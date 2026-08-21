@@ -15,6 +15,8 @@ pub enum StorageError {
     CharacterNotFound(i64),
     #[error("不正な値: {0}")]
     InvalidValue(String),
+    #[error("シリアライズに失敗しました: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;

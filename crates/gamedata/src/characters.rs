@@ -11,7 +11,27 @@ pub struct GameCharacter {
     pub name: &'static str,
 }
 
-const CHARACTERS: &[GameCharacter] = &[GameCharacter { id: "boris", name: "ボリス" }];
+const CHARACTERS: &[GameCharacter] = &[
+    GameCharacter { id: "lucian", name: "ルシアン" },
+    GameCharacter { id: "boris", name: "ボリス" },
+    GameCharacter { id: "ispin", name: "イスピン" },
+    GameCharacter { id: "maximin", name: "マキシミン" },
+    GameCharacter { id: "tichiel", name: "ティチエル" },
+    GameCharacter { id: "nayatorei", name: "ナヤトレイ" },
+    GameCharacter { id: "siberin", name: "シベリン" },
+    GameCharacter { id: "mira", name: "ミラ" },
+    GameCharacter { id: "joshua", name: "ジョシュア" },
+    GameCharacter { id: "chloe", name: "クロエ" },
+    GameCharacter { id: "ranjie", name: "ランジエ" },
+    GameCharacter { id: "isaac", name: "イサック" },
+    GameCharacter { id: "anais", name: "アナイス" },
+    GameCharacter { id: "isolet", name: "イソレット" },
+    GameCharacter { id: "benya", name: "ベンヤ" },
+    GameCharacter { id: "roamini", name: "ロアミニ" },
+    GameCharacter { id: "nocturne", name: "ノクターン" },
+    GameCharacter { id: "leeche", name: "リーチェ" },
+    GameCharacter { id: "yefnen", name: "イェフネン" },
+];
 
 pub fn characters() -> &'static [GameCharacter] {
     CHARACTERS
@@ -50,10 +70,20 @@ mod tests {
     use domain::{stat_attack_power, EffectiveStats};
 
     #[test]
-    fn ボリスが登録されている() {
-        assert_eq!(characters().len(), 1);
+    fn プレイアブルキャラは19名登録されている() {
+        assert_eq!(characters().len(), 19);
         assert_eq!(find_character("boris").unwrap().name, "ボリス");
+        assert_eq!(find_character("benya").unwrap().name, "ベンヤ");
+        assert_eq!(find_character("roamini").unwrap().name, "ロアミニ");
         assert!(find_character("nope").is_none());
+    }
+
+    #[test]
+    fn キャラidは重複しない() {
+        let mut ids: Vec<_> = characters().iter().map(|c| c.id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), characters().len());
     }
 
     #[test]

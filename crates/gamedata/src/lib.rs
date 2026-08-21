@@ -3,6 +3,7 @@
 //! 現状は Rust のリテラルで持つ(docs/decisions.md「構成・運用」)。各データに出典 `Source` を付ける。
 
 pub mod awakening;
+pub mod buffs;
 pub mod characters;
 pub mod enemies;
 pub mod skills;
@@ -10,6 +11,7 @@ pub mod skills;
 use serde::Serialize;
 
 pub use awakening::awakening_rate;
+pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use characters::{attack_coefficients, characters, find_character, GameCharacter};
 pub use enemies::{enemies, find_enemy};
 pub use skills::{find_skill, skills_for};

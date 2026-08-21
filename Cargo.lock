@@ -677,6 +677,7 @@ name = "domain"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -2970,6 +2971,7 @@ dependencies = [
  "domain",
  "rusqlite",
  "serde",
+ "serde_json",
  "thiserror 2.0.20",
 ]
 
