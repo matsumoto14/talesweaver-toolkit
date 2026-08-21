@@ -64,3 +64,15 @@
 - **storage は `characters` 1 テーブル**(id, name, game_character_id, 7 ステ, awakening_stage, eta_level, created_at) / CRUD のみのスコープ / `cargo test -p storage`
 - **DB ファイルは Tauri の `app_data_dir`/`talesweaver-toolkit.sqlite`** / Tauri 標準の置き場所 / 再起動後の永続化をスクリーンショットで確認
 - **CLAUDE.md の `researcher`/`implementer`/`reviewer` は専用エージェント定義が無いため general-purpose エージェントをその役割で使う** / 定義ファイル(.claude/agents)が未整備 / 今後 .claude/agents に定義を置けば差し替え
+
+### 実装時の仮決定(implementer 報告より、司令塔が承認)
+
+- **`DamageInput` は `BaseStats` + `StatModifierSet` を受け取り、能力値計算を domain 内で行う** / トレースに `StatTrace` を含めるため。4 段パイプラインが domain 内で完結する / `trace.stats` が 7 行出ること
+- **非クリティカル時は `{F×G}` 全体を 1.0 とする(G クリダメ増加もクリ時のみ)** `[仮]` / G は「クリティカルダメージ増加」であり非クリに乗るのは意味的に不自然 / wiki 計算式まとめ#CriticalChance 取込時に確認
+- **カテゴリ集計の内部表現は Σ%(0.15 = +15%)。減算系 Q/S/U/New2 は `factor = 1 − Σ%`、それ以外の割合は `1 + Σ%`** / wiki §3 の種別ルールそのまま / トレースの `value`(生値)と `factor`(式で使う値)を併記
+- **N(覚醒)・V1(カット率A)は割合カテゴリとして `rate − 1.0` を加算** / wiki の種別(割合)を保ちつつ、gamedata は乗数で持てる / —
+- **C(敵防御力)は固定値種別** / wiki 表記どおり / —
+- **`floor_int` / `trunc2` は 1e-9 の許容誤差を足してから floor。負数は負の無限大方向(Excel INT と同じ)** / 浮動小数の 0.9999999 問題の回避 / 境界テスト
+- **覚醒 stage は 0..=5、エタ Lv は 0..=80 を storage の validate で拒否** / wiki の範囲 / storage テスト
+- **`trace.categories` は最大乱数(B=max)時の集計** / B 以外は min/max で共通。B=1 は `steps_min` の式文字列で確認できる / —
+- **`.gitattributes` で `* text=auto eol=lf`** / Windows 開発機で CRLF 警告が出るため。リポジトリは LF で統一 / —
