@@ -10,6 +10,7 @@ pub mod damage;
 pub mod enemy;
 pub mod rounding;
 pub mod skill;
+pub mod stat_sources;
 pub mod stats;
 
 pub use attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
@@ -21,7 +22,13 @@ pub use damage::{
 pub use enemy::Enemy;
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};
+pub use stat_sources::{
+    apply_pins, apply_temporary_adjustments, build_modifiers, preview_effective_stats, stat_limits,
+    Adjustments, BuffCatalog, BuffChoice, BuffDefinition, BuffGroup, BuffSelection, BuffTarget,
+    BuffValue, Crown, PetSkillTier, PetSkills, RuneLevels, SacredRelic, StatAdjustment,
+    StatContribution, StatLayer, StatLimits, StatPreview, StatSourceError, StatSources,
+};
 pub use stats::{
-    effective_stat, effective_stats, BaseStats, EffectiveStats, StatKind, StatModifierSet,
-    StatModifiers, StatTrace,
+    effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind,
+    StatModifierSet, StatModifiers, StatTrace, BASE_STAT_MAX,
 };

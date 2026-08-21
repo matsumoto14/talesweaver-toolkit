@@ -7,7 +7,7 @@
 ```
 ┌─────────────────────────────────────────────┐
 │ apps/desktop (Tauri シェル)                   │
-│   ui/ … フロントエンド(TS)。表示と入力のみ      │
+│   src/ … フロントエンド(TS)。表示と入力のみ     │
 │   commands … domain への薄いアダプタ           │
 └──────────────┬──────────────────────────────┘
                │
@@ -18,7 +18,7 @@
 └──────────────┬───────────┘  └───────┬────────┘
                │                      ↑ 生成
 ┌──────────────┴───────────┐  ┌───────┴────────┐
-│ crates/storage            │  │ tools/scraper   │
+│ crates/storage            │  │ tools/scraper ※ │
 │ SQLite(ユーザーデータのみ) │  │ talewiki 取込み  │
 └──────────────────────────┘  └────────────────┘
 ```
@@ -50,9 +50,32 @@
 ### apps/desktop — Tauri シェル
 
 - コマンドは「storage/gamedata から読む → domain を呼ぶ → 結果を返す」だけの薄いアダプタ。ロジックを書かない
+  - 未実装要素の中立値(装備・属性など)もコマンドに書かない。`DamageInput::new` のように domain 側へ集約し、実装時にそこを引数へ昇格させる
 - UI は表示と入力のみ。計算・判定は必ず Rust 側
 
-### tools/scraper — talewiki 取り込み
+フロントエンドの階層(`apps/desktop/src/`):
+
+```
+main.ts, App.svelte  エントリと画面枠(ナビ・エラー帯)
+api/types.ts         Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
+api/commands.ts      invoke ラッパー
+ui/                  画面によらない汎用部品(Select, StatInput, Splitter, persistedState)
+pages/<機能>/        機能ごとの画面と、その画面専用の部品
+format.ts            数値整形
+labels.ts            ステータスの表示名・並び順
+toast.svelte.ts      エラー帯の共有状態
+```
+
+機能を足すときは `pages/<機能>/` を作る。2 つ以上の機能で使う部品だけを `ui/` に上げる。
+SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイリアスがなく、階層が 1 段深くなるだけ)。
+
+数値入力は `ui/StatInput.svelte`(ラベル|数値欄|range スライダー|MAX ボタン)1 種類に統一する(docs/goals/2026-08-21-character-screen-v2.md)。旧 `Stepper`/`NumberField` の 2 部品は廃止済み(「入力方式は 1 種類」という CLAUDE.md の UX 方針を部品数で強制する)。
+
+画面レイアウトは可変にする(2026-08-21)。`ui/persistedState.svelte.ts`(`persisted(key, initial)`: localStorage に永続化する `$state` ラッパー。呼び出し元コンポーネントの `<script>` 初期化中に呼ぶ)と `ui/Splitter.svelte`(グリッドの列境界に置く、ドラッグ・ダブルクリック・矢印キーで列幅を変える縦区切り線)の組み合わせで、サイドバー(`App.svelte`)の折りたたみとダメージ計算・キャラ管理の列幅リサイズを実装する。各画面のグリッドは列幅を `grid-template-columns` の動的文字列で組み立て、区切り線トラック(6px)を明示的な grid カラムとして持つ(旧来の `gap:1px; background:var(--border)` によるトラックレス区切りから変更)。詳細は docs/decisions.md 参照。
+
+例(`pages/character/`、docs/ux-guidelines.md「作成と詳細設定を分離する」の適用、2026-08-21 に「一覧|キャラデータ|設定」の 3 カラムへ再構成): `CharacterPage.svelte`(一覧+登録の入口。左カラム、マスター・ディテール)/ `CharacterRegisterForm.svelte`(名前+キャラ種のみの最小登録)/ `CharacterWorkspace.svelte`(選択キャラの編集 draft を 1 つの `$state` にまとめて持つ外枠。`{#key character.id}` で作り直され、`preview_effective_stats` を debounce 呼び出しして即時プレビューを保持する)/ `CharacterData.svelte`(中央カラム。名前・キャラ種・覚醒と、能力値表「ステ|素|補正|最終」・補正の内訳)/ `CharacterSettings.svelte`(右カラム。恒常補正/常用バフ/キャラスキル/調整のアコーディオン。専門用語(層名)はここに出さず、内訳表示にのみ出す)/ `draft.ts`(3 部品で共有する編集中ドラフトの型と組み立て関数)の構成にする。
+
+### tools/scraper — talewiki 取り込み(※未実装)
 
 - EUC-JP PukiWiki の取得(`cmd=source`)→ パース → gamedata の生成。手法は docs/damage-formula.md 取得メモと旧リポの scrapeSkills.js を参照
 - 生成物との差分検出(wiki 更新の検知)をここで行う

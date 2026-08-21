@@ -9,6 +9,7 @@ use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::enemy::Enemy;
 use crate::rounding::{floor_int, trunc2};
 use crate::skill::Skill;
+use crate::stat_sources::{apply_pins, Adjustments, StatContribution};
 use crate::stats::{effective_stats, BaseStats, StatModifierSet, StatTrace};
 
 /// 3 コンボ以上で付くコンボボーナス(wiki: カテゴリH)。
@@ -24,6 +25,8 @@ const MIN_DAMAGE_TO_MONSTER: i64 = 1;
 pub struct DamageInput {
     pub base_stats: BaseStats,
     pub stat_modifiers: StatModifierSet,
+    /// `stat_modifiers` の寄与内訳(ペット/ルーン/クラウン/聖物/バフ/調整値)。トレース表示用
+    pub stat_contributions: Vec<StatContribution>,
     pub coefficients: AttackCoefficients,
     pub skill: Skill,
     pub enemy: Enemy,
@@ -36,6 +39,45 @@ pub struct DamageInput {
     pub equipment_attack: f64,
     /// 装備補正強化係数(wiki: カテゴリA の内訳)。現状は 0
     pub equipment_enhance_rate: f64,
+    /// 能力値の固定(pin)。キャラの保存済み調整値
+    pub pins: Adjustments,
+    /// 計算リクエストの一時調整(キャラには保存しない)。ステごとに `pins` より優先する
+    pub temporary_pins: Option<Adjustments>,
+}
+
+impl DamageInput {
+    /// 計算に必要な要素を組み立てる。装備・属性は未実装のため中立値で埋める。
+    /// ステータス補正(`stat_modifiers`/`stat_contributions`)は呼び出し側(コマンド)が
+    /// `stat_sources::build_modifiers` で組み立てて渡す(中立値の決め打ちはしない)。
+    /// 実装時はここを引数へ昇格させ、呼び出し側(コマンド)に中立値を書かせない。
+    pub fn new(
+        base_stats: BaseStats,
+        stat_modifiers: StatModifierSet,
+        stat_contributions: Vec<StatContribution>,
+        coefficients: AttackCoefficients,
+        awakening_rate: f64,
+        skill: Skill,
+        enemy: Enemy,
+        combo_count: u32,
+        pins: Adjustments,
+        temporary_pins: Option<Adjustments>,
+    ) -> Self {
+        Self {
+            base_stats,
+            stat_modifiers,
+            stat_contributions,
+            coefficients,
+            skill,
+            enemy,
+            awakening_rate,
+            combo_count,
+            element_value: 0,
+            equipment_attack: 0.0,
+            equipment_enhance_rate: 0.0,
+            pins,
+            temporary_pins,
+        }
+    }
 }
 
 /// 式の 1 段。
@@ -56,6 +98,8 @@ pub struct DamageTriple {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DamageTrace {
     pub stats: Vec<StatTrace>,
+    /// ステ補正源(ペット/ルーン/クラウン/聖物/バフ/調整値)の寄与内訳
+    pub stat_contributions: Vec<StatContribution>,
     /// 最大乱数(B = 最大)時のカテゴリ集計
     pub categories: Vec<CategoryTrace>,
     pub steps_min: Vec<FormulaStep>,
@@ -176,7 +220,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     use DamageCategory::*;
 
     // ① 能力値計算
-    let (stats, stat_traces) = effective_stats(&input.base_stats, &input.stat_modifiers);
+    let (mut stats, mut stat_traces) = effective_stats(&input.base_stats, &input.stat_modifiers);
+    apply_pins(&mut stats, &mut stat_traces, &input.pins, input.temporary_pins.as_ref());
 
     // ② カテゴリ集計
     let stat_attack = stat_attack_power(&stats, &input.coefficients);
@@ -215,6 +260,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         hit_count,
         trace: DamageTrace {
             stats: stat_traces,
+            stat_contributions: input.stat_contributions.clone(),
             categories: totals_max.trace(),
             steps_min,
             steps_max,
@@ -228,12 +274,14 @@ mod tests {
     use super::*;
     use crate::category::CategoryKind;
     use crate::skill::SkillDependency;
-    use crate::stats::StatKind;
+    use crate::stat_sources::StatAdjustment;
+    use crate::stats::{PinSource, StatKind};
 
     fn input() -> DamageInput {
         DamageInput {
             base_stats: BaseStats { stab: 500, hack: 500, int: 0, def: 0, mr: 0, dex: 100, agi: 0 },
             stat_modifiers: StatModifierSet::default(),
+            stat_contributions: Vec::new(),
             coefficients: AttackCoefficients { primary: (StatKind::Stab, 1.8), secondary: (StatKind::Hack, 1.8) },
             skill: Skill {
                 id: "s".into(),
@@ -256,6 +304,8 @@ mod tests {
             element_value: 0,
             equipment_attack: 0.0,
             equipment_enhance_rate: 0.0,
+            pins: Adjustments::default(),
+            temporary_pins: None,
         }
     }
 
@@ -336,6 +386,33 @@ mod tests {
         i.enemy.damage_reduction = -100;
         i.enemy.cut_rate_a = 0.5;
         assert_eq!(calculate_damage(&i).per_hit.min, 301);
+    }
+
+    // pin で STAB を 2000 に固定すると、ステ由来攻撃力の計算に反映されて結果が変わる。
+    // trace.stats の STAB 行には pinned_from に元の 500 が残る。
+    #[test]
+    fn pinで能力値を固定すると攻撃力計算に反映されpinned_fromが記録される() {
+        let mut i = input();
+        i.pins.stab = StatAdjustment { add: 0, pin: Some(2000) };
+        let r = calculate_damage(&i);
+        assert_ne!(r.per_hit.min, 802);
+        let stab_trace = r.trace.stats.iter().find(|t| t.kind == StatKind::Stab).unwrap();
+        assert_eq!(stab_trace.pinned_from, Some(500));
+        assert_eq!(stab_trace.effective, 2000);
+    }
+
+    #[test]
+    fn temporary_pinsが保存済みpinを一時的に上書きしpin_sourceがtemporaryになる() {
+        let mut i = input();
+        i.pins.stab = StatAdjustment { add: 0, pin: Some(500) };
+        i.temporary_pins = Some(Adjustments {
+            stab: StatAdjustment { add: 0, pin: Some(999) },
+            ..Default::default()
+        });
+        let r = calculate_damage(&i);
+        let stab_trace = r.trace.stats.iter().find(|t| t.kind == StatKind::Stab).unwrap();
+        assert_eq!(stab_trace.effective, 999);
+        assert_eq!(stab_trace.pin_source, Some(PinSource::Temporary));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! ステータス(素ステ 7 種)と能力値(実効ステータス)の計算。docs/damage-formula.md §1・§2。
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::rounding::floor_int;
 
@@ -29,6 +30,16 @@ impl StatKind {
     ];
 }
 
+/// 素ステ(振り分け分)の上限。wiki に明記なし。レベル上限でもある(docs/goals/2026-08-21-character-stat-sources.md)。下限は 1。
+pub const BASE_STAT_MAX: u32 = 310;
+
+/// 素ステの値域違反。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum BaseStatsError {
+    #[error("{kind:?} は 1〜{max} の範囲で指定してください(指定値 {value})")]
+    OutOfRange { kind: StatKind, value: u32, max: u32 },
+}
+
 /// 素ステータス(オリジナル)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct BaseStats {
@@ -52,6 +63,17 @@ impl BaseStats {
             StatKind::Dex => self.dex,
             StatKind::Agi => self.agi,
         }
+    }
+
+    /// 各ステが 1..=`BASE_STAT_MAX` の範囲内であることを検証する。
+    pub fn validate(&self) -> Result<(), BaseStatsError> {
+        for kind in StatKind::ALL {
+            let value = self.get(kind);
+            if !(1..=BASE_STAT_MAX).contains(&value) {
+                return Err(BaseStatsError::OutOfRange { kind, value, max: BASE_STAT_MAX });
+            }
+        }
+        Ok(())
     }
 }
 
@@ -97,6 +119,17 @@ impl Default for StatModifiers {
 /// 倍率B の下限(wiki §2)。
 const MULTIPLIER_B_MIN: f64 = -0.30;
 
+/// pin(能力値の固定)の出所。フロント側で値の一致比較により推測するのをやめ、
+/// サーバ側(`apply_pins`)が決定した出所をそのまま返す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PinSource {
+    /// キャラに保存済みの調整値による pin
+    Saved,
+    /// 計算リクエストの一時調整による pin(保存済み pin があれば一時的に上書き)
+    Temporary,
+}
+
 /// 能力値計算の中間値。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatTrace {
@@ -116,6 +149,10 @@ pub struct StatTrace {
     pub final_fixed: i64,
     /// 最終能力値
     pub effective: i64,
+    /// pin(能力値の固定)が適用された場合の上書き前の値(`stat_sources::apply_pins` が事後に設定する)
+    pub pinned_from: Option<i64>,
+    /// pin の出所(`stat_sources::apply_pins` が事後に設定する)
+    pub pin_source: Option<PinSource>,
 }
 
 /// 1 ステータス分の能力値計算(wiki §2)。
@@ -142,6 +179,8 @@ pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers) -> (i64, Sta
         multiplier_b_bonus,
         final_fixed: m.final_fixed,
         effective,
+        pinned_from: None,
+        pin_source: None,
     };
     (effective, trace)
 }
@@ -168,6 +207,18 @@ impl StatModifierSet {
             StatKind::Mr => &self.mr,
             StatKind::Dex => &self.dex,
             StatKind::Agi => &self.agi,
+        }
+    }
+
+    pub fn get_mut(&mut self, kind: StatKind) -> &mut StatModifiers {
+        match kind {
+            StatKind::Stab => &mut self.stab,
+            StatKind::Hack => &mut self.hack,
+            StatKind::Int => &mut self.int,
+            StatKind::Def => &mut self.def,
+            StatKind::Mr => &mut self.mr,
+            StatKind::Dex => &mut self.dex,
+            StatKind::Agi => &mut self.agi,
         }
     }
 }
@@ -197,7 +248,7 @@ impl EffectiveStats {
         }
     }
 
-    fn set(&mut self, kind: StatKind, value: i64) {
+    pub(crate) fn set(&mut self, kind: StatKind, value: i64) {
         match kind {
             StatKind::Stab => self.stab = value,
             StatKind::Hack => self.hack = value,
@@ -296,6 +347,22 @@ mod tests {
         assert_eq!(trace.basic, 275);
         assert_eq!(trace.multiplier_b_bonus, 27);
         assert_eq!(trace.kind, StatKind::Int);
+    }
+
+    #[test]
+    fn 素ステの範囲外は拒否する() {
+        let mut base = BaseStats { stab: 310, hack: 310, int: 310, def: 310, mr: 310, dex: 310, agi: 310 };
+        assert!(base.validate().is_ok());
+        base.int = 0;
+        assert!(matches!(
+            base.validate(),
+            Err(BaseStatsError::OutOfRange { kind: StatKind::Int, value: 0, max: BASE_STAT_MAX })
+        ));
+        base.int = 311;
+        assert!(matches!(
+            base.validate(),
+            Err(BaseStatsError::OutOfRange { kind: StatKind::Int, value: 311, max: BASE_STAT_MAX })
+        ));
     }
 
     #[test]
