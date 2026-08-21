@@ -1,7 +1,8 @@
 <script lang="ts">
-  import CharacterPage from "./lib/components/CharacterPage.svelte";
-  import DamagePage from "./lib/components/DamagePage.svelte";
-  import { dismissError, toast } from "./lib/toast.svelte";
+  import CharacterPage from "./pages/character/CharacterPage.svelte";
+  import DamagePage from "./pages/damage/DamagePage.svelte";
+  import { dismissError, toast } from "./toast.svelte";
+  import { persisted } from "./ui/persistedState.svelte";
 
   type PageId = "damage" | "characters" | "enhance" | "roadmap" | "index";
   interface NavItem { id: PageId; label: string; enabled: boolean }
@@ -17,17 +18,28 @@
   const title = $derived(NAV.find((n) => n.id === page)?.label ?? "");
 
   let recalculate: (() => void) | null = null;
+
+  const sidebarCollapsed = persisted("tw-sidebar-collapsed", false);
 </script>
 
 <div class="shell">
-  <aside>
+  <aside class:collapsed={sidebarCollapsed.value}>
     <div class="brand">
+      <button
+        type="button"
+        class="collapse-btn"
+        title={sidebarCollapsed.value ? "サイドバーを開く" : "サイドバーを閉じる"}
+        aria-label={sidebarCollapsed.value ? "サイドバーを開く" : "サイドバーを閉じる"}
+        onclick={() => (sidebarCollapsed.value = !sidebarCollapsed.value)}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class:flip={sidebarCollapsed.value}><path d="M10 3.2L5.4 8l4.6 4.8"/></svg>
+      </button>
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-linejoin="round"><path d="M9 1.5l6.5 3.75v7.5L9 16.5 2.5 12.75v-7.5z"/><path d="M9 6.2l3.2 1.85v3.7L9 13.6l-3.2-1.85v-3.7z"/></svg>
-      <span>TW TOOLKIT</span>
+      {#if !sidebarCollapsed.value}<span>TW TOOLKIT</span>{/if}
     </div>
     <nav>
       {#each NAV as item (item.id)}
-        <button type="button" class:active={page === item.id} disabled={!item.enabled} onclick={() => (page = item.id)}>
+        <button type="button" class:active={page === item.id} disabled={!item.enabled} title={sidebarCollapsed.value ? item.label : undefined} onclick={() => (page = item.id)}>
           {#if item.id === "damage"}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M5.5 5h5M5.5 8.2h1.4M7.8 8.2h1.4M10.1 8.2h1.4M5.5 11h1.4M7.8 11h1.4M10.1 11h1.4"/></svg>
           {:else if item.id === "characters"}
@@ -39,13 +51,15 @@
           {:else}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h3.6c1 0 1.8.8 1.8 1.8v8.4c0-1-.8-1.8-1.8-1.8H2.6z"/><path d="M13.4 3.4H9.8c-1 0-1.8.8-1.8 1.8v8.4c0-1 .8-1.8 1.8-1.8h3.6z"/></svg>
           {/if}
-          <span>{item.label}</span>
-          {#if !item.enabled}<span class="soon">未実装</span>{/if}
+          {#if !sidebarCollapsed.value}
+            <span>{item.label}</span>
+            {#if !item.enabled}<span class="soon">未実装</span>{/if}
+          {/if}
         </button>
       {/each}
     </nav>
     <div class="spacer"></div>
-    <div class="foot dim">DATA seed / 2026-08-21</div>
+    {#if !sidebarCollapsed.value}<div class="foot dim">DATA seed / 2026-08-21</div>{/if}
   </aside>
 
   <main>
@@ -83,18 +97,29 @@
   aside {
     width: 208px; flex-shrink: 0; display: flex; flex-direction: column;
     background: var(--bg-panel); border-right: 1px solid var(--border);
+    transition: width 0.15s;
   }
+  aside.collapsed { width: 56px; }
   .brand {
     height: 52px; display: flex; align-items: center; gap: 9px; padding: 0 14px;
     border-bottom: 1px solid var(--border);
     font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
   }
+  aside.collapsed .brand { padding: 0 10px; gap: 6px; }
+  .collapse-btn {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 18px; height: 18px; padding: 0; background: none; border: 0; color: var(--fg-muted);
+  }
+  .collapse-btn:hover { color: var(--fg); }
+  .collapse-btn svg { transition: transform 0.15s; }
+  .collapse-btn svg.flip { transform: rotate(180deg); }
   nav { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; }
   nav button {
     display: flex; align-items: center; gap: 10px; padding: 8px 10px;
     background: none; border: 0; border-left: 2px solid transparent;
     color: var(--fg-muted); font-size: 12px; text-align: left;
   }
+  aside.collapsed nav button { justify-content: center; padding: 8px; }
   nav button:hover:not(:disabled) { color: var(--fg); }
   nav button.active { color: var(--accent); background: var(--bg-active); border-left-color: var(--accent); }
   nav button:disabled { opacity: 0.45; }

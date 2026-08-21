@@ -1,13 +1,23 @@
 <script lang="ts">
   import {
     calculateDamage, errorMessage, listCharacters, listEnemies, listGameCharacters, listSkills,
-    STAT_KINDS, STAT_LABELS,
-  } from "../api";
-  import type { DamageResult, Enemy, GameCharacter, RegisteredCharacter, Skill } from "../api";
-  import { fmtInt, fmtNum } from "../format";
-  import { reportError } from "../toast.svelte";
-  import Select from "./Select.svelte";
+  } from "../../api/commands";
+  import { STAT_KINDS, STAT_LABELS } from "../../labels";
+  import type { Adjustments, DamageResult, Enemy, GameCharacter, RegisteredCharacter, Skill, StatKind } from "../../api/types";
+  import { fmtInt, fmtNum } from "../../format";
+  import { reportError } from "../../toast.svelte";
+  import { persisted } from "../../ui/persistedState.svelte";
+  import Select from "../../ui/Select.svelte";
+  import Splitter from "../../ui/Splitter.svelte";
+  import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
+
+  const DEFAULT_INPUT_WIDTH = 336;
+  const DEFAULT_TARGET_WIDTH = 296;
+  const layoutWidths = persisted("tw-layout-damage", { input: DEFAULT_INPUT_WIDTH, target: DEFAULT_TARGET_WIDTH });
+  const gridTemplateColumns = $derived(
+    `minmax(200px, ${layoutWidths.value.input ?? DEFAULT_INPUT_WIDTH}px) 6px minmax(180px, ${layoutWidths.value.target ?? DEFAULT_TARGET_WIDTH}px) 6px minmax(240px, 1fr)`,
+  );
 
   interface Props {
     /** ヘッダーの「計算」ボタンから再計算させるための呼び出し口 */
@@ -29,6 +39,25 @@
 
   let result = $state<DamageResult | null>(null);
   let calculating = $state(false);
+
+  // 一時調整: キャラには保存せず、計算リクエストにのみ乗せる(docs/ux-guidelines.md 原則4)。
+  const neutralAdjustments = (): Adjustments =>
+    Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as Adjustments;
+  let temporaryAdjustments = $state<Adjustments>(neutralAdjustments());
+  const hasTemporaryAdjustments = $derived(
+    STAT_KINDS.some((k) => temporaryAdjustments[k].add !== 0 || temporaryAdjustments[k].pin !== null),
+  );
+
+  // 固定トグル ON 時の初期値は、直近の計算結果の最終能力値(無ければ素ステ)にする
+  // (「初期値は実用値」の原則。0 や素ステだけに戻すと、既に計算済みの実用値から離れてしまう)。
+  function toggleTemporaryPin(k: StatKind, checked: boolean) {
+    if (!checked) {
+      temporaryAdjustments[k].pin = null;
+      return;
+    }
+    const current = result?.trace.stats.find((s) => s.kind === k)?.effective;
+    temporaryAdjustments[k].pin = current ?? character?.base_stats[k] ?? 0;
+  }
 
   const character = $derived(characters.find((c) => String(c.id) === characterId) ?? null);
   const skill = $derived(skills.find((s) => s.id === skillId) ?? null);
@@ -72,14 +101,16 @@
     }
     const seq = ++requestSeq;
     calculating = true;
-    calculateDamage(character.id, skillId, enemyId, combo ? COMBO_THRESHOLD : 0)
+    calculateDamage(character.id, skillId, enemyId, combo ? COMBO_THRESHOLD : 0, temporaryAdjustments)
       .then((r) => { if (seq === requestSeq) result = r; })
       .catch((e) => { if (seq === requestSeq) { result = null; reportError(errorMessage(e)); } })
       .finally(() => { if (seq === requestSeq) calculating = false; });
   }
   $effect(() => {
-    // 依存を明示的に読む
+    // 依存を明示的に読む。$state はプロパティ単位で追跡されるため、一時調整は各ステの
+    // fixed/final_fixed を明示的に読む必要がある。
     void [character?.id, skillId, enemyId, combo];
+    for (const k of STAT_KINDS) void [temporaryAdjustments[k].add, temporaryAdjustments[k].pin];
     calculate();
   });
   $effect(() => {
@@ -91,7 +122,7 @@
   const enemyOptions = $derived(enemies.map((e) => ({ value: e.id, label: e.name })));
 </script>
 
-<div class="layout">
+<div class="layout" style="grid-template-columns: {gridTemplateColumns};">
   <!-- INPUT -->
   <section>
     <div class="panel-head"><span class="dot"></span><span class="title">INPUT — 入力</span></div>
@@ -122,6 +153,14 @@
     </div>
   </section>
 
+  <Splitter
+    bind:value={layoutWidths.value.input}
+    min={200}
+    defaultValue={DEFAULT_INPUT_WIDTH}
+    controls="prev"
+    label="INPUT と TARGET の境界"
+  />
+
   <!-- TARGET -->
   <section>
     <div class="panel-head"><span class="dot"></span><span class="title">TARGET — 条件</span></div>
@@ -143,13 +182,66 @@
         <span>{COMBO_THRESHOLD} コンボ以上</span>
         <span class="hint dim">コンボボーナス</span>
       </label>
+
+      <details class="adjustments">
+        <summary>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg>
+          <span>調整(一時) — 計算にのみ反映、キャラには保存されません</span>
+        </summary>
+        <div class="block adj-grid">
+          {#each STAT_KINDS as k (k)}
+            <div class="adj-stat">
+              <div class="adj-stat-label">{STAT_LABELS[k]}</div>
+              <div class="adj-row">
+                <span class="adj-desc dim">加算 — このステに +N する(検証・仮定用)</span>
+                <div class="adj-control">
+                  <StatInput label="" min={-999} max={999} bind:value={temporaryAdjustments[k].add} />
+                </div>
+              </div>
+              <div class="adj-row">
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={temporaryAdjustments[k].pin !== null}
+                    onchange={(e) => toggleTemporaryPin(k, e.currentTarget.checked)}
+                  />
+                  <span class="check" aria-hidden="true">
+                    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 4.5l1.9 1.9L7.4 2.6"/></svg>
+                  </span>
+                  <span class="adj-desc">固定 — 最終能力値を N に固定する(実測値で計算したいとき)</span>
+                </label>
+                {#if temporaryAdjustments[k].pin !== null}
+                  <div class="adj-control">
+                    <StatInput
+                      label="" min={0} max={99999}
+                      bind:value={
+                        () => temporaryAdjustments[k].pin ?? 0,
+                        (v) => (temporaryAdjustments[k].pin = v)
+                      }
+                    />
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      </details>
     </div>
   </section>
+
+  <Splitter
+    bind:value={layoutWidths.value.target}
+    min={180}
+    defaultValue={DEFAULT_TARGET_WIDTH}
+    controls="prev"
+    label="TARGET と RESULT の境界"
+  />
 
   <!-- RESULT -->
   <section class="result">
     <div class="panel-head">
       <span class="dot warm"></span><span class="title">RESULT — 結果</span>
+      {#if hasTemporaryAdjustments}<span class="badge">調整あり</span>{/if}
       {#if calculating}<span class="dim status">計算中…</span>{/if}
     </div>
     <div class="scroll">
@@ -170,7 +262,7 @@
           <div><span class="cap">最大</span><span class="num accent">{fmtInt(result.total.max)}</span></div>
           <div><span class="cap">クリティカル</span><span class="num warm">{fmtInt(result.total.critical)}</span></div>
         </div>
-        <TracePanel trace={result.trace} />
+        <TracePanel trace={result.trace} {character} />
       {:else}
         <p class="empty dim">キャラ・スキル・対象を選ぶと自動で計算します。</p>
       {/if}
@@ -180,17 +272,17 @@
 
 <style>
   .layout {
-    height: 100%; display: grid; grid-template-columns: 336px 296px minmax(0, 1fr);
-    gap: 1px; background: var(--border);
+    height: 100%; display: grid;
+    background: var(--border); overflow-x: auto;
   }
-  section { background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+  section { background: var(--bg); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   section.result { background: var(--bg-raised); }
   .scroll { overflow: auto; min-height: 0; }
   .block { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border-soft); }
   .meta { display: flex; gap: 12px; font-size: 11px; }
   .status { margin-left: auto; font-size: 10px; }
 
-  .toggle { display: flex; align-items: center; gap: 9px; padding: 5px 14px; cursor: pointer; font-size: 12px; }
+  .toggle { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 5px 14px; cursor: pointer; font-size: 12px; min-width: 0; }
   .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
   .check {
     width: 13px; height: 13px; flex-shrink: 0; border: 1px solid var(--border-strong);
@@ -199,6 +291,32 @@
   .toggle input:checked + .check { background: var(--accent); border-color: var(--accent); color: var(--bg); }
   .toggle input:focus-visible + .check { outline: 1px solid var(--accent); outline-offset: 2px; }
   .hint { margin-left: auto; font-size: 11px; }
+
+  details.adjustments { border-top: 1px solid var(--border); margin-top: 4px; }
+  details.adjustments summary {
+    display: flex; align-items: center; gap: 8px; padding: 11px 14px;
+    font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); cursor: pointer; list-style: none;
+    user-select: none;
+  }
+  details.adjustments summary::-webkit-details-marker { display: none; }
+  details.adjustments summary svg { transition: transform 0.15s; }
+  details.adjustments[open] summary svg { transform: rotate(90deg); }
+  details.adjustments summary:hover { color: var(--fg); }
+  .adj-grid { display: flex; flex-direction: column; padding: 0 0 6px; min-width: 0; }
+  .adj-stat { padding: 8px 14px; border-bottom: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .adj-stat:last-child { border-bottom: 0; }
+  .adj-stat-label { font-size: 11px; font-weight: 700; color: var(--fg-muted); }
+  /* 説明文とStatInputを縦積みにする(296px の TARGET 列で横スクロールが出ないように)。 */
+  .adj-row { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+  .adj-row .toggle { padding: 0; }
+  .adj-desc { font-size: 11px; min-width: 0; }
+  .adj-control { width: 100%; min-width: 0; }
+  .adj-control :global(.stat-input) { width: 100%; }
+
+  .badge {
+    font-size: 10px; letter-spacing: 0.08em; color: var(--warm); border: 1px solid var(--warm);
+    padding: 1px 6px;
+  }
 
   .hero { padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border-soft); }
   .cap { font-size: 10px; letter-spacing: 0.14em; color: var(--fg-muted); }

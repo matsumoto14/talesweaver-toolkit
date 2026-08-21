@@ -1,9 +1,21 @@
 <script lang="ts">
-  import type { DamageTrace, CategoryTrace } from "../api";
-  import { STAT_LABELS } from "../api";
-  import { fmtInt, fmtNum } from "../format";
+  import type { DamageTrace, CategoryTrace, RegisteredCharacter, StatContribution, StatTrace } from "../../api/types";
+  import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
+  import { fmtInt, fmtNum, formatLayerValue } from "../../format";
 
-  let { trace }: { trace: DamageTrace } = $props();
+  let { trace, character = null }: { trace: DamageTrace; character?: RegisteredCharacter | null } = $props();
+
+  // 「固定前」の表示値: キャラに保存済みの固定(pin)があり、かつ今回の一時調整で
+  // 別の値に上書きされている場合は、保存済みの固定値を見せる(「自分が普段固定している値」を
+  // 基準にするほうが、生の未固定計算値より一時オーバーライドの意味が伝わりやすいため)。
+  // それ以外(保存済み固定が無い、または一時調整せずそのまま使っている)は
+  // pinned_from(この計算で pin される直前の計算値)をそのまま使う。
+  function pinnedBeforeLabel(s: StatTrace): string {
+    if (s.pinned_from === null) return "";
+    const savedPin = character?.stat_sources.adjustments[s.kind].pin ?? null;
+    const before = savedPin !== null && savedPin !== s.effective ? savedPin : s.pinned_from;
+    return `固定前: ${fmtInt(before)}`;
+  }
 
   const KIND_LABEL = { assigned: "代入", fixed: "固定値", rate: "割合" } as const;
   type StepTab = "min" | "max" | "critical";
@@ -26,6 +38,11 @@
   };
   const fmtValue = (c: CategoryTrace) =>
     c.kind === "rate" ? `${c.value >= 0 ? "+" : ""}${fmtNum(c.value * 100)}%` : fmtNum(c.value);
+
+  /** ステ補正源の寄与内訳。STAT_KINDS の順、同じステ内は元の配列順を保つ */
+  const contributions = $derived<StatContribution[]>(
+    STAT_KINDS.flatMap((k) => trace.stat_contributions.filter((c) => c.kind === k)),
+  );
 </script>
 
 <details class="trace">
@@ -39,13 +56,19 @@
   <div class="tbl">
     <table class="grid">
       <thead><tr>
-        <th>ステ</th><th class="n">素</th><th class="n">Σ割合</th><th class="n">固定</th><th class="n">Π倍率A</th>
-        <th class="n">基本</th><th class="n">倍率B</th><th class="n">[基本×B]</th><th class="n">最終固定</th><th class="n">最終</th>
+        <th>ステ</th><th class="n">最終</th><th class="n">素</th><th class="n">Σ割合</th><th class="n">固定</th><th class="n">Π倍率A</th>
+        <th class="n">基本</th><th class="n">倍率B</th><th class="n">[基本×B]</th><th class="n">最終固定</th>
       </tr></thead>
       <tbody>
         {#each trace.stats as s (s.kind)}
           <tr>
             <td>{STAT_LABELS[s.kind]}</td>
+            <td class="n strong final">
+              <span>{fmtInt(s.effective)}</span>
+              {#if s.pinned_from !== null}
+                <span class="pin-badge" title={pinnedBeforeLabel(s)}>固定</span>
+              {/if}
+            </td>
             <td class="n">{fmtInt(s.base)}</td>
             <td class="n">{fmtInt(s.percent_of_base_total)}</td>
             <td class="n">{fmtInt(s.fixed)}</td>
@@ -54,11 +77,31 @@
             <td class="n">{fmtNum(s.multiplier_b)}</td>
             <td class="n">{fmtInt(s.multiplier_b_bonus)}</td>
             <td class="n">{fmtInt(s.final_fixed)}</td>
-            <td class="n strong">{fmtInt(s.effective)}</td>
           </tr>
         {/each}
       </tbody>
     </table>
+  </div>
+
+  <div class="section-label"><span>(a-1) 補正源内訳</span><span class="rule"></span></div>
+  <div class="tbl">
+    {#if contributions.length === 0}
+      <p class="empty dim">補正源なし(素ステのみ)</p>
+    {:else}
+      <table class="grid">
+        <thead><tr><th>ステ</th><th>出典</th><th>層</th><th class="n">値</th></tr></thead>
+        <tbody>
+          {#each contributions as c, i (i)}
+            <tr>
+              <td>{STAT_LABELS[c.kind]}</td>
+              <td class="muted">{c.source}</td>
+              <td class="muted">{STAT_LAYER_LABELS[c.layer]}</td>
+              <td class="n">{formatLayerValue(c.layer, c.value)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
   </div>
 
   <div class="section-label"><span>(b) カテゴリ集計</span><span class="rule"></span><span class="dim">ハイライト = 非中立値</span></div>
@@ -119,8 +162,14 @@
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
   .tbl { overflow-x: auto; margin: 0 16px 8px; border: 1px solid var(--border-soft); }
+  .empty { padding: 10px 12px; font-size: 11px; }
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }
+  td.final { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pin-badge {
+    font-size: 9px; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent);
+    padding: 1px 4px; cursor: default;
+  }
   td.expr { white-space: normal; color: var(--fg-muted); font-size: 11px; min-width: 260px; }
   tr.active td { background: oklch(0.23 0.025 200); }
   tr.active td.sym { color: var(--warm); }

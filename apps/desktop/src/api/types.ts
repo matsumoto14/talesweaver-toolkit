@@ -1,12 +1,7 @@
-// Tauri コマンドの型とラッパー。形状は Rust の serde 構造体(crates/domain, storage, gamedata)に従う。
-import { invoke } from "@tauri-apps/api/core";
+// Tauri コマンドの入出力の型。Rust の serde 構造体(crates/domain, storage, gamedata)の写し。
+// 手で同期しているため、Rust 側の構造体を変えたらここも必ず変える。
 
 export type StatKind = "stab" | "hack" | "int" | "def" | "mr" | "dex" | "agi";
-export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
-export const STAT_LABELS: Record<StatKind, string> = {
-  stab: "STAB", hack: "HACK", int: "INT", def: "DEF", mr: "MR", dex: "DEX", agi: "AGI",
-};
-
 export type BaseStats = Record<StatKind, number>;
 
 export interface Awakening {
@@ -39,12 +34,88 @@ export interface Enemy {
   element_threshold: number;
 }
 
+// ペット S スキルの段階(wiki: PET)。crates/domain/src/stat_sources.rs の PetSkillTier(snake_case)。
+export type PetSkillTier = "basic" | "true_lv1" | "true_lv2" | "true_lv3" | "true_lv4";
+// ペット S スキル。ステごとに 1 つ(上位段階を選ぶと置き換わる)。未選択は null。
+export type PetSkills = Record<StatKind, PetSkillTier | null>;
+// ルーンスキル。ステごと 0..=20。
+export type RuneLevels = Record<StatKind, number>;
+// クラウン。ステごと 0..=300。
+export type Crown = Record<StatKind, number>;
+// 神鳥の聖物。ステごと 0..=40 段階(実加算値は段階×10)。
+export type SacredRelic = Record<StatKind, number>;
+
+// 能力値計算の5レイヤー(wiki §2)。crates/domain/src/stats.rs の StatLayer(snake_case)。
+export type StatLayer = "percent_of_base" | "fixed" | "multiplier_a" | "multiplier_b" | "final_fixed";
+
+// バフの対象ステ。crates/domain/src/stat_sources.rs の BuffTarget(rename_all snake_case、外部タグ付け)。
+export type BuffTarget = "all_stats" | { stat: StatKind } | "user_selected" | { stats: StatKind[] };
+
+// バフの値の決め方。crates/domain/src/stat_sources.rs の BuffValue(rename_all snake_case、外部タグ付け)。
+export type BuffValue = { fixed: number } | { choice: number[] } | { user_input: { min: number; max: number } };
+
+// バフの分類。crates/domain/src/stat_sources.rs の BuffGroup(rename_all snake_case、外部タグ付け)。
+export type BuffGroup =
+  | "consumable"
+  | { character_skill: { game_character_id: string } }
+  | "ally_skill";
+
+export interface BuffDefinition {
+  id: string;
+  name: string;
+  target: BuffTarget;
+  layer: StatLayer;
+  value: BuffValue;
+  exclusive_slots: string[];
+  source_url: string;
+  note: string;
+  /** BuffValue::UserInput の初期値。それ以外は null */
+  default_value: number | null;
+  group: BuffGroup;
+}
+
+export interface BuffChoice {
+  buff_id: string;
+  stat: StatKind | null;
+  choice_index: number | null;
+  value: number | null;
+}
+
+export interface BuffSelection {
+  choices: BuffChoice[];
+}
+
+export interface StatAdjustment {
+  /** このステに +N する(固定値層への加算) */
+  add: number;
+  /** Some のとき最終能力値をこの値に固定する */
+  pin: number | null;
+}
+export type Adjustments = Record<StatKind, StatAdjustment>;
+
+export interface StatSources {
+  pet_skills: PetSkills;
+  rune_levels: RuneLevels;
+  crown: Crown;
+  sacred_relic: SacredRelic;
+  buffs: BuffSelection;
+  adjustments: Adjustments;
+}
+
+export interface StatContribution {
+  source: string;
+  kind: StatKind;
+  layer: StatLayer;
+  value: number;
+}
+
 export interface RegisteredCharacter {
   id: number;
   name: string;
   game_character_id: string;
   base_stats: BaseStats;
   awakening: Awakening;
+  stat_sources: StatSources;
 }
 
 export interface NewCharacter {
@@ -52,6 +123,7 @@ export interface NewCharacter {
   game_character_id: string;
   base_stats: BaseStats;
   awakening: Awakening;
+  stat_sources: StatSources;
 }
 
 export type CategoryKind = "assigned" | "fixed" | "rate";
@@ -82,6 +154,18 @@ export interface StatTrace {
   multiplier_b_bonus: number;
   final_fixed: number;
   effective: number;
+  /** pin(能力値の固定)が適用された場合の上書き前の値。未適用は null */
+  pinned_from: number | null;
+}
+
+// 7 ステータスすべての最終能力値。crates/domain/src/stats.rs の EffectiveStats。
+export type EffectiveStats = Record<StatKind, number>;
+
+// crates/domain/src/stat_sources.rs の StatPreview。preview_effective_stats コマンドの戻り値(保存しない)。
+export interface StatPreview {
+  stats: EffectiveStats;
+  traces: StatTrace[];
+  contributions: StatContribution[];
 }
 
 export interface FormulaStep {
@@ -98,6 +182,8 @@ export interface DamageTriple {
 
 export interface DamageTrace {
   stats: StatTrace[];
+  /** ステ補正源(ペット/ルーン/クラウン/聖物/バフ/調整値)の寄与内訳 */
+  stat_contributions: StatContribution[];
   categories: CategoryTrace[];
   steps_min: FormulaStep[];
   steps_max: FormulaStep[];
@@ -111,17 +197,3 @@ export interface DamageResult {
   trace: DamageTrace;
 }
 
-export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
-export const listSkills = (gameCharacterId: string) => invoke<Skill[]>("list_skills", { gameCharacterId });
-export const listEnemies = () => invoke<Enemy[]>("list_enemies");
-export const listCharacters = () => invoke<RegisteredCharacter[]>("list_characters");
-export const createCharacter = (character: NewCharacter) =>
-  invoke<RegisteredCharacter>("create_character", { character });
-export const deleteCharacter = (id: number) => invoke<void>("delete_character", { id });
-export const calculateDamage = (characterId: number, skillId: string, enemyId: string, comboCount: number) =>
-  invoke<DamageResult>("calculate_damage", { characterId, skillId, enemyId, comboCount });
-
-/** invoke の reject(String)を表示用文字列にする */
-export function errorMessage(e: unknown): string {
-  return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
-}
