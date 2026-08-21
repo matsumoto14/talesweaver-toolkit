@@ -1,0 +1,418 @@
+//! 与ダメージ式のカテゴリ(docs/damage-formula.md §4)と集計。
+//!
+//! wiki の記号(A〜Y, New1/New2 など)は `wiki_symbol()` とドキュメントコメントにだけ置き、識別子には使わない。
+
+use serde::{Deserialize, Serialize};
+
+/// カテゴリの種別(wiki §3「種別の意味」)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CategoryKind {
+    /// 代入: 計算結果・倍率をそのまま入れる(後から入れた値で置き換わる)
+    Assigned,
+    /// 固定値: 整数。初期値 0 に加減算
+    Fixed,
+    /// 割合: 初期値 0%(=係数 1.0)に加減算。同一カテゴリ内は加算
+    Rate,
+}
+
+/// 集計値の範囲。割合は Σ% の小数表現(+45% → 0.45)、固定値はそのままの値。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CategoryCap {
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+}
+
+impl CategoryCap {
+    const fn max(max: f64) -> Self {
+        Self { min: None, max: Some(max) }
+    }
+
+    const fn range(min: f64, max: f64) -> Self {
+        Self { min: Some(min), max: Some(max) }
+    }
+
+    fn clamp(&self, value: f64) -> f64 {
+        let value = match self.min {
+            Some(min) => value.max(min),
+            None => value,
+        };
+        match self.max {
+            Some(max) => value.min(max),
+            None => value,
+        }
+    }
+}
+
+/// 与ダメージ式に現れる全カテゴリ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DamageCategory {
+    /// wiki: A 攻撃力
+    AttackPower,
+    /// wiki: B 攻撃力乱数部分
+    AttackRandom,
+    /// wiki: C 攻撃対象の防御力
+    TargetDefense,
+    /// wiki: D スキル倍率
+    SkillMultiplier,
+    /// wiki: E1 スキル倍率増加(割合)
+    SkillMultiplierRate,
+    /// wiki: E2 スキル倍率増加(固定値)
+    SkillMultiplierFixed,
+    /// wiki: F Cri倍率
+    CriticalMultiplier,
+    /// wiki: G クリティカルダメージ増加
+    CriticalDamageRate,
+    /// wiki: H コンボボーナス
+    ComboBonus,
+    /// wiki: I 属性差ボーナス
+    ElementBonus,
+    /// wiki: J カット率(プレイヤー)
+    PlayerCutRate,
+    /// wiki: New1 攻撃力増加(シエナのオーラ)
+    SienaAuraAttackRate,
+    /// wiki: K 最終ダメージ(固定値)
+    FinalDamageFixed,
+    /// wiki: L 最終ダメージ
+    FinalDamageRate,
+    /// wiki: V1 カット率A
+    CutRateA,
+    /// wiki: M 被害減少
+    DamageReduction,
+    /// wiki: Old 攻撃ダメージII
+    AttackDamageLegacy,
+    /// wiki: N 覚醒ダメージ
+    AwakeningDamage,
+    /// wiki: O 物理/魔法ダメージ増加
+    PhysicalMagicDamageRate,
+    /// wiki: P 特定依存ダメージ増加
+    DependencyDamageRate,
+    /// wiki: Q 物理/魔法ダメージ吸収(式では 1−Q)
+    DamageAbsorb,
+    /// wiki: R 物理/魔法被ダメージ倍率
+    TakenDamageRate,
+    /// wiki: S 被ダメージ減少(式では 1−S)
+    TakenDamageReduction,
+    /// wiki: T ダメージ増幅
+    DamageAmplify,
+    /// wiki: U ダメージ耐性(式では 1−U)
+    DamageResistance,
+    /// wiki: New2 ダメージ緩和(式では 1−New2)
+    DamageMitigation,
+    /// wiki: V2 カット率B
+    CutRateB,
+    /// wiki: W 攻撃ダメージ(基本発動)(固定値)
+    BasicTriggerDamageFixed,
+    /// wiki: X 攻撃ダメージ
+    AttackDamageRate,
+    /// wiki: Y PVP補正
+    PvpCorrection,
+}
+
+impl DamageCategory {
+    /// 式に現れる順。
+    pub const ALL: [DamageCategory; 30] = [
+        DamageCategory::AttackPower,
+        DamageCategory::AttackRandom,
+        DamageCategory::TargetDefense,
+        DamageCategory::SkillMultiplier,
+        DamageCategory::SkillMultiplierRate,
+        DamageCategory::SkillMultiplierFixed,
+        DamageCategory::CriticalMultiplier,
+        DamageCategory::CriticalDamageRate,
+        DamageCategory::ComboBonus,
+        DamageCategory::ElementBonus,
+        DamageCategory::PlayerCutRate,
+        DamageCategory::SienaAuraAttackRate,
+        DamageCategory::FinalDamageFixed,
+        DamageCategory::FinalDamageRate,
+        DamageCategory::CutRateA,
+        DamageCategory::DamageReduction,
+        DamageCategory::AttackDamageLegacy,
+        DamageCategory::AwakeningDamage,
+        DamageCategory::PhysicalMagicDamageRate,
+        DamageCategory::DependencyDamageRate,
+        DamageCategory::DamageAbsorb,
+        DamageCategory::TakenDamageRate,
+        DamageCategory::TakenDamageReduction,
+        DamageCategory::DamageAmplify,
+        DamageCategory::DamageResistance,
+        DamageCategory::DamageMitigation,
+        DamageCategory::CutRateB,
+        DamageCategory::BasicTriggerDamageFixed,
+        DamageCategory::AttackDamageRate,
+        DamageCategory::PvpCorrection,
+    ];
+
+    pub fn all() -> &'static [DamageCategory] {
+        &Self::ALL
+    }
+
+    pub fn kind(self) -> CategoryKind {
+        use DamageCategory::*;
+        match self {
+            AttackPower | AttackRandom | SkillMultiplier | SkillMultiplierFixed
+            | CriticalMultiplier => CategoryKind::Assigned,
+            TargetDefense | FinalDamageFixed | DamageReduction | BasicTriggerDamageFixed => {
+                CategoryKind::Fixed
+            }
+            SkillMultiplierRate | CriticalDamageRate | ComboBonus | ElementBonus | PlayerCutRate
+            | SienaAuraAttackRate | FinalDamageRate | CutRateA | AttackDamageLegacy
+            | AwakeningDamage | PhysicalMagicDamageRate | DependencyDamageRate | DamageAbsorb
+            | TakenDamageRate | TakenDamageReduction | DamageAmplify | DamageResistance
+            | DamageMitigation | CutRateB | AttackDamageRate | PvpCorrection => CategoryKind::Rate,
+        }
+    }
+
+    /// 式の中で `(1 − 値)` として掛かる割合カテゴリ。
+    pub fn is_subtractive(self) -> bool {
+        use DamageCategory::*;
+        matches!(self, DamageAbsorb | TakenDamageReduction | DamageResistance | DamageMitigation)
+    }
+
+    /// 集計値の上限・下限(wiki §4)。サブカテゴリを持つ S・X は親のみで上限なし。
+    pub fn cap(self) -> Option<CategoryCap> {
+        use DamageCategory::*;
+        match self {
+            ElementBonus => Some(CategoryCap::range(0.0, 0.50)),
+            FinalDamageFixed => Some(CategoryCap::max(1000.0)),
+            FinalDamageRate => Some(CategoryCap::max(0.45)),
+            // 初期100%・下限30%・上限300% → Σ% は -70%..+200%
+            AttackDamageLegacy => Some(CategoryCap::range(-0.70, 2.00)),
+            DependencyDamageRate => Some(CategoryCap::max(0.73)),
+            DamageAbsorb => Some(CategoryCap::range(0.0, 0.70)),
+            DamageResistance => Some(CategoryCap::max(0.62)),
+            DamageMitigation => Some(CategoryCap::max(0.40)),
+            BasicTriggerDamageFixed => Some(CategoryCap::max(1000.0)),
+            _ => None,
+        }
+    }
+
+    /// wiki の記号(トレース表示用)。
+    pub fn wiki_symbol(self) -> &'static str {
+        use DamageCategory::*;
+        match self {
+            AttackPower => "A",
+            AttackRandom => "B",
+            TargetDefense => "C",
+            SkillMultiplier => "D",
+            SkillMultiplierRate => "E1",
+            SkillMultiplierFixed => "E2",
+            CriticalMultiplier => "F",
+            CriticalDamageRate => "G",
+            ComboBonus => "H",
+            ElementBonus => "I",
+            PlayerCutRate => "J",
+            SienaAuraAttackRate => "New1",
+            FinalDamageFixed => "K",
+            FinalDamageRate => "L",
+            CutRateA => "V1",
+            DamageReduction => "M",
+            AttackDamageLegacy => "Old",
+            AwakeningDamage => "N",
+            PhysicalMagicDamageRate => "O",
+            DependencyDamageRate => "P",
+            DamageAbsorb => "Q",
+            TakenDamageRate => "R",
+            TakenDamageReduction => "S",
+            DamageAmplify => "T",
+            DamageResistance => "U",
+            DamageMitigation => "New2",
+            CutRateB => "V2",
+            BasicTriggerDamageFixed => "W",
+            AttackDamageRate => "X",
+            PvpCorrection => "Y",
+        }
+    }
+
+    /// 日本語名(wiki §4)。
+    pub fn label(self) -> &'static str {
+        use DamageCategory::*;
+        match self {
+            AttackPower => "攻撃力",
+            AttackRandom => "攻撃力乱数部分",
+            TargetDefense => "攻撃対象の防御力",
+            SkillMultiplier => "スキル倍率",
+            SkillMultiplierRate => "スキル倍率増加(割合)",
+            SkillMultiplierFixed => "スキル倍率増加(固定値)",
+            CriticalMultiplier => "Cri倍率",
+            CriticalDamageRate => "クリティカルダメージ増加",
+            ComboBonus => "コンボボーナス",
+            ElementBonus => "属性差ボーナス",
+            PlayerCutRate => "カット率(プレイヤー)",
+            SienaAuraAttackRate => "攻撃力増加(シエナのオーラ)",
+            FinalDamageFixed => "最終ダメージ(固定値)",
+            FinalDamageRate => "最終ダメージ",
+            CutRateA => "カット率A",
+            DamageReduction => "被害減少",
+            AttackDamageLegacy => "攻撃ダメージII",
+            AwakeningDamage => "覚醒ダメージ",
+            PhysicalMagicDamageRate => "物理/魔法ダメージ増加",
+            DependencyDamageRate => "特定依存ダメージ増加",
+            DamageAbsorb => "物理/魔法ダメージ吸収",
+            TakenDamageRate => "物理/魔法被ダメージ倍率",
+            TakenDamageReduction => "被ダメージ減少",
+            DamageAmplify => "ダメージ増幅",
+            DamageResistance => "ダメージ耐性",
+            DamageMitigation => "ダメージ緩和",
+            CutRateB => "カット率B",
+            BasicTriggerDamageFixed => "攻撃ダメージ(基本発動)(固定値)",
+            AttackDamageRate => "攻撃ダメージ",
+            PvpCorrection => "PVP補正",
+        }
+    }
+
+    fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|c| *c == self)
+            .expect("ALL は全 variant を含む")
+    }
+}
+
+/// 1 カテゴリの集計結果(トレース用)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CategoryTrace {
+    pub category: DamageCategory,
+    pub symbol: String,
+    pub label: String,
+    pub kind: CategoryKind,
+    /// 生の集計値。割合は Σ% の小数表現(+15% → 0.15)、固定値は合計、代入はその値
+    pub value: f64,
+    /// 式で使われる値。割合は 1+Σ%(減算系は 1−Σ%)、それ以外は value と同じ
+    pub factor: f64,
+    pub cap: Option<CategoryCap>,
+}
+
+/// 全カテゴリの集計値(パイプライン②)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CategoryTotals {
+    /// `DamageCategory::ALL` と同じ順。生の集計値
+    values: [f64; 30],
+}
+
+impl CategoryTotals {
+    /// 中立値。割合 = +0%(係数 1.0)、固定値 = 0、代入 = 0.0(呼び出し側が必ず代入する)。
+    pub fn neutral() -> Self {
+        Self { values: [0.0; 30] }
+    }
+
+    /// 値を入れる。割合・固定値は同一カテゴリ内で加算、代入は置き換え。キャップを適用する。
+    pub fn add(&mut self, category: DamageCategory, value: f64) {
+        let slot = &mut self.values[category.index()];
+        let raw = match category.kind() {
+            CategoryKind::Assigned => value,
+            CategoryKind::Fixed | CategoryKind::Rate => *slot + value,
+        };
+        *slot = match category.cap() {
+            Some(cap) => cap.clamp(raw),
+            None => raw,
+        };
+    }
+
+    /// 生の集計値(割合は Σ%)。
+    pub fn value(&self, category: DamageCategory) -> f64 {
+        self.values[category.index()]
+    }
+
+    /// 式で使う値。割合は `1 + Σ%`(減算系は `1 − Σ%`)、固定値・代入はそのまま。
+    pub fn get(&self, category: DamageCategory) -> f64 {
+        let raw = self.value(category);
+        match category.kind() {
+            CategoryKind::Rate if category.is_subtractive() => 1.0 - raw,
+            CategoryKind::Rate => 1.0 + raw,
+            CategoryKind::Assigned | CategoryKind::Fixed => raw,
+        }
+    }
+
+    pub fn trace(&self) -> Vec<CategoryTrace> {
+        DamageCategory::ALL
+            .iter()
+            .map(|&category| CategoryTrace {
+                category,
+                symbol: category.wiki_symbol().to_string(),
+                label: category.label().to_string(),
+                kind: category.kind(),
+                value: self.value(category),
+                factor: self.get(category),
+                cap: category.cap(),
+            })
+            .collect()
+    }
+}
+
+impl Default for CategoryTotals {
+    fn default() -> Self {
+        Self::neutral()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use DamageCategory::*;
+
+    #[test]
+    fn all_は全カテゴリを重複なく返す() {
+        assert_eq!(DamageCategory::all().len(), 30);
+        let mut symbols: Vec<_> = DamageCategory::all().iter().map(|c| c.wiki_symbol()).collect();
+        symbols.sort_unstable();
+        symbols.dedup();
+        assert_eq!(symbols.len(), 30);
+    }
+
+    #[test]
+    fn 中立値は割合1固定0() {
+        let t = CategoryTotals::neutral();
+        assert_eq!(t.get(FinalDamageRate), 1.0);
+        assert_eq!(t.get(DamageAbsorb), 1.0);
+        assert_eq!(t.get(FinalDamageFixed), 0.0);
+        assert_eq!(t.get(AttackPower), 0.0);
+        assert_eq!(t.trace().len(), 30);
+    }
+
+    #[test]
+    fn 割合は同一カテゴリ内で加算される() {
+        let mut t = CategoryTotals::neutral();
+        t.add(FinalDamageRate, 0.2);
+        t.add(FinalDamageRate, 0.1);
+        assert!((t.get(FinalDamageRate) - 1.3).abs() < 1e-12);
+    }
+
+    #[test]
+    fn 減算系の割合は1から引く() {
+        let mut t = CategoryTotals::neutral();
+        t.add(DamageAbsorb, 0.3);
+        assert!((t.get(DamageAbsorb) - 0.7).abs() < 1e-12);
+        assert!((t.value(DamageAbsorb) - 0.3).abs() < 1e-12);
+    }
+
+    #[test]
+    fn 固定値は加算され代入は置き換わる() {
+        let mut t = CategoryTotals::neutral();
+        t.add(DamageReduction, -100.0);
+        t.add(DamageReduction, -50.0);
+        assert_eq!(t.get(DamageReduction), -150.0);
+        t.add(SkillMultiplier, 1.5);
+        t.add(SkillMultiplier, 2.0);
+        assert_eq!(t.get(SkillMultiplier), 2.0);
+    }
+
+    #[test]
+    fn キャップが適用される() {
+        let mut t = CategoryTotals::neutral();
+        t.add(FinalDamageRate, 0.5);
+        assert!((t.get(FinalDamageRate) - 1.45).abs() < 1e-12);
+        t.add(ElementBonus, -0.3);
+        assert_eq!(t.get(ElementBonus), 1.0);
+        t.add(ElementBonus, 0.9);
+        assert!((t.get(ElementBonus) - 1.5).abs() < 1e-12);
+        t.add(FinalDamageFixed, 1500.0);
+        assert_eq!(t.get(FinalDamageFixed), 1000.0);
+        t.add(AttackDamageLegacy, -0.9);
+        assert!((t.get(AttackDamageLegacy) - 0.3).abs() < 1e-12);
+        t.add(AttackDamageLegacy, 5.0);
+        assert!((t.get(AttackDamageLegacy) - 3.0).abs() < 1e-12);
+    }
+}

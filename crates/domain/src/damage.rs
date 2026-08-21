@@ -1,0 +1,431 @@
+//! 与ダメージ計算(docs/damage-formula.md §3)。
+//!
+//! ①能力値計算 → ②カテゴリ集計 → ③式の評価 → ④段数 の 4 段をここで束ねる。
+
+use serde::{Deserialize, Serialize};
+
+use crate::attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
+use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
+use crate::enemy::Enemy;
+use crate::rounding::{floor_int, trunc2};
+use crate::skill::Skill;
+use crate::stats::{effective_stats, BaseStats, StatModifierSet, StatTrace};
+
+/// 3 コンボ以上で付くコンボボーナス(wiki: カテゴリH)。
+const COMBO_BONUS_RATE: f64 = 0.15;
+/// コンボボーナスが付くコンボ数。
+const COMBO_BONUS_THRESHOLD: u32 = 3;
+/// 属性差 1 あたりの属性差ボーナス(%)(wiki: カテゴリI)。
+const ELEMENT_BONUS_PERCENT_PER_POINT: f64 = 0.625;
+/// 対モンスターの与ダメージ下限。
+const MIN_DAMAGE_TO_MONSTER: i64 = 1;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DamageInput {
+    pub base_stats: BaseStats,
+    pub stat_modifiers: StatModifierSet,
+    pub coefficients: AttackCoefficients,
+    pub skill: Skill,
+    pub enemy: Enemy,
+    /// 覚醒倍率(wiki: カテゴリN)。1.0 = 補正なし
+    pub awakening_rate: f64,
+    pub combo_count: u32,
+    /// キャラの属性値(wiki: カテゴリI の起点)。現状は 0
+    pub element_value: i64,
+    /// 装備攻撃力(wiki: カテゴリA の内訳)。現状は 0
+    pub equipment_attack: f64,
+    /// 装備補正強化係数(wiki: カテゴリA の内訳)。現状は 0
+    pub equipment_enhance_rate: f64,
+}
+
+/// 式の 1 段。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FormulaStep {
+    pub name: String,
+    pub expression: String,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageTriple {
+    pub min: i64,
+    pub max: i64,
+    pub critical: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DamageTrace {
+    pub stats: Vec<StatTrace>,
+    /// 最大乱数(B = 最大)時のカテゴリ集計
+    pub categories: Vec<CategoryTrace>,
+    pub steps_min: Vec<FormulaStep>,
+    pub steps_max: Vec<FormulaStep>,
+    pub steps_critical: Vec<FormulaStep>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DamageResult {
+    pub per_hit: DamageTriple,
+    /// 与ダメージ × 段数(追加ダメージは未実装のため 0)
+    pub total: DamageTriple,
+    pub hit_count: u32,
+    pub trace: DamageTrace,
+}
+
+/// 属性差ボーナス(wiki: カテゴリI)の Σ%。`floor((属性値 − 閾値) × 0.625) / 100`。範囲はキャップで 0..+50% に収める。
+fn element_bonus_rate(element_value: i64, element_threshold: i64) -> f64 {
+    floor_int((element_value - element_threshold) as f64 * ELEMENT_BONUS_PERCENT_PER_POINT) as f64
+        / 100.0
+}
+
+/// 与ダメージ式(wiki §3)を評価する。`totals` には A〜Y がすべて入っている前提。
+///
+/// ```text
+/// [ ( ( MAX( (A + B − C) * {D*E1 + E2} * {F*G} * H * I * J * New1 + K, K )
+///       * L * V1 + M )
+///     * Old * N * O * P * (1−Q) * R * (1−S) * T * (1−U) * (1−New2) * V2 + W )
+///   * X * Y ]
+/// ```
+pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaStep>) {
+    use DamageCategory::*;
+    let g = |c: DamageCategory| totals.get(c);
+    let mut steps = Vec::with_capacity(10);
+    let mut step = |name: &str, expression: String, value: f64| {
+        steps.push(FormulaStep { name: name.to_string(), expression, value });
+        value
+    };
+
+    let base = step(
+        "攻撃力−防御力",
+        format!("A {} + B {} − C {}", g(AttackPower), g(AttackRandom), g(TargetDefense)),
+        g(AttackPower) + g(AttackRandom) - g(TargetDefense),
+    );
+    let skill = step(
+        "スキル倍率",
+        format!("{{D {} × E1 {} + E2 {}}}", g(SkillMultiplier), g(SkillMultiplierRate), g(SkillMultiplierFixed)),
+        trunc2(g(SkillMultiplier) * g(SkillMultiplierRate) + g(SkillMultiplierFixed)),
+    );
+    let crit = if critical {
+        step(
+            "クリティカル",
+            format!("{{F {} × G {}}}", g(CriticalMultiplier), g(CriticalDamageRate)),
+            trunc2(g(CriticalMultiplier) * g(CriticalDamageRate)),
+        )
+    } else {
+        step("クリティカル", "非クリティカル(F = 1.0)".to_string(), 1.0)
+    };
+    let bonus = step(
+        "コンボ・属性・カット率・オーラ",
+        format!("H {} × I {} × J {} × New1 {}", g(ComboBonus), g(ElementBonus), g(PlayerCutRate), g(SienaAuraAttackRate)),
+        g(ComboBonus) * g(ElementBonus) * g(PlayerCutRate) * g(SienaAuraAttackRate),
+    );
+    let product = base * skill * crit * bonus;
+    let inner = step(
+        "最終ダメージ固定値(下限)",
+        format!("MAX({product} + K {k}, K {k})", k = g(FinalDamageFixed)),
+        (product + g(FinalDamageFixed)).max(g(FinalDamageFixed)),
+    );
+    let mid = step(
+        "最終ダメージ・カット率A・被害減少",
+        format!("{inner} × L {} × V1 {} + M {}", g(FinalDamageRate), g(CutRateA), g(DamageReduction)),
+        inner * g(FinalDamageRate) * g(CutRateA) + g(DamageReduction),
+    );
+    let outer_factors = g(AttackDamageLegacy)
+        * g(AwakeningDamage)
+        * g(PhysicalMagicDamageRate)
+        * g(DependencyDamageRate)
+        * g(DamageAbsorb)
+        * g(TakenDamageRate)
+        * g(TakenDamageReduction)
+        * g(DamageAmplify)
+        * g(DamageResistance)
+        * g(DamageMitigation)
+        * g(CutRateB);
+    let outer = step(
+        "各種ダメージ増減",
+        format!(
+            "{mid} × Old {} × N {} × O {} × P {} × (1−Q) {} × R {} × (1−S) {} × T {} × (1−U) {} × (1−New2) {} × V2 {} + W {}",
+            g(AttackDamageLegacy),
+            g(AwakeningDamage),
+            g(PhysicalMagicDamageRate),
+            g(DependencyDamageRate),
+            g(DamageAbsorb),
+            g(TakenDamageRate),
+            g(TakenDamageReduction),
+            g(DamageAmplify),
+            g(DamageResistance),
+            g(DamageMitigation),
+            g(CutRateB),
+            g(BasicTriggerDamageFixed),
+        ),
+        mid * outer_factors + g(BasicTriggerDamageFixed),
+    );
+    let final_value = step(
+        "攻撃ダメージ・PVP補正",
+        format!("{outer} × X {} × Y {}", g(AttackDamageRate), g(PvpCorrection)),
+        outer * g(AttackDamageRate) * g(PvpCorrection),
+    );
+    let floored = floor_int(final_value);
+    step("切捨て", format!("[{final_value}]"), floored as f64);
+    let damage = floored.max(MIN_DAMAGE_TO_MONSTER);
+    step("対モンスター下限", format!("MAX({floored}, {MIN_DAMAGE_TO_MONSTER})"), damage as f64);
+    (damage, steps)
+}
+
+pub fn calculate_damage(input: &DamageInput) -> DamageResult {
+    use DamageCategory::*;
+
+    // ① 能力値計算
+    let (stats, stat_traces) = effective_stats(&input.base_stats, &input.stat_modifiers);
+
+    // ② カテゴリ集計
+    let stat_attack = stat_attack_power(&stats, &input.coefficients);
+    let mut totals = CategoryTotals::neutral();
+    totals.add(
+        AttackPower,
+        attack_power(stat_attack, input.equipment_attack, input.equipment_enhance_rate) as f64,
+    );
+    totals.add(TargetDefense, input.enemy.defense as f64);
+    totals.add(SkillMultiplier, input.skill.multiplier);
+    totals.add(CriticalMultiplier, input.skill.critical_multiplier);
+    if input.combo_count >= COMBO_BONUS_THRESHOLD {
+        totals.add(ComboBonus, COMBO_BONUS_RATE);
+    }
+    totals.add(ElementBonus, element_bonus_rate(input.element_value, input.enemy.element_threshold));
+    totals.add(DamageReduction, input.enemy.damage_reduction as f64);
+    totals.add(AwakeningDamage, input.awakening_rate - 1.0);
+    totals.add(CutRateA, input.enemy.cut_rate_a - 1.0);
+
+    let mut totals_min = totals.clone();
+    totals_min.add(AttackRandom, 1.0);
+    let mut totals_max = totals;
+    totals_max.add(AttackRandom, random_part_max(stat_attack, stats.dex));
+
+    // ③ 式の評価
+    let (min, steps_min) = evaluate(&totals_min, false);
+    let (max, steps_max) = evaluate(&totals_max, false);
+    let (critical, steps_critical) = evaluate(&totals_max, true);
+
+    // ④ 段数
+    let hit_count = input.skill.hit_count;
+    let hits = i64::from(hit_count);
+    DamageResult {
+        per_hit: DamageTriple { min, max, critical },
+        total: DamageTriple { min: min * hits, max: max * hits, critical: critical * hits },
+        hit_count,
+        trace: DamageTrace {
+            stats: stat_traces,
+            categories: totals_max.trace(),
+            steps_min,
+            steps_max,
+            steps_critical,
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::category::CategoryKind;
+    use crate::skill::SkillDependency;
+    use crate::stats::StatKind;
+
+    fn input() -> DamageInput {
+        DamageInput {
+            base_stats: BaseStats { stab: 500, hack: 500, int: 0, def: 0, mr: 0, dex: 100, agi: 0 },
+            stat_modifiers: StatModifierSet::neutral(),
+            coefficients: AttackCoefficients { primary: (StatKind::Stab, 1.8), secondary: (StatKind::Hack, 1.8) },
+            skill: Skill {
+                id: "s".into(),
+                name: "テスト斬り".into(),
+                dependency: SkillDependency::StabHack,
+                multiplier: 0.99,
+                hit_count: 1,
+                critical_multiplier: 2.0,
+            },
+            enemy: Enemy {
+                id: "e".into(),
+                name: "テスト敵".into(),
+                defense: 990,
+                damage_reduction: 0,
+                cut_rate_a: 1.0,
+                element_threshold: 90,
+            },
+            awakening_rate: 1.0,
+            combo_count: 0,
+            element_value: 0,
+            equipment_attack: 0.0,
+            equipment_enhance_rate: 0.0,
+        }
+    }
+
+    // 基準値(手計算):
+    //   ステ攻撃力 = 500×1.8 + 500×1.8 = 1800 → A = 1800
+    //   B最大 = {(1800 + 100×3)/18} + 1 = {116.666..} + 1 = 117.66
+    //   min : (1800 + 1 − 990) × {0.99} = 811 × 0.99 = 802.89 → 802
+    //   max : (1800 + 117.66 − 990) × 0.99 = 927.66 × 0.99 = 918.3834 → 918
+    //   crit: 918.3834 × {2.0 × 1.0} = 1836.7668 → 1836
+    #[test]
+    fn 攻撃力_乱数_防御力_スキル倍率_cri倍率() {
+        let r = calculate_damage(&input());
+        assert_eq!(r.per_hit, DamageTriple { min: 802, max: 918, critical: 1836 });
+        assert_eq!(r.total, r.per_hit);
+        assert_eq!(r.hit_count, 1);
+        assert_eq!(r.trace.stats.len(), 7);
+        assert_eq!(r.trace.categories.len(), 30);
+        let a = r.trace.categories.iter().find(|c| c.symbol == "A").unwrap();
+        assert_eq!(a.value, 1800.0);
+        assert_eq!(a.kind, CategoryKind::Assigned);
+    }
+
+    #[test]
+    fn 段数を掛けた合計() {
+        let mut i = input();
+        i.skill.hit_count = 11;
+        let r = calculate_damage(&i);
+        assert_eq!(r.per_hit, DamageTriple { min: 802, max: 918, critical: 1836 });
+        assert_eq!(r.total, DamageTriple { min: 802 * 11, max: 918 * 11, critical: 1836 * 11 });
+    }
+
+    // コンボ 3 以上で H = 1.15:
+    //   min : 802.89 × 1.15 = 923.3235 → 923
+    //   max : 918.3834 × 1.15 = 1056.14091 → 1056
+    //   crit: 1836.7668 × 1.15 = 2112.28182 → 2112
+    #[test]
+    fn コンボボーナス() {
+        let mut i = input();
+        i.combo_count = 2;
+        assert_eq!(calculate_damage(&i).per_hit.min, 802);
+        i.combo_count = 3;
+        let r = calculate_damage(&i);
+        assert_eq!(r.per_hit, DamageTriple { min: 923, max: 1056, critical: 2112 });
+    }
+
+    // 覚醒倍率 1.2: max 918.3834 × 1.2 = 1102.06 → 1102
+    #[test]
+    fn 覚醒ダメージ() {
+        let mut i = input();
+        i.awakening_rate = 1.2;
+        let r = calculate_damage(&i);
+        assert_eq!(r.per_hit.max, 1102);
+        let n = r.trace.categories.iter().find(|c| c.symbol == "N").unwrap();
+        assert!((n.value - 0.2).abs() < 1e-12);
+    }
+
+    // 属性値 170 − 閾値 90 = 80 → 80 × 0.625 = 50 → I = 1.50: min 802.89 × 1.5 = 1204.335 → 1204
+    // 属性値 1000 でも上限 +50% で同じ。属性値 0 は負 → 下限 0%
+    #[test]
+    fn 属性差ボーナス() {
+        let mut i = input();
+        i.element_value = 170;
+        assert_eq!(calculate_damage(&i).per_hit.min, 1204);
+        i.element_value = 1000;
+        assert_eq!(calculate_damage(&i).per_hit.min, 1204);
+        // 属性値 100 − 90 = 10 → 6.25 → floor 6 → 1.06: 802.89 × 1.06 = 851.0634 → 851
+        i.element_value = 100;
+        assert_eq!(calculate_damage(&i).per_hit.min, 851);
+        i.element_value = 0;
+        assert_eq!(calculate_damage(&i).per_hit.min, 802);
+    }
+
+    // 被害減少 −100、カット率A 0.5:
+    //   min: 802.89 × 0.5 − 100 = 301.445 → 301
+    #[test]
+    fn 被害減少とカット率a() {
+        let mut i = input();
+        i.enemy.damage_reduction = -100;
+        i.enemy.cut_rate_a = 0.5;
+        assert_eq!(calculate_damage(&i).per_hit.min, 301);
+    }
+
+    #[test]
+    fn 防御力が攻撃力を上回ると対モンスター下限の1() {
+        let mut i = input();
+        i.enemy.defense = 5000;
+        let r = calculate_damage(&i);
+        assert_eq!(r.per_hit, DamageTriple { min: 1, max: 1, critical: 1 });
+        assert_eq!(r.trace.steps_min.last().unwrap().name, "対モンスター下限");
+    }
+
+    #[test]
+    fn 丸め境界_スキル倍率は小数2位切捨て() {
+        use DamageCategory::*;
+        let mut t = CategoryTotals::neutral();
+        t.add(AttackPower, 1000.0);
+        t.add(AttackRandom, 0.0);
+        t.add(SkillMultiplier, 1.0);
+        t.add(SkillMultiplierRate, 0.123); // {1.0 × 1.123} = 1.12
+        t.add(CriticalMultiplier, 2.0);
+        // 1000 × 1.12 = 1120
+        assert_eq!(evaluate(&t, false).0, 1120);
+        // クリティカル: G +30% → {2.0 × 1.3} = 2.6 → 1120 × 2.6 = 2912
+        t.add(CriticalDamageRate, 0.3);
+        assert_eq!(evaluate(&t, true).0, 2912);
+        // G +0.7% → {2.0 × 1.007 = 2.014} = 2.01 → 1120 × 2.01 = 2251.2 → 2251
+        let mut t2 = t.clone();
+        t2.add(CriticalDamageRate, -0.3 + 0.007);
+        assert_eq!(evaluate(&t2, true).0, 2251);
+    }
+
+    #[test]
+    fn 最終ダメージ固定値が下限になる() {
+        use DamageCategory::*;
+        let mut t = CategoryTotals::neutral();
+        t.add(AttackPower, 100.0);
+        t.add(TargetDefense, 500.0);
+        t.add(SkillMultiplier, 1.0);
+        t.add(CriticalMultiplier, 2.0);
+        t.add(FinalDamageFixed, 300.0);
+        // (100 − 500) × 1 + 300 = −100 → MAX(−100, 300) = 300
+        assert_eq!(evaluate(&t, false).0, 300);
+    }
+
+    /// 配線漏れ防止: 全カテゴリに非中立値を入れたとき結果が変わること。
+    #[test]
+    fn 全カテゴリが式に配線されている() {
+        use DamageCategory::*;
+        let mut base = CategoryTotals::neutral();
+        base.add(AttackPower, 2000.0);
+        base.add(AttackRandom, 50.0);
+        base.add(TargetDefense, 500.0);
+        base.add(SkillMultiplier, 1.5);
+        base.add(CriticalMultiplier, 2.0);
+        let (normal, _) = evaluate(&base, false);
+        let (critical, _) = evaluate(&base, true);
+        assert!(normal > 1 && critical > normal);
+
+        for &category in DamageCategory::all() {
+            let mut t = base.clone();
+            let delta = match category.kind() {
+                CategoryKind::Assigned => t.value(category) * 1.5 + 1.0,
+                CategoryKind::Fixed => 100.0,
+                CategoryKind::Rate => 0.1,
+            };
+            t.add(category, delta);
+            let (n, _) = evaluate(&t, false);
+            let (c, steps) = evaluate(&t, true);
+            assert_ne!(c, critical, "{}({}) がクリティカル時の結果に影響していない", category.label(), category.wiki_symbol());
+            let only_critical = matches!(category, CriticalMultiplier | CriticalDamageRate);
+            if !only_critical {
+                assert_ne!(n, normal, "{}({}) が結果に影響していない", category.label(), category.wiki_symbol());
+            }
+            let symbol = category.wiki_symbol();
+            assert!(
+                steps.iter().any(|s| s.expression.contains(&format!("{symbol} "))
+                    || s.expression.contains(&format!("{symbol}) "))),
+                "{symbol} がトレース式に現れない"
+            );
+        }
+    }
+
+    #[test]
+    fn トレースに全カテゴリが出る() {
+        let r = calculate_damage(&input());
+        let symbols: Vec<&str> = r.trace.categories.iter().map(|c| c.symbol.as_str()).collect();
+        for c in DamageCategory::all() {
+            assert!(symbols.contains(&c.wiki_symbol()));
+        }
+        assert_eq!(r.trace.steps_min.len(), 10);
+        assert_eq!(r.trace.steps_min.len(), r.trace.steps_critical.len());
+    }
+}
