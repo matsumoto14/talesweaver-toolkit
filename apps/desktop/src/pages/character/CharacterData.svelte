@@ -4,6 +4,7 @@
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import { fmtInt, formatLayerValue } from "../../format";
   import type { BuffDefinition, GameCharacter, StatPreview } from "../../api/types";
+  import { limits } from "../../limits.svelte";
   import Select from "../../ui/Select.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import type { Draft } from "./draft";
@@ -11,6 +12,7 @@
   interface Props {
     draft: Draft;
     preview: StatPreview | null;
+    previewError: string | null;
     gameCharacters: GameCharacter[];
     catalog: BuffDefinition[];
     save: () => void;
@@ -18,10 +20,9 @@
     dirty: boolean;
     canSubmit: boolean;
   }
-  let { draft, preview, gameCharacters, save, saving, dirty, canSubmit }: Props = $props();
+  let { draft, preview, previewError, gameCharacters, save, saving, dirty, canSubmit }: Props = $props();
 
   const STAT_MIN = 1;
-  const STAT_MAX = 310; // domain::BASE_STAT_MAX
 
   const characterOptions = $derived(gameCharacters.map((c) => ({ value: c.id, label: c.name })));
   const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: `${i} 段階` }));
@@ -56,6 +57,7 @@
     </div>
 
     <div class="section-label"><span>能力値</span><span class="rule"></span><span class="dim">設定を触ると即時更新</span></div>
+    {#if previewError}<p class="preview-error">{previewError}</p>{/if}
     <div class="tbl">
       <table class="grid">
         <thead><tr><th>ステ</th><th class="n">素</th><th class="n">補正</th><th class="n">最終</th></tr></thead>
@@ -66,7 +68,7 @@
             <tr>
               <td>{STAT_LABELS[k]}</td>
               <td class="n stat-cell">
-                <StatInput label="" min={STAT_MIN} max={STAT_MAX} bind:value={draft.baseStats[k]} />
+                <StatInput label="" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
               </td>
               <td class="n muted">{diff === null ? "—" : signed(diff)}</td>
               <td class="n final">
@@ -129,6 +131,8 @@
     padding: 8px 10px; background: var(--bg-field); border: 1px solid var(--border); color: var(--fg);
   }
   input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+  .preview-error { padding: 4px 14px 0; font-size: 11px; color: var(--warm); }
 
   .tbl { overflow-x: auto; margin: 0 14px 12px; border: 1px solid var(--border-soft); }
   table.grid td.stat-cell { min-width: 180px; }

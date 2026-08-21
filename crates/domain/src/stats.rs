@@ -119,6 +119,17 @@ impl Default for StatModifiers {
 /// 倍率B の下限(wiki §2)。
 const MULTIPLIER_B_MIN: f64 = -0.30;
 
+/// pin(能力値の固定)の出所。フロント側で値の一致比較により推測するのをやめ、
+/// サーバ側(`apply_pins`)が決定した出所をそのまま返す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PinSource {
+    /// キャラに保存済みの調整値による pin
+    Saved,
+    /// 計算リクエストの一時調整による pin(保存済み pin があれば一時的に上書き)
+    Temporary,
+}
+
 /// 能力値計算の中間値。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatTrace {
@@ -140,6 +151,8 @@ pub struct StatTrace {
     pub effective: i64,
     /// pin(能力値の固定)が適用された場合の上書き前の値(`stat_sources::apply_pins` が事後に設定する)
     pub pinned_from: Option<i64>,
+    /// pin の出所(`stat_sources::apply_pins` が事後に設定する)
+    pub pin_source: Option<PinSource>,
 }
 
 /// 1 ステータス分の能力値計算(wiki §2)。
@@ -167,6 +180,7 @@ pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers) -> (i64, Sta
         final_fixed: m.final_fixed,
         effective,
         pinned_from: None,
+        pin_source: None,
     };
     (effective, trace)
 }

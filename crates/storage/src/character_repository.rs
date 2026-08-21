@@ -32,6 +32,8 @@ pub struct NewCharacter {
     pub stat_sources: StatSources,
 }
 
+/// v1 相当(`stat_sources` 列を含まない、main ブランチ時代の実スキーマ)。
+/// v2 への移行は `from_connection` が `PRAGMA user_version` を見て `ALTER TABLE` で行う。
 const MIGRATION: &str = "
 CREATE TABLE IF NOT EXISTS characters (
     id                INTEGER PRIMARY KEY,
@@ -46,10 +48,12 @@ CREATE TABLE IF NOT EXISTS characters (
     agi               INTEGER NOT NULL,
     awakening_stage   INTEGER NOT NULL,
     eternal_level     INTEGER NOT NULL,
-    stat_sources      TEXT    NOT NULL,
     created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 ";
+
+/// このスキーマバージョンで `stat_sources` 列が存在する(v2)。
+const SCHEMA_VERSION: i64 = 2;
 
 const SELECT_COLUMNS: &str =
     "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources";
@@ -83,6 +87,32 @@ impl CharacterRepository {
 
     fn from_connection(conn: Connection) -> Result<Self> {
         conn.execute_batch(MIGRATION)?;
+
+        // `PRAGMA user_version` だけで「列が無い」と判定しない: このブランチ以前の実スキーマは
+        // `stat_sources` 列を `CREATE TABLE` に直接持っていた(`ALTER TABLE` で足したのではない)ため、
+        // 一度でも起動した DB は列を持ちながら `user_version` が未設定(0)のままになっている。
+        // その状態で `user_version < SCHEMA_VERSION` だけを見て `ALTER TABLE` すると
+        // `duplicate column name: stat_sources` で起動不能になる。列の実在を直接確認する。
+        let has_stat_sources = {
+            let mut stmt = conn.prepare("PRAGMA table_info(characters)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let name: String = row.get(1)?;
+                if name == "stat_sources" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        if !has_stat_sources {
+            conn.execute_batch(
+                "ALTER TABLE characters ADD COLUMN stat_sources TEXT NOT NULL DEFAULT '{}';",
+            )?;
+        }
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+
         Ok(Self { conn })
     }
 
@@ -192,7 +222,7 @@ fn validate(new: &NewCharacter, catalog: &BuffCatalog) -> Result<()> {
         )));
     }
     new.stat_sources.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
-    domain::stat_sources::build_modifiers(&new.stat_sources, catalog)
+    domain::stat_sources::build_modifiers(&new.stat_sources, catalog, &new.game_character_id)
         .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     Ok(())
 }
@@ -346,6 +376,109 @@ mod tests {
         repo.conn.execute_batch(MIGRATION).unwrap();
         repo.create(&new_character("a"), &[]).unwrap();
         assert_eq!(repo.list().unwrap().len(), 1);
+    }
+
+    /// `stat_sources` 列の無い旧スキーマ(v1)から開いた場合、`from_connection` が
+    /// 自動で `ALTER TABLE` して `stat_sources` を `StatSources::default()` として読めるようにする。
+    #[test]
+    fn 旧スキーマからでも自動マイグレーションしてstat_sourcesが中立値で読める() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                INTEGER PRIMARY KEY,
+                name              TEXT    NOT NULL,
+                game_character_id TEXT    NOT NULL,
+                stab              INTEGER NOT NULL,
+                hack              INTEGER NOT NULL,
+                int               INTEGER NOT NULL,
+                def               INTEGER NOT NULL,
+                mr                INTEGER NOT NULL,
+                dex               INTEGER NOT NULL,
+                agi               INTEGER NOT NULL,
+                awakening_stage   INTEGER NOT NULL,
+                eternal_level     INTEGER NOT NULL,
+                created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            ",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level)
+             VALUES ('旧データ', 'boris', 300, 250, 10, 200, 150, 280, 250, 5, 40)",
+            [],
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+
+        let list = repo.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].stat_sources, StatSources::default());
+
+        let fetched = repo.get(list[0].id).unwrap();
+        assert_eq!(fetched.stat_sources, StatSources::default());
+
+        // マイグレーション後も create/update が使えること
+        let created = repo.create(&new_character("新データ"), &[]).unwrap();
+        assert_eq!(created.stat_sources, StatSources::default());
+
+        let mut updated = new_character("旧データ改");
+        updated.stat_sources.rune_levels.stab = 10;
+        let result = repo.update(list[0].id, &updated, &[]).unwrap();
+        assert_eq!(result.stat_sources.rune_levels.stab, 10);
+    }
+
+    /// 実際に起きたバグの再現テスト: このブランチ以前のスキーマは `stat_sources` 列を
+    /// `CREATE TABLE` に直接持っていた(`ALTER TABLE` で足したのではない)ため、
+    /// 一度でも起動した DB は「列は既にあるが `user_version` は未設定(0)」という状態になる。
+    /// この状態を `PRAGMA user_version` だけで判定すると `ALTER TABLE` が
+    /// `duplicate column name` で失敗し、リポジトリを開けなくなる。
+    #[test]
+    fn 列は既にあるがuser_version未設定のdbも開ける() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                INTEGER PRIMARY KEY,
+                name              TEXT    NOT NULL,
+                game_character_id TEXT    NOT NULL,
+                stab              INTEGER NOT NULL,
+                hack              INTEGER NOT NULL,
+                int               INTEGER NOT NULL,
+                def               INTEGER NOT NULL,
+                mr                INTEGER NOT NULL,
+                dex               INTEGER NOT NULL,
+                agi               INTEGER NOT NULL,
+                awakening_stage   INTEGER NOT NULL,
+                eternal_level     INTEGER NOT NULL,
+                stat_sources      TEXT    NOT NULL,
+                created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            ",
+        )
+        .unwrap();
+        // user_version はこの時点で未設定(0)のまま。
+        assert_eq!(conn.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0)).unwrap(), 0);
+
+        conn.execute(
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources)
+             VALUES ('既存データ', 'boris', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}')",
+            [],
+        )
+        .unwrap();
+
+        // 列が既にあるので from_connection は ALTER TABLE を試みてはいけない(試みれば
+        // duplicate column name で Err になる)。
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let list = repo.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "既存データ");
+        assert_eq!(list[0].stat_sources, StatSources::default());
+
+        // create/update も引き続き使えること。
+        repo.create(&new_character("追加データ"), &[]).unwrap();
+        assert_eq!(repo.list().unwrap().len(), 2);
     }
 
     #[test]

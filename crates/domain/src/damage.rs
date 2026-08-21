@@ -39,8 +39,10 @@ pub struct DamageInput {
     pub equipment_attack: f64,
     /// 装備補正強化係数(wiki: カテゴリA の内訳)。現状は 0
     pub equipment_enhance_rate: f64,
-    /// 能力値の固定(pin)。キャラの調整値と計算リクエストの一時調整を呼び出し側が合成して渡す
+    /// 能力値の固定(pin)。キャラの保存済み調整値
     pub pins: Adjustments,
+    /// 計算リクエストの一時調整(キャラには保存しない)。ステごとに `pins` より優先する
+    pub temporary_pins: Option<Adjustments>,
 }
 
 impl DamageInput {
@@ -58,6 +60,7 @@ impl DamageInput {
         enemy: Enemy,
         combo_count: u32,
         pins: Adjustments,
+        temporary_pins: Option<Adjustments>,
     ) -> Self {
         Self {
             base_stats,
@@ -72,6 +75,7 @@ impl DamageInput {
             equipment_attack: 0.0,
             equipment_enhance_rate: 0.0,
             pins,
+            temporary_pins,
         }
     }
 }
@@ -217,7 +221,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
 
     // ① 能力値計算
     let (mut stats, mut stat_traces) = effective_stats(&input.base_stats, &input.stat_modifiers);
-    apply_pins(&mut stats, &mut stat_traces, &input.pins);
+    apply_pins(&mut stats, &mut stat_traces, &input.pins, input.temporary_pins.as_ref());
 
     // ② カテゴリ集計
     let stat_attack = stat_attack_power(&stats, &input.coefficients);
@@ -271,7 +275,7 @@ mod tests {
     use crate::category::CategoryKind;
     use crate::skill::SkillDependency;
     use crate::stat_sources::StatAdjustment;
-    use crate::stats::StatKind;
+    use crate::stats::{PinSource, StatKind};
 
     fn input() -> DamageInput {
         DamageInput {
@@ -301,6 +305,7 @@ mod tests {
             equipment_attack: 0.0,
             equipment_enhance_rate: 0.0,
             pins: Adjustments::default(),
+            temporary_pins: None,
         }
     }
 
@@ -394,6 +399,20 @@ mod tests {
         let stab_trace = r.trace.stats.iter().find(|t| t.kind == StatKind::Stab).unwrap();
         assert_eq!(stab_trace.pinned_from, Some(500));
         assert_eq!(stab_trace.effective, 2000);
+    }
+
+    #[test]
+    fn temporary_pinsが保存済みpinを一時的に上書きしpin_sourceがtemporaryになる() {
+        let mut i = input();
+        i.pins.stab = StatAdjustment { add: 0, pin: Some(500) };
+        i.temporary_pins = Some(Adjustments {
+            stab: StatAdjustment { add: 0, pin: Some(999) },
+            ..Default::default()
+        });
+        let r = calculate_damage(&i);
+        let stab_trace = r.trace.stats.iter().find(|t| t.kind == StatKind::Stab).unwrap();
+        assert_eq!(stab_trace.effective, 999);
+        assert_eq!(stab_trace.pin_source, Some(PinSource::Temporary));
     }
 
     #[test]

@@ -1,15 +1,17 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     calculateDamage, errorMessage, listCharacters, listEnemies, listGameCharacters, listSkills,
   } from "../../api/commands";
   import { STAT_KINDS, STAT_LABELS } from "../../labels";
-  import type { Adjustments, DamageResult, Enemy, GameCharacter, RegisteredCharacter, Skill, StatKind } from "../../api/types";
+  import type { Adjustments, DamageResult, Enemy, GameCharacter, RegisteredCharacter, Skill } from "../../api/types";
+  import { limits } from "../../limits.svelte";
   import { fmtInt, fmtNum } from "../../format";
   import { reportError } from "../../toast.svelte";
+  import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import Select from "../../ui/Select.svelte";
   import Splitter from "../../ui/Splitter.svelte";
-  import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
 
   const DEFAULT_INPUT_WIDTH = 336;
@@ -48,17 +50,6 @@
     STAT_KINDS.some((k) => temporaryAdjustments[k].add !== 0 || temporaryAdjustments[k].pin !== null),
   );
 
-  // 固定トグル ON 時の初期値は、直近の計算結果の最終能力値(無ければ素ステ)にする
-  // (「初期値は実用値」の原則。0 や素ステだけに戻すと、既に計算済みの実用値から離れてしまう)。
-  function toggleTemporaryPin(k: StatKind, checked: boolean) {
-    if (!checked) {
-      temporaryAdjustments[k].pin = null;
-      return;
-    }
-    const current = result?.trace.stats.find((s) => s.kind === k)?.effective;
-    temporaryAdjustments[k].pin = current ?? character?.base_stats[k] ?? 0;
-  }
-
   const character = $derived(characters.find((c) => String(c.id) === characterId) ?? null);
   const skill = $derived(skills.find((s) => s.id === skillId) ?? null);
   const enemy = $derived(enemies.find((e) => e.id === enemyId) ?? null);
@@ -92,6 +83,16 @@
       .catch((e) => reportError(errorMessage(e)));
   });
 
+  // キャラを切り替えたら一時調整・結果をリセットする(前のキャラの一時調整を引き継がない)
+  let lastCharacterId = untrack(() => character?.id);
+  $effect(() => {
+    const id = character?.id;
+    if (id === lastCharacterId) return;
+    lastCharacterId = id;
+    temporaryAdjustments = neutralAdjustments();
+    result = null;
+  });
+
   // 選択が揃ったら自動計算。古いリクエストの応答は捨てる
   let requestSeq = 0;
   function calculate() {
@@ -106,12 +107,17 @@
       .catch((e) => { if (seq === requestSeq) { result = null; reportError(errorMessage(e)); } })
       .finally(() => { if (seq === requestSeq) calculating = false; });
   }
+  let debounceHandle: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     // 依存を明示的に読む。$state はプロパティ単位で追跡されるため、一時調整は各ステの
     // fixed/final_fixed を明示的に読む必要がある。
     void [character?.id, skillId, enemyId, combo];
     for (const k of STAT_KINDS) void [temporaryAdjustments[k].add, temporaryAdjustments[k].pin];
-    calculate();
+    if (debounceHandle) clearTimeout(debounceHandle);
+    debounceHandle = setTimeout(calculate, 100);
+    return () => {
+      if (debounceHandle) clearTimeout(debounceHandle);
+    };
   });
   $effect(() => {
     registerRecalculate(calculate);
@@ -188,42 +194,13 @@
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg>
           <span>調整(一時) — 計算にのみ反映、キャラには保存されません</span>
         </summary>
-        <div class="block adj-grid">
-          {#each STAT_KINDS as k (k)}
-            <div class="adj-stat">
-              <div class="adj-stat-label">{STAT_LABELS[k]}</div>
-              <div class="adj-row">
-                <span class="adj-desc dim">加算 — このステに +N する(検証・仮定用)</span>
-                <div class="adj-control">
-                  <StatInput label="" min={-999} max={999} bind:value={temporaryAdjustments[k].add} />
-                </div>
-              </div>
-              <div class="adj-row">
-                <label class="toggle">
-                  <input
-                    type="checkbox"
-                    checked={temporaryAdjustments[k].pin !== null}
-                    onchange={(e) => toggleTemporaryPin(k, e.currentTarget.checked)}
-                  />
-                  <span class="check" aria-hidden="true">
-                    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 4.5l1.9 1.9L7.4 2.6"/></svg>
-                  </span>
-                  <span class="adj-desc">固定 — 最終能力値を N に固定する(実測値で計算したいとき)</span>
-                </label>
-                {#if temporaryAdjustments[k].pin !== null}
-                  <div class="adj-control">
-                    <StatInput
-                      label="" min={0} max={99999}
-                      bind:value={
-                        () => temporaryAdjustments[k].pin ?? 0,
-                        (v) => (temporaryAdjustments[k].pin = v)
-                      }
-                    />
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/each}
+        <div class="block">
+          <AdjustmentEditor
+            adjustments={temporaryAdjustments}
+            addMin={limits.adjustment_add_min} addMax={limits.adjustment_add_max}
+            pinMin={limits.adjustment_pin_min} pinMax={limits.adjustment_pin_max}
+            pinDefault={(k) => result?.trace.stats.find((s) => s.kind === k)?.effective ?? character?.base_stats[k] ?? 0}
+          />
         </div>
       </details>
     </div>
@@ -302,16 +279,6 @@
   details.adjustments summary svg { transition: transform 0.15s; }
   details.adjustments[open] summary svg { transform: rotate(90deg); }
   details.adjustments summary:hover { color: var(--fg); }
-  .adj-grid { display: flex; flex-direction: column; padding: 0 0 6px; min-width: 0; }
-  .adj-stat { padding: 8px 14px; border-bottom: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .adj-stat:last-child { border-bottom: 0; }
-  .adj-stat-label { font-size: 11px; font-weight: 700; color: var(--fg-muted); }
-  /* 説明文とStatInputを縦積みにする(296px の TARGET 列で横スクロールが出ないように)。 */
-  .adj-row { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
-  .adj-row .toggle { padding: 0; }
-  .adj-desc { font-size: 11px; min-width: 0; }
-  .adj-control { width: 100%; min-width: 0; }
-  .adj-control :global(.stat-input) { width: 100%; }
 
   .badge {
     font-size: 10px; letter-spacing: 0.08em; color: var(--warm); border: 1px solid var(--warm);

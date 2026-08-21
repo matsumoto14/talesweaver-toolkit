@@ -143,6 +143,9 @@ export interface CategoryTrace {
   cap: CategoryCap | null;
 }
 
+// pin(能力値の固定)の出所。crates/domain/src/stats.rs の PinSource(snake_case)。
+export type PinSource = "saved" | "temporary";
+
 export interface StatTrace {
   kind: StatKind;
   base: number;
@@ -156,6 +159,8 @@ export interface StatTrace {
   effective: number;
   /** pin(能力値の固定)が適用された場合の上書き前の値。未適用は null */
   pinned_from: number | null;
+  /** pin の出所。未適用は null */
+  pin_source: PinSource | null;
 }
 
 // 7 ステータスすべての最終能力値。crates/domain/src/stats.rs の EffectiveStats。
@@ -195,5 +200,17 @@ export interface DamageResult {
   total: DamageTriple;
   hit_count: number;
   trace: DamageTrace;
+}
+
+// crates/domain/src/stat_sources.rs の StatLimits。get_stat_limits コマンドの戻り値。
+export interface StatLimits {
+  base_stat_max: number;
+  rune_level_max: number;
+  crown_max: number;
+  sacred_relic_stage_max: number;
+  adjustment_add_min: number;
+  adjustment_add_max: number;
+  adjustment_pin_min: number;
+  adjustment_pin_max: number;
 }
 

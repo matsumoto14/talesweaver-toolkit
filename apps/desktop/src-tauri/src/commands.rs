@@ -74,9 +74,15 @@ pub fn delete_character(state: State<'_, AppState>, id: i64) -> CommandResult<()
 pub fn preview_effective_stats(
     base_stats: domain::BaseStats,
     stat_sources: domain::StatSources,
+    game_character_id: String,
 ) -> CommandResult<domain::StatPreview> {
-    domain::preview_effective_stats(&base_stats, &stat_sources, &gamedata::buff_catalog())
+    domain::preview_effective_stats(&base_stats, &stat_sources, &gamedata::buff_catalog(), &game_character_id)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_stat_limits() -> domain::StatLimits {
+    domain::stat_sources::stat_limits()
 }
 
 #[tauri::command]
@@ -93,16 +99,16 @@ pub fn calculate_damage(
     let enemy = gamedata::find_enemy(&enemy_id).ok_or_else(|| format!("敵 '{enemy_id}' が見つかりません"))?;
     let coefficients = gamedata::attack_coefficients(skill.dependency);
     let awakening_rate = gamedata::awakening_rate(character.awakening);
-    let (mut stat_modifiers, mut stat_contributions) =
-        domain::stat_sources::build_modifiers(&character.stat_sources, &gamedata::buff_catalog())
-            .map_err(|e| e.to_string())?;
-    let pins = match &temporary_adjustments {
-        Some(temp) => {
-            domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
-            domain::stat_sources::merge_pins(&character.stat_sources.adjustments, temp)
-        }
-        None => character.stat_sources.adjustments,
-    };
+    let (mut stat_modifiers, mut stat_contributions) = domain::stat_sources::build_modifiers(
+        &character.stat_sources,
+        &gamedata::buff_catalog(),
+        &character.game_character_id,
+    )
+    .map_err(|e| e.to_string())?;
+    if let Some(temp) = &temporary_adjustments {
+        temp.validate().map_err(|e| e.to_string())?;
+        domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
+    }
     let input = DamageInput::new(
         character.base_stats,
         stat_modifiers,
@@ -112,7 +118,8 @@ pub fn calculate_damage(
         skill,
         enemy,
         combo_count,
-        pins,
+        character.stat_sources.adjustments,
+        temporary_adjustments,
     );
     Ok(domain::calculate_damage(&input))
 }

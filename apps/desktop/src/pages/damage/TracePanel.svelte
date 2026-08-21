@@ -5,16 +5,18 @@
 
   let { trace, character = null }: { trace: DamageTrace; character?: RegisteredCharacter | null } = $props();
 
-  // 「固定前」の表示値: キャラに保存済みの固定(pin)があり、かつ今回の一時調整で
-  // 別の値に上書きされている場合は、保存済みの固定値を見せる(「自分が普段固定している値」を
-  // 基準にするほうが、生の未固定計算値より一時オーバーライドの意味が伝わりやすいため)。
-  // それ以外(保存済み固定が無い、または一時調整せずそのまま使っている)は
+  // 「固定前」の表示値: pin の出所(pin_source、サーバ側 apply_pins が決定)が temporary
+  // (計算リクエストの一時調整による上書き)で、かつキャラに保存済みの固定(pin)があるときは、
+  // 「自分が普段固定している値」を基準にするほうが伝わりやすいのでそちらを見せる。
+  // それ以外(pin_source が saved、または保存済み固定が無い)は
   // pinned_from(この計算で pin される直前の計算値)をそのまま使う。
   function pinnedBeforeLabel(s: StatTrace): string {
     if (s.pinned_from === null) return "";
-    const savedPin = character?.stat_sources.adjustments[s.kind].pin ?? null;
-    const before = savedPin !== null && savedPin !== s.effective ? savedPin : s.pinned_from;
-    return `固定前: ${fmtInt(before)}`;
+    if (s.pin_source === "temporary") {
+      const savedPin = character?.stat_sources.adjustments[s.kind].pin ?? null;
+      if (savedPin !== null) return `保存済みの固定 ${fmtInt(savedPin)} を一時的に上書き`;
+    }
+    return `固定前: ${fmtInt(s.pinned_from)}`;
   }
 
   const KIND_LABEL = { assigned: "代入", fixed: "固定値", rate: "割合" } as const;

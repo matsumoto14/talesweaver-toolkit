@@ -31,6 +31,7 @@ pub fn run() {
             commands::list_enemies,
             commands::list_buff_catalog,
             commands::preview_effective_stats,
+            commands::get_stat_limits,
             commands::list_characters,
             commands::create_character,
             commands::update_character,

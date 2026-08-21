@@ -10,7 +10,10 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::stats::{effective_stats, BaseStats, EffectiveStats, StatKind, StatModifierSet, StatTrace};
+use crate::stats::{
+    effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind, StatModifierSet,
+    StatTrace, BASE_STAT_MAX,
+};
 
 /// ペット S スキルの段階(wiki: PET)。上位段階ほど値が大きい。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -255,6 +258,13 @@ pub struct BuffSelection {
     pub choices: Vec<BuffChoice>,
 }
 
+/// 調整「加算」の妥当範囲(検証・仮定用の自由入力)。
+pub const ADJUSTMENT_ADD_MIN: i64 = -999;
+pub const ADJUSTMENT_ADD_MAX: i64 = 999;
+/// 調整「固定(pin)」の妥当範囲。上限は最終能力値の理論上限(エタの意志Lv80、docs/decisions.md「2400」)。
+pub const ADJUSTMENT_PIN_MIN: i64 = 1;
+pub const ADJUSTMENT_PIN_MAX: i64 = 2400;
+
 /// ステ 1 つの自由な調整(検証・未収録バフ用)。
 /// - `add`: このステに +N する(固定値層への加算)
 /// - `pin`: 最終能力値そのものを N に固定する(実測値で計算したい時)。`Some` のとき
@@ -300,23 +310,58 @@ impl Adjustments {
             StatKind::Agi => &mut self.agi,
         }
     }
+
+    /// `add` は `ADJUSTMENT_ADD_MIN..=ADJUSTMENT_ADD_MAX`、`pin`(指定時)は
+    /// `ADJUSTMENT_PIN_MIN..=ADJUSTMENT_PIN_MAX` の範囲であることを検証する。
+    pub fn validate(&self) -> Result<(), StatSourceError> {
+        for kind in StatKind::ALL {
+            let a = self.get(kind);
+            if !(ADJUSTMENT_ADD_MIN..=ADJUSTMENT_ADD_MAX).contains(&a.add) {
+                return Err(StatSourceError::AdjustmentOutOfRange {
+                    field: "加算",
+                    kind,
+                    value: a.add,
+                    min: ADJUSTMENT_ADD_MIN,
+                    max: ADJUSTMENT_ADD_MAX,
+                });
+            }
+            if let Some(pin) = a.pin {
+                if !(ADJUSTMENT_PIN_MIN..=ADJUSTMENT_PIN_MAX).contains(&pin) {
+                    return Err(StatSourceError::AdjustmentOutOfRange {
+                        field: "固定",
+                        kind,
+                        value: pin,
+                        min: ADJUSTMENT_PIN_MIN,
+                        max: ADJUSTMENT_PIN_MAX,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// キャラクターに紐づく補正源一式。`Default` は全フィールド中立
 /// (ペット無し、ルーン 0、クラウン 0、聖物 0 段階、バフ無し、調整値 0)。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct StatSources {
+    #[serde(default)]
     pub pet_skills: PetSkills,
+    #[serde(default)]
     pub rune_levels: RuneLevels,
+    #[serde(default)]
     pub crown: Crown,
+    #[serde(default)]
     pub sacred_relic: SacredRelic,
+    #[serde(default)]
     pub buffs: BuffSelection,
+    #[serde(default)]
     pub adjustments: Adjustments,
 }
 
 impl StatSources {
-    /// ルーンスキル(0..=20)/クラウン(0..=300)/聖物(0..=40段階)の値域を検証する。
-    /// ペットは enum で構造的に制約済み、調整値は検証・未収録バフ用の自由加算なので対象外。
+    /// ルーンスキル(0..=20)/クラウン(0..=300)/聖物(0..=40段階)/調整値(`Adjustments::validate`)
+    /// の値域を検証する。ペットは enum で構造的に制約済みなので対象外。
     pub fn validate(&self) -> Result<(), StatSourceError> {
         for kind in StatKind::ALL {
             let rune = self.rune_levels.get(kind);
@@ -349,6 +394,7 @@ impl StatSources {
                 });
             }
         }
+        self.adjustments.validate()?;
         Ok(())
     }
 }
@@ -382,12 +428,19 @@ pub enum StatSourceError {
     DuplicateBuff { id: String },
     #[error("バフ '{id}' の入力値が範囲外です({min}..={max}、指定値 {value})")]
     ValueOutOfRange { id: String, value: f64, min: f64, max: f64 },
+    #[error("バフ '{id}' はこのキャラ(game_character_id={game_character_id})のスキルではありません")]
+    ForeignCharacterSkill { id: String, game_character_id: String },
+    #[error("調整の{field}は{kind:?}で{min}..={max}の範囲で指定してください(指定値 {value})")]
+    AdjustmentOutOfRange { field: &'static str, kind: StatKind, value: i64, min: i64, max: i64 },
+    #[error(transparent)]
+    BaseStats(#[from] BaseStatsError),
 }
 
 /// `StatSources` と バフカタログから `StatModifierSet` と寄与内訳を組み立てる。
 pub fn build_modifiers(
     sources: &StatSources,
     catalog: &BuffCatalog,
+    game_character_id: &str,
 ) -> Result<(StatModifierSet, Vec<StatContribution>), StatSourceError> {
     let mut modifiers = StatModifierSet::default();
     let mut contributions = Vec::new();
@@ -460,6 +513,15 @@ pub fn build_modifiers(
             .iter()
             .find(|d| d.id == choice.buff_id)
             .ok_or_else(|| StatSourceError::UnknownBuff { id: choice.buff_id.clone() })?;
+
+        if let BuffGroup::CharacterSkill { game_character_id: owner } = def.group {
+            if owner != game_character_id {
+                return Err(StatSourceError::ForeignCharacterSkill {
+                    id: def.id.to_string(),
+                    game_character_id: game_character_id.to_string(),
+                });
+            }
+        }
 
         for slot in def.exclusive_slots.iter().copied() {
             if !used_slots.insert(slot) {
@@ -549,7 +611,7 @@ fn apply_adjustments(
 /// 計算リクエストにのみ乗る一時調整(キャラには保存しない)の加算(`add`)を `StatModifierSet` に合流させる。
 /// キャラの調整値と同じ経路(固定値層)を通すが、寄与内訳の source 名を「一時調整」にして区別する。
 /// `build_modifiers` が返した `modifiers`/`contributions` に対して呼び出し側(コマンド)が追加で適用する。
-/// `pin` はここでは扱わない(呼び出し側が `merge_pins` でキャラの調整値と合成し、`apply_pins` で適用する)。
+/// `pin` はここでは扱わない(呼び出し側が `apply_pins` に base/temporary を渡して適用する)。
 pub fn apply_temporary_adjustments(
     modifiers: &mut StatModifierSet,
     contributions: &mut Vec<StatContribution>,
@@ -558,28 +620,31 @@ pub fn apply_temporary_adjustments(
     apply_adjustments(modifiers, contributions, adjustments, "一時調整");
 }
 
-/// 調整の「固定(pin)」を反映する。対象ステの `StatTrace.pinned_from` に上書き前の値を保存してから、
-/// `stats`/`trace.effective` を pin 値で上書きする。能力値計算(`effective_stats`)の後に呼ぶ。
-pub fn apply_pins(stats: &mut EffectiveStats, traces: &mut [StatTrace], adjustments: &Adjustments) {
+/// 調整の「固定(pin)」を反映する。`base`(キャラの調整値)と `temporary`(計算リクエストの
+/// 一時調整、無ければ None)からステごとに pin 値と出所を決め、`stats`/`trace.effective`/
+/// `trace.pinned_from`/`trace.pin_source` に反映する。temporary 側に pin があれば優先する
+/// (出所は Temporary)。無ければ base 側にフォールバックする(出所は Saved)。
+pub fn apply_pins(
+    stats: &mut EffectiveStats,
+    traces: &mut [StatTrace],
+    base: &Adjustments,
+    temporary: Option<&Adjustments>,
+) {
     for kind in StatKind::ALL {
-        if let Some(pin) = adjustments.get(kind).pin {
+        let temp_pin = temporary.and_then(|t| t.get(kind).pin);
+        let (pin, source) = match temp_pin {
+            Some(p) => (Some(p), PinSource::Temporary),
+            None => (base.get(kind).pin, PinSource::Saved),
+        };
+        if let Some(pin) = pin {
             if let Some(trace) = traces.iter_mut().find(|t| t.kind == kind) {
                 trace.pinned_from = Some(trace.effective);
+                trace.pin_source = Some(source);
                 trace.effective = pin;
             }
             stats.set(kind, pin);
         }
     }
-}
-
-/// キャラの調整値(`base`)と計算リクエストの一時調整(`temporary`)から pin だけを合成する。
-/// ステごとに temporary 側の pin があればそちらを優先し、無ければ base 側を使う。`add` は使わない。
-pub fn merge_pins(base: &Adjustments, temporary: &Adjustments) -> Adjustments {
-    let mut merged = Adjustments::default();
-    for kind in StatKind::ALL {
-        merged.get_mut(kind).pin = temporary.get(kind).pin.or(base.get(kind).pin);
-    }
-    merged
 }
 
 /// `preview_effective_stats` の結果(最終能力値・トレース・寄与内訳)。
@@ -596,11 +661,40 @@ pub fn preview_effective_stats(
     base: &BaseStats,
     sources: &StatSources,
     catalog: &BuffCatalog,
+    game_character_id: &str,
 ) -> Result<StatPreview, StatSourceError> {
-    let (modifiers, contributions) = build_modifiers(sources, catalog)?;
+    base.validate()?;
+    sources.validate()?;
+    let (modifiers, contributions) = build_modifiers(sources, catalog, game_character_id)?;
     let (mut stats, mut traces) = effective_stats(base, &modifiers);
-    apply_pins(&mut stats, &mut traces, &sources.adjustments);
+    apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
     Ok(StatPreview { stats, traces, contributions })
+}
+
+/// UI がリテラルで持たず参照するための値域上限一覧(起動時に 1 回取得する想定)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct StatLimits {
+    pub base_stat_max: u32,
+    pub rune_level_max: u8,
+    pub crown_max: u32,
+    pub sacred_relic_stage_max: u8,
+    pub adjustment_add_min: i64,
+    pub adjustment_add_max: i64,
+    pub adjustment_pin_min: i64,
+    pub adjustment_pin_max: i64,
+}
+
+pub fn stat_limits() -> StatLimits {
+    StatLimits {
+        base_stat_max: BASE_STAT_MAX,
+        rune_level_max: RuneLevels::MAX_LEVEL,
+        crown_max: Crown::MAX_VALUE,
+        sacred_relic_stage_max: SacredRelic::MAX_STAGE,
+        adjustment_add_min: ADJUSTMENT_ADD_MIN,
+        adjustment_add_max: ADJUSTMENT_ADD_MAX,
+        adjustment_pin_min: ADJUSTMENT_PIN_MIN,
+        adjustment_pin_max: ADJUSTMENT_PIN_MAX,
+    }
 }
 
 #[cfg(test)]
@@ -711,7 +805,7 @@ mod tests {
             pet_skills: PetSkills { stab: Some(PetSkillTier::Basic), ..Default::default() },
             ..Default::default()
         };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         assert_eq!(modifiers.get(StatKind::Stab).fixed, 20);
         let c = contributions.iter().find(|c| c.kind == StatKind::Stab).unwrap();
         assert_eq!(c.layer, StatLayer::Fixed);
@@ -721,7 +815,7 @@ mod tests {
     #[test]
     fn ルーンスキルは固定値層に積まれる() {
         let sources = StatSources { rune_levels: RuneLevels { hack: 15, ..Default::default() }, ..Default::default() };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         assert_eq!(modifiers.get(StatKind::Hack).fixed, 15);
         let c = contributions.iter().find(|c| c.kind == StatKind::Hack).unwrap();
         assert_eq!(c.layer, StatLayer::Fixed);
@@ -730,7 +824,7 @@ mod tests {
     #[test]
     fn クラウンは最終固定値層に積まれる() {
         let sources = StatSources { crown: Crown { def: 250, ..Default::default() }, ..Default::default() };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         assert_eq!(modifiers.get(StatKind::Def).final_fixed, 250);
         let c = contributions.iter().find(|c| c.kind == StatKind::Def).unwrap();
         assert_eq!(c.layer, StatLayer::FinalFixed);
@@ -739,7 +833,7 @@ mod tests {
     #[test]
     fn 聖物は段階を10倍して最終固定値層に積まれる() {
         let sources = StatSources { sacred_relic: SacredRelic { mr: 12, ..Default::default() }, ..Default::default() };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         assert_eq!(modifiers.get(StatKind::Mr).final_fixed, 120);
         let c = contributions.iter().find(|c| c.kind == StatKind::Mr).unwrap();
         assert_eq!(c.layer, StatLayer::FinalFixed);
@@ -755,7 +849,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         assert_eq!(modifiers.get(StatKind::Dex).fixed, 7);
         assert_eq!(contributions.iter().filter(|c| c.kind == StatKind::Dex).count(), 1);
     }
@@ -772,13 +866,14 @@ mod tests {
             ..Default::default()
         };
         let base = BaseStats { dex: 100, ..Default::default() };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         let (mut stats, mut traces) = effective_stats(&base, &modifiers);
-        apply_pins(&mut stats, &mut traces, &sources.adjustments);
+        apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
 
         let dex_trace = traces.iter().find(|t| t.kind == StatKind::Dex).unwrap();
         assert_eq!(dex_trace.pinned_from, Some(100));
         assert_eq!(dex_trace.effective, 999);
+        assert_eq!(dex_trace.pin_source, Some(PinSource::Saved));
         assert_eq!(stats.get(StatKind::Dex), 999);
 
         // pin していないステの pinned_from は None のまま
@@ -787,7 +882,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_pinsはtemporaryを優先しなければbaseにフォールバックする() {
+    fn apply_pinsはtemporaryを優先しなければbaseにフォールバックし出所を記録する() {
         let base = Adjustments {
             stab: StatAdjustment { add: 0, pin: Some(100) },
             hack: StatAdjustment { add: 0, pin: Some(200) },
@@ -796,21 +891,37 @@ mod tests {
         let temporary =
             Adjustments { stab: StatAdjustment { add: 0, pin: Some(150) }, ..Default::default() };
 
-        let merged = merge_pins(&base, &temporary);
-        assert_eq!(merged.get(StatKind::Stab).pin, Some(150));
-        assert_eq!(merged.get(StatKind::Hack).pin, Some(200));
-        assert_eq!(merged.get(StatKind::Int).pin, None);
+        let base_stats = BaseStats { stab: 1, hack: 1, int: 1, ..Default::default() };
+        let (mut stats, mut traces) = effective_stats(&base_stats, &StatModifierSet::default());
+        apply_pins(&mut stats, &mut traces, &base, Some(&temporary));
+
+        // temporary に pin があるステ(stab)はそちらが優先され、出所は Temporary
+        let stab_trace = traces.iter().find(|t| t.kind == StatKind::Stab).unwrap();
+        assert_eq!(stab_trace.effective, 150);
+        assert_eq!(stab_trace.pinned_from, Some(1));
+        assert_eq!(stab_trace.pin_source, Some(PinSource::Temporary));
+
+        // temporary に pin が無いステ(hack)は base の pin が適用され、出所は Saved
+        let hack_trace = traces.iter().find(|t| t.kind == StatKind::Hack).unwrap();
+        assert_eq!(hack_trace.effective, 200);
+        assert_eq!(hack_trace.pin_source, Some(PinSource::Saved));
+
+        // どちらにも pin が無いステ(int)は pin_source が None のまま
+        let int_trace = traces.iter().find(|t| t.kind == StatKind::Int).unwrap();
+        assert_eq!(int_trace.pin_source, None);
+        assert_eq!(int_trace.pinned_from, None);
     }
 
     #[test]
     fn preview_effective_statsはpin無しとpin有りの両方で正しい結果を返す() {
-        let base = BaseStats { stab: 100, ..Default::default() };
+        // preview_effective_stats は base.validate() を呼ぶため、全ステが 1..=310 の範囲内である必要がある。
+        let base = BaseStats { stab: 100, hack: 1, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
 
         let sources = StatSources {
             adjustments: Adjustments { stab: StatAdjustment { add: 10, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let preview = preview_effective_stats(&base, &sources, &test_catalog()).unwrap();
+        let preview = preview_effective_stats(&base, &sources, &test_catalog(), "boris").unwrap();
         assert!(preview
             .contributions
             .iter()
@@ -826,7 +937,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &test_catalog()).unwrap();
+        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &test_catalog(), "boris").unwrap();
         assert!(pinned_preview
             .contributions
             .iter()
@@ -845,7 +956,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         let m = modifiers.get(StatKind::Stab);
         assert_eq!(m.percent_of_base, vec![0.30]);
         assert_eq!(m.multiplier_a, vec![1.1]);
@@ -869,7 +980,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         // event_buff choice_index 2 → 0.30、trust_potion 手入力 33 が全ステの固定値に乗る
         assert_eq!(modifiers.get(StatKind::Int).percent_of_base, vec![0.30]);
         assert_eq!(modifiers.get(StatKind::Int).fixed, 33);
@@ -888,7 +999,7 @@ mod tests {
             pet_skills: PetSkills { stab: Some(PetSkillTier::TrueLv2), ..Default::default() },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         assert_eq!(modifiers.get(StatKind::Stab).fixed, 40);
         assert_ne!(modifiers.get(StatKind::Stab).fixed, 20 + 30 + 40);
     }
@@ -901,14 +1012,14 @@ mod tests {
             buffs: BuffSelection { choices: vec![choice("illumination_drink"), choice("charge_potion")] },
             ..Default::default()
         };
-        let err = build_modifiers(&sources, &test_catalog()).unwrap_err();
+        let err = build_modifiers(&sources, &test_catalog(), "boris").unwrap_err();
         assert!(matches!(err, StatSourceError::ExclusiveSlotConflict { slot } if slot == "percent_slot_1"));
     }
 
     #[test]
     fn 未知のバフidはエラーになる() {
         let sources = StatSources { buffs: BuffSelection { choices: vec![choice("nope")] }, ..Default::default() };
-        let err = build_modifiers(&sources, &test_catalog()).unwrap_err();
+        let err = build_modifiers(&sources, &test_catalog(), "boris").unwrap_err();
         assert!(matches!(err, StatSourceError::UnknownBuff { id } if id == "nope"));
     }
 
@@ -922,8 +1033,42 @@ mod tests {
             },
             ..Default::default()
         };
-        let err = build_modifiers(&sources, &test_catalog()).unwrap_err();
+        let err = build_modifiers(&sources, &test_catalog(), "boris").unwrap_err();
         assert!(matches!(err, StatSourceError::DuplicateBuff { id } if id == "tales_weaver_energy"));
+    }
+
+    /// キャラスキル(`BuffGroup::CharacterSkill`)は所有者一致のときだけ許可する。
+    fn character_skill_catalog() -> Vec<BuffDefinition> {
+        vec![BuffDefinition {
+            id: "boris_skill",
+            name: "ボリスのスキル",
+            target: BuffTarget::AllStats,
+            layer: StatLayer::Fixed,
+            value: BuffValue::Fixed(10.0),
+            exclusive_slots: vec![],
+            source_url: "",
+            note: "",
+            default_value: None,
+            group: BuffGroup::CharacterSkill { game_character_id: "boris" },
+        }]
+    }
+
+    #[test]
+    fn キャラスキルは一致するキャラなら成功する() {
+        let sources = StatSources { buffs: BuffSelection { choices: vec![choice("boris_skill")] }, ..Default::default() };
+        let (modifiers, _) = build_modifiers(&sources, &character_skill_catalog(), "boris").unwrap();
+        assert_eq!(modifiers.get(StatKind::Stab).fixed, 10);
+    }
+
+    #[test]
+    fn キャラスキルは異なるキャラだとエラーになる() {
+        let sources = StatSources { buffs: BuffSelection { choices: vec![choice("boris_skill")] }, ..Default::default() };
+        let err = build_modifiers(&sources, &character_skill_catalog(), "other_character").unwrap_err();
+        assert!(matches!(
+            err,
+            StatSourceError::ForeignCharacterSkill { id, game_character_id }
+                if id == "boris_skill" && game_character_id == "other_character"
+        ));
     }
 
     #[test]
@@ -934,7 +1079,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let err = build_modifiers(&over, &test_catalog()).unwrap_err();
+        let err = build_modifiers(&over, &test_catalog(), "boris").unwrap_err();
         assert!(matches!(
             err,
             StatSourceError::ValueOutOfRange { id, value, min, max }
@@ -947,7 +1092,7 @@ mod tests {
             },
             ..Default::default()
         };
-        assert!(build_modifiers(&boundary, &test_catalog()).is_ok());
+        assert!(build_modifiers(&boundary, &test_catalog(), "boris").is_ok());
     }
 
     // --- 3.5. StatSources::validate() が各補正源の値域を拒否する ---
@@ -994,6 +1139,47 @@ mod tests {
         assert!(StatSources::default().validate().is_ok());
     }
 
+    #[test]
+    fn 調整値のaddとpinは境界値を許容し範囲外を拒否する() {
+        let mut adjustments = Adjustments::default();
+        adjustments.stab.add = ADJUSTMENT_ADD_MIN;
+        adjustments.hack.add = ADJUSTMENT_ADD_MAX;
+        assert!(adjustments.validate().is_ok());
+
+        let mut too_low = adjustments;
+        too_low.stab.add = ADJUSTMENT_ADD_MIN - 1;
+        assert!(matches!(
+            too_low.validate(),
+            Err(StatSourceError::AdjustmentOutOfRange { field: "加算", kind: StatKind::Stab, .. })
+        ));
+
+        let mut too_high = adjustments;
+        too_high.hack.add = ADJUSTMENT_ADD_MAX + 1;
+        assert!(matches!(
+            too_high.validate(),
+            Err(StatSourceError::AdjustmentOutOfRange { field: "加算", kind: StatKind::Hack, .. })
+        ));
+
+        let mut pin_ok = Adjustments::default();
+        pin_ok.stab.pin = Some(ADJUSTMENT_PIN_MIN);
+        pin_ok.hack.pin = Some(ADJUSTMENT_PIN_MAX);
+        assert!(pin_ok.validate().is_ok());
+
+        let mut pin_too_low = Adjustments::default();
+        pin_too_low.stab.pin = Some(ADJUSTMENT_PIN_MIN - 1);
+        assert!(matches!(
+            pin_too_low.validate(),
+            Err(StatSourceError::AdjustmentOutOfRange { field: "固定", kind: StatKind::Stab, .. })
+        ));
+
+        let mut pin_too_high = Adjustments::default();
+        pin_too_high.hack.pin = Some(ADJUSTMENT_PIN_MAX + 1);
+        assert!(matches!(
+            pin_too_high.validate(),
+            Err(StatSourceError::AdjustmentOutOfRange { field: "固定", kind: StatKind::Hack, .. })
+        ));
+    }
+
     // --- 4. BaseStats::validate() が 1..=310 の範囲外を拒否する ---
 
     #[test]
@@ -1014,7 +1200,7 @@ mod tests {
             adjustments: Adjustments { mr: StatAdjustment { add: 12, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog()).unwrap();
+        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog(), "boris").unwrap();
         apply_temporary_adjustments(&mut modifiers, &mut contributions, &sources.adjustments);
 
         assert_eq!(modifiers.get(StatKind::Mr).fixed, 12);
@@ -1025,7 +1211,7 @@ mod tests {
 
     #[test]
     fn 中立な一時調整は何も積まない() {
-        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog()).unwrap();
+        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog(), "boris").unwrap();
         let before_contributions = contributions.len();
         apply_temporary_adjustments(&mut modifiers, &mut contributions, &Adjustments::default());
 
@@ -1055,11 +1241,24 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         let base = BaseStats { stab: 310, ..Default::default() };
         let (value, trace) = effective_stat(StatKind::Stab, base.stab, modifiers.get(StatKind::Stab));
         assert_eq!(trace.basic, 429);
         assert_eq!(trace.multiplier_b_bonus, 85);
         assert_eq!(value, 914);
+    }
+
+    #[test]
+    fn stat_limitsは対応する定数と一致する() {
+        let limits = stat_limits();
+        assert_eq!(limits.base_stat_max, BASE_STAT_MAX);
+        assert_eq!(limits.rune_level_max, RuneLevels::MAX_LEVEL);
+        assert_eq!(limits.crown_max, Crown::MAX_VALUE);
+        assert_eq!(limits.sacred_relic_stage_max, SacredRelic::MAX_STAGE);
+        assert_eq!(limits.adjustment_add_min, ADJUSTMENT_ADD_MIN);
+        assert_eq!(limits.adjustment_add_max, ADJUSTMENT_ADD_MAX);
+        assert_eq!(limits.adjustment_pin_min, ADJUSTMENT_PIN_MIN);
+        assert_eq!(limits.adjustment_pin_max, ADJUSTMENT_PIN_MAX);
     }
 }

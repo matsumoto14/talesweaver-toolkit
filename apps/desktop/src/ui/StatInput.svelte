@@ -38,8 +38,9 @@
     text = (e.currentTarget as HTMLInputElement).value;
     const n = Number(text);
     if (text.trim() !== "" && Number.isFinite(n)) {
-      value = n;
-      lastSyncedValue = n;
+      const normalized = clamp(Number.isInteger(step) ? Math.round(n) : n);
+      value = normalized;
+      lastSyncedValue = normalized;
     }
   }
 
@@ -49,8 +50,14 @@
     // value を書き換えないため、常に「最後に確定した値」を保っている)にフォールバックする。
     // min にフォールバックすると、min が負の項目(例: 調整「加算」の -999)で
     // 空欄化しただけの操作が -999 になってしまう。範囲外は端に寄せる。
-    const v = clamp(text.trim() === "" || !Number.isFinite(n) ? value : n);
-    value = v;
+    const raw = text.trim() === "" || !Number.isFinite(n) ? value : n;
+    const v = clamp(Number.isInteger(step) ? Math.round(raw) : raw);
+    // この部品が最後に確定した値(lastSyncedValue)と同じなら setter を呼ばない。
+    // `value` と比較すると、アンマウント時の blur で親が既にリセット済みの state を読んでしまい
+    // 古い text を新しい state に書き戻す(キャラ切替で一時固定が次のキャラに漏れる)。
+    if (v !== lastSyncedValue) {
+      value = v;
+    }
     lastSyncedValue = v;
     text = String(v);
   }

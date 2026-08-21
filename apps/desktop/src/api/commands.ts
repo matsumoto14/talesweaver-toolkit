@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, GameCharacter, NewCharacter, RegisteredCharacter,
-  Skill, StatPreview, StatSources,
+  Skill, StatLimits, StatPreview, StatSources,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -16,11 +16,12 @@ export const updateCharacter = (id: number, character: NewCharacter) =>
   invoke<RegisteredCharacter>("update_character", { id, character });
 export const deleteCharacter = (id: number) => invoke<void>("delete_character", { id });
 /** 保存しない試算。draft の base_stats/stat_sources から最終能力値と寄与内訳を得る */
-export const previewEffectiveStats = (baseStats: BaseStats, statSources: StatSources) =>
-  invoke<StatPreview>("preview_effective_stats", { baseStats, statSources });
+export const previewEffectiveStats = (baseStats: BaseStats, statSources: StatSources, gameCharacterId: string) =>
+  invoke<StatPreview>("preview_effective_stats", { baseStats, statSources, gameCharacterId });
 export const calculateDamage = (
   characterId: number, skillId: string, enemyId: string, comboCount: number, temporaryAdjustments: Adjustments,
 ) => invoke<DamageResult>("calculate_damage", { characterId, skillId, enemyId, comboCount, temporaryAdjustments });
+export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

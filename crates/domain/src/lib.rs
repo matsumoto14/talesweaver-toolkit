@@ -23,12 +23,12 @@ pub use enemy::Enemy;
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};
 pub use stat_sources::{
-    apply_pins, apply_temporary_adjustments, build_modifiers, merge_pins, preview_effective_stats,
+    apply_pins, apply_temporary_adjustments, build_modifiers, preview_effective_stats, stat_limits,
     Adjustments, BuffCatalog, BuffChoice, BuffDefinition, BuffGroup, BuffSelection, BuffTarget,
     BuffValue, Crown, PetSkillTier, PetSkills, RuneLevels, SacredRelic, StatAdjustment,
-    StatContribution, StatLayer, StatPreview, StatSourceError, StatSources,
+    StatContribution, StatLayer, StatLimits, StatPreview, StatSourceError, StatSources,
 };
 pub use stats::{
-    effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, StatKind,
+    effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind,
     StatModifierSet, StatModifiers, StatTrace, BASE_STAT_MAX,
 };

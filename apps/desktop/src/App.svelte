@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import { errorMessage } from "./api/commands";
+  import { loadStatLimits } from "./limits.svelte";
   import CharacterPage from "./pages/character/CharacterPage.svelte";
   import DamagePage from "./pages/damage/DamagePage.svelte";
-  import { dismissError, toast } from "./toast.svelte";
+  import { dismissError, reportError, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
 
   type PageId = "damage" | "characters" | "enhance" | "roadmap" | "index";
@@ -20,6 +23,10 @@
   let recalculate: (() => void) | null = null;
 
   const sidebarCollapsed = persisted("tw-sidebar-collapsed", false);
+
+  onMount(() => {
+    loadStatLimits().catch((e) => reportError(errorMessage(e)));
+  });
 </script>
 
 <div class="shell">

@@ -6,6 +6,8 @@
   import type {
     BuffChoice, BuffDefinition, BuffTarget, BuffValue, PetSkillTier, StatKind, StatLayer, StatPreview,
   } from "../../api/types";
+  import { limits } from "../../limits.svelte";
+  import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import Select from "../../ui/Select.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import type { Draft } from "./draft";
@@ -87,12 +89,6 @@
     }
   }
 
-  // --- 調整(加算/固定) -------------------------------------------------------
-
-  function togglePin(k: StatKind, checked: boolean) {
-    draft.statSources.adjustments[k].pin = checked ? (preview?.stats[k] ?? draft.baseStats[k]) : null;
-  }
-
   // --- 要約行 ---------------------------------------------------------------
 
   const permanentSummary = $derived.by(() => {
@@ -158,23 +154,23 @@
               />
             {/each}
           </div>
-          <div class="section-label"><span>ルーンスキル</span><span class="rule"></span><span class="dim">0–20</span></div>
+          <div class="section-label"><span>ルーンスキル</span><span class="rule"></span><span class="dim">0–{limits.rune_level_max}</span></div>
           <div class="block stats">
             {#each STAT_KINDS as k (k)}
-              <StatInput label={STAT_LABELS[k]} min={0} max={20} bind:value={draft.statSources.rune_levels[k]} />
+              <StatInput label={STAT_LABELS[k]} min={0} max={limits.rune_level_max} bind:value={draft.statSources.rune_levels[k]} />
             {/each}
           </div>
-          <div class="section-label"><span>クラウン</span><span class="rule"></span><span class="dim">0–300</span></div>
+          <div class="section-label"><span>クラウン</span><span class="rule"></span><span class="dim">0–{limits.crown_max}</span></div>
           <div class="block stats">
             {#each STAT_KINDS as k (k)}
-              <StatInput label={STAT_LABELS[k]} min={0} max={300} bind:value={draft.statSources.crown[k]} />
+              <StatInput label={STAT_LABELS[k]} min={0} max={limits.crown_max} bind:value={draft.statSources.crown[k]} />
             {/each}
           </div>
-          <div class="section-label"><span>神鳥の聖物</span><span class="rule"></span><span class="dim">0–40 段階</span></div>
+          <div class="section-label"><span>神鳥の聖物</span><span class="rule"></span><span class="dim">0–{limits.sacred_relic_stage_max} 段階</span></div>
           <div class="block stats">
             {#each STAT_KINDS as k (k)}
               <StatInput
-                label={STAT_LABELS[k]} min={0} max={40}
+                label={STAT_LABELS[k]} min={0} max={limits.sacred_relic_stage_max}
                 bind:value={draft.statSources.sacred_relic[k]}
                 format={(v) => `${v} 段階 (+${v * 10})`}
               />
@@ -304,38 +300,12 @@
       </button>
       {#if openGroup === "adjustments"}
         <div class="group-body">
-          {#each STAT_KINDS as k (k)}
-            <div class="adj-stat">
-              <div class="adj-stat-label">{STAT_LABELS[k]}</div>
-              <div class="adj-row">
-                <span class="adj-desc dim">加算 — このステに +N する(検証・仮定用)</span>
-                <div class="adj-control">
-                  <StatInput label="" min={-999} max={999} bind:value={draft.statSources.adjustments[k].add} />
-                </div>
-              </div>
-              <div class="adj-row">
-                <label class="buff-check">
-                  <input
-                    type="checkbox"
-                    checked={draft.statSources.adjustments[k].pin !== null}
-                    onchange={(e) => togglePin(k, e.currentTarget.checked)}
-                  />
-                  <span class="adj-desc">固定 — 最終能力値を N に固定する(実測値で計算したいとき)</span>
-                </label>
-                {#if draft.statSources.adjustments[k].pin !== null}
-                  <div class="adj-control">
-                    <StatInput
-                      label="" min={0} max={99999}
-                      bind:value={
-                        () => draft.statSources.adjustments[k].pin ?? 0,
-                        (v) => (draft.statSources.adjustments[k].pin = v)
-                      }
-                    />
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/each}
+          <AdjustmentEditor
+            adjustments={draft.statSources.adjustments}
+            addMin={limits.adjustment_add_min} addMax={limits.adjustment_add_max}
+            pinMin={limits.adjustment_pin_min} pinMax={limits.adjustment_pin_max}
+            pinDefault={(k) => preview?.stats[k] ?? draft.baseStats[k]}
+          />
         </div>
       {/if}
     </div>
@@ -372,14 +342,4 @@
   .buff-detail { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 2px 22px; }
   .buff-detail > :global(*) { min-width: 140px; flex: 1; }
   .empty { padding: 8px 0; font-size: 11px; }
-
-  .adj-stat { padding: 10px 14px; border-bottom: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 6px; }
-  .adj-stat:last-child { border-bottom: 0; }
-  .adj-stat-label { font-size: 11px; font-weight: 700; color: var(--fg-muted); }
-  /* 説明文とStatInputを縦積みにする(狭い設定列で横スクロールが出ないように)。 */
-  .adj-row { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-  .adj-desc { font-size: 11px; min-width: 0; }
-  .adj-row .buff-check { flex-shrink: 1; min-width: 0; }
-  .adj-control { width: 100%; min-width: 0; }
-  .adj-control :global(.stat-input) { width: 100%; }
 </style>

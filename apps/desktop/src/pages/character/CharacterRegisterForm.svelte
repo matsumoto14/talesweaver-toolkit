@@ -3,9 +3,10 @@
   // 素ステ・覚醒・恒常補正・常用バフ・調整値は中立値で組み立て、登録後の CharacterWorkspace で編集する。
   import { createCharacter, errorMessage } from "../../api/commands";
   import { STAT_KINDS } from "../../labels";
-  import type { BaseStats, GameCharacter, NewCharacter, RegisteredCharacter, StatSources } from "../../api/types";
+  import type { BaseStats, GameCharacter, NewCharacter, RegisteredCharacter } from "../../api/types";
   import { reportError } from "../../toast.svelte";
   import Select from "../../ui/Select.svelte";
+  import { neutralStatSources } from "./draft";
 
   interface Props {
     gameCharacters: GameCharacter[];
@@ -15,17 +16,6 @@
 
   const defaultStats = (): BaseStats =>
     Object.fromEntries(STAT_KINDS.map((k) => [k, 1])) as BaseStats;
-
-  const neutralStatSources = (): StatSources => ({
-    pet_skills: Object.fromEntries(STAT_KINDS.map((k) => [k, null])) as StatSources["pet_skills"],
-    rune_levels: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["rune_levels"],
-    crown: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["crown"],
-    sacred_relic: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["sacred_relic"],
-    buffs: { choices: [] },
-    adjustments: Object.fromEntries(
-      STAT_KINDS.map((k) => [k, { add: 0, pin: null }]),
-    ) as StatSources["adjustments"],
-  });
 
   let name = $state("");
   let gameCharacterId = $state("");

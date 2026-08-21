@@ -13,7 +13,7 @@
   import Splitter from "../../ui/Splitter.svelte";
   import CharacterData from "./CharacterData.svelte";
   import CharacterSettings from "./CharacterSettings.svelte";
-  import { buildDraft, cloneAdjustments, type Draft } from "./draft";
+  import { buildDraft, type Draft } from "./draft";
 
   interface Props {
     character: RegisteredCharacter;
@@ -62,8 +62,10 @@
 
   // --- 即時プレビュー ---------------------------------------------------
   // draft の baseStats/statSources が変わるたびに(100ms debounce)preview_effective_stats を呼ぶ。
-  // エラー時はトースト表示のみ行い、直前のプレビューを保持する(全部 null にしない)。
+  // エラー時は previewError に入れて能力値表の近くに表示する(トーストは出さない。直前の
+  // プレビューは保持する。全部 null にしない)。
   let preview = $state<StatPreview | null>(null);
+  let previewError = $state<string | null>(null);
   let debounceHandle: ReturnType<typeof setTimeout> | undefined;
   let previewSeq = 0;
 
@@ -75,9 +77,9 @@
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources)
-        .then((p) => { if (seq === previewSeq) preview = p; })
-        .catch((e) => { if (seq === previewSeq) reportError(errorMessage(e)); });
+      previewEffectiveStats(baseStats, statSources, draft.gameCharacterId)
+        .then((p) => { if (seq === previewSeq) { preview = p; previewError = null; } })
+        .catch((e) => { if (seq === previewSeq) { previewError = errorMessage(e); } });
     }, 100);
 
     return () => {
@@ -97,14 +99,7 @@
         game_character_id: draft.gameCharacterId,
         base_stats: { ...draft.baseStats },
         awakening: { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) },
-        stat_sources: {
-          pet_skills: { ...draft.statSources.pet_skills },
-          rune_levels: { ...draft.statSources.rune_levels },
-          crown: { ...draft.statSources.crown },
-          sacred_relic: { ...draft.statSources.sacred_relic },
-          buffs: { choices: draft.statSources.buffs.choices.map((c) => ({ ...c })) },
-          adjustments: cloneAdjustments(draft.statSources.adjustments),
-        },
+        stat_sources: $state.snapshot(draft.statSources),
       };
       const saved = await updateCharacter(character.id, payload);
       // 保存成功: 基準スナップショットを現在の draft に合わせ、「未保存」表示・保存ボタンを消す。
@@ -119,7 +114,7 @@
 </script>
 
 <div class="workspace" style="grid-template-columns: {gridTemplateColumns};">
-  <CharacterData {draft} {preview} {gameCharacters} {catalog} {save} {saving} {dirty} {canSubmit} />
+  <CharacterData {draft} {preview} {previewError} {gameCharacters} {catalog} {save} {saving} {dirty} {canSubmit} />
   <Splitter
     bind:value={layoutWidths.value.settings}
     min={220}
