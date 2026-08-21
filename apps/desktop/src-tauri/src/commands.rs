@@ -66,7 +66,7 @@ pub fn calculate_damage(
     let enemy = gamedata::find_enemy(&enemy_id).ok_or_else(|| format!("敵 '{enemy_id}' が見つかりません"))?;
     let input = DamageInput {
         base_stats: character.base_stats,
-        stat_modifiers: StatModifierSet::neutral(),
+        stat_modifiers: StatModifierSet::default(),
         coefficients: gamedata::attack_coefficients(skill.dependency),
         awakening_rate: gamedata::awakening_rate(character.awakening),
         skill,

@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use domain::{Awakening, BaseStats};
+use domain::{Awakening, BaseStats, StatKind};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
@@ -121,9 +121,22 @@ impl CharacterRepository {
     }
 }
 
+/// 素ステータスの値域(wiki §1: 下限 1、上限 1500、エタの意志で最大 2000)。
+const STAT_RANGE: std::ops::RangeInclusive<u32> = 1..=2000;
+
 fn validate(new: &NewCharacter) -> Result<()> {
     if new.name.trim().is_empty() {
         return Err(StorageError::InvalidValue("名前が空です".into()));
+    }
+    for kind in StatKind::ALL {
+        let value = new.base_stats.get(kind);
+        if !STAT_RANGE.contains(&value) {
+            return Err(StorageError::InvalidValue(format!(
+                "{kind:?} は {}〜{} の範囲で指定してください(指定値 {value})",
+                STAT_RANGE.start(),
+                STAT_RANGE.end()
+            )));
+        }
     }
     if new.awakening.stage > Awakening::MAX_STAGE {
         return Err(StorageError::InvalidValue(format!(
@@ -213,6 +226,19 @@ mod tests {
         c.awakening.stage = 5;
         c.awakening.eternal_level = 81;
         assert!(matches!(repo.create(&c), Err(StorageError::InvalidValue(_))));
+    }
+
+    #[test]
+    fn 素ステは1から2000の範囲() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.base_stats.int = 0;
+        assert!(matches!(repo.create(&c), Err(StorageError::InvalidValue(_))));
+        c.base_stats.int = 2001;
+        assert!(matches!(repo.create(&c), Err(StorageError::InvalidValue(_))));
+        c.base_stats.int = 1;
+        c.base_stats.agi = 2000;
+        assert!(repo.create(&c).is_ok());
     }
 
     #[test]

@@ -14,19 +14,6 @@ pub enum SkillDependency {
     HackInt,
 }
 
-impl SkillDependency {
-    pub fn label(self) -> &'static str {
-        match self {
-            SkillDependency::Stab => "STAB",
-            SkillDependency::Hack => "HACK",
-            SkillDependency::Int => "INT",
-            SkillDependency::Mr => "MR",
-            SkillDependency::StabHack => "STAB+HACK",
-            SkillDependency::HackInt => "HACK+INT",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,

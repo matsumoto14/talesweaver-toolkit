@@ -575,8 +575,6 @@ version = "0.1.0"
 dependencies = [
  "domain",
  "gamedata",
- "serde",
- "serde_json",
  "storage",
  "tauri",
  "tauri-build",

@@ -145,10 +145,6 @@ impl DamageCategory {
         DamageCategory::PvpCorrection,
     ];
 
-    pub fn all() -> &'static [DamageCategory] {
-        &Self::ALL
-    }
-
     pub fn kind(self) -> CategoryKind {
         use DamageCategory::*;
         match self {
@@ -263,11 +259,9 @@ impl DamageCategory {
         }
     }
 
+    /// `ALL` と `values` の添字。variant の宣言順 = `ALL` の順(テストで固定)。
     fn index(self) -> usize {
-        Self::ALL
-            .iter()
-            .position(|c| *c == self)
-            .expect("ALL は全 variant を含む")
+        self as usize
     }
 }
 
@@ -278,9 +272,11 @@ pub struct CategoryTrace {
     pub symbol: String,
     pub label: String,
     pub kind: CategoryKind,
-    /// 生の集計値。割合は Σ% の小数表現(+15% → 0.15)、固定値は合計、代入はその値
+    /// キャップ適用前の生の集計値。割合は Σ% の小数表現(+15% → 0.15)、固定値は合計、代入はその値
+    pub raw: f64,
+    /// キャップ適用後の集計値
     pub value: f64,
-    /// 式で使われる値。割合は 1+Σ%(減算系は 1−Σ%)、それ以外は value と同じ
+    /// 式で使われる値(キャップ適用後)。割合は 1+Σ%(減算系は 1−Σ%)、それ以外は value と同じ
     pub factor: f64,
     pub cap: Option<CategoryCap>,
 }
@@ -288,7 +284,7 @@ pub struct CategoryTrace {
 /// 全カテゴリの集計値(パイプライン②)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CategoryTotals {
-    /// `DamageCategory::ALL` と同じ順。生の集計値
+    /// `DamageCategory::ALL` と同じ順。キャップ適用前の生の集計値(Σ)
     values: [f64; 30],
 }
 
@@ -298,22 +294,28 @@ impl CategoryTotals {
         Self { values: [0.0; 30] }
     }
 
-    /// 値を入れる。割合・固定値は同一カテゴリ内で加算、代入は置き換え。キャップを適用する。
+    /// 値を入れる。割合・固定値は同一カテゴリ内で加算、代入は置き換え。
+    /// キャップは Σ に対して読み出し時(`value` / `get`)に適用する。
     pub fn add(&mut self, category: DamageCategory, value: f64) {
         let slot = &mut self.values[category.index()];
-        let raw = match category.kind() {
+        *slot = match category.kind() {
             CategoryKind::Assigned => value,
             CategoryKind::Fixed | CategoryKind::Rate => *slot + value,
         };
-        *slot = match category.cap() {
-            Some(cap) => cap.clamp(raw),
-            None => raw,
-        };
     }
 
-    /// 生の集計値(割合は Σ%)。
-    pub fn value(&self, category: DamageCategory) -> f64 {
+    /// キャップ適用前の生の集計値(割合は Σ%)。
+    pub fn raw(&self, category: DamageCategory) -> f64 {
         self.values[category.index()]
+    }
+
+    /// キャップ適用後の集計値(割合は Σ%)。
+    pub fn value(&self, category: DamageCategory) -> f64 {
+        let raw = self.raw(category);
+        match category.cap() {
+            Some(cap) => cap.clamp(raw),
+            None => raw,
+        }
     }
 
     /// 式で使う値。割合は `1 + Σ%`(減算系は `1 − Σ%`)、固定値・代入はそのまま。
@@ -334,6 +336,7 @@ impl CategoryTotals {
                 symbol: category.wiki_symbol().to_string(),
                 label: category.label().to_string(),
                 kind: category.kind(),
+                raw: self.raw(category),
                 value: self.value(category),
                 factor: self.get(category),
                 cap: category.cap(),
@@ -354,12 +357,16 @@ mod tests {
     use DamageCategory::*;
 
     #[test]
-    fn all_は全カテゴリを重複なく返す() {
-        assert_eq!(DamageCategory::all().len(), 30);
-        let mut symbols: Vec<_> = DamageCategory::all().iter().map(|c| c.wiki_symbol()).collect();
+    fn all_は全カテゴリを重複なく宣言順に持つ() {
+        assert_eq!(DamageCategory::ALL.len(), 30);
+        let mut symbols: Vec<_> = DamageCategory::ALL.iter().map(|c| c.wiki_symbol()).collect();
         symbols.sort_unstable();
         symbols.dedup();
         assert_eq!(symbols.len(), 30);
+        // `index()` は variant の宣言順に依存するので ALL の並びと一致させる
+        for (i, c) in DamageCategory::ALL.iter().enumerate() {
+            assert_eq!(c.index(), i, "{} の位置が ALL と一致しない", c.wiki_symbol());
+        }
     }
 
     #[test]
@@ -400,10 +407,23 @@ mod tests {
     }
 
     #[test]
-    fn キャップが適用される() {
+    fn キャップは合計に対して適用される() {
         let mut t = CategoryTotals::neutral();
         t.add(FinalDamageRate, 0.5);
         assert!((t.get(FinalDamageRate) - 1.45).abs() < 1e-12);
+        assert!((t.raw(FinalDamageRate) - 0.5).abs() < 1e-12);
+        // +0.5 − 0.1 = +0.4(キャップ 0.45 未満なのでそのまま)。add ごとに clamp していれば 0.35 になってしまう
+        t.add(FinalDamageRate, -0.1);
+        assert!((t.value(FinalDamageRate) - 0.40).abs() < 1e-12);
+        assert!((t.get(FinalDamageRate) - 1.40).abs() < 1e-12);
+        let trace = t.trace();
+        let l = trace.iter().find(|c| c.symbol == "L").unwrap();
+        assert!((l.raw - 0.40).abs() < 1e-12 && (l.value - 0.40).abs() < 1e-12 && (l.factor - 1.40).abs() < 1e-12);
+    }
+
+    #[test]
+    fn キャップが適用される() {
+        let mut t = CategoryTotals::neutral();
         t.add(ElementBonus, -0.3);
         assert_eq!(t.get(ElementBonus), 1.0);
         t.add(ElementBonus, 0.9);

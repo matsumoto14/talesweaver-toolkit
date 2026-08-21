@@ -27,18 +27,6 @@ impl StatKind {
         StatKind::Dex,
         StatKind::Agi,
     ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            StatKind::Stab => "STAB",
-            StatKind::Hack => "HACK",
-            StatKind::Int => "INT",
-            StatKind::Def => "DEF",
-            StatKind::Mr => "MR",
-            StatKind::Dex => "DEX",
-            StatKind::Agi => "AGI",
-        }
-    }
 }
 
 /// 素ステータス(オリジナル)。
@@ -158,7 +146,7 @@ pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers) -> (i64, Sta
     (effective, trace)
 }
 
-/// 7 ステータスそれぞれの補正。
+/// 7 ステータスそれぞれの補正。`Default` が中立(補正なし)。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct StatModifierSet {
     pub stab: StatModifiers,
@@ -171,10 +159,6 @@ pub struct StatModifierSet {
 }
 
 impl StatModifierSet {
-    pub fn neutral() -> Self {
-        Self::default()
-    }
-
     pub fn get(&self, kind: StatKind) -> &StatModifiers {
         match kind {
             StatKind::Stab => &self.stab,
@@ -317,7 +301,7 @@ mod tests {
     #[test]
     fn 七種すべてを計算しトレースを返す() {
         let base = BaseStats { stab: 1, hack: 2, int: 3, def: 4, mr: 5, dex: 6, agi: 7 };
-        let (stats, traces) = effective_stats(&base, &StatModifierSet::neutral());
+        let (stats, traces) = effective_stats(&base, &StatModifierSet::default());
         assert_eq!(stats, EffectiveStats { stab: 1, hack: 2, int: 3, def: 4, mr: 5, dex: 6, agi: 7 });
         assert_eq!(traces.len(), 7);
         for kind in StatKind::ALL {

@@ -233,7 +233,7 @@ mod tests {
     fn input() -> DamageInput {
         DamageInput {
             base_stats: BaseStats { stab: 500, hack: 500, int: 0, def: 0, mr: 0, dex: 100, agi: 0 },
-            stat_modifiers: StatModifierSet::neutral(),
+            stat_modifiers: StatModifierSet::default(),
             coefficients: AttackCoefficients { primary: (StatKind::Stab, 1.8), secondary: (StatKind::Hack, 1.8) },
             skill: Skill {
                 id: "s".into(),
@@ -380,6 +380,28 @@ mod tests {
         assert_eq!(evaluate(&t, false).0, 300);
     }
 
+    // 外側の倍率群の位置関係(手計算):
+    //   (A 2000 + B 0 − C 1000) × {D 1.0} = 1000
+    //   × (1−Q 0.3) = 700、+ W 100 = 800(W は Old〜V2 の積の外・X の内側)
+    //   × X 1.5 = 1200
+    //   W が X の外側にあれば 1000 × 0.7 × 1.5 + 100 = 1150 になるので区別できる
+    #[test]
+    fn 外側の倍率群の位置_吸収と基本発動固定値と攻撃ダメージ() {
+        use DamageCategory::*;
+        let mut t = CategoryTotals::neutral();
+        t.add(AttackPower, 2000.0);
+        t.add(TargetDefense, 1000.0);
+        t.add(SkillMultiplier, 1.0);
+        t.add(CriticalMultiplier, 2.0);
+        t.add(DamageAbsorb, 0.3);
+        t.add(BasicTriggerDamageFixed, 100.0);
+        t.add(AttackDamageRate, 0.5);
+        assert_eq!(evaluate(&t, false).0, 1200);
+        // M は L・V1 の後、Old 以降の前: (1000 × 1.0 × 1.0 + M −200) × 0.7 + 100 = 660 → × 1.5 = 990
+        t.add(DamageReduction, -200.0);
+        assert_eq!(evaluate(&t, false).0, 990);
+    }
+
     /// 配線漏れ防止: 全カテゴリに非中立値を入れたとき結果が変わること。
     #[test]
     fn 全カテゴリが式に配線されている() {
@@ -394,7 +416,7 @@ mod tests {
         let (critical, _) = evaluate(&base, true);
         assert!(normal > 1 && critical > normal);
 
-        for &category in DamageCategory::all() {
+        for category in DamageCategory::ALL {
             let mut t = base.clone();
             let delta = match category.kind() {
                 CategoryKind::Assigned => t.value(category) * 1.5 + 1.0,
@@ -422,7 +444,7 @@ mod tests {
     fn トレースに全カテゴリが出る() {
         let r = calculate_damage(&input());
         let symbols: Vec<&str> = r.trace.categories.iter().map(|c| c.symbol.as_str()).collect();
-        for c in DamageCategory::all() {
+        for c in DamageCategory::ALL {
             assert!(symbols.contains(&c.wiki_symbol()));
         }
         assert_eq!(r.trace.steps_min.len(), 10);
