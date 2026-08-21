@@ -1,0 +1,99 @@
+/* 配色・寸法は Main.dc.html(デザインモック)に合わせる */
+:root {
+  --bg: oklch(0.17 0.008 250);
+  --bg-raised: oklch(0.20 0.010 250);
+  --bg-panel: oklch(0.21 0.010 250);
+  --bg-field: oklch(0.24 0.011 250);
+  --bg-active: oklch(0.25 0.030 200);
+  --border: oklch(0.30 0.012 250);
+  --border-soft: oklch(0.24 0.011 250);
+  --border-strong: oklch(0.34 0.012 250);
+  --fg: oklch(0.93 0.004 250);
+  --fg-muted: oklch(0.63 0.010 250);
+  --fg-dim: oklch(0.48 0.010 250);
+  --accent: oklch(0.80 0.14 195);
+  --accent-hover: oklch(0.88 0.11 195);
+  --warm: oklch(0.80 0.14 45);
+  --danger: oklch(0.72 0.17 25);
+  --font: "M PLUS 1 Code", ui-monospace, SFMono-Regular, Menlo, "Hiragino Kaku Gothic ProN", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button, select, input { font-family: inherit; font-size: inherit; color: inherit; }
+
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* 共通部品 ---------------------------------------------------------- */
+
+.panel-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.panel-head .dot { width: 4px; height: 4px; background: var(--accent); }
+.panel-head .dot.warm { background: var(--warm); }
+.panel-head .title { font-size: 10px; letter-spacing: 0.18em; color: var(--fg-muted); }
+
+.section-label {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px 8px;
+  font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim);
+}
+.section-label .rule { flex-grow: 1; height: 1px; background: var(--border-soft); }
+.section-label .note { color: var(--accent); letter-spacing: 0; }
+
+.kv {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 5px 14px;
+}
+.kv .k { font-size: 12px; color: var(--fg-muted); }
+.kv .v {
+  min-width: 96px; text-align: right; padding: 4px 9px;
+  background: var(--bg-field); border: 1px solid var(--border);
+  font-weight: 500; font-variant-numeric: tabular-nums;
+}
+
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px;
+  background: var(--bg-field); border: 1px solid var(--border);
+  color: var(--fg); font-size: 12px;
+}
+.btn:hover:not(:disabled) { border-color: var(--border-strong); }
+.btn.primary {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--bg); font-weight: 700;
+}
+.btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn.danger { color: var(--danger); }
+.btn.danger:hover:not(:disabled) { border-color: var(--danger); }
+
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--fg-muted); }
+.dim { color: var(--fg-dim); }
+
+table.grid { border-collapse: collapse; width: 100%; font-size: 12px; }
+table.grid th, table.grid td {
+  padding: 5px 8px; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid var(--border-soft);
+}
+table.grid th {
+  font-size: 10px; letter-spacing: 0.08em; font-weight: 500;
+  color: var(--fg-dim); background: var(--bg-panel);
+  position: sticky; top: 0;
+}
+table.grid td.n, table.grid th.n { text-align: right; font-variant-numeric: tabular-nums; }
