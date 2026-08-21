@@ -122,12 +122,12 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     let product = base * skill * crit * bonus;
     let inner = step(
         "最終ダメージ固定値(下限)",
-        format!("MAX({product} + K {k}, K {k})", k = g(FinalDamageFixed)),
+        format!("MAX({product:.4} + K {k}, K {k})", k = g(FinalDamageFixed)),
         (product + g(FinalDamageFixed)).max(g(FinalDamageFixed)),
     );
     let mid = step(
         "最終ダメージ・カット率A・被害減少",
-        format!("{inner} × L {} × V1 {} + M {}", g(FinalDamageRate), g(CutRateA), g(DamageReduction)),
+        format!("{inner:.4} × L {} × V1 {} + M {}", g(FinalDamageRate), g(CutRateA), g(DamageReduction)),
         inner * g(FinalDamageRate) * g(CutRateA) + g(DamageReduction),
     );
     let outer_factors = g(AttackDamageLegacy)
@@ -144,7 +144,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     let outer = step(
         "各種ダメージ増減",
         format!(
-            "{mid} × Old {} × N {} × O {} × P {} × (1−Q) {} × R {} × (1−S) {} × T {} × (1−U) {} × (1−New2) {} × V2 {} + W {}",
+            "{mid:.4} × Old {} × N {} × O {} × P {} × (1−Q) {} × R {} × (1−S) {} × T {} × (1−U) {} × (1−New2) {} × V2 {} + W {}",
             g(AttackDamageLegacy),
             g(AwakeningDamage),
             g(PhysicalMagicDamageRate),
@@ -162,11 +162,11 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     );
     let final_value = step(
         "攻撃ダメージ・PVP補正",
-        format!("{outer} × X {} × Y {}", g(AttackDamageRate), g(PvpCorrection)),
+        format!("{outer:.4} × X {} × Y {}", g(AttackDamageRate), g(PvpCorrection)),
         outer * g(AttackDamageRate) * g(PvpCorrection),
     );
     let floored = floor_int(final_value);
-    step("切捨て", format!("[{final_value}]"), floored as f64);
+    step("切捨て", format!("[{final_value:.4}]"), floored as f64);
     let damage = floored.max(MIN_DAMAGE_TO_MONSTER);
     step("対モンスター下限", format!("MAX({floored}, {MIN_DAMAGE_TO_MONSTER})"), damage as f64);
     (damage, steps)

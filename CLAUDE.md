@@ -36,8 +36,19 @@ TalesWeaver(MMORPG)プレイヤー向けの便利ツールキット。デスク�
 
 ## 現状
 
-リポジトリは未スキャフォールド。最初のタスクは Tauri プロジェクトの足場作成。
-足場ができたらビルド・実行・テストのコマンドをここに追記する。
+最小 end-to-end(キャラ登録 → スキル・敵選択 → ダメージ計算 + トレース)が動く(2026-08-21、docs/goals/2026-08-21-minimal-e2e.md)。
+シードはボリス 1 体・スキル 5 件・敵 3 体。装備・バフ・属性は未実装(中立値)。決定事項は docs/decisions.md、実証スクリーンショットは docs/screenshots/。
+
+## ビルド・実行・テスト
+
+前提: Rust stable(MSVC)、VS 2022 Build Tools(C++)、Node 22。cargo は `%USERPROFILE%.cargoin`(PATH 未登録なら追加)。
+
+- 依存取得: `cd apps/desktop && npm install`
+- テスト: `cargo test --workspace`(リポジトリルート)
+- 開発起動: `cd apps/desktop && npm run tauri dev`(初回の Rust ビルドは数分)
+- フロント単体チェック: `cd apps/desktop && npm run build && npx svelte-check`
+- GUI の自動操作・撮影: WebView2 に `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` を付けて起動し、Playwright の `chromium.connectOverCDP` で操作する(docs/decisions.md 参照)
+- DB: `%APPDATA%com.talesweaver.toolkit	alesweaver-toolkit.sqlite`
 
 ## 原則
 
