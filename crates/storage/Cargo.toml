@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 serde = { workspace = true }
 domain = { path = "../domain" }
+rusqlite = { version = "0.37", features = ["bundled"] }
+thiserror = "2"

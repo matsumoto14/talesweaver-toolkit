@@ -1,1 +1,20 @@
-//! storage クレート(実装は後続コミット)
+//! ユーザーデータ(SQLite)。登録キャラのみを持ち、静的データは入れない。
+//! domain の型との変換はここで行う(domain は SQLite を知らない)。
+
+mod character_repository;
+
+pub use character_repository::{CharacterRepository, NewCharacter, RegisteredCharacter};
+
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum StorageError {
+    #[error("データベースエラー: {0}")]
+    Database(#[from] rusqlite::Error),
+    #[error("キャラクター(id={0})が見つかりません")]
+    CharacterNotFound(i64),
+    #[error("不正な値: {0}")]
+    InvalidValue(String),
+}
+
+pub type Result<T> = std::result::Result<T, StorageError>;
