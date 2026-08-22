@@ -1,7 +1,7 @@
 # ダメージ計算・ステータス仕様(talewiki 整理)
 
 出典: [Tale Wiki「ステータス」ページ](https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9)(wiki 最終更新 2026-07-21、取得 2026-08-21)。
-このドキュメントは wiki の記述を実装向けに構造化したもの。個別アイテム・スキルの数値カタログは静的データ(SQLite シード)として別管理し、ここには**計算モデルだけ**を書く。
+このドキュメントは wiki の記述を実装向けに構造化したもの。個別アイテム・スキルの数値カタログは静的データ(`crates/gamedata`)として別管理し、ここには**計算モデルだけ**を書く。
 
 ## 1. ステータス(7種)
 
@@ -34,7 +34,7 @@
 - 能力値倍率B: 初期 0%、下限 -30%(デバフ側)
 - 5 つのレイヤー(割合増加/固定値/倍率A/倍率B/最終固定値)それぞれにバフ・アイテムがぶら下がる。同名枠内は重複不可
 - レイヤー別バフ一覧(常用バフ 16 件): wiki「ステータス」#jc16a054。カタログの実装は `crates/gamedata/src/buffs.rs`(型は `domain::stat_sources`)
-- キャラスキル(自身/味方のステ上昇、9 件、`BuffGroup::CharacterSkill`/`AllySkill`)の一覧も同じ `crates/gamedata/src/buffs.rs` に置く。出典は各キャラの wiki `Skill/<キャラ>` ページ(docs/goals/2026-08-21-character-screen-v2.md「wiki 調査結果」参照。層の一部は `[仮]`)
+- キャラスキル(自身/味方のステ上昇、9 件、`BuffGroup::CharacterSkill`/`AllySkill`)の一覧も同じ `crates/gamedata/src/buffs.rs` に置く。出典は各キャラの wiki `Skill/<キャラ>` ページ(docs/claude/goals/2026-08-21-character-screen-v2.md「wiki 調査結果」参照。層の一部は `[仮]`)
 
 ## 3. 与ダメージ式(核心)
 

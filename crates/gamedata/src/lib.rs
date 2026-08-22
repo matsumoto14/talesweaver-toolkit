@@ -1,6 +1,6 @@
 //! 静的ゲームデータ(wiki / 旧リポ由来)。アプリに同梱し、ユーザーは編集しない。
 //!
-//! 現状は Rust のリテラルで持つ(docs/decisions.md「構成・運用」)。各データに出典 `Source` を付ける。
+//! 現状は Rust のリテラルで持つ(docs/claude/decisions.md「構成・運用」)。各データに出典 `Source` を付ける。
 
 pub mod awakening;
 pub mod buffs;

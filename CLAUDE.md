@@ -1,91 +1,54 @@
 # TalesWeaver Toolkit
 
-TalesWeaver(MMORPG)プレイヤー向けの便利ツールキット。デスクトップアプリ。
+TalesWeaver(MMORPG)プレイヤー向けデスクトップツール。Tauri(Rust)+ SQLite(rusqlite)+ TypeScript/Svelte。
+機能と全体構成は docs/architecture.md、進捗は docs/status.md。
+docs/ 直下は人向け(HTML 版は docs/site/、`python tools/docs-site/build.py` で再生成)。docs/claude/ は Claude 向け(決定記録 decisions.md、goal 文書 goals/、運用 workflow.md)。
 
-## 主要機能
+## アーキテクチャ(構造ファースト)
 
-- **ダメージ計算** — ステータス・スキル・装備からダメージを計算する
-- **キャラ登録** — 自分のキャラクター(ステータス・装備・スキル)を登録・管理する
-- **強化提案** — 登録キャラに対しておすすめの強化(装備・ステ振りなど)を提案する
-- **コンテンツ入場ロードマップ** — 各コンテンツの入場条件と、そこに到達するまでの手順を提示する
-- **やりたいこと索引** — 「やりたいこと」起点で必要な機能・情報へたどり着ける索引
+- ゲームのドメインモデル(キャラ・装備・スキル・バフ・敵・コンテンツ)を先に立て、ダメージ計算などの機能はその消費者として実装する。計算ファーストにしない。
+- 語彙はドメイン用語(wiki のカテゴリ名・ゲーム内名称)。出典(Excel セル名・wiki アンカー)はコメントや docs に置き、型名・関数名に持ち込まない。
+- docs/architecture.md を正とする。直書き・レイヤー飛ばしの近道をしない。
 
-## 技術スタック
+## UX
 
-- **アプリ基盤**: Tauri(バックエンド Rust)
-- **データ保存**: SQLite(rusqlite)
-- **フロントエンド**: TypeScript + Svelte(Tauri との相性と軽量さで選定)
-
-## アーキテクチャ方針(構造ファースト)
-
-- **構造ファースト。計算ファーストにしない。** 旧リポジトリは Excel 出力の再現が目的化し、Excel のセル構造(AF54 等)がそのままコードの語彙になった。新リポではゲームのドメインモデル(キャラ・装備・スキル・バフ・敵・コンテンツ)を先に立て、ダメージ計算はドメインの消費者の一つとして実装する
-- コードの語彙はドメイン用語(wiki のカテゴリ名・ゲーム内名称)。出典(Excel セル名・wiki アンカー)はコメントや docs に置き、型名・関数名には持ち込まない
-- 全体構成は docs/architecture.md を正とする。構造を壊す近道(とりあえず動かすための直書き・レイヤー飛ばし)はしない
-
-## UX の基本方針
-
-**UI の実装・変更時は必ず docs/ux-guidelines.md を参照する**(4 原則: 既知の情報を入力させない / 削らず構造化する / 作成と詳細設定を分離する / 入力より選択)。以下はその要約。
-
-- **ユーザー入力は最小化し、登録キャラデータを軸にする。** 計算・強化提案・ロードマップは「キャラを選ぶだけ」で動くのが基本形
-- 手入力が要るのはキャラ登録時の一度きりを目指す。スキル倍率・敵の防御力・バフ数値など wiki から取れるものはすべて静的データとして同梱し、ユーザーに入力させない
-- 画面上の入力欄は「キャラデータからの自動値を上書きする例外操作」として設計する(初期値は常に埋まっている)
+**UI の実装・変更時は必ず docs/ux-guidelines.md を読む。** 要点: 登録キャラデータを軸にし、wiki から取れる値は静的データとして同梱してユーザーに入力させない。入力欄は「自動値を上書きする例外操作」で、初期値は常に埋まっている。
 
 ## 情報ソース
 
-- ゲーム仕様の一次ソースは [Tale Wiki](https://talewiki.com/)(EUC-JP の PukiWiki)。取得方法は docs/damage-formula.md 末尾の取得メモを参照
-- 整理済みの仕様は docs/ に置く。ダメージ計算式: docs/damage-formula.md
-- 旧リポジトリ C:\github\private\twtoolkit(TypeScript/Next.js 版、Excel 計算器移植)に流用可能な静的データ・仕様書がある。棚卸し: docs/legacy-twtoolkit.md。**数値は古い可能性があるため wiki を正とする**
+- ゲーム仕様の一次ソースは [Tale Wiki](https://talewiki.com/)(EUC-JP の PukiWiki)。取得方法は docs/damage-formula.md 末尾。
+- 旧リポ `C:\github\private\twtoolkit` に流用可能な静的データがある(棚卸し: docs/legacy-twtoolkit.md)。数値は古い可能性があるため wiki を正とする。
 
-## 現状
+## ビルド・テスト
 
-最小 end-to-end(キャラ登録 → スキル・敵選択 → ダメージ計算 + トレース)が動く(2026-08-21、docs/goals/2026-08-21-minimal-e2e.md)。
-シードはボリス 1 体・スキル 5 件・敵 3 体。装備・属性は未実装(中立値)。決定事項は docs/decisions.md、実証スクリーンショットは docs/screenshots/。
-
-キャラ登録にステータスの補正源(ペット S スキル・ルーンスキル・クラウン・神鳥の聖物・常用バフ・調整値)を追加できるようになり、ダメージ計算はこれらを自動反映してステトレースに寄与内訳を出す(2026-08-21、docs/goals/2026-08-21-character-stat-sources.md)。キャラ編集にも対応。装備値側(称号・装備アビリティ等)は未実装。
-
-画面レイアウトが可変になった(サイドバー折りたたみ・列リサイズ、2026-08-21)。
-
-キャラ画面は docs/ux-guidelines.md に沿って登録(名前+キャラ種のみ)/詳細(グループ化・展開編集)に分離し、ダメージ計算に一時調整(キャラには保存しない、計算リクエストにのみ乗る)の経路を追加した(2026-08-21、docs/goals/2026-08-21-ux-guidelines-character-screen.md)。
-
-キャラ画面を「一覧|キャラデータ|設定」の3カラムに再構成し、数値入力を `StatInput`(数値欄+スライダー+MAXボタン)1種類に統一した。調整値は「加算(+N)」と「固定(最終能力値を N に置換)」の2種に再設計し、設定を触ると保存前でもキャラデータ列の最終能力値が `preview_effective_stats` で即時に再計算される。gamedata にプレイアブル19キャラとキャラスキルバフ(自身/味方のステ上昇 9件)を追加した(2026-08-21、docs/goals/2026-08-21-character-screen-v2.md)。実機スモークテスト・スクリーンショット更新は別途行う。
-
-## ビルド・実行・テスト
-
-前提: Rust stable(MSVC)、VS 2022 Build Tools(C++)、Node 22。cargo は `%USERPROFILE%.cargoin`(PATH 未登録なら追加)。
+前提: Rust stable(MSVC)、VS 2022 Build Tools、Node 22。cargo は `%USERPROFILE%\.cargo\bin`(PATH 未登録なら追加)。
 
 - 依存取得: `cd apps/desktop && npm install`
 - テスト: `cargo test --workspace`(リポジトリルート)
-- 開発起動: `cd apps/desktop && npm run tauri dev`(初回の Rust ビルドは数分)
-- フロント単体チェック: `cd apps/desktop && npm run build && npx svelte-check`
-- GUI の自動操作・撮影: WebView2 に `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` を付けて起動し、Playwright の `chromium.connectOverCDP` で操作する(docs/decisions.md 参照)
-- DB: `%APPDATA%com.talesweaver.toolkit	alesweaver-toolkit.sqlite`
+- フロント: `cd apps/desktop && npm run build && npx svelte-check`
+- 開発起動: `cd apps/desktop && npm run tauri dev`
+- GUI の実機確認・撮影は `gui-smoke` skill の手順で行う(Subagent に出すなら `smoke-tester`)
+- DB: `%APPDATA%\com.talesweaver.toolkit\talesweaver-toolkit.sqlite`
 
 ## 原則
 
 - 後方互換性を保たない。互換レイヤー・フォールバックを足さず、古いパスを削除する。
 - 現在の要件を満たす最もシンプルな実装を選ぶ。投機的な抽象化・設定・間接化をしない。
-- レイヤーで育てる。end-to-end で動く最小から始め、動くものの上に積む。
-- コンポーネントはモジュール化し、関心事を分離する。
-- 複雑さを減らすなら実績あるライブラリを使う。一般的な機能を理由なく再実装しない。
-- 既にある依存を先に使う。ドキュメントと型を確認せずに「機能がない」と判断しない。
+- end-to-end で動く最小から始め、動くものの上に積む。
+- 複雑さを減らすなら実績あるライブラリを使う。既にある依存を先に使い、型とドキュメントを確認せずに「機能がない」と判断しない。
 - アーキテクチャは長期前提で決める。後で置き換える前提のつなぎを受け入れない。
 
 ## 実行ワークフロー
 
-司令塔(リードオーケストレーター)として振る舞う。
+メインセッション(Fable 5)が司令塔・最終判断者。Subagent は必要なときだけ使う。詳細と判断基準は docs/claude/workflow.md。
 
-自明でない実装依頼では、毎回次の手順を踏む:
+**IMPORTANT: Subagent として実行されている場合はこの節を無視し、与えられたタスクを自分で直接遂行する。`Agent` を起動しない。**
 
-1. 目的と受け入れ条件を明確にする。
-2. コードベースの調査を `researcher` に委譲する。
-3. 調査結果を評価し、実装方針を決める。
-4. 実装とテストを `implementer` に委譲する。
-5. 完成した差分を `reviewer` に委譲する。
-6. 実装結果とレビュー結果を自分で評価する。
-7. レビューで重大な問題が見つかったら `implementer` に差し戻す。
-8. 関連テストが通り、レビュー指摘が解消されてから完了を報告する。
+着手前に変更を分類し、その段階の手順だけを踏む:
 
-アーキテクチャ上の判断・スコープ変更・要件の衝突・最終的な受け入れ判定は、
-司令塔である Fable 5 の会話内で行う。
+1. **Small**(数ファイル内の修正・微調整・docs・`/code-review` 指摘対応): Fable 自身が実装 → 関連テスト → diff 確認。探索は Explore。`researcher` / `implementer` / `reviewer` は起動しない。
+2. **Normal**(単一 domain/module 内の機能追加・修正): Fable が受け入れ条件を整理し、規模が大きいときのみ `implementer` に委譲。Fable 自身が diff とテスト結果を評価する。独立 reviewer は必須にしない。
+3. **Complex**(アーキテクチャ変更・複数 module 横断・DB migration・セキュリティ・並行処理・破壊的操作・データ整合性・大規模リファクタリング・原因不明の障害): `researcher` → Fable が方針決定 → `implementer` → `reviewer` → Fable 最終判定。
 
-単純なファイル探索や機械的な検索には、組み込みの Explore エージェントや Haiku を使う。
+- 同一変更に `reviewer` と `/code-review` を重ねない。追加レビューは観点が異なる場合(security / migration / architecture)のみ。
+- Subagent への依頼は目的・受け入れ条件・対象ファイル・制約のみ。返答は結論・根拠・変更ファイル・テスト要約・残存リスクのみ(ログ・diff 全文は返さない)。

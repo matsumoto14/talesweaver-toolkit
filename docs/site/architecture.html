@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アーキテクチャ · TalesWeaver Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;600&family=Noto+Sans+JP:wght@400;700&display=swap">
+<style>/* 配色はアプリ(apps/desktop/src/app.css)のトークンに合わせたダーク基調。ライトは同じ色相で反転 */
+:root {
+  --bg: #1c1e22; --bg-raised: #22252a; --panel: #262a30; --field: #2e333a;
+  --border: #3a3f47; --border-soft: #2e333a;
+  --fg: #eaebee; --muted: #9a9ea6; --dim: #6e737b;
+  --accent: #4fd1d9; --accent-soft: rgba(79, 209, 217, .14);
+  --warm: #e8a25c; --warm-soft: rgba(232, 162, 92, .16);
+  --code-bg: #24282e;
+  --mono: "M PLUS 1 Code", ui-monospace, SFMono-Regular, Menlo, "Hiragino Kaku Gothic ProN", monospace;
+  --sans: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7; --bg-raised: #eceef1; --panel: #ffffff; --field: #e9ebef;
+    --border: #d3d7dd; --border-soft: #e4e7eb;
+    --fg: #1f2226; --muted: #5f656e; --dim: #8a9099;
+    --accent: #0f8a93; --accent-soft: rgba(15, 138, 147, .12);
+    --warm: #b8651f; --warm-soft: rgba(184, 101, 31, .14);
+    --code-bg: #eceef1;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: 24px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.8; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+a:hover { border-bottom-color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- 骨格: 左ナビ | 本文 ------------------------------------------------ */
+.shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 22px 16px; border-right: 1px solid var(--border); background: var(--bg-raised); }
+.brand { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; letter-spacing: .14em; color: var(--fg); border: 0; margin-bottom: 22px; }
+.brand .dot { width: 5px; height: 5px; background: var(--accent); }
+.site-nav .label { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--dim); margin: 16px 0 6px 10px; }
+.site-nav a { display: block; padding: 7px 10px; border: 0; border-left: 2px solid transparent; color: var(--fg); line-height: 1.35; }
+.site-nav a span { display: block; font-size: 13.5px; }
+.site-nav a small { display: block; font-size: 11px; color: var(--dim); font-family: var(--mono); letter-spacing: 0; }
+.site-nav a:hover { background: var(--panel); }
+.site-nav a.current { border-left-color: var(--accent); background: var(--accent-soft); }
+.site-nav a.ext span::after { content: " ↗"; color: var(--dim); font-size: 11px; }
+
+.main { padding: 40px 48px 96px; }
+.doc { max-width: 78ch; }
+.crumb { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; color: var(--dim); }
+h1 { font-family: var(--mono); font-size: 30px; line-height: 1.25; margin: 4px 0 22px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+h2 { font-family: var(--mono); font-size: 19px; font-weight: 600; margin: 52px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); text-wrap: balance; }
+h3 { font-family: var(--mono); font-size: 15.5px; font-weight: 600; margin: 30px 0 8px; }
+h4 { font-size: 14px; margin: 22px 0 6px; color: var(--muted); }
+p { margin: 0 0 14px; }
+ul, ol { padding-left: 1.4em; margin: 0 0 14px; }
+li { margin: 4px 0; }
+li > ul, li > ol { margin-top: 4px; }
+strong { font-weight: 700; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+img { max-width: 100%; height: auto; }
+code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: .1em .4em; border-radius: 3px; }
+pre { background: var(--code-bg); border: 1px solid var(--border-soft); padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; margin: 0 0 18px; border-radius: 4px; }
+pre code { background: none; padding: 0; font-size: inherit; }
+blockquote { margin: 0 0 14px; padding: 8px 16px; border-left: 3px solid var(--warm); color: var(--muted); background: var(--panel); }
+
+.tbl { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 11px; border-bottom: 1px solid var(--border-soft); text-align: left; vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; color: var(--muted); background: var(--field); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.sym { font-family: var(--mono); font-weight: 600; color: var(--accent); white-space: nowrap; }
+
+.toc { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 12px 18px; margin: 0 0 36px; }
+.toc .label { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--dim); margin-bottom: 4px; }
+.toc ul { list-style: none; padding: 0; margin: 0; columns: 2; column-gap: 24px; font-size: 13.5px; }
+.toc li { break-inside: avoid; margin: 2px 0; }
+.toc a { border: 0; color: var(--fg); }
+.toc a:hover { color: var(--accent); }
+
+.tag { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 0 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); margin-right: 4px; vertical-align: middle; }
+.tag.warm { background: var(--warm-soft); color: var(--warm); }
+
+.callout { padding: 10px 14px; border-radius: 4px; background: var(--panel); border-left: 3px solid var(--border); }
+.callout .k { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--dim); margin-bottom: 2px; }
+.callout.判断の問い { border-left-color: var(--accent); }
+.callout.判断の問い .k { color: var(--accent); }
+li.check { list-style: none; margin-left: -1.4em; padding-left: 1.6em; position: relative; }
+li.check::before { content: ""; position: absolute; left: 0; top: .55em; width: 12px; height: 12px; border: 1.5px solid var(--muted); border-radius: 2px; }
+
+.doc-foot { margin-top: 64px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); }
+
+/* ---- ページ固有 ---------------------------------------------------------- */
+.hero { margin: 0 0 28px; }
+.hero img { display: block; border: 1px solid var(--border); border-radius: 4px; }
+.hero figcaption { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 6px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0 0 18px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 12px 14px; }
+.card h3 { margin: 0 0 6px; font-size: 14px; color: var(--accent); }
+.card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-color: var(--accent); border-left-width: 3px; }
+.kind { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 0 7px; border-radius: 3px; white-space: nowrap; }
+.kind.assign { background: var(--accent-soft); color: var(--accent); }
+.kind.fixed { background: var(--warm-soft); color: var(--warm); }
+.kind.rate { background: var(--field); color: var(--muted); }
+
+.timeline { list-style: none; padding: 0; margin: 0 0 18px; border-left: 2px solid var(--border); }
+.timeline .event { display: grid; grid-template-columns: 110px 1fr; gap: 12px; margin: 0; padding: 8px 0 8px 18px; position: relative; }
+.timeline .event::before { content: ""; position: absolute; left: -6px; top: 17px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+.timeline time { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 3px; }
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .main { padding: 24px 18px 64px; }
+  .toc ul { columns: 1; }
+  h1 { font-size: 24px; }
+  .timeline .event { grid-template-columns: 1fr; gap: 2px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="side">
+  <a class="brand" href="index.html"><span class="dot"></span>TalesWeaver Toolkit</a>
+  <nav class="site-nav">
+    <div class="label">DOCS</div>
+    <a href="index.html"><span>概要</span><small>何ができるか・セットアップ</small></a><a href="architecture.html" class="current"><span>アーキテクチャ</span><small>クレート構成・フロント階層・依存の向き</small></a><a href="ux-guidelines.html"><span>UX ガイドライン</span><small>UI を作るときの 4 原則</small></a><a href="damage-formula.html"><span>ダメージ計算仕様</span><small>talewiki を整理した計算モデル</small></a><a href="status.html"><span>進捗</span><small>goal ごとの到達点</small></a>
+    <div class="label">CLAUDE 向け(md)</div>
+    <a href="../../docs/claude/decisions.md" class="ext"><span>決定記録</span><small>docs/claude/decisions.md</small></a><a href="../../docs/claude/goals/" class="ext"><span>goal 文書</span><small>docs/claude/goals/</small></a><a href="../../docs/claude/workflow.md" class="ext"><span>Claude Code 運用</span><small>docs/claude/workflow.md</small></a><a href="../../docs/legacy-twtoolkit.md" class="ext"><span>旧リポ棚卸し</span><small>docs/legacy-twtoolkit.md</small></a>
+  </nav>
+</aside>
+<main class="main">
+  <article class="doc">
+    <header class="doc-head">
+      <div class="crumb">docs/architecture.md</div>
+      <h1>アーキテクチャ</h1>
+    </header>
+    <nav class="toc"><div class="label">この文書</div>
+<ul>
+<li><a href="#_2">全体像</a></li>
+<li><a href="#_3">クレート構成と責務</a></li>
+<li><a href="#_4">依存の向き</a></li>
+<li><a href="#_5">語彙の規約</a></li>
+<li><a href="#_6">機能がモデルを共有する構図(キャラデータが軸)</a></li>
+<li><a href="#_7">検証戦略</a></li>
+</ul>
+</nav>
+    
+<p>方針: <strong>構造ファースト</strong>。ゲームのドメインモデルを中心に置き、5つの機能(ダメージ計算・キャラ管理・強化提案・ロードマップ・やりたいこと索引)はすべて同じモデルの消費者として実装する。</p>
+<h2 id="_2">全体像</h2>
+<pre><code>┌─────────────────────────────────────────────┐
+│ apps/desktop (Tauri シェル)                   │
+│   src/ … フロントエンド(TS)。表示と入力のみ     │
+│   commands … domain への薄いアダプタ           │
+└──────────────┬──────────────────────────────┘
+               │
+┌──────────────┴───────────┐  ┌────────────────┐
+│ crates/domain             │←─│ crates/gamedata │
+│ 純粋なドメインモデル+計算   │  │ 静的データの型と  │
+│ I/O なし・決定的           │  │ ローダ(wiki由来) │
+└──────────────┬───────────┘  └───────┬────────┘
+               │                      ↑ 生成
+┌──────────────┴───────────┐  ┌───────┴────────┐
+│ crates/storage            │  │ tools/scraper ※ │
+│ SQLite(ユーザーデータのみ) │  │ talewiki 取込み  │
+└──────────────────────────┘  └────────────────┘
+</code></pre>
+<h2 id="_3">クレート構成と責務</h2>
+<h3 id="cratesdomain">crates/domain — ドメインモデルと計算(核)</h3>
+<ul>
+<li><strong>モデル</strong>: <code>Character</code>(素ステ・装備・スキル構成・覚醒/エタ・バフセット)、<code>Equipment</code>、<code>Skill</code>、<code>Buff</code>、<code>Enemy</code>、<code>Content</code>(入場条件)</li>
+<li><strong>計算</strong>: 能力値計算 → カテゴリ集計 → 与ダメージ式 → 段数・追加ダメージ の4段パイプライン(<a href="damage-formula.html">docs/damage-formula.md</a> §8)</li>
+<li><strong>機能サービス</strong>: ダメージ計算・強化提案・ロードマップ判定・索引。すべて <code>Character</code> を入力に取る純関数群</li>
+<li>制約:</li>
+<li><strong>I/O を一切持たない</strong>(SQLite・ファイル・ネットワーク禁止)。引数で受けて結果を返すだけ。決定的で全面的にユニットテスト可能</li>
+<li><strong>全中間値をトレースとして返す</strong>(旧リポの教訓: 最終値だけの一致は偶然一致を見逃す)</li>
+<li>丸めは専用関数(<code>floor_int</code>, <code>trunc2</code> 等)として型で固定し、裸の <code>as</code>/<code>floor()</code> を式に書かない</li>
+<li>バフは「カテゴリ + 数値 + 重複枠」のデータであり、個別バフをコードで分岐しない</li>
+</ul>
+<h3 id="cratesgamedata-wiki">crates/gamedata — 静的データ(wiki 由来)</h3>
+<ul>
+<li>スキル・敵・バフカタログ・係数・覚醒倍率などの型定義とローダ。アプリに同梱し、ユーザーは編集しない</li>
+<li>各データに出典(wiki ページ・取得日)とゲームバージョンをメタデータとして持たせる</li>
+<li>旧リポの JSON(<a href="../legacy-twtoolkit.md">docs/legacy-twtoolkit.md</a> ⭐)を初期シードにするが、スキーマはドメイン語彙で定義し直し、wiki の現行値で検証してから採用する</li>
+</ul>
+<h3 id="cratesstorage-sqlite">crates/storage — ユーザーデータ(SQLite)</h3>
+<ul>
+<li>登録キャラ・バフセット・設定のみ。静的データは入れない(この分離が Web/モバイル展開時の差し替え範囲を最小化する)</li>
+<li>domain の型との変換はここで行う。domain は SQLite を知らない</li>
+</ul>
+<h3 id="appsdesktop-tauri">apps/desktop — Tauri シェル</h3>
+<ul>
+<li>コマンドは「storage/gamedata から読む → domain を呼ぶ → 結果を返す」だけの薄いアダプタ。ロジックを書かない</li>
+<li>未実装要素の中立値(装備・属性など)もコマンドに書かない。<code>DamageInput::new</code> のように domain 側へ集約し、実装時にそこを引数へ昇格させる</li>
+<li>UI は表示と入力のみ。計算・判定は必ず Rust 側</li>
+</ul>
+<p>フロントエンドの階層(<code>apps/desktop/src/</code>):</p>
+<pre><code>main.ts, App.svelte  エントリと画面枠(ナビ・エラー帯)
+api/types.ts         Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
+api/commands.ts      invoke ラッパー
+ui/                  画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
+pages/&lt;機能&gt;/        機能ごとの画面と、その画面専用の部品
+format.ts            数値整形
+labels.ts            ステータスの表示名・並び順
+limits.svelte.ts     domain の値域上限(`get_stat_limits` で起動時に 1 回取得)の共有状態
+toast.svelte.ts      エラー帯の共有状態
+</code></pre>
+<p>機能を足すときは <code>pages/&lt;機能&gt;/</code> を作る。2 つ以上の機能で使う部品だけを <code>ui/</code> に上げる。
+SvelteKit は使っていないため <code>src/lib/</code> は置かない(<code>$lib</code> エイリアスがなく、階層が 1 段深くなるだけ)。</p>
+<ul>
+<li><strong>数値入力</strong>は <code>ui/StatInput.svelte</code>(ラベル|数値欄|range スライダー|MAX ボタン)の 1 種類のみ。「入力方式は 1 種類」という UX 方針を部品数で強制する。範囲の上限・下限はフロントにリテラルで持たず <code>limits.svelte.ts</code> から取る</li>
+<li><strong>可変レイアウト</strong>: <code>ui/persistedState.svelte.ts</code>(<code>persisted(key, initial)</code>: localStorage に永続化する <code>$state</code> ラッパー。コンポーネントの <code>&lt;script&gt;</code> 初期化中に呼ぶ)と <code>ui/Splitter.svelte</code>(グリッド列境界のドラッグ・ダブルクリック・矢印キーで列幅を変える区切り線)で、サイドバー折りたたみと各画面の列幅リサイズを実装する。各画面のグリッドは <code>grid-template-columns</code> を動的に組み立て、区切り線トラック(6px)を明示的な grid カラムとして持つ。最小幅・既定幅・localStorage キーは <a href="../claude/decisions.md">docs/claude/decisions.md</a>「画面レイアウトの可変化」</li>
+<li><strong><code>pages/character/</code></strong>(「一覧|キャラデータ|設定」の 3 カラム): <code>CharacterPage.svelte</code>(一覧+登録の入口、マスター・ディテール)/ <code>CharacterRegisterForm.svelte</code>(名前+キャラ種のみの最小登録)/ <code>CharacterWorkspace.svelte</code>(選択キャラの編集 draft を 1 つの <code>$state</code> に持つ外枠。<code>{#key character.id}</code> で作り直され、<code>preview_effective_stats</code> を debounce 呼び出しして即時プレビューを出す)/ <code>CharacterData.svelte</code>(中央。名前・キャラ種・覚醒と能力値表「ステ|素|補正|最終」・補正の内訳)/ <code>CharacterSettings.svelte</code>(右。恒常補正/常用バフ/キャラスキル/調整のアコーディオン。層名などの専門用語は内訳表示にのみ出す)/ <code>draft.ts</code>(共有する編集中ドラフトの型と組み立て関数)</li>
+<li><strong><code>pages/damage/</code></strong>: <code>DamagePage.svelte</code>(キャラ・スキル・敵の選択、一時調整、自動計算)/ <code>TracePanel.svelte</code>(ステ・カテゴリ・式各段のトレース表示)</li>
+</ul>
+<h3 id="toolsscraper-talewiki">tools/scraper — talewiki 取り込み(※未実装)</h3>
+<ul>
+<li>EUC-JP PukiWiki の取得(<code>cmd=source</code>)→ パース → gamedata の生成。手法は <a href="damage-formula.html">docs/damage-formula.md</a> 取得メモと旧リポの scrapeSkills.js を参照</li>
+<li>生成物との差分検出(wiki 更新の検知)をここで行う</li>
+</ul>
+<h2 id="_4">依存の向き</h2>
+<pre><code>apps/desktop → storage, gamedata, domain
+storage      → domain(型のため)
+gamedata     → domain(型のため)
+domain       → (何にも依存しない)
+tools/scraper→ gamedata(スキーマ共有)
+</code></pre>
+<p>domain が最内層。逆流(domain → storage 等)は禁止。</p>
+<h2 id="_5">語彙の規約</h2>
+<ul>
+<li>型名・関数名・フィールド名は<strong>ドメイン用語</strong>(例: <code>AttackPower</code>, <code>SkillMultiplier</code>, <code>DamageCategory::FinalDamageRate</code>)</li>
+<li>wiki のカテゴリ記号(A〜Y)や Excel セル名(AF54)は出典情報。doc コメントに <code>/// wiki: カテゴリL(最終ダメージ)</code> の形で残し、識別子には使わない</li>
+</ul>
+<h2 id="_6">機能がモデルを共有する構図(キャラデータが軸)</h2>
+<ul>
+<li><strong>ダメージ計算</strong> = <code>damage(character, skill, enemy, buff_set) -&gt; DamageResult(トレース付き)</code></li>
+<li><strong>強化提案</strong> = 候補変更(装備・強化・ステ振り)を character に適用して damage を再評価し、差分をランキング</li>
+<li><strong>ロードマップ</strong> = content の入場条件と character の現状を突き合わせて不足を列挙</li>
+<li><strong>索引</strong> = 「やりたいこと」→ 必要な機能・コンテンツ・強化への逆引き(gamedata 上のグラフ)</li>
+</ul>
+<p>強化提案とロードマップが「計算機能の再利用」で書けるのは、キャラモデルを軸にした構造の直接の利点。</p>
+<h2 id="_7">検証戦略</h2>
+<ol>
+<li><strong>ユニット</strong>: domain の各段(能力値・カテゴリ集計・式・追加ダメージ)を個別に</li>
+<li><strong>トレース比較</strong>: 旧リポ(Excel 由来)と同一入力での中間値比較。差分は「意図した差(wiki 準拠)」か「バグ」かを必ず分類</li>
+<li><strong>実測突き合わせ</strong>: ゲーム内の実測ダメージを記録して期待値と比較する機能をアプリ自体に持たせる(最終の正解は実測。旧リポ最大の欠落)</li>
+</ol>
+    <footer class="doc-foot">原本: <code>docs/architecture.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>
+  </article>
+</main>
+</div>
+</body>
+</html>

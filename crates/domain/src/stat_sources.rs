@@ -1,6 +1,6 @@
 //! キャラクターの実効ステータスに効く恒常補正源(ペット・ルーン・クラウン・聖物)と常用バフ。
 //!
-//! docs/goals/2026-08-21-character-stat-sources.md。バフは個別にコードで分岐せず、
+//! docs/claude/goals/2026-08-21-character-stat-sources.md。バフは個別にコードで分岐せず、
 //! 「カテゴリ(層)+ 数値 + 重複枠」を持つデータ(`BuffDefinition`)として解決する
 //! (CLAUDE.md 原則、crates/domain/src/category.rs の設計思想を踏襲)。
 //! カタログの実データ(常用バフ 16 件)は gamedata に置く。
@@ -261,7 +261,7 @@ pub struct BuffSelection {
 /// 調整「加算」の妥当範囲(検証・仮定用の自由入力)。
 pub const ADJUSTMENT_ADD_MIN: i64 = -999;
 pub const ADJUSTMENT_ADD_MAX: i64 = 999;
-/// 調整「固定(pin)」の妥当範囲。上限は最終能力値の理論上限(エタの意志Lv80、docs/decisions.md「2400」)。
+/// 調整「固定(pin)」の妥当範囲。上限は最終能力値の理論上限(エタの意志Lv80、docs/claude/decisions.md「2400」)。
 pub const ADJUSTMENT_PIN_MIN: i64 = 1;
 pub const ADJUSTMENT_PIN_MAX: i64 = 2400;
 

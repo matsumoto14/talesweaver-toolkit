@@ -30,7 +30,7 @@ impl StatKind {
     ];
 }
 
-/// 素ステ(振り分け分)の上限。wiki に明記なし。レベル上限でもある(docs/goals/2026-08-21-character-stat-sources.md)。下限は 1。
+/// 素ステ(振り分け分)の上限。wiki に明記なし。レベル上限でもある(docs/claude/goals/2026-08-21-character-stat-sources.md)。下限は 1。
 pub const BASE_STAT_MAX: u32 = 310;
 
 /// 素ステの値域違反。

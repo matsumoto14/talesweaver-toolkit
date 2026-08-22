@@ -6,7 +6,7 @@
 
 docs/ux-guidelines.md の 4 原則に照らして見つかった違反を解消する。対象は主にキャラ登録・編集と、ダメージ計算画面の調整値の経路。
 
-**必ず先に読むこと**: docs/ux-guidelines.md、CLAUDE.md、docs/architecture.md、docs/goals/2026-08-21-character-stat-sources.md。
+**必ず先に読むこと**: docs/ux-guidelines.md、CLAUDE.md、docs/architecture.md、docs/claude/goals/2026-08-21-character-stat-sources.md。
 
 ## 違反と対応
 
@@ -24,7 +24,7 @@ docs/ux-guidelines.md の 4 原則に照らして見つかった違反を解消�
 3. 未設定のグループは要約行で「未設定(中立値で計算)」と分かる
 4. 計算画面の一時調整はキャラデータを変更せず、トレースの補正源内訳に「一時調整」として出る
 5. `cargo test --workspace`、`npm run build`、`npx svelte-check` が通る
-6. docs/architecture.md のフロント階層、docs/decisions.md、CLAUDE.md 現状を更新
+6. docs/architecture.md のフロント階層、docs/claude/decisions.md、CLAUDE.md 現状を更新
 
 ## スコープ外
 

@@ -6,7 +6,7 @@
 
 ダメージ計算に使う「実効ステータス」を、素ステだけでなく実際のキャラが持つ恒常補正(ペット S スキル・ルーンスキル・クラウン・神鳥の聖物)と常用バフから自動で組み立てる。ユーザー入力は「段階・Lv・ランクを選ぶ」だけにする(CLAUDE.md UX 方針)。
 
-**必ず先に読むこと**: CLAUDE.md、docs/architecture.md、docs/damage-formula.md §1・§2、docs/decisions.md。
+**必ず先に読むこと**: CLAUDE.md、docs/architecture.md、docs/damage-formula.md §1・§2、docs/claude/decisions.md。
 
 ## 前提(ユーザー確認済み 2026-08-21)
 
@@ -52,7 +52,7 @@
 2. キャラ登録画面で、素ステ(上限 310)に加えて ペット S スキル / ルーン Lv / クラウン / 聖物段階 / 常用バフ / 調整値 を選択式で登録でき、再起動後も残る
 3. ダメージ計算が登録内容から `StatModifierSet` を自動構築し、ステトレースに各補正源の寄与が内訳として出る
 4. 同名枠の排他(①/②/退魔師の恵み枠/祝福のポーション枠)が UI と domain の両方で守られる
-5. 決定事項・出典が docs/decisions.md と gamedata に記録される。docs/damage-formula.md のエタ上限を 2400 に修正
+5. 決定事項・出典が docs/claude/decisions.md と gamedata に記録される。docs/damage-formula.md のエタ上限を 2400 に修正
 
 ## スコープ
 

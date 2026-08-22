@@ -2,15 +2,15 @@
 
 TalesWeaver(MMORPG)プレイヤー向けのデスクトップツールキット。登録したキャラクターを軸に、ダメージ計算・強化提案・コンテンツ入場ロードマップを提供することを目指す。
 
-![ダメージ計算画面](docs/screenshots/02-damage-result.png)
+![ダメージ計算画面](docs/screenshots/26-damage.png)
 
 ## 現在できること
 
-- **キャラ登録** — 名前・キャラ・素ステータス 7 種・覚醒段階・エタの意志 Lv を登録(SQLite に保存)
-- **ダメージ計算** — 登録キャラ・スキル・敵を選ぶだけで 最小 / 最大 / クリティカル と合計(×段数)を表示
-- **計算トレース** — 能力値計算、カテゴリ集計(全 30 カテゴリ)、与ダメージ式の各段をすべて展開表示
+- **キャラ管理** — 名前とキャラ種だけで登録し、素ステ・覚醒・恒常補正(ペット S スキル・ルーン・クラウン・神鳥の聖物)・常用バフ・キャラスキル・調整値を「一覧|キャラデータ|設定」の 3 カラムで編集。設定を触ると保存前でも最終能力値が即時に再計算される
+- **ダメージ計算** — 登録キャラ・スキル・敵を選ぶだけで 最小 / 最大 / クリティカル と合計(×段数)を表示。一時調整(キャラには保存しない)も可能
+- **計算トレース** — 能力値計算(補正源の寄与内訳)、カテゴリ集計(全 30 カテゴリ)、与ダメージ式の各段をすべて展開表示
 
-シードデータはボリス 1 体・スキル 5 件・敵 3 体。装備・バフ・属性は未実装(中立値で式に参加)。
+静的データはプレイアブル 19 キャラ・キャラスキルバフ 9 件・常用バフ 16 件・スキル 5 件(ボリス)・敵 3 体。装備・属性は未実装(中立値で式に参加)。進捗は [docs/status.md](docs/status.md)。
 
 ## 技術スタック
 
@@ -49,10 +49,15 @@ DB は `%APPDATA%\com.talesweaver.toolkit\talesweaver-toolkit.sqlite` に作ら�
 
 ## ドキュメント
 
+ブラウザで読むなら [docs/site/index.html](docs/site/index.html)(md から生成。`python tools/docs-site/build.py`)。
+
+- [docs/architecture.md](docs/architecture.md) — クレート構成・フロント階層・依存の向き
+- [docs/ux-guidelines.md](docs/ux-guidelines.md) — UI 実装時の判断基準(4 原則)
 - [docs/damage-formula.md](docs/damage-formula.md) — ダメージ計算・ステータス仕様(talewiki 整理)
-- [docs/architecture.md](docs/architecture.md) — クレート構成と依存の向き
-- [docs/decisions.md](docs/decisions.md) — 設計判断と仮決定の記録
+- [docs/status.md](docs/status.md) — 進捗
 - [docs/legacy-twtoolkit.md](docs/legacy-twtoolkit.md) — 旧リポジトリの棚卸し
+
+Claude Code 向け(作業記録・運用): [docs/claude/](docs/claude/) — decisions.md(設計判断と仮決定)、goals/(各 goal の受け入れ条件)、workflow.md(運用ガイド)
 
 ## 情報ソース
 
