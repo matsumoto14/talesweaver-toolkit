@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ダメージ計算仕様 · TalesWeaver Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;600&family=Noto+Sans+JP:wght@400;700&display=swap">
+<style>/* 配色はアプリ(apps/desktop/src/app.css)のトークンに合わせたダーク基調。ライトは同じ色相で反転 */
+:root {
+  --bg: #1c1e22; --bg-raised: #22252a; --panel: #262a30; --field: #2e333a;
+  --border: #3a3f47; --border-soft: #2e333a;
+  --fg: #eaebee; --muted: #9a9ea6; --dim: #6e737b;
+  --accent: #4fd1d9; --accent-soft: rgba(79, 209, 217, .14);
+  --warm: #e8a25c; --warm-soft: rgba(232, 162, 92, .16);
+  --code-bg: #24282e;
+  --mono: "M PLUS 1 Code", ui-monospace, SFMono-Regular, Menlo, "Hiragino Kaku Gothic ProN", monospace;
+  --sans: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7; --bg-raised: #eceef1; --panel: #ffffff; --field: #e9ebef;
+    --border: #d3d7dd; --border-soft: #e4e7eb;
+    --fg: #1f2226; --muted: #5f656e; --dim: #8a9099;
+    --accent: #0f8a93; --accent-soft: rgba(15, 138, 147, .12);
+    --warm: #b8651f; --warm-soft: rgba(184, 101, 31, .14);
+    --code-bg: #eceef1;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: 24px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.8; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+a:hover { border-bottom-color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- 骨格: 左ナビ | 本文 ------------------------------------------------ */
+.shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 22px 16px; border-right: 1px solid var(--border); background: var(--bg-raised); }
+.brand { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; letter-spacing: .14em; color: var(--fg); border: 0; margin-bottom: 22px; }
+.brand .dot { width: 5px; height: 5px; background: var(--accent); }
+.site-nav .label { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--dim); margin: 16px 0 6px 10px; }
+.site-nav a { display: block; padding: 7px 10px; border: 0; border-left: 2px solid transparent; color: var(--fg); line-height: 1.35; }
+.site-nav a span { display: block; font-size: 13.5px; }
+.site-nav a small { display: block; font-size: 11px; color: var(--dim); font-family: var(--mono); letter-spacing: 0; }
+.site-nav a:hover { background: var(--panel); }
+.site-nav a.current { border-left-color: var(--accent); background: var(--accent-soft); }
+.site-nav a.ext span::after { content: " ↗"; color: var(--dim); font-size: 11px; }
+
+.main { padding: 40px 48px 96px; }
+.doc { max-width: 78ch; }
+.crumb { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; color: var(--dim); }
+h1 { font-family: var(--mono); font-size: 30px; line-height: 1.25; margin: 4px 0 22px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+h2 { font-family: var(--mono); font-size: 19px; font-weight: 600; margin: 52px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); text-wrap: balance; }
+h3 { font-family: var(--mono); font-size: 15.5px; font-weight: 600; margin: 30px 0 8px; }
+h4 { font-size: 14px; margin: 22px 0 6px; color: var(--muted); }
+p { margin: 0 0 14px; }
+ul, ol { padding-left: 1.4em; margin: 0 0 14px; }
+li { margin: 4px 0; }
+li > ul, li > ol { margin-top: 4px; }
+strong { font-weight: 700; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+img { max-width: 100%; height: auto; }
+code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: .1em .4em; border-radius: 3px; }
+pre { background: var(--code-bg); border: 1px solid var(--border-soft); padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; margin: 0 0 18px; border-radius: 4px; }
+pre code { background: none; padding: 0; font-size: inherit; }
+blockquote { margin: 0 0 14px; padding: 8px 16px; border-left: 3px solid var(--warm); color: var(--muted); background: var(--panel); }
+
+.tbl { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 11px; border-bottom: 1px solid var(--border-soft); text-align: left; vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; color: var(--muted); background: var(--field); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.sym { font-family: var(--mono); font-weight: 600; color: var(--accent); white-space: nowrap; }
+
+.toc { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 12px 18px; margin: 0 0 36px; }
+.toc .label { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--dim); margin-bottom: 4px; }
+.toc ul { list-style: none; padding: 0; margin: 0; columns: 2; column-gap: 24px; font-size: 13.5px; }
+.toc li { break-inside: avoid; margin: 2px 0; }
+.toc a { border: 0; color: var(--fg); }
+.toc a:hover { color: var(--accent); }
+
+.tag { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 0 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); margin-right: 4px; vertical-align: middle; }
+.tag.warm { background: var(--warm-soft); color: var(--warm); }
+
+.callout { padding: 10px 14px; border-radius: 4px; background: var(--panel); border-left: 3px solid var(--border); }
+.callout .k { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--dim); margin-bottom: 2px; }
+.callout.判断の問い { border-left-color: var(--accent); }
+.callout.判断の問い .k { color: var(--accent); }
+li.check { list-style: none; margin-left: -1.4em; padding-left: 1.6em; position: relative; }
+li.check::before { content: ""; position: absolute; left: 0; top: .55em; width: 12px; height: 12px; border: 1.5px solid var(--muted); border-radius: 2px; }
+
+.doc-foot { margin-top: 64px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); }
+
+/* ---- ページ固有 ---------------------------------------------------------- */
+.hero { margin: 0 0 28px; }
+.hero img { display: block; border: 1px solid var(--border); border-radius: 4px; }
+.hero figcaption { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 6px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0 0 18px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 12px 14px; }
+.card h3 { margin: 0 0 6px; font-size: 14px; color: var(--accent); }
+.card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-color: var(--accent); border-left-width: 3px; }
+.kind { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 0 7px; border-radius: 3px; white-space: nowrap; }
+.kind.assign { background: var(--accent-soft); color: var(--accent); }
+.kind.fixed { background: var(--warm-soft); color: var(--warm); }
+.kind.rate { background: var(--field); color: var(--muted); }
+
+.timeline { list-style: none; padding: 0; margin: 0 0 18px; border-left: 2px solid var(--border); }
+.timeline .event { display: grid; grid-template-columns: 110px 1fr; gap: 12px; margin: 0; padding: 8px 0 8px 18px; position: relative; }
+.timeline .event::before { content: ""; position: absolute; left: -6px; top: 17px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+.timeline time { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 3px; }
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .main { padding: 24px 18px 64px; }
+  .toc ul { columns: 1; }
+  h1 { font-size: 24px; }
+  .timeline .event { grid-template-columns: 1fr; gap: 2px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="side">
+  <a class="brand" href="index.html"><span class="dot"></span>TalesWeaver Toolkit</a>
+  <nav class="site-nav">
+    <div class="label">DOCS</div>
+    <a href="index.html"><span>概要</span><small>何ができるか・セットアップ</small></a><a href="architecture.html"><span>アーキテクチャ</span><small>クレート構成・フロント階層・依存の向き</small></a><a href="ux-guidelines.html"><span>UX ガイドライン</span><small>UI を作るときの 4 原則</small></a><a href="damage-formula.html" class="current"><span>ダメージ計算仕様</span><small>talewiki を整理した計算モデル</small></a><a href="status.html"><span>進捗</span><small>goal ごとの到達点</small></a>
+    <div class="label">CLAUDE 向け(md)</div>
+    <a href="../../docs/claude/decisions.md" class="ext"><span>決定記録</span><small>docs/claude/decisions.md</small></a><a href="../../docs/claude/goals/" class="ext"><span>goal 文書</span><small>docs/claude/goals/</small></a><a href="../../docs/claude/workflow.md" class="ext"><span>Claude Code 運用</span><small>docs/claude/workflow.md</small></a><a href="../../docs/legacy-twtoolkit.md" class="ext"><span>旧リポ棚卸し</span><small>docs/legacy-twtoolkit.md</small></a>
+  </nav>
+</aside>
+<main class="main">
+  <article class="doc">
+    <header class="doc-head">
+      <div class="crumb">docs/damage-formula.md</div>
+      <h1>ダメージ計算・ステータス仕様(talewiki 整理)</h1>
+    </header>
+    <nav class="toc"><div class="label">この文書</div>
+<ul>
+<li><a href="#1-7">1. ステータス(7種)</a></li>
+<li><a href="#2">2. 能力値(実効ステータス)の計算</a></li>
+<li><a href="#3">3. 与ダメージ式(核心)</a></li>
+<li><a href="#4">4. カテゴリー一覧</a></li>
+<li><a href="#5">5. 追加ダメージ(与ダメージ式の外)</a></li>
+<li><a href="#6">6. 防御側の戦闘能力値</a></li>
+<li><a href="#7">7. 命中・回避</a></li>
+<li><a href="#8">8. 実装への示唆</a></li>
+<li><a href="#9">9. 未取込の参照ページ(次の情報整理対象)</a></li>
+<li><a href="#_1">取得メモ</a></li>
+</ul>
+</nav>
+    
+<p>出典: <a href="https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9">Tale Wiki「ステータス」ページ</a>(wiki 最終更新 2026-07-21、取得 2026-08-21)。
+このドキュメントは wiki の記述を実装向けに構造化したもの。個別アイテム・スキルの数値カタログは静的データ(<code>crates/gamedata</code>)として別管理し、ここには<strong>計算モデルだけ</strong>を書く。</p>
+<h2 id="1-7">1. ステータス(7種)</h2>
+<p>上限 1500(エタの意志で最大 2400)。下限 1。装備条件や一部スキルは素ステータス(オリジナル)を参照する。</p>
+<ul>
+<li>出典: エタの意志ページ Lv100「最大ステータス開放」2,400(取得 2026-08-21)</li>
+</ul>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>ステ</th>
+<th>主な効果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="sym">STAB</td>
+<td>突き攻撃力の元。物理前ディレイ減少(武器ディレイ-1/5)、物理CI減少</td>
+</tr>
+<tr>
+<td class="sym">HACK</td>
+<td>斬り攻撃力の元。物理前ディレイ減少(-1/15)、物理CI減少</td>
+</tr>
+<tr>
+<td class="sym">INT</td>
+<td>魔法攻撃力の元。魔法クリティカル命中率上昇(対人のみ?)</td>
+</tr>
+<tr>
+<td class="sym">DEF</td>
+<td>物理防御力+3、複合防御力+1.5、物理/複合カット率(プレイヤー)増加、スキルキャンセル率低下、物理回避+2/7、複合回避+1/7、HP自然回復+1/6</td>
+</tr>
+<tr>
+<td class="sym">MR</td>
+<td>魔法防御力+3、複合防御力+1.5、魔法/複合カット率増加、魔法回避+2/7、複合回避+1/7、MP自然回復+1/7、魔法前ディレイ減少(-1/5)、魔法CI減少、NOEFFECT/RECOVER率上昇、特殊回避+1/15</td>
+</tr>
+<tr>
+<td class="sym">DEX</td>
+<td>命中率+1、物理前ディレイ減少(-1/5)、物理CI減少、SP自然回復+1/7、攻撃力乱数部分に影響(§4 B)</td>
+</tr>
+<tr>
+<td class="sym">AGI</td>
+<td>回避率+6/5、後ディレイ減少(-1/5)、クリティカル率増加/被クリ率減少、特殊回避+1/8</td>
+</tr>
+</tbody>
+</table></div>
+<p>装備補正(装備S=突き、装備H=斬り、装備I=魔攻、装備F=物防、装備M=魔防、装備X=命中、C=クリ、装備A=回避、Q=敏捷)はステータスと別枠。防御はステ+3 に対し装備+6 と装備側が強い。</p>
+<h2 id="2">2. 能力値(実効ステータス)の計算</h2>
+<pre><code>最終能力値 = 基本能力値 + [基本能力値 * 能力値倍率B] + 最終固定値増加/減少
+基本能力値 = [(素ステータス + 割合増加(素ステ比) + 固定値増加/減少) * 能力値倍率A]
+</code></pre>
+<ul>
+<li><code>[]</code> 内は計算後小数点以下切り捨て</li>
+<li>割合増加(素ステ比)は<strong>バフごとに</strong>切り捨ててから加算</li>
+<li>能力値倍率A: 乗算で重なる(例: 退魔師の恵み 1.1倍)</li>
+<li>能力値倍率B: 初期 0%、下限 -30%(デバフ側)</li>
+<li>5 つのレイヤー(割合増加/固定値/倍率A/倍率B/最終固定値)それぞれにバフ・アイテムがぶら下がる。同名枠内は重複不可</li>
+<li>レイヤー別バフ一覧(常用バフ 16 件): wiki「ステータス」#jc16a054。カタログの実装は <code>crates/gamedata/src/buffs.rs</code>(型は <code>domain::stat_sources</code>)</li>
+<li>キャラスキル(自身/味方のステ上昇、9 件、<code>BuffGroup::CharacterSkill</code>/<code>AllySkill</code>)の一覧も同じ <code>crates/gamedata/src/buffs.rs</code> に置く。出典は各キャラの wiki <code>Skill/&lt;キャラ&gt;</code> ページ(<a href="../claude/goals/2026-08-21-character-screen-v2.md">docs/claude/goals/2026-08-21-character-screen-v2.md</a>「wiki 調査結果」参照。層の一部は <span class="tag warm">仮</span>)</li>
+</ul>
+<h2 id="3">3. 与ダメージ式(核心)</h2>
+<pre class="formula"><code>与ダメージ = [ ( ( MAX( (A + B − C) * {D*E1 + E2} * {F*G} * H * I * J * New1 + K, K )
+                  * L * V1 + M )
+                * Old * N * O * P * (1−Q) * R * (1−S) * T * (1−U) * (1−New2) * V2 + W )
+              * X * Y ]
+
+総与ダメージ = 与ダメージ * スキル段数 + 追加ダメージ各種
+</code></pre>
+<p>丸め・境界ルール:</p>
+<ul>
+<li><code>[]</code> 内は計算後小数点以下切り捨て</li>
+<li><code>{}</code> 内は小数第二位まで適用(第三位以下切り捨て)</li>
+<li>プレイヤーの被ダメージ ≦ 0 → Block。モンスターの被ダメージ ≦ 0 → 1</li>
+<li>K(最終ダメージ固定値)が入る時点で下限が K になる(MAX の意味)。K が無い場合は負値になり得る</li>
+<li>wiki 注記: 計算順序は確定ではない。丸め誤差が発生する場合あり</li>
+<li>「与ダメージ」にはダメージ上限がある(覚醒・極限・エタの意志で変化)。「追加ダメージ」には上限がない(→ 武器強化の追加固定ダメージが与ダメージ式に含まれない理由)</li>
+</ul>
+<p>種別の意味(カテゴリ共通ルール):</p>
+<ul>
+<li><strong>代入</strong>: 計算結果・倍率をそのまま入れる</li>
+<li><strong>固定値</strong>: 整数。初期値 0 に加減算</li>
+<li><strong>割合</strong>: 百分率。初期値 100%(=1.0)に加減算し、計算時に小数へ</li>
+<li><strong>同一カテゴリ内は加算</strong>(1.0 + 0.2 + 0.1 = 1.3。乗算ではない)。発生源が同じ枠内のものは重複不可</li>
+</ul>
+<h2 id="4">4. カテゴリー一覧</h2>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>記号</th>
+<th>名称</th>
+<th>種別</th>
+<th>範囲・上限</th>
+<th>備考</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="sym">A</td>
+<td>攻撃力</td>
+<td><span class="kind assign">代入</span></td>
+<td></td>
+<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備補正強化係数] * 25</code>。ステ/装備攻撃力の内訳はスキル依存(→ Skill#formula 未取込)。装備補正強化係数 = 装備補正強化バフ合計%/100(パワーウェポン+2%、ストロングウェポン+3〜18% 等)</td>
+</tr>
+<tr>
+<td class="sym">B</td>
+<td>攻撃力乱数部分</td>
+<td><span class="kind assign">代入</span></td>
+<td>最小1</td>
+<td>最大 = <code>{(ステ由来攻撃力 + DEX*3)/18} + 1</code></td>
+</tr>
+<tr>
+<td class="sym">C</td>
+<td>攻撃対象の防御力</td>
+<td><span class="kind fixed">固定値</span></td>
+<td></td>
+<td>敵データ。能力値減少デバフで低下。強打効果(確率で防御一定割合無視: ペット強打 7%/-100%(極限後-50%)、スキル強打 15%/-15% 等)は別枠</td>
+</tr>
+<tr>
+<td class="sym">D</td>
+<td>スキル倍率</td>
+<td><span class="kind assign">代入</span></td>
+<td></td>
+<td>スキルごと</td>
+</tr>
+<tr>
+<td class="sym">E1</td>
+<td>スキル倍率増加(割合)</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td class="sym">E2</td>
+<td>スキル倍率増加(固定値)</td>
+<td><span class="kind assign">代入</span></td>
+<td></td>
+<td>兜アビリティ等</td>
+</tr>
+<tr>
+<td class="sym">F</td>
+<td>Cri倍率</td>
+<td><span class="kind assign">代入</span></td>
+<td></td>
+<td>スキルごと。非クリティカル時は 1.0 相当</td>
+</tr>
+<tr>
+<td class="sym">G</td>
+<td>クリティカルダメージ増加</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>小数点以下切り捨て</td>
+</tr>
+<tr>
+<td class="sym">H</td>
+<td>コンボボーナス</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>3コンボ以上で +15%</td>
+</tr>
+<tr>
+<td class="sym">I</td>
+<td>属性差ボーナス</td>
+<td><span class="kind rate">割合</span></td>
+<td>+0〜+50%</td>
+<td>属性差1あたり +0.625%。小数点以下切捨、下限+0%</td>
+</tr>
+<tr>
+<td class="sym">J</td>
+<td>カット率(プレイヤー)</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td><code>a = 3 + [(DEF+装備DEF−1)/10]</code>(物理)、MR版(魔法)、<code>(DEF+装備DEF+MR+装備MR−1)/20</code>(複合)。<code>r = 1 − a/(a+80)</code></td>
+</tr>
+<tr>
+<td class="sym">New1</td>
+<td>攻撃力増加(シエナのオーラ)</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td class="sym">K</td>
+<td>最終ダメージ(固定値)</td>
+<td><span class="kind fixed">固定値</span></td>
+<td>上限1000</td>
+<td>テシスコア等。式の下限も兼ねる</td>
+</tr>
+<tr>
+<td class="sym">L</td>
+<td>最終ダメージ</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限+45%</td>
+<td></td>
+</tr>
+<tr>
+<td class="sym">V1</td>
+<td>カット率A</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>モンスター素体ごとの設定</td>
+</tr>
+<tr>
+<td class="sym">M</td>
+<td>被害減少</td>
+<td><span class="kind fixed">固定値</span></td>
+<td></td>
+<td>鎧/盾/カフスアビリティ、敵側設定</td>
+</tr>
+<tr>
+<td class="sym">Old</td>
+<td>攻撃ダメージII</td>
+<td><span class="kind rate">割合</span></td>
+<td>初期100%、下限30%、上限300%</td>
+<td>表記は「攻撃ダメージ(vsモンスター/プレイヤー)」</td>
+</tr>
+<tr>
+<td class="sym">N</td>
+<td>覚醒ダメージ</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>覚醒・極限 +10〜100%、エタの意志</td>
+</tr>
+<tr>
+<td class="sym">O</td>
+<td>物理/魔法ダメージ増加</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td class="sym">P</td>
+<td>特定依存ダメージ増加</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限+73%</td>
+<td>STAB/STAB+HACK/HACK/HACK+INT/INT/MR 系統別</td>
+</tr>
+<tr>
+<td class="sym">Q</td>
+<td>物理/魔法ダメージ吸収</td>
+<td><span class="kind rate">割合</span></td>
+<td>+0〜+70%</td>
+<td>式では (1−Q)。被ダメージ軽減</td>
+</tr>
+<tr>
+<td class="sym">R</td>
+<td>物理/魔法被ダメージ倍率</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td class="sym">S</td>
+<td>被ダメージ減少</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>サブカテゴリ合算: S1秘薬(上限+20%)、S2一般(+15%)、S3基本発動(+15%)、S4スキル(-30%〜+30%)、S5その他。式では (1−S)</td>
+</tr>
+<tr>
+<td class="sym">T</td>
+<td>ダメージ増幅</td>
+<td><span class="kind rate">割合</span></td>
+<td>初期100%</td>
+<td></td>
+</tr>
+<tr>
+<td class="sym">U</td>
+<td>ダメージ耐性</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限+62%</td>
+<td>式では (1−U)。回復もカット。ダメージ上限・回復上限にも適用</td>
+</tr>
+<tr>
+<td class="sym">New2</td>
+<td>ダメージ緩和</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限+40%</td>
+<td>式では (1−New2)。ダメージ上限に適用、回復上限には非適用。計算タイミング未確定</td>
+</tr>
+<tr>
+<td class="sym">V2</td>
+<td>カット率B</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>コンテンツごとの個別設定</td>
+</tr>
+<tr>
+<td class="sym">W</td>
+<td>攻撃ダメージ(基本発動)(固定値)</td>
+<td><span class="kind fixed">固定値</span></td>
+<td>上限1000</td>
+<td>武器/手アビリティ</td>
+</tr>
+<tr>
+<td class="sym">X</td>
+<td>攻撃ダメージ</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>サブカテゴリ合算: X1イザベル(上限+50%)、X2一般(+30%)、X3基本発動(+80%)、X4スキル(+65%)、X5特殊(上限不明)、X6日本独自(+30%)</td>
+</tr>
+<tr>
+<td class="sym">Y</td>
+<td>PVP補正</td>
+<td><span class="kind rate">割合</span></td>
+<td></td>
+<td>5%(固定ダメージにも適用。追加ダメージ(武器強化)のみ 10%)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="5">5. 追加ダメージ(与ダメージ式の外)</h2>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>種別</th>
+<th>算出基準</th>
+<th>備考</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>武器強化</td>
+<td><span class="kind fixed">固定値</span></td>
+<td><code>[数値 / スキル段数]</code> を段ごとに適用。PVP補正10%</td>
+</tr>
+<tr>
+<td>旧-割合</td>
+<td>与ダメージ1段ごと</td>
+<td></td>
+</tr>
+<tr>
+<td>旧-割合(負荷軽減済み)</td>
+<td>合計ダメージ(=与ダメージ*段数)</td>
+<td>カードスキル等。スキルごと上限3,000(例外あり)</td>
+</tr>
+<tr>
+<td>新-割合</td>
+<td>合計ダメージ + 追加ダメージ(武器強化)</td>
+<td>シャープネスビジョン、称号、武器ランダムOP等</td>
+</tr>
+<tr>
+<td><span class="kind fixed">固定値</span></td>
+<td></td>
+<td>スプラッシュ等</td>
+</tr>
+</tbody>
+</table></div>
+<p>発生源ごとに丸め・表示が個別。適用可否:</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>攻撃種別</th>
+<th>旧-割合</th>
+<th>旧-割合(負荷軽減)</th>
+<th>新-割合</th>
+<th>武器強化固定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>通常攻撃</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>スキル直接攻撃</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>状態異常</td>
+<td>×</td>
+<td>×</td>
+<td>○</td>
+<td>×</td>
+</tr>
+<tr>
+<td>設置/陣/持続周辺</td>
+<td>×</td>
+<td>×</td>
+<td>○</td>
+<td>○(対象・使用ごと初回1ヒットのみ)</td>
+</tr>
+<tr>
+<td>武器強化固定ダメージ自体</td>
+<td>×</td>
+<td>○</td>
+<td>○</td>
+<td>−</td>
+</tr>
+</tbody>
+</table></div>
+<p>見分け方: 中ディレイ開始時に表示=新、終了時に表示=旧。</p>
+<h2 id="6">6. 防御側の戦闘能力値</h2>
+<pre><code>物理防御力 = [ [DEF * 3 + 装備物防 * 装備物理防御力倍率 * 6] * 物理ダメージ耐性(シエナ) ]
+魔法防御力 = [ [MR * 3 + 装備魔防 * 装備魔法防御力倍率 * 6] * 魔法ダメージ耐性(シエナ) ]
+複合防御力 = [ (DEF + MR) * 1.5 + (装備物防*物倍率 + 装備魔防*魔倍率) * 3 ]
+</code></pre>
+<ul>
+<li>装備防御力倍率は初期100%(コートアーマー物+18%/魔+12%、プロテクトアーマー物+36〜81%/魔+24〜54% 等)。リンゴの島・ベリネンルミでは常に100%</li>
+<li>防御力には上限があり、覚醒/極限・エタの意志で上限増加。上限到達後の軽減はカット率(J)による</li>
+<li>この防御力は被ダメージ計算時のみ。該当能力値依存の攻撃力には影響しない</li>
+</ul>
+<h2 id="7">7. 命中・回避</h2>
+<ul>
+<li>命中率は下限 15%。表示値は同レベルモンスター相手の値で、実際はコンテンツごとに異なる(→ 計算式まとめ#HitRate、狩り場情報一覧 未取込)</li>
+<li>回避は2種の合成: <code>最終被弾率 = (1 − 通常回避) × (1 − 特殊回避)</code>(例: 85% + 50% → 92.5%)</li>
+<li>通常回避: AGI 等で上昇。多段攻撃は1段ずつ判定。基本上限85%/下限0%</li>
+<li>特殊回避: コンボ・アイテム等(重複不可)。成功時は多段全段回避。回復魔法も回避対象<ul>
+<li>コンボ回避: <code>(10 + MR/15 + AGI/7.5)%</code>、下限20%/上限63%(係数は不正確の可能性と注記あり)</li>
+<li>最大63%系: <code>(40 + MR/15 + AGI/7.5)%</code>、下限40%/上限63%</li>
+</ul>
+</li>
+</ul>
+<h2 id="8">8. 実装への示唆</h2>
+<ul>
+<li>計算パイプラインは「①能力値計算(§2) → ②カテゴリ集計(同一カテゴリ内は加算、キャップ適用) → ③与ダメージ式(§3、丸め順序込み) → ④段数・追加ダメージ(§5)」の4段</li>
+<li>丸めの再現が正確性の肝: <code>[]</code>=floor、<code>{}</code>=小数2位切り捨て、割合増加はバフごとに floor</li>
+<li>バフ・アイテムは「カテゴリ + 数値 + 重複枠」を持つ静的データとしてモデル化する。UI もカテゴリ単位でバフを選ばせる構造が自然</li>
+<li>wiki 自身が「計算順序未確定・丸め誤差あり」としているため、検証値(実測ダメージ)との突き合わせ機能があると望ましい</li>
+<li><strong>入力最小化の観点(UX方針)</strong>: 約30カテゴリのうちユーザーが都度入力すべきものはほぼ無い。A/B はキャラのステ・装備から、D/E/F はスキル選択から、C/V1/V2/M は敵(狩り場)選択から、L/N/O/P/X 等のバフはキャラに紐づくバフプリセットから自動で埋まる。つまり計算画面の入力は「キャラ・スキル・敵・バフセット」の4つの選択に還元できる。静的データの充実(§9 の未取込ページ)がそのまま入力削減になる</li>
+</ul>
+<h2 id="9">9. 未取込の参照ページ(次の情報整理対象)</h2>
+<blockquote>
+<p>注: 以下の多くは旧リポジトリ(<a href="../legacy-twtoolkit.md">docs/legacy-twtoolkit.md</a>)に Excel 計算器 v4.00 由来の具体値がある(スキル係数・覚醒倍率・ダメージ上限・ボス28体データ・スキル373件)。ただし数値が古い可能性があるため、wiki 側で裏取りしてから採用する。</p>
+</blockquote>
+<ul>
+<li><a href="https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1">計算式まとめ</a> — 攻撃力計算式(#BaseAttackPower)、クリティカル率(#CriticalChance)、命中P(#HitRate)、命中/回避キャップ(#HitRateCap)</li>
+<li>Skill#formula — スキル依存ごとのステ/装備攻撃力の内訳</li>
+<li>狩り場情報一覧 — 敵の防御力・カット率・必中命中P・上限回避P</li>
+<li>属性システム — 属性差ボーナスの詳細</li>
+<li>装備システム/装備強化 — 武器強化の追加固定ダメージ数値</li>
+<li>エタの意志 / Quest/覚醒クエスト — ダメージ上限・防御上限の変化量</li>
+</ul>
+<h2 id="_1">取得メモ</h2>
+<p>talewiki は EUC-JP の PukiWiki。<code>?cmd=source&amp;page=&lt;EUC-JPでURLエンコードしたページ名&gt;</code> で wiki ソースが取れる(HTML の <code>&lt;pre&gt;</code> 内)。<code>curl → iconv -c -f EUC-JP -t UTF-8</code> で変換。</p>
+    <footer class="doc-foot">原本: <code>docs/damage-formula.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>
+  </article>
+</main>
+</div>
+</body>
+</html>

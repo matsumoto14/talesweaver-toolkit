@@ -59,21 +59,21 @@
 main.ts, App.svelte  エントリと画面枠(ナビ・エラー帯)
 api/types.ts         Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
 api/commands.ts      invoke ラッパー
-ui/                  画面によらない汎用部品(Select, StatInput, Splitter, persistedState)
+ui/                  画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
 pages/<機能>/        機能ごとの画面と、その画面専用の部品
 format.ts            数値整形
 labels.ts            ステータスの表示名・並び順
+limits.svelte.ts     domain の値域上限(`get_stat_limits` で起動時に 1 回取得)の共有状態
 toast.svelte.ts      エラー帯の共有状態
 ```
 
 機能を足すときは `pages/<機能>/` を作る。2 つ以上の機能で使う部品だけを `ui/` に上げる。
 SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイリアスがなく、階層が 1 段深くなるだけ)。
 
-数値入力は `ui/StatInput.svelte`(ラベル|数値欄|range スライダー|MAX ボタン)1 種類に統一する(docs/goals/2026-08-21-character-screen-v2.md)。旧 `Stepper`/`NumberField` の 2 部品は廃止済み(「入力方式は 1 種類」という CLAUDE.md の UX 方針を部品数で強制する)。
-
-画面レイアウトは可変にする(2026-08-21)。`ui/persistedState.svelte.ts`(`persisted(key, initial)`: localStorage に永続化する `$state` ラッパー。呼び出し元コンポーネントの `<script>` 初期化中に呼ぶ)と `ui/Splitter.svelte`(グリッドの列境界に置く、ドラッグ・ダブルクリック・矢印キーで列幅を変える縦区切り線)の組み合わせで、サイドバー(`App.svelte`)の折りたたみとダメージ計算・キャラ管理の列幅リサイズを実装する。各画面のグリッドは列幅を `grid-template-columns` の動的文字列で組み立て、区切り線トラック(6px)を明示的な grid カラムとして持つ(旧来の `gap:1px; background:var(--border)` によるトラックレス区切りから変更)。詳細は docs/decisions.md 参照。
-
-例(`pages/character/`、docs/ux-guidelines.md「作成と詳細設定を分離する」の適用、2026-08-21 に「一覧|キャラデータ|設定」の 3 カラムへ再構成): `CharacterPage.svelte`(一覧+登録の入口。左カラム、マスター・ディテール)/ `CharacterRegisterForm.svelte`(名前+キャラ種のみの最小登録)/ `CharacterWorkspace.svelte`(選択キャラの編集 draft を 1 つの `$state` にまとめて持つ外枠。`{#key character.id}` で作り直され、`preview_effective_stats` を debounce 呼び出しして即時プレビューを保持する)/ `CharacterData.svelte`(中央カラム。名前・キャラ種・覚醒と、能力値表「ステ|素|補正|最終」・補正の内訳)/ `CharacterSettings.svelte`(右カラム。恒常補正/常用バフ/キャラスキル/調整のアコーディオン。専門用語(層名)はここに出さず、内訳表示にのみ出す)/ `draft.ts`(3 部品で共有する編集中ドラフトの型と組み立て関数)の構成にする。
+- **数値入力**は `ui/StatInput.svelte`(ラベル|数値欄|range スライダー|MAX ボタン)の 1 種類のみ。「入力方式は 1 種類」という UX 方針を部品数で強制する。範囲の上限・下限はフロントにリテラルで持たず `limits.svelte.ts` から取る
+- **可変レイアウト**: `ui/persistedState.svelte.ts`(`persisted(key, initial)`: localStorage に永続化する `$state` ラッパー。コンポーネントの `<script>` 初期化中に呼ぶ)と `ui/Splitter.svelte`(グリッド列境界のドラッグ・ダブルクリック・矢印キーで列幅を変える区切り線)で、サイドバー折りたたみと各画面の列幅リサイズを実装する。各画面のグリッドは `grid-template-columns` を動的に組み立て、区切り線トラック(6px)を明示的な grid カラムとして持つ。最小幅・既定幅・localStorage キーは docs/claude/decisions.md「画面レイアウトの可変化」
+- **`pages/character/`**(「一覧|キャラデータ|設定」の 3 カラム): `CharacterPage.svelte`(一覧+登録の入口、マスター・ディテール)/ `CharacterRegisterForm.svelte`(名前+キャラ種のみの最小登録)/ `CharacterWorkspace.svelte`(選択キャラの編集 draft を 1 つの `$state` に持つ外枠。`{#key character.id}` で作り直され、`preview_effective_stats` を debounce 呼び出しして即時プレビューを出す)/ `CharacterData.svelte`(中央。名前・キャラ種・覚醒と能力値表「ステ|素|補正|最終」・補正の内訳)/ `CharacterSettings.svelte`(右。恒常補正/常用バフ/キャラスキル/調整のアコーディオン。層名などの専門用語は内訳表示にのみ出す)/ `draft.ts`(共有する編集中ドラフトの型と組み立て関数)
+- **`pages/damage/`**: `DamagePage.svelte`(キャラ・スキル・敵の選択、一時調整、自動計算)/ `TracePanel.svelte`(ステ・カテゴリ・式各段のトレース表示)
 
 ### tools/scraper — talewiki 取り込み(※未実装)
 

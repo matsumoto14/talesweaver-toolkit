@@ -3,7 +3,7 @@
   // CharacterData(中央)・CharacterSettings(右)の双方から書き換えられるようにする
   // (draft は $state のプロキシなので、子へは通常の prop で渡し、子はネストしたプロパティを
   // 直接書き換える。トップレベルの draft 自体を差し替えないので bind: は使わない)。
-  // 親 CharacterPage が {#key character.id} で作り直す前提。docs/decisions.md の
+  // 親 CharacterPage が {#key character.id} で作り直す前提。docs/claude/decisions.md の
   // 「{#key} で作り直す」パターンを踏襲し、$effect による再同期は書かない。
   import { onMount, untrack } from "svelte";
   import { errorMessage, listBuffCatalog, previewEffectiveStats, updateCharacter } from "../../api/commands";
@@ -87,7 +87,7 @@
     };
   });
 
-  // 保存はキャラ単位で1ボタン、未保存変更があるときだけ有効(docs/decisions.md)。
+  // 保存はキャラ単位で1ボタン、未保存変更があるときだけ有効(docs/claude/decisions.md)。
   const canSubmit = $derived(draft.name.trim().length > 0 && draft.gameCharacterId !== "" && !saving && dirty);
 
   async function save() {

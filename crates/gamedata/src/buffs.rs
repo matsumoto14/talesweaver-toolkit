@@ -11,7 +11,7 @@ use crate::Source;
 pub const BUFF_CATALOG_SOURCE: Source = Source {
     page: "ステータス#jc16a054",
     retrieved_on: "2026-08-21",
-    note: "常用バフのプリセット16件。値の符号・層は docs/goals/2026-08-21-character-stat-sources.md 参照",
+    note: "常用バフのプリセット16件。値の符号・層は docs/claude/goals/2026-08-21-character-stat-sources.md 参照",
 };
 
 /// 常用バフの初期カタログ(16件)。
@@ -97,7 +97,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::Fixed,
             value: BuffValue::Fixed(20.0),
-            // wiki は秘法(固定)・特選秘薬(固定)を「併用可」とする(docs/decisions.md 2026-08-21
+            // wiki は秘法(固定)・特選秘薬(固定)を「併用可」とする(docs/claude/decisions.md 2026-08-21
             // キャラ画面v2)。どちらも「祝福のポーション」系とは排他なので、将来そのアイテムを
             // 追加するときは blessing_potion_a/blessing_potion_b の両方を持たせて両方を塞ぐ。
             exclusive_slots: vec!["blessing_potion_a"],
@@ -161,7 +161,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             name: "固定増加系(メバルのフライ等)",
             target: BuffTarget::UserSelected,
             layer: StatLayer::Fixed,
-            // wiki に明記の上限が無いため、実用上の安全域として暫定 999(docs/decisions.md 参照)。
+            // wiki に明記の上限が無いため、実用上の安全域として暫定 999(docs/claude/decisions.md 参照)。
             value: BuffValue::UserInput { min: 0.0, max: 999.0 },
             exclusive_slots: vec![],
             source_url: WIKI_URL,
@@ -217,7 +217,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             default_value: None,
             group: BuffGroup::Consumable,
         },
-        // --- キャラスキル(自身/味方のステ上昇。9件、docs/goals/2026-08-21-character-screen-v2.md) ---
+        // --- キャラスキル(自身/味方のステ上昇。9件、docs/claude/goals/2026-08-21-character-screen-v2.md) ---
         // source_url はキャラの wiki Skill ページ(https://talewiki.com/?Skill/<キャラ>)を英語 id で
         // 組み立てたもの。実際の PukiWiki は EUC-JP percent-encode された URL を使うため、
         // ここでの URL はクリック可能な形での検証が済んでいない(docs/damage-formula.md 取得メモ参照)。

@@ -18,7 +18,7 @@ pub struct RegisteredCharacter {
     pub game_character_id: String,
     pub base_stats: BaseStats,
     pub awakening: Awakening,
-    /// ペット/ルーン/クラウン/聖物/バフ/調整値(docs/goals/2026-08-21-character-stat-sources.md)
+    /// ペット/ルーン/クラウン/聖物/バフ/調整値(docs/claude/goals/2026-08-21-character-stat-sources.md)
     pub stat_sources: StatSources,
 }
 

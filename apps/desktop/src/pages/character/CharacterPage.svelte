@@ -1,5 +1,5 @@
 <script lang="ts">
-  // マスター・ディテール構成(docs/goals/2026-08-21-ux-guidelines-character-screen.md)。
+  // マスター・ディテール構成(docs/claude/goals/2026-08-21-ux-guidelines-character-screen.md)。
   // 一覧は名前・キャラ種のみの簡素な行にし、詳細は CharacterWorkspace(キャラデータ+設定の2カラム)が十分な幅で担う。
   import { deleteCharacter, errorMessage, listCharacters, listGameCharacters } from "../../api/commands";
   import type { GameCharacter, RegisteredCharacter } from "../../api/types";
