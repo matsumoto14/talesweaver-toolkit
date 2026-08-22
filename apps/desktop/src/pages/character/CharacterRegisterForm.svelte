@@ -6,7 +6,7 @@
   import type { BaseStats, GameCharacter, NewCharacter, RegisteredCharacter } from "../../api/types";
   import { reportError } from "../../toast.svelte";
   import Select from "../../ui/Select.svelte";
-  import { neutralStatSources } from "./draft";
+  import { neutralEquipment, neutralStatSources } from "./draft";
 
   interface Props {
     gameCharacters: GameCharacter[];
@@ -35,6 +35,7 @@
         base_stats: defaultStats(),
         awakening: { stage: 0, eternal_level: 0 },
         stat_sources: neutralStatSources(),
+        equipment: neutralEquipment(),
       };
       const saved = await createCharacter(payload);
       onCreated(saved);

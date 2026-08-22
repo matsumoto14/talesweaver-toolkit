@@ -151,6 +151,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li class="event"><time>2026-08-21</time><div><a href="../claude/goals/2026-08-21-ux-guidelines-character-screen.md">キャラ画面の UX ガイドライン適用</a>: 登録(名前+キャラ種のみ)と詳細設定を分離、ダメージ計算に一時調整の経路を追加</div></li>
 <li class="event"><time>2026-08-21</time><div><a href="../claude/goals/2026-08-21-character-screen-v2.md">キャラ画面 v2</a>: 「一覧|キャラデータ|設定」の 3 カラム、数値入力を <code>StatInput</code> に統一、調整値は加算/固定の 2 種、保存前の即時プレビュー。gamedata にプレイアブル 19 キャラ・キャラスキルバフ 9 件。実機検証は docs/screenshots/20〜33</div></li>
 <li class="event"><time>2026-08-22</time><div>PR レビュー指摘の修正: storage の自動マイグレーション、値域検証の domain 一本化、<code>get_stat_limits</code>、調整エディタ共通化(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「PR レビュー指摘の修正」)</div></li>
+<li class="event"><time>2026-08-22</time><div><a href="../claude/goals/2026-08-22-equipment-attack.md">装備攻撃力</a>: キャラ設定に「装備」グループ(基本/強化 × 突き/斬り/魔攻/魔防、パワーウェポン/ストロングウェポン)を追加し、攻撃力(A)の装備攻撃力が wiki 係数で効く。カテゴリ A の <span class="tag warm">仮</span> を解消。中盤以降の敵でも現実的なダメージが出る。装備防御側・武器強化の追加固定ダメージは未実装。実機検証は docs/screenshots/34〜37</div></li>
 </ul>
     <footer class="doc-foot">原本: <code>docs/status.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>
   </article>

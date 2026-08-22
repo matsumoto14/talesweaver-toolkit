@@ -256,7 +256,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃力</td>
 <td><span class="kind assign">代入</span></td>
 <td></td>
-<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備補正強化係数] * 25</code>。ステ/装備攻撃力の内訳はスキル依存(→ Skill#formula 未取込)。装備補正強化係数 = 装備補正強化バフ合計%/100(パワーウェポン+2%、ストロングウェポン+3〜18% 等)</td>
+<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備攻撃力強化倍率] * 25</code>。ステ攻撃力・装備攻撃力の係数はスキル依存種別(STAB/HACK/INT/MR/STAB+HACK/HACK+INT)ごとに wiki「計算式まとめ#BaseAttackPower」の表(取得 2026-08-22)で定義(<code>crates/gamedata/src/characters.rs</code>)。装備攻撃力は「基本能力値」(エンチャント除く素の装備補正・キャラスキル・アビリティ)と「強化能力値」(エンチャント・テシスコア・シエナのオーラ等の期間制能力値)の 2 系統に分かれ、それぞれ別係数。装備攻撃力強化倍率 = パワーウェポン+2%(wiki Skill/共通)+ ストロングウェポン Lv×3%(Lv1〜6 = 3〜18%、同ページ)</td>
 </tr>
 <tr>
 <td class="sym">B</td>
@@ -584,13 +584,12 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <p>注: 以下の多くは旧リポジトリ(<a href="../legacy-twtoolkit.md">docs/legacy-twtoolkit.md</a>)に Excel 計算器 v4.00 由来の具体値がある(スキル係数・覚醒倍率・ダメージ上限・ボス28体データ・スキル373件)。ただし数値が古い可能性があるため、wiki 側で裏取りしてから採用する。</p>
 </blockquote>
 <ul>
-<li><a href="https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1">計算式まとめ</a> — 攻撃力計算式(#BaseAttackPower)、クリティカル率(#CriticalChance)、命中P(#HitRate)、命中/回避キャップ(#HitRateCap)</li>
-<li>Skill#formula — スキル依存ごとのステ/装備攻撃力の内訳</li>
+<li><a href="https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1">計算式まとめ</a> — 攻撃力計算式(#BaseAttackPower、取込済み。§4 A)、クリティカル率(#CriticalChance)、命中P(#HitRate)、命中/回避キャップ(#HitRateCap)</li>
 <li>狩り場情報一覧 — 敵の防御力・カット率・必中命中P・上限回避P</li>
 <li>属性システム — 属性差ボーナスの詳細</li>
-<li>装備システム/装備強化 — 武器強化の追加固定ダメージ数値</li>
 <li>エタの意志 / Quest/覚醒クエスト — ダメージ上限・防御上限の変化量</li>
 </ul>
+<p>装備強化(+1〜+15)による武器の追加固定ダメージ(装備システム/装備強化)は与ダメージ式の外側の加算(§5)であり、装備攻撃力(§4 A)とは別項目。今回未実装(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「2026-08-22 装備攻撃力」)。</p>
 <h2 id="_1">取得メモ</h2>
 <p>talewiki は EUC-JP の PukiWiki。<code>?cmd=source&amp;page=&lt;EUC-JPでURLエンコードしたページ名&gt;</code> で wiki ソースが取れる(HTML の <code>&lt;pre&gt;</code> 内)。<code>curl → iconv -c -f EUC-JP -t UTF-8</code> で変換。</p>
     <footer class="doc-foot">原本: <code>docs/damage-formula.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>

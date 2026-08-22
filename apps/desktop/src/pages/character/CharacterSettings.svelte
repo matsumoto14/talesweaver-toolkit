@@ -1,7 +1,9 @@
 <script lang="ts">
   // 右カラム(設定)。アコーディオン、1つずつ開く。専門用語(固定値/最終固定値/倍率A/B)は
   // ここに出さない(内訳は CharacterData の折りたたみのみ)。
-  import { PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import {
+    EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS,
+  } from "../../labels";
   import { fmtInt, formatLayerValue } from "../../format";
   import type {
     BuffChoice, BuffDefinition, BuffTarget, BuffValue, PetSkillTier, StatKind, StatLayer, StatPreview,
@@ -19,8 +21,8 @@
   }
   let { draft, preview, catalog }: Props = $props();
 
-  let openGroup = $state<"permanent" | "buffs" | "skills" | "adjustments" | null>(null);
-  function toggleGroup(g: "permanent" | "buffs" | "skills" | "adjustments") {
+  let openGroup = $state<"permanent" | "equipment" | "buffs" | "skills" | "adjustments" | null>(null);
+  function toggleGroup(g: "permanent" | "equipment" | "buffs" | "skills" | "adjustments") {
     openGroup = openGroup === g ? null : g;
   }
 
@@ -36,6 +38,16 @@
   };
 
   const statOptions = STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }));
+
+  // --- 装備 -------------------------------------------------------------
+  // Select は value:string 必須。strong_weapon_level は number(0..=6, 0=未使用)なので橋渡しする。
+  const strongWeaponOptions = [
+    { value: "0", label: "なし" },
+    ...Array.from({ length: limits.strong_weapon_level_max }, (_, i) => {
+      const lv = i + 1;
+      return { value: String(lv), label: `Lv${lv}(+${lv * 3}%)` };
+    }),
+  ];
 
   // --- バフ共通ロジック(旧 CharacterDetail.svelte を踏襲) -----------------------
 
@@ -102,6 +114,19 @@
     const relicTotal = STAT_KINDS.reduce((sum, k) => sum + draft.statSources.sacred_relic[k] * 10, 0);
     if (relicTotal > 0) parts.push(`聖物 合計+${relicTotal}`);
     return parts.length === 0 ? "未設定(中立値で計算)" : parts.join(" ・ ");
+  });
+
+  const equipmentSummary = $derived.by(() => {
+    const parts: string[] = [];
+    const baseParts = EQUIPMENT_STAT_KINDS.filter((k) => draft.equipment.base[k] !== 0)
+      .map((k) => `${EQUIPMENT_STAT_LABELS[k]}${draft.equipment.base[k]}`);
+    if (baseParts.length > 0) parts.push(`基本 ${baseParts.join(" ")}`);
+    const enhancedParts = EQUIPMENT_STAT_KINDS.filter((k) => draft.equipment.enhanced[k] !== 0)
+      .map((k) => `${EQUIPMENT_STAT_LABELS[k]}${draft.equipment.enhanced[k]}`);
+    if (enhancedParts.length > 0) parts.push(`強化 ${enhancedParts.join(" ")}`);
+    const enhanceRatePercent = (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3;
+    if (enhanceRatePercent > 0) parts.push(`+${enhanceRatePercent}%`);
+    return parts.length === 0 ? "未設定(中立値で計算)" : parts.join(" / ");
   });
 
   const buffsSummary = $derived.by(() => {
@@ -175,6 +200,59 @@
                 format={(v) => `${v} 段階 (+${v * 10})`}
               />
             {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <div class="group">
+      <button type="button" class="group-head" onclick={() => toggleGroup("equipment")}>
+        <svg class="chevron" class:open={openGroup === "equipment"} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg>
+        <span class="group-title">装備</span>
+        <span class="group-summary dim">{equipmentSummary}</span>
+      </button>
+      {#if openGroup === "equipment"}
+        <div class="group-body">
+          <div class="section-label">
+            <span>基本能力値</span><span class="rule"></span>
+          </div>
+          <p class="hint-text dim">ゲーム内ステータス画面の装備補正から、エンチャント分を除いた値(+アビリティ)</p>
+          <div class="block stats">
+            {#each EQUIPMENT_STAT_KINDS as k (k)}
+              <StatInput
+                label={EQUIPMENT_STAT_LABELS[k]} min={0} max={limits.equipment_value_max}
+                bind:value={draft.equipment.base[k]}
+              />
+            {/each}
+          </div>
+          <div class="section-label">
+            <span>強化能力値</span><span class="rule"></span>
+          </div>
+          <p class="hint-text dim">エンチャント・テシスコア・シエナのオーラ等の期間制能力値</p>
+          <div class="block stats">
+            {#each EQUIPMENT_STAT_KINDS as k (k)}
+              <StatInput
+                label={EQUIPMENT_STAT_LABELS[k]} min={0} max={limits.equipment_value_max}
+                bind:value={draft.equipment.enhanced[k]}
+              />
+            {/each}
+          </div>
+          <div class="section-label">
+            <span>装備攻撃力強化</span><span class="rule"></span>
+          </div>
+          <div class="block stats">
+            <label class="buff-check">
+              <input type="checkbox" bind:checked={draft.equipment.power_weapon} />
+              <span>パワーウェポン(+2%)</span>
+            </label>
+            <Select
+              label="ストロングウェポン"
+              options={strongWeaponOptions}
+              bind:value={
+                () => String(draft.equipment.strong_weapon_level),
+                (v) => (draft.equipment.strong_weapon_level = Number(v))
+              }
+            />
           </div>
         </div>
       {/if}
@@ -328,6 +406,7 @@
   .group-summary { font-size: 11px; min-width: 0; white-space: normal; overflow-wrap: break-word; }
   .group-body { padding-bottom: 10px; }
 
+  .hint-text { margin: 0; padding: 0 14px 6px; font-size: 11px; line-height: 1.4; }
   .block { display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 4px; }
   .block.stats { gap: 8px; }
 

@@ -109,6 +109,24 @@ export interface StatContribution {
   value: number;
 }
 
+// 装備補正 4 種(突き/斬り/魔攻/魔防)。crates/domain/src/equipment.rs の EquipmentValues。
+export interface EquipmentValues {
+  thrust: number;
+  slash: number;
+  magic_attack: number;
+  magic_defense: number;
+}
+
+// 装備補正一式(基本能力値/強化能力値/装備攻撃力強化バフ)。crates/domain/src/equipment.rs の Equipment。
+export interface Equipment {
+  base: EquipmentValues;
+  enhanced: EquipmentValues;
+  /** パワーウェポン(自身の装備補正を2%増加) */
+  power_weapon: boolean;
+  /** ストロングウェポンの Lv(0 = 未使用、1〜6) */
+  strong_weapon_level: number;
+}
+
 export interface RegisteredCharacter {
   id: number;
   name: string;
@@ -116,6 +134,7 @@ export interface RegisteredCharacter {
   base_stats: BaseStats;
   awakening: Awakening;
   stat_sources: StatSources;
+  equipment: Equipment;
 }
 
 export interface NewCharacter {
@@ -124,6 +143,7 @@ export interface NewCharacter {
   base_stats: BaseStats;
   awakening: Awakening;
   stat_sources: StatSources;
+  equipment: Equipment;
 }
 
 export type CategoryKind = "assigned" | "fixed" | "rate";
@@ -212,5 +232,7 @@ export interface StatLimits {
   adjustment_add_max: number;
   adjustment_pin_min: number;
   adjustment_pin_max: number;
+  equipment_value_max: number;
+  strong_weapon_level_max: number;
 }
 

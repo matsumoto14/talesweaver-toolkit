@@ -12,7 +12,9 @@ use serde::Serialize;
 
 pub use awakening::awakening_rate;
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
-pub use characters::{attack_coefficients, characters, find_character, GameCharacter};
+pub use characters::{
+    attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,
+};
 pub use enemies::{enemies, find_enemy};
 pub use skills::{find_skill, skills_for};
 

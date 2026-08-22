@@ -1,8 +1,9 @@
 //! 登録キャラクターのリポジトリ。
 
+use std::collections::HashSet;
 use std::path::Path;
 
-use domain::{Awakening, BaseStats, BuffCatalog, StatSources};
+use domain::{Awakening, BaseStats, BuffCatalog, Equipment, StatSources};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,8 @@ pub struct RegisteredCharacter {
     pub awakening: Awakening,
     /// ペット/ルーン/クラウン/聖物/バフ/調整値(docs/claude/goals/2026-08-21-character-stat-sources.md)
     pub stat_sources: StatSources,
+    /// 装備補正(基本能力値/強化能力値/装備攻撃力強化バフ)(docs/claude/goals/2026-08-22-equipment-attack.md)
+    pub equipment: Equipment,
 }
 
 /// 登録リクエスト。
@@ -30,10 +33,11 @@ pub struct NewCharacter {
     pub base_stats: BaseStats,
     pub awakening: Awakening,
     pub stat_sources: StatSources,
+    pub equipment: Equipment,
 }
 
-/// v1 相当(`stat_sources` 列を含まない、main ブランチ時代の実スキーマ)。
-/// v2 への移行は `from_connection` が `PRAGMA user_version` を見て `ALTER TABLE` で行う。
+/// v1 相当(`stat_sources`/`equipment` 列を含まない、main ブランチ時代の実スキーマ)。
+/// v2/v3 への移行は `from_connection` が列の実在を確認して `ALTER TABLE` で行う。
 const MIGRATION: &str = "
 CREATE TABLE IF NOT EXISTS characters (
     id                INTEGER PRIMARY KEY,
@@ -52,13 +56,12 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 ";
 
-/// このスキーマバージョンで `stat_sources` 列が存在する(v2)。
-const SCHEMA_VERSION: i64 = 2;
+/// このスキーマバージョンで `stat_sources`・`equipment` 列が存在する(v3)。
+const SCHEMA_VERSION: i64 = 3;
 
-const SELECT_COLUMNS: &str =
-    "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment";
 
-/// `stat_sources` 列(JSON テキスト)を `StatSources` として読み出すための橋渡し。
+/// `stat_sources`/`equipment` 列(JSON テキスト)を domain の型として読み出すための橋渡し。
 struct StatSourcesColumn(StatSources);
 
 impl FromSql for StatSourcesColumn {
@@ -66,6 +69,17 @@ impl FromSql for StatSourcesColumn {
         let text = value.as_str()?;
         serde_json::from_str(text)
             .map(StatSourcesColumn)
+            .map_err(|e| FromSqlError::Other(Box::new(e)))
+    }
+}
+
+struct EquipmentColumn(Equipment);
+
+impl FromSql for EquipmentColumn {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let text = value.as_str()?;
+        serde_json::from_str(text)
+            .map(EquipmentColumn)
             .map_err(|e| FromSqlError::Other(Box::new(e)))
     }
 }
@@ -92,23 +106,25 @@ impl CharacterRepository {
         // `stat_sources` 列を `CREATE TABLE` に直接持っていた(`ALTER TABLE` で足したのではない)ため、
         // 一度でも起動した DB は列を持ちながら `user_version` が未設定(0)のままになっている。
         // その状態で `user_version < SCHEMA_VERSION` だけを見て `ALTER TABLE` すると
-        // `duplicate column name: stat_sources` で起動不能になる。列の実在を直接確認する。
-        let has_stat_sources = {
+        // `duplicate column name` で起動不能になる。列の実在を直接確認する。
+        let existing_columns: HashSet<String> = {
             let mut stmt = conn.prepare("PRAGMA table_info(characters)")?;
             let mut rows = stmt.query([])?;
-            let mut found = false;
+            let mut columns = HashSet::new();
             while let Some(row) = rows.next()? {
                 let name: String = row.get(1)?;
-                if name == "stat_sources" {
-                    found = true;
-                    break;
-                }
+                columns.insert(name);
             }
-            found
+            columns
         };
-        if !has_stat_sources {
+        if !existing_columns.contains("stat_sources") {
             conn.execute_batch(
                 "ALTER TABLE characters ADD COLUMN stat_sources TEXT NOT NULL DEFAULT '{}';",
+            )?;
+        }
+        if !existing_columns.contains("equipment") {
+            conn.execute_batch(
+                "ALTER TABLE characters ADD COLUMN equipment TEXT NOT NULL DEFAULT '{}';",
             )?;
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -120,9 +136,10 @@ impl CharacterRepository {
         validate(new, catalog)?;
         let s = &new.base_stats;
         let stat_sources_json = serde_json::to_string(&new.stat_sources)?;
+        let equipment_json = serde_json::to_string(&new.equipment)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 new.name,
                 new.game_character_id,
@@ -136,6 +153,7 @@ impl CharacterRepository {
                 new.awakening.stage,
                 new.awakening.eternal_level,
                 stat_sources_json,
+                equipment_json,
             ],
         )?;
         self.get(self.conn.last_insert_rowid())
@@ -146,12 +164,13 @@ impl CharacterRepository {
         validate(update, catalog)?;
         let s = &update.base_stats;
         let stat_sources_json = serde_json::to_string(&update.stat_sources)?;
+        let equipment_json = serde_json::to_string(&update.equipment)?;
         let affected = self.conn.execute(
             "UPDATE characters SET
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
-                awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12
-             WHERE id = ?13",
+                awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13
+             WHERE id = ?14",
             params![
                 update.name,
                 update.game_character_id,
@@ -165,6 +184,7 @@ impl CharacterRepository {
                 update.awakening.stage,
                 update.awakening.eternal_level,
                 stat_sources_json,
+                equipment_json,
                 id,
             ],
         )?;
@@ -224,6 +244,7 @@ fn validate(new: &NewCharacter, catalog: &BuffCatalog) -> Result<()> {
     new.stat_sources.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     domain::stat_sources::build_modifiers(&new.stat_sources, catalog, &new.game_character_id)
         .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+    new.equipment.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     Ok(())
 }
 
@@ -246,6 +267,7 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
             eternal_level: row.get("eternal_level")?,
         },
         stat_sources: row.get::<_, StatSourcesColumn>("stat_sources")?.0,
+        equipment: row.get::<_, EquipmentColumn>("equipment")?.0,
     })
 }
 
@@ -265,6 +287,7 @@ mod tests {
             base_stats: BaseStats { stab: 300, hack: 250, int: 10, def: 200, mr: 150, dex: 280, agi: 250 },
             awakening: Awakening { stage: 5, eternal_level: 40 },
             stat_sources: StatSources::default(),
+            equipment: Equipment::default(),
         }
     }
 
@@ -415,13 +438,16 @@ mod tests {
         let list = repo.list().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].stat_sources, StatSources::default());
+        assert_eq!(list[0].equipment, Equipment::default());
 
         let fetched = repo.get(list[0].id).unwrap();
         assert_eq!(fetched.stat_sources, StatSources::default());
+        assert_eq!(fetched.equipment, Equipment::default());
 
         // マイグレーション後も create/update が使えること
         let created = repo.create(&new_character("新データ"), &[]).unwrap();
         assert_eq!(created.stat_sources, StatSources::default());
+        assert_eq!(created.equipment, Equipment::default());
 
         let mut updated = new_character("旧データ改");
         updated.stat_sources.rune_levels.stab = 10;
@@ -468,13 +494,14 @@ mod tests {
         )
         .unwrap();
 
-        // 列が既にあるので from_connection は ALTER TABLE を試みてはいけない(試みれば
-        // duplicate column name で Err になる)。
+        // stat_sources 列は既にあるので from_connection はこの列に ALTER TABLE を試みてはいけない
+        // (試みれば duplicate column name で Err になる)。equipment 列は無いので追加される。
         let repo = CharacterRepository::from_connection(conn).unwrap();
         let list = repo.list().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "既存データ");
         assert_eq!(list[0].stat_sources, StatSources::default());
+        assert_eq!(list[0].equipment, Equipment::default());
 
         // create/update も引き続き使えること。
         repo.create(&new_character("追加データ"), &[]).unwrap();
@@ -507,6 +534,43 @@ mod tests {
 
         let listed = repo.list().unwrap();
         assert_eq!(listed[0].stat_sources, c.stat_sources);
+    }
+
+    #[test]
+    fn equipmentはjsonで往復する() {
+        use domain::EquipmentValues;
+
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("メイン");
+        c.equipment = Equipment {
+            base: EquipmentValues { thrust: 150, slash: 150, magic_attack: 0, magic_defense: 0 },
+            enhanced: EquipmentValues { thrust: 60, slash: 60, magic_attack: 0, magic_defense: 0 },
+            power_weapon: true,
+            strong_weapon_level: 6,
+        };
+        let created = repo.create(&c, &[]).unwrap();
+        assert_eq!(created.equipment, c.equipment);
+
+        let fetched = repo.get(created.id).unwrap();
+        assert_eq!(fetched.equipment, c.equipment);
+
+        let listed = repo.list().unwrap();
+        assert_eq!(listed[0].equipment, c.equipment);
+    }
+
+    #[test]
+    fn 装備の値域違反は拒否する() {
+        use domain::EquipmentValues;
+
+        let repo = CharacterRepository::open_in_memory().unwrap();
+
+        let mut over_value = new_character("x");
+        over_value.equipment.base = EquipmentValues { thrust: 10000, ..Default::default() };
+        assert!(matches!(repo.create(&over_value, &[]), Err(StorageError::InvalidValue(_))));
+
+        let mut over_level = new_character("x");
+        over_level.equipment.strong_weapon_level = 7;
+        assert!(matches!(repo.create(&over_level, &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]

@@ -21,3 +21,13 @@ export const PET_SKILL_TIER_LABELS: Record<PetSkillTier, string> = {
   true_lv3: "真Lv3",
   true_lv4: "真Lv4",
 };
+
+// 装備補正 4 種(crates/domain/src/equipment.rs の EquipmentValues)の表示名・並び順。
+export const EQUIPMENT_STAT_KINDS = ["thrust", "slash", "magic_attack", "magic_defense"] as const;
+export type EquipmentStatKind = (typeof EQUIPMENT_STAT_KINDS)[number];
+export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = {
+  thrust: "突き攻撃力",
+  slash: "斬り攻撃力",
+  magic_attack: "魔法攻撃力",
+  magic_defense: "魔法防御力",
+};
