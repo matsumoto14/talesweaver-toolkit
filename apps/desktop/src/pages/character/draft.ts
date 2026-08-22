@@ -1,5 +1,5 @@
 // CharacterWorkspace/CharacterData/CharacterSettings で共有する編集中ドラフトの型と組み立て関数。
-import type { Adjustments, BaseStats, RegisteredCharacter, StatSources } from "../../api/types";
+import type { Adjustments, BaseStats, Equipment, RegisteredCharacter, StatSources } from "../../api/types";
 import { STAT_KINDS } from "../../labels";
 
 export interface Draft {
@@ -9,7 +9,22 @@ export interface Draft {
   stage: string;
   eternalLevel: string;
   statSources: StatSources;
+  equipment: Equipment;
 }
+
+export const cloneEquipment = (src: Equipment): Equipment => ({
+  base: { ...src.base },
+  enhanced: { ...src.enhanced },
+  power_weapon: src.power_weapon,
+  strong_weapon_level: src.strong_weapon_level,
+});
+
+export const neutralEquipment = (): Equipment => ({
+  base: { thrust: 0, slash: 0, magic_attack: 0, magic_defense: 0 },
+  enhanced: { thrust: 0, slash: 0, magic_attack: 0, magic_defense: 0 },
+  power_weapon: false,
+  strong_weapon_level: 0,
+});
 
 export const cloneAdjustments = (src: Adjustments): Adjustments =>
   Object.fromEntries(STAT_KINDS.map((k) => [k, { add: src[k].add, pin: src[k].pin }])) as Adjustments;
@@ -39,4 +54,5 @@ export const buildDraft = (c: RegisteredCharacter): Draft => ({
   stage: String(c.awakening.stage),
   eternalLevel: String(c.awakening.eternal_level),
   statSources: cloneStatSources(c.stat_sources),
+  equipment: cloneEquipment(c.equipment),
 });

@@ -12,6 +12,8 @@ const FALLBACK: StatLimits = {
   adjustment_add_max: 999,
   adjustment_pin_min: 1,
   adjustment_pin_max: 2400,
+  equipment_value_max: 9999,
+  strong_weapon_level_max: 6,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

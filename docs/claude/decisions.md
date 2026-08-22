@@ -25,11 +25,11 @@
 - **ダメージ上限(与ダメージのキャップ)は今回実装しない** `[仮]` / 上限値の出典(エタの意志ページ)が未取込。旧リポ値(300万〜1800万)は裏取り前 / wiki「エタの意志」取込後に `DamageCap` を追加
 - **クリティカル時ダメージ = 最大乱数(B=max)で F・G を適用した値** `[仮]` / 「クリティカル時」の表示値として最大値ベースが一般的(旧リポ・Excel も同様) / UI 表示の定義として docs に明記済み
 
-### カテゴリ A(攻撃力)の内訳 `[仮]`
+### カテゴリ A(攻撃力)の内訳
 
-- **ステ由来攻撃力 = 旧リポ `rawStatCoefficients.json` の係数(例 STAB: 1.08×HACK + 2.1×STAB)** `[仮]` / wiki の Skill#formula が未取込。旧リポの Excel v4.00 由来の係数を暫定採用し、gamedata に出典を記録 / 「計算式まとめ#BaseAttackPower」「Skill#formula」を取り込んで置換
-- **装備攻撃力 = 0、装備補正強化係数 = 0** `[仮]` / 今回のスコープに装備登録が無い / 装備モデル導入時に `[装備攻撃力/25 × 係数] × 25` 項が効くこと(式自体は実装済み・テスト済み)
-- **スキル依存種別は 6 種(STAB / HACK / INT / MR / STAB+HACK / HACK+INT)** / 旧リポのスキル 373 件がこの 6 種で分類されている / wiki Skill#formula で確認
+- `[更新済 → 2026-08-22 装備攻撃力 #1]` **ステ由来攻撃力 = 旧リポ `rawStatCoefficients.json` の係数(例 STAB: 1.08×HACK + 2.1×STAB)** `[仮]` / wiki の Skill#formula が未取込。旧リポの Excel v4.00 由来の係数を暫定採用し、gamedata に出典を記録 / 「計算式まとめ#BaseAttackPower」「Skill#formula」を取り込んで置換
+- `[更新済 → 2026-08-22 装備攻撃力 #2]` **装備攻撃力 = 0、装備補正強化係数 = 0** `[仮]` / 今回のスコープに装備登録が無い / 装備モデル導入時に `[装備攻撃力/25 × 係数] × 25` 項が効くこと(式自体は実装済み・テスト済み)
+- `[更新済 → 2026-08-22 装備攻撃力 #3]` **スキル依存種別は 6 種(STAB / HACK / INT / MR / STAB+HACK / HACK+INT)** / 旧リポのスキル 373 件がこの 6 種で分類されている / wiki Skill#formula で確認
 
 ### カテゴリ B(乱数)
 
@@ -212,3 +212,19 @@ feature/character-stat-sources-ui の PR レビューで挙がった 10 件の�
 - **実機 GUI 確認は `smoke-tester`(Sonnet / medium)** / general-purpose は親の Fable モデルで動き、スモークテスト 5 回で Subagent 出力トークンの約 1/4 を占めた / `~/.claude/agents/smoke-tester.md`
 - **implementer は effort medium、researcher / reviewer は high 維持** / 実装は依頼に受け入れ条件と対象ファイルが付くため high の余地が小さい。調査・独立レビューは Complex 限定なので品質優先 / `~/.claude/agents/*.md`
 - **Context 管理は運用推奨(goal ごとに `/clear`、150k 超で `/compact`、`/code-review` は専用セッション)** / 13.5 時間・3 goal・最大 276k context のセッションが発生。Claude Code は自動で `/clear` `/compact` できない / docs/claude/workflow.md「Context 管理」
+
+## 2026-08-22 装備攻撃力(docs/claude/goals/2026-08-22-equipment-attack.md)
+
+カテゴリ A(攻撃力)の「装備攻撃力」項を実装し、登録キャラに装備補正を持たせた(中盤以降の敵で `A+B−C` が負になり下限1固定になる既知の制約を解消)。
+
+1. **`Equipment { base: EquipmentValues, enhanced: EquipmentValues, power_weapon: bool, strong_weapon_level: u8 }`(`crates/domain/src/equipment.rs`)を新設した。`EquipmentValues` は突き/斬り/魔攻/魔防の4値。装備品を部位ごとに登録せず、ゲーム内ステータス画面の「基本能力値」「強化能力値」の合計値のみを持つ** / goal のスコープ(装備品の個別登録は対象外)。`stat_sources.rs`(ペット/ルーン/クラウン/聖物/バフ/調整値)と同じ「キャラに紐づく補正源一式」という構造を踏襲した / `crates/domain/src/equipment.rs`
+2. **装備攻撃力係数(`EquipmentCoefficients { base: EquipmentRates, enhanced: EquipmentRates }`)はステ由来攻撃力係数(`AttackCoefficients`)と対になる別の型にし、gamedata の `equipment_coefficients(dependency)` で持つ。値は wiki「計算式まとめ#BaseAttackPower」(取得 2026-08-22)の表をそのまま転記した** / ステ係数(`attack_coefficients`)と装備係数は wiki 表で行を共有するが、対象(ステ vs 装備補正)・単位が異なるため同じ構造体に混ぜず分離した。MR 依存の魔攻強化係数は wiki 注記どおり 19.25(韓国情報 16.75 とは異なる)を採用した / `crates/gamedata/src/characters.rs::equipment_coefficients` の「依存種別ごとの装備係数」テスト(6種すべて)
+3. **装備攻撃力強化倍率 = パワーウェポン +2%(Lv1 のみ)+ ストロングウェポン Lv×3%(Lv1〜6 = 3/6/9/12/15/18%)。両者は重複可** / 出典: wiki「Skill/共通」(取得 2026-08-22)のパワーウェポン「自身の装備補正を2%増加して与ダメージを算出する(ストロングウェポンと重複可)」、ストロングウェポン「3%/6%/9%/12%/15%/18%」。旧 docs の値とも一致 / `crates/domain/src/equipment.rs` の `Equipment::enhance_rate()` テスト
+4. **装備補正 4 値の値域上限は 0..=9999** `[仮]` / wiki に明記の上限が無く、`fixed_increase`(固定増加系)等これまでの暫定上限と同じ考え方(実用上の安全域)で採用した。実際の上限が判明したら差し替える / `crates/domain/src/equipment.rs::EQUIPMENT_VALUE_MAX`
+5. **storage の `characters` に `equipment TEXT NOT NULL DEFAULT '{}'` 列を追加し、`stat_sources` と同じ方式(`PRAGMA table_info` で列の実在を直接確認して個別に `ALTER TABLE`、`SCHEMA_VERSION` を 3 に更新)でマイグレーションした** / 2026-08-21 のレビューで確立した「`user_version` だけに頼らず列の実在を見る」方式をそのまま再利用。`stat_sources` 列だけ既にあり `equipment` 列が無い状態(このブランチ以前の DB)を実際にテストで再現した / `crates/storage/src/character_repository.rs` の「列は既にあるがuser_version未設定のdbも開ける」テストの `equipment` アサーション追加・「equipmentはjsonで往復する」「装備の値域違反は拒否する」テスト新規追加
+6. **`DamageInput` の `equipment_attack: f64`/`equipment_enhance_rate: f64`(中立値決め打ちフィールド)を廃止し、`equipment: Equipment`/`equipment_coefficients: EquipmentCoefficients` を `DamageInput::new` の必須引数に昇格させた。`calculate_damage`(コマンド)が `character.equipment` と `gamedata::equipment_coefficients(skill.dependency)` を渡す** / 2026-08-21 の「未実装要素の中立値をコマンドに書かせない」設計(docs/architecture.md、`stat_modifiers`/`stat_contributions` で確立済みのパターン)をそのまま踏襲。装備が実装された以上、中立値を domain 内で決め打ちする理由が無くなった / `crates/domain/src/damage.rs` の `攻撃力_乱数_防御力_スキル倍率_cri倍率` 等の既存テストを `Equipment::default()`/`EquipmentCoefficients::default()` で再構成、`apps/desktop/src-tauri/src/commands.rs::calculate_damage`
+7. **トレースの攻撃力(A)の内訳は `evaluate()`(カテゴリ集計 `totals` からしか式を作れない既存関数)を変更せず、`calculate_damage` が「ステ攻撃力」「装備攻撃力」「装備攻撃力強化倍率」「攻撃力(A)」の4段の `FormulaStep` を組み立てて `steps_min`/`steps_max`/`steps_critical` の先頭に付け足す形にした** / `evaluate()` は `CategoryTotals`(合算済みの A の値)しか受け取らず、ステ/装備の内訳を式として表現できない。A は B(乱数)を含まないため min/max/critical で同じ内訳になり、3箇所に同じ4段を差し込むだけで済む。`evaluate()` 自体のテスト(「全カテゴリが式に配線されている」等、`totals` を直接組み立てて呼ぶテスト)は無変更で通る / `crates/domain/src/damage.rs::attack_power_breakdown_steps`、「トレースに全カテゴリが出る」テスト(`steps_min.len()` を 10→14 に更新し先頭4件の `name` を確認)
+8. **UI の「装備」グループは、装備補正8値(基本/強化 × 突き/斬り/魔攻/魔防)を `StatInput`(min 0、max は `limits.equipment_value_max`)で、装備攻撃力強化倍率をチェックボックス(パワーウェポン)+ `Select`(ストロングウェポン Lv なし/1〜6、選択肢に % を併記)で入力させる。係数(wiki 由来の数値)は一切入力させない** / docs/ux-guidelines.md 原則1(既知の情報を入力させない)・原則4(通常操作は選択)。装備補正の実測値(基本/強化の8値)はゲーム内ステータス画面を見ないと分からない個人差のある値なので入力欄が適切だが、強化倍率(パワーウェポン/ストロングウェポン)は「持っているかどうか・Lv いくつか」という離散的な既知の選択なので Select/チェックボックスにした / `apps/desktop/src/pages/character/CharacterSettings.svelte` の「装備」アコーディオン
+9. **装備強化(+1〜+15)による武器の追加固定ダメージは今回のスコープに含めない** / goal の wiki 調査結果で「これはカテゴリA(装備攻撃力)ではなく§5の追加ダメージであり、丸め・適用可否が個別の別項目」と判明した。カテゴリAの装備攻撃力(本 goal のスコープ)とは算出の位置づけが異なるため、別 goal で扱う / docs/damage-formula.md §9(未実装として明記)、§5(既存の「武器強化」行)
+
+出典・確認方法: `cargo test --workspace`(106 件: domain 70 / gamedata 19 / storage 17)、`cd apps/desktop && npm run build && npx svelte-check`(133 files, 0 errors / 0 warnings)を実行し通過を確認した。独立レビュー(reviewer)は指摘なしで合格。

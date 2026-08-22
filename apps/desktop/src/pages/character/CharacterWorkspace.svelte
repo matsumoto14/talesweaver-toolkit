@@ -100,6 +100,7 @@
         base_stats: { ...draft.baseStats },
         awakening: { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) },
         stat_sources: $state.snapshot(draft.statSources),
+        equipment: $state.snapshot(draft.equipment),
       };
       const saved = await updateCharacter(character.id, payload);
       // 保存成功: 基準スナップショットを現在の draft に合わせ、「未保存」表示・保存ボタンを消す。

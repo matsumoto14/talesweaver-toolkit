@@ -1,9 +1,9 @@
 //! ゲーム内キャラクター(操作キャラ)と、スキル依存種別ごとのステ由来攻撃力係数。
 
-use domain::{AttackCoefficients, SkillDependency, StatKind};
+use domain::{AttackCoefficients, EquipmentCoefficients, EquipmentRates, SkillDependency, StatKind};
 use serde::Serialize;
 
-use crate::{Source, LEGACY_TWTOOLKIT_RETRIEVED_ON};
+use crate::Source;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GameCharacter {
@@ -41,16 +41,16 @@ pub fn find_character(id: &str) -> Option<&'static GameCharacter> {
     CHARACTERS.iter().find(|c| c.id == id)
 }
 
-/// ステ由来攻撃力係数の出典。
+/// ステ由来攻撃力係数・装備攻撃力係数の出典。
 pub const ATTACK_COEFFICIENTS_SOURCE: Source = Source {
-    page: "旧リポ twtoolkit rawStatCoefficients.json",
-    retrieved_on: LEGACY_TWTOOLKIT_RETRIEVED_ON,
-    note: "Excel ダメージ計算器 v4.00 由来。wiki Skill#formula / 計算式まとめ#BaseAttackPower で要裏取り",
+    page: "wiki 計算式まとめ#BaseAttackPower",
+    retrieved_on: "2026-08-22",
+    note: "旧リポ twtoolkit rawStatCoefficients.json(Excel v4.00 由来)と完全一致を確認済み",
 };
 
 /// スキル依存種別ごとのステ由来攻撃力係数(wiki: カテゴリA の内訳)。
 ///
-/// 全キャラ共通(旧リポのデータ構造に同じ)。
+/// 全キャラ共通(旧リポのデータ構造に同じ)。出典: `ATTACK_COEFFICIENTS_SOURCE`。
 pub fn attack_coefficients(dependency: SkillDependency) -> AttackCoefficients {
     use StatKind::*;
     let (primary, secondary) = match dependency {
@@ -62,6 +62,40 @@ pub fn attack_coefficients(dependency: SkillDependency) -> AttackCoefficients {
         SkillDependency::HackInt => ((Hack, 1.8), (Int, 1.8)),
     };
     AttackCoefficients { primary, secondary }
+}
+
+/// スキル依存種別ごとの装備攻撃力係数(wiki: カテゴリA の内訳「装備攻撃力」)。
+/// 基本能力値/強化能力値で係数が異なる。出典: `ATTACK_COEFFICIENTS_SOURCE`。
+pub fn equipment_coefficients(dependency: SkillDependency) -> EquipmentCoefficients {
+    use SkillDependency::*;
+    let (base, enhanced) = match dependency {
+        Stab => (
+            EquipmentRates { thrust: 23.75, slash: 3.75, magic_attack: 0.0, magic_defense: 0.0 },
+            EquipmentRates { thrust: 32.5, slash: 18.75, magic_attack: 0.0, magic_defense: 0.0 },
+        ),
+        Hack => (
+            EquipmentRates { thrust: 3.75, slash: 23.75, magic_attack: 0.0, magic_defense: 0.0 },
+            EquipmentRates { thrust: 18.75, slash: 32.5, magic_attack: 0.0, magic_defense: 0.0 },
+        ),
+        StabHack => (
+            EquipmentRates { thrust: 14.5, slash: 14.5, magic_attack: 0.0, magic_defense: 0.0 },
+            EquipmentRates { thrust: 28.75, slash: 28.75, magic_attack: 0.0, magic_defense: 0.0 },
+        ),
+        HackInt => (
+            EquipmentRates { thrust: 0.0, slash: 14.5, magic_attack: 14.5, magic_defense: 0.0 },
+            EquipmentRates { thrust: 0.0, slash: 28.75, magic_attack: 28.75, magic_defense: 0.0 },
+        ),
+        Int => (
+            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 23.75, magic_defense: 2.5 },
+            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 32.5, magic_defense: 18.25 },
+        ),
+        Mr => (
+            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 2.5, magic_defense: 20.5 },
+            // wiki 注記: 韓国情報の 16.75 と異なるが、この数値(19.25)で適用と明記されている。
+            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 19.25, magic_defense: 32.5 },
+        ),
+    };
+    EquipmentCoefficients { base, enhanced }
 }
 
 #[cfg(test)]
@@ -102,5 +136,33 @@ mod tests {
         assert!((power(SkillDependency::StabHack) - 540.0).abs() < 1e-9);
         // 1.8×(HACK+INT) = 900
         assert!((power(SkillDependency::HackInt) - 900.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn 依存種別ごとの装備係数() {
+        use SkillDependency::*;
+        let c = equipment_coefficients(Stab);
+        assert_eq!((c.base.thrust, c.base.slash), (23.75, 3.75));
+        assert_eq!((c.enhanced.thrust, c.enhanced.slash), (32.5, 18.75));
+
+        let c = equipment_coefficients(Hack);
+        assert_eq!((c.base.thrust, c.base.slash), (3.75, 23.75));
+        assert_eq!((c.enhanced.thrust, c.enhanced.slash), (18.75, 32.5));
+
+        let c = equipment_coefficients(StabHack);
+        assert_eq!((c.base.thrust, c.base.slash), (14.5, 14.5));
+        assert_eq!((c.enhanced.thrust, c.enhanced.slash), (28.75, 28.75));
+
+        let c = equipment_coefficients(HackInt);
+        assert_eq!((c.base.slash, c.base.magic_attack), (14.5, 14.5));
+        assert_eq!((c.enhanced.slash, c.enhanced.magic_attack), (28.75, 28.75));
+
+        let c = equipment_coefficients(Int);
+        assert_eq!((c.base.magic_attack, c.base.magic_defense), (23.75, 2.5));
+        assert_eq!((c.enhanced.magic_attack, c.enhanced.magic_defense), (32.5, 18.25));
+
+        let c = equipment_coefficients(Mr);
+        assert_eq!((c.base.magic_attack, c.base.magic_defense), (2.5, 20.5));
+        assert_eq!((c.enhanced.magic_attack, c.enhanced.magic_defense), (19.25, 32.5));
     }
 }

@@ -98,6 +98,7 @@ pub fn calculate_damage(
     let skill = gamedata::find_skill(&skill_id).ok_or_else(|| format!("スキル '{skill_id}' が見つかりません"))?;
     let enemy = gamedata::find_enemy(&enemy_id).ok_or_else(|| format!("敵 '{enemy_id}' が見つかりません"))?;
     let coefficients = gamedata::attack_coefficients(skill.dependency);
+    let equipment_coefficients = gamedata::equipment_coefficients(skill.dependency);
     let awakening_rate = gamedata::awakening_rate(character.awakening);
     let (mut stat_modifiers, mut stat_contributions) = domain::stat_sources::build_modifiers(
         &character.stat_sources,
@@ -114,6 +115,8 @@ pub fn calculate_damage(
         stat_modifiers,
         stat_contributions,
         coefficients,
+        character.equipment,
+        equipment_coefficients,
         awakening_rate,
         skill,
         enemy,

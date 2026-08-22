@@ -197,7 +197,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <h3 id="appsdesktop-tauri">apps/desktop — Tauri シェル</h3>
 <ul>
 <li>コマンドは「storage/gamedata から読む → domain を呼ぶ → 結果を返す」だけの薄いアダプタ。ロジックを書かない</li>
-<li>未実装要素の中立値(装備・属性など)もコマンドに書かない。<code>DamageInput::new</code> のように domain 側へ集約し、実装時にそこを引数へ昇格させる</li>
+<li>未実装要素の中立値(属性など)もコマンドに書かない。<code>DamageInput::new</code> のように domain 側へ集約し、実装時にそこを引数へ昇格させる</li>
 <li>UI は表示と入力のみ。計算・判定は必ず Rust 側</li>
 </ul>
 <p>フロントエンドの階層(<code>apps/desktop/src/</code>):</p>

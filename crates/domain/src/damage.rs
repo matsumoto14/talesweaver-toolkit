@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::enemy::Enemy;
+use crate::equipment::{equipment_attack_power, Equipment, EquipmentCoefficients};
 use crate::rounding::{floor_int, trunc2};
 use crate::skill::Skill;
 use crate::stat_sources::{apply_pins, Adjustments, StatContribution};
@@ -28,6 +29,10 @@ pub struct DamageInput {
     /// `stat_modifiers` の寄与内訳(ペット/ルーン/クラウン/聖物/バフ/調整値)。トレース表示用
     pub stat_contributions: Vec<StatContribution>,
     pub coefficients: AttackCoefficients,
+    /// 装備補正(基本能力値/強化能力値/装備攻撃力強化バフ)
+    pub equipment: Equipment,
+    /// 装備攻撃力の係数(wiki: カテゴリA の内訳)。スキル依存種別ごとに gamedata が持つ
+    pub equipment_coefficients: EquipmentCoefficients,
     pub skill: Skill,
     pub enemy: Enemy,
     /// 覚醒倍率(wiki: カテゴリN)。1.0 = 補正なし
@@ -35,10 +40,6 @@ pub struct DamageInput {
     pub combo_count: u32,
     /// キャラの属性値(wiki: カテゴリI の起点)。現状は 0
     pub element_value: i64,
-    /// 装備攻撃力(wiki: カテゴリA の内訳)。現状は 0
-    pub equipment_attack: f64,
-    /// 装備補正強化係数(wiki: カテゴリA の内訳)。現状は 0
-    pub equipment_enhance_rate: f64,
     /// 能力値の固定(pin)。キャラの保存済み調整値
     pub pins: Adjustments,
     /// 計算リクエストの一時調整(キャラには保存しない)。ステごとに `pins` より優先する
@@ -46,15 +47,17 @@ pub struct DamageInput {
 }
 
 impl DamageInput {
-    /// 計算に必要な要素を組み立てる。装備・属性は未実装のため中立値で埋める。
-    /// ステータス補正(`stat_modifiers`/`stat_contributions`)は呼び出し側(コマンド)が
-    /// `stat_sources::build_modifiers` で組み立てて渡す(中立値の決め打ちはしない)。
+    /// 計算に必要な要素を組み立てる。属性は未実装のため中立値で埋める。
+    /// ステータス補正(`stat_modifiers`/`stat_contributions`)・装備(`equipment`/`equipment_coefficients`)は
+    /// 呼び出し側(コマンド)が組み立てて渡す(中立値の決め打ちはしない)。
     /// 実装時はここを引数へ昇格させ、呼び出し側(コマンド)に中立値を書かせない。
     pub fn new(
         base_stats: BaseStats,
         stat_modifiers: StatModifierSet,
         stat_contributions: Vec<StatContribution>,
         coefficients: AttackCoefficients,
+        equipment: Equipment,
+        equipment_coefficients: EquipmentCoefficients,
         awakening_rate: f64,
         skill: Skill,
         enemy: Enemy,
@@ -67,13 +70,13 @@ impl DamageInput {
             stat_modifiers,
             stat_contributions,
             coefficients,
+            equipment,
+            equipment_coefficients,
             skill,
             enemy,
             awakening_rate,
             combo_count,
             element_value: 0,
-            equipment_attack: 0.0,
-            equipment_enhance_rate: 0.0,
             pins,
             temporary_pins,
         }
@@ -225,11 +228,11 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
 
     // ② カテゴリ集計
     let stat_attack = stat_attack_power(&stats, &input.coefficients);
+    let equipment_attack = equipment_attack_power(&input.equipment, &input.equipment_coefficients);
+    let enhance_rate = input.equipment.enhance_rate();
+    let a_value = attack_power(stat_attack, equipment_attack, enhance_rate);
     let mut totals = CategoryTotals::neutral();
-    totals.add(
-        AttackPower,
-        attack_power(stat_attack, input.equipment_attack, input.equipment_enhance_rate) as f64,
-    );
+    totals.add(AttackPower, a_value as f64);
     totals.add(TargetDefense, input.enemy.defense as f64);
     totals.add(SkillMultiplier, input.skill.multiplier);
     totals.add(CriticalMultiplier, input.skill.critical_multiplier);
@@ -251,6 +254,14 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     let (max, steps_max) = evaluate(&totals_max, false);
     let (critical, steps_critical) = evaluate(&totals_max, true);
 
+    // 攻撃力(A)の内訳(ステ攻撃力/装備攻撃力/装備攻撃力強化倍率)。A は B(乱数)を含まないため
+    // min/max/critical のすべてで同じ内訳になる。`evaluate` は `totals` からしか値を作れず
+    // 内訳を持たないため、ここで先頭に付け足す。
+    let attack_breakdown = attack_power_breakdown_steps(stat_attack, equipment_attack, enhance_rate, a_value);
+    let steps_min = attack_breakdown.iter().cloned().chain(steps_min).collect();
+    let steps_max = attack_breakdown.iter().cloned().chain(steps_max).collect();
+    let steps_critical = attack_breakdown.into_iter().chain(steps_critical).collect();
+
     // ④ 段数
     let hit_count = input.skill.hit_count;
     let hits = i64::from(hit_count);
@@ -269,6 +280,35 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     }
 }
 
+/// 攻撃力(A)の内訳を表す `FormulaStep` 4 件(ステ攻撃力/装備攻撃力/装備攻撃力強化倍率/攻撃力(A))。
+fn attack_power_breakdown_steps(
+    stat_attack: f64,
+    equipment_attack: f64,
+    enhance_rate: f64,
+    a_value: i64,
+) -> Vec<FormulaStep> {
+    vec![
+        FormulaStep { name: "ステ攻撃力".to_string(), expression: format!("{stat_attack:.4}"), value: stat_attack },
+        FormulaStep {
+            name: "装備攻撃力".to_string(),
+            expression: format!("{equipment_attack:.4}"),
+            value: equipment_attack,
+        },
+        FormulaStep {
+            name: "装備攻撃力強化倍率".to_string(),
+            expression: format!("{enhance_rate:.4}"),
+            value: enhance_rate,
+        },
+        FormulaStep {
+            name: "攻撃力(A)".to_string(),
+            expression: format!(
+                "[{stat_attack:.4} + {equipment_attack:.4}] + [{equipment_attack:.4}/25 × {enhance_rate:.4}] × 25"
+            ),
+            value: a_value as f64,
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,6 +323,8 @@ mod tests {
             stat_modifiers: StatModifierSet::default(),
             stat_contributions: Vec::new(),
             coefficients: AttackCoefficients { primary: (StatKind::Stab, 1.8), secondary: (StatKind::Hack, 1.8) },
+            equipment: Equipment::default(),
+            equipment_coefficients: EquipmentCoefficients::default(),
             skill: Skill {
                 id: "s".into(),
                 name: "テスト斬り".into(),
@@ -302,8 +344,6 @@ mod tests {
             awakening_rate: 1.0,
             combo_count: 0,
             element_value: 0,
-            equipment_attack: 0.0,
-            equipment_enhance_rate: 0.0,
             pins: Adjustments::default(),
             temporary_pins: None,
         }
@@ -524,7 +564,55 @@ mod tests {
         for c in DamageCategory::ALL {
             assert!(symbols.contains(&c.wiki_symbol()));
         }
-        assert_eq!(r.trace.steps_min.len(), 10);
+        // 攻撃力(A)の内訳 4 段(ステ攻撃力/装備攻撃力/装備攻撃力強化倍率/攻撃力(A)) + 従来の 10 段。
+        assert_eq!(r.trace.steps_min.len(), 14);
         assert_eq!(r.trace.steps_min.len(), r.trace.steps_critical.len());
+        let names: Vec<&str> = r.trace.steps_min.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(
+            &names[..4],
+            ["ステ攻撃力", "装備攻撃力", "装備攻撃力強化倍率", "攻撃力(A)"]
+        );
+    }
+
+    // 受け入れ条件1: 装備補正を入れたキャラは中盤以降の敵(兄弟の鍛冶場相当)でも下限1にならない。
+    // ボリス素ステ例(STAB 310 HACK 310)+ 装備(base 突400 斬400、enhanced 突200 斬200、SW Lv6。
+    // 基本 400 はネオテシス武器(wiki 装備強化: 蒼穹 410〜888)相当で現実的な値)。
+    #[test]
+    fn 装備補正があると中盤の敵に対しても下限1にならない() {
+        let mut i = input();
+        i.base_stats = BaseStats { stab: 310, hack: 310, int: 1, def: 1, mr: 1, dex: 100, agi: 1 };
+        use crate::equipment::EquipmentValues;
+        i.equipment = Equipment {
+            base: EquipmentValues { thrust: 400, slash: 400, ..Default::default() },
+            enhanced: EquipmentValues { thrust: 200, slash: 200, ..Default::default() },
+            strong_weapon_level: 6,
+            ..Default::default()
+        };
+        i.equipment_coefficients = EquipmentCoefficients {
+            base: crate::equipment::EquipmentRates { thrust: 14.5, slash: 14.5, magic_attack: 0.0, magic_defense: 0.0 },
+            enhanced: crate::equipment::EquipmentRates {
+                thrust: 28.75,
+                slash: 28.75,
+                magic_attack: 0.0,
+                magic_defense: 0.0,
+            },
+        };
+        // 兄弟の鍛冶場相当の敵(旧リポ由来。crates/gamedata/src/enemies.rs と同じ値)。
+        i.enemy = Enemy {
+            id: "brothers_forge".into(),
+            name: "兄弟の鍛冶場".into(),
+            defense: 7050,
+            damage_reduction: -5850,
+            cut_rate_a: 0.405,
+            element_threshold: 120,
+        };
+        let r = calculate_damage(&i);
+        assert!(r.per_hit.min > 1, "装備ありなら下限1を超えるはず: {:?}", r.per_hit);
+
+        // 回帰確認: 装備 default なら従来どおり下限1のまま。
+        let mut without_equipment = i.clone();
+        without_equipment.equipment = Equipment::default();
+        let r2 = calculate_damage(&without_equipment);
+        assert_eq!(r2.per_hit, DamageTriple { min: 1, max: 1, critical: 1 });
     }
 }

@@ -8,6 +8,7 @@ pub mod awakening;
 pub mod category;
 pub mod damage;
 pub mod enemy;
+pub mod equipment;
 pub mod rounding;
 pub mod skill;
 pub mod stat_sources;
@@ -20,6 +21,10 @@ pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
 };
 pub use enemy::Enemy;
+pub use equipment::{
+    equipment_attack_power, Equipment, EquipmentCoefficients, EquipmentError, EquipmentRates,
+    EquipmentValues, EQUIPMENT_VALUE_MAX, STRONG_WEAPON_LEVEL_MAX,
+};
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};
 pub use stat_sources::{

@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::equipment::{EQUIPMENT_VALUE_MAX, STRONG_WEAPON_LEVEL_MAX};
 use crate::stats::{
     effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind, StatModifierSet,
     StatTrace, BASE_STAT_MAX,
@@ -682,6 +683,8 @@ pub struct StatLimits {
     pub adjustment_add_max: i64,
     pub adjustment_pin_min: i64,
     pub adjustment_pin_max: i64,
+    pub equipment_value_max: i64,
+    pub strong_weapon_level_max: u8,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -694,6 +697,8 @@ pub fn stat_limits() -> StatLimits {
         adjustment_add_max: ADJUSTMENT_ADD_MAX,
         adjustment_pin_min: ADJUSTMENT_PIN_MIN,
         adjustment_pin_max: ADJUSTMENT_PIN_MAX,
+        equipment_value_max: EQUIPMENT_VALUE_MAX,
+        strong_weapon_level_max: STRONG_WEAPON_LEVEL_MAX,
     }
 }
 
@@ -1260,5 +1265,7 @@ mod tests {
         assert_eq!(limits.adjustment_add_max, ADJUSTMENT_ADD_MAX);
         assert_eq!(limits.adjustment_pin_min, ADJUSTMENT_PIN_MIN);
         assert_eq!(limits.adjustment_pin_max, ADJUSTMENT_PIN_MAX);
+        assert_eq!(limits.equipment_value_max, EQUIPMENT_VALUE_MAX);
+        assert_eq!(limits.strong_weapon_level_max, STRONG_WEAPON_LEVEL_MAX);
     }
 }
