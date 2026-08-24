@@ -1,6 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
-  CoreRegion, CoreType, EquipmentAbilityFamily, PartSlot, PetSkillTier, StatKind, StatLayer,
+  CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier, StatKind,
+  StatLayer,
 } from "./api/types";
 
 export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
@@ -46,6 +47,19 @@ export const EQUIPMENT_STAT_SHORT: Record<EquipmentStatKind, string> = {
   thrust: "突き", slash: "斬り", physical_defense: "物防", magic_attack: "魔攻", magic_defense: "魔防",
   accuracy: "命中", critical: "Cri", evasion: "回避", agility: "敏捷",
 };
+
+// 属性 8 種(crates/domain/src/element.rs の Element)。wiki 属性システムの並び。
+export const ELEMENTS: Element[] = ["fire", "water", "wind", "earth", "thunder", "white", "black", "neutral"];
+export const ELEMENT_LABELS: Record<Element, string> = {
+  fire: "火", water: "水", wind: "風", earth: "土", thunder: "雷",
+  white: "白", black: "黒", neutral: "無",
+};
+// 装備に付与できるのは無属性以外(wiki: 装備システム/属性強化「1属性のみ装着可能(火、水、風、土、雷、白、黒)」)。
+export const EQUIPMENT_ELEMENTS: Element[] = ELEMENTS.filter((e) => e !== "neutral");
+// 属性強化を持てる部位(wiki: 装備システム冒頭の表「属性強化」行。盾+・レリックは対象外)。
+export const ELEMENT_ALLOWED_SLOTS: PartSlot[] = [
+  "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg", "effect", "artifact",
+];
 
 // 装備部位(crates/domain/src/equipment.rs の PartSlot)の表示名・並び順(wiki: 装備システム ページ冒頭の表)。
 export const PART_SLOTS: PartSlot[] = [

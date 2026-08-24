@@ -23,6 +23,8 @@ const FALLBACK: StatLimits = {
   core_slot_count: 6,
   core_evolution_max: 4,
   core_enhancement_max: 4,
+  equipment_element_value_max: 9,
+  element_value_max: 255,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

@@ -9,6 +9,7 @@ pub mod category;
 pub mod content;
 pub mod damage;
 pub mod defense;
+pub mod element;
 pub mod enemy;
 pub mod equipment;
 pub mod rounding;
@@ -33,6 +34,7 @@ pub use damage::{
 pub use defense::{
     defense_profile, hit_taken_rate, normal_evasion, DefenseProfile, EvasionPoints, NORMAL_EVASION_CAP,
 };
+pub use element::{Element, ElementValues, ELEMENT_VALUE_MAX, EQUIPMENT_ELEMENT_VALUE_MAX};
 pub use enemy::Enemy;
 pub use equipment::{
     equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment,

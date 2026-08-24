@@ -16,8 +16,8 @@
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
-    CoreRegion, CoreType, EquipmentAbilityFamily, EquipmentItem, PartSlot, PetSkillTier, Skill,
-    StatKind, StatPreview,
+    CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentItem, PartSlot, PetSkillTier,
+    Skill, StatKind, StatPreview,
   } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import type { Draft } from "../../draft";
@@ -28,7 +28,8 @@
   import { fmtInt, formatLayerValue } from "../../format";
   import {
     ABILITY_ALLOWED_SLOTS, ABILITY_FAMILIES, ABILITY_FAMILY_LABELS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
-    CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
+    CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ENHANCE_ALLOWED_SLOTS,
+    EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
     PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS, SIENA_ALLOWED_SLOTS,
     SIENA_EQUIPMENT_VALUE_SLOTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
   } from "../../labels";
@@ -202,6 +203,18 @@
     draft.equipment.parts[slot].siena.stage = stage;
   }
   const sienaIsEquipmentValues = (slot: PartSlot) => SIENA_EQUIPMENT_VALUE_SLOTS.includes(slot);
+
+  // --- 属性強化(部位ごとに 1 属性) --------------------------------------
+  const elementOptions = [
+    { value: "", label: "属性なし" },
+    ...EQUIPMENT_ELEMENTS.map((e) => ({ value: e, label: ELEMENT_LABELS[e] })),
+  ];
+  function setPartElement(slot: PartSlot, value: string) {
+    const part = draft.equipment.parts[slot];
+    part.element = value === "" ? null : (value as Element);
+    // 属性を外したら値も消す(0 と「属性なし」を食い違わせない)
+    if (part.element === null) part.element_value = 0;
+  }
   const sienaSummary = (slot: PartSlot): string => {
     const siena = draft.equipment.parts[slot].siena;
     if (siena.stage === 0) return "未発現";
@@ -398,6 +411,9 @@
               {#if part.abilities.length > 0}
                 <span class="part-abi">アビリティ {part.abilities.length}</span>
               {/if}
+              {#if part.element !== null}
+                <span class="part-elem">{ELEMENT_LABELS[part.element]}{part.element_value}</span>
+              {/if}
             </span>
             <span class="part-vals num dim">{valuesSummary(part.base)}</span>
             <span class="chev dim">›</span>
@@ -494,6 +510,28 @@
           強化能力値に自動で合流します。ここにも入れると二重計上になります)。
         </p>
       </div>
+
+      {#if ELEMENT_ALLOWED_SLOTS.includes(slot)}
+        <div class="card">
+          <div class="card-title">属性強化</div>
+          <p class="hint dim">1 部位につき 1 属性。無属性は付与できません(wiki: 装備システム/属性強化)</p>
+          <div class="fields">
+            <Select
+              label="属性"
+              options={elementOptions}
+              bind:value={() => part.element ?? "", (v) => setPartElement(slot, v)}
+            />
+            {#if part.element !== null}
+              <StatInput
+                label="属性値"
+                min={0}
+                max={limits.equipment_element_value_max}
+                bind:value={part.element_value}
+              />
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       {#if ENHANCE_ALLOWED_SLOTS.includes(slot)}
         <div class="card">
@@ -908,6 +946,11 @@
   .card-title.inline { margin: 0; }
   .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
   .values-col { flex: 1 1 260px; min-width: 0; }
+  .part-elem {
+    flex-shrink: 0; padding: 1px 6px; font-size: 9px; font-weight: 700;
+    color: var(--fg-muted); background: var(--surface-inset);
+    border: 1px solid var(--border); border-radius: var(--r-pill);
+  }
   .part-abi {
     flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;

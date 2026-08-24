@@ -8,11 +8,13 @@
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
-    equipmentBaseTotal, equipmentEnchantTotal, sienaAttackRatePercent, sienaPartCount,
-    sienaStatTotal, thesisCoresBestTotal,
+    equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, sienaAttackRatePercent,
+    sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
-  import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import {
+    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
+  } from "../../labels";
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
@@ -146,6 +148,12 @@
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
   const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
+  // 装備に付与した属性値の合計。0 の属性は出さない(全部 0 なら「なし」)
+  const elementSummary = $derived.by(() => {
+    const values = equipmentElementValues(draft.equipment);
+    const parts = ELEMENTS.filter((e) => values[e] > 0).map((e) => `${ELEMENT_LABELS[e]}${values[e]}`);
+    return parts.length === 0 ? "なし" : parts.join(" / ");
+  });
 
   const NEUTRAL = "未設定(中立値で計算)";
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
@@ -313,6 +321,7 @@
               </tr>
             </tbody>
           </table>
+          <p class="dim tiny">属性(装備の付与分): {elementSummary}</p>
           <p class="dim tiny">
             強化倍率 +{enhanceRatePercent}%。強化のうちテシスコア・シエナのオーラの分はこの表に入りません
             (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。

@@ -51,7 +51,8 @@ pub struct DamageInput {
     /// 覚醒倍率(wiki: カテゴリN)。1.0 = 補正なし
     pub awakening_rate: f64,
     pub combo_count: u32,
-    /// キャラの属性値(wiki: カテゴリI の起点)。現状は 0
+    /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
+    /// スキルの属性が未取込(`Skill::element` が `None`)なら 0
     pub element_value: i64,
     /// 能力値の固定(pin)。キャラの保存済み調整値
     pub pins: Adjustments,
@@ -60,10 +61,9 @@ pub struct DamageInput {
 }
 
 impl DamageInput {
-    /// 計算に必要な要素を組み立てる。属性は未実装のため中立値で埋める。
+    /// 計算に必要な要素を組み立てる。
     /// ステータス補正(`stat_modifiers`/`stat_contributions`)・装備(`equipment`/`equipment_coefficients`)は
     /// 呼び出し側(コマンド)が組み立てて渡す(中立値の決め打ちはしない)。
-    /// 実装時はここを引数へ昇格させ、呼び出し側(コマンド)に中立値を書かせない。
     pub fn new(
         base_stats: BaseStats,
         stat_modifiers: StatModifierSet,
@@ -78,6 +78,7 @@ impl DamageInput {
         skill: Skill,
         enemy: Enemy,
         combo_count: u32,
+        element_value: i64,
         pins: Adjustments,
         temporary_pins: Option<Adjustments>,
     ) -> Self {
@@ -95,7 +96,7 @@ impl DamageInput {
             enemy,
             awakening_rate,
             combo_count,
-            element_value: 0,
+            element_value,
             pins,
             temporary_pins,
         }
@@ -386,6 +387,7 @@ mod tests {
                 multiplier: 0.99,
                 hit_count: 1,
                 critical_multiplier: 2.0,
+                element: Some(crate::element::Element::Water),
             },
             enemy: Enemy {
                 id: "e".into(),

@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::element::Element;
+
 /// スキルの依存種別。ステ由来攻撃力の係数(`AttackCoefficients`)を選ぶキー。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -25,4 +27,7 @@ pub struct Skill {
     pub hit_count: u32,
     /// Cri倍率(wiki: カテゴリF)
     pub critical_multiplier: f64,
+    /// スキルの属性(wiki: 属性システム「スキル属性」)。`None` = wiki の一覧から読み取れない `[仮]`。
+    /// `None` のときカテゴリI は 1.0(属性差ボーナスなし)
+    pub element: Option<Element>,
 }

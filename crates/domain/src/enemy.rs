@@ -12,6 +12,7 @@ pub struct Enemy {
     pub damage_reduction: i64,
     /// カット率A(wiki: カテゴリV1)。乗数そのもの(1.0 = 減少なし)。旧リポ af64
     pub cut_rate_a: f64,
-    /// 属性差ボーナス(wiki: カテゴリI)の起点となる敵の属性閾値
+    /// 敵の属性値(wiki 狩り場情報一覧「敵属性値」= 属性差ボーナス カテゴリI の起点)。
+    /// 攻撃スキルの属性値がこれを上回った分だけ与ダメージが増える(+80 で上限 1.5 倍)
     pub element_threshold: i64,
 }

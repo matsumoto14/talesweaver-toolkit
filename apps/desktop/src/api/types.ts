@@ -23,7 +23,13 @@ export interface Skill {
   multiplier: number;
   hit_count: number;
   critical_multiplier: number;
+  /** スキルの属性。null = wiki の一覧から読み取れない `[仮]`(属性差ボーナスなし) */
+  element: Element | null;
 }
+
+// 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
+export type Element =
+  | "fire" | "water" | "wind" | "earth" | "thunder" | "white" | "black" | "neutral";
 
 export interface Enemy {
   id: string;
@@ -189,6 +195,10 @@ export interface EquipmentPart {
   abilities: string[];
   /** シエナのオーラ(発現できるのは 8 部位。未発現は中立値) */
   siena: SienaAura;
+  /** 付与した属性(1 部位 1 属性)。null = 属性なし */
+  element: Element | null;
+  /** 付与した属性値(0..=9) */
+  element_value: number;
 }
 
 // 12 部位。crates/domain/src/equipment.rs の EquipmentParts(named field)。
@@ -455,6 +465,10 @@ export interface StatLimits {
   core_slot_count: number;
   core_evolution_max: number;
   core_enhancement_max: number;
+  /** 装備 1 部位に付与できる属性値の上限 */
+  equipment_element_value_max: number;
+  /** キャラの属性値の上限 */
+  element_value_max: number;
 }
 
 

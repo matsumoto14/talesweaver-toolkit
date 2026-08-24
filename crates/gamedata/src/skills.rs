@@ -1,6 +1,6 @@
 //! スキルカタログ。
 
-use domain::{Skill, SkillDependency};
+use domain::{Element, Skill, SkillDependency};
 
 use crate::{Source, LEGACY_TWTOOLKIT_RETRIEVED_ON};
 
@@ -8,6 +8,13 @@ pub const SKILLS_SOURCE: Source = Source {
     page: "旧リポ twtoolkit boris.json",
     retrieved_on: LEGACY_TWTOOLKIT_RETRIEVED_ON,
     note: "Excel ダメージ計算器 v4.00 由来。スキル Lv 別倍率は未対応。wiki のボリススキルページで要裏取り",
+};
+
+/// スキル属性の出典(wiki 属性システム「スキル属性」)。
+pub const SKILL_ELEMENT_SOURCE: Source = Source {
+    page: "属性システム",
+    retrieved_on: "2026-08-25",
+    note: "ボリスは 水属性=氷結系/氷撃斬/フローズンスレイ/フローズンブレイク、土属性=大地系、           黒属性=黒魔法系、無属性=共通系/剣系/刀系(縦斬り、連、円)。刀系のうち横斬り・残影斬は           どの属性の行にも無く読み取れないため None(`[仮]`)",
 };
 
 struct SkillRecord {
@@ -18,9 +25,12 @@ struct SkillRecord {
     multiplier: f64,
     hit_count: u32,
     critical_multiplier: f64,
+    /// wiki 属性システム「スキル属性」から読み取れないものは `None` `[仮]`
+    element: Option<Element>,
 }
 
 const SKILLS: &[SkillRecord] = &[
+    // 刀系。無属性の行は「縦斬り、連、円」だけを挙げていて横斬りが無い `[仮]`
     SkillRecord {
         character_id: "boris",
         id: "boris_goku_yokogiri",
@@ -29,7 +39,9 @@ const SKILLS: &[SkillRecord] = &[
         multiplier: 0.99,
         hit_count: 1,
         critical_multiplier: 2.0,
+        element: None,
     },
+    // 無属性(刀系: 縦斬り)
     SkillRecord {
         character_id: "boris",
         id: "boris_goku_tategiri",
@@ -38,7 +50,9 @@ const SKILLS: &[SkillRecord] = &[
         multiplier: 1.09,
         hit_count: 1,
         critical_multiplier: 2.5,
+        element: Some(Element::Neutral),
     },
+    // 水属性(氷結系)
     SkillRecord {
         character_id: "boris",
         id: "boris_goku_ice_break",
@@ -47,7 +61,9 @@ const SKILLS: &[SkillRecord] = &[
         multiplier: 1.13,
         hit_count: 1,
         critical_multiplier: 2.25,
+        element: Some(Element::Water),
     },
+    // 刀系。無属性の行に残影斬が無い `[仮]`
     SkillRecord {
         character_id: "boris",
         id: "boris_goku_zaneizan",
@@ -56,7 +72,9 @@ const SKILLS: &[SkillRecord] = &[
         multiplier: 5.45,
         hit_count: 11,
         critical_multiplier: 2.7,
+        element: None,
     },
+    // 無属性(刀系: 連)
     SkillRecord {
         character_id: "boris",
         id: "boris_goku_ren",
@@ -65,6 +83,7 @@ const SKILLS: &[SkillRecord] = &[
         multiplier: 5.5,
         hit_count: 11,
         critical_multiplier: 2.5,
+        element: Some(Element::Neutral),
     },
 ];
 
@@ -77,6 +96,7 @@ impl SkillRecord {
             multiplier: self.multiplier,
             hit_count: self.hit_count,
             critical_multiplier: self.critical_multiplier,
+            element: self.element,
         }
     }
 }

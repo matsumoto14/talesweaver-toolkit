@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::element::{Element, ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX};
 use crate::stats::StatKind;
 use crate::thesis_core::{CoreRegion, ThesisCoreError, ThesisCores};
 
@@ -144,6 +145,12 @@ impl PartSlot {
                 | PartSlot::Hand
                 | PartSlot::Leg
         )
+    }
+
+    /// この部位が属性強化を持てるか
+    /// (wiki: 装備システム冒頭の表「属性強化」行 = 兜/鎧/武/盾/頭/体/手/足/効果/AF。盾+・レリックは対象外)。
+    pub fn allows_element(self) -> bool {
+        !matches!(self, PartSlot::ShieldPlus | PartSlot::Relic)
     }
 
     /// シエナのオーラの能力値が「装備補正(エンチャント扱い)」として付く部位
@@ -339,13 +346,41 @@ pub struct EquipmentPart {
     /// シエナのオーラ(発現できるのは 8 部位。未発現は中立値)
     #[serde(default)]
     pub siena: SienaAura,
+    /// 付与した属性(wiki 装備システム/属性強化「1属性のみ装着可能」)。`None` = 属性なし
+    #[serde(default)]
+    pub element: Option<Element>,
+    /// 付与した属性値(0..=9)。`element` が `None` なら 0
+    #[serde(default)]
+    pub element_value: i64,
 }
 
 impl EquipmentPart {
+    /// 属性強化(wiki 装備システム/属性強化)。1 部位 1 属性・0〜9・盾+/レリックは対象外。
+    fn validate_element(&self, slot: PartSlot) -> Result<(), EquipmentError> {
+        if !(0..=EQUIPMENT_ELEMENT_VALUE_MAX).contains(&self.element_value) {
+            return Err(EquipmentError::ElementValueOutOfRange {
+                slot,
+                value: self.element_value,
+                max: EQUIPMENT_ELEMENT_VALUE_MAX,
+            });
+        }
+        let Some(element) = self.element else {
+            return Ok(());
+        };
+        if !slot.allows_element() {
+            return Err(EquipmentError::ElementNotAllowed { slot });
+        }
+        if !element.can_enchant_equipment() {
+            return Err(EquipmentError::ElementNeutralNotAllowed { slot });
+        }
+        Ok(())
+    }
+
     fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
         self.base.validate()?;
         self.enchant.validate()?;
         self.siena.validate(slot)?;
+        self.validate_element(slot)?;
         if self.enhance_level > ENHANCE_LEVEL_MAX {
             return Err(EquipmentError::EnhanceLevelOutOfRange {
                 slot,
@@ -407,6 +442,12 @@ pub enum EquipmentError {
     SienaAllStatsOutOfRange { slot: PartSlot, value: i64, max: i64 },
     #[error("{slot:?} のシエナのオーラの攻撃力増加は 0〜{max}% です(指定値 {value})")]
     SienaAttackRateOutOfRange { slot: PartSlot, value: f64, max: f64 },
+    #[error("{slot:?} は属性強化の対象外です(盾+・レリック以外)")]
+    ElementNotAllowed { slot: PartSlot },
+    #[error("無属性は装備に付与できません(火/水/風/土/雷/白/黒のみ)")]
+    ElementNeutralNotAllowed { slot: PartSlot },
+    #[error("{slot:?} の属性値は 0〜{max} です(指定値 {value})")]
+    ElementValueOutOfRange { slot: PartSlot, value: i64, max: i64 },
     #[error(transparent)]
     ThesisCore(#[from] ThesisCoreError),
 }
@@ -577,6 +618,17 @@ impl Equipment {
     pub fn siena_attack_rate(&self) -> f64 {
         self.parts.iter().into_iter().map(|(_, part)| part.siena.attack_rate_percent).sum::<f64>()
             / 100.0
+    }
+
+    /// 装備に付与した属性値の合計(属性ごと)。
+    pub fn element_values(&self) -> ElementValues {
+        let mut total = ElementValues::default();
+        for (_, part) in self.parts.iter() {
+            if let Some(element) = part.element {
+                *total.get_mut(element) += part.element_value;
+            }
+        }
+        total
     }
 
     /// シエナのオーラによるステ加算の合計(能力値スロット + 全ステータス増加。最終固定値層に乗る)。
@@ -786,6 +838,42 @@ mod tests {
             let mut eq = Equipment::default();
             setter(&mut eq.parts.weapon.base, over);
             assert!(matches!(eq.validate(), Err(EquipmentError::ValueOutOfRange { .. })));
+        }
+    }
+
+    #[test]
+    fn 装備の属性は部位ごとに1属性で合計される() {
+        let mut eq = Equipment::default();
+        eq.parts.weapon.element = Some(Element::Water);
+        eq.parts.weapon.element_value = 9;
+        eq.parts.armor.element = Some(Element::Water);
+        eq.parts.armor.element_value = 8;
+        eq.parts.helm.element = Some(Element::Fire);
+        eq.parts.helm.element_value = 7;
+        assert!(eq.validate().is_ok());
+        let values = eq.element_values();
+        assert_eq!(values.get(Element::Water), 17);
+        assert_eq!(values.get(Element::Fire), 7);
+        assert_eq!(values.get(Element::Neutral), 0);
+    }
+
+    #[test]
+    fn 属性の値域と部位制約() {
+        let mut eq = Equipment::default();
+        eq.parts.weapon.element = Some(Element::Water);
+        eq.parts.weapon.element_value = EQUIPMENT_ELEMENT_VALUE_MAX + 1;
+        assert!(matches!(eq.validate(), Err(EquipmentError::ElementValueOutOfRange { .. })));
+
+        // 無属性は装備に付与できない
+        let mut eq = Equipment::default();
+        eq.parts.weapon.element = Some(Element::Neutral);
+        assert!(matches!(eq.validate(), Err(EquipmentError::ElementNeutralNotAllowed { .. })));
+
+        // 盾+ とレリックは属性強化の対象外
+        for slot in [PartSlot::ShieldPlus, PartSlot::Relic] {
+            let mut eq = Equipment::default();
+            eq.parts.get_mut(slot).element = Some(Element::Fire);
+            assert!(matches!(eq.validate(), Err(EquipmentError::ElementNotAllowed { .. })));
         }
     }
 

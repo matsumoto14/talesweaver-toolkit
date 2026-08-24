@@ -825,6 +825,10 @@ pub struct StatLimits {
     pub core_slot_count: usize,
     pub core_evolution_max: u8,
     pub core_enhancement_max: u8,
+    /// 装備 1 部位に付与できる属性値の上限(wiki: 装備システム/属性強化)
+    pub equipment_element_value_max: i64,
+    /// キャラの属性値の上限(wiki: 属性システム)
+    pub element_value_max: i64,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -848,6 +852,8 @@ pub fn stat_limits() -> StatLimits {
         core_slot_count: CORE_SLOT_COUNT,
         core_evolution_max: CORE_EVOLUTION_MAX,
         core_enhancement_max: CORE_ENHANCEMENT_MAX,
+        equipment_element_value_max: crate::element::EQUIPMENT_ELEMENT_VALUE_MAX,
+        element_value_max: crate::element::ELEMENT_VALUE_MAX,
     }
 }
 

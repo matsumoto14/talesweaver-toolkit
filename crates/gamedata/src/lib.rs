@@ -6,6 +6,7 @@ pub mod awakening;
 pub mod buffs;
 pub mod characters;
 pub mod contents;
+pub mod elements;
 pub mod enemies;
 pub mod equipment_catalog;
 pub mod skills;
@@ -18,6 +19,7 @@ pub use characters::{
     attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,
 };
 pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};
+pub use elements::{element_base, ELEMENT_BASE_SOURCE};
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
     enhance_multiplier, enhance_multiplier_range, enhance_rates, equipment_abilities,

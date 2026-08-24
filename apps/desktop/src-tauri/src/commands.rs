@@ -241,6 +241,20 @@ fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     domain::weapon_added_damage(&weapon.base, &rates, min_multiplier)
 }
 
+/// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
+///
+/// キャラの基礎属性値(gamedata)+ 装備の属性強化の合計で、上限 255。スキルの属性が
+/// wiki から読み取れない(`Skill::element` が `None`)なら 0 = 属性差ボーナスなし。
+fn element_value_for(game_character_id: &str, equipment: &domain::Equipment, skill: &Skill) -> i64 {
+    let Some(element) = skill.element else {
+        return 0;
+    };
+    gamedata::element_base(game_character_id)
+        .add(equipment.element_values())
+        .clamp_to_max()
+        .get(element)
+}
+
 /// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage / evaluate_contents 共通)。
 #[allow(clippy::too_many_arguments)]
 fn build_damage_input(
@@ -269,6 +283,7 @@ fn build_damage_input(
     let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities());
     let equipment_enhanced_totals = equipment.enhanced_totals(core_region);
     let added_damage = weapon_added_damage(&equipment.parts.weapon);
+    let element_value = element_value_for(game_character_id, &equipment, &skill);
     Ok(DamageInput::new(
         base_stats.clone(),
         stat_modifiers,
@@ -283,6 +298,7 @@ fn build_damage_input(
         skill,
         enemy,
         combo_count,
+        element_value,
         stat_sources.adjustments.clone(),
         temporary_adjustments,
     ))
@@ -436,6 +452,7 @@ pub fn evaluate_contents(
                     skill.clone(),
                     enemy.clone(),
                     0,
+                    element_value_for(&character.game_character_id, &character.equipment, skill),
                     character.stat_sources.adjustments.clone(),
                     None,
                 );

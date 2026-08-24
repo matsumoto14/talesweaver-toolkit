@@ -2,12 +2,12 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  CoreRegion, CoreSet, CoreType, Equipment, EquipmentPart, EquipmentValues, SienaAura,
+  CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentValues, SienaAura,
   SienaStatBonus, ThesisCores,
 } from "./api/types";
 import {
-  CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT,
-  PART_SLOTS, STAT_KINDS,
+  CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENTS, EQUIPMENT_STAT_KINDS,
+  EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS,
 } from "./labels";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
@@ -92,6 +92,8 @@ export const neutralEquipmentPart = (): EquipmentPart => ({
   enhance_added_damage: null,
   abilities: [],
   siena: neutralSienaAura(),
+  element: null,
+  element_value: 0,
 });
 
 export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
@@ -103,7 +105,19 @@ export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
   enhance_added_damage: src.enhance_added_damage,
   abilities: [...src.abilities],
   siena: cloneSienaAura(src.siena),
+  element: src.element,
+  element_value: src.element_value,
 });
+
+/** 装備に付与した属性値の合計(属性ごと)。表示用(計算は Rust 側)。 */
+export const equipmentElementValues = (equipment: Equipment): Record<Element, number> => {
+  const total = Object.fromEntries(ELEMENTS.map((e) => [e, 0])) as Record<Element, number>;
+  for (const slot of PART_SLOTS) {
+    const part = equipment.parts[slot];
+    if (part.element) total[part.element] += part.element_value;
+  }
+  return total;
+};
 
 /** テシスコアの補正値(wiki: 進化強化表)。判定・計算は Rust 側。ここは表示用。 */
 const CORE_POWER_BONUS: number[][] = [
