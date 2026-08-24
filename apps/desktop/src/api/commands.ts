@@ -36,6 +36,12 @@ export const previewDamage = (
   character: NewCharacter, skillId: string, enemyId: string, comboCount: number,
   temporaryAdjustments: Adjustments | null = null,
 ) => invoke<DamageResult>("preview_damage", { character, skillId, enemyId, comboCount, temporaryAdjustments });
-/** 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価) */
-export const evaluateContents = (character: NewCharacter) =>
-  invoke<ContentEvaluation[]>("evaluate_contents", { character });
+/**
+ * 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価)。
+ * `dependencySkillId` を渡すと、装備条件(スキル依存で比較先が変わる)をそのスキルで判定する。
+ */
+export const evaluateContents = (character: NewCharacter, dependencySkillId?: string) =>
+  invoke<ContentEvaluation[]>("evaluate_contents", {
+    character,
+    dependencySkillId: dependencySkillId ?? null,
+  });

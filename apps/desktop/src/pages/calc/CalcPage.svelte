@@ -40,7 +40,20 @@
   const payload = $derived(app.sim ?? savedPayload);
 
   // --- 対象(コンテンツ) --------------------------------------------------
-  const contents = $derived(flatContents());
+  // ダメージ計算には敵データが要るので、enemy_id を持つコンテンツだけを対象に出す
+  // (敵未収録のコンテンツはホームで入場条件のみ判定する)。
+  const contents = $derived(
+    flatContents().filter(
+      (x): x is typeof x & { content: { enemy_id: string } } => x.content.enemy_id !== null,
+    ),
+  );
+  // 対象ピッカーも同じ絞り込みで描画する(選べない行を一覧に残さない)。
+  // 敵が 1 件も無いエリアは見出しごと落とす。
+  const targetAreas = $derived(
+    app.areas
+      .map((a) => ({ ...a, contents: a.contents.filter((c) => c.enemy_id !== null) }))
+      .filter((a) => a.contents.length > 0),
+  );
   const targetIndex = $derived(
     Math.max(0, contents.findIndex((x) => x.content.id === app.calcTargetId)),
   );
@@ -176,6 +189,9 @@
   let evalHandle: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null;
+    // 計算タブは「今このスキルで戦う」文脈なので、装備条件も選択中スキルの依存で判定する
+    // (ホームはコンテンツごとの最大ダメージスキルで判定する)。
+    const sid = skillId;
     if (evalHandle) clearTimeout(evalHandle);
     if (!pJson) {
       evals = [];
@@ -183,7 +199,7 @@
     }
     const seq = ++evalSeq;
     evalHandle = setTimeout(() => {
-      evaluateContents(JSON.parse(pJson))
+      evaluateContents(JSON.parse(pJson), sid || undefined)
         .then((rs) => {
           if (seq === evalSeq) evals = rs;
         })
@@ -207,6 +223,9 @@
   const need = $derived(target?.content.need_per_hit ?? 0);
   const ratio = $derived(perHit !== null && need > 0 ? perHit / need : 0);
   const hasReqs = $derived((target?.content.requirements.length ?? 0) > 0);
+  const hasEquipmentReq = $derived(
+    target?.content.requirements.some((r) => "equipment_by_skill" in r) ?? false,
+  );
   // 評価が未取得の間は入場条件を「不明」として扱い、未達コンテンツに「通る/余裕」を
   // 出さない(ダメージ 120ms・評価 200ms のデバウンス差で毎回この窓が開く。PR レビュー指摘)
   const entryKnown = $derived(!hasReqs || targetEval !== null);
@@ -587,7 +606,7 @@
           {#if targetOpen}
             <button type="button" class="overlay" aria-label="閉じる" onclick={() => (targetOpen = false)}></button>
             <div class="pop">
-              {#each app.areas as area (area.id)}
+              {#each targetAreas as area (area.id)}
                 <div class="pop-head"><span class="pop-diamond"></span><span>{area.name}</span><span class="num dim">{area.contents.length} 件</span></div>
                 {#each area.contents as c (c.id)}
                   {@const ev = evals.find((e) => e.content_id === c.id)}
@@ -1049,6 +1068,15 @@
                   </div>
                 {/each}
               </div>
+              {#if hasEquipmentReq}
+                <!-- 装備条件は突き/斬り/魔攻/魔防/複合の別条件で、使うスキルの依存で比較先が決まる -->
+                <p class="buff-note dim">
+                  装備条件は選択中のスキル{skill ? `「${skill.name}」` : ""}の依存で判定しています(突き / 斬り / 魔攻 / 魔防 / 複合のいずれか 1 つを満たせば OK)。
+                </p>
+              {/if}
+            {/if}
+            {#if target.content.entry_note}
+              <p class="entry-note">{target.content.entry_note}</p>
             {/if}
             {#if target.content.team_note}
               <p class="buff-note dim">チーム条件: {target.content.team_note}</p>
@@ -1280,6 +1308,11 @@
     border-color: #687287; color: #123047; font-weight: 700;
   }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
+  .entry-note {
+    margin: 8px 0 0; padding: 7px 9px; border-radius: 9px;
+    background: #FDF9EE; border: 1px solid #C2A057;
+    font-size: 9px; font-weight: 500; line-height: 1.6; color: #7A6420;
+  }
   .buff-detail {
     margin-top: 7px; padding: 7px 9px; border-radius: 9px;
     background: var(--bg-panel); border: 1px dashed var(--border-soft);

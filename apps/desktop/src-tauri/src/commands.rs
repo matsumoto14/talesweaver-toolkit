@@ -258,8 +258,15 @@ pub fn preview_damage(
 
 /// 全コンテンツを判定する(ホームの到達一覧・キャラレールのクリア数)。
 /// 火力はキャラのスキルのうち 1 ヒット(最大)が最大のもの、コンボ補正なしで評価する。
+///
+/// `dependency_skill_id` は装備条件(スキル依存で比較先が変わる)の判定に使うスキル。
+/// 計算タブのように「今このスキルで戦う」文脈では選択中スキルを渡す。None ならコンテンツ
+/// ごとの最大ダメージスキル(敵データなしコンテンツは一覧先頭)の依存で判定する。
 #[tauri::command]
-pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEvaluation>> {
+pub fn evaluate_contents(
+    character: NewCharacter,
+    dependency_skill_id: Option<String>,
+) -> CommandResult<Vec<ContentEvaluation>> {
     let catalog = gamedata::buff_catalog();
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_abilities = gamedata::equipment_abilities();
@@ -279,11 +286,30 @@ pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEv
     let equipment_base_totals = character.equipment.base_totals(&equipment_abilities);
     let equipment_enhanced_totals = character.equipment.enhanced_totals();
     let added_damage = weapon_added_damage(&character.equipment.parts.weapon);
+    // 呼び出し側がスキルを指定したら、装備条件の比較先はそのスキルの依存で固定する。
+    let fixed_dependency = match dependency_skill_id {
+        None => None,
+        Some(id) => Some(find_skill(&id)?.dependency),
+    };
     let mut evaluations = Vec::new();
     for area in gamedata::content_areas() {
         for content in &area.contents {
-            let enemy = find_enemy(&content.enemy_id)?;
+            // 敵データが無いコンテンツ(入場条件のみ判定)は火力計算をしない。装備条件の
+            // 比較先はキャラの代表スキル(一覧の先頭)の依存種別で決める。
+            let Some(enemy_id) = content.enemy_id.as_deref() else {
+                let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.dependency));
+                evaluations.push(evaluate_content(
+                    content,
+                    None,
+                    &equipment_base_totals,
+                    character.awakening,
+                    dependency,
+                ));
+                continue;
+            };
+            let enemy = find_enemy(enemy_id)?;
             let mut best: Option<BestSkillDamage> = None;
+            let mut best_dependency: Option<domain::SkillDependency> = None;
             for skill in &skills {
                 let input = DamageInput::new(
                     character.base_stats.clone(),
@@ -309,9 +335,17 @@ pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEv
                         per_hit_max: result.per_hit.max,
                         total_max: result.total.max,
                     });
+                    // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
+                    best_dependency = Some(skill.dependency);
                 }
             }
-            evaluations.push(evaluate_content(content, best, &equipment_base_totals, character.awakening));
+            evaluations.push(evaluate_content(
+                content,
+                best,
+                &equipment_base_totals,
+                character.awakening,
+                fixed_dependency.or(best_dependency),
+            ));
         }
     }
     Ok(evaluations)

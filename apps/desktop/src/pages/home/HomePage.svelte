@@ -54,18 +54,21 @@
   const entryCount = $derived(rows.filter((r) => r.ev?.entry_ok).length);
 
   // 行の状態: 0余裕 1通る 2ぎりぎり 3届かない 4条件・火力とも未達 5条件だけ未達 6スキル未収録 7判定中
+  //           8 入場OK(火力データなし) 9 入場条件が未達(火力データなし)
   // 「判定未着(!r.ev)」と「本当にスキル未収録(!r.ev.damage)」を混同しない(PR レビュー指摘)。
+  // 敵データが無いコンテンツ(need_per_hit === null)は入場条件だけで状態を決める。
   function rowState(r: Row): number {
     if (!r.ev) return 7;
+    if (r.content.need_per_hit === null) return r.ev.entry_ok ? 8 : 9;
     if (!r.ev.damage) return 6;
     const ratio = r.ev.damage.per_hit_max / r.content.need_per_hit;
     if (!r.ev.entry_ok) return r.ev.reaches_need ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   }
-  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "スキル未収録", "判定中…"];
-  const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2", "#ECEEF2"];
-  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "#6D6AA8", "#A9B4C4", "#A9B4C4"];
-  const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88", "#5E6E88"];
+  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "スキル未収録", "判定中…", "入場OK", "条件未達"];
+  const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2", "#ECEEF2", "#DFF3E6", "#EFEEF8"];
+  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "#6D6AA8", "#A9B4C4", "#A9B4C4", "#6FA98A", "#6D6AA8"];
+  const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88", "#5E6E88", "#2E6B4C", "#4A4780"];
   const BAR_BG = [
     "linear-gradient(90deg,#90D7FF,#426DD6)",
     "linear-gradient(90deg,#9FD9BC,#3E8C63)",
@@ -75,13 +78,34 @@
     "linear-gradient(90deg,#C3C1E4,#6D6AA8)",
     "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
     "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
+    "linear-gradient(90deg,#9FD9BC,#3E8C63)",
+    "linear-gradient(90deg,#C3C1E4,#6D6AA8)",
   ];
 
-  const ratioOf = (r: Row) => (r.ev?.damage ? r.ev.damage.per_hit_max / r.content.need_per_hit : 0);
+  // 火力バーの比率。敵データが無いコンテンツは入場条件の充足度(満たした項目の割合)を出す。
+  const ratioOf = (r: Row) => {
+    if (r.content.need_per_hit === null) {
+      if (!r.ev || r.ev.checks.length === 0) return r.ev?.entry_ok ? 1 : 0;
+      return r.ev.checks.filter((c) => c.ok).length / r.ev.checks.length;
+    }
+    return r.ev?.damage ? r.ev.damage.per_hit_max / r.content.need_per_hit : 0;
+  };
   const pctOf = (r: Row) => `${Math.min(100, ratioOf(r) * 100).toFixed(1)}%`;
+
+  /** 未達条件の説明(「エタの意志 Lv あと 5」)。装備条件は比較先がスキル依存なので label をそのまま使う。 */
+  const unmetText = (ev: ContentEvaluation) =>
+    ev.checks.filter((c) => !c.ok).map((c) => `${c.label} あと ${fmtInt(c.required - c.current)}`).join(" ・ ");
 
   function noteOf(r: Row): { text: string; unmet: boolean } {
     if (!r.ev) return { text: "判定中…", unmet: false };
+    // 敵データなし: 入場条件だけを説明する(火力の話をしない)
+    if (r.content.need_per_hit === null) {
+      if (r.ev.entry_ok) {
+        const met = r.ev.checks.map((c) => `${c.label} ${fmtInt(c.required)}`).join(" / ");
+        return { text: met ? `入場条件OK(${met})` : "入場条件なし", unmet: false };
+      }
+      return { text: `入場まで: ${unmetText(r.ev)}`, unmet: true };
+    }
     if (!r.ev.damage) return { text: "このキャラのスキルデータが未収録のため火力を判定できません", unmet: false };
     const lackPct = Math.max(1, Math.round((1 - ratioOf(r)) * 100));
     if (r.content.requirements.length === 0) {
@@ -94,11 +118,7 @@
         ? { text: `入場条件OK(${r.ev.checks.map((c) => `${c.label} ${fmtInt(c.required)}`).join(" / ")})`, unmet: false }
         : { text: `入場条件OK ／ 火力が あと ${lackPct}%`, unmet: false };
     }
-    const unmet = r.ev.checks.filter((c) => !c.ok);
-    return {
-      text: `入場まで: ${unmet.map((c) => `${c.label} あと ${fmtInt(c.required - c.current)}`).join(" ・ ")}`,
-      unmet: true,
-    };
+    return { text: `入場まで: ${unmetText(r.ev)}`, unmet: true };
   }
 
   // 選択とフロンティア(最初の未クリア)
@@ -152,7 +172,8 @@
     // 依存を明示的に読む(保存データの変化でも再計算する)
     void app.evaluations[c?.id ?? -1];
     if (adviceHandle) clearTimeout(adviceHandle);
-    if (!c || !g?.ev?.damage) {
+    // 敵データが無いコンテンツ(enemy_id なし)は火力を比較できないので候補を出さない
+    if (!c || !g?.ev?.damage || !g.content.enemy_id) {
       advice = [];
       return;
     }
@@ -280,9 +301,13 @@
                       </div>
                       <div class="row-bar">
                         <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {BAR_BG[st]};"></div></div>
-                        <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
-                        {#if ratioOf(r) >= 1.15}
-                          <span class="over num">×{ratioOf(r).toFixed(1)}</span>
+                        {#if r.content.need_per_hit === null}
+                          <span class="need num dim">入場条件のみ</span>
+                        {:else}
+                          <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
+                          {#if ratioOf(r) >= 1.15}
+                            <span class="over num">×{ratioOf(r).toFixed(1)}</span>
+                          {/if}
                         {/if}
                         <span class="badge" style="background: {BADGE_BG[st]}; border-color: {BADGE_BD[st]}; color: {BADGE_FG[st]};">{BADGE[st]}</span>
                       </div>
@@ -300,7 +325,10 @@
             </div>
           {/each}
         </div>
-        <p class="foot dim">目安ダメージ・入場条件は仮値です(wiki 狩り場情報の取込後に置き換わります)。</p>
+        <p class="foot dim">
+          入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
+          目安ダメージは仮値です(実測で更新)。
+        </p>
       {/if}
     </div>
   </section>
@@ -324,26 +352,29 @@
         {@const ok = !!r.ev?.reaches_need}
         <div class="sel-card">
           <div class="sel-name">{r.content.name}</div>
-          <div class="sel-dmg">
-            <span class="num huge">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
-            <span class="dim">1発(最大)</span>
-          </div>
-          <div class="sel-need num dim">目安 {fmtInt(r.content.need_per_hit)}</div>
-          {#if r.ev?.damage}
-            <div class="sel-skill dim">
-              スキル: {skillNames[r.ev.damage.skill_id] ?? r.ev.damage.skill_id}(最大ダメージのスキルで判定)
-            </div>
-          {/if}
-          {#if r.ev?.damage}
-            <div class="sel-note" class:ok>
-              {ok
-                ? "火力は目安を超えています(参考値)。"
-                : `目安まで あと ${Math.max(1, Math.round((1 - ratioOf(r)) * 100))}%。`}
-            </div>
+          {#if r.content.need_per_hit === null}
+            <!-- 敵データが無いコンテンツ: 火力を出さず入場条件だけを示す -->
+            <div class="sel-entry-only dim">敵データ未収録のため、入場条件のみ判定しています。</div>
           {:else}
-            <div class="sel-note">スキル未収録のため火力を判定できません。</div>
+            <div class="sel-dmg">
+              <span class="num huge">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
+              <span class="dim">1発(最大)</span>
+            </div>
+            <div class="sel-need num dim">目安 {fmtInt(r.content.need_per_hit)}</div>
+            {#if r.ev?.damage}
+              <div class="sel-skill dim">
+                スキル: {skillNames[r.ev.damage.skill_id] ?? r.ev.damage.skill_id}(最大ダメージのスキルで判定)
+              </div>
+              <div class="sel-note" class:ok>
+                {ok
+                  ? "火力は目安を超えています(参考値)。"
+                  : `目安まで あと ${Math.max(1, Math.round((1 - ratioOf(r)) * 100))}%。`}
+              </div>
+            {:else}
+              <div class="sel-note">スキル未収録のため火力を判定できません。</div>
+            {/if}
+            <button type="button" class="try" onclick={tryInCalc}>計算シートで試す</button>
           {/if}
-          <button type="button" class="try" onclick={tryInCalc}>計算シートで試す</button>
           <div class="sel-entry" class:ng={r.ev ? !r.ev.entry_ok && r.content.requirements.length > 0 : false}>
             {r.content.requirements.length === 0
               ? "入場条件はありません。"
@@ -364,6 +395,10 @@
                 </div>
               {/each}
             </div>
+          {/if}
+          {#if r.content.entry_note}
+            <!-- ルーン Lv・共通スキル・コア等、キャラモデルに値が無く判定できない条件 -->
+            <div class="sel-entry-note">{r.content.entry_note}</div>
           {/if}
         </div>
 
@@ -394,7 +429,8 @@
             </div>
             <div class="advice-list">
               {#each advice as a (a.candidate.id)}
-                {@const reach = a.perHit >= goal.content.need_per_hit}
+                {@const need = goal.content.need_per_hit ?? 0}
+                {@const reach = a.perHit >= need}
                 <button type="button" class="advice" class:reach onclick={() => applyAdvice(a)}>
                   <span class="adv-row">
                     <span class="adv-label">{a.candidate.label}</span>
@@ -403,7 +439,7 @@
                     </span>
                   </span>
                   <span class="adv-row sub">
-                    <span class="num dim">{fmtInt(a.perHit)} / 目安 {fmtInt(goal.content.need_per_hit)}</span>
+                    <span class="num dim">{fmtInt(a.perHit)} / 目安 {fmtInt(need)}</span>
                     <span
                       class="cost"
                       style="background: {COST_COLORS[a.candidate.cost][0]}; border-color: {COST_COLORS[a.candidate.cost][1]}; color: {COST_COLORS[a.candidate.cost][2]};"
@@ -538,6 +574,16 @@
     font-size: 10.5px; font-weight: 500; line-height: 1.6; color: #3B4A63;
   }
   .sel-entry.ng { background: #F6E8E5; border-color: #B08480; color: var(--danger); }
+  .sel-entry-only {
+    margin-top: 7px; padding: 7px 10px; border-radius: 9px;
+    background: #F7F8FB; border: 1px dashed var(--border-soft);
+    font-size: 10.5px; line-height: 1.6;
+  }
+  .sel-entry-note {
+    margin-top: 7px; padding: 7px 10px; border-radius: 9px;
+    background: #FDF9EE; border: 1px solid #C2A057;
+    font-size: 10.5px; font-weight: 500; line-height: 1.6; color: #7A6420;
+  }
   .sel-team {
     margin-top: 7px; padding: 7px 10px; border-radius: 9px;
     background: #EFEEF8; border: 1px solid #6D6AA8;

@@ -322,11 +322,12 @@ export interface StatLimits {
 
 // --- コンテンツ(crates/domain/src/content.rs) ---
 
-// 入場条件。serde の外部タグ付け enum(newtype variant)の写し。
+// 入場条件。serde の外部タグ付け enum の写し。
+// equipment_by_skill は「使うスキルの依存種別で比較先が決まる」条件(swiki の S/H/I・M・複合列)。
 export type ContentRequirement =
-  | { equipment_thrust: number }
-  | { equipment_thrust_slash: number }
-  | { eternal_level: number };
+  | { awakening_stage: number }
+  | { eternal_level: number }
+  | { equipment_by_skill: { single: number; mr: number; composite: number } };
 
 export interface RequirementCheck {
   label: string;
@@ -338,10 +339,13 @@ export interface RequirementCheck {
 export interface Content {
   id: string;
   name: string;
-  enemy_id: string;
-  /** 実用的に周回できる 1 ヒット(最大)の目安ダメージ */
-  need_per_hit: number;
+  /** 敵データが無い(入場条件のみ判定する)コンテンツは null */
+  enemy_id: string | null;
+  /** 実用的に周回できる 1 ヒット(最大)の目安ダメージ。敵データが無ければ null */
+  need_per_hit: number | null;
   requirements: ContentRequirement[];
+  /** 判定対象外の入場条件の注記(ルーン Lv・共通スキル・コア等。表示専用) */
+  entry_note: string | null;
   team_note: string | null;
 }
 
@@ -359,10 +363,11 @@ export interface BestSkillDamage {
 
 export interface ContentEvaluation {
   content_id: string;
-  /** スキル未収録キャラは null */
+  /** スキル未収録キャラ・敵データなしコンテンツは null */
   damage: BestSkillDamage | null;
   checks: RequirementCheck[];
   entry_ok: boolean;
+  /** 敵データなし(目安なし)は火力不問で true */
   reaches_need: boolean;
   clear: boolean;
 }
