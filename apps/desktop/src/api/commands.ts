@@ -15,10 +15,16 @@ export const createCharacter = (character: NewCharacter) =>
 export const updateCharacter = (id: number, character: NewCharacter) =>
   invoke<RegisteredCharacter>("update_character", { id, character });
 export const deleteCharacter = (id: number) => invoke<void>("delete_character", { id });
-/** 保存しない試算。draft の base_stats/stat_sources/equipment から最終能力値と寄与内訳を得る */
+/**
+ * 保存しない試算。draft の base_stats/stat_sources/equipment から最終能力値と寄与内訳を得る。
+ * `mainSkillId`(主軸スキル)を渡すとその依存種別で攻撃力(A)も返る。null なら攻撃力は出ない。
+ */
 export const previewEffectiveStats = (
   baseStats: BaseStats, statSources: StatSources, equipment: Equipment, gameCharacterId: string,
-) => invoke<StatPreview>("preview_effective_stats", { baseStats, statSources, equipment, gameCharacterId });
+  mainSkillId: string | null,
+) => invoke<StatPreview>("preview_effective_stats", {
+  baseStats, statSources, equipment, gameCharacterId, mainSkillId,
+});
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
 ) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, temporaryAdjustments });

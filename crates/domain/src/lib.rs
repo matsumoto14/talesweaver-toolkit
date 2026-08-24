@@ -16,7 +16,10 @@ pub mod stat_sources;
 pub mod stats;
 pub mod thesis_core;
 
-pub use attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
+pub use attack_power::{
+    attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
+    AttackPowerBreakdown,
+};
 pub use awakening::Awakening;
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use content::{
@@ -28,7 +31,7 @@ pub use damage::{
 };
 pub use enemy::Enemy;
 pub use equipment::{
-    equipment_attack_power, weapon_added_damage, EnhanceRates, Equipment, EquipmentAbilityDef,
+    equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment, EquipmentAbilityDef,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentParts, EquipmentRates,
     EquipmentValues, PartSlot, SienaAura, SienaStatBonus, SupportValues, ENHANCE_LEVEL_MAX,
     ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
@@ -38,9 +41,10 @@ pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};
 pub use stat_sources::{
     apply_pins, apply_temporary_adjustments, build_modifiers, preview_effective_stats, stat_limits,
-    Adjustments, BuffCatalog, BuffChoice, BuffDefinition, BuffGroup, BuffSelection, BuffTarget,
-    BuffValue, Crown, PetSkillTier, PetSkills, RuneLevels, SacredRelic, StatAdjustment,
-    StatContribution, StatLayer, StatLimits, StatPreview, StatSourceError, StatSources,
+    Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice, BuffDefinition,
+    BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown, PartAttackContribution, PetSkillTier,
+    PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution, StatLayer, StatLimits,
+    StatPreview, StatSourceError, StatSources,
 };
 pub use stats::{
     effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind,

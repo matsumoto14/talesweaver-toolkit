@@ -389,3 +389,23 @@ goal の「やること(案)」は「シエナのオーラの Lv 別値」を wi
 
 出典・確認方法: wiki「テシスコア」「装備システム/シエナのオーラ」「装備システム」(いずれも取得 2026-08-24)、swiki コンテンツ入場条件。`cargo test --workspace`(168 件: domain 103 / gamedata 39 / storage 22 / desktop 4)、`cd apps/desktop && npm run build && npx svelte-check`(138 files, 0 errors / 0 warnings)、実機スモークテスト(docs/screenshots/63〜71、page/console エラーなし)。
 
+
+## 2026-08-25 キャラ画面の攻撃力(A)可視化(docs/claude/goals/2026-08-24-mock-alignment.md 段階1)
+
+1. **キャラに「主軸スキル」(`main_skill_id`)を持たせ、キャラ画面の攻撃力はその依存種別で出す**(ユーザー決定 2026-08-24) / 攻撃力 A は依存種別(突き/斬り/魔攻/魔防/複合)で装備係数が変わるので、スキルを決めないと 1 つの数字にできない。モック 12a は「補正源をいじるとこの数字が動く」ことを画面の軸にしており、そこにスキル選択を毎回持ち込むと軸がぶれる / `storage::NewCharacter::main_skill_id`(SQLite v5)、`RegisterPane`/`SourcePane` の主軸スキル欄
+2. **主軸スキルは未選択(`NULL`)を許し、そのときは攻撃力を出さず「主軸スキルを選ぶと攻撃力が出ます」と書く** / スキル未収録のキャラ(gamedata はボリス 5 件のみ)がある。空欄にすると「0 なのか未実装なのか」が区別できない / `StatPreview::attack: Option<AttackPreview>`、`.attack-foot.empty`
+3. **攻撃力の算出はダメージ計算と同じ経路(`attack_power_breakdown`)を通す。計算を二重に書かない** / `preview_effective_stats` 側に別式を書くと、片方だけ直す事故が起きる。内訳を出すために `equipment_attack_power` を `equipment_values_attack`(4 値 × 係数の内積)に分解し、基本/強化それぞれを単独で出せるようにした / `domain::attack_power::attack_power_breakdown`、`damage.rs` の `calculate_damage` も同関数を通る
+4. **キャラ画面の A は「地域なし」の値にし、その旨を画面に書く** / テシスコアの能力値増加は対象ダンジョン限定(`enhanced_totals(region)`)で、キャラ画面はコンテンツを選ばない。地域を勝手に 1 つ選ぶと嘘になる / `attack_power_of` は `enhanced_totals(None)`、フッタとシートに注記
+5. **部位の寄与は「その部位を未装備にした状態を丸ごと計算し直した A」との差にする** / 装備は装備攻撃力だけでなくシエナのオーラのステ加算経由で最終能力値にも効き、pin があるとその分は消える。装備値の差分だけを引くと合わない / `Equipment::without_part`、`PartAttackContribution`、`部位の寄与は外したときの攻撃力との差に一致する` テスト
+6. **主軸スキルの所有チェックは commands 側で行う(`validate_main_skill`)。キャラ種の変更時は UI が同期的に選択を外す** / `game_character_id` の存在チェックが既に commands にあり、storage を gamedata のスキル一覧に依存させたくない。UI 側は `$effect` ではなく Select のセッターで外す(非同期の取りこぼしを作らない) / `commands.rs::validate_main_skill`、`SourcePane::setGameCharacterId`
+7. **storage は v5。`main_skill_id TEXT`(NULL 可)を列の実在確認つきで `ALTER TABLE` する** / v4 と同じ方式。`PRAGMA user_version` だけで判定しない(この DB は列を持ちながら 0 のままになりうる) / `main_skill_id列の無いdbを開くと既存キャラは未選択で読める` テスト
+
+### 実機確認(docs/screenshots/72〜74)
+
+検証ボリス(既存 DB・主軸スキル未選択で読めることを確認)で:
+
+- 未選択のときフッタは「主軸スキル未選択 / 主軸スキルを選ぶと攻撃力が出ます」。極・残影斬(複合)を選ぶと **A = 24,091**、内訳はステ 2,187 / 装備基本 6,467 / 装備強化 11,787.5 / 強化倍率 +20%
+- 極・縦斬り(斬り依存)に変えると A = 20,601 に変わる(依存種別で装備係数が変わる)
+- 武器の部位詳細の「この枠の寄与 −21,904」が、実際に未装備にしたときの A(24,091 → 2,187)の差と一致
+- パワーウェポンを切ると A 24,091 → 23,716(補正源を触ると即時に動く)
+- 登録ペインで主軸スキルを選んで登録 → 変更 → 保存 → リロードで値が残る(v5 の往復)

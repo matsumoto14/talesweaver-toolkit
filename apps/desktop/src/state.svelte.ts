@@ -10,6 +10,7 @@ import {
   listEquipmentAbilities,
   listEquipmentCatalog,
   listGameCharacters,
+  listSkills,
 } from "./api/commands";
 import type {
   BuffDefinition,
@@ -21,6 +22,7 @@ import type {
   GameCharacter,
   NewCharacter,
   RegisteredCharacter,
+  Skill,
 } from "./api/types";
 import { reportError } from "./toast.svelte";
 
@@ -47,6 +49,27 @@ export const app = $state({
   /** キャラタブで登録ペインを開く(レールの「＋ キャラを登録」から) */
   registerOpen: false,
 });
+
+/**
+ * ゲームキャラ id → スキル一覧。静的データなので一度引いたら使い回す。
+ * キャラ画面(主軸スキルの選択肢)で参照する。未取得のキーは空配列を返す。
+ */
+export const skillsByCharacter = $state<Record<string, Skill[]>>({});
+
+// 取得済み・取得中のキー(非リアクティブ)。$effect から呼ぶので、重複判定に
+// skillsByCharacter 自身を読むと「書いた瞬間に呼び出し元の effect が再実行される」ため分ける。
+const requestedSkills = new Set<string>();
+
+export async function loadSkills(gameCharacterId: string): Promise<void> {
+  if (gameCharacterId === "" || requestedSkills.has(gameCharacterId)) return;
+  requestedSkills.add(gameCharacterId);
+  try {
+    skillsByCharacter[gameCharacterId] = await listSkills(gameCharacterId);
+  } catch (e) {
+    requestedSkills.delete(gameCharacterId);
+    reportError(errorMessage(e));
+  }
+}
 
 export function selectedCharacter(): RegisteredCharacter | null {
   return app.characters.find((c) => c.id === app.selectedId) ?? null;

@@ -6,16 +6,34 @@
   import { neutralEquipment, neutralStatSources } from "../../draft";
   import { STAT_KINDS } from "../../labels";
   import {
-    app, payloadOf, selectCharacter, selectedCharacter, upsertCharacter,
+    app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Select from "../../ui/Select.svelte";
 
   let name = $state("");
   let gameCharacterId = $state("boris");
+  let mainSkillId = $state("");
   let saving = $state(false);
 
   const source = $derived(selectedCharacter());
   const selectedGame = $derived(app.gameCharacters.find((c) => c.id === gameCharacterId) ?? null);
+
+  // 主軸スキル(攻撃力の依存種別を決める)。スキル未収録のキャラがあるので未選択を許す。
+  $effect(() => {
+    void loadSkills(gameCharacterId);
+  });
+  const skills = $derived(skillsByCharacter[gameCharacterId] ?? []);
+  const mainSkillOptions = $derived([
+    { value: "", label: "未選択(あとで選ぶ)" },
+    ...skills.map((s) => ({ value: s.id, label: s.name })),
+  ]);
+  /** キャラを選び直したら前キャラのスキル id を残さない */
+  function pickGameCharacter(id: string) {
+    if (id === gameCharacterId) return;
+    gameCharacterId = id;
+    mainSkillId = "";
+  }
 
   async function register(copy: boolean) {
     if (!selectedGame || saving) return;
@@ -23,7 +41,12 @@
     try {
       let payload: NewCharacter;
       if (copy && source) {
-        payload = { ...payloadOf(source), name: name.trim() || selectedGame.name, game_character_id: gameCharacterId };
+        payload = {
+          ...payloadOf(source),
+          name: name.trim() || selectedGame.name,
+          game_character_id: gameCharacterId,
+          main_skill_id: mainSkillId === "" ? null : mainSkillId,
+        };
         if (source.game_character_id !== gameCharacterId) {
           // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルバフを落とす(幽霊バフ対策)
           payload.stat_sources.buffs.choices = payload.stat_sources.buffs.choices.filter((ch) => {
@@ -39,6 +62,7 @@
           awakening: { stage: 0, eternal_level: 0 },
           stat_sources: neutralStatSources(),
           equipment: neutralEquipment(),
+          main_skill_id: mainSkillId === "" ? null : mainSkillId,
         };
       }
       const saved = await createCharacter(payload);
@@ -46,6 +70,7 @@
       selectCharacter(saved.id);
       app.registerOpen = false;
       name = "";
+      mainSkillId = "";
     } catch (e) {
       reportError(errorMessage(e));
     } finally {
@@ -69,11 +94,20 @@
     <div class="grid">
       {#each app.gameCharacters as c (c.id)}
         {@const on = c.id === gameCharacterId}
-        <button type="button" class="pick" class:on onclick={() => (gameCharacterId = c.id)}>
+        <button type="button" class="pick" class:on onclick={() => pickGameCharacter(c.id)}>
           <span class="icon" class:on></span>
           <span class="pick-name">{c.name}</span>
         </button>
       {/each}
+    </div>
+    <div class="row skill-row">
+      <span class="label">主軸スキル</span>
+      <span class="skill-select">
+        <Select options={mainSkillOptions} bind:value={mainSkillId} />
+      </span>
+      <span class="hint dim">
+        {skills.length === 0 ? "このキャラのスキルは未収録" : "攻撃力の依存種別を決めます。あとで変更できます"}
+      </span>
     </div>
     <div class="actions">
       <button type="button" class="btn primary" disabled={saving} onclick={() => register(false)}>
@@ -122,6 +156,8 @@
   .pick-name { max-width: 58px; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pick.on .pick-name { color: var(--fg); font-weight: 700; }
 
+  .skill-row { margin-top: 11px; }
+  .skill-select { min-width: 0; flex: 1; }
   .actions { margin-top: 11px; display: flex; gap: 7px; }
   .actions .btn { flex: 1; }
   .actions .btn.cancel { flex: 0 0 auto; }

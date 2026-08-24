@@ -16,7 +16,7 @@
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
-    CoreRegion, CoreType, EquipmentItem, PartSlot, PetSkillTier, StatKind, StatPreview,
+    CoreRegion, CoreType, EquipmentItem, PartSlot, PetSkillTier, Skill, StatKind, StatPreview,
   } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import type { Draft } from "../../draft";
@@ -41,12 +41,26 @@
     draft: Draft;
     preview: StatPreview | null;
     previewError: string | null;
+    /** 主軸スキルの選択肢(キャラ種のスキル一覧)。親が引く */
+    skills: Skill[];
     sourceId: SourceId;
   }
-  let { draft, preview, previewError, sourceId }: Props = $props();
+  let { draft, preview, previewError, skills, sourceId }: Props = $props();
 
   const STAT_MIN = 1;
   const characterOptions = $derived(app.gameCharacters.map((c) => ({ value: c.id, label: c.name })));
+
+  // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
+  // キャラ種を変えたら前キャラのスキル id が残らないよう同期的に外す(保存時に Rust 側が弾く値)。
+  const mainSkillOptions = $derived([
+    { value: "", label: "未選択(攻撃力を出さない)" },
+    ...skills.map((s) => ({ value: s.id, label: s.name })),
+  ]);
+  function setGameCharacterId(id: string) {
+    if (id === draft.gameCharacterId) return;
+    draft.gameCharacterId = id;
+    draft.mainSkillId = "";
+  }
   const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: `${i} 段階` }));
   const eternalOptions = Array.from({ length: 81 }, (_, i) => ({ value: String(i), label: `Lv ${i}` }));
 
@@ -111,6 +125,10 @@
     if (part.custom_name === null) part.custom_name = "";
     itemQuery = "";
   }
+
+  /** その部位の攻撃力(A)への寄与(外すと減る量)。主軸スキル未選択なら null */
+  const partContribution = (slot: PartSlot): number | null =>
+    preview?.attack?.part_contributions.find((c) => c.slot === slot)?.value ?? null;
 
   const abilityChecked = (slot: PartSlot, id: string) => draft.equipment.parts[slot].abilities.includes(id);
   function toggleAbility(slot: PartSlot, id: string) {
@@ -233,12 +251,26 @@
           <span class="label">名前</span>
           <input type="text" bind:value={draft.name} maxlength="32" placeholder="表示名" />
         </label>
-        <Select label="キャラ" bind:value={draft.gameCharacterId} options={characterOptions} />
+        <Select
+          label="キャラ"
+          options={characterOptions}
+          bind:value={() => draft.gameCharacterId, setGameCharacterId}
+        />
         <div class="two">
           <Select label="覚醒段階" bind:value={draft.stage} options={stageOptions} />
           <Select label="エタの意志 Lv" bind:value={draft.eternalLevel} options={eternalOptions} />
         </div>
+        <Select label="主軸スキル" options={mainSkillOptions} bind:value={draft.mainSkillId} />
       </div>
+      <p class="hint dim">
+        {#if skills.length === 0}
+          このキャラのスキルはまだ未収録です。収録されるまで攻撃力は出せません。
+        {:else if draft.mainSkillId === ""}
+          主軸スキルを選ぶと攻撃力が出ます。スキルの依存種別(突き / 斬り / 魔攻 / 魔防 / 複合)で装備の係数が変わるためです。
+        {:else}
+          攻撃力はこのスキルの依存種別で計算します。ダメージ計算タブは選んだスキルごとに計算します。
+        {/if}
+      </p>
     </div>
     <div class="card">
       <div class="card-title">能力値 <span class="dim normal">設定を触ると即時更新</span></div>
@@ -330,6 +362,16 @@
       {@const part = draft.equipment.parts[slot]}
       {@const item = equippedItem(slot)}
       <button type="button" class="back-link" onclick={() => (openPart = null)}>‹ 装備一覧へ</button>
+      {@const contribution = partContribution(slot)}
+      <div class="contrib-card" class:empty={contribution === null}>
+        <span class="contrib-label">この枠の寄与</span>
+        {#if contribution === null}
+          <span class="contrib-note dim">「キャラステータス」で主軸スキルを選ぶと出ます</span>
+        {:else}
+          <span class="contrib-value num">−{fmtInt(contribution)}</span>
+          <span class="contrib-note dim">外すと攻撃力がこれだけ減ります(テシスコアの地域分を除く)</span>
+        {/if}
+      </div>
       <div class="card">
         <div class="card-title">{openPartLabel}: アイテム選択</div>
         <input
@@ -806,6 +848,15 @@
   /* 装備ドリルダウン: 部位詳細 */
   .back-link { align-self: flex-start; padding: 2px 2px; font-size: 10.5px; color: var(--accent); }
   .back-link:hover { text-decoration: underline; }
+  .contrib-card {
+    margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+    padding: 8px 11px; border-radius: 10px;
+    background: linear-gradient(180deg, #fff, #EFF5FD); border: 1px solid #9FB4D0;
+  }
+  .contrib-card.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
+  .contrib-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .contrib-value { font-size: 17px; font-weight: 700; }
+  .contrib-note { font-size: 9px; line-height: 1.5; }
   .item-search {
     margin-top: 8px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 8px;
     background: var(--bg-field); border: 1px solid var(--border); color: var(--fg); font-size: 11px;

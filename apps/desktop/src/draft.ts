@@ -19,6 +19,8 @@ export interface Draft {
   eternalLevel: string;
   statSources: StatSources;
   equipment: Equipment;
+  /** 主軸スキル(攻撃力の依存種別を決める)。"" = 未選択 */
+  mainSkillId: string;
 }
 
 export const cloneEquipment = (src: Equipment): Equipment => ({
@@ -66,6 +68,7 @@ export const buildDraft = (c: RegisteredCharacter): Draft => ({
   eternalLevel: String(c.awakening.eternal_level),
   statSources: cloneStatSources(c.stat_sources),
   equipment: cloneEquipment(c.equipment),
+  mainSkillId: c.main_skill_id ?? "",
 });
 
 /** Draft → コマンドに渡すペイロード(保存・保存前プレビューの両方で使う) */
@@ -76,4 +79,5 @@ export const draftToPayload = (draft: Draft): NewCharacter => ({
   awakening: { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) },
   stat_sources: cloneStatSources(draft.statSources),
   equipment: cloneEquipment(draft.equipment),
+  main_skill_id: draft.mainSkillId === "" ? null : draft.mainSkillId,
 });

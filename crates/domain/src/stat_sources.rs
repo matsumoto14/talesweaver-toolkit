@@ -10,8 +10,12 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::attack_power::{
+    attack_power_breakdown, stat_attack_power, AttackCoefficients, AttackPowerBreakdown,
+};
 use crate::equipment::{
-    Equipment, EquipmentError, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
+    equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
+    PartSlot, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
     SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX, SIENA_STAGE_MAX,
     SIENA_STAT_BONUS_MAX, STRONG_WEAPON_LEVEL_MAX,
 };
@@ -655,12 +659,43 @@ pub fn apply_pins(
     }
 }
 
-/// `preview_effective_stats` の結果(最終能力値・トレース・寄与内訳)。
+/// 主軸スキルの依存種別から引いた攻撃力(A)の係数一式。
+/// スキル依存種別ごとの実データは gamedata が持つので、呼び出し側が引いて渡す。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct AttackPowerCoefficients {
+    /// ステ由来攻撃力の係数
+    pub stat: AttackCoefficients,
+    /// 装備攻撃力の係数(基本能力値用/強化能力値用)
+    pub equipment: EquipmentCoefficients,
+}
+
+/// 部位 1 つの攻撃力(A)への寄与。「外すと A がこれだけ減る」量。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PartAttackContribution {
+    pub slot: PartSlot,
+    /// A − (その部位を未装備にした A)
+    pub value: i64,
+}
+
+/// 攻撃力(A)のプレビュー。主軸スキルが選ばれているときだけ作る。
+///
+/// テシスコアの能力値増加は地域依存(`Equipment::enhanced_totals(region)`)だが、キャラ画面は
+/// 対象コンテンツを選ばないので **地域なし(テシスコアの能力値を含まない)** で出す。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AttackPreview {
+    pub breakdown: AttackPowerBreakdown,
+    /// 12 部位それぞれの寄与(外したときの差分)
+    pub part_contributions: Vec<PartAttackContribution>,
+}
+
+/// `preview_effective_stats` の結果(最終能力値・トレース・寄与内訳・攻撃力)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatPreview {
     pub stats: EffectiveStats,
     pub traces: Vec<StatTrace>,
     pub contributions: Vec<StatContribution>,
+    /// 主軸スキル未選択なら `None`
+    pub attack: Option<AttackPreview>,
 }
 
 /// シエナのオーラのステ加算(wiki: 能力値一覧(その他の部位)・追加オプション「全ステータス増加」)を
@@ -689,22 +724,77 @@ pub fn apply_siena_stats(
 }
 
 /// `BaseStats` + `StatSources` + 装備(シエナのオーラ)から最終能力値を組み立てる(pin 込み)。
-/// キャラ編集画面で「設定を触ると即時に最終能力値を再計算する」ために使う(保存はしない)。
-pub fn preview_effective_stats(
+/// 装備が最終能力値に効く経路(シエナのオーラのステ加算)を含むので、部位ごとの寄与を出すときは
+/// 装備を差し替えてここから丸ごと引き直す。
+fn effective_stats_with(
     base: &BaseStats,
     sources: &StatSources,
     equipment: &Equipment,
     catalog: &BuffCatalog,
     game_character_id: &str,
-) -> Result<StatPreview, StatSourceError> {
-    base.validate()?;
-    sources.validate()?;
-    equipment.validate()?;
+) -> Result<(EffectiveStats, Vec<StatTrace>, Vec<StatContribution>), StatSourceError> {
     let (mut modifiers, mut contributions) = build_modifiers(sources, catalog, game_character_id)?;
     apply_siena_stats(&mut modifiers, &mut contributions, equipment);
     let (mut stats, mut traces) = effective_stats(base, &modifiers);
     apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
-    Ok(StatPreview { stats, traces, contributions })
+    Ok((stats, traces, contributions))
+}
+
+/// 最終能力値と装備から攻撃力(A)を内訳付きで出す。ダメージ計算(`calculate_damage`)と
+/// 同じ `attack_power_breakdown` を通す(計算を二重に書かない)。
+/// テシスコアは地域依存なのでキャラ画面では地域なし(`enhanced_totals(None)`)で出す。
+fn attack_power_of(
+    stats: &EffectiveStats,
+    equipment: &Equipment,
+    abilities: &[EquipmentAbilityDef],
+    coefficients: &AttackPowerCoefficients,
+) -> AttackPowerBreakdown {
+    attack_power_breakdown(
+        stat_attack_power(stats, &coefficients.stat),
+        equipment_values_attack(&equipment.base_totals(abilities), &coefficients.equipment.base),
+        equipment_values_attack(&equipment.enhanced_totals(None), &coefficients.equipment.enhanced),
+        equipment.enhance_rate(),
+    )
+}
+
+/// `BaseStats` + `StatSources` + 装備から最終能力値と(主軸スキルがあれば)攻撃力を組み立てる。
+/// キャラ編集画面で「設定を触ると即時に再計算する」ために使う(保存はしない)。
+///
+/// `coefficients` はキャラの主軸スキルの依存種別から引いた係数。`None`(主軸スキル未選択)なら
+/// 攻撃力は出さない。
+pub fn preview_effective_stats(
+    base: &BaseStats,
+    sources: &StatSources,
+    equipment: &Equipment,
+    catalog: &BuffCatalog,
+    abilities: &[EquipmentAbilityDef],
+    game_character_id: &str,
+    coefficients: Option<AttackPowerCoefficients>,
+) -> Result<StatPreview, StatSourceError> {
+    base.validate()?;
+    sources.validate()?;
+    equipment.validate()?;
+    let (stats, traces, contributions) =
+        effective_stats_with(base, sources, equipment, catalog, game_character_id)?;
+    let attack = match coefficients {
+        None => None,
+        Some(coefficients) => {
+            let breakdown = attack_power_of(&stats, equipment, abilities, &coefficients);
+            // 部位を外すとシエナのオーラのステ加算も消える = 最終能力値まで動く。
+            // 差分は「その装備を外した状態を丸ごと計算し直した A」との差にする。
+            let mut part_contributions = Vec::with_capacity(12);
+            for (slot, _) in equipment.parts.iter() {
+                let without = equipment.without_part(slot);
+                let (stats_without, _, _) =
+                    effective_stats_with(base, sources, &without, catalog, game_character_id)?;
+                let a_without = attack_power_of(&stats_without, &without, abilities, &coefficients);
+                part_contributions
+                    .push(PartAttackContribution { slot, value: breakdown.value - a_without.value });
+            }
+            Some(AttackPreview { breakdown, part_contributions })
+        }
+    };
+    Ok(StatPreview { stats, traces, contributions, attack })
 }
 
 /// UI がリテラルで持たず参照するための値域上限一覧(起動時に 1 回取得する想定)。
@@ -985,7 +1075,7 @@ mod tests {
             adjustments: Adjustments { stab: StatAdjustment { add: 10, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &test_catalog(), "boris").unwrap();
+        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &test_catalog(), &[], "boris", None).unwrap();
         assert!(preview
             .contributions
             .iter()
@@ -1001,7 +1091,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &test_catalog(), "boris").unwrap();
+        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &test_catalog(), &[], "boris", None).unwrap();
         assert!(pinned_preview
             .contributions
             .iter()
@@ -1010,6 +1100,112 @@ mod tests {
         assert_eq!(pinned_trace.pinned_from, Some(110));
         assert_eq!(pinned_trace.effective, 500);
         assert_eq!(pinned_preview.stats.get(StatKind::Stab), 500);
+    }
+
+    /// 主軸スキル(StabHack 相当)の係数一式。値は gamedata::characters の実データに合わせる。
+    fn test_attack_coefficients() -> AttackPowerCoefficients {
+        use crate::equipment::EquipmentRates;
+        AttackPowerCoefficients {
+            stat: AttackCoefficients { primary: (StatKind::Stab, 1.8), secondary: (StatKind::Hack, 1.8) },
+            equipment: EquipmentCoefficients {
+                base: EquipmentRates { thrust: 14.5, slash: 14.5, magic_attack: 0.0, magic_defense: 0.0 },
+                enhanced: EquipmentRates { thrust: 28.75, slash: 28.75, magic_attack: 0.0, magic_defense: 0.0 },
+            },
+        }
+    }
+
+    /// 武器(基本値・エンチャント・シエナのオーラのステ加算)と手(基本値のみ)を持つ装備。
+    fn test_equipment() -> Equipment {
+        use crate::equipment::{EquipmentPart, EquipmentParts, EquipmentValues, SienaAura};
+        Equipment {
+            parts: EquipmentParts {
+                weapon: EquipmentPart {
+                    base: EquipmentValues { thrust: 150, slash: 150, ..Default::default() },
+                    enchant: EquipmentValues { thrust: 60, slash: 60, ..Default::default() },
+                    siena: SienaAura {
+                        stage: 3,
+                        values: EquipmentValues { thrust: 20, slash: 20, ..Default::default() },
+                        all_stats: 5,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                hand: EquipmentPart {
+                    base: EquipmentValues { thrust: 30, slash: 30, ..Default::default() },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            power_weapon: true,
+            strong_weapon_level: 6,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn 主軸スキル未選択なら攻撃力は出ない() {
+        let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+        let preview = preview_effective_stats(
+            &base, &StatSources::default(), &test_equipment(), &test_catalog(), &[], "boris", None,
+        )
+        .unwrap();
+        assert!(preview.attack.is_none());
+    }
+
+    #[test]
+    fn 攻撃力の内訳はステと装備基本と装備強化の和になる() {
+        let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+        let equipment = test_equipment();
+        let preview = preview_effective_stats(
+            &base, &StatSources::default(), &equipment, &test_catalog(), &[],
+            "boris", Some(test_attack_coefficients()),
+        )
+        .unwrap();
+        let attack = preview.attack.unwrap();
+        let b = attack.breakdown;
+        // シエナのオーラの全ステータス増加 +5 が最終能力値に乗る
+        assert_eq!(preview.stats.get(StatKind::Stab), 105);
+        assert!((b.stat_attack - (105.0 * 1.8 + 105.0 * 1.8)).abs() < 1e-9);
+        // 基本 = 武器 150/150 + 手 30/30 → 突 180・斬 180
+        assert!((b.equipment_base_attack - (180.0 * 14.5 + 180.0 * 14.5)).abs() < 1e-9);
+        // 強化 = エンチャント 60/60 + シエナのオーラ(武器)20/20 → 突 80・斬 80。
+        // テシスコアは地域なしなので入らない
+        assert!((b.equipment_enhanced_attack - (80.0 * 28.75 + 80.0 * 28.75)).abs() < 1e-9);
+        // パワーウェポン 2% + ストロングウェポン Lv6 18% = 20%
+        assert!((b.enhance_rate - 0.20).abs() < 1e-9);
+        assert_eq!(
+            b.value,
+            crate::attack_power::attack_power(b.stat_attack, b.equipment_attack(), b.enhance_rate)
+        );
+    }
+
+    #[test]
+    fn 部位の寄与は外したときの攻撃力との差に一致する() {
+        let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+        let equipment = test_equipment();
+        let sources = StatSources::default();
+        let coefficients = test_attack_coefficients();
+        let preview = preview_effective_stats(
+            &base, &sources, &equipment, &test_catalog(), &[], "boris", Some(coefficients),
+        )
+        .unwrap();
+        let attack = preview.attack.unwrap();
+
+        for (slot, _) in equipment.parts.iter() {
+            let without = equipment.without_part(slot);
+            let preview_without = preview_effective_stats(
+                &base, &sources, &without, &test_catalog(), &[], "boris", Some(coefficients),
+            )
+            .unwrap();
+            let expected = attack.breakdown.value - preview_without.attack.unwrap().breakdown.value;
+            let actual = attack.part_contributions.iter().find(|c| c.slot == slot).unwrap().value;
+            assert_eq!(actual, expected, "{slot:?} の寄与が外したときの差と一致しない");
+        }
+        // 何も付いていない部位の寄与は 0、武器の寄与は正
+        let weapon = attack.part_contributions.iter().find(|c| c.slot == PartSlot::Weapon).unwrap();
+        let helm = attack.part_contributions.iter().find(|c| c.slot == PartSlot::Helm).unwrap();
+        assert!(weapon.value > 0);
+        assert_eq!(helm.value, 0);
     }
 
     #[test]

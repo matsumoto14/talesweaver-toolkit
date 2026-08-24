@@ -24,6 +24,9 @@ pub struct RegisteredCharacter {
     pub stat_sources: StatSources,
     /// 装備補正(基本能力値/強化能力値/装備攻撃力強化バフ)(docs/claude/goals/2026-08-22-equipment-attack.md)
     pub equipment: Equipment,
+    /// 主軸スキル(gamedata の `Skill::id`)。攻撃力(A)の依存種別を決める。
+    /// スキル未収録のキャラがあるので未選択(`None`)を許す
+    pub main_skill_id: Option<String>,
 }
 
 /// 登録リクエスト。
@@ -35,6 +38,7 @@ pub struct NewCharacter {
     pub awakening: Awakening,
     pub stat_sources: StatSources,
     pub equipment: Equipment,
+    pub main_skill_id: Option<String>,
 }
 
 /// v1 相当(`stat_sources`/`equipment` 列を含まない、main ブランチ時代の実スキーマ)。
@@ -57,12 +61,13 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 ";
 
-/// このスキーマバージョンで `equipment` 列が部位別装備(12 スロット)の JSON になる(v4)。
+/// v4 で `equipment` 列が部位別装備(12 スロット)の JSON になり、v5 で `main_skill_id` 列
+/// (攻撃力の依存種別を決める主軸スキル)が加わった。
 /// v3 以前は `equipment` 列に「基本能力値/強化能力値の合計 8 値」を持っていた
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, main_skill_id";
 
 /// `stat_sources`/`equipment` 列(JSON テキスト)を domain の型として読み出すための橋渡し。
 struct StatSourcesColumn(StatSources);
@@ -157,6 +162,10 @@ impl CharacterRepository {
                 "ALTER TABLE characters ADD COLUMN equipment TEXT NOT NULL DEFAULT '{}';",
             )?;
         }
+        // v5: 主軸スキル。既存キャラは未選択(NULL)で読める。
+        if !existing_columns.contains("main_skill_id") {
+            conn.execute_batch("ALTER TABLE characters ADD COLUMN main_skill_id TEXT;")?;
+        }
         migrate_equipment_to_parts(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
@@ -175,8 +184,8 @@ impl CharacterRepository {
         let stat_sources_json = serde_json::to_string(&new.stat_sources)?;
         let equipment_json = serde_json::to_string(&new.equipment)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, main_skill_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 new.name,
                 new.game_character_id,
@@ -191,6 +200,7 @@ impl CharacterRepository {
                 new.awakening.eternal_level,
                 stat_sources_json,
                 equipment_json,
+                new.main_skill_id,
             ],
         )?;
         self.get(self.conn.last_insert_rowid())
@@ -213,8 +223,9 @@ impl CharacterRepository {
             "UPDATE characters SET
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
-                awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13
-             WHERE id = ?14",
+                awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
+                main_skill_id = ?14
+             WHERE id = ?15",
             params![
                 update.name,
                 update.game_character_id,
@@ -229,6 +240,7 @@ impl CharacterRepository {
                 update.awakening.eternal_level,
                 stat_sources_json,
                 equipment_json,
+                update.main_skill_id,
                 id,
             ],
         )?;
@@ -361,6 +373,7 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         },
         stat_sources: row.get::<_, StatSourcesColumn>("stat_sources")?.0,
         equipment: row.get::<_, EquipmentColumn>("equipment")?.0,
+        main_skill_id: row.get("main_skill_id")?,
     })
 }
 
@@ -381,6 +394,7 @@ mod tests {
             awakening: Awakening { stage: 5, eternal_level: 40 },
             stat_sources: StatSources::default(),
             equipment: Equipment::default(),
+            main_skill_id: None,
         }
     }
 
@@ -712,6 +726,62 @@ mod tests {
 
         let listed = repo.list().unwrap();
         assert_eq!(listed[0].equipment, c.equipment);
+    }
+
+    #[test]
+    fn main_skill_idは往復し未選択はnullで読める() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("メイン");
+        c.main_skill_id = Some("boris_goku_zaneizan".to_string());
+        let created = repo.create(&c, &[], &[], &[]).unwrap();
+        assert_eq!(created.main_skill_id.as_deref(), Some("boris_goku_zaneizan"));
+        assert_eq!(repo.get(created.id).unwrap().main_skill_id.as_deref(), Some("boris_goku_zaneizan"));
+
+        // 未選択(None)も保存できる。update で解除できること。
+        let mut cleared = c.clone();
+        cleared.main_skill_id = None;
+        let updated = repo.update(created.id, &cleared, &[], &[], &[]).unwrap();
+        assert_eq!(updated.main_skill_id, None);
+    }
+
+    /// v4 の DB(`main_skill_id` 列が無い)を開いても落ちず、既存キャラは主軸スキル未選択で読める。
+    #[test]
+    fn main_skill_id列の無いdbを開くと既存キャラは未選択で読める() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                INTEGER PRIMARY KEY,
+                name              TEXT    NOT NULL,
+                game_character_id TEXT    NOT NULL,
+                stab              INTEGER NOT NULL,
+                hack              INTEGER NOT NULL,
+                int               INTEGER NOT NULL,
+                def               INTEGER NOT NULL,
+                mr                INTEGER NOT NULL,
+                dex               INTEGER NOT NULL,
+                agi               INTEGER NOT NULL,
+                awakening_stage   INTEGER NOT NULL,
+                eternal_level     INTEGER NOT NULL,
+                stat_sources      TEXT    NOT NULL,
+                equipment         TEXT    NOT NULL,
+                created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment)
+            VALUES ('v4データ', 'boris', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}');
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let list = repo.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "v4データ");
+        assert_eq!(list[0].main_skill_id, None);
+
+        // 移行後も create/update が使えること。
+        repo.create(&new_character("追加データ"), &[], &[], &[]).unwrap();
+        assert_eq!(repo.list().unwrap().len(), 2);
     }
 
     #[test]

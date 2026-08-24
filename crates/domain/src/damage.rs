@@ -4,10 +4,13 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
+use crate::attack_power::{
+    attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
+    AttackPowerBreakdown,
+};
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::enemy::Enemy;
-use crate::equipment::{equipment_attack_power, Equipment, EquipmentCoefficients, EquipmentValues};
+use crate::equipment::{equipment_values_attack, Equipment, EquipmentCoefficients, EquipmentValues};
 use crate::rounding::{floor_int, trunc2};
 use crate::skill::Skill;
 use crate::stat_sources::{apply_pins, Adjustments, StatContribution};
@@ -244,15 +247,17 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
 
     // ② カテゴリ集計
     let stat_attack = stat_attack_power(&stats, &input.coefficients);
-    let equipment_attack = equipment_attack_power(
-        &input.equipment_base_totals,
-        &input.equipment_enhanced_totals,
-        &input.equipment_coefficients,
+    let attack = attack_power_breakdown(
+        stat_attack,
+        equipment_values_attack(&input.equipment_base_totals, &input.equipment_coefficients.base),
+        equipment_values_attack(
+            &input.equipment_enhanced_totals,
+            &input.equipment_coefficients.enhanced,
+        ),
+        input.equipment.enhance_rate(),
     );
-    let enhance_rate = input.equipment.enhance_rate();
-    let a_value = attack_power(stat_attack, equipment_attack, enhance_rate);
     let mut totals = CategoryTotals::neutral();
-    totals.add(AttackPower, a_value as f64);
+    totals.add(AttackPower, attack.value as f64);
     totals.add(TargetDefense, input.enemy.defense as f64);
     totals.add(SkillMultiplier, input.skill.multiplier);
     totals.add(CriticalMultiplier, input.skill.critical_multiplier);
@@ -283,7 +288,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // 攻撃力(A)の内訳(ステ攻撃力/装備攻撃力/装備攻撃力強化倍率)。A は B(乱数)を含まないため
     // min/max/critical のすべてで同じ内訳になる。`evaluate` は `totals` からしか値を作れず
     // 内訳を持たないため、ここで先頭に付け足す。
-    let attack_breakdown = attack_power_breakdown_steps(stat_attack, equipment_attack, enhance_rate, a_value);
+    let attack_breakdown = attack_power_breakdown_steps(&attack);
     let mut steps_min: Vec<FormulaStep> = attack_breakdown.iter().cloned().chain(steps_min).collect();
     let mut steps_max: Vec<FormulaStep> = attack_breakdown.iter().cloned().chain(steps_max).collect();
     let mut steps_critical: Vec<FormulaStep> = attack_breakdown.into_iter().chain(steps_critical).collect();
@@ -327,17 +332,17 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
 }
 
 /// 攻撃力(A)の内訳を表す `FormulaStep` 4 件(ステ攻撃力/装備攻撃力/装備攻撃力強化倍率/攻撃力(A))。
-fn attack_power_breakdown_steps(
-    stat_attack: f64,
-    equipment_attack: f64,
-    enhance_rate: f64,
-    a_value: i64,
-) -> Vec<FormulaStep> {
+fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaStep> {
+    let AttackPowerBreakdown { stat_attack, enhance_rate, .. } = *attack;
+    let equipment_attack = attack.equipment_attack();
     vec![
         FormulaStep { name: "ステ攻撃力".to_string(), expression: format!("{stat_attack:.4}"), value: stat_attack },
         FormulaStep {
             name: "装備攻撃力".to_string(),
-            expression: format!("{equipment_attack:.4}"),
+            expression: format!(
+                "基本 {:.4} + 強化 {:.4}",
+                attack.equipment_base_attack, attack.equipment_enhanced_attack
+            ),
             value: equipment_attack,
         },
         FormulaStep {
@@ -350,7 +355,7 @@ fn attack_power_breakdown_steps(
             expression: format!(
                 "[{stat_attack:.4} + {equipment_attack:.4}] + [{equipment_attack:.4}/25 × {enhance_rate:.4}] × 25"
             ),
-            value: a_value as f64,
+            value: attack.value as f64,
         },
     ]
 }

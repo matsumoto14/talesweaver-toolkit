@@ -11,9 +11,9 @@
     equipmentBaseTotal, equipmentEnchantTotal, sienaAttackRatePercent, sienaPartCount,
     sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
-  import { fmtInt } from "../../format";
+  import { fmtInt, fmtNum } from "../../format";
   import { STAT_KINDS, STAT_LABELS } from "../../labels";
-  import { app, removeCharacter, upsertCharacter } from "../../state.svelte";
+  import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import Splitter from "../../ui/Splitter.svelte";
@@ -53,6 +53,13 @@
     });
   });
 
+  // 主軸スキル(攻撃力の依存種別を決める)。選択肢はキャラ種のスキル一覧。
+  $effect(() => {
+    void loadSkills(draft.gameCharacterId);
+  });
+  const skills = $derived(skillsByCharacter[draft.gameCharacterId] ?? []);
+  const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+
   // 即時プレビュー(100ms debounce)。エラーはペイン内に控えめに表示(トーストは出さない)。
   let preview = $state<StatPreview | null>(null);
   let previewError = $state<string | null>(null);
@@ -63,10 +70,12 @@
     const statSources = JSON.parse(JSON.stringify(draft.statSources)) as StatSources;
     // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
     const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
+    const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
+    const gameCharacterId = draft.gameCharacterId;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, equipment, draft.gameCharacterId)
+      previewEffectiveStats(baseStats, statSources, equipment, gameCharacterId, mainSkillId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;
@@ -207,6 +216,24 @@
           </div>
         {/each}
       </div>
+      <div class="attack-foot" class:empty={!preview?.attack}>
+        <div class="attack-head">
+          <span class="attack-label">いまの攻撃力</span>
+          <span class="attack-skill dim">{mainSkill ? mainSkill.name : "主軸スキル未選択"}</span>
+        </div>
+        {#if preview?.attack}
+          <div class="attack-value num">{fmtInt(preview.attack.breakdown.value)}</div>
+          <div class="attack-parts num dim">
+            ステ {fmtNum(Math.floor(preview.attack.breakdown.stat_attack))}
+            ・ 装備基本 {fmtNum(Math.floor(preview.attack.breakdown.equipment_base_attack))}
+            ・ 装備強化 {fmtNum(Math.floor(preview.attack.breakdown.equipment_enhanced_attack))}
+            ・ 強化倍率 +{Math.round(preview.attack.breakdown.enhance_rate * 100)}%
+          </div>
+          <p class="attack-note dim">テシスコアの能力値は地域ごとなので、この値には入っていません(ダメージ計算タブでは対象の地域で入ります)。</p>
+        {:else}
+          <p class="attack-note dim">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
+        {/if}
+      </div>
       <p class="src-note dim">常用バフは<b>ダメージ計算</b>タブの「計算の材料」で選べます。グレーの補正源はこれから。</p>
     </section>
 
@@ -219,7 +246,7 @@
     />
 
     <section class="detail">
-      <SourcePane {draft} {preview} {previewError} sourceId={openSource} />
+      <SourcePane {draft} {preview} {previewError} {skills} sourceId={openSource} />
     </section>
   </div>
 
@@ -245,6 +272,21 @@
               </span>
             {/each}
           </div>
+        </div>
+        <div class="sheet-card">
+          <div class="card-title">攻撃力(A){mainSkill ? ` — ${mainSkill.name}` : ""}</div>
+          {#if preview?.attack}
+            <div class="clear num"><span class="strong">{fmtInt(preview.attack.breakdown.value)}</span></div>
+            <div class="eq-summary num">
+              <span><span class="dim">ステ攻撃力</span> {fmtNum(preview.attack.breakdown.stat_attack)}</span>
+              <span><span class="dim">装備基本</span> {fmtNum(preview.attack.breakdown.equipment_base_attack)}</span>
+              <span><span class="dim">装備強化</span> {fmtNum(preview.attack.breakdown.equipment_enhanced_attack)}</span>
+              <span><span class="dim">強化倍率</span> +{Math.round(preview.attack.breakdown.enhance_rate * 100)}%</span>
+            </div>
+            <p class="dim tiny">テシスコアの能力値は地域ごとのため未加算(地域なしの値)。</p>
+          {:else}
+            <p class="dim tiny">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
+          {/if}
         </div>
         <div class="sheet-card">
           <div class="card-title">装備値(全部位の合計)</div>
@@ -302,6 +344,18 @@
   .src.planned .src-name, .src.planned .src-sub { color: #A9B4C4; }
   .src-sub { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chev { flex-shrink: 0; font-size: 11px; }
+  .attack-foot {
+    flex-shrink: 0; margin-top: 8px; padding: 9px 11px; border-radius: 10px;
+    background: linear-gradient(180deg, #fff, #EFF5FD); border: 1px solid #9FB4D0;
+  }
+  .attack-foot.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
+  .attack-head { display: flex; align-items: baseline; gap: 8px; }
+  .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .attack-skill { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .attack-value { margin-top: 2px; font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .attack-parts { margin-top: 3px; font-size: 9px; line-height: 1.6; }
+  .attack-note { margin: 4px 0 0; font-size: 9px; line-height: 1.55; }
+
   .src-note {
     flex-shrink: 0; margin: 10px 0 0; padding: 9px 11px; border-radius: 10px;
     background: var(--bg-rail); border: 1px dashed var(--border);

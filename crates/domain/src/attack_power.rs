@@ -26,6 +26,45 @@ pub fn attack_power(stat_attack: f64, equipment_attack: f64, equipment_enhance_r
         + floor_int(equipment_attack / 25.0 * equipment_enhance_rate) * 25
 }
 
+/// 攻撃力(A)の内訳。`attack_power` と同じ経路で作る(計算を二重に書かない)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct AttackPowerBreakdown {
+    /// ステ由来攻撃力(切捨て前)
+    pub stat_attack: f64,
+    /// 装備の基本能力値に係数を掛けた分
+    pub equipment_base_attack: f64,
+    /// 装備の強化能力値(エンチャント + シエナのオーラ + テシスコア)に係数を掛けた分
+    pub equipment_enhanced_attack: f64,
+    /// 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)
+    pub enhance_rate: f64,
+    /// 攻撃力(A)
+    pub value: i64,
+}
+
+impl AttackPowerBreakdown {
+    /// 装備攻撃力(基本 + 強化)。
+    pub fn equipment_attack(&self) -> f64 {
+        self.equipment_base_attack + self.equipment_enhanced_attack
+    }
+}
+
+/// 攻撃力(A)を内訳付きで出す。`attack_power` の唯一の呼び出し口にする。
+pub fn attack_power_breakdown(
+    stat_attack: f64,
+    equipment_base_attack: f64,
+    equipment_enhanced_attack: f64,
+    enhance_rate: f64,
+) -> AttackPowerBreakdown {
+    let equipment_attack = equipment_base_attack + equipment_enhanced_attack;
+    AttackPowerBreakdown {
+        stat_attack,
+        equipment_base_attack,
+        equipment_enhanced_attack,
+        enhance_rate,
+        value: attack_power(stat_attack, equipment_attack, enhance_rate),
+    }
+}
+
 /// 攻撃力乱数部分の最大値(wiki: カテゴリB)。最小は 1。
 ///
 /// `{(ステ由来攻撃力 + DEX*3)/18} + 1`

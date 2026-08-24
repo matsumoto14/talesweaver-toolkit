@@ -487,6 +487,24 @@ impl EquipmentParts {
             (PartSlot::Relic, &self.relic),
         ]
     }
+
+    /// 部位を可変で引く。
+    pub fn get_mut(&mut self, slot: PartSlot) -> &mut EquipmentPart {
+        match slot {
+            PartSlot::Weapon => &mut self.weapon,
+            PartSlot::Armor => &mut self.armor,
+            PartSlot::Helm => &mut self.helm,
+            PartSlot::Shield => &mut self.shield,
+            PartSlot::ShieldPlus => &mut self.shield_plus,
+            PartSlot::Head => &mut self.head,
+            PartSlot::Body => &mut self.body,
+            PartSlot::Hand => &mut self.hand,
+            PartSlot::Leg => &mut self.leg,
+            PartSlot::Effect => &mut self.effect,
+            PartSlot::Artifact => &mut self.artifact,
+            PartSlot::Relic => &mut self.relic,
+        }
+    }
 }
 
 impl Equipment {
@@ -556,6 +574,13 @@ impl Equipment {
 
     /// 装備攻撃力強化倍率(wiki: カテゴリA の内訳)。
     /// パワーウェポン(+2%)+ ストロングウェポン Lv × 3%。
+    /// その部位だけを未装備(中立値)にした複製。部位ごとの寄与(外したときの差分)を出すのに使う。
+    pub fn without_part(&self, slot: PartSlot) -> Equipment {
+        let mut copy = self.clone();
+        *copy.parts.get_mut(slot) = EquipmentPart::default();
+        copy
+    }
+
     pub fn enhance_rate(&self) -> f64 {
         let power_weapon_rate = if self.power_weapon { 0.02 } else { 0.0 };
         power_weapon_rate + f64::from(self.strong_weapon_level) * 0.03
@@ -585,14 +610,16 @@ pub fn equipment_attack_power(
     enhanced: &EquipmentValues,
     c: &EquipmentCoefficients,
 ) -> f64 {
-    base.thrust as f64 * c.base.thrust
-        + base.slash as f64 * c.base.slash
-        + base.magic_attack as f64 * c.base.magic_attack
-        + base.magic_defense as f64 * c.base.magic_defense
-        + enhanced.thrust as f64 * c.enhanced.thrust
-        + enhanced.slash as f64 * c.enhanced.slash
-        + enhanced.magic_attack as f64 * c.enhanced.magic_attack
-        + enhanced.magic_defense as f64 * c.enhanced.magic_defense
+    equipment_values_attack(base, &c.base) + equipment_values_attack(enhanced, &c.enhanced)
+}
+
+/// 装備値 4 値と係数の内積。基本能力値・強化能力値それぞれの装備攻撃力を単独で出すのに使う
+/// (`equipment_attack_power` は両者の和)。
+pub fn equipment_values_attack(values: &EquipmentValues, rates: &EquipmentRates) -> f64 {
+    values.thrust as f64 * rates.thrust
+        + values.slash as f64 * rates.slash
+        + values.magic_attack as f64 * rates.magic_attack
+        + values.magic_defense as f64 * rates.magic_defense
 }
 
 /// 武器系統ごとの強化補正一次式の係数(wiki: 装備システム/装備強化)。

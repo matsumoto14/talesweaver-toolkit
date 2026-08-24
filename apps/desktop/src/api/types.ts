@@ -270,6 +270,8 @@ export interface RegisteredCharacter {
   awakening: Awakening;
   stat_sources: StatSources;
   equipment: Equipment;
+  /** 主軸スキル(攻撃力の依存種別を決める)。未選択は null */
+  main_skill_id: string | null;
 }
 
 export interface NewCharacter {
@@ -279,6 +281,7 @@ export interface NewCharacter {
   awakening: Awakening;
   stat_sources: StatSources;
   equipment: Equipment;
+  main_skill_id: string | null;
 }
 
 export type CategoryKind = "assigned" | "fixed" | "rate";
@@ -321,11 +324,40 @@ export interface StatTrace {
 // 7 ステータスすべての最終能力値。crates/domain/src/stats.rs の EffectiveStats。
 export type EffectiveStats = Record<StatKind, number>;
 
+// crates/domain/src/attack_power.rs の AttackPowerBreakdown。攻撃力(A)の内訳。
+export interface AttackPowerBreakdown {
+  /** ステ由来攻撃力(切捨て前) */
+  stat_attack: number;
+  /** 装備の基本能力値に係数を掛けた分 */
+  equipment_base_attack: number;
+  /** 装備の強化能力値に係数を掛けた分(テシスコアは地域なしのため含まない) */
+  equipment_enhanced_attack: number;
+  /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン) */
+  enhance_rate: number;
+  /** 攻撃力(A) */
+  value: number;
+}
+
+// crates/domain/src/stat_sources.rs の PartAttackContribution。
+export interface PartAttackContribution {
+  slot: PartSlot;
+  /** A −(その部位を未装備にした A)= 外すと減る量 */
+  value: number;
+}
+
+// crates/domain/src/stat_sources.rs の AttackPreview。主軸スキルが選ばれているときだけ返る。
+export interface AttackPreview {
+  breakdown: AttackPowerBreakdown;
+  part_contributions: PartAttackContribution[];
+}
+
 // crates/domain/src/stat_sources.rs の StatPreview。preview_effective_stats コマンドの戻り値(保存しない)。
 export interface StatPreview {
   stats: EffectiveStats;
   traces: StatTrace[];
   contributions: StatContribution[];
+  /** 主軸スキル未選択なら null */
+  attack: AttackPreview | null;
 }
 
 export interface FormulaStep {

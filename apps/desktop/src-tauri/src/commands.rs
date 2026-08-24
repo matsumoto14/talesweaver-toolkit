@@ -1,8 +1,9 @@
 //! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは String に変換して返す。
 
 use domain::{
-    evaluate_content, BestSkillDamage, BuffDefinition, Content, ContentArea, ContentEvaluation,
-    CoreRegion, DamageInput, DamageResult, Enemy, EquipmentAbilityDef, EquipmentPart, Skill,
+    evaluate_content, AttackPowerCoefficients, BestSkillDamage, BuffDefinition, Content,
+    ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, Enemy,
+    EquipmentAbilityDef, EquipmentPart, Skill,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
@@ -81,6 +82,21 @@ pub fn list_characters(state: State<'_, AppState>) -> CommandResult<Vec<Register
     with_repo(&state, |repo| repo.list())
 }
 
+/// 主軸スキル(攻撃力の依存種別を決める)はそのキャラのスキル一覧に含まれている必要がある。
+/// キャラ種を変えたときに前キャラのスキルが残るのを防ぐ。未選択(`None`)は許す。
+fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
+    let Some(skill_id) = &character.main_skill_id else {
+        return Ok(());
+    };
+    if !gamedata::skills_for(&character.game_character_id).iter().any(|s| &s.id == skill_id) {
+        return Err(format!(
+            "主軸スキル '{skill_id}' は '{}' のスキルではありません",
+            character.game_character_id
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn create_character(
     state: State<'_, AppState>,
@@ -89,6 +105,7 @@ pub fn create_character(
     if gamedata::find_character(&character.game_character_id).is_none() {
         return Err(format!("ゲームキャラ '{}' は未登録です", character.game_character_id));
     }
+    validate_main_skill(&character)?;
     with_repo(&state, |repo| {
         repo.create(
             &character,
@@ -108,6 +125,7 @@ pub fn update_character(
     if gamedata::find_character(&character.game_character_id).is_none() {
         return Err(format!("ゲームキャラ '{}' は未登録です", character.game_character_id));
     }
+    validate_main_skill(&character)?;
     with_repo(&state, |repo| {
         repo.update(
             id,
@@ -124,19 +142,35 @@ pub fn delete_character(state: State<'_, AppState>, id: i64) -> CommandResult<()
     with_repo(&state, |repo| repo.delete(id))
 }
 
+/// キャラの主軸スキルから攻撃力(A)の係数一式を引く。未選択なら `None`(攻撃力を出さない)。
+fn attack_coefficients_of(main_skill_id: Option<&str>) -> CommandResult<Option<AttackPowerCoefficients>> {
+    let Some(skill_id) = main_skill_id else {
+        return Ok(None);
+    };
+    let dependency = find_skill(skill_id)?.dependency;
+    Ok(Some(AttackPowerCoefficients {
+        stat: gamedata::attack_coefficients(dependency),
+        equipment: gamedata::equipment_coefficients(dependency),
+    }))
+}
+
 #[tauri::command]
 pub fn preview_effective_stats(
     base_stats: domain::BaseStats,
     stat_sources: domain::StatSources,
     equipment: domain::Equipment,
     game_character_id: String,
+    main_skill_id: Option<String>,
 ) -> CommandResult<domain::StatPreview> {
+    let coefficients = attack_coefficients_of(main_skill_id.as_deref())?;
     domain::preview_effective_stats(
         &base_stats,
         &stat_sources,
         &equipment,
         &gamedata::buff_catalog(),
+        &gamedata::equipment_abilities(),
         &game_character_id,
+        coefficients,
     )
     .map_err(|e| e.to_string())
 }
