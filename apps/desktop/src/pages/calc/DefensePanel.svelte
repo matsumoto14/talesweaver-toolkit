@@ -11,6 +11,12 @@
   let { profile, error }: Props = $props();
 
   const pct = (v: number) => `${fmtNum(Math.round(v * 1000) / 10)}%`;
+  // 防御力の上限で捨てられた分(3 種のどれかが 0 超なら注記を出す)
+  const capLoss = $derived(
+    profile === null
+      ? 0
+      : profile.physical_defense_loss + profile.magic_defense_loss + profile.composite_defense_loss,
+  );
 </script>
 
 <div class="sheet">
@@ -46,7 +52,19 @@
           <span class="num rv">{fmtInt(profile.composite_defense)}</span>
           <span class="rn dim">(DEF+MR)×1.5 + 装備×3</span>
         </div>
+        <div class="row">
+          <span class="rl">防御力の上限</span>
+          <span class="num rv">{fmtInt(profile.defense_cap)}</span>
+          <span class="rn dim">覚醒段階 + エタの意志 Lv で開放(wiki: Quest/覚醒クエスト・エタの意志)</span>
+        </div>
       </div>
+      {#if capLoss > 0}
+        <p class="note dim">
+          上限で捨てられた分: 物理 {fmtInt(profile.physical_defense_loss)} ・
+          魔法 {fmtInt(profile.magic_defense_loss)} ・ 複合 {fmtInt(profile.composite_defense_loss)}。
+          ここから先の軽減はカット率 J が担います。
+        </p>
+      {/if}
     </div>
 
     <div class="block">

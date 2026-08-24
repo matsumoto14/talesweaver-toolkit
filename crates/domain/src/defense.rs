@@ -11,6 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::awakening::AwakeningCaps;
 use crate::equipment::EquipmentValues;
 use crate::rounding::floor_int;
 use crate::stats::EffectiveStats;
@@ -58,12 +59,18 @@ pub struct EvasionPoints {
 /// 防御側の戦闘能力値一式。割合(カット率・回避)は小数表現(50% → 0.5)。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct DefenseProfile {
-    /// 物理防御力 `[DEF*3 + 装備物防 * 倍率 * 6]`
+    /// 物理防御力 `[DEF*3 + 装備物防 * 倍率 * 6]`(上限適用後)
     pub physical_defense: i64,
-    /// 魔法防御力 `[MR*3 + 装備魔防 * 倍率 * 6]`
+    /// 魔法防御力 `[MR*3 + 装備魔防 * 倍率 * 6]`(上限適用後)
     pub magic_defense: i64,
-    /// 複合防御力 `[(DEF+MR)*1.5 + (装備物防*倍率 + 装備魔防*倍率) * 3]`
+    /// 複合防御力 `[(DEF+MR)*1.5 + (装備物防*倍率 + 装備魔防*倍率) * 3]`(上限適用後)
     pub composite_defense: i64,
+    /// 防御力の上限(覚醒段階とエタの意志 Lv で決まる。wiki: Quest/覚醒クエスト・エタの意志)
+    pub defense_cap: i64,
+    /// 上限で捨てられた分(物理 / 魔法 / 複合)。すべて 0 なら上限に当たっていない
+    pub physical_defense_loss: i64,
+    pub magic_defense_loss: i64,
+    pub composite_defense_loss: i64,
     /// カット率 J(物理)`r = 1 − a/(a+80)`、`a = 3 + [(DEF+装備物防−1)/10]`
     pub physical_cut_rate: f64,
     /// カット率 J(魔法)。`a` は MR 版
@@ -132,7 +139,13 @@ pub fn hit_taken_rate(normal_evasion: f64, combo_evasion: f64) -> f64 {
 ///
 /// `equipment` は装備補正 9 値の合計(基本 + 強化)。呼び出し側が `Equipment::base_totals` /
 /// `enhanced_totals` を足して渡す(domain は gamedata のアビリティカタログを持たないため)。
-pub fn defense_profile(stats: &EffectiveStats, equipment: &EquipmentValues) -> DefenseProfile {
+/// `caps` は覚醒・エタの意志で開放される上限(表は gamedata)。防御力は上限に当たると
+/// そこで頭打ちになり、以降の軽減はカット率 J が担う(wiki §6)。
+pub fn defense_profile(
+    stats: &EffectiveStats,
+    equipment: &EquipmentValues,
+    caps: AwakeningCaps,
+) -> DefenseProfile {
     let def = stats.def as f64;
     let mr = stats.mr as f64;
     let eq_physical = equipment.physical_defense as f64 * EQUIPMENT_DEFENSE_RATE;
@@ -146,10 +159,19 @@ pub fn defense_profile(stats: &EffectiveStats, equipment: &EquipmentValues) -> D
         + floor_int((stats.stab + stats.hack) as f64 / EVASION_PHYSICAL_ATTACK_DIVISOR) as f64)
         / EVASION_TYPE_DIVISOR;
 
+    let raw_physical = floor_int(def * 3.0 + eq_physical * 6.0);
+    let raw_magic = floor_int(mr * 3.0 + eq_magic * 6.0);
+    let raw_composite = floor_int((def + mr) * 1.5 + (eq_physical + eq_magic) * 3.0);
+    let cap = |value: i64| value.min(caps.max_defense);
+
     DefenseProfile {
-        physical_defense: floor_int(def * 3.0 + eq_physical * 6.0),
-        magic_defense: floor_int(mr * 3.0 + eq_magic * 6.0),
-        composite_defense: floor_int((def + mr) * 1.5 + (eq_physical + eq_magic) * 3.0),
+        physical_defense: cap(raw_physical),
+        magic_defense: cap(raw_magic),
+        composite_defense: cap(raw_composite),
+        defense_cap: caps.max_defense,
+        physical_defense_loss: raw_physical - cap(raw_physical),
+        magic_defense_loss: raw_magic - cap(raw_magic),
+        composite_defense_loss: raw_composite - cap(raw_composite),
         physical_cut_rate: cut_rate(cut_rate_a(stats.def + equipment.physical_defense, 10.0)),
         magic_cut_rate: cut_rate(cut_rate_a(stats.mr + equipment.magic_defense, 10.0)),
         composite_cut_rate: cut_rate(cut_rate_a(
@@ -179,6 +201,11 @@ mod tests {
         EffectiveStats { def, mr, agi, ..Default::default() }
     }
 
+    /// 上限に当たらない値(上限の挙動は専用テストで見る)
+    fn no_caps() -> AwakeningCaps {
+        AwakeningCaps { max_damage: i64::MAX, max_defense: i64::MAX, max_stat: i64::MAX }
+    }
+
     fn eq_magic(magic_defense: i64) -> EquipmentValues {
         EquipmentValues { magic_defense, ..Default::default() }
     }
@@ -189,7 +216,7 @@ mod tests {
             physical_defense: 60,
             magic_defense: 40,
             ..Default::default()
-        });
+        }, no_caps());
         assert_eq!(p.physical_defense, 960); // 200*3 + 60*6
         assert_eq!(p.magic_defense, 690); // 150*3 + 40*6
         // (200+150)*1.5 + (60 + 40)*3 = 525 + 300 = 825
@@ -200,7 +227,7 @@ mod tests {
 
     #[test]
     fn カット率は1マイナスaを80足したaで割った値() {
-        let p = defense_profile(&stats(200, 150, 0), &EquipmentValues::default());
+        let p = defense_profile(&stats(200, 150, 0), &EquipmentValues::default(), no_caps());
         // a = 3 + [(200-1)/10] = 3 + 19 = 22 → 1 − 22/102
         assert!((p.physical_cut_rate - (1.0 - 22.0 / 102.0)).abs() < 1e-9);
         // a = 3 + [(150-1)/10] = 3 + 14 = 17 → 1 − 17/97
@@ -215,7 +242,7 @@ mod tests {
             physical_defense: 100,
             magic_defense: 50,
             ..Default::default()
-        });
+        }, no_caps());
         // a = 3 + [(200+100-1)/10] = 3 + 29 = 32
         assert!((p.physical_cut_rate - (1.0 - 32.0 / 112.0)).abs() < 1e-9);
         // a = 3 + [(150+50-1)/10] = 3 + 19 = 22
@@ -228,18 +255,18 @@ mod tests {
     fn 特殊回避は下限20上限63に収まる() {
         // MR/AGI が 0 なら 10% → 下限 20%
         let zero = EquipmentValues::default();
-        assert!((defense_profile(&stats(0, 0, 0), &zero).combo_evasion - 0.20).abs() < 1e-9);
+        assert!((defense_profile(&stats(0, 0, 0), &zero, no_caps()).combo_evasion - 0.20).abs() < 1e-9);
         // 10 + 150/15 + 200/7.5 = 10 + 10 + 26.666.. = 46.666..%
-        let p = defense_profile(&stats(0, 150, 200), &zero);
+        let p = defense_profile(&stats(0, 150, 200), &zero, no_caps());
         assert!((p.combo_evasion - 0.4666666666666667).abs() < 1e-9);
         // 上限 63%
-        assert!((defense_profile(&stats(0, 310, 310), &zero).combo_evasion - 0.63).abs() < 1e-9);
+        assert!((defense_profile(&stats(0, 310, 310), &zero, no_caps()).combo_evasion - 0.63).abs() < 1e-9);
     }
 
     #[test]
     fn 回避Pは15足すAGI1_2倍足す攻撃タイプ別増加() {
         // DEF200 / MR150 / AGI100、STAB+HACK は 0、装備なし
-        let p = defense_profile(&stats(200, 150, 100), &EquipmentValues::default());
+        let p = defense_profile(&stats(200, 150, 100), &EquipmentValues::default(), no_caps());
         // 物理: 15 + 120 + (400 + 0)/7 = 135 + 57.142.. = 192.14.. → 192
         assert_eq!(p.evasion_point.physical, 192);
         // 魔法: 15 + 120 + 300/7 = 135 + 42.857.. → 177
@@ -254,7 +281,7 @@ mod tests {
             evasion: 50,
             agility: 70,
             ..Default::default()
-        });
+        }, no_caps());
         // 複合: 15 + (100+50)*1.2 + 70/7 + 350/7 = 15 + 180 + 10 + 50 = 255
         assert_eq!(p.evasion_point.composite, 255);
         assert_eq!(p.equipment_evasion, 50);
@@ -264,7 +291,7 @@ mod tests {
     #[test]
     fn 物理の回避P増加は突き足す斬りを100で割って切捨ててから足す() {
         let s = EffectiveStats { def: 0, mr: 0, agi: 0, stab: 250, hack: 260, ..Default::default() };
-        let p = defense_profile(&s, &EquipmentValues::default());
+        let p = defense_profile(&s, &EquipmentValues::default(), no_caps());
         // [(250+260)/100] = 5 → 15 + 0 + 5/7 = 15.714.. → 15
         assert_eq!(p.evasion_point.physical, 15);
     }
@@ -282,8 +309,21 @@ mod tests {
     }
 
     #[test]
+    fn 防御力は上限で頭打ちになり捨てられた分を残す() {
+        let caps = AwakeningCaps { max_damage: 3_000_000, max_defense: 12_000, max_stat: 1_500 };
+        // DEF 5000 → 生値 15,000 が 12,000 で頭打ち
+        let p = defense_profile(&stats(5_000, 100, 0), &EquipmentValues::default(), caps);
+        assert_eq!(p.physical_defense, 12_000);
+        assert_eq!(p.physical_defense_loss, 3_000);
+        assert_eq!(p.defense_cap, 12_000);
+        // 魔法は 300 なので上限に当たらない
+        assert_eq!(p.magic_defense, 300);
+        assert_eq!(p.magic_defense_loss, 0);
+    }
+
+    #[test]
     fn 上限回避時の最終被弾率は特殊回避と合成する() {
-        let p = defense_profile(&stats(0, 150, 200), &eq_magic(0));
+        let p = defense_profile(&stats(0, 150, 200), &eq_magic(0), no_caps());
         // 特殊回避 46.666..% → (1 − 0.85) × (1 − 0.46666..) = 0.15 × 0.53333.. = 0.08
         assert!((p.hit_taken_rate_at_cap - 0.08).abs() < 1e-9);
         assert!((p.normal_evasion_cap - 0.85).abs() < 1e-9);

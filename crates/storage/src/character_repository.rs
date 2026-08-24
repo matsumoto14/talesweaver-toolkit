@@ -495,7 +495,7 @@ mod tests {
         c.awakening.stage = 6;
         assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.awakening.stage = 5;
-        c.awakening.eternal_level = 81;
+        c.awakening.eternal_level = 101;
         assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 

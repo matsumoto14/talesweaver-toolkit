@@ -64,7 +64,10 @@
     draft.mainSkillId = "";
   }
   const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: `${i} 段階` }));
-  const eternalOptions = Array.from({ length: 81 }, (_, i) => ({ value: String(i), label: `Lv ${i}` }));
+  // wiki エタの意志「エタの成長」は Lv100(MAX)まで
+  const eternalOptions = $derived(
+    Array.from({ length: limits.eternal_level_max + 1 }, (_, i) => ({ value: String(i), label: `Lv ${i}` })),
+  );
 
   const PET_TIERS: PetSkillTier[] = ["basic", "true_lv1", "true_lv2", "true_lv3", "true_lv4"];
   const petSkillOptions = [

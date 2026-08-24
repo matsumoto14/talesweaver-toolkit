@@ -13,7 +13,7 @@ pub mod skills;
 
 use serde::Serialize;
 
-pub use awakening::awakening_rate;
+pub use awakening::{awakening_caps, awakening_rate, AWAKENING_SOURCE};
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use characters::{
     attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,

@@ -380,6 +380,12 @@ export interface DefenseProfile {
   physical_defense: number;
   magic_defense: number;
   composite_defense: number;
+  /** 防御力の上限(覚醒段階とエタの意志 Lv で決まる) */
+  defense_cap: number;
+  /** 上限で捨てられた分。すべて 0 なら上限に当たっていない */
+  physical_defense_loss: number;
+  magic_defense_loss: number;
+  composite_defense_loss: number;
   physical_cut_rate: number;
   magic_cut_rate: number;
   composite_cut_rate: number;
@@ -431,9 +437,14 @@ export interface DamageTrace {
 }
 
 export interface DamageResult {
+  /** 1 段あたりの与ダメージ(ダメージ上限を適用したあと) */
   per_hit: DamageTriple;
   total: DamageTriple;
   hit_count: number;
+  /** 与ダメージの上限(1 段ごとに適用) */
+  damage_cap: number;
+  /** 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない */
+  capped_loss: DamageTriple;
   trace: DamageTrace;
 }
 
@@ -469,6 +480,10 @@ export interface StatLimits {
   equipment_element_value_max: number;
   /** キャラの属性値の上限 */
   element_value_max: number;
+  /** 覚醒段階の上限 */
+  awakening_stage_max: number;
+  /** エタの意志 Lv の上限 */
+  eternal_level_max: number;
 }
 
 

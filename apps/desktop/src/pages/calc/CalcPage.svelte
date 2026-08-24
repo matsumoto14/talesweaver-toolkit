@@ -907,6 +907,18 @@
                   <span class="mat-title">倍率の材料</span>
                   <span class="dim">上限に届いた枠は「満」</span>
                 </div>
+                {#if result !== null && result.capped_loss.max > 0}
+                  <!-- ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用) -->
+                  <div class="capped">
+                    <div class="capped-row">
+                      <span class="cp-label">ダメージ上限(1 段ごと)</span>
+                      <span class="num cp-raw">{fmtInt(result.per_hit.max + result.capped_loss.max)}</span>
+                      <span class="cp-arrow dim">→ 上限</span>
+                      <span class="num cp-val">{fmtInt(result.damage_cap)}</span>
+                      <span class="num cp-loss">{fmtInt(result.capped_loss.max)} は無効</span>
+                    </div>
+                  </div>
+                {/if}
                 {#if cappedCategories.length > 0}
                   <!-- 上限で捨てられた分(規格シート 5b)。合算してから上限で切るので、
                        積んだのに効いていない量が数値で見えないと詰み手前が分からない -->

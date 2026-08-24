@@ -22,7 +22,7 @@ pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,
 };
-pub use awakening::Awakening;
+pub use awakening::{Awakening, AwakeningCaps};
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use content::{
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,

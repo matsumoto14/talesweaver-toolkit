@@ -202,7 +202,11 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         .equipment
         .base_totals(&gamedata::equipment_abilities())
         .add(character.equipment.enhanced_totals(None));
-    Ok(domain::defense_profile(&preview.stats, &equipment_totals))
+    Ok(domain::defense_profile(
+        &preview.stats,
+        &equipment_totals,
+        gamedata::awakening_caps(character.awakening),
+    ))
 }
 
 #[tauri::command]
@@ -295,6 +299,7 @@ fn build_damage_input(
         equipment_coefficients,
         added_damage,
         awakening_rate,
+        gamedata::awakening_caps(awakening).max_damage,
         skill,
         enemy,
         combo_count,
@@ -449,6 +454,7 @@ pub fn evaluate_contents(
                     gamedata::equipment_coefficients(skill.dependency),
                     added_damage,
                     awakening_rate,
+                    gamedata::awakening_caps(character.awakening).max_damage,
                     skill.clone(),
                     enemy.clone(),
                     0,

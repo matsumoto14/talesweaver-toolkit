@@ -50,6 +50,9 @@ pub struct DamageInput {
     pub enemy: Enemy,
     /// 覚醒倍率(wiki: カテゴリN)。1.0 = 補正なし
     pub awakening_rate: f64,
+    /// 与ダメージの上限(wiki: Quest/覚醒クエスト「ダメージ上限は多段スキルでも1段ごとに適用」)。
+    /// 覚醒段階とエタの意志 Lv で決まる(表は gamedata)
+    pub damage_cap: i64,
     pub combo_count: u32,
     /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
     /// スキルの属性が未取込(`Skill::element` が `None`)なら 0
@@ -75,6 +78,7 @@ impl DamageInput {
         equipment_coefficients: EquipmentCoefficients,
         weapon_added_damage: i64,
         awakening_rate: f64,
+        damage_cap: i64,
         skill: Skill,
         enemy: Enemy,
         combo_count: u32,
@@ -95,6 +99,7 @@ impl DamageInput {
             skill,
             enemy,
             awakening_rate,
+            damage_cap,
             combo_count,
             element_value,
             pins,
@@ -132,10 +137,15 @@ pub struct DamageTrace {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DamageResult {
+    /// 1 段あたりの与ダメージ(ダメージ上限を適用したあと)
     pub per_hit: DamageTriple,
-    /// 与ダメージ × 段数(追加ダメージは未実装のため 0)
+    /// 与ダメージ × 段数
     pub total: DamageTriple,
     pub hit_count: u32,
+    /// 与ダメージの上限(1 段ごとに適用)
+    pub damage_cap: i64,
+    /// 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない
+    pub capped_loss: DamageTriple,
     pub trace: DamageTrace,
 }
 
@@ -313,6 +323,24 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         steps_critical.push(step);
     }
 
+    // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)。
+    // 捨てられた分は 0 と区別できるように別で持つ(UI が「上限で捨てた分」を出す)。
+    let cap = |value: i64| value.min(input.damage_cap);
+    let (capped_min, capped_max, capped_critical) = (cap(min), cap(max), cap(critical));
+    let capped_loss =
+        DamageTriple { min: min - capped_min, max: max - capped_max, critical: critical - capped_critical };
+    if capped_loss.max > 0 {
+        let step = FormulaStep {
+            name: "ダメージ上限".to_string(),
+            expression: format!("MIN(生値, {}) ※1 段ごとに適用", input.damage_cap),
+            value: input.damage_cap as f64,
+        };
+        steps_min.push(step.clone());
+        steps_max.push(step.clone());
+        steps_critical.push(step);
+    }
+    let (min, max, critical) = (capped_min, capped_max, capped_critical);
+
     DamageResult {
         per_hit: DamageTriple { min, max, critical },
         total: DamageTriple {
@@ -321,6 +349,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             critical: critical * hits,
         },
         hit_count,
+        damage_cap: input.damage_cap,
+        capped_loss,
         trace: DamageTrace {
             stats: stat_traces,
             stat_contributions: input.stat_contributions.clone(),
@@ -380,6 +410,8 @@ mod tests {
             equipment_enhanced_totals: EquipmentValues::default(),
             equipment_coefficients: EquipmentCoefficients::default(),
             weapon_added_damage: 0,
+            // テストは上限に当たらない値を既定にする(上限の挙動は専用テストで見る)
+            damage_cap: i64::MAX,
             skill: Skill {
                 id: "s".into(),
                 name: "テスト斬り".into(),
@@ -411,6 +443,23 @@ mod tests {
     //   min : (1800 + 1 − 990) × {0.99} = 811 × 0.99 = 802.89 → 802
     //   max : (1800 + 117.66 − 990) × 0.99 = 927.66 × 0.99 = 918.3834 → 918
     //   crit: 918.3834 × {2.0 × 1.0} = 1836.7668 → 1836
+    #[test]
+    fn ダメージ上限は1段ごとに適用され捨てられた分を残す() {
+        let mut i = input();
+        i.skill.hit_count = 3;
+        let uncapped = calculate_damage(&i);
+        assert!(uncapped.capped_loss.max == 0);
+
+        i.damage_cap = uncapped.per_hit.max - 100;
+        let capped = calculate_damage(&i);
+        assert_eq!(capped.per_hit.max, i.damage_cap);
+        assert_eq!(capped.capped_loss.max, 100);
+        // 上限は 1 段ごとなので合計は 上限 × 段数
+        assert_eq!(capped.total.max, i.damage_cap * 3);
+        assert_eq!(capped.damage_cap, i.damage_cap);
+        assert!(capped.trace.steps_max.iter().any(|s| s.name == "ダメージ上限"));
+    }
+
     #[test]
     fn 攻撃力_乱数_防御力_スキル倍率_cri倍率() {
         let r = calculate_damage(&input());

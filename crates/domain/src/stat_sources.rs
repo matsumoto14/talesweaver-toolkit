@@ -829,6 +829,10 @@ pub struct StatLimits {
     pub equipment_element_value_max: i64,
     /// キャラの属性値の上限(wiki: 属性システム)
     pub element_value_max: i64,
+    /// 覚醒段階の上限(wiki: Quest/覚醒クエスト)
+    pub awakening_stage_max: u8,
+    /// エタの意志 Lv の上限(wiki: エタの意志「エタの成長」)
+    pub eternal_level_max: u8,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -854,6 +858,8 @@ pub fn stat_limits() -> StatLimits {
         core_enhancement_max: CORE_ENHANCEMENT_MAX,
         equipment_element_value_max: crate::element::EQUIPMENT_ELEMENT_VALUE_MAX,
         element_value_max: crate::element::ELEMENT_VALUE_MAX,
+        awakening_stage_max: crate::awakening::Awakening::MAX_STAGE,
+        eternal_level_max: crate::awakening::Awakening::MAX_ETERNAL_LEVEL,
     }
 }
 
