@@ -73,7 +73,7 @@
   }
   .rail-toggle {
     flex-shrink: 0; margin-left: auto; width: 20px; height: 20px;
-    display: flex; align-items: center; justify-content: center; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; border-radius: var(--r-inset);
     background: rgba(255, 255, 255, 0.22); border: 1px solid rgba(255, 255, 255, 0.55);
     font-size: 10px; font-weight: 700; color: #fff;
   }
@@ -82,7 +82,7 @@
 
   .char {
     display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 12px;
-    border-radius: 11px; text-align: left;
+    border-radius: var(--r-window); text-align: left;
     background: linear-gradient(180deg, #fff, #F4F8FD);
     border: 1px solid #C8D6E6; border-left: 3px solid #DCE5F0;
     box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(30, 44, 74, 0.06);
@@ -97,7 +97,7 @@
 
   .icon {
     width: 30px; height: 30px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center; border-radius: var(--r-panel);
     background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
     border: 1px solid var(--border-strong);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
@@ -117,7 +117,7 @@
   .mini { font-size: 9.5px; font-weight: 700; color: #26334A; }
 
   .register {
-    text-align: center; padding: 9px 6px; border-radius: 10px;
+    text-align: center; padding: 9px 6px; border-radius: var(--r-panel);
     background: linear-gradient(180deg, #fff, var(--bg-rail));
     border: 1px dashed #9FB4D0; box-shadow: inset 0 1px 0 #fff;
     font-size: 11px; font-weight: 700; color: #2B3C57; white-space: nowrap; overflow: hidden;

@@ -14,10 +14,11 @@ export interface Candidate {
 }
 
 /** cost タグ → [背景, 枠, 文字] */
+/** [面, 枠, 文字] の CSS 変数参照(inline style で使う)。色の実値は app.css のトークンが持つ */
 export const COST_COLORS: Record<Candidate["cost"], [string, string, string]> = {
-  すぐできる: ["#DFF3E6", "#6FA98A", "#2E6B4C"],
-  エンチャント: ["#DCEBFF", "#426DD6", "#2B4FA8"],
-  装備更新: ["#F6E8E5", "#B08480", "#8C4A42"],
+  すぐできる: ["var(--good-bg)", "var(--good-border)", "var(--good)"],
+  エンチャント: ["var(--bg-active)", "var(--accent)", "var(--accent-hover)"],
+  装備更新: ["var(--danger-bg)", "var(--danger-border)", "var(--danger)"],
 };
 
 export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): Candidate[] {

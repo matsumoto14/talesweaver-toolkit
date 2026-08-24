@@ -131,12 +131,12 @@
 
 <style>
   .pane { max-width: 720px; }
-  .card { padding: 13px; border-radius: 12px; }
+  .card { padding: 13px; border-radius: var(--r-window); }
   .card-title.big { font-size: 12px; color: #26334A; }
   .row { margin-top: 9px; display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .label { width: 60px; flex-shrink: 0; font-size: 10.5px; color: var(--fg-muted); }
+  .label { width: 60px; flex-shrink: 0; font-size: var(--t-label); color: var(--fg-muted); }
   input[type="text"] {
-    min-width: 0; flex: 1; padding: 6px 9px; border-radius: 8px;
+    min-width: 0; flex: 1; padding: 6px 9px; border-radius: var(--r-panel);
     border: 1px solid var(--accent); background: var(--bg-panel); font-size: 12px; color: var(--fg);
   }
   input[type="text"]:focus { outline: none; border-color: var(--accent-hover); }
@@ -146,12 +146,12 @@
   .grid { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
   .pick {
     width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 7px 4px; border-radius: 10px;
+    padding: 7px 4px; border-radius: var(--r-panel);
     background: #fff; border: 1px solid var(--border-soft);
   }
   .pick.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16); }
   .icon {
-    width: 30px; height: 30px; border-radius: 9px;
+    width: 30px; height: 30px; border-radius: var(--r-panel);
     background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
     border: 1px solid var(--border-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
   }

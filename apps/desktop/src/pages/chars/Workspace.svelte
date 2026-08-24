@@ -271,7 +271,7 @@
       <div class="sheet-body">
         <div class="sheet-card">
           <div class="card-title">最終能力値</div>
-          <div class="stat-grid">
+          <div class="stat-grid inset">
             {#each STAT_KINDS as k (k)}
               <span class="stat-cell">
                 <span class="dim">{STAT_LABELS[k]}</span>
@@ -284,7 +284,7 @@
           <div class="card-title">攻撃力(A){mainSkill ? ` — ${mainSkill.name}` : ""}</div>
           {#if preview?.attack}
             <div class="clear num"><span class="strong">{fmtInt(preview.attack.breakdown.value)}</span></div>
-            <div class="eq-summary num">
+            <div class="eq-summary num inset">
               <span><span class="dim">ステ攻撃力</span> {fmtNum(preview.attack.breakdown.stat_attack)}</span>
               <span><span class="dim">装備基本</span> {fmtNum(preview.attack.breakdown.equipment_base_attack)}</span>
               <span><span class="dim">装備強化</span> {fmtNum(preview.attack.breakdown.equipment_enhanced_attack)}</span>
@@ -297,7 +297,7 @@
         </div>
         <div class="sheet-card">
           <div class="card-title">装備値(全部位の合計)</div>
-          <table class="eq-table num">
+          <table class="eq-table num inset">
             <thead>
               <tr>
                 <th></th>
@@ -343,7 +343,7 @@
   .char-name { font-size: 13px; font-weight: 800; }
   .unsaved {
     font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--warm);
-    border: 1px solid var(--warm); border-radius: 999px; padding: 1px 8px;
+    border: 1px solid var(--warm); border-radius: var(--r-pill); padding: 1px 8px;
   }
   .spacer { flex: 1; }
 
@@ -351,15 +351,15 @@
   section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
   .src-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 7px; }
-  .src-title { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
   .src-head .dim { margin-left: auto; font-size: 9px; }
   .src-unset {
     font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
-    border: 1px solid var(--border); border-radius: 999px; padding: 0 6px;
+    border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
-    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-panel);
     background: #fff; border: 1px solid var(--border-soft); text-align: left;
   }
   .src:hover:not(.planned) { border-color: var(--accent); }
@@ -371,7 +371,7 @@
   .src-sub { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chev { flex-shrink: 0; font-size: 11px; }
   .attack-foot {
-    flex-shrink: 0; margin-top: 8px; padding: 9px 11px; border-radius: 10px;
+    flex-shrink: 0; margin-top: 8px; padding: 9px 11px; border-radius: var(--r-panel);
     background: linear-gradient(180deg, #fff, #EFF5FD); border: 1px solid #9FB4D0;
   }
   .attack-foot.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
@@ -383,7 +383,7 @@
   .attack-note { margin: 4px 0 0; font-size: 9px; line-height: 1.55; }
 
   .src-note {
-    flex-shrink: 0; margin: 10px 0 0; padding: 9px 11px; border-radius: 10px;
+    flex-shrink: 0; margin: 10px 0 0; padding: 9px 11px; border-radius: var(--r-panel);
     background: var(--bg-rail); border: 1px dashed var(--border);
     font-size: 9.5px; line-height: 1.5; color: var(--fg-muted);
   }
@@ -392,38 +392,40 @@
 
   .sheet { flex-shrink: 0; border-top: 1px solid var(--border-strong); background: var(--bg-mid); padding: 8px 16px 10px; }
   .sheet-trigger {
-    width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: 10px;
+    width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--r-panel);
     background: linear-gradient(180deg, #fff, #F1F6FC); border: 1px solid #9FB4D0;
     box-shadow: inset 0 1px 0 #fff; text-align: left;
   }
   .sheet-trigger:hover { border-color: #6382AD; }
-  .sheet-title { flex-shrink: 0; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: #26334A; white-space: nowrap; }
+  .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: #26334A; white-space: nowrap; }
   .sheet-summary { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sheet-chev {
     flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-    border-radius: 6px; background: #fff; border: 1px solid var(--border);
+    border-radius: var(--r-inset); background: #fff; border: 1px solid var(--border);
     font-size: 9px; font-weight: 700; color: var(--accent);
   }
   .sheet-body { margin-top: 8px; max-height: 220px; overflow: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+  /* インセット面(表・最終能力値)の内側余白が増えた分、5 枚(4 カード + 削除)が
+     1 行に収まるよう basis を詰める */
   .sheet-card {
-    flex: 1 1 240px; min-width: 0; padding: 11px 12px; border-radius: 11px;
+    flex: 1 1 210px; min-width: 0; padding: 11px 12px; border-radius: var(--r-window);
     background: #fff; border: 1px solid var(--border-strong);
   }
-  .stat-grid { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
+  .stat-grid { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
   .stat-cell { display: flex; align-items: baseline; gap: 5px; font-size: 10px; }
   .stat-cell .strong { font-size: 12px; font-weight: 700; }
-  .eq-summary { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
-  .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; font-size: 11px; }
-  .eq-table th, .eq-table td { padding: 3px 6px; border-bottom: 1px solid var(--border-soft); }
-  .eq-table thead th { font-size: 9px; font-weight: 700; color: var(--fg-muted); }
+  .eq-summary { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
+  .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; border-spacing: 0; overflow: hidden; font-size: 11px; }
+  .eq-table th, .eq-table td { padding: 3px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.55); }
+  .eq-table thead th { font-size: 9px; font-weight: 700; color: var(--fg-muted); background: none; position: static; }
   .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
   .eq-table .n { text-align: right; }
   .clear { margin-top: 4px; }
   .clear .strong { font-size: 20px; font-weight: 700; }
   .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }
   .delete {
-    flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: 9px;
-    background: #fff; border: 1px solid #B08480; font-size: 10.5px; color: var(--danger);
+    flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: var(--r-panel);
+    background: #fff; border: 1px solid #B08480; font-size: var(--t-label); color: var(--danger);
   }
   .delete.confirm { background: #F6E8E5; font-weight: 700; }
 </style>

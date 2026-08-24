@@ -67,7 +67,7 @@
   }
   const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "スキル未収録", "判定中…", "入場OK", "条件未達"];
   const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2", "#ECEEF2", "#DFF3E6", "#EFEEF8"];
-  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "#6D6AA8", "#A9B4C4", "#A9B4C4", "#6FA98A", "#6D6AA8"];
+  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "var(--sim)", "#A9B4C4", "#A9B4C4", "#6FA98A", "var(--sim)"];
   const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88", "#5E6E88", "#2E6B4C", "#4A4780"];
   const BAR_BG = [
     "linear-gradient(90deg,#90D7FF,#426DD6)",
@@ -75,11 +75,11 @@
     "linear-gradient(90deg,#F0D79A,#C2A057)",
     "linear-gradient(90deg,#E8B3A2,#B0574A)",
     "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
-    "linear-gradient(90deg,#C3C1E4,#6D6AA8)",
+    "linear-gradient(90deg,#C3C1E4,var(--sim))",
     "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
     "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
     "linear-gradient(90deg,#9FD9BC,#3E8C63)",
-    "linear-gradient(90deg,#C3C1E4,#6D6AA8)",
+    "linear-gradient(90deg,#C3C1E4,var(--sim))",
   ];
 
   // 火力バーの比率。敵データが無いコンテンツは入場条件の充足度(満たした項目の割合)を出す。
@@ -470,7 +470,7 @@
   .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
 
   .summary {
-    display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-radius: 13px;
+    display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-radius: var(--r-window);
     background: linear-gradient(180deg, #fff, #E8F1FB 92%);
     border: 1px solid var(--border-strong);
     box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(30, 44, 74, 0.1);
@@ -481,7 +481,7 @@
   .summary .of { font-size: 12px; color: #7E8EA6; white-space: nowrap; }
   .entry-pill {
     flex-shrink: 0; margin-left: auto; display: flex; align-items: baseline; gap: 6px;
-    padding: 4px 11px; border-radius: 999px;
+    padding: 4px 11px; border-radius: var(--r-pill);
     background: rgba(255, 255, 255, 0.75); border: 1px solid var(--border-soft);
     font-size: 9.5px; white-space: nowrap;
   }
@@ -490,35 +490,35 @@
   .areas { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
-  .area-rule { flex: 1; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
-  .collapsed-note { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 10.5px; text-align: left; overflow: hidden; }
+  .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
+  .collapsed-note { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: var(--t-label); text-align: left; overflow: hidden; }
   .collapsed-note .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ok-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: #6FA98A; }
   .area-toggle {
-    flex-shrink: 0; padding: 2px 9px; border-radius: 999px;
+    flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
     background: #fff; border: 1px solid var(--border-soft);
     font-size: 9px; font-weight: 700; color: var(--accent); white-space: nowrap;
   }
 
   .rows { padding-top: 7px; display: flex; flex-direction: column; gap: 6px; }
   .row {
-    padding: 9px 12px; border-radius: 11px; cursor: pointer;
+    padding: 9px 12px; border-radius: var(--r-window); cursor: pointer;
     background: #fff; border: 1px solid var(--border-soft);
   }
   .row.sel { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.18); }
   .frontier {
-    display: inline-flex; align-items: center; margin-bottom: 6px; padding: 2px 9px; border-radius: 999px;
+    display: inline-flex; align-items: center; margin-bottom: 6px; padding: 2px 9px; border-radius: var(--r-pill);
     background: linear-gradient(180deg, #CCF7FF, #90D7FF); border: 1px solid #687287;
     font-size: 9.5px; font-weight: 700; color: #123047;
   }
   .row-main { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .pin {
     width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-    border-radius: 7px; border: 1px solid var(--border-soft); font-size: 10px; color: var(--fg-dim);
+    border-radius: var(--r-inset); border: 1px solid var(--border-soft); font-size: 10px; color: var(--fg-dim);
   }
   .pin.on { background: #DCEBFF; border-color: var(--accent); color: #2B4FA8; }
   .thumb {
-    width: 24px; height: 24px; flex-shrink: 0; border-radius: 8px;
+    width: 24px; height: 24px; flex-shrink: 0; border-radius: var(--r-panel);
     background: repeating-linear-gradient(135deg, #F3E7E4 0 4px, #E6D3CD 4px 8px);
     border: 1px solid #A98B86; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
   }
@@ -534,11 +534,11 @@
 
   .row-note { margin-top: 5px; display: flex; align-items: center; gap: 7px; min-width: 0; }
   .entry-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; }
-  .note-text { flex: 1; min-width: 0; font-size: 10.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note-text { flex: 1; min-width: 0; font-size: var(--t-label); color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .note-text.unmet { color: var(--danger); font-weight: 700; }
   .team {
-    flex-shrink: 0; padding: 1px 6px; border-radius: 999px;
-    background: #EFEEF8; border: 1px solid #6D6AA8;
+    flex-shrink: 0; padding: 1px 6px; border-radius: var(--r-pill);
+    background: #EFEEF8; border: 1px solid var(--sim);
     font-size: 8.5px; font-weight: 700; color: #4A4780;
   }
 
@@ -547,55 +547,56 @@
   /* 右カラム */
   .scroll.pad { display: flex; flex-direction: column; gap: 11px; }
   .sel-card {
-    padding: 14px; border-radius: 12px;
+    padding: 14px; border-radius: var(--r-window);
     background: linear-gradient(180deg, #FBFAFE, #F1F0FA);
-    border: 1px solid #6D6AA8; box-shadow: inset 0 1px 0 #fff;
+    border: 1px solid var(--sim); box-shadow: inset 0 1px 0 #fff;
   }
-  .sel-name { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: #4A4780; }
+  /* このカード群の親になる大見出し(規格の見出し段) */
+  .sel-name { font-size: var(--t-heading); font-weight: var(--w-strong); letter-spacing: 0.02em; color: var(--fg); line-height: 1.25; }
   .sel-dmg { margin-top: 2px; display: flex; align-items: baseline; gap: 7px; }
   .huge { font-size: 34px; line-height: 1.05; font-weight: 700; }
-  .sel-need { margin-top: 4px; font-size: 10.5px; }
+  .sel-need { margin-top: 4px; font-size: var(--t-label); }
   .sel-skill { margin-top: 4px; font-size: 9.5px; line-height: 1.5; }
   .sel-note {
-    margin-top: 9px; padding: 7px 10px; border-radius: 9px;
+    margin-top: 9px; padding: 7px 10px; border-radius: var(--r-panel);
     background: #FDF3DE; border: 1px solid #E3CB93;
-    font-size: 10.5px; font-weight: 500; line-height: 1.6; color: #7A6420;
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #7A6420;
   }
   .sel-note.ok { background: #DFF3E6; border-color: #6FA98A; color: var(--good); }
   .try {
-    margin-top: 8px; width: 100%; text-align: center; padding: 9px; border-radius: 9px;
-    background: linear-gradient(180deg, #6D6AA8, #565394); border: 1px solid #3C3A6B;
+    margin-top: 8px; width: 100%; text-align: center; padding: 9px; border-radius: var(--r-panel);
+    background: linear-gradient(180deg, var(--sim), var(--sim-strong)); border: 1px solid #3C3A6B;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
     font-size: 11px; font-weight: 700; color: #fff;
   }
   .sel-entry {
-    margin-top: 7px; padding: 7px 10px; border-radius: 9px;
+    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
-    font-size: 10.5px; font-weight: 500; line-height: 1.6; color: #3B4A63;
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #3B4A63;
   }
   .sel-entry.ng { background: #F6E8E5; border-color: #B08480; color: var(--danger); }
   .sel-entry-only {
-    margin-top: 7px; padding: 7px 10px; border-radius: 9px;
+    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
     background: #F7F8FB; border: 1px dashed var(--border-soft);
-    font-size: 10.5px; line-height: 1.6;
+    font-size: var(--t-label); line-height: 1.6;
   }
   .sel-entry-note {
-    margin-top: 7px; padding: 7px 10px; border-radius: 9px;
+    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
     background: #FDF9EE; border: 1px solid #C2A057;
-    font-size: 10.5px; font-weight: 500; line-height: 1.6; color: #7A6420;
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #7A6420;
   }
   .sel-team {
-    margin-top: 7px; padding: 7px 10px; border-radius: 9px;
-    background: #EFEEF8; border: 1px solid #6D6AA8;
-    font-size: 10.5px; font-weight: 500; line-height: 1.6; color: #4A4780;
+    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
+    background: #EFEEF8; border: 1px solid var(--sim);
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #4A4780;
   }
   .reqs { margin-top: 7px; display: flex; flex-direction: column; gap: 5px; }
   .req {
-    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 8px;
+    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
   }
   .req.ng { background: #F6E8E5; border-color: #B08480; }
-  .req-label { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 500; color: #3B4A63; white-space: nowrap; }
+  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: #3B4A63; white-space: nowrap; }
   .req.ng .req-label { color: var(--danger); }
   .req .num { font-size: 10px; white-space: nowrap; }
   .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: #3B4A63; white-space: nowrap; }
@@ -605,7 +606,7 @@
   .small { font-size: 9.5px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fav-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .fav {
-    display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 10px;
+    display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: var(--r-panel);
     background: #fff; border: 1px solid var(--border-soft); text-align: left;
   }
   .fav.act { background: #F1F6FF; border-color: var(--accent); }
@@ -617,7 +618,7 @@
   .advice-card { border-color: var(--accent); }
   .advice-list { margin-top: 9px; display: flex; flex-direction: column; gap: 7px; }
   .advice {
-    display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border-radius: 10px; text-align: left;
+    display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border-radius: var(--r-panel); text-align: left;
     background: #F6FBFF; border: 1px solid var(--border-soft); box-shadow: inset 0 1px 0 #fff;
   }
   .advice.reach { background: linear-gradient(180deg, #F3FBF6, #E4F4EB); border-color: #6FA98A; }
@@ -628,6 +629,6 @@
   .adv-delta { flex-shrink: 0; font-size: 11.5px; font-weight: 700; color: var(--fg-dim); }
   .adv-delta.up { color: var(--good); }
   .adv-row.sub .num { font-size: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .cost { flex-shrink: 0; margin-left: auto; padding: 1px 8px; border-radius: 999px; border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
+  .cost { flex-shrink: 0; margin-left: auto; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
   .advice-foot { margin: 8px 0 0; font-size: 9.5px; line-height: 1.6; }
 </style>
