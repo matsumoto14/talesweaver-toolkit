@@ -236,3 +236,50 @@ export interface StatLimits {
   strong_weapon_level_max: number;
 }
 
+
+// --- コンテンツ(crates/domain/src/content.rs) ---
+
+// 入場条件。serde の外部タグ付け enum(newtype variant)の写し。
+export type ContentRequirement =
+  | { equipment_thrust: number }
+  | { equipment_thrust_slash: number }
+  | { eternal_level: number };
+
+export interface RequirementCheck {
+  label: string;
+  current: number;
+  required: number;
+  ok: boolean;
+}
+
+export interface Content {
+  id: string;
+  name: string;
+  enemy_id: string;
+  /** 実用的に周回できる 1 ヒット(最大)の目安ダメージ */
+  need_per_hit: number;
+  requirements: ContentRequirement[];
+  team_note: string | null;
+}
+
+export interface ContentArea {
+  id: string;
+  name: string;
+  contents: Content[];
+}
+
+export interface BestSkillDamage {
+  skill_id: string;
+  per_hit_max: number;
+  total_max: number;
+}
+
+export interface ContentEvaluation {
+  content_id: string;
+  /** スキル未収録キャラは null */
+  damage: BestSkillDamage | null;
+  checks: RequirementCheck[];
+  entry_ok: boolean;
+  reaches_need: boolean;
+  clear: boolean;
+}

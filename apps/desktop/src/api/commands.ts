@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, GameCharacter, NewCharacter, RegisteredCharacter,
-  Skill, StatLimits, StatPreview, StatSources,
+  ContentArea, ContentEvaluation, Skill, StatLimits, StatPreview, StatSources,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -27,3 +27,13 @@ export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
 export function errorMessage(e: unknown): string {
   return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
 }
+
+export const listContents = () => invoke<ContentArea[]>("list_contents");
+/** 保存前のキャラデータ(編集中 draft・試し変更)でダメージ計算する。DB には書き込まない */
+export const previewDamage = (
+  character: NewCharacter, skillId: string, enemyId: string, comboCount: number,
+  temporaryAdjustments: Adjustments | null = null,
+) => invoke<DamageResult>("preview_damage", { character, skillId, enemyId, comboCount, temporaryAdjustments });
+/** 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価) */
+export const evaluateContents = (character: NewCharacter) =>
+  invoke<ContentEvaluation[]>("evaluate_contents", { character });

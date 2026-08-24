@@ -56,24 +56,29 @@
 フロントエンドの階層(`apps/desktop/src/`):
 
 ```
-main.ts, App.svelte  エントリと画面枠(ナビ・エラー帯)
-api/types.ts         Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
-api/commands.ts      invoke ラッパー
-ui/                  画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
-pages/<機能>/        機能ごとの画面と、その画面専用の部品
-format.ts            数値整形
-labels.ts            ステータスの表示名・並び順
-limits.svelte.ts     domain の値域上限(`get_stat_limits` で起動時に 1 回取得)の共有状態
-toast.svelte.ts      エラー帯の共有状態
+main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠
+CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線)
+state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・選択・コンテンツ判定・試し変更 sim)
+api/types.ts           Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
+api/commands.ts        invoke ラッパー
+ui/                    画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
+pages/<機能>/          機能ごとの画面と、その画面専用の部品
+buffs.ts               バフ選択の共通ロジック(純関数)
+candidates.ts          強化候補の列挙(効果の計算は Rust 側 preview_damage)
+draft.ts               キャラ編集ドラフトの型と組み立て
+format.ts, labels.ts   数値整形・表示名
+limits.svelte.ts       domain の値域上限(`get_stat_limits`)の共有状態
+toast.svelte.ts        エラー帯の共有状態
 ```
 
 機能を足すときは `pages/<機能>/` を作る。2 つ以上の機能で使う部品だけを `ui/` に上げる。
 SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイリアスがなく、階層が 1 段深くなるだけ)。
 
-- **数値入力**は `ui/StatInput.svelte`(ラベル|数値欄|range スライダー|MAX ボタン)の 1 種類のみ。「入力方式は 1 種類」という UX 方針を部品数で強制する。範囲の上限・下限はフロントにリテラルで持たず `limits.svelte.ts` から取る
-- **可変レイアウト**: `ui/persistedState.svelte.ts`(`persisted(key, initial)`: localStorage に永続化する `$state` ラッパー。コンポーネントの `<script>` 初期化中に呼ぶ)と `ui/Splitter.svelte`(グリッド列境界のドラッグ・ダブルクリック・矢印キーで列幅を変える区切り線)で、サイドバー折りたたみと各画面の列幅リサイズを実装する。各画面のグリッドは `grid-template-columns` を動的に組み立て、区切り線トラック(6px)を明示的な grid カラムとして持つ。最小幅・既定幅・localStorage キーは docs/claude/decisions.md「画面レイアウトの可変化」
-- **`pages/character/`**(「一覧|キャラデータ|設定」の 3 カラム): `CharacterPage.svelte`(一覧+登録の入口、マスター・ディテール)/ `CharacterRegisterForm.svelte`(名前+キャラ種のみの最小登録)/ `CharacterWorkspace.svelte`(選択キャラの編集 draft を 1 つの `$state` に持つ外枠。`{#key character.id}` で作り直され、`preview_effective_stats` を debounce 呼び出しして即時プレビューを出す)/ `CharacterData.svelte`(中央。名前・キャラ種・覚醒と能力値表「ステ|素|補正|最終」・補正の内訳)/ `CharacterSettings.svelte`(右。恒常補正/常用バフ/キャラスキル/調整のアコーディオン。層名などの専門用語は内訳表示にのみ出す)/ `draft.ts`(共有する編集中ドラフトの型と組み立て関数)
-- **`pages/damage/`**: `DamagePage.svelte`(キャラ・スキル・敵の選択、一時調整、自動計算)/ `TracePanel.svelte`(ステ・カテゴリ・式各段のトレース表示)
+- **ビジュアル**はデザインモック「TW Toolkit Prototype v4」(claude.ai/design)準拠のライトテーマ。トークンは `app.css`、フォント(M PLUS Rounded 1c / M PLUS 1 Code)は `@fontsource` で同梱
+- **数値入力**は `ui/StatInput.svelte` の 1 種類のみ(従来どおり)。範囲上限は `limits.svelte.ts` から取る
+- **`pages/home/`**: `HomePage.svelte` — 到達一覧(エリア → コンテンツ、目安バー・バッジ・入場条件ノート)、お気に入り(localStorage)、「次に変えるなら」(候補を `preview_damage` で再計算し、押すと計算タブの試し変更に入る)
+- **`pages/calc/`**: `CalcPage.svelte` — 対象プレート(◀▶ + エリア別一覧)、スキル選択、1発(最大)+ 合計/クリティカル、もし〜だったら、なぜこの数字?(攻撃力の内訳 / 防御を抜く / 倍率で伸ばす。トレースの式から組み立て)/ `TracePanel.svelte` — 詳細トレース。右カラム「計算の材料」= 試し変更(sim)・装備・バフ・調整・コンボ・入場条件
+- **`pages/chars/`**: `CharsPage.svelte`(外枠)/ `RegisterPane.svelte`(名前 + 19 職アイコンのみの最小登録・コピー登録)/ `Workspace.svelte`(draft 管理・`preview_effective_stats` の即時プレビュー・保存・いまの実力シート)/ `SourcePane.svelte`(補正源ドリルダウンの編集ペイン)
 
 ### tools/scraper — talewiki 取り込み(※未実装)
 

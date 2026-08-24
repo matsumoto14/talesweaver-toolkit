@@ -201,23 +201,28 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>UI は表示と入力のみ。計算・判定は必ず Rust 側</li>
 </ul>
 <p>フロントエンドの階層(<code>apps/desktop/src/</code>):</p>
-<pre><code>main.ts, App.svelte  エントリと画面枠(ナビ・エラー帯)
-api/types.ts         Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
-api/commands.ts      invoke ラッパー
-ui/                  画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
-pages/&lt;機能&gt;/        機能ごとの画面と、その画面専用の部品
-format.ts            数値整形
-labels.ts            ステータスの表示名・並び順
-limits.svelte.ts     domain の値域上限(`get_stat_limits` で起動時に 1 回取得)の共有状態
-toast.svelte.ts      エラー帯の共有状態
+<pre><code>main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠
+CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線)
+state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・選択・コンテンツ判定・試し変更 sim)
+api/types.ts           Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
+api/commands.ts        invoke ラッパー
+ui/                    画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
+pages/&lt;機能&gt;/          機能ごとの画面と、その画面専用の部品
+buffs.ts               バフ選択の共通ロジック(純関数)
+candidates.ts          強化候補の列挙(効果の計算は Rust 側 preview_damage)
+draft.ts               キャラ編集ドラフトの型と組み立て
+format.ts, labels.ts   数値整形・表示名
+limits.svelte.ts       domain の値域上限(`get_stat_limits`)の共有状態
+toast.svelte.ts        エラー帯の共有状態
 </code></pre>
 <p>機能を足すときは <code>pages/&lt;機能&gt;/</code> を作る。2 つ以上の機能で使う部品だけを <code>ui/</code> に上げる。
 SvelteKit は使っていないため <code>src/lib/</code> は置かない(<code>$lib</code> エイリアスがなく、階層が 1 段深くなるだけ)。</p>
 <ul>
-<li><strong>数値入力</strong>は <code>ui/StatInput.svelte</code>(ラベル|数値欄|range スライダー|MAX ボタン)の 1 種類のみ。「入力方式は 1 種類」という UX 方針を部品数で強制する。範囲の上限・下限はフロントにリテラルで持たず <code>limits.svelte.ts</code> から取る</li>
-<li><strong>可変レイアウト</strong>: <code>ui/persistedState.svelte.ts</code>(<code>persisted(key, initial)</code>: localStorage に永続化する <code>$state</code> ラッパー。コンポーネントの <code>&lt;script&gt;</code> 初期化中に呼ぶ)と <code>ui/Splitter.svelte</code>(グリッド列境界のドラッグ・ダブルクリック・矢印キーで列幅を変える区切り線)で、サイドバー折りたたみと各画面の列幅リサイズを実装する。各画面のグリッドは <code>grid-template-columns</code> を動的に組み立て、区切り線トラック(6px)を明示的な grid カラムとして持つ。最小幅・既定幅・localStorage キーは <a href="../claude/decisions.md">docs/claude/decisions.md</a>「画面レイアウトの可変化」</li>
-<li><strong><code>pages/character/</code></strong>(「一覧|キャラデータ|設定」の 3 カラム): <code>CharacterPage.svelte</code>(一覧+登録の入口、マスター・ディテール)/ <code>CharacterRegisterForm.svelte</code>(名前+キャラ種のみの最小登録)/ <code>CharacterWorkspace.svelte</code>(選択キャラの編集 draft を 1 つの <code>$state</code> に持つ外枠。<code>{#key character.id}</code> で作り直され、<code>preview_effective_stats</code> を debounce 呼び出しして即時プレビューを出す)/ <code>CharacterData.svelte</code>(中央。名前・キャラ種・覚醒と能力値表「ステ|素|補正|最終」・補正の内訳)/ <code>CharacterSettings.svelte</code>(右。恒常補正/常用バフ/キャラスキル/調整のアコーディオン。層名などの専門用語は内訳表示にのみ出す)/ <code>draft.ts</code>(共有する編集中ドラフトの型と組み立て関数)</li>
-<li><strong><code>pages/damage/</code></strong>: <code>DamagePage.svelte</code>(キャラ・スキル・敵の選択、一時調整、自動計算)/ <code>TracePanel.svelte</code>(ステ・カテゴリ・式各段のトレース表示)</li>
+<li><strong>ビジュアル</strong>はデザインモック「TW Toolkit Prototype v4」(claude.ai/design)準拠のライトテーマ。トークンは <code>app.css</code>、フォント(M PLUS Rounded 1c / M PLUS 1 Code)は <code>@fontsource</code> で同梱</li>
+<li><strong>数値入力</strong>は <code>ui/StatInput.svelte</code> の 1 種類のみ(従来どおり)。範囲上限は <code>limits.svelte.ts</code> から取る</li>
+<li><strong><code>pages/home/</code></strong>: <code>HomePage.svelte</code> — 到達一覧(エリア → コンテンツ、目安バー・バッジ・入場条件ノート)、お気に入り(localStorage)、「次に変えるなら」(候補を <code>preview_damage</code> で再計算し、押すと計算タブの試し変更に入る)</li>
+<li><strong><code>pages/calc/</code></strong>: <code>CalcPage.svelte</code> — 対象プレート(◀▶ + エリア別一覧)、スキル選択、1発(最大)+ 合計/クリティカル、もし〜だったら、なぜこの数字?(攻撃力の内訳 / 防御を抜く / 倍率で伸ばす。トレースの式から組み立て)/ <code>TracePanel.svelte</code> — 詳細トレース。右カラム「計算の材料」= 試し変更(sim)・装備・バフ・調整・コンボ・入場条件</li>
+<li><strong><code>pages/chars/</code></strong>: <code>CharsPage.svelte</code>(外枠)/ <code>RegisterPane.svelte</code>(名前 + 19 職アイコンのみの最小登録・コピー登録)/ <code>Workspace.svelte</code>(draft 管理・<code>preview_effective_stats</code> の即時プレビュー・保存・いまの実力シート)/ <code>SourcePane.svelte</code>(補正源ドリルダウンの編集ペイン)</li>
 </ul>
 <h3 id="toolsscraper-talewiki">tools/scraper — talewiki 取り込み(※未実装)</h3>
 <ul>

@@ -4,6 +4,7 @@
 mod character_repository;
 
 pub use character_repository::{CharacterRepository, NewCharacter, RegisteredCharacter};
+pub use character_repository::validate as validate_new_character;
 
 use thiserror::Error;
 

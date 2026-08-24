@@ -224,7 +224,8 @@ impl CharacterRepository {
     }
 }
 
-fn validate(new: &NewCharacter, catalog: &BuffCatalog) -> Result<()> {
+/// 登録リクエストの検証(値域・バフ整合性)。保存前プレビュー(preview_damage 等)からも使う。
+pub fn validate(new: &NewCharacter, catalog: &BuffCatalog) -> Result<()> {
     if new.name.trim().is_empty() {
         return Err(StorageError::InvalidValue("名前が空です".into()));
     }
