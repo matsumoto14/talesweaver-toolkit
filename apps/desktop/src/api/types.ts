@@ -117,14 +117,93 @@ export interface EquipmentValues {
   magic_defense: number;
 }
 
-// 装備補正一式(基本能力値/強化能力値/装備攻撃力強化バフ)。crates/domain/src/equipment.rs の Equipment。
-export interface Equipment {
+// 装備部位。crates/domain/src/equipment.rs の PartSlot(snake_case)。
+export type PartSlot =
+  | "weapon" | "armor" | "helm" | "shield" | "shield_plus"
+  | "head" | "body" | "hand" | "leg" | "effect" | "artifact" | "relic";
+
+// 装備部位 1 つ。crates/domain/src/equipment.rs の EquipmentPart。
+export interface EquipmentPart {
+  /** カタログ参照(EquipmentItem.id)。null = 未装備またはカスタム */
+  item_id: string | null;
+  /** カタログ外アイテムの表示名 `[仮]` */
+  custom_name: string | null;
+  /** 実測の基本能力値 */
   base: EquipmentValues;
-  enhanced: EquipmentValues;
+  /** エンチャント値(強化能力値) */
+  enchant: EquipmentValues;
+  /** 装備強化 Lv(0..=15)。武器・鎧のみ 0 超を許可 */
+  enhance_level: number;
+  /** +12 以上の追加固定ダメージ実測値の上書き。+11 以下は null 固定 */
+  enhance_added_damage: number | null;
+  /** 装備アビリティ id(武器のみ非空を許可) */
+  abilities: string[];
+}
+
+// 12 部位。crates/domain/src/equipment.rs の EquipmentParts(named field)。
+export interface EquipmentParts {
+  weapon: EquipmentPart;
+  armor: EquipmentPart;
+  helm: EquipmentPart;
+  shield: EquipmentPart;
+  shield_plus: EquipmentPart;
+  head: EquipmentPart;
+  body: EquipmentPart;
+  hand: EquipmentPart;
+  leg: EquipmentPart;
+  effect: EquipmentPart;
+  artifact: EquipmentPart;
+  relic: EquipmentPart;
+}
+
+// 装備補正一式(部位別装備 12 スロット + パワーウェポン/ストロングウェポン)。
+// crates/domain/src/equipment.rs の Equipment。
+export interface Equipment {
+  parts: EquipmentParts;
   /** パワーウェポン(自身の装備補正を2%増加) */
   power_weapon: boolean;
   /** ストロングウェポンの Lv(0 = 未使用、1〜6) */
   strong_weapon_level: number;
+}
+
+// gamedata の出典。crates/gamedata/src/lib.rs の Source。
+export interface Source {
+  page: string;
+  retrieved_on: string;
+  note: string;
+}
+
+// 武器種(wiki: 装備システム/装備強化「系統」表)。crates/gamedata/src/equipment_catalog.rs の WeaponClass(snake_case)。
+export type WeaponClass =
+  | "rapier" | "dagger" | "spear" | "small_sword" | "physical_gun" | "claw" | "hand_launcher"
+  | "long_sword" | "tachi" | "war_staff" | "short_sword" | "rod" | "nunchaku"
+  | "katana" | "axe" | "whip" | "kara" | "dual_blade_physical" | "scythe" | "arming_sword"
+  | "magic_wand" | "wand" | "magic_gun" | "scepter" | "totem"
+  | "great_sword"
+  | "holy_staff" | "handbell" | "dual_blade_magic" | "hammer";
+
+// 装備カタログの 1 アイテム。crates/gamedata/src/equipment_catalog.rs の EquipmentItem。
+export interface EquipmentItem {
+  id: string;
+  slot: PartSlot;
+  name: string;
+  /** 基本能力値のレンジ下限(wiki: Item ページの MR レンジ) */
+  values_min: EquipmentValues;
+  /** 基本能力値のレンジ上限 */
+  values_max: EquipmentValues;
+  /** エンチャント上限(エンチャント不可は全 0) */
+  enchant_caps: EquipmentValues;
+  /** 武器のみ非 null */
+  weapon_class: WeaponClass | null;
+  source: Source;
+}
+
+// 武器アビリティ定義。crates/domain/src/equipment.rs の EquipmentAbilityDef。
+export interface EquipmentAbilityDef {
+  id: string;
+  name: string;
+  /** 装備攻撃力(基本能力値)への加算値 */
+  values: EquipmentValues;
 }
 
 export interface RegisteredCharacter {
@@ -234,6 +313,10 @@ export interface StatLimits {
   adjustment_pin_max: number;
   equipment_value_max: number;
   strong_weapon_level_max: number;
+  /** 装備強化 Lv 上限(wiki: 装備システム/装備強化。+1〜+15) */
+  enhance_level_max: number;
+  /** +12 以上の追加固定ダメージ実測値の上限(実用上の安全域)`[仮]` */
+  enhance_added_damage_max: number;
 }
 
 

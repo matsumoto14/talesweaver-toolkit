@@ -7,6 +7,7 @@
   import type { RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
+  import { equipmentBaseTotal, equipmentEnchantTotal } from "../../equipment";
   import { fmtInt } from "../../format";
   import { STAT_KINDS, STAT_LABELS } from "../../labels";
   import { app, removeCharacter, upsertCharacter } from "../../state.svelte";
@@ -124,6 +125,8 @@
   const enhanceRatePercent = $derived(
     (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3,
   );
+  const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment));
+  const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
 
   const NEUTRAL = "未設定(中立値で計算)";
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
@@ -131,7 +134,7 @@
     {
       id: "equipment",
       name: "装備",
-      sub: `基本 突${fmtInt(draft.equipment.base.thrust)} / 斬${fmtInt(draft.equipment.base.slash)}${enhanceRatePercent > 0 ? ` ・ +${enhanceRatePercent}%` : ""}`,
+      sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}${enhanceRatePercent > 0 ? ` ・ +${enhanceRatePercent}%` : ""}`,
     },
     { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
@@ -222,12 +225,12 @@
           </div>
         </div>
         <div class="sheet-card">
-          <div class="card-title">装備値(ゲーム内の表示と同じ)</div>
+          <div class="card-title">装備値(全部位の合計)</div>
           <div class="eq-summary num">
-            <span><span class="dim">基本 突き</span> {fmtInt(draft.equipment.base.thrust)}</span>
-            <span><span class="dim">基本 斬り</span> {fmtInt(draft.equipment.base.slash)}</span>
-            <span><span class="dim">強化 突き</span> {fmtInt(draft.equipment.enhanced.thrust)}</span>
-            <span><span class="dim">強化 斬り</span> {fmtInt(draft.equipment.enhanced.slash)}</span>
+            <span><span class="dim">基本合計 突き</span> {fmtInt(eqBaseTotal.thrust)}</span>
+            <span><span class="dim">基本合計 斬り</span> {fmtInt(eqBaseTotal.slash)}</span>
+            <span><span class="dim">エンチャント合計 突き</span> {fmtInt(eqEnchantTotal.thrust)}</span>
+            <span><span class="dim">エンチャント合計 斬り</span> {fmtInt(eqEnchantTotal.slash)}</span>
             <span><span class="dim">強化倍率</span> +{enhanceRatePercent}%</span>
           </div>
         </div>

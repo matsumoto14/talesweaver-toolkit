@@ -27,8 +27,10 @@ pub use damage::{
 };
 pub use enemy::Enemy;
 pub use equipment::{
-    equipment_attack_power, Equipment, EquipmentCoefficients, EquipmentError, EquipmentRates,
-    EquipmentValues, EQUIPMENT_VALUE_MAX, STRONG_WEAPON_LEVEL_MAX,
+    equipment_attack_power, weapon_added_damage, EnhanceRates, Equipment, EquipmentAbilityDef,
+    EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentParts, EquipmentRates,
+    EquipmentValues, PartSlot, ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
+    STRONG_WEAPON_LEVEL_MAX,
 };
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};

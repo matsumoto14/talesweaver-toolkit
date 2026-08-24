@@ -1,7 +1,8 @@
 // 「次に変えるなら / もし〜だったら」の強化候補。
-// 現行のキャラモデル(装備 8 値 + PW/SW)で実際に表現できる変更だけを挙げる。
+// 現行のキャラモデル(部位別装備 12 スロット + PW/SW)で実際に表現できる変更だけを挙げる。
 // 効果は preview_damage(Rust 側)で再計算する。ここは候補の列挙(表示)のみ。
-import type { NewCharacter } from "./api/types";
+import type { EquipmentItem, NewCharacter } from "./api/types";
+import { clampToCaps, midpointValues, sumValues } from "./equipment";
 import { limits } from "./limits.svelte";
 
 export interface Candidate {
@@ -19,7 +20,7 @@ export const COST_COLORS: Record<Candidate["cost"], [string, string, string]> = 
   装備更新: ["#F6E8E5", "#B08480", "#8C4A42"],
 };
 
-export function candidatesFor(current: NewCharacter): Candidate[] {
+export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): Candidate[] {
   const out: Candidate[] = [];
   if (!current.equipment.power_weapon) {
     out.push({
@@ -41,23 +42,55 @@ export function candidatesFor(current: NewCharacter): Candidate[] {
       },
     });
   }
-  out.push({
-    id: "enh",
-    label: "強化能力値(突き・斬り)を +100",
-    cost: "エンチャント",
-    apply: (p) => {
-      p.equipment.enhanced.thrust = Math.min(limits.equipment_value_max, p.equipment.enhanced.thrust + 100);
-      p.equipment.enhanced.slash = Math.min(limits.equipment_value_max, p.equipment.enhanced.slash + 100);
-    },
-  });
-  out.push({
-    id: "base",
-    label: "基本能力値(突き・斬り)を +100",
-    cost: "装備更新",
-    apply: (p) => {
-      p.equipment.base.thrust = Math.min(limits.equipment_value_max, p.equipment.base.thrust + 100);
-      p.equipment.base.slash = Math.min(limits.equipment_value_max, p.equipment.base.slash + 100);
-    },
-  });
+
+  const weaponItem = current.equipment.parts.weapon.item_id
+    ? (catalog.find((i) => i.id === current.equipment.parts.weapon.item_id) ?? null)
+    : null;
+  const armorItem = current.equipment.parts.armor.item_id
+    ? (catalog.find((i) => i.id === current.equipment.parts.armor.item_id) ?? null)
+    : null;
+
+  // カタログ item のときのみ(カスタム・未装備は候補から除外)
+  if (weaponItem && armorItem) {
+    out.push({
+      id: "enchant-max",
+      label: "武器と鎧のエンチャントを上限まで",
+      cost: "エンチャント",
+      apply: (p) => {
+        p.equipment.parts.weapon.enchant = { ...weaponItem.enchant_caps };
+        p.equipment.parts.armor.enchant = { ...armorItem.enchant_caps };
+      },
+    });
+  }
+
+  // 現武器の weapon_class と同じ slot=weapon のカタログ上位品(基本値レンジ上限の合計が大きいもの)
+  if (weaponItem?.weapon_class) {
+    const upgrade = catalog
+      .filter(
+        (i) =>
+          i.slot === "weapon" &&
+          i.weapon_class === weaponItem.weapon_class &&
+          i.id !== weaponItem.id &&
+          sumValues(i.values_max) > sumValues(weaponItem.values_max),
+      )
+      .sort((a, b) => sumValues(b.values_max) - sumValues(a.values_max))[0];
+    if (upgrade) {
+      out.push({
+        id: "weapon-upgrade",
+        label: `武器を${upgrade.name}に更新`,
+        cost: "装備更新",
+        apply: (p) => {
+          const weapon = p.equipment.parts.weapon;
+          weapon.item_id = upgrade.id;
+          weapon.custom_name = null;
+          weapon.base = midpointValues(upgrade.values_min, upgrade.values_max);
+          // 新アイテムのエンチャント上限まで clamp(SourcePane の pickCatalogItem と同じ扱い。
+          // 例: アクィルス(魔攻上限280)→アビス(同100)への更新で検証エラーにならないように)
+          weapon.enchant = clampToCaps(weapon.enchant, upgrade.enchant_caps);
+        },
+      });
+    }
+  }
+
   return out;
 }

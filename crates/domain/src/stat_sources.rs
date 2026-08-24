@@ -685,6 +685,9 @@ pub struct StatLimits {
     pub adjustment_pin_max: i64,
     pub equipment_value_max: i64,
     pub strong_weapon_level_max: u8,
+    /// 装備強化 Lv 上限(wiki: 装備システム/装備強化。+1〜+15)
+    pub enhance_level_max: u8,
+    pub enhance_added_damage_max: i64,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -699,6 +702,8 @@ pub fn stat_limits() -> StatLimits {
         adjustment_pin_max: ADJUSTMENT_PIN_MAX,
         equipment_value_max: EQUIPMENT_VALUE_MAX,
         strong_weapon_level_max: STRONG_WEAPON_LEVEL_MAX,
+        enhance_level_max: crate::equipment::ENHANCE_LEVEL_MAX,
+        enhance_added_damage_max: crate::equipment::ENHANCE_ADDED_DAMAGE_MAX,
     }
 }
 
@@ -1267,5 +1272,7 @@ mod tests {
         assert_eq!(limits.adjustment_pin_max, ADJUSTMENT_PIN_MAX);
         assert_eq!(limits.equipment_value_max, EQUIPMENT_VALUE_MAX);
         assert_eq!(limits.strong_weapon_level_max, STRONG_WEAPON_LEVEL_MAX);
+        assert_eq!(limits.enhance_level_max, crate::equipment::ENHANCE_LEVEL_MAX);
+        assert_eq!(limits.enhance_added_damage_max, crate::equipment::ENHANCE_ADDED_DAMAGE_MAX);
     }
 }

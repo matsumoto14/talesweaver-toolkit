@@ -2,9 +2,9 @@
 
 use domain::{
     evaluate_content, BestSkillDamage, BuffDefinition, ContentArea, ContentEvaluation, DamageInput,
-    DamageResult, Enemy, Skill,
+    DamageResult, Enemy, EquipmentAbilityDef, EquipmentPart, Skill,
 };
-use gamedata::GameCharacter;
+use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
 use tauri::State;
 
@@ -54,6 +54,16 @@ pub fn list_contents() -> Vec<ContentArea> {
 }
 
 #[tauri::command]
+pub fn list_equipment_catalog() -> Vec<EquipmentItem> {
+    gamedata::equipment_catalog()
+}
+
+#[tauri::command]
+pub fn list_equipment_abilities() -> Vec<EquipmentAbilityDef> {
+    gamedata::equipment_abilities()
+}
+
+#[tauri::command]
 pub fn list_characters(state: State<'_, AppState>) -> CommandResult<Vec<RegisteredCharacter>> {
     with_repo(&state, |repo| repo.list())
 }
@@ -66,7 +76,14 @@ pub fn create_character(
     if gamedata::find_character(&character.game_character_id).is_none() {
         return Err(format!("ゲームキャラ '{}' は未登録です", character.game_character_id));
     }
-    with_repo(&state, |repo| repo.create(&character, &gamedata::buff_catalog()))
+    with_repo(&state, |repo| {
+        repo.create(
+            &character,
+            &gamedata::buff_catalog(),
+            &gamedata::equipment_catalog(),
+            &gamedata::equipment_abilities(),
+        )
+    })
 }
 
 #[tauri::command]
@@ -78,7 +95,15 @@ pub fn update_character(
     if gamedata::find_character(&character.game_character_id).is_none() {
         return Err(format!("ゲームキャラ '{}' は未登録です", character.game_character_id));
     }
-    with_repo(&state, |repo| repo.update(id, &character, &gamedata::buff_catalog()))
+    with_repo(&state, |repo| {
+        repo.update(
+            id,
+            &character,
+            &gamedata::buff_catalog(),
+            &gamedata::equipment_catalog(),
+            &gamedata::equipment_abilities(),
+        )
+    })
 }
 
 #[tauri::command]
@@ -99,6 +124,37 @@ pub fn preview_effective_stats(
 #[tauri::command]
 pub fn get_stat_limits() -> domain::StatLimits {
     domain::stat_sources::stat_limits()
+}
+
+/// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
+///
+/// `item_id` → カタログの `weapon_class` → 系統ごとの補正式、の順で解決する。
+/// - 強化 Lv 0 は 0
+/// - +1〜+11 は確定倍率で式から算出
+/// - +12 以上は `enhance_added_damage`(実測上書き)があればそれ、無ければレンジ下限の倍率で算出
+/// - カスタム武器(カタログ外・`weapon_class` 不明)は式で算出できないため `enhance_added_damage ?? 0`
+fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
+    if weapon.enhance_level == 0 {
+        return 0;
+    }
+    let weapon_class = weapon
+        .item_id
+        .as_deref()
+        .and_then(gamedata::find_equipment_item)
+        .and_then(|item| item.weapon_class);
+    let Some(weapon_class) = weapon_class else {
+        return weapon.enhance_added_damage.unwrap_or(0);
+    };
+    let rates = gamedata::enhance_rates(weapon_class);
+    if let Some(multiplier) = gamedata::enhance_multiplier(weapon.enhance_level) {
+        return domain::weapon_added_damage(&weapon.base, &rates, multiplier);
+    }
+    if let Some(added) = weapon.enhance_added_damage {
+        return added;
+    }
+    let (min_multiplier, _max_multiplier) =
+        gamedata::enhance_multiplier_range(weapon.enhance_level).unwrap_or((0.0, 0.0));
+    domain::weapon_added_damage(&weapon.base, &rates, min_multiplier)
 }
 
 /// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage / evaluate_contents 共通)。
@@ -124,13 +180,19 @@ fn build_damage_input(
         temp.validate().map_err(|e| e.to_string())?;
         domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
     }
+    let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities());
+    let equipment_enhanced_totals = equipment.enhanced_totals();
+    let added_damage = weapon_added_damage(&equipment.parts.weapon);
     Ok(DamageInput::new(
         base_stats.clone(),
         stat_modifiers,
         stat_contributions,
         coefficients,
         equipment,
+        equipment_base_totals,
+        equipment_enhanced_totals,
         equipment_coefficients,
+        added_damage,
         awakening_rate,
         skill,
         enemy,
@@ -173,7 +235,13 @@ pub fn preview_damage(
     combo_count: u32,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
-    storage::validate_new_character(&character, &gamedata::buff_catalog()).map_err(|e| e.to_string())?;
+    storage::validate_new_character(
+        &character,
+        &gamedata::buff_catalog(),
+        &gamedata::equipment_catalog(),
+        &gamedata::equipment_abilities(),
+    )
+    .map_err(|e| e.to_string())?;
     let input = build_damage_input(
         &character.base_stats,
         &character.game_character_id,
@@ -193,7 +261,10 @@ pub fn preview_damage(
 #[tauri::command]
 pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEvaluation>> {
     let catalog = gamedata::buff_catalog();
-    storage::validate_new_character(&character, &catalog).map_err(|e| e.to_string())?;
+    let equipment_catalog = gamedata::equipment_catalog();
+    let equipment_abilities = gamedata::equipment_abilities();
+    storage::validate_new_character(&character, &catalog, &equipment_catalog, &equipment_abilities)
+        .map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
     // ループ不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
     // カタログとステ補正を再構築すると、この最重量パスで無駄な再計算になる(PR レビュー指摘)。
@@ -204,6 +275,10 @@ pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEv
     )
     .map_err(|e| e.to_string())?;
     let awakening_rate = gamedata::awakening_rate(character.awakening);
+    // 装備集計(基本能力値・強化能力値・武器追加固定ダメージ)もキャラのみ依存なのでループの外で 1 回だけ計算する。
+    let equipment_base_totals = character.equipment.base_totals(&equipment_abilities);
+    let equipment_enhanced_totals = character.equipment.enhanced_totals();
+    let added_damage = weapon_added_damage(&character.equipment.parts.weapon);
     let mut evaluations = Vec::new();
     for area in gamedata::content_areas() {
         for content in &area.contents {
@@ -215,8 +290,11 @@ pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEv
                     stat_modifiers.clone(),
                     stat_contributions.clone(),
                     gamedata::attack_coefficients(skill.dependency),
-                    character.equipment,
+                    character.equipment.clone(),
+                    equipment_base_totals,
+                    equipment_enhanced_totals,
                     gamedata::equipment_coefficients(skill.dependency),
+                    added_damage,
                     awakening_rate,
                     skill.clone(),
                     enemy.clone(),
@@ -233,8 +311,49 @@ pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEv
                     });
                 }
             }
-            evaluations.push(evaluate_content(content, best, &character.equipment, character.awakening));
+            evaluations.push(evaluate_content(content, best, &equipment_base_totals, character.awakening));
         }
     }
     Ok(evaluations)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::weapon_added_damage;
+    use domain::{EquipmentPart, EquipmentValues};
+
+    // 刀(HACK系: 斬×6.67 + 突×1.00)・突100/斬300 → INT(300×6.67+100) = 2101
+    fn weapon(item_id: Option<&str>, level: u8, added: Option<i64>) -> EquipmentPart {
+        EquipmentPart {
+            item_id: item_id.map(String::from),
+            enhance_level: level,
+            enhance_added_damage: added,
+            base: EquipmentValues { thrust: 100, slash: 300, ..Default::default() },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn 強化なしは追加固定ダメージ0() {
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 0, None)), 0);
+    }
+
+    #[test]
+    fn カタログ外武器は上書きが無ければ0_あればその値() {
+        assert_eq!(weapon_added_damage(&weapon(None, 5, None)), 0);
+        assert_eq!(weapon_added_damage(&weapon(None, 12, Some(12345))), 12345);
+    }
+
+    #[test]
+    fn 確定倍率帯は系統式から算出する() {
+        // +10 倍率 28.8 → INT(2101×28.8) = 60508(偶数なのでそのまま)
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 10, None)), 60508);
+    }
+
+    #[test]
+    fn レンジ倍率帯は上書き優先_無ければレンジ下限() {
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, Some(311220))), 311220);
+        // +12 レンジ下限 140 → INT(2101×140) = 294140(偶数)
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, None)), 294140);
+    }
 }

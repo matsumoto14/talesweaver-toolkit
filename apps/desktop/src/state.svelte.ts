@@ -7,6 +7,8 @@ import {
   listBuffCatalog,
   listCharacters,
   listContents,
+  listEquipmentAbilities,
+  listEquipmentCatalog,
   listGameCharacters,
 } from "./api/commands";
 import type {
@@ -14,6 +16,8 @@ import type {
   Content,
   ContentArea,
   ContentEvaluation,
+  EquipmentAbilityDef,
+  EquipmentItem,
   GameCharacter,
   NewCharacter,
   RegisteredCharacter,
@@ -29,6 +33,8 @@ export const app = $state({
   gameCharacters: [] as GameCharacter[],
   areas: [] as ContentArea[],
   catalog: [] as BuffDefinition[],
+  equipmentCatalog: [] as EquipmentItem[],
+  equipmentAbilities: [] as EquipmentAbilityDef[],
   selectedId: null as number | null,
   /** キャラ id → コンテンツ判定(保存済みデータ基準) */
   evaluations: {} as Record<number, ContentEvaluation[]>,
@@ -100,16 +106,20 @@ export function selectCharacter(id: number | null): void {
 
 export async function loadAll(): Promise<void> {
   try {
-    const [characters, gameCharacters, areas, catalog] = await Promise.all([
+    const [characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities] = await Promise.all([
       listCharacters(),
       listGameCharacters(),
       listContents(),
       listBuffCatalog(),
+      listEquipmentCatalog(),
+      listEquipmentAbilities(),
     ]);
     app.characters = characters;
     app.gameCharacters = gameCharacters;
     app.areas = areas;
     app.catalog = catalog;
+    app.equipmentCatalog = equipmentCatalog;
+    app.equipmentAbilities = equipmentAbilities;
     if (app.selectedId === null && characters.length > 0) app.selectedId = characters[0].id;
     await Promise.all(characters.map(refreshEvaluation));
   } catch (e) {

@@ -7,5 +7,6 @@ edition = "2021"
 serde = { workspace = true }
 serde_json = { workspace = true }
 domain = { path = "../domain" }
+gamedata = { path = "../gamedata" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 thiserror = "2"

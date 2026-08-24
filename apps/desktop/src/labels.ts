@@ -1,5 +1,5 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
-import type { PetSkillTier, StatKind, StatLayer } from "./api/types";
+import type { PartSlot, PetSkillTier, StatKind, StatLayer } from "./api/types";
 
 export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
 export const STAT_LABELS: Record<StatKind, string> = {
@@ -31,3 +31,27 @@ export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = {
   magic_attack: "魔法攻撃力",
   magic_defense: "魔法防御力",
 };
+
+// 装備部位(crates/domain/src/equipment.rs の PartSlot)の表示名・並び順(wiki: 装備システム ページ冒頭の表)。
+export const PART_SLOTS: PartSlot[] = [
+  "weapon", "armor", "helm", "shield", "shield_plus",
+  "head", "body", "hand", "leg", "effect", "artifact", "relic",
+];
+export const PART_SLOT_LABELS: Record<PartSlot, string> = {
+  weapon: "武器",
+  armor: "鎧",
+  helm: "兜",
+  shield: "盾",
+  shield_plus: "盾+",
+  head: "頭",
+  body: "体",
+  hand: "手",
+  leg: "足",
+  effect: "効果",
+  artifact: "AF",
+  relic: "レリック",
+};
+// 装備強化(+1〜+15)を持てる部位(wiki: 装備システム/装備強化。武器・鎧のみ)。
+export const ENHANCE_ALLOWED_SLOTS: PartSlot[] = ["weapon", "armor"];
+// 装備アビリティを持てる部位(wiki: 装備システム/アビリティ。武器のみが火力に効く)。
+export const ABILITY_ALLOWED_SLOTS: PartSlot[] = ["weapon"];

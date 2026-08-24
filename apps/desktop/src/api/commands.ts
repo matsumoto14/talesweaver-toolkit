@@ -1,8 +1,8 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, GameCharacter, NewCharacter, RegisteredCharacter,
-  ContentArea, ContentEvaluation, Skill, StatLimits, StatPreview, StatSources,
+  Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, EquipmentAbilityDef, EquipmentItem, GameCharacter,
+  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, Skill, StatLimits, StatPreview, StatSources,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -22,6 +22,8 @@ export const calculateDamage = (
   characterId: number, skillId: string, enemyId: string, comboCount: number, temporaryAdjustments: Adjustments,
 ) => invoke<DamageResult>("calculate_damage", { characterId, skillId, enemyId, comboCount, temporaryAdjustments });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
+export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
+export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

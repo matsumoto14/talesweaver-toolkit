@@ -7,6 +7,7 @@ pub mod buffs;
 pub mod characters;
 pub mod contents;
 pub mod enemies;
+pub mod equipment_catalog;
 pub mod skills;
 
 use serde::Serialize;
@@ -18,6 +19,11 @@ pub use characters::{
 };
 pub use contents::{content_areas, CONTENTS_SOURCE};
 pub use enemies::{enemies, find_enemy};
+pub use equipment_catalog::{
+    enhance_multiplier, enhance_multiplier_range, enhance_rates, equipment_abilities,
+    equipment_catalog, find_equipment_item, EquipmentItem, WeaponClass, EQUIPMENT_ABILITY_SOURCE,
+    EQUIPMENT_CATALOG_SOURCE, ENHANCE_SOURCE,
+};
 pub use skills::{find_skill, skills_for};
 
 /// データの出典。
