@@ -1,8 +1,8 @@
 //! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは String に変換して返す。
 
 use domain::{
-    evaluate_content, BestSkillDamage, BuffDefinition, ContentArea, ContentEvaluation, DamageInput,
-    DamageResult, Enemy, EquipmentAbilityDef, EquipmentPart, Skill,
+    evaluate_content, BestSkillDamage, BuffDefinition, Content, ContentArea, ContentEvaluation,
+    CoreRegion, DamageInput, DamageResult, Enemy, EquipmentAbilityDef, EquipmentPart, Skill,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
@@ -26,6 +26,19 @@ fn find_skill(skill_id: &str) -> CommandResult<Skill> {
 
 fn find_enemy(enemy_id: &str) -> CommandResult<Enemy> {
     gamedata::find_enemy(enemy_id).ok_or_else(|| format!("敵 '{enemy_id}' が見つかりません"))
+}
+
+/// 計算対象のコンテンツを引く。敵データが無いコンテンツはダメージ計算の対象にできない。
+fn find_content(content_id: &str) -> CommandResult<Content> {
+    let content = gamedata::content_areas()
+        .into_iter()
+        .flat_map(|area| area.contents)
+        .find(|c| c.id == content_id)
+        .ok_or_else(|| format!("コンテンツ '{content_id}' が見つかりません"))?;
+    if content.enemy_id.is_none() {
+        return Err(format!("コンテンツ '{content_id}' には敵データがありません"));
+    }
+    Ok(content)
 }
 
 #[tauri::command]
@@ -115,10 +128,17 @@ pub fn delete_character(state: State<'_, AppState>, id: i64) -> CommandResult<()
 pub fn preview_effective_stats(
     base_stats: domain::BaseStats,
     stat_sources: domain::StatSources,
+    equipment: domain::Equipment,
     game_character_id: String,
 ) -> CommandResult<domain::StatPreview> {
-    domain::preview_effective_stats(&base_stats, &stat_sources, &gamedata::buff_catalog(), &game_character_id)
-        .map_err(|e| e.to_string())
+    domain::preview_effective_stats(
+        &base_stats,
+        &stat_sources,
+        &equipment,
+        &gamedata::buff_catalog(),
+        &game_character_id,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -167,6 +187,7 @@ fn build_damage_input(
     awakening: domain::Awakening,
     skill: Skill,
     enemy: Enemy,
+    core_region: Option<CoreRegion>,
     combo_count: u32,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageInput> {
@@ -176,12 +197,13 @@ fn build_damage_input(
     let (mut stat_modifiers, mut stat_contributions) =
         domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog(), game_character_id)
             .map_err(|e| e.to_string())?;
+    domain::stat_sources::apply_siena_stats(&mut stat_modifiers, &mut stat_contributions, &equipment);
     if let Some(temp) = &temporary_adjustments {
         temp.validate().map_err(|e| e.to_string())?;
         domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
     }
     let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities());
-    let equipment_enhanced_totals = equipment.enhanced_totals();
+    let equipment_enhanced_totals = equipment.enhanced_totals(core_region);
     let added_damage = weapon_added_damage(&equipment.parts.weapon);
     Ok(DamageInput::new(
         base_stats.clone(),
@@ -207,11 +229,13 @@ pub fn calculate_damage(
     state: State<'_, AppState>,
     character_id: i64,
     skill_id: String,
-    enemy_id: String,
+    content_id: String,
     combo_count: u32,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
     let character = with_repo(&state, |repo| repo.get(character_id))?;
+    let content = find_content(&content_id)?;
+    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
     let input = build_damage_input(
         &character.base_stats,
         &character.game_character_id,
@@ -219,7 +243,8 @@ pub fn calculate_damage(
         character.equipment,
         character.awakening,
         find_skill(&skill_id)?,
-        find_enemy(&enemy_id)?,
+        enemy,
+        content.core_region,
         combo_count,
         temporary_adjustments,
     )?;
@@ -231,7 +256,7 @@ pub fn calculate_damage(
 pub fn preview_damage(
     character: NewCharacter,
     skill_id: String,
-    enemy_id: String,
+    content_id: String,
     combo_count: u32,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
@@ -242,6 +267,8 @@ pub fn preview_damage(
         &gamedata::equipment_abilities(),
     )
     .map_err(|e| e.to_string())?;
+    let content = find_content(&content_id)?;
+    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
     let input = build_damage_input(
         &character.base_stats,
         &character.game_character_id,
@@ -249,7 +276,8 @@ pub fn preview_damage(
         character.equipment,
         character.awakening,
         find_skill(&skill_id)?,
-        find_enemy(&enemy_id)?,
+        enemy,
+        content.core_region,
         combo_count,
         temporary_adjustments,
     )?;
@@ -258,8 +286,15 @@ pub fn preview_damage(
 
 /// 全コンテンツを判定する(ホームの到達一覧・キャラレールのクリア数)。
 /// 火力はキャラのスキルのうち 1 ヒット(最大)が最大のもの、コンボ補正なしで評価する。
+///
+/// `dependency_skill_id` は装備条件(スキル依存で比較先が変わる)の判定に使うスキル。
+/// 計算タブのように「今このスキルで戦う」文脈では選択中スキルを渡す。None ならコンテンツ
+/// ごとの最大ダメージスキル(敵データなしコンテンツは一覧先頭)の依存で判定する。
 #[tauri::command]
-pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEvaluation>> {
+pub fn evaluate_contents(
+    character: NewCharacter,
+    dependency_skill_id: Option<String>,
+) -> CommandResult<Vec<ContentEvaluation>> {
     let catalog = gamedata::buff_catalog();
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_abilities = gamedata::equipment_abilities();
@@ -268,22 +303,60 @@ pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEv
     let skills = gamedata::skills_for(&character.game_character_id);
     // ループ不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
     // カタログとステ補正を再構築すると、この最重量パスで無駄な再計算になる(PR レビュー指摘)。
-    let (stat_modifiers, stat_contributions) = domain::stat_sources::build_modifiers(
+    let (mut stat_modifiers, mut stat_contributions) = domain::stat_sources::build_modifiers(
         &character.stat_sources,
         &catalog,
         &character.game_character_id,
     )
     .map_err(|e| e.to_string())?;
+    domain::stat_sources::apply_siena_stats(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &character.equipment,
+    );
     let awakening_rate = gamedata::awakening_rate(character.awakening);
-    // 装備集計(基本能力値・強化能力値・武器追加固定ダメージ)もキャラのみ依存なのでループの外で 1 回だけ計算する。
+    // 装備集計(基本能力値・武器追加固定ダメージ)はキャラのみ依存なのでループの外で 1 回だけ計算する。
     let equipment_base_totals = character.equipment.base_totals(&equipment_abilities);
-    let equipment_enhanced_totals = character.equipment.enhanced_totals();
     let added_damage = weapon_added_damage(&character.equipment.parts.weapon);
+    // 強化能力値はテシスコアの地域で変わるので、地域ごとに 1 回だけ集計してループ内で使い回す
+    // (地域は 4 つ + 地域なし。コンテンツごとに再集計すると最重量パスで無駄な再計算になる)。
+    let enhanced_totals_of = |region: Option<CoreRegion>| character.equipment.enhanced_totals(region);
+    let enhanced_by_region: Vec<(Option<CoreRegion>, domain::EquipmentValues)> =
+        std::iter::once(None)
+            .chain(CoreRegion::ALL.into_iter().map(Some))
+            .map(|region| (region, enhanced_totals_of(region)))
+            .collect();
+    let enhanced_for = |region: Option<CoreRegion>| {
+        enhanced_by_region.iter().find(|(r, _)| *r == region).map(|(_, v)| *v).unwrap_or_default()
+    };
+    // 呼び出し側がスキルを指定したら、装備条件の比較先はそのスキルの依存で固定する。
+    let fixed_dependency = match dependency_skill_id {
+        None => None,
+        Some(id) => Some(find_skill(&id)?.dependency),
+    };
     let mut evaluations = Vec::new();
     for area in gamedata::content_areas() {
         for content in &area.contents {
-            let enemy = find_enemy(&content.enemy_id)?;
+            // 敵データが無いコンテンツ(入場条件のみ判定)は火力計算をしない。装備条件の
+            // 比較先はキャラの代表スキル(一覧の先頭)の依存種別で決める。
+            let thesis_core_total =
+                character.equipment.thesis_cores.total_bonus(content.core_region);
+            let Some(enemy_id) = content.enemy_id.as_deref() else {
+                let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.dependency));
+                evaluations.push(evaluate_content(
+                    content,
+                    None,
+                    &equipment_base_totals,
+                    character.awakening,
+                    dependency,
+                    thesis_core_total,
+                ));
+                continue;
+            };
+            let equipment_enhanced_totals = enhanced_for(content.core_region);
+            let enemy = find_enemy(enemy_id)?;
             let mut best: Option<BestSkillDamage> = None;
+            let mut best_dependency: Option<domain::SkillDependency> = None;
             for skill in &skills {
                 let input = DamageInput::new(
                     character.base_stats.clone(),
@@ -309,9 +382,18 @@ pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEv
                         per_hit_max: result.per_hit.max,
                         total_max: result.total.max,
                     });
+                    // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
+                    best_dependency = Some(skill.dependency);
                 }
             }
-            evaluations.push(evaluate_content(content, best, &equipment_base_totals, character.awakening));
+            evaluations.push(evaluate_content(
+                content,
+                best,
+                &equipment_base_totals,
+                character.awakening,
+                fixed_dependency.or(best_dependency),
+                thesis_core_total,
+            ));
         }
     }
     Ok(evaluations)

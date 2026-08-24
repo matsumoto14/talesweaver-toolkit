@@ -10,7 +10,12 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::equipment::{EQUIPMENT_VALUE_MAX, STRONG_WEAPON_LEVEL_MAX};
+use crate::equipment::{
+    Equipment, EquipmentError, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
+    SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX, SIENA_STAGE_MAX,
+    SIENA_STAT_BONUS_MAX, STRONG_WEAPON_LEVEL_MAX,
+};
+use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
 use crate::stats::{
     effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind, StatModifierSet,
     StatTrace, BASE_STAT_MAX,
@@ -435,6 +440,8 @@ pub enum StatSourceError {
     AdjustmentOutOfRange { field: &'static str, kind: StatKind, value: i64, min: i64, max: i64 },
     #[error(transparent)]
     BaseStats(#[from] BaseStatsError),
+    #[error(transparent)]
+    Equipment(#[from] EquipmentError),
 }
 
 /// `StatSources` と バフカタログから `StatModifierSet` と寄与内訳を組み立てる。
@@ -656,17 +663,45 @@ pub struct StatPreview {
     pub contributions: Vec<StatContribution>,
 }
 
-/// `BaseStats` + `StatSources` から最終能力値を組み立てる(pin 込み)。
+/// シエナのオーラのステ加算(wiki: 能力値一覧(その他の部位)・追加オプション「全ステータス増加」)を
+/// `StatModifierSet` の最終固定値層に合流させる。
+///
+/// シエナのオーラは装備部位に属する(`EquipmentPart::siena`)ので `StatSources` からは組み立てられない。
+/// `build_modifiers` を呼んだ側が続けて呼ぶ(ダメージ計算・能力値プレビューの両方)。
+pub fn apply_siena_stats(
+    modifiers: &mut StatModifierSet,
+    contributions: &mut Vec<StatContribution>,
+    equipment: &Equipment,
+) {
+    let bonus = equipment.siena_stat_bonus();
+    for kind in StatKind::ALL {
+        let value = bonus.get(kind);
+        if value != 0 {
+            modifiers.get_mut(kind).final_fixed += value;
+            contributions.push(StatContribution {
+                source: "シエナのオーラ".to_string(),
+                kind,
+                layer: StatLayer::FinalFixed,
+                value: value as f64,
+            });
+        }
+    }
+}
+
+/// `BaseStats` + `StatSources` + 装備(シエナのオーラ)から最終能力値を組み立てる(pin 込み)。
 /// キャラ編集画面で「設定を触ると即時に最終能力値を再計算する」ために使う(保存はしない)。
 pub fn preview_effective_stats(
     base: &BaseStats,
     sources: &StatSources,
+    equipment: &Equipment,
     catalog: &BuffCatalog,
     game_character_id: &str,
 ) -> Result<StatPreview, StatSourceError> {
     base.validate()?;
     sources.validate()?;
-    let (modifiers, contributions) = build_modifiers(sources, catalog, game_character_id)?;
+    equipment.validate()?;
+    let (mut modifiers, mut contributions) = build_modifiers(sources, catalog, game_character_id)?;
+    apply_siena_stats(&mut modifiers, &mut contributions, equipment);
     let (mut stats, mut traces) = effective_stats(base, &modifiers);
     apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
     Ok(StatPreview { stats, traces, contributions })
@@ -688,6 +723,18 @@ pub struct StatLimits {
     /// 装備強化 Lv 上限(wiki: 装備システム/装備強化。+1〜+15)
     pub enhance_level_max: u8,
     pub enhance_added_damage_max: i64,
+    /// シエナのオーラの増幅段階の上限(wiki: 装備システム/シエナのオーラ)
+    pub siena_stage_max: u8,
+    /// シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 %
+    pub siena_attack_rate_percent_max: f64,
+    /// シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限
+    pub siena_stat_bonus_max: i64,
+    /// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
+    pub siena_all_stats_bonus_max: i64,
+    /// テシスコアの装着枠数(wiki: テシスコア効果)
+    pub core_slot_count: usize,
+    pub core_evolution_max: u8,
+    pub core_enhancement_max: u8,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -702,8 +749,15 @@ pub fn stat_limits() -> StatLimits {
         adjustment_pin_max: ADJUSTMENT_PIN_MAX,
         equipment_value_max: EQUIPMENT_VALUE_MAX,
         strong_weapon_level_max: STRONG_WEAPON_LEVEL_MAX,
-        enhance_level_max: crate::equipment::ENHANCE_LEVEL_MAX,
-        enhance_added_damage_max: crate::equipment::ENHANCE_ADDED_DAMAGE_MAX,
+        enhance_level_max: ENHANCE_LEVEL_MAX,
+        enhance_added_damage_max: ENHANCE_ADDED_DAMAGE_MAX,
+        siena_stage_max: SIENA_STAGE_MAX,
+        siena_attack_rate_percent_max: SIENA_ATTACK_RATE_PERCENT_MAX,
+        siena_stat_bonus_max: SIENA_STAT_BONUS_MAX,
+        siena_all_stats_bonus_max: SIENA_ALL_STATS_BONUS_MAX,
+        core_slot_count: CORE_SLOT_COUNT,
+        core_evolution_max: CORE_EVOLUTION_MAX,
+        core_enhancement_max: CORE_ENHANCEMENT_MAX,
     }
 }
 
@@ -931,7 +985,7 @@ mod tests {
             adjustments: Adjustments { stab: StatAdjustment { add: 10, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let preview = preview_effective_stats(&base, &sources, &test_catalog(), "boris").unwrap();
+        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &test_catalog(), "boris").unwrap();
         assert!(preview
             .contributions
             .iter()
@@ -947,7 +1001,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &test_catalog(), "boris").unwrap();
+        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &test_catalog(), "boris").unwrap();
         assert!(pinned_preview
             .contributions
             .iter()

@@ -14,6 +14,7 @@ pub mod rounding;
 pub mod skill;
 pub mod stat_sources;
 pub mod stats;
+pub mod thesis_core;
 
 pub use attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
 pub use awakening::Awakening;
@@ -29,8 +30,9 @@ pub use enemy::Enemy;
 pub use equipment::{
     equipment_attack_power, weapon_added_damage, EnhanceRates, Equipment, EquipmentAbilityDef,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentParts, EquipmentRates,
-    EquipmentValues, PartSlot, ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
-    STRONG_WEAPON_LEVEL_MAX,
+    EquipmentValues, PartSlot, SienaAura, SienaStatBonus, SupportValues, ENHANCE_LEVEL_MAX,
+    ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
+    SIENA_ALL_STATS_BONUS_MAX, SIENA_STAGE_MAX, SIENA_STAT_BONUS_MAX, STRONG_WEAPON_LEVEL_MAX,
 };
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};
@@ -43,4 +45,8 @@ pub use stat_sources::{
 pub use stats::{
     effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind,
     StatModifierSet, StatModifiers, StatTrace, BASE_STAT_MAX,
+};
+pub use thesis_core::{
+    CoreRegion, CoreSet, CoreSetBonus, CoreType, ThesisCore, ThesisCoreError, ThesisCores,
+    CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT,
 };

@@ -29,12 +29,14 @@ pub struct DamageInput {
     /// `stat_modifiers` の寄与内訳(ペット/ルーン/クラウン/聖物/バフ/調整値)。トレース表示用
     pub stat_contributions: Vec<StatContribution>,
     pub coefficients: AttackCoefficients,
-    /// 装備補正(パワーウェポン/ストロングウェポン。`enhance_rate()` にのみ使う)
+    /// 装備補正。装備攻撃力強化倍率(`enhance_rate()`)、シエナのオーラの攻撃力増加(New1)、
+    /// テシスコアのセット効果(K/L)の 3 つに使う
     pub equipment: Equipment,
     /// 装備の基本能力値の集計(`Equipment::base_totals`。アビリティ加算込み。呼び出し側が gamedata の
     /// 武器アビリティカタログを使って集計して渡す。domain は gamedata に依存できないため)
     pub equipment_base_totals: EquipmentValues,
-    /// 装備の強化能力値の集計(`Equipment::enhanced_totals`)
+    /// 装備の強化能力値の集計(`Equipment::enhanced_totals`。エンチャント + シエナのオーラ +
+    /// 対象コンテンツの地域のテシスコア。地域の解決は呼び出し側が行う)
     pub equipment_enhanced_totals: EquipmentValues,
     /// 装備攻撃力の係数(wiki: カテゴリA の内訳)。スキル依存種別ごとに gamedata が持つ
     pub equipment_coefficients: EquipmentCoefficients,
@@ -261,6 +263,12 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     totals.add(DamageReduction, input.enemy.damage_reduction as f64);
     totals.add(AwakeningDamage, input.awakening_rate - 1.0);
     totals.add(CutRateA, input.enemy.cut_rate_a - 1.0);
+    // シエナのオーラの追加オプション「攻撃力増加」(wiki: New1。実際は与ダメージ割合増加)
+    totals.add(SienaAuraAttackRate, input.equipment.siena_attack_rate());
+    // テシスコアのセット効果(wiki: コアセット効果。全地域で発動するので対象コンテンツの地域を問わない)
+    let core_set_bonus = input.equipment.thesis_cores.set_bonus();
+    totals.add(FinalDamageFixed, core_set_bonus.final_damage_fixed as f64);
+    totals.add(FinalDamageRate, core_set_bonus.final_damage_rate);
 
     let mut totals_min = totals.clone();
     totals_min.add(AttackRandom, 1.0);
@@ -681,5 +689,71 @@ mod tests {
         let r = calculate_damage(&input());
         assert_eq!(r.trace.steps_min.len(), 14);
         assert_ne!(r.trace.steps_min.last().unwrap().name, "武器強化(追加固定ダメージ)");
+    }
+
+    #[test]
+    fn シエナのオーラの攻撃力増加はNew1に乗る() {
+        let base = calculate_damage(&input()).per_hit.max;
+
+        let mut i = input();
+        i.equipment.parts.weapon.siena.stage = 10;
+        i.equipment.parts.weapon.siena.attack_rate_percent = 10.0;
+        i.equipment.parts.armor.siena.stage = 10;
+        i.equipment.parts.armor.siena.attack_rate_percent = 5.0;
+        let boosted = calculate_damage(&i);
+
+        // New1 は Σ% = +15% として集計される
+        let new1 = boosted
+            .trace
+            .categories
+            .iter()
+            .find(|c| c.symbol == "New1")
+            .expect("New1 のトレースがある");
+        assert!((new1.value - 0.15).abs() < 1e-12);
+        assert!((new1.factor - 1.15).abs() < 1e-12);
+        assert!(boosted.per_hit.max > base);
+    }
+
+    #[test]
+    fn テシスコアのセット効果は最終ダメージのkとlに乗る() {
+        use crate::thesis_core::{CoreRegion, CoreSet, CoreType, ThesisCore, CORE_SLOT_COUNT};
+
+        // 進化0 強化4 が 6 個 → 最終ダメージ(固定値)+800
+        let mut i = input();
+        *i.equipment.thesis_cores.get_mut(CoreRegion::Abyss) = CoreSet {
+            slots: [Some(ThesisCore { core_type: CoreType::Slash, evolution: 0, enhancement: 4 });
+                CORE_SLOT_COUNT],
+        };
+        let fixed = calculate_damage(&i);
+        let k = fixed.trace.categories.iter().find(|c| c.symbol == "K").unwrap();
+        assert_eq!(k.value, 800.0);
+
+        // 進化4 強化4 が 6 個 → 最終ダメージ +5%(K は 0 に戻る)
+        let mut i = input();
+        *i.equipment.thesis_cores.get_mut(CoreRegion::Eclipse) = CoreSet {
+            slots: [Some(ThesisCore { core_type: CoreType::Slash, evolution: 4, enhancement: 4 });
+                CORE_SLOT_COUNT],
+        };
+        let rate = calculate_damage(&i);
+        let l = rate.trace.categories.iter().find(|c| c.symbol == "L").unwrap();
+        assert!((l.value - 0.05).abs() < 1e-12);
+        assert_eq!(rate.trace.categories.iter().find(|c| c.symbol == "K").unwrap().value, 0.0);
+        assert!(rate.per_hit.max > calculate_damage(&input()).per_hit.max);
+    }
+
+    // wiki: K は上限 1000。進化1 強化4 の 6 セット(+1,400)はキャップに当たる
+    #[test]
+    fn テシスコアの最終ダメージ固定値は上限1000でキャップされる() {
+        use crate::thesis_core::{CoreRegion, CoreSet, CoreType, ThesisCore, CORE_SLOT_COUNT};
+
+        let mut i = input();
+        *i.equipment.thesis_cores.get_mut(CoreRegion::Mercurial) = CoreSet {
+            slots: [Some(ThesisCore { core_type: CoreType::Thrust, evolution: 1, enhancement: 4 });
+                CORE_SLOT_COUNT],
+        };
+        let result = calculate_damage(&i);
+        let k = result.trace.categories.iter().find(|c| c.symbol == "K").unwrap();
+        assert_eq!(k.raw, 1_400.0);
+        assert_eq!(k.value, 1_000.0);
     }
 }

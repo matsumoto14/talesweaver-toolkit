@@ -17,7 +17,7 @@ pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use characters::{
     attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,
 };
-pub use contents::{content_areas, CONTENTS_SOURCE};
+pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
     enhance_multiplier, enhance_multiplier_range, enhance_rates, equipment_abilities,

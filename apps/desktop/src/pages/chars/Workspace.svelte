@@ -4,10 +4,13 @@
   // 親 CharsPage が {#key character.id} で作り直す前提($effect による再同期は書かない)。
   import { untrack } from "svelte";
   import { errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
-  import type { RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
+  import type { Equipment, RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
-  import { equipmentBaseTotal, equipmentEnchantTotal } from "../../equipment";
+  import {
+    equipmentBaseTotal, equipmentEnchantTotal, sienaAttackRatePercent, sienaPartCount,
+    sienaStatTotal, thesisCoresBestTotal,
+  } from "../../equipment";
   import { fmtInt } from "../../format";
   import { STAT_KINDS, STAT_LABELS } from "../../labels";
   import { app, removeCharacter, upsertCharacter } from "../../state.svelte";
@@ -58,10 +61,12 @@
   $effect(() => {
     const baseStats = { ...draft.baseStats };
     const statSources = JSON.parse(JSON.stringify(draft.statSources)) as StatSources;
+    // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
+    const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, draft.gameCharacterId)
+      previewEffectiveStats(baseStats, statSources, equipment, draft.gameCharacterId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;
@@ -127,6 +132,10 @@
   );
   const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment));
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
+  const sienaParts = $derived(sienaPartCount(draft.equipment));
+  const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
+  const sienaStats = $derived(sienaStatTotal(draft.equipment));
+  const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
 
   const NEUTRAL = "未設定(中立値で計算)";
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
@@ -140,10 +149,23 @@
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
     { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
+    {
+      id: "siena",
+      name: "シエナのオーラ",
+      sub:
+        sienaParts > 0
+          ? `${sienaParts} 部位 ・ 攻撃力 +${sienaRate}%${sienaStats > 0 ? ` ・ ステ +${fmtInt(sienaStats)}` : ""}`
+          : NEUTRAL,
+    },
+    {
+      id: "thesis",
+      name: "テシスコア",
+      sub: coreBestTotal > 0 ? `最大 合計 ${fmtInt(coreBestTotal)}` : NEUTRAL,
+    },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
-  const PLANNED = ["シエナのオーラ", "テシスコア", "称号", "モンスターカード"];
+  const PLANNED = ["称号", "モンスターカード"];
 
   // --- いまの実力 ---------------------------------------------------------
   const totalContents = $derived(app.areas.reduce((n, a) => n + a.contents.length, 0));
