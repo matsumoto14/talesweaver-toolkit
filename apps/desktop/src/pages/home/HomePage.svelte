@@ -2,11 +2,11 @@
   // ホーム: 選択中キャラが「どこにどのくらい通るか」の到達一覧(v4 デザイン)。
   // 判定はすべて Rust 側(evaluate_contents)。この画面は表示と選択のみ。
   import { errorMessage, listSkills, previewDamage } from "../../api/commands";
-  import type { Content, ContentEvaluation } from "../../api/types";
+  import type { Content, ContentEvaluation, NewCharacter } from "../../api/types";
   import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
   import { fmtInt } from "../../format";
   import {
-    app, evaluationFor, flatContents, payloadOf, selectedCharacter,
+    app, evaluationFor, flatContents, payloadOf, refreshEvaluation, selectedCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
@@ -53,17 +53,19 @@
   const clearCount = $derived(rows.filter((r) => r.ev?.clear).length);
   const entryCount = $derived(rows.filter((r) => r.ev?.entry_ok).length);
 
-  // 行の状態: 0余裕 1通る 2ぎりぎり 3届かない 4条件・火力とも未達 5条件だけ未達 6スキル未収録
+  // 行の状態: 0余裕 1通る 2ぎりぎり 3届かない 4条件・火力とも未達 5条件だけ未達 6スキル未収録 7判定中
+  // 「判定未着(!r.ev)」と「本当にスキル未収録(!r.ev.damage)」を混同しない(PR レビュー指摘)。
   function rowState(r: Row): number {
-    if (!r.ev || !r.ev.damage) return 6;
+    if (!r.ev) return 7;
+    if (!r.ev.damage) return 6;
     const ratio = r.ev.damage.per_hit_max / r.content.need_per_hit;
     if (!r.ev.entry_ok) return r.ev.reaches_need ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   }
-  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "スキル未収録"];
-  const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2"];
-  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "#6D6AA8", "#A9B4C4"];
-  const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88"];
+  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "スキル未収録", "判定中…"];
+  const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2", "#ECEEF2"];
+  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "#6D6AA8", "#A9B4C4", "#A9B4C4"];
+  const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88", "#5E6E88"];
   const BAR_BG = [
     "linear-gradient(90deg,#90D7FF,#426DD6)",
     "linear-gradient(90deg,#9FD9BC,#3E8C63)",
@@ -71,6 +73,7 @@
     "linear-gradient(90deg,#E8B3A2,#B0574A)",
     "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
     "linear-gradient(90deg,#C3C1E4,#6D6AA8)",
+    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
     "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
   ];
 
@@ -180,7 +183,8 @@
 
   function applyAdvice(a: Advice) {
     if (!character || !goal) return;
-    const p = payloadOf(character);
+    // 既存の試し変更があればその上に候補を重ねる(無確認で破棄しない。PR レビュー指摘)
+    const p = JSON.parse(JSON.stringify(app.sim ?? payloadOf(character))) as NewCharacter;
     a.candidate.apply(p);
     app.sim = p;
     app.calcTargetId = goal.content.id;
@@ -208,6 +212,12 @@
       {#if !character}
         <p class="empty dim">キャラを登録すると、ここに到達一覧が出ます。左下の「＋ キャラを登録」からどうぞ。</p>
       {:else}
+        {#if !app.evaluations[character.id]}
+          <div class="retry-row">
+            <span class="dim">到達判定を取得できていません。</span>
+            <button type="button" class="btn" onclick={() => character && refreshEvaluation(character)}>再判定</button>
+          </div>
+        {/if}
         <div class="summary">
           <span class="cap">クリアできるのは</span>
           <span class="big-wrap"><span class="big num">{clearCount}</span><span class="of num">/ {totalCount}</span></span>
@@ -418,6 +428,8 @@
   .scroll { flex: 1; min-height: 0; overflow: auto; padding: 13px 16px 18px; }
   .scroll.pad { padding: 12px; }
   .empty { font-size: 12px; }
+
+  .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
 
   .summary {
     display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-radius: 13px;

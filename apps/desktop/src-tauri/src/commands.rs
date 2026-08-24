@@ -192,25 +192,38 @@ pub fn preview_damage(
 /// 火力はキャラのスキルのうち 1 ヒット(最大)が最大のもの、コンボ補正なしで評価する。
 #[tauri::command]
 pub fn evaluate_contents(character: NewCharacter) -> CommandResult<Vec<ContentEvaluation>> {
-    storage::validate_new_character(&character, &gamedata::buff_catalog()).map_err(|e| e.to_string())?;
+    let catalog = gamedata::buff_catalog();
+    storage::validate_new_character(&character, &catalog).map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
+    // ループ不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
+    // カタログとステ補正を再構築すると、この最重量パスで無駄な再計算になる(PR レビュー指摘)。
+    let (stat_modifiers, stat_contributions) = domain::stat_sources::build_modifiers(
+        &character.stat_sources,
+        &catalog,
+        &character.game_character_id,
+    )
+    .map_err(|e| e.to_string())?;
+    let awakening_rate = gamedata::awakening_rate(character.awakening);
     let mut evaluations = Vec::new();
     for area in gamedata::content_areas() {
         for content in &area.contents {
             let enemy = find_enemy(&content.enemy_id)?;
             let mut best: Option<BestSkillDamage> = None;
             for skill in &skills {
-                let input = build_damage_input(
-                    &character.base_stats,
-                    &character.game_character_id,
-                    &character.stat_sources,
+                let input = DamageInput::new(
+                    character.base_stats.clone(),
+                    stat_modifiers.clone(),
+                    stat_contributions.clone(),
+                    gamedata::attack_coefficients(skill.dependency),
                     character.equipment,
-                    character.awakening,
+                    gamedata::equipment_coefficients(skill.dependency),
+                    awakening_rate,
                     skill.clone(),
                     enemy.clone(),
                     0,
+                    character.stat_sources.adjustments.clone(),
                     None,
-                )?;
+                );
                 let result = domain::calculate_damage(&input);
                 if best.as_ref().is_none_or(|b| result.per_hit.max > b.per_hit_max) {
                     best = Some(BestSkillDamage {

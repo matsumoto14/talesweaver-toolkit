@@ -75,9 +75,17 @@ export function evaluationFor(characterId: number, contentId: string): ContentEv
   return app.evaluations[characterId]?.find((e) => e.content_id === contentId) ?? null;
 }
 
+// キャラ id ごとの最新リクエスト番号(非リアクティブ)。古い応答を捨てるためのガード。
+const evaluationSeqs: Record<number, number> = {};
+
 export async function refreshEvaluation(c: RegisteredCharacter): Promise<void> {
+  const seq = (evaluationSeqs[c.id] = (evaluationSeqs[c.id] ?? 0) + 1);
   try {
-    app.evaluations[c.id] = await evaluateContents(payloadOf(c));
+    const evaluations = await evaluateContents(payloadOf(c));
+    // 古い応答、および削除済みキャラの応答は反映しない(削除済みキーの復活防止)
+    if (evaluationSeqs[c.id] === seq && app.characters.some((x) => x.id === c.id)) {
+      app.evaluations[c.id] = evaluations;
+    }
   } catch (e) {
     reportError(errorMessage(e));
   }

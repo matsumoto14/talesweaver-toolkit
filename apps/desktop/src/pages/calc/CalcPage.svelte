@@ -1,11 +1,12 @@
 <script lang="ts">
   // ダメージ計算: v4 の縦フロー「相手を選ぶ → この一発 → もし〜だったら → なぜこの数字？」。
   // 右カラムは「計算の材料」(試し変更・バフ・入場条件)。計算はすべて Rust 側(preview_damage)。
+  import { untrack } from "svelte";
   import {
     errorMessage, evaluateContents, listSkills, previewDamage, updateCharacter,
   } from "../../api/commands";
   import type {
-    BuffDefinition, ContentEvaluation, DamageResult, NewCharacter, Skill, StatKind,
+    Adjustments, BuffDefinition, ContentEvaluation, DamageResult, NewCharacter, Skill, StatKind,
   } from "../../api/types";
   import {
     isBlocked, isChoiceValue, isConsumable, isFixedValue, isPercentLayer, isUserSelectedTarget,
@@ -53,22 +54,26 @@
   // --- スキル(キャラ種で引き直し) ----------------------------------------
   let skills = $state<Skill[]>([]);
   let skillId = $state("");
+  // 取得済みスキルが属するキャラ種(非リアクティブ)。キャラ種が変わった瞬間に skillId を
+  // 同期的に空へ戻す。残すと listSkills の応答まで「別キャラのステ × 前キャラのスキル」で
+  // 計算・表示されてしまう(Rust 側はスキル所有チェックをしない。PR レビュー指摘)。
+  let skillsGid: string | null = null;
   $effect(() => {
-    const gid = character?.game_character_id;
-    if (!gid) {
-      skills = [];
-      skillId = "";
-      return;
-    }
+    const gid = character?.game_character_id ?? null;
+    if (gid === skillsGid) return; // 保存等でキャラのオブジェクトだけ変わった場合は選択を保つ
+    skillsGid = gid;
+    skills = [];
+    skillId = "";
+    if (!gid) return;
     listSkills(gid)
       .then((list) => {
+        if (skillsGid !== gid) return; // 切替済みの古い応答は捨てる
         skills = list;
         // ホームからの遷移はホームの判定に使ったスキル(最大ダメージ)を引き継ぐ。
-        // タブ間で同じ数字が出ることを優先する(実機スモークで食い違いの指摘)。
         const handoff = app.calcSkillId;
         app.calcSkillId = null;
         if (handoff && list.some((s) => s.id === handoff)) skillId = handoff;
-        else if (!list.some((s) => s.id === skillId)) skillId = list[0]?.id ?? "";
+        else skillId = list[0]?.id ?? "";
       })
       .catch((e) => reportError(errorMessage(e)));
   });
@@ -79,13 +84,16 @@
   let skillTotals = $state<Record<string, { perHit: number; total: number }>>({});
   let skillSeq = 0;
   $effect(() => {
+    // 対象・キャラ・試し変更が変わったら古い合計を出さない(PR レビュー指摘)
+    skillTotals = {};
     if (!skillOpen || !payload || !target || skills.length === 0) return;
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
+    const temp = JSON.parse(JSON.stringify(temporaryAdjustments)) as Adjustments;
     const enemyId = target.content.enemy_id;
     const comboCount = combo ? COMBO_THRESHOLD : 0;
     const seq = ++skillSeq;
     Promise.all(
-      skills.map(async (s) => [s.id, await previewDamage(p, s.id, enemyId, comboCount)] as const),
+      skills.map(async (s) => [s.id, await previewDamage(p, s.id, enemyId, comboCount, temp)] as const),
     )
       .then((rs) => {
         if (seq !== skillSeq) return;
@@ -97,6 +105,24 @@
   });
 
   let combo = $state(false);
+
+  // --- 一時調整 -------------------------------------------------------------
+  // 計算リクエストにのみ乗せ、「キャラに保存」の対象にしない(旧仕様を踏襲。
+  // sim に混ぜると「もしステ+50なら」が保存で永続化されてしまう。PR レビュー指摘)。
+  const neutralAdjustments = (): Adjustments =>
+    Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as Adjustments;
+  let temporaryAdjustments = $state<Adjustments>(neutralAdjustments());
+  const hasTemporaryAdjustments = $derived(
+    STAT_KINDS.some((k) => temporaryAdjustments[k].add !== 0 || temporaryAdjustments[k].pin !== null),
+  );
+  // キャラを切り替えたら一時調整をリセット(前のキャラの調整を引き継がない)
+  let lastCharacterId = untrack(() => character?.id);
+  $effect(() => {
+    const id = character?.id;
+    if (id === lastCharacterId) return;
+    lastCharacterId = id;
+    temporaryAdjustments = neutralAdjustments();
+  });
 
   // --- 計算(payload と saved の両方) -------------------------------------
   let result = $state<DamageResult | null>(null);
@@ -111,6 +137,7 @@
     const sid = skillId;
     const comboCount = combo ? COMBO_THRESHOLD : 0;
     const simActive = app.sim !== null;
+    const tempJson = JSON.stringify(temporaryAdjustments);
     if (debounceHandle) clearTimeout(debounceHandle);
     if (!pJson || !sp || !t || !sid) {
       result = null;
@@ -121,8 +148,10 @@
     calculating = true;
     debounceHandle = setTimeout(async () => {
       try {
-        const main = await previewDamage(JSON.parse(pJson), sid, t.content.enemy_id, comboCount);
-        const saved = simActive ? await previewDamage(sp, sid, t.content.enemy_id, comboCount) : main;
+        const main = await previewDamage(JSON.parse(pJson), sid, t.content.enemy_id, comboCount, JSON.parse(tempJson));
+        const saved = simActive
+          ? await previewDamage(sp, sid, t.content.enemy_id, comboCount, JSON.parse(tempJson))
+          : main;
         if (seq === requestSeq) {
           result = main;
           savedResult = saved;
@@ -177,14 +206,17 @@
   );
   const need = $derived(target?.content.need_per_hit ?? 0);
   const ratio = $derived(perHit !== null && need > 0 ? perHit / need : 0);
-  const entryOk = $derived(targetEval?.entry_ok ?? true);
   const hasReqs = $derived((target?.content.requirements.length ?? 0) > 0);
+  // 評価が未取得の間は入場条件を「不明」として扱い、未達コンテンツに「通る/余裕」を
+  // 出さない(ダメージ 120ms・評価 200ms のデバウンス差で毎回この窓が開く。PR レビュー指摘)
+  const entryKnown = $derived(!hasReqs || targetEval !== null);
+  const entryOk = $derived(!hasReqs || (targetEval?.entry_ok ?? false));
   const badgeState = $derived.by(() => {
-    if (perHit === null) return 6;
+    if (perHit === null || !entryKnown) return 6;
     if (hasReqs && !entryOk) return ratio >= 1 ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   });
-  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "—"];
+  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "判定中"];
   const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2"];
   const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "#6D6AA8", "#A9B4C4"];
   const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88"];
@@ -292,9 +324,6 @@
     c.kind === "rate" ? `${c.value >= 0 ? "+" : ""}${fmtNum(c.value * 100)}%` : fmtNum(c.value);
 
   // --- 試し変更(sim) ------------------------------------------------------
-  function ensureSim() {
-    if (app.sim === null && savedPayload) app.sim = JSON.parse(JSON.stringify(savedPayload));
-  }
   function editSim(fn: (p: NewCharacter) => void) {
     if (!payload) return;
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
@@ -435,6 +464,7 @@
   let whatIfHandle: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null;
+    const tempJson = JSON.stringify(temporaryAdjustments);
     const t = target;
     const sid = skillId;
     const base = perHit;
@@ -452,7 +482,7 @@
           list.map(async (candidate) => {
             const p = JSON.parse(pJson) as NewCharacter;
             candidate.apply(p);
-            const r = await previewDamage(p, sid, t.content.enemy_id, combo ? COMBO_THRESHOLD : 0);
+            const r = await previewDamage(p, sid, t.content.enemy_id, combo ? COMBO_THRESHOLD : 0, JSON.parse(tempJson));
             return {
               candidate,
               perHit: r.per_hit.max,
@@ -976,19 +1006,18 @@
 
         <!-- 調整(一時) -->
         <details class="card adj">
-          <summary class="card-title">調整 — 「もしステが +50 なら」</summary>
-          {#if app.sim}
-            <AdjustmentEditor
-              adjustments={app.sim.stat_sources.adjustments}
-              addMin={limits.adjustment_add_min}
-              addMax={limits.adjustment_add_max}
-              pinMin={limits.adjustment_pin_min}
-              pinMax={limits.adjustment_pin_max}
-              pinDefault={(k) => result?.trace.stats.find((s) => s.kind === k)?.effective ?? payload.base_stats[k]}
-            />
-          {:else}
-            <button type="button" class="btn start-adj" onclick={ensureSim}>試し変更を始めて調整する</button>
-          {/if}
+          <summary class="card-title">
+            調整(一時) — 「もしステが +50 なら」{hasTemporaryAdjustments ? " ・ 調整あり" : ""}
+          </summary>
+          <p class="adj-note dim">計算にのみ反映されます。「キャラに保存」には含まれません(保存する調整はキャラタブで)。</p>
+          <AdjustmentEditor
+            adjustments={temporaryAdjustments}
+            addMin={limits.adjustment_add_min}
+            addMax={limits.adjustment_add_max}
+            pinMin={limits.adjustment_pin_min}
+            pinMax={limits.adjustment_pin_max}
+            pinDefault={(k) => result?.trace.stats.find((s) => s.kind === k)?.effective ?? payload.base_stats[k]}
+          />
         </details>
 
         <!-- コンボ -->
@@ -1256,7 +1285,7 @@
   .bd-fixed { font-size: 10px; }
 
   .card.adj summary { cursor: pointer; font-size: 11px; }
-  .start-adj { margin-top: 8px; width: 100%; }
+  .adj-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
 
   .combo { display: flex; align-items: center; gap: 8px; padding: 2px 4px; font-size: 11.5px; cursor: pointer; }
   .combo input { accent-color: var(--accent); }
