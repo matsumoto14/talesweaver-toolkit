@@ -10,7 +10,9 @@ use thiserror::Error;
 use crate::stats::StatKind;
 use crate::thesis_core::{CoreRegion, ThesisCoreError, ThesisCores};
 
-/// 装備補正 4 種(突き/斬り/魔攻/魔防)。基本能力値・エンチャント値のどちらも同じ形。
+/// 装備補正 9 種(wiki Item 各ページの列: 突き / 斬り / 物防 / 魔攻 / 魔防 / 命中 / Cri補正 / 回避 / 敏捷)。
+/// 基本能力値・エンチャント値のどちらも同じ形。与ダメージ式に入るのは前半 4 種
+/// (突き/斬り/魔攻/魔防)で、残りは防御側(§6)と命中・回避(§7)の入力。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EquipmentValues {
     #[serde(default)]
@@ -18,12 +20,23 @@ pub struct EquipmentValues {
     #[serde(default)]
     pub slash: i64,
     #[serde(default)]
+    pub physical_defense: i64,
+    #[serde(default)]
     pub magic_attack: i64,
     #[serde(default)]
     pub magic_defense: i64,
+    #[serde(default)]
+    pub accuracy: i64,
+    #[serde(default)]
+    pub critical: i64,
+    #[serde(default)]
+    pub evasion: i64,
+    #[serde(default)]
+    pub agility: i64,
 }
 
-/// 装備補正 4 値の値域上限(wiki に明記なし。実用上の安全域として暫定採用)`[仮]`。
+/// 装備補正 9 値の値域上限(wiki は装備ごとの「上限」行しか持たず、全装備共通の上限は
+/// 未記載。カタログ外のカスタム入力に掛ける安全域として暫定採用)`[仮]`。
 pub const EQUIPMENT_VALUE_MAX: i64 = 9999;
 /// ストロングウェポンの Lv 上限(wiki Skill/共通: Lv1〜6)。
 pub const STRONG_WEAPON_LEVEL_MAX: u8 = 6;
@@ -49,13 +62,23 @@ pub const SIENA_STAT_BONUS_MAX: i64 = 100;
 pub const SIENA_ALL_STATS_BONUS_MAX: i64 = 30;
 
 impl EquipmentValues {
-    fn validate(&self) -> Result<(), EquipmentError> {
-        for (field, value) in [
+    /// (表示名, 値)の 9 組。検証・UI ラベル・合計表示の唯一の並び順にする。
+    pub fn fields(&self) -> [(&'static str, i64); 9] {
+        [
             ("突き攻撃力", self.thrust),
             ("斬り攻撃力", self.slash),
+            ("物理防御力", self.physical_defense),
             ("魔法攻撃力", self.magic_attack),
             ("魔法防御力", self.magic_defense),
-        ] {
+            ("命中率補正", self.accuracy),
+            ("クリティカル補正", self.critical),
+            ("回避率補正", self.evasion),
+            ("敏捷度補正", self.agility),
+        ]
+    }
+
+    fn validate(&self) -> Result<(), EquipmentError> {
+        for (field, value) in self.fields() {
             if !(0..=EQUIPMENT_VALUE_MAX).contains(&value) {
                 return Err(EquipmentError::ValueOutOfRange { field, value, max: EQUIPMENT_VALUE_MAX });
             }
@@ -63,45 +86,18 @@ impl EquipmentValues {
         Ok(())
     }
 
-    fn add(self, other: EquipmentValues) -> EquipmentValues {
+    pub fn add(self, other: EquipmentValues) -> EquipmentValues {
         EquipmentValues {
             thrust: self.thrust + other.thrust,
             slash: self.slash + other.slash,
+            physical_defense: self.physical_defense + other.physical_defense,
             magic_attack: self.magic_attack + other.magic_attack,
             magic_defense: self.magic_defense + other.magic_defense,
-        }
-    }
-}
-
-/// 与ダメージ式に入らない装備補正(wiki: テシスコア効果の(補助)タイプ、
-/// シエナのオーラ「能力値一覧(その他の部位)」の命中率・回避率)。
-///
-/// ダメージ計算には使わないが、装備値の合計としては保持する(防御側・命中/回避の計算を
-/// 入れるときにここが入力になる。値を捨てると後から復元できない)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct SupportValues {
-    #[serde(default)]
-    pub physical_defense: i64,
-    #[serde(default)]
-    pub evasion: i64,
-    #[serde(default)]
-    pub agility: i64,
-    #[serde(default)]
-    pub accuracy: i64,
-}
-
-impl SupportValues {
-    pub fn add(self, other: SupportValues) -> SupportValues {
-        SupportValues {
-            physical_defense: self.physical_defense + other.physical_defense,
+            accuracy: self.accuracy + other.accuracy,
+            critical: self.critical + other.critical,
             evasion: self.evasion + other.evasion,
             agility: self.agility + other.agility,
-            accuracy: self.accuracy + other.accuracy,
         }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        *self == SupportValues::default()
     }
 }
 
@@ -583,12 +579,6 @@ impl Equipment {
             / 100.0
     }
 
-    /// 与ダメージ式に入らない装備補正の合計(現在の供給元はテシスコアの補助タイプのみ)。
-    /// ダメージ計算には渡さないが、装備値の合計として保持・表示する。
-    pub fn support_totals(&self, region: Option<CoreRegion>) -> SupportValues {
-        self.thesis_cores.support_values(region)
-    }
-
     /// シエナのオーラによるステ加算の合計(能力値スロット + 全ステータス増加。最終固定値層に乗る)。
     pub fn siena_stat_bonus(&self) -> SienaStatBonus {
         let mut total = SienaStatBonus::default();
@@ -768,6 +758,35 @@ mod tests {
         eq.parts.weapon.base.thrust = EQUIPMENT_VALUE_MAX;
         eq.strong_weapon_level = STRONG_WEAPON_LEVEL_MAX;
         assert!(eq.validate().is_ok());
+    }
+
+    #[test]
+    fn 装備値の値域は9種すべてを検証する() {
+        // wiki Item ページの列順そのまま。1 種でも欠けると検証をすり抜ける
+        let names: Vec<&str> = EquipmentValues::default().fields().iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            vec![
+                "突き攻撃力", "斬り攻撃力", "物理防御力", "魔法攻撃力", "魔法防御力",
+                "命中率補正", "クリティカル補正", "回避率補正", "敏捷度補正",
+            ]
+        );
+        let over = EQUIPMENT_VALUE_MAX + 1;
+        for setter in [
+            |v: &mut EquipmentValues, x| v.thrust = x,
+            |v: &mut EquipmentValues, x| v.slash = x,
+            |v: &mut EquipmentValues, x| v.physical_defense = x,
+            |v: &mut EquipmentValues, x| v.magic_attack = x,
+            |v: &mut EquipmentValues, x| v.magic_defense = x,
+            |v: &mut EquipmentValues, x| v.accuracy = x,
+            |v: &mut EquipmentValues, x| v.critical = x,
+            |v: &mut EquipmentValues, x| v.evasion = x,
+            |v: &mut EquipmentValues, x| v.agility = x,
+        ] {
+            let mut eq = Equipment::default();
+            setter(&mut eq.parts.weapon.base, over);
+            assert!(matches!(eq.validate(), Err(EquipmentError::ValueOutOfRange { .. })));
+        }
     }
 
     #[test]

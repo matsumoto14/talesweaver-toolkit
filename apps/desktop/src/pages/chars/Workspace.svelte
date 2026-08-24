@@ -12,7 +12,7 @@
     sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
-  import { EQUIPMENT_STAT_KINDS, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
@@ -24,8 +24,6 @@
   }
   let { character }: Props = $props();
 
-  // 表のヘッダは狭いので短縮名にする(EQUIPMENT_STAT_LABELS は「突き攻撃力」等で長い)
-  const EQUIPMENT_STAT_SHORT = { thrust: "突き", slash: "斬り", magic_attack: "魔攻", magic_defense: "魔防" };
 
   const DEFAULT_LIST_WIDTH = 280;
   const layoutWidths = persisted("tw-v4-chars", { list: DEFAULT_LIST_WIDTH });

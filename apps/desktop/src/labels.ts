@@ -24,14 +24,27 @@ export const PET_SKILL_TIER_LABELS: Record<PetSkillTier, string> = {
   true_lv4: "真Lv4",
 };
 
-// 装備補正 4 種(crates/domain/src/equipment.rs の EquipmentValues)の表示名・並び順。
-export const EQUIPMENT_STAT_KINDS = ["thrust", "slash", "magic_attack", "magic_defense"] as const;
+// 装備補正 9 種(crates/domain/src/equipment.rs の EquipmentValues)の表示名・並び順(wiki Item ページの列順)。
+export const EQUIPMENT_STAT_KINDS = [
+  "thrust", "slash", "physical_defense", "magic_attack", "magic_defense",
+  "accuracy", "critical", "evasion", "agility",
+] as const;
 export type EquipmentStatKind = (typeof EQUIPMENT_STAT_KINDS)[number];
 export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = {
   thrust: "突き攻撃力",
   slash: "斬り攻撃力",
+  physical_defense: "物理防御力",
   magic_attack: "魔法攻撃力",
   magic_defense: "魔法防御力",
+  accuracy: "命中率補正",
+  critical: "クリティカル補正",
+  evasion: "回避率補正",
+  agility: "敏捷度補正",
+};
+// 表・部位行など幅の狭いところ用の短縮名。
+export const EQUIPMENT_STAT_SHORT: Record<EquipmentStatKind, string> = {
+  thrust: "突き", slash: "斬り", physical_defense: "物防", magic_attack: "魔攻", magic_defense: "魔防",
+  accuracy: "命中", critical: "Cri", evasion: "回避", agility: "敏捷",
 };
 
 // 装備部位(crates/domain/src/equipment.rs の PartSlot)の表示名・並び順(wiki: 装備システム ページ冒頭の表)。

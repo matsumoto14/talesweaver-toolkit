@@ -23,7 +23,7 @@
   import type { Draft } from "../../draft";
   import {
     clampToCaps, coreBonus, coreSetSupportValues, coreSetTotalBonus, midpointValues,
-    neutralEquipmentPart, neutralSienaAura, sienaPartStatTotal,
+    neutralEquipmentPart, neutralSienaAura, rangeSummary, sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
@@ -242,7 +242,7 @@
   }
   const coreRegionTotal = (region: CoreRegion) =>
     coreSetTotalBonus(draft.equipment.thesis_cores[region]);
-  // 補助タイプは与ダメージに効かないが、装備値の合計としては保持する(表示して分かるようにする)
+  // 補助タイプは与ダメージ(攻撃力)には効かないが、装備値 9 種として防御側・回避Pに効く
   const coreSupport = $derived(coreSetSupportValues(draft.equipment.thesis_cores[coreRegion]));
   const coreSupportSummary = $derived(
     [
@@ -399,7 +399,7 @@
                 <span class="part-abi">アビリティ {part.abilities.length}</span>
               {/if}
             </span>
-            <span class="part-vals num dim">突{fmtInt(part.base.thrust)} / 斬{fmtInt(part.base.slash)}</span>
+            <span class="part-vals num dim">{valuesSummary(part.base)}</span>
             <span class="chev dim">›</span>
           </button>
         {/each}
@@ -435,8 +435,7 @@
             <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
               <span class="item-name">{candidate.name}</span>
               <span class="item-vals num dim">
-                突{candidate.values_min.thrust}-{candidate.values_max.thrust} /
-                斬{candidate.values_min.slash}-{candidate.values_max.slash}
+                {rangeSummary(candidate.values_min, candidate.values_max)}
               </span>
             </button>
           {/each}
@@ -725,8 +724,8 @@
         対応する地域のコアだけが装備攻撃力に入ります。セット効果(最終ダメージ)は全地域で発動します。
       </p>
       <p class="hint dim">
-        補助タイプ(物防/回避/敏捷/命中)も装着状態として記録できます。与ダメージ式には効かないので
-        装備攻撃力には入らず、入場条件「コア N」の合計にだけ効きます(グレー表示の補正値)。
+        補助タイプ(物防/回避/敏捷/命中)も装着状態として記録できます。与ダメージ式の装備係数が 0 なので
+        装備攻撃力には入らず、入場条件「コア N」の合計と防御タブ(防御力・カット率・回避P)に効きます。
         経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。
       </p>
     </div>
@@ -737,7 +736,7 @@
       </div>
       {#if coreSupportSummary}
         <p class="hint dim">
-          このうち補助タイプ({coreSupportSummary})は装備値として記録するだけで、与ダメージには効きません。
+          このうち補助タイプ({coreSupportSummary})は装備攻撃力には入らず、防御タブの防御力・カット率・回避Pに効きます。
         </p>
       {/if}
       <div class="core-list">

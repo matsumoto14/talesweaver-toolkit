@@ -195,7 +195,7 @@ mod tests {
     use super::*;
 
     fn equipment(thrust: i64, slash: i64, magic_attack: i64, magic_defense: i64) -> EquipmentValues {
-        EquipmentValues { thrust, slash, magic_attack, magic_defense }
+        EquipmentValues { thrust, slash, magic_attack, magic_defense, ..Default::default() }
     }
 
     fn content(need: Option<i64>, requirements: Vec<ContentRequirement>) -> Content {

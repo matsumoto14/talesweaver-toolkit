@@ -720,8 +720,8 @@ mod tests {
         c.equipment = Equipment {
             parts: EquipmentParts {
                 weapon: EquipmentPart {
-                    base: EquipmentValues { thrust: 150, slash: 150, magic_attack: 0, magic_defense: 0 },
-                    enchant: EquipmentValues { thrust: 60, slash: 60, magic_attack: 0, magic_defense: 0 },
+                    base: EquipmentValues { thrust: 150, slash: 150, magic_attack: 0, magic_defense: 0, ..Default::default() },
+                    enchant: EquipmentValues { thrust: 60, slash: 60, magic_attack: 0, magic_defense: 0, ..Default::default() },
                     ..Default::default()
                 },
                 ..Default::default()
@@ -861,8 +861,8 @@ mod tests {
             slot: domain::PartSlot::Weapon,
             name: "テスト武器",
             values_min: domain::EquipmentValues::default(),
-            values_max: domain::EquipmentValues { thrust: 100, slash: 100, magic_attack: 0, magic_defense: 0 },
-            enchant_caps: domain::EquipmentValues { thrust: 50, slash: 50, magic_attack: 0, magic_defense: 0 },
+            values_max: domain::EquipmentValues { thrust: 100, slash: 100, magic_attack: 0, magic_defense: 0, ..Default::default() },
+            enchant_caps: domain::EquipmentValues { thrust: 50, slash: 50, magic_attack: 0, magic_defense: 0, ..Default::default() },
             weapon_class: None,
             source: gamedata::EQUIPMENT_CATALOG_SOURCE,
         }

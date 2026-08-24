@@ -1,7 +1,6 @@
 <script lang="ts">
   // 防御側パネル(規格シート 5c)。攻撃タブと同列で「自分がどれだけ耐えるか」を出す。
   // 計算は Rust 側(crates/domain/src/defense.rs)。ここは表示だけ。
-  // 未実装(値を出せない)項目は破線 +「未実装」にして 0 と区別する。
   import type { DefenseProfile } from "../../api/types";
   import { fmtInt, fmtNum } from "../../format";
 
@@ -35,7 +34,7 @@
         <div class="row">
           <span class="rl">物理防御力</span>
           <span class="num rv">{fmtInt(profile.physical_defense)}</span>
-          <span class="rn dim">DEF×3(装備物防は未実装のぶん下振れ)</span>
+          <span class="rn dim">DEF×3 + 装備物防 {fmtInt(profile.equipment_physical_defense)}×6</span>
         </div>
         <div class="row">
           <span class="rl">魔法防御力</span>
@@ -46,11 +45,6 @@
           <span class="rl">複合防御力</span>
           <span class="num rv">{fmtInt(profile.composite_defense)}</span>
           <span class="rn dim">(DEF+MR)×1.5 + 装備×3</span>
-        </div>
-        <div class="row">
-          <span class="rl">装備物防</span>
-          <span class="na">未実装</span>
-          <span class="rn dim">装備データが物理防御力を持っていません(0 ではなく未収録)</span>
         </div>
       </div>
     </div>
@@ -64,7 +58,7 @@
         <div class="row">
           <span class="rl">物理</span>
           <span class="num rv">{pct(profile.physical_cut_rate)}</span>
-          <span class="rn dim">DEF から</span>
+          <span class="rn dim">DEF + 装備物防 から</span>
         </div>
         <div class="row">
           <span class="rl">魔法</span>
@@ -99,7 +93,9 @@
         <div class="row">
           <span class="rl">回避P(複合)</span>
           <span class="num rv">{fmtInt(profile.evasion_point.composite)}</span>
-          <span class="rn dim">+ (DEF+MR) / 7(装備回避率・装備敏捷度は未実装のぶん下振れ)</span>
+          <span class="rn dim">
+            + (DEF+MR) / 7。装備回避率 {fmtInt(profile.equipment_evasion)}×1.2 + 装備敏捷度 {fmtInt(profile.equipment_agility)}/7 を含む
+          </span>
         </div>
         <div class="row">
           <span class="rl">通常回避(上限)</span>
@@ -159,11 +155,6 @@
   }
   .rl { flex-shrink: 0; width: 120px; font-size: 10px; color: var(--fg-muted); }
   .rv { flex-shrink: 0; width: 84px; text-align: right; font-size: 13px; font-weight: 700; }
-  /* 未実装は 0 と区別する(破線 + 「未実装」) */
-  .na {
-    flex-shrink: 0; width: 84px; text-align: center; font-size: 9.5px; font-weight: 700;
-    color: var(--fg-muted); border: 1px dashed var(--border-strong); border-radius: var(--r-pill);
-  }
   .rn { min-width: 0; font-size: 9px; line-height: 1.5; }
   .tmp { color: var(--warm); font-weight: 700; }
   .note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }

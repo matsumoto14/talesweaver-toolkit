@@ -7,8 +7,8 @@
 //! - 能力値の増加は対象ダンジョン内でのみ有効。セット効果は全地域で発動する
 //!
 //! 補助タイプ(物理防御力・回避率補正・敏捷性補正・命中率補正)も収録する(ユーザー要望)。
-//! 与ダメージ式には効かないので強化能力値(`equipment_values`)には入れず、
-//! 装備値の合計として `support_values` に保持する(防御側・命中/回避の計算を入れるときの入力)。
+//! 装備補正 9 値に持ち場があるので強化能力値(`equipment_values`)に合流する。与ダメージ式の
+//! 装備係数はこの 4 種が 0 なので攻撃力には効かず、防御側(§6)と回避P(§7)にだけ効く。
 //! 入場条件「コア N」の合計には火力と同じように効く。経験値タイプはシオカンヘイム専用で、
 //! シオカンヘイムのコアはセット効果も経験値獲得量なので地域ごと収録しない
 //! (wiki「実装済みダンジョンコア」「コアセット効果」、ユーザー確認 2026-08-24)。
@@ -16,7 +16,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::equipment::{EquipmentValues, SupportValues};
+use crate::equipment::EquipmentValues;
 
 /// 装着位置の数(wiki: テシスコア効果「装着位置」1〜6)。
 pub const CORE_SLOT_COUNT: usize = 6;
@@ -222,7 +222,7 @@ impl CoreSet {
         self.slots.iter().flatten().map(ThesisCore::bonus).sum()
     }
 
-    /// 強化能力値への加算(火力タイプのみ。命中は装備補正 4 値に持ち場が無い)。
+    /// 強化能力値への加算(火力 4 タイプ + 補助 4 タイプ。装備補正 9 値にすべて持ち場がある)。
     pub fn equipment_values(&self) -> EquipmentValues {
         let mut values = EquipmentValues::default();
         for core in self.slots.iter().flatten() {
@@ -232,30 +232,11 @@ impl CoreSet {
                 CoreType::Slash => values.slash += bonus,
                 CoreType::MagicAttack => values.magic_attack += bonus,
                 CoreType::MagicDefense => values.magic_defense += bonus,
-                // 補助タイプは装備補正 4 値に持ち場が無い(与ダメージ式にも入らない)
-                CoreType::PhysicalDefense
-                | CoreType::Evasion
-                | CoreType::Agility
-                | CoreType::Accuracy => {}
-            }
-        }
-        values
-    }
-
-    /// 与ダメージ式に入らない補助タイプの合計(装備値として保持する)。
-    pub fn support_values(&self) -> SupportValues {
-        let mut values = SupportValues::default();
-        for core in self.slots.iter().flatten() {
-            let bonus = core.bonus();
-            match core.core_type {
+                // 補助タイプ。与ダメージ式の係数は 0 なので攻撃力には効かず、防御側・回避Pに効く
                 CoreType::PhysicalDefense => values.physical_defense += bonus,
                 CoreType::Evasion => values.evasion += bonus,
                 CoreType::Agility => values.agility += bonus,
                 CoreType::Accuracy => values.accuracy += bonus,
-                CoreType::Thrust
-                | CoreType::Slash
-                | CoreType::MagicAttack
-                | CoreType::MagicDefense => {}
             }
         }
         values
@@ -328,14 +309,6 @@ impl ThesisCores {
         match region {
             Some(region) => self.get(region).equipment_values(),
             None => EquipmentValues::default(),
-        }
-    }
-
-    /// その地域での補助タイプの合計(装備値として保持する。与ダメージには使わない)。
-    pub fn support_values(&self, region: Option<CoreRegion>) -> SupportValues {
-        match region {
-            Some(region) => self.get(region).support_values(),
-            None => SupportValues::default(),
         }
     }
 
@@ -422,7 +395,7 @@ mod tests {
         };
         assert_eq!(
             set.equipment_values(),
-            EquipmentValues { thrust: 80, slash: 81, magic_attack: 12, magic_defense: 29 }
+            EquipmentValues { thrust: 80, slash: 81, magic_attack: 12, magic_defense: 29, ..Default::default() }
         );
         assert_eq!(set.total_bonus(), 80 + 80 + 1 + 12 + 29);
     }
@@ -550,18 +523,17 @@ mod tests {
             assert_eq!(ThesisCore { core_type, evolution: 4, enhancement: 4 }.bonus(), 80);
         }
 
-        // 補助コアで 6 枠を埋めても強化能力値は 0。合計(入場条件)と装備値の補助側に効く
+        // 補助コアで 6 枠を埋めると命中率補正だけが積まれる(与ダメージ式の係数は 0)
         let set = CoreSet {
             slots: [core(CoreType::Accuracy, 4, 4); CORE_SLOT_COUNT],
         };
-        assert_eq!(set.equipment_values(), EquipmentValues::default());
-        assert_eq!(set.total_bonus(), 360);
         assert_eq!(
-            set.support_values(),
-            SupportValues { accuracy: 360, ..Default::default() }
+            set.equipment_values(),
+            EquipmentValues { accuracy: 360, ..Default::default() }
         );
+        assert_eq!(set.total_bonus(), 360);
 
-        // タイプ混在: 火力は強化能力値、補助は装備値の補助側に振り分ける
+        // タイプ混在: 火力も補助も同じ 9 値に振り分ける
         let mixed = CoreSet {
             slots: [
                 core(CoreType::Slash, 4, 4),
@@ -574,11 +546,14 @@ mod tests {
         };
         assert_eq!(
             mixed.equipment_values(),
-            EquipmentValues { slash: 80, ..Default::default() }
-        );
-        assert_eq!(
-            mixed.support_values(),
-            SupportValues { physical_defense: 60, evasion: 23, agility: 16, accuracy: 1 }
+            EquipmentValues {
+                slash: 80,
+                physical_defense: 60,
+                evasion: 23,
+                agility: 16,
+                accuracy: 1,
+                ..Default::default()
+            }
         );
         assert_eq!(mixed.total_bonus(), 80 + 60 + 23 + 16 + 1);
 

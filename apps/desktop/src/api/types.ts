@@ -109,21 +109,18 @@ export interface StatContribution {
   value: number;
 }
 
-// 装備補正 4 種(突き/斬り/魔攻/魔防)。crates/domain/src/equipment.rs の EquipmentValues。
+// 装備補正 9 種(wiki Item ページの列順: 突き/斬り/物防/魔攻/魔防/命中/Cri/回避/敏捷)。
+// crates/domain/src/equipment.rs の EquipmentValues。
 export interface EquipmentValues {
   thrust: number;
   slash: number;
+  physical_defense: number;
   magic_attack: number;
   magic_defense: number;
-}
-
-// 与ダメージ式に入らない装備補正(テシスコアの補助タイプ等)。
-// crates/domain/src/equipment.rs の SupportValues。装備値の合計として保持するだけで計算には使わない。
-export interface SupportValues {
-  physical_defense: number;
+  accuracy: number;
+  critical: number;
   evasion: number;
   agility: number;
-  accuracy: number;
 }
 
 // 装備部位。crates/domain/src/equipment.rs の PartSlot(snake_case)。
@@ -369,7 +366,6 @@ export interface StatPreview {
 }
 
 // crates/domain/src/defense.rs の DefenseProfile。割合は小数表現(50% → 0.5)。
-// 未実装で値を出せない項目は null(0 と区別する)。
 export interface DefenseProfile {
   physical_defense: number;
   magic_defense: number;
@@ -385,11 +381,14 @@ export interface DefenseProfile {
   normal_evasion_cap: number;
   /** 上限回避時の最終被弾率 (1 − 0.85) × (1 − 特殊回避) */
   hit_taken_rate_at_cap: number;
-  /** 装備物防。装備モデルが持たないので null */
-  equipment_physical_defense: number | null;
+  /** 装備物防(基本 + 強化) */
+  equipment_physical_defense: number;
+  /** 装備魔防(基本 + 強化) */
   equipment_magic_defense: number;
-  /** 装備回避率・装備敏捷度。装備モデルが持たないので null */
-  equipment_evasion: number | null;
+  /** 装備回避率補正(基本 + 強化) */
+  equipment_evasion: number;
+  /** 装備敏捷度補正(基本 + 強化) */
+  equipment_agility: number;
 }
 
 // crates/domain/src/defense.rs の EvasionPoints(wiki 計算式まとめ#EvasionPoint)。

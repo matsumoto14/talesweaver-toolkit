@@ -3,13 +3,17 @@
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
   CoreRegion, CoreSet, CoreType, Equipment, EquipmentPart, EquipmentValues, SienaAura,
-  SienaStatBonus, SupportValues, ThesisCores,
+  SienaStatBonus, ThesisCores,
 } from "./api/types";
-import { CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, PART_SLOTS, STAT_KINDS } from "./labels";
+import {
+  CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT,
+  PART_SLOTS, STAT_KINDS,
+} from "./labels";
 
-const EQUIPMENT_VALUE_KEYS = ["thrust", "slash", "magic_attack", "magic_defense"] as const;
+const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
 
-export const zeroValues = (): EquipmentValues => ({ thrust: 0, slash: 0, magic_attack: 0, magic_defense: 0 });
+export const zeroValues = (): EquipmentValues =>
+  Object.fromEntries(EQUIPMENT_VALUE_KEYS.map((k) => [k, 0])) as unknown as EquipmentValues;
 
 /** カタログのレンジ(min/max)の中央値(floor)。カタログ選択時の基本能力値の既定セットに使う。 */
 export const midpointValues = (min: EquipmentValues, max: EquipmentValues): EquipmentValues =>
@@ -23,9 +27,23 @@ export const clampToCaps = (values: EquipmentValues, caps: EquipmentValues): Equ
     EQUIPMENT_VALUE_KEYS.map((k) => [k, Math.min(values[k], caps[k])]),
   ) as unknown as EquipmentValues;
 
-/** 4 値の合計(候補の「上位品」判定など、大小比較の目安にのみ使う)。 */
+/** 9 値の合計(候補の「上位品」判定など、大小比較の目安にのみ使う)。 */
 export const sumValues = (v: EquipmentValues): number =>
   EQUIPMENT_VALUE_KEYS.reduce((s, k) => s + v[k], 0);
+
+/** 値が大きい上位 2 種の要約(部位行の見出し用)。武器なら「突き122 / 斬り315」、鎧なら「物防270 / 魔防245」。 */
+export const valuesSummary = (v: EquipmentValues): string => {
+  const top = EQUIPMENT_VALUE_KEYS.filter((k) => v[k] > 0).sort((a, b) => v[b] - v[a]).slice(0, 2);
+  return top.length === 0 ? "—" : top.map((k) => `${EQUIPMENT_STAT_SHORT[k]}${v[k]}`).join(" / ");
+};
+
+/** カタログ候補のレンジ要約。max が大きい上位 2 種を「物防260-280 / 魔防230-260」の形で出す。 */
+export const rangeSummary = (min: EquipmentValues, max: EquipmentValues): string => {
+  const top = EQUIPMENT_VALUE_KEYS.filter((k) => max[k] > 0).sort((a, b) => max[b] - max[a]).slice(0, 2);
+  return top.length === 0
+    ? "—"
+    : top.map((k) => `${EQUIPMENT_STAT_SHORT[k]}${min[k]}-${max[k]}`).join(" / ");
+};
 
 export const zeroStatBonus = (): SienaStatBonus =>
   Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as unknown as SienaStatBonus;
@@ -114,19 +132,12 @@ export const coreBonus = (type: CoreType, evolution: number, enhancement: number
 export const coreSetTotalBonus = (set: CoreSet): number =>
   set.slots.reduce((sum, core) => sum + (core ? coreBonus(core.core_type, core.evolution, core.enhancement) : 0), 0);
 
-export const zeroSupportValues = (): SupportValues =>
-  ({ physical_defense: 0, evasion: 0, agility: 0, accuracy: 0 });
-
-/** 6 枠の補助タイプの合計(装備値として保持する分。与ダメージには効かない)。表示用 */
-export const coreSetSupportValues = (set: CoreSet): SupportValues => {
-  const total = zeroSupportValues();
+/** 6 枠の補助タイプの合計(装備値 9 種のうち 物防/回避/敏捷/命中)。表示用 */
+export const coreSetSupportValues = (set: CoreSet): EquipmentValues => {
+  const total = zeroValues();
   for (const core of set.slots) {
     if (!core || CORE_POWER_TYPES.includes(core.core_type)) continue;
-    const bonus = coreBonus(core.core_type, core.evolution, core.enhancement);
-    if (core.core_type === "physical_defense") total.physical_defense += bonus;
-    else if (core.core_type === "evasion") total.evasion += bonus;
-    else if (core.core_type === "agility") total.agility += bonus;
-    else if (core.core_type === "accuracy") total.accuracy += bonus;
+    total[core.core_type] += coreBonus(core.core_type, core.evolution, core.enhancement);
   }
   return total;
 };
