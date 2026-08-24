@@ -3,10 +3,11 @@
   // 右カラムは「計算の材料」(試し変更・バフ・入場条件)。計算はすべて Rust 側(preview_damage)。
   import { untrack } from "svelte";
   import {
-    errorMessage, evaluateContents, listSkills, previewDamage, updateCharacter,
+    errorMessage, evaluateContents, listSkills, previewDamage, previewDefense, updateCharacter,
   } from "../../api/commands";
   import type {
-    Adjustments, BuffDefinition, ContentEvaluation, DamageResult, NewCharacter, Skill, StatKind,
+    Adjustments, BuffDefinition, ContentEvaluation, DamageResult, DefenseProfile, NewCharacter,
+    Skill, StatKind,
   } from "../../api/types";
   import {
     isBlocked, isChoiceValue, isConsumable, isFixedValue, isPercentLayer, isUserSelectedTarget,
@@ -23,6 +24,7 @@
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import Icon from "../../ui/Icon.svelte";
+  import DefensePanel from "./DefensePanel.svelte";
   import Select from "../../ui/Select.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import StatInput from "../../ui/StatInput.svelte";
@@ -342,6 +344,40 @@
     !!c.cap && c.cap.max !== null && c.value >= c.cap.max - 1e-9;
   const fmtCatValue = (c: (typeof activeCategories)[number]) =>
     c.kind === "rate" ? `${c.value >= 0 ? "+" : ""}${fmtNum(c.value * 100)}%` : fmtNum(c.value);
+  /** 上限で捨てられた分(生の合算値 − 上限適用後)。0 なら捨てていない */
+  const catLoss = (c: (typeof activeCategories)[number]) => c.raw - c.value;
+  const fmtCatRaw = (c: (typeof activeCategories)[number]) =>
+    c.kind === "rate" ? `${c.raw >= 0 ? "+" : ""}${fmtNum(c.raw * 100)}%` : fmtNum(c.raw);
+  const fmtCatLoss = (c: (typeof activeCategories)[number]) => {
+    const loss = catLoss(c);
+    return c.kind === "rate" ? `${fmtNum(loss * 100)}%` : fmtNum(loss);
+  };
+  const cappedCategories = $derived(activeCategories.filter((c) => catLoss(c) > 1e-9));
+
+  // --- 攻撃 / 防御タブ(規格シート 5c) --------------------------------------
+  let side = $state<"attack" | "defense">("attack");
+  let defense = $state<DefenseProfile | null>(null);
+  let defenseError = $state<string | null>(null);
+  let defenseSeq = 0;
+  $effect(() => {
+    // 防御側は対象コンテンツに依らない。キャラ(試し変更込み)が変わったときだけ引き直す
+    const p = payload;
+    if (!p) {
+      defense = null;
+      return;
+    }
+    const seq = ++defenseSeq;
+    previewDefense(p)
+      .then((d) => {
+        if (seq === defenseSeq) {
+          defense = d;
+          defenseError = null;
+        }
+      })
+      .catch((e) => {
+        if (seq === defenseSeq) defenseError = errorMessage(e);
+      });
+  });
 
   // --- 試し変更(sim) ------------------------------------------------------
   function editSim(fn: (p: NewCharacter) => void) {
@@ -577,6 +613,23 @@
         <p class="empty dim">キャラを登録するとダメージ計算ができます。</p>
       {:else if !target}
         <p class="empty dim">コンテンツデータがありません。</p>
+      {:else}
+        <!-- 攻撃 / 防御(同列タブ) -->
+        <div class="side-tabs" role="tablist">
+          <button
+            type="button" class="side-tab" class:on={side === "attack"}
+            role="tab" aria-selected={side === "attack"} onclick={() => (side = "attack")}
+          >攻撃</button>
+          <button
+            type="button" class="side-tab" class:on={side === "defense"}
+            role="tab" aria-selected={side === "defense"} onclick={() => (side = "defense")}
+          >防御</button>
+        </div>
+      {/if}
+      {#if !character || !target}
+        <!-- 上のブロックで案内済み -->
+      {:else if side === "defense"}
+        <DefensePanel profile={defense} error={defenseError} />
       {:else}
         <!-- 行ける?カード -->
         <div class="sheet">
@@ -835,6 +888,21 @@
                   <span class="mat-title">倍率の材料</span>
                   <span class="dim">上限に届いた枠は「満」</span>
                 </div>
+                {#if cappedCategories.length > 0}
+                  <!-- 上限で捨てられた分(規格シート 5b)。合算してから上限で切るので、
+                       積んだのに効いていない量が数値で見えないと詰み手前が分からない -->
+                  <div class="capped">
+                    {#each cappedCategories as c (c.category)}
+                      <div class="capped-row">
+                        <span class="cp-label">{c.label}</span>
+                        <span class="num cp-raw">{fmtCatRaw(c)}</span>
+                        <span class="cp-arrow dim">→ 上限</span>
+                        <span class="num cp-val">{fmtCatValue(c)}</span>
+                        <span class="num cp-loss">{fmtCatLoss(c)} は無効</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
                 <div class="mat-chips">
                   {#each activeCategories as c (c.category)}
                     <span class="mat-chip" class:cap={catAtCap(c)}>
@@ -847,6 +915,11 @@
                     <span class="dim">まだ倍率の材料がありません(バフ・称号などを設定すると増えます)。</span>
                   {/if}
                 </div>
+                <!-- 未実装の補正源が中立値で計算されていることを明示する(黙って 0 にしない) -->
+                <p class="mat-note dim">
+                  未実装の補正源(称号 ・ 等級 ・ ランダムOP ・ 属性値)は中立値で計算しています。
+                  実際の火力はこの数字より上がります。防御側の未実装は<b>防御</b>タブに出しています。
+                </p>
               </div>
 
               {#if result}
@@ -1299,6 +1372,31 @@
   .eq-details summary:hover { color: var(--fg); }
   .eq-grid { display: flex; flex-direction: column; gap: 7px; padding-top: 8px; }
   .eq-note { margin: 8px 0 0; font-size: 9.5px; line-height: 1.6; }
+
+  .side-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
+  .side-tab {
+    padding: 6px 18px; border-radius: var(--r-panel);
+    background: linear-gradient(180deg, #fff, #E9F1FB); border: 1px solid var(--border-strong);
+    font-size: 11.5px; font-weight: 700; color: #2B3C57;
+  }
+  .side-tab:hover:not(.on) { border-color: var(--accent); }
+  .side-tab.on {
+    background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); color: #123047;
+    box-shadow: inset 0 1px 0 #fff;
+  }
+
+  .mat-note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }
+  .capped { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+  .capped-row {
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    padding: 4px 9px; border-radius: var(--r-inset);
+    background: var(--surface-inset); border: 1px solid var(--border-soft); font-size: 10px;
+  }
+  .cp-label { font-weight: 700; color: #26334A; }
+  .cp-raw { color: var(--fg-muted); text-decoration: line-through; }
+  .cp-arrow { font-size: 9px; }
+  .cp-val { font-weight: 700; }
+  .cp-loss { margin-left: auto; font-weight: 700; color: var(--danger); }
 
   .buff-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
   .buff-chip {

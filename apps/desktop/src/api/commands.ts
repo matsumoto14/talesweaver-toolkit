@@ -2,7 +2,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
-  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, Skill, StatLimits, StatPreview, StatSources,
+  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile, Skill, StatLimits,
+  StatPreview, StatSources,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -29,6 +30,9 @@ export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
 ) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, temporaryAdjustments });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
+/** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
+export const previewDefense = (character: NewCharacter) =>
+  invoke<DefenseProfile>("preview_defense", { character });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
 

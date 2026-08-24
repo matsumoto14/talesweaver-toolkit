@@ -2,8 +2,8 @@
 
 use domain::{
     evaluate_content, AttackPowerCoefficients, BestSkillDamage, BuffDefinition, Content,
-    ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, Enemy,
-    EquipmentAbilityDef, EquipmentPart, Skill,
+    ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, DefenseProfile,
+    Enemy, EquipmentAbilityDef, EquipmentPart, Skill,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
@@ -173,6 +173,37 @@ pub fn preview_effective_stats(
         coefficients,
     )
     .map_err(|e| e.to_string())
+}
+
+/// 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。保存前のキャラデータで出す。
+///
+/// 与ダメージ式とは別経路なので対象コンテンツを取らない。装備の魔法防御力は
+/// 基本能力値 + 強化能力値(地域なし = テシスコアを含まない)の合計を渡す。
+#[tauri::command]
+pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile> {
+    storage::validate_new_character(
+        &character,
+        &gamedata::buff_catalog(),
+        &gamedata::equipment_catalog(),
+        &gamedata::equipment_abilities(),
+    )
+    .map_err(|e| e.to_string())?;
+    let preview = domain::preview_effective_stats(
+        &character.base_stats,
+        &character.stat_sources,
+        &character.equipment,
+        &gamedata::buff_catalog(),
+        &gamedata::equipment_abilities(),
+        &character.game_character_id,
+        None,
+    )
+    .map_err(|e| e.to_string())?;
+    let equipment_magic_defense = character
+        .equipment
+        .base_totals(&gamedata::equipment_abilities())
+        .magic_defense
+        + character.equipment.enhanced_totals(None).magic_defense;
+    Ok(domain::defense_profile(&preview.stats, equipment_magic_defense))
 }
 
 #[tauri::command]

@@ -302,6 +302,8 @@ export interface CategoryTrace {
   symbol: string;
   label: string;
   kind: CategoryKind;
+  /** 上限適用前の生の合算値(割合は Σ%)。`raw − value` が上限で捨てられた分 */
+  raw: number;
   value: number;
   factor: number;
   cap: CategoryCap | null;
@@ -364,6 +366,26 @@ export interface StatPreview {
   contributions: StatContribution[];
   /** 主軸スキル未選択なら null */
   attack: AttackPreview | null;
+}
+
+// crates/domain/src/defense.rs の DefenseProfile。割合は小数表現(50% → 0.5)。
+// 未実装で値を出せない項目は null(0 と区別する)。
+export interface DefenseProfile {
+  physical_defense: number;
+  magic_defense: number;
+  composite_defense: number;
+  physical_cut_rate: number;
+  magic_cut_rate: number;
+  composite_cut_rate: number;
+  /** 特殊回避(コンボ回避) */
+  combo_evasion: number;
+  /** 通常回避。算出式が未取込なので null */
+  normal_evasion: number | null;
+  /** 最終被弾率。通常回避が未実装なので null */
+  hit_taken_rate: number | null;
+  /** 装備物防。装備モデルが持たないので null */
+  equipment_physical_defense: number | null;
+  equipment_magic_defense: number;
 }
 
 export interface FormulaStep {

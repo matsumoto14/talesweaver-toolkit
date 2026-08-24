@@ -8,6 +8,7 @@ pub mod awakening;
 pub mod category;
 pub mod content;
 pub mod damage;
+pub mod defense;
 pub mod enemy;
 pub mod equipment;
 pub mod rounding;
@@ -29,6 +30,7 @@ pub use content::{
 pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
 };
+pub use defense::{defense_profile, DefenseProfile};
 pub use enemy::Enemy;
 pub use equipment::{
     equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment,
