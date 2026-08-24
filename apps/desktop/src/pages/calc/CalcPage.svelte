@@ -4,11 +4,16 @@
   import {
     errorMessage, evaluateContents, listSkills, previewDamage, updateCharacter,
   } from "../../api/commands";
-  import type { BuffDefinition, ContentEvaluation, DamageResult, NewCharacter, Skill } from "../../api/types";
-  import { isBlocked, isConsumable, toggleBuff } from "../../buffs";
+  import type {
+    BuffDefinition, ContentEvaluation, DamageResult, NewCharacter, Skill, StatKind,
+  } from "../../api/types";
+  import {
+    isBlocked, isChoiceValue, isConsumable, isFixedValue, isPercentLayer, isUserSelectedTarget,
+    toggleBuff, userInputRange,
+  } from "../../buffs";
   import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
-  import { fmtInt, fmtNum } from "../../format";
-  import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS } from "../../labels";
+  import { fmtInt, fmtNum, formatLayerValue } from "../../format";
+  import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
     app, flatContents, payloadOf, selectedCharacter, upsertCharacter,
@@ -479,6 +484,18 @@
       p.stat_sources.buffs.choices = toggleBuff(p.stat_sources.buffs.choices, def, !buffOn(def));
     });
   }
+  // ON のバフのうち、対象ステ・効果量の選択肢・手入力を持つものの詳細編集(試し変更として反映)
+  const statOptions = STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }));
+  const buffChoiceOf = (buffId: string) =>
+    payload?.stat_sources.buffs.choices.find((c) => c.buff_id === buffId) ?? null;
+  const hasDetail = (def: BuffDefinition) =>
+    isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value) !== null || isFixedValue(def.value);
+  function editBuffChoice(buffId: string, fn: (c: NewCharacter["stat_sources"]["buffs"]["choices"][number]) => void) {
+    editSim((p) => {
+      const c = p.stat_sources.buffs.choices.find((x) => x.buff_id === buffId);
+      if (c) fn(c);
+    });
+  }
   const strongWeaponOptions = [
     { value: "0", label: "なし" },
     ...Array.from({ length: limits.strong_weapon_level_max }, (_, i) => ({
@@ -909,7 +926,52 @@
               >{def.name}</button>
             {/each}
           </div>
-          <p class="buff-note dim">細かい値(対象ステ・効果量)はキャラタブの「キャラスキル」や保存後の設定で調整できます。</p>
+          {#each consumableBuffs.filter((d) => buffOn(d) && hasDetail(d)) as def (def.id)}
+            {@const choice = buffChoiceOf(def.id)}
+            {#if choice}
+              <div class="buff-detail">
+                <span class="bd-name">{def.name}</span>
+                {#if isUserSelectedTarget(def.target)}
+                  <Select
+                    label="対象ステ"
+                    options={statOptions}
+                    bind:value={
+                      () => choice.stat ?? STAT_KINDS[0],
+                      (v) => editBuffChoice(def.id, (c) => (c.stat = v as StatKind))
+                    }
+                  />
+                {/if}
+                {#if isChoiceValue(def.value)}
+                  {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
+                  <Select
+                    label="値"
+                    {options}
+                    bind:value={
+                      () => String(choice.choice_index ?? 0),
+                      (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
+                    }
+                  />
+                {/if}
+                {#if userInputRange(def.value)}
+                  {@const range = userInputRange(def.value)!}
+                  {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                  <StatInput
+                    label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
+                    min={range.min * scale}
+                    max={range.max * scale}
+                    bind:value={
+                      () => (choice.value ?? 0) * scale,
+                      (v) => editBuffChoice(def.id, (c) => (c.value = v / scale))
+                    }
+                  />
+                {/if}
+                {#if isFixedValue(def.value)}
+                  <span class="dim bd-fixed">値: {formatLayerValue(def.layer, def.value.fixed)}</span>
+                {/if}
+              </div>
+            {/if}
+          {/each}
+          <p class="buff-note dim">変更は試し変更として反映されます。「キャラに保存」で常用セットとして残ります。</p>
         </div>
 
         <!-- 調整(一時) -->
@@ -1185,6 +1247,13 @@
     border-color: #687287; color: #123047; font-weight: 700;
   }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
+  .buff-detail {
+    margin-top: 7px; padding: 7px 9px; border-radius: 9px;
+    background: var(--bg-panel); border: 1px dashed var(--border-soft);
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .bd-name { font-size: 10px; font-weight: 700; color: #3B4A63; }
+  .bd-fixed { font-size: 10px; }
 
   .card.adj summary { cursor: pointer; font-size: 11px; }
   .start-adj { margin-top: 8px; width: 100%; }

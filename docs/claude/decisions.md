@@ -245,3 +245,12 @@ feature/character-stat-sources-ui の PR レビューで挙がった 10 件の�
 
 出典・確認方法: `cargo test --workspace`(111 件)、`cd apps/desktop && npm run build && npx svelte-check`(137 files, 0 errors / 0 warnings)。実機スモークテスト(smoke-tester、docs/screenshots/40〜43)。
 10. **ホームの火力は「最大ダメージのスキル」で判定し、その旨とスキル名を選択中カードに明示する。ホーム → 計算タブの遷移(計算シートで試す / 次に変えるなら)では判定に使ったスキルを `calcSkillId` で引き継ぐ** / 実機スモークテストで「同一キャラ・同一対象なのにホーム(最大スキル: 極・残影斬)と計算タブ(既定 = 先頭スキル: 極・横斬り)で数値が食い違って見える」指摘。どちらの数値も式としては正しく、経路の違いを明示+引き継ぎで解消した(計算タブのスキルはその後自由に変更できる) / 実機確認(遷移後のスキル・数値一致)
+
+### 方針更新(2026-08-24、ユーザー確認後)
+
+v4 実装時に司令塔が独断で決めたスコープ 4 点をユーザーに確認し、次のとおり方針を更新した。
+
+- **部位別装備**: #9 の「実装しない」を変更。「モックが正しい前提で wiki 取り込みも行い詰める」(ユーザー決定)。構造はモック準拠・数値は wiki 裏取り → docs/claude/goals/2026-08-24-equipment-parts.md
+- **コンテンツ拡充**: wiki 取込ベース+Mob データは旧リポ monsters.json(28 体)をシードにする(ユーザー決定)→ docs/claude/goals/2026-08-24-contents-expansion.md
+- **常用バフの詳細編集**: 計算タブに追加する(ユーザー決定)。#8 の `[仮]` を解消: 計算の材料のバフカードに、ON のバフの対象ステ Select・効果量 Select・手入力 StatInput(%スケールはレイヤーで分岐、既存 formatLayerValue/isPercentLayer を再利用)を表示し、編集は試し変更(editSim)として反映 →「キャラに保存」で常用セット化 / `apps/desktop/src/pages/calc/CalcPage.svelte` の buff-detail
+- **シエナのオーラ・テシスコア**: 次の goal でモデル追加(ユーザー決定)→ docs/claude/goals/2026-08-24-siena-thesis.md(入場条件 ThesisCoreTotal の追加を含む)
