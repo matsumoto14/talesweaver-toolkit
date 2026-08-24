@@ -117,10 +117,62 @@ export interface EquipmentValues {
   magic_defense: number;
 }
 
+// 与ダメージ式に入らない装備補正(テシスコアの補助タイプ等)。
+// crates/domain/src/equipment.rs の SupportValues。装備値の合計として保持するだけで計算には使わない。
+export interface SupportValues {
+  physical_defense: number;
+  evasion: number;
+  agility: number;
+  accuracy: number;
+}
+
 // 装備部位。crates/domain/src/equipment.rs の PartSlot(snake_case)。
 export type PartSlot =
   | "weapon" | "armor" | "helm" | "shield" | "shield_plus"
   | "head" | "body" | "hand" | "leg" | "effect" | "artifact" | "relic";
+
+// シエナのオーラのステ加算。crates/domain/src/equipment.rs の SienaStatBonus。
+export type SienaStatBonus = Record<StatKind, number>;
+
+// シエナのオーラ(部位ごと)。crates/domain/src/equipment.rs の SienaAura。
+export interface SienaAura {
+  /** 増幅段階 0..=10(= 解放される能力値スロット数)。計算には使わない */
+  stage: number;
+  /** 能力値の合計(武器/盾のみ)。強化能力値へ合流する */
+  values: EquipmentValues;
+  /** 能力値スロットのステ加算(武器/盾以外)。最終固定値層へ合流する */
+  stats: SienaStatBonus;
+  /** 追加オプション「全ステータス増加」。STAB〜AGI の全ステに同じ値が乗る(部位を問わない) */
+  all_stats: number;
+  /** 追加オプション「攻撃力増加」の %(カテゴリ New1) */
+  attack_rate_percent: number;
+}
+
+// テシスコアの地域。crates/domain/src/thesis_core.rs の CoreRegion(snake_case)。
+export type CoreRegion = "mercurial" | "abyss" | "eclipse" | "rubicona";
+
+// テシスコアのタイプ(火力 4 + 補助 4)。crates/domain/src/thesis_core.rs の CoreType(snake_case)。
+// 補助タイプは記録と入場条件「コア N」の合計にのみ効く(与ダメージ式には入らない)。
+export type CoreType =
+  | "thrust" | "slash" | "magic_attack" | "magic_defense"
+  | "physical_defense" | "evasion" | "agility" | "accuracy";
+
+// コア 1 個。crates/domain/src/thesis_core.rs の ThesisCore。
+export interface ThesisCore {
+  core_type: CoreType;
+  /** 進化段階 0..=4 */
+  evolution: number;
+  /** 強化段階 0..=4 */
+  enhancement: number;
+}
+
+// 1 地域分の 6 枠。未装着は null。crates/domain/src/thesis_core.rs の CoreSet。
+export interface CoreSet {
+  slots: (ThesisCore | null)[];
+}
+
+// 地域ごとのコアセット。crates/domain/src/thesis_core.rs の ThesisCores。
+export type ThesisCores = Record<CoreRegion, CoreSet>;
 
 // 装備部位 1 つ。crates/domain/src/equipment.rs の EquipmentPart。
 export interface EquipmentPart {
@@ -138,6 +190,8 @@ export interface EquipmentPart {
   enhance_added_damage: number | null;
   /** 装備アビリティ id(武器のみ非空を許可) */
   abilities: string[];
+  /** シエナのオーラ(発現できるのは 8 部位。未発現は中立値) */
+  siena: SienaAura;
 }
 
 // 12 部位。crates/domain/src/equipment.rs の EquipmentParts(named field)。
@@ -164,6 +218,8 @@ export interface Equipment {
   power_weapon: boolean;
   /** ストロングウェポンの Lv(0 = 未使用、1〜6) */
   strong_weapon_level: number;
+  /** テシスコア(地域ごとに 6 枠) */
+  thesis_cores: ThesisCores;
 }
 
 // gamedata の出典。crates/gamedata/src/lib.rs の Source。
@@ -317,6 +373,18 @@ export interface StatLimits {
   enhance_level_max: number;
   /** +12 以上の追加固定ダメージ実測値の上限(実用上の安全域)`[仮]` */
   enhance_added_damage_max: number;
+  /** シエナのオーラの増幅段階の上限 */
+  siena_stage_max: number;
+  /** シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 % */
+  siena_attack_rate_percent_max: number;
+  /** シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限 */
+  siena_stat_bonus_max: number;
+  /** シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限 */
+  siena_all_stats_bonus_max: number;
+  /** テシスコアの装着枠数 */
+  core_slot_count: number;
+  core_evolution_max: number;
+  core_enhancement_max: number;
 }
 
 
@@ -327,7 +395,8 @@ export interface StatLimits {
 export type ContentRequirement =
   | { awakening_stage: number }
   | { eternal_level: number }
-  | { equipment_by_skill: { single: number; mr: number; composite: number } };
+  | { equipment_by_skill: { single: number; mr: number; composite: number } }
+  | { thesis_core_total: number };
 
 export interface RequirementCheck {
   label: string;
@@ -344,7 +413,9 @@ export interface Content {
   /** 実用的に周回できる 1 ヒット(最大)の目安ダメージ。敵データが無ければ null */
   need_per_hit: number | null;
   requirements: ContentRequirement[];
-  /** 判定対象外の入場条件の注記(ルーン Lv・共通スキル・コア等。表示専用) */
+  /** このコンテンツで効くテシスコアの地域。対応が取れないコンテンツは null */
+  core_region: CoreRegion | null;
+  /** 判定対象外の入場条件の注記(ルーン Lv・共通スキル等。表示専用) */
   entry_note: string | null;
   team_note: string | null;
 }

@@ -102,11 +102,11 @@
     if (!skillOpen || !payload || !target || skills.length === 0) return;
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
     const temp = JSON.parse(JSON.stringify(temporaryAdjustments)) as Adjustments;
-    const enemyId = target.content.enemy_id;
+    const contentId = target.content.id;
     const comboCount = combo ? COMBO_THRESHOLD : 0;
     const seq = ++skillSeq;
     Promise.all(
-      skills.map(async (s) => [s.id, await previewDamage(p, s.id, enemyId, comboCount, temp)] as const),
+      skills.map(async (s) => [s.id, await previewDamage(p, s.id, contentId, comboCount, temp)] as const),
     )
       .then((rs) => {
         if (seq !== skillSeq) return;
@@ -161,9 +161,9 @@
     calculating = true;
     debounceHandle = setTimeout(async () => {
       try {
-        const main = await previewDamage(JSON.parse(pJson), sid, t.content.enemy_id, comboCount, JSON.parse(tempJson));
+        const main = await previewDamage(JSON.parse(pJson), sid, t.content.id, comboCount, JSON.parse(tempJson));
         const saved = simActive
-          ? await previewDamage(sp, sid, t.content.enemy_id, comboCount, JSON.parse(tempJson))
+          ? await previewDamage(sp, sid, t.content.id, comboCount, JSON.parse(tempJson))
           : main;
         if (seq === requestSeq) {
           result = main;
@@ -500,7 +500,7 @@
           list.map(async (candidate) => {
             const p = JSON.parse(pJson) as NewCharacter;
             candidate.apply(p);
-            const r = await previewDamage(p, sid, t.content.enemy_id, combo ? COMBO_THRESHOLD : 0, JSON.parse(tempJson));
+            const r = await previewDamage(p, sid, t.content.id, combo ? COMBO_THRESHOLD : 0, JSON.parse(tempJson));
             return {
               candidate,
               perHit: r.per_hit.max,

@@ -702,6 +702,7 @@ mod tests {
             },
             power_weapon: true,
             strong_weapon_level: 6,
+            ..Default::default()
         };
         let created = repo.create(&c, &[], &[], &[]).unwrap();
         assert_eq!(created.equipment, c.equipment);

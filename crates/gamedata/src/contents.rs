@@ -6,22 +6,25 @@
 //! これを `ContentRequirement::EquipmentBySkill` の 1 件で表し、判定時にスキル依存で
 //! 比較先を選ぶ。表の "-" は 0(その系統の条件なし)。
 //!
-//! 判定できない条件(ルーンレベル・共通スキルコンプ・コア・テシスコア・前提クリア)は
-//! `entry_note` に表示専用で持つ(キャラモデルに値が無く、条件にすると「常に未達」か
-//! 「常に無視」の嘘になるため)。
+//! 判定できない条件(ルーンレベル・共通スキルコンプ・前提クリア)は `entry_note` に
+//! 表示専用で持つ(キャラモデルに値が無く、条件にすると「常に未達」か「常に無視」の
+//! 嘘になるため)。表の「コア N」はテシスコアの火力補正合計と一致するため
+//! (wiki 進化強化表: 60 = 6枠×10、120 = 6×20、210 = 6×35、300 = 6×50、480 = 6×80)、
+//! `ContentRequirement::ThesisCoreTotal` として実判定する。
 //!
 //! 敵データ(`enemies.rs`)があるコンテンツは火力も判定する。敵データが無いコンテンツは
 //! `enemy_id`/`need_per_hit` が None で、入場条件のみで判定する。
 //! 目安ダメージ(need_per_hit)はコミュニティ知識・実測がソースで全件 `[仮]`。
 
 use domain::content::{Content, ContentArea, ContentRequirement};
+use domain::thesis_core::CoreRegion;
 
 use crate::Source;
 
 pub const CONTENTS_SOURCE: Source = Source {
     page: "swiki コンテンツ入場条件(入場条件・コンテンツ構成)+ 暫定値(目安ダメージ)",
     retrieved_on: "2026-08-24",
-    note: "装備条件 S/H/I・M・複合はスキル依存で比較先が決まる(いずれか 1 つ充足で OK)。判定できない条件(ルーン Lv・共通スキル・コア等)は entry_note に表示専用。目安ダメージは全件 [仮]",
+    note: "装備条件 S/H/I・M・複合はスキル依存で比較先が決まる(いずれか 1 つ充足で OK)。「コア N」はテシスコアの火力補正合計として実判定する。判定できない条件(ルーン Lv・共通スキル等)は entry_note に表示専用。目安ダメージは全件 [仮]",
 };
 
 /// 装備補正条件。`single` = S/H/I 列、`mr` = M 列、`composite` = 複合列(表の "-" は 0)。
@@ -35,6 +38,11 @@ const fn stage(v: u8) -> ContentRequirement {
 
 const fn eternal(v: u8) -> ContentRequirement {
     ContentRequirement::EternalLevel(v)
+}
+
+/// swiki の「コア N」= テシスコアの火力補正合計(wiki 進化強化表と一致)。
+const fn core(v: i64) -> ContentRequirement {
+    ContentRequirement::ThesisCoreTotal(v)
 }
 
 /// コンテンツ 1 件の定義。
@@ -58,10 +66,69 @@ impl Def {
             enemy_id: self.enemy_id.map(String::from),
             need_per_hit: self.need_per_hit,
             requirements: self.requirements.to_vec(),
+            core_region: core_region_of(self.id),
             entry_note: self.entry_note.map(String::from),
             team_note: self.team_note.map(String::from),
         }
     }
+}
+
+/// テシスコアの能力値増加が有効なコンテンツと地域の対応。
+///
+/// 出典は wiki「テシスコア」の実装済みダンジョンコア表(コアと「その他発動場所」の対応):
+/// - マーキュリアル洞窟: マーキュリアル洞窟 / ルミナスの試練 / プシーキーの迷宮 / プシーキーの虚像
+/// - アビス: アビス / アークロン要塞 / 守護者の部屋(レイド)/ 深淵の狭間 / アークロン地下
+/// - エクリプス: エクリプスダンジョン / アフェティリアダンジョン
+/// - ルビコナ: ゆがんだ村(狩り場情報一覧の「ゆがんだ村」節 = 空虚の領域・レイティア・設計者)
+///
+/// wiki の表に名前が無いがユーザー確認済み(2026-08-24): リンゴ = マーキュリアル、
+/// 月の女王の軍の訓練所・最後の決戦(1/2 含む)・異界の峡谷 兵士 = エクリプス、
+/// 混乱した大地・異界の峡谷防衛戦・喜びの残像 = ルビコナ。
+/// 「異界の峡谷」は防衛戦がルビコナ、通常の峡谷(兵士)がエクリプスで分かれる(同確認)。
+///
+/// **ここに無いコンテンツはコア効果が無い**(ユーザー確認 2026-08-24。コアの効かない
+/// コンテンツが実在する)。セット効果だけは全地域で発動するので別枠で常に乗る。
+/// シオカンヘイムのコアは経験値タイプのみで火力に効かないため、地域自体を持たない(同確認)。
+const CORE_REGIONS: &[(&str, CoreRegion)] = &[
+    // マーキュリアル洞窟(ルミナスの試練。リンゴはユーザー確認)
+    ("ringo", CoreRegion::Mercurial),
+    ("luminous_ex", CoreRegion::Mercurial),
+    // アビス / アークロン地下
+    ("abyss_normal", CoreRegion::Abyss),
+    ("abyss_hard", CoreRegion::Abyss),
+    ("abyss_hell", CoreRegion::Abyss),
+    ("abyss_ex", CoreRegion::Abyss),
+    ("arklon_underground", CoreRegion::Abyss),
+    // エクリプス / アフェティリア(月の女王の軍の訓練所・最後の決戦・異界の峡谷 兵士はユーザー確認)
+    ("moon_queen_training", CoreRegion::Eclipse),
+    ("last_battle", CoreRegion::Eclipse),
+    ("last_battle_1", CoreRegion::Eclipse),
+    ("last_battle_2", CoreRegion::Eclipse),
+    ("valley_soldier", CoreRegion::Eclipse),
+    ("eclipse_boss", CoreRegion::Eclipse),
+    ("eclipse_2", CoreRegion::Eclipse),
+    ("eclipse_subjugation", CoreRegion::Eclipse),
+    ("aphetiria_normal", CoreRegion::Eclipse),
+    ("aphetiria_hard", CoreRegion::Eclipse),
+    ("aphetiria_ex", CoreRegion::Eclipse),
+    ("selinacos_h", CoreRegion::Eclipse),
+    ("selinacos_ex", CoreRegion::Eclipse),
+    ("goitia_h", CoreRegion::Eclipse),
+    ("goitia_ex", CoreRegion::Eclipse),
+    // ルビコナ(ゆがんだ村。混乱した大地・異界の峡谷・喜びの残像はユーザー確認)
+    ("chaotic_land", CoreRegion::Rubicona),
+    ("valley_defense", CoreRegion::Rubicona),
+    ("pleasure_afterimage", CoreRegion::Rubicona),
+    ("void_domain", CoreRegion::Rubicona),
+    ("leitia_n", CoreRegion::Rubicona),
+    ("leitia_h", CoreRegion::Rubicona),
+    ("architect_n", CoreRegion::Rubicona),
+    ("architect_h", CoreRegion::Rubicona),
+];
+
+/// コンテンツ id → テシスコアの地域。表に無ければ None(コアの能力値増加は乗らない)。
+pub fn core_region_of(content_id: &str) -> Option<CoreRegion> {
+    CORE_REGIONS.iter().find(|(id, _)| *id == content_id).map(|(_, region)| *region)
 }
 
 /// 下位コンテンツ共通の注記(swiki: リンゴと煩わしい怒り以外はルーンレベル30 必要)。
@@ -69,13 +136,8 @@ const RUNE30: Option<&str> = Some("ルーンレベル 30 必要(判定対象外)
 /// 上位コンテンツ共通の注記(swiki: 5次覚醒・ルーンレベル40・共通スキルコンプリート)。
 const UPPER: &str = "ルーンレベル 40・共通スキルコンプリート必要(判定対象外)";
 
-/// 上位コンテンツの entry_note(共通注記 + コア要求)。コアはキャラモデルに無いため表示専用。
-const CORE_0: Option<&str> = Some(UPPER);
-const CORE_60: Option<&str> = Some("ルーンレベル 40・共通スキルコンプリート・コア 60 必要(判定対象外)");
-const CORE_120: Option<&str> = Some("ルーンレベル 40・共通スキルコンプリート・コア 120 必要(判定対象外)");
-const CORE_210: Option<&str> = Some("ルーンレベル 40・共通スキルコンプリート・コア 210 必要(判定対象外)");
-const CORE_300: Option<&str> = Some("ルーンレベル 40・共通スキルコンプリート・コア 300 必要(判定対象外)");
-const CORE_480: Option<&str> = Some("ルーンレベル 40・共通スキルコンプリート・コア 480 必要(判定対象外)");
+/// 上位コンテンツの entry_note(判定対象外の共通条件のみ。コア要求は `core()` で実判定する)。
+const UPPER_NOTE: Option<&str> = Some(UPPER);
 
 /// 上位コンテンツ共通の覚醒条件(5 次覚醒)。
 const STAGE5: ContentRequirement = stage(5);
@@ -94,8 +156,8 @@ const AREAS: &[(&str, &str, &[Def])] = &[
               requirements: &[stage(3), equip(900, 1_100, 1_650)],
               entry_note: Some("ルーンレベル 30 必要(判定対象外)/ 配布インファ+α程度"), team_note: None },
         Def { id: "luminous_ex", name: "ルミナスEX", enemy_id: None, need_per_hit: None,
-              requirements: &[stage(3), equip(900, 1_300, 1_500)],
-              entry_note: Some("ルーンレベル 30・コア 60 必要(判定対象外)"), team_note: None },
+              requirements: &[stage(3), equip(900, 1_300, 1_500), core(60)],
+              entry_note: RUNE30, team_note: None },
         Def { id: "annoying_anger", name: "煩わしい怒り", enemy_id: None, need_per_hit: None,
               requirements: &[stage(3), equip(1_000, 1_180, 1_750)],
               entry_note: None, team_note: None },
@@ -131,62 +193,62 @@ const AREAS: &[(&str, &str, &[Def])] = &[
     // ================= 上位コンテンツ(swiki *上位コンテンツ) =================
     ("upper", "上位コンテンツ", &[
         Def { id: "abyss_ex", name: "アビスEX", enemy_id: Some("abyss_core_master"), need_per_hit: Some(3_500),
-              requirements: &[STAGE5, equip(1_500, 1_700, 2_100)],
-              entry_note: CORE_120, team_note: Some("改IHは不要") },
+              requirements: &[STAGE5, equip(1_500, 1_700, 2_100), core(120)],
+              entry_note: UPPER_NOTE, team_note: Some("改IHは不要") },
         Def { id: "eclipse_boss", name: "エクリプスボス", enemy_id: Some("eclipse_1"), need_per_hit: Some(6_000),
               requirements: &[STAGE5, equip(1_600, 1_800, 2_350)],
-              entry_note: CORE_0, team_note: Some("ソロは入場条件よりもだいぶ難易度低い") },
+              entry_note: UPPER_NOTE, team_note: Some("ソロは入場条件よりもだいぶ難易度低い") },
         Def { id: "aphetiria_normal", name: "アフェティリア(ノーマル)", enemy_id: Some("aphetiria_n"), need_per_hit: Some(7_000),
               requirements: &[STAGE5, eternal(5), equip(1_600, 1_800, 2_350)],
-              entry_note: CORE_0, team_note: Some("ソロの場合エタ制限のみだがソロはきつい") },
+              entry_note: UPPER_NOTE, team_note: Some("ソロの場合エタ制限のみだがソロはきつい") },
         Def { id: "moon_queen_training", name: "月の女王の軍の訓練所", enemy_id: None, need_per_hit: None,
-              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900)],
-              entry_note: CORE_120, team_note: None },
+              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900), core(120)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "eclipse_subjugation", name: "エクリプスボス討伐戦", enemy_id: Some("eclipse_subjugation"), need_per_hit: Some(12_000),
-              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900)],
-              entry_note: CORE_120, team_note: None },
+              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900), core(120)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "aphetiria_hard", name: "アフェティリア(ハード)", enemy_id: Some("kisinik_h"), need_per_hit: Some(16_000),
-              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900)],
-              entry_note: CORE_120, team_note: Some("活躍するには靴エフェ合わせて 400 くらいほしい") },
+              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900), core(120)],
+              entry_note: UPPER_NOTE, team_note: Some("活躍するには靴エフェ合わせて 400 くらいほしい") },
         Def { id: "relic_sanctuary_kisinik", name: "古代レリックの聖域(キシニク)", enemy_id: Some("relic_sanctuary_20"), need_per_hit: Some(16_000),
               requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900)],
-              entry_note: CORE_0, team_note: None },
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "chaotic_land", name: "混乱した大地", enemy_id: None, need_per_hit: None,
               requirements: &[STAGE5, eternal(20), equip(2_200, 2_600, 3_500)],
-              entry_note: CORE_0, team_note: None },
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "colorless_land", name: "色を失った大地", enemy_id: None, need_per_hit: None,
               requirements: &[STAGE5, eternal(20), equip(2_200, 2_600, 3_500)],
-              entry_note: CORE_0, team_note: None },
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "architect_mine", name: "設計者の採掘場", enemy_id: None, need_per_hit: None,
               requirements: &[STAGE5, eternal(20), equip(2_200, 2_600, 3_500)],
               entry_note: Some("ルーンレベル 40・共通スキルコンプリート・カフス(盾+)の上限 140 以上 必要(判定対象外)"), team_note: None },
         Def { id: "valley_defense", name: "異界の峡谷防衛戦", enemy_id: Some("valley_captain"), need_per_hit: Some(12_000),
-              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700)],
-              entry_note: CORE_300, team_note: None },
+              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700), core(300)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "last_battle", name: "最後の決戦", enemy_id: Some("last_battle_3"), need_per_hit: Some(15_000),
-              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700)],
-              entry_note: CORE_300, team_note: None },
+              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700), core(300)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "aphetiria_ex", name: "アフェティリアEX", enemy_id: Some("kisinik_ex"), need_per_hit: Some(20_000),
-              requirements: &[STAGE5, eternal(41), equip(2_500, 3_000, 4_000)],
-              entry_note: CORE_480, team_note: None },
+              requirements: &[STAGE5, eternal(41), equip(2_500, 3_000, 4_000), core(480)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "void_domain", name: "空虚の領域", enemy_id: None, need_per_hit: None,
               requirements: &[STAGE5, eternal(41), equip(3_100, 3_500, 4_900)],
-              entry_note: CORE_0, team_note: None },
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "leitia_n", name: "追従する喜び(ノーマル)", enemy_id: Some("leitia_n"), need_per_hit: Some(18_000),
               requirements: &[STAGE5, eternal(41), equip(3_100, 3_500, 4_900)],
-              entry_note: CORE_0, team_note: None },
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "architect_n", name: "見つめる悲しみ(ノーマル)", enemy_id: Some("architect_n"), need_per_hit: Some(18_000),
-              requirements: &[STAGE5, eternal(41), equip(3_100, 3_500, 4_900)],
-              entry_note: CORE_60, team_note: None },
+              requirements: &[STAGE5, eternal(41), equip(3_100, 3_500, 4_900), core(60)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "pleasure_afterimage", name: "喜びの残像", enemy_id: None, need_per_hit: None,
-              requirements: &[STAGE5, eternal(51), equip(3_500, 3_850, 5_500)],
-              entry_note: CORE_60, team_note: None },
+              requirements: &[STAGE5, eternal(51), equip(3_500, 3_850, 5_500), core(60)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "leitia_h", name: "追従する喜び(ハード)", enemy_id: Some("leitia_h"), need_per_hit: Some(22_000),
-              requirements: &[STAGE5, eternal(61), equip(3_900, 4_000, 5_900)],
-              entry_note: CORE_120, team_note: None },
+              requirements: &[STAGE5, eternal(61), equip(3_900, 4_000, 5_900), core(120)],
+              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "architect_h", name: "見つめる悲しみ(ハード)", enemy_id: Some("architect_h"), need_per_hit: Some(22_000),
-              requirements: &[STAGE5, eternal(61), equip(3_900, 4_000, 5_900)],
-              entry_note: CORE_210, team_note: None },
+              requirements: &[STAGE5, eternal(61), equip(3_900, 4_000, 5_900), core(210)],
+              entry_note: UPPER_NOTE, team_note: None },
     ]),
     // ======== 入場条件表に無い敵(実測表由来。火力の目安確認用。条件は未収録) ========
     ("other_targets", "その他の対象(条件データなし)", &[
@@ -339,5 +401,86 @@ mod tests {
         // エタのみ条件のコンテンツは装備条件を持たない
         let vestige = by_id("vestige_ruins");
         assert_eq!(vestige.requirements, vec![eternal(1)]);
+    }
+
+    #[test]
+    fn コア要求は実条件として持ちテシスコア合計で判定する() {
+        let areas = content_areas();
+        let by_id = |id: &str| {
+            areas.iter().flat_map(|a| &a.contents).find(|c| c.id == id).unwrap().clone()
+        };
+
+        // swiki「コア 480」= 6 枠すべて進化4強化4(火力補正 80 × 6)
+        let ex = by_id("aphetiria_ex");
+        assert!(ex.requirements.contains(&ContentRequirement::ThesisCoreTotal(480)));
+        // コア要求は entry_note から外し、判定できない条件だけを注記に残す
+        assert_eq!(ex.entry_note.as_deref(), Some(UPPER));
+
+        assert!(by_id("luminous_ex").requirements.contains(&ContentRequirement::ThesisCoreTotal(60)));
+        assert!(by_id("abyss_ex").requirements.contains(&ContentRequirement::ThesisCoreTotal(120)));
+        assert!(by_id("architect_h").requirements.contains(&ContentRequirement::ThesisCoreTotal(210)));
+        assert!(by_id("last_battle").requirements.contains(&ContentRequirement::ThesisCoreTotal(300)));
+        // コア要求が無いコンテンツには条件を足さない
+        assert!(!by_id("ringo")
+            .requirements
+            .iter()
+            .any(|r| matches!(r, ContentRequirement::ThesisCoreTotal(_))));
+    }
+
+    // 「コア N」はそのコンテンツの地域のコアだけで判定する(ユーザー確認 2026-08-24)ため、
+    // 地域が無いまま要求だけあると「常に未達」の嘘になる。
+    #[test]
+    fn コア要求のあるコンテンツは必ず地域を持つ() {
+        for area in content_areas() {
+            for content in area.contents {
+                let requires_core = content
+                    .requirements
+                    .iter()
+                    .any(|r| matches!(r, ContentRequirement::ThesisCoreTotal(n) if *n > 0));
+                if requires_core {
+                    assert!(
+                        content.core_region.is_some(),
+                        "'{}' はコア要求があるのに core_region が無い",
+                        content.id
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn テシスコアの地域はwikiの発動場所どおり() {
+        let areas = content_areas();
+        let region = |id: &str| {
+            areas.iter().flat_map(|a| &a.contents).find(|c| c.id == id).unwrap().core_region
+        };
+        assert_eq!(region("luminous_ex"), Some(CoreRegion::Mercurial));
+        assert_eq!(region("abyss_ex"), Some(CoreRegion::Abyss));
+        assert_eq!(region("arklon_underground"), Some(CoreRegion::Abyss));
+        assert_eq!(region("aphetiria_ex"), Some(CoreRegion::Eclipse));
+        assert_eq!(region("leitia_h"), Some(CoreRegion::Rubicona));
+        assert_eq!(region("void_domain"), Some(CoreRegion::Rubicona));
+        // wiki の表に無いがユーザー確認済み
+        assert_eq!(region("ringo"), Some(CoreRegion::Mercurial));
+        assert_eq!(region("chaotic_land"), Some(CoreRegion::Rubicona));
+        assert_eq!(region("moon_queen_training"), Some(CoreRegion::Eclipse));
+        assert_eq!(region("last_battle"), Some(CoreRegion::Eclipse));
+        // 異界の峡谷は防衛戦(ルビコナ)と通常の峡谷(エクリプス)で分かれる
+        assert_eq!(region("valley_defense"), Some(CoreRegion::Rubicona));
+        assert_eq!(region("valley_soldier"), Some(CoreRegion::Eclipse));
+        assert_eq!(region("last_battle_1"), Some(CoreRegion::Eclipse));
+        assert_eq!(region("last_battle_2"), Some(CoreRegion::Eclipse));
+        assert_eq!(region("pleasure_afterimage"), Some(CoreRegion::Rubicona));
+        // コア効果が無いコンテンツ(ユーザー確認)
+        assert_eq!(region("odin_total_war"), None);
+        assert_eq!(region("shinchou_normal"), None);
+
+        // 対応表の id はすべて実在する(タイポで黙って無効化されないように)
+        for (id, _) in CORE_REGIONS {
+            assert!(
+                areas.iter().flat_map(|a| &a.contents).any(|c| c.id == *id),
+                "CORE_REGIONS の '{id}' に対応するコンテンツが無い"
+            );
+        }
     }
 }

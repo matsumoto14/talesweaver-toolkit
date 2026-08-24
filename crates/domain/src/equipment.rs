@@ -2,10 +2,13 @@
 //!
 //! 装備は部位別(12 スロット)で持つ(docs/claude/goals/2026-08-24-equipment-parts.md)。
 //! 「基本能力値」= 部位ごとの実測補正値 + 武器アビリティの加算。
-//! 「強化能力値」= 部位ごとのエンチャント値の合計。
+//! 「強化能力値」= 部位ごとのエンチャント値 + シエナのオーラの能力値(武器/盾)+ テシスコア。
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::stats::StatKind;
+use crate::thesis_core::{CoreRegion, ThesisCoreError, ThesisCores};
 
 /// 装備補正 4 種(突き/斬り/魔攻/魔防)。基本能力値・エンチャント値のどちらも同じ形。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -31,6 +34,19 @@ pub const ENHANCE_LEVEL_RANDOM_RANGE_MIN: u8 = 12;
 /// +12 以上の追加固定ダメージ実測値の上限(wiki に明記なし。+15 最上位帯でも数百万に収まる
 /// 実用上の安全域として暫定採用)`[仮]`。
 pub const ENHANCE_ADDED_DAMAGE_MAX: i64 = 9_999_999;
+/// シエナのオーラの増幅段階の上限(wiki: 装備システム/シエナのオーラ「発現・増幅」0→1〜9→10)。
+pub const SIENA_STAGE_MAX: u8 = 10;
+/// シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 %(wiki: 追加オプション一覧の
+/// 最大 8〜10%。同じ種類のオプションは同じ装備の別スロットには登場しないため 1 部位 1 個)。
+pub const SIENA_ATTACK_RATE_PERCENT_MAX: f64 = 10.0;
+/// シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限
+/// (wiki: 能力値一覧(その他の部位)の STAB〜AGI は 1〜10。段階 10 = 10 スロットが全部同じステに
+/// 乗った場合の 100)。
+pub const SIENA_STAT_BONUS_MAX: i64 = 100;
+/// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
+/// (wiki: 追加オプション一覧の最大帯 21〜30。同じ種類のオプションは同じ装備の別スロットには
+/// 登場しないため 1 部位 1 個)。STAB〜AGI の全ステにこの値がそのまま加算される。
+pub const SIENA_ALL_STATS_BONUS_MAX: i64 = 30;
 
 impl EquipmentValues {
     fn validate(&self) -> Result<(), EquipmentError> {
@@ -54,6 +70,38 @@ impl EquipmentValues {
             magic_attack: self.magic_attack + other.magic_attack,
             magic_defense: self.magic_defense + other.magic_defense,
         }
+    }
+}
+
+/// 与ダメージ式に入らない装備補正(wiki: テシスコア効果の(補助)タイプ、
+/// シエナのオーラ「能力値一覧(その他の部位)」の命中率・回避率)。
+///
+/// ダメージ計算には使わないが、装備値の合計としては保持する(防御側・命中/回避の計算を
+/// 入れるときにここが入力になる。値を捨てると後から復元できない)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SupportValues {
+    #[serde(default)]
+    pub physical_defense: i64,
+    #[serde(default)]
+    pub evasion: i64,
+    #[serde(default)]
+    pub agility: i64,
+    #[serde(default)]
+    pub accuracy: i64,
+}
+
+impl SupportValues {
+    pub fn add(self, other: SupportValues) -> SupportValues {
+        SupportValues {
+            physical_defense: self.physical_defense + other.physical_defense,
+            evasion: self.evasion + other.evasion,
+            agility: self.agility + other.agility,
+            accuracy: self.accuracy + other.accuracy,
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        *self == SupportValues::default()
     }
 }
 
@@ -85,6 +133,187 @@ impl PartSlot {
     pub fn allows_abilities(self) -> bool {
         matches!(self, PartSlot::Weapon)
     }
+
+    /// この部位がシエナのオーラを発現できるか
+    /// (wiki: 装備システム冒頭の表「オーラ」行 = 兜/鎧/武/盾/頭/体/手/足の 8 部位)。
+    pub fn allows_siena(self) -> bool {
+        matches!(
+            self,
+            PartSlot::Weapon
+                | PartSlot::Armor
+                | PartSlot::Helm
+                | PartSlot::Shield
+                | PartSlot::Head
+                | PartSlot::Body
+                | PartSlot::Hand
+                | PartSlot::Leg
+        )
+    }
+
+    /// シエナのオーラの能力値が「装備補正(エンチャント扱い)」として付く部位
+    /// (wiki: シエナのオーラ「能力値一覧(武器/盾)」)。その他の部位はステの最終固定値増加になる。
+    pub fn siena_values_are_equipment(self) -> bool {
+        matches!(self, PartSlot::Weapon | PartSlot::Shield)
+    }
+}
+
+/// シエナのオーラによるステ加算(wiki: 能力値一覧(その他の部位)の STAB〜AGI と、
+/// 追加オプション「全ステータス増加」。どちらも最終固定値増加)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SienaStatBonus {
+    #[serde(default)]
+    pub stab: i64,
+    #[serde(default)]
+    pub hack: i64,
+    #[serde(default)]
+    pub int: i64,
+    #[serde(default)]
+    pub def: i64,
+    #[serde(default)]
+    pub mr: i64,
+    #[serde(default)]
+    pub dex: i64,
+    #[serde(default)]
+    pub agi: i64,
+}
+
+impl SienaStatBonus {
+    pub fn get(&self, kind: StatKind) -> i64 {
+        match kind {
+            StatKind::Stab => self.stab,
+            StatKind::Hack => self.hack,
+            StatKind::Int => self.int,
+            StatKind::Def => self.def,
+            StatKind::Mr => self.mr,
+            StatKind::Dex => self.dex,
+            StatKind::Agi => self.agi,
+        }
+    }
+
+    pub fn get_mut(&mut self, kind: StatKind) -> &mut i64 {
+        match kind {
+            StatKind::Stab => &mut self.stab,
+            StatKind::Hack => &mut self.hack,
+            StatKind::Int => &mut self.int,
+            StatKind::Def => &mut self.def,
+            StatKind::Mr => &mut self.mr,
+            StatKind::Dex => &mut self.dex,
+            StatKind::Agi => &mut self.agi,
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        StatKind::ALL.iter().all(|k| self.get(*k) == 0)
+    }
+
+    fn add(self, other: SienaStatBonus) -> SienaStatBonus {
+        let mut total = self;
+        for kind in StatKind::ALL {
+            *total.get_mut(kind) += other.get(kind);
+        }
+        total
+    }
+}
+
+/// シエナのオーラ(wiki: 装備システム/シエナのオーラ)。Lv310 装備の 8 部位に発現できる。
+///
+/// 能力値・追加オプションはどちらも再抽選のランダム値なので、wiki から静的データとして
+/// 与えられる値は無い(段階ごとの解放スロット数だけが決まっている)。部位ごとの実測値を
+/// ユーザーが入力する。
+///
+/// - `values`(武器/盾): 装備補正がエンチャント扱いで増加 → 強化能力値へ合流
+/// - `stats`(その他の部位): 能力値スロットの STAB〜AGI。最終固定値増加
+/// - `all_stats`(全部位共通の追加オプション「全ステータス増加」): STAB〜AGI の全ステに
+///   この値がそのまま加算される(最終固定値増加)
+/// - `attack_rate_percent`(全部位共通の追加オプション「攻撃力増加」): 実際は与ダメージ割合増加
+///   = カテゴリ New1(`DamageCategory::SienaAuraAttackRate`)
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct SienaAura {
+    /// 増幅段階 0..=10(0 = 未発現)。解放される能力値スロット数と等しい。
+    /// 計算には使わず、入力値の妥当性の目安として持つ
+    #[serde(default)]
+    pub stage: u8,
+    /// 能力値の合計(武器/盾のみ)。強化能力値へ合流する
+    #[serde(default)]
+    pub values: EquipmentValues,
+    /// 能力値スロットのステ加算(武器/盾以外)。最終固定値層へ合流する
+    #[serde(default)]
+    pub stats: SienaStatBonus,
+    /// 追加オプション「全ステータス増加」。全ステに同じ値が乗る(部位を問わない)
+    #[serde(default)]
+    pub all_stats: i64,
+    /// 追加オプション「攻撃力増加」の % (New1)
+    #[serde(default)]
+    pub attack_rate_percent: f64,
+}
+
+impl SienaAura {
+    /// この部位のステ加算の合計(能力値スロット + 追加オプション「全ステータス増加」)。
+    pub fn stat_bonus(&self) -> SienaStatBonus {
+        let mut total = self.stats;
+        if self.all_stats != 0 {
+            for kind in StatKind::ALL {
+                *total.get_mut(kind) += self.all_stats;
+            }
+        }
+        total
+    }
+
+    fn is_neutral(&self) -> bool {
+        self.stage == 0
+            && self.values == EquipmentValues::default()
+            && self.stats.is_zero()
+            && self.all_stats == 0
+            && self.attack_rate_percent == 0.0
+    }
+
+    fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
+        if self.is_neutral() {
+            return Ok(());
+        }
+        if !slot.allows_siena() {
+            return Err(EquipmentError::SienaNotAllowed { slot });
+        }
+        if self.stage > SIENA_STAGE_MAX {
+            return Err(EquipmentError::SienaStageOutOfRange {
+                slot,
+                value: self.stage,
+                max: SIENA_STAGE_MAX,
+            });
+        }
+        self.values.validate()?;
+        if !slot.siena_values_are_equipment() && self.values != EquipmentValues::default() {
+            return Err(EquipmentError::SienaValuesNotAllowed { slot });
+        }
+        if slot.siena_values_are_equipment() && !self.stats.is_zero() {
+            return Err(EquipmentError::SienaStatsNotAllowed { slot });
+        }
+        for kind in StatKind::ALL {
+            let value = self.stats.get(kind);
+            if !(0..=SIENA_STAT_BONUS_MAX).contains(&value) {
+                return Err(EquipmentError::SienaStatOutOfRange {
+                    slot,
+                    value,
+                    max: SIENA_STAT_BONUS_MAX,
+                });
+            }
+        }
+        if !(0..=SIENA_ALL_STATS_BONUS_MAX).contains(&self.all_stats) {
+            return Err(EquipmentError::SienaAllStatsOutOfRange {
+                slot,
+                value: self.all_stats,
+                max: SIENA_ALL_STATS_BONUS_MAX,
+            });
+        }
+        if !(0.0..=SIENA_ATTACK_RATE_PERCENT_MAX).contains(&self.attack_rate_percent) {
+            return Err(EquipmentError::SienaAttackRateOutOfRange {
+                slot,
+                value: self.attack_rate_percent,
+                max: SIENA_ATTACK_RATE_PERCENT_MAX,
+            });
+        }
+        Ok(())
+    }
 }
 
 /// 装備部位 1 つ。
@@ -111,12 +340,16 @@ pub struct EquipmentPart {
     /// 装備アビリティ id(武器のみ非空を許可)
     #[serde(default)]
     pub abilities: Vec<String>,
+    /// シエナのオーラ(発現できるのは 8 部位。未発現は中立値)
+    #[serde(default)]
+    pub siena: SienaAura,
 }
 
 impl EquipmentPart {
     fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
         self.base.validate()?;
         self.enchant.validate()?;
+        self.siena.validate(slot)?;
         if self.enhance_level > ENHANCE_LEVEL_MAX {
             return Err(EquipmentError::EnhanceLevelOutOfRange {
                 slot,
@@ -147,7 +380,8 @@ impl EquipmentPart {
 }
 
 /// 装備補正の値域・部位制約違反。
-#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+/// (シエナのオーラの攻撃力増加が % の実数なので `Eq` は導出しない)
+#[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
 pub enum EquipmentError {
     #[error("装備補正の{field}は 0〜{max} の範囲で指定してください(指定値 {value})")]
     ValueOutOfRange { field: &'static str, value: i64, max: i64 },
@@ -163,6 +397,22 @@ pub enum EquipmentError {
     EnhanceAddedDamageOutOfRange { slot: PartSlot, value: i64, max: i64 },
     #[error("{slot:?} は装備アビリティの対象外です(武器のみ)")]
     AbilitiesNotAllowed { slot: PartSlot },
+    #[error("{slot:?} はシエナのオーラの対象外です(兜/鎧/武器/盾/頭/体/手/足のみ)")]
+    SienaNotAllowed { slot: PartSlot },
+    #[error("{slot:?} のシエナのオーラの増幅段階は 0〜{max} です(指定値 {value})")]
+    SienaStageOutOfRange { slot: PartSlot, value: u8, max: u8 },
+    #[error("{slot:?} のシエナのオーラは装備補正の能力値を持ちません(武器・盾のみ)")]
+    SienaValuesNotAllowed { slot: PartSlot },
+    #[error("{slot:?} のシエナのオーラはステータス加算を持ちません(武器・盾は装備補正)")]
+    SienaStatsNotAllowed { slot: PartSlot },
+    #[error("{slot:?} のシエナのオーラのステータス加算は 0〜{max} です(指定値 {value})")]
+    SienaStatOutOfRange { slot: PartSlot, value: i64, max: i64 },
+    #[error("{slot:?} のシエナのオーラの全ステータス増加は 0〜{max} です(指定値 {value})")]
+    SienaAllStatsOutOfRange { slot: PartSlot, value: i64, max: i64 },
+    #[error("{slot:?} のシエナのオーラの攻撃力増加は 0〜{max}% です(指定値 {value})")]
+    SienaAttackRateOutOfRange { slot: PartSlot, value: f64, max: f64 },
+    #[error(transparent)]
+    ThesisCore(#[from] ThesisCoreError),
 }
 
 /// 武器アビリティ定義(gamedata がカタログを持つ。domain の `BuffDefinition` と同じ依存方向)。
@@ -185,6 +435,9 @@ pub struct Equipment {
     /// ストロングウェポンの Lv(0 = 未使用、1〜6 = 該当 Lv。wiki Skill/共通: 3/6/9/12/15/18%)
     #[serde(default)]
     pub strong_weapon_level: u8,
+    /// テシスコア(地域ごとに 6 枠)。火力タイプの補正は強化能力値へ合流する
+    #[serde(default)]
+    pub thesis_cores: ThesisCores,
 }
 
 /// 12 部位。named field で持つ(`parts.weapon` 等)。
@@ -247,6 +500,7 @@ impl Equipment {
                 max: STRONG_WEAPON_LEVEL_MAX,
             });
         }
+        self.thesis_cores.validate()?;
         Ok(())
     }
 
@@ -264,11 +518,38 @@ impl Equipment {
         total
     }
 
-    /// 強化能力値の合計(Σ part.enchant)。
-    pub fn enhanced_totals(&self) -> EquipmentValues {
+    /// 強化能力値の合計(Σ part.enchant + Σ シエナのオーラの能力値(武器/盾)+ テシスコア)。
+    ///
+    /// `region` はダメージ計算の対象コンテンツのテシスコア地域。テシスコアの能力値増加は
+    /// 対象ダンジョン内でのみ有効なので、`None`(コアが効かないコンテンツ)なら加算しない。
+    pub fn enhanced_totals(&self, region: Option<CoreRegion>) -> EquipmentValues {
         let mut total = EquipmentValues::default();
-        for (_, part) in self.parts.iter() {
+        for (slot, part) in self.parts.iter() {
             total = total.add(part.enchant);
+            if slot.siena_values_are_equipment() {
+                total = total.add(part.siena.values);
+            }
+        }
+        total.add(self.thesis_cores.equipment_values(region))
+    }
+
+    /// シエナのオーラの追加オプション「攻撃力増加」の合計(wiki: New1)。Σ% の小数表現。
+    pub fn siena_attack_rate(&self) -> f64 {
+        self.parts.iter().into_iter().map(|(_, part)| part.siena.attack_rate_percent).sum::<f64>()
+            / 100.0
+    }
+
+    /// 与ダメージ式に入らない装備補正の合計(現在の供給元はテシスコアの補助タイプのみ)。
+    /// ダメージ計算には渡さないが、装備値の合計として保持・表示する。
+    pub fn support_totals(&self, region: Option<CoreRegion>) -> SupportValues {
+        self.thesis_cores.support_values(region)
+    }
+
+    /// シエナのオーラによるステ加算の合計(能力値スロット + 全ステータス増加。最終固定値層に乗る)。
+    pub fn siena_stat_bonus(&self) -> SienaStatBonus {
+        let mut total = SienaStatBonus::default();
+        for (_, part) in self.parts.iter() {
+            total = total.add(part.siena.stat_bonus());
         }
         total
     }
@@ -370,7 +651,7 @@ mod tests {
             EquipmentValues { thrust: 60, slash: 60, ..Default::default() },
         );
         let base = eq.base_totals(&[]);
-        let enhanced = eq.enhanced_totals();
+        let enhanced = eq.enhanced_totals(None);
         // 150*14.5*2 + 60*28.75*2 = 4350 + 3450 = 7800
         assert!((equipment_attack_power(&base, &enhanced, &coefficients()) - 7800.0).abs() < 1e-9);
     }
@@ -379,7 +660,7 @@ mod tests {
     fn 装備なしなら装備攻撃力は0() {
         let eq = Equipment::default();
         let base = eq.base_totals(&[]);
-        let enhanced = eq.enhanced_totals();
+        let enhanced = eq.enhanced_totals(None);
         assert_eq!(equipment_attack_power(&base, &enhanced, &coefficients()), 0.0);
     }
 
@@ -400,7 +681,7 @@ mod tests {
         let base = eq.base_totals(&abilities);
         assert_eq!(base, EquipmentValues { thrust: 100, slash: 209, magic_defense: 50, ..Default::default() });
 
-        let enhanced = eq.enhanced_totals();
+        let enhanced = eq.enhanced_totals(None);
         assert_eq!(enhanced, EquipmentValues { thrust: 10, slash: 20, ..Default::default() });
     }
 
@@ -510,5 +791,134 @@ mod tests {
 
         eq.parts.weapon.enhance_added_damage = Some(ENHANCE_ADDED_DAMAGE_MAX);
         assert!(eq.validate().is_ok());
+    }
+
+    fn siena_values(thrust: i64, slash: i64) -> SienaAura {
+        SienaAura {
+            stage: 10,
+            values: EquipmentValues { thrust, slash, ..Default::default() },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn シエナのオーラの能力値は武器と盾だけ強化能力値に入る() {
+        let mut eq = Equipment::default();
+        eq.parts.weapon.enchant = EquipmentValues { thrust: 10, ..Default::default() };
+        eq.parts.weapon.siena = siena_values(6, 4);
+        eq.parts.shield.siena = siena_values(0, 5);
+        // 武器・盾以外はステ加算(装備補正には入らない)
+        eq.parts.helm.siena = SienaAura {
+            stage: 5,
+            stats: SienaStatBonus { stab: 20, hack: 10, ..Default::default() },
+            ..Default::default()
+        };
+        assert!(eq.validate().is_ok());
+
+        assert_eq!(
+            eq.enhanced_totals(None),
+            EquipmentValues { thrust: 16, slash: 9, ..Default::default() }
+        );
+        assert_eq!(eq.base_totals(&[]), EquipmentValues::default());
+        assert_eq!(
+            eq.siena_stat_bonus(),
+            SienaStatBonus { stab: 20, hack: 10, ..Default::default() }
+        );
+    }
+
+    #[test]
+    fn シエナのオーラの攻撃力増加は全部位の合計() {
+        let mut eq = Equipment::default();
+        eq.parts.weapon.siena.attack_rate_percent = 10.0;
+        eq.parts.armor.siena.attack_rate_percent = 3.0;
+        eq.parts.leg.siena.attack_rate_percent = 2.5;
+        assert!(eq.validate().is_ok());
+        assert!((eq.siena_attack_rate() - 0.155).abs() < 1e-12);
+        assert_eq!(Equipment::default().siena_attack_rate(), 0.0);
+    }
+
+    #[test]
+    fn 全ステータス増加は全ステに同じ値が乗る() {
+        let mut eq = Equipment::default();
+        // 武器・盾も追加オプションは持てる(wiki: 追加オプションは全ての部位で共通)
+        eq.parts.weapon.siena = SienaAura { stage: 10, all_stats: 30, ..Default::default() };
+        eq.parts.helm.siena = SienaAura {
+            stage: 5,
+            stats: SienaStatBonus { stab: 12, ..Default::default() },
+            all_stats: 21,
+            ..Default::default()
+        };
+        assert!(eq.validate().is_ok());
+
+        // 武器 30 + 兜 21 が全ステに乗り、STAB だけ能力値スロットの 12 が上乗せされる
+        let total = eq.siena_stat_bonus();
+        assert_eq!(total.stab, 30 + 21 + 12);
+        for kind in [StatKind::Hack, StatKind::Int, StatKind::Def, StatKind::Mr, StatKind::Dex, StatKind::Agi] {
+            assert_eq!(total.get(kind), 51);
+        }
+
+        // 上限超過は拒否する
+        eq.parts.weapon.siena.all_stats = SIENA_ALL_STATS_BONUS_MAX + 1;
+        assert!(matches!(eq.validate(), Err(EquipmentError::SienaAllStatsOutOfRange { .. })));
+    }
+
+    #[test]
+    fn シエナのオーラの部位制約と値域() {
+        // 盾+ / 効果 / AF / レリックは発現できない
+        let mut eq = Equipment::default();
+        eq.parts.shield_plus.siena.stage = 1;
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::SienaNotAllowed { slot: PartSlot::ShieldPlus })
+        ));
+
+        // 武器・盾以外は装備補正の能力値を持てない
+        let mut eq = Equipment::default();
+        eq.parts.helm.siena = siena_values(1, 0);
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::SienaValuesNotAllowed { slot: PartSlot::Helm })
+        ));
+
+        // 武器・盾はステ加算を持てない
+        let mut eq = Equipment::default();
+        eq.parts.weapon.siena = SienaAura {
+            stage: 1,
+            stats: SienaStatBonus { stab: 1, ..Default::default() },
+            ..Default::default()
+        };
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::SienaStatsNotAllowed { slot: PartSlot::Weapon })
+        ));
+
+        let mut eq = Equipment::default();
+        eq.parts.armor.siena.stage = SIENA_STAGE_MAX + 1;
+        assert!(matches!(eq.validate(), Err(EquipmentError::SienaStageOutOfRange { .. })));
+
+        let mut eq = Equipment::default();
+        eq.parts.armor.siena.attack_rate_percent = SIENA_ATTACK_RATE_PERCENT_MAX + 0.1;
+        assert!(matches!(eq.validate(), Err(EquipmentError::SienaAttackRateOutOfRange { .. })));
+
+        let mut eq = Equipment::default();
+        eq.parts.armor.siena.stats.agi = SIENA_STAT_BONUS_MAX + 1;
+        assert!(matches!(eq.validate(), Err(EquipmentError::SienaStatOutOfRange { .. })));
+    }
+
+    #[test]
+    fn テシスコアは対象地域のときだけ強化能力値に入る() {
+        use crate::thesis_core::{CoreSet, CoreType, ThesisCore, CORE_SLOT_COUNT};
+
+        let mut eq = Equipment::default();
+        eq.parts.weapon.enchant = EquipmentValues { slash: 100, ..Default::default() };
+        *eq.thesis_cores.get_mut(CoreRegion::Abyss) = CoreSet {
+            slots: [Some(ThesisCore { core_type: CoreType::Slash, evolution: 4, enhancement: 4 });
+                CORE_SLOT_COUNT],
+        };
+        assert!(eq.validate().is_ok());
+
+        assert_eq!(eq.enhanced_totals(Some(CoreRegion::Abyss)).slash, 100 + 480);
+        assert_eq!(eq.enhanced_totals(Some(CoreRegion::Eclipse)).slash, 100);
+        assert_eq!(eq.enhanced_totals(None).slash, 100);
     }
 }

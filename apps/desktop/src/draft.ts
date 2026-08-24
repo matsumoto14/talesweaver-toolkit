@@ -8,7 +8,7 @@ import type {
   RegisteredCharacter,
   StatSources,
 } from "./api/types";
-import { cloneEquipmentPart, neutralEquipmentPart } from "./equipment";
+import { cloneEquipmentPart, cloneThesisCores, neutralEquipmentPart, neutralThesisCores } from "./equipment";
 import { PART_SLOTS, STAT_KINDS } from "./labels";
 
 export interface Draft {
@@ -27,12 +27,14 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   ) as unknown as EquipmentParts,
   power_weapon: src.power_weapon,
   strong_weapon_level: src.strong_weapon_level,
+  thesis_cores: cloneThesisCores(src.thesis_cores),
 });
 
 export const neutralEquipment = (): Equipment => ({
   parts: Object.fromEntries(PART_SLOTS.map((slot) => [slot, neutralEquipmentPart()])) as unknown as EquipmentParts,
   power_weapon: false,
   strong_weapon_level: 0,
+  thesis_cores: neutralThesisCores(),
 });
 
 export const cloneAdjustments = (src: Adjustments): Adjustments =>

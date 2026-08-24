@@ -178,7 +178,7 @@
       return;
     }
     const skillId = g.ev.damage.skill_id;
-    const enemyId = g.content.enemy_id;
+    const contentId = g.content.id;
     const baseDamage = g.ev.damage.per_hit_max;
     const seq = ++adviceSeq;
     adviceHandle = setTimeout(async () => {
@@ -189,7 +189,7 @@
           list.map(async (candidate) => {
             const p = payloadOf(c);
             candidate.apply(p);
-            const r = await previewDamage(p, skillId, enemyId, 0);
+            const r = await previewDamage(p, skillId, contentId, 0);
             return { candidate, perHit: r.per_hit.max, deltaPct: Math.round((r.per_hit.max / baseDamage - 1) * 100) };
           }),
         );

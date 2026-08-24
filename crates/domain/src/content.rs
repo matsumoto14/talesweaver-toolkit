@@ -14,11 +14,12 @@ use serde::{Deserialize, Serialize};
 use crate::awakening::Awakening;
 use crate::equipment::EquipmentValues;
 use crate::skill::SkillDependency;
+use crate::thesis_core::CoreRegion;
 
 /// 入場条件。判定に使う値は登録キャラのデータから取れるものに限る。
 ///
-/// テシスコア・ルーンレベル(ルーンマスターLv)・共通スキルコンプ等、現行のキャラモデルに
-/// 無い値は条件にしない(判定できない条件をデータに持たせると「常に未達」か「常に無視」の
+/// ルーンレベル(ルーンマスターLv)・共通スキルコンプ等、現行のキャラモデルに無い値は
+/// 条件にしない(判定できない条件をデータに持たせると「常に未達」か「常に無視」の
 /// どちらかの嘘になる)。それらは `Content::entry_note` に表示専用で持つ。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -32,6 +33,9 @@ pub enum ContentRequirement {
     /// StabHack/HackInt → `composite` を 突き+斬り / 斬り+魔攻 と比較。
     /// 値 0 は「その系統の条件なし」(チェックを生成しない)。
     EquipmentBySkill { single: i64, mr: i64, composite: i64 },
+    /// テシスコアの火力補正合計がこの値以上(swiki の「コア N」)。
+    /// 判定対象は `Content::core_region` の地域のコアセット(地域不明なら全地域の最大値)。
+    ThesisCoreTotal(i64),
 }
 
 /// 入場条件 1 件の判定結果。
@@ -46,11 +50,13 @@ pub struct RequirementCheck {
 impl ContentRequirement {
     /// `equipment_base` は `Equipment::base_totals` で集計済みの基本能力値。
     /// `dependency` は判定に使うスキルの依存種別(スキル未収録キャラは None)。
+    /// `thesis_core_total` はこのコンテンツの地域で効くテシスコアの火力補正合計。
     pub fn check(
         &self,
         equipment_base: &EquipmentValues,
         awakening: Awakening,
         dependency: Option<SkillDependency>,
+        thesis_core_total: i64,
     ) -> RequirementCheck {
         let (label, current, required) = match *self {
             ContentRequirement::AwakeningStage(v) => {
@@ -78,6 +84,7 @@ impl ContentRequirement {
                     composite,
                 ),
             },
+            ContentRequirement::ThesisCoreTotal(v) => ("テシスコア 合計", thesis_core_total, v),
         };
         RequirementCheck { label: label.to_string(), current, required, ok: current >= required }
     }
@@ -93,7 +100,10 @@ pub struct Content {
     /// 実用的に周回できる 1 ヒット(最大)の目安ダメージ。敵データが無いコンテンツは None
     pub need_per_hit: Option<i64>,
     pub requirements: Vec<ContentRequirement>,
-    /// 判定対象外の入場条件の注記(テシスコア・ルーンレベル等。表示専用)
+    /// このコンテンツで効くテシスコアの地域(wiki: テシスコア「実装済みダンジョンコア」の
+    /// 発動場所。対応が取れないコンテンツは None = コアの能力値増加は乗らない)
+    pub core_region: Option<CoreRegion>,
+    /// 判定対象外の入場条件の注記(ルーンレベル・共通スキルコンプ等。表示専用)
     pub entry_note: Option<String>,
     /// チーム条件の注記(無ければ None)
     pub team_note: Option<String>,
@@ -142,11 +152,12 @@ pub fn evaluate_content(
     equipment_base: &EquipmentValues,
     awakening: Awakening,
     dependency: Option<SkillDependency>,
+    thesis_core_total: i64,
 ) -> ContentEvaluation {
     let checks: Vec<RequirementCheck> = content
         .requirements
         .iter()
-        .map(|r| r.check(equipment_base, awakening, dependency))
+        .map(|r| r.check(equipment_base, awakening, dependency, thesis_core_total))
         // required 0 は「その系統の条件なし」(例: 表で複合列が "-" のコンテンツ)
         .filter(|c| c.required > 0)
         .collect();
@@ -180,6 +191,7 @@ mod tests {
             enemy_id: need.map(|_| "e".into()),
             need_per_hit: need,
             requirements,
+            core_region: None,
             entry_note: None,
             team_note: None,
         }
@@ -192,34 +204,34 @@ mod tests {
     fn 装備条件はスキル依存で比較先が変わる() {
         let eq = equipment(1500, 1400, 1600, 1699);
 
-        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Stab));
+        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Stab), 0);
         assert!(c.ok);
         assert_eq!((c.current, c.required), (1500, 1500));
-        assert!(!EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Hack)).ok);
-        assert!(EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Int)).ok);
+        assert!(!EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Hack), 0).ok);
+        assert!(EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Int), 0).ok);
 
-        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Mr));
+        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Mr), 0);
         assert!(!c.ok);
         assert_eq!((c.current, c.required), (1699, 1700));
 
-        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::StabHack));
+        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::StabHack), 0);
         assert!(c.ok);
         assert_eq!((c.current, c.required), (2900, 2100));
-        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::HackInt));
+        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::HackInt), 0);
         assert!(c.ok);
         assert_eq!(c.current, 3000);
 
         // スキル未収録は判定不可(ok=false)
-        assert!(!EQ_REQ.check(&eq, Awakening::default(), None).ok);
+        assert!(!EQ_REQ.check(&eq, Awakening::default(), None, 0).ok);
     }
 
     #[test]
     fn 覚醒とエタの判定は境界値を含む() {
         let eq = EquipmentValues::default();
         let aw = Awakening { stage: 5, eternal_level: 41 };
-        assert!(ContentRequirement::AwakeningStage(5).check(&eq, aw, None).ok);
-        assert!(ContentRequirement::EternalLevel(41).check(&eq, aw, None).ok);
-        assert!(!ContentRequirement::EternalLevel(42).check(&eq, aw, None).ok);
+        assert!(ContentRequirement::AwakeningStage(5).check(&eq, aw, None, 0).ok);
+        assert!(ContentRequirement::EternalLevel(41).check(&eq, aw, None, 0).ok);
+        assert!(!ContentRequirement::EternalLevel(42).check(&eq, aw, None, 0).ok);
     }
 
     #[test]
@@ -236,15 +248,16 @@ mod tests {
             &eq,
             aw,
             dep,
+            0,
         );
         assert!(e.entry_ok && e.reaches_need && e.clear);
 
         // 火力だけ未達
-        let e = evaluate_content(&content(Some(1001), vec![]), dmg(1000), &eq, aw, dep);
+        let e = evaluate_content(&content(Some(1001), vec![]), dmg(1000), &eq, aw, dep, 0);
         assert!(e.entry_ok && !e.reaches_need && !e.clear);
 
         // 条件だけ未達
-        let e = evaluate_content(&content(Some(1000), vec![ContentRequirement::EternalLevel(1)]), dmg(1000), &eq, aw, dep);
+        let e = evaluate_content(&content(Some(1000), vec![ContentRequirement::EternalLevel(1)]), dmg(1000), &eq, aw, dep, 0);
         assert!(!e.entry_ok && e.reaches_need && !e.clear);
     }
 
@@ -258,6 +271,7 @@ mod tests {
             &eq,
             aw,
             None,
+            0,
         );
         assert!(e.entry_ok && e.reaches_need && e.clear);
         assert!(e.damage.is_none());
@@ -268,6 +282,7 @@ mod tests {
             &eq,
             aw,
             None,
+            0,
         );
         assert!(!e.entry_ok && !e.clear);
     }
@@ -281,6 +296,7 @@ mod tests {
             &EquipmentValues::default(),
             Awakening::default(),
             Some(SkillDependency::StabHack),
+            0,
         );
         assert!(e.checks.is_empty());
         assert!(e.entry_ok);
@@ -288,9 +304,33 @@ mod tests {
 
     #[test]
     fn スキル未収録はダメージ不明としてクリア不可() {
-        let e = evaluate_content(&content(Some(1), vec![]), None, &EquipmentValues::default(), Awakening::default(), None);
+        let e = evaluate_content(&content(Some(1), vec![]), None, &EquipmentValues::default(), Awakening::default(), None, 0);
         assert!(e.entry_ok);
         assert!(!e.reaches_need && !e.clear);
         assert!(e.damage.is_none());
+    }
+
+    #[test]
+    fn テシスコア条件は合計値で判定する() {
+        let req = ContentRequirement::ThesisCoreTotal(120);
+        let eq = EquipmentValues::default();
+        let aw = Awakening::default();
+
+        let c = req.check(&eq, aw, None, 119);
+        assert!(!c.ok);
+        assert_eq!((c.current, c.required), (119, 120));
+        assert!(req.check(&eq, aw, None, 120).ok);
+
+        // required 0(条件なし)はチェックを生成しない
+        let e = evaluate_content(
+            &content(None, vec![ContentRequirement::ThesisCoreTotal(0)]),
+            None,
+            &eq,
+            aw,
+            None,
+            0,
+        );
+        assert!(e.checks.is_empty());
+        assert!(e.entry_ok);
     }
 }

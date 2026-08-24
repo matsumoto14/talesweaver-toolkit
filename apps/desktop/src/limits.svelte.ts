@@ -16,6 +16,13 @@ const FALLBACK: StatLimits = {
   strong_weapon_level_max: 6,
   enhance_level_max: 15,
   enhance_added_damage_max: 9999999,
+  siena_stage_max: 10,
+  siena_attack_rate_percent_max: 10,
+  siena_stat_bonus_max: 100,
+  siena_all_stats_bonus_max: 30,
+  core_slot_count: 6,
+  core_evolution_max: 4,
+  core_enhancement_max: 4,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

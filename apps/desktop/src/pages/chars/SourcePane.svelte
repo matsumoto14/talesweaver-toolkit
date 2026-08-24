@@ -6,6 +6,8 @@
     | "rune"
     | "crown"
     | "relic"
+    | "siena"
+    | "thesis"
     | "skills"
     | "adjust";
 </script>
@@ -13,14 +15,21 @@
 <script lang="ts">
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
-  import type { EquipmentItem, PartSlot, PetSkillTier, StatKind, StatPreview } from "../../api/types";
+  import type {
+    CoreRegion, CoreType, EquipmentItem, PartSlot, PetSkillTier, StatKind, StatPreview,
+  } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import type { Draft } from "../../draft";
-  import { clampToCaps, midpointValues, neutralEquipmentPart } from "../../equipment";
+  import {
+    clampToCaps, coreBonus, coreSetSupportValues, coreSetTotalBonus, midpointValues,
+    neutralEquipmentPart, neutralSienaAura, sienaPartStatTotal,
+  } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
-    ABILITY_ALLOWED_SLOTS, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
-    PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
+    ABILITY_ALLOWED_SLOTS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
+    CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
+    PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS, SIENA_ALLOWED_SLOTS,
+    SIENA_EQUIPMENT_VALUE_SLOTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { app } from "../../state.svelte";
@@ -121,6 +130,77 @@
     if (level < 12) part.enhance_added_damage = null;
   }
 
+  // --- シエナのオーラ(部位ごと) ------------------------------------------
+  let openSienaPart = $state<PartSlot | null>(null);
+  const sienaStageOptions = $derived(
+    Array.from({ length: limits.siena_stage_max + 1 }, (_, i) => ({
+      value: String(i),
+      label: i === 0 ? "未発現" : `${i} 段階(能力値 ${i} 枠)`,
+    })),
+  );
+  /** 段階 0 に戻したらその部位のオーラを丸ごと中立に戻す(値だけ残る幽霊状態を作らない) */
+  function setSienaStage(slot: PartSlot, stage: number) {
+    if (stage === 0) {
+      draft.equipment.parts[slot].siena = neutralSienaAura();
+      return;
+    }
+    draft.equipment.parts[slot].siena.stage = stage;
+  }
+  const sienaIsEquipmentValues = (slot: PartSlot) => SIENA_EQUIPMENT_VALUE_SLOTS.includes(slot);
+  const sienaSummary = (slot: PartSlot): string => {
+    const siena = draft.equipment.parts[slot].siena;
+    if (siena.stage === 0) return "未発現";
+    const parts: string[] = [`${siena.stage} 段階`];
+    if (sienaIsEquipmentValues(slot)) {
+      const v = siena.values;
+      if (v.thrust || v.slash || v.magic_attack || v.magic_defense) {
+        parts.push(`突${fmtInt(v.thrust)} / 斬${fmtInt(v.slash)}`);
+      }
+    }
+    const statTotal = sienaPartStatTotal(siena);
+    if (statTotal > 0) parts.push(`ステ +${fmtInt(statTotal)}`);
+    if (siena.attack_rate_percent > 0) parts.push(`攻撃力 +${siena.attack_rate_percent}%`);
+    return parts.join(" ・ ");
+  };
+
+  // --- テシスコア(地域ごとに 6 枠) ---------------------------------------
+  let coreRegion = $state<CoreRegion>("abyss");
+  const coreSlotIndexes = Array.from({ length: CORE_SLOT_COUNT }, (_, i) => i);
+  // 火力タイプと補助タイプはラベルで区別する(補助は装備攻撃力に入らない)
+  const coreTypeOptions = [
+    { value: "", label: "未装着" },
+    ...CORE_POWER_TYPES.map((t) => ({ value: t, label: CORE_TYPE_LABELS[t] })),
+    ...CORE_SUPPORT_TYPES.map((t) => ({ value: t, label: `${CORE_TYPE_LABELS[t]}(補助)` })),
+  ];
+  const coreStageOptions = (max: number, prefix: string) =>
+    Array.from({ length: max + 1 }, (_, i) => ({ value: String(i), label: `${prefix}${i}` }));
+  const coreEvolutionOptions = $derived(coreStageOptions(limits.core_evolution_max, "進化"));
+  const coreEnhancementOptions = $derived(coreStageOptions(limits.core_enhancement_max, "強化"));
+  const coreAt = (index: number) => draft.equipment.thesis_cores[coreRegion].slots[index] ?? null;
+  function setCoreType(index: number, value: string) {
+    const slots = draft.equipment.thesis_cores[coreRegion].slots;
+    slots[index] = value === "" ? null : { core_type: value as CoreType, evolution: 0, enhancement: 0 };
+  }
+  function setCoreStage(index: number, field: "evolution" | "enhancement", value: number) {
+    const core = draft.equipment.thesis_cores[coreRegion].slots[index];
+    if (core) core[field] = value;
+  }
+  const coreRegionTotal = (region: CoreRegion) =>
+    coreSetTotalBonus(draft.equipment.thesis_cores[region]);
+  // 補助タイプは与ダメージに効かないが、装備値の合計としては保持する(表示して分かるようにする)
+  const coreSupport = $derived(coreSetSupportValues(draft.equipment.thesis_cores[coreRegion]));
+  const coreSupportSummary = $derived(
+    [
+      ["物防", coreSupport.physical_defense],
+      ["回避", coreSupport.evasion],
+      ["敏捷", coreSupport.agility],
+      ["命中", coreSupport.accuracy],
+    ]
+      .filter(([, v]) => (v as number) > 0)
+      .map(([label, v]) => `${label} +${fmtInt(v as number)}`)
+      .join(" ・ "),
+  );
+
   const TITLES: Record<SourceId, { title: string; note: string }> = {
     status: { title: "キャラステータス", note: "素ステ・覚醒・エタの意志" },
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
@@ -128,6 +208,8 @@
     rune: { title: "ルーンスキル", note: `0–${limits.rune_level_max}` },
     crown: { title: "クラウン", note: `0–${limits.crown_max}` },
     relic: { title: "神鳥の聖物", note: `0–${limits.sacred_relic_stage_max} 段階(実加算は段階×10)` },
+    siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
+    thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
   };
@@ -304,6 +386,10 @@
       <div class="card">
         <div class="card-title">エンチャント</div>
         <p class="hint dim">呪文書で伸ばした強化能力値。上限はアイテム個別(カタログ外は{fmtInt(limits.equipment_value_max)})</p>
+        <p class="hint dim">
+          シエナのオーラとテシスコアの分はここに含めないでください(それぞれの補正源で入力すると
+          強化能力値に自動で合流します。ここにも入れると二重計上になります)。
+        </p>
         <div class="fields">
           {#each EQUIPMENT_STAT_KINDS as k (k)}
             {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
@@ -418,6 +504,189 @@
           />
         {/each}
       </div>
+    </div>
+  {:else if sourceId === "siena"}
+    {#if openSienaPart === null}
+      <div class="card">
+        <p class="hint dim">
+          wiki「装備システム/シエナのオーラ」。Lv310 の 8 部位(兜/鎧/武器/盾/頭/体/手/足)に発現でき、
+          増幅段階の数だけ能力値スロットが解放されます。中身は再抽選のランダム値なので wiki から自動では
+          決まりません。部位ごとに実測の合計値を入れてください。
+        </p>
+        <p class="hint dim">
+          武器・盾の能力値はエンチャント扱い(強化能力値)、その他の部位はステの最終固定値、
+          追加オプション「攻撃力増加」は与ダメージ割合増加(New1)として計算に入ります。
+        </p>
+      </div>
+      <div class="part-list">
+        {#each SIENA_ALLOWED_SLOTS as slot (slot)}
+          {@const siena = draft.equipment.parts[slot].siena}
+          <button type="button" class="part-row" onclick={() => (openSienaPart = slot)}>
+            <span class="part-main">
+              <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
+              <span class="part-item">{partDisplayName(slot)}</span>
+              {#if siena.stage > 0}<span class="part-plus">{siena.stage} 段階</span>{/if}
+            </span>
+            <span class="part-vals num dim">{sienaSummary(slot)}</span>
+            <span class="chev dim">›</span>
+          </button>
+        {/each}
+      </div>
+    {:else}
+      {@const slot = openSienaPart}
+      {@const siena = draft.equipment.parts[slot].siena}
+      <button type="button" class="back-link" onclick={() => (openSienaPart = null)}>‹ 部位一覧へ</button>
+      <div class="card">
+        <div class="card-title">{PART_SLOT_LABELS[slot]}: 増幅段階</div>
+        <Select
+          label="段階"
+          options={sienaStageOptions}
+          bind:value={() => String(siena.stage), (v) => setSienaStage(slot, Number(v))}
+        />
+        <p class="hint dim">
+          段階ごとに能力値スロットが 1 個ずつ解放されます(段階 3/7/10 で追加オプションが 1/2/3 個)。
+          段階を「未発現」に戻すとこの部位の入力値は消えます。
+        </p>
+      </div>
+
+      {#if siena.stage > 0}
+        {#if sienaIsEquipmentValues(slot)}
+          <div class="card">
+            <div class="card-title">能力値(装備補正の合計)</div>
+            <p class="hint dim">解放済みスロットに出ている装備補正の合計。強化能力値として装備攻撃力に入ります</p>
+            <div class="fields">
+              {#each EQUIPMENT_STAT_KINDS as k (k)}
+                <StatInput
+                  label={EQUIPMENT_STAT_LABELS[k]}
+                  min={0}
+                  max={limits.equipment_value_max}
+                  bind:value={siena.values[k]}
+                />
+              {/each}
+            </div>
+            <p class="hint dim">
+              物理複合攻撃力・魔法斬り攻撃力は wiki の内訳(例: 物理複合 5 = 突き 3 + 斬り 2)に分けて入れてください。
+            </p>
+          </div>
+        {:else}
+          <div class="card">
+            <div class="card-title">能力値スロットのステータス加算</div>
+            <p class="hint dim">解放済みスロットに出ている STAB〜AGI の合計(最終固定値)。全ステータス増加は下の追加オプションへ</p>
+            <div class="fields">
+              {#each STAT_KINDS as k (k)}
+                <StatInput
+                  label={STAT_LABELS[k]}
+                  min={0}
+                  max={limits.siena_stat_bonus_max}
+                  bind:value={siena.stats[k]}
+                />
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <div class="card">
+          <div class="card-title">追加オプション</div>
+          <p class="hint dim">同じ種類のオプションは同じ装備に 1 個までしか付きません(部位は問いません)</p>
+          <div class="fields">
+            <StatInput
+              label="攻撃力増加"
+              min={0}
+              max={limits.siena_attack_rate_percent_max}
+              step={0.5}
+              bind:value={siena.attack_rate_percent}
+              format={(v) => `+${v}%`}
+            />
+            <StatInput
+              label="全ステータス増加"
+              min={0}
+              max={limits.siena_all_stats_bonus_max}
+              bind:value={siena.all_stats}
+              format={(v) => (v > 0 ? `STAB〜AGI に +${v}` : "なし")}
+            />
+          </div>
+          <p class="hint dim">
+            「攻撃力増加」は与ダメージ割合増加(New1)、「全ステータス増加」は 7 ステすべてに同じ値が乗ります。
+            防御力増加・防御無視・中ディレイ減少・クリティカル確率・HP/MP/SP は与ダメージ式に入らないため未収録です。
+          </p>
+        </div>
+      {/if}
+    {/if}
+  {:else if sourceId === "thesis"}
+    <div class="card">
+      <div class="card-title">地域</div>
+      <div class="region-tabs">
+        {#each CORE_REGIONS as region (region)}
+          <button
+            type="button"
+            class="region-tab"
+            class:on={coreRegion === region}
+            onclick={() => (coreRegion = region)}
+          >
+            <span>{CORE_REGION_LABELS[region]}</span>
+            <span class="num dim">{fmtInt(coreRegionTotal(region))}</span>
+          </button>
+        {/each}
+      </div>
+      <p class="hint dim">
+        wiki「テシスコア」。コアの能力値増加は対象ダンジョン内でのみ有効なので、計算対象のコンテンツに
+        対応する地域のコアだけが装備攻撃力に入ります。セット効果(最終ダメージ)は全地域で発動します。
+      </p>
+      <p class="hint dim">
+        補助タイプ(物防/回避/敏捷/命中)も装着状態として記録できます。与ダメージ式には効かないので
+        装備攻撃力には入らず、入場条件「コア N」の合計にだけ効きます(グレー表示の補正値)。
+        経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        {CORE_REGION_LABELS[coreRegion]} の 6 枠
+        <span class="dim normal">補正値 合計 {fmtInt(coreRegionTotal(coreRegion))}</span>
+      </div>
+      {#if coreSupportSummary}
+        <p class="hint dim">
+          このうち補助タイプ({coreSupportSummary})は装備値として記録するだけで、与ダメージには効きません。
+        </p>
+      {/if}
+      <div class="core-list">
+        {#each coreSlotIndexes as index (index)}
+          {@const core = coreAt(index)}
+          <div class="core-row">
+            <span class="core-slot dim">{index + 1}</span>
+            <Select
+              label="タイプ"
+              options={coreTypeOptions}
+              bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
+            />
+            <Select
+              label="進化"
+              options={coreEvolutionOptions}
+              disabled={core === null}
+              bind:value={
+                () => String(core?.evolution ?? 0),
+                (v) => setCoreStage(index, "evolution", Number(v))
+              }
+            />
+            <Select
+              label="強化"
+              options={coreEnhancementOptions}
+              disabled={core === null}
+              bind:value={
+                () => String(core?.enhancement ?? 0),
+                (v) => setCoreStage(index, "enhancement", Number(v))
+              }
+            />
+            <span class="core-bonus num" class:support={core !== null && !CORE_POWER_TYPES.includes(core.core_type)}>
+              {core ? `+${fmtInt(coreBonus(core.core_type, core.evolution, core.enhancement))}` : "—"}
+            </span>
+          </div>
+        {/each}
+      </div>
+      <p class="hint dim">
+        入場条件の「コア N」はこの 6 枠の合計と同じ値です(火力の進化1強化4 ×6 = 60、進化4強化4 ×6 = 480。
+        補助タイプは進化4強化4 でも 60 なので 6 枠でも 360 止まり)。
+        セット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
+      </p>
     </div>
   {:else if sourceId === "skills"}
     <div class="card">
@@ -552,4 +821,19 @@
   .item-name { min-width: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item-vals { flex-shrink: 0; font-size: 9.5px; }
   .custom-name { margin-top: 9px; }
+
+  .region-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .region-tab {
+    display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: 8px;
+    background: var(--bg-field); border: 1px solid var(--border); font-size: 11px;
+  }
+  .region-tab.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); font-weight: 700; }
+  .core-list { display: flex; flex-direction: column; gap: 8px; }
+  .core-row {
+    display: grid; grid-template-columns: 18px minmax(110px, 1.4fr) minmax(84px, 1fr) minmax(84px, 1fr) 48px;
+    gap: 8px; align-items: end;
+  }
+  .core-slot { font-size: 11px; padding-bottom: 8px; text-align: center; }
+  .core-bonus { font-size: 12px; font-weight: 700; padding-bottom: 8px; text-align: right; }
+  .core-bonus.support { color: var(--fg-muted); font-weight: 400; }
 </style>

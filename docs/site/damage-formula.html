@@ -256,7 +256,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃力</td>
 <td><span class="kind assign">代入</span></td>
 <td></td>
-<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備攻撃力強化倍率] * 25</code>。ステ攻撃力・装備攻撃力の係数はスキル依存種別(STAB/HACK/INT/MR/STAB+HACK/HACK+INT)ごとに wiki「計算式まとめ#BaseAttackPower」の表(取得 2026-08-22)で定義(<code>crates/gamedata/src/characters.rs</code>)。装備攻撃力は「基本能力値」(エンチャント除く素の装備補正・キャラスキル・アビリティ)と「強化能力値」(エンチャント・テシスコア・シエナのオーラ等の期間制能力値)の 2 系統に分かれ、それぞれ別係数。装備攻撃力強化倍率 = パワーウェポン+2%(wiki Skill/共通)+ ストロングウェポン Lv×3%(Lv1〜6 = 3〜18%、同ページ)</td>
+<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備攻撃力強化倍率] * 25</code>。ステ攻撃力・装備攻撃力の係数はスキル依存種別(STAB/HACK/INT/MR/STAB+HACK/HACK+INT)ごとに wiki「計算式まとめ#BaseAttackPower」の表(取得 2026-08-22)で定義(<code>crates/gamedata/src/characters.rs</code>)。装備攻撃力は「基本能力値」(エンチャント除く素の装備補正・キャラスキル・アビリティ)と「強化能力値」(エンチャント + シエナのオーラの能力値(武器/盾)+ テシスコアの火力タイプ補正)の 2 系統に分かれ、それぞれ別係数。テシスコアの能力値増加は<strong>対象ダンジョン内でのみ有効</strong>なので、強化能力値の集計は計算対象コンテンツの地域(<code>Content::core_region</code>)で変わる。テシスコアの補助タイプ(物防/回避/敏捷/命中)は与ダメージ式に入らないが、装備値の合計(<code>Equipment::support_totals</code>)としては保持する。装備攻撃力強化倍率 = パワーウェポン+2%(wiki Skill/共通)+ ストロングウェポン Lv×3%(Lv1〜6 = 3〜18%、同ページ)</td>
 </tr>
 <tr>
 <td class="sym">B</td>
@@ -333,21 +333,21 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃力増加(シエナのオーラ)</td>
 <td><span class="kind rate">割合</span></td>
 <td></td>
-<td></td>
+<td>シエナのオーラの<strong>追加オプション「攻撃力増加」</strong>(1〜10%)。wiki「装備システム/シエナのオーラ#追加オプション一覧」に「実際は与ダメージ割合増加(新規カテゴリ)」と明記。同じ種類のオプションは同じ装備の別スロットに出ないため 1 部位 1 個、8 部位分が加算される(<code>Equipment::siena_attack_rate</code>)</td>
 </tr>
 <tr>
 <td class="sym">K</td>
 <td>最終ダメージ(固定値)</td>
 <td><span class="kind fixed">固定値</span></td>
 <td>上限1000</td>
-<td>テシスコア等。式の下限も兼ねる</td>
+<td><strong>テシスコアのセット効果</strong>(強化4のコアが 3〜5 個 / 6 個で進化段階に応じて +500〜+1,400。wiki「テシスコア#コアセット効果」)。セット効果は地域ごとに発動して<strong>重複する</strong>ので 4 地域分が加算され、上限 1000 で頭打ちになる。式の下限も兼ねる</td>
 </tr>
 <tr>
 <td class="sym">L</td>
 <td>最終ダメージ</td>
 <td><span class="kind rate">割合</span></td>
 <td>上限+45%</td>
-<td></td>
+<td><strong>テシスコアのセット効果</strong>の上位段階(進化2の6セット〜進化4の6セットで +1〜+5%)。地域ごとに発動して重複するので最大 4 地域分が加算される(<code>ThesisCores::set_bonus</code>)</td>
 </tr>
 <tr>
 <td class="sym">V1</td>
