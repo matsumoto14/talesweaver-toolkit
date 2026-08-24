@@ -31,7 +31,8 @@ pub use damage::{
 };
 pub use enemy::Enemy;
 pub use equipment::{
-    equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment, EquipmentAbilityDef,
+    equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment,
+    EquipmentAbilityDef, EquipmentAbilityFamily,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentParts, EquipmentRates,
     EquipmentValues, PartSlot, SienaAura, SienaStatBonus, SupportValues, ENHANCE_LEVEL_MAX,
     ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,

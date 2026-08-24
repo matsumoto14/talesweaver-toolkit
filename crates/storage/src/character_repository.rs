@@ -344,9 +344,21 @@ fn validate_equipment_catalog(
                 )));
             }
         }
+        // アビリティは系統(尖った刃/鋭い刃/知力/耐魔力)ごとに 1 つまで。
+        // 段が違っても同じ系統は併用できない(wiki: 装備システム/アビリティ)。
+        let mut families = HashSet::new();
         for ability_id in &part.abilities {
-            if !equipment_abilities.iter().any(|a| a.id == ability_id.as_str()) {
-                return Err(StorageError::InvalidValue(format!("未知の装備アビリティ '{ability_id}' です")));
+            let def = equipment_abilities
+                .iter()
+                .find(|a| a.id == ability_id.as_str())
+                .ok_or_else(|| {
+                    StorageError::InvalidValue(format!("未知の装備アビリティ '{ability_id}' です"))
+                })?;
+            if !families.insert(def.family) {
+                return Err(StorageError::InvalidValue(format!(
+                    "装備アビリティ '{}' は同じ系統がすでに選ばれています(系統ごとに 1 つまで)",
+                    def.name
+                )));
             }
         }
     }
@@ -729,6 +741,50 @@ mod tests {
     }
 
     #[test]
+    fn 同じ系統のアビリティを2つ持つと拒否する() {
+        use domain::{EquipmentAbilityFamily, EquipmentParts, EquipmentPart};
+
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let abilities = [
+            EquipmentAbilityDef {
+                id: "pointed-blade-low",
+                name: "(下)尖った刃",
+                family: EquipmentAbilityFamily::PointedBlade,
+                values: domain::EquipmentValues { thrust: 2, ..Default::default() },
+            },
+            EquipmentAbilityDef {
+                id: "pointed-blade-e",
+                name: "E-尖った刃",
+                family: EquipmentAbilityFamily::PointedBlade,
+                values: domain::EquipmentValues { thrust: 9, ..Default::default() },
+            },
+            EquipmentAbilityDef {
+                id: "sharp-blade-e",
+                name: "E-鋭い刃",
+                family: EquipmentAbilityFamily::SharpBlade,
+                values: domain::EquipmentValues { slash: 9, ..Default::default() },
+            },
+        ];
+        let mut c = new_character("メイン");
+        c.equipment = Equipment {
+            parts: EquipmentParts {
+                weapon: EquipmentPart {
+                    abilities: vec!["pointed-blade-low".into(), "pointed-blade-e".into()],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let err = repo.create(&c, &[], &[], &abilities).unwrap_err();
+        assert!(err.to_string().contains("系統"), "{err}");
+
+        // 系統が違えば通る
+        c.equipment.parts.weapon.abilities = vec!["pointed-blade-e".into(), "sharp-blade-e".into()];
+        repo.create(&c, &[], &[], &abilities).unwrap();
+    }
+
+    #[test]
     fn main_skill_idは往復し未選択はnullで読める() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("メイン");
@@ -813,7 +869,12 @@ mod tests {
     }
 
     fn test_equipment_ability() -> EquipmentAbilityDef {
-        EquipmentAbilityDef { id: "test-ability", name: "テストアビリティ", values: domain::EquipmentValues::default() }
+        EquipmentAbilityDef {
+            id: "test-ability",
+            name: "テストアビリティ",
+            family: domain::EquipmentAbilityFamily::PointedBlade,
+            values: domain::EquipmentValues::default(),
+        }
     }
 
     #[test]

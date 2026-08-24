@@ -415,11 +415,37 @@ pub enum EquipmentError {
     ThesisCore(#[from] ThesisCoreError),
 }
 
+/// 武器アビリティの系統(wiki: 装備システム/アビリティ。尖った刃/鋭い刃/知力/耐魔力)。
+/// 同じ系統は 1 部位に 1 つだけ付く(段が違っても併用できない)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EquipmentAbilityFamily {
+    /// 尖った刃(突き攻撃力)
+    PointedBlade,
+    /// 鋭い刃(斬り攻撃力)
+    SharpBlade,
+    /// 知力(魔法攻撃力)
+    Intelligence,
+    /// 耐魔力(魔法防御力)
+    MagicResistance,
+}
+
+impl EquipmentAbilityFamily {
+    pub const ALL: [EquipmentAbilityFamily; 4] = [
+        EquipmentAbilityFamily::PointedBlade,
+        EquipmentAbilityFamily::SharpBlade,
+        EquipmentAbilityFamily::Intelligence,
+        EquipmentAbilityFamily::MagicResistance,
+    ];
+}
+
 /// 武器アビリティ定義(gamedata がカタログを持つ。domain の `BuffDefinition` と同じ依存方向)。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EquipmentAbilityDef {
     pub id: &'static str,
     pub name: &'static str,
+    /// 系統。1 部位につき同じ系統は 1 つまで
+    pub family: EquipmentAbilityFamily,
     /// 装備攻撃力(基本能力値)への加算値
     pub values: EquipmentValues,
 }
@@ -703,6 +729,7 @@ mod tests {
         let abilities = vec![EquipmentAbilityDef {
             id: "sharp-blade-e",
             name: "E-鋭い刃",
+            family: EquipmentAbilityFamily::SharpBlade,
             values: EquipmentValues { slash: 9, ..Default::default() },
         }];
         let base = eq.base_totals(&abilities);

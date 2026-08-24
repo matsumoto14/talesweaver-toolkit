@@ -3,7 +3,7 @@
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import { createCharacter, errorMessage } from "../../api/commands";
   import type { NewCharacter } from "../../api/types";
-  import { neutralEquipment, neutralStatSources } from "../../draft";
+  import { defaultEquipment, neutralStatSources } from "../../draft";
   import { STAT_KINDS } from "../../labels";
   import {
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
@@ -61,7 +61,7 @@
           base_stats: Object.fromEntries(STAT_KINDS.map((k) => [k, 1])) as NewCharacter["base_stats"],
           awakening: { stage: 0, eternal_level: 0 },
           stat_sources: neutralStatSources(),
-          equipment: neutralEquipment(),
+          equipment: defaultEquipment(),
           main_skill_id: mainSkillId === "" ? null : mainSkillId,
         };
       }
@@ -123,7 +123,10 @@
       {/if}
     </div>
   </div>
-  <p class="note dim">登録は名前だけでOK。装備やステータスは登録後にこの画面で育てます(空の項目は中立値で計算されます)。</p>
+  <p class="note dim">
+    登録は名前だけでOK。装備やステータスは登録後にこの画面で育てます(空の項目は中立値で計算されます)。
+    パワーウェポンとストロングウェポン Lv6(合計 +20%)は既定で入ります(装備ペインで変更できます)。
+  </p>
 </div>
 
 <style>

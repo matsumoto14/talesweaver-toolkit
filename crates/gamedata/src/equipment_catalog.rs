@@ -5,7 +5,7 @@
 //! Item/防具/腕/盾＋ / Item/アクセサリ/顔・体・手・足・エフェクト(取得 2026-08-24)。
 //! docs/claude/goals/2026-08-24-equipment-parts.md「wiki 調査結果」「カタログ seed」節参照。
 
-use domain::{EnhanceRates, EquipmentAbilityDef, EquipmentValues, PartSlot};
+use domain::{EnhanceRates, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentValues, PartSlot};
 
 use crate::Source;
 
@@ -424,8 +424,13 @@ pub fn find_equipment_item(id: &str) -> Option<EquipmentItem> {
     equipment_catalog().into_iter().find(|item| item.id == id)
 }
 
-fn ability(id: &'static str, name: &'static str, values: EquipmentValues) -> EquipmentAbilityDef {
-    EquipmentAbilityDef { id, name, values }
+fn ability(
+    id: &'static str,
+    name: &'static str,
+    family: EquipmentAbilityFamily,
+    values: EquipmentValues,
+) -> EquipmentAbilityDef {
+    EquipmentAbilityDef { id, name, family, values }
 }
 
 /// 武器アビリティカタログ(装備攻撃力に効く 4 系統 × 7 段 = 28 件。wiki: 装備システム/アビリティ)。
@@ -433,37 +438,37 @@ fn ability(id: &'static str, name: &'static str, values: EquipmentValues) -> Equ
 pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
     vec![
         // 尖った刃(突き攻撃力)
-        ability("pointed-blade-low", "(下)尖った刃", v(2, 0, 0, 0)),
-        ability("pointed-blade-mid", "(中)尖った刃", v(3, 0, 0, 0)),
-        ability("pointed-blade-high", "(上)尖った刃", v(4, 0, 0, 0)),
-        ability("pointed-blade-n", "N-尖った刃", v(6, 0, 0, 0)),
-        ability("pointed-blade-r", "R-尖った刃", v(7, 0, 0, 0)),
-        ability("pointed-blade-l", "L-尖った刃", v(8, 0, 0, 0)),
-        ability("pointed-blade-e", "E-尖った刃", v(9, 0, 0, 0)),
+        ability("pointed-blade-low", "(下)尖った刃", EquipmentAbilityFamily::PointedBlade, v(2, 0, 0, 0)),
+        ability("pointed-blade-mid", "(中)尖った刃", EquipmentAbilityFamily::PointedBlade, v(3, 0, 0, 0)),
+        ability("pointed-blade-high", "(上)尖った刃", EquipmentAbilityFamily::PointedBlade, v(4, 0, 0, 0)),
+        ability("pointed-blade-n", "N-尖った刃", EquipmentAbilityFamily::PointedBlade, v(6, 0, 0, 0)),
+        ability("pointed-blade-r", "R-尖った刃", EquipmentAbilityFamily::PointedBlade, v(7, 0, 0, 0)),
+        ability("pointed-blade-l", "L-尖った刃", EquipmentAbilityFamily::PointedBlade, v(8, 0, 0, 0)),
+        ability("pointed-blade-e", "E-尖った刃", EquipmentAbilityFamily::PointedBlade, v(9, 0, 0, 0)),
         // 鋭い刃(斬り攻撃力)
-        ability("sharp-blade-low", "(下)鋭い刃", v(0, 2, 0, 0)),
-        ability("sharp-blade-mid", "(中)鋭い刃", v(0, 3, 0, 0)),
-        ability("sharp-blade-high", "(上)鋭い刃", v(0, 4, 0, 0)),
-        ability("sharp-blade-n", "N-鋭い刃", v(0, 6, 0, 0)),
-        ability("sharp-blade-r", "R-鋭い刃", v(0, 7, 0, 0)),
-        ability("sharp-blade-l", "L-鋭い刃", v(0, 8, 0, 0)),
-        ability("sharp-blade-e", "E-鋭い刃", v(0, 9, 0, 0)),
+        ability("sharp-blade-low", "(下)鋭い刃", EquipmentAbilityFamily::SharpBlade, v(0, 2, 0, 0)),
+        ability("sharp-blade-mid", "(中)鋭い刃", EquipmentAbilityFamily::SharpBlade, v(0, 3, 0, 0)),
+        ability("sharp-blade-high", "(上)鋭い刃", EquipmentAbilityFamily::SharpBlade, v(0, 4, 0, 0)),
+        ability("sharp-blade-n", "N-鋭い刃", EquipmentAbilityFamily::SharpBlade, v(0, 6, 0, 0)),
+        ability("sharp-blade-r", "R-鋭い刃", EquipmentAbilityFamily::SharpBlade, v(0, 7, 0, 0)),
+        ability("sharp-blade-l", "L-鋭い刃", EquipmentAbilityFamily::SharpBlade, v(0, 8, 0, 0)),
+        ability("sharp-blade-e", "E-鋭い刃", EquipmentAbilityFamily::SharpBlade, v(0, 9, 0, 0)),
         // 知力(魔法攻撃力)
-        ability("intelligence-low", "(下)知力", v(0, 0, 2, 0)),
-        ability("intelligence-mid", "(中)知力", v(0, 0, 3, 0)),
-        ability("intelligence-high", "(上)知力", v(0, 0, 4, 0)),
-        ability("intelligence-n", "N-知力", v(0, 0, 6, 0)),
-        ability("intelligence-r", "R-知力", v(0, 0, 7, 0)),
-        ability("intelligence-l", "L-知力", v(0, 0, 8, 0)),
-        ability("intelligence-e", "E-知力", v(0, 0, 9, 0)),
+        ability("intelligence-low", "(下)知力", EquipmentAbilityFamily::Intelligence, v(0, 0, 2, 0)),
+        ability("intelligence-mid", "(中)知力", EquipmentAbilityFamily::Intelligence, v(0, 0, 3, 0)),
+        ability("intelligence-high", "(上)知力", EquipmentAbilityFamily::Intelligence, v(0, 0, 4, 0)),
+        ability("intelligence-n", "N-知力", EquipmentAbilityFamily::Intelligence, v(0, 0, 6, 0)),
+        ability("intelligence-r", "R-知力", EquipmentAbilityFamily::Intelligence, v(0, 0, 7, 0)),
+        ability("intelligence-l", "L-知力", EquipmentAbilityFamily::Intelligence, v(0, 0, 8, 0)),
+        ability("intelligence-e", "E-知力", EquipmentAbilityFamily::Intelligence, v(0, 0, 9, 0)),
         // 耐魔力(魔法防御力)
-        ability("magic-resistance-low", "(下)耐魔力", v(0, 0, 0, 2)),
-        ability("magic-resistance-mid", "(中)耐魔力", v(0, 0, 0, 3)),
-        ability("magic-resistance-high", "(上)耐魔力", v(0, 0, 0, 4)),
-        ability("magic-resistance-n", "N-耐魔力", v(0, 0, 0, 6)),
-        ability("magic-resistance-r", "R-耐魔力", v(0, 0, 0, 7)),
-        ability("magic-resistance-l", "L-耐魔力", v(0, 0, 0, 8)),
-        ability("magic-resistance-e", "E-耐魔力", v(0, 0, 0, 9)),
+        ability("magic-resistance-low", "(下)耐魔力", EquipmentAbilityFamily::MagicResistance, v(0, 0, 0, 2)),
+        ability("magic-resistance-mid", "(中)耐魔力", EquipmentAbilityFamily::MagicResistance, v(0, 0, 0, 3)),
+        ability("magic-resistance-high", "(上)耐魔力", EquipmentAbilityFamily::MagicResistance, v(0, 0, 0, 4)),
+        ability("magic-resistance-n", "N-耐魔力", EquipmentAbilityFamily::MagicResistance, v(0, 0, 0, 6)),
+        ability("magic-resistance-r", "R-耐魔力", EquipmentAbilityFamily::MagicResistance, v(0, 0, 0, 7)),
+        ability("magic-resistance-l", "L-耐魔力", EquipmentAbilityFamily::MagicResistance, v(0, 0, 0, 8)),
+        ability("magic-resistance-e", "E-耐魔力", EquipmentAbilityFamily::MagicResistance, v(0, 0, 0, 9)),
     ]
 }
 
@@ -543,6 +548,28 @@ mod tests {
         assert_eq!(abilities.len(), 28);
         let ids: HashSet<&str> = abilities.iter().map(|a| a.id).collect();
         assert_eq!(ids.len(), abilities.len());
+    }
+
+    /// 系統は UI の「系統ごとに 1 つ選ぶ」4 行と storage の重複検証の両方が使う。
+    #[test]
+    fn アビリティは4系統各7段で系統と加算先が対応する() {
+        use domain::EquipmentAbilityFamily::*;
+        let abilities = equipment_abilities();
+        for family in [PointedBlade, SharpBlade, Intelligence, MagicResistance] {
+            let members: Vec<_> = abilities.iter().filter(|a| a.family == family).collect();
+            assert_eq!(members.len(), 7, "{family:?} は 7 段");
+            for def in members {
+                let nonzero = [
+                    (def.values.thrust, PointedBlade),
+                    (def.values.slash, SharpBlade),
+                    (def.values.magic_attack, Intelligence),
+                    (def.values.magic_defense, MagicResistance),
+                ];
+                for (value, owner) in nonzero {
+                    assert_eq!(value != 0, owner == family, "{} の加算先が系統と食い違う", def.id);
+                }
+            }
+        }
     }
 
     #[test]

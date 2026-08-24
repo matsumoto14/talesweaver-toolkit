@@ -12,7 +12,7 @@
     sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
-  import { STAT_KINDS, STAT_LABELS } from "../../labels";
+  import { EQUIPMENT_STAT_KINDS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
@@ -23,6 +23,9 @@
     character: RegisteredCharacter;
   }
   let { character }: Props = $props();
+
+  // 表のヘッダは狭いので短縮名にする(EQUIPMENT_STAT_LABELS は「突き攻撃力」等で長い)
+  const EQUIPMENT_STAT_SHORT = { thrust: "突き", slash: "斬り", magic_attack: "魔攻", magic_defense: "魔防" };
 
   const DEFAULT_LIST_WIDTH = 280;
   const layoutWidths = persisted("tw-v4-chars", { list: DEFAULT_LIST_WIDTH });
@@ -154,10 +157,6 @@
       name: "装備",
       sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}${enhanceRatePercent > 0 ? ` ・ +${enhanceRatePercent}%` : ""}`,
     },
-    { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
-    { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
-    { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
-    { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
     {
       id: "siena",
       name: "シエナのオーラ",
@@ -171,10 +170,17 @@
       name: "テシスコア",
       sub: coreBestTotal > 0 ? `最大 合計 ${fmtInt(coreBestTotal)}` : NEUTRAL,
     },
+    { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
+    { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
+    { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
+    { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
-  const PLANNED = ["称号", "モンスターカード"];
+  // 並びは 12a の指定順(キャラステータス / 装備 / シエナ / テシスコア / 聖物 / クラウン /
+  // スキル / モンスターカード / ペット)。12a に無いルーン・調整はその後ろに置く。
+  const PLANNED = ["モンスターカード", "称号"];
+  const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
   // --- いまの実力 ---------------------------------------------------------
   const totalContents = $derived(app.areas.reduce((n, a) => n + a.contents.length, 0));
@@ -195,6 +201,7 @@
     <section class="sources">
       <div class="src-head">
         <span class="src-title">補正源</span>
+        {#if neutralCount > 0}<span class="src-unset">未設定 {neutralCount} 件</span>{/if}
         <span class="dim">押して中身を変える</span>
       </div>
       <div class="src-list">
@@ -290,13 +297,28 @@
         </div>
         <div class="sheet-card">
           <div class="card-title">装備値(全部位の合計)</div>
-          <div class="eq-summary num">
-            <span><span class="dim">基本合計 突き</span> {fmtInt(eqBaseTotal.thrust)}</span>
-            <span><span class="dim">基本合計 斬り</span> {fmtInt(eqBaseTotal.slash)}</span>
-            <span><span class="dim">エンチャント合計 突き</span> {fmtInt(eqEnchantTotal.thrust)}</span>
-            <span><span class="dim">エンチャント合計 斬り</span> {fmtInt(eqEnchantTotal.slash)}</span>
-            <span><span class="dim">強化倍率</span> +{enhanceRatePercent}%</span>
-          </div>
+          <table class="eq-table num">
+            <thead>
+              <tr>
+                <th></th>
+                {#each EQUIPMENT_STAT_KINDS as k (k)}<th class="n">{EQUIPMENT_STAT_SHORT[k]}</th>{/each}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th class="rh">基本</th>
+                {#each EQUIPMENT_STAT_KINDS as k (k)}<td class="n">{fmtInt(eqBaseTotal[k])}</td>{/each}
+              </tr>
+              <tr>
+                <th class="rh">強化</th>
+                {#each EQUIPMENT_STAT_KINDS as k (k)}<td class="n">{fmtInt(eqEnchantTotal[k])}</td>{/each}
+              </tr>
+            </tbody>
+          </table>
+          <p class="dim tiny">
+            強化倍率 +{enhanceRatePercent}%。強化のうちテシスコア・シエナのオーラの分はこの表に入りません
+            (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。
+          </p>
         </div>
         <div class="sheet-card">
           <div class="card-title">このキャラで通るのは</div>
@@ -331,6 +353,10 @@
   .src-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 7px; }
   .src-title { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
   .src-head .dim { margin-left: auto; font-size: 9px; }
+  .src-unset {
+    font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 0 6px;
+  }
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
@@ -387,6 +413,11 @@
   .stat-cell { display: flex; align-items: baseline; gap: 5px; font-size: 10px; }
   .stat-cell .strong { font-size: 12px; font-weight: 700; }
   .eq-summary { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
+  .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; font-size: 11px; }
+  .eq-table th, .eq-table td { padding: 3px 6px; border-bottom: 1px solid var(--border-soft); }
+  .eq-table thead th { font-size: 9px; font-weight: 700; color: var(--fg-muted); }
+  .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
+  .eq-table .n { text-align: right; }
   .clear { margin-top: 4px; }
   .clear .strong { font-size: 20px; font-weight: 700; }
   .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }

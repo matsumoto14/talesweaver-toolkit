@@ -32,12 +32,21 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   thesis_cores: cloneThesisCores(src.thesis_cores),
 });
 
-export const neutralEquipment = (): Equipment => ({
+/**
+ * 新規登録キャラの装備の初期値。パワーウェポン ON・ストロングウェポン Lv6(合計 +20%)を
+ * 既定にする(2026-08-24 決定2: 値は人によって変わるが、取っていないユーザーはほぼいない)。
+ * 変更は例外操作として装備ペインの折りたたみの中に置く。**保存済みキャラの値は書き換えない**
+ * ので、ここを使うのは新規登録だけにすること。
+ */
+export const defaultEquipment = (): Equipment => ({
   parts: Object.fromEntries(PART_SLOTS.map((slot) => [slot, neutralEquipmentPart()])) as unknown as EquipmentParts,
-  power_weapon: false,
-  strong_weapon_level: 0,
+  power_weapon: true,
+  strong_weapon_level: DEFAULT_STRONG_WEAPON_LEVEL,
   thesis_cores: neutralThesisCores(),
 });
+
+/** ストロングウェポンの既定 Lv(上限。wiki Skill/共通: Lv6 = +18%) */
+const DEFAULT_STRONG_WEAPON_LEVEL = 6;
 
 export const cloneAdjustments = (src: Adjustments): Adjustments =>
   Object.fromEntries(STAT_KINDS.map((k) => [k, { add: src[k].add, pin: src[k].pin }])) as Adjustments;

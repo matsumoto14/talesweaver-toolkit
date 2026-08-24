@@ -16,7 +16,8 @@
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
-    CoreRegion, CoreType, EquipmentItem, PartSlot, PetSkillTier, Skill, StatKind, StatPreview,
+    CoreRegion, CoreType, EquipmentAbilityFamily, EquipmentItem, PartSlot, PetSkillTier, Skill,
+    StatKind, StatPreview,
   } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import type { Draft } from "../../draft";
@@ -26,7 +27,7 @@
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
-    ABILITY_ALLOWED_SLOTS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
+    ABILITY_ALLOWED_SLOTS, ABILITY_FAMILIES, ABILITY_FAMILY_LABELS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
     CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
     PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS, SIENA_ALLOWED_SLOTS,
     SIENA_EQUIPMENT_VALUE_SLOTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
@@ -130,11 +131,47 @@
   const partContribution = (slot: PartSlot): number | null =>
     preview?.attack?.part_contributions.find((c) => c.slot === slot)?.value ?? null;
 
-  const abilityChecked = (slot: PartSlot, id: string) => draft.equipment.parts[slot].abilities.includes(id);
-  function toggleAbility(slot: PartSlot, id: string) {
+  // アビリティは系統(尖った刃 / 鋭い刃 / 知力 / 耐魔力)ごとに 1 つだけ。Select 4 行にして
+  // 排他を構造で保証する(段違いの重複チェックが通ってしまう問題の解消。storage 側も検証する)。
+  const abilityDef = (id: string) => app.equipmentAbilities.find((a) => a.id === id) ?? null;
+  const abilityOptions = (family: EquipmentAbilityFamily) => [
+    { value: "", label: "なし" },
+    ...app.equipmentAbilities.filter((a) => a.family === family).map((a) => ({ value: a.id, label: a.name })),
+  ];
+  /** その部位でこの系統に選ばれているアビリティ id(未選択は "") */
+  const abilityOf = (slot: PartSlot, family: EquipmentAbilityFamily): string =>
+    draft.equipment.parts[slot].abilities.find((id) => abilityDef(id)?.family === family) ?? "";
+  /** 同じ系統の既存選択を必ず 1 つに置き換える(旧データの重複もここで解消される) */
+  function setAbility(slot: PartSlot, family: EquipmentAbilityFamily, id: string) {
     const part = draft.equipment.parts[slot];
-    part.abilities = abilityChecked(slot, id) ? part.abilities.filter((a) => a !== id) : [...part.abilities, id];
+    const others = part.abilities.filter((a) => abilityDef(a)?.family !== family);
+    part.abilities = id === "" ? others : [...others, id];
   }
+  /** 部位詳細を開いたときに、旧データの同系統重複を 1 つへ畳む(保存時に弾かれる値を残さない) */
+  function openPartDetail(slot: PartSlot) {
+    const part = draft.equipment.parts[slot];
+    const seen = new Set<string>();
+    const normalized = part.abilities.filter((id) => {
+      const family = abilityDef(id)?.family;
+      if (family === undefined || seen.has(family)) return false;
+      seen.add(family);
+      return true;
+    });
+    if (normalized.length !== part.abilities.length) part.abilities = normalized;
+    openPart = slot;
+  }
+
+  const enhanceRatePercent = $derived(
+    (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3,
+  );
+  const enhanceRateSummary = $derived(
+    [
+      draft.equipment.power_weapon ? "パワーウェポン" : null,
+      draft.equipment.strong_weapon_level > 0 ? `ストロングウェポン Lv${draft.equipment.strong_weapon_level}` : null,
+    ]
+      .filter((x) => x !== null)
+      .join(" ・ ") || "どちらも未使用",
+  );
 
   const enhanceLevelOptions = $derived(
     Array.from({ length: limits.enhance_level_max + 1 }, (_, lv) => ({
@@ -324,32 +361,42 @@
   {:else if sourceId === "equipment"}
     {#if openPart === null}
       <div class="card">
-        <div class="card-title">装備攻撃力強化</div>
-        <div class="fields">
-          <label class="check">
-            <input type="checkbox" bind:checked={draft.equipment.power_weapon} />
-            <span>パワーウェポン(+2%)</span>
-          </label>
-          <Select
-            label="ストロングウェポン"
-            options={strongWeaponOptions}
-            bind:value={
-              () => String(draft.equipment.strong_weapon_level),
-              (v) => (draft.equipment.strong_weapon_level = Number(v))
-            }
-          />
-        </div>
+        <details class="enhance-rate">
+          <summary>
+            <span class="card-title inline">装備攻撃力強化</span>
+            <span class="num strong">+{enhanceRatePercent}%</span>
+            <span class="dim">{enhanceRateSummary}</span>
+          </summary>
+          <p class="hint dim">ほぼ全員が取っているので既定で入れてあります。取っていない・Lv が違うときだけ触ってください。</p>
+          <div class="fields">
+            <label class="check">
+              <input type="checkbox" bind:checked={draft.equipment.power_weapon} />
+              <span>パワーウェポン(+2%)</span>
+            </label>
+            <Select
+              label="ストロングウェポン"
+              options={strongWeaponOptions}
+              bind:value={
+                () => String(draft.equipment.strong_weapon_level),
+                (v) => (draft.equipment.strong_weapon_level = Number(v))
+              }
+            />
+          </div>
+        </details>
       </div>
       <div class="part-list">
         {#each PART_SLOTS as slot (slot)}
           {@const part = draft.equipment.parts[slot]}
           {@const canEnhance = ENHANCE_ALLOWED_SLOTS.includes(slot)}
-          <button type="button" class="part-row" onclick={() => (openPart = slot)}>
+          <button type="button" class="part-row" onclick={() => openPartDetail(slot)}>
             <span class="part-main">
               <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
               <span class="part-item">{partDisplayName(slot)}</span>
               {#if canEnhance && part.enhance_level > 0}
                 <span class="part-plus">+{part.enhance_level}</span>
+              {/if}
+              {#if part.abilities.length > 0}
+                <span class="part-abi">アビリティ {part.abilities.length}</span>
               {/if}
             </span>
             <span class="part-vals num dim">突{fmtInt(part.base.thrust)} / 斬{fmtInt(part.base.slash)}</span>
@@ -406,44 +453,47 @@
       </div>
 
       <div class="card">
-        <div class="card-title">基本能力値</div>
-        <p class="hint dim">
-          {#if item}wiki レンジ {item.values_min.thrust}〜{item.values_max.thrust} 等(MR で個体差あり)。上書きは例外操作
-          {:else}カタログ外のため手入力(例外操作)
-          {/if}
-        </p>
-        <div class="fields">
-          {#each EQUIPMENT_STAT_KINDS as k (k)}
-            <StatInput
-              label={EQUIPMENT_STAT_LABELS[k]}
-              min={0}
-              max={limits.equipment_value_max}
-              bind:value={part.base[k]}
-              format={item ? () => `wiki ${item.values_min[k]}–${item.values_max[k]}` : undefined}
-            />
-          {/each}
+        <div class="values-cols">
+          <div class="values-col">
+            <div class="card-title">基本(装備品ごとに固定)</div>
+            <p class="hint dim">
+              {#if item}wiki レンジ(MR で個体差あり)。上書きは例外操作
+              {:else}カタログ外のため手入力(例外操作)
+              {/if}
+            </p>
+            <div class="fields">
+              {#each EQUIPMENT_STAT_KINDS as k (k)}
+                <StatInput
+                  label={EQUIPMENT_STAT_LABELS[k]}
+                  min={0}
+                  max={limits.equipment_value_max}
+                  bind:value={part.base[k]}
+                  format={item ? () => `wiki ${item.values_min[k]}–${item.values_max[k]}` : undefined}
+                />
+              {/each}
+            </div>
+          </div>
+          <div class="values-col">
+            <div class="card-title">エンチャント(呪文書で伸ばす)</div>
+            <p class="hint dim">上限はアイテム個別(カタログ外は{fmtInt(limits.equipment_value_max)})</p>
+            <div class="fields">
+              {#each EQUIPMENT_STAT_KINDS as k (k)}
+                {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
+                <StatInput
+                  label={EQUIPMENT_STAT_LABELS[k]}
+                  min={0}
+                  max={cap}
+                  bind:value={part.enchant[k]}
+                  capGauge
+                />
+              {/each}
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">エンチャント</div>
-        <p class="hint dim">呪文書で伸ばした強化能力値。上限はアイテム個別(カタログ外は{fmtInt(limits.equipment_value_max)})</p>
         <p class="hint dim">
-          シエナのオーラとテシスコアの分はここに含めないでください(それぞれの補正源で入力すると
+          エンチャントにシエナのオーラとテシスコアの分は含めないでください(それぞれの補正源で入力すると
           強化能力値に自動で合流します。ここにも入れると二重計上になります)。
         </p>
-        <div class="fields">
-          {#each EQUIPMENT_STAT_KINDS as k (k)}
-            {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
-            <StatInput
-              label={EQUIPMENT_STAT_LABELS[k]}
-              min={0}
-              max={cap}
-              bind:value={part.enchant[k]}
-              format={() => `上限 ${fmtInt(cap)}`}
-            />
-          {/each}
-        </div>
       </div>
 
       {#if ENHANCE_ALLOWED_SLOTS.includes(slot)}
@@ -491,14 +541,14 @@
       {#if ABILITY_ALLOWED_SLOTS.includes(slot)}
         <div class="card">
           <div class="card-title">アビリティ</div>
-          <p class="hint dim">装備攻撃力に効く 4 系統(尖った刃/鋭い刃/知力/耐魔力)。武器のみ</p>
-          <div class="buff-list">
-            {#each app.equipmentAbilities as def (def.id)}
-              {@const checked = abilityChecked(slot, def.id)}
-              <label class="check">
-                <input type="checkbox" {checked} onchange={() => toggleAbility(slot, def.id)} />
-                <span>{def.name}</span>
-              </label>
+          <p class="hint dim">装備攻撃力に効く 4 系統。同じ系統は段が違っても 1 つだけ付きます(武器のみ)</p>
+          <div class="fields">
+            {#each ABILITY_FAMILIES as family (family)}
+              <Select
+                label={ABILITY_FAMILY_LABELS[family]}
+                options={abilityOptions(family)}
+                bind:value={() => abilityOf(slot, family), (id) => setAbility(slot, family, id)}
+              />
             {/each}
           </div>
         </div>
@@ -848,6 +898,22 @@
   /* 装備ドリルダウン: 部位詳細 */
   .back-link { align-self: flex-start; padding: 2px 2px; font-size: 10.5px; color: var(--accent); }
   .back-link:hover { text-decoration: underline; }
+  .enhance-rate > summary {
+    display: flex; align-items: baseline; gap: 8px; cursor: pointer; list-style: none;
+  }
+  .enhance-rate > summary::-webkit-details-marker { display: none; }
+  .enhance-rate > summary::before { content: "▸"; font-size: 9px; color: var(--fg-muted); }
+  .enhance-rate[open] > summary::before { content: "▾"; }
+  .enhance-rate > summary .strong { font-size: 13px; font-weight: 700; }
+  .enhance-rate > summary .dim { margin-left: auto; font-size: 9.5px; }
+  .card-title.inline { margin: 0; }
+  .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+  .values-col { flex: 1 1 260px; min-width: 0; }
+  .part-abi {
+    flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 0 6px;
+  }
+
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
     padding: 8px 11px; border-radius: 10px;

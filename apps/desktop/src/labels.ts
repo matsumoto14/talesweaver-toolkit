@@ -1,5 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
-import type { CoreRegion, CoreType, PartSlot, PetSkillTier, StatKind, StatLayer } from "./api/types";
+import type {
+  CoreRegion, CoreType, EquipmentAbilityFamily, PartSlot, PetSkillTier, StatKind, StatLayer,
+} from "./api/types";
 
 export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
 export const STAT_LABELS: Record<StatKind, string> = {
@@ -55,6 +57,17 @@ export const PART_SLOT_LABELS: Record<PartSlot, string> = {
 export const ENHANCE_ALLOWED_SLOTS: PartSlot[] = ["weapon", "armor"];
 // 装備アビリティを持てる部位(wiki: 装備システム/アビリティ。武器のみが火力に効く)。
 export const ABILITY_ALLOWED_SLOTS: PartSlot[] = ["weapon"];
+// 武器アビリティの系統(crates/domain/src/equipment.rs の EquipmentAbilityFamily)。
+// 表示順は加算先(突き / 斬り / 魔攻 / 魔防)の並びに合わせる。
+export const ABILITY_FAMILIES: EquipmentAbilityFamily[] = [
+  "pointed_blade", "sharp_blade", "intelligence", "magic_resistance",
+];
+export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
+  pointed_blade: "尖った刃(突き)",
+  sharp_blade: "鋭い刃(斬り)",
+  intelligence: "知力(魔攻)",
+  magic_resistance: "耐魔力(魔防)",
+};
 // シエナのオーラを発現できる部位(wiki: 装備システム冒頭の表「オーラ」行。8 部位)。
 export const SIENA_ALLOWED_SLOTS: PartSlot[] = [
   "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg",

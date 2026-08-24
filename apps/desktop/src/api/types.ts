@@ -254,8 +254,14 @@ export interface EquipmentItem {
   source: Source;
 }
 
+// 武器アビリティの系統。crates/domain/src/equipment.rs の EquipmentAbilityFamily。
+// 同じ系統は 1 部位に 1 つだけ(段が違っても併用できない)。
+export type EquipmentAbilityFamily =
+  | "pointed_blade" | "sharp_blade" | "intelligence" | "magic_resistance";
+
 // 武器アビリティ定義。crates/domain/src/equipment.rs の EquipmentAbilityDef。
 export interface EquipmentAbilityDef {
+  family: EquipmentAbilityFamily;
   id: string;
   name: string;
   /** 装備攻撃力(基本能力値)への加算値 */
