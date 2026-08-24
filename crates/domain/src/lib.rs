@@ -1,6 +1,6 @@
 //! ドメインモデルと計算(I/O 無し・決定的)。
 //!
-//! パイプライン(docs/damage-formula.md §11):
+//! パイプライン(docs/damage-formula.md §12):
 //! ①能力値計算(`stats`) → ②カテゴリ集計(`category`) → ③与ダメージ式(`damage`) → ④段数。
 
 pub mod attack_power;

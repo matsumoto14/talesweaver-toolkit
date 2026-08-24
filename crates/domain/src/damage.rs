@@ -189,7 +189,11 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
             trunc2(g(CriticalMultiplier) * g(CriticalDamageRate)),
         )
     } else {
-        step("クリティカル", "非クリティカル(F = 1.0)".to_string(), 1.0)
+        // 非クリティカル時は `{F×G}` ごと 1.0。F(Cri倍率)はクリティカル時にだけ代入され、
+        // G(クリティカルダメージ増加)の供給源は wiki ステータス [G] の表がすべて
+        // 「クリティカルダメージ増加」(スコープアイ / 致命のルーン / ソウルリンク / 称号 /
+        // プシーキーの刻印)で、非クリティカルの一撃には乗らない(取得 2026-08-25)。
+        step("クリティカル", "非クリティカル({F × G} = 1.0)".to_string(), 1.0)
     };
     let bonus = step(
         "コンボ・属性・カット率・オーラ",

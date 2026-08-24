@@ -22,7 +22,7 @@ use crate::Source;
 pub const ENEMIES_SOURCE: Source = Source {
     page: "wiki 狩り場情報一覧 + 実測表「モンスター能力値リスト」+ 旧リポ twtoolkit monsters.json",
     retrieved_on: "2026-08-25",
-    note: "被害減少は符号反転して負値で保持、カット率は乗数で保持。2026-08-25 に wiki を再取得して重複分を再照合し、全件一致(最後の決戦2 のカット率のみ実測表 70% を採用)。wiki にしか無い敵と、wiki にあって未消費の列は docs/damage-formula.md §10 参照",
+    note: "被害減少は符号反転して負値で保持、カット率は乗数で保持。2026-08-25 に wiki を再取得して重複分を再照合し、全件一致(最後の決戦2 のカット率のみ実測表 70% を採用)。wiki にしか無い敵と、wiki にあって未消費の列は docs/damage-formula.md §11 参照",
 };
 
 struct EnemyRecord {

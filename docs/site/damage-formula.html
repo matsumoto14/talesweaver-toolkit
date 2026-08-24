@@ -151,10 +151,11 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li><a href="#6">6. 防御側の戦闘能力値</a></li>
 <li><a href="#7">7. 命中・回避</a></li>
 <li><a href="#8">8. 属性</a></li>
-<li><a href="#9">9. 覚醒・エタの意志で開放される上限</a></li>
-<li><a href="#10">10. 敵データ(狩り場情報一覧)</a></li>
-<li><a href="#11">11. 実装への示唆</a></li>
-<li><a href="#12">12. 未取込の参照ページ(次の情報整理対象)</a></li>
+<li><a href="#9">9. クリティカル率</a></li>
+<li><a href="#10">10. 覚醒・エタの意志で開放される上限</a></li>
+<li><a href="#11">11. 敵データ(狩り場情報一覧)</a></li>
+<li><a href="#12">12. 実装への示唆</a></li>
+<li><a href="#13">13. 参照ページの取込状況</a></li>
 <li><a href="#_1">取得メモ</a></li>
 </ul>
 </nav>
@@ -301,7 +302,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>Cri倍率</td>
 <td><span class="kind assign">代入</span></td>
 <td></td>
-<td>スキルごと。非クリティカル時は 1.0 相当</td>
+<td>スキルごと。<strong>非クリティカル時は <code>{F×G}</code> ごと 1.0</strong>(G の供給源はすべて「クリティカルダメージ増加」で非クリには乗らない)</td>
 </tr>
 <tr>
 <td class="sym">G</td>
@@ -649,7 +650,20 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li><strong>未解決</strong>: wiki どおりだと攻撃側の属性値は最大 255 のはずが、モデル化できる範囲(基礎 ≤10 + 属性強化 9 × 10 部位)では 100 止まりで、敵属性値 120 / 125 を上回れない。属性強化に 9 より上があるか、未取込の供給源(覚醒・ランダムOP 等)があるはず <span class="tag warm">仮</span></li>
 <li>攻撃側が「エレメンタルブレイク」を修得していると一定確率で防御側の属性値を 0 として計算する(未実装)</li>
 </ul>
-<h2 id="9">9. 覚醒・エタの意志で開放される上限</h2>
+<h2 id="9">9. クリティカル率</h2>
+<p>出典: 計算式まとめ <code>#CriticalChance</code>、ステータス「ダメージ増加/減少カテゴリー」(取得 2026-08-25)。</p>
+<pre><code>クリティカル確率 = ( (装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象のAGI))
+                     × ペット会心 × シエナのオーラ
+                     + スキルクリティカル率 + クリティカル率増加 + 対象のクリティカル被撃率A )
+                   × 対象のクリティカル被撃率B + 最終クリティカル率増加
+</code></pre>
+<ul>
+<li>下限 0% / 上限 100%(余剰は意味なし)。クリティカル率増加は上限 +100%</li>
+<li>ペット会心 = ×1.1。vsモンスター/プレイヤー表記のものは上限の対象外</li>
+<li><strong>未実装</strong>。式に要る入力のうち、対象のAGI・対象のクリティカル被撃率(狩り場情報一覧。多くの行が <code>?</code>)と<strong>スキルクリティカル率</strong>(スキルデータに無い)が揃わない。装備クリティカル補正は段階2 で入った</li>
+<li>クリティカル率自体は与ダメージ式に入らない(入るのは F: Cri倍率 と G: クリティカルダメージ増加)</li>
+</ul>
+<h2 id="10">10. 覚醒・エタの意志で開放される上限</h2>
 <p>出典: Quest/覚醒クエスト「各能力の上限値」「極限後の各値の増加効果」/ エタの意志「エタの成長」(Ver8.14、取得 2026-08-25)。</p>
 <ul>
 <li><strong>覚醒倍率(カテゴリN)</strong> は「二次極限+N次覚醒」の覚醒ダメージ: 2次 +20% / 3次 +40% / 4次 +60% / 5次 +100%(= ×1.2 / 1.4 / 1.6 / 2.0)</li>
@@ -707,7 +721,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li><strong>最終能力値の上限 2,400</strong> はエタの意志 Lv100 の「最大ステータス開放」。素の上限は 1,500(ステータス ページ)</li>
 <li>防御力は上限に届いたあと頭打ちになり、そこから先の軽減はカット率 J が担う(§6)</li>
 </ul>
-<h2 id="10">10. 敵データ(狩り場情報一覧)</h2>
+<h2 id="11">11. 敵データ(狩り場情報一覧)</h2>
 <p>出典: 狩り場情報一覧(取得 2026-08-25)。収録は <code>crates/gamedata/src/enemies.rs</code> の 42 体。</p>
 <ul>
 <li>wiki の列と、こちらで消費している項目</li>
@@ -778,7 +792,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>武器ダメージ無効(旧リポ <code>weaponTerm=0</code>。キマイラ)は wiki 狩り場情報一覧に該当する列が無く未モデル <span class="tag warm">仮</span></li>
 <li>wiki にしか無くデータが揃っている敵(空虚の領域 防76800 / カット率A -30% / 被害減少6500 / カット率B -40%、次元の隙間 防11850 / -77.5%、ヴェスティージ一般 -75% 被害減少なし、プシーキーの虚像 防1350 / -64% など)は未収録。収録するにはコンテンツ側の追加も要るので別 goal</li>
 </ul>
-<h2 id="11">11. 実装への示唆</h2>
+<h2 id="12">12. 実装への示唆</h2>
 <ul>
 <li>計算パイプラインは「①能力値計算(§2) → ②カテゴリ集計(同一カテゴリ内は加算、キャップ適用) → ③与ダメージ式(§3、丸め順序込み) → ④段数・追加ダメージ(§5)」の4段</li>
 <li>丸めの再現が正確性の肝: <code>[]</code>=floor、<code>{}</code>=小数2位切り捨て、割合増加はバフごとに floor</li>
@@ -786,17 +800,56 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>wiki 自身が「計算順序未確定・丸め誤差あり」としているため、検証値(実測ダメージ)との突き合わせ機能があると望ましい</li>
 <li><strong>入力最小化の観点(UX方針)</strong>: 約30カテゴリのうちユーザーが都度入力すべきものはほぼ無い。A/B はキャラのステ・装備から、D/E/F はスキル選択から、C/V1/V2/M は敵(狩り場)選択から、L/N/O/P/X 等のバフはキャラに紐づくバフプリセットから自動で埋まる。つまり計算画面の入力は「キャラ・スキル・敵・バフセット」の4つの選択に還元できる。静的データの充実(§9 の未取込ページ)がそのまま入力削減になる</li>
 </ul>
-<h2 id="12">12. 未取込の参照ページ(次の情報整理対象)</h2>
+<h2 id="13">13. 参照ページの取込状況</h2>
 <blockquote>
-<p>注: 以下の多くは旧リポジトリ(<a href="../legacy-twtoolkit.md">docs/legacy-twtoolkit.md</a>)に Excel 計算器 v4.00 由来の具体値がある(スキル係数・覚醒倍率・ダメージ上限・ボス28体データ・スキル373件)。ただし数値が古い可能性があるため、wiki 側で裏取りしてから採用する。</p>
+<p>注: 旧リポジトリ(<a href="../legacy-twtoolkit.md">docs/legacy-twtoolkit.md</a>)に Excel 計算器 v4.00 由来の具体値がある(スキル係数・覚醒倍率・ダメージ上限・ボス28体データ・スキル373件)。数値が古い可能性があるため wiki 側で裏取りしてから採用する。</p>
 </blockquote>
-<ul>
-<li>装備システム / 装備システム/エンチャント / Item 各ページ — 装備補正 9 値と上限(取込済み。<code>crates/gamedata/src/equipment_catalog.rs</code>)</li>
-<li>エタの意志 / Quest/覚醒クエスト — 覚醒倍率・ダメージ上限・防御力上限・最終能力値上限(取込済み。§10、<code>crates/gamedata/src/awakening.rs</code>)</li>
-<li>属性システム / 装備システム/属性強化 — 属性 8 種・キャラ基礎属性値・装備の属性強化(取込済み。§4 カテゴリI、<code>crates/domain/src/element.rs</code>)</li>
-<li><a href="https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1">計算式まとめ</a> — 攻撃力計算式(#BaseAttackPower、取込済み。§4 A)、命中P/回避P/命中率キャップ(#HitRate・#AccuracyPoint・#EvasionPoint・#HitRateCap、取込済み。§7)、クリティカル率(#CriticalChance)</li>
-<li>狩り場情報一覧 — 敵の防御力・カット率・必中命中P・上限回避P(上限回避Pは全行未記載)</li>
-</ul>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>ページ</th>
+<th>内容</th>
+<th>状況</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1">計算式まとめ</a></td>
+<td>攻撃力(#BaseAttackPower)・命中P/回避P/キャップ・クリティカル率</td>
+<td>取込済み(§4 A / §7 / §9)。クリティカル率は式だけ記録して未実装</td>
+</tr>
+<tr>
+<td>ステータス</td>
+<td>能力値レイヤー・防御力・カット率・特殊回避・カテゴリ一覧</td>
+<td>取込済み(§2 / §4 / §6 / §7)</td>
+</tr>
+<tr>
+<td>属性システム / 装備システム/属性強化</td>
+<td>属性 8 種・キャラ基礎属性値・装備の属性強化</td>
+<td>取込済み(§8)</td>
+</tr>
+<tr>
+<td>装備システム / 〜エンチャント / Item 各ページ</td>
+<td>装備補正 9 値と上限</td>
+<td>取込済み(<code>equipment_catalog.rs</code>)</td>
+</tr>
+<tr>
+<td>エタの意志 / Quest/覚醒クエスト</td>
+<td>覚醒倍率・ダメージ上限・防御力上限・最終能力値上限</td>
+<td>取込済み(§10)</td>
+</tr>
+<tr>
+<td>狩り場情報一覧</td>
+<td>敵の防御力・カット率・被害減少・属性値</td>
+<td>取込済み(§11)。上限回避Pは wiki 側が全行未記載</td>
+</tr>
+<tr>
+<td>各キャラのスキルページ</td>
+<td>スキル倍率・段数・Cri倍率・スキル命中/クリティカル率</td>
+<td><strong>未取込</strong>(ボリス 5 件のみ旧リポ由来 <span class="tag warm">仮</span>)</td>
+</tr>
+</tbody>
+</table></div>
 <p>装備強化(+1〜+15)による武器の追加固定ダメージ(装備システム/装備強化)は与ダメージ式の外側の加算(§5)であり、装備攻撃力(§4 A)とは別項目。実装済み(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「2026-08-24 部位別装備モデル」): <code>追加効果 = INT(INT(補正) × 倍率)</code>(補正 = 武器系統ごとの一次式・アビリティ除外、奇数なら −1、per-hit は <code>INT(追加 / Hit数)</code>)。+12〜15 の倍率はレンジ振りのため実測値の上書き入力を持つ。</p>
 <h2 id="_1">取得メモ</h2>
 <p>talewiki は EUC-JP の PukiWiki。<code>?cmd=source&amp;page=&lt;EUC-JPでURLエンコードしたページ名&gt;</code> で wiki ソースが取れる(HTML の <code>&lt;pre&gt;</code> 内)。<code>curl → iconv -c -f EUC-JP -t UTF-8</code> で変換。</p>

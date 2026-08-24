@@ -86,7 +86,7 @@
         <div class="row">
           <span class="rl">複合</span>
           <span class="num rv">{pct(profile.composite_cut_rate)}</span>
-          <span class="rn dim">除数 20 <span class="tmp">[仮]</span></span>
+          <span class="rn dim">DEF + 装備物防 + MR + 装備魔防 から(除数 20)</span>
         </div>
       </div>
       <p class="note dim">防御力には上限があり、上限に届いたあとの軽減はこのカット率が担います。</p>
@@ -174,6 +174,5 @@
   .rl { flex-shrink: 0; width: 120px; font-size: 10px; color: var(--fg-muted); }
   .rv { flex-shrink: 0; width: 84px; text-align: right; font-size: 13px; font-weight: 700; }
   .rn { min-width: 0; font-size: 9px; line-height: 1.5; }
-  .tmp { color: var(--warm); font-weight: 700; }
   .note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }
 </style>

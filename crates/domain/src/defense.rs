@@ -75,7 +75,7 @@ pub struct DefenseProfile {
     pub physical_cut_rate: f64,
     /// カット率 J(魔法)。`a` は MR 版
     pub magic_cut_rate: f64,
-    /// カット率 J(複合)。`a = 3 + [(DEF+装備物防+MR+装備魔防−1)/20]` `[仮]`
+    /// カット率 J(複合)。`a = 3 + [(DEF+装備物防+MR+装備魔防−1)/20]`
     pub composite_cut_rate: f64,
     /// 特殊回避(コンボ回避)`(10 + MR/15 + AGI/7.5)%`、下限 20% / 上限 63%
     pub combo_evasion: f64,
