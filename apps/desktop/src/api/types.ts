@@ -379,13 +379,24 @@ export interface DefenseProfile {
   composite_cut_rate: number;
   /** 特殊回避(コンボ回避) */
   combo_evasion: number;
-  /** 通常回避。算出式が未取込なので null */
-  normal_evasion: number | null;
-  /** 最終被弾率。通常回避が未実装なので null */
-  hit_taken_rate: number | null;
+  /** 攻撃タイプ別の回避P。通常回避率は敵の命中Pとの差で決まる */
+  evasion_point: EvasionPoints;
+  /** 通常回避の上限(0.85)。敵命中P ≦ 回避P + 15 のときこの値 */
+  normal_evasion_cap: number;
+  /** 上限回避時の最終被弾率 (1 − 0.85) × (1 − 特殊回避) */
+  hit_taken_rate_at_cap: number;
   /** 装備物防。装備モデルが持たないので null */
   equipment_physical_defense: number | null;
   equipment_magic_defense: number;
+  /** 装備回避率・装備敏捷度。装備モデルが持たないので null */
+  equipment_evasion: number | null;
+}
+
+// crates/domain/src/defense.rs の EvasionPoints(wiki 計算式まとめ#EvasionPoint)。
+export interface EvasionPoints {
+  physical: number;
+  magic: number;
+  composite: number;
 }
 
 export interface FormulaStep {

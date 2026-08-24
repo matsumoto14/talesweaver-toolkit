@@ -30,7 +30,9 @@ pub use content::{
 pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
 };
-pub use defense::{defense_profile, DefenseProfile};
+pub use defense::{
+    defense_profile, hit_taken_rate, normal_evasion, DefenseProfile, EvasionPoints, NORMAL_EVASION_CAP,
+};
 pub use enemy::Enemy;
 pub use equipment::{
     equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment,

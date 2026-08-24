@@ -83,26 +83,46 @@
     <div class="block">
       <div class="block-head">
         <span class="block-title">回避</span>
-        <span class="formula num dim">最終被弾率 = (1 − 通常回避) × (1 − 特殊回避)</span>
+        <span class="formula num dim">回避P = [15 + AGI×1.2 + 攻撃タイプ別増加]、通常回避 = 1 − (敵命中P − 回避P)/100</span>
       </div>
       <div class="rows">
+        <div class="row">
+          <span class="rl">回避P(物理)</span>
+          <span class="num rv">{fmtInt(profile.evasion_point.physical)}</span>
+          <span class="rn dim">+ (DEF×2 + [(突き+斬り)/100]) / 7</span>
+        </div>
+        <div class="row">
+          <span class="rl">回避P(魔法)</span>
+          <span class="num rv">{fmtInt(profile.evasion_point.magic)}</span>
+          <span class="rn dim">+ MR×2 / 7</span>
+        </div>
+        <div class="row">
+          <span class="rl">回避P(複合)</span>
+          <span class="num rv">{fmtInt(profile.evasion_point.composite)}</span>
+          <span class="rn dim">+ (DEF+MR) / 7(装備回避率・装備敏捷度は未実装のぶん下振れ)</span>
+        </div>
+        <div class="row">
+          <span class="rl">通常回避(上限)</span>
+          <span class="num rv">{pct(profile.normal_evasion_cap)}</span>
+          <span class="rn dim">
+            敵命中P が 回避P+15 以下なら上限、回避P+100 以上で 0%(必中)。命中率は下限 15% / 上限 100%
+          </span>
+        </div>
         <div class="row">
           <span class="rl">特殊回避(コンボ)</span>
           <span class="num rv">{pct(profile.combo_evasion)}</span>
           <span class="rn dim">(10 + MR/15 + AGI/7.5)%、下限 20% / 上限 63%</span>
         </div>
         <div class="row">
-          <span class="rl">通常回避</span>
-          <span class="na">未実装</span>
-          <span class="rn dim">AGI からの算出式が未取込(wiki 計算式まとめ#HitRate)</span>
-        </div>
-        <div class="row">
           <span class="rl">最終被弾率</span>
-          <span class="na">未実装</span>
-          <span class="rn dim">通常回避が出せないので合成できません</span>
+          <span class="num rv">{pct(profile.hit_taken_rate_at_cap)}</span>
+          <span class="rn dim">上限回避時 (1 − 85%) × (1 − 特殊回避)。回避Pが足りなければこれより悪化</span>
         </div>
       </div>
-      <p class="note dim">特殊回避は成功すると多段攻撃の全段を回避します(通常回避は 1 段ずつ判定)。</p>
+      <p class="note dim">
+        上限回避に必要な回避Pはコンテンツごとに異なります(wiki 狩り場情報一覧「上限回避P」は現状すべて未記載)。
+        特殊回避は成功すると多段攻撃の全段を回避します(通常回避は 1 段ずつ判定)。
+      </p>
     </div>
   {/if}
 </div>
