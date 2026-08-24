@@ -25,7 +25,7 @@ pub use awakening::Awakening;
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use content::{
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,
-    ContentRequirement, RequirementCheck,
+    ContentRequirement, ContentSeries, RequirementCheck,
 };
 pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,

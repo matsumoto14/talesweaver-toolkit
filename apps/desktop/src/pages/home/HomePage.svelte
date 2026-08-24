@@ -129,6 +129,48 @@
     rows.find((r) => r.content.id === selectedContentId) ?? rows.find((r) => r.content.id === frontierId) ?? rows[0] ?? null,
   );
 
+  // --- 段数違いの系列(レリックの聖域 10〜19段)は 1 行 + 難易度ステッパーに畳む ---
+  // 10 行並ぶと一覧のノイズになるだけで、実際に見たいのは「いまどの段まで行けるか」。
+  let seriesStep = $state<Record<string, number>>({});
+  const seriesRowsOf = (seriesId: string) =>
+    rows
+      .filter((r) => r.content.series?.id === seriesId)
+      .sort((a, b) => (a.content.series?.step ?? 0) - (b.content.series?.step ?? 0));
+  function currentSeriesRow(seriesId: string): Row | null {
+    const list = seriesRowsOf(seriesId);
+    const step = seriesStep[seriesId];
+    return list.find((r) => r.content.series?.step === step) ?? list[0] ?? null;
+  }
+  function stepSeries(e: MouseEvent, seriesId: string, dir: number) {
+    e.stopPropagation();
+    const list = seriesRowsOf(seriesId);
+    const current = currentSeriesRow(seriesId);
+    const i = list.findIndex((r) => r.content.id === current?.content.id);
+    const next = list[Math.min(list.length - 1, Math.max(0, i + dir))];
+    if (next?.content.series) {
+      seriesStep[seriesId] = next.content.series.step;
+      selectedContentId = next.content.id;
+    }
+  }
+
+  /** 一覧に出す行。系列は選択中の段だけを代表 1 行として出す */
+  function areaDisplayRows(areaId: string): Row[] {
+    const seen = new Set<string>();
+    const out: Row[] = [];
+    for (const r of areaRows(areaId)) {
+      const series = r.content.series;
+      if (!series) {
+        out.push(r);
+        continue;
+      }
+      if (seen.has(series.id)) continue;
+      seen.add(series.id);
+      const current = currentSeriesRow(series.id);
+      if (current) out.push(current);
+    }
+    return out;
+  }
+
   // エリアの開閉(既定: 全クリアのエリアは畳む)
   let openAreas = $state<Record<string, boolean>>({});
   function areaRows(areaId: string): Row[] {
@@ -255,7 +297,8 @@
         <div class="areas">
           {#each areas as area (area.id)}
             {@const open = isAreaOpen(area.id)}
-            {@const okCount = areaRows(area.id).filter((r) => r.ev?.clear).length}
+            {@const shown = areaDisplayRows(area.id)}
+            {@const okCount = shown.filter((r) => r.ev?.clear).length}
             <div class="area">
               <div class="area-head">
                 <span class="area-name">{area.name}</span>
@@ -264,16 +307,17 @@
                 {:else}
                   <button type="button" class="collapsed-note" onclick={() => toggleArea(area.id)}>
                     <span class="ok-dot"></span>
-                    <span class="dim">全部クリア可 — {areaRows(area.id).map((r) => r.content.name).join("・")}</span>
+                    <!-- 系列は代表 1 行の名前だけ出す(10 段ぶん並べると畳んだ意味がない) -->
+                    <span class="dim">全部クリア可 — {shown.map((r) => r.content.series?.name ?? r.content.name).join("・")}</span>
                   </button>
                 {/if}
                 <button type="button" class="area-toggle" onclick={() => toggleArea(area.id)}>
-                  {open ? "▴" : `${okCount}/${areaRows(area.id).length} ▾`}
+                  {open ? "▴" : `${okCount}/${shown.length} ▾`}
                 </button>
               </div>
               {#if open}
                 <div class="rows">
-                  {#each areaRows(area.id) as r (r.content.id)}
+                  {#each shown as r (r.content.series?.id ?? r.content.id)}
                     {@const st = rowState(r)}
                     {@const note = noteOf(r)}
                     {@const sel = selectedRow?.content.id === r.content.id}
@@ -297,7 +341,27 @@
                           onclick={(e) => togglePin(e, r.content.id)}
                         >★</button>
                         <Icon kind="mob" id={r.content.enemy_id} size={28} label={r.content.name} />
-                        <span class="name">{r.content.name}</span>
+                        {#if r.content.series}
+                          {@const series = r.content.series}
+                          {@const list = seriesRowsOf(series.id)}
+                          {@const maxStep = list[list.length - 1]?.content.series?.step ?? series.step}
+                          <span class="name">{series.name}</span>
+                          <span class="stepper">
+                            <button
+                              type="button" class="st" aria-label="難易度を下げる"
+                              disabled={series.step <= (list[0]?.content.series?.step ?? series.step)}
+                              onclick={(e) => stepSeries(e, series.id, -1)}
+                            >◀</button>
+                            <span class="st-label num">難易度 {series.step} / {maxStep}</span>
+                            <button
+                              type="button" class="st" aria-label="難易度を上げる"
+                              disabled={series.step >= maxStep}
+                              onclick={(e) => stepSeries(e, series.id, 1)}
+                            >▶</button>
+                          </span>
+                        {:else}
+                          <span class="name">{r.content.name}</span>
+                        {/if}
                         <span class="dmg num">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
                       </div>
                       <div class="row-bar">
@@ -494,6 +558,18 @@
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
   .collapsed-note { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: var(--t-label); text-align: left; overflow: hidden; }
   .collapsed-note .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stepper {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+    padding: 1px 4px; border-radius: var(--r-pill);
+    background: #fff; border: 1px solid var(--border-soft);
+  }
+  .st {
+    width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+    border-radius: var(--r-pill); font-size: 8px; color: var(--accent);
+  }
+  .st:hover:not(:disabled) { background: var(--bg-active); }
+  .st-label { font-size: 9px; color: var(--fg-muted); white-space: nowrap; }
+
   .ok-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: #6FA98A; }
   .area-toggle {
     flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);

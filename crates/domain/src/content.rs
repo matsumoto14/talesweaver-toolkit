@@ -90,11 +90,25 @@ impl ContentRequirement {
     }
 }
 
+/// 段数違いの同一コンテンツ(例: レリックの聖域 10段〜19段)をまとめる系列。
+/// 一覧はこの単位で 1 行に畳み、段は難易度ステッパーで切り替える。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContentSeries {
+    /// 系列 id(同じ系列の `Content` が共有する)
+    pub id: String,
+    /// 系列の表示名(例: レリックの聖域)
+    pub name: String,
+    /// この `Content` の段(難易度)
+    pub step: u32,
+}
+
 /// コンテンツ(ボス・狩り場)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Content {
     pub id: String,
     pub name: String,
+    /// 段数違いの系列に属するなら系列情報。単独のコンテンツは `None`
+    pub series: Option<ContentSeries>,
     /// 対応する敵データ(`Enemy::id`)。敵データが無い(入場条件のみ判定する)コンテンツは None
     pub enemy_id: Option<String>,
     /// 実用的に周回できる 1 ヒット(最大)の目安ダメージ。敵データが無いコンテンツは None
@@ -192,6 +206,7 @@ mod tests {
             need_per_hit: need,
             requirements,
             core_region: None,
+            series: None,
             entry_note: None,
             team_note: None,
         }

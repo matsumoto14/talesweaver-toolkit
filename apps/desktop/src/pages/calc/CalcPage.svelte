@@ -95,6 +95,10 @@
   });
   const skill = $derived(skills.find((s) => s.id === skillId) ?? null);
   let skillOpen = $state(false);
+  /** ピッカーの並びは合計ダメージの降順(v4 指定)。合計が未取得のものは登録順で末尾 */
+  const pickerSkills = $derived(
+    [...skills].sort((a, b) => (skillTotals[b.id]?.total ?? -1) - (skillTotals[a.id]?.total ?? -1)),
+  );
 
   // スキル一覧の対象別ダメージ(ドロップダウンを開いたときに計算)
   let skillTotals = $state<Record<string, { perHit: number; total: number }>>({});
@@ -565,6 +569,21 @@
   const consumableBuffs = $derived(app.catalog.filter(isConsumable));
   const buffOn = (def: BuffDefinition) =>
     (payload?.stat_sources.buffs.choices ?? []).some((c) => c.buff_id === def.id);
+  /**
+   * バフの 3 状態(v4)。保存済みかどうかで「常時(マイセット)」と「追加枠」を分ける。
+   * - `always`: キャラに保存済み = 毎回のっている常用セット
+   * - `extra`: この計算だけの追加(試し変更。保存されない)
+   * - `off`: 使わない(保存済みバフを一時的に外した場合も含む)
+   * 常時への昇格は保存操作(「試し変更を保存」)で行う。チップのクリックで DB を書かない。
+   */
+  const buffState = (def: BuffDefinition): "always" | "extra" | "off" => {
+    const saved = (savedPayload?.stat_sources.buffs.choices ?? []).some((c) => c.buff_id === def.id);
+    if (!buffOn(def)) return "off";
+    return saved ? "always" : "extra";
+  };
+  const BUFF_STATE_LABEL = { always: "常時", extra: "追加", off: "" } as const;
+  const alwaysBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "always").length);
+  const extraBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "extra").length);
   function toggleBuffChip(def: BuffDefinition) {
     editSim((p) => {
       p.stat_sources.buffs.choices = toggleBuff(p.stat_sources.buffs.choices, def, !buffOn(def));
@@ -702,8 +721,8 @@
           {#if skillOpen && skills.length > 1}
             <button type="button" class="overlay" aria-label="閉じる" onclick={() => (skillOpen = false)}></button>
             <div class="pop gold">
-              <div class="pop-head gold"><span>スキル {skills.length} 種 ／ 対象への合計ダメージ順は仮なし・登録順</span></div>
-              {#each skills as s (s.id)}
+              <div class="pop-head gold"><span>スキル {skills.length} 種 ／ この対象への合計ダメージ順</span></div>
+              {#each pickerSkills as s (s.id)}
                 {@const d = skillTotals[s.id]}
                 <button
                   type="button"
@@ -1041,18 +1060,27 @@
             <span class="card-title">バフ</span>
             <span class="dim small">押した瞬間に数字が動きます</span>
           </div>
+          <p class="buff-legend dim">
+            <span class="lg always">常時</span> マイセット(キャラに保存済み・{alwaysBuffCount} 件)
+            ／ <span class="lg extra">追加</span> この計算だけ({extraBuffCount} 件・保存されません)
+            ／ 無印 使わない。<b>常時にするには「試し変更を保存」</b>。
+          </p>
           <div class="buff-chips">
             {#each consumableBuffs as def (def.id)}
-              {@const on = buffOn(def)}
-              {@const blocked = !on && isBlocked(payload.stat_sources.buffs.choices, app.catalog, def)}
+              {@const state = buffState(def)}
+              {@const blocked = state === "off" && isBlocked(payload.stat_sources.buffs.choices, app.catalog, def)}
               <button
                 type="button"
                 class="buff-chip"
-                class:on
+                class:on={state !== "off"}
+                class:extra={state === "extra"}
                 disabled={blocked}
                 title={blocked ? "同枠の他バフと排他です" : def.note || undefined}
                 onclick={() => toggleBuffChip(def)}
-              >{def.name}</button>
+              >
+                <span>{def.name}</span>
+                {#if state !== "off"}<span class="chip-state">{BUFF_STATE_LABEL[state]}</span>{/if}
+              </button>
             {/each}
           </div>
           {#each consumableBuffs.filter((d) => buffOn(d) && hasDetail(d)) as def (def.id)}
@@ -1409,6 +1437,23 @@
     background: linear-gradient(180deg, #CCF7FF, #90D7FF);
     border-color: #687287; color: #123047; font-weight: 700;
   }
+  /* 追加枠は「保存されない」ので、その専用色(--sim)にそろえる */
+  .buff-chip.on.extra {
+    background: linear-gradient(180deg, #fff, #EFEEF8);
+    border-color: var(--sim); color: var(--sim-fg);
+  }
+  .buff-chip .chip-state {
+    margin-left: 5px; padding: 0 5px; border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.75); border: 1px solid currentColor;
+    font-size: 8px; font-weight: 700;
+  }
+  .buff-legend { margin: 7px 0 0; font-size: 9px; line-height: 1.7; }
+  .buff-legend .lg {
+    display: inline-block; padding: 0 5px; border-radius: var(--r-pill);
+    font-size: 8px; font-weight: 700; border: 1px solid;
+  }
+  .buff-legend .lg.always { background: #CCF7FF; border-color: #687287; color: #123047; }
+  .buff-legend .lg.extra { background: #EFEEF8; border-color: var(--sim); color: var(--sim-fg); }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
   .entry-note {
     margin: 8px 0 0; padding: 7px 9px; border-radius: var(--r-panel);

@@ -465,7 +465,17 @@ export interface RequirementCheck {
   ok: boolean;
 }
 
+// crates/domain/src/content.rs の ContentSeries。段数違いの同一コンテンツをまとめる系列。
+export interface ContentSeries {
+  id: string;
+  name: string;
+  /** この Content の段(難易度) */
+  step: number;
+}
+
 export interface Content {
+  /** 段数違いの系列に属するなら系列情報。単独のコンテンツは null */
+  series: ContentSeries | null;
   id: string;
   name: string;
   /** 敵データが無い(入場条件のみ判定する)コンテンツは null */
