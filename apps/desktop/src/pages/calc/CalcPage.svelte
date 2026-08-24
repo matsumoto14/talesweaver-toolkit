@@ -22,6 +22,7 @@
   import { reportError } from "../../toast.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import Select from "../../ui/Select.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import StatInput from "../../ui/StatInput.svelte";
@@ -635,6 +636,7 @@
             {:else}
               <button type="button" class="skill-trigger" onclick={() => (skillOpen = !skillOpen)}>
                 <span class="sk-line1">
+                  <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill?.name ?? "スキル"} />
                   <span class="sk-name">{skill?.name ?? ""}</span>
                   {#if skills.length > 1}<span class="t-chev" class:rot={skillOpen}>▼</span>{/if}
                 </span>
@@ -659,6 +661,7 @@
                     skillOpen = false;
                   }}
                 >
+                  <Icon kind="skill" id={s.id} size={20} label={s.name} />
                   <span class="pop-name">{s.name}</span>
                   <span class="num dim">×{fmtNum(s.multiplier)} / {s.hit_count}段</span>
                   <span class="num strong">{d ? fmtInt(d.total) : "…"}</span>
@@ -983,6 +986,7 @@
             {@const choice = buffChoiceOf(def.id)}
             {#if choice}
               <div class="buff-detail">
+                <Icon kind="buff" id={def.id} size={20} label={def.name} />
                 <span class="bd-name">{def.name}</span>
                 {#if isUserSelectedTarget(def.target)}
                   <Select

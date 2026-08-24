@@ -9,6 +9,7 @@
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import Select from "../../ui/Select.svelte";
 
   let name = $state("");
@@ -95,7 +96,7 @@
       {#each app.gameCharacters as c (c.id)}
         {@const on = c.id === gameCharacterId}
         <button type="button" class="pick" class:on onclick={() => pickGameCharacter(c.id)}>
-          <span class="icon" class:on></span>
+          <Icon kind="character" id={c.id} size={40} label={c.name} />
           <span class="pick-name">{c.name}</span>
         </button>
       {/each}
@@ -150,12 +151,6 @@
     background: #fff; border: 1px solid var(--border-soft);
   }
   .pick.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16); }
-  .icon {
-    width: 30px; height: 30px; border-radius: var(--r-panel);
-    background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
-    border: 1px solid var(--border-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
-  }
-  .icon.on { border-color: var(--accent); }
   .pick-name { max-width: 58px; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pick.on .pick-name { color: var(--fg); font-weight: 700; }
 

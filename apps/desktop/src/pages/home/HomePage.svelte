@@ -9,6 +9,7 @@
     app, evaluationFor, flatContents, payloadOf, refreshEvaluation, selectedCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import Splitter from "../../ui/Splitter.svelte";
 
@@ -295,7 +296,7 @@
                           title={pinned(r.content.id) ? "お気に入りから外す" : "お気に入りに追加"}
                           onclick={(e) => togglePin(e, r.content.id)}
                         >★</button>
-                        <span class="thumb"></span>
+                        <Icon kind="mob" id={r.content.enemy_id} size={28} label={r.content.name} />
                         <span class="name">{r.content.name}</span>
                         <span class="dmg num">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
                       </div>
@@ -517,11 +518,7 @@
     border-radius: var(--r-inset); border: 1px solid var(--border-soft); font-size: 10px; color: var(--fg-dim);
   }
   .pin.on { background: #DCEBFF; border-color: var(--accent); color: #2B4FA8; }
-  .thumb {
-    width: 24px; height: 24px; flex-shrink: 0; border-radius: var(--r-panel);
-    background: repeating-linear-gradient(135deg, #F3E7E4 0 4px, #E6D3CD 4px 8px);
-    border: 1px solid #A98B86; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
-  }
+
   .row-main .name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row.sel .row-main .name { font-weight: 700; }
   .row-main .dmg { flex-shrink: 0; font-size: 15px; font-weight: 700; white-space: nowrap; }

@@ -1,6 +1,7 @@
 <script lang="ts">
   // 左のキャラレール。全タブ共通の「どのキャラの話をしているか」を担う。
   import { app, gameCharacterName, selectCharacter } from "./state.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   interface Props {
     collapsed: boolean;
@@ -44,7 +45,13 @@
         title="{c.name}({gameCharacterName(c.game_character_id)}) クリア可 {clearCount(c.id)} / {totalContents}"
         onclick={() => selectCharacter(c.id)}
       >
-        <span class="icon">{c.name.slice(0, 1)}</span>
+        <!-- 畳んだときはアイコン単独になるが、ボタンに title があるので規格の例外に当たる -->
+        <Icon
+          kind="character"
+          id={c.game_character_id}
+          size={collapsed ? 40 : 28}
+          label="{c.name}({gameCharacterName(c.game_character_id)})"
+        />
         {#if !collapsed}
           <span class="meta">
             <span class="name">{c.name}</span>
@@ -94,16 +101,6 @@
     box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.14), inset 0 1px 0 #fff;
   }
   aside.collapsed .char { flex-direction: column; gap: 2px; padding: 8px 4px 7px; }
-
-  .icon {
-    width: 30px; height: 30px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; border-radius: var(--r-panel);
-    background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
-    border: 1px solid var(--border-strong);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
-    font-size: 13px; font-weight: 800; color: #3B4A63;
-  }
-  aside.collapsed .icon { width: 34px; height: 34px; }
 
   .meta { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .meta .name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
