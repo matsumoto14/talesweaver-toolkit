@@ -162,8 +162,9 @@
     const seq = ++adviceSeq;
     adviceHandle = setTimeout(async () => {
       try {
-        const list = candidatesFor(payloadOf(c));
-        const results = await Promise.all(
+        const list = candidatesFor(payloadOf(c), app.equipmentCatalog);
+        // 1 候補の失敗(装備検証エラー等)で他候補まで消さない(独立レビュー指摘)
+        const settled = await Promise.allSettled(
           list.map(async (candidate) => {
             const p = payloadOf(c);
             candidate.apply(p);
@@ -171,6 +172,7 @@
             return { candidate, perHit: r.per_hit.max, deltaPct: Math.round((r.per_hit.max / baseDamage - 1) * 100) };
           }),
         );
+        const results = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
         if (seq === adviceSeq) advice = results.sort((a, b) => b.perHit - a.perHit);
       } catch (e) {
         if (seq === adviceSeq) reportError(errorMessage(e));

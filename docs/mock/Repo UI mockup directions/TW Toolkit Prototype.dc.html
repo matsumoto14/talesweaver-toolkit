@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=M+PLUS+1+Code:wght@400;500;700&display=swap" rel="stylesheet"><style>body{margin:0;background:#C9D8EE;font-family:"M PLUS Rounded 1c","Hiragino Kaku Gothic ProN",system-ui,sans-serif;color:#1B2331;-webkit-font-smoothing:antialiased}a{color:#426DD6;text-decoration:none}a:hover{color:#2B4FA8}</style></helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#C9D8EE">
+<div style="height:52px;flex:none;box-sizing:border-box;padding:0 20px;background:linear-gradient(180deg,#DBE6F8,#AEC7F0);border-bottom:1px solid #303336;display:flex;align-items:center;gap:14px">
+<div style="display:flex;align-items:center;gap:9px">
+<div style="width:22px;height:22px;border-radius:7px;background:linear-gradient(160deg,#fff,#8EB9FC);border:1px solid #687287"></div>
+<span style="font:800 12.5px 'M PLUS Rounded 1c',sans-serif;letter-spacing:.08em;white-space:nowrap">TW TOOLKIT</span>
+</div>
+<div style="display:flex;align-items:flex-end;gap:3px;margin-left:8px">
+<div style="padding:7px 16px;border-radius:9px 9px 0 0;background:linear-gradient(180deg,#CCF7FF,#90D7FF);border:1px solid #687287;border-bottom:0;font:700 12px 'M PLUS Rounded 1c',sans-serif;color:#123047;white-space:nowrap;position:relative;top:1px">ホーム</div>
+<div style="padding:6px 14px;border-radius:9px 9px 0 0;background:linear-gradient(180deg,#A9CDFE,#8EB9FC);border:1px solid #798CAC;border-bottom:0;font:500 12px 'M PLUS Rounded 1c',sans-serif;color:#2B3C57;white-space:nowrap">ダメージ計算</div>
+<div style="padding:6px 14px;border-radius:9px 9px 0 0;background:linear-gradient(180deg,#A9CDFE,#8EB9FC);border:1px solid #798CAC;border-bottom:0;font:500 12px 'M PLUS Rounded 1c',sans-serif;color:#2B3C57;white-space:nowrap">キャラ</div>
+</div>
+<div style="margin-left:auto;display:flex;align-items:center;gap:9px;padding:5px 12px 5px 6px;background:rgba(255,255,255,.6);border:1px solid #A3B9DE;border-radius:999px">
+<div style="width:22px;height:22px;border-radius:7px;background:repeating-linear-gradient(135deg,#E4EDF9 0 4px,#CFDFF2 4px 8px);border:1px solid #798CAC"></div>
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">{{ charName }}</span>
+<span style="font:400 10.5px 'M PLUS Rounded 1c',sans-serif;color:#40536F;white-space:nowrap">{{ charCls }}</span>
+</div>
+</div>
+
+<sc-if value="{{ simMode }}" hint-placeholder-val="{{ false }}">
+<div style="flex:none;box-sizing:border-box;padding:7px 20px;background:linear-gradient(180deg,#6D6AA8,#565394);border-bottom:1px solid #3C3A6B;display:flex;align-items:center;gap:12px">
+<span style="width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.25)"></span>
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;color:#fff;white-space:nowrap">装備の入れ替えを試しています — 保存されません</span>
+<span style="font:400 10.5px 'M PLUS Rounded 1c',sans-serif;color:#D9D7EC;white-space:nowrap">{{ simSummary }}</span>
+<span onClick="{{ resetSim }}" style="margin-left:auto;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.5);cursor:pointer;font:700 10.5px 'M PLUS Rounded 1c',sans-serif;color:#fff;white-space:nowrap">元に戻す</span>
+<span onClick="{{ exitSim }}" style="padding:5px 12px;border-radius:999px;background:#fff;border:1px solid #fff;cursor:pointer;font:700 10.5px 'M PLUS Rounded 1c',sans-serif;color:#4A4780;white-space:nowrap">入れ替えをやめる</span>
+</div>
+</sc-if>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(286px,320px) minmax(540px,1fr) minmax(300px,344px);overflow-x:auto">
+
+<div style="border-right:1px solid #798CAC;background:#EAF2FB;overflow:auto">
+<div style="height:30px;box-sizing:border-box;padding:0 14px;background:{{ railHeadBg }};display:flex;align-items:center">
+<span style="font:700 10.5px 'M PLUS Rounded 1c',sans-serif;letter-spacing:.1em;color:#fff;white-space:nowrap">{{ railHead }}</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS Rounded 1c',sans-serif;color:#EAF2FB;white-space:nowrap">{{ railHeadNote }}</span>
+</div>
+<sc-if value="{{ notSim }}" hint-placeholder-val="{{ true }}">
+<div style="padding:12px;display:flex;flex-direction:column;gap:9px">
+<sc-for list="{{ charCards }}" as="c" hint-placeholder-count="3">
+<div onClick="{{ c.pick }}" style="padding:11px 12px;border-radius:11px;cursor:pointer;background:{{ c.bg }};border:1px solid {{ c.bd }};box-shadow:{{ c.ring }}">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="width:36px;height:36px;flex:none;border-radius:10px;background:repeating-linear-gradient(135deg,#E4EDF9 0 4px,#CFDFF2 4px 8px);border:1px solid #798CAC"></div>
+<div style="min-width:0"><div style="font-family:'M PLUS Rounded 1c',sans-serif;font-size:13px;font-weight:{{ c.w }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</div><div style="font:400 10px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap">{{ c.cls }}</div></div>
+<span style="margin-left:auto;flex:none;font:700 13px 'M PLUS 1 Code',monospace;white-space:nowrap">{{ c.ok }}<span style="font-size:9.5px;color:#93A0B2;font-weight:400"> / {{ c.total }}</span></span>
+</div>
+<div style="margin-top:7px;display:flex;align-items:center;gap:10px">
+<sc-for list="{{ c.stats }}" as="st" hint-placeholder-count="3">
+<span style="display:flex;align-items:baseline;gap:4px">
+<span style="font:400 9px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap">{{ st.k }}</span>
+<span style="font:700 11px 'M PLUS 1 Code',monospace;color:#26334A;white-space:nowrap">{{ st.v }}</span>
+</span>
+</sc-for>
+</div>
+</div>
+</sc-for>
+<div style="margin-top:2px;padding:10px 12px;border-radius:11px;background:#F4F9FE;border:1px dashed #A6BAD3;font:400 10.5px/1.65 'M PLUS Rounded 1c',sans-serif;color:#5E6E88">登録済みの装備を<b>入れ替えて</b>、どこまで通るようになるか試せます。<br>装備そのものの登録・編集は<a href="#">キャラ画面</a>で。</div>
+<div onClick="{{ enterSim }}" style="text-align:center;padding:9px;border-radius:10px;background:linear-gradient(180deg,#6D6AA8,#565394);border:1px solid #3C3A6B;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);cursor:pointer;font:700 11.5px 'M PLUS Rounded 1c',sans-serif;color:#fff">装備を入れ替えて試す</div>
+</div>
+</sc-if>
+<sc-if value="{{ simMode }}" hint-placeholder-val="{{ false }}">
+<div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+<div style="padding:9px 11px;border-radius:10px;background:#F7F6FC;border:1px solid #6D6AA8;font:400 10px/1.65 'M PLUS Rounded 1c',sans-serif;color:#4A4780">自分の装備を入れ替えると、<b>どのコンテンツに通るようになるか</b>を試せます（保存されません）。数値だけを自由に振って試すのは<a href="#">ダメージ計算</a>タブへ。</div>
+
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">装備（部位別）</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">突き {{ thrustVal }} / 斬り {{ slashVal }}</span>
+</div>
+<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{ gearSlots }}" as="sl" hint-placeholder-count="7">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="width:34px;flex:none;font:500 10.5px 'M PLUS Rounded 1c',sans-serif;color:#3B4A63;white-space:nowrap">{{ sl.name }}</span>
+<div style="flex:1;display:flex;border:1px solid #798CAC;border-radius:8px;overflow:hidden">
+<sc-for list="{{ sl.opts }}" as="o" hint-placeholder-count="4">
+<div onClick="{{ o.pick }}" style="flex:1;text-align:center;padding:5px 0;cursor:pointer;background:{{ o.bg }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10px;font-weight:{{ o.w }};color:{{ o.fg }};border-right:1px solid #E2EAF4;white-space:nowrap">{{ o.label }}</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="margin-top:9px;display:flex;align-items:center;gap:9px">
+<span style="font:400 10.5px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap">武器の持ち方</span>
+<div style="display:flex;border:1px solid #798CAC;border-radius:8px;overflow:hidden">
+<div onClick="{{ pickOne }}" style="padding:5px 12px;background:{{ oneBg }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:11px;font-weight:{{ oneW }};color:{{ oneFg }};cursor:pointer;border-right:1px solid #E2EAF4">片面</div>
+<div onClick="{{ pickBoth }}" style="padding:5px 12px;background:{{ bothBg }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:11px;font-weight:{{ bothW }};color:{{ bothFg }};cursor:pointer">両面</div>
+</div>
+<span style="margin-left:auto;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">強化 {{ rateLabel }}</span>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">レリック</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">装備補正値 {{ relic }}</span>
+</div>
+<div style="margin-top:8px;display:flex;border:1px solid #798CAC;border-radius:9px;overflow:hidden">
+<sc-for list="{{ relicOptions }}" as="o" hint-placeholder-count="5">
+<div onClick="{{ o.pick }}" style="flex:1;text-align:center;padding:6px 0;cursor:pointer;background:{{ o.bg }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:11px;font-weight:{{ o.w }};color:{{ o.fg }};border-right:1px solid #E2EAF4">{{ o.name }}</div>
+</sc-for>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid {{ afBd }}">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">アーティファクト</span>
+<span style="margin-left:auto;padding:1px 8px;border-radius:999px;background:{{ afBadgeBg }};border:1px solid {{ afBd }};font:700 9.5px 'M PLUS Rounded 1c',sans-serif;color:{{ afBadgeFg }};white-space:nowrap">{{ afBadge }}</span>
+</div>
+<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px">
+<sc-for list="{{ afOptions }}" as="o" hint-placeholder-count="5">
+<span onClick="{{ o.pick }}" style="padding:5px 10px;border-radius:999px;cursor:pointer;background:{{ o.bg }};border:1px solid {{ o.bd }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:{{ o.w }};color:#1B2331;white-space:nowrap">{{ o.name }}</span>
+</sc-for>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid {{ titleBd }}">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">称号</span>
+<span style="margin-left:auto;padding:1px 8px;border-radius:999px;background:{{ titleBadgeBg }};border:1px solid {{ titleBd }};font:700 9.5px 'M PLUS Rounded 1c',sans-serif;color:{{ titleBadgeFg }};white-space:nowrap">{{ titleBadge }}</span>
+</div>
+<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px">
+<sc-for list="{{ titleOptions }}" as="o" hint-placeholder-count="6">
+<span onClick="{{ o.pick }}" style="padding:5px 10px;border-radius:999px;cursor:pointer;background:{{ o.bg }};border:1px solid {{ o.bd }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:{{ o.w }};color:#1B2331;white-space:nowrap">{{ o.name }}</span>
+</sc-for>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">テシスコア</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">合計 {{ thesis }}</span>
+</div>
+<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{ coreSlots }}" as="c" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="width:34px;flex:none;font:500 10.5px 'M PLUS Rounded 1c',sans-serif;color:#3B4A63;white-space:nowrap">{{ c.name }}</span>
+<div style="flex:1;display:flex;border:1px solid #798CAC;border-radius:8px;overflow:hidden">
+<sc-for list="{{ c.opts }}" as="o" hint-placeholder-count="5">
+<div onClick="{{ o.pick }}" style="flex:1;text-align:center;padding:5px 0;cursor:pointer;background:{{ o.bg }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10px;font-weight:{{ o.w }};color:{{ o.fg }};border-right:1px solid #E2EAF4">{{ o.label }}</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">エタの意志</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">Lv {{ eternal }}</span>
+</div>
+<div style="margin-top:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px 6px">
+<span onClick="{{ eternalDown }}" style="width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 12px 'M PLUS 1 Code',monospace;color:#2B3C57">−</span>
+<span style="width:46px;padding:5px 7px;border-radius:8px;background:#fff;border:1px solid #426DD6;font:500 12px 'M PLUS 1 Code',monospace;text-align:right">{{ eternal }}</span>
+<span onClick="{{ eternalUp }}" style="width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 12px 'M PLUS 1 Code',monospace;color:#2B3C57">＋</span>
+<div style="flex:1 0 100%;display:flex;flex-wrap:wrap;gap:4px">
+<sc-for list="{{ eternalPresets }}" as="o" hint-placeholder-count="4">
+<span onClick="{{ o.pick }}" style="padding:4px 8px;border-radius:999px;cursor:pointer;background:{{ o.bg }};border:1px solid {{ o.bd }};font-family:'M PLUS 1 Code',monospace;font-size:9.5px;font-weight:{{ o.w }};color:{{ o.fg }}">{{ o.name }}</span>
+</sc-for>
+</div>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">シエナのオーラ</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">最終+{{ sienaL }} / 攻撃+{{ sienaAtk }}</span>
+</div>
+<div style="margin-top:8px;display:flex;border:1px solid #798CAC;border-radius:9px;overflow:hidden">
+<sc-for list="{{ sienaOptions }}" as="o" hint-placeholder-count="4">
+<div onClick="{{ o.pick }}" style="flex:1;text-align:center;padding:6px 0;cursor:pointer;background:{{ o.bg }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:{{ o.w }};color:{{ o.fg }};border-right:1px solid #E2EAF4">{{ o.label }}</div>
+</sc-for>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">エフェクト</span>
+<span onClick="{{ toggleCollab }}" style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:3px 9px 3px 4px;border-radius:999px;cursor:pointer;background:{{ collabBg }};border:1px solid {{ collabBd }}">
+<span style="width:12px;height:12px;border-radius:50%;background:#fff;border:1px solid #687287"></span>
+<span style="font-family:'M PLUS Rounded 1c',sans-serif;font-size:9.5px;font-weight:700;color:{{ collabFg }};white-space:nowrap">コラボ +3%</span>
+</span>
+</div>
+<div style="margin-top:9px;display:flex;gap:7px">
+<div style="flex:1;display:flex;align-items:center;gap:4px">
+<span style="font:400 10px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88">補正</span>
+<span onClick="{{ effBaseDown }}" style="width:21px;height:23px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 12px 'M PLUS 1 Code',monospace;color:#2B3C57">−</span>
+<span style="flex:1;padding:5px 7px;border-radius:8px;background:#fff;border:1px solid #426DD6;font:500 11.5px 'M PLUS 1 Code',monospace;text-align:right">{{ effBase }}</span>
+<span onClick="{{ effBaseUp }}" style="width:21px;height:23px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 12px 'M PLUS 1 Code',monospace;color:#2B3C57">＋</span>
+</div>
+<div style="flex:1;display:flex;align-items:center;gap:4px">
+<span style="font:400 10px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88">強化</span>
+<span onClick="{{ effEnhDown }}" style="width:21px;height:23px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 12px 'M PLUS 1 Code',monospace;color:#2B3C57">−</span>
+<span style="flex:1;padding:5px 7px;border-radius:8px;background:#C1D3E6;border:1px solid #A6BAD3;font:500 11.5px 'M PLUS 1 Code',monospace;text-align:right">{{ effEnh }}</span>
+<span onClick="{{ effEnhUp }}" style="width:21px;height:23px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 12px 'M PLUS 1 Code',monospace;color:#2B3C57">＋</span>
+</div>
+</div>
+</div>
+<div style="padding:11px 12px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;white-space:nowrap">常用バフ</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">X {{ xLabel }}</span>
+</div>
+<div style="margin-top:8px;display:flex;border:1px solid #798CAC;border-radius:9px;overflow:hidden">
+<sc-for list="{{ buffOptions }}" as="o" hint-placeholder-count="3">
+<div onClick="{{ o.pick }}" style="flex:1;text-align:center;padding:6px 0;cursor:pointer;background:{{ o.bg }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:{{ o.w }};color:{{ o.fg }};border-right:1px solid #E2EAF4;white-space:nowrap">{{ o.name }}</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;gap:7px">
+<div onClick="{{ resetSim }}" style="flex:1;text-align:center;padding:8px;border-radius:9px;background:linear-gradient(180deg,#fff,#E9F1FB);border:1px solid #798CAC;cursor:pointer;font:500 11px 'M PLUS Rounded 1c',sans-serif;color:#2B3C57">元に戻す</div>
+<div onClick="{{ exitSim }}" style="flex:1;text-align:center;padding:8px;border-radius:9px;background:#fff;border:1px solid #6D6AA8;cursor:pointer;font:700 11px 'M PLUS Rounded 1c',sans-serif;color:#4A4780">入れ替えをやめる</div>
+</div>
+</div>
+</sc-if>
+</div>
+
+<div style="min-width:0;display:flex;flex-direction:column;background:#DEEBF7">
+<div style="height:30px;box-sizing:border-box;padding:0 16px;background:#6382AD;display:flex;align-items:center">
+<span style="font:700 10.5px 'M PLUS Rounded 1c',sans-serif;letter-spacing:.1em;color:#fff;white-space:nowrap">どこにどのくらい通るか</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS Rounded 1c',sans-serif;color:#EAF2FB;white-space:nowrap">目安＝実用的に周回できる1発量（仮値・あとで編集可） / 極・横斬り</span>
+</div>
+<div style="flex:1;min-height:0;overflow:auto;padding:13px 16px 18px">
+
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:11px 13px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:baseline;gap:7px">
+<span style="font:500 11.5px 'M PLUS Rounded 1c',sans-serif;color:#3B4A63;white-space:nowrap">クリアできるのは</span>
+<span style="font:700 21px 'M PLUS 1 Code',monospace">{{ clearCountEl }}</span>
+<span style="font:400 11px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap">/ {{ totalCount }}</span>
+</div>
+<div style="display:flex;align-items:baseline;gap:7px;padding-left:12px;border-left:1px solid #DCE5F0">
+<span style="font:500 11.5px 'M PLUS Rounded 1c',sans-serif;color:#3B4A63;white-space:nowrap">入場条件を満たすのは</span>
+<span style="font:700 21px 'M PLUS 1 Code',monospace">{{ entryCountEl }}</span>
+<span style="font:400 11px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap">/ {{ totalCount }}</span>
+</div>
+<div style="margin-left:auto;display:flex;align-items:baseline;gap:7px">
+<span style="font:400 10.5px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap">変更前 {{ baseClearCount }} →</span>
+<span style="font-family:'M PLUS Rounded 1c',sans-serif;font-size:11.5px;font-weight:700;color:{{ diffFg }};white-space:nowrap">{{ diffLabel }}</span>
+</div>
+</div>
+
+<div style="margin-top:12px;display:flex;flex-direction:column;gap:14px">
+<sc-for list="{{ areas }}" as="a" hint-placeholder-count="7">
+<div>
+<div style="display:flex;align-items:center;gap:9px">
+<span style="font:700 11.5px 'M PLUS Rounded 1c',sans-serif;letter-spacing:.04em;color:#26334A;white-space:nowrap">{{ a.name }}</span>
+<sc-if value="{{ a.diff }}" hint-placeholder-val="{{ false }}">
+<span style="display:flex;align-items:center;gap:6px;padding:2px 6px 2px 9px;border-radius:999px;background:#fff;border:1px solid #798CAC">
+<span style="font:400 9.5px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap">難易度</span>
+<span onClick="{{ diffDown }}" style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 11px 'M PLUS 1 Code',monospace;color:#2B3C57">−</span>
+<span style="min-width:22px;text-align:center;font:700 11.5px 'M PLUS 1 Code',monospace">{{ sancLv }}</span>
+<span onClick="{{ diffUp }}" style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:#EAF2FB;border:1px solid #798CAC;cursor:pointer;font:700 11px 'M PLUS 1 Code',monospace;color:#2B3C57">＋</span>
+<span style="font:400 9px 'M PLUS Rounded 1c',sans-serif;color:#93A0B2;white-space:nowrap">/ 20</span>
+</span>
+</sc-if>
+<sc-if value="{{ a.open }}" hint-placeholder-val="{{ true }}">
+<span style="flex:1;height:1px;background:#C1D3E6"></span>
+</sc-if>
+<sc-if value="{{ a.collapsed }}" hint-placeholder-val="{{ false }}">
+<span onClick="{{ a.toggle }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;cursor:pointer">
+<span style="width:5px;height:5px;flex:none;border-radius:50%;background:#6FA98A"></span>
+<span style="min-width:0;font:500 10.5px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.collapsedText }}</span>
+</span>
+</sc-if>
+<span onClick="{{ a.toggle }}" style="flex:none;display:flex;align-items:center;gap:8px;padding:3px 4px;border-radius:999px;cursor:pointer;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap" style-hover="background:#fff">
+<span style="width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#fff;border:1px solid #C1D3E6;font:700 9px 'M PLUS Rounded 1c',sans-serif;color:#426DD6">{{ a.chevron }}</span>
+</span>
+</div>
+<sc-if value="{{ a.hint }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:5px;padding:6px 10px;border-radius:9px;background:#F4F9FE;border:1px solid #C1D3E6;font:500 10px 'M PLUS Rounded 1c',sans-serif;color:#3B4A63">{{ a.hint }}</div>
+</sc-if>
+<div style="max-height:{{ a.rowsMax }};opacity:{{ a.rowsOp }};overflow:hidden;transition:max-height .34s cubic-bezier(.4,0,.2,1),opacity .24s ease">
+<div style="padding-top:7px;display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ a.rows }}" as="r" hint-placeholder-count="3">
+<div onClick="{{ r.pick }}" style="padding:9px 12px;border-radius:11px;cursor:pointer;background:{{ r.bg }};border:1px solid {{ r.bd }};box-shadow:{{ r.ring }}">
+<sc-if value="{{ r.frontier }}" hint-placeholder-val="{{ false }}">
+<div style="display:inline-flex;align-items:center;gap:6px;margin-bottom:6px;padding:2px 9px;border-radius:999px;background:linear-gradient(180deg,#CCF7FF,#90D7FF);border:1px solid #687287">
+<span style="font:700 9.5px 'M PLUS Rounded 1c',sans-serif;color:#123047;white-space:nowrap">次はここ</span>
+</div>
+</sc-if>
+<div style="display:flex;align-items:center;gap:9px">
+<span onClick="{{ r.togglePin }}" style="width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:7px;background:{{ r.pinBg }};border:1px solid {{ r.pinBd }};cursor:pointer;font-size:10px;color:{{ r.pinFg }}">★</span>
+<div style="width:24px;height:24px;flex:none;border-radius:8px;background:repeating-linear-gradient(135deg,#F3E7E4 0 4px,#E6D3CD 4px 8px);border:1px solid #A98B86"></div>
+<span style="min-width:0;font-family:'M PLUS Rounded 1c',sans-serif;font-size:12.5px;font-weight:{{ r.w }};color:#1B2331;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span>
+<sc-if value="{{ r.team }}" hint-placeholder-val="{{ false }}"><span style="flex:none;padding:1px 7px;border-radius:999px;background:#EFEEF8;border:1px solid #6D6AA8;font:700 9px 'M PLUS Rounded 1c',sans-serif;color:#4A4780;white-space:nowrap">チーム条件</span></sc-if>
+<span style="flex:none;margin-left:auto;font:700 15px 'M PLUS 1 Code',monospace;white-space:nowrap">{{ r.dmgEl }}</span>
+<span style="flex:none;padding:2px 9px;border-radius:999px;background:{{ r.badgeBg }};border:1px solid {{ r.badgeBd }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:9.5px;font-weight:700;color:{{ r.badgeFg }};white-space:nowrap">{{ r.badge }}</span>
+</div>
+<div style="margin-top:6px;display:flex;align-items:center;gap:9px">
+<div style="flex:1;position:relative;height:9px;border-radius:5px;background:#E7EEF7;border:1px solid #D3DEEC;overflow:hidden">
+<div style="position:absolute;left:0;top:0;bottom:0;width:{{ r.basePct }};background:#C1D3E6"></div>
+<div style="position:absolute;left:0;top:0;bottom:0;width:{{ r.pct }};background:{{ r.barBg }};transition:width .38s cubic-bezier(.4,0,.2,1)"></div>
+</div>
+<span style="flex:none;width:96px;text-align:right;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">目安 {{ r.need }}</span>
+<span style="flex:none;width:50px;text-align:right;font-family:'M PLUS 1 Code',monospace;font-size:10.5px;font-weight:700;color:{{ r.deltaFg }};white-space:nowrap">{{ r.delta }}</span>
+<sc-if value="{{ r.ratioLabel }}" hint-placeholder-val="{{ false }}">
+<span style="flex:none;padding:1px 7px;border-radius:999px;background:#EAF2FB;border:1px solid #C1D3E6;font:700 9.5px 'M PLUS 1 Code',monospace;color:#2B4FA8;white-space:nowrap">{{ r.ratioLabel }}</span>
+</sc-if>
+</div>
+<div style="margin-top:5px;display:flex;align-items:center;gap:7px">
+<span style="width:5px;height:5px;flex:none;border-radius:50%;background:{{ r.entryDot }}"></span>
+<span style="font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:{{ r.entryW }};color:{{ r.entryFg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.entryText }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="margin-top:14px;font:400 10px/1.7 'M PLUS Rounded 1c',sans-serif;color:#5E6E88">薄いバーは変更前。目安ダメージ・入場条件（必要攻撃力）は仮値です。古代レリックの聖域だけコンテンツごとに難易度1〜20があり、上のボタンで切り替わります。</div>
+</div>
+</div>
+
+<div style="border-left:1px solid #798CAC;background:#EAF2FB;overflow:auto">
+<div style="height:30px;box-sizing:border-box;padding:0 14px;background:#6382AD;display:flex;align-items:center">
+<span style="font:700 10.5px 'M PLUS Rounded 1c',sans-serif;letter-spacing:.1em;color:#fff;white-space:nowrap">選択中</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS Rounded 1c',sans-serif;color:#EAF2FB;white-space:nowrap">{{ selArea }}</span>
+</div>
+<div style="padding:12px;display:flex;flex-direction:column;gap:11px">
+<div style="padding:14px;border-radius:12px;background:linear-gradient(180deg,#FBFAFE,#F1F0FA);border:1px solid #6D6AA8;box-shadow:inset 0 1px 0 #fff">
+<div style="font:700 11px 'M PLUS Rounded 1c',sans-serif;letter-spacing:.04em;color:#4A4780">{{ selName }}</div>
+<div style="margin-top:2px;display:flex;align-items:baseline;gap:7px">
+<span style="font:700 40px/1.05 'M PLUS 1 Code',monospace">{{ selDmgEl }}</span>
+<span style="font:400 11px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88">1発</span>
+</div>
+<div style="margin-top:4px;display:flex;gap:13px;font:400 10.5px 'M PLUS 1 Code',monospace;color:#5E6E88">
+<span>目安 {{ selNeed }}</span><span>変更前 {{ selBase }}</span>
+</div>
+<div style="margin-top:9px;padding:7px 10px;border-radius:9px;background:{{ selNoteBg }};border:1px solid {{ selNoteBd }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:500;line-height:1.6;color:{{ selNoteFg }}">{{ selNote }}</div>
+<sc-if value="{{ notSim }}" hint-placeholder-val="{{ true }}">
+<div onClick="{{ enterSim }}" style="margin-top:8px;text-align:center;padding:8px;border-radius:9px;background:linear-gradient(180deg,#6D6AA8,#565394);border:1px solid #3C3A6B;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);cursor:pointer;font:700 11px 'M PLUS Rounded 1c',sans-serif;color:#fff">装備を入れ替えて届かせ方を探す</div>
+</sc-if>
+<div style="margin-top:7px;padding:7px 10px;border-radius:9px;background:{{ selEntryBg }};border:1px solid {{ selEntryBd }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:500;line-height:1.6;color:{{ selEntryFg }}">{{ selEntryNote }}</div>
+<sc-if value="{{ selTeamNote }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:7px;padding:7px 10px;border-radius:9px;background:#EFEEF8;border:1px solid #6D6AA8;font:500 10.5px/1.6 'M PLUS Rounded 1c',sans-serif;color:#4A4780">{{ selTeamNote }}</div>
+</sc-if>
+<div style="margin-top:7px;display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{ selReqs }}" as="q" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:8px;background:{{ q.bg }};border:1px solid {{ q.bd }}">
+<span style="min-width:0;flex:1;font-family:'M PLUS Rounded 1c',sans-serif;font-size:10.5px;font-weight:500;color:{{ q.fg }};white-space:nowrap">{{ q.label }}</span>
+<span style="flex:none;font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap">{{ q.value }}</span>
+<span style="flex:none;font-family:'M PLUS Rounded 1c',sans-serif;font-size:9.5px;font-weight:700;color:{{ q.fg }};white-space:nowrap">{{ q.tag }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:12px 13px;border-radius:11px;background:#fff;border:1px solid #798CAC">
+<div style="display:flex;align-items:center;gap:9px">
+<span style="font:500 11.5px 'M PLUS Rounded 1c',sans-serif;color:#3B4A63;white-space:nowrap">A 攻撃力</span>
+<span style="margin-left:auto;font:700 14px 'M PLUS 1 Code',monospace">{{ atkEl }}</span>
+</div>
+<div style="margin-top:7px;display:flex;align-items:center;gap:9px">
+<span style="font:500 11.5px 'M PLUS Rounded 1c',sans-serif;color:#3B4A63;white-space:nowrap">X 攻撃ダメージ</span>
+<span style="margin-left:auto;font:700 14px 'M PLUS 1 Code',monospace">{{ xEl }}</span>
+</div>
+<div style="margin-top:9px;text-align:center;padding:7px;border-radius:9px;background:linear-gradient(180deg,#fff,#E9F1FB);border:1px solid #798CAC;cursor:pointer;font:700 10.5px 'M PLUS Rounded 1c',sans-serif;color:#2B3C57">この数字の計算式を見る（トレース）</div>
+<sc-if value="{{ capNote }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:9px;padding:8px 10px;border-radius:9px;background:#FDF3DE;border:1px solid #E3CB93;font:500 10.5px/1.6 'M PLUS Rounded 1c',sans-serif;color:#7A6420">{{ capNote }}</div>
+</sc-if>
+<sc-if value="{{ showBreakdown }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:9px;display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{ parts }}" as="p" hint-placeholder-count="4">
+<div style="display:flex;align-items:baseline;gap:9px">
+<span style="min-width:0;flex:1;font:400 10.5px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88">{{ p.k }}</span>
+<span style="flex:none;font:500 11px 'M PLUS 1 Code',monospace">{{ p.v }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="padding:12px 13px;border-radius:11px;background:#fff;border:1px solid #426DD6">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font:700 11px 'M PLUS Rounded 1c',sans-serif;color:#26334A;white-space:nowrap">次に変えるなら</span>
+<span style="margin-left:auto;font:400 10px 'M PLUS Rounded 1c',sans-serif;color:#5E6E88;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ goalLabel }}</span>
+</div>
+<div style="margin-top:9px;display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ advice }}" as="v" hint-placeholder-count="4">
+<div onClick="{{ v.apply }}" style="padding:9px 11px;border-radius:10px;cursor:pointer;background:{{ v.bg }};border:1px solid {{ v.bd }}">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="min-width:0;flex:1;font:500 11.5px 'M PLUS Rounded 1c',sans-serif;color:#1B2331">{{ v.label }}</span>
+<span style="flex:none;font-family:'M PLUS 1 Code',monospace;font-size:11.5px;font-weight:700;color:{{ v.fg }}">{{ v.delta }}</span>
+</div>
+<div style="margin-top:3px;display:flex;align-items:center;gap:8px">
+<span style="font:400 10px 'M PLUS 1 Code',monospace;color:#5E6E88;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.dmg }}</span>
+<span style="flex:none;margin-left:auto;padding:1px 8px;border-radius:999px;background:{{ v.costBg }};border:1px solid {{ v.costBd }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:9px;font-weight:700;color:{{ v.costFg }};white-space:nowrap">{{ v.cost }}</span>
+<span style="flex:none;padding:1px 8px;border-radius:999px;background:{{ v.tagBg }};border:1px solid {{ v.tagBd }};font-family:'M PLUS Rounded 1c',sans-serif;font-size:9px;font-weight:700;color:{{ v.tagFg }};white-space:nowrap">{{ v.tag }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="margin-top:8px;font:400 9.5px/1.6 'M PLUS Rounded 1c',sans-serif;color:#5E6E88">押すと左の装備が実際に切り替わります（保存はされません）。</div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showBreakdown&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;表示&quot;}}">
+const SETS = {
+  aquilus: { name: "アクィルス上限", thrust: 1240, slash: 1180, plus: 300 },
+  abyss: { name: "アビス上限", thrust: 1480, slash: 1410, plus: 320 },
+  eclipse: { name: "エクリプス上限", thrust: 1690, slash: 1610, plus: 350 }
+};
+const AFS = {
+  none: { name: "なし", atk: 0, x2: 0, L: 0 },
+  psyche: { name: "プシーキー", atk: 180, x2: 0, L: 0 },
+  arclon: { name: "アークロン", atk: 0, x2: 0.06, L: 0 },
+  eclipse: { name: "エクリプス", atk: 60, x2: 0, L: 0.04 },
+  rubicona: { name: "ルビコナ", atk: 120, x2: 0.03, L: 0 }
+};
+const TITLES = {
+  none: { name: "なし", x6: 0, P: 0 },
+  kuratora: { name: "黒虎", x6: 0.10, P: 0 },
+  kurousagi: { name: "黒兎", x6: 0.08, P: 0 },
+  seiryu: { name: "青龍", x6: 0, P: 0.05 },
+  souja: { name: "蒼蛇", x6: 0.06, P: 0 },
+  hiuma: { name: "緋馬", x6: 0.05, P: 0 }
+};
+const BUFFS = {
+  none: { name: "なし", x1: 0, x2: 0 },
+  usual: { name: "よく使う3つ", x1: 0.30, x2: 0.12 },
+  all: { name: "全部盛り", x1: 0.58, x2: 0.22 }
+};
+const REQ = {
+  thrust: { label: "突き", unit: "" },
+  ts: { label: "突き+斬り", unit: "" },
+  eternal: { label: "エタの意志 Lv", unit: "" },
+  thesis: { label: "テシスコア合計", unit: "" }
+};
+const AREAS = [
+  { id: "mercurial", name: "マーキュリアル洞窟", rows: [
+    { id: "apple", name: "リンゴボス", def: 80000, need: 900000, reqs: [] },
+    { id: "luminous", name: "ルミナス", def: 180000, need: 1600000, reqs: [{ k: "thrust", v: 900 }] }
+  ] },
+  { id: "nest", name: "神鳥の塒", rows: [
+    { id: "nest_n", name: "神鳥の塒（ノーマル）", def: 320000, need: 2600000, team: "4人 / ヒーラー1推奨",
+      reqs: [{ k: "thrust", v: 1250 }, { k: "eternal", v: 41 }] },
+    { id: "nest_h", name: "神鳥の塒（ハード）", def: 520000, need: 4200000, team: "4人 / ヒーラー1必須",
+      reqs: [{ k: "ts", v: 2400 }, { k: "eternal", v: 51 }] }
+  ] },
+  { id: "abyss", name: "アビス", rows: [
+    { id: "abyss_n", name: "アビスボス（ノーマル）", def: 700000, need: 5500000, team: "4人 / 全員が入場条件を満たす",
+      reqs: [{ k: "ts", v: 2800 }, { k: "eternal", v: 61 }, { k: "thesis", v: 240 }] },
+    { id: "abyss_h", name: "アビスボス（ハード）", def: 950000, need: 7500000, team: "4人 / 全員が入場条件を満たす",
+      reqs: [{ k: "ts", v: 3200 }, { k: "eternal", v: 66 }, { k: "thesis", v: 320 }] },
+    { id: "abyss_hell", name: "アビスボス（ヘル）", def: 1250000, need: 10000000, team: "4人 / ヒーラー1必須 / 全員条件",
+      reqs: [{ k: "ts", v: 3600 }, { k: "eternal", v: 71 }, { k: "thesis", v: 400 }] },
+    { id: "abyss_ex", name: "アビス Ex", def: 1500000, need: 12000000,
+      reqs: [{ k: "ts", v: 4000 }, { k: "eternal", v: 76 }, { k: "thesis", v: 480 }] }
+  ] },
+  { id: "eclipse", name: "エクリプス", rows: [
+    { id: "ec_boss", name: "エクリプスボス", def: 1750000, need: 14000000, team: "4人 / 全員条件",
+      reqs: [{ k: "ts", v: 4200 }, { k: "eternal", v: 76 }, { k: "thesis", v: 480 }] },
+    { id: "afe_n", name: "アフェティリア（ノーマル）", def: 1950000, need: 16000000, team: "4人 / 役割分担あり",
+      reqs: [{ k: "ts", v: 4400 }, { k: "eternal", v: 80 }, { k: "thesis", v: 520 }] },
+    { id: "afe_h", name: "アフェティリア（ハード）", def: 2200000, need: 19000000, team: "4人 / 役割分担あり",
+      reqs: [{ k: "ts", v: 4800 }, { k: "eternal", v: 80 }, { k: "thesis", v: 560 }] },
+    { id: "ec_war", name: "エクリプス討伐戦", def: 2400000, need: 21000000,
+      reqs: [{ k: "ts", v: 5000 }, { k: "eternal", v: 80 }, { k: "thesis", v: 600 }] },
+    { id: "last", name: "最後の決戦", def: 2650000, need: 24000000,
+      reqs: [{ k: "ts", v: 5400 }, { k: "eternal", v: 80 }, { k: "thesis", v: 640 }] }
+  ] },
+  { id: "rubicona", name: "ルビコナ", rows: [
+    { id: "clamor", name: "クラモール", def: 2850000, need: 26000000,
+      reqs: [{ k: "ts", v: 5600 }, { k: "thesis", v: 680 }] },
+    { id: "joy_n", name: "追従する喜び（ノーマル）", def: 3000000, need: 27000000,
+      reqs: [{ k: "ts", v: 5800 }, { k: "thesis", v: 700 }] },
+    { id: "joy_h", name: "追従する喜び（ハード）", def: 3200000, need: 29000000,
+      reqs: [{ k: "ts", v: 6100 }, { k: "thesis", v: 740 }] },
+    { id: "sad_n", name: "見つめる悲しみ（ノーマル）", def: 3050000, need: 27500000,
+      reqs: [{ k: "ts", v: 5900 }, { k: "thesis", v: 700 }] },
+    { id: "sad_h", name: "見つめる悲しみ（ハード）", def: 3250000, need: 29500000,
+      reqs: [{ k: "ts", v: 6200 }, { k: "thesis", v: 760 }] },
+    { id: "afterimage", name: "喜びの残像", def: 3500000, need: 32000000,
+      reqs: [{ k: "ts", v: 6400 }, { k: "thesis", v: 800 }] }
+  ] },
+  { id: "sanctuary", name: "古代レリックの聖域", diff: true, rows: [
+    { id: "sanc_bird", name: "神鳥", def: 380000, need: 2800000,
+      reqs: [{ k: "thrust", v: 1100 }, { k: "eternal", v: 41 }] },
+    { id: "sanc_kishinik", name: "キシニク", def: 460000, need: 3400000,
+      reqs: [{ k: "thrust", v: 1250 }, { k: "eternal", v: 46 }] }
+  ] },
+  { id: "other", name: "その他", rows: [
+    { id: "chimera", name: "キマイラ", def: 600000, need: 4500000, reqs: [{ k: "thrust", v: 1400 }] },
+    { id: "odin", name: "オーディン", def: 1100000, need: 8500000,
+      reqs: [{ k: "ts", v: 3000 }, { k: "eternal", v: 61 }] },
+    { id: "odin_rank", name: "オーディン（ランキング戦）", def: 1400000, need: 11000000,
+      reqs: [{ k: "ts", v: 3400 }, { k: "eternal", v: 66 }, { k: "thesis", v: 300 }] }
+  ] }
+];
+const SLOTS = [
+  { k: "weapon", name: "武器", share: 0.38 },
+  { k: "armor", name: "鎧", share: 0.16 },
+  { k: "helm", name: "兜", share: 0.12 },
+  { k: "hand", name: "手", share: 0.10 },
+  { k: "boot", name: "靴", share: 0.10 },
+  { k: "cloak", name: "マント", share: 0.08 },
+  { k: "cuffs", name: "カフス", share: 0.06 }
+];
+const TIERS = [
+  { k: "none", label: "無", name: "未装備" },
+  { k: "aquilus", label: "アクィ", name: "アクィルス上限" },
+  { k: "abyss", label: "アビス", name: "アビス上限" },
+  { k: "eclipse", label: "エクリ", name: "エクリプス上限" }
+];
+const CORE_TIERS = [
+  { v: 0, label: "無" }, { v: 40, label: "40" }, { v: 80, label: "80" },
+  { v: 120, label: "120" }, { v: 160, label: "160" }
+];
+const SIENA = [
+  { lv: 0, label: "なし", L: 0, atk: 0 },
+  { lv: 1, label: "Lv1", L: 0.02, atk: 0.03 },
+  { lv: 2, label: "Lv2", L: 0.03, atk: 0.05 },
+  { lv: 3, label: "Lv3", L: 0.04, atk: 0.07 }
+];
+const allSlots = (tier) => SLOTS.reduce((o, sl) => { o[sl.k] = tier; return o; }, {});
+const BASELINE = {
+  slots: allSlots("eclipse"), hand: "both", relic: 100, af: "none", title: "none",
+  cores: [160, 160, 160], eternal: 61, siena: 2,
+  effBase: 180, effEnh: 60, collab: true, buffs: "usual"
+};
+const CHARS = {
+  boris: { name: "検証ボリス", cls: "ボリス / 覚醒0", gear: { ...BASELINE } },
+  minami: { name: "みなみ", cls: "ティチエル / 覚醒2",
+    gear: { slots: { weapon: "abyss", armor: "abyss", helm: "abyss", hand: "aquilus", boot: "aquilus", cloak: "none", cuffs: "none" },
+      hand: "both", relic: 75, af: "none", title: "none", cores: [120, 80, 0], eternal: 51, siena: 1,
+      effBase: 120, effEnh: 40, collab: false, buffs: "usual" } },
+  ispin: { name: "サブのイスピン", cls: "イスピン / 覚醒0",
+    gear: { slots: { weapon: "aquilus", armor: "aquilus", helm: "none", hand: "none", boot: "none", cloak: "none", cuffs: "none" },
+      hand: "one", relic: 30, af: "none", title: "none", cores: [40, 0, 0], eternal: 31, siena: 0,
+      effBase: 60, effEnh: 20, collab: false, buffs: "none" } }
+};
+const STA_ATK = 1200000, GEAR_K = 3000, SW_LV = 6, PW = true;
+const SKILL = 1.6, COMBO = 1.15, AWAKE = 1.2;
+const cap = (v, c) => Math.min(v, c);
+const man = (n) => {
+  const v = Math.round(n);
+  if (v < 1000000) return v.toLocaleString("en-US");
+  const m = v / 1000000;
+  return (m >= 100 ? Math.round(m) : Number(m.toFixed(m >= 10 ? 1 : 2))).toLocaleString("en-US") + "M";
+};
+const num = (n) => Math.round(n).toLocaleString("en-US");
+
+function scaleRow(r, lv, isDiff) {
+  if (!isDiff) return r;
+  const k = lv - 1;
+  return { ...r,
+    def: Math.round(r.def * (1 + k * 0.22)),
+    need: Math.round(r.need * (1 + k * 0.25)),
+    reqs: r.reqs.map((q) => q.k === "eternal"
+      ? { ...q, v: Math.min(80, q.v + Math.round(k * 1.8)) }
+      : { ...q, v: Math.round(q.v * (1 + k * 0.11)) })
+  };
+}
+function derive(g) {
+  const af = AFS[g.af], title = TITLES[g.title], buffs = BUFFS[g.buffs];
+  const siena = SIENA[g.siena] || SIENA[0];
+  let thrust = 0, slash = 0, plus = 0;
+  SLOTS.forEach((sl) => {
+    const tier = g.slots[sl.k];
+    if (!tier || tier === "none") return;
+    const t = SETS[tier];
+    const mul = sl.k === "weapon" && g.hand === "one" ? 0.85 : 1;
+    thrust += t.thrust * sl.share * mul;
+    slash += t.slash * sl.share * mul;
+    plus += t.plus * sl.share;
+  });
+  thrust = Math.round(thrust + g.relic + g.effBase);
+  slash = Math.round(slash + g.relic + g.effBase);
+  const thesis = g.cores.reduce((n, v) => n + v, 0);
+  const eqBase = thrust + af.atk;
+  const eqEnh = Math.round(plus) + g.effEnh;
+  const eqAtk = Math.floor((eqBase * 0.5 + eqEnh * 0.35) * GEAR_K);
+  const rate = (PW ? 0.02 : 0) + SW_LV * 0.03 + (g.collab ? 0.03 : 0);
+  const atk = Math.floor((STA_ATK + eqAtk + Math.floor((eqAtk / 25) * rate) * 25) * (1 + siena.atk));
+  const x1 = cap(buffs.x1, 0.50), x2 = cap(buffs.x2 + af.x2, 0.30), x6 = cap(title.x6, 0.30);
+  const caps = [];
+  if (buffs.x1 > 0.50) caps.push("イザベル枠");
+  if (buffs.x2 + af.x2 > 0.30) caps.push("一般枠");
+  if (title.x6 > 0.30) caps.push("日本独自枠");
+  return { atk, X: 1 + x1 + x2 + x6, L: cap(af.L + siena.L, 0.45), P: cap(title.P, 0.73), rate, caps,
+    thrust, slash, ts: thrust + slash, eternal: g.eternal, thesis,
+    eqBase: Math.round(eqBase), eqEnh, eqAtk, sienaLv: siena.lv };
+}
+const dmgOf = (d, def) => Math.floor(Math.max(d.atk - def, 1) * SKILL * COMBO * d.X * (1 + d.L) * (1 + d.P) * AWAKE);
+function checkReqs(d, reqs) {
+  const items = reqs.map((q) => {
+    const cur = d[q.k];
+    return { label: REQ[q.k].label, cur, need: q.v, ok: cur >= q.v, short: Math.max(0, q.v - cur) };
+  });
+  return { ok: items.every((i) => i.ok), items, unmet: items.filter((i) => !i.ok) };
+}
+function CountUpNumber(props) {
+  const value = props.value, fmt = props.fmt;
+  const [shown, setShown] = React.useState(value);
+  const [pop, setPop] = React.useState(false);
+  const raf = React.useRef(0);
+  const cur = React.useRef(value);
+  React.useEffect(() => {
+    const from = cur.current;
+    if (from === value) return;
+    const dur = 420, t0 = (typeof performance !== "undefined" ? performance.now() : Date.now());
+    setPop(true);
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      const v = from + (value - from) * e;
+      cur.current = v;
+      setShown(v);
+      if (p < 1) raf.current = requestAnimationFrame(step);
+      else { cur.current = value; setShown(value); setTimeout(() => setPop(false), 140); }
+    };
+    raf.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf.current);
+  }, [value]);
+  const up = value > cur.current;
+  return React.createElement("span", {
+    style: {
+      display: "inline-block",
+      transform: pop ? "scale(1.07)" : "scale(1)",
+      color: pop ? (up ? "#2E6B4C" : "#8C4A42") : "inherit",
+      transition: "transform .2s cubic-bezier(.34,1.56,.64,1), color .3s ease",
+      textShadow: pop ? "0 0 12px rgba(66,109,214,.35)" : "none"
+    }
+  }, fmt(shown));
+}
+
+class Component extends DCLogic {
+  state = { charId: "boris", sim: null, sel: "abyss_ex", sancLv: 10, open: {}, pin: null };
+  set(patch) { this.setState(patch); }
+  gearOf(st) { return st.sim || CHARS[st.charId].gear; }
+  simSet(patch) { this.setState((st) => ({ sim: { ...this.gearOf(st), ...patch } })); }
+  simFn(fn) { this.setState((st) => { const g = this.gearOf(st); return { sim: { ...g, ...fn(g) } }; }); }
+
+  renderVals() {
+    const s = this.state;
+    const ch = CHARS[s.charId];
+    const saved = ch.gear;
+    const g = s.sim || saved;
+    const simMode = !!s.sim;
+    const d = derive(g), b = derive(saved);
+    const on = { bg: "linear-gradient(180deg,#CCF7FF,#90D7FF)", bd: "#687287", fg: "#123047", w: "700" };
+    const off = { bg: "#fff", bd: "#798CAC", fg: "#5E6E88", w: "500" };
+
+    const flat = [];
+    let frontierId = null;
+    const areas = AREAS.map((a) => {
+      const rows = a.rows.map((r0) => {
+        const r = scaleRow(r0, s.sancLv, a.diff);
+        const dmg = dmgOf(d, r.def), base = dmgOf(b, r.def);
+        const rq = checkReqs(d, r.reqs), rqB = checkReqs(b, r.reqs);
+        const clear = dmg >= r.need && rq.ok;
+        flat.push({ ...r, area: a.name, dmg, base, entryOk: rq.ok, reqItems: rq.items, unmet: rq.unmet,
+          clear, baseClear: base >= r.need && rqB.ok });
+        const ratio = dmg / r.need;
+        const st = !rq.ok ? (dmg >= r.need ? 5 : 4) : ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
+        const dp = Math.round((dmg / base - 1) * 100);
+        const sel = s.sel === r.id;
+        const isFrontier = !frontierId && !clear;
+        if (isFrontier) frontierId = r.id;
+        const pinned = s.pin === r.id;
+        return {
+          name: r.name, team: !!r.team, dmg: man(dmg), need: man(r.need),
+          dmgEl: React.createElement(CountUpNumber, { value: dmg, fmt: man }),
+          frontier: isFrontier,
+          ratioLabel: ratio >= 1.3 ? "×" + ratio.toFixed(1) : "",
+          pinned, pinBg: pinned ? "#DCEBFF" : "transparent", pinBd: pinned ? "#426DD6" : "#C1D3E6",
+          pinFg: pinned ? "#2B4FA8" : "#93A0B2",
+          togglePin: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState((st) => ({ pin: st.pin === r.id ? null : r.id, sel: r.id })); },
+          badge: ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達"][st],
+          badgeBg: ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8"][st],
+          badgeBd: ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "#6D6AA8"][st],
+          badgeFg: ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780"][st],
+          barBg: ["linear-gradient(90deg,#90D7FF,#426DD6)", "linear-gradient(90deg,#9FD9BC,#3E8C63)",
+            "linear-gradient(90deg,#F0D79A,#C2A057)", "linear-gradient(90deg,#E8B3A2,#B0574A)",
+            "linear-gradient(90deg,#CBD3DE,#9AA6B6)", "linear-gradient(90deg,#C3C1E4,#6D6AA8)"][st],
+          pct: Math.min(100, ratio * 100).toFixed(1) + "%",
+          basePct: Math.min(100, (base / r.need) * 100).toFixed(1) + "%",
+          delta: dp === 0 ? "±0%" : (dp > 0 ? "+" : "") + dp + "%",
+          deltaFg: dp > 0 ? "#2E6B4C" : dp < 0 ? "#8C4A42" : "#93A0B2",
+          entryText: r.reqs.length === 0
+            ? "入場条件なし"
+            : rq.ok
+              ? "入場条件OK（" + rq.items.map((i2) => i2.label + " " + num(i2.need)).join(" / ") + "）"
+              : "入場まで: " + rq.unmet.map((i2) => i2.label + " あと " + num(i2.short)).join(" ・ "),
+          entryFg: rq.ok ? "#5E6E88" : "#8C4A42",
+          entryW: rq.ok ? "400" : "700",
+          entryDot: r.reqs.length === 0 ? "#C1D3E6" : rq.ok ? "#6FA98A" : "#B0574A",
+          w: sel ? "700" : "500",
+          bg: sel ? "linear-gradient(180deg,#D9ECFF,#C2E1FF)" : "#fff",
+          bd: sel ? "#426DD6" : "#C1D3E6",
+          ring: sel ? "0 0 0 3px rgba(66,109,214,.18)" : "none",
+          pick: () => this.set({ sel: r.id })
+        };
+      });
+      const ok = a.rows.filter((r0) => {
+        const r = scaleRow(r0, s.sancLv, a.diff);
+        return dmgOf(d, r.def) >= r.need && checkReqs(d, r.reqs).ok;
+      }).length;
+      let hint = "";
+      if (a.diff) {
+        const maxes = a.rows.map((r0) => {
+          let best = 0;
+          for (let lv = 1; lv <= 20; lv++) {
+            const r = scaleRow(r0, lv, true);
+            if (dmgOf(d, r.def) >= r.need && checkReqs(d, r.reqs).ok) best = lv;
+          }
+          return r0.name + " " + (best === 0 ? "—" : best);
+        });
+        hint = "火力が出ない人は 1 から。今の装備でクリアできる最大 → " + maxes.join(" / ");
+      }
+      const allClear = ok === a.rows.length;
+      const openArea = s.open[a.id] === undefined ? !allClear : !!s.open[a.id];
+      return { name: a.name, diff: !!a.diff, hint: openArea ? hint : "", rows,
+        open: openArea, collapsed: !openArea, chevron: openArea ? "▴" : "▾",
+        toggleLabel: openArea ? "畳む" : "開く",
+        rowsMax: openArea ? (a.rows.length * 132 + 40) + "px" : "0px", rowsOp: openArea ? "1" : "0",
+        sumMax: openArea ? "0px" : "26px", sumOp: openArea ? "0" : "1",
+        collapsedText: "全部余裕 — " + a.rows.map((r) => r.name).join("・"),
+        toggle: () => this.setState((st) => {
+          const cur = st.open[a.id] === undefined ? !allClear : !!st.open[a.id];
+          return { open: { ...st.open, [a.id]: !cur } };
+        }) };
+    });
+
+    const clearCount = flat.filter((r) => r.clear).length;
+    const entryCount = flat.filter((r) => r.entryOk).length;
+    const baseClearCount = flat.filter((r) => r.baseClear).length;
+    const cdiff = clearCount - baseClearCount;
+
+    const selR = flat.find((r) => r.id === s.sel) || flat[0];
+    const selOk = selR.dmg >= selR.need;
+    const shortBy = Math.round((1 - selR.dmg / selR.need) * 100);
+    const selReqs = selR.reqItems.map((i2) => ({
+      label: i2.label, value: num(i2.cur) + " / " + num(i2.need),
+      tag: i2.ok ? "OK" : "あと " + num(i2.short),
+      bg: i2.ok ? "#F4F9FE" : "#F6E8E5", bd: i2.ok ? "#C1D3E6" : "#B08480",
+      fg: i2.ok ? "#3B4A63" : "#8C4A42"
+    }));
+
+    const pinnedRow = s.pin ? flat.find((r) => r.id === s.pin) : null;
+    const goal = pinnedRow || flat.find((r) => !r.clear) || selR;
+    const cands = [];
+    const COST = { free: { label: "無料", w: 0 }, grind: { label: "ゲーム内で可", w: 1 }, pay: { label: "高コスト", w: 2 } };
+    const push = (label, patch, cost) => {
+      const nd = derive({ ...g, ...patch });
+      const rq = checkReqs(nd, goal.reqs);
+      cands.push({ label, patch, cost, dmg: dmgOf(nd, goal.def), entryOk: rq.ok, unmet: rq.unmet.length });
+    };
+    if (g.buffs !== "all") push("常用バフを 全部盛り に", { buffs: "all" }, "free");
+    if (!g.collab) push("コラボ効果を ON に", { collab: true }, "free");
+    if (g.hand !== "both") push("武器を両面に持ち替える", { hand: "both" }, "free");
+    if (g.title !== "kuratora") push("称号に 黒虎", { title: "kuratora" }, "grind");
+    if (g.eternal < 80) push("エタの意志を Lv+5", { eternal: Math.min(80, g.eternal + 5) }, "grind");
+    if (g.siena < 3) push("シエナのオーラを Lv" + (g.siena + 1) + " に", { siena: g.siena + 1 }, "grind");
+    const coreIdx = g.cores.findIndex((v) => v < 160);
+    if (coreIdx >= 0) {
+      const next = CORE_TIERS.find((t) => t.v > g.cores[coreIdx]);
+      if (next) push("テシスコア第" + (coreIdx + 1) + "を " + next.v + " に", { cores: g.cores.map((v, i2) => (i2 === coreIdx ? next.v : v)) }, "grind");
+    }
+    if (g.effEnh < 160) push("エフェクト強化値を +160 に", { effEnh: 160 }, "grind");
+    const order = ["none", "aquilus", "abyss", "eclipse"];
+    const weak = SLOTS.filter((sl) => g.slots[sl.k] !== "eclipse")
+      .sort((x, y) => (order.indexOf(g.slots[x.k]) - order.indexOf(g.slots[y.k])) || (y.share - x.share))[0];
+    if (weak) {
+      const nextTier = order[order.indexOf(g.slots[weak.k]) + 1];
+      push(weak.name + "を " + TIERS.find((t) => t.k === nextTier).name + " に",
+        { slots: { ...g.slots, [weak.k]: nextTier } }, "pay");
+    }
+    if (g.af !== "psyche") push("AF に プシーキー", { af: "psyche" }, "pay");
+    if (g.relic < 200) push("レリックを 200 に", { relic: 200 }, "pay");
+    if (g.effBase < 400) push("エフェクト補正値を +100 上げる", { effBase: g.effBase + 100 }, "pay");
+    const cur = dmgOf(d, goal.def);
+    const curUnmet = checkReqs(d, goal.reqs).unmet.length;
+    const reaches = (c) => (c.dmg >= goal.need && c.entryOk) ? 0 : 1;
+    const advice = cands
+      .sort((x, y) => (x.unmet - y.unmet) || (reaches(x) - reaches(y)) || (COST[x.cost].w - COST[y.cost].w) || (y.dmg - x.dmg))
+      .slice(0, 4)
+      .map((c) => {
+        const dp = Math.round((c.dmg / cur - 1) * 100);
+        const reach = c.dmg >= goal.need && c.entryOk;
+        const fixesEntry = curUnmet > 0 && c.unmet < curUnmet;
+        return { label: c.label,
+          cost: COST[c.cost].label,
+          costBg: c.cost === "free" ? "#DFF3E6" : c.cost === "grind" ? "#F4F9FE" : "#F6E8E5",
+          costBd: c.cost === "free" ? "#6FA98A" : c.cost === "grind" ? "#A6BAD3" : "#B08480",
+          costFg: c.cost === "free" ? "#2E6B4C" : c.cost === "grind" ? "#5E6E88" : "#8C4A42",
+          dmg: fixesEntry ? "入場条件が前進（残り " + c.unmet + " 項目）" : man(c.dmg) + " / 目安 " + man(goal.need),
+          delta: dp === 0 ? "±0%" : (dp > 0 ? "+" : "") + dp + "%",
+          fg: dp > 0 ? "#2E6B4C" : "#93A0B2",
+          tag: reach ? "これで届く" : (!c.entryOk ? "入場条件が先" : "まだ届かない"),
+          tagBg: reach ? "#DFF3E6" : (fixesEntry ? "#EFEEF8" : "#F4F9FE"),
+          tagBd: reach ? "#6FA98A" : (fixesEntry ? "#6D6AA8" : "#A6BAD3"),
+          tagFg: reach ? "#2E6B4C" : (fixesEntry ? "#4A4780" : "#5E6E88"),
+          bg: reach ? "linear-gradient(180deg,#F3FBF6,#E4F4EB)" : "#F6FBFF",
+          bd: reach ? "#6FA98A" : "#C1D3E6",
+          apply: () => this.simSet(c.patch) };
+      });
+
+    const diffCount = SLOTS.filter((sl) => g.slots[sl.k] !== saved.slots[sl.k]).length
+      + g.cores.filter((v, i2) => v !== saved.cores[i2]).length
+      + ["hand", "relic", "af", "title", "effBase", "effEnh", "collab", "buffs", "eternal", "siena"]
+        .filter((k) => g[k] !== saved[k]).length;
+
+    const charCards = Object.keys(CHARS).map((id) => {
+      const cg = CHARS[id];
+      const cd = derive(cg.gear);
+      let ok = 0;
+      AREAS.forEach((a) => a.rows.forEach((r0) => {
+        const r = scaleRow(r0, 10, a.diff);
+        if (dmgOf(cd, r.def) >= r.need && checkReqs(cd, r.reqs).ok) ok++;
+      }));
+      const sel = s.charId === id;
+      return { name: cg.name, cls: cg.cls, ok, total: 24,
+        stats: [
+          { k: "エタ", v: "Lv" + cd.eternal },
+          { k: "装備値", v: num(cd.ts) }
+        ],
+        w: sel ? "700" : "500",
+        bg: sel ? "linear-gradient(180deg,#D9ECFF,#C2E1FF)" : "#fff",
+        bd: sel ? "#426DD6" : "#C1D3E6",
+        ring: sel ? "0 0 0 3px rgba(66,109,214,.16)" : "none",
+        pick: () => this.set({ charId: id, sim: null }) };
+    });
+
+    return {
+      showBreakdown: this.props.showBreakdown ?? true,
+      simMode, notSim: !simMode,
+      charName: ch.name, charCls: ch.cls + (simMode ? " / 入れ替え中" : ""),
+      charCards,
+      enterSim: () => this.setState((st) => ({ sim: st.sim || { ...CHARS[st.charId].gear } })),
+      exitSim: () => this.set({ sim: null }),
+      resetSim: () => this.setState((st) => ({ sim: st.sim ? { ...CHARS[st.charId].gear } : null })),
+      simSummary: diffCount === 0 ? "まだ何も入れ替えていません" : "入れ替え " + diffCount + " 箇所",
+      railHead: simMode ? "装備を入れ替えて試す" : "キャラ",
+      railHeadNote: simMode ? "保存されません" : "切り替えで一覧も更新",
+      railHeadBg: simMode ? "linear-gradient(180deg,#6D6AA8,#565394)" : "#6382AD",
+      areas, clearCount, entryCount, totalCount: flat.length, baseClearCount,
+      diffLabel: cdiff === 0 ? "変化なし" : (cdiff > 0 ? "+" + cdiff + " コンテンツ" : cdiff + " コンテンツ"),
+      diffFg: cdiff > 0 ? "#2E6B4C" : cdiff < 0 ? "#8C4A42" : "#5E6E88",
+      sancLv: s.sancLv,
+      diffUp: () => this.setState((st) => ({ sancLv: Math.min(20, st.sancLv + 1) })),
+      diffDown: () => this.setState((st) => ({ sancLv: Math.max(1, st.sancLv - 1) })),
+      gearSlots: SLOTS.map((sl) => ({
+        name: sl.name,
+        opts: TIERS.map((t) => ({
+          label: t.label,
+          ...(g.slots[sl.k] === t.k ? on : off),
+          pick: () => this.simFn((x) => ({ slots: { ...x.slots, [sl.k]: t.k } }))
+        }))
+      })),
+      oneBg: g.hand === "one" ? on.bg : "#fff", oneFg: g.hand === "one" ? on.fg : off.fg, oneW: g.hand === "one" ? "700" : "500",
+      bothBg: g.hand === "both" ? on.bg : "#fff", bothFg: g.hand === "both" ? on.fg : off.fg, bothW: g.hand === "both" ? "700" : "500",
+      pickOne: () => this.simSet({ hand: "one" }), pickBoth: () => this.simSet({ hand: "both" }),
+      rateLabel: "+" + Math.round(d.rate * 100) + "%",
+      relic: g.relic,
+      relicOptions: [30, 50, 75, 100, 200].map((v) => ({
+        name: String(v), ...(g.relic === v ? on : off), pick: () => this.simSet({ relic: v })
+      })),
+      afOptions: Object.keys(AFS).map((k) => ({
+        name: AFS[k].name, ...(g.af === k ? { bg: on.bg, bd: on.bd, w: "700" } : { bg: "#fff", bd: "#798CAC", w: "500" }),
+        pick: () => this.simSet({ af: k })
+      })),
+      afBd: g.af === "none" ? "#A9B4C4" : "#798CAC",
+      afBadge: g.af === "none" ? "未選択" : AFS[g.af].name,
+      afBadgeBg: g.af === "none" ? "#ECEEF2" : "#DCEBFF",
+      afBadgeFg: g.af === "none" ? "#5E6E88" : "#2B4FA8",
+      titleOptions: Object.keys(TITLES).map((k) => ({
+        name: TITLES[k].name, ...(g.title === k ? { bg: on.bg, bd: on.bd, w: "700" } : { bg: "#fff", bd: "#798CAC", w: "500" }),
+        pick: () => this.simSet({ title: k })
+      })),
+      titleBd: g.title === "none" ? "#A9B4C4" : "#798CAC",
+      titleBadge: g.title === "none" ? "未選択" : TITLES[g.title].name,
+      titleBadgeBg: g.title === "none" ? "#ECEEF2" : "#DCEBFF",
+      titleBadgeFg: g.title === "none" ? "#5E6E88" : "#2B4FA8",
+      coreSlots: g.cores.map((cv, idx) => ({
+        name: "第" + (idx + 1),
+        opts: CORE_TIERS.map((t) => ({
+          label: t.label,
+          ...(cv === t.v ? on : off),
+          pick: () => this.simFn((x) => ({ cores: x.cores.map((v2, i2) => (i2 === idx ? t.v : v2)) }))
+        }))
+      })),
+      thesis: num(d.thesis),
+      eternal: g.eternal,
+      eternalUp: () => this.simFn((x) => ({ eternal: Math.min(80, x.eternal + 1) })),
+      eternalDown: () => this.simFn((x) => ({ eternal: Math.max(0, x.eternal - 1) })),
+      eternalPresets: [41, 51, 61, 71, 80].map((v) => ({
+        name: String(v), ...(g.eternal === v ? { bg: on.bg, bd: on.bd, fg: on.fg, w: "700" } : { bg: "#fff", bd: "#C1D3E6", fg: "#5E6E88", w: "500" }),
+        pick: () => this.simSet({ eternal: v })
+      })),
+      sienaOptions: SIENA.map((sv) => ({
+        label: sv.label, ...(g.siena === sv.lv ? on : off), pick: () => this.simSet({ siena: sv.lv })
+      })),
+      sienaL: Math.round((SIENA[g.siena] || SIENA[0]).L * 100) + "%",
+      sienaAtk: Math.round((SIENA[g.siena] || SIENA[0]).atk * 100) + "%",
+      thrustVal: num(d.thrust), slashVal: num(d.slash), tsVal: num(d.ts),
+      effBase: g.effBase, effEnh: "+" + g.effEnh,
+      effBaseUp: () => this.simFn((x) => ({ effBase: Math.min(600, x.effBase + 20) })),
+      effBaseDown: () => this.simFn((x) => ({ effBase: Math.max(0, x.effBase - 20) })),
+      effEnhUp: () => this.simFn((x) => ({ effEnh: Math.min(300, x.effEnh + 20) })),
+      effEnhDown: () => this.simFn((x) => ({ effEnh: Math.max(0, x.effEnh - 20) })),
+      collabBg: g.collab ? on.bg : "#fff", collabBd: g.collab ? "#687287" : "#798CAC",
+      collabFg: g.collab ? "#123047" : "#5E6E88",
+      toggleCollab: () => this.simFn((x) => ({ collab: !x.collab })),
+      buffOptions: Object.keys(BUFFS).map((k) => ({
+        name: BUFFS[k].name, ...(g.buffs === k ? on : off), pick: () => this.simSet({ buffs: k })
+      })),
+      xLabel: "×" + d.X.toFixed(2),
+      selArea: selR.area, selName: selR.name, selDmg: man(selR.dmg),
+      selDmgEl: React.createElement(CountUpNumber, { value: selR.dmg, fmt: man }),
+      atkEl: React.createElement(CountUpNumber, { value: d.atk, fmt: man }),
+      xEl: React.createElement(CountUpNumber, { value: Math.round(d.X * 100), fmt: (v) => "×" + (v / 100).toFixed(2) }),
+      clearCountEl: React.createElement(CountUpNumber, { value: clearCount, fmt: (v) => String(Math.round(v)) }),
+      entryCountEl: React.createElement(CountUpNumber, { value: entryCount, fmt: (v) => String(Math.round(v)) }),
+      selNeed: man(selR.need), selBase: man(selR.base),
+      selNote: selOk ? "火力は目安を超えています（目安なので参考値です）。" : "目安まで あと " + shortBy + "%。どの装備を替えれば届くかは下の提案から試せます。",
+      selNoteBg: selOk ? "#DFF3E6" : "#FDF3DE", selNoteBd: selOk ? "#6FA98A" : "#E3CB93",
+      selNoteFg: selOk ? "#2E6B4C" : "#7A6420",
+      selReqs,
+      selEntryNote: selR.reqs.length === 0
+        ? "入場条件はありません。"
+        : selR.entryOk
+          ? (selR.team ? "入場条件OK。ただしチーム条件（人数・役割）があります。" : "入場条件をすべて満たしています。")
+          : "未達 " + selR.unmet.length + " 項目: " + selR.unmet.map((i2) => i2.label + " あと " + num(i2.short)).join(" ・ "),
+      selEntryBg: selR.entryOk ? "#F4F9FE" : "#F6E8E5",
+      selEntryBd: selR.entryOk ? "#C1D3E6" : "#B08480",
+      selEntryFg: selR.entryOk ? "#3B4A63" : "#8C4A42",
+      atk: man(d.atk), xLabel: "×" + d.X.toFixed(2),
+      capNote: d.caps.length ? d.caps.join("・") + "が上限です。ここに足しても増えません。" : "",
+      parts: [
+        { k: "ステ攻撃力", v: man(STA_ATK) },
+        { k: "装備攻撃力（補正 " + num(d.eqBase) + " / 強化 " + num(d.eqEnh) + "）", v: man(d.eqAtk) },
+        { k: "強化倍率（PW+SW+コラボ）", v: "+" + Math.round(d.rate * 100) + "%" },
+        { k: "シエナのオーラ", v: d.sienaLv === 0 ? "なし" : "Lv" + d.sienaLv },
+        { k: "L 最終 / P 特定依存", v: "+" + Math.round(d.L * 100) + "% / +" + Math.round(d.P * 100) + "%" }
+      ],
+      goalLabel: (pinnedRow ? "📌 " : "") + (goal === selR && selR.clear ? "すべてクリア可能" : "目標: " + goal.name),
+      selTeamNote: typeof selR.team === "string" ? "チーム条件: " + selR.team : "",
+      advice
+    };
+  }
+}
+</script>
+</body>
+</html>

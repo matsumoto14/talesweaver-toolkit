@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::awakening::Awakening;
-use crate::equipment::Equipment;
+use crate::equipment::EquipmentValues;
 
 /// 入場条件。判定に使う値は登録キャラのデータから取れるものに限る。
 ///
@@ -35,11 +35,12 @@ pub struct RequirementCheck {
 }
 
 impl ContentRequirement {
-    pub fn check(&self, equipment: &Equipment, awakening: Awakening) -> RequirementCheck {
+    /// `equipment_base` は `Equipment::base_totals` で集計済みの基本能力値。
+    pub fn check(&self, equipment_base: &EquipmentValues, awakening: Awakening) -> RequirementCheck {
         let (label, current, required) = match *self {
-            ContentRequirement::EquipmentThrust(v) => ("装備 突き(基本)", equipment.base.thrust, v),
+            ContentRequirement::EquipmentThrust(v) => ("装備 突き(基本)", equipment_base.thrust, v),
             ContentRequirement::EquipmentThrustSlash(v) => {
-                ("装備 突き+斬り(基本)", equipment.base.thrust + equipment.base.slash, v)
+                ("装備 突き+斬り(基本)", equipment_base.thrust + equipment_base.slash, v)
             }
             ContentRequirement::EternalLevel(v) => {
                 ("エタの意志 Lv", i64::from(awakening.eternal_level), i64::from(v))
@@ -99,11 +100,11 @@ pub struct ContentEvaluation {
 pub fn evaluate_content(
     content: &Content,
     damage: Option<BestSkillDamage>,
-    equipment: &Equipment,
+    equipment_base: &EquipmentValues,
     awakening: Awakening,
 ) -> ContentEvaluation {
     let checks: Vec<RequirementCheck> =
-        content.requirements.iter().map(|r| r.check(equipment, awakening)).collect();
+        content.requirements.iter().map(|r| r.check(equipment_base, awakening)).collect();
     let entry_ok = checks.iter().all(|c| c.ok);
     let reaches_need =
         damage.as_ref().is_some_and(|d| d.per_hit_max >= content.need_per_hit);
@@ -120,13 +121,9 @@ pub fn evaluate_content(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::equipment::EquipmentValues;
 
-    fn equipment(thrust: i64, slash: i64) -> Equipment {
-        Equipment {
-            base: EquipmentValues { thrust, slash, ..Default::default() },
-            ..Default::default()
-        }
+    fn equipment(thrust: i64, slash: i64) -> EquipmentValues {
+        EquipmentValues { thrust, slash, ..Default::default() }
     }
 
     fn content(need: i64, requirements: Vec<ContentRequirement>) -> Content {

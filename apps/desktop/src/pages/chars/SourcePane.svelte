@@ -13,13 +13,14 @@
 <script lang="ts">
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
-  import type { PetSkillTier, StatKind, StatPreview } from "../../api/types";
+  import type { EquipmentItem, PartSlot, PetSkillTier, StatKind, StatPreview } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import type { Draft } from "../../draft";
+  import { clampToCaps, midpointValues, neutralEquipmentPart } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
-    EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS,
-    STAT_LAYER_LABELS,
+    ABILITY_ALLOWED_SLOTS, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
+    PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { app } from "../../state.svelte";
@@ -62,9 +63,67 @@
   const allySkillBuffs = $derived(app.catalog.filter(isAllySkill));
   const buffChecked = (buffId: string) => draft.statSources.buffs.choices.some((c) => c.buff_id === buffId);
 
+  // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
+  let openPart = $state<PartSlot | null>(null);
+  let itemQuery = $state("");
+  const openPartLabel = $derived(openPart ? PART_SLOT_LABELS[openPart] : "");
+  const catalogFor = $derived(
+    openPart ? app.equipmentCatalog.filter((i) => i.slot === openPart) : [],
+  );
+  const filteredCatalog = $derived(
+    itemQuery.trim() === "" ? catalogFor : catalogFor.filter((i) => i.name.includes(itemQuery.trim())),
+  );
+  const equippedItem = (slot: PartSlot): EquipmentItem | null => {
+    const itemId = draft.equipment.parts[slot].item_id;
+    return itemId ? (app.equipmentCatalog.find((i) => i.id === itemId) ?? null) : null;
+  };
+  const partDisplayName = (slot: PartSlot): string => {
+    const item = equippedItem(slot);
+    if (item) return item.name;
+    const custom = draft.equipment.parts[slot].custom_name;
+    return custom ? `${custom} [仮]` : "未装備";
+  };
+
+  function pickCatalogItem(slot: PartSlot, item: EquipmentItem) {
+    const part = draft.equipment.parts[slot];
+    part.item_id = item.id;
+    part.custom_name = null;
+    part.base = midpointValues(item.values_min, item.values_max);
+    part.enchant = clampToCaps(part.enchant, item.enchant_caps);
+    itemQuery = "";
+  }
+  function pickUnequipped(slot: PartSlot) {
+    draft.equipment.parts[slot] = neutralEquipmentPart();
+    itemQuery = "";
+  }
+  function pickCustom(slot: PartSlot) {
+    const part = draft.equipment.parts[slot];
+    part.item_id = null;
+    if (part.custom_name === null) part.custom_name = "";
+    itemQuery = "";
+  }
+
+  const abilityChecked = (slot: PartSlot, id: string) => draft.equipment.parts[slot].abilities.includes(id);
+  function toggleAbility(slot: PartSlot, id: string) {
+    const part = draft.equipment.parts[slot];
+    part.abilities = abilityChecked(slot, id) ? part.abilities.filter((a) => a !== id) : [...part.abilities, id];
+  }
+
+  const enhanceLevelOptions = $derived(
+    Array.from({ length: limits.enhance_level_max + 1 }, (_, lv) => ({
+      value: String(lv), label: lv === 0 ? "強化なし" : `+${lv}`,
+    })),
+  );
+  function setEnhanceLevel(slot: PartSlot, level: number) {
+    const part = draft.equipment.parts[slot];
+    part.enhance_level = level;
+    // +11 以下は追加固定ダメージの上書きを許可しない(domain 側の制約に合わせる)
+    if (level < 12) part.enhance_added_damage = null;
+  }
+
   const TITLES: Record<SourceId, { title: string; note: string }> = {
     status: { title: "キャラステータス", note: "素ステ・覚醒・エタの意志" },
-    equipment: { title: "装備", note: "ゲーム内ステータス画面の表示値をそのまま" },
+    equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
     rune: { title: "ルーンスキル", note: `0–${limits.rune_level_max}` },
     crown: { title: "クラウン", note: `0–${limits.crown_max}` },
@@ -149,41 +208,174 @@
       </details>
     </div>
   {:else if sourceId === "equipment"}
-    <div class="card">
-      <div class="card-title">基本能力値</div>
-      <p class="hint dim">ゲーム内ステータス画面の装備補正から、エンチャント分を除いた値(+アビリティ)</p>
-      <div class="fields">
-        {#each EQUIPMENT_STAT_KINDS as k (k)}
-          <StatInput label={EQUIPMENT_STAT_LABELS[k]} min={0} max={limits.equipment_value_max} bind:value={draft.equipment.base[k]} />
+    {#if openPart === null}
+      <div class="card">
+        <div class="card-title">装備攻撃力強化</div>
+        <div class="fields">
+          <label class="check">
+            <input type="checkbox" bind:checked={draft.equipment.power_weapon} />
+            <span>パワーウェポン(+2%)</span>
+          </label>
+          <Select
+            label="ストロングウェポン"
+            options={strongWeaponOptions}
+            bind:value={
+              () => String(draft.equipment.strong_weapon_level),
+              (v) => (draft.equipment.strong_weapon_level = Number(v))
+            }
+          />
+        </div>
+      </div>
+      <div class="part-list">
+        {#each PART_SLOTS as slot (slot)}
+          {@const part = draft.equipment.parts[slot]}
+          {@const canEnhance = ENHANCE_ALLOWED_SLOTS.includes(slot)}
+          <button type="button" class="part-row" onclick={() => (openPart = slot)}>
+            <span class="part-main">
+              <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
+              <span class="part-item">{partDisplayName(slot)}</span>
+              {#if canEnhance && part.enhance_level > 0}
+                <span class="part-plus">+{part.enhance_level}</span>
+              {/if}
+            </span>
+            <span class="part-vals num dim">突{fmtInt(part.base.thrust)} / 斬{fmtInt(part.base.slash)}</span>
+            <span class="chev dim">›</span>
+          </button>
         {/each}
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title">強化能力値</div>
-      <p class="hint dim">エンチャント・テシスコア・シエナのオーラ等の期間制能力値</p>
-      <div class="fields">
-        {#each EQUIPMENT_STAT_KINDS as k (k)}
-          <StatInput label={EQUIPMENT_STAT_LABELS[k]} min={0} max={limits.equipment_value_max} bind:value={draft.equipment.enhanced[k]} />
-        {/each}
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">装備攻撃力強化</div>
-      <div class="fields">
-        <label class="check">
-          <input type="checkbox" bind:checked={draft.equipment.power_weapon} />
-          <span>パワーウェポン(+2%)</span>
-        </label>
-        <Select
-          label="ストロングウェポン"
-          options={strongWeaponOptions}
-          bind:value={
-            () => String(draft.equipment.strong_weapon_level),
-            (v) => (draft.equipment.strong_weapon_level = Number(v))
-          }
+    {:else}
+      {@const slot = openPart}
+      {@const part = draft.equipment.parts[slot]}
+      {@const item = equippedItem(slot)}
+      <button type="button" class="back-link" onclick={() => (openPart = null)}>‹ 装備一覧へ</button>
+      <div class="card">
+        <div class="card-title">{openPartLabel}: アイテム選択</div>
+        <input
+          class="item-search"
+          type="text"
+          placeholder="装備名で探す"
+          bind:value={itemQuery}
         />
+        <div class="item-list">
+          <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name === null} onclick={() => pickUnequipped(slot)}>
+            <span class="item-name">未装備</span>
+          </button>
+          {#each filteredCatalog as candidate (candidate.id)}
+            <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
+              <span class="item-name">{candidate.name}</span>
+              <span class="item-vals num dim">
+                突{candidate.values_min.thrust}-{candidate.values_max.thrust} /
+                斬{candidate.values_min.slash}-{candidate.values_max.slash}
+              </span>
+            </button>
+          {/each}
+          <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name !== null} onclick={() => pickCustom(slot)}>
+            <span class="item-name">カスタム(カタログ外)</span>
+          </button>
+        </div>
+        {#if part.item_id === null && part.custom_name !== null}
+          <label class="text custom-name">
+            <span class="label">表示名 <span class="dim">[仮] 例外操作(カタログ外)</span></span>
+            <input type="text" bind:value={part.custom_name} maxlength="40" placeholder="装備名" />
+          </label>
+        {/if}
       </div>
-    </div>
+
+      <div class="card">
+        <div class="card-title">基本能力値</div>
+        <p class="hint dim">
+          {#if item}wiki レンジ {item.values_min.thrust}〜{item.values_max.thrust} 等(MR で個体差あり)。上書きは例外操作
+          {:else}カタログ外のため手入力(例外操作)
+          {/if}
+        </p>
+        <div class="fields">
+          {#each EQUIPMENT_STAT_KINDS as k (k)}
+            <StatInput
+              label={EQUIPMENT_STAT_LABELS[k]}
+              min={0}
+              max={limits.equipment_value_max}
+              bind:value={part.base[k]}
+              format={item ? () => `wiki ${item.values_min[k]}–${item.values_max[k]}` : undefined}
+            />
+          {/each}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">エンチャント</div>
+        <p class="hint dim">呪文書で伸ばした強化能力値。上限はアイテム個別(カタログ外は{fmtInt(limits.equipment_value_max)})</p>
+        <div class="fields">
+          {#each EQUIPMENT_STAT_KINDS as k (k)}
+            {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
+            <StatInput
+              label={EQUIPMENT_STAT_LABELS[k]}
+              min={0}
+              max={cap}
+              bind:value={part.enchant[k]}
+              format={() => `上限 ${fmtInt(cap)}`}
+            />
+          {/each}
+        </div>
+      </div>
+
+      {#if ENHANCE_ALLOWED_SLOTS.includes(slot)}
+        <div class="card">
+          <div class="card-title">装備強化</div>
+          <Select
+            label="強化 Lv"
+            options={enhanceLevelOptions}
+            bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
+          />
+          {#if slot === "armor"}
+            <p class="hint dim">鎧の強化は最大 HP のみに効きます(火力計算には反映されません)。</p>
+          {:else if part.enhance_level >= 12}
+            <label class="check">
+              <input
+                type="checkbox"
+                checked={part.enhance_added_damage !== null}
+                onchange={(e) => (part.enhance_added_damage = e.currentTarget.checked ? 0 : null)}
+              />
+              <span>追加固定ダメージ(ゲーム内表示値)を実測で上書き(未チェックはレンジ下限で自動計算)</span>
+            </label>
+            {#if part.enhance_added_damage !== null}
+              <div class="fields">
+                <StatInput
+                  label="追加固定ダメージ"
+                  min={0}
+                  max={limits.enhance_added_damage_max}
+                  bind:value={
+                    () => part.enhance_added_damage ?? 0,
+                    (v) => (part.enhance_added_damage = v)
+                  }
+                />
+              </div>
+            {/if}
+          {:else if part.enhance_level > 0}
+            {#if item}
+              <p class="hint dim">追加固定ダメージは自動計算されます(ダメージ計算タブのトレースに表示)。</p>
+            {:else}
+              <p class="hint dim">カタログ外アイテムは追加固定ダメージを自動計算できません(+12 以上にすると実測値を入力できます)。</p>
+            {/if}
+          {/if}
+        </div>
+      {/if}
+
+      {#if ABILITY_ALLOWED_SLOTS.includes(slot)}
+        <div class="card">
+          <div class="card-title">アビリティ</div>
+          <p class="hint dim">装備攻撃力に効く 4 系統(尖った刃/鋭い刃/知力/耐魔力)。武器のみ</p>
+          <div class="buff-list">
+            {#each app.equipmentAbilities as def (def.id)}
+              {@const checked = abilityChecked(slot, def.id)}
+              <label class="check">
+                <input type="checkbox" {checked} onchange={() => toggleAbility(slot, def.id)} />
+                <span>{def.name}</span>
+              </label>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    {/if}
   {:else if sourceId === "pet"}
     <div class="card">
       <div class="fields">
@@ -324,4 +516,40 @@
   .buff-list { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
   .note { font-size: 10px; }
   .fixed-value { font-size: 11px; font-weight: 500; }
+
+  /* 装備ドリルダウン: 部位一覧 */
+  .part-list { display: flex; flex-direction: column; gap: 6px; }
+  .part-row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px;
+    background: #fff; border: 1px solid var(--border-soft); text-align: left;
+  }
+  .part-row:hover { border-color: var(--accent); }
+  .part-main { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 7px; }
+  .part-name { flex-shrink: 0; font-size: 11px; font-weight: 700; }
+  .part-item { min-width: 0; font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .part-plus {
+    flex-shrink: 0; padding: 0 6px; border-radius: 999px; background: #F6E8E5; border: 1px solid #A98B86;
+    font-size: 9px; font-weight: 700; color: #7A4B45;
+  }
+  .part-vals { flex-shrink: 0; font-size: 9.5px; }
+  .chev { flex-shrink: 0; font-size: 11px; }
+
+  /* 装備ドリルダウン: 部位詳細 */
+  .back-link { align-self: flex-start; padding: 2px 2px; font-size: 10.5px; color: var(--accent); }
+  .back-link:hover { text-decoration: underline; }
+  .item-search {
+    margin-top: 8px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 8px;
+    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg); font-size: 11px;
+  }
+  .item-search:focus { outline: none; border-color: var(--accent); }
+  .item-list { margin-top: 7px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .item-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 9px; border-radius: 8px; background: #fff; border: 1px solid var(--border-soft); text-align: left;
+  }
+  .item-row:hover { border-color: var(--accent); }
+  .item-row.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); }
+  .item-name { min-width: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-vals { flex-shrink: 0; font-size: 9.5px; }
+  .custom-name { margin-top: 9px; }
 </style>

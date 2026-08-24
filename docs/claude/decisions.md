@@ -269,3 +269,19 @@ v4 実装時に司令塔が独断で決めたスコープ 4 点をユーザー�
 8. **`evaluate_contents` のループ不変値(バフカタログ・ステ補正)を 1 回だけ構築**し、コンテンツ×スキルのループでは clone を使う
 
 出典・確認方法: `cargo test --workspace`、`cd apps/desktop && npm run build && npx svelte-check`。
+
+## 2026-08-24 部位別装備モデル(docs/claude/goals/2026-08-24-equipment-parts.md)
+
+装備を部位別 12 スロットに刷新し、武器強化の追加固定ダメージ(§5)を実装した。
+
+1. **部位は 12 スロット(兜/鎧/武器/盾/盾+/頭/体/手/足/効果/AF/レリック)。モックの「カフス」は wiki の「盾+」と同定した** / wiki「装備システム」冒頭の表が正。カフスという部位は wiki に存在しない。効果/AF/レリックも装備値(基本能力値)の一部なので部位として持つが、カタログは当面カスタム入力のみ `[仮]` / `crates/domain/src/equipment.rs::PartSlot`、goal 文書「wiki 調査結果」
+2. **モックの「等級(最下〜最上)」は採用しない。部位の基本能力値をカタログ既定値(レンジ中央)から上書きできる形にした** / wiki に等級概念は無く、実体は MR(アイテム表のレンジ内で基本補正値を振り直す)。追加固定ダメージも実際の補正値から計算するため wiki 式と一致する / `EquipmentPart::base`、UI のレンジヒント表示
+3. **武器強化の追加固定ダメージ(§5)= `INT(INT(補正)×倍率)`、奇数なら−1、per-hit は `INT(追加/Hit数)×Hit数`。補正は武器系統ごとの一次式(6 系統、装着アビリティ除外)。+12〜15 はレンジ振りのため実測値の上書き(既定はレンジ下限)** / wiki「装備システム/装備強化」(取得 2026-08-24)をそのまま転記。与ダメージ式の外なのでカテゴリに入れず、`calculate_damage` が per-hit に加算しトレース末尾に段を足す / `crates/domain/src/equipment.rs::weapon_added_damage`・`damage.rs` の Hit 分割テスト(wiki 例 2488/9hit→276)
+4. **鎧の強化 Lv は記録のみ(計算未反映)** / wiki: 鎧強化の効果は最大 HP で、HP は未モデル / UI に注記
+5. **ランダム OP はスコープ外にした** / wiki の武器 OP はすべて条件付き(後方から/ボス限定/確率発動)の % 追加ダメージ(§5 新-割合、称号と同枠)で、無条件で火力式に入る OP が存在しない。期待値でしか反映できないため称号・新-割合の goal でまとめて扱う。モックの無条件「攻撃ダメージ+X%」OP は架空 / goal 文書「wiki 調査結果」
+6. **カタログ seed はアクィルス/アビス系列(全部位)+ 刀・太刀の武器のみ。他武器種はカスタム武器(名前+4値+系統なし)で運用 `[仮]`** / 武器 26 種×全アイテムの転記は非現実的。武器系統→強化式の対応表(30 武器種)は全部入れた / `crates/gamedata/src/equipment_catalog.rs`(出典コメントつき、20 件)
+7. **storage v4: 旧 `equipment` JSON(合計 8 値)は破棄し、power_weapon / strong_weapon_level のみ引き継ぐ** / 合計値から部位を再構成できない。判定は「JSON に `parts` キーが無ければ旧形式」。移行前の実 DB はバックアップ済み(talesweaver-toolkit.sqlite.bak-v3-*) / `character_repository.rs::migrate_equipment_to_parts` と移行テスト
+8. **`DamageInput` は装備の集計値(`equipment_base_totals`/`enhanced_totals`)を受け、集計は commands 層で行う** / domain は gamedata(武器アビリティカタログ)に依存できないため。バフの `build_modifiers(catalog)` と同じ流儀 / `commands.rs::build_damage_input`
+9. **独立レビュー指摘 5 件を修正した**: (a) 武器カタログ 4 件の魔防が wiki の命中列の誤転記(列順 突|斬|物防|魔攻|魔防|命中。goal 文書の seed 表自体の誤りで、レビューが原典突き合わせで発見)(b) 候補「武器を更新」でエンチャントを新上限に clamp せず、1 候補の検証エラーが Promise.all で候補一覧全体を消していた → clamp + `Promise.allSettled` (c) `enhance_added_damage` の値域検証追加(0〜9,999,999 `[仮]`、`ENHANCE_ADDED_DAMAGE_MAX`。UI 上限も専用値に。+12 実測値は 30 万超になり得るため 9999 では不足)(d) カスタム武器の強化ヒント文言 (e) `commands.rs::weapon_added_damage` の 5 分岐テスト追加 / wiki 転記は必ず節ヘッダで列順を確認する(今回の教訓)
+
+出典・確認方法: `cargo test --workspace`(139 件: domain 82 / gamedata 31 / storage 22 / desktop 4)、`cd apps/desktop && npm run build && npx svelte-check`(138 files, 0 errors / 0 warnings)、実機スモークテスト(smoke-tester、docs/screenshots/44〜49、全シナリオ OK)。

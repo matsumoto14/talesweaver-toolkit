@@ -14,7 +14,7 @@
   } from "../../buffs";
   import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
-  import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import { EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
     app, flatContents, payloadOf, selectedCharacter, upsertCharacter,
@@ -372,20 +372,18 @@
       get: (p) => String(p.equipment.strong_weapon_level),
       set: (p, v) => (p.equipment.strong_weapon_level = Number(v)),
     },
-    ...EQUIPMENT_STAT_KINDS.flatMap((k): Knob[] => [
-      {
-        id: `base_${k}`,
-        label: (p) => `基本 ${EQUIPMENT_STAT_LABELS[k]} ${fmtInt(p.equipment.base[k])}`,
-        get: (p) => String(p.equipment.base[k]),
-        set: (p, v) => (p.equipment.base[k] = Number(v)),
-      },
-      {
-        id: `enh_${k}`,
-        label: (p) => `強化 ${EQUIPMENT_STAT_LABELS[k]} ${fmtInt(p.equipment.enhanced[k])}`,
-        get: (p) => String(p.equipment.enhanced[k]),
-        set: (p, v) => (p.equipment.enhanced[k] = Number(v)),
-      },
-    ]),
+    {
+      id: "weapon_enchant_thrust",
+      label: (p) => `武器エンチャント 突き ${fmtInt(p.equipment.parts.weapon.enchant.thrust)}`,
+      get: (p) => String(p.equipment.parts.weapon.enchant.thrust),
+      set: (p, v) => (p.equipment.parts.weapon.enchant.thrust = Number(v)),
+    },
+    {
+      id: "weapon_enchant_slash",
+      label: (p) => `武器エンチャント 斬り ${fmtInt(p.equipment.parts.weapon.enchant.slash)}`,
+      get: (p) => String(p.equipment.parts.weapon.enchant.slash),
+      set: (p, v) => (p.equipment.parts.weapon.enchant.slash = Number(v)),
+    },
     {
       id: "buffs",
       label: (p) => `バフ選択 ${p.stat_sources.buffs.choices.length}件`,
@@ -477,8 +475,9 @@
     whatIfHandle = setTimeout(async () => {
       try {
         const current = JSON.parse(pJson) as NewCharacter;
-        const list = candidatesFor(current);
-        const rs = await Promise.all(
+        const list = candidatesFor(current, app.equipmentCatalog);
+        // 1 候補の失敗(装備検証エラー等)で他候補まで消さない(独立レビュー指摘)
+        const settled = await Promise.allSettled(
           list.map(async (candidate) => {
             const p = JSON.parse(pJson) as NewCharacter;
             candidate.apply(p);
@@ -490,6 +489,7 @@
             };
           }),
         );
+        const rs = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
         if (seq === whatIfSeq) {
           whatIf = rs.filter((w) => w.perHit > base).sort((a, b) => b.perHit - a.perHit);
         }
@@ -533,6 +533,15 @@
       label: `Lv${i + 1}(+${(i + 1) * 3}%)`,
     })),
   ];
+  // 武器のエンチャント上限(カタログ item ならその上限、カスタム・未装備は equipment_value_max)
+  const weaponEnchantCaps = $derived.by(() => {
+    const weapon = payload?.equipment.parts.weapon;
+    const item = weapon?.item_id ? app.equipmentCatalog.find((i) => i.id === weapon.item_id) : null;
+    return {
+      thrust: item?.enchant_caps.thrust ?? limits.equipment_value_max,
+      slash: item?.enchant_caps.slash ?? limits.equipment_value_max,
+    };
+  });
 
   const totalContents = $derived(contents.length);
 </script>
@@ -906,33 +915,28 @@
             />
           </div>
           <details class="eq-details">
-            <summary>装備補正 8 値(基本/強化)</summary>
+            <summary>武器のエンチャント(突き・斬り)</summary>
             <div class="eq-grid">
-              <span class="eq-cap dim">基本能力値</span>
-              {#each EQUIPMENT_STAT_KINDS as k (k)}
-                <StatInput
-                  label={EQUIPMENT_STAT_LABELS[k]}
-                  min={0}
-                  max={limits.equipment_value_max}
-                  bind:value={
-                    () => payload.equipment.base[k],
-                    (v) => editSim((p) => (p.equipment.base[k] = v))
-                  }
-                />
-              {/each}
-              <span class="eq-cap dim">強化能力値</span>
-              {#each EQUIPMENT_STAT_KINDS as k (k)}
-                <StatInput
-                  label={EQUIPMENT_STAT_LABELS[k]}
-                  min={0}
-                  max={limits.equipment_value_max}
-                  bind:value={
-                    () => payload.equipment.enhanced[k],
-                    (v) => editSim((p) => (p.equipment.enhanced[k] = v))
-                  }
-                />
-              {/each}
+              <StatInput
+                label={EQUIPMENT_STAT_LABELS.thrust}
+                min={0}
+                max={weaponEnchantCaps.thrust}
+                bind:value={
+                  () => payload.equipment.parts.weapon.enchant.thrust,
+                  (v) => editSim((p) => (p.equipment.parts.weapon.enchant.thrust = v))
+                }
+              />
+              <StatInput
+                label={EQUIPMENT_STAT_LABELS.slash}
+                min={0}
+                max={weaponEnchantCaps.slash}
+                bind:value={
+                  () => payload.equipment.parts.weapon.enchant.slash,
+                  (v) => editSim((p) => (p.equipment.parts.weapon.enchant.slash = v))
+                }
+              />
             </div>
+            <p class="eq-note dim">武器のアイテム変更・基本能力値・強化 Lv・アビリティ・他の部位は<b>キャラ</b>タブで編集します。</p>
           </details>
         </div>
 
@@ -1262,7 +1266,7 @@
   .eq-details summary { padding: 8px 0 0; font-size: 10.5px; color: var(--fg-muted); cursor: pointer; }
   .eq-details summary:hover { color: var(--fg); }
   .eq-grid { display: flex; flex-direction: column; gap: 7px; padding-top: 8px; }
-  .eq-cap { font-size: 9.5px; letter-spacing: 0.08em; }
+  .eq-note { margin: 8px 0 0; font-size: 9.5px; line-height: 1.6; }
 
   .buff-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
   .buff-chip {

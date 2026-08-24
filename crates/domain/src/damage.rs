@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::enemy::Enemy;
-use crate::equipment::{equipment_attack_power, Equipment, EquipmentCoefficients};
+use crate::equipment::{equipment_attack_power, Equipment, EquipmentCoefficients, EquipmentValues};
 use crate::rounding::{floor_int, trunc2};
 use crate::skill::Skill;
 use crate::stat_sources::{apply_pins, Adjustments, StatContribution};
@@ -29,10 +29,18 @@ pub struct DamageInput {
     /// `stat_modifiers` の寄与内訳(ペット/ルーン/クラウン/聖物/バフ/調整値)。トレース表示用
     pub stat_contributions: Vec<StatContribution>,
     pub coefficients: AttackCoefficients,
-    /// 装備補正(基本能力値/強化能力値/装備攻撃力強化バフ)
+    /// 装備補正(パワーウェポン/ストロングウェポン。`enhance_rate()` にのみ使う)
     pub equipment: Equipment,
+    /// 装備の基本能力値の集計(`Equipment::base_totals`。アビリティ加算込み。呼び出し側が gamedata の
+    /// 武器アビリティカタログを使って集計して渡す。domain は gamedata に依存できないため)
+    pub equipment_base_totals: EquipmentValues,
+    /// 装備の強化能力値の集計(`Equipment::enhanced_totals`)
+    pub equipment_enhanced_totals: EquipmentValues,
     /// 装備攻撃力の係数(wiki: カテゴリA の内訳)。スキル依存種別ごとに gamedata が持つ
     pub equipment_coefficients: EquipmentCoefficients,
+    /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
+    /// 与ダメージ式の外(A〜Y のいずれにも入らない)。無強化なら 0
+    pub weapon_added_damage: i64,
     pub skill: Skill,
     pub enemy: Enemy,
     /// 覚醒倍率(wiki: カテゴリN)。1.0 = 補正なし
@@ -57,7 +65,10 @@ impl DamageInput {
         stat_contributions: Vec<StatContribution>,
         coefficients: AttackCoefficients,
         equipment: Equipment,
+        equipment_base_totals: EquipmentValues,
+        equipment_enhanced_totals: EquipmentValues,
         equipment_coefficients: EquipmentCoefficients,
+        weapon_added_damage: i64,
         awakening_rate: f64,
         skill: Skill,
         enemy: Enemy,
@@ -71,7 +82,10 @@ impl DamageInput {
             stat_contributions,
             coefficients,
             equipment,
+            equipment_base_totals,
+            equipment_enhanced_totals,
             equipment_coefficients,
+            weapon_added_damage,
             skill,
             enemy,
             awakening_rate,
@@ -228,7 +242,11 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
 
     // ② カテゴリ集計
     let stat_attack = stat_attack_power(&stats, &input.coefficients);
-    let equipment_attack = equipment_attack_power(&input.equipment, &input.equipment_coefficients);
+    let equipment_attack = equipment_attack_power(
+        &input.equipment_base_totals,
+        &input.equipment_enhanced_totals,
+        &input.equipment_coefficients,
+    );
     let enhance_rate = input.equipment.enhance_rate();
     let a_value = attack_power(stat_attack, equipment_attack, enhance_rate);
     let mut totals = CategoryTotals::neutral();
@@ -258,16 +276,36 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // min/max/critical のすべてで同じ内訳になる。`evaluate` は `totals` からしか値を作れず
     // 内訳を持たないため、ここで先頭に付け足す。
     let attack_breakdown = attack_power_breakdown_steps(stat_attack, equipment_attack, enhance_rate, a_value);
-    let steps_min = attack_breakdown.iter().cloned().chain(steps_min).collect();
-    let steps_max = attack_breakdown.iter().cloned().chain(steps_max).collect();
-    let steps_critical = attack_breakdown.into_iter().chain(steps_critical).collect();
+    let mut steps_min: Vec<FormulaStep> = attack_breakdown.iter().cloned().chain(steps_min).collect();
+    let mut steps_max: Vec<FormulaStep> = attack_breakdown.iter().cloned().chain(steps_max).collect();
+    let mut steps_critical: Vec<FormulaStep> = attack_breakdown.into_iter().chain(steps_critical).collect();
 
     // ④ 段数
     let hit_count = input.skill.hit_count;
     let hits = i64::from(hit_count);
+
+    // §5 武器強化の追加固定ダメージ(与ダメージ式の外)。1 体あたり per-hit 追加 = INT(追加ダメージ / hits)、
+    // 合計追加 = per-hit 追加 × hits(wiki: 装備システム/装備強化のヒット分割仕様)。
+    let per_hit_added = if hit_count > 0 { input.weapon_added_damage / hits } else { 0 };
+    let (min, max, critical) = (min + per_hit_added, max + per_hit_added, critical + per_hit_added);
+    if per_hit_added != 0 {
+        let step = FormulaStep {
+            name: "武器強化(追加固定ダメージ)".to_string(),
+            expression: format!("INT({} / {hits}) = {per_hit_added}", input.weapon_added_damage),
+            value: per_hit_added as f64,
+        };
+        steps_min.push(step.clone());
+        steps_max.push(step.clone());
+        steps_critical.push(step);
+    }
+
     DamageResult {
         per_hit: DamageTriple { min, max, critical },
-        total: DamageTriple { min: min * hits, max: max * hits, critical: critical * hits },
+        total: DamageTriple {
+            min: min * hits,
+            max: max * hits,
+            critical: critical * hits,
+        },
         hit_count,
         trace: DamageTrace {
             stats: stat_traces,
@@ -324,7 +362,10 @@ mod tests {
             stat_contributions: Vec::new(),
             coefficients: AttackCoefficients { primary: (StatKind::Stab, 1.8), secondary: (StatKind::Hack, 1.8) },
             equipment: Equipment::default(),
+            equipment_base_totals: EquipmentValues::default(),
+            equipment_enhanced_totals: EquipmentValues::default(),
             equipment_coefficients: EquipmentCoefficients::default(),
+            weapon_added_damage: 0,
             skill: Skill {
                 id: "s".into(),
                 name: "テスト斬り".into(),
@@ -581,13 +622,9 @@ mod tests {
     fn 装備補正があると中盤の敵に対しても下限1にならない() {
         let mut i = input();
         i.base_stats = BaseStats { stab: 310, hack: 310, int: 1, def: 1, mr: 1, dex: 100, agi: 1 };
-        use crate::equipment::EquipmentValues;
-        i.equipment = Equipment {
-            base: EquipmentValues { thrust: 400, slash: 400, ..Default::default() },
-            enhanced: EquipmentValues { thrust: 200, slash: 200, ..Default::default() },
-            strong_weapon_level: 6,
-            ..Default::default()
-        };
+        i.equipment = Equipment { strong_weapon_level: 6, ..Default::default() };
+        i.equipment_base_totals = EquipmentValues { thrust: 400, slash: 400, ..Default::default() };
+        i.equipment_enhanced_totals = EquipmentValues { thrust: 200, slash: 200, ..Default::default() };
         i.equipment_coefficients = EquipmentCoefficients {
             base: crate::equipment::EquipmentRates { thrust: 14.5, slash: 14.5, magic_attack: 0.0, magic_defense: 0.0 },
             enhanced: crate::equipment::EquipmentRates {
@@ -612,7 +649,37 @@ mod tests {
         // 回帰確認: 装備 default なら従来どおり下限1のまま。
         let mut without_equipment = i.clone();
         without_equipment.equipment = Equipment::default();
+        without_equipment.equipment_base_totals = EquipmentValues::default();
+        without_equipment.equipment_enhanced_totals = EquipmentValues::default();
         let r2 = calculate_damage(&without_equipment);
         assert_eq!(r2.per_hit, DamageTriple { min: 1, max: 1, critical: 1 });
+    }
+
+    // §5 武器強化の追加固定ダメージ(与ダメージ式の外)。goal 文書の例: 追加 2488・9hit → per-hit 276。
+    #[test]
+    fn 武器強化の追加固定ダメージはhit数で分割してper_hitとtotalに加算される() {
+        let mut i = input();
+        i.skill.hit_count = 9;
+        i.weapon_added_damage = 2488;
+        let base = calculate_damage(&input());
+        let r = calculate_damage(&i);
+        // INT(2488 / 9) = 276
+        assert_eq!(r.per_hit.min, base.per_hit.min + 276);
+        assert_eq!(r.per_hit.max, base.per_hit.max + 276);
+        assert_eq!(r.per_hit.critical, base.per_hit.critical + 276);
+        assert_eq!(r.total.min, r.per_hit.min * 9);
+        assert_eq!(r.total.max, r.per_hit.max * 9);
+        assert_eq!(r.total.critical, r.per_hit.critical * 9);
+        assert_eq!(
+            r.trace.steps_min.last().unwrap().name,
+            "武器強化(追加固定ダメージ)"
+        );
+    }
+
+    #[test]
+    fn weapon_added_damageが0ならトレース段は増えず挙動は現行と変わらない() {
+        let r = calculate_damage(&input());
+        assert_eq!(r.trace.steps_min.len(), 14);
+        assert_ne!(r.trace.steps_min.last().unwrap().name, "武器強化(追加固定ダメージ)");
     }
 }

@@ -153,6 +153,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li class="event"><time>2026-08-22</time><div>PR レビュー指摘の修正: storage の自動マイグレーション、値域検証の domain 一本化、<code>get_stat_limits</code>、調整エディタ共通化(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「PR レビュー指摘の修正」)</div></li>
 <li class="event"><time>2026-08-22</time><div><a href="../claude/goals/2026-08-22-equipment-attack.md">装備攻撃力</a>: キャラ設定に「装備」グループ(基本/強化 × 突き/斬り/魔攻/魔防、パワーウェポン/ストロングウェポン)を追加し、攻撃力(A)の装備攻撃力が wiki 係数で効く。カテゴリ A の <span class="tag warm">仮</span> を解消。中盤以降の敵でも現実的なダメージが出る。装備防御側・武器強化の追加固定ダメージは未実装。実機検証は docs/screenshots/34〜37</div></li>
 <li class="event"><time>2026-08-24</time><div><a href="../claude/goals/2026-08-24-v4-ui-redesign.md">v4 UI 全面刷新</a>: 上部タブ+キャラレール構成・ライトテーマ(v4 モック準拠)へ移行。ホーム(コンテンツ到達一覧、<span class="tag warm">仮</span> 3 件)・計算タブの縦フロー(もし〜だったら / なぜこの数字?)・キャラタブの補正源ドリルダウン+最小登録。domain に <code>Content</code>(入場条件判定)、<code>preview_damage</code> / <code>evaluate_contents</code> コマンドを追加。部位別装備・シエナ/テシスコア等は未実装(グレーの「これから」表示)</div></li>
+<li class="event"><time>2026-08-24</time><div><a href="../claude/goals/2026-08-24-equipment-parts.md">部位別装備モデル</a>: 装備を部位別 12 スロット(アイテム選択・エンチャント・強化・武器アビリティ)のドリルダウンに刷新し、装備攻撃力・入場条件が部位集計で決まる。武器強化の追加固定ダメージ(§5)を実装。カタログはアクィルス/アビス系列+刀・太刀(他は <span class="tag warm">仮</span> カスタム入力)。旧・合計 8 値は廃止(storage v4)。実機検証は docs/screenshots/44〜49</div></li>
 </ul>
     <footer class="doc-foot">原本: <code>docs/status.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>
   </article>

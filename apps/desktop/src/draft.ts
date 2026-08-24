@@ -3,11 +3,13 @@ import type {
   Adjustments,
   BaseStats,
   Equipment,
+  EquipmentParts,
   NewCharacter,
   RegisteredCharacter,
   StatSources,
 } from "./api/types";
-import { STAT_KINDS } from "./labels";
+import { cloneEquipmentPart, neutralEquipmentPart } from "./equipment";
+import { PART_SLOTS, STAT_KINDS } from "./labels";
 
 export interface Draft {
   name: string;
@@ -20,15 +22,15 @@ export interface Draft {
 }
 
 export const cloneEquipment = (src: Equipment): Equipment => ({
-  base: { ...src.base },
-  enhanced: { ...src.enhanced },
+  parts: Object.fromEntries(
+    PART_SLOTS.map((slot) => [slot, cloneEquipmentPart(src.parts[slot])]),
+  ) as unknown as EquipmentParts,
   power_weapon: src.power_weapon,
   strong_weapon_level: src.strong_weapon_level,
 });
 
 export const neutralEquipment = (): Equipment => ({
-  base: { thrust: 0, slash: 0, magic_attack: 0, magic_defense: 0 },
-  enhanced: { thrust: 0, slash: 0, magic_attack: 0, magic_defense: 0 },
+  parts: Object.fromEntries(PART_SLOTS.map((slot) => [slot, neutralEquipmentPart()])) as unknown as EquipmentParts,
   power_weapon: false,
   strong_weapon_level: 0,
 });
