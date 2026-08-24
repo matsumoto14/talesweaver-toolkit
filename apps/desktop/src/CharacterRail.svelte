@@ -68,7 +68,7 @@
     {/each}
     <button type="button" class="register" onclick={goRegister}>{collapsed ? "＋" : "＋ キャラを登録"}</button>
     {#if !collapsed}
-      <p class="note-text dim">コンテンツの目安ダメージ・入場条件は仮値です。</p>
+      <p class="note-text dim">目安ダメージは wiki に無い値です(コミュニティ知識・実測)。</p>
     {/if}
   </div>
 </aside>

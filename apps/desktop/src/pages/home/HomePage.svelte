@@ -272,7 +272,7 @@
   <section class="mid">
     <div class="head-bar">
       <span class="title">どこにどのくらい通るか</span>
-      <span class="note">目安＝実用的に周回できる1発量(仮値)</span>
+      <span class="note">目安＝実用的に周回できる1発量(コミュニティ知識)</span>
     </div>
     <div class="scroll">
       {#if !character}
@@ -392,7 +392,7 @@
         </div>
         <p class="foot dim">
           入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
-          目安ダメージは仮値です(実測で更新)。
+          目安ダメージは wiki に無い値で、コミュニティ知識・実測が出典です(実測で更新)。
         </p>
       {/if}
     </div>

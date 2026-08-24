@@ -14,7 +14,9 @@
 //!
 //! 敵データ(`enemies.rs`)があるコンテンツは火力も判定する。敵データが無いコンテンツは
 //! `enemy_id`/`need_per_hit` が None で、入場条件のみで判定する。
-//! 目安ダメージ(need_per_hit)はコミュニティ知識・実測がソースで全件 `[仮]`。
+//! 目安ダメージ(need_per_hit)はコミュニティ知識・実測がソース。wiki 狩り場情報一覧には
+//! 対応する列が無く(2026-08-25 再確認)、wiki の取り込みでは埋まらない項目なので
+//! `[仮]`(= wiki 待ち)ではなく「出典がコミュニティ知識」として運用する。
 
 use domain::content::{Content, ContentArea, ContentRequirement, ContentSeries};
 use domain::thesis_core::CoreRegion;

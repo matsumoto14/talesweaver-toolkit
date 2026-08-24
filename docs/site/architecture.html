@@ -175,7 +175,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <h3 id="cratesdomain">crates/domain — ドメインモデルと計算(核)</h3>
 <ul>
 <li><strong>モデル</strong>: <code>Character</code>(素ステ・装備・スキル構成・覚醒/エタ・バフセット)、<code>Equipment</code>(部位別 12 スロット。部位ごとにアイテム参照/カスタム・基本能力値・エンチャント・強化 Lv・武器アビリティを持ち、装備攻撃力・入場条件は集計値で計算)、<code>Skill</code>、<code>Buff</code>、<code>Enemy</code>、<code>Content</code>(入場条件)</li>
-<li><strong>計算</strong>: 能力値計算 → カテゴリ集計 → 与ダメージ式 → 段数・追加ダメージ の4段パイプライン(<a href="damage-formula.html">docs/damage-formula.md</a> §8)</li>
+<li><strong>計算</strong>: 能力値計算 → カテゴリ集計 → 与ダメージ式 → 段数・追加ダメージ の4段パイプライン(<a href="damage-formula.html">docs/damage-formula.md</a> §11)</li>
 <li><strong>機能サービス</strong>: ダメージ計算・強化提案・ロードマップ判定・索引。すべて <code>Character</code> を入力に取る純関数群</li>
 <li>制約:</li>
 <li><strong>I/O を一切持たない</strong>(SQLite・ファイル・ネットワーク禁止)。引数で受けて結果を返すだけ。決定的で全面的にユニットテスト可能</li>
