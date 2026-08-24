@@ -30,6 +30,7 @@ pub fn run() {
             commands::list_skills,
             commands::list_enemies,
             commands::list_buff_catalog,
+            commands::list_contents,
             commands::preview_effective_stats,
             commands::get_stat_limits,
             commands::list_characters,
@@ -37,6 +38,8 @@ pub fn run() {
             commands::update_character,
             commands::delete_character,
             commands::calculate_damage,
+            commands::preview_damage,
+            commands::evaluate_contents,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri アプリの起動に失敗");

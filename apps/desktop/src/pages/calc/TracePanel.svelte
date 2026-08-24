@@ -1,15 +1,14 @@
 <script lang="ts">
-  import type { DamageTrace, CategoryTrace, RegisteredCharacter, StatContribution, StatTrace } from "../../api/types";
-  import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
+  // 詳細トレース(能力値・カテゴリ・式の各段)。「なぜこの数字？」の最深部。
+  import type { CategoryTrace, DamageTrace, RegisteredCharacter, StatContribution, StatTrace } from "../../api/types";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
+  import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
 
   let { trace, character = null }: { trace: DamageTrace; character?: RegisteredCharacter | null } = $props();
 
   // 「固定前」の表示値: pin の出所(pin_source、サーバ側 apply_pins が決定)が temporary
   // (計算リクエストの一時調整による上書き)で、かつキャラに保存済みの固定(pin)があるときは、
   // 「自分が普段固定している値」を基準にするほうが伝わりやすいのでそちらを見せる。
-  // それ以外(pin_source が saved、または保存済み固定が無い)は
-  // pinned_from(この計算で pin される直前の計算値)をそのまま使う。
   function pinnedBeforeLabel(s: StatTrace): string {
     if (s.pinned_from === null) return "";
     if (s.pin_source === "temporary") {
@@ -50,7 +49,7 @@
 <details class="trace">
   <summary>
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg>
-    <span>TRACE — 計算トレース</span>
+    <span>詳細トレース</span>
     <span class="dim">能力値 {trace.stats.length} / カテゴリ {trace.categories.length} / 式 {trace.steps_max.length} 段</span>
   </summary>
 
@@ -153,9 +152,9 @@
 </details>
 
 <style>
-  .trace { border-top: 1px solid var(--border); }
+  .trace { border-top: 1px dashed var(--border-soft); margin-top: 12px; }
   summary {
-    display: flex; align-items: center; gap: 8px; padding: 11px 16px;
+    display: flex; align-items: center; gap: 8px; padding: 11px 2px;
     font-size: 10px; letter-spacing: 0.14em; color: var(--fg-muted); cursor: pointer; list-style: none;
     user-select: none;
   }
@@ -163,21 +162,20 @@
   summary svg { transition: transform 0.15s; }
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
-  .tbl { overflow-x: auto; margin: 0 16px 8px; border: 1px solid var(--border-soft); }
+  .section-label { padding: 10px 2px 8px; }
+  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: 8px; background: #fff; }
   .empty { padding: 10px 12px; font-size: 11px; }
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }
   td.final { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .pin-badge {
     font-size: 9px; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent);
-    padding: 1px 4px; cursor: default;
+    border-radius: 4px; padding: 1px 4px; cursor: default;
   }
   td.expr { white-space: normal; color: var(--fg-muted); font-size: 11px; min-width: 260px; }
-  tr.active td { background: oklch(0.23 0.025 200); }
+  tr.active td { background: var(--bg-active); }
   tr.active td.sym { color: var(--warm); }
-  .tabs { display: flex; border: 1px solid var(--border); letter-spacing: 0; }
-  .tabs button {
-    padding: 3px 10px; border: 0; background: var(--bg-field); color: var(--fg-muted); font-size: 11px;
-  }
-  .tabs button.on { background: var(--bg-active); color: var(--accent); }
+  .tabs { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; letter-spacing: 0; }
+  .tabs button { padding: 3px 10px; background: #fff; color: var(--fg-muted); font-size: 11px; }
+  .tabs button.on { background: var(--bg-active); color: var(--accent-hover); font-weight: 700; }
 </style>

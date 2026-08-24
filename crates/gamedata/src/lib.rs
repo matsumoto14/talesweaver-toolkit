@@ -5,6 +5,7 @@
 pub mod awakening;
 pub mod buffs;
 pub mod characters;
+pub mod contents;
 pub mod enemies;
 pub mod skills;
 
@@ -15,6 +16,7 @@ pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use characters::{
     attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,
 };
+pub use contents::{content_areas, CONTENTS_SOURCE};
 pub use enemies::{enemies, find_enemy};
 pub use skills::{find_skill, skills_for};
 

@@ -1,153 +1,140 @@
 <script lang="ts">
+  // 画面枠: 上部タブ(ホーム/ダメージ計算/キャラ)+ 左キャラレール + エラー帯。
+  // 構成は docs/design の TW Toolkit Prototype v4 に合わせる。
   import { onMount } from "svelte";
   import { errorMessage } from "./api/commands";
+  import CharacterRail from "./CharacterRail.svelte";
   import { loadStatLimits } from "./limits.svelte";
-  import CharacterPage from "./pages/character/CharacterPage.svelte";
-  import DamagePage from "./pages/damage/DamagePage.svelte";
+  import CalcPage from "./pages/calc/CalcPage.svelte";
+  import CharsPage from "./pages/chars/CharsPage.svelte";
+  import HomePage from "./pages/home/HomePage.svelte";
+  import { app, loadAll, type Tab } from "./state.svelte";
   import { dismissError, reportError, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
+  import Splitter from "./ui/Splitter.svelte";
 
-  type PageId = "damage" | "characters" | "enhance" | "roadmap" | "index";
-  interface NavItem { id: PageId; label: string; enabled: boolean }
-  const NAV: NavItem[] = [
-    { id: "damage", label: "ダメージ計算", enabled: true },
-    { id: "characters", label: "キャラ管理", enabled: true },
-    { id: "enhance", label: "強化提案", enabled: false },
-    { id: "roadmap", label: "ロードマップ", enabled: false },
-    { id: "index", label: "やりたいこと索引", enabled: false },
+  const TABS: { id: Tab; label: string }[] = [
+    { id: "home", label: "ホーム" },
+    { id: "calc", label: "ダメージ計算" },
+    { id: "chars", label: "キャラ" },
   ];
 
-  let page = $state<PageId>("characters");
-  const title = $derived(NAV.find((n) => n.id === page)?.label ?? "");
-
-  let recalculate: (() => void) | null = null;
-
-  const sidebarCollapsed = persisted("tw-sidebar-collapsed", false);
+  const DEFAULT_RAIL_WIDTH = 280;
+  const railWidth = persisted("tw-v4-rail", { width: DEFAULT_RAIL_WIDTH });
+  const railCollapsed = persisted("tw-v4-rail-collapsed", false);
+  const gridTemplateColumns = $derived(
+    railCollapsed.value
+      ? "64px 0px minmax(0, 1fr)"
+      : `minmax(200px, ${railWidth.value.width ?? DEFAULT_RAIL_WIDTH}px) 6px minmax(0, 1fr)`,
+  );
 
   onMount(() => {
     loadStatLimits().catch((e) => reportError(errorMessage(e)));
+    void loadAll();
   });
 </script>
 
 <div class="shell">
-  <aside class:collapsed={sidebarCollapsed.value}>
+  <header class="topbar">
     <div class="brand">
-      <button
-        type="button"
-        class="collapse-btn"
-        title={sidebarCollapsed.value ? "サイドバーを開く" : "サイドバーを閉じる"}
-        aria-label={sidebarCollapsed.value ? "サイドバーを開く" : "サイドバーを閉じる"}
-        onclick={() => (sidebarCollapsed.value = !sidebarCollapsed.value)}
-      >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class:flip={sidebarCollapsed.value}><path d="M10 3.2L5.4 8l4.6 4.8"/></svg>
-      </button>
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-linejoin="round"><path d="M9 1.5l6.5 3.75v7.5L9 16.5 2.5 12.75v-7.5z"/><path d="M9 6.2l3.2 1.85v3.7L9 13.6l-3.2-1.85v-3.7z"/></svg>
-      {#if !sidebarCollapsed.value}<span>TW TOOLKIT</span>{/if}
+      <span class="mark"></span>
+      <span class="name">TW TOOLKIT</span>
     </div>
-    <nav>
-      {#each NAV as item (item.id)}
-        <button type="button" class:active={page === item.id} disabled={!item.enabled} title={sidebarCollapsed.value ? item.label : undefined} onclick={() => (page = item.id)}>
-          {#if item.id === "damage"}
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M5.5 5h5M5.5 8.2h1.4M7.8 8.2h1.4M10.1 8.2h1.4M5.5 11h1.4M7.8 11h1.4M10.1 11h1.4"/></svg>
-          {:else if item.id === "characters"}
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.6" r="2.6"/><path d="M2.9 13.6c0-2.5 2.3-4.1 5.1-4.1s5.1 1.6 5.1 4.1"/></svg>
-          {:else if item.id === "enhance"}
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5V3.2M8 3.2L4.6 6.6M8 3.2l3.4 3.4"/><path d="M3.4 14.2h9.2"/></svg>
-          {:else if item.id === "roadmap"}
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 4.6l3.9-1.5 3.4 1.5 3.9-1.5v8.8l-3.9 1.5-3.4-1.5-3.9 1.5z"/><path d="M6.3 3.1v9.8M9.7 4.6v9.8"/></svg>
-          {:else}
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h3.6c1 0 1.8.8 1.8 1.8v8.4c0-1-.8-1.8-1.8-1.8H2.6z"/><path d="M13.4 3.4H9.8c-1 0-1.8.8-1.8 1.8v8.4c0-1 .8-1.8 1.8-1.8h3.6z"/></svg>
-          {/if}
-          {#if !sidebarCollapsed.value}
-            <span>{item.label}</span>
-            {#if !item.enabled}<span class="soon">未実装</span>{/if}
-          {/if}
+    <nav class="tabs">
+      {#each TABS as t (t.id)}
+        <button type="button" class="tab" class:active={app.tab === t.id} onclick={() => (app.tab = t.id)}>
+          {t.label}
         </button>
       {/each}
     </nav>
-    <div class="spacer"></div>
-    {#if !sidebarCollapsed.value}<div class="foot dim">DATA seed / 2026-08-21</div>{/if}
-  </aside>
-
-  <main>
-    <header>
-      <span class="h-title">{title}</span>
-      {#if page === "damage"}
-        <span class="dim">/ 単発スキル</span>
-        <div class="spacer"></div>
-        <button class="btn primary" onclick={() => recalculate?.()}>
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.4l3 3 6-6.8"/></svg>
-          <span>計算</span>
-        </button>
-      {/if}
-    </header>
-
-    {#if toast.message}
-      <div class="toast" role="alert">
-        <span>{toast.message}</span>
-        <button type="button" onclick={dismissError} aria-label="閉じる">×</button>
+    {#if app.sim !== null}
+      <div class="sim-note">
+        <span class="dot"></span>
+        <span>試し変更中 — 保存されていません</span>
       </div>
     {/if}
+  </header>
 
-    <div class="content">
-      {#if page === "damage"}
-        <DamagePage registerRecalculate={(fn) => (recalculate = fn)} />
-      {:else if page === "characters"}
-        <CharacterPage />
-      {/if}
+  {#if toast.message}
+    <div class="toast" role="alert">
+      <span>{toast.message}</span>
+      <button type="button" onclick={dismissError} aria-label="閉じる">×</button>
     </div>
-  </main>
+  {/if}
+
+  <div class="body" style="grid-template-columns: {gridTemplateColumns};">
+    <CharacterRail collapsed={railCollapsed.value} onToggle={() => (railCollapsed.value = !railCollapsed.value)} />
+    {#if !railCollapsed.value}
+      <Splitter
+        bind:value={railWidth.value.width}
+        min={200}
+        max={380}
+        defaultValue={DEFAULT_RAIL_WIDTH}
+        controls="prev"
+        label="キャラレールとメインの境界"
+      />
+    {:else}
+      <div></div>
+    {/if}
+    <main>
+      {#if app.tab === "home"}
+        <HomePage />
+      {:else if app.tab === "calc"}
+        <CalcPage />
+      {:else}
+        <CharsPage />
+      {/if}
+    </main>
+  </div>
 </div>
 
 <style>
-  .shell { height: 100%; display: flex; }
-  aside {
-    width: 208px; flex-shrink: 0; display: flex; flex-direction: column;
-    background: var(--bg-panel); border-right: 1px solid var(--border);
-    transition: width 0.15s;
-  }
-  aside.collapsed { width: 56px; }
-  .brand {
-    height: 52px; display: flex; align-items: center; gap: 9px; padding: 0 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
-  }
-  aside.collapsed .brand { padding: 0 10px; gap: 6px; }
-  .collapse-btn {
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    width: 18px; height: 18px; padding: 0; background: none; border: 0; color: var(--fg-muted);
-  }
-  .collapse-btn:hover { color: var(--fg); }
-  .collapse-btn svg { transition: transform 0.15s; }
-  .collapse-btn svg.flip { transform: rotate(180deg); }
-  nav { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; }
-  nav button {
-    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-    background: none; border: 0; border-left: 2px solid transparent;
-    color: var(--fg-muted); font-size: 12px; text-align: left;
-  }
-  aside.collapsed nav button { justify-content: center; padding: 8px; }
-  nav button:hover:not(:disabled) { color: var(--fg); }
-  nav button.active { color: var(--accent); background: var(--bg-active); border-left-color: var(--accent); }
-  nav button:disabled { opacity: 0.45; }
-  .soon { margin-left: auto; font-size: 9px; letter-spacing: 0.08em; color: var(--fg-dim); }
-  .spacer { flex-grow: 1; }
-  .foot { padding: 12px 14px; border-top: 1px solid var(--border); font-size: 10px; }
+  .shell { height: 100%; display: flex; flex-direction: column; position: relative; }
 
-  main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
-  header {
-    height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px;
-    background: var(--bg-panel); border-bottom: 1px solid var(--border);
+  .topbar {
+    height: 52px; flex-shrink: 0; padding: 0 20px 0 16px;
+    background: linear-gradient(180deg, #DBE6F8, #AEC7F0);
+    border-bottom: 1px solid #687287;
+    display: flex; align-items: center; gap: 14px;
   }
-  .h-title { font-weight: 500; }
-  header .dim { font-size: 11px; }
-  .content { flex-grow: 1; min-height: 0; }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .brand .mark {
+    width: 22px; height: 22px; border-radius: 7px;
+    background: linear-gradient(160deg, #fff, #8EB9FC);
+    border: 1px solid #687287;
+  }
+  .brand .name { font-weight: 800; font-size: 12.5px; letter-spacing: 0.08em; white-space: nowrap; }
+
+  .tabs { display: flex; align-items: flex-end; gap: 3px; margin-left: 8px; align-self: flex-end; }
+  .tab {
+    padding: 6px 14px; border-radius: 9px 9px 0 0;
+    background: linear-gradient(180deg, #A9CDFE, #8EB9FC);
+    border: 1px solid var(--border-strong); border-bottom: 0;
+    color: #2B3C57; font-size: 12px; font-weight: 500; white-space: nowrap;
+  }
+  .tab.active {
+    padding: 7px 16px; position: relative; top: 1px;
+    background: linear-gradient(180deg, #CCF7FF, #90D7FF);
+    border-color: #687287; color: #123047; font-weight: 700;
+  }
+
+  .sim-note {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.7); border: 1px solid #6D6AA8;
+    font-size: 10.5px; font-weight: 700; color: #4A4780; white-space: nowrap;
+  }
+  .sim-note .dot { width: 7px; height: 7px; border-radius: 50%; background: #6D6AA8; }
 
   .toast {
-    position: absolute; top: 60px; left: 16px; right: 16px; z-index: 10;
+    position: absolute; top: 58px; left: 16px; right: 16px; z-index: 50;
     display: flex; align-items: center; gap: 12px; padding: 9px 12px;
-    background: oklch(0.26 0.04 25); border: 1px solid var(--danger); border-left-width: 3px;
+    border-radius: 9px;
+    background: #FDF1EF; border: 1px solid var(--danger); border-left-width: 3px;
     color: var(--fg); font-size: 12px;
   }
-  .toast button { margin-left: auto; background: none; border: 0; color: var(--fg-muted); font-size: 14px; }
+  .toast button { margin-left: auto; color: var(--fg-muted); font-size: 14px; }
+
+  .body { flex: 1; min-height: 0; display: grid; }
+  main { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-mid); }
 </style>

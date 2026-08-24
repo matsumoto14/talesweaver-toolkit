@@ -6,6 +6,7 @@
 pub mod attack_power;
 pub mod awakening;
 pub mod category;
+pub mod content;
 pub mod damage;
 pub mod enemy;
 pub mod equipment;
@@ -17,6 +18,10 @@ pub mod stats;
 pub use attack_power::{attack_power, random_part_max, stat_attack_power, AttackCoefficients};
 pub use awakening::Awakening;
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
+pub use content::{
+    evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,
+    ContentRequirement, RequirementCheck,
+};
 pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
 };

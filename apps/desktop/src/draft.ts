@@ -1,6 +1,13 @@
-// CharacterWorkspace/CharacterData/CharacterSettings で共有する編集中ドラフトの型と組み立て関数。
-import type { Adjustments, BaseStats, Equipment, RegisteredCharacter, StatSources } from "../../api/types";
-import { STAT_KINDS } from "../../labels";
+// キャラ編集で共有する編集中ドラフトの型と組み立て関数(キャラタブと登録ペインで使用)。
+import type {
+  Adjustments,
+  BaseStats,
+  Equipment,
+  NewCharacter,
+  RegisteredCharacter,
+  StatSources,
+} from "./api/types";
+import { STAT_KINDS } from "./labels";
 
 export interface Draft {
   name: string;
@@ -55,4 +62,14 @@ export const buildDraft = (c: RegisteredCharacter): Draft => ({
   eternalLevel: String(c.awakening.eternal_level),
   statSources: cloneStatSources(c.stat_sources),
   equipment: cloneEquipment(c.equipment),
+});
+
+/** Draft → コマンドに渡すペイロード(保存・保存前プレビューの両方で使う) */
+export const draftToPayload = (draft: Draft): NewCharacter => ({
+  name: draft.name.trim(),
+  game_character_id: draft.gameCharacterId,
+  base_stats: { ...draft.baseStats },
+  awakening: { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) },
+  stat_sources: cloneStatSources(draft.statSources),
+  equipment: cloneEquipment(draft.equipment),
 });
