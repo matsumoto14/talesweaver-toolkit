@@ -289,74 +289,100 @@
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
-  // 補正源は操作頻度で 3 群に分ける(design-system §14 決定 3)。
-  // 全部を同じ行の重さで並べるのは、設計をしていないのと同じ — 行数は減らさず、重さだけ変える。
+  // 補正源の並びはプレイヤーが決める(design-system §14 決定 3)。
   //
-  // **群の軸は操作頻度**で、効き先(ステに効く / 装備に効く)ではない。効き先は排他に
-  // 切れない(シエナのオーラはステ加算にも攻撃力増加にも効く)ので、群には使えない。
-  // ただし「頻度が同じでも種類が違う」読みにくさは実在するので、**群の中の並びを効き先で**
-  // 揃える(2 軸を階層で使う)。装備まわりと速度まわりが同じ群でも隣り合わない。
+  // 全部を同じ行の重さで並べるのは、設計をしていないのと同じ。ただし「どれをよく触るか」は
+  // 人によって違うので、こちらで頻度を決め打ちしない。**お気に入り(★)で重さを分け、
+  // 並びはドラッグで動かす**。§09 規則 5「並びは、ユーザーが頼まない限り変わらない」の
+  // 裏返しで、頼まれたら変わってよい。設定画面は作らない — リストの上で直接動かす。
   //
-  // 出荷時の振り分け。ここが「最初の 1 回」で、以後はプレイヤーが動かせる。
-  const SOURCE_GROUPS: { id: string; title: string; note: string; collapsed: boolean; ids: SourceId[] }[] = [
-    {
-      id: "often",
-      title: "よく触る",
-      note: "強化するたびに変わる",
-      collapsed: false,
-      ids: ["equipment", "commonSkill", "siena", "thesis", "relic", "adjust"],
-    },
-    {
-      id: "grown",
-      title: "育ったら変える",
-      note: "育成が進んだときだけ",
-      collapsed: false,
-      ids: ["status", "skills", "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate"],
-    },
-    {
-      id: "fixed",
-      title: "一度決めたら触らない",
-      note: "装備を替えるまで動かない",
-      collapsed: true,
-      ids: ["element", "title", "randomOption"],
-    },
+  // ★ はホームタブのコンテンツと同じ操作なので、覚えることが増えない。
+  const DEFAULT_ORDER: SourceId[] = [
+    "status", "skills", "equipment", "commonSkill", "thesis", "siena", "relic",
+    "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
+    "element", "title", "randomOption", "adjust",
   ];
-  /** 出荷時の所属。プレイヤーが動かしていない補正源はここが効く */
-  const DEFAULT_GROUP_OF: Record<string, string> = Object.fromEntries(
-    SOURCE_GROUPS.flatMap((g) => g.ids.map((id) => [id, g.id])),
-  );
-  /**
-   * プレイヤーが動かした所属。**どれをよく触るかは人によって違う**ので、こちらが正。
-   * 並びが勝手に変わらないことは §09 規則 5 の要求で、裏を返せば
-   * 「ユーザーが頼んだら変わってよい」。だから設定画面は作らず、リストの上で動かす。
-   */
-  const groupOf = persisted("chars.sourceGroupOf", {} as Record<string, string>);
-  const groupIdOf = (id: string) => groupOf.value[id] ?? DEFAULT_GROUP_OF[id] ?? SOURCE_GROUPS[0].id;
-  /** 群を 1 つ上げ下げする。端では止める(巡回させると「戻したつもりが一周した」が起きる) */
-  function moveSource(id: string, dir: -1 | 1) {
-    const at = SOURCE_GROUPS.findIndex((g) => g.id === groupIdOf(id));
-    const next = SOURCE_GROUPS[at + dir];
-    if (!next) return;
-    groupOf.value = { ...groupOf.value, [id]: next.id };
-    // 移した行を追いかける。「操作したら対象が消えた」は最悪の体験(§09 規則 5)
+  interface SourceLayout {
+    /** お気に入り。上に置いて常に開く */
+    fav: string[];
+    /** そのほか */
+    rest: string[];
+  }
+  const layout = persisted("chars.sourceLayout", { fav: [], rest: [...DEFAULT_ORDER] } as SourceLayout);
+  /** 保存済みの並びに無い補正源(あとから増えたもの)は「そのほか」の既定位置に戻す */
+  const ordered = $derived.by<SourceLayout>(() => {
+    const known = new Set<string>(sources.map((s) => s.id));
+    const fav = (layout.value.fav ?? []).filter((id) => known.has(id));
+    const seen = new Set(fav);
+    const rest = (layout.value.rest ?? []).filter((id) => known.has(id) && !seen.has(id));
+    rest.forEach((id) => seen.add(id));
+    for (const id of DEFAULT_ORDER) if (known.has(id) && !seen.has(id)) rest.push(id);
+    return { fav, rest };
+  });
+  const itemsOf = (ids: string[]) => ids.map((id) => sources.find((s) => s.id === id)).filter((s) => s !== undefined);
+
+  /** ★ の付け外し。付けたら お気に入りの末尾、外したら そのほかの末尾へ */
+  function toggleFavorite(id: string) {
+    const { fav, rest } = ordered;
+    layout.value = fav.includes(id)
+      ? { fav: fav.filter((x) => x !== id), rest: [...rest, id] }
+      : { fav: [...fav, id], rest: rest.filter((x) => x !== id) };
+    follow(id);
+  }
+  /** 動かした行を追いかける。「操作したら対象が消えた」は最悪の体験(§09 規則 5) */
+  function follow(id: string) {
     requestAnimationFrame(() => {
       document.querySelector(`[data-source-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
     });
   }
-  /** 並べ替えの手が出るのは、頼まれたときだけ。既定は静かなまま(§00 触る場所だけ大きく) */
-  let arranging = $state(false);
-  const groupedSources = $derived(
-    SOURCE_GROUPS.map((g, i) => ({
-      ...g,
-      first: i === 0,
-      last: i === SOURCE_GROUPS.length - 1,
-      // 群の中の並びは元の並び(効き先の順)を保つ。動かしても順番は崩れない
-      items: sources.filter((s) => groupIdOf(s.id) === g.id),
-    })),
-  );
-  /** 畳んだ群を開いたかどうか。既定は SOURCE_GROUPS の collapsed */
-  const groupOpen = persisted("chars.sourceGroups", {} as Record<string, boolean>);
-  const isGroupOpen = (g: (typeof SOURCE_GROUPS)[number]) => groupOpen.value[g.id] ?? !g.collapsed;
+
+  // --- ドラッグで並べ替え ---------------------------------------------------
+  let dragId = $state<string | null>(null);
+  /** いま落ちる位置。行の上半分なら手前、下半分なら後ろ */
+  let dropAt = $state<{ list: "fav" | "rest"; index: number } | null>(null);
+
+  function onDragStart(e: DragEvent, id: string) {
+    dragId = id;
+    e.dataTransfer?.setData("text/plain", id);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  }
+  function onDragOverRow(e: DragEvent, list: "fav" | "rest", index: number) {
+    if (dragId === null) return;
+    e.preventDefault();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dropAt = { list, index: e.clientY < r.top + r.height / 2 ? index : index + 1 };
+  }
+  function onDragOverList(e: DragEvent, list: "fav" | "rest", count: number) {
+    if (dragId === null) return;
+    e.preventDefault();
+    if (dropAt === null || dropAt.list !== list) dropAt = { list, index: count };
+  }
+  function onDrop(e: DragEvent) {
+    e.preventDefault();
+    const id = dragId;
+    const at = dropAt;
+    dragId = null;
+    dropAt = null;
+    if (id === null || at === null) return;
+    const next: SourceLayout = {
+      fav: ordered.fav.filter((x) => x !== id),
+      rest: ordered.rest.filter((x) => x !== id),
+    };
+    const arr = next[at.list];
+    const from = ordered[at.list].indexOf(id);
+    const index = from !== -1 && from < at.index ? at.index - 1 : at.index;
+    arr.splice(Math.max(0, Math.min(arr.length, index)), 0, id);
+    layout.value = next;
+    follow(id);
+  }
+  /** ドラッグできない環境(キーボード)向け。表には出さない */
+  function onRowKey(e: KeyboardEvent, list: "fav" | "rest", index: number, id: string) {
+    if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    dragId = id;
+    dropAt = { list, index: index + (e.key === "ArrowUp" ? -1 : 2) };
+    onDrop(new DragEvent("drop"));
+  }
 
   const PLANNED: string[] = [];
   const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
@@ -381,57 +407,61 @@
       <div class="src-head">
         <span class="src-title">補正源</span>
         {#if neutralCount > 0}<span class="src-unset">未設定 {neutralCount} 件</span>{/if}
-        <span class="dim">{arranging ? "▲▼ でよく触る順に動かす" : "押して中身を変える"}</span>
-        <button type="button" class="arrange" class:on={arranging} onclick={() => (arranging = !arranging)}>
-          {arranging ? "並べ替えを終える" : "並べ替え"}
-        </button>
+        <span class="dim">押して中身を変える ・ つかんで並べ替え</span>
       </div>
       <div class="src-list">
-        {#each groupedSources as g (g.id)}
-          {@const open = isGroupOpen(g)}
-          {@const unset = g.items.filter((s) => s.sub === NEUTRAL).length}
-          <div class="src-group">
-            <button
-              type="button"
-              class="group-head"
-              onclick={() => (groupOpen.value = { ...groupOpen.value, [g.id]: !open })}
-            >
-              <span class="group-title">{g.title}</span>
-              <span class="group-note dim">{open ? g.note : `${g.items.length} 件${unset > 0 ? ` ・ 未設定 ${unset} 件` : " ・ 設定済み"}`}</span>
-              <span class="group-chev dim">{open ? "▴" : "▾"}</span>
-            </button>
-            {#if open}
-              <div class="group-body open-in">
-                {#if g.items.length === 0}
-                  <p class="group-empty dim">ここに入れた補正源はまだありません。{arranging ? "▲▼ で移せます。" : ""}</p>
-                {/if}
-                {#each g.items as s (s.id)}
-                  <div class="src-line" data-source-id={s.id}>
-                    <button type="button" class="src" class:on={openSource === s.id} onclick={() => (openSource = s.id)}>
-                      <span class="src-main">
-                        <span class="src-name">{s.name}</span>
-                        <span class="src-sub num">{s.sub}</span>
-                      </span>
-                      <span class="chev dim">›</span>
-                    </button>
-                    {#if arranging}
-                      <span class="arrange-btns">
-                        <button
-                          type="button" class="arrow" disabled={g.first}
-                          aria-label="{s.name} を上の群へ" title="よく触る側へ"
-                          onclick={() => moveSource(s.id, -1)}
-                        >▲</button>
-                        <button
-                          type="button" class="arrow" disabled={g.last}
-                          aria-label="{s.name} を下の群へ" title="触らない側へ"
-                          onclick={() => moveSource(s.id, 1)}
-                        >▼</button>
-                      </span>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
+        <!-- お気に入りと そのほか の 2 段。重さの差はプレイヤーが ★ で決める(§14 決定 3) -->
+        {#each [{ key: "fav" as const, title: "お気に入り", ids: ordered.fav }, { key: "rest" as const, title: "そのほか", ids: ordered.rest }] as list (list.key)}
+          <div
+            class="src-group"
+            role="list"
+            ondragover={(e) => onDragOverList(e, list.key, list.ids.length)}
+            ondrop={onDrop}
+          >
+            <div class="group-head">
+              <span class="group-title">{list.title}</span>
+              <span class="group-note dim">{list.ids.length} 件</span>
+            </div>
+            {#if list.ids.length === 0}
+              <p class="group-empty dim">★ を押すか、行をここへ運ぶと上がります。</p>
             {/if}
+            {#each itemsOf(list.ids) as s, i (s.id)}
+              <div
+                class="src-line"
+                class:dragging={dragId === s.id}
+                class:drop-before={dropAt?.list === list.key && dropAt.index === i}
+                class:drop-after={dropAt?.list === list.key && dropAt.index === i + 1 && i === list.ids.length - 1}
+                data-source-id={s.id}
+                role="listitem"
+                draggable="true"
+                ondragstart={(e) => onDragStart(e, s.id)}
+                ondragend={() => { dragId = null; dropAt = null; }}
+                ondragover={(e) => onDragOverRow(e, list.key, i)}
+                ondrop={onDrop}
+              >
+                <button
+                  type="button"
+                  class="fav"
+                  class:on={list.key === "fav"}
+                  aria-label="{s.name} を{list.key === 'fav' ? 'お気に入りから外す' : 'お気に入りに入れる'}"
+                  title={list.key === "fav" ? "お気に入りから外す" : "お気に入りに入れる"}
+                  onclick={() => toggleFavorite(s.id)}
+                >★</button>
+                <button
+                  type="button"
+                  class="src"
+                  class:on={openSource === s.id}
+                  onclick={() => (openSource = s.id)}
+                  onkeydown={(e) => onRowKey(e, list.key, i, s.id)}
+                >
+                  <span class="src-main">
+                    <span class="src-name">{s.name}</span>
+                    <span class="src-sub num">{s.sub}</span>
+                  </span>
+                  <span class="chev dim">›</span>
+                </button>
+              </div>
+            {/each}
           </div>
         {/each}
         {#each PLANNED as name (name)}
@@ -578,35 +608,34 @@
     font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
-  /* 操作頻度の 3 群(§14 決定 3)。触る場所だけ大きく、触らない場所は 1 行に畳む(§00) */
+  /* お気に入りと そのほか の 2 段(§14 決定 3)。重さの差はプレイヤーが決める */
   .src-group { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .group-head {
     min-width: 0; display: flex; align-items: center; gap: 8px; padding: 2px 2px 0;
-    font-size: 9.5px; letter-spacing: 0.08em; text-align: left;
+    font-size: 9.5px; letter-spacing: 0.08em;
   }
   .group-title { flex-shrink: 0; font-weight: 800; color: var(--fg-muted); }
   .group-note { min-width: 0; flex: 1; letter-spacing: 0; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .group-chev { flex-shrink: 0; font-size: 9px; }
-  .group-head:hover .group-title { color: var(--accent); }
-  .group-body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .group-empty { margin: 0 0 2px; padding: 0 2px; font-size: 9.5px; }
-  /* 並べ替えは頼まれたときだけ手が出る。押した行はその場に残り、移した先へ動いて見える(§10) */
-  .src-line { min-width: 0; display: flex; align-items: stretch; gap: 4px; }
+
+  /* つかんで運ぶ。落ちる位置は行の縁に線で出す — 隙間を差し込むと下が全部ずれる(§09 規則 1) */
+  .src-line { position: relative; min-width: 0; display: flex; align-items: stretch; gap: 5px; cursor: grab; }
   .src-line > .src { min-width: 0; flex: 1; }
-  .arrange-btns { flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
-  .arrow {
-    width: 20px; flex: 1; border-radius: var(--r-inset);
+  .src-line.dragging { opacity: 0.45; }
+  .src-line.drop-before::before, .src-line.drop-after::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 2px;
+    background: var(--accent); border-radius: var(--r-pill);
+  }
+  .src-line.drop-before::before { top: -4px; }
+  .src-line.drop-after::after { bottom: -4px; }
+  /* ★ はホームタブのコンテンツと同じ操作。金 = あなたの操作待ち(§03 予約色) */
+  .src-line > .fav {
+    flex-shrink: 0; width: 22px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border-soft);
-    color: var(--fg-muted); font-size: 8px;
+    color: var(--fg-off); font-size: 11px;
   }
-  .arrow:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .arrange {
-    flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill);
-    border: 1px solid var(--border-soft); background: var(--bg-field);
-    font-size: 9px; font-weight: 700; color: var(--fg-muted); letter-spacing: 0;
-  }
-  .arrange:hover { border-color: var(--accent); color: var(--accent); }
-  .arrange.on { background: var(--bg-active); border-color: var(--accent); color: var(--accent-hover); }
+  .src-line > .fav:hover { border-color: var(--gold); color: var(--gold); }
+  .src-line > .fav.on { color: var(--gold); border-color: var(--gold); }
 
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
