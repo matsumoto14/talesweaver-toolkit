@@ -32,3 +32,26 @@ export function bump(node: HTMLElement, get: () => number | null) {
     return () => node.removeEventListener("animationend", clear);
   });
 }
+
+/**
+ * 数値ではない**要約が変わった**ことを見せる(§10 型 5「状態が変わった → 弾んで出る」)。
+ * 補正源リストの行サマリーのように、右のペインを触ると左の要約も変わるもので使う。
+ * 片方だけ動かないと、動かないほうが古い値に見える(§10 規則 2)。
+ */
+export function flash(node: HTMLElement, get: () => string) {
+  const clear = () => node.classList.remove("badge-in");
+  let prev = get();
+  $effect(() => {
+    const next = get();
+    if (next === prev) return;
+    prev = next;
+    clear();
+    void node.offsetWidth;
+    node.classList.add("badge-in");
+  });
+  $effect(() => {
+    node.addEventListener("animationend", clear);
+    return () => node.removeEventListener("animationend", clear);
+  });
+}
+

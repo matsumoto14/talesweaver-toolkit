@@ -22,7 +22,7 @@
   import { persisted } from "../../ui/persistedState.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
-  import { bump } from "../../ui/motion.svelte";
+  import { bump, flash } from "../../ui/motion.svelte";
 
   interface Props {
     character: RegisteredCharacter;
@@ -461,7 +461,7 @@
                 >★</button>
                 <span class="src-main">
                   <span class="src-name">{s.name}</span>
-                  <span class="src-sub num">{s.sub}</span>
+                  <span class="src-sub num" use:flash={() => s.sub}>{s.sub}</span>
                 </span>
                 <span class="chev dim">›</span>
               </div>

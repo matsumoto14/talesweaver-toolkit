@@ -1018,12 +1018,12 @@
           <div class="panel-body">
             <div class="flow-line">
               <span class="dim">抜けた分</span>
-              <span class="num strong">{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
+              <span class="num strong" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
               <span class="arrow num dim">→</span>
               <span class="dim">倍率</span>
               <span class="num good strong">{flowMultLabel}</span>
               <span class="arrow num dim">→</span>
-              <span class="num final">{perHit !== null ? fmtInt(perHit) : "—"}</span>
+              <span class="num final" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
             </div>
             <div class="lever-note">
               {#if noPierce}
