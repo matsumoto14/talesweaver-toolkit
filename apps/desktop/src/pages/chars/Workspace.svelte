@@ -207,6 +207,17 @@
     return parts.length === 0 ? NEUTRAL : parts.join(" / ");
   });
 
+  // クリティカル率(wiki: 計算式まとめ #CriticalChance)。ここはペット会心と増加だけ。
+  // 装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入る。
+  const criticalRateSummary = $derived.by(() => {
+    const c = draft.statSources.critical_rate;
+    const parts: string[] = [];
+    if (c.pet) parts.push("ペット会心 ×1.1");
+    const bonus = (c.ultimate_rune ? 20 : 0) + (c.architect_lab ? 30 : 0) + (c.deadly_blow ? 100 : 0);
+    if (bonus > 0) parts.push(`増加 +${Math.min(100, bonus)}%`);
+    return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
+  });
+
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
     { id: "status", name: "キャラステータス", sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}` },
     {
@@ -254,6 +265,7 @@
     { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
     { id: "actualDelay", name: "中ディレイ減少", sub: delaySummary },
+    { id: "criticalRate", name: "クリティカル率", sub: criticalRateSummary },
     { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },

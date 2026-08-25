@@ -776,7 +776,10 @@
                 <span class="num strong">{result ? fmtInt(result.total.max) : "—"}</span>
               </div>
               <div class="total-box crit">
-                <span class="cap">クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}</span>
+                <span class="cap">
+                  クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
+                  {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
+                </span>
                 <span class="num strong">{result ? fmtInt(result.total.critical) : "—"}</span>
               </div>
               <div class="total-box dps">
@@ -805,7 +808,22 @@
                   ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
                 {/if}
               </div>
-            {:else if skill && skill.base_actual_delay === null}
+            {/if}
+            {#if result?.critical_rate}
+              {@const c = result.critical_rate}
+              <div class="delay-note dim">
+                クリティカル率 (装備クリ補正 {fmtInt(c.equipment_critical)} + 1) × 2 × (AGI {fmtInt(c.agi)} / (AGI + 対象AGI {fmtInt(c.target_agi)}))
+                = {c.from_agi.toFixed(1)}%
+                ＋ スキル Cri値 {fmtInt(c.skill)}%{#if c.bonus > 0} ＋ 増加 {fmtInt(c.bonus)}%{/if}
+                − 対象のクリティカル被撃率 {fmtInt(-c.target_taken_rate)}%
+                = <b>{c.value.toFixed(1)}%</b>{#if c.raw < 0}<span class="warn"> ※下限 0%</span>{:else if c.raw > 100}<span class="warn"> ※上限 100%</span>{/if}
+              </div>
+            {:else if result && skill}
+              <div class="delay-note dim">
+                クリティカル率は出せません(この敵の AGI / クリティカル被撃率、またはスキルの Cri値が wiki 未記載)。
+              </div>
+            {/if}
+            {#if skill && skill.base_actual_delay === null}
               <div class="delay-note dim">このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。</div>
             {/if}
           </div>

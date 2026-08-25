@@ -50,6 +50,10 @@ export interface Enemy {
   damage_reduction: number;
   cut_rate_a: number;
   element_threshold: number;
+  /** 対象のAGI(wiki 狩り場情報一覧「敵AGI+固定値」)。null = wiki 未記載 */
+  agi: number | null;
+  /** 対象のクリティカル被撃率A(負値)。null = wiki 未記載 */
+  critical_taken_rate: number | null;
 }
 
 // ペット S スキルの段階(wiki: PET)。crates/domain/src/stat_sources.rs の PetSkillTier(snake_case)。
@@ -122,6 +126,39 @@ export interface StatSources {
   elements: ElementSources;
   /** 中ディレイ減少をもたらすキャラのパッシブ・マスタリー */
   actual_delay_skills: ActualDelaySkills;
+  /** クリティカル率の供給源(wiki: 計算式まとめ #CriticalChance) */
+  critical_rate: CriticalRateSources;
+}
+
+// crates/domain/src/critical_rate.rs の CriticalRateSources。
+export interface CriticalRateSources {
+  /** ペット会心(クリティカル率 ×1.1) */
+  pet: boolean;
+  /** 極のルーン(+20) */
+  ultimate_rune: boolean;
+  /** 設計者の研究室(+30) */
+  architect_lab: boolean;
+  /** 致命打(+100) */
+  deadly_blow: boolean;
+}
+
+// crates/domain/src/critical_rate.rs の CriticalRate。
+export interface CriticalRate {
+  equipment_critical: number;
+  agi: number;
+  target_agi: number;
+  /** AGI 由来の部分 */
+  from_agi: number;
+  /** スキルクリティカル率(Cri値) */
+  skill: number;
+  /** クリティカル率増加(上限 +100%) */
+  bonus: number;
+  /** 対象のクリティカル被撃率A(負値) */
+  target_taken_rate: number;
+  /** 下限 0% / 上限 100% を掛ける前 */
+  raw: number;
+  /** クリティカル率(%) */
+  value: number;
 }
 
 // crates/domain/src/actual_delay.rs の ActualDelaySkillDef。list_actual_delay_skills の戻り値。
@@ -651,6 +688,8 @@ export interface DamageResult {
   added_damage: DamageTriple;
   /** 命中P。敵の回避Pを 100 上回ると必中。null = スキル命中が wiki 未記載で出せない */
   accuracy_point: number | null;
+  /** クリティカル率。null = 敵の AGI / クリティカル被撃率 / スキルの Cri値 のどれかが wiki 未記載 */
+  critical_rate: CriticalRate | null;
   /** 中ディレイ。null = スキルの「動作」列が秒で取れず出せない */
   actual_delay: ActualDelay | null;
   /** 1 秒あたりの与ダメージ(合計 / 中ディレイ)。null = 中ディレイが出せない */
@@ -711,6 +750,8 @@ export interface StatLimits {
   sharpness_vision_level_max: number;
   augment_level_max: number;
   hyper_limit_level_max: number;
+  /** クリティカル率増加の上限 %(wiki: 計算式まとめ #CriticalChance) */
+  critical_rate_bonus_max: number;
 }
 
 

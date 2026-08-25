@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::actual_delay::ActualDelaySkills;
+use crate::critical_rate::CriticalRateSources;
 use crate::element::ElementSources;
 use crate::attack_power::{
     attack_power_breakdown, stat_attack_power, AttackCoefficients, AttackPowerBreakdown,
@@ -377,6 +378,9 @@ pub struct StatSources {
     /// 中ディレイ減少をもたらすキャラのパッシブ・マスタリー(wiki: ステータス「中ディレイ倍率B」)
     #[serde(default)]
     pub actual_delay_skills: ActualDelaySkills,
+    /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)
+    #[serde(default)]
+    pub critical_rate: CriticalRateSources,
 }
 
 impl StatSources {
@@ -865,6 +869,8 @@ pub struct StatLimits {
     pub augment_level_max: u8,
     /// ハイパーリミットの Lv 上限(wiki: Skill/極限)
     pub hyper_limit_level_max: u8,
+    /// クリティカル率増加の上限 %(wiki: 計算式まとめ `#CriticalChance`)
+    pub critical_rate_bonus_max: f64,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -900,6 +906,7 @@ pub fn stat_limits() -> StatLimits {
         sharpness_vision_level_max: crate::common_skill::SHARPNESS_VISION_LEVEL_MAX,
         augment_level_max: crate::common_skill::AUGMENT_LEVEL_MAX,
         hyper_limit_level_max: crate::ultimate_skill::HYPER_LIMIT_LEVEL_MAX,
+        critical_rate_bonus_max: crate::critical_rate::CRITICAL_RATE_BONUS_MAX,
     }
 }
 

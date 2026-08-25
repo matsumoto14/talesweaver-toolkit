@@ -389,6 +389,7 @@ fn build_damage_input(
         stat_sources.adjustments.clone(),
         temporary_adjustments,
         stat_sources.actual_delay_skills.contributions(gamedata::actual_delay_skill_catalog()),
+        stat_sources.critical_rate,
     ))
 }
 
@@ -574,6 +575,7 @@ pub fn evaluate_contents(
                     character.stat_sources.adjustments.clone(),
                     None,
                     actual_delay_skills.clone(),
+                    character.stat_sources.critical_rate,
                 );
                 let result = domain::calculate_damage(&input);
                 if best.as_ref().is_none_or(|b| result.per_hit.max > b.per_hit_max) {

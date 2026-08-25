@@ -9,6 +9,7 @@ pub mod awakening;
 pub mod category;
 pub mod common_skill;
 pub mod content;
+pub mod critical_rate;
 pub mod damage;
 pub mod defense;
 pub mod element;
@@ -41,6 +42,10 @@ pub use common_skill::{
 pub use content::{
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,
     ContentRequirement, ContentSeries, RequirementCheck,
+};
+pub use critical_rate::{
+    critical_rate, CriticalRate, CriticalRateSourceId, CriticalRateSources,
+    CRITICAL_RATE_BONUS_MAX,
 };
 pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, DpsTriple,

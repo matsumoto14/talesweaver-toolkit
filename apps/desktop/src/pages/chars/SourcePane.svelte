@@ -12,6 +12,7 @@
     | "title"
     | "commonSkill"
     | "actualDelay"
+    | "criticalRate"
     | "thesis"
     | "skills"
     | "adjust";
@@ -81,6 +82,13 @@
       (c) => (c.skill_id === id ? { ...c, choice_index: index } : c),
     );
   }
+  /** クリティカル率増加の合計(上限を掛ける前) */
+  const criticalRateBonus = $derived(
+    (draft.statSources.critical_rate.ultimate_rune ? 20 : 0) +
+      (draft.statSources.critical_rate.architect_lab ? 30 : 0) +
+      (draft.statSources.critical_rate.deadly_blow ? 100 : 0),
+  );
+
   /** このキャラのパッシブぶんの中ディレイ減少 %(共通の供給源は含まない) */
   const delaySkillPercent = $derived(
     draft.statSources.actual_delay_skills.choices.reduce((n, c) => {
@@ -511,6 +519,7 @@
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
     actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
+    criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 +${limits.critical_rate_bonus_max}%)` },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
   };
 
@@ -1409,6 +1418,48 @@
       {#if delaySkillPercent > 0}
         <p class="hint dim">このキャラのパッシブぶん: <b>−{delaySkillPercent}%</b></p>
       {/if}
+    </div>
+  {:else if sourceId === "criticalRate"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「計算式まとめ <b>#CriticalChance</b>」。クリティカル率は
+        <b>(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象のAGI)) × ペット会心
+        ＋ スキルの Cri値 ＋ クリティカル率増加 ＋ 対象のクリティカル被撃率</b>で、下限 0% / 上限 100%。
+        装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入るので、
+        ここで選ぶのは<b>ペット会心と「クリティカル率増加」</b>だけです。
+        対象のAGI とクリティカル被撃率は wiki 狩り場情報一覧に値がある敵だけに入っているので、
+        計算タブでは<b>その敵を選んだときだけ</b>クリティカル率が出ます。
+      </p>
+      <div class="buff-list">
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.pet} />
+          <span>ペット会心</span>
+          <span class="fixed-value dim">×1.1</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.ultimate_rune} />
+          <span>極のルーン</span>
+          <span class="fixed-value dim">+20%</span>
+          <span class="dim note">最大レベル時</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.architect_lab} />
+          <span>設計者の研究室</span>
+          <span class="fixed-value dim">+30%</span>
+          <span class="dim note">最大レベル時</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.deadly_blow} />
+          <span>致命打</span>
+          <span class="fixed-value dim">+100%</span>
+        </label>
+      </div>
+      <p class="hint dim">
+        クリティカル率増加の合計: <b>+{Math.min(limits.critical_rate_bonus_max, criticalRateBonus)}%</b>
+        {#if criticalRateBonus > limits.critical_rate_bonus_max}(上限 +{limits.critical_rate_bonus_max}% で頭打ち){/if}
+        <br />
+        値が不定の「バフ」、シエナのオーラのクリティカル確率、被撃率B(対人)、最終クリティカル率増加は未収録です。
+      </p>
     </div>
   {:else if sourceId === "skills"}
     <div class="card">

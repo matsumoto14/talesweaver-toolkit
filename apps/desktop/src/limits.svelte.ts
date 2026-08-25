@@ -35,6 +35,7 @@ const FALLBACK: StatLimits = {
   sharpness_vision_level_max: 10,
   augment_level_max: 5,
   hyper_limit_level_max: 6,
+  critical_rate_bonus_max: 100,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

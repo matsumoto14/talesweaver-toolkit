@@ -714,7 +714,15 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <ul>
 <li>下限 0% / 上限 100%(余剰は意味なし)。クリティカル率増加は上限 +100%</li>
 <li>ペット会心 = ×1.1。vsモンスター/プレイヤー表記のものは上限の対象外</li>
-<li><strong>未実装</strong>。式に要る入力のうち、対象のAGI・対象のクリティカル被撃率(狩り場情報一覧。多くの行が <code>?</code>)と<strong>スキルクリティカル率</strong>(スキルデータに無い)が揃わない。装備クリティカル補正は段階2 で入った</li>
+<li>実装済み(<code>crates/domain/src/critical_rate.rs</code>)。<strong>対象のAGI と 対象のクリティカル被撃率が両方そろっている敵</strong>でだけ出す</li>
+<li>狩り場情報一覧は多くの行が <code>?</code>。被撃率は −250〜−930% と支配的なので、片方だけで出すと桁違いに外れる</li>
+<li>値が入っているのは 11 体(オーディン / エクリプス 1・2・討伐戦 / 異界の峡谷 部隊長 / 最後の決戦3 /
+    アフェティリア(N) / セリニアコス(H) / キシニク(H) / レリックの聖域20 / レイティアH)。
+    AGI だけの敵(アビスヘル 等)は AGI を持つが率は出さない</li>
+<li>スキルの Cri値(<code>Skill::critical_rate</code>)は S5 で収録済み。wiki が <code>-</code> の 28 件では出さない</li>
+<li><strong>クリティカル率増加</strong>(上限 +100%)は値が確定している 3 件だけ収録: 極のルーン +20 / 設計者の研究室 +30 / 致命打 +100。
+    値が <code>n</code> の「バフ」、シエナのオーラのクリティカル確率、被撃率B(対人)、最終クリティカル率増加は未収録(中立値)</li>
+<li>敵の値は「約」「推定値」付きのコミュニティ実測なので <span class="tag warm">仮</span></li>
 <li>クリティカル率自体は与ダメージ式に入らない(入るのは F: Cri倍率 と G: クリティカルダメージ増加)</li>
 </ul>
 <h2 id="10">10. 覚醒・エタの意志で開放される上限</h2>
@@ -824,12 +832,12 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>敵AGI</td>
 <td>敵の回避P <code>[15 + AGI×1.2]</code> とクリティカル率に効く</td>
-<td>未消費</td>
+<td><code>Enemy::agi</code>(§9。19 体。<code>?</code> の行は <code>None</code>)</td>
 </tr>
 <tr>
 <td>クリティカル被撃率</td>
 <td>AGI とは別に加算</td>
-<td>未消費(クリティカル率自体を出していない)</td>
+<td><code>Enemy::critical_taken_rate</code>(§9。11 体。<code>?</code> の行は <code>None</code>)</td>
 </tr>
 <tr>
 <td>被ダメージ倍率 I / II / XXX</td>
@@ -947,8 +955,8 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </tr>
 <tr>
 <td>狩り場情報一覧</td>
-<td>敵の防御力・カット率・被害減少・属性値</td>
-<td>取込済み(§11)。上限回避Pは wiki 側が全行未記載</td>
+<td>敵の防御力・カット率・被害減少・属性値・敵AGI・クリティカル被撃率</td>
+<td>取込済み(§11 / §9)。上限回避Pは wiki 側が全行未記載。敵AGI 19 体・クリティカル被撃率 11 体(残りは <code>?</code>)</td>
 </tr>
 <tr>
 <td>称号/normal・称号/special</td>

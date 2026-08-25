@@ -10,6 +10,7 @@ use crate::attack_power::{
     AttackPowerBreakdown,
 };
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
+use crate::critical_rate::{critical_rate, CriticalRate, CriticalRateSources};
 use crate::common_skill::CommonSkills;
 use crate::enemy::Enemy;
 use crate::defense::{accuracy_point, AccuracyCorrection};
@@ -75,6 +76,8 @@ pub struct DamageInput {
     pub pins: Adjustments,
     /// 計算リクエストの一時調整(キャラには保存しない)。ステごとに `pins` より優先する
     pub temporary_pins: Option<Adjustments>,
+    /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)。ペット会心・極のルーン等
+    pub critical_rate_sources: CriticalRateSources,
     /// キャラのパッシブ・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
     /// カタログの解決は呼び出し側(`ActualDelaySkills::contributions`)。共通の供給源
     /// (フルスロットル / ランダムオプション / シエナのオーラ)は `calculate_damage` が自分で集める
@@ -108,6 +111,7 @@ impl DamageInput {
         pins: Adjustments,
         temporary_pins: Option<Adjustments>,
         actual_delay_skills: Vec<ActualDelayContribution>,
+        critical_rate_sources: CriticalRateSources,
     ) -> Self {
         Self {
             base_stats,
@@ -132,6 +136,7 @@ impl DamageInput {
             pins,
             temporary_pins,
             actual_delay_skills,
+            critical_rate_sources,
         }
     }
 }
@@ -182,6 +187,10 @@ pub struct DamageResult {
     /// 命中P(wiki: 計算式まとめ #AccuracyPoint)。敵の回避Pを 100 上回ると必中。
     /// スキル命中が wiki 未記載(`Skill::accuracy` が `None`)なら出せないので `None`
     pub accuracy_point: Option<i64>,
+    /// クリティカル率(wiki: 計算式まとめ `#CriticalChance`)。
+    /// **敵の AGI とクリティカル被撃率が両方そろっている敵でしか出せない**ので、
+    /// 片方でも未記載(wiki が `?`)なら `None`。スキルの Cri値が未記載でも `None`
+    pub critical_rate: Option<CriticalRate>,
     /// 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。スキルの「動作」列が秒で取れない
     /// (`Skill::base_actual_delay` が `None`)なら出せないので `None`
     pub actual_delay: Option<ActualDelay>,
@@ -444,6 +453,22 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         steps_critical.push(step);
     }
 
+    // クリティカル率(wiki: 計算式まとめ `#CriticalChance`)。与ダメージ式には入らないが、
+    // 「クリティカル ×N」がどれくらいの頻度で出るのかを読めるように結果に載せる。
+    // 対象のAGI・クリティカル被撃率(狩り場情報一覧)は `?` の行が多く、被撃率は −250〜−930% と
+    // 支配的なので、**両方そろっている敵でだけ**出す。スキルの Cri値が未記載でも出さない。
+    let critical_chance = match (input.enemy.agi, input.enemy.critical_taken_rate, input.skill.critical_rate) {
+        (Some(target_agi), Some(taken_rate), Some(skill_critical_rate)) => Some(critical_rate(
+            input.equipment_base_totals.critical + input.equipment_enhanced_totals.critical,
+            stats.agi,
+            target_agi,
+            skill_critical_rate as f64,
+            &input.critical_rate_sources,
+            taken_rate,
+        )),
+        _ => None,
+    };
+
     // 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。減少値の供給源は
     // 極限スキル「フルスロットル」/ カフス(盾+)のランダムオプション / シエナのオーラ /
     // キャラのパッシブ(呼び出し側がカタログを引いて渡す)。
@@ -489,6 +514,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         added_damage_rate: added_rate,
         added_damage: added,
         accuracy_point: accuracy,
+        critical_rate: critical_chance,
         actual_delay: delay,
         dps,
         trace: DamageTrace {
@@ -584,6 +610,8 @@ mod tests {
                 damage_reduction: 0,
                 cut_rate_a: 1.0,
                 element_threshold: 90,
+                agi: None,
+                critical_taken_rate: None,
             },
             awakening_rate: 1.0,
             combo_count: 0,
@@ -591,6 +619,7 @@ mod tests {
             pins: Adjustments::default(),
             temporary_pins: None,
             actual_delay_skills: Vec::new(),
+            critical_rate_sources: CriticalRateSources::default(),
         }
     }
 
@@ -871,6 +900,8 @@ mod tests {
             defense: 7050,
             damage_reduction: -5850,
             cut_rate_a: 0.405,
+            agi: Some(1552),
+            critical_taken_rate: None,
             element_threshold: 120,
         };
         let r = calculate_damage(&i);
@@ -1024,6 +1055,56 @@ mod tests {
         i.random_options.accuracy_point = 20;
         let base = calculate_damage(&input()).accuracy_point.unwrap();
         assert_eq!(calculate_damage(&i).accuracy_point.unwrap(), base + 20);
+    }
+
+    // --- クリティカル率(wiki: 計算式まとめ `#CriticalChance`)-----------------
+
+    #[test]
+    fn クリティカル率は敵のagiと被撃率が両方そろったときだけ出す() {
+        let mut i = input();
+        i.base_stats.agi = 300;
+        i.equipment_base_totals.critical = 200;
+        i.skill.critical_rate = Some(13);
+
+        // どちらも未記載(wiki が `?`)なら出さない
+        assert!(calculate_damage(&i).critical_rate.is_none());
+
+        // AGI だけでも出さない(被撃率は −250〜−930% と支配的で、無いと桁違いに外れる)
+        i.enemy.agi = Some(1420);
+        assert!(calculate_damage(&i).critical_rate.is_none());
+
+        i.enemy.critical_taken_rate = Some(-350.0);
+        let r = calculate_damage(&i).critical_rate.unwrap();
+        assert_eq!(r.equipment_critical, 200);
+        assert_eq!(r.agi, 300);
+        assert_eq!(r.target_agi, 1420);
+        assert!((r.target_taken_rate - -350.0).abs() < 1e-12);
+
+        // スキルの Cri値が wiki 未記載なら出せない
+        i.skill.critical_rate = None;
+        assert!(calculate_damage(&i).critical_rate.is_none());
+    }
+
+    #[test]
+    fn クリティカル率増加は結果を押し上げる() {
+        use crate::critical_rate::CriticalRateSources;
+
+        let mut i = input();
+        i.base_stats.agi = 300;
+        i.equipment_base_totals.critical = 200;
+        i.enemy.agi = Some(1420);
+        i.enemy.critical_taken_rate = Some(-100.0);
+        let base = calculate_damage(&i).critical_rate.unwrap();
+
+        i.critical_rate_sources = CriticalRateSources {
+            pet: true,
+            ultimate_rune: true,
+            architect_lab: false,
+            deadly_blow: false,
+        };
+        let boosted = calculate_damage(&i).critical_rate.unwrap();
+        assert!((boosted.bonus - 20.0).abs() < 1e-12);
+        assert!(boosted.raw > base.raw);
     }
 
     // wiki Quest/覚醒クエスト「各能力の上限値」/ エタの意志: 最終能力値の上限

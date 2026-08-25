@@ -80,6 +80,7 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   actual_delay_skills: {
     choices: (src.actual_delay_skills?.choices ?? []).map((c) => ({ ...c })),
   },
+  critical_rate: { ...src.critical_rate },
 });
 
 export const neutralStatSources = (): StatSources => ({
@@ -91,6 +92,7 @@ export const neutralStatSources = (): StatSources => ({
   adjustments: Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as StatSources["adjustments"],
   elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
   actual_delay_skills: { choices: [] },
+  critical_rate: { pet: false, ultimate_rune: false, architect_lab: false, deadly_blow: false },
 });
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({
