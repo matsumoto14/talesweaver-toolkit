@@ -172,7 +172,7 @@
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
   .section-label { padding: 10px 2px 8px; }
-  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--bg-field); }
+  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); }
   .empty { padding: 10px 12px; font-size: 11px; }
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }

@@ -1707,7 +1707,7 @@
   }
   input[type="text"]:focus { outline: none; border-color: var(--accent); }
 
-  .tbl { margin-top: 8px; overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--bg-field); }
+  .tbl { margin-top: 8px; overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); }
   table.grid td.stat-cell { min-width: 180px; }
   .stat-cell :global(.stat-input) { justify-content: flex-end; flex-wrap: nowrap; }
   .final { white-space: nowrap; }
