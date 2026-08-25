@@ -47,7 +47,8 @@
 
   function clamp(n: number): number {
     if (n < min) return min;
-    if (n > max) return max;
+    // 上限の情報が無いとき(max <= min)は上限で縛らない。縛ると手入力が min に落ちるだけになる
+    if (max > min && n > max) return max;
     return n;
   }
 
@@ -88,10 +89,12 @@
 
   const hint = $derived(format ? format(value) : null);
   const full = $derived(value >= max);
-  /** 動かせる幅が無い(そのアイテムがその値を持たない等)。§07 形態 1 に降りて表示だけにする */
-  const fixed = $derived(max <= min);
-  /** 上限を語る部分(進捗バー・/上限・MAX)を出すか */
-  const showCap = $derived(gauge && !fixed);
+  /**
+   * 上限を語る部分(進捗バー・/上限・MAX)を出すか。
+   * `max <= min` は動かせる幅が無い = 上限の情報が無いということなので、上限を語らない。
+   * ただし**手入力は残す** — gamedata が未収録・誤っているときの逃げ道が無くなる。
+   */
+  const showCap = $derived(gauge && max > min);
   /**
    * 上限に対する進捗。負の範囲(調整の加算 -3,000〜3,000)は「上限に対してどこまで」が
    * 成り立たないのでバーを出さない
@@ -128,9 +131,9 @@
   <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
        上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
        読取(button)と編集(input)でセルの寸法は同じ。押しても値が動かない(§09 規則 1) -->
-  <div class="cell" class:editing class:fixed class:bare={!showCap}>
+  <div class="cell" class:editing class:bare={!showCap}>
     {#if showCap && pct !== null}<span class="fill" style:width="{pct}%"></span>{/if}
-    {#if editing && !fixed}
+    {#if editing}
       <input
         class="num val"
         type="number"
@@ -139,7 +142,7 @@
         onblur={handleBlur}
         onkeydown={(e) => { if (e.key === "Escape" || e.key === "Enter") editing = false; }}
         {min}
-        {max}
+        max={max > min ? max : undefined}
         {step}
         aria-label={label}
         {@attach (node) => {
@@ -149,8 +152,6 @@
           node.select();
         }}
       />
-    {:else if fixed}
-      <span class="num val">{value.toLocaleString("ja-JP")}</span>
     {:else}
       <button
         type="button"
@@ -180,9 +181,7 @@
   }
   /* 白 = 編集できる面(§01) */
   .cell.editing { background: var(--bg-field); border-color: var(--accent); }
-  .cell:not(.editing):not(.fixed):hover { border-color: var(--accent); }
-  /* 動かせないものは押せる見た目にしない */
-  .cell.fixed { justify-content: center; }
+  .cell:not(.editing):hover { border-color: var(--accent); }
   /* 上限を語らない形(形態 1)。/上限 と MAX が無いぶん詰める */
   .cell.bare { width: 74px; }
   /* 上限に対していまどのあたりか。セル底の 2px(v4) */
