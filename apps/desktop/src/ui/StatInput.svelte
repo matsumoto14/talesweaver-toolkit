@@ -142,7 +142,8 @@
       {#if min === 0}{value.toLocaleString("ja-JP")} / {max.toLocaleString("ja-JP")}
       {:else}{min.toLocaleString("ja-JP")} 〜 {max.toLocaleString("ja-JP")}{/if}
     </span>
-    {#if value >= max}<span class="cap-badge">満</span>{/if}
+    <!-- 「満」の枠は常に確保する。出たときに行がずれない(§09 規則 4 / §11) -->
+    <span class="cap-badge" class:on={value >= max}>{value >= max ? "満" : ""}</span>
   {/if}
   {#if hint}<span class="hint dim">{hint}</span>{/if}
 </div>
@@ -183,5 +184,9 @@
   .hint { flex-shrink: 0; font-size: 11px; white-space: nowrap; }
   .cap { flex-shrink: 0; font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
   .cap.full { color: var(--fg); font-weight: 700; }
-  .cap-badge { flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg); }
+  .cap-badge {
+    flex-shrink: 0; min-width: 16px; text-align: center;
+    font-size: 8.5px; font-weight: 700; color: transparent;
+  }
+  .cap-badge.on { color: var(--state-edge-fg); }
 </style>

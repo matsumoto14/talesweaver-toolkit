@@ -637,28 +637,44 @@
       <div class="card-title">能力値 <span class="dim normal">設定を触ると即時更新</span></div>
       <div class="tbl">
         <table class="grid">
-          <thead><tr><th>ステ</th><th class="n">素</th><th class="n">補正</th><th class="n">最終</th></tr></thead>
+          <thead><tr><th>ステ</th><th class="n">素</th><th class="n">補正</th><th>素ステ → 最終</th><th class="n">最終</th></tr></thead>
           <tbody>
             {#each STAT_KINDS as k (k)}
               {@const trace = traceFor(k)}
               {@const diff = preview ? preview.stats[k] - draft.baseStats[k] : null}
+              {@const cap = trace?.stat_cap ?? 0}
+              {@const basePct = cap > 0 ? Math.min(100, (draft.baseStats[k] / cap) * 100) : 0}
+              {@const addPct = cap > 0 && diff !== null ? Math.max(0, Math.min(100 - basePct, (diff / cap) * 100)) : 0}
               <tr>
                 <td>{STAT_LABELS[k]}</td>
                 <td class="n stat-cell">
                   <StatInput label="" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
                 </td>
                 <td class="n muted">{diff === null ? "—" : signed(diff)}</td>
+                <!-- 素ステ → 最終を 1 本のバーで(§11)。数字の羅列ではなく「どれだけ伸びたか」を見せる。
+                     灰が素ステ(振り分け)、青が補正で乗った分。長さは最終能力値の上限に対する割合 -->
+                <td>
+                  <span
+                    class="grow"
+                    title={cap > 0 ? `上限 ${fmtInt(cap)}(覚醒段階 + エタの意志 Lv)` : "上限は計算中"}
+                  >
+                    <i class="base" style="width: {basePct.toFixed(1)}%"></i>
+                    <i class="add" style="width: {addPct.toFixed(1)}%"></i>
+                  </span>
+                </td>
                 <td class="n final">
                   <span class="strong">{preview ? fmtInt(preview.stats[k]) : "—"}</span>
                   {#if trace?.pinned_from !== null && trace?.pinned_from !== undefined}
                     <span class="pin-badge" title={`固定前: ${fmtInt(trace.pinned_from)}`}>固定</span>
                   {/if}
-                  {#if trace && trace.capped_loss > 0}
-                    <span
-                      class="cap-badge"
-                      title={`上限 ${fmtInt(trace.stat_cap)} で ${fmtInt(trace.capped_loss)} 捨てています。上限は覚醒段階とエタの意志 Lv で上がります`}
-                    >上限</span>
-                  {/if}
+                  <!-- 「満」の枠は常に確保する。出たときに行がずれない(§09 規則 4 / §11) -->
+                  <span
+                    class="cap-badge"
+                    class:on={trace !== null && trace !== undefined && trace.capped_loss > 0}
+                    title={trace && trace.capped_loss > 0
+                      ? `上限 ${fmtInt(trace.stat_cap)} で ${fmtInt(trace.capped_loss)} 捨てています。上限は覚醒段階とエタの意志 Lv で上がります`
+                      : ""}
+                  >{trace && trace.capped_loss > 0 ? "満" : ""}</span>
                 </td>
               </tr>
             {/each}
@@ -1659,10 +1675,21 @@
   /* チップは横に並べる(1 行 1 個だと 30 行の一覧になる) */
   .buff-list { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
   .note { font-size: 10px; }
+  /* 「満」は上限に届いた印。金 = 上限(§03 予約色)。枠は常に確保して行をずらさない */
   .cap-badge {
-    font-size: 9px; letter-spacing: 0.05em; color: #B5443A; border: 1px solid #B5443A;
+    display: inline-block; min-width: 20px; text-align: center;
+    font-size: 9px; letter-spacing: 0.05em; color: transparent; border: 1px solid transparent;
     border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
   }
+  .cap-badge.on { color: var(--state-edge-fg); border-color: var(--gold); background: var(--state-edge-bg); }
+  /* 素ステ → 最終。灰が素ステ、青が補正で乗った分(§11) */
+  .grow {
+    display: flex; width: 100%; min-width: 74px; height: 7px; overflow: hidden;
+    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-soft);
+  }
+  .grow > i { display: block; transition: width 0.38s cubic-bezier(0.4, 0, 0.2, 1); }
+  .grow > .base { background: var(--flow-base); }
+  .grow > .add { background: var(--accent); }
   .fixed-value { font-size: 11px; font-weight: 500; }
 
   /* 装備ドリルダウン: 部位一覧 */
