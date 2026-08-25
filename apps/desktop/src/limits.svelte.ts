@@ -18,6 +18,8 @@ const FALLBACK: StatLimits = {
   enhance_added_damage_max: 9999999,
   siena_stage_max: 10,
   siena_attack_rate_percent_max: 10,
+  siena_defense_rate_percent_max: 10,
+  siena_actual_delay_percent_max: 2,
   siena_stat_bonus_max: 100,
   siena_all_stats_bonus_max: 30,
   core_slot_count: 6,

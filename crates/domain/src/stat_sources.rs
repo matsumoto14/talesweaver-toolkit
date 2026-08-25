@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::actual_delay::ActualDelaySkills;
 use crate::element::ElementSources;
 use crate::attack_power::{
     attack_power_breakdown, stat_attack_power, AttackCoefficients, AttackPowerBreakdown,
@@ -17,8 +18,8 @@ use crate::attack_power::{
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
     PartSlot, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
-    SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX, SIENA_STAGE_MAX,
-    SIENA_STAT_BONUS_MAX,
+    SIENA_ACTUAL_DELAY_PERCENT_MAX, SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
+    SIENA_DEFENSE_RATE_PERCENT_MAX, SIENA_STAGE_MAX, SIENA_STAT_BONUS_MAX,
 };
 use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
 use crate::common_skill::{CommonSkills, STRONG_WEAPON_LEVEL_MAX};
@@ -373,6 +374,9 @@ pub struct StatSources {
     /// 装備の属性強化以外の属性値の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)
     #[serde(default)]
     pub elements: ElementSources,
+    /// 中ディレイ減少をもたらすキャラのパッシブ・マスタリー(wiki: ステータス「中ディレイ倍率B」)
+    #[serde(default)]
+    pub actual_delay_skills: ActualDelaySkills,
 }
 
 impl StatSources {
@@ -827,6 +831,10 @@ pub struct StatLimits {
     pub siena_stage_max: u8,
     /// シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 %
     pub siena_attack_rate_percent_max: f64,
+    /// シエナのオーラの追加オプション「防御力増加」の 1 部位あたり上限 %
+    pub siena_defense_rate_percent_max: f64,
+    /// シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 %
+    pub siena_actual_delay_percent_max: f64,
     /// シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限
     pub siena_stat_bonus_max: i64,
     /// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
@@ -873,6 +881,8 @@ pub fn stat_limits() -> StatLimits {
         enhance_added_damage_max: ENHANCE_ADDED_DAMAGE_MAX,
         siena_stage_max: SIENA_STAGE_MAX,
         siena_attack_rate_percent_max: SIENA_ATTACK_RATE_PERCENT_MAX,
+        siena_defense_rate_percent_max: SIENA_DEFENSE_RATE_PERCENT_MAX,
+        siena_actual_delay_percent_max: SIENA_ACTUAL_DELAY_PERCENT_MAX,
         siena_stat_bonus_max: SIENA_STAT_BONUS_MAX,
         siena_all_stats_bonus_max: SIENA_ALL_STATS_BONUS_MAX,
         core_slot_count: CORE_SLOT_COUNT,

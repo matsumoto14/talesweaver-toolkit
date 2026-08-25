@@ -11,6 +11,7 @@
     | "randomOption"
     | "title"
     | "commonSkill"
+    | "actualDelay"
     | "thesis"
     | "skills"
     | "adjust";
@@ -61,6 +62,32 @@
   let { draft, preview, previewError, skills, sourceId }: Props = $props();
 
   const STAT_MIN = 1;
+
+  // --- 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)---------------------
+  // カタログはキャラを問わず全件持っているので、このキャラのぶんだけ出す。
+  const delaySkills = $derived(
+    app.actualDelaySkills.filter((d) => d.game_character_id === draft.gameCharacterId),
+  );
+  const delayChoice = (id: string) =>
+    draft.statSources.actual_delay_skills.choices.find((c) => c.skill_id === id) ?? null;
+  function toggleDelaySkill(id: string, on: boolean) {
+    const rest = draft.statSources.actual_delay_skills.choices.filter((c) => c.skill_id !== id);
+    draft.statSources.actual_delay_skills.choices = on
+      ? [...rest, { skill_id: id, choice_index: 0 }]
+      : rest;
+  }
+  function setDelayChoice(id: string, index: number) {
+    draft.statSources.actual_delay_skills.choices = draft.statSources.actual_delay_skills.choices.map(
+      (c) => (c.skill_id === id ? { ...c, choice_index: index } : c),
+    );
+  }
+  /** このキャラのパッシブぶんの中ディレイ減少 %(共通の供給源は含まない) */
+  const delaySkillPercent = $derived(
+    draft.statSources.actual_delay_skills.choices.reduce((n, c) => {
+      const def = app.actualDelaySkills.find((d) => d.id === c.skill_id);
+      return n + (def?.percents[c.choice_index] ?? 0);
+    }, 0),
+  );
   const characterOptions = $derived(app.gameCharacters.map((c) => ({ value: c.id, label: c.name })));
 
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
@@ -483,6 +510,7 @@
     commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
+    actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
   };
 
@@ -1026,10 +1054,26 @@
               bind:value={siena.all_stats}
               format={(v) => (v > 0 ? `STAB〜AGI に +${v}` : "なし")}
             />
+            <StatInput
+              label="防御力増加"
+              min={0}
+              max={limits.siena_defense_rate_percent_max}
+              bind:value={siena.defense_rate_percent}
+              format={(v) => `+${v}%`}
+            />
+            <StatInput
+              label="中ディレイ減少"
+              min={0}
+              max={limits.siena_actual_delay_percent_max}
+              step={0.5}
+              bind:value={siena.actual_delay_percent}
+              format={(v) => `−${v}%`}
+            />
           </div>
           <p class="hint dim">
             「攻撃力増加」は与ダメージ割合増加(New1)、「全ステータス増加」は 7 ステすべてに同じ値が乗ります。
-            防御力増加・防御無視・中ディレイ減少・クリティカル確率・HP/MP/SP は与ダメージ式に入らないため未収録です。
+            「防御力増加」は装備防御力倍率(防御タブ)、「中ディレイ減少」は中ディレイ倍率B(計算タブの 1 秒あたり)へ合流します。
+            防御無視攻撃確率・クリティカル確率・HP/MP/SP は与ダメージ式に入らないため未収録です。
           </p>
         </div>
       {/if}
@@ -1314,6 +1358,52 @@
         セット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
       </p>
     </div>
+  {:else if sourceId === "actualDelay"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「ステータス」の<b>中ディレイ倍率B</b>。中ディレイは
+        <b>基本中ディレイ × (1 − 減少値) ×(2 コンボ以上なら 0.5)</b>で、下限 0.3s・減少値の上限 70%。
+        ここで選ぶのは<b>このキャラ固有のパッシブ・マスタリー</b>だけです。
+        フルスロットル(共通スキル)・カフスのランダムOP・シエナのオーラの「中ディレイ減少」は
+        それぞれの補正源で設定した値がそのまま合流します。
+        中ディレイと 1 秒あたりの火力は計算タブに出ます。
+      </p>
+      <div class="buff-list">
+        {#if delaySkills.length === 0}
+          <p class="empty dim">このキャラには中ディレイ減少のパッシブがありません(wiki の表に記載なし)。</p>
+        {/if}
+        {#each delaySkills as def (def.id)}
+          {@const choice = delayChoice(def.id)}
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={choice !== null}
+              onchange={(e) => toggleDelaySkill(def.id, e.currentTarget.checked)}
+            />
+            <span>{def.name}</span>
+            {#if def.percents.length === 1}
+              <span class="fixed-value dim">−{def.percents[0]}%</span>
+            {:else if choice !== null}
+              <select
+                class="delay-tier"
+                value={String(choice.choice_index)}
+                onchange={(e) => setDelayChoice(def.id, Number(e.currentTarget.value))}
+              >
+                {#each def.percents as p, i (i)}
+                  <option value={String(i)}>−{p}%</option>
+                {/each}
+              </select>
+            {:else}
+              <span class="fixed-value dim">−{def.percents.join(" / −")}%</span>
+            {/if}
+            {#if def.note}<span class="dim note">{def.note}</span>{/if}
+          </label>
+        {/each}
+      </div>
+      {#if delaySkillPercent > 0}
+        <p class="hint dim">このキャラのパッシブぶん: <b>−{delaySkillPercent}%</b></p>
+      {/if}
+    </div>
   {:else if sourceId === "skills"}
     <div class="card">
       <div class="card-title">このキャラのスキル</div>
@@ -1410,6 +1500,7 @@
   .check input { accent-color: var(--accent); }
   .buff-list { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
   .note { font-size: 10px; }
+  .delay-tier { font-size: 10px; padding: 1px 4px; }
   .fixed-value { font-size: 11px; font-weight: 500; }
 
   /* 装備ドリルダウン: 部位一覧 */

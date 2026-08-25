@@ -154,8 +154,9 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li><a href="#9">9. クリティカル率</a></li>
 <li><a href="#10">10. 覚醒・エタの意志で開放される上限</a></li>
 <li><a href="#11">11. 敵データ(狩り場情報一覧)</a></li>
-<li><a href="#12">12. 実装への示唆</a></li>
-<li><a href="#13">13. 参照ページの取込状況</a></li>
+<li><a href="#12">12. 中ディレイ(スキルの発動間隔)</a></li>
+<li><a href="#13">13. 実装への示唆</a></li>
+<li><a href="#14">14. 参照ページの取込状況</a></li>
 <li><a href="#_1">取得メモ</a></li>
 </ul>
 </nav>
@@ -845,7 +846,58 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>武器ダメージ無効(旧リポ <code>weaponTerm=0</code>。キマイラ)は wiki 狩り場情報一覧に該当する列が無く未モデル <span class="tag warm">仮</span></li>
 <li>wiki にしか無くデータが揃っている敵(空虚の領域 防76800 / カット率A -30% / 被害減少6500 / カット率B -40%、次元の隙間 防11850 / -77.5%、ヴェスティージ一般 -75% 被害減少なし、プシーキーの虚像 防1350 / -64% など)は未収録。収録するにはコンテンツ側の追加も要るので別 goal</li>
 </ul>
-<h2 id="12">12. 実装への示唆</h2>
+<h2 id="12">12. 中ディレイ(スキルの発動間隔)</h2>
+<p>出典: 計算式まとめ <code>#ActualDelay</code> / ステータス「中ディレイ倍率A / 倍率B」/ 各キャラの
+スキル性能一覧「動作」列(取得 2026-08-25)。</p>
+<pre><code>中ディレイ = 基本中ディレイ × (1 − 中ディレイ減少値) × (2 コンボ以上なら 0.5)   (下限 0.3s)
+</code></pre>
+<ul>
+<li><strong>基本中ディレイ</strong>は wiki スキル性能一覧の「動作」列。303 件すべて取り込み済み(<code>Skill::base_actual_delay</code>)</li>
+<li><code>A/B</code> 表記(イェフネンのパイク系)は条件付き([加速])なので<strong>基本値の A</strong> を採る</li>
+<li><code>(固定)</code> 付き(ティチエル 極・ギガブレイズ / クロエ 極・メテオストライク)は<strong>中ディレイ減少が効かない</strong></li>
+<li>秒として読めない 1 件(ティチエル 極・スパークリングカイト。wiki 表記が <code>0</code>)は <code>None</code> = 中ディレイ・DPS を出さない</li>
+<li>チャネリングスキル(区分 <code>続</code>)の「動作」はチャネリング全体の秒数(例: 極・連撃 10s)。
+    2025/10/29 から<strong>全てのチャネリングスキルに中ディレイ減少が適用される</strong>(コンボボーナス除く)</li>
+<li><strong>中ディレイ減少値</strong>(= 倍率B の減少分)は<strong>上限 70%</strong>(倍率B の下限 30%)。供給源(ステータス「中ディレイ倍率B」の表):</li>
+</ul>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>供給源</th>
+<th>減少</th>
+<th>実装</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>極限スキル フルスロットル</td>
+<td>−25〜−45%</td>
+<td>✅ <code>UltimateSkills::actual_delay_reduction</code></td>
+</tr>
+<tr>
+<td>カフス(盾+)のランダムオプション</td>
+<td>−1〜−3%</td>
+<td>✅ <code>RandomOptionEffect::ActualDelayReduction</code></td>
+</tr>
+<tr>
+<td>シエナのオーラ 追加オプション</td>
+<td>−x%(1 部位 0〜2%)</td>
+<td>✅ <code>Equipment::siena_actual_delay_reduction</code></td>
+</tr>
+<tr>
+<td>キャラのパッシブ・マスタリー</td>
+<td>−5% ずつ(ミラ スパートのみ −25/−15/−5/−0)</td>
+<td>✅ <code>ActualDelaySkills</code>(9 件)</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>コンボボーナス</strong>(2 コンボ以上で ×0.5)は<strong>倍率A</strong> で、減少値の上限 70% の対象外</li>
+<li>用途は <strong>1 秒あたりの火力(DPS)</strong> = 合計ダメージ / 中ディレイ。「範囲を取るか火力を取るか」の比較に使う</li>
+<li>CI(コンボインターバル)は「次に使うスキルの中ディレイの下限」として効く。wiki に値の一覧があるが未収録</li>
+<li>前後ディレイ(前隙・後隙)は wiki 自身が「省略」としているので DPS に入れていない</li>
+</ul>
+<h2 id="13">13. 実装への示唆</h2>
 <ul>
 <li>計算パイプラインは「①能力値計算(§2) → ②カテゴリ集計(同一カテゴリ内は加算、キャップ適用) → ③与ダメージ式(§3、丸め順序込み) → ④段数・追加ダメージ(§5)」の4段</li>
 <li>丸めの再現が正確性の肝: <code>[]</code>=floor、<code>{}</code>=小数2位切り捨て、割合増加はバフごとに floor</li>
@@ -853,7 +905,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>wiki 自身が「計算順序未確定・丸め誤差あり」としているため、検証値(実測ダメージ)との突き合わせ機能があると望ましい</li>
 <li><strong>入力最小化の観点(UX方針)</strong>: 約30カテゴリのうちユーザーが都度入力すべきものはほぼ無い。A/B はキャラのステ・装備から、D/E/F はスキル選択から、C/V1/V2/M は敵(狩り場)選択から、L/N/O/P/X 等のバフはキャラに紐づくバフプリセットから自動で埋まる。つまり計算画面の入力は「キャラ・スキル・敵・バフセット」の4つの選択に還元できる。静的データの充実(§9 の未取込ページ)がそのまま入力削減になる</li>
 </ul>
-<h2 id="13">13. 参照ページの取込状況</h2>
+<h2 id="14">14. 参照ページの取込状況</h2>
 <blockquote>
 <p>注: 旧リポジトリ(<a href="../legacy-twtoolkit.md">docs/legacy-twtoolkit.md</a>)に Excel 計算器 v4.00 由来の具体値がある(スキル係数・覚醒倍率・ダメージ上限・ボス28体データ・スキル373件)。数値が古い可能性があるため wiki 側で裏取りしてから採用する。</p>
 </blockquote>
@@ -868,13 +920,13 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tbody>
 <tr>
 <td><a href="https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1">計算式まとめ</a></td>
-<td>攻撃力(#BaseAttackPower)・命中P/回避P/キャップ・クリティカル率</td>
-<td>取込済み(§4 A / §7 / §9)。クリティカル率は式だけ記録して未実装</td>
+<td>攻撃力(#BaseAttackPower)・命中P/回避P/キャップ・クリティカル率・中ディレイ(#ActualDelay)</td>
+<td>取込済み(§4 A / §7 / §9 / §12)。クリティカル率は式だけ記録して未実装</td>
 </tr>
 <tr>
 <td>ステータス</td>
-<td>能力値レイヤー・防御力・カット率・特殊回避・カテゴリ一覧</td>
-<td>取込済み(§2 / §4 / §6 / §7)</td>
+<td>能力値レイヤー・防御力・カット率・特殊回避・カテゴリ一覧・中ディレイ倍率A/B</td>
+<td>取込済み(§2 / §4 / §6 / §7 / §12)</td>
 </tr>
 <tr>
 <td>属性システム / 装備システム/属性強化</td>
@@ -909,12 +961,12 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>Skill/極限</td>
 <td>極限スキル 3 種の効果値(基本 / スーパーリミット / ハイパーリミット Lv1〜6)</td>
-<td>取込済み(<code>ultimate_skill.rs</code>)。<strong>2 枠</strong>。スコープアイ = G、フルスロットル = 段数(単体チャネリングのみ)+ 中ディレイ(段階5)、ワイドフォーカス = 範囲(火力に効かない)。エレメンタルパワー・オーバードライブは収録しない</td>
+<td>取込済み(<code>ultimate_skill.rs</code>)。<strong>2 枠</strong>。スコープアイ = G、フルスロットル = 段数(単体チャネリングのみ)+ 中ディレイ減少(§12)、ワイドフォーカス = 範囲(火力に効かない)。エレメンタルパワー・オーバードライブは収録しない</td>
 </tr>
 <tr>
 <td>各キャラのスキルページ</td>
-<td>スキル倍率・段数・Cri倍率・属性・スキル命中・Cri値・SLv</td>
-<td>取込済み(19 キャラ 303 件)。銭投げ・変種行・未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)は除外。スキル Lv 別倍率と召喚獣は未対応。<strong>単体チャネリング判定</strong>(区分 <code>続</code> + 対象指定 <code>単体</code>。凡例は wiki Skill#f8e303fb)は 7 件</td>
+<td>スキル倍率・段数・Cri倍率・属性・スキル命中・Cri値・SLv・<strong>動作(基本中ディレイ)</strong></td>
+<td>取込済み(19 キャラ 303 件)。銭投げ・変種行・未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)は除外。スキル Lv 別倍率と召喚獣は未対応。<strong>単体チャネリング判定</strong>(区分 <code>続</code> + 対象指定 <code>単体</code>。凡例は wiki Skill#f8e303fb)は 7 件。<strong>動作</strong>は §12</td>
 </tr>
 </tbody>
 </table></div>

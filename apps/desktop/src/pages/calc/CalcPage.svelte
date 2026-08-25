@@ -779,7 +779,35 @@
                 <span class="cap">クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}</span>
                 <span class="num strong">{result ? fmtInt(result.total.critical) : "—"}</span>
               </div>
+              <div class="total-box dps">
+                <span class="cap">
+                  {#if result?.actual_delay}
+                    1 秒あたり(中ディレイ {result.actual_delay.value.toFixed(2)}s)
+                  {:else}
+                    1 秒あたり
+                  {/if}
+                </span>
+                <span class="num strong">{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
+              </div>
             </div>
+            {#if result?.actual_delay}
+              {@const d = result.actual_delay}
+              <div class="delay-note dim">
+                中ディレイ {d.base.toFixed(2)}s
+                {#if d.fixed}
+                  ×(固定・減少が効かない)
+                {:else if d.reduction > 0}
+                  × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 70%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
+                {/if}
+                {#if d.combo_rate < 1}× 0.5(2 コンボ以上){/if}
+                = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 0.3s</span>{/if}
+                {#if d.contributions.length > 0}
+                  ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
+                {/if}
+              </div>
+            {:else if skill && skill.base_actual_delay === null}
+              <div class="delay-note dim">このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。</div>
+            {/if}
           </div>
         </div>
 
@@ -1309,6 +1337,11 @@
   .total-box.crit { background: #FFFBF0; border-color: #E0C98A; }
   .total-box.crit .cap { color: #7A6420; }
   .total-box.crit .strong { color: #A97E1E; }
+  .total-box.dps { background: #F2F7FF; border-color: #B7CDEB; }
+  .total-box.dps .cap { color: #40536F; }
+  .total-box.dps .strong { color: #2C4A76; }
+  .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
+  .delay-note .warn { color: var(--danger, #B5443A); }
 
   /* パネル(もし〜/なぜ) */
   .panel { margin-top: 11px; border-radius: var(--r-window); overflow: hidden; border: 1px solid var(--border-strong); background: #fff; }

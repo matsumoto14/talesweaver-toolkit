@@ -155,6 +155,18 @@
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
 
+  // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラ固有のパッシブだけ。
+  // 共通の供給源(フルスロットル / カフスの RO / シエナのオーラ)はそれぞれの補正源で設定する。
+  const delaySummary = $derived.by(() => {
+    const choices = draft.statSources.actual_delay_skills.choices;
+    if (choices.length === 0) return NEUTRAL;
+    const percent = choices.reduce((n, c) => {
+      const def = app.actualDelaySkills.find((d) => d.id === c.skill_id);
+      return n + (def?.percents[c.choice_index] ?? 0);
+    }, 0);
+    return `${choices.length} 件 ・ 合計 −${percent}%`;
+  });
+
   // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる
   const commonSkillSummary = $derived.by(() => {
     const c = draft.commonSkills;
@@ -239,6 +251,7 @@
     { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
     { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
+    { id: "actualDelay", name: "中ディレイ減少", sub: delaySummary },
     { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },

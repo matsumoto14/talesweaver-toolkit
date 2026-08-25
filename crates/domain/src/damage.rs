@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::actual_delay::{actual_delay, ActualDelay, ActualDelayContribution};
 use crate::attack_power::{
     attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,
@@ -71,6 +72,10 @@ pub struct DamageInput {
     pub pins: Adjustments,
     /// 計算リクエストの一時調整(キャラには保存しない)。ステごとに `pins` より優先する
     pub temporary_pins: Option<Adjustments>,
+    /// キャラのパッシブ・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
+    /// カタログの解決は呼び出し側(`ActualDelaySkills::contributions`)。共通の供給源
+    /// (フルスロットル / ランダムオプション / シエナのオーラ)は `calculate_damage` が自分で集める
+    pub actual_delay_skills: Vec<ActualDelayContribution>,
 }
 
 impl DamageInput {
@@ -98,6 +103,7 @@ impl DamageInput {
         element_value: i64,
         pins: Adjustments,
         temporary_pins: Option<Adjustments>,
+        actual_delay_skills: Vec<ActualDelayContribution>,
     ) -> Self {
         Self {
             base_stats,
@@ -120,6 +126,7 @@ impl DamageInput {
             element_value,
             pins,
             temporary_pins,
+            actual_delay_skills,
         }
     }
 }
@@ -170,7 +177,20 @@ pub struct DamageResult {
     /// 命中P(wiki: 計算式まとめ #AccuracyPoint)。敵の回避Pを 100 上回ると必中。
     /// スキル命中が wiki 未記載(`Skill::accuracy` が `None`)なら出せないので `None`
     pub accuracy_point: Option<i64>,
+    /// 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。スキルの「動作」列が秒で取れない
+    /// (`Skill::base_actual_delay` が `None`)なら出せないので `None`
+    pub actual_delay: Option<ActualDelay>,
+    /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。中ディレイが出せないなら `None`
+    pub dps: Option<DpsTriple>,
     pub trace: DamageTrace,
+}
+
+/// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct DpsTriple {
+    pub min: f64,
+    pub max: f64,
+    pub critical: f64,
 }
 
 /// 属性差ボーナス(wiki: カテゴリI)の Σ%。`floor((属性値 − 閾値) × 0.625) / 100`。範囲はキャップで 0..+50% に収める。
@@ -418,19 +438,53 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         steps_critical.push(step);
     }
 
+    // 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。減少値の供給源は
+    // 極限スキル「フルスロットル」/ カフス(盾+)のランダムオプション / シエナのオーラ /
+    // キャラのパッシブ(呼び出し側がカタログを引いて渡す)。
+    let delay = input.skill.base_actual_delay.map(|base| {
+        let mut contributions = Vec::new();
+        let full_throttle = input.common_skills.ultimate.actual_delay_reduction();
+        if full_throttle != 0.0 {
+            contributions
+                .push(ActualDelayContribution { source: "フルスロットル".into(), rate: full_throttle });
+        }
+        let random_option = input.random_options.actual_delay_reduction;
+        if random_option != 0.0 {
+            contributions.push(ActualDelayContribution {
+                source: "ランダムオプション(カフス)".into(),
+                rate: random_option,
+            });
+        }
+        let siena = input.equipment.siena_actual_delay_reduction();
+        if siena != 0.0 {
+            contributions
+                .push(ActualDelayContribution { source: "シエナのオーラ".into(), rate: siena });
+        }
+        contributions.extend(input.actual_delay_skills.iter().cloned());
+        actual_delay(base, input.skill.actual_delay_fixed, contributions, input.combo_count)
+    });
+    let total = DamageTriple {
+        min: sum.min + added.min,
+        max: sum.max + added.max,
+        critical: sum.critical + added.critical,
+    };
+    let dps = delay.as_ref().map(|d| DpsTriple {
+        min: total.min as f64 / d.value,
+        max: total.max as f64 / d.value,
+        critical: total.critical as f64 / d.value,
+    });
+
     DamageResult {
         per_hit: DamageTriple { min, max, critical },
-        total: DamageTriple {
-            min: sum.min + added.min,
-            max: sum.max + added.max,
-            critical: sum.critical + added.critical,
-        },
+        total,
         hit_count,
         damage_cap: input.damage_cap,
         capped_loss,
         added_damage_rate: added_rate,
         added_damage: added,
         accuracy_point: accuracy,
+        actual_delay: delay,
+        dps,
         trace: DamageTrace {
             stats: stat_traces,
             stat_contributions: input.stat_contributions.clone(),
@@ -513,6 +567,8 @@ mod tests {
                 critical_rate: Some(7),
                 level: 1,
                 single_target_channeling: false,
+                base_actual_delay: Some(1.4),
+                actual_delay_fixed: false,
             },
             enemy: Enemy {
                 id: "e".into(),
@@ -527,6 +583,7 @@ mod tests {
             element_value: 0,
             pins: Adjustments::default(),
             temporary_pins: None,
+            actual_delay_skills: Vec::new(),
         }
     }
 
@@ -960,6 +1017,49 @@ mod tests {
         i.random_options.accuracy_point = 20;
         let base = calculate_damage(&input()).accuracy_point.unwrap();
         assert_eq!(calculate_damage(&i).accuracy_point.unwrap(), base + 20);
+    }
+
+    // --- 中ディレイ・DPS(wiki: 計算式まとめ `#ActualDelay`)------------------
+
+    #[test]
+    fn 中ディレイの供給源はフルスロットルとroとシエナとキャラパッシブ() {
+        use crate::actual_delay::ActualDelayContribution;
+        use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
+
+        let mut i = input();
+        i.common_skills.ultimate = UltimateSkills {
+            slots: [Some(UltimateSkill::FullThrottle), None],
+            super_limit: true,
+            hyper_limit_level: 6,
+        };
+        i.random_options.actual_delay_reduction = 0.03;
+        i.equipment.parts.shield_plus.siena.actual_delay_percent = 2.0;
+        i.actual_delay_skills =
+            vec![ActualDelayContribution { source: "剣の司祭".into(), rate: 0.05 }];
+
+        let delay = calculate_damage(&i).actual_delay.unwrap();
+        assert_eq!(delay.contributions.len(), 4);
+        // フルスロットル 45% + RO 3% + シエナ 2% + パッシブ 5% = 55%
+        assert!((delay.reduction - 0.55).abs() < 1e-12);
+        assert!((delay.value - 1.4 * 0.45).abs() < 1e-12);
+    }
+
+    #[test]
+    fn dpsは合計ダメージを中ディレイで割る() {
+        let result = calculate_damage(&input());
+        let delay = result.actual_delay.unwrap();
+        let dps = result.dps.unwrap();
+        assert!((dps.max - result.total.max as f64 / delay.value).abs() < 1e-9);
+        assert!((dps.critical - result.total.critical as f64 / delay.value).abs() < 1e-9);
+    }
+
+    #[test]
+    fn 動作が取れないスキルは中ディレイもdpsも出さない() {
+        let mut i = input();
+        i.skill.base_actual_delay = None;
+        let result = calculate_damage(&i);
+        assert!(result.actual_delay.is_none());
+        assert!(result.dps.is_none());
     }
 
     // --- 極限スキル(wiki: Skill/極限)-----------------------------------

@@ -1,8 +1,9 @@
 //! ドメインモデルと計算(I/O 無し・決定的)。
 //!
-//! パイプライン(docs/damage-formula.md §12):
+//! パイプライン(docs/damage-formula.md §13):
 //! ①能力値計算(`stats`) → ②カテゴリ集計(`category`) → ③与ダメージ式(`damage`) → ④段数。
 
+pub mod actual_delay;
 pub mod attack_power;
 pub mod awakening;
 pub mod category;
@@ -22,6 +23,11 @@ pub mod thesis_core;
 pub mod title;
 pub mod ultimate_skill;
 
+pub use actual_delay::{
+    actual_delay, ActualDelay, ActualDelayContribution, ActualDelayError, ActualDelaySkillCatalog,
+    ActualDelaySkillChoice, ActualDelaySkillDef, ActualDelaySkills, ACTUAL_DELAY_MIN,
+    ACTUAL_DELAY_REDUCTION_MAX,
+};
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,
@@ -37,7 +43,8 @@ pub use content::{
     ContentRequirement, ContentSeries, RequirementCheck,
 };
 pub use damage::{
-    calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
+    calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, DpsTriple,
+    FormulaStep,
 };
 pub use defense::{
     accuracy_point, defense_profile, AccuracyCorrection, DefenseProfile, EvasionPoints,

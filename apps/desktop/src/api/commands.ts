@@ -1,7 +1,7 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, BaseStats, BuffDefinition, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
+  ActualDelaySkillDef, Adjustments, BaseStats, BuffDefinition, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, RandomOptionDef, Skill, StatLimits, StatPreview, StatSources,
   TitleDef,
@@ -45,6 +45,9 @@ export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_
 export const listRandomOptions = () => invoke<RandomOptionDef[]>("list_random_options");
 /** 称号のカタログ(wiki: 称号システム。主要称号のみ) */
 export const listTitles = () => invoke<TitleDef[]>("list_titles");
+/** 中ディレイ減少スキルのカタログ(wiki: ステータス「中ディレイ倍率B」。キャラ固有のパッシブのみ) */
+export const listActualDelaySkills = () =>
+  invoke<ActualDelaySkillDef[]>("list_actual_delay_skills");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

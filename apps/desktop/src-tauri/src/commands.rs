@@ -79,6 +79,7 @@ pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::Elemen
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
         &gamedata::title_catalog(),
+        gamedata::actual_delay_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     Ok(element_preview(&character.game_character_id, &character.equipment, &character.stat_sources))
@@ -103,6 +104,13 @@ pub fn list_equipment_abilities() -> Vec<EquipmentAbilityDef> {
 #[tauri::command]
 pub fn list_random_options() -> Vec<RandomOptionDef> {
     gamedata::random_option_catalog()
+}
+
+/// 中ディレイ減少スキルのカタログ(wiki: ステータス「中ディレイ倍率B」)。キャラ固有のパッシブのみ。
+/// 9 件しかないので全件返し、キャラでの絞り込みは UI 側で `game_character_id` を見て行う。
+#[tauri::command]
+pub fn list_actual_delay_skills() -> Vec<domain::ActualDelaySkillDef> {
+    gamedata::actual_delay_skill_catalog().to_vec()
 }
 
 /// 称号のカタログ(wiki: 称号システム)。主要称号のみ。
@@ -148,6 +156,7 @@ pub fn create_character(
             &gamedata::equipment_abilities(),
             &gamedata::random_option_catalog(),
             &gamedata::title_catalog(),
+            gamedata::actual_delay_skill_catalog(),
         )
     })
 }
@@ -171,6 +180,7 @@ pub fn update_character(
             &gamedata::equipment_abilities(),
             &gamedata::random_option_catalog(),
             &gamedata::title_catalog(),
+            gamedata::actual_delay_skill_catalog(),
         )
     })
 }
@@ -229,6 +239,7 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
         &gamedata::title_catalog(),
+        gamedata::actual_delay_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let preview = domain::preview_effective_stats(
@@ -373,6 +384,7 @@ fn build_damage_input(
         element_value,
         stat_sources.adjustments.clone(),
         temporary_adjustments,
+        stat_sources.actual_delay_skills.contributions(gamedata::actual_delay_skill_catalog()),
     ))
 }
 
@@ -420,6 +432,7 @@ pub fn preview_damage(
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
         &gamedata::title_catalog(),
+        gamedata::actual_delay_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let content = find_content(&content_id)?;
@@ -463,6 +476,7 @@ pub fn evaluate_contents(
         &equipment_abilities,
         &random_options,
         &titles,
+        gamedata::actual_delay_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
@@ -480,6 +494,10 @@ pub fn evaluate_contents(
         &character.equipment,
     );
     let awakening_rate = gamedata::awakening_rate(character.awakening);
+    let actual_delay_skills = character
+        .stat_sources
+        .actual_delay_skills
+        .contributions(gamedata::actual_delay_skill_catalog());
     // 装備集計(基本能力値・武器追加固定ダメージ)はキャラのみ依存なのでループの外で 1 回だけ計算する。
     let equipment_base_totals = character.equipment.base_totals(&equipment_abilities, &titles);
     let random_option_totals = character.equipment.random_option_totals(&random_options);
@@ -550,6 +568,7 @@ pub fn evaluate_contents(
                     ),
                     character.stat_sources.adjustments.clone(),
                     None,
+                    actual_delay_skills.clone(),
                 );
                 let result = domain::calculate_damage(&input);
                 if best.as_ref().is_none_or(|b| result.per_hit.max > b.per_hit_max) {

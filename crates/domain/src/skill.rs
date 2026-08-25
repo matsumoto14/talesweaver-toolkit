@@ -41,4 +41,11 @@ pub struct Skill {
     /// 凡例は wiki「Skill#f8e303fb」)。極限スキル「フルスロットル」の段数増加はこれにだけ乗る
     #[serde(default)]
     pub single_target_channeling: bool,
+    /// 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列。
+    /// 秒数として読めない行(表記が `0` 等)は `None` = 中ディレイ・DPS を出せない
+    #[serde(default)]
+    pub base_actual_delay: Option<f64>,
+    /// 中ディレイが固定で減少が効かない(wiki スキル性能一覧の「(固定)」表記)
+    #[serde(default)]
+    pub actual_delay_fixed: bool,
 }

@@ -2,6 +2,7 @@
 //!
 //! 現状は Rust のリテラルで持つ(docs/claude/decisions.md「構成・運用」)。各データに出典 `Source` を付ける。
 
+pub mod actual_delay;
 pub mod awakening;
 pub mod buffs;
 pub mod characters;
@@ -15,6 +16,9 @@ pub mod titles;
 
 use serde::Serialize;
 
+pub use actual_delay::{
+    actual_delay_skill_catalog, ACTUAL_DELAY_SKILLS_SOURCE,
+};
 pub use awakening::{awakening_caps, awakening_rate, AWAKENING_SOURCE};
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use characters::{

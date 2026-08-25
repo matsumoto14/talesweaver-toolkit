@@ -77,6 +77,9 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   buffs: { choices: src.buffs.choices.map((b) => ({ ...b })) },
   adjustments: cloneAdjustments(src.adjustments),
   elements: { ...src.elements },
+  actual_delay_skills: {
+    choices: (src.actual_delay_skills?.choices ?? []).map((c) => ({ ...c })),
+  },
 });
 
 export const neutralStatSources = (): StatSources => ({
@@ -87,6 +90,7 @@ export const neutralStatSources = (): StatSources => ({
   buffs: { choices: [] },
   adjustments: Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as StatSources["adjustments"],
   elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
+  actual_delay_skills: { choices: [] },
 });
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({

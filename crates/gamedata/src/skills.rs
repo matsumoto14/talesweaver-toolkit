@@ -30,6 +30,346 @@ const SINGLE_TARGET_CHANNELING: [&str; 7] = [
     "isaac_demise_furious",       // 極・滅神乱舞
 ];
 
+/// 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列(取得 2026-08-25)。
+///
+/// `s(...)` の引数に足さず別表にしているのは `SINGLE_TARGET_CHANNELING` と同じ理由で、
+/// 303 行の主表は wiki の「攻撃力・Cri倍・命中・Cri値」の並びを保ちたいため。
+/// - `A/B` 表記(イェフネンのパイク系)は条件付き([加速])の値なので**基本値の A** を採る
+/// - `(固定)` 付き(ティチエル 極・ギガブレイズ / クロエ 極・メテオストライク)は
+///   中ディレイ減少が効かない。`ACTUAL_DELAY_FIXED` で持つ
+/// - 秒数として読めない行は `None`(中ディレイ・DPS を出さない)
+#[rustfmt::skip]
+const ACTUAL_DELAYS: &[(&str, Option<f64>)] = &[
+    // ---- lucian ----
+    ("lucian_butt", Some(0.6)),
+    ("lucian_horizontal_sword", Some(0.7)),
+    ("lucian_vertical_sword", Some(0.7)),
+    ("lucian_killing", Some(0.8)),
+    ("lucian_vortex", Some(1.4)),
+    ("lucian_streak", Some(10.0)),
+    ("lucian_crescent_slash", Some(0.8)),
+    ("lucian_continuous", Some(1.4)),
+    ("lucian_warriors_dance", Some(10.0)),
+    ("lucian_circle", Some(0.8)),
+    ("lucian_flying_burst", Some(1.2)),
+    ("lucian_fei", Some(0.6)),
+    ("lucian_waltz", Some(1.4)),
+    ("lucian_whirlwind_sword", Some(10.0)),
+    ("lucian_sylph_cutter", Some(1.2)),
+    ("lucian_wind_slice", Some(1.1)),
+    // ---- boris ----
+    ("boris_horizontal_sword", Some(0.8)),
+    ("boris_vertical_sword", Some(0.8)),
+    ("boris_ice_break", Some(0.7)),
+    ("boris_blur_sword", Some(1.4)),
+    ("boris_explosion", Some(0.8)),
+    ("boris_smash_crusher", Some(1.2)),
+    ("boris_inherited", Some(0.8)),
+    ("boris_continuous", Some(1.4)),
+    ("boris_crash_bomb", Some(1.2)),
+    ("boris_ice_attack_sword", Some(1.4)),
+    ("boris_frozen_sleigh", Some(1.5)),
+    ("boris_frozen_break", Some(1.2)),
+    ("boris_ice_missile", Some(1.1)),
+    ("boris_ice_fog", Some(1.4)),
+    ("boris_icing_earrings", Some(1.4)),
+    ("boris_gracia", Some(1.2)),
+    // ---- ispin ----
+    ("ispin_step_in", Some(0.7)),
+    ("ispin_scratch", Some(0.7)),
+    ("ispin_over_cut", Some(0.7)),
+    ("ispin_gale_butt", Some(1.0)),
+    ("ispin_counter_spear", Some(1.2)),
+    ("ispin_ren", Some(1.4)),
+    ("ispin_sanfamu", Some(0.8)),
+    ("ispin_grand_cross", Some(1.0)),
+    ("ispin_double_cross_slash", Some(0.8)),
+    ("ispin_killing", Some(0.9)),
+    // ---- maximin ----
+    ("maximin_sword", Some(0.7)),
+    ("maximin_attracted_sword", Some(0.8)),
+    ("maximin_air_break", Some(0.7)),
+    ("maximin_zan", Some(0.8)),
+    ("maximin_continuous", Some(1.4)),
+    ("maximin_wind_storm", Some(0.1)),
+    ("maximin_roll_hash", Some(0.8)),
+    ("maximin_explosion", Some(0.8)),
+    ("maximin_storm_eye", Some(1.0)),
+    ("maximin_moonlight_sword", Some(1.0)),
+    ("maximin_wind_tooth_knife", Some(1.4)),
+    ("maximin_wind_slice", Some(1.1)),
+    ("maximin_sylph_lance", Some(0.8)),
+    ("maximin_mistral_blade", Some(1.2)),
+    // ---- tichiel ----
+    ("tichiel_twinkle", Some(0.8)),
+    ("tichiel_smash", Some(0.7)),
+    ("tichiel_fire_ball", Some(0.8)),
+    ("tichiel_burning_air", Some(0.8)),
+    ("tichiel_giga_blaze", Some(0.8)),
+    ("tichiel_fire_arrow", Some(1.0)),
+    ("tichiel_cold_snap", Some(1.0)),
+    ("tichiel_frost_coating", Some(0.8)),
+    ("tichiel_blizzard", Some(8.0)),
+    ("tichiel_ice_missile", Some(1.0)),
+    ("tichiel_lightning_rod", Some(0.8)),
+    ("tichiel_calling_thunder", Some(0.8)),
+    ("tichiel_sparkling_kite", None), // 極・スパークリングカイト: wiki の「動作」が "0"
+    ("tichiel_lightning_bolt", Some(1.0)),
+    ("tichiel_holy_bolt", Some(1.0)),
+    ("tichiel_sunrise", Some(1.2)),
+    ("tichiel_aurora_wall", Some(1.1)),
+    ("tichiel_beating", Some(1.4)),
+    ("tichiel_break_armor", Some(0.8)),
+    ("tichiel_blade_wall", Some(0.8)),
+    // ---- nayatorei ----
+    ("nayatorei_cross_thrust", Some(0.7)),
+    ("nayatorei_dual_hit", Some(0.8)),
+    ("nayatorei_slash", Some(0.7)),
+    ("nayatorei_back_stab", Some(1.0)),
+    ("nayatorei_avatar", Some(0.8)),
+    ("nayatorei_mausoleum", Some(10.0)),
+    ("nayatorei_assault", Some(0.8)),
+    ("nayatorei_wide_assault", Some(0.8)),
+    ("nayatorei_ren", Some(1.4)),
+    ("nayatorei_dance", Some(0.8)),
+    ("nayatorei_heart", Some(1.0)),
+    ("nayatorei_shuriken", Some(0.8)),
+    ("nayatorei_flash", Some(0.6)),
+    // ---- siberin ----
+    ("siberin_thrust", Some(0.7)),
+    ("siberin_brandy", Some(0.8)),
+    ("siberin_beat_down", Some(0.8)),
+    ("siberin_turning", Some(0.8)),
+    ("siberin_continuous_thrust", Some(1.4)),
+    ("siberin_twin_dragon_strike", Some(10.0)),
+    ("siberin_throw_dragon", Some(0.8)),
+    ("siberin_even_fly", Some(1.0)),
+    ("siberin_twin_dragon_slash", Some(0.8)),
+    ("siberin_red_dragon_strike", Some(10.0)),
+    ("siberin_red_dragon_climb", Some(1.2)),
+    ("siberin_bombing", Some(8.0)),
+    // ---- mira ----
+    ("mira_hit_whip", Some(0.7)),
+    ("mira_hard_whip", Some(0.7)),
+    ("mira_whip", Some(0.7)),
+    ("mira_cool_whip", Some(0.9)),
+    ("mira_card_spray_a", Some(0.5)),
+    ("mira_mad_bite_viper", Some(1.2)),
+    ("mira_bite_viper", Some(1.0)),
+    ("mira_dew_storm", Some(0.8)),
+    ("mira_dirty_strike", Some(0.7)),
+    ("mira_dancing_viper", Some(1.0)),
+    ("mira_crazy_viper", Some(1.2)),
+    ("mira_crimson_shooter", Some(2.0)),
+    // ---- joshua ----
+    ("joshua_sting", Some(0.7)),
+    ("joshua_death_claw", Some(1.1)),
+    ("joshua_soul_burst", Some(8.0)),
+    ("joshua_ghost_burst", Some(1.0)),
+    ("joshua_staccato", Some(1.0)),
+    ("joshua_vertical_infinity", Some(0.8)),
+    ("joshua_finale", Some(1.0)),
+    ("joshua_soul_slayer", Some(1.2)),
+    ("joshua_shadow_vision", Some(1.0)),
+    ("joshua_iron_mist", Some(0.8)),
+    ("joshua_ruin", Some(0.8)),
+    ("joshua_soul_grab", Some(0.8)),
+    // ---- chloe ----
+    ("chloe_fire_beat", Some(0.8)),
+    ("chloe_ice_beat", Some(0.8)),
+    ("chloe_lightning_beat", Some(0.8)),
+    ("chloe_air_beat", Some(0.8)),
+    ("chloe_stone_beat", Some(0.8)),
+    ("chloe_fire_arrow", Some(1.0)),
+    ("chloe_fire_ball", Some(0.8)),
+    ("chloe_mega_blaze", Some(0.8)),
+    ("chloe_meteor_strike", Some(0.8)),
+    ("chloe_ice_missile", Some(1.0)),
+    ("chloe_snow_flake", Some(0.8)),
+    ("chloe_extraction", Some(0.8)),
+    ("chloe_icicle_rain", Some(8.0)),
+    ("chloe_thunder_strike", Some(1.0)),
+    ("chloe_radial_thunder", Some(0.8)),
+    ("chloe_static_field", Some(0.8)),
+    ("chloe_electric_ball", Some(0.8)),
+    ("chloe_gast", Some(1.0)),
+    ("chloe_vacuumize", Some(0.8)),
+    ("chloe_tornado", Some(0.8)),
+    ("chloe_stone_arrow", Some(1.0)),
+    ("chloe_square_shock", Some(0.8)),
+    ("chloe_gravity", Some(0.8)),
+    ("chloe_sand_storm", Some(8.0)),
+    // ---- ranjie ----
+    ("ranjie_gunshot", Some(0.9)),
+    ("ranjie_dual_shot", Some(1.1)),
+    ("ranjie_hard_shot", Some(1.0)),
+    ("ranjie_magic_bullet", Some(0.9)),
+    ("ranjie_magical_dual_shot", Some(1.1)),
+    ("ranjie_magical_hard_shot", Some(1.0)),
+    ("ranjie_crazy_shot", Some(1.4)),
+    ("ranjie_multi_shot", Some(0.8)),
+    ("ranjie_piercing_shot", Some(0.9)),
+    ("ranjie_ice_shot", Some(0.9)),
+    ("ranjie_misty_shot", Some(0.8)),
+    ("ranjie_ice_pierce_shot", Some(1.0)),
+    // ---- isaac ----
+    ("isaac_straight", Some(1.0)),
+    ("isaac_jab", Some(0.8)),
+    ("isaac_double_kick", Some(1.0)),
+    ("isaac_forefist_punch", Some(1.0)),
+    ("isaac_jab_punch", Some(0.8)),
+    ("isaac_backfist_strike", Some(0.9)),
+    ("isaac_slam_bang", Some(1.4)),
+    ("isaac_blasting_blow", Some(1.2)),
+    ("isaac_break_through", Some(0.8)),
+    ("isaac_demise_furious", Some(10.0)),
+    ("isaac_power_punch", Some(0.9)),
+    ("isaac_energy_punch", Some(0.9)),
+    ("isaac_chris_cross", Some(1.4)),
+    ("isaac_energy_wave", Some(1.0)),
+    ("isaac_destrudo", Some(1.2)),
+    ("isaac_lion_fear", Some(1.5)),
+    ("isaac_energy_field", Some(8.0)),
+    // ---- anais ----
+    ("anais_fairy_light", Some(0.6)),
+    ("anais_angry_pixie", Some(0.8)),
+    ("anais_thrust", Some(0.5)),
+    ("anais_mica_even_bear", Some(1.0)),
+    ("anais_mica_footstep", Some(0.8)),
+    ("anais_judgment_spin", Some(0.8)),
+    ("anais_mica_bear_step", Some(0.8)),
+    ("anais_strike", Some(0.5)),
+    ("anais_rucy_even_bear", Some(1.0)),
+    ("anais_deathmoment", Some(1.0)),
+    ("anais_rucy_footstep", Some(0.8)),
+    ("anais_rucy_bear_step", Some(1.2)),
+    ("anais_lightning_attack", Some(0.3)),
+    ("anais_chain_lightning", Some(1.0)),
+    ("anais_tesla_coil", Some(1.1)),
+    ("anais_crystal_attack", Some(0.3)),
+    ("anais_crystal_sprinter", Some(1.0)),
+    ("anais_ring_of_ice", Some(0.8)),
+    ("anais_ice_age", Some(1.1)),
+    ("anais_flame_attack", Some(0.3)),
+    ("anais_fire_blast", Some(0.8)),
+    ("anais_detonate", Some(0.8)),
+    ("anais_flare_field", Some(1.1)),
+    ("anais_dissonance", Some(1.4)),
+    ("anais_cacophony", Some(1.2)),
+    // ---- isolet ----
+    ("isolet_butt", Some(0.8)),
+    ("isolet_horizontal_sword", Some(0.8)),
+    ("isolet_devine_beat", Some(0.7)),
+    ("isolet_dash_blade", Some(0.6)),
+    ("isolet_gravity_field", Some(0.8)),
+    ("isolet_vacuum_sword", Some(0.8)),
+    ("isolet_gale_sword", Some(0.8)),
+    ("isolet_wind_spear", Some(0.8)),
+    ("isolet_whirl_wind", Some(1.0)),
+    ("isolet_back_blade", Some(0.5)),
+    ("isolet_continuous", Some(1.4)),
+    ("isolet_circle", Some(0.8)),
+    ("isolet_storm_blade", Some(1.1)),
+    ("isolet_storm_dance", Some(1.1)),
+    ("isolet_storm_blast", Some(1.1)),
+    ("isolet_holy_light", Some(0.8)),
+    ("isolet_zone_burst", Some(0.8)),
+    ("isolet_holy_phoenix", Some(0.8)),
+    ("isolet_sonic_wave", Some(0.1)),
+    ("isolet_gloria", Some(1.0)),
+    ("isolet_holy_bird", Some(1.0)),
+    // ---- benya ----
+    ("benya_curse_of_blood", Some(1.0)),
+    ("benya_guillotine", Some(0.8)),
+    ("benya_soul_steal", Some(0.1)),
+    ("benya_death_chain", Some(1.0)),
+    ("benya_hell_gate", Some(0.1)),
+    ("benya_scythe_dancing", Some(1.4)),
+    ("benya_strike_blow", Some(1.0)),
+    ("benya_soul_scream", Some(0.8)),
+    ("benya_sharp_hellfire", Some(1.0)),
+    ("benya_earth_dive", Some(1.0)),
+    ("benya_counter_hammer", Some(0.2)),
+    ("benya_paul_hammer", Some(1.2)),
+    ("benya_space_cutting", Some(0.8)),
+    ("benya_meteor_soul", Some(1.0)),
+    // ---- roamini ----
+    ("roamini_darkness_flare", Some(0.8)),
+    ("roamini_poison_dart", Some(0.8)),
+    ("roamini_curse_nova", Some(0.8)),
+    ("roamini_darkness_gazer", Some(0.8)),
+    ("roamini_carse_flame", Some(1.0)),
+    ("roamini_poison_mist", Some(0.8)),
+    ("roamini_mastary1_2", Some(0.3)),
+    ("roamini_mastary3_2", Some(0.4)),
+    ("roamini_mastary3_3", Some(0.8)),
+    ("roamini_mastary2_4", Some(1.0)),
+    ("roamini_mastary2_3", Some(1.0)),
+    // ---- nocturne ----
+    ("nocturne_launcher", Some(0.8)),
+    ("nocturne_lightning_bomb", Some(0.8)),
+    ("nocturne_shining_laser", Some(1.0)),
+    ("nocturne_magnetic_force", Some(0.1)),
+    ("nocturne_buster_launcher", Some(1.0)),
+    ("nocturne_laser_canon", Some(1.0)),
+    ("nocturne_plasma_canon", Some(1.0)),
+    ("nocturne_satellite_canon", Some(0.1)),
+    ("nocturne_cluster_rocket", Some(1.0)),
+    ("nocturne_quantum_nuclear", Some(1.0)),
+    // ---- leeche ----
+    ("leeche_monpureine_skill_1", Some(0.7)),
+    ("leeche_monpureine_skill_2", Some(0.8)),
+    ("leeche_monpureine_skill_3", Some(0.6)),
+    ("leeche_monpureine_skill_4", Some(1.0)),
+    ("leeche_monpureine_skill_5", Some(1.4)),
+    ("leeche_monpureine_skill_6", Some(1.6)),
+    ("leeche_monpureine_skill_7", Some(0.8)),
+    ("leeche_monpureine_skill_8", Some(0.8)),
+    ("leeche_monpureine_skill_9", Some(0.8)),
+    ("leeche_monpureine_skill_10", Some(0.8)),
+    ("leeche_monpureine_skill_11", Some(0.8)),
+    ("leeche_monpureine_skill_12", Some(0.8)),
+    ("leeche_monpureine_skill_19", Some(0.8)),
+    ("leeche_monpureine_skill_21", Some(0.8)),
+    ("leeche_armor_of_evil_skill_2", Some(0.8)),
+    ("leeche_armor_of_evil_skill_3", Some(0.8)),
+    ("leeche_armor_of_evil_skill_8", Some(0.8)),
+    ("leeche_armor_of_evil_skill_9", Some(0.8)),
+    ("leeche_armor_of_evil_skill_11", Some(0.8)),
+    ("leeche_armor_of_evil_skill_12", Some(0.8)),
+    ("leeche_armor_of_evil_skill_13", Some(0.1)),
+    ("leeche_anarose_skill_5", Some(0.8)),
+    ("leeche_anarose_skill_6", Some(0.8)),
+    ("leeche_runaway_skill_2", Some(0.8)),
+    // ---- yefnen ----
+    ("yefnen_continuous", Some(1.4)),
+    ("yefnen_explosion", Some(1.2)),
+    ("yefnen_slay", Some(1.4)),
+    ("yefnen_crash", Some(1.2)),
+    ("yefnen_continuous_pike", Some(1.5)),
+    ("yefnen_explosion_pike", Some(1.0)),
+    ("yefnen_slay_pike", Some(1.5)),
+    ("yefnen_crash_pike", Some(1.0)),
+    ("yefnen_continuous_axe", Some(1.8)),
+    ("yefnen_explosion_axe", Some(1.5)),
+    ("yefnen_slay_axe", Some(1.8)),
+    ("yefnen_crash_axe", Some(1.5)),
+    ("yefnen_continuous_urumi", Some(1.4)),
+    ("yefnen_explosion_urumi", Some(1.2)),
+    ("yefnen_slay_urumi", Some(8.0)),
+    ("yefnen_crash_urumi", Some(8.0)),
+    ("yefnen_continuous_chisel", Some(0.8)),
+    ("yefnen_explosion_chisel", Some(0.8)),
+    ("yefnen_slay_chisel", Some(0.9)),
+    ("yefnen_crash_chisel", Some(0.8)),
+];
+
+/// 中ディレイが固定で減少が効かないスキル(wiki スキル性能一覧の「動作」が `(固定)`)。
+const ACTUAL_DELAY_FIXED: [&str; 2] = [
+    "tichiel_giga_blaze",  // 極・ギガブレイズ
+    "chloe_meteor_strike", // 極・メテオストライク
+];
+
 pub const SKILLS_SOURCE: Source = Source {
     page: "Skill/<各キャラ名>「スキル性能一覧」",
     retrieved_on: "2026-08-25",
@@ -425,6 +765,11 @@ impl SkillRecord {
             critical_rate: self.critical_rate,
             level: self.level,
             single_target_channeling: SINGLE_TARGET_CHANNELING.contains(&self.skill_id().as_str()),
+            base_actual_delay: ACTUAL_DELAYS
+                .iter()
+                .find(|(id, _)| *id == self.skill_id().as_str())
+                .and_then(|(_, delay)| *delay),
+            actual_delay_fixed: ACTUAL_DELAY_FIXED.contains(&self.skill_id().as_str()),
         }
     }
 }
@@ -461,6 +806,46 @@ mod tests {
             .filter(|s| s.single_target_channeling)
             .count();
         assert_eq!(flagged, 7);
+    }
+
+    /// wiki スキル性能一覧の「動作」列。全 303 件ぶん引けて、秒が読めなかったのは
+    /// ティチエル 極・スパークリングカイト(wiki 表記が `0`)の 1 件だけ。
+    #[test]
+    fn 基本中ディレイは全スキルぶん引けて未取得は1件() {
+        assert_eq!(ACTUAL_DELAYS.len(), SKILLS.len());
+        let mut ids: Vec<&str> = ACTUAL_DELAYS.iter().map(|(id, _)| *id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), SKILLS.len());
+        for record in SKILLS {
+            let id = record.skill_id();
+            assert!(ACTUAL_DELAYS.iter().any(|(k, _)| *k == id), "{id} の動作が無い");
+        }
+        let missing: Vec<&str> =
+            ACTUAL_DELAYS.iter().filter(|(_, d)| d.is_none()).map(|(id, _)| *id).collect();
+        assert_eq!(missing, ["tichiel_sparkling_kite"]);
+        // 秒が読めた行はすべて正の値
+        assert!(ACTUAL_DELAYS.iter().filter_map(|(_, d)| *d).all(|d| d > 0.0));
+    }
+
+    #[test]
+    fn 固定の中ディレイは2件でカタログにある() {
+        for id in ACTUAL_DELAY_FIXED {
+            let skill = find_skill(id).unwrap_or_else(|| panic!("{id} がカタログに無い"));
+            assert!(skill.actual_delay_fixed, "{id} にフラグが立っていない");
+            assert_eq!(skill.base_actual_delay, Some(0.8), "{id} の動作");
+        }
+    }
+
+    #[test]
+    fn 中ディレイのスポットチェック() {
+        // wiki Skill/ボリス: 極・残影斬 1.4s / †極・横斬り 0.8s
+        assert_eq!(find_skill("boris_blur_sword").unwrap().base_actual_delay, Some(1.4));
+        assert_eq!(find_skill("boris_horizontal_sword").unwrap().base_actual_delay, Some(0.8));
+        // wiki Skill/ルシアン: 極・連撃(チャネリング)は 10s
+        assert_eq!(find_skill("lucian_streak").unwrap().base_actual_delay, Some(10.0));
+        // wiki Skill/イェフネン: 極・連・パイクは `1.5s/1s`([加速]時)。基本値の 1.5s を採る
+        assert_eq!(find_skill("yefnen_continuous_pike").unwrap().base_actual_delay, Some(1.5));
     }
 
     #[test]

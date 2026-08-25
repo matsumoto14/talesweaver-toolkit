@@ -29,8 +29,8 @@ pub const RANDOM_OPTION_SOURCE: Source = Source {
 };
 
 use RandomOptionEffect::{
-    AccuracyAndEvasionPoint, AccuracyPoint, AttackDamageRate, DependencyDamageRate, EvasionPoint,
-    RecordOnly,
+    AccuracyAndEvasionPoint, AccuracyPoint, ActualDelayReduction, AttackDamageRate,
+    DependencyDamageRate, EvasionPoint, RecordOnly,
 };
 use RandomOptionRank::{Normal, Rare, STrue, Special, Valuable};
 
@@ -211,9 +211,9 @@ pub fn random_option_catalog() -> Vec<RandomOptionDef> {
             "スキルの中ディレイが減少",
             PartSlot::ShieldPlus,
             0,
-            RecordOnly,
+            ActualDelayReduction,
             CUFFS_ACTUAL_DELAY_TIERS,
-            "Lv310〜。中ディレイ倍率B の減少。中ディレイが未実装なので記録のみ",
+            "Lv310〜。中ディレイ倍率B の減少(wiki: ステータス「中ディレイ倍率B」)",
         ),
         // --- 鎧 ---------------------------------------------------------
         def(

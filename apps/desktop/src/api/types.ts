@@ -33,6 +33,10 @@ export interface Skill {
   level: number;
   /** 単体チャネリングスキルか。極限スキル「フルスロットル」の段数増加はこれにだけ乗る */
   single_target_channeling: boolean;
+  /** 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列。null = 秒として読めない */
+  base_actual_delay: number | null;
+  /** 中ディレイが固定で減少が効かない(wiki の「(固定)」表記) */
+  actual_delay_fixed: boolean;
 }
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
@@ -116,6 +120,53 @@ export interface StatSources {
   adjustments: Adjustments;
   /** 装備の属性強化以外の属性値の供給源 */
   elements: ElementSources;
+  /** 中ディレイ減少をもたらすキャラのパッシブ・マスタリー */
+  actual_delay_skills: ActualDelaySkills;
+}
+
+// crates/domain/src/actual_delay.rs の ActualDelaySkillDef。list_actual_delay_skills の戻り値。
+export interface ActualDelaySkillDef {
+  id: string;
+  name: string;
+  game_character_id: string;
+  /** 選べる減少 %(1 段だけのパッシブは 1 要素) */
+  percents: number[];
+  note: string;
+}
+
+export interface ActualDelaySkillChoice {
+  skill_id: string;
+  /** percents のインデックス */
+  choice_index: number;
+}
+
+export interface ActualDelaySkills {
+  choices: ActualDelaySkillChoice[];
+}
+
+// crates/domain/src/actual_delay.rs の ActualDelayContribution / ActualDelay。
+export interface ActualDelayContribution {
+  source: string;
+  /** Σ% の小数表現(−5% → 0.05) */
+  rate: number;
+}
+
+export interface ActualDelay {
+  /** 基本中ディレイ(秒) */
+  base: number;
+  /** 上限前の中ディレイ減少値 */
+  reduction_raw: number;
+  /** 上限(70%)適用後の中ディレイ減少値 */
+  reduction: number;
+  /** 倍率A(コンボボーナス)。2 コンボ以上で 0.5 */
+  combo_rate: number;
+  /** 中ディレイ(秒)。下限 0.3s 適用後 */
+  value: number;
+  /** 下限 0.3s で頭打ちになったか */
+  floored: boolean;
+  /** wiki が「(固定)」と書いている中ディレイ(減少が効かない) */
+  fixed: boolean;
+  contributions: ActualDelayContribution[];
 }
 
 // 属性値の供給源の種別。crates/domain/src/element.rs の ElementSourceId(snake_case)。
@@ -192,7 +243,7 @@ export interface SienaAura {
   attack_rate_percent: number;
   /** 追加オプション「防御力増加」の %。装備防御力倍率へ合流する */
   defense_rate_percent: number;
-  /** 追加オプション「中ディレイ減少」の %。中ディレイが未実装なので記録のみ */
+  /** 追加オプション「中ディレイ減少」の %。中ディレイ減少値(倍率B)へ合流する */
   actual_delay_percent: number;
 }
 
@@ -595,7 +646,17 @@ export interface DamageResult {
   added_damage: DamageTriple;
   /** 命中P。敵の回避Pを 100 上回ると必中。null = スキル命中が wiki 未記載で出せない */
   accuracy_point: number | null;
+  /** 中ディレイ。null = スキルの「動作」列が秒で取れず出せない */
+  actual_delay: ActualDelay | null;
+  /** 1 秒あたりの与ダメージ(合計 / 中ディレイ)。null = 中ディレイが出せない */
+  dps: DpsTriple | null;
   trace: DamageTrace;
+}
+
+export interface DpsTriple {
+  min: number;
+  max: number;
+  critical: number;
 }
 
 // crates/domain/src/stat_sources.rs の StatLimits。get_stat_limits コマンドの戻り値。
@@ -618,6 +679,10 @@ export interface StatLimits {
   siena_stage_max: number;
   /** シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 % */
   siena_attack_rate_percent_max: number;
+  /** シエナのオーラの追加オプション「防御力増加」の 1 部位あたり上限 % */
+  siena_defense_rate_percent_max: number;
+  /** シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 % */
+  siena_actual_delay_percent_max: number;
   /** シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限 */
   siena_stat_bonus_max: number;
   /** シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限 */

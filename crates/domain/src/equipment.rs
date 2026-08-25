@@ -65,7 +65,7 @@ pub const SIENA_STAT_BONUS_MAX: i64 = 100;
 /// 登場しないため 1 部位 1 個)。実際は**装備防御力倍率増加**でプロテクトアーマーなどと加算される。
 pub const SIENA_DEFENSE_RATE_PERCENT_MAX: f64 = 10.0;
 /// シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 %
-/// (wiki: 追加オプション一覧の最大帯 2%)。中ディレイは未実装なので記録のみ。
+/// (wiki: 追加オプション一覧の最大帯 2%)。
 pub const SIENA_ACTUAL_DELAY_PERCENT_MAX: f64 = 2.0;
 /// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
 /// (wiki: 追加オプション一覧の最大帯 21〜30。同じ種類のオプションは同じ装備の別スロットには
@@ -268,7 +268,7 @@ pub struct SienaAura {
     /// プロテクトアーマーなどと加算される(wiki: 追加オプション一覧の備考)
     #[serde(default)]
     pub defense_rate_percent: f64,
-    /// 追加オプション「中ディレイ減少」の %。中ディレイが未実装なので記録のみ
+    /// 追加オプション「中ディレイ減少」の %。中ディレイ減少値(倍率B)へ合流する
     #[serde(default)]
     pub actual_delay_percent: f64,
 }
@@ -712,6 +712,13 @@ impl Equipment {
     /// 装備防御力倍率へ合流する(`CommonSkills::defense_rates` の引数)。
     pub fn siena_defense_rate(&self) -> f64 {
         self.parts.iter().into_iter().map(|(_, part)| part.siena.defense_rate_percent).sum::<f64>()
+            / 100.0
+    }
+
+    /// シエナのオーラの追加オプション「中ディレイ減少」の合計。Σ% の小数表現。
+    /// 中ディレイ減少値(倍率B)へ合流する(wiki: ステータス「中ディレイ倍率B」)。
+    pub fn siena_actual_delay_reduction(&self) -> f64 {
+        self.parts.iter().into_iter().map(|(_, part)| part.siena.actual_delay_percent).sum::<f64>()
             / 100.0
     }
 
