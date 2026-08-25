@@ -894,7 +894,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </tr>
 </tbody>
 </table></div>
-<p>装備強化(+1〜+15)による武器の追加固定ダメージ(装備システム/装備強化)は与ダメージ式の外側の加算(§5)であり、装備攻撃力(§4 A)とは別項目。実装済み(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「2026-08-24 部位別装備モデル」): <code>追加効果 = INT(INT(補正) × 倍率)</code>(補正 = 武器系統ごとの一次式・アビリティ除外、奇数なら −1、per-hit は <code>INT(追加 / Hit数)</code>)。+12〜15 の倍率はレンジ振りのため実測値の上書き入力を持つ。</p>
+<p>装備強化(+1〜+15)による武器の追加固定ダメージ(装備システム/装備強化)は与ダメージ式の外側の加算(§5)であり、装備攻撃力(§4 A)とは別項目。実装済み(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「2026-08-24 部位別装備モデル」): <code>追加効果 = INT(INT(補正) × 倍率)</code>(補正 = 武器系統ごとの一次式・アビリティ除外、奇数なら −1、per-hit は <code>INT(追加 / Hit数)</code>)。+12〜15 の倍率はレンジ振り(武器 +12: 140–280 / +13: 300–460 / +14: 480–660 / +15: 680–880、鎧はその半分)のため実測値の上書き入力を持ち、<strong>上書きが無いときはレンジ上限</strong>で自動計算する(装備強化再設定呪文書で振り直せるので実用上の想定値は最上値。ユーザー決定 2026-08-25)。</p>
 <h2 id="_1">取得メモ</h2>
 <p>talewiki は EUC-JP の PukiWiki。<code>?cmd=source&amp;page=&lt;EUC-JPでURLエンコードしたページ名&gt;</code> で wiki ソースが取れる(HTML の <code>&lt;pre&gt;</code> 内)。<code>curl → iconv -c -f EUC-JP -t UTF-8</code> で変換。</p>
     <footer class="doc-foot">原本: <code>docs/damage-formula.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>

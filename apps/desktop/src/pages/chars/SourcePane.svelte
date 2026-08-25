@@ -575,7 +575,7 @@
                 checked={part.enhance_added_damage !== null}
                 onchange={(e) => (part.enhance_added_damage = e.currentTarget.checked ? 0 : null)}
               />
-              <span>追加固定ダメージ(ゲーム内表示値)を実測で上書き(未チェックはレンジ下限で自動計算)</span>
+              <span>追加固定ダメージ(ゲーム内表示値)を実測で上書き(未チェックはレンジ上限で自動計算)</span>
             </label>
             {#if part.enhance_added_damage !== null}
               <div class="fields">

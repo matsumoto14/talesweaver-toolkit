@@ -239,7 +239,9 @@ pub fn get_stat_limits() -> domain::StatLimits {
 /// `item_id` → カタログの `weapon_class` → 系統ごとの補正式、の順で解決する。
 /// - 強化 Lv 0 は 0
 /// - +1〜+11 は確定倍率で式から算出
-/// - +12 以上は `enhance_added_damage`(実測上書き)があればそれ、無ければレンジ下限の倍率で算出
+/// - +12 以上は `enhance_added_damage`(実測上書き)があればそれ、無ければ**レンジ上限**の倍率で算出
+///   (wiki 装備システム/装備強化「強化数値の再設定」: 再設定呪文書で振り直せるので、
+///   実用上の想定値はレンジの最上値。ユーザー決定 2026-08-25)
 /// - カスタム武器(カタログ外・`weapon_class` 不明)は式で算出できないため `enhance_added_damage ?? 0`
 fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     if weapon.enhance_level == 0 {
@@ -260,9 +262,9 @@ fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     if let Some(added) = weapon.enhance_added_damage {
         return added;
     }
-    let (min_multiplier, _max_multiplier) =
+    let (_min_multiplier, max_multiplier) =
         gamedata::enhance_multiplier_range(weapon.enhance_level).unwrap_or((0.0, 0.0));
-    domain::weapon_added_damage(&weapon.base, &rates, min_multiplier)
+    domain::weapon_added_damage(&weapon.base, &rates, max_multiplier)
 }
 
 /// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
@@ -557,9 +559,11 @@ mod tests {
     }
 
     #[test]
-    fn レンジ倍率帯は上書き優先_無ければレンジ下限() {
+    fn レンジ倍率帯は上書き優先_無ければレンジ上限() {
         assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, Some(311220))), 311220);
-        // +12 レンジ下限 140 → INT(2101×140) = 294140(偶数)
-        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, None)), 294140);
+        // +12 レンジ上限 280 → INT(2101×280) = 588280(偶数)
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, None)), 588280);
+        // +15 レンジ上限 880 → INT(2101×880) = 1848880(偶数)
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 15, None)), 1848880);
     }
 }
