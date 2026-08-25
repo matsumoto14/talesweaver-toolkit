@@ -81,15 +81,15 @@
   .icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* 実画像が来るまでの縞プレースホルダ。系統ごとに地の色を変える */
   .icon.character {
-    border-radius: var(--r-window); border-color: #798CAC; color: #3B4A63;
+    border-radius: var(--r-window); border-color: var(--border-strong); color: var(--fg-sub);
     background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
   }
   .icon.mob {
-    border-radius: var(--r-window); border-color: #A98B86; color: #6B4F49;
+    border-radius: var(--r-window); border-color: var(--mob); color: #6B4F49;
     background: repeating-linear-gradient(135deg, #F3E7E4 0 4px, #E6D3CD 4px 8px);
   }
   .icon.skill {
-    border-radius: var(--r-panel); border-color: #C2A057; color: #7A5F22;
+    border-radius: var(--r-panel); border-color: var(--gold); color: #7A5F22;
     background: repeating-linear-gradient(135deg, #FBF2DE 0 4px, #F0E2C2 4px 8px);
   }
   .icon.buff {

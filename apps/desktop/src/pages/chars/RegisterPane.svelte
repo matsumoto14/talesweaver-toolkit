@@ -134,7 +134,7 @@
 <style>
   .pane { max-width: 720px; }
   .card { padding: 13px; border-radius: var(--r-window); }
-  .card-title.big { font-size: 12px; color: #26334A; }
+  .card-title.big { font-size: 12px; color: var(--fg-head); }
   .row { margin-top: 9px; display: flex; align-items: center; gap: 8px; min-width: 0; }
   .label { width: 60px; flex-shrink: 0; font-size: var(--t-label); color: var(--fg-muted); }
   input[type="text"] {
@@ -149,7 +149,7 @@
   .pick {
     width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px;
     padding: 7px 4px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid var(--border-soft);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
   }
   .pick.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16); }
   .pick-name { max-width: 58px; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

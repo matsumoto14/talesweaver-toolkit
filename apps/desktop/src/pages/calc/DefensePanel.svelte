@@ -154,7 +154,7 @@
     width: 9px; height: 9px; flex-shrink: 0; transform: rotate(45deg);
     background: var(--head-bar); border: 1px solid #4C6689;
   }
-  .sheet-title { font-size: 12px; font-weight: 800; color: #26334A; white-space: nowrap; }
+  .sheet-title { font-size: 12px; font-weight: 800; color: var(--fg-head); white-space: nowrap; }
   .sheet-char { margin-left: auto; font-size: 9.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
   .empty, .err { margin: 0; padding: 16px 13px; font-size: 11px; }
@@ -163,7 +163,7 @@
   .block { padding: 11px 13px; border-bottom: 1px solid var(--border-soft); }
   .block:last-child { border-bottom: 0; }
   .block-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
-  .block-title { font-size: 11px; font-weight: 700; color: #26334A; white-space: nowrap; }
+  .block-title { font-size: 11px; font-weight: 700; color: var(--fg-head); white-space: nowrap; }
   .formula { font-size: 9px; line-height: 1.5; }
 
   .rows { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }

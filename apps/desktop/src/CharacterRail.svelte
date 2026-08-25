@@ -111,7 +111,7 @@
   .count .ok { font-size: 13px; font-weight: 700; white-space: nowrap; }
   .count .total { font-size: 9.5px; color: var(--fg-dim); font-weight: 400; }
   .count .cap { font-size: 8.5px; color: var(--fg-muted); white-space: nowrap; }
-  .mini { font-size: 9.5px; font-weight: 700; color: #26334A; }
+  .mini { font-size: 9.5px; font-weight: 700; color: var(--fg-head); }
 
   .register {
     text-align: center; padding: 9px 6px; border-radius: var(--r-panel);

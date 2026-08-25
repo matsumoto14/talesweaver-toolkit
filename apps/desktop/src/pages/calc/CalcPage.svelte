@@ -27,6 +27,7 @@
   import DefensePanel from "./DefensePanel.svelte";
   import Select from "../../ui/Select.svelte";
   import Splitter from "../../ui/Splitter.svelte";
+  import { badgeStyle, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
 
@@ -242,18 +243,15 @@
     if (hasReqs && !entryOk) return ratio >= 1 ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   });
-  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "判定中"];
-  const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2"];
-  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "var(--sim)", "#A9B4C4"];
-  const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88"];
-  const BAR_BG = [
-    "linear-gradient(90deg,#90D7FF,#426DD6)",
-    "linear-gradient(90deg,#9FD9BC,#3E8C63)",
-    "linear-gradient(90deg,#F0D79A,#C2A057)",
-    "linear-gradient(90deg,#E8B3A2,#B0574A)",
-    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
-    "linear-gradient(90deg,#C3C1E4,var(--sim))",
-    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
+  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)
+  const BADGE: Badge[] = [
+    { label: "余裕", state: "goal" },
+    { label: "通る", state: "met" },
+    { label: "ぎりぎり", state: "edge" },
+    { label: "届かない", state: "short" },
+    { label: "条件・火力とも未達", state: "unknown" },
+    { label: "条件だけ未達", state: "temp" },
+    { label: "判定中", state: "unknown" },
   ];
 
   // --- なぜこの数字?(トレースの式から組み立て) ---------------------------
@@ -271,8 +269,8 @@
   const atkRows = $derived.by(() => {
     if (atkA === null) return [];
     const raw = [
-      { k: "ステ攻撃力", v: atkStat ?? 0, c: "#9AA6B6", note: "素ステ・補正源から" },
-      { k: "装備攻撃力", v: atkEquip ?? 0, c: "#426DD6", note: "基本/強化 × 依存別係数" },
+      { k: "ステ攻撃力", v: atkStat ?? 0, c: "var(--flow-base)", note: "素ステ・補正源から" },
+      { k: "装備攻撃力", v: atkEquip ?? 0, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
       { k: "装備攻撃力強化倍率", v: atkBonus, c: "var(--sim)", note: "パワーW・ストロングW" },
     ].filter((x) => x.v > 0);
     const total = raw.reduce((a, x) => a + x.v, 0) || 1;
@@ -300,13 +298,13 @@
     c: string;
   }
   const FLOW_COLORS: Record<string, string> = {
-    "スキル倍率": "#426DD6",
-    "クリティカル": "#5B8FD6",
-    "コンボ・属性・カット率・オーラ": "#3E8C63",
-    "最終ダメージ固定値(下限)": "#6FA98A",
-    "最終ダメージ・カット率A・被害減少": "#8FBFA6",
-    "各種ダメージ増減": "#C2A057",
-    "攻撃ダメージ・PVP補正": "#B0824A",
+    "スキル倍率": "var(--flow-1)",
+    "クリティカル": "var(--flow-2)",
+    "コンボ・属性・カット率・オーラ": "var(--flow-3)",
+    "最終ダメージ固定値(下限)": "var(--flow-4)",
+    "最終ダメージ・カット率A・被害減少": "var(--flow-5)",
+    "各種ダメージ増減": "var(--flow-6)",
+    "攻撃ダメージ・PVP補正": "var(--flow-7)",
   };
   const FACTOR_STEPS = new Set(["スキル倍率", "クリティカル", "コンボ・属性・カット率・オーラ"]);
   const RUNNING_STEPS = new Set([
@@ -318,14 +316,14 @@
   const flowRows = $derived.by<FlowRow[]>(() => {
     if (pierced === null) return [];
     let running = pierced;
-    const rows: FlowRow[] = [{ k: "抜けた分(素通り)", add: pierced, mult: "—", c: "#93A0B2" }];
+    const rows: FlowRow[] = [{ k: "抜けた分(素通り)", add: pierced, mult: "—", c: "var(--fg-dim)" }];
     for (const s of stepsMax) {
       if (FACTOR_STEPS.has(s.name)) {
         const next = running * s.value;
-        rows.push({ k: s.name, add: next - running, mult: `×${s.value.toFixed(2)}`, c: FLOW_COLORS[s.name] ?? "#93A0B2" });
+        rows.push({ k: s.name, add: next - running, mult: `×${s.value.toFixed(2)}`, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)" });
         running = next;
       } else if (RUNNING_STEPS.has(s.name)) {
-        rows.push({ k: s.name, add: s.value - running, mult: "—", c: FLOW_COLORS[s.name] ?? "#93A0B2" });
+        rows.push({ k: s.name, add: s.value - running, mult: "—", c: FLOW_COLORS[s.name] ?? "var(--fg-dim)" });
         running = s.value;
       }
     }
@@ -656,7 +654,7 @@
             <span class="gem"></span>
             <span class="sheet-title">行ける？</span>
             <span class="sheet-char dim">{character.name}{calculating ? " ・ 計算中…" : ""}</span>
-            <span class="badge" style="background: {BADGE_BG[badgeState]}; border-color: {BADGE_BD[badgeState]}; color: {BADGE_FG[badgeState]};">{BADGE[badgeState]}</span>
+            <span class="badge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
           </div>
 
           <!-- 対象プレート -->
@@ -692,7 +690,7 @@
                       targetOpen = false;
                     }}
                   >
-                    <span class="dot" style="background: {ev?.clear ? '#3E8C63' : ev?.entry_ok === false ? '#B0574A' : '#C1D3E6'};"></span>
+                    <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
                     <span class="pop-name">{c.name}</span>
                     <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_max) : "—"}</span>
                   </button>
@@ -755,7 +753,7 @@
                 <span class="hero-saved num dim">登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}</span>
               {/if}
             </div>
-            <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {BAR_BG[badgeState]};"></div></div>
+            <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
             <div class="hero-sentence">
               <span class="sentence" class:ok={ratio >= 1} class:ng={ratio < 1}>
                 {#if perHit === null}
@@ -894,7 +892,7 @@
             {#if flowOpen}
               <!-- ① 攻撃力をつくる -->
               <div class="stage">
-                <span class="stage-no" style="background: #426DD6;">1</span>
+                <span class="stage-no" style="background: var(--flow-1);">1</span>
                 <span class="stage-title">攻撃力をつくる</span>
                 <span class="num strong stage-val">{atkA !== null ? fmtInt(atkA) : "—"}</span>
               </div>
@@ -917,13 +915,13 @@
 
               <!-- ② 防御力を抜く -->
               <div class="stage">
-                <span class="stage-no" style="background: #8C4A42;">2</span>
+                <span class="stage-no" style="background: var(--danger);">2</span>
                 <span class="stage-title">相手の防御力を抜く</span>
                 <span class="num strong stage-val">{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
               </div>
               <div class="band">
-                <div style="width: {(100 - defShare).toFixed(2)}%; background: linear-gradient(90deg, #8FB2E8, #426DD6);"></div>
-                <div style="width: {defShare.toFixed(2)}%; background: repeating-linear-gradient(135deg, #B08480 0 4px, #8C4A42 4px 8px);"></div>
+                <div style="width: {(100 - defShare).toFixed(2)}%; background: var(--flow-pierce);"></div>
+                <div style="width: {defShare.toFixed(2)}%; background: var(--hatch-lost);"></div>
               </div>
               <div class="pierce-note num">
                 <span>攻撃力 {atkA !== null ? fmtInt(atkA) : "—"}</span>
@@ -935,7 +933,7 @@
 
               <!-- ③ 倍率で伸ばす -->
               <div class="stage">
-                <span class="stage-no" style="background: #3E8C63;">3</span>
+                <span class="stage-no" style="background: var(--flow-3);">3</span>
                 <span class="stage-title">倍率で伸ばす</span>
                 <span class="stage-note dim">帯の幅＝足した分(赤字は減る倍率)</span>
                 <span class="num strong stage-val">{perHit !== null ? fmtInt(perHit) : "—"}</span>
@@ -1276,7 +1274,7 @@
   .empty { font-size: 12px; }
 
   /* 行ける?カード */
-  .sheet { position: relative; border-radius: var(--r-window); border: 1px solid #687287; box-shadow: 0 1px 0 rgba(121, 140, 172, 0.4); background: #fff; }
+  .sheet { position: relative; border-radius: var(--r-window); border: 1px solid #687287; box-shadow: 0 1px 0 rgba(121, 140, 172, 0.4); background: var(--bg-field); }
   .sheet-head {
     display: flex; align-items: center; gap: 8px; padding: 7px 13px;
     border-radius: var(--r-window) 12px 0 0;
@@ -1290,26 +1288,26 @@
   .step {
     flex-shrink: 0; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center;
     border-radius: var(--r-inset); background: linear-gradient(180deg, #fff, #E9F1FB); border: 1px solid #9FB4D0;
-    font-size: 9px; font-weight: 700; color: #3B4A63; font-family: var(--font-num);
+    font-size: 9px; font-weight: 700; color: var(--fg-sub);
   }
   .step:hover { background: var(--bg-active); }
   .target-trigger { min-width: 0; flex: 1; padding: 3px 8px; border-radius: var(--r-panel); border: 1px solid transparent; text-align: left; }
   .target-trigger:hover, .target-trigger.open { background: var(--bg-rail); border-color: #9FB4D0; }
   .t-line1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .t-chev { flex-shrink: 0; font-size: 8px; color: var(--fg-muted); font-family: var(--font-num); transition: transform 0.18s; }
+  .t-chev { flex-shrink: 0; font-size: 8px; color: var(--fg-muted); transition: transform 0.18s; }
   .t-chev.rot { transform: rotate(180deg); }
   .t-index { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
   .t-line2 { margin-top: 1px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .t-area { min-width: 0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .t-def { flex-shrink: 0; font-size: 8.5px; color: var(--danger); }
-  .t-need { flex-shrink: 0; font-size: 8.5px; color: #3B4A63; }
+  .t-need { flex-shrink: 0; font-size: 8.5px; color: var(--fg-sub); }
 
   .overlay { position: fixed; inset: 0; z-index: 40; cursor: default; }
   .pop {
     position: absolute; left: 10px; right: 10px; top: 88px; z-index: 41;
     max-height: 262px; overflow-y: auto; overscroll-behavior: contain;
-    border-radius: var(--r-window); background: #fff; border: 1px solid #687287;
+    border-radius: var(--r-window); background: var(--bg-field); border: 1px solid #687287;
     box-shadow: 0 10px 24px rgba(30, 44, 74, 0.3), inset 0 0 0 1px #fff;
   }
   .pop.gold { border-color: #A9821F; box-shadow: 0 10px 24px rgba(74, 60, 18, 0.28), inset 0 0 0 1px #fff; }
@@ -1317,7 +1315,7 @@
     position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 7px;
     padding: 6px 13px 6px 11px;
     background: linear-gradient(180deg, #DBE6F8, #C6D8F0); border-bottom: 1px solid var(--border);
-    font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; color: #26334A;
+    font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; color: var(--fg-head);
   }
   .pop-head.gold { background: linear-gradient(180deg, #F2E3BD, #DCC27E); border-bottom-color: #BFA155; color: #4A3C12; }
   .pop-head .num { margin-left: auto; font-weight: 400; }
@@ -1361,7 +1359,7 @@
   .total-box .cap { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .total-box .strong { font-size: 15px; font-weight: 700; }
   .total-box.crit { background: #FFFBF0; border-color: #E0C98A; }
-  .total-box.crit .cap { color: #7A6420; }
+  .total-box.crit .cap { color: var(--state-edge-fg); }
   .total-box.crit .strong { color: #A97E1E; }
   .total-box.dps { background: #F2F7FF; border-color: #B7CDEB; }
   .total-box.dps .cap { color: #40536F; }
@@ -1370,7 +1368,7 @@
   .delay-note .warn { color: var(--danger, #B5443A); }
 
   /* パネル(もし〜/なぜ) */
-  .panel { margin-top: 11px; border-radius: var(--r-window); overflow: hidden; border: 1px solid var(--border-strong); background: #fff; }
+  .panel { margin-top: 11px; border-radius: var(--r-window); overflow: hidden; border: 1px solid var(--border-strong); background: var(--bg-field); }
   .panel.purple { border-color: var(--sim); background: var(--sim-bg); }
   .panel-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 12px; text-align: left; }
   .panel-head.purple { background: linear-gradient(180deg, var(--sim), var(--sim-strong)); border-bottom: 1px solid var(--sim-strong); }
@@ -1383,7 +1381,7 @@
 
   .whatif {
     width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
-    border-radius: var(--r-panel); background: #fff; border: 1px solid var(--border-soft); text-align: left;
+    border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .whatif:last-child { margin-bottom: 0; }
   .whatif:hover { border-color: var(--sim); background: #F7F6FC; }
@@ -1391,20 +1389,20 @@
   .wi-label { min-width: 0; flex: 1; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cost { flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill); border: 1px solid; font-size: 8.5px; font-weight: 700; white-space: nowrap; }
   .wi-nums { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; }
-  .wi-pct { font-size: 12.5px; font-weight: 700; color: #4A4780; }
+  .wi-pct { font-size: 12.5px; font-weight: 700; color: var(--sim-fg); }
 
   .flow-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 9px; }
-  .flow-line .strong { font-size: 13px; font-weight: 700; color: #3B4A63; }
-  .flow-line .good.strong { color: #3E8C63; }
+  .flow-line .strong { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
+  .flow-line .good.strong { color: var(--flow-3); }
   .flow-line .final { font-size: 15px; font-weight: 700; color: var(--fg); }
   .lever-note {
     margin-top: 9px; padding: 8px 10px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #3B4A63; text-wrap: pretty;
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--fg-sub); text-wrap: pretty;
   }
 
   .stage { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-soft); display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .stage-no { flex-shrink: 0; width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 9px; line-height: 16px; text-align: center; font-family: var(--font-num); font-weight: 700; }
+  .stage-no { flex-shrink: 0; width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 9px; line-height: 16px; text-align: center; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 700; }
   .stage-title { font-size: 11px; font-weight: 700; white-space: nowrap; }
   .stage-note { min-width: 0; flex: 1; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stage-val { margin-left: auto; font-size: 15px; font-weight: 700; }
@@ -1418,7 +1416,7 @@
   .br-label.bad { color: var(--danger); }
   .br-note { min-width: 0; flex: 1.2; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .br-mult { flex-shrink: 0; width: 48px; text-align: right; font-size: 10px; }
-  .br-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 700; color: #3B4A63; }
+  .br-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
   .br-val.bad { color: var(--danger); }
   .br-share { flex-shrink: 0; width: 32px; text-align: right; font-size: 9.5px; }
   .pierce-note { margin-top: 7px; display: flex; align-items: center; gap: 10px; font-size: 9.5px; color: var(--fg-muted); min-width: 0; }
@@ -1434,7 +1432,7 @@
     display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: var(--r-panel);
     background: var(--bg-panel); border: 1px solid var(--border-soft); font-size: 9.5px;
   }
-  .mat-chip.cap { background: #F6E8E5; border-color: #B08480; }
+  .mat-chip.cap { background: var(--state-short-bg); border-color: var(--state-short-bd); }
   .mat-chip .strong { font-size: 10px; font-weight: 700; }
   .mat-chip .full { font-size: 8.5px; font-weight: 700; color: var(--danger); }
 
@@ -1444,8 +1442,8 @@
   .sim-line { display: flex; align-items: center; gap: 8px; }
   .sim-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: #9FB4D0; }
   .sim-dot.active { background: var(--sim); }
-  .sim-title { font-size: var(--t-label); font-weight: 700; color: #3B4A63; }
-  .sim-bar.active .sim-title { color: #4A4780; }
+  .sim-title { font-size: var(--t-label); font-weight: 700; color: var(--fg-sub); }
+  .sim-bar.active .sim-title { color: var(--sim-fg); }
   .sim-delta { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--fg-dim); }
   .sim-delta.up { color: var(--good); }
   .sim-delta.down { color: var(--danger); }
@@ -1456,12 +1454,12 @@
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chip-diff {
     display: inline-flex; align-items: center; gap: 7px; padding: 3px 4px 3px 9px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--sim); box-shadow: 0 1px 0 rgba(109, 106, 168, 0.25);
+    background: var(--bg-field); border: 1px solid var(--sim); box-shadow: 0 1px 0 rgba(109, 106, 168, 0.25);
     font-size: 10px; font-weight: 500;
   }
   .chip-x {
     width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
-    border-radius: 50%; background: #EFEEF8; font-size: 9px; color: var(--sim);
+    border-radius: 50%; background: var(--state-temp-bg); font-size: 9px; color: var(--sim);
   }
   .chip-x:hover { background: var(--sim); color: #fff; }
 
@@ -1496,7 +1494,7 @@
     padding: 4px 9px; border-radius: var(--r-inset);
     background: var(--surface-inset); border: 1px solid var(--border-soft); font-size: 10px;
   }
-  .cp-label { font-weight: 700; color: #26334A; }
+  .cp-label { font-weight: 700; color: var(--fg-head); }
   .cp-raw { color: var(--fg-muted); text-decoration: line-through; }
   .cp-arrow { font-size: 9px; }
   .cp-val { font-weight: 700; }
@@ -1505,7 +1503,7 @@
   .buff-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
   .buff-chip {
     padding: 4px 9px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--border-soft);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
     font-size: 10px; font-weight: 500; color: var(--fg-muted); white-space: nowrap;
   }
   .buff-chip:hover:not(:disabled) { border-color: var(--accent); }
@@ -1515,7 +1513,7 @@
   }
   /* 追加枠は「保存されない」ので、その専用色(--sim)にそろえる */
   .buff-chip.on.extra {
-    background: linear-gradient(180deg, #fff, #EFEEF8);
+    background: linear-gradient(180deg, #fff, var(--state-temp-bg));
     border-color: var(--sim); color: var(--sim-fg);
   }
   .buff-chip .chip-state {
@@ -1529,19 +1527,19 @@
     font-size: 8px; font-weight: 700; border: 1px solid;
   }
   .buff-legend .lg.always { background: #CCF7FF; border-color: #687287; color: #123047; }
-  .buff-legend .lg.extra { background: #EFEEF8; border-color: var(--sim); color: var(--sim-fg); }
+  .buff-legend .lg.extra { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
   .entry-note {
     margin: 8px 0 0; padding: 7px 9px; border-radius: var(--r-panel);
-    background: #FDF9EE; border: 1px solid #C2A057;
-    font-size: 9px; font-weight: 500; line-height: 1.6; color: #7A6420;
+    background: #FDF9EE; border: 1px solid var(--gold);
+    font-size: 9px; font-weight: 500; line-height: 1.6; color: var(--state-edge-fg);
   }
   .buff-detail {
     margin-top: 7px; padding: 7px 9px; border-radius: var(--r-panel);
     background: var(--bg-panel); border: 1px dashed var(--border-soft);
     display: flex; flex-direction: column; gap: 7px;
   }
-  .bd-name { font-size: 10px; font-weight: 700; color: #3B4A63; }
+  .bd-name { font-size: 10px; font-weight: 700; color: var(--fg-sub); }
   .bd-fixed { font-size: 10px; }
 
   .card.adj summary { cursor: pointer; font-size: 11px; }
@@ -1555,10 +1553,10 @@
     display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
   }
-  .req.ng { background: #F6E8E5; border-color: #B08480; }
-  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: #3B4A63; white-space: nowrap; }
+  .req.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); }
+  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: var(--fg-sub); white-space: nowrap; }
   .req.ng .req-label { color: var(--danger); }
   .req .num { font-size: 10px; white-space: nowrap; }
-  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: #3B4A63; white-space: nowrap; }
+  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
   .req.ng .req-tag { color: var(--danger); }
 </style>

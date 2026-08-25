@@ -463,7 +463,7 @@
   section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
   .src-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 7px; }
-  .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .src-head .dim { margin-left: auto; font-size: 9px; }
   .src-unset {
     font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
@@ -472,14 +472,14 @@
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid var(--border-soft); text-align: left;
+    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .src:hover:not(.planned) { border-color: var(--accent); }
   .src.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); }
   .src.planned { background: #F0F3F7; border-style: dashed; cursor: default; }
   .src-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .src-name { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .src.planned .src-name, .src.planned .src-sub { color: #A9B4C4; }
+  .src.planned .src-name, .src.planned .src-sub { color: var(--fg-off); }
   .src-sub { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chev { flex-shrink: 0; font-size: 11px; }
   .attack-foot {
@@ -488,7 +488,7 @@
   }
   .attack-foot.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
   .attack-head { display: flex; align-items: baseline; gap: 8px; }
-  .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .attack-skill { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .attack-value { margin-top: 2px; font-size: 22px; font-weight: 700; line-height: 1.1; }
   .attack-parts { margin-top: 3px; font-size: 9px; line-height: 1.6; }
@@ -508,12 +508,12 @@
     background: linear-gradient(180deg, #fff, #F1F6FC); border: 1px solid #9FB4D0;
     box-shadow: inset 0 1px 0 #fff; text-align: left;
   }
-  .sheet-trigger:hover { border-color: #6382AD; }
-  .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: #26334A; white-space: nowrap; }
+  .sheet-trigger:hover { border-color: var(--head-bar); }
+  .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: var(--fg-head); white-space: nowrap; }
   .sheet-summary { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sheet-chev {
     flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-    border-radius: var(--r-inset); background: #fff; border: 1px solid var(--border);
+    border-radius: var(--r-inset); background: var(--bg-field); border: 1px solid var(--border);
     font-size: 9px; font-weight: 700; color: var(--accent);
   }
   .sheet-body { margin-top: 8px; max-height: 220px; overflow: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
@@ -521,7 +521,7 @@
      1 行に収まるよう basis を詰める */
   .sheet-card {
     flex: 1 1 210px; min-width: 0; padding: 11px 12px; border-radius: var(--r-window);
-    background: #fff; border: 1px solid var(--border-strong);
+    background: var(--bg-field); border: 1px solid var(--border-strong);
   }
   .stat-grid { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
   .stat-cell { display: flex; align-items: baseline; gap: 5px; font-size: 10px; }
@@ -537,7 +537,7 @@
   .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }
   .delete {
     flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid #B08480; font-size: var(--t-label); color: var(--danger);
+    background: var(--bg-field); border: 1px solid var(--state-short-bd); font-size: var(--t-label); color: var(--danger);
   }
-  .delete.confirm { background: #F6E8E5; font-weight: 700; }
+  .delete.confirm { background: var(--state-short-bg); font-weight: 700; }
 </style>

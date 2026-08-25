@@ -55,6 +55,8 @@ RULES = {
 }
 
 HEX = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
+# 面としてべた塗りしている背景。グラデーションや影の中の色は「面」ではない
+FLAT_BG = re.compile(r"background(?:-color)?\s*:\s*#[0-9A-Fa-f]{3,8}\b", re.I)
 
 
 def norm_hex(h: str) -> str:
@@ -174,8 +176,9 @@ def check_colors(path: Path, text: str, tokens: dict[str, str], out: list[Findin
         for m in HEX.finditer(line):
             value = norm_hex(m.group(0))
             token = tokens.get(value)
-            # 白と黒は面のトークン(--bg-field)と同値になるが、文字色の白は別物。地に使うときだけ拾う
-            if token and value in ("#ffffff", "#000000") and "background" not in line:
+            # 白と黒は面のトークン(--bg-field)と同値になるが、対象は面としてべた塗りするときだけ。
+            # 文字色の白、グラデーションの明側、box-shadow のハイライトは面ではないので拾わない
+            if token and value in ("#ffffff", "#000000") and not FLAT_BG.search(line):
                 continue
             if token:
                 out.append(Finding("R1", path, i, m.group(0), f"var({token}) と同値"))

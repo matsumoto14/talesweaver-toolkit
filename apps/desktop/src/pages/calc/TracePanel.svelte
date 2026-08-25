@@ -172,7 +172,7 @@
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
   .section-label { padding: 10px 2px 8px; }
-  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: #fff; }
+  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--bg-field); }
   .empty { padding: 10px 12px; font-size: 11px; }
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }
@@ -187,6 +187,6 @@
   tr.active td { background: var(--bg-active); }
   tr.active td.sym { color: var(--warm); }
   .tabs { display: flex; border: 1px solid var(--border); border-radius: var(--r-inset); overflow: hidden; letter-spacing: 0; }
-  .tabs button { padding: 3px 10px; background: #fff; color: var(--fg-muted); font-size: 11px; }
+  .tabs button { padding: 3px 10px; background: var(--bg-field); color: var(--fg-muted); font-size: 11px; }
   .tabs button.on { background: var(--bg-active); color: var(--accent-hover); font-weight: 700; }
 </style>

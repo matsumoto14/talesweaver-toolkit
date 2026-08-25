@@ -12,6 +12,7 @@
   import Icon from "../../ui/Icon.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import Splitter from "../../ui/Splitter.svelte";
+  import { badgeStyle, STATE, type Badge } from "../../ui/states";
 
   const DEFAULT_RIGHT_WIDTH = 330;
   const layoutWidths = persisted("tw-v4-home", { right: DEFAULT_RIGHT_WIDTH });
@@ -66,21 +67,18 @@
     if (!r.ev.entry_ok) return r.ev.reaches_need ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   }
-  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "スキル未収録", "判定中…", "入場OK", "条件未達"];
-  const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2", "#ECEEF2", "#DFF3E6", "#EFEEF8"];
-  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "var(--sim)", "#A9B4C4", "#A9B4C4", "#6FA98A", "var(--sim)"];
-  const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88", "#5E6E88", "#2E6B4C", "#4A4780"];
-  const BAR_BG = [
-    "linear-gradient(90deg,#90D7FF,#426DD6)",
-    "linear-gradient(90deg,#9FD9BC,#3E8C63)",
-    "linear-gradient(90deg,#F0D79A,#C2A057)",
-    "linear-gradient(90deg,#E8B3A2,#B0574A)",
-    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
-    "linear-gradient(90deg,#C3C1E4,var(--sim))",
-    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
-    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
-    "linear-gradient(90deg,#9FD9BC,#3E8C63)",
-    "linear-gradient(90deg,#C3C1E4,var(--sim))",
+  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)
+  const BADGE: Badge[] = [
+    { label: "余裕", state: "goal" },
+    { label: "通る", state: "met" },
+    { label: "ぎりぎり", state: "edge" },
+    { label: "届かない", state: "short" },
+    { label: "条件・火力とも未達", state: "unknown" },
+    { label: "条件だけ未達", state: "temp" },
+    { label: "スキル未収録", state: "unknown" },
+    { label: "判定中…", state: "unknown" },
+    { label: "入場OK", state: "met" },
+    { label: "条件未達", state: "temp" },
   ];
 
   // 火力バーの比率。敵データが無いコンテンツは入場条件の充足度(満たした項目の割合)を出す。
@@ -365,7 +363,7 @@
                         <span class="dmg num">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
                       </div>
                       <div class="row-bar">
-                        <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {BAR_BG[st]};"></div></div>
+                        <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
                         {#if r.content.need_per_hit === null}
                           <span class="need num dim">入場条件のみ</span>
                         {:else}
@@ -374,10 +372,10 @@
                             <span class="over num">×{ratioOf(r).toFixed(1)}</span>
                           {/if}
                         {/if}
-                        <span class="badge" style="background: {BADGE_BG[st]}; border-color: {BADGE_BD[st]}; color: {BADGE_FG[st]};">{BADGE[st]}</span>
+                        <span class="badge" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>
                       </div>
                       <div class="row-note">
-                        <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? '#C1D3E6' : r.ev?.entry_ok ? '#6FA98A' : '#B0574A'};"></span>
+                        <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? STATE.unknown.bd : r.ev?.entry_ok ? STATE.met.bd : STATE.short.bd};"></span>
                         <span class="note-text" class:unmet={note.unmet}>{note.text}</span>
                         {#if r.content.team_note}
                           <span class="team" title="チーム条件: {r.content.team_note}">チーム</span>
@@ -550,18 +548,18 @@
     background: rgba(255, 255, 255, 0.75); border: 1px solid var(--border-soft);
     font-size: 9.5px; white-space: nowrap;
   }
-  .entry-pill .strong { font-size: 12px; font-weight: 700; color: #2B4FA8; }
+  .entry-pill .strong { font-size: 12px; font-weight: 700; color: var(--accent-hover); }
 
   .areas { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
-  .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
+  .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
   .collapsed-note { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: var(--t-label); text-align: left; overflow: hidden; }
   .collapsed-note .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stepper {
     flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
     padding: 1px 4px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--border-soft);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
   }
   .st {
     width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
@@ -570,17 +568,17 @@
   .st:hover:not(:disabled) { background: var(--bg-active); }
   .st-label { font-size: 9px; color: var(--fg-muted); white-space: nowrap; }
 
-  .ok-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: #6FA98A; }
+  .ok-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--good-soft); }
   .area-toggle {
     flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--border-soft);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
     font-size: 9px; font-weight: 700; color: var(--accent); white-space: nowrap;
   }
 
   .rows { padding-top: 7px; display: flex; flex-direction: column; gap: 6px; }
   .row {
     padding: 9px 12px; border-radius: var(--r-window); cursor: pointer;
-    background: #fff; border: 1px solid var(--border-soft);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
   }
   .row.sel { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.18); }
   .frontier {
@@ -593,7 +591,7 @@
     width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
     border-radius: var(--r-inset); border: 1px solid var(--border-soft); font-size: 10px; color: var(--fg-dim);
   }
-  .pin.on { background: #DCEBFF; border-color: var(--accent); color: #2B4FA8; }
+  .pin.on { background: var(--bg-active); border-color: var(--accent); color: var(--accent-hover); }
 
   .row-main .name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row.sel .row-main .name { font-weight: 700; }
@@ -602,7 +600,7 @@
   .row-bar { margin-top: 6px; display: flex; align-items: center; gap: 9px; }
   .row-bar .meter { flex: 1 1 auto; min-width: 40px; }
   .row-bar .need { flex-shrink: 0; font-size: 10px; white-space: nowrap; }
-  .row-bar .over { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: #2B4FA8; }
+  .row-bar .over { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--accent-hover); }
   .row-bar .badge { margin-left: auto; }
 
   .row-note { margin-top: 5px; display: flex; align-items: center; gap: 7px; min-width: 0; }
@@ -611,8 +609,8 @@
   .note-text.unmet { color: var(--danger); font-weight: 700; }
   .team {
     flex-shrink: 0; padding: 1px 6px; border-radius: var(--r-pill);
-    background: #EFEEF8; border: 1px solid var(--sim);
-    font-size: 8.5px; font-weight: 700; color: #4A4780;
+    background: var(--state-temp-bg); border: 1px solid var(--sim);
+    font-size: 8.5px; font-weight: 700; color: var(--sim-fg);
   }
 
   .foot { margin: 14px 0 0; font-size: 10px; line-height: 1.7; }
@@ -621,7 +619,7 @@
   .scroll.pad { display: flex; flex-direction: column; gap: 11px; }
   .sel-card {
     padding: 14px; border-radius: var(--r-window);
-    background: linear-gradient(180deg, #FBFAFE, #F1F0FA);
+    background: linear-gradient(180deg, var(--sim-bg), #F1F0FA);
     border: 1px solid var(--sim); box-shadow: inset 0 1px 0 #fff;
   }
   /* このカード群の親になる大見出し(規格の見出し段) */
@@ -632,10 +630,10 @@
   .sel-skill { margin-top: 4px; font-size: 9.5px; line-height: 1.5; }
   .sel-note {
     margin-top: 9px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: #FDF3DE; border: 1px solid #E3CB93;
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #7A6420;
+    background: var(--state-edge-bg); border: 1px solid #E3CB93;
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--state-edge-fg);
   }
-  .sel-note.ok { background: #DFF3E6; border-color: #6FA98A; color: var(--good); }
+  .sel-note.ok { background: var(--state-met-bg); border-color: var(--good-soft); color: var(--good); }
   .try {
     margin-top: 8px; width: 100%; text-align: center; padding: 9px; border-radius: var(--r-panel);
     background: linear-gradient(180deg, var(--sim), var(--sim-strong)); border: 1px solid #3C3A6B;
@@ -645,9 +643,9 @@
   .sel-entry {
     margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #3B4A63;
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--fg-sub);
   }
-  .sel-entry.ng { background: #F6E8E5; border-color: #B08480; color: var(--danger); }
+  .sel-entry.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); color: var(--danger); }
   .sel-entry-only {
     margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
     background: #F7F8FB; border: 1px dashed var(--border-soft);
@@ -655,24 +653,24 @@
   }
   .sel-entry-note {
     margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: #FDF9EE; border: 1px solid #C2A057;
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #7A6420;
+    background: #FDF9EE; border: 1px solid var(--gold);
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--state-edge-fg);
   }
   .sel-team {
     margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: #EFEEF8; border: 1px solid var(--sim);
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #4A4780;
+    background: var(--state-temp-bg); border: 1px solid var(--sim);
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--sim-fg);
   }
   .reqs { margin-top: 7px; display: flex; flex-direction: column; gap: 5px; }
   .req {
     display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
   }
-  .req.ng { background: #F6E8E5; border-color: #B08480; }
-  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: #3B4A63; white-space: nowrap; }
+  .req.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); }
+  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: var(--fg-sub); white-space: nowrap; }
   .req.ng .req-label { color: var(--danger); }
   .req .num { font-size: 10px; white-space: nowrap; }
-  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: #3B4A63; white-space: nowrap; }
+  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
   .req.ng .req-tag { color: var(--danger); }
 
   .card-head { display: flex; align-items: center; gap: 8px; }
@@ -680,11 +678,11 @@
   .fav-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .fav {
     display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid var(--border-soft); text-align: left;
+    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .fav.act { background: #F1F6FF; border-color: var(--accent); }
   .fav .mark { flex-shrink: 0; font-size: 10px; color: var(--fg-dim); }
-  .fav .mark.act { color: #2B4FA8; }
+  .fav .mark.act { color: var(--accent-hover); }
   .fav-name { min-width: 0; flex: 1; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fav.act .fav-name { font-weight: 700; }
 
@@ -692,9 +690,9 @@
   .advice-list { margin-top: 9px; display: flex; flex-direction: column; gap: 7px; }
   .advice {
     display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border-radius: var(--r-panel); text-align: left;
-    background: #F6FBFF; border: 1px solid var(--border-soft); box-shadow: inset 0 1px 0 #fff;
+    background: var(--bg-panel); border: 1px solid var(--border-soft); box-shadow: inset 0 1px 0 #fff;
   }
-  .advice.reach { background: linear-gradient(180deg, #F3FBF6, #E4F4EB); border-color: #6FA98A; }
+  .advice.reach { background: linear-gradient(180deg, #F3FBF6, #E4F4EB); border-color: var(--good-soft); }
   .advice:hover { border-color: var(--accent); }
   .adv-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .adv-row.sub { margin-top: 0; }

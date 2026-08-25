@@ -10,25 +10,59 @@
   --border: #A6BAD3;
   --border-soft: #C1D3E6;
   --border-strong: #798CAC;
-  --fg: #1B2331;
-  --fg-muted: #5E6E88;
-  --fg-dim: #93A0B2;
+  /* 文字色 6 段(§03)。濃さで役割を分ける */
+  --fg: #1B2331;         /* 本文・主となる値 */
+  --fg-head: #26334A;    /* セクション見出し */
+  --fg-sub: #3B4A63;     /* 副次的な値・説明 */
+  --fg-muted: #5E6E88;   /* ラベル・注記 */
+  --fg-dim: #93A0B2;     /* 補足・単位 */
+  --fg-off: #A9B4C4;     /* 無効・未設定 */
   --accent: #426DD6;
   --accent-hover: #2B4FA8;
-  --warm: #B0574A;
-  --danger: #8C4A42;
-  --good: #2E6B4C;
+  /* 予約色(§03)。この用途以外に使わない */
+  --gold: #C2A057;       /* 操作待ち・上限・結果。「金が出ている = まだ何か決めていない」 */
+  --mob: #A98B86;        /* 敵 */
+  --warm: #B0574A;       /* 危険・減る値 */
+  --danger: #8C4A42;     /* 削除・届かない */
+  --good: #2E6B4C;       /* 足りている・増えた(評価ではなく事実) */
+  --good-soft: #6FA98A;
   --head-bar: #6382AD;
-  /* 候補チップ(すぐできる / エンチャント / 装備更新)の面と枠。文字色は --good/--accent-hover/--danger */
-  --good-bg: #DFF3E6;
-  --good-border: #6FA98A;
-  --danger-bg: #F6E8E5;
-  --danger-border: #B08480;
   /* 「保存されない・一時のもの」専用の色(試し変更・候補の一時表示)。この用途以外に使わない */
   --sim: #6D6AA8;
   --sim-strong: #565394;
   --sim-fg: #4A4780;
   --sim-bg: #FBFAFE;
+
+  /* 状態の 6 系統(§03)。到達判定のバッジ・量バー・候補チップはこの 6 つから選ぶ。
+     ラベル(「余裕」「通る」…)は画面ごとに変えてよいが、色と意味の対応は変えない。
+     参照は src/ui/states.ts 経由(inline style に hex を書かない) */
+  --state-goal-bg: var(--bg-active);  --state-goal-bd: var(--accent);      --state-goal-fg: var(--accent-hover);  /* 余裕・目標 */
+  --state-met-bg: #DFF3E6;            --state-met-bd: var(--good-soft);    --state-met-fg: var(--good);           /* 足りている */
+  --state-edge-bg: #FDF3DE;           --state-edge-bd: var(--gold);        --state-edge-fg: #7A6420;              /* ぎりぎり・操作待ち */
+  --state-short-bg: #F6E8E5;          --state-short-bd: #B08480;           --state-short-fg: var(--danger);       /* 届かない・危険 */
+  --state-unknown-bg: #ECEEF2;        --state-unknown-bd: #A9B4C4;         --state-unknown-fg: var(--fg-muted);   /* 対象外・判定不能 */
+  --state-temp-bg: #EFEEF8;           --state-temp-bd: var(--sim);         --state-temp-fg: var(--sim-fg);        /* 一時・チーム条件 */
+  /* 同じ 6 系統の量バー(明 → 暗) */
+  --state-goal-bar: linear-gradient(90deg, #90D7FF, #426DD6);
+  --state-met-bar: linear-gradient(90deg, #9FD9BC, #3E8C63);
+  --state-edge-bar: linear-gradient(90deg, #F0D79A, #C2A057);
+  --state-short-bar: linear-gradient(90deg, #E8B3A2, #B0574A);
+  --state-unknown-bar: linear-gradient(90deg, #CBD3DE, #9AA6B6);
+  --state-temp-bar: linear-gradient(90deg, #C3C1E4, #6D6AA8);
+
+  /* 内訳の色(§03「内訳の色」)。積み上げ帯・流れ帯で「どの区間か」を識別するための並びで、
+     良し悪しは表さない。状態の 6 系統と混ぜない。順序は流れの順 */
+  --flow-base: #9AA6B6;  /* 素ステ由来の土台 */
+  --flow-1: var(--accent);  /* 装備攻撃力・スキル倍率 */
+  --flow-2: #5B8FD6;     /* クリティカル */
+  --flow-3: #3E8C63;     /* コンボ・属性・カット率・オーラ */
+  --flow-4: var(--good-soft);  /* 最終ダメージ固定値(下限) */
+  --flow-5: #8FBFA6;     /* 最終ダメージ・カット率A・被害減少 */
+  --flow-6: var(--gold);  /* 各種ダメージ増減 */
+  --flow-7: #B0824A;     /* 攻撃ダメージ・PVP 補正 */
+  --flow-pierce: linear-gradient(90deg, #8FB2E8, #426DD6);  /* 防御を抜けた分 */
+  /* 斜線 = 効いていない・持っていかれた量(§03)。塗りつぶし(効いている量)と混ぜない */
+  --hatch-lost: repeating-linear-gradient(135deg, #B08480 0 4px, #8C4A42 4px 8px);
   /* 窓の3層目(規格シート 2a のインセット面)。表・読み取り専用の数値をここに載せて、
      編集できる面(--bg-field の白)と区別する */
   --surface-inset: #C1D3E6;
@@ -66,7 +100,7 @@ body {
 }
 
 button, select, input { font-family: inherit; font-size: inherit; color: inherit; }
-input[type="number"], input[type="text"] { font-family: var(--font-num); }
+input[type="number"], input[type="text"] { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
 button { cursor: pointer; background: none; border: 0; padding: 0; }
 button:disabled { cursor: not-allowed; opacity: 0.5; }
@@ -93,9 +127,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .card {
   padding: 12px 13px; border-radius: var(--r-window);
-  background: #fff; border: 1px solid var(--border-strong);
+  background: var(--bg-field); border: 1px solid var(--border-strong);
 }
-.card-title { font-weight: 700; font-size: 11px; color: #26334A; white-space: nowrap; }
+.card-title { font-weight: 700; font-size: 11px; color: var(--fg-head); white-space: nowrap; }
 
 .badge {
   flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
