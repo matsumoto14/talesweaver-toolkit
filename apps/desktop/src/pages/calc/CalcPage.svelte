@@ -701,7 +701,7 @@
     if (!buffOn(def)) return "off";
     return saved ? "always" : "extra";
   };
-  const BUFF_STATE_LABEL = { always: "常時", extra: "追加", off: "" } as const;
+  const BUFF_STATE_LABEL = { always: "常", extra: "追", off: "" } as const;
   const alwaysBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "always").length);
   const extraBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "extra").length);
   function toggleBuffChip(def: BuffDefinition) {
@@ -1189,35 +1189,33 @@
           <div class="sim-line">
             <span class="sim-dot" class:active={simDirty}></span>
             <span class="sim-title">{simDirty ? "試し変更中" : "登録どおり"}</span>
-            {#if simActive}
-              <span class="num sim-delta" class:up={deltaPct > 0} class:down={deltaPct < 0}>
-                {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
-              </span>
-            {/if}
+            <!-- 差分の枠も常に確保する。出た瞬間に行が 1px 伸びて下がずれる(§09 規則 4) -->
+            <span class="num sim-delta" class:on={simActive} class:up={deltaPct > 0} class:down={deltaPct < 0}
+            >{simActive ? (deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`) : ""}</span>
           </div>
           <div class="sim-note-text dim">
             {simDirty
               ? "保存されていません。チップの ✕ で1つずつ戻せます。"
               : "下の材料を変えると、その場で数字が動きます(保存されません)。"}
           </div>
-          {#if simDirty}
-            <div class="sim-actions">
-              <button type="button" class="btn" onclick={resetSim}>ぜんぶ戻す</button>
-              <button type="button" class="btn primary" disabled={saving} onclick={saveSim}>{saving ? "保存中…" : "キャラに保存"}</button>
-            </div>
-          {/if}
+          <!-- 試し変更に入っても下がずれないよう、操作の枠は常に確保する(§09 規則 1・4)。
+               ここは押した材料(装備・バフ)より**上**にあるので、差し込むと押したものが流れる -->
+          <div class="sim-actions">
+            <button type="button" class="btn" disabled={!simDirty} onclick={resetSim}>ぜんぶ戻す</button>
+            <button type="button" class="btn primary" disabled={!simDirty || saving} onclick={saveSim}>{saving ? "保存中…" : "キャラに保存"}</button>
+          </div>
         </div>
 
-        {#if changedKnobs.length > 0}
-          <div class="chips">
-            {#each changedKnobs as k (k.id)}
-              <span class="chip-diff">
-                <span>{k.label(app.sim!)}</span>
-                <button type="button" class="chip-x" title="この変更だけ戻す" onclick={() => revertKnob(k)}>✕</button>
-              </span>
-            {/each}
-          </div>
-        {/if}
+        <!-- 差分チップも同じ理由で高さを固定する。3 件までなので 1 行に収め、
+             溢れたら横にスクロールさせる(行が増えて下をずらさない) -->
+        <div class="chips">
+          {#each changedKnobs as k (k.id)}
+            <span class="chip-diff">
+              <span>{k.label(app.sim!)}</span>
+              <button type="button" class="chip-x" title="この変更だけ戻す" onclick={() => revertKnob(k)}>✕</button>
+            </span>
+          {/each}
+        </div>
         <!-- 上限の注記は固定領域。行を差し込んで下をずらさない(§07) -->
         <div class="sim-limit" class:hit={simLimited}>
           {#if simLimited}
@@ -1287,8 +1285,8 @@
             <span class="dim small">押した瞬間に数字が動きます</span>
           </div>
           <p class="buff-legend dim">
-            <span class="lg always">常時</span> マイセット(キャラに保存済み・{alwaysBuffCount} 件)
-            ／ <span class="lg extra">追加</span> この計算だけ({extraBuffCount} 件・保存されません)
+            <span class="lg always">常</span> 常時 = マイセット(キャラに保存済み・{alwaysBuffCount} 件)
+            ／ <span class="lg extra">追</span> 追加 = この計算だけ({extraBuffCount} 件・保存されません)
             ／ 無印 使わない。<b>常時にするには「試し変更を保存」</b>。
           </p>
           <div class="buff-chips">
@@ -1305,7 +1303,10 @@
                 onclick={() => toggleBuffChip(def)}
               >
                 <span>{def.name}</span>
-                {#if state !== "off"}<span class="chip-state">{BUFF_STATE_LABEL[state]}</span>{/if}
+                <!-- 状態バッジの枠は常に確保する。付いた瞬間にチップが伸びると、
+                     隣のチップが折り返して並びが動く(§09 規則 4) -->
+                <span class="chip-state" class:on={state !== "off"}
+                >{state !== "off" ? BUFF_STATE_LABEL[state] : ""}</span>
               </button>
             {/each}
           </div>
@@ -1633,14 +1634,19 @@
   .sim-dot.active { background: var(--sim); }
   .sim-title { font-size: var(--t-label); font-weight: 700; color: var(--fg-sub); }
   .sim-bar.active .sim-title { color: var(--sim-fg); }
-  .sim-delta { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--fg-dim); }
-  .sim-delta.up { color: var(--good); }
-  .sim-delta.down { color: var(--danger); }
+  .sim-delta { min-width: 34px; text-align: right; font-size: 11px; font-weight: 700; color: transparent; }
+  .sim-delta.on { color: var(--fg-dim); }
+  .sim-delta.on.up { color: var(--good); }
+  .sim-delta.on.down { color: var(--danger); }
   .sim-note-text { margin-top: 3px; font-size: 9px; line-height: 1.6; text-wrap: pretty; }
-  .sim-actions { margin-top: 8px; display: flex; gap: 7px; }
+  .sim-actions { margin-top: 8px; display: flex; gap: 7px; min-height: 30px; }
   .sim-actions .btn { flex: 1; }
 
-  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  /* 高さを固定する。件数で行が増えると、下にある材料(装備・バフ)がずれる */
+  .chips {
+    display: flex; flex-wrap: nowrap; gap: 5px; min-height: 24px;
+    overflow-x: auto; overscroll-behavior-x: contain;
+  }
   .chip-diff {
     display: inline-flex; align-items: center; gap: 7px; padding: 3px 4px 3px 9px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--sim); box-shadow: 0 1px 0 rgba(109, 106, 168, 0.25);
@@ -1698,9 +1704,13 @@
     border-color: var(--sim); color: var(--sim-fg);
   }
   .buff-chip .chip-state {
+    display: inline-block; min-width: 15px; text-align: center;
     margin-left: 5px; padding: 0 5px; border-radius: var(--r-pill);
-    background: rgba(255, 255, 255, 0.75); border: 1px solid currentColor;
-    font-size: 8.5px; font-weight: 700;
+    background: transparent; border: 1px solid transparent;
+    font-size: 8.5px; font-weight: 700; color: transparent;
+  }
+  .buff-chip .chip-state.on {
+    background: rgba(255, 255, 255, 0.75); border-color: currentColor; color: inherit;
   }
   .buff-legend { margin: 7px 0 0; font-size: 9px; line-height: 1.7; }
   .buff-legend .lg {
