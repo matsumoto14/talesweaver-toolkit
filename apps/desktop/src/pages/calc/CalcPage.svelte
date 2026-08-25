@@ -775,7 +775,6 @@
             <span class="gem"></span>
             <span class="sheet-title">行ける？</span>
             <span class="sheet-char dim">{character.name}{calculating ? " ・ 計算中…" : ""}</span>
-            {#key badgeState}<span class="badge badge-in" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>{/key}
           </div>
 
           <!-- 対象プレート -->
@@ -865,14 +864,54 @@
 
           <!-- この一発 -->
           <div class="hero">
-            <div class="hero-line">
-              <span class="hero-num num" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
-              {#if simActive}
-                <span class="hero-delta num" class:up={deltaPct > 0} class:down={deltaPct < 0}>
-                  {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
+            <!-- 鎖(§14 決定 1)。1 発は**ゲート**(防御を抜けるか・目安を超えるかの閾値判定)、
+                 DPS は**レート**(どれくらいの速さで削れるか)で、種類の違う量。ゲートを通らな
+                 ければレートに意味が無いので、軸を切り替えず因果の順に繋ぐ。
+                 判定(バッジ)はゲートの位置だけに置き、レートには付けない — 「何秒までなら
+                 合格」の基準がゲーム側に存在しないので、付けたら嘘になる。
+                 44px の主役数値は増やさない(金の帯 = 答えは 1 つ。§02)。鎖が右に伸びるだけ。 -->
+            <div class="chain">
+              <div class="node gate">
+                <span class="nl">1 発</span>
+                <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
+                {#if simActive}
+                  <span class="nsub num">
+                    <span class:up={deltaPct > 0} class:down={deltaPct < 0}>
+                      {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
+                    </span>
+                    ・ 登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}
+                  </span>
+                {/if}
+              </div>
+              {#key badgeState}
+                <span class="badge badge-in gatebadge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
+              {/key}
+              <span class="op num">×{skill?.hit_count ?? 1} 段</span>
+              <div class="node mid">
+                <span class="nl">合計</span>
+                <span class="num nv" use:bump={() => result?.total.max ?? null}>{result ? fmtInt(result.total.max) : "—"}</span>
+                <span class="nsub num">
+                  クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
+                  {result ? fmtInt(result.total.critical) : "—"}
+                  {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
                 </span>
-                <span class="hero-saved num dim">登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}</span>
-              {/if}
+              </div>
+              <span class="op num">÷ {result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}s</span>
+              <div class="node rate">
+                <span class="nl">1 秒あたり</span>
+                <span class="num nv" use:bump={() => (result?.dps ? Math.round(result.dps.max) : null)}>{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
+                <span class="nsub dim">
+                  {#if result?.actual_delay}{Math.round(result.actual_delay.uses_per_minute)} 回/分 ・ {/if}判定は付けない
+                </span>
+              </div>
+              <span class="op">→</span>
+              <!-- 討伐時間。敵 HP を gamedata に持っていないので破線 +「—」で出す。
+                   0 で埋めると画面が嘘をつく(§00 欠けを正常な状態として見せる) -->
+              <div class="node pending">
+                <span class="nl">討伐時間</span>
+                <span class="num nv">— 秒</span>
+                <span class="nsub dim">敵 HP が未収録</span>
+              </div>
             </div>
             <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
             <div class="hero-sentence">
@@ -888,29 +927,6 @@
                 {/if}
               </span>
               <span class="num dim">目安 {fmtInt(need)}</span>
-            </div>
-            <div class="totals">
-              <div class="total-box">
-                <span class="cap dim">{skill && skill.hit_count > 1 ? `合計 ×${skill.hit_count}段` : "合計(1段)"}</span>
-                <span class="num strong" use:bump={() => result?.total.max ?? null}>{result ? fmtInt(result.total.max) : "—"}</span>
-              </div>
-              <div class="total-box crit">
-                <span class="cap">
-                  クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
-                  {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
-                </span>
-                <span class="num strong" use:bump={() => result?.total.critical ?? null}>{result ? fmtInt(result.total.critical) : "—"}</span>
-              </div>
-              <div class="total-box dps">
-                <span class="cap">
-                  {#if result?.actual_delay}
-                    1 秒あたり({Math.round(result.actual_delay.uses_per_minute)} 回/分)
-                  {:else}
-                    1 秒あたり
-                  {/if}
-                </span>
-                <span class="num strong" use:bump={() => (result?.dps ? Math.round(result.dps.max) : null)}>{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
-              </div>
             </div>
             {#if result?.actual_delay}
               {@const d = result.actual_delay}
@@ -1479,28 +1495,37 @@
   .sk-meta { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .hero { padding: 11px 13px 12px; }
-  .hero-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   .hero-num { font-size: var(--t-result); line-height: 1; font-weight: var(--w-strong); }
-  .hero-delta { font-size: 13px; font-weight: 700; color: var(--fg-dim); }
-  .hero-delta.up { color: var(--good); }
-  .hero-delta.down { color: var(--danger); }
-  .hero-saved { min-width: 0; flex: 1; text-align: right; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chain .nsub .up { color: var(--good); font-weight: 700; }
+  .chain .nsub .down { color: var(--danger); font-weight: 700; }
   .meter.big { margin-top: 10px; height: 12px; border-radius: var(--r-inset); }
   .hero-sentence { margin-top: 7px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .sentence { min-width: 0; flex: 1; font-size: 11px; font-weight: 700; text-wrap: pretty; }
   .sentence.ok { color: var(--good); }
   .sentence.ng { color: var(--danger); }
   .hero-sentence .num { flex-shrink: 0; font-size: 9.5px; }
-  .totals { margin-top: 11px; padding-top: 11px; border-top: 1px dashed var(--border-soft); display: flex; gap: 7px; }
-  .total-box { flex: 1; min-width: 0; padding: 6px 10px; border-radius: var(--r-panel); background: var(--bg-panel); border: 1px solid var(--border-soft); display: flex; flex-direction: column; }
-  .total-box .cap { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .total-box .strong { font-size: 15px; font-weight: 700; }
-  .total-box.crit { background: #FFFBF0; border-color: #E0C98A; }
-  .total-box.crit .cap { color: var(--state-edge-fg); }
-  .total-box.crit .strong { color: #A97E1E; }
-  .total-box.dps { background: #F2F7FF; border-color: #B7CDEB; }
-  .total-box.dps .cap { color: #40536F; }
-  .total-box.dps .strong { color: #2C4A76; }
+  /* 鎖(§14 決定 1)。44px の主役数値は増やさない — 金の帯 = 答えは 1 つ(§02)を
+     壊さず、鎖が右に伸びるだけ。狭いときは折り返す(桁で隣が動かないよう各段に min-width) */
+  .chain { display: flex; align-items: flex-end; gap: 10px 11px; flex-wrap: wrap; }
+  .chain .node { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .chain .nl { font-size: 9px; letter-spacing: 0.06em; color: var(--fg-muted); white-space: nowrap; }
+  .chain .nv { font-weight: 700; color: var(--fg); white-space: nowrap; }
+  .chain .node.gate .nv { min-width: 120px; }
+  .chain .node.mid .nv { font-size: 17px; min-width: 68px; }
+  .chain .node.rate .nv { font-size: 19px; min-width: 68px; }
+  .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
+  .chain .op { font-size: 12px; color: var(--fg-dim); padding-bottom: 3px; white-space: nowrap; }
+  .chain .gatebadge { align-self: flex-end; margin-bottom: 3px; }
+  /* まだデータが来ていない段。0 で埋めず、破線で「無い」と見せる(§00) */
+  /* まだデータが来ていない段は 1 行に畳む(§00 触らない場所は 1 行に)。
+     破線 = 「無い」の記号。0 で埋めない */
+  .chain .node.pending {
+    flex-direction: row; align-items: baseline; gap: 6px;
+    padding: 3px 9px; border-radius: var(--r-panel);
+    border: 1px dashed var(--border); background: var(--bg-rail);
+  }
+  .chain .node.pending .nv { font-size: 13px; color: var(--fg-off); }
+
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
 
