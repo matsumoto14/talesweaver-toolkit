@@ -426,14 +426,26 @@
               <p class="group-empty dim">★ を押すか、行をここへ運ぶと上がります。</p>
             {/if}
             {#each itemsOf(list.ids) as s, i (s.id)}
+              <!-- 行そのものが面。★ はその中のボタンで、面を 2 枚に割らない(§01) -->
               <div
-                class="src-line"
+                class="src src-line"
+                class:on={openSource === s.id}
                 class:dragging={dragId === s.id}
                 class:drop-before={dropAt?.list === list.key && dropAt.index === i}
                 class:drop-after={dropAt?.list === list.key && dropAt.index === i + 1 && i === list.ids.length - 1}
                 data-source-id={s.id}
-                role="listitem"
+                role="button"
+                tabindex="0"
                 draggable="true"
+                onclick={() => (openSource = s.id)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openSource = s.id;
+                  } else {
+                    onRowKey(e, list.key, i, s.id);
+                  }
+                }}
                 ondragstart={(e) => onDragStart(e, s.id)}
                 ondragend={() => { dragId = null; dropAt = null; }}
                 ondragover={(e) => onDragOverRow(e, list.key, i)}
@@ -445,21 +457,13 @@
                   class:on={list.key === "fav"}
                   aria-label="{s.name} を{list.key === 'fav' ? 'お気に入りから外す' : 'お気に入りに入れる'}"
                   title={list.key === "fav" ? "お気に入りから外す" : "お気に入りに入れる"}
-                  onclick={() => toggleFavorite(s.id)}
+                  onclick={(e) => { e.stopPropagation(); toggleFavorite(s.id); }}
                 >★</button>
-                <button
-                  type="button"
-                  class="src"
-                  class:on={openSource === s.id}
-                  onclick={() => (openSource = s.id)}
-                  onkeydown={(e) => onRowKey(e, list.key, i, s.id)}
-                >
-                  <span class="src-main">
-                    <span class="src-name">{s.name}</span>
-                    <span class="src-sub num">{s.sub}</span>
-                  </span>
-                  <span class="chev dim">›</span>
-                </button>
+                <span class="src-main">
+                  <span class="src-name">{s.name}</span>
+                  <span class="src-sub num">{s.sub}</span>
+                </span>
+                <span class="chev dim">›</span>
               </div>
             {/each}
           </div>
@@ -619,8 +623,7 @@
   .group-empty { margin: 0 0 2px; padding: 0 2px; font-size: 9.5px; }
 
   /* つかんで運ぶ。落ちる位置は行の縁に線で出す — 隙間を差し込むと下が全部ずれる(§09 規則 1) */
-  .src-line { position: relative; min-width: 0; display: flex; align-items: stretch; gap: 5px; cursor: grab; }
-  .src-line > .src { min-width: 0; flex: 1; }
+  .src-line { position: relative; cursor: grab; }
   .src-line.dragging { opacity: 0.45; }
   .src-line.drop-before::before, .src-line.drop-after::after {
     content: ""; position: absolute; left: 0; right: 0; height: 2px;
@@ -628,14 +631,14 @@
   }
   .src-line.drop-before::before { top: -4px; }
   .src-line.drop-after::after { bottom: -4px; }
-  /* ★ はホームタブのコンテンツと同じ操作。金 = あなたの操作待ち(§03 予約色) */
-  .src-line > .fav {
-    flex-shrink: 0; width: 22px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border-soft);
-    color: var(--fg-off); font-size: 11px;
+  /* ★ はホームタブのコンテンツと同じ操作・同じ寸法。金 = あなたの操作待ち(§03 予約色) */
+  .src .fav {
+    width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    border-radius: var(--r-inset); border: 1px solid var(--border-soft);
+    font-size: 10px; color: var(--fg-off);
   }
-  .src-line > .fav:hover { border-color: var(--gold); color: var(--gold); }
-  .src-line > .fav.on { color: var(--gold); border-color: var(--gold); }
+  .src .fav:hover { border-color: var(--gold); color: var(--gold); }
+  .src .fav.on { background: #FDF9EE; border-color: var(--gold); color: var(--gold); }
 
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
