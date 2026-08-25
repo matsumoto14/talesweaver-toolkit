@@ -115,25 +115,25 @@
   .stat-input { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
   .label { font-size: 12px; color: var(--fg-muted); min-width: 44px; flex-shrink: 0; white-space: nowrap; }
   .num-field {
-    width: 64px; flex-shrink: 0; padding: 5px 7px;
+    width: 64px; flex-shrink: 0; padding: 5px 7px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border); color: var(--fg);
     font-variant-numeric: tabular-nums;
   }
   .num-field:focus { outline: none; border-color: var(--accent); }
   .slider {
-    flex-grow: 1; flex-shrink: 1; min-width: 24px; height: 2px; appearance: none;
+    flex-grow: 1; flex-shrink: 1; min-width: 24px; height: 2px; appearance: none; border-radius: var(--r-pill);
     background: var(--border-strong); accent-color: var(--accent);
   }
   .slider::-webkit-slider-thumb {
-    appearance: none; width: 10px; height: 14px; background: var(--accent); border: 0; cursor: pointer;
+    appearance: none; width: 10px; height: 14px; border-radius: var(--r-inset); background: var(--accent); border: 0; cursor: pointer;
   }
   .max-btn {
-    flex-shrink: 0; padding: 5px 8px;
+    flex-shrink: 0; padding: 5px 8px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border); color: var(--fg-muted); font-size: 10px;
   }
   .max-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--border-strong); }
   .hint { flex-shrink: 0; font-size: 11px; white-space: nowrap; }
   .cap { flex-shrink: 0; font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
   .cap.full { color: var(--fg); font-weight: 700; }
-  .cap-badge { flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--danger); }
+  .cap-badge { flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg); }
 </style>

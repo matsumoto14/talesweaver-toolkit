@@ -52,7 +52,11 @@ RULES = {
     "R6": ("0.5s を超える transition / animation", "§10"),
     "R7": ("状態 6 系統をまたいだ色の組み合わせ", "§03"),
     "R8": ("TS / Svelte に色の実値を直書き", "§15"),
+    "R9": ("枠のある操作部品に border-radius が無い", "§04"),
 }
+
+# R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
+CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)\b")
 
 HEX = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
 # 面としてべた塗りしている背景。グラデーションや影の中の色は「面」ではない
@@ -243,6 +247,41 @@ def check_icon_size(chunk: Chunk, out: list[Finding]) -> None:
                                        "4 段(20 / 28 / 40 / 64)の外"))
 
 
+SEL_NAMES = re.compile(r"[.#]?[A-Za-z][-\w]*")
+# 枠も地も無い(リセットや透明化)ルールは角丸の対象にならない
+NO_SURFACE = {"0", "none", "transparent", "0px", "inherit", "initial", "unset"}
+
+
+def sel_names(sel: str) -> set[str]:
+    """セレクタに出てくるクラス名・要素名の集合。疑似クラスと結合子は落とす。"""
+    return {m.group(0).lstrip(".#") for m in SEL_NAMES.finditer(re.sub(r"::?[a-z-]+(\([^)]*\))?", " ", sel))}
+
+
+def check_control_radius(chunk: Chunk, out: list[Finding]) -> None:
+    """押す・打ち込む部品に枠や地があるのに角丸が無い(§04 は 0 を段に数えない)。
+
+    同じ面に対する別ルール(`:hover` や修飾クラス)で角丸が付いていれば違反ではないので、
+    ファイル内で角丸を宣言しているセレクタの名前を先に集めて突き合わせる。
+    """
+    if chunk.kind != "css":
+        return
+    blocks = list(rule_blocks(chunk))
+    rounded: set[str] = set()
+    for sel, body, _ in blocks:
+        if "border-radius" in body:
+            rounded |= sel_names(sel)
+    for sel, body, offset in blocks:
+        if not CONTROL_SEL.search(sel) or "border-radius" in body:
+            continue
+        decls = DECL.findall(body)
+        surface = [v.strip() for p, v in decls if p in ("border", "background", "background-color")]
+        if not surface or all(v.split()[0] in NO_SURFACE for v in surface):
+            continue
+        if sel_names(sel) & rounded:
+            continue
+        out.append(Finding("R9", chunk.path, chunk.line_of(offset), sel, "角丸が 4 段のどれでもない(0)"))
+
+
 DURATION = re.compile(r"(?<![-\w.])(\d*\.?\d+)(ms|s)(?![-\w])")
 
 
@@ -294,6 +333,7 @@ def collect() -> list[Finding]:
             check_icon_size(chunk, out)
             check_duration(chunk, out)
             check_state_pairs(chunk, out)
+            check_control_radius(chunk, out)
     return out
 
 

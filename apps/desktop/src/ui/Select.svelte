@@ -34,7 +34,7 @@
   .box { position: relative; display: flex; color: var(--fg-muted); }
   select {
     appearance: none; width: 100%;
-    padding: 8px 30px 8px 10px;
+    padding: 8px 30px 8px 10px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border);
     color: var(--fg); font-size: 13px;
   }

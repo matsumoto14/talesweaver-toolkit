@@ -26,7 +26,7 @@
       <div class="adj-row">
         <span class="adj-desc dim">加算 — このステに +N する(検証・仮定用)</span>
         <div class="adj-control">
-          <StatInput label="" min={addMin} max={addMax} bind:value={adjustments[k].add} />
+          <StatInput label="" min={addMin} max={addMax} bind:value={adjustments[k].add} capGauge />
         </div>
       </div>
       <div class="adj-row">
@@ -44,7 +44,7 @@
         {#if adjustments[k].pin !== null}
           <div class="adj-control">
             <StatInput
-              label="" min={pinMin} max={pinMax}
+              label="" min={pinMin} max={pinMax} capGauge
               bind:value={
                 () => adjustments[k].pin ?? pinMin,
                 (v) => (adjustments[k].pin = v)
@@ -72,6 +72,7 @@
   .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
   .check {
     width: 13px; height: 13px; flex-shrink: 0; border: 1px solid var(--border-strong);
+    border-radius: var(--r-inset);
     display: flex; align-items: center; justify-content: center; color: transparent;
   }
   .toggle input:checked + .check { background: var(--accent); border-color: var(--accent); color: var(--bg); }

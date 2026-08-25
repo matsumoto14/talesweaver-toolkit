@@ -271,7 +271,7 @@
     const raw = [
       { k: "ステ攻撃力", v: atkStat ?? 0, c: "var(--flow-base)", note: "素ステ・補正源から" },
       { k: "装備攻撃力", v: atkEquip ?? 0, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
-      { k: "装備攻撃力強化倍率", v: atkBonus, c: "var(--sim)", note: "パワーW・ストロングW" },
+      { k: "装備攻撃力強化倍率", v: atkBonus, c: "var(--flow-2)", note: "パワーW・ストロングW" },
     ].filter((x) => x.v > 0);
     const total = raw.reduce((a, x) => a + x.v, 0) || 1;
     return raw.map((x) => ({
@@ -516,6 +516,8 @@
     deltaPct: number;
   }
   let whatIf = $state<WhatIf[]>([]);
+  /** 試した候補の数。0 件のときに「候補が無い」のか「超えるものが無い」のかを書き分ける */
+  let whatIfTried = $state(0);
   let whatIfSeq = 0;
   let whatIfHandle: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
@@ -527,6 +529,7 @@
     if (whatIfHandle) clearTimeout(whatIfHandle);
     if (!pJson || !t || !sid || base === null) {
       whatIf = [];
+      whatIfTried = 0;
       return;
     }
     const seq = ++whatIfSeq;
@@ -550,6 +553,7 @@
         const rs = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
         if (seq === whatIfSeq) {
           whatIf = rs.filter((w) => w.perHit > base).sort((a, b) => b.perHit - a.perHit);
+          whatIfTried = list.length;
         }
       } catch (e) {
         if (seq === whatIfSeq) reportError(errorMessage(e));
@@ -836,31 +840,36 @@
         </div>
 
         <!-- もし〜だったら -->
-        {#if whatIf.length > 0}
-          <div class="panel purple">
-            <div class="panel-head purple">
-              <span class="panel-title">足りない分をどう埋める？</span>
-              <span class="panel-note">押すと試し変更に入ります(保存されません)</span>
-            </div>
-            <div class="panel-body">
-              {#each whatIf as w (w.candidate.id)}
-                <button type="button" class="whatif" onclick={() => applyWhatIf(w)}>
-                  <span class="wi-main">
-                    <span class="wi-label">{w.candidate.label}</span>
-                    <span
-                      class="cost"
-                      style="background: {COST_COLORS[w.candidate.cost][0]}; border-color: {COST_COLORS[w.candidate.cost][1]}; color: {COST_COLORS[w.candidate.cost][2]};"
-                    >{w.candidate.cost}</span>
-                  </span>
-                  <span class="wi-nums">
-                    <span class="num wi-pct">+{w.deltaPct}%</span>
-                    <span class="num dim">{fmtInt(w.perHit)}</span>
-                  </span>
-                </button>
-              {/each}
-            </div>
+        <div class="panel purple">
+          <div class="panel-head purple">
+            <span class="panel-title">足りない分をどう埋める？</span>
+            <span class="panel-note">押すと試し変更に入ります(保存されません)</span>
           </div>
-        {/if}
+          <div class="panel-body">
+            {#if whatIf.length === 0}
+              <p class="wi-empty dim">
+                {whatIfTried === 0
+                  ? "いま変えられる場所がありません。共通スキル・エンチャントはすでに上限です。"
+                  : `${whatIfTried} 件ためしましたが、どれもいまの数字を超えませんでした。`}
+              </p>
+            {/if}
+            {#each whatIf as w (w.candidate.id)}
+              <button type="button" class="whatif" onclick={() => applyWhatIf(w)}>
+                <span class="wi-main">
+                  <span class="wi-label">{w.candidate.label}</span>
+                  <span
+                    class="cost"
+                    style="background: {COST_COLORS[w.candidate.cost][0]}; border-color: {COST_COLORS[w.candidate.cost][1]}; color: {COST_COLORS[w.candidate.cost][2]};"
+                  >{w.candidate.cost}</span>
+                </span>
+                <span class="wi-nums">
+                  <span class="num wi-pct">+{w.deltaPct}%</span>
+                  <span class="num dim">{fmtInt(w.perHit)}</span>
+                </span>
+              </button>
+            {/each}
+          </div>
+        </div>
 
         <!-- なぜこの数字? -->
         <div class="panel">
@@ -1390,6 +1399,7 @@
   .cost { flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill); border: 1px solid; font-size: 8.5px; font-weight: 700; white-space: nowrap; }
   .wi-nums { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; }
   .wi-pct { font-size: 12.5px; font-weight: 700; color: var(--sim-fg); }
+  .wi-empty { margin: 0; padding: 9px 11px; font-size: 11px; line-height: 1.6; }
 
   .flow-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 9px; }
   .flow-line .strong { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
