@@ -1125,11 +1125,19 @@
               bind:value={siena.actual_delay_percent}
               format={(v) => `−${v}%`}
             />
+            <StatInput
+              label="クリティカル確率"
+              min={0}
+              max={limits.siena_critical_rate_percent_max}
+              bind:value={siena.critical_rate_percent}
+              format={(v) => `+${v}%`}
+            />
           </div>
           <p class="hint dim">
             「攻撃力増加」は与ダメージ割合増加(New1)、「全ステータス増加」は 7 ステすべてに同じ値が乗ります。
-            「防御力増加」は装備防御力倍率(防御タブ)、「中ディレイ減少」は中ディレイ倍率B(計算タブの 1 秒あたり)へ合流します。
-            防御無視攻撃確率・クリティカル確率・HP/MP/SP は与ダメージ式に入らないため未収録です。
+            「防御力増加」は装備防御力倍率(防御タブ)、「中ディレイ減少」は中ディレイ倍率B(計算タブの 1 秒あたり)、
+            「クリティカル確率」はクリティカル率の AGI 由来の項に<b>乗算</b>で合流します。
+            防御無視攻撃確率は確率発動(x% で防御力 15% 無視)なので未収録、HP/MP/SP は与ダメージ式に入りません。
           </p>
         </div>
       {/if}

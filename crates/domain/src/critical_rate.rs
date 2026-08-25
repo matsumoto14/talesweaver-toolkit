@@ -9,9 +9,12 @@
 //!
 //! 単位はパーセントポイント。下限 0% / 上限 100%。
 //!
+//! `ペット会心`(×1.1)と `シエナのオーラ`(追加オプション「クリティカル確率」)は
+//! **AGI 由来の項に掛かる乗数**で、加算項ではない。
+//!
 //! **対象のAGI と クリティカル被撃率A が両方そろっている敵でしか出せない**。狩り場情報一覧は
 //! 多くの行が `?` で、被撃率A は −250〜−930% と支配的なので、片方だけで出すと桁違いに外れる。
-//! 未収録の入力(シエナのオーラのクリティカル確率・被撃率B・最終クリティカル率増加)は中立値。
+//! 未収録の入力(被撃率B(対人のみ)・最終クリティカル率増加)は中立値。
 
 use serde::{Deserialize, Serialize};
 
@@ -107,8 +110,11 @@ pub struct CriticalRate {
     pub agi: i64,
     /// 対象の AGI(wiki 狩り場情報一覧「敵AGI+固定値」の合計)
     pub target_agi: i64,
-    /// AGI 由来の部分 `(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象AGI)) × ペット会心`
+    /// AGI 由来の部分
+    /// `(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象AGI)) × ペット会心 × シエナのオーラ`
     pub from_agi: f64,
+    /// シエナのオーラの追加オプション「クリティカル確率」の Σ%(小数表現)。AGI 由来の項に乗る
+    pub siena_rate: f64,
     /// スキルクリティカル率(wiki スキル性能一覧の Cri値)
     pub skill: f64,
     /// クリティカル率増加(上限 +100%)
@@ -123,19 +129,24 @@ pub struct CriticalRate {
 
 /// クリティカル率を出す。`target_agi` / `target_taken_rate` は wiki 狩り場情報一覧の値で、
 /// **どちらかが未記載なら呼び出し側が `None` を返す**(この関数は両方そろっている前提)。
+#[allow(clippy::too_many_arguments)]
 pub fn critical_rate(
     equipment_critical: i64,
     agi: i64,
     target_agi: i64,
     skill_critical_rate: f64,
     sources: &CriticalRateSources,
+    siena_rate: f64,
     target_taken_rate: f64,
 ) -> CriticalRate {
     let denominator = (agi + target_agi) as f64;
     // AGI も対象AGI も 0 なら 0 除算になる。その場合は AGI 由来の項を 0 にする
     let agi_ratio = if denominator == 0.0 { 0.0 } else { agi as f64 / denominator };
-    let from_agi =
-        (equipment_critical + 1) as f64 * 2.0 * agi_ratio * sources.pet_rate();
+    let from_agi = (equipment_critical + 1) as f64
+        * 2.0
+        * agi_ratio
+        * sources.pet_rate()
+        * (1.0 + siena_rate);
     let bonus = sources.bonus();
     let raw = from_agi + skill_critical_rate + bonus + target_taken_rate;
     CriticalRate {
@@ -143,6 +154,7 @@ pub fn critical_rate(
         agi,
         target_agi,
         from_agi,
+        siena_rate,
         skill: skill_critical_rate,
         bonus,
         target_taken_rate,
@@ -160,7 +172,7 @@ mod tests {
     //   + スキル Cri値 13 + 増加 0 + 被撃率A −350 = −27.7 → 下限 0%
     #[test]
     fn 被撃率aが効いて下限0になる() {
-        let r = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), -350.0);
+        let r = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.0, -350.0);
         assert!((r.from_agi - 602.0 * (1500.0 / 2920.0)).abs() < 1e-9);
         assert!(r.raw < 0.0);
         assert_eq!(r.value, 0.0);
@@ -176,8 +188,8 @@ mod tests {
         };
         // 増加は 20 + 30 = 50
         assert_eq!(sources.bonus(), 50.0);
-        let r = critical_rate(300, 1500, 1420, 13.0, &sources, -350.0);
-        let base = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), -350.0);
+        let r = critical_rate(300, 1500, 1420, 13.0, &sources, 0.0, -350.0);
+        let base = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.0, -350.0);
         // ペット会心 ×1.1
         assert!((r.from_agi - base.from_agi * 1.1).abs() < 1e-9);
         assert!(r.raw > base.raw);
@@ -198,14 +210,26 @@ mod tests {
     // wiki `#CriticalChance`: 下限 0% / 上限 100%
     #[test]
     fn 上限は100パーセント() {
-        let r = critical_rate(3000, 2000, 100, 15.0, &CriticalRateSources::default(), 0.0);
+        let r = critical_rate(3000, 2000, 100, 15.0, &CriticalRateSources::default(), 0.0, 0.0);
         assert!(r.raw > 100.0);
         assert_eq!(r.value, 100.0);
     }
 
+    // wiki `#CriticalChance`: シエナのオーラは AGI 由来の項に掛かる乗数(加算項ではない)
+    #[test]
+    fn シエナのオーラはagi由来の項に乗算で効く() {
+        let base = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.0, -350.0);
+        let siena = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.80, -350.0);
+        assert!((siena.from_agi - base.from_agi * 1.80).abs() < 1e-9);
+        assert!((siena.siena_rate - 0.80).abs() < 1e-12);
+        // 加算項(スキル Cri値・増加・被撃率)は変わらない
+        assert_eq!(siena.skill, base.skill);
+        assert_eq!(siena.target_taken_rate, base.target_taken_rate);
+    }
+
     #[test]
     fn agiが両方0でも0除算しない() {
-        let r = critical_rate(300, 0, 0, 10.0, &CriticalRateSources::default(), 0.0);
+        let r = critical_rate(300, 0, 0, 10.0, &CriticalRateSources::default(), 0.0, 0.0);
         assert_eq!(r.from_agi, 0.0);
         assert_eq!(r.value, 10.0);
     }

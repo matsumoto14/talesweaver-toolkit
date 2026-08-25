@@ -820,6 +820,7 @@
               {@const c = result.critical_rate}
               <div class="delay-note dim">
                 クリティカル率 (装備クリ補正 {fmtInt(c.equipment_critical)} + 1) × 2 × (AGI {fmtInt(c.agi)} / (AGI + 対象AGI {fmtInt(c.target_agi)}))
+                {#if c.siena_rate > 0}× シエナのオーラ {(1 + c.siena_rate).toFixed(2)}{/if}
                 = {c.from_agi.toFixed(1)}%
                 ＋ スキル Cri値 {fmtInt(c.skill)}%{#if c.bonus > 0} ＋ 増加 {fmtInt(c.bonus)}%{/if}
                 − 対象のクリティカル被撃率 {fmtInt(-c.target_taken_rate)}%

@@ -20,7 +20,8 @@ use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
     PartSlot, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
     SIENA_ACTUAL_DELAY_PERCENT_MAX, SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
-    SIENA_DEFENSE_RATE_PERCENT_MAX, SIENA_STAGE_MAX, SIENA_STAT_BONUS_MAX,
+    SIENA_CRITICAL_RATE_PERCENT_MAX, SIENA_DEFENSE_RATE_PERCENT_MAX, SIENA_STAGE_MAX,
+    SIENA_STAT_BONUS_MAX,
 };
 use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
 use crate::common_skill::{CommonSkills, STRONG_WEAPON_LEVEL_MAX};
@@ -927,6 +928,8 @@ pub struct StatLimits {
     pub siena_defense_rate_percent_max: f64,
     /// シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 %
     pub siena_actual_delay_percent_max: f64,
+    /// シエナのオーラの追加オプション「クリティカル確率」の 1 部位あたり上限 %
+    pub siena_critical_rate_percent_max: f64,
     /// シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限
     pub siena_stat_bonus_max: i64,
     /// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
@@ -984,6 +987,7 @@ pub fn stat_limits() -> StatLimits {
         siena_attack_rate_percent_max: SIENA_ATTACK_RATE_PERCENT_MAX,
         siena_defense_rate_percent_max: SIENA_DEFENSE_RATE_PERCENT_MAX,
         siena_actual_delay_percent_max: SIENA_ACTUAL_DELAY_PERCENT_MAX,
+        siena_critical_rate_percent_max: SIENA_CRITICAL_RATE_PERCENT_MAX,
         siena_stat_bonus_max: SIENA_STAT_BONUS_MAX,
         siena_all_stats_bonus_max: SIENA_ALL_STATS_BONUS_MAX,
         core_slot_count: CORE_SLOT_COUNT,

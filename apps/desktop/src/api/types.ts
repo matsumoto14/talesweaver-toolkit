@@ -153,6 +153,8 @@ export interface CriticalRate {
   target_agi: number;
   /** AGI 由来の部分 */
   from_agi: number;
+  /** シエナのオーラの追加オプション「クリティカル確率」の Σ%(小数表現) */
+  siena_rate: number;
   /** スキルクリティカル率(Cri値) */
   skill: number;
   /** クリティカル率増加(上限 +100%) */
@@ -285,6 +287,8 @@ export interface SienaAura {
   defense_rate_percent: number;
   /** 追加オプション「中ディレイ減少」の %。中ディレイ減少値(倍率B)へ合流する */
   actual_delay_percent: number;
+  /** 追加オプション「クリティカル確率」の %。クリティカル率の AGI 由来の項に乗算で効く */
+  critical_rate_percent: number;
 }
 
 // ランダムオプションのランク。crates/domain/src/random_option.rs の RandomOptionRank。
@@ -744,6 +748,8 @@ export interface StatLimits {
   siena_defense_rate_percent_max: number;
   /** シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 % */
   siena_actual_delay_percent_max: number;
+  /** シエナのオーラの追加オプション「クリティカル確率」の 1 部位あたり上限 % */
+  siena_critical_rate_percent_max: number;
   /** シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限 */
   siena_stat_bonus_max: number;
   /** シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限 */

@@ -470,6 +470,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             target_agi,
             skill_critical_rate as f64,
             &input.critical_rate_sources,
+            input.equipment.siena_critical_rate(),
             taken_rate,
         )),
         _ => None,

@@ -64,6 +64,9 @@ pub const SIENA_STAT_BONUS_MAX: i64 = 100;
 /// (wiki: 追加オプション一覧の最大帯 8〜10%。同じ種類のオプションは同じ装備の別スロットには
 /// 登場しないため 1 部位 1 個)。実際は**装備防御力倍率増加**でプロテクトアーマーなどと加算される。
 pub const SIENA_DEFENSE_RATE_PERCENT_MAX: f64 = 10.0;
+/// シエナのオーラの追加オプション「クリティカル確率」の 1 部位あたり上限 %
+/// (wiki: 追加オプション一覧の最大帯 8〜10%)。
+pub const SIENA_CRITICAL_RATE_PERCENT_MAX: f64 = 10.0;
 /// シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 %
 /// (wiki: 追加オプション一覧の最大帯 2%)。
 pub const SIENA_ACTUAL_DELAY_PERCENT_MAX: f64 = 2.0;
@@ -271,6 +274,10 @@ pub struct SienaAura {
     /// 追加オプション「中ディレイ減少」の %。中ディレイ減少値(倍率B)へ合流する
     #[serde(default)]
     pub actual_delay_percent: f64,
+    /// 追加オプション「クリティカル確率」の %。クリティカル率の AGI 由来の項に**乗算**で効く
+    /// (wiki: 計算式まとめ `#CriticalChance` の「シエナのオーラ」)
+    #[serde(default)]
+    pub critical_rate_percent: f64,
 }
 
 impl SienaAura {
@@ -293,6 +300,7 @@ impl SienaAura {
             && self.attack_rate_percent == 0.0
             && self.defense_rate_percent == 0.0
             && self.actual_delay_percent == 0.0
+            && self.critical_rate_percent == 0.0
     }
 
     fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
@@ -352,6 +360,13 @@ impl SienaAura {
                 slot,
                 value: self.actual_delay_percent,
                 max: SIENA_ACTUAL_DELAY_PERCENT_MAX,
+            });
+        }
+        if !(0.0..=SIENA_CRITICAL_RATE_PERCENT_MAX).contains(&self.critical_rate_percent) {
+            return Err(EquipmentError::SienaCriticalRateOutOfRange {
+                slot,
+                value: self.critical_rate_percent,
+                max: SIENA_CRITICAL_RATE_PERCENT_MAX,
             });
         }
         Ok(())
@@ -511,6 +526,8 @@ pub enum EquipmentError {
     SienaDefenseRateOutOfRange { slot: PartSlot, value: f64, max: f64 },
     #[error("{slot:?} のシエナのオーラの中ディレイ減少は 0〜{max}% です(指定値 {value})")]
     SienaActualDelayOutOfRange { slot: PartSlot, value: f64, max: f64 },
+    #[error("{slot:?} のシエナのオーラのクリティカル確率は 0〜{max}% です(指定値 {value})")]
+    SienaCriticalRateOutOfRange { slot: PartSlot, value: f64, max: f64 },
     #[error("{slot:?} は属性強化の対象外です(盾+・レリック以外)")]
     ElementNotAllowed { slot: PartSlot },
     #[error("無属性は装備に付与できません(火/水/風/土/雷/白/黒のみ)")]
@@ -719,6 +736,16 @@ impl Equipment {
     /// 中ディレイ減少値(倍率B)へ合流する(wiki: ステータス「中ディレイ倍率B」)。
     pub fn siena_actual_delay_reduction(&self) -> f64 {
         self.parts.iter().into_iter().map(|(_, part)| part.siena.actual_delay_percent).sum::<f64>()
+            / 100.0
+    }
+
+    /// シエナのオーラの追加オプション「クリティカル確率」の合計。Σ% の小数表現。
+    /// クリティカル率の AGI 由来の項に `× (1 + これ)` で効く(wiki: `#CriticalChance`)。
+    ///
+    /// wiki は「同一名称の効果同士で加算されるかどうかは要検証」としているが、
+    /// 他の追加オプション(攻撃力増加・防御力増加・中ディレイ減少)と同じく部位ぶん加算する `[仮]`。
+    pub fn siena_critical_rate(&self) -> f64 {
+        self.parts.iter().into_iter().map(|(_, part)| part.siena.critical_rate_percent).sum::<f64>()
             / 100.0
     }
 
