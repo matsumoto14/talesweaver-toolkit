@@ -218,10 +218,6 @@ mod tests {
         AwakeningCaps { max_damage: i64::MAX, max_defense: i64::MAX, max_stat: i64::MAX }
     }
 
-    fn eq_magic(magic_defense: i64) -> EquipmentValues {
-        EquipmentValues { magic_defense, ..Default::default() }
-    }
-
     #[test]
     fn 防御力はステ3倍と装備防御6倍() {
         let p = defense_profile(&stats(200, 150, 0), &EquipmentValues {

@@ -280,17 +280,13 @@ fn element_preview(
 }
 
 /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
-/// スキルの属性が未取込(`Skill::element` が `None`)なら 0 = 属性差ボーナスなし。
 fn element_value_for(
     game_character_id: &str,
     equipment: &domain::Equipment,
     stat_sources: &domain::StatSources,
     skill: &Skill,
 ) -> i64 {
-    let Some(element) = skill.element else {
-        return 0;
-    };
-    element_preview(game_character_id, equipment, stat_sources).total.get(element)
+    element_preview(game_character_id, equipment, stat_sources).total.get(skill.element)
 }
 
 /// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage / evaluate_contents 共通)。

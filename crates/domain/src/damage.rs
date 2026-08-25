@@ -151,8 +151,9 @@ pub struct DamageResult {
     pub damage_cap: i64,
     /// 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない
     pub capped_loss: DamageTriple,
-    /// 命中P(wiki: 計算式まとめ #AccuracyPoint)。敵の回避Pを 100 上回ると必中
-    pub accuracy_point: i64,
+    /// 命中P(wiki: 計算式まとめ #AccuracyPoint)。敵の回避Pを 100 上回ると必中。
+    /// スキル命中が wiki 未記載(`Skill::accuracy` が `None`)なら出せないので `None`
+    pub accuracy_point: Option<i64>,
     pub trace: DamageTrace,
 }
 
@@ -336,12 +337,14 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
 
     // 命中P(wiki: 計算式まとめ #AccuracyPoint)。与ダメージ式には入らないが、必中に必要な
     // 命中P(狩り場情報一覧)と見比べられるように結果に載せる。
-    let accuracy = accuracy_point(
-        &stats,
-        &input.accuracy_correction,
-        input.equipment_base_totals.accuracy + input.equipment_enhanced_totals.accuracy,
-        input.skill.accuracy,
-    );
+    let accuracy = input.skill.accuracy.map(|skill_accuracy| {
+        accuracy_point(
+            &stats,
+            &input.accuracy_correction,
+            input.equipment_base_totals.accuracy + input.equipment_enhanced_totals.accuracy,
+            skill_accuracy,
+        )
+    });
 
     // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)。
     // 捨てられた分は 0 と区別できるように別で持つ(UI が「上限で捨てた分」を出す)。
@@ -447,9 +450,9 @@ mod tests {
                 multiplier: 0.99,
                 hit_count: 1,
                 critical_multiplier: 2.0,
-                element: Some(crate::element::Element::Water),
-                accuracy: 92,
-                critical_rate: 7,
+                element: crate::element::Element::Water,
+                accuracy: Some(92),
+                critical_rate: Some(7),
                 level: 1,
             },
             enemy: Enemy {
@@ -480,7 +483,7 @@ mod tests {
         i.equipment_base_totals.accuracy = 30;
         i.equipment_enhanced_totals.accuracy = 20;
         // DEX 100 + 装備 50 + スキル命中 92 − [(STAB500 + HACK500)/200] = 242 − 5 = 237
-        assert_eq!(calculate_damage(&i).accuracy_point, 237);
+        assert_eq!(calculate_damage(&i).accuracy_point, Some(237));
     }
 
     #[test]
