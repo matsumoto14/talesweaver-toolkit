@@ -742,10 +742,11 @@ fn effective_stats_with(
     equipment: &Equipment,
     catalog: &BuffCatalog,
     game_character_id: &str,
+    stat_cap: i64,
 ) -> Result<(EffectiveStats, Vec<StatTrace>, Vec<StatContribution>), StatSourceError> {
     let (mut modifiers, mut contributions) = build_modifiers(sources, catalog, game_character_id)?;
     apply_siena_stats(&mut modifiers, &mut contributions, equipment);
-    let (mut stats, mut traces) = effective_stats(base, &modifiers);
+    let (mut stats, mut traces) = effective_stats(base, &modifiers, stat_cap);
     apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
     Ok((stats, traces, contributions))
 }
@@ -784,12 +785,13 @@ pub fn preview_effective_stats(
     titles: &[TitleDef],
     game_character_id: &str,
     coefficients: Option<AttackPowerCoefficients>,
+    stat_cap: i64,
 ) -> Result<StatPreview, StatSourceError> {
     base.validate()?;
     sources.validate()?;
     equipment.validate()?;
     let (stats, traces, contributions) =
-        effective_stats_with(base, sources, equipment, catalog, game_character_id)?;
+        effective_stats_with(base, sources, equipment, catalog, game_character_id, stat_cap)?;
     let attack = match coefficients {
         None => None,
         Some(coefficients) => {
@@ -800,7 +802,7 @@ pub fn preview_effective_stats(
             for (slot, _) in equipment.parts.iter() {
                 let without = equipment.without_part(slot);
                 let (stats_without, _, _) =
-                    effective_stats_with(base, sources, &without, catalog, game_character_id)?;
+                    effective_stats_with(base, sources, &without, catalog, game_character_id, stat_cap)?;
                 let a_without = attack_power_of(&stats_without, &without, common, abilities, titles, &coefficients);
                 part_contributions
                     .push(PartAttackContribution { slot, value: breakdown.value - a_without.value });
@@ -905,6 +907,9 @@ pub fn stat_limits() -> StatLimits {
 mod tests {
     use super::*;
     use crate::stats::{effective_stat, BaseStats, BaseStatsError, BASE_STAT_MAX};
+
+    /// 上限に当たらない値(最終能力値の上限の挙動は stats.rs のテストで見る)。
+    const NO_CAP: i64 = i64::MAX;
 
     /// domain は gamedata に依存できないため、テスト用に必要分だけ縮小したカタログを用意する。
     /// 値は gamedata::buffs::buff_catalog() の実データと一致させること。
@@ -1071,7 +1076,7 @@ mod tests {
         };
         let base = BaseStats { dex: 100, ..Default::default() };
         let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
-        let (mut stats, mut traces) = effective_stats(&base, &modifiers);
+        let (mut stats, mut traces) = effective_stats(&base, &modifiers, NO_CAP);
         apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
 
         let dex_trace = traces.iter().find(|t| t.kind == StatKind::Dex).unwrap();
@@ -1096,7 +1101,7 @@ mod tests {
             Adjustments { stab: StatAdjustment { add: 0, pin: Some(150) }, ..Default::default() };
 
         let base_stats = BaseStats { stab: 1, hack: 1, int: 1, ..Default::default() };
-        let (mut stats, mut traces) = effective_stats(&base_stats, &StatModifierSet::default());
+        let (mut stats, mut traces) = effective_stats(&base_stats, &StatModifierSet::default(), NO_CAP);
         apply_pins(&mut stats, &mut traces, &base, Some(&temporary));
 
         // temporary に pin があるステ(stab)はそちらが優先され、出所は Temporary
@@ -1125,7 +1130,7 @@ mod tests {
             adjustments: Adjustments { stab: StatAdjustment { add: 10, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None).unwrap();
+        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None, NO_CAP).unwrap();
         assert!(preview
             .contributions
             .iter()
@@ -1141,7 +1146,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None).unwrap();
+        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None, NO_CAP).unwrap();
         assert!(pinned_preview
             .contributions
             .iter()
@@ -1199,7 +1204,7 @@ mod tests {
     fn 主軸スキル未選択なら攻撃力は出ない() {
         let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
         let preview = preview_effective_stats(
-            &base, &StatSources::default(), &test_equipment(), &test_common_skills(), &test_catalog(), &[], &[], "boris", None,
+            &base, &StatSources::default(), &test_equipment(), &test_common_skills(), &test_catalog(), &[], &[], "boris", None, NO_CAP,
         )
         .unwrap();
         assert!(preview.attack.is_none());
@@ -1211,7 +1216,7 @@ mod tests {
         let equipment = test_equipment();
         let preview = preview_effective_stats(
             &base, &StatSources::default(), &equipment, &test_common_skills(), &test_catalog(), &[], &[],
-            "boris", Some(test_attack_coefficients()),
+            "boris", Some(test_attack_coefficients()), NO_CAP,
         )
         .unwrap();
         let attack = preview.attack.unwrap();
@@ -1239,7 +1244,7 @@ mod tests {
         let sources = StatSources::default();
         let coefficients = test_attack_coefficients();
         let preview = preview_effective_stats(
-            &base, &sources, &equipment, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients),
+            &base, &sources, &equipment, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients), NO_CAP,
         )
         .unwrap();
         let attack = preview.attack.unwrap();
@@ -1247,7 +1252,7 @@ mod tests {
         for (slot, _) in equipment.parts.iter() {
             let without = equipment.without_part(slot);
             let preview_without = preview_effective_stats(
-                &base, &sources, &without, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients),
+                &base, &sources, &without, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients), NO_CAP,
             )
             .unwrap();
             let expected = attack.breakdown.value - preview_without.attack.unwrap().breakdown.value;
@@ -1556,7 +1561,7 @@ mod tests {
         };
         let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         let base = BaseStats { stab: 310, ..Default::default() };
-        let (value, trace) = effective_stat(StatKind::Stab, base.stab, modifiers.get(StatKind::Stab));
+        let (value, trace) = effective_stat(StatKind::Stab, base.stab, modifiers.get(StatKind::Stab), NO_CAP);
         assert_eq!(trace.basic, 429);
         assert_eq!(trace.multiplier_b_bonus, 85);
         assert_eq!(value, 914);

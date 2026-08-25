@@ -64,6 +64,9 @@ pub struct DamageInput {
     /// 与ダメージの上限(wiki: Quest/覚醒クエスト「ダメージ上限は多段スキルでも1段ごとに適用」)。
     /// 覚醒段階とエタの意志 Lv で決まる(表は gamedata)
     pub damage_cap: i64,
+    /// 最終能力値の上限(wiki: Quest/覚醒クエスト「各能力の上限値」/ エタの意志)。
+    /// 同じく覚醒段階とエタの意志 Lv で決まる(表は gamedata)
+    pub stat_cap: i64,
     pub combo_count: u32,
     /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
     /// スキルの属性が未取込(`Skill::element` が `None`)なら 0
@@ -97,6 +100,7 @@ impl DamageInput {
         weapon_added_damage: i64,
         awakening_rate: f64,
         damage_cap: i64,
+        stat_cap: i64,
         skill: Skill,
         enemy: Enemy,
         combo_count: u32,
@@ -122,6 +126,7 @@ impl DamageInput {
             enemy,
             awakening_rate,
             damage_cap,
+            stat_cap,
             combo_count,
             element_value,
             pins,
@@ -301,7 +306,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     use DamageCategory::*;
 
     // ① 能力値計算
-    let (mut stats, mut stat_traces) = effective_stats(&input.base_stats, &input.stat_modifiers);
+    let (mut stats, mut stat_traces) =
+        effective_stats(&input.base_stats, &input.stat_modifiers, input.stat_cap);
     apply_pins(&mut stats, &mut stat_traces, &input.pins, input.temporary_pins.as_ref());
 
     // ② カテゴリ集計
@@ -555,6 +561,7 @@ mod tests {
             weapon_added_damage: 0,
             // テストは上限に当たらない値を既定にする(上限の挙動は専用テストで見る)
             damage_cap: i64::MAX,
+            stat_cap: i64::MAX,
             skill: Skill {
                 id: "s".into(),
                 name: "テスト斬り".into(),
@@ -1017,6 +1024,23 @@ mod tests {
         i.random_options.accuracy_point = 20;
         let base = calculate_damage(&input()).accuracy_point.unwrap();
         assert_eq!(calculate_damage(&i).accuracy_point.unwrap(), base + 20);
+    }
+
+    // wiki Quest/覚醒クエスト「各能力の上限値」/ エタの意志: 最終能力値の上限
+    #[test]
+    fn 最終能力値の上限は攻撃力に効きトレースに捨てた分が出る() {
+        let mut i = input();
+        let uncapped = calculate_damage(&i);
+        assert!(uncapped.trace.stats.iter().all(|t| t.capped_loss == 0));
+
+        i.stat_cap = 400;
+        let capped = calculate_damage(&i);
+        let stab = capped.trace.stats.iter().find(|t| t.kind == StatKind::Stab).unwrap();
+        assert_eq!(stab.effective, 400);
+        assert_eq!(stab.stat_cap, 400);
+        assert_eq!(stab.capped_loss, 100); // 素ステ 500 → 上限 400
+        // ステ攻撃力が減るので与ダメージも減る
+        assert!(capped.per_hit.max < uncapped.per_hit.max);
     }
 
     // --- 中ディレイ・DPS(wiki: 計算式まとめ `#ActualDelay`)------------------

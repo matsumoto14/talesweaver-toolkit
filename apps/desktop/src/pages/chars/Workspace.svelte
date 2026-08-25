@@ -76,12 +76,14 @@
     // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
     const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
     const commonSkills = { ...draft.commonSkills };
+    // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
+    const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
     const gameCharacterId = draft.gameCharacterId;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, gameCharacterId, mainSkillId)
+      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, gameCharacterId, mainSkillId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;

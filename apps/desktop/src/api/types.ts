@@ -526,7 +526,12 @@ export interface StatTrace {
   multiplier_b: number;
   multiplier_b_bonus: number;
   final_fixed: number;
+  /** 最終能力値(上限適用後) */
   effective: number;
+  /** 最終能力値の上限(覚醒段階 + エタの意志 Lv で 1,500〜2,400) */
+  stat_cap: number;
+  /** 上限で捨てられた分。0 なら上限に当たっていない */
+  capped_loss: number;
   /** pin(能力値の固定)が適用された場合の上書き前の値。未適用は null */
   pinned_from: number | null;
   /** pin の出所。未適用は null */

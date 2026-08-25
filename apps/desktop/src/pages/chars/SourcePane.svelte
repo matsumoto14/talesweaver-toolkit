@@ -619,6 +619,12 @@
                   {#if trace?.pinned_from !== null && trace?.pinned_from !== undefined}
                     <span class="pin-badge" title={`固定前: ${fmtInt(trace.pinned_from)}`}>固定</span>
                   {/if}
+                  {#if trace && trace.capped_loss > 0}
+                    <span
+                      class="cap-badge"
+                      title={`上限 ${fmtInt(trace.stat_cap)} で ${fmtInt(trace.capped_loss)} 捨てています。上限は覚醒段階とエタの意志 Lv で上がります`}
+                    >上限</span>
+                  {/if}
                 </td>
               </tr>
             {/each}
@@ -1500,6 +1506,10 @@
   .check input { accent-color: var(--accent); }
   .buff-list { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
   .note { font-size: 10px; }
+  .cap-badge {
+    font-size: 9px; letter-spacing: 0.05em; color: #B5443A; border: 1px solid #B5443A;
+    border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
+  }
   .delay-tier { font-size: 10px; padding: 1px 4px; }
   .fixed-value { font-size: 11px; font-weight: 500; }
 

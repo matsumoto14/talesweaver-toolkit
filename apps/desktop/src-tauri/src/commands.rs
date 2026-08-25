@@ -208,6 +208,7 @@ pub fn preview_effective_stats(
     stat_sources: domain::StatSources,
     equipment: domain::Equipment,
     common_skills: CommonSkills,
+    awakening: domain::Awakening,
     game_character_id: String,
     main_skill_id: Option<String>,
 ) -> CommandResult<domain::StatPreview> {
@@ -222,6 +223,7 @@ pub fn preview_effective_stats(
         &gamedata::title_catalog(),
         &game_character_id,
         coefficients,
+        gamedata::awakening_caps(awakening).max_stat,
     )
     .map_err(|e| e.to_string())
 }
@@ -252,6 +254,7 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &gamedata::title_catalog(),
         &character.game_character_id,
         None,
+        gamedata::awakening_caps(character.awakening).max_stat,
     )
     .map_err(|e| e.to_string())?;
     let equipment_totals = character
@@ -378,6 +381,7 @@ fn build_damage_input(
         added_damage,
         awakening_rate,
         gamedata::awakening_caps(awakening).max_damage,
+        gamedata::awakening_caps(awakening).max_stat,
         skill,
         enemy,
         combo_count,
@@ -557,6 +561,7 @@ pub fn evaluate_contents(
                     added_damage,
                     awakening_rate,
                     gamedata::awakening_caps(character.awakening).max_damage,
+                    gamedata::awakening_caps(character.awakening).max_stat,
                     skill.clone(),
                     enemy.clone(),
                     0,

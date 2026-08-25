@@ -772,7 +772,9 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </table></div>
 <ul>
 <li>エタの意志 Lv1〜100 で「最大ダメージ / 最大HP / 最大防御力 / 最大ステータス」が伸びる(Lv100 = 29,500,000 / 4,100,000 / 24,000 / 2,400)</li>
-<li><strong>最終能力値の上限 2,400</strong> はエタの意志 Lv100 の「最大ステータス開放」。素の上限は 1,500(ステータス ページ)</li>
+<li><strong>最終能力値の上限 2,400</strong> はエタの意志 Lv100 の「最大ステータス開放」。素の上限は 1,500(ステータス ページ)。
+  実装済み(<code>effective_stat</code> が <code>cap</code> を受け取る)。上限に当たった分は <code>StatTrace::capped_loss</code> に残す。
+  <strong>調整の「固定(pin)」は上限のあとに適用する</strong>(実測値をそのまま入れるための例外操作なので上限で削らない)</li>
 <li>防御力は上限に届いたあと頭打ちになり、そこから先の軽減はカット率 J が担う(§6)</li>
 </ul>
 <h2 id="11">11. 敵データ(狩り場情報一覧)</h2>

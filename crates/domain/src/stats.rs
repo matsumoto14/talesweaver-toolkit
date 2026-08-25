@@ -147,16 +147,22 @@ pub struct StatTrace {
     /// [基本能力値 * 倍率B]
     pub multiplier_b_bonus: i64,
     pub final_fixed: i64,
-    /// 最終能力値
+    /// 最終能力値(上限適用後)
     pub effective: i64,
+    /// 最終能力値の上限(wiki: Quest/覚醒クエスト「各能力の上限値」/ エタの意志。
+    /// 覚醒段階 + エタの意志 Lv で 1,500〜2,400。表は gamedata が持つ)
+    pub stat_cap: i64,
+    /// 上限で捨てられた分。0 なら上限に当たっていない
+    pub capped_loss: i64,
     /// pin(能力値の固定)が適用された場合の上書き前の値(`stat_sources::apply_pins` が事後に設定する)
     pub pinned_from: Option<i64>,
     /// pin の出所(`stat_sources::apply_pins` が事後に設定する)
     pub pin_source: Option<PinSource>,
 }
 
-/// 1 ステータス分の能力値計算(wiki §2)。
-pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers) -> (i64, StatTrace) {
+/// 1 ステータス分の能力値計算(wiki §2)。`cap` は最終能力値の上限
+/// (wiki: Quest/覚醒クエスト「各能力の上限値」。覚醒段階 + エタの意志 Lv で決まる)。
+pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers, cap: i64) -> (i64, StatTrace) {
     let percent_of_base_total: i64 = m
         .percent_of_base
         .iter()
@@ -167,7 +173,8 @@ pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers) -> (i64, Sta
     let basic = floor_int(before_multiplier as f64 * multiplier_a);
     let multiplier_b = m.multiplier_b.max(MULTIPLIER_B_MIN);
     let multiplier_b_bonus = floor_int(basic as f64 * multiplier_b);
-    let effective = basic + multiplier_b_bonus + m.final_fixed;
+    let raw = basic + multiplier_b_bonus + m.final_fixed;
+    let effective = raw.min(cap);
     let trace = StatTrace {
         kind,
         base,
@@ -179,6 +186,8 @@ pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers) -> (i64, Sta
         multiplier_b_bonus,
         final_fixed: m.final_fixed,
         effective,
+        stat_cap: cap,
+        capped_loss: raw - effective,
         pinned_from: None,
         pin_source: None,
     };
@@ -262,14 +271,16 @@ impl EffectiveStats {
 }
 
 /// 7 ステータスすべての能力値計算。トレースは `StatKind::ALL` の順。
+/// `cap` は最終能力値の上限(`AwakeningCaps::max_stat`。表は gamedata が持つ)。
 pub fn effective_stats(
     base: &BaseStats,
     modifiers: &StatModifierSet,
+    cap: i64,
 ) -> (EffectiveStats, Vec<StatTrace>) {
     let mut stats = EffectiveStats::default();
     let mut traces = Vec::with_capacity(StatKind::ALL.len());
     for kind in StatKind::ALL {
-        let (value, trace) = effective_stat(kind, base.get(kind), modifiers.get(kind));
+        let (value, trace) = effective_stat(kind, base.get(kind), modifiers.get(kind), cap);
         stats.set(kind, value);
         traces.push(trace);
     }
@@ -280,8 +291,11 @@ pub fn effective_stats(
 mod tests {
     use super::*;
 
+    /// 上限に当たらない値(上限の挙動は専用テストで見る)。
+    const NO_CAP: i64 = i64::MAX;
+
     fn stat(base: u32, m: &StatModifiers) -> i64 {
-        effective_stat(StatKind::Stab, base, m).0
+        effective_stat(StatKind::Stab, base, m, NO_CAP).0
     }
 
     #[test]
@@ -342,7 +356,7 @@ mod tests {
         };
         // 基本 = [(200 + 40 + 10) * 1.1] = [275.0] = 275
         // 最終 = 275 + [27.5] + 5 = 307
-        let (value, trace) = effective_stat(StatKind::Int, 200, &m);
+        let (value, trace) = effective_stat(StatKind::Int, 200, &m, NO_CAP);
         assert_eq!(value, 307);
         assert_eq!(trace.basic, 275);
         assert_eq!(trace.multiplier_b_bonus, 27);
@@ -365,10 +379,25 @@ mod tests {
         ));
     }
 
+    // wiki Quest/覚醒クエスト「各能力の上限値」/ エタの意志: 最終能力値は上限で頭打ち
+    #[test]
+    fn 最終能力値は上限で頭打ちになり捨てた分をトレースに残す() {
+        let m = StatModifiers { fixed: 1000, ..StatModifiers::neutral() };
+        let (value, trace) = effective_stat(StatKind::Stab, 300, &m, 1000);
+        assert_eq!(value, 1000);
+        assert_eq!(trace.stat_cap, 1000);
+        assert_eq!(trace.capped_loss, 300);
+
+        // 上限未満なら捨てる分は 0
+        let (value, trace) = effective_stat(StatKind::Stab, 300, &m, 2400);
+        assert_eq!(value, 1300);
+        assert_eq!(trace.capped_loss, 0);
+    }
+
     #[test]
     fn 七種すべてを計算しトレースを返す() {
         let base = BaseStats { stab: 1, hack: 2, int: 3, def: 4, mr: 5, dex: 6, agi: 7 };
-        let (stats, traces) = effective_stats(&base, &StatModifierSet::default());
+        let (stats, traces) = effective_stats(&base, &StatModifierSet::default(), NO_CAP);
         assert_eq!(stats, EffectiveStats { stab: 1, hack: 2, int: 3, def: 4, mr: 5, dex: 6, agi: 7 });
         assert_eq!(traces.len(), 7);
         for kind in StatKind::ALL {
