@@ -1643,10 +1643,10 @@
   /* オン / オフはチップで出す(§07 形態 3)。素のチェックボックスは 5 形態のどれでもない。
      値はチップの中に書く — 選ぶ = 値が確定する。計算タブのバフチップと同じ形にそろえる */
   .check {
-    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 7px;
-    padding: 5px 11px; border-radius: var(--r-pill);
+    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    padding: 4px 11px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border-soft);
-    color: var(--fg-muted); font-size: 11px; cursor: pointer;
+    color: var(--fg-sub); font-size: 11px; font-weight: 500; cursor: pointer;
   }
   .check:hover { border-color: var(--accent); }
   .check:has(input:checked) {

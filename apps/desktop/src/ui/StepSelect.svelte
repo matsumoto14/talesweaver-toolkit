@@ -37,19 +37,26 @@
 </div>
 
 <style>
+  /* 見た目は design-system の .seg に合わせる — 1 つの枠の中にボタンが並び、
+     間は弱い区切り線 1 本。選択中は水色のグラデ(このアプリの「選ばれている」の色) */
   .step-select { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  /* 横に並べきれないときは折り返す。畳んで隠さない — 段階を見せるのがこの形の役目 */
-  .steps { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+  .steps {
+    display: inline-flex; flex-wrap: wrap; align-self: flex-start; min-width: 0;
+    border: 1px solid var(--border); border-radius: var(--r-panel); overflow: hidden;
+  }
   .step {
-    padding: 5px 10px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border);
-    color: var(--fg-muted); font-size: 11px; white-space: nowrap;
+    padding: 5px 12px; border: 0; border-right: 1px solid var(--border-soft);
+    background: var(--bg-field); color: var(--fg-muted);
+    font-size: 11px; font-weight: 500; white-space: nowrap;
+    transition: background 0.15s ease;
   }
-  .step:hover:not(:disabled):not(.on) { border-color: var(--accent); color: var(--fg); }
+  .step:last-child { border-right: 0; }
+  .step:hover:not(:disabled):not(.on) { background: var(--bg-rail); }
   .step.on {
-    background: var(--bg-active); border-color: var(--accent);
-    color: var(--accent-hover); font-weight: 700;
+    background: linear-gradient(180deg, #CCF7FF, #90D7FF);
+    color: #123047; font-weight: 700;
   }
+  .step:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .step:disabled { cursor: not-allowed; opacity: 0.5; }
 </style>
