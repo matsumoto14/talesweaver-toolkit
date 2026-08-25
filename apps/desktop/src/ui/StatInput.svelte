@@ -93,6 +93,7 @@
 <div
   class="stat-input"
   class:editing
+  class:full={value >= max}
   onfocusout={(e) => {
     // 編集の中で入力欄 → スライダー → MAX と移る間は閉じない。
     // relatedTarget は再描画のタイミングで null になることがあるので、次のフレームで
@@ -157,6 +158,10 @@
     background: var(--surface-inset); border: 1px solid var(--border-soft);
   }
   .read:hover { border-color: var(--accent); }
+  /* 上限に届いたら面の色が変わる(§07 / §12)。「満」は文字ではなく面でも伝える */
+  .stat-input.full .read, .stat-input.full .num-field {
+    background: var(--state-edge-bg); border-color: var(--gold);
+  }
   .read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   /* 桁が増えても隣が動かない(§09 規則 4)。編集欄と同じ幅を予約しておく */
   .read-value { min-width: 50px; text-align: right; font-variant-numeric: tabular-nums; }

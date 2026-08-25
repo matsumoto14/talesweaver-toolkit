@@ -716,8 +716,10 @@
         <span class="part-main">
           <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
           <span class="part-item">{partDisplayName(slot)}</span>
-          {#if canEnhance && part.enhance_level > 0}
-            <span class="part-plus">+{part.enhance_level}</span>
+          <!-- 強化バッジの枠は常に確保する。出ても行の中身がずれない(§12) -->
+          {#if canEnhance}
+            <span class="part-plus" class:on={part.enhance_level > 0}
+            >{part.enhance_level > 0 ? `+${part.enhance_level}` : ""}</span>
           {/if}
           {#if part.abilities.length > 0}
             <span class="part-abi">アビリティ {part.abilities.length}</span>
@@ -1052,7 +1054,7 @@
             <span class="part-main">
               <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
               <span class="part-item">{partDisplayName(slot)}</span>
-              {#if siena.stage > 0}<span class="part-plus">{siena.stage} 段階</span>{/if}
+              <span class="part-plus wide" class:on={siena.stage > 0}>{siena.stage > 0 ? `${siena.stage} 段階` : ""}</span>
             </span>
             <span class="part-vals num dim">{sienaSummary(slot)}</span>
             <span class="chev dim">›</span>
@@ -1711,9 +1713,13 @@
   .part-name { flex-shrink: 0; font-size: 11px; font-weight: 700; }
   .part-item { min-width: 0; font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .part-plus {
-    flex-shrink: 0; padding: 0 6px; border-radius: var(--r-pill); background: var(--state-short-bg); border: 1px solid var(--mob);
-    font-size: 9px; font-weight: 700; color: #7A4B45;
+    flex-shrink: 0; min-width: 30px; text-align: center;
+    padding: 0 6px; border-radius: var(--r-pill);
+    background: transparent; border: 1px solid transparent;
+    font-size: 9px; font-weight: 700; color: transparent;
   }
+  .part-plus.on { background: var(--state-short-bg); border-color: var(--mob); color: #7A4B45; }
+  .part-plus.wide { min-width: 46px; }
   .part-vals { flex-shrink: 0; font-size: 9.5px; }
   .chev { flex-shrink: 0; font-size: 11px; }
 
