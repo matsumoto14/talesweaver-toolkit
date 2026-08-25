@@ -8,12 +8,16 @@
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
-    equipmentBaseTotal, equipmentEnchantTotal, sienaAttackRatePercent, sienaPartCount,
-    sienaStatTotal, thesisCoresBestTotal,
+    equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
+    randomOptionRecordOnlyCount, sienaAttackRatePercent,
+    sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
-  import { fmtInt } from "../../format";
-  import { STAT_KINDS, STAT_LABELS } from "../../labels";
-  import { app, removeCharacter, upsertCharacter } from "../../state.svelte";
+  import { fmtInt, fmtNum } from "../../format";
+  import {
+    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
+    ULTIMATE_SKILL_LABELS,
+  } from "../../labels";
+  import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import Splitter from "../../ui/Splitter.svelte";
@@ -23,6 +27,7 @@
     character: RegisteredCharacter;
   }
   let { character }: Props = $props();
+
 
   const DEFAULT_LIST_WIDTH = 280;
   const layoutWidths = persisted("tw-v4-chars", { list: DEFAULT_LIST_WIDTH });
@@ -53,6 +58,13 @@
     });
   });
 
+  // 主軸スキル(攻撃力の依存種別を決める)。選択肢はキャラ種のスキル一覧。
+  $effect(() => {
+    void loadSkills(draft.gameCharacterId);
+  });
+  const skills = $derived(skillsByCharacter[draft.gameCharacterId] ?? []);
+  const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+
   // 即時プレビュー(100ms debounce)。エラーはペイン内に控えめに表示(トーストは出さない)。
   let preview = $state<StatPreview | null>(null);
   let previewError = $state<string | null>(null);
@@ -63,10 +75,13 @@
     const statSources = JSON.parse(JSON.stringify(draft.statSources)) as StatSources;
     // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
     const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
+    const commonSkills = { ...draft.commonSkills };
+    const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
+    const gameCharacterId = draft.gameCharacterId;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, equipment, draft.gameCharacterId)
+      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, gameCharacterId, mainSkillId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;
@@ -128,27 +143,86 @@
     STAT_KINDS.filter((k) => draft.statSources.adjustments[k].add !== 0 || draft.statSources.adjustments[k].pin !== null).length,
   );
   const enhanceRatePercent = $derived(
-    (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3,
+    (draft.commonSkills.power_weapon ? 2 : 0) + draft.commonSkills.strong_weapon_level * 3,
   );
-  const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment));
+  const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment, app.equipmentAbilities, app.titles));
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
   const sienaParts = $derived(sienaPartCount(draft.equipment));
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
   const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
-
+  const roCount = $derived(randomOptionCount(draft.equipment));
+  const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
+
+  // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる
+  const commonSkillSummary = $derived.by(() => {
+    const c = draft.commonSkills;
+    const parts: string[] = [];
+    if (enhanceRatePercent > 0) parts.push(`装備攻撃力 +${enhanceRatePercent}%`);
+    const pa = c.protect_armor_level;
+    const defense =
+      (c.coat_armor ? 18 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
+    if (defense > 0) parts.push(`装備防御力 物+${defense}%`);
+    if (c.sharpness_vision_level > 0) {
+      parts.push(`追加ダメージ +${[5, 10, 15, 20, 25, 28, 31, 34, 37, 40][c.sharpness_vision_level - 1]}%`);
+    }
+    const ultimate = c.ultimate.slots.filter((u) => u !== null);
+    if (ultimate.length > 0) {
+      parts.push(`極限 ${ultimate.map((u) => ULTIMATE_SKILL_LABELS[u]).join(" / ")}`);
+    }
+    return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
+  });
+
+  // 称号は 1 枠。表示中の 1 件だけが効く(wiki: 称号システム)
+  const titleSummary = $derived.by(() => {
+    const t = app.titles.find((x) => x.id === draft.equipment.title);
+    if (!t) return NEUTRAL;
+    const total = EQUIPMENT_STAT_KINDS.reduce((n, k) => n + t.values[k], 0);
+    return `${t.name}(合計 +${fmtInt(total)})`;
+  });
+
+  // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
+  const elementSummary = $derived.by(() => {
+    const values = equipmentElementValues(draft.equipment);
+    for (const def of app.elementSources) {
+      const element = draft.statSources.elements[def.id];
+      if (element) values[element] += def.value;
+    }
+    const parts = ELEMENTS.filter((e) => values[e] > 0).map((e) => `${ELEMENT_LABELS[e]}${values[e]}`);
+    return parts.length === 0 ? NEUTRAL : parts.join(" / ");
+  });
+
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
     { id: "status", name: "キャラステータス", sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}` },
     {
+      id: "commonSkill",
+      name: "共通スキル",
+      sub: commonSkillSummary,
+    },
+    {
       id: "equipment",
       name: "装備",
-      sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}${enhanceRatePercent > 0 ? ` ・ +${enhanceRatePercent}%` : ""}`,
+      sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}`,
     },
-    { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
-    { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
-    { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
-    { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
+    {
+      id: "element",
+      name: "属性",
+      sub: elementSummary,
+    },
+    {
+      id: "title",
+      name: "称号",
+      sub: titleSummary,
+    },
+    {
+      id: "randomOption",
+      name: "ランダムOP",
+      sub:
+        roCount > 0
+          ? `${roCount} 枠${roRecordOnly > 0 ? ` ・ うち ${roRecordOnly} 枠は記録のみ` : ""}`
+          : NEUTRAL,
+    },
     {
       id: "siena",
       name: "シエナのオーラ",
@@ -162,10 +236,17 @@
       name: "テシスコア",
       sub: coreBestTotal > 0 ? `最大 合計 ${fmtInt(coreBestTotal)}` : NEUTRAL,
     },
+    { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
+    { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
+    { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
+    { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
-  const PLANNED = ["称号", "モンスターカード"];
+  // 並びは 12a の指定順(キャラステータス / 装備 / シエナ / テシスコア / 聖物 / クラウン /
+  // スキル / モンスターカード / ペット)。12a に無いルーン・調整はその後ろに置く。
+  const PLANNED = ["モンスターカード"];
+  const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
   // --- いまの実力 ---------------------------------------------------------
   const totalContents = $derived(app.areas.reduce((n, a) => n + a.contents.length, 0));
@@ -186,6 +267,7 @@
     <section class="sources">
       <div class="src-head">
         <span class="src-title">補正源</span>
+        {#if neutralCount > 0}<span class="src-unset">未設定 {neutralCount} 件</span>{/if}
         <span class="dim">押して中身を変える</span>
       </div>
       <div class="src-list">
@@ -207,6 +289,24 @@
           </div>
         {/each}
       </div>
+      <div class="attack-foot" class:empty={!preview?.attack}>
+        <div class="attack-head">
+          <span class="attack-label">いまの攻撃力</span>
+          <span class="attack-skill dim">{mainSkill ? mainSkill.name : "主軸スキル未選択"}</span>
+        </div>
+        {#if preview?.attack}
+          <div class="attack-value num">{fmtInt(preview.attack.breakdown.value)}</div>
+          <div class="attack-parts num dim">
+            ステ {fmtNum(Math.floor(preview.attack.breakdown.stat_attack))}
+            ・ 装備基本 {fmtNum(Math.floor(preview.attack.breakdown.equipment_base_attack))}
+            ・ 装備強化 {fmtNum(Math.floor(preview.attack.breakdown.equipment_enhanced_attack))}
+            ・ 強化倍率 +{Math.round(preview.attack.breakdown.enhance_rate * 100)}%
+          </div>
+          <p class="attack-note dim">テシスコアの能力値は地域ごとなので、この値には入っていません(ダメージ計算タブでは対象の地域で入ります)。</p>
+        {:else}
+          <p class="attack-note dim">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
+        {/if}
+      </div>
       <p class="src-note dim">常用バフは<b>ダメージ計算</b>タブの「計算の材料」で選べます。グレーの補正源はこれから。</p>
     </section>
 
@@ -219,7 +319,7 @@
     />
 
     <section class="detail">
-      <SourcePane {draft} {preview} {previewError} sourceId={openSource} />
+      <SourcePane {draft} {preview} {previewError} {skills} sourceId={openSource} />
     </section>
   </div>
 
@@ -237,7 +337,7 @@
       <div class="sheet-body">
         <div class="sheet-card">
           <div class="card-title">最終能力値</div>
-          <div class="stat-grid">
+          <div class="stat-grid inset">
             {#each STAT_KINDS as k (k)}
               <span class="stat-cell">
                 <span class="dim">{STAT_LABELS[k]}</span>
@@ -247,14 +347,45 @@
           </div>
         </div>
         <div class="sheet-card">
+          <div class="card-title">攻撃力(A){mainSkill ? ` — ${mainSkill.name}` : ""}</div>
+          {#if preview?.attack}
+            <div class="clear num"><span class="strong">{fmtInt(preview.attack.breakdown.value)}</span></div>
+            <div class="eq-summary num inset">
+              <span><span class="dim">ステ攻撃力</span> {fmtNum(preview.attack.breakdown.stat_attack)}</span>
+              <span><span class="dim">装備基本</span> {fmtNum(preview.attack.breakdown.equipment_base_attack)}</span>
+              <span><span class="dim">装備強化</span> {fmtNum(preview.attack.breakdown.equipment_enhanced_attack)}</span>
+              <span><span class="dim">強化倍率</span> +{Math.round(preview.attack.breakdown.enhance_rate * 100)}%</span>
+            </div>
+            <p class="dim tiny">テシスコアの能力値は地域ごとのため未加算(地域なしの値)。</p>
+          {:else}
+            <p class="dim tiny">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
+          {/if}
+        </div>
+        <div class="sheet-card">
           <div class="card-title">装備値(全部位の合計)</div>
-          <div class="eq-summary num">
-            <span><span class="dim">基本合計 突き</span> {fmtInt(eqBaseTotal.thrust)}</span>
-            <span><span class="dim">基本合計 斬り</span> {fmtInt(eqBaseTotal.slash)}</span>
-            <span><span class="dim">エンチャント合計 突き</span> {fmtInt(eqEnchantTotal.thrust)}</span>
-            <span><span class="dim">エンチャント合計 斬り</span> {fmtInt(eqEnchantTotal.slash)}</span>
-            <span><span class="dim">強化倍率</span> +{enhanceRatePercent}%</span>
-          </div>
+          <table class="eq-table num inset">
+            <thead>
+              <tr>
+                <th></th>
+                {#each EQUIPMENT_STAT_KINDS as k (k)}<th class="n">{EQUIPMENT_STAT_SHORT[k]}</th>{/each}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th class="rh">基本</th>
+                {#each EQUIPMENT_STAT_KINDS as k (k)}<td class="n">{fmtInt(eqBaseTotal[k])}</td>{/each}
+              </tr>
+              <tr>
+                <th class="rh">強化</th>
+                {#each EQUIPMENT_STAT_KINDS as k (k)}<td class="n">{fmtInt(eqEnchantTotal[k])}</td>{/each}
+              </tr>
+            </tbody>
+          </table>
+          <p class="dim tiny">
+            強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も入っています。
+            強化のうちテシスコア・シエナのオーラの分はこの表に入りません
+            (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。
+          </p>
         </div>
         <div class="sheet-card">
           <div class="card-title">このキャラで通るのは</div>
@@ -279,7 +410,7 @@
   .char-name { font-size: 13px; font-weight: 800; }
   .unsaved {
     font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--warm);
-    border: 1px solid var(--warm); border-radius: 999px; padding: 1px 8px;
+    border: 1px solid var(--warm); border-radius: var(--r-pill); padding: 1px 8px;
   }
   .spacer { flex: 1; }
 
@@ -287,11 +418,15 @@
   section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
   .src-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 7px; }
-  .src-title { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
   .src-head .dim { margin-left: auto; font-size: 9px; }
+  .src-unset {
+    font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
+  }
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
-    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-panel);
     background: #fff; border: 1px solid var(--border-soft); text-align: left;
   }
   .src:hover:not(.planned) { border-color: var(--accent); }
@@ -302,8 +437,20 @@
   .src.planned .src-name, .src.planned .src-sub { color: #A9B4C4; }
   .src-sub { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chev { flex-shrink: 0; font-size: 11px; }
+  .attack-foot {
+    flex-shrink: 0; margin-top: 8px; padding: 9px 11px; border-radius: var(--r-panel);
+    background: linear-gradient(180deg, #fff, #EFF5FD); border: 1px solid #9FB4D0;
+  }
+  .attack-foot.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
+  .attack-head { display: flex; align-items: baseline; gap: 8px; }
+  .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .attack-skill { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .attack-value { margin-top: 2px; font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .attack-parts { margin-top: 3px; font-size: 9px; line-height: 1.6; }
+  .attack-note { margin: 4px 0 0; font-size: 9px; line-height: 1.55; }
+
   .src-note {
-    flex-shrink: 0; margin: 10px 0 0; padding: 9px 11px; border-radius: 10px;
+    flex-shrink: 0; margin: 10px 0 0; padding: 9px 11px; border-radius: var(--r-panel);
     background: var(--bg-rail); border: 1px dashed var(--border);
     font-size: 9.5px; line-height: 1.5; color: var(--fg-muted);
   }
@@ -312,33 +459,40 @@
 
   .sheet { flex-shrink: 0; border-top: 1px solid var(--border-strong); background: var(--bg-mid); padding: 8px 16px 10px; }
   .sheet-trigger {
-    width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: 10px;
+    width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--r-panel);
     background: linear-gradient(180deg, #fff, #F1F6FC); border: 1px solid #9FB4D0;
     box-shadow: inset 0 1px 0 #fff; text-align: left;
   }
   .sheet-trigger:hover { border-color: #6382AD; }
-  .sheet-title { flex-shrink: 0; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: #26334A; white-space: nowrap; }
+  .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: #26334A; white-space: nowrap; }
   .sheet-summary { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sheet-chev {
     flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-    border-radius: 6px; background: #fff; border: 1px solid var(--border);
+    border-radius: var(--r-inset); background: #fff; border: 1px solid var(--border);
     font-size: 9px; font-weight: 700; color: var(--accent);
   }
   .sheet-body { margin-top: 8px; max-height: 220px; overflow: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+  /* インセット面(表・最終能力値)の内側余白が増えた分、5 枚(4 カード + 削除)が
+     1 行に収まるよう basis を詰める */
   .sheet-card {
-    flex: 1 1 240px; min-width: 0; padding: 11px 12px; border-radius: 11px;
+    flex: 1 1 210px; min-width: 0; padding: 11px 12px; border-radius: var(--r-window);
     background: #fff; border: 1px solid var(--border-strong);
   }
-  .stat-grid { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
+  .stat-grid { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
   .stat-cell { display: flex; align-items: baseline; gap: 5px; font-size: 10px; }
   .stat-cell .strong { font-size: 12px; font-weight: 700; }
-  .eq-summary { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
+  .eq-summary { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
+  .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; border-spacing: 0; overflow: hidden; font-size: 11px; }
+  .eq-table th, .eq-table td { padding: 3px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.55); }
+  .eq-table thead th { font-size: 9px; font-weight: 700; color: var(--fg-muted); background: none; position: static; }
+  .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
+  .eq-table .n { text-align: right; }
   .clear { margin-top: 4px; }
   .clear .strong { font-size: 20px; font-weight: 700; }
   .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }
   .delete {
-    flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: 9px;
-    background: #fff; border: 1px solid #B08480; font-size: 10.5px; color: var(--danger);
+    flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: var(--r-panel);
+    background: #fff; border: 1px solid #B08480; font-size: var(--t-label); color: var(--danger);
   }
   .delete.confirm { background: #F6E8E5; font-weight: 700; }
 </style>

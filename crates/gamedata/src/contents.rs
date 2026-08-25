@@ -14,9 +14,11 @@
 //!
 //! 敵データ(`enemies.rs`)があるコンテンツは火力も判定する。敵データが無いコンテンツは
 //! `enemy_id`/`need_per_hit` が None で、入場条件のみで判定する。
-//! 目安ダメージ(need_per_hit)はコミュニティ知識・実測がソースで全件 `[仮]`。
+//! 目安ダメージ(need_per_hit)はコミュニティ知識・実測がソース。wiki 狩り場情報一覧には
+//! 対応する列が無く(2026-08-25 再確認)、wiki の取り込みでは埋まらない項目なので
+//! `[仮]`(= wiki 待ち)ではなく「出典がコミュニティ知識」として運用する。
 
-use domain::content::{Content, ContentArea, ContentRequirement};
+use domain::content::{Content, ContentArea, ContentRequirement, ContentSeries};
 use domain::thesis_core::CoreRegion;
 
 use crate::Source;
@@ -67,10 +69,24 @@ impl Def {
             need_per_hit: self.need_per_hit,
             requirements: self.requirements.to_vec(),
             core_region: core_region_of(self.id),
+            series: series_of(self.id),
             entry_note: self.entry_note.map(String::from),
             team_note: self.team_note.map(String::from),
         }
     }
+}
+
+/// 段数違いの系列(一覧では 1 行 + 難易度ステッパーに畳む)。
+///
+/// id の接頭辞 + 末尾の数値で機械的に決める。系列を手で並べた表にすると、段を足したときに
+/// 2 箇所直すことになる。現在の系列は「レリックの聖域 10段〜19段」のみ。
+const SERIES: &[(&str, &str)] = &[("relic_sanctuary_", "レリックの聖域")];
+
+fn series_of(id: &str) -> Option<ContentSeries> {
+    SERIES.iter().find_map(|(prefix, name)| {
+        let step = id.strip_prefix(prefix)?.parse::<u32>().ok()?;
+        Some(ContentSeries { id: prefix.trim_end_matches('_').to_string(), name: name.to_string(), step })
+    })
 }
 
 /// テシスコアの能力値増加が有効なコンテンツと地域の対応。
@@ -324,6 +340,26 @@ mod tests {
 
     fn all_contents() -> Vec<Content> {
         content_areas().into_iter().flat_map(|a| a.contents).collect()
+    }
+
+    /// 系列は id の接頭辞 + 末尾の数値で決まる。数値でない末尾(神鳥・キシニク)は系列に入れない。
+    #[test]
+    fn レリックの聖域は10段から19段の系列になる() {
+        let series: Vec<_> = all_contents()
+            .into_iter()
+            .filter_map(|c| c.series.map(|s| (s.id, s.step)))
+            .collect();
+        assert!(series.iter().all(|(id, _)| id == "relic_sanctuary"));
+        let mut steps: Vec<u32> = series.iter().map(|(_, step)| *step).collect();
+        steps.sort_unstable();
+        assert_eq!(steps, (10..=19).collect::<Vec<_>>());
+
+        // 末尾が数値でないものは系列に入らない(1 行に畳むと別コンテンツが混ざる)
+        let standalone = all_contents()
+            .into_iter()
+            .find(|c| c.id == "relic_sanctuary_kisinik")
+            .unwrap();
+        assert_eq!(standalone.series, None);
     }
 
     #[test]

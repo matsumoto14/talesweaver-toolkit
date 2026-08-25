@@ -3,19 +3,38 @@
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import { createCharacter, errorMessage } from "../../api/commands";
   import type { NewCharacter } from "../../api/types";
-  import { neutralEquipment, neutralStatSources } from "../../draft";
+  import { defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
   import { STAT_KINDS } from "../../labels";
   import {
-    app, payloadOf, selectCharacter, selectedCharacter, upsertCharacter,
+    app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Icon from "../../ui/Icon.svelte";
+  import Select from "../../ui/Select.svelte";
 
   let name = $state("");
   let gameCharacterId = $state("boris");
+  let mainSkillId = $state("");
   let saving = $state(false);
 
   const source = $derived(selectedCharacter());
   const selectedGame = $derived(app.gameCharacters.find((c) => c.id === gameCharacterId) ?? null);
+
+  // 主軸スキル(攻撃力の依存種別を決める)。スキル未収録のキャラがあるので未選択を許す。
+  $effect(() => {
+    void loadSkills(gameCharacterId);
+  });
+  const skills = $derived(skillsByCharacter[gameCharacterId] ?? []);
+  const mainSkillOptions = $derived([
+    { value: "", label: "未選択(あとで選ぶ)" },
+    ...skills.map((s) => ({ value: s.id, label: s.name })),
+  ]);
+  /** キャラを選び直したら前キャラのスキル id を残さない */
+  function pickGameCharacter(id: string) {
+    if (id === gameCharacterId) return;
+    gameCharacterId = id;
+    mainSkillId = "";
+  }
 
   async function register(copy: boolean) {
     if (!selectedGame || saving) return;
@@ -23,7 +42,12 @@
     try {
       let payload: NewCharacter;
       if (copy && source) {
-        payload = { ...payloadOf(source), name: name.trim() || selectedGame.name, game_character_id: gameCharacterId };
+        payload = {
+          ...payloadOf(source),
+          name: name.trim() || selectedGame.name,
+          game_character_id: gameCharacterId,
+          main_skill_id: mainSkillId === "" ? null : mainSkillId,
+        };
         if (source.game_character_id !== gameCharacterId) {
           // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルバフを落とす(幽霊バフ対策)
           payload.stat_sources.buffs.choices = payload.stat_sources.buffs.choices.filter((ch) => {
@@ -38,7 +62,9 @@
           base_stats: Object.fromEntries(STAT_KINDS.map((k) => [k, 1])) as NewCharacter["base_stats"],
           awakening: { stage: 0, eternal_level: 0 },
           stat_sources: neutralStatSources(),
-          equipment: neutralEquipment(),
+          equipment: defaultEquipment(),
+          common_skills: defaultCommonSkills(),
+          main_skill_id: mainSkillId === "" ? null : mainSkillId,
         };
       }
       const saved = await createCharacter(payload);
@@ -46,6 +72,7 @@
       selectCharacter(saved.id);
       app.registerOpen = false;
       name = "";
+      mainSkillId = "";
     } catch (e) {
       reportError(errorMessage(e));
     } finally {
@@ -69,11 +96,20 @@
     <div class="grid">
       {#each app.gameCharacters as c (c.id)}
         {@const on = c.id === gameCharacterId}
-        <button type="button" class="pick" class:on onclick={() => (gameCharacterId = c.id)}>
-          <span class="icon" class:on></span>
+        <button type="button" class="pick" class:on onclick={() => pickGameCharacter(c.id)}>
+          <Icon kind="character" id={c.id} size={40} label={c.name} />
           <span class="pick-name">{c.name}</span>
         </button>
       {/each}
+    </div>
+    <div class="row skill-row">
+      <span class="label">主軸スキル</span>
+      <span class="skill-select">
+        <Select options={mainSkillOptions} bind:value={mainSkillId} />
+      </span>
+      <span class="hint dim">
+        {skills.length === 0 ? "このキャラのスキルは未収録" : "攻撃力の依存種別を決めます。あとで変更できます"}
+      </span>
     </div>
     <div class="actions">
       <button type="button" class="btn primary" disabled={saving} onclick={() => register(false)}>
@@ -89,17 +125,20 @@
       {/if}
     </div>
   </div>
-  <p class="note dim">登録は名前だけでOK。装備やステータスは登録後にこの画面で育てます(空の項目は中立値で計算されます)。</p>
+  <p class="note dim">
+    登録は名前だけでOK。装備やステータスは登録後にこの画面で育てます(空の項目は中立値で計算されます)。
+    パワーウェポンとストロングウェポン Lv6(合計 +20%)は既定で入ります(装備ペインで変更できます)。
+  </p>
 </div>
 
 <style>
   .pane { max-width: 720px; }
-  .card { padding: 13px; border-radius: 12px; }
+  .card { padding: 13px; border-radius: var(--r-window); }
   .card-title.big { font-size: 12px; color: #26334A; }
   .row { margin-top: 9px; display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .label { width: 60px; flex-shrink: 0; font-size: 10.5px; color: var(--fg-muted); }
+  .label { width: 60px; flex-shrink: 0; font-size: var(--t-label); color: var(--fg-muted); }
   input[type="text"] {
-    min-width: 0; flex: 1; padding: 6px 9px; border-radius: 8px;
+    min-width: 0; flex: 1; padding: 6px 9px; border-radius: var(--r-panel);
     border: 1px solid var(--accent); background: var(--bg-panel); font-size: 12px; color: var(--fg);
   }
   input[type="text"]:focus { outline: none; border-color: var(--accent-hover); }
@@ -109,19 +148,15 @@
   .grid { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
   .pick {
     width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 7px 4px; border-radius: 10px;
+    padding: 7px 4px; border-radius: var(--r-panel);
     background: #fff; border: 1px solid var(--border-soft);
   }
   .pick.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16); }
-  .icon {
-    width: 30px; height: 30px; border-radius: 9px;
-    background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
-    border: 1px solid var(--border-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
-  }
-  .icon.on { border-color: var(--accent); }
   .pick-name { max-width: 58px; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pick.on .pick-name { color: var(--fg); font-weight: 700; }
 
+  .skill-row { margin-top: 11px; }
+  .skill-select { min-width: 0; flex: 1; }
   .actions { margin-top: 11px; display: flex; gap: 7px; }
   .actions .btn { flex: 1; }
   .actions .btn.cancel { flex: 0 0 auto; }

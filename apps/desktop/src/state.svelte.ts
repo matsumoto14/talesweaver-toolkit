@@ -7,12 +7,17 @@ import {
   listBuffCatalog,
   listCharacters,
   listContents,
+  listElementSources,
   listEquipmentAbilities,
   listEquipmentCatalog,
   listGameCharacters,
+  listRandomOptions,
+  listSkills,
+  listTitles,
 } from "./api/commands";
 import type {
   BuffDefinition,
+  ElementSourceDef,
   Content,
   ContentArea,
   ContentEvaluation,
@@ -20,7 +25,10 @@ import type {
   EquipmentItem,
   GameCharacter,
   NewCharacter,
+  RandomOptionDef,
   RegisteredCharacter,
+  Skill,
+  TitleDef,
 } from "./api/types";
 import { reportError } from "./toast.svelte";
 
@@ -35,6 +43,12 @@ export const app = $state({
   catalog: [] as BuffDefinition[],
   equipmentCatalog: [] as EquipmentItem[],
   equipmentAbilities: [] as EquipmentAbilityDef[],
+  /** ランダムオプションのカタログ(wiki: ランダムオプション) */
+  randomOptions: [] as RandomOptionDef[],
+  /** 称号のカタログ(主要称号のみ) */
+  titles: [] as TitleDef[],
+  /** 属性値の供給源カタログ(装備の属性強化以外) */
+  elementSources: [] as ElementSourceDef[],
   selectedId: null as number | null,
   /** キャラ id → コンテンツ判定(保存済みデータ基準) */
   evaluations: {} as Record<number, ContentEvaluation[]>,
@@ -47,6 +61,27 @@ export const app = $state({
   /** キャラタブで登録ペインを開く(レールの「＋ キャラを登録」から) */
   registerOpen: false,
 });
+
+/**
+ * ゲームキャラ id → スキル一覧。静的データなので一度引いたら使い回す。
+ * キャラ画面(主軸スキルの選択肢)で参照する。未取得のキーは空配列を返す。
+ */
+export const skillsByCharacter = $state<Record<string, Skill[]>>({});
+
+// 取得済み・取得中のキー(非リアクティブ)。$effect から呼ぶので、重複判定に
+// skillsByCharacter 自身を読むと「書いた瞬間に呼び出し元の effect が再実行される」ため分ける。
+const requestedSkills = new Set<string>();
+
+export async function loadSkills(gameCharacterId: string): Promise<void> {
+  if (gameCharacterId === "" || requestedSkills.has(gameCharacterId)) return;
+  requestedSkills.add(gameCharacterId);
+  try {
+    skillsByCharacter[gameCharacterId] = await listSkills(gameCharacterId);
+  } catch (e) {
+    requestedSkills.delete(gameCharacterId);
+    reportError(errorMessage(e));
+  }
+}
 
 export function selectedCharacter(): RegisteredCharacter | null {
   return app.characters.find((c) => c.id === app.selectedId) ?? null;
@@ -106,13 +141,19 @@ export function selectCharacter(id: number | null): void {
 
 export async function loadAll(): Promise<void> {
   try {
-    const [characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities] = await Promise.all([
+    const [
+      characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities, elementSources,
+      randomOptions, titles,
+    ] = await Promise.all([
       listCharacters(),
       listGameCharacters(),
       listContents(),
       listBuffCatalog(),
       listEquipmentCatalog(),
       listEquipmentAbilities(),
+      listElementSources(),
+      listRandomOptions(),
+      listTitles(),
     ]);
     app.characters = characters;
     app.gameCharacters = gameCharacters;
@@ -120,6 +161,9 @@ export async function loadAll(): Promise<void> {
     app.catalog = catalog;
     app.equipmentCatalog = equipmentCatalog;
     app.equipmentAbilities = equipmentAbilities;
+    app.elementSources = elementSources;
+    app.randomOptions = randomOptions;
+    app.titles = titles;
     if (app.selectedId === null && characters.length > 0) app.selectedId = characters[0].id;
     await Promise.all(characters.map(refreshEvaluation));
   } catch (e) {

@@ -1,8 +1,9 @@
 //! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは String に変換して返す。
 
 use domain::{
-    evaluate_content, BestSkillDamage, BuffDefinition, Content, ContentArea, ContentEvaluation,
-    CoreRegion, DamageInput, DamageResult, Enemy, EquipmentAbilityDef, EquipmentPart, Skill,
+    evaluate_content, AttackPowerCoefficients, BestSkillDamage, BuffDefinition, Content,
+    CommonSkills, ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, DefenseProfile,
+    Enemy, EquipmentAbilityDef, EquipmentPart, RandomOptionDef, Skill, TitleDef,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
@@ -61,6 +62,28 @@ pub fn list_buff_catalog() -> Vec<BuffDefinition> {
     gamedata::buff_catalog()
 }
 
+/// 属性値の供給源カタログ(装備の属性強化以外。ペット / モンスターカード / ルーン /
+/// 頭アビリティ / カフスアビリティ)。
+#[tauri::command]
+pub fn list_element_sources() -> Vec<domain::ElementSourceDef> {
+    gamedata::element_source_catalog().to_vec()
+}
+
+/// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
+#[tauri::command]
+pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
+    storage::validate_new_character(
+        &character,
+        &gamedata::buff_catalog(),
+        &gamedata::equipment_catalog(),
+        &gamedata::equipment_abilities(),
+        &gamedata::random_option_catalog(),
+        &gamedata::title_catalog(),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(element_preview(&character.game_character_id, &character.equipment, &character.stat_sources))
+}
+
 #[tauri::command]
 pub fn list_contents() -> Vec<ContentArea> {
     gamedata::content_areas()
@@ -76,9 +99,36 @@ pub fn list_equipment_abilities() -> Vec<EquipmentAbilityDef> {
     gamedata::equipment_abilities()
 }
 
+/// ランダムオプションのカタログ(wiki: ランダムオプション)。
+#[tauri::command]
+pub fn list_random_options() -> Vec<RandomOptionDef> {
+    gamedata::random_option_catalog()
+}
+
+/// 称号のカタログ(wiki: 称号システム)。主要称号のみ。
+#[tauri::command]
+pub fn list_titles() -> Vec<TitleDef> {
+    gamedata::title_catalog()
+}
+
 #[tauri::command]
 pub fn list_characters(state: State<'_, AppState>) -> CommandResult<Vec<RegisteredCharacter>> {
     with_repo(&state, |repo| repo.list())
+}
+
+/// 主軸スキル(攻撃力の依存種別を決める)はそのキャラのスキル一覧に含まれている必要がある。
+/// キャラ種を変えたときに前キャラのスキルが残るのを防ぐ。未選択(`None`)は許す。
+fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
+    let Some(skill_id) = &character.main_skill_id else {
+        return Ok(());
+    };
+    if !gamedata::skills_for(&character.game_character_id).iter().any(|s| &s.id == skill_id) {
+        return Err(format!(
+            "主軸スキル '{skill_id}' は '{}' のスキルではありません",
+            character.game_character_id
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -89,12 +139,15 @@ pub fn create_character(
     if gamedata::find_character(&character.game_character_id).is_none() {
         return Err(format!("ゲームキャラ '{}' は未登録です", character.game_character_id));
     }
+    validate_main_skill(&character)?;
     with_repo(&state, |repo| {
         repo.create(
             &character,
             &gamedata::buff_catalog(),
             &gamedata::equipment_catalog(),
             &gamedata::equipment_abilities(),
+            &gamedata::random_option_catalog(),
+            &gamedata::title_catalog(),
         )
     })
 }
@@ -108,6 +161,7 @@ pub fn update_character(
     if gamedata::find_character(&character.game_character_id).is_none() {
         return Err(format!("ゲームキャラ '{}' は未登録です", character.game_character_id));
     }
+    validate_main_skill(&character)?;
     with_repo(&state, |repo| {
         repo.update(
             id,
@@ -115,6 +169,8 @@ pub fn update_character(
             &gamedata::buff_catalog(),
             &gamedata::equipment_catalog(),
             &gamedata::equipment_abilities(),
+            &gamedata::random_option_catalog(),
+            &gamedata::title_catalog(),
         )
     })
 }
@@ -124,21 +180,83 @@ pub fn delete_character(state: State<'_, AppState>, id: i64) -> CommandResult<()
     with_repo(&state, |repo| repo.delete(id))
 }
 
+/// キャラの主軸スキルから攻撃力(A)の係数一式を引く。未選択なら `None`(攻撃力を出さない)。
+fn attack_coefficients_of(main_skill_id: Option<&str>) -> CommandResult<Option<AttackPowerCoefficients>> {
+    let Some(skill_id) = main_skill_id else {
+        return Ok(None);
+    };
+    let dependency = find_skill(skill_id)?.dependency;
+    Ok(Some(AttackPowerCoefficients {
+        stat: gamedata::attack_coefficients(dependency),
+        equipment: gamedata::equipment_coefficients(dependency),
+    }))
+}
+
 #[tauri::command]
 pub fn preview_effective_stats(
     base_stats: domain::BaseStats,
     stat_sources: domain::StatSources,
     equipment: domain::Equipment,
+    common_skills: CommonSkills,
     game_character_id: String,
+    main_skill_id: Option<String>,
 ) -> CommandResult<domain::StatPreview> {
+    let coefficients = attack_coefficients_of(main_skill_id.as_deref())?;
     domain::preview_effective_stats(
         &base_stats,
         &stat_sources,
         &equipment,
+        &common_skills,
         &gamedata::buff_catalog(),
+        &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
         &game_character_id,
+        coefficients,
     )
     .map_err(|e| e.to_string())
+}
+
+/// 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。保存前のキャラデータで出す。
+///
+/// 与ダメージ式とは別経路なので対象コンテンツを取らない。装備補正 9 値は
+/// 基本能力値 + 強化能力値(地域なし = テシスコアを含まない)の合計を渡す。
+#[tauri::command]
+pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile> {
+    storage::validate_new_character(
+        &character,
+        &gamedata::buff_catalog(),
+        &gamedata::equipment_catalog(),
+        &gamedata::equipment_abilities(),
+        &gamedata::random_option_catalog(),
+        &gamedata::title_catalog(),
+    )
+    .map_err(|e| e.to_string())?;
+    let preview = domain::preview_effective_stats(
+        &character.base_stats,
+        &character.stat_sources,
+        &character.equipment,
+        &character.common_skills,
+        &gamedata::buff_catalog(),
+        &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
+        &character.game_character_id,
+        None,
+    )
+    .map_err(|e| e.to_string())?;
+    let equipment_totals = character
+        .equipment
+        .base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog())
+        .add(character.equipment.enhanced_totals(None));
+    Ok(domain::defense_profile(
+        &preview.stats,
+        &equipment_totals,
+        gamedata::awakening_caps(character.awakening),
+        &character.equipment.random_option_totals(&gamedata::random_option_catalog()),
+        // 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。
+        // リンゴの島・ベリネンルミは常に 100% だが、防御タブは対象コンテンツを取らないので
+        // ここでは習得どおりの倍率で出す(その注記は UI 側で出す)
+        character.common_skills.defense_rates(character.equipment.siena_defense_rate()),
+    ))
 }
 
 #[tauri::command]
@@ -151,7 +269,9 @@ pub fn get_stat_limits() -> domain::StatLimits {
 /// `item_id` → カタログの `weapon_class` → 系統ごとの補正式、の順で解決する。
 /// - 強化 Lv 0 は 0
 /// - +1〜+11 は確定倍率で式から算出
-/// - +12 以上は `enhance_added_damage`(実測上書き)があればそれ、無ければレンジ下限の倍率で算出
+/// - +12 以上は `enhance_added_damage`(実測上書き)があればそれ、無ければ**レンジ上限**の倍率で算出
+///   (wiki 装備システム/装備強化「強化数値の再設定」: 再設定呪文書で振り直せるので、
+///   実用上の想定値はレンジの最上値。ユーザー決定 2026-08-25)
 /// - カスタム武器(カタログ外・`weapon_class` 不明)は式で算出できないため `enhance_added_damage ?? 0`
 fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     if weapon.enhance_level == 0 {
@@ -172,9 +292,33 @@ fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     if let Some(added) = weapon.enhance_added_damage {
         return added;
     }
-    let (min_multiplier, _max_multiplier) =
+    let (_min_multiplier, max_multiplier) =
         gamedata::enhance_multiplier_range(weapon.enhance_level).unwrap_or((0.0, 0.0));
-    domain::weapon_added_damage(&weapon.base, &rates, min_multiplier)
+    domain::weapon_added_damage(&weapon.base, &rates, max_multiplier)
+}
+
+/// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
+/// 装備以外の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)。合計は上限 255。
+fn element_preview(
+    game_character_id: &str,
+    equipment: &domain::Equipment,
+    stat_sources: &domain::StatSources,
+) -> domain::ElementPreview {
+    domain::ElementPreview::new(
+        gamedata::element_base(game_character_id),
+        equipment.element_values(),
+        stat_sources.elements.values(gamedata::element_source_catalog()),
+    )
+}
+
+/// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
+fn element_value_for(
+    game_character_id: &str,
+    equipment: &domain::Equipment,
+    stat_sources: &domain::StatSources,
+    skill: &Skill,
+) -> i64 {
+    element_preview(game_character_id, equipment, stat_sources).total.get(skill.element)
 }
 
 /// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage / evaluate_contents 共通)。
@@ -184,6 +328,7 @@ fn build_damage_input(
     game_character_id: &str,
     stat_sources: &domain::StatSources,
     equipment: domain::Equipment,
+    common_skills: CommonSkills,
     awakening: domain::Awakening,
     skill: Skill,
     enemy: Enemy,
@@ -202,23 +347,30 @@ fn build_damage_input(
         temp.validate().map_err(|e| e.to_string())?;
         domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
     }
-    let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities());
+    let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog());
     let equipment_enhanced_totals = equipment.enhanced_totals(core_region);
+    let random_options = equipment.random_option_totals(&gamedata::random_option_catalog());
     let added_damage = weapon_added_damage(&equipment.parts.weapon);
+    let element_value = element_value_for(game_character_id, &equipment, stat_sources, &skill);
     Ok(DamageInput::new(
         base_stats.clone(),
         stat_modifiers,
         stat_contributions,
         coefficients,
         equipment,
+        common_skills,
         equipment_base_totals,
         equipment_enhanced_totals,
         equipment_coefficients,
+        gamedata::accuracy_correction(skill.dependency),
+        random_options,
         added_damage,
         awakening_rate,
+        gamedata::awakening_caps(awakening).max_damage,
         skill,
         enemy,
         combo_count,
+        element_value,
         stat_sources.adjustments.clone(),
         temporary_adjustments,
     ))
@@ -241,6 +393,7 @@ pub fn calculate_damage(
         &character.game_character_id,
         &character.stat_sources,
         character.equipment,
+        character.common_skills,
         character.awakening,
         find_skill(&skill_id)?,
         enemy,
@@ -265,6 +418,8 @@ pub fn preview_damage(
         &gamedata::buff_catalog(),
         &gamedata::equipment_catalog(),
         &gamedata::equipment_abilities(),
+        &gamedata::random_option_catalog(),
+        &gamedata::title_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let content = find_content(&content_id)?;
@@ -274,6 +429,7 @@ pub fn preview_damage(
         &character.game_character_id,
         &character.stat_sources,
         character.equipment,
+        character.common_skills,
         character.awakening,
         find_skill(&skill_id)?,
         enemy,
@@ -298,8 +454,17 @@ pub fn evaluate_contents(
     let catalog = gamedata::buff_catalog();
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_abilities = gamedata::equipment_abilities();
-    storage::validate_new_character(&character, &catalog, &equipment_catalog, &equipment_abilities)
-        .map_err(|e| e.to_string())?;
+    let random_options = gamedata::random_option_catalog();
+    let titles = gamedata::title_catalog();
+    storage::validate_new_character(
+        &character,
+        &catalog,
+        &equipment_catalog,
+        &equipment_abilities,
+        &random_options,
+        &titles,
+    )
+    .map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
     // ループ不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
     // カタログとステ補正を再構築すると、この最重量パスで無駄な再計算になる(PR レビュー指摘)。
@@ -316,7 +481,8 @@ pub fn evaluate_contents(
     );
     let awakening_rate = gamedata::awakening_rate(character.awakening);
     // 装備集計(基本能力値・武器追加固定ダメージ)はキャラのみ依存なのでループの外で 1 回だけ計算する。
-    let equipment_base_totals = character.equipment.base_totals(&equipment_abilities);
+    let equipment_base_totals = character.equipment.base_totals(&equipment_abilities, &titles);
+    let random_option_totals = character.equipment.random_option_totals(&random_options);
     let added_damage = weapon_added_damage(&character.equipment.parts.weapon);
     // 強化能力値はテシスコアの地域で変わるので、地域ごとに 1 回だけ集計してループ内で使い回す
     // (地域は 4 つ + 地域なし。コンテンツごとに再集計すると最重量パスで無駄な再計算になる)。
@@ -364,14 +530,24 @@ pub fn evaluate_contents(
                     stat_contributions.clone(),
                     gamedata::attack_coefficients(skill.dependency),
                     character.equipment.clone(),
+                    character.common_skills,
                     equipment_base_totals,
                     equipment_enhanced_totals,
                     gamedata::equipment_coefficients(skill.dependency),
+                    gamedata::accuracy_correction(skill.dependency),
+                    random_option_totals,
                     added_damage,
                     awakening_rate,
+                    gamedata::awakening_caps(character.awakening).max_damage,
                     skill.clone(),
                     enemy.clone(),
                     0,
+                    element_value_for(
+                        &character.game_character_id,
+                        &character.equipment,
+                        &character.stat_sources,
+                        skill,
+                    ),
                     character.stat_sources.adjustments.clone(),
                     None,
                 );
@@ -433,9 +609,11 @@ mod tests {
     }
 
     #[test]
-    fn レンジ倍率帯は上書き優先_無ければレンジ下限() {
+    fn レンジ倍率帯は上書き優先_無ければレンジ上限() {
         assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, Some(311220))), 311220);
-        // +12 レンジ下限 140 → INT(2101×140) = 294140(偶数)
-        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, None)), 294140);
+        // +12 レンジ上限 280 → INT(2101×280) = 588280(偶数)
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, None)), 588280);
+        // +15 レンジ上限 880 → INT(2101×880) = 1848880(偶数)
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 15, None)), 1848880);
     }
 }

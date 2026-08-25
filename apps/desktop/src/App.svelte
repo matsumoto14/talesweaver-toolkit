@@ -99,7 +99,7 @@
   }
   .brand { display: flex; align-items: center; gap: 9px; }
   .brand .mark {
-    width: 22px; height: 22px; border-radius: 7px;
+    width: 22px; height: 22px; border-radius: var(--r-inset);
     background: linear-gradient(160deg, #fff, #8EB9FC);
     border: 1px solid #687287;
   }
@@ -107,7 +107,7 @@
 
   .tabs { display: flex; align-items: flex-end; gap: 3px; margin-left: 8px; align-self: flex-end; }
   .tab {
-    padding: 6px 14px; border-radius: 9px 9px 0 0;
+    padding: 6px 14px; border-radius: var(--r-panel) 9px 0 0;
     background: linear-gradient(180deg, #A9CDFE, #8EB9FC);
     border: 1px solid var(--border-strong); border-bottom: 0;
     color: #2B3C57; font-size: 12px; font-weight: 500; white-space: nowrap;
@@ -120,16 +120,16 @@
 
   .sim-note {
     margin-left: auto; display: flex; align-items: center; gap: 8px;
-    padding: 5px 12px; border-radius: 999px;
-    background: rgba(255, 255, 255, 0.7); border: 1px solid #6D6AA8;
-    font-size: 10.5px; font-weight: 700; color: #4A4780; white-space: nowrap;
+    padding: 5px 12px; border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, 0.7); border: 1px solid var(--sim);
+    font-size: var(--t-label); font-weight: var(--w-strong); color: var(--sim-fg); white-space: nowrap;
   }
-  .sim-note .dot { width: 7px; height: 7px; border-radius: 50%; background: #6D6AA8; }
+  .sim-note .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sim); }
 
   .toast {
     position: absolute; top: 58px; left: 16px; right: 16px; z-index: 50;
     display: flex; align-items: center; gap: 12px; padding: 9px 12px;
-    border-radius: 9px;
+    border-radius: var(--r-panel);
     background: #FDF1EF; border: 1px solid var(--danger); border-left-width: 3px;
     color: var(--fg); font-size: 12px;
   }

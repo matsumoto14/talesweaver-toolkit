@@ -1,30 +1,50 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
-  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, Skill, StatLimits, StatPreview, StatSources,
+  Adjustments, BaseStats, BuffDefinition, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
+  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
+  ElementPreview, ElementSourceDef, RandomOptionDef, Skill, StatLimits, StatPreview, StatSources,
+  TitleDef,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
 export const listSkills = (gameCharacterId: string) => invoke<Skill[]>("list_skills", { gameCharacterId });
 export const listEnemies = () => invoke<Enemy[]>("list_enemies");
 export const listBuffCatalog = () => invoke<BuffDefinition[]>("list_buff_catalog");
+/** 属性値の供給源カタログ(装備の属性強化以外) */
+export const listElementSources = () => invoke<ElementSourceDef[]>("list_element_sources");
+/** 属性値の内訳(キャラ基礎 / 装備 / 供給源 / 合計)。保存前のキャラデータで出す */
+export const previewElements = (character: NewCharacter) =>
+  invoke<ElementPreview>("preview_elements", { character });
 export const listCharacters = () => invoke<RegisteredCharacter[]>("list_characters");
 export const createCharacter = (character: NewCharacter) =>
   invoke<RegisteredCharacter>("create_character", { character });
 export const updateCharacter = (id: number, character: NewCharacter) =>
   invoke<RegisteredCharacter>("update_character", { id, character });
 export const deleteCharacter = (id: number) => invoke<void>("delete_character", { id });
-/** 保存しない試算。draft の base_stats/stat_sources/equipment から最終能力値と寄与内訳を得る */
+/**
+ * 保存しない試算。draft の base_stats/stat_sources/equipment から最終能力値と寄与内訳を得る。
+ * `mainSkillId`(主軸スキル)を渡すとその依存種別で攻撃力(A)も返る。null なら攻撃力は出ない。
+ */
 export const previewEffectiveStats = (
-  baseStats: BaseStats, statSources: StatSources, equipment: Equipment, gameCharacterId: string,
-) => invoke<StatPreview>("preview_effective_stats", { baseStats, statSources, equipment, gameCharacterId });
+  baseStats: BaseStats, statSources: StatSources, equipment: Equipment, commonSkills: CommonSkills,
+  gameCharacterId: string, mainSkillId: string | null,
+) => invoke<StatPreview>("preview_effective_stats", {
+  baseStats, statSources, equipment, commonSkills, gameCharacterId, mainSkillId,
+});
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
 ) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, temporaryAdjustments });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
+/** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
+export const previewDefense = (character: NewCharacter) =>
+  invoke<DefenseProfile>("preview_defense", { character });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
+/** ランダムオプションのカタログ(wiki: ランダムオプション) */
+export const listRandomOptions = () => invoke<RandomOptionDef[]>("list_random_options");
+/** 称号のカタログ(wiki: 称号システム。主要称号のみ) */
+export const listTitles = () => invoke<TitleDef[]>("list_titles");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

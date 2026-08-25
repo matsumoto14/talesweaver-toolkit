@@ -163,19 +163,19 @@
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
   .section-label { padding: 10px 2px 8px; }
-  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: 8px; background: #fff; }
+  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: #fff; }
   .empty { padding: 10px 12px; font-size: 11px; }
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }
   td.final { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .pin-badge {
     font-size: 9px; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent);
-    border-radius: 4px; padding: 1px 4px; cursor: default;
+    border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
   }
   td.expr { white-space: normal; color: var(--fg-muted); font-size: 11px; min-width: 260px; }
   tr.active td { background: var(--bg-active); }
   tr.active td.sym { color: var(--warm); }
-  .tabs { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; letter-spacing: 0; }
+  .tabs { display: flex; border: 1px solid var(--border); border-radius: var(--r-inset); overflow: hidden; letter-spacing: 0; }
   .tabs button { padding: 3px 10px; background: #fff; color: var(--fg-muted); font-size: 11px; }
   .tabs button.on { background: var(--bg-active); color: var(--accent-hover); font-weight: 700; }
 </style>

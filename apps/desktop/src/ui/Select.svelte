@@ -14,7 +14,12 @@
   {#if label}<span class="label">{label}</span>{/if}
   <span class="box">
     <select bind:value {disabled}>
-      <option value="" disabled>{placeholder}</option>
+      <!-- 選択肢側が空値(「なし」「未装着」等)を持つときは placeholder を出さない。
+           両方あると value="" のときに先頭(disabled な placeholder)が選択表示されてしまい、
+           「なし」を選んでいるのに「選択してください」と出る。 -->
+      {#if !options.some((o) => o.value === "")}
+        <option value="" disabled>{placeholder}</option>
+      {/if}
       {#each options as o (o.value)}
         <option value={o.value}>{o.label}</option>
       {/each}

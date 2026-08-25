@@ -1,6 +1,7 @@
 <script lang="ts">
   // 左のキャラレール。全タブ共通の「どのキャラの話をしているか」を担う。
   import { app, gameCharacterName, selectCharacter } from "./state.svelte";
+  import Icon from "./ui/Icon.svelte";
 
   interface Props {
     collapsed: boolean;
@@ -44,7 +45,13 @@
         title="{c.name}({gameCharacterName(c.game_character_id)}) クリア可 {clearCount(c.id)} / {totalContents}"
         onclick={() => selectCharacter(c.id)}
       >
-        <span class="icon">{c.name.slice(0, 1)}</span>
+        <!-- 畳んだときはアイコン単独になるが、ボタンに title があるので規格の例外に当たる -->
+        <Icon
+          kind="character"
+          id={c.game_character_id}
+          size={collapsed ? 40 : 28}
+          label="{c.name}({gameCharacterName(c.game_character_id)})"
+        />
         {#if !collapsed}
           <span class="meta">
             <span class="name">{c.name}</span>
@@ -61,7 +68,7 @@
     {/each}
     <button type="button" class="register" onclick={goRegister}>{collapsed ? "＋" : "＋ キャラを登録"}</button>
     {#if !collapsed}
-      <p class="note-text dim">コンテンツの目安ダメージ・入場条件は仮値です。</p>
+      <p class="note-text dim">目安ダメージは wiki に無い値です(コミュニティ知識・実測)。</p>
     {/if}
   </div>
 </aside>
@@ -73,7 +80,7 @@
   }
   .rail-toggle {
     flex-shrink: 0; margin-left: auto; width: 20px; height: 20px;
-    display: flex; align-items: center; justify-content: center; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; border-radius: var(--r-inset);
     background: rgba(255, 255, 255, 0.22); border: 1px solid rgba(255, 255, 255, 0.55);
     font-size: 10px; font-weight: 700; color: #fff;
   }
@@ -82,7 +89,7 @@
 
   .char {
     display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 12px;
-    border-radius: 11px; text-align: left;
+    border-radius: var(--r-window); text-align: left;
     background: linear-gradient(180deg, #fff, #F4F8FD);
     border: 1px solid #C8D6E6; border-left: 3px solid #DCE5F0;
     box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(30, 44, 74, 0.06);
@@ -94,16 +101,6 @@
     box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.14), inset 0 1px 0 #fff;
   }
   aside.collapsed .char { flex-direction: column; gap: 2px; padding: 8px 4px 7px; }
-
-  .icon {
-    width: 30px; height: 30px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; border-radius: 9px;
-    background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
-    border: 1px solid var(--border-strong);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
-    font-size: 13px; font-weight: 800; color: #3B4A63;
-  }
-  aside.collapsed .icon { width: 34px; height: 34px; }
 
   .meta { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .meta .name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -117,7 +114,7 @@
   .mini { font-size: 9.5px; font-weight: 700; color: #26334A; }
 
   .register {
-    text-align: center; padding: 9px 6px; border-radius: 10px;
+    text-align: center; padding: 9px 6px; border-radius: var(--r-panel);
     background: linear-gradient(180deg, #fff, var(--bg-rail));
     border: 1px dashed #9FB4D0; box-shadow: inset 0 1px 0 #fff;
     font-size: 11px; font-weight: 700; color: #2B3C57; white-space: nowrap; overflow: hidden;

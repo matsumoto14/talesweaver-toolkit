@@ -19,6 +19,35 @@
   --danger: #8C4A42;
   --good: #2E6B4C;
   --head-bar: #6382AD;
+  /* 候補チップ(すぐできる / エンチャント / 装備更新)の面と枠。文字色は --good/--accent-hover/--danger */
+  --good-bg: #DFF3E6;
+  --good-border: #6FA98A;
+  --danger-bg: #F6E8E5;
+  --danger-border: #B08480;
+  /* 「保存されない・一時のもの」専用の色(試し変更・候補の一時表示)。この用途以外に使わない */
+  --sim: #6D6AA8;
+  --sim-strong: #565394;
+  --sim-fg: #4A4780;
+  --sim-bg: #FBFAFE;
+  /* 窓の3層目(規格シート 2a のインセット面)。表・読み取り専用の数値をここに載せて、
+     編集できる面(--bg-field の白)と区別する */
+  --surface-inset: #C1D3E6;
+
+  /* 角丸は 4 段(v4 系列。規格シート 3a の 16px 系列は採らない。decisions 2026-08-25) */
+  --r-window: 12px;  /* 窓・大カード */
+  --r-panel: 9px;    /* パネル・ボタン・フィールド・タブ */
+  --r-inset: 6px;    /* インセット面・表・小チップ */
+  --r-pill: 999px;   /* バッジ・チップ */
+
+  /* タイポは 4 つの役割。実寸はモック規格に合わせる。
+     カード見出し(11px)・小ラベル(9〜9.5px)は v4 の密度を保つため据え置き
+     (役割トークンで置き換えない。decisions 2026-08-25) */
+  --t-result: 44px;  /* 画面の主役になる結果の数値 */
+  --t-heading: 19px; /* カード群の親になる大見出し */
+  --t-body: 12.5px;  /* 本文 */
+  --t-label: 10.5px; /* ラベル(色は --fg-muted) */
+  --w-strong: 700;
+
   --font: "M PLUS Rounded 1c", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
   --font-num: "M PLUS 1 Code", ui-monospace, SFMono-Regular, monospace;
 }
@@ -31,7 +60,7 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font);
-  font-size: 12.5px;
+  font-size: var(--t-body);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -59,23 +88,23 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   background: var(--head-bar);
   display: flex; align-items: center; gap: 8px;
 }
-.head-bar .title { font-weight: 700; font-size: 10.5px; letter-spacing: 0.1em; color: #fff; white-space: nowrap; }
+.head-bar .title { font-weight: 700; font-size: var(--t-label); letter-spacing: 0.1em; color: #fff; white-space: nowrap; }
 .head-bar .note { margin-left: auto; font-size: 10px; color: var(--bg-rail); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .card {
-  padding: 12px 13px; border-radius: 11px;
+  padding: 12px 13px; border-radius: var(--r-window);
   background: #fff; border: 1px solid var(--border-strong);
 }
 .card-title { font-weight: 700; font-size: 11px; color: #26334A; white-space: nowrap; }
 
 .badge {
-  flex-shrink: 0; padding: 2px 9px; border-radius: 999px;
+  flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
   font-size: 9.5px; font-weight: 700; white-space: nowrap; border: 1px solid;
 }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 7px 12px; border-radius: 9px;
+  padding: 7px 12px; border-radius: var(--r-panel);
   background: linear-gradient(180deg, #fff, #E9F1FB);
   border: 1px solid var(--border-strong); color: #2B3C57;
   font-size: 11.5px; font-weight: 500;
@@ -97,6 +126,12 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .section-label .rule { flex-grow: 1; height: 1px; background: var(--border-soft); }
 .section-label .note { color: var(--accent); letter-spacing: 0; }
 
+/* インセット面(窓の3層目)。表・読み取り専用の数値をここに載せて、編集できる面(白)と区別する */
+.inset {
+  background: var(--surface-inset); border-radius: var(--r-inset);
+  border: 1px solid var(--border-soft);
+}
+
 table.grid { border-collapse: collapse; width: 100%; font-size: 11.5px; }
 table.grid th, table.grid td {
   padding: 5px 8px; text-align: left; white-space: nowrap;
@@ -104,14 +139,14 @@ table.grid th, table.grid td {
 }
 table.grid th {
   font-size: 9.5px; letter-spacing: 0.08em; font-weight: 700;
-  color: var(--fg-muted); background: var(--bg-panel);
+  color: var(--fg-muted); background: var(--surface-inset);
   position: sticky; top: 0;
 }
 table.grid td.n, table.grid th.n { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
 /* 進捗バー(目安に対する火力など) */
 .meter {
-  position: relative; height: 9px; border-radius: 5px;
+  position: relative; height: 9px; border-radius: var(--r-inset);
   background: #E7EEF7; border: 1px solid #D3DEEC; overflow: hidden;
 }
 .meter > .fill {

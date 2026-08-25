@@ -1,5 +1,8 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
-import type { CoreRegion, CoreType, PartSlot, PetSkillTier, StatKind, StatLayer } from "./api/types";
+import type {
+  CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier,
+  RandomOptionRank, SkillDependency, StatKind, StatLayer, UltimateSkill,
+} from "./api/types";
 
 export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
 export const STAT_LABELS: Record<StatKind, string> = {
@@ -22,15 +25,41 @@ export const PET_SKILL_TIER_LABELS: Record<PetSkillTier, string> = {
   true_lv4: "真Lv4",
 };
 
-// 装備補正 4 種(crates/domain/src/equipment.rs の EquipmentValues)の表示名・並び順。
-export const EQUIPMENT_STAT_KINDS = ["thrust", "slash", "magic_attack", "magic_defense"] as const;
+// 装備補正 9 種(crates/domain/src/equipment.rs の EquipmentValues)の表示名・並び順(wiki Item ページの列順)。
+export const EQUIPMENT_STAT_KINDS = [
+  "thrust", "slash", "physical_defense", "magic_attack", "magic_defense",
+  "accuracy", "critical", "evasion", "agility",
+] as const;
 export type EquipmentStatKind = (typeof EQUIPMENT_STAT_KINDS)[number];
 export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = {
   thrust: "突き攻撃力",
   slash: "斬り攻撃力",
+  physical_defense: "物理防御力",
   magic_attack: "魔法攻撃力",
   magic_defense: "魔法防御力",
+  accuracy: "命中率補正",
+  critical: "クリティカル補正",
+  evasion: "回避率補正",
+  agility: "敏捷度補正",
 };
+// 表・部位行など幅の狭いところ用の短縮名。
+export const EQUIPMENT_STAT_SHORT: Record<EquipmentStatKind, string> = {
+  thrust: "突き", slash: "斬り", physical_defense: "物防", magic_attack: "魔攻", magic_defense: "魔防",
+  accuracy: "命中", critical: "Cri", evasion: "回避", agility: "敏捷",
+};
+
+// 属性 8 種(crates/domain/src/element.rs の Element)。wiki 属性システムの並び。
+export const ELEMENTS: Element[] = ["fire", "water", "wind", "earth", "thunder", "white", "black", "neutral"];
+export const ELEMENT_LABELS: Record<Element, string> = {
+  fire: "火", water: "水", wind: "風", earth: "土", thunder: "雷",
+  white: "白", black: "黒", neutral: "無",
+};
+// 装備に付与できるのは無属性以外(wiki: 装備システム/属性強化「1属性のみ装着可能(火、水、風、土、雷、白、黒)」)。
+export const EQUIPMENT_ELEMENTS: Element[] = ELEMENTS.filter((e) => e !== "neutral");
+// 属性強化を持てる部位(wiki: 装備システム冒頭の表「属性強化」行。盾+・レリックは対象外)。
+export const ELEMENT_ALLOWED_SLOTS: PartSlot[] = [
+  "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg", "effect", "artifact",
+];
 
 // 装備部位(crates/domain/src/equipment.rs の PartSlot)の表示名・並び順(wiki: 装備システム ページ冒頭の表)。
 export const PART_SLOTS: PartSlot[] = [
@@ -55,6 +84,17 @@ export const PART_SLOT_LABELS: Record<PartSlot, string> = {
 export const ENHANCE_ALLOWED_SLOTS: PartSlot[] = ["weapon", "armor"];
 // 装備アビリティを持てる部位(wiki: 装備システム/アビリティ。武器のみが火力に効く)。
 export const ABILITY_ALLOWED_SLOTS: PartSlot[] = ["weapon"];
+// 武器アビリティの系統(crates/domain/src/equipment.rs の EquipmentAbilityFamily)。
+// 表示順は加算先(突き / 斬り / 魔攻 / 魔防)の並びに合わせる。
+export const ABILITY_FAMILIES: EquipmentAbilityFamily[] = [
+  "pointed_blade", "sharp_blade", "intelligence", "magic_resistance",
+];
+export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
+  pointed_blade: "尖った刃(突き)",
+  sharp_blade: "鋭い刃(斬り)",
+  intelligence: "知力(魔攻)",
+  magic_resistance: "耐魔力(魔防)",
+};
 // シエナのオーラを発現できる部位(wiki: 装備システム冒頭の表「オーラ」行。8 部位)。
 export const SIENA_ALLOWED_SLOTS: PartSlot[] = [
   "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg",
@@ -62,6 +102,45 @@ export const SIENA_ALLOWED_SLOTS: PartSlot[] = [
 // シエナのオーラの能力値が装備補正(強化能力値)になる部位(wiki: 能力値一覧(武器/盾))。
 // それ以外の部位はステの最終固定値増加になる。
 export const SIENA_EQUIPMENT_VALUE_SLOTS: PartSlot[] = ["weapon", "shield"];
+
+// ランダムオプションを持てる部位(wiki: 装備システム冒頭の表「転移」行。効果・AF は対象外)。
+export const RANDOM_OPTION_ALLOWED_SLOTS: PartSlot[] = PART_SLOTS.filter(
+  (s) => s !== "effect" && s !== "artifact",
+);
+// ランダムオプションのランク(wiki 一覧表の列)。左ほど下位。
+export const RANDOM_OPTION_RANKS: RandomOptionRank[] = [
+  "normal", "valuable", "rare", "special", "s_true",
+];
+export const RANDOM_OPTION_RANK_LABELS: Record<RandomOptionRank, string> = {
+  normal: "Normal",
+  valuable: "Valuable",
+  rare: "Rare",
+  special: "Special",
+  s_true: "S・真",
+};
+// スキル依存種別(crates/domain/src/skill.rs の SkillDependency)。ランダムOP の効き先表示に使う。
+export const SKILL_DEPENDENCY_LABELS: Record<SkillDependency, string> = {
+  stab: "突き(STAB依存)",
+  hack: "斬り(HACK依存)",
+  int: "魔法(INT依存)",
+  mr: "神聖(MR依存)",
+  stab_hack: "物理複合(STAB+HACK依存)",
+  hack_int: "魔法斬り(HACK+INT依存)",
+};
+
+// 極限スキル(crates/domain/src/ultimate_skill.rs の UltimateSkill)。wiki Skill/極限 の表順。
+export const ULTIMATE_SKILLS: UltimateSkill[] = ["scope_eye", "full_throttle", "wide_focus"];
+export const ULTIMATE_SKILL_LABELS: Record<UltimateSkill, string> = {
+  scope_eye: "スコープアイ",
+  full_throttle: "フルスロットル",
+  wide_focus: "ワイドフォーカス",
+};
+/** 何に効くか(火力に効かないものはそう分かる文言にする)。 */
+export const ULTIMATE_SKILL_EFFECTS: Record<UltimateSkill, string> = {
+  scope_eye: "クリティカルダメージ増加(非クリには乗りません)",
+  full_throttle: "中ディレイ減少 + 単体チャネリングスキルの段数",
+  wide_focus: "スキル範囲(火力には効きません)",
+};
 
 // テシスコアの地域(crates/domain/src/thesis_core.rs の CoreRegion)。順序は Rust の CoreRegion::ALL に合わせる。
 export const CORE_REGIONS: CoreRegion[] = ["mercurial", "abyss", "eclipse", "rubicona"];

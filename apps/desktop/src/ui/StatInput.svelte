@@ -15,8 +15,10 @@
     max: number;
     step?: number;
     format?: (value: number) => string;
+    /** 上限ゲージ(`値 / 上限` + 上限に達したら「満」)を出す。上限は `max` */
+    capGauge?: boolean;
   }
-  let { label, value = $bindable(), min, max, step = 1, format }: Props = $props();
+  let { label, value = $bindable(), min, max, step = 1, format, capGauge = false }: Props = $props();
 
   let text = $state(String(value));
   let lastSyncedValue = value;
@@ -102,6 +104,10 @@
     aria-label="{label} スライダー"
   />
   <button type="button" class="max-btn" onclick={setMax} disabled={value >= max}>MAX</button>
+  {#if capGauge}
+    <span class="cap num" class:full={value >= max}>{value.toLocaleString("ja-JP")} / {max.toLocaleString("ja-JP")}</span>
+    {#if value >= max}<span class="cap-badge">満</span>{/if}
+  {/if}
   {#if hint}<span class="hint dim">{hint}</span>{/if}
 </div>
 
@@ -127,4 +133,7 @@
   }
   .max-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--border-strong); }
   .hint { flex-shrink: 0; font-size: 11px; white-space: nowrap; }
+  .cap { flex-shrink: 0; font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
+  .cap.full { color: var(--fg); font-weight: 700; }
+  .cap-badge { flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--danger); }
 </style>

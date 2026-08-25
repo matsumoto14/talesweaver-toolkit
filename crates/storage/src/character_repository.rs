@@ -3,7 +3,10 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use domain::{Awakening, BaseStats, BuffCatalog, Equipment, EquipmentAbilityDef, StatSources};
+use domain::{
+    Awakening, BaseStats, BuffCatalog, CommonSkills, Equipment, EquipmentAbilityDef,
+    RandomOptionDef, StatSources, TitleDef,
+};
 use gamedata::EquipmentItem;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use rusqlite::{params, Connection, Row};
@@ -24,6 +27,12 @@ pub struct RegisteredCharacter {
     pub stat_sources: StatSources,
     /// 装備補正(基本能力値/強化能力値/装備攻撃力強化バフ)(docs/claude/goals/2026-08-22-equipment-attack.md)
     pub equipment: Equipment,
+    /// 共通スキル(wiki: Skill/共通)。装備攻撃力強化倍率・装備防御力倍率・割合追加ダメージ
+    #[serde(default)]
+    pub common_skills: CommonSkills,
+    /// 主軸スキル(gamedata の `Skill::id`)。攻撃力(A)の依存種別を決める。
+    /// スキル未収録のキャラがあるので未選択(`None`)を許す
+    pub main_skill_id: Option<String>,
 }
 
 /// 登録リクエスト。
@@ -35,6 +44,10 @@ pub struct NewCharacter {
     pub awakening: Awakening,
     pub stat_sources: StatSources,
     pub equipment: Equipment,
+    /// 共通スキル(wiki: Skill/共通)
+    #[serde(default)]
+    pub common_skills: CommonSkills,
+    pub main_skill_id: Option<String>,
 }
 
 /// v1 相当(`stat_sources`/`equipment` 列を含まない、main ブランチ時代の実スキーマ)。
@@ -57,12 +70,15 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 ";
 
-/// このスキーマバージョンで `equipment` 列が部位別装備(12 スロット)の JSON になる(v4)。
+/// v4 で `equipment` 列が部位別装備(12 スロット)の JSON になり、v5 で `main_skill_id` 列
+/// (攻撃力の依存種別を決める主軸スキル)が加わった。
 /// v3 以前は `equipment` 列に「基本能力値/強化能力値の合計 8 値」を持っていた
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
-const SCHEMA_VERSION: i64 = 4;
+/// v6 で `common_skills` 列が加わった。パワーウェポン / ストロングウェポンは
+/// v5 まで `equipment` 列の中にあり、移行で `common_skills` へ移す。
+const SCHEMA_VERSION: i64 = 6;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id";
 
 /// `stat_sources`/`equipment` 列(JSON テキスト)を domain の型として読み出すための橋渡し。
 struct StatSourcesColumn(StatSources);
@@ -87,6 +103,17 @@ impl FromSql for EquipmentColumn {
     }
 }
 
+struct CommonSkillsColumn(CommonSkills);
+
+impl FromSql for CommonSkillsColumn {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let text = value.as_str()?;
+        serde_json::from_str(text)
+            .map(CommonSkillsColumn)
+            .map_err(|e| FromSqlError::Other(Box::new(e)))
+    }
+}
+
 /// v3 以前(旧形式)の `equipment` 列を部位別装備(v4)へ移行する。
 ///
 /// 旧形式は JSON に `parts` キーを持たない。旧形式からは部位を再構成できないため、
@@ -103,13 +130,57 @@ fn migrate_equipment_to_parts(conn: &Connection) -> Result<()> {
         if value.get("parts").is_some() {
             continue;
         }
-        let power_weapon = value.get("power_weapon").and_then(|v| v.as_bool()).unwrap_or(false);
-        let strong_weapon_level =
-            value.get("strong_weapon_level").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-        let migrated =
-            Equipment { power_weapon, strong_weapon_level, ..Equipment::default() };
-        let migrated_json = serde_json::to_string(&migrated)?;
+        // 旧形式から部位は再構成できない。パワーウェポン / ストロングウェポンは
+        // `migrate_weapon_skills_to_common` が `equipment` 列の JSON から拾うので、
+        // ここでは触らず中立値の部位別装備に差し替えるだけにする。
+        let migrated = Equipment::default();
+        let mut migrated_value = serde_json::to_value(migrated)?;
+        for key in ["power_weapon", "strong_weapon_level"] {
+            if let Some(v) = value.get(key) {
+                migrated_value[key] = v.clone();
+            }
+        }
+        let migrated_json = serde_json::to_string(&migrated_value)?;
         conn.execute("UPDATE characters SET equipment = ?1 WHERE id = ?2", params![migrated_json, id])?;
+    }
+    Ok(())
+}
+
+/// v5 以前の `equipment` 列にあったパワーウェポン / ストロングウェポンを
+/// `common_skills` 列へ移す(wiki: どちらも Skill/共通 の共通スキルで、装備ではない)。
+///
+/// `common_skills` 側にすでに値が入っている行(= 移行済み)は触らない。
+fn migrate_weapon_skills_to_common(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, equipment, common_skills FROM characters")?;
+    let rows: Vec<(i64, String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (id, equipment_json, common_json) in rows {
+        let mut equipment: serde_json::Value = serde_json::from_str(&equipment_json)?;
+        let power_weapon = equipment.get("power_weapon").and_then(|v| v.as_bool());
+        let strong_weapon_level =
+            equipment.get("strong_weapon_level").and_then(|v| v.as_u64()).map(|v| v as u8);
+        if power_weapon.is_none() && strong_weapon_level.is_none() {
+            continue;
+        }
+        let mut common: CommonSkills = serde_json::from_str(&common_json)?;
+        if common == CommonSkills::default() {
+            common.power_weapon = power_weapon.unwrap_or(false);
+            common.strong_weapon_level = strong_weapon_level.unwrap_or(0);
+            // ストロングウェポン Lv2 以降はオーグメントが要る。移行前のデータには
+            // オーグメント Lv が無いので、その Lv を取れるだけの値を入れておく
+            // (検証で弾かれて保存できなくなるのを避ける)。
+            common.augment_level = common.strong_weapon_level.saturating_sub(1);
+        }
+        if let Some(map) = equipment.as_object_mut() {
+            map.remove("power_weapon");
+            map.remove("strong_weapon_level");
+        }
+        conn.execute(
+            "UPDATE characters SET equipment = ?1, common_skills = ?2 WHERE id = ?3",
+            params![serde_json::to_string(&equipment)?, serde_json::to_string(&common)?, id],
+        )?;
     }
     Ok(())
 }
@@ -157,7 +228,18 @@ impl CharacterRepository {
                 "ALTER TABLE characters ADD COLUMN equipment TEXT NOT NULL DEFAULT '{}';",
             )?;
         }
+        // v5: 主軸スキル。既存キャラは未選択(NULL)で読める。
+        if !existing_columns.contains("main_skill_id") {
+            conn.execute_batch("ALTER TABLE characters ADD COLUMN main_skill_id TEXT;")?;
+        }
+        // v6: 共通スキル。既存キャラは `{}`(全部未習得)で読める。
+        if !existing_columns.contains("common_skills") {
+            conn.execute_batch(
+                "ALTER TABLE characters ADD COLUMN common_skills TEXT NOT NULL DEFAULT '{}';",
+            )?;
+        }
         migrate_equipment_to_parts(&conn)?;
+        migrate_weapon_skills_to_common(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -169,14 +251,17 @@ impl CharacterRepository {
         catalog: &BuffCatalog,
         equipment_catalog: &[EquipmentItem],
         equipment_abilities: &[EquipmentAbilityDef],
+        random_options: &[RandomOptionDef],
+        titles: &[TitleDef],
     ) -> Result<RegisteredCharacter> {
-        validate(new, catalog, equipment_catalog, equipment_abilities)?;
+        validate(new, catalog, equipment_catalog, equipment_abilities, random_options, titles)?;
         let s = &new.base_stats;
         let stat_sources_json = serde_json::to_string(&new.stat_sources)?;
         let equipment_json = serde_json::to_string(&new.equipment)?;
+        let common_skills_json = serde_json::to_string(&new.common_skills)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 new.name,
                 new.game_character_id,
@@ -191,6 +276,8 @@ impl CharacterRepository {
                 new.awakening.eternal_level,
                 stat_sources_json,
                 equipment_json,
+                common_skills_json,
+                new.main_skill_id,
             ],
         )?;
         self.get(self.conn.last_insert_rowid())
@@ -204,17 +291,21 @@ impl CharacterRepository {
         catalog: &BuffCatalog,
         equipment_catalog: &[EquipmentItem],
         equipment_abilities: &[EquipmentAbilityDef],
+        random_options: &[RandomOptionDef],
+        titles: &[TitleDef],
     ) -> Result<RegisteredCharacter> {
-        validate(update, catalog, equipment_catalog, equipment_abilities)?;
+        validate(update, catalog, equipment_catalog, equipment_abilities, random_options, titles)?;
         let s = &update.base_stats;
         let stat_sources_json = serde_json::to_string(&update.stat_sources)?;
         let equipment_json = serde_json::to_string(&update.equipment)?;
+        let common_skills_json = serde_json::to_string(&update.common_skills)?;
         let affected = self.conn.execute(
             "UPDATE characters SET
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
-                awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13
-             WHERE id = ?14",
+                awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
+                common_skills = ?14, main_skill_id = ?15
+             WHERE id = ?16",
             params![
                 update.name,
                 update.game_character_id,
@@ -229,6 +320,8 @@ impl CharacterRepository {
                 update.awakening.eternal_level,
                 stat_sources_json,
                 equipment_json,
+                common_skills_json,
+                update.main_skill_id,
                 id,
             ],
         )?;
@@ -274,6 +367,8 @@ pub fn validate(
     catalog: &BuffCatalog,
     equipment_catalog: &[EquipmentItem],
     equipment_abilities: &[EquipmentAbilityDef],
+    random_options: &[RandomOptionDef],
+    titles: &[TitleDef],
 ) -> Result<()> {
     if new.name.trim().is_empty() {
         return Err(StorageError::InvalidValue("名前が空です".into()));
@@ -295,7 +390,14 @@ pub fn validate(
     domain::stat_sources::build_modifiers(&new.stat_sources, catalog, &new.game_character_id)
         .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     new.equipment.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
-    validate_equipment_catalog(&new.equipment, equipment_catalog, equipment_abilities)?;
+    new.common_skills.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+    validate_equipment_catalog(&new.equipment, equipment_catalog, equipment_abilities, random_options)?;
+    // 称号は装備部位ではないので部位ループの外で見る(1 枠・カタログ参照のみ)
+    if let Some(id) = &new.equipment.title {
+        if !titles.iter().any(|t| t.id == id.as_str()) {
+            return Err(StorageError::InvalidValue(format!("未知の称号 '{id}' です")));
+        }
+    }
     Ok(())
 }
 
@@ -307,6 +409,7 @@ fn validate_equipment_catalog(
     equipment: &Equipment,
     equipment_catalog: &[EquipmentItem],
     equipment_abilities: &[EquipmentAbilityDef],
+    random_options: &[RandomOptionDef],
 ) -> Result<()> {
     for (slot, part) in equipment.parts.iter() {
         if let Some(item_id) = &part.item_id {
@@ -332,10 +435,74 @@ fn validate_equipment_catalog(
                 )));
             }
         }
+        // アビリティは系統(尖った刃/鋭い刃/知力/耐魔力)ごとに 1 つまで。
+        // 段が違っても同じ系統は併用できない(wiki: 装備システム/アビリティ)。
+        let mut families = HashSet::new();
         for ability_id in &part.abilities {
-            if !equipment_abilities.iter().any(|a| a.id == ability_id.as_str()) {
-                return Err(StorageError::InvalidValue(format!("未知の装備アビリティ '{ability_id}' です")));
+            let def = equipment_abilities
+                .iter()
+                .find(|a| a.id == ability_id.as_str())
+                .ok_or_else(|| {
+                    StorageError::InvalidValue(format!("未知の装備アビリティ '{ability_id}' です"))
+                })?;
+            if !families.insert(def.family) {
+                return Err(StorageError::InvalidValue(format!(
+                    "装備アビリティ '{}' は同じ系統がすでに選ばれています(系統ごとに 1 つまで)",
+                    def.name
+                )));
             }
+        }
+        validate_random_options(slot, part, random_options)?;
+    }
+    Ok(())
+}
+
+/// ランダムオプションのカタログ整合性(未知 id・部位不一致・未収録ランク・カテゴリー重複)。
+///
+/// wiki「ランダムオプション」転移の説明: 「同じカテゴリーのオプションを共存させることは出来ず、
+/// 転移させると優先的に上書きされる。ただし、カテゴリーなし(一覧表では 0 表記)はその限りではない」。
+/// 部位ごとの枠数は wiki に記載が無いので数では縛らない。
+fn validate_random_options(
+    slot: domain::PartSlot,
+    part: &domain::EquipmentPart,
+    random_options: &[RandomOptionDef],
+) -> Result<()> {
+    let mut categories = HashSet::new();
+    let mut ids = HashSet::new();
+    for option in &part.random_options {
+        let def = random_options
+            .iter()
+            .find(|d| d.id == option.option_id.as_str())
+            .ok_or_else(|| {
+                StorageError::InvalidValue(format!(
+                    "未知のランダムオプション '{}' です",
+                    option.option_id
+                ))
+            })?;
+        if def.slot != slot {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' は {:?} 用ですが {:?} 部位に指定されています",
+                def.name, def.slot, slot
+            )));
+        }
+        if def.tier(option.rank).is_none() {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' に {:?} ランクはありません",
+                def.name, option.rank
+            )));
+        }
+        if !ids.insert(def.id) {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' が同じ部位に重複しています",
+                def.name
+            )));
+        }
+        // カテゴリー 0 は「カテゴリーなし」で共存できる
+        if def.category != 0 && !categories.insert(def.category) {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' はカテゴリー{} が同じ部位ですでに選ばれています(同じカテゴリーは 1 つまで)",
+                def.name, def.category
+            )));
         }
     }
     Ok(())
@@ -361,6 +528,8 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         },
         stat_sources: row.get::<_, StatSourcesColumn>("stat_sources")?.0,
         equipment: row.get::<_, EquipmentColumn>("equipment")?.0,
+        common_skills: row.get::<_, CommonSkillsColumn>("common_skills")?.0,
+        main_skill_id: row.get("main_skill_id")?,
     })
 }
 
@@ -381,6 +550,8 @@ mod tests {
             awakening: Awakening { stage: 5, eternal_level: 40 },
             stat_sources: StatSources::default(),
             equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
+            main_skill_id: None,
         }
     }
 
@@ -437,12 +608,12 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         assert!(repo.list().unwrap().is_empty());
 
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(created.name, "メイン");
         assert_eq!(created.base_stats.hack, 250);
         assert_eq!(created.awakening, Awakening { stage: 5, eternal_level: 40 });
 
-        let second = repo.create(&new_character("サブ"), &[], &[], &[]).unwrap();
+        let second = repo.create(&new_character("サブ"), &[], &[], &[], &[], &[]).unwrap();
         assert_ne!(created.id, second.id);
 
         let list = repo.list().unwrap();
@@ -453,7 +624,7 @@ mod tests {
     #[test]
     fn 削除できる_存在しないidはエラー() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[], &[]).unwrap();
         repo.delete(created.id).unwrap();
         assert!(repo.list().unwrap().is_empty());
         assert!(matches!(repo.delete(created.id), Err(StorageError::CharacterNotFound(_))));
@@ -464,13 +635,13 @@ mod tests {
     fn 不正な値は拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("  ");
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.name = "x".into();
         c.awakening.stage = 6;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.awakening.stage = 5;
-        c.awakening.eternal_level = 81;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        c.awakening.eternal_level = 101;
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
@@ -478,19 +649,19 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
         c.base_stats.int = 0;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.base_stats.int = 311;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.base_stats.int = 1;
         c.base_stats.agi = 310;
-        assert!(repo.create(&c, &[], &[], &[]).is_ok());
+        assert!(repo.create(&c, &[], &[], &[], &[], &[]).is_ok());
     }
 
     #[test]
     fn マイグレーションは再適用しても壊れない() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         repo.conn.execute_batch(MIGRATION).unwrap();
-        repo.create(&new_character("a"), &[], &[], &[]).unwrap();
+        repo.create(&new_character("a"), &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(repo.list().unwrap().len(), 1);
     }
 
@@ -538,13 +709,13 @@ mod tests {
         assert_eq!(fetched.equipment, Equipment::default());
 
         // マイグレーション後も create/update が使えること
-        let created = repo.create(&new_character("新データ"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("新データ"), &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(created.stat_sources, StatSources::default());
         assert_eq!(created.equipment, Equipment::default());
 
         let mut updated = new_character("旧データ改");
         updated.stat_sources.rune_levels.stab = 10;
-        let result = repo.update(list[0].id, &updated, &[], &[], &[]).unwrap();
+        let result = repo.update(list[0].id, &updated, &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(result.stat_sources.rune_levels.stab, 10);
     }
 
@@ -588,9 +759,11 @@ mod tests {
 
         let list = repo.list().unwrap();
         assert_eq!(list.len(), 1);
-        // power_weapon/strong_weapon_level は引き継がれる。
-        assert_eq!(list[0].equipment.power_weapon, true);
-        assert_eq!(list[0].equipment.strong_weapon_level, 6);
+        // パワーウェポン / ストロングウェポンは共通スキル(v6)へ移る。
+        assert_eq!(list[0].common_skills.power_weapon, true);
+        assert_eq!(list[0].common_skills.strong_weapon_level, 6);
+        // Lv6 を取れるだけのオーグメント Lv を補って、検証で弾かれないようにする
+        assert_eq!(list[0].common_skills.augment_level, 5);
         // 旧合計値(base/enhanced相当)は破棄され、部位はすべて default(未装備)になる。
         assert_eq!(list[0].equipment.parts, domain::EquipmentParts::default());
 
@@ -653,7 +826,7 @@ mod tests {
         assert_eq!(list[0].equipment, Equipment::default());
 
         // create/update も引き続き使えること。
-        repo.create(&new_character("追加データ"), &[], &[], &[]).unwrap();
+        repo.create(&new_character("追加データ"), &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(repo.list().unwrap().len(), 2);
     }
 
@@ -675,7 +848,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let created = repo.create(&c, &test_catalog(), &[], &[]).unwrap();
+        let created = repo.create(&c, &test_catalog(), &[], &[], &[], &[]).unwrap();
         assert_eq!(created.stat_sources, c.stat_sources);
 
         let fetched = repo.get(created.id).unwrap();
@@ -694,24 +867,124 @@ mod tests {
         c.equipment = Equipment {
             parts: EquipmentParts {
                 weapon: EquipmentPart {
-                    base: EquipmentValues { thrust: 150, slash: 150, magic_attack: 0, magic_defense: 0 },
-                    enchant: EquipmentValues { thrust: 60, slash: 60, magic_attack: 0, magic_defense: 0 },
+                    base: EquipmentValues { thrust: 150, slash: 150, magic_attack: 0, magic_defense: 0, ..Default::default() },
+                    enchant: EquipmentValues { thrust: 60, slash: 60, magic_attack: 0, magic_defense: 0, ..Default::default() },
                     ..Default::default()
                 },
                 ..Default::default()
             },
-            power_weapon: true,
-            strong_weapon_level: 6,
             ..Default::default()
         };
-        let created = repo.create(&c, &[], &[], &[]).unwrap();
+        c.common_skills = CommonSkills { power_weapon: true, strong_weapon_level: 6, augment_level: 5, ..Default::default() };
+        let created = repo.create(&c, &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(created.equipment, c.equipment);
+        assert_eq!(created.common_skills, c.common_skills);
 
         let fetched = repo.get(created.id).unwrap();
         assert_eq!(fetched.equipment, c.equipment);
 
         let listed = repo.list().unwrap();
         assert_eq!(listed[0].equipment, c.equipment);
+    }
+
+    #[test]
+    fn 同じ系統のアビリティを2つ持つと拒否する() {
+        use domain::{EquipmentAbilityFamily, EquipmentParts, EquipmentPart};
+
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let abilities = [
+            EquipmentAbilityDef {
+                id: "pointed-blade-low",
+                name: "(下)尖った刃",
+                family: EquipmentAbilityFamily::PointedBlade,
+                values: domain::EquipmentValues { thrust: 2, ..Default::default() },
+            },
+            EquipmentAbilityDef {
+                id: "pointed-blade-e",
+                name: "E-尖った刃",
+                family: EquipmentAbilityFamily::PointedBlade,
+                values: domain::EquipmentValues { thrust: 9, ..Default::default() },
+            },
+            EquipmentAbilityDef {
+                id: "sharp-blade-e",
+                name: "E-鋭い刃",
+                family: EquipmentAbilityFamily::SharpBlade,
+                values: domain::EquipmentValues { slash: 9, ..Default::default() },
+            },
+        ];
+        let mut c = new_character("メイン");
+        c.equipment = Equipment {
+            parts: EquipmentParts {
+                weapon: EquipmentPart {
+                    abilities: vec!["pointed-blade-low".into(), "pointed-blade-e".into()],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let err = repo.create(&c, &[], &[], &abilities, &[], &[]).unwrap_err();
+        assert!(err.to_string().contains("系統"), "{err}");
+
+        // 系統が違えば通る
+        c.equipment.parts.weapon.abilities = vec!["pointed-blade-e".into(), "sharp-blade-e".into()];
+        repo.create(&c, &[], &[], &abilities, &[], &[]).unwrap();
+    }
+
+    #[test]
+    fn main_skill_idは往復し未選択はnullで読める() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("メイン");
+        c.main_skill_id = Some("boris_goku_zaneizan".to_string());
+        let created = repo.create(&c, &[], &[], &[], &[], &[]).unwrap();
+        assert_eq!(created.main_skill_id.as_deref(), Some("boris_goku_zaneizan"));
+        assert_eq!(repo.get(created.id).unwrap().main_skill_id.as_deref(), Some("boris_goku_zaneizan"));
+
+        // 未選択(None)も保存できる。update で解除できること。
+        let mut cleared = c.clone();
+        cleared.main_skill_id = None;
+        let updated = repo.update(created.id, &cleared, &[], &[], &[], &[], &[]).unwrap();
+        assert_eq!(updated.main_skill_id, None);
+    }
+
+    /// v4 の DB(`main_skill_id` 列が無い)を開いても落ちず、既存キャラは主軸スキル未選択で読める。
+    #[test]
+    fn main_skill_id列の無いdbを開くと既存キャラは未選択で読める() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                INTEGER PRIMARY KEY,
+                name              TEXT    NOT NULL,
+                game_character_id TEXT    NOT NULL,
+                stab              INTEGER NOT NULL,
+                hack              INTEGER NOT NULL,
+                int               INTEGER NOT NULL,
+                def               INTEGER NOT NULL,
+                mr                INTEGER NOT NULL,
+                dex               INTEGER NOT NULL,
+                agi               INTEGER NOT NULL,
+                awakening_stage   INTEGER NOT NULL,
+                eternal_level     INTEGER NOT NULL,
+                stat_sources      TEXT    NOT NULL,
+                equipment         TEXT    NOT NULL,
+                created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment)
+            VALUES ('v4データ', 'boris', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}');
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let list = repo.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "v4データ");
+        assert_eq!(list[0].main_skill_id, None);
+
+        // 移行後も create/update が使えること。
+        repo.create(&new_character("追加データ"), &[], &[], &[], &[], &[]).unwrap();
+        assert_eq!(repo.list().unwrap().len(), 2);
     }
 
     #[test]
@@ -722,11 +995,17 @@ mod tests {
 
         let mut over_value = new_character("x");
         over_value.equipment.parts.weapon.base = EquipmentValues { thrust: 10000, ..Default::default() };
-        assert!(matches!(repo.create(&over_value, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_value, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_level = new_character("x");
-        over_level.equipment.strong_weapon_level = 7;
-        assert!(matches!(repo.create(&over_level, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        over_level.common_skills.strong_weapon_level = 7;
+        over_level.common_skills.augment_level = 5;
+        assert!(matches!(repo.create(&over_level, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+
+        // オーグメントが足りない Lv も弾く(wiki: Lv2 以降はオーグメントの LvUp が必要)
+        let mut no_augment = new_character("x");
+        no_augment.common_skills.strong_weapon_level = 6;
+        assert!(matches!(repo.create(&no_augment, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     fn test_equipment_item() -> EquipmentItem {
@@ -735,15 +1014,152 @@ mod tests {
             slot: domain::PartSlot::Weapon,
             name: "テスト武器",
             values_min: domain::EquipmentValues::default(),
-            values_max: domain::EquipmentValues { thrust: 100, slash: 100, magic_attack: 0, magic_defense: 0 },
-            enchant_caps: domain::EquipmentValues { thrust: 50, slash: 50, magic_attack: 0, magic_defense: 0 },
+            values_max: domain::EquipmentValues { thrust: 100, slash: 100, magic_attack: 0, magic_defense: 0, ..Default::default() },
+            enchant_caps: domain::EquipmentValues { thrust: 50, slash: 50, magic_attack: 0, magic_defense: 0, ..Default::default() },
             weapon_class: None,
             source: gamedata::EQUIPMENT_CATALOG_SOURCE,
         }
     }
 
     fn test_equipment_ability() -> EquipmentAbilityDef {
-        EquipmentAbilityDef { id: "test-ability", name: "テストアビリティ", values: domain::EquipmentValues::default() }
+        EquipmentAbilityDef {
+            id: "test-ability",
+            name: "テストアビリティ",
+            family: domain::EquipmentAbilityFamily::PointedBlade,
+            values: domain::EquipmentValues::default(),
+        }
+    }
+
+    const TEST_RO_TIERS: &[domain::RandomOptionTier] = &[domain::RandomOptionTier {
+        rank: domain::RandomOptionRank::Rare,
+        min: 6.0,
+        max: 8.0,
+    }];
+
+    /// 盾のカテゴリー15 を 2 件(排他)と、カテゴリー 0 を 1 件(共存できる)。
+    fn test_random_options() -> Vec<domain::RandomOptionDef> {
+        let def = |id, category, effect| domain::RandomOptionDef {
+            id,
+            name: id,
+            slot: domain::PartSlot::Shield,
+            category,
+            effect,
+            tiers: TEST_RO_TIERS,
+            note: "",
+        };
+        vec![
+            def("ro-a", 15, domain::RandomOptionEffect::AttackDamageRate),
+            def("ro-b", 15, domain::RandomOptionEffect::AccuracyPoint),
+            def("ro-free", 0, domain::RandomOptionEffect::RecordOnly),
+        ]
+    }
+
+    fn ro_slot(id: &str) -> domain::RandomOptionSlot {
+        domain::RandomOptionSlot {
+            option_id: id.to_string(),
+            rank: domain::RandomOptionRank::Rare,
+            value: None,
+        }
+    }
+
+    fn test_titles() -> Vec<domain::TitleDef> {
+        vec![domain::TitleDef {
+            id: "test-title",
+            name: "テスト称号",
+            kind: domain::TitleKind::Special,
+            group: "テスト",
+            level: None,
+            values: domain::EquipmentValues { thrust: 40, ..Default::default() },
+            note: "",
+        }]
+    }
+
+    #[test]
+    fn 未知の称号idは拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.title = Some("nope".to_string());
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &[], &test_titles()),
+            Err(StorageError::InvalidValue(_))
+        ));
+    }
+
+    #[test]
+    fn 称号は基本能力値に加算されjsonで往復する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.title = Some("test-title".to_string());
+        let created = repo.create(&c, &[], &[], &[], &[], &test_titles()).unwrap();
+        let loaded = repo.get(created.id).unwrap();
+        assert_eq!(loaded.equipment.title.as_deref(), Some("test-title"));
+        assert_eq!(loaded.equipment.base_totals(&[], &test_titles()).thrust, 40);
+    }
+
+    #[test]
+    fn 未知のランダムオプションidは拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.shield.random_options = vec![ro_slot("nope")];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options(), &[]),
+            Err(StorageError::InvalidValue(_))
+        ));
+    }
+
+    #[test]
+    fn ランダムオプションは部位が一致しないと拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.weapon.random_options = vec![ro_slot("ro-a")];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options(), &[]),
+            Err(StorageError::InvalidValue(_))
+        ));
+    }
+
+    #[test]
+    fn ランダムオプションに無いランクは拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        let mut slot = ro_slot("ro-a");
+        slot.rank = domain::RandomOptionRank::STrue;
+        c.equipment.parts.shield.random_options = vec![slot];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options(), &[]),
+            Err(StorageError::InvalidValue(_))
+        ));
+    }
+
+    // wiki 転移: 同じカテゴリーは共存できない。カテゴリー 0(カテゴリーなし)は例外
+    #[test]
+    fn 同じカテゴリーのランダムオプションは1部位に1つまで() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.shield.random_options = vec![ro_slot("ro-a"), ro_slot("ro-b")];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options(), &[]),
+            Err(StorageError::InvalidValue(_))
+        ));
+
+        let mut ok = new_character("y");
+        ok.equipment.parts.shield.random_options = vec![ro_slot("ro-a"), ro_slot("ro-free")];
+        assert!(repo.create(&ok, &[], &[], &[], &test_random_options(), &[]).is_ok());
+    }
+
+    #[test]
+    fn ランダムオプションは部位別装備のjsonで往復する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.shield.random_options =
+            vec![domain::RandomOptionSlot {
+                option_id: "ro-a".to_string(),
+                rank: domain::RandomOptionRank::Rare,
+                value: Some(7.5),
+            }];
+        let created = repo.create(&c, &[], &[], &[], &test_random_options(), &[]).unwrap();
+        let loaded = repo.get(created.id).unwrap();
+        assert_eq!(loaded.equipment.parts.shield.random_options, c.equipment.parts.shield.random_options);
     }
 
     #[test]
@@ -752,7 +1168,7 @@ mod tests {
         let mut c = new_character("x");
         c.equipment.parts.weapon.item_id = Some("nope".to_string());
         assert!(matches!(
-            repo.create(&c, &[], &[test_equipment_item()], &[]),
+            repo.create(&c, &[], &[test_equipment_item()], &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
     }
@@ -764,7 +1180,7 @@ mod tests {
         // test_equipment_item は Weapon 用だが helm 部位に指定する。
         c.equipment.parts.helm.item_id = Some("test-weapon".to_string());
         assert!(matches!(
-            repo.create(&c, &[], &[test_equipment_item()], &[]),
+            repo.create(&c, &[], &[test_equipment_item()], &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
     }
@@ -776,14 +1192,14 @@ mod tests {
         c.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
         c.equipment.parts.weapon.enchant = domain::EquipmentValues { thrust: 51, ..Default::default() };
         assert!(matches!(
-            repo.create(&c, &[], &[test_equipment_item()], &[]),
+            repo.create(&c, &[], &[test_equipment_item()], &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
 
         let mut ok = new_character("x");
         ok.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
         ok.equipment.parts.weapon.enchant = domain::EquipmentValues { thrust: 50, ..Default::default() };
-        assert!(repo.create(&ok, &[], &[test_equipment_item()], &[]).is_ok());
+        assert!(repo.create(&ok, &[], &[test_equipment_item()], &[], &[], &[]).is_ok());
     }
 
     #[test]
@@ -791,24 +1207,24 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
         c.equipment.parts.weapon.abilities = vec!["nope".to_string()];
-        assert!(matches!(repo.create(&c, &[], &[], &[test_equipment_ability()]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[test_equipment_ability()], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut ok = new_character("x");
         ok.equipment.parts.weapon.abilities = vec!["test-ability".to_string()];
-        assert!(repo.create(&ok, &[], &[], &[test_equipment_ability()]).is_ok());
+        assert!(repo.create(&ok, &[], &[], &[test_equipment_ability()], &[], &[]).is_ok());
     }
 
     #[test]
     fn updateで登録内容を更新できる() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[], &[]).unwrap();
 
         let mut updated = new_character("メイン改");
         updated.base_stats.stab = 310;
         updated.awakening.eternal_level = 60;
         updated.stat_sources.rune_levels.stab = 20;
 
-        let result = repo.update(created.id, &updated, &[], &[], &[]).unwrap();
+        let result = repo.update(created.id, &updated, &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(result.id, created.id);
         assert_eq!(result.name, "メイン改");
         assert_eq!(result.base_stats.stab, 310);
@@ -822,16 +1238,16 @@ mod tests {
     fn updateは存在しないidをエラーにする() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let c = new_character("メイン");
-        assert!(matches!(repo.update(999, &c, &[], &[], &[]), Err(StorageError::CharacterNotFound(999))));
+        assert!(matches!(repo.update(999, &c, &[], &[], &[], &[], &[]), Err(StorageError::CharacterNotFound(999))));
     }
 
     #[test]
     fn updateも310の範囲バリデーションが効く() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[], &[]).unwrap();
         let mut invalid = new_character("メイン");
         invalid.base_stats.stab = 311;
-        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
@@ -840,27 +1256,27 @@ mod tests {
 
         let mut over_crown = new_character("x");
         over_crown.stat_sources.crown = Crown { stab: Crown::MAX_VALUE + 1, ..Default::default() };
-        assert!(matches!(repo.create(&over_crown, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_crown, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_rune = new_character("x");
         over_rune.stat_sources.rune_levels =
             RuneLevels { hack: RuneLevels::MAX_LEVEL + 1, ..Default::default() };
-        assert!(matches!(repo.create(&over_rune, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_rune, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_relic = new_character("x");
         over_relic.stat_sources.sacred_relic =
             SacredRelic { int: SacredRelic::MAX_STAGE + 1, ..Default::default() };
-        assert!(matches!(repo.create(&over_relic, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_relic, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
     fn updateはクラウン_ルーン_聖物の範囲超過を拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[], &[]).unwrap();
 
         let mut invalid = new_character("メイン");
         invalid.stat_sources.crown = Crown { stab: Crown::MAX_VALUE + 1, ..Default::default() };
-        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
@@ -870,20 +1286,20 @@ mod tests {
         c.stat_sources.buffs = BuffSelection {
             choices: vec![buff_choice("illumination_drink"), buff_choice("charge_potion")],
         };
-        assert!(matches!(repo.create(&c, &test_catalog(), &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &test_catalog(), &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
     fn updateは排他枠が重複するバフ選択を拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &test_catalog(), &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &test_catalog(), &[], &[], &[], &[]).unwrap();
 
         let mut invalid = new_character("メイン");
         invalid.stat_sources.buffs = BuffSelection {
             choices: vec![buff_choice("illumination_drink"), buff_choice("charge_potion")],
         };
         assert!(matches!(
-            repo.update(created.id, &invalid, &test_catalog(), &[], &[]),
+            repo.update(created.id, &invalid, &test_catalog(), &[], &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
     }

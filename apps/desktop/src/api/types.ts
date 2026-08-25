@@ -23,7 +23,21 @@ export interface Skill {
   multiplier: number;
   hit_count: number;
   critical_multiplier: number;
+  /** スキルの属性 */
+  element: Element;
+  /** スキル命中(wiki 表記 +15 済みの実値)。null = wiki 未記載 */
+  accuracy: number | null;
+  /** スキルクリティカル率(wiki スキル性能一覧の Cri値)。null = wiki 未記載 */
+  critical_rate: number | null;
+  /** スキル Lv(wiki スキル性能一覧の SLv) */
+  level: number;
+  /** 単体チャネリングスキルか。極限スキル「フルスロットル」の段数増加はこれにだけ乗る */
+  single_target_channeling: boolean;
 }
+
+// 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
+export type Element =
+  | "fire" | "water" | "wind" | "earth" | "thunder" | "white" | "black" | "neutral";
 
 export interface Enemy {
   id: string;
@@ -100,7 +114,40 @@ export interface StatSources {
   sacred_relic: SacredRelic;
   buffs: BuffSelection;
   adjustments: Adjustments;
+  /** 装備の属性強化以外の属性値の供給源 */
+  elements: ElementSources;
 }
+
+// 属性値の供給源の種別。crates/domain/src/element.rs の ElementSourceId(snake_case)。
+export type ElementSourceId = "pet" | "monster_card" | "rune" | "helm_ability" | "cuffs_ability";
+
+// 供給源ごとに「どの属性に乗せているか」。null = 使っていない。
+export interface ElementSources {
+  pet: Element | null;
+  monster_card: Element | null;
+  rune: Element | null;
+  helm_ability: Element | null;
+  cuffs_ability: Element | null;
+}
+
+// 供給源 1 つ分の定義(表示名と加算値)。crates/domain/src/element.rs の ElementSourceDef。
+export interface ElementSourceDef {
+  id: ElementSourceId;
+  name: string;
+  value: number;
+}
+
+// 属性値の内訳。crates/domain/src/element.rs の ElementPreview。
+export interface ElementPreview {
+  base: ElementValues;
+  equipment: ElementValues;
+  sources: ElementValues;
+  /** 3 つを足して上限 255 で頭打ちにした値 */
+  total: ElementValues;
+}
+
+// 属性ごとの値。crates/domain/src/element.rs の ElementValues。
+export type ElementValues = Record<Element, number>;
 
 export interface StatContribution {
   source: string;
@@ -109,21 +156,18 @@ export interface StatContribution {
   value: number;
 }
 
-// 装備補正 4 種(突き/斬り/魔攻/魔防)。crates/domain/src/equipment.rs の EquipmentValues。
+// 装備補正 9 種(wiki Item ページの列順: 突き/斬り/物防/魔攻/魔防/命中/Cri/回避/敏捷)。
+// crates/domain/src/equipment.rs の EquipmentValues。
 export interface EquipmentValues {
   thrust: number;
   slash: number;
+  physical_defense: number;
   magic_attack: number;
   magic_defense: number;
-}
-
-// 与ダメージ式に入らない装備補正(テシスコアの補助タイプ等)。
-// crates/domain/src/equipment.rs の SupportValues。装備値の合計として保持するだけで計算には使わない。
-export interface SupportValues {
-  physical_defense: number;
+  accuracy: number;
+  critical: number;
   evasion: number;
   agility: number;
-  accuracy: number;
 }
 
 // 装備部位。crates/domain/src/equipment.rs の PartSlot(snake_case)。
@@ -146,6 +190,107 @@ export interface SienaAura {
   all_stats: number;
   /** 追加オプション「攻撃力増加」の %(カテゴリ New1) */
   attack_rate_percent: number;
+  /** 追加オプション「防御力増加」の %。装備防御力倍率へ合流する */
+  defense_rate_percent: number;
+  /** 追加オプション「中ディレイ減少」の %。中ディレイが未実装なので記録のみ */
+  actual_delay_percent: number;
+}
+
+// ランダムオプションのランク。crates/domain/src/random_option.rs の RandomOptionRank。
+export type RandomOptionRank = "normal" | "valuable" | "rare" | "special" | "s_true";
+
+// ランダムオプションの効き先。crates/domain/src/random_option.rs の RandomOptionEffect。
+// タプル variant(依存別)は serde が { dependency_damage_rate: SkillDependency } になる。
+export type RandomOptionEffect =
+  | { dependency_damage_rate: SkillDependency }
+  | "attack_damage_rate"
+  | "accuracy_point"
+  | "evasion_point"
+  | "accuracy_and_evasion_point"
+  | "record_only";
+
+// ランクごとの効果値レンジ。crates/domain/src/random_option.rs の RandomOptionTier。
+export interface RandomOptionTier {
+  rank: RandomOptionRank;
+  min: number;
+  max: number;
+}
+
+// ランダムオプション定義(gamedata のカタログ)。crates/domain/src/random_option.rs の RandomOptionDef。
+export interface RandomOptionDef {
+  id: string;
+  name: string;
+  slot: PartSlot;
+  /** wiki 一覧表のカテゴリー番号。同じ番号は 1 部位に 1 つまで(0 は制約なし) */
+  category: number;
+  effect: RandomOptionEffect;
+  tiers: RandomOptionTier[];
+  note: string;
+}
+
+// キャラが付けている 1 枠。crates/domain/src/random_option.rs の RandomOptionSlot。
+export interface RandomOptionSlot {
+  option_id: string;
+  rank: RandomOptionRank;
+  /** 実測値の上書き。null = レンジ上限 */
+  value: number | null;
+}
+
+// 極限スキル(wiki: Skill/極限)。crates/domain/src/ultimate_skill.rs の UltimateSkill。
+export type UltimateSkill = "scope_eye" | "full_throttle" | "wide_focus";
+
+// 極限スキル一式。crates/domain/src/ultimate_skill.rs の UltimateSkills。
+export interface UltimateSkills {
+  /** 選んだ極限スキル(2 枠)。同じスキルは 2 枠に入れられない */
+  slots: (UltimateSkill | null)[];
+  /** スーパーリミット(ハイパーアタックの極限形。Lv1 のみ) */
+  super_limit: boolean;
+  /** ハイパーリミットの Lv(0〜6)。Lv2 以降はオーグメントの Lv が要る */
+  hyper_limit_level: number;
+}
+
+// 共通スキル(wiki: Skill/共通)。crates/domain/src/common_skill.rs の CommonSkills。
+export interface CommonSkills {
+  /** パワーウェポン(Lv1)。装備攻撃力強化倍率 +2% */
+  power_weapon: boolean;
+  /** ストロングウェポンの Lv(0〜6)。Lv2 以降はオーグメントの Lv が要る */
+  strong_weapon_level: number;
+  /** コートアーマー(Lv1)。装備防御力倍率 物+18% / 魔+12% */
+  coat_armor: boolean;
+  /** プロテクトアーマーの Lv(0〜6)。Lv2 以降はオーグメントの Lv が要る */
+  protect_armor_level: number;
+  /** 改・プロテクトアーマーの Lv(0〜5) */
+  kai_protect_armor_level: number;
+  /** シャープネスビジョンの Lv(0〜10)。割合追加ダメージ */
+  sharpness_vision_level: number;
+  /** オーグメントの Lv(0〜5)。前提スキル */
+  augment_level: number;
+  /** 極限スキル(wiki: Skill/極限)。2 枠 + スーパーリミット / ハイパーリミット */
+  ultimate: UltimateSkills;
+}
+
+// 装備防御力倍率。crates/domain/src/common_skill.rs の DefenseRates。
+export interface DefenseRates {
+  physical: number;
+  magic: number;
+}
+
+// 称号の区分。crates/domain/src/title.rs の TitleKind。
+export type TitleKind = "normal" | "special";
+
+// 称号定義(gamedata のカタログ)。crates/domain/src/title.rs の TitleDef。
+export interface TitleDef {
+  id: string;
+  name: string;
+  kind: TitleKind;
+  /** wiki の見出し(グループボーナスの単位。ボーナス自体は未実装) */
+  group: string;
+  /** 習得 Lv。wiki が `-` の行は null */
+  level: number | null;
+  /** 装備の基本能力値への加算 */
+  values: EquipmentValues;
+  /** 入手方法・備考(条件付きの追加効果は計算に入らない) */
+  note: string;
 }
 
 // テシスコアの地域。crates/domain/src/thesis_core.rs の CoreRegion(snake_case)。
@@ -192,6 +337,12 @@ export interface EquipmentPart {
   abilities: string[];
   /** シエナのオーラ(発現できるのは 8 部位。未発現は中立値) */
   siena: SienaAura;
+  /** 付与した属性(1 部位 1 属性)。null = 属性なし */
+  element: Element | null;
+  /** 付与した属性値(0..=9) */
+  element_value: number;
+  /** ランダムオプション。同じカテゴリーは 1 部位に 1 つまで */
+  random_options: RandomOptionSlot[];
 }
 
 // 12 部位。crates/domain/src/equipment.rs の EquipmentParts(named field)。
@@ -214,12 +365,10 @@ export interface EquipmentParts {
 // crates/domain/src/equipment.rs の Equipment。
 export interface Equipment {
   parts: EquipmentParts;
-  /** パワーウェポン(自身の装備補正を2%増加) */
-  power_weapon: boolean;
-  /** ストロングウェポンの Lv(0 = 未使用、1〜6) */
-  strong_weapon_level: number;
   /** テシスコア(地域ごとに 6 枠) */
   thesis_cores: ThesisCores;
+  /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
+  title: string | null;
 }
 
 // gamedata の出典。crates/gamedata/src/lib.rs の Source。
@@ -254,8 +403,14 @@ export interface EquipmentItem {
   source: Source;
 }
 
+// 武器アビリティの系統。crates/domain/src/equipment.rs の EquipmentAbilityFamily。
+// 同じ系統は 1 部位に 1 つだけ(段が違っても併用できない)。
+export type EquipmentAbilityFamily =
+  | "pointed_blade" | "sharp_blade" | "intelligence" | "magic_resistance";
+
 // 武器アビリティ定義。crates/domain/src/equipment.rs の EquipmentAbilityDef。
 export interface EquipmentAbilityDef {
+  family: EquipmentAbilityFamily;
   id: string;
   name: string;
   /** 装備攻撃力(基本能力値)への加算値 */
@@ -270,6 +425,10 @@ export interface RegisteredCharacter {
   awakening: Awakening;
   stat_sources: StatSources;
   equipment: Equipment;
+  /** 主軸スキル(攻撃力の依存種別を決める)。未選択は null */
+  main_skill_id: string | null;
+  /** 共通スキル(wiki: Skill/共通) */
+  common_skills: CommonSkills;
 }
 
 export interface NewCharacter {
@@ -279,6 +438,9 @@ export interface NewCharacter {
   awakening: Awakening;
   stat_sources: StatSources;
   equipment: Equipment;
+  /** 共通スキル(wiki: Skill/共通) */
+  common_skills: CommonSkills;
+  main_skill_id: string | null;
 }
 
 export type CategoryKind = "assigned" | "fixed" | "rate";
@@ -293,6 +455,8 @@ export interface CategoryTrace {
   symbol: string;
   label: string;
   kind: CategoryKind;
+  /** 上限適用前の生の合算値(割合は Σ%)。`raw − value` が上限で捨てられた分 */
+  raw: number;
   value: number;
   factor: number;
   cap: CategoryCap | null;
@@ -321,11 +485,77 @@ export interface StatTrace {
 // 7 ステータスすべての最終能力値。crates/domain/src/stats.rs の EffectiveStats。
 export type EffectiveStats = Record<StatKind, number>;
 
+// crates/domain/src/attack_power.rs の AttackPowerBreakdown。攻撃力(A)の内訳。
+export interface AttackPowerBreakdown {
+  /** ステ由来攻撃力(切捨て前) */
+  stat_attack: number;
+  /** 装備の基本能力値に係数を掛けた分 */
+  equipment_base_attack: number;
+  /** 装備の強化能力値に係数を掛けた分(テシスコアは地域なしのため含まない) */
+  equipment_enhanced_attack: number;
+  /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン) */
+  enhance_rate: number;
+  /** 攻撃力(A) */
+  value: number;
+}
+
+// crates/domain/src/stat_sources.rs の PartAttackContribution。
+export interface PartAttackContribution {
+  slot: PartSlot;
+  /** A −(その部位を未装備にした A)= 外すと減る量 */
+  value: number;
+}
+
+// crates/domain/src/stat_sources.rs の AttackPreview。主軸スキルが選ばれているときだけ返る。
+export interface AttackPreview {
+  breakdown: AttackPowerBreakdown;
+  part_contributions: PartAttackContribution[];
+}
+
 // crates/domain/src/stat_sources.rs の StatPreview。preview_effective_stats コマンドの戻り値(保存しない)。
 export interface StatPreview {
   stats: EffectiveStats;
   traces: StatTrace[];
   contributions: StatContribution[];
+  /** 主軸スキル未選択なら null */
+  attack: AttackPreview | null;
+}
+
+// crates/domain/src/defense.rs の DefenseProfile。割合は小数表現(50% → 0.5)。
+export interface DefenseProfile {
+  physical_defense: number;
+  magic_defense: number;
+  composite_defense: number;
+  /** 防御力の上限(覚醒段階とエタの意志 Lv で決まる) */
+  defense_cap: number;
+  /** 上限で捨てられた分。すべて 0 なら上限に当たっていない */
+  physical_defense_loss: number;
+  magic_defense_loss: number;
+  composite_defense_loss: number;
+  physical_cut_rate: number;
+  magic_cut_rate: number;
+  composite_cut_rate: number;
+  /** 特殊回避(コンボ回避) */
+  combo_evasion: number;
+  /** 攻撃タイプ別の回避P。通常回避「率」は敵の命中Pが取れないので出さない */
+  evasion_point: EvasionPoints;
+  /** 装備物防(基本 + 強化) */
+  equipment_physical_defense: number;
+  /** 装備魔防(基本 + 強化) */
+  equipment_magic_defense: number;
+  /** 装備回避率補正(基本 + 強化) */
+  equipment_evasion: number;
+  /** 装備敏捷度補正(基本 + 強化) */
+  equipment_agility: number;
+  /** 適用した装備防御力倍率(共通スキル + シエナのオーラの防御力増加) */
+  defense_rates: DefenseRates;
+}
+
+// crates/domain/src/defense.rs の EvasionPoints(wiki 計算式まとめ#EvasionPoint)。
+export interface EvasionPoints {
+  physical: number;
+  magic: number;
+  composite: number;
 }
 
 export interface FormulaStep {
@@ -351,9 +581,20 @@ export interface DamageTrace {
 }
 
 export interface DamageResult {
+  /** 1 段あたりの与ダメージ(ダメージ上限を適用したあと) */
   per_hit: DamageTriple;
   total: DamageTriple;
   hit_count: number;
+  /** 与ダメージの上限(1 段ごとに適用) */
+  damage_cap: number;
+  /** 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない */
+  capped_loss: DamageTriple;
+  /** 割合追加ダメージ(新-割合)の Σ%。いまの供給源はシャープネスビジョンのみ */
+  added_damage_rate: number;
+  /** 割合追加ダメージの実額。合計ダメージにだけ乗る */
+  added_damage: DamageTriple;
+  /** 命中P。敵の回避Pを 100 上回ると必中。null = スキル命中が wiki 未記載で出せない */
+  accuracy_point: number | null;
   trace: DamageTrace;
 }
 
@@ -385,6 +626,21 @@ export interface StatLimits {
   core_slot_count: number;
   core_evolution_max: number;
   core_enhancement_max: number;
+  /** 装備 1 部位に付与できる属性値の上限 */
+  equipment_element_value_max: number;
+  /** キャラの属性値の上限 */
+  element_value_max: number;
+  /** 覚醒段階の上限 */
+  awakening_stage_max: number;
+  /** エタの意志 Lv の上限 */
+  eternal_level_max: number;
+  /** ランダムオプションの効果値の上限 `[仮]` */
+  random_option_value_max: number;
+  protect_armor_level_max: number;
+  kai_protect_armor_level_max: number;
+  sharpness_vision_level_max: number;
+  augment_level_max: number;
+  hyper_limit_level_max: number;
 }
 
 
@@ -405,7 +661,17 @@ export interface RequirementCheck {
   ok: boolean;
 }
 
+// crates/domain/src/content.rs の ContentSeries。段数違いの同一コンテンツをまとめる系列。
+export interface ContentSeries {
+  id: string;
+  name: string;
+  /** この Content の段(難易度) */
+  step: number;
+}
+
 export interface Content {
+  /** 段数違いの系列に属するなら系列情報。単独のコンテンツは null */
+  series: ContentSeries | null;
   id: string;
   name: string;
   /** 敵データが無い(入場条件のみ判定する)コンテンツは null */
