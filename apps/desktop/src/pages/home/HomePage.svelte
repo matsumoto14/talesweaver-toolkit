@@ -12,6 +12,7 @@
   import Icon from "../../ui/Icon.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import Splitter from "../../ui/Splitter.svelte";
+  import { bump } from "../../ui/motion.svelte";
   import { badgeStyle, STATE, type Badge } from "../../ui/states";
 
   const DEFAULT_RIGHT_WIDTH = 330;
@@ -314,7 +315,7 @@
                 </button>
               </div>
               {#if open}
-                <div class="rows">
+                <div class="rows open-in">
                   {#each shown as r (r.content.series?.id ?? r.content.id)}
                     {@const st = rowState(r)}
                     {@const note = noteOf(r)}
@@ -360,7 +361,7 @@
                         {:else}
                           <span class="name">{r.content.name}</span>
                         {/if}
-                        <span class="dmg num">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
+                        <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
                       </div>
                       <div class="row-bar">
                         <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
@@ -372,7 +373,7 @@
                             <span class="over num">×{ratioOf(r).toFixed(1)}</span>
                           {/if}
                         {/if}
-                        <span class="badge" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>
+                        {#key st}<span class="badge badge-in" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>{/key}
                       </div>
                       <div class="row-note">
                         <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? STATE.unknown.bd : r.ev?.entry_ok ? STATE.met.bd : STATE.short.bd};"></span>
@@ -420,7 +421,7 @@
             <div class="sel-entry-only dim">敵データ未収録のため、入場条件のみ判定しています。</div>
           {:else}
             <div class="sel-dmg">
-              <span class="num huge">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
+              <span class="num huge" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
               <span class="dim">1発(最大)</span>
             </div>
             <div class="sel-need num dim">目安 {fmtInt(r.content.need_per_hit)}</div>

@@ -595,7 +595,8 @@
   </div>
 {/snippet}
 
-<div class="pane">
+{#key sourceId}
+<div class="pane pane-in">
   <div class="pane-head">
     <span class="pane-title">{TITLES[sourceId].title}</span>
     <span class="dim">{TITLES[sourceId].note}</span>
@@ -1596,6 +1597,7 @@
     </div>
   {/if}
 </div>
+{/key}
 
 <style>
   .pane { display: flex; flex-direction: column; gap: 9px; padding-bottom: 10px; }

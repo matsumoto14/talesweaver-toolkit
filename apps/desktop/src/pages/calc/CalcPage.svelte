@@ -27,6 +27,7 @@
   import DefensePanel from "./DefensePanel.svelte";
   import Select from "../../ui/Select.svelte";
   import Splitter from "../../ui/Splitter.svelte";
+  import { bump } from "../../ui/motion.svelte";
   import { badgeStyle, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
@@ -382,10 +383,24 @@
   });
 
   // --- 試し変更(sim) ------------------------------------------------------
+  /**
+   * 同時に試せる変更の上限(design-system §14 決定 6)。
+   * 5〜6 個同時に動くとチップ列が読めなくなる。「試しセットに名前を付けて保存」に逃げると
+   * ラベンダー = 保存されない の意味が壊れるので、機能側に制約を置く。
+   * 上限に達したことは**色ではなく文言**で伝える(ラベンダーに 2 つ目の意味を持たせない)。
+   */
+  const SIM_LIMIT = 3;
+  /** 上限で弾いた直後だけ立てる。次の操作が通ったら下ろす */
+  let simLimited = $state(false);
   function editSim(fn: (p: NewCharacter) => void) {
     if (!payload) return;
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
     fn(p);
+    if (savedPayload !== null && KNOBS.filter((k) => k.get(p) !== k.get(savedPayload)).length > SIM_LIMIT) {
+      simLimited = true;
+      return;
+    }
+    simLimited = false;
     app.sim = p;
   }
   const simActive = $derived(app.sim !== null);
@@ -394,6 +409,7 @@
   );
   function resetSim() {
     app.sim = null;
+    simLimited = false;
   }
   let saving = $state(false);
   async function saveSim() {
@@ -507,6 +523,7 @@
     const p = JSON.parse(JSON.stringify(app.sim)) as NewCharacter;
     k.set(p, k.get(savedPayload));
     app.sim = JSON.stringify(p) === JSON.stringify(savedPayload) ? null : p;
+    simLimited = false;
   }
 
   // --- もし〜だったら ------------------------------------------------------
@@ -658,7 +675,7 @@
             <span class="gem"></span>
             <span class="sheet-title">行ける？</span>
             <span class="sheet-char dim">{character.name}{calculating ? " ・ 計算中…" : ""}</span>
-            <span class="badge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
+            {#key badgeState}<span class="badge badge-in" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>{/key}
           </div>
 
           <!-- 対象プレート -->
@@ -680,7 +697,7 @@
           </div>
           {#if targetOpen}
             <button type="button" class="overlay" aria-label="閉じる" onclick={() => (targetOpen = false)}></button>
-            <div class="pop">
+            <div class="pop pop-in">
               {#each targetAreas as area (area.id)}
                 <div class="pop-head"><span class="pop-diamond"></span><span>{area.name}</span><span class="num dim">{area.contents.length} 件</span></div>
                 {#each area.contents as c (c.id)}
@@ -724,7 +741,7 @@
           </div>
           {#if skillOpen && skills.length > 1}
             <button type="button" class="overlay" aria-label="閉じる" onclick={() => (skillOpen = false)}></button>
-            <div class="pop gold">
+            <div class="pop gold pop-in">
               <div class="pop-head gold"><span>スキル {skills.length} 種 ／ この対象への合計ダメージ順</span></div>
               {#each pickerSkills as s (s.id)}
                 {@const d = skillTotals[s.id]}
@@ -749,7 +766,7 @@
           <!-- この一発 -->
           <div class="hero">
             <div class="hero-line">
-              <span class="hero-num num">{perHit !== null ? fmtInt(perHit) : "—"}</span>
+              <span class="hero-num num" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
               {#if simActive}
                 <span class="hero-delta num" class:up={deltaPct > 0} class:down={deltaPct < 0}>
                   {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
@@ -775,14 +792,14 @@
             <div class="totals">
               <div class="total-box">
                 <span class="cap dim">{skill && skill.hit_count > 1 ? `合計 ×${skill.hit_count}段` : "合計(1段)"}</span>
-                <span class="num strong">{result ? fmtInt(result.total.max) : "—"}</span>
+                <span class="num strong" use:bump={() => result?.total.max ?? null}>{result ? fmtInt(result.total.max) : "—"}</span>
               </div>
               <div class="total-box crit">
                 <span class="cap">
                   クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
                   {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
                 </span>
-                <span class="num strong">{result ? fmtInt(result.total.critical) : "—"}</span>
+                <span class="num strong" use:bump={() => result?.total.critical ?? null}>{result ? fmtInt(result.total.critical) : "—"}</span>
               </div>
               <div class="total-box dps">
                 <span class="cap">
@@ -792,7 +809,7 @@
                     1 秒あたり
                   {/if}
                 </span>
-                <span class="num strong">{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
+                <span class="num strong" use:bump={() => (result?.dps ? Math.round(result.dps.max) : null)}>{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
               </div>
             </div>
             {#if result?.actual_delay}
@@ -899,6 +916,7 @@
             </div>
 
             {#if flowOpen}
+              <div class="open-in">
               <!-- ① 攻撃力をつくる -->
               <div class="stage">
                 <span class="stage-no" style="background: var(--flow-1);">1</span>
@@ -1022,6 +1040,7 @@
               {#if result}
                 <TracePanel trace={result.trace} {character} />
               {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -1078,6 +1097,14 @@
             {/each}
           </div>
         {/if}
+        <!-- 上限の注記は固定領域。行を差し込んで下をずらさない(§07) -->
+        <div class="sim-limit" class:hit={simLimited}>
+          {#if simLimited}
+            試し変更は同時 {SIM_LIMIT} 件までです。どれかを ✕ で戻すか、「キャラに保存」で確定してください。
+          {:else}
+            同時に試せるのは {changedKnobs.length} / {SIM_LIMIT} 件です。
+          {/if}
+        </div>
 
         <!-- 装備(試し変更) -->
         <div class="card">
@@ -1472,6 +1499,9 @@
     border-radius: 50%; background: var(--state-temp-bg); font-size: 9px; color: var(--sim);
   }
   .chip-x:hover { background: var(--sim); color: #fff; }
+  /* 上限の注記。色ではなく文言で伝える(ラベンダーに 2 つ目の意味を持たせない。§14 決定 6) */
+  .sim-limit { min-height: 15px; padding: 0 11px 7px; font-size: 9.5px; color: var(--fg-dim); }
+  .sim-limit.hit { color: var(--fg); font-weight: 700; }
 
   .card-head { display: flex; align-items: center; gap: 8px; }
   .small { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

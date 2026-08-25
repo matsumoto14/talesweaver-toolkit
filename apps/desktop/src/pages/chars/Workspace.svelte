@@ -22,6 +22,7 @@
   import { persisted } from "../../ui/persistedState.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
+  import { bump } from "../../ui/motion.svelte";
 
   interface Props {
     character: RegisteredCharacter;
@@ -379,14 +380,14 @@
       <span class="sheet-chev">{sheetOpen.value.open ? "▴" : "▾"}</span>
     </button>
     {#if sheetOpen.value.open}
-      <div class="sheet-body">
+      <div class="sheet-body open-in">
         <div class="sheet-card">
           <div class="card-title">最終能力値</div>
           <div class="stat-grid inset">
             {#each STAT_KINDS as k (k)}
               <span class="stat-cell">
                 <span class="dim">{STAT_LABELS[k]}</span>
-                <span class="num strong">{preview ? fmtInt(preview.stats[k]) : "—"}</span>
+                <span class="num strong" use:bump={() => preview?.stats[k] ?? null}>{preview ? fmtInt(preview.stats[k]) : "—"}</span>
               </span>
             {/each}
           </div>
@@ -394,7 +395,7 @@
         <div class="sheet-card">
           <div class="card-title">攻撃力(A){mainSkill ? ` — ${mainSkill.name}` : ""}</div>
           {#if preview?.attack}
-            <div class="clear num"><span class="strong">{fmtInt(preview.attack.breakdown.value)}</span></div>
+            <div class="clear num"><span class="strong" use:bump={() => preview?.attack?.breakdown.value ?? null}>{fmtInt(preview.attack.breakdown.value)}</span></div>
             <div class="eq-summary num inset">
               <span><span class="dim">ステ攻撃力</span> {fmtNum(preview.attack.breakdown.stat_attack)}</span>
               <span><span class="dim">装備基本</span> {fmtNum(preview.attack.breakdown.equipment_base_attack)}</span>

@@ -187,3 +187,67 @@ table.grid td.n, table.grid th.n { text-align: right; font-family: var(--font-nu
   position: absolute; left: 0; top: 0; bottom: 0;
   transition: width 0.38s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* 動きと変化(design-system §10)---------------------------------------------
+   動きの仕事はひとつだけ — いま何が変わったかを、探させずに伝えること。
+   だから装飾のアニメーションは置かない(置くと本当の変化がその中に埋もれる)。
+   0.5 秒を超える動きは置かない。待たせるための動きは 1 つも要らない。
+   型ごとに手段を固定してあるので、新しい動きを足す前にこの 6 つに寄せられないか見る。 */
+
+/* 1. 数値が変わった — 跳ねる + 増減の色。色は必ず元に戻す(残すと状態色 §03 と混ざる)。
+      animation は終了時に元の値へ戻るので、色の後始末を JS でしなくてよい */
+@keyframes tw-bump-up {
+  0%   { transform: scale(1);    color: var(--good); }
+  40%  { transform: scale(1.07); color: var(--good); }
+  100% { transform: scale(1);    color: var(--good); }
+}
+@keyframes tw-bump-down {
+  0%   { transform: scale(1);    color: var(--warm); }
+  40%  { transform: scale(1.07); color: var(--warm); }
+  100% { transform: scale(1);    color: var(--warm); }
+}
+.bump-up, .bump-down { display: inline-block; }
+.bump-up { animation: tw-bump-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.bump-down { animation: tw-bump-down 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* 2. 量が変わった — バーの幅。数値と同時に動かす(.meter > .fill の transition) */
+
+/* 3. 場所が増えた — 左端から生えてくる。元からある場所は動かさない(§09 規則 2) */
+@keyframes tw-pane-in {
+  from { opacity: 0; transform: translateX(-10px) scaleX(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+.pane-in { animation: tw-pane-in 0.28s cubic-bezier(0.2, 0.85, 0.25, 1); transform-origin: left center; }
+
+/* 4. 一時的に重なった — 上から降りる。閉じたら跡形もなく消える
+      (レイアウトを押していないので、消えても何も動かない。§09 規則 3) */
+@keyframes tw-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scaleY(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+.pop-in { animation: tw-pop-in 0.17s cubic-bezier(0.34, 1.2, 0.64, 1); transform-origin: top center; }
+
+/* 5. 状態が変わった — バッジが弾んで出る。行そのものは動かさない */
+@keyframes tw-badge-in {
+  from { transform: scale(0.9); }
+  to   { transform: none; }
+}
+.badge-in { animation: tw-badge-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* 6. 開いた / 閉じた — 下方向にだけ伸びる。上に伸ばすと上にあるものが全部ずれる */
+@keyframes tw-open {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 1400px; }
+}
+.open-in { animation: tw-open 0.34s ease; overflow: hidden; transform-origin: top center; }
+
+/* 動きを消しても変化が分かること。ここで消えて意味が伝わらなくなるなら、
+   それは動きに頼りすぎているサイン — 色と数値だけで伝わる状態を先に作る */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
