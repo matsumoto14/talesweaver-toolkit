@@ -240,8 +240,9 @@
     const takenCategories = new Set(
       part.random_options.map((o) => randomOptionDef(o.option_id)?.category).filter((c) => c !== undefined && c !== 0),
     );
+    // 段階選択に並べるので、プレースホルダは入れない。押せない選択肢を混ぜると
+    // 「選ばれているのに何も起きない」項目になる(§00 意味のないものを置かない)
     return [
-      { value: "", label: "追加する OP を選ぶ" },
       ...app.randomOptions
         .filter((d) => d.slot === slot && !takenIds.has(d.id) && !takenCategories.has(d.category))
         .map((d) => ({ value: d.id, label: d.name })),
@@ -608,7 +609,7 @@
     {/if}
   {/each}
   <div class="fields">
-    <Select
+    <StepSelect
       label="OP を追加"
       options={addableRandomOptions(slot)}
       bind:value={() => "", (v) => addRandomOption(slot, v)}

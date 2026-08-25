@@ -1317,7 +1317,7 @@
                 <Icon kind="buff" id={def.id} size={20} label={def.name} />
                 <span class="bd-name">{def.name}</span>
                 {#if isUserSelectedTarget(def.target)}
-                  <Select
+                  <StepSelect
                     label="対象ステ"
                     options={statOptions}
                     bind:value={
