@@ -24,8 +24,16 @@
     max: number;
     step?: number;
     format?: (value: number) => string;
+    /**
+     * 上限に対する進捗を見せるか(§07 形態 4)。**上限まで盛るもの**だけ true —
+     * エンチャント・ランダムOP・能力値のように「どこまで届いたか」に意味がある値。
+     *
+     * false は §12 の形態 1(自動)。装備の基本値のように、上限が入力ミスを防ぐための
+     * 一律値でしかないものは、進捗を出すと「1,000 まで盛れる」と読めてしまう。
+     */
+    gauge?: boolean;
   }
-  let { label, value = $bindable(), min, max, step = 1, format }: Props = $props();
+  let { label, value = $bindable(), min, max, step = 1, format, gauge = true }: Props = $props();
 
   let text = $state(String(value));
   let lastSyncedValue = value;
@@ -82,6 +90,8 @@
   const full = $derived(value >= max);
   /** 動かせる幅が無い(そのアイテムがその値を持たない等)。§07 形態 1 に降りて表示だけにする */
   const fixed = $derived(max <= min);
+  /** 上限を語る部分(進捗バー・/上限・MAX)を出すか */
+  const showCap = $derived(gauge && !fixed);
   /**
    * 上限に対する進捗。負の範囲(調整の加算 -3,000〜3,000)は「上限に対してどこまで」が
    * 成り立たないのでバーを出さない
@@ -118,8 +128,8 @@
   <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
        上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
        読取(button)と編集(input)でセルの寸法は同じ。押しても値が動かない(§09 規則 1) -->
-  <div class="cell" class:editing class:fixed>
-    {#if pct !== null}<span class="fill" style:width="{pct}%"></span>{/if}
+  <div class="cell" class:editing class:fixed class:bare={!showCap}>
+    {#if showCap && pct !== null}<span class="fill" style:width="{pct}%"></span>{/if}
     {#if editing && !fixed}
       <input
         class="num val"
@@ -149,10 +159,10 @@
         onclick={() => (editing = true)}
       >{value.toLocaleString("ja-JP")}</button>
     {/if}
-    {#if !fixed}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
+    {#if showCap}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
   </div>
   <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->
-  {#if !fixed}
+  {#if showCap}
     <button type="button" class="max-btn" onclick={setMax} disabled={full}>MAX</button>
   {/if}
   {#if hint}<span class="hint dim">{hint}</span>{/if}
@@ -173,6 +183,8 @@
   .cell:not(.editing):not(.fixed):hover { border-color: var(--accent); }
   /* 動かせないものは押せる見た目にしない */
   .cell.fixed { justify-content: center; }
+  /* 上限を語らない形(形態 1)。/上限 と MAX が無いぶん詰める */
+  .cell.bare { width: 74px; }
   /* 上限に対していまどのあたりか。セル底の 2px(v4) */
   .fill {
     position: absolute; left: 0; bottom: 0; height: 2px;

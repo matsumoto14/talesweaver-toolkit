@@ -839,14 +839,17 @@
               </p>
               <div class="fields">
                 {#each EQUIPMENT_STAT_KINDS as k (k)}
-                  <!-- 上限は**そのアイテムの wiki レンジ**。装備一律の 1,000 を上限にすると
-                       「122 / 1,000」となって、レンジのどのあたりかが読めない(§07 形態 4 の
-                       進捗は上限が実態と合っていて初めて意味を持つ)。カタログ外だけ一律上限 -->
+                  <!-- 基本値は §12 の形態 1(自動)。装備品を選んだ瞬間に確定する値で、
+                       上限まで盛るものではない。上限(1,000)は入力ミスを防ぐための一律値なので
+                       進捗も MAX も出さない — 出すと「1,000 まで盛れる」と読めてしまう。
+                       MR による個体差で上書きできるので、目安として wiki レンジだけ添える -->
                   <StatInput
                     label={EQUIPMENT_STAT_LABELS[k]}
-                    min={item ? item.values_min[k] : 0}
-                    max={item ? item.values_max[k] : limits.equipment_value_max}
+                    min={0}
+                    max={limits.equipment_value_max}
+                    gauge={false}
                     bind:value={part.base[k]}
+                    format={item ? () => `wiki ${item.values_min[k]}–${item.values_max[k]}` : undefined}
                   />
                 {/each}
               </div>
