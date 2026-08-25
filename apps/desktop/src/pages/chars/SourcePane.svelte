@@ -1517,6 +1517,7 @@
               options={coreTypeOptions}
               bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
             />
+            <span class="core-stage">
             <StepSelect
               label="進化"
               options={coreEvolutionOptions}
@@ -1535,6 +1536,7 @@
                 (v) => setCoreStage(index, "enhancement", Number(v))
               }
             />
+            </span>
             <span class="core-bonus num" class:support={core !== null && !CORE_POWER_TYPES.includes(core.core_type)}>
               {core ? `+${fmtInt(coreBonus(core.core_type, core.evolution, core.enhancement))}` : "—"}
             </span>
@@ -1860,10 +1862,18 @@
   }
   .region-tab.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); font-weight: 700; }
   .core-list { display: flex; flex-direction: column; gap: 8px; }
+  /* タイプは 8 択なので 1 行使う。狭い枠に押し込むとセグメントが縦に折り返して読めない。
+     進化・強化は 5 択なので下の行に横並び(§00「触る場所だけ大きく」) */
   .core-row {
-    display: grid; grid-template-columns: 18px minmax(110px, 1.4fr) minmax(84px, 1fr) minmax(84px, 1fr) 48px;
+    display: grid;
+    grid-template-columns: 18px 1fr 48px;
+    grid-template-areas: "n type bonus" ". stage stage";
     gap: 8px; align-items: end;
+    padding-bottom: 9px; border-bottom: 1px dashed var(--border-soft);
   }
+  .core-row:last-child { padding-bottom: 0; border-bottom: 0; }
+  .core-row > :global(*:nth-child(2)) { grid-area: type; }
+  .core-stage { grid-area: stage; display: flex; flex-wrap: wrap; gap: 8px 14px; }
   .core-slot { font-size: 11px; padding-bottom: 8px; text-align: center; }
   .core-bonus { font-size: 12px; font-weight: 700; padding-bottom: 8px; text-align: right; }
   .core-bonus.support { color: var(--fg-muted); font-weight: 400; }
