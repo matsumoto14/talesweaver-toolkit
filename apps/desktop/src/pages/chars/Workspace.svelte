@@ -451,6 +451,7 @@
                 ondragover={(e) => onDragOverRow(e, list.key, i)}
                 ondrop={onDrop}
               >
+                <span class="grip" aria-hidden="true" title="つかんで並べ替え">⠿</span>
                 <button
                   type="button"
                   class="fav"
@@ -628,7 +629,18 @@
   .group-empty { margin: 0 0 2px; padding: 0 2px; font-size: 9.5px; }
 
   /* つかんで運ぶ。落ちる位置は行の縁に線で出す — 隙間を差し込むと下が全部ずれる(§09 規則 1) */
-  .src-line { position: relative; cursor: grab; }
+  .src-line {
+    position: relative; cursor: grab;
+    /* 中のテキストが選択されるとドラッグがそちらに取られて、掴んでも動かない */
+    user-select: none; -webkit-user-drag: element;
+  }
+  .src-line:active { cursor: grabbing; }
+  /* 掴めることを見た目でも言う。ふだんは薄く、行に触れたら濃くなる */
+  .grip {
+    flex-shrink: 0; width: 9px; text-align: center;
+    font-size: 11px; line-height: 1; color: var(--fg-off); letter-spacing: -1px;
+  }
+  .src:hover .grip, .src-line.dragging .grip { color: var(--accent); }
   .src-line.dragging { opacity: 0.45; }
   .src-line.drop-before::before, .src-line.drop-after::after {
     content: ""; position: absolute; left: 0; right: 0; height: 2px;
