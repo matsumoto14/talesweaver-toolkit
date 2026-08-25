@@ -357,6 +357,106 @@
   };
   const cappedCategories = $derived(activeCategories.filter((c) => catLoss(c) > 1e-9));
 
+  // --- 効いていない分の棚卸し(design-system §14 決定 2)---------------------
+  // 上限で捨てた分は 能力値上限 / カテゴリ上限 / ダメージ上限 / 防御力上限 / 中ディレイ
+  // の 5 階層に散っている。5 箇所を回らないと総ロスが分からない状態は
+  // 「効いていない量を見せるのがこの道具の価値」(§00)を薄めるので、1 箇所に集める。
+  // 斜線の記号は各所で使ったまま、棚卸しだけをここに寄せる。新しい画面は作らない。
+  interface LostRow {
+    /** どの上限か */
+    k: string;
+    /** 上限にぶつかる前の値 */
+    raw: string;
+    /** 実際に効いている値 */
+    val: string;
+    /** 捨てている量 */
+    loss: string;
+    /** 効いている割合(0〜1)。塗り = 効いている量、斜線 = 捨てた量 */
+    kept: number;
+  }
+  const lostRows = $derived.by<LostRow[]>(() => {
+    const out: LostRow[] = [];
+    // 能力値上限(覚醒段階 + エタの意志 Lv)
+    for (const s of result?.trace.stats ?? []) {
+      if (s.capped_loss > 1e-9) {
+        const before = s.effective + s.capped_loss;
+        out.push({
+          k: `能力値上限 ${STAT_LABELS[s.kind]}`,
+          raw: fmtInt(before),
+          val: fmtInt(s.stat_cap),
+          loss: fmtInt(s.capped_loss),
+          kept: before > 0 ? s.effective / before : 1,
+        });
+      }
+    }
+    // カテゴリ上限。合算してから切るので、積んだのに効いていない量が数値で見えないと詰み手前が分からない
+    for (const c of cappedCategories) {
+      out.push({
+        k: `カテゴリ上限 ${c.label}`,
+        raw: fmtCatRaw(c),
+        val: fmtCatValue(c),
+        loss: fmtCatLoss(c),
+        kept: Math.abs(c.raw) > 1e-9 ? Math.abs(c.value) / Math.abs(c.raw) : 1,
+      });
+    }
+    // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)
+    if (result !== null && result.capped_loss.max > 0) {
+      const before = result.per_hit.max + result.capped_loss.max;
+      out.push({
+        k: "ダメージ上限(1 段ごと)",
+        raw: fmtInt(before),
+        val: fmtInt(result.damage_cap),
+        loss: fmtInt(result.capped_loss.max),
+        kept: before > 0 ? result.per_hit.max / before : 1,
+      });
+    }
+    // 防御力上限。防御タブと同じ値だが、棚卸しのために回らせない
+    if (defense !== null) {
+      const d = defense;
+      const rows: [string, number, number][] = [
+        ["物理", d.physical_defense, d.physical_defense_loss],
+        ["魔法", d.magic_defense, d.magic_defense_loss],
+        ["複合", d.composite_defense, d.composite_defense_loss],
+      ];
+      for (const [name, value, loss] of rows) {
+        if (loss > 1e-9) {
+          const before = value + loss;
+          out.push({
+            k: `防御力上限 ${name}`,
+            raw: fmtInt(before),
+            val: fmtInt(d.defense_cap),
+            loss: fmtInt(loss),
+            kept: before > 0 ? value / before : 1,
+          });
+        }
+      }
+    }
+    // 中ディレイ。減少値の上限(70%)と秒そのものの下限(0.3s)は別の捨て方なので分けて出す
+    const ad = result?.actual_delay ?? null;
+    if (ad !== null) {
+      if (ad.reduction_raw > ad.reduction + 1e-9) {
+        out.push({
+          k: "中ディレイ減少の上限(70%)",
+          raw: `${(ad.reduction_raw * 100).toFixed(0)}%`,
+          val: `${(ad.reduction * 100).toFixed(0)}%`,
+          loss: `${((ad.reduction_raw - ad.reduction) * 100).toFixed(0)}%`,
+          kept: ad.reduction_raw > 0 ? ad.reduction / ad.reduction_raw : 1,
+        });
+      }
+      if (ad.floored) {
+        const want = ad.base * (1 - ad.reduction) * ad.combo_rate;
+        out.push({
+          k: "中ディレイの下限(0.3s)",
+          raw: `${want.toFixed(2)}s`,
+          val: `${ad.value.toFixed(2)}s`,
+          loss: `${(ad.value - want).toFixed(2)}s ぶん遅い`,
+          kept: ad.value > 0 ? want / ad.value : 1,
+        });
+      }
+    }
+    return out;
+  });
+
   // --- 攻撃 / 防御タブ(規格シート 5c) --------------------------------------
   let side = $state<"attack" | "defense">("attack");
   let defense = $state<DefenseProfile | null>(null);
@@ -982,39 +1082,40 @@
                 {/each}
               </div>
 
+              <!-- 効いていない分(§14 決定 2)。5 階層に散っていた「捨てた量」をここに集める -->
+              <div class="materials">
+                <div class="mat-head">
+                  <span class="mat-title">効いていない分</span>
+                  <span class="dim">積んだのに上限で捨てている量</span>
+                </div>
+                {#if lostRows.length === 0}
+                  <p class="lost-none dim">いまはどの上限にも当たっていません。積んだ分はすべて効いています。</p>
+                {:else}
+                  <div class="lost">
+                    {#each lostRows as r (r.k)}
+                      <div class="lost-row">
+                        <span class="lost-label">{r.k}</span>
+                        <span class="num lost-raw">{r.raw}</span>
+                        <span class="lost-arrow dim">→ 上限</span>
+                        <span class="num lost-val">{r.val}</span>
+                        <span class="lost-bar" aria-hidden="true">
+                          <i style="width: {(r.kept * 100).toFixed(1)}%"></i>
+                          <i class="cut" style="width: {(100 - r.kept * 100).toFixed(1)}%"></i>
+                        </span>
+                        <span class="num lost-loss">{r.loss} は無効</span>
+                      </div>
+                    {/each}
+                  </div>
+                  <p class="lost-note dim">斜線が捨てている量です。ここが太い枠は、伸ばしても数字が動きません。</p>
+                {/if}
+              </div>
+
               <!-- 倍率の材料 -->
               <div class="materials">
                 <div class="mat-head">
                   <span class="mat-title">倍率の材料</span>
                   <span class="dim">上限に届いた枠は「満」</span>
                 </div>
-                {#if result !== null && result.capped_loss.max > 0}
-                  <!-- ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用) -->
-                  <div class="capped">
-                    <div class="capped-row">
-                      <span class="cp-label">ダメージ上限(1 段ごと)</span>
-                      <span class="num cp-raw">{fmtInt(result.per_hit.max + result.capped_loss.max)}</span>
-                      <span class="cp-arrow dim">→ 上限</span>
-                      <span class="num cp-val">{fmtInt(result.damage_cap)}</span>
-                      <span class="num cp-loss">{fmtInt(result.capped_loss.max)} は無効</span>
-                    </div>
-                  </div>
-                {/if}
-                {#if cappedCategories.length > 0}
-                  <!-- 上限で捨てられた分(規格シート 5b)。合算してから上限で切るので、
-                       積んだのに効いていない量が数値で見えないと詰み手前が分からない -->
-                  <div class="capped">
-                    {#each cappedCategories as c (c.category)}
-                      <div class="capped-row">
-                        <span class="cp-label">{c.label}</span>
-                        <span class="num cp-raw">{fmtCatRaw(c)}</span>
-                        <span class="cp-arrow dim">→ 上限</span>
-                        <span class="num cp-val">{fmtCatValue(c)}</span>
-                        <span class="num cp-loss">{fmtCatLoss(c)} は無効</span>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
                 <div class="mat-chips">
                   {#each activeCategories as c (c.category)}
                     <span class="mat-chip" class:cap={catAtCap(c)}>
@@ -1470,6 +1571,22 @@
     background: var(--bg-panel); border: 1px solid var(--border-soft); font-size: 9.5px;
   }
   .mat-chip.cap { background: var(--state-short-bg); border-color: var(--state-short-bd); }
+  /* 効いていない分の棚卸し(§14 決定 2)。塗り = 効いている量、斜線 = 捨てた量(§03) */
+  .lost { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+  .lost-row {
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+    padding: 4px 9px; border-radius: var(--r-inset);
+    background: var(--surface-inset); border: 1px solid var(--border-soft);
+  }
+  .lost-label { min-width: 0; flex: 1; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lost-raw { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; color: var(--fg-muted); text-decoration: line-through; }
+  .lost-arrow { flex-shrink: 0; font-size: 9px; }
+  .lost-val { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; font-weight: 700; }
+  .lost-bar { flex-shrink: 0; width: 96px; height: 7px; display: flex; border-radius: var(--r-inset); overflow: hidden; border: 1px solid var(--border-soft); }
+  .lost-bar > i { display: block; background: var(--flow-1); }
+  .lost-bar > i.cut { background: var(--hatch-lost); }
+  .lost-loss { flex-shrink: 0; min-width: 104px; text-align: right; font-size: 10px; color: var(--danger); }
+  .lost-none, .lost-note { margin: 4px 0 0; font-size: 10px; line-height: 1.6; }
   .mat-chip .strong { font-size: 10px; font-weight: 700; }
   .mat-chip .full { font-size: 8.5px; font-weight: 700; color: var(--danger); }
 
@@ -1528,17 +1645,6 @@
   }
 
   .mat-note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }
-  .capped { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
-  .capped-row {
-    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-    padding: 4px 9px; border-radius: var(--r-inset);
-    background: var(--surface-inset); border: 1px solid var(--border-soft); font-size: 10px;
-  }
-  .cp-label { font-weight: 700; color: var(--fg-head); }
-  .cp-raw { color: var(--fg-muted); text-decoration: line-through; }
-  .cp-arrow { font-size: 9px; }
-  .cp-val { font-weight: 700; }
-  .cp-loss { margin-left: auto; font-weight: 700; color: var(--danger); }
 
   .buff-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
   .buff-chip {
