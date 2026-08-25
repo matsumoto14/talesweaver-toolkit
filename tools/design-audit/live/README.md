@@ -24,6 +24,7 @@ NODE_PATH=/c/github/private/twtoolkit/node_modules node tools/design-audit/live/
 | `digits.js` | §09 規則 4(桁が増えても隣が動かない)。値を実際に変えて座標を比べる |
 | `sim10.js` | §10 規則 2(同時に変わるものが全部動く)。跳ねたクラスを MutationObserver で拾う |
 | `round11.js` | 登録ペイン(新規キャラ)とエラー帯の重なり |
+| `sweep.js` | §09 規則 1・3 を**押せる要素の自動列挙**で(全タブ・全ペイン、1,200 個超)。手書きのリストだと漏れる |
 | `clickall.js` | §09 規則 1 を**押せる要素の総当たり**で(タブ・チップ・段階選択・★・行・部位・数値の編集)。「押すと**開く**もの」だけでなく「押すと**状態が変わる**もの」も含める |
 
 ## 測るときの注意
@@ -36,4 +37,6 @@ NODE_PATH=/c/github/private/twtoolkit/node_modules node tools/design-audit/live/
   アプリが動いていなくても座標が変わる。`offsetLeft` / `offsetTop`(レイアウト上の位置)で測り、
   押すときも `dispatchEvent("click")` にする(`clickall.js` がその形)
 - **前の測定で開いたペイン・スクロールが残っていると座標が動いて見える。** 1 件ごとにリロードする
+- **保存・削除・登録のボタンを押さない。** 監査が開発 DB を書き換えると、あとで
+  「実装のバグ」と区別が付かなくなる(`sweep.js` の `DESTRUCTIVE` で弾いている)
 - スクリプトはアプリの状態(localStorage・DB)を変えることがある。検証後は元に戻す

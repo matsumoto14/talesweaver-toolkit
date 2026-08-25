@@ -1066,7 +1066,10 @@
       </div>
     </div>
   {:else if sourceId === "siena"}
-    {#if openSienaPart === null}
+    <!-- ドリルダウンは置き換えではなく、右にペインを足す(§09 規則 2)。
+         押した部位行はその場に残り、別の部位を押せばそのまま横に移れる -->
+    <div class="part-split" class:open={openSienaPart !== null}>
+      <div class="part-side">
       <div class="card">
         <p class="hint dim">
           wiki「装備システム/シエナのオーラ」。Lv310 の 8 部位(兜/鎧/武器/盾/頭/体/手/足)に発現でき、
@@ -1081,7 +1084,7 @@
       <div class="part-list">
         {#each SIENA_ALLOWED_SLOTS as slot (slot)}
           {@const siena = draft.equipment.parts[slot].siena}
-          <button type="button" class="part-row" onclick={() => (openSienaPart = slot)}>
+          <button type="button" class="part-row" class:on={openSienaPart === slot} onclick={() => (openSienaPart = slot)}>
             <span class="part-main">
               <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
               <span class="part-item">{partDisplayName(slot)}</span>
@@ -1092,10 +1095,12 @@
           </button>
         {/each}
       </div>
-    {:else}
-      {@const slot = openSienaPart}
-      {@const siena = draft.equipment.parts[slot].siena}
-      <button type="button" class="back-link" onclick={() => (openSienaPart = null)}>‹ 部位一覧へ</button>
+      </div>
+      {#if openSienaPart !== null}
+        {@const slot = openSienaPart}
+        {@const siena = draft.equipment.parts[slot].siena}
+        <div class="part-detail pane-in">
+      <button type="button" class="close-detail" onclick={() => (openSienaPart = null)}>✕ この部位を閉じる</button>
       <div class="card">
         <div class="card-title">{PART_SLOT_LABELS[slot]}: 増幅段階</div>
         <StepSelect
@@ -1195,7 +1200,9 @@
           </p>
         </div>
       {/if}
-    {/if}
+        </div>
+      {/if}
+    </div>
   {:else if sourceId === "randomOption"}
     <div class="card">
       <p class="hint dim">
@@ -1734,7 +1741,9 @@
      詳細を開いているときだけ一覧を細くし、値サマリを畳む — 狭いときだけ左から畳む、の形 */
   .part-split { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
   .part-list { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
-  .part-split.open .part-list { flex: 0 0 232px; }
+  /* シエナは一覧の上に説明カードがあるので、まとめて 1 列にする */
+  .part-side { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 9px; }
+  .part-split.open .part-list, .part-split.open .part-side { flex: 0 0 232px; }
   .part-split.open .part-vals { display: none; }
   .part-detail { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 9px; }
   .part-row {
