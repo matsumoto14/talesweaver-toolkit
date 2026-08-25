@@ -6,12 +6,15 @@
 //! - **装備攻撃力強化倍率**(カテゴリA の内訳): パワーウェポン + ストロングウェポン
 //! - **装備防御力倍率**(§6 の防御力計算): コートアーマー + プロテクトアーマー + 改・プロテクトアーマー
 //! - **追加ダメージ(新-割合)**(§5): シャープネスビジョン
+//! - **能力値倍率B**(§2): アンリーシュ(能力解放)
 //!
 //! オーグメントは**前提スキル**で、ストロングウェポン / プロテクトアーマー / ハイパーリミットの
 //! Lv2 以降に必要(wiki の該当行に赤字で明記)。倍率そのものには効かないので Lv 上限の制約として扱う。
+//! レインフォースも同じ形の前提スキルで、アンリーシュの Lv6 以降に必要。
 
 use serde::{Deserialize, Serialize};
 
+use crate::stats::StatKind;
 use crate::ultimate_skill::UltimateSkills;
 
 /// ストロングウェポンの Lv 上限(wiki Skill/共通: Lv1〜6 = 3〜18%)。
@@ -24,6 +27,14 @@ pub const KAI_PROTECT_ARMOR_LEVEL_MAX: u8 = 5;
 pub const SHARPNESS_VISION_LEVEL_MAX: u8 = 10;
 /// オーグメントの Lv 上限(wiki Skill/共通: Lv5)。
 pub const AUGMENT_LEVEL_MAX: u8 = 5;
+/// アンリーシュ(能力解放)の Lv 上限(wiki Skill/共通: Lv1〜10)。
+pub const UNLEASH_LEVEL_MAX: u8 = 10;
+/// レインフォースの Lv 上限(wiki Skill/共通: Lv5)。アンリーシュ Lv6 以降の前提。
+pub const REINFORCE_LEVEL_MAX: u8 = 5;
+/// レインフォース無しで取れるアンリーシュの Lv(wiki: Lv6 以降が LvUp 必要 = Lv5 までは不要)。
+const UNLEASH_FREE_LEVEL_MAX: u8 = 5;
+/// アンリーシュの枠数(wiki Skill/共通: 2 つまで使用可能)。
+pub const UNLEASH_SLOTS: usize = 2;
 
 /// パワーウェポンの装備攻撃力強化倍率(wiki: 自身の装備補正を 2% 増加)。
 const POWER_WEAPON_RATE: f64 = 0.02;
@@ -42,6 +53,21 @@ const KAI_PROTECT_ARMOR_PHYSICAL: [f64; 5] = [0.09, 0.18, 0.27, 0.36, 0.45];
 const KAI_PROTECT_ARMOR_MAGIC: [f64; 5] = [0.06, 0.12, 0.18, 0.24, 0.30];
 /// シャープネスビジョン Lv1〜10 の割合追加ダメージ(5/10/15/20/25/28/31/34/37/40%)。
 const SHARPNESS_VISION: [f64; 10] = [0.05, 0.10, 0.15, 0.20, 0.25, 0.28, 0.31, 0.34, 0.37, 0.40];
+/// アンリーシュ Lv1〜10 の能力値倍率B(wiki Skill/共通「バフ等含むステータス値 × 強化倍率[%]」
+/// +1/+2/+3/+4/+5/+8/+11/+14/+17/+20%)。ユーザーの実測(基本能力値 506 で
+/// 990/995/1000/1005/1010/1025/1040/1055/1071/1086)と 1 の位まで一致する(2026-08-25)。
+const UNLEASH: [f64; 10] = [0.01, 0.02, 0.03, 0.04, 0.05, 0.08, 0.11, 0.14, 0.17, 0.20];
+
+/// アンリーシュ(能力解放)の 1 枠。ステを 1 つ選んで Lv を上げる。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct UnleashSlot {
+    /// 解放するステ。`None` = この枠は未使用
+    #[serde(default)]
+    pub stat: Option<StatKind>,
+    /// Lv(0〜10)。Lv6 以降はレインフォースの Lv が要る
+    #[serde(default)]
+    pub level: u8,
+}
 
 /// 装備防御力倍率(物理 / 魔法)。初期値はどちらも 1.0(wiki §6)。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -85,6 +111,12 @@ pub struct CommonSkills {
     /// オーグメントの Lv(0〜5)。前提スキルで、倍率そのものには効かない
     #[serde(default)]
     pub augment_level: u8,
+    /// アンリーシュ(能力解放)の 2 枠。選んだステの能力値倍率B に乗る
+    #[serde(default)]
+    pub unleash: [UnleashSlot; UNLEASH_SLOTS],
+    /// レインフォースの Lv(0〜5)。前提スキルで、アンリーシュの Lv6 以降に要る
+    #[serde(default)]
+    pub reinforce_level: u8,
     /// 極限スキル(wiki: Skill/極限)。2 枠 + スーパーリミット / ハイパーリミット。
     /// 効果を底上げする 2 スキルは共通スキル(ハイパーアタック / エクストリームアタック)の
     /// 極限形なのでここにぶら下げる
@@ -146,6 +178,22 @@ impl CommonSkills {
         self.augment_level + 1
     }
 
+    /// レインフォースで解放されているアンリーシュの Lv 上限
+    /// (wiki: Lv6 以降はレインフォースの LvUp が必要)。Lv0 なら 5、Lv5 なら 10。
+    pub fn reinforce_gated_level_max(&self) -> u8 {
+        self.reinforce_level + UNLEASH_FREE_LEVEL_MAX
+    }
+
+    /// アンリーシュによるこのステの能力値倍率B(wiki: ステータス「能力値倍率B」)。
+    /// 2 枠とも同じステには入れられないので、合致する枠は高々 1 つ。
+    pub fn unleash_rate(&self, kind: StatKind) -> f64 {
+        self.unleash
+            .iter()
+            .filter(|slot| slot.stat == Some(kind) && slot.level > 0)
+            .map(|slot| UNLEASH[(slot.level as usize - 1).min(UNLEASH.len() - 1)])
+            .sum()
+    }
+
     pub fn validate(&self) -> Result<(), CommonSkillError> {
         let check = |name: &'static str, value: u8, max: u8| {
             if value > max {
@@ -163,6 +211,7 @@ impl CommonSkills {
         )?;
         check("シャープネスビジョン", self.sharpness_vision_level, SHARPNESS_VISION_LEVEL_MAX)?;
         check("オーグメント", self.augment_level, AUGMENT_LEVEL_MAX)?;
+        check("レインフォース", self.reinforce_level, REINFORCE_LEVEL_MAX)?;
         // オーグメント制約(wiki Skill/共通の該当行に赤字で明記)
         let max = self.augment_gated_level_max();
         for (name, level) in [
@@ -179,6 +228,25 @@ impl CommonSkills {
             }
         }
         self.ultimate.validate(max)?;
+        // アンリーシュ(wiki Skill/共通: 2 つまで・Lv6 以降はレインフォースが前提)
+        let unleash_max = self.reinforce_gated_level_max();
+        for slot in &self.unleash {
+            if slot.stat.is_none() {
+                continue;
+            }
+            check("アンリーシュ", slot.level, UNLEASH_LEVEL_MAX)?;
+            if slot.level > unleash_max {
+                return Err(CommonSkillError::ReinforceRequired {
+                    value: slot.level,
+                    reinforce_level: self.reinforce_level,
+                    max: unleash_max,
+                });
+            }
+        }
+        let [first, second] = self.unleash;
+        if first.stat.is_some() && first.stat == second.stat {
+            return Err(CommonSkillError::UnleashDuplicated { kind: first.stat.unwrap() });
+        }
         Ok(())
     }
 }
@@ -189,6 +257,10 @@ pub enum CommonSkillError {
     LevelOutOfRange { name: &'static str, value: u8, max: u8 },
     #[error("{name} Lv{value} にはオーグメントの Lv が足りません(オーグメント Lv{augment_level} では Lv{max} まで)")]
     AugmentRequired { name: &'static str, value: u8, augment_level: u8, max: u8 },
+    #[error("アンリーシュ Lv{value} にはレインフォースの Lv が足りません(レインフォース Lv{reinforce_level} では Lv{max} まで)")]
+    ReinforceRequired { value: u8, reinforce_level: u8, max: u8 },
+    #[error("アンリーシュの 2 枠が同じステ({kind:?})です(別のステを選んでください)")]
+    UnleashDuplicated { kind: StatKind },
     #[error(transparent)]
     UltimateSkill(#[from] crate::ultimate_skill::UltimateSkillError),
 }
@@ -196,6 +268,89 @@ pub enum CommonSkillError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn unleash(stat: StatKind, level: u8) -> UnleashSlot {
+        UnleashSlot { stat: Some(stat), level }
+    }
+
+    /// wiki Skill/共通「能力解放 - XXX(アンリーシュ)」: +1/+2/+3/+4/+5/+8/+11/+14/+17/+20%。
+    /// ユーザーの実測(2026-08-25。基本能力値 506・最終固定値 479)と 1 の位まで一致する:
+    /// Lv1〜10 で最終能力値 990/995/1000/1005/1010/1025/1040/1055/1071/1086
+    #[test]
+    fn アンリーシュは実測どおりの倍率bになる() {
+        let basic = 506_i64;
+        let final_fixed = 479_i64;
+        let expected = [990, 995, 1000, 1005, 1010, 1025, 1040, 1055, 1071, 1086];
+        for (i, want) in expected.iter().enumerate() {
+            let level = i as u8 + 1;
+            let c = CommonSkills {
+                unleash: [unleash(StatKind::Stab, level), UnleashSlot::default()],
+                reinforce_level: REINFORCE_LEVEL_MAX,
+                ..Default::default()
+            };
+            let rate = c.unleash_rate(StatKind::Stab);
+            let effective = basic + crate::rounding::floor_int(basic as f64 * rate) + final_fixed;
+            assert_eq!(effective, *want, "Lv{level}(倍率 {rate})");
+        }
+    }
+
+    #[test]
+    fn アンリーシュは選んだステにだけ乗り2枠とも効く() {
+        let c = CommonSkills {
+            unleash: [unleash(StatKind::Stab, 10), unleash(StatKind::Dex, 5)],
+            reinforce_level: REINFORCE_LEVEL_MAX,
+            ..Default::default()
+        };
+        assert!((c.unleash_rate(StatKind::Stab) - 0.20).abs() < 1e-12);
+        assert!((c.unleash_rate(StatKind::Dex) - 0.05).abs() < 1e-12);
+        assert_eq!(c.unleash_rate(StatKind::Hack), 0.0);
+        // 未選択の枠・Lv0 は効かない
+        assert_eq!(CommonSkills::default().unleash_rate(StatKind::Stab), 0.0);
+    }
+
+    // wiki Skill/共通: Lv6 以降はレインフォース(Lv1〜5)の LvUp が必要
+    #[test]
+    fn アンリーシュのlv6以降はレインフォースに縛られる() {
+        let with = |level: u8, reinforce: u8| CommonSkills {
+            unleash: [unleash(StatKind::Stab, level), UnleashSlot::default()],
+            reinforce_level: reinforce,
+            ..Default::default()
+        };
+        // レインフォース無しでも Lv5 までは取れる
+        assert!(with(5, 0).validate().is_ok());
+        assert!(matches!(
+            with(6, 0).validate(),
+            Err(CommonSkillError::ReinforceRequired { max: 5, .. })
+        ));
+        assert!(with(6, 1).validate().is_ok());
+        assert!(with(10, 5).validate().is_ok());
+        assert!(matches!(
+            with(10, 4).validate(),
+            Err(CommonSkillError::ReinforceRequired { max: 9, .. })
+        ));
+        // Lv 上限そのもの
+        assert!(matches!(
+            with(11, 5).validate(),
+            Err(CommonSkillError::LevelOutOfRange { name: "アンリーシュ", .. })
+        ));
+    }
+
+    #[test]
+    fn アンリーシュの2枠に同じステは入れられない() {
+        let same = CommonSkills {
+            unleash: [unleash(StatKind::Stab, 1), unleash(StatKind::Stab, 2)],
+            ..Default::default()
+        };
+        assert!(matches!(
+            same.validate(),
+            Err(CommonSkillError::UnleashDuplicated { kind: StatKind::Stab })
+        ));
+        let ok = CommonSkills {
+            unleash: [unleash(StatKind::Stab, 1), unleash(StatKind::Hack, 2)],
+            ..Default::default()
+        };
+        assert!(ok.validate().is_ok());
+    }
 
     #[test]
     fn 装備攻撃力強化倍率はパワーウェポンとストロングウェポンの和() {

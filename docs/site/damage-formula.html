@@ -220,6 +220,98 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>レイヤー別バフ一覧(常用バフ 16 件): wiki「ステータス」#jc16a054。カタログの実装は <code>crates/gamedata/src/buffs.rs</code>(型は <code>domain::stat_sources</code>)</li>
 <li>キャラスキル(自身/味方のステ上昇、9 件、<code>BuffGroup::CharacterSkill</code>/<code>AllySkill</code>)の一覧も同じ <code>crates/gamedata/src/buffs.rs</code> に置く。出典は各キャラの wiki <code>Skill/&lt;キャラ&gt;</code> ページ(<a href="../claude/goals/2026-08-21-character-screen-v2.md">docs/claude/goals/2026-08-21-character-screen-v2.md</a>「wiki 調査結果」参照。層の一部は <span class="tag warm">仮</span>)</li>
 </ul>
+<h3 id="b">能力値倍率B の供給源</h3>
+<p>出典: ステータス「能力値倍率B (初期値0% 下限-30%)」/ Skill/共通「能力解放系列」(取得 2026-08-25)。</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>名称</th>
+<th>倍率B</th>
+<th>実装</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>アンリーシュ(能力解放)</td>
+<td>+1〜20%</td>
+<td>✅ <code>CommonSkills::unleash</code>(2 枠)</td>
+</tr>
+<tr>
+<td>イスピン エンカレッジ / ロアミニ ア・プチ / パウアトゥン 等</td>
+<td>+10%</td>
+<td>未収録(キャラスキル)</td>
+</tr>
+<tr>
+<td>ブレイクアーマー・カース・ペンジュラム 等の減少</td>
+<td>−1〜25%</td>
+<td>未収録(敵にかけるデバフ)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>アンリーシュ(能力解放)</strong>は共通スキル「アンリーシュ」で<strong>選んだステを 2 つまで</strong>解放するもの。
+<code>バフ等含むステータス値 × 強化倍率[%]</code> = 倍率B そのもので、Lv1〜10 =
+<strong>+1 / +2 / +3 / +4 / +5 / +8 / +11 / +14 / +17 / +20%</strong>。
+<strong>Lv6 以降は共通スキル「レインフォース」(Lv1〜5)の LvUp が前提</strong>(オーグメントと同じ形)。</p>
+<p>ユーザーの実測(2026-08-25。基本能力値 506 ・ 最終固定値 479)と 1 の位まで一致する:</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>Lv</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+<th>8</th>
+<th>9</th>
+<th>10</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>倍率B</td>
+<td>+1%</td>
+<td>+2%</td>
+<td>+3%</td>
+<td>+4%</td>
+<td>+5%</td>
+<td>+8%</td>
+<td>+11%</td>
+<td>+14%</td>
+<td>+17%</td>
+<td>+20%</td>
+</tr>
+<tr>
+<td><code>[506 × 倍率]</code></td>
+<td>5</td>
+<td>10</td>
+<td>15</td>
+<td>20</td>
+<td>25</td>
+<td>40</td>
+<td>55</td>
+<td>70</td>
+<td>86</td>
+<td>101</td>
+</tr>
+<tr>
+<td>実測の最終能力値</td>
+<td>990</td>
+<td>995</td>
+<td>1000</td>
+<td>1005</td>
+<td>1010</td>
+<td>1025</td>
+<td>1040</td>
+<td>1055</td>
+<td>1071</td>
+<td>1086</td>
+</tr>
+</tbody>
+</table></div>
+<p>Lv9 だけ前 Lv からの差が +16 になるのは <code>[506 × 0.17] = [86.02] = 86</code> の切捨てによるもの。</p>
 <h2 id="3">3. 与ダメージ式(核心)</h2>
 <pre class="formula"><code>与ダメージ = [ ( ( MAX( (A + B − C) * {D*E1 + E2} * {F*G} * H * I * J * New1 + K, K )
                   * L * V1 + M )
@@ -956,7 +1048,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </tr>
 <tr>
 <td>ステータス</td>
-<td>能力値レイヤー・防御力・カット率・特殊回避・カテゴリ一覧・中ディレイ倍率A/B</td>
+<td>能力値レイヤー・防御力・カット率・特殊回避・カテゴリ一覧・中ディレイ倍率A/B・能力値倍率B</td>
 <td>取込済み(§2 / §4 / §6 / §7 / §12)</td>
 </tr>
 <tr>

@@ -737,19 +737,46 @@ pub fn apply_siena_stats(
     }
 }
 
+/// 共通スキル「アンリーシュ(能力解放)」のステ加算(wiki: ステータス「能力値倍率B」)を
+/// `StatModifierSet` の能力値倍率B 層に合流させる。
+///
+/// アンリーシュは共通スキルなので `StatSources` からは組み立てられない。`build_modifiers` を
+/// 呼んだ側が続けて呼ぶ(`apply_siena_stats` と同じ位置づけ)。
+pub fn apply_unleash(
+    modifiers: &mut StatModifierSet,
+    contributions: &mut Vec<StatContribution>,
+    common: &CommonSkills,
+) {
+    for kind in StatKind::ALL {
+        let rate = common.unleash_rate(kind);
+        if rate != 0.0 {
+            modifiers.get_mut(kind).multiplier_b += rate;
+            contributions.push(StatContribution {
+                source: "アンリーシュ".to_string(),
+                kind,
+                layer: StatLayer::MultiplierB,
+                value: rate,
+            });
+        }
+    }
+}
+
 /// `BaseStats` + `StatSources` + 装備(シエナのオーラ)から最終能力値を組み立てる(pin 込み)。
 /// 装備が最終能力値に効く経路(シエナのオーラのステ加算)を含むので、部位ごとの寄与を出すときは
 /// 装備を差し替えてここから丸ごと引き直す。
+#[allow(clippy::too_many_arguments)]
 fn effective_stats_with(
     base: &BaseStats,
     sources: &StatSources,
     equipment: &Equipment,
+    common: &CommonSkills,
     catalog: &BuffCatalog,
     game_character_id: &str,
     stat_cap: i64,
 ) -> Result<(EffectiveStats, Vec<StatTrace>, Vec<StatContribution>), StatSourceError> {
     let (mut modifiers, mut contributions) = build_modifiers(sources, catalog, game_character_id)?;
     apply_siena_stats(&mut modifiers, &mut contributions, equipment);
+    apply_unleash(&mut modifiers, &mut contributions, common);
     let (mut stats, mut traces) = effective_stats(base, &modifiers, stat_cap);
     apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
     Ok((stats, traces, contributions))
@@ -795,7 +822,7 @@ pub fn preview_effective_stats(
     sources.validate()?;
     equipment.validate()?;
     let (stats, traces, contributions) =
-        effective_stats_with(base, sources, equipment, catalog, game_character_id, stat_cap)?;
+        effective_stats_with(base, sources, equipment, common, catalog, game_character_id, stat_cap)?;
     let attack = match coefficients {
         None => None,
         Some(coefficients) => {
@@ -806,7 +833,7 @@ pub fn preview_effective_stats(
             for (slot, _) in equipment.parts.iter() {
                 let without = equipment.without_part(slot);
                 let (stats_without, _, _) =
-                    effective_stats_with(base, sources, &without, catalog, game_character_id, stat_cap)?;
+                    effective_stats_with(base, sources, &without, common, catalog, game_character_id, stat_cap)?;
                 let a_without = attack_power_of(&stats_without, &without, common, abilities, titles, &coefficients);
                 part_contributions
                     .push(PartAttackContribution { slot, value: breakdown.value - a_without.value });
@@ -867,6 +894,12 @@ pub struct StatLimits {
     pub sharpness_vision_level_max: u8,
     /// オーグメントの Lv 上限(wiki: Skill/共通)
     pub augment_level_max: u8,
+    /// アンリーシュ(能力解放)の Lv 上限(wiki: Skill/共通)
+    pub unleash_level_max: u8,
+    /// アンリーシュの枠数(wiki: Skill/共通「2つまで使用可能」)
+    pub unleash_slots: usize,
+    /// レインフォースの Lv 上限(wiki: Skill/共通。アンリーシュ Lv6 以降の前提)
+    pub reinforce_level_max: u8,
     /// ハイパーリミットの Lv 上限(wiki: Skill/極限)
     pub hyper_limit_level_max: u8,
     /// クリティカル率増加の上限 %(wiki: 計算式まとめ `#CriticalChance`)
@@ -905,6 +938,9 @@ pub fn stat_limits() -> StatLimits {
         kai_protect_armor_level_max: crate::common_skill::KAI_PROTECT_ARMOR_LEVEL_MAX,
         sharpness_vision_level_max: crate::common_skill::SHARPNESS_VISION_LEVEL_MAX,
         augment_level_max: crate::common_skill::AUGMENT_LEVEL_MAX,
+        unleash_level_max: crate::common_skill::UNLEASH_LEVEL_MAX,
+        unleash_slots: crate::common_skill::UNLEASH_SLOTS,
+        reinforce_level_max: crate::common_skill::REINFORCE_LEVEL_MAX,
         hyper_limit_level_max: crate::ultimate_skill::HYPER_LIMIT_LEVEL_MAX,
         critical_rate_bonus_max: crate::critical_rate::CRITICAL_RATE_BONUS_MAX,
     }

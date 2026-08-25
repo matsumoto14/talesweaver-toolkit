@@ -352,8 +352,20 @@ export interface CommonSkills {
   sharpness_vision_level: number;
   /** オーグメントの Lv(0〜5)。前提スキル */
   augment_level: number;
+  /** アンリーシュ(能力解放)の 2 枠。選んだステの能力値倍率B に乗る */
+  unleash: [UnleashSlot, UnleashSlot];
+  /** レインフォースの Lv(0〜5)。前提スキルで、アンリーシュの Lv6 以降に要る */
+  reinforce_level: number;
   /** 極限スキル(wiki: Skill/極限)。2 枠 + スーパーリミット / ハイパーリミット */
   ultimate: UltimateSkills;
+}
+
+// アンリーシュ(能力解放)の 1 枠。crates/domain/src/common_skill.rs の UnleashSlot。
+export interface UnleashSlot {
+  /** 解放するステ。null = この枠は未使用 */
+  stat: StatKind | null;
+  /** Lv(0〜10)。Lv6 以降はレインフォースの Lv が要る */
+  level: number;
 }
 
 // 装備防御力倍率。crates/domain/src/common_skill.rs の DefenseRates。
@@ -748,6 +760,12 @@ export interface StatLimits {
   kai_protect_armor_level_max: number;
   sharpness_vision_level_max: number;
   augment_level_max: number;
+  /** アンリーシュ(能力解放)の Lv 上限 */
+  unleash_level_max: number;
+  /** アンリーシュの枠数 */
+  unleash_slots: number;
+  /** レインフォースの Lv 上限(アンリーシュ Lv6 以降の前提) */
+  reinforce_level_max: number;
   hyper_limit_level_max: number;
   /** クリティカル率増加の上限 %(wiki: 計算式まとめ #CriticalChance) */
   critical_rate_bonus_max: number;

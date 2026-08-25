@@ -36,8 +36,9 @@ pub use attack_power::{
 pub use awakening::{Awakening, AwakeningCaps};
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use common_skill::{
-    CommonSkillError, CommonSkills, DefenseRates, AUGMENT_LEVEL_MAX, KAI_PROTECT_ARMOR_LEVEL_MAX,
-    PROTECT_ARMOR_LEVEL_MAX, SHARPNESS_VISION_LEVEL_MAX, STRONG_WEAPON_LEVEL_MAX,
+    CommonSkillError, CommonSkills, DefenseRates, UnleashSlot, AUGMENT_LEVEL_MAX,
+    KAI_PROTECT_ARMOR_LEVEL_MAX, PROTECT_ARMOR_LEVEL_MAX, REINFORCE_LEVEL_MAX,
+    SHARPNESS_VISION_LEVEL_MAX, STRONG_WEAPON_LEVEL_MAX, UNLEASH_LEVEL_MAX, UNLEASH_SLOTS,
 };
 pub use content::{
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,
@@ -75,7 +76,8 @@ pub use random_option::{
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};
 pub use stat_sources::{
-    apply_pins, apply_temporary_adjustments, build_modifiers, preview_effective_stats, stat_limits,
+    apply_pins, apply_temporary_adjustments, apply_unleash, build_modifiers,
+    preview_effective_stats, stat_limits,
     Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice, BuffDefinition,
     BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown, PartAttackContribution, PetSkillTier,
     PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution, StatLayer, StatLimits,

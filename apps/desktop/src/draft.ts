@@ -46,6 +46,12 @@ const DEFAULT_STRONG_WEAPON_LEVEL = 6;
 
 export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
   ...src,
+  // v6 以前に保存したキャラには unleash / reinforce_level が無い(serde default で 0)
+  unleash: [
+    { ...(src.unleash?.[0] ?? { stat: null, level: 0 }) },
+    { ...(src.unleash?.[1] ?? { stat: null, level: 0 }) },
+  ],
+  reinforce_level: src.reinforce_level ?? 0,
   ultimate: { ...src.ultimate, slots: [...src.ultimate.slots] },
 });
 
@@ -63,6 +69,8 @@ export const defaultCommonSkills = (): CommonSkills => ({
   kai_protect_armor_level: 0,
   sharpness_vision_level: 0,
   augment_level: DEFAULT_STRONG_WEAPON_LEVEL - 1,
+  unleash: [{ stat: null, level: 0 }, { stat: null, level: 0 }],
+  reinforce_level: 0,
   ultimate: { slots: [null, null], super_limit: false, hyper_limit_level: 0 },
 });
 

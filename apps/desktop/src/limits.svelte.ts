@@ -34,6 +34,9 @@ const FALLBACK: StatLimits = {
   kai_protect_armor_level_max: 5,
   sharpness_vision_level_max: 10,
   augment_level_max: 5,
+  unleash_level_max: 10,
+  unleash_slots: 2,
+  reinforce_level_max: 5,
   hyper_limit_level_max: 6,
   critical_rate_bonus_max: 100,
 };

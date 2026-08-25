@@ -357,6 +357,7 @@ fn build_damage_input(
         domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog(), game_character_id)
             .map_err(|e| e.to_string())?;
     domain::stat_sources::apply_siena_stats(&mut stat_modifiers, &mut stat_contributions, &equipment);
+    domain::stat_sources::apply_unleash(&mut stat_modifiers, &mut stat_contributions, &common_skills);
     if let Some(temp) = &temporary_adjustments {
         temp.validate().map_err(|e| e.to_string())?;
         domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
@@ -498,6 +499,11 @@ pub fn evaluate_contents(
         &mut stat_modifiers,
         &mut stat_contributions,
         &character.equipment,
+    );
+    domain::stat_sources::apply_unleash(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &character.common_skills,
     );
     let awakening_rate = gamedata::awakening_rate(character.awakening);
     let actual_delay_skills = character

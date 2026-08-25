@@ -287,6 +287,36 @@
     c.protect_armor_level = Math.min(c.protect_armor_level, max);
     c.ultimate.hyper_limit_level = Math.min(c.ultimate.hyper_limit_level, max);
   }
+  // アンリーシュ(能力解放)。効き先は能力値倍率B。Lv6 以降はレインフォース(Lv5 まで)が前提。
+  const UNLEASH_RATES = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
+  const reinforceGate = $derived(draft.commonSkills.reinforce_level + 5);
+  /** レインフォース Lv を下げたら、それに縛られるアンリーシュの Lv も一緒に下げる */
+  function setReinforceLevel(level: number) {
+    const c = draft.commonSkills;
+    c.reinforce_level = level;
+    for (const slot of c.unleash) slot.level = Math.min(slot.level, level + 5);
+  }
+  const reinforceOptions = $derived(
+    Array.from({ length: limits.reinforce_level_max + 1 }, (_, i) => ({
+      value: String(i),
+      label: i === 0 ? `未習得(アンリーシュ Lv5 まで)` : `Lv${i}(アンリーシュ Lv${i + 5} まで)`,
+    })),
+  );
+  /** もう一方の枠で選んでいるステは選べない(同じステの 2 枠は不可) */
+  const unleashStatOptions = (slotIndex: number) => {
+    const other = draft.commonSkills.unleash[1 - slotIndex].stat;
+    return [
+      { value: "", label: "未使用" },
+      ...STAT_KINDS.filter((k) => k !== other).map((k) => ({ value: k, label: STAT_LABELS[k] })),
+    ];
+  };
+  const unleashLevelOptions = $derived(
+    Array.from({ length: Math.min(limits.unleash_level_max, reinforceGate) + 1 }, (_, lv) => ({
+      value: String(lv),
+      label: lv === 0 ? "未習得" : `Lv${lv}(+${UNLEASH_RATES[lv - 1]}%)`,
+    })),
+  );
+
   const augmentOptions = $derived(
     Array.from({ length: limits.augment_level_max + 1 }, (_, i) => ({
       value: String(i),
@@ -1170,6 +1200,52 @@
             (v) => setAugmentLevel(Number(v))
           }
         />
+        <Select
+          label="レインフォース(前提スキル)"
+          options={reinforceOptions}
+          bind:value={
+            () => String(draft.commonSkills.reinforce_level),
+            (v) => setReinforceLevel(Number(v))
+          }
+        />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title inline">
+        アンリーシュ(能力解放)
+        <span class="num strong">
+          {draft.commonSkills.unleash
+            .filter((u) => u.stat !== null && u.level > 0)
+            .map((u) => `${STAT_LABELS[u.stat!]} +${UNLEASH_RATES[u.level - 1]}%`)
+            .join(" ・ ") || "未使用"}
+        </span>
+      </div>
+      <p class="hint dim">
+        選んだステが<b>能力値倍率B</b>で増えます(<b>バフ込みの基本能力値 × 倍率</b>なので、
+        バフを盛るほど効きます)。<b>2 ステまで</b>で、同じステは 2 枠に入れられません。
+        Lv6 以降は<b>レインフォース</b>の Lv が要ります(下げると Lv も一緒に下がります)。
+      </p>
+      <div class="fields">
+        {#each draft.commonSkills.unleash as slot, i (i)}
+          <Select
+            label={`枠 ${i + 1} のステ`}
+            options={unleashStatOptions(i)}
+            bind:value={
+              () => slot.stat ?? "",
+              (v) => {
+                slot.stat = v === "" ? null : (v as StatKind);
+                if (slot.stat === null) slot.level = 0;
+              }
+            }
+          />
+          <Select
+            label={`枠 ${i + 1} の Lv`}
+            options={unleashLevelOptions}
+            disabled={slot.stat === null}
+            bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
+          />
+        {/each}
       </div>
     </div>
 
