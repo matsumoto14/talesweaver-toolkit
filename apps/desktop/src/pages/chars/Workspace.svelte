@@ -694,8 +694,13 @@
     flex: 1 1 210px; min-width: 0; padding: 11px 12px; border-radius: var(--r-window);
     background: var(--bg-field); border: 1px solid var(--border-strong);
   }
-  .stat-grid { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
-  .stat-cell { display: flex; align-items: baseline; gap: 5px; font-size: 10px; }
+  /* 桁が増えても隣が動かない(§09 規則 4)。flex + 折り返しだと値の幅で列がずれるので、
+     列そのものを grid で決める。密度(3 列)は保ったまま座標が動かない */
+  .stat-grid {
+    margin-top: 6px; padding: 7px 9px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 10px;
+  }
+  .stat-cell { min-width: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10px; }
   .stat-cell .strong { font-size: 12px; font-weight: 700; }
   .eq-summary { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
   .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; border-spacing: 0; overflow: hidden; font-size: 11px; }
