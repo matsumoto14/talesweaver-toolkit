@@ -305,11 +305,13 @@ pub struct BuffSelection {
 }
 
 /// 調整「加算」の妥当範囲(検証・仮定用の自由入力)。
-pub const ADJUSTMENT_ADD_MIN: i64 = -999;
-pub const ADJUSTMENT_ADD_MAX: i64 = 999;
-/// 調整「固定(pin)」の妥当範囲。上限は最終能力値の理論上限(エタの意志Lv80、docs/claude/decisions.md「2400」)。
+/// 実際に入れる値は 3 桁に収まるが、検証用なので理論上限(2,400)より外まで許す(ユーザー確認)。
+pub const ADJUSTMENT_ADD_MIN: i64 = -3000;
+pub const ADJUSTMENT_ADD_MAX: i64 = 3000;
+/// 調整「固定(pin)」の妥当範囲。**実測値をそのまま入れるための例外操作**なので、
+/// 最終能力値の理論上限(2,400)を超える値も受ける(ユーザー確認)。
 pub const ADJUSTMENT_PIN_MIN: i64 = 1;
-pub const ADJUSTMENT_PIN_MAX: i64 = 2400;
+pub const ADJUSTMENT_PIN_MAX: i64 = 3000;
 
 /// ステ 1 つの自由な調整(検証・未収録バフ用)。
 /// - `add`: このステに +N する(固定値層への加算)

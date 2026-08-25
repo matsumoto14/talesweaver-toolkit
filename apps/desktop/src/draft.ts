@@ -12,6 +12,20 @@ import type {
 import { cloneEquipmentPart, cloneThesisCores, neutralEquipmentPart, neutralThesisCores } from "./equipment";
 import { PART_SLOTS, STAT_KINDS } from "./labels";
 
+/**
+ * 新規登録の覚醒段階。**このツールのターゲット層は覚醒 5**(遅くても 4)で、
+ * エタの意志を解放している時点で 5 が前提になる。既定を 0 にすると、ほぼ全員が
+ * 毎回上書きすることになる(ux-guidelines「初期値は実用値」)。
+ */
+export const DEFAULT_AWAKENING_STAGE = 5;
+
+/**
+ * エタの意志 Lv の節目。ここを超えると上限の増え方が一段上がる
+ * (crates/gamedata/src/awakening.rs の ETERNAL_CAPS。最大ダメージは Lv20→21 で +70 万、
+ * それ以外の区間は +10〜35 万)。育成の目標地点なので、入力はこの節目から選べるようにする。
+ */
+export const ETERNAL_MILESTONES = [0, 20, 40, 60, 80, 90, 100] as const;
+
 export interface Draft {
   name: string;
   gameCharacterId: string;

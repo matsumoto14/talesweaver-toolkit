@@ -52,6 +52,7 @@
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import Select from "../../ui/Select.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
+  import { ETERNAL_MILESTONES } from "../../draft";
   import StatInput from "../../ui/StatInput.svelte";
 
   interface Props {
@@ -103,10 +104,17 @@
     draft.mainSkillId = "";
   }
   const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: `${i} 段階` }));
-  // wiki エタの意志「エタの成長」は Lv100(MAX)まで
-  const eternalOptions = $derived(
-    Array.from({ length: limits.eternal_level_max + 1 }, (_, i) => ({ value: String(i), label: `Lv ${i}` })),
+  // エタの意志 Lv は 0〜100 の**数値**。101 個を並べても段階にならないので、
+  // 節目(20 / 40 / 60 / 80 / 90)を選べる形 + 数値の微調整にする。
+  // 節目はそこを超えると上限の増え方が一段上がる地点で、育成の目標地点そのもの。
+  const eternalMilestoneOptions = $derived(
+    ETERNAL_MILESTONES.filter((lv) => lv <= limits.eternal_level_max).map((lv) => ({
+      value: String(lv),
+      label: `Lv ${lv}`,
+    })),
   );
+  /** 覚醒 5 でないとエタの意志は効かない(gamedata: 段階 0〜4 は STAGE_CAPS を引く) */
+  const eternalActive = $derived(Number(draft.stage) >= 5);
 
   const PET_TIERS: PetSkillTier[] = ["basic", "true_lv1", "true_lv2", "true_lv3", "true_lv4"];
   const petSkillOptions = [
@@ -617,9 +625,32 @@
           options={characterOptions}
           bind:value={() => draft.gameCharacterId, setGameCharacterId}
         />
-        <div class="two">
-          <StepSelect label="覚醒段階" bind:value={draft.stage} options={stageOptions} />
-          <Select label="エタの意志 Lv" bind:value={draft.eternalLevel} options={eternalOptions} />
+        <StepSelect label="覚醒段階" bind:value={draft.stage} options={stageOptions} />
+        <!-- エタの意志は数値。節目を押せば一発で、間は数値で詰める(§07 は上から順に試す)。
+             覚醒 5 でないと効かないので、そのときは理由を出して触らせない(§00) -->
+        <div class="eternal" class:off={!eternalActive}>
+          <span class="label">エタの意志 Lv</span>
+          {#if eternalActive}
+            <div class="eternal-row">
+              <StatInput
+                label=""
+                min={0}
+                max={limits.eternal_level_max}
+                bind:value={
+                  () => Number(draft.eternalLevel),
+                  (v) => (draft.eternalLevel = String(v))
+                }
+              />
+            </div>
+            <StepSelect
+              label=""
+              options={eternalMilestoneOptions}
+              bind:value={draft.eternalLevel}
+            />
+            <p class="hint dim">節目(20 / 40 / 60 / 80 / 90)を超えると、ダメージ上限・防御力上限・能力値上限の伸びが一段上がります。</p>
+          {:else}
+            <p class="hint dim">覚醒 5 段階で効きます(いまは {draft.stage} 段階)。</p>
+          {/if}
         </div>
         <Select label="主軸スキル" options={mainSkillOptions} bind:value={draft.mainSkillId} />
       </div>
@@ -1631,9 +1662,13 @@
   .card-title .normal { font-weight: 400; font-size: 9px; }
   .card-title.space { margin-top: 12px; }
   .hint { margin: 6px 0 0; font-size: 9.5px; line-height: 1.5; }
+  /* エタの意志。値 → 節目 → 説明 の縦積み。覚醒 5 でないときは畳んで理由だけ出す */
+  .eternal { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .eternal > .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .eternal-row { max-width: 260px; }
+  .eternal .hint { margin: 0; }
+
   .fields { margin-top: 9px; display: flex; flex-direction: column; gap: 9px; }
-  .two { display: flex; gap: 10px; }
-  .two > :global(*) { flex: 1; }
   .text { display: flex; flex-direction: column; gap: 6px; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
   input[type="text"] {

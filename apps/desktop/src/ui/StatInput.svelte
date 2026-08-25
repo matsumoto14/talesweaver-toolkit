@@ -1,13 +1,11 @@
 <script lang="ts">
-  // 数値入力の唯一の部品(CLAUDE.md UX 方針)。ラベル | 数値欄 | スライダー | MAX の1行。
+  // 数値入力の唯一の部品(CLAUDE.md UX 方針)。ラベル | 値 | MAX | 範囲 の1行。
+  // 値は読取(button)と編集(input)で同じ位置・同じ幅(§08 / §09 規則 1)。
   // 数値欄のテキスト確定ロジックは旧 NumberField.svelte を踏襲:
   // text($state) と value(bindable) を分離し、oninput で確定できる間だけ value を書き換え、
   // onblur で最終確定・範囲内にクランプする。外部から value が変わったときだけ $effect で
   // text を同期する(lastSyncedValue で比較。Number("") === 0 になる罠を避けるため
   // value との比較ではなく専用変数で判定する)。
-  // スライダーは text ではなく value(確定済みの数値)に束縛する。text に束縛すると、
-  // 数値欄を空欄にした瞬間に range の value="" 扱いとなり、スライダーのつまみが
-  // 中央付近へ飛んで見える不具合があった。
   interface Props {
     label: string;
     value: number;
@@ -68,13 +66,6 @@
     text = String(v);
   }
 
-  function handleSlider(e: Event) {
-    const n = Number((e.currentTarget as HTMLInputElement).value);
-    value = n;
-    lastSyncedValue = n;
-    text = String(n);
-  }
-
   function setMax() {
     value = max;
     lastSyncedValue = max;
@@ -106,9 +97,11 @@
   }}
 >
   {#if label}<span class="label">{label}</span>{/if}
+  <!-- 値は読取でも編集でも**同じ位置・同じ幅**。押しても値が動かない(§09 規則 1)。
+       入れ替わるのは右側だけ — 「編集」→ スライダー + MAX(§08 のフィールドの図) -->
   {#if editing}
     <input
-      class="num-field"
+      class="num value-box"
       type="number"
       value={text}
       oninput={handleInput}
@@ -122,33 +115,29 @@
         // preventScroll: focus の既定はスクロールして要素を視界に入れる。押した場所は
         // 既に見えているので、動かすと視点がリセットされる(§09「押した場所は動かない」)
         node.focus({ preventScroll: true });
-        // select() もカーソル位置へスクロールするので、範囲指定で選ぶ
-        node.setSelectionRange(0, node.value.length);
+        node.select();
       }}
     />
-    <input
-      class="slider"
-      type="range"
-      {min}
-      {max}
-      {step}
-      value={value}
-      oninput={handleSlider}
-      aria-label="{label} スライダー"
-    />
-    <button type="button" class="max-btn" onclick={setMax} disabled={value >= max}>MAX</button>
   {:else}
-    <button type="button" class="read" onclick={() => (editing = true)} aria-label="{label} を編集">
-      <span class="num read-value">{value.toLocaleString("ja-JP")}</span>
-      <span class="edit">編集</span>
-    </button>
+    <button
+      type="button"
+      class="num value-box read"
+      aria-label="{label} を編集"
+      onclick={() => (editing = true)}
+    >{value.toLocaleString("ja-JP")}</button>
   {/if}
+  <!-- 右側。幅が違うので、この先の範囲表示は右端に固定して動かさない -->
+  <span class="side">
+    {#if editing}
+      <button type="button" class="max-btn" onclick={setMax} disabled={value >= max}>MAX</button>
+    {:else}
+      <button type="button" class="edit" onclick={() => (editing = true)} tabindex="-1">編集</button>
+    {/if}
+  </span>
   {#if capGauge}
-    <!-- 下限が 0 なら「値 / 上限」、0 以外(調整の ±999 など)は範囲そのものを出す -->
-    <span class="cap num" class:full={value >= max}>
-      {#if min === 0}{value.toLocaleString("ja-JP")} / {max.toLocaleString("ja-JP")}
-      {:else}{min.toLocaleString("ja-JP")} 〜 {max.toLocaleString("ja-JP")}{/if}
-    </span>
+    <!-- 値は左の欄に出ているので、ここは**上限だけ**を言う。
+         「1 〜 310」のような範囲表記だと、値が別にあるぶん何の数字か読めない -->
+    <span class="cap num" class:full={value >= max}>上限 {max.toLocaleString("ja-JP")}</span>
     <!-- 「満」の枠は常に確保する。出たときに行がずれない(§09 規則 4 / §11) -->
     <span class="cap-badge" class:on={value >= max}>{value >= max ? "満" : ""}</span>
   {/if}
@@ -157,43 +146,33 @@
 
 <style>
   .stat-input { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-  /* 読み取り表示。インセット面に載せて「いまは編集していない」を面で伝える(§01) */
-  .read {
-    display: inline-flex; align-items: baseline; gap: 8px;
-    padding: 5px 9px; border-radius: var(--r-inset);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
-  }
-  .read:hover { border-color: var(--accent); }
   /* 上限に届いたら面の色が変わる(§07 / §12)。「満」は文字ではなく面でも伝える */
-  .stat-input.full .read, .stat-input.full .num-field {
-    background: var(--state-edge-bg); border-color: var(--gold);
-  }
-  .read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-  /* 桁が増えても隣が動かない(§09 規則 4)。編集欄と同じ幅を予約しておく */
-  .read-value { min-width: 50px; text-align: right; font-variant-numeric: tabular-nums; }
-  .edit { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
-  .read:hover .edit { color: var(--accent); }
+  .stat-input.full .value-box { background: var(--state-edge-bg); border-color: var(--gold); }
+  .edit { flex-shrink: 0; font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
+  .edit:hover { color: var(--accent); text-decoration: underline; }
   .label { font-size: 12px; color: var(--fg-muted); min-width: 44px; flex-shrink: 0; white-space: nowrap; }
-  .num-field {
-    width: 64px; flex-shrink: 0; padding: 5px 7px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg);
-    font-variant-numeric: tabular-nums;
+  /* 値の欄。読取(button)と編集(input)で同じ寸法にして、押しても値が動かないようにする */
+  .value-box {
+    width: 74px; flex-shrink: 0; padding: 5px 7px; border-radius: var(--r-panel);
+    text-align: right; font-variant-numeric: tabular-nums; color: var(--fg);
+    border: 1px solid var(--border);
   }
-  .num-field:focus { outline: none; border-color: var(--accent); }
-  .slider {
-    flex-grow: 1; flex-shrink: 1; min-width: 24px; height: 2px; appearance: none; border-radius: var(--r-pill);
-    background: var(--border-strong); accent-color: var(--accent);
-  }
-  .slider::-webkit-slider-thumb {
-    appearance: none; width: 10px; height: 14px; border-radius: var(--r-inset); background: var(--accent); border: 0; cursor: pointer;
-  }
+  /* 読取はインセット面、編集は白い面(§01 白 = 編集できる面) */
+  .value-box.read { background: var(--surface-inset); border-color: var(--border-soft); }
+  .value-box.read:hover { border-color: var(--accent); }
+  .value-box.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  input.value-box { background: var(--bg-field); }
+  input.value-box:focus { outline: none; border-color: var(--accent); }
+  /* 読取(「編集」)と編集(MAX)で必要幅が変わると、表の列幅が動いて値が横にずれる。
+     広いほう(MAX)に合わせて最低幅を決めておく(§09 規則 4) */
+  .side { flex: 1; min-width: 44px; display: flex; align-items: center; gap: 8px; }
   .max-btn {
     flex-shrink: 0; padding: 5px 8px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border); color: var(--fg-muted); font-size: 10px;
   }
   .max-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--border-strong); }
   .hint { flex-shrink: 0; font-size: 11px; white-space: nowrap; }
-  .cap { flex-shrink: 0; font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
+  .cap { flex-shrink: 0; margin-left: auto; font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
   .cap.full { color: var(--fg); font-weight: 700; }
   .cap-badge {
     flex-shrink: 0; min-width: 16px; text-align: center;

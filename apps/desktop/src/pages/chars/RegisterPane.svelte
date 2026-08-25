@@ -3,7 +3,7 @@
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import { createCharacter, errorMessage } from "../../api/commands";
   import type { NewCharacter } from "../../api/types";
-  import { defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
+  import { DEFAULT_AWAKENING_STAGE, defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
   import { STAT_KINDS } from "../../labels";
   import {
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
@@ -60,7 +60,9 @@
           name: name.trim() || selectedGame.name,
           game_character_id: gameCharacterId,
           base_stats: Object.fromEntries(STAT_KINDS.map((k) => [k, 1])) as NewCharacter["base_stats"],
-          awakening: { stage: 0, eternal_level: 0 },
+          // このツールのターゲット層は**覚醒 5**(遅くても 4)。既定を 0 にすると
+          // ほぼ全員が毎回上書きすることになる(ux-guidelines「初期値は実用値」)
+          awakening: { stage: DEFAULT_AWAKENING_STAGE, eternal_level: 0 },
           stat_sources: neutralStatSources(),
           equipment: defaultEquipment(),
           common_skills: defaultCommonSkills(),
