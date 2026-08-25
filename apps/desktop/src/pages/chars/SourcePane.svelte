@@ -51,6 +51,7 @@
   import { app } from "../../state.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import Select from "../../ui/Select.svelte";
+  import StepSelect from "../../ui/StepSelect.svelte";
   import StatInput from "../../ui/StatInput.svelte";
 
   interface Props {
@@ -565,7 +566,7 @@
           <button type="button" class="ro-remove" onclick={() => removeRandomOption(slot, index)}>外す</button>
         </div>
         <div class="fields">
-          <Select
+          <StepSelect
             label="ランク"
             options={rankOptions(def)}
             bind:value={
@@ -617,7 +618,7 @@
           bind:value={() => draft.gameCharacterId, setGameCharacterId}
         />
         <div class="two">
-          <Select label="覚醒段階" bind:value={draft.stage} options={stageOptions} />
+          <StepSelect label="覚醒段階" bind:value={draft.stage} options={stageOptions} />
           <Select label="エタの意志 Lv" bind:value={draft.eternalLevel} options={eternalOptions} />
         </div>
         <Select label="主軸スキル" options={mainSkillOptions} bind:value={draft.mainSkillId} />
@@ -834,7 +835,7 @@
         {#if ENHANCE_ALLOWED_SLOTS.includes(slot)}
           <div class="card">
             <div class="card-title">装備強化</div>
-            <Select
+            <StepSelect
               label="強化 Lv"
               options={enhanceLevelOptions}
               bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
@@ -960,10 +961,9 @@
     <div class="card">
       <div class="fields">
         {#each STAT_KINDS as k (k)}
-          <Select
+          <StepSelect
             label={STAT_LABELS[k]}
             options={petSkillOptions}
-            placeholder="なし"
             bind:value={() => petSkillValue(k), (v) => setPetSkillValue(k, v)}
           />
         {/each}
@@ -1050,7 +1050,7 @@
       <button type="button" class="back-link" onclick={() => (openSienaPart = null)}>‹ 部位一覧へ</button>
       <div class="card">
         <div class="card-title">{PART_SLOT_LABELS[slot]}: 増幅段階</div>
-        <Select
+        <StepSelect
           label="段階"
           options={sienaStageOptions}
           bind:value={() => String(siena.stage), (v) => setSienaStage(slot, Number(v))}
@@ -1226,7 +1226,7 @@
         (下げると、それに縛られる Lv も一緒に下がります)。
       </p>
       <div class="fields">
-        <Select
+        <StepSelect
           label="オーグメント(前提スキル)"
           options={augmentOptions}
           bind:value={
@@ -1234,7 +1234,7 @@
             (v) => setAugmentLevel(Number(v))
           }
         />
-        <Select
+        <StepSelect
           label="レインフォース(前提スキル)"
           options={reinforceOptions}
           bind:value={
@@ -1273,7 +1273,7 @@
               }
             }
           />
-          <Select
+          <StepSelect
             label={`枠 ${i + 1} の Lv`}
             options={unleashLevelOptions}
             disabled={slot.stat === null}
@@ -1291,7 +1291,7 @@
           <input type="checkbox" bind:checked={draft.commonSkills.power_weapon} />
           <span>パワーウェポン(+2%)</span>
         </label>
-        <Select
+        <StepSelect
           label="ストロングウェポン"
           options={strongWeaponOptions.filter((o) => Number(o.value) <= augmentGate)}
           bind:value={
@@ -1640,9 +1640,25 @@
   details.contrib summary:hover { color: var(--fg); }
   .empty { margin: 6px 0 0; padding: 4px 0; font-size: 11px; }
 
-  .check { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; cursor: pointer; }
-  .check input { accent-color: var(--accent); }
-  .buff-list { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+  /* オン / オフはチップで出す(§07 形態 3)。素のチェックボックスは 5 形態のどれでもない。
+     値はチップの中に書く — 選ぶ = 値が確定する。計算タブのバフチップと同じ形にそろえる */
+  .check {
+    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 7px;
+    padding: 5px 11px; border-radius: var(--r-pill);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
+    color: var(--fg-muted); font-size: 11px; cursor: pointer;
+  }
+  .check:hover { border-color: var(--accent); }
+  .check:has(input:checked) {
+    background: linear-gradient(180deg, #CCF7FF, #90D7FF);
+    border-color: #687287; color: #123047; font-weight: 700;
+  }
+  .check:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
+  /* チェックボックスそのものは出さない。選ばれているかは面の色が言う */
+  .check input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .check .fixed-value, .check .note { color: inherit; opacity: 0.75; }
+  /* チップは横に並べる(1 行 1 個だと 30 行の一覧になる) */
+  .buff-list { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
   .note { font-size: 10px; }
   .cap-badge {
     font-size: 9px; letter-spacing: 0.05em; color: #B5443A; border: 1px solid #B5443A;

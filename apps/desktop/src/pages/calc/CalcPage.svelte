@@ -26,6 +26,7 @@
   import Icon from "../../ui/Icon.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import Select from "../../ui/Select.svelte";
+  import StepSelect from "../../ui/StepSelect.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import { bump } from "../../ui/motion.svelte";
   import { badgeStyle, STATE, type Badge } from "../../ui/states";
@@ -1244,7 +1245,7 @@
             <span>パワーウェポン(+2%)</span>
           </label>
           <div class="sw">
-            <Select
+            <StepSelect
               label="ストロングウェポン"
               options={strongWeaponOptions}
               bind:value={

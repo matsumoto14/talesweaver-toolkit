@@ -1,0 +1,55 @@
+<script lang="ts">
+  // 段階選択(design-system §07 形態 2)。**選択肢が有限で、順序があるとき**に使う。
+  // 段階そのものを見せるのが要点で、「3」という数字を打たせない・畳んで隠さない。
+  // ドロップダウン(Select.svelte)は 5 形態のどれでもないので、段階として並べられる
+  // ものはこちらを使う。並べると横に溢れる長さ(Lv 0〜100 のような)は段階ではないので
+  // Select のまま置き、§14 に保留として挙げてある。
+  //
+  // 押した瞬間に結果が動く(「適用」を挟まない)。押した段は同じ位置に残る(§09 規則 1)。
+  interface Option {
+    value: string;
+    label: string;
+  }
+  interface Props {
+    label?: string;
+    value: string;
+    options: Option[];
+    disabled?: boolean;
+  }
+  let { label, value = $bindable(), options, disabled = false }: Props = $props();
+</script>
+
+<div class="step-select">
+  {#if label}<span class="label">{label}</span>{/if}
+  <div class="steps" role="radiogroup" aria-label={label ?? ""}>
+    {#each options as o (o.value)}
+      <button
+        type="button"
+        class="step"
+        class:on={o.value === value}
+        role="radio"
+        aria-checked={o.value === value}
+        {disabled}
+        onclick={() => (value = o.value)}
+      >{o.label}</button>
+    {/each}
+  </div>
+</div>
+
+<style>
+  .step-select { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  /* 横に並べきれないときは折り返す。畳んで隠さない — 段階を見せるのがこの形の役目 */
+  .steps { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+  .step {
+    padding: 5px 10px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border);
+    color: var(--fg-muted); font-size: 11px; white-space: nowrap;
+  }
+  .step:hover:not(:disabled):not(.on) { border-color: var(--accent); color: var(--fg); }
+  .step.on {
+    background: var(--bg-active); border-color: var(--accent);
+    color: var(--accent-hover); font-weight: 700;
+  }
+  .step:disabled { cursor: not-allowed; opacity: 0.5; }
+</style>
