@@ -1420,12 +1420,12 @@ td code { background: var(--card-soft2); }
         <div class="sec">文字色 6 段<span class="r">濃さで役割を分ける</span></div>
         <div class="spec col" style="gap:6px">
           <div class="ramp">
-            <span style="color:#1B2331">#1B2331 &nbsp;本文・主となる値</span>
-            <span style="color:#26334A">#26334A &nbsp;セクション見出し</span>
-            <span style="color:#3B4A63">#3B4A63 &nbsp;副次的な値・説明</span>
-            <span style="color:#5E6E88">#5E6E88 &nbsp;ラベル・注記</span>
-            <span style="color:#93A0B2">#93A0B2 &nbsp;補足・単位</span>
-            <span style="color:#A9B4C4">#A9B4C4 &nbsp;無効・未設定</span>
+            <span style="color:#1B2331">#1B2331 &nbsp;<code>--fg</code> &nbsp;本文・主となる値</span>
+            <span style="color:#26334A">#26334A &nbsp;<code>--fg-head</code> &nbsp;セクション見出し</span>
+            <span style="color:#3B4A63">#3B4A63 &nbsp;<code>--fg-sub</code> &nbsp;副次的な値・説明</span>
+            <span style="color:#5E6E88">#5E6E88 &nbsp;<code>--fg-muted</code> &nbsp;ラベル・注記</span>
+            <span style="color:#93A0B2">#93A0B2 &nbsp;<code>--fg-dim</code> &nbsp;補足・単位</span>
+            <span style="color:#A9B4C4">#A9B4C4 &nbsp;<code>--fg-off</code> &nbsp;無効・未設定</span>
           </div>
         </div>
 
@@ -1435,54 +1435,54 @@ td code { background: var(--card-soft2); }
           <div class="state-row">
             <span class="i">0</span><span class="m">余裕・目標</span>
             <span class="meter-wrap"><span class="meter"><i class="f0" style="width:92%"></i></span></span>
-            <span class="state-badge"><span class="badge b0">余裕</span> <span class="cap">#DCEBFF / #426DD6</span></span>
+            <span class="state-badge"><span class="badge b0">余裕</span> <span class="cap">#DCEBFF / #426DD6 &nbsp;<code>--state-goal-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">1</span><span class="m">足りている</span>
             <span class="meter-wrap"><span class="meter"><i class="f1" style="width:74%"></i></span></span>
-            <span class="state-badge"><span class="badge b1">通る</span> <span class="cap">#DFF3E6 / #6FA98A</span></span>
+            <span class="state-badge"><span class="badge b1">通る</span> <span class="cap">#DFF3E6 / #6FA98A &nbsp;<code>--state-met-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">2</span><span class="m">ぎりぎり・操作待ち</span>
             <span class="meter-wrap"><span class="meter"><i class="f2" style="width:52%"></i></span></span>
-            <span class="state-badge"><span class="badge b2">ぎりぎり</span> <span class="cap">#FDF3DE / #C2A057</span></span>
+            <span class="state-badge"><span class="badge b2">ぎりぎり</span> <span class="cap">#FDF3DE / #C2A057 &nbsp;<code>--state-edge-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">3</span><span class="m">届かない・危険</span>
             <span class="meter-wrap"><span class="meter"><i class="f3" style="width:31%"></i></span></span>
-            <span class="state-badge"><span class="badge b3">届かない</span> <span class="cap">#F6E8E5 / #B08480</span></span>
+            <span class="state-badge"><span class="badge b3">届かない</span> <span class="cap">#F6E8E5 / #B08480 &nbsp;<code>--state-short-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">4</span><span class="m">対象外・判定不能</span>
             <span class="meter-wrap"><span class="meter"><i class="f4" style="width:18%"></i></span></span>
-            <span class="state-badge"><span class="badge b4">判定中</span> <span class="cap">#ECEEF2 / #A9B4C4</span></span>
+            <span class="state-badge"><span class="badge b4">判定中</span> <span class="cap">#ECEEF2 / #A9B4C4 &nbsp;<code>--state-unknown-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">5</span><span class="m">一時・チーム条件</span>
             <span class="meter-wrap"><span class="meter"><i class="f5" style="width:64%"></i></span></span>
-            <span class="state-badge"><span class="badge b5">条件だけ未達</span> <span class="cap">#EFEEF8 / #6D6AA8</span></span>
+            <span class="state-badge"><span class="badge b5">条件だけ未達</span> <span class="cap">#EFEEF8 / #6D6AA8 &nbsp;<code>--state-temp-*</code></span></span>
           </div>
         </div>
 
         <div class="sec">予約色<span class="r">この用途以外に使わない</span></div>
         <div class="reserved">
           <div class="res res-gold">
-            <h4><span class="dot" style="background:#C2A057"></span>金 #C2A057</h4>
+            <h4><span class="dot" style="background:#C2A057"></span>金 #C2A057 <code>--gold</code></h4>
             <p><b>あなたの操作待ち・上限・結果。</b>未選択、未保存、上限到達(「満」)、スキル、結果の帯。</p>
             <span class="use">「金が出ている = まだ何か決めていない」で読める状態を守る</span>
           </div>
           <div class="res res-sim">
-            <h4><span class="dot" style="background:#6D6AA8"></span>ラベンダー #6D6AA8</h4>
+            <h4><span class="dot" style="background:#6D6AA8"></span>ラベンダー #6D6AA8 <code>--sim</code></h4>
             <p><b>保存されない・一時的なもの。</b>試し変更、シミュレーション、バフ・消耗品、エンチャント。</p>
             <span class="use">保存済みデータの名前に使ったら誤用。水色と紫の対比が崩れる</span>
           </div>
           <div class="res res-warm">
-            <h4><span class="dot" style="background:#B0574A"></span>赤茶 #A98B86 / #B0574A / #8C4A42</h4>
+            <h4><span class="dot" style="background:#B0574A"></span>赤茶 #A98B86 / #B0574A / #8C4A42 <code>--mob</code> / <code>--warm</code> / <code>--danger</code></h4>
             <p><b>敵と危険。</b>Mob、武器・装備の世界、削除、届かない、減る値。</p>
             <span class="use">敵と危険を兼ねるのは意図。プレイヤーにとって敵は障害</span>
           </div>
           <div class="res res-good">
-            <h4><span class="dot" style="background:#3E8C63"></span>緑 #2E6B4C / #6FA98A</h4>
+            <h4><span class="dot" style="background:#3E8C63"></span>緑 #2E6B4C / #6FA98A <code>--good</code> / <code>--good-soft</code></h4>
             <p><b>足りている・増えた。</b>増加した数値、条件を満たした行、すぐできる強化。</p>
             <span class="use">「良い」ではなく「足りている / 増えた」。評価ではなく事実</span>
           </div>
@@ -1512,16 +1512,31 @@ td code { background: var(--card-soft2); }
               <b><i style="background:var(--stripe-def)"></i>防御に食われた分</b>
             </div>
           </div>
-          <p style="margin-top:11px;font-size:11.5px">斜線は一貫して<strong>「効いていない・持っていかれた」</strong>の記号。塗りつぶしと混ぜない。塗りは「効いている量」だけに使う。</p>
+          <p style="margin-top:11px;font-size:11.5px">斜線は一貫して<strong>「効いていない・持っていかれた」</strong>の記号。塗りつぶしと混ぜない。塗りは「効いている量」だけに使う。実装は <code>--hatch-lost</code>。</p>
+        </div>
+
+        <div class="sec">内訳の色<span class="r">「どの区間か」の識別。良し悪しは表さない</span></div>
+        <p>積み上げ帯・流れ帯(「なぜこの数字?」の各段、攻撃力の内訳)で使う並び。<strong>状態の 6 系統とは別物</strong>で、
+          こちらは達成度を表さない — 隣り合う区間を見分けるためだけにある。だから 6 系統に寄せてはいけないし、
+          逆にこの並びをバッジや到達バーに使ってもいけない。実装は <code>--flow-base</code> と <code>--flow-1</code>〜<code>--flow-7</code>。</p>
+        <div class="spec">
+          <span class="badge" style="background:#fff;border:1px solid #9AA6B6;color:#5E6E88"><code>--flow-base</code> 素ステ由来の土台</span>
+          <span class="badge" style="background:#fff;border:1px solid #426DD6;color:#2B4FA8"><code>--flow-1</code> 装備攻撃力・スキル倍率</span>
+          <span class="badge" style="background:#fff;border:1px solid #5B8FD6;color:#2B4FA8"><code>--flow-2</code> クリティカル</span>
+          <span class="badge" style="background:#fff;border:1px solid #3E8C63;color:#2E6B4C"><code>--flow-3</code> コンボ・属性・カット率・オーラ</span>
+          <span class="badge" style="background:#fff;border:1px solid #6FA98A;color:#2E6B4C"><code>--flow-4</code> 最終ダメージ固定値(下限)</span>
+          <span class="badge" style="background:#fff;border:1px solid #8FBFA6;color:#2E6B4C"><code>--flow-5</code> 最終ダメージ・カット率A・被害減少</span>
+          <span class="badge" style="background:#fff;border:1px solid #C2A057;color:#7A6420"><code>--flow-6</code> 各種ダメージ増減</span>
+          <span class="badge" style="background:#fff;border:1px solid #B0824A;color:#7A6420"><code>--flow-7</code> 攻撃ダメージ・PVP 補正</span>
+          <span class="cap">順序は式の流れの順。区間が増えたら並びの末尾に足す(途中に差し込むと既存の色の意味が動く)</span>
         </div>
 
         <div class="sec">コストの色<span class="r">強化候補の重さ</span></div>
         <div class="spec">
           <span class="badge b1">すぐできる</span>
-          <span class="badge b0">育成</span>
-          <span class="badge b2">周回</span>
-          <span class="badge b3">素材・課金</span>
-          <span class="cap">状態の 6 系統をそのまま流用する。新しい配色を作らない</span>
+          <span class="badge b0">エンチャント</span>
+          <span class="badge b3">装備更新</span>
+          <span class="cap">状態の 6 系統をそのまま流用する。新しい配色を作らない(<code>candidates.ts:COST_COLORS</code>)</span>
         </div>
       </div>
     </section>
@@ -2418,7 +2433,8 @@ td code { background: var(--card-soft2); }
               <tr><td>共通部品 <code>.card</code> <code>.badge</code> <code>.btn</code> <code>.inset</code> <code>.meter</code> <code>table.grid</code> <code>.head-bar</code></td><td><code>app.css</code></td></tr>
               <tr><td>アイコン 4 系統 × 4 サイズ</td><td><code>src/ui/Icon.svelte</code></td></tr>
               <tr><td>スプリッター</td><td><code>src/ui/Splitter.svelte</code></td></tr>
-              <tr><td>状態の 6 系統</td><td><code>pages/home/HomePage.svelte</code> / <code>pages/calc/CalcPage.svelte</code> の <code>BADGE_*</code> <code>BAR_BG</code></td></tr>
+              <tr><td>状態の 6 系統</td><td><code>app.css</code> の <code>--state-*</code> / 参照は <code>src/ui/states.ts</code>(<code>STATE</code> と <code>badgeStyle</code>)。画面側はラベルと系統の対応だけを持つ</td></tr>
+              <tr><td>内訳の色 / 斜線</td><td><code>app.css</code> の <code>--flow-*</code> / <code>--hatch-lost</code></td></tr>
               <tr><td>コストの色</td><td><code>candidates.ts:COST_COLORS</code>(CSS 変数を参照する)</td></tr>
               <tr><td>アプリ帯・タブ・カラム構成</td><td><code>src/App.svelte</code></td></tr>
             </tbody>
