@@ -1104,11 +1104,11 @@
               <!-- 効いていない分(§14 決定 2)。5 階層に散っていた「捨てた量」をここに集める -->
               <div class="materials">
                 <div class="mat-head">
-                  <span class="mat-title">効いていない分</span>
+                  <span class="mat-title">どこで頭打ち？</span>
                   <span class="dim">積んだのに上限で捨てている量</span>
                 </div>
                 {#if lostRows.length === 0}
-                  <p class="lost-none dim">いまはどの上限にも当たっていません。積んだ分はすべて効いています。</p>
+                  <p class="lost-none dim">まだどの上限にも当たっていません。積んだ分はすべて効いています。</p>
                 {:else}
                   <div class="lost">
                     {#each lostRows as r (r.k)}
