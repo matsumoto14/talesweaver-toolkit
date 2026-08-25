@@ -798,7 +798,6 @@
                     min={0}
                     max={cap}
                     bind:value={part.enchant[k]}
-                    capGauge
                   />
                 {/each}
               </div>

@@ -15,10 +15,14 @@
     max: number;
     step?: number;
     format?: (value: number) => string;
-    /** 上限ゲージ(`値 / 上限` + 上限に達したら「満」)を出す。上限は `max` */
+    /**
+     * 範囲の表示(`値 / 上限` + 上限に達したら「満」)。**既定で出す** —
+     * §07「範囲は入力欄が知っている。値の隣に常設し、範囲外を打てなくするのではなく
+     * 範囲を見せる」。隣に別の形で範囲が出ているときだけ false にする。
+     */
     capGauge?: boolean;
   }
-  let { label, value = $bindable(), min, max, step = 1, format, capGauge = false }: Props = $props();
+  let { label, value = $bindable(), min, max, step = 1, format, capGauge = true }: Props = $props();
 
   let text = $state(String(value));
   let lastSyncedValue = value;
@@ -105,7 +109,11 @@
   />
   <button type="button" class="max-btn" onclick={setMax} disabled={value >= max}>MAX</button>
   {#if capGauge}
-    <span class="cap num" class:full={value >= max}>{value.toLocaleString("ja-JP")} / {max.toLocaleString("ja-JP")}</span>
+    <!-- 下限が 0 なら「値 / 上限」、0 以外(調整の ±999 など)は範囲そのものを出す -->
+    <span class="cap num" class:full={value >= max}>
+      {#if min === 0}{value.toLocaleString("ja-JP")} / {max.toLocaleString("ja-JP")}
+      {:else}{min.toLocaleString("ja-JP")} 〜 {max.toLocaleString("ja-JP")}{/if}
+    </span>
     {#if value >= max}<span class="cap-badge">満</span>{/if}
   {/if}
   {#if hint}<span class="hint dim">{hint}</span>{/if}
