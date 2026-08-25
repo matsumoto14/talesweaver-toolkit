@@ -53,6 +53,7 @@ DB は `%APPDATA%\com.talesweaver.toolkit\talesweaver-toolkit.sqlite` に作ら�
 
 - [docs/architecture.md](docs/architecture.md) — クレート構成・フロント階層・依存の向き
 - [docs/ux-guidelines.md](docs/ux-guidelines.md) — UI 実装時の判断基準(4 原則)
+- [docs/design-system.html](docs/design-system.html) — デザインシステム(拘り・面・帯・色・角丸・書体・アイコン・部品・動き。ブラウザで開く)
 - [docs/damage-formula.md](docs/damage-formula.md) — ダメージ計算・ステータス仕様(talewiki 整理)
 - [docs/status.md](docs/status.md) — 進捗
 - [docs/legacy-twtoolkit.md](docs/legacy-twtoolkit.md) — 旧リポジトリの棚卸し

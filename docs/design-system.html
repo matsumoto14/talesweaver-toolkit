@@ -1,0 +1,3127 @@
+<title>TW Toolkit デザインシステム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=M+PLUS+1+Code:wght@400;500;700&display=swap">
+
+<style>
+/* ==========================================================================
+   TW Toolkit デザインシステム
+   この文書は、それ自身が記述しているデザインシステムで組まれている。
+   単一テーマ(光の世界)に commit している — 理由は §0 に書いた。
+   ========================================================================== */
+
+:root {
+  /* 面 */
+  --ground:       #C9D8EE;
+  --win:          #DEEBF7;
+  --rail:         #EAF2FB;
+  --card:         #FFFFFF;
+  --card-soft:    #F6FBFF;
+  --card-soft2:   #F4F9FE;
+  --inset:        #C1D3E6;
+
+  /* 枠 */
+  --frame:        #798CAC;
+  --frame-outer:  #303336;
+  --edge:         #A6BAD3;
+  --edge-soft:    #C1D3E6;
+  --edge-faint:   #E2EAF4;
+
+  /* 帯 */
+  --bar:          #6382AD;
+  --band-app-a:   #DBE6F8;
+  --band-app-b:   #AEC7F0;
+  --band-gold-a:  #F2E3BD;
+  --band-gold-b:  #DCC27E;
+  --band-gold-bd: #BFA155;
+
+  /* 文字 6 段 */
+  --fg:           #1B2331;
+  --fg-head:      #26334A;
+  --fg-sub:       #3B4A63;
+  --fg-muted:     #5E6E88;
+  --fg-dim:       #93A0B2;
+  --fg-faint:     #A9B4C4;
+
+  /* アクセントと予約色 */
+  --accent:       #426DD6;
+  --accent-deep:  #2B4FA8;
+  --gold:         #C2A057;
+  --gold-fg:      #7A6420;
+  --sim:          #6D6AA8;
+  --sim-strong:   #565394;
+  --sim-fg:       #4A4780;
+  --warm:         #A98B86;
+  --warm-mid:     #B0574A;
+  --danger:       #8C4A42;
+  --good:         #2E6B4C;
+  --good-mid:     #3E8C63;
+  --good-soft:    #6FA98A;
+
+  /* 状態 6 系統 */
+  --s0-bg:#DCEBFF; --s0-bd:#426DD6; --s0-fg:#2B4FA8;
+  --s1-bg:#DFF3E6; --s1-bd:#6FA98A; --s1-fg:#2E6B4C;
+  --s2-bg:#FDF3DE; --s2-bd:#C2A057; --s2-fg:#7A6420;
+  --s3-bg:#F6E8E5; --s3-bd:#B08480; --s3-fg:#8C4A42;
+  --s4-bg:#ECEEF2; --s4-bd:#A9B4C4; --s4-fg:#5E6E88;
+  --s5-bg:#EFEEF8; --s5-bd:#6D6AA8; --s5-fg:#4A4780;
+
+  /* 角丸 4 段 */
+  --r-window: 12px;
+  --r-panel:   9px;
+  --r-inset:   6px;
+  --r-pill:  999px;
+
+  --font: "M PLUS Rounded 1c", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+  --num:  "M PLUS 1 Code", ui-monospace, SFMono-Regular, monospace;
+
+  --stripe-blue: repeating-linear-gradient(135deg,#E4EDF9 0 4px,#CFDFF2 4px 8px);
+  --stripe-warm: repeating-linear-gradient(135deg,#F3E7E4 0 4px,#E6D3CD 4px 8px);
+  --stripe-grey: repeating-linear-gradient(135deg,#EDEFF2 0 4px,#DFE2E6 4px 8px);
+  --stripe-loss: repeating-linear-gradient(45deg,#E8B3A2 0 3px,#F8EDEA 3px 6px);
+  --stripe-def:  repeating-linear-gradient(135deg,#B08480 0 4px,#8C4A42 4px 8px);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+
+.num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+
+/* --- アプリ帯(製品の 52px バンドをそのまま文書の頭に使う) ----------------- */
+
+.appbar {
+  position: sticky; top: 0; z-index: 60;
+  height: 52px; padding: 0 20px;
+  background: linear-gradient(180deg, var(--band-app-a), var(--band-app-b));
+  border-bottom: 1px solid var(--frame-outer);
+  display: flex; align-items: center; gap: 14px;
+}
+.mark {
+  width: 22px; height: 22px; flex: none; border-radius: 7px;
+  background: linear-gradient(160deg, #fff, #8EB9FC);
+  border: 1px solid #687287;
+}
+.wordmark {
+  font-weight: 800; font-size: 12.5px; letter-spacing: .08em; white-space: nowrap;
+}
+.appbar-note {
+  margin-left: auto; font-family: var(--num); font-size: 10.5px;
+  color: #40536F; white-space: nowrap;
+}
+@media (max-width: 700px) { .appbar-note { display: none; } }
+
+/* --- シェル --------------------------------------------------------------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: 214px minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 22px 20px 96px;
+}
+@media (max-width: 960px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 14px 72px; }
+}
+
+/* --- 索引レール(キャラレールと同じ形) ------------------------------------- */
+
+.rail {
+  position: sticky; top: 74px;
+  background: var(--rail);
+  border: 1px solid var(--frame);
+  border-radius: var(--r-window);
+  overflow: hidden;
+}
+@media (max-width: 960px) { .rail { position: static; } }
+.rail-head {
+  height: 30px; padding: 0 14px; background: var(--bar);
+  display: flex; align-items: center;
+  font-weight: 700; font-size: 10.5px; letter-spacing: .1em; color: #fff;
+}
+.rail-list { display: flex; flex-direction: column; gap: 3px; padding: 9px; }
+.rail-group {
+  margin: 7px 0 1px; padding: 0 9px;
+  font-size: 8.5px; font-weight: 700; letter-spacing: .14em; color: var(--fg-dim);
+}
+.rail-group:first-child { margin-top: 2px; }
+.rail-list a {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 9px; border-radius: var(--r-panel);
+  border: 1px solid transparent; border-left: 3px solid transparent;
+  color: var(--fg); text-decoration: none;
+  font-size: 11.5px; font-weight: 500;
+  transition: background .15s ease, border-color .15s ease;
+}
+.rail-list a .k {
+  font-family: var(--num); font-size: 9.5px; font-weight: 700; color: var(--fg-dim);
+  min-width: 14px;
+}
+.rail-list a:hover, .rail-list a:focus-visible {
+  background: #fff; border-color: var(--edge-soft); border-left-color: var(--accent);
+  outline: none;
+}
+.rail-list a.on {
+  background: linear-gradient(180deg,#D9ECFF,#C2E1FF);
+  border-color: var(--accent); border-left-color: var(--accent); font-weight: 700;
+}
+.rail-list a.on .k { color: var(--accent-deep); }
+.rail-foot {
+  margin: 2px 9px 11px; padding: 9px 10px;
+  background: var(--inset); border: 1px solid var(--frame); border-radius: var(--r-inset);
+  font-size: 10px; line-height: 1.7; color: var(--fg-head);
+}
+
+/* --- 窓 ------------------------------------------------------------------- */
+
+.stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+
+.win {
+  background: var(--win);
+  border: 1px solid var(--frame);
+  border-radius: var(--r-window);
+  box-shadow: 0 1px 2px rgba(30,44,74,.10);
+  overflow: hidden;
+  scroll-margin-top: 68px;
+}
+.win-bar {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 15px;
+  background: linear-gradient(180deg, var(--band-app-a), var(--band-app-b));
+  border-bottom: 1px solid var(--frame);
+}
+.win-bar .dia {
+  width: 11px; height: 11px; flex: none; transform: rotate(45deg);
+  background: linear-gradient(160deg,#fff,#8EB9FC); border: 1px solid #687287;
+}
+.win-bar h2 {
+  margin: 0; font-size: 12.5px; font-weight: 800; letter-spacing: .08em;
+  color: var(--fg); text-wrap: balance;
+}
+.win-bar .idx {
+  font-family: var(--num); font-size: 10px; font-weight: 700; color: #40536F;
+}
+.win-bar .note {
+  margin-left: auto; font-size: 10px; color: #40536F;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+@media (max-width: 620px) { .win-bar .note { display: none; } }
+.win-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+/* 窓のヒーロー(冒頭だけ金の帯 = ここが答え) */
+.win.result .win-bar {
+  background: linear-gradient(180deg, var(--band-gold-a), var(--band-gold-b));
+  border-bottom-color: var(--band-gold-bd);
+}
+.win.result .win-bar .dia { background: linear-gradient(160deg,#fff,#C9A227); border-color:#A9821F; }
+.win.result .win-bar h2 { color: #4A3C12; }
+.win.result .win-bar .note, .win.result .win-bar .idx { color: #6B5A24; }
+
+/* --- セクションバー(窓の中の見出し) --------------------------------------- */
+
+.sec {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: var(--r-inset);
+  background: var(--bar); color: #fff;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+}
+.sec .r { margin-left: auto; font-weight: 400; letter-spacing: 0; color: var(--rail); font-size: 10px; }
+
+/* --- 文章 ----------------------------------------------------------------- */
+
+p { margin: 0; max-width: 62ch; }
+.win-body > p, .prose { color: var(--fg-sub); }
+.lede { font-size: 14px; color: var(--fg); max-width: 58ch; }
+strong { font-weight: 700; color: var(--fg); }
+code {
+  font-family: var(--num); font-size: .92em;
+  background: #fff; border: 1px solid var(--edge-soft); border-radius: var(--r-inset);
+  padding: 1px 5px; color: var(--fg-sub);
+}
+a { color: var(--accent); }
+a:hover { color: var(--accent-deep); }
+ul { margin: 0; padding-left: 1.25em; max-width: 62ch; color: var(--fg-sub); }
+li { margin: 2px 0; }
+li::marker { color: var(--fg-dim); }
+
+/* --- カード --------------------------------------------------------------- */
+
+.card {
+  background: var(--card); border: 1px solid var(--frame);
+  border-radius: var(--r-window); padding: 13px 14px;
+}
+.card.soft { background: var(--card-soft); border-color: var(--edge-soft); }
+.card-h {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 9px;
+}
+.card-h b { font-size: 11px; font-weight: 700; color: var(--fg-head); }
+.card-h .r { margin-left: auto; font-family: var(--num); font-size: 9.5px; color: var(--fg-muted); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+
+/* --- 拘りカード ----------------------------------------------------------- */
+
+.tenets { display: grid; grid-template-columns: repeat(auto-fit, minmax(292px, 1fr)); gap: 12px; }
+.tenet {
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--card); border: 1px solid var(--frame);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-window); padding: 13px 14px;
+}
+.tenet.gold   { border-left-color: var(--gold); }
+.tenet.sim    { border-left-color: var(--sim); }
+.tenet.warm   { border-left-color: var(--warm-mid); }
+.tenet.good   { border-left-color: var(--good-mid); }
+.tenet h3 {
+  margin: 0; font-size: 14px; font-weight: 800; line-height: 1.55;
+  color: var(--fg); text-wrap: balance;
+}
+.tenet p { font-size: 12px; color: var(--fg-sub); max-width: none; }
+.tenet .quote {
+  margin: 0; padding: 8px 10px;
+  background: var(--card-soft2); border: 1px solid var(--edge-soft);
+  border-radius: var(--r-inset);
+  font-size: 11px; line-height: 1.7; color: var(--fg-muted);
+}
+.tenet .quote b { display: block; font-size: 9px; letter-spacing: .1em; color: var(--fg-dim); font-weight: 700; margin-bottom: 2px; }
+.tenet .breaks {
+  margin: 0; padding: 7px 10px;
+  background: var(--s3-bg); border: 1px solid var(--s3-bd); border-radius: var(--r-inset);
+  font-size: 11px; line-height: 1.65; color: var(--s3-fg); max-width: none;
+}
+.tenet .breaks b { color: var(--s3-fg); }
+
+/* --- 見本(specimen)の器 --------------------------------------------------- */
+
+.spec {
+  background: var(--card-soft2); border: 1px solid var(--edge-soft);
+  border-radius: var(--r-panel); padding: 13px;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+}
+.spec.col { flex-direction: column; align-items: stretch; }
+.cap {
+  font-family: var(--num); font-size: 9.5px; color: var(--fg-dim);
+  letter-spacing: .02em; line-height: 1.6;
+}
+.scroll-x { overflow-x: auto; }
+
+/* --- 面のデモ ------------------------------------------------------------- */
+
+.layers { display: flex; flex-direction: column; }
+.layer {
+  padding: 11px 13px; display: flex; align-items: center; gap: 10px;
+  font-size: 11.5px;
+}
+.layer .tag { font-family: var(--num); font-size: 10px; color: var(--fg-muted); margin-left: auto; }
+.l-ground { background: var(--ground); }
+.l-win    { background: var(--win); }
+.l-card   { background: var(--card); border: 1px solid var(--frame); border-radius: var(--r-window); margin: 9px; }
+.l-inset  { background: var(--inset); border: 1px solid var(--frame); border-radius: var(--r-inset); margin: 0 9px 9px; }
+
+/* --- 帯のデモ ------------------------------------------------------------- */
+
+.band {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 13px; border-radius: var(--r-inset);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .08em;
+}
+.band .r { margin-left: auto; font-weight: 400; letter-spacing: 0; font-size: 9.5px; }
+.band-app  { background: linear-gradient(180deg,var(--band-app-a),var(--band-app-b)); color: var(--fg); border: 1px solid var(--frame-outer); }
+.band-sec  { background: var(--bar); color: #fff; }
+.band-sec .r { color: var(--rail); }
+.band-gold { background: linear-gradient(180deg,var(--band-gold-a),var(--band-gold-b)); color:#4A3C12; border: 1px solid var(--band-gold-bd); }
+.band-gold .r { color:#6B5A24; }
+.band-sim  { background: linear-gradient(180deg,var(--sim),var(--sim-strong)); color:#fff; border: 1px solid var(--sim-strong); }
+.band-sim .r { color:#E4E3F4; }
+
+/* --- 色見本 --------------------------------------------------------------- */
+
+.swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 8px; }
+.sw {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  padding: 6px; border-radius: var(--r-inset);
+  background: var(--card); border: 1px solid var(--edge-soft);
+  font: inherit; color: inherit; cursor: pointer;
+  transition: border-color .15s ease, transform .12s ease;
+}
+.sw:hover, .sw:focus-visible { border-color: var(--accent); transform: translateX(2px); outline: none; }
+.sw .chip { width: 30px; height: 30px; flex: none; border-radius: var(--r-inset); border: 1px solid var(--frame); }
+.sw .n { font-size: 10.5px; font-weight: 500; line-height: 1.35; }
+.sw .v { font-family: var(--num); font-size: 9.5px; color: var(--fg-muted); }
+.sw .copied { font-family: var(--num); font-size: 9px; color: var(--good); }
+
+/* --- 状態 6 系統 ---------------------------------------------------------- */
+
+.states { display: flex; flex-direction: column; gap: 7px; }
+.state-row {
+  display: grid;
+  grid-template-columns: 20px 104px minmax(60px, 1fr) 196px;
+  align-items: center; gap: 10px;
+  padding: 7px 9px; border-radius: var(--r-panel);
+  background: var(--card); border: 1px solid var(--edge-soft);
+}
+.state-row .meter-wrap { display: block; min-width: 0; }
+.state-row .state-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 720px) {
+  .state-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .state-row .meter-wrap, .state-row .state-badge { grid-column: 1 / -1; }
+}
+.state-row .i { font-family: var(--num); font-size: 10px; font-weight: 700; color: var(--fg-dim); text-align: center; }
+.state-row .m { font-size: 11px; font-weight: 500; }
+
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 9px; border-radius: var(--r-pill);
+  font-size: 9.5px; font-weight: 700; white-space: nowrap; border: 1px solid;
+}
+.b0 { background: var(--s0-bg); border-color: var(--s0-bd); color: var(--s0-fg); }
+.b1 { background: var(--s1-bg); border-color: var(--s1-bd); color: var(--s1-fg); }
+.b2 { background: var(--s2-bg); border-color: var(--s2-bd); color: var(--s2-fg); }
+.b3 { background: var(--s3-bg); border-color: var(--s3-bd); color: var(--s3-fg); }
+.b4 { background: var(--s4-bg); border-color: var(--s4-bd); color: var(--s4-fg); }
+.b5 { background: var(--s5-bg); border-color: var(--s5-bd); color: var(--s5-fg); }
+
+.meter {
+  position: relative; height: 9px; border-radius: var(--r-inset);
+  background: #E7EEF7; border: 1px solid #D3DEEC; overflow: hidden;
+}
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; display: block; }
+.f0 { background: linear-gradient(90deg,#90D7FF,#426DD6); }
+.f1 { background: linear-gradient(90deg,#9FD9BC,#3E8C63); }
+.f2 { background: linear-gradient(90deg,#F0D79A,#C2A057); }
+.f3 { background: linear-gradient(90deg,#E8B3A2,#B0574A); }
+.f4 { background: linear-gradient(90deg,#CBD3DE,#9AA6B6); }
+.f5 { background: linear-gradient(90deg,#C3C1E4,#6D6AA8); }
+
+/* --- 予約色 --------------------------------------------------------------- */
+
+.reserved { display: grid; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); gap: 12px; }
+.res { border-radius: var(--r-window); border: 1px solid; padding: 12px 13px; }
+.res h4 { margin: 0 0 4px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.res h4 .dot { width: 12px; height: 12px; border-radius: var(--r-inset); border: 1px solid rgba(0,0,0,.18); }
+.res p { font-size: 11px; line-height: 1.7; max-width: none; }
+.res .use { font-family: var(--num); font-size: 9.5px; margin-top: 6px; display: block; }
+.res-gold { background:#FFFBF0; border-color: var(--gold); }
+.res-gold h4, .res-gold p { color: var(--gold-fg); }
+.res-sim  { background: var(--s5-bg); border-color: var(--sim); }
+.res-sim h4, .res-sim p { color: var(--sim-fg); }
+.res-warm { background:#FFF6F1; border-color: var(--warm); }
+.res-warm h4, .res-warm p { color: #7A4B45; }
+.res-good { background: var(--s1-bg); border-color: var(--good-soft); }
+.res-good h4, .res-good p { color: var(--good); }
+.res .use { color: inherit; opacity: .8; }
+
+/* --- 角丸 ----------------------------------------------------------------- */
+
+.radii { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+.radius-demo { text-align: center; }
+.radius-demo .box {
+  width: 84px; height: 56px; background: var(--card);
+  border: 1px solid var(--frame); box-shadow: inset 0 0 0 1px #fff;
+}
+.radius-demo .lbl { margin-top: 6px; font-family: var(--num); font-size: 9.5px; color: var(--fg-muted); }
+.radius-demo .lbl b { display: block; font-family: var(--font); font-size: 10px; color: var(--fg-sub); }
+
+.rejected {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 11px 12px; border-radius: var(--r-panel);
+  background: var(--s4-bg); border: 1px dashed var(--s4-bd);
+}
+.rejected .box { width: 76px; height: 46px; background:#fff; border: 1px solid var(--fg-faint); flex: none; }
+.rejected p { font-size: 11px; color: var(--fg-muted); max-width: 46ch; }
+
+/* --- タイポ見本 ----------------------------------------------------------- */
+
+.type-rows { display: flex; flex-direction: column; gap: 11px; }
+.type-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.type-row .meta {
+  width: 168px; flex: none; font-family: var(--num); font-size: 9.5px; color: var(--fg-muted); line-height: 1.6;
+}
+.type-row .meta b { display: block; font-family: var(--font); font-size: 10.5px; color: var(--fg-sub); }
+.t-result  { font-family: var(--num); font-size: 44px; font-weight: 700; line-height: 1; }
+.t-heading { font-size: 19px; font-weight: 700; }
+.t-body    { font-size: 12.5px; line-height: 1.7; max-width: 40ch; }
+.t-label   { font-size: 10.5px; color: var(--fg-muted); letter-spacing: .06em; }
+
+.ramp { display: flex; flex-wrap: wrap; gap: 6px; }
+.ramp span {
+  padding: 4px 10px; border-radius: var(--r-inset);
+  background: var(--card); border: 1px solid var(--edge-soft);
+  font-size: 11px; font-weight: 500;
+}
+
+/* --- アイコン ------------------------------------------------------------- */
+
+.icon {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  background: var(--stripe-blue); border: 1px solid var(--frame);
+  border-radius: var(--r-window); box-shadow: inset 0 0 0 1px rgba(255,255,255,.8);
+}
+.icon.mob   { background: var(--stripe-warm); border-color: var(--warm); }
+.icon.skill { background: linear-gradient(160deg,#F7E6BE,#E3C77E); border-color: var(--gold); border-radius: var(--r-panel); box-shadow: inset 0 1px 0 #fff; }
+.icon.buff  { background: linear-gradient(160deg,#EDECF7,#D9D7EC); border-color: var(--sim); border-radius: 50%; box-shadow: inset 0 1px 0 #fff; }
+.icon.s20 { width: 20px; height: 20px; }
+.icon.s28 { width: 28px; height: 28px; }
+.icon.s40 { width: 40px; height: 40px; }
+.icon.s64 { width: 64px; height: 64px; }
+.icon.sel { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66,109,214,.28); }
+.icon.off { background: var(--stripe-grey); border-color: var(--fg-faint); opacity: .5; }
+.icon.missing {
+  background: var(--card-soft2); border: 1px dashed var(--edge);
+  font-family: var(--num); font-weight: 700; color: var(--edge); box-shadow: none;
+}
+.icon.s40.missing { font-size: 14px; }
+.icon.s28.missing { font-size: 11px; }
+
+.icon-fam { display: flex; align-items: center; gap: 12px; }
+.icon-fam .t b { display: block; font-size: 12px; font-weight: 700; }
+.icon-fam .t span { font-family: var(--num); font-size: 10px; color: var(--fg-muted); }
+
+.icon-state { text-align: center; }
+.icon-state .lbl { margin-top: 5px; font-size: 10px; color: var(--fg-muted); }
+
+/* --- 部品見本 ------------------------------------------------------------- */
+
+.tabs { display: flex; align-items: flex-end; gap: 3px; }
+.tab {
+  padding: 6px 14px; border-radius: 9px 9px 0 0;
+  border: 1px solid var(--frame); border-bottom: 0;
+  background: linear-gradient(180deg,#A9CDFE,#8EB9FC);
+  font-size: 12px; font-weight: 500; color: #2B3C57; white-space: nowrap;
+}
+.tab.on {
+  padding: 7px 16px; background: linear-gradient(180deg,#CCF7FF,#90D7FF);
+  border-color: #687287; color: #123047; font-weight: 700; position: relative; top: 1px;
+}
+.tab.todo { opacity: .65; }
+.tab-rule { height: 1px; background: #687287; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 8px 16px; border-radius: var(--r-panel);
+  font-family: var(--font); font-size: 12.5px; font-weight: 500;
+  background: linear-gradient(180deg,#fff,#E9F1FB);
+  border: 1px solid var(--frame); color: #2B3C57;
+  cursor: pointer; transition: filter .15s ease, border-color .15s ease;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn.primary { background: linear-gradient(180deg,#CCF7FF,#90D7FF); border-color:#687287; color:#123047; font-weight: 700; box-shadow: inset 0 1px 0 #fff; }
+.btn.primary:hover { filter: brightness(1.04); }
+.btn.sim { background: linear-gradient(180deg,var(--sim),var(--sim-strong)); border-color:#3C3A6B; color:#fff; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+.btn.link { background: none; border-color: transparent; color: var(--accent); }
+.btn.del { background: linear-gradient(180deg,#fff,#F3E3E1); border-color:#B08480; color: var(--danger); }
+.btn.off { background:#D5DDE7; border-color:#A9B4C4; color:#93A0B2; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.field-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.field-row > .k { width: 92px; flex: none; font-size: 11px; color: var(--fg-muted); }
+.fld-read {
+  padding: 5px 11px; min-width: 82px; text-align: right;
+  background: var(--inset); border: 1px solid var(--frame); border-radius: var(--r-panel);
+  font-family: var(--num); font-size: 12px; font-weight: 700; color: var(--fg);
+}
+.fld-edit {
+  padding: 5px 11px; min-width: 82px; text-align: right;
+  background: #fff; border: 1px solid var(--accent); border-radius: var(--r-panel);
+  box-shadow: 0 0 0 2px rgba(66,109,214,.18);
+  font-family: var(--num); font-size: 12px; font-weight: 500;
+}
+.fld-sel {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 10px; background:#fff; border: 1px solid var(--frame); border-radius: var(--r-panel);
+  font-size: 12px; font-weight: 500;
+}
+.fld-sel .cv { font-size: 10px; color: var(--fg-muted); }
+
+.seg { display: inline-flex; border: 1px solid var(--frame); border-radius: var(--r-panel); overflow: hidden; }
+.seg button {
+  padding: 5px 12px; border: 0; border-right: 1px solid var(--edge-faint);
+  background: #fff; font-family: var(--font); font-size: 11px; font-weight: 500; color: var(--fg-muted);
+  cursor: pointer; transition: background .15s ease;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover { background: var(--rail); }
+.seg button.on { background: linear-gradient(180deg,#CCF7FF,#90D7FF); color:#123047; font-weight: 700; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 11px; border-radius: var(--r-pill);
+  background: #fff; border: 1px solid var(--edge-soft);
+  font-size: 11px; font-weight: 500; color: var(--fg-sub);
+}
+.chip.add { background: var(--card-soft2); border-style: dashed; border-color: var(--edge); color: var(--accent); }
+.chip.sim { border-color: var(--sim); color: var(--sim-fg); }
+.chip .dotb { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(160deg,#EDECF7,#D9D7EC); border: 1px solid var(--sim); }
+
+.pop {
+  width: 258px; border-radius: var(--r-panel); background:#fff;
+  border: 1px solid #687287;
+  box-shadow: 0 10px 24px rgba(30,44,74,.3), inset 0 0 0 1px #fff;
+  overflow: hidden;
+}
+.pop-h {
+  display: flex; align-items: center; gap: 7px; padding: 6px 12px;
+  background: linear-gradient(180deg,#DBE6F8,#C6D8F0); border-bottom: 1px solid var(--edge);
+  font-size: 9.5px; font-weight: 800; letter-spacing: .1em; color: var(--fg-head);
+}
+.pop-h .sq { width: 6px; height: 6px; transform: rotate(45deg); background: var(--bar); }
+.pop-h .r { margin-left: auto; font-family: var(--num); font-weight: 400; letter-spacing: 0; color: var(--fg-muted); }
+.pop-r { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-bottom: 1px solid #EDF2F9; font-size: 11px; }
+.pop-r:last-child { border-bottom: 0; }
+.pop-r .dt { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.pop-r .nm { flex: 1; min-width: 0; }
+.pop-r .vl { font-family: var(--num); font-size: 10px; color: var(--fg-muted); }
+
+.splitter-demo { display: flex; align-items: stretch; height: 62px; }
+.splitter-demo .pane { flex: 1; background: var(--rail); border: 1px solid var(--edge-soft); border-radius: var(--r-inset); display: flex; align-items: center; justify-content: center; font-size: 10.5px; color: var(--fg-muted); }
+.splitter {
+  width: 9px; flex: none; cursor: col-resize; align-self: stretch;
+  background: linear-gradient(90deg,transparent 4px,var(--edge-soft) 4px,var(--edge-soft) 5px,transparent 5px);
+  transition: background .15s ease;
+}
+.splitter:hover {
+  background: linear-gradient(90deg,transparent 4px,var(--accent) 4px,var(--accent) 5px,transparent 5px), rgba(66,109,214,.14);
+}
+
+/* --- 斜線の意味 ----------------------------------------------------------- */
+
+.hatch-demo { display: flex; flex-direction: column; gap: 5px; }
+.hatch-bar { display: flex; height: 11px; border-radius: var(--r-inset); border: 1px solid var(--edge-soft); background:#EDF2F9; overflow: hidden; }
+.hatch-bar > i { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 10.5px; color: var(--fg-muted); }
+.legend b { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.legend b i { width: 12px; height: 8px; border-radius: 2px; display: block; }
+
+/* --- 動き ----------------------------------------------------------------- */
+
+.motion-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(214px, 1fr)); gap: 12px; }
+.motion {
+  background: var(--card); border: 1px solid var(--edge-soft); border-radius: var(--r-panel);
+  padding: 11px 12px; display: flex; flex-direction: column; gap: 9px;
+}
+.motion .stage {
+  height: 66px; border-radius: var(--r-inset); background: var(--card-soft2);
+  border: 1px dashed var(--edge); display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.motion .t { font-size: 11px; font-weight: 700; color: var(--fg-head); }
+.motion .cap { margin-top: -4px; }
+.motion .btn { align-self: flex-start; padding: 4px 11px; font-size: 10.5px; }
+
+.mo-box { width: 122px; height: 40px; border-radius: var(--r-inset); background: var(--card); border: 1px solid var(--frame); display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--fg-muted); }
+.mo-badge { padding: 2px 10px; border-radius: var(--r-pill); background: linear-gradient(180deg,#CCF7FF,#90D7FF); border: 1px solid #687287; font-size: 9.5px; font-weight: 700; color:#123047; }
+
+@keyframes paneIn { from { opacity: 0; transform: translateX(-10px) scaleX(.97); } to { opacity: 1; transform: none; } }
+@keyframes tgtIn  { from { opacity: 0; transform: translateY(-6px) scaleY(.97); } to { opacity: 1; transform: none; } }
+@keyframes popIn  { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes growW  { from { width: 8%; } to { width: 76%; } }
+
+.play-pane  { animation: paneIn .3s cubic-bezier(.2,.85,.25,1) both; transform-origin: left center; }
+.play-pop   { animation: tgtIn .17s cubic-bezier(.34,1.2,.64,1) both; transform-origin: top center; }
+.play-badge { animation: popIn .26s cubic-bezier(.34,1.56,.64,1) both; }
+.play-bar > i { animation: growW .45s cubic-bezier(.4,0,.2,1) both; }
+
+.numpop {
+  font-family: var(--num); font-size: 30px; font-weight: 700;
+  transition: transform .2s cubic-bezier(.34,1.56,.64,1), color .3s ease;
+  display: inline-block;
+}
+.numpop.up   { transform: scale(1.07); color: var(--good); }
+.numpop.down { transform: scale(1.07); color: var(--danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* --- 言葉の対比 ----------------------------------------------------------- */
+
+.words { display: flex; flex-direction: column; gap: 7px; }
+.word-row {
+  display: grid; grid-template-columns: 1fr 18px 1fr; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--r-panel);
+  background: var(--card); border: 1px solid var(--edge-soft);
+}
+@media (max-width: 620px) { .word-row { grid-template-columns: 1fr; } .word-row .arrow { display: none; } }
+.word-row .no  { font-size: 11.5px; color: var(--fg-dim); text-decoration: line-through; text-decoration-color: var(--s3-bd); }
+.word-row .arrow { font-family: var(--num); font-size: 11px; color: var(--fg-faint); text-align: center; }
+.word-row .yes { font-size: 12.5px; font-weight: 700; color: var(--fg); }
+
+/* --- 表 ------------------------------------------------------------------- */
+
+table { border-collapse: collapse; width: 100%; font-size: 11.5px; min-width: 480px; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--edge-soft); vertical-align: top; }
+th {
+  font-size: 9.5px; letter-spacing: .08em; font-weight: 700; color: var(--fg-muted);
+  background: var(--inset); white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td code { background: var(--card-soft2); }
+
+/* --- チェックリスト ------------------------------------------------------- */
+
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 7px; }
+.check {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 9px 11px; border-radius: var(--r-panel);
+  background: var(--card); border: 1px solid var(--edge-soft);
+  font-size: 11.5px; line-height: 1.6; color: var(--fg-sub);
+  cursor: pointer; transition: border-color .15s ease, background .15s ease;
+}
+.check:hover { border-color: var(--accent); }
+.check input { margin: 4px 0 0; accent-color: var(--accent); flex: none; }
+.check.done { background: var(--s1-bg); border-color: var(--s1-bd); color: var(--s1-fg); }
+
+/* --- フッタ --------------------------------------------------------------- */
+
+.foot {
+  margin-top: 4px; padding: 13px 15px; border-radius: var(--r-window);
+  background: var(--inset); border: 1px solid var(--frame);
+  font-size: 11px; line-height: 1.75; color: var(--fg-head);
+}
+.foot b { color: var(--fg); }
+
+/* --- 入力の 5 形態 -------------------------------------------------------- */
+
+.ladder { display: flex; flex-direction: column; gap: 0; }
+.rung {
+  display: grid; grid-template-columns: 26px 128px minmax(0, 1fr);
+  align-items: center; gap: 12px;
+  padding: 12px 13px;
+  background: var(--card); border: 1px solid var(--edge-soft);
+  border-bottom: 0;
+}
+.rung:first-child { border-radius: var(--r-window) var(--r-window) 0 0; }
+.rung:last-child { border-bottom: 1px solid var(--edge-soft); border-radius: 0 0 var(--r-window) var(--r-window); }
+.rung .lv {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--num); font-size: 11px; font-weight: 700;
+  background: var(--s1-bg); border: 1px solid var(--s1-bd); color: var(--s1-fg);
+}
+.rung.r2 .lv { background:#E9F4EE; }
+.rung.r3 .lv { background: var(--s0-bg); border-color: var(--s0-bd); color: var(--s0-fg); }
+.rung.r4 .lv { background: var(--s2-bg); border-color: var(--s2-bd); color: var(--s2-fg); }
+.rung.r5 .lv { background: var(--s5-bg); border-color: var(--s5-bd); color: var(--s5-fg); }
+.rung .nm b { display: block; font-size: 12px; font-weight: 700; color: var(--fg); }
+.rung .nm span { font-size: 10px; color: var(--fg-muted); line-height: 1.5; display: block; }
+.rung .demo { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; min-width: 0; }
+@media (max-width: 640px) {
+  .rung { grid-template-columns: 26px minmax(0, 1fr); }
+  .rung .demo { grid-column: 2 / -1; }
+}
+
+/* --- エンチャントセル(入力の白眉) ---------------------------------------- */
+
+.ench { display: grid; grid-template-columns: 46px 62px minmax(0, 1fr); gap: 8px 10px; align-items: center; }
+.ench .h { font-size: 8.5px; font-weight: 700; color: var(--fg-muted); }
+.ench .h.e { color: var(--sim-fg); }
+.ench .k { font-size: 10.5px; font-weight: 700; }
+.ench .base { font-family: var(--num); font-size: 13px; font-weight: 700; text-align: right; }
+.ench .ctrl { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.step {
+  width: 16px; height: 22px; flex: none; padding: 0; border: 0; background: none;
+  font-family: var(--num); font-size: 13px; font-weight: 700; color: #8F8CC4; cursor: pointer;
+  border-radius: 4px; line-height: 1;
+}
+.step:hover { background: var(--s5-bg); color: var(--sim); }
+.step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cell {
+  position: relative; flex: 1 1 auto; min-width: 0;
+  padding: 4px 7px 5px; border-radius: var(--r-panel);
+  background: #fff; border: 1px solid #C6C3E0; overflow: hidden;
+  transition: background .18s ease, border-color .18s ease;
+}
+.cell .fillbar {
+  position: absolute; left: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg,#C6C3E0,var(--sim));
+  transition: width .32s cubic-bezier(.4,0,.2,1);
+}
+.cell .row { display: flex; align-items: baseline; justify-content: flex-end; gap: 3px; }
+.cell .v { font-family: var(--num); font-size: 12.5px; font-weight: 700; color: #2C2A57; }
+.cell .cap-n { font-family: var(--num); font-size: 8px; color: #9A97BE; }
+.cell.full { background: linear-gradient(180deg,#F3F0FF,#E6E1FA); border-color: var(--sim); }
+.cell.full .v { color: var(--sim-fg); }
+.cell.zero .v { color: #A9A6D6; }
+.maxbtn {
+  width: 30px; flex: none; padding: 3px 0; border-radius: var(--r-inset);
+  background: var(--s5-bg); border: 1px solid #A9A6D6; color: var(--sim);
+  font-family: var(--font); font-size: 8px; font-weight: 700; cursor: pointer;
+  transition: background .18s ease;
+}
+.maxbtn.full { background: linear-gradient(180deg,#CFC9F5,#B3ACE8); border-color: var(--sim-fg); color:#2C2A57; }
+.maxbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.echo {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--r-panel);
+  background: var(--card-soft); border: 1px solid var(--edge-soft);
+}
+.echo .lb { font-size: 10px; color: var(--fg-muted); }
+.echo .vv { margin-left: auto; font-family: var(--num); font-size: 22px; font-weight: 700; }
+.echo .dl { font-family: var(--num); font-size: 11px; font-weight: 700; min-width: 46px; text-align: right; }
+
+/* --- 空間と視点 ----------------------------------------------------------- */
+
+.vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(288px, 1fr)); gap: 12px; }
+.vs-card { border-radius: var(--r-window); border: 1px solid; overflow: hidden; }
+.vs-card.ng { border-color: var(--s3-bd); background: #FFFAF9; }
+.vs-card.ok { border-color: var(--s1-bd); background: #FAFEFB; }
+.vs-h {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+}
+.vs-card.ng .vs-h { background: var(--s3-bg); color: var(--s3-fg); border-bottom: 1px solid var(--s3-bd); }
+.vs-card.ok .vs-h { background: var(--s1-bg); color: var(--s1-fg); border-bottom: 1px solid var(--s1-bd); }
+.vs-h .r { margin-left: auto; font-weight: 400; letter-spacing: 0; font-size: 9.5px; }
+.vs-b { padding: 11px 12px; display: flex; flex-direction: column; gap: 8px; }
+.vs-b > p { font-size: 11px; line-height: 1.65; max-width: none; }
+
+/* 押した場所が動かない・実演 */
+.stage-list { display: flex; flex-direction: column; gap: 5px; min-height: 168px; }
+.srow {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border-radius: var(--r-panel);
+  background: #fff; border: 1px solid var(--edge-soft);
+  font-size: 11.5px; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.srow:hover { border-color: var(--accent); }
+.srow.on { background: linear-gradient(180deg,#D9ECFF,#C2E1FF); border-color: var(--accent); font-weight: 700; }
+.srow .vl { margin-left: auto; font-family: var(--num); font-size: 11px; color: var(--fg-muted); }
+.srow.on .vl { color: var(--accent-deep); }
+.sdetail {
+  padding: 9px 11px; border-radius: var(--r-panel);
+  background: var(--card-soft2); border: 1px solid var(--accent);
+  font-size: 10.5px; line-height: 1.6; color: var(--fg-sub);
+  animation: tgtIn .17s cubic-bezier(.34,1.2,.64,1) both;
+}
+.sbanner {
+  padding: 8px 11px; border-radius: var(--r-panel);
+  background: var(--s2-bg); border: 1px solid var(--s2-bd);
+  font-size: 10.5px; font-weight: 700; color: var(--s2-fg);
+  animation: popIn .26s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+/* ドリルダウン実演 */
+.drill { display: flex; gap: 7px; align-items: stretch; min-height: 150px; overflow-x: auto; padding-bottom: 4px; }
+.dpane {
+  flex: 1 0 118px; min-width: 118px;
+  border-radius: var(--r-panel); background: #fff; border: 1px solid var(--edge-soft); overflow: hidden;
+}
+/* 新しく増えたペインだけが動く。既に出ているペインは動かさない(規則 2 そのもの) */
+.dpane.fresh { animation: paneIn .28s cubic-bezier(.2,.85,.25,1) both; transform-origin: left center; }
+.dpane.past { background: var(--rail); }
+.dpane-h {
+  padding: 5px 9px; background: var(--bar); color: #fff;
+  font-size: 8.5px; font-weight: 700; letter-spacing: .08em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.dpane-b { padding: 7px; display: flex; flex-direction: column; gap: 4px; }
+.ditem {
+  padding: 5px 8px; border-radius: var(--r-inset);
+  background: #fff; border: 1px solid var(--edge-soft);
+  font-size: 10.5px; cursor: pointer; text-align: left; font-family: var(--font); color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ditem:hover { border-color: var(--accent); }
+.ditem.on { background: linear-gradient(180deg,#D9ECFF,#C2E1FF); border-color: var(--accent); font-weight: 700; }
+.ditem.leaf { cursor: default; background: var(--card-soft2); border-style: dashed; border-color: var(--edge); color: var(--fg-muted); }
+.crumb-note { font-size: 10px; color: var(--fg-muted); }
+
+.toggle-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.toggle-row .lb { font-size: 10.5px; color: var(--fg-muted); }
+
+/* 固定サイズの実演 */
+.fixed-demo { display: flex; gap: 12px; flex-wrap: wrap; }
+.fixed-demo .col { display: flex; flex-direction: column; gap: 5px; }
+.numbox {
+  min-width: 82px; padding: 4px 9px; text-align: right;
+  background: var(--inset); border: 1px solid var(--frame); border-radius: var(--r-inset);
+  font-family: var(--num); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700;
+}
+.numbox.loose { min-width: 0; }
+
+/* --- 変化の型 ------------------------------------------------------------- */
+
+.changes { display: flex; flex-direction: column; gap: 6px; }
+.change {
+  display: grid; grid-template-columns: 118px minmax(0, 1fr) 160px;
+  gap: 11px; align-items: center;
+  padding: 9px 11px; border-radius: var(--r-panel);
+  background: var(--card); border: 1px solid var(--edge-soft);
+}
+@media (max-width: 720px) { .change { grid-template-columns: minmax(0, 1fr); } }
+.change .w { font-size: 11.5px; font-weight: 700; color: var(--fg-head); }
+.change .how { font-size: 11px; color: var(--fg-sub); line-height: 1.6; }
+.change .spec-n { font-family: var(--num); font-size: 9px; color: var(--fg-dim); line-height: 1.6; }
+
+/* --- 組み上がり: キャラクターステータス ---------------------------------- */
+
+.sheet {
+  border: 1px solid var(--frame-outer); border-radius: var(--r-window);
+  background: var(--win); box-shadow: inset 0 0 0 1px var(--frame);
+  overflow: hidden;
+}
+.sheet-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: linear-gradient(180deg, var(--band-app-a), var(--band-app-b));
+  border-bottom: 1px solid var(--frame); flex-wrap: wrap;
+}
+.sheet-bar .nm { font-size: 13px; font-weight: 800; letter-spacing: .04em; }
+.sheet-bar .sub { font-size: 11px; color: #40536F; }
+.sheet-bar .acts { margin-left: auto; display: flex; gap: 7px; }
+.sheet-bar .btn { padding: 6px 14px; font-size: 12px; }
+.sheet-grid {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 0;
+}
+@media (max-width: 860px) { .sheet-grid { grid-template-columns: minmax(0, 1fr); } }
+.sheet-col { min-width: 0; }
+.sheet-col + .sheet-col { border-left: 1px solid var(--frame); }
+@media (max-width: 860px) { .sheet-col + .sheet-col { border-left: 0; border-top: 1px solid var(--frame); } }
+.sheet-sec {
+  padding: 5px 13px; background: var(--bar); color: #fff;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  display: flex; align-items: center; gap: 8px;
+}
+.sheet-sec .r { margin-left: auto; font-weight: 400; letter-spacing: 0; font-size: 9.5px; color: var(--rail); }
+.sheet-pad { padding: 12px 13px; display: flex; flex-direction: column; gap: 11px; }
+
+/* 素 → 最終 の行 */
+.statline {
+  display: grid; grid-template-columns: 42px 46px minmax(60px, 1fr) 58px 30px;
+  align-items: center; gap: 9px;
+}
+.statline .sk { font-family: var(--num); font-size: 11px; font-weight: 700; color: var(--fg-sub); }
+.statline .b0 { font-family: var(--num); font-size: 11px; color: var(--fg-dim); text-align: right;
+  background: none; border: 0; padding: 0; }
+.statline .fin {
+  font-family: var(--num); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 700; text-align: right;
+  transition: transform .2s cubic-bezier(.34,1.56,.64,1), color .3s ease;
+}
+.statline .fin.up { transform: scale(1.07); color: var(--good); }
+.statline .fin.down { transform: scale(1.07); color: var(--danger); }
+/* 「満」の枠は値の有無に関わらず常に確保する(§09 規則 4) */
+.statline .capslot { width: 30px; display: flex; justify-content: flex-end; }
+.sbar {
+  position: relative; display: flex; height: 10px; border-radius: var(--r-inset);
+  background: #E7EEF7; border: 1px solid #D3DEEC; overflow: hidden;
+}
+.sbar > i { display: block; height: 100%; transition: width .4s cubic-bezier(.4,0,.2,1); }
+.sbar .raw { background: #9AA6B6; }
+.sbar .add { background: linear-gradient(90deg,#8FB2E8,#426DD6); }
+
+/* 5 レイヤー */
+.layers-tbl { display: grid; grid-template-columns: 78px minmax(0, 1fr) 62px; gap: 5px 9px; align-items: center; }
+.layers-tbl .ln { font-size: 10.5px; color: var(--fg-sub); }
+.layers-tbl .lsrc { font-size: 9.5px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.layers-tbl .lv2 { font-family: var(--num); font-size: 11px; font-weight: 700; text-align: right; color: var(--sim-fg); }
+
+/* 装備値 9 種 */
+.eqtbl { width: 100%; min-width: 400px; border-collapse: collapse; font-family: var(--num); font-size: 10.5px; }
+.eqtbl th, .eqtbl td { padding: 4px 6px; text-align: right; border-bottom: 1px solid #fff; }
+.eqtbl thead th { background: var(--inset); font-size: 9px; font-weight: 700; color: var(--fg-head); letter-spacing: 0; }
+.eqtbl tbody th { background: var(--inset); text-align: left; font-family: var(--font); font-size: 10px; }
+.eqtbl tbody td { background: var(--inset); font-variant-numeric: tabular-nums; }
+.eqtbl .z { color: var(--fg-faint); }
+
+.buffbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bchip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 4px 10px; border-radius: var(--r-pill);
+  background: #fff; border: 1px solid var(--edge-soft);
+  font-family: var(--font); font-size: 10.5px; font-weight: 500; color: var(--fg-muted);
+  cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.bchip .bv { font-family: var(--num); font-size: 9px; font-weight: 700; color: var(--fg-dim); }
+.bchip:hover { border-color: var(--accent); }
+.bchip.on {
+  background: linear-gradient(180deg,#CCF7FF,#90D7FF); border-color: #687287;
+  color: #123047; font-weight: 700;
+}
+.bchip.on .bv { color: var(--accent-deep); }
+.bchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.abox {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: var(--r-panel);
+  background: var(--card-soft); border: 1px solid var(--edge-soft);
+}
+.abox .lb { font-size: 10.5px; font-weight: 700; color: var(--fg-head); }
+.abox .av {
+  margin-left: auto; font-family: var(--num); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 700;
+  transition: transform .2s cubic-bezier(.34,1.56,.64,1), color .3s ease;
+}
+.abox .av.up { transform: scale(1.07); color: var(--good); }
+.abox .av.down { transform: scale(1.07); color: var(--danger); }
+.abox .ad { font-family: var(--num); font-size: 11px; font-weight: 700; min-width: 52px; text-align: right; }
+
+/* --- 組み上がり: 装備を決める(入力エリア) ------------------------------- */
+
+.eqs { border: 1px solid var(--frame-outer); border-radius: var(--r-window);
+  background: var(--win); box-shadow: inset 0 0 0 1px var(--frame); overflow: hidden; }
+.eqs-panes {
+  display: grid; grid-template-columns: 136px 186px minmax(0, 1fr);
+  align-items: stretch;
+}
+.eqs-pane { min-width: 0; }
+.eqs-pane + .eqs-pane { border-left: 1px solid var(--frame); }
+@media (max-width: 900px) {
+  .eqs-panes { grid-template-columns: minmax(0, 1fr); }
+  .eqs-pane + .eqs-pane { border-left: 0; border-top: 1px solid var(--frame); }
+}
+.eqs-h {
+  padding: 5px 11px; background: var(--bar); color: #fff;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
+  display: flex; align-items: center; gap: 7px;
+}
+.eqs-h .r { margin-left: auto; font-weight: 400; letter-spacing: 0; font-size: 9px; color: var(--rail);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.eqs-b { padding: 9px; display: flex; flex-direction: column; gap: 5px; }
+.eqs-pane:last-child .eqs-b { gap: 9px; }
+
+/* 補正源の行 */
+.srcrow {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  padding: 7px 9px; border-radius: var(--r-panel);
+  background: #fff; border: 1px solid var(--edge-soft);
+  font-family: var(--font); font-size: 11px; color: var(--fg); cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.srcrow:hover { border-color: var(--accent); }
+.srcrow.on { background: linear-gradient(180deg,#D9ECFF,#C2E1FF); border-color: var(--accent); font-weight: 700; }
+.srcrow.todo { background: #F0F3F7; border-style: dashed; color: var(--fg-faint); cursor: not-allowed; }
+.srcrow .st { margin-left: auto; font-size: 8.5px; color: var(--fg-dim); white-space: nowrap; }
+.srcrow.on .st { color: var(--accent-deep); }
+
+/* 部位の行 */
+.slotrow {
+  display: flex; align-items: center; gap: 8px; text-align: left; width: 100%;
+  padding: 7px 9px; border-radius: var(--r-panel);
+  background: #fff; border: 1px solid var(--edge-soft);
+  font-family: var(--font); color: var(--fg); cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.slotrow:hover { border-color: var(--accent); }
+.slotrow.on { background: linear-gradient(180deg,#D9ECFF,#C2E1FF); border-color: var(--accent); }
+.slotrow.empty { border-style: dashed; border-color: var(--edge); }
+.slotrow .ic { width: 20px; height: 20px; flex: none; border-radius: var(--r-inset);
+  background: var(--stripe-warm); border: 1px solid var(--warm); }
+.slotrow.empty .ic { background: #F0F3F7; border: 1px dashed var(--edge-soft); }
+.slotrow .tx { min-width: 0; flex: 1; }
+.slotrow .tx b { display: flex; align-items: baseline; gap: 5px; font-size: 10.5px; font-weight: 700; }
+.slotrow .tx span { display: block; font-size: 8.5px; color: var(--fg-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slotrow.empty .tx span { color: var(--fg-faint); }
+.plusbadge { padding: 0 5px; border-radius: var(--r-pill); background: #fff;
+  border: 1px solid var(--warm); font-family: var(--num); font-size: 8px; font-weight: 700; color: #7A4B45; }
+.slotrow .vv { flex: none; font-family: var(--num); font-size: 8.5px; font-weight: 700; color: var(--fg-sub); }
+
+/* 部位の中身 */
+.partcard {
+  position: relative; padding: 10px 11px; border-radius: var(--r-window);
+  background: linear-gradient(160deg,#FFF6F1,#F4E3DA 70%,#EAD5CB);
+  border: 1px solid var(--warm); box-shadow: inset 0 1px 0 #fff; overflow: hidden;
+}
+.partcard .top { display: flex; align-items: center; gap: 9px; }
+.partcard .top .nm { min-width: 0; flex: 1; }
+.partcard .top .nm b { display: block; font-size: 12px; font-weight: 800; color: #3E2B26; }
+.partcard .top .nm span { font-size: 9px; color: #8A7168; }
+.itemopt {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  padding: 5px 8px; border-radius: var(--r-panel);
+  background: #fff; border: 1px solid #DDCFC8;
+  font-family: var(--font); font-size: 10px; color: #5E362C; cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.itemopt:hover { transform: translateX(2px); border-color: var(--warm); }
+.itemopt.on { background: linear-gradient(180deg,#CCF7FF,#90D7FF); border-color: #687287; color: #123047; font-weight: 700; }
+.itemopt .mk { width: 12px; flex: none; text-align: center; font-size: 8px; color: #C6B3AA; }
+.itemopt.on .mk { color: #123047; }
+.itemopt .nm2 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.itemopt .vs2 { flex: none; font-family: var(--num); font-size: 9px; color: #8A7168; }
+.itemopt.on .vs2 { color: #123047; }
+
+.subcard { padding: 10px 11px; border-radius: var(--r-window); background: var(--card-soft); border: 1px solid var(--frame); }
+.subcard.warm { background: #fff; border-color: var(--warm); }
+.subcard-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.subcard-h b { font-size: 10.5px; font-weight: 700; }
+.subcard-h .hint { font-size: 8.5px; color: var(--fg-muted); }
+.subcard-h .r { margin-left: auto; font-family: var(--num); font-size: 11px; font-weight: 700; color: #7A4B45; }
+
+.seg-row { display: flex; align-items: center; gap: 7px; }
+.seg-row .k2 { width: 40px; flex: none; font-size: 9.5px; font-weight: 500; color: var(--fg-muted); }
+.seg.warm { border-color: var(--warm); }
+.seg.warm button { border-right-color: #EDE3DC; color: #8A7168; }
+.seg.warm button:hover { background: #FFF8F4; }
+.seg.warm button.on { background: linear-gradient(180deg,#F2D9C9,#E0B49C); color: #5E362C; }
+.seg.full { display: flex; width: 100%; }
+.seg.full button { flex: 1; text-align: center; padding: 5px 0; }
+
+.opline {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 9px; border-radius: var(--r-panel);
+  background: #FFF8F4; border: 1px solid #DDAF95; font-size: 10.5px;
+}
+.opline .dt2 { width: 5px; height: 5px; border-radius: 50%; background: var(--warm-mid); flex: none; }
+.opline .nm3 { flex: 1; min-width: 0; }
+.opline .ov { flex: none; width: 44px; text-align: right; font-family: var(--num); font-size: 10.5px; font-weight: 700; color: #7A4B45; }
+.opline .step { color: var(--warm); }
+.opline .step:hover { background: #F8EDEA; color: var(--warm-mid); }
+.opadd {
+  padding: 6px 9px; border-radius: var(--r-panel); width: 100%; text-align: left;
+  background: #fff; border: 1px dashed #C6B3AA; color: #A9968E;
+  font-family: var(--font); font-size: 9.5px; cursor: pointer;
+}
+.opadd:hover { border-color: var(--warm); color: #7A4B45; }
+
+/* 効いた先(下の帯) */
+.eqs-foot {
+  border-top: 1px solid var(--frame); background: var(--win);
+  padding: 10px 13px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.eqs-foot .grp { display: flex; align-items: baseline; gap: 7px; }
+.eqs-foot .lb2 { font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; }
+.eqs-foot .nv {
+  font-family: var(--num); font-variant-numeric: tabular-nums;
+  font-size: 15px; font-weight: 700; min-width: 56px; text-align: right;
+  transition: transform .2s cubic-bezier(.34,1.56,.64,1), color .3s ease; display: inline-block;
+}
+.eqs-foot .nv.big { font-size: 24px; min-width: 74px; }
+.eqs-foot .nv.up { transform: scale(1.07); color: var(--good); }
+.eqs-foot .nv.down { transform: scale(1.07); color: var(--danger); }
+.eqs-foot .simnote {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  padding: 5px 11px; border-radius: var(--r-pill);
+  background: var(--s5-bg); border: 1px solid var(--sim);
+  font-size: 9.5px; font-weight: 700; color: var(--sim-fg); white-space: nowrap;
+}
+.eqs-foot .simnote .dt3 { width: 6px; height: 6px; border-radius: 50%; background: var(--sim); }
+
+.formtag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 7px; border-radius: var(--r-pill);
+  background: var(--s1-bg); border: 1px solid var(--s1-bd);
+  font-size: 8px; font-weight: 700; color: var(--s1-fg); white-space: nowrap;
+}
+.formtag.f2 { background:#E9F4EE; }
+.formtag.f3 { background: var(--s0-bg); border-color: var(--s0-bd); color: var(--s0-fg); }
+.formtag.f4 { background: var(--s2-bg); border-color: var(--s2-bd); color: var(--s2-fg); }
+
+/* --- これから作る画面の決定 ---------------------------------------------- */
+
+.chain {
+  display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+  padding: 14px 15px; border-radius: var(--r-window);
+  background: var(--card); border: 1px solid var(--frame);
+}
+.node { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.node .nl { font-size: 9px; color: var(--fg-muted); letter-spacing: .06em; white-space: nowrap; }
+.node .nv2 { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--fg); white-space: nowrap; }
+.node.hero .nv2 { font-size: 30px; line-height: 1; }
+.node.mid .nv2 { font-size: 17px; }
+.node.rate .nv2 { font-size: 22px; }
+.node .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
+.node.pending {
+  padding: 5px 10px; border-radius: var(--r-panel);
+  border: 1px dashed var(--edge); background: var(--card-soft2);
+}
+.node.pending .nv2 { color: var(--fg-faint); }
+.chain .op {
+  font-family: var(--num); font-size: 13px; color: var(--fg-faint);
+  padding-bottom: 4px; white-space: nowrap;
+}
+.chain .gatebadge { align-self: flex-end; padding-bottom: 5px; }
+
+.decs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.dec {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 13px 14px; border-radius: var(--r-window);
+  background: var(--card); border: 1px dashed var(--edge);
+}
+.dec-h { display: flex; align-items: center; gap: 8px; }
+.dec-h b { font-size: 12.5px; font-weight: 800; color: var(--fg); text-wrap: balance; }
+.dec-h .n2 {
+  width: 20px; height: 20px; flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--inset); border: 1px solid var(--frame);
+  font-family: var(--num); font-size: 10px; font-weight: 700; color: var(--fg-head);
+}
+.dec p { font-size: 11.5px; line-height: 1.7; color: var(--fg-sub); max-width: none; }
+.dec .why {
+  margin: 0; padding: 8px 10px; border-radius: var(--r-inset);
+  background: var(--card-soft2); border: 1px solid var(--edge-soft);
+  font-size: 11px; line-height: 1.65; color: var(--fg-muted);
+}
+.dec .why b { color: var(--fg-sub); }
+.dec .where {
+  margin-top: auto; font-family: var(--num); font-size: 9px; color: var(--fg-dim);
+  border-top: 1px dashed var(--edge-soft); padding-top: 7px;
+}
+.dec .blocked {
+  margin: 0; padding: 7px 10px; border-radius: var(--r-inset);
+  background: var(--s2-bg); border: 1px solid var(--s2-bd);
+  font-size: 10.5px; line-height: 1.6; color: var(--s2-fg);
+}
+.soonbadge {
+  margin-left: auto; flex: none; padding: 1px 8px; border-radius: var(--r-pill);
+  background: var(--card-soft2); border: 1px dashed var(--edge);
+  font-size: 8.5px; font-weight: 700; color: var(--fg-dim); white-space: nowrap;
+}
+
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px);
+  padding: 7px 15px; border-radius: var(--r-pill);
+  background: var(--fg); color: #fff; font-size: 11px; font-weight: 500;
+  opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease;
+  z-index: 90;
+}
+.toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+
+<header class="appbar">
+  <div class="mark"></div>
+  <span class="wordmark">TW TOOLKIT</span>
+  <span class="appbar-note">DESIGN SYSTEM &nbsp;/&nbsp; 出典 Prototype v4 + Redesign 規格シート</span>
+</header>
+
+<div class="shell">
+
+  <nav class="rail" aria-label="目次">
+    <div class="rail-head">この文書</div>
+    <div class="rail-list">
+      <a href="#tenets"><span class="k">00</span>拘り</a>
+      <div class="rail-group">見た目</div>
+      <a href="#surface"><span class="k">01</span>面と階層</a>
+      <a href="#bands"><span class="k">02</span>帯</a>
+      <a href="#color"><span class="k">03</span>色</a>
+      <a href="#radius"><span class="k">04</span>角丸</a>
+      <a href="#type"><span class="k">05</span>書体</a>
+      <a href="#icons"><span class="k">06</span>アイコン</a>
+      <div class="rail-group">操作</div>
+      <a href="#input"><span class="k">07</span>入力</a>
+      <a href="#parts"><span class="k">08</span>部品</a>
+      <a href="#space"><span class="k">09</span>空間と視点</a>
+      <a href="#motion"><span class="k">10</span>動きと変化</a>
+      <div class="rail-group">組み上がり</div>
+      <a href="#sheet"><span class="k">11</span>キャラステータス</a>
+      <a href="#gear"><span class="k">12</span>装備を決める</a>
+      <div class="rail-group">その他</div>
+      <a href="#words"><span class="k">13</span>言葉</a>
+      <a href="#next"><span class="k">14</span>これから作る画面</a>
+      <a href="#impl"><span class="k">15</span>実装との対応</a>
+    </div>
+    <div class="rail-foot">
+      このページは、それ自身が記述しているデザインシステムで組んである。見本はすべて実物で、画像ではない。
+    </div>
+  </nav>
+
+  <main class="stack">
+
+    <!-- ================================================================= -->
+    <section class="win result" id="tenets">
+      <div class="win-bar">
+        <span class="dia"></span>
+        <span class="idx">00</span>
+        <h2>何に拘っているか</h2>
+        <span class="note">規格より先に、これが決まっている</span>
+      </div>
+      <div class="win-body">
+        <p class="lede">規格(色・角丸・書体)は結論であって理由ではない。理由はここにある。<strong>迷ったら規格ではなくこの節に戻る</strong> — 規格が答えを持っていない場面のほうが多いので。</p>
+        <p>各カードの「モックでの証拠」は、デザインモック <code>TW Toolkit Prototype v1〜v4</code> と <code>TW Toolkit Redesign</code> に実際に書かれた言葉。後付けの整理ではなく、作りながら繰り返し口にしていたこと。</p>
+
+        <div class="tenets">
+
+          <article class="tenet">
+            <h3>ゲームの窓の言語で作る。ただし 6/10 で止める。</h3>
+            <p>タイトル帯・二重枠・セクションバーで階層を作る。でも振り切らない。<strong>10/10 はファンサイトになり、0/10 は業務ツールになる。</strong>どちらもプレイヤーが毎日開く道具の顔ではない。</p>
+            <p class="quote"><b>モックでの証拠</b>「TalesWeaver 的ウィンドウ言語での再解釈」「ゲームらしさ 6/10」「角丸は 9px に抑えて Web アプリの密度を保つ」</p>
+          </article>
+
+          <article class="tenet">
+            <h3>丸みは書体で出す。角丸では出さない。</h3>
+            <p>角丸 10〜16px を一度ちゃんと試して、<strong>増えたのは「ゲームらしさ」ではなく「親しみ」だった</strong>ので採らなかった。丸さの担当は M PLUS Rounded 1c。<code>border-radius</code> は構造を示すためだけに使う。</p>
+            <p class="quote"><b>モックでの証拠</b>「丸みは書体(M PLUS Rounded 1c)で出す」/ 規格シート 3a で 16px 系列を検証 →「親しみが増えます」と判定し、v4 は採用せず</p>
+          </article>
+
+          <article class="tenet sim">
+            <h3>入力欄を増やして解決しない。3 回連続でここを攻めた。</h3>
+            <p>「項目が多い」への答えを、入力欄の追加以外で 3 ターン探し続けた。テンプレ化・枠(スロット)化・カテゴリ化。着地は<strong>「かんたん設定 = 入力ゼロ・選ぶだけ」</strong>。</p>
+            <p class="quote"><b>モックでの証拠</b>「入力欄をほぼ廃止、段階を選ぶだけ」→「入力の単位を変える」→「入力ゼロ・選ぶだけ」/「入力欄の数はアイテム種類が増えても増えない(6 行で固定)」</p>
+            <p class="breaks"><b>破ると</b> 旧リポに戻る。毎回同じ数字を打ち直す道具になり、二度と開かれなくなる。</p>
+          </article>
+
+          <article class="tenet good">
+            <h3>押した場所は、押したあとも同じ場所にある。</h3>
+            <p>クリックした要素の<strong>上に何かを差し込まない。</strong>展開は必ずクリックした要素の下か右。押した瞬間に対象が視界の外へ流れる画面は、それだけで信用を失う — 情報量が多い画面ほど、探し直しのコストが効いてくる。</p>
+            <p class="quote"><b>システムに現れている形</b>ポップオーバーは <code>absolute</code> でトリガの真下に重なり、周りを押し下げない / アイコンはサイズ 4 段固定で「画像 0 枚でもレイアウトが動かない」/ 数値欄は <code>min-width</code> + <code>tabular-nums</code> で桁が増えても幅が変わらない</p>
+            <p class="breaks"><b>破ると</b> ユーザーは「押したもの」を毎回探し直す。1 画面に 30 行あるこのツールでは致命的。</p>
+          </article>
+
+          <article class="tenet good">
+            <h3>ドリルダウンで情報を置き換えない。右に増やす。</h3>
+            <p>補正源 → 部位 → 部位の中身は、<strong>階層が深くなるたびに右へペインが増える。</strong>前の階層は消えない。だから「いま自分がどこにいるか」を思い出す必要がなく、戻るのに「戻る」を押す必要もない。狭いときだけ左から畳む。</p>
+            <p class="quote"><b>モックでの証拠</b>「3 階層の遷移をそのまま並べた図(同じ窓の中身が入れ替わる)」を検討したうえで、v4 は<b>入れ替えではなく横に並べる</b>形を採った / ペインの出現アニメは <code>transform-origin: left center</code> = 左端から生えてくる</p>
+          </article>
+
+          <article class="tenet">
+            <h3>入力は「打ち込む場所」ではなく「決める場所」。</h3>
+            <p>ここが一番の拘り。<strong>自由入力は最後の手段で、その上に 4 段の手前がある</strong>(自動 → 段階選択 → チップ → ステッパー)。上の形で表現できないときだけ下に降りる。そして押した瞬間に、その結果が同じ画面で動く。</p>
+            <p class="quote"><b>モックでの証拠</b>「既定のかんたんでは数値入力欄が 1 つもない(段階・テンプレ・チップだけ)」「押した瞬間に数字が動きます」「右列に最終能力値を常設し、編集の結果が同一画面で見える」</p>
+          </article>
+
+          <article class="tenet sim">
+            <h3>動きの仕事は、何が変わったかを認知させること。</h3>
+            <p>この画面は情報が多い。<strong>数字が静かに書き換わったら、まず気づかれない。</strong>だから変わったものだけを跳ねさせ、色で増減を伝え、すぐ元に戻す。装飾のアニメーションを置かないのは、置くと本当の変化が埋もれるから。</p>
+            <p class="quote"><b>システムに現れている形</b>数値は <code>scale(1.07)</code> + 増減の色 → 0.3s で戻す / バーは幅を数値と同時に動かす / 変わった要素だけ動かし、画面全体は動かさない</p>
+            <p class="breaks"><b>破ると</b> 「押したのに何か起きたのか分からない」。試し変更が主要な体験のこの道具では、機能そのものが伝わらなくなる。</p>
+          </article>
+
+          <article class="tenet">
+            <h3>要素が増えても、入口は変わらない。</h3>
+            <p>装備・属性・称号・モンスターカード…は今後も増える。増えたときに<strong>増えてよいのは行数だけで、階層の深さと入口の重さは変わってはいけない。</strong>「登録は名前だけ、あとから育てる」もこの拘りの一部。</p>
+            <p class="quote"><b>モックでの証拠</b>「増えるのは行数だけで、階層は深くならない」「装備・属性が増えても入口は変わらない」「登録は名前だけで OK」</p>
+          </article>
+
+          <article class="tenet gold">
+            <h3>色に意味を持たせる。意味のない色を置かない。</h3>
+            <p>ラベンダーは「保存されない」に予約。金は「あなたの操作待ち」に固定。<strong>バッジの種類を増やすのではなく、色の意味を減らして固定した。</strong>帯の色も同じで、意味のある帯は 1 画面に 2 種まで。</p>
+            <p class="quote"><b>モックでの証拠</b>「ラベンダー #6D6AA8 は『一時・シミュレーション』専用に予約」「バッジの種類を減らし、色の意味を『金 = あなたの操作待ち』に固定」「1 画面で帯の色は 2 種まで」</p>
+          </article>
+
+          <article class="tenet warm">
+            <h3>効いていない量を見せる。それがこの道具の価値。</h3>
+            <p>合計値だけなら他にもある。<strong>「これ以上盛っても効かない」が分かることがこのツールの存在理由。</strong>上限で捨てられた分、相手の防御に持っていかれた分を、斜線という一貫した記号で見せる。</p>
+            <p class="quote"><b>モックでの証拠</b>「上限で捨てられた分を明示(イザベル +58% → 上限 50%、+8% は無効)。これが『何を盛るべきか』の判断材料になる」「これ以上盛っても効かないが分かるのがこのツールの価値になる」</p>
+          </article>
+
+          <article class="tenet warm">
+            <h3>欠けている状態を、正常な状態として見せる。</h3>
+            <p>gamedata は育っていく前提。だから<strong>未収録は空白ではなく破線 + <code>?</code>、未実装は破線 +「未実装」。</strong><code>0</code> で埋めると画面が嘘をつく。ついでに、欠けの一覧はそのままロードマップになる。</p>
+            <p class="quote"><b>モックでの証拠</b>「未収録アイコンは空白ではなく破線 + ?。gamedata が育つ前提のプロダクトなので、欠けている状態が正常に見える設計にしておく」「未収録の枠を隠さず見せる = ロードマップの可視化にもなる」</p>
+          </article>
+
+          <article class="tenet good">
+            <h3>検証性は落とさない。下げるのは初見の負荷だけ。</h3>
+            <p>式 10 段をバー 4 本に要約したが、<strong>全段は消していない。ボタンの奥にある。</strong>「情報を減らす」と「認知負荷を減らす」を混同しない。根拠(トレース・出典)には常に到達できる。</p>
+            <p class="quote"><b>モックでの証拠</b>「式 10 段はバー 4 本に要約し、全段はボタンの奥へ。検証性は落とさず初見の負荷だけ下げる」</p>
+          </article>
+
+          <article class="tenet">
+            <h3>ゲーム内の言葉と並びのまま。読み替えさせない。</h3>
+            <p>ゲーム画面を見ながら使う道具なので、<strong>語と並びがずれた瞬間に「写す」が「読み替える」になる。</strong>そこで事故が起きる。内部の用語(カテゴリ記号・Excel のセル名)を画面に出さない。</p>
+            <p class="quote"><b>モックでの証拠</b>「ゲーム内画面と同じ並び・同じ語にすることが肝。写す作業を『読み替え』にしないこと」「装備値(ゲーム内の表示と同じ)」</p>
+          </article>
+
+          <article class="tenet">
+            <h3>見出しは機能名ではなく、プレイヤーの問い。</h3>
+            <p>v3 の「この相手への 1 発」は v4 で<strong>「行ける？」</strong>になった。<code>INPUT</code> / <code>TARGET</code> は「だれが / だれに」になった。画面の見出しは、その画面が答える問いそのものにする。</p>
+            <p class="quote"><b>モックでの証拠</b>「列の見出しを INPUT/TARGET からユーザーの問い(だれが／だれに／結果)に変更」「プレイヤーの本当の問いは『今いくら出るか』ではなく『次に何を伸ばすと効くか』」</p>
+          </article>
+
+          <article class="tenet good">
+            <h3>触る場所だけ大きく。触らない場所は 1 行に畳む。</h3>
+            <p>全部を同じ大きさで並べない。<strong>決める枠はカードで大きく、自動で埋まる枠は 1 行。</strong>この整理だけで縦が約半分になった。「同じ重要度で並べる」は設計をしていないのと同じ。</p>
+            <p class="quote"><b>モックでの証拠</b>「3 ステップ列を廃止 / 自動枠は 1 行に畳む / 決める枠は 2×2 カードだけ。縦は約半分に」「触る場所(4 カード)だけ大きく」</p>
+          </article>
+
+          <article class="tenet sim">
+            <h3>保存されるかどうかが、色で分かる。</h3>
+            <p>試し変更で数字が動くのがこの道具の主要な体験なので、<strong>「いま見ている数字は保存済みか、試しているだけか」を常に色で返す。</strong>水色 = 保存される、ラベンダー = 保存されない。文言で補うのではなく、色で先に伝える。</p>
+            <p class="quote"><b>モックでの証拠</b>「保存される操作は水色、保存されない操作は紫、で色が意味を持つ」「押すと試し変更に入ります(保存されません)」</p>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="surface">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">01</span>
+        <h2>面と階層</h2>
+        <span class="note">白 = 編集できる面 の予約</span>
+      </div>
+      <div class="win-body">
+        <p>窓は 3 層。地 → 面 → インセットの順に濃くなる。<strong>白はユーザーが編集できる面に予約する</strong>ので、読み取り専用の数値を白い箱に入れてはいけない。編集できるかどうかを、文字色ではなく面の色で伝える。</p>
+
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="layers">
+            <div class="layer l-ground">地 — アプリ全体の背景<span class="tag num">#C9D8EE</span></div>
+            <div class="layer l-win">窓・カラム — 中央カラムの地<span class="tag num">#DEEBF7</span></div>
+            <div class="layer l-card"><b>カード — 内容の器。<span style="color:var(--accent)">編集できる面</span></b><span class="tag num">#FFFFFF</span></div>
+            <div class="layer l-inset">インセット — 表・トレース・<b>読み取り専用の数値</b><span class="tag num">#C1D3E6</span></div>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card soft">
+            <div class="card-h"><b>枠は 3 段</b><span class="r">用途で選ぶ</span></div>
+            <div class="spec col" style="gap:8px">
+              <div class="field-row"><span class="k">窓・カード</span><span style="flex:1;height:0;border-top:1px solid #798CAC"></span><span class="cap">#798CAC</span></div>
+              <div class="field-row"><span class="k">通常</span><span style="flex:1;height:0;border-top:1px solid #A6BAD3"></span><span class="cap">#A6BAD3</span></div>
+              <div class="field-row"><span class="k">弱い区切り</span><span style="flex:1;height:0;border-top:1px solid #C1D3E6"></span><span class="cap">#C1D3E6</span></div>
+            </div>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><b>判断の問い</b></div>
+            <p style="font-size:11.5px">その数値を<strong>ユーザーが編集できるなら白</strong>、できないなら<strong>インセット面</strong>。迷ったら、その値の出どころを探す(wiki / マスタ / 登録キャラ)。出どころがあるならそれは読み取り専用で、インセットに載る。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="bands">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">02</span>
+        <h2>帯</h2>
+        <span class="note">帯の色はブロックの性格</span>
+      </div>
+      <div class="win-body">
+        <p>帯は装飾ではなく、そのブロックが何であるかの宣言。<strong>色を足す前に意味を決める。</strong>意味のある帯(金・ラベンダー)は 1 画面に同時に 2 種まで — 3 種目が欲しくなったら、それは階層を作り直すべきサイン。</p>
+
+        <div class="spec col">
+          <div class="band band-app">アプリ帯 <span class="r">52px / タイトルとタブ</span></div>
+          <div class="band band-sec">カラム見出し <span class="r">30px / そのカラムが何か</span></div>
+          <div class="band band-gold">結果 <span class="r">ここが答え。金は 1 画面に 1 つ</span></div>
+          <div class="band band-sim">一時・試し <span class="r">保存されない操作のブロック</span></div>
+        </div>
+        <p class="cap">帯の文字は 800 / 10.5px / letter-spacing .08〜.1em。カラム見出しだけ 700。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="color">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">03</span>
+        <h2>色</h2>
+        <span class="note">クリックで hex をコピー</span>
+      </div>
+      <div class="win-body">
+
+        <div class="sec">基本トークン<span class="r">規格シート 2a の COLOR TOKENS</span></div>
+        <div class="swatches" id="sw-base"></div>
+
+        <div class="sec">文字色 6 段<span class="r">濃さで役割を分ける</span></div>
+        <div class="spec col" style="gap:6px">
+          <div class="ramp">
+            <span style="color:#1B2331">#1B2331 &nbsp;本文・主となる値</span>
+            <span style="color:#26334A">#26334A &nbsp;セクション見出し</span>
+            <span style="color:#3B4A63">#3B4A63 &nbsp;副次的な値・説明</span>
+            <span style="color:#5E6E88">#5E6E88 &nbsp;ラベル・注記</span>
+            <span style="color:#93A0B2">#93A0B2 &nbsp;補足・単位</span>
+            <span style="color:#A9B4C4">#A9B4C4 &nbsp;無効・未設定</span>
+          </div>
+        </div>
+
+        <div class="sec">状態の 6 系統<span class="r">到達判定はこれで全部を賄う</span></div>
+        <p>バッジもバーもこの 6 つから選ぶ。ラベル(「余裕」「通る」「ぎりぎり」…)は画面ごとに変えてよいが、<strong>色と意味の対応は変えない。</strong>新しい状態を足したくなったら、まずこの 6 つのどれかに寄せられないか考える。</p>
+        <div class="states">
+          <div class="state-row">
+            <span class="i">0</span><span class="m">余裕・目標</span>
+            <span class="meter-wrap"><span class="meter"><i class="f0" style="width:92%"></i></span></span>
+            <span class="state-badge"><span class="badge b0">余裕</span> <span class="cap">#DCEBFF / #426DD6</span></span>
+          </div>
+          <div class="state-row">
+            <span class="i">1</span><span class="m">足りている</span>
+            <span class="meter-wrap"><span class="meter"><i class="f1" style="width:74%"></i></span></span>
+            <span class="state-badge"><span class="badge b1">通る</span> <span class="cap">#DFF3E6 / #6FA98A</span></span>
+          </div>
+          <div class="state-row">
+            <span class="i">2</span><span class="m">ぎりぎり・操作待ち</span>
+            <span class="meter-wrap"><span class="meter"><i class="f2" style="width:52%"></i></span></span>
+            <span class="state-badge"><span class="badge b2">ぎりぎり</span> <span class="cap">#FDF3DE / #C2A057</span></span>
+          </div>
+          <div class="state-row">
+            <span class="i">3</span><span class="m">届かない・危険</span>
+            <span class="meter-wrap"><span class="meter"><i class="f3" style="width:31%"></i></span></span>
+            <span class="state-badge"><span class="badge b3">届かない</span> <span class="cap">#F6E8E5 / #B08480</span></span>
+          </div>
+          <div class="state-row">
+            <span class="i">4</span><span class="m">対象外・判定不能</span>
+            <span class="meter-wrap"><span class="meter"><i class="f4" style="width:18%"></i></span></span>
+            <span class="state-badge"><span class="badge b4">判定中</span> <span class="cap">#ECEEF2 / #A9B4C4</span></span>
+          </div>
+          <div class="state-row">
+            <span class="i">5</span><span class="m">一時・チーム条件</span>
+            <span class="meter-wrap"><span class="meter"><i class="f5" style="width:64%"></i></span></span>
+            <span class="state-badge"><span class="badge b5">条件だけ未達</span> <span class="cap">#EFEEF8 / #6D6AA8</span></span>
+          </div>
+        </div>
+
+        <div class="sec">予約色<span class="r">この用途以外に使わない</span></div>
+        <div class="reserved">
+          <div class="res res-gold">
+            <h4><span class="dot" style="background:#C2A057"></span>金 #C2A057</h4>
+            <p><b>あなたの操作待ち・上限・結果。</b>未選択、未保存、上限到達(「満」)、スキル、結果の帯。</p>
+            <span class="use">「金が出ている = まだ何か決めていない」で読める状態を守る</span>
+          </div>
+          <div class="res res-sim">
+            <h4><span class="dot" style="background:#6D6AA8"></span>ラベンダー #6D6AA8</h4>
+            <p><b>保存されない・一時的なもの。</b>試し変更、シミュレーション、バフ・消耗品、エンチャント。</p>
+            <span class="use">保存済みデータの名前に使ったら誤用。水色と紫の対比が崩れる</span>
+          </div>
+          <div class="res res-warm">
+            <h4><span class="dot" style="background:#B0574A"></span>赤茶 #A98B86 / #B0574A / #8C4A42</h4>
+            <p><b>敵と危険。</b>Mob、武器・装備の世界、削除、届かない、減る値。</p>
+            <span class="use">敵と危険を兼ねるのは意図。プレイヤーにとって敵は障害</span>
+          </div>
+          <div class="res res-good">
+            <h4><span class="dot" style="background:#3E8C63"></span>緑 #2E6B4C / #6FA98A</h4>
+            <p><b>足りている・増えた。</b>増加した数値、条件を満たした行、すぐできる強化。</p>
+            <span class="use">「良い」ではなく「足りている / 増えた」。評価ではなく事実</span>
+          </div>
+        </div>
+
+        <div class="sec">斜線 = 効いていない量<span class="r">この道具の存在理由の表現</span></div>
+        <div class="card">
+          <div class="hatch-demo">
+            <div class="cap">攻撃ダメージ X — 上限 50% に対して +58% 積んだとき</div>
+            <div class="hatch-bar">
+              <i style="width:64%;background:linear-gradient(90deg,#90D7FF,#426DD6)"></i>
+              <i style="width:9%;background:var(--stripe-loss)"></i>
+            </div>
+            <div class="legend">
+              <b><i style="background:linear-gradient(90deg,#90D7FF,#426DD6)"></i>効いている +50%</b>
+              <b><i style="background:var(--stripe-loss)"></i>上限で捨てられた +8%</b>
+            </div>
+          </div>
+          <div class="hatch-demo" style="margin-top:13px">
+            <div class="cap">攻撃力 A のうち、相手の防御力に持っていかれた分</div>
+            <div class="hatch-bar">
+              <i style="width:58%;background:linear-gradient(90deg,#8FB2E8,#426DD6)"></i>
+              <i style="width:42%;background:var(--stripe-def)"></i>
+            </div>
+            <div class="legend">
+              <b><i style="background:linear-gradient(90deg,#8FB2E8,#426DD6)"></i>抜けた分</b>
+              <b><i style="background:var(--stripe-def)"></i>防御に食われた分</b>
+            </div>
+          </div>
+          <p style="margin-top:11px;font-size:11.5px">斜線は一貫して<strong>「効いていない・持っていかれた」</strong>の記号。塗りつぶしと混ぜない。塗りは「効いている量」だけに使う。</p>
+        </div>
+
+        <div class="sec">コストの色<span class="r">強化候補の重さ</span></div>
+        <div class="spec">
+          <span class="badge b1">すぐできる</span>
+          <span class="badge b0">育成</span>
+          <span class="badge b2">周回</span>
+          <span class="badge b3">素材・課金</span>
+          <span class="cap">状態の 6 系統をそのまま流用する。新しい配色を作らない</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="radius">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">04</span>
+        <h2>角丸</h2>
+        <span class="note">4 段。中間値を足さない</span>
+      </div>
+      <div class="win-body">
+        <div class="radii">
+          <div class="radius-demo"><div class="box" style="border-radius:12px"></div><div class="lbl"><b>--r-window</b>12px / 窓・大カード</div></div>
+          <div class="radius-demo"><div class="box" style="border-radius:9px"></div><div class="lbl"><b>--r-panel</b>9px / パネル・ボタン・タブ</div></div>
+          <div class="radius-demo"><div class="box" style="border-radius:6px"></div><div class="lbl"><b>--r-inset</b>6px / インセット・表・バー</div></div>
+          <div class="radius-demo"><div class="box" style="border-radius:999px;width:96px;height:34px"></div><div class="lbl"><b>--r-pill</b>999px / バッジ・チップ</div></div>
+        </div>
+        <p>例外は丸ドット・円形アイコンの <code>border-radius: 50%</code> だけ。形が違うので段には数えない。</p>
+
+        <div class="rejected">
+          <div class="box" style="border-radius:0"></div>
+          <div class="box" style="border-radius:16px"></div>
+          <p><strong>採らなかった 2 案。</strong>規格シート 2a の 0〜4px は密度は出るが硬すぎ、3a の 10〜16px は「ゲームらしさ」ではなく「親しみ」に振れた。v4 の 9〜13px 系列を 4 段に丸めたのが上の 4 つ。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="type">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">05</span>
+        <h2>書体</h2>
+        <span class="note">言葉と数値を混ぜない</span>
+      </div>
+      <div class="win-body">
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><b>M PLUS Rounded 1c</b><span class="r">400 / 500 / 700 / 800</span></div>
+            <div style="font-size:21px;font-weight:700;line-height:1.5">言葉 — 見出し・ラベル・説明・ボタン</div>
+            <p style="font-size:11.5px;margin-top:6px">この書体が<strong>丸みの担当</strong>。角丸を上げなくてよい理由がここにある。</p>
+          </div>
+          <div class="card">
+            <div class="card-h"><b>M PLUS 1 Code</b><span class="r">400 / 500 / 700</span></div>
+            <div class="num" style="font-size:21px;font-weight:700;line-height:1.5">3,158 &nbsp;×0.99 &nbsp;+58%</div>
+            <p style="font-size:11.5px;margin-top:6px"><strong>数値</strong>。必ず <code>tabular-nums</code> を当てる。数値が Rounded で出ていたら桁が揃わないバグ。</p>
+          </div>
+        </div>
+
+        <div class="sec">役割トークン<span class="r">4 つ</span></div>
+        <div class="card">
+          <div class="type-rows">
+            <div class="type-row">
+              <span class="meta"><b>--t-result</b>44px / 700 / Code</span>
+              <span class="t-result num">3,158</span>
+            </div>
+            <div class="type-row">
+              <span class="meta"><b>--t-heading</b>19px / 700 / Rounded</span>
+              <span class="t-heading">古代レリックの聖域</span>
+            </div>
+            <div class="type-row">
+              <span class="meta"><b>--t-body</b>12.5px / 400 / Rounded</span>
+              <span class="t-body">選ぶだけで計算できます。数値は等幅で、桁が揺れないようにします。</span>
+            </div>
+            <div class="type-row">
+              <span class="meta"><b>--t-label</b>10.5px / 400 / #5E6E88</span>
+              <span class="t-label">スキル / 対象 / 覚醒段階</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">実寸のスケール<span class="r">密度は崩れではなく設計</span></div>
+        <p>v4 は密度を優先していて、役割トークン 4 段の外にも実寸がある。<strong>これを機械的に役割トークンへ寄せると、3 タブすべてで縦が伸びて 1 画面の情報量が減る。</strong>寄せるなら、密度を捨てる意識的な判断として決める。</p>
+        <div class="spec col" style="gap:7px">
+          <div class="field-row"><span class="k num">44 / 40 / 27</span><span style="font-size:11.5px">結果の数値(画面の主役 / 右カラムの選択中 / サマリー)</span></div>
+          <div class="field-row"><span class="k num">19</span><span style="font-size:11.5px">カード群の親になる名前</span></div>
+          <div class="field-row"><span class="k num">15 / 14 / 13</span><span style="font-size:11.5px">セクションの合計値・行の数値</span></div>
+          <div class="field-row"><span class="k num">12.5 / 12 / 11.5</span><span style="font-size:11.5px">本文・行のタイトル</span></div>
+          <div class="field-row"><span class="k num">11 / 10.5</span><span style="font-size:11.5px">カード見出し(700)・ラベル</span></div>
+          <div class="field-row"><span class="k num">9.5 / 9 / 8.5</span><span style="font-size:11.5px">注記・単位・バッジ</span></div>
+        </div>
+        <p class="cap">800 + letter-spacing .06〜.12em は帯とセクション見出し専用。本文には使わない。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="icons">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">06</span>
+        <h2>アイコン</h2>
+        <span class="note">装飾ではなく識別子</span>
+      </div>
+      <div class="win-body">
+        <p><strong>枠の色と形で系統を識別する。</strong>画像が 1 枚も無い状態でも系統が分かることが要件 — 実際、実装は今その状態で動いている。</p>
+
+        <div class="grid2">
+          <div class="card"><div class="icon-fam"><span class="icon s40"></span><span class="t"><b>キャラクター</b><span>#798CAC / r12 — 味方</span></span></div></div>
+          <div class="card"><div class="icon-fam"><span class="icon mob s40"></span><span class="t"><b>Mob(敵)</b><span>#A98B86 / r12 — 味方と混ざらない</span></span></div></div>
+          <div class="card"><div class="icon-fam"><span class="icon skill s40"></span><span class="t"><b>スキル</b><span>#C2A057 / r9 — 発動するもの</span></span></div></div>
+          <div class="card"><div class="icon-fam"><span class="icon buff s40"></span><span class="t"><b>バフ・消耗品</b><span>#6D6AA8 / 円形 — 一時的なもの</span></span></div></div>
+        </div>
+        <p class="cap">バフだけ円形にしてあるのは、<b>「一時的なもの」を色だけでなく形でも区別する</b>ため。色覚に依存しない層をひとつ持たせている。</p>
+
+        <div class="sec">サイズ 4 段<span class="r">型で縛り、CSS 側で固定する</span></div>
+        <div class="spec">
+          <div class="icon-state"><span class="icon s20"></span><div class="lbl num">20</div></div>
+          <div class="icon-state"><span class="icon s28"></span><div class="lbl num">28</div></div>
+          <div class="icon-state"><span class="icon s40"></span><div class="lbl num">40</div></div>
+          <div class="icon-state"><span class="icon s64"></span><div class="lbl num">64</div></div>
+          <p class="cap" style="max-width:22ch">20 = 行内・チップ<br>28 = 一覧行<br>40 = 選択カード<br>64 = キャラ詳細</p>
+        </div>
+
+        <div class="sec">状態<span class="r">「データが無い」と「対象が無い」は別</span></div>
+        <div class="spec">
+          <div class="icon-state"><span class="icon s40"></span><div class="lbl">通常</div></div>
+          <div class="icon-state"><span class="icon s40 sel"></span><div class="lbl" style="color:var(--accent)">選択中</div></div>
+          <div class="icon-state"><span class="icon s40 off"></span><div class="lbl">無効</div></div>
+          <div class="icon-state"><span class="icon s40 missing">?</span><div class="lbl">未収録</div></div>
+          <div class="icon-state"><span class="icon s40"></span><div class="lbl">対象なし</div></div>
+          <p class="cap" style="max-width:30ch">画像が来るまでは縞プレースホルダ。<b style="color:var(--fg-sub)">未収録は破線 + ?</b> で、データが無いことを明示する(空白にしない)。<b style="color:var(--fg-sub)">対象が無い枠は縞のまま</b>で、警告も ? も出さない。</p>
+        </div>
+
+        <div class="sec">実際の並びでの見え方</div>
+        <div class="grid2">
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="pop-h">登録キャラ一覧<span class="r">28px</span></div>
+            <div class="pop-r" style="background:linear-gradient(180deg,#D9ECFF,#C2E1FF)"><span class="icon s28 sel"></span><span class="nm"><b>検証ボリス</b><br><span style="font-size:10px;color:var(--accent-deep)">ボリス</span></span></div>
+            <div class="pop-r"><span class="icon s28"></span><span class="nm">みなみ<br><span style="font-size:10px;color:var(--fg-dim)">ティチエル</span></span></div>
+            <div class="pop-r"><span class="icon s28 missing">?</span><span class="nm">新規キャラ<br><span style="font-size:10px;color:var(--fg-dim)">アイコン未収録</span></span></div>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="pop-h">スキル選択<span class="r">40px・金枠</span></div>
+            <div class="pop-r" style="gap:10px"><span class="icon skill s40"></span><span class="nm"><b>極・横斬り</b><br><span class="num" style="font-size:10px;color:var(--accent)">×0.99 / 1段 / Cri×2</span></span></div>
+            <div class="pop-r" style="gap:10px"><span class="icon skill s40"></span><span class="nm">回転斬り<br><span class="num" style="font-size:10px;color:var(--fg-dim)">×0.48 / 3段</span></span></div>
+            <div class="pop-r" style="gap:10px;opacity:.5"><span class="icon s40 off"></span><span class="nm">未収録スキル<br><span style="font-size:10px;color:var(--fg-dim)">データ待ち</span></span></div>
+          </div>
+        </div>
+
+        <div class="sec">差し替え規約<span class="r">実装側の約束</span></div>
+        <ul>
+          <li>ファイルは <code>src/assets/icons/{characters|mobs|skills|buffs}/&lt;id&gt;.png</code>。<strong>id は gamedata の id と一致</strong>させ、UI 側は id から機械的に解決する。手動のマッピング表は作らない</li>
+          <li>画像は 1:1・余白 8%・影なし(影と枠は UI 側が付ける)。128px 基準で用意すれば 20〜64px を 1 枚で兼用できる</li>
+          <li>解決できない id は破線 + <code>?</code> にフォールバックし、console に 1 行だけ warn(id ごとに 1 回)。<strong>レイアウトは絶対に崩さない</strong></li>
+          <li><strong>アイコン単独表示は禁止</strong>(名前と併記)。例外はキャラレールを畳んだときだけで、そのとき呼び出し側が <code>title</code> を付ける</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="input">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">07</span>
+        <h2>入力</h2>
+        <span class="note">打ち込む場所ではなく、決める場所</span>
+      </div>
+      <div class="win-body">
+        <p class="lede">このシステムで一番拘っているところ。<strong>自由入力は最後の手段で、その手前に 4 段ある。</strong>上の形で表現できないときだけ、ひとつ下に降りる。</p>
+
+        <div class="sec">入力の 5 形態<span class="r">上から順に試す。飛ばして下に行かない</span></div>
+        <div class="ladder">
+
+          <div class="rung">
+            <span class="lv">1</span>
+            <span class="nm"><b>自動</b><span>ユーザーは触らない。表示だけ</span></span>
+            <span class="demo">
+              <span class="fld-read num">1,240</span>
+              <span class="cap">出どころがある値(wiki / マスタ / 登録キャラ)は<br>そもそも入力にしない。インセット面に載せる</span>
+            </span>
+          </div>
+
+          <div class="rung r2">
+            <span class="lv">2</span>
+            <span class="nm"><b>段階選択</b><span>選択肢が有限で、順序があるとき</span></span>
+            <span class="demo">
+              <span class="seg" role="group" aria-label="覚醒段階の例">
+                <button type="button">なし</button><button type="button">強化</button><button type="button">真1</button><button type="button">真2</button><button type="button" class="on" aria-pressed="true">真3</button>
+              </span>
+              <span class="cap">段階そのものを見せる。<br>「3」という数字を打たせない</span>
+            </span>
+          </div>
+
+          <div class="rung r3">
+            <span class="lv">3</span>
+            <span class="nm"><b>チップ</b><span>オン / オフ、または少数の状態の巡回</span></span>
+            <span class="demo">
+              <span class="chip" style="background:linear-gradient(180deg,#CCF7FF,#90D7FF);border-color:#687287;color:#123047;font-weight:700">改・信頼の薬 <b class="num" style="font-size:9px">+12%</b></span>
+              <span class="chip">イルミネ祭り <b class="num" style="font-size:9px;color:var(--fg-dim)">+8%</b></span>
+              <span class="cap">値はチップの中に書く。<br>選ぶ = 値が確定する</span>
+            </span>
+          </div>
+
+          <div class="rung r4">
+            <span class="lv">4</span>
+            <span class="nm"><b>ステッパー</b><span>連続値だが上限があり、刻みが決まっているとき</span></span>
+            <span class="demo">
+              <span class="cap" style="max-width:34ch">＋ / − と MAX で動かす。<br><b style="color:var(--fg-sub)">上限は値の隣に常設</b>し、届いたら面の色が変わる。<br>下の実演がこの形。</span>
+            </span>
+          </div>
+
+          <div class="rung r5">
+            <span class="lv">5</span>
+            <span class="nm"><b>自由入力</b><span>例外。ここまで降りたら理由を書く</span></span>
+            <span class="demo">
+              <span class="fld-edit num" style="min-width:96px">2,000</span>
+              <span class="chip add">調整値</span>
+              <span class="cap">シミュレーション用の一時値と、<br>外部データで取れない値だけ</span>
+            </span>
+          </div>
+
+        </div>
+
+        <div class="sec">押した瞬間に、結果が動く<span class="r">実演 — 触ってください</span></div>
+        <p>「適用」ボタンを挟まない。<strong>入力した結果がどこに効いたかは、同じ画面で、同じ瞬間に返す。</strong>下は装備のエンチャント欄(v4 の実物)。値・上限・進捗・MAX がひとつのセルに同居していて、動かすと右の攻撃力が跳ねる。</p>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><b>能力値</b><span class="r">基本は装備品ごとに固定</span></div>
+            <div class="ench">
+              <span></span><span class="h" style="text-align:right">基本</span><span class="h e">エンチャント(上限まで)</span>
+
+              <span class="k">突き</span>
+              <span class="base num">122</span>
+              <span class="ctrl">
+                <button class="step" type="button" data-ench="thrust" data-d="-40" aria-label="突きを減らす">−</button>
+                <span class="cell" id="cell-thrust">
+                  <i class="fillbar" style="width:0%"></i>
+                  <span class="row"><span class="v num" data-v="thrust">0</span><span class="cap-n">/400</span></span>
+                </span>
+                <button class="step" type="button" data-ench="thrust" data-d="40" aria-label="突きを増やす">＋</button>
+                <button class="maxbtn" type="button" data-max="thrust" title="上限 400 にする">MAX</button>
+              </span>
+
+              <span class="k">斬り</span>
+              <span class="base num">315</span>
+              <span class="ctrl">
+                <button class="step" type="button" data-ench="slash" data-d="-40" aria-label="斬りを減らす">−</button>
+                <span class="cell" id="cell-slash">
+                  <i class="fillbar" style="width:0%"></i>
+                  <span class="row"><span class="v num" data-v="slash">0</span><span class="cap-n">/400</span></span>
+                </span>
+                <button class="step" type="button" data-ench="slash" data-d="40" aria-label="斬りを増やす">＋</button>
+                <button class="maxbtn" type="button" data-max="slash" title="上限 400 にする">MAX</button>
+              </span>
+            </div>
+            <p class="cap" style="margin-top:11px">上限に届くとセルが紫になり MAX が反転する。<b style="color:var(--sim-fg)">「満」は文字ではなく面で伝える</b> — 文字だと 30 行の中で読まれない。</p>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="echo">
+              <span class="lb">A 攻撃力</span>
+              <span class="dl" id="atk-delta"></span>
+              <span class="vv num numpop" id="atk-val">2,462</span>
+            </div>
+            <div class="card soft" style="flex:1">
+              <div class="card-h"><b>ここで守っていること</b></div>
+              <ul style="font-size:11px">
+                <li><strong>入力欄は常に埋まっている。</strong>placeholder に頼らない — 空欄は「まだ決めていない」ではなく「意図的に外した」を意味する</li>
+                <li><strong>範囲は入力欄が知っている。</strong><code>/400</code> を値の隣に常設し、MAX を 1 タップで置く。範囲外を打てなくするのではなく、範囲を見せる</li>
+                <li><strong>桁が増えても幅が変わらない。</strong><code>min-width</code> + <code>tabular-nums</code> + 右寄せ。数字が伸びて隣が押される画面にしない</li>
+                <li><strong>注記とエラーは行内の固定領域に出す。</strong>行を差し込んで下をずらさない</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">自由入力は、見た目で例外だと分かる</div>
+        <div class="spec">
+          <span class="fld-read num">1,240</span>
+          <span class="cap">自動 — インセット面</span>
+          <span style="width:1px;height:26px;background:var(--edge-soft)"></span>
+          <span class="fld-edit num">2,000</span>
+          <span class="chip add">調整値 · 一時</span>
+          <span class="cap">自由入力 — 白 + 青枠 + 破線チップ</span>
+        </div>
+        <p class="cap">自由入力を禁止はしない。禁止すると未収録データと検証に対応できなくなる。<b style="color:var(--fg-sub)">「例外として許す」位置づけを見た目で表す</b>のが正しい落とし所。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="parts">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">08</span>
+        <h2>部品</h2>
+        <span class="note">すべて実物。触れる</span>
+      </div>
+      <div class="win-body">
+
+        <div class="sec">タブ</div>
+        <div class="spec col" style="gap:0;padding-bottom:0">
+          <div class="tabs">
+            <div class="tab on">ダメージ計算</div>
+            <div class="tab">キャラ管理</div>
+            <div class="tab todo">強化提案</div>
+          </div>
+          <div class="tab-rule"></div>
+          <p class="cap" style="padding:9px 0 13px">選択中は 1px 迫り出す。未実装のタブは opacity .65 で「あるが、まだ」を示す</p>
+        </div>
+
+        <div class="sec">ボタン<span class="r">保存されるかどうかが色で分かる</span></div>
+        <div class="spec">
+          <button class="btn primary">保存</button>
+          <button class="btn">キャンセル</button>
+          <button class="btn sim">計算シートで試す</button>
+          <button class="btn link">内訳を見る</button>
+          <button class="btn del">削除</button>
+          <button class="btn off" disabled>計算する</button>
+        </div>
+        <p class="cap">水色 = 保存される / ラベンダー = 保存されない。主要には <code>inset 0 1px 0 #fff</code> のハイライトを 1 本入れる。</p>
+
+        <div class="sec">フィールド<span class="r">表示が既定・編集は例外</span></div>
+        <div class="spec col" style="gap:9px">
+          <div class="field-row"><span class="k">既定(読取)</span><span class="fld-read num">2,000</span><a href="#parts" style="font-size:10.5px">編集</a></div>
+          <div class="field-row"><span class="k">編集中</span><span class="fld-edit num">2,000</span><span class="cap">1 – 9,999</span></div>
+          <div class="field-row"><span class="k">選択</span><span class="fld-sel">トゥタトゥール <span class="cv">▾</span></span></div>
+          <div class="field-row"><span class="k">段階選択</span>
+            <span class="seg" role="group" aria-label="覚醒段階">
+              <button type="button">強化</button><button type="button">真1</button><button type="button">真2</button><button type="button">真3</button><button type="button" class="on" aria-pressed="true">真4</button>
+            </span>
+          </div>
+        </div>
+        <p class="cap">初期値は常に埋まっている。入力欄は<b>自動値を上書きする例外操作</b>で、その関係が見た目でも分かるようにする。</p>
+
+        <div class="sec">バッジ・チップ</div>
+        <div class="spec">
+          <span class="badge" style="background:#fff;border-color:#798CAC;color:#5E6E88">未設定</span>
+          <span class="badge b5">一時</span>
+          <span class="badge b0">固定</span>
+          <span class="badge b2">未保存</span>
+          <span class="chip"><span class="dotb"></span>改・信頼の薬</span>
+          <span class="chip sim"><span class="dotb"></span>イルミネ祭り</span>
+          <span class="chip add">＋ 追加</span>
+        </div>
+        <p class="cap">追加用のチップは破線 + ＋。実在のチップと見た目で区別する。</p>
+
+        <div class="sec">バー</div>
+        <div class="spec col" style="gap:11px">
+          <div><div class="cap">進捗 — 目安に対する火力</div><div class="meter" style="margin-top:5px"><i class="f1" style="width:74%"></i></div></div>
+          <div>
+            <div class="cap">積み上げ — 攻撃力 A の内訳。区画の色は補正源ごとに固定し、必ず凡例を添える</div>
+            <div class="hatch-bar" style="margin-top:5px">
+              <i style="width:22%;background:#9AA6B6"></i><i style="width:44%;background:#426DD6"></i><i style="width:19%;background:#6D6AA8"></i><i style="width:15%;background:#C2A057"></i>
+            </div>
+            <div class="legend" style="margin-top:6px">
+              <b><i style="background:#9AA6B6"></i>素の攻撃力</b>
+              <b><i style="background:#426DD6"></i>装備の攻撃力</b>
+              <b><i style="background:#6D6AA8"></i>装備強化倍率</b>
+              <b><i style="background:#C2A057"></i>シエナのオーラ</b>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">ポップオーバー</div>
+        <div class="spec" style="align-items:flex-start">
+          <div class="pop">
+            <div class="pop-h"><span class="sq"></span>古代レリックの聖域<span class="r">4</span></div>
+            <div class="pop-r"><span class="dt" style="background:#3E8C63"></span><span class="nm">トゥタトゥール</span><span class="vl num">3,158</span><span class="badge b1" style="font-size:8.5px">通る</span></div>
+            <div class="pop-r"><span class="dt" style="background:#C2A057"></span><span class="nm">ネヴィスカ</span><span class="vl num">2,410</span><span class="badge b2" style="font-size:8.5px">ぎりぎり</span></div>
+            <div class="pop-r"><span class="dt" style="background:#B0574A"></span><span class="nm">アルカディウス</span><span class="vl num">1,880</span><span class="badge b3" style="font-size:8.5px">届かない</span></div>
+          </div>
+          <p class="cap" style="max-width:30ch">最大高 240〜262px でスクロールし、グループ見出しは sticky。背後に全画面の透明オーバーレイを敷いて外側クリックで閉じる。スキル一覧だけ枠が金 <code>#A9821F</code>。</p>
+        </div>
+
+        <div class="sec">スプリッター<span class="r">当たり判定 9px / 線は 1px</span></div>
+        <div class="spec col">
+          <div class="splitter-demo">
+            <div class="pane">補正源</div>
+            <div class="splitter" title="ドラッグで幅を変える"></div>
+            <div class="pane">部位の中身</div>
+          </div>
+          <p class="cap">hover で線が <code>#426DD6</code> になり、周囲にごく薄い面が出る。<code>title</code> には「何が起きるか」を書く — 「ドラッグ、閉じるまで寄せられます」</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="space">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">09</span>
+        <h2>空間と視点</h2>
+        <span class="note">押した場所は動かない</span>
+      </div>
+      <div class="win-body">
+        <p class="lede">1 画面に 30 行が並ぶ道具なので、<strong>操作のたびに視点をリセットさせない</strong>ことが最優先。押したものが視界の外へ流れる画面は、それだけで信用を失う。</p>
+
+        <div class="sec">規則 1 — クリックした要素の上に、何も差し込まない<span class="r">実演 — 左右とも 3 行目を押してみてください</span></div>
+        <div class="vs">
+
+          <div class="vs-card ng">
+            <div class="vs-h">✕ 却下 — 上に差し込む<span class="r">押した行が下へ流れる</span></div>
+            <div class="vs-b">
+              <div class="stage-list" id="stage-ng"></div>
+              <p>結果や通知を先頭に足すと、<strong>押した行が押した瞬間に下へずれる。</strong>ユーザーは自分が何を押したかを目で追い直すことになり、行が多いほど失敗する。</p>
+            </div>
+          </div>
+
+          <div class="vs-card ok">
+            <div class="vs-h">✓ 採用 — 押した行の直下に出す<span class="r">押した行はその場に残る</span></div>
+            <div class="vs-b">
+              <div class="stage-list" id="stage-ok"></div>
+              <p>展開は<strong>押した要素の下か右</strong>にだけ出す。上に伸ばさない。押した行は動かないので、視線を戻す必要がない。</p>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="sec">規則 2 — ドリルダウンは置き換えではなく、右に増やす<span class="r">実演 — 項目を押して掘ってください</span></div>
+        <div class="vs">
+
+          <div class="vs-card ng">
+            <div class="vs-h">✕ 却下 — 同じ窓の中身を入れ替える<span class="r">どこにいるか分からなくなる</span></div>
+            <div class="vs-b">
+              <div class="drill" id="drill-ng"></div>
+              <p>掘るたびに前の階層が消えるので、<strong>「戻る」を押すまで自分の位置が分からない。</strong>横並びの候補(他の部位)も見えないため、比較ができない。</p>
+              <div class="toggle-row"><button class="btn" type="button" id="ng-reset">最初から</button><span class="crumb-note" id="ng-crumb"></span></div>
+            </div>
+          </div>
+
+          <div class="vs-card ok">
+            <div class="vs-h">✓ 採用 — 右にペインを足す<span class="r">来た道が全部見えている</span></div>
+            <div class="vs-b">
+              <div class="drill" id="drill-ok"></div>
+              <p>階層が深くなるたびに右へ増える。<strong>前の階層は残るので、戻るのに「戻る」を押す必要がない</strong> — 左のペインの別項目を押せばそのまま横に移れる。狭いときだけ左から畳む。</p>
+              <div class="toggle-row"><button class="btn" type="button" id="ok-reset">最初から</button><span class="crumb-note" id="ok-crumb"></span></div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="sec">規則 3 — 重なるものはレイアウトを押さない</div>
+        <p>候補リスト・ポップオーバー・ツールチップは <code>position: absolute</code> でトリガの真下に<strong>重ねる</strong>。周囲を押し下げる形(アコーディオンで下を全部ずらす)にしない。閉じたときに何も動かないことが条件。</p>
+
+        <div class="sec">規則 4 — サイズは、データが来る前に決まっている</div>
+        <p>「あとから値が入ってレイアウトが変わる」を作らない。<strong>実装が今この状態で成立している</strong>ことが証拠 — アイコン画像は 1 枚も入っていないのに、どの画面も崩れていない。</p>
+        <div class="fixed-demo">
+          <div class="col">
+            <span class="cap">✓ min-width + tabular-nums + 右寄せ</span>
+            <span class="numbox num">9</span>
+            <span class="numbox num">1,240</span>
+            <span class="numbox num">128,400</span>
+          </div>
+          <div class="col">
+            <span class="cap">✕ 幅が値に追従する</span>
+            <span class="numbox loose num">9</span>
+            <span class="numbox loose num">1,240</span>
+            <span class="numbox loose num">128,400</span>
+          </div>
+          <p class="cap" style="max-width:32ch;align-self:center">数値・アイコン・バー・バッジは<b style="color:var(--fg-sub)">値が変わっても寸法が変わらない</b>。左は桁が増えても隣が動かない。右は動く。</p>
+        </div>
+
+        <div class="sec">規則 5 — 並びは、ユーザーが頼まない限り変わらない</div>
+        <p>チェックを付けた行がソートで飛ばない。フィルタで消えるときも、<strong>いま操作した行だけは残す</strong>(または消えることを動きで見せる)。「操作したら対象が消えた」は最悪の体験で、操作の取り消しすらできなくなる。</p>
+
+        <div class="foot" style="background:var(--card-soft);border-color:var(--edge-soft);color:var(--fg-sub)">
+          <b>この 5 規則の共通の目的</b> — 操作のあと、<b>ユーザーが目を戻す先が常に同じであること。</b>動き(§10)が「何が変わったか」を伝えられるのは、その周りが動いていないから。<b>空間が安定していない画面では、どんなに丁寧なアニメーションも読めない。</b>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="motion">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">10</span>
+        <h2>動きと変化</h2>
+        <span class="note">何が変わったかを認知させる</span>
+      </div>
+      <div class="win-body">
+        <p class="lede">この画面は情報が多い。<strong>数字が静かに書き換わったら、まず気づかれない。</strong>動きの仕事はひとつだけ — いま何が変わったかを、探させずに伝えること。</p>
+        <p>だから装飾のアニメーションを置かない。置くと、本当の変化がその中に埋もれる。</p>
+
+        <div class="sec">変化の型と、その伝え方<span class="r">型ごとに手段を固定する</span></div>
+        <div class="changes">
+          <div class="change">
+            <span class="w">数値が変わった</span>
+            <span class="how">跳ねる + 増減の色。<b>色は必ず元に戻す</b> — 残すと状態色(§03)と混ざって意味が壊れる</span>
+            <span class="spec-n">scale(1.07)<br>transform .2s cubic-bezier(.34,1.56,.64,1)<br>color .3s ease</span>
+          </div>
+          <div class="change">
+            <span class="w">量が変わった</span>
+            <span class="how">バーの幅。<b>数値と同時に動かす</b>(片方だけ動くと、もう片方が古い値に見える)</span>
+            <span class="spec-n">width .38〜.5s<br>cubic-bezier(.4,0,.2,1)</span>
+          </div>
+          <div class="change">
+            <span class="w">場所が増えた</span>
+            <span class="how">左端から生えてくる。<b>元からある場所は動かさない</b>(§09 規則 2)</span>
+            <span class="spec-n">translateX(-10px) scaleX(.97)<br>.26〜.32s cubic-bezier(.2,.85,.25,1)<br>transform-origin: left center</span>
+          </div>
+          <div class="change">
+            <span class="w">一時的に重なった</span>
+            <span class="how">上から降りる。閉じたら跡形もなく消える(レイアウトを押していないので)</span>
+            <span class="spec-n">translateY(-6px) scaleY(.97)<br>.17s cubic-bezier(.34,1.2,.64,1)</span>
+          </div>
+          <div class="change">
+            <span class="w">状態が変わった</span>
+            <span class="how">バッジが弾んで出る。行そのものは動かさない</span>
+            <span class="spec-n">scale(.9) → 等倍<br>.26s cubic-bezier(.34,1.56,.64,1)</span>
+          </div>
+          <div class="change">
+            <span class="w">開いた / 閉じた</span>
+            <span class="how"><b>下方向にだけ伸びる。</b>上に伸ばすと、上にあるものが全部ずれる</span>
+            <span class="spec-n">max-height .34s<br>+ opacity .24s</span>
+          </div>
+        </div>
+
+        <div class="sec">動きの規則</div>
+        <ul>
+          <li><strong>変わった要素だけ動かす。画面全体を動かさない。</strong>ページ遷移風の演出は、何が変わったかを消してしまう</li>
+          <li><strong>同時に 2 箇所が変わったら、2 箇所とも動かす。</strong>片方だけ動かすと、動かないほうが「古い値のまま」に見える</li>
+          <li><strong>0.5 秒を超える動きを置かない。</strong>待たせるための動きは 1 つも要らない</li>
+          <li><strong>連打されても壊れない。</strong>アニメーションは途中から再スタートできること(このページの実演もそう作ってある)</li>
+          <li><strong>動きを消しても変化が分かること。</strong>色・バッジ・数値そのもので既に伝わっていて、動きはその上乗せ — という順序を守る</li>
+        </ul>
+
+        <div class="motion-grid">
+          <div class="motion">
+            <span class="t">ペインの出現</span>
+            <div class="stage"><div class="mo-box" data-anim="play-pane">部位の中身</div></div>
+            <span class="cap">translateX(-10px) scaleX(.97) → 等倍<br>.26〜.32s / cubic-bezier(.2,.85,.25,1)</span>
+            <button class="btn" type="button" data-play>再生</button>
+          </div>
+          <div class="motion">
+            <span class="t">ポップオーバー</span>
+            <div class="stage"><div class="mo-box" data-anim="play-pop" style="width:140px">対象を選ぶ</div></div>
+            <span class="cap">translateY(-6px) scaleY(.97) → 等倍<br>.17s / cubic-bezier(.34,1.2,.64,1)</span>
+            <button class="btn" type="button" data-play>再生</button>
+          </div>
+          <div class="motion">
+            <span class="t">バッジの出現</span>
+            <div class="stage"><span class="mo-badge" data-anim="play-badge">次はここ</span></div>
+            <span class="cap">scale(.9) → 等倍<br>.26s / cubic-bezier(.34,1.56,.64,1)</span>
+            <button class="btn" type="button" data-play>再生</button>
+          </div>
+          <div class="motion">
+            <span class="t">バーの伸縮</span>
+            <div class="stage"><div class="meter" style="width:150px" data-anim="play-bar"><i class="f1" style="width:76%"></i></div></div>
+            <span class="cap">width / .38〜.5s / cubic-bezier(.4,0,.2,1)</span>
+            <button class="btn" type="button" data-play>再生</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:2px">
+          <div class="card-h"><b>数値が変わったとき</b><span class="r">どの数字が動いたかを目で追わせる</span></div>
+          <div class="spec" style="justify-content:space-between">
+            <span class="numpop" id="numpop">3,158</span>
+            <span style="display:flex;gap:8px">
+              <button class="btn" type="button" id="np-up">強化する</button>
+              <button class="btn" type="button" id="np-down">外す</button>
+            </span>
+          </div>
+          <p class="cap" style="margin-top:9px">scale(1.07) に一瞬跳ね、<b style="color:var(--good)">増えたら緑</b>・<b style="color:var(--danger)">減ったら赤茶</b>に色を振ってから戻す。transform .2s cubic-bezier(.34,1.56,.64,1) / color .3s ease</p>
+        </div>
+
+        <p class="cap"><code>prefers-reduced-motion: reduce</code> のときは全アニメーションを実質 0 にする(このページも同じ)。<b style="color:var(--fg-sub)">そのとき変化が分からなくなるなら、それは動きに頼りすぎている</b>というサイン — 色と数値だけで既に伝わっている状態を先に作る。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="sheet">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">11</span>
+        <h2>組み上がり — キャラクターステータス</h2>
+        <span class="note">バフを押すと全部が連動します</span>
+      </div>
+      <div class="win-body">
+        <p class="lede">ここまでの規格を全部使うと、こうなる。<strong>下のバフチップを押してください</strong> — 能力値・バー・攻撃力・レイヤーの内訳が同時に動き、上限に届いた枠には「満」が出ます。</p>
+        <p>ゲームのステータスウィンドウとして左を作り、<strong>素ステ → 最終能力値を 1 本のバーで見せる。</strong>数字の羅列ではなく「どれだけ伸びたか」が一目で分かることを狙っている。灰色が素ステ、青が補正で乗った分。</p>
+
+        <div class="sheet">
+          <div class="sheet-bar">
+            <span class="icon s28"></span>
+            <span class="nm">検証ボリス</span>
+            <span class="sub">ボリス / 覚醒 2</span>
+            <span class="badge b2">未保存</span>
+            <span class="acts">
+              <button class="btn primary" type="button">保存</button>
+              <button class="btn" type="button">閉じる</button>
+            </span>
+          </div>
+
+          <div class="sheet-grid">
+
+            <div class="sheet-col">
+              <div class="sheet-sec">能力値<span class="r">素ステ → 最終</span></div>
+              <div class="sheet-pad">
+                <div id="statlines" style="display:flex;flex-direction:column;gap:7px"></div>
+                <div class="legend">
+                  <b><i style="background:#9AA6B6"></i>素ステ(振り分け)</b>
+                  <b><i style="background:linear-gradient(90deg,#8FB2E8,#426DD6)"></i>補正で乗った分</b>
+                  <b><span class="badge b2" style="font-size:8.5px">満</span> 上限 310 に到達</b>
+                </div>
+              </div>
+
+              <div class="sheet-sec">常用バフ<span class="r">押した瞬間に上が動く</span></div>
+              <div class="sheet-pad">
+                <div class="buffbar" id="buffbar"></div>
+                <p class="cap">チップの中に効果量を書く。<b style="color:var(--fg-sub)">選ぶこと = 値が確定すること</b>で、数値を打たせない(§07 形態 3)。</p>
+              </div>
+            </div>
+
+            <div class="sheet-col">
+              <div class="sheet-sec">攻撃力 A<span class="r">極・横斬り(STAB 依存)</span></div>
+              <div class="sheet-pad">
+                <div class="abox">
+                  <span class="lb">A 攻撃力</span>
+                  <span class="ad" id="a-delta"></span>
+                  <span class="av num" id="a-val">0</span>
+                </div>
+                <div>
+                  <div class="hatch-bar" id="a-bar">
+                    <i style="background:#9AA6B6" data-seg="stat"></i>
+                    <i style="background:linear-gradient(90deg,#8FB2E8,#426DD6)" data-seg="eqbase"></i>
+                    <i style="background:#6D6AA8" data-seg="eqenh"></i>
+                    <i style="background:#C2A057" data-seg="rate"></i>
+                  </div>
+                  <div class="legend" style="margin-top:7px">
+                    <b><i style="background:#9AA6B6"></i>ステ攻撃力 <span class="num" id="lg-stat"></span></b>
+                    <b><i style="background:linear-gradient(90deg,#8FB2E8,#426DD6)"></i>装備基本 <span class="num">1,240</span></b>
+                    <b><i style="background:#6D6AA8"></i>装備強化 <span class="num">320</span></b>
+                    <b><i style="background:#C2A057"></i>強化倍率 <span class="num">+20%</span></b>
+                  </div>
+                </div>
+
+                <div class="sheet-sec" style="margin:2px -13px 0;border-radius:0">能力値の 5 レイヤー<span class="r">wiki §2</span></div>
+                <div class="layers-tbl">
+                  <span class="ln">割合増加</span><span class="lsrc" id="l1s">—</span><span class="lv2" id="l1">+5%</span>
+                  <span class="ln">固定値</span><span class="lsrc" id="l2s">—</span><span class="lv2" id="l2">+30</span>
+                  <span class="ln">倍率A</span><span class="lsrc" id="l3s">—</span><span class="lv2" id="l3">×1.05</span>
+                  <span class="ln">倍率B</span><span class="lsrc" id="l4s">—</span><span class="lv2" id="l4">+10%</span>
+                  <span class="ln">最終固定値</span><span class="lsrc" id="l5s">—</span><span class="lv2" id="l5">+40</span>
+                </div>
+                <p class="cap">レイヤーは<b style="color:var(--sim-fg)">計算の順番そのもの</b>。並べ替えない。どのバフがどのレイヤーに入ったかを右に出す。</p>
+              </div>
+
+              <div class="sheet-sec">装備値(全部位の合計)<span class="r">ゲーム内の表示と同じ並び</span></div>
+              <div class="sheet-pad">
+                <div class="scroll-x">
+                  <table class="eqtbl">
+                    <thead><tr><th></th><th>突き</th><th>斬り</th><th>物防</th><th>魔攻</th><th>魔防</th><th>命中</th><th>Cri</th><th>回避</th><th>敏捷</th></tr></thead>
+                    <tbody>
+                      <tr><th>基本</th><td>1,240</td><td>1,180</td><td>640</td><td class="z">0</td><td>410</td><td>128</td><td>46</td><td>92</td><td>74</td></tr>
+                      <tr><th>強化</th><td>320</td><td>320</td><td>180</td><td class="z">0</td><td>80</td><td>40</td><td>12</td><td>24</td><td>18</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="cap">読み取り専用なので<b style="color:var(--fg-sub)">インセット面</b>(§01)。編集できる白い面と、触れるかどうかが面で分かれている。<b style="color:var(--fg-sub)">0 は薄く</b>して「無い」と分かるようにするが、空欄にはしない。</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="sec">この 1 枚が使っている規格</div>
+        <div class="grid3">
+          <div class="card soft"><div class="card-h"><b>§01 面</b></div><p style="font-size:11px">装備値の表と最終能力値はインセット面。触れるバフチップだけが白。</p></div>
+          <div class="card soft"><div class="card-h"><b>§02 帯</b></div><p style="font-size:11px">窓のタイトル帯 + セクションバー。金とラベンダーは使っていない = 結果画面でも一時状態でもない。</p></div>
+          <div class="card soft"><div class="card-h"><b>§03 色</b></div><p style="font-size:11px">「満」は金(上限)。積み上げの区画色は補正源ごとに固定し、凡例を必ず添える。</p></div>
+          <div class="card soft"><div class="card-h"><b>§07 入力</b></div><p style="font-size:11px">数値入力欄がひとつも無い。チップを押すだけで値が確定する。</p></div>
+          <div class="card soft"><div class="card-h"><b>§09 空間</b></div><p style="font-size:11px">「満」バッジの枠を常に確保してあるので、出ても行がずれない。数値欄も幅固定。</p></div>
+          <div class="card soft"><div class="card-h"><b>§10 動き</b></div><p style="font-size:11px">変わった能力値だけが跳ね、バーと攻撃力が同時に動く。色は 0.3s で戻る。</p></div>
+        </div>
+        <p class="cap">数値はサンプル。素ステ上限 310・レイヤーの順番・装備値 9 種の並びは実装(<code>crates/domain/src/stats.rs</code>・<code>labels.ts</code>)と同じ語彙にしてある。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="gear">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">12</span>
+        <h2>組み上がり — 装備を決める(入力エリア)</h2>
+        <span class="note">全部触れます</span>
+      </div>
+      <div class="win-body">
+        <p class="lede">入力の 5 形態(§07)が同時に出る唯一の画面。<strong>部位を選び、装備品を替え、エンチャントを盛り、強化段階を選ぶ</strong> — その全部が数値入力欄なしで完結し、結果が下の帯で同時に動く。</p>
+        <p>同時にこれは<strong>ドリルダウンの実物</strong>でもある(§09 規則 2)。補正源 → 部位 → 中身が左から右へ並び、掘っても前の階層が消えない。左の「装備」も、真ん中の部位も、押したあとその場に残る。</p>
+
+        <div class="eqs">
+          <div class="eqs-panes">
+
+            <div class="eqs-pane">
+              <div class="eqs-h">補正源</div>
+              <div class="eqs-b">
+                <button class="srcrow on" type="button">装備<span class="st">編集中</span></button>
+                <button class="srcrow" type="button">恒常補正<span class="st">設定済み</span></button>
+                <button class="srcrow" type="button">常用バフ<span class="st">6 / 16</span></button>
+                <button class="srcrow" type="button">キャラスキル<span class="st">2 件</span></button>
+                <button class="srcrow todo" type="button" disabled>属性<span class="st">これから</span></button>
+              </div>
+            </div>
+
+            <div class="eqs-pane">
+              <div class="eqs-h">部位<span class="r" id="slot-note"></span></div>
+              <div class="eqs-b" id="slotlist"></div>
+            </div>
+
+            <div class="eqs-pane">
+              <div class="eqs-h">中身<span class="r" id="part-note"></span></div>
+              <div class="eqs-b" id="partbody"></div>
+            </div>
+
+          </div>
+
+          <div class="eqs-foot">
+            <span class="grp"><span class="lb2">突き 合計</span><span class="nv num" id="f-thrust">0</span></span>
+            <span class="grp"><span class="lb2">斬り 合計</span><span class="nv num" id="f-slash">0</span></span>
+            <span class="grp"><span class="lb2">追加固定</span><span class="nv num" id="f-fixed">0</span></span>
+            <span class="grp"><span class="lb2">A 攻撃力</span><span class="nv num big" id="f-atk">0</span></span>
+            <span class="simnote"><span class="dt3"></span>保存されていません</span>
+          </div>
+        </div>
+
+        <div class="sec">この画面で 5 形態がどこに出ているか</div>
+        <div class="grid2">
+          <div class="card soft">
+            <div class="card-h"><span class="formtag">1 自動</span></div>
+            <p style="font-size:11px"><b>基本値(突き 122 / 斬り 315)。</b>装備品を選んだ瞬間に確定する値で、ユーザーは触らない。インセット面に載せて「触れない」ことを面で示す。</p>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><span class="formtag f2">2 段階選択</span></div>
+            <p style="font-size:11px"><b>等級と強化値。</b>「+12」を数字で打たせない。段階そのものを並べて押させる。有限で順序があるものは必ずこの形。</p>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><span class="formtag f3">3 チップ</span></div>
+            <p style="font-size:11px"><b>装備品の候補とアビリティ。</b>候補は値を添えて並べる — 名前だけだと「どっちが強いか」を別画面で調べることになる。</p>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><span class="formtag f4">4 ステッパー</span></div>
+            <p style="font-size:11px"><b>エンチャントとランダムOP。</b>連続値だが上限がある。上限を値の隣に常設し、MAX を 1 タップで置く。届いたら面の色が変わる。</p>
+          </div>
+        </div>
+        <p class="cap"><b style="color:var(--fg-sub)">5 形態目(自由入力)はこの画面に 1 つも無い。</b>装備は wiki から取れる値だけでできているので、自由入力に降りる理由が無い — これが §00「入力欄を増やして解決しない」の実物。</p>
+
+        <div class="sec">ここで守っていること</div>
+        <ul>
+          <li><strong>部位を替えても、左の 2 ペインは動かない。</strong>「武器 → 鎧」と押しても、押した行はその場に残り、補正源の一覧も消えない</li>
+          <li><strong>「適用」ボタンが無い。</strong>押した瞬間に下の帯の 4 つの数値が動く。どれが動いたかは跳ね方で分かる</li>
+          <li><strong>変わった数値だけ跳ねる。</strong>エンチャント突きを盛れば「突き 合計」と「A 攻撃力」だけが動き、「斬り 合計」は静かなまま</li>
+          <li><strong>保存されていないことを、色で常に出しておく。</strong>下の帯のラベンダーが「これはまだキャラに入っていない」の宣言(§03 予約色)</li>
+          <li><strong>枠は値の有無で伸び縮みしない。</strong>「+12」バッジも「満」も、出ていない状態で場所が確保されている</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="words">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">13</span>
+        <h2>言葉</h2>
+        <span class="note">見出しは、その画面が答える問い</span>
+      </div>
+      <div class="win-body">
+        <p>左が却下した書き方、右が採った書き方。<strong>機能名・データ名で見出しを付けない。</strong>プレイヤーがその画面を開いた理由をそのまま見出しにする。</p>
+        <div class="words">
+          <div class="word-row"><span class="no">この相手への 1 発</span><span class="arrow">→</span><span class="yes">行ける？</span></div>
+          <div class="word-row"><span class="no">計算トレース / 内訳</span><span class="arrow">→</span><span class="yes">なぜこの数字？</span></div>
+          <div class="word-row"><span class="no">強化候補一覧</span><span class="arrow">→</span><span class="yes">足りない分をどう埋める？</span></div>
+          <div class="word-row"><span class="no">INPUT / TARGET / RESULT</span><span class="arrow">→</span><span class="yes">だれが / だれに / 結果</span></div>
+          <div class="word-row"><span class="no">ステータスサマリー</span><span class="arrow">→</span><span class="yes">いまの実力</span></div>
+          <div class="word-row"><span class="no">推奨アクション</span><span class="arrow">→</span><span class="yes">次に変えるなら</span></div>
+        </div>
+
+        <div class="grid2" style="margin-top:2px">
+          <div class="card soft">
+            <div class="card-h"><b>副作用を先に言う</b></div>
+            <p style="font-size:11.5px">「押すと試し変更に入ります(保存されません)」「キャラには保存しません」。<strong>操作の前に、色と文言の両方で予告する。</strong></p>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><b>3 つの「無い」を書き分ける</b></div>
+            <p style="font-size:11.5px"><b>データ待ち</b>(gamedata 未収録) / <b>未実装</b>(式が入っていない) / <b>未設定(中立値で計算)</b>(ユーザーが未入力)。破線の使い方もそれぞれ別。</p>
+          </div>
+        </div>
+        <p class="cap">仮の値には「仮値」「(仮)」を明示する。モックの数値をそのまま実装に持ち込まない。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="next">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">14</span>
+        <h2>これから作る画面の決定</h2>
+        <span class="note">決定済み・未実装。破線はそれを表す</span>
+      </div>
+      <div class="win-body">
+        <p class="lede">まだ画面が無いが、<strong>作る前に決めてある</strong>こと。ドメイン側の実装(中ディレイ・能力値上限・クリティカル率)が入ってくると、規格だけでは答えが出ない場面が来る — その答えを先に置いておく。</p>
+        <p>この節のカードが破線なのは規格どおり(§00「欠けている状態を正常に見せる」)。<strong>決まっているが、まだ無い。</strong>作ったら実線にして該当の節へ移す。</p>
+
+        <div class="sec">1. ダメージは「鎖」で出す — ゲートとレートを並列にしない<span class="r">中ディレイ / DPS が入るとき</span></div>
+        <p><strong>1発と DPS は同じ種類の量ではない。</strong>1発は<b>ゲート</b>(防御を抜けるか・目安を超えるか = 閾値判定)、DPS は<b>レート</b>(どれくらいの速さで削れるか = 連続量)。ゲートを通らなければレートに意味が無い(防御を抜けていなければ、どれだけ速く振っても 0)。だから軸を切り替えるのではなく、<strong>因果の順に鎖で繋ぐ。</strong></p>
+
+        <div class="chain">
+          <div class="node hero">
+            <span class="nl">1 発</span>
+            <span class="nv2">3,158</span>
+            <span class="nsub">目安 2,400</span>
+          </div>
+          <span class="gatebadge"><span class="badge b1">通る</span></span>
+          <span class="op">×10 段</span>
+          <div class="node mid">
+            <span class="nl">合計</span>
+            <span class="nv2">31,580</span>
+          </div>
+          <span class="op">÷ 1.12s</span>
+          <div class="node rate">
+            <span class="nl">1 秒あたり</span>
+            <span class="nv2">28,196</span>
+            <span class="nsub">判定は付けない</span>
+          </div>
+          <span class="op">→</span>
+          <div class="node pending">
+            <span class="nl">討伐時間</span>
+            <span class="nv2">— 秒</span>
+            <span class="nsub">敵 HP が未収録</span>
+          </div>
+        </div>
+
+        <div class="grid3" style="margin-top:2px">
+          <div class="card soft">
+            <div class="card-h"><b>ヒーローは 1発のまま</b></div>
+            <p style="font-size:11px">44px の数字は増やさない。金の帯 = 答えは 1 つ(§02)を壊さず、鎖が右に伸びるだけ。到達判定も per-hit に固定されたままなので巻き戻しが起きない。</p>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><b>レートに判定を付けない</b></div>
+            <p style="font-size:11px">「何秒までなら合格」の基準がゲーム側に存在しない。バッジを付けると嘘になる。DPS は<b>比較のためだけ</b>の数字にする(前回比・候補比・スキル間比較)。</p>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><b>主役は画面ごとに分ける</b></div>
+            <p style="font-size:11px">ホーム・計算タブ = <b>ゲート主役</b>(行けるか)。強化提案タブ = <b>レート主役</b>(次に何を伸ばすと効くか)。1 画面で軸を切り替えない。</p>
+          </div>
+        </div>
+        <p class="cap">強化提案が DPS を必要とする理由: フルスロットル(段数 +3・中ディレイ短縮)は <b style="color:var(--fg-sub)">per-hit が 1 も変わらないのに実効火力が上がる</b>。ゲートだけ見ていると候補の順位が付かない。</p>
+
+        <div class="sec">2 〜 6</div>
+        <div class="decs">
+
+          <div class="dec">
+            <div class="dec-h"><span class="n2">2</span><b>効いていない分は 1 箇所に集める</b><span class="soonbadge">これから</span></div>
+            <p>上限で捨てた分は <b>カテゴリ上限 / ダメージ上限 / 防御力上限 / 能力値上限 / 中ディレイ下限</b> の 5 階層になる。斜線の記号は各所で使ったまま、<strong>棚卸しは「なぜこの数字？」の中の 1 セクションに集約する。</strong>新画面は作らない。</p>
+            <p class="why"><b>なぜ</b> 「効いていない量を見せるのがこの道具の価値」(§00)と決めた以上、5 箇所を回らないと総ロスが分からない状態は価値を薄める。ここが強化提案タブの自然な入口にもなる。</p>
+            <span class="where">効くところ: 計算タブ「なぜこの数字？」/ 強化提案タブ</span>
+          </div>
+
+          <div class="dec">
+            <div class="dec-h"><span class="n2">3</span><b>補正源リストを操作頻度で 3 群に分ける</b><span class="soonbadge">これから</span></div>
+            <p>装備 / 恒常補正 / 常用バフ / キャラスキル / 称号 / ランダムOP / 共通スキル / 極限スキル / 調整 / 属性 が同じ行の重さで並んでいる。<strong>毎回変える ・ 育ったら変える ・ 一度決めたら触らない</strong> の 3 群にし、固定群は既定で畳む。</p>
+            <p class="why"><b>なぜ</b> §00「触る場所だけ大きく、触らない場所は 1 行に畳む」の未適用箇所。オーグメント Lv と常用バフが同格なのは、設計をしていないのと同じ。行数は増えてよいが、重さは揃えない。</p>
+            <span class="where">効くところ: キャラタブ 補正源ペイン</span>
+          </div>
+
+          <div class="dec">
+            <div class="dec-h"><span class="n2">4</span><b>相手依存の値は 2 つに割る</b><span class="soonbadge">規約</span></div>
+            <p>「値が 1 つに決まる」が前提の設計なので、<strong>相手が決まらないと出ない値</strong>は所属を割る:</p>
+            <ul style="font-size:11px;margin:0">
+              <li><b>キャラ側(補正源)</b> — 自分が<b>持っている</b>値。相手がいなくても決まる</li>
+              <li><b>計算タブ側</b> — その相手に対する<b>効き</b>。対象を選んで初めて出る</li>
+            </ul>
+            <p class="why"><b>先例は属性(実装済み)</b> キャラ側に属性値(基礎 + 装備の属性強化 + 供給源)を持ち、計算タブ側で敵属性値との差をカテゴリ I にする。この形が正解だったので、以後これを規約にする。<br><b>次はクリティカル率</b>が同じ形になる — 対象の AGI とクリティカル被撃率は敵側の値なので、キャラ画面に置かない。</p>
+            <p class="blocked">この形を破ると、キャラ画面に<b>必ず「—」になる欄</b>ができる。相手が決まっていないのだから当然で、それは欠損ではなく置き場所の誤り。</p>
+            <span class="where">効くところ: キャラタブ 補正源 / 計算タブ 対象パネル</span>
+          </div>
+
+          <div class="dec">
+            <div class="dec-h"><span class="n2">5</span><b>欠けの表現を行内から行頭へ</b><span class="soonbadge">これから</span></div>
+            <p>クリティカル率は<b>値のある敵だけ</b>出す(§00)。ただし 30 行の一覧で破線が増えると画面が壊れて見える。行ごとに歯抜けを見せるのをやめ、<strong>敵の行頭に「収録度」バッジを 1 つ置く</strong>(この敵はどこまで分かっているか)。</p>
+            <p class="why"><b>なぜ</b> 欠けを見せるのと、欠けだらけに見えるのは別。欠けの表現には<b>密度の閾値</b>がある、というのがここで分かったこと。宣言を先に 1 つ置けば、行内は静かにできる。</p>
+            <span class="where">効くところ: ホーム 到達一覧 / 計算タブ 対象リスト</span>
+          </div>
+
+          <div class="dec">
+            <div class="dec-h"><span class="n2">6</span><b>同時に試せる変更は 3 つまで</b><span class="soonbadge">これから</span></div>
+            <p>試し変更がスキル・極限スキルまで広がると、同時に 5〜6 個変わるのが普通になりチップ列が読めなくなる。<strong>上限を意図的に設け、超えたら古いものから確定を促す。</strong></p>
+            <p class="why"><b>なぜ</b> ここで「試しセットに名前を付けて保存」に逃げると、<b>ラベンダー = 保存されない</b> の意味が壊れる(§03 予約色)。色の意味を守るために、機能側に制約を置く。制約は妥協ではなく設計判断。</p>
+            <span class="where">効くところ: 計算タブ 試し変更チップ列</span>
+          </div>
+
+        </div>
+
+        <p class="cap">この 6 件は <code>docs/claude/goals/</code> の goal 文書と対になっている。実装した項目はこの節から消し、該当する規格の節に実物として移す。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="win" id="impl">
+      <div class="win-bar">
+        <span class="dia"></span><span class="idx">15</span>
+        <h2>実装との対応と、変えるときのルール</h2>
+        <span class="note">トークンがあるものは変数で書く</span>
+      </div>
+      <div class="win-body">
+
+        <div class="scroll-x">
+          <table>
+            <thead><tr><th>規格</th><th>実装</th></tr></thead>
+            <tbody>
+              <tr><td>色・角丸・タイポのトークン</td><td><code>apps/desktop/src/app.css</code> の <code>:root</code></td></tr>
+              <tr><td>共通部品 <code>.card</code> <code>.badge</code> <code>.btn</code> <code>.inset</code> <code>.meter</code> <code>table.grid</code> <code>.head-bar</code></td><td><code>app.css</code></td></tr>
+              <tr><td>アイコン 4 系統 × 4 サイズ</td><td><code>src/ui/Icon.svelte</code></td></tr>
+              <tr><td>スプリッター</td><td><code>src/ui/Splitter.svelte</code></td></tr>
+              <tr><td>状態の 6 系統</td><td><code>pages/home/HomePage.svelte</code> / <code>pages/calc/CalcPage.svelte</code> の <code>BADGE_*</code> <code>BAR_BG</code></td></tr>
+              <tr><td>コストの色</td><td><code>candidates.ts:COST_COLORS</code>(CSS 変数を参照する)</td></tr>
+              <tr><td>アプリ帯・タブ・カラム構成</td><td><code>src/App.svelte</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="cap">色の実値を TS / Svelte に直書きすると、テーマを触るときに見落とす。inline style でも <code>var(--…)</code> はそのまま通る。</p>
+
+        <div class="sec">変えるときのルール</div>
+        <ul>
+          <li><strong>v4 と規格シートが食い違ったら v4。</strong>規格シート(Redesign)は探索過程を含み、採らなかった方向も残っている</li>
+          <li><strong>色を足す前に、状態の 6 系統と予約色に寄せられないか確認する。</strong>寄せられないなら、それは新しい意味の追加なのでこの文書に足す</li>
+          <li>角丸・アイコンサイズ・書体は<strong>段を増やさない。</strong>中間値が必要に見えたら、たいていは階層設計の問題</li>
+          <li>密度(11px 見出し・9px ラベル)を役割トークンに寄せると 1 画面の情報量が減る。<strong>寄せるなら意識的な判断として決定記録に残す</strong></li>
+          <li>変更したら実機で 3 タブとも確認する(<code>gui-smoke</code>)。スクリーンショットは <code>docs/screenshots/</code></li>
+        </ul>
+
+        <div class="sec">レビュー前のチェック<span class="r">クリックで消せる</span></div>
+        <div class="checks">
+          <label class="check"><input type="checkbox">面の選択は正しいか(編集できる = 白 / 読み取り専用 = インセット)</label>
+          <label class="check"><input type="checkbox">意味のある帯が 1 画面に 3 種以上出ていないか</label>
+          <label class="check"><input type="checkbox">保存される操作と保存されない操作が色で区別できるか</label>
+          <label class="check"><input type="checkbox">数値は M PLUS 1 Code + tabular-nums か</label>
+          <label class="check"><input type="checkbox">角丸・アイコンサイズは既存の段に収まっているか</label>
+          <label class="check"><input type="checkbox">未収録・未実装・未設定を 0 や空白で埋めていないか</label>
+          <label class="check"><input type="checkbox">効いていない量(上限で捨てた分)が見えるか</label>
+          <label class="check"><input type="checkbox">見出しはプレイヤーの問いになっているか</label>
+          <label class="check"><input type="checkbox"><b>押した要素は、押したあとも同じ位置にあるか</b>(上に何かが差し込まれていないか)</label>
+          <label class="check"><input type="checkbox"><b>ドリルダウンで前の階層が消えていないか</b>(置き換えではなく右に増えているか)</label>
+          <label class="check"><input type="checkbox">重なるもの(候補・ポップオーバー)がレイアウトを押していないか</label>
+          <label class="check"><input type="checkbox">値の桁が増えても、隣の要素が動かないか</label>
+          <label class="check"><input type="checkbox">入力は 5 形態の一番上から順に試したか(いきなり自由入力にしていないか)</label>
+          <label class="check"><input type="checkbox">押した瞬間に結果が動くか(「適用」ボタンを挟んでいないか)</label>
+          <label class="check"><input type="checkbox">変わった値が動いて見えるか。同時に変わるものは全部動いているか</label>
+          <label class="check"><input type="checkbox">動きを消しても(reduced-motion)変化が分かるか</label>
+          <label class="check"><input type="checkbox">直書きした色に、既にトークンが無いか</label>
+          <label class="check"><input type="checkbox">この画面は、要素が増えても入口が変わらない形か</label>
+        </div>
+
+        <div class="foot">
+          <b>出典</b> — <code>docs/mock/Repo UI mockup directions/TW Toolkit Prototype v4.dc.html</code>(実寸・実配色の正)、<code>TW Toolkit Redesign.dc.html</code>(規格シート 2a / 3a と各案の意図)。<br>
+          <b>関連</b> — <code>docs/ux-guidelines.md</code>(何を出すか・入力させるか)、<code>docs/architecture.md</code>(UI は表示と入力のみ)、<code>docs/claude/decisions.md</code>(トークン化・アイコン規格の決定)。<br>
+          <b>単一テーマについて</b> — このデザインは光の窓の世界に commit している。ダークテーマは「暗い版」ではなく別のデザインになるので、必要になった時点で改めて設計する。それまでは背景と全色を明示指定してどのホスト上でも同じ見え方を保つ。
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* --- 色見本を生成 ----------------------------------------------------- */
+  var BASE = [
+    ["Window Title", "linear-gradient(180deg,#DBE6F8,#AEC7F0)", "#DBE6F8 → #AEC7F0"],
+    ["Window Body", "#DEEBF7", "#DEEBF7"],
+    ["Window Frame", "#798CAC", "#798CAC"],
+    ["Outer Border", "#303336", "#303336"],
+    ["Inset Panel", "#C1D3E6", "#C1D3E6"],
+    ["Section Bar", "#6382AD", "#6382AD"],
+    ["Accent / Label", "#426DD6", "#426DD6"],
+    ["Active Tab", "linear-gradient(180deg,#CCF7FF,#90D7FF)", "#CCF7FF → #90D7FF"],
+    ["Inactive Tab", "linear-gradient(180deg,#A9CDFE,#8EB9FC)", "#A9CDFE → #8EB9FC"],
+    ["Lavender", "#6D6AA8", "#6D6AA8"],
+    ["Gold", "#C2A057", "#C2A057"],
+    ["Mob / Warm", "#A98B86", "#A98B86"]
+  ];
+  var host = document.getElementById("sw-base");
+  BASE.forEach(function (t) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "sw";
+    b.dataset.copy = t[2];
+    b.innerHTML =
+      '<span class="chip" style="background:' + t[1] + '"></span>' +
+      '<span><span class="n">' + t[0] + '</span><br><span class="v">' + t[2] + "</span></span>";
+    host.appendChild(b);
+  });
+
+  /* --- hex コピー ------------------------------------------------------- */
+  var toast = document.getElementById("toast");
+  var toastTimer = null;
+  function say(msg) {
+    toast.textContent = msg;
+    toast.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove("on"); }, 1600);
+  }
+  document.addEventListener("click", function (e) {
+    var sw = e.target.closest ? e.target.closest(".sw") : null;
+    if (!sw) return;
+    var v = sw.dataset.copy;
+    try {
+      navigator.clipboard.writeText(v).then(
+        function () { say(v + " をコピーしました"); },
+        function () { say(v); }
+      );
+    } catch (err) {
+      say(v);
+    }
+  });
+
+  /* --- 動きの再生 ------------------------------------------------------- */
+  function replay(el) {
+    var cls = el.dataset.anim;
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  }
+  document.querySelectorAll("[data-play]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var stage = btn.parentElement.querySelector("[data-anim]");
+      if (stage) replay(stage);
+    });
+  });
+  document.querySelectorAll("[data-anim]").forEach(function (el) { replay(el); });
+
+  /* --- 数値のポップ ----------------------------------------------------- */
+  var np = document.getElementById("numpop");
+  var val = 3158;
+  function bump(delta) {
+    val = Math.max(0, val + delta);
+    np.textContent = val.toLocaleString("en-US");
+    np.classList.remove("up", "down");
+    void np.offsetWidth;
+    np.classList.add(delta > 0 ? "up" : "down");
+    setTimeout(function () { np.classList.remove("up", "down"); }, 320);
+  }
+  document.getElementById("np-up").addEventListener("click", function () { bump(214); });
+  document.getElementById("np-down").addEventListener("click", function () { bump(-186); });
+
+  /* --- チェックの状態 --------------------------------------------------- */
+  document.querySelectorAll(".check input").forEach(function (cb) {
+    cb.addEventListener("change", function () {
+      cb.closest(".check").classList.toggle("done", cb.checked);
+    });
+  });
+
+  /* --- 入力: エンチャントセル → 攻撃力が同時に動く ---------------------- */
+  var ench = { thrust: 0, slash: 0 }, CAP = 400, BASE_ATK = 2462;
+  var atkVal = document.getElementById("atk-val");
+  var atkDelta = document.getElementById("atk-delta");
+
+  function paintEnch() {
+    Object.keys(ench).forEach(function (k) {
+      var v = ench[k];
+      var cell = document.getElementById("cell-" + k);
+      cell.querySelector(".fillbar").style.width = (v / CAP * 100) + "%";
+      cell.querySelector(".v").textContent = v.toLocaleString("en-US");
+      cell.classList.toggle("full", v >= CAP);
+      cell.classList.toggle("zero", v === 0);
+      var mx = document.querySelector('[data-max="' + k + '"]');
+      mx.classList.toggle("full", v >= CAP);
+    });
+  }
+  function setEnch(k, next) {
+    var before = BASE_ATK + ench.thrust + ench.slash;
+    next = Math.max(0, Math.min(CAP, next));
+    if (next === ench[k]) return;
+    ench[k] = next;
+    var after = BASE_ATK + ench.thrust + ench.slash;
+    paintEnch();
+    var d = after - before;
+    atkVal.textContent = after.toLocaleString("en-US");
+    atkDelta.textContent = (d > 0 ? "+" : "") + d.toLocaleString("en-US");
+    atkDelta.style.color = d > 0 ? "var(--good)" : "var(--danger)";
+    atkVal.classList.remove("up", "down");
+    void atkVal.offsetWidth;
+    atkVal.classList.add(d > 0 ? "up" : "down");
+    setTimeout(function () { atkVal.classList.remove("up", "down"); }, 340);
+  }
+  document.querySelectorAll("[data-ench]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      setEnch(b.dataset.ench, ench[b.dataset.ench] + Number(b.dataset.d));
+    });
+  });
+  document.querySelectorAll("[data-max]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var k = b.dataset.max;
+      setEnch(k, ench[k] >= CAP ? 0 : CAP);
+    });
+  });
+  paintEnch();
+
+  /* --- 空間: 押した場所が動かない実演 ----------------------------------- */
+  var ROWS = [
+    { n: "ペット Sスキル", v: "+60" },
+    { n: "神鳥の聖物", v: "+100" },
+    { n: "ルーン", v: "+20" },
+    { n: "クラウン", v: "+100" }
+  ];
+  function buildStage(hostId, mode) {
+    var host = document.getElementById(hostId);
+    var picked = null;
+    function render() {
+      host.textContent = "";
+      if (mode === "ng" && picked !== null) {
+        var b = document.createElement("div");
+        b.className = "sbanner";
+        b.textContent = "「" + ROWS[picked].n + "」を選びました";
+        host.appendChild(b);
+      }
+      ROWS.forEach(function (r, i) {
+        var row = document.createElement("div");
+        row.className = "srow" + (picked === i ? " on" : "");
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.innerHTML = '<span>' + r.n + '</span><span class="vl">' + r.v + "</span>";
+        function pick() { picked = (picked === i ? null : i); render(); }
+        row.addEventListener("click", pick);
+        row.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); }
+        });
+        host.appendChild(row);
+        if (mode === "ok" && picked === i) {
+          var d = document.createElement("div");
+          d.className = "sdetail";
+          d.textContent = r.n + " — 段階を選ぶと固定値が変わります。押した行はその場に残ります。";
+          host.appendChild(d);
+        }
+      });
+    }
+    render();
+  }
+  buildStage("stage-ng", "ng");
+  buildStage("stage-ok", "ok");
+
+  /* --- 空間: ドリルダウン実演 ------------------------------------------- */
+  var TREE = [
+    { t: "補正源", items: ["装備", "称号", "ペット", "ルーン"] },
+    { t: "部位", items: ["武器", "鎧", "兜", "手袋"] },
+    { t: "中身", items: ["エンチャント", "強化 +12", "アビリティ", "ランダムOP"] }
+  ];
+  function buildDrill(hostId, crumbId, resetId, mode) {
+    var host = document.getElementById(hostId);
+    var crumb = document.getElementById(crumbId);
+    var path = [], shown = 0;
+    function render() {
+      host.textContent = "";
+      var levels = mode === "ok" ? path.length + 1 : 1;
+      var start = mode === "ok" ? 0 : path.length;
+      for (var d = start; d < start + levels && d < TREE.length; d++) {
+        (function (depth) {
+          var lv = TREE[depth];
+          var pane = document.createElement("div");
+          // OK: 新しく増えたペインだけ動かす / NG: 中身ごと入れ替わるので毎回動く
+          var fresh = mode === "ng" || depth >= shown;
+          pane.className = "dpane"
+            + (mode === "ok" && depth < path.length ? " past" : "")
+            + (fresh ? " fresh" : "");
+          var h = document.createElement("div");
+          h.className = "dpane-h";
+          h.textContent = lv.t;
+          pane.appendChild(h);
+          var b = document.createElement("div");
+          b.className = "dpane-b";
+          lv.items.forEach(function (it, i) {
+            var el = document.createElement("button");
+            el.type = "button";
+            el.className = "ditem" + (path[depth] === i ? " on" : "") + (depth === TREE.length - 1 ? " leaf" : "");
+            el.textContent = it;
+            if (depth < TREE.length - 1) {
+              el.addEventListener("click", function () {
+                path = path.slice(0, depth);
+                path.push(i);
+                render();
+              });
+            }
+            b.appendChild(el);
+          });
+          pane.appendChild(b);
+          host.appendChild(pane);
+        })(d);
+      }
+      shown = mode === "ok" ? path.length + 1 : 1;
+      var names = path.map(function (i, d) { return TREE[d].items[i]; });
+      crumb.textContent = names.length
+        ? (mode === "ok" ? "来た道: " + names.join(" › ") : "いまここ: " + TREE[path.length].t + " (来た道は画面から消えている)")
+        : "上の項目を押してください";
+    }
+    document.getElementById(resetId).addEventListener("click", function () { path = []; render(); });
+    render();
+  }
+  buildDrill("drill-ng", "ng-crumb", "ng-reset", "ng");
+  buildDrill("drill-ok", "ok-crumb", "ok-reset", "ok");
+
+  /* --- 組み上がり: キャラクターステータス -------------------------------- */
+  var STATS = [
+    { k: "STAB", base: 310 }, { k: "HACK", base: 240 }, { k: "INT", base: 1 },
+    { k: "DEF", base: 220 }, { k: "MR", base: 150 }, { k: "DEX", base: 200 }, { k: "AGI", base: 180 }
+  ];
+  var BASE_MAX = 310;
+  // 恒常分(ルーン・クラウン・聖物など。常に効いている前提)
+  var CONST = { pct: 0.05, fixed: 30, ma: 1.05, mb: 0.10, ff: 40 };
+  var BUFFS = [
+    { id: "trust", n: "改・信頼の薬", v: "割合 +10%", layer: 1, on: false, pct: 0.10 },
+    { id: "pet", n: "ペット Sスキル 真Lv4", v: "STAB 最終 +60", layer: 5, on: false, ff: 60, only: "STAB" },
+    { id: "illumi", n: "イルミネ祭りのドリンク", v: "倍率B +20%", layer: 4, on: false, mb: 0.20 },
+    { id: "crown", n: "クラウン", v: "固定 +100", layer: 2, on: false, fixed: 100 }
+  ];
+  var EQ_BASE = 1240, EQ_ENH = 320, ENH_RATE = 0.20;
+
+  function mods(statKey) {
+    var m = { pct: CONST.pct, fixed: CONST.fixed, ma: CONST.ma, mb: CONST.mb, ff: CONST.ff };
+    BUFFS.forEach(function (b) {
+      if (!b.on) return;
+      if (b.only && b.only !== statKey) return;
+      if (b.pct) m.pct += b.pct;
+      if (b.fixed) m.fixed += b.fixed;
+      if (b.mb) m.mb += b.mb;
+      if (b.ff) m.ff += b.ff;
+    });
+    return m;
+  }
+  function finalOf(st) {
+    var m = mods(st.k);
+    var v = st.base + Math.floor(st.base * m.pct);
+    v = v + m.fixed;
+    v = Math.floor(v * m.ma);
+    v = Math.floor(v * (1 + m.mb));
+    return v + m.ff;
+  }
+
+  var lineHost = document.getElementById("statlines");
+  var lineEls = {};
+  STATS.forEach(function (st) {
+    var row = document.createElement("div");
+    row.className = "statline";
+    var full = st.base >= BASE_MAX;
+    row.innerHTML =
+      '<span class="sk">' + st.k + "</span>" +
+      '<span class="b0">' + st.base + "</span>" +
+      '<span class="sbar"><i class="raw"></i><i class="add"></i></span>' +
+      '<span class="fin num">0</span>' +
+      '<span class="capslot">' + (full ? '<span class="badge b2" style="font-size:8.5px">満</span>' : "") + "</span>";
+    lineHost.appendChild(row);
+    lineEls[st.k] = {
+      raw: row.querySelector(".raw"), add: row.querySelector(".add"), fin: row.querySelector(".fin")
+    };
+  });
+
+  var aVal = document.getElementById("a-val");
+  var aDelta = document.getElementById("a-delta");
+  var aBar = document.getElementById("a-bar");
+  var prev = {};
+
+  function attackOf() {
+    var stat = Math.floor(finalOf(STATS[0]) * 1.6);
+    var enh = Math.floor(EQ_ENH * (1 + ENH_RATE));
+    return { stat: stat, eqbase: EQ_BASE, eqenh: EQ_ENH, rate: enh - EQ_ENH, total: stat + EQ_BASE + enh };
+  }
+  function pop(el, d) {
+    el.classList.remove("up", "down");
+    void el.offsetWidth;
+    el.classList.add(d > 0 ? "up" : "down");
+    setTimeout(function () { el.classList.remove("up", "down"); }, 340);
+  }
+  function renderSheet(animate) {
+    var maxFinal = 0;
+    STATS.forEach(function (st) { maxFinal = Math.max(maxFinal, finalOf(st)); });
+    var scale = Math.max(maxFinal, 1);
+
+    STATS.forEach(function (st) {
+      var f = finalOf(st), el = lineEls[st.k];
+      var rawW = Math.min(st.base, f) / scale * 100;
+      el.raw.style.width = rawW + "%";
+      el.add.style.width = Math.max(0, (f - st.base) / scale * 100) + "%";
+      el.fin.textContent = f.toLocaleString("en-US");
+      if (animate && prev[st.k] !== undefined && prev[st.k] !== f) pop(el.fin, f - prev[st.k]);
+      prev[st.k] = f;
+    });
+
+    var a = attackOf();
+    aVal.textContent = a.total.toLocaleString("en-US");
+    document.getElementById("lg-stat").textContent = a.stat.toLocaleString("en-US");
+    ["stat", "eqbase", "eqenh", "rate"].forEach(function (k) {
+      aBar.querySelector('[data-seg="' + k + '"]').style.width = (a[k] / a.total * 100) + "%";
+    });
+    if (animate && prev.__a !== undefined && prev.__a !== a.total) {
+      var d = a.total - prev.__a;
+      aDelta.textContent = (d > 0 ? "+" : "") + d.toLocaleString("en-US");
+      aDelta.style.color = d > 0 ? "var(--good)" : "var(--danger)";
+      pop(aVal, d);
+    }
+    prev.__a = a.total;
+
+    // 5 レイヤーの現在値と、そこに入っているバフ名
+    var m = mods("HACK"), mS = mods("STAB");
+    var byLayer = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+    BUFFS.forEach(function (b) { if (b.on) byLayer[b.layer].push(b.n); });
+    var txt = [
+      "+" + Math.round(m.pct * 100) + "%",
+      "+" + m.fixed,
+      "×" + m.ma.toFixed(2),
+      "+" + Math.round(m.mb * 100) + "%",
+      "+" + mS.ff
+    ];
+    for (var i = 1; i <= 5; i++) {
+      document.getElementById("l" + i).textContent = txt[i - 1];
+      document.getElementById("l" + i + "s").textContent = byLayer[i].length ? byLayer[i].join(" ・ ") : "恒常分のみ";
+    }
+  }
+
+  var bhost = document.getElementById("buffbar");
+  BUFFS.forEach(function (b) {
+    var el = document.createElement("button");
+    el.type = "button";
+    el.className = "bchip";
+    el.setAttribute("aria-pressed", "false");
+    el.innerHTML = '<span>' + b.n + '</span><span class="bv">' + b.v + "</span>";
+    el.addEventListener("click", function () {
+      b.on = !b.on;
+      el.classList.toggle("on", b.on);
+      el.setAttribute("aria-pressed", b.on ? "true" : "false");
+      renderSheet(true);
+    });
+    bhost.appendChild(el);
+  });
+  renderSheet(false);
+
+  /* --- 組み上がり: 装備を決める(入力エリア) ---------------------------- */
+  var GRADES = ["なし", "下級", "中級", "上級", "最上級"];
+  var PLUSES = [0, 3, 6, 9, 12, 15];
+  var ABILS = [
+    { n: "尖った刃", v: 40 }, { n: "鋭い刃", v: 60 }, { n: "重い刃", v: 30 }
+  ];
+  var SLOTS = [
+    {
+      id: "weapon", nm: "武器", plus: true, abil: true, op: true, cap: 400,
+      keys: [["thrust", "突き"], ["slash", "斬り"]],
+      items: [
+        { n: "†アビスシミター", thrust: 122, slash: 315 },
+        { n: "アクィルスソード", thrust: 180, slash: 240 },
+        { n: "エクリプスブレード", thrust: 210, slash: 205 }
+      ]
+    },
+    {
+      id: "armor", nm: "鎧", plus: true, abil: false, op: false, cap: 200,
+      keys: [["pdef", "物防"], ["mdef", "魔防"]],
+      items: [
+        { n: "アビスプレート", pdef: 340, mdef: 120 },
+        { n: "アクィルスメイル", pdef: 300, mdef: 160 }
+      ]
+    },
+    {
+      id: "helm", nm: "兜", plus: false, abil: false, op: false, cap: 120,
+      keys: [["pdef", "物防"], ["mdef", "魔防"]],
+      items: [{ n: "アビスヘルム", pdef: 120, mdef: 60 }]
+    },
+    { id: "gloves", nm: "手袋", empty: true },
+    { id: "boots", nm: "靴", empty: true },
+    { id: "shield", nm: "盾", empty: true }
+  ];
+  // 各部位の状態
+  var GEAR = {};
+  SLOTS.forEach(function (s) {
+    if (s.empty) return;
+    GEAR[s.id] = { item: 0, ench: {}, grade: 2, plus: 4, abils: [0], ops: [] };
+    s.keys.forEach(function (k) { GEAR[s.id].ench[k[0]] = 0; });
+  });
+  GEAR.weapon.ops = [12];
+  var curSlot = "weapon";
+
+  function fixedDamage(g) {
+    // 追加固定ダメージ = 等級係数 × 強化値(サンプル値)
+    return g.grade * PLUSES[g.plus] * 4;
+  }
+  function totals() {
+    var t = { thrust: 0, slash: 0, fixed: 0 };
+    SLOTS.forEach(function (s) {
+      if (s.empty) return;
+      var g = GEAR[s.id], it = s.items[g.item];
+      s.keys.forEach(function (k) {
+        if (k[0] === "thrust") t.thrust += it.thrust + g.ench.thrust;
+        if (k[0] === "slash") t.slash += it.slash + g.ench.slash;
+      });
+      if (s.plus) t.fixed += fixedDamage(g);
+      if (s.abil) g.abils.forEach(function (i) { t.thrust += ABILS[i].v; });
+    });
+    var opPct = GEAR.weapon.ops.reduce(function (a, b) { return a + b; }, 0);
+    t.atk = Math.floor((718 + t.thrust + t.slash * 0.5) * (1 + opPct / 100)) + t.fixed;
+    return t;
+  }
+
+  var fEls = {
+    thrust: document.getElementById("f-thrust"),
+    slash: document.getElementById("f-slash"),
+    fixed: document.getElementById("f-fixed"),
+    atk: document.getElementById("f-atk")
+  };
+  var fPrev = {};
+  function renderFoot(animate) {
+    var t = totals();
+    ["thrust", "slash", "fixed", "atk"].forEach(function (k) {
+      var el = fEls[k];
+      el.textContent = t[k].toLocaleString("en-US");
+      if (animate && fPrev[k] !== undefined && fPrev[k] !== t[k]) pop(el, t[k] - fPrev[k]);
+      fPrev[k] = t[k];
+    });
+  }
+
+  function renderSlots() {
+    var host = document.getElementById("slotlist");
+    host.textContent = "";
+    SLOTS.forEach(function (s) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "slotrow" + (s.empty ? " empty" : "") + (curSlot === s.id ? " on" : "");
+      var sub = "未装備", val = "", plus = "";
+      if (!s.empty) {
+        var g = GEAR[s.id], it = s.items[g.item];
+        sub = it.n;
+        if (s.plus && PLUSES[g.plus] > 0) plus = '<span class="plusbadge">+' + PLUSES[g.plus] + "</span>";
+        val = s.keys.map(function (k) { return k[1] + (it[k[0]] + g.ench[k[0]]); }).join(" / ");
+      }
+      btn.innerHTML =
+        '<span class="ic"></span><span class="tx"><b>' + s.nm + plus + "</b><span>" + sub + "</span></span>" +
+        '<span class="vv">' + val + "</span>";
+      if (!s.empty) btn.addEventListener("click", function () { curSlot = s.id; renderSlots(); renderPart(); });
+      host.appendChild(btn);
+    });
+    var filled = SLOTS.filter(function (s) { return !s.empty; }).length;
+    document.getElementById("slot-note").textContent = filled + " / " + SLOTS.length + " 装備";
+  }
+
+  function renderPart() {
+    var s = SLOTS.filter(function (x) { return x.id === curSlot; })[0];
+    var g = GEAR[s.id], it = s.items[g.item];
+    var host = document.getElementById("partbody");
+    host.textContent = "";
+    document.getElementById("part-note").textContent = s.nm + " の中身";
+
+    // 装備品を選ぶ(形態 3)
+    var pc = document.createElement("div");
+    pc.className = "partcard";
+    pc.innerHTML =
+      '<div class="top"><span class="icon mob s28"></span>' +
+      '<span class="nm"><b>' + it.n + '</b><span>' + s.nm + " ・ 候補 " + s.items.length + " 件</span></span>" +
+      '<span class="formtag f3">3 チップ</span></div>' +
+      '<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px" data-items></div>';
+    var ih = pc.querySelector("[data-items]");
+    s.items.forEach(function (o, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "itemopt" + (g.item === i ? " on" : "");
+      b.innerHTML = '<span class="mk">' + (g.item === i ? "●" : "") + '</span>' +
+        '<span class="nm2">' + o.n + '</span><span class="vs2">' +
+        s.keys.map(function (k) { return k[1] + o[k[0]]; }).join(" / ") + "</span>";
+      b.addEventListener("click", function () { g.item = i; renderPart(); renderSlots(); renderFoot(true); });
+      ih.appendChild(b);
+    });
+    host.appendChild(pc);
+
+    // 能力値: 基本(形態 1) + エンチャント(形態 4)
+    var ec = document.createElement("div");
+    ec.className = "subcard";
+    ec.innerHTML =
+      '<div class="subcard-h"><b>能力値</b><span class="hint">基本は装備品ごとに固定</span>' +
+      '<span style="margin-left:auto;display:flex;gap:5px"><span class="formtag">1 自動</span><span class="formtag f4">4 ステッパー</span></span></div>' +
+      '<div class="ench" data-ench></div>';
+    var eh = ec.querySelector("[data-ench]");
+    eh.innerHTML = '<span></span><span class="h" style="text-align:right">基本</span><span class="h e">エンチャント(上限まで)</span>';
+    s.keys.forEach(function (k) {
+      var key = k[0], full = g.ench[key] >= s.cap;
+      var kEl = document.createElement("span"); kEl.className = "k"; kEl.textContent = k[1];
+      var bEl = document.createElement("span"); bEl.className = "base num"; bEl.textContent = it[key].toLocaleString("en-US");
+      var cEl = document.createElement("span"); cEl.className = "ctrl";
+      cEl.innerHTML =
+        '<button class="step" type="button" data-d="-1" aria-label="' + k[1] + 'を減らす">−</button>' +
+        '<span class="cell' + (full ? " full" : "") + (g.ench[key] === 0 ? " zero" : "") + '">' +
+        '<i class="fillbar" style="width:' + (g.ench[key] / s.cap * 100) + '%"></i>' +
+        '<span class="row"><span class="v num">' + g.ench[key].toLocaleString("en-US") +
+        '</span><span class="cap-n">/' + s.cap + "</span></span></span>" +
+        '<button class="step" type="button" data-d="1" aria-label="' + k[1] + 'を増やす">＋</button>' +
+        '<button class="maxbtn' + (full ? " full" : "") + '" type="button" data-mx="1" title="上限 ' + s.cap + ' にする">MAX</button>';
+      cEl.querySelectorAll("[data-d]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var stepv = Math.round(s.cap / 10);
+          g.ench[key] = Math.max(0, Math.min(s.cap, g.ench[key] + Number(b.dataset.d) * stepv));
+          renderPart(); renderSlots(); renderFoot(true);
+        });
+      });
+      cEl.querySelector("[data-mx]").addEventListener("click", function () {
+        g.ench[key] = g.ench[key] >= s.cap ? 0 : s.cap;
+        renderPart(); renderSlots(); renderFoot(true);
+      });
+      eh.appendChild(kEl); eh.appendChild(bEl); eh.appendChild(cEl);
+    });
+    host.appendChild(ec);
+
+    // 強化(形態 2)
+    if (s.plus) {
+      var gc = document.createElement("div");
+      gc.className = "subcard warm";
+      gc.innerHTML =
+        '<div class="subcard-h"><b>強化</b><span class="hint">武器と鎧だけ</span>' +
+        '<span style="margin-left:auto;display:flex;align-items:center;gap:7px"><span class="formtag f2">2 段階選択</span>' +
+        '<span class="r">' + (PLUSES[g.plus] > 0 ? "+" + PLUSES[g.plus] : "強化なし") + "</span></span></div>" +
+        '<div style="display:flex;flex-direction:column;gap:6px">' +
+        '<div class="seg-row"><span class="k2">等級</span><span class="seg warm full" data-grade></span></div>' +
+        '<div class="seg-row"><span class="k2">強化値</span><span class="seg warm full" data-plus></span></div>' +
+        '</div>' +
+        '<div style="margin-top:7px;display:flex;align-items:baseline;gap:8px">' +
+        '<span style="margin-left:auto;font-size:9px;color:var(--fg-muted)">追加固定ダメージ</span>' +
+        '<span class="num" style="font-size:13px;font-weight:700;color:#7A4B45">+' + fixedDamage(g).toLocaleString("en-US") + "</span></div>";
+      GRADES.forEach(function (nm, i) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = i === g.grade ? "on" : ""; b.textContent = nm;
+        b.addEventListener("click", function () { g.grade = i; renderPart(); renderSlots(); renderFoot(true); });
+        gc.querySelector("[data-grade]").appendChild(b);
+      });
+      PLUSES.forEach(function (v, i) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = i === g.plus ? "on" : ""; b.textContent = "+" + v;
+        b.addEventListener("click", function () { g.plus = i; renderPart(); renderSlots(); renderFoot(true); });
+        gc.querySelector("[data-plus]").appendChild(b);
+      });
+      host.appendChild(gc);
+    }
+
+    // アビリティ(形態 3)
+    if (s.abil) {
+      var ac = document.createElement("div");
+      ac.className = "subcard";
+      ac.innerHTML =
+        '<div class="subcard-h"><b>アビリティ</b><span class="hint">この装備に付いているもの</span>' +
+        '<span style="margin-left:auto"><span class="formtag f3">3 チップ</span></span></div>' +
+        '<div class="buffbar" data-abil></div>';
+      ABILS.forEach(function (a, i) {
+        var on = g.abils.indexOf(i) >= 0;
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "bchip" + (on ? " on" : "");
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+        b.innerHTML = "<span>" + a.n + '</span><span class="bv">突き +' + a.v + "</span>";
+        b.addEventListener("click", function () {
+          var at = g.abils.indexOf(i);
+          if (at >= 0) g.abils.splice(at, 1); else g.abils.push(i);
+          renderPart(); renderSlots(); renderFoot(true);
+        });
+        ac.querySelector("[data-abil]").appendChild(b);
+      });
+      host.appendChild(ac);
+    }
+
+    // ランダムOP(形態 4)
+    if (s.op) {
+      var oc = document.createElement("div");
+      oc.className = "subcard warm";
+      oc.innerHTML =
+        '<div class="subcard-h"><b>ランダムOP</b><span class="hint">称号と同枠 ・ ' + g.ops.length + ' / 3</span>' +
+        '<span style="margin-left:auto"><span class="formtag f4">4 ステッパー</span></span></div>' +
+        '<div style="display:flex;flex-direction:column;gap:5px" data-ops></div>';
+      var oh = oc.querySelector("[data-ops]");
+      g.ops.forEach(function (v, i) {
+        var row = document.createElement("div");
+        row.className = "opline";
+        row.innerHTML =
+          '<span class="dt2"></span><span class="nm3">攻撃ダメージ</span>' +
+          '<button class="step" type="button" data-o="-1" aria-label="減らす">−</button>' +
+          '<span class="ov">+' + v + "%</span>" +
+          '<button class="step" type="button" data-o="1" aria-label="増やす">＋</button>' +
+          '<button class="step" type="button" data-o="x" aria-label="外す" style="color:#C0A79E">✕</button>';
+        row.querySelectorAll("[data-o]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            var d = b.dataset.o;
+            if (d === "x") g.ops.splice(i, 1);
+            else g.ops[i] = Math.max(1, Math.min(30, g.ops[i] + Number(d)));
+            renderPart(); renderFoot(true);
+          });
+        });
+        oh.appendChild(row);
+      });
+      if (g.ops.length < 3) {
+        var add = document.createElement("button");
+        add.type = "button"; add.className = "opadd"; add.textContent = "＋ 付いている OP を追加";
+        add.addEventListener("click", function () { g.ops.push(5); renderPart(); renderFoot(true); });
+        oh.appendChild(add);
+      }
+      host.appendChild(oc);
+    }
+  }
+
+  renderSlots();
+  renderPart();
+  renderFoot(false);
+
+  /* --- 索引のハイライト ------------------------------------------------- */
+  var links = Array.prototype.slice.call(document.querySelectorAll(".rail-list a"));
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (a) { a.classList.remove("on"); });
+        var a = byId[en.target.id];
+        if (a) a.classList.add("on");
+      });
+    }, { rootMargin: "-70px 0px -65% 0px", threshold: 0 });
+    document.querySelectorAll(".win[id]").forEach(function (s) { io.observe(s); });
+  }
+})();
+</script>

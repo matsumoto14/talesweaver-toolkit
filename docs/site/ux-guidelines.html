@@ -154,7 +154,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </nav>
     
 <p>UI を実装・変更するときに必ず参照する判断基準。目的は見た目の統一ではなく、<strong>機能追加のたびに安易なフォーム羅列や情報過多な画面が生まれるのを防ぐ</strong>こと。
-具体的なコンポーネント構成・カラム数・フォルダ構成はここでは定めない(実装の現状は <a href="architecture.html">docs/architecture.md</a>、視覚トークンは docs/design/Main.dc.html と <code>apps/desktop/src/app.css</code>)。</p>
+具体的なコンポーネント構成・カラム数・フォルダ構成はここでは定めない(実装の現状は <a href="architecture.html">docs/architecture.md</a>、見た目の規格は docs/design-system.html)。</p>
 <p>このツールのユーザーは「自分のキャラで、いま何ができるか・どう強くなれるか」を知りたいプレイヤーであり、データ入力をしたい人ではない。すべての原則はここから導かれる。</p>
 <h2 id="1">原則 1. 既知の情報をユーザーに入力させない</h2>
 <p>wiki・マスタデータ・登録済みキャラから取得または推定できる値は、原則として自動設定する。</p>
@@ -220,7 +220,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <ul>
 <li>CLAUDE.md「UX」(本書の要約)</li>
 <li>docs/architecture.md(UI は表示と入力のみ、計算・判定は Rust 側)</li>
-<li>docs/design/Main.dc.html、<code>apps/desktop/src/app.css</code>(視覚トークン)</li>
+<li>docs/design-system.html(デザインシステム。本書が「何を出すか」、あちらが「どう見せるか」と「なぜそう拘るか」)</li>
 <li>docs/legacy-twtoolkit.md(旧リポの反省)</li>
 </ul>
     <footer class="doc-foot">原本: <code>docs/ux-guidelines.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>

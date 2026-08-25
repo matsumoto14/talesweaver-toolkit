@@ -1,7 +1,7 @@
 # UX/UI ガイドライン
 
 UI を実装・変更するときに必ず参照する判断基準。目的は見た目の統一ではなく、**機能追加のたびに安易なフォーム羅列や情報過多な画面が生まれるのを防ぐ**こと。
-具体的なコンポーネント構成・カラム数・フォルダ構成はここでは定めない(実装の現状は docs/architecture.md、視覚トークンは docs/design/Main.dc.html と `apps/desktop/src/app.css`)。
+具体的なコンポーネント構成・カラム数・フォルダ構成はここでは定めない(実装の現状は docs/architecture.md、見た目の規格は docs/design-system.html)。
 
 このツールのユーザーは「自分のキャラで、いま何ができるか・どう強くなれるか」を知りたいプレイヤーであり、データ入力をしたい人ではない。すべての原則はここから導かれる。
 
@@ -83,5 +83,5 @@ wiki・マスタデータ・登録済みキャラから取得または推定で�
 
 - CLAUDE.md「UX」(本書の要約)
 - docs/architecture.md(UI は表示と入力のみ、計算・判定は Rust 側)
-- docs/design/Main.dc.html、`apps/desktop/src/app.css`(視覚トークン)
+- docs/design-system.html(デザインシステム。本書が「何を出すか」、あちらが「どう見せるか」と「なぜそう拘るか」)
 - docs/legacy-twtoolkit.md(旧リポの反省)
