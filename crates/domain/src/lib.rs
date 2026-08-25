@@ -79,7 +79,8 @@ pub use stat_sources::{
     apply_pins, apply_temporary_adjustments, apply_unleash, build_modifiers,
     preview_effective_stats, stat_limits,
     Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice, BuffDefinition,
-    BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown, PartAttackContribution, PetSkillTier,
+    BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown, MonsterCards, PartAttackContribution,
+    PetSkillTier,
     PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution, StatLayer, StatLimits,
     StatPreview, StatSourceError, StatSources,
 };

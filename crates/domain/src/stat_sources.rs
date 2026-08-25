@@ -139,6 +139,36 @@ impl Crown {
     }
 }
 
+/// モンスターカード(wiki: ステータス「固定値増加/減少」の「カード装着」/ モンスターブック)。
+/// 装着したカードのステータスがそのまま乗る。ステごと 0..=70、**固定値層**(倍率A の前)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct MonsterCards {
+    pub stab: u32,
+    pub hack: u32,
+    pub int: u32,
+    pub def: u32,
+    pub mr: u32,
+    pub dex: u32,
+    pub agi: u32,
+}
+
+impl MonsterCards {
+    /// wiki ステータス「モンスターカード / カード装着 / +0〜70」。
+    pub const MAX_VALUE: u32 = 70;
+
+    pub fn get(&self, kind: StatKind) -> u32 {
+        match kind {
+            StatKind::Stab => self.stab,
+            StatKind::Hack => self.hack,
+            StatKind::Int => self.int,
+            StatKind::Def => self.def,
+            StatKind::Mr => self.mr,
+            StatKind::Dex => self.dex,
+            StatKind::Agi => self.agi,
+        }
+    }
+}
+
 /// 神鳥の聖物(wiki: 神鳥の聖物)。ステごと 0..=40 段階、+10 刻みで最終固定値に乗る。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SacredRelic {
@@ -366,6 +396,9 @@ pub struct StatSources {
     pub rune_levels: RuneLevels,
     #[serde(default)]
     pub crown: Crown,
+    /// モンスターカード(wiki: ステータス「カード装着」)。ステごと 0〜70、固定値層
+    #[serde(default)]
+    pub monster_cards: MonsterCards,
     #[serde(default)]
     pub sacred_relic: SacredRelic,
     #[serde(default)]
@@ -405,6 +438,16 @@ impl StatSources {
                     kind,
                     value: crown,
                     max: Crown::MAX_VALUE,
+                });
+            }
+
+            let card = self.monster_cards.get(kind);
+            if card > MonsterCards::MAX_VALUE {
+                return Err(StatSourceError::OutOfRange {
+                    source_name: "モンスターカード",
+                    kind,
+                    value: card,
+                    max: MonsterCards::MAX_VALUE,
                 });
             }
 
@@ -491,6 +534,20 @@ pub fn build_modifiers(
             modifiers.get_mut(kind).fixed += bonus;
             contributions.push(StatContribution {
                 source: "ルーンスキル".to_string(),
+                kind,
+                layer: StatLayer::Fixed,
+                value: bonus as f64,
+            });
+        }
+    }
+
+    for kind in StatKind::ALL {
+        let value = sources.monster_cards.get(kind);
+        if value > 0 {
+            let bonus = i64::from(value);
+            modifiers.get_mut(kind).fixed += bonus;
+            contributions.push(StatContribution {
+                source: "モンスターカード".to_string(),
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
@@ -850,6 +907,8 @@ pub struct StatLimits {
     pub base_stat_max: u32,
     pub rune_level_max: u8,
     pub crown_max: u32,
+    /// モンスターカードの 1 ステあたり上限(wiki: ステータス「カード装着 +0〜70」)
+    pub monster_card_max: u32,
     pub sacred_relic_stage_max: u8,
     pub adjustment_add_min: i64,
     pub adjustment_add_max: i64,
@@ -911,6 +970,7 @@ pub fn stat_limits() -> StatLimits {
         base_stat_max: BASE_STAT_MAX,
         rune_level_max: RuneLevels::MAX_LEVEL,
         crown_max: Crown::MAX_VALUE,
+        monster_card_max: MonsterCards::MAX_VALUE,
         sacred_relic_stage_max: SacredRelic::MAX_STAGE,
         adjustment_add_min: ADJUSTMENT_ADD_MIN,
         adjustment_add_max: ADJUSTMENT_ADD_MAX,
@@ -1608,6 +1668,29 @@ mod tests {
         assert_eq!(trace.basic, 429);
         assert_eq!(trace.multiplier_b_bonus, 85);
         assert_eq!(value, 914);
+    }
+
+    // wiki ステータス「固定値増加/減少」: モンスターカード(カード装着)+0〜70。
+    // ユーザーの実測(2026-08-25)でも AGI に +70 乗っていた
+    #[test]
+    fn モンスターカードは固定値層に乗り上限70() {
+        let mut sources = StatSources::default();
+        sources.monster_cards.agi = 70;
+        assert!(sources.validate().is_ok());
+
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        assert_eq!(modifiers.get(StatKind::Agi).fixed, 70);
+        assert_eq!(modifiers.get(StatKind::Stab).fixed, 0);
+        let c = contributions.iter().find(|c| c.source == "モンスターカード").unwrap();
+        assert_eq!(c.kind, StatKind::Agi);
+        assert_eq!(c.layer, StatLayer::Fixed);
+        assert_eq!(c.value, 70.0);
+
+        sources.monster_cards.agi = 71;
+        assert!(matches!(
+            sources.validate(),
+            Err(StatSourceError::OutOfRange { source_name: "モンスターカード", max: 70, .. })
+        ));
     }
 
     #[test]

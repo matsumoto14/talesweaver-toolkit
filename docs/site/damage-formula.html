@@ -157,7 +157,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li><a href="#12">12. 中ディレイ(スキルの発動間隔)</a></li>
 <li><a href="#13">13. 実装への示唆</a></li>
 <li><a href="#14">14. 参照ページの取込状況</a></li>
-<li><a href="#_1">取得メモ</a></li>
+<li><a href="#_2">取得メモ</a></li>
 </ul>
 </nav>
     
@@ -220,6 +220,50 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>レイヤー別バフ一覧(常用バフ 16 件): wiki「ステータス」#jc16a054。カタログの実装は <code>crates/gamedata/src/buffs.rs</code>(型は <code>domain::stat_sources</code>)</li>
 <li>キャラスキル(自身/味方のステ上昇、9 件、<code>BuffGroup::CharacterSkill</code>/<code>AllySkill</code>)の一覧も同じ <code>crates/gamedata/src/buffs.rs</code> に置く。出典は各キャラの wiki <code>Skill/&lt;キャラ&gt;</code> ページ(<a href="../claude/goals/2026-08-21-character-screen-v2.md">docs/claude/goals/2026-08-21-character-screen-v2.md</a>「wiki 調査結果」参照。層の一部は <span class="tag warm">仮</span>)</li>
 </ul>
+<h3 id="_1">固定値層の供給源(抜粋)</h3>
+<p>出典: ステータス「固定値増加/減少」(取得 2026-08-25)。倍率A の<strong>前</strong>に足される層。</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>名称</th>
+<th>値</th>
+<th>実装</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ペット S スキル</td>
+<td>+20〜40(真は 60 まで)</td>
+<td>✅ <code>PetSkills</code></td>
+</tr>
+<tr>
+<td>ルーンスキル</td>
+<td>Lv ぶん</td>
+<td>✅ <code>RuneLevels</code></td>
+</tr>
+<tr>
+<td><strong>モンスターカード(カード装着)</strong></td>
+<td><strong>+0〜70</strong></td>
+<td>✅ <code>MonsterCards</code>(2026-08-25 追加)</td>
+</tr>
+<tr>
+<td>クラブ効果</td>
+<td>+1〜7</td>
+<td>✅ バフカタログ(上限 +7 固定で持っている)</td>
+</tr>
+<tr>
+<td>クラブSエフェクト</td>
+<td>+20</td>
+<td>✅ バフカタログ</td>
+</tr>
+<tr>
+<td>祝福のポーション / イザベルの秘法(固定)等</td>
+<td>+20〜100</td>
+<td>✅ バフカタログ</td>
+</tr>
+</tbody>
+</table></div>
+<p>※ クラウン(+0〜300)と神鳥の聖物(段階×10)は<strong>最終固定値層</strong>なので別枠。</p>
 <h3 id="b">能力値倍率B の供給源</h3>
 <p>出典: ステータス「能力値倍率B (初期値0% 下限-30%)」/ Skill/共通「能力解放系列」(取得 2026-08-25)。</p>
 <div class="tbl"><table>
@@ -1094,7 +1138,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </tbody>
 </table></div>
 <p>装備強化(+1〜+15)による武器の追加固定ダメージ(装備システム/装備強化)は与ダメージ式の外側の加算(§5)であり、装備攻撃力(§4 A)とは別項目。実装済み(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「2026-08-24 部位別装備モデル」): <code>追加効果 = INT(INT(補正) × 倍率)</code>(補正 = 武器系統ごとの一次式・アビリティ除外、奇数なら −1、per-hit は <code>INT(追加 / Hit数)</code>)。+12〜15 の倍率はレンジ振り(武器 +12: 140–280 / +13: 300–460 / +14: 480–660 / +15: 680–880、鎧はその半分)のため実測値の上書き入力を持ち、<strong>上書きが無いときはレンジ上限</strong>で自動計算する(装備強化再設定呪文書で振り直せるので実用上の想定値は最上値。ユーザー決定 2026-08-25)。</p>
-<h2 id="_1">取得メモ</h2>
+<h2 id="_2">取得メモ</h2>
 <p>talewiki は EUC-JP の PukiWiki。<code>?cmd=source&amp;page=&lt;EUC-JPでURLエンコードしたページ名&gt;</code> で wiki ソースが取れる(HTML の <code>&lt;pre&gt;</code> 内)。<code>curl → iconv -c -f EUC-JP -t UTF-8</code> で変換。</p>
     <footer class="doc-foot">原本: <code>docs/damage-formula.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>
   </article>

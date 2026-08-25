@@ -6,6 +6,7 @@
     | "pet"
     | "rune"
     | "crown"
+    | "monsterCard"
     | "relic"
     | "siena"
     | "randomOption"
@@ -532,6 +533,7 @@
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
     rune: { title: "ルーンスキル", note: `0–${limits.rune_level_max}` },
     crown: { title: "クラウン", note: `0–${limits.crown_max}` },
+    monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
     relic: { title: "神鳥の聖物", note: `0–${limits.sacred_relic_stage_max} 段階(実加算は段階×10)` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
@@ -974,6 +976,24 @@
       <div class="fields">
         {#each STAT_KINDS as k (k)}
           <StatInput label={STAT_LABELS[k]} min={0} max={limits.crown_max} bind:value={draft.statSources.crown[k]} />
+        {/each}
+      </div>
+    </div>
+  {:else if sourceId === "monsterCard"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「ステータス」の固定値増加にある<b>カード装着</b>。装着したカードのステータスが
+        そのまま乗ります(ステごと 0〜{limits.monster_card_max})。
+        <b>固定値層</b>なので、能力値倍率A(テイルズウィーバーのエネルギー等)の影響を受けます。
+      </p>
+      <div class="fields">
+        {#each STAT_KINDS as k (k)}
+          <StatInput
+            label={STAT_LABELS[k]}
+            min={0}
+            max={limits.monster_card_max}
+            bind:value={draft.statSources.monster_cards[k]}
+          />
         {/each}
       </div>
     </div>

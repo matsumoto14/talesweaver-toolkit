@@ -136,6 +136,9 @@
   const petCount = $derived(STAT_KINDS.filter((k) => draft.statSources.pet_skills[k] !== null).length);
   const runeTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.rune_levels[k], 0));
   const crownTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.crown[k], 0));
+  const monsterCardTotal = $derived(
+    STAT_KINDS.reduce((s, k) => s + draft.statSources.monster_cards[k], 0),
+  );
   const relicTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.sacred_relic[k] * 10, 0));
   const skillCount = $derived(
     draft.statSources.buffs.choices.filter((c) => {
@@ -273,6 +276,11 @@
     },
     { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
     { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
+    {
+      id: "monsterCard",
+      name: "モンスターカード",
+      sub: monsterCardTotal > 0 ? `合計 +${fmtInt(monsterCardTotal)}` : NEUTRAL,
+    },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
     { id: "actualDelay", name: "中ディレイ減少", sub: delaySummary },
     { id: "criticalRate", name: "クリティカル率", sub: criticalRateSummary },
@@ -282,7 +290,7 @@
   ]);
   // 並びは 12a の指定順(キャラステータス / 装備 / シエナ / テシスコア / 聖物 / クラウン /
   // スキル / モンスターカード / ペット)。12a に無いルーン・調整はその後ろに置く。
-  const PLANNED = ["モンスターカード"];
+  const PLANNED: string[] = [];
   const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
   // --- いまの実力 ---------------------------------------------------------

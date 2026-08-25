@@ -7,6 +7,7 @@ const FALLBACK: StatLimits = {
   base_stat_max: 310,
   rune_level_max: 20,
   crown_max: 300,
+  monster_card_max: 70,
   sacred_relic_stage_max: 40,
   adjustment_add_min: -999,
   adjustment_add_max: 999,

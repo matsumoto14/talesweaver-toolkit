@@ -64,6 +64,8 @@ export type PetSkills = Record<StatKind, PetSkillTier | null>;
 export type RuneLevels = Record<StatKind, number>;
 // クラウン。ステごと 0..=300。
 export type Crown = Record<StatKind, number>;
+// モンスターカード(カード装着)。ステごと 0..=70、固定値層。
+export type MonsterCards = Record<StatKind, number>;
 // 神鳥の聖物。ステごと 0..=40 段階(実加算値は段階×10)。
 export type SacredRelic = Record<StatKind, number>;
 
@@ -119,6 +121,8 @@ export interface StatSources {
   pet_skills: PetSkills;
   rune_levels: RuneLevels;
   crown: Crown;
+  /** モンスターカード(wiki: ステータス「カード装着」)。ステごと 0〜70、固定値層 */
+  monster_cards: MonsterCards;
   sacred_relic: SacredRelic;
   buffs: BuffSelection;
   adjustments: Adjustments;
@@ -719,6 +723,8 @@ export interface StatLimits {
   base_stat_max: number;
   rune_level_max: number;
   crown_max: number;
+  /** モンスターカードの 1 ステあたり上限 */
+  monster_card_max: number;
   sacred_relic_stage_max: number;
   adjustment_add_min: number;
   adjustment_add_max: number;
