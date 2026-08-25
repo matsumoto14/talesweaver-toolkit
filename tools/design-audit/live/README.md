@@ -23,6 +23,7 @@ NODE_PATH=/c/github/private/twtoolkit/node_modules node tools/design-audit/live/
 | `row.js` | §09 規則 1 を補正源の行で(**完全に見えている行**で測る) |
 | `digits.js` | §09 規則 4(桁が増えても隣が動かない)。値を実際に変えて座標を比べる |
 | `sim10.js` | §10 規則 2(同時に変わるものが全部動く)。跳ねたクラスを MutationObserver で拾う |
+| `round11.js` | 登録ペイン(新規キャラ)とエラー帯の重なり |
 
 ## 測るときの注意
 
