@@ -289,8 +289,48 @@
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
-  // 並びは 12a の指定順(キャラステータス / 装備 / シエナ / テシスコア / 聖物 / クラウン /
-  // スキル / モンスターカード / ペット)。12a に無いルーン・調整はその後ろに置く。
+  // 補正源は操作頻度で 3 群に分ける(design-system §14 決定 3)。
+  // 全部を同じ行の重さで並べるのは、設計をしていないのと同じ — 行数は減らさず、重さだけ変える。
+  //
+  // **群の軸は操作頻度**で、効き先(ステに効く / 装備に効く)ではない。効き先は排他に
+  // 切れない(シエナのオーラはステ加算にも攻撃力増加にも効く)ので、群には使えない。
+  // ただし「頻度が同じでも種類が違う」読みにくさは実在するので、**群の中の並びを効き先で**
+  // 揃える(2 軸を階層で使う)。装備まわりと速度まわりが同じ群でも隣り合わない。
+  //
+  // 振り分けは使ってみて変わる。ここ 1 箇所を書き換えれば表示も畳みも追従する。
+  const SOURCE_GROUPS: { id: string; title: string; note: string; collapsed: boolean; ids: SourceId[] }[] = [
+    {
+      id: "often",
+      title: "よく触る",
+      note: "強化するたびに変わる",
+      collapsed: false,
+      ids: ["equipment", "commonSkill", "siena", "thesis", "relic", "adjust"],
+    },
+    {
+      id: "grown",
+      title: "育ったら変える",
+      note: "育成が進んだときだけ",
+      collapsed: false,
+      ids: ["status", "skills", "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate"],
+    },
+    {
+      id: "fixed",
+      title: "一度決めたら触らない",
+      note: "装備を替えるまで動かない",
+      collapsed: true,
+      ids: ["element", "title", "randomOption"],
+    },
+  ];
+  const groupedSources = $derived(
+    SOURCE_GROUPS.map((g) => ({
+      ...g,
+      items: g.ids.map((id) => sources.find((s) => s.id === id)).filter((s) => s !== undefined),
+    })),
+  );
+  /** 畳んだ群を開いたかどうか。既定は SOURCE_GROUPS の collapsed */
+  const groupOpen = persisted("chars.sourceGroups", {} as Record<string, boolean>);
+  const isGroupOpen = (g: (typeof SOURCE_GROUPS)[number]) => groupOpen.value[g.id] ?? !g.collapsed;
+
   const PLANNED: string[] = [];
   const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
@@ -317,14 +357,33 @@
         <span class="dim">押して中身を変える</span>
       </div>
       <div class="src-list">
-        {#each sources as s (s.id)}
-          <button type="button" class="src" class:on={openSource === s.id} onclick={() => (openSource = s.id)}>
-            <span class="src-main">
-              <span class="src-name">{s.name}</span>
-              <span class="src-sub num">{s.sub}</span>
-            </span>
-            <span class="chev dim">›</span>
-          </button>
+        {#each groupedSources as g (g.id)}
+          {@const open = isGroupOpen(g)}
+          {@const unset = g.items.filter((s) => s.sub === NEUTRAL).length}
+          <div class="src-group">
+            <button
+              type="button"
+              class="group-head"
+              onclick={() => (groupOpen.value = { ...groupOpen.value, [g.id]: !open })}
+            >
+              <span class="group-title">{g.title}</span>
+              <span class="group-note dim">{open ? g.note : `${g.items.length} 件${unset > 0 ? ` ・ 未設定 ${unset} 件` : " ・ 設定済み"}`}</span>
+              <span class="group-chev dim">{open ? "▴" : "▾"}</span>
+            </button>
+            {#if open}
+              <div class="group-body open-in">
+                {#each g.items as s (s.id)}
+                  <button type="button" class="src" class:on={openSource === s.id} onclick={() => (openSource = s.id)}>
+                    <span class="src-main">
+                      <span class="src-name">{s.name}</span>
+                      <span class="src-sub num">{s.sub}</span>
+                    </span>
+                    <span class="chev dim">›</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
         {/each}
         {#each PLANNED as name (name)}
           <div class="src planned">
@@ -470,6 +529,18 @@
     font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
+  /* 操作頻度の 3 群(§14 決定 3)。触る場所だけ大きく、触らない場所は 1 行に畳む(§00) */
+  .src-group { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .group-head {
+    min-width: 0; display: flex; align-items: center; gap: 8px; padding: 2px 2px 0;
+    font-size: 9.5px; letter-spacing: 0.08em; text-align: left;
+  }
+  .group-title { flex-shrink: 0; font-weight: 800; color: var(--fg-muted); }
+  .group-note { min-width: 0; flex: 1; letter-spacing: 0; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .group-chev { flex-shrink: 0; font-size: 9px; }
+  .group-head:hover .group-title { color: var(--accent); }
+  .group-body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-panel);
