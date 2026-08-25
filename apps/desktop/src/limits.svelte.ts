@@ -7,6 +7,7 @@ const FALLBACK: StatLimits = {
   base_stat_max: 310,
   rune_level_max: 20,
   crown_max: 300,
+  monster_card_max: 70,
   sacred_relic_stage_max: 40,
   adjustment_add_min: -999,
   adjustment_add_max: 999,
@@ -18,6 +19,9 @@ const FALLBACK: StatLimits = {
   enhance_added_damage_max: 9999999,
   siena_stage_max: 10,
   siena_attack_rate_percent_max: 10,
+  siena_defense_rate_percent_max: 10,
+  siena_actual_delay_percent_max: 2,
+  siena_critical_rate_percent_max: 10,
   siena_stat_bonus_max: 100,
   siena_all_stats_bonus_max: 30,
   core_slot_count: 6,
@@ -32,7 +36,11 @@ const FALLBACK: StatLimits = {
   kai_protect_armor_level_max: 5,
   sharpness_vision_level_max: 10,
   augment_level_max: 5,
+  unleash_level_max: 10,
+  unleash_slots: 2,
+  reinforce_level_max: 5,
   hyper_limit_level_max: 6,
+  critical_rate_bonus_max: 100,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

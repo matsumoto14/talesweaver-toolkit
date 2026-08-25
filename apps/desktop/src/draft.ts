@@ -46,6 +46,12 @@ const DEFAULT_STRONG_WEAPON_LEVEL = 6;
 
 export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
   ...src,
+  // v6 以前に保存したキャラには unleash / reinforce_level が無い(serde default で 0)
+  unleash: [
+    { ...(src.unleash?.[0] ?? { stat: null, level: 0 }) },
+    { ...(src.unleash?.[1] ?? { stat: null, level: 0 }) },
+  ],
+  reinforce_level: src.reinforce_level ?? 0,
   ultimate: { ...src.ultimate, slots: [...src.ultimate.slots] },
 });
 
@@ -63,6 +69,8 @@ export const defaultCommonSkills = (): CommonSkills => ({
   kai_protect_armor_level: 0,
   sharpness_vision_level: 0,
   augment_level: DEFAULT_STRONG_WEAPON_LEVEL - 1,
+  unleash: [{ stat: null, level: 0 }, { stat: null, level: 0 }],
+  reinforce_level: 0,
   ultimate: { slots: [null, null], super_limit: false, hyper_limit_level: 0 },
 });
 
@@ -73,20 +81,26 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   pet_skills: { ...src.pet_skills },
   rune_levels: { ...src.rune_levels },
   crown: { ...src.crown },
+  monster_cards: { ...(src.monster_cards ?? {}) } as StatSources["monster_cards"],
   sacred_relic: { ...src.sacred_relic },
   buffs: { choices: src.buffs.choices.map((b) => ({ ...b })) },
   adjustments: cloneAdjustments(src.adjustments),
   elements: { ...src.elements },
+  actual_delay_skills: { skill_ids: [...(src.actual_delay_skills?.skill_ids ?? [])] },
+  critical_rate: { ...src.critical_rate },
 });
 
 export const neutralStatSources = (): StatSources => ({
   pet_skills: Object.fromEntries(STAT_KINDS.map((k) => [k, null])) as StatSources["pet_skills"],
   rune_levels: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["rune_levels"],
   crown: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["crown"],
+  monster_cards: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["monster_cards"],
   sacred_relic: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["sacred_relic"],
   buffs: { choices: [] },
   adjustments: Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as StatSources["adjustments"],
   elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
+  actual_delay_skills: { skill_ids: [] },
+  critical_rate: { pet: false, ultimate_rune: false, architect_lab: false, deadly_blow: false },
 });
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({

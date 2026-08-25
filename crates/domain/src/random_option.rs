@@ -54,6 +54,8 @@ pub enum RandomOptionEffect {
     EvasionPoint,
     /// 命中P と 回避P の両方へ加算
     AccuracyAndEvasionPoint,
+    /// 中ディレイ減少値(wiki: ステータス「中ディレイ倍率B」)への加算
+    ActualDelayReduction,
     /// 計算には反映しない(発動条件付き・被ダメージ側・未実装の概念)。理由はカタログの `note`
     RecordOnly,
 }
@@ -161,6 +163,8 @@ pub struct RandomOptionTotals {
     pub accuracy_point: i64,
     /// 回避P への加算
     pub evasion_point: i64,
+    /// 中ディレイ減少値への加算。Σ% の小数表現
+    pub actual_delay_reduction: f64,
     /// 計算に反映しなかった枠の数(UI が「記録するだけ」と出すのに使う)
     pub record_only_count: usize,
 }
@@ -179,6 +183,9 @@ impl RandomOptionTotals {
             RandomOptionEffect::AccuracyAndEvasionPoint => {
                 self.accuracy_point += value as i64;
                 self.evasion_point += value as i64;
+            }
+            RandomOptionEffect::ActualDelayReduction => {
+                self.actual_delay_reduction += value / 100.0;
             }
             RandomOptionEffect::RecordOnly => self.record_only_count += 1,
         }

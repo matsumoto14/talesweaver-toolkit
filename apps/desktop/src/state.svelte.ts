@@ -12,10 +12,12 @@ import {
   listEquipmentCatalog,
   listGameCharacters,
   listRandomOptions,
+  listActualDelaySkills,
   listSkills,
   listTitles,
 } from "./api/commands";
 import type {
+  ActualDelaySkillDef,
   BuffDefinition,
   ElementSourceDef,
   Content,
@@ -47,6 +49,8 @@ export const app = $state({
   randomOptions: [] as RandomOptionDef[],
   /** 称号のカタログ(主要称号のみ) */
   titles: [] as TitleDef[],
+  /** 中ディレイ減少スキル(wiki: ステータス「中ディレイ倍率B」)。キャラ固有のパッシブのみ */
+  actualDelaySkills: [] as ActualDelaySkillDef[],
   /** 属性値の供給源カタログ(装備の属性強化以外) */
   elementSources: [] as ElementSourceDef[],
   selectedId: null as number | null,
@@ -143,7 +147,7 @@ export async function loadAll(): Promise<void> {
   try {
     const [
       characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities, elementSources,
-      randomOptions, titles,
+      randomOptions, titles, actualDelaySkills,
     ] = await Promise.all([
       listCharacters(),
       listGameCharacters(),
@@ -154,6 +158,7 @@ export async function loadAll(): Promise<void> {
       listElementSources(),
       listRandomOptions(),
       listTitles(),
+      listActualDelaySkills(),
     ]);
     app.characters = characters;
     app.gameCharacters = gameCharacters;
@@ -164,6 +169,7 @@ export async function loadAll(): Promise<void> {
     app.elementSources = elementSources;
     app.randomOptions = randomOptions;
     app.titles = titles;
+    app.actualDelaySkills = actualDelaySkills;
     if (app.selectedId === null && characters.length > 0) app.selectedId = characters[0].id;
     await Promise.all(characters.map(refreshEvaluation));
   } catch (e) {

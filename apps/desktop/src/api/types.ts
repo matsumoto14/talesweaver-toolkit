@@ -33,6 +33,10 @@ export interface Skill {
   level: number;
   /** 単体チャネリングスキルか。極限スキル「フルスロットル」の段数増加はこれにだけ乗る */
   single_target_channeling: boolean;
+  /** 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列。null = 秒として読めない */
+  base_actual_delay: number | null;
+  /** 中ディレイが固定で減少が効かない(wiki の「(固定)」表記) */
+  actual_delay_fixed: boolean;
 }
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
@@ -46,6 +50,10 @@ export interface Enemy {
   damage_reduction: number;
   cut_rate_a: number;
   element_threshold: number;
+  /** 対象のAGI(wiki 狩り場情報一覧「敵AGI+固定値」)。null = wiki 未記載 */
+  agi: number | null;
+  /** 対象のクリティカル被撃率A(負値)。null = wiki 未記載 */
+  critical_taken_rate: number | null;
 }
 
 // ペット S スキルの段階(wiki: PET)。crates/domain/src/stat_sources.rs の PetSkillTier(snake_case)。
@@ -56,6 +64,8 @@ export type PetSkills = Record<StatKind, PetSkillTier | null>;
 export type RuneLevels = Record<StatKind, number>;
 // クラウン。ステごと 0..=300。
 export type Crown = Record<StatKind, number>;
+// モンスターカード(カード装着)。ステごと 0..=70、固定値層。
+export type MonsterCards = Record<StatKind, number>;
 // 神鳥の聖物。ステごと 0..=40 段階(実加算値は段階×10)。
 export type SacredRelic = Record<StatKind, number>;
 
@@ -111,11 +121,94 @@ export interface StatSources {
   pet_skills: PetSkills;
   rune_levels: RuneLevels;
   crown: Crown;
+  /** モンスターカード(wiki: ステータス「カード装着」)。ステごと 0〜70、固定値層 */
+  monster_cards: MonsterCards;
   sacred_relic: SacredRelic;
   buffs: BuffSelection;
   adjustments: Adjustments;
   /** 装備の属性強化以外の属性値の供給源 */
   elements: ElementSources;
+  /** 中ディレイ減少をもたらすキャラのパッシブ・マスタリー */
+  actual_delay_skills: ActualDelaySkills;
+  /** クリティカル率の供給源(wiki: 計算式まとめ #CriticalChance) */
+  critical_rate: CriticalRateSources;
+}
+
+// crates/domain/src/critical_rate.rs の CriticalRateSources。
+export interface CriticalRateSources {
+  /** ペット会心(クリティカル率 ×1.1) */
+  pet: boolean;
+  /** 極のルーン(+20) */
+  ultimate_rune: boolean;
+  /** 設計者の研究室(+30) */
+  architect_lab: boolean;
+  /** 致命打(+100) */
+  deadly_blow: boolean;
+}
+
+// crates/domain/src/critical_rate.rs の CriticalRate。
+export interface CriticalRate {
+  equipment_critical: number;
+  agi: number;
+  target_agi: number;
+  /** AGI 由来の部分 */
+  from_agi: number;
+  /** シエナのオーラの追加オプション「クリティカル確率」の Σ%(小数表現) */
+  siena_rate: number;
+  /** スキルクリティカル率(Cri値) */
+  skill: number;
+  /** クリティカル率増加(上限 +100%) */
+  bonus: number;
+  /** 対象のクリティカル被撃率A(負値) */
+  target_taken_rate: number;
+  /** 下限 0% / 上限 100% を掛ける前 */
+  raw: number;
+  /** クリティカル率(%) */
+  value: number;
+}
+
+// crates/domain/src/actual_delay.rs の ActualDelaySkillDef。list_actual_delay_skills の戻り値。
+export interface ActualDelaySkillDef {
+  id: string;
+  name: string;
+  game_character_id: string;
+  /** 中ディレイ減少 %(習得していれば常にこの値) */
+  percent: number;
+  note: string;
+}
+
+export interface ActualDelaySkills {
+  /** 習得している ActualDelaySkillDef の id */
+  skill_ids: string[];
+}
+
+// crates/domain/src/actual_delay.rs の ActualDelayContribution / ActualDelay。
+export interface ActualDelayContribution {
+  source: string;
+  /** Σ% の小数表現(−5% → 0.05) */
+  rate: number;
+}
+
+export interface ActualDelay {
+  /** 基本中ディレイ(秒) */
+  base: number;
+  /** 上限前の中ディレイ減少値 */
+  reduction_raw: number;
+  /** 上限(70%)適用後の中ディレイ減少値 */
+  reduction: number;
+  /** 倍率A(コンボボーナス)。2 コンボ以上で 0.5 */
+  combo_rate: number;
+  /** 中ディレイ(秒)。下限 0.3s 適用後 */
+  value: number;
+  /** 下限 0.3s で頭打ちになったか */
+  floored: boolean;
+  /** wiki が「(固定)」と書いている中ディレイ(減少が効かない) */
+  fixed: boolean;
+  contributions: ActualDelayContribution[];
+  /** 60 秒あたりのスキル回数。DPS はこれから出す */
+  uses_per_minute: number;
+  /** 実測表(計測データ)由来か。false = 60 / 中ディレイ の式から出した */
+  uses_measured: boolean;
 }
 
 // 属性値の供給源の種別。crates/domain/src/element.rs の ElementSourceId(snake_case)。
@@ -192,8 +285,10 @@ export interface SienaAura {
   attack_rate_percent: number;
   /** 追加オプション「防御力増加」の %。装備防御力倍率へ合流する */
   defense_rate_percent: number;
-  /** 追加オプション「中ディレイ減少」の %。中ディレイが未実装なので記録のみ */
+  /** 追加オプション「中ディレイ減少」の %。中ディレイ減少値(倍率B)へ合流する */
   actual_delay_percent: number;
+  /** 追加オプション「クリティカル確率」の %。クリティカル率の AGI 由来の項に乗算で効く */
+  critical_rate_percent: number;
 }
 
 // ランダムオプションのランク。crates/domain/src/random_option.rs の RandomOptionRank。
@@ -265,8 +360,20 @@ export interface CommonSkills {
   sharpness_vision_level: number;
   /** オーグメントの Lv(0〜5)。前提スキル */
   augment_level: number;
+  /** アンリーシュ(能力解放)の 2 枠。選んだステの能力値倍率B に乗る */
+  unleash: [UnleashSlot, UnleashSlot];
+  /** レインフォースの Lv(0〜5)。前提スキルで、アンリーシュの Lv6 以降に要る */
+  reinforce_level: number;
   /** 極限スキル(wiki: Skill/極限)。2 枠 + スーパーリミット / ハイパーリミット */
   ultimate: UltimateSkills;
+}
+
+// アンリーシュ(能力解放)の 1 枠。crates/domain/src/common_skill.rs の UnleashSlot。
+export interface UnleashSlot {
+  /** 解放するステ。null = この枠は未使用 */
+  stat: StatKind | null;
+  /** Lv(0〜10)。Lv6 以降はレインフォースの Lv が要る */
+  level: number;
 }
 
 // 装備防御力倍率。crates/domain/src/common_skill.rs の DefenseRates。
@@ -475,7 +582,12 @@ export interface StatTrace {
   multiplier_b: number;
   multiplier_b_bonus: number;
   final_fixed: number;
+  /** 最終能力値(上限適用後) */
   effective: number;
+  /** 最終能力値の上限(覚醒段階 + エタの意志 Lv で 1,500〜2,400) */
+  stat_cap: number;
+  /** 上限で捨てられた分。0 なら上限に当たっていない */
+  capped_loss: number;
   /** pin(能力値の固定)が適用された場合の上書き前の値。未適用は null */
   pinned_from: number | null;
   /** pin の出所。未適用は null */
@@ -595,7 +707,19 @@ export interface DamageResult {
   added_damage: DamageTriple;
   /** 命中P。敵の回避Pを 100 上回ると必中。null = スキル命中が wiki 未記載で出せない */
   accuracy_point: number | null;
+  /** クリティカル率。null = 敵の AGI / クリティカル被撃率 / スキルの Cri値 のどれかが wiki 未記載 */
+  critical_rate: CriticalRate | null;
+  /** 中ディレイ。null = スキルの「動作」列が秒で取れず出せない */
+  actual_delay: ActualDelay | null;
+  /** 1 秒あたりの与ダメージ(合計 / 中ディレイ)。null = 中ディレイが出せない */
+  dps: DpsTriple | null;
   trace: DamageTrace;
+}
+
+export interface DpsTriple {
+  min: number;
+  max: number;
+  critical: number;
 }
 
 // crates/domain/src/stat_sources.rs の StatLimits。get_stat_limits コマンドの戻り値。
@@ -603,6 +727,8 @@ export interface StatLimits {
   base_stat_max: number;
   rune_level_max: number;
   crown_max: number;
+  /** モンスターカードの 1 ステあたり上限 */
+  monster_card_max: number;
   sacred_relic_stage_max: number;
   adjustment_add_min: number;
   adjustment_add_max: number;
@@ -618,6 +744,12 @@ export interface StatLimits {
   siena_stage_max: number;
   /** シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 % */
   siena_attack_rate_percent_max: number;
+  /** シエナのオーラの追加オプション「防御力増加」の 1 部位あたり上限 % */
+  siena_defense_rate_percent_max: number;
+  /** シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 % */
+  siena_actual_delay_percent_max: number;
+  /** シエナのオーラの追加オプション「クリティカル確率」の 1 部位あたり上限 % */
+  siena_critical_rate_percent_max: number;
   /** シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限 */
   siena_stat_bonus_max: number;
   /** シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限 */
@@ -640,7 +772,15 @@ export interface StatLimits {
   kai_protect_armor_level_max: number;
   sharpness_vision_level_max: number;
   augment_level_max: number;
+  /** アンリーシュ(能力解放)の Lv 上限 */
+  unleash_level_max: number;
+  /** アンリーシュの枠数 */
+  unleash_slots: number;
+  /** レインフォースの Lv 上限(アンリーシュ Lv6 以降の前提) */
+  reinforce_level_max: number;
   hyper_limit_level_max: number;
+  /** クリティカル率増加の上限 %(wiki: 計算式まとめ #CriticalChance) */
+  critical_rate_bonus_max: number;
 }
 
 

@@ -4,11 +4,15 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::actual_delay::{
+    actual_delay, ActualDelay, ActualDelayContribution, SkillUsesTable, SECONDS_PER_MINUTE,
+};
 use crate::attack_power::{
     attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,
 };
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
+use crate::critical_rate::{critical_rate, CriticalRate, CriticalRateSources};
 use crate::common_skill::CommonSkills;
 use crate::enemy::Enemy;
 use crate::defense::{accuracy_point, AccuracyCorrection};
@@ -63,6 +67,9 @@ pub struct DamageInput {
     /// 与ダメージの上限(wiki: Quest/覚醒クエスト「ダメージ上限は多段スキルでも1段ごとに適用」)。
     /// 覚醒段階とエタの意志 Lv で決まる(表は gamedata)
     pub damage_cap: i64,
+    /// 最終能力値の上限(wiki: Quest/覚醒クエスト「各能力の上限値」/ エタの意志)。
+    /// 同じく覚醒段階とエタの意志 Lv で決まる(表は gamedata)
+    pub stat_cap: i64,
     pub combo_count: u32,
     /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
     /// スキルの属性が未取込(`Skill::element` が `None`)なら 0
@@ -71,6 +78,14 @@ pub struct DamageInput {
     pub pins: Adjustments,
     /// 計算リクエストの一時調整(キャラには保存しない)。ステごとに `pins` より優先する
     pub temporary_pins: Option<Adjustments>,
+    /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)。ペット会心・極のルーン等
+    pub critical_rate_sources: CriticalRateSources,
+    /// 実測のスキル回数表(60 秒あたり)。DPS はここから出す(格子の外だけ式)。実データは gamedata
+    pub skill_uses: SkillUsesTable,
+    /// キャラのパッシブ・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
+    /// カタログの解決は呼び出し側(`ActualDelaySkills::contributions`)。共通の供給源
+    /// (フルスロットル / ランダムオプション / シエナのオーラ)は `calculate_damage` が自分で集める
+    pub actual_delay_skills: Vec<ActualDelayContribution>,
 }
 
 impl DamageInput {
@@ -92,12 +107,16 @@ impl DamageInput {
         weapon_added_damage: i64,
         awakening_rate: f64,
         damage_cap: i64,
+        stat_cap: i64,
         skill: Skill,
         enemy: Enemy,
         combo_count: u32,
         element_value: i64,
         pins: Adjustments,
         temporary_pins: Option<Adjustments>,
+        actual_delay_skills: Vec<ActualDelayContribution>,
+        critical_rate_sources: CriticalRateSources,
+        skill_uses: SkillUsesTable,
     ) -> Self {
         Self {
             base_stats,
@@ -116,10 +135,14 @@ impl DamageInput {
             enemy,
             awakening_rate,
             damage_cap,
+            stat_cap,
             combo_count,
             element_value,
             pins,
             temporary_pins,
+            actual_delay_skills,
+            critical_rate_sources,
+            skill_uses,
         }
     }
 }
@@ -170,7 +193,24 @@ pub struct DamageResult {
     /// 命中P(wiki: 計算式まとめ #AccuracyPoint)。敵の回避Pを 100 上回ると必中。
     /// スキル命中が wiki 未記載(`Skill::accuracy` が `None`)なら出せないので `None`
     pub accuracy_point: Option<i64>,
+    /// クリティカル率(wiki: 計算式まとめ `#CriticalChance`)。
+    /// **敵の AGI とクリティカル被撃率が両方そろっている敵でしか出せない**ので、
+    /// 片方でも未記載(wiki が `?`)なら `None`。スキルの Cri値が未記載でも `None`
+    pub critical_rate: Option<CriticalRate>,
+    /// 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。スキルの「動作」列が秒で取れない
+    /// (`Skill::base_actual_delay` が `None`)なら出せないので `None`
+    pub actual_delay: Option<ActualDelay>,
+    /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。中ディレイが出せないなら `None`
+    pub dps: Option<DpsTriple>,
     pub trace: DamageTrace,
+}
+
+/// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct DpsTriple {
+    pub min: f64,
+    pub max: f64,
+    pub critical: f64,
 }
 
 /// 属性差ボーナス(wiki: カテゴリI)の Σ%。`floor((属性値 − 閾値) × 0.625) / 100`。範囲はキャップで 0..+50% に収める。
@@ -281,7 +321,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     use DamageCategory::*;
 
     // ① 能力値計算
-    let (mut stats, mut stat_traces) = effective_stats(&input.base_stats, &input.stat_modifiers);
+    let (mut stats, mut stat_traces) =
+        effective_stats(&input.base_stats, &input.stat_modifiers, input.stat_cap);
     apply_pins(&mut stats, &mut stat_traces, &input.pins, input.temporary_pins.as_ref());
 
     // ② カテゴリ集計
@@ -418,19 +459,81 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         steps_critical.push(step);
     }
 
+    // クリティカル率(wiki: 計算式まとめ `#CriticalChance`)。与ダメージ式には入らないが、
+    // 「クリティカル ×N」がどれくらいの頻度で出るのかを読めるように結果に載せる。
+    // 対象のAGI・クリティカル被撃率(狩り場情報一覧)は `?` の行が多く、被撃率は −250〜−930% と
+    // 支配的なので、**両方そろっている敵でだけ**出す。スキルの Cri値が未記載でも出さない。
+    let critical_chance = match (input.enemy.agi, input.enemy.critical_taken_rate, input.skill.critical_rate) {
+        (Some(target_agi), Some(taken_rate), Some(skill_critical_rate)) => Some(critical_rate(
+            input.equipment_base_totals.critical + input.equipment_enhanced_totals.critical,
+            stats.agi,
+            target_agi,
+            skill_critical_rate as f64,
+            &input.critical_rate_sources,
+            input.equipment.siena_critical_rate(),
+            taken_rate,
+        )),
+        _ => None,
+    };
+
+    // 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。減少値の供給源は
+    // 極限スキル「フルスロットル」/ カフス(盾+)のランダムオプション / シエナのオーラ /
+    // キャラのパッシブ(呼び出し側がカタログを引いて渡す)。
+    let delay = input.skill.base_actual_delay.map(|base| {
+        let mut contributions = Vec::new();
+        let full_throttle = input.common_skills.ultimate.actual_delay_reduction();
+        if full_throttle != 0.0 {
+            contributions
+                .push(ActualDelayContribution { source: "フルスロットル".into(), rate: full_throttle });
+        }
+        let random_option = input.random_options.actual_delay_reduction;
+        if random_option != 0.0 {
+            contributions.push(ActualDelayContribution {
+                source: "ランダムオプション(カフス)".into(),
+                rate: random_option,
+            });
+        }
+        let siena = input.equipment.siena_actual_delay_reduction();
+        if siena != 0.0 {
+            contributions
+                .push(ActualDelayContribution { source: "シエナのオーラ".into(), rate: siena });
+        }
+        contributions.extend(input.actual_delay_skills.iter().cloned());
+        actual_delay(
+            base,
+            input.skill.actual_delay_fixed,
+            contributions,
+            input.combo_count,
+            &input.skill_uses,
+        )
+    });
+    let total = DamageTriple {
+        min: sum.min + added.min,
+        max: sum.max + added.max,
+        critical: sum.critical + added.critical,
+    };
+    // DPS は「合計ダメージ × 60 秒あたりのスキル回数 / 60」。回数は実測表(格子の外だけ式)。
+    let dps = delay.as_ref().map(|d| {
+        let per_second = |total: i64| total as f64 * d.uses_per_minute / SECONDS_PER_MINUTE;
+        DpsTriple {
+            min: per_second(total.min),
+            max: per_second(total.max),
+            critical: per_second(total.critical),
+        }
+    });
+
     DamageResult {
         per_hit: DamageTriple { min, max, critical },
-        total: DamageTriple {
-            min: sum.min + added.min,
-            max: sum.max + added.max,
-            critical: sum.critical + added.critical,
-        },
+        total,
         hit_count,
         damage_cap: input.damage_cap,
         capped_loss,
         added_damage_rate: added_rate,
         added_damage: added,
         accuracy_point: accuracy,
+        critical_rate: critical_chance,
+        actual_delay: delay,
+        dps,
         trace: DamageTrace {
             stats: stat_traces,
             stat_contributions: input.stat_contributions.clone(),
@@ -501,6 +604,7 @@ mod tests {
             weapon_added_damage: 0,
             // テストは上限に当たらない値を既定にする(上限の挙動は専用テストで見る)
             damage_cap: i64::MAX,
+            stat_cap: i64::MAX,
             skill: Skill {
                 id: "s".into(),
                 name: "テスト斬り".into(),
@@ -513,6 +617,8 @@ mod tests {
                 critical_rate: Some(7),
                 level: 1,
                 single_target_channeling: false,
+                base_actual_delay: Some(1.4),
+                actual_delay_fixed: false,
             },
             enemy: Enemy {
                 id: "e".into(),
@@ -521,12 +627,22 @@ mod tests {
                 damage_reduction: 0,
                 cut_rate_a: 1.0,
                 element_threshold: 90,
+                agi: None,
+                critical_taken_rate: None,
             },
             awakening_rate: 1.0,
             combo_count: 0,
             element_value: 0,
             pins: Adjustments::default(),
             temporary_pins: None,
+            actual_delay_skills: Vec::new(),
+            critical_rate_sources: CriticalRateSources::default(),
+            // 実測表の挙動は actual_delay.rs のテストで見る。ここは式にフォールバックさせる
+            skill_uses: SkillUsesTable {
+                reduction_percents: Vec::new(),
+                base_delays: Vec::new(),
+                uses: Vec::new(),
+            },
         }
     }
 
@@ -807,6 +923,8 @@ mod tests {
             defense: 7050,
             damage_reduction: -5850,
             cut_rate_a: 0.405,
+            agi: Some(1552),
+            critical_taken_rate: None,
             element_threshold: 120,
         };
         let r = calculate_damage(&i);
@@ -960,6 +1078,116 @@ mod tests {
         i.random_options.accuracy_point = 20;
         let base = calculate_damage(&input()).accuracy_point.unwrap();
         assert_eq!(calculate_damage(&i).accuracy_point.unwrap(), base + 20);
+    }
+
+    // --- クリティカル率(wiki: 計算式まとめ `#CriticalChance`)-----------------
+
+    #[test]
+    fn クリティカル率は敵のagiと被撃率が両方そろったときだけ出す() {
+        let mut i = input();
+        i.base_stats.agi = 300;
+        i.equipment_base_totals.critical = 200;
+        i.skill.critical_rate = Some(13);
+
+        // どちらも未記載(wiki が `?`)なら出さない
+        assert!(calculate_damage(&i).critical_rate.is_none());
+
+        // AGI だけでも出さない(被撃率は −250〜−930% と支配的で、無いと桁違いに外れる)
+        i.enemy.agi = Some(1420);
+        assert!(calculate_damage(&i).critical_rate.is_none());
+
+        i.enemy.critical_taken_rate = Some(-350.0);
+        let r = calculate_damage(&i).critical_rate.unwrap();
+        assert_eq!(r.equipment_critical, 200);
+        assert_eq!(r.agi, 300);
+        assert_eq!(r.target_agi, 1420);
+        assert!((r.target_taken_rate - -350.0).abs() < 1e-12);
+
+        // スキルの Cri値が wiki 未記載なら出せない
+        i.skill.critical_rate = None;
+        assert!(calculate_damage(&i).critical_rate.is_none());
+    }
+
+    #[test]
+    fn クリティカル率増加は結果を押し上げる() {
+        use crate::critical_rate::CriticalRateSources;
+
+        let mut i = input();
+        i.base_stats.agi = 300;
+        i.equipment_base_totals.critical = 200;
+        i.enemy.agi = Some(1420);
+        i.enemy.critical_taken_rate = Some(-100.0);
+        let base = calculate_damage(&i).critical_rate.unwrap();
+
+        i.critical_rate_sources = CriticalRateSources {
+            pet: true,
+            ultimate_rune: true,
+            architect_lab: false,
+            deadly_blow: false,
+        };
+        let boosted = calculate_damage(&i).critical_rate.unwrap();
+        assert!((boosted.bonus - 20.0).abs() < 1e-12);
+        assert!(boosted.raw > base.raw);
+    }
+
+    // wiki Quest/覚醒クエスト「各能力の上限値」/ エタの意志: 最終能力値の上限
+    #[test]
+    fn 最終能力値の上限は攻撃力に効きトレースに捨てた分が出る() {
+        let mut i = input();
+        let uncapped = calculate_damage(&i);
+        assert!(uncapped.trace.stats.iter().all(|t| t.capped_loss == 0));
+
+        i.stat_cap = 400;
+        let capped = calculate_damage(&i);
+        let stab = capped.trace.stats.iter().find(|t| t.kind == StatKind::Stab).unwrap();
+        assert_eq!(stab.effective, 400);
+        assert_eq!(stab.stat_cap, 400);
+        assert_eq!(stab.capped_loss, 100); // 素ステ 500 → 上限 400
+        // ステ攻撃力が減るので与ダメージも減る
+        assert!(capped.per_hit.max < uncapped.per_hit.max);
+    }
+
+    // --- 中ディレイ・DPS(wiki: 計算式まとめ `#ActualDelay`)------------------
+
+    #[test]
+    fn 中ディレイの供給源はフルスロットルとroとシエナとキャラパッシブ() {
+        use crate::actual_delay::ActualDelayContribution;
+        use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
+
+        let mut i = input();
+        i.common_skills.ultimate = UltimateSkills {
+            slots: [Some(UltimateSkill::FullThrottle), None],
+            super_limit: true,
+            hyper_limit_level: 6,
+        };
+        i.random_options.actual_delay_reduction = 0.03;
+        i.equipment.parts.shield_plus.siena.actual_delay_percent = 2.0;
+        i.actual_delay_skills =
+            vec![ActualDelayContribution { source: "剣の司祭".into(), rate: 0.05 }];
+
+        let delay = calculate_damage(&i).actual_delay.unwrap();
+        assert_eq!(delay.contributions.len(), 4);
+        // フルスロットル 45% + RO 3% + シエナ 2% + パッシブ 5% = 55%
+        assert!((delay.reduction - 0.55).abs() < 1e-12);
+        assert!((delay.value - 1.4 * 0.45).abs() < 1e-12);
+    }
+
+    #[test]
+    fn dpsは合計ダメージを中ディレイで割る() {
+        let result = calculate_damage(&input());
+        let delay = result.actual_delay.unwrap();
+        let dps = result.dps.unwrap();
+        assert!((dps.max - result.total.max as f64 / delay.value).abs() < 1e-9);
+        assert!((dps.critical - result.total.critical as f64 / delay.value).abs() < 1e-9);
+    }
+
+    #[test]
+    fn 動作が取れないスキルは中ディレイもdpsも出さない() {
+        let mut i = input();
+        i.skill.base_actual_delay = None;
+        let result = calculate_damage(&i);
+        assert!(result.actual_delay.is_none());
+        assert!(result.dps.is_none());
     }
 
     // --- 極限スキル(wiki: Skill/極限)-----------------------------------

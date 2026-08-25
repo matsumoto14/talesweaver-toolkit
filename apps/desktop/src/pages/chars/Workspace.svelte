@@ -4,7 +4,7 @@
   // 親 CharsPage が {#key character.id} で作り直す前提($effect による再同期は書かない)。
   import { untrack } from "svelte";
   import { errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
-  import type { Equipment, RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
+  import type { CommonSkills, Equipment, RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
@@ -75,13 +75,17 @@
     const statSources = JSON.parse(JSON.stringify(draft.statSources)) as StatSources;
     // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
     const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
-    const commonSkills = { ...draft.commonSkills };
+    // 浅いコピーだとネストした値(アンリーシュの枠・極限スキル)の変更を $effect が追跡できず、
+    // 触っても再計算が走らない。装備と同じく deep copy で全プロパティを読む
+    const commonSkills = JSON.parse(JSON.stringify(draft.commonSkills)) as CommonSkills;
+    // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
+    const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
     const gameCharacterId = draft.gameCharacterId;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, gameCharacterId, mainSkillId)
+      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, gameCharacterId, mainSkillId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;
@@ -132,6 +136,9 @@
   const petCount = $derived(STAT_KINDS.filter((k) => draft.statSources.pet_skills[k] !== null).length);
   const runeTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.rune_levels[k], 0));
   const crownTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.crown[k], 0));
+  const monsterCardTotal = $derived(
+    STAT_KINDS.reduce((s, k) => s + draft.statSources.monster_cards[k], 0),
+  );
   const relicTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.sacred_relic[k] * 10, 0));
   const skillCount = $derived(
     draft.statSources.buffs.choices.filter((c) => {
@@ -155,6 +162,18 @@
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
 
+  // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラ固有のパッシブだけ。
+  // 共通の供給源(フルスロットル / カフスの RO / シエナのオーラ)はそれぞれの補正源で設定する。
+  const delaySummary = $derived.by(() => {
+    const ids = draft.statSources.actual_delay_skills.skill_ids;
+    if (ids.length === 0) return NEUTRAL;
+    const percent = ids.reduce(
+      (n, id) => n + (app.actualDelaySkills.find((d) => d.id === id)?.percent ?? 0),
+      0,
+    );
+    return `${ids.length} 件 ・ 合計 −${percent}%`;
+  });
+
   // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる
   const commonSkillSummary = $derived.by(() => {
     const c = draft.commonSkills;
@@ -170,6 +189,14 @@
     const ultimate = c.ultimate.slots.filter((u) => u !== null);
     if (ultimate.length > 0) {
       parts.push(`極限 ${ultimate.map((u) => ULTIMATE_SKILL_LABELS[u]).join(" / ")}`);
+    }
+    // アンリーシュ(能力解放)。効き先は能力値倍率B
+    const unleash = (c.unleash ?? []).filter((u) => u.stat !== null && u.level > 0);
+    if (unleash.length > 0) {
+      const rates = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
+      parts.push(
+        `解放 ${unleash.map((u) => `${STAT_LABELS[u.stat!]} +${rates[u.level - 1]}%`).join(" / ")}`,
+      );
     }
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
@@ -191,6 +218,17 @@
     }
     const parts = ELEMENTS.filter((e) => values[e] > 0).map((e) => `${ELEMENT_LABELS[e]}${values[e]}`);
     return parts.length === 0 ? NEUTRAL : parts.join(" / ");
+  });
+
+  // クリティカル率(wiki: 計算式まとめ #CriticalChance)。ここはペット会心と増加だけ。
+  // 装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入る。
+  const criticalRateSummary = $derived.by(() => {
+    const c = draft.statSources.critical_rate;
+    const parts: string[] = [];
+    if (c.pet) parts.push("ペット会心 ×1.1");
+    const bonus = (c.ultimate_rune ? 20 : 0) + (c.architect_lab ? 30 : 0) + (c.deadly_blow ? 100 : 0);
+    if (bonus > 0) parts.push(`増加 +${Math.min(100, bonus)}%`);
+    return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
@@ -238,14 +276,21 @@
     },
     { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
     { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
+    {
+      id: "monsterCard",
+      name: "モンスターカード",
+      sub: monsterCardTotal > 0 ? `合計 +${fmtInt(monsterCardTotal)}` : NEUTRAL,
+    },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
+    { id: "actualDelay", name: "中ディレイ減少", sub: delaySummary },
+    { id: "criticalRate", name: "クリティカル率", sub: criticalRateSummary },
     { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
   // 並びは 12a の指定順(キャラステータス / 装備 / シエナ / テシスコア / 聖物 / クラウン /
   // スキル / モンスターカード / ペット)。12a に無いルーン・調整はその後ろに置く。
-  const PLANNED = ["モンスターカード"];
+  const PLANNED: string[] = [];
   const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
   // --- いまの実力 ---------------------------------------------------------

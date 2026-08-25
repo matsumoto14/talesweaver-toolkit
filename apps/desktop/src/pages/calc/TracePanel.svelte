@@ -59,6 +59,7 @@
       <thead><tr>
         <th>ステ</th><th class="n">最終</th><th class="n">素</th><th class="n">Σ割合</th><th class="n">固定</th><th class="n">Π倍率A</th>
         <th class="n">基本</th><th class="n">倍率B</th><th class="n">[基本×B]</th><th class="n">最終固定</th>
+        <th class="n">上限</th><th class="n">上限で捨てた分</th>
       </tr></thead>
       <tbody>
         {#each trace.stats as s (s.kind)}
@@ -78,11 +79,19 @@
             <td class="n">{fmtNum(s.multiplier_b)}</td>
             <td class="n">{fmtInt(s.multiplier_b_bonus)}</td>
             <td class="n">{fmtInt(s.final_fixed)}</td>
+            <td class="n dim">{fmtInt(s.stat_cap)}</td>
+            <td class="n" class:capped={s.capped_loss > 0}>{s.capped_loss > 0 ? fmtInt(s.capped_loss) : "—"}</td>
           </tr>
         {/each}
       </tbody>
     </table>
   </div>
+
+  {#if trace.stats.some((s) => s.capped_loss > 0)}
+    <p class="cap-note">
+      最終能力値が上限({fmtInt(trace.stats[0].stat_cap)})で頭打ちになっています。上限は覚醒段階とエタの意志 Lv で上がります(wiki: Quest/覚醒クエスト・エタの意志)。
+    </p>
+  {/if}
 
   <div class="section-label"><span>(a-1) 補正源内訳</span><span class="rule"></span></div>
   <div class="tbl">
@@ -168,6 +177,8 @@
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }
   td.final { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .capped { color: #B5443A; font-weight: 700; }
+  .cap-note { margin: 4px 0 0; font-size: 9px; color: #B5443A; }
   .pin-badge {
     font-size: 9px; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent);
     border-radius: var(--r-inset); padding: 1px 4px; cursor: default;

@@ -15,4 +15,12 @@ pub struct Enemy {
     /// 敵の属性値(wiki 狩り場情報一覧「敵属性値」= 属性差ボーナス カテゴリI の起点)。
     /// 攻撃スキルの属性値がこれを上回った分だけ与ダメージが増える(+80 で上限 1.5 倍)
     pub element_threshold: i64,
+    /// 対象のAGI(wiki 狩り場情報一覧「敵AGI+固定値」の合計)。クリティカル率の分母に入る。
+    /// `None` = wiki が `?` で未記載
+    #[serde(default)]
+    pub agi: Option<i64>,
+    /// 対象のクリティカル被撃率A(wiki 狩り場情報一覧。−250〜−930% の負値)。
+    /// `None` = wiki が `?` で未記載。**AGI と両方そろわないとクリティカル率を出さない**
+    #[serde(default)]
+    pub critical_taken_rate: Option<f64>,
 }
