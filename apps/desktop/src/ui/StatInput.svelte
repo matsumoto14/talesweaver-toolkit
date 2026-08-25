@@ -3,14 +3,13 @@
   //
   //   [ラベル]  [ 値 /上限  ← セル底に進捗バー ]  [MAX]  [注記]
   //
-  // v4(TW Toolkit Prototype v4.dc.html 570-587)の実物は `− [値/上限] ＋ MAX` だが、
-  // ＋ / − は置かない。ステータスの刻みは 1 で上限が 310〜3,000 あり、1 ずつ押して
-  // 動かす操作が実用にならない。代わりに **セルを押すと手入力**に入る。
-  // 形態 4 のうち「上限に対していまどのあたりか」を見せる部分(値と上限の同居・
-  // 進捗バー・MAX 1 タップ・上限到達で面が変わる)を採る。
+  // 寸法・配色・動きは §07「押した瞬間に、結果が動く」の実演(.ench / .ctrl / .step /
+  // .cell / .fillbar / .maxbtn)をそのまま採る。
+  //   セルは白 + ラベンダーの枠、底に 2px の進捗バー、右に MAX。
+  //   上限に届くとセルが紫になり MAX が反転する(.cell.full / .maxbtn.full)。
   //
-  // 上限到達は金(§03 予約色「上限到達(「満」)」)。§07 実演の「紫になる」は
-  // v4 のエンチャント欄がラベンダー系統の画面にあるための記述で、色の規則ではない。
+  // ＋ / − は「1 押しに意味がある」欄だけに置く(stepper)。ステータスの刻みは 1 で
+  // 上限が 310〜3,000 あり、1 ずつ押す操作にならないため。どの欄もセルを押せば手入力に入る。
   //
   // 数値欄のテキスト確定ロジックは旧 NumberField.svelte を踏襲:
   // text($state) と value(bindable) を分離し、oninput で確定できる間だけ value を書き換え、
@@ -193,59 +192,63 @@
 </div>
 
 <style>
-  .stat-input { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
-  .label { font-size: 12px; color: var(--fg-muted); min-width: 44px; flex-shrink: 0; white-space: nowrap; }
-  /* 値・上限・進捗が入るセル。読取でも編集でも同じ寸法 */
-  .cell {
-    position: relative; overflow: hidden; flex-shrink: 0;
-    display: flex; align-items: baseline; justify-content: flex-end; gap: 2px;
-    width: 104px; padding: 4px 6px 5px; border-radius: var(--r-panel);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
+  /* §07 実演の .ctrl。gap 3px で ＋ / − をセルに寄せる */
+  .stat-input { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .label {
+    font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
+    min-width: 46px; margin-right: 5px; flex-shrink: 0; white-space: nowrap;
   }
-  /* 白 = 編集できる面(§01) */
-  .cell.editing { background: var(--bg-field); border-color: var(--accent); }
-  .cell:not(.editing):hover { border-color: var(--accent); }
-  /* 上限を語らない形(形態 1)。/上限 と MAX が無いぶん詰める */
-  .cell.bare { width: 74px; }
-  /* 上限に対していまどのあたりか。セル底の 2px(v4) */
+  /* .cell — 値・上限・進捗がひとつのセルに同居する(§07) */
+  .cell {
+    position: relative; flex: 1 1 auto; min-width: 74px; overflow: hidden;
+    display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
+    padding: 4px 7px 5px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--cell-bd);
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+  .cell.editing { border-color: var(--accent); }
+  .cell:not(.editing):hover { border-color: var(--sim); }
+  /* .fillbar — 上限に対していまどのあたりか。伸び縮みが見えるように width を送る */
   .fill {
     position: absolute; left: 0; bottom: 0; height: 2px;
-    background: linear-gradient(90deg, var(--border-strong), var(--accent));
-    pointer-events: none;
+    background: var(--cell-bar); pointer-events: none;
+    transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .val {
-    min-width: 0; flex: 1 1 auto; text-align: right; font-size: 12.5px; font-weight: 700;
-    font-variant-numeric: tabular-nums; color: var(--fg);
-    background: none; border: none; padding: 0;
+    min-width: 0; flex: 1 1 auto; text-align: right;
+    font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--cell-fg); background: none; border: none; padding: 0;
   }
   .val:focus { outline: none; }
-  /* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1)。
-     ＋ / − を置かないので、刻みで動かす手段としても要らない */
+  .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  /* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1) */
   .val::-webkit-inner-spin-button, .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
   input.val { appearance: textfield; }
-  .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-  /* 上限は値のすぐ右、小さく。「1 〜 310」のような範囲表記にはしない —
-     値が別にあるぶん、範囲で書くと何の数字か読めない */
-  .cap { flex: none; font-size: 8.5px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
-  /* 上限に届いたら面の色が変わる(§07 / §12)。「満」は文字ではなく面で伝える */
-  .stat-input.full .cell { background: var(--state-edge-bg); border-color: var(--gold); }
-  .stat-input.full .fill { background: var(--gold); }
-  .stat-input.full .cap { color: var(--state-edge-fg); }
-  /* ＋ / −。セルの左右に置く(v4) */
+  .cap { flex: none; font-size: 8px; color: var(--cell-cap); font-variant-numeric: tabular-nums; }
+  /* .step — ＋ / − */
   .nudge {
-    flex: none; width: 16px; text-align: center; padding: 2px 0;
-    font-size: 12px; font-weight: 700; color: var(--accent); background: none; border: none;
+    width: 16px; height: 22px; flex: none; padding: 0; line-height: 1;
+    background: none; border: none; border-radius: var(--r-chip);
+    font-size: 13px; font-weight: 700; color: var(--cell-step);
   }
-  .nudge:hover:not(:disabled) { color: var(--accent-deep); }
-  .nudge:disabled { color: var(--fg-faint); }
+  .nudge:hover:not(:disabled) { background: var(--state-temp-bg); color: var(--sim); }
+  .nudge:disabled { color: var(--border); }
+  /* .maxbtn — 常設。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) */
   .max-btn {
-    flex-shrink: 0; width: 30px; padding: 4px 0; text-align: center;
-    border-radius: var(--r-chip); background: var(--bg-field);
-    border: 1px solid var(--border); color: var(--fg-muted);
+    width: 30px; flex: none; padding: 3px 0; text-align: center;
+    border-radius: var(--r-inset); background: var(--state-temp-bg);
+    border: 1px solid var(--cell-max-bd); color: var(--sim);
     font-size: 8px; font-weight: 700;
+    transition: background 0.18s ease;
   }
-  .max-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--border-strong); }
-  /* 満のときは沈めずに反転させる。「もう上限だ」を MAX 自身が言う(v4) */
-  .max-btn:disabled { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
-  .hint { flex-shrink: 0; font-size: 11px; white-space: nowrap; }
+  .max-btn:hover:not(:disabled) { border-color: var(--sim); }
+  /* 上限に届くとセルが紫になり MAX が反転する。「満」は文字ではなく面で伝える(§07) */
+  .stat-input.full .cell { background: var(--cell-full-bg); border-color: var(--sim); }
+  .stat-input.full .val { color: var(--sim-fg); }
+  .stat-input.full .max-btn {
+    background: var(--cell-max-full-bg); border-color: var(--sim-fg); color: var(--cell-fg);
+  }
+  /* 上限を語らない形(形態 1)。/上限 と MAX が無いぶん詰める */
+  .cell.bare { flex: none; width: 74px; }
+  .hint { flex-shrink: 0; margin-left: 5px; font-size: 11px; white-space: nowrap; }
 </style>

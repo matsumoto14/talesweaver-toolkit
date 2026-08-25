@@ -1712,7 +1712,12 @@
   .lv { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .lv .hint { margin: 0; }
 
-  .fields { margin-top: 9px; display: flex; flex-direction: column; gap: 9px; }
+  /* 入力セルは親の幅まで伸びる(§07 実演の .ctrl が 1fr)。1 列で受けると値が
+     右端まで離れて読めないので、232px の段に割って伸び先を絞る */
+  .fields {
+    margin-top: 9px; display: grid; gap: 9px 16px;
+    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  }
   .text { display: flex; flex-direction: column; gap: 6px; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
   input[type="text"] {

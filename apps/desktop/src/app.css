@@ -33,6 +33,17 @@
   --sim-fg: #4A4780;
   --sim-bg: #FBFAFE;
 
+  /* 上限のある入力欄(§07 形態 4 の実演)。ラベンダー系でまとめる —
+     上限まで盛る操作はその場の試行なので、保存済みの値の面(水色)とは別に見せる */
+  --cell-bd: #C6C3E0;                 /* 通常の枠 */
+  --cell-fg: #2C2A57;                 /* 値 */
+  --cell-cap: #9A97BE;                /* /上限 */
+  --cell-step: #8F8CC4;               /* ＋ / − */
+  --cell-max-bd: #A9A6D6;             /* MAX の枠 */
+  --cell-bar: linear-gradient(90deg, #C6C3E0, var(--sim));
+  --cell-full-bg: linear-gradient(180deg, #F3F0FF, #E6E1FA);
+  --cell-max-full-bg: linear-gradient(180deg, #CFC9F5, #B3ACE8);
+
   /* 状態の 6 系統(§03)。到達判定のバッジ・量バー・候補チップはこの 6 つから選ぶ。
      ラベル(「余裕」「通る」…)は画面ごとに変えてよいが、色と意味の対応は変えない。
      参照は src/ui/states.ts 経由(inline style に hex を書かない) */
