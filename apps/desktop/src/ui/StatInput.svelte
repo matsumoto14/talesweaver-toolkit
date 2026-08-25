@@ -32,8 +32,16 @@
      * 一律値でしかないものは、進捗を出すと「1,000 まで盛れる」と読めてしまう。
      */
     gauge?: boolean;
+    /**
+     * ＋ / − を置くか(§07 形態 4「刻みが決まっているとき。＋ / − と MAX で動かす」)。
+     * **1 押しに意味がある**もの、つまり段階を数で持っている値だけ true —
+     * 神鳥の聖物(1 段階 = +10)やルーンスキル Lv。能力値の 1 は誤差なので置かない。
+     */
+    stepper?: boolean;
   }
-  let { label, value = $bindable(), min, max, step = 1, format, gauge = true }: Props = $props();
+  let {
+    label, value = $bindable(), min, max, step = 1, format, gauge = true, stepper = false,
+  }: Props = $props();
 
   let text = $state(String(value));
   let lastSyncedValue = value;
@@ -78,6 +86,15 @@
     }
     lastSyncedValue = v;
     text = String(v);
+  }
+
+  /** ＋ / − で 1 刻み動かす。編集中でも読取のままでも同じように効く */
+  function nudge(dir: 1 | -1) {
+    const next = clamp(value + dir * step);
+    if (next === value) return;
+    value = next;
+    lastSyncedValue = next;
+    text = String(next);
   }
 
   function setMax() {
@@ -128,6 +145,9 @@
   }}
 >
   {#if label}<span class="label">{label}</span>{/if}
+  {#if stepper}
+    <button type="button" class="nudge" onclick={() => nudge(-1)} disabled={value <= min} aria-label="{label} を 1 減らす">−</button>
+  {/if}
   <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
        上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
        読取(button)と編集(input)でセルの寸法は同じ。押しても値が動かない(§09 規則 1) -->
@@ -162,6 +182,9 @@
     {/if}
     {#if showCap}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
   </div>
+  {#if stepper}
+    <button type="button" class="nudge" onclick={() => nudge(1)} disabled={value >= max} aria-label="{label} を 1 増やす">＋</button>
+  {/if}
   <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->
   {#if showCap}
     <button type="button" class="max-btn" onclick={setMax} disabled={full}>MAX</button>
@@ -208,6 +231,13 @@
   .stat-input.full .cell { background: var(--state-edge-bg); border-color: var(--gold); }
   .stat-input.full .fill { background: var(--gold); }
   .stat-input.full .cap { color: var(--state-edge-fg); }
+  /* ＋ / −。セルの左右に置く(v4) */
+  .nudge {
+    flex: none; width: 16px; text-align: center; padding: 2px 0;
+    font-size: 12px; font-weight: 700; color: var(--accent); background: none; border: none;
+  }
+  .nudge:hover:not(:disabled) { color: var(--accent-deep); }
+  .nudge:disabled { color: var(--fg-faint); }
   .max-btn {
     flex-shrink: 0; width: 30px; padding: 4px 0; text-align: center;
     border-radius: var(--r-chip); background: var(--bg-field);

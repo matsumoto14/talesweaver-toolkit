@@ -553,8 +553,8 @@
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
     element: { title: "属性", note: "装備の属性強化以外の供給源(乗せる属性を選ぶ)" },
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
-    rune: { title: "ルーンスキル", note: `0–${limits.rune_level_max}` },
-    crown: { title: "クラウン", note: `0–${limits.crown_max}` },
+    rune: { title: "ルーンスキル", note: `スキル Lv がそのままステに乗る(Lv 0–${limits.rune_level_max})` },
+    crown: { title: "クラウン", note: `ステに乗る実値(0–${limits.crown_max})` },
     monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
     relic: { title: "神鳥の聖物", note: `0–${limits.sacred_relic_stage_max} 段階(実加算は段階×10)` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
@@ -1039,7 +1039,14 @@
     <div class="card">
       <div class="fields">
         {#each STAT_KINDS as k (k)}
-          <StatInput label={STAT_LABELS[k]} min={0} max={limits.rune_level_max} bind:value={draft.statSources.rune_levels[k]} />
+          <!-- Lv は段階。1 押しに意味があるので ＋ / − を置く(§07 形態 4) -->
+          <StatInput
+            label={STAT_LABELS[k]}
+            min={0}
+            max={limits.rune_level_max}
+            stepper
+            bind:value={draft.statSources.rune_levels[k]}
+          />
         {/each}
       </div>
     </div>
@@ -1077,8 +1084,9 @@
             label={STAT_LABELS[k]}
             min={0}
             max={limits.sacred_relic_stage_max}
+            stepper
             bind:value={draft.statSources.sacred_relic[k]}
-            format={(v) => `${v} 段階 (+${v * 10})`}
+            format={(v) => (v > 0 ? `+${v * 10}` : "")}
           />
         {/each}
       </div>
