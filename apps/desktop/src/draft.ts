@@ -30,6 +30,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   power_weapon: src.power_weapon,
   strong_weapon_level: src.strong_weapon_level,
   thesis_cores: cloneThesisCores(src.thesis_cores),
+  title: src.title ?? null,
 });
 
 /**
@@ -43,6 +44,7 @@ export const defaultEquipment = (): Equipment => ({
   power_weapon: true,
   strong_weapon_level: DEFAULT_STRONG_WEAPON_LEVEL,
   thesis_cores: neutralThesisCores(),
+  title: null,
 });
 
 /** ストロングウェポンの既定 Lv(上限。wiki Skill/共通: Lv6 = +18%) */

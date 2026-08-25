@@ -4,6 +4,7 @@ import type {
   Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, RandomOptionDef, Skill, StatLimits, StatPreview, StatSources,
+  TitleDef,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -42,6 +43,8 @@ export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipmen
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
 /** ランダムオプションのカタログ(wiki: ランダムオプション) */
 export const listRandomOptions = () => invoke<RandomOptionDef[]>("list_random_options");
+/** 称号のカタログ(wiki: 称号システム。主要称号のみ) */
+export const listTitles = () => invoke<TitleDef[]>("list_titles");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

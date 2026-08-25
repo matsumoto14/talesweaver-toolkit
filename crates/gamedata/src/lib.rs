@@ -11,6 +11,7 @@ pub mod enemies;
 pub mod equipment_catalog;
 pub mod random_options;
 pub mod skills;
+pub mod titles;
 
 use serde::Serialize;
 
@@ -32,6 +33,7 @@ pub use equipment_catalog::{
 };
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};
 pub use skills::{find_skill, skills_for};
+pub use titles::{title_catalog, TITLE_SOURCE};
 
 /// データの出典。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

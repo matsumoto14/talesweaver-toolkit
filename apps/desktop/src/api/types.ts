@@ -230,6 +230,24 @@ export interface RandomOptionSlot {
   value: number | null;
 }
 
+// 称号の区分。crates/domain/src/title.rs の TitleKind。
+export type TitleKind = "normal" | "special";
+
+// 称号定義(gamedata のカタログ)。crates/domain/src/title.rs の TitleDef。
+export interface TitleDef {
+  id: string;
+  name: string;
+  kind: TitleKind;
+  /** wiki の見出し(グループボーナスの単位。ボーナス自体は未実装) */
+  group: string;
+  /** 習得 Lv。wiki が `-` の行は null */
+  level: number | null;
+  /** 装備の基本能力値への加算 */
+  values: EquipmentValues;
+  /** 入手方法・備考(条件付きの追加効果は計算に入らない) */
+  note: string;
+}
+
 // テシスコアの地域。crates/domain/src/thesis_core.rs の CoreRegion(snake_case)。
 export type CoreRegion = "mercurial" | "abyss" | "eclipse" | "rubicona";
 
@@ -308,6 +326,8 @@ export interface Equipment {
   strong_weapon_level: number;
   /** テシスコア(地域ごとに 6 枠) */
   thesis_cores: ThesisCores;
+  /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
+  title: string | null;
 }
 
 // gamedata の出典。crates/gamedata/src/lib.rs の Source。

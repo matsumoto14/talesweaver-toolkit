@@ -3,7 +3,7 @@
 use domain::{
     evaluate_content, AttackPowerCoefficients, BestSkillDamage, BuffDefinition, Content,
     ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, DefenseProfile,
-    Enemy, EquipmentAbilityDef, EquipmentPart, RandomOptionDef, Skill,
+    Enemy, EquipmentAbilityDef, EquipmentPart, RandomOptionDef, Skill, TitleDef,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
@@ -78,6 +78,7 @@ pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::Elemen
         &gamedata::equipment_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
+        &gamedata::title_catalog(),
     )
     .map_err(|e| e.to_string())?;
     Ok(element_preview(&character.game_character_id, &character.equipment, &character.stat_sources))
@@ -102,6 +103,12 @@ pub fn list_equipment_abilities() -> Vec<EquipmentAbilityDef> {
 #[tauri::command]
 pub fn list_random_options() -> Vec<RandomOptionDef> {
     gamedata::random_option_catalog()
+}
+
+/// 称号のカタログ(wiki: 称号システム)。主要称号のみ。
+#[tauri::command]
+pub fn list_titles() -> Vec<TitleDef> {
+    gamedata::title_catalog()
 }
 
 #[tauri::command]
@@ -140,6 +147,7 @@ pub fn create_character(
             &gamedata::equipment_catalog(),
             &gamedata::equipment_abilities(),
             &gamedata::random_option_catalog(),
+            &gamedata::title_catalog(),
         )
     })
 }
@@ -162,6 +170,7 @@ pub fn update_character(
             &gamedata::equipment_catalog(),
             &gamedata::equipment_abilities(),
             &gamedata::random_option_catalog(),
+            &gamedata::title_catalog(),
         )
     })
 }
@@ -198,6 +207,7 @@ pub fn preview_effective_stats(
         &equipment,
         &gamedata::buff_catalog(),
         &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
         &game_character_id,
         coefficients,
     )
@@ -216,6 +226,7 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &gamedata::equipment_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
+        &gamedata::title_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let preview = domain::preview_effective_stats(
@@ -224,13 +235,14 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &character.equipment,
         &gamedata::buff_catalog(),
         &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
         &character.game_character_id,
         None,
     )
     .map_err(|e| e.to_string())?;
     let equipment_totals = character
         .equipment
-        .base_totals(&gamedata::equipment_abilities())
+        .base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog())
         .add(character.equipment.enhanced_totals(None));
     Ok(domain::defense_profile(
         &preview.stats,
@@ -327,7 +339,7 @@ fn build_damage_input(
         temp.validate().map_err(|e| e.to_string())?;
         domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
     }
-    let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities());
+    let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog());
     let equipment_enhanced_totals = equipment.enhanced_totals(core_region);
     let random_options = equipment.random_option_totals(&gamedata::random_option_catalog());
     let added_damage = weapon_added_damage(&equipment.parts.weapon);
@@ -397,6 +409,7 @@ pub fn preview_damage(
         &gamedata::equipment_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
+        &gamedata::title_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let content = find_content(&content_id)?;
@@ -431,12 +444,14 @@ pub fn evaluate_contents(
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_abilities = gamedata::equipment_abilities();
     let random_options = gamedata::random_option_catalog();
+    let titles = gamedata::title_catalog();
     storage::validate_new_character(
         &character,
         &catalog,
         &equipment_catalog,
         &equipment_abilities,
         &random_options,
+        &titles,
     )
     .map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
@@ -455,7 +470,7 @@ pub fn evaluate_contents(
     );
     let awakening_rate = gamedata::awakening_rate(character.awakening);
     // 装備集計(基本能力値・武器追加固定ダメージ)はキャラのみ依存なのでループの外で 1 回だけ計算する。
-    let equipment_base_totals = character.equipment.base_totals(&equipment_abilities);
+    let equipment_base_totals = character.equipment.base_totals(&equipment_abilities, &titles);
     let random_option_totals = character.equipment.random_option_totals(&random_options);
     let added_damage = weapon_added_damage(&character.equipment.parts.weapon);
     // 強化能力値はテシスコアの地域で変わるので、地域ごとに 1 回だけ集計してループ内で使い回す

@@ -14,6 +14,7 @@ use crate::random_option::{
 };
 use crate::stats::StatKind;
 use crate::thesis_core::{CoreRegion, ThesisCoreError, ThesisCores};
+use crate::title::{title_values, TitleDef};
 
 /// 装備補正 9 種(wiki Item 各ページの列: 突き / 斬り / 物防 / 魔攻 / 魔防 / 命中 / Cri補正 / 回避 / 敏捷)。
 /// 基本能力値・エンチャント値のどちらも同じ形。与ダメージ式に入るのは前半 4 種
@@ -541,6 +542,10 @@ pub struct Equipment {
     /// テシスコア(地域ごとに 6 枠)。火力タイプの補正は強化能力値へ合流する
     #[serde(default)]
     pub thesis_cores: ThesisCores,
+    /// 表示中の称号(`TitleDef::id`)。**1 枠だけ**で、補正は基本能力値へ合流する
+    /// (wiki: 称号システム。所持ぶんの累積ではない)。`None` = 未装備
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// 12 部位。named field で持つ(`parts.weapon` 等)。
@@ -625,8 +630,15 @@ impl Equipment {
         Ok(())
     }
 
-    /// 基本能力値の合計(Σ part.base + Σ 武器アビリティの加算値)。
-    pub fn base_totals(&self, abilities: &[EquipmentAbilityDef]) -> EquipmentValues {
+    /// 基本能力値の合計(Σ part.base + Σ 武器アビリティの加算値 + 表示中の称号)。
+    ///
+    /// 称号は装備部位ではないが、効き先が基本能力値なのでここで合流させる
+    /// (wiki: 称号システム。ユーザー確定 2026-08-25)。
+    pub fn base_totals(
+        &self,
+        abilities: &[EquipmentAbilityDef],
+        titles: &[TitleDef],
+    ) -> EquipmentValues {
         let mut total = EquipmentValues::default();
         for (_, part) in self.parts.iter() {
             total = total.add(part.base);
@@ -636,7 +648,7 @@ impl Equipment {
                 total = total.add(def.values);
             }
         }
-        total
+        total.add(title_values(self.title.as_deref(), titles))
     }
 
     /// 強化能力値の合計(Σ part.enchant + Σ シエナのオーラの能力値(武器/盾)+ テシスコア)。
@@ -800,7 +812,7 @@ mod tests {
             EquipmentValues { thrust: 150, slash: 150, ..Default::default() },
             EquipmentValues { thrust: 60, slash: 60, ..Default::default() },
         );
-        let base = eq.base_totals(&[]);
+        let base = eq.base_totals(&[], &[]);
         let enhanced = eq.enhanced_totals(None);
         // 150*14.5*2 + 60*28.75*2 = 4350 + 3450 = 7800
         assert!((equipment_attack_power(&base, &enhanced, &coefficients()) - 7800.0).abs() < 1e-9);
@@ -809,7 +821,7 @@ mod tests {
     #[test]
     fn 装備なしなら装備攻撃力は0() {
         let eq = Equipment::default();
-        let base = eq.base_totals(&[]);
+        let base = eq.base_totals(&[], &[]);
         let enhanced = eq.enhanced_totals(None);
         assert_eq!(equipment_attack_power(&base, &enhanced, &coefficients()), 0.0);
     }
@@ -829,7 +841,7 @@ mod tests {
             family: EquipmentAbilityFamily::SharpBlade,
             values: EquipmentValues { slash: 9, ..Default::default() },
         }];
-        let base = eq.base_totals(&abilities);
+        let base = eq.base_totals(&abilities, &[]);
         assert_eq!(base, EquipmentValues { thrust: 100, slash: 209, magic_defense: 50, ..Default::default() });
 
         let enhanced = eq.enhanced_totals(None);
@@ -1035,7 +1047,7 @@ mod tests {
             eq.enhanced_totals(None),
             EquipmentValues { thrust: 16, slash: 9, ..Default::default() }
         );
-        assert_eq!(eq.base_totals(&[]), EquipmentValues::default());
+        assert_eq!(eq.base_totals(&[], &[]), EquipmentValues::default());
         assert_eq!(
             eq.siena_stat_bonus(),
             SienaStatBonus { stab: 20, hack: 10, ..Default::default() }
@@ -1218,5 +1230,41 @@ mod tests {
             eq.validate(),
             Err(EquipmentError::RandomOption(RandomOptionError::ValueOutOfRange { .. }))
         ));
+    }
+
+    // --- 称号 -----------------------------------------------------------
+
+    fn title_defs() -> Vec<crate::title::TitleDef> {
+        use crate::title::{TitleDef, TitleKind};
+        vec![TitleDef {
+            id: "eclipse",
+            name: "エクリプス",
+            kind: TitleKind::Special,
+            group: "喪失の島",
+            level: None,
+            values: EquipmentValues { thrust: 40, slash: 40, ..Default::default() },
+            note: "",
+        }]
+    }
+
+    // wiki: 称号システム。表示中の 1 件だけが基本能力値に乗る
+    #[test]
+    fn 称号は基本能力値に合流する() {
+        let mut eq = Equipment::default();
+        eq.parts.weapon.base = EquipmentValues { thrust: 100, ..Default::default() };
+        assert_eq!(eq.base_totals(&[], &title_defs()).thrust, 100);
+
+        eq.title = Some("eclipse".to_string());
+        assert_eq!(eq.base_totals(&[], &title_defs()).thrust, 140);
+        assert_eq!(eq.base_totals(&[], &title_defs()).slash, 40);
+        // 強化能力値には入らない(称号にエンチャントは無い)
+        assert_eq!(eq.enhanced_totals(None), EquipmentValues::default());
+    }
+
+    #[test]
+    fn カタログに無い称号idは加算されない() {
+        let mut eq = Equipment::default();
+        eq.title = Some("nope".to_string());
+        assert_eq!(eq.base_totals(&[], &title_defs()), EquipmentValues::default());
     }
 }

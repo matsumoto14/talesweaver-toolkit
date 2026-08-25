@@ -3,7 +3,8 @@
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
   CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentValues,
-  RandomOptionDef, RandomOptionEffect, RandomOptionSlot, SienaAura, SienaStatBonus, ThesisCores,
+  EquipmentAbilityDef, RandomOptionDef, RandomOptionEffect, RandomOptionSlot, SienaAura,
+  SienaStatBonus, ThesisCores, TitleDef,
 } from "./api/types";
 import {
   CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENTS, EQUIPMENT_STAT_KINDS,
@@ -171,8 +172,25 @@ function sumParts(equipment: Equipment, pick: (p: EquipmentPart) => EquipmentVal
   return total;
 }
 
-/** Σ part.base(表示用。実際の集計は Rust 側 Equipment::base_totals がアビリティ込みで行う)。 */
-export const equipmentBaseTotal = (equipment: Equipment): EquipmentValues => sumParts(equipment, (p) => p.base);
+/**
+ * 基本能力値の合計(表示用)。Rust 側 `Equipment::base_totals` と**同じ顔ぶれ**にする:
+ * Σ part.base + 武器アビリティ + 表示中の称号。カタログを引く必要があるので呼び出し側が渡す。
+ * (片方だけ欠けると「装備値の表は 0 なのに攻撃力には乗っている」というズレになる)
+ */
+export const equipmentBaseTotal = (
+  equipment: Equipment,
+  abilities: EquipmentAbilityDef[] = [],
+  titles: TitleDef[] = [],
+): EquipmentValues => {
+  const total = sumParts(equipment, (p) => p.base);
+  for (const id of equipment.parts.weapon.abilities) {
+    const def = abilities.find((a) => a.id === id);
+    if (def) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += def.values[k];
+  }
+  const title = titles.find((t) => t.id === equipment.title);
+  if (title) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += title.values[k];
+  return total;
+};
 /** Σ part.enchant(表示用。実際の集計は Rust 側 Equipment::enhanced_totals)。 */
 export const equipmentEnchantTotal = (equipment: Equipment): EquipmentValues => sumParts(equipment, (p) => p.enchant);
 

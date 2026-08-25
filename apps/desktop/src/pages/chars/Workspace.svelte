@@ -143,7 +143,7 @@
   const enhanceRatePercent = $derived(
     (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3,
   );
-  const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment));
+  const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment, app.equipmentAbilities, app.titles));
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
   const sienaParts = $derived(sienaPartCount(draft.equipment));
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
@@ -152,6 +152,14 @@
   const roCount = $derived(randomOptionCount(draft.equipment));
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
+
+  // 称号は 1 枠。表示中の 1 件だけが効く(wiki: 称号システム)
+  const titleSummary = $derived.by(() => {
+    const t = app.titles.find((x) => x.id === draft.equipment.title);
+    if (!t) return NEUTRAL;
+    const total = EQUIPMENT_STAT_KINDS.reduce((n, k) => n + t.values[k], 0);
+    return `${t.name}(合計 +${fmtInt(total)})`;
+  });
 
   // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
   const elementSummary = $derived.by(() => {
@@ -175,6 +183,11 @@
       id: "element",
       name: "属性",
       sub: elementSummary,
+    },
+    {
+      id: "title",
+      name: "称号",
+      sub: titleSummary,
     },
     {
       id: "randomOption",
@@ -206,7 +219,7 @@
   ]);
   // 並びは 12a の指定順(キャラステータス / 装備 / シエナ / テシスコア / 聖物 / クラウン /
   // スキル / モンスターカード / ペット)。12a に無いルーン・調整はその後ろに置く。
-  const PLANNED = ["モンスターカード", "称号"];
+  const PLANNED = ["モンスターカード"];
   const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
   // --- いまの実力 ---------------------------------------------------------
@@ -343,7 +356,8 @@
             </tbody>
           </table>
           <p class="dim tiny">
-            強化倍率 +{enhanceRatePercent}%。強化のうちテシスコア・シエナのオーラの分はこの表に入りません
+            強化倍率 +{enhanceRatePercent}%。基本には武器アビリティと称号の分も入っています。
+            強化のうちテシスコア・シエナのオーラの分はこの表に入りません
             (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。
           </p>
         </div>

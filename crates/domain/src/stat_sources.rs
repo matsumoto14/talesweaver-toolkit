@@ -21,6 +21,7 @@ use crate::equipment::{
     SIENA_STAT_BONUS_MAX, STRONG_WEAPON_LEVEL_MAX,
 };
 use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
+use crate::title::TitleDef;
 use crate::stats::{
     effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind, StatModifierSet,
     StatTrace, BASE_STAT_MAX,
@@ -751,11 +752,12 @@ fn attack_power_of(
     stats: &EffectiveStats,
     equipment: &Equipment,
     abilities: &[EquipmentAbilityDef],
+    titles: &[TitleDef],
     coefficients: &AttackPowerCoefficients,
 ) -> AttackPowerBreakdown {
     attack_power_breakdown(
         stat_attack_power(stats, &coefficients.stat),
-        equipment_values_attack(&equipment.base_totals(abilities), &coefficients.equipment.base),
+        equipment_values_attack(&equipment.base_totals(abilities, titles), &coefficients.equipment.base),
         equipment_values_attack(&equipment.enhanced_totals(None), &coefficients.equipment.enhanced),
         equipment.enhance_rate(),
     )
@@ -772,6 +774,7 @@ pub fn preview_effective_stats(
     equipment: &Equipment,
     catalog: &BuffCatalog,
     abilities: &[EquipmentAbilityDef],
+    titles: &[TitleDef],
     game_character_id: &str,
     coefficients: Option<AttackPowerCoefficients>,
 ) -> Result<StatPreview, StatSourceError> {
@@ -783,7 +786,7 @@ pub fn preview_effective_stats(
     let attack = match coefficients {
         None => None,
         Some(coefficients) => {
-            let breakdown = attack_power_of(&stats, equipment, abilities, &coefficients);
+            let breakdown = attack_power_of(&stats, equipment, abilities, titles, &coefficients);
             // 部位を外すとシエナのオーラのステ加算も消える = 最終能力値まで動く。
             // 差分は「その装備を外した状態を丸ごと計算し直した A」との差にする。
             let mut part_contributions = Vec::with_capacity(12);
@@ -791,7 +794,7 @@ pub fn preview_effective_stats(
                 let without = equipment.without_part(slot);
                 let (stats_without, _, _) =
                     effective_stats_with(base, sources, &without, catalog, game_character_id)?;
-                let a_without = attack_power_of(&stats_without, &without, abilities, &coefficients);
+                let a_without = attack_power_of(&stats_without, &without, abilities, titles, &coefficients);
                 part_contributions
                     .push(PartAttackContribution { slot, value: breakdown.value - a_without.value });
             }
@@ -1094,7 +1097,7 @@ mod tests {
             adjustments: Adjustments { stab: StatAdjustment { add: 10, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &test_catalog(), &[], "boris", None).unwrap();
+        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &test_catalog(), &[], &[], "boris", None).unwrap();
         assert!(preview
             .contributions
             .iter()
@@ -1110,7 +1113,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &test_catalog(), &[], "boris", None).unwrap();
+        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &test_catalog(), &[], &[], "boris", None).unwrap();
         assert!(pinned_preview
             .contributions
             .iter()
@@ -1165,7 +1168,7 @@ mod tests {
     fn 主軸スキル未選択なら攻撃力は出ない() {
         let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
         let preview = preview_effective_stats(
-            &base, &StatSources::default(), &test_equipment(), &test_catalog(), &[], "boris", None,
+            &base, &StatSources::default(), &test_equipment(), &test_catalog(), &[], &[], "boris", None,
         )
         .unwrap();
         assert!(preview.attack.is_none());
@@ -1176,7 +1179,7 @@ mod tests {
         let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
         let equipment = test_equipment();
         let preview = preview_effective_stats(
-            &base, &StatSources::default(), &equipment, &test_catalog(), &[],
+            &base, &StatSources::default(), &equipment, &test_catalog(), &[], &[],
             "boris", Some(test_attack_coefficients()),
         )
         .unwrap();
@@ -1205,7 +1208,7 @@ mod tests {
         let sources = StatSources::default();
         let coefficients = test_attack_coefficients();
         let preview = preview_effective_stats(
-            &base, &sources, &equipment, &test_catalog(), &[], "boris", Some(coefficients),
+            &base, &sources, &equipment, &test_catalog(), &[], &[], "boris", Some(coefficients),
         )
         .unwrap();
         let attack = preview.attack.unwrap();
@@ -1213,7 +1216,7 @@ mod tests {
         for (slot, _) in equipment.parts.iter() {
             let without = equipment.without_part(slot);
             let preview_without = preview_effective_stats(
-                &base, &sources, &without, &test_catalog(), &[], "boris", Some(coefficients),
+                &base, &sources, &without, &test_catalog(), &[], &[], "boris", Some(coefficients),
             )
             .unwrap();
             let expected = attack.breakdown.value - preview_without.attack.unwrap().breakdown.value;

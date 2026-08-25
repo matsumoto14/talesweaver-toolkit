@@ -9,6 +9,7 @@
     | "relic"
     | "siena"
     | "randomOption"
+    | "title"
     | "thesis"
     | "skills"
     | "adjust";
@@ -19,7 +20,7 @@
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
     CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityFamily, EquipmentItem, PartSlot,
-    PetSkillTier, RandomOptionDef, RandomOptionRank, Skill, StatKind, StatPreview,
+    PetSkillTier, RandomOptionDef, RandomOptionRank, Skill, StatKind, StatPreview, TitleDef,
   } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import { previewElements } from "../../api/commands";
@@ -34,7 +35,7 @@
     ABILITY_ALLOWED_SLOTS, ABILITY_FAMILIES, ABILITY_FAMILY_LABELS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
     CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ELEMENTS,
     ENHANCE_ALLOWED_SLOTS,
-    EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
+    EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT,
     PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS,
     RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANK_LABELS, RANDOM_OPTION_RANKS,
     SIENA_ALLOWED_SLOTS,
@@ -171,6 +172,21 @@
     if (normalized.length !== part.abilities.length) part.abilities = normalized;
     openPart = slot;
   }
+
+  // --- 称号 ---------------------------------------------------------------
+  // 装備枠 1 つ。表示中の 1 件だけが効く(所持ぶんの累積ではない。wiki: 称号システム)。
+  let titleQuery = $state("");
+  const selectedTitle = $derived(app.titles.find((t) => t.id === draft.equipment.title) ?? null);
+  const filteredTitles = $derived.by(() => {
+    const q = titleQuery.trim();
+    if (q === "") return app.titles;
+    return app.titles.filter((t) => t.name.includes(q) || t.group.includes(q));
+  });
+  /** 称号の補正値の要約(値が入っている列だけ)。 */
+  const titleSummary = (t: TitleDef): string =>
+    EQUIPMENT_STAT_KINDS.filter((k) => t.values[k] !== 0)
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]}${t.values[k]}`)
+      .join(" ");
 
   // --- ランダムオプション -------------------------------------------------
   // 効果値の上限は wiki の一覧表のレンジそのもの。枠数は wiki に記載が無く、代わりに
@@ -361,6 +377,7 @@
     relic: { title: "神鳥の聖物", note: `0–${limits.sacred_relic_stage_max} 段階(実加算は段階×10)` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
+    title: { title: "称号", note: "表示中の 1 件だけが装備の基本能力値に乗る" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
@@ -956,6 +973,54 @@
         </div>
       {/if}
     {/each}
+  {:else if sourceId === "title"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「称号システム」。<b>表示中の 1 件だけ</b>が効きます(持っている称号の合計ではありません)。
+        補正は<b>装備の基本能力値</b>に乗るので、装備値の合計と同じ列に足されます。
+        収録は<b>主要称号のみ</b>(補正値 9 種の合計 15 以上 = {app.titles.length} 件)。
+        備考の条件付き効果(特定マップで追加ダメージ +20% など)とグループボーナスは計算に入りません。
+      </p>
+      <input class="item-search" type="text" placeholder="称号名・グループで探す" bind:value={titleQuery} />
+      <div class="item-list">
+        <button
+          type="button"
+          class="item-row"
+          class:on={draft.equipment.title === null}
+          onclick={() => (draft.equipment.title = null)}
+        >
+          <span class="item-name">未装備</span>
+        </button>
+        {#each filteredTitles as t (t.id)}
+          <button
+            type="button"
+            class="item-row"
+            class:on={draft.equipment.title === t.id}
+            onclick={() => (draft.equipment.title = t.id)}
+          >
+            <span class="item-name">{t.name}</span>
+            <span class="item-vals num dim">{titleSummary(t)}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+    {#if selectedTitle}
+      <div class="card">
+        <div class="card-title">{selectedTitle.name}</div>
+        <div class="values-grid">
+          {#each EQUIPMENT_STAT_KINDS as k (k)}
+            <span class="val-cell">
+              <span class="dim">{EQUIPMENT_STAT_SHORT[k]}</span>
+              <span class="num strong">{signed(selectedTitle.values[k])}</span>
+            </span>
+          {/each}
+        </div>
+        <p class="hint dim">
+          {selectedTitle.group}{selectedTitle.level !== null ? ` ・ 習得 Lv${selectedTitle.level}` : ""}
+          {#if selectedTitle.note}<br />{selectedTitle.note}{/if}
+        </p>
+      </div>
+    {/if}
   {:else if sourceId === "thesis"}
     <div class="card">
       <div class="card-title">地域</div>
@@ -1170,6 +1235,10 @@
     flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
+
+  /* 称号の補正値グリッド */
+  .values-grid { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 6px; }
+  .val-cell { display: flex; align-items: baseline; gap: 4px; font-size: 11px; }
 
   /* ランダムオプションの 1 枠 */
   .ro-row {
