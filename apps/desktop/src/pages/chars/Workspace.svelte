@@ -483,7 +483,7 @@
           <span class="attack-skill dim">{mainSkill ? mainSkill.name : "主軸スキル未選択"}</span>
         </div>
         {#if preview?.attack}
-          <div class="attack-value num">{fmtInt(preview.attack.breakdown.value)}</div>
+          <div class="attack-value num" use:bump={() => preview?.attack?.breakdown.value ?? null}>{fmtInt(preview.attack.breakdown.value)}</div>
           <div class="attack-parts num dim">
             ステ {fmtNum(Math.floor(preview.attack.breakdown.stat_attack))}
             ・ 装備基本 {fmtNum(Math.floor(preview.attack.breakdown.equipment_base_attack))}
@@ -515,9 +515,14 @@
     <button type="button" class="sheet-trigger" onclick={() => (sheetOpen.value.open = !sheetOpen.value.open)}>
       <span class="sheet-title">いまの実力</span>
       <span class="sheet-summary num dim">
-        {preview
-          ? STAT_KINDS.map((k) => `${STAT_LABELS[k]} ${fmtInt(preview!.stats[k])}`).join(" ・ ")
-          : "計算中…"}
+        {#if preview}
+          {#each STAT_KINDS as k, i (k)}
+            {#if i > 0}<span class="sep"> ・ </span>{/if}{STAT_LABELS[k]}
+            <span use:bump={() => preview?.stats[k] ?? null}>{fmtInt(preview.stats[k])}</span>
+          {/each}
+        {:else}
+          計算中…
+        {/if}
       </span>
       <span class="sheet-chev">{sheetOpen.value.open ? "▴" : "▾"}</span>
     </button>

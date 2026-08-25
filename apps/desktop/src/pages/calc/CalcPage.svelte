@@ -1040,7 +1040,7 @@
               <div class="stage">
                 <span class="stage-no" style="background: var(--flow-1);">1</span>
                 <span class="stage-title">攻撃力をつくる</span>
-                <span class="num strong stage-val">{atkA !== null ? fmtInt(atkA) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => atkA}>{atkA !== null ? fmtInt(atkA) : "—"}</span>
               </div>
               <div class="band">
                 {#each atkRows as a (a.k)}
@@ -1063,7 +1063,7 @@
               <div class="stage">
                 <span class="stage-no" style="background: var(--danger);">2</span>
                 <span class="stage-title">相手の防御力を抜く</span>
-                <span class="num strong stage-val">{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
               </div>
               <div class="band">
                 <div style="width: {(100 - defShare).toFixed(2)}%; background: var(--flow-pierce);"></div>
@@ -1082,7 +1082,7 @@
                 <span class="stage-no" style="background: var(--flow-3);">3</span>
                 <span class="stage-title">倍率で伸ばす</span>
                 <span class="stage-note dim">帯の幅＝足した分(赤字は減る倍率)</span>
-                <span class="num strong stage-val">{perHit !== null ? fmtInt(perHit) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
               </div>
               <div class="band">
                 {#each flowRows.filter((r) => r.add > 0) as f (f.k)}
