@@ -3,6 +3,8 @@
   // 下に「いまの実力」シート。draft(編集状態)を 1 つの $state に持ち、保存はキャラ単位で 1 ボタン。
   // 親 CharsPage が {#key character.id} で作り直す前提($effect による再同期は書かない)。
   import { untrack } from "svelte";
+  import { flip } from "svelte/animate";
+  import { cubicOut } from "svelte/easing";
   import { errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
   import type { CommonSkills, Equipment, RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
@@ -329,10 +331,30 @@
       : { fav: [...fav, id], rest: rest.filter((x) => x !== id) };
     follow(id);
   }
+  /**
+   * 動きを消す設定(prefers-reduced-motion)のときは 0 にする。
+   * CSS のアニメーションは app.css が一括で殺しているが、Svelte の animate は JS なので
+   * ここで見る必要がある(§10「動きを消しても変化が分かること」)。
+   */
+  const motionDuration = (ms: number) =>
+    typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms;
+
+  /**
+   * 群をまたいで動いた行。同じ群の中の並べ替えは `animate:flip` が滑らせるが、
+   * 群をまたぐと別の `{#each}` になるので繋がらない。着地を弾ませて、
+   * どれが動いたのかを目で追えるようにする(§10 型 5「状態が変わった」)。
+   */
+  let movedId = $state<string | null>(null);
+  let movedTimer: ReturnType<typeof setTimeout> | undefined;
+
   /** 動かした行を追いかける。「操作したら対象が消えた」は最悪の体験(§09 規則 5) */
   function follow(id: string) {
+    clearTimeout(movedTimer);
+    movedId = null;
     requestAnimationFrame(() => {
       document.querySelector(`[data-source-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+      movedId = id;
+      movedTimer = setTimeout(() => (movedId = null), 400);
     });
   }
 
@@ -426,9 +448,13 @@
               <p class="group-empty dim">★ を押すか、行をここへ運ぶと上がります。</p>
             {/if}
             {#each itemsOf(list.ids) as s, i (s.id)}
-              <!-- 行そのものが面。★ はその中のボタンで、面を 2 枚に割らない(§01) -->
+              <!-- 行そのものが面。★ はその中のボタンで、面を 2 枚に割らない(§01)。
+                   並べ替えたら**動いた行だけ**が新しい場所へ滑る(§10「変わった要素だけ動かす」)。
+                   0.5s を超えない — 待たせるための動きは要らない -->
               <div
+                animate:flip={{ duration: motionDuration(260), easing: cubicOut }}
                 class="src src-line"
+                class:badge-in={movedId === s.id}
                 class:on={openSource === s.id}
                 class:dragging={dragId === s.id}
                 class:drop-before={dropAt?.list === list.key && dropAt.index === i}

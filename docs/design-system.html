@@ -2062,6 +2062,13 @@ td code { background: var(--card-soft2); }
             <span class="how"><b>下方向にだけ伸びる。</b>上に伸ばすと、上にあるものが全部ずれる</span>
             <span class="spec-n">max-height .34s<br>+ opacity .24s</span>
           </div>
+          <div class="change">
+            <span class="w">並びが変わった</span>
+            <span class="how"><b>動いた行が新しい場所へ滑る。</b>押しのけられた行も一緒に動く —
+              掴んだ行だけ動くと、どこに入ったのかが分からない。群をまたいで移った行は、
+              滑りが繋がらないので着地を弾ませる</span>
+            <span class="spec-n">FLIP transform .26s<br>cubic-bezier(.33,1,.68,1)</span>
+          </div>
         </div>
 
         <div class="sec">動きの規則</div>
