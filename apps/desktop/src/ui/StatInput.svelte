@@ -118,7 +118,13 @@
       {max}
       {step}
       aria-label={label}
-      {@attach (node) => { node.focus(); node.select(); }}
+      {@attach (node) => {
+        // preventScroll: focus の既定はスクロールして要素を視界に入れる。押した場所は
+        // 既に見えているので、動かすと視点がリセットされる(§09「押した場所は動かない」)
+        node.focus({ preventScroll: true });
+        // select() もカーソル位置へスクロールするので、範囲指定で選ぶ
+        node.setSelectionRange(0, node.value.length);
+      }}
     />
     <input
       class="slider"

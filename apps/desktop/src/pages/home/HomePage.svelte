@@ -324,8 +324,10 @@
                     <span class="dim">全部クリア可 — {shown.map((r) => r.content.series?.name ?? r.content.name).join("・")}</span>
                   </button>
                 {/if}
+                <!-- 開閉で幅が変わると、押したボタン自身が動く(§09 規則 1・4)。件数は常に出す -->
                 <button type="button" class="area-toggle" onclick={() => toggleArea(area.id)}>
-                  {open ? "▴" : `${okCount}/${shown.length} ▾`}
+                  <span class="num">{okCount}/{shown.length}</span>
+                  <span class="chev">{open ? "▴" : "▾"}</span>
                 </button>
               </div>
               {#if open}
@@ -588,7 +590,8 @@
 
   .ok-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--good-soft); }
   .area-toggle {
-    flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border-soft);
     font-size: 9px; font-weight: 700; color: var(--accent); white-space: nowrap;
   }
