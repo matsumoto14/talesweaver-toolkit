@@ -309,7 +309,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>クリティカルダメージ増加</td>
 <td><span class="kind rate">割合</span></td>
 <td></td>
-<td>小数点以下切り捨て</td>
+<td>小数点以下切り捨て。<strong>極限スキル「スコープアイ」</strong>(基本+20% + スーパーリミット+3 + ハイパーリミット Lv1〜6 で +7〜+17 = 最大 +40%。wiki Skill/極限)</td>
 </tr>
 <tr>
 <td class="sym">H</td>
@@ -907,9 +907,14 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>取込済み(<code>random_options.rs</code>)。<strong>火力・命中・回避に関係する OP のみ</strong> 28 件。枠数は wiki に記載が無く、制約は「同じカテゴリーは 1 部位に 1 つまで(カテゴリー 0 は除く)」(転移の説明)</td>
 </tr>
 <tr>
+<td>Skill/極限</td>
+<td>極限スキル 3 種の効果値(基本 / スーパーリミット / ハイパーリミット Lv1〜6)</td>
+<td>取込済み(<code>ultimate_skill.rs</code>)。<strong>2 枠</strong>。スコープアイ = G、フルスロットル = 段数(単体チャネリングのみ)+ 中ディレイ(段階5)、ワイドフォーカス = 範囲(火力に効かない)。エレメンタルパワー・オーバードライブは収録しない</td>
+</tr>
+<tr>
 <td>各キャラのスキルページ</td>
 <td>スキル倍率・段数・Cri倍率・属性・スキル命中・Cri値・SLv</td>
-<td>取込済み(19 キャラ 303 件)。銭投げ・変種行・未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)は除外。スキル Lv 別倍率と召喚獣は未対応</td>
+<td>取込済み(19 キャラ 303 件)。銭投げ・変種行・未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)は除外。スキル Lv 別倍率と召喚獣は未対応。<strong>単体チャネリング判定</strong>(区分 <code>続</code> + 対象指定 <code>単体</code>。凡例は wiki Skill#f8e303fb)は 7 件</td>
 </tr>
 </tbody>
 </table></div>

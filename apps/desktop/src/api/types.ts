@@ -31,6 +31,8 @@ export interface Skill {
   critical_rate: number | null;
   /** スキル Lv(wiki スキル性能一覧の SLv) */
   level: number;
+  /** 単体チャネリングスキルか。極限スキル「フルスロットル」の段数増加はこれにだけ乗る */
+  single_target_channeling: boolean;
 }
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
@@ -234,6 +236,19 @@ export interface RandomOptionSlot {
   value: number | null;
 }
 
+// 極限スキル(wiki: Skill/極限)。crates/domain/src/ultimate_skill.rs の UltimateSkill。
+export type UltimateSkill = "scope_eye" | "full_throttle" | "wide_focus";
+
+// 極限スキル一式。crates/domain/src/ultimate_skill.rs の UltimateSkills。
+export interface UltimateSkills {
+  /** 選んだ極限スキル(2 枠)。同じスキルは 2 枠に入れられない */
+  slots: (UltimateSkill | null)[];
+  /** スーパーリミット(ハイパーアタックの極限形。Lv1 のみ) */
+  super_limit: boolean;
+  /** ハイパーリミットの Lv(0〜6)。Lv2 以降はオーグメントの Lv が要る */
+  hyper_limit_level: number;
+}
+
 // 共通スキル(wiki: Skill/共通)。crates/domain/src/common_skill.rs の CommonSkills。
 export interface CommonSkills {
   /** パワーウェポン(Lv1)。装備攻撃力強化倍率 +2% */
@@ -250,6 +265,8 @@ export interface CommonSkills {
   sharpness_vision_level: number;
   /** オーグメントの Lv(0〜5)。前提スキル */
   augment_level: number;
+  /** 極限スキル(wiki: Skill/極限)。2 枠 + スーパーリミット / ハイパーリミット */
+  ultimate: UltimateSkills;
 }
 
 // 装備防御力倍率。crates/domain/src/common_skill.rs の DefenseRates。
@@ -623,6 +640,7 @@ export interface StatLimits {
   kai_protect_armor_level_max: number;
   sharpness_vision_level_max: number;
   augment_level_max: number;
+  hyper_limit_level_max: number;
 }
 
 

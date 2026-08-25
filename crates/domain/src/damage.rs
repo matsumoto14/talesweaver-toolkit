@@ -320,6 +320,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         input.random_options.dependency_damage_rate.get(input.skill.dependency),
     );
     totals.add(AttackDamageRate, input.random_options.attack_damage_rate);
+    // 極限スキル「スコープアイ」(wiki: Skill/極限)。カテゴリG はクリティカル時にだけ乗る
+    totals.add(CriticalDamageRate, input.common_skills.ultimate.critical_damage_rate());
 
     let mut totals_min = totals.clone();
     totals_min.add(AttackRandom, 1.0);
@@ -340,7 +342,14 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     let mut steps_critical: Vec<FormulaStep> = attack_breakdown.into_iter().chain(steps_critical).collect();
 
     // ④ 段数
-    let hit_count = input.skill.hit_count;
+    // 極限スキル「フルスロットル」(wiki: Skill/極限)。ハイパーリミット Lv4 以降で
+    // **単体チャネリングスキル**の段数が +1〜+3 される。他のスキルには乗らない
+    let added_hits = if input.skill.single_target_channeling {
+        input.common_skills.ultimate.added_hit_count()
+    } else {
+        0
+    };
+    let hit_count = input.skill.hit_count + added_hits;
     let hits = i64::from(hit_count);
 
     // §5 武器強化の追加固定ダメージ(与ダメージ式の外)。1 体あたり per-hit 追加 = INT(追加ダメージ / hits)、
@@ -503,6 +512,7 @@ mod tests {
                 accuracy: Some(92),
                 critical_rate: Some(7),
                 level: 1,
+                single_target_channeling: false,
             },
             enemy: Enemy {
                 id: "e".into(),
@@ -950,5 +960,70 @@ mod tests {
         i.random_options.accuracy_point = 20;
         let base = calculate_damage(&input()).accuracy_point.unwrap();
         assert_eq!(calculate_damage(&i).accuracy_point.unwrap(), base + 20);
+    }
+
+    // --- 極限スキル(wiki: Skill/極限)-----------------------------------
+
+    #[test]
+    fn スコープアイはクリティカル時だけダメージを増やす() {
+        use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
+
+        let mut i = input();
+        i.common_skills.ultimate = UltimateSkills {
+            slots: [Some(UltimateSkill::ScopeEye), None],
+            super_limit: true,
+            hyper_limit_level: 6,
+        };
+        let base = calculate_damage(&input());
+        let with_scope = calculate_damage(&i);
+        // 非クリティカルは {F × G} ごと 1.0 なので変わらない
+        assert_eq!(with_scope.per_hit.max, base.per_hit.max);
+        // クリティカルは G +40% ぶん増える
+        assert!(with_scope.per_hit.critical > base.per_hit.critical);
+        let g = with_scope.trace.categories.iter().find(|c| c.symbol == "G").unwrap();
+        assert!((g.value - 0.40).abs() < 1e-12);
+    }
+
+    #[test]
+    fn フルスロットルの段数は単体チャネリングスキルにだけ乗る() {
+        use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
+
+        let ultimate = UltimateSkills {
+            slots: [Some(UltimateSkill::FullThrottle), None],
+            super_limit: true,
+            hyper_limit_level: 6,
+        };
+
+        // 単体チャネリングではないスキル(テスト既定)は段数が変わらない
+        let mut plain = input();
+        plain.common_skills.ultimate = ultimate;
+        assert_eq!(calculate_damage(&plain).hit_count, input().skill.hit_count);
+
+        // 単体チャネリングなら +3
+        let mut channeling = input();
+        channeling.skill.hit_count = 10;
+        channeling.skill.single_target_channeling = true;
+        let without = calculate_damage(&channeling);
+        channeling.common_skills.ultimate = ultimate;
+        let with_throttle = calculate_damage(&channeling);
+        assert_eq!(without.hit_count, 10);
+        assert_eq!(with_throttle.hit_count, 13);
+        assert_eq!(with_throttle.total.max, with_throttle.per_hit.max * 13);
+    }
+
+    #[test]
+    fn ワイドフォーカスは与ダメージを変えない() {
+        use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
+
+        let mut i = input();
+        i.skill.single_target_channeling = true;
+        i.common_skills.ultimate = UltimateSkills {
+            slots: [Some(UltimateSkill::WideFocus), None],
+            super_limit: true,
+            hyper_limit_level: 6,
+        };
+        let mut base = input();
+        base.skill.single_target_channeling = true;
+        assert_eq!(calculate_damage(&i).total, calculate_damage(&base).total);
     }
 }

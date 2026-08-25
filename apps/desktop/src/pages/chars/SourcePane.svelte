@@ -22,6 +22,7 @@
   import type {
     CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityFamily, EquipmentItem, PartSlot,
     PetSkillTier, RandomOptionDef, RandomOptionRank, Skill, StatKind, StatPreview, TitleDef,
+    UltimateSkill,
   } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import { previewElements } from "../../api/commands";
@@ -41,6 +42,7 @@
     RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANK_LABELS, RANDOM_OPTION_RANKS,
     SIENA_ALLOWED_SLOTS,
     SIENA_EQUIPMENT_VALUE_SLOTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
+    ULTIMATE_SKILLS, ULTIMATE_SKILL_EFFECTS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { app } from "../../state.svelte";
@@ -244,9 +246,21 @@
     def.tiers.find((t) => t.rank === rank);
 
   // --- 共通スキル(wiki: Skill/共通)---------------------------------------
-  // オーグメントはストロングウェポン / プロテクトアーマーの Lv2 以降の前提スキル。
+  // オーグメントはストロングウェポン / プロテクトアーマー / ハイパーリミットの Lv2 以降の前提スキル。
   // 上限を超える Lv は保存時に Rust 側が弾くので、選択肢の側で先に絞る。
   const augmentGate = $derived(draft.commonSkills.augment_level + 1);
+  /**
+   * オーグメント Lv を下げたら、それに縛られる Lv(ストロングウェポン / プロテクトアーマー /
+   * ハイパーリミット)も一緒に下げる。放置すると選択肢に無い値が残り、保存だけが失敗する。
+   */
+  function setAugmentLevel(level: number) {
+    const c = draft.commonSkills;
+    c.augment_level = level;
+    const max = level + 1;
+    c.strong_weapon_level = Math.min(c.strong_weapon_level, max);
+    c.protect_armor_level = Math.min(c.protect_armor_level, max);
+    c.ultimate.hyper_limit_level = Math.min(c.ultimate.hyper_limit_level, max);
+  }
   const augmentOptions = $derived(
     Array.from({ length: limits.augment_level_max + 1 }, (_, i) => ({
       value: String(i),
@@ -293,6 +307,49 @@
       kai * 6 +
       sienaDefenseRate;
     return { physical: 100 + physical, magic: 100 + magic };
+  });
+
+  // --- 極限スキル(wiki: Skill/極限)---------------------------------------
+  // 3 択から 2 つ。効果値は 基本 + スーパーリミット + ハイパーリミット Lv の加算。
+  const hyperLimitOptions = $derived(
+    Array.from({ length: limits.hyper_limit_level_max + 1 }, (_, lv) => ({
+      value: String(lv),
+      label: lv === 0 ? "未習得" : `Lv${lv}`,
+    })).filter((o) => Number(o.value) <= augmentGate),
+  );
+  /** その枠で選べる極限スキル(もう片方の枠で選ばれているものは出さない) */
+  function ultimateOptions(slotIndex: number) {
+    const other = draft.commonSkills.ultimate.slots[1 - slotIndex];
+    return [
+      { value: "", label: "未習得" },
+      ...ULTIMATE_SKILLS.filter((u) => u !== other).map((u) => ({
+        value: u,
+        label: ULTIMATE_SKILL_LABELS[u],
+      })),
+    ];
+  }
+  function setUltimate(slotIndex: number, value: string) {
+    draft.commonSkills.ultimate.slots[slotIndex] = value === "" ? null : (value as UltimateSkill);
+  }
+  /** 選択中の極限スキルの効果値(表示用。計算は Rust 側) */
+  const ultimateEffects = $derived.by(() => {
+    const u = draft.commonSkills.ultimate;
+    const superLimit = u.super_limit;
+    const lv = u.hyper_limit_level;
+    const hyper = (table: number[]) => (lv === 0 ? 0 : table[lv - 1]);
+    const out: string[] = [];
+    if (u.slots.includes("scope_eye")) {
+      out.push(`クリティカルダメージ +${20 + (superLimit ? 3 : 0) + hyper([7, 9, 11, 13, 15, 17])}%`);
+    }
+    if (u.slots.includes("full_throttle")) {
+      const hits = hyper([0, 0, 0, 1, 2, 3]);
+      out.push(`中ディレイ −${25 + (superLimit ? 3 : 0) + hyper([7, 9, 11, 13, 15, 17])}%`);
+      out.push(`単体チャネリング段数 +${hits}`);
+    }
+    if (u.slots.includes("wide_focus")) {
+      out.push(`スキル範囲 +${4 + (superLimit ? 2 : 0) + hyper([4, 6, 8, 10, 12, 14])}`);
+    }
+    return out;
   });
 
   const enhanceRatePercent = $derived(
@@ -1050,8 +1107,9 @@
         <b>装備攻撃力強化倍率</b>(パワーウェポン / ストロングウェポン)、
         <b>装備防御力倍率</b>(コートアーマー / プロテクトアーマー)、
         <b>割合追加ダメージ</b>(シャープネスビジョン)の 3 つ。
-        <b>オーグメント</b>はストロングウェポン・プロテクトアーマーを Lv2 以上にするための前提スキルなので、
-        先に上げないと上の Lv が選べません。
+        <b>オーグメント</b>はストロングウェポン・プロテクトアーマー・ハイパーリミットを Lv2 以上に
+        するための前提スキルなので、先に上げないと上の Lv が選べません
+        (下げると、それに縛られる Lv も一緒に下がります)。
       </p>
       <div class="fields">
         <Select
@@ -1059,7 +1117,7 @@
           options={augmentOptions}
           bind:value={
             () => String(draft.commonSkills.augment_level),
-            (v) => (draft.commonSkills.augment_level = Number(v))
+            (v) => setAugmentLevel(Number(v))
           }
         />
       </div>
@@ -1118,6 +1176,46 @@
       </div>
       {#if sienaDefenseRate > 0}
         <p class="hint dim">シエナのオーラの防御力増加 +{sienaDefenseRate}% を含んでいます。</p>
+      {/if}
+    </div>
+
+    <div class="card">
+      <div class="card-title inline">極限スキル(2 枠)</div>
+      <p class="hint dim">
+        wiki「Skill/極限」。ゲージスキルのうち<b>2 つ</b>がパッシブとして常時適用されます。
+        効果値は <b>基本 + スーパーリミット + ハイパーリミット Lv</b> の加算です
+        (スーパーリミット = ハイパーアタック、ハイパーリミット = エクストリームアタックの極限形)。
+        ハイパーリミットも Lv2 以降はオーグメントが要ります。
+      </p>
+      <div class="fields">
+        {#each [0, 1] as slotIndex (slotIndex)}
+          <Select
+            label={`枠 ${slotIndex + 1}`}
+            options={ultimateOptions(slotIndex)}
+            bind:value={
+              () => draft.commonSkills.ultimate.slots[slotIndex] ?? "",
+              (v) => setUltimate(slotIndex, v)
+            }
+          />
+        {/each}
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.commonSkills.ultimate.super_limit} />
+          <span>スーパーリミット(ハイパーアタックの極限形)</span>
+        </label>
+        <Select
+          label="ハイパーリミット"
+          options={hyperLimitOptions}
+          bind:value={
+            () => String(draft.commonSkills.ultimate.hyper_limit_level),
+            (v) => (draft.commonSkills.ultimate.hyper_limit_level = Number(v))
+          }
+        />
+      </div>
+      {#each draft.commonSkills.ultimate.slots.filter((u) => u !== null) as picked (picked)}
+        <p class="hint dim">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
+      {/each}
+      {#if ultimateEffects.length > 0}
+        <p class="hint dim">いまの効果: {ultimateEffects.join(" ・ ")}</p>
       {/if}
     </div>
 

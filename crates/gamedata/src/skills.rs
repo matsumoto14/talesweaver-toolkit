@@ -15,6 +15,21 @@ use domain::{Element, Skill, SkillDependency};
 
 use crate::Source;
 
+/// 単体チャネリングスキル(wiki「Skill#f8e303fb」の区分の凡例: `続` = チャネリングスキル)。
+///
+/// **区分に `続` を含み、対象指定が `単体`** のものだけが該当する。19 キャラ 515 行を
+/// パースして 7 件(いずれも段数 10)。極限スキル「フルスロットル」の段数増加(最大 +3)は
+/// これにだけ乗る(wiki Skill/極限)。
+const SINGLE_TARGET_CHANNELING: [&str; 7] = [
+    "lucian_streak",              // 極・連撃
+    "lucian_warriors_dance",      // 極・無双乱舞
+    "lucian_whirlwind_sword",     // 極・旋風斬
+    "nayatorei_mausoleum",        // 極・狂猫
+    "siberin_twin_dragon_strike", // 極・双龍撃
+    "siberin_red_dragon_strike",  // 極・紅龍連撃
+    "isaac_demise_furious",       // 極・滅神乱舞
+];
+
 pub const SKILLS_SOURCE: Source = Source {
     page: "Skill/<各キャラ名>「スキル性能一覧」",
     retrieved_on: "2026-08-25",
@@ -409,6 +424,7 @@ impl SkillRecord {
             accuracy: self.accuracy,
             critical_rate: self.critical_rate,
             level: self.level,
+            single_target_channeling: SINGLE_TARGET_CHANNELING.contains(&self.skill_id().as_str()),
         }
     }
 }
@@ -429,6 +445,23 @@ pub fn find_skill(id: &str) -> Option<Skill> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// wiki「Skill#f8e303fb」の区分 `続` + 対象指定 `単体` で抽出した 7 件。
+    /// これ以外に段数が増えるスキルがあると火力が過大になる。
+    #[test]
+    fn 単体チャネリングスキルは7件で全部カタログにある() {
+        assert_eq!(SINGLE_TARGET_CHANNELING.len(), 7);
+        for id in SINGLE_TARGET_CHANNELING {
+            let skill = find_skill(id).unwrap_or_else(|| panic!("{id} がカタログに無い"));
+            assert!(skill.single_target_channeling, "{id} にフラグが立っていない");
+        }
+        let flagged = crate::characters()
+            .into_iter()
+            .flat_map(|c| skills_for(c.id))
+            .filter(|s| s.single_target_channeling)
+            .count();
+        assert_eq!(flagged, 7);
+    }
 
     #[test]
     fn 全19キャラにスキルがある() {

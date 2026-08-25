@@ -12,6 +12,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ultimate_skill::UltimateSkills;
+
 /// ストロングウェポンの Lv 上限(wiki Skill/共通: Lv1〜6 = 3〜18%)。
 pub const STRONG_WEAPON_LEVEL_MAX: u8 = 6;
 /// プロテクトアーマーの Lv 上限(wiki Skill/共通: Lv1〜6)。
@@ -83,6 +85,11 @@ pub struct CommonSkills {
     /// オーグメントの Lv(0〜5)。前提スキルで、倍率そのものには効かない
     #[serde(default)]
     pub augment_level: u8,
+    /// 極限スキル(wiki: Skill/極限)。2 枠 + スーパーリミット / ハイパーリミット。
+    /// 効果を底上げする 2 スキルは共通スキル(ハイパーアタック / エクストリームアタック)の
+    /// 極限形なのでここにぶら下げる
+    #[serde(default)]
+    pub ultimate: UltimateSkills,
 }
 
 impl CommonSkills {
@@ -171,6 +178,7 @@ impl CommonSkills {
                 });
             }
         }
+        self.ultimate.validate(max)?;
         Ok(())
     }
 }
@@ -181,6 +189,8 @@ pub enum CommonSkillError {
     LevelOutOfRange { name: &'static str, value: u8, max: u8 },
     #[error("{name} Lv{value} にはオーグメントの Lv が足りません(オーグメント Lv{augment_level} では Lv{max} まで)")]
     AugmentRequired { name: &'static str, value: u8, augment_level: u8, max: u8 },
+    #[error(transparent)]
+    UltimateSkill(#[from] crate::ultimate_skill::UltimateSkillError),
 }
 
 #[cfg(test)]

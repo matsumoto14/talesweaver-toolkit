@@ -853,6 +853,8 @@ pub struct StatLimits {
     pub sharpness_vision_level_max: u8,
     /// オーグメントの Lv 上限(wiki: Skill/共通)
     pub augment_level_max: u8,
+    /// ハイパーリミットの Lv 上限(wiki: Skill/極限)
+    pub hyper_limit_level_max: u8,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -885,6 +887,7 @@ pub fn stat_limits() -> StatLimits {
         kai_protect_armor_level_max: crate::common_skill::KAI_PROTECT_ARMOR_LEVEL_MAX,
         sharpness_vision_level_max: crate::common_skill::SHARPNESS_VISION_LEVEL_MAX,
         augment_level_max: crate::common_skill::AUGMENT_LEVEL_MAX,
+        hyper_limit_level_max: crate::ultimate_skill::HYPER_LIMIT_LEVEL_MAX,
     }
 }
 

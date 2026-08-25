@@ -44,7 +44,10 @@ export const defaultEquipment = (): Equipment => ({
 /** ストロングウェポンの既定 Lv(上限。wiki Skill/共通: Lv6 = +18%) */
 const DEFAULT_STRONG_WEAPON_LEVEL = 6;
 
-export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({ ...src });
+export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
+  ...src,
+  ultimate: { ...src.ultimate, slots: [...src.ultimate.slots] },
+});
 
 /**
  * 新規登録キャラの共通スキルの初期値。パワーウェポン ON・ストロングウェポン Lv6(合計 +20%)を
@@ -60,6 +63,7 @@ export const defaultCommonSkills = (): CommonSkills => ({
   kai_protect_armor_level: 0,
   sharpness_vision_level: 0,
   augment_level: DEFAULT_STRONG_WEAPON_LEVEL - 1,
+  ultimate: { slots: [null, null], super_limit: false, hyper_limit_level: 0 },
 });
 
 export const cloneAdjustments = (src: Adjustments): Adjustments =>

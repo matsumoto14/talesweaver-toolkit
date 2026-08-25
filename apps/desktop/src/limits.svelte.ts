@@ -32,6 +32,7 @@ const FALLBACK: StatLimits = {
   kai_protect_armor_level_max: 5,
   sharpness_vision_level_max: 10,
   augment_level_max: 5,
+  hyper_limit_level_max: 6,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

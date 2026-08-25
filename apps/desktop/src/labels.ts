@@ -1,7 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
   CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier,
-  RandomOptionRank, SkillDependency, StatKind, StatLayer,
+  RandomOptionRank, SkillDependency, StatKind, StatLayer, UltimateSkill,
 } from "./api/types";
 
 export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
@@ -126,6 +126,20 @@ export const SKILL_DEPENDENCY_LABELS: Record<SkillDependency, string> = {
   mr: "神聖(MR依存)",
   stab_hack: "物理複合(STAB+HACK依存)",
   hack_int: "魔法斬り(HACK+INT依存)",
+};
+
+// 極限スキル(crates/domain/src/ultimate_skill.rs の UltimateSkill)。wiki Skill/極限 の表順。
+export const ULTIMATE_SKILLS: UltimateSkill[] = ["scope_eye", "full_throttle", "wide_focus"];
+export const ULTIMATE_SKILL_LABELS: Record<UltimateSkill, string> = {
+  scope_eye: "スコープアイ",
+  full_throttle: "フルスロットル",
+  wide_focus: "ワイドフォーカス",
+};
+/** 何に効くか(火力に効かないものはそう分かる文言にする)。 */
+export const ULTIMATE_SKILL_EFFECTS: Record<UltimateSkill, string> = {
+  scope_eye: "クリティカルダメージ増加(非クリには乗りません)",
+  full_throttle: "中ディレイ減少 + 単体チャネリングスキルの段数",
+  wide_focus: "スキル範囲(火力には効きません)",
 };
 
 // テシスコアの地域(crates/domain/src/thesis_core.rs の CoreRegion)。順序は Rust の CoreRegion::ALL に合わせる。

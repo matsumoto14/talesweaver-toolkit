@@ -37,4 +37,8 @@ pub struct Skill {
     pub critical_rate: Option<i64>,
     /// スキル Lv(wiki スキル性能一覧の SLv。倍率は Lv 別未対応なのでこの Lv の値を持つ)
     pub level: u8,
+    /// 単体チャネリングスキルか(wiki スキル性能一覧の 区分に `続` を含み、対象指定が `単体`。
+    /// 凡例は wiki「Skill#f8e303fb」)。極限スキル「フルスロットル」の段数増加はこれにだけ乗る
+    #[serde(default)]
+    pub single_target_channeling: bool,
 }

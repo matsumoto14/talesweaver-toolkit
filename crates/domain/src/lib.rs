@@ -20,6 +20,7 @@ pub mod stat_sources;
 pub mod stats;
 pub mod thesis_core;
 pub mod title;
+pub mod ultimate_skill;
 
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
@@ -73,6 +74,9 @@ pub use stats::{
     StatModifierSet, StatModifiers, StatTrace, BASE_STAT_MAX,
 };
 pub use title::{title_values, TitleDef, TitleError, TitleKind};
+pub use ultimate_skill::{
+    UltimateSkill, UltimateSkillError, UltimateSkills, HYPER_LIMIT_LEVEL_MAX, ULTIMATE_SKILL_SLOTS,
+};
 pub use thesis_core::{
     CoreRegion, CoreSet, CoreSetBonus, CoreType, ThesisCore, ThesisCoreError, ThesisCores,
     CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT,

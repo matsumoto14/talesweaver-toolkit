@@ -15,6 +15,7 @@
   import { fmtInt, fmtNum } from "../../format";
   import {
     ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
+    ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
@@ -165,6 +166,10 @@
     if (defense > 0) parts.push(`装備防御力 物+${defense}%`);
     if (c.sharpness_vision_level > 0) {
       parts.push(`追加ダメージ +${[5, 10, 15, 20, 25, 28, 31, 34, 37, 40][c.sharpness_vision_level - 1]}%`);
+    }
+    const ultimate = c.ultimate.slots.filter((u) => u !== null);
+    if (ultimate.length > 0) {
+      parts.push(`極限 ${ultimate.map((u) => ULTIMATE_SKILL_LABELS[u]).join(" / ")}`);
     }
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
