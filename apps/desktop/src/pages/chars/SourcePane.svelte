@@ -340,20 +340,32 @@
       label: lv === 0 ? "未習得" : label(lv),
       disabled: lv > augmentGate,
     })).filter((o) => !o.disabled);
-  const protectArmorOptions = $derived(
-    gatedLevelOptions(
-      limits.protect_armor_level_max,
-      (lv) => `Lv${lv}(物+${[36, 45, 54, 63, 72, 81][lv - 1]}% / 魔+${[24, 30, 36, 42, 48, 54][lv - 1]}%)`,
-    ),
-  );
+  // 段階選択に並べるのでラベルは Lv だけ。効果値は選択中のものを注記で出す
+  // (全段の効果を並べると 7 段で 4 行になり、1 画面の情報量が減る)
+  const PROTECT_ARMOR_RATES = [36, 45, 54, 63, 72, 81];
+  const PROTECT_ARMOR_MAGIC = [24, 30, 36, 42, 48, 54];
+  const protectArmorOptions = $derived(gatedLevelOptions(limits.protect_armor_level_max, (lv) => `Lv${lv}`));
+  const protectArmorNote = $derived.by(() => {
+    const lv = draft.commonSkills.protect_armor_level;
+    return lv === 0 ? "未習得" : `物 +${PROTECT_ARMOR_RATES[lv - 1]}% / 魔 +${PROTECT_ARMOR_MAGIC[lv - 1]}%`;
+  });
   const kaiProtectArmorOptions = Array.from({ length: 6 }, (_, lv) => ({
     value: String(lv),
-    label: lv === 0 ? "未習得" : `Lv${lv}(物+${lv * 9}% / 魔+${lv * 6}%)`,
+    label: lv === 0 ? "未習得" : `Lv${lv}`,
   }));
+  const kaiProtectArmorNote = $derived.by(() => {
+    const lv = draft.commonSkills.kai_protect_armor_level;
+    return lv === 0 ? "未習得" : `物 +${lv * 9}% / 魔 +${lv * 6}%`;
+  });
+  const SHARPNESS_RATES = [5, 10, 15, 20, 25, 28, 31, 34, 37, 40];
   const sharpnessVisionOptions = Array.from({ length: 11 }, (_, lv) => ({
     value: String(lv),
-    label: lv === 0 ? "未習得" : `Lv${lv}(+${[5, 10, 15, 20, 25, 28, 31, 34, 37, 40][lv - 1]}%)`,
+    label: lv === 0 ? "未習得" : `Lv${lv}`,
   }));
+  const sharpnessVisionNote = $derived.by(() => {
+    const lv = draft.commonSkills.sharpness_vision_level;
+    return lv === 0 ? "未習得" : `割合追加ダメージ +${SHARPNESS_RATES[lv - 1]}%`;
+  });
   /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。表示用 */
   const sienaDefenseRate = $derived(
     PART_SLOTS.reduce((n, slot) => n + draft.equipment.parts[slot].siena.defense_rate_percent, 0),
@@ -863,7 +875,7 @@
             <div class="card-title">属性強化</div>
             <p class="hint dim">1 部位につき 1 属性。無属性は付与できません(wiki: 装備システム/属性強化)</p>
             <div class="fields">
-              <Select
+              <StepSelect
                 label="属性"
                 options={elementOptions}
                 bind:value={() => part.element ?? "", (v) => setPartElement(slot, v)}
@@ -960,7 +972,7 @@
       </p>
       <div class="fields">
         {#each elementSourceDefs as def (def.id)}
-          <Select
+          <StepSelect
             label={`${def.name}(+${def.value})`}
             options={elementOptions}
             bind:value={
@@ -1317,7 +1329,7 @@
       </p>
       <div class="fields">
         {#each draft.commonSkills.unleash as slot, i (i)}
-          <Select
+          <StepSelect
             label={`枠 ${i + 1} のステ`}
             options={unleashStatOptions(i)}
             bind:value={
@@ -1372,22 +1384,28 @@
           <input type="checkbox" bind:checked={draft.commonSkills.coat_armor} />
           <span>コートアーマー(物+18% / 魔+12%)</span>
         </label>
-        <Select
-          label="プロテクトアーマー"
-          options={protectArmorOptions}
-          bind:value={
-            () => String(draft.commonSkills.protect_armor_level),
-            (v) => (draft.commonSkills.protect_armor_level = Number(v))
-          }
-        />
-        <Select
-          label="改・プロテクトアーマー"
-          options={kaiProtectArmorOptions}
-          bind:value={
-            () => String(draft.commonSkills.kai_protect_armor_level),
-            (v) => (draft.commonSkills.kai_protect_armor_level = Number(v))
-          }
-        />
+        <div class="lv">
+          <StepSelect
+            label="プロテクトアーマー"
+            options={protectArmorOptions}
+            bind:value={
+              () => String(draft.commonSkills.protect_armor_level),
+              (v) => (draft.commonSkills.protect_armor_level = Number(v))
+            }
+          />
+          <p class="hint dim">{protectArmorNote}</p>
+        </div>
+        <div class="lv">
+          <StepSelect
+            label="改・プロテクトアーマー"
+            options={kaiProtectArmorOptions}
+            bind:value={
+              () => String(draft.commonSkills.kai_protect_armor_level),
+              (v) => (draft.commonSkills.kai_protect_armor_level = Number(v))
+            }
+          />
+          <p class="hint dim">{kaiProtectArmorNote}</p>
+        </div>
       </div>
       {#if sienaDefenseRate > 0}
         <p class="hint dim">シエナのオーラの防御力増加 +{sienaDefenseRate}% を含んでいます。</p>
@@ -1404,7 +1422,7 @@
       </p>
       <div class="fields">
         {#each [0, 1] as slotIndex (slotIndex)}
-          <Select
+          <StepSelect
             label={`枠 ${slotIndex + 1}`}
             options={ultimateOptions(slotIndex)}
             bind:value={
@@ -1417,7 +1435,7 @@
           <input type="checkbox" bind:checked={draft.commonSkills.ultimate.super_limit} />
           <span>スーパーリミット(ハイパーアタックの極限形)</span>
         </label>
-        <Select
+        <StepSelect
           label="ハイパーリミット"
           options={hyperLimitOptions}
           bind:value={
@@ -1443,7 +1461,7 @@
         Lv6 以上は各 Lv の習得スクロールが要ります。
       </p>
       <div class="fields">
-        <Select
+        <StepSelect
           label="シャープネスビジョン"
           options={sharpnessVisionOptions}
           bind:value={
@@ -1494,12 +1512,12 @@
           {@const core = coreAt(index)}
           <div class="core-row">
             <span class="core-slot dim">{index + 1}</span>
-            <Select
+            <StepSelect
               label="タイプ"
               options={coreTypeOptions}
               bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
             />
-            <Select
+            <StepSelect
               label="進化"
               options={coreEvolutionOptions}
               disabled={core === null}
@@ -1508,7 +1526,7 @@
                 (v) => setCoreStage(index, "evolution", Number(v))
               }
             />
-            <Select
+            <StepSelect
               label="強化"
               options={coreEnhancementOptions}
               disabled={core === null}
@@ -1674,6 +1692,9 @@
   .eternal > .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
   .eternal-row { max-width: 260px; }
   .eternal .hint { margin: 0; }
+  /* Lv の段階選択 + 選択中の効果値 */
+  .lv { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .lv .hint { margin: 0; }
 
   .fields { margin-top: 9px; display: flex; flex-direction: column; gap: 9px; }
   .text { display: flex; flex-direction: column; gap: 6px; }
