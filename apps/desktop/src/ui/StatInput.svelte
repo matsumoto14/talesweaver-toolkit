@@ -82,32 +82,60 @@
   }
 
   const hint = $derived(format ? format(value) : null);
+
+  /** 編集中か。既定は読み取り表示(§08 フィールド) */
+  let editing = $state(false);
 </script>
 
-<div class="stat-input">
+<!-- §08「フィールド — 表示が既定・編集は例外」。初期値は常に埋まっているので、
+     ふだんは読み取り表示。入力欄は**自動値を上書きする例外操作**なので、押して初めて出す。
+     編集に入っても「適用」は挟まない — 触った瞬間に結果が動く(§07)。 -->
+<div
+  class="stat-input"
+  class:editing
+  onfocusout={(e) => {
+    // 編集の中で入力欄 → スライダー → MAX と移る間は閉じない。
+    // relatedTarget は再描画のタイミングで null になることがあるので、次のフレームで
+    // 「いまフォーカスがこの部品の外にあるか」を見る
+    if (!editing) return;
+    const root = e.currentTarget as HTMLElement;
+    setTimeout(() => {
+      if (!root.contains(document.activeElement)) editing = false;
+    }, 0);
+  }}
+>
   {#if label}<span class="label">{label}</span>{/if}
-  <input
-    class="num-field"
-    type="number"
-    value={text}
-    oninput={handleInput}
-    onblur={handleBlur}
-    {min}
-    {max}
-    {step}
-    aria-label={label}
-  />
-  <input
-    class="slider"
-    type="range"
-    {min}
-    {max}
-    {step}
-    value={value}
-    oninput={handleSlider}
-    aria-label="{label} スライダー"
-  />
-  <button type="button" class="max-btn" onclick={setMax} disabled={value >= max}>MAX</button>
+  {#if editing}
+    <input
+      class="num-field"
+      type="number"
+      value={text}
+      oninput={handleInput}
+      onblur={handleBlur}
+      onkeydown={(e) => { if (e.key === "Escape" || e.key === "Enter") editing = false; }}
+      {min}
+      {max}
+      {step}
+      aria-label={label}
+      {@attach (node) => { node.focus(); node.select(); }}
+    />
+    <input
+      class="slider"
+      type="range"
+      {min}
+      {max}
+      {step}
+      value={value}
+      oninput={handleSlider}
+      aria-label="{label} スライダー"
+    />
+    <button type="button" class="max-btn" onclick={setMax} disabled={value >= max}>MAX</button>
+  {:else}
+    <button type="button" class="read" onclick={() => (editing = true)} aria-label="{label} を編集">
+      <span class="num read-value">{value.toLocaleString("ja-JP")}</span>
+      <span class="edit">編集</span>
+    </button>
+  {/if}
   {#if capGauge}
     <!-- 下限が 0 なら「値 / 上限」、0 以外(調整の ±999 など)は範囲そのものを出す -->
     <span class="cap num" class:full={value >= max}>
@@ -121,6 +149,18 @@
 
 <style>
   .stat-input { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+  /* 読み取り表示。インセット面に載せて「いまは編集していない」を面で伝える(§01) */
+  .read {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    padding: 5px 9px; border-radius: var(--r-inset);
+    background: var(--surface-inset); border: 1px solid var(--border-soft);
+  }
+  .read:hover { border-color: var(--accent); }
+  .read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  /* 桁が増えても隣が動かない(§09 規則 4)。編集欄と同じ幅を予約しておく */
+  .read-value { min-width: 50px; text-align: right; font-variant-numeric: tabular-nums; }
+  .edit { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
+  .read:hover .edit { color: var(--accent); }
   .label { font-size: 12px; color: var(--fg-muted); min-width: 44px; flex-shrink: 0; white-space: nowrap; }
   .num-field {
     width: 64px; flex-shrink: 0; padding: 5px 7px; border-radius: var(--r-panel);
