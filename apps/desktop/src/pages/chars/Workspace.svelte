@@ -297,7 +297,7 @@
   // ただし「頻度が同じでも種類が違う」読みにくさは実在するので、**群の中の並びを効き先で**
   // 揃える(2 軸を階層で使う)。装備まわりと速度まわりが同じ群でも隣り合わない。
   //
-  // 振り分けは使ってみて変わる。ここ 1 箇所を書き換えれば表示も畳みも追従する。
+  // 出荷時の振り分け。ここが「最初の 1 回」で、以後はプレイヤーが動かせる。
   const SOURCE_GROUPS: { id: string; title: string; note: string; collapsed: boolean; ids: SourceId[] }[] = [
     {
       id: "often",
@@ -321,10 +321,37 @@
       ids: ["element", "title", "randomOption"],
     },
   ];
+  /** 出荷時の所属。プレイヤーが動かしていない補正源はここが効く */
+  const DEFAULT_GROUP_OF: Record<string, string> = Object.fromEntries(
+    SOURCE_GROUPS.flatMap((g) => g.ids.map((id) => [id, g.id])),
+  );
+  /**
+   * プレイヤーが動かした所属。**どれをよく触るかは人によって違う**ので、こちらが正。
+   * 並びが勝手に変わらないことは §09 規則 5 の要求で、裏を返せば
+   * 「ユーザーが頼んだら変わってよい」。だから設定画面は作らず、リストの上で動かす。
+   */
+  const groupOf = persisted("chars.sourceGroupOf", {} as Record<string, string>);
+  const groupIdOf = (id: string) => groupOf.value[id] ?? DEFAULT_GROUP_OF[id] ?? SOURCE_GROUPS[0].id;
+  /** 群を 1 つ上げ下げする。端では止める(巡回させると「戻したつもりが一周した」が起きる) */
+  function moveSource(id: string, dir: -1 | 1) {
+    const at = SOURCE_GROUPS.findIndex((g) => g.id === groupIdOf(id));
+    const next = SOURCE_GROUPS[at + dir];
+    if (!next) return;
+    groupOf.value = { ...groupOf.value, [id]: next.id };
+    // 移した行を追いかける。「操作したら対象が消えた」は最悪の体験(§09 規則 5)
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-source-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+    });
+  }
+  /** 並べ替えの手が出るのは、頼まれたときだけ。既定は静かなまま(§00 触る場所だけ大きく) */
+  let arranging = $state(false);
   const groupedSources = $derived(
-    SOURCE_GROUPS.map((g) => ({
+    SOURCE_GROUPS.map((g, i) => ({
       ...g,
-      items: g.ids.map((id) => sources.find((s) => s.id === id)).filter((s) => s !== undefined),
+      first: i === 0,
+      last: i === SOURCE_GROUPS.length - 1,
+      // 群の中の並びは元の並び(効き先の順)を保つ。動かしても順番は崩れない
+      items: sources.filter((s) => groupIdOf(s.id) === g.id),
     })),
   );
   /** 畳んだ群を開いたかどうか。既定は SOURCE_GROUPS の collapsed */
@@ -354,7 +381,10 @@
       <div class="src-head">
         <span class="src-title">補正源</span>
         {#if neutralCount > 0}<span class="src-unset">未設定 {neutralCount} 件</span>{/if}
-        <span class="dim">押して中身を変える</span>
+        <span class="dim">{arranging ? "▲▼ でよく触る順に動かす" : "押して中身を変える"}</span>
+        <button type="button" class="arrange" class:on={arranging} onclick={() => (arranging = !arranging)}>
+          {arranging ? "並べ替えを終える" : "並べ替え"}
+        </button>
       </div>
       <div class="src-list">
         {#each groupedSources as g (g.id)}
@@ -372,14 +402,33 @@
             </button>
             {#if open}
               <div class="group-body open-in">
+                {#if g.items.length === 0}
+                  <p class="group-empty dim">ここに入れた補正源はまだありません。{arranging ? "▲▼ で移せます。" : ""}</p>
+                {/if}
                 {#each g.items as s (s.id)}
-                  <button type="button" class="src" class:on={openSource === s.id} onclick={() => (openSource = s.id)}>
-                    <span class="src-main">
-                      <span class="src-name">{s.name}</span>
-                      <span class="src-sub num">{s.sub}</span>
-                    </span>
-                    <span class="chev dim">›</span>
-                  </button>
+                  <div class="src-line" data-source-id={s.id}>
+                    <button type="button" class="src" class:on={openSource === s.id} onclick={() => (openSource = s.id)}>
+                      <span class="src-main">
+                        <span class="src-name">{s.name}</span>
+                        <span class="src-sub num">{s.sub}</span>
+                      </span>
+                      <span class="chev dim">›</span>
+                    </button>
+                    {#if arranging}
+                      <span class="arrange-btns">
+                        <button
+                          type="button" class="arrow" disabled={g.first}
+                          aria-label="{s.name} を上の群へ" title="よく触る側へ"
+                          onclick={() => moveSource(s.id, -1)}
+                        >▲</button>
+                        <button
+                          type="button" class="arrow" disabled={g.last}
+                          aria-label="{s.name} を下の群へ" title="触らない側へ"
+                          onclick={() => moveSource(s.id, 1)}
+                        >▼</button>
+                      </span>
+                    {/if}
+                  </div>
                 {/each}
               </div>
             {/if}
@@ -540,6 +589,24 @@
   .group-chev { flex-shrink: 0; font-size: 9px; }
   .group-head:hover .group-title { color: var(--accent); }
   .group-body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .group-empty { margin: 0 0 2px; padding: 0 2px; font-size: 9.5px; }
+  /* 並べ替えは頼まれたときだけ手が出る。押した行はその場に残り、移した先へ動いて見える(§10) */
+  .src-line { min-width: 0; display: flex; align-items: stretch; gap: 4px; }
+  .src-line > .src { min-width: 0; flex: 1; }
+  .arrange-btns { flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+  .arrow {
+    width: 20px; flex: 1; border-radius: var(--r-inset);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
+    color: var(--fg-muted); font-size: 8px;
+  }
+  .arrow:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .arrange {
+    flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill);
+    border: 1px solid var(--border-soft); background: var(--bg-field);
+    font-size: 9px; font-weight: 700; color: var(--fg-muted); letter-spacing: 0;
+  }
+  .arrange:hover { border-color: var(--accent); color: var(--accent); }
+  .arrange.on { background: var(--bg-active); border-color: var(--accent); color: var(--accent-hover); }
 
   .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .src {
