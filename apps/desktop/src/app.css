@@ -1,4 +1,4 @@
-/* 配色・寸法は docs/design の TW Toolkit Prototype v4(デザインモック)に合わせたライトテーマ */
+/* 配色・寸法の規格は docs/design-system.html(出典は デザインモック TW Toolkit Prototype v4) */
 :root {
   --bg: #C9D8EE;            /* アプリ全体の地 */
   --bg-mid: #DEEBF7;        /* 中央カラムの地 */

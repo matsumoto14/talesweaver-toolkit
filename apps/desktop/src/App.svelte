@@ -1,6 +1,6 @@
 <script lang="ts">
   // 画面枠: 上部タブ(ホーム/ダメージ計算/キャラ)+ 左キャラレール + エラー帯。
-  // 構成は docs/design の TW Toolkit Prototype v4 に合わせる。
+  // 構成は デザインモック TW Toolkit Prototype v4 に合わせる(規格は docs/design-system.html)。
   import { onMount } from "svelte";
   import { errorMessage } from "./api/commands";
   import CharacterRail from "./CharacterRail.svelte";
