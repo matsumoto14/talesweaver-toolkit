@@ -1,6 +1,17 @@
 <script lang="ts">
-  // 数値入力の唯一の部品(CLAUDE.md UX 方針)。ラベル | 値 | MAX | 範囲 の1行。
-  // 値は読取(button)と編集(input)で同じ位置・同じ幅(§08 / §09 規則 1)。
+  // 上限のある数値の唯一の入力部品(§07 形態 4)。
+  //
+  //   [ラベル]  [ 値 /上限  ← セル底に進捗バー ]  [MAX]  [注記]
+  //
+  // v4(TW Toolkit Prototype v4.dc.html 570-587)の実物は `− [値/上限] ＋ MAX` だが、
+  // ＋ / − は置かない。ステータスの刻みは 1 で上限が 310〜3,000 あり、1 ずつ押して
+  // 動かす操作が実用にならない。代わりに **セルを押すと手入力**に入る。
+  // 形態 4 のうち「上限に対していまどのあたりか」を見せる部分(値と上限の同居・
+  // 進捗バー・MAX 1 タップ・上限到達で面が変わる)を採る。
+  //
+  // 上限到達は金(§03 予約色「上限到達(「満」)」)。§07 実演の「紫になる」は
+  // v4 のエンチャント欄がラベンダー系統の画面にあるための記述で、色の規則ではない。
+  //
   // 数値欄のテキスト確定ロジックは旧 NumberField.svelte を踏襲:
   // text($state) と value(bindable) を分離し、oninput で確定できる間だけ value を書き換え、
   // onblur で最終確定・範囲内にクランプする。外部から value が変わったときだけ $effect で
@@ -13,14 +24,8 @@
     max: number;
     step?: number;
     format?: (value: number) => string;
-    /**
-     * 範囲の表示(`値 / 上限` + 上限に達したら「満」)。**既定で出す** —
-     * §07「範囲は入力欄が知っている。値の隣に常設し、範囲外を打てなくするのではなく
-     * 範囲を見せる」。隣に別の形で範囲が出ているときだけ false にする。
-     */
-    capGauge?: boolean;
   }
-  let { label, value = $bindable(), min, max, step = 1, format, capGauge = true }: Props = $props();
+  let { label, value = $bindable(), min, max, step = 1, format }: Props = $props();
 
   let text = $state(String(value));
   let lastSyncedValue = value;
@@ -52,8 +57,8 @@
     const n = Number(text);
     // 空欄・無効値は直前の確定値(= 現在の value。handleInput は無効な text のときに
     // value を書き換えないため、常に「最後に確定した値」を保っている)にフォールバックする。
-    // min にフォールバックすると、min が負の項目(例: 調整「加算」の -999)で
-    // 空欄化しただけの操作が -999 になってしまう。範囲外は端に寄せる。
+    // min にフォールバックすると、min が負の項目(例: 調整「加算」の -3,000)で
+    // 空欄化しただけの操作が -3,000 になってしまう。範囲外は端に寄せる。
     const raw = text.trim() === "" || !Number.isFinite(n) ? value : n;
     const v = clamp(Number.isInteger(step) ? Math.round(raw) : raw);
     // この部品が最後に確定した値(lastSyncedValue)と同じなら setter を呼ばない。
@@ -67,12 +72,27 @@
   }
 
   function setMax() {
+    if (value === max) return;
     value = max;
     lastSyncedValue = max;
     text = String(max);
   }
 
   const hint = $derived(format ? format(value) : null);
+  const full = $derived(value >= max);
+  /** 動かせる幅が無い(そのアイテムがその値を持たない等)。§07 形態 1 に降りて表示だけにする */
+  const fixed = $derived(max <= min);
+  /**
+   * 上限に対する進捗。負の範囲(調整の加算 -3,000〜3,000)は「上限に対してどこまで」が
+   * 成り立たないのでバーを出さない
+   */
+  const pct = $derived(
+    min < 0 || max <= min
+      ? null
+      : value <= min
+        ? 0
+        : Math.min(100, Math.max(3, ((value - min) / (max - min)) * 100)),
+  );
 
   /** 編集中か。既定は読み取り表示(§08 フィールド) */
   let editing = $state(false);
@@ -83,12 +103,10 @@
      編集に入っても「適用」は挟まない — 触った瞬間に結果が動く(§07)。 -->
 <div
   class="stat-input"
-  class:editing
-  class:full={value >= max}
+  class:full
   onfocusout={(e) => {
-    // 編集の中で入力欄 → スライダー → MAX と移る間は閉じない。
-    // relatedTarget は再描画のタイミングで null になることがあるので、次のフレームで
-    // 「いまフォーカスがこの部品の外にあるか」を見る
+    // 編集の中で入力欄 → MAX と移る間は閉じない。relatedTarget は再描画のタイミングで
+    // null になることがあるので、次のフレームで「いまフォーカスがこの部品の外にあるか」を見る
     if (!editing) return;
     const root = e.currentTarget as HTMLElement;
     setTimeout(() => {
@@ -97,86 +115,96 @@
   }}
 >
   {#if label}<span class="label">{label}</span>{/if}
-  <!-- 値は読取でも編集でも**同じ位置・同じ幅**。押しても値が動かない(§09 規則 1)。
-       入れ替わるのは右側だけ — 「編集」→ スライダー + MAX(§08 のフィールドの図) -->
-  {#if editing}
-    <input
-      class="num value-box"
-      type="number"
-      value={text}
-      oninput={handleInput}
-      onblur={handleBlur}
-      onkeydown={(e) => { if (e.key === "Escape" || e.key === "Enter") editing = false; }}
-      {min}
-      {max}
-      {step}
-      aria-label={label}
-      {@attach (node) => {
-        // preventScroll: focus の既定はスクロールして要素を視界に入れる。押した場所は
-        // 既に見えているので、動かすと視点がリセットされる(§09「押した場所は動かない」)
-        node.focus({ preventScroll: true });
-        node.select();
-      }}
-    />
-  {:else}
-    <button
-      type="button"
-      class="num value-box read"
-      aria-label="{label} を編集"
-      onclick={() => (editing = true)}
-    >{value.toLocaleString("ja-JP")}</button>
-  {/if}
-  <!-- 右側。幅が違うので、この先の範囲表示は右端に固定して動かさない -->
-  <span class="side">
-    {#if editing}
-      <button type="button" class="max-btn" onclick={setMax} disabled={value >= max}>MAX</button>
+  <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
+       上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
+       読取(button)と編集(input)でセルの寸法は同じ。押しても値が動かない(§09 規則 1) -->
+  <div class="cell" class:editing class:fixed>
+    {#if pct !== null}<span class="fill" style:width="{pct}%"></span>{/if}
+    {#if editing && !fixed}
+      <input
+        class="num val"
+        type="number"
+        value={text}
+        oninput={handleInput}
+        onblur={handleBlur}
+        onkeydown={(e) => { if (e.key === "Escape" || e.key === "Enter") editing = false; }}
+        {min}
+        {max}
+        {step}
+        aria-label={label}
+        {@attach (node) => {
+          // preventScroll: focus の既定はスクロールして要素を視界に入れる。押した場所は
+          // 既に見えているので、動かすと視点がリセットされる(§09「押した場所は動かない」)
+          node.focus({ preventScroll: true });
+          node.select();
+        }}
+      />
+    {:else if fixed}
+      <span class="num val">{value.toLocaleString("ja-JP")}</span>
     {:else}
-      <button type="button" class="edit" onclick={() => (editing = true)} tabindex="-1">編集</button>
+      <button
+        type="button"
+        class="num val read"
+        aria-label="{label} を編集"
+        onclick={() => (editing = true)}
+      >{value.toLocaleString("ja-JP")}</button>
     {/if}
-  </span>
-  {#if capGauge}
-    <!-- 値は左の欄に出ているので、ここは**上限だけ**を言う。
-         「1 〜 310」のような範囲表記だと、値が別にあるぶん何の数字か読めない -->
-    <span class="cap num" class:full={value >= max}>上限 {max.toLocaleString("ja-JP")}</span>
-    <!-- 「満」の枠は常に確保する。出たときに行がずれない(§09 規則 4 / §11) -->
-    <span class="cap-badge" class:on={value >= max}>{value >= max ? "満" : ""}</span>
+    {#if !fixed}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
+  </div>
+  <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->
+  {#if !fixed}
+    <button type="button" class="max-btn" onclick={setMax} disabled={full}>MAX</button>
   {/if}
   {#if hint}<span class="hint dim">{hint}</span>{/if}
 </div>
 
 <style>
-  .stat-input { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-  /* 上限に届いたら面の色が変わる(§07 / §12)。「満」は文字ではなく面でも伝える */
-  .stat-input.full .value-box { background: var(--state-edge-bg); border-color: var(--gold); }
-  .edit { flex-shrink: 0; font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
-  .edit:hover { color: var(--accent); text-decoration: underline; }
+  .stat-input { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
   .label { font-size: 12px; color: var(--fg-muted); min-width: 44px; flex-shrink: 0; white-space: nowrap; }
-  /* 値の欄。読取(button)と編集(input)で同じ寸法にして、押しても値が動かないようにする */
-  .value-box {
-    width: 74px; flex-shrink: 0; padding: 5px 7px; border-radius: var(--r-panel);
-    text-align: right; font-variant-numeric: tabular-nums; color: var(--fg);
-    border: 1px solid var(--border);
+  /* 値・上限・進捗が入るセル。読取でも編集でも同じ寸法 */
+  .cell {
+    position: relative; overflow: hidden; flex-shrink: 0;
+    display: flex; align-items: baseline; justify-content: flex-end; gap: 2px;
+    width: 104px; padding: 4px 6px 5px; border-radius: var(--r-panel);
+    background: var(--surface-inset); border: 1px solid var(--border-soft);
   }
-  /* 読取はインセット面、編集は白い面(§01 白 = 編集できる面) */
-  .value-box.read { background: var(--surface-inset); border-color: var(--border-soft); }
-  .value-box.read:hover { border-color: var(--accent); }
-  .value-box.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-  input.value-box { background: var(--bg-field); }
-  input.value-box:focus { outline: none; border-color: var(--accent); }
-  /* 読取(「編集」)と編集(MAX)で必要幅が変わると、表の列幅が動いて値が横にずれる。
-     広いほう(MAX)に合わせて最低幅を決めておく(§09 規則 4) */
-  .side { flex: 1; min-width: 44px; display: flex; align-items: center; gap: 8px; }
+  /* 白 = 編集できる面(§01) */
+  .cell.editing { background: var(--bg-field); border-color: var(--accent); }
+  .cell:not(.editing):not(.fixed):hover { border-color: var(--accent); }
+  /* 動かせないものは押せる見た目にしない */
+  .cell.fixed { justify-content: center; }
+  /* 上限に対していまどのあたりか。セル底の 2px(v4) */
+  .fill {
+    position: absolute; left: 0; bottom: 0; height: 2px;
+    background: linear-gradient(90deg, var(--border-strong), var(--accent));
+    pointer-events: none;
+  }
+  .val {
+    min-width: 0; flex: 1 1 auto; text-align: right; font-size: 12.5px; font-weight: 700;
+    font-variant-numeric: tabular-nums; color: var(--fg);
+    background: none; border: none; padding: 0;
+  }
+  .val:focus { outline: none; }
+  /* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1)。
+     ＋ / − を置かないので、刻みで動かす手段としても要らない */
+  .val::-webkit-inner-spin-button, .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
+  input.val { appearance: textfield; }
+  .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  /* 上限は値のすぐ右、小さく。「1 〜 310」のような範囲表記にはしない —
+     値が別にあるぶん、範囲で書くと何の数字か読めない */
+  .cap { flex: none; font-size: 8.5px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+  /* 上限に届いたら面の色が変わる(§07 / §12)。「満」は文字ではなく面で伝える */
+  .stat-input.full .cell { background: var(--state-edge-bg); border-color: var(--gold); }
+  .stat-input.full .fill { background: var(--gold); }
+  .stat-input.full .cap { color: var(--state-edge-fg); }
   .max-btn {
-    flex-shrink: 0; padding: 5px 8px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg-muted); font-size: 10px;
+    flex-shrink: 0; width: 30px; padding: 4px 0; text-align: center;
+    border-radius: var(--r-chip); background: var(--bg-field);
+    border: 1px solid var(--border); color: var(--fg-muted);
+    font-size: 8px; font-weight: 700;
   }
   .max-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--border-strong); }
+  /* 満のときは沈めずに反転させる。「もう上限だ」を MAX 自身が言う(v4) */
+  .max-btn:disabled { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
   .hint { flex-shrink: 0; font-size: 11px; white-space: nowrap; }
-  .cap { flex-shrink: 0; margin-left: auto; font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
-  .cap.full { color: var(--fg); font-weight: 700; }
-  .cap-badge {
-    flex-shrink: 0; min-width: 16px; text-align: center;
-    font-size: 8.5px; font-weight: 700; color: transparent;
-  }
-  .cap-badge.on { color: var(--state-edge-fg); }
 </style>
