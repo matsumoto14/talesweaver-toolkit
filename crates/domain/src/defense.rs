@@ -36,15 +36,6 @@ const EVASION_TYPE_DIVISOR: f64 = 7.0;
 /// 物理の回避P増加に入る `[(STAB+HACK)/100]` の除数。
 const EVASION_PHYSICAL_ATTACK_DIVISOR: f64 = 100.0;
 
-/// 命中率の下限 %(wiki `#HitRateCap`: `15 + 攻撃者の最小命中率補正 − 対象の最小回避率補正`。
-/// 最小命中率/最小回避率の補正は未収録なので定数 15 のまま)。
-const HIT_RATE_MIN_PERCENT: f64 = 15.0;
-/// 命中率の上限 %(wiki `#HitRateCap`: モンスターが行う攻撃は 100)。
-const HIT_RATE_MAX_PERCENT: f64 = 100.0;
-
-/// 通常回避の上限(wiki ステータス「命中率/回避率」: 基本上限 85% = 命中率下限 15% の裏返し)。
-pub const NORMAL_EVASION_CAP: f64 = 1.0 - HIT_RATE_MIN_PERCENT / 100.0;
-
 /// 攻撃タイプ別の回避P(wiki `#EvasionPoint`)。敵の攻撃タイプに合わせた回避Pが要る。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EvasionPoints {
@@ -79,14 +70,9 @@ pub struct DefenseProfile {
     pub composite_cut_rate: f64,
     /// 特殊回避(コンボ回避)`(10 + MR/15 + AGI/7.5)%`、下限 20% / 上限 63%
     pub combo_evasion: f64,
-    /// 攻撃タイプ別の回避P。通常回避率は敵の命中Pとの差で決まるので、能力値だけで
-    /// 出せるのはここまで(`通常回避 = 1 − (敵命中P − 回避P)/100`、下限 0% / 上限 85%)
+    /// 攻撃タイプ別の回避P。通常回避「率」は敵の命中Pが要り、その入力(wiki 狩り場情報一覧の
+    /// 「上限回避P」)が全行未記載なので出さない(ユーザー決定 2026-08-25)
     pub evasion_point: EvasionPoints,
-    /// 通常回避の上限(85%)。敵命中P ≦ 回避P + 15 のときこの値になる
-    pub normal_evasion_cap: f64,
-    /// 上限回避時の最終被弾率 `(1 − 85%) × (1 − 特殊回避)`。
-    /// 敵命中Pが上がるほどこの値より悪化する(上限は `1 − 特殊回避`)
-    pub hit_taken_rate_at_cap: f64,
     /// 装備物防(基本能力値 + 強化能力値の合計)
     pub equipment_physical_defense: i64,
     /// 装備魔防(基本能力値 + 強化能力値の合計)
@@ -163,22 +149,6 @@ pub fn accuracy_point(
         - floor_int(correction.penalty_value(stats))
 }
 
-/// 通常回避率(wiki `#HitRate` + `#HitRateCap`)。
-///
-/// `命中率 = 敵命中P − 回避P`(下限 15% / 上限 100%)の裏返しなので、
-/// 通常回避は下限 0% / 上限 85%。敵の命中Pはコンテンツごとに異なる
-/// (wiki 狩り場情報一覧「上限回避P」= 敵命中P − 15。現状すべて未記載)。
-pub fn normal_evasion(evasion_point: i64, enemy_accuracy_point: i64) -> f64 {
-    let hit_rate =
-        ((enemy_accuracy_point - evasion_point) as f64).clamp(HIT_RATE_MIN_PERCENT, HIT_RATE_MAX_PERCENT);
-    1.0 - hit_rate / 100.0
-}
-
-/// 最終被弾率 `(1 − 通常回避) × (1 − 特殊回避)`(wiki ステータス「命中率/回避率」の例と同じ合成)。
-pub fn hit_taken_rate(normal_evasion: f64, combo_evasion: f64) -> f64 {
-    (1.0 - normal_evasion) * (1.0 - combo_evasion)
-}
-
 /// 防御側の戦闘能力値を出す。
 ///
 /// `equipment` は装備補正 9 値の合計(基本 + 強化)。呼び出し側が `Equipment::base_totals` /
@@ -228,8 +198,6 @@ pub fn defense_profile(
             magic: evasion_point(stats, equipment, mr * 2.0 / EVASION_TYPE_DIVISOR),
             composite: evasion_point(stats, equipment, (def + mr) / EVASION_TYPE_DIVISOR),
         },
-        normal_evasion_cap: NORMAL_EVASION_CAP,
-        hit_taken_rate_at_cap: hit_taken_rate(NORMAL_EVASION_CAP, combo_evasion),
         equipment_physical_defense: equipment.physical_defense,
         equipment_magic_defense: equipment.magic_defense,
         equipment_evasion: equipment.evasion,
@@ -338,38 +306,5 @@ mod tests {
         let p = defense_profile(&s, &EquipmentValues::default(), no_caps());
         // [(250+260)/100] = 5 → 15 + 0 + 5/7 = 15.714.. → 15
         assert_eq!(p.evasion_point.physical, 15);
-    }
-
-    #[test]
-    fn 通常回避は敵命中Pとの差で下限0上限85() {
-        // 敵命中P が 回避P + 15 以下なら上限 85%
-        assert!((normal_evasion(1000, 1010) - 0.85).abs() < 1e-9);
-        assert!((normal_evasion(1000, 1015) - 0.85).abs() < 1e-9);
-        // 差 40 → 命中率 40% → 回避 60%
-        assert!((normal_evasion(1000, 1040) - 0.60).abs() < 1e-9);
-        // 敵命中P が 回避P + 100 以上なら 0%(必中)
-        assert!(normal_evasion(1000, 1100).abs() < 1e-9);
-        assert!(normal_evasion(1000, 9999).abs() < 1e-9);
-    }
-
-    #[test]
-    fn 防御力は上限で頭打ちになり捨てられた分を残す() {
-        let caps = AwakeningCaps { max_damage: 3_000_000, max_defense: 12_000, max_stat: 1_500 };
-        // DEF 5000 → 生値 15,000 が 12,000 で頭打ち
-        let p = defense_profile(&stats(5_000, 100, 0), &EquipmentValues::default(), caps);
-        assert_eq!(p.physical_defense, 12_000);
-        assert_eq!(p.physical_defense_loss, 3_000);
-        assert_eq!(p.defense_cap, 12_000);
-        // 魔法は 300 なので上限に当たらない
-        assert_eq!(p.magic_defense, 300);
-        assert_eq!(p.magic_defense_loss, 0);
-    }
-
-    #[test]
-    fn 上限回避時の最終被弾率は特殊回避と合成する() {
-        let p = defense_profile(&stats(0, 150, 200), &eq_magic(0), no_caps());
-        // 特殊回避 46.666..% → (1 − 0.85) × (1 − 0.46666..) = 0.15 × 0.53333.. = 0.08
-        assert!((p.hit_taken_rate_at_cap - 0.08).abs() < 1e-9);
-        assert!((p.normal_evasion_cap - 0.85).abs() < 1e-9);
     }
 }

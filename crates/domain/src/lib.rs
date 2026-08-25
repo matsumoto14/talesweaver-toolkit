@@ -32,9 +32,12 @@ pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
 };
 pub use defense::{
-    accuracy_point, defense_profile, AccuracyCorrection, hit_taken_rate, normal_evasion, DefenseProfile, EvasionPoints, NORMAL_EVASION_CAP,
+    accuracy_point, defense_profile, AccuracyCorrection, DefenseProfile, EvasionPoints,
 };
-pub use element::{Element, ElementValues, ELEMENT_VALUE_MAX, EQUIPMENT_ELEMENT_VALUE_MAX};
+pub use element::{
+    Element, ElementPreview, ElementSourceDef, ElementSourceId, ElementSources, ElementValues,
+    EQUIPMENT_ELEMENT_VALUE_MAX,
+};
 pub use enemy::Enemy;
 pub use equipment::{
     equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment,

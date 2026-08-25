@@ -7,7 +7,7 @@
 //! 例: ボリスの土属性「大地系」・黒属性「黒魔法系」)。
 //! ロアミニ・ノクターン・リーチェ・イェフネンは表そのものが無い(実装が新しい)ため全属性 0 `[仮]`。
 
-use domain::ElementValues;
+use domain::{ElementSourceDef, ElementSourceId, ElementValues};
 
 use crate::Source;
 
@@ -17,6 +17,30 @@ pub const ELEMENT_BASE_SOURCE: Source = Source {
     note: "各キャラ表の属性名に付く括弧の数値。括弧が無い属性は 0。\
            ロアミニ/ノクターン/リーチェ/イェフネンは wiki に表が無く全属性 0 `[仮]`",
 };
+
+/// 装備の属性強化以外の属性値の供給源(ユーザー提供 2026-08-25)。
+///
+/// wiki には一覧が無く、ユーザーが実プレイから提供した値。装備の属性強化(部位ごとに 0〜9、
+/// 盾+(カフス)とレリックは対象外 = 10 部位で最大 90)と合わせて 200 まで積め、
+/// 敵属性値 120〜125 に対して属性差 +80(カテゴリI の上限 +50%)に届く。
+pub const ELEMENT_SOURCE_CATALOG_SOURCE: Source = Source {
+    page: "ユーザー提供(実プレイ)",
+    retrieved_on: "2026-08-25",
+    note: "ペット+10 / モンスターカード+30 / ルーンスキル+20 / 頭アビリティ+20 /            カフス(盾+)アビリティ+30(神秘鉱の鋭い刃 等)。wiki 属性システムには供給源の一覧が無い",
+};
+
+const ELEMENT_SOURCES: &[ElementSourceDef] = &[
+    ElementSourceDef { id: ElementSourceId::Pet, name: "ペット", value: 10 },
+    ElementSourceDef { id: ElementSourceId::MonsterCard, name: "モンスターカード", value: 30 },
+    ElementSourceDef { id: ElementSourceId::Rune, name: "ルーンスキル", value: 20 },
+    ElementSourceDef { id: ElementSourceId::HelmAbility, name: "頭アビリティ", value: 20 },
+    ElementSourceDef { id: ElementSourceId::CuffsAbility, name: "カフスアビリティ", value: 30 },
+];
+
+/// 属性値の供給源カタログ(装備の属性強化以外)。
+pub fn element_source_catalog() -> &'static [ElementSourceDef] {
+    ELEMENT_SOURCES
+}
 
 /// (character_id, 火, 水, 風, 土, 雷, 白, 黒, 無)
 #[rustfmt::skip]
@@ -75,6 +99,16 @@ mod tests {
     fn wikiに表が無いキャラは全属性0() {
         assert_eq!(element_base("roamini"), ElementValues::default());
         assert_eq!(element_base("nope"), ElementValues::default());
+    }
+
+    #[test]
+    fn 供給源は5件で合計200まで積める() {
+        let defs = element_source_catalog();
+        assert_eq!(defs.len(), 5);
+        // 供給源 110 + 装備 10 部位 × 9 = 90 → 200
+        let sources: i64 = defs.iter().map(|d| d.value).sum();
+        assert_eq!(sources, 110);
+        assert_eq!(sources + 10 * domain::EQUIPMENT_ELEMENT_VALUE_MAX, 200);
     }
 
     #[test]

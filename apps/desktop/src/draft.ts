@@ -58,6 +58,7 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   sacred_relic: { ...src.sacred_relic },
   buffs: { choices: src.buffs.choices.map((b) => ({ ...b })) },
   adjustments: cloneAdjustments(src.adjustments),
+  elements: { ...src.elements },
 });
 
 export const neutralStatSources = (): StatSources => ({
@@ -67,6 +68,7 @@ export const neutralStatSources = (): StatSources => ({
   sacred_relic: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["sacred_relic"],
   buffs: { choices: [] },
   adjustments: Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as StatSources["adjustments"],
+  elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
 });
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({

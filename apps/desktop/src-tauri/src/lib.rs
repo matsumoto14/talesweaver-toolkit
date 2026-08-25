@@ -30,6 +30,8 @@ pub fn run() {
             commands::list_skills,
             commands::list_enemies,
             commands::list_buff_catalog,
+            commands::list_element_sources,
+            commands::preview_elements,
             commands::list_contents,
             commands::list_equipment_catalog,
             commands::list_equipment_abilities,

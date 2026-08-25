@@ -20,7 +20,9 @@ pub use characters::{
     attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,
 };
 pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};
-pub use elements::{element_base, ELEMENT_BASE_SOURCE};
+pub use elements::{
+    element_base, element_source_catalog, ELEMENT_BASE_SOURCE, ELEMENT_SOURCE_CATALOG_SOURCE,
+};
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
     enhance_multiplier, enhance_multiplier_range, enhance_rates, equipment_abilities,

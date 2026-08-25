@@ -112,6 +112,85 @@ impl ElementValues {
     }
 }
 
+/// 装備の属性強化以外の属性値の供給源(ユーザー提供 2026-08-25)。
+/// 供給源ごとに「どの属性に乗せているか」だけを持ち、加算値は gamedata が持つ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ElementSources {
+    /// ペット
+    #[serde(default)]
+    pub pet: Option<Element>,
+    /// モンスターカード
+    #[serde(default)]
+    pub monster_card: Option<Element>,
+    /// ルーンスキル
+    #[serde(default)]
+    pub rune: Option<Element>,
+    /// 頭アビリティ
+    #[serde(default)]
+    pub helm_ability: Option<Element>,
+    /// カフス(盾+)のアビリティ(神秘鉱の鋭い刃 等)
+    #[serde(default)]
+    pub cuffs_ability: Option<Element>,
+}
+
+/// 供給源 1 つ分の定義(表示名と加算値)。実データは gamedata。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ElementSourceDef {
+    pub id: ElementSourceId,
+    pub name: &'static str,
+    pub value: i64,
+}
+
+/// 供給源の種別。`ElementSources` のどのフィールドかを指す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ElementSourceId {
+    Pet,
+    MonsterCard,
+    Rune,
+    HelmAbility,
+    CuffsAbility,
+}
+
+impl ElementSources {
+    pub fn get(&self, id: ElementSourceId) -> Option<Element> {
+        match id {
+            ElementSourceId::Pet => self.pet,
+            ElementSourceId::MonsterCard => self.monster_card,
+            ElementSourceId::Rune => self.rune,
+            ElementSourceId::HelmAbility => self.helm_ability,
+            ElementSourceId::CuffsAbility => self.cuffs_ability,
+        }
+    }
+
+    /// 供給源の加算値を属性ごとに集計する。`defs` は gamedata のカタログ。
+    pub fn values(&self, defs: &[ElementSourceDef]) -> ElementValues {
+        let mut total = ElementValues::default();
+        for def in defs {
+            if let Some(element) = self.get(def.id) {
+                *total.get_mut(element) += def.value;
+            }
+        }
+        total
+    }
+}
+
+/// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。画面表示用。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ElementPreview {
+    pub base: ElementValues,
+    pub equipment: ElementValues,
+    pub sources: ElementValues,
+    /// 3 つを足して上限 255 で頭打ちにした値
+    pub total: ElementValues,
+}
+
+impl ElementPreview {
+    pub fn new(base: ElementValues, equipment: ElementValues, sources: ElementValues) -> Self {
+        Self { base, equipment, sources, total: base.add(equipment).add(sources).clamp_to_max() }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +204,26 @@ mod tests {
         assert_eq!(total.get(Element::Thunder), 5);
         assert_eq!(total.get(Element::Fire), ELEMENT_VALUE_MAX);
         assert_eq!(total.get(Element::Neutral), 0);
+    }
+
+    #[test]
+    fn 供給源は選んだ属性にカタログの値を足す() {
+        let defs = [
+            ElementSourceDef { id: ElementSourceId::Pet, name: "ペット", value: 10 },
+            ElementSourceDef { id: ElementSourceId::MonsterCard, name: "モンスターカード", value: 30 },
+            ElementSourceDef { id: ElementSourceId::Rune, name: "ルーンスキル", value: 20 },
+        ];
+        let sources = ElementSources {
+            pet: Some(Element::Water),
+            monster_card: Some(Element::Water),
+            rune: Some(Element::Fire),
+            ..Default::default()
+        };
+        let values = sources.values(&defs);
+        assert_eq!(values.get(Element::Water), 40);
+        assert_eq!(values.get(Element::Fire), 20);
+        // 未選択(None)の供給源は足さない
+        assert_eq!(ElementSources::default().values(&defs), ElementValues::default());
     }
 
     #[test]

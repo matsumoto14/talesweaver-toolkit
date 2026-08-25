@@ -2,6 +2,7 @@
   export type SourceId =
     | "status"
     | "equipment"
+    | "element"
     | "pet"
     | "rune"
     | "crown"
@@ -16,11 +17,12 @@
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
-    CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentItem, PartSlot, PetSkillTier,
-    Skill, StatKind, StatPreview,
+    CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityFamily, EquipmentItem, PartSlot,
+    PetSkillTier, Skill, StatKind, StatPreview,
   } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
-  import type { Draft } from "../../draft";
+  import { previewElements } from "../../api/commands";
+  import { draftToPayload, type Draft } from "../../draft";
   import {
     clampToCaps, coreBonus, coreSetSupportValues, coreSetTotalBonus, midpointValues,
     neutralEquipmentPart, neutralSienaAura, rangeSummary, sienaPartStatTotal, valuesSummary,
@@ -28,7 +30,8 @@
   import { fmtInt, formatLayerValue } from "../../format";
   import {
     ABILITY_ALLOWED_SLOTS, ABILITY_FAMILIES, ABILITY_FAMILY_LABELS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
-    CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ENHANCE_ALLOWED_SLOTS,
+    CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ELEMENTS,
+    ENHANCE_ALLOWED_SLOTS,
     EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
     PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS, SIENA_ALLOWED_SLOTS,
     SIENA_EQUIPMENT_VALUE_SLOTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
@@ -207,6 +210,24 @@
   }
   const sienaIsEquipmentValues = (slot: PartSlot) => SIENA_EQUIPMENT_VALUE_SLOTS.includes(slot);
 
+  // --- 属性(装備の属性強化以外の供給源) ----------------------------------
+  const elementSourceDefs = $derived(app.elementSources);
+  // 内訳は Rust 側で出す(キャラ基礎属性値は gamedata にしか無い)。開いている間だけ引く
+  let elementPreview = $state<ElementPreview | null>(null);
+  let elementSeq = 0;
+  $effect(() => {
+    if (sourceId !== "element") return;
+    const payload = draftToPayload(draft);
+    const seq = ++elementSeq;
+    previewElements(payload)
+      .then((p) => {
+        if (seq === elementSeq) elementPreview = p;
+      })
+      .catch(() => {
+        if (seq === elementSeq) elementPreview = null;
+      });
+  });
+
   // --- 属性強化(部位ごとに 1 属性) --------------------------------------
   const elementOptions = [
     { value: "", label: "属性なし" },
@@ -275,6 +296,7 @@
   const TITLES: Record<SourceId, { title: string; note: string }> = {
     status: { title: "キャラステータス", note: "素ステ・覚醒・エタの意志" },
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
+    element: { title: "属性", note: "装備の属性強化以外の供給源(乗せる属性を選ぶ)" },
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
     rune: { title: "ルーンスキル", note: `0–${limits.rune_level_max}` },
     crown: { title: "クラウン", note: `0–${limits.crown_max}` },
@@ -593,6 +615,60 @@
           </div>
         </div>
       {/if}
+    {/if}
+  {:else if sourceId === "element"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「属性システム」。与ダメージに効くのは<b>攻撃側の属性値 − 敵の属性値</b>の差だけで、
+        差 +1 ごとに +0.625%、+80 で上限 +50% です(カテゴリI)。装備の属性強化は「装備」の部位ごとに、
+        キャラの基礎属性値は wiki 由来で自動です。
+      </p>
+      <div class="fields">
+        {#each elementSourceDefs as def (def.id)}
+          <Select
+            label={`${def.name}(+${def.value})`}
+            options={elementOptions}
+            bind:value={
+              () => draft.statSources.elements[def.id] ?? "",
+              (v) => (draft.statSources.elements[def.id] = v === "" ? null : (v as Element))
+            }
+          />
+        {/each}
+      </div>
+    </div>
+    {#if elementPreview}
+      <div class="card">
+        <div class="card-title">属性値の内訳</div>
+        <table class="eq-table num inset">
+          <thead>
+            <tr>
+              <th></th>
+              {#each ELEMENTS as e (e)}<th class="n">{ELEMENT_LABELS[e]}</th>{/each}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th class="rh">キャラ基礎</th>
+              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.base[e])}</td>{/each}
+            </tr>
+            <tr>
+              <th class="rh">装備の属性強化</th>
+              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.equipment[e])}</td>{/each}
+            </tr>
+            <tr>
+              <th class="rh">この画面の供給源</th>
+              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.sources[e])}</td>{/each}
+            </tr>
+            <tr class="total">
+              <th class="rh">合計(上限 {fmtInt(limits.element_value_max)})</th>
+              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.total[e])}</td>{/each}
+            </tr>
+          </tbody>
+        </table>
+        <p class="hint dim">
+          敵の属性値は 120 / 125(狩り場情報一覧)。合計がそれを +80 上回ると属性差ボーナスが上限(+50%)に届きます。
+        </p>
+      </div>
     {/if}
   {:else if sourceId === "pet"}
     <div class="card">

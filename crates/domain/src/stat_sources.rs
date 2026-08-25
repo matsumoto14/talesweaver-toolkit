@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::element::ElementSources;
 use crate::attack_power::{
     attack_power_breakdown, stat_attack_power, AttackCoefficients, AttackPowerBreakdown,
 };
@@ -367,6 +368,9 @@ pub struct StatSources {
     pub buffs: BuffSelection,
     #[serde(default)]
     pub adjustments: Adjustments,
+    /// 装備の属性強化以外の属性値の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)
+    #[serde(default)]
+    pub elements: ElementSources,
 }
 
 impl StatSources {

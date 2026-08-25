@@ -2,14 +2,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
-  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile, Skill, StatLimits,
-  StatPreview, StatSources,
+  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
+  ElementPreview, ElementSourceDef, Skill, StatLimits, StatPreview, StatSources,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
 export const listSkills = (gameCharacterId: string) => invoke<Skill[]>("list_skills", { gameCharacterId });
 export const listEnemies = () => invoke<Enemy[]>("list_enemies");
 export const listBuffCatalog = () => invoke<BuffDefinition[]>("list_buff_catalog");
+/** 属性値の供給源カタログ(装備の属性強化以外) */
+export const listElementSources = () => invoke<ElementSourceDef[]>("list_element_sources");
+/** 属性値の内訳(キャラ基礎 / 装備 / 供給源 / 合計)。保存前のキャラデータで出す */
+export const previewElements = (character: NewCharacter) =>
+  invoke<ElementPreview>("preview_elements", { character });
 export const listCharacters = () => invoke<RegisteredCharacter[]>("list_characters");
 export const createCharacter = (character: NewCharacter) =>
   invoke<RegisteredCharacter>("create_character", { character });

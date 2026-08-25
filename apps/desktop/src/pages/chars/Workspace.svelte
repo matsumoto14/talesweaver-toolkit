@@ -148,20 +148,30 @@
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
   const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
-  // 装備に付与した属性値の合計。0 の属性は出さない(全部 0 なら「なし」)
+  const NEUTRAL = "未設定(中立値で計算)";
+
+  // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
   const elementSummary = $derived.by(() => {
     const values = equipmentElementValues(draft.equipment);
+    for (const def of app.elementSources) {
+      const element = draft.statSources.elements[def.id];
+      if (element) values[element] += def.value;
+    }
     const parts = ELEMENTS.filter((e) => values[e] > 0).map((e) => `${ELEMENT_LABELS[e]}${values[e]}`);
-    return parts.length === 0 ? "なし" : parts.join(" / ");
+    return parts.length === 0 ? NEUTRAL : parts.join(" / ");
   });
 
-  const NEUTRAL = "未設定(中立値で計算)";
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
     { id: "status", name: "キャラステータス", sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}` },
     {
       id: "equipment",
       name: "装備",
       sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}${enhanceRatePercent > 0 ? ` ・ +${enhanceRatePercent}%` : ""}`,
+    },
+    {
+      id: "element",
+      name: "属性",
+      sub: elementSummary,
     },
     {
       id: "siena",
@@ -321,7 +331,6 @@
               </tr>
             </tbody>
           </table>
-          <p class="dim tiny">属性(装備の付与分): {elementSummary}</p>
           <p class="dim tiny">
             強化倍率 +{enhanceRatePercent}%。強化のうちテシスコア・シエナのオーラの分はこの表に入りません
             (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。

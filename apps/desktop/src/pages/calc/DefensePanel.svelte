@@ -95,7 +95,7 @@
     <div class="block">
       <div class="block-head">
         <span class="block-title">回避</span>
-        <span class="formula num dim">回避P = [15 + AGI×1.2 + 攻撃タイプ別増加]、通常回避 = 1 − (敵命中P − 回避P)/100</span>
+        <span class="formula num dim">回避P = [15 + (AGI + 装備回避率)×1.2 + 装備敏捷度/7 + 攻撃タイプ別増加]</span>
       </div>
       <div class="rows">
         <div class="row">
@@ -116,26 +116,14 @@
           </span>
         </div>
         <div class="row">
-          <span class="rl">通常回避(上限)</span>
-          <span class="num rv">{pct(profile.normal_evasion_cap)}</span>
-          <span class="rn dim">
-            敵命中P が 回避P+15 以下なら上限、回避P+100 以上で 0%(必中)。命中率は下限 15% / 上限 100%
-          </span>
-        </div>
-        <div class="row">
           <span class="rl">特殊回避(コンボ)</span>
           <span class="num rv">{pct(profile.combo_evasion)}</span>
           <span class="rn dim">(10 + MR/15 + AGI/7.5)%、下限 20% / 上限 63%</span>
         </div>
-        <div class="row">
-          <span class="rl">最終被弾率</span>
-          <span class="num rv">{pct(profile.hit_taken_rate_at_cap)}</span>
-          <span class="rn dim">上限回避時 (1 − 85%) × (1 − 特殊回避)。回避Pが足りなければこれより悪化</span>
-        </div>
       </div>
       <p class="note dim">
-        上限回避に必要な回避Pはコンテンツごとに異なります(wiki 狩り場情報一覧「上限回避P」は現状すべて未記載)。
-        特殊回避は成功すると多段攻撃の全段を回避します(通常回避は 1 段ずつ判定)。
+        通常回避「率」は敵の命中Pが要り、その入力(wiki 狩り場情報一覧「上限回避P」)が全行未記載なので出しません。
+        回避Pを上げるほど当たりにくくなります(上限 85%)。特殊回避は成功すると多段攻撃の全段を回避します。
       </p>
     </div>
   {/if}

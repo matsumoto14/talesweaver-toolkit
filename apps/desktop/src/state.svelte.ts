@@ -7,6 +7,7 @@ import {
   listBuffCatalog,
   listCharacters,
   listContents,
+  listElementSources,
   listEquipmentAbilities,
   listEquipmentCatalog,
   listGameCharacters,
@@ -14,6 +15,7 @@ import {
 } from "./api/commands";
 import type {
   BuffDefinition,
+  ElementSourceDef,
   Content,
   ContentArea,
   ContentEvaluation,
@@ -37,6 +39,8 @@ export const app = $state({
   catalog: [] as BuffDefinition[],
   equipmentCatalog: [] as EquipmentItem[],
   equipmentAbilities: [] as EquipmentAbilityDef[],
+  /** 属性値の供給源カタログ(装備の属性強化以外) */
+  elementSources: [] as ElementSourceDef[],
   selectedId: null as number | null,
   /** キャラ id → コンテンツ判定(保存済みデータ基準) */
   evaluations: {} as Record<number, ContentEvaluation[]>,
@@ -129,13 +133,16 @@ export function selectCharacter(id: number | null): void {
 
 export async function loadAll(): Promise<void> {
   try {
-    const [characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities] = await Promise.all([
+    const [
+      characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities, elementSources,
+    ] = await Promise.all([
       listCharacters(),
       listGameCharacters(),
       listContents(),
       listBuffCatalog(),
       listEquipmentCatalog(),
       listEquipmentAbilities(),
+      listElementSources(),
     ]);
     app.characters = characters;
     app.gameCharacters = gameCharacters;
@@ -143,6 +150,7 @@ export async function loadAll(): Promise<void> {
     app.catalog = catalog;
     app.equipmentCatalog = equipmentCatalog;
     app.equipmentAbilities = equipmentAbilities;
+    app.elementSources = elementSources;
     if (app.selectedId === null && characters.length > 0) app.selectedId = characters[0].id;
     await Promise.all(characters.map(refreshEvaluation));
   } catch (e) {

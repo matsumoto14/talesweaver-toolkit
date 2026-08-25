@@ -112,7 +112,40 @@ export interface StatSources {
   sacred_relic: SacredRelic;
   buffs: BuffSelection;
   adjustments: Adjustments;
+  /** 装備の属性強化以外の属性値の供給源 */
+  elements: ElementSources;
 }
+
+// 属性値の供給源の種別。crates/domain/src/element.rs の ElementSourceId(snake_case)。
+export type ElementSourceId = "pet" | "monster_card" | "rune" | "helm_ability" | "cuffs_ability";
+
+// 供給源ごとに「どの属性に乗せているか」。null = 使っていない。
+export interface ElementSources {
+  pet: Element | null;
+  monster_card: Element | null;
+  rune: Element | null;
+  helm_ability: Element | null;
+  cuffs_ability: Element | null;
+}
+
+// 供給源 1 つ分の定義(表示名と加算値)。crates/domain/src/element.rs の ElementSourceDef。
+export interface ElementSourceDef {
+  id: ElementSourceId;
+  name: string;
+  value: number;
+}
+
+// 属性値の内訳。crates/domain/src/element.rs の ElementPreview。
+export interface ElementPreview {
+  base: ElementValues;
+  equipment: ElementValues;
+  sources: ElementValues;
+  /** 3 つを足して上限 255 で頭打ちにした値 */
+  total: ElementValues;
+}
+
+// 属性ごとの値。crates/domain/src/element.rs の ElementValues。
+export type ElementValues = Record<Element, number>;
 
 export interface StatContribution {
   source: string;
@@ -397,12 +430,8 @@ export interface DefenseProfile {
   composite_cut_rate: number;
   /** 特殊回避(コンボ回避) */
   combo_evasion: number;
-  /** 攻撃タイプ別の回避P。通常回避率は敵の命中Pとの差で決まる */
+  /** 攻撃タイプ別の回避P。通常回避「率」は敵の命中Pが取れないので出さない */
   evasion_point: EvasionPoints;
-  /** 通常回避の上限(0.85)。敵命中P ≦ 回避P + 15 のときこの値 */
-  normal_evasion_cap: number;
-  /** 上限回避時の最終被弾率 (1 − 0.85) × (1 − 特殊回避) */
-  hit_taken_rate_at_cap: number;
   /** 装備物防(基本 + 強化) */
   equipment_physical_defense: number;
   /** 装備魔防(基本 + 強化) */

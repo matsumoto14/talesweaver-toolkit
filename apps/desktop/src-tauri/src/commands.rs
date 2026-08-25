@@ -62,6 +62,26 @@ pub fn list_buff_catalog() -> Vec<BuffDefinition> {
     gamedata::buff_catalog()
 }
 
+/// 属性値の供給源カタログ(装備の属性強化以外。ペット / モンスターカード / ルーン /
+/// 頭アビリティ / カフスアビリティ)。
+#[tauri::command]
+pub fn list_element_sources() -> Vec<domain::ElementSourceDef> {
+    gamedata::element_source_catalog().to_vec()
+}
+
+/// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
+#[tauri::command]
+pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
+    storage::validate_new_character(
+        &character,
+        &gamedata::buff_catalog(),
+        &gamedata::equipment_catalog(),
+        &gamedata::equipment_abilities(),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(element_preview(&character.game_character_id, &character.equipment, &character.stat_sources))
+}
+
 #[tauri::command]
 pub fn list_contents() -> Vec<ContentArea> {
     gamedata::content_areas()
@@ -245,18 +265,32 @@ fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     domain::weapon_added_damage(&weapon.base, &rates, min_multiplier)
 }
 
+/// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
+/// 装備以外の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)。合計は上限 255。
+fn element_preview(
+    game_character_id: &str,
+    equipment: &domain::Equipment,
+    stat_sources: &domain::StatSources,
+) -> domain::ElementPreview {
+    domain::ElementPreview::new(
+        gamedata::element_base(game_character_id),
+        equipment.element_values(),
+        stat_sources.elements.values(gamedata::element_source_catalog()),
+    )
+}
+
 /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
-///
-/// キャラの基礎属性値(gamedata)+ 装備の属性強化の合計で、上限 255。スキルの属性が
-/// wiki から読み取れない(`Skill::element` が `None`)なら 0 = 属性差ボーナスなし。
-fn element_value_for(game_character_id: &str, equipment: &domain::Equipment, skill: &Skill) -> i64 {
+/// スキルの属性が未取込(`Skill::element` が `None`)なら 0 = 属性差ボーナスなし。
+fn element_value_for(
+    game_character_id: &str,
+    equipment: &domain::Equipment,
+    stat_sources: &domain::StatSources,
+    skill: &Skill,
+) -> i64 {
     let Some(element) = skill.element else {
         return 0;
     };
-    gamedata::element_base(game_character_id)
-        .add(equipment.element_values())
-        .clamp_to_max()
-        .get(element)
+    element_preview(game_character_id, equipment, stat_sources).total.get(element)
 }
 
 /// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage / evaluate_contents 共通)。
@@ -287,7 +321,7 @@ fn build_damage_input(
     let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities());
     let equipment_enhanced_totals = equipment.enhanced_totals(core_region);
     let added_damage = weapon_added_damage(&equipment.parts.weapon);
-    let element_value = element_value_for(game_character_id, &equipment, &skill);
+    let element_value = element_value_for(game_character_id, &equipment, stat_sources, &skill);
     Ok(DamageInput::new(
         base_stats.clone(),
         stat_modifiers,
@@ -460,7 +494,12 @@ pub fn evaluate_contents(
                     skill.clone(),
                     enemy.clone(),
                     0,
-                    element_value_for(&character.game_character_id, &character.equipment, skill),
+                    element_value_for(
+                        &character.game_character_id,
+                        &character.equipment,
+                        &character.stat_sources,
+                        skill,
+                    ),
                     character.stat_sources.adjustments.clone(),
                     None,
                 );
