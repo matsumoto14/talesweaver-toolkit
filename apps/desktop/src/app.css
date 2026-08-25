@@ -144,9 +144,11 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   font-size: 11.5px; font-weight: 500;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent); }
+/* 主要なボタンは inset のハイライトを 1 本入れる(§08) */
 .btn.primary {
   background: linear-gradient(180deg, #CCF7FF, #90D7FF);
   border-color: #687287; color: #123047; font-weight: 700;
+  box-shadow: inset 0 1px 0 #fff;
 }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.04); }
 .btn.danger { color: var(--danger); }
