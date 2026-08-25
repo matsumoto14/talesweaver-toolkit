@@ -15,7 +15,7 @@
   } from "../../buffs";
   import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
-  import { EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import { ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
     app, flatContents, payloadOf, selectedCharacter, upsertCharacter,
@@ -714,6 +714,8 @@
                 </span>
                 <span class="sk-meta num dim">
                   ×{skill ? fmtNum(skill.multiplier) : "—"} ・ {skill?.hit_count ?? "—"}段 ・ Cri×{skill ? fmtNum(skill.critical_multiplier) : "—"}
+                  {#if skill?.element}・ {ELEMENT_LABELS[skill.element]}属性{/if}
+                  {#if result}・ 命中P {fmtInt(result.accuracy_point)}{/if}
                 </span>
               </button>
             {/if}

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::awakening::AwakeningCaps;
 use crate::equipment::EquipmentValues;
 use crate::rounding::floor_int;
-use crate::stats::EffectiveStats;
+use crate::stats::{EffectiveStats, StatKind};
 
 /// 装備防御力倍率の初期値(wiki §6: 初期 100%。リンゴの島・ベリネンルミでは常に 100%)。
 /// コートアーマー等による増加は未収録なのでこの値で固定する。
@@ -117,6 +117,50 @@ fn evasion_point(stats: &EffectiveStats, equipment: &EquipmentValues, type_bonus
             + equipment.agility as f64 / EVASION_TYPE_DIVISOR
             + type_bonus,
     )
+}
+
+/// スキル依存種別ごとの命中P補正の係数(wiki 計算式まとめ の依存表「命中P補正」)。
+/// 値は gamedata が持ち、ここは形と評価だけ。ペナルティは最大 2 ステの和(表のいちばん広い行が
+/// `(INT+HACK)/250`)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct AccuracyCorrection {
+    /// 依存ボーナス = `stat(kind) × rate`。ボーナスが無い依存は `None`
+    pub bonus: Option<(StatKind, f64)>,
+    /// 依存ペナルティ = `(stat(primary) + stat(secondary)) / divisor`
+    pub penalty_primary: StatKind,
+    pub penalty_secondary: Option<StatKind>,
+    pub penalty_divisor: f64,
+}
+
+impl AccuracyCorrection {
+    /// 依存ボーナス(切り捨て前)。
+    pub fn bonus_value(&self, stats: &EffectiveStats) -> f64 {
+        self.bonus.map_or(0.0, |(kind, rate)| stats.get(kind) as f64 * rate)
+    }
+
+    /// 依存ペナルティ(切り捨て前)。
+    pub fn penalty_value(&self, stats: &EffectiveStats) -> f64 {
+        let sum = stats.get(self.penalty_primary)
+            + self.penalty_secondary.map_or(0, |k| stats.get(k));
+        sum as f64 / self.penalty_divisor
+    }
+}
+
+/// 命中P(wiki `#AccuracyPoint`)。
+///
+/// `命中P = [(DEX + 装備命中率補正 + スキル命中 + 依存ボーナス − 依存ペナルティ + 命中P増加)
+///          × 命中P割合増加 × 命中P割合減少 + ランダムOP]`
+///
+/// 命中P増加(射手のルーン等のバフ)・割合増加(集中/的中剣)・割合減少(感電/雷電)・ランダムOP は
+/// カタログに無いので中立値。スキル命中は wiki 表記 +15 済みの値を渡す。
+pub fn accuracy_point(
+    stats: &EffectiveStats,
+    correction: &AccuracyCorrection,
+    equipment_accuracy: i64,
+    skill_accuracy: i64,
+) -> i64 {
+    stats.dex + equipment_accuracy + skill_accuracy + floor_int(correction.bonus_value(stats))
+        - floor_int(correction.penalty_value(stats))
 }
 
 /// 通常回避率(wiki `#HitRate` + `#HitRateCap`)。

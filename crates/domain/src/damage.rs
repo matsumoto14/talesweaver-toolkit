@@ -10,6 +10,7 @@ use crate::attack_power::{
 };
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::enemy::Enemy;
+use crate::defense::{accuracy_point, AccuracyCorrection};
 use crate::equipment::{equipment_values_attack, Equipment, EquipmentCoefficients, EquipmentValues};
 use crate::rounding::{floor_int, trunc2};
 use crate::skill::Skill;
@@ -43,6 +44,8 @@ pub struct DamageInput {
     pub equipment_enhanced_totals: EquipmentValues,
     /// 装備攻撃力の係数(wiki: カテゴリA の内訳)。スキル依存種別ごとに gamedata が持つ
     pub equipment_coefficients: EquipmentCoefficients,
+    /// 命中P補正の係数(wiki: 計算式まとめ の依存表)。スキル依存種別ごとに gamedata が持つ
+    pub accuracy_correction: AccuracyCorrection,
     /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
     /// 与ダメージ式の外(A〜Y のいずれにも入らない)。無強化なら 0
     pub weapon_added_damage: i64,
@@ -76,6 +79,7 @@ impl DamageInput {
         equipment_base_totals: EquipmentValues,
         equipment_enhanced_totals: EquipmentValues,
         equipment_coefficients: EquipmentCoefficients,
+        accuracy_correction: AccuracyCorrection,
         weapon_added_damage: i64,
         awakening_rate: f64,
         damage_cap: i64,
@@ -95,6 +99,7 @@ impl DamageInput {
             equipment_base_totals,
             equipment_enhanced_totals,
             equipment_coefficients,
+            accuracy_correction,
             weapon_added_damage,
             skill,
             enemy,
@@ -146,6 +151,8 @@ pub struct DamageResult {
     pub damage_cap: i64,
     /// 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない
     pub capped_loss: DamageTriple,
+    /// 命中P(wiki: 計算式まとめ #AccuracyPoint)。敵の回避Pを 100 上回ると必中
+    pub accuracy_point: i64,
     pub trace: DamageTrace,
 }
 
@@ -327,6 +334,15 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         steps_critical.push(step);
     }
 
+    // 命中P(wiki: 計算式まとめ #AccuracyPoint)。与ダメージ式には入らないが、必中に必要な
+    // 命中P(狩り場情報一覧)と見比べられるように結果に載せる。
+    let accuracy = accuracy_point(
+        &stats,
+        &input.accuracy_correction,
+        input.equipment_base_totals.accuracy + input.equipment_enhanced_totals.accuracy,
+        input.skill.accuracy,
+    );
+
     // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)。
     // 捨てられた分は 0 と区別できるように別で持つ(UI が「上限で捨てた分」を出す)。
     let cap = |value: i64| value.min(input.damage_cap);
@@ -355,6 +371,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         hit_count,
         damage_cap: input.damage_cap,
         capped_loss,
+        accuracy_point: accuracy,
         trace: DamageTrace {
             stats: stat_traces,
             stat_contributions: input.stat_contributions.clone(),
@@ -413,6 +430,13 @@ mod tests {
             equipment_base_totals: EquipmentValues::default(),
             equipment_enhanced_totals: EquipmentValues::default(),
             equipment_coefficients: EquipmentCoefficients::default(),
+            // STAB+HACK 依存(ボーナスなし、ペナルティ (STAB+HACK)/200)
+            accuracy_correction: AccuracyCorrection {
+                bonus: None,
+                penalty_primary: StatKind::Stab,
+                penalty_secondary: Some(StatKind::Hack),
+                penalty_divisor: 200.0,
+            },
             weapon_added_damage: 0,
             // テストは上限に当たらない値を既定にする(上限の挙動は専用テストで見る)
             damage_cap: i64::MAX,
@@ -424,6 +448,9 @@ mod tests {
                 hit_count: 1,
                 critical_multiplier: 2.0,
                 element: Some(crate::element::Element::Water),
+                accuracy: 92,
+                critical_rate: 7,
+                level: 1,
             },
             enemy: Enemy {
                 id: "e".into(),
@@ -447,6 +474,15 @@ mod tests {
     //   min : (1800 + 1 − 990) × {0.99} = 811 × 0.99 = 802.89 → 802
     //   max : (1800 + 117.66 − 990) × 0.99 = 927.66 × 0.99 = 918.3834 → 918
     //   crit: 918.3834 × {2.0 × 1.0} = 1836.7668 → 1836
+    #[test]
+    fn 命中pはdexと装備命中とスキル命中から依存ペナルティを引く() {
+        let mut i = input();
+        i.equipment_base_totals.accuracy = 30;
+        i.equipment_enhanced_totals.accuracy = 20;
+        // DEX 100 + 装備 50 + スキル命中 92 − [(STAB500 + HACK500)/200] = 242 − 5 = 237
+        assert_eq!(calculate_damage(&i).accuracy_point, 237);
+    }
+
     #[test]
     fn ダメージ上限は1段ごとに適用され捨てられた分を残す() {
         let mut i = input();

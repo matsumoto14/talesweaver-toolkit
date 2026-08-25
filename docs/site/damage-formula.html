@@ -616,7 +616,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <p>出典: 計算式まとめ <code>#HitRate</code> / <code>#AccuracyPoint</code> / <code>#EvasionPoint</code> / <code>#HitRateCap</code>、ステータス「命中率/回避率」(取得 2026-08-25)。</p>
 <ul>
 <li><code>命中率 = 命中P − 対象の回避P</code>(パーセントポイント)</li>
-<li><code>命中P = [(DEX + 装備命中率補正 + (スキル命中 + 15) + 依存ボーナス − 依存ペナルティ + 命中P増加) × 命中P割合増加 × 命中P割合減少 + ランダムOP]</code><ul>
+<li><code>命中P = [(DEX + 装備命中率補正 + (スキル命中 + 15) + 依存ボーナス − 依存ペナルティ + 命中P増加) × 命中P割合増加 × 命中P割合減少 + ランダムOP]</code>(実装済み。命中P増加・割合・ランダムOP はカタログに無く中立値)<ul>
 <li>wiki のスキル命中は実値から 15 引いた値が載っているため +15 する</li>
 <li>依存ボーナス/ペナルティは §4 A の依存表(例 STAB 依存: ボーナス <code>STAB×0.1</code> / ペナルティ <code>STAB/100</code>)</li>
 <li>命中P割合増加は集中(+5%)か的中剣(+35%)のどちらか一方、割合減少は感電/雷電(−30%)</li>
@@ -845,8 +845,8 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </tr>
 <tr>
 <td>各キャラのスキルページ</td>
-<td>スキル倍率・段数・Cri倍率・スキル命中/クリティカル率</td>
-<td><strong>未取込</strong>(ボリス 5 件のみ旧リポ由来 <span class="tag warm">仮</span>)</td>
+<td>スキル倍率・段数・Cri倍率・属性・スキル命中・Cri値・SLv</td>
+<td>ボリス 5 件は取込済み(旧リポ値と全件一致)。<strong>他 18 キャラは未取込</strong></td>
 </tr>
 </tbody>
 </table></div>

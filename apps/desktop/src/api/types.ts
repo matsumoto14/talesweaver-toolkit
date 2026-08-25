@@ -23,8 +23,14 @@ export interface Skill {
   multiplier: number;
   hit_count: number;
   critical_multiplier: number;
-  /** スキルの属性。null = wiki の一覧から読み取れない `[仮]`(属性差ボーナスなし) */
+  /** スキルの属性。null = 未取込(属性差ボーナスなし) */
   element: Element | null;
+  /** スキル命中(wiki 表記 +15 済みの実値) */
+  accuracy: number;
+  /** スキルクリティカル率(wiki スキル性能一覧の Cri値) */
+  critical_rate: number;
+  /** スキル Lv(wiki スキル性能一覧の SLv) */
+  level: number;
 }
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
@@ -445,6 +451,8 @@ export interface DamageResult {
   damage_cap: number;
   /** 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない */
   capped_loss: DamageTriple;
+  /** 命中P。敵の回避Pを 100 上回ると必中 */
+  accuracy_point: number;
   trace: DamageTrace;
 }
 

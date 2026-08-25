@@ -16,6 +16,7 @@ use serde::Serialize;
 pub use awakening::{awakening_caps, awakening_rate, AWAKENING_SOURCE};
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use characters::{
+    accuracy_correction,
     attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,
 };
 pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};

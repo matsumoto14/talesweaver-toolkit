@@ -1,6 +1,9 @@
 //! ゲーム内キャラクター(操作キャラ)と、スキル依存種別ごとのステ由来攻撃力係数。
 
-use domain::{AttackCoefficients, EquipmentCoefficients, EquipmentRates, SkillDependency, StatKind};
+use domain::{
+    AccuracyCorrection, AttackCoefficients, EquipmentCoefficients, EquipmentRates, SkillDependency,
+    StatKind,
+};
 use serde::Serialize;
 
 use crate::Source;
@@ -62,6 +65,55 @@ pub fn attack_coefficients(dependency: SkillDependency) -> AttackCoefficients {
         SkillDependency::HackInt => ((Hack, 1.8), (Int, 1.8)),
     };
     AttackCoefficients { primary, secondary }
+}
+
+/// スキル依存種別ごとの命中P補正(wiki 計算式まとめ の依存表「命中P補正(小数点以下切り捨て)」)。
+pub fn accuracy_correction(dependency: SkillDependency) -> AccuracyCorrection {
+    use SkillDependency::*;
+    match dependency {
+        // STAB: ボーナス STAB×0.1 / ペナルティ STAB/100
+        Stab => AccuracyCorrection {
+            bonus: Some((StatKind::Stab, 0.1)),
+            penalty_primary: StatKind::Stab,
+            penalty_secondary: None,
+            penalty_divisor: 100.0,
+        },
+        // HACK: ボーナス HACK×0.06 / ペナルティ HACK/100
+        Hack => AccuracyCorrection {
+            bonus: Some((StatKind::Hack, 0.06)),
+            penalty_primary: StatKind::Hack,
+            penalty_secondary: None,
+            penalty_divisor: 100.0,
+        },
+        // STAB+HACK: ボーナスなし / (STAB+HACK)/200
+        StabHack => AccuracyCorrection {
+            bonus: None,
+            penalty_primary: StatKind::Stab,
+            penalty_secondary: Some(StatKind::Hack),
+            penalty_divisor: 200.0,
+        },
+        // INT+HACK: ボーナスなし / (INT+HACK)/250
+        HackInt => AccuracyCorrection {
+            bonus: None,
+            penalty_primary: StatKind::Int,
+            penalty_secondary: Some(StatKind::Hack),
+            penalty_divisor: 250.0,
+        },
+        // INT: ボーナスなし / INT/100
+        Int => AccuracyCorrection {
+            bonus: None,
+            penalty_primary: StatKind::Int,
+            penalty_secondary: None,
+            penalty_divisor: 100.0,
+        },
+        // MR: ボーナスなし / MR/100
+        Mr => AccuracyCorrection {
+            bonus: None,
+            penalty_primary: StatKind::Mr,
+            penalty_secondary: None,
+            penalty_divisor: 100.0,
+        },
+    }
 }
 
 /// スキル依存種別ごとの装備攻撃力係数(wiki: カテゴリA の内訳「装備攻撃力」)。

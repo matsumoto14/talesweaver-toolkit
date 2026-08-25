@@ -32,7 +32,7 @@ pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
 };
 pub use defense::{
-    defense_profile, hit_taken_rate, normal_evasion, DefenseProfile, EvasionPoints, NORMAL_EVASION_CAP,
+    accuracy_point, defense_profile, AccuracyCorrection, hit_taken_rate, normal_evasion, DefenseProfile, EvasionPoints, NORMAL_EVASION_CAP,
 };
 pub use element::{Element, ElementValues, ELEMENT_VALUE_MAX, EQUIPMENT_ELEMENT_VALUE_MAX};
 pub use enemy::Enemy;
