@@ -1770,7 +1770,7 @@
   }
   .contrib-card.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
   .contrib-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
-  .contrib-value { font-size: 17px; font-weight: 700; }
+  .contrib-value { font-size: 15px; font-weight: 700; }
   .contrib-note { font-size: 9px; line-height: 1.5; }
   .item-search {
     margin-top: 8px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: var(--r-panel);

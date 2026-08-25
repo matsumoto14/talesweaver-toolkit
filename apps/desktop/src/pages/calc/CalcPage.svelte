@@ -1452,7 +1452,7 @@
   .target-trigger:hover, .target-trigger.open { background: var(--bg-rail); border-color: #9FB4D0; }
   .t-line1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .t-chev { flex-shrink: 0; font-size: 8px; color: var(--fg-muted); transition: transform 0.18s; }
+  .t-chev { flex-shrink: 0; font-size: 8.5px; color: var(--fg-muted); transition: transform 0.18s; }
   .t-chev.rot { transform: rotate(180deg); }
   .t-index { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
   .t-line2 { margin-top: 1px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
@@ -1521,7 +1521,7 @@
   .chain .nl { font-size: 9px; letter-spacing: 0.06em; color: var(--fg-muted); white-space: nowrap; }
   .chain .nv { font-weight: 700; color: var(--fg); white-space: nowrap; }
   .chain .node.gate .nv { min-width: 120px; }
-  .chain .node.mid .nv { font-size: 17px; min-width: 68px; }
+  .chain .node.mid .nv { font-size: 15px; min-width: 68px; }
   .chain .node.rate .nv { font-size: 19px; min-width: 68px; }
   .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
   .chain .op { font-size: 12px; color: var(--fg-dim); padding-bottom: 3px; white-space: nowrap; }
@@ -1700,12 +1700,12 @@
   .buff-chip .chip-state {
     margin-left: 5px; padding: 0 5px; border-radius: var(--r-pill);
     background: rgba(255, 255, 255, 0.75); border: 1px solid currentColor;
-    font-size: 8px; font-weight: 700;
+    font-size: 8.5px; font-weight: 700;
   }
   .buff-legend { margin: 7px 0 0; font-size: 9px; line-height: 1.7; }
   .buff-legend .lg {
     display: inline-block; padding: 0 5px; border-radius: var(--r-pill);
-    font-size: 8px; font-weight: 700; border: 1px solid;
+    font-size: 8.5px; font-weight: 700; border: 1px solid;
   }
   .buff-legend .lg.always { background: #CCF7FF; border-color: #687287; color: #123047; }
   .buff-legend .lg.extra { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }

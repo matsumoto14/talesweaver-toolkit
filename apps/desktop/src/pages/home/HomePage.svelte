@@ -581,7 +581,7 @@
   }
   .st {
     width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
-    border-radius: var(--r-pill); font-size: 8px; color: var(--accent);
+    border-radius: var(--r-pill); font-size: 8.5px; color: var(--accent);
   }
   .st:hover:not(:disabled) { background: var(--bg-active); }
   .st-label { font-size: 9px; color: var(--fg-muted); white-space: nowrap; }
@@ -649,7 +649,8 @@
   /* このカード群の親になる大見出し(規格の見出し段) */
   .sel-name { font-size: var(--t-heading); font-weight: var(--w-strong); letter-spacing: 0.02em; color: var(--fg); line-height: 1.25; }
   .sel-dmg { margin-top: 2px; display: flex; align-items: baseline; gap: 7px; }
-  .huge { font-size: 34px; line-height: 1.05; font-weight: 700; }
+  /* 右カラムの選択中は結果の数値の 2 段目(§05: 44 / 40 / 27) */
+  .huge { font-size: 40px; line-height: 1.05; font-weight: 700; }
   .sel-need { margin-top: 4px; font-size: var(--t-label); }
   .sel-skill { margin-top: 4px; font-size: 9.5px; line-height: 1.5; }
   .sel-note {

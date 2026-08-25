@@ -715,7 +715,7 @@
   .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
   .eq-table .n { text-align: right; }
   .clear { margin-top: 4px; }
-  .clear .strong { font-size: 20px; font-weight: 700; }
+  .clear .strong { font-size: 19px; font-weight: 700; }
   .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }
   .delete {
     flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: var(--r-panel);
