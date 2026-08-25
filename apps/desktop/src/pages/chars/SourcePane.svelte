@@ -69,18 +69,9 @@
   const delaySkills = $derived(
     app.actualDelaySkills.filter((d) => d.game_character_id === draft.gameCharacterId),
   );
-  const delayChoice = (id: string) =>
-    draft.statSources.actual_delay_skills.choices.find((c) => c.skill_id === id) ?? null;
   function toggleDelaySkill(id: string, on: boolean) {
-    const rest = draft.statSources.actual_delay_skills.choices.filter((c) => c.skill_id !== id);
-    draft.statSources.actual_delay_skills.choices = on
-      ? [...rest, { skill_id: id, choice_index: 0 }]
-      : rest;
-  }
-  function setDelayChoice(id: string, index: number) {
-    draft.statSources.actual_delay_skills.choices = draft.statSources.actual_delay_skills.choices.map(
-      (c) => (c.skill_id === id ? { ...c, choice_index: index } : c),
-    );
+    const rest = draft.statSources.actual_delay_skills.skill_ids.filter((x) => x !== id);
+    draft.statSources.actual_delay_skills.skill_ids = on ? [...rest, id] : rest;
   }
   /** クリティカル率増加の合計(上限を掛ける前) */
   const criticalRateBonus = $derived(
@@ -91,10 +82,10 @@
 
   /** このキャラのパッシブぶんの中ディレイ減少 %(共通の供給源は含まない) */
   const delaySkillPercent = $derived(
-    draft.statSources.actual_delay_skills.choices.reduce((n, c) => {
-      const def = app.actualDelaySkills.find((d) => d.id === c.skill_id);
-      return n + (def?.percents[c.choice_index] ?? 0);
-    }, 0),
+    draft.statSources.actual_delay_skills.skill_ids.reduce(
+      (n, id) => n + (app.actualDelaySkills.find((d) => d.id === id)?.percent ?? 0),
+      0,
+    ),
   );
   const characterOptions = $derived(app.gameCharacters.map((c) => ({ value: c.id, label: c.name })));
 
@@ -1388,29 +1379,14 @@
           <p class="empty dim">このキャラには中ディレイ減少のパッシブがありません(wiki の表に記載なし)。</p>
         {/if}
         {#each delaySkills as def (def.id)}
-          {@const choice = delayChoice(def.id)}
           <label class="check">
             <input
               type="checkbox"
-              checked={choice !== null}
+              checked={draft.statSources.actual_delay_skills.skill_ids.includes(def.id)}
               onchange={(e) => toggleDelaySkill(def.id, e.currentTarget.checked)}
             />
             <span>{def.name}</span>
-            {#if def.percents.length === 1}
-              <span class="fixed-value dim">−{def.percents[0]}%</span>
-            {:else if choice !== null}
-              <select
-                class="delay-tier"
-                value={String(choice.choice_index)}
-                onchange={(e) => setDelayChoice(def.id, Number(e.currentTarget.value))}
-              >
-                {#each def.percents as p, i (i)}
-                  <option value={String(i)}>−{p}%</option>
-                {/each}
-              </select>
-            {:else}
-              <span class="fixed-value dim">−{def.percents.join(" / −")}%</span>
-            {/if}
+            <span class="fixed-value dim">−{def.percent}%</span>
             {#if def.note}<span class="dim note">{def.note}</span>{/if}
           </label>
         {/each}
@@ -1561,7 +1537,6 @@
     font-size: 9px; letter-spacing: 0.05em; color: #B5443A; border: 1px solid #B5443A;
     border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
   }
-  .delay-tier { font-size: 10px; padding: 1px 4px; }
   .fixed-value { font-size: 11px; font-weight: 500; }
 
   /* 装備ドリルダウン: 部位一覧 */

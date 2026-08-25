@@ -86,73 +86,57 @@ pub struct ActualDelaySkillDef {
     pub name: &'static str,
     /// このスキルを持つキャラ(`GameCharacter::id`)
     pub game_character_id: &'static str,
-    /// 選べる減少 %(1 段だけのパッシブは 1 要素。ミラのスパートは −25/−15/−5/−0 の 4 段)
-    pub percents: &'static [f64],
+    /// 中ディレイ減少 %(習得していれば常にこの値)
+    pub percent: f64,
     pub note: &'static str,
 }
 
 /// カタログ。呼び出しは `&ActualDelaySkillCatalog` = `&[ActualDelaySkillDef]`。
 pub type ActualDelaySkillCatalog = [ActualDelaySkillDef];
 
-/// キャラのパッシブ 1 件の選択。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ActualDelaySkillChoice {
-    pub skill_id: String,
-    /// `ActualDelaySkillDef::percents` のインデックス。1 段だけのパッシブは 0
-    #[serde(default)]
-    pub choice_index: usize,
-}
-
-/// キャラのパッシブによる中ディレイ減少の選択一式。
+/// キャラのパッシブによる中ディレイ減少の選択一式(習得している `ActualDelaySkillDef::id`)。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct ActualDelaySkills {
     #[serde(default)]
-    pub choices: Vec<ActualDelaySkillChoice>,
+    pub skill_ids: Vec<String>,
 }
 
 impl ActualDelaySkills {
-    /// 選択を供給源の内訳に変換する。カタログに無い id・範囲外のインデックスは
-    /// `validate` で弾いている前提で無視する。
+    /// 選択を供給源の内訳に変換する。カタログに無い id は `validate` で弾いている前提で無視する。
     pub fn contributions(
         &self,
         catalog: &ActualDelaySkillCatalog,
     ) -> Vec<ActualDelayContribution> {
-        self.choices
+        self.skill_ids
             .iter()
-            .filter_map(|choice| {
-                let def = catalog.iter().find(|d| d.id == choice.skill_id.as_str())?;
-                let percent = *def.percents.get(choice.choice_index)?;
-                (percent != 0.0).then(|| ActualDelayContribution {
-                    source: def.name.to_string(),
-                    rate: percent / 100.0,
-                })
+            .filter_map(|id| catalog.iter().find(|d| d.id == id.as_str()))
+            .map(|def| ActualDelayContribution {
+                source: def.name.to_string(),
+                rate: def.percent / 100.0,
             })
             .collect()
     }
 
-    /// カタログ参照・キャラ一致・インデックス範囲・重複を検証する。
+    /// カタログ参照・キャラ一致・重複を検証する。
     pub fn validate(
         &self,
         catalog: &ActualDelaySkillCatalog,
         game_character_id: &str,
     ) -> Result<(), ActualDelayError> {
-        let mut seen: Vec<&str> = Vec::with_capacity(self.choices.len());
-        for choice in &self.choices {
+        let mut seen: Vec<&str> = Vec::with_capacity(self.skill_ids.len());
+        for id in &self.skill_ids {
             let def = catalog
                 .iter()
-                .find(|d| d.id == choice.skill_id.as_str())
-                .ok_or_else(|| ActualDelayError::UnknownSkill { id: choice.skill_id.clone() })?;
+                .find(|d| d.id == id.as_str())
+                .ok_or_else(|| ActualDelayError::UnknownSkill { id: id.clone() })?;
             if def.game_character_id != game_character_id {
                 return Err(ActualDelayError::ForeignCharacterSkill {
-                    id: choice.skill_id.clone(),
+                    id: id.clone(),
                     game_character_id: game_character_id.to_string(),
                 });
             }
-            if choice.choice_index >= def.percents.len() {
-                return Err(ActualDelayError::ChoiceOutOfRange { id: choice.skill_id.clone() });
-            }
             if seen.contains(&def.id) {
-                return Err(ActualDelayError::Duplicated { id: choice.skill_id.clone() });
+                return Err(ActualDelayError::Duplicated { id: id.clone() });
             }
             seen.push(def.id);
         }
@@ -166,8 +150,6 @@ pub enum ActualDelayError {
     UnknownSkill { id: String },
     #[error("中ディレイ減少スキル '{id}' はこのキャラ(game_character_id={game_character_id})のスキルではありません")]
     ForeignCharacterSkill { id: String, game_character_id: String },
-    #[error("中ディレイ減少スキル '{id}' の選択肢が範囲外です")]
-    ChoiceOutOfRange { id: String },
     #[error("中ディレイ減少スキル '{id}' が重複して選択されています")]
     Duplicated { id: String },
 }
@@ -227,75 +209,49 @@ mod tests {
     const CATALOG: &[ActualDelaySkillDef] = &[
         ActualDelaySkillDef {
             id: "mira_spurt",
-            name: "スパート",
+            name: "極・スパート【グッドフェイス】",
             game_character_id: "mira",
-            percents: &[25.0, 15.0, 5.0, 0.0],
+            percent: 5.0,
             note: "",
         },
         ActualDelaySkillDef {
             id: "boris_sword_priest",
             name: "剣の司祭",
             game_character_id: "boris",
-            percents: &[5.0],
+            percent: 5.0,
             note: "",
         },
     ];
 
     #[test]
-    fn 選択は内訳になり0パーセントは出さない() {
-        let s = ActualDelaySkills {
-            choices: vec![ActualDelaySkillChoice {
-                skill_id: "mira_spurt".into(),
-                choice_index: 0,
-            }],
-        };
+    fn 選択は供給源の内訳になる() {
+        let s = ActualDelaySkills { skill_ids: vec!["mira_spurt".into()] };
         let contributions = s.contributions(CATALOG);
         assert_eq!(contributions.len(), 1);
-        assert!((contributions[0].rate - 0.25).abs() < 1e-12);
+        assert!((contributions[0].rate - 0.05).abs() < 1e-12);
 
-        // −0% の段は内訳に出さない
-        let s = ActualDelaySkills {
-            choices: vec![ActualDelaySkillChoice {
-                skill_id: "mira_spurt".into(),
-                choice_index: 3,
-            }],
-        };
-        assert!(s.contributions(CATALOG).is_empty());
+        // カタログに無い id は無視する(保存時に validate で弾いている)
+        let unknown = ActualDelaySkills { skill_ids: vec!["nope".into()] };
+        assert!(unknown.contributions(CATALOG).is_empty());
     }
 
     #[test]
-    fn 他キャラのスキルと未知idと範囲外と重複を弾く() {
-        let foreign = ActualDelaySkills {
-            choices: vec![ActualDelaySkillChoice { skill_id: "mira_spurt".into(), choice_index: 0 }],
-        };
-        assert!(foreign.validate(CATALOG, "mira").is_ok());
+    fn 他キャラのスキルと未知idと重複を弾く() {
+        let mine = ActualDelaySkills { skill_ids: vec!["mira_spurt".into()] };
+        assert!(mine.validate(CATALOG, "mira").is_ok());
         assert!(matches!(
-            foreign.validate(CATALOG, "boris"),
+            mine.validate(CATALOG, "boris"),
             Err(ActualDelayError::ForeignCharacterSkill { .. })
         ));
 
-        let unknown = ActualDelaySkills {
-            choices: vec![ActualDelaySkillChoice { skill_id: "nope".into(), choice_index: 0 }],
-        };
+        let unknown = ActualDelaySkills { skill_ids: vec!["nope".into()] };
         assert!(matches!(
             unknown.validate(CATALOG, "mira"),
             Err(ActualDelayError::UnknownSkill { .. })
         ));
 
-        let out_of_range = ActualDelaySkills {
-            choices: vec![ActualDelaySkillChoice { skill_id: "mira_spurt".into(), choice_index: 4 }],
-        };
-        assert!(matches!(
-            out_of_range.validate(CATALOG, "mira"),
-            Err(ActualDelayError::ChoiceOutOfRange { .. })
-        ));
-
-        let duplicated = ActualDelaySkills {
-            choices: vec![
-                ActualDelaySkillChoice { skill_id: "mira_spurt".into(), choice_index: 0 },
-                ActualDelaySkillChoice { skill_id: "mira_spurt".into(), choice_index: 1 },
-            ],
-        };
+        let duplicated =
+            ActualDelaySkills { skill_ids: vec!["mira_spurt".into(), "mira_spurt".into()] };
         assert!(matches!(
             duplicated.validate(CATALOG, "mira"),
             Err(ActualDelayError::Duplicated { .. })

@@ -166,19 +166,14 @@ export interface ActualDelaySkillDef {
   id: string;
   name: string;
   game_character_id: string;
-  /** 選べる減少 %(1 段だけのパッシブは 1 要素) */
-  percents: number[];
+  /** 中ディレイ減少 %(習得していれば常にこの値) */
+  percent: number;
   note: string;
 }
 
-export interface ActualDelaySkillChoice {
-  skill_id: string;
-  /** percents のインデックス */
-  choice_index: number;
-}
-
 export interface ActualDelaySkills {
-  choices: ActualDelaySkillChoice[];
+  /** 習得している ActualDelaySkillDef の id */
+  skill_ids: string[];
 }
 
 // crates/domain/src/actual_delay.rs の ActualDelayContribution / ActualDelay。

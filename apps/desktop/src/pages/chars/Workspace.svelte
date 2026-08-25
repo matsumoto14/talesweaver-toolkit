@@ -160,13 +160,13 @@
   // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラ固有のパッシブだけ。
   // 共通の供給源(フルスロットル / カフスの RO / シエナのオーラ)はそれぞれの補正源で設定する。
   const delaySummary = $derived.by(() => {
-    const choices = draft.statSources.actual_delay_skills.choices;
-    if (choices.length === 0) return NEUTRAL;
-    const percent = choices.reduce((n, c) => {
-      const def = app.actualDelaySkills.find((d) => d.id === c.skill_id);
-      return n + (def?.percents[c.choice_index] ?? 0);
-    }, 0);
-    return `${choices.length} 件 ・ 合計 −${percent}%`;
+    const ids = draft.statSources.actual_delay_skills.skill_ids;
+    if (ids.length === 0) return NEUTRAL;
+    const percent = ids.reduce(
+      (n, id) => n + (app.actualDelaySkills.find((d) => d.id === id)?.percent ?? 0),
+      0,
+    );
+    return `${ids.length} 件 ・ 合計 −${percent}%`;
   });
 
   // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる

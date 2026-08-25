@@ -3,6 +3,11 @@
 //! 出典: wiki「ステータス」の `中ディレイ倍率B (初期値:100%、下限30%)` の表(取得 2026-08-25)。
 //! 同じ表にある共通の供給源(フルスロットル / カフスのランダムオプション / シエナのオーラ)は
 //! それぞれ `UltimateSkills` / `RandomOptionTotals` / `SienaAura` から入るので、ここには入れない。
+//!
+//! ミラの「極・スパート」は素のままだと **25% から 9.6 秒かけて 0% まで減衰**するので
+//! 定常値として扱えない(wiki Skill/ミラ #Spurt)。マスタリー【グッドフェイス】を取ると
+//! **中ディレイ低下率が 5% に固定**される(移動速度増加が消える代わりに持続 5 分)ので、
+//! **グッドフェイス前提の 5% 固定**として 1 件だけ収録する(ユーザー確定 2026-08-25)。
 
 use domain::ActualDelaySkillDef;
 
@@ -15,72 +20,64 @@ pub const ACTUAL_DELAY_SKILLS_SOURCE: Source = Source {
            カフスのランダムオプション / シエナのオーラ)は別経路で入る",
 };
 
-/// 1 段だけのパッシブはすべて −5%(wiki の表)。
-const FIVE: &[f64] = &[5.0];
+/// wiki の表はすべて −5%。
+const FIVE: f64 = 5.0;
 
 const ACTUAL_DELAY_SKILLS: &[ActualDelaySkillDef] = &[
     ActualDelaySkillDef {
         id: "boris_sword_priest",
         name: "剣の司祭",
         game_character_id: "boris",
-        percents: FIVE,
+        percent: FIVE,
         note: "パッシブ",
     },
     ActualDelaySkillDef {
         id: "boris_mastery_issen",
         name: "マスタリー【一閃】",
         game_character_id: "boris",
-        percents: FIVE,
+        percent: FIVE,
         note: "マスタリー",
     },
     ActualDelaySkillDef {
         id: "ispin_rivalry",
         name: "ライバルリー",
         game_character_id: "ispin",
-        percents: FIVE,
+        percent: FIVE,
         note: "パッシブ",
     },
     ActualDelaySkillDef {
         id: "maximin_clumsy_pair",
         name: "ドタバタペア",
         game_character_id: "maximin",
-        percents: FIVE,
+        percent: FIVE,
         note: "パッシブ",
     },
     ActualDelaySkillDef {
         id: "mira_spurt",
-        name: "スパート",
+        name: "極・スパート【グッドフェイス】",
         game_character_id: "mira",
-        // wiki の表記は `-25%/-15%/-5%/-0%`
-        percents: &[25.0, 15.0, 5.0, 0.0],
-        note: "パッシブ。段階で減少値が変わる",
-    },
-    ActualDelaySkillDef {
-        id: "mira_mastery_good_face",
-        name: "マスタリー【グッドフェイス】",
-        game_character_id: "mira",
-        percents: FIVE,
-        note: "マスタリー(スパートとは別枠で加算)",
+        percent: FIVE,
+        note: "マスタリー【グッドフェイス】前提(素は 25% から 9.6 秒で 0% まで減衰する)",
     },
     ActualDelaySkillDef {
         id: "chloe_rivalry",
         name: "ライバルリー",
         game_character_id: "chloe",
-        percents: FIVE,
+        percent: FIVE,
         note: "パッシブ",
     },
     ActualDelaySkillDef {
         id: "anais_loki_specialization",
         name: "ロキ特化",
         game_character_id: "anais",
-        percents: FIVE,
+        percent: FIVE,
         note: "パッシブ",
     },
     ActualDelaySkillDef {
         id: "isolet_corona_gale",
         name: "コロナゲイル",
         game_character_id: "isolet",
-        percents: FIVE,
+        percent: FIVE,
         note: "パッシブ",
     },
 ];
@@ -95,12 +92,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wikiの表と同じ9件で_id_は一意() {
-        assert_eq!(ACTUAL_DELAY_SKILLS.len(), 9);
+    fn 収録は8件で_id_は一意() {
+        assert_eq!(ACTUAL_DELAY_SKILLS.len(), 8);
         let mut ids: Vec<&str> = ACTUAL_DELAY_SKILLS.iter().map(|d| d.id).collect();
         ids.sort_unstable();
         ids.dedup();
-        assert_eq!(ids.len(), 9);
+        assert_eq!(ids.len(), 8);
     }
 
     #[test]
@@ -110,20 +107,18 @@ mod tests {
         }
     }
 
+    /// wiki ステータス「中ディレイ倍率B」はキャラ固有ぶんがすべて −5%。
+    /// ミラの極・スパートも【グッドフェイス】前提の 5% 固定として収録している。
     #[test]
-    fn ミラだけ段階選択で他は5パーセント1段() {
+    fn 全件5パーセントでミラはスパート1件だけ() {
         for d in ACTUAL_DELAY_SKILLS {
-            if d.id == "mira_spurt" {
-                assert_eq!(d.percents, [25.0, 15.0, 5.0, 0.0]);
-            } else {
-                assert_eq!(d.percents, [5.0], "{}", d.id);
-            }
+            assert_eq!(d.percent, 5.0, "{}", d.id);
         }
         let mira: Vec<&str> = ACTUAL_DELAY_SKILLS
             .iter()
             .filter(|d| d.game_character_id == "mira")
             .map(|d| d.id)
             .collect();
-        assert_eq!(mira, ["mira_spurt", "mira_mastery_good_face"]);
+        assert_eq!(mira, ["mira_spurt"]);
     }
 }

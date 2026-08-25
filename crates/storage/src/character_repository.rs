@@ -1104,14 +1104,14 @@ mod tests {
                 id: "boris_sword_priest",
                 name: "剣の司祭",
                 game_character_id: "boris",
-                percents: &[5.0],
+                percent: 5.0,
                 note: "",
             },
             domain::ActualDelaySkillDef {
                 id: "mira_spurt",
-                name: "スパート",
+                name: "極・スパート【グッドフェイス】",
                 game_character_id: "mira",
-                percents: &[25.0, 15.0, 5.0, 0.0],
+                percent: 5.0,
                 note: "",
             },
         ]
@@ -1122,23 +1122,15 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let catalog = test_actual_delay_skills();
         let mut c = new_character("x"); // ボリス
-        c.stat_sources.actual_delay_skills = domain::ActualDelaySkills {
-            choices: vec![domain::ActualDelaySkillChoice {
-                skill_id: "mira_spurt".to_string(),
-                choice_index: 0,
-            }],
-        };
+        c.stat_sources.actual_delay_skills =
+            domain::ActualDelaySkills { skill_ids: vec!["mira_spurt".to_string()] };
         assert!(matches!(
             repo.create(&c, &[], &[], &[], &[], &[], &catalog),
             Err(StorageError::InvalidValue(_))
         ));
 
-        c.stat_sources.actual_delay_skills = domain::ActualDelaySkills {
-            choices: vec![domain::ActualDelaySkillChoice {
-                skill_id: "boris_sword_priest".to_string(),
-                choice_index: 0,
-            }],
-        };
+        c.stat_sources.actual_delay_skills =
+            domain::ActualDelaySkills { skill_ids: vec!["boris_sword_priest".to_string()] };
         let created = repo.create(&c, &[], &[], &[], &[], &[], &catalog).unwrap();
         let loaded = repo.get(created.id).unwrap();
         assert_eq!(loaded.stat_sources.actual_delay_skills, c.stat_sources.actual_delay_skills);
