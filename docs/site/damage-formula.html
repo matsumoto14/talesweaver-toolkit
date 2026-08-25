@@ -154,9 +154,10 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li><a href="#9">9. クリティカル率</a></li>
 <li><a href="#10">10. 覚醒・エタの意志で開放される上限</a></li>
 <li><a href="#11">11. 敵データ(狩り場情報一覧)</a></li>
-<li><a href="#12">12. 実装への示唆</a></li>
-<li><a href="#13">13. 参照ページの取込状況</a></li>
-<li><a href="#_1">取得メモ</a></li>
+<li><a href="#12">12. 中ディレイ(スキルの発動間隔)</a></li>
+<li><a href="#13">13. 実装への示唆</a></li>
+<li><a href="#14">14. 参照ページの取込状況</a></li>
+<li><a href="#_2">取得メモ</a></li>
 </ul>
 </nav>
     
@@ -219,6 +220,142 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>レイヤー別バフ一覧(常用バフ 16 件): wiki「ステータス」#jc16a054。カタログの実装は <code>crates/gamedata/src/buffs.rs</code>(型は <code>domain::stat_sources</code>)</li>
 <li>キャラスキル(自身/味方のステ上昇、9 件、<code>BuffGroup::CharacterSkill</code>/<code>AllySkill</code>)の一覧も同じ <code>crates/gamedata/src/buffs.rs</code> に置く。出典は各キャラの wiki <code>Skill/&lt;キャラ&gt;</code> ページ(<a href="../claude/goals/2026-08-21-character-screen-v2.md">docs/claude/goals/2026-08-21-character-screen-v2.md</a>「wiki 調査結果」参照。層の一部は <span class="tag warm">仮</span>)</li>
 </ul>
+<h3 id="_1">固定値層の供給源(抜粋)</h3>
+<p>出典: ステータス「固定値増加/減少」(取得 2026-08-25)。倍率A の<strong>前</strong>に足される層。</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>名称</th>
+<th>値</th>
+<th>実装</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ペット S スキル</td>
+<td>+20〜40(真は 60 まで)</td>
+<td>✅ <code>PetSkills</code></td>
+</tr>
+<tr>
+<td>ルーンスキル</td>
+<td>Lv ぶん</td>
+<td>✅ <code>RuneLevels</code></td>
+</tr>
+<tr>
+<td><strong>モンスターカード(カード装着)</strong></td>
+<td><strong>+0〜70</strong></td>
+<td>✅ <code>MonsterCards</code>(2026-08-25 追加)</td>
+</tr>
+<tr>
+<td>クラブ効果</td>
+<td>+1〜7</td>
+<td>✅ バフカタログ(<strong>上限の +7 固定</strong>で持つ。ユーザー決定 2026-08-25)</td>
+</tr>
+<tr>
+<td>クラブSエフェクト</td>
+<td>+20</td>
+<td>✅ バフカタログ(クラブ効果とは別バフで同時に掛けられる)</td>
+</tr>
+<tr>
+<td>祝福のポーション / イザベルの秘法(固定)等</td>
+<td>+20〜100</td>
+<td>✅ バフカタログ</td>
+</tr>
+</tbody>
+</table></div>
+<p>※ クラウン(+0〜300)と神鳥の聖物(段階×10)は<strong>最終固定値層</strong>なので別枠。</p>
+<h3 id="b">能力値倍率B の供給源</h3>
+<p>出典: ステータス「能力値倍率B (初期値0% 下限-30%)」/ Skill/共通「能力解放系列」(取得 2026-08-25)。</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>名称</th>
+<th>倍率B</th>
+<th>実装</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>アンリーシュ(能力解放)</td>
+<td>+1〜20%</td>
+<td>✅ <code>CommonSkills::unleash</code>(2 枠)</td>
+</tr>
+<tr>
+<td>イスピン エンカレッジ / ロアミニ ア・プチ / パウアトゥン 等</td>
+<td>+10%</td>
+<td>未収録(キャラスキル)</td>
+</tr>
+<tr>
+<td>ブレイクアーマー・カース・ペンジュラム 等の減少</td>
+<td>−1〜25%</td>
+<td>未収録(敵にかけるデバフ)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>アンリーシュ(能力解放)</strong>は共通スキル「アンリーシュ」で<strong>選んだステを 2 つまで</strong>解放するもの。
+<code>バフ等含むステータス値 × 強化倍率[%]</code> = 倍率B そのもので、Lv1〜10 =
+<strong>+1 / +2 / +3 / +4 / +5 / +8 / +11 / +14 / +17 / +20%</strong>。
+<strong>Lv6 以降は共通スキル「レインフォース」(Lv1〜5)の LvUp が前提</strong>(オーグメントと同じ形)。</p>
+<p>ユーザーの実測(2026-08-25。基本能力値 506 ・ 最終固定値 479)と 1 の位まで一致する:</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>Lv</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+<th>8</th>
+<th>9</th>
+<th>10</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>倍率B</td>
+<td>+1%</td>
+<td>+2%</td>
+<td>+3%</td>
+<td>+4%</td>
+<td>+5%</td>
+<td>+8%</td>
+<td>+11%</td>
+<td>+14%</td>
+<td>+17%</td>
+<td>+20%</td>
+</tr>
+<tr>
+<td><code>[506 × 倍率]</code></td>
+<td>5</td>
+<td>10</td>
+<td>15</td>
+<td>20</td>
+<td>25</td>
+<td>40</td>
+<td>55</td>
+<td>70</td>
+<td>86</td>
+<td>101</td>
+</tr>
+<tr>
+<td>実測の最終能力値</td>
+<td>990</td>
+<td>995</td>
+<td>1000</td>
+<td>1005</td>
+<td>1010</td>
+<td>1025</td>
+<td>1040</td>
+<td>1055</td>
+<td>1071</td>
+<td>1086</td>
+</tr>
+</tbody>
+</table></div>
+<p>Lv9 だけ前 Lv からの差が +16 になるのは <code>[506 × 0.17] = [86.02] = 86</code> の切捨てによるもの。</p>
 <h2 id="3">3. 与ダメージ式(核心)</h2>
 <pre class="formula"><code>与ダメージ = [ ( ( MAX( (A + B − C) * {D*E1 + E2} * {F*G} * H * I * J * New1 + K, K )
                   * L * V1 + M )
@@ -713,7 +850,22 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <ul>
 <li>下限 0% / 上限 100%(余剰は意味なし)。クリティカル率増加は上限 +100%</li>
 <li>ペット会心 = ×1.1。vsモンスター/プレイヤー表記のものは上限の対象外</li>
-<li><strong>未実装</strong>。式に要る入力のうち、対象のAGI・対象のクリティカル被撃率(狩り場情報一覧。多くの行が <code>?</code>)と<strong>スキルクリティカル率</strong>(スキルデータに無い)が揃わない。装備クリティカル補正は段階2 で入った</li>
+<li>実装済み(<code>crates/domain/src/critical_rate.rs</code>)。<strong>対象のAGI と 対象のクリティカル被撃率が両方そろっている敵</strong>でだけ出す</li>
+<li>狩り場情報一覧は多くの行が <code>?</code>。被撃率は −250〜−930% と支配的なので、片方だけで出すと桁違いに外れる</li>
+<li>値が入っているのは 11 体(オーディン / エクリプス 1・2・討伐戦 / 異界の峡谷 部隊長 / 最後の決戦3 /
+    アフェティリア(N) / セリニアコス(H) / キシニク(H) / レリックの聖域20 / レイティアH)。
+    AGI だけの敵(アビスヘル 等)は AGI を持つが率は出さない</li>
+<li>スキルの Cri値(<code>Skill::critical_rate</code>)は S5 で収録済み。wiki が <code>-</code> の 28 件では出さない</li>
+<li><strong>クリティカル率増加</strong>(上限 +100%)は値が確定している 3 件だけ収録: 極のルーン +20 / 設計者の研究室 +30 / 致命打 +100。
+    値が <code>n</code> の「バフ」は<strong>旧仕様なので不要</strong>(ユーザー確定 2026-08-25)</li>
+<li><strong>ペット会心(×1.1)とシエナのオーラは AGI 由来の項に掛かる乗数</strong>で、加算項ではない。
+    シエナのオーラの追加オプション「クリティカル確率」(1 部位 0〜10%)を収録済み。
+    wiki は「同一名称の効果同士で加算されるかどうかは要検証」としているが、他の追加オプションと
+    同じく部位ぶん加算する <span class="tag warm">仮</span></li>
+<li>被撃率B(対人のみ)・最終クリティカル率増加(wiki 自身が「エクリプス+50%?」と不確か)は未収録(中立値)</li>
+<li>敵の値は「約」「推定値」付きのコミュニティ実測なので <span class="tag warm">仮</span></li>
+<li><strong>エクリプスより下の低レベル帯のクリティカルは考慮しない</strong>(ユーザー決定 2026-08-25)。
+    wiki が <code>?</code> の行はそのまま未収録でよい</li>
 <li>クリティカル率自体は与ダメージ式に入らない(入るのは F: Cri倍率 と G: クリティカルダメージ増加)</li>
 </ul>
 <h2 id="10">10. 覚醒・エタの意志で開放される上限</h2>
@@ -771,7 +923,9 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </table></div>
 <ul>
 <li>エタの意志 Lv1〜100 で「最大ダメージ / 最大HP / 最大防御力 / 最大ステータス」が伸びる(Lv100 = 29,500,000 / 4,100,000 / 24,000 / 2,400)</li>
-<li><strong>最終能力値の上限 2,400</strong> はエタの意志 Lv100 の「最大ステータス開放」。素の上限は 1,500(ステータス ページ)</li>
+<li><strong>最終能力値の上限 2,400</strong> はエタの意志 Lv100 の「最大ステータス開放」。素の上限は 1,500(ステータス ページ)。
+  実装済み(<code>effective_stat</code> が <code>cap</code> を受け取る)。上限に当たった分は <code>StatTrace::capped_loss</code> に残す。
+  <strong>調整の「固定(pin)」は上限のあとに適用する</strong>(実測値をそのまま入れるための例外操作なので上限で削らない)</li>
 <li>防御力は上限に届いたあと頭打ちになり、そこから先の軽減はカット率 J が担う(§6)</li>
 </ul>
 <h2 id="11">11. 敵データ(狩り場情報一覧)</h2>
@@ -821,12 +975,12 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>敵AGI</td>
 <td>敵の回避P <code>[15 + AGI×1.2]</code> とクリティカル率に効く</td>
-<td>未消費</td>
+<td><code>Enemy::agi</code>(§9。19 体。<code>?</code> の行は <code>None</code>)</td>
 </tr>
 <tr>
 <td>クリティカル被撃率</td>
 <td>AGI とは別に加算</td>
-<td>未消費(クリティカル率自体を出していない)</td>
+<td><code>Enemy::critical_taken_rate</code>(§9。11 体。<code>?</code> の行は <code>None</code>)</td>
 </tr>
 <tr>
 <td>被ダメージ倍率 I / II / XXX</td>
@@ -845,7 +999,77 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>武器ダメージ無効(旧リポ <code>weaponTerm=0</code>。キマイラ)は wiki 狩り場情報一覧に該当する列が無く未モデル <span class="tag warm">仮</span></li>
 <li>wiki にしか無くデータが揃っている敵(空虚の領域 防76800 / カット率A -30% / 被害減少6500 / カット率B -40%、次元の隙間 防11850 / -77.5%、ヴェスティージ一般 -75% 被害減少なし、プシーキーの虚像 防1350 / -64% など)は未収録。収録するにはコンテンツ側の追加も要るので別 goal</li>
 </ul>
-<h2 id="12">12. 実装への示唆</h2>
+<h2 id="12">12. 中ディレイ(スキルの発動間隔)</h2>
+<p>出典: 計算式まとめ <code>#ActualDelay</code> / ステータス「中ディレイ倍率A / 倍率B」/ 各キャラの
+スキル性能一覧「動作」列(取得 2026-08-25)。</p>
+<pre><code>中ディレイ = 基本中ディレイ × (1 − 中ディレイ減少値) × (2 コンボ以上なら 0.5)   (下限 0.3s)
+</code></pre>
+<ul>
+<li><strong>基本中ディレイ</strong>は wiki スキル性能一覧の「動作」列。303 件すべて取り込み済み(<code>Skill::base_actual_delay</code>)</li>
+<li><code>A/B</code> 表記(イェフネンのパイク系)は条件付き([加速])なので<strong>基本値の A</strong> を採る</li>
+<li><code>(固定)</code> 付き(ティチエル 極・ギガブレイズ / クロエ 極・メテオストライク)は<strong>中ディレイ減少が効かない</strong></li>
+<li>秒として読めない 1 件(ティチエル 極・スパークリングカイト。wiki 表記が <code>0</code>)は <code>None</code> = 中ディレイ・DPS を出さない</li>
+<li>チャネリングスキル(区分 <code>続</code>)の「動作」はチャネリング全体の秒数(例: 極・連撃 10s)。
+    2025/10/29 から<strong>全てのチャネリングスキルに中ディレイ減少が適用される</strong>(コンボボーナス除く)</li>
+<li><strong>中ディレイ減少値</strong>(= 倍率B の減少分)は<strong>上限 70%</strong>(倍率B の下限 30%)。供給源(ステータス「中ディレイ倍率B」の表):</li>
+</ul>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>供給源</th>
+<th>減少</th>
+<th>実装</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>極限スキル フルスロットル</td>
+<td>−25〜−45%</td>
+<td>✅ <code>UltimateSkills::actual_delay_reduction</code></td>
+</tr>
+<tr>
+<td>カフス(盾+)のランダムオプション</td>
+<td>−1〜−3%</td>
+<td>✅ <code>RandomOptionEffect::ActualDelayReduction</code></td>
+</tr>
+<tr>
+<td>シエナのオーラ 追加オプション</td>
+<td>−x%(1 部位 0〜2%)</td>
+<td>✅ <code>Equipment::siena_actual_delay_reduction</code></td>
+</tr>
+<tr>
+<td>キャラのパッシブ・マスタリー</td>
+<td>−5% ずつ(ミラ スパートのみ −25/−15/−5/−0)</td>
+<td>✅ <code>ActualDelaySkills</code>(9 件)</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>コンボボーナス</strong>(2 コンボ以上で ×0.5)は<strong>倍率A</strong> で、減少値の上限 70% の対象外</li>
+</ul>
+<h3 id="dps1">DPS(1 秒あたりの火力)</h3>
+<p><code>DPS = 合計ダメージ × 60 秒あたりのスキル回数 ÷ 60</code>。回数は<strong>実測表</strong>から引く。</p>
+<p>wiki <code>#ActualDelay</code> 自身が「中ディレイ減少値を特定の値まで上げると、スキルの発動頻度が急激に変化する
+場合がある(丸め処理や通信頻度、入力間隔の都合)」と書いているとおり、実際の発動回数は <code>60 / 中ディレイ</code>
+にならない(詠唱・入力の overhead で <strong>3〜14% 少ない</strong>)。式より実測のほうが正確なので実測表を正とする。</p>
+<ul>
+<li>出典: ユーザー提供の計測表「260702 테섭 허수아비 기준」(テスト鯖の訓練用かかし基準、2026-08-25 提供。
+  原本は <code>docs/reference-skill-uses-table.png</code>)</li>
+<li>行 = <strong>総中ディレイ減少 %</strong>(48 / 50 / … / 64 / 69 / 70)、列 = <strong>基本中ディレイ</strong>(0.8 / 1 / 1.2 / 1.4 / 1.6s)</li>
+<li>元表の行は「フルスロットル −45% + カフスのランダムオプション −3% = <strong>48%</strong> への積み増し %」表記。
+    <code>그외 캐릭터 16%</code> = シエナのオーラ 2%×8 部位、<code>밀라・비호・이솔렛 21%</code> = + パッシブ 5%、
+    <code>보리스 26%</code> = + 剣の司祭 5% + 一閃 5%</li>
+<li><code>보리스 26% (실적용22%)</code> は 48 + 26 = 74% が<strong>上限 70% で頭打ち</strong>になった結果で、
+    実装の減少値上限 70% と一致する(表の裏取りになっている)</li>
+<li>格子の<strong>内側は 2 次元の線形補間</strong>、<strong>外側(総減少 48% 未満・基本中ディレイ 0.8s 未満 / 1.6s 超)は
+  <code>60 / 中ディレイ</code> の式</strong>にフォールバックし、どちらで出したか画面に明示する</li>
+<li>実測表は<strong>コンボボーナス無し・中ディレイ減少が効くスキル</strong>の計測なので、
+  2 コンボ以上や「(固定)」の中ディレイでは式で出す</li>
+<li><strong>CI(コンボインターバル)は考慮しない</strong>(ユーザー決定 2026-08-25)。コンボによる DPS はサポート外</li>
+<li>前後ディレイ(前隙・後隙)は wiki 自身が「省略」としているので DPS に入れていない
+  (ミラのマスタリー【アドレナリン】【リズミカル】も同じ理由で未収録)</li>
+</ul>
+<h2 id="13">13. 実装への示唆</h2>
 <ul>
 <li>計算パイプラインは「①能力値計算(§2) → ②カテゴリ集計(同一カテゴリ内は加算、キャップ適用) → ③与ダメージ式(§3、丸め順序込み) → ④段数・追加ダメージ(§5)」の4段</li>
 <li>丸めの再現が正確性の肝: <code>[]</code>=floor、<code>{}</code>=小数2位切り捨て、割合増加はバフごとに floor</li>
@@ -853,7 +1077,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>wiki 自身が「計算順序未確定・丸め誤差あり」としているため、検証値(実測ダメージ)との突き合わせ機能があると望ましい</li>
 <li><strong>入力最小化の観点(UX方針)</strong>: 約30カテゴリのうちユーザーが都度入力すべきものはほぼ無い。A/B はキャラのステ・装備から、D/E/F はスキル選択から、C/V1/V2/M は敵(狩り場)選択から、L/N/O/P/X 等のバフはキャラに紐づくバフプリセットから自動で埋まる。つまり計算画面の入力は「キャラ・スキル・敵・バフセット」の4つの選択に還元できる。静的データの充実(§9 の未取込ページ)がそのまま入力削減になる</li>
 </ul>
-<h2 id="13">13. 参照ページの取込状況</h2>
+<h2 id="14">14. 参照ページの取込状況</h2>
 <blockquote>
 <p>注: 旧リポジトリ(<a href="../legacy-twtoolkit.md">docs/legacy-twtoolkit.md</a>)に Excel 計算器 v4.00 由来の具体値がある(スキル係数・覚醒倍率・ダメージ上限・ボス28体データ・スキル373件)。数値が古い可能性があるため wiki 側で裏取りしてから採用する。</p>
 </blockquote>
@@ -868,13 +1092,13 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tbody>
 <tr>
 <td><a href="https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1">計算式まとめ</a></td>
-<td>攻撃力(#BaseAttackPower)・命中P/回避P/キャップ・クリティカル率</td>
-<td>取込済み(§4 A / §7 / §9)。クリティカル率は式だけ記録して未実装</td>
+<td>攻撃力(#BaseAttackPower)・命中P/回避P/キャップ・クリティカル率・中ディレイ(#ActualDelay)</td>
+<td>取込済み(§4 A / §7 / §9 / §12)。クリティカル率は式だけ記録して未実装</td>
 </tr>
 <tr>
 <td>ステータス</td>
-<td>能力値レイヤー・防御力・カット率・特殊回避・カテゴリ一覧</td>
-<td>取込済み(§2 / §4 / §6 / §7)</td>
+<td>能力値レイヤー・防御力・カット率・特殊回避・カテゴリ一覧・中ディレイ倍率A/B・能力値倍率B</td>
+<td>取込済み(§2 / §4 / §6 / §7 / §12)</td>
 </tr>
 <tr>
 <td>属性システム / 装備システム/属性強化</td>
@@ -893,8 +1117,8 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </tr>
 <tr>
 <td>狩り場情報一覧</td>
-<td>敵の防御力・カット率・被害減少・属性値</td>
-<td>取込済み(§11)。上限回避Pは wiki 側が全行未記載</td>
+<td>敵の防御力・カット率・被害減少・属性値・敵AGI・クリティカル被撃率</td>
+<td>取込済み(§11 / §9)。上限回避Pは wiki 側が全行未記載。敵AGI 19 体・クリティカル被撃率 11 体(残りは <code>?</code>)</td>
 </tr>
 <tr>
 <td>称号/normal・称号/special</td>
@@ -909,17 +1133,17 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>Skill/極限</td>
 <td>極限スキル 3 種の効果値(基本 / スーパーリミット / ハイパーリミット Lv1〜6)</td>
-<td>取込済み(<code>ultimate_skill.rs</code>)。<strong>2 枠</strong>。スコープアイ = G、フルスロットル = 段数(単体チャネリングのみ)+ 中ディレイ(段階5)、ワイドフォーカス = 範囲(火力に効かない)。エレメンタルパワー・オーバードライブは収録しない</td>
+<td>取込済み(<code>ultimate_skill.rs</code>)。<strong>2 枠</strong>。スコープアイ = G、フルスロットル = 段数(単体チャネリングのみ)+ 中ディレイ減少(§12)、ワイドフォーカス = 範囲(火力に効かない)。エレメンタルパワー・オーバードライブは収録しない</td>
 </tr>
 <tr>
 <td>各キャラのスキルページ</td>
-<td>スキル倍率・段数・Cri倍率・属性・スキル命中・Cri値・SLv</td>
-<td>取込済み(19 キャラ 303 件)。銭投げ・変種行・未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)は除外。スキル Lv 別倍率と召喚獣は未対応。<strong>単体チャネリング判定</strong>(区分 <code>続</code> + 対象指定 <code>単体</code>。凡例は wiki Skill#f8e303fb)は 7 件</td>
+<td>スキル倍率・段数・Cri倍率・属性・スキル命中・Cri値・SLv・<strong>動作(基本中ディレイ)</strong></td>
+<td>取込済み(19 キャラ 303 件)。銭投げ・変種行・未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)は除外。スキル Lv 別倍率と召喚獣は未対応。<strong>単体チャネリング判定</strong>(区分 <code>続</code> + 対象指定 <code>単体</code>。凡例は wiki Skill#f8e303fb)は 7 件。<strong>動作</strong>は §12</td>
 </tr>
 </tbody>
 </table></div>
 <p>装備強化(+1〜+15)による武器の追加固定ダメージ(装備システム/装備強化)は与ダメージ式の外側の加算(§5)であり、装備攻撃力(§4 A)とは別項目。実装済み(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「2026-08-24 部位別装備モデル」): <code>追加効果 = INT(INT(補正) × 倍率)</code>(補正 = 武器系統ごとの一次式・アビリティ除外、奇数なら −1、per-hit は <code>INT(追加 / Hit数)</code>)。+12〜15 の倍率はレンジ振り(武器 +12: 140–280 / +13: 300–460 / +14: 480–660 / +15: 680–880、鎧はその半分)のため実測値の上書き入力を持ち、<strong>上書きが無いときはレンジ上限</strong>で自動計算する(装備強化再設定呪文書で振り直せるので実用上の想定値は最上値。ユーザー決定 2026-08-25)。</p>
-<h2 id="_1">取得メモ</h2>
+<h2 id="_2">取得メモ</h2>
 <p>talewiki は EUC-JP の PukiWiki。<code>?cmd=source&amp;page=&lt;EUC-JPでURLエンコードしたページ名&gt;</code> で wiki ソースが取れる(HTML の <code>&lt;pre&gt;</code> 内)。<code>curl → iconv -c -f EUC-JP -t UTF-8</code> で変換。</p>
     <footer class="doc-foot">原本: <code>docs/damage-formula.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>
   </article>

@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::actual_delay::ActualDelaySkills;
+use crate::critical_rate::CriticalRateSources;
 use crate::element::ElementSources;
 use crate::attack_power::{
     attack_power_breakdown, stat_attack_power, AttackCoefficients, AttackPowerBreakdown,
@@ -17,7 +19,8 @@ use crate::attack_power::{
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
     PartSlot, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
-    SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX, SIENA_STAGE_MAX,
+    SIENA_ACTUAL_DELAY_PERCENT_MAX, SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
+    SIENA_CRITICAL_RATE_PERCENT_MAX, SIENA_DEFENSE_RATE_PERCENT_MAX, SIENA_STAGE_MAX,
     SIENA_STAT_BONUS_MAX,
 };
 use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
@@ -123,6 +126,36 @@ pub struct Crown {
 
 impl Crown {
     pub const MAX_VALUE: u32 = 300;
+
+    pub fn get(&self, kind: StatKind) -> u32 {
+        match kind {
+            StatKind::Stab => self.stab,
+            StatKind::Hack => self.hack,
+            StatKind::Int => self.int,
+            StatKind::Def => self.def,
+            StatKind::Mr => self.mr,
+            StatKind::Dex => self.dex,
+            StatKind::Agi => self.agi,
+        }
+    }
+}
+
+/// モンスターカード(wiki: ステータス「固定値増加/減少」の「カード装着」/ モンスターブック)。
+/// 装着したカードのステータスがそのまま乗る。ステごと 0..=70、**固定値層**(倍率A の前)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct MonsterCards {
+    pub stab: u32,
+    pub hack: u32,
+    pub int: u32,
+    pub def: u32,
+    pub mr: u32,
+    pub dex: u32,
+    pub agi: u32,
+}
+
+impl MonsterCards {
+    /// wiki ステータス「モンスターカード / カード装着 / +0〜70」。
+    pub const MAX_VALUE: u32 = 70;
 
     pub fn get(&self, kind: StatKind) -> u32 {
         match kind {
@@ -364,6 +397,9 @@ pub struct StatSources {
     pub rune_levels: RuneLevels,
     #[serde(default)]
     pub crown: Crown,
+    /// モンスターカード(wiki: ステータス「カード装着」)。ステごと 0〜70、固定値層
+    #[serde(default)]
+    pub monster_cards: MonsterCards,
     #[serde(default)]
     pub sacred_relic: SacredRelic,
     #[serde(default)]
@@ -373,6 +409,12 @@ pub struct StatSources {
     /// 装備の属性強化以外の属性値の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)
     #[serde(default)]
     pub elements: ElementSources,
+    /// 中ディレイ減少をもたらすキャラのパッシブ・マスタリー(wiki: ステータス「中ディレイ倍率B」)
+    #[serde(default)]
+    pub actual_delay_skills: ActualDelaySkills,
+    /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)
+    #[serde(default)]
+    pub critical_rate: CriticalRateSources,
 }
 
 impl StatSources {
@@ -397,6 +439,16 @@ impl StatSources {
                     kind,
                     value: crown,
                     max: Crown::MAX_VALUE,
+                });
+            }
+
+            let card = self.monster_cards.get(kind);
+            if card > MonsterCards::MAX_VALUE {
+                return Err(StatSourceError::OutOfRange {
+                    source_name: "モンスターカード",
+                    kind,
+                    value: card,
+                    max: MonsterCards::MAX_VALUE,
                 });
             }
 
@@ -483,6 +535,20 @@ pub fn build_modifiers(
             modifiers.get_mut(kind).fixed += bonus;
             contributions.push(StatContribution {
                 source: "ルーンスキル".to_string(),
+                kind,
+                layer: StatLayer::Fixed,
+                value: bonus as f64,
+            });
+        }
+    }
+
+    for kind in StatKind::ALL {
+        let value = sources.monster_cards.get(kind);
+        if value > 0 {
+            let bonus = i64::from(value);
+            modifiers.get_mut(kind).fixed += bonus;
+            contributions.push(StatContribution {
+                source: "モンスターカード".to_string(),
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
@@ -729,19 +795,47 @@ pub fn apply_siena_stats(
     }
 }
 
+/// 共通スキル「アンリーシュ(能力解放)」のステ加算(wiki: ステータス「能力値倍率B」)を
+/// `StatModifierSet` の能力値倍率B 層に合流させる。
+///
+/// アンリーシュは共通スキルなので `StatSources` からは組み立てられない。`build_modifiers` を
+/// 呼んだ側が続けて呼ぶ(`apply_siena_stats` と同じ位置づけ)。
+pub fn apply_unleash(
+    modifiers: &mut StatModifierSet,
+    contributions: &mut Vec<StatContribution>,
+    common: &CommonSkills,
+) {
+    for kind in StatKind::ALL {
+        let rate = common.unleash_rate(kind);
+        if rate != 0.0 {
+            modifiers.get_mut(kind).multiplier_b += rate;
+            contributions.push(StatContribution {
+                source: "アンリーシュ".to_string(),
+                kind,
+                layer: StatLayer::MultiplierB,
+                value: rate,
+            });
+        }
+    }
+}
+
 /// `BaseStats` + `StatSources` + 装備(シエナのオーラ)から最終能力値を組み立てる(pin 込み)。
 /// 装備が最終能力値に効く経路(シエナのオーラのステ加算)を含むので、部位ごとの寄与を出すときは
 /// 装備を差し替えてここから丸ごと引き直す。
+#[allow(clippy::too_many_arguments)]
 fn effective_stats_with(
     base: &BaseStats,
     sources: &StatSources,
     equipment: &Equipment,
+    common: &CommonSkills,
     catalog: &BuffCatalog,
     game_character_id: &str,
+    stat_cap: i64,
 ) -> Result<(EffectiveStats, Vec<StatTrace>, Vec<StatContribution>), StatSourceError> {
     let (mut modifiers, mut contributions) = build_modifiers(sources, catalog, game_character_id)?;
     apply_siena_stats(&mut modifiers, &mut contributions, equipment);
-    let (mut stats, mut traces) = effective_stats(base, &modifiers);
+    apply_unleash(&mut modifiers, &mut contributions, common);
+    let (mut stats, mut traces) = effective_stats(base, &modifiers, stat_cap);
     apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
     Ok((stats, traces, contributions))
 }
@@ -780,12 +874,13 @@ pub fn preview_effective_stats(
     titles: &[TitleDef],
     game_character_id: &str,
     coefficients: Option<AttackPowerCoefficients>,
+    stat_cap: i64,
 ) -> Result<StatPreview, StatSourceError> {
     base.validate()?;
     sources.validate()?;
     equipment.validate()?;
     let (stats, traces, contributions) =
-        effective_stats_with(base, sources, equipment, catalog, game_character_id)?;
+        effective_stats_with(base, sources, equipment, common, catalog, game_character_id, stat_cap)?;
     let attack = match coefficients {
         None => None,
         Some(coefficients) => {
@@ -796,7 +891,7 @@ pub fn preview_effective_stats(
             for (slot, _) in equipment.parts.iter() {
                 let without = equipment.without_part(slot);
                 let (stats_without, _, _) =
-                    effective_stats_with(base, sources, &without, catalog, game_character_id)?;
+                    effective_stats_with(base, sources, &without, common, catalog, game_character_id, stat_cap)?;
                 let a_without = attack_power_of(&stats_without, &without, common, abilities, titles, &coefficients);
                 part_contributions
                     .push(PartAttackContribution { slot, value: breakdown.value - a_without.value });
@@ -813,6 +908,8 @@ pub struct StatLimits {
     pub base_stat_max: u32,
     pub rune_level_max: u8,
     pub crown_max: u32,
+    /// モンスターカードの 1 ステあたり上限(wiki: ステータス「カード装着 +0〜70」)
+    pub monster_card_max: u32,
     pub sacred_relic_stage_max: u8,
     pub adjustment_add_min: i64,
     pub adjustment_add_max: i64,
@@ -827,6 +924,12 @@ pub struct StatLimits {
     pub siena_stage_max: u8,
     /// シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 %
     pub siena_attack_rate_percent_max: f64,
+    /// シエナのオーラの追加オプション「防御力増加」の 1 部位あたり上限 %
+    pub siena_defense_rate_percent_max: f64,
+    /// シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 %
+    pub siena_actual_delay_percent_max: f64,
+    /// シエナのオーラの追加オプション「クリティカル確率」の 1 部位あたり上限 %
+    pub siena_critical_rate_percent_max: f64,
     /// シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限
     pub siena_stat_bonus_max: i64,
     /// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
@@ -853,8 +956,16 @@ pub struct StatLimits {
     pub sharpness_vision_level_max: u8,
     /// オーグメントの Lv 上限(wiki: Skill/共通)
     pub augment_level_max: u8,
+    /// アンリーシュ(能力解放)の Lv 上限(wiki: Skill/共通)
+    pub unleash_level_max: u8,
+    /// アンリーシュの枠数(wiki: Skill/共通「2つまで使用可能」)
+    pub unleash_slots: usize,
+    /// レインフォースの Lv 上限(wiki: Skill/共通。アンリーシュ Lv6 以降の前提)
+    pub reinforce_level_max: u8,
     /// ハイパーリミットの Lv 上限(wiki: Skill/極限)
     pub hyper_limit_level_max: u8,
+    /// クリティカル率増加の上限 %(wiki: 計算式まとめ `#CriticalChance`)
+    pub critical_rate_bonus_max: f64,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -862,6 +973,7 @@ pub fn stat_limits() -> StatLimits {
         base_stat_max: BASE_STAT_MAX,
         rune_level_max: RuneLevels::MAX_LEVEL,
         crown_max: Crown::MAX_VALUE,
+        monster_card_max: MonsterCards::MAX_VALUE,
         sacred_relic_stage_max: SacredRelic::MAX_STAGE,
         adjustment_add_min: ADJUSTMENT_ADD_MIN,
         adjustment_add_max: ADJUSTMENT_ADD_MAX,
@@ -873,6 +985,9 @@ pub fn stat_limits() -> StatLimits {
         enhance_added_damage_max: ENHANCE_ADDED_DAMAGE_MAX,
         siena_stage_max: SIENA_STAGE_MAX,
         siena_attack_rate_percent_max: SIENA_ATTACK_RATE_PERCENT_MAX,
+        siena_defense_rate_percent_max: SIENA_DEFENSE_RATE_PERCENT_MAX,
+        siena_actual_delay_percent_max: SIENA_ACTUAL_DELAY_PERCENT_MAX,
+        siena_critical_rate_percent_max: SIENA_CRITICAL_RATE_PERCENT_MAX,
         siena_stat_bonus_max: SIENA_STAT_BONUS_MAX,
         siena_all_stats_bonus_max: SIENA_ALL_STATS_BONUS_MAX,
         core_slot_count: CORE_SLOT_COUNT,
@@ -887,7 +1002,11 @@ pub fn stat_limits() -> StatLimits {
         kai_protect_armor_level_max: crate::common_skill::KAI_PROTECT_ARMOR_LEVEL_MAX,
         sharpness_vision_level_max: crate::common_skill::SHARPNESS_VISION_LEVEL_MAX,
         augment_level_max: crate::common_skill::AUGMENT_LEVEL_MAX,
+        unleash_level_max: crate::common_skill::UNLEASH_LEVEL_MAX,
+        unleash_slots: crate::common_skill::UNLEASH_SLOTS,
+        reinforce_level_max: crate::common_skill::REINFORCE_LEVEL_MAX,
         hyper_limit_level_max: crate::ultimate_skill::HYPER_LIMIT_LEVEL_MAX,
+        critical_rate_bonus_max: crate::critical_rate::CRITICAL_RATE_BONUS_MAX,
     }
 }
 
@@ -895,6 +1014,9 @@ pub fn stat_limits() -> StatLimits {
 mod tests {
     use super::*;
     use crate::stats::{effective_stat, BaseStats, BaseStatsError, BASE_STAT_MAX};
+
+    /// 上限に当たらない値(最終能力値の上限の挙動は stats.rs のテストで見る)。
+    const NO_CAP: i64 = i64::MAX;
 
     /// domain は gamedata に依存できないため、テスト用に必要分だけ縮小したカタログを用意する。
     /// 値は gamedata::buffs::buff_catalog() の実データと一致させること。
@@ -1061,7 +1183,7 @@ mod tests {
         };
         let base = BaseStats { dex: 100, ..Default::default() };
         let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
-        let (mut stats, mut traces) = effective_stats(&base, &modifiers);
+        let (mut stats, mut traces) = effective_stats(&base, &modifiers, NO_CAP);
         apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
 
         let dex_trace = traces.iter().find(|t| t.kind == StatKind::Dex).unwrap();
@@ -1086,7 +1208,7 @@ mod tests {
             Adjustments { stab: StatAdjustment { add: 0, pin: Some(150) }, ..Default::default() };
 
         let base_stats = BaseStats { stab: 1, hack: 1, int: 1, ..Default::default() };
-        let (mut stats, mut traces) = effective_stats(&base_stats, &StatModifierSet::default());
+        let (mut stats, mut traces) = effective_stats(&base_stats, &StatModifierSet::default(), NO_CAP);
         apply_pins(&mut stats, &mut traces, &base, Some(&temporary));
 
         // temporary に pin があるステ(stab)はそちらが優先され、出所は Temporary
@@ -1115,7 +1237,7 @@ mod tests {
             adjustments: Adjustments { stab: StatAdjustment { add: 10, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None).unwrap();
+        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None, NO_CAP).unwrap();
         assert!(preview
             .contributions
             .iter()
@@ -1131,7 +1253,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None).unwrap();
+        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None, NO_CAP).unwrap();
         assert!(pinned_preview
             .contributions
             .iter()
@@ -1189,7 +1311,7 @@ mod tests {
     fn 主軸スキル未選択なら攻撃力は出ない() {
         let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
         let preview = preview_effective_stats(
-            &base, &StatSources::default(), &test_equipment(), &test_common_skills(), &test_catalog(), &[], &[], "boris", None,
+            &base, &StatSources::default(), &test_equipment(), &test_common_skills(), &test_catalog(), &[], &[], "boris", None, NO_CAP,
         )
         .unwrap();
         assert!(preview.attack.is_none());
@@ -1201,7 +1323,7 @@ mod tests {
         let equipment = test_equipment();
         let preview = preview_effective_stats(
             &base, &StatSources::default(), &equipment, &test_common_skills(), &test_catalog(), &[], &[],
-            "boris", Some(test_attack_coefficients()),
+            "boris", Some(test_attack_coefficients()), NO_CAP,
         )
         .unwrap();
         let attack = preview.attack.unwrap();
@@ -1229,7 +1351,7 @@ mod tests {
         let sources = StatSources::default();
         let coefficients = test_attack_coefficients();
         let preview = preview_effective_stats(
-            &base, &sources, &equipment, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients),
+            &base, &sources, &equipment, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients), NO_CAP,
         )
         .unwrap();
         let attack = preview.attack.unwrap();
@@ -1237,7 +1359,7 @@ mod tests {
         for (slot, _) in equipment.parts.iter() {
             let without = equipment.without_part(slot);
             let preview_without = preview_effective_stats(
-                &base, &sources, &without, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients),
+                &base, &sources, &without, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients), NO_CAP,
             )
             .unwrap();
             let expected = attack.breakdown.value - preview_without.attack.unwrap().breakdown.value;
@@ -1546,10 +1668,33 @@ mod tests {
         };
         let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
         let base = BaseStats { stab: 310, ..Default::default() };
-        let (value, trace) = effective_stat(StatKind::Stab, base.stab, modifiers.get(StatKind::Stab));
+        let (value, trace) = effective_stat(StatKind::Stab, base.stab, modifiers.get(StatKind::Stab), NO_CAP);
         assert_eq!(trace.basic, 429);
         assert_eq!(trace.multiplier_b_bonus, 85);
         assert_eq!(value, 914);
+    }
+
+    // wiki ステータス「固定値増加/減少」: モンスターカード(カード装着)+0〜70。
+    // ユーザーの実測(2026-08-25)でも AGI に +70 乗っていた
+    #[test]
+    fn モンスターカードは固定値層に乗り上限70() {
+        let mut sources = StatSources::default();
+        sources.monster_cards.agi = 70;
+        assert!(sources.validate().is_ok());
+
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        assert_eq!(modifiers.get(StatKind::Agi).fixed, 70);
+        assert_eq!(modifiers.get(StatKind::Stab).fixed, 0);
+        let c = contributions.iter().find(|c| c.source == "モンスターカード").unwrap();
+        assert_eq!(c.kind, StatKind::Agi);
+        assert_eq!(c.layer, StatLayer::Fixed);
+        assert_eq!(c.value, 70.0);
+
+        sources.monster_cards.agi = 71;
+        assert!(matches!(
+            sources.validate(),
+            Err(StatSourceError::OutOfRange { source_name: "モンスターカード", max: 70, .. })
+        ));
     }
 
     #[test]

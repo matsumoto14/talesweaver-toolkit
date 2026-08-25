@@ -1,13 +1,15 @@
 //! ドメインモデルと計算(I/O 無し・決定的)。
 //!
-//! パイプライン(docs/damage-formula.md §12):
+//! パイプライン(docs/damage-formula.md §13):
 //! ①能力値計算(`stats`) → ②カテゴリ集計(`category`) → ③与ダメージ式(`damage`) → ④段数。
 
+pub mod actual_delay;
 pub mod attack_power;
 pub mod awakening;
 pub mod category;
 pub mod common_skill;
 pub mod content;
+pub mod critical_rate;
 pub mod damage;
 pub mod defense;
 pub mod element;
@@ -22,6 +24,11 @@ pub mod thesis_core;
 pub mod title;
 pub mod ultimate_skill;
 
+pub use actual_delay::{
+    actual_delay, ActualDelay, ActualDelayContribution, ActualDelayError, ActualDelaySkillCatalog,
+    ActualDelaySkillDef, ActualDelaySkills, SkillUsesTable, ACTUAL_DELAY_MIN,
+    ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
+};
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,
@@ -29,15 +36,21 @@ pub use attack_power::{
 pub use awakening::{Awakening, AwakeningCaps};
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use common_skill::{
-    CommonSkillError, CommonSkills, DefenseRates, AUGMENT_LEVEL_MAX, KAI_PROTECT_ARMOR_LEVEL_MAX,
-    PROTECT_ARMOR_LEVEL_MAX, SHARPNESS_VISION_LEVEL_MAX, STRONG_WEAPON_LEVEL_MAX,
+    CommonSkillError, CommonSkills, DefenseRates, UnleashSlot, AUGMENT_LEVEL_MAX,
+    KAI_PROTECT_ARMOR_LEVEL_MAX, PROTECT_ARMOR_LEVEL_MAX, REINFORCE_LEVEL_MAX,
+    SHARPNESS_VISION_LEVEL_MAX, STRONG_WEAPON_LEVEL_MAX, UNLEASH_LEVEL_MAX, UNLEASH_SLOTS,
 };
 pub use content::{
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,
     ContentRequirement, ContentSeries, RequirementCheck,
 };
+pub use critical_rate::{
+    critical_rate, CriticalRate, CriticalRateSourceId, CriticalRateSources,
+    CRITICAL_RATE_BONUS_MAX,
+};
 pub use damage::{
-    calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, FormulaStep,
+    calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, DpsTriple,
+    FormulaStep,
 };
 pub use defense::{
     accuracy_point, defense_profile, AccuracyCorrection, DefenseProfile, EvasionPoints,
@@ -53,7 +66,8 @@ pub use equipment::{
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentParts, EquipmentRates,
     EquipmentValues, PartSlot, SienaAura, SienaStatBonus, ENHANCE_LEVEL_MAX,
     ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
-    SIENA_ACTUAL_DELAY_PERCENT_MAX, SIENA_ALL_STATS_BONUS_MAX, SIENA_DEFENSE_RATE_PERCENT_MAX,
+    SIENA_ACTUAL_DELAY_PERCENT_MAX, SIENA_ALL_STATS_BONUS_MAX,
+    SIENA_CRITICAL_RATE_PERCENT_MAX, SIENA_DEFENSE_RATE_PERCENT_MAX,
     SIENA_STAGE_MAX, SIENA_STAT_BONUS_MAX,
 };
 pub use random_option::{
@@ -63,9 +77,11 @@ pub use random_option::{
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};
 pub use stat_sources::{
-    apply_pins, apply_temporary_adjustments, build_modifiers, preview_effective_stats, stat_limits,
+    apply_pins, apply_temporary_adjustments, apply_unleash, build_modifiers,
+    preview_effective_stats, stat_limits,
     Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice, BuffDefinition,
-    BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown, PartAttackContribution, PetSkillTier,
+    BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown, MonsterCards, PartAttackContribution,
+    PetSkillTier,
     PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution, StatLayer, StatLimits,
     StatPreview, StatSourceError, StatSources,
 };

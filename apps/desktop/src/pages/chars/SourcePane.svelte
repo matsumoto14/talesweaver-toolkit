@@ -6,11 +6,14 @@
     | "pet"
     | "rune"
     | "crown"
+    | "monsterCard"
     | "relic"
     | "siena"
     | "randomOption"
     | "title"
     | "commonSkill"
+    | "actualDelay"
+    | "criticalRate"
     | "thesis"
     | "skills"
     | "adjust";
@@ -61,6 +64,30 @@
   let { draft, preview, previewError, skills, sourceId }: Props = $props();
 
   const STAT_MIN = 1;
+
+  // --- 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)---------------------
+  // カタログはキャラを問わず全件持っているので、このキャラのぶんだけ出す。
+  const delaySkills = $derived(
+    app.actualDelaySkills.filter((d) => d.game_character_id === draft.gameCharacterId),
+  );
+  function toggleDelaySkill(id: string, on: boolean) {
+    const rest = draft.statSources.actual_delay_skills.skill_ids.filter((x) => x !== id);
+    draft.statSources.actual_delay_skills.skill_ids = on ? [...rest, id] : rest;
+  }
+  /** クリティカル率増加の合計(上限を掛ける前) */
+  const criticalRateBonus = $derived(
+    (draft.statSources.critical_rate.ultimate_rune ? 20 : 0) +
+      (draft.statSources.critical_rate.architect_lab ? 30 : 0) +
+      (draft.statSources.critical_rate.deadly_blow ? 100 : 0),
+  );
+
+  /** このキャラのパッシブぶんの中ディレイ減少 %(共通の供給源は含まない) */
+  const delaySkillPercent = $derived(
+    draft.statSources.actual_delay_skills.skill_ids.reduce(
+      (n, id) => n + (app.actualDelaySkills.find((d) => d.id === id)?.percent ?? 0),
+      0,
+    ),
+  );
   const characterOptions = $derived(app.gameCharacters.map((c) => ({ value: c.id, label: c.name })));
 
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
@@ -261,6 +288,36 @@
     c.protect_armor_level = Math.min(c.protect_armor_level, max);
     c.ultimate.hyper_limit_level = Math.min(c.ultimate.hyper_limit_level, max);
   }
+  // アンリーシュ(能力解放)。効き先は能力値倍率B。Lv6 以降はレインフォース(Lv5 まで)が前提。
+  const UNLEASH_RATES = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
+  const reinforceGate = $derived(draft.commonSkills.reinforce_level + 5);
+  /** レインフォース Lv を下げたら、それに縛られるアンリーシュの Lv も一緒に下げる */
+  function setReinforceLevel(level: number) {
+    const c = draft.commonSkills;
+    c.reinforce_level = level;
+    for (const slot of c.unleash) slot.level = Math.min(slot.level, level + 5);
+  }
+  const reinforceOptions = $derived(
+    Array.from({ length: limits.reinforce_level_max + 1 }, (_, i) => ({
+      value: String(i),
+      label: i === 0 ? `未習得(アンリーシュ Lv5 まで)` : `Lv${i}(アンリーシュ Lv${i + 5} まで)`,
+    })),
+  );
+  /** もう一方の枠で選んでいるステは選べない(同じステの 2 枠は不可) */
+  const unleashStatOptions = (slotIndex: number) => {
+    const other = draft.commonSkills.unleash[1 - slotIndex].stat;
+    return [
+      { value: "", label: "未使用" },
+      ...STAT_KINDS.filter((k) => k !== other).map((k) => ({ value: k, label: STAT_LABELS[k] })),
+    ];
+  };
+  const unleashLevelOptions = $derived(
+    Array.from({ length: Math.min(limits.unleash_level_max, reinforceGate) + 1 }, (_, lv) => ({
+      value: String(lv),
+      label: lv === 0 ? "未習得" : `Lv${lv}(+${UNLEASH_RATES[lv - 1]}%)`,
+    })),
+  );
+
   const augmentOptions = $derived(
     Array.from({ length: limits.augment_level_max + 1 }, (_, i) => ({
       value: String(i),
@@ -476,6 +533,7 @@
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
     rune: { title: "ルーンスキル", note: `0–${limits.rune_level_max}` },
     crown: { title: "クラウン", note: `0–${limits.crown_max}` },
+    monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
     relic: { title: "神鳥の聖物", note: `0–${limits.sacred_relic_stage_max} 段階(実加算は段階×10)` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
@@ -483,6 +541,8 @@
     commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
+    actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
+    criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 +${limits.critical_rate_bonus_max}%)` },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
   };
 
@@ -590,6 +650,12 @@
                   <span class="strong">{preview ? fmtInt(preview.stats[k]) : "—"}</span>
                   {#if trace?.pinned_from !== null && trace?.pinned_from !== undefined}
                     <span class="pin-badge" title={`固定前: ${fmtInt(trace.pinned_from)}`}>固定</span>
+                  {/if}
+                  {#if trace && trace.capped_loss > 0}
+                    <span
+                      class="cap-badge"
+                      title={`上限 ${fmtInt(trace.stat_cap)} で ${fmtInt(trace.capped_loss)} 捨てています。上限は覚醒段階とエタの意志 Lv で上がります`}
+                    >上限</span>
                   {/if}
                 </td>
               </tr>
@@ -913,6 +979,24 @@
         {/each}
       </div>
     </div>
+  {:else if sourceId === "monsterCard"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「ステータス」の固定値増加にある<b>カード装着</b>。装着したカードのステータスが
+        そのまま乗ります(ステごと 0〜{limits.monster_card_max})。
+        <b>固定値層</b>なので、能力値倍率A(テイルズウィーバーのエネルギー等)の影響を受けます。
+      </p>
+      <div class="fields">
+        {#each STAT_KINDS as k (k)}
+          <StatInput
+            label={STAT_LABELS[k]}
+            min={0}
+            max={limits.monster_card_max}
+            bind:value={draft.statSources.monster_cards[k]}
+          />
+        {/each}
+      </div>
+    </div>
   {:else if sourceId === "relic"}
     <div class="card">
       <div class="fields">
@@ -1026,10 +1110,34 @@
               bind:value={siena.all_stats}
               format={(v) => (v > 0 ? `STAB〜AGI に +${v}` : "なし")}
             />
+            <StatInput
+              label="防御力増加"
+              min={0}
+              max={limits.siena_defense_rate_percent_max}
+              bind:value={siena.defense_rate_percent}
+              format={(v) => `+${v}%`}
+            />
+            <StatInput
+              label="中ディレイ減少"
+              min={0}
+              max={limits.siena_actual_delay_percent_max}
+              step={0.5}
+              bind:value={siena.actual_delay_percent}
+              format={(v) => `−${v}%`}
+            />
+            <StatInput
+              label="クリティカル確率"
+              min={0}
+              max={limits.siena_critical_rate_percent_max}
+              bind:value={siena.critical_rate_percent}
+              format={(v) => `+${v}%`}
+            />
           </div>
           <p class="hint dim">
             「攻撃力増加」は与ダメージ割合増加(New1)、「全ステータス増加」は 7 ステすべてに同じ値が乗ります。
-            防御力増加・防御無視・中ディレイ減少・クリティカル確率・HP/MP/SP は与ダメージ式に入らないため未収録です。
+            「防御力増加」は装備防御力倍率(防御タブ)、「中ディレイ減少」は中ディレイ倍率B(計算タブの 1 秒あたり)、
+            「クリティカル確率」はクリティカル率の AGI 由来の項に<b>乗算</b>で合流します。
+            防御無視攻撃確率は確率発動(x% で防御力 15% 無視)なので未収録、HP/MP/SP は与ダメージ式に入りません。
           </p>
         </div>
       {/if}
@@ -1120,6 +1228,52 @@
             (v) => setAugmentLevel(Number(v))
           }
         />
+        <Select
+          label="レインフォース(前提スキル)"
+          options={reinforceOptions}
+          bind:value={
+            () => String(draft.commonSkills.reinforce_level),
+            (v) => setReinforceLevel(Number(v))
+          }
+        />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title inline">
+        アンリーシュ(能力解放)
+        <span class="num strong">
+          {draft.commonSkills.unleash
+            .filter((u) => u.stat !== null && u.level > 0)
+            .map((u) => `${STAT_LABELS[u.stat!]} +${UNLEASH_RATES[u.level - 1]}%`)
+            .join(" ・ ") || "未使用"}
+        </span>
+      </div>
+      <p class="hint dim">
+        選んだステが<b>能力値倍率B</b>で増えます(<b>バフ込みの基本能力値 × 倍率</b>なので、
+        バフを盛るほど効きます)。<b>2 ステまで</b>で、同じステは 2 枠に入れられません。
+        Lv6 以降は<b>レインフォース</b>の Lv が要ります(下げると Lv も一緒に下がります)。
+      </p>
+      <div class="fields">
+        {#each draft.commonSkills.unleash as slot, i (i)}
+          <Select
+            label={`枠 ${i + 1} のステ`}
+            options={unleashStatOptions(i)}
+            bind:value={
+              () => slot.stat ?? "",
+              (v) => {
+                slot.stat = v === "" ? null : (v as StatKind);
+                if (slot.stat === null) slot.level = 0;
+              }
+            }
+          />
+          <Select
+            label={`枠 ${i + 1} の Lv`}
+            options={unleashLevelOptions}
+            disabled={slot.stat === null}
+            bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
+          />
+        {/each}
       </div>
     </div>
 
@@ -1314,6 +1468,79 @@
         セット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
       </p>
     </div>
+  {:else if sourceId === "actualDelay"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「ステータス」の<b>中ディレイ倍率B</b>。中ディレイは
+        <b>基本中ディレイ × (1 − 減少値) ×(2 コンボ以上なら 0.5)</b>で、下限 0.3s・減少値の上限 70%。
+        ここで選ぶのは<b>このキャラ固有のパッシブ・マスタリー</b>だけです。
+        フルスロットル(共通スキル)・カフスのランダムOP・シエナのオーラの「中ディレイ減少」は
+        それぞれの補正源で設定した値がそのまま合流します。
+        中ディレイと 1 秒あたりの火力は計算タブに出ます。
+      </p>
+      <div class="buff-list">
+        {#if delaySkills.length === 0}
+          <p class="empty dim">このキャラには中ディレイ減少のパッシブがありません(wiki の表に記載なし)。</p>
+        {/if}
+        {#each delaySkills as def (def.id)}
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={draft.statSources.actual_delay_skills.skill_ids.includes(def.id)}
+              onchange={(e) => toggleDelaySkill(def.id, e.currentTarget.checked)}
+            />
+            <span>{def.name}</span>
+            <span class="fixed-value dim">−{def.percent}%</span>
+            {#if def.note}<span class="dim note">{def.note}</span>{/if}
+          </label>
+        {/each}
+      </div>
+      {#if delaySkillPercent > 0}
+        <p class="hint dim">このキャラのパッシブぶん: <b>−{delaySkillPercent}%</b></p>
+      {/if}
+    </div>
+  {:else if sourceId === "criticalRate"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「計算式まとめ <b>#CriticalChance</b>」。クリティカル率は
+        <b>(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象のAGI)) × ペット会心
+        ＋ スキルの Cri値 ＋ クリティカル率増加 ＋ 対象のクリティカル被撃率</b>で、下限 0% / 上限 100%。
+        装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入るので、
+        ここで選ぶのは<b>ペット会心と「クリティカル率増加」</b>だけです。
+        対象のAGI とクリティカル被撃率は wiki 狩り場情報一覧に値がある敵だけに入っているので、
+        計算タブでは<b>その敵を選んだときだけ</b>クリティカル率が出ます。
+      </p>
+      <div class="buff-list">
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.pet} />
+          <span>ペット会心</span>
+          <span class="fixed-value dim">×1.1</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.ultimate_rune} />
+          <span>極のルーン</span>
+          <span class="fixed-value dim">+20%</span>
+          <span class="dim note">最大レベル時</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.architect_lab} />
+          <span>設計者の研究室</span>
+          <span class="fixed-value dim">+30%</span>
+          <span class="dim note">最大レベル時</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.statSources.critical_rate.deadly_blow} />
+          <span>致命打</span>
+          <span class="fixed-value dim">+100%</span>
+        </label>
+      </div>
+      <p class="hint dim">
+        クリティカル率増加の合計: <b>+{Math.min(limits.critical_rate_bonus_max, criticalRateBonus)}%</b>
+        {#if criticalRateBonus > limits.critical_rate_bonus_max}(上限 +{limits.critical_rate_bonus_max}% で頭打ち){/if}
+        <br />
+        値が不定の「バフ」、シエナのオーラのクリティカル確率、被撃率B(対人)、最終クリティカル率増加は未収録です。
+      </p>
+    </div>
   {:else if sourceId === "skills"}
     <div class="card">
       <div class="card-title">このキャラのスキル</div>
@@ -1410,6 +1637,10 @@
   .check input { accent-color: var(--accent); }
   .buff-list { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
   .note { font-size: 10px; }
+  .cap-badge {
+    font-size: 9px; letter-spacing: 0.05em; color: #B5443A; border: 1px solid #B5443A;
+    border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
+  }
   .fixed-value { font-size: 11px; font-weight: 500; }
 
   /* 装備ドリルダウン: 部位一覧 */

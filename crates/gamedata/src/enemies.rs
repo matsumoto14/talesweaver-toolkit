@@ -14,6 +14,9 @@
 //! - `element_threshold` は wiki 狩り場情報一覧の「敵属性値」(2026-08-25 に意味を確定。
 //!   攻撃スキルの属性値がこれを上回った分だけ与ダメージが増える)。120 / 125 / 90 の 3 値
 //! - HP(ソロ)は実測表にあるが消費する機能が無いため未収録(必要になったら追加)
+//! - `agi` / `critical_taken_rate` は wiki「狩り場情報一覧」の「敵AGI+固定値」「クリティカル被撃率」
+//!   (取得 2026-08-25)。**wiki 側は多くの行が `?`** で、値のある行も「約」「推定値」付きの
+//!   コミュニティ実測。両方そろっている敵でだけクリティカル率を出す(docs/damage-formula.md §9)`[仮]`
 
 use domain::Enemy;
 
@@ -32,83 +35,87 @@ struct EnemyRecord {
     damage_reduction: i64,
     cut_rate_a: f64,
     element_threshold: i64,
+    /// wiki 狩り場情報一覧「敵AGI+固定値」の合計。`?` の行は `None`
+    agi: Option<i64>,
+    /// wiki 狩り場情報一覧「クリティカル被撃率」(負値)。`?` の行は `None`
+    critical_taken_rate: Option<f64>,
 }
 
 #[rustfmt::skip]
 const ENEMIES: &[EnemyRecord] = &[
     // ---- リンゴの島 ----
     // 旧リポ。カット率 0.52 は wiki ルミナス -48%(ソロ)と一致。防 8700 は wiki 未記載(1800+6900 ならルミナスと整合)
-    EnemyRecord { id: "ringo_boss", name: "リンゴボス", defense: 8700, damage_reduction: 0, cut_rate_a: 0.52, element_threshold: 120 },
+    EnemyRecord { id: "ringo_boss", name: "リンゴボス", defense: 8700, damage_reduction: 0, cut_rate_a: 0.52, element_threshold: 120, agi: None, critical_taken_rate: None },
     // ---- アークロン要塞 / アビス ----
     // 旧リポ。wiki 狩り場情報一覧に対応行なし(スフォルツェンド -91% とは別個体)
-    EnemyRecord { id: "arklon_underground", name: "アークロン地下要塞", defense: 4350, damage_reduction: 0, cut_rate_a: 0.18, element_threshold: 120 },
+    EnemyRecord { id: "arklon_underground", name: "アークロン地下要塞", defense: 4350, damage_reduction: 0, cut_rate_a: 0.18, element_threshold: 120, agi: None, critical_taken_rate: None },
     // wiki 裏取り済み: 防1500+8100=9600(ソロ)、カット率 -75% → 0.25、属性 120
-    EnemyRecord { id: "abyss_hell", name: "アビスヘル", defense: 9600, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120 },
+    EnemyRecord { id: "abyss_hell", name: "アビスヘル", defense: 9600, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120, agi: Some(1270), critical_taken_rate: None },
     // wiki 裏取り済み: 防1500+8700=10200、カット率 -75% → 0.25
-    EnemyRecord { id: "abyss_core_master", name: "アビスコアマスター", defense: 10200, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120 },
+    EnemyRecord { id: "abyss_core_master", name: "アビスコアマスター", defense: 10200, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120, agi: Some(1290), critical_taken_rate: None },
     // ---- レイドボス ----
     // 旧リポ。wiki 狩り場情報一覧に対応行なし。属性閾値 90 は旧リポ知見(threshold=90 はトゥタトゥールのみ)
-    EnemyRecord { id: "tutatur", name: "トゥタトゥール", defense: 990, damage_reduction: 0, cut_rate_a: 1.0, element_threshold: 90 },
+    EnemyRecord { id: "tutatur", name: "トゥタトゥール", defense: 990, damage_reduction: 0, cut_rate_a: 1.0, element_threshold: 90, agi: None, critical_taken_rate: None },
     // 旧リポ。wiki 狩り場情報一覧に対応行なし
-    EnemyRecord { id: "clamor", name: "クラモール", defense: 16500, damage_reduction: 0, cut_rate_a: 0.18, element_threshold: 125 },
+    EnemyRecord { id: "clamor", name: "クラモール", defense: 16500, damage_reduction: 0, cut_rate_a: 0.18, element_threshold: 125, agi: None, critical_taken_rate: None },
     // 旧リポ。武器ダメージ無効(weaponTerm=0)の特殊挙動は未モデル `[仮]`
-    EnemyRecord { id: "chimera", name: "キマイラ", defense: 57900, damage_reduction: 0, cut_rate_a: 0.4225, element_threshold: 120 },
+    EnemyRecord { id: "chimera", name: "キマイラ", defense: 57900, damage_reduction: 0, cut_rate_a: 0.4225, element_threshold: 120, agi: None, critical_taken_rate: None },
     // ---- シオカンヘイム ----
     // wiki 裏取り済み: 防1050+6000=7050、カット率 -59.5% → 0.405、属性 120、被害減少 有
-    EnemyRecord { id: "brothers_forge", name: "兄弟の鍛冶場", defense: 7050, damage_reduction: -5850, cut_rate_a: 0.405, element_threshold: 120 },
+    EnemyRecord { id: "brothers_forge", name: "兄弟の鍛冶場", defense: 7050, damage_reduction: -5850, cut_rate_a: 0.405, element_threshold: 120, agi: Some(1552), critical_taken_rate: None },
     // 旧リポ。wiki「シオカンヘイム ボス」のカット率 -51% → 0.49 と一致
-    EnemyRecord { id: "siokan_boss", name: "シオカンボス", defense: 35220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125 },
+    EnemyRecord { id: "siokan_boss", name: "シオカンボス", defense: 35220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125, agi: None, critical_taken_rate: None },
     // wiki 裏取り済み: 防 53500 以下(旧リポ 53220 と整合)、カット率 -51% → 0.49、属性 125、被害減少 有
-    EnemyRecord { id: "odin", name: "オーディン", defense: 53220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125 },
+    EnemyRecord { id: "odin", name: "オーディン", defense: 53220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125, agi: Some(1500), critical_taken_rate: Some(-450.0) },
     // 旧リポ(ランキング戦個体)。wiki は通常オーディンのみ記載
-    EnemyRecord { id: "odin_rank", name: "オーディン(ランク)", defense: 59220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125 },
+    EnemyRecord { id: "odin_rank", name: "オーディン(ランク)", defense: 59220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125, agi: None, critical_taken_rate: None },
     // ---- エクリプス ----
     // 旧リポ。wiki「エクリプス ボス(ソロ)」= 約41640・カット率 -51% → 0.49 と整合(個体差あり)
-    EnemyRecord { id: "eclipse_1", name: "エクリプス1", defense: 41220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125 },
-    EnemyRecord { id: "eclipse_2", name: "エクリプス2", defense: 42720, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125 },
+    EnemyRecord { id: "eclipse_1", name: "エクリプス1", defense: 41220, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125, agi: Some(1420), critical_taken_rate: Some(-350.0) },
+    EnemyRecord { id: "eclipse_2", name: "エクリプス2", defense: 42720, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125, agi: Some(1420), critical_taken_rate: Some(-350.0) },
     // 旧リポ。wiki「討伐戦ボス」のカット率 -68.5% → 0.315 と一致
-    EnemyRecord { id: "eclipse_subjugation", name: "エクリプス討伐戦", defense: 62700, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125 },
+    EnemyRecord { id: "eclipse_subjugation", name: "エクリプス討伐戦", defense: 62700, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2050), critical_taken_rate: Some(-500.0) },
     // 旧リポ。wiki 狩り場情報一覧に対応行なし(エクリプス地域の派生コンテンツ)
-    EnemyRecord { id: "lost_forest", name: "喪失の森", defense: 37350, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 120 },
+    EnemyRecord { id: "lost_forest", name: "喪失の森", defense: 37350, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 120, agi: None, critical_taken_rate: None },
     // ---- エタ(異界の峡谷 / 最後の決戦) ----
-    EnemyRecord { id: "valley_soldier", name: "異界の峡谷 兵士", defense: 73500, damage_reduction: 0, cut_rate_a: 0.42, element_threshold: 125 },
-    EnemyRecord { id: "valley_captain", name: "異界の峡谷 部隊長", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125 },
+    EnemyRecord { id: "valley_soldier", name: "異界の峡谷 兵士", defense: 73500, damage_reduction: 0, cut_rate_a: 0.42, element_threshold: 125, agi: Some(2150), critical_taken_rate: None },
+    EnemyRecord { id: "valley_captain", name: "異界の峡谷 部隊長", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2200), critical_taken_rate: Some(-550.0) },
     // 実測表 備考: 決戦1=ロカゴス・チェリア / 決戦2=ティロロス・ゴイティア / 決戦3=召喚の石像
-    EnemyRecord { id: "last_battle_1", name: "最後の決戦1", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125 },
+    EnemyRecord { id: "last_battle_1", name: "最後の決戦1", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: None, critical_taken_rate: None },
     // 実測表のカット率 70% を採用(旧リポは 0.315。3 ソース中唯一の差分)
-    EnemyRecord { id: "last_battle_2", name: "最後の決戦2", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.30, element_threshold: 125 },
-    EnemyRecord { id: "last_battle_3", name: "最後の決戦3", defense: 106500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125 },
+    EnemyRecord { id: "last_battle_2", name: "最後の決戦2", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.30, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "last_battle_3", name: "最後の決戦3", defense: 106500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2200), critical_taken_rate: Some(-550.0) },
     // ---- アフェティリア ----
     // 旧リポ。wiki「アフェティリアNボス」のカット率 -51%(ソロ) → 0.49 と一致
-    EnemyRecord { id: "aphetiria_n", name: "アフェティリア(N)", defense: 43200, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125 },
+    EnemyRecord { id: "aphetiria_n", name: "アフェティリア(N)", defense: 43200, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125, agi: Some(1850), critical_taken_rate: Some(-450.0) },
     // wiki カット率一致: セリニアコス(H) -65% → 0.35 / ゴイティア(H) -68.5% → 0.315 / キシニク(H) -72% → 0.28
-    EnemyRecord { id: "selinacos_h", name: "セリニアコス(H)", defense: 61200, damage_reduction: -4550, cut_rate_a: 0.35, element_threshold: 125 },
-    EnemyRecord { id: "goitia_h", name: "ゴイティア(H)", defense: 62700, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125 },
-    EnemyRecord { id: "kisinik_h", name: "キシニク(H)", defense: 65700, damage_reduction: -4550, cut_rate_a: 0.28, element_threshold: 125 },
+    EnemyRecord { id: "selinacos_h", name: "セリニアコス(H)", defense: 61200, damage_reduction: -4550, cut_rate_a: 0.35, element_threshold: 125, agi: Some(2040), critical_taken_rate: Some(-475.0) },
+    EnemyRecord { id: "goitia_h", name: "ゴイティア(H)", defense: 62700, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "kisinik_h", name: "キシニク(H)", defense: 65700, damage_reduction: -4550, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2100), critical_taken_rate: Some(-535.0) },
     // 旧リポ(EX)。wiki 狩り場情報一覧はアフェティリア EX の防御値未記載
-    EnemyRecord { id: "selinacos_ex", name: "セリニアコス(EX)", defense: 118200, damage_reduction: -5850, cut_rate_a: 0.35, element_threshold: 125 },
-    EnemyRecord { id: "goitia_ex", name: "ゴイティア(EX)", defense: 118200, damage_reduction: -5850, cut_rate_a: 0.315, element_threshold: 125 },
-    EnemyRecord { id: "kisinik_ex", name: "キシニク(EX)", defense: 119550, damage_reduction: -5850, cut_rate_a: 0.28, element_threshold: 125 },
+    EnemyRecord { id: "selinacos_ex", name: "セリニアコス(EX)", defense: 118200, damage_reduction: -5850, cut_rate_a: 0.35, element_threshold: 125, agi: Some(2200), critical_taken_rate: None },
+    EnemyRecord { id: "goitia_ex", name: "ゴイティア(EX)", defense: 118200, damage_reduction: -5850, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2200), critical_taken_rate: None },
+    EnemyRecord { id: "kisinik_ex", name: "キシニク(EX)", defense: 119550, damage_reduction: -5850, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2200), critical_taken_rate: None },
     // ---- 古代レリックの聖域 ----
     // 実測表(防 = 1500+固定防御。4 つのミニゲームクリア時のステータス)。20 段は旧リポとも一致
-    EnemyRecord { id: "relic_sanctuary_10", name: "レリックの聖域10", defense: 38640, damage_reduction: 0, cut_rate_a: 0.49, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_11", name: "レリックの聖域11", defense: 59700, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_12", name: "レリックの聖域12", defense: 62280, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_13", name: "レリックの聖域13", defense: 64110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_14", name: "レリックの聖域14", defense: 77790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_15", name: "レリックの聖域15", defense: 78450, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_16", name: "レリックの聖域16", defense: 79110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_17", name: "レリックの聖域17", defense: 101790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_18", name: "レリックの聖域18", defense: 103620, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_19", name: "レリックの聖域19", defense: 105540, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
-    EnemyRecord { id: "relic_sanctuary_20", name: "レリックの聖域20", defense: 108360, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125 },
+    EnemyRecord { id: "relic_sanctuary_10", name: "レリックの聖域10", defense: 38640, damage_reduction: 0, cut_rate_a: 0.49, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_11", name: "レリックの聖域11", defense: 59700, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_12", name: "レリックの聖域12", defense: 62280, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_13", name: "レリックの聖域13", defense: 64110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_14", name: "レリックの聖域14", defense: 77790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_15", name: "レリックの聖域15", defense: 78450, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_16", name: "レリックの聖域16", defense: 79110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_17", name: "レリックの聖域17", defense: 101790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_18", name: "レリックの聖域18", defense: 103620, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_19", name: "レリックの聖域19", defense: 105540, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "relic_sanctuary_20", name: "レリックの聖域20", defense: 108360, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2350), critical_taken_rate: Some(-550.0) },
     // ---- ゆがんだ村 ----
     // 実測表「一部修正」版: N = 防1950+105000=106950・固定減少 3250・カット率 67.5%
     //                      H = 防1950+130200(レイティア)/130800(設計者)・固定減少 2925・カット率 70.75%
-    EnemyRecord { id: "leitia_n", name: "レイティアN", defense: 106950, damage_reduction: -3250, cut_rate_a: 0.325, element_threshold: 125 },
-    EnemyRecord { id: "architect_n", name: "設計者N", defense: 106950, damage_reduction: -3250, cut_rate_a: 0.325, element_threshold: 125 },
-    EnemyRecord { id: "leitia_h", name: "レイティアH", defense: 132150, damage_reduction: -2925, cut_rate_a: 0.2925, element_threshold: 125 },
-    EnemyRecord { id: "architect_h", name: "設計者H", defense: 132300, damage_reduction: -2925, cut_rate_a: 0.2925, element_threshold: 125 },
+    EnemyRecord { id: "leitia_n", name: "レイティアN", defense: 106950, damage_reduction: -3250, cut_rate_a: 0.325, element_threshold: 125, agi: Some(2350), critical_taken_rate: None },
+    EnemyRecord { id: "architect_n", name: "設計者N", defense: 106950, damage_reduction: -3250, cut_rate_a: 0.325, element_threshold: 125, agi: None, critical_taken_rate: None },
+    EnemyRecord { id: "leitia_h", name: "レイティアH", defense: 132150, damage_reduction: -2925, cut_rate_a: 0.2925, element_threshold: 125, agi: Some(2700), critical_taken_rate: Some(-930.0) },
+    EnemyRecord { id: "architect_h", name: "設計者H", defense: 132300, damage_reduction: -2925, cut_rate_a: 0.2925, element_threshold: 125, agi: None, critical_taken_rate: None },
 ];
 
 impl EnemyRecord {
@@ -120,6 +127,8 @@ impl EnemyRecord {
             damage_reduction: self.damage_reduction,
             cut_rate_a: self.cut_rate_a,
             element_threshold: self.element_threshold,
+            agi: self.agi,
+            critical_taken_rate: self.critical_taken_rate,
         }
     }
 }
@@ -144,6 +153,44 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), 42);
+    }
+
+    /// wiki 狩り場情報一覧の「敵AGI+固定値」「クリティカル被撃率」。
+    /// **両方そろっている敵でだけ**クリティカル率を出す(片方だけでは桁違いに外れる)。
+    #[test]
+    fn 敵agiとクリティカル被撃率はwikiに値のある行だけ入る() {
+        // クリティカル率を出せる = 両方ある
+        let both: Vec<&str> = ENEMIES
+            .iter()
+            .filter(|e| e.agi.is_some() && e.critical_taken_rate.is_some())
+            .map(|e| e.id)
+            .collect();
+        assert_eq!(
+            both,
+            [
+                "odin",
+                "eclipse_1",
+                "eclipse_2",
+                "eclipse_subjugation",
+                "valley_captain",
+                "last_battle_3",
+                "aphetiria_n",
+                "selinacos_h",
+                "kisinik_h",
+                "relic_sanctuary_20",
+                "leitia_h",
+            ]
+        );
+        // 被撃率だけあって AGI が無い行は作らない(式の分母に AGI が要る)
+        assert!(ENEMIES.iter().all(|e| e.critical_taken_rate.is_none() || e.agi.is_some()));
+        // 被撃率は負値(wiki の -250〜-930%)
+        assert!(ENEMIES.iter().filter_map(|e| e.critical_taken_rate).all(|r| r < 0.0));
+        // wiki 裏取り: エクリプス ボス(ソロ) 200+1220=1420 / -350%
+        let e = find_enemy("eclipse_1").unwrap();
+        assert_eq!(e.agi, Some(1420));
+        assert_eq!(e.critical_taken_rate, Some(-350.0));
+        // 値の無い敵(旧リポ由来で wiki に対応行なし)
+        assert_eq!(find_enemy("tutatur").unwrap().agi, None);
     }
 
     #[test]

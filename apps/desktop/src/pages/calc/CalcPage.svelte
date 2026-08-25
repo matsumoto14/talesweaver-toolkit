@@ -776,10 +776,64 @@
                 <span class="num strong">{result ? fmtInt(result.total.max) : "—"}</span>
               </div>
               <div class="total-box crit">
-                <span class="cap">クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}</span>
+                <span class="cap">
+                  クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
+                  {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
+                </span>
                 <span class="num strong">{result ? fmtInt(result.total.critical) : "—"}</span>
               </div>
+              <div class="total-box dps">
+                <span class="cap">
+                  {#if result?.actual_delay}
+                    1 秒あたり({Math.round(result.actual_delay.uses_per_minute)} 回/分)
+                  {:else}
+                    1 秒あたり
+                  {/if}
+                </span>
+                <span class="num strong">{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
+              </div>
             </div>
+            {#if result?.actual_delay}
+              {@const d = result.actual_delay}
+              <div class="delay-note dim">
+                中ディレイ {d.base.toFixed(2)}s
+                {#if d.fixed}
+                  ×(固定・減少が効かない)
+                {:else if d.reduction > 0}
+                  × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 70%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
+                {/if}
+                {#if d.combo_rate < 1}× 0.5(2 コンボ以上){/if}
+                = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 0.3s</span>{/if}
+                {#if d.contributions.length > 0}
+                  ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
+                {/if}
+                <br />
+                1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
+                {#if d.uses_measured}
+                  (<b>実測表</b>: 総減少 {(d.reduction * 100).toFixed(0)}% × 基本 {d.base.toFixed(1)}s)
+                {:else}
+                  (実測表の範囲外なので 60 ÷ 中ディレイ の式で算出)
+                {/if}
+              </div>
+            {/if}
+            {#if result?.critical_rate}
+              {@const c = result.critical_rate}
+              <div class="delay-note dim">
+                クリティカル率 (装備クリ補正 {fmtInt(c.equipment_critical)} + 1) × 2 × (AGI {fmtInt(c.agi)} / (AGI + 対象AGI {fmtInt(c.target_agi)}))
+                {#if c.siena_rate > 0}× シエナのオーラ {(1 + c.siena_rate).toFixed(2)}{/if}
+                = {c.from_agi.toFixed(1)}%
+                ＋ スキル Cri値 {fmtInt(c.skill)}%{#if c.bonus > 0} ＋ 増加 {fmtInt(c.bonus)}%{/if}
+                − 対象のクリティカル被撃率 {fmtInt(-c.target_taken_rate)}%
+                = <b>{c.value.toFixed(1)}%</b>{#if c.raw < 0}<span class="warn"> ※下限 0%</span>{:else if c.raw > 100}<span class="warn"> ※上限 100%</span>{/if}
+              </div>
+            {:else if result && skill}
+              <div class="delay-note dim">
+                クリティカル率は出せません(この敵の AGI / クリティカル被撃率、またはスキルの Cri値が wiki 未記載)。
+              </div>
+            {/if}
+            {#if skill && skill.base_actual_delay === null}
+              <div class="delay-note dim">このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。</div>
+            {/if}
           </div>
         </div>
 
@@ -1309,6 +1363,11 @@
   .total-box.crit { background: #FFFBF0; border-color: #E0C98A; }
   .total-box.crit .cap { color: #7A6420; }
   .total-box.crit .strong { color: #A97E1E; }
+  .total-box.dps { background: #F2F7FF; border-color: #B7CDEB; }
+  .total-box.dps .cap { color: #40536F; }
+  .total-box.dps .strong { color: #2C4A76; }
+  .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
+  .delay-note .warn { color: var(--danger, #B5443A); }
 
   /* パネル(もし〜/なぜ) */
   .panel { margin-top: 11px; border-radius: var(--r-window); overflow: hidden; border: 1px solid var(--border-strong); background: #fff; }
