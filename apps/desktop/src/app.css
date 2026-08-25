@@ -179,6 +179,9 @@ table.grid th {
   position: sticky; top: 0;
 }
 table.grid td.n, table.grid th.n { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+/* 読み取り専用の表はインセット面に載せる(§01)。編集できる面(白)と、
+   触れるかどうかが面で分かれる。編集列が混ざる表は列に .ro を付ける */
+table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 
 /* 進捗バー(目安に対する火力など) */
 .meter {

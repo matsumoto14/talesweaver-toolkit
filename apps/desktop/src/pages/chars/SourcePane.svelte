@@ -693,10 +693,10 @@
                 <td class="n stat-cell">
                   <StatInput label="" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
                 </td>
-                <td class="n muted">{diff === null ? "—" : signed(diff)}</td>
+                <td class="n muted ro">{diff === null ? "—" : signed(diff)}</td>
                 <!-- 素ステ → 最終を 1 本のバーで(§11)。数字の羅列ではなく「どれだけ伸びたか」を見せる。
                      灰が素ステ(振り分け)、青が補正で乗った分。長さは最終能力値の上限に対する割合 -->
-                <td>
+                <td class="ro">
                   <span
                     class="grow"
                     title={cap > 0 ? `上限 ${fmtInt(cap)}(覚醒段階 + エタの意志 Lv)` : "上限は計算中"}
@@ -705,7 +705,7 @@
                     <i class="add" style="width: {addPct.toFixed(1)}%"></i>
                   </span>
                 </td>
-                <td class="n final">
+                <td class="n final ro">
                   <span class="strong">{preview ? fmtInt(preview.stats[k]) : "—"}</span>
                   {#if trace?.pinned_from !== null && trace?.pinned_from !== undefined}
                     <span class="pin-badge" title={`固定前: ${fmtInt(trace.pinned_from)}`}>固定</span>
@@ -730,7 +730,7 @@
           <p class="empty dim">補正源なし(素ステのみ)</p>
         {:else}
           <div class="tbl">
-            <table class="grid">
+            <table class="grid ro">
               <thead><tr><th>ステ</th><th>出典</th><th>層</th><th class="n">値</th></tr></thead>
               <tbody>
                 {#each STAT_KINDS.flatMap((k) => preview!.contributions.filter((c) => c.kind === k)) as c, i (i)}
