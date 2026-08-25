@@ -801,6 +801,8 @@
                 <div class="pop-head"><span class="pop-diamond"></span><span>{area.name}</span><span class="num dim">{area.contents.length} 件</span></div>
                 {#each area.contents as c (c.id)}
                   {@const ev = evals.find((e) => e.content_id === c.id)}
+                  <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。分かっている行には出さない -->
+                  {@const cov = !ev ? "判定中" : c.enemy_id === null ? "敵データなし" : !ev.damage ? "スキル未収録" : null}
                   <button
                     type="button"
                     class="pop-row"
@@ -811,6 +813,7 @@
                     }}
                   >
                     <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
+                    {#if cov !== null}<span class="coverage">{cov}</span>{/if}
                     <span class="pop-name">{c.name}</span>
                     <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_max) : "—"}</span>
                   </button>
@@ -1480,6 +1483,12 @@
   .pop-row:hover { background: #F1F7FE; }
   .pop-row.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); }
   .pop-row .dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; }
+  /* 収録度(§14 決定 5)。破線 = 「まだ無い」の記号 */
+  .coverage {
+    flex-shrink: 0; padding: 0 6px; border-radius: var(--r-pill);
+    border: 1px dashed var(--border); background: var(--bg-rail);
+    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
+  }
   .pop-name { min-width: 0; flex: 1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pop-row.on .pop-name { font-weight: 700; }
   .pop-row .strong { font-weight: 700; }

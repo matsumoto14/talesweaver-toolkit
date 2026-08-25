@@ -61,12 +61,26 @@
   // 「判定未着(!r.ev)」と「本当にスキル未収録(!r.ev.damage)」を混同しない(PR レビュー指摘)。
   // 敵データが無いコンテンツ(need_per_hit === null)は入場条件だけで状態を決める。
   function rowState(r: Row): number {
-    if (!r.ev) return 7;
-    if (r.content.need_per_hit === null) return r.ev.entry_ok ? 8 : 9;
+    if (!r.ev) return 6;
+    if (r.content.need_per_hit === null) return r.ev.entry_ok ? 7 : 8;
     if (!r.ev.damage) return 6;
     const ratio = r.ev.damage.per_hit_max / r.content.need_per_hit;
     if (!r.ev.entry_ok) return r.ev.reaches_need ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
+  }
+
+  /**
+   * 収録度 — この敵についてどこまで分かっているか(design-system §14 決定 5)。
+   *
+   * 到達判定(バッジ)とは別の軸なので、同じ場所に混ぜない。行ごとに歯抜けを見せると
+   * 30 行の一覧で破線が増えて画面が壊れて見えるので、**行頭に 1 つだけ**宣言する。
+   * 完全に分かっている行は `null` — 全行に並ぶとバッジが装飾になる。
+   */
+  function coverage(r: Row): string | null {
+    if (!r.ev) return "判定中";
+    if (r.content.enemy_id === null) return "敵データなし";
+    if (!r.ev.damage) return "スキル未収録";
+    return null;
   }
   // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)
   const BADGE: Badge[] = [
@@ -76,8 +90,8 @@
     { label: "届かない", state: "short" },
     { label: "条件・火力とも未達", state: "unknown" },
     { label: "条件だけ未達", state: "temp" },
-    { label: "スキル未収録", state: "unknown" },
-    { label: "判定中…", state: "unknown" },
+    // 火力の判定ができない行。理由は行頭の収録度バッジが言うので、ここでは繰り返さない
+    { label: "火力は判定できません", state: "unknown" },
     { label: "入場OK", state: "met" },
     { label: "条件未達", state: "temp" },
   ];
@@ -318,6 +332,7 @@
                 <div class="rows open-in">
                   {#each shown as r (r.content.series?.id ?? r.content.id)}
                     {@const st = rowState(r)}
+                    {@const cov = coverage(r)}
                     {@const note = noteOf(r)}
                     {@const sel = selectedRow?.content.id === r.content.id}
                     <div
@@ -340,6 +355,8 @@
                           onclick={(e) => togglePin(e, r.content.id)}
                         >★</button>
                         <Icon kind="mob" id={r.content.enemy_id} size={28} label={r.content.name} />
+                        <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
+                        {#if cov !== null}<span class="coverage">{cov}</span>{/if}
                         {#if r.content.series}
                           {@const series = r.content.series}
                           {@const list = seriesRowsOf(series.id)}
@@ -605,6 +622,12 @@
   .row-bar .badge { margin-left: auto; }
 
   .row-note { margin-top: 5px; display: flex; align-items: center; gap: 7px; min-width: 0; }
+  /* 収録度(§14 決定 5)。破線 = 「まだ無い」の記号。行内の歯抜けはこの 1 つが引き受ける */
+  .coverage {
+    flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill);
+    border: 1px dashed var(--border); background: var(--bg-rail);
+    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
+  }
   .entry-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; }
   .note-text { flex: 1; min-width: 0; font-size: var(--t-label); color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .note-text.unmet { color: var(--danger); font-weight: 700; }
