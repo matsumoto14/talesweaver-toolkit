@@ -28,6 +28,10 @@ const FALLBACK: StatLimits = {
   awakening_stage_max: 5,
   eternal_level_max: 100,
   random_option_value_max: 100,
+  protect_armor_level_max: 6,
+  kai_protect_armor_level_max: 5,
+  sharpness_vision_level_max: 10,
+  augment_level_max: 5,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

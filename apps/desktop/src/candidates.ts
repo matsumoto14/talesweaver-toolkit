@@ -23,23 +23,28 @@ export const COST_COLORS: Record<Candidate["cost"], [string, string, string]> = 
 
 export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): Candidate[] {
   const out: Candidate[] = [];
-  if (!current.equipment.power_weapon) {
+  if (!current.common_skills.power_weapon) {
     out.push({
       id: "pw",
       label: "パワーウェポンを ON に",
       cost: "すぐできる",
       apply: (p) => {
-        p.equipment.power_weapon = true;
+        p.common_skills.power_weapon = true;
       },
     });
   }
-  if (current.equipment.strong_weapon_level < limits.strong_weapon_level_max) {
+  if (current.common_skills.strong_weapon_level < limits.strong_weapon_level_max) {
     out.push({
       id: "sw",
       label: `ストロングウェポンを Lv${limits.strong_weapon_level_max} に`,
       cost: "すぐできる",
       apply: (p) => {
-        p.equipment.strong_weapon_level = limits.strong_weapon_level_max;
+        p.common_skills.strong_weapon_level = limits.strong_weapon_level_max;
+        // Lv2 以降はオーグメントの Lv が要る(wiki Skill/共通)
+        p.common_skills.augment_level = Math.max(
+          p.common_skills.augment_level,
+          limits.strong_weapon_level_max - 1,
+        );
       },
     });
   }

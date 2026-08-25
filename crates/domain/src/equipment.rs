@@ -44,8 +44,6 @@ pub struct EquipmentValues {
 /// 装備補正 9 値の値域上限(wiki は装備ごとの「上限」行しか持たず、全装備共通の上限は
 /// 未記載。カタログ外のカスタム入力に掛ける安全域として暫定採用)`[仮]`。
 pub const EQUIPMENT_VALUE_MAX: i64 = 9999;
-/// ストロングウェポンの Lv 上限(wiki Skill/共通: Lv1〜6)。
-pub const STRONG_WEAPON_LEVEL_MAX: u8 = 6;
 /// 装備強化の Lv 上限(wiki: 装備システム/装備強化。+1〜+15)。
 pub const ENHANCE_LEVEL_MAX: u8 = 15;
 /// +12 以上で追加固定ダメージがレンジ振り(MR)になる境界(wiki: +11 覚醒までは確定値)。
@@ -62,6 +60,13 @@ pub const SIENA_ATTACK_RATE_PERCENT_MAX: f64 = 10.0;
 /// (wiki: 能力値一覧(その他の部位)の STAB〜AGI は 1〜10。段階 10 = 10 スロットが全部同じステに
 /// 乗った場合の 100)。
 pub const SIENA_STAT_BONUS_MAX: i64 = 100;
+/// シエナのオーラの追加オプション「防御力増加」の 1 部位あたり上限 %
+/// (wiki: 追加オプション一覧の最大帯 8〜10%。同じ種類のオプションは同じ装備の別スロットには
+/// 登場しないため 1 部位 1 個)。実際は**装備防御力倍率増加**でプロテクトアーマーなどと加算される。
+pub const SIENA_DEFENSE_RATE_PERCENT_MAX: f64 = 10.0;
+/// シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 %
+/// (wiki: 追加オプション一覧の最大帯 2%)。中ディレイは未実装なので記録のみ。
+pub const SIENA_ACTUAL_DELAY_PERCENT_MAX: f64 = 2.0;
 /// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
 /// (wiki: 追加オプション一覧の最大帯 21〜30。同じ種類のオプションは同じ装備の別スロットには
 /// 登場しないため 1 部位 1 個)。STAB〜AGI の全ステにこの値がそのまま加算される。
@@ -259,6 +264,13 @@ pub struct SienaAura {
     /// 追加オプション「攻撃力増加」の % (New1)
     #[serde(default)]
     pub attack_rate_percent: f64,
+    /// 追加オプション「防御力増加」の %。実際は装備防御力倍率増加で
+    /// プロテクトアーマーなどと加算される(wiki: 追加オプション一覧の備考)
+    #[serde(default)]
+    pub defense_rate_percent: f64,
+    /// 追加オプション「中ディレイ減少」の %。中ディレイが未実装なので記録のみ
+    #[serde(default)]
+    pub actual_delay_percent: f64,
 }
 
 impl SienaAura {
@@ -279,6 +291,8 @@ impl SienaAura {
             && self.stats.is_zero()
             && self.all_stats == 0
             && self.attack_rate_percent == 0.0
+            && self.defense_rate_percent == 0.0
+            && self.actual_delay_percent == 0.0
     }
 
     fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
@@ -324,6 +338,20 @@ impl SienaAura {
                 slot,
                 value: self.attack_rate_percent,
                 max: SIENA_ATTACK_RATE_PERCENT_MAX,
+            });
+        }
+        if !(0.0..=SIENA_DEFENSE_RATE_PERCENT_MAX).contains(&self.defense_rate_percent) {
+            return Err(EquipmentError::SienaDefenseRateOutOfRange {
+                slot,
+                value: self.defense_rate_percent,
+                max: SIENA_DEFENSE_RATE_PERCENT_MAX,
+            });
+        }
+        if !(0.0..=SIENA_ACTUAL_DELAY_PERCENT_MAX).contains(&self.actual_delay_percent) {
+            return Err(EquipmentError::SienaActualDelayOutOfRange {
+                slot,
+                value: self.actual_delay_percent,
+                max: SIENA_ACTUAL_DELAY_PERCENT_MAX,
             });
         }
         Ok(())
@@ -455,8 +483,6 @@ impl EquipmentPart {
 pub enum EquipmentError {
     #[error("装備補正の{field}は 0〜{max} の範囲で指定してください(指定値 {value})")]
     ValueOutOfRange { field: &'static str, value: i64, max: i64 },
-    #[error("ストロングウェポンの Lv は 0〜{max} です(指定値 {value})")]
-    StrongWeaponLevelOutOfRange { value: u8, max: u8 },
     #[error("{slot:?} の装備強化 Lv は 0〜{max} です(指定値 {value})")]
     EnhanceLevelOutOfRange { slot: PartSlot, value: u8, max: u8 },
     #[error("{slot:?} は装備強化の対象外です(武器・鎧のみ)")]
@@ -481,6 +507,10 @@ pub enum EquipmentError {
     SienaAllStatsOutOfRange { slot: PartSlot, value: i64, max: i64 },
     #[error("{slot:?} のシエナのオーラの攻撃力増加は 0〜{max}% です(指定値 {value})")]
     SienaAttackRateOutOfRange { slot: PartSlot, value: f64, max: f64 },
+    #[error("{slot:?} のシエナのオーラの防御力増加は 0〜{max}% です(指定値 {value})")]
+    SienaDefenseRateOutOfRange { slot: PartSlot, value: f64, max: f64 },
+    #[error("{slot:?} のシエナのオーラの中ディレイ減少は 0〜{max}% です(指定値 {value})")]
+    SienaActualDelayOutOfRange { slot: PartSlot, value: f64, max: f64 },
     #[error("{slot:?} は属性強化の対象外です(盾+・レリック以外)")]
     ElementNotAllowed { slot: PartSlot },
     #[error("無属性は装備に付与できません(火/水/風/土/雷/白/黒のみ)")]
@@ -528,17 +558,14 @@ pub struct EquipmentAbilityDef {
     pub values: EquipmentValues,
 }
 
-/// キャラの装備補正一式(部位別装備 12 スロット + パワーウェポン/ストロングウェポン)。
+/// キャラの装備補正一式(部位別装備 12 スロット + 称号 + テシスコア)。
+///
+/// 装備攻撃力強化倍率(パワーウェポン / ストロングウェポン)は**共通スキル**なので
+/// `CommonSkills` が持つ(wiki: Skill/共通)。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Equipment {
     #[serde(default)]
     pub parts: EquipmentParts,
-    /// パワーウェポン(wiki Skill/共通: 自身の装備補正を2%増加。Lv1 のみ、ストロングウェポンと重複可)
-    #[serde(default)]
-    pub power_weapon: bool,
-    /// ストロングウェポンの Lv(0 = 未使用、1〜6 = 該当 Lv。wiki Skill/共通: 3/6/9/12/15/18%)
-    #[serde(default)]
-    pub strong_weapon_level: u8,
     /// テシスコア(地域ごとに 6 枠)。火力タイプの補正は強化能力値へ合流する
     #[serde(default)]
     pub thesis_cores: ThesisCores,
@@ -620,12 +647,6 @@ impl Equipment {
         for (slot, part) in self.parts.iter() {
             part.validate(slot)?;
         }
-        if self.strong_weapon_level > STRONG_WEAPON_LEVEL_MAX {
-            return Err(EquipmentError::StrongWeaponLevelOutOfRange {
-                value: self.strong_weapon_level,
-                max: STRONG_WEAPON_LEVEL_MAX,
-            });
-        }
         self.thesis_cores.validate()?;
         Ok(())
     }
@@ -687,6 +708,13 @@ impl Equipment {
             / 100.0
     }
 
+    /// シエナのオーラの追加オプション「防御力増加」の合計。Σ% の小数表現。
+    /// 装備防御力倍率へ合流する(`CommonSkills::defense_rates` の引数)。
+    pub fn siena_defense_rate(&self) -> f64 {
+        self.parts.iter().into_iter().map(|(_, part)| part.siena.defense_rate_percent).sum::<f64>()
+            / 100.0
+    }
+
     /// 装備に付与した属性値の合計(属性ごと)。
     pub fn element_values(&self) -> ElementValues {
         let mut total = ElementValues::default();
@@ -707,18 +735,11 @@ impl Equipment {
         total
     }
 
-    /// 装備攻撃力強化倍率(wiki: カテゴリA の内訳)。
-    /// パワーウェポン(+2%)+ ストロングウェポン Lv × 3%。
     /// その部位だけを未装備(中立値)にした複製。部位ごとの寄与(外したときの差分)を出すのに使う。
     pub fn without_part(&self, slot: PartSlot) -> Equipment {
         let mut copy = self.clone();
         *copy.parts.get_mut(slot) = EquipmentPart::default();
         copy
-    }
-
-    pub fn enhance_rate(&self) -> f64 {
-        let power_weapon_rate = if self.power_weapon { 0.02 } else { 0.0 };
-        power_weapon_rate + f64::from(self.strong_weapon_level) * 0.03
     }
 }
 
@@ -848,16 +869,6 @@ mod tests {
         assert_eq!(enhanced, EquipmentValues { thrust: 10, slash: 20, ..Default::default() });
     }
 
-    #[test]
-    fn 強化倍率はパワーウェポンとストロングウェポンの合計() {
-        assert_eq!(Equipment::default().enhance_rate(), 0.0);
-        let pw = Equipment { power_weapon: true, ..Default::default() };
-        assert!((pw.enhance_rate() - 0.02).abs() < 1e-12);
-        let sw6 = Equipment { strong_weapon_level: 6, ..Default::default() };
-        assert!((sw6.enhance_rate() - 0.18).abs() < 1e-12);
-        let both = Equipment { power_weapon: true, strong_weapon_level: 6, ..Default::default() };
-        assert!((both.enhance_rate() - 0.20).abs() < 1e-12);
-    }
 
     #[test]
     fn 値域違反は拒否する() {
@@ -870,12 +881,7 @@ mod tests {
         assert!(matches!(eq.validate(), Err(EquipmentError::ValueOutOfRange { .. })));
 
         let mut eq = Equipment::default();
-        eq.strong_weapon_level = STRONG_WEAPON_LEVEL_MAX + 1;
-        assert!(matches!(eq.validate(), Err(EquipmentError::StrongWeaponLevelOutOfRange { .. })));
-
-        let mut eq = Equipment::default();
         eq.parts.weapon.base.thrust = EQUIPMENT_VALUE_MAX;
-        eq.strong_weapon_level = STRONG_WEAPON_LEVEL_MAX;
         assert!(eq.validate().is_ok());
     }
 

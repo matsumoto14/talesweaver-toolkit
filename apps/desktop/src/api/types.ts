@@ -188,6 +188,10 @@ export interface SienaAura {
   all_stats: number;
   /** 追加オプション「攻撃力増加」の %(カテゴリ New1) */
   attack_rate_percent: number;
+  /** 追加オプション「防御力増加」の %。装備防御力倍率へ合流する */
+  defense_rate_percent: number;
+  /** 追加オプション「中ディレイ減少」の %。中ディレイが未実装なので記録のみ */
+  actual_delay_percent: number;
 }
 
 // ランダムオプションのランク。crates/domain/src/random_option.rs の RandomOptionRank。
@@ -228,6 +232,30 @@ export interface RandomOptionSlot {
   rank: RandomOptionRank;
   /** 実測値の上書き。null = レンジ上限 */
   value: number | null;
+}
+
+// 共通スキル(wiki: Skill/共通)。crates/domain/src/common_skill.rs の CommonSkills。
+export interface CommonSkills {
+  /** パワーウェポン(Lv1)。装備攻撃力強化倍率 +2% */
+  power_weapon: boolean;
+  /** ストロングウェポンの Lv(0〜6)。Lv2 以降はオーグメントの Lv が要る */
+  strong_weapon_level: number;
+  /** コートアーマー(Lv1)。装備防御力倍率 物+18% / 魔+12% */
+  coat_armor: boolean;
+  /** プロテクトアーマーの Lv(0〜6)。Lv2 以降はオーグメントの Lv が要る */
+  protect_armor_level: number;
+  /** 改・プロテクトアーマーの Lv(0〜5) */
+  kai_protect_armor_level: number;
+  /** シャープネスビジョンの Lv(0〜10)。割合追加ダメージ */
+  sharpness_vision_level: number;
+  /** オーグメントの Lv(0〜5)。前提スキル */
+  augment_level: number;
+}
+
+// 装備防御力倍率。crates/domain/src/common_skill.rs の DefenseRates。
+export interface DefenseRates {
+  physical: number;
+  magic: number;
 }
 
 // 称号の区分。crates/domain/src/title.rs の TitleKind。
@@ -320,10 +348,6 @@ export interface EquipmentParts {
 // crates/domain/src/equipment.rs の Equipment。
 export interface Equipment {
   parts: EquipmentParts;
-  /** パワーウェポン(自身の装備補正を2%増加) */
-  power_weapon: boolean;
-  /** ストロングウェポンの Lv(0 = 未使用、1〜6) */
-  strong_weapon_level: number;
   /** テシスコア(地域ごとに 6 枠) */
   thesis_cores: ThesisCores;
   /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
@@ -386,6 +410,8 @@ export interface RegisteredCharacter {
   equipment: Equipment;
   /** 主軸スキル(攻撃力の依存種別を決める)。未選択は null */
   main_skill_id: string | null;
+  /** 共通スキル(wiki: Skill/共通) */
+  common_skills: CommonSkills;
 }
 
 export interface NewCharacter {
@@ -395,6 +421,8 @@ export interface NewCharacter {
   awakening: Awakening;
   stat_sources: StatSources;
   equipment: Equipment;
+  /** 共通スキル(wiki: Skill/共通) */
+  common_skills: CommonSkills;
   main_skill_id: string | null;
 }
 
@@ -502,6 +530,8 @@ export interface DefenseProfile {
   equipment_evasion: number;
   /** 装備敏捷度補正(基本 + 強化) */
   equipment_agility: number;
+  /** 適用した装備防御力倍率(共通スキル + シエナのオーラの防御力増加) */
+  defense_rates: DefenseRates;
 }
 
 // crates/domain/src/defense.rs の EvasionPoints(wiki 計算式まとめ#EvasionPoint)。
@@ -542,6 +572,10 @@ export interface DamageResult {
   damage_cap: number;
   /** 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない */
   capped_loss: DamageTriple;
+  /** 割合追加ダメージ(新-割合)の Σ%。いまの供給源はシャープネスビジョンのみ */
+  added_damage_rate: number;
+  /** 割合追加ダメージの実額。合計ダメージにだけ乗る */
+  added_damage: DamageTriple;
   /** 命中P。敵の回避Pを 100 上回ると必中。null = スキル命中が wiki 未記載で出せない */
   accuracy_point: number | null;
   trace: DamageTrace;
@@ -585,6 +619,10 @@ export interface StatLimits {
   eternal_level_max: number;
   /** ランダムオプションの効果値の上限 `[仮]` */
   random_option_value_max: number;
+  protect_armor_level_max: number;
+  kai_protect_armor_level_max: number;
+  sharpness_vision_level_max: number;
+  augment_level_max: number;
 }
 
 

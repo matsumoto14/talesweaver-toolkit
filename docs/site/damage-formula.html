@@ -260,7 +260,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃力</td>
 <td><span class="kind assign">代入</span></td>
 <td></td>
-<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備攻撃力強化倍率] * 25</code>。ステ攻撃力・装備攻撃力の係数はスキル依存種別(STAB/HACK/INT/MR/STAB+HACK/HACK+INT)ごとに wiki「計算式まとめ#BaseAttackPower」の表(取得 2026-08-22)で定義(<code>crates/gamedata/src/characters.rs</code>)。装備攻撃力は「基本能力値」(エンチャント除く素の装備補正・キャラスキル・アビリティ・<strong>称号</strong>)と「強化能力値」(エンチャント + シエナのオーラの能力値(武器/盾)+ テシスコアの火力タイプ補正)の 2 系統に分かれ、それぞれ別係数。テシスコアの能力値増加は<strong>対象ダンジョン内でのみ有効</strong>なので、強化能力値の集計は計算対象コンテンツの地域(<code>Content::core_region</code>)で変わる。テシスコアの補助タイプ(物防/回避/敏捷/命中)は与ダメージ式に入らないが、装備値の合計(<code>Equipment::support_totals</code>)としては保持する。装備攻撃力強化倍率 = パワーウェポン+2%(wiki Skill/共通)+ ストロングウェポン Lv×3%(Lv1〜6 = 3〜18%、同ページ)</td>
+<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備攻撃力強化倍率] * 25</code>。ステ攻撃力・装備攻撃力の係数はスキル依存種別(STAB/HACK/INT/MR/STAB+HACK/HACK+INT)ごとに wiki「計算式まとめ#BaseAttackPower」の表(取得 2026-08-22)で定義(<code>crates/gamedata/src/characters.rs</code>)。装備攻撃力は「基本能力値」(エンチャント除く素の装備補正・キャラスキル・アビリティ・<strong>称号</strong>)と「強化能力値」(エンチャント + シエナのオーラの能力値(武器/盾)+ テシスコアの火力タイプ補正)の 2 系統に分かれ、それぞれ別係数。テシスコアの能力値増加は<strong>対象ダンジョン内でのみ有効</strong>なので、強化能力値の集計は計算対象コンテンツの地域(<code>Content::core_region</code>)で変わる。テシスコアの補助タイプ(物防/回避/敏捷/命中)は与ダメージ式に入らないが、装備値の合計(<code>Equipment::support_totals</code>)としては保持する。装備攻撃力強化倍率 = パワーウェポン+2%(wiki Skill/共通)+ ストロングウェポン Lv×3%(Lv1〜6 = 3〜18%、同ページ)。どちらも<strong>共通スキル</strong>なので <code>CommonSkills</code> が持つ(ストロングウェポンの Lv2 以降はオーグメントの LvUp が前提)</td>
 </tr>
 <tr>
 <td class="sym">B</td>
@@ -495,7 +495,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>新-割合</td>
 <td>合計ダメージ + 追加ダメージ(武器強化)</td>
-<td>シャープネスビジョン、称号、武器ランダムOP等。武器の OP と称号の備考にある条件付き効果(特定マップで追加ダメージ +20% など)は発動条件を計算対象に持っていないので<strong>記録するだけ</strong>で計算に入れていない</td>
+<td><strong>シャープネスビジョン Lv1〜10 = 5/10/15/20/25/28/31/34/37/40%(実装済み。合計ダメージに乗る)</strong>、称号、武器ランダムOP等。武器の OP と称号の備考にある条件付き効果(特定マップで追加ダメージ +20% など)は発動条件を計算対象に持っていないので<strong>記録するだけ</strong>で計算に入れていない</td>
 </tr>
 <tr>
 <td><span class="kind fixed">固定値</span></td>
@@ -568,6 +568,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <th>名称</th>
 <th>物理</th>
 <th>魔法</th>
+<th>実装</th>
 </tr>
 </thead>
 <tbody>
@@ -575,36 +576,43 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>コートアーマー</td>
 <td>+18%</td>
 <td>+12%</td>
+<td>✅ <code>CommonSkills</code></td>
 </tr>
 <tr>
 <td>プロテクトアーマー</td>
 <td>+36〜81%</td>
 <td>+24〜54%</td>
+<td>✅ <code>CommonSkills</code>(Lv2 以降はオーグメントが前提)</td>
 </tr>
 <tr>
 <td>改・プロテクトアーマー</td>
 <td>+9〜45%</td>
 <td>+6〜30%</td>
-</tr>
-<tr>
-<td>防御力増加(Cランク、水曜日の異変)</td>
-<td>+10%</td>
-<td>+10%</td>
-</tr>
-<tr>
-<td>プロテクトアーマーバフ(挑戦課題完了スタンプ)</td>
-<td>+20%</td>
-<td>+20%</td>
-</tr>
-<tr>
-<td>リリーローズの試薬(マインツ)</td>
-<td>+10%</td>
-<td>+10%</td>
+<td>✅ <code>CommonSkills</code></td>
 </tr>
 <tr>
 <td>シエナのオーラ「防御力増加」</td>
 <td>+x%</td>
 <td>+x%</td>
+<td>✅ <code>Equipment::siena_defense_rate</code>(1 部位 0〜10%)</td>
+</tr>
+<tr>
+<td>防御力増加(Cランク、水曜日の異変)</td>
+<td>+10%</td>
+<td>+10%</td>
+<td>未収録(期間限定)</td>
+</tr>
+<tr>
+<td>プロテクトアーマーバフ(挑戦課題完了スタンプ)</td>
+<td>+20%</td>
+<td>+20%</td>
+<td>未収録</td>
+</tr>
+<tr>
+<td>リリーローズの試薬(マインツ)</td>
+<td>+10%</td>
+<td>+10%</td>
+<td>未収録</td>
 </tr>
 </tbody>
 </table></div>

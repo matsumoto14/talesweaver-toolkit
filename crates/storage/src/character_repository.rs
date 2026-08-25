@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use domain::{
-    Awakening, BaseStats, BuffCatalog, Equipment, EquipmentAbilityDef, RandomOptionDef, StatSources,
-    TitleDef,
+    Awakening, BaseStats, BuffCatalog, CommonSkills, Equipment, EquipmentAbilityDef,
+    RandomOptionDef, StatSources, TitleDef,
 };
 use gamedata::EquipmentItem;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
@@ -27,6 +27,9 @@ pub struct RegisteredCharacter {
     pub stat_sources: StatSources,
     /// 装備補正(基本能力値/強化能力値/装備攻撃力強化バフ)(docs/claude/goals/2026-08-22-equipment-attack.md)
     pub equipment: Equipment,
+    /// 共通スキル(wiki: Skill/共通)。装備攻撃力強化倍率・装備防御力倍率・割合追加ダメージ
+    #[serde(default)]
+    pub common_skills: CommonSkills,
     /// 主軸スキル(gamedata の `Skill::id`)。攻撃力(A)の依存種別を決める。
     /// スキル未収録のキャラがあるので未選択(`None`)を許す
     pub main_skill_id: Option<String>,
@@ -41,6 +44,9 @@ pub struct NewCharacter {
     pub awakening: Awakening,
     pub stat_sources: StatSources,
     pub equipment: Equipment,
+    /// 共通スキル(wiki: Skill/共通)
+    #[serde(default)]
+    pub common_skills: CommonSkills,
     pub main_skill_id: Option<String>,
 }
 
@@ -68,9 +74,11 @@ CREATE TABLE IF NOT EXISTS characters (
 /// (攻撃力の依存種別を決める主軸スキル)が加わった。
 /// v3 以前は `equipment` 列に「基本能力値/強化能力値の合計 8 値」を持っていた
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
-const SCHEMA_VERSION: i64 = 5;
+/// v6 で `common_skills` 列が加わった。パワーウェポン / ストロングウェポンは
+/// v5 まで `equipment` 列の中にあり、移行で `common_skills` へ移す。
+const SCHEMA_VERSION: i64 = 6;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, main_skill_id";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id";
 
 /// `stat_sources`/`equipment` 列(JSON テキスト)を domain の型として読み出すための橋渡し。
 struct StatSourcesColumn(StatSources);
@@ -95,6 +103,17 @@ impl FromSql for EquipmentColumn {
     }
 }
 
+struct CommonSkillsColumn(CommonSkills);
+
+impl FromSql for CommonSkillsColumn {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let text = value.as_str()?;
+        serde_json::from_str(text)
+            .map(CommonSkillsColumn)
+            .map_err(|e| FromSqlError::Other(Box::new(e)))
+    }
+}
+
 /// v3 以前(旧形式)の `equipment` 列を部位別装備(v4)へ移行する。
 ///
 /// 旧形式は JSON に `parts` キーを持たない。旧形式からは部位を再構成できないため、
@@ -111,13 +130,57 @@ fn migrate_equipment_to_parts(conn: &Connection) -> Result<()> {
         if value.get("parts").is_some() {
             continue;
         }
-        let power_weapon = value.get("power_weapon").and_then(|v| v.as_bool()).unwrap_or(false);
-        let strong_weapon_level =
-            value.get("strong_weapon_level").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-        let migrated =
-            Equipment { power_weapon, strong_weapon_level, ..Equipment::default() };
-        let migrated_json = serde_json::to_string(&migrated)?;
+        // 旧形式から部位は再構成できない。パワーウェポン / ストロングウェポンは
+        // `migrate_weapon_skills_to_common` が `equipment` 列の JSON から拾うので、
+        // ここでは触らず中立値の部位別装備に差し替えるだけにする。
+        let migrated = Equipment::default();
+        let mut migrated_value = serde_json::to_value(migrated)?;
+        for key in ["power_weapon", "strong_weapon_level"] {
+            if let Some(v) = value.get(key) {
+                migrated_value[key] = v.clone();
+            }
+        }
+        let migrated_json = serde_json::to_string(&migrated_value)?;
         conn.execute("UPDATE characters SET equipment = ?1 WHERE id = ?2", params![migrated_json, id])?;
+    }
+    Ok(())
+}
+
+/// v5 以前の `equipment` 列にあったパワーウェポン / ストロングウェポンを
+/// `common_skills` 列へ移す(wiki: どちらも Skill/共通 の共通スキルで、装備ではない)。
+///
+/// `common_skills` 側にすでに値が入っている行(= 移行済み)は触らない。
+fn migrate_weapon_skills_to_common(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, equipment, common_skills FROM characters")?;
+    let rows: Vec<(i64, String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (id, equipment_json, common_json) in rows {
+        let mut equipment: serde_json::Value = serde_json::from_str(&equipment_json)?;
+        let power_weapon = equipment.get("power_weapon").and_then(|v| v.as_bool());
+        let strong_weapon_level =
+            equipment.get("strong_weapon_level").and_then(|v| v.as_u64()).map(|v| v as u8);
+        if power_weapon.is_none() && strong_weapon_level.is_none() {
+            continue;
+        }
+        let mut common: CommonSkills = serde_json::from_str(&common_json)?;
+        if common == CommonSkills::default() {
+            common.power_weapon = power_weapon.unwrap_or(false);
+            common.strong_weapon_level = strong_weapon_level.unwrap_or(0);
+            // ストロングウェポン Lv2 以降はオーグメントが要る。移行前のデータには
+            // オーグメント Lv が無いので、その Lv を取れるだけの値を入れておく
+            // (検証で弾かれて保存できなくなるのを避ける)。
+            common.augment_level = common.strong_weapon_level.saturating_sub(1);
+        }
+        if let Some(map) = equipment.as_object_mut() {
+            map.remove("power_weapon");
+            map.remove("strong_weapon_level");
+        }
+        conn.execute(
+            "UPDATE characters SET equipment = ?1, common_skills = ?2 WHERE id = ?3",
+            params![serde_json::to_string(&equipment)?, serde_json::to_string(&common)?, id],
+        )?;
     }
     Ok(())
 }
@@ -169,7 +232,14 @@ impl CharacterRepository {
         if !existing_columns.contains("main_skill_id") {
             conn.execute_batch("ALTER TABLE characters ADD COLUMN main_skill_id TEXT;")?;
         }
+        // v6: 共通スキル。既存キャラは `{}`(全部未習得)で読める。
+        if !existing_columns.contains("common_skills") {
+            conn.execute_batch(
+                "ALTER TABLE characters ADD COLUMN common_skills TEXT NOT NULL DEFAULT '{}';",
+            )?;
+        }
         migrate_equipment_to_parts(&conn)?;
+        migrate_weapon_skills_to_common(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -188,9 +258,10 @@ impl CharacterRepository {
         let s = &new.base_stats;
         let stat_sources_json = serde_json::to_string(&new.stat_sources)?;
         let equipment_json = serde_json::to_string(&new.equipment)?;
+        let common_skills_json = serde_json::to_string(&new.common_skills)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, main_skill_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 new.name,
                 new.game_character_id,
@@ -205,6 +276,7 @@ impl CharacterRepository {
                 new.awakening.eternal_level,
                 stat_sources_json,
                 equipment_json,
+                common_skills_json,
                 new.main_skill_id,
             ],
         )?;
@@ -226,13 +298,14 @@ impl CharacterRepository {
         let s = &update.base_stats;
         let stat_sources_json = serde_json::to_string(&update.stat_sources)?;
         let equipment_json = serde_json::to_string(&update.equipment)?;
+        let common_skills_json = serde_json::to_string(&update.common_skills)?;
         let affected = self.conn.execute(
             "UPDATE characters SET
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
                 awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
-                main_skill_id = ?14
-             WHERE id = ?15",
+                common_skills = ?14, main_skill_id = ?15
+             WHERE id = ?16",
             params![
                 update.name,
                 update.game_character_id,
@@ -247,6 +320,7 @@ impl CharacterRepository {
                 update.awakening.eternal_level,
                 stat_sources_json,
                 equipment_json,
+                common_skills_json,
                 update.main_skill_id,
                 id,
             ],
@@ -316,6 +390,7 @@ pub fn validate(
     domain::stat_sources::build_modifiers(&new.stat_sources, catalog, &new.game_character_id)
         .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     new.equipment.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+    new.common_skills.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     validate_equipment_catalog(&new.equipment, equipment_catalog, equipment_abilities, random_options)?;
     // 称号は装備部位ではないので部位ループの外で見る(1 枠・カタログ参照のみ)
     if let Some(id) = &new.equipment.title {
@@ -453,6 +528,7 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         },
         stat_sources: row.get::<_, StatSourcesColumn>("stat_sources")?.0,
         equipment: row.get::<_, EquipmentColumn>("equipment")?.0,
+        common_skills: row.get::<_, CommonSkillsColumn>("common_skills")?.0,
         main_skill_id: row.get("main_skill_id")?,
     })
 }
@@ -474,6 +550,7 @@ mod tests {
             awakening: Awakening { stage: 5, eternal_level: 40 },
             stat_sources: StatSources::default(),
             equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
             main_skill_id: None,
         }
     }
@@ -682,9 +759,11 @@ mod tests {
 
         let list = repo.list().unwrap();
         assert_eq!(list.len(), 1);
-        // power_weapon/strong_weapon_level は引き継がれる。
-        assert_eq!(list[0].equipment.power_weapon, true);
-        assert_eq!(list[0].equipment.strong_weapon_level, 6);
+        // パワーウェポン / ストロングウェポンは共通スキル(v6)へ移る。
+        assert_eq!(list[0].common_skills.power_weapon, true);
+        assert_eq!(list[0].common_skills.strong_weapon_level, 6);
+        // Lv6 を取れるだけのオーグメント Lv を補って、検証で弾かれないようにする
+        assert_eq!(list[0].common_skills.augment_level, 5);
         // 旧合計値(base/enhanced相当)は破棄され、部位はすべて default(未装備)になる。
         assert_eq!(list[0].equipment.parts, domain::EquipmentParts::default());
 
@@ -794,12 +873,12 @@ mod tests {
                 },
                 ..Default::default()
             },
-            power_weapon: true,
-            strong_weapon_level: 6,
             ..Default::default()
         };
+        c.common_skills = CommonSkills { power_weapon: true, strong_weapon_level: 6, augment_level: 5, ..Default::default() };
         let created = repo.create(&c, &[], &[], &[], &[], &[]).unwrap();
         assert_eq!(created.equipment, c.equipment);
+        assert_eq!(created.common_skills, c.common_skills);
 
         let fetched = repo.get(created.id).unwrap();
         assert_eq!(fetched.equipment, c.equipment);
@@ -919,8 +998,14 @@ mod tests {
         assert!(matches!(repo.create(&over_value, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_level = new_character("x");
-        over_level.equipment.strong_weapon_level = 7;
+        over_level.common_skills.strong_weapon_level = 7;
+        over_level.common_skills.augment_level = 5;
         assert!(matches!(repo.create(&over_level, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+
+        // オーグメントが足りない Lv も弾く(wiki: Lv2 以降はオーグメントの LvUp が必要)
+        let mut no_augment = new_character("x");
+        no_augment.common_skills.strong_weapon_level = 6;
+        assert!(matches!(repo.create(&no_augment, &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     fn test_equipment_item() -> EquipmentItem {

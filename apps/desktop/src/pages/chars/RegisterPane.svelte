@@ -3,7 +3,7 @@
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import { createCharacter, errorMessage } from "../../api/commands";
   import type { NewCharacter } from "../../api/types";
-  import { defaultEquipment, neutralStatSources } from "../../draft";
+  import { defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
   import { STAT_KINDS } from "../../labels";
   import {
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
@@ -63,6 +63,7 @@
           awakening: { stage: 0, eternal_level: 0 },
           stat_sources: neutralStatSources(),
           equipment: defaultEquipment(),
+          common_skills: defaultCommonSkills(),
           main_skill_id: mainSkillId === "" ? null : mainSkillId,
         };
       }

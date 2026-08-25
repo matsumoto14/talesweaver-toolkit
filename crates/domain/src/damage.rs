@@ -9,6 +9,7 @@ use crate::attack_power::{
     AttackPowerBreakdown,
 };
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
+use crate::common_skill::CommonSkills;
 use crate::enemy::Enemy;
 use crate::defense::{accuracy_point, AccuracyCorrection};
 use crate::equipment::{equipment_values_attack, Equipment, EquipmentCoefficients, EquipmentValues};
@@ -34,9 +35,11 @@ pub struct DamageInput {
     /// `stat_modifiers` の寄与内訳(ペット/ルーン/クラウン/聖物/バフ/調整値)。トレース表示用
     pub stat_contributions: Vec<StatContribution>,
     pub coefficients: AttackCoefficients,
-    /// 装備補正。装備攻撃力強化倍率(`enhance_rate()`)、シエナのオーラの攻撃力増加(New1)、
-    /// テシスコアのセット効果(K/L)の 3 つに使う
+    /// 装備補正。シエナのオーラの攻撃力増加(New1)とテシスコアのセット効果(K/L)に使う
     pub equipment: Equipment,
+    /// 共通スキル(wiki: Skill/共通)。装備攻撃力強化倍率(カテゴリA の内訳)と
+    /// シャープネスビジョンの割合追加ダメージ(§5 新-割合)に使う
+    pub common_skills: CommonSkills,
     /// 装備の基本能力値の集計(`Equipment::base_totals`。アビリティ加算込み。呼び出し側が gamedata の
     /// 武器アビリティカタログを使って集計して渡す。domain は gamedata に依存できないため)
     pub equipment_base_totals: EquipmentValues,
@@ -80,6 +83,7 @@ impl DamageInput {
         stat_contributions: Vec<StatContribution>,
         coefficients: AttackCoefficients,
         equipment: Equipment,
+        common_skills: CommonSkills,
         equipment_base_totals: EquipmentValues,
         equipment_enhanced_totals: EquipmentValues,
         equipment_coefficients: EquipmentCoefficients,
@@ -101,6 +105,7 @@ impl DamageInput {
             stat_contributions,
             coefficients,
             equipment,
+            common_skills,
             equipment_base_totals,
             equipment_enhanced_totals,
             equipment_coefficients,
@@ -157,6 +162,11 @@ pub struct DamageResult {
     pub damage_cap: i64,
     /// 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない
     pub capped_loss: DamageTriple,
+    /// 割合追加ダメージ(§5「新-割合」)の Σ%。いまの供給源はシャープネスビジョンのみ
+    pub added_damage_rate: f64,
+    /// 割合追加ダメージの実額。**合計ダメージ**に乗る(1 段ごとではない)ので
+    /// `total` にだけ含まれる
+    pub added_damage: DamageTriple,
     /// 命中P(wiki: 計算式まとめ #AccuracyPoint)。敵の回避Pを 100 上回ると必中。
     /// スキル命中が wiki 未記載(`Skill::accuracy` が `None`)なら出せないので `None`
     pub accuracy_point: Option<i64>,
@@ -283,7 +293,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             &input.equipment_enhanced_totals,
             &input.equipment_coefficients.enhanced,
         ),
-        input.equipment.enhance_rate(),
+        input.common_skills.equipment_attack_rate(),
     );
     let mut totals = CategoryTotals::neutral();
     totals.add(AttackPower, attack.value as f64);
@@ -378,16 +388,39 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     }
     let (min, max, critical) = (capped_min, capped_max, capped_critical);
 
+    // §5 割合追加ダメージ(新-割合)。「合計ダメージ + 追加ダメージ(武器強化)」に掛かるので、
+    // 1 段ごとではなく段数を掛けたあとの合計に乗せる。武器強化の追加固定ダメージは
+    // すでに per-hit に入っているので、`合計` がそのまま算出基準になる。
+    let added_rate = input.common_skills.sharpness_vision_rate();
+    let sum = DamageTriple { min: min * hits, max: max * hits, critical: critical * hits };
+    let added = DamageTriple {
+        min: floor_int(sum.min as f64 * added_rate),
+        max: floor_int(sum.max as f64 * added_rate),
+        critical: floor_int(sum.critical as f64 * added_rate),
+    };
+    if added.max != 0 {
+        let step = FormulaStep {
+            name: "割合追加ダメージ(合計に乗る)".to_string(),
+            expression: format!("合計 × {:.0}% ※シャープネスビジョン", added_rate * 100.0),
+            value: added_rate,
+        };
+        steps_min.push(step.clone());
+        steps_max.push(step.clone());
+        steps_critical.push(step);
+    }
+
     DamageResult {
         per_hit: DamageTriple { min, max, critical },
         total: DamageTriple {
-            min: min * hits,
-            max: max * hits,
-            critical: critical * hits,
+            min: sum.min + added.min,
+            max: sum.max + added.max,
+            critical: sum.critical + added.critical,
         },
         hit_count,
         damage_cap: input.damage_cap,
         capped_loss,
+        added_damage_rate: added_rate,
+        added_damage: added,
         accuracy_point: accuracy,
         trace: DamageTrace {
             stats: stat_traces,
@@ -444,6 +477,7 @@ mod tests {
             stat_contributions: Vec::new(),
             coefficients: AttackCoefficients { primary: (StatKind::Stab, 1.8), secondary: (StatKind::Hack, 1.8) },
             equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
             equipment_base_totals: EquipmentValues::default(),
             equipment_enhanced_totals: EquipmentValues::default(),
             equipment_coefficients: EquipmentCoefficients::default(),
@@ -744,7 +778,7 @@ mod tests {
     fn 装備補正があると中盤の敵に対しても下限1にならない() {
         let mut i = input();
         i.base_stats = BaseStats { stab: 310, hack: 310, int: 1, def: 1, mr: 1, dex: 100, agi: 1 };
-        i.equipment = Equipment { strong_weapon_level: 6, ..Default::default() };
+        i.common_skills = CommonSkills { strong_weapon_level: 6, ..Default::default() };
         i.equipment_base_totals = EquipmentValues { thrust: 400, slash: 400, ..Default::default() };
         i.equipment_enhanced_totals = EquipmentValues { thrust: 200, slash: 200, ..Default::default() };
         i.equipment_coefficients = EquipmentCoefficients {

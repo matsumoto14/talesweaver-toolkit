@@ -1,7 +1,7 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
+  Adjustments, BaseStats, BuffDefinition, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, RandomOptionDef, Skill, StatLimits, StatPreview, StatSources,
   TitleDef,
@@ -27,10 +27,10 @@ export const deleteCharacter = (id: number) => invoke<void>("delete_character", 
  * `mainSkillId`(主軸スキル)を渡すとその依存種別で攻撃力(A)も返る。null なら攻撃力は出ない。
  */
 export const previewEffectiveStats = (
-  baseStats: BaseStats, statSources: StatSources, equipment: Equipment, gameCharacterId: string,
-  mainSkillId: string | null,
+  baseStats: BaseStats, statSources: StatSources, equipment: Equipment, commonSkills: CommonSkills,
+  gameCharacterId: string, mainSkillId: string | null,
 ) => invoke<StatPreview>("preview_effective_stats", {
-  baseStats, statSources, equipment, gameCharacterId, mainSkillId,
+  baseStats, statSources, equipment, commonSkills, gameCharacterId, mainSkillId,
 });
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,

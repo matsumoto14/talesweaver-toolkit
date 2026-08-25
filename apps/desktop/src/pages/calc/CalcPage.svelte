@@ -422,15 +422,15 @@
   const KNOBS: Knob[] = [
     {
       id: "pw",
-      label: (p) => `パワーW ${p.equipment.power_weapon ? "ON" : "OFF"}`,
-      get: (p) => String(p.equipment.power_weapon),
-      set: (p, v) => (p.equipment.power_weapon = v === "true"),
+      label: (p) => `パワーW ${p.common_skills.power_weapon ? "ON" : "OFF"}`,
+      get: (p) => String(p.common_skills.power_weapon),
+      set: (p, v) => (p.common_skills.power_weapon = v === "true"),
     },
     {
       id: "sw",
-      label: (p) => `ストロングW ${p.equipment.strong_weapon_level > 0 ? `Lv${p.equipment.strong_weapon_level}` : "なし"}`,
-      get: (p) => String(p.equipment.strong_weapon_level),
-      set: (p, v) => (p.equipment.strong_weapon_level = Number(v)),
+      label: (p) => `ストロングW ${p.common_skills.strong_weapon_level > 0 ? `Lv${p.common_skills.strong_weapon_level}` : "なし"}`,
+      get: (p) => String(p.common_skills.strong_weapon_level),
+      set: (p, v) => (p.common_skills.strong_weapon_level = Number(v)),
     },
     {
       id: "weapon_enchant_thrust",
@@ -1027,10 +1027,10 @@
           <label class="pw">
             <input
               type="checkbox"
-              checked={payload.equipment.power_weapon}
+              checked={payload.common_skills.power_weapon}
               onchange={(e) => {
                 const v = e.currentTarget.checked;
-                editSim((p) => (p.equipment.power_weapon = v));
+                editSim((p) => (p.common_skills.power_weapon = v));
               }}
             />
             <span>パワーウェポン(+2%)</span>
@@ -1040,8 +1040,8 @@
               label="ストロングウェポン"
               options={strongWeaponOptions}
               bind:value={
-                () => String(payload.equipment.strong_weapon_level),
-                (v) => editSim((p) => (p.equipment.strong_weapon_level = Number(v)))
+                () => String(payload.common_skills.strong_weapon_level),
+                (v) => editSim((p) => (p.common_skills.strong_weapon_level = Number(v)))
               }
             />
           </div>

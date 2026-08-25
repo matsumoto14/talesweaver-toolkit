@@ -2,7 +2,7 @@
 
 use domain::{
     evaluate_content, AttackPowerCoefficients, BestSkillDamage, BuffDefinition, Content,
-    ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, DefenseProfile,
+    CommonSkills, ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, DefenseProfile,
     Enemy, EquipmentAbilityDef, EquipmentPart, RandomOptionDef, Skill, TitleDef,
 };
 use gamedata::{EquipmentItem, GameCharacter};
@@ -197,6 +197,7 @@ pub fn preview_effective_stats(
     base_stats: domain::BaseStats,
     stat_sources: domain::StatSources,
     equipment: domain::Equipment,
+    common_skills: CommonSkills,
     game_character_id: String,
     main_skill_id: Option<String>,
 ) -> CommandResult<domain::StatPreview> {
@@ -205,6 +206,7 @@ pub fn preview_effective_stats(
         &base_stats,
         &stat_sources,
         &equipment,
+        &common_skills,
         &gamedata::buff_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
@@ -233,6 +235,7 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &character.base_stats,
         &character.stat_sources,
         &character.equipment,
+        &character.common_skills,
         &gamedata::buff_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
@@ -249,6 +252,10 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &equipment_totals,
         gamedata::awakening_caps(character.awakening),
         &character.equipment.random_option_totals(&gamedata::random_option_catalog()),
+        // 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。
+        // リンゴの島・ベリネンルミは常に 100% だが、防御タブは対象コンテンツを取らないので
+        // ここでは習得どおりの倍率で出す(その注記は UI 側で出す)
+        character.common_skills.defense_rates(character.equipment.siena_defense_rate()),
     ))
 }
 
@@ -321,6 +328,7 @@ fn build_damage_input(
     game_character_id: &str,
     stat_sources: &domain::StatSources,
     equipment: domain::Equipment,
+    common_skills: CommonSkills,
     awakening: domain::Awakening,
     skill: Skill,
     enemy: Enemy,
@@ -350,6 +358,7 @@ fn build_damage_input(
         stat_contributions,
         coefficients,
         equipment,
+        common_skills,
         equipment_base_totals,
         equipment_enhanced_totals,
         equipment_coefficients,
@@ -384,6 +393,7 @@ pub fn calculate_damage(
         &character.game_character_id,
         &character.stat_sources,
         character.equipment,
+        character.common_skills,
         character.awakening,
         find_skill(&skill_id)?,
         enemy,
@@ -419,6 +429,7 @@ pub fn preview_damage(
         &character.game_character_id,
         &character.stat_sources,
         character.equipment,
+        character.common_skills,
         character.awakening,
         find_skill(&skill_id)?,
         enemy,
@@ -519,6 +530,7 @@ pub fn evaluate_contents(
                     stat_contributions.clone(),
                     gamedata::attack_coefficients(skill.dependency),
                     character.equipment.clone(),
+                    character.common_skills,
                     equipment_base_totals,
                     equipment_enhanced_totals,
                     gamedata::equipment_coefficients(skill.dependency),

@@ -10,6 +10,7 @@
     | "siena"
     | "randomOption"
     | "title"
+    | "commonSkill"
     | "thesis"
     | "skills"
     | "adjust";
@@ -242,16 +243,60 @@
   const tierOf = (def: RandomOptionDef, rank: RandomOptionRank) =>
     def.tiers.find((t) => t.rank === rank);
 
-  const enhanceRatePercent = $derived(
-    (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3,
+  // --- 共通スキル(wiki: Skill/共通)---------------------------------------
+  // オーグメントはストロングウェポン / プロテクトアーマーの Lv2 以降の前提スキル。
+  // 上限を超える Lv は保存時に Rust 側が弾くので、選択肢の側で先に絞る。
+  const augmentGate = $derived(draft.commonSkills.augment_level + 1);
+  const augmentOptions = $derived(
+    Array.from({ length: limits.augment_level_max + 1 }, (_, i) => ({
+      value: String(i),
+      label: i === 0 ? "未習得" : `Lv${i}`,
+    })),
   );
-  const enhanceRateSummary = $derived(
-    [
-      draft.equipment.power_weapon ? "パワーウェポン" : null,
-      draft.equipment.strong_weapon_level > 0 ? `ストロングウェポン Lv${draft.equipment.strong_weapon_level}` : null,
-    ]
-      .filter((x) => x !== null)
-      .join(" ・ ") || "どちらも未使用",
+  /** オーグメントで解放されている Lv までを選択肢にする */
+  const gatedLevelOptions = (max: number, label: (lv: number) => string) =>
+    Array.from({ length: max + 1 }, (_, lv) => ({
+      value: String(lv),
+      label: lv === 0 ? "未習得" : label(lv),
+      disabled: lv > augmentGate,
+    })).filter((o) => !o.disabled);
+  const protectArmorOptions = $derived(
+    gatedLevelOptions(
+      limits.protect_armor_level_max,
+      (lv) => `Lv${lv}(物+${[36, 45, 54, 63, 72, 81][lv - 1]}% / 魔+${[24, 30, 36, 42, 48, 54][lv - 1]}%)`,
+    ),
+  );
+  const kaiProtectArmorOptions = Array.from({ length: 6 }, (_, lv) => ({
+    value: String(lv),
+    label: lv === 0 ? "未習得" : `Lv${lv}(物+${lv * 9}% / 魔+${lv * 6}%)`,
+  }));
+  const sharpnessVisionOptions = Array.from({ length: 11 }, (_, lv) => ({
+    value: String(lv),
+    label: lv === 0 ? "未習得" : `Lv${lv}(+${[5, 10, 15, 20, 25, 28, 31, 34, 37, 40][lv - 1]}%)`,
+  }));
+  /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。表示用 */
+  const sienaDefenseRate = $derived(
+    PART_SLOTS.reduce((n, slot) => n + draft.equipment.parts[slot].siena.defense_rate_percent, 0),
+  );
+  const defenseRatePercent = $derived.by(() => {
+    const c = draft.commonSkills;
+    const pa = c.protect_armor_level;
+    const kai = c.kai_protect_armor_level;
+    const physical =
+      (c.coat_armor ? 18 : 0) +
+      (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) +
+      kai * 9 +
+      sienaDefenseRate;
+    const magic =
+      (c.coat_armor ? 12 : 0) +
+      (pa > 0 ? [24, 30, 36, 42, 48, 54][pa - 1] : 0) +
+      kai * 6 +
+      sienaDefenseRate;
+    return { physical: 100 + physical, magic: 100 + magic };
+  });
+
+  const enhanceRatePercent = $derived(
+    (draft.commonSkills.power_weapon ? 2 : 0) + draft.commonSkills.strong_weapon_level * 3,
   );
 
   const enhanceLevelOptions = $derived(
@@ -378,6 +423,7 @@
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
     title: { title: "称号", note: "表示中の 1 件だけが装備の基本能力値に乗る" },
+    commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
@@ -519,30 +565,6 @@
     </div>
   {:else if sourceId === "equipment"}
     {#if openPart === null}
-      <div class="card">
-        <details class="enhance-rate">
-          <summary>
-            <span class="card-title inline">装備攻撃力強化</span>
-            <span class="num strong">+{enhanceRatePercent}%</span>
-            <span class="dim">{enhanceRateSummary}</span>
-          </summary>
-          <p class="hint dim">ほぼ全員が取っているので既定で入れてあります。取っていない・Lv が違うときだけ触ってください。</p>
-          <div class="fields">
-            <label class="check">
-              <input type="checkbox" bind:checked={draft.equipment.power_weapon} />
-              <span>パワーウェポン(+2%)</span>
-            </label>
-            <Select
-              label="ストロングウェポン"
-              options={strongWeaponOptions}
-              bind:value={
-                () => String(draft.equipment.strong_weapon_level),
-                (v) => (draft.equipment.strong_weapon_level = Number(v))
-              }
-            />
-          </div>
-        </details>
-      </div>
       <div class="part-list">
         {#each PART_SLOTS as slot (slot)}
           {@const part = draft.equipment.parts[slot]}
@@ -1021,6 +1043,103 @@
         </p>
       </div>
     {/if}
+  {:else if sourceId === "commonSkill"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「Skill/共通」。キャラを問わず習得するパッシブです。効き先は
+        <b>装備攻撃力強化倍率</b>(パワーウェポン / ストロングウェポン)、
+        <b>装備防御力倍率</b>(コートアーマー / プロテクトアーマー)、
+        <b>割合追加ダメージ</b>(シャープネスビジョン)の 3 つ。
+        <b>オーグメント</b>はストロングウェポン・プロテクトアーマーを Lv2 以上にするための前提スキルなので、
+        先に上げないと上の Lv が選べません。
+      </p>
+      <div class="fields">
+        <Select
+          label="オーグメント(前提スキル)"
+          options={augmentOptions}
+          bind:value={
+            () => String(draft.commonSkills.augment_level),
+            (v) => (draft.commonSkills.augment_level = Number(v))
+          }
+        />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title inline">装備攻撃力強化 <span class="num strong">+{enhanceRatePercent}%</span></div>
+      <p class="hint dim">ほぼ全員が取っているので既定で入れてあります。取っていない・Lv が違うときだけ触ってください。</p>
+      <div class="fields">
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.commonSkills.power_weapon} />
+          <span>パワーウェポン(+2%)</span>
+        </label>
+        <Select
+          label="ストロングウェポン"
+          options={strongWeaponOptions.filter((o) => Number(o.value) <= augmentGate)}
+          bind:value={
+            () => String(draft.commonSkills.strong_weapon_level),
+            (v) => (draft.commonSkills.strong_weapon_level = Number(v))
+          }
+        />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title inline">
+        装備防御力倍率
+        <span class="num strong">物 {fmtInt(defenseRatePercent.physical)}% / 魔 {fmtInt(defenseRatePercent.magic)}%</span>
+      </div>
+      <p class="hint dim">
+        装備の物防・魔防に掛かります(防御タブの防御力に効きます)。
+        コートアーマーとプロテクトアーマーは<b>重複可</b>で、シエナのオーラの「防御力増加」もここに加算されます。
+        <b>リンゴの島・ベリネンルミでは常に 100%</b>(wiki 計算式まとめ §防御力)。
+      </p>
+      <div class="fields">
+        <label class="check">
+          <input type="checkbox" bind:checked={draft.commonSkills.coat_armor} />
+          <span>コートアーマー(物+18% / 魔+12%)</span>
+        </label>
+        <Select
+          label="プロテクトアーマー"
+          options={protectArmorOptions}
+          bind:value={
+            () => String(draft.commonSkills.protect_armor_level),
+            (v) => (draft.commonSkills.protect_armor_level = Number(v))
+          }
+        />
+        <Select
+          label="改・プロテクトアーマー"
+          options={kaiProtectArmorOptions}
+          bind:value={
+            () => String(draft.commonSkills.kai_protect_armor_level),
+            (v) => (draft.commonSkills.kai_protect_armor_level = Number(v))
+          }
+        />
+      </div>
+      {#if sienaDefenseRate > 0}
+        <p class="hint dim">シエナのオーラの防御力増加 +{sienaDefenseRate}% を含んでいます。</p>
+      {/if}
+    </div>
+
+    <div class="card">
+      <div class="card-title inline">
+        割合追加ダメージ <span class="num strong">+{fmtInt(draft.commonSkills.sharpness_vision_level === 0 ? 0 : [5, 10, 15, 20, 25, 28, 31, 34, 37, 40][draft.commonSkills.sharpness_vision_level - 1])}%</span>
+      </div>
+      <p class="hint dim">
+        シャープネスビジョン。<b>合計ダメージ</b>に乗ります(1 発ごとではありません)。
+        Lv6 以上は各 Lv の習得スクロールが要ります。
+      </p>
+      <div class="fields">
+        <Select
+          label="シャープネスビジョン"
+          options={sharpnessVisionOptions}
+          bind:value={
+            () => String(draft.commonSkills.sharpness_vision_level),
+            (v) => (draft.commonSkills.sharpness_vision_level = Number(v))
+          }
+        />
+      </div>
+    </div>
   {:else if sourceId === "thesis"}
     <div class="card">
       <div class="card-title">地域</div>
@@ -1215,15 +1334,8 @@
   /* 装備ドリルダウン: 部位詳細 */
   .back-link { align-self: flex-start; padding: 2px 2px; font-size: var(--t-label); color: var(--accent); }
   .back-link:hover { text-decoration: underline; }
-  .enhance-rate > summary {
-    display: flex; align-items: baseline; gap: 8px; cursor: pointer; list-style: none;
-  }
-  .enhance-rate > summary::-webkit-details-marker { display: none; }
-  .enhance-rate > summary::before { content: "▸"; font-size: 9px; color: var(--fg-muted); }
-  .enhance-rate[open] > summary::before { content: "▾"; }
-  .enhance-rate > summary .strong { font-size: 13px; font-weight: 700; }
-  .enhance-rate > summary .dim { margin-left: auto; font-size: 9.5px; }
-  .card-title.inline { margin: 0; }
+  .card-title.inline { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+  .card-title.inline .strong { font-size: 13px; font-weight: 700; }
   .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
   .values-col { flex: 1 1 260px; min-width: 0; }
   .part-elem {

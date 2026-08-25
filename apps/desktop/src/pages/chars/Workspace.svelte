@@ -74,12 +74,13 @@
     const statSources = JSON.parse(JSON.stringify(draft.statSources)) as StatSources;
     // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
     const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
+    const commonSkills = { ...draft.commonSkills };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
     const gameCharacterId = draft.gameCharacterId;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, equipment, gameCharacterId, mainSkillId)
+      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, gameCharacterId, mainSkillId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;
@@ -141,7 +142,7 @@
     STAT_KINDS.filter((k) => draft.statSources.adjustments[k].add !== 0 || draft.statSources.adjustments[k].pin !== null).length,
   );
   const enhanceRatePercent = $derived(
-    (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3,
+    (draft.commonSkills.power_weapon ? 2 : 0) + draft.commonSkills.strong_weapon_level * 3,
   );
   const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment, app.equipmentAbilities, app.titles));
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
@@ -152,6 +153,21 @@
   const roCount = $derived(randomOptionCount(draft.equipment));
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
+
+  // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる
+  const commonSkillSummary = $derived.by(() => {
+    const c = draft.commonSkills;
+    const parts: string[] = [];
+    if (enhanceRatePercent > 0) parts.push(`装備攻撃力 +${enhanceRatePercent}%`);
+    const pa = c.protect_armor_level;
+    const defense =
+      (c.coat_armor ? 18 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
+    if (defense > 0) parts.push(`装備防御力 物+${defense}%`);
+    if (c.sharpness_vision_level > 0) {
+      parts.push(`追加ダメージ +${[5, 10, 15, 20, 25, 28, 31, 34, 37, 40][c.sharpness_vision_level - 1]}%`);
+    }
+    return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
+  });
 
   // 称号は 1 枠。表示中の 1 件だけが効く(wiki: 称号システム)
   const titleSummary = $derived.by(() => {
@@ -175,9 +191,14 @@
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
     { id: "status", name: "キャラステータス", sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}` },
     {
+      id: "commonSkill",
+      name: "共通スキル",
+      sub: commonSkillSummary,
+    },
+    {
       id: "equipment",
       name: "装備",
-      sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}${enhanceRatePercent > 0 ? ` ・ +${enhanceRatePercent}%` : ""}`,
+      sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}`,
     },
     {
       id: "element",
@@ -356,7 +377,7 @@
             </tbody>
           </table>
           <p class="dim tiny">
-            強化倍率 +{enhanceRatePercent}%。基本には武器アビリティと称号の分も入っています。
+            強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も入っています。
             強化のうちテシスコア・シエナのオーラの分はこの表に入りません
             (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。
           </p>

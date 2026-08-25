@@ -55,6 +55,8 @@ export const neutralSienaAura = (): SienaAura => ({
   stats: zeroStatBonus(),
   all_stats: 0,
   attack_rate_percent: 0,
+  defense_rate_percent: 0,
+  actual_delay_percent: 0,
 });
 
 export const cloneSienaAura = (src: SienaAura): SienaAura => ({
@@ -63,6 +65,8 @@ export const cloneSienaAura = (src: SienaAura): SienaAura => ({
   stats: { ...src.stats },
   all_stats: src.all_stats,
   attack_rate_percent: src.attack_rate_percent,
+  defense_rate_percent: src.defense_rate_percent,
+  actual_delay_percent: src.actual_delay_percent,
 });
 
 /** 部位ごとのステ加算合計(能力値スロット + 全ステータス増加 × 7 ステ)。表示用 */

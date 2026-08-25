@@ -40,17 +40,29 @@
         <div class="row">
           <span class="rl">物理防御力</span>
           <span class="num rv">{fmtInt(profile.physical_defense)}</span>
-          <span class="rn dim">DEF×3 + 装備物防 {fmtInt(profile.equipment_physical_defense)}×6</span>
+          <span class="rn dim">
+            DEF×3 + 装備物防 {fmtInt(profile.equipment_physical_defense)}×{fmtNum(profile.defense_rates.physical)}×6
+          </span>
         </div>
         <div class="row">
           <span class="rl">魔法防御力</span>
           <span class="num rv">{fmtInt(profile.magic_defense)}</span>
-          <span class="rn dim">MR×3 + 装備魔防 {fmtInt(profile.equipment_magic_defense)}×6</span>
+          <span class="rn dim">
+            MR×3 + 装備魔防 {fmtInt(profile.equipment_magic_defense)}×{fmtNum(profile.defense_rates.magic)}×6
+          </span>
         </div>
         <div class="row">
           <span class="rl">複合防御力</span>
           <span class="num rv">{fmtInt(profile.composite_defense)}</span>
           <span class="rn dim">(DEF+MR)×1.5 + 装備×3</span>
+        </div>
+        <div class="row">
+          <span class="rl">装備防御力倍率</span>
+          <span class="num rv">物 {fmtInt(profile.defense_rates.physical * 100)}%</span>
+          <span class="rn dim">
+            魔 {fmtInt(profile.defense_rates.magic * 100)}%。共通スキル(コートアーマー / プロテクトアーマー)+
+            シエナのオーラの防御力増加。<b>リンゴの島・ベリネンルミでは常に 100%</b>
+          </span>
         </div>
         <div class="row">
           <span class="rl">防御力の上限</span>
