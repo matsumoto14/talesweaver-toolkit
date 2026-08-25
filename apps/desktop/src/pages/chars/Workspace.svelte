@@ -666,7 +666,7 @@
   .attack-head { display: flex; align-items: baseline; gap: 8px; }
   .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .attack-skill { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .attack-value { margin-top: 2px; font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .attack-value { margin-top: 2px; font-size: 19px; font-weight: 700; line-height: 1.1; }
   .attack-parts { margin-top: 3px; font-size: 9px; line-height: 1.6; }
   .attack-note { margin: 4px 0 0; font-size: 9px; line-height: 1.55; }
 

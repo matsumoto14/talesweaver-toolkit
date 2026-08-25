@@ -53,7 +53,12 @@ RULES = {
     "R7": ("状態 6 系統をまたいだ色の組み合わせ", "§03"),
     "R8": ("TS / Svelte に色の実値を直書き", "§15"),
     "R9": ("枠のある操作部品に border-radius が無い", "§04"),
+    "R10": ("font-size が実寸スケールの外", "§05"),
 }
+
+# §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
+# 密度は意識的な選択なので「役割トークンに寄せる」のではなく、この集合に収まるかを見る
+FONT_SCALE = {44, 40, 27, 19, 15, 14, 13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5}
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
 CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)\b")
@@ -257,6 +262,18 @@ def sel_names(sel: str) -> set[str]:
     return {m.group(0).lstrip(".#") for m in SEL_NAMES.finditer(re.sub(r"::?[a-z-]+(\([^)]*\))?", " ", sel))}
 
 
+FONT_SIZE = re.compile(r"font-size\s*:\s*([0-9.]+)px")
+
+
+def check_font_scale(chunk: Chunk, out: list[Finding]) -> None:
+    """§05 の実寸スケールの外にある font-size。calc() は §06 のアイコン比率なので見ない。"""
+    for m in FONT_SIZE.finditer(chunk.text):
+        size = float(m.group(1))
+        if size not in FONT_SCALE:
+            out.append(Finding("R10", chunk.path, chunk.line_of(m.start(1)), f"{m.group(1)}px",
+                               "44 / 40 / 27 / 19 / 15 / 14 / 13 / 12.5 / 12 / 11.5 / 11 / 10.5 / 10 / 9.5 / 9 / 8.5 の外"))
+
+
 def check_control_radius(chunk: Chunk, out: list[Finding]) -> None:
     """押す・打ち込む部品に枠や地があるのに角丸が無い(§04 は 0 を段に数えない)。
 
@@ -334,6 +351,7 @@ def collect() -> list[Finding]:
             check_duration(chunk, out)
             check_state_pairs(chunk, out)
             check_control_radius(chunk, out)
+            check_font_scale(chunk, out)
     return out
 
 
