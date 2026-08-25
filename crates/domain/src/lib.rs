@@ -26,7 +26,8 @@ pub mod ultimate_skill;
 
 pub use actual_delay::{
     actual_delay, ActualDelay, ActualDelayContribution, ActualDelayError, ActualDelaySkillCatalog,
-    ActualDelaySkillDef, ActualDelaySkills, ACTUAL_DELAY_MIN, ACTUAL_DELAY_REDUCTION_MAX,
+    ActualDelaySkillDef, ActualDelaySkills, SkillUsesTable, ACTUAL_DELAY_MIN,
+    ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
 };
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,

@@ -17,7 +17,7 @@ pub mod titles;
 use serde::Serialize;
 
 pub use actual_delay::{
-    actual_delay_skill_catalog, ACTUAL_DELAY_SKILLS_SOURCE,
+    actual_delay_skill_catalog, skill_uses_table, ACTUAL_DELAY_SKILLS_SOURCE, SKILL_USES_SOURCE,
 };
 pub use awakening::{awakening_caps, awakening_rate, AWAKENING_SOURCE};
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};

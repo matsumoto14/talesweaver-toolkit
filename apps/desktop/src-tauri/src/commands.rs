@@ -390,6 +390,7 @@ fn build_damage_input(
         temporary_adjustments,
         stat_sources.actual_delay_skills.contributions(gamedata::actual_delay_skill_catalog()),
         stat_sources.critical_rate,
+        gamedata::skill_uses_table(),
     ))
 }
 
@@ -503,6 +504,7 @@ pub fn evaluate_contents(
         .stat_sources
         .actual_delay_skills
         .contributions(gamedata::actual_delay_skill_catalog());
+    let skill_uses = gamedata::skill_uses_table();
     // 装備集計(基本能力値・武器追加固定ダメージ)はキャラのみ依存なのでループの外で 1 回だけ計算する。
     let equipment_base_totals = character.equipment.base_totals(&equipment_abilities, &titles);
     let random_option_totals = character.equipment.random_option_totals(&random_options);
@@ -576,6 +578,7 @@ pub fn evaluate_contents(
                     None,
                     actual_delay_skills.clone(),
                     character.stat_sources.critical_rate,
+                    skill_uses.clone(),
                 );
                 let result = domain::calculate_damage(&input);
                 if best.as_ref().is_none_or(|b| result.per_hit.max > b.per_hit_max) {

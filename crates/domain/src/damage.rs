@@ -4,7 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::actual_delay::{actual_delay, ActualDelay, ActualDelayContribution};
+use crate::actual_delay::{
+    actual_delay, ActualDelay, ActualDelayContribution, SkillUsesTable, SECONDS_PER_MINUTE,
+};
 use crate::attack_power::{
     attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,
@@ -78,6 +80,8 @@ pub struct DamageInput {
     pub temporary_pins: Option<Adjustments>,
     /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)。ペット会心・極のルーン等
     pub critical_rate_sources: CriticalRateSources,
+    /// 実測のスキル回数表(60 秒あたり)。DPS はここから出す(格子の外だけ式)。実データは gamedata
+    pub skill_uses: SkillUsesTable,
     /// キャラのパッシブ・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
     /// カタログの解決は呼び出し側(`ActualDelaySkills::contributions`)。共通の供給源
     /// (フルスロットル / ランダムオプション / シエナのオーラ)は `calculate_damage` が自分で集める
@@ -112,6 +116,7 @@ impl DamageInput {
         temporary_pins: Option<Adjustments>,
         actual_delay_skills: Vec<ActualDelayContribution>,
         critical_rate_sources: CriticalRateSources,
+        skill_uses: SkillUsesTable,
     ) -> Self {
         Self {
             base_stats,
@@ -137,6 +142,7 @@ impl DamageInput {
             temporary_pins,
             actual_delay_skills,
             critical_rate_sources,
+            skill_uses,
         }
     }
 }
@@ -492,17 +498,27 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
                 .push(ActualDelayContribution { source: "シエナのオーラ".into(), rate: siena });
         }
         contributions.extend(input.actual_delay_skills.iter().cloned());
-        actual_delay(base, input.skill.actual_delay_fixed, contributions, input.combo_count)
+        actual_delay(
+            base,
+            input.skill.actual_delay_fixed,
+            contributions,
+            input.combo_count,
+            &input.skill_uses,
+        )
     });
     let total = DamageTriple {
         min: sum.min + added.min,
         max: sum.max + added.max,
         critical: sum.critical + added.critical,
     };
-    let dps = delay.as_ref().map(|d| DpsTriple {
-        min: total.min as f64 / d.value,
-        max: total.max as f64 / d.value,
-        critical: total.critical as f64 / d.value,
+    // DPS は「合計ダメージ × 60 秒あたりのスキル回数 / 60」。回数は実測表(格子の外だけ式)。
+    let dps = delay.as_ref().map(|d| {
+        let per_second = |total: i64| total as f64 * d.uses_per_minute / SECONDS_PER_MINUTE;
+        DpsTriple {
+            min: per_second(total.min),
+            max: per_second(total.max),
+            critical: per_second(total.critical),
+        }
     });
 
     DamageResult {
@@ -620,6 +636,12 @@ mod tests {
             temporary_pins: None,
             actual_delay_skills: Vec::new(),
             critical_rate_sources: CriticalRateSources::default(),
+            // 実測表の挙動は actual_delay.rs のテストで見る。ここは式にフォールバックさせる
+            skill_uses: SkillUsesTable {
+                reduction_percents: Vec::new(),
+                base_delays: Vec::new(),
+                uses: Vec::new(),
+            },
         }
     }
 

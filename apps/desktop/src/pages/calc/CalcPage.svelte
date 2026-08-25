@@ -785,7 +785,7 @@
               <div class="total-box dps">
                 <span class="cap">
                   {#if result?.actual_delay}
-                    1 秒あたり(中ディレイ {result.actual_delay.value.toFixed(2)}s)
+                    1 秒あたり({Math.round(result.actual_delay.uses_per_minute)} 回/分)
                   {:else}
                     1 秒あたり
                   {/if}
@@ -806,6 +806,13 @@
                 = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 0.3s</span>{/if}
                 {#if d.contributions.length > 0}
                   ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
+                {/if}
+                <br />
+                1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
+                {#if d.uses_measured}
+                  (<b>実測表</b>: 総減少 {(d.reduction * 100).toFixed(0)}% × 基本 {d.base.toFixed(1)}s)
+                {:else}
+                  (実測表の範囲外なので 60 ÷ 中ディレイ の式で算出)
                 {/if}
               </div>
             {/if}

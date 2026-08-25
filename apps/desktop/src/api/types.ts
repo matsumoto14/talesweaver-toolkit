@@ -199,6 +199,10 @@ export interface ActualDelay {
   /** wiki が「(固定)」と書いている中ディレイ(減少が効かない) */
   fixed: boolean;
   contributions: ActualDelayContribution[];
+  /** 60 秒あたりのスキル回数。DPS はこれから出す */
+  uses_per_minute: number;
+  /** 実測表(計測データ)由来か。false = 60 / 中ディレイ の式から出した */
+  uses_measured: boolean;
 }
 
 // 属性値の供給源の種別。crates/domain/src/element.rs の ElementSourceId(snake_case)。
