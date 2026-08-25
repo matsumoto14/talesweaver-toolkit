@@ -837,6 +837,8 @@ pub struct StatLimits {
     pub awakening_stage_max: u8,
     /// エタの意志 Lv の上限(wiki: エタの意志「エタの成長」)
     pub eternal_level_max: u8,
+    /// ランダムオプションの効果値の上限 `[仮]`
+    pub random_option_value_max: f64,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -864,6 +866,7 @@ pub fn stat_limits() -> StatLimits {
         element_value_max: crate::element::ELEMENT_VALUE_MAX,
         awakening_stage_max: crate::awakening::Awakening::MAX_STAGE,
         eternal_level_max: crate::awakening::Awakening::MAX_ETERNAL_LEVEL,
+        random_option_value_max: crate::random_option::RANDOM_OPTION_VALUE_MAX,
     }
 }
 

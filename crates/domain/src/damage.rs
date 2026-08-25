@@ -12,6 +12,7 @@ use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::enemy::Enemy;
 use crate::defense::{accuracy_point, AccuracyCorrection};
 use crate::equipment::{equipment_values_attack, Equipment, EquipmentCoefficients, EquipmentValues};
+use crate::random_option::RandomOptionTotals;
 use crate::rounding::{floor_int, trunc2};
 use crate::skill::Skill;
 use crate::stat_sources::{apply_pins, Adjustments, StatContribution};
@@ -46,6 +47,9 @@ pub struct DamageInput {
     pub equipment_coefficients: EquipmentCoefficients,
     /// 命中P補正の係数(wiki: 計算式まとめ の依存表)。スキル依存種別ごとに gamedata が持つ
     pub accuracy_correction: AccuracyCorrection,
+    /// ランダムオプションの集計(`Equipment::random_option_totals`。カタログの解決は呼び出し側)。
+    /// カテゴリP(依存別)・カテゴリX(攻撃ダメージ)・命中P への加算に使う
+    pub random_options: RandomOptionTotals,
     /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
     /// 与ダメージ式の外(A〜Y のいずれにも入らない)。無強化なら 0
     pub weapon_added_damage: i64,
@@ -80,6 +84,7 @@ impl DamageInput {
         equipment_enhanced_totals: EquipmentValues,
         equipment_coefficients: EquipmentCoefficients,
         accuracy_correction: AccuracyCorrection,
+        random_options: RandomOptionTotals,
         weapon_added_damage: i64,
         awakening_rate: f64,
         damage_cap: i64,
@@ -100,6 +105,7 @@ impl DamageInput {
             equipment_enhanced_totals,
             equipment_coefficients,
             accuracy_correction,
+            random_options,
             weapon_added_damage,
             skill,
             enemy,
@@ -297,6 +303,13 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     let core_set_bonus = input.equipment.thesis_cores.set_bonus();
     totals.add(FinalDamageFixed, core_set_bonus.final_damage_fixed as f64);
     totals.add(FinalDamageRate, core_set_bonus.final_damage_rate);
+    // ランダムオプション(wiki: ランダムオプション)。依存別攻撃力増加はスキルの依存種別が
+    // 一致したときだけ乗る(カテゴリP)、攻撃ダメージ増加はカテゴリX
+    totals.add(
+        DependencyDamageRate,
+        input.random_options.dependency_damage_rate.get(input.skill.dependency),
+    );
+    totals.add(AttackDamageRate, input.random_options.attack_damage_rate);
 
     let mut totals_min = totals.clone();
     totals_min.add(AttackRandom, 1.0);
@@ -343,6 +356,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             &input.accuracy_correction,
             input.equipment_base_totals.accuracy + input.equipment_enhanced_totals.accuracy,
             skill_accuracy,
+            input.random_options.accuracy_point,
         )
     });
 
@@ -440,6 +454,7 @@ mod tests {
                 penalty_secondary: Some(StatKind::Hack),
                 penalty_divisor: 200.0,
             },
+            random_options: RandomOptionTotals::default(),
             weapon_added_damage: 0,
             // テストは上限に当たらない値を既定にする(上限の挙動は専用テストで見る)
             damage_cap: i64::MAX,
@@ -854,5 +869,52 @@ mod tests {
         let k = result.trace.categories.iter().find(|c| c.symbol == "K").unwrap();
         assert_eq!(k.raw, 1_400.0);
         assert_eq!(k.value, 1_000.0);
+    }
+
+    // --- ランダムオプション ---------------------------------------------
+
+    #[test]
+    fn ランダムオプションの依存別攻撃力増加は依存が一致したときだけ乗る() {
+        use crate::random_option::DependencyRates;
+
+        // スキルは STAB+HACK 依存。一致する枠だけがカテゴリP に入る
+        let mut i = input();
+        i.random_options.dependency_damage_rate =
+            DependencyRates { stab_hack: 0.10, stab: 0.25, ..Default::default() };
+        let result = calculate_damage(&i);
+        let p = result.trace.categories.iter().find(|c| c.symbol == "P").unwrap();
+        assert!((p.value - 0.10).abs() < 1e-12);
+        assert!(result.per_hit.max > calculate_damage(&input()).per_hit.max);
+    }
+
+    // wiki §4: カテゴリP は上限 +73%
+    #[test]
+    fn ランダムオプションの依存別攻撃力増加は上限73パーセントで頭打ち() {
+        use crate::random_option::DependencyRates;
+
+        let mut i = input();
+        i.random_options.dependency_damage_rate =
+            DependencyRates { stab_hack: 1.00, ..Default::default() };
+        let result = calculate_damage(&i);
+        let p = result.trace.categories.iter().find(|c| c.symbol == "P").unwrap();
+        assert!((p.raw - 1.00).abs() < 1e-12);
+        assert!((p.value - 0.73).abs() < 1e-12);
+    }
+
+    #[test]
+    fn ランダムオプションの攻撃ダメージ増加はカテゴリXに入る() {
+        let mut i = input();
+        i.random_options.attack_damage_rate = 0.30;
+        let result = calculate_damage(&i);
+        let x = result.trace.categories.iter().find(|c| c.symbol == "X").unwrap();
+        assert!((x.value - 0.30).abs() < 1e-12);
+    }
+
+    #[test]
+    fn ランダムオプションの命中率増加は命中Pに足される() {
+        let mut i = input();
+        i.random_options.accuracy_point = 20;
+        let base = calculate_damage(&input()).accuracy_point.unwrap();
+        assert_eq!(calculate_damage(&i).accuracy_point.unwrap(), base + 20);
     }
 }

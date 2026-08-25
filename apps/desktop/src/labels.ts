@@ -1,7 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
-  CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier, StatKind,
-  StatLayer,
+  CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier,
+  RandomOptionRank, SkillDependency, StatKind, StatLayer,
 } from "./api/types";
 
 export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
@@ -102,6 +102,31 @@ export const SIENA_ALLOWED_SLOTS: PartSlot[] = [
 // シエナのオーラの能力値が装備補正(強化能力値)になる部位(wiki: 能力値一覧(武器/盾))。
 // それ以外の部位はステの最終固定値増加になる。
 export const SIENA_EQUIPMENT_VALUE_SLOTS: PartSlot[] = ["weapon", "shield"];
+
+// ランダムオプションを持てる部位(wiki: 装備システム冒頭の表「転移」行。効果・AF は対象外)。
+export const RANDOM_OPTION_ALLOWED_SLOTS: PartSlot[] = PART_SLOTS.filter(
+  (s) => s !== "effect" && s !== "artifact",
+);
+// ランダムオプションのランク(wiki 一覧表の列)。左ほど下位。
+export const RANDOM_OPTION_RANKS: RandomOptionRank[] = [
+  "normal", "valuable", "rare", "special", "s_true",
+];
+export const RANDOM_OPTION_RANK_LABELS: Record<RandomOptionRank, string> = {
+  normal: "Normal",
+  valuable: "Valuable",
+  rare: "Rare",
+  special: "Special",
+  s_true: "S・真",
+};
+// スキル依存種別(crates/domain/src/skill.rs の SkillDependency)。ランダムOP の効き先表示に使う。
+export const SKILL_DEPENDENCY_LABELS: Record<SkillDependency, string> = {
+  stab: "突き(STAB依存)",
+  hack: "斬り(HACK依存)",
+  int: "魔法(INT依存)",
+  mr: "神聖(MR依存)",
+  stab_hack: "物理複合(STAB+HACK依存)",
+  hack_int: "魔法斬り(HACK+INT依存)",
+};
 
 // テシスコアの地域(crates/domain/src/thesis_core.rs の CoreRegion)。順序は Rust の CoreRegion::ALL に合わせる。
 export const CORE_REGIONS: CoreRegion[] = ["mercurial", "abyss", "eclipse", "rubicona"];

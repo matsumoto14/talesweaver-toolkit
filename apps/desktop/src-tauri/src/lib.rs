@@ -35,6 +35,7 @@ pub fn run() {
             commands::list_contents,
             commands::list_equipment_catalog,
             commands::list_equipment_abilities,
+            commands::list_random_options,
             commands::preview_effective_stats,
             commands::preview_defense,
             commands::get_stat_limits,

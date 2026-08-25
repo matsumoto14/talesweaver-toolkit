@@ -2,12 +2,12 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentValues, SienaAura,
-  SienaStatBonus, ThesisCores,
+  CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentValues,
+  RandomOptionDef, RandomOptionEffect, RandomOptionSlot, SienaAura, SienaStatBonus, ThesisCores,
 } from "./api/types";
 import {
   CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENTS, EQUIPMENT_STAT_KINDS,
-  EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS,
+  EQUIPMENT_STAT_SHORT, PART_SLOTS, SKILL_DEPENDENCY_LABELS, STAT_KINDS,
 } from "./labels";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
@@ -94,6 +94,7 @@ export const neutralEquipmentPart = (): EquipmentPart => ({
   siena: neutralSienaAura(),
   element: null,
   element_value: 0,
+  random_options: [],
 });
 
 export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
@@ -107,6 +108,7 @@ export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
   siena: cloneSienaAura(src.siena),
   element: src.element,
   element_value: src.element_value,
+  random_options: (src.random_options ?? []).map((o) => ({ ...o })),
 });
 
 /** 装備に付与した属性値の合計(属性ごと)。表示用(計算は Rust 側)。 */
@@ -181,6 +183,45 @@ export const sienaAttackRatePercent = (equipment: Equipment): number =>
 /** シエナのオーラのステ加算の合計(全部位・全ステ。表示用)。 */
 export const sienaStatTotal = (equipment: Equipment): number =>
   PART_SLOTS.reduce((sum, slot) => sum + sienaPartStatTotal(equipment.parts[slot].siena), 0);
+
+// --- ランダムオプション ---------------------------------------------------
+// 判定・集計は Rust 側(crates/domain/src/random_option.rs)。ここは表示・編集用。
+
+/** この枠の効果値。上書きが無ければレンジ上限(Rust の RandomOptionSlot::value と同じ規則)。 */
+export const randomOptionValue = (slot: RandomOptionSlot, def: RandomOptionDef): number =>
+  slot.value ?? (def.tiers.find((t) => t.rank === slot.rank)?.max ?? 0);
+
+/** 効き先の表示名。「記録するだけ」の OP はそう分かる文言にする。 */
+export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
+  if (typeof effect === "object") {
+    return `与ダメージ増加 ${SKILL_DEPENDENCY_LABELS[effect.dependency_damage_rate]}`;
+  }
+  switch (effect) {
+    case "attack_damage_rate": return "攻撃ダメージ増加";
+    case "accuracy_point": return "命中P";
+    case "evasion_point": return "回避P";
+    case "accuracy_and_evasion_point": return "命中P・回避P";
+    case "record_only": return "記録するだけ(計算に入りません)";
+  }
+};
+
+export const randomOptionIsApplied = (effect: RandomOptionEffect): boolean => effect !== "record_only";
+
+/** 全部位のランダムOP の枠数(補正源リストのサマリ用)。 */
+export const randomOptionCount = (equipment: Equipment): number =>
+  PART_SLOTS.reduce((n, slot) => n + equipment.parts[slot].random_options.length, 0);
+
+/** 計算に入らない(記録するだけの)枠数。 */
+export const randomOptionRecordOnlyCount = (equipment: Equipment, defs: RandomOptionDef[]): number =>
+  PART_SLOTS.reduce(
+    (n, slot) =>
+      n +
+      equipment.parts[slot].random_options.filter((o) => {
+        const def = defs.find((d) => d.id === o.option_id);
+        return def !== undefined && !randomOptionIsApplied(def.effect);
+      }).length,
+    0,
+  );
 
 /** シエナのオーラを発現している部位数(表示用)。 */
 export const sienaPartCount = (equipment: Equipment): number =>

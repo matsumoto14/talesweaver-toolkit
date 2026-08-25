@@ -190,6 +190,46 @@ export interface SienaAura {
   attack_rate_percent: number;
 }
 
+// ランダムオプションのランク。crates/domain/src/random_option.rs の RandomOptionRank。
+export type RandomOptionRank = "normal" | "valuable" | "rare" | "special" | "s_true";
+
+// ランダムオプションの効き先。crates/domain/src/random_option.rs の RandomOptionEffect。
+// タプル variant(依存別)は serde が { dependency_damage_rate: SkillDependency } になる。
+export type RandomOptionEffect =
+  | { dependency_damage_rate: SkillDependency }
+  | "attack_damage_rate"
+  | "accuracy_point"
+  | "evasion_point"
+  | "accuracy_and_evasion_point"
+  | "record_only";
+
+// ランクごとの効果値レンジ。crates/domain/src/random_option.rs の RandomOptionTier。
+export interface RandomOptionTier {
+  rank: RandomOptionRank;
+  min: number;
+  max: number;
+}
+
+// ランダムオプション定義(gamedata のカタログ)。crates/domain/src/random_option.rs の RandomOptionDef。
+export interface RandomOptionDef {
+  id: string;
+  name: string;
+  slot: PartSlot;
+  /** wiki 一覧表のカテゴリー番号。同じ番号は 1 部位に 1 つまで(0 は制約なし) */
+  category: number;
+  effect: RandomOptionEffect;
+  tiers: RandomOptionTier[];
+  note: string;
+}
+
+// キャラが付けている 1 枠。crates/domain/src/random_option.rs の RandomOptionSlot。
+export interface RandomOptionSlot {
+  option_id: string;
+  rank: RandomOptionRank;
+  /** 実測値の上書き。null = レンジ上限 */
+  value: number | null;
+}
+
 // テシスコアの地域。crates/domain/src/thesis_core.rs の CoreRegion(snake_case)。
 export type CoreRegion = "mercurial" | "abyss" | "eclipse" | "rubicona";
 
@@ -238,6 +278,8 @@ export interface EquipmentPart {
   element: Element | null;
   /** 付与した属性値(0..=9) */
   element_value: number;
+  /** ランダムオプション。同じカテゴリーは 1 部位に 1 つまで */
+  random_options: RandomOptionSlot[];
 }
 
 // 12 部位。crates/domain/src/equipment.rs の EquipmentParts(named field)。
@@ -521,6 +563,8 @@ export interface StatLimits {
   awakening_stage_max: number;
   /** エタの意志 Lv の上限 */
   eternal_level_max: number;
+  /** ランダムオプションの効果値の上限 `[仮]` */
+  random_option_value_max: number;
 }
 
 

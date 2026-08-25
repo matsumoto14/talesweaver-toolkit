@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::element::{Element, ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX};
+use crate::random_option::{
+    RandomOptionDef, RandomOptionError, RandomOptionSlot, RandomOptionTotals,
+    RANDOM_OPTION_VALUE_MAX,
+};
 use crate::stats::StatKind;
 use crate::thesis_core::{CoreRegion, ThesisCoreError, ThesisCores};
 
@@ -145,6 +149,12 @@ impl PartSlot {
                 | PartSlot::Hand
                 | PartSlot::Leg
         )
+    }
+
+    /// この部位がランダムオプションを持てるか
+    /// (wiki: 装備システム冒頭の表「転移」行 = 兜/鎧/武/盾/盾+/頭/体/手/足/レリック。効果・AF は対象外)。
+    pub fn allows_random_option(self) -> bool {
+        !matches!(self, PartSlot::Effect | PartSlot::Artifact)
     }
 
     /// この部位が属性強化を持てるか
@@ -352,6 +362,10 @@ pub struct EquipmentPart {
     /// 付与した属性値(0..=9)。`element` が `None` なら 0
     #[serde(default)]
     pub element_value: i64,
+    /// ランダムオプション(wiki: ランダムオプション)。同じカテゴリーは 1 部位に 1 つまで
+    /// (カテゴリー整合性はカタログを引ける `storage` 側で検証する)
+    #[serde(default)]
+    pub random_options: Vec<RandomOptionSlot>,
 }
 
 impl EquipmentPart {
@@ -372,6 +386,29 @@ impl EquipmentPart {
         }
         if !element.can_enchant_equipment() {
             return Err(EquipmentError::ElementNeutralNotAllowed { slot });
+        }
+        Ok(())
+    }
+
+    /// ランダムオプションの部位制約と値域。カタログ整合性(未知 id・カテゴリー重複)は
+    /// カタログを引ける `storage` 側で見る。
+    fn validate_random_options(&self, slot: PartSlot) -> Result<(), RandomOptionError> {
+        if self.random_options.is_empty() {
+            return Ok(());
+        }
+        if !slot.allows_random_option() {
+            return Err(RandomOptionError::NotAllowed { slot });
+        }
+        for option in &self.random_options {
+            if let Some(value) = option.value {
+                if !(0.0..=RANDOM_OPTION_VALUE_MAX).contains(&value) {
+                    return Err(RandomOptionError::ValueOutOfRange {
+                        option_id: option.option_id.clone(),
+                        value,
+                        max: RANDOM_OPTION_VALUE_MAX,
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -406,6 +443,7 @@ impl EquipmentPart {
         if !self.abilities.is_empty() && !slot.allows_abilities() {
             return Err(EquipmentError::AbilitiesNotAllowed { slot });
         }
+        self.validate_random_options(slot)?;
         Ok(())
     }
 }
@@ -450,6 +488,8 @@ pub enum EquipmentError {
     ElementValueOutOfRange { slot: PartSlot, value: i64, max: i64 },
     #[error(transparent)]
     ThesisCore(#[from] ThesisCoreError),
+    #[error(transparent)]
+    RandomOption(#[from] RandomOptionError),
 }
 
 /// 武器アビリティの系統(wiki: 装備システム/アビリティ。尖った刃/鋭い刃/知力/耐魔力)。
@@ -612,6 +652,21 @@ impl Equipment {
             }
         }
         total.add(self.thesis_cores.equipment_values(region))
+    }
+
+    /// 全部位のランダムオプションの集計。カタログは呼び出し側が渡す
+    /// (`base_totals` の武器アビリティと同じ依存方向。domain は gamedata に依存できない)。
+    /// カタログに無い id の枠は無視する(保存時に `storage` が弾いている)。
+    pub fn random_option_totals(&self, defs: &[RandomOptionDef]) -> RandomOptionTotals {
+        let mut totals = RandomOptionTotals::default();
+        for (_, part) in self.parts.iter() {
+            for option in &part.random_options {
+                if let Some(def) = defs.iter().find(|d| d.id == option.option_id.as_str()) {
+                    totals.add(def, option);
+                }
+            }
+        }
+        totals
     }
 
     /// シエナのオーラの追加オプション「攻撃力増加」の合計(wiki: New1)。Σ% の小数表現。
@@ -1081,5 +1136,87 @@ mod tests {
         assert_eq!(eq.enhanced_totals(Some(CoreRegion::Abyss)).slash, 100 + 480);
         assert_eq!(eq.enhanced_totals(Some(CoreRegion::Eclipse)).slash, 100);
         assert_eq!(eq.enhanced_totals(None).slash, 100);
+    }
+
+    // --- ランダムオプション ---------------------------------------------
+
+    fn ro_defs() -> Vec<RandomOptionDef> {
+        use crate::random_option::{RandomOptionEffect, RandomOptionRank, RandomOptionTier};
+        use crate::skill::SkillDependency;
+
+        const TIERS: &[RandomOptionTier] =
+            &[RandomOptionTier { rank: RandomOptionRank::Special, min: 10.0, max: 25.0 }];
+        vec![
+            RandomOptionDef {
+                id: "shield-dep",
+                name: "物理複合攻撃力が増加",
+                slot: PartSlot::Shield,
+                category: 15,
+                effect: RandomOptionEffect::DependencyDamageRate(SkillDependency::StabHack),
+                tiers: TIERS,
+                note: "",
+            },
+            RandomOptionDef {
+                id: "hand-acc",
+                name: "命中率が増加",
+                slot: PartSlot::Hand,
+                category: 10,
+                effect: RandomOptionEffect::AccuracyPoint,
+                tiers: TIERS,
+                note: "",
+            },
+        ]
+    }
+
+    fn ro(id: &str) -> RandomOptionSlot {
+        use crate::random_option::RandomOptionRank;
+        RandomOptionSlot { option_id: id.to_string(), rank: RandomOptionRank::Special, value: None }
+    }
+
+    #[test]
+    fn ランダムオプションは全部位から集計される() {
+        use crate::skill::SkillDependency;
+
+        let mut eq = Equipment::default();
+        eq.parts.shield.random_options = vec![ro("shield-dep")];
+        eq.parts.hand.random_options = vec![ro("hand-acc")];
+        assert!(eq.validate().is_ok());
+
+        let totals = eq.random_option_totals(&ro_defs());
+        // 上書きが無いのでレンジ上限 25% → 0.25
+        assert_eq!(totals.dependency_damage_rate.get(SkillDependency::StabHack), 0.25);
+        assert_eq!(totals.accuracy_point, 25);
+    }
+
+    #[test]
+    fn カタログに無いランダムオプションidは集計されない() {
+        let mut eq = Equipment::default();
+        eq.parts.shield.random_options = vec![ro("nope")];
+        assert_eq!(eq.random_option_totals(&ro_defs()), RandomOptionTotals::default());
+    }
+
+    // wiki: 装備システム冒頭の表「転移」行に 効果・AF は無い
+    #[test]
+    fn 効果とafはランダムオプションを持てない() {
+        for slot in [PartSlot::Effect, PartSlot::Artifact] {
+            let mut eq = Equipment::default();
+            eq.parts.get_mut(slot).random_options = vec![ro("shield-dep")];
+            assert!(matches!(
+                eq.validate(),
+                Err(EquipmentError::RandomOption(RandomOptionError::NotAllowed { .. }))
+            ));
+        }
+    }
+
+    #[test]
+    fn ランダムオプションの効果値の上書きは値域を検証する() {
+        let mut eq = Equipment::default();
+        let mut option = ro("shield-dep");
+        option.value = Some(RANDOM_OPTION_VALUE_MAX + 1.0);
+        eq.parts.shield.random_options = vec![option];
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::RandomOption(RandomOptionError::ValueOutOfRange { .. }))
+        ));
     }
 }

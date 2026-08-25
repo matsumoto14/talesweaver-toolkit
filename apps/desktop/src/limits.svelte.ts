@@ -27,6 +27,7 @@ const FALLBACK: StatLimits = {
   element_value_max: 255,
   awakening_stage_max: 5,
   eternal_level_max: 100,
+  random_option_value_max: 100,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

@@ -12,6 +12,7 @@ pub mod defense;
 pub mod element;
 pub mod enemy;
 pub mod equipment;
+pub mod random_option;
 pub mod rounding;
 pub mod skill;
 pub mod stat_sources;
@@ -46,6 +47,10 @@ pub use equipment::{
     EquipmentValues, PartSlot, SienaAura, SienaStatBonus, ENHANCE_LEVEL_MAX,
     ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
     SIENA_ALL_STATS_BONUS_MAX, SIENA_STAGE_MAX, SIENA_STAT_BONUS_MAX, STRONG_WEAPON_LEVEL_MAX,
+};
+pub use random_option::{
+    DependencyRates, RandomOptionDef, RandomOptionEffect, RandomOptionError, RandomOptionRank,
+    RandomOptionSlot, RandomOptionTier, RandomOptionTotals, RANDOM_OPTION_VALUE_MAX,
 };
 pub use rounding::{floor_int, trunc2};
 pub use skill::{Skill, SkillDependency};

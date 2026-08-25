@@ -8,7 +8,8 @@
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
-    equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, sienaAttackRatePercent,
+    equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
+    randomOptionRecordOnlyCount, sienaAttackRatePercent,
     sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
@@ -148,6 +149,8 @@
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
   const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
+  const roCount = $derived(randomOptionCount(draft.equipment));
+  const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
 
   // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
@@ -172,6 +175,14 @@
       id: "element",
       name: "属性",
       sub: elementSummary,
+    },
+    {
+      id: "randomOption",
+      name: "ランダムOP",
+      sub:
+        roCount > 0
+          ? `${roCount} 枠${roRecordOnly > 0 ? ` ・ うち ${roRecordOnly} 枠は記録のみ` : ""}`
+          : NEUTRAL,
     },
     {
       id: "siena",

@@ -8,6 +8,7 @@
     | "crown"
     | "relic"
     | "siena"
+    | "randomOption"
     | "thesis"
     | "skills"
     | "adjust";
@@ -18,14 +19,15 @@
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
     CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityFamily, EquipmentItem, PartSlot,
-    PetSkillTier, Skill, StatKind, StatPreview,
+    PetSkillTier, RandomOptionDef, RandomOptionRank, Skill, StatKind, StatPreview,
   } from "../../api/types";
   import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
   import { previewElements } from "../../api/commands";
   import { draftToPayload, type Draft } from "../../draft";
   import {
     clampToCaps, coreBonus, coreSetSupportValues, coreSetTotalBonus, midpointValues,
-    neutralEquipmentPart, neutralSienaAura, rangeSummary, sienaPartStatTotal, valuesSummary,
+    neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
+    randomOptionValue, rangeSummary, sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
@@ -33,7 +35,9 @@
     CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ELEMENTS,
     ENHANCE_ALLOWED_SLOTS,
     EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS,
-    PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS, SIENA_ALLOWED_SLOTS,
+    PART_SLOT_LABELS, PART_SLOTS, PET_SKILL_TIER_LABELS,
+    RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANK_LABELS, RANDOM_OPTION_RANKS,
+    SIENA_ALLOWED_SLOTS,
     SIENA_EQUIPMENT_VALUE_SLOTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
@@ -167,6 +171,60 @@
     if (normalized.length !== part.abilities.length) part.abilities = normalized;
     openPart = slot;
   }
+
+  // --- ランダムオプション -------------------------------------------------
+  // 効果値の上限は wiki の一覧表のレンジそのもの。枠数は wiki に記載が無く、代わりに
+  // 「同じカテゴリーは 1 部位に 1 つまで(カテゴリー 0 は除く)」で縛る(転移の説明)。
+  const randomOptionDef = (id: string): RandomOptionDef | undefined =>
+    app.randomOptions.find((d) => d.id === id);
+
+  /** その部位に足せる OP(未選択 かつ カテゴリーが空いているもの) */
+  function addableRandomOptions(slot: PartSlot) {
+    const part = draft.equipment.parts[slot];
+    const takenIds = new Set(part.random_options.map((o) => o.option_id));
+    const takenCategories = new Set(
+      part.random_options.map((o) => randomOptionDef(o.option_id)?.category).filter((c) => c !== undefined && c !== 0),
+    );
+    return [
+      { value: "", label: "追加する OP を選ぶ" },
+      ...app.randomOptions
+        .filter((d) => d.slot === slot && !takenIds.has(d.id) && !takenCategories.has(d.category))
+        .map((d) => ({ value: d.id, label: d.name })),
+    ];
+  }
+
+  function addRandomOption(slot: PartSlot, id: string) {
+    if (id === "") return;
+    const def = randomOptionDef(id);
+    if (!def || def.tiers.length === 0) return;
+    // 既定は一覧のいちばん上位のランク(手持ちがそれ未満なら下げてもらう)
+    const rank = def.tiers[def.tiers.length - 1].rank;
+    draft.equipment.parts[slot].random_options = [
+      ...draft.equipment.parts[slot].random_options,
+      { option_id: id, rank, value: null },
+    ];
+  }
+
+  function removeRandomOption(slot: PartSlot, index: number) {
+    const part = draft.equipment.parts[slot];
+    part.random_options = part.random_options.filter((_, i) => i !== index);
+  }
+
+  const rankOptions = (def: RandomOptionDef) =>
+    RANDOM_OPTION_RANKS.filter((r) => def.tiers.some((t) => t.rank === r)).map((r) => ({
+      value: r,
+      label: RANDOM_OPTION_RANK_LABELS[r],
+    }));
+
+  /** ランクを変えるとレンジが変わるので、実測の上書きは外して既定(レンジ上限)へ戻す */
+  function setRandomOptionRank(slot: PartSlot, index: number, rank: RandomOptionRank) {
+    const option = draft.equipment.parts[slot].random_options[index];
+    option.rank = rank;
+    option.value = null;
+  }
+
+  const tierOf = (def: RandomOptionDef, rank: RandomOptionRank) =>
+    def.tiers.find((t) => t.rank === rank);
 
   const enhanceRatePercent = $derived(
     (draft.equipment.power_weapon ? 2 : 0) + draft.equipment.strong_weapon_level * 3,
@@ -302,6 +360,7 @@
     crown: { title: "クラウン", note: `0–${limits.crown_max}` },
     relic: { title: "神鳥の聖物", note: `0–${limits.sacred_relic_stage_max} 段階(実加算は段階×10)` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
+    randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
@@ -310,6 +369,51 @@
   const traceFor = (k: StatKind) => preview?.traces.find((t) => t.kind === k) ?? null;
   const signed = (n: number) => `${n >= 0 ? "+" : ""}${fmtInt(n)}`;
 </script>
+
+<!-- ランダムオプションの編集(装備の部位詳細と「ランダムOP」ペインで共有する) -->
+{#snippet randomOptionEditor(slot: PartSlot)}
+  {@const part = draft.equipment.parts[slot]}
+  {#each part.random_options as option, index (option.option_id)}
+    {@const def = randomOptionDef(option.option_id)}
+    {#if def}
+      {@const t = tierOf(def, option.rank)}
+      <div class="ro-row" class:record-only={!randomOptionIsApplied(def.effect)}>
+        <div class="ro-head">
+          <span class="ro-name">{def.name}</span>
+          <span class="ro-cat dim">カテゴリー{def.category}</span>
+          <span class="ro-effect dim">{randomOptionEffectLabel(def.effect)}</span>
+          <button type="button" class="ro-remove" onclick={() => removeRandomOption(slot, index)}>外す</button>
+        </div>
+        <div class="fields">
+          <Select
+            label="ランク"
+            options={rankOptions(def)}
+            bind:value={
+              () => option.rank,
+              (v) => setRandomOptionRank(slot, index, v as RandomOptionRank)
+            }
+          />
+          <StatInput
+            label="効果値"
+            min={t ? t.min : 0}
+            max={t ? t.max : limits.random_option_value_max}
+            step={0.5}
+            format={t ? () => `wiki ${t.min}–${t.max}` : undefined}
+            bind:value={() => randomOptionValue(option, def), (v) => (option.value = v)}
+          />
+        </div>
+        {#if def.note}<p class="hint dim">{def.note}</p>{/if}
+      </div>
+    {/if}
+  {/each}
+  <div class="fields">
+    <Select
+      label="OP を追加"
+      options={addableRandomOptions(slot)}
+      bind:value={() => "", (v) => addRandomOption(slot, v)}
+    />
+  </div>
+{/snippet}
 
 <div class="pane">
   <div class="pane-head">
@@ -435,6 +539,9 @@
               {/if}
               {#if part.abilities.length > 0}
                 <span class="part-abi">アビリティ {part.abilities.length}</span>
+              {/if}
+              {#if part.random_options.length > 0}
+                <span class="part-abi">OP {part.random_options.length}</span>
               {/if}
               {#if part.element !== null}
                 <span class="part-elem">{ELEMENT_LABELS[part.element]}{part.element_value}</span>
@@ -597,6 +704,17 @@
               <p class="hint dim">カタログ外アイテムは追加固定ダメージを自動計算できません(+12 以上にすると実測値を入力できます)。</p>
             {/if}
           {/if}
+        </div>
+      {/if}
+
+      {#if RANDOM_OPTION_ALLOWED_SLOTS.includes(slot)}
+        <div class="card">
+          <div class="card-title">ランダムオプション</div>
+          <p class="hint dim">
+            同じカテゴリーの OP は 1 部位に 1 つだけです(wiki: 転移)。効果値は触らなければレンジ上限で計算します。
+            収録しているのは火力・命中・回避に関係する OP だけで、グレーの枠は<b>記録するだけ</b>で計算には入りません。
+          </p>
+          {@render randomOptionEditor(slot)}
         </div>
       {/if}
 
@@ -820,6 +938,24 @@
         </div>
       {/if}
     {/if}
+  {:else if sourceId === "randomOption"}
+    <div class="card">
+      <p class="hint dim">
+        wiki「ランダムオプション」。装備補正 9 値には乗らず、与ダメージ式のカテゴリ(依存別の与ダメージ増加・
+        攻撃ダメージ増加)や命中P・回避P に直接効きます。<b>同じカテゴリーの OP は 1 部位に 1 つだけ</b>です(wiki: 転移)。
+        効果値は触らなければレンジ上限で計算します(オプション変化石で振り直せるため)。
+        <b>収録しているのは火力・命中・回避に関係する OP だけ</b>で、HP・移動速度・経験値などは入れていません。
+        グレーの枠は<b>記録するだけ</b>(発動条件付き・未実装の概念)で計算には入りません。
+      </p>
+    </div>
+    {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
+      {#if app.randomOptions.some((d) => d.slot === slot)}
+        <div class="card">
+          <div class="card-title">{PART_SLOT_LABELS[slot]}</div>
+          {@render randomOptionEditor(slot)}
+        </div>
+      {/if}
+    {/each}
   {:else if sourceId === "thesis"}
     <div class="card">
       <div class="card-title">地域</div>
@@ -1034,6 +1170,25 @@
     flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
+
+  /* ランダムオプションの 1 枠 */
+  .ro-row {
+    margin-top: 8px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--surface-inset);
+  }
+  /* 計算に入らない(記録するだけの)枠は破線 + 塗りなしで見分ける */
+  .ro-row.record-only { border-style: dashed; background: var(--bg-rail); }
+  .ro-row.record-only .ro-name { color: var(--fg-muted); }
+  .ro-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .ro-name { font-size: 11px; font-weight: 700; }
+  .ro-cat { flex-shrink: 0; font-size: 9px; }
+  .ro-effect { font-size: 9px; }
+  .ro-remove {
+    margin-left: auto; flex-shrink: 0; padding: 1px 8px;
+    font-size: 9px; color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--bg-field);
+  }
+  .ro-remove:hover { border-color: var(--accent); color: var(--accent); }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;

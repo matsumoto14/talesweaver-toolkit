@@ -11,6 +11,7 @@ import {
   listEquipmentAbilities,
   listEquipmentCatalog,
   listGameCharacters,
+  listRandomOptions,
   listSkills,
 } from "./api/commands";
 import type {
@@ -23,6 +24,7 @@ import type {
   EquipmentItem,
   GameCharacter,
   NewCharacter,
+  RandomOptionDef,
   RegisteredCharacter,
   Skill,
 } from "./api/types";
@@ -39,6 +41,8 @@ export const app = $state({
   catalog: [] as BuffDefinition[],
   equipmentCatalog: [] as EquipmentItem[],
   equipmentAbilities: [] as EquipmentAbilityDef[],
+  /** ランダムオプションのカタログ(wiki: ランダムオプション) */
+  randomOptions: [] as RandomOptionDef[],
   /** 属性値の供給源カタログ(装備の属性強化以外) */
   elementSources: [] as ElementSourceDef[],
   selectedId: null as number | null,
@@ -135,6 +139,7 @@ export async function loadAll(): Promise<void> {
   try {
     const [
       characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities, elementSources,
+      randomOptions,
     ] = await Promise.all([
       listCharacters(),
       listGameCharacters(),
@@ -143,6 +148,7 @@ export async function loadAll(): Promise<void> {
       listEquipmentCatalog(),
       listEquipmentAbilities(),
       listElementSources(),
+      listRandomOptions(),
     ]);
     app.characters = characters;
     app.gameCharacters = gameCharacters;
@@ -151,6 +157,7 @@ export async function loadAll(): Promise<void> {
     app.equipmentCatalog = equipmentCatalog;
     app.equipmentAbilities = equipmentAbilities;
     app.elementSources = elementSources;
+    app.randomOptions = randomOptions;
     if (app.selectedId === null && characters.length > 0) app.selectedId = characters[0].id;
     await Promise.all(characters.map(refreshEvaluation));
   } catch (e) {

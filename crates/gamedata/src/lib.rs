@@ -9,6 +9,7 @@ pub mod contents;
 pub mod elements;
 pub mod enemies;
 pub mod equipment_catalog;
+pub mod random_options;
 pub mod skills;
 
 use serde::Serialize;
@@ -29,6 +30,7 @@ pub use equipment_catalog::{
     equipment_catalog, find_equipment_item, EquipmentItem, WeaponClass, EQUIPMENT_ABILITY_SOURCE,
     EQUIPMENT_CATALOG_SOURCE, ENHANCE_SOURCE,
 };
+pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};
 pub use skills::{find_skill, skills_for};
 
 /// データの出典。

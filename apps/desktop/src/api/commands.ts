@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Adjustments, BaseStats, BuffDefinition, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
-  ElementPreview, ElementSourceDef, Skill, StatLimits, StatPreview, StatSources,
+  ElementPreview, ElementSourceDef, RandomOptionDef, Skill, StatLimits, StatPreview, StatSources,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -40,6 +40,8 @@ export const previewDefense = (character: NewCharacter) =>
   invoke<DefenseProfile>("preview_defense", { character });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
+/** ランダムオプションのカタログ(wiki: ランダムオプション) */
+export const listRandomOptions = () => invoke<RandomOptionDef[]>("list_random_options");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

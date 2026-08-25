@@ -393,7 +393,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>特定依存ダメージ増加</td>
 <td><span class="kind rate">割合</span></td>
 <td>上限+73%</td>
-<td>STAB/STAB+HACK/HACK/HACK+INT/INT/MR 系統別</td>
+<td>STAB/STAB+HACK/HACK/HACK+INT/INT/MR 系統別。<strong>ランダムオプション</strong>「突き/斬り/物理複合/魔法/神聖/魔法斬り 攻撃力が X% 増加」(盾・レリック右)がここに入る。wiki 補足に「特定のスキルの与ダメージが X% 増加」とあり、スキルの依存種別が一致したときだけ乗る(<code>Equipment::random_option_totals</code>)</td>
 </tr>
 <tr>
 <td class="sym">Q</td>
@@ -456,7 +456,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃ダメージ</td>
 <td><span class="kind rate">割合</span></td>
 <td></td>
-<td>サブカテゴリ合算: X1イザベル(上限+50%)、X2一般(+30%)、X3基本発動(+80%)、X4スキル(+65%)、X5特殊(上限不明)、X6日本独自(+30%)</td>
+<td>サブカテゴリ合算: X1イザベル(上限+50%)、X2一般(+30%)、X3基本発動(+80%)、X4スキル(+65%)、X5特殊(上限不明)、X6日本独自(+30%)。<strong>ランダムオプション</strong>「攻撃ダメージが X% 増加」(盾・レリック右)がここに入る</td>
 </tr>
 <tr>
 <td class="sym">Y</td>
@@ -495,7 +495,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>新-割合</td>
 <td>合計ダメージ + 追加ダメージ(武器強化)</td>
-<td>シャープネスビジョン、称号、武器ランダムOP等</td>
+<td>シャープネスビジョン、称号、武器ランダムOP等。武器の OP はすべて発動条件付き(後方から・ボス限定・確率)なので<strong>記録するだけ</strong>で計算に入れていない</td>
 </tr>
 <tr>
 <td><span class="kind fixed">固定値</span></td>
@@ -616,7 +616,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <p>出典: 計算式まとめ <code>#HitRate</code> / <code>#AccuracyPoint</code> / <code>#EvasionPoint</code> / <code>#HitRateCap</code>、ステータス「命中率/回避率」(取得 2026-08-25)。</p>
 <ul>
 <li><code>命中率 = 命中P − 対象の回避P</code>(パーセントポイント)</li>
-<li><code>命中P = [(DEX + 装備命中率補正 + (スキル命中 + 15) + 依存ボーナス − 依存ペナルティ + 命中P増加) × 命中P割合増加 × 命中P割合減少 + ランダムOP]</code>(実装済み。命中P増加・割合・ランダムOP はカタログに無く中立値)<ul>
+<li><code>命中P = [(DEX + 装備命中率補正 + (スキル命中 + 15) + 依存ボーナス − 依存ペナルティ + 命中P増加) × 命中P割合増加 × 命中P割合減少 + ランダムOP]</code>(実装済み。命中P増加・割合はカタログに無く中立値。<strong>ランダムOP は実装済み</strong>: 手・レリック左の「命中率が X 増加」)<ul>
 <li>wiki のスキル命中は実値から 15 引いた値が載っているため +15 する</li>
 <li>依存ボーナス/ペナルティは §4 A の依存表(例 STAB 依存: ボーナス <code>STAB×0.1</code> / ペナルティ <code>STAB/100</code>)</li>
 <li>命中P割合増加は集中(+5%)か的中剣(+35%)のどちらか一方、割合減少は感電/雷電(−30%)</li>
@@ -624,6 +624,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </li>
 <li><code>回避P = [15 + (AGI + 装備回避率) × 1.2 + 装備敏捷度/7 + 回避P増加 + 攻撃タイプに応じた回避P増加]</code><ul>
 <li>攻撃タイプ別増加(プレイヤーのみ): 物理 <code>(DEF×2 + [(STAB+HACK)/100])/7</code>、魔法 <code>(MR×2)/7</code>、複合 <code>(DEF+MR)/7</code></li>
+<li>回避P増加にはランダムOP「回避率が X 増加」(手・レリック左)が入る(実装済み)</li>
 <li>モンスターの回避Pは <code>[15 + AGI×1.2]</code>(狩り場情報一覧)</li>
 </ul>
 </li>
@@ -886,6 +887,11 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>狩り場情報一覧</td>
 <td>敵の防御力・カット率・被害減少・属性値</td>
 <td>取込済み(§11)。上限回避Pは wiki 側が全行未記載</td>
+</tr>
+<tr>
+<td>ランダムオプション</td>
+<td>部位ごとの追加効果(カテゴリー番号・ランク別レンジ)</td>
+<td>取込済み(<code>random_options.rs</code>)。<strong>火力・命中・回避に関係する OP のみ</strong> 28 件。枠数は wiki に記載が無く、制約は「同じカテゴリーは 1 部位に 1 つまで(カテゴリー 0 は除く)」(転移の説明)</td>
 </tr>
 <tr>
 <td>各キャラのスキルページ</td>

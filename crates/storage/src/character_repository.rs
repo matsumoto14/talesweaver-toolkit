@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use domain::{Awakening, BaseStats, BuffCatalog, Equipment, EquipmentAbilityDef, StatSources};
+use domain::{
+    Awakening, BaseStats, BuffCatalog, Equipment, EquipmentAbilityDef, RandomOptionDef, StatSources,
+};
 use gamedata::EquipmentItem;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use rusqlite::{params, Connection, Row};
@@ -178,8 +180,9 @@ impl CharacterRepository {
         catalog: &BuffCatalog,
         equipment_catalog: &[EquipmentItem],
         equipment_abilities: &[EquipmentAbilityDef],
+        random_options: &[RandomOptionDef],
     ) -> Result<RegisteredCharacter> {
-        validate(new, catalog, equipment_catalog, equipment_abilities)?;
+        validate(new, catalog, equipment_catalog, equipment_abilities, random_options)?;
         let s = &new.base_stats;
         let stat_sources_json = serde_json::to_string(&new.stat_sources)?;
         let equipment_json = serde_json::to_string(&new.equipment)?;
@@ -214,8 +217,9 @@ impl CharacterRepository {
         catalog: &BuffCatalog,
         equipment_catalog: &[EquipmentItem],
         equipment_abilities: &[EquipmentAbilityDef],
+        random_options: &[RandomOptionDef],
     ) -> Result<RegisteredCharacter> {
-        validate(update, catalog, equipment_catalog, equipment_abilities)?;
+        validate(update, catalog, equipment_catalog, equipment_abilities, random_options)?;
         let s = &update.base_stats;
         let stat_sources_json = serde_json::to_string(&update.stat_sources)?;
         let equipment_json = serde_json::to_string(&update.equipment)?;
@@ -286,6 +290,7 @@ pub fn validate(
     catalog: &BuffCatalog,
     equipment_catalog: &[EquipmentItem],
     equipment_abilities: &[EquipmentAbilityDef],
+    random_options: &[RandomOptionDef],
 ) -> Result<()> {
     if new.name.trim().is_empty() {
         return Err(StorageError::InvalidValue("名前が空です".into()));
@@ -307,7 +312,7 @@ pub fn validate(
     domain::stat_sources::build_modifiers(&new.stat_sources, catalog, &new.game_character_id)
         .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     new.equipment.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
-    validate_equipment_catalog(&new.equipment, equipment_catalog, equipment_abilities)?;
+    validate_equipment_catalog(&new.equipment, equipment_catalog, equipment_abilities, random_options)?;
     Ok(())
 }
 
@@ -319,6 +324,7 @@ fn validate_equipment_catalog(
     equipment: &Equipment,
     equipment_catalog: &[EquipmentItem],
     equipment_abilities: &[EquipmentAbilityDef],
+    random_options: &[RandomOptionDef],
 ) -> Result<()> {
     for (slot, part) in equipment.parts.iter() {
         if let Some(item_id) = &part.item_id {
@@ -360,6 +366,58 @@ fn validate_equipment_catalog(
                     def.name
                 )));
             }
+        }
+        validate_random_options(slot, part, random_options)?;
+    }
+    Ok(())
+}
+
+/// ランダムオプションのカタログ整合性(未知 id・部位不一致・未収録ランク・カテゴリー重複)。
+///
+/// wiki「ランダムオプション」転移の説明: 「同じカテゴリーのオプションを共存させることは出来ず、
+/// 転移させると優先的に上書きされる。ただし、カテゴリーなし(一覧表では 0 表記)はその限りではない」。
+/// 部位ごとの枠数は wiki に記載が無いので数では縛らない。
+fn validate_random_options(
+    slot: domain::PartSlot,
+    part: &domain::EquipmentPart,
+    random_options: &[RandomOptionDef],
+) -> Result<()> {
+    let mut categories = HashSet::new();
+    let mut ids = HashSet::new();
+    for option in &part.random_options {
+        let def = random_options
+            .iter()
+            .find(|d| d.id == option.option_id.as_str())
+            .ok_or_else(|| {
+                StorageError::InvalidValue(format!(
+                    "未知のランダムオプション '{}' です",
+                    option.option_id
+                ))
+            })?;
+        if def.slot != slot {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' は {:?} 用ですが {:?} 部位に指定されています",
+                def.name, def.slot, slot
+            )));
+        }
+        if def.tier(option.rank).is_none() {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' に {:?} ランクはありません",
+                def.name, option.rank
+            )));
+        }
+        if !ids.insert(def.id) {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' が同じ部位に重複しています",
+                def.name
+            )));
+        }
+        // カテゴリー 0 は「カテゴリーなし」で共存できる
+        if def.category != 0 && !categories.insert(def.category) {
+            return Err(StorageError::InvalidValue(format!(
+                "ランダムオプション '{}' はカテゴリー{} が同じ部位ですでに選ばれています(同じカテゴリーは 1 つまで)",
+                def.name, def.category
+            )));
         }
     }
     Ok(())
@@ -463,12 +521,12 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         assert!(repo.list().unwrap().is_empty());
 
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[]).unwrap();
         assert_eq!(created.name, "メイン");
         assert_eq!(created.base_stats.hack, 250);
         assert_eq!(created.awakening, Awakening { stage: 5, eternal_level: 40 });
 
-        let second = repo.create(&new_character("サブ"), &[], &[], &[]).unwrap();
+        let second = repo.create(&new_character("サブ"), &[], &[], &[], &[]).unwrap();
         assert_ne!(created.id, second.id);
 
         let list = repo.list().unwrap();
@@ -479,7 +537,7 @@ mod tests {
     #[test]
     fn 削除できる_存在しないidはエラー() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[]).unwrap();
         repo.delete(created.id).unwrap();
         assert!(repo.list().unwrap().is_empty());
         assert!(matches!(repo.delete(created.id), Err(StorageError::CharacterNotFound(_))));
@@ -490,13 +548,13 @@ mod tests {
     fn 不正な値は拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("  ");
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.name = "x".into();
         c.awakening.stage = 6;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.awakening.stage = 5;
         c.awakening.eternal_level = 101;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
@@ -504,19 +562,19 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
         c.base_stats.int = 0;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.base_stats.int = 311;
-        assert!(matches!(repo.create(&c, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
         c.base_stats.int = 1;
         c.base_stats.agi = 310;
-        assert!(repo.create(&c, &[], &[], &[]).is_ok());
+        assert!(repo.create(&c, &[], &[], &[], &[]).is_ok());
     }
 
     #[test]
     fn マイグレーションは再適用しても壊れない() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         repo.conn.execute_batch(MIGRATION).unwrap();
-        repo.create(&new_character("a"), &[], &[], &[]).unwrap();
+        repo.create(&new_character("a"), &[], &[], &[], &[]).unwrap();
         assert_eq!(repo.list().unwrap().len(), 1);
     }
 
@@ -564,13 +622,13 @@ mod tests {
         assert_eq!(fetched.equipment, Equipment::default());
 
         // マイグレーション後も create/update が使えること
-        let created = repo.create(&new_character("新データ"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("新データ"), &[], &[], &[], &[]).unwrap();
         assert_eq!(created.stat_sources, StatSources::default());
         assert_eq!(created.equipment, Equipment::default());
 
         let mut updated = new_character("旧データ改");
         updated.stat_sources.rune_levels.stab = 10;
-        let result = repo.update(list[0].id, &updated, &[], &[], &[]).unwrap();
+        let result = repo.update(list[0].id, &updated, &[], &[], &[], &[]).unwrap();
         assert_eq!(result.stat_sources.rune_levels.stab, 10);
     }
 
@@ -679,7 +737,7 @@ mod tests {
         assert_eq!(list[0].equipment, Equipment::default());
 
         // create/update も引き続き使えること。
-        repo.create(&new_character("追加データ"), &[], &[], &[]).unwrap();
+        repo.create(&new_character("追加データ"), &[], &[], &[], &[]).unwrap();
         assert_eq!(repo.list().unwrap().len(), 2);
     }
 
@@ -701,7 +759,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let created = repo.create(&c, &test_catalog(), &[], &[]).unwrap();
+        let created = repo.create(&c, &test_catalog(), &[], &[], &[]).unwrap();
         assert_eq!(created.stat_sources, c.stat_sources);
 
         let fetched = repo.get(created.id).unwrap();
@@ -730,7 +788,7 @@ mod tests {
             strong_weapon_level: 6,
             ..Default::default()
         };
-        let created = repo.create(&c, &[], &[], &[]).unwrap();
+        let created = repo.create(&c, &[], &[], &[], &[]).unwrap();
         assert_eq!(created.equipment, c.equipment);
 
         let fetched = repo.get(created.id).unwrap();
@@ -776,12 +834,12 @@ mod tests {
             },
             ..Default::default()
         };
-        let err = repo.create(&c, &[], &[], &abilities).unwrap_err();
+        let err = repo.create(&c, &[], &[], &abilities, &[]).unwrap_err();
         assert!(err.to_string().contains("系統"), "{err}");
 
         // 系統が違えば通る
         c.equipment.parts.weapon.abilities = vec!["pointed-blade-e".into(), "sharp-blade-e".into()];
-        repo.create(&c, &[], &[], &abilities).unwrap();
+        repo.create(&c, &[], &[], &abilities, &[]).unwrap();
     }
 
     #[test]
@@ -789,14 +847,14 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("メイン");
         c.main_skill_id = Some("boris_goku_zaneizan".to_string());
-        let created = repo.create(&c, &[], &[], &[]).unwrap();
+        let created = repo.create(&c, &[], &[], &[], &[]).unwrap();
         assert_eq!(created.main_skill_id.as_deref(), Some("boris_goku_zaneizan"));
         assert_eq!(repo.get(created.id).unwrap().main_skill_id.as_deref(), Some("boris_goku_zaneizan"));
 
         // 未選択(None)も保存できる。update で解除できること。
         let mut cleared = c.clone();
         cleared.main_skill_id = None;
-        let updated = repo.update(created.id, &cleared, &[], &[], &[]).unwrap();
+        let updated = repo.update(created.id, &cleared, &[], &[], &[], &[]).unwrap();
         assert_eq!(updated.main_skill_id, None);
     }
 
@@ -836,7 +894,7 @@ mod tests {
         assert_eq!(list[0].main_skill_id, None);
 
         // 移行後も create/update が使えること。
-        repo.create(&new_character("追加データ"), &[], &[], &[]).unwrap();
+        repo.create(&new_character("追加データ"), &[], &[], &[], &[]).unwrap();
         assert_eq!(repo.list().unwrap().len(), 2);
     }
 
@@ -848,11 +906,11 @@ mod tests {
 
         let mut over_value = new_character("x");
         over_value.equipment.parts.weapon.base = EquipmentValues { thrust: 10000, ..Default::default() };
-        assert!(matches!(repo.create(&over_value, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_value, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_level = new_character("x");
         over_level.equipment.strong_weapon_level = 7;
-        assert!(matches!(repo.create(&over_level, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_level, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     fn test_equipment_item() -> EquipmentItem {
@@ -877,13 +935,111 @@ mod tests {
         }
     }
 
+    const TEST_RO_TIERS: &[domain::RandomOptionTier] = &[domain::RandomOptionTier {
+        rank: domain::RandomOptionRank::Rare,
+        min: 6.0,
+        max: 8.0,
+    }];
+
+    /// 盾のカテゴリー15 を 2 件(排他)と、カテゴリー 0 を 1 件(共存できる)。
+    fn test_random_options() -> Vec<domain::RandomOptionDef> {
+        let def = |id, category, effect| domain::RandomOptionDef {
+            id,
+            name: id,
+            slot: domain::PartSlot::Shield,
+            category,
+            effect,
+            tiers: TEST_RO_TIERS,
+            note: "",
+        };
+        vec![
+            def("ro-a", 15, domain::RandomOptionEffect::AttackDamageRate),
+            def("ro-b", 15, domain::RandomOptionEffect::AccuracyPoint),
+            def("ro-free", 0, domain::RandomOptionEffect::RecordOnly),
+        ]
+    }
+
+    fn ro_slot(id: &str) -> domain::RandomOptionSlot {
+        domain::RandomOptionSlot {
+            option_id: id.to_string(),
+            rank: domain::RandomOptionRank::Rare,
+            value: None,
+        }
+    }
+
+    #[test]
+    fn 未知のランダムオプションidは拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.shield.random_options = vec![ro_slot("nope")];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options()),
+            Err(StorageError::InvalidValue(_))
+        ));
+    }
+
+    #[test]
+    fn ランダムオプションは部位が一致しないと拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.weapon.random_options = vec![ro_slot("ro-a")];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options()),
+            Err(StorageError::InvalidValue(_))
+        ));
+    }
+
+    #[test]
+    fn ランダムオプションに無いランクは拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        let mut slot = ro_slot("ro-a");
+        slot.rank = domain::RandomOptionRank::STrue;
+        c.equipment.parts.shield.random_options = vec![slot];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options()),
+            Err(StorageError::InvalidValue(_))
+        ));
+    }
+
+    // wiki 転移: 同じカテゴリーは共存できない。カテゴリー 0(カテゴリーなし)は例外
+    #[test]
+    fn 同じカテゴリーのランダムオプションは1部位に1つまで() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.shield.random_options = vec![ro_slot("ro-a"), ro_slot("ro-b")];
+        assert!(matches!(
+            repo.create(&c, &[], &[], &[], &test_random_options()),
+            Err(StorageError::InvalidValue(_))
+        ));
+
+        let mut ok = new_character("y");
+        ok.equipment.parts.shield.random_options = vec![ro_slot("ro-a"), ro_slot("ro-free")];
+        assert!(repo.create(&ok, &[], &[], &[], &test_random_options()).is_ok());
+    }
+
+    #[test]
+    fn ランダムオプションは部位別装備のjsonで往復する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.shield.random_options =
+            vec![domain::RandomOptionSlot {
+                option_id: "ro-a".to_string(),
+                rank: domain::RandomOptionRank::Rare,
+                value: Some(7.5),
+            }];
+        let created = repo.create(&c, &[], &[], &[], &test_random_options()).unwrap();
+        let loaded = repo.get(created.id).unwrap();
+        assert_eq!(loaded.equipment.parts.shield.random_options, c.equipment.parts.shield.random_options);
+    }
+
     #[test]
     fn 未知の装備アイテムidは拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
         c.equipment.parts.weapon.item_id = Some("nope".to_string());
         assert!(matches!(
-            repo.create(&c, &[], &[test_equipment_item()], &[]),
+            repo.create(&c, &[], &[test_equipment_item()], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
     }
@@ -895,7 +1051,7 @@ mod tests {
         // test_equipment_item は Weapon 用だが helm 部位に指定する。
         c.equipment.parts.helm.item_id = Some("test-weapon".to_string());
         assert!(matches!(
-            repo.create(&c, &[], &[test_equipment_item()], &[]),
+            repo.create(&c, &[], &[test_equipment_item()], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
     }
@@ -907,14 +1063,14 @@ mod tests {
         c.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
         c.equipment.parts.weapon.enchant = domain::EquipmentValues { thrust: 51, ..Default::default() };
         assert!(matches!(
-            repo.create(&c, &[], &[test_equipment_item()], &[]),
+            repo.create(&c, &[], &[test_equipment_item()], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
 
         let mut ok = new_character("x");
         ok.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
         ok.equipment.parts.weapon.enchant = domain::EquipmentValues { thrust: 50, ..Default::default() };
-        assert!(repo.create(&ok, &[], &[test_equipment_item()], &[]).is_ok());
+        assert!(repo.create(&ok, &[], &[test_equipment_item()], &[], &[]).is_ok());
     }
 
     #[test]
@@ -922,24 +1078,24 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
         c.equipment.parts.weapon.abilities = vec!["nope".to_string()];
-        assert!(matches!(repo.create(&c, &[], &[], &[test_equipment_ability()]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &[], &[], &[test_equipment_ability()], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut ok = new_character("x");
         ok.equipment.parts.weapon.abilities = vec!["test-ability".to_string()];
-        assert!(repo.create(&ok, &[], &[], &[test_equipment_ability()]).is_ok());
+        assert!(repo.create(&ok, &[], &[], &[test_equipment_ability()], &[]).is_ok());
     }
 
     #[test]
     fn updateで登録内容を更新できる() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[]).unwrap();
 
         let mut updated = new_character("メイン改");
         updated.base_stats.stab = 310;
         updated.awakening.eternal_level = 60;
         updated.stat_sources.rune_levels.stab = 20;
 
-        let result = repo.update(created.id, &updated, &[], &[], &[]).unwrap();
+        let result = repo.update(created.id, &updated, &[], &[], &[], &[]).unwrap();
         assert_eq!(result.id, created.id);
         assert_eq!(result.name, "メイン改");
         assert_eq!(result.base_stats.stab, 310);
@@ -953,16 +1109,16 @@ mod tests {
     fn updateは存在しないidをエラーにする() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let c = new_character("メイン");
-        assert!(matches!(repo.update(999, &c, &[], &[], &[]), Err(StorageError::CharacterNotFound(999))));
+        assert!(matches!(repo.update(999, &c, &[], &[], &[], &[]), Err(StorageError::CharacterNotFound(999))));
     }
 
     #[test]
     fn updateも310の範囲バリデーションが効く() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[]).unwrap();
         let mut invalid = new_character("メイン");
         invalid.base_stats.stab = 311;
-        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
@@ -971,27 +1127,27 @@ mod tests {
 
         let mut over_crown = new_character("x");
         over_crown.stat_sources.crown = Crown { stab: Crown::MAX_VALUE + 1, ..Default::default() };
-        assert!(matches!(repo.create(&over_crown, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_crown, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_rune = new_character("x");
         over_rune.stat_sources.rune_levels =
             RuneLevels { hack: RuneLevels::MAX_LEVEL + 1, ..Default::default() };
-        assert!(matches!(repo.create(&over_rune, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_rune, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_relic = new_character("x");
         over_relic.stat_sources.sacred_relic =
             SacredRelic { int: SacredRelic::MAX_STAGE + 1, ..Default::default() };
-        assert!(matches!(repo.create(&over_relic, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&over_relic, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
     fn updateはクラウン_ルーン_聖物の範囲超過を拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &[], &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[]).unwrap();
 
         let mut invalid = new_character("メイン");
         invalid.stat_sources.crown = Crown { stab: Crown::MAX_VALUE + 1, ..Default::default() };
-        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
@@ -1001,20 +1157,20 @@ mod tests {
         c.stat_sources.buffs = BuffSelection {
             choices: vec![buff_choice("illumination_drink"), buff_choice("charge_potion")],
         };
-        assert!(matches!(repo.create(&c, &test_catalog(), &[], &[]), Err(StorageError::InvalidValue(_))));
+        assert!(matches!(repo.create(&c, &test_catalog(), &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 
     #[test]
     fn updateは排他枠が重複するバフ選択を拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let created = repo.create(&new_character("メイン"), &test_catalog(), &[], &[]).unwrap();
+        let created = repo.create(&new_character("メイン"), &test_catalog(), &[], &[], &[]).unwrap();
 
         let mut invalid = new_character("メイン");
         invalid.stat_sources.buffs = BuffSelection {
             choices: vec![buff_choice("illumination_drink"), buff_choice("charge_potion")],
         };
         assert!(matches!(
-            repo.update(created.id, &invalid, &test_catalog(), &[], &[]),
+            repo.update(created.id, &invalid, &test_catalog(), &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
     }
