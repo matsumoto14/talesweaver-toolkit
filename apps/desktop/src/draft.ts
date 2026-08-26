@@ -62,6 +62,7 @@ const DEFAULT_KAI_PROTECT_ARMOR_LEVEL = 5;
 const DEFAULT_AUGMENT_LEVEL = 5;
 const DEFAULT_REINFORCE_LEVEL = 5;
 const DEFAULT_HYPER_LIMIT_LEVEL = 6;
+const DEFAULT_SHARPNESS_VISION_LEVEL = 5;
 
 export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
   ...src,
@@ -89,8 +90,8 @@ export const defaultCommonSkills = (): CommonSkills => ({
   coat_armor: true,
   protect_armor_level: DEFAULT_PROTECT_ARMOR_LEVEL,
   kai_protect_armor_level: DEFAULT_KAI_PROTECT_ARMOR_LEVEL,
-  // 習得スクロールが要るので、取っているかは人による
-  sharpness_vision_level: 0,
+  // Lv5 までは自然に上がる(ここで止まる人が多い)。Lv6 以降は習得スクロールが要るので人による
+  sharpness_vision_level: DEFAULT_SHARPNESS_VISION_LEVEL,
   augment_level: DEFAULT_AUGMENT_LEVEL,
   unleash: [{ stat: null, level: 0 }, { stat: null, level: 0 }],
   // アンリーシュ Lv10 の前提。ステを選べば Lv は上限で入る

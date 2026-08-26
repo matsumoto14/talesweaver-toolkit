@@ -23,8 +23,16 @@
     cols?: number;
     /** 段ごとに足すクラス(属性のやんわりした面など)。`value -> class` */
     tone?: (value: string) => string | undefined;
+    /**
+     * 押せない段。**段そのものは消さない** — 消すと段の数が変わって幅が動く
+     * (§09 規則 4「あとから幅が変わらない」)
+     */
+    disabledValues?: string[];
   }
-  let { label, value = $bindable(), options, disabled = false, full = false, cols, tone }: Props = $props();
+  let {
+    label, value = $bindable(), options, disabled = false, full = false, cols, tone,
+    disabledValues = [],
+  }: Props = $props();
 </script>
 
 <div class="step-select">
@@ -44,7 +52,7 @@
         class:on={o.value === value}
         role="radio"
         aria-checked={o.value === value}
-        {disabled}
+        disabled={disabled || disabledValues.includes(o.value)}
         onclick={() => (value = o.value)}
       >{o.label}</button>
     {/each}

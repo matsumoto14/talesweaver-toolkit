@@ -371,9 +371,11 @@
     })),
   );
   /** もう一方の枠で選んでいるステは選べない(同じステの 2 枠は不可) */
-  const unleashStatOptions = (slotIndex: number) => {
+  /** 段はいつも 7 つ。もう片方の枠で使っているステは**押せなくするだけ**(消すと幅が動く) */
+  const unleashStatOptions = STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }));
+  const unleashDisabled = (slotIndex: number) => {
     const other = draft.commonSkills.unleash[1 - slotIndex].stat;
-    return STAT_KINDS.filter((k) => k !== other).map((k) => ({ value: k, label: STAT_LABELS[k] }));
+    return other === null ? [] : [other];
   };
   /** いま取れるアンリーシュの上限(レインフォース Lv + 5、最大 10) */
   const unleashCap = $derived(Math.min(limits.unleash_level_max, reinforceGate));
@@ -471,6 +473,20 @@
   }
   function setUltimate(slotIndex: number, value: string) {
     draft.commonSkills.ultimate.slots[slotIndex] = value === "" ? null : (value as UltimateSkill);
+  }
+  /** 極限は「3 つのうち 2 つ」。枠に分けず、押して入れる / 押して外す(§07 形態 3) */
+  const ultimatePickedCount = $derived(
+    draft.commonSkills.ultimate.slots.filter((u) => u !== null).length,
+  );
+  function toggleUltimate(skill: UltimateSkill) {
+    const slots = draft.commonSkills.ultimate.slots;
+    const at = slots.indexOf(skill);
+    if (at !== -1) {
+      slots[at] = null;
+      return;
+    }
+    const empty = slots.indexOf(null);
+    if (empty !== -1) slots[empty] = skill;
   }
   /** 選択中の極限スキルの効果値(表示用。計算は Rust 側) */
   const ultimateEffects = $derived.by(() => {
@@ -1535,29 +1551,24 @@
             onclick={() => setAugmentLevel(0)}
           >未習得</button>
         </div>
-        {#each [0, 1] as slotIndex (slotIndex)}
-          {@const picked = draft.commonSkills.ultimate.slots[slotIndex]}
-          <div class="skill-field">
-            <span class="k">極限 枠 {slotIndex + 1}</span>
-            <StepSelect
-              label=""
-              options={ultimateOptions(slotIndex)}
-              cols={ultimateOptions(slotIndex).length}
-              bind:value={
-                () => draft.commonSkills.ultimate.slots[slotIndex] ?? "",
-                (v) => setUltimate(slotIndex, v)
-              }
-            />
-            <button
-              type="button"
-              class="clear"
-              disabled={picked === null}
-              onclick={() => setUltimate(slotIndex, "")}
-            >未習得</button>
+        <div class="skill-field">
+          <span class="k">極限スキル</span>
+          <div class="ultimate-row">
+            {#each ULTIMATE_SKILLS as u (u)}
+              {@const on = draft.commonSkills.ultimate.slots.includes(u)}
+              <button
+                type="button"
+                class="chip"
+                class:on
+                disabled={!on && ultimatePickedCount >= 2}
+                onclick={() => toggleUltimate(u)}
+              >{ULTIMATE_SKILL_LABELS[u]}</button>
+            {/each}
           </div>
-          {#if picked !== null}
-            <p class="hint dim skill-note">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
-          {/if}
+          <span class="v num">{ultimatePickedCount} / 2</span>
+        </div>
+        {#each draft.commonSkills.ultimate.slots.filter((u) => u !== null) as picked (picked)}
+          <p class="hint dim skill-note">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
         {/each}
       </div>
       {#if ultimateEffects.length > 0}
@@ -1577,8 +1588,9 @@
             <span class="k">枠 {i + 1}</span>
             <StepSelect
               label=""
-              options={unleashStatOptions(i)}
-              cols={unleashStatOptions(i).length}
+              options={unleashStatOptions}
+              cols={unleashStatOptions.length}
+              disabledValues={unleashDisabled(i)}
               bind:value={() => slot.stat ?? "", (v) => setUnleashStat(i, v)}
             />
             <button
@@ -2232,6 +2244,7 @@
   .skill-field .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
   .skill-field .clear:disabled { color: var(--border-soft); }
   .skill-note { margin: 0 0 0 73px; }
+  .ultimate-row { display: flex; flex-wrap: wrap; gap: 6px; }
 
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .skill-chip .skill-name { font-weight: 700; }
