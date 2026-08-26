@@ -10,8 +10,12 @@
 //! 部位名の対応(wiki の節名 → `PartSlot`):
 //! - 「サブアーム」= 盾(`Shield`)
 //! - 「サブアーム(SHOW)」= 盾+ / カフス(`ShieldPlus`。Show 装備だが補正が設定されている装備)
-//! - 「レリック(右)」「レリック(左)」= どちらも `Relic`。カテゴリー番号が重ならないので
-//!   1 つの部位に両方を持たせても「同じカテゴリーは 1 つまで」の制約は正しく効く
+//! - 「レリック(右)」「レリック(左)」= **付加オプションの 2 枠**(隠月の結晶(右)/(左))で、
+//!   部位ではない(wiki: Item/アクセサリ/レリック「ルナリアレリックは 1 レベルから
+//!   アビリティスロット 1 枠、付加オプション 2 枠が付与される」)。
+//!   装備としての部位は**ペンダント**と**ブレスレット**の 2 つなので、
+//!   右/左 の OP はどちらの部位にも持たせる。カテゴリー番号が重ならないので
+//!   「同じカテゴリーは 1 つまで」の制約はそのまま効く
 
 use domain::{
     PartSlot, RandomOptionDef, RandomOptionEffect, RandomOptionRank, RandomOptionTier,
@@ -203,8 +207,38 @@ const COMMON_IDS: &[&str] = &[
     "cuffs-actual-delay",
 ];
 
+/// レリックの付加オプションはペンダントとブレスレットの両方に付く。
+/// 保存する id は部位ごとに分ける(同じ id が 2 部位にあると、どちらの枠か決まらない)。
+const BRACELET_IDS: &[(&str, &str)] = &[
+    ("relic-attack-damage", "relic-bracelet-attack-damage"),
+    ("relic-thrust-rate", "relic-bracelet-thrust-rate"),
+    ("relic-slash-rate", "relic-bracelet-slash-rate"),
+    ("relic-physical-composite-rate", "relic-bracelet-physical-composite-rate"),
+    ("relic-magic-rate", "relic-bracelet-magic-rate"),
+    ("relic-holy-rate", "relic-bracelet-holy-rate"),
+    ("relic-magic-slash-rate", "relic-bracelet-magic-slash-rate"),
+    ("relic-damage-resistance", "relic-bracelet-damage-resistance"),
+    ("relic-accuracy", "relic-bracelet-accuracy"),
+    ("relic-evasion", "relic-bracelet-evasion"),
+];
+
 pub fn random_option_catalog() -> Vec<RandomOptionDef> {
     let mut defs = random_option_defs();
+    // レリックの付加オプションはペンダントにもブレスレットにも付く。
+    // id は部位ごとに分ける(同じ id が 2 部位にあると、どちらの枠か決まらない)
+    let bracelet: Vec<RandomOptionDef> = defs
+        .iter()
+        .filter(|d| d.slot == PartSlot::RelicPendant)
+        .map(|d| RandomOptionDef {
+            slot: PartSlot::RelicBracelet,
+            id: BRACELET_IDS
+                .iter()
+                .find(|(pendant, _)| *pendant == d.id)
+                .map_or(d.id, |(_, bracelet)| *bracelet),
+            ..d.clone()
+        })
+        .collect();
+    defs.extend(bracelet);
     for d in &mut defs {
         d.common = COMMON_IDS.contains(&d.id);
     }
@@ -356,7 +390,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-attack-damage",
             "攻撃ダメージが増加(レリック右)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             15,
             AttackDamageRate,
             RELIC_CATEGORY15_TIERS,
@@ -365,7 +399,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-thrust-rate",
             "突き攻撃力が増加(レリック右)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             15,
             DependencyDamageRate(SkillDependency::Stab),
             RELIC_CATEGORY15_TIERS,
@@ -374,7 +408,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-slash-rate",
             "斬り攻撃力が増加(レリック右)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             15,
             DependencyDamageRate(SkillDependency::Hack),
             RELIC_CATEGORY15_TIERS,
@@ -383,7 +417,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-physical-composite-rate",
             "物理複合攻撃力が増加(レリック右)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             15,
             DependencyDamageRate(SkillDependency::StabHack),
             RELIC_CATEGORY15_TIERS,
@@ -392,7 +426,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-magic-rate",
             "魔法攻撃力が増加(レリック右)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             15,
             DependencyDamageRate(SkillDependency::Int),
             RELIC_CATEGORY15_TIERS,
@@ -401,7 +435,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-holy-rate",
             "神聖攻撃力が増加(レリック右)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             15,
             DependencyDamageRate(SkillDependency::Mr),
             RELIC_CATEGORY15_TIERS,
@@ -410,7 +444,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-magic-slash-rate",
             "魔法斬り攻撃力が増加(レリック右)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             15,
             DependencyDamageRate(SkillDependency::HackInt),
             RELIC_CATEGORY15_TIERS,
@@ -420,7 +454,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-damage-resistance",
             "ダメージ耐性が増加(レリック左)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             3,
             RecordOnly,
             RELIC_RESISTANCE_TIERS,
@@ -429,7 +463,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-accuracy",
             "命中率が増加(レリック左)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             10,
             AccuracyPoint,
             RELIC_ACCURACY_TIERS,
@@ -438,7 +472,7 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
         def(
             "relic-evasion",
             "回避率が増加(レリック左)",
-            PartSlot::Relic,
+            PartSlot::RelicPendant,
             10,
             EvasionPoint,
             RELIC_ACCURACY_TIERS,
@@ -587,13 +621,15 @@ mod tests {
         }
     }
 
-    /// 同じ部位・同じカテゴリーの OP は排他になる。カテゴリー 0 だけは例外(wiki: 転移)。
+    /// レリックの付加オプション(右 = カテゴリー15 / 左 = カテゴリー3・10)は、
+    /// ペンダントにもブレスレットにも同じ形で付く。カテゴリーが重ならないので排他制約も壊れない。
     #[test]
-    fn relic_right_and_left_categories_do_not_collide() {
-        let relic: Vec<_> =
-            random_option_catalog().into_iter().filter(|d| d.slot == PartSlot::Relic).collect();
-        // 右は 15、左は 3 と 10。1 部位に統合しても排他制約が壊れない
-        let categories: HashSet<u8> = relic.iter().map(|d| d.category).collect();
-        assert_eq!(categories, HashSet::from([3, 10, 15]));
+    fn レリックの付加オプションは両方の部位に付く() {
+        for slot in [PartSlot::RelicPendant, PartSlot::RelicBracelet] {
+            let relic: Vec<_> =
+                random_option_catalog().into_iter().filter(|d| d.slot == slot).collect();
+            let categories: HashSet<u8> = relic.iter().map(|d| d.category).collect();
+            assert_eq!(categories, HashSet::from([3, 10, 15]), "{slot:?}");
+        }
     }
 }

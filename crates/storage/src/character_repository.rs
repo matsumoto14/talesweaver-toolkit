@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS characters (
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
 /// v6 で `common_skills` 列が加わった。パワーウェポン / ストロングウェポンは
 /// v5 まで `equipment` 列の中にあり、移行で `common_skills` へ移す。
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id";
 
@@ -142,6 +142,33 @@ fn migrate_equipment_to_parts(conn: &Connection) -> Result<()> {
         }
         let migrated_json = serde_json::to_string(&migrated_value)?;
         conn.execute("UPDATE characters SET equipment = ?1 WHERE id = ?2", params![migrated_json, id])?;
+    }
+    Ok(())
+}
+
+/// v7: レリックを**ペンダント**と**ブレスレット**の 2 部位に分ける
+/// (wiki: Item/アクセサリ/レリック。ペンダントは突き/斬り/魔攻/命中/Cri、
+/// ブレスレットは物防/魔防/回避/敏捷)。
+///
+/// 旧 `parts.relic` に入っていた値は**ペンダント**へ移す(火力側の入力がそこに入っている)。
+/// ブレスレットは中立値で始まる。
+fn migrate_relic_to_pendant(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, equipment FROM characters")?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (id, json) in rows {
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        let Some(parts) = value.get_mut("parts").and_then(|p| p.as_object_mut()) else {
+            continue;
+        };
+        let Some(relic) = parts.remove("relic") else {
+            continue;
+        };
+        parts.insert("relic_pendant".to_string(), relic);
+        let migrated = serde_json::to_string(&value)?;
+        conn.execute("UPDATE characters SET equipment = ?1 WHERE id = ?2", params![migrated, id])?;
     }
     Ok(())
 }
@@ -239,6 +266,7 @@ impl CharacterRepository {
             )?;
         }
         migrate_equipment_to_parts(&conn)?;
+        migrate_relic_to_pendant(&conn)?;
         migrate_weapon_skills_to_common(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 

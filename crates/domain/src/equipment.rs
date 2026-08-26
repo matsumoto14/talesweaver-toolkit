@@ -131,7 +131,11 @@ pub enum PartSlot {
     Leg,
     Effect,
     Artifact,
-    Relic,
+    /// レリック(ペンダント)。突き / 斬り / 魔攻 / 命中率 / Cri の側
+    /// (wiki: Item/アクセサリ/レリック 神鳥のペンダント・ルナリアペンダント)
+    RelicPendant,
+    /// レリック(ブレスレット)。物防 / 魔防 / 回避率 / 敏捷度の側
+    RelicBracelet,
 }
 
 impl PartSlot {
@@ -170,7 +174,7 @@ impl PartSlot {
     /// この部位が属性強化を持てるか
     /// (wiki: 装備システム冒頭の表「属性強化」行 = 兜/鎧/武/盾/頭/体/手/足/効果/AF。盾+・レリックは対象外)。
     pub fn allows_element(self) -> bool {
-        !matches!(self, PartSlot::ShieldPlus | PartSlot::Relic)
+        !matches!(self, PartSlot::ShieldPlus | PartSlot::RelicPendant | PartSlot::RelicBracelet)
     }
 
     /// シエナのオーラの能力値が「装備補正(エンチャント扱い)」として付く部位
@@ -619,12 +623,14 @@ pub struct EquipmentParts {
     #[serde(default)]
     pub artifact: EquipmentPart,
     #[serde(default)]
-    pub relic: EquipmentPart,
+    pub relic_pendant: EquipmentPart,
+    #[serde(default)]
+    pub relic_bracelet: EquipmentPart,
 }
 
 impl EquipmentParts {
-    /// 12 部位を `(PartSlot, &EquipmentPart)` で列挙する。
-    pub fn iter(&self) -> [(PartSlot, &EquipmentPart); 12] {
+    /// 13 部位を `(PartSlot, &EquipmentPart)` で列挙する。
+    pub fn iter(&self) -> [(PartSlot, &EquipmentPart); 13] {
         [
             (PartSlot::Weapon, &self.weapon),
             (PartSlot::Armor, &self.armor),
@@ -637,7 +643,8 @@ impl EquipmentParts {
             (PartSlot::Leg, &self.leg),
             (PartSlot::Effect, &self.effect),
             (PartSlot::Artifact, &self.artifact),
-            (PartSlot::Relic, &self.relic),
+            (PartSlot::RelicPendant, &self.relic_pendant),
+            (PartSlot::RelicBracelet, &self.relic_bracelet),
         ]
     }
 
@@ -655,7 +662,8 @@ impl EquipmentParts {
             PartSlot::Leg => &mut self.leg,
             PartSlot::Effect => &mut self.effect,
             PartSlot::Artifact => &mut self.artifact,
-            PartSlot::Relic => &mut self.relic,
+            PartSlot::RelicPendant => &mut self.relic_pendant,
+            PartSlot::RelicBracelet => &mut self.relic_bracelet,
         }
     }
 }
@@ -978,7 +986,7 @@ mod tests {
         assert!(matches!(eq.validate(), Err(EquipmentError::ElementNeutralNotAllowed { .. })));
 
         // 盾+ とレリックは属性強化の対象外
-        for slot in [PartSlot::ShieldPlus, PartSlot::Relic] {
+        for slot in [PartSlot::ShieldPlus, PartSlot::RelicPendant, PartSlot::RelicBracelet] {
             let mut eq = Equipment::default();
             eq.parts.get_mut(slot).element = Some(Element::Fire);
             assert!(matches!(eq.validate(), Err(EquipmentError::ElementNotAllowed { .. })));

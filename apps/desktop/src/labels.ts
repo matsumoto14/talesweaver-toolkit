@@ -64,7 +64,7 @@ export const ELEMENT_ALLOWED_SLOTS: PartSlot[] = [
 // 装備部位(crates/domain/src/equipment.rs の PartSlot)の表示名・並び順(wiki: 装備システム ページ冒頭の表)。
 export const PART_SLOTS: PartSlot[] = [
   "weapon", "armor", "helm", "shield", "shield_plus",
-  "head", "body", "hand", "leg", "effect", "artifact", "relic",
+  "head", "body", "hand", "leg", "effect", "artifact", "relic_pendant", "relic_bracelet",
 ];
 export const PART_SLOT_LABELS: Record<PartSlot, string> = {
   weapon: "武器",
@@ -78,7 +78,8 @@ export const PART_SLOT_LABELS: Record<PartSlot, string> = {
   leg: "足",
   effect: "効果",
   artifact: "AF",
-  relic: "レリック",
+  relic_pendant: "レリック(ペンダント)",
+  relic_bracelet: "レリック(ブレスレット)",
 };
 // 装備強化(+1〜+15)を持てる部位(wiki: 装備システム/装備強化。武器・鎧のみ)。
 export const ENHANCE_ALLOWED_SLOTS: PartSlot[] = ["weapon", "armor"];

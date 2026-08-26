@@ -271,7 +271,8 @@ export interface EquipmentValues {
 // 装備部位。crates/domain/src/equipment.rs の PartSlot(snake_case)。
 export type PartSlot =
   | "weapon" | "armor" | "helm" | "shield" | "shield_plus"
-  | "head" | "body" | "hand" | "leg" | "effect" | "artifact" | "relic";
+  | "head" | "body" | "hand" | "leg" | "effect" | "artifact"
+  | "relic_pendant" | "relic_bracelet";
 
 // シエナのオーラのステ加算。crates/domain/src/equipment.rs の SienaStatBonus。
 export type SienaStatBonus = Record<StatKind, number>;
@@ -473,10 +474,11 @@ export interface EquipmentParts {
   leg: EquipmentPart;
   effect: EquipmentPart;
   artifact: EquipmentPart;
-  relic: EquipmentPart;
+  relic_pendant: EquipmentPart;
+  relic_bracelet: EquipmentPart;
 }
 
-// 装備補正一式(部位別装備 12 スロット + パワーウェポン/ストロングウェポン)。
+// 装備補正一式(部位別装備 13 スロット + パワーウェポン/ストロングウェポン)。
 // crates/domain/src/equipment.rs の Equipment。
 export interface Equipment {
   parts: EquipmentParts;
