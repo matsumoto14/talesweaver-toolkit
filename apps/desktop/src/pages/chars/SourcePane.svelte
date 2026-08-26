@@ -94,6 +94,11 @@
   // キャラは名前で探すより顔で選ぶほうが速い(ゲーム内も顔で選ぶ)。§06 の 40px。
   // 名前は必ず併記する(アイコン単独表示は禁止)
   const characterOptions = $derived(app.gameCharacters.map((c) => ({ value: c.id, label: c.name })));
+  const gameCharacterName = $derived(
+    app.gameCharacters.find((c) => c.id === draft.gameCharacterId)?.name ?? "未選択",
+  );
+  /** キャラは登録時に決めるもの。ふだんは畳んでおく */
+  let charPickOpen = $state(false);
 
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
   // キャラ種を変えたら前キャラのスキル id が残らないよう同期的に外す(保存時に Rust 側が弾く値)。
@@ -753,22 +758,32 @@
           <span class="label">名前</span>
           <input type="text" bind:value={draft.name} maxlength="32" placeholder="表示名" />
         </label>
-        <!-- キャラは顔で選ぶ(ゲーム内も顔で並ぶ)。名前は必ず併記する -->
+        <!-- キャラは登録のときに決めて、ふだんは変えない。いまのキャラだけ出して、
+             変えるときに顔を並べる(§00 02)。名前はアイコンに必ず併記する -->
         <div class="wide">
           <span class="label">キャラ</span>
-          <div class="pick-grid">
-            {#each app.gameCharacters as c (c.id)}
-              <button
-                type="button"
-                class="pick"
-                class:on={c.id === draft.gameCharacterId}
-                onclick={() => setGameCharacterId(c.id)}
-              >
-                <Icon kind="character" id={c.id} size={40} label={c.name} />
-                <span class="pick-name">{c.name}</span>
-              </button>
-            {/each}
+          <div class="char-now">
+            <Icon kind="character" id={draft.gameCharacterId} size={40} label={gameCharacterName} />
+            <span class="char-name">{gameCharacterName}</span>
+            <button type="button" class="chip quiet" class:on={charPickOpen} onclick={() => (charPickOpen = !charPickOpen)}>
+              {charPickOpen ? "閉じる" : "変更"}
+            </button>
           </div>
+          {#if charPickOpen}
+            <div class="pick-grid open-in">
+              {#each app.gameCharacters as c (c.id)}
+                <button
+                  type="button"
+                  class="pick"
+                  class:on={c.id === draft.gameCharacterId}
+                  onclick={() => { setGameCharacterId(c.id); charPickOpen = false; }}
+                >
+                  <Icon kind="character" id={c.id} size={40} label={c.name} />
+                  <span class="pick-name">{c.name}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
         <!-- エタの意志は覚醒 5 の先にあるもの。**選んだ時点で覚醒は 5 で確定する**ので、
              覚醒より先に置く(§00 01 決める順に並べる) -->
@@ -794,7 +809,7 @@
           <p class="hint dim">節目(20 / 40 / 60 / 80 / 90)を超えると、ダメージ上限・防御力上限・能力値上限の伸びが一段上がります。Lv を入れると覚醒は 5 段階になります。</p>
         </div>
         <!-- 覚醒段階は 4 と 5 しか使わない。それ以外は開いたときだけ出す(§00 02) -->
-        <div class="stage-field">
+        <div class="stage-field wide">
           <span class="label">覚醒段階</span>
           <div class="stage-row">
             <StepSelect
@@ -2141,9 +2156,13 @@
   /* 同じ形のステが 8 個並ぶ場所の共通形。ラベルを左に置いて 1 ステ 1 行にする —
      ラベルを上に置くと 1 件で 2 行使い、8 件で画面が埋まる(§00 01 / 02) */
   /* キャラの顔で選ぶ場所(登録ペインと同じ形。見た目は app.css の .pick に置いてある) */
-  .pick-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pick-grid { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .char-now { display: flex; align-items: center; gap: 9px; }
+  .char-now .char-name { font-size: 13px; font-weight: 700; }
+  .char-now .chip { margin-left: 4px; }
   .stage-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .stage-row { display: flex; align-items: center; gap: 8px; }
+  .stage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .stage-row > :global(.chip) { flex: none; }
   /* 段が 2 つしか無いと、幅なりでは細すぎて押す場所に見えない。段の大きさを先に決める */
   .stage-row > :global(.step-select) { flex: none; }
   .stage-row :global(.seg button) { min-width: 46px; padding: 7px 0; font-size: 13px; }
