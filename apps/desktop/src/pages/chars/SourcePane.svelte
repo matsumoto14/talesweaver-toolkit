@@ -545,10 +545,9 @@
   // 入らないので、ふだんは畳んでおく(§00「要らないものを見せない」)。
   // 既に補助タイプが入っている枠があるときは、畳んだままだと選択中の段が消えるので開く
   let coreShowSupport = $state(false);
-  const corePowerOptions = [
-    { value: "", label: "未装着" },
-    ...CORE_POWER_TYPES.map((t) => ({ value: t, label: CORE_TYPE_LABELS[t] })),
-  ];
+  // 「未装着」は段に入れない。ほぼ選ばれないものが常に 1 列を占めるのは割に合わない。
+  // 外すのは行末の小さな × 1 つで足りる(§00 02「要らないものを見せない」)
+  const corePowerOptions = CORE_POWER_TYPES.map((t) => ({ value: t, label: CORE_TYPE_LABELS[t] }));
   const coreSupportOptions = CORE_SUPPORT_TYPES.map((t) => ({
     value: t,
     label: `${CORE_TYPE_LABELS[t]}(補助)`,
@@ -1541,7 +1540,7 @@
               <StepSelect
                 label=""
                 options={corePowerOptions}
-                cols={5}
+                cols={4}
                 bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
               />
               {#if coreShowSupport || coreSupportInUse}
@@ -1554,6 +1553,14 @@
               {/if}
             </span>
             <!-- 進化 - 強化。押すと 5×5 が重なって出るので、押した枠は動かない(§09 規則 3) -->
+            <button
+              type="button"
+              class="core-clear"
+              disabled={core === null}
+              title="このコアを外す"
+              aria-label="このコアを外す"
+              onclick={() => setCoreType(index, "")}
+            >×</button>
             <span class="core-stage">
               <button
                 type="button"
@@ -1922,13 +1929,20 @@
   /* 1 枠 = 1 行。番号・タイプ・進化-強化・補正値が同じ高さに並ぶので、
      6 枠を上から一度の視線で読める(§00「視線を動かさない」) */
   .core-row {
-    display: grid; grid-template-columns: 16px 1fr 54px 48px;
+    display: grid; grid-template-columns: 16px 1fr 20px 54px 48px;
     gap: 9px; align-items: center;
     padding-bottom: 7px; border-bottom: 1px dashed var(--border-soft);
   }
   .core-row:last-child { padding-bottom: 0; border-bottom: 0; }
   .core-slot { font-size: 11px; text-align: center; }
   .core-types { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  /* 外すのは「ほぼ押さない操作」なので、段ではなく小さな 1 つに落とす */
+  .core-clear {
+    width: 20px; height: 20px; padding: 0; border-radius: var(--r-chip);
+    background: none; border: 0; color: var(--fg-dim); font-size: 12px; line-height: 1;
+  }
+  .core-clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
+  .core-clear:disabled { color: var(--border-soft); }
   .core-stage { position: relative; }
   .stage-trigger {
     width: 100%; padding: 5px 0; border-radius: var(--r-panel);
