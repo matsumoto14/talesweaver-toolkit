@@ -322,7 +322,23 @@
     addableRandomOptions(slot)
       .map((o) => randomOptionDef(o.value))
       .filter((d): d is RandomOptionDef => d !== undefined);
-  const commonAddable = (slot: PartSlot) => addableDefs(slot).filter((d) => d.common);
+  /**
+   * よく使う OP。**主軸スキルの依存に合う「◯◯攻撃力が増加」を先頭**に出す —
+   * ここで実際に選ばれるのはほぼそれで、攻撃ダメージ増加はその次(ユーザー確認 2026-08-26)
+   */
+  const commonAddable = (slot: PartSlot) => {
+    const dependency = mainSkill?.dependency ?? null;
+    const rank = (d: RandomOptionDef) => {
+      const effect = d.effect;
+      if (typeof effect === "object") {
+        return effect.dependency_damage_rate === dependency ? 0 : 1;
+      }
+      return 2;
+    };
+    return addableDefs(slot)
+      .filter((d) => d.common)
+      .sort((a, b) => rank(a) - rank(b));
+  };
   const otherAddable = (slot: PartSlot) => addableDefs(slot).filter((d) => !d.common);
   const otherPickerOptions = (slot: PartSlot): PickerOption[] =>
     otherAddable(slot).map((d) => ({

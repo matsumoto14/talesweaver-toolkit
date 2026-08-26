@@ -201,8 +201,11 @@ const COMMON_IDS: &[&str] = &[
     "shield-thrust-rate",
     "shield-slash-rate",
     "shield-magic-rate",
-    // レリック: ペンダントは攻撃系、ブレスレットは耐性・回避
+    // レリック: ペンダントは攻撃系(主軸の依存に合わせて 1 つ)、ブレスレットは耐性・回避
     "relic-attack-damage",
+    "relic-thrust-rate",
+    "relic-slash-rate",
+    "relic-magic-rate",
     "relic-damage-resistance",
     "relic-evasion",
     // 鎧: 耐久系(計算には入らないが、付ける人が多いので記録する)
