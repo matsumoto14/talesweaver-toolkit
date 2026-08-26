@@ -29,8 +29,8 @@ pub const RANDOM_OPTION_SOURCE: Source = Source {
 };
 
 use RandomOptionEffect::{
-    AccuracyAndEvasionPoint, AccuracyPoint, ActualDelayReduction, AttackDamageRate,
-    DependencyDamageRate, EvasionPoint, RecordOnly,
+    AccuracyAndEvasionPoint, AccuracyPoint, ActualDelayReduction, AddedDamageRate,
+    AttackDamageRate, DependencyDamageRate, EvasionPoint, RecordOnly,
 };
 use RandomOptionRank::{Normal, Rare, STrue, Special, Valuable};
 
@@ -56,6 +56,27 @@ const RELIC_RESISTANCE_TIERS: &[RandomOptionTier] =
     &[tier(Valuable, 3.0, 4.0), tier(Rare, 5.0, 7.0), tier(Special, 8.0, 10.0)];
 const RELIC_ACCURACY_TIERS: &[RandomOptionTier] =
     &[tier(Valuable, 3.0, 5.0), tier(Rare, 6.0, 10.0), tier(Special, 11.0, 15.0)];
+
+/// 武器カテゴリー11「物理 / 魔法攻撃が的中した場合、X% の確率で Y% の追加ダメージ」の **Y**。
+/// 確率 X は満たしている前提で入れる(ユーザー確認 2026-08-26)。
+const WEAPON_ON_HIT_TIERS: &[RandomOptionTier] = &[
+    tier(Normal, 10.0, 11.0),
+    tier(Valuable, 12.0, 13.0),
+    tier(Rare, 13.0, 14.0),
+    tier(Special, 14.0, 15.0),
+];
+
+/// 武器カテゴリー16「攻撃時、強化の石を 1 個消耗する代わりに X% の追加ダメージ」。
+const WEAPON_STONE_TIERS: &[RandomOptionTier] =
+    &[tier(Rare, 18.0, 25.0), tier(Special, 30.0, 45.0), tier(STrue, 35.0, 48.0)];
+
+/// 武器カテゴリー16「攻撃時、X SEED を消耗する代わりに Y% の追加ダメージ」の **Y**。
+const WEAPON_SEED_TIERS: &[RandomOptionTier] = &[
+    tier(Normal, 2.0, 4.0),
+    tier(Valuable, 5.0, 8.0),
+    tier(Rare, 10.0, 15.0),
+    tier(Special, 18.0, 25.0),
+];
 
 const SHIELD_ATTACK_DAMAGE_TIERS: &[RandomOptionTier] = &[
     tier(Valuable, 5.0, 10.0),
@@ -363,42 +384,86 @@ pub fn random_option_catalog() -> Vec<RandomOptionDef> {
             RELIC_ACCURACY_TIERS,
             "",
         ),
-        // --- 武器(すべて発動条件付き = 記録のみ)---------------------------
+        // --- 武器 -----------------------------------------------------------
+        //
+        // **発動条件は満たしている前提で計算に入れる**(ユーザー確認 2026-08-26)。
+        // 実際の運用ではボス戦で殴り、石は常時 ON、確率つきも期待値ではなく効いた側で
+        // 見積もる。条件は `note` に残す。
         def(
             "weapon-boss-damage",
             "一般ボスモンスター攻撃時、追加ダメージ",
             PartSlot::Weapon,
             1,
-            RecordOnly,
+            AddedDamageRate,
             WEAPON_BOSS_TIERS,
-            "追加ダメージ(新-割合)。敵がボスかどうかを持っていないので記録のみ",
+            "追加ダメージ(新-割合)。ボス戦で効く",
         ),
         def(
             "weapon-raid-boss-damage",
             "レイドボスモンスター攻撃時、追加ダメージ",
             PartSlot::Weapon,
             1,
-            RecordOnly,
+            AddedDamageRate,
             WEAPON_RAID_BOSS_TIERS,
-            "追加ダメージ(新-割合)。敵がレイドボスかどうかを持っていないので記録のみ",
+            "追加ダメージ(新-割合)。レイドボス戦で効く",
         ),
         def(
             "weapon-back-attack-damage",
             "対象の後方から攻撃した場合、追加ダメージ",
             PartSlot::Weapon,
             1,
-            RecordOnly,
+            AddedDamageRate,
             WEAPON_BACK_ATTACK_TIERS,
-            "追加ダメージ(新-割合)。位置関係は計算対象外なので記録のみ",
+            "追加ダメージ(新-割合)。後ろから殴っている前提",
         ),
         def(
             "weapon-melee-damage",
             "近接する対象攻撃時、追加ダメージ",
             PartSlot::Weapon,
             1,
-            RecordOnly,
+            AddedDamageRate,
             WEAPON_MELEE_TIERS,
-            "追加ダメージ(新-割合)。発動クールタイム 1 秒・射程条件があるので記録のみ",
+            "追加ダメージ(新-割合)。発動クールタイム 1 秒・射程 24 で確認",
+        ),
+        def(
+            "weapon-on-hit-physical",
+            "物理攻撃が的中した場合、確率で追加ダメージ",
+            PartSlot::Weapon,
+            11,
+            AddedDamageRate,
+            WEAPON_ON_HIT_TIERS,
+            "追加ダメージ(新-割合)。物理依存(STAB / HACK / STAB+HACK / 熊)のスキルで、\
+             的中時に 5〜6% の確率。値は効いたときの Y%",
+        ),
+        def(
+            "weapon-on-hit-magic",
+            "魔法攻撃が的中した場合、確率で追加ダメージ",
+            PartSlot::Weapon,
+            11,
+            AddedDamageRate,
+            WEAPON_ON_HIT_TIERS,
+            "追加ダメージ(新-割合)。魔法依存(INT / MR / HACK+INT)のスキルで、\
+             的中時に 5〜6% の確率。値は効いたときの Y%",
+        ),
+        def(
+            "weapon-stone-damage",
+            "強化の石を 1 個消耗する代わりに追加ダメージ",
+            PartSlot::Weapon,
+            16,
+            AddedDamageRate,
+            WEAPON_STONE_TIERS,
+            "追加ダメージ(新-割合)。強化の石を 20 個以上持っていること。\
+             複数体に当てるとその数だけ消費する。説明文から ON / OFF を切り替えられる",
+        ),
+        def(
+            "weapon-seed-damage",
+            "SEED を消耗する代わりに追加ダメージ",
+            PartSlot::Weapon,
+            16,
+            AddedDamageRate,
+            WEAPON_SEED_TIERS,
+            "追加ダメージ(新-割合)。1,000,000 SEED 以上持っていること。\
+             複数体に当てるとその数だけ消費する。説明文から ON / OFF を切り替えられる",
         ),
     ]
 }

@@ -304,6 +304,7 @@ export type RandomOptionRank = "normal" | "valuable" | "rare" | "special" | "s_t
 export type RandomOptionEffect =
   | { dependency_damage_rate: SkillDependency }
   | "attack_damage_rate"
+  | "added_damage_rate"
   | "accuracy_point"
   | "evasion_point"
   | "accuracy_and_evasion_point"

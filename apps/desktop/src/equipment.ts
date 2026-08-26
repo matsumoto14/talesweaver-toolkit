@@ -267,6 +267,7 @@ export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
   }
   switch (effect) {
     case "attack_damage_rate": return "攻撃ダメージ増加";
+    case "added_damage_rate": return "割合追加ダメージ";
     case "accuracy_point": return "命中P";
     case "evasion_point": return "回避P";
     case "accuracy_and_evasion_point": return "命中P・回避P";

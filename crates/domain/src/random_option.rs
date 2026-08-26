@@ -48,6 +48,10 @@ pub enum RandomOptionEffect {
     DependencyDamageRate(SkillDependency),
     /// 攻撃ダメージ(wiki: カテゴリX)
     AttackDamageRate,
+    /// 割合追加ダメージ(wiki: §5「新-割合」)。合計ダメージに乗る。
+    /// **発動条件(ボス限定・確率・石の消費)は満たしている前提で常に効くものとして入れる**
+    /// (ユーザー確認 2026-08-26)。条件は `note` に残す
+    AddedDamageRate,
     /// 命中P への加算(wiki `#AccuracyPoint`: 命中P割合増加の計算後に加算)
     AccuracyPoint,
     /// 回避P への加算
@@ -159,6 +163,8 @@ pub struct RandomOptionTotals {
     pub dependency_damage_rate: DependencyRates,
     /// カテゴリX(攻撃ダメージ)
     pub attack_damage_rate: f64,
+    /// §5「新-割合」の割合追加ダメージ。Σ% の小数表現
+    pub added_damage_rate: f64,
     /// 命中P への加算
     pub accuracy_point: i64,
     /// 回避P への加算
@@ -178,6 +184,7 @@ impl RandomOptionTotals {
                 *self.dependency_damage_rate.get_mut(dependency) += value / 100.0;
             }
             RandomOptionEffect::AttackDamageRate => self.attack_damage_rate += value / 100.0,
+            RandomOptionEffect::AddedDamageRate => self.added_damage_rate += value / 100.0,
             RandomOptionEffect::AccuracyPoint => self.accuracy_point += value as i64,
             RandomOptionEffect::EvasionPoint => self.evasion_point += value as i64,
             RandomOptionEffect::AccuracyAndEvasionPoint => {

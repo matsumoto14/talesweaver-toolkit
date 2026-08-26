@@ -441,7 +441,10 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // §5 割合追加ダメージ(新-割合)。「合計ダメージ + 追加ダメージ(武器強化)」に掛かるので、
     // 1 段ごとではなく段数を掛けたあとの合計に乗せる。武器強化の追加固定ダメージは
     // すでに per-hit に入っているので、`合計` がそのまま算出基準になる。
-    let added_rate = input.common_skills.sharpness_vision_rate();
+    // 供給源はシャープネスビジョンと、武器のランダムOP(ボス追加ダメージ・命中時追加ダメージ・
+    // 石を消費する追加ダメージ)。OP 側は発動条件を満たしている前提で入れる
+    let added_rate =
+        input.common_skills.sharpness_vision_rate() + input.random_options.added_damage_rate;
     let sum = DamageTriple { min: min * hits, max: max * hits, critical: critical * hits };
     let added = DamageTriple {
         min: floor_int(sum.min as f64 * added_rate),
@@ -451,7 +454,12 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     if added.max != 0 {
         let step = FormulaStep {
             name: "割合追加ダメージ(合計に乗る)".to_string(),
-            expression: format!("合計 × {:.0}% ※シャープネスビジョン", added_rate * 100.0),
+            expression: format!(
+                "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}%",
+                added_rate * 100.0,
+                input.common_skills.sharpness_vision_rate() * 100.0,
+                input.random_options.added_damage_rate * 100.0
+            ),
             value: added_rate,
         };
         steps_min.push(step.clone());
