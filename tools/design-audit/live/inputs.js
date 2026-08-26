@@ -22,7 +22,7 @@ const CHECK = `(() => {
   }));
   return {
     selects,
-    steps: document.querySelectorAll(".step-select").length,
+    steps: document.querySelectorAll(".seg").length,
     chips: document.querySelectorAll("label.check, .buff-chip").length,
     free: [...document.querySelectorAll("input[type=text], textarea")].map(label),
     // 編集は例外操作なので、ふだんは読み取り表示になっているか

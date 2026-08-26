@@ -608,12 +608,15 @@
       </div>
     {/if}
   {/each}
-  <div class="fields">
-    <StepSelect
-      label="OP を追加"
-      options={addableRandomOptions(slot)}
-      bind:value={() => "", (v) => addRandomOption(slot, v)}
-    />
+  <!-- 「1 つ選ぶ」ではなく「追加する」操作なので段階選択にしない。
+       §08「追加用のチップは破線 + ＋。実在のチップと見た目で区別する」 -->
+  <div class="add-row">
+    <span class="label">OP を追加</span>
+    {#each addableRandomOptions(slot) as o (o.value)}
+      <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.value)}>
+        ＋ {o.label}
+      </button>
+    {/each}
   </div>
 {/snippet}
 
@@ -1714,6 +1717,7 @@
 
   /* 入力セルは親の幅まで伸びる(§07 実演の .ctrl が 1fr)。1 列で受けると値が
      右端まで離れて読めないので、232px の段に割って伸び先を絞る */
+  .add-row { margin-top: 9px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .fields {
     margin-top: 9px; display: grid; gap: 9px 16px;
     grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));

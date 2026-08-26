@@ -7,7 +7,7 @@ const TARGETS = {
   ダメージ計算: [
     ["攻撃 / 防御タブ", "button.side-tab"],
     ["対象の ◀▶", "button.step"],
-    ["段階選択(ストロングW)", ".step-select .step"],
+    ["段階選択(ストロングW)", ".seg .step"],
     ["バフチップ", ".buff-chip:not([disabled])"],
     ["候補(足りない分)", "button.whatif"],
     ["パワーウェポン", "label.pw"],
@@ -19,8 +19,8 @@ const TARGETS = {
   ],
   キャラ: [
     ["補正源の行", ".src-line"],
-    ["段階選択", ".step-select .step", "キャラステータス"],
-    ["数値の編集(行の位置)", ".stat-input", "キャラステータス"],
+    ["段階選択", ".seg .step", "キャラステータス"],
+    ["数値の編集(行の位置)", ".stepper", "キャラステータス"],
     ["部位の行", "button.part-row", "装備"],
     ["チップ(オン/オフ)", "label.check", "クリティカル率"],
   ],

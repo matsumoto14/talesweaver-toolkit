@@ -15,7 +15,7 @@ const { chromium } = require("playwright-core");
   const before = await xs();
   const l1 = await label();
   // §08 で「表示が既定・編集は例外」になったので、まず読み取り表示を押して編集に入る
-  await page.locator(".adj-stat").nth(1).locator(".stat-input .read").first().click();
+  await page.locator(".adj-stat").nth(1).locator(".stepper .read").first().click();
   await wait(600);
   const f = page.locator(".adj-stat").nth(1).locator(".num-field").first();
   await f.fill("9999"); await f.dispatchEvent("blur");

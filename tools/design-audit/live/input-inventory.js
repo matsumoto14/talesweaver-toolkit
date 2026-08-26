@@ -12,7 +12,7 @@ const CHECK = `(() => {
   const rows = [];
 
   // 値の欄(表示が既定・編集は例外)
-  document.querySelectorAll(".stat-input").forEach((el) => {
+  document.querySelectorAll(".stepper").forEach((el) => {
     const label = txt(el.querySelector(".label"));
     const box = el.querySelector(".value-box");
     const cap = txt(el.querySelector(".cap"));
@@ -29,8 +29,8 @@ const CHECK = `(() => {
   });
 
   // 段階選択
-  document.querySelectorAll(".step-select").forEach((el) => {
-    const on = txt(el.querySelector(".step.on"));
+  document.querySelectorAll(".seg").forEach((el) => {
+    const on = txt(el.querySelector(".seg button.on"));
     rows.push({
       kind: "段階",
       label: txt(el.querySelector(".label")) || "(ラベルなし)",
