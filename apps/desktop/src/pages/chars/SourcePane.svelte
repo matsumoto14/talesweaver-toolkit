@@ -49,7 +49,9 @@
   import { limits } from "../../limits.svelte";
   import { app } from "../../state.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
+  import { bump, flash } from "../../ui/motion.svelte";
   import Select from "../../ui/Select.svelte";
+  import { STATE } from "../../ui/states";
   import StepSelect from "../../ui/StepSelect.svelte";
   import { ETERNAL_MILESTONES } from "../../draft";
   import StatInput from "../../ui/StatInput.svelte";
@@ -1533,7 +1535,7 @@
             onclick={() => (coreRegion = region)}
           >
             {CORE_REGION_LABELS[region]}
-            <span class="num dim">{fmtInt(coreRegionTotal(region))}</span>
+            <span class="num dim" use:bump={() => coreRegionTotal(region)}>{fmtInt(coreRegionTotal(region))}</span>
           </button>
         {/each}
       </div>
@@ -1566,11 +1568,18 @@
       <div class="core-summary">
         <div class="sum-item">
           <span class="k">補正値 合計</span>
-          <span class="v num">{fmtInt(coreRegionTotal(coreRegion))}</span>
+          <span class="v num" use:bump={() => coreRegionTotal(coreRegion)}>{fmtInt(coreRegionTotal(coreRegion))}</span>
         </div>
-        <div class="sum-item set" class:on={coreSet.evolution !== null}>
+        <div class="sum-item">
           <span class="k">セット効果</span>
-          <span class="v">{coreSetLabel}</span>
+          <span class="v" use:flash={() => coreSetLabel}>{coreSetLabel}</span>
+          <span
+            class="badge"
+            style="background: {coreSet.evolution === null ? STATE.edge.bg : STATE.met.bg};
+                   border-color: {coreSet.evolution === null ? STATE.edge.bd : STATE.met.bd};
+                   color: {coreSet.evolution === null ? STATE.edge.fg : STATE.met.fg}"
+            use:flash={() => (coreSet.evolution === null ? "off" : "on")}
+          >{coreSet.evolution === null ? "未発動" : "発動中"}</span>
           <span class="note">{coreSetNote}</span>
         </div>
       </div>
@@ -1624,7 +1633,9 @@
                 aria-label="進化と強化"
                 onclick={() => (openCoreStage = openCoreStage === index ? null : index)}
               >
-                {core ? `${core.evolution}-${core.enhancement}` : "—"}
+                <span use:flash={() => (core ? `${core.evolution}-${core.enhancement}` : "-")}>
+                  {core ? `${core.evolution}-${core.enhancement}` : "—"}
+                </span>
               </button>
               {#if openCoreStage === index && core}
                 <button type="button" class="stage-overlay" aria-label="閉じる" onclick={() => (openCoreStage = null)}></button>
@@ -1651,7 +1662,11 @@
                 </div>
               {/if}
             </span>
-            <span class="core-bonus num" class:support={core !== null && !CORE_POWER_TYPES.includes(core.core_type)}>
+            <span
+              class="core-bonus num"
+              class:support={core !== null && !CORE_POWER_TYPES.includes(core.core_type)}
+              use:bump={() => (core ? coreBonus(core.core_type, core.evolution, core.enhancement) : null)}
+            >
               {core ? `+${fmtInt(coreBonus(core.core_type, core.evolution, core.enhancement))}` : "—"}
             </span>
           </div>
@@ -1991,20 +2006,20 @@
   .tab-rule { margin-bottom: 9px; }
 
   .core-list { display: flex; flex-direction: column; gap: 7px; }
+  /* 読み取り専用の要約なのでインセット。面の色ではなくバッジで状態を言う
+     (意味のある帯・面は 1 画面 2 種まで。§02) */
   .core-summary { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 8px; }
   .sum-item {
-    display: flex; align-items: baseline; gap: 8px;
-    padding: 7px 11px; border-radius: var(--r-panel);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
+    display: flex; align-items: baseline; gap: 9px;
+    padding: 8px 12px; border-radius: var(--r-panel);
+    background: linear-gradient(180deg, #E4EDF8, #F2F7FD);
+    border: 1px solid var(--border-soft);
+    box-shadow: inset 0 1px 2px rgba(90, 110, 145, 0.18);
   }
-  .sum-item .k { font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  .sum-item .v { font-size: 15px; font-weight: 800; color: var(--fg); }
+  .sum-item .k { flex: none; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .sum-item .v { font-size: 15px; font-weight: 800; color: var(--fg-head); letter-spacing: 0.02em; }
+  .sum-item .badge { align-self: center; }
   .sum-item .note { font-size: 9px; color: var(--fg-muted); }
-  /* 発動していないセット効果は「あなたの操作待ち」= 金(§03 の予約色) */
-  .sum-item.set { background: var(--state-edge-bg); border-color: var(--state-edge-bd); }
-  .sum-item.set .v { font-size: 12.5px; color: var(--state-edge-fg); }
-  .sum-item.set.on { background: var(--state-met-bg); border-color: var(--good-soft); }
-  .sum-item.set.on .v { color: var(--good); }
 
   .core-head {
     display: grid; grid-template-columns: 16px minmax(0, 1fr) 34px 118px 52px; gap: 9px;
