@@ -322,6 +322,8 @@ export interface RandomOptionTier {
 export interface RandomOptionDef {
   id: string;
   name: string;
+  /** 一覧のバッジに出す短い名前(「一般ボス」「魔攻」など) */
+  short: string;
   slot: PartSlot;
   /** wiki 一覧表のカテゴリー番号。同じ番号は 1 部位に 1 つまで(0 は制約なし) */
   category: number;

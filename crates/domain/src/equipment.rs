@@ -1235,6 +1235,7 @@ mod tests {
                 tiers: TIERS,
                 note: "",
                 common: false,
+                short: "テスト",
             },
             RandomOptionDef {
                 id: "hand-acc",
@@ -1245,6 +1246,7 @@ mod tests {
                 tiers: TIERS,
                 note: "",
                 common: false,
+                short: "テスト",
             },
         ]
     }

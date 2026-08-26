@@ -85,6 +85,8 @@ pub struct RandomOptionDef {
     pub id: &'static str,
     /// wiki 一覧表の「オプション」列(X などのプレースホルダは実値に置き換えた表現)
     pub name: &'static str,
+    /// 一覧のバッジに出す短い名前(「一般ボス」「魔攻」など)。名前をそのまま並べると読めない
+    pub short: &'static str,
     /// この OP が付く部位
     pub slot: crate::equipment::PartSlot,
     /// wiki 一覧表の「カテゴリー」列。同じ番号は 1 部位に 1 つまで(0 は制約なし)
@@ -237,6 +239,7 @@ mod tests {
             tiers: TIERS,
             note: "",
             common: false,
+            short: "テスト",
         }
     }
 

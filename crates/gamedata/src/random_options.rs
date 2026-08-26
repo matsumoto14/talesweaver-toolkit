@@ -184,7 +184,43 @@ const fn def(
     tiers: &'static [RandomOptionTier],
     note: &'static str,
 ) -> RandomOptionDef {
-    RandomOptionDef { id, name, slot, category, effect, tiers, note, common: false }
+    RandomOptionDef { id, name, short: short_name(name), slot, category, effect, tiers, note, common: false }
+}
+
+/// 一覧のバッジに出す短い名前。長い名前をそのまま並べると 1 行に収まらない。
+const SHORT_NAMES: &[(&str, &str)] = &[
+    ("攻撃ダメージが増加(被ダメージも増加)", "攻撃ダメージ"),
+    ("攻撃ダメージが増加", "攻撃ダメージ"),
+    ("突き攻撃力が増加", "突き"),
+    ("斬り攻撃力が増加", "斬り"),
+    ("物理複合攻撃力が増加", "物理複合"),
+    ("魔法攻撃力が増加", "魔攻"),
+    ("神聖攻撃力が増加", "神聖"),
+    ("魔法斬り攻撃力が増加", "魔法斬り"),
+    ("固定回避が増加", "固定回避"),
+    ("スキルの中ディレイが減少", "中ディレイ"),
+    ("ダメージ耐性が増加", "耐性"),
+    ("命中率が増加", "命中"),
+    ("回避率が増加", "回避"),
+    ("回避率と命中率が増加", "命中・回避"),
+    ("最大回避率が増加", "最大回避率"),
+    ("レリックダンジョンのモンスターに追加ダメージ", "レリックD"),
+    ("移動速度が減少し、ダメージ耐性が増加", "耐性(速度減)"),
+    ("移動速度が遅いとき、追加ダメージ", "低速時"),
+    ("攻撃時、確率で追加ダメージ(自分は移動速度減少)", "確率(速度減)"),
+    ("一般ボスモンスター攻撃時、追加ダメージ", "一般ボス"),
+    ("レイドボスモンスター攻撃時、追加ダメージ", "レイドボス"),
+    ("対象の後方から攻撃した場合、追加ダメージ", "後方"),
+    ("近接する対象攻撃時、追加ダメージ", "近接"),
+    ("物理攻撃が的中した場合、確率で追加ダメージ", "物理命中"),
+    ("魔法攻撃が的中した場合、確率で追加ダメージ", "魔法命中"),
+    ("強化の石を 1 個消耗する代わりに追加ダメージ", "強化の石"),
+    ("SEED を消耗する代わりに追加ダメージ", "SEED"),
+];
+
+const fn short_name(name: &'static str) -> &'static str {
+    // const fn では文字列比較ができないので、実体は `random_option_catalog` で解決する
+    name
 }
 
 /// **実際によく付ける OP**(ユーザー確認 2026-08-26)。画面はこれをチップで先に出す。
@@ -230,6 +266,9 @@ pub fn random_option_catalog() -> Vec<RandomOptionDef> {
     let mut defs = random_option_defs();
     for d in &mut defs {
         d.common = COMMON_IDS.contains(&d.id);
+        if let Some((_, short)) = SHORT_NAMES.iter().find(|(name, _)| *name == d.name) {
+            d.short = short;
+        }
     }
     defs
 }

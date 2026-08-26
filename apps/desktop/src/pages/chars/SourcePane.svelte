@@ -1562,9 +1562,19 @@
             >
               <span class="part-main">
                 <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
-                <span class="part-plus" class:on={count > 0}>{count > 0 ? `OP ${count}` : ""}</span>
               </span>
-              <span class="part-vals num dim">{randomOptionSummary(slot)}</span>
+              <!-- 付いている OP を短い名前のバッジで並べる。名前をそのまま出すと 1 行に入らない -->
+              <span class="ro-badges">
+                {#each draft.equipment.parts[slot].random_options as o (o.option_id)}
+                  {@const def = randomOptionDef(o.option_id)}
+                  {#if def}
+                    <span class="ro-badge" class:record-only={!randomOptionIsApplied(def.effect)} title={def.name}>
+                      {def.short}
+                    </span>
+                  {/if}
+                {/each}
+                {#if count === 0}<span class="dim">なし</span>{/if}
+              </span>
               <span class="chev dim">›</span>
             </button>
           {/if}
@@ -2441,6 +2451,18 @@
   .ro-note { margin: 0 0 6px; }
   .ro-common { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
   .ro-add { margin-top: 8px; max-width: 300px; }
+  /* 部位の行に「何が付いているか」を短い名前のバッジで並べる。
+     名前をそのまま出すと 1 行に入らないので、gamedata の short を使う */
+  .ro-badges {
+    min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px;
+  }
+  .ro-badge {
+    padding: 1px 7px; border-radius: var(--r-pill);
+    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg-sub);
+    font-size: 9px; font-weight: 700; white-space: nowrap;
+  }
+  /* 計算に入らない(記録するだけの)枠は破線 + 塗りなし */
+  .ro-badge.record-only { background: none; border-style: dashed; color: var(--fg-muted); }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
