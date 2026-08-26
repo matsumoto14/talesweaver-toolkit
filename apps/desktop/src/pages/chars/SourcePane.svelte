@@ -102,12 +102,17 @@
 
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
   // キャラ種を変えたら前キャラのスキル id が残らないよう同期的に外す(保存時に Rust 側が弾く値)。
-  const mainSkillOptions = $derived([
-    { value: "", label: "未選択(攻撃力を出さない)" },
-    ...skills.map((s) => ({ value: s.id, label: s.name })),
-  ]);
   /** 火力の高い順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す */
   const skillPower = (s: Skill) => s.multiplier * Math.max(1, s.hit_count);
+  /** 一覧でも名前だけにしない。単 / 範・段数・属性を名前の後ろに付ける */
+  const skillMeta = (s: Skill) =>
+    `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]}`;
+  const mainSkillOptions = $derived([
+    { value: "", label: "未選択(攻撃力を出さない)" },
+    ...[...skills]
+      .sort((a, b) => skillPower(b) - skillPower(a))
+      .map((s) => ({ value: s.id, label: `${s.name}(${skillMeta(s)})` })),
+  ]);
   const topSkills = $derived([...skills].sort((a, b) => skillPower(b) - skillPower(a)).slice(0, 3));
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
   /** 候補にない主軸を選んでいるとき、または自分で開いたときだけ全部出す */
