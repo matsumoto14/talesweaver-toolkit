@@ -1567,13 +1567,21 @@
           </div>
           <span class="v num">{ultimatePickedCount} / 2</span>
         </div>
-        {#each draft.commonSkills.ultimate.slots.filter((u) => u !== null) as picked (picked)}
-          <p class="hint dim skill-note">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
-        {/each}
+        <!-- 選んだ数で行数が変わると、下にあるものが上下する。**2 件ぶんの場所を先に取る**
+             (§09 規則 4「あとから寸法が変わらない」) -->
+        <div class="ultimate-notes">
+          {#each [0, 1] as i (i)}
+            {@const picked = draft.commonSkills.ultimate.slots[i]}
+            <p class="hint dim skill-note">
+              {#if picked !== null}{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}{/if}
+            </p>
+          {/each}
+        </div>
       </div>
-      {#if ultimateEffects.length > 0}
-        <p class="hint dim">いまの効果: <b use:flash={() => ultimateEffects.join(" ・ ")}>{ultimateEffects.join(" ・ ")}</b></p>
-      {/if}
+      <p class="hint dim">
+        いまの効果:
+        <b use:flash={() => ultimateEffects.join(" ・ ")}>{ultimateEffects.length > 0 ? ultimateEffects.join(" ・ ") : "—"}</b>
+      </p>
       <p class="hint dim">
         wiki「Skill/共通」「Skill/極限」。<b>オーグメント</b>はストロングウェポン・プロテクトアーマー・
         ハイパーリミットを Lv2 以上にするための前提で、下げるとそれに縛られる Lv も一緒に下がります。
@@ -2245,6 +2253,9 @@
   .skill-field .clear:disabled { color: var(--border-soft); }
   .skill-note { margin: 0 0 0 73px; }
   .ultimate-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* 2 件ぶんの高さを先に取る。選んだ数で下が上下しない */
+  .ultimate-notes { min-height: 30px; }
+  .ultimate-notes .skill-note { min-height: 15px; }
 
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .skill-chip .skill-name { font-weight: 700; }
