@@ -1601,17 +1601,23 @@
               </button>
               {#if openCoreStage === index && core}
                 <button type="button" class="stage-overlay" aria-label="閉じる" onclick={() => (openCoreStage = null)}></button>
-                <div class="stage-pop pop-in">
+                <!-- 下の枠は上に開く。下に開くとペインの外へ出て、選ぶのにスクロールが要る -->
+                <div class="stage-pop pop-in" class:up={index >= 3}>
                   <div class="stage-pop-h">進化 - 強化</div>
                   <div class="stage-grid">
                     {#each coreStagePairs as row (row[0].ev)}
                       {#each row as p (p.en)}
+                        <!-- 段の名前だけだと「それでいくつになるのか」を毎回考えることになる。
+                             結果(補正値)をその場に小さく乗せる(§00 05「考えさせない」) -->
                         <button
                           type="button"
-                          class="stage-cell num"
+                          class="stage-cell"
                           class:on={core.evolution === p.ev && core.enhancement === p.en}
                           onclick={() => { setCoreStagePair(index, p.ev, p.en); openCoreStage = null; }}
-                        >{p.ev}-{p.en}</button>
+                        >
+                          <b class="num">{p.ev}-{p.en}</b>
+                          <span class="cell-bonus num">+{fmtInt(coreBonus(core.core_type, p.ev, p.en))}</span>
+                        </button>
                       {/each}
                     {/each}
                   </div>
@@ -1995,19 +2001,25 @@
   .stage-trigger:disabled { color: var(--fg-off); }
   /* 重なって出るので、開いても行は動かない(§09 規則 3) */
   .stage-overlay { position: fixed; inset: 0; z-index: 30; cursor: default; }
+  /* 右端に近い場所から開くので、右をそろえて左へ広げる。中央合わせだと枠から溢れる */
   .stage-pop {
-    position: absolute; z-index: 31; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
-    padding: 7px; border-radius: var(--r-panel);
+    position: absolute; z-index: 31; top: calc(100% + 5px); right: 0;
+    padding: 8px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border-strong);
-    box-shadow: 0 8px 20px rgba(30, 44, 74, 0.26);
+    box-shadow: 0 10px 24px rgba(30, 44, 74, 0.28);
   }
+  .stage-pop.up { top: auto; bottom: calc(100% + 5px); transform-origin: bottom center; }
   .stage-pop-h { margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
   .stage-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .stage-cell {
-    padding: 7px 10px; border-radius: var(--r-inset);
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    width: 60px; padding: 6px 0 5px; border-radius: var(--r-inset);
     background: var(--bg-rail); border: 1px solid var(--border-soft);
-    font-size: 12.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap;
+    white-space: nowrap;
   }
+  .stage-cell b { font-size: 13px; font-weight: 800; color: var(--fg-sub); letter-spacing: 0.04em; }
+  .stage-cell .cell-bonus { font-size: 9px; color: var(--fg-dim); }
+  .stage-cell.on b, .stage-cell.on .cell-bonus { color: var(--sel-fg); }
   .stage-cell:hover:not(.on) { background: var(--bg-active); }
   .stage-cell.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
   .core-bonus { font-size: 12px; font-weight: 700; text-align: right; }
