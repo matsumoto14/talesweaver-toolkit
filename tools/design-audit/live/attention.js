@@ -22,15 +22,19 @@ const CHECK = `(() => {
     return (c || el.tagName.toLowerCase()) + (t ? " «" + t + "»" : "");
   };
   const rows = (el) => new Set([...el.children].map((c) => c.offsetTop)).size;
+  // 畳んである <details> の中は「いま見えていない」。開いたときに測る
+  const hidden = (el) => el.closest("details:not([open])") !== null || el.offsetParent === null;
   const out = { A1: [], A2: [], A3: [], A4: [], A5: [] };
 
   // A1 段階選択・チップ群が折り返している
   document.querySelectorAll(".seg, .chips, .buff-chips, .add-row").forEach((el) => {
+    if (hidden(el)) return;
     if (el.children.length > 1 && rows(el) > 1) out.A1.push(name(el) + " " + rows(el) + " 行");
   });
 
   // A2 入力欄が横に並んでいる(1 行に 2 つ以上)
   document.querySelectorAll(".fields").forEach((box) => {
+    if (hidden(box)) return;
     const byRow = new Map();
     [...box.children].forEach((c) => {
       const k = c.offsetTop;
@@ -43,11 +47,11 @@ const CHECK = `(() => {
   });
 
   // A3 常時見えている選択肢(段・チップ・開いていない <select> の中身は数えない)
-  const segs = [...document.querySelectorAll(".seg")].map((s) => ({
+  const segs = [...document.querySelectorAll(".seg")].filter((s) => !hidden(s)).map((s) => ({
     n: s.children.length,
     label: (s.closest(".step-select")?.querySelector(".label")?.textContent || "").trim() || name(s).slice(0, 24),
   }));
-  const chips = document.querySelectorAll(".chip, .buff-chip").length;
+  const chips = [...document.querySelectorAll(".chip, .buff-chip")].filter((c) => !hidden(c)).length;
   out.A3.push({ segTotal: segs.reduce((a, s) => a + s.n, 0), chips, top: segs.sort((a, b) => b.n - a.n).slice(0, 5) });
 
   // A4 はみ出し・省略
