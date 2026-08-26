@@ -6,7 +6,7 @@
   //
   // **アイコン単独表示は禁止**(名前と併記する)。例外はキャラレールを畳んだときだけで、
   // そのときは呼び出し側が title を付ける。
-  export type IconKind = "character" | "mob" | "skill" | "buff";
+  export type IconKind = "character" | "mob" | "skill" | "buff" | "mastery";
   /** 20 = 行内・チップ / 28 = 一覧行 / 40 = 選択カード / 64 = キャラ詳細 */
   export type IconSize = 20 | 28 | 40 | 64;
 
@@ -15,6 +15,16 @@
     mob: "mobs",
     skill: "skills",
     buff: "buffs",
+    mastery: "masteries",
+  };
+
+  /// 枠の見た目。マスタリーはスキルの一種なのでスキルの枠を使う(段は色で区別しない)
+  const FRAMES: Record<IconKind, string> = {
+    character: "character",
+    mob: "mob",
+    skill: "skill",
+    buff: "buff",
+    mastery: "skill",
   };
 
   // Vite の glob import。実画像が 1 枚も無ければ空オブジェクトになるだけで、ビルドは通る。
@@ -57,7 +67,7 @@
 </script>
 
 <span
-  class="icon {kind}"
+  class="icon {FRAMES[kind]}"
   class:missing
   style="--icon-size: {size}px"
   role="img"
@@ -81,15 +91,15 @@
   .icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* 実画像が来るまでの縞プレースホルダ。系統ごとに地の色を変える */
   .icon.character {
-    border-radius: var(--r-window); border-color: #798CAC; color: #3B4A63;
+    border-radius: var(--r-window); border-color: var(--border-strong); color: var(--fg-sub);
     background: repeating-linear-gradient(135deg, #E4EDF9 0 4px, #CFDFF2 4px 8px);
   }
   .icon.mob {
-    border-radius: var(--r-window); border-color: #A98B86; color: #6B4F49;
+    border-radius: var(--r-window); border-color: var(--mob); color: #6B4F49;
     background: repeating-linear-gradient(135deg, #F3E7E4 0 4px, #E6D3CD 4px 8px);
   }
   .icon.skill {
-    border-radius: var(--r-panel); border-color: #C2A057; color: #7A5F22;
+    border-radius: var(--r-panel); border-color: var(--gold); color: #7A5F22;
     background: repeating-linear-gradient(135deg, #FBF2DE 0 4px, #F0E2C2 4px 8px);
   }
   .icon.buff {

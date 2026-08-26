@@ -104,15 +104,28 @@ pub enum DamageCategory {
     CutRateB,
     /// wiki: W 攻撃ダメージ(基本発動)(固定値)
     BasicTriggerDamageFixed,
-    /// wiki: X 攻撃ダメージ
+    /// wiki: X 攻撃ダメージ。**X1〜X6 の合計**で、それ自体には上限が無い。
+    /// 値は子カテゴリ(上限適用後)の和として出す — `add` してはいけない
     AttackDamageRate,
+    /// wiki: X1 攻撃ダメージ(イザベル)(上限 +50%)。消費アイテム
+    AttackDamageIsabel,
+    /// wiki: X2 攻撃ダメージ(一般)(上限 +30%)。消費アイテム・バフ・ルーン
+    AttackDamageGeneral,
+    /// wiki: X3 攻撃ダメージ(基本発動)(上限 +80%)。称号「ダメージ増加」・武器/手アビリティ
+    AttackDamageBasicTrigger,
+    /// wiki: X4 攻撃ダメージ(スキル)(上限 +65%)。キャラスキル・マスタリー
+    AttackDamageSkill,
+    /// wiki: X5 攻撃ダメージ(特殊)(wiki は上限「+??%」= 未記載)。ランダムオプション・AF
+    AttackDamageSpecial,
+    /// wiki: X6 攻撃ダメージ(日本独自)(上限 +30%)。消費アイテム・装備
+    AttackDamageJapan,
     /// wiki: Y PVP補正
     PvpCorrection,
 }
 
 impl DamageCategory {
     /// 式に現れる順。
-    pub const ALL: [DamageCategory; 30] = [
+    pub const ALL: [DamageCategory; 36] = [
         DamageCategory::AttackPower,
         DamageCategory::AttackRandom,
         DamageCategory::TargetDefense,
@@ -142,7 +155,24 @@ impl DamageCategory {
         DamageCategory::CutRateB,
         DamageCategory::BasicTriggerDamageFixed,
         DamageCategory::AttackDamageRate,
+        DamageCategory::AttackDamageIsabel,
+        DamageCategory::AttackDamageGeneral,
+        DamageCategory::AttackDamageBasicTrigger,
+        DamageCategory::AttackDamageSkill,
+        DamageCategory::AttackDamageSpecial,
+        DamageCategory::AttackDamageJapan,
         DamageCategory::PvpCorrection,
+    ];
+
+    /// カテゴリX の子(wiki: X = X1+…+X6)。収録済みのぶんだけ持つ。
+    /// X1(イザベル)・X2(一般)・X6(日本独自)は未収録
+    pub const ATTACK_DAMAGE_CHILDREN: [DamageCategory; 6] = [
+        DamageCategory::AttackDamageIsabel,
+        DamageCategory::AttackDamageGeneral,
+        DamageCategory::AttackDamageBasicTrigger,
+        DamageCategory::AttackDamageSkill,
+        DamageCategory::AttackDamageSpecial,
+        DamageCategory::AttackDamageJapan,
     ];
 
     pub fn kind(self) -> CategoryKind {
@@ -157,7 +187,9 @@ impl DamageCategory {
             | SienaAuraAttackRate | FinalDamageRate | CutRateA | AttackDamageLegacy
             | AwakeningDamage | PhysicalMagicDamageRate | DependencyDamageRate | DamageAbsorb
             | TakenDamageRate | TakenDamageReduction | DamageAmplify | DamageResistance
-            | DamageMitigation | CutRateB | AttackDamageRate | PvpCorrection => CategoryKind::Rate,
+            | DamageMitigation | CutRateB | AttackDamageRate | AttackDamageIsabel
+            | AttackDamageGeneral | AttackDamageBasicTrigger | AttackDamageSkill
+            | AttackDamageSpecial | AttackDamageJapan | PvpCorrection => CategoryKind::Rate,
         }
     }
 
@@ -167,7 +199,8 @@ impl DamageCategory {
         matches!(self, DamageAbsorb | TakenDamageReduction | DamageResistance | DamageMitigation)
     }
 
-    /// 集計値の上限・下限(wiki §4)。サブカテゴリを持つ S・X は親のみで上限なし。
+    /// 集計値の上限・下限(wiki §4)。**上限は子カテゴリごとに違う**ので、
+    /// サブカテゴリを持つ X の親自身には上限が無い(子に掛けてから足す)。
     pub fn cap(self) -> Option<CategoryCap> {
         use DamageCategory::*;
         match self {
@@ -181,6 +214,13 @@ impl DamageCategory {
             DamageResistance => Some(CategoryCap::max(0.62)),
             DamageMitigation => Some(CategoryCap::max(0.40)),
             BasicTriggerDamageFixed => Some(CategoryCap::max(1000.0)),
+            AttackDamageIsabel => Some(CategoryCap::max(0.50)),
+            AttackDamageGeneral => Some(CategoryCap::max(0.30)),
+            AttackDamageBasicTrigger => Some(CategoryCap::max(0.80)),
+            AttackDamageSkill => Some(CategoryCap::max(0.65)),
+            // X5 は wiki が「上限:+??%」と書いていて値が分からない。決め打ちしない
+            AttackDamageSpecial => None,
+            AttackDamageJapan => Some(CategoryCap::max(0.30)),
             _ => None,
         }
     }
@@ -218,6 +258,12 @@ impl DamageCategory {
             CutRateB => "V2",
             BasicTriggerDamageFixed => "W",
             AttackDamageRate => "X",
+            AttackDamageIsabel => "X1",
+            AttackDamageGeneral => "X2",
+            AttackDamageBasicTrigger => "X3",
+            AttackDamageSkill => "X4",
+            AttackDamageSpecial => "X5",
+            AttackDamageJapan => "X6",
             PvpCorrection => "Y",
         }
     }
@@ -255,6 +301,12 @@ impl DamageCategory {
             CutRateB => "カット率B",
             BasicTriggerDamageFixed => "攻撃ダメージ(基本発動)(固定値)",
             AttackDamageRate => "攻撃ダメージ",
+            AttackDamageIsabel => "攻撃ダメージ(イザベル)",
+            AttackDamageGeneral => "攻撃ダメージ(一般)",
+            AttackDamageBasicTrigger => "攻撃ダメージ(基本発動)",
+            AttackDamageSkill => "攻撃ダメージ(スキル)",
+            AttackDamageSpecial => "攻撃ダメージ(特殊)",
+            AttackDamageJapan => "攻撃ダメージ(日本独自)",
             PvpCorrection => "PVP補正",
         }
     }
@@ -284,19 +336,25 @@ pub struct CategoryTrace {
 /// 全カテゴリの集計値(パイプライン②)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CategoryTotals {
-    /// `DamageCategory::ALL` と同じ順。キャップ適用前の生の集計値(Σ)
-    values: [f64; 30],
+    /// `DamageCategory::ALL` と同じ順。キャップ適用前の生の集計値(Σ)。
+    /// serde が配列を扱えるのは 32 要素までなので `Vec` で持つ
+    values: Vec<f64>,
 }
 
 impl CategoryTotals {
     /// 中立値。割合 = +0%(係数 1.0)、固定値 = 0、代入 = 0.0(呼び出し側が必ず代入する)。
     pub fn neutral() -> Self {
-        Self { values: [0.0; 30] }
+        Self { values: vec![0.0; DamageCategory::ALL.len()] }
     }
 
     /// 値を入れる。割合・固定値は同一カテゴリ内で加算、代入は置き換え。
     /// キャップは Σ に対して読み出し時(`value` / `get`)に適用する。
     pub fn add(&mut self, category: DamageCategory, value: f64) {
+        debug_assert_ne!(
+            category,
+            DamageCategory::AttackDamageRate,
+            "カテゴリX は子(X3/X4/X5)の合計。供給源は子に足す"
+        );
         let slot = &mut self.values[category.index()];
         *slot = match category.kind() {
             CategoryKind::Assigned => value,
@@ -305,12 +363,22 @@ impl CategoryTotals {
     }
 
     /// キャップ適用前の生の集計値(割合は Σ%)。
+    /// カテゴリX は子(X3/X4/X5)の生の和 — 親に直接足す供給源は無い。
     pub fn raw(&self, category: DamageCategory) -> f64 {
+        if category == DamageCategory::AttackDamageRate {
+            return DamageCategory::ATTACK_DAMAGE_CHILDREN.iter().map(|c| self.raw(*c)).sum();
+        }
         self.values[category.index()]
     }
 
     /// キャップ適用後の集計値(割合は Σ%)。
+    ///
+    /// カテゴリX は**子ごとに上限を掛けてから足す**(X3 は +80%、X4 は +65%)。
+    /// 親でまとめて上限を掛けると、片方が上限に届いていてももう片方が伸びてしまう。
     pub fn value(&self, category: DamageCategory) -> f64 {
+        if category == DamageCategory::AttackDamageRate {
+            return DamageCategory::ATTACK_DAMAGE_CHILDREN.iter().map(|c| self.value(*c)).sum();
+        }
         let raw = self.raw(category);
         match category.cap() {
             Some(cap) => cap.clamp(raw),
@@ -358,11 +426,11 @@ mod tests {
 
     #[test]
     fn all_は全カテゴリを重複なく宣言順に持つ() {
-        assert_eq!(DamageCategory::ALL.len(), 30);
+        assert_eq!(DamageCategory::ALL.len(), 36);
         let mut symbols: Vec<_> = DamageCategory::ALL.iter().map(|c| c.wiki_symbol()).collect();
         symbols.sort_unstable();
         symbols.dedup();
-        assert_eq!(symbols.len(), 30);
+        assert_eq!(symbols.len(), 36);
         // `index()` は variant の宣言順に依存するので ALL の並びと一致させる
         for (i, c) in DamageCategory::ALL.iter().enumerate() {
             assert_eq!(c.index(), i, "{} の位置が ALL と一致しない", c.wiki_symbol());
@@ -376,7 +444,24 @@ mod tests {
         assert_eq!(t.get(DamageAbsorb), 1.0);
         assert_eq!(t.get(FinalDamageFixed), 0.0);
         assert_eq!(t.get(AttackPower), 0.0);
-        assert_eq!(t.trace().len(), 30);
+        assert_eq!(t.trace().len(), 36);
+    }
+
+    /// wiki: X = X1+…+X6 で、**上限は子ごとに違う**(X3 +80% / X4 +65%)。
+    /// 親でまとめて上限を掛けると、片方が上限に届いていてももう片方が伸びてしまう。
+    #[test]
+    fn カテゴリxは子ごとに上限を掛けてから足す() {
+        let mut t = CategoryTotals::neutral();
+        t.add(AttackDamageBasicTrigger, 1.00); // 称号など。上限 +80%
+        t.add(AttackDamageSkill, 0.90); // キャラスキル・マスタリー。上限 +65%
+        t.add(AttackDamageSpecial, 0.20); // ランダムオプション。上限は wiki 未記載
+        assert_eq!(t.value(AttackDamageBasicTrigger), 0.80);
+        assert_eq!(t.value(AttackDamageSkill), 0.65);
+        assert_eq!(t.value(AttackDamageSpecial), 0.20);
+        // 親は上限適用後の和(0.80 + 0.65 + 0.20 = 1.65)。親自身に上限は無い
+        assert!((t.value(AttackDamageRate) - 1.65).abs() < 1e-12);
+        assert!((t.get(AttackDamageRate) - 2.65).abs() < 1e-12);
+        assert_eq!(t.raw(AttackDamageRate), 2.10);
     }
 
     #[test]

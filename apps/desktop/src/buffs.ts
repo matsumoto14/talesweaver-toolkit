@@ -1,4 +1,5 @@
-// バフ選択の共通ロジック。キャラタブ(キャラスキル)と計算タブ(常用バフ)で共有する。
+// バフ選択の共通ロジック。バフカタログは消費アイテム・イベントの常用バフ専用で、
+// キャラのパッシブ・自己バフ・味方バフは characterSkills(api/types の CharacterSkillDef)。
 // 旧 CharacterSettings.svelte のヘルパーを純関数として切り出したもの。
 import type { BuffChoice, BuffDefinition, BuffTarget, BuffValue, StatLayer } from "./api/types";
 import { STAT_KINDS } from "./labels";
@@ -12,19 +13,13 @@ export const userInputRange = (v: BuffValue): { min: number; max: number } | nul
 export const isFixedValue = (v: BuffValue): v is { fixed: number } =>
   typeof v === "object" && v !== null && "fixed" in v;
 
+/** 記録するだけ(計算に入らない)のバフか */
+export const isRecordOnly = (v: BuffValue): boolean => v === "record_only";
+
 export const isUserSelectedTarget = (t: BuffTarget): boolean => t === "user_selected";
 
 export const isPercentLayer = (layer: StatLayer): boolean =>
   layer === "percent_of_base" || layer === "multiplier_b";
-
-export const isConsumable = (d: BuffDefinition): boolean => d.group === "consumable";
-
-export const isCharacterSkillFor = (d: BuffDefinition, gameCharacterId: string): boolean =>
-  typeof d.group === "object"
-  && "character_skill" in d.group
-  && d.group.character_skill.game_character_id === gameCharacterId;
-
-export const isAllySkill = (d: BuffDefinition): boolean => d.group === "ally_skill";
 
 /** `excludingBuffId` 以外の選択が占有している排他枠の集合 */
 export function usedExclusiveSlots(

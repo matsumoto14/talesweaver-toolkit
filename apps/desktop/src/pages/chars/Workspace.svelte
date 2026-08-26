@@ -3,25 +3,33 @@
   // 下に「いまの実力」シート。draft(編集状態)を 1 つの $state に持ち、保存はキャラ単位で 1 ボタン。
   // 親 CharsPage が {#key character.id} で作り直す前提($effect による再同期は書かない)。
   import { untrack } from "svelte";
+  import { flip } from "svelte/animate";
+  import { cubicOut } from "svelte/easing";
   import { errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
   import type { CommonSkills, Equipment, RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
+  import { actualDelayPercent, dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
+    coreSetEffect, coreSetTotalBonus, randomOptionTotals,
     equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
     randomOptionRecordOnlyCount, sienaAttackRatePercent,
     sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
+  import { limits } from "../../limits.svelte";
   import {
+    CORE_REGION_LABELS, CORE_REGIONS,
     ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
     ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
+  import { STATE } from "../../ui/states";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
+  import { bump, flash } from "../../ui/motion.svelte";
 
   interface Props {
     character: RegisteredCharacter;
@@ -45,17 +53,17 @@
   let saving = $state(false);
   const canSubmit = $derived(draft.name.trim().length > 0 && draft.gameCharacterId !== "" && !saving && dirty);
 
-  // キャラ種を切り替えたら旧キャラ専用のキャラスキルバフを落とす(幽霊バフ対策、既存決定を踏襲)。
+  // キャラ種を切り替えたら旧キャラ専用のキャラスキルを落とす(幽霊スキル対策、既存決定を踏襲)。
   let lastGameCharacterId = draft.gameCharacterId;
   $effect(() => {
     const currentId = draft.gameCharacterId;
-    if (currentId === lastGameCharacterId || app.catalog.length === 0) return;
+    if (currentId === lastGameCharacterId || app.characterSkills.length === 0) return;
     lastGameCharacterId = currentId;
-    draft.statSources.buffs.choices = draft.statSources.buffs.choices.filter((choice) => {
-      const def = app.catalog.find((d) => d.id === choice.buff_id);
-      if (!def || typeof def.group !== "object" || !("character_skill" in def.group)) return true;
-      return def.group.character_skill.game_character_id === currentId;
-    });
+    draft.statSources.character_skills.skill_ids = dropForeignSkills(
+      draft.statSources.character_skills.skill_ids,
+      app.characterSkills,
+      currentId,
+    );
   });
 
   // 主軸スキル(攻撃力の依存種別を決める)。選択肢はキャラ種のスキル一覧。
@@ -81,11 +89,10 @@
     // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
     const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
-    const gameCharacterId = draft.gameCharacterId;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, gameCharacterId, mainSkillId)
+      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, mainSkillId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;
@@ -140,12 +147,7 @@
     STAT_KINDS.reduce((s, k) => s + draft.statSources.monster_cards[k], 0),
   );
   const relicTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.sacred_relic[k] * 10, 0));
-  const skillCount = $derived(
-    draft.statSources.buffs.choices.filter((c) => {
-      const def = app.catalog.find((d) => d.id === c.buff_id);
-      return def && (def.group === "ally_skill" || (typeof def.group === "object" && "character_skill" in def.group));
-    }).length,
-  );
+  const skillCount = $derived(draft.statSources.character_skills.skill_ids.length);
   const adjustCount = $derived(
     STAT_KINDS.filter((k) => draft.statSources.adjustments[k].add !== 0 || draft.statSources.adjustments[k].pin !== null).length,
   );
@@ -158,21 +160,68 @@
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
   const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
+  // テシスコアの結果(合計とセット効果)は**編集する場所ではなく結果の場所**に出す。
+  // 6 枠の入力エリアに置くと、その分だけ触る場所が下がる(§00 02)。
+  // セット効果は地域ごとに発動して足される(domain: ThesisCores::set_bonus)
+  const coreRegionRows = $derived(
+    CORE_REGIONS.map((region) => ({
+      region,
+      total: coreSetTotalBonus(draft.equipment.thesis_cores[region]),
+      set: coreSetEffect(draft.equipment.thesis_cores[region]),
+    })).filter((r) => r.total > 0),
+  );
+  const coreSetTotalLabel = $derived.by(() => {
+    const fixed = coreRegionRows.reduce((n, r) => n + r.set.fixed, 0);
+    const rate = coreRegionRows.reduce((n, r) => n + r.set.rate, 0);
+    const parts: string[] = [];
+    if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
+    if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
+    return parts.length === 0 ? "未発動" : parts.join(" と ");
+  });
   const roCount = $derived(randomOptionCount(draft.equipment));
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
+  /** ランダムOP の効き先ごとの合計(結果の置き場所)。同系統は足して 1 行にする */
+  const roTotals = $derived(randomOptionTotals(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
 
-  // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラ固有のパッシブだけ。
+  // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラスキルのぶんだけ。
   // 共通の供給源(フルスロットル / カフスの RO / シエナのオーラ)はそれぞれの補正源で設定する。
   const delaySummary = $derived.by(() => {
-    const ids = draft.statSources.actual_delay_skills.skill_ids;
+    const ids = draft.statSources.character_skills.skill_ids;
     if (ids.length === 0) return NEUTRAL;
-    const percent = ids.reduce(
-      (n, id) => n + (app.actualDelaySkills.find((d) => d.id === id)?.percent ?? 0),
-      0,
-    );
+    const percent = actualDelayPercent(ids, app.characterSkills, draft.statSources.masteries.picked);
+    if (percent === 0) return `${ids.length} 件`;
     return `${ids.length} 件 ・ 合計 −${percent}%`;
   });
+
+  // 共通スキルの効き先(結果側の表示用)。入力は補正源、結果はここ
+  const UNLEASH_RATES = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
+  const SHARPNESS_RATES = [5, 10, 15, 20, 25, 28, 31, 34, 37, 40];
+  const defenseRatePercent = $derived.by(() => {
+    const c = draft.commonSkills;
+    const pa = c.protect_armor_level;
+    const base =
+      (c.coat_armor ? 18 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
+    const magic = (c.coat_armor ? 12 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
+    return { physical: base, magic };
+  });
+  const sharpnessRatePercent = $derived(
+    draft.commonSkills.sharpness_vision_level === 0
+      ? 0
+      : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1],
+  );
+  const unleashSummary = $derived(
+    (draft.commonSkills.unleash ?? [])
+      .filter((u) => u.stat !== null && u.level > 0)
+      .map((u) => `${STAT_LABELS[u.stat!]} +${UNLEASH_RATES[u.level - 1]}%`)
+      .join(" / ") || "未使用",
+  );
+  const ultimatePicked = $derived(
+    draft.commonSkills.ultimate.slots
+      .filter((u) => u !== null)
+      .map((u) => ULTIMATE_SKILL_LABELS[u])
+      .join(" / ") || "未習得",
+  );
 
   // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる
   const commonSkillSummary = $derived.by(() => {
@@ -206,7 +255,9 @@
     const t = app.titles.find((x) => x.id === draft.equipment.title);
     if (!t) return NEUTRAL;
     const total = EQUIPMENT_STAT_KINDS.reduce((n, k) => n + t.values[k], 0);
-    return `${t.name}(合計 +${fmtInt(total)})`;
+    const parts = [`合計 +${fmtInt(total)}`];
+    if (t.attack_damage_percent > 0) parts.unshift(`ダメ +${t.attack_damage_percent}%`);
+    return `${t.name}(${parts.join(" ・ ")})`;
   });
 
   // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
@@ -226,13 +277,20 @@
     const c = draft.statSources.critical_rate;
     const parts: string[] = [];
     if (c.pet) parts.push("ペット会心 ×1.1");
-    const bonus = (c.ultimate_rune ? 20 : 0) + (c.architect_lab ? 30 : 0) + (c.deadly_blow ? 100 : 0);
+    const bonus =
+      (c.ultimate_rune ? 20 : 0) +
+      c.architect_lab_stage * limits.architect_lab_per_stage +
+      (c.deadly_blow ? 100 : 0);
     if (bonus > 0) parts.push(`増加 +${Math.min(100, bonus)}%`);
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
-    { id: "status", name: "キャラステータス", sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}` },
+    {
+      id: "status",
+      name: "キャラステータス",
+      sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel} ・ 属性 ${elementSummary}`,
+    },
     {
       id: "commonSkill",
       name: "共通スキル",
@@ -242,11 +300,6 @@
       id: "equipment",
       name: "装備",
       sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}`,
-    },
-    {
-      id: "element",
-      name: "属性",
-      sub: elementSummary,
     },
     {
       id: "title",
@@ -266,7 +319,11 @@
       name: "シエナのオーラ",
       sub:
         sienaParts > 0
-          ? `${sienaParts} 部位 ・ 攻撃力 +${sienaRate}%${sienaStats > 0 ? ` ・ ステ +${fmtInt(sienaStats)}` : ""}`
+          ? [
+              `${sienaParts} 部位`,
+              ...(sienaRate > 0 ? [`攻撃力 +${sienaRate}%`] : []),
+              ...(sienaStats > 0 ? [`ステ +${fmtInt(sienaStats)}`] : []),
+            ].join(" ・ ")
           : NEUTRAL,
     },
     {
@@ -288,8 +345,144 @@
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
     { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
-  // 並びは 12a の指定順(キャラステータス / 装備 / シエナ / テシスコア / 聖物 / クラウン /
-  // スキル / モンスターカード / ペット)。12a に無いルーン・調整はその後ろに置く。
+  // 補正源の並びはプレイヤーが決める(design-system §14 決定 3)。
+  //
+  // 全部を同じ行の重さで並べるのは、設計をしていないのと同じ。ただし「どれをよく触るか」は
+  // 人によって違うので、こちらで頻度を決め打ちしない。**お気に入り(★)で重さを分け、
+  // 並びはドラッグで動かす**。§09 規則 5「並びは、ユーザーが頼まない限り変わらない」の
+  // 裏返しで、頼まれたら変わってよい。設定画面は作らない — リストの上で直接動かす。
+  //
+  // ★ はホームタブのコンテンツと同じ操作なので、覚えることが増えない。
+  const DEFAULT_ORDER: SourceId[] = [
+    "status", "skills", "equipment", "commonSkill", "thesis", "siena", "relic",
+    "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
+    "title", "randomOption", "adjust",
+  ];
+  interface SourceLayout {
+    /** お気に入り。上に置いて常に開く */
+    fav: string[];
+    /** そのほか */
+    rest: string[];
+  }
+  const layout = persisted("chars.sourceLayout", { fav: [], rest: [...DEFAULT_ORDER] } as SourceLayout);
+  /** 保存済みの並びに無い補正源(あとから増えたもの)は「そのほか」の既定位置に戻す */
+  const ordered = $derived.by<SourceLayout>(() => {
+    const known = new Set<string>(sources.map((s) => s.id));
+    const fav = (layout.value.fav ?? []).filter((id) => known.has(id));
+    const seen = new Set(fav);
+    const rest = (layout.value.rest ?? []).filter((id) => known.has(id) && !seen.has(id));
+    rest.forEach((id) => seen.add(id));
+    for (const id of DEFAULT_ORDER) if (known.has(id) && !seen.has(id)) rest.push(id);
+    return { fav, rest };
+  });
+  const itemsOf = (ids: string[]) => ids.map((id) => sources.find((s) => s.id === id)).filter((s) => s !== undefined);
+
+  /** ★ を外したときの戻り先。既定の並びの位置に戻す — 末尾に飛ばすと移動距離が長くなる */
+  function insertByDefaultOrder(rest: string[], id: string): string[] {
+    const rank = DEFAULT_ORDER.indexOf(id as SourceId);
+    const at = rest.findIndex((x) => DEFAULT_ORDER.indexOf(x as SourceId) > rank);
+    const next = [...rest];
+    next.splice(at === -1 ? next.length : at, 0, id);
+    return next;
+  }
+  /**
+   * ★ の付け外し。付けたら お気に入りの末尾、外したら **既定の並びの位置**へ。
+   *
+   * ここでは**スクロールしない**。押した ★ は指の下にあるので、画面が動くと
+   * 次に押すつもりだった行が別のものに入れ替わる(§00 03「押した場所は動かない」)。
+   * どこへ行ったかは着地の弾みで見せる。自分で運ぶドラッグは別で、そちらは追いかける
+   */
+  function toggleFavorite(id: string) {
+    const { fav, rest } = ordered;
+    layout.value = fav.includes(id)
+      ? { fav: fav.filter((x) => x !== id), rest: insertByDefaultOrder(rest, id) }
+      : { fav: [...fav, id], rest: rest.filter((x) => x !== id) };
+    mark(id);
+  }
+  /**
+   * 動きを消す設定(prefers-reduced-motion)のときは 0 にする。
+   * CSS のアニメーションは app.css が一括で殺しているが、Svelte の animate は JS なので
+   * ここで見る必要がある(§10「動きを消しても変化が分かること」)。
+   */
+  const motionDuration = (ms: number) =>
+    typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms;
+
+  /**
+   * 群をまたいで動いた行。同じ群の中の並べ替えは `animate:flip` が滑らせるが、
+   * 群をまたぐと別の `{#each}` になるので繋がらない。着地を弾ませて、
+   * どれが動いたのかを目で追えるようにする(§10 型 5「状態が変わった」)。
+   */
+  let movedId = $state<string | null>(null);
+  let movedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** 着地を弾ませるだけ。画面は動かさない */
+  function mark(id: string) {
+    clearTimeout(movedTimer);
+    movedId = null;
+    requestAnimationFrame(() => {
+      movedId = id;
+      movedTimer = setTimeout(() => (movedId = null), 400);
+    });
+  }
+  /** 動かした行を追いかける。自分でつまんで運んだときだけ使う(§09 規則 5) */
+  function follow(id: string) {
+    clearTimeout(movedTimer);
+    movedId = null;
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-source-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+      movedId = id;
+      movedTimer = setTimeout(() => (movedId = null), 400);
+    });
+  }
+
+  // --- ドラッグで並べ替え ---------------------------------------------------
+  let dragId = $state<string | null>(null);
+  /** いま落ちる位置。行の上半分なら手前、下半分なら後ろ */
+  let dropAt = $state<{ list: "fav" | "rest"; index: number } | null>(null);
+
+  function onDragStart(e: DragEvent, id: string) {
+    dragId = id;
+    e.dataTransfer?.setData("text/plain", id);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  }
+  function onDragOverRow(e: DragEvent, list: "fav" | "rest", index: number) {
+    if (dragId === null) return;
+    e.preventDefault();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dropAt = { list, index: e.clientY < r.top + r.height / 2 ? index : index + 1 };
+  }
+  function onDragOverList(e: DragEvent, list: "fav" | "rest", count: number) {
+    if (dragId === null) return;
+    e.preventDefault();
+    if (dropAt === null || dropAt.list !== list) dropAt = { list, index: count };
+  }
+  function onDrop(e: DragEvent) {
+    e.preventDefault();
+    const id = dragId;
+    const at = dropAt;
+    dragId = null;
+    dropAt = null;
+    if (id === null || at === null) return;
+    const next: SourceLayout = {
+      fav: ordered.fav.filter((x) => x !== id),
+      rest: ordered.rest.filter((x) => x !== id),
+    };
+    const arr = next[at.list];
+    const from = ordered[at.list].indexOf(id);
+    const index = from !== -1 && from < at.index ? at.index - 1 : at.index;
+    arr.splice(Math.max(0, Math.min(arr.length, index)), 0, id);
+    layout.value = next;
+    follow(id);
+  }
+  /** ドラッグできない環境(キーボード)向け。表には出さない */
+  function onRowKey(e: KeyboardEvent, list: "fav" | "rest", index: number, id: string) {
+    if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    dragId = id;
+    dropAt = { list, index: index + (e.key === "ArrowUp" ? -1 : 2) };
+    onDrop(new DragEvent("drop"));
+  }
+
   const PLANNED: string[] = [];
   const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
@@ -313,17 +506,71 @@
       <div class="src-head">
         <span class="src-title">補正源</span>
         {#if neutralCount > 0}<span class="src-unset">未設定 {neutralCount} 件</span>{/if}
-        <span class="dim">押して中身を変える</span>
+        <span class="dim">押して中身を変える ・ つかんで並べ替え</span>
       </div>
       <div class="src-list">
-        {#each sources as s (s.id)}
-          <button type="button" class="src" class:on={openSource === s.id} onclick={() => (openSource = s.id)}>
-            <span class="src-main">
-              <span class="src-name">{s.name}</span>
-              <span class="src-sub num">{s.sub}</span>
-            </span>
-            <span class="chev dim">›</span>
-          </button>
+        <!-- お気に入りと そのほか の 2 段。重さの差はプレイヤーが ★ で決める(§14 決定 3) -->
+        {#each [{ key: "fav" as const, title: "お気に入り", ids: ordered.fav }, { key: "rest" as const, title: "そのほか", ids: ordered.rest }] as list (list.key)}
+          <div
+            class="src-group"
+            role="list"
+            ondragover={(e) => onDragOverList(e, list.key, list.ids.length)}
+            ondrop={onDrop}
+          >
+            <div class="group-head">
+              <span class="group-title">{list.title}</span>
+              <span class="group-note dim">{list.ids.length} 件</span>
+            </div>
+            {#if list.ids.length === 0}
+              <p class="group-empty dim">★ を押すか、行をここへ運ぶと上がります。</p>
+            {/if}
+            {#each itemsOf(list.ids) as s, i (s.id)}
+              <!-- 行そのものが面。★ はその中のボタンで、面を 2 枚に割らない(§01)。
+                   並べ替えたら**動いた行だけ**が新しい場所へ滑る(§10「変わった要素だけ動かす」)。
+                   0.5s を超えない — 待たせるための動きは要らない -->
+              <div
+                animate:flip={{ duration: motionDuration(260), easing: cubicOut }}
+                class="src src-line"
+                class:badge-in={movedId === s.id}
+                class:on={openSource === s.id}
+                class:dragging={dragId === s.id}
+                class:drop-before={dropAt?.list === list.key && dropAt.index === i}
+                class:drop-after={dropAt?.list === list.key && dropAt.index === i + 1 && i === list.ids.length - 1}
+                data-source-id={s.id}
+                role="button"
+                tabindex="0"
+                draggable="true"
+                onclick={() => (openSource = s.id)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openSource = s.id;
+                  } else {
+                    onRowKey(e, list.key, i, s.id);
+                  }
+                }}
+                ondragstart={(e) => onDragStart(e, s.id)}
+                ondragend={() => { dragId = null; dropAt = null; }}
+                ondragover={(e) => onDragOverRow(e, list.key, i)}
+                ondrop={onDrop}
+              >
+                <span class="grip" aria-hidden="true" title="つかんで並べ替え">⠿</span>
+                <button
+                  type="button"
+                  class="fav"
+                  class:on={list.key === "fav"}
+                  aria-label="{s.name} を{list.key === 'fav' ? 'お気に入りから外す' : 'お気に入りに入れる'}"
+                  title={list.key === "fav" ? "お気に入りから外す" : "お気に入りに入れる"}
+                  onclick={(e) => { e.stopPropagation(); toggleFavorite(s.id); }}
+                >★</button>
+                <span class="src-main">
+                  <span class="src-name">{s.name}</span>
+                  <span class="src-sub num" use:flash={() => s.sub}>{s.sub}</span>
+                </span>
+                <span class="chev dim">›</span>
+              </div>
+            {/each}
+          </div>
         {/each}
         {#each PLANNED as name (name)}
           <div class="src planned">
@@ -340,7 +587,7 @@
           <span class="attack-skill dim">{mainSkill ? mainSkill.name : "主軸スキル未選択"}</span>
         </div>
         {#if preview?.attack}
-          <div class="attack-value num">{fmtInt(preview.attack.breakdown.value)}</div>
+          <div class="attack-value num" use:bump={() => preview?.attack?.breakdown.value ?? null}>{fmtInt(preview.attack.breakdown.value)}</div>
           <div class="attack-parts num dim">
             ステ {fmtNum(Math.floor(preview.attack.breakdown.stat_attack))}
             ・ 装備基本 {fmtNum(Math.floor(preview.attack.breakdown.equipment_base_attack))}
@@ -364,7 +611,14 @@
     />
 
     <section class="detail">
-      <SourcePane {draft} {preview} {previewError} {skills} sourceId={openSource} />
+      <SourcePane
+        {draft}
+        {preview}
+        {previewError}
+        {skills}
+        sourceId={openSource}
+        onOpenSource={(id) => (openSource = id)}
+      />
     </section>
   </div>
 
@@ -372,21 +626,26 @@
     <button type="button" class="sheet-trigger" onclick={() => (sheetOpen.value.open = !sheetOpen.value.open)}>
       <span class="sheet-title">いまの実力</span>
       <span class="sheet-summary num dim">
-        {preview
-          ? STAT_KINDS.map((k) => `${STAT_LABELS[k]} ${fmtInt(preview!.stats[k])}`).join(" ・ ")
-          : "計算中…"}
+        {#if preview}
+          {#each STAT_KINDS as k, i (k)}
+            {#if i > 0}<span class="sep"> ・ </span>{/if}{STAT_LABELS[k]}
+            <span use:bump={() => preview?.stats[k] ?? null}>{fmtInt(preview.stats[k])}</span>
+          {/each}
+        {:else}
+          計算中…
+        {/if}
       </span>
       <span class="sheet-chev">{sheetOpen.value.open ? "▴" : "▾"}</span>
     </button>
     {#if sheetOpen.value.open}
-      <div class="sheet-body">
+      <div class="sheet-body open-in">
         <div class="sheet-card">
           <div class="card-title">最終能力値</div>
           <div class="stat-grid inset">
             {#each STAT_KINDS as k (k)}
               <span class="stat-cell">
                 <span class="dim">{STAT_LABELS[k]}</span>
-                <span class="num strong">{preview ? fmtInt(preview.stats[k]) : "—"}</span>
+                <span class="num strong" use:bump={() => preview?.stats[k] ?? null}>{preview ? fmtInt(preview.stats[k]) : "—"}</span>
               </span>
             {/each}
           </div>
@@ -394,7 +653,7 @@
         <div class="sheet-card">
           <div class="card-title">攻撃力(A){mainSkill ? ` — ${mainSkill.name}` : ""}</div>
           {#if preview?.attack}
-            <div class="clear num"><span class="strong">{fmtInt(preview.attack.breakdown.value)}</span></div>
+            <div class="clear num"><span class="strong" use:bump={() => preview?.attack?.breakdown.value ?? null}>{fmtInt(preview.attack.breakdown.value)}</span></div>
             <div class="eq-summary num inset">
               <span><span class="dim">ステ攻撃力</span> {fmtNum(preview.attack.breakdown.stat_attack)}</span>
               <span><span class="dim">装備基本</span> {fmtNum(preview.attack.breakdown.equipment_base_attack)}</span>
@@ -406,6 +665,62 @@
             <p class="dim tiny">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
           {/if}
         </div>
+        {#if roTotals.length > 0 || roRecordOnly > 0}
+          <div class="sheet-card">
+            <!-- ランダムOP の結果。部位ごとの行に混ぜると「どの部位の話か」が分からないまま
+                 数字だけ並ぶので、効き先ごとの合計はここにまとめる -->
+            <div class="card-title">ランダムOP</div>
+            <div class="eq-summary num inset">
+              {#each roTotals as t (t.label)}
+                <span><span class="dim">{t.label}</span> <span use:flash={() => t.value}>{t.value}</span></span>
+              {:else}
+                <span class="dim">計算に入る OP はまだありません</span>
+              {/each}
+            </div>
+            {#if roRecordOnly > 0}
+              <p class="dim tiny">記録するだけの枠が {roRecordOnly} 件あります(発動条件付き・被ダメージ側)。</p>
+            {/if}
+          </div>
+        {/if}
+        <div class="sheet-card">
+          <!-- 共通スキルの結果。入力側(補正源)には入力だけを置き、効いている量はここで見る -->
+          <div class="card-title">共通スキル</div>
+          <div class="eq-summary num inset">
+            <span><span class="dim">装備攻撃力強化</span> +{enhanceRatePercent}%</span>
+            <span><span class="dim">装備防御力</span> 物 {fmtInt(defenseRatePercent.physical)}% / 魔 {fmtInt(defenseRatePercent.magic)}%</span>
+            <span><span class="dim">割合追加ダメージ</span> +{sharpnessRatePercent}%</span>
+            <span><span class="dim">アンリーシュ</span> {unleashSummary}</span>
+          </div>
+          <p class="dim tiny">オーグメント Lv{draft.commonSkills.augment_level} ・ 極限 {ultimatePicked}</p>
+        </div>
+        {#if coreRegionRows.length > 0}
+          <div class="sheet-card">
+            <!-- ゲーム内の言葉に合わせる(Tecith Core System: 「コア効果」「コアセット効果」)。
+                 ゲームは左列にセット効果の合計を出しているので、こちらも合計を先に置く -->
+            <div class="card-title">テシスコア</div>
+            <div class="clear num">
+              <span class="dim tiny">コアセット効果(全地域) 最終ダメージ</span>
+              <span class="strong" use:flash={() => coreSetTotalLabel}>{coreSetTotalLabel}</span>
+            </div>
+            <div class="eq-summary num inset">
+              {#each coreRegionRows as r (r.region)}
+                <span>
+                  <span class="dim">{CORE_REGION_LABELS[r.region]}</span>
+                  <span use:bump={() => r.total}>{fmtInt(r.total)}</span>
+                  <span
+                    class="badge"
+                    style="background: {r.set.groups.length === 0 ? STATE.unknown.bg : STATE.met.bg};
+                           border-color: {r.set.groups.length === 0 ? STATE.unknown.bd : STATE.met.bd};
+                           color: {r.set.groups.length === 0 ? STATE.unknown.fg : STATE.met.fg}"
+                  >{r.set.groups.length === 0
+                      ? `あと ${3 - r.set.ready}`
+                      : r.set.groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
+                </span>
+              {/each}
+            </div>
+            <p class="dim tiny">コア効果(能力値)は対象地域内でのみ有効。コアセット効果は<b>同じ進化段階の強化 4 コア 3 個ごと</b>に成立し、段階ごと・地域ごとの分が足されます(同じ段階が 6 個なら 6 セット効果になり、3 セット分は重ねません)。</p>
+          </div>
+        {/if}
         <div class="sheet-card">
           <div class="card-title">装備値(全部位の合計)</div>
           <table class="eq-table num inset">
@@ -463,23 +778,62 @@
   section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
   .src-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 7px; }
-  .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .src-head .dim { margin-left: auto; font-size: 9px; }
   .src-unset {
     font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
-  .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  /* お気に入りと そのほか の 2 段(§14 決定 3)。重さの差はプレイヤーが決める */
+  .src-group { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .group-head {
+    min-width: 0; display: flex; align-items: center; gap: 8px; padding: 2px 2px 0;
+    font-size: 9.5px; letter-spacing: 0.08em;
+  }
+  .group-title { flex-shrink: 0; font-weight: 800; color: var(--fg-muted); }
+  .group-note { min-width: 0; flex: 1; letter-spacing: 0; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .group-empty { margin: 0 0 2px; padding: 0 2px; font-size: 9.5px; }
+
+  /* つかんで運ぶ。落ちる位置は行の縁に線で出す — 隙間を差し込むと下が全部ずれる(§09 規則 1) */
+  .src-line {
+    position: relative; cursor: grab;
+    /* 中のテキストが選択されるとドラッグがそちらに取られて、掴んでも動かない */
+    user-select: none; -webkit-user-drag: element;
+  }
+  .src-line:active { cursor: grabbing; }
+  /* 掴めることを見た目でも言う。ふだんは薄く、行に触れたら濃くなる */
+  .grip {
+    flex-shrink: 0; width: 9px; text-align: center;
+    font-size: 11px; line-height: 1; color: var(--fg-off); letter-spacing: -1px;
+  }
+  .src:hover .grip, .src-line.dragging .grip { color: var(--accent); }
+  .src-line.dragging { opacity: 0.45; }
+  .src-line.drop-before::before, .src-line.drop-after::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 2px;
+    background: var(--accent); border-radius: var(--r-pill);
+  }
+  .src-line.drop-before::before { top: -4px; }
+  .src-line.drop-after::after { bottom: -4px; }
+  /* ★ はホームタブのコンテンツと同じ操作・同じ寸法。金 = あなたの操作待ち(§03 予約色) */
+  .src .fav {
+    width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    border-radius: var(--r-inset); border: 1px solid var(--border-soft);
+    font-size: 10px; color: var(--fg-off);
+  }
+  .src .fav:hover { border-color: var(--gold); color: var(--gold); }
+  .src .fav.on { background: #FDF9EE; border-color: var(--gold); color: var(--gold); }
+
+  .src-list { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 6px; }
   .src {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid var(--border-soft); text-align: left;
+    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .src:hover:not(.planned) { border-color: var(--accent); }
   .src.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); }
   .src.planned { background: #F0F3F7; border-style: dashed; cursor: default; }
   .src-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .src-name { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .src.planned .src-name, .src.planned .src-sub { color: #A9B4C4; }
+  .src.planned .src-name, .src.planned .src-sub { color: var(--fg-off); }
   .src-sub { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chev { flex-shrink: 0; font-size: 11px; }
   .attack-foot {
@@ -488,9 +842,9 @@
   }
   .attack-foot.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
   .attack-head { display: flex; align-items: baseline; gap: 8px; }
-  .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #26334A; }
+  .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .attack-skill { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .attack-value { margin-top: 2px; font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .attack-value { margin-top: 2px; font-size: 19px; font-weight: 700; line-height: 1.1; }
   .attack-parts { margin-top: 3px; font-size: 9px; line-height: 1.6; }
   .attack-note { margin: 4px 0 0; font-size: 9px; line-height: 1.55; }
 
@@ -500,7 +854,9 @@
     font-size: 9.5px; line-height: 1.5; color: var(--fg-muted);
   }
 
-  .detail { overflow: auto; padding-left: 6px; }
+  /* 縦スクロールバーが後から出ると幅が縮み、右寄せのものが左へ飛ぶ。
+     場所を先に確保しておく(§09 規則 4「あとから幅が変わらない」) */
+  .detail { overflow: auto; scrollbar-gutter: stable; padding-left: 6px; }
 
   .sheet { flex-shrink: 0; border-top: 1px solid var(--border-strong); background: var(--bg-mid); padding: 8px 16px 10px; }
   .sheet-trigger {
@@ -508,12 +864,12 @@
     background: linear-gradient(180deg, #fff, #F1F6FC); border: 1px solid #9FB4D0;
     box-shadow: inset 0 1px 0 #fff; text-align: left;
   }
-  .sheet-trigger:hover { border-color: #6382AD; }
-  .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: #26334A; white-space: nowrap; }
+  .sheet-trigger:hover { border-color: var(--head-bar); }
+  .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: var(--fg-head); white-space: nowrap; }
   .sheet-summary { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sheet-chev {
     flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-    border-radius: var(--r-inset); background: #fff; border: 1px solid var(--border);
+    border-radius: var(--r-inset); background: var(--bg-field); border: 1px solid var(--border);
     font-size: 9px; font-weight: 700; color: var(--accent);
   }
   .sheet-body { margin-top: 8px; max-height: 220px; overflow: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
@@ -521,10 +877,16 @@
      1 行に収まるよう basis を詰める */
   .sheet-card {
     flex: 1 1 210px; min-width: 0; padding: 11px 12px; border-radius: var(--r-window);
-    background: #fff; border: 1px solid var(--border-strong);
+    background: var(--bg-field); border: 1px solid var(--border-strong);
   }
-  .stat-grid { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 12px; }
-  .stat-cell { display: flex; align-items: baseline; gap: 5px; font-size: 10px; }
+  /* 桁が増えても隣が動かない(§09 規則 4)。flex + 折り返しだと値の幅で列がずれるので、
+     列そのものを grid で決める。列数はカラム幅で決まり、**値の桁では変わらない** */
+  .stat-grid {
+    margin-top: 6px; padding: 7px 9px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 5px 10px;
+  }
+  .stat-cell { min-width: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10px; overflow: hidden; }
+  .stat-cell .dim { flex-shrink: 0; }
   .stat-cell .strong { font-size: 12px; font-weight: 700; }
   .eq-summary { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
   .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; border-spacing: 0; overflow: hidden; font-size: 11px; }
@@ -533,11 +895,11 @@
   .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
   .eq-table .n { text-align: right; }
   .clear { margin-top: 4px; }
-  .clear .strong { font-size: 20px; font-weight: 700; }
+  .clear .strong { font-size: 19px; font-weight: 700; }
   .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }
   .delete {
     flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid #B08480; font-size: var(--t-label); color: var(--danger);
+    background: var(--bg-field); border: 1px solid var(--state-short-bd); font-size: var(--t-label); color: var(--danger);
   }
-  .delete.confirm { background: #F6E8E5; font-weight: 700; }
+  .delete.confirm { background: var(--state-short-bg); font-weight: 700; }
 </style>

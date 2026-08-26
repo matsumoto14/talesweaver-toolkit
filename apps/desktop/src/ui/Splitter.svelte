@@ -97,6 +97,7 @@
   aria-valuemin={min}
   aria-valuemax={max ?? 9999}
   aria-label={label}
+  title="{label} — ドラッグで幅を変えます(ダブルクリックで既定に戻ります)"
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
   onpointerup={handlePointerUp}
@@ -108,13 +109,15 @@
 </div>
 
 <style>
+  /* §08: 当たり判定 9px / 線は 1px。hover で線が accent になり、
+     周囲には**ごく薄い**面が出る(濃い面で塗ると境界そのものが太く見える) */
   .splitter {
-    width: 6px; height: 100%; flex-shrink: 0; cursor: col-resize;
+    width: 9px; height: 100%; flex-shrink: 0; cursor: col-resize;
     display: flex; align-items: center; justify-content: center;
     background: var(--bg); touch-action: none;
   }
   .splitter .rule { width: 1px; height: 100%; background: var(--border); }
-  .splitter:hover, .splitter.dragging { background: var(--accent); }
+  .splitter:hover, .splitter.dragging { background: var(--bg-active); }
   .splitter:hover .rule, .splitter.dragging .rule { background: var(--accent); }
   .splitter:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 </style>

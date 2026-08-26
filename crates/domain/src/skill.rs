@@ -16,6 +16,17 @@ pub enum SkillDependency {
     HackInt,
 }
 
+/// 対象指定(wiki スキル性能一覧の「対象指定」列)。
+///
+/// 単体は 1 体、範囲は位置指定・方向指定・自分中心・設置などをまとめたもの。
+/// 計算には使わない — **どのスキルを主軸にするかを選ぶときの手がかり**として持つ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillTarget {
+    Single,
+    Area,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -29,6 +40,10 @@ pub struct Skill {
     pub critical_multiplier: f64,
     /// スキルの属性(wiki: 各キャラのスキルページ「スキル性能一覧」の属性列)
     pub element: Element,
+    /// 単体 / 範囲(wiki: 同じ表の対象指定列)。`None` = wiki の行と突き合わせできなかった
+    /// (未収録として `?` で出す。0 や「単体」で埋めない)
+    #[serde(default)]
+    pub target: Option<SkillTarget>,
     /// スキル命中(wiki 計算式まとめ `#AccuracyPoint`: 「当Wikiのスキル命中は実際の数値から
     /// 15 引いた値が記載されているため +15 する必要がある」。**+15 済みの実値**を持つ)。
     /// wiki の表が `-` の行は `None` = 未記載で、命中Pを出せない

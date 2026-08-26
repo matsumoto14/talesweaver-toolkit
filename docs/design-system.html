@@ -272,6 +272,16 @@ li::marker { color: var(--fg-dim); }
 
 /* --- 拘りカード ----------------------------------------------------------- */
 
+.core { display: grid; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); gap: 12px; margin: 14px 0 18px; }
+.core-item {
+  padding: 11px 13px 12px; border-radius: var(--r-panel);
+  background: var(--card); border: 1px solid var(--edge); border-top: 3px solid var(--accent);
+}
+.core-item .n { font-family: var(--num); font-size: 9px; font-weight: 700; letter-spacing: .12em; color: var(--fg-dim); }
+.core-item h3 { margin: 2px 0 5px; font-size: 13px; font-weight: 800; color: var(--fg-head); }
+.core-item p { font-size: 11.5px; color: var(--fg-sub); max-width: none; }
+.core-item .ask { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--edge-soft); font-size: 11px; color: var(--fg-muted); }
+.core-item .ask b { display: block; font-size: 9px; letter-spacing: .1em; color: var(--fg-dim); font-weight: 700; margin-bottom: 2px; }
 .tenets { display: grid; grid-template-columns: repeat(auto-fit, minmax(292px, 1fr)); gap: 12px; }
 .tenet {
   display: flex; flex-direction: column; gap: 8px;
@@ -347,6 +357,8 @@ li::marker { color: var(--fg-dim); }
 
 /* --- 色見本 --------------------------------------------------------------- */
 
+.elem-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.elem-row .elem { padding: 5px 14px; border-radius: var(--r-panel); font-size: 12px; font-weight: 700; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 8px; }
 .sw {
   display: flex; align-items: center; gap: 9px; text-align: left;
@@ -1071,6 +1083,8 @@ td code { background: var(--card-soft2); }
 .seg.warm button.on { background: linear-gradient(180deg,#F2D9C9,#E0B49C); color: #5E362C; }
 .seg.full { display: flex; width: 100%; }
 .seg.full button { flex: 1; text-align: center; padding: 5px 0; }
+.seg.cols { display: grid; grid-template-columns: repeat(var(--seg-cols,5),1fr); width: 100%; gap: 1px; background: var(--edge-soft); }
+.seg.cols button { border-right: 0; text-align: center; padding: 5px 4px; }
 
 .opline {
   display: flex; align-items: center; gap: 8px;
@@ -1241,7 +1255,41 @@ td code { background: var(--card-soft2); }
         <span class="note">規格より先に、これが決まっている</span>
       </div>
       <div class="win-body">
-        <p class="lede">規格(色・角丸・書体)は結論であって理由ではない。理由はここにある。<strong>迷ったら規格ではなくこの節に戻る</strong> — 規格が答えを持っていない場面のほうが多いので。</p>
+        <p class="lede">規格(色・角丸・書体)は結論であって理由ではない。理由はここにある。<strong>迷ったら規格ではなくこの節に戻る</strong> — 規格が答えを持っていない場面のほうが多いので。まず <strong>いつでも意識する 5 つ</strong>があり、その下に、作りながら繰り返し口にしていた拘りが並ぶ。</p>
+        <div class="core">
+          <div class="core-item">
+            <span class="n">01</span>
+            <h3>視線を動かさない</h3>
+            <p>一つのことを決めるのに、目を行き来させない。<strong>並びは決める順序に、関係するものは 1 回の視線に入る位置に。</strong>欄が 2 列に折り返した時点で、目は右へ行って左へ戻っている。<strong>同じ並びが続くところは幅と端をそろえる</strong> — 行ごとに端がずれると、そこを毎回探し直す。空きセル・行末の余白は、意味を持たないなら作らない。</p>
+            <p class="ask"><b>自分に問う</b>この欄を決めるまでに、目は何回動く?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">02</span>
+            <h3>要らないものを見せない</h3>
+            <p>いま決めるのに要らない選択肢・値・説明を出さない。<strong>既定で足りているものは、既定の 1 つだけ出す。</strong>選択肢を並べるのは、道具が人に質問しているということ。答えの分かっている質問はしない。</p>
+            <p class="ask"><b>自分に問う</b>いま出ているもののうち、この人が今見なくていいものはどれ?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">03</span>
+            <h3>押した場所は動かない</h3>
+            <p>押した要素が、押したあとも<strong>同じ位置に、同じ内容のまま残る。</strong>上に何かを差し込まない・その場を別の中身に入れ替えない。展開は下か右へ増やす。押した瞬間に対象が視界の外へ流れる画面は、それだけで信用を失う。</p>
+            <p class="ask"><b>自分に問う</b>押したあと、いま押したものはまだそこにある?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">04</span>
+            <h3>変わったら動かす</h3>
+            <p><strong>ぱっと差し替えず、しゅっと動かす。</strong>差し替わった数字は探さないと見つからない。動けば探さなくても分かる。変わったものは全部動かし、変わっていないものは動かさない(§10)。</p>
+            <p class="ask"><b>自分に問う</b>これを押して変わる場所は、全部動く?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">05</span>
+            <h3>考えさせない</h3>
+            <p>上限・単位・既定値・結果をその場に出す。<strong>頭の中で計算・比較・記憶をさせない。</strong>ユーザーが自分のキャラのことだけを考えていられる状態が正解で、道具の都合(欄・並び・単位)を考えさせた時点で負けている。</p>
+            <p class="ask"><b>自分に問う</b>ここでユーザーは、何かを覚えたり計算したりしている?</p>
+          </div>
+        </div>
+        <p><strong>この 5 つが目的で、§01 以降の規格はその手段。</strong>規格に合っているのに画面が良くないときは、たいていこの 5 つのどれかが崩れている。<strong>そして見た目の崩れ(折り返し・余白・ずれ)は、その症状であることが多い。</strong>幅や余白を調整して症状だけ消すと、配分のずれが残ったまま「きれいに間違っている」状態になり、次からは監査にも目にも引っかからなくなる。直すのは出す量と並びのほう。</p>
+
         <p>各カードの「モックでの証拠」は、デザインモック <code>TW Toolkit Prototype v1〜v4</code> と <code>TW Toolkit Redesign</code> に実際に書かれた言葉。後付けの整理ではなく、作りながら繰り返し口にしていたこと。</p>
 
         <div class="tenets">
@@ -1402,6 +1450,17 @@ td code { background: var(--card-soft2); }
           <div class="band band-sim">一時・試し <span class="r">保存されない操作のブロック</span></div>
         </div>
         <p class="cap">帯の文字は 800 / 10.5px / letter-spacing .08〜.1em。カラム見出しだけ 700。</p>
+
+        <div class="sec">結果は「鎖」で出す<span class="r">ゲートとレートを並列にしない</span></div>
+        <p><strong>1 発と DPS は同じ種類の量ではない。</strong>1 発は<b>ゲート</b>(防御を抜けるか・目安を超えるか = 閾値判定)、
+          DPS は<b>レート</b>(どれくらいの速さで削れるか = 連続量)。ゲートを通らなければレートに意味が無いので、
+          軸を切り替えるのではなく<strong>因果の順に繋ぐ</strong>:
+          <code>1 発 [判定] ×N 段 → 合計 ÷ 中ディレイ → 1 秒あたり → 討伐時間</code>。</p>
+        <p><strong>判定はゲートの位置にだけ置く。</strong>レートにバッジを付けない — 「何秒までなら合格」の基準が
+          ゲーム側に存在しないので、付けたら嘘になる。DPS は比較のためだけの数字にする(前回比・候補比・スキル間比較)。
+          44px の主役数値は増やさない(金の帯 = 答えは 1 つ)。鎖が右に伸びるだけ。
+          まだデータが無い段(討伐時間 = 敵 HP 未収録)は破線 + 「—」で 1 行に畳む。</p>
+        <p class="cap">実装 — <code>pages/calc/CalcPage.svelte</code> の <code>.chain</code>。着地 2026-08-25。</p>
       </div>
     </section>
 
@@ -1420,12 +1479,12 @@ td code { background: var(--card-soft2); }
         <div class="sec">文字色 6 段<span class="r">濃さで役割を分ける</span></div>
         <div class="spec col" style="gap:6px">
           <div class="ramp">
-            <span style="color:#1B2331">#1B2331 &nbsp;本文・主となる値</span>
-            <span style="color:#26334A">#26334A &nbsp;セクション見出し</span>
-            <span style="color:#3B4A63">#3B4A63 &nbsp;副次的な値・説明</span>
-            <span style="color:#5E6E88">#5E6E88 &nbsp;ラベル・注記</span>
-            <span style="color:#93A0B2">#93A0B2 &nbsp;補足・単位</span>
-            <span style="color:#A9B4C4">#A9B4C4 &nbsp;無効・未設定</span>
+            <span style="color:#1B2331">#1B2331 &nbsp;<code>--fg</code> &nbsp;本文・主となる値</span>
+            <span style="color:#26334A">#26334A &nbsp;<code>--fg-head</code> &nbsp;セクション見出し</span>
+            <span style="color:#3B4A63">#3B4A63 &nbsp;<code>--fg-sub</code> &nbsp;副次的な値・説明</span>
+            <span style="color:#5E6E88">#5E6E88 &nbsp;<code>--fg-muted</code> &nbsp;ラベル・注記</span>
+            <span style="color:#93A0B2">#93A0B2 &nbsp;<code>--fg-dim</code> &nbsp;補足・単位</span>
+            <span style="color:#A9B4C4">#A9B4C4 &nbsp;<code>--fg-off</code> &nbsp;無効・未設定</span>
           </div>
         </div>
 
@@ -1435,54 +1494,71 @@ td code { background: var(--card-soft2); }
           <div class="state-row">
             <span class="i">0</span><span class="m">余裕・目標</span>
             <span class="meter-wrap"><span class="meter"><i class="f0" style="width:92%"></i></span></span>
-            <span class="state-badge"><span class="badge b0">余裕</span> <span class="cap">#DCEBFF / #426DD6</span></span>
+            <span class="state-badge"><span class="badge b0">余裕</span> <span class="cap">#DCEBFF / #426DD6 &nbsp;<code>--state-goal-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">1</span><span class="m">足りている</span>
             <span class="meter-wrap"><span class="meter"><i class="f1" style="width:74%"></i></span></span>
-            <span class="state-badge"><span class="badge b1">通る</span> <span class="cap">#DFF3E6 / #6FA98A</span></span>
+            <span class="state-badge"><span class="badge b1">通る</span> <span class="cap">#DFF3E6 / #6FA98A &nbsp;<code>--state-met-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">2</span><span class="m">ぎりぎり・操作待ち</span>
             <span class="meter-wrap"><span class="meter"><i class="f2" style="width:52%"></i></span></span>
-            <span class="state-badge"><span class="badge b2">ぎりぎり</span> <span class="cap">#FDF3DE / #C2A057</span></span>
+            <span class="state-badge"><span class="badge b2">ぎりぎり</span> <span class="cap">#FDF3DE / #C2A057 &nbsp;<code>--state-edge-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">3</span><span class="m">届かない・危険</span>
             <span class="meter-wrap"><span class="meter"><i class="f3" style="width:31%"></i></span></span>
-            <span class="state-badge"><span class="badge b3">届かない</span> <span class="cap">#F6E8E5 / #B08480</span></span>
+            <span class="state-badge"><span class="badge b3">届かない</span> <span class="cap">#F6E8E5 / #B08480 &nbsp;<code>--state-short-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">4</span><span class="m">対象外・判定不能</span>
             <span class="meter-wrap"><span class="meter"><i class="f4" style="width:18%"></i></span></span>
-            <span class="state-badge"><span class="badge b4">判定中</span> <span class="cap">#ECEEF2 / #A9B4C4</span></span>
+            <span class="state-badge"><span class="badge b4">判定中</span> <span class="cap">#ECEEF2 / #A9B4C4 &nbsp;<code>--state-unknown-*</code></span></span>
           </div>
           <div class="state-row">
             <span class="i">5</span><span class="m">一時・チーム条件</span>
             <span class="meter-wrap"><span class="meter"><i class="f5" style="width:64%"></i></span></span>
-            <span class="state-badge"><span class="badge b5">条件だけ未達</span> <span class="cap">#EFEEF8 / #6D6AA8</span></span>
+            <span class="state-badge"><span class="badge b5">条件だけ未達</span> <span class="cap">#EFEEF8 / #6D6AA8 &nbsp;<code>--state-temp-*</code></span></span>
           </div>
         </div>
+
+        <div class="sec">属性 8 色<span class="r">状態の 6 系統とは別系統</span></div>
+        <div class="spec col" style="gap:6px">
+          <div class="elem-row">
+            <span class="elem" style="background:#F7DCD3;color:#944A36">火</span>
+            <span class="elem" style="background:#D9E8F8;color:#33608F">水</span>
+            <span class="elem" style="background:#DAEFE0;color:#35734D">風</span>
+            <span class="elem" style="background:#EDE3CF;color:#6D5A33">土</span>
+            <span class="elem" style="background:#F2E9C6;color:#7A661F">雷</span>
+            <span class="elem" style="background:#ECF1F8;color:#5E6B7E">白</span>
+            <span class="elem" style="background:#DCE0E7;color:#3C4351">黒</span>
+            <span class="elem" style="background:#E7EAF0;color:#6F7A8C">無</span>
+          </div>
+        </div>
+        <p class="cap"><b>意味は「どの属性か」だけで、状態は言わない。</b>だから<strong>彩度を落として面(bg)にだけ使い、帯・到達判定のバッジには使わない</strong> —
+          金(操作待ち)やラベンダー(保存されない)と読み違えられると、予約色の意味が壊れる。
+          選ばれている段は水色(選択)が勝つ。トークンは <code>--elem-&lt;属性&gt;-bg</code> / <code>-fg</code>。</p>
 
         <div class="sec">予約色<span class="r">この用途以外に使わない</span></div>
         <div class="reserved">
           <div class="res res-gold">
-            <h4><span class="dot" style="background:#C2A057"></span>金 #C2A057</h4>
+            <h4><span class="dot" style="background:#C2A057"></span>金 #C2A057 <code>--gold</code></h4>
             <p><b>あなたの操作待ち・上限・結果。</b>未選択、未保存、上限到達(「満」)、スキル、結果の帯。</p>
             <span class="use">「金が出ている = まだ何か決めていない」で読める状態を守る</span>
           </div>
           <div class="res res-sim">
-            <h4><span class="dot" style="background:#6D6AA8"></span>ラベンダー #6D6AA8</h4>
+            <h4><span class="dot" style="background:#6D6AA8"></span>ラベンダー #6D6AA8 <code>--sim</code></h4>
             <p><b>保存されない・一時的なもの。</b>試し変更、シミュレーション、バフ・消耗品、エンチャント。</p>
-            <span class="use">保存済みデータの名前に使ったら誤用。水色と紫の対比が崩れる</span>
+            <span class="use">保存済みデータの名前に使ったら誤用。水色と紫の対比が崩れる。<b>同時に試せるのは 3 件まで</b> — 上限に達したことは色ではなく文言で伝える(2 つ目の意味を持たせない)</span>
           </div>
           <div class="res res-warm">
-            <h4><span class="dot" style="background:#B0574A"></span>赤茶 #A98B86 / #B0574A / #8C4A42</h4>
+            <h4><span class="dot" style="background:#B0574A"></span>赤茶 #A98B86 / #B0574A / #8C4A42 <code>--mob</code> / <code>--warm</code> / <code>--danger</code></h4>
             <p><b>敵と危険。</b>Mob、武器・装備の世界、削除、届かない、減る値。</p>
             <span class="use">敵と危険を兼ねるのは意図。プレイヤーにとって敵は障害</span>
           </div>
           <div class="res res-good">
-            <h4><span class="dot" style="background:#3E8C63"></span>緑 #2E6B4C / #6FA98A</h4>
+            <h4><span class="dot" style="background:#3E8C63"></span>緑 #2E6B4C / #6FA98A <code>--good</code> / <code>--good-soft</code></h4>
             <p><b>足りている・増えた。</b>増加した数値、条件を満たした行、すぐできる強化。</p>
             <span class="use">「良い」ではなく「足りている / 増えた」。評価ではなく事実</span>
           </div>
@@ -1512,16 +1588,36 @@ td code { background: var(--card-soft2); }
               <b><i style="background:var(--stripe-def)"></i>防御に食われた分</b>
             </div>
           </div>
-          <p style="margin-top:11px;font-size:11.5px">斜線は一貫して<strong>「効いていない・持っていかれた」</strong>の記号。塗りつぶしと混ぜない。塗りは「効いている量」だけに使う。</p>
+          <p style="margin-top:11px;font-size:11.5px">斜線は一貫して<strong>「効いていない・持っていかれた」</strong>の記号。塗りつぶしと混ぜない。塗りは「効いている量」だけに使う。実装は <code>--hatch-lost</code>。<b>§06 のプレースホルダ縞と混同しない</b> — あちらは同系色 2 色の薄い縞で「まだ画像が無い枠」を表し、値の上には出ない。斜線が濃い 2 色で<b>量の上に重なっていたら</b>、それは常に「効いていない量」。</p>
+          <p style="margin-top:9px;font-size:11.5px"><strong>棚卸しは 1 箇所に集める。</strong>上限で捨てた分は
+            カテゴリ上限 / ダメージ上限 / 防御力上限 / 能力値上限 / 中ディレイ の 5 階層に散る。斜線の記号は各所で使ったまま、
+            <b>総量が分かる表は「なぜこの数字?」の中に 1 つだけ</b>置く。5 箇所を回らないと総ロスが分からない状態は、
+            「効いていない量を見せるのがこの道具の価値」(§00)を薄める。どの上限にも当たっていないときは、
+            空白ではなくそう書く。着地 2026-08-25。</p>
+        </div>
+
+        <div class="sec">内訳の色<span class="r">「どの区間か」の識別。良し悪しは表さない</span></div>
+        <p>積み上げ帯・流れ帯(「なぜこの数字?」の各段、攻撃力の内訳)で使う並び。<strong>状態の 6 系統とは別物</strong>で、
+          こちらは達成度を表さない — 隣り合う区間を見分けるためだけにある。だから 6 系統に寄せてはいけないし、
+          逆にこの並びをバッジや到達バーに使ってもいけない。実装は <code>--flow-base</code> と <code>--flow-1</code>〜<code>--flow-7</code>。</p>
+        <div class="spec">
+          <span class="badge" style="background:#fff;border:1px solid #9AA6B6;color:#5E6E88"><code>--flow-base</code> 素ステ由来の土台</span>
+          <span class="badge" style="background:#fff;border:1px solid #426DD6;color:#2B4FA8"><code>--flow-1</code> 装備攻撃力・スキル倍率</span>
+          <span class="badge" style="background:#fff;border:1px solid #5B8FD6;color:#2B4FA8"><code>--flow-2</code> クリティカル</span>
+          <span class="badge" style="background:#fff;border:1px solid #3E8C63;color:#2E6B4C"><code>--flow-3</code> コンボ・属性・カット率・オーラ</span>
+          <span class="badge" style="background:#fff;border:1px solid #6FA98A;color:#2E6B4C"><code>--flow-4</code> 最終ダメージ固定値(下限)</span>
+          <span class="badge" style="background:#fff;border:1px solid #8FBFA6;color:#2E6B4C"><code>--flow-5</code> 最終ダメージ・カット率A・被害減少</span>
+          <span class="badge" style="background:#fff;border:1px solid #C2A057;color:#7A6420"><code>--flow-6</code> 各種ダメージ増減</span>
+          <span class="badge" style="background:#fff;border:1px solid #B0824A;color:#7A6420"><code>--flow-7</code> 攻撃ダメージ・PVP 補正</span>
+          <span class="cap">順序は式の流れの順。区間が増えたら並びの末尾に足す(途中に差し込むと既存の色の意味が動く)</span>
         </div>
 
         <div class="sec">コストの色<span class="r">強化候補の重さ</span></div>
         <div class="spec">
           <span class="badge b1">すぐできる</span>
-          <span class="badge b0">育成</span>
-          <span class="badge b2">周回</span>
-          <span class="badge b3">素材・課金</span>
-          <span class="cap">状態の 6 系統をそのまま流用する。新しい配色を作らない</span>
+          <span class="badge b0">エンチャント</span>
+          <span class="badge b3">装備更新</span>
+          <span class="cap">状態の 6 系統をそのまま流用する。新しい配色を作らない(<code>candidates.ts:COST_COLORS</code>)</span>
         </div>
       </div>
     </section>
@@ -1600,7 +1696,7 @@ td code { background: var(--card-soft2); }
           <div class="field-row"><span class="k num">19</span><span style="font-size:11.5px">カード群の親になる名前</span></div>
           <div class="field-row"><span class="k num">15 / 14 / 13</span><span style="font-size:11.5px">セクションの合計値・行の数値</span></div>
           <div class="field-row"><span class="k num">12.5 / 12 / 11.5</span><span style="font-size:11.5px">本文・行のタイトル</span></div>
-          <div class="field-row"><span class="k num">11 / 10.5</span><span style="font-size:11.5px">カード見出し(700)・ラベル</span></div>
+          <div class="field-row"><span class="k num">11 / 10.5 / 10</span><span style="font-size:11.5px">カード見出し(700)・ラベル</span></div>
           <div class="field-row"><span class="k num">9.5 / 9 / 8.5</span><span style="font-size:11.5px">注記・単位・バッジ</span></div>
         </div>
         <p class="cap">800 + letter-spacing .06〜.12em は帯とセクション見出し専用。本文には使わない。</p>
@@ -1642,6 +1738,10 @@ td code { background: var(--card-soft2); }
           <div class="icon-state"><span class="icon s40 missing">?</span><div class="lbl">未収録</div></div>
           <div class="icon-state"><span class="icon s40"></span><div class="lbl">対象なし</div></div>
           <p class="cap" style="max-width:30ch">画像が来るまでは縞プレースホルダ。<b style="color:var(--fg-sub)">未収録は破線 + ?</b> で、データが無いことを明示する(空白にしない)。<b style="color:var(--fg-sub)">対象が無い枠は縞のまま</b>で、警告も ? も出さない。</p>
+          <p><strong>欠けの表現は行内ではなく行頭へ。</strong>30 行の一覧で破線が増えると画面が壊れて見えるので、
+            行ごとに歯抜けを見せるのをやめ、<b>行頭に「収録度」を 1 つだけ</b>置く(この敵はどこまで分かっているか)。
+            <strong>完全に分かっている行には出さない</strong> — 全行に並ぶとバッジが装飾になる。
+            欠けの表現には<b>密度の閾値</b>がある。着地 2026-08-25。</p>
         </div>
 
         <div class="sec">実際の並びでの見え方</div>
@@ -1844,6 +1944,18 @@ td code { background: var(--card-soft2); }
         </div>
         <p class="cap">初期値は常に埋まっている。入力欄は<b>自動値を上書きする例外操作</b>で、その関係が見た目でも分かるようにする。</p>
 
+        <div class="sec">同じ並びが何行も続くとき<span class="r">列を固定して幅を揃える</span></div>
+        <div class="spec col" style="gap:6px">
+          <span class="seg cols" style="--seg-cols:5" role="group" aria-label="1 行目">
+            <button type="button">未装着</button><button type="button">突き攻撃力</button><button type="button" class="on" aria-pressed="true">斬り攻撃力</button><button type="button">魔法攻撃力</button><button type="button">魔法防御力</button>
+          </span>
+          <span class="seg cols" style="--seg-cols:5" role="group" aria-label="2 行目">
+            <button type="button">未装着</button><button type="button" class="on" aria-pressed="true">突き攻撃力</button><button type="button">斬り攻撃力</button><button type="button">魔法攻撃力</button><button type="button">魔法防御力</button>
+          </span>
+        </div>
+        <p class="cap"><b>同じ選択肢の並びが何行も続く場所では、段の幅を内容なりにしない。</b>行ごとに端がずれると、目は毎行そこを探し直す。列を固定して(<code>.seg.cols</code>)行をまたいで揃える。<b>列が余って空きセルが出るなら、その並びは 1 つの段に入れすぎ</b> — 別の段に分ける。</p>
+        <p class="cap"><b>ほぼ選ばれない選択肢を段に入れない。</b>「未装着」「なし」「未使用」は、選ばれる確率に対して 1 列を占めすぎている。<strong>外す操作は行末の小さな × 1 つで足りる</strong> — 段はよく選ばれるものだけで組む。</p>
+
         <div class="sec">バッジ・チップ</div>
         <div class="spec">
           <span class="badge" style="background:#fff;border-color:#798CAC;color:#5E6E88">未設定</span>
@@ -1973,6 +2085,10 @@ td code { background: var(--card-soft2); }
 
         <div class="sec">規則 5 — 並びは、ユーザーが頼まない限り変わらない</div>
         <p>チェックを付けた行がソートで飛ばない。フィルタで消えるときも、<strong>いま操作した行だけは残す</strong>(または消えることを動きで見せる)。「操作したら対象が消えた」は最悪の体験で、操作の取り消しすらできなくなる。</p>
+        <p><strong>裏返せば、頼まれたら変わってよい。</strong>「どれをよく触るか」は人によって違うので、
+          頻度をこちらで決め打ちしない。重さの差は<b>お気に入り(★)</b>で付け、並びは<b>つかんで運ぶ</b>。
+          設定画面は作らない — リストの上で直接動かす。落ちる位置は行の縁に線で出す(隙間を差し込むと下が全部ずれる)。
+          運んだ行は視界に残す。着地 2026-08-25(キャラタブ 補正源リスト)。</p>
 
         <div class="foot" style="background:var(--card-soft);border-color:var(--edge-soft);color:var(--fg-sub)">
           <b>この 5 規則の共通の目的</b> — 操作のあと、<b>ユーザーが目を戻す先が常に同じであること。</b>動き(§10)が「何が変わったか」を伝えられるのは、その周りが動いていないから。<b>空間が安定していない画面では、どんなに丁寧なアニメーションも読めない。</b>
@@ -2009,6 +2125,13 @@ td code { background: var(--card-soft2); }
             <span class="spec-n">translateX(-10px) scaleX(.97)<br>.26〜.32s cubic-bezier(.2,.85,.25,1)<br>transform-origin: left center</span>
           </div>
           <div class="change">
+            <span class="w">面が入れ替わった</span>
+            <span class="how">タブで中身を切り替えたとき。<b>入ってくる面だけ</b>短く動かす —
+              ぱっと差し替わると「切り替えたのか、元からこうだったのか」が一瞬わからない。
+              画面全体を動かす演出にはしない(それは規則 1 に反する)</span>
+            <span class="spec-n">translateY(-5px) + opacity<br>.2s cubic-bezier(.2,.85,.25,1)</span>
+          </div>
+          <div class="change">
             <span class="w">一時的に重なった</span>
             <span class="how">上から降りる。閉じたら跡形もなく消える(レイアウトを押していないので)</span>
             <span class="spec-n">translateY(-6px) scaleY(.97)<br>.17s cubic-bezier(.34,1.2,.64,1)</span>
@@ -2023,12 +2146,24 @@ td code { background: var(--card-soft2); }
             <span class="how"><b>下方向にだけ伸びる。</b>上に伸ばすと、上にあるものが全部ずれる</span>
             <span class="spec-n">max-height .34s<br>+ opacity .24s</span>
           </div>
+          <div class="change">
+            <span class="w">並びが変わった</span>
+            <span class="how"><b>動いた行が新しい場所へ滑る。</b>押しのけられた行も一緒に動く —
+              掴んだ行だけ動くと、どこに入ったのかが分からない。群をまたいで移った行は、
+              滑りが繋がらないので着地を弾ませる</span>
+            <span class="spec-n">FLIP transform .26s<br>cubic-bezier(.33,1,.68,1)</span>
+          </div>
         </div>
 
         <div class="sec">動きの規則</div>
         <ul>
           <li><strong>変わった要素だけ動かす。画面全体を動かさない。</strong>ページ遷移風の演出は、何が変わったかを消してしまう</li>
           <li><strong>同時に 2 箇所が変わったら、2 箇所とも動かす。</strong>片方だけ動かすと、動かないほうが「古い値のまま」に見える</li>
+          <li><strong>入場に <code>scale</code> を使わない。</strong>原点から遠い要素ほど大きく横に流れるので、
+            ペインの右端にあるものが「あとから左右に動いてくる」ように見える(実測で 22px 動いていた)。
+            入場は<b>全体が同じ量だけ動く</b> <code>translate</code> + <code>opacity</code> にする</li>
+          <li><strong>押すと言葉が変わるものは、先に幅を取る。</strong>「出す ↔ 閉じる」で幅が変わると、
+            押した場所そのものが動く(§09 規則 1)</li>
           <li><strong>0.5 秒を超える動きを置かない。</strong>待たせるための動きは 1 つも要らない</li>
           <li><strong>連打されても壊れない。</strong>アニメーションは途中から再スタートできること(このページの実演もそう作ってある)</li>
           <li><strong>動きを消しても変化が分かること。</strong>色・バッジ・数値そのもので既に伝わっていて、動きはその上乗せ — という順序を守る</li>
@@ -2235,7 +2370,7 @@ td code { background: var(--card-soft2); }
         <div class="grid2">
           <div class="card soft">
             <div class="card-h"><span class="formtag">1 自動</span></div>
-            <p style="font-size:11px"><b>基本値(突き 122 / 斬り 315)。</b>装備品を選んだ瞬間に確定する値で、ユーザーは触らない。インセット面に載せて「触れない」ことを面で示す。</p>
+            <p style="font-size:11px"><b>基本値(突き 122 / 斬り 315)。装備品を選んだ瞬間に確定する値なので、既定は読み取り表示。インセット面に載せて「いまは触っていない」ことを面で示す。<b>ただし MR による個体差があるので上書きはできる</b> — 自動値を上書きする例外操作として、押して初めて入力欄になる(§08 フィールド)。</p>
           </div>
           <div class="card soft">
             <div class="card-h"><span class="formtag f2">2 段階選択</span></div>
@@ -2299,105 +2434,80 @@ td code { background: var(--card-soft2); }
     <section class="win" id="next">
       <div class="win-bar">
         <span class="dia"></span><span class="idx">14</span>
-        <h2>これから作る画面の決定</h2>
-        <span class="note">決定済み・未実装。破線はそれを表す</span>
+        <h2>まだ決めていないこと</h2>
+        <span class="note">決めたものはここから消し、規格の節へ実物として移す</span>
       </div>
       <div class="win-body">
-        <p class="lede">まだ画面が無いが、<strong>作る前に決めてある</strong>こと。ドメイン側の実装(中ディレイ / DPS・能力値上限・クリティカル率)は <b>2026-08-25 に着地済み</b>。規格だけでは答えが出ない場面がもう来ているので、その答えをここに置く。</p>
-        <p>この節のカードが破線なのは規格どおり(§00「欠けている状態を正常に見せる」)。<strong>決まっているが、まだ無い。</strong>作ったら実線にして該当の節へ移す。</p>
+        <p class="lede">規格だけでは答えが出ない場面のうち、<strong>まだ答えを決めていない</strong>もの。決まったら該当の節へ実物として移し、ここからは消す。<b>2026-08-25</b> に置いた 6 件(鎖 / 効いていない分の棚卸し / 補正源の並び / 相手依存の値 / 欠けの表現 / 試し変更の上限)はすべて着地したので、それぞれ §02・§03・§06・§09 へ移した。</p>
 
-        <div class="sec">1. ダメージは「鎖」で出す — ゲートとレートを並列にしない<span class="r">着手可 ・ 現状は非適合</span></div>
-        <p class="blocked" style="margin-bottom:11px"><b>現状</b> 中ディレイ / DPS は実装済み(2026-08-25 段階5)。ただし計算タブでは <b>合計 / クリティカル / 1 秒あたり の 3 箱が横並び</b>で、鎖になっていない。DPS にバッジが付いていない点は既に適合している。</p>
-        <p><strong>1発と DPS は同じ種類の量ではない。</strong>1発は<b>ゲート</b>(防御を抜けるか・目安を超えるか = 閾値判定)、DPS は<b>レート</b>(どれくらいの速さで削れるか = 連続量)。ゲートを通らなければレートに意味が無い(防御を抜けていなければ、どれだけ速く振っても 0)。だから軸を切り替えるのではなく、<strong>因果の順に鎖で繋ぐ。</strong></p>
 
-        <div class="chain">
-          <div class="node hero">
-            <span class="nl">1 発</span>
-            <span class="nv2">3,158</span>
-            <span class="nsub">目安 2,400</span>
-          </div>
-          <span class="gatebadge"><span class="badge b1">通る</span></span>
-          <span class="op">×10 段</span>
-          <div class="node mid">
-            <span class="nl">合計</span>
-            <span class="nv2">31,580</span>
-          </div>
-          <span class="op">÷ 1.12s</span>
-          <div class="node rate">
-            <span class="nl">1 秒あたり</span>
-            <span class="nv2">28,196</span>
-            <span class="nsub">判定は付けない</span>
-          </div>
-          <span class="op">→</span>
-          <div class="node pending">
-            <span class="nl">討伐時間</span>
-            <span class="nv2">— 秒</span>
-            <span class="nsub">敵 HP が未収録</span>
-          </div>
+
+        <div class="sec">判断を保留しているもの<span class="r">決めるまで違反として数えない</span></div>
+        <p>適合ループの実機監査で出たが、<strong>規格と実装のどちらが正しいかこの場では決められなかった</strong>もの。
+          決めたら該当の節を直し、ここからは消す。</p>
+        <div class="dec">
+          <div class="dec-h"><span class="n2">A</span><b>数値入力のスライダーは 5 形態のどれなのか</b><span class="soonbadge">保留</span></div>
+          <p><code>StatInput</code> は「数値欄 + スライダー + MAX」で出来ている。<strong>スライダーは §07 の 5 形態のどれでもない。</strong>
+            形態 4(ステッパー)に寄せて <b>− / +</b> にするか、スライダーを 6 つ目の形態として規格に足すか。
+            実機では「上限に対していまどのあたりか」を掴むのにスライダーが効いていて、単純に消すと情報が減る。</p>
+          <p class="why"><b>決めるのに要るもの</b> v4 にスライダーがあるかどうか(あれば規格の書き落とし、無ければ実装の逸脱)。</p>
+          <span class="where">効くところ: キャラタブ 調整 / 装備エンチャント</span>
         </div>
-
-        <div class="grid3" style="margin-top:2px">
-          <div class="card soft">
-            <div class="card-h"><b>ヒーローは 1発のまま</b></div>
-            <p style="font-size:11px">44px の数字は増やさない。金の帯 = 答えは 1 つ(§02)を壊さず、鎖が右に伸びるだけ。到達判定も per-hit に固定されたままなので巻き戻しが起きない。</p>
-          </div>
-          <div class="card soft">
-            <div class="card-h"><b>レートに判定を付けない</b></div>
-            <p style="font-size:11px">「何秒までなら合格」の基準がゲーム側に存在しない。バッジを付けると嘘になる。DPS は<b>比較のためだけ</b>の数字にする(前回比・候補比・スキル間比較)。</p>
-          </div>
-          <div class="card soft">
-            <div class="card-h"><b>主役は画面ごとに分ける</b></div>
-            <p style="font-size:11px">ホーム・計算タブ = <b>ゲート主役</b>(行けるか)。強化提案タブ = <b>レート主役</b>(次に何を伸ばすと効くか)。1 画面で軸を切り替えない。</p>
-          </div>
+        <div class="dec">
+          <div class="dec-h"><span class="n2">B</span><b>オン / オフの選択がチェックボックスとチップに割れている</b><span class="soonbadge">保留</span></div>
+          <p>計算タブのバフは<b>チップ</b>(形態 3)、キャラタブのクリティカル率・中ディレイ・ペット S スキルは<b>チェックボックス</b>。
+            §07 は「上から順に試す」なのでチップに寄せるのが筋だが、補正源ペインの行は<b>名前 + 値 + 発動条件</b>を並べていて、
+            チップにすると値と条件が読めなくなる可能性がある。</p>
+          <p class="why"><b>決めるのに要るもの</b> チップの中に「値」まで入れて 30 行並べたときに読めるか、の実物確認。</p>
+          <span class="where">効くところ: キャラタブ 各補正源ペイン / 計算タブ バフ</span>
         </div>
-        <p class="cap">強化提案が DPS を必要とする理由: フルスロットル(段数 +3・中ディレイ短縮)は <b style="color:var(--fg-sub)">per-hit が 1 も変わらないのに実効火力が上がる</b>。ゲートだけ見ていると候補の順位が付かない。</p>
-
-        <div class="sec">2 〜 6</div>
-        <div class="decs">
-
-          <div class="dec">
-            <div class="dec-h"><span class="n2">2</span><b>効いていない分は 1 箇所に集める</b><span class="soonbadge">これから</span></div>
-            <p>上限で捨てた分は <b>カテゴリ上限 / ダメージ上限 / 防御力上限 / 能力値上限 / 中ディレイ下限</b> の 5 階層。<b>前 4 種は「捨てた量」まで出ている</b>(段階6 で能力値上限も着地)。中ディレイ下限だけ「※下限 0.3s」の警告どまりで量が出ていない。斜線の記号は各所で使ったまま、<strong>棚卸しは「なぜこの数字？」の中の 1 セクションに集約する。</strong>新画面は作らない。</p>
-            <p class="why"><b>なぜ</b> 「効いていない量を見せるのがこの道具の価値」(§00)と決めた以上、5 箇所を回らないと総ロスが分からない状態は価値を薄める。ここが強化提案タブの自然な入口にもなる。</p>
-            <span class="where">効くところ: 計算タブ「なぜこの数字？」/ 強化提案タブ ・ 4 / 5 種は算出済みなので今すぐ作れる</span>
-          </div>
-
-          <div class="dec">
-            <div class="dec-h"><span class="n2">3</span><b>補正源リストを操作頻度で 3 群に分ける</b><span class="soonbadge">これから</span></div>
-            <p>装備 / 恒常補正 / 常用バフ / キャラスキル / 称号 / ランダムOP / 共通スキル / 極限スキル / 調整 / 属性 が同じ行の重さで並んでいる。<strong>毎回変える ・ 育ったら変える ・ 一度決めたら触らない</strong> の 3 群にし、固定群は既定で畳む。</p>
-            <p class="why"><b>なぜ</b> §00「触る場所だけ大きく、触らない場所は 1 行に畳む」の未適用箇所。オーグメント Lv と常用バフが同格なのは、設計をしていないのと同じ。行数は増えてよいが、重さは揃えない。</p>
-            <span class="where">効くところ: キャラタブ 補正源ペイン</span>
-          </div>
-
-          <div class="dec">
-            <div class="dec-h"><span class="n2">4</span><b>相手依存の値は 2 つに割る</b><span class="soonbadge">適合済み</span></div>
-            <p>「値が 1 つに決まる」が前提の設計なので、<strong>相手が決まらないと出ない値</strong>は所属を割る:</p>
-            <ul style="font-size:11px;margin:0">
-              <li><b>キャラ側(補正源)</b> — 自分が<b>持っている</b>値。相手がいなくても決まる</li>
-              <li><b>計算タブ側</b> — その相手に対する<b>効き</b>。対象を選んで初めて出る</li>
-            </ul>
-            <p class="why"><b>先例 1・属性</b> キャラ側に属性値(基礎 + 装備の属性強化 + 供給源)、計算タブ側で敵属性値との差をカテゴリ I にする。<br><b>先例 2・クリティカル率(2026-08-25 段階7)</b> キャラ側には<b>供給源だけ</b>(ペット会心・極のルーン・設計者の研究室・致命打)、<b>率そのものは計算タブ</b>に出る。対象の AGI とクリティカル被撃率が敵側の値だから。<br><b>2 例とも自然にこの形になった</b>ので、規約として確定する。</p>
-            <p class="blocked">この形を破ると、キャラ画面に<b>必ず「—」になる欄</b>ができる。相手が決まっていないのだから当然で、それは欠損ではなく置き場所の誤り。</p>
-            <span class="where">効くところ: キャラタブ 補正源 / 計算タブ 対象パネル</span>
-          </div>
-
-          <div class="dec">
-            <div class="dec-h"><span class="n2">5</span><b>欠けの表現を行内から行頭へ</b><span class="soonbadge">着手すべき</span></div>
-            <p>クリティカル率が <b>AGI と被撃率が両方そろった敵だけ</b>で着地した(段階7)。判断は §00 どおり正しいが、これで<strong>歯抜けが現実に発生した。</strong>30 行の一覧で破線が増えると画面が壊れて見えるので、行ごとに歯抜けを見せるのをやめ、<strong>敵の行頭に「収録度」バッジを 1 つ置く</strong>(この敵はどこまで分かっているか)。</p>
-            <p class="why"><b>なぜ</b> 欠けを見せるのと、欠けだらけに見えるのは別。欠けの表現には<b>密度の閾値</b>がある、というのがここで分かったこと。宣言を先に 1 つ置けば、行内は静かにできる。</p>
-            <span class="where">効くところ: ホーム 到達一覧 / 計算タブ 対象リスト</span>
-          </div>
-
-          <div class="dec">
-            <div class="dec-h"><span class="n2">6</span><b>同時に試せる変更は 3 つまで</b><span class="soonbadge">これから</span></div>
-            <p>試し変更がスキル・極限スキルまで広がると、同時に 5〜6 個変わるのが普通になりチップ列が読めなくなる。<strong>上限を意図的に設け、超えたら古いものから確定を促す。</strong></p>
-            <p class="why"><b>なぜ</b> ここで「試しセットに名前を付けて保存」に逃げると、<b>ラベンダー = 保存されない</b> の意味が壊れる(§03 予約色)。色の意味を守るために、機能側に制約を置く。制約は妥協ではなく設計判断。</p>
-            <span class="where">効くところ: 計算タブ 試し変更チップ列</span>
-          </div>
-
+        <div class="dec">
+          <div class="dec-h"><span class="n2">C</span><b>上限に届いたことを金で言うのか、紫で言うのか</b><span class="soonbadge">保留</span></div>
+          <p><strong>この文書の中で食い違っている。</strong>§03 の予約色は<b>金</b>を「上限到達(「満」)」に割り当てているが、
+            §07 の実演は「上限に届くと<b>セルが紫になり</b> MAX が反転する」と書いている。実装の「満」バッジは
+            1 周目までは赤茶(<code>--danger</code>)で、どちらでもなかった — これは誤用なので金に寄せた。
+            残っているのは<b>面をどう塗るか</b>のほう。</p>
+          <p class="why"><b>決めるのに要るもの</b> v4 の実物(§07 の記述は v4 の説明なので、紫が v4 なら §03 の予約色の説明を直す側)。</p>
+          <span class="where">効くところ: 上限のある入力すべて</span>
         </div>
-
-        <p class="cap">この 6 件は <code>docs/claude/goals/</code> の goal 文書と対になっている。実装した項目はこの節から消し、該当する規格の節に実物として移す。</p>
+        <div class="dec">
+          <div class="dec-h"><span class="n2">D</span><b>押した候補が消えるのを、どう見せるか</b><span class="soonbadge">保留</span></div>
+          <p>「足りない分をどう埋める?」の候補を押すと試し変更に入り、<strong>その候補は一覧から消える</strong>
+            (もう今の数字を超えないので、正しい結果ではある)。§09 規則 5 は「操作したら対象が消えた」を最悪の体験とし、
+            「消えることを動きで見せる」を求めている。<strong>ところが §10 には「行が消える」型が無い。</strong>
+            型を足すのか、消さずに「適用中」として残すのか。</p>
+          <p class="why"><b>いまの逃げ道</b> 押した直後に右カラムのチップ列(試し変更)へ同じ名前が出るので、行き先は追える。
+            ホームの「次に変えるなら」も同じ構造。</p>
+          <span class="where">効くところ: 計算タブ 足りない分をどう埋める / ホーム 次に変えるなら</span>
+        </div>
+        <div class="dec">
+          <div class="dec-h"><span class="n2">E</span><b>ドロップダウンは 5 形態のどこにも無い</b><span class="soonbadge">保留</span></div>
+          <p>順序のある有限選択は<b>段階選択</b>(形態 2)にした。<b>並べきれない多数(スキル 20 種など)は
+            2026-08-26 に<code>ui/Picker.svelte</code>(1 件 1 行・重なって出る候補の面)へ移した</b> —
+            素の <code>&lt;select&gt;</code> では「名前のほかに選ぶのに要る値(単 / 範・段数・属性)」と
+            アイコンを出せないため。残っているのは 2 種類で、
+            どちらも 5 形態に当てるものが無い:</p>
+          <p><b>1. 順序のない有限選択</b> — 属性 / 対象ステ / アビリティ / キャラ。「段階」ではないので
+            並べても順序の意味が出ない。チップ列にすると 7〜12 個が横に並び、1 つしか選べないのに
+            複数選べるように見える。<br />
+            <b>2. 段階として並べられない長さ</b> — エタの意志 Lv(0〜100)。101 個は段階ではない。
+            形態 4(ステッパー)が近いが、それは保留 A(スライダーの位置づけ)と絡む。</p>
+          <p class="why"><b>決めるのに要るもの</b> v4 にこの 2 種類の入力があるか。無ければ
+            「6 つ目の形態」として足すか、別の見せ方(検索付きのポップオーバー等)を決める。</p>
+          <span class="where">効くところ: キャラタブ 属性 / 装備アビリティ / キャラステータス</span>
+        </div>
+        <div class="dec">
+          <div class="dec-h"><span class="n2">F</span><b>装備ペインの「下の帯」を作るか、フッターに寄せるか</b><span class="soonbadge">保留</span></div>
+          <p>§12 は装備を決める画面の下に <b>突き 合計 / 斬り 合計 / 追加固定 / A 攻撃力</b> の 4 数値の帯を置き、
+            そこがラベンダーで「保存されていません」を宣言する形になっている。
+            実装は 3 ペイン構成で、<b>画面共通のフッター「いまの実力」</b>がその役をしている
+            (最終能力値 / 攻撃力(A) / 装備値 / このキャラで通るのは)。</p>
+          <p class="why"><b>どちらが正しいか</b> 装備ペイン専用の帯を足すと、フッターと同じ値が 2 箇所に出る。
+            共通フッターのままだと「いま触っている部位が何に効いたか」が遠い。
+            §12 の意図(押した瞬間に下で動く)は共通フッターでも満たせているので、
+            <b>規格側を実装に寄せる</b>可能性が高い。v4 に共通フッターがあるかどうかで決まる。</p>
+          <span class="where">効くところ: キャラタブ 装備 / いまの実力フッター</span>
+        </div>
       </div>
     </section>
 
@@ -2416,9 +2526,11 @@ td code { background: var(--card-soft2); }
             <tbody>
               <tr><td>色・角丸・タイポのトークン</td><td><code>apps/desktop/src/app.css</code> の <code>:root</code></td></tr>
               <tr><td>共通部品 <code>.card</code> <code>.badge</code> <code>.btn</code> <code>.inset</code> <code>.meter</code> <code>table.grid</code> <code>.head-bar</code></td><td><code>app.css</code></td></tr>
+              <tr><td>上限のある入力(形態 4)<code>.stepper</code></td><td><code>app.css</code>(見た目)/ <code>src/ui/StatInput.svelte</code>(振る舞い)。色は <code>--cell-*</code></td></tr>
               <tr><td>アイコン 4 系統 × 4 サイズ</td><td><code>src/ui/Icon.svelte</code></td></tr>
               <tr><td>スプリッター</td><td><code>src/ui/Splitter.svelte</code></td></tr>
-              <tr><td>状態の 6 系統</td><td><code>pages/home/HomePage.svelte</code> / <code>pages/calc/CalcPage.svelte</code> の <code>BADGE_*</code> <code>BAR_BG</code></td></tr>
+              <tr><td>状態の 6 系統</td><td><code>app.css</code> の <code>--state-*</code> / 参照は <code>src/ui/states.ts</code>(<code>STATE</code> と <code>badgeStyle</code>)。画面側はラベルと系統の対応だけを持つ</td></tr>
+              <tr><td>内訳の色 / 斜線</td><td><code>app.css</code> の <code>--flow-*</code> / <code>--hatch-lost</code></td></tr>
               <tr><td>コストの色</td><td><code>candidates.ts:COST_COLORS</code>(CSS 変数を参照する)</td></tr>
               <tr><td>アプリ帯・タブ・カラム構成</td><td><code>src/App.svelte</code></td></tr>
             </tbody>
@@ -2430,6 +2542,7 @@ td code { background: var(--card-soft2); }
         <ul>
           <li><strong>v4 と規格シートが食い違ったら v4。</strong>規格シート(Redesign)は探索過程を含み、採らなかった方向も残っている</li>
           <li><strong>色を足す前に、状態の 6 系統と予約色に寄せられないか確認する。</strong>寄せられないなら、それは新しい意味の追加なのでこの文書に足す</li>
+          <li><b>この文書が実演で見せている部品は、見た目を <code>app.css</code> にだけ置く。</b>Svelte 部品のスコープ CSS に写すと、写した時点の解釈で固まってずれる — <code>.stepper</code> は最初、面の色も動きも規格と違う状態で実装された。部品には振る舞いだけを持たせる</li>
           <li>角丸・アイコンサイズ・書体は<strong>段を増やさない。</strong>中間値が必要に見えたら、たいていは階層設計の問題</li>
           <li>密度(11px 見出し・9px ラベル)を役割トークンに寄せると 1 画面の情報量が減る。<strong>寄せるなら意識的な判断として決定記録に残す</strong></li>
           <li>変更したら実機で 3 タブとも確認する(<code>gui-smoke</code>)。スクリーンショットは <code>docs/screenshots/</code></li>

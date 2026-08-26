@@ -48,6 +48,10 @@ pub enum RandomOptionEffect {
     DependencyDamageRate(SkillDependency),
     /// 攻撃ダメージ(wiki: カテゴリX)
     AttackDamageRate,
+    /// 割合追加ダメージ(wiki: §5「新-割合」)。合計ダメージに乗る。
+    /// **発動条件(ボス限定・確率・石の消費)は満たしている前提で常に効くものとして入れる**
+    /// (ユーザー確認 2026-08-26)。条件は `note` に残す
+    AddedDamageRate,
     /// 命中P への加算(wiki `#AccuracyPoint`: 命中P割合増加の計算後に加算)
     AccuracyPoint,
     /// 回避P への加算
@@ -81,6 +85,8 @@ pub struct RandomOptionDef {
     pub id: &'static str,
     /// wiki 一覧表の「オプション」列(X などのプレースホルダは実値に置き換えた表現)
     pub name: &'static str,
+    /// 一覧のバッジに出す短い名前(「一般ボス」「魔攻」など)。名前をそのまま並べると読めない
+    pub short: &'static str,
     /// この OP が付く部位
     pub slot: crate::equipment::PartSlot,
     /// wiki 一覧表の「カテゴリー」列。同じ番号は 1 部位に 1 つまで(0 は制約なし)
@@ -90,6 +96,9 @@ pub struct RandomOptionDef {
     pub tiers: &'static [RandomOptionTier],
     /// 補足(発動条件・記録のみの理由・部位の別名など)
     pub note: &'static str,
+    /// **実際によく付ける OP**。画面はこれをチップで先に出し、残りは奥に置く
+    /// (ユーザー確認 2026-08-26)
+    pub common: bool,
 }
 
 impl RandomOptionDef {
@@ -159,6 +168,8 @@ pub struct RandomOptionTotals {
     pub dependency_damage_rate: DependencyRates,
     /// カテゴリX(攻撃ダメージ)
     pub attack_damage_rate: f64,
+    /// §5「新-割合」の割合追加ダメージ。Σ% の小数表現
+    pub added_damage_rate: f64,
     /// 命中P への加算
     pub accuracy_point: i64,
     /// 回避P への加算
@@ -178,6 +189,7 @@ impl RandomOptionTotals {
                 *self.dependency_damage_rate.get_mut(dependency) += value / 100.0;
             }
             RandomOptionEffect::AttackDamageRate => self.attack_damage_rate += value / 100.0,
+            RandomOptionEffect::AddedDamageRate => self.added_damage_rate += value / 100.0,
             RandomOptionEffect::AccuracyPoint => self.accuracy_point += value as i64,
             RandomOptionEffect::EvasionPoint => self.evasion_point += value as i64,
             RandomOptionEffect::AccuracyAndEvasionPoint => {
@@ -199,6 +211,8 @@ pub enum RandomOptionError {
     NotAllowed { slot: crate::equipment::PartSlot },
     #[error("ランダムオプション '{option_id}' の効果値は 0〜{max} です(指定値 {value})")]
     ValueOutOfRange { option_id: String, value: f64, max: f64 },
+    #[error("{slot:?} のランダムオプションは {max} 枠までです")]
+    TooMany { slot: crate::equipment::PartSlot, max: usize },
 }
 
 /// ランダムオプションの効果値の上限(wiki に全 OP 共通の上限は無い。
@@ -224,6 +238,8 @@ mod tests {
             effect,
             tiers: TIERS,
             note: "",
+            common: false,
+            short: "テスト",
         }
     }
 

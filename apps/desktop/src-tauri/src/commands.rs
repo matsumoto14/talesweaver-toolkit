@@ -79,7 +79,7 @@ pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::Elemen
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
         &gamedata::title_catalog(),
-        gamedata::actual_delay_skill_catalog(),
+        gamedata::character_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     Ok(element_preview(&character.game_character_id, &character.equipment, &character.stat_sources))
@@ -106,11 +106,66 @@ pub fn list_random_options() -> Vec<RandomOptionDef> {
     gamedata::random_option_catalog()
 }
 
-/// 中ディレイ減少スキルのカタログ(wiki: ステータス「中ディレイ倍率B」)。キャラ固有のパッシブのみ。
-/// 9 件しかないので全件返し、キャラでの絞り込みは UI 側で `game_character_id` を見て行う。
+/// マスタリーのカタログ(wiki: 各キャラの Skill ページ、スキル表の `P (M1)`〜`(M4)`)。
+/// 段ごとに 1 つだけ選ぶ。キャラでの絞り込みは UI 側で `game_character_id` を見て行う。
 #[tauri::command]
-pub fn list_actual_delay_skills() -> Vec<domain::ActualDelaySkillDef> {
-    gamedata::actual_delay_skill_catalog().to_vec()
+pub fn list_masteries() -> Vec<domain::MasteryDef> {
+    gamedata::mastery_catalog().to_vec()
+}
+
+/// 与ダメージ式のカテゴリへの寄与(キャラスキル + マスタリー + バフ + 装備アビリティ)。
+/// カタログが分かれているのでここでまとめる。
+fn damage_contributions_of(
+    sources: &domain::StatSources,
+    equipment: &domain::Equipment,
+) -> Vec<(domain::DamageCategory, f64)> {
+    let mut out = sources.character_skills.damage_contributions(
+        gamedata::character_skill_catalog(),
+        &sources.masteries,
+    );
+    out.extend(equipment.ability_damage_contributions(&gamedata::equipment_abilities()));
+    out.extend(sources.masteries.damage_contributions(gamedata::mastery_catalog()));
+    out.extend(domain::stat_sources::buff_damage_contributions(
+        &sources.buffs,
+        &gamedata::buff_catalog(),
+    ));
+    out
+}
+
+/// 中ディレイ減少の寄与(キャラスキル + マスタリー)。
+/// キャラスキルとマスタリーはカタログが別なので、ここでまとめる。
+fn actual_delay_contributions(
+    skills: &domain::CharacterSkills,
+    masteries: &domain::Masteries,
+) -> Vec<domain::ActualDelayContribution> {
+    let mut out =
+        skills.actual_delay_contributions(gamedata::character_skill_catalog(), masteries);
+    let catalog = gamedata::mastery_catalog();
+    for id in &masteries.picked {
+        if let Some(def) = catalog.iter().find(|d| d.id == id.as_str()) {
+            if let domain::SkillEffect::ActualDelay { percent } = def.effect {
+                out.push(domain::ActualDelayContribution {
+                    source: format!("マスタリー【{}】", def.name),
+                    rate: percent / 100.0,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// シエナのオーラで選べる能力値・追加オプションのカタログ(wiki: 装備システム/シエナのオーラ)。
+/// 中身は再抽選のランダム値なので、静的データとして持てるのは**種類と値域**だけ。
+#[tauri::command]
+pub fn list_siena_kinds() -> domain::SienaCatalog {
+    domain::siena_catalog()
+}
+
+/// キャラスキルのカタログ(パッシブ・自己バフ・味方バフ)。キャラでの絞り込みは
+/// UI 側で `game_character_id` と `audience` を見て行う(味方スキルは誰でも ON にできる)。
+#[tauri::command]
+pub fn list_character_skills() -> Vec<domain::CharacterSkillDef> {
+    gamedata::character_skill_catalog().to_vec()
 }
 
 /// 称号のカタログ(wiki: 称号システム)。主要称号のみ。
@@ -156,7 +211,7 @@ pub fn create_character(
             &gamedata::equipment_abilities(),
             &gamedata::random_option_catalog(),
             &gamedata::title_catalog(),
-            gamedata::actual_delay_skill_catalog(),
+            gamedata::character_skill_catalog(),
         )
     })
 }
@@ -180,7 +235,7 @@ pub fn update_character(
             &gamedata::equipment_abilities(),
             &gamedata::random_option_catalog(),
             &gamedata::title_catalog(),
-            gamedata::actual_delay_skill_catalog(),
+            gamedata::character_skill_catalog(),
         )
     })
 }
@@ -209,7 +264,6 @@ pub fn preview_effective_stats(
     equipment: domain::Equipment,
     common_skills: CommonSkills,
     awakening: domain::Awakening,
-    game_character_id: String,
     main_skill_id: Option<String>,
 ) -> CommandResult<domain::StatPreview> {
     let coefficients = attack_coefficients_of(main_skill_id.as_deref())?;
@@ -219,9 +273,10 @@ pub fn preview_effective_stats(
         &equipment,
         &common_skills,
         &gamedata::buff_catalog(),
+        gamedata::mastery_catalog(),
+        gamedata::character_skill_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
-        &game_character_id,
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
     )
@@ -241,7 +296,7 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
         &gamedata::title_catalog(),
-        gamedata::actual_delay_skill_catalog(),
+        gamedata::character_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let preview = domain::preview_effective_stats(
@@ -250,9 +305,10 @@ pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile>
         &character.equipment,
         &character.common_skills,
         &gamedata::buff_catalog(),
+        gamedata::mastery_catalog(),
+        gamedata::character_skill_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
-        &character.game_character_id,
         None,
         gamedata::awakening_caps(character.awakening).max_stat,
     )
@@ -354,9 +410,22 @@ fn build_damage_input(
     let equipment_coefficients = gamedata::equipment_coefficients(skill.dependency);
     let awakening_rate = gamedata::awakening_rate(awakening);
     let (mut stat_modifiers, mut stat_contributions) =
-        domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog(), game_character_id)
+        domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog())
             .map_err(|e| e.to_string())?;
     domain::stat_sources::apply_siena_stats(&mut stat_modifiers, &mut stat_contributions, &equipment);
+    domain::stat_sources::apply_masteries(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &stat_sources.masteries,
+        gamedata::mastery_catalog(),
+    );
+    domain::stat_sources::apply_character_skills(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &stat_sources.character_skills,
+        &stat_sources.masteries,
+        gamedata::character_skill_catalog(),
+    );
     domain::stat_sources::apply_unleash(&mut stat_modifiers, &mut stat_contributions, &common_skills);
     if let Some(temp) = &temporary_adjustments {
         temp.validate().map_err(|e| e.to_string())?;
@@ -366,6 +435,9 @@ fn build_damage_input(
     let equipment_enhanced_totals = equipment.enhanced_totals(core_region);
     let random_options = equipment.random_option_totals(&gamedata::random_option_catalog());
     let added_damage = weapon_added_damage(&equipment.parts.weapon);
+    let title_damage_rate =
+        domain::title_attack_damage_rate(equipment.title.as_deref(), &gamedata::title_catalog());
+    let damage_contributions = damage_contributions_of(stat_sources, &equipment);
     let element_value = element_value_for(game_character_id, &equipment, stat_sources, &skill);
     Ok(DamageInput::new(
         base_stats.clone(),
@@ -379,6 +451,8 @@ fn build_damage_input(
         equipment_coefficients,
         gamedata::accuracy_correction(skill.dependency),
         random_options,
+        title_damage_rate,
+        damage_contributions.clone(),
         added_damage,
         awakening_rate,
         gamedata::awakening_caps(awakening).max_damage,
@@ -389,7 +463,10 @@ fn build_damage_input(
         element_value,
         stat_sources.adjustments.clone(),
         temporary_adjustments,
-        stat_sources.actual_delay_skills.contributions(gamedata::actual_delay_skill_catalog()),
+        actual_delay_contributions(
+            &stat_sources.character_skills,
+            &stat_sources.masteries,
+        ),
         stat_sources.critical_rate,
         gamedata::skill_uses_table(),
     ))
@@ -439,7 +516,7 @@ pub fn preview_damage(
         &gamedata::equipment_abilities(),
         &gamedata::random_option_catalog(),
         &gamedata::title_catalog(),
-        gamedata::actual_delay_skill_catalog(),
+        gamedata::character_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let content = find_content(&content_id)?;
@@ -483,22 +560,25 @@ pub fn evaluate_contents(
         &equipment_abilities,
         &random_options,
         &titles,
-        gamedata::actual_delay_skill_catalog(),
+        gamedata::character_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
     // ループ不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
     // カタログとステ補正を再構築すると、この最重量パスで無駄な再計算になる(PR レビュー指摘)。
-    let (mut stat_modifiers, mut stat_contributions) = domain::stat_sources::build_modifiers(
-        &character.stat_sources,
-        &catalog,
-        &character.game_character_id,
-    )
-    .map_err(|e| e.to_string())?;
+    let (mut stat_modifiers, mut stat_contributions) =
+        domain::stat_sources::build_modifiers(&character.stat_sources, &catalog)
+            .map_err(|e| e.to_string())?;
     domain::stat_sources::apply_siena_stats(
         &mut stat_modifiers,
         &mut stat_contributions,
         &character.equipment,
+    );
+    domain::stat_sources::apply_masteries(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &character.stat_sources.masteries,
+        gamedata::mastery_catalog(),
     );
     domain::stat_sources::apply_unleash(
         &mut stat_modifiers,
@@ -506,10 +586,12 @@ pub fn evaluate_contents(
         &character.common_skills,
     );
     let awakening_rate = gamedata::awakening_rate(character.awakening);
-    let actual_delay_skills = character
-        .stat_sources
-        .actual_delay_skills
-        .contributions(gamedata::actual_delay_skill_catalog());
+    let actual_delay_skills = actual_delay_contributions(
+        &character.stat_sources.character_skills,
+        &character.stat_sources.masteries,
+    );
+    let damage_contributions =
+        damage_contributions_of(&character.stat_sources, &character.equipment);
     let skill_uses = gamedata::skill_uses_table();
     // 装備集計(基本能力値・武器追加固定ダメージ)はキャラのみ依存なのでループの外で 1 回だけ計算する。
     let equipment_base_totals = character.equipment.base_totals(&equipment_abilities, &titles);
@@ -551,6 +633,8 @@ pub fn evaluate_contents(
                 continue;
             };
             let equipment_enhanced_totals = enhanced_for(content.core_region);
+            let title_damage_rate =
+                domain::title_attack_damage_rate(character.equipment.title.as_deref(), &titles);
             let enemy = find_enemy(enemy_id)?;
             let mut best: Option<BestSkillDamage> = None;
             let mut best_dependency: Option<domain::SkillDependency> = None;
@@ -567,6 +651,8 @@ pub fn evaluate_contents(
                     gamedata::equipment_coefficients(skill.dependency),
                     gamedata::accuracy_correction(skill.dependency),
                     random_option_totals,
+                    title_damage_rate,
+                    damage_contributions.clone(),
                     added_damage,
                     awakening_rate,
                     gamedata::awakening_caps(character.awakening).max_damage,

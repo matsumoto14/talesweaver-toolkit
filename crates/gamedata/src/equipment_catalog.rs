@@ -5,7 +5,10 @@
 //! Item/防具/腕/盾＋ / Item/アクセサリ/顔・体・手・足・エフェクト(取得 2026-08-24)。
 //! docs/claude/goals/2026-08-24-equipment-parts.md「wiki 調査結果」「カタログ seed」節参照。
 
-use domain::{EnhanceRates, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentValues, PartSlot};
+use domain::{
+    DamageCategory, EnhanceRates, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentValues,
+    PartSlot, SkillEffect,
+};
 
 use crate::Source;
 
@@ -439,16 +442,47 @@ fn ability(
     family: EquipmentAbilityFamily,
     values: EquipmentValues,
 ) -> EquipmentAbilityDef {
-    EquipmentAbilityDef { id, name, family, values }
+    EquipmentAbilityDef { id, name, family, values, damage_effects: &[] }
 }
+
+/// 追加効果「ダメージ増加 +n%」付き(wiki: アビリティ表の「追加効果」列。R- 以上の段)。
+/// **装備攻撃力ではなくカテゴリX3(攻撃ダメージ(基本発動)、上限 +80%)に入る。**
+fn ability_with_damage(
+    id: &'static str,
+    name: &'static str,
+    family: EquipmentAbilityFamily,
+    values: EquipmentValues,
+    damage_effects: &'static [SkillEffect],
+) -> EquipmentAbilityDef {
+    EquipmentAbilityDef { id, name, family, values, damage_effects }
+}
+
+/// R- 段の追加効果。全 4 系統で共通の +3%。
+const DAMAGE_3: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageBasicTrigger,
+    percent: 3.0,
+}];
+/// L- 段の追加効果。
+const DAMAGE_4: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageBasicTrigger,
+    percent: 4.0,
+}];
+/// E- 段の追加効果。
+const DAMAGE_6: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageBasicTrigger,
+    percent: 6.0,
+}];
 
 /// 武器アビリティは装備攻撃力(突き/斬り/魔攻/魔防)にしか効かない。
 fn a(thrust: i64, slash: i64, magic_attack: i64, magic_defense: i64) -> EquipmentValues {
     EquipmentValues { thrust, slash, magic_attack, magic_defense, ..Default::default() }
 }
 
-/// 武器アビリティカタログ(装備攻撃力に効く 4 系統 × 7 段 = 28 件。wiki: 装備システム/アビリティ)。
-/// 段は (下)/(中)/(上)/N-/R-/L-/E- で値 +2/+3/+4/+6/+7/+8/+9。
+/// 武器アビリティカタログ(4 系統 × 7 段 = 28 件。wiki: 装備システム/アビリティ)。
+/// 段は (下)/(中)/(上)/N-/R-/L-/E- で装備攻撃力 +2/+3/+4/+6/+7/+8/+9。
+///
+/// **R- 以上には追加効果「ダメージ増加 +3/+4/+6%」が付く。**これは装備攻撃力ではなく
+/// 与ダメージ式のカテゴリX3(攻撃ダメージ(基本発動)、上限 +80%)に入る。
 pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
     vec![
         // 尖った刃(突き攻撃力)
@@ -456,38 +490,66 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ability("pointed-blade-mid", "(中)尖った刃", EquipmentAbilityFamily::PointedBlade, a(3, 0, 0, 0)),
         ability("pointed-blade-high", "(上)尖った刃", EquipmentAbilityFamily::PointedBlade, a(4, 0, 0, 0)),
         ability("pointed-blade-n", "N-尖った刃", EquipmentAbilityFamily::PointedBlade, a(6, 0, 0, 0)),
-        ability("pointed-blade-r", "R-尖った刃", EquipmentAbilityFamily::PointedBlade, a(7, 0, 0, 0)),
-        ability("pointed-blade-l", "L-尖った刃", EquipmentAbilityFamily::PointedBlade, a(8, 0, 0, 0)),
-        ability("pointed-blade-e", "E-尖った刃", EquipmentAbilityFamily::PointedBlade, a(9, 0, 0, 0)),
+        ability_with_damage("pointed-blade-r", "R-尖った刃", EquipmentAbilityFamily::PointedBlade, a(7, 0, 0, 0), DAMAGE_3),
+        ability_with_damage("pointed-blade-l", "L-尖った刃", EquipmentAbilityFamily::PointedBlade, a(8, 0, 0, 0), DAMAGE_4),
+        ability_with_damage("pointed-blade-e", "E-尖った刃", EquipmentAbilityFamily::PointedBlade, a(9, 0, 0, 0), DAMAGE_6),
         // 鋭い刃(斬り攻撃力)
         ability("sharp-blade-low", "(下)鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 2, 0, 0)),
         ability("sharp-blade-mid", "(中)鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 3, 0, 0)),
         ability("sharp-blade-high", "(上)鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 4, 0, 0)),
         ability("sharp-blade-n", "N-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 6, 0, 0)),
-        ability("sharp-blade-r", "R-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 7, 0, 0)),
-        ability("sharp-blade-l", "L-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 8, 0, 0)),
-        ability("sharp-blade-e", "E-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 9, 0, 0)),
+        ability_with_damage("sharp-blade-r", "R-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 7, 0, 0), DAMAGE_3),
+        ability_with_damage("sharp-blade-l", "L-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 8, 0, 0), DAMAGE_4),
+        ability_with_damage("sharp-blade-e", "E-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 9, 0, 0), DAMAGE_6),
         // 知力(魔法攻撃力)
         ability("intelligence-low", "(下)知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 2, 0)),
         ability("intelligence-mid", "(中)知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 3, 0)),
         ability("intelligence-high", "(上)知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 4, 0)),
         ability("intelligence-n", "N-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 6, 0)),
-        ability("intelligence-r", "R-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 7, 0)),
-        ability("intelligence-l", "L-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 8, 0)),
-        ability("intelligence-e", "E-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 9, 0)),
+        ability_with_damage("intelligence-r", "R-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 7, 0), DAMAGE_3),
+        ability_with_damage("intelligence-l", "L-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 8, 0), DAMAGE_4),
+        ability_with_damage("intelligence-e", "E-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 9, 0), DAMAGE_6),
         // 耐魔力(魔法防御力)
         ability("magic-resistance-low", "(下)耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 2)),
         ability("magic-resistance-mid", "(中)耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 3)),
         ability("magic-resistance-high", "(上)耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 4)),
         ability("magic-resistance-n", "N-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 6)),
-        ability("magic-resistance-r", "R-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 7)),
-        ability("magic-resistance-l", "L-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 8)),
-        ability("magic-resistance-e", "E-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 9)),
+        ability_with_damage("magic-resistance-r", "R-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 7), DAMAGE_3),
+        ability_with_damage("magic-resistance-l", "L-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 8), DAMAGE_4),
+        ability_with_damage("magic-resistance-e", "E-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 9), DAMAGE_6),
     ]
 }
 
 #[cfg(test)]
 mod tests {
+    use domain::{DamageCategory, SkillEffect};
+
+    /// R- 以上のアビリティには追加効果「ダメージ増加 +3/+4/+6%」が付く
+    /// (wiki: 装備システム/アビリティ の「追加効果」列)。**装備攻撃力ではなくカテゴリX3**。
+    #[test]
+    fn r_以上のアビリティはx3のダメージ増加を持つ() {
+        let expected = [("-r", 3.0), ("-l", 4.0), ("-e", 6.0)];
+        for def in equipment_abilities() {
+            let want = expected.iter().find(|(suffix, _)| def.id.ends_with(suffix));
+            match want {
+                Some((_, percent)) => assert_eq!(
+                    def.damage_effects,
+                    &[SkillEffect::Damage {
+                        category: DamageCategory::AttackDamageBasicTrigger,
+                        percent: *percent,
+                    }],
+                    "{}",
+                    def.id
+                ),
+                None => assert!(def.damage_effects.is_empty(), "{}", def.id),
+            }
+        }
+        // 4 系統 × R/L/E = 12 件
+        let with_damage =
+            equipment_abilities().iter().filter(|d| !d.damage_effects.is_empty()).count();
+        assert_eq!(with_damage, 12);
+    }
+
     use super::*;
     use std::collections::HashSet;
 

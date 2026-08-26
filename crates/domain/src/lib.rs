@@ -4,6 +4,7 @@
 //! ①能力値計算(`stats`) → ②カテゴリ集計(`category`) → ③与ダメージ式(`damage`) → ④段数。
 
 pub mod actual_delay;
+pub mod character_skill;
 pub mod attack_power;
 pub mod awakening;
 pub mod category;
@@ -15,8 +16,10 @@ pub mod defense;
 pub mod element;
 pub mod enemy;
 pub mod equipment;
+pub mod mastery;
 pub mod random_option;
 pub mod rounding;
+pub mod siena;
 pub mod skill;
 pub mod stat_sources;
 pub mod stats;
@@ -25,9 +28,12 @@ pub mod title;
 pub mod ultimate_skill;
 
 pub use actual_delay::{
-    actual_delay, ActualDelay, ActualDelayContribution, ActualDelayError, ActualDelaySkillCatalog,
-    ActualDelaySkillDef, ActualDelaySkills, SkillUsesTable, ACTUAL_DELAY_MIN,
+    actual_delay, ActualDelay, ActualDelayContribution, SkillUsesTable, ACTUAL_DELAY_MIN,
     ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
+};
+pub use character_skill::{
+    CharacterSkillCatalog, CharacterSkillDef, CharacterSkillError, CharacterSkills,
+    MasteryOverride, SkillAudience, SkillEffect,
 };
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
@@ -45,8 +51,8 @@ pub use content::{
     ContentRequirement, ContentSeries, RequirementCheck,
 };
 pub use critical_rate::{
-    critical_rate, CriticalRate, CriticalRateSourceId, CriticalRateSources,
-    CRITICAL_RATE_BONUS_MAX,
+    critical_rate, CriticalRate, CriticalRateError, CriticalRateSourceId, CriticalRateSources,
+    ARCHITECT_LAB_PER_STAGE, ARCHITECT_LAB_STAGE_MAX, CRITICAL_RATE_BONUS_MAX,
 };
 pub use damage::{
     calculate_damage, evaluate, DamageInput, DamageResult, DamageTrace, DamageTriple, DpsTriple,
@@ -64,23 +70,26 @@ pub use equipment::{
     equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment,
     EquipmentAbilityDef, EquipmentAbilityFamily,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentParts, EquipmentRates,
-    EquipmentValues, PartSlot, SienaAura, SienaStatBonus, ENHANCE_LEVEL_MAX,
-    ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
-    SIENA_ACTUAL_DELAY_PERCENT_MAX, SIENA_ALL_STATS_BONUS_MAX,
-    SIENA_CRITICAL_RATE_PERCENT_MAX, SIENA_DEFENSE_RATE_PERCENT_MAX,
-    SIENA_STAGE_MAX, SIENA_STAT_BONUS_MAX,
+    EquipmentValues, PartSlot, SienaStatBonus, ENHANCE_LEVEL_MAX,
+    ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
 };
+pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};
 pub use random_option::{
     DependencyRates, RandomOptionDef, RandomOptionEffect, RandomOptionError, RandomOptionRank,
     RandomOptionSlot, RandomOptionTier, RandomOptionTotals, RANDOM_OPTION_VALUE_MAX,
 };
 pub use rounding::{floor_int, trunc2};
-pub use skill::{Skill, SkillDependency};
+pub use siena::{
+    siena_catalog, SienaAura, SienaCatalog, SienaError, SienaExtraKind, SienaExtraKindDef,
+    SienaExtraSlot, SienaSlot, SienaValueKind, SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES,
+    SIENA_STAGE_MAX,
+};
+pub use skill::{Skill, SkillDependency, SkillTarget};
 pub use stat_sources::{
-    apply_pins, apply_temporary_adjustments, apply_unleash, build_modifiers,
+    apply_character_skills, apply_masteries, apply_pins, apply_temporary_adjustments, apply_unleash, build_modifiers,
     preview_effective_stats, stat_limits,
     Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice, BuffDefinition,
-    BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown, MonsterCards, PartAttackContribution,
+    BuffSelection, BuffTarget, BuffValue, Crown, MonsterCards, PartAttackContribution,
     PetSkillTier,
     PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution, StatLayer, StatLimits,
     StatPreview, StatSourceError, StatSources,
@@ -89,7 +98,9 @@ pub use stats::{
     effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind,
     StatModifierSet, StatModifiers, StatTrace, BASE_STAT_MAX,
 };
-pub use title::{title_values, TitleDef, TitleError, TitleKind};
+pub use title::{
+    title_attack_damage_rate, title_values, TitleDef, TitleError, TitleKind,
+};
 pub use ultimate_skill::{
     UltimateSkill, UltimateSkillError, UltimateSkills, HYPER_LIMIT_LEVEL_MAX, ULTIMATE_SKILL_SLOTS,
 };

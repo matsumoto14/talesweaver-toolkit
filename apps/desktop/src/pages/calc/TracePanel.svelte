@@ -55,7 +55,7 @@
 
   <div class="section-label"><span>(a) 能力値計算</span><span class="rule"></span></div>
   <div class="tbl">
-    <table class="grid">
+    <table class="grid ro">
       <thead><tr>
         <th>ステ</th><th class="n">最終</th><th class="n">素</th><th class="n">Σ割合</th><th class="n">固定</th><th class="n">Π倍率A</th>
         <th class="n">基本</th><th class="n">倍率B</th><th class="n">[基本×B]</th><th class="n">最終固定</th>
@@ -98,7 +98,7 @@
     {#if contributions.length === 0}
       <p class="empty dim">補正源なし(素ステのみ)</p>
     {:else}
-      <table class="grid">
+      <table class="grid ro">
         <thead><tr><th>ステ</th><th>出典</th><th>層</th><th class="n">値</th></tr></thead>
         <tbody>
           {#each contributions as c, i (i)}
@@ -116,7 +116,7 @@
 
   <div class="section-label"><span>(b) カテゴリ集計</span><span class="rule"></span><span class="dim">ハイライト = 非中立値</span></div>
   <div class="tbl">
-    <table class="grid">
+    <table class="grid ro">
       <thead><tr>
         <th>記号</th><th>カテゴリ</th><th>種別</th><th class="n">集計値</th><th class="n">係数</th><th class="n">キャップ</th>
       </tr></thead>
@@ -144,7 +144,7 @@
     </span>
   </div>
   <div class="tbl">
-    <table class="grid">
+    <table class="grid ro">
       <thead><tr><th>#</th><th>段</th><th>式</th><th class="n">値</th></tr></thead>
       <tbody>
         {#each steps as s, i (i)}
@@ -172,7 +172,7 @@
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
   .section-label { padding: 10px 2px 8px; }
-  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: #fff; }
+  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); }
   .empty { padding: 10px 12px; font-size: 11px; }
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }
@@ -187,6 +187,6 @@
   tr.active td { background: var(--bg-active); }
   tr.active td.sym { color: var(--warm); }
   .tabs { display: flex; border: 1px solid var(--border); border-radius: var(--r-inset); overflow: hidden; letter-spacing: 0; }
-  .tabs button { padding: 3px 10px; background: #fff; color: var(--fg-muted); font-size: 11px; }
+  .tabs button { padding: 3px 10px; background: var(--bg-field); color: var(--fg-muted); font-size: 11px; }
   .tabs button.on { background: var(--bg-active); color: var(--accent-hover); font-weight: 700; }
 </style>

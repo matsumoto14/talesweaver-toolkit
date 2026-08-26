@@ -12,12 +12,14 @@ import {
   listEquipmentCatalog,
   listGameCharacters,
   listRandomOptions,
-  listActualDelaySkills,
+  listMasteries,
+  listSienaKinds,
+  listCharacterSkills,
   listSkills,
   listTitles,
 } from "./api/commands";
 import type {
-  ActualDelaySkillDef,
+  CharacterSkillDef,
   BuffDefinition,
   ElementSourceDef,
   Content,
@@ -28,7 +30,9 @@ import type {
   GameCharacter,
   NewCharacter,
   RandomOptionDef,
+  MasteryDef,
   RegisteredCharacter,
+  SienaCatalog,
   Skill,
   TitleDef,
 } from "./api/types";
@@ -47,10 +51,14 @@ export const app = $state({
   equipmentAbilities: [] as EquipmentAbilityDef[],
   /** ランダムオプションのカタログ(wiki: ランダムオプション) */
   randomOptions: [] as RandomOptionDef[],
+  /** シエナのオーラで選べる能力値・追加オプション(wiki: 装備システム/シエナのオーラ) */
+  siena: { values: [], extras: [], extra_unlock_stages: [3, 7, 10], stage_max: 10 } as SienaCatalog,
   /** 称号のカタログ(主要称号のみ) */
   titles: [] as TitleDef[],
   /** 中ディレイ減少スキル(wiki: ステータス「中ディレイ倍率B」)。キャラ固有のパッシブのみ */
-  actualDelaySkills: [] as ActualDelaySkillDef[],
+  characterSkills: [] as CharacterSkillDef[],
+  /** マスタリー(wiki: 各キャラの Skill ページ。段ごとに 1 つ選ぶ) */
+  masteries: [] as MasteryDef[],
   /** 属性値の供給源カタログ(装備の属性強化以外) */
   elementSources: [] as ElementSourceDef[],
   selectedId: null as number | null,
@@ -147,7 +155,7 @@ export async function loadAll(): Promise<void> {
   try {
     const [
       characters, gameCharacters, areas, catalog, equipmentCatalog, equipmentAbilities, elementSources,
-      randomOptions, titles, actualDelaySkills,
+      randomOptions, titles, characterSkills, siena, masteries,
     ] = await Promise.all([
       listCharacters(),
       listGameCharacters(),
@@ -158,7 +166,9 @@ export async function loadAll(): Promise<void> {
       listElementSources(),
       listRandomOptions(),
       listTitles(),
-      listActualDelaySkills(),
+      listCharacterSkills(),
+      listSienaKinds(),
+      listMasteries(),
     ]);
     app.characters = characters;
     app.gameCharacters = gameCharacters;
@@ -169,7 +179,9 @@ export async function loadAll(): Promise<void> {
     app.elementSources = elementSources;
     app.randomOptions = randomOptions;
     app.titles = titles;
-    app.actualDelaySkills = actualDelaySkills;
+    app.characterSkills = characterSkills;
+    app.siena = siena;
+    app.masteries = masteries;
     if (app.selectedId === null && characters.length > 0) app.selectedId = characters[0].id;
     await Promise.all(characters.map(refreshEvaluation));
   } catch (e) {

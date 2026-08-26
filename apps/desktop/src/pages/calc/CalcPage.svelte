@@ -10,7 +10,7 @@
     Skill, StatKind,
   } from "../../api/types";
   import {
-    isBlocked, isChoiceValue, isConsumable, isFixedValue, isPercentLayer, isUserSelectedTarget,
+    isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
     toggleBuff, userInputRange,
   } from "../../buffs";
   import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
@@ -26,7 +26,10 @@
   import Icon from "../../ui/Icon.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import Select from "../../ui/Select.svelte";
+  import StepSelect from "../../ui/StepSelect.svelte";
   import Splitter from "../../ui/Splitter.svelte";
+  import { bump } from "../../ui/motion.svelte";
+  import { badgeStyle, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
 
@@ -242,18 +245,15 @@
     if (hasReqs && !entryOk) return ratio >= 1 ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   });
-  const BADGE = ["余裕", "通る", "ぎりぎり", "届かない", "条件・火力とも未達", "条件だけ未達", "判定中"];
-  const BADGE_BG = ["#DCEBFF", "#DFF3E6", "#FDF3DE", "#F6E8E5", "#ECEEF2", "#EFEEF8", "#ECEEF2"];
-  const BADGE_BD = ["#426DD6", "#6FA98A", "#C2A057", "#B08480", "#A9B4C4", "var(--sim)", "#A9B4C4"];
-  const BADGE_FG = ["#2B4FA8", "#2E6B4C", "#7A6420", "#8C4A42", "#5E6E88", "#4A4780", "#5E6E88"];
-  const BAR_BG = [
-    "linear-gradient(90deg,#90D7FF,#426DD6)",
-    "linear-gradient(90deg,#9FD9BC,#3E8C63)",
-    "linear-gradient(90deg,#F0D79A,#C2A057)",
-    "linear-gradient(90deg,#E8B3A2,#B0574A)",
-    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
-    "linear-gradient(90deg,#C3C1E4,var(--sim))",
-    "linear-gradient(90deg,#CBD3DE,#9AA6B6)",
+  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)
+  const BADGE: Badge[] = [
+    { label: "余裕", state: "goal" },
+    { label: "通る", state: "met" },
+    { label: "ぎりぎり", state: "edge" },
+    { label: "届かない", state: "short" },
+    { label: "条件・火力とも未達", state: "unknown" },
+    { label: "条件だけ未達", state: "temp" },
+    { label: "判定中", state: "unknown" },
   ];
 
   // --- なぜこの数字?(トレースの式から組み立て) ---------------------------
@@ -271,9 +271,9 @@
   const atkRows = $derived.by(() => {
     if (atkA === null) return [];
     const raw = [
-      { k: "ステ攻撃力", v: atkStat ?? 0, c: "#9AA6B6", note: "素ステ・補正源から" },
-      { k: "装備攻撃力", v: atkEquip ?? 0, c: "#426DD6", note: "基本/強化 × 依存別係数" },
-      { k: "装備攻撃力強化倍率", v: atkBonus, c: "var(--sim)", note: "パワーW・ストロングW" },
+      { k: "ステ攻撃力", v: atkStat ?? 0, c: "var(--flow-base)", note: "素ステ・補正源から" },
+      { k: "装備攻撃力", v: atkEquip ?? 0, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
+      { k: "装備攻撃力強化倍率", v: atkBonus, c: "var(--flow-2)", note: "パワーW・ストロングW" },
     ].filter((x) => x.v > 0);
     const total = raw.reduce((a, x) => a + x.v, 0) || 1;
     return raw.map((x) => ({
@@ -300,13 +300,13 @@
     c: string;
   }
   const FLOW_COLORS: Record<string, string> = {
-    "スキル倍率": "#426DD6",
-    "クリティカル": "#5B8FD6",
-    "コンボ・属性・カット率・オーラ": "#3E8C63",
-    "最終ダメージ固定値(下限)": "#6FA98A",
-    "最終ダメージ・カット率A・被害減少": "#8FBFA6",
-    "各種ダメージ増減": "#C2A057",
-    "攻撃ダメージ・PVP補正": "#B0824A",
+    "スキル倍率": "var(--flow-1)",
+    "クリティカル": "var(--flow-2)",
+    "コンボ・属性・カット率・オーラ": "var(--flow-3)",
+    "最終ダメージ固定値(下限)": "var(--flow-4)",
+    "最終ダメージ・カット率A・被害減少": "var(--flow-5)",
+    "各種ダメージ増減": "var(--flow-6)",
+    "攻撃ダメージ・PVP補正": "var(--flow-7)",
   };
   const FACTOR_STEPS = new Set(["スキル倍率", "クリティカル", "コンボ・属性・カット率・オーラ"]);
   const RUNNING_STEPS = new Set([
@@ -318,14 +318,14 @@
   const flowRows = $derived.by<FlowRow[]>(() => {
     if (pierced === null) return [];
     let running = pierced;
-    const rows: FlowRow[] = [{ k: "抜けた分(素通り)", add: pierced, mult: "—", c: "#93A0B2" }];
+    const rows: FlowRow[] = [{ k: "抜けた分(素通り)", add: pierced, mult: "—", c: "var(--fg-dim)" }];
     for (const s of stepsMax) {
       if (FACTOR_STEPS.has(s.name)) {
         const next = running * s.value;
-        rows.push({ k: s.name, add: next - running, mult: `×${s.value.toFixed(2)}`, c: FLOW_COLORS[s.name] ?? "#93A0B2" });
+        rows.push({ k: s.name, add: next - running, mult: `×${s.value.toFixed(2)}`, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)" });
         running = next;
       } else if (RUNNING_STEPS.has(s.name)) {
-        rows.push({ k: s.name, add: s.value - running, mult: "—", c: FLOW_COLORS[s.name] ?? "#93A0B2" });
+        rows.push({ k: s.name, add: s.value - running, mult: "—", c: FLOW_COLORS[s.name] ?? "var(--fg-dim)" });
         running = s.value;
       }
     }
@@ -358,6 +358,106 @@
   };
   const cappedCategories = $derived(activeCategories.filter((c) => catLoss(c) > 1e-9));
 
+  // --- 効いていない分の棚卸し(design-system §14 決定 2)---------------------
+  // 上限で捨てた分は 能力値上限 / カテゴリ上限 / ダメージ上限 / 防御力上限 / 中ディレイ
+  // の 5 階層に散っている。5 箇所を回らないと総ロスが分からない状態は
+  // 「効いていない量を見せるのがこの道具の価値」(§00)を薄めるので、1 箇所に集める。
+  // 斜線の記号は各所で使ったまま、棚卸しだけをここに寄せる。新しい画面は作らない。
+  interface LostRow {
+    /** どの上限か */
+    k: string;
+    /** 上限にぶつかる前の値 */
+    raw: string;
+    /** 実際に効いている値 */
+    val: string;
+    /** 捨てている量 */
+    loss: string;
+    /** 効いている割合(0〜1)。塗り = 効いている量、斜線 = 捨てた量 */
+    kept: number;
+  }
+  const lostRows = $derived.by<LostRow[]>(() => {
+    const out: LostRow[] = [];
+    // 能力値上限(覚醒段階 + エタの意志 Lv)
+    for (const s of result?.trace.stats ?? []) {
+      if (s.capped_loss > 1e-9) {
+        const before = s.effective + s.capped_loss;
+        out.push({
+          k: `能力値上限 ${STAT_LABELS[s.kind]}`,
+          raw: fmtInt(before),
+          val: fmtInt(s.stat_cap),
+          loss: fmtInt(s.capped_loss),
+          kept: before > 0 ? s.effective / before : 1,
+        });
+      }
+    }
+    // カテゴリ上限。合算してから切るので、積んだのに効いていない量が数値で見えないと詰み手前が分からない
+    for (const c of cappedCategories) {
+      out.push({
+        k: `カテゴリ上限 ${c.label}`,
+        raw: fmtCatRaw(c),
+        val: fmtCatValue(c),
+        loss: fmtCatLoss(c),
+        kept: Math.abs(c.raw) > 1e-9 ? Math.abs(c.value) / Math.abs(c.raw) : 1,
+      });
+    }
+    // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)
+    if (result !== null && result.capped_loss.max > 0) {
+      const before = result.per_hit.max + result.capped_loss.max;
+      out.push({
+        k: "ダメージ上限(1 段ごと)",
+        raw: fmtInt(before),
+        val: fmtInt(result.damage_cap),
+        loss: fmtInt(result.capped_loss.max),
+        kept: before > 0 ? result.per_hit.max / before : 1,
+      });
+    }
+    // 防御力上限。防御タブと同じ値だが、棚卸しのために回らせない
+    if (defense !== null) {
+      const d = defense;
+      const rows: [string, number, number][] = [
+        ["物理", d.physical_defense, d.physical_defense_loss],
+        ["魔法", d.magic_defense, d.magic_defense_loss],
+        ["複合", d.composite_defense, d.composite_defense_loss],
+      ];
+      for (const [name, value, loss] of rows) {
+        if (loss > 1e-9) {
+          const before = value + loss;
+          out.push({
+            k: `防御力上限 ${name}`,
+            raw: fmtInt(before),
+            val: fmtInt(d.defense_cap),
+            loss: fmtInt(loss),
+            kept: before > 0 ? value / before : 1,
+          });
+        }
+      }
+    }
+    // 中ディレイ。減少値の上限(70%)と秒そのものの下限(0.3s)は別の捨て方なので分けて出す
+    const ad = result?.actual_delay ?? null;
+    if (ad !== null) {
+      if (ad.reduction_raw > ad.reduction + 1e-9) {
+        out.push({
+          k: "中ディレイ減少の上限(70%)",
+          raw: `${(ad.reduction_raw * 100).toFixed(0)}%`,
+          val: `${(ad.reduction * 100).toFixed(0)}%`,
+          loss: `${((ad.reduction_raw - ad.reduction) * 100).toFixed(0)}%`,
+          kept: ad.reduction_raw > 0 ? ad.reduction / ad.reduction_raw : 1,
+        });
+      }
+      if (ad.floored) {
+        const want = ad.base * (1 - ad.reduction) * ad.combo_rate;
+        out.push({
+          k: "中ディレイの下限(0.3s)",
+          raw: `${want.toFixed(2)}s`,
+          val: `${ad.value.toFixed(2)}s`,
+          loss: `${(ad.value - want).toFixed(2)}s ぶん遅い`,
+          kept: ad.value > 0 ? want / ad.value : 1,
+        });
+      }
+    }
+    return out;
+  });
+
   // --- 攻撃 / 防御タブ(規格シート 5c) --------------------------------------
   let side = $state<"attack" | "defense">("attack");
   let defense = $state<DefenseProfile | null>(null);
@@ -384,10 +484,24 @@
   });
 
   // --- 試し変更(sim) ------------------------------------------------------
+  /**
+   * 同時に試せる変更の上限(design-system §14 決定 6)。
+   * 5〜6 個同時に動くとチップ列が読めなくなる。「試しセットに名前を付けて保存」に逃げると
+   * ラベンダー = 保存されない の意味が壊れるので、機能側に制約を置く。
+   * 上限に達したことは**色ではなく文言**で伝える(ラベンダーに 2 つ目の意味を持たせない)。
+   */
+  const SIM_LIMIT = 3;
+  /** 上限で弾いた直後だけ立てる。次の操作が通ったら下ろす */
+  let simLimited = $state(false);
   function editSim(fn: (p: NewCharacter) => void) {
     if (!payload) return;
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
     fn(p);
+    if (savedPayload !== null && KNOBS.filter((k) => k.get(p) !== k.get(savedPayload)).length > SIM_LIMIT) {
+      simLimited = true;
+      return;
+    }
+    simLimited = false;
     app.sim = p;
   }
   const simActive = $derived(app.sim !== null);
@@ -396,6 +510,7 @@
   );
   function resetSim() {
     app.sim = null;
+    simLimited = false;
   }
   let saving = $state(false);
   async function saveSim() {
@@ -509,6 +624,7 @@
     const p = JSON.parse(JSON.stringify(app.sim)) as NewCharacter;
     k.set(p, k.get(savedPayload));
     app.sim = JSON.stringify(p) === JSON.stringify(savedPayload) ? null : p;
+    simLimited = false;
   }
 
   // --- もし〜だったら ------------------------------------------------------
@@ -518,6 +634,8 @@
     deltaPct: number;
   }
   let whatIf = $state<WhatIf[]>([]);
+  /** 試した候補の数。0 件のときに「候補が無い」のか「超えるものが無い」のかを書き分ける */
+  let whatIfTried = $state(0);
   let whatIfSeq = 0;
   let whatIfHandle: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
@@ -529,6 +647,7 @@
     if (whatIfHandle) clearTimeout(whatIfHandle);
     if (!pJson || !t || !sid || base === null) {
       whatIf = [];
+      whatIfTried = 0;
       return;
     }
     const seq = ++whatIfSeq;
@@ -552,6 +671,7 @@
         const rs = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
         if (seq === whatIfSeq) {
           whatIf = rs.filter((w) => w.perHit > base).sort((a, b) => b.perHit - a.perHit);
+          whatIfTried = list.length;
         }
       } catch (e) {
         if (seq === whatIfSeq) reportError(errorMessage(e));
@@ -566,7 +686,8 @@
   }
 
   // --- 右カラム: バフ・装備の編集(試し変更として) -------------------------
-  const consumableBuffs = $derived(app.catalog.filter(isConsumable));
+  // バフカタログは常用バフ専用(キャラスキルは補正源のキャラスキル欄)
+  const consumableBuffs = $derived(app.catalog);
   const buffOn = (def: BuffDefinition) =>
     (payload?.stat_sources.buffs.choices ?? []).some((c) => c.buff_id === def.id);
   /**
@@ -581,7 +702,7 @@
     if (!buffOn(def)) return "off";
     return saved ? "always" : "extra";
   };
-  const BUFF_STATE_LABEL = { always: "常時", extra: "追加", off: "" } as const;
+  const BUFF_STATE_LABEL = { always: "常", extra: "追", off: "" } as const;
   const alwaysBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "always").length);
   const extraBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "extra").length);
   function toggleBuffChip(def: BuffDefinition) {
@@ -648,15 +769,15 @@
       {#if !character || !target}
         <!-- 上のブロックで案内済み -->
       {:else if side === "defense"}
-        <DefensePanel profile={defense} error={defenseError} />
+        <!-- 攻撃 / 防御 は面ごと入れ替わる。入ってくる面を短く動かす(§10 型 3b) -->
+        <div class="swap-in"><DefensePanel profile={defense} error={defenseError} /></div>
       {:else}
         <!-- 行ける?カード -->
-        <div class="sheet">
+        <div class="sheet swap-in">
           <div class="sheet-head">
             <span class="gem"></span>
             <span class="sheet-title">行ける？</span>
             <span class="sheet-char dim">{character.name}{calculating ? " ・ 計算中…" : ""}</span>
-            <span class="badge" style="background: {BADGE_BG[badgeState]}; border-color: {BADGE_BD[badgeState]}; color: {BADGE_FG[badgeState]};">{BADGE[badgeState]}</span>
           </div>
 
           <!-- 対象プレート -->
@@ -678,11 +799,13 @@
           </div>
           {#if targetOpen}
             <button type="button" class="overlay" aria-label="閉じる" onclick={() => (targetOpen = false)}></button>
-            <div class="pop">
+            <div class="pop pop-in">
               {#each targetAreas as area (area.id)}
                 <div class="pop-head"><span class="pop-diamond"></span><span>{area.name}</span><span class="num dim">{area.contents.length} 件</span></div>
                 {#each area.contents as c (c.id)}
                   {@const ev = evals.find((e) => e.content_id === c.id)}
+                  <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。分かっている行には出さない -->
+                  {@const cov = !ev ? "判定中" : c.enemy_id === null ? "敵データなし" : !ev.damage ? "スキル未収録" : null}
                   <button
                     type="button"
                     class="pop-row"
@@ -692,7 +815,8 @@
                       targetOpen = false;
                     }}
                   >
-                    <span class="dot" style="background: {ev?.clear ? '#3E8C63' : ev?.entry_ok === false ? '#B0574A' : '#C1D3E6'};"></span>
+                    <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
+                    {#if cov !== null}<span class="coverage">{cov}</span>{/if}
                     <span class="pop-name">{c.name}</span>
                     <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_max) : "—"}</span>
                   </button>
@@ -722,7 +846,7 @@
           </div>
           {#if skillOpen && skills.length > 1}
             <button type="button" class="overlay" aria-label="閉じる" onclick={() => (skillOpen = false)}></button>
-            <div class="pop gold">
+            <div class="pop gold pop-in">
               <div class="pop-head gold"><span>スキル {skills.length} 種 ／ この対象への合計ダメージ順</span></div>
               {#each pickerSkills as s (s.id)}
                 {@const d = skillTotals[s.id]}
@@ -746,16 +870,56 @@
 
           <!-- この一発 -->
           <div class="hero">
-            <div class="hero-line">
-              <span class="hero-num num">{perHit !== null ? fmtInt(perHit) : "—"}</span>
-              {#if simActive}
-                <span class="hero-delta num" class:up={deltaPct > 0} class:down={deltaPct < 0}>
-                  {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
+            <!-- 鎖(§14 決定 1)。1 発は**ゲート**(防御を抜けるか・目安を超えるかの閾値判定)、
+                 DPS は**レート**(どれくらいの速さで削れるか)で、種類の違う量。ゲートを通らな
+                 ければレートに意味が無いので、軸を切り替えず因果の順に繋ぐ。
+                 判定(バッジ)はゲートの位置だけに置き、レートには付けない — 「何秒までなら
+                 合格」の基準がゲーム側に存在しないので、付けたら嘘になる。
+                 44px の主役数値は増やさない(金の帯 = 答えは 1 つ。§02)。鎖が右に伸びるだけ。 -->
+            <div class="chain">
+              <div class="node gate">
+                <span class="nl">1 発</span>
+                <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
+                {#if simActive}
+                  <span class="nsub num">
+                    <span class:up={deltaPct > 0} class:down={deltaPct < 0}>
+                      {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
+                    </span>
+                    ・ 登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}
+                  </span>
+                {/if}
+              </div>
+              {#key badgeState}
+                <span class="badge badge-in gatebadge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
+              {/key}
+              <span class="op num">×{skill?.hit_count ?? 1} 段</span>
+              <div class="node mid">
+                <span class="nl">合計</span>
+                <span class="num nv" use:bump={() => result?.total.max ?? null}>{result ? fmtInt(result.total.max) : "—"}</span>
+                <span class="nsub num">
+                  クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
+                  {result ? fmtInt(result.total.critical) : "—"}
+                  {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
                 </span>
-                <span class="hero-saved num dim">登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}</span>
-              {/if}
+              </div>
+              <span class="op num">÷ {result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}s</span>
+              <div class="node rate">
+                <span class="nl">1 秒あたり</span>
+                <span class="num nv" use:bump={() => (result?.dps ? Math.round(result.dps.max) : null)}>{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
+                <span class="nsub dim">
+                  {#if result?.actual_delay}{Math.round(result.actual_delay.uses_per_minute)} 回/分 ・ {/if}判定は付けない
+                </span>
+              </div>
+              <span class="op">→</span>
+              <!-- 討伐時間。敵 HP を gamedata に持っていないので破線 +「—」で出す。
+                   0 で埋めると画面が嘘をつく(§00 欠けを正常な状態として見せる) -->
+              <div class="node pending">
+                <span class="nl">討伐時間</span>
+                <span class="num nv">— 秒</span>
+                <span class="nsub dim">敵 HP が未収録</span>
+              </div>
             </div>
-            <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {BAR_BG[badgeState]};"></div></div>
+            <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
             <div class="hero-sentence">
               <span class="sentence" class:ok={ratio >= 1} class:ng={ratio < 1}>
                 {#if perHit === null}
@@ -769,29 +933,6 @@
                 {/if}
               </span>
               <span class="num dim">目安 {fmtInt(need)}</span>
-            </div>
-            <div class="totals">
-              <div class="total-box">
-                <span class="cap dim">{skill && skill.hit_count > 1 ? `合計 ×${skill.hit_count}段` : "合計(1段)"}</span>
-                <span class="num strong">{result ? fmtInt(result.total.max) : "—"}</span>
-              </div>
-              <div class="total-box crit">
-                <span class="cap">
-                  クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
-                  {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
-                </span>
-                <span class="num strong">{result ? fmtInt(result.total.critical) : "—"}</span>
-              </div>
-              <div class="total-box dps">
-                <span class="cap">
-                  {#if result?.actual_delay}
-                    1 秒あたり({Math.round(result.actual_delay.uses_per_minute)} 回/分)
-                  {:else}
-                    1 秒あたり
-                  {/if}
-                </span>
-                <span class="num strong">{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
-              </div>
             </div>
             {#if result?.actual_delay}
               {@const d = result.actual_delay}
@@ -838,31 +979,36 @@
         </div>
 
         <!-- もし〜だったら -->
-        {#if whatIf.length > 0}
-          <div class="panel purple">
-            <div class="panel-head purple">
-              <span class="panel-title">足りない分をどう埋める？</span>
-              <span class="panel-note">押すと試し変更に入ります(保存されません)</span>
-            </div>
-            <div class="panel-body">
-              {#each whatIf as w (w.candidate.id)}
-                <button type="button" class="whatif" onclick={() => applyWhatIf(w)}>
-                  <span class="wi-main">
-                    <span class="wi-label">{w.candidate.label}</span>
-                    <span
-                      class="cost"
-                      style="background: {COST_COLORS[w.candidate.cost][0]}; border-color: {COST_COLORS[w.candidate.cost][1]}; color: {COST_COLORS[w.candidate.cost][2]};"
-                    >{w.candidate.cost}</span>
-                  </span>
-                  <span class="wi-nums">
-                    <span class="num wi-pct">+{w.deltaPct}%</span>
-                    <span class="num dim">{fmtInt(w.perHit)}</span>
-                  </span>
-                </button>
-              {/each}
-            </div>
+        <div class="panel purple">
+          <div class="panel-head purple">
+            <span class="panel-title">足りない分をどう埋める？</span>
+            <span class="panel-note">押すと試し変更に入ります(保存されません)</span>
           </div>
-        {/if}
+          <div class="panel-body">
+            {#if whatIf.length === 0}
+              <p class="wi-empty dim">
+                {whatIfTried === 0
+                  ? "いま変えられる場所がありません。共通スキル・エンチャントはすでに上限です。"
+                  : `${whatIfTried} 件ためしましたが、どれもいまの数字を超えませんでした。`}
+              </p>
+            {/if}
+            {#each whatIf as w (w.candidate.id)}
+              <button type="button" class="whatif" onclick={() => applyWhatIf(w)}>
+                <span class="wi-main">
+                  <span class="wi-label">{w.candidate.label}</span>
+                  <span
+                    class="cost"
+                    style="background: {COST_COLORS[w.candidate.cost][0]}; border-color: {COST_COLORS[w.candidate.cost][1]}; color: {COST_COLORS[w.candidate.cost][2]};"
+                  >{w.candidate.cost}</span>
+                </span>
+                <span class="wi-nums">
+                  <span class="num wi-pct">+{w.deltaPct}%</span>
+                  <span class="num dim">{fmtInt(w.perHit)}</span>
+                </span>
+              </button>
+            {/each}
+          </div>
+        </div>
 
         <!-- なぜこの数字? -->
         <div class="panel">
@@ -874,12 +1020,12 @@
           <div class="panel-body">
             <div class="flow-line">
               <span class="dim">抜けた分</span>
-              <span class="num strong">{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
+              <span class="num strong" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
               <span class="arrow num dim">→</span>
               <span class="dim">倍率</span>
               <span class="num good strong">{flowMultLabel}</span>
               <span class="arrow num dim">→</span>
-              <span class="num final">{perHit !== null ? fmtInt(perHit) : "—"}</span>
+              <span class="num final" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
             </div>
             <div class="lever-note">
               {#if noPierce}
@@ -892,11 +1038,12 @@
             </div>
 
             {#if flowOpen}
+              <div class="open-in">
               <!-- ① 攻撃力をつくる -->
               <div class="stage">
-                <span class="stage-no" style="background: #426DD6;">1</span>
+                <span class="stage-no" style="background: var(--flow-1);">1</span>
                 <span class="stage-title">攻撃力をつくる</span>
-                <span class="num strong stage-val">{atkA !== null ? fmtInt(atkA) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => atkA}>{atkA !== null ? fmtInt(atkA) : "—"}</span>
               </div>
               <div class="band">
                 {#each atkRows as a (a.k)}
@@ -917,13 +1064,13 @@
 
               <!-- ② 防御力を抜く -->
               <div class="stage">
-                <span class="stage-no" style="background: #8C4A42;">2</span>
+                <span class="stage-no" style="background: var(--danger);">2</span>
                 <span class="stage-title">相手の防御力を抜く</span>
-                <span class="num strong stage-val">{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
               </div>
               <div class="band">
-                <div style="width: {(100 - defShare).toFixed(2)}%; background: linear-gradient(90deg, #8FB2E8, #426DD6);"></div>
-                <div style="width: {defShare.toFixed(2)}%; background: repeating-linear-gradient(135deg, #B08480 0 4px, #8C4A42 4px 8px);"></div>
+                <div style="width: {(100 - defShare).toFixed(2)}%; background: var(--flow-pierce);"></div>
+                <div style="width: {defShare.toFixed(2)}%; background: var(--hatch-lost);"></div>
               </div>
               <div class="pierce-note num">
                 <span>攻撃力 {atkA !== null ? fmtInt(atkA) : "—"}</span>
@@ -935,10 +1082,10 @@
 
               <!-- ③ 倍率で伸ばす -->
               <div class="stage">
-                <span class="stage-no" style="background: #3E8C63;">3</span>
+                <span class="stage-no" style="background: var(--flow-3);">3</span>
                 <span class="stage-title">倍率で伸ばす</span>
                 <span class="stage-note dim">帯の幅＝足した分(赤字は減る倍率)</span>
-                <span class="num strong stage-val">{perHit !== null ? fmtInt(perHit) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
               </div>
               <div class="band">
                 {#each flowRows.filter((r) => r.add > 0) as f (f.k)}
@@ -957,39 +1104,40 @@
                 {/each}
               </div>
 
+              <!-- 効いていない分(§14 決定 2)。5 階層に散っていた「捨てた量」をここに集める -->
+              <div class="materials">
+                <div class="mat-head">
+                  <span class="mat-title">どこで頭打ち？</span>
+                  <span class="dim">積んだのに上限で捨てている量</span>
+                </div>
+                {#if lostRows.length === 0}
+                  <p class="lost-none dim">まだどの上限にも当たっていません。積んだ分はすべて効いています。</p>
+                {:else}
+                  <div class="lost">
+                    {#each lostRows as r (r.k)}
+                      <div class="lost-row">
+                        <span class="lost-label">{r.k}</span>
+                        <span class="num lost-raw">{r.raw}</span>
+                        <span class="lost-arrow dim">→ 上限</span>
+                        <span class="num lost-val">{r.val}</span>
+                        <span class="lost-bar" aria-hidden="true">
+                          <i style="width: {(r.kept * 100).toFixed(1)}%"></i>
+                          <i class="cut" style="width: {(100 - r.kept * 100).toFixed(1)}%"></i>
+                        </span>
+                        <span class="num lost-loss">{r.loss} は無効</span>
+                      </div>
+                    {/each}
+                  </div>
+                  <p class="lost-note dim">斜線が捨てている量です。ここが太い枠は、伸ばしても数字が動きません。</p>
+                {/if}
+              </div>
+
               <!-- 倍率の材料 -->
               <div class="materials">
                 <div class="mat-head">
                   <span class="mat-title">倍率の材料</span>
                   <span class="dim">上限に届いた枠は「満」</span>
                 </div>
-                {#if result !== null && result.capped_loss.max > 0}
-                  <!-- ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用) -->
-                  <div class="capped">
-                    <div class="capped-row">
-                      <span class="cp-label">ダメージ上限(1 段ごと)</span>
-                      <span class="num cp-raw">{fmtInt(result.per_hit.max + result.capped_loss.max)}</span>
-                      <span class="cp-arrow dim">→ 上限</span>
-                      <span class="num cp-val">{fmtInt(result.damage_cap)}</span>
-                      <span class="num cp-loss">{fmtInt(result.capped_loss.max)} は無効</span>
-                    </div>
-                  </div>
-                {/if}
-                {#if cappedCategories.length > 0}
-                  <!-- 上限で捨てられた分(規格シート 5b)。合算してから上限で切るので、
-                       積んだのに効いていない量が数値で見えないと詰み手前が分からない -->
-                  <div class="capped">
-                    {#each cappedCategories as c (c.category)}
-                      <div class="capped-row">
-                        <span class="cp-label">{c.label}</span>
-                        <span class="num cp-raw">{fmtCatRaw(c)}</span>
-                        <span class="cp-arrow dim">→ 上限</span>
-                        <span class="num cp-val">{fmtCatValue(c)}</span>
-                        <span class="num cp-loss">{fmtCatLoss(c)} は無効</span>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
                 <div class="mat-chips">
                   {#each activeCategories as c (c.category)}
                     <span class="mat-chip" class:cap={catAtCap(c)}>
@@ -1015,6 +1163,7 @@
               {#if result}
                 <TracePanel trace={result.trace} {character} />
               {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -1042,35 +1191,41 @@
           <div class="sim-line">
             <span class="sim-dot" class:active={simDirty}></span>
             <span class="sim-title">{simDirty ? "試し変更中" : "登録どおり"}</span>
-            {#if simActive}
-              <span class="num sim-delta" class:up={deltaPct > 0} class:down={deltaPct < 0}>
-                {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
-              </span>
-            {/if}
+            <!-- 差分の枠も常に確保する。出た瞬間に行が 1px 伸びて下がずれる(§09 規則 4) -->
+            <span class="num sim-delta" class:on={simActive} class:up={deltaPct > 0} class:down={deltaPct < 0}
+            >{simActive ? (deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`) : ""}</span>
           </div>
           <div class="sim-note-text dim">
             {simDirty
               ? "保存されていません。チップの ✕ で1つずつ戻せます。"
               : "下の材料を変えると、その場で数字が動きます(保存されません)。"}
           </div>
-          {#if simDirty}
-            <div class="sim-actions">
-              <button type="button" class="btn" onclick={resetSim}>ぜんぶ戻す</button>
-              <button type="button" class="btn primary" disabled={saving} onclick={saveSim}>{saving ? "保存中…" : "キャラに保存"}</button>
-            </div>
-          {/if}
+          <!-- 試し変更に入っても下がずれないよう、操作の枠は常に確保する(§09 規則 1・4)。
+               ここは押した材料(装備・バフ)より**上**にあるので、差し込むと押したものが流れる -->
+          <div class="sim-actions">
+            <button type="button" class="btn" disabled={!simDirty} onclick={resetSim}>ぜんぶ戻す</button>
+            <button type="button" class="btn primary" disabled={!simDirty || saving} onclick={saveSim}>{saving ? "保存中…" : "キャラに保存"}</button>
+          </div>
         </div>
 
-        {#if changedKnobs.length > 0}
-          <div class="chips">
-            {#each changedKnobs as k (k.id)}
-              <span class="chip-diff">
-                <span>{k.label(app.sim!)}</span>
-                <button type="button" class="chip-x" title="この変更だけ戻す" onclick={() => revertKnob(k)}>✕</button>
-              </span>
-            {/each}
-          </div>
-        {/if}
+        <!-- 差分チップも同じ理由で高さを固定する。3 件までなので 1 行に収め、
+             溢れたら横にスクロールさせる(行が増えて下をずらさない) -->
+        <div class="chips">
+          {#each changedKnobs as k (k.id)}
+            <span class="chip-diff">
+              <span>{k.label(app.sim!)}</span>
+              <button type="button" class="chip-x" title="この変更だけ戻す" onclick={() => revertKnob(k)}>✕</button>
+            </span>
+          {/each}
+        </div>
+        <!-- 上限の注記は固定領域。行を差し込んで下をずらさない(§07) -->
+        <div class="sim-limit" class:hit={simLimited}>
+          {#if simLimited}
+            試し変更は同時 {SIM_LIMIT} 件までです。どれかを ✕ で戻すか、「キャラに保存」で確定してください。
+          {:else}
+            同時に試せるのは {changedKnobs.length} / {SIM_LIMIT} 件です。
+          {/if}
+        </div>
 
         <!-- 装備(試し変更) -->
         <div class="card">
@@ -1090,7 +1245,7 @@
             <span>パワーウェポン(+2%)</span>
           </label>
           <div class="sw">
-            <Select
+            <StepSelect
               label="ストロングウェポン"
               options={strongWeaponOptions}
               bind:value={
@@ -1132,8 +1287,8 @@
             <span class="dim small">押した瞬間に数字が動きます</span>
           </div>
           <p class="buff-legend dim">
-            <span class="lg always">常時</span> マイセット(キャラに保存済み・{alwaysBuffCount} 件)
-            ／ <span class="lg extra">追加</span> この計算だけ({extraBuffCount} 件・保存されません)
+            <span class="lg always">常</span> 常時 = マイセット(キャラに保存済み・{alwaysBuffCount} 件)
+            ／ <span class="lg extra">追</span> 追加 = この計算だけ({extraBuffCount} 件・保存されません)
             ／ 無印 使わない。<b>常時にするには「試し変更を保存」</b>。
           </p>
           <div class="buff-chips">
@@ -1150,7 +1305,10 @@
                 onclick={() => toggleBuffChip(def)}
               >
                 <span>{def.name}</span>
-                {#if state !== "off"}<span class="chip-state">{BUFF_STATE_LABEL[state]}</span>{/if}
+                <!-- 状態バッジの枠は常に確保する。付いた瞬間にチップが伸びると、
+                     隣のチップが折り返して並びが動く(§09 規則 4) -->
+                <span class="chip-state" class:on={state !== "off"}
+                >{state !== "off" ? BUFF_STATE_LABEL[state] : ""}</span>
               </button>
             {/each}
           </div>
@@ -1161,7 +1319,7 @@
                 <Icon kind="buff" id={def.id} size={20} label={def.name} />
                 <span class="bd-name">{def.name}</span>
                 {#if isUserSelectedTarget(def.target)}
-                  <Select
+                  <StepSelect
                     label="対象ステ"
                     options={statOptions}
                     bind:value={
@@ -1271,12 +1429,12 @@
   section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   section.mid { background: var(--bg-mid); }
   section.right { background: var(--bg-rail); border-left: 1px solid var(--border-strong); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 13px 16px 18px; }
+  .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 13px 16px 18px; }
   .scroll.pad { padding: 11px; display: flex; flex-direction: column; gap: 9px; }
   .empty { font-size: 12px; }
 
   /* 行ける?カード */
-  .sheet { position: relative; border-radius: var(--r-window); border: 1px solid #687287; box-shadow: 0 1px 0 rgba(121, 140, 172, 0.4); background: #fff; }
+  .sheet { position: relative; border-radius: var(--r-window); border: 1px solid #687287; box-shadow: 0 1px 0 rgba(121, 140, 172, 0.4); background: var(--bg-field); }
   .sheet-head {
     display: flex; align-items: center; gap: 8px; padding: 7px 13px;
     border-radius: var(--r-window) 12px 0 0;
@@ -1290,26 +1448,26 @@
   .step {
     flex-shrink: 0; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center;
     border-radius: var(--r-inset); background: linear-gradient(180deg, #fff, #E9F1FB); border: 1px solid #9FB4D0;
-    font-size: 9px; font-weight: 700; color: #3B4A63; font-family: var(--font-num);
+    font-size: 9px; font-weight: 700; color: var(--fg-sub);
   }
   .step:hover { background: var(--bg-active); }
   .target-trigger { min-width: 0; flex: 1; padding: 3px 8px; border-radius: var(--r-panel); border: 1px solid transparent; text-align: left; }
   .target-trigger:hover, .target-trigger.open { background: var(--bg-rail); border-color: #9FB4D0; }
   .t-line1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .t-chev { flex-shrink: 0; font-size: 8px; color: var(--fg-muted); font-family: var(--font-num); transition: transform 0.18s; }
+  .t-chev { flex-shrink: 0; font-size: 8.5px; color: var(--fg-muted); transition: transform 0.18s; }
   .t-chev.rot { transform: rotate(180deg); }
   .t-index { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
   .t-line2 { margin-top: 1px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .t-area { min-width: 0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .t-def { flex-shrink: 0; font-size: 8.5px; color: var(--danger); }
-  .t-need { flex-shrink: 0; font-size: 8.5px; color: #3B4A63; }
+  .t-need { flex-shrink: 0; font-size: 8.5px; color: var(--fg-sub); }
 
   .overlay { position: fixed; inset: 0; z-index: 40; cursor: default; }
   .pop {
     position: absolute; left: 10px; right: 10px; top: 88px; z-index: 41;
     max-height: 262px; overflow-y: auto; overscroll-behavior: contain;
-    border-radius: var(--r-window); background: #fff; border: 1px solid #687287;
+    border-radius: var(--r-window); background: var(--bg-field); border: 1px solid #687287;
     box-shadow: 0 10px 24px rgba(30, 44, 74, 0.3), inset 0 0 0 1px #fff;
   }
   .pop.gold { border-color: #A9821F; box-shadow: 0 10px 24px rgba(74, 60, 18, 0.28), inset 0 0 0 1px #fff; }
@@ -1317,7 +1475,7 @@
     position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 7px;
     padding: 6px 13px 6px 11px;
     background: linear-gradient(180deg, #DBE6F8, #C6D8F0); border-bottom: 1px solid var(--border);
-    font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; color: #26334A;
+    font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; color: var(--fg-head);
   }
   .pop-head.gold { background: linear-gradient(180deg, #F2E3BD, #DCC27E); border-bottom-color: #BFA155; color: #4A3C12; }
   .pop-head .num { margin-left: auto; font-weight: 400; }
@@ -1329,6 +1487,12 @@
   .pop-row:hover { background: #F1F7FE; }
   .pop-row.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); }
   .pop-row .dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; }
+  /* 収録度(§14 決定 5)。破線 = 「まだ無い」の記号 */
+  .coverage {
+    flex-shrink: 0; padding: 0 6px; border-radius: var(--r-pill);
+    border: 1px dashed var(--border); background: var(--bg-rail);
+    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
+  }
   .pop-name { min-width: 0; flex: 1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pop-row.on .pop-name { font-weight: 700; }
   .pop-row .strong { font-weight: 700; }
@@ -1344,33 +1508,42 @@
   .sk-meta { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .hero { padding: 11px 13px 12px; }
-  .hero-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   .hero-num { font-size: var(--t-result); line-height: 1; font-weight: var(--w-strong); }
-  .hero-delta { font-size: 13px; font-weight: 700; color: var(--fg-dim); }
-  .hero-delta.up { color: var(--good); }
-  .hero-delta.down { color: var(--danger); }
-  .hero-saved { min-width: 0; flex: 1; text-align: right; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chain .nsub .up { color: var(--good); font-weight: 700; }
+  .chain .nsub .down { color: var(--danger); font-weight: 700; }
   .meter.big { margin-top: 10px; height: 12px; border-radius: var(--r-inset); }
   .hero-sentence { margin-top: 7px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .sentence { min-width: 0; flex: 1; font-size: 11px; font-weight: 700; text-wrap: pretty; }
   .sentence.ok { color: var(--good); }
   .sentence.ng { color: var(--danger); }
   .hero-sentence .num { flex-shrink: 0; font-size: 9.5px; }
-  .totals { margin-top: 11px; padding-top: 11px; border-top: 1px dashed var(--border-soft); display: flex; gap: 7px; }
-  .total-box { flex: 1; min-width: 0; padding: 6px 10px; border-radius: var(--r-panel); background: var(--bg-panel); border: 1px solid var(--border-soft); display: flex; flex-direction: column; }
-  .total-box .cap { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .total-box .strong { font-size: 15px; font-weight: 700; }
-  .total-box.crit { background: #FFFBF0; border-color: #E0C98A; }
-  .total-box.crit .cap { color: #7A6420; }
-  .total-box.crit .strong { color: #A97E1E; }
-  .total-box.dps { background: #F2F7FF; border-color: #B7CDEB; }
-  .total-box.dps .cap { color: #40536F; }
-  .total-box.dps .strong { color: #2C4A76; }
+  /* 鎖(§14 決定 1)。44px の主役数値は増やさない — 金の帯 = 答えは 1 つ(§02)を
+     壊さず、鎖が右に伸びるだけ。狭いときは折り返す(桁で隣が動かないよう各段に min-width) */
+  .chain { display: flex; align-items: flex-end; gap: 10px 11px; flex-wrap: wrap; }
+  .chain .node { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .chain .nl { font-size: 9px; letter-spacing: 0.06em; color: var(--fg-muted); white-space: nowrap; }
+  .chain .nv { font-weight: 700; color: var(--fg); white-space: nowrap; }
+  .chain .node.gate .nv { min-width: 120px; }
+  .chain .node.mid .nv { font-size: 15px; min-width: 68px; }
+  .chain .node.rate .nv { font-size: 19px; min-width: 68px; }
+  .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
+  .chain .op { font-size: 12px; color: var(--fg-dim); padding-bottom: 3px; white-space: nowrap; }
+  .chain .gatebadge { align-self: flex-end; margin-bottom: 3px; }
+  /* まだデータが来ていない段。0 で埋めず、破線で「無い」と見せる(§00) */
+  /* まだデータが来ていない段は 1 行に畳む(§00 触らない場所は 1 行に)。
+     破線 = 「無い」の記号。0 で埋めない */
+  .chain .node.pending {
+    flex-direction: row; align-items: baseline; gap: 6px;
+    padding: 3px 9px; border-radius: var(--r-panel);
+    border: 1px dashed var(--border); background: var(--bg-rail);
+  }
+  .chain .node.pending .nv { font-size: 13px; color: var(--fg-off); }
+
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
 
   /* パネル(もし〜/なぜ) */
-  .panel { margin-top: 11px; border-radius: var(--r-window); overflow: hidden; border: 1px solid var(--border-strong); background: #fff; }
+  .panel { margin-top: 11px; border-radius: var(--r-window); overflow: hidden; border: 1px solid var(--border-strong); background: var(--bg-field); }
   .panel.purple { border-color: var(--sim); background: var(--sim-bg); }
   .panel-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 12px; text-align: left; }
   .panel-head.purple { background: linear-gradient(180deg, var(--sim), var(--sim-strong)); border-bottom: 1px solid var(--sim-strong); }
@@ -1383,7 +1556,7 @@
 
   .whatif {
     width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
-    border-radius: var(--r-panel); background: #fff; border: 1px solid var(--border-soft); text-align: left;
+    border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .whatif:last-child { margin-bottom: 0; }
   .whatif:hover { border-color: var(--sim); background: #F7F6FC; }
@@ -1391,20 +1564,21 @@
   .wi-label { min-width: 0; flex: 1; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cost { flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill); border: 1px solid; font-size: 8.5px; font-weight: 700; white-space: nowrap; }
   .wi-nums { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; }
-  .wi-pct { font-size: 12.5px; font-weight: 700; color: #4A4780; }
+  .wi-pct { font-size: 12.5px; font-weight: 700; color: var(--sim-fg); }
+  .wi-empty { margin: 0; padding: 9px 11px; font-size: 11px; line-height: 1.6; }
 
   .flow-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 9px; }
-  .flow-line .strong { font-size: 13px; font-weight: 700; color: #3B4A63; }
-  .flow-line .good.strong { color: #3E8C63; }
+  .flow-line .strong { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
+  .flow-line .good.strong { color: var(--flow-3); }
   .flow-line .final { font-size: 15px; font-weight: 700; color: var(--fg); }
   .lever-note {
     margin-top: 9px; padding: 8px 10px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: #3B4A63; text-wrap: pretty;
+    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--fg-sub); text-wrap: pretty;
   }
 
   .stage { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-soft); display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .stage-no { flex-shrink: 0; width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 9px; line-height: 16px; text-align: center; font-family: var(--font-num); font-weight: 700; }
+  .stage-no { flex-shrink: 0; width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 9px; line-height: 16px; text-align: center; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 700; }
   .stage-title { font-size: 11px; font-weight: 700; white-space: nowrap; }
   .stage-note { min-width: 0; flex: 1; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stage-val { margin-left: auto; font-size: 15px; font-weight: 700; }
@@ -1418,7 +1592,7 @@
   .br-label.bad { color: var(--danger); }
   .br-note { min-width: 0; flex: 1.2; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .br-mult { flex-shrink: 0; width: 48px; text-align: right; font-size: 10px; }
-  .br-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 700; color: #3B4A63; }
+  .br-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
   .br-val.bad { color: var(--danger); }
   .br-share { flex-shrink: 0; width: 32px; text-align: right; font-size: 9.5px; }
   .pierce-note { margin-top: 7px; display: flex; align-items: center; gap: 10px; font-size: 9.5px; color: var(--fg-muted); min-width: 0; }
@@ -1434,7 +1608,23 @@
     display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: var(--r-panel);
     background: var(--bg-panel); border: 1px solid var(--border-soft); font-size: 9.5px;
   }
-  .mat-chip.cap { background: #F6E8E5; border-color: #B08480; }
+  .mat-chip.cap { background: var(--state-short-bg); border-color: var(--state-short-bd); }
+  /* 効いていない分の棚卸し(§14 決定 2)。塗り = 効いている量、斜線 = 捨てた量(§03) */
+  .lost { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+  .lost-row {
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+    padding: 4px 9px; border-radius: var(--r-inset);
+    background: var(--surface-inset); border: 1px solid var(--border-soft);
+  }
+  .lost-label { min-width: 0; flex: 1; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lost-raw { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; color: var(--fg-muted); text-decoration: line-through; }
+  .lost-arrow { flex-shrink: 0; font-size: 9px; }
+  .lost-val { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; font-weight: 700; }
+  .lost-bar { flex-shrink: 0; width: 96px; height: 7px; display: flex; border-radius: var(--r-inset); overflow: hidden; border: 1px solid var(--border-soft); }
+  .lost-bar > i { display: block; background: var(--flow-1); }
+  .lost-bar > i.cut { background: var(--hatch-lost); }
+  .lost-loss { flex-shrink: 0; min-width: 104px; text-align: right; font-size: 10px; color: var(--danger); }
+  .lost-none, .lost-note { margin: 4px 0 0; font-size: 10px; line-height: 1.6; }
   .mat-chip .strong { font-size: 10px; font-weight: 700; }
   .mat-chip .full { font-size: 8.5px; font-weight: 700; color: var(--danger); }
 
@@ -1444,26 +1634,34 @@
   .sim-line { display: flex; align-items: center; gap: 8px; }
   .sim-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: #9FB4D0; }
   .sim-dot.active { background: var(--sim); }
-  .sim-title { font-size: var(--t-label); font-weight: 700; color: #3B4A63; }
-  .sim-bar.active .sim-title { color: #4A4780; }
-  .sim-delta { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--fg-dim); }
-  .sim-delta.up { color: var(--good); }
-  .sim-delta.down { color: var(--danger); }
+  .sim-title { font-size: var(--t-label); font-weight: 700; color: var(--fg-sub); }
+  .sim-bar.active .sim-title { color: var(--sim-fg); }
+  .sim-delta { min-width: 34px; text-align: right; font-size: 11px; font-weight: 700; color: transparent; }
+  .sim-delta.on { color: var(--fg-dim); }
+  .sim-delta.on.up { color: var(--good); }
+  .sim-delta.on.down { color: var(--danger); }
   .sim-note-text { margin-top: 3px; font-size: 9px; line-height: 1.6; text-wrap: pretty; }
-  .sim-actions { margin-top: 8px; display: flex; gap: 7px; }
+  .sim-actions { margin-top: 8px; display: flex; gap: 7px; min-height: 30px; }
   .sim-actions .btn { flex: 1; }
 
-  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  /* 高さを固定する。件数で行が増えると、下にある材料(装備・バフ)がずれる */
+  .chips {
+    display: flex; flex-wrap: nowrap; gap: 5px; min-height: 24px;
+    overflow-x: auto; overscroll-behavior-x: contain;
+  }
   .chip-diff {
     display: inline-flex; align-items: center; gap: 7px; padding: 3px 4px 3px 9px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--sim); box-shadow: 0 1px 0 rgba(109, 106, 168, 0.25);
+    background: var(--bg-field); border: 1px solid var(--sim); box-shadow: 0 1px 0 rgba(109, 106, 168, 0.25);
     font-size: 10px; font-weight: 500;
   }
   .chip-x {
     width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
-    border-radius: 50%; background: #EFEEF8; font-size: 9px; color: var(--sim);
+    border-radius: 50%; background: var(--state-temp-bg); font-size: 9px; color: var(--sim);
   }
   .chip-x:hover { background: var(--sim); color: #fff; }
+  /* 上限の注記。色ではなく文言で伝える(ラベンダーに 2 つ目の意味を持たせない。§14 決定 6) */
+  .sim-limit { min-height: 15px; padding: 0 11px 7px; font-size: 9.5px; color: var(--fg-dim); }
+  .sim-limit.hit { color: var(--fg); font-weight: 700; }
 
   .card-head { display: flex; align-items: center; gap: 8px; }
   .small { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1490,22 +1688,11 @@
   }
 
   .mat-note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }
-  .capped { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
-  .capped-row {
-    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-    padding: 4px 9px; border-radius: var(--r-inset);
-    background: var(--surface-inset); border: 1px solid var(--border-soft); font-size: 10px;
-  }
-  .cp-label { font-weight: 700; color: #26334A; }
-  .cp-raw { color: var(--fg-muted); text-decoration: line-through; }
-  .cp-arrow { font-size: 9px; }
-  .cp-val { font-weight: 700; }
-  .cp-loss { margin-left: auto; font-weight: 700; color: var(--danger); }
 
   .buff-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
   .buff-chip {
     padding: 4px 9px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--border-soft);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
     font-size: 10px; font-weight: 500; color: var(--fg-muted); white-space: nowrap;
   }
   .buff-chip:hover:not(:disabled) { border-color: var(--accent); }
@@ -1515,33 +1702,37 @@
   }
   /* 追加枠は「保存されない」ので、その専用色(--sim)にそろえる */
   .buff-chip.on.extra {
-    background: linear-gradient(180deg, #fff, #EFEEF8);
+    background: linear-gradient(180deg, #fff, var(--state-temp-bg));
     border-color: var(--sim); color: var(--sim-fg);
   }
   .buff-chip .chip-state {
+    display: inline-block; min-width: 15px; text-align: center;
     margin-left: 5px; padding: 0 5px; border-radius: var(--r-pill);
-    background: rgba(255, 255, 255, 0.75); border: 1px solid currentColor;
-    font-size: 8px; font-weight: 700;
+    background: transparent; border: 1px solid transparent;
+    font-size: 8.5px; font-weight: 700; color: transparent;
+  }
+  .buff-chip .chip-state.on {
+    background: rgba(255, 255, 255, 0.75); border-color: currentColor; color: inherit;
   }
   .buff-legend { margin: 7px 0 0; font-size: 9px; line-height: 1.7; }
   .buff-legend .lg {
     display: inline-block; padding: 0 5px; border-radius: var(--r-pill);
-    font-size: 8px; font-weight: 700; border: 1px solid;
+    font-size: 8.5px; font-weight: 700; border: 1px solid;
   }
   .buff-legend .lg.always { background: #CCF7FF; border-color: #687287; color: #123047; }
-  .buff-legend .lg.extra { background: #EFEEF8; border-color: var(--sim); color: var(--sim-fg); }
+  .buff-legend .lg.extra { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
   .entry-note {
     margin: 8px 0 0; padding: 7px 9px; border-radius: var(--r-panel);
-    background: #FDF9EE; border: 1px solid #C2A057;
-    font-size: 9px; font-weight: 500; line-height: 1.6; color: #7A6420;
+    background: #FDF9EE; border: 1px solid var(--gold);
+    font-size: 9px; font-weight: 500; line-height: 1.6; color: var(--state-edge-fg);
   }
   .buff-detail {
     margin-top: 7px; padding: 7px 9px; border-radius: var(--r-panel);
     background: var(--bg-panel); border: 1px dashed var(--border-soft);
     display: flex; flex-direction: column; gap: 7px;
   }
-  .bd-name { font-size: 10px; font-weight: 700; color: #3B4A63; }
+  .bd-name { font-size: 10px; font-weight: 700; color: var(--fg-sub); }
   .bd-fixed { font-size: 10px; }
 
   .card.adj summary { cursor: pointer; font-size: 11px; }
@@ -1555,10 +1746,10 @@
     display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
   }
-  .req.ng { background: #F6E8E5; border-color: #B08480; }
-  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: #3B4A63; white-space: nowrap; }
+  .req.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); }
+  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: var(--fg-sub); white-space: nowrap; }
   .req.ng .req-label { color: var(--danger); }
   .req .num { font-size: 10px; white-space: nowrap; }
-  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: #3B4A63; white-space: nowrap; }
+  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
   .req.ng .req-tag { color: var(--danger); }
 </style>

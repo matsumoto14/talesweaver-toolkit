@@ -4,6 +4,7 @@
 import type { EquipmentItem, NewCharacter } from "./api/types";
 import { clampToCaps, midpointValues, sumValues } from "./equipment";
 import { limits } from "./limits.svelte";
+import { STATE } from "./ui/states";
 
 export interface Candidate {
   id: string;
@@ -13,12 +14,11 @@ export interface Candidate {
   apply: (p: NewCharacter) => void;
 }
 
-/** cost タグ → [背景, 枠, 文字] */
-/** [面, 枠, 文字] の CSS 変数参照(inline style で使う)。色の実値は app.css のトークンが持つ */
+/** cost タグ → [面, 枠, 文字]。状態の 6 系統をそのまま流用する(design-system §03) */
 export const COST_COLORS: Record<Candidate["cost"], [string, string, string]> = {
-  すぐできる: ["var(--good-bg)", "var(--good-border)", "var(--good)"],
-  エンチャント: ["var(--bg-active)", "var(--accent)", "var(--accent-hover)"],
-  装備更新: ["var(--danger-bg)", "var(--danger-border)", "var(--danger)"],
+  すぐできる: [STATE.met.bg, STATE.met.bd, STATE.met.fg],
+  エンチャント: [STATE.goal.bg, STATE.goal.bd, STATE.goal.fg],
+  装備更新: [STATE.short.bg, STATE.short.bd, STATE.short.fg],
 };
 
 export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): Candidate[] {

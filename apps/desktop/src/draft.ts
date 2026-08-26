@@ -12,6 +12,20 @@ import type {
 import { cloneEquipmentPart, cloneThesisCores, neutralEquipmentPart, neutralThesisCores } from "./equipment";
 import { PART_SLOTS, STAT_KINDS } from "./labels";
 
+/**
+ * 新規登録の覚醒段階。**このツールのターゲット層は覚醒 5**(遅くても 4)で、
+ * エタの意志を解放している時点で 5 が前提になる。既定を 0 にすると、ほぼ全員が
+ * 毎回上書きすることになる(ux-guidelines「初期値は実用値」)。
+ */
+export const DEFAULT_AWAKENING_STAGE = 5;
+
+/**
+ * エタの意志 Lv の節目。ここを超えると上限の増え方が一段上がる
+ * (crates/gamedata/src/awakening.rs の ETERNAL_CAPS。最大ダメージは Lv20→21 で +70 万、
+ * それ以外の区間は +10〜35 万)。育成の目標地点なので、入力はこの節目から選べるようにする。
+ */
+export const ETERNAL_MILESTONES = [0, 20, 40, 60, 80, 90, 100] as const;
+
 export interface Draft {
   name: string;
   gameCharacterId: string;
@@ -43,6 +57,12 @@ export const defaultEquipment = (): Equipment => ({
 
 /** ストロングウェポンの既定 Lv(上限。wiki Skill/共通: Lv6 = +18%) */
 const DEFAULT_STRONG_WEAPON_LEVEL = 6;
+const DEFAULT_PROTECT_ARMOR_LEVEL = 6;
+const DEFAULT_KAI_PROTECT_ARMOR_LEVEL = 5;
+const DEFAULT_AUGMENT_LEVEL = 5;
+const DEFAULT_REINFORCE_LEVEL = 5;
+const DEFAULT_HYPER_LIMIT_LEVEL = 6;
+const DEFAULT_SHARPNESS_VISION_LEVEL = 5;
 
 export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
   ...src,
@@ -62,16 +82,21 @@ export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
  * **保存済みキャラの値は書き換えない**ので、ここを使うのは新規登録だけにすること。
  */
 export const defaultCommonSkills = (): CommonSkills => ({
+  // 共通スキルは「ほぼ全員が取り切っている」前提で最大を入れる。ここを 0 にすると
+  // 全員が毎回同じ値を入れ直すことになる(ux-guidelines「初期値は実用値」)。
+  // 人によって違うのはオーグメント・極限スキル 2 枠・シャープネスビジョンだけ
   power_weapon: true,
   strong_weapon_level: DEFAULT_STRONG_WEAPON_LEVEL,
-  coat_armor: false,
-  protect_armor_level: 0,
-  kai_protect_armor_level: 0,
-  sharpness_vision_level: 0,
-  augment_level: DEFAULT_STRONG_WEAPON_LEVEL - 1,
+  coat_armor: true,
+  protect_armor_level: DEFAULT_PROTECT_ARMOR_LEVEL,
+  kai_protect_armor_level: DEFAULT_KAI_PROTECT_ARMOR_LEVEL,
+  // Lv5 までは自然に上がる(ここで止まる人が多い)。Lv6 以降は習得スクロールが要るので人による
+  sharpness_vision_level: DEFAULT_SHARPNESS_VISION_LEVEL,
+  augment_level: DEFAULT_AUGMENT_LEVEL,
   unleash: [{ stat: null, level: 0 }, { stat: null, level: 0 }],
-  reinforce_level: 0,
-  ultimate: { slots: [null, null], super_limit: false, hyper_limit_level: 0 },
+  // アンリーシュ Lv10 の前提。ステを選べば Lv は上限で入る
+  reinforce_level: DEFAULT_REINFORCE_LEVEL,
+  ultimate: { slots: [null, null], super_limit: true, hyper_limit_level: DEFAULT_HYPER_LIMIT_LEVEL },
 });
 
 export const cloneAdjustments = (src: Adjustments): Adjustments =>
@@ -86,7 +111,8 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   buffs: { choices: src.buffs.choices.map((b) => ({ ...b })) },
   adjustments: cloneAdjustments(src.adjustments),
   elements: { ...src.elements },
-  actual_delay_skills: { skill_ids: [...(src.actual_delay_skills?.skill_ids ?? [])] },
+  character_skills: { skill_ids: [...(src.character_skills?.skill_ids ?? [])] },
+  masteries: { picked: [...(src.masteries?.picked ?? [])] },
   critical_rate: { ...src.critical_rate },
 });
 
@@ -99,8 +125,9 @@ export const neutralStatSources = (): StatSources => ({
   buffs: { choices: [] },
   adjustments: Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as StatSources["adjustments"],
   elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
-  actual_delay_skills: { skill_ids: [] },
-  critical_rate: { pet: false, ultimate_rune: false, architect_lab: false, deadly_blow: false },
+  character_skills: { skill_ids: [] },
+  masteries: { picked: [] },
+  critical_rate: { pet: false, ultimate_rune: false, architect_lab_stage: 0, deadly_blow: false },
 });
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({

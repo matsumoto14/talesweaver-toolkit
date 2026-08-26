@@ -10,18 +10,19 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::actual_delay::ActualDelaySkills;
+use crate::category::DamageCategory;
+use crate::character_skill::{
+    damage_contributions, CharacterSkillCatalog, CharacterSkills, SkillEffect,
+};
 use crate::critical_rate::CriticalRateSources;
 use crate::element::ElementSources;
+use crate::mastery::{MasteryCatalog, Masteries};
 use crate::attack_power::{
     attack_power_breakdown, stat_attack_power, AttackCoefficients, AttackPowerBreakdown,
 };
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
     PartSlot, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
-    SIENA_ACTUAL_DELAY_PERCENT_MAX, SIENA_ALL_STATS_BONUS_MAX, SIENA_ATTACK_RATE_PERCENT_MAX,
-    SIENA_CRITICAL_RATE_PERCENT_MAX, SIENA_DEFENSE_RATE_PERCENT_MAX, SIENA_STAGE_MAX,
-    SIENA_STAT_BONUS_MAX,
 };
 use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
 use crate::common_skill::{CommonSkills, STRONG_WEAPON_LEVEL_MAX};
@@ -240,18 +241,6 @@ pub enum BuffTarget {
     Stats(&'static [StatKind]),
 }
 
-/// バフの分類。カタログ表示のグルーピングと、キャラスキルのキャラ紐付けに使う。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BuffGroup {
-    /// 常用バフ(消費アイテム・イベント等)
-    Consumable,
-    /// 選択キャラ本人のスキル(自身のみ効果)
-    CharacterSkill { game_character_id: &'static str },
-    /// 味方に掛かるキャラスキル(誰でも ON にできる)
-    AllySkill,
-}
-
 /// バフの値の決め方。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -262,9 +251,15 @@ pub enum BuffValue {
     Choice(Vec<f64>),
     /// ユーザーの手入力(min..=max の範囲で検証する)
     UserInput { min: f64, max: f64 },
+    /// **記録するだけ**。wiki に効果はあるが、まだ能力値・与ダメージ式に配線していない
+    /// (被ダメージ減少・攻撃ダメージ増加など)。マスタリーは段ごとに 1 つしか取れないので、
+    /// 計算に入らない選択肢も**選べないと段の状態が表せない**(ランダムOP のグレー枠と同じ扱い)
+    RecordOnly,
 }
 
-/// バフカタログの 1 エントリ。型はここ(domain)、実データ(常用バフ 16 件)は gamedata に置く。
+/// バフカタログの 1 エントリ。**消費アイテム・イベントの常用バフ専用**
+/// (キャラのパッシブ・自己バフ・味方バフは `character_skill.rs`)。
+/// 型はここ(domain)、実データは gamedata に置く。
 /// `target: BuffTarget` が `Serialize` のみのため、このカタログ自体も `Serialize` のみ導出する
 /// (Tauri コマンドの戻り値としてフロントへ一方向にシリアライズするだけで、デシリアライズはしない)。
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -280,7 +275,10 @@ pub struct BuffDefinition {
     pub note: &'static str,
     /// `BuffValue::UserInput` の初期値。それ以外は `None`
     pub default_value: Option<f64>,
-    pub group: BuffGroup,
+    /// **ステ増加以外の効き先**(wiki: 与ダメージ式のカテゴリ)。同じバフが 2 か所に効くことがある
+    /// (守護者のためのポーションは能力値の割合増加 +10% と最終ダメージ L +10% の両方)。
+    /// ON/OFF だけで決まるので `BuffValue` の段階選択・手入力は掛からない
+    pub damage_effects: &'static [SkillEffect],
 }
 
 /// バフカタログ。呼び出しは `&BuffCatalog` = `&[BuffDefinition]`。
@@ -305,11 +303,13 @@ pub struct BuffSelection {
 }
 
 /// 調整「加算」の妥当範囲(検証・仮定用の自由入力)。
-pub const ADJUSTMENT_ADD_MIN: i64 = -999;
-pub const ADJUSTMENT_ADD_MAX: i64 = 999;
-/// 調整「固定(pin)」の妥当範囲。上限は最終能力値の理論上限(エタの意志Lv80、docs/claude/decisions.md「2400」)。
+/// 実際に入れる値は 3 桁に収まるが、検証用なので理論上限(2,400)より外まで許す(ユーザー確認)。
+pub const ADJUSTMENT_ADD_MIN: i64 = -3000;
+pub const ADJUSTMENT_ADD_MAX: i64 = 3000;
+/// 調整「固定(pin)」の妥当範囲。**実測値をそのまま入れるための例外操作**なので、
+/// 最終能力値の理論上限(2,400)を超える値も受ける(ユーザー確認)。
 pub const ADJUSTMENT_PIN_MIN: i64 = 1;
-pub const ADJUSTMENT_PIN_MAX: i64 = 2400;
+pub const ADJUSTMENT_PIN_MAX: i64 = 3000;
 
 /// ステ 1 つの自由な調整(検証・未収録バフ用)。
 /// - `add`: このステに +N する(固定値層への加算)
@@ -409,12 +409,15 @@ pub struct StatSources {
     /// 装備の属性強化以外の属性値の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)
     #[serde(default)]
     pub elements: ElementSources,
-    /// 中ディレイ減少をもたらすキャラのパッシブ・マスタリー(wiki: ステータス「中ディレイ倍率B」)
+    /// ON にしているキャラスキル(パッシブ・自己バフ・味方バフ。効果は `character_skill.rs`)
     #[serde(default)]
-    pub actual_delay_skills: ActualDelaySkills,
+    pub character_skills: CharacterSkills,
     /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)
     #[serde(default)]
     pub critical_rate: CriticalRateSources,
+    /// 選んでいるマスタリー(wiki: 各キャラの Skill ページ。段ごとに 1 つ)
+    #[serde(default)]
+    pub masteries: Masteries,
 }
 
 impl StatSources {
@@ -463,8 +466,71 @@ impl StatSources {
             }
         }
         self.adjustments.validate()?;
+        self.critical_rate.validate()?;
         Ok(())
     }
+}
+
+/// ステ増加を層に応じて足す(マスタリー・キャラスキル共通)。
+fn add_stat_rate(
+    modifiers: &mut StatModifierSet,
+    contributions: &mut Vec<StatContribution>,
+    source: String,
+    kind: StatKind,
+    rate: f64,
+    layer: StatLayer,
+) {
+    let m = modifiers.get_mut(kind);
+    match layer {
+        StatLayer::PercentOfBase => m.percent_of_base.push(rate),
+        StatLayer::MultiplierA => m.multiplier_a.push(1.0 + rate),
+        StatLayer::MultiplierB => m.multiplier_b += rate,
+        // 割合で来る効果しか無いので固定値層は使わない
+        StatLayer::Fixed | StatLayer::FinalFixed => return,
+    }
+    contributions.push(StatContribution { source, kind, layer, value: rate });
+}
+
+/// マスタリーのステ増加を適用する。カタログが要るので `build_modifiers` からは
+/// 呼べない(`apply_siena_stats` と同じ位置づけ)。
+pub fn apply_masteries(
+    modifiers: &mut StatModifierSet,
+    contributions: &mut Vec<StatContribution>,
+    masteries: &Masteries,
+    catalog: &MasteryCatalog,
+) {
+    for (kind, rate, layer, name) in masteries.stat_rates(catalog) {
+        add_stat_rate(modifiers, contributions, format!("マスタリー【{name}】"), kind, rate, layer);
+    }
+}
+
+/// キャラスキルのステ増加を適用する。マスタリーで効果が差し替わるので
+/// `masteries` も要る(wiki: ステータスの各カテゴリ表の「マスタリー」列)。
+pub fn apply_character_skills(
+    modifiers: &mut StatModifierSet,
+    contributions: &mut Vec<StatContribution>,
+    skills: &CharacterSkills,
+    masteries: &Masteries,
+    catalog: &CharacterSkillCatalog,
+) {
+    for (kind, rate, layer, name) in skills.stat_rates(catalog, masteries) {
+        add_stat_rate(modifiers, contributions, name.to_string(), kind, rate, layer);
+    }
+}
+
+/// 選んでいるバフの、与ダメージ式のカテゴリへの寄与(カテゴリ, 値)。
+/// ステ増加は `build_modifiers` が別に処理する(このバフは両方持てる)。
+pub fn buff_damage_contributions(
+    buffs: &BuffSelection,
+    catalog: &BuffCatalog,
+) -> Vec<(DamageCategory, f64)> {
+    let effects: Vec<&SkillEffect> = buffs
+        .choices
+        .iter()
+        .filter_map(|c| catalog.iter().find(|d| d.id == c.buff_id))
+        .flat_map(|d| d.damage_effects.iter())
+        .collect();
+    damage_contributions(effects.into_iter())
 }
 
 /// 寄与内訳の 1 行(ステトレース向け)。
@@ -478,6 +544,8 @@ pub struct StatContribution {
 
 #[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
 pub enum StatSourceError {
+    #[error(transparent)]
+    CriticalRate(#[from] crate::critical_rate::CriticalRateError),
     #[error("排他枠 '{slot}' が重複しています")]
     ExclusiveSlotConflict { slot: String },
     #[error("未知のバフです: {id}")]
@@ -496,8 +564,6 @@ pub enum StatSourceError {
     DuplicateBuff { id: String },
     #[error("バフ '{id}' の入力値が範囲外です({min}..={max}、指定値 {value})")]
     ValueOutOfRange { id: String, value: f64, min: f64, max: f64 },
-    #[error("バフ '{id}' はこのキャラ(game_character_id={game_character_id})のスキルではありません")]
-    ForeignCharacterSkill { id: String, game_character_id: String },
     #[error("調整の{field}は{kind:?}で{min}..={max}の範囲で指定してください(指定値 {value})")]
     AdjustmentOutOfRange { field: &'static str, kind: StatKind, value: i64, min: i64, max: i64 },
     #[error(transparent)]
@@ -510,7 +576,6 @@ pub enum StatSourceError {
 pub fn build_modifiers(
     sources: &StatSources,
     catalog: &BuffCatalog,
-    game_character_id: &str,
 ) -> Result<(StatModifierSet, Vec<StatContribution>), StatSourceError> {
     let mut modifiers = StatModifierSet::default();
     let mut contributions = Vec::new();
@@ -598,15 +663,6 @@ pub fn build_modifiers(
             .find(|d| d.id == choice.buff_id)
             .ok_or_else(|| StatSourceError::UnknownBuff { id: choice.buff_id.clone() })?;
 
-        if let BuffGroup::CharacterSkill { game_character_id: owner } = def.group {
-            if owner != game_character_id {
-                return Err(StatSourceError::ForeignCharacterSkill {
-                    id: def.id.to_string(),
-                    game_character_id: game_character_id.to_string(),
-                });
-            }
-        }
-
         for slot in def.exclusive_slots.iter().copied() {
             if !used_slots.insert(slot) {
                 return Err(StatSourceError::ExclusiveSlotConflict { slot: slot.to_string() });
@@ -614,6 +670,8 @@ pub fn build_modifiers(
         }
 
         let value = match &def.value {
+            // 記録するだけの選択(マスタリーの未配線分)。排他枠は押さえたうえで加算しない
+            BuffValue::RecordOnly => continue,
             BuffValue::Fixed(v) => *v,
             BuffValue::Choice(options) => {
                 let index = choice
@@ -829,11 +887,20 @@ fn effective_stats_with(
     equipment: &Equipment,
     common: &CommonSkills,
     catalog: &BuffCatalog,
-    game_character_id: &str,
+    masteries: &MasteryCatalog,
+    character_skills: &CharacterSkillCatalog,
     stat_cap: i64,
 ) -> Result<(EffectiveStats, Vec<StatTrace>, Vec<StatContribution>), StatSourceError> {
-    let (mut modifiers, mut contributions) = build_modifiers(sources, catalog, game_character_id)?;
+    let (mut modifiers, mut contributions) = build_modifiers(sources, catalog)?;
     apply_siena_stats(&mut modifiers, &mut contributions, equipment);
+    apply_masteries(&mut modifiers, &mut contributions, &sources.masteries, masteries);
+    apply_character_skills(
+        &mut modifiers,
+        &mut contributions,
+        &sources.character_skills,
+        &sources.masteries,
+        character_skills,
+    );
     apply_unleash(&mut modifiers, &mut contributions, common);
     let (mut stats, mut traces) = effective_stats(base, &modifiers, stat_cap);
     apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
@@ -870,9 +937,10 @@ pub fn preview_effective_stats(
     equipment: &Equipment,
     common: &CommonSkills,
     catalog: &BuffCatalog,
+    masteries: &MasteryCatalog,
+    character_skills: &CharacterSkillCatalog,
     abilities: &[EquipmentAbilityDef],
     titles: &[TitleDef],
-    game_character_id: &str,
     coefficients: Option<AttackPowerCoefficients>,
     stat_cap: i64,
 ) -> Result<StatPreview, StatSourceError> {
@@ -880,7 +948,7 @@ pub fn preview_effective_stats(
     sources.validate()?;
     equipment.validate()?;
     let (stats, traces, contributions) =
-        effective_stats_with(base, sources, equipment, common, catalog, game_character_id, stat_cap)?;
+        effective_stats_with(base, sources, equipment, common, catalog, masteries, character_skills, stat_cap)?;
     let attack = match coefficients {
         None => None,
         Some(coefficients) => {
@@ -891,7 +959,7 @@ pub fn preview_effective_stats(
             for (slot, _) in equipment.parts.iter() {
                 let without = equipment.without_part(slot);
                 let (stats_without, _, _) =
-                    effective_stats_with(base, sources, &without, common, catalog, game_character_id, stat_cap)?;
+                    effective_stats_with(base, sources, &without, common, catalog, masteries, character_skills, stat_cap)?;
                 let a_without = attack_power_of(&stats_without, &without, common, abilities, titles, &coefficients);
                 part_contributions
                     .push(PartAttackContribution { slot, value: breakdown.value - a_without.value });
@@ -920,20 +988,6 @@ pub struct StatLimits {
     /// 装備強化 Lv 上限(wiki: 装備システム/装備強化。+1〜+15)
     pub enhance_level_max: u8,
     pub enhance_added_damage_max: i64,
-    /// シエナのオーラの増幅段階の上限(wiki: 装備システム/シエナのオーラ)
-    pub siena_stage_max: u8,
-    /// シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 %
-    pub siena_attack_rate_percent_max: f64,
-    /// シエナのオーラの追加オプション「防御力増加」の 1 部位あたり上限 %
-    pub siena_defense_rate_percent_max: f64,
-    /// シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 %
-    pub siena_actual_delay_percent_max: f64,
-    /// シエナのオーラの追加オプション「クリティカル確率」の 1 部位あたり上限 %
-    pub siena_critical_rate_percent_max: f64,
-    /// シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限
-    pub siena_stat_bonus_max: i64,
-    /// シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限
-    pub siena_all_stats_bonus_max: i64,
     /// テシスコアの装着枠数(wiki: テシスコア効果)
     pub core_slot_count: usize,
     pub core_evolution_max: u8,
@@ -966,6 +1020,10 @@ pub struct StatLimits {
     pub hyper_limit_level_max: u8,
     /// クリティカル率増加の上限 %(wiki: 計算式まとめ `#CriticalChance`)
     pub critical_rate_bonus_max: f64,
+    /// 設計者の研究室の研究段階の上限(wiki: 設計者の研究室)
+    pub architect_lab_stage_max: u8,
+    /// 設計者の研究室 1 段階あたりのクリティカル率増加(wiki: 設計者の研究室 永続バフ)
+    pub architect_lab_per_stage: f64,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -983,13 +1041,6 @@ pub fn stat_limits() -> StatLimits {
         strong_weapon_level_max: STRONG_WEAPON_LEVEL_MAX,
         enhance_level_max: ENHANCE_LEVEL_MAX,
         enhance_added_damage_max: ENHANCE_ADDED_DAMAGE_MAX,
-        siena_stage_max: SIENA_STAGE_MAX,
-        siena_attack_rate_percent_max: SIENA_ATTACK_RATE_PERCENT_MAX,
-        siena_defense_rate_percent_max: SIENA_DEFENSE_RATE_PERCENT_MAX,
-        siena_actual_delay_percent_max: SIENA_ACTUAL_DELAY_PERCENT_MAX,
-        siena_critical_rate_percent_max: SIENA_CRITICAL_RATE_PERCENT_MAX,
-        siena_stat_bonus_max: SIENA_STAT_BONUS_MAX,
-        siena_all_stats_bonus_max: SIENA_ALL_STATS_BONUS_MAX,
         core_slot_count: CORE_SLOT_COUNT,
         core_evolution_max: CORE_EVOLUTION_MAX,
         core_enhancement_max: CORE_ENHANCEMENT_MAX,
@@ -1007,6 +1058,8 @@ pub fn stat_limits() -> StatLimits {
         reinforce_level_max: crate::common_skill::REINFORCE_LEVEL_MAX,
         hyper_limit_level_max: crate::ultimate_skill::HYPER_LIMIT_LEVEL_MAX,
         critical_rate_bonus_max: crate::critical_rate::CRITICAL_RATE_BONUS_MAX,
+        architect_lab_stage_max: crate::critical_rate::ARCHITECT_LAB_STAGE_MAX,
+        architect_lab_per_stage: crate::critical_rate::ARCHITECT_LAB_PER_STAGE,
     }
 }
 
@@ -1032,7 +1085,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "charge_potion",
@@ -1044,7 +1097,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "event_buff",
@@ -1056,7 +1109,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "trust_potion",
@@ -1068,7 +1121,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: Some(33.0),
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "club_effect",
@@ -1080,7 +1133,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "tales_weaver_energy",
@@ -1092,7 +1145,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "unleash",
@@ -1104,7 +1157,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
         ]
     }
@@ -1121,7 +1174,7 @@ mod tests {
             pet_skills: PetSkills { stab: Some(PetSkillTier::Basic), ..Default::default() },
             ..Default::default()
         };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Stab).fixed, 20);
         let c = contributions.iter().find(|c| c.kind == StatKind::Stab).unwrap();
         assert_eq!(c.layer, StatLayer::Fixed);
@@ -1131,7 +1184,7 @@ mod tests {
     #[test]
     fn ルーンスキルは固定値層に積まれる() {
         let sources = StatSources { rune_levels: RuneLevels { hack: 15, ..Default::default() }, ..Default::default() };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Hack).fixed, 15);
         let c = contributions.iter().find(|c| c.kind == StatKind::Hack).unwrap();
         assert_eq!(c.layer, StatLayer::Fixed);
@@ -1140,7 +1193,7 @@ mod tests {
     #[test]
     fn クラウンは最終固定値層に積まれる() {
         let sources = StatSources { crown: Crown { def: 250, ..Default::default() }, ..Default::default() };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Def).final_fixed, 250);
         let c = contributions.iter().find(|c| c.kind == StatKind::Def).unwrap();
         assert_eq!(c.layer, StatLayer::FinalFixed);
@@ -1149,7 +1202,7 @@ mod tests {
     #[test]
     fn 聖物は段階を10倍して最終固定値層に積まれる() {
         let sources = StatSources { sacred_relic: SacredRelic { mr: 12, ..Default::default() }, ..Default::default() };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Mr).final_fixed, 120);
         let c = contributions.iter().find(|c| c.kind == StatKind::Mr).unwrap();
         assert_eq!(c.layer, StatLayer::FinalFixed);
@@ -1165,7 +1218,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Dex).fixed, 7);
         assert_eq!(contributions.iter().filter(|c| c.kind == StatKind::Dex).count(), 1);
     }
@@ -1182,7 +1235,7 @@ mod tests {
             ..Default::default()
         };
         let base = BaseStats { dex: 100, ..Default::default() };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
         let (mut stats, mut traces) = effective_stats(&base, &modifiers, NO_CAP);
         apply_pins(&mut stats, &mut traces, &sources.adjustments, None);
 
@@ -1237,7 +1290,7 @@ mod tests {
             adjustments: Adjustments { stab: StatAdjustment { add: 10, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None, NO_CAP).unwrap();
+        let preview = preview_effective_stats(&base, &sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], &[], &[], None, NO_CAP).unwrap();
         assert!(preview
             .contributions
             .iter()
@@ -1253,7 +1306,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], "boris", None, NO_CAP).unwrap();
+        let pinned_preview = preview_effective_stats(&base, &pinned_sources, &Equipment::default(), &CommonSkills::default(), &test_catalog(), &[], &[], &[], &[], None, NO_CAP).unwrap();
         assert!(pinned_preview
             .contributions
             .iter()
@@ -1278,17 +1331,21 @@ mod tests {
 
     /// 武器(基本値・エンチャント・シエナのオーラのステ加算)と手(基本値のみ)を持つ装備。
     fn test_equipment() -> Equipment {
-        use crate::equipment::{EquipmentPart, EquipmentParts, EquipmentValues, SienaAura};
+        use crate::equipment::{EquipmentPart, EquipmentParts, EquipmentValues};
+        use crate::siena::{SienaAura, SienaExtraKind, SienaExtraSlot, SienaSlot, SienaValueKind};
         Equipment {
             parts: EquipmentParts {
                 weapon: EquipmentPart {
                     base: EquipmentValues { thrust: 150, slash: 150, ..Default::default() },
                     enchant: EquipmentValues { thrust: 60, slash: 60, ..Default::default() },
                     siena: SienaAura {
-                        stage: 3,
-                        values: EquipmentValues { thrust: 20, slash: 20, ..Default::default() },
-                        all_stats: 5,
-                        ..Default::default()
+                        slots: vec![
+                            SienaSlot { kind: SienaValueKind::Thrust, value: 10 },
+                            SienaSlot { kind: SienaValueKind::Thrust, value: 10 },
+                            SienaSlot { kind: SienaValueKind::Slash, value: 10 },
+                            SienaSlot { kind: SienaValueKind::Slash, value: 10 },
+                        ],
+                        extras: vec![SienaExtraSlot { kind: SienaExtraKind::AllStats, value: 5.0 }],
                     },
                     ..Default::default()
                 },
@@ -1311,7 +1368,7 @@ mod tests {
     fn 主軸スキル未選択なら攻撃力は出ない() {
         let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
         let preview = preview_effective_stats(
-            &base, &StatSources::default(), &test_equipment(), &test_common_skills(), &test_catalog(), &[], &[], "boris", None, NO_CAP,
+            &base, &StatSources::default(), &test_equipment(), &test_common_skills(), &test_catalog(), &[], &[], &[], &[], None, NO_CAP,
         )
         .unwrap();
         assert!(preview.attack.is_none());
@@ -1322,8 +1379,7 @@ mod tests {
         let base = BaseStats { stab: 100, hack: 100, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
         let equipment = test_equipment();
         let preview = preview_effective_stats(
-            &base, &StatSources::default(), &equipment, &test_common_skills(), &test_catalog(), &[], &[],
-            "boris", Some(test_attack_coefficients()), NO_CAP,
+            &base, &StatSources::default(), &equipment, &test_common_skills(), &test_catalog(), &[], &[], &[], &[], Some(test_attack_coefficients()), NO_CAP,
         )
         .unwrap();
         let attack = preview.attack.unwrap();
@@ -1351,7 +1407,7 @@ mod tests {
         let sources = StatSources::default();
         let coefficients = test_attack_coefficients();
         let preview = preview_effective_stats(
-            &base, &sources, &equipment, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients), NO_CAP,
+            &base, &sources, &equipment, &test_common_skills(), &test_catalog(), &[], &[], &[], &[], Some(coefficients), NO_CAP,
         )
         .unwrap();
         let attack = preview.attack.unwrap();
@@ -1359,7 +1415,7 @@ mod tests {
         for (slot, _) in equipment.parts.iter() {
             let without = equipment.without_part(slot);
             let preview_without = preview_effective_stats(
-                &base, &sources, &without, &test_common_skills(), &test_catalog(), &[], &[], "boris", Some(coefficients), NO_CAP,
+                &base, &sources, &without, &test_common_skills(), &test_catalog(), &[], &[], &[], &[], Some(coefficients), NO_CAP,
             )
             .unwrap();
             let expected = attack.breakdown.value - preview_without.attack.unwrap().breakdown.value;
@@ -1381,7 +1437,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
         let m = modifiers.get(StatKind::Stab);
         assert_eq!(m.percent_of_base, vec![0.30]);
         assert_eq!(m.multiplier_a, vec![1.1]);
@@ -1405,7 +1461,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
         // event_buff choice_index 2 → 0.30、trust_potion 手入力 33 が全ステの固定値に乗る
         assert_eq!(modifiers.get(StatKind::Int).percent_of_base, vec![0.30]);
         assert_eq!(modifiers.get(StatKind::Int).fixed, 33);
@@ -1424,7 +1480,7 @@ mod tests {
             pet_skills: PetSkills { stab: Some(PetSkillTier::TrueLv2), ..Default::default() },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Stab).fixed, 40);
         assert_ne!(modifiers.get(StatKind::Stab).fixed, 20 + 30 + 40);
     }
@@ -1437,14 +1493,14 @@ mod tests {
             buffs: BuffSelection { choices: vec![choice("illumination_drink"), choice("charge_potion")] },
             ..Default::default()
         };
-        let err = build_modifiers(&sources, &test_catalog(), "boris").unwrap_err();
+        let err = build_modifiers(&sources, &test_catalog()).unwrap_err();
         assert!(matches!(err, StatSourceError::ExclusiveSlotConflict { slot } if slot == "percent_slot_1"));
     }
 
     #[test]
     fn 未知のバフidはエラーになる() {
         let sources = StatSources { buffs: BuffSelection { choices: vec![choice("nope")] }, ..Default::default() };
-        let err = build_modifiers(&sources, &test_catalog(), "boris").unwrap_err();
+        let err = build_modifiers(&sources, &test_catalog()).unwrap_err();
         assert!(matches!(err, StatSourceError::UnknownBuff { id } if id == "nope"));
     }
 
@@ -1458,67 +1514,10 @@ mod tests {
             },
             ..Default::default()
         };
-        let err = build_modifiers(&sources, &test_catalog(), "boris").unwrap_err();
+        let err = build_modifiers(&sources, &test_catalog()).unwrap_err();
         assert!(matches!(err, StatSourceError::DuplicateBuff { id } if id == "tales_weaver_energy"));
     }
 
-    /// キャラスキル(`BuffGroup::CharacterSkill`)は所有者一致のときだけ許可する。
-    fn character_skill_catalog() -> Vec<BuffDefinition> {
-        vec![BuffDefinition {
-            id: "boris_skill",
-            name: "ボリスのスキル",
-            target: BuffTarget::AllStats,
-            layer: StatLayer::Fixed,
-            value: BuffValue::Fixed(10.0),
-            exclusive_slots: vec![],
-            source_url: "",
-            note: "",
-            default_value: None,
-            group: BuffGroup::CharacterSkill { game_character_id: "boris" },
-        }]
-    }
-
-    #[test]
-    fn キャラスキルは一致するキャラなら成功する() {
-        let sources = StatSources { buffs: BuffSelection { choices: vec![choice("boris_skill")] }, ..Default::default() };
-        let (modifiers, _) = build_modifiers(&sources, &character_skill_catalog(), "boris").unwrap();
-        assert_eq!(modifiers.get(StatKind::Stab).fixed, 10);
-    }
-
-    #[test]
-    fn キャラスキルは異なるキャラだとエラーになる() {
-        let sources = StatSources { buffs: BuffSelection { choices: vec![choice("boris_skill")] }, ..Default::default() };
-        let err = build_modifiers(&sources, &character_skill_catalog(), "other_character").unwrap_err();
-        assert!(matches!(
-            err,
-            StatSourceError::ForeignCharacterSkill { id, game_character_id }
-                if id == "boris_skill" && game_character_id == "other_character"
-        ));
-    }
-
-    #[test]
-    fn 手入力値が範囲外だとエラーになり境界値は成功する() {
-        let over = StatSources {
-            buffs: BuffSelection {
-                choices: vec![BuffChoice { buff_id: "trust_potion".into(), stat: None, choice_index: None, value: Some(34.0) }],
-            },
-            ..Default::default()
-        };
-        let err = build_modifiers(&over, &test_catalog(), "boris").unwrap_err();
-        assert!(matches!(
-            err,
-            StatSourceError::ValueOutOfRange { id, value, min, max }
-                if id == "trust_potion" && value == 34.0 && min == 0.0 && max == 33.0
-        ));
-
-        let boundary = StatSources {
-            buffs: BuffSelection {
-                choices: vec![BuffChoice { buff_id: "trust_potion".into(), stat: None, choice_index: None, value: Some(33.0) }],
-            },
-            ..Default::default()
-        };
-        assert!(build_modifiers(&boundary, &test_catalog(), "boris").is_ok());
-    }
 
     // --- 3.5. StatSources::validate() が各補正源の値域を拒否する ---
 
@@ -1625,7 +1624,7 @@ mod tests {
             adjustments: Adjustments { mr: StatAdjustment { add: 12, pin: None }, ..Default::default() },
             ..Default::default()
         };
-        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog(), "boris").unwrap();
+        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog()).unwrap();
         apply_temporary_adjustments(&mut modifiers, &mut contributions, &sources.adjustments);
 
         assert_eq!(modifiers.get(StatKind::Mr).fixed, 12);
@@ -1636,7 +1635,7 @@ mod tests {
 
     #[test]
     fn 中立な一時調整は何も積まない() {
-        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog(), "boris").unwrap();
+        let (mut modifiers, mut contributions) = build_modifiers(&StatSources::default(), &test_catalog()).unwrap();
         let before_contributions = contributions.len();
         apply_temporary_adjustments(&mut modifiers, &mut contributions, &Adjustments::default());
 
@@ -1666,7 +1665,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let (modifiers, _) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, _) = build_modifiers(&sources, &test_catalog()).unwrap();
         let base = BaseStats { stab: 310, ..Default::default() };
         let (value, trace) = effective_stat(StatKind::Stab, base.stab, modifiers.get(StatKind::Stab), NO_CAP);
         assert_eq!(trace.basic, 429);
@@ -1682,7 +1681,7 @@ mod tests {
         sources.monster_cards.agi = 70;
         assert!(sources.validate().is_ok());
 
-        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog(), "boris").unwrap();
+        let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Agi).fixed, 70);
         assert_eq!(modifiers.get(StatKind::Stab).fixed, 0);
         let c = contributions.iter().find(|c| c.source == "モンスターカード").unwrap();

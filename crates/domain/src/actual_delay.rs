@@ -143,83 +143,6 @@ impl SkillUsesTable {
     }
 }
 
-/// 中ディレイ減少をもたらすキャラのパッシブ・マスタリー(wiki: ステータス「中ディレイ倍率B」)。
-/// 共通の供給源(フルスロットル / ランダムオプション / シエナのオーラ)は別経路で入るので、
-/// このカタログはキャラ固有のものだけを持つ。実データは gamedata。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct ActualDelaySkillDef {
-    pub id: &'static str,
-    pub name: &'static str,
-    /// このスキルを持つキャラ(`GameCharacter::id`)
-    pub game_character_id: &'static str,
-    /// 中ディレイ減少 %(習得していれば常にこの値)
-    pub percent: f64,
-    pub note: &'static str,
-}
-
-/// カタログ。呼び出しは `&ActualDelaySkillCatalog` = `&[ActualDelaySkillDef]`。
-pub type ActualDelaySkillCatalog = [ActualDelaySkillDef];
-
-/// キャラのパッシブによる中ディレイ減少の選択一式(習得している `ActualDelaySkillDef::id`)。
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct ActualDelaySkills {
-    #[serde(default)]
-    pub skill_ids: Vec<String>,
-}
-
-impl ActualDelaySkills {
-    /// 選択を供給源の内訳に変換する。カタログに無い id は `validate` で弾いている前提で無視する。
-    pub fn contributions(
-        &self,
-        catalog: &ActualDelaySkillCatalog,
-    ) -> Vec<ActualDelayContribution> {
-        self.skill_ids
-            .iter()
-            .filter_map(|id| catalog.iter().find(|d| d.id == id.as_str()))
-            .map(|def| ActualDelayContribution {
-                source: def.name.to_string(),
-                rate: def.percent / 100.0,
-            })
-            .collect()
-    }
-
-    /// カタログ参照・キャラ一致・重複を検証する。
-    pub fn validate(
-        &self,
-        catalog: &ActualDelaySkillCatalog,
-        game_character_id: &str,
-    ) -> Result<(), ActualDelayError> {
-        let mut seen: Vec<&str> = Vec::with_capacity(self.skill_ids.len());
-        for id in &self.skill_ids {
-            let def = catalog
-                .iter()
-                .find(|d| d.id == id.as_str())
-                .ok_or_else(|| ActualDelayError::UnknownSkill { id: id.clone() })?;
-            if def.game_character_id != game_character_id {
-                return Err(ActualDelayError::ForeignCharacterSkill {
-                    id: id.clone(),
-                    game_character_id: game_character_id.to_string(),
-                });
-            }
-            if seen.contains(&def.id) {
-                return Err(ActualDelayError::Duplicated { id: id.clone() });
-            }
-            seen.push(def.id);
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, thiserror::Error, Serialize, Deserialize)]
-pub enum ActualDelayError {
-    #[error("未知の中ディレイ減少スキルです: {id}")]
-    UnknownSkill { id: String },
-    #[error("中ディレイ減少スキル '{id}' はこのキャラ(game_character_id={game_character_id})のスキルではありません")]
-    ForeignCharacterSkill { id: String, game_character_id: String },
-    #[error("中ディレイ減少スキル '{id}' が重複して選択されています")]
-    Duplicated { id: String },
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,35 +209,6 @@ mod tests {
         assert!((d.value - 0.4).abs() < 1e-12);
     }
 
-    const CATALOG: &[ActualDelaySkillDef] = &[
-        ActualDelaySkillDef {
-            id: "mira_spurt",
-            name: "極・スパート【グッドフェイス】",
-            game_character_id: "mira",
-            percent: 5.0,
-            note: "",
-        },
-        ActualDelaySkillDef {
-            id: "boris_sword_priest",
-            name: "剣の司祭",
-            game_character_id: "boris",
-            percent: 5.0,
-            note: "",
-        },
-    ];
-
-    #[test]
-    fn 選択は供給源の内訳になる() {
-        let s = ActualDelaySkills { skill_ids: vec!["mira_spurt".into()] };
-        let contributions = s.contributions(CATALOG);
-        assert_eq!(contributions.len(), 1);
-        assert!((contributions[0].rate - 0.05).abs() < 1e-12);
-
-        // カタログに無い id は無視する(保存時に validate で弾いている)
-        let unknown = ActualDelaySkills { skill_ids: vec!["nope".into()] };
-        assert!(unknown.contributions(CATALOG).is_empty());
-    }
-
     // ユーザー提供の計測表(60 秒あたりのスキル回数)。格子の中は実測、外は式。
     #[test]
     fn 実測表の格子の中は実測回数で外は式にフォールバックする() {
@@ -350,26 +244,4 @@ mod tests {
         assert!(!fixed.uses_measured);
     }
 
-    #[test]
-    fn 他キャラのスキルと未知idと重複を弾く() {
-        let mine = ActualDelaySkills { skill_ids: vec!["mira_spurt".into()] };
-        assert!(mine.validate(CATALOG, "mira").is_ok());
-        assert!(matches!(
-            mine.validate(CATALOG, "boris"),
-            Err(ActualDelayError::ForeignCharacterSkill { .. })
-        ));
-
-        let unknown = ActualDelaySkills { skill_ids: vec!["nope".into()] };
-        assert!(matches!(
-            unknown.validate(CATALOG, "mira"),
-            Err(ActualDelayError::UnknownSkill { .. })
-        ));
-
-        let duplicated =
-            ActualDelaySkills { skill_ids: vec!["mira_spurt".into(), "mira_spurt".into()] };
-        assert!(matches!(
-            duplicated.validate(CATALOG, "mira"),
-            Err(ActualDelayError::Duplicated { .. })
-        ));
-    }
 }

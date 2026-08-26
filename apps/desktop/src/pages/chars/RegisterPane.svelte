@@ -2,15 +2,16 @@
   // キャラ登録(v4): 呼び名 + 19 職のアイコン選択だけ。詳細は登録後にワークスペースで育てる
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import { createCharacter, errorMessage } from "../../api/commands";
-  import type { NewCharacter } from "../../api/types";
-  import { defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
-  import { STAT_KINDS } from "../../labels";
+  import { dropForeignSkills } from "../../characterSkills";
+  import type { NewCharacter, Skill } from "../../api/types";
+  import { DEFAULT_AWAKENING_STAGE, defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
+  import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
   import {
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
-  import Select from "../../ui/Select.svelte";
+  import Picker, { type PickerOption } from "../../ui/Picker.svelte";
 
   let name = $state("");
   let gameCharacterId = $state("boris");
@@ -25,9 +26,14 @@
     void loadSkills(gameCharacterId);
   });
   const skills = $derived(skillsByCharacter[gameCharacterId] ?? []);
-  const mainSkillOptions = $derived([
-    { value: "", label: "未選択(あとで選ぶ)" },
-    ...skills.map((s) => ({ value: s.id, label: s.name })),
+  /** 名前だけでは選べない。単 / 範・段数・属性を並べ、火力の高い順にする(SourcePane と同じ形) */
+  const skillMeta = (s: Skill) =>
+    `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]}`;
+  const mainSkillOptions = $derived<PickerOption[]>([
+    { value: "", name: "未選択(あとで選ぶ)", iconId: null },
+    ...[...skills]
+      .sort((a, b) => b.multiplier * Math.max(1, b.hit_count) - a.multiplier * Math.max(1, a.hit_count))
+      .map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
   ]);
   /** キャラを選び直したら前キャラのスキル id を残さない */
   function pickGameCharacter(id: string) {
@@ -49,18 +55,21 @@
           main_skill_id: mainSkillId === "" ? null : mainSkillId,
         };
         if (source.game_character_id !== gameCharacterId) {
-          // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルバフを落とす(幽霊バフ対策)
-          payload.stat_sources.buffs.choices = payload.stat_sources.buffs.choices.filter((ch) => {
-            const def = app.catalog.find((d) => d.id === ch.buff_id);
-            return !(def && typeof def.group === "object" && "character_skill" in def.group);
-          });
+          // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルを落とす(幽霊スキル対策)
+          payload.stat_sources.character_skills.skill_ids = dropForeignSkills(
+            payload.stat_sources.character_skills.skill_ids,
+            app.characterSkills,
+            gameCharacterId,
+          );
         }
       } else {
         payload = {
           name: name.trim() || selectedGame.name,
           game_character_id: gameCharacterId,
           base_stats: Object.fromEntries(STAT_KINDS.map((k) => [k, 1])) as NewCharacter["base_stats"],
-          awakening: { stage: 0, eternal_level: 0 },
+          // このツールのターゲット層は**覚醒 5**(遅くても 4)。既定を 0 にすると
+          // ほぼ全員が毎回上書きすることになる(ux-guidelines「初期値は実用値」)
+          awakening: { stage: DEFAULT_AWAKENING_STAGE, eternal_level: 0 },
           stat_sources: neutralStatSources(),
           equipment: defaultEquipment(),
           common_skills: defaultCommonSkills(),
@@ -105,7 +114,7 @@
     <div class="row skill-row">
       <span class="label">主軸スキル</span>
       <span class="skill-select">
-        <Select options={mainSkillOptions} bind:value={mainSkillId} />
+        <Picker options={mainSkillOptions} note="火力の高い順(倍率 × 段数)" placeholder="あとで選ぶ" bind:value={mainSkillId} />
       </span>
       <span class="hint dim">
         {skills.length === 0 ? "このキャラのスキルは未収録" : "攻撃力の依存種別を決めます。あとで変更できます"}
@@ -134,7 +143,7 @@
 <style>
   .pane { max-width: 720px; }
   .card { padding: 13px; border-radius: var(--r-window); }
-  .card-title.big { font-size: 12px; color: #26334A; }
+  .card-title.big { font-size: 12px; color: var(--fg-head); }
   .row { margin-top: 9px; display: flex; align-items: center; gap: 8px; min-width: 0; }
   .label { width: 60px; flex-shrink: 0; font-size: var(--t-label); color: var(--fg-muted); }
   input[type="text"] {
@@ -149,7 +158,7 @@
   .pick {
     width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px;
     padding: 7px 4px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid var(--border-soft);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
   }
   .pick.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16); }
   .pick-name { max-width: 58px; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

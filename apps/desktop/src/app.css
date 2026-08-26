@@ -7,28 +7,89 @@
   --bg-panel: #F6FBFF;
   --bg-field: #FFFFFF;
   --bg-active: #DCEBFF;
+  /* 選ばれている・押せる主役(タブ・段階選択の選択中・主要ボタン)。§03 Active Tab */
+  --sel: linear-gradient(180deg, #CCF7FF, #90D7FF);
+  --sel-bd: #687287;
+  --sel-fg: #123047;
   --border: #A6BAD3;
   --border-soft: #C1D3E6;
   --border-strong: #798CAC;
-  --fg: #1B2331;
-  --fg-muted: #5E6E88;
-  --fg-dim: #93A0B2;
+  /* 文字色 6 段(§03)。濃さで役割を分ける */
+  --fg: #1B2331;         /* 本文・主となる値 */
+  --fg-head: #26334A;    /* セクション見出し */
+  --fg-sub: #3B4A63;     /* 副次的な値・説明 */
+  --fg-muted: #5E6E88;   /* ラベル・注記 */
+  --fg-dim: #93A0B2;     /* 補足・単位 */
+  --fg-off: #A9B4C4;     /* 無効・未設定 */
   --accent: #426DD6;
   --accent-hover: #2B4FA8;
-  --warm: #B0574A;
-  --danger: #8C4A42;
-  --good: #2E6B4C;
+  /* 予約色(§03)。この用途以外に使わない */
+  --gold: #C2A057;       /* 操作待ち・上限・結果。「金が出ている = まだ何か決めていない」 */
+  --mob: #A98B86;        /* 敵 */
+  --warm: #B0574A;       /* 危険・減る値 */
+  --danger: #8C4A42;     /* 削除・届かない */
+  --good: #2E6B4C;       /* 足りている・増えた(評価ではなく事実) */
+  --good-soft: #6FA98A;
   --head-bar: #6382AD;
-  /* 候補チップ(すぐできる / エンチャント / 装備更新)の面と枠。文字色は --good/--accent-hover/--danger */
-  --good-bg: #DFF3E6;
-  --good-border: #6FA98A;
-  --danger-bg: #F6E8E5;
-  --danger-border: #B08480;
   /* 「保存されない・一時のもの」専用の色(試し変更・候補の一時表示)。この用途以外に使わない */
   --sim: #6D6AA8;
   --sim-strong: #565394;
   --sim-fg: #4A4780;
   --sim-bg: #FBFAFE;
+
+  /* 上限のある入力欄(§07 形態 4 の実演)。ラベンダー系でまとめる —
+     上限まで盛る操作はその場の試行なので、保存済みの値の面(水色)とは別に見せる */
+  --cell-bd: #C6C3E0;                 /* 通常の枠 */
+  --cell-fg: #2C2A57;                 /* 値 */
+  --cell-cap: #9A97BE;                /* /上限 */
+  --cell-step: #8F8CC4;               /* ＋ / − */
+  --cell-max-bd: #A9A6D6;             /* MAX の枠 */
+  --cell-bar: linear-gradient(90deg, #C6C3E0, var(--sim));
+  --cell-full-bg: linear-gradient(180deg, #F3F0FF, #E6E1FA);
+  --cell-max-full-bg: linear-gradient(180deg, #CFC9F5, #B3ACE8);
+
+  /* 属性 8 色(§03)。**状態の 6 系統とは別系統**で、意味は「どの属性か」だけ。
+     予約色(金 = 操作待ち / ラベンダー = 保存されない)と読み違えないよう、
+     **彩度を落として面(bg)にだけ使う**。帯・到達判定のバッジには使わない */
+  --elem-fire-bg: #F7DCD3;    --elem-fire-fg: #944A36;
+  --elem-water-bg: #D9E8F8;   --elem-water-fg: #33608F;
+  --elem-wind-bg: #DAEFE0;    --elem-wind-fg: #35734D;
+  --elem-earth-bg: #EDE3CF;   --elem-earth-fg: #6D5A33;
+  --elem-thunder-bg: #F2E9C6; --elem-thunder-fg: #7A661F;
+  --elem-white-bg: #ECF1F8;   --elem-white-fg: #5E6B7E;
+  --elem-black-bg: #DCE0E7;   --elem-black-fg: #3C4351;
+  --elem-neutral-bg: #E7EAF0; --elem-neutral-fg: #6F7A8C;
+
+  /* 状態の 6 系統(§03)。到達判定のバッジ・量バー・候補チップはこの 6 つから選ぶ。
+     ラベル(「余裕」「通る」…)は画面ごとに変えてよいが、色と意味の対応は変えない。
+     参照は src/ui/states.ts 経由(inline style に hex を書かない) */
+  --state-goal-bg: var(--bg-active);  --state-goal-bd: var(--accent);      --state-goal-fg: var(--accent-hover);  /* 余裕・目標 */
+  --state-met-bg: #DFF3E6;            --state-met-bd: var(--good-soft);    --state-met-fg: var(--good);           /* 足りている */
+  --state-edge-bg: #FDF3DE;           --state-edge-bd: var(--gold);        --state-edge-fg: #7A6420;              /* ぎりぎり・操作待ち */
+  --state-short-bg: #F6E8E5;          --state-short-bd: #B08480;           --state-short-fg: var(--danger);       /* 届かない・危険 */
+  --state-unknown-bg: #ECEEF2;        --state-unknown-bd: #A9B4C4;         --state-unknown-fg: var(--fg-muted);   /* 対象外・判定不能 */
+  --state-temp-bg: #EFEEF8;           --state-temp-bd: var(--sim);         --state-temp-fg: var(--sim-fg);        /* 一時・チーム条件 */
+  /* 同じ 6 系統の量バー(明 → 暗) */
+  --state-goal-bar: linear-gradient(90deg, #90D7FF, #426DD6);
+  --state-met-bar: linear-gradient(90deg, #9FD9BC, #3E8C63);
+  --state-edge-bar: linear-gradient(90deg, #F0D79A, #C2A057);
+  --state-short-bar: linear-gradient(90deg, #E8B3A2, #B0574A);
+  --state-unknown-bar: linear-gradient(90deg, #CBD3DE, #9AA6B6);
+  --state-temp-bar: linear-gradient(90deg, #C3C1E4, #6D6AA8);
+
+  /* 内訳の色(§03「内訳の色」)。積み上げ帯・流れ帯で「どの区間か」を識別するための並びで、
+     良し悪しは表さない。状態の 6 系統と混ぜない。順序は流れの順 */
+  --flow-base: #9AA6B6;  /* 素ステ由来の土台 */
+  --flow-1: var(--accent);  /* 装備攻撃力・スキル倍率 */
+  --flow-2: #5B8FD6;     /* クリティカル */
+  --flow-3: #3E8C63;     /* コンボ・属性・カット率・オーラ */
+  --flow-4: var(--good-soft);  /* 最終ダメージ固定値(下限) */
+  --flow-5: #8FBFA6;     /* 最終ダメージ・カット率A・被害減少 */
+  --flow-6: var(--gold);  /* 各種ダメージ増減 */
+  --flow-7: #B0824A;     /* 攻撃ダメージ・PVP 補正 */
+  --flow-pierce: linear-gradient(90deg, #8FB2E8, #426DD6);  /* 防御を抜けた分 */
+  /* 斜線 = 効いていない・持っていかれた量(§03)。塗りつぶし(効いている量)と混ぜない */
+  --hatch-lost: repeating-linear-gradient(135deg, #B08480 0 4px, #8C4A42 4px 8px);
   /* 窓の3層目(規格シート 2a のインセット面)。表・読み取り専用の数値をここに載せて、
      編集できる面(--bg-field の白)と区別する */
   --surface-inset: #C1D3E6;
@@ -66,7 +127,7 @@ body {
 }
 
 button, select, input { font-family: inherit; font-size: inherit; color: inherit; }
-input[type="number"], input[type="text"] { font-family: var(--font-num); }
+input[type="number"], input[type="text"] { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
 button { cursor: pointer; background: none; border: 0; padding: 0; }
 button:disabled { cursor: not-allowed; opacity: 0.5; }
@@ -93,9 +154,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .card {
   padding: 12px 13px; border-radius: var(--r-window);
-  background: #fff; border: 1px solid var(--border-strong);
+  background: var(--bg-field); border: 1px solid var(--border-strong);
 }
-.card-title { font-weight: 700; font-size: 11px; color: #26334A; white-space: nowrap; }
+.card-title { font-weight: 700; font-size: 11px; color: var(--fg-head); white-space: nowrap; }
 
 .badge {
   flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
@@ -110,9 +171,11 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   font-size: 11.5px; font-weight: 500;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent); }
+/* 主要なボタンは inset のハイライトを 1 本入れる(§08) */
 .btn.primary {
-  background: linear-gradient(180deg, #CCF7FF, #90D7FF);
-  border-color: #687287; color: #123047; font-weight: 700;
+  background: var(--sel);
+  border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700;
+  box-shadow: inset 0 1px 0 #fff;
 }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.04); }
 .btn.danger { color: var(--danger); }
@@ -143,6 +206,9 @@ table.grid th {
   position: sticky; top: 0;
 }
 table.grid td.n, table.grid th.n { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+/* 読み取り専用の表はインセット面に載せる(§01)。編集できる面(白)と、
+   触れるかどうかが面で分かれる。編集列が混ざる表は列に .ro を付ける */
+table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 
 /* 進捗バー(目安に対する火力など) */
 .meter {
@@ -153,3 +219,318 @@ table.grid td.n, table.grid th.n { text-align: right; font-family: var(--font-nu
   position: absolute; left: 0; top: 0; bottom: 0;
   transition: width 0.38s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* 動きと変化(design-system §10)---------------------------------------------
+   動きの仕事はひとつだけ — いま何が変わったかを、探させずに伝えること。
+   だから装飾のアニメーションは置かない(置くと本当の変化がその中に埋もれる)。
+   0.5 秒を超える動きは置かない。待たせるための動きは 1 つも要らない。
+   型ごとに手段を固定してあるので、新しい動きを足す前にこの 6 つに寄せられないか見る。 */
+
+/* 1. 数値が変わった — 跳ねる + 増減の色。色は必ず元に戻す(残すと状態色 §03 と混ざる)。
+      animation は終了時に元の値へ戻るので、色の後始末を JS でしなくてよい */
+@keyframes tw-bump-up {
+  0%   { transform: scale(1);    color: var(--good); }
+  40%  { transform: scale(1.07); color: var(--good); }
+  100% { transform: scale(1);    color: var(--good); }
+}
+@keyframes tw-bump-down {
+  0%   { transform: scale(1);    color: var(--warm); }
+  40%  { transform: scale(1.07); color: var(--warm); }
+  100% { transform: scale(1);    color: var(--warm); }
+}
+.bump-up, .bump-down { display: inline-block; }
+.bump-up { animation: tw-bump-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.bump-down { animation: tw-bump-down 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* 2. 量が変わった — バーの幅。数値と同時に動かす(.meter > .fill の transition) */
+
+/* 3. 場所が増えた — 左端から生えてくる。元からある場所は動かさない(§09 規則 2) */
+/* scaleX を使わない。原点から遠い要素ほど大きく横に流れるので、
+   ペインの右端にあるものが「あとから左右に動いてくる」ように見える(実測 22px)。
+   入場は**全体が同じ量だけ**動く translateX + opacity だけにする */
+@keyframes tw-pane-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+.pane-in { animation: tw-pane-in 0.28s cubic-bezier(0.2, 0.85, 0.25, 1); transform-origin: left center; }
+
+/* 3b. 面が入れ替わった — タブで中身を切り替えたとき。**入ってくる面だけ**短く動かす。
+      ぱっと差し替わると「切り替えたのか、元からこうだったのか」が一瞬わからない(§00 04) */
+@keyframes tw-swap-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: none; }
+}
+.swap-in { animation: tw-swap-in 0.2s cubic-bezier(0.2, 0.85, 0.25, 1); }
+
+/* 4. 一時的に重なった — 上から降りる。閉じたら跡形もなく消える
+      (レイアウトを押していないので、消えても何も動かない。§09 規則 3) */
+@keyframes tw-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scaleY(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+.pop-in { animation: tw-pop-in 0.17s cubic-bezier(0.34, 1.2, 0.64, 1); transform-origin: top center; }
+
+/* 5. 状態が変わった — バッジが弾んで出る。行そのものは動かさない */
+@keyframes tw-badge-in {
+  from { transform: scale(0.9); }
+  to   { transform: none; }
+}
+.badge-in { animation: tw-badge-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* 6. 開いた / 閉じた — 下方向にだけ伸びる。上に伸ばすと上にあるものが全部ずれる */
+@keyframes tw-open {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 1400px; }
+}
+.open-in { animation: tw-open 0.34s ease; overflow: hidden; transform-origin: top center; }
+
+/* 動きを消しても変化が分かること。ここで消えて意味が伝わらなくなるなら、
+   それは動きに頼りすぎているサイン — 色と数値だけで伝わる状態を先に作る */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- 段階選択(§07 形態 2「段階選択」/ §08 .seg) -----------------------------
+   1 つの枠の中に段が並び、間は弱い区切り線 1 本。段そのものを見せて数字を打たせない。
+   見た目はここだけに置く。振る舞いは src/ui/StepSelect.svelte  */
+.seg {
+  display: inline-flex; flex-wrap: wrap; align-self: flex-start; min-width: 0;
+  border: 1px solid var(--border); border-radius: var(--r-panel); overflow: hidden;
+}
+.seg button {
+  padding: 5px 12px; border: 0; border-right: 1px solid var(--border-soft);
+  background: var(--bg-field); color: var(--fg-muted);
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+  transition: background 0.15s ease;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover:not(:disabled):not(.on) { background: var(--bg-rail); }
+.seg button.on { background: var(--sel); color: var(--sel-fg); font-weight: 700; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.seg button:disabled { cursor: not-allowed; opacity: 0.5; }
+/* 幅いっぱいに割る形(§08 .seg.full) */
+.seg.full { display: flex; width: 100%; }
+.seg.full button { flex: 1; text-align: center; padding: 5px 0; }
+/* 段が多くて 1 行に収まらないときの形。**列を固定して、行をまたいで幅を揃える**。
+   同じ並びが行ごとに違う幅で終わると、端がばらついて目が毎行そこを探し直す(§00 01)。
+   区切り線は 1px の隙間から下の面が覗く形で出す(枠と二重線にならない) */
+.seg.cols {
+  display: grid; grid-template-columns: repeat(var(--seg-cols, 5), 1fr);
+  width: 100%; gap: 1px; background: var(--border-soft);
+}
+.seg.cols button { border-right: 0; text-align: center; padding: 5px 4px; }
+/* 段の**大きさ**をそろえる形。行ごとに段の数が違うとき(Lv5 まで / Lv6 まで)、
+   幅いっぱいに割ると 1 段の大きさが行ごとに変わってしまう。段を固定幅にして、
+   行の長さのほうを変える */
+.seg.cols.fixed { width: max-content; grid-template-columns: repeat(var(--seg-cols, 5), var(--seg-cell, 34px)); }
+
+/* 属性のやんわりした面。段・チップ・値の背景に使う(§03 の属性 8 色)。
+   クラスを 2 回書いているのは、`.seg button` のような「要素込みの指定」に負けないため */
+.elem-fire.elem-fire { background: var(--elem-fire-bg); color: var(--elem-fire-fg); }
+.elem-water.elem-water { background: var(--elem-water-bg); color: var(--elem-water-fg); }
+.elem-wind.elem-wind { background: var(--elem-wind-bg); color: var(--elem-wind-fg); }
+.elem-earth.elem-earth { background: var(--elem-earth-bg); color: var(--elem-earth-fg); }
+.elem-thunder.elem-thunder { background: var(--elem-thunder-bg); color: var(--elem-thunder-fg); }
+.elem-white.elem-white { background: var(--elem-white-bg); color: var(--elem-white-fg); }
+.elem-black.elem-black { background: var(--elem-black-bg); color: var(--elem-black-fg); }
+.elem-neutral.elem-neutral { background: var(--elem-neutral-bg); color: var(--elem-neutral-fg); }
+/* 選ばれている段は水色(§03 の選択)が勝つ。属性色は「どれか」を言うだけで、状態は言わない */
+.seg button.on.elem-fire.elem-fire, .seg button.on.elem-water.elem-water,
+.seg button.on.elem-wind.elem-wind, .seg button.on.elem-earth.elem-earth,
+.seg button.on.elem-thunder.elem-thunder, .seg button.on.elem-white.elem-white,
+.seg button.on.elem-black.elem-black, .seg button.on.elem-neutral.elem-neutral {
+  background: var(--sel); color: var(--sel-fg);
+}
+
+/* --- 多数から 1 つ選ぶ(ui/Picker.svelte)-----------------------------------------
+   素の <select> の代わり。**1 件 1 行**で、名前のほかに選ぶのに要る値とアイコンを持てる。
+   候補は重なって出るので、押した場所も周りの行も動かない(§09 規則 3)  */
+.picker-trigger {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px; border-radius: var(--r-panel);
+  background: var(--bg-field); border: 1px solid var(--border);
+  font-size: 12.5px; color: var(--fg); text-align: left;
+}
+.picker-trigger:hover:not(:disabled), .picker-trigger.open { border-color: var(--accent); }
+.picker-trigger:disabled { color: var(--fg-dim); }
+.picker-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-meta {
+  flex: none; padding: 0 5px; border-radius: var(--r-pill);
+  background: var(--surface-inset); font-size: 9px; color: var(--fg-muted); white-space: nowrap;
+}
+.picker-chev { flex: none; font-size: 8px; color: var(--fg-dim); transition: transform 0.18s ease; }
+.picker-chev.rot { transform: rotate(180deg); }
+.picker-overlay { position: fixed; inset: 0; z-index: 40; cursor: default; }
+.picker-pop {
+  position: absolute; z-index: 41; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 280px; overflow-y: auto; overscroll-behavior: contain;
+  border-radius: var(--r-window); background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 10px 24px rgba(30, 44, 74, 0.28), inset 0 0 0 1px #fff;
+}
+.picker-pop-head {
+  position: sticky; top: 0; z-index: 1;
+  padding: 6px 11px; background: var(--bg-rail); border-bottom: 1px solid var(--border-soft);
+  font-size: 9px; letter-spacing: 0.1em; color: var(--fg-muted);
+}
+.picker-row {
+  width: 100%; display: flex; align-items: center; gap: 7px;
+  padding: 7px 11px; background: none; border: 0; border-bottom: 1px dashed var(--border-soft);
+  font-size: 12px; color: var(--fg); text-align: left;
+}
+.picker-row:last-child { border-bottom: 0; }
+.picker-row:hover { background: var(--bg-rail); }
+.picker-row.on { background: var(--bg-active); font-weight: 700; }
+
+/* --- 畳んでおく場所(§00「要らないものを見せない」)-----------------------------
+   ほぼ全員が同じ値で、ふだん触らないものはここに入れる。**要約は畳んだ状態でも出す** —
+   隠すのは操作であって、いまいくつなのかという情報ではない  */
+details.fold { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-soft); }
+details.fold > summary {
+  display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; user-select: none;
+  font-size: 10.5px; color: var(--fg-muted);
+}
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::before { content: "▸"; font-size: 8.5px; color: var(--fg-dim); }
+details.fold[open] > summary::before { content: "▾"; }
+details.fold > summary:hover { color: var(--fg); }
+details.fold .fold-body { margin-top: 10px; }
+
+/* --- タブ(§08)。画面の切り替えと、同じ形の中身を切り替える場所に使う ---------
+   選択中は 1px 迫り出して、下の面と地続きになる。だから必ず下に `.tab-rule` を敷く。
+   未実装のタブは `.todo`(opacity .65)で「あるが、まだ」を示す  */
+.tabs { display: flex; align-items: flex-end; gap: 3px; }
+.tab {
+  padding: 6px 14px; border-radius: var(--r-panel) var(--r-panel) 0 0;
+  border: 1px solid var(--border-strong); border-bottom: 0;
+  background: linear-gradient(180deg, #A9CDFE, #8EB9FC);
+  font-size: 12px; font-weight: 500; color: #2B3C57; white-space: nowrap;
+}
+.tab.on {
+  padding: 7px 16px; position: relative; top: 1px;
+  background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700;
+}
+.tab.todo { opacity: 0.65; }
+.tab-rule { height: 1px; background: var(--sel-bd); }
+
+/* --- 顔で選ぶ(§06 アイコン 40px + 名前)。キャラの選択はここに寄せる --------------
+   アイコン単独表示は禁止なので、名前を必ず下に置く  */
+.pick {
+  width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 7px 4px; border-radius: var(--r-panel);
+  background: var(--bg-field); border: 1px solid var(--border-soft);
+}
+.pick.on {
+  background: var(--bg-active); border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16);
+}
+.pick .pick-name {
+  max-width: 58px; font-size: 9.5px; color: var(--fg-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pick.on .pick-name { color: var(--fg); font-weight: 700; }
+
+/* --- チップ(§07 形態 3 / §08 バッジ・チップ) --------------------------------
+   オン / オフ、または少数の状態の巡回。値はチップの中に書く。
+   追加用は破線 + ＋ で、実在のチップと見た目で区別する(§08)  */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 11px; border-radius: var(--r-pill);
+  background: var(--bg-field); border: 1px solid var(--border-soft);
+  font-size: 11px; font-weight: 500; color: var(--fg-sub);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.chip:hover:not(:disabled) { border-color: var(--accent); }
+/* 選ばれている(オン) */
+.chip.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
+/* 追加用 — 実在のチップと見た目で区別する */
+/* 控えめなチップ。「見え方を変えるスイッチ」(保存されない)に使う。
+   主役の隣に置くので、押していないときは面を持たない。押している間はラベンダー(保存されない) */
+.chip.quiet { padding: 3px 9px; font-size: 9.5px; font-weight: 500; background: none; color: var(--fg-dim); }
+.chip.quiet.on { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); font-weight: 700; }
+.chip.quiet:disabled { opacity: 0.8; }
+.chip.add { background: var(--bg-rail); border-style: dashed; border-color: var(--border); color: var(--accent); }
+/* 計算に入らない(記録するだけの)チップ。バッジの record-only と同じ扱い */
+.chip.record-only { color: var(--fg-muted); border-style: dashed; }
+.chip.record-only.on { border-style: solid; }
+/* 保存されない・一時的なもの(§03 予約色) */
+.chip.sim { border-color: var(--sim); color: var(--sim-fg); }
+
+/* --- 上限のある入力(§07 形態 4「ステッパー」) --------------------------------
+   規格の実演(.ench / .ctrl / .step / .cell / .fillbar / .maxbtn)がそのまま入る。
+   値・上限・進捗・MAX がひとつのセルに同居し、上限に届くとセルが紫になり MAX が
+   反転する。**見た目はここだけに置く** — 部品の中に写すと、写した先でずれる。
+   振る舞い(確定・クランプ・編集の出し入れ)は src/ui/StatInput.svelte  */
+.stepper { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.stepper > .label {
+  font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
+  min-width: 46px; margin-right: 5px; flex: none; white-space: nowrap;
+}
+.stepper .cell {
+  position: relative; flex: 1 1 auto; min-width: 74px; overflow: hidden;
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
+  padding: 4px 7px 5px; border-radius: var(--r-panel);
+  background: var(--bg-field); border: 1px solid var(--cell-bd);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.stepper .cell.editing { border-color: var(--accent); }
+.stepper .cell:not(.editing):hover { border-color: var(--sim); }
+/* 上限を語らない形(§07 形態 1)。/上限 と MAX が無いぶん詰める */
+.stepper .cell.bare { flex: none; width: 74px; }
+.stepper .fill {
+  position: absolute; left: 0; bottom: 0; height: 2px;
+  background: var(--cell-bar); pointer-events: none;
+  transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.stepper .val {
+  min-width: 0; flex: 1 1 auto; text-align: right;
+  font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--cell-fg); background: none; border: none; padding: 0;
+}
+.stepper .val:focus { outline: none; }
+.stepper .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+/* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1) */
+.stepper .val::-webkit-inner-spin-button,
+.stepper .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.stepper input.val { appearance: textfield; }
+.stepper .cap { flex: none; font-size: 8px; color: var(--cell-cap); font-variant-numeric: tabular-nums; }
+/* format の結果(「+200」など)。0 のときも場所を空けておく — 出たり消えたりすると
+   その行だけ入力欄の幅が変わる(§09 規則 4) */
+.stepper .hint.fixed {
+  flex: none; min-width: 42px; text-align: right; white-space: nowrap;
+  font-size: 9.5px; font-variant-numeric: tabular-nums;
+}
+/* よく使う値のボタン。MAX と同じ寸法で、押されていない間は面を持たない */
+.stepper .preset {
+  flex: none; padding: 3px 6px; border-radius: var(--r-inset);
+  background: none; border: 1px solid var(--cell-bd); color: var(--cell-cap);
+  font-size: 8px; font-weight: 700; white-space: nowrap;
+  font-variant-numeric: tabular-nums; transition: background 0.18s ease;
+}
+.stepper .preset:hover { border-color: var(--sim); color: var(--sim); }
+.stepper .preset.on { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
+.stepper .step {
+  width: 16px; height: 22px; flex: none; padding: 0; line-height: 1;
+  background: none; border: none; border-radius: var(--r-chip);
+  font-size: 13px; font-weight: 700; color: var(--cell-step);
+}
+.stepper .step:hover:not(:disabled) { background: var(--state-temp-bg); color: var(--sim); }
+.stepper .step:disabled { color: var(--border); }
+/* MAX は常設。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) */
+.stepper .max {
+  width: 30px; flex: none; padding: 3px 0; text-align: center;
+  border-radius: var(--r-inset); background: var(--state-temp-bg);
+  border: 1px solid var(--cell-max-bd); color: var(--sim);
+  font-size: 8px; font-weight: 700; transition: background 0.18s ease;
+}
+.stepper .max:hover:not(:disabled) { border-color: var(--sim); }
+/* 上限に届くとセルが紫になり MAX が反転する。「満」は文字ではなく面で伝える(§07) */
+.stepper.full .cell { background: var(--cell-full-bg); border-color: var(--sim); }
+.stepper.full .val { color: var(--sim-fg); }
+.stepper.full .max { background: var(--cell-max-full-bg); border-color: var(--sim-fg); color: var(--cell-fg); }
+.stepper .hint { flex: none; margin-left: 5px; font-size: 11px; white-space: nowrap; }

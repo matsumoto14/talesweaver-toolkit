@@ -13,6 +13,8 @@
 
 use domain::{Element, Skill, SkillDependency};
 
+use crate::skill_targets::SKILL_TARGETS;
+
 use crate::Source;
 
 /// 単体チャネリングスキル(wiki「Skill#f8e303fb」の区分の凡例: `続` = チャネリングスキル)。
@@ -761,6 +763,10 @@ impl SkillRecord {
             hit_count: self.hit_count,
             critical_multiplier: self.critical_multiplier,
             element: self.element,
+            target: SKILL_TARGETS
+                .iter()
+                .find(|(id, _)| *id == self.skill_id().as_str())
+                .map(|(_, target)| *target),
             accuracy: self.accuracy,
             critical_rate: self.critical_rate,
             level: self.level,

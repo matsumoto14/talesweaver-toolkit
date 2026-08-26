@@ -66,12 +66,13 @@
   .adj-row .toggle { padding: 0; }
   .adj-desc { font-size: 11px; min-width: 0; }
   .adj-control { width: 100%; min-width: 0; }
-  .adj-control :global(.stat-input) { width: 100%; }
+  .adj-control :global(.stepper) { width: 100%; }
 
   .toggle { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; cursor: pointer; font-size: 12px; min-width: 0; }
   .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
   .check {
     width: 13px; height: 13px; flex-shrink: 0; border: 1px solid var(--border-strong);
+    border-radius: var(--r-inset);
     display: flex; align-items: center; justify-content: center; color: transparent;
   }
   .toggle input:checked + .check { background: var(--accent); border-color: var(--accent); color: var(--bg); }
