@@ -637,7 +637,7 @@
     rune: { title: "ルーンスキル", note: `スキル Lv がそのままステに乗る(Lv 0–${limits.rune_level_max})` },
     crown: { title: "クラウン", note: `ステに乗る実値(0–${limits.crown_max})` },
     monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
-    relic: { title: "神鳥の聖物", note: `1 段階 +10(0–${limits.sacred_relic_stage_max} 段階)` },
+    relic: { title: "神鳥の聖物", note: `ステごとの加算(10 きざみ・0–${limits.sacred_relic_stage_max * 10})` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
     title: { title: "称号", note: "表示中の 1 件だけが装備の基本能力値に乗る" },
@@ -1151,15 +1151,19 @@
         {#each STAT_KINDS as k (k)}
           <div class="stat-row">
             <span class="k">{STAT_LABELS[k]}</span>
-            <!-- 1 段階 = +10。多くの人は +200(20 段階)で止まるので、そこを 1 押しで置く -->
+            <!-- 段階ではなく**実際に増える値**で入れる(1 段階 = +10 なので ＋ を押すと 10 ずつ)。
+                 多くの人は 200 で止まるので、そこを 1 押しで置く。保存は段階のまま -->
             <StatInput
               label=""
               min={0}
-              max={limits.sacred_relic_stage_max}
+              max={limits.sacred_relic_stage_max * 10}
+              step={10}
               stepper
-              bind:value={draft.statSources.sacred_relic[k]}
-              format={(v) => (v > 0 ? `+${v * 10}` : "")}
-              presets={[{ value: 20, label: "+200" }]}
+              presets={[{ value: 200, label: "200" }]}
+              bind:value={
+                () => draft.statSources.sacred_relic[k] * 10,
+                (v) => (draft.statSources.sacred_relic[k] = Math.round(v / 10))
+              }
             />
           </div>
         {/each}
