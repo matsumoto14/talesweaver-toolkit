@@ -515,24 +515,44 @@
   // --- テシスコア(地域ごとに 6 枠) ---------------------------------------
   let coreRegion = $state<CoreRegion>("abyss");
   const coreSlotIndexes = Array.from({ length: CORE_SLOT_COUNT }, (_, i) => i);
-  // 火力タイプと補助タイプはラベルで区別する(補助は装備攻撃力に入らない)
-  const coreTypeOptions = [
+  // 選ぶのは火力 4 タイプがほとんど。補助タイプ(物防・回避・敏捷・命中)は装備攻撃力に
+  // 入らないので、ふだんは畳んでおく(§00「要らないものを見せない」)。
+  // 既に補助タイプが入っている枠があるときは、畳んだままだと選択中の段が消えるので開く
+  let coreShowSupport = $state(false);
+  const corePowerOptions = [
     { value: "", label: "未装着" },
     ...CORE_POWER_TYPES.map((t) => ({ value: t, label: CORE_TYPE_LABELS[t] })),
-    ...CORE_SUPPORT_TYPES.map((t) => ({ value: t, label: `${CORE_TYPE_LABELS[t]}(補助)` })),
   ];
-  const coreStageOptions = (max: number, prefix: string) =>
-    Array.from({ length: max + 1 }, (_, i) => ({ value: String(i), label: `${prefix}${i}` }));
-  const coreEvolutionOptions = $derived(coreStageOptions(limits.core_evolution_max, "進化"));
-  const coreEnhancementOptions = $derived(coreStageOptions(limits.core_enhancement_max, "強化"));
+  const coreSupportOptions = CORE_SUPPORT_TYPES.map((t) => ({
+    value: t,
+    label: `${CORE_TYPE_LABELS[t]}(補助)`,
+  }));
+  const coreSupportInUse = $derived(
+    draft.equipment.thesis_cores[coreRegion].slots.some(
+      (c) => c !== null && !CORE_POWER_TYPES.includes(c.core_type),
+    ),
+  );
+  const coreTypeOptions = $derived(
+    coreShowSupport || coreSupportInUse ? [...corePowerOptions, ...coreSupportOptions] : corePowerOptions,
+  );
+  // 進化と強化は別々に選ばせず「4-4」で 1 回で決める(5×5 = 25 通り)。
+  // 押した枠の下に重ねて出すので、他の枠は動かない(§09 規則 3)
+  let openCoreStage = $state<number | null>(null);
+  const coreStagePairs = $derived(
+    Array.from({ length: limits.core_evolution_max + 1 }, (_, ev) =>
+      Array.from({ length: limits.core_enhancement_max + 1 }, (_, en) => ({ ev, en })),
+    ),
+  );
   const coreAt = (index: number) => draft.equipment.thesis_cores[coreRegion].slots[index] ?? null;
   function setCoreType(index: number, value: string) {
     const slots = draft.equipment.thesis_cores[coreRegion].slots;
     slots[index] = value === "" ? null : { core_type: value as CoreType, evolution: 0, enhancement: 0 };
   }
-  function setCoreStage(index: number, field: "evolution" | "enhancement", value: number) {
+  function setCoreStagePair(index: number, evolution: number, enhancement: number) {
     const core = draft.equipment.thesis_cores[coreRegion].slots[index];
-    if (core) core[field] = value;
+    if (!core) return;
+    core.evolution = evolution;
+    core.enhancement = enhancement;
   }
   const coreRegionTotal = (region: CoreRegion) =>
     coreSetTotalBonus(draft.equipment.thesis_cores[region]);
@@ -1494,19 +1514,21 @@
   {:else if sourceId === "thesis"}
     <div class="card">
       <div class="card-title">地域</div>
-      <div class="region-tabs">
+      <!-- 地域は「同じ形の 6 枠を切り替える」ので §08 のタブ。選んだ地域の下と地続きになる -->
+      <div class="tabs">
         {#each CORE_REGIONS as region (region)}
           <button
             type="button"
-            class="region-tab"
+            class="tab"
             class:on={coreRegion === region}
             onclick={() => (coreRegion = region)}
           >
-            <span>{CORE_REGION_LABELS[region]}</span>
+            {CORE_REGION_LABELS[region]}
             <span class="num dim">{fmtInt(coreRegionTotal(region))}</span>
           </button>
         {/each}
       </div>
+      <div class="tab-rule"></div>
       <p class="hint dim">
         wiki「テシスコア」。コアの能力値増加は対象ダンジョン内でのみ有効なので、計算対象のコンテンツに
         対応する地域のコアだけが装備攻撃力に入ります。セット効果(最終ダメージ)は全地域で発動します。
@@ -1533,29 +1555,39 @@
           <div class="core-row">
             <span class="core-slot dim">{index + 1}</span>
             <StepSelect
-              label="タイプ"
+              label=""
               options={coreTypeOptions}
               bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
             />
+            <!-- 進化 - 強化。押すと 5×5 が重なって出るので、押した枠は動かない(§09 規則 3) -->
             <span class="core-stage">
-            <StepSelect
-              label="進化"
-              options={coreEvolutionOptions}
-              disabled={core === null}
-              bind:value={
-                () => String(core?.evolution ?? 0),
-                (v) => setCoreStage(index, "evolution", Number(v))
-              }
-            />
-            <StepSelect
-              label="強化"
-              options={coreEnhancementOptions}
-              disabled={core === null}
-              bind:value={
-                () => String(core?.enhancement ?? 0),
-                (v) => setCoreStage(index, "enhancement", Number(v))
-              }
-            />
+              <button
+                type="button"
+                class="stage-trigger num"
+                disabled={core === null}
+                aria-label="進化と強化"
+                onclick={() => (openCoreStage = openCoreStage === index ? null : index)}
+              >
+                {core ? `${core.evolution}-${core.enhancement}` : "—"}
+              </button>
+              {#if openCoreStage === index && core}
+                <button type="button" class="stage-overlay" aria-label="閉じる" onclick={() => (openCoreStage = null)}></button>
+                <div class="stage-pop pop-in">
+                  <div class="stage-pop-h">進化 - 強化</div>
+                  <div class="stage-grid">
+                    {#each coreStagePairs as row (row[0].ev)}
+                      {#each row as p (p.en)}
+                        <button
+                          type="button"
+                          class="stage-cell num"
+                          class:on={core.evolution === p.ev && core.enhancement === p.en}
+                          onclick={() => { setCoreStagePair(index, p.ev, p.en); openCoreStage = null; }}
+                        >{p.ev}-{p.en}</button>
+                      {/each}
+                    {/each}
+                  </div>
+                </div>
+              {/if}
             </span>
             <span class="core-bonus num" class:support={core !== null && !CORE_POWER_TYPES.includes(core.core_type)}>
               {core ? `+${fmtInt(coreBonus(core.core_type, core.evolution, core.enhancement))}` : "—"}
@@ -1563,6 +1595,10 @@
           </div>
         {/each}
       </div>
+      <label class="core-support-toggle">
+        <input type="checkbox" bind:checked={coreShowSupport} disabled={coreSupportInUse} />
+        補助タイプ(物防・回避・敏捷・命中)も選ぶ
+      </label>
       <p class="hint dim">
         入場条件の「コア N」はこの 6 枠の合計と同じ値です(火力の進化1強化4 ×6 = 60、進化4強化4 ×6 = 480。
         補助タイプは進化4強化4 でも 60 なので 6 枠でも 360 止まり)。
@@ -1881,26 +1917,50 @@
   .item-vals { flex-shrink: 0; font-size: 9.5px; }
   .custom-name { margin-top: 9px; }
 
-  .region-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  .region-tab {
-    display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border); font-size: 11px;
-  }
-  .region-tab.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); font-weight: 700; }
-  .core-list { display: flex; flex-direction: column; gap: 8px; }
-  /* タイプは 8 択なので 1 行使う。狭い枠に押し込むとセグメントが縦に折り返して読めない。
-     進化・強化は 5 択なので下の行に横並び(§00「触る場所だけ大きく」) */
+  /* 地域タブの見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
+  .tabs { margin-top: 2px; }
+  .tab .num { font-size: 9.5px; margin-left: 5px; }
+  .tab-rule { margin-bottom: 9px; }
+
+  .core-list { display: flex; flex-direction: column; gap: 7px; }
+  /* 1 枠 = 1 行。番号・タイプ・進化-強化・補正値が同じ高さに並ぶので、
+     6 枠を上から一度の視線で読める(§00「視線を動かさない」) */
   .core-row {
-    display: grid;
-    grid-template-columns: 18px 1fr 48px;
-    grid-template-areas: "n type bonus" ". stage stage";
-    gap: 8px; align-items: end;
-    padding-bottom: 9px; border-bottom: 1px dashed var(--border-soft);
+    display: grid; grid-template-columns: 16px 1fr 54px 48px;
+    gap: 9px; align-items: center;
+    padding-bottom: 7px; border-bottom: 1px dashed var(--border-soft);
   }
   .core-row:last-child { padding-bottom: 0; border-bottom: 0; }
-  .core-row > :global(*:nth-child(2)) { grid-area: type; }
-  .core-stage { grid-area: stage; display: flex; flex-wrap: wrap; gap: 8px 14px; }
-  .core-slot { font-size: 11px; padding-bottom: 8px; text-align: center; }
-  .core-bonus { font-size: 12px; font-weight: 700; padding-bottom: 8px; text-align: right; }
+  .core-slot { font-size: 11px; text-align: center; }
+  .core-stage { position: relative; }
+  .stage-trigger {
+    width: 100%; padding: 5px 0; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border);
+    font-size: 11.5px; font-weight: 700; color: var(--fg-sub);
+  }
+  .stage-trigger:hover:not(:disabled) { border-color: var(--accent); }
+  .stage-trigger:disabled { color: var(--fg-off); }
+  /* 重なって出るので、開いても行は動かない(§09 規則 3) */
+  .stage-overlay { position: fixed; inset: 0; z-index: 30; cursor: default; }
+  .stage-pop {
+    position: absolute; z-index: 31; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+    padding: 7px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border-strong);
+    box-shadow: 0 8px 20px rgba(30, 44, 74, 0.26);
+  }
+  .stage-pop-h { margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .stage-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+  .stage-cell {
+    padding: 4px 7px; border-radius: var(--r-inset);
+    background: var(--bg-rail); border: 1px solid var(--border-soft);
+    font-size: 11px; color: var(--fg-sub); white-space: nowrap;
+  }
+  .stage-cell:hover:not(.on) { background: var(--bg-active); }
+  .stage-cell.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
+  .core-bonus { font-size: 12px; font-weight: 700; text-align: right; }
   .core-bonus.support { color: var(--fg-muted); font-weight: 400; }
+  .core-support-toggle {
+    margin-top: 9px; display: flex; align-items: center; gap: 6px;
+    font-size: 10.5px; color: var(--fg-muted);
+  }
 </style>

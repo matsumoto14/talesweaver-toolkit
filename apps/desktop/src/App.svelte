@@ -42,7 +42,7 @@
     </div>
     <nav class="tabs">
       {#each TABS as t (t.id)}
-        <button type="button" class="tab" class:active={app.tab === t.id} onclick={() => (app.tab = t.id)}>
+        <button type="button" class="tab" class:on={app.tab === t.id} onclick={() => (app.tab = t.id)}>
           {t.label}
         </button>
       {/each}
@@ -94,29 +94,19 @@
   .topbar {
     height: 52px; flex-shrink: 0; padding: 0 20px 0 16px;
     background: linear-gradient(180deg, #DBE6F8, #AEC7F0);
-    border-bottom: 1px solid #687287;
+    border-bottom: 1px solid var(--sel-bd);
     display: flex; align-items: center; gap: 14px;
   }
   .brand { display: flex; align-items: center; gap: 9px; }
   .brand .mark {
     width: 22px; height: 22px; border-radius: var(--r-inset);
     background: linear-gradient(160deg, #fff, #8EB9FC);
-    border: 1px solid #687287;
+    border: 1px solid var(--sel-bd);
   }
   .brand .name { font-weight: 800; font-size: 12.5px; letter-spacing: 0.08em; white-space: nowrap; }
 
-  .tabs { display: flex; align-items: flex-end; gap: 3px; margin-left: 8px; align-self: flex-end; }
-  .tab {
-    padding: 6px 14px; border-radius: var(--r-panel) 9px 0 0;
-    background: linear-gradient(180deg, #A9CDFE, #8EB9FC);
-    border: 1px solid var(--border-strong); border-bottom: 0;
-    color: #2B3C57; font-size: 12px; font-weight: 500; white-space: nowrap;
-  }
-  .tab.active {
-    padding: 7px 16px; position: relative; top: 1px;
-    background: linear-gradient(180deg, #CCF7FF, #90D7FF);
-    border-color: #687287; color: #123047; font-weight: 700;
-  }
+  /* 見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
+  .tabs { margin-left: 8px; align-self: flex-end; }
 
   .sim-note {
     margin-left: auto; display: flex; align-items: center; gap: 8px;
