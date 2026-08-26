@@ -1535,11 +1535,24 @@
           {@const core = coreAt(index)}
           <div class="core-row">
             <span class="core-slot dim">{index + 1}</span>
-            <StepSelect
-              label=""
-              options={coreTypeOptions}
-              bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
-            />
+            <!-- 6 枠が同じ列で並ぶように列を固定する。行ごとに幅が違うと端を探し直す(§00 01)。
+                 補助タイプは別の段にする — 1 つの段に 9 個入れると列が余って空きセルが出る -->
+            <span class="core-types">
+              <StepSelect
+                label=""
+                options={corePowerOptions}
+                cols={5}
+                bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
+              />
+              {#if coreShowSupport || coreSupportInUse}
+                <StepSelect
+                  label=""
+                  options={coreSupportOptions}
+                  cols={4}
+                  bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
+                />
+              {/if}
+            </span>
             <!-- 進化 - 強化。押すと 5×5 が重なって出るので、押した枠は動かない(§09 規則 3) -->
             <span class="core-stage">
               <button
@@ -1915,6 +1928,7 @@
   }
   .core-row:last-child { padding-bottom: 0; border-bottom: 0; }
   .core-slot { font-size: 11px; text-align: center; }
+  .core-types { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .core-stage { position: relative; }
   .stage-trigger {
     width: 100%; padding: 5px 0; border-radius: var(--r-panel);

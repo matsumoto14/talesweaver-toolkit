@@ -19,13 +19,22 @@
     disabled?: boolean;
     /** 幅いっぱいを段の数で割る(§08 `.seg.full`)。段が折り返すのを防ぐ */
     full?: boolean;
+    /** 列を固定して並べる(§08 `.seg.cols`)。折り返しても行をまたいで幅が揃う */
+    cols?: number;
   }
-  let { label, value = $bindable(), options, disabled = false, full = false }: Props = $props();
+  let { label, value = $bindable(), options, disabled = false, full = false, cols }: Props = $props();
 </script>
 
 <div class="step-select">
   {#if label}<span class="label">{label}</span>{/if}
-  <div class="seg" class:full role="radiogroup" aria-label={label ?? ""}>
+  <div
+    class="seg"
+    class:full
+    class:cols={cols !== undefined}
+    style={cols === undefined ? undefined : `--seg-cols: ${cols}`}
+    role="radiogroup"
+    aria-label={label ?? ""}
+  >
     {#each options as o (o.value)}
       <button
         type="button"

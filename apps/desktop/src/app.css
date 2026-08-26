@@ -293,6 +293,14 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 /* 幅いっぱいに割る形(§08 .seg.full) */
 .seg.full { display: flex; width: 100%; }
 .seg.full button { flex: 1; text-align: center; padding: 5px 0; }
+/* 段が多くて 1 行に収まらないときの形。**列を固定して、行をまたいで幅を揃える**。
+   同じ並びが行ごとに違う幅で終わると、端がばらついて目が毎行そこを探し直す(§00 01)。
+   区切り線は 1px の隙間から下の面が覗く形で出す(枠と二重線にならない) */
+.seg.cols {
+  display: grid; grid-template-columns: repeat(var(--seg-cols, 5), 1fr);
+  width: 100%; gap: 1px; background: var(--border-soft);
+}
+.seg.cols button { border-right: 0; text-align: center; padding: 5px 4px; }
 
 /* --- 畳んでおく場所(§00「要らないものを見せない」)-----------------------------
    ほぼ全員が同じ値で、ふだん触らないものはここに入れる。**要約は畳んだ状態でも出す** —

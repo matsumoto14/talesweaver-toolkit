@@ -1081,6 +1081,8 @@ td code { background: var(--card-soft2); }
 .seg.warm button.on { background: linear-gradient(180deg,#F2D9C9,#E0B49C); color: #5E362C; }
 .seg.full { display: flex; width: 100%; }
 .seg.full button { flex: 1; text-align: center; padding: 5px 0; }
+.seg.cols { display: grid; grid-template-columns: repeat(var(--seg-cols,5),1fr); width: 100%; gap: 1px; background: var(--edge-soft); }
+.seg.cols button { border-right: 0; text-align: center; padding: 5px 4px; }
 
 .opline {
   display: flex; align-items: center; gap: 8px;
@@ -1256,7 +1258,7 @@ td code { background: var(--card-soft2); }
           <div class="core-item">
             <span class="n">01</span>
             <h3>視線を動かさない</h3>
-            <p>一つのことを決めるのに、目を行き来させない。<strong>並びは決める順序に、関係するものは 1 回の視線に入る位置に。</strong>欄が 2 列に折り返した時点で、目は右へ行って左へ戻っている。</p>
+            <p>一つのことを決めるのに、目を行き来させない。<strong>並びは決める順序に、関係するものは 1 回の視線に入る位置に。</strong>欄が 2 列に折り返した時点で、目は右へ行って左へ戻っている。<strong>同じ並びが続くところは幅と端をそろえる</strong> — 行ごとに端がずれると、そこを毎回探し直す。空きセル・行末の余白は、意味を持たないなら作らない。</p>
             <p class="ask"><b>自分に問う</b>この欄を決めるまでに、目は何回動く?</p>
           </div>
           <div class="core-item">
@@ -1922,6 +1924,17 @@ td code { background: var(--card-soft2); }
           </div>
         </div>
         <p class="cap">初期値は常に埋まっている。入力欄は<b>自動値を上書きする例外操作</b>で、その関係が見た目でも分かるようにする。</p>
+
+        <div class="sec">同じ並びが何行も続くとき<span class="r">列を固定して幅を揃える</span></div>
+        <div class="spec col" style="gap:6px">
+          <span class="seg cols" style="--seg-cols:5" role="group" aria-label="1 行目">
+            <button type="button">未装着</button><button type="button">突き攻撃力</button><button type="button" class="on" aria-pressed="true">斬り攻撃力</button><button type="button">魔法攻撃力</button><button type="button">魔法防御力</button>
+          </span>
+          <span class="seg cols" style="--seg-cols:5" role="group" aria-label="2 行目">
+            <button type="button">未装着</button><button type="button" class="on" aria-pressed="true">突き攻撃力</button><button type="button">斬り攻撃力</button><button type="button">魔法攻撃力</button><button type="button">魔法防御力</button>
+          </span>
+        </div>
+        <p class="cap"><b>同じ選択肢の並びが何行も続く場所では、段の幅を内容なりにしない。</b>行ごとに端がずれると、目は毎行そこを探し直す。列を固定して(<code>.seg.cols</code>)行をまたいで揃える。<b>列が余って空きセルが出るなら、その並びは 1 つの段に入れすぎ</b> — 別の段に分ける。</p>
 
         <div class="sec">バッジ・チップ</div>
         <div class="spec">
