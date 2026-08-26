@@ -119,11 +119,19 @@
   const eternalActive = $derived(Number(draft.stage) >= 5);
 
   const PET_TIERS: PetSkillTier[] = ["basic", "true_lv1", "true_lv2", "true_lv3", "true_lv4"];
+  // 段の名前だけだと「それでいくつ増えるのか」を毎回引くことになるので、値を段に書く
+  const PET_SKILL_BONUS: Record<PetSkillTier, number> = {
+    basic: 20, true_lv1: 30, true_lv2: 40, true_lv3: 50, true_lv4: 60,
+  };
   const petSkillOptions = [
     { value: "", label: "なし" },
-    ...PET_TIERS.map((t) => ({ value: t, label: PET_SKILL_TIER_LABELS[t] })),
+    ...PET_TIERS.map((t) => ({ value: t, label: `${PET_SKILL_TIER_LABELS[t]} +${PET_SKILL_BONUS[t]}` })),
   ];
   const petSkillValue = (k: StatKind) => draft.statSources.pet_skills[k] ?? "";
+  const petSkillBonus = (k: StatKind) => {
+    const tier = draft.statSources.pet_skills[k];
+    return tier ? PET_SKILL_BONUS[tier] : 0;
+  };
   const setPetSkillValue = (k: StatKind, v: string) => {
     draft.statSources.pet_skills[k] = (v === "" ? null : v) as PetSkillTier | null;
   };
@@ -1069,36 +1077,50 @@
     </div>
   {:else if sourceId === "pet"}
     <div class="card">
-      <div class="fields">
+      <!-- 8 ステが同じ形で並ぶので 1 ステ 1 行。段は列を固定して行をまたいで揃える(§00 01) -->
+      <div class="stat-rows">
         {#each STAT_KINDS as k (k)}
-          <StepSelect
-            label={STAT_LABELS[k]}
-            options={petSkillOptions}
-            bind:value={() => petSkillValue(k), (v) => setPetSkillValue(k, v)}
-          />
+          <div class="stat-row">
+            <span class="k">{STAT_LABELS[k]}</span>
+            <StepSelect
+              label=""
+              options={petSkillOptions}
+              cols={petSkillOptions.length}
+              bind:value={() => petSkillValue(k), (v) => setPetSkillValue(k, v)}
+            />
+            <span class="v num" use:bump={() => petSkillBonus(k)}>
+              {petSkillBonus(k) > 0 ? `+${fmtInt(petSkillBonus(k))}` : "—"}
+            </span>
+          </div>
         {/each}
       </div>
     </div>
   {:else if sourceId === "rune"}
     <div class="card">
-      <div class="fields">
+      <div class="stat-rows two">
         {#each STAT_KINDS as k (k)}
           <!-- Lv は段階。1 押しに意味があるので ＋ / − を置く(§07 形態 4) -->
-          <StatInput
-            label={STAT_LABELS[k]}
-            min={0}
-            max={limits.rune_level_max}
-            stepper
-            bind:value={draft.statSources.rune_levels[k]}
-          />
+          <div class="stat-row">
+            <span class="k">{STAT_LABELS[k]}</span>
+            <StatInput
+              label=""
+              min={0}
+              max={limits.rune_level_max}
+              stepper
+              bind:value={draft.statSources.rune_levels[k]}
+            />
+          </div>
         {/each}
       </div>
     </div>
   {:else if sourceId === "crown"}
     <div class="card">
-      <div class="fields">
+      <div class="stat-rows two">
         {#each STAT_KINDS as k (k)}
-          <StatInput label={STAT_LABELS[k]} min={0} max={limits.crown_max} bind:value={draft.statSources.crown[k]} />
+          <div class="stat-row">
+            <span class="k">{STAT_LABELS[k]}</span>
+            <StatInput label="" min={0} max={limits.crown_max} bind:value={draft.statSources.crown[k]} />
+          </div>
         {/each}
       </div>
     </div>
@@ -1109,29 +1131,35 @@
         そのまま乗ります(ステごと 0〜{limits.monster_card_max})。
         <b>固定値層</b>なので、能力値倍率A(テイルズウィーバーのエネルギー等)の影響を受けます。
       </p>
-      <div class="fields">
+      <div class="stat-rows two">
         {#each STAT_KINDS as k (k)}
-          <StatInput
-            label={STAT_LABELS[k]}
-            min={0}
-            max={limits.monster_card_max}
-            bind:value={draft.statSources.monster_cards[k]}
-          />
+          <div class="stat-row">
+            <span class="k">{STAT_LABELS[k]}</span>
+            <StatInput
+              label=""
+              min={0}
+              max={limits.monster_card_max}
+              bind:value={draft.statSources.monster_cards[k]}
+            />
+          </div>
         {/each}
       </div>
     </div>
   {:else if sourceId === "relic"}
     <div class="card">
-      <div class="fields">
+      <div class="stat-rows two">
         {#each STAT_KINDS as k (k)}
-          <StatInput
-            label={STAT_LABELS[k]}
-            min={0}
-            max={limits.sacred_relic_stage_max}
-            stepper
-            bind:value={draft.statSources.sacred_relic[k]}
-            format={(v) => (v > 0 ? `+${v * 10}` : "")}
-          />
+          <div class="stat-row">
+            <span class="k">{STAT_LABELS[k]}</span>
+            <StatInput
+              label=""
+              min={0}
+              max={limits.sacred_relic_stage_max}
+              stepper
+              bind:value={draft.statSources.sacred_relic[k]}
+              format={(v) => (v > 0 ? `+${v * 10}` : "")}
+            />
+          </div>
         {/each}
       </div>
     </div>
@@ -2001,6 +2029,17 @@
   }
   .tab-set.off { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
   .tab-rule { margin-bottom: 9px; }
+
+  /* 同じ形のステが 8 個並ぶ場所の共通形。ラベルを左に置いて 1 ステ 1 行にする —
+     ラベルを上に置くと 1 件で 2 行使い、8 件で画面が埋まる(§00 01 / 02) */
+  .stat-rows { margin-top: 8px; display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .stat-rows.two { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 5px 16px; }
+  .stat-row {
+    display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 9px; align-items: center;
+    padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft);
+  }
+  .stat-row .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
+  .stat-row .v { min-width: 44px; text-align: right; font-size: 12px; font-weight: 700; color: var(--fg-sub); }
 
   .core-list { display: flex; flex-direction: column; gap: 7px; }
   /* 読み取り専用の要約なのでインセット。面の色ではなくバッジで状態を言う
