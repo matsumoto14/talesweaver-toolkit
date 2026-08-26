@@ -209,6 +209,8 @@ pub enum RandomOptionError {
     NotAllowed { slot: crate::equipment::PartSlot },
     #[error("ランダムオプション '{option_id}' の効果値は 0〜{max} です(指定値 {value})")]
     ValueOutOfRange { option_id: String, value: f64, max: f64 },
+    #[error("{slot:?} のランダムオプションは {max} 枠までです")]
+    TooMany { slot: crate::equipment::PartSlot, max: usize },
 }
 
 /// ランダムオプションの効果値の上限(wiki に全 OP 共通の上限は無い。

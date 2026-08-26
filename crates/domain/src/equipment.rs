@@ -171,6 +171,15 @@ impl PartSlot {
         !matches!(self, PartSlot::Effect | PartSlot::Artifact)
     }
 
+    /// この部位のランダムオプションの枠数。`None` = wiki に枠数の記載が無い(数えない)。
+    /// レリックだけは「付加オプション 2 枠」と決まっている
+    pub fn random_option_slots(self) -> Option<usize> {
+        match self {
+            PartSlot::RelicPendant | PartSlot::RelicBracelet => Some(2),
+            _ => None,
+        }
+    }
+
     /// この部位が属性強化を持てるか
     /// (wiki: 装備システム冒頭の表「属性強化」行 = 兜/鎧/武/盾/頭/体/手/足/効果/AF。盾+・レリックは対象外)。
     pub fn allows_element(self) -> bool {
@@ -447,6 +456,15 @@ impl EquipmentPart {
         }
         if !slot.allows_random_option() {
             return Err(RandomOptionError::NotAllowed { slot });
+        }
+        // レリックの付加オプションは 1 部位 2 枠(wiki: Item/アクセサリ/レリック
+        // 「ルナリアレリックは 1 レベルから…付加オプション 2 枠が付与される」。
+        // ユーザー確認 2026-08-26「2 個ずつ付けられる。カテゴリー重複は不可」)
+        if slot.random_option_slots().is_some_and(|max| self.random_options.len() > max) {
+            return Err(RandomOptionError::TooMany {
+                slot,
+                max: slot.random_option_slots().unwrap_or(0),
+            });
         }
         for option in &self.random_options {
             if let Some(value) = option.value {
@@ -1318,4 +1336,23 @@ mod tests {
         eq.title = Some("nope".to_string());
         assert_eq!(eq.base_totals(&[], &title_defs()), EquipmentValues::default());
     }
+    #[test]
+    fn レリックの付加オプションは2枠まで() {
+        let mut part = EquipmentPart::default();
+        let op = |id: &str| RandomOptionSlot {
+            option_id: id.to_string(),
+            rank: crate::random_option::RandomOptionRank::Special,
+            value: None,
+        };
+        part.random_options = vec![op("a"), op("b")];
+        assert!(part.validate(PartSlot::RelicPendant).is_ok());
+        part.random_options.push(op("c"));
+        assert!(matches!(
+            part.validate(PartSlot::RelicPendant),
+            Err(EquipmentError::RandomOption(RandomOptionError::TooMany { .. }))
+        ));
+        // 枠数の記載が無い部位は数えない
+        assert!(part.validate(PartSlot::Weapon).is_ok());
+    }
+
 }
