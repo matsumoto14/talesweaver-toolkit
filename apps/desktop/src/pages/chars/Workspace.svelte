@@ -343,13 +343,27 @@
   });
   const itemsOf = (ids: string[]) => ids.map((id) => sources.find((s) => s.id === id)).filter((s) => s !== undefined);
 
-  /** ★ の付け外し。付けたら お気に入りの末尾、外したら そのほかの末尾へ */
+  /** ★ を外したときの戻り先。既定の並びの位置に戻す — 末尾に飛ばすと移動距離が長くなる */
+  function insertByDefaultOrder(rest: string[], id: string): string[] {
+    const rank = DEFAULT_ORDER.indexOf(id as SourceId);
+    const at = rest.findIndex((x) => DEFAULT_ORDER.indexOf(x as SourceId) > rank);
+    const next = [...rest];
+    next.splice(at === -1 ? next.length : at, 0, id);
+    return next;
+  }
+  /**
+   * ★ の付け外し。付けたら お気に入りの末尾、外したら **既定の並びの位置**へ。
+   *
+   * ここでは**スクロールしない**。押した ★ は指の下にあるので、画面が動くと
+   * 次に押すつもりだった行が別のものに入れ替わる(§00 03「押した場所は動かない」)。
+   * どこへ行ったかは着地の弾みで見せる。自分で運ぶドラッグは別で、そちらは追いかける
+   */
   function toggleFavorite(id: string) {
     const { fav, rest } = ordered;
     layout.value = fav.includes(id)
-      ? { fav: fav.filter((x) => x !== id), rest: [...rest, id] }
+      ? { fav: fav.filter((x) => x !== id), rest: insertByDefaultOrder(rest, id) }
       : { fav: [...fav, id], rest: rest.filter((x) => x !== id) };
-    follow(id);
+    mark(id);
   }
   /**
    * 動きを消す設定(prefers-reduced-motion)のときは 0 にする。
@@ -367,7 +381,16 @@
   let movedId = $state<string | null>(null);
   let movedTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** 動かした行を追いかける。「操作したら対象が消えた」は最悪の体験(§09 規則 5) */
+  /** 着地を弾ませるだけ。画面は動かさない */
+  function mark(id: string) {
+    clearTimeout(movedTimer);
+    movedId = null;
+    requestAnimationFrame(() => {
+      movedId = id;
+      movedTimer = setTimeout(() => (movedId = null), 400);
+    });
+  }
+  /** 動かした行を追いかける。自分でつまんで運んだときだけ使う(§09 規則 5) */
   function follow(id: string) {
     clearTimeout(movedTimer);
     movedId = null;
