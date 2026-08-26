@@ -10,7 +10,7 @@
     Skill, StatKind,
   } from "../../api/types";
   import {
-    isBlocked, isChoiceValue, isConsumable, isFixedValue, isPercentLayer, isUserSelectedTarget,
+    isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
     toggleBuff, userInputRange,
   } from "../../buffs";
   import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
@@ -686,7 +686,8 @@
   }
 
   // --- 右カラム: バフ・装備の編集(試し変更として) -------------------------
-  const consumableBuffs = $derived(app.catalog.filter(isConsumable));
+  // バフカタログは常用バフ専用(キャラスキルは補正源のキャラスキル欄)
+  const consumableBuffs = $derived(app.catalog);
   const buffOn = (def: BuffDefinition) =>
     (payload?.stat_sources.buffs.choices ?? []).some((c) => c.buff_id === def.id);
   /**

@@ -8,6 +8,7 @@
   import { errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
   import type { CommonSkills, Equipment, RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
+  import { actualDelayPercent, dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
     coreSetEffect, coreSetTotalBonus, randomOptionTotals,
@@ -16,6 +17,7 @@
     sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
+  import { limits } from "../../limits.svelte";
   import {
     CORE_REGION_LABELS, CORE_REGIONS,
     ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
@@ -51,17 +53,17 @@
   let saving = $state(false);
   const canSubmit = $derived(draft.name.trim().length > 0 && draft.gameCharacterId !== "" && !saving && dirty);
 
-  // キャラ種を切り替えたら旧キャラ専用のキャラスキルバフを落とす(幽霊バフ対策、既存決定を踏襲)。
+  // キャラ種を切り替えたら旧キャラ専用のキャラスキルを落とす(幽霊スキル対策、既存決定を踏襲)。
   let lastGameCharacterId = draft.gameCharacterId;
   $effect(() => {
     const currentId = draft.gameCharacterId;
-    if (currentId === lastGameCharacterId || app.catalog.length === 0) return;
+    if (currentId === lastGameCharacterId || app.characterSkills.length === 0) return;
     lastGameCharacterId = currentId;
-    draft.statSources.buffs.choices = draft.statSources.buffs.choices.filter((choice) => {
-      const def = app.catalog.find((d) => d.id === choice.buff_id);
-      if (!def || typeof def.group !== "object" || !("character_skill" in def.group)) return true;
-      return def.group.character_skill.game_character_id === currentId;
-    });
+    draft.statSources.character_skills.skill_ids = dropForeignSkills(
+      draft.statSources.character_skills.skill_ids,
+      app.characterSkills,
+      currentId,
+    );
   });
 
   // 主軸スキル(攻撃力の依存種別を決める)。選択肢はキャラ種のスキル一覧。
@@ -87,11 +89,10 @@
     // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
     const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
-    const gameCharacterId = draft.gameCharacterId;
     if (debounceHandle) clearTimeout(debounceHandle);
     const seq = ++previewSeq;
     debounceHandle = setTimeout(() => {
-      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, gameCharacterId, mainSkillId)
+      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, mainSkillId)
         .then((p) => {
           if (seq === previewSeq) {
             preview = p;
@@ -146,12 +147,7 @@
     STAT_KINDS.reduce((s, k) => s + draft.statSources.monster_cards[k], 0),
   );
   const relicTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.sacred_relic[k] * 10, 0));
-  const skillCount = $derived(
-    draft.statSources.buffs.choices.filter((c) => {
-      const def = app.catalog.find((d) => d.id === c.buff_id);
-      return def && (def.group === "ally_skill" || (typeof def.group === "object" && "character_skill" in def.group));
-    }).length,
-  );
+  const skillCount = $derived(draft.statSources.character_skills.skill_ids.length);
   const adjustCount = $derived(
     STAT_KINDS.filter((k) => draft.statSources.adjustments[k].add !== 0 || draft.statSources.adjustments[k].pin !== null).length,
   );
@@ -188,15 +184,13 @@
   const roTotals = $derived(randomOptionTotals(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
 
-  // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラ固有のパッシブだけ。
+  // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラスキルのぶんだけ。
   // 共通の供給源(フルスロットル / カフスの RO / シエナのオーラ)はそれぞれの補正源で設定する。
   const delaySummary = $derived.by(() => {
-    const ids = draft.statSources.actual_delay_skills.skill_ids;
+    const ids = draft.statSources.character_skills.skill_ids;
     if (ids.length === 0) return NEUTRAL;
-    const percent = ids.reduce(
-      (n, id) => n + (app.actualDelaySkills.find((d) => d.id === id)?.percent ?? 0),
-      0,
-    );
+    const percent = actualDelayPercent(ids, app.characterSkills, draft.statSources.masteries.picked);
+    if (percent === 0) return `${ids.length} 件`;
     return `${ids.length} 件 ・ 合計 −${percent}%`;
   });
 
@@ -261,7 +255,9 @@
     const t = app.titles.find((x) => x.id === draft.equipment.title);
     if (!t) return NEUTRAL;
     const total = EQUIPMENT_STAT_KINDS.reduce((n, k) => n + t.values[k], 0);
-    return `${t.name}(合計 +${fmtInt(total)})`;
+    const parts = [`合計 +${fmtInt(total)}`];
+    if (t.attack_damage_percent > 0) parts.unshift(`ダメ +${t.attack_damage_percent}%`);
+    return `${t.name}(${parts.join(" ・ ")})`;
   });
 
   // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
@@ -281,7 +277,10 @@
     const c = draft.statSources.critical_rate;
     const parts: string[] = [];
     if (c.pet) parts.push("ペット会心 ×1.1");
-    const bonus = (c.ultimate_rune ? 20 : 0) + (c.architect_lab ? 30 : 0) + (c.deadly_blow ? 100 : 0);
+    const bonus =
+      (c.ultimate_rune ? 20 : 0) +
+      c.architect_lab_stage * limits.architect_lab_per_stage +
+      (c.deadly_blow ? 100 : 0);
     if (bonus > 0) parts.push(`増加 +${Math.min(100, bonus)}%`);
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
@@ -320,7 +319,11 @@
       name: "シエナのオーラ",
       sub:
         sienaParts > 0
-          ? `${sienaParts} 部位 ・ 攻撃力 +${sienaRate}%${sienaStats > 0 ? ` ・ ステ +${fmtInt(sienaStats)}` : ""}`
+          ? [
+              `${sienaParts} 部位`,
+              ...(sienaRate > 0 ? [`攻撃力 +${sienaRate}%`] : []),
+              ...(sienaStats > 0 ? [`ステ +${fmtInt(sienaStats)}`] : []),
+            ].join(" ・ ")
           : NEUTRAL,
     },
     {
@@ -608,7 +611,14 @@
     />
 
     <section class="detail">
-      <SourcePane {draft} {preview} {previewError} {skills} sourceId={openSource} />
+      <SourcePane
+        {draft}
+        {preview}
+        {previewError}
+        {skills}
+        sourceId={openSource}
+        onOpenSource={(id) => (openSource = id)}
+      />
     </section>
   </div>
 

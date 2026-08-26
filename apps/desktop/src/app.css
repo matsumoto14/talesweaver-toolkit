@@ -455,6 +455,9 @@ details.fold .fold-body { margin-top: 10px; }
 .chip.quiet.on { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); font-weight: 700; }
 .chip.quiet:disabled { opacity: 0.8; }
 .chip.add { background: var(--bg-rail); border-style: dashed; border-color: var(--border); color: var(--accent); }
+/* 計算に入らない(記録するだけの)チップ。バッジの record-only と同じ扱い */
+.chip.record-only { color: var(--fg-muted); border-style: dashed; }
+.chip.record-only.on { border-style: solid; }
 /* 保存されない・一時的なもの(§03 予約色) */
 .chip.sim { border-color: var(--sim); color: var(--sim-fg); }
 

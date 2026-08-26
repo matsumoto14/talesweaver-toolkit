@@ -6,7 +6,7 @@
   //
   // **アイコン単独表示は禁止**(名前と併記する)。例外はキャラレールを畳んだときだけで、
   // そのときは呼び出し側が title を付ける。
-  export type IconKind = "character" | "mob" | "skill" | "buff";
+  export type IconKind = "character" | "mob" | "skill" | "buff" | "mastery";
   /** 20 = 行内・チップ / 28 = 一覧行 / 40 = 選択カード / 64 = キャラ詳細 */
   export type IconSize = 20 | 28 | 40 | 64;
 
@@ -15,6 +15,16 @@
     mob: "mobs",
     skill: "skills",
     buff: "buffs",
+    mastery: "masteries",
+  };
+
+  /// 枠の見た目。マスタリーはスキルの一種なのでスキルの枠を使う(段は色で区別しない)
+  const FRAMES: Record<IconKind, string> = {
+    character: "character",
+    mob: "mob",
+    skill: "skill",
+    buff: "buff",
+    mastery: "skill",
   };
 
   // Vite の glob import。実画像が 1 枚も無ければ空オブジェクトになるだけで、ビルドは通る。
@@ -57,7 +67,7 @@
 </script>
 
 <span
-  class="icon {kind}"
+  class="icon {FRAMES[kind]}"
   class:missing
   style="--icon-size: {size}px"
   role="img"

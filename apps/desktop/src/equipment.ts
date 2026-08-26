@@ -4,7 +4,7 @@
 import type {
   CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentValues,
   EquipmentAbilityDef, RandomOptionDef, RandomOptionEffect, RandomOptionSlot, SienaAura,
-  SienaStatBonus, ThesisCores, TitleDef,
+  SienaExtraKind, ThesisCores, TitleDef,
 } from "./api/types";
 import {
   CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENTS, EQUIPMENT_STAT_KINDS,
@@ -46,34 +46,48 @@ export const rangeSummary = (min: EquipmentValues, max: EquipmentValues): string
     : top.map((k) => `${EQUIPMENT_STAT_SHORT[k]}${min[k]}-${max[k]}`).join(" / ");
 };
 
-export const zeroStatBonus = (): SienaStatBonus =>
-  Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as unknown as SienaStatBonus;
-
-export const neutralSienaAura = (): SienaAura => ({
-  stage: 0,
-  values: zeroValues(),
-  stats: zeroStatBonus(),
-  all_stats: 0,
-  attack_rate_percent: 0,
-  defense_rate_percent: 0,
-  actual_delay_percent: 0,
-  critical_rate_percent: 0,
-});
+export const neutralSienaAura = (): SienaAura => ({ slots: [], extras: [] });
 
 export const cloneSienaAura = (src: SienaAura): SienaAura => ({
-  stage: src.stage,
-  values: { ...src.values },
-  stats: { ...src.stats },
-  all_stats: src.all_stats,
-  attack_rate_percent: src.attack_rate_percent,
-  defense_rate_percent: src.defense_rate_percent,
-  actual_delay_percent: src.actual_delay_percent,
-  critical_rate_percent: src.critical_rate_percent ?? 0,
+  slots: src.slots.map((s) => ({ ...s })),
+  extras: src.extras.map((e) => ({ ...e })),
 });
+
+/** 増幅段階 = 能力値スロットの数(wiki: 段階ごとに 1 個解放)。 */
+export const sienaStage = (siena: SienaAura): number => siena.slots.length;
+
+/** いま解放されている追加オプションの枠数(段階 3/7/10 で 1/2/3)。 */
+export const sienaExtraCapacity = (siena: SienaAura, unlockStages: readonly number[]): number =>
+  unlockStages.filter((stage) => sienaStage(siena) >= stage).length;
+
+/** 追加オプションの合計 %(同じ種類は 1 部位 1 個なので実質その値)。 */
+export const sienaExtraValue = (siena: SienaAura, kind: SienaExtraKind): number =>
+  siena.extras.filter((e) => e.kind === kind).reduce((sum, e) => sum + e.value, 0);
+
+/** 能力値スロットのうち STAB〜AGI の合計。 */
+const SIENA_STAT_KINDS = new Set<string>(STAT_KINDS);
+export const sienaSlotStatTotal = (siena: SienaAura): number =>
+  siena.slots.filter((s) => SIENA_STAT_KINDS.has(s.kind)).reduce((sum, s) => sum + s.value, 0);
+
+/** 能力値スロットの装備補正合計(武器/盾)。表示用。
+ *  複合の内訳(物理複合5 = 突き3 + 斬り2)は crates/domain/src/siena.rs と同じ分け方。 */
+export const sienaPartValues = (siena: SienaAura): EquipmentValues => {
+  const values = zeroValues();
+  for (const s of siena.slots) {
+    const major = Math.ceil(s.value / 2);
+    if (s.kind === "thrust") values.thrust += s.value;
+    else if (s.kind === "slash") values.slash += s.value;
+    else if (s.kind === "magic_attack") values.magic_attack += s.value;
+    else if (s.kind === "magic_defense") values.magic_defense += s.value;
+    else if (s.kind === "physical_composite") { values.thrust += major; values.slash += s.value - major; }
+    else if (s.kind === "magic_slash") { values.magic_attack += major; values.slash += s.value - major; }
+  }
+  return values;
+};
 
 /** 部位ごとのステ加算合計(能力値スロット + 全ステータス増加 × 7 ステ)。表示用 */
 export const sienaPartStatTotal = (siena: SienaAura): number =>
-  STAT_KINDS.reduce((sum, k) => sum + siena.stats[k] + siena.all_stats, 0);
+  sienaSlotStatTotal(siena) + sienaExtraValue(siena, "all_stats") * STAT_KINDS.length;
 
 export const neutralCoreSet = (): CoreSet => ({ slots: Array(CORE_SLOT_COUNT).fill(null) });
 
@@ -245,9 +259,28 @@ export const equipmentBaseTotal = (
 /** Σ part.enchant(表示用。実際の集計は Rust 側 Equipment::enhanced_totals)。 */
 export const equipmentEnchantTotal = (equipment: Equipment): EquipmentValues => sumParts(equipment, (p) => p.enchant);
 
+/** ランダムOP の中ディレイ減少の合計 %(表示用)。ほかの補正源から入る分の内訳に使う。 */
+export const randomOptionActualDelayPercent = (
+  equipment: Equipment,
+  defs: RandomOptionDef[],
+): number =>
+  PART_SLOTS.reduce(
+    (sum, slot) =>
+      sum +
+      equipment.parts[slot].random_options.reduce((n, option) => {
+        const def = defs.find((d) => d.id === option.option_id);
+        return def?.effect === "actual_delay_reduction" ? n + randomOptionValue(option, def) : n;
+      }, 0),
+    0,
+  );
+
+/** シエナのオーラの追加オプションの合計 %(全部位。表示用)。 */
+export const sienaExtraTotal = (equipment: Equipment, kind: SienaExtraKind): number =>
+  PART_SLOTS.reduce((sum, slot) => sum + sienaExtraValue(equipment.parts[slot].siena, kind), 0);
+
 /** シエナのオーラの攻撃力増加(New1)の合計 %(表示用)。 */
 export const sienaAttackRatePercent = (equipment: Equipment): number =>
-  PART_SLOTS.reduce((sum, slot) => sum + equipment.parts[slot].siena.attack_rate_percent, 0);
+  sienaExtraTotal(equipment, "attack_rate");
 
 /** シエナのオーラのステ加算の合計(全部位・全ステ。表示用)。 */
 export const sienaStatTotal = (equipment: Equipment): number =>
@@ -397,4 +430,4 @@ export const randomOptionRecordOnlyCount = (equipment: Equipment, defs: RandomOp
 
 /** シエナのオーラを発現している部位数(表示用)。 */
 export const sienaPartCount = (equipment: Equipment): number =>
-  PART_SLOTS.filter((slot) => equipment.parts[slot].siena.stage > 0).length;
+  PART_SLOTS.filter((slot) => sienaStage(equipment.parts[slot].siena) > 0).length;

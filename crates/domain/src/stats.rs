@@ -28,6 +28,19 @@ impl StatKind {
         StatKind::Dex,
         StatKind::Agi,
     ];
+
+    /// ゲーム内表記(wiki のステータス表の列名)。
+    pub fn label(self) -> &'static str {
+        match self {
+            StatKind::Stab => "STAB",
+            StatKind::Hack => "HACK",
+            StatKind::Int => "INT",
+            StatKind::Def => "DEF",
+            StatKind::Mr => "MR",
+            StatKind::Dex => "DEX",
+            StatKind::Agi => "AGI",
+        }
+    }
 }
 
 /// 素ステ(振り分け分)の上限。wiki に明記なし。レベル上限でもある(docs/claude/goals/2026-08-21-character-stat-sources.md)。下限は 1。

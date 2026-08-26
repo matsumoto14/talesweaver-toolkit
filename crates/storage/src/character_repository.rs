@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use domain::{
-    ActualDelaySkillCatalog, Awakening, BaseStats, BuffCatalog, CommonSkills, Equipment,
+    Awakening, BaseStats, BuffCatalog, CharacterSkillCatalog, CommonSkills, Equipment,
     EquipmentAbilityDef, RandomOptionDef, StatSources, TitleDef,
 };
 use gamedata::EquipmentItem;
@@ -177,6 +177,144 @@ fn migrate_relic_to_pendant(conn: &Connection) -> Result<()> {
 /// `common_skills` 列へ移す(wiki: どちらも Skill/共通 の共通スキルで、装備ではない)。
 ///
 /// `common_skills` 側にすでに値が入っている行(= 移行済み)は触らない。
+/// カタログから消えた id を保存済みの `stat_sources` から取り除く。
+///
+/// カタログに無い id は `build_modifiers` / `CharacterSkills::validate` が弾くので、
+/// **残っているとそのキャラの計算がまるごと止まる**(実機で「未知のバフです」
+/// 「未知の中ディレイ減少スキルです」が出た)。カタログを入れ替えるたびにここへ 1 行足す。
+const REMOVED_BUFF_IDS: &[&str] = &[
+    // マスタリー【シルバースカル優勝者】→ `masteries` の boris_m2_3 へ移動(2026-08-27)
+    "boris_silver_skull",
+];
+
+/// 中ディレイ減少スキル(いまはキャラスキル)のカタログから消えた id。
+/// `migrate_character_skills` が `character_skills` に移す前に落とす。
+const REMOVED_ACTUAL_DELAY_SKILL_IDS: &[&str] = &[
+    // マスタリー【一閃】→ `masteries` の boris_m1_1 へ移動(2026-08-27)
+    "boris_mastery_issen",
+];
+
+fn migrate_removed_buffs(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, stat_sources FROM characters")?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (id, json) in rows {
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        let mut changed = false;
+
+        if let Some(choices) = value
+            .get_mut("buffs")
+            .and_then(|b| b.get_mut("choices"))
+            .and_then(|c| c.as_array_mut())
+        {
+            let before = choices.len();
+            choices.retain(|c| {
+                c.get("buff_id")
+                    .and_then(|v| v.as_str())
+                    .is_none_or(|id| !REMOVED_BUFF_IDS.contains(&id))
+            });
+            changed |= choices.len() != before;
+        }
+
+        if let Some(ids) = value
+            .get_mut("actual_delay_skills")
+            .and_then(|a| a.get_mut("skill_ids"))
+            .and_then(|c| c.as_array_mut())
+        {
+            let before = ids.len();
+            ids.retain(|v| {
+                v.as_str().is_none_or(|id| !REMOVED_ACTUAL_DELAY_SKILL_IDS.contains(&id))
+            });
+            changed |= ids.len() != before;
+        }
+
+        if !changed {
+            continue;
+        }
+        let migrated = serde_json::to_string(&value)?;
+        conn.execute("UPDATE characters SET stat_sources = ?1 WHERE id = ?2", params![migrated, id])?;
+    }
+    Ok(())
+}
+
+/// 中ディレイ減少スキルと、バフカタログにあったキャラスキルを `character_skills` に寄せる
+/// (2026-08-27)。器を 1 本にしたので、保存済みの選択も 1 つのキーにまとめる。
+const MOVED_BUFF_TO_CHARACTER_SKILL: &[(&str, &str)] = &[
+    ("benya_soul_gate", "benya_soul_gate"),
+    ("ispin_encourage", "ispin_encourage"),
+    ("roamini_ha_petit", "roamini_ha_petit"),
+    ("roamini_powatun", "roamini_powatun"),
+    ("siberin_charm", "siberin_charm"),
+    ("joshua_elite_swordsman", "joshua_possession_swordsman"),
+    ("joshua_elite_mage", "joshua_possession_mage"),
+    ("tichiel_magic_teacher", "tichiel_magic_teacher"),
+];
+
+fn migrate_character_skills(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, stat_sources FROM characters")?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (id, json) in rows {
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        let Some(object) = value.as_object_mut() else { continue };
+        let mut moved: Vec<String> = Vec::new();
+
+        // 中ディレイ減少スキルは id を変えずにそのまま移す
+        if let Some(old) = object.remove("actual_delay_skills") {
+            if let Some(ids) = old.get("skill_ids").and_then(|v| v.as_array()) {
+                moved.extend(ids.iter().filter_map(|v| v.as_str()).map(str::to_string));
+            }
+        }
+
+        // バフとして持っていたキャラスキルは、新しい id に読み替えて移す
+        if let Some(choices) = object
+            .get_mut("buffs")
+            .and_then(|b| b.get_mut("choices"))
+            .and_then(|c| c.as_array_mut())
+        {
+            choices.retain(|c| {
+                let Some(buff_id) = c.get("buff_id").and_then(|v| v.as_str()) else {
+                    return true;
+                };
+                match MOVED_BUFF_TO_CHARACTER_SKILL.iter().find(|(from, _)| *from == buff_id) {
+                    Some((_, to)) => {
+                        moved.push((*to).to_string());
+                        false
+                    }
+                    None => true,
+                }
+            });
+        }
+
+        if moved.is_empty() && !object.contains_key("character_skills") {
+            continue;
+        }
+        let existing = object
+            .get("character_skills")
+            .and_then(|v| v.get("skill_ids"))
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str()).map(str::to_string).collect())
+            .unwrap_or_else(Vec::new);
+        let mut skill_ids: Vec<String> = existing;
+        for id in moved {
+            if !skill_ids.contains(&id) {
+                skill_ids.push(id);
+            }
+        }
+        object.insert(
+            "character_skills".to_string(),
+            serde_json::json!({ "skill_ids": skill_ids }),
+        );
+        let migrated = serde_json::to_string(&value)?;
+        conn.execute("UPDATE characters SET stat_sources = ?1 WHERE id = ?2", params![migrated, id])?;
+    }
+    Ok(())
+}
+
 fn migrate_weapon_skills_to_common(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT id, equipment, common_skills FROM characters")?;
     let rows: Vec<(i64, String, String)> = stmt
@@ -268,6 +406,8 @@ impl CharacterRepository {
         migrate_equipment_to_parts(&conn)?;
         migrate_relic_to_pendant(&conn)?;
         migrate_weapon_skills_to_common(&conn)?;
+        migrate_removed_buffs(&conn)?;
+        migrate_character_skills(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -281,7 +421,7 @@ impl CharacterRepository {
         equipment_abilities: &[EquipmentAbilityDef],
         random_options: &[RandomOptionDef],
         titles: &[TitleDef],
-        actual_delay_skills: &ActualDelaySkillCatalog,
+        character_skills: &CharacterSkillCatalog,
     ) -> Result<RegisteredCharacter> {
         validate(
             new,
@@ -290,7 +430,7 @@ impl CharacterRepository {
             equipment_abilities,
             random_options,
             titles,
-            actual_delay_skills,
+            character_skills,
         )?;
         let s = &new.base_stats;
         let stat_sources_json = serde_json::to_string(&new.stat_sources)?;
@@ -330,7 +470,7 @@ impl CharacterRepository {
         equipment_abilities: &[EquipmentAbilityDef],
         random_options: &[RandomOptionDef],
         titles: &[TitleDef],
-        actual_delay_skills: &ActualDelaySkillCatalog,
+        character_skills: &CharacterSkillCatalog,
     ) -> Result<RegisteredCharacter> {
         validate(
             update,
@@ -339,7 +479,7 @@ impl CharacterRepository {
             equipment_abilities,
             random_options,
             titles,
-            actual_delay_skills,
+            character_skills,
         )?;
         let s = &update.base_stats;
         let stat_sources_json = serde_json::to_string(&update.stat_sources)?;
@@ -415,7 +555,7 @@ pub fn validate(
     equipment_abilities: &[EquipmentAbilityDef],
     random_options: &[RandomOptionDef],
     titles: &[TitleDef],
-    actual_delay_skills: &ActualDelaySkillCatalog,
+    character_skills: &CharacterSkillCatalog,
 ) -> Result<()> {
     if new.name.trim().is_empty() {
         return Err(StorageError::InvalidValue("名前が空です".into()));
@@ -435,10 +575,10 @@ pub fn validate(
     }
     new.stat_sources.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     new.stat_sources
-        .actual_delay_skills
-        .validate(actual_delay_skills, &new.game_character_id)
+        .character_skills
+        .validate(character_skills, &new.game_character_id)
         .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
-    domain::stat_sources::build_modifiers(&new.stat_sources, catalog, &new.game_character_id)
+    domain::stat_sources::build_modifiers(&new.stat_sources, catalog)
         .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     new.equipment.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
     new.common_skills.validate().map_err(|e| StorageError::InvalidValue(e.to_string()))?;
@@ -587,7 +727,7 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
 #[cfg(test)]
 mod tests {
     use domain::{
-        BuffChoice, BuffDefinition, BuffGroup, BuffSelection, BuffTarget, BuffValue, Crown,
+        BuffChoice, BuffDefinition, BuffSelection, BuffTarget, BuffValue, Crown,
         PetSkillTier, PetSkills, RuneLevels, SacredRelic, StatLayer, StatSources,
     };
 
@@ -621,7 +761,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: Some(33.0),
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "illumination_drink",
@@ -633,7 +773,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
             BuffDefinition {
                 id: "charge_potion",
@@ -645,7 +785,7 @@ mod tests {
                 source_url: "",
                 note: "",
                 default_value: None,
-                group: BuffGroup::Consumable,
+                damage_effects: &[],
             },
         ]
     }
@@ -949,18 +1089,21 @@ mod tests {
                 name: "(下)尖った刃",
                 family: EquipmentAbilityFamily::PointedBlade,
                 values: domain::EquipmentValues { thrust: 2, ..Default::default() },
+            damage_effects: &[],
             },
             EquipmentAbilityDef {
                 id: "pointed-blade-e",
                 name: "E-尖った刃",
                 family: EquipmentAbilityFamily::PointedBlade,
                 values: domain::EquipmentValues { thrust: 9, ..Default::default() },
+            damage_effects: &[],
             },
             EquipmentAbilityDef {
                 id: "sharp-blade-e",
                 name: "E-鋭い刃",
                 family: EquipmentAbilityFamily::SharpBlade,
                 values: domain::EquipmentValues { slash: 9, ..Default::default() },
+            damage_effects: &[],
             },
         ];
         let mut c = new_character("メイン");
@@ -1078,6 +1221,7 @@ mod tests {
             name: "テストアビリティ",
             family: domain::EquipmentAbilityFamily::PointedBlade,
             values: domain::EquipmentValues::default(),
+            damage_effects: &[],
         }
     }
 
@@ -1115,6 +1259,51 @@ mod tests {
         }
     }
 
+    /// カタログから消えたバフ id は起動時に落とす。残っていると `UnknownBuff` で
+    /// そのキャラの計算がまるごと止まる(マスタリーをバフから移した 2026-08-27)。
+    /// あわせて、バフ・中ディレイ減少スキルとして持っていたキャラスキルを
+    /// `character_skills` に寄せる(器を 1 本にした 2026-08-27)。
+    #[test]
+    fn 消えたバフidは移行で落ちてキャラスキルは1つのキーに寄る() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let created = repo.create(&new_character("メイン"), &[], &[], &[], &[], &[], &[]).unwrap();
+        repo.conn
+            .execute(
+                "UPDATE characters SET stat_sources = ?1 WHERE id = ?2",
+                params![
+                    r#"{
+                        "buffs":{"choices":[
+                            {"buff_id":"boris_silver_skull","stat":null,"choice_index":null,"value":null},
+                            {"buff_id":"siberin_charm","stat":null,"choice_index":null,"value":null}
+                        ]},
+                        "actual_delay_skills":{"skill_ids":["boris_mastery_issen","boris_sword_priest"]}
+                    }"#,
+                    created.id
+                ],
+            )
+            .unwrap();
+
+        migrate_removed_buffs(&repo.conn).unwrap();
+        migrate_character_skills(&repo.conn).unwrap();
+
+        let ids: Vec<String> = repo
+            .get(created.id)
+            .unwrap()
+            .stat_sources
+            .buffs
+            .choices
+            .iter()
+            .map(|c| c.buff_id.clone())
+            .collect();
+        // 消えた id は落ち、キャラスキルだった siberin_charm はバフから抜けている
+        assert!(ids.is_empty(), "{ids:?}");
+        // 中ディレイ減少スキルとバフのキャラスキルが 1 つのキーに寄る
+        assert_eq!(
+            repo.get(created.id).unwrap().stat_sources.character_skills.skill_ids,
+            vec!["boris_sword_priest".to_string(), "siberin_charm".to_string()]
+        );
+    }
+
     fn test_titles() -> Vec<domain::TitleDef> {
         vec![domain::TitleDef {
             id: "test-title",
@@ -1123,47 +1312,54 @@ mod tests {
             group: "テスト",
             level: None,
             values: domain::EquipmentValues { thrust: 40, ..Default::default() },
+            attack_damage_percent: 0.0,
             note: "",
         }]
     }
 
-    /// 中ディレイ減少スキル(wiki: ステータス「中ディレイ倍率B」)。
-    fn test_actual_delay_skills() -> Vec<domain::ActualDelaySkillDef> {
+    /// キャラスキル(wiki: 各キャラの Skill ページ / ステータスの各カテゴリ表)。
+    fn test_character_skills() -> Vec<domain::CharacterSkillDef> {
         vec![
-            domain::ActualDelaySkillDef {
+            domain::CharacterSkillDef {
                 id: "boris_sword_priest",
-                name: "剣の司祭",
                 game_character_id: "boris",
-                percent: 5.0,
+                name: "剣の司祭",
+                audience: domain::SkillAudience::SelfOnly,
+                effects: &[domain::SkillEffect::ActualDelay { percent: 5.0 }],
+                mastery_overrides: &[],
+                source_url: "",
                 note: "",
             },
-            domain::ActualDelaySkillDef {
+            domain::CharacterSkillDef {
                 id: "mira_spurt",
-                name: "極・スパート【グッドフェイス】",
                 game_character_id: "mira",
-                percent: 5.0,
+                name: "極・スパート",
+                audience: domain::SkillAudience::SelfOnly,
+                effects: &[domain::SkillEffect::RecordOnly],
+                mastery_overrides: &[],
+                source_url: "",
                 note: "",
             },
         ]
     }
 
     #[test]
-    fn 中ディレイ減少スキルは他キャラのものを拒否しjsonで往復する() {
+    fn キャラスキルは他キャラのものを拒否しjsonで往復する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let catalog = test_actual_delay_skills();
+        let catalog = test_character_skills();
         let mut c = new_character("x"); // ボリス
-        c.stat_sources.actual_delay_skills =
-            domain::ActualDelaySkills { skill_ids: vec!["mira_spurt".to_string()] };
+        c.stat_sources.character_skills =
+            domain::CharacterSkills { skill_ids: vec!["mira_spurt".to_string()] };
         assert!(matches!(
             repo.create(&c, &[], &[], &[], &[], &[], &catalog),
             Err(StorageError::InvalidValue(_))
         ));
 
-        c.stat_sources.actual_delay_skills =
-            domain::ActualDelaySkills { skill_ids: vec!["boris_sword_priest".to_string()] };
+        c.stat_sources.character_skills =
+            domain::CharacterSkills { skill_ids: vec!["boris_sword_priest".to_string()] };
         let created = repo.create(&c, &[], &[], &[], &[], &[], &catalog).unwrap();
         let loaded = repo.get(created.id).unwrap();
-        assert_eq!(loaded.stat_sources.actual_delay_skills, c.stat_sources.actual_delay_skills);
+        assert_eq!(loaded.stat_sources.character_skills, c.stat_sources.character_skills);
     }
 
     #[test]

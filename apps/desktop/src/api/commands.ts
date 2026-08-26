@@ -1,9 +1,10 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  ActualDelaySkillDef, Adjustments, Awakening, BaseStats, BuffDefinition, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
+  Adjustments, Awakening, BaseStats, BuffDefinition, CharacterSkillDef, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
-  ElementPreview, ElementSourceDef, RandomOptionDef, Skill, StatLimits, StatPreview, StatSources,
+  ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
+  StatPreview, StatSources,
   TitleDef,
 } from "./types";
 
@@ -28,9 +29,9 @@ export const deleteCharacter = (id: number) => invoke<void>("delete_character", 
  */
 export const previewEffectiveStats = (
   baseStats: BaseStats, statSources: StatSources, equipment: Equipment, commonSkills: CommonSkills,
-  awakening: Awakening, gameCharacterId: string, mainSkillId: string | null,
+  awakening: Awakening, mainSkillId: string | null,
 ) => invoke<StatPreview>("preview_effective_stats", {
-  baseStats, statSources, equipment, commonSkills, awakening, gameCharacterId, mainSkillId,
+  baseStats, statSources, equipment, commonSkills, awakening, mainSkillId,
 });
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
@@ -43,11 +44,15 @@ export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipmen
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
 /** ランダムオプションのカタログ(wiki: ランダムオプション) */
 export const listRandomOptions = () => invoke<RandomOptionDef[]>("list_random_options");
+/** マスタリーのカタログ(wiki: 各キャラの Skill ページ。段ごとに 1 つ選ぶ) */
+export const listMasteries = () => invoke<MasteryDef[]>("list_masteries");
+/** シエナのオーラで選べる能力値・追加オプションのカタログ(wiki: 装備システム/シエナのオーラ) */
+export const listSienaKinds = () => invoke<SienaCatalog>("list_siena_kinds");
 /** 称号のカタログ(wiki: 称号システム。主要称号のみ) */
 export const listTitles = () => invoke<TitleDef[]>("list_titles");
-/** 中ディレイ減少スキルのカタログ(wiki: ステータス「中ディレイ倍率B」。キャラ固有のパッシブのみ) */
-export const listActualDelaySkills = () =>
-  invoke<ActualDelaySkillDef[]>("list_actual_delay_skills");
+/** キャラスキルのカタログ(パッシブ・自己バフ・味方バフ)。味方スキルは誰でも ON にできる */
+export const listCharacterSkills = () =>
+  invoke<CharacterSkillDef[]>("list_character_skills");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

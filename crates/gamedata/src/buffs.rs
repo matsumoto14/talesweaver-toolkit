@@ -1,9 +1,11 @@
-//! 常用バフカタログ(wiki: ステータス#jc16a054)。
+//! 常用バフカタログ(wiki: ステータス#jc16a054)。**消費アイテム・イベントのバフ専用**で、
+//! キャラのパッシブ・自己バフ・味方バフは `character_skills.rs`(効き先がステだけではなく、
+//! 同じスキルが中ディレイや攻撃ダメージにも効くため)。
 //!
 //! バフは個別にコードで分岐せず「カテゴリ(層)+ 数値 + 重複枠」を持つデータとして持つ
 //! (CLAUDE.md 原則)。型定義は domain 側(`domain::stat_sources`)、実データはここ。
 
-use domain::{BuffDefinition, BuffGroup, BuffTarget, BuffValue, StatKind, StatLayer};
+use domain::{BuffDefinition, BuffTarget, BuffValue, DamageCategory, SkillEffect, StatLayer};
 
 use crate::Source;
 
@@ -14,7 +16,7 @@ pub const BUFF_CATALOG_SOURCE: Source = Source {
     note: "常用バフのプリセット16件。値の符号・層は docs/claude/goals/2026-08-21-character-stat-sources.md 参照",
 };
 
-/// 常用バフの初期カタログ(16件)。
+/// 常用バフのカタログ。
 pub fn buff_catalog() -> Vec<BuffDefinition> {
     vec![
         BuffDefinition {
@@ -27,7 +29,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "①+②",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
         BuffDefinition {
             id: "snowman_potion",
@@ -39,7 +41,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "①+②",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
         },
         BuffDefinition {
             id: "charge_potion",
@@ -51,7 +53,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "①",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "buff_concentrate",
@@ -63,7 +65,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "②",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
         BuffDefinition {
             id: "guardian_potion",
@@ -75,7 +77,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "独立。「週五社のためのポーション」は本項の別名",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 10.0 }],
         },
         BuffDefinition {
             id: "isabelle_ratio",
@@ -87,7 +89,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "退魔師の恵み・祝福の聖水・河童神の涙と同枠(テイルズウィーバーのエネルギーとは別枠)",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         // 旧カタログでは isabelle_fixed の値を +100 としていたが、これは特選秘薬(固定)側の値の
         // 誤転記だった。wiki 通り秘法(固定)は +20、特選秘薬(固定)は +100 が正しい。
@@ -104,7 +106,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "祝福のポーション・カレーライスと同枠",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "isabelle_rare_percent",
@@ -116,7 +118,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "特別な時のみ",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "isabelle_rare_fixed",
@@ -130,7 +132,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "特別な時のみ",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "event_buff",
@@ -142,7 +144,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "段階選択(+10%/+20%/+30%/+50%)",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "trust_potion",
@@ -154,7 +156,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "最大+33、人により異なる。信頼の薬と排他",
             default_value: Some(33.0),
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "fixed_increase",
@@ -167,7 +169,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "手入力(1枠)",
             default_value: Some(50.0),
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "club_effect",
@@ -179,7 +181,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "wiki ステータスの表記は +1〜7 だが上限の +7 固定で持つ(装備強化・ランダムOP と同じ                   「上書きが無ければ上限」の方針。ユーザー確定 2026-08-25)。+20 はクラブSエフェクト",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "club_s_effect",
@@ -191,7 +193,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "+20固定。クラブ効果(+7)とは別のバフで、同時に掛けられる",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 5.0 }],
         },
         BuffDefinition {
             id: "tales_weaver_energy",
@@ -203,7 +205,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
         },
         BuffDefinition {
             id: "unleash",
@@ -215,120 +217,242 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: WIKI_URL,
             note: "ON/OFFのみ、+20%固定",
             default_value: None,
-            group: BuffGroup::Consumable,
+            damage_effects: &[],
         },
-        // --- キャラスキル(自身/味方のステ上昇。9件、docs/claude/goals/2026-08-21-character-screen-v2.md) ---
-        // source_url はキャラの wiki Skill ページ(https://talewiki.com/?Skill/<キャラ>)を英語 id で
-        // 組み立てたもの。実際の PukiWiki は EUC-JP percent-encode された URL を使うため、
-        // ここでの URL はクリック可能な形での検証が済んでいない(docs/damage-formula.md 取得メモ参照)。
+        // --- ダメージにだけ効くバフ(ステは上げない。wiki ステータスの [X1]〜[X6] / [L])---
         BuffDefinition {
-            id: "benya_soul_gate",
-            name: "極・ソウルゲート",
-            target: BuffTarget::Stat(StatKind::Agi),
+            id: "isabel_damage",
+            name: "イザベルの秘法(ダメージ)",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
-            value: BuffValue::Fixed(0.05),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/benya",
-            note: "自身のみ",
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X1] 上限 +50%。クリティカル率 +5% は未収録",
             default_value: None,
-            group: BuffGroup::CharacterSkill { game_character_id: "benya" },
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
         BuffDefinition {
-            id: "ispin_encourage",
-            name: "極・エンカレッジ",
+            id: "isabel_special_damage",
+            name: "イザベルの特選秘薬(ダメージ)",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/ispin",
-            note: "味方にも(30分)",
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X1]。橙色の薬・宝玉<赤眼の魔王> 等と同枠",
             default_value: None,
-            group: BuffGroup::AllySkill,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
         BuffDefinition {
-            id: "roamini_ha_petit",
-            name: "極・ア・プチ(マスタリー)",
-            target: BuffTarget::Stat(StatKind::Int),
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/roamini",
-            note: "自身のみ",
-            default_value: None,
-            group: BuffGroup::CharacterSkill { game_character_id: "roamini" },
-        },
-        BuffDefinition {
-            id: "roamini_powatun",
-            name: "極・パウアトゥン(マスタリー)",
-            target: BuffTarget::Stats(&[StatKind::Def, StatKind::Mr]),
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/roamini",
-            note: "自身のみ",
-            default_value: None,
-            group: BuffGroup::CharacterSkill { game_character_id: "roamini" },
-        },
-        // wiki 上は分類不明のため倍率Bと推定して収録(Ver8.20で固定値化されたとの記述あり)。
-        BuffDefinition {
-            id: "boris_silver_skull",
-            name: "マスタリー【シルバースカル優勝者】",
-            target: BuffTarget::Stats(&[StatKind::Hack, StatKind::Def]),
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/boris",
-            note: "[仮] Ver8.20で固定値化",
-            default_value: None,
-            group: BuffGroup::CharacterSkill { game_character_id: "boris" },
-        },
-        BuffDefinition {
-            id: "siberin_charm",
-            name: "魅力発散",
+            id: "moonlight_potion",
+            name: "月光のポーション",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.01),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/siberin",
-            note: "[仮] 女性キャラ同行時、味方にも",
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X1]。怪力のポーションと同枠",
             default_value: None,
-            group: BuffGroup::AllySkill,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
         BuffDefinition {
-            id: "joshua_elite_swordsman",
-            name: "マスタリー【エリート】(剣闘士)",
-            target: BuffTarget::Stats(&[StatKind::Stab, StatKind::Def]),
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/joshua",
-            note: "[仮] 憑依モード時",
+            id: "silver_sword_stew",
+            name: "<シルバーソード>のクリームシチュー",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X1]",
             default_value: None,
-            group: BuffGroup::CharacterSkill { game_character_id: "joshua" },
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
         },
         BuffDefinition {
-            id: "joshua_elite_mage",
-            name: "マスタリー【エリート】(魔法師)",
-            target: BuffTarget::Stats(&[StatKind::Int, StatKind::Mr]),
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/joshua",
-            note: "[仮] 憑依モード時",
+            id: "festival_food",
+            name: "おいしいフェスティバル料理",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X1]",
             default_value: None,
-            group: BuffGroup::CharacterSkill { game_character_id: "joshua" },
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
         },
         BuffDefinition {
-            id: "tichiel_magic_teacher",
-            name: "魔法の先生",
-            target: BuffTarget::Stat(StatKind::Int),
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec![],
-            source_url: "https://talewiki.com/?Skill/tichiel",
-            note: "[仮] マキシミン/クロエ同行時、味方にも",
+            id: "awakening_elixir",
+            name: "覚醒の秘薬",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2] 上限 +30%。改・覚醒の秘薬も同値",
             default_value: None,
-            group: BuffGroup::AllySkill,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+        },
+        BuffDefinition {
+            id: "strength_ham",
+            name: "怪力のハム",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2]",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "ancient_ganapoly_mana",
+            name: "古代ガナポリーマナの破片",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2] wiki は +1〜15%。最大値で入れている",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 15.0 }],
+        },
+        BuffDefinition {
+            id: "attendance_buff",
+            name: "スペシャル出席チェックバフ",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2] 重複可能",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "daily_burning_buff",
+            name: "定着支援バフ(デイリーバーニング)",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2]",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "soul_link_explore",
+            name: "ソウルリンク探検(攻撃力 +5%)",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2] 重複不可",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+        },
+        BuffDefinition {
+            id: "berserker_rune",
+            name: "狂戦士のルーン",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2] Lv×0.25%、最大 +10%。最大値で入れている",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "fever",
+            name: "フィーバー",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X3] 上限 +80%",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageBasicTrigger, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "deep_rune_attack",
+            name: "深化ルーン(攻撃)",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X3] +3 で +9%",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageBasicTrigger, percent: 9.0 }],
+        },
+        BuffDefinition {
+            id: "plunder_bread",
+            name: "略奪パン",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X6] 上限 +30%",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageJapan, percent: 20.0 }],
+        },
+        BuffDefinition {
+            id: "boiled_mimic",
+            name: "茹でミミック",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X6] 被ダメージ -30% は未収録",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageJapan, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "soul_link_status",
+            name: "ソウルリンク(リンクステータス)",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[L] 上限 +45%。wiki は +4〜20%。最大値で入れている",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 20.0 }],
+        },
+        BuffDefinition {
+            id: "ancient_relic_minigame",
+            name: "古代レリックの聖域ミニゲームバフ",
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[L] 上限 +45%",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 15.0 }],
         },
     ]
 }
@@ -341,21 +465,27 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn 常用バフconsumableは16件() {
-        let consumable = buff_catalog().into_iter().filter(|d| d.group == BuffGroup::Consumable).count();
-        assert_eq!(consumable, 16);
+    fn 常用バフは34件() {
+        assert_eq!(buff_catalog().len(), 34);
     }
 
+    /// ダメージにだけ効くバフは**ステを上げない**(`RecordOnly`)。
+    /// 逆に、ステと与ダメージの両方に効くバフもある(守護者のためのポーション・クラブSエフェクト)。
     #[test]
-    fn キャラスキルは9件() {
-        let skill_count =
-            buff_catalog().into_iter().filter(|d| !matches!(d.group, BuffGroup::Consumable)).count();
-        assert_eq!(skill_count, 9);
-    }
-
-    #[test]
-    fn catalogは25件() {
-        assert_eq!(buff_catalog().len(), 25);
+    fn ダメージへの効き先を持つバフ() {
+        let catalog = buff_catalog();
+        let with_damage: Vec<&str> = catalog
+            .iter()
+            .filter(|d| !d.damage_effects.is_empty())
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(with_damage.len(), 24);
+        // ステと与ダメージの両方に効くもの
+        for id in ["guardian_potion", "club_s_effect", "snowman_potion", "tales_weaver_energy"] {
+            let d = catalog.iter().find(|d| d.id == id).unwrap();
+            assert!(!d.damage_effects.is_empty(), "{id}");
+            assert!(!matches!(d.value, BuffValue::RecordOnly), "{id} はステにも効く");
+        }
     }
 
     #[test]

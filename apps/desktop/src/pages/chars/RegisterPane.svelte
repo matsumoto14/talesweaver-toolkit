@@ -2,6 +2,7 @@
   // キャラ登録(v4): 呼び名 + 19 職のアイコン選択だけ。詳細は登録後にワークスペースで育てる
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import { createCharacter, errorMessage } from "../../api/commands";
+  import { dropForeignSkills } from "../../characterSkills";
   import type { NewCharacter, Skill } from "../../api/types";
   import { DEFAULT_AWAKENING_STAGE, defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
   import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
@@ -54,11 +55,12 @@
           main_skill_id: mainSkillId === "" ? null : mainSkillId,
         };
         if (source.game_character_id !== gameCharacterId) {
-          // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルバフを落とす(幽霊バフ対策)
-          payload.stat_sources.buffs.choices = payload.stat_sources.buffs.choices.filter((ch) => {
-            const def = app.catalog.find((d) => d.id === ch.buff_id);
-            return !(def && typeof def.group === "object" && "character_skill" in def.group);
-          });
+          // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルを落とす(幽霊スキル対策)
+          payload.stat_sources.character_skills.skill_ids = dropForeignSkills(
+            payload.stat_sources.character_skills.skill_ids,
+            app.characterSkills,
+            gameCharacterId,
+          );
         }
       } else {
         payload = {

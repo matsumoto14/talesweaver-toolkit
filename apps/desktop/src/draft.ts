@@ -111,7 +111,8 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   buffs: { choices: src.buffs.choices.map((b) => ({ ...b })) },
   adjustments: cloneAdjustments(src.adjustments),
   elements: { ...src.elements },
-  actual_delay_skills: { skill_ids: [...(src.actual_delay_skills?.skill_ids ?? [])] },
+  character_skills: { skill_ids: [...(src.character_skills?.skill_ids ?? [])] },
+  masteries: { picked: [...(src.masteries?.picked ?? [])] },
   critical_rate: { ...src.critical_rate },
 });
 
@@ -124,8 +125,9 @@ export const neutralStatSources = (): StatSources => ({
   buffs: { choices: [] },
   adjustments: Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as StatSources["adjustments"],
   elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
-  actual_delay_skills: { skill_ids: [] },
-  critical_rate: { pet: false, ultimate_rune: false, architect_lab: false, deadly_blow: false },
+  character_skills: { skill_ids: [] },
+  masteries: { picked: [] },
+  critical_rate: { pet: false, ultimate_rune: false, architect_lab_stage: 0, deadly_blow: false },
 });
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({

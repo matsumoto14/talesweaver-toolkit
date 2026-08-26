@@ -81,13 +81,12 @@ export type StatLayer = "percent_of_base" | "fixed" | "multiplier_a" | "multipli
 export type BuffTarget = "all_stats" | { stat: StatKind } | "user_selected" | { stats: StatKind[] };
 
 // バフの値の決め方。crates/domain/src/stat_sources.rs の BuffValue(rename_all snake_case、外部タグ付け)。
-export type BuffValue = { fixed: number } | { choice: number[] } | { user_input: { min: number; max: number } };
-
-// バフの分類。crates/domain/src/stat_sources.rs の BuffGroup(rename_all snake_case、外部タグ付け)。
-export type BuffGroup =
-  | "consumable"
-  | { character_skill: { game_character_id: string } }
-  | "ally_skill";
+export type BuffValue =
+  | { fixed: number }
+  | { choice: number[] }
+  | { user_input: { min: number; max: number } }
+  /** 記録するだけ(wiki に効果はあるが未配線)。マスタリーの段の状態を表すために選べる */
+  | "record_only";
 
 export interface BuffDefinition {
   id: string;
@@ -100,7 +99,8 @@ export interface BuffDefinition {
   note: string;
   /** BuffValue::UserInput の初期値。それ以外は null */
   default_value: number | null;
-  group: BuffGroup;
+  /** ステ増加以外の効き先(与ダメージ式のカテゴリ)。同じバフが 2 か所に効くことがある */
+  damage_effects: SkillEffect[];
 }
 
 export interface BuffChoice {
@@ -133,8 +133,10 @@ export interface StatSources {
   adjustments: Adjustments;
   /** 装備の属性強化以外の属性値の供給源 */
   elements: ElementSources;
-  /** 中ディレイ減少をもたらすキャラのパッシブ・マスタリー */
-  actual_delay_skills: ActualDelaySkills;
+  /** ON にしているキャラスキル(パッシブ・自己バフ・味方バフ) */
+  character_skills: CharacterSkills;
+  /** 選んでいるマスタリー(段ごとに 1 つ) */
+  masteries: Masteries;
   /** クリティカル率の供給源(wiki: 計算式まとめ #CriticalChance) */
   critical_rate: CriticalRateSources;
 }
@@ -145,8 +147,8 @@ export interface CriticalRateSources {
   pet: boolean;
   /** 極のルーン(+20) */
   ultimate_rune: boolean;
-  /** 設計者の研究室(+30) */
-  architect_lab: boolean;
+  /** 設計者の研究室 B グループ「クリティカル率増加」の研究段階 0..=10(1 段階 +3) */
+  architect_lab_stage: number;
   /** 致命打(+100) */
   deadly_blow: boolean;
 }
@@ -172,18 +174,76 @@ export interface CriticalRate {
   value: number;
 }
 
-// crates/domain/src/actual_delay.rs の ActualDelaySkillDef。list_actual_delay_skills の戻り値。
-export interface ActualDelaySkillDef {
+// 与ダメージ式のカテゴリ。crates/domain/src/category.rs の DamageCategory(rename_all snake_case)。
+// 効き先として使うのは一部だけなので、必要なものを列挙する。
+export type DamageCategory =
+  | "skill_multiplier_rate"
+  | "skill_multiplier_fixed"
+  | "final_damage_rate"
+  | "final_damage_fixed"
+  | "attack_damage_legacy"
+  | "physical_magic_damage_rate"
+  | "attack_damage_isabel"
+  | "attack_damage_general"
+  | "attack_damage_basic_trigger"
+  | "attack_damage_skill"
+  | "attack_damage_special"
+  | "attack_damage_japan"
+  | "basic_trigger_damage_fixed"
+  | (string & {});
+
+// スキル・マスタリー・バフの効き先。crates/domain/src/character_skill.rs の SkillEffect。
+export type SkillEffect =
+  | { stat_rate: { stats: StatKind[]; percent: number; layer: StatLayer } }
+  | { actual_delay: { percent: number } }
+  /** 与ダメージ式のカテゴリへの加算(上限はカテゴリ側が持つ) */
+  | { damage: { category: DamageCategory; percent: number } }
+  /** 記録するだけ(防御側・確率発動・条件付きで未配線) */
+  | "record_only";
+
+// マスタリー 1 つ。crates/domain/src/mastery.rs の MasteryDef。list_masteries の戻り値。
+export interface MasteryDef {
   id: string;
-  name: string;
   game_character_id: string;
-  /** 中ディレイ減少 %(習得していれば常にこの値) */
-  percent: number;
+  /** 段 1..=4(wiki のスキル表の (M1)〜(M4))。段ごとに 1 つだけ選ぶ */
+  tier: number;
+  name: string;
+  effect: SkillEffect;
   note: string;
 }
 
-export interface ActualDelaySkills {
-  /** 習得している ActualDelaySkillDef の id */
+// 選んでいるマスタリー。crates/domain/src/mastery.rs の Masteries。
+export interface Masteries {
+  /** MasteryDef.id。段ごとに 1 つ */
+  picked: string[];
+}
+
+// 誰に効くか。crates/domain/src/character_skill.rs の SkillAudience。
+export type SkillAudience = "self_only" | "ally";
+
+// マスタリーによる効果の差し替え。crates/domain/src/character_skill.rs の MasteryOverride。
+export interface MasteryOverride {
+  mastery_id: string;
+  effects: SkillEffect[];
+}
+
+// キャラスキル 1 つ。crates/domain/src/character_skill.rs の CharacterSkillDef。
+// list_character_skills の戻り値。
+export interface CharacterSkillDef {
+  id: string;
+  game_character_id: string;
+  name: string;
+  audience: SkillAudience;
+  /** マスタリー未取得のときの効果。空 = マスタリーを取ってはじめて効果が出る */
+  effects: SkillEffect[];
+  /** マスタリーを取ると効果が差し替わる(上から順に最初に一致したもの) */
+  mastery_overrides: MasteryOverride[];
+  source_url: string;
+  note: string;
+}
+
+export interface CharacterSkills {
+  /** ON にしている CharacterSkillDef の id */
   skill_ids: string[];
 }
 
@@ -277,24 +337,72 @@ export type PartSlot =
 // シエナのオーラのステ加算。crates/domain/src/equipment.rs の SienaStatBonus。
 export type SienaStatBonus = Record<StatKind, number>;
 
-// シエナのオーラ(部位ごと)。crates/domain/src/equipment.rs の SienaAura。
+// シエナのオーラの能力値スロットの種類。crates/domain/src/siena.rs の SienaValueKind。
+export type SienaValueKind =
+  | "thrust" | "slash" | "magic_attack" | "magic_defense"
+  | "physical_composite" | "magic_slash"
+  | "physical_resist" | "magic_resist" | "critical_taken_reduction"
+  | "accuracy" | "evasion"
+  | "stab" | "hack" | "int" | "def" | "mr" | "dex" | "agi";
+
+// シエナのオーラの追加オプションの種類。crates/domain/src/siena.rs の SienaExtraKind。
+export type SienaExtraKind =
+  | "attack_rate" | "defense_rate" | "defense_ignore_chance" | "actual_delay"
+  | "all_stats" | "critical_rate" | "hp" | "mp" | "sp";
+
+// 能力値スロット 1 個。crates/domain/src/siena.rs の SienaSlot。
+export interface SienaSlot {
+  kind: SienaValueKind;
+  value: number;
+}
+
+// 追加オプションスロット 1 個。crates/domain/src/siena.rs の SienaExtraSlot。
+export interface SienaExtraSlot {
+  kind: SienaExtraKind;
+  value: number;
+}
+
+// シエナのオーラ(部位ごと)。crates/domain/src/siena.rs の SienaAura。
+// **増幅段階は slots.length**(別に持たない)。
 export interface SienaAura {
-  /** 増幅段階 0..=10(= 解放される能力値スロット数)。計算には使わない */
-  stage: number;
-  /** 能力値の合計(武器/盾のみ)。強化能力値へ合流する */
-  values: EquipmentValues;
-  /** 能力値スロットのステ加算(武器/盾以外)。最終固定値層へ合流する */
-  stats: SienaStatBonus;
-  /** 追加オプション「全ステータス増加」。STAB〜AGI の全ステに同じ値が乗る(部位を問わない) */
-  all_stats: number;
-  /** 追加オプション「攻撃力増加」の %(カテゴリ New1) */
-  attack_rate_percent: number;
-  /** 追加オプション「防御力増加」の %。装備防御力倍率へ合流する */
-  defense_rate_percent: number;
-  /** 追加オプション「中ディレイ減少」の %。中ディレイ減少値(倍率B)へ合流する */
-  actual_delay_percent: number;
-  /** 追加オプション「クリティカル確率」の %。クリティカル率の AGI 由来の項に乗算で効く */
-  critical_rate_percent: number;
+  /** 解放済み能力値スロットの中身。並び順は入力順 */
+  slots: SienaSlot[];
+  /** 解放済み追加オプションスロットの中身 */
+  extras: SienaExtraSlot[];
+}
+
+// 画面が選択肢を並べるためのカタログ。crates/domain/src/siena.rs の SienaCatalog。
+export interface SienaValueKindDef {
+  kind: SienaValueKind;
+  label: string;
+  /** 一覧の行に並べる短い名前 */
+  short: string;
+  /** 武器/盾の一覧か(false = その他の部位の一覧) */
+  is_equipment_value: boolean;
+  min: number;
+  max: number;
+  unit: string;
+  /** 与ダメージ式に入るか(false = 記録するだけ) */
+  is_modeled: boolean;
+  note: string;
+}
+export interface SienaExtraKindDef {
+  kind: SienaExtraKind;
+  label: string;
+  /** 一覧の行に並べる短い名前 */
+  short: string;
+  /** 取りうる値そのもの(飛び飛びなので min/max では表せない) */
+  choices: number[];
+  unit: string;
+  is_modeled: boolean;
+  note: string;
+}
+export interface SienaCatalog {
+  values: SienaValueKindDef[];
+  extras: SienaExtraKindDef[];
+  /** 追加オプションが 1 個ずつ解放される段階 */
+  extra_unlock_stages: [number, number, number];
+  stage_max: number;
 }
 
 // ランダムオプションのランク。crates/domain/src/random_option.rs の RandomOptionRank。
@@ -395,7 +503,7 @@ export interface DefenseRates {
 }
 
 // 称号の区分。crates/domain/src/title.rs の TitleKind。
-export type TitleKind = "normal" | "special";
+export type TitleKind = "normal" | "special" | "event";
 
 // 称号定義(gamedata のカタログ)。crates/domain/src/title.rs の TitleDef。
 export interface TitleDef {
@@ -408,7 +516,9 @@ export interface TitleDef {
   level: number | null;
   /** 装備の基本能力値への加算 */
   values: EquipmentValues;
-  /** 入手方法・備考(条件付きの追加効果は計算に入らない) */
+  /** 無条件の「ダメージ n% 増加」。カテゴリX(攻撃ダメージ)の X3 基本発動に入る。単位は % */
+  attack_damage_percent: number;
+  /** 入手方法・備考(**条件付き**の追加効果は計算に入らない) */
   note: string;
 }
 
@@ -535,6 +645,8 @@ export interface EquipmentAbilityDef {
   name: string;
   /** 装備攻撃力(基本能力値)への加算値 */
   values: EquipmentValues;
+  /** 追加効果(R- 以上に付く「ダメージ増加 +n%」。カテゴリX3) */
+  damage_effects: SkillEffect[];
 }
 
 export interface RegisteredCharacter {
@@ -753,20 +865,6 @@ export interface StatLimits {
   enhance_level_max: number;
   /** +12 以上の追加固定ダメージ実測値の上限(実用上の安全域)`[仮]` */
   enhance_added_damage_max: number;
-  /** シエナのオーラの増幅段階の上限 */
-  siena_stage_max: number;
-  /** シエナのオーラの追加オプション「攻撃力増加」の 1 部位あたり上限 % */
-  siena_attack_rate_percent_max: number;
-  /** シエナのオーラの追加オプション「防御力増加」の 1 部位あたり上限 % */
-  siena_defense_rate_percent_max: number;
-  /** シエナのオーラの追加オプション「中ディレイ減少」の 1 部位あたり上限 % */
-  siena_actual_delay_percent_max: number;
-  /** シエナのオーラの追加オプション「クリティカル確率」の 1 部位あたり上限 % */
-  siena_critical_rate_percent_max: number;
-  /** シエナのオーラの能力値スロットによるステ加算の 1 部位・1 ステあたり上限 */
-  siena_stat_bonus_max: number;
-  /** シエナのオーラの追加オプション「全ステータス増加」の 1 部位あたり上限 */
-  siena_all_stats_bonus_max: number;
   /** テシスコアの装着枠数 */
   core_slot_count: number;
   core_evolution_max: number;
@@ -794,6 +892,10 @@ export interface StatLimits {
   hyper_limit_level_max: number;
   /** クリティカル率増加の上限 %(wiki: 計算式まとめ #CriticalChance) */
   critical_rate_bonus_max: number;
+  /** 設計者の研究室の研究段階の上限 */
+  architect_lab_stage_max: number;
+  /** 設計者の研究室 1 段階あたりのクリティカル率増加 */
+  architect_lab_per_stage: number;
 }
 
 

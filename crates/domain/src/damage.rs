@@ -55,8 +55,15 @@ pub struct DamageInput {
     /// 命中P補正の係数(wiki: 計算式まとめ の依存表)。スキル依存種別ごとに gamedata が持つ
     pub accuracy_correction: AccuracyCorrection,
     /// ランダムオプションの集計(`Equipment::random_option_totals`。カタログの解決は呼び出し側)。
-    /// カテゴリP(依存別)・カテゴリX(攻撃ダメージ)・命中P への加算に使う
+    /// カテゴリP(依存別)・カテゴリX5(攻撃ダメージ(特殊))・命中P への加算に使う
     pub random_options: RandomOptionTotals,
+    /// 称号の無条件「ダメージ n% 増加」(`title_attack_damage_rate`。カタログの解決は呼び出し側)。
+    /// **カテゴリX3 攻撃ダメージ(基本発動)**(上限 +80%)
+    pub title_attack_damage_rate: f64,
+    /// キャラスキル・マスタリー・バフの、与ダメージ式のカテゴリへの寄与(カタログの解決は
+    /// 呼び出し側)。効き先はカテゴリごとに違う(X4 攻撃ダメージ(スキル)、L 最終ダメージ、
+    /// E1/E2 スキル倍率増加 …)ので、値だけでなく**どのカテゴリか**を持つ
+    pub damage_contributions: Vec<(DamageCategory, f64)>,
     /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
     /// 与ダメージ式の外(A〜Y のいずれにも入らない)。無強化なら 0
     pub weapon_added_damage: i64,
@@ -82,8 +89,8 @@ pub struct DamageInput {
     pub critical_rate_sources: CriticalRateSources,
     /// 実測のスキル回数表(60 秒あたり)。DPS はここから出す(格子の外だけ式)。実データは gamedata
     pub skill_uses: SkillUsesTable,
-    /// キャラのパッシブ・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
-    /// カタログの解決は呼び出し側(`ActualDelaySkills::contributions`)。共通の供給源
+    /// キャラスキル・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
+    /// カタログの解決は呼び出し側(`CharacterSkills::actual_delay_contributions`)。共通の供給源
     /// (フルスロットル / ランダムオプション / シエナのオーラ)は `calculate_damage` が自分で集める
     pub actual_delay_skills: Vec<ActualDelayContribution>,
 }
@@ -104,6 +111,8 @@ impl DamageInput {
         equipment_coefficients: EquipmentCoefficients,
         accuracy_correction: AccuracyCorrection,
         random_options: RandomOptionTotals,
+        title_attack_damage_rate: f64,
+        damage_contributions: Vec<(DamageCategory, f64)>,
         weapon_added_damage: i64,
         awakening_rate: f64,
         damage_cap: i64,
@@ -130,6 +139,8 @@ impl DamageInput {
             equipment_coefficients,
             accuracy_correction,
             random_options,
+            title_attack_damage_rate,
+            damage_contributions,
             weapon_added_damage,
             skill,
             enemy,
@@ -360,7 +371,14 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         DependencyDamageRate,
         input.random_options.dependency_damage_rate.get(input.skill.dependency),
     );
-    totals.add(AttackDamageRate, input.random_options.attack_damage_rate);
+    // カテゴリX は X1〜X6 の合計で、**上限が子ごとに違う**(X3 +80% / X4 +65% / X5 未記載)。
+    // 親の `AttackDamageRate` は子の合計として読み出されるので、ここでは子に足す
+    totals.add(AttackDamageBasicTrigger, input.title_attack_damage_rate);
+    totals.add(AttackDamageSpecial, input.random_options.attack_damage_rate);
+    // キャラスキル・マスタリー・バフ。効き先はカテゴリごとに違う
+    for (category, value) in &input.damage_contributions {
+        totals.add(*category, *value);
+    }
     // 極限スキル「スコープアイ」(wiki: Skill/極限)。カテゴリG はクリティカル時にだけ乗る
     totals.add(CriticalDamageRate, input.common_skills.ultimate.critical_damage_rate());
 
@@ -586,8 +604,18 @@ fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaSte
 mod tests {
     use super::*;
     use crate::category::CategoryKind;
+    use crate::siena::{SienaAura, SienaExtraKind, SienaExtraSlot, SienaSlot, SienaValueKind};
     use crate::skill::SkillDependency;
     use crate::stat_sources::StatAdjustment;
+
+    /// 追加オプションを 1 個持つオーラ。追加オプションは段階 3 以上で解放されるので
+    /// 能力値スロットを 3 個埋める(段階 = スロット数)。
+    fn siena_extra(kind: SienaValueKind, extra: SienaExtraKind, value: f64) -> SienaAura {
+        SienaAura {
+            slots: vec![SienaSlot { kind, value: 1 }; 3],
+            extras: vec![SienaExtraSlot { kind: extra, value }],
+        }
+    }
     use crate::stats::{PinSource, StatKind};
 
     fn input() -> DamageInput {
@@ -600,6 +628,8 @@ mod tests {
             common_skills: CommonSkills::default(),
             equipment_base_totals: EquipmentValues::default(),
             equipment_enhanced_totals: EquipmentValues::default(),
+            title_attack_damage_rate: 0.0,
+            damage_contributions: Vec::new(),
             equipment_coefficients: EquipmentCoefficients::default(),
             // STAB+HACK 依存(ボーナスなし、ペナルティ (STAB+HACK)/200)
             accuracy_correction: AccuracyCorrection {
@@ -694,7 +724,7 @@ mod tests {
         assert_eq!(r.total, r.per_hit);
         assert_eq!(r.hit_count, 1);
         assert_eq!(r.trace.stats.len(), 7);
-        assert_eq!(r.trace.categories.len(), 30);
+        assert_eq!(r.trace.categories.len(), 36);
         let a = r.trace.categories.iter().find(|c| c.symbol == "A").unwrap();
         assert_eq!(a.value, 1800.0);
         assert_eq!(a.kind, CategoryKind::Assigned);
@@ -844,7 +874,7 @@ mod tests {
         t.add(CriticalMultiplier, 2.0);
         t.add(DamageAbsorb, 0.3);
         t.add(BasicTriggerDamageFixed, 100.0);
-        t.add(AttackDamageRate, 0.5);
+        t.add(AttackDamageSkill, 0.5);
         assert_eq!(evaluate(&t, false).0, 1200);
         // M は L・V1 の後、Old 以降の前: (1000 × 1.0 × 1.0 + M −200) × 0.7 + 100 = 660 → × 1.5 = 990
         t.add(DamageReduction, -200.0);
@@ -872,7 +902,10 @@ mod tests {
                 CategoryKind::Fixed => 100.0,
                 CategoryKind::Rate => 0.1,
             };
-            t.add(category, delta);
+            // カテゴリX の親は子(X3/X4/X5)の合計として読むので、加算は子に入れる
+            let target =
+                if category == AttackDamageRate { AttackDamageSkill } else { category };
+            t.add(target, delta);
             let (n, _) = evaluate(&t, false);
             let (c, steps) = evaluate(&t, true);
             assert_ne!(c, critical, "{}({}) がクリティカル時の結果に影響していない", category.label(), category.wiki_symbol());
@@ -880,7 +913,12 @@ mod tests {
             if !only_critical {
                 assert_ne!(n, normal, "{}({}) が結果に影響していない", category.label(), category.wiki_symbol());
             }
-            let symbol = category.wiki_symbol();
+            // X3/X4/X5 は親 X としてまとめて式に出る
+            let symbol = if DamageCategory::ATTACK_DAMAGE_CHILDREN.contains(&category) {
+                AttackDamageRate.wiki_symbol()
+            } else {
+                category.wiki_symbol()
+            };
             assert!(
                 steps.iter().any(|s| s.expression.contains(&format!("{symbol} "))
                     || s.expression.contains(&format!("{symbol}) "))),
@@ -976,15 +1014,38 @@ mod tests {
         assert_ne!(r.trace.steps_min.last().unwrap().name, "武器強化(追加固定ダメージ)");
     }
 
+    /// マスタリーの「攻撃ダメージ +n%」も同じカテゴリX(称号・ランダムOP と合算)。
+    #[test]
+    fn マスタリーの攻撃ダメージ増加はXに乗る() {
+        let mut i = input();
+        i.damage_contributions = vec![(DamageCategory::AttackDamageSkill, 0.05)];
+        let r = calculate_damage(&i);
+        let x = r.trace.categories.iter().find(|c| c.symbol == "X").unwrap();
+        assert!((x.value - 0.05).abs() < 1e-12);
+        assert!(r.per_hit.max > calculate_damage(&input()).per_hit.max);
+    }
+
+    /// 称号の無条件「ダメージ n% 増加」は wiki: ステータス `#z4747f51` の
+    /// [X3] 攻撃ダメージ(基本発動)なので、カテゴリX に合流する。
+    #[test]
+    fn 称号のダメージ増加はXに乗る() {
+        let mut i = input();
+        i.random_options.attack_damage_rate = 0.30;
+        i.title_attack_damage_rate = 0.20;
+        let r = calculate_damage(&i);
+        let x = r.trace.categories.iter().find(|c| c.symbol == "X").unwrap();
+        // ランダムOP 30% + 称号 20% = Σ +50%
+        assert!((x.value - 0.50).abs() < 1e-12);
+        assert!((x.factor - 1.50).abs() < 1e-12);
+    }
+
     #[test]
     fn シエナのオーラの攻撃力増加はNew1に乗る() {
         let base = calculate_damage(&input()).per_hit.max;
 
         let mut i = input();
-        i.equipment.parts.weapon.siena.stage = 10;
-        i.equipment.parts.weapon.siena.attack_rate_percent = 10.0;
-        i.equipment.parts.armor.siena.stage = 10;
-        i.equipment.parts.armor.siena.attack_rate_percent = 5.0;
+        i.equipment.parts.weapon.siena = siena_extra(SienaValueKind::Thrust, SienaExtraKind::AttackRate, 10.0);
+        i.equipment.parts.armor.siena = siena_extra(SienaValueKind::Stab, SienaExtraKind::AttackRate, 5.0);
         let boosted = calculate_damage(&i);
 
         // New1 は Σ% = +15% として集計される
@@ -1131,7 +1192,7 @@ mod tests {
         i.critical_rate_sources = CriticalRateSources {
             pet: true,
             ultimate_rune: true,
-            architect_lab: false,
+            architect_lab_stage: 0,
             deadly_blow: false,
         };
         let boosted = calculate_damage(&i).critical_rate.unwrap();
@@ -1170,7 +1231,8 @@ mod tests {
             hyper_limit_level: 6,
         };
         i.random_options.actual_delay_reduction = 0.03;
-        i.equipment.parts.shield_plus.siena.actual_delay_percent = 2.0;
+        i.equipment.parts.shield.siena =
+            siena_extra(SienaValueKind::Thrust, SienaExtraKind::ActualDelay, 2.0);
         i.actual_delay_skills =
             vec![ActualDelayContribution { source: "剣の司祭".into(), rate: 0.05 }];
 

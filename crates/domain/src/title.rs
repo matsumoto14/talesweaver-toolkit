@@ -19,6 +19,8 @@ use crate::equipment::EquipmentValues;
 pub enum TitleKind {
     Normal,
     Special,
+    /// wiki「称号/event」。課金箱シリーズと名誉の証。**無条件のダメージ増加を持つのはここだけ**
+    Event,
 }
 
 /// 称号定義(gamedata がカタログを持つ。`EquipmentAbilityDef` と同じ依存方向)。
@@ -33,8 +35,12 @@ pub struct TitleDef {
     pub level: Option<u16>,
     /// 装備の基本能力値への加算
     pub values: EquipmentValues,
-    /// 入手方法・備考。条件付きの追加効果(特定マップで追加ダメージ +20% など)は
-    /// 計算に入れないのでここに残すだけ
+    /// 無条件の「ダメージ n% 増加」(wiki: ステータス `#z4747f51` の
+    /// **[X3] 攻撃ダメージ(基本発動)(上限 +80%)** に称号の「ダメージ増加」が載っている)。
+    /// 課金箱シリーズ(明鏡止水〜緋馬の怪火)と一部の名誉の証が持つ。単位は %
+    pub attack_damage_percent: f64,
+    /// 入手方法・備考。**条件付き**の追加効果(特定マップで追加ダメージ +20% など)は
+    /// 発動条件を持っていないので計算に入れず、ここに残すだけ
     pub note: &'static str,
 }
 
@@ -47,10 +53,17 @@ pub enum TitleError {
 
 /// 選択中の称号の補正値。カタログに無い id は `None`(保存時に `storage` が弾いている)。
 pub fn title_values(title: Option<&str>, titles: &[TitleDef]) -> EquipmentValues {
-    let Some(id) = title else {
-        return EquipmentValues::default();
-    };
-    titles.iter().find(|t| t.id == id).map_or(EquipmentValues::default(), |t| t.values)
+    find(title, titles).map_or(EquipmentValues::default(), |t| t.values)
+}
+
+/// 選択中の称号の「ダメージ n% 増加」を Σ% の小数表現で返す(カテゴリX へ入る)。
+pub fn title_attack_damage_rate(title: Option<&str>, titles: &[TitleDef]) -> f64 {
+    find(title, titles).map_or(0.0, |t| t.attack_damage_percent / 100.0)
+}
+
+fn find<'a>(title: Option<&str>, titles: &'a [TitleDef]) -> Option<&'a TitleDef> {
+    let id = title?;
+    titles.iter().find(|t| t.id == id)
 }
 
 #[cfg(test)]
@@ -75,6 +88,7 @@ mod tests {
                 evasion: 40,
                 agility: 40,
             },
+            attack_damage_percent: 0.0,
             note: "",
         }]
     }

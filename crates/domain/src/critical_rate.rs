@@ -30,7 +30,7 @@ const PET_CRITICAL_RATE: f64 = 1.1;
 pub enum CriticalRateSourceId {
     /// 極のルーン(最大レベル時 +20)
     UltimateRune,
-    /// 設計者の研究室(最大レベル時 +30)
+    /// 設計者の研究室 B グループ「クリティカル率増加」(1 段階 +3・最大 10 段階 = +30)
     ArchitectLab,
     /// 致命打(+100)
     DeadlyBlow,
@@ -51,15 +51,24 @@ impl CriticalRateSourceId {
         }
     }
 
-    /// クリティカル率増加(パーセントポイント)。
-    pub fn value(self) -> f64 {
+    /// クリティカル率増加の**最大値**(パーセントポイント)。
+    /// 設計者の研究室は段階制なので、実際に乗る値は `CriticalRateSources::architect_lab_bonus`。
+    pub fn max_value(self) -> f64 {
         match self {
             CriticalRateSourceId::UltimateRune => 20.0,
-            CriticalRateSourceId::ArchitectLab => 30.0,
+            CriticalRateSourceId::ArchitectLab => {
+                f64::from(ARCHITECT_LAB_STAGE_MAX) * ARCHITECT_LAB_PER_STAGE
+            }
             CriticalRateSourceId::DeadlyBlow => 100.0,
         }
     }
 }
+
+/// 設計者の研究室の研究段階の上限(wiki: 設計者の研究室「A・B グループは最大 10 段階まで研究可能」)。
+pub const ARCHITECT_LAB_STAGE_MAX: u8 = 10;
+/// 設計者の研究室 B グループ「クリティカル率増加」の 1 段階あたり増加量
+/// (wiki: 設計者の研究室 永続バフの表)。
+pub const ARCHITECT_LAB_PER_STAGE: f64 = 3.0;
 
 /// クリティカル率の供給源の選択。`Default` は全部オフ(中立)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -69,26 +78,48 @@ pub struct CriticalRateSources {
     pub pet: bool,
     #[serde(default)]
     pub ultimate_rune: bool,
+    /// 設計者の研究室 B グループ「クリティカル率増加」の研究段階 0..=10(1 段階 +3)。
+    /// 研究は**テイルズID 内の全キャラに適用**されるが、入力はキャラごとに持つ
     #[serde(default)]
-    pub architect_lab: bool,
+    pub architect_lab_stage: u8,
     #[serde(default)]
     pub deadly_blow: bool,
 }
 
 impl CriticalRateSources {
-    pub fn is_on(&self, id: CriticalRateSourceId) -> bool {
+    /// 設計者の研究室ぶんのクリティカル率増加(段階 × 3)。
+    pub fn architect_lab_bonus(&self) -> f64 {
+        f64::from(self.architect_lab_stage) * ARCHITECT_LAB_PER_STAGE
+    }
+
+    /// 供給源ごとの実際の値(0 = 未習得・未研究)。
+    pub fn value_of(&self, id: CriticalRateSourceId) -> f64 {
         match id {
-            CriticalRateSourceId::UltimateRune => self.ultimate_rune,
-            CriticalRateSourceId::ArchitectLab => self.architect_lab,
-            CriticalRateSourceId::DeadlyBlow => self.deadly_blow,
+            CriticalRateSourceId::UltimateRune => {
+                if self.ultimate_rune { id.max_value() } else { 0.0 }
+            }
+            CriticalRateSourceId::ArchitectLab => self.architect_lab_bonus(),
+            CriticalRateSourceId::DeadlyBlow => {
+                if self.deadly_blow { id.max_value() } else { 0.0 }
+            }
         }
     }
 
     /// クリティカル率増加の合計(上限 +100%)。ペット会心は倍率なのでここには入らない。
     pub fn bonus(&self) -> f64 {
-        let sum: f64 =
-            CriticalRateSourceId::ALL.iter().filter(|id| self.is_on(**id)).map(|id| id.value()).sum();
+        let sum: f64 = CriticalRateSourceId::ALL.iter().map(|id| self.value_of(*id)).sum();
         sum.min(CRITICAL_RATE_BONUS_MAX)
+    }
+
+    /// 研究段階が wiki の上限に収まっているか。
+    pub fn validate(&self) -> Result<(), CriticalRateError> {
+        if self.architect_lab_stage > ARCHITECT_LAB_STAGE_MAX {
+            return Err(CriticalRateError::ArchitectLabStageOutOfRange {
+                value: self.architect_lab_stage,
+                max: ARCHITECT_LAB_STAGE_MAX,
+            });
+        }
+        Ok(())
     }
 
     /// ペット会心の倍率(習得していなければ 1.0)。
@@ -99,6 +130,13 @@ impl CriticalRateSources {
             1.0
         }
     }
+}
+
+/// クリティカル率の供給源の値域違反。
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
+pub enum CriticalRateError {
+    #[error("設計者の研究室の研究段階は 0〜{max} です(指定値 {value})")]
+    ArchitectLabStageOutOfRange { value: u8, max: u8 },
 }
 
 /// クリティカル率の内訳。
@@ -183,7 +221,7 @@ mod tests {
         let sources = CriticalRateSources {
             pet: true,
             ultimate_rune: true,
-            architect_lab: true,
+            architect_lab_stage: ARCHITECT_LAB_STAGE_MAX,
             deadly_blow: false,
         };
         // 増加は 20 + 30 = 50
@@ -201,10 +239,29 @@ mod tests {
         let sources = CriticalRateSources {
             pet: false,
             ultimate_rune: true,
-            architect_lab: true,
+            architect_lab_stage: ARCHITECT_LAB_STAGE_MAX,
             deadly_blow: true,
         };
         assert_eq!(sources.bonus(), CRITICAL_RATE_BONUS_MAX);
+    }
+
+    // wiki: 設計者の研究室「クリティカル率増加 1 段階 +3」「最大 10 段階」
+    #[test]
+    fn 設計者の研究室は段階ごとに3ずつ増える() {
+        for stage in 0..=ARCHITECT_LAB_STAGE_MAX {
+            let sources = CriticalRateSources { architect_lab_stage: stage, ..Default::default() };
+            assert_eq!(sources.architect_lab_bonus(), f64::from(stage) * 3.0);
+            assert_eq!(sources.bonus(), f64::from(stage) * 3.0);
+            assert!(sources.validate().is_ok());
+        }
+        let over = CriticalRateSources {
+            architect_lab_stage: ARCHITECT_LAB_STAGE_MAX + 1,
+            ..Default::default()
+        };
+        assert!(matches!(
+            over.validate(),
+            Err(CriticalRateError::ArchitectLabStageOutOfRange { .. })
+        ));
     }
 
     // wiki `#CriticalChance`: 下限 0% / 上限 100%

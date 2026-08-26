@@ -23,16 +23,23 @@
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
     CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityFamily, EquipmentItem, PartSlot,
-    PetSkillTier, RandomOptionDef, RandomOptionRank, Skill, StatKind, StatPreview, TitleDef,
-    UltimateSkill,
+    MasteryDef, PetSkillTier, RandomOptionDef, RandomOptionRank, SienaExtraKind, SienaValueKind,
+    Skill,
+    StatKind, StatPreview, TitleDef, UltimateSkill,
   } from "../../api/types";
-  import { isAllySkill, isCharacterSkillFor, isFixedValue, toggleBuff } from "../../buffs";
+  import { isFixedValue, toggleBuff } from "../../buffs";
+  import {
+    actualDelayPercent, allySkills, damageCategoryLabel, effectLabel, ownSkills,
+    toggleCharacterSkill,
+  } from "../../characterSkills";
   import { previewElements } from "../../api/commands";
   import { draftToPayload, type Draft } from "../../draft";
   import {
     clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
-    neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
-    randomOptionValue, randomOptionValueLabel, rangeSummary, sienaPartStatTotal, valuesSummary,
+    neutralEquipmentPart, randomOptionEffectLabel, randomOptionIsApplied,
+    randomOptionActualDelayPercent, randomOptionValue, randomOptionValueLabel, rangeSummary,
+    sienaExtraCapacity, sienaExtraTotal, sienaExtraValue,
+    sienaPartStatTotal, sienaPartValues, sienaStage, valuesSummary,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
@@ -57,6 +64,15 @@
   import { ETERNAL_MILESTONES } from "../../draft";
   import StatInput from "../../ui/StatInput.svelte";
 
+  /** ほかの補正源から入ってくる分の 1 行。押すとその補正源へ飛ぶ */
+  interface ExternalSource {
+    id: SourceId;
+    name: string;
+    value: number;
+    format: (value: number) => string;
+    note?: string;
+  }
+
   interface Props {
     draft: Draft;
     preview: StatPreview | null;
@@ -64,32 +80,100 @@
     /** 主軸スキルの選択肢(キャラ種のスキル一覧)。親が引く */
     skills: Skill[];
     sourceId: SourceId;
+    /** ほかの補正源へ飛ぶ(この値がどこから来ているかを追えるようにする) */
+    onOpenSource: (id: SourceId) => void;
   }
-  let { draft, preview, previewError, skills, sourceId }: Props = $props();
+  let { draft, preview, previewError, skills, sourceId, onOpenSource }: Props = $props();
 
   const STAT_MIN = 1;
 
-  // --- 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)---------------------
+  // --- キャラスキル(wiki: 各キャラの Skill ページ / ステータスの各カテゴリ表)-------
   // カタログはキャラを問わず全件持っているので、このキャラのぶんだけ出す。
-  const delaySkills = $derived(
-    app.actualDelaySkills.filter((d) => d.game_character_id === draft.gameCharacterId),
-  );
-  function toggleDelaySkill(id: string, on: boolean) {
-    const rest = draft.statSources.actual_delay_skills.skill_ids.filter((x) => x !== id);
-    draft.statSources.actual_delay_skills.skill_ids = on ? [...rest, id] : rest;
+  // 味方から受けるスキルは誰でも ON にできる。
+  const ownCharacterSkills = $derived(ownSkills(app.characterSkills, draft.gameCharacterId));
+  const allyCharacterSkills = $derived(allySkills(app.characterSkills));
+  const skillChecked = (id: string) => draft.statSources.character_skills.skill_ids.includes(id);
+  function toggleCharSkill(id: string, on: boolean) {
+    draft.statSources.character_skills.skill_ids = toggleCharacterSkill(
+      draft.statSources.character_skills.skill_ids,
+      id,
+      on,
+    );
   }
+  /** 中ディレイ減少を持つキャラスキル(中ディレイのペインに出す) */
+  const delaySkills = $derived(
+    ownCharacterSkills.filter((d) =>
+      [...d.effects, ...d.mastery_overrides.flatMap((o) => o.effects)].some(
+        (e) => e !== "record_only" && "actual_delay" in e,
+      ),
+    ),
+  );
+  /** 設計者の研究室ぶんのクリティカル率増加(研究段階 × 1 段階あたりの増加量) */
+  const architectLabBonus = $derived(
+    draft.statSources.critical_rate.architect_lab_stage * limits.architect_lab_per_stage,
+  );
+  /** 研究段階の選択肢。0〜10 段階を「N 段階(+3N%)」で並べる(§07 形態 2) */
+  const architectLabOptions = $derived(
+    Array.from({ length: limits.architect_lab_stage_max + 1 }, (_, i) => ({
+      value: String(i),
+      label: String(i),
+    })),
+  );
   /** クリティカル率増加の合計(上限を掛ける前) */
   const criticalRateBonus = $derived(
     (draft.statSources.critical_rate.ultimate_rune ? 20 : 0) +
-      (draft.statSources.critical_rate.architect_lab ? 30 : 0) +
+      architectLabBonus +
       (draft.statSources.critical_rate.deadly_blow ? 100 : 0),
   );
 
-  /** このキャラのパッシブぶんの中ディレイ減少 %(共通の供給源は含まない) */
+  // --- マスタリー(wiki: 各キャラの Skill ページ。段ごとに 1 つ)-----------
+  // 同じ段の選択肢は効き先がばらばら(中ディレイ / カテゴリX / ステ / 未収録)なので、
+  // カタログは 1 つにまとめて domain 側が効き先ごとに振り分ける。
+  const masteryTiers = $derived.by(() => {
+    const mine = app.masteries.filter((m) => m.game_character_id === draft.gameCharacterId);
+    const tiers = [...new Set(mine.map((m) => m.tier))].sort((a, b) => a - b);
+    return tiers.map((tier) => ({ tier, options: mine.filter((m) => m.tier === tier) }));
+  });
+  const pickedMastery = (tier: number) =>
+    app.masteries.find(
+      (m) => m.tier === tier && draft.statSources.masteries.picked.includes(m.id),
+    ) ?? null;
+  /** その段の選択を差し替える(段ごとに 1 つ。同じものを押したら外す) */
+  function pickMastery(tier: number, id: string | null) {
+    const others = draft.statSources.masteries.picked.filter(
+      (picked) => app.masteries.find((m) => m.id === picked)?.tier !== tier,
+    );
+    draft.statSources.masteries.picked = id === null ? others : [...others, id];
+  }
+  /** 効き先の要約。記録のみは wiki の効果だけ出し、未収録の理由は title に回す
+      (カードは 3 列なので、理由まで入れると行が伸びて段の高さがそろわない) */
+  const masteryEffectLabel = (m: MasteryDef): string => {
+    const e = m.effect;
+    if (e === "record_only") return m.note.split(" — ")[0];
+    if ("stat_rate" in e) {
+      return `${e.stat_rate.stats.map((k) => STAT_LABELS[k]).join(" / ")} +${e.stat_rate.percent}%`;
+    }
+    if ("actual_delay" in e) return `中ディレイ −${e.actual_delay.percent}%`;
+    const sign = e.damage.percent < 0 ? "−" : "+";
+    return `${damageCategoryLabel(e.damage.category)} ${sign}${Math.abs(e.damage.percent)}%`;
+  };
+  const masteryIsModeled = (m: MasteryDef): boolean => m.effect !== "record_only";
+  /** マスタリーぶんの中ディレイ減少 %(中ディレイペインの「ほかから入る分」に出す) */
+  const masteryDelayPercent = $derived.by(() => {
+    let sum = 0;
+    for (const id of draft.statSources.masteries.picked) {
+      const e = app.masteries.find((m) => m.id === id)?.effect;
+      if (e !== undefined && e !== "record_only" && "actual_delay" in e) sum += e.actual_delay.percent;
+    }
+    return sum;
+  });
+
+  /** このキャラのスキルぶんの中ディレイ減少 %(共通の供給源は含まない) */
   const delaySkillPercent = $derived(
-    draft.statSources.actual_delay_skills.skill_ids.reduce(
-      (n, id) => n + (app.actualDelaySkills.find((d) => d.id === id)?.percent ?? 0),
-      0,
+    actualDelayPercent(
+      draft.statSources.character_skills.skill_ids,
+      app.characterSkills,
+      draft.statSources.masteries.picked,
     ),
   );
   // キャラは名前で探すより顔で選ぶほうが速い(ゲーム内も顔で選ぶ)。§06 の 40px。
@@ -191,9 +275,6 @@
     }),
   ]);
 
-  const ownSkillBuffs = $derived(app.catalog.filter((d) => isCharacterSkillFor(d, draft.gameCharacterId)));
-  const allySkillBuffs = $derived(app.catalog.filter(isAllySkill));
-  const buffChecked = (buffId: string) => draft.statSources.buffs.choices.some((c) => c.buff_id === buffId);
 
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
@@ -283,6 +364,20 @@
     EQUIPMENT_STAT_KINDS.filter((k) => t.values[k] !== 0)
       .map((k) => `${EQUIPMENT_STAT_SHORT[k]}${t.values[k]}`)
       .join(" ");
+  /** 「緋馬の怪火 - 突き」の「緋馬の怪火」。同じ称号の依存違いをまとめる単位 */
+  const titleBase = (t: TitleDef): string => t.name.split(" - ")[0];
+  /** 同じ称号の変種(突き / 斬り / 魔攻 …)を 1 行にまとめる。
+      カタログの並び(ダメージ増加の大きい順)は最初に出てきた変種の位置で保つ */
+  const titleGroups = $derived.by(() => {
+    const groups = new Map<string, TitleDef[]>();
+    for (const t of filteredTitles) {
+      const base = titleBase(t);
+      const list = groups.get(base);
+      if (list) list.push(t);
+      else groups.set(base, [t]);
+    }
+    return [...groups].map(([base, items]) => ({ base, items }));
+  });
 
   // --- ランダムオプション -------------------------------------------------
   // 効果値の上限は wiki の一覧表のレンジそのもの。枠数は wiki に記載が無く、代わりに
@@ -519,7 +614,7 @@
   });
   /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。表示用 */
   const sienaDefenseRate = $derived(
-    PART_SLOTS.reduce((n, slot) => n + draft.equipment.parts[slot].siena.defense_rate_percent, 0),
+    PART_SLOTS.reduce((n, slot) => n + sienaExtraValue(draft.equipment.parts[slot].siena, "defense_rate"), 0),
   );
   const defenseRatePercent = $derived.by(() => {
     const c = draft.commonSkills;
@@ -584,7 +679,7 @@
     }
     if (u.slots.includes("full_throttle")) {
       const hits = hyper([0, 0, 0, 1, 2, 3]);
-      out.push(`中ディレイ −${25 + (superLimit ? 3 : 0) + hyper([7, 9, 11, 13, 15, 17])}%`);
+      out.push(`中ディレイ −${fullThrottlePercent}%`);
       out.push(`単体チャネリング段数 +${hits}`);
     }
     if (u.slots.includes("wide_focus")) {
@@ -592,6 +687,70 @@
     }
     return out;
   });
+
+  /** フルスロットル(共通スキル)の中ディレイ減少 %。0 = 未装着 */
+  const fullThrottlePercent = $derived.by(() => {
+    const u = draft.commonSkills.ultimate;
+    if (!u.slots.includes("full_throttle")) return 0;
+    const lv = u.hyper_limit_level;
+    const hyper = lv === 0 ? 0 : [7, 9, 11, 13, 15, 17][lv - 1];
+    return 25 + (u.super_limit ? 3 : 0) + hyper;
+  });
+
+  /** 中ディレイ減少に、この補正源の外から入ってくる分 */
+  const delayFromOthers = $derived<ExternalSource[]>([
+    { id: "commonSkill", name: "フルスロットル(共通スキル)", value: fullThrottlePercent, format: (v) => `−${v}%` },
+    {
+      id: "skills",
+      name: "マスタリー(キャラスキル)",
+      value: masteryDelayPercent,
+      format: (v) => `−${v}%`,
+      note: "段ごとに 1 つ。中ディレイ以外に効く選択肢もある",
+    },
+    {
+      id: "randomOption",
+      name: "ランダムOP(カフス)",
+      value: randomOptionActualDelayPercent(draft.equipment, app.randomOptions),
+      format: (v) => `−${v}%`,
+    },
+    { id: "siena", name: "シエナのオーラ", value: sienaExtraTotal(draft.equipment, "actual_delay"), format: (v) => `−${v}%` },
+  ]);
+
+  /** クリティカル率に、この補正源の外から入ってくる分 */
+  const criticalFromOthers = $derived<ExternalSource[]>([
+    {
+      id: "equipment",
+      name: "装備クリティカル補正",
+      value: PART_SLOTS.reduce((n, slot) => n + draft.equipment.parts[slot].base.critical + draft.equipment.parts[slot].enchant.critical, 0),
+      format: (v) => `+${fmtInt(v)}`,
+      note: "(装備クリティカル補正 + 1) × 2 の項",
+    },
+    {
+      id: "status",
+      name: "AGI(最終能力値)",
+      value: preview?.stats.agi ?? 0,
+      format: (v) => fmtInt(v),
+      note: "AGI /(AGI + 対象のAGI)の項",
+    },
+    {
+      id: "status",
+      name: "主軸スキルの Cri値",
+      value: mainSkill?.critical_rate ?? 0,
+      format: (v) => `+${v}%`,
+      note: mainSkill
+        ? mainSkill.critical_rate === null
+          ? `${mainSkill.name} は wiki 未記載`
+          : mainSkill.name
+        : "主軸スキル未選択",
+    },
+    {
+      id: "siena",
+      name: "シエナのオーラのクリティカル確率",
+      value: sienaExtraTotal(draft.equipment, "critical_rate"),
+      format: (v) => `×${(1 + v / 100).toFixed(2)}`,
+      note: "AGI 由来の項に乗算。下の合計には入らない",
+    },
+  ]);
 
   const enhanceRatePercent = $derived(
     (draft.commonSkills.power_weapon ? 2 : 0) + draft.commonSkills.strong_weapon_level * 3,
@@ -610,22 +769,53 @@
   }
 
   // --- シエナのオーラ(部位ごと) ------------------------------------------
+  // **段階は入力しない。**能力値スロットを 1 個ずつ足した数がそのまま段階になる
+  // (wiki: 段階ごとに能力値スロットが 1 個解放)。追加オプションの枠も段階から出る。
   let openSienaPart = $state<PartSlot | null>(null);
-  const sienaStageOptions = $derived(
-    Array.from({ length: limits.siena_stage_max + 1 }, (_, i) => ({
-      value: String(i),
-      label: i === 0 ? "未発現" : `${i} 段階(能力値 ${i} 枠)`,
-    })),
-  );
-  /** 段階 0 に戻したらその部位のオーラを丸ごと中立に戻す(値だけ残る幽霊状態を作らない) */
-  function setSienaStage(slot: PartSlot, stage: number) {
-    if (stage === 0) {
-      draft.equipment.parts[slot].siena = neutralSienaAura();
-      return;
-    }
-    draft.equipment.parts[slot].siena.stage = stage;
-  }
   const sienaIsEquipmentValues = (slot: PartSlot) => SIENA_EQUIPMENT_VALUE_SLOTS.includes(slot);
+  /** その部位に出る能力値の種類。武器/盾とその他の部位で一覧が丸ごと違う */
+  const sienaValueDefs = (slot: PartSlot) =>
+    app.siena.values
+      .filter((d) => d.is_equipment_value === sienaIsEquipmentValues(slot))
+      // 記録するだけのものは後ろへ。ふだん選ぶのは計算に入るほう(§00 02)
+      .sort((a, b) => Number(b.is_modeled) - Number(a.is_modeled));
+  const sienaValueDef = (kind: SienaValueKind) => app.siena.values.find((d) => d.kind === kind);
+  const sienaExtraDef = (kind: SienaExtraKind) => app.siena.extras.find((d) => d.kind === kind);
+  const sienaCapacity = (slot: PartSlot) =>
+    sienaExtraCapacity(draft.equipment.parts[slot].siena, app.siena.extra_unlock_stages);
+  /** まだ付いていない追加オプション(wiki: 同じ種類は同じ装備の別スロットには出ない) */
+  const sienaAddableExtras = (slot: PartSlot) => {
+    const used = new Set(draft.equipment.parts[slot].siena.extras.map((e) => e.kind));
+    return app.siena.extras
+      .filter((d) => !used.has(d.kind))
+      .sort((a, b) => Number(b.is_modeled) - Number(a.is_modeled));
+  };
+  /** 取りうる値が連番かどうか。連番ならステッパー、飛び飛び(中ディレイ)は段階選択 */
+  const sienaChoicesAreRun = (choices: number[]) =>
+    choices.every((c, i) => c === choices[0] + i);
+  /** 足した直後の値はレンジ上限(再抽選で振り直せるので想定値は最上値。ランダムOP と同じ) */
+  function addSienaSlot(slot: PartSlot, kind: SienaValueKind) {
+    const def = sienaValueDef(kind);
+    if (!def) return;
+    draft.equipment.parts[slot].siena.slots.push({ kind, value: def.max });
+  }
+  function removeSienaSlot(slot: PartSlot, index: number) {
+    const siena = draft.equipment.parts[slot].siena;
+    siena.slots.splice(index, 1);
+    // 段階が下がって枠が閉じたら、はみ出た追加オプションも落とす(値だけ残る幽霊状態を作らない)
+    const capacity = sienaExtraCapacity(siena, app.siena.extra_unlock_stages);
+    if (siena.extras.length > capacity) siena.extras.length = capacity;
+  }
+  function addSienaExtra(slot: PartSlot, kind: SienaExtraKind) {
+    const def = sienaExtraDef(kind);
+    if (!def || def.choices.length === 0) return;
+    draft.equipment.parts[slot].siena.extras.push({
+      kind,
+      value: def.choices[def.choices.length - 1],
+    });
+  }
+  const removeSienaExtra = (slot: PartSlot, index: number) =>
+    draft.equipment.parts[slot].siena.extras.splice(index, 1);
 
   // --- 主属性 -------------------------------------------------------------
   // 供給源(ペット / モンスターカード / ルーンスキル / 頭・カフスのアビリティ)は、
@@ -675,20 +865,43 @@
     // 属性を外したら値も消す(0 と「属性なし」を食い違わせない)
     if (part.element === null) part.element_value = 0;
   }
+  /** 部位の行に出す要約。段階はバッジで出しているので、ここでは効き先の合計だけ */
   const sienaSummary = (slot: PartSlot): string => {
     const siena = draft.equipment.parts[slot].siena;
-    if (siena.stage === 0) return "未発現";
-    const parts: string[] = [`${siena.stage} 段階`];
+    if (sienaStage(siena) === 0) return "未発現";
+    const parts: string[] = [];
     if (sienaIsEquipmentValues(slot)) {
-      const v = siena.values;
-      if (v.thrust || v.slash || v.magic_attack || v.magic_defense) {
-        parts.push(`突${fmtInt(v.thrust)} / 斬${fmtInt(v.slash)}`);
-      }
+      const v = sienaPartValues(siena);
+      const top = EQUIPMENT_STAT_KINDS.filter((k) => v[k] > 0)
+        .map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(v[k])}`);
+      if (top.length > 0) parts.push(top.join(" / "));
     }
     const statTotal = sienaPartStatTotal(siena);
     if (statTotal > 0) parts.push(`ステ +${fmtInt(statTotal)}`);
-    if (siena.attack_rate_percent > 0) parts.push(`攻撃力 +${siena.attack_rate_percent}%`);
-    return parts.join(" ・ ");
+    const attack = sienaExtraValue(siena, "attack_rate");
+    if (attack > 0) parts.push(`攻撃力 +${attack}%`);
+    return parts.length > 0 ? parts.join(" ・ ") : "—";
+  };
+  /** 行に出すバッジ。段階 10 だと 13 個になるので上位だけ出し、残りは「+N」で畳む(§00 01) */
+  const SIENA_BADGE_MAX = 4;
+  const sienaBadges = (slot: PartSlot) => {
+    const siena = draft.equipment.parts[slot].siena;
+    const rows: { key: string; text: string; title: string; modeled: boolean }[] = [];
+    siena.slots.forEach((s, i) => {
+      const def = sienaValueDef(s.kind);
+      if (def) rows.push({
+        key: `v${i}`, text: `${def.short}${s.value}${def.unit}`,
+        title: `${def.label} +${s.value}${def.unit}`, modeled: def.is_modeled,
+      });
+    });
+    siena.extras.forEach((e, i) => {
+      const def = sienaExtraDef(e.kind);
+      if (def) rows.push({
+        key: `e${i}`, text: `${def.short}${e.value}${def.unit}`,
+        title: `${def.label} +${e.value}${def.unit}`, modeled: def.is_modeled,
+      });
+    });
+    return rows;
   };
 
   // --- テシスコア(地域ごとに 6 枠) ---------------------------------------
@@ -782,12 +995,12 @@
     crown: { title: "クラウン", note: `ステに乗る実値(0–${limits.crown_max})` },
     monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
     relic: { title: "神鳥の聖物", note: `ステごとの加算(10 きざみ・0–${limits.sacred_relic_stage_max * 10})` },
-    siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
+    siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・スロットを 1 個ずつ足す(段階 = スロット数)" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
     title: { title: "称号", note: "表示中の 1 件だけが装備の基本能力値に乗る" },
     commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
-    skills: { title: "キャラスキル", note: "自分のスキルと味方から受けるスキル" },
+    skills: { title: "キャラスキル", note: "マスタリー(段ごとに 1 つ)と、自分・味方のスキル" },
     actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
     criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 +${limits.critical_rate_bonus_max}%)` },
     adjust: { title: "調整", note: "検証・仮定用の例外操作" },
@@ -798,6 +1011,28 @@
 </script>
 
 <!-- ランダムオプションの編集(装備の部位詳細と「ランダムOP」ペインで共有する) -->
+<!-- ほかの補正源から入ってくる分。**0 の行も出す** — ここは「この値がどこから来るか」の
+     地図でもあるので、入っていない供給源を消すと存在に気づけない。0 の行は薄くする。
+     押すとその補正源へ移る -->
+{#snippet fromOthers(rows: ExternalSource[], title: string)}
+  {#if rows.length > 0}
+    <div class="card">
+      <div class="card-title">{title}</div>
+      {#each rows as r (r.id + r.name)}
+        <div class="ext-row" class:empty={r.value === 0}>
+          <span class="ext-name">
+            {r.name}
+            {#if r.note}<span class="ext-note">{r.note}</span>{/if}
+          </span>
+          <!-- 0 は「−0%」「×1.00」ではなく — で出す(入っていないことを値の形で言わない) -->
+          <span class="ext-value num" use:bump={() => r.value}>{r.value === 0 ? "—" : r.format(r.value)}</span>
+          <button type="button" class="chip quiet" onclick={() => onOpenSource(r.id)}>開く ›</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet randomOptionEditor(slot: PartSlot)}
   {@const part = draft.equipment.parts[slot]}
   {#each part.random_options as option, index (option.option_id)}
@@ -1403,140 +1638,161 @@
       </div>
     </div>
   {:else if sourceId === "siena"}
+    <!-- 説明は分割の**外**に置く。中に入れると右ペインを開いたとき左が狭まって
+         折り返しが増え、押した部位行が下へ逃げる(§09 規則 1) -->
+    <div class="card">
+      <p class="hint dim">
+        wiki「装備システム/シエナのオーラ」。Lv310 の 8 部位(兜/鎧/武器/盾/頭/体/手/足)に発現できます。
+        中身は再抽選のランダム値なので、<b>スロットに出ているものを 1 個ずつ選んで足します</b>。
+        <b>増幅段階は足したスロットの数</b>で、段階 3/7/10 で追加オプションの枠が 1/2/3 個開きます。
+        効果値は触らなければレンジ上限で計算します(再抽選で振り直せるため)。
+        グレーの枠は<b>記録するだけ</b>(防御側・HP/MP/SP など未収録の概念)で計算には入りません。
+      </p>
+    </div>
     <!-- ドリルダウンは置き換えではなく、右にペインを足す(§09 規則 2)。
          押した部位行はその場に残り、別の部位を押せばそのまま横に移れる -->
     <div class="part-split" class:open={openSienaPart !== null}>
-      <div class="part-side">
-      <div class="card">
-        <p class="hint dim">
-          wiki「装備システム/シエナのオーラ」。Lv310 の 8 部位(兜/鎧/武器/盾/頭/体/手/足)に発現でき、
-          増幅段階の数だけ能力値スロットが解放されます。中身は再抽選のランダム値なので wiki から自動では
-          決まりません。部位ごとに実測の合計値を入れてください。
-        </p>
-        <p class="hint dim">
-          武器・盾の能力値はエンチャント扱い(強化能力値)、その他の部位はステの最終固定値、
-          追加オプション「攻撃力増加」は与ダメージ割合増加(New1)として計算に入ります。
-        </p>
-      </div>
       <div class="part-list">
         {#each SIENA_ALLOWED_SLOTS as slot (slot)}
           {@const siena = draft.equipment.parts[slot].siena}
+          {@const stage = sienaStage(siena)}
+          {@const badges = sienaBadges(slot)}
           <button type="button" class="part-row" class:on={openSienaPart === slot} onclick={() => (openSienaPart = slot)}>
             <span class="part-main">
               <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
-              <span class="part-item">{partDisplayName(slot)}</span>
-              <span class="part-plus wide" class:on={siena.stage > 0}>{siena.stage > 0 ? `${siena.stage} 段階` : ""}</span>
+              <span class="part-plus wide" class:on={stage > 0}>{stage > 0 ? `${stage} 段階` : ""}</span>
             </span>
+            <!-- 付いているスロットを短い名前 + 値のバッジで並べる(ランダムOP と同じ形)。
+                 部位を開いている間は一覧が細くなるので出さない。右のペインが同じ中身を全部出している -->
+            {#if openSienaPart === null}
+              <span class="ro-badges">
+                {#each badges.slice(0, SIENA_BADGE_MAX) as b (b.key)}
+                  <span class="ro-badge" class:record-only={!b.modeled} title={b.title}>{b.text}</span>
+                {/each}
+                {#if badges.length > SIENA_BADGE_MAX}
+                  <span class="ro-badge more">+{badges.length - SIENA_BADGE_MAX}</span>
+                {/if}
+              </span>
+            {/if}
+            <!-- 部位を開いている間は .part-split.open が隠す(装備・ランダムOP と同じ) -->
             <span class="part-vals num dim">{sienaSummary(slot)}</span>
             <span class="chev dim">›</span>
           </button>
         {/each}
       </div>
-      </div>
       {#if openSienaPart !== null}
         {@const slot = openSienaPart}
         {@const siena = draft.equipment.parts[slot].siena}
+        {@const stage = sienaStage(siena)}
+        {@const capacity = sienaCapacity(slot)}
         <div class="part-detail pane-in">
-      <button type="button" class="close-detail" onclick={() => (openSienaPart = null)}>✕ この部位を閉じる</button>
-      <div class="card">
-        <div class="card-title">{PART_SLOT_LABELS[slot]}: 増幅段階</div>
-        <StepSelect
-          label="段階"
-          options={sienaStageOptions}
-          bind:value={() => String(siena.stage), (v) => setSienaStage(slot, Number(v))}
-        />
-        <p class="hint dim">
-          段階ごとに能力値スロットが 1 個ずつ解放されます(段階 3/7/10 で追加オプションが 1/2/3 個)。
-          段階を「未発現」に戻すとこの部位の入力値は消えます。
-        </p>
-      </div>
-
-      {#if siena.stage > 0}
-        {#if sienaIsEquipmentValues(slot)}
+          <button type="button" class="close-detail" onclick={() => (openSienaPart = null)}>✕ この部位を閉じる</button>
           <div class="card">
-            <div class="card-title">能力値(装備補正の合計)</div>
-            <p class="hint dim">解放済みスロットに出ている装備補正の合計。強化能力値として装備攻撃力に入ります</p>
-            <div class="fields">
-              {#each EQUIPMENT_STAT_KINDS as k (k)}
-                <StatInput
-                  label={EQUIPMENT_STAT_LABELS[k]}
-                  min={0}
-                  max={limits.equipment_value_max}
-                  bind:value={siena.values[k]}
-                />
-              {/each}
+            <div class="card-title inline">
+              {PART_SLOT_LABELS[slot]}: 能力値スロット
+              <span class="dim normal num" use:bump={() => stage}>{stage} / {app.siena.stage_max} 段階</span>
             </div>
-            <p class="hint dim">
-              物理複合攻撃力・魔法斬り攻撃力は wiki の内訳(例: 物理複合 5 = 突き 3 + 斬り 2)に分けて入れてください。
-            </p>
+            <!-- 足す場所は**行より上**。下に置くと、1 個足すたびに押したチップが
+                 行の高さぶん下へ逃げる(§09 規則 1)。足したものは真下に増える -->
+            {#if stage < app.siena.stage_max}
+              <div class="ro-add-row">
+                {#each sienaValueDefs(slot) as def (def.kind)}
+                  <button
+                    type="button"
+                    class="chip add"
+                    class:record-only={!def.is_modeled}
+                    title={def.note}
+                    onclick={() => addSienaSlot(slot, def.kind)}
+                  >＋ {def.label}</button>
+                {/each}
+              </div>
+            {:else}
+              <p class="hint dim">段階 {app.siena.stage_max} まで埋まりました。変えるときは外してから足します。</p>
+            {/if}
+            {#each siena.slots as s, index (index)}
+              {@const def = sienaValueDef(s.kind)}
+              {#if def}
+                <!-- 1 スロット 1 行。種類 / 値 / 外す を列でそろえる(§00 01)。
+                     効き先の但し書きは title に入れ、行は増やさない -->
+                <div class="siena-row swap-in" class:record-only={!def.is_modeled}>
+                  <span class="ro-name" title="{def.label}{def.note ? ` — ${def.note}` : ''}">{def.label}</span>
+                  <StatInput
+                    label=""
+                    min={def.min}
+                    max={def.max}
+                    format={def.min > 1 ? () => `wiki ${def.min}–${def.max}${def.unit}` : undefined}
+                    bind:value={() => s.value, (v) => (s.value = v)}
+                    stepper
+                  />
+                  <button type="button" class="clear" onclick={() => removeSienaSlot(slot, index)}>外す</button>
+                </div>
+              {/if}
+            {/each}
           </div>
-        {:else}
-          <div class="card">
-            <div class="card-title">能力値スロットのステータス加算</div>
-            <p class="hint dim">解放済みスロットに出ている STAB〜AGI の合計(最終固定値)。全ステータス増加は下の追加オプションへ</p>
-            <div class="fields">
-              {#each STAT_KINDS as k (k)}
-                <StatInput
-                  label={STAT_LABELS[k]}
-                  min={0}
-                  max={limits.siena_stat_bonus_max}
-                  bind:value={siena.stats[k]}
-                />
-              {/each}
-            </div>
-          </div>
-        {/if}
 
-        <div class="card">
-          <div class="card-title">追加オプション</div>
-          <p class="hint dim">同じ種類のオプションは同じ装備に 1 個までしか付きません(部位は問いません)</p>
-          <div class="fields">
-            <StatInput
-              label="攻撃力増加"
-              min={0}
-              max={limits.siena_attack_rate_percent_max}
-              step={0.5}
-              bind:value={siena.attack_rate_percent}
-              format={(v) => `+${v}%`}
-            />
-            <StatInput
-              label="全ステータス増加"
-              min={0}
-              max={limits.siena_all_stats_bonus_max}
-              bind:value={siena.all_stats}
-              format={(v) => (v > 0 ? `STAB〜AGI に +${v}` : "なし")}
-            />
-            <StatInput
-              label="防御力増加"
-              min={0}
-              max={limits.siena_defense_rate_percent_max}
-              bind:value={siena.defense_rate_percent}
-              format={(v) => `+${v}%`}
-            />
-            <StatInput
-              label="中ディレイ減少"
-              min={0}
-              max={limits.siena_actual_delay_percent_max}
-              step={0.5}
-              bind:value={siena.actual_delay_percent}
-              format={(v) => `−${v}%`}
-            />
-            <StatInput
-              label="クリティカル確率"
-              min={0}
-              max={limits.siena_critical_rate_percent_max}
-              bind:value={siena.critical_rate_percent}
-              format={(v) => `+${v}%`}
-            />
+          <div class="card">
+            <div class="card-title inline">
+              追加オプション
+              <span class="dim normal num" use:bump={() => capacity}>
+                {siena.extras.length} / {capacity} 枠
+              </span>
+            </div>
+            {#if capacity === 0}
+              <p class="hint dim">
+                段階 {app.siena.extra_unlock_stages[0]} で 1 枠目が開きます(いま段階 {stage})。
+              </p>
+            {:else}
+              {#if siena.extras.length < capacity}
+                <div class="ro-add-row">
+                  {#each sienaAddableExtras(slot) as def (def.kind)}
+                    <button
+                      type="button"
+                      class="chip add"
+                      class:record-only={!def.is_modeled}
+                      title={def.note}
+                      onclick={() => addSienaExtra(slot, def.kind)}
+                    >＋ {def.label}</button>
+                  {/each}
+                </div>
+              {:else}
+                <p class="hint dim">
+                  いまの段階で開いている {capacity} 枠は埋まりました。次は段階
+                  {app.siena.extra_unlock_stages[capacity] ?? app.siena.stage_max} で開きます。
+                </p>
+              {/if}
+              {#each siena.extras as e, index (index)}
+                {@const def = sienaExtraDef(e.kind)}
+                {#if def}
+                  <div class="siena-row swap-in" class:record-only={!def.is_modeled}>
+                    <span class="ro-name" title="{def.label} — {def.note}">
+                      {def.label}
+                      <span class="siena-to">{def.note}</span>
+                    </span>
+                    {#if sienaChoicesAreRun(def.choices)}
+                      <StatInput
+                        label=""
+                        min={def.choices[0]}
+                        max={def.choices[def.choices.length - 1]}
+                        format={def.choices[0] > 1
+                          ? () => `wiki ${def.choices[0]}–${def.choices[def.choices.length - 1]}${def.unit}`
+                          : undefined}
+                        bind:value={() => e.value, (v) => (e.value = v)}
+                        stepper
+                      />
+                    {:else}
+                      <!-- 飛び飛びの値(中ディレイ 0.5 / 1 / 2%)はステッパーだと無い値を作れてしまう -->
+                      <StepSelect
+                        label=""
+                        options={def.choices.map((c) => ({ value: String(c), label: `${c}${def.unit}` }))}
+                        bind:value={() => String(e.value), (v) => (e.value = Number(v))}
+                      />
+                    {/if}
+                    <button type="button" class="clear" onclick={() => removeSienaExtra(slot, index)}>外す</button>
+                  </div>
+                {/if}
+              {/each}
+            {/if}
           </div>
-          <p class="hint dim">
-            「攻撃力増加」は与ダメージ割合増加(New1)、「全ステータス増加」は 7 ステすべてに同じ値が乗ります。
-            「防御力増加」は装備防御力倍率(防御タブ)、「中ディレイ減少」は中ディレイ倍率B(計算タブの 1 秒あたり)、
-            「クリティカル確率」はクリティカル率の AGI 由来の項に<b>乗算</b>で合流します。
-            防御無視攻撃確率は確率発動(x% で防御力 15% 無視)なので未収録、HP/MP/SP は与ダメージ式に入りません。
-          </p>
-        </div>
-      {/if}
         </div>
       {/if}
     </div>
@@ -1631,9 +1887,11 @@
     <div class="card">
       <p class="hint dim">
         wiki「称号システム」。<b>表示中の 1 件だけ</b>が効きます(持っている称号の合計ではありません)。
-        補正は<b>装備の基本能力値</b>に乗るので、装備値の合計と同じ列に足されます。
-        収録は<b>主要称号のみ</b>(補正値 9 種の合計 15 以上 = {app.titles.length} 件)。
-        備考の条件付き効果(特定マップで追加ダメージ +20% など)とグループボーナスは計算に入りません。
+        補正値は<b>装備の基本能力値</b>に乗り、<b>ダメージ n% 増加</b>はカテゴリX(攻撃ダメージ)に入ります。
+        収録は<b>主要称号のみ</b>({app.titles.length} 件 — normal / special は補正値 9 種の合計 15 以上、
+        event はダメージ増加を持つもの)。並びは<b>ダメージ増加 → 与ダメージに効く 1 値の大きさ</b>の順です
+        (装備攻撃力に入るのは突き/斬り/魔攻/魔防の 4 値だけで、使うのはスキルの依存種別の 1 つ)。
+        備考の<b>条件付き</b>効果(特定マップで追加ダメージ +20% など)とグループボーナスは計算に入りません。
       </p>
       <input class="item-search" type="text" placeholder="称号名・グループで探す" bind:value={titleQuery} />
       <div class="item-list">
@@ -1645,30 +1903,77 @@
         >
           <span class="item-name">未装備</span>
         </button>
-        {#each filteredTitles as t (t.id)}
-          <button
-            type="button"
-            class="item-row"
-            class:on={draft.equipment.title === t.id}
-            onclick={() => (draft.equipment.title = t.id)}
-          >
-            <span class="item-name">{t.name}</span>
-            <span class="item-vals num dim">{titleSummary(t)}</span>
-          </button>
+        {#each titleGroups as g (g.base)}
+          {#if g.items.length === 1}
+            {@const t = g.items[0]}
+            <button
+              type="button"
+              class="item-row"
+              class:on={draft.equipment.title === t.id}
+              onclick={() => (draft.equipment.title = t.id)}
+            >
+              <span class="item-name">{t.name}</span>
+              <!-- ダメージ増加は補正値と桁が違う効き方をするので、値の要約と別枠で出す -->
+              {#if t.attack_damage_percent > 0}
+                <span class="title-dmg num">ダメ +{t.attack_damage_percent}%</span>
+              {/if}
+              <span class="item-vals num dim">{titleSummary(t)}</span>
+            </button>
+          {:else}
+            <!-- 依存違いだけの変種は 1 行にまとめ、どれを持っているかをチップで選ぶ。
+                 4〜6 個なので段階選択に収まる(§07 形態 2)。行ごと押せる場所は作らない -->
+            {@const picked = g.items.find((t) => t.id === draft.equipment.title) ?? null}
+            <div class="item-row group" class:on={picked !== null}>
+              <span class="item-name">{g.base}</span>
+              {#if g.items[0].attack_damage_percent > 0}
+                <span class="title-dmg num">ダメ +{g.items[0].attack_damage_percent}%</span>
+              {/if}
+              <span class="item-vals num dim">{picked ? titleSummary(picked) : ""}</span>
+              <span class="title-variants">
+                {#each g.items as t (t.id)}
+                  <button
+                    type="button"
+                    class="chip"
+                    class:on={draft.equipment.title === t.id}
+                    title="{t.name} — {titleSummary(t)}"
+                    onclick={() => (draft.equipment.title = t.id)}
+                  >{t.name.slice(g.base.length + 3)}</button>
+                {/each}
+              </span>
+            </div>
+          {/if}
         {/each}
       </div>
     </div>
     {#if selectedTitle}
+      {@const filled = EQUIPMENT_STAT_KINDS.filter((k) => selectedTitle.values[k] !== 0)}
       <div class="card">
-        <div class="card-title">{selectedTitle.name}</div>
-        <div class="values-grid">
-          {#each EQUIPMENT_STAT_KINDS as k (k)}
-            <span class="val-cell">
-              <span class="dim">{EQUIPMENT_STAT_SHORT[k]}</span>
-              <span class="num strong">{signed(selectedTitle.values[k])}</span>
+        <div class="card-title inline">
+          {selectedTitle.name}
+          {#if selectedTitle.attack_damage_percent > 0}
+            <span class="title-dmg num" use:bump={() => selectedTitle?.attack_damage_percent ?? 0}>
+              ダメージ +{selectedTitle.attack_damage_percent}%
             </span>
-          {/each}
+          {/if}
         </div>
+        {#if selectedTitle.attack_damage_percent > 0}
+          <p class="hint dim">
+            ダメージ増加は<b>カテゴリX(攻撃ダメージ)</b>の X3 基本発動に入ります(wiki: ステータス。X3 は上限 +80%)。
+          </p>
+        {/if}
+        <!-- 課金箱シリーズは 1 値だけの称号が多い。0 の列を並べても比べる材料にならない(§00 02) -->
+        {#if filled.length > 0}
+          <div class="values-grid">
+            {#each filled as k (k)}
+              <span class="val-cell">
+                <span class="dim">{EQUIPMENT_STAT_SHORT[k]}</span>
+                <span class="num strong">{signed(selectedTitle.values[k])}</span>
+              </span>
+            {/each}
+          </div>
+        {:else}
+          <p class="hint dim">補正値はありません(ダメージ増加だけの称号)。</p>
+        {/if}
         <p class="hint dim">
           {selectedTitle.group}{selectedTitle.level !== null ? ` ・ 習得 Lv${selectedTitle.level}` : ""}
           {#if selectedTitle.note}<br />{selectedTitle.note}{/if}
@@ -2178,32 +2483,33 @@
       <p class="hint dim">
         wiki「ステータス」の<b>中ディレイ倍率B</b>。中ディレイは
         <b>基本中ディレイ × (1 − 減少値) ×(2 コンボ以上なら 0.5)</b>で、下限 0.3s・減少値の上限 70%。
-        ここで選ぶのは<b>このキャラ固有のパッシブ・マスタリー</b>だけです。
-        フルスロットル(共通スキル)・カフスのランダムOP・シエナのオーラの「中ディレイ減少」は
-        それぞれの補正源で設定した値がそのまま合流します。
+        ここで選ぶのは<b>このキャラのスキル</b>だけです
+        (マスタリーは段ごとに 1 つで中ディレイ以外にも効くので、キャラスキルの欄にまとめてあります)。
         中ディレイと 1 秒あたりの火力は計算タブに出ます。
       </p>
       <div class="buff-list">
         {#if delaySkills.length === 0}
-          <p class="empty dim">このキャラには中ディレイ減少のパッシブがありません(wiki の表に記載なし)。</p>
+          <p class="empty dim">このキャラには中ディレイ減少のスキルがありません(wiki の表に記載なし)。</p>
         {/if}
         {#each delaySkills as def (def.id)}
+          {@const label = effectLabel(def, draft.statSources.masteries.picked)}
           <label class="check">
             <input
               type="checkbox"
-              checked={draft.statSources.actual_delay_skills.skill_ids.includes(def.id)}
-              onchange={(e) => toggleDelaySkill(def.id, e.currentTarget.checked)}
+              checked={skillChecked(def.id)}
+              onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
             />
             <span>{def.name}</span>
-            <span class="fixed-value dim">−{def.percent}%</span>
+            <span class="fixed-value dim num" use:flash={() => label ?? ""}>{label ?? "マスタリー未取得"}</span>
             {#if def.note}<span class="dim note">{def.note}</span>{/if}
           </label>
         {/each}
       </div>
       {#if delaySkillPercent > 0}
-        <p class="hint dim">このキャラのパッシブぶん: <b>−{delaySkillPercent}%</b></p>
+        <p class="hint dim">このキャラのスキルぶん: <b>−{delaySkillPercent}%</b></p>
       {/if}
     </div>
+    {@render fromOthers(delayFromOthers, "ほかの補正源から入る分")}
   {:else if sourceId === "criticalRate"}
     <div class="card">
       <p class="hint dim">
@@ -2211,7 +2517,7 @@
         <b>(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象のAGI)) × ペット会心
         ＋ スキルの Cri値 ＋ クリティカル率増加 ＋ 対象のクリティカル被撃率</b>で、下限 0% / 上限 100%。
         装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入るので、
-        ここで選ぶのは<b>ペット会心と「クリティカル率増加」</b>だけです。
+        ここで選ぶのは<b>ペット会心と「クリティカル率増加」</b>だけです(自動で入る分は下に出します)。
         対象のAGI とクリティカル被撃率は wiki 狩り場情報一覧に値がある敵だけに入っているので、
         計算タブでは<b>その敵を選んだときだけ</b>クリティカル率が出ます。
       </p>
@@ -2228,60 +2534,121 @@
           <span class="dim note">最大レベル時</span>
         </label>
         <label class="check">
-          <input type="checkbox" bind:checked={draft.statSources.critical_rate.architect_lab} />
-          <span>設計者の研究室</span>
-          <span class="fixed-value dim">+30%</span>
-          <span class="dim note">最大レベル時</span>
-        </label>
-        <label class="check">
           <input type="checkbox" bind:checked={draft.statSources.critical_rate.deadly_blow} />
           <span>致命打</span>
           <span class="fixed-value dim">+100%</span>
         </label>
       </div>
+      <!-- 設計者の研究室だけは段階制(wiki: B グループは最大 10 段階・1 段階 +3)。
+           オン/オフだと 1〜9 段階の人が入力できない。チェックの列は割らずに下へ置く -->
+      <div class="lab-field">
+        <span class="lab-label">
+          設計者の研究室
+          <span class="lab-note">B グループの研究段階(0 = 未研究)・ 1 段階 +{limits.architect_lab_per_stage}%</span>
+        </span>
+        <StepSelect
+          label=""
+          options={architectLabOptions}
+          cols={architectLabOptions.length}
+          cell={34}
+          bind:value={
+            () => String(draft.statSources.critical_rate.architect_lab_stage),
+            (v) => (draft.statSources.critical_rate.architect_lab_stage = Number(v))
+          }
+        />
+        <span class="lab-value num" use:bump={() => architectLabBonus}>
+          {architectLabBonus > 0 ? `+${architectLabBonus}%` : "—"}
+        </span>
+      </div>
       <p class="hint dim">
         クリティカル率増加の合計: <b>+{Math.min(limits.critical_rate_bonus_max, criticalRateBonus)}%</b>
         {#if criticalRateBonus > limits.critical_rate_bonus_max}(上限 +{limits.critical_rate_bonus_max}% で頭打ち){/if}
         <br />
-        値が不定の「バフ」、シエナのオーラのクリティカル確率、被撃率B(対人)、最終クリティカル率増加は未収録です。
+        値が不定の「バフ」、被撃率B(対人)、最終クリティカル率増加は未収録です。
       </p>
     </div>
+    {@render fromOthers(criticalFromOthers, "ほかの補正源から自動で入る分")}
   {:else if sourceId === "skills"}
+    <!-- マスタリーは**段ごとに 1 つ**(wiki: スキル表の (M1)〜(M4))。同じ段の選択肢は
+         効き先がばらばら(中ディレイ / カテゴリX / ステ / 未収録)なので、
+         チェックの列ではなく段の選択にする(§07 形態 2)。グレーは記録するだけ -->
+    <div class="card">
+      <div class="card-title inline">
+        マスタリー
+        <span class="dim normal">段ごとに 1 つ ・ もう一度押すと外す</span>
+      </div>
+      {#if masteryTiers.length === 0}
+        <p class="empty dim">このキャラのマスタリーは未収録です(wiki の Skill ページから取り込み予定)。</p>
+      {:else}
+        {#each masteryTiers as t (t.tier)}
+          {@const picked = pickedMastery(t.tier)}
+          <!-- どの段も 3 択。列をそろえて横に並べる(§00 01)。ゲームに「未取得」という
+               選択肢は無いので出さず、選んだものをもう一度押して外す -->
+          <div class="mastery-row">
+            <span class="mastery-tier num">M{t.tier}</span>
+            <div class="mastery-options">
+              {#each t.options as m (m.id)}
+                <button
+                  type="button"
+                  class="mastery-option"
+                  class:on={picked?.id === m.id}
+                  class:record-only={!masteryIsModeled(m)}
+                  title={m.note}
+                  onclick={() => pickMastery(t.tier, picked?.id === m.id ? null : m.id)}
+                >
+                  <Icon kind="mastery" id={m.id} size={28} label={m.name} />
+                  <span class="mastery-text">
+                    <span class="mastery-name">{m.name}</span>
+                    <span class="mastery-effect num">{masteryEffectLabel(m)}</span>
+                  </span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      {/if}
+    </div>
     <div class="card">
       <div class="card-title">このキャラのスキル</div>
+      <p class="hint dim">
+        スキルの効果は<b>取っているマスタリーで変わります</b>(wiki の各カテゴリ表がその形)。
+        上のマスタリーを選び直すと、ここの値も一緒に動きます。
+      </p>
       <div class="buff-list">
-        {#if ownSkillBuffs.length === 0}
+        {#if ownCharacterSkills.length === 0}
           <p class="empty dim">このキャラのスキルデータは未収録です。</p>
         {/if}
-        {#each ownSkillBuffs as def (def.id)}
-          {@const checked = buffChecked(def.id)}
+        {#each ownCharacterSkills as def (def.id)}
+          {@const label = effectLabel(def, draft.statSources.masteries.picked)}
           <label class="check">
             <input
               type="checkbox"
-              {checked}
-              onchange={(e) => (draft.statSources.buffs.choices = toggleBuff(draft.statSources.buffs.choices, def, e.currentTarget.checked))}
+              checked={skillChecked(def.id)}
+              onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
             />
             <span>{def.name}</span>
-            {#if isFixedValue(def.value)}<span class="fixed-value dim">{formatLayerValue(def.layer, def.value.fixed)}</span>{/if}
+            <span class="fixed-value dim num" class:unknown={label === null} use:flash={() => label ?? ""}>
+              {label ?? "マスタリー未取得"}
+            </span>
             {#if def.note}<span class="dim note">{def.note}</span>{/if}
           </label>
         {/each}
       </div>
       <div class="card-title space">味方から受けるスキル</div>
       <div class="buff-list">
-        {#if allySkillBuffs.length === 0}
+        {#if allyCharacterSkills.length === 0}
           <p class="empty dim">味方から受けるスキルデータは未収録です。</p>
         {/if}
-        {#each allySkillBuffs as def (def.id)}
-          {@const checked = buffChecked(def.id)}
+        {#each allyCharacterSkills as def (def.id)}
+          {@const label = effectLabel(def, draft.statSources.masteries.picked)}
           <label class="check">
             <input
               type="checkbox"
-              {checked}
-              onchange={(e) => (draft.statSources.buffs.choices = toggleBuff(draft.statSources.buffs.choices, def, e.currentTarget.checked))}
+              checked={skillChecked(def.id)}
+              onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
             />
             <span>{def.name}</span>
-            {#if isFixedValue(def.value)}<span class="fixed-value dim">{formatLayerValue(def.layer, def.value.fixed)}</span>{/if}
+            <span class="fixed-value dim">{label ?? "—"}</span>
             {#if def.note}<span class="dim note">{def.note}</span>{/if}
           </label>
         {/each}
@@ -2388,6 +2755,10 @@
   .grow > .base { background: var(--flow-base); }
   .grow > .add { background: var(--accent); }
   .fixed-value { font-size: 11px; font-weight: 500; }
+  /* マスタリー待ちで値が決まらないものは破線で出す(0 や空白で埋めない。§03) */
+  .fixed-value.unknown {
+    padding: 0 4px; border: 1px dashed var(--border); border-radius: 4px; opacity: 0.6;
+  }
 
   /* 装備ドリルダウン: 部位一覧 */
   /* 装備のドリルダウン(§09 規則 2)。掘るたびに右へペインが増え、前の階層は消えない。
@@ -2395,8 +2766,7 @@
   .part-split { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
   .part-list { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
   /* シエナは一覧の上に説明カードがあるので、まとめて 1 列にする */
-  .part-side { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 9px; }
-  .part-split.open .part-list, .part-split.open .part-side { flex: 0 0 232px; }
+  .part-split.open .part-list { flex: 0 0 232px; }
   .part-split.open .part-vals { display: none; }
   .part-detail { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 9px; }
   .part-row {
@@ -2442,6 +2812,76 @@
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
 
+  /* 変種をまとめた行。1 行目が名前・2 行目が変種のチップ */
+  .item-row.group {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 3px 7px; cursor: default;
+  }
+  .item-row.group:hover { border-color: var(--border); }
+  .title-variants { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
+
+  /* マスタリーの 1 段。段名 + 3 択のカード。どの段も 3 択なので列を固定してそろえる */
+  .mastery-row {
+    display: grid; grid-template-columns: 24px minmax(0, 1fr);
+    gap: 9px; align-items: start;
+    padding: 6px 0; border-bottom: 1px dashed var(--border-soft);
+  }
+  .mastery-row:last-of-type { border-bottom: none; }
+  .mastery-tier { padding-top: 9px; font-size: 10px; font-weight: 700; color: var(--fg-dim); }
+  .mastery-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  /* 1 択 = アイコン + 名前 + 効果。効果を出さないと「どれを選ぶか」を別画面で調べることになる(§00 05) */
+  .mastery-option {
+    display: flex; align-items: center; gap: 7px; min-width: 0; text-align: left;
+    padding: 6px 8px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg);
+    cursor: pointer;
+  }
+  .mastery-option:hover { border-color: var(--accent); }
+  .mastery-option.on {
+    background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent);
+  }
+  /* 計算に入らない(記録するだけの)選択肢 */
+  .mastery-option.record-only { border-style: dashed; color: var(--fg-muted); }
+  .mastery-option.record-only.on { border-style: solid; }
+  .mastery-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .mastery-name { font-size: 11px; font-weight: 700; line-height: 1.25; }
+  /* 効果は 2 行で打ち切る。長い 1 択(騎士道・冬を降らせる子)に合わせて段の高さが
+     ばらつくと、3 列そろえた意味が無くなる。全文は title に出る */
+  .mastery-effect {
+    font-size: 9px; color: var(--fg-muted); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .mastery-option.on .mastery-effect { color: var(--fg-sub); }
+
+  /* 設計者の研究室(段階制)。チェックの列に混ぜず 1 段だけ独立させる */
+  .lab-field {
+    margin: 7px 0; display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  }
+  .lab-label { font-size: 11.5px; font-weight: 700; }
+  .lab-note { display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted); }
+  .lab-value { min-width: 52px; font-size: 12.5px; font-weight: 700; }
+
+  /* ほかの補正源から入る分の 1 行。名前 / 値 / その補正源へ移るボタン */
+  .ext-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 9px; align-items: center;
+    padding: 3px 0; border-bottom: 1px dashed var(--border-soft);
+  }
+  .ext-row:last-of-type { border-bottom: none; }
+  /* まだ入っていない供給源。消さずに薄くする(どこから来るかの地図として残す) */
+  .ext-row.empty { opacity: 0.55; }
+  .ext-name { min-width: 0; font-size: 11.5px; font-weight: 700; }
+  .ext-note { display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted); }
+  .ext-value { font-size: 12.5px; font-weight: 700; min-width: 56px; text-align: right; }
+
+  /* 称号のダメージ増加。補正値と効き方が違うので値の要約と分けて出す */
+  .title-dmg {
+    flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
+    color: var(--sel-fg); background: var(--sel);
+    border: 1px solid var(--sel-bd); border-radius: var(--r-pill);
+  }
+
   /* 称号の補正値グリッド */
   .values-grid { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 6px; }
   .val-cell { display: flex; align-items: baseline; gap: 4px; font-size: 11px; }
@@ -2467,6 +2907,31 @@
   .ro-next { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--border-soft); }
   .ro-next-label { font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
   .ro-common { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px; }
+  /* シエナのオーラの 1 枠。名前 / 値 / 外す が 1 行に収まる
+     (ランダムOP と違ってランクの段が無いので 2 行いらない) */
+  .siena-row {
+    display: grid; grid-template-columns: minmax(0, 132px) minmax(0, 1fr) 40px;
+    gap: 9px; align-items: center;
+    padding: 3px 0; border-bottom: 1px dashed var(--border-soft);
+  }
+  .siena-row:last-of-type { border-bottom: none; }
+  .siena-row.record-only { opacity: 0.75; }
+  .siena-row .clear {
+    padding: 1px 5px; font-size: 9px; color: var(--fg-dim);
+    background: none; border: 1px solid var(--border-soft); border-radius: var(--r-pill);
+  }
+  .siena-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
+  /* 効き先。名前の下に小さく置く(行は増やさない) */
+  .siena-to {
+    display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* 「足す」を行より上に常設する列。押しても動かない位置に置く(§09 規則 1) */
+  .ro-add-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 9px; padding-bottom: 9px; border-bottom: 1px dashed var(--border-soft);
+  }
   .ro-add { margin-top: 8px; max-width: 300px; }
   /* 部位の行に「何が付いているか」を短い名前のバッジで並べる。
      名前をそのまま出すと 1 行に入らないので、gamedata の short を使う */
@@ -2480,6 +2945,8 @@
   }
   /* 計算に入らない(記録するだけの)枠は破線 + 塗りなし */
   .ro-badge.record-only { background: none; border-style: dashed; color: var(--fg-muted); }
+  /* 畳んだ残り数。数そのものは主役ではないので面を持たせない */
+  .ro-badge.more { background: none; border-color: var(--border-soft); color: var(--fg-dim); }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
@@ -2495,7 +2962,9 @@
     background: var(--bg-field); border: 1px solid var(--border); color: var(--fg); font-size: 11px;
   }
   .item-search:focus { outline: none; border-color: var(--accent); }
-  .item-list { margin-top: 7px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  /* 変種をまとめた行は 2 段ぶんの高さがあるので、220px だと 3 行しか入らず
+     チップが毎回途中で切れる。ペインの下は空いているので伸ばす */
+  .item-list { margin-top: 7px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
   .item-row {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 7px 9px; border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
