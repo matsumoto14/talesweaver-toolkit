@@ -30,7 +30,7 @@
   import { previewElements } from "../../api/commands";
   import { draftToPayload, type Draft } from "../../draft";
   import {
-    clampToCaps, coreBonus, coreSetSupportValues, coreSetTotalBonus, midpointValues,
+    clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
     neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
     randomOptionValue, rangeSummary, sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
@@ -596,6 +596,21 @@
   const coreRegionTotal = (region: CoreRegion) =>
     coreSetTotalBonus(draft.equipment.thesis_cores[region]);
   // 補助タイプは与ダメージ(攻撃力)には効かないが、装備値 9 種として防御側・回避Pに効く
+  // セット効果は「いま発動しているか」と「あと何が要るか」を出す。
+  // 数字だけ出しても、そこから逆算させたら考えさせていることになる(§00 05)
+  const coreSet = $derived(coreSetEffect(draft.equipment.thesis_cores[coreRegion]));
+  const coreSetLabel = $derived(
+    coreSet.evolution === null
+      ? "未発動"
+      : coreSet.fixed > 0
+        ? `最終ダメージ +${fmtInt(coreSet.fixed)}`
+        : `最終ダメージ +${Math.round(coreSet.rate * 100)}%`,
+  );
+  const coreSetNote = $derived.by(() => {
+    if (coreSet.evolution === null) return `強化 4 のコアがあと ${3 - coreSet.ready} 個で発動します`;
+    if (coreSet.ready >= 6) return "6 枠そろっています(この段階の最大)";
+    return `強化 4 のコアが ${coreSet.ready} 個 ・ 6 枠そろえると一段上がります`;
+  });
   const coreSupport = $derived(coreSetSupportValues(draft.equipment.thesis_cores[coreRegion]));
   const coreSupportSummary = $derived(
     [
@@ -1537,7 +1552,6 @@
     <div class="card swap-in">
       <div class="card-title inline">
         {CORE_REGION_LABELS[coreRegion]} の 6 枠
-        <span class="dim normal">補正値 合計 {fmtInt(coreRegionTotal(coreRegion))}</span>
         <!-- 「補助も出す」は段の見え方を変える操作なので、段より先に目に入る位置に置く。
              控えめなチップ 1 つ(§07 形態 3)。下に置くと、段を見たあとで見え方が変わって読み直しになる -->
         <button
@@ -1546,6 +1560,19 @@
           class:on={coreShowSupport || coreSupportInUse}
           onclick={toggleCoreSupport}
         >{coreShowSupport || coreSupportInUse ? "補助タイプを閉じる" : "補助タイプも出す"}</button>
+      </div>
+      <!-- この画面で知りたいのは「いくつになったか」と「セット効果が出ているか」の 2 つ。
+           小さな注記ではなく、段より先に読める場所に出す -->
+      <div class="core-summary">
+        <div class="sum-item">
+          <span class="k">補正値 合計</span>
+          <span class="v num">{fmtInt(coreRegionTotal(coreRegion))}</span>
+        </div>
+        <div class="sum-item set" class:on={coreSet.evolution !== null}>
+          <span class="k">セット効果</span>
+          <span class="v">{coreSetLabel}</span>
+          <span class="note">{coreSetNote}</span>
+        </div>
       </div>
       {#if coreSupportSummary}
         <p class="hint dim">
@@ -1964,6 +1991,21 @@
   .tab-rule { margin-bottom: 9px; }
 
   .core-list { display: flex; flex-direction: column; gap: 7px; }
+  .core-summary { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .sum-item {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 7px 11px; border-radius: var(--r-panel);
+    background: var(--surface-inset); border: 1px solid var(--border-soft);
+  }
+  .sum-item .k { font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .sum-item .v { font-size: 15px; font-weight: 800; color: var(--fg); }
+  .sum-item .note { font-size: 9px; color: var(--fg-muted); }
+  /* 発動していないセット効果は「あなたの操作待ち」= 金(§03 の予約色) */
+  .sum-item.set { background: var(--state-edge-bg); border-color: var(--state-edge-bd); }
+  .sum-item.set .v { font-size: 12.5px; color: var(--state-edge-fg); }
+  .sum-item.set.on { background: var(--state-met-bg); border-color: var(--good-soft); }
+  .sum-item.set.on .v { color: var(--good); }
+
   .core-head {
     display: grid; grid-template-columns: 16px minmax(0, 1fr) 34px 118px 52px; gap: 9px;
     margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim);

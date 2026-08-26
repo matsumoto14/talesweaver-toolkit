@@ -165,6 +165,38 @@ export const coreSetSupportValues = (set: CoreSet): EquipmentValues => {
   return total;
 };
 
+/** セット効果(表示用)。判定と値は domain/thesis_core.rs `CoreSet::set_bonus` と同じ。
+ *  強化 4 のコアが 3 個以上そろうと、その中で最も低い進化段階で決まる。6 枠そろうと一段上がる。 */
+export interface CoreSetEffect {
+  /** 発動している進化段階。未発動なら null */
+  evolution: number | null;
+  /** 強化 4 に達しているコアの数 */
+  ready: number;
+  /** 最終ダメージの固定加算 */
+  fixed: number;
+  /** 最終ダメージの割合(0.02 = +2%) */
+  rate: number;
+}
+const CORE_SET_BONUS: Record<number, [number, number][]> = {
+  // [進化段階]: [3〜5 個, 6 個] の順に [固定, 割合]
+  0: [[500, 0], [800, 0]],
+  1: [[700, 0], [1400, 0]],
+  2: [[1000, 0], [0, 0.01]],
+  3: [[0, 0.01], [0, 0.02]],
+  4: [[0, 0.02], [0, 0.05]],
+};
+export const coreSetEffect = (set: CoreSet): CoreSetEffect => {
+  const ready = set.slots.filter((c) => c !== null && c.enhancement >= 4).length;
+  for (let evolution = 4; evolution >= 0; evolution--) {
+    const count = set.slots.filter((c) => c !== null && c.enhancement >= 4 && c.evolution >= evolution).length;
+    if (count >= 3) {
+      const [fixed, rate] = CORE_SET_BONUS[evolution][count >= 6 ? 1 : 0];
+      return { evolution, ready, fixed, rate };
+    }
+  }
+  return { evolution: null, ready, fixed: 0, rate: 0 };
+};
+
 /** 全地域のコア合計のうち最大(補正源リストのサマリ表示用) */
 export const thesisCoresBestTotal = (cores: ThesisCores): number =>
   Math.max(0, ...CORE_REGIONS.map((r: CoreRegion) => coreSetTotalBonus(cores[r])));
