@@ -103,14 +103,16 @@
     draft.gameCharacterId = id;
     draft.mainSkillId = "";
   }
-  const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: `${i} 段階` }));
+  // 段の名前は数字だけにして、幅いっぱいを 6 で割る(§08 `.seg.full`)。
+  // 「0 段階」…「5 段階」だと欄の幅で折り返して 2 段になり、段の並びが読めなくなる
+  const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: String(i) }));
   // エタの意志 Lv は 0〜100 の**数値**。101 個を並べても段階にならないので、
   // 節目(20 / 40 / 60 / 80 / 90)を選べる形 + 数値の微調整にする。
   // 節目はそこを超えると上限の増え方が一段上がる地点で、育成の目標地点そのもの。
   const eternalMilestoneOptions = $derived(
     ETERNAL_MILESTONES.filter((lv) => lv <= limits.eternal_level_max).map((lv) => ({
       value: String(lv),
-      label: `Lv ${lv}`,
+      label: String(lv),
     })),
   );
   /** 覚醒 5 でないとエタの意志は効かない(gamedata: 段階 0〜4 は STAGE_CAPS を引く) */
@@ -641,7 +643,7 @@
           options={characterOptions}
           bind:value={() => draft.gameCharacterId, setGameCharacterId}
         />
-        <StepSelect label="覚醒段階" bind:value={draft.stage} options={stageOptions} />
+        <StepSelect label="覚醒段階" bind:value={draft.stage} options={stageOptions} full />
         <!-- エタの意志は数値。節目を押せば一発で、間は数値で詰める(§07 は上から順に試す)。
              覚醒 5 でないと効かないので、そのときは理由を出して触らせない(§00) -->
         <div class="eternal" class:off={!eternalActive}>
@@ -662,6 +664,7 @@
               label=""
               options={eternalMilestoneOptions}
               bind:value={draft.eternalLevel}
+              full
             />
             <p class="hint dim">節目(20 / 40 / 60 / 80 / 90)を超えると、ダメージ上限・防御力上限・能力値上限の伸びが一段上がります。</p>
           {:else}

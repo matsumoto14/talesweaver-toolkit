@@ -17,13 +17,15 @@
     value: string;
     options: Option[];
     disabled?: boolean;
+    /** 幅いっぱいを段の数で割る(§08 `.seg.full`)。段が折り返すのを防ぐ */
+    full?: boolean;
   }
-  let { label, value = $bindable(), options, disabled = false }: Props = $props();
+  let { label, value = $bindable(), options, disabled = false, full = false }: Props = $props();
 </script>
 
 <div class="step-select">
   {#if label}<span class="label">{label}</span>{/if}
-  <div class="seg" role="radiogroup" aria-label={label ?? ""}>
+  <div class="seg" class:full role="radiogroup" aria-label={label ?? ""}>
     {#each options as o (o.value)}
       <button
         type="button"
