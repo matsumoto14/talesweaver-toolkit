@@ -355,6 +355,11 @@ details.fold .fold-body { margin-top: 10px; }
 /* 選ばれている(オン) */
 .chip.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
 /* 追加用 — 実在のチップと見た目で区別する */
+/* 控えめなチップ。「見え方を変えるスイッチ」(保存されない)に使う。
+   主役の隣に置くので、押していないときは面を持たない。押している間はラベンダー(保存されない) */
+.chip.quiet { padding: 3px 9px; font-size: 9.5px; font-weight: 500; background: none; color: var(--fg-dim); }
+.chip.quiet.on { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); font-weight: 700; }
+.chip.quiet:disabled { opacity: 0.8; }
 .chip.add { background: var(--bg-rail); border-style: dashed; border-color: var(--border); color: var(--accent); }
 /* 保存されない・一時的なもの(§03 予約色) */
 .chip.sim { border-color: var(--sim); color: var(--sim-fg); }

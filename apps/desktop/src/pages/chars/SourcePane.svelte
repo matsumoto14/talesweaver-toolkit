@@ -1522,9 +1522,18 @@
     </div>
     {#key coreRegion}
     <div class="card swap-in">
-      <div class="card-title">
+      <div class="card-title inline">
         {CORE_REGION_LABELS[coreRegion]} の 6 枠
         <span class="dim normal">補正値 合計 {fmtInt(coreRegionTotal(coreRegion))}</span>
+        <!-- 「補助も出す」は段の見え方を変える操作なので、段より先に目に入る位置に置く。
+             控えめなチップ 1 つ(§07 形態 3)。下に置くと、段を見たあとで見え方が変わって読み直しになる -->
+        <button
+          type="button"
+          class="chip quiet"
+          class:on={coreShowSupport || coreSupportInUse}
+          disabled={coreSupportInUse}
+          onclick={() => (coreShowSupport = !coreShowSupport)}
+        >補助タイプも出す</button>
       </div>
       {#if coreSupportSummary}
         <p class="hint dim">
@@ -1600,10 +1609,7 @@
           </div>
         {/each}
       </div>
-      <label class="core-support-toggle">
-        <input type="checkbox" bind:checked={coreShowSupport} disabled={coreSupportInUse} />
-        補助タイプ(物防・回避・敏捷・命中)も選ぶ
-      </label>
+
       <p class="hint dim">
         入場条件の「コア N」はこの 6 枠の合計と同じ値です(火力の進化1強化4 ×6 = 60、進化4強化4 ×6 = 480。
         補助タイプは進化4強化4 でも 60 なので 6 枠でも 360 止まり)。
@@ -1864,6 +1870,8 @@
   .close-detail { align-self: flex-start; padding: 2px 2px; font-size: var(--t-label); color: var(--fg-muted); }
   .close-detail:hover { color: var(--accent); text-decoration: underline; }
   .card-title.inline { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+  /* 見え方を変えるスイッチは右端に控えめに置く(主役は 6 枠そのもの) */
+  .card-title.inline .chip.quiet { margin-left: auto; align-self: center; }
   .card-title.inline .strong { font-size: 13px; font-weight: 700; }
   .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
   .values-col { flex: 1 1 260px; min-width: 0; }
@@ -1985,8 +1993,5 @@
   .stage-cell.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
   .core-bonus { font-size: 12px; font-weight: 700; text-align: right; }
   .core-bonus.support { color: var(--fg-muted); font-weight: 400; }
-  .core-support-toggle {
-    margin-top: 9px; display: flex; align-items: center; gap: 6px;
-    font-size: 10.5px; color: var(--fg-muted);
-  }
+
 </style>
