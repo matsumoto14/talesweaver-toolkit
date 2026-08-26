@@ -32,7 +32,8 @@
   import {
     clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
     neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
-    randomOptionValue, randomOptionValueLabel, rangeSummary, sienaPartStatTotal, valuesSummary,
+    randomOptionPartSummary, randomOptionValue, randomOptionValueLabel, rangeSummary,
+    sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
@@ -375,8 +376,8 @@
     part.random_options = part.random_options.filter((_, i) => i !== index);
   }
 
-  /** 1 装備に付けられる枠の数(domain: PartSlot::RANDOM_OPTION_SLOTS) */
-  const RANDOM_OPTION_SLOTS = 2;
+  /** その部位に付けられる枠の数(domain: PartSlot::random_option_slots)。武器だけ 3 枠 */
+  const randomOptionSlots = (slot: PartSlot) => (slot === "weapon" ? 3 : 2);
   const rankOptions = (def: RandomOptionDef) =>
     RANDOM_OPTION_RANKS.filter((r) => def.tiers.some((t) => t.rank === r)).map((r) => ({
       value: r,
@@ -1570,19 +1571,18 @@
                 {#each draft.equipment.parts[slot].random_options as o (o.option_id)}
                   {@const def = randomOptionDef(o.option_id)}
                   {#if def}
-                    <!-- 値まで出す。開かないと分からないと、行を見た意味がない(§00 05) -->
+                    <!-- バッジは「何が付いているか」だけ。いくら効いているかは行の要約で出す -->
                     <span
                       class="ro-badge"
                       class:record-only={!randomOptionIsApplied(def.effect)}
-                      title="{def.name}({randomOptionEffectLabel(def.effect)})"
-                    >
-                      {def.short}
-                      <b class="num">{randomOptionValueLabel(o, def)}</b>
-                    </span>
+                      title="{def.name}({randomOptionEffectLabel(def.effect)} {randomOptionValueLabel(o, def)})"
+                    >{def.short}</span>
                   {/if}
                 {/each}
                 {#if count === 0}<span class="dim">なし</span>{/if}
               </span>
+              <!-- 同系統は足して 1 つに。枠ごとの値を並べても火力への効きは読めない -->
+              <span class="ro-total num">{randomOptionPartSummary(draft.equipment.parts[slot], app.randomOptions)}</span>
               <span class="chev dim">›</span>
             </button>
           {/if}
@@ -1597,11 +1597,11 @@
             {@render randomOptionEditor(slot)}
             <!-- 枠は 1 装備 2 つ。**1 つ目を決めたら 2 つ目の候補を出す** —
                  候補を 2 枠ぶん並べても、実際に選べるのは順番に 1 つずつ(§00 02) -->
-            {#if draft.equipment.parts[slot].random_options.length < RANDOM_OPTION_SLOTS}
+            {#if draft.equipment.parts[slot].random_options.length < randomOptionSlots(slot)}
               <div class="ro-next swap-in">
                 <span class="ro-next-label">
                   枠 {draft.equipment.parts[slot].random_options.length + 1}
-                  <span class="dim">/ {RANDOM_OPTION_SLOTS}</span>
+                  <span class="dim">/ {randomOptionSlots(slot)}</span>
                 </span>
                 {#if commonAddable(slot).length > 0}
                   <div class="ro-common">
@@ -1624,7 +1624,7 @@
                 {/if}
               </div>
             {:else}
-              <p class="hint dim">枠は {RANDOM_OPTION_SLOTS} つまで。変えるときは外してから足します。</p>
+              <p class="hint dim">枠は {randomOptionSlots(slot)} つまで。変えるときは外してから足します。</p>
             {/if}
           </div>
         </div>
@@ -2477,13 +2477,14 @@
     min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px;
   }
   .ro-badge {
-    display: inline-flex; align-items: baseline; gap: 4px;
     padding: 1px 7px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border); color: var(--fg-sub);
     font-size: 9px; font-weight: 700; white-space: nowrap;
   }
   /* 計算に入らない(記録するだけの)枠は破線 + 塗りなし */
   .ro-badge.record-only { background: none; border-style: dashed; color: var(--fg-muted); }
+  /* 効き先ごとの合計。行を見ただけで「火力にいくら効いているか」が分かる */
+  .ro-total { flex: none; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
