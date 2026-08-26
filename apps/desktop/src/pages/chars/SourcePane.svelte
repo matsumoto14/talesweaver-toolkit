@@ -375,6 +375,8 @@
     part.random_options = part.random_options.filter((_, i) => i !== index);
   }
 
+  /** 1 装備に付けられる枠の数(domain: PartSlot::RANDOM_OPTION_SLOTS) */
+  const RANDOM_OPTION_SLOTS = 2;
   const rankOptions = (def: RandomOptionDef) =>
     RANDOM_OPTION_RANKS.filter((r) => def.tiers.some((t) => t.rank === r)).map((r) => ({
       value: r,
@@ -1593,26 +1595,36 @@
           <div class="card">
             <div class="card-title">{PART_SLOT_LABELS[slot]}</div>
             {@render randomOptionEditor(slot)}
-            <!-- よく付ける OP は見えていて 1 押しで入る。残りは「ほかの OP」の奥
-                 (§07 形態 3 + §08「追加用のチップは破線 + ＋」) -->
-            {#if commonAddable(slot).length > 0}
-              <div class="ro-common">
-                {#each commonAddable(slot) as o (o.id)}
-                  <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.id)}>
-                    ＋ {o.name}
-                  </button>
-                {/each}
+            <!-- 枠は 1 装備 2 つ。**1 つ目を決めたら 2 つ目の候補を出す** —
+                 候補を 2 枠ぶん並べても、実際に選べるのは順番に 1 つずつ(§00 02) -->
+            {#if draft.equipment.parts[slot].random_options.length < RANDOM_OPTION_SLOTS}
+              <div class="ro-next swap-in">
+                <span class="ro-next-label">
+                  枠 {draft.equipment.parts[slot].random_options.length + 1}
+                  <span class="dim">/ {RANDOM_OPTION_SLOTS}</span>
+                </span>
+                {#if commonAddable(slot).length > 0}
+                  <div class="ro-common">
+                    {#each commonAddable(slot) as o (o.id)}
+                      <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.id)}>
+                        ＋ {o.name}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+                {#if otherAddable(slot).length > 0}
+                  <div class="ro-add">
+                    <Picker
+                      options={otherPickerOptions(slot)}
+                      note="ほかの OP(同じカテゴリーは 1 つまで)"
+                      placeholder="ほかの OP から選ぶ"
+                      bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
+                    />
+                  </div>
+                {/if}
               </div>
-            {/if}
-            {#if otherAddable(slot).length > 0}
-              <div class="ro-add">
-                <Picker
-                  options={otherPickerOptions(slot)}
-                  note="ほかの OP(同じカテゴリーは 1 つまで)"
-                  placeholder="ほかの OP から選ぶ"
-                  bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
-                />
-              </div>
+            {:else}
+              <p class="hint dim">枠は {RANDOM_OPTION_SLOTS} つまで。変えるときは外してから足します。</p>
             {/if}
           </div>
         </div>
@@ -2455,7 +2467,9 @@
   }
   .ro-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
   .ro-note { margin: 0 0 6px; }
-  .ro-common { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .ro-next { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--border-soft); }
+  .ro-next-label { font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .ro-common { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px; }
   .ro-add { margin-top: 8px; max-width: 300px; }
   /* 部位の行に「何が付いているか」を短い名前のバッジで並べる。
      名前をそのまま出すと 1 行に入らないので、gamedata の short を使う */

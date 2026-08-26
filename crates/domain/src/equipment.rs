@@ -171,13 +171,13 @@ impl PartSlot {
         !matches!(self, PartSlot::Effect | PartSlot::Artifact)
     }
 
-    /// この部位のランダムオプションの枠数。`None` = wiki に枠数の記載が無い(数えない)。
-    /// レリックだけは「付加オプション 2 枠」と決まっている
+    /// この部位に付けられるランダムオプションの数。**1 装備 2 枠**
+    /// (ユーザー確認 2026-08-26。レリックは wiki にも「付加オプション 2 枠」とある)。
+    /// 同じカテゴリーは重複できないので、実際に選べる組み合わせはさらに狭い
+    pub const RANDOM_OPTION_SLOTS: usize = 2;
+
     pub fn random_option_slots(self) -> Option<usize> {
-        match self {
-            PartSlot::RelicPendant | PartSlot::RelicBracelet => Some(2),
-            _ => None,
-        }
+        self.allows_random_option().then_some(Self::RANDOM_OPTION_SLOTS)
     }
 
     /// この部位が属性強化を持てるか
@@ -1353,8 +1353,11 @@ mod tests {
             part.validate(PartSlot::RelicPendant),
             Err(EquipmentError::RandomOption(RandomOptionError::TooMany { .. }))
         ));
-        // 枠数の記載が無い部位は数えない
-        assert!(part.validate(PartSlot::Weapon).is_ok());
+        // どの部位でも 2 枠まで
+        assert!(matches!(
+            part.validate(PartSlot::Weapon),
+            Err(EquipmentError::RandomOption(RandomOptionError::TooMany { .. }))
+        ));
     }
 
 }
