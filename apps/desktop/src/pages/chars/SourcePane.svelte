@@ -829,9 +829,10 @@
           label=""
           min={t ? t.min : 0}
           max={t ? t.max : limits.random_option_value_max}
-          step={0.5}
+          step={t && Number.isInteger(t.min) && Number.isInteger(t.max) ? 1 : 0.5}
           format={t ? () => `wiki ${t.min}–${t.max}` : undefined}
           bind:value={() => randomOptionValue(option, def), (v) => (option.value = v)}
+          stepper
         />
       </div>
       {#if def.note}<p class="hint dim ro-note">{def.note}</p>{/if}
@@ -1348,7 +1349,7 @@
         {#each STAT_KINDS as k (k)}
           <div class="stat-row">
             <span class="k">{STAT_LABELS[k]}</span>
-            <StatInput label="" min={0} max={limits.crown_max} bind:value={draft.statSources.crown[k]} />
+            <StatInput label="" min={0} max={limits.crown_max} stepper bind:value={draft.statSources.crown[k]} />
           </div>
         {/each}
       </div>
@@ -1368,6 +1369,7 @@
               label=""
               min={0}
               max={limits.monster_card_max}
+              stepper
               bind:value={draft.statSources.monster_cards[k]}
             />
           </div>
