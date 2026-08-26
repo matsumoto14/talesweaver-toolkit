@@ -30,7 +30,7 @@
   import { previewElements } from "../../api/commands";
   import { draftToPayload, type Draft } from "../../draft";
   import {
-    clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
+    clampToCaps, coreBonus, coreSetSupportValues, coreSetTotalBonus, midpointValues,
     neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
     randomOptionValue, rangeSummary, sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
@@ -51,7 +51,6 @@
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import Select from "../../ui/Select.svelte";
-  import { STATE } from "../../ui/states";
   import StepSelect from "../../ui/StepSelect.svelte";
   import { ETERNAL_MILESTONES } from "../../draft";
   import StatInput from "../../ui/StatInput.svelte";
@@ -598,34 +597,6 @@
   const coreRegionTotal = (region: CoreRegion) =>
     coreSetTotalBonus(draft.equipment.thesis_cores[region]);
   // 補助タイプは与ダメージ(攻撃力)には効かないが、装備値 9 種として防御側・回避Pに効く
-  // セット効果は「いま発動しているか」と「あと何が要るか」を出す。
-  // 数字だけ出しても、そこから逆算させたら考えさせていることになる(§00 05)
-  const coreSet = $derived(coreSetEffect(draft.equipment.thesis_cores[coreRegion]));
-  const coreSetLabel = $derived(
-    coreSet.evolution === null
-      ? "未発動"
-      : coreSet.fixed > 0
-        ? `最終ダメージ +${fmtInt(coreSet.fixed)}`
-        : `最終ダメージ +${Math.round(coreSet.rate * 100)}%`,
-  );
-  // セット効果は**地域ごとに発動して、全部足される**(domain: ThesisCores::set_bonus)。
-  // タブで 1 地域ずつ見せているので、2 地域以上で出ているときは合計も言わないと
-  // 「いまいくつ効いているのか」が画面のどこにも無いことになる
-  const coreSetAll = $derived(CORE_REGIONS.map((r) => coreSetEffect(draft.equipment.thesis_cores[r])));
-  const coreSetActiveRegions = $derived(coreSetAll.filter((e) => e.evolution !== null).length);
-  const coreSetTotalLabel = $derived.by(() => {
-    const fixed = coreSetAll.reduce((n, e) => n + e.fixed, 0);
-    const rate = coreSetAll.reduce((n, e) => n + e.rate, 0);
-    const parts: string[] = [];
-    if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
-    if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
-    return parts.join(" と ");
-  });
-  const coreSetNote = $derived.by(() => {
-    if (coreSet.evolution === null) return `強化 4 のコアがあと ${3 - coreSet.ready} 個で発動します`;
-    if (coreSet.ready >= 6) return "6 枠そろっています(この段階の最大)";
-    return `強化 4 のコアが ${coreSet.ready} 個 ・ 6 枠そろえると一段上がります`;
-  });
   const coreSupport = $derived(coreSetSupportValues(draft.equipment.thesis_cores[coreRegion]));
   const coreSupportSummary = $derived(
     [
@@ -1553,15 +1524,27 @@
         {/each}
       </div>
       <div class="tab-rule"></div>
-      <p class="hint dim">
-        wiki「テシスコア」。コアの能力値増加は対象ダンジョン内でのみ有効なので、計算対象のコンテンツに
-        対応する地域のコアだけが装備攻撃力に入ります。セット効果(最終ダメージ)は全地域で発動します。
-      </p>
-      <p class="hint dim">
-        補助タイプ(物防/回避/敏捷/命中)も装着状態として記録できます。与ダメージ式の装備係数が 0 なので
-        装備攻撃力には入らず、入場条件「コア N」の合計と防御タブ(防御力・カット率・回避P)に効きます。
-        経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。
-      </p>
+      <!-- 説明は毎回読むものではない。畳んで、入力の場所を押し下げないようにする(§00 02) -->
+      <details class="fold">
+        <summary>この画面の読み方(wiki テシスコア)</summary>
+        <div class="fold-body">
+          <p class="hint dim">
+            コアの能力値増加は対象ダンジョン内でのみ有効なので、計算対象のコンテンツに
+            対応する地域のコアだけが装備攻撃力に入ります。コアセット効果(最終ダメージ)は全地域で発動し、
+            地域ごとの発動分が足されます。
+          </p>
+          <p class="hint dim">
+            補助タイプ(物防/回避/敏捷/命中)も装着状態として記録できます。与ダメージ式の装備係数が 0 なので
+            装備攻撃力には入らず、入場条件「コア N」の合計と防御タブ(防御力・カット率・回避P)に効きます。
+            経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。
+          </p>
+          <p class="hint dim">
+            入場条件の「コア N」はこの 6 枠の合計と同じ値です(火力の進化1強化4 ×6 = 60、進化4強化4 ×6 = 480。
+            補助タイプは進化4強化4 でも 60 なので 6 枠でも 360 止まり)。
+            コアセット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
+          </p>
+        </div>
+      </details>
     </div>
     {#key coreRegion}
     <div class="card swap-in">
@@ -1578,31 +1561,6 @@
       </div>
       <!-- この画面で知りたいのは「いくつになったか」と「セット効果が出ているか」の 2 つ。
            小さな注記ではなく、段より先に読める場所に出す -->
-      <div class="core-summary">
-        <div class="sum-item">
-          <span class="k">補正値 合計</span>
-          <span class="v num" use:bump={() => coreRegionTotal(coreRegion)}>{fmtInt(coreRegionTotal(coreRegion))}</span>
-        </div>
-        <div class="sum-item">
-          <span class="k">セット効果</span>
-          <span class="v" use:flash={() => coreSetLabel}>{coreSetLabel}</span>
-          <span
-            class="badge"
-            style="background: {coreSet.evolution === null ? STATE.edge.bg : STATE.met.bg};
-                   border-color: {coreSet.evolution === null ? STATE.edge.bd : STATE.met.bd};
-                   color: {coreSet.evolution === null ? STATE.edge.fg : STATE.met.fg}"
-            use:flash={() => (coreSet.evolution === null ? "off" : "on")}
-          >{coreSet.evolution === null ? "未発動" : "発動中"}</span>
-          <span class="note">{coreSetNote}</span>
-        </div>
-        {#if coreSetActiveRegions > 1}
-          <!-- セット効果は地域ごとに発動して足し算される。1 地域ぶんだけ見て終わらせない -->
-          <div class="sum-item">
-            <span class="k">全 {coreSetActiveRegions} 地域の合計</span>
-            <span class="v" use:flash={() => coreSetTotalLabel}>最終ダメージ {coreSetTotalLabel}</span>
-          </div>
-        {/if}
-      </div>
       {#if coreSupportSummary}
         <p class="hint dim">
           このうち補助タイプ({coreSupportSummary})は装備攻撃力には入らず、防御タブの防御力・カット率・回避Pに効きます。
@@ -1610,7 +1568,7 @@
       {/if}
       <!-- 列の名前は 1 回だけ。行ごとにラベルを置くと、6 回同じ言葉を読ませることになる -->
       <div class="core-head">
-        <span></span><span>タイプ</span><span></span><span class="lead">進化 - 強化</span><span class="r">補正値</span>
+        <span></span><span>タイプ</span><span></span><span class="lead">進化 - 強化</span><span class="r">コア効果</span>
       </div>
       <div class="core-list">
         {#each coreSlotIndexes as index (index)}
@@ -1693,11 +1651,6 @@
         {/each}
       </div>
 
-      <p class="hint dim">
-        入場条件の「コア N」はこの 6 枠の合計と同じ値です(火力の進化1強化4 ×6 = 60、進化4強化4 ×6 = 480。
-        補助タイプは進化4強化4 でも 60 なので 6 枠でも 360 止まり)。
-        セット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
-      </p>
     </div>
     {/key}
   {:else if sourceId === "actualDelay"}
@@ -2028,19 +1981,6 @@
   .core-list { display: flex; flex-direction: column; gap: 7px; }
   /* 読み取り専用の要約なのでインセット。面の色ではなくバッジで状態を言う
      (意味のある帯・面は 1 画面 2 種まで。§02) */
-  .core-summary { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 8px; }
-  .sum-item {
-    display: flex; align-items: baseline; gap: 9px;
-    padding: 8px 12px; border-radius: var(--r-panel);
-    background: linear-gradient(180deg, #E4EDF8, #F2F7FD);
-    border: 1px solid var(--border-soft);
-    box-shadow: inset 0 1px 2px rgba(90, 110, 145, 0.18);
-  }
-  .sum-item .k { flex: none; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  .sum-item .v { font-size: 15px; font-weight: 800; color: var(--fg-head); letter-spacing: 0.02em; }
-  .sum-item .badge { align-self: center; }
-  .sum-item .note { font-size: 9px; color: var(--fg-muted); }
-
   .core-head {
     display: grid; grid-template-columns: 16px minmax(0, 1fr) 34px 118px 52px; gap: 9px;
     margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim);

@@ -10,18 +10,21 @@
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
+    coreSetEffect, coreSetTotalBonus,
     equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
     randomOptionRecordOnlyCount, sienaAttackRatePercent,
     sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
   import {
+    CORE_REGION_LABELS, CORE_REGIONS,
     ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
     ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
+  import { STATE } from "../../ui/states";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
@@ -161,6 +164,24 @@
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
   const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
+  // テシスコアの結果(合計とセット効果)は**編集する場所ではなく結果の場所**に出す。
+  // 6 枠の入力エリアに置くと、その分だけ触る場所が下がる(§00 02)。
+  // セット効果は地域ごとに発動して足される(domain: ThesisCores::set_bonus)
+  const coreRegionRows = $derived(
+    CORE_REGIONS.map((region) => ({
+      region,
+      total: coreSetTotalBonus(draft.equipment.thesis_cores[region]),
+      set: coreSetEffect(draft.equipment.thesis_cores[region]),
+    })).filter((r) => r.total > 0),
+  );
+  const coreSetTotalLabel = $derived.by(() => {
+    const fixed = coreRegionRows.reduce((n, r) => n + r.set.fixed, 0);
+    const rate = coreRegionRows.reduce((n, r) => n + r.set.rate, 0);
+    const parts: string[] = [];
+    if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
+    if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
+    return parts.length === 0 ? "未発動" : parts.join(" と ");
+  });
   const roCount = $derived(randomOptionCount(draft.equipment));
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
@@ -580,6 +601,32 @@
             <p class="dim tiny">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
           {/if}
         </div>
+        {#if coreRegionRows.length > 0}
+          <div class="sheet-card">
+            <!-- ゲーム内の言葉に合わせる(Tecith Core System: 「コア効果」「コアセット効果」)。
+                 ゲームは左列にセット効果の合計を出しているので、こちらも合計を先に置く -->
+            <div class="card-title">テシスコア</div>
+            <div class="clear num">
+              <span class="dim tiny">コアセット効果(全地域) 最終ダメージ</span>
+              <span class="strong" use:flash={() => coreSetTotalLabel}>{coreSetTotalLabel}</span>
+            </div>
+            <div class="eq-summary num inset">
+              {#each coreRegionRows as r (r.region)}
+                <span>
+                  <span class="dim">{CORE_REGION_LABELS[r.region]}</span>
+                  <span use:bump={() => r.total}>{fmtInt(r.total)}</span>
+                  <span
+                    class="badge"
+                    style="background: {r.set.evolution === null ? STATE.unknown.bg : STATE.met.bg};
+                           border-color: {r.set.evolution === null ? STATE.unknown.bd : STATE.met.bd};
+                           color: {r.set.evolution === null ? STATE.unknown.fg : STATE.met.fg}"
+                  >{r.set.evolution === null ? `あと ${3 - r.set.ready}` : "発動中"}</span>
+                </span>
+              {/each}
+            </div>
+            <p class="dim tiny">コア効果(能力値)は対象地域内でのみ有効。コアセット効果は地域ごとに発動して足されます(強化 4 のコア 3 個から)。</p>
+          </div>
+        {/if}
         <div class="sheet-card">
           <div class="card-title">装備値(全部位の合計)</div>
           <table class="eq-table num inset">
