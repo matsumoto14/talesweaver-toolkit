@@ -410,6 +410,15 @@
   // (全段の効果を並べると 7 段で 4 行になり、1 画面の情報量が減る)
   const PROTECT_ARMOR_RATES = [36, 45, 54, 63, 72, 81];
   const PROTECT_ARMOR_MAGIC = [24, 30, 36, 42, 48, 54];
+  // 畳んだ中の段も上と同じ形にする。名前は Lv の数字だけ、効いている値は行の右
+  const levelChoices = (max: number) =>
+    Array.from({ length: max }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }));
+  const strongWeaponLevels = $derived(levelChoices(limits.strong_weapon_level_max));
+  const protectArmorLevels = $derived(levelChoices(limits.protect_armor_level_max));
+  const kaiProtectArmorLevels = $derived(levelChoices(limits.kai_protect_armor_level_max));
+  const hyperLimitLevels = $derived(levelChoices(limits.hyper_limit_level_max));
+  const reinforceLevels = $derived(levelChoices(limits.reinforce_level_max));
+  const unleashLevelChoices = $derived(levelChoices(limits.unleash_level_max));
   const protectArmorOptions = $derived(gatedLevelOptions(limits.protect_armor_level_max, (lv) => `Lv${lv}`));
   const protectArmorNote = $derived.by(() => {
     const lv = draft.commonSkills.protect_armor_level;
@@ -1655,7 +1664,7 @@
                 class="chip quiet"
                 class:on={sharpnessAllOpen}
                 onclick={() => (sharpnessAllOpen = !sharpnessAllOpen)}
-              >{sharpnessAllOpen ? "5 以上" : "Lv1〜4"}</button>
+              >{sharpnessAllOpen ? "5 以上" : "1〜4"}</button>
             {/if}
             <button
               type="button"
@@ -1688,75 +1697,183 @@
       </div>
       <details class="fold">
         <summary>取っていない・Lv が違うときだけ開く(8 項目)</summary>
-        <div class="fold-body fields">
-          <StepSelect
-            label="レインフォース(アンリーシュの前提)"
-            options={reinforceOptions}
-            bind:value={
-              () => String(draft.commonSkills.reinforce_level),
-              (v) => setReinforceLevel(Number(v))
-            }
-          />
-          {#each draft.commonSkills.unleash as slot, i (i)}
-            {#if slot.stat !== null}
-              <StepSelect
-                label={`アンリーシュ 枠 ${i + 1}(${STAT_LABELS[slot.stat]})の Lv`}
-                options={unleashLevelOptions}
-                bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
-              />
-            {/if}
-          {/each}
-          <label class="check">
-            <input type="checkbox" bind:checked={draft.commonSkills.power_weapon} />
-            <span>パワーウェポン(+2%)</span>
-          </label>
-          <StepSelect
-            label="ストロングウェポン"
-            options={strongWeaponOptions.filter((o) => Number(o.value) <= augmentGate)}
-            bind:value={
-              () => String(draft.commonSkills.strong_weapon_level),
-              (v) => (draft.commonSkills.strong_weapon_level = Number(v))
-            }
-          />
-          <label class="check">
-            <input type="checkbox" bind:checked={draft.commonSkills.coat_armor} />
-            <span>コートアーマー(物+18% / 魔+12%)</span>
-          </label>
-          <div class="lv">
+        <!-- 開いた先も上と同じ形。ラベル / 段 / 操作 / 効いている値の 4 列でそろえる -->
+        <div class="fold-body skill-fields">
+          <div class="skill-field">
+            <span class="k">パワーウェポン</span>
+            <span class="chip-row">
+              <button
+                type="button"
+                class="chip"
+                class:on={draft.commonSkills.power_weapon}
+                onclick={() => (draft.commonSkills.power_weapon = !draft.commonSkills.power_weapon)}
+              >取っている</button>
+            </span>
+            <span class="skill-actions"></span>
+            <span class="v num">{draft.commonSkills.power_weapon ? "+2%" : "—"}</span>
+          </div>
+          <div class="skill-field">
+            <span class="k">ストロングウェポン</span>
             <StepSelect
-              label="プロテクトアーマー"
-              options={protectArmorOptions}
+              label=""
+              options={strongWeaponLevels}
+              cols={strongWeaponLevels.length}
+              disabledValues={strongWeaponLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
+              bind:value={
+                () => String(draft.commonSkills.strong_weapon_level),
+                (v) => (draft.commonSkills.strong_weapon_level = Number(v))
+              }
+            />
+            <span class="skill-actions">
+              <button
+                type="button"
+                class="clear"
+                disabled={draft.commonSkills.strong_weapon_level === 0}
+                onclick={() => (draft.commonSkills.strong_weapon_level = 0)}
+              >未習得</button>
+            </span>
+            <span class="v num" use:bump={() => draft.commonSkills.strong_weapon_level * 3}>
+              {draft.commonSkills.strong_weapon_level === 0 ? "—" : `+${draft.commonSkills.strong_weapon_level * 3}%`}
+            </span>
+          </div>
+          <div class="skill-field">
+            <span class="k">コートアーマー</span>
+            <span class="chip-row">
+              <button
+                type="button"
+                class="chip"
+                class:on={draft.commonSkills.coat_armor}
+                onclick={() => (draft.commonSkills.coat_armor = !draft.commonSkills.coat_armor)}
+              >取っている</button>
+            </span>
+            <span class="skill-actions"></span>
+            <span class="v num">{draft.commonSkills.coat_armor ? "物18 / 魔12%" : "—"}</span>
+          </div>
+          <div class="skill-field">
+            <span class="k">プロテクトアーマー</span>
+            <StepSelect
+              label=""
+              options={protectArmorLevels}
+              cols={protectArmorLevels.length}
+              disabledValues={protectArmorLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
               bind:value={
                 () => String(draft.commonSkills.protect_armor_level),
                 (v) => (draft.commonSkills.protect_armor_level = Number(v))
               }
             />
-            <p class="hint dim">{protectArmorNote}</p>
+            <span class="skill-actions">
+              <button
+                type="button"
+                class="clear"
+                disabled={draft.commonSkills.protect_armor_level === 0}
+                onclick={() => (draft.commonSkills.protect_armor_level = 0)}
+              >未習得</button>
+            </span>
+            <span class="v num" use:bump={() => draft.commonSkills.protect_armor_level}>
+              {draft.commonSkills.protect_armor_level === 0
+                ? "—"
+                : `物${PROTECT_ARMOR_RATES[draft.commonSkills.protect_armor_level - 1]} / 魔${PROTECT_ARMOR_MAGIC[draft.commonSkills.protect_armor_level - 1]}%`}
+            </span>
           </div>
-          <div class="lv">
+          <div class="skill-field">
+            <span class="k">改・プロテクト</span>
             <StepSelect
-              label="改・プロテクトアーマー"
-              options={kaiProtectArmorOptions}
+              label=""
+              options={kaiProtectArmorLevels}
+              cols={kaiProtectArmorLevels.length}
               bind:value={
                 () => String(draft.commonSkills.kai_protect_armor_level),
                 (v) => (draft.commonSkills.kai_protect_armor_level = Number(v))
               }
             />
-            <p class="hint dim">{kaiProtectArmorNote}</p>
+            <span class="skill-actions">
+              <button
+                type="button"
+                class="clear"
+                disabled={draft.commonSkills.kai_protect_armor_level === 0}
+                onclick={() => (draft.commonSkills.kai_protect_armor_level = 0)}
+              >未習得</button>
+            </span>
+            <span class="v num" use:bump={() => draft.commonSkills.kai_protect_armor_level * 9}>
+              {draft.commonSkills.kai_protect_armor_level === 0
+                ? "—"
+                : `物${draft.commonSkills.kai_protect_armor_level * 9} / 魔${draft.commonSkills.kai_protect_armor_level * 6}%`}
+            </span>
           </div>
-          <label class="check">
-            <input type="checkbox" bind:checked={draft.commonSkills.ultimate.super_limit} />
-            <span>スーパーリミット(ハイパーアタックの極限形)</span>
-          </label>
-          <StepSelect
-            label="ハイパーリミット"
-            options={hyperLimitOptions}
-            bind:value={
-              () => String(draft.commonSkills.ultimate.hyper_limit_level),
-              (v) => (draft.commonSkills.ultimate.hyper_limit_level = Number(v))
-            }
-          />
-          <p class="hint dim wide">
+          <div class="skill-field">
+            <span class="k">スーパーリミット</span>
+            <span class="chip-row">
+              <button
+                type="button"
+                class="chip"
+                class:on={draft.commonSkills.ultimate.super_limit}
+                onclick={() => (draft.commonSkills.ultimate.super_limit = !draft.commonSkills.ultimate.super_limit)}
+              >取っている</button>
+            </span>
+            <span class="skill-actions"></span>
+            <span class="v num">{draft.commonSkills.ultimate.super_limit ? "極限に加算" : "—"}</span>
+          </div>
+          <div class="skill-field">
+            <span class="k">ハイパーリミット</span>
+            <StepSelect
+              label=""
+              options={hyperLimitLevels}
+              cols={hyperLimitLevels.length}
+              disabledValues={hyperLimitLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
+              bind:value={
+                () => String(draft.commonSkills.ultimate.hyper_limit_level),
+                (v) => (draft.commonSkills.ultimate.hyper_limit_level = Number(v))
+              }
+            />
+            <span class="skill-actions">
+              <button
+                type="button"
+                class="clear"
+                disabled={draft.commonSkills.ultimate.hyper_limit_level === 0}
+                onclick={() => (draft.commonSkills.ultimate.hyper_limit_level = 0)}
+              >未習得</button>
+            </span>
+            <span class="v num">{draft.commonSkills.ultimate.hyper_limit_level === 0 ? "—" : `Lv${draft.commonSkills.ultimate.hyper_limit_level}`}</span>
+          </div>
+          <div class="skill-field">
+            <span class="k">レインフォース</span>
+            <StepSelect
+              label=""
+              options={reinforceLevels}
+              cols={reinforceLevels.length}
+              bind:value={
+                () => String(draft.commonSkills.reinforce_level),
+                (v) => setReinforceLevel(Number(v))
+              }
+            />
+            <span class="skill-actions">
+              <button
+                type="button"
+                class="clear"
+                disabled={draft.commonSkills.reinforce_level === 0}
+                onclick={() => setReinforceLevel(0)}
+              >未習得</button>
+            </span>
+            <span class="v num">Lv{unleashCap} まで</span>
+          </div>
+          {#each draft.commonSkills.unleash as slot, i (i)}
+            {#if slot.stat !== null}
+              <div class="skill-field">
+                <span class="k">解放 {i + 1} の Lv</span>
+                <StepSelect
+                  label=""
+                  options={unleashLevelChoices}
+                  cols={unleashLevelChoices.length}
+                  disabledValues={unleashLevelChoices.filter((o) => Number(o.value) > unleashCap).map((o) => o.value)}
+                  bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
+                />
+                <span class="skill-actions"></span>
+                <span class="v num">{STAT_LABELS[slot.stat]} +{UNLEASH_RATES[slot.level - 1]}%</span>
+              </div>
+            {/if}
+          {/each}
+          <p class="hint dim">
+            オーグメントで解放されていない段は押せません。
             {#if sienaDefenseRate > 0}装備防御力にはシエナのオーラの +{sienaDefenseRate}% を含みます。{/if}
             <b>リンゴの島・ベリネンルミでは装備防御力は常に 100%</b>(wiki 計算式まとめ §防御力)。
           </p>
@@ -2061,7 +2178,6 @@
   .eternal-row > :global(.step-select) { flex: 1 1 260px; min-width: 0; }
   /* Lv の段階選択 + 選択中の効果値 */
   .lv { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .lv .hint { margin: 0; }
 
   /* 入力セルは親の幅まで伸びる(§07 実演の .ctrl が 1fr)。1 列で受けると値が
      右端まで離れて読めないので、232px の段に割って伸び先を絞る */
@@ -2262,9 +2378,11 @@
   .skill-fields { margin-top: 9px; display: flex; flex-direction: column; gap: 7px; }
   /* 列: ラベル / 段 / 操作(見え方のスイッチ・外す) / 効いている値。
      操作が無い行でも列は残すので、どの行も同じ位置で並ぶ */
-  .skill-field { display: grid; grid-template-columns: 64px minmax(0, 1fr) 108px 58px; gap: 9px; align-items: center; }
-  .skill-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  .skill-field { display: grid; grid-template-columns: 100px minmax(0, 1fr) 104px 100px; gap: 8px; align-items: center; }
+  .skill-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; white-space: nowrap; }
+  .chip-row { display: flex; align-items: center; gap: 6px; }
   .skill-field .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
+  .skill-field .v { white-space: nowrap; }
   .skill-field .v { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--fg-sub); }
   /* ほぼ押さない操作。段に 1 列渡さず、言葉のまま小さく置く(記号にしない) */
   .skill-field .clear {
@@ -2273,7 +2391,7 @@
   }
   .skill-field .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
   .skill-field .clear:disabled { color: var(--border-soft); }
-  .skill-note { margin: 0 0 0 73px; }
+  .skill-note { margin: 0 0 0 113px; }
   /* 3 つのチップは段 1 つぶんの幅に収まらないので、操作の列まで使う */
   .ultimate-row { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 6px; }
   /* 2 件ぶんの高さを先に取る。選んだ数で下が上下しない */
