@@ -608,6 +608,19 @@
         ? `最終ダメージ +${fmtInt(coreSet.fixed)}`
         : `最終ダメージ +${Math.round(coreSet.rate * 100)}%`,
   );
+  // セット効果は**地域ごとに発動して、全部足される**(domain: ThesisCores::set_bonus)。
+  // タブで 1 地域ずつ見せているので、2 地域以上で出ているときは合計も言わないと
+  // 「いまいくつ効いているのか」が画面のどこにも無いことになる
+  const coreSetAll = $derived(CORE_REGIONS.map((r) => coreSetEffect(draft.equipment.thesis_cores[r])));
+  const coreSetActiveRegions = $derived(coreSetAll.filter((e) => e.evolution !== null).length);
+  const coreSetTotalLabel = $derived.by(() => {
+    const fixed = coreSetAll.reduce((n, e) => n + e.fixed, 0);
+    const rate = coreSetAll.reduce((n, e) => n + e.rate, 0);
+    const parts: string[] = [];
+    if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
+    if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
+    return parts.join(" と ");
+  });
   const coreSetNote = $derived.by(() => {
     if (coreSet.evolution === null) return `強化 4 のコアがあと ${3 - coreSet.ready} 個で発動します`;
     if (coreSet.ready >= 6) return "6 枠そろっています(この段階の最大)";
@@ -1582,6 +1595,13 @@
           >{coreSet.evolution === null ? "未発動" : "発動中"}</span>
           <span class="note">{coreSetNote}</span>
         </div>
+        {#if coreSetActiveRegions > 1}
+          <!-- セット効果は地域ごとに発動して足し算される。1 地域ぶんだけ見て終わらせない -->
+          <div class="sum-item">
+            <span class="k">全 {coreSetActiveRegions} 地域の合計</span>
+            <span class="v" use:flash={() => coreSetTotalLabel}>最終ダメージ {coreSetTotalLabel}</span>
+          </div>
+        {/if}
       </div>
       {#if coreSupportSummary}
         <p class="hint dim">
