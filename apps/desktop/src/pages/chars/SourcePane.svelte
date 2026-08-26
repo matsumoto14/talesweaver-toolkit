@@ -32,7 +32,7 @@
   import {
     clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
     neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
-    randomOptionValue, rangeSummary, sienaPartStatTotal, valuesSummary,
+    randomOptionValue, randomOptionValueLabel, rangeSummary, sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
@@ -1568,8 +1568,14 @@
                 {#each draft.equipment.parts[slot].random_options as o (o.option_id)}
                   {@const def = randomOptionDef(o.option_id)}
                   {#if def}
-                    <span class="ro-badge" class:record-only={!randomOptionIsApplied(def.effect)} title={def.name}>
+                    <!-- 値まで出す。開かないと分からないと、行を見た意味がない(§00 05) -->
+                    <span
+                      class="ro-badge"
+                      class:record-only={!randomOptionIsApplied(def.effect)}
+                      title="{def.name}({randomOptionEffectLabel(def.effect)})"
+                    >
                       {def.short}
+                      <b class="num">{randomOptionValueLabel(o, def)}</b>
                     </span>
                   {/if}
                 {/each}
@@ -2457,6 +2463,7 @@
     min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px;
   }
   .ro-badge {
+    display: inline-flex; align-items: baseline; gap: 4px;
     padding: 1px 7px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border); color: var(--fg-sub);
     font-size: 9px; font-weight: 700; white-space: nowrap;

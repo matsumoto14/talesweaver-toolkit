@@ -260,6 +260,27 @@ export const sienaStatTotal = (equipment: Equipment): number =>
 export const randomOptionValue = (slot: RandomOptionSlot, def: RandomOptionDef): number =>
   slot.value ?? (def.tiers.find((t) => t.rank === slot.rank)?.max ?? 0);
 
+/**
+ * 一覧のバッジに出す値。効き先で単位が違う —
+ * 割合(与ダメージ増加・攻撃ダメージ・追加ダメージ・耐性)は `%`、命中P/回避P は実数、
+ * 中ディレイは減る側なので `−`。
+ */
+export const randomOptionValueLabel = (slot: RandomOptionSlot, def: RandomOptionDef): string => {
+  const value = randomOptionValue(slot, def);
+  const effect = def.effect;
+  if (typeof effect === "object") return `+${value}%`;
+  switch (effect) {
+    case "accuracy_point":
+    case "evasion_point":
+    case "accuracy_and_evasion_point":
+      return `+${value}`;
+    case "actual_delay_reduction":
+      return `−${value}%`;
+    default:
+      return `+${value}%`;
+  }
+};
+
 /** 効き先の表示名。「記録するだけ」の OP はそう分かる文言にする。 */
 export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
   if (typeof effect === "object") {
@@ -271,6 +292,7 @@ export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
     case "accuracy_point": return "命中P";
     case "evasion_point": return "回避P";
     case "accuracy_and_evasion_point": return "命中P・回避P";
+    case "actual_delay_reduction": return "中ディレイ減少";
     case "record_only": return "記録するだけ(計算に入りません)";
   }
 };

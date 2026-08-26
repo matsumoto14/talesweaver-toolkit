@@ -309,6 +309,7 @@ export type RandomOptionEffect =
   | "accuracy_point"
   | "evasion_point"
   | "accuracy_and_evasion_point"
+  | "actual_delay_reduction"
   | "record_only";
 
 // ランクごとの効果値レンジ。crates/domain/src/random_option.rs の RandomOptionTier。
