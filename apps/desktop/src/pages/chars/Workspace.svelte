@@ -198,6 +198,35 @@
     return `${ids.length} 件 ・ 合計 −${percent}%`;
   });
 
+  // 共通スキルの効き先(結果側の表示用)。入力は補正源、結果はここ
+  const UNLEASH_RATES = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
+  const SHARPNESS_RATES = [5, 10, 15, 20, 25, 28, 31, 34, 37, 40];
+  const defenseRatePercent = $derived.by(() => {
+    const c = draft.commonSkills;
+    const pa = c.protect_armor_level;
+    const base =
+      (c.coat_armor ? 18 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
+    const magic = (c.coat_armor ? 12 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
+    return { physical: base, magic };
+  });
+  const sharpnessRatePercent = $derived(
+    draft.commonSkills.sharpness_vision_level === 0
+      ? 0
+      : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1],
+  );
+  const unleashSummary = $derived(
+    (draft.commonSkills.unleash ?? [])
+      .filter((u) => u.stat !== null && u.level > 0)
+      .map((u) => `${STAT_LABELS[u.stat!]} +${UNLEASH_RATES[u.level - 1]}%`)
+      .join(" / ") || "未使用",
+  );
+  const ultimatePicked = $derived(
+    draft.commonSkills.ultimate.slots
+      .filter((u) => u !== null)
+      .map((u) => ULTIMATE_SKILL_LABELS[u])
+      .join(" / ") || "未習得",
+  );
+
   // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる
   const commonSkillSummary = $derived.by(() => {
     const c = draft.commonSkills;
@@ -623,6 +652,17 @@
           {:else}
             <p class="dim tiny">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
           {/if}
+        </div>
+        <div class="sheet-card">
+          <!-- 共通スキルの結果。入力側(補正源)には入力だけを置き、効いている量はここで見る -->
+          <div class="card-title">共通スキル</div>
+          <div class="eq-summary num inset">
+            <span><span class="dim">装備攻撃力強化</span> +{enhanceRatePercent}%</span>
+            <span><span class="dim">装備防御力</span> 物 {fmtInt(defenseRatePercent.physical)}% / 魔 {fmtInt(defenseRatePercent.magic)}%</span>
+            <span><span class="dim">割合追加ダメージ</span> +{sharpnessRatePercent}%</span>
+            <span><span class="dim">アンリーシュ</span> {unleashSummary}</span>
+          </div>
+          <p class="dim tiny">オーグメント Lv{draft.commonSkills.augment_level} ・ 極限 {ultimatePicked}</p>
         </div>
         {#if coreRegionRows.length > 0}
           <div class="sheet-card">

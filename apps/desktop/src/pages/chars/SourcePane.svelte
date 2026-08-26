@@ -373,10 +373,7 @@
   /** もう一方の枠で選んでいるステは選べない(同じステの 2 枠は不可) */
   const unleashStatOptions = (slotIndex: number) => {
     const other = draft.commonSkills.unleash[1 - slotIndex].stat;
-    return [
-      { value: "", label: "未使用" },
-      ...STAT_KINDS.filter((k) => k !== other).map((k) => ({ value: k, label: STAT_LABELS[k] })),
-    ];
+    return STAT_KINDS.filter((k) => k !== other).map((k) => ({ value: k, label: STAT_LABELS[k] }));
   };
   /** いま取れるアンリーシュの上限(レインフォース Lv + 5、最大 10) */
   const unleashCap = $derived(Math.min(limits.unleash_level_max, reinforceGate));
@@ -393,10 +390,11 @@
     })),
   );
 
+  // 「未習得」は段に入れない。ほぼ選ばれないものに 1 列を渡さず、外すのは行末の小さな 1 押しで足りる
   const augmentOptions = $derived(
-    Array.from({ length: limits.augment_level_max + 1 }, (_, i) => ({
-      value: String(i),
-      label: i === 0 ? "未習得" : `Lv${i}`,
+    Array.from({ length: limits.augment_level_max }, (_, i) => ({
+      value: String(i + 1),
+      label: `Lv${i + 1}`,
     })),
   );
   /** オーグメントで解放されている Lv までを選択肢にする */
@@ -424,9 +422,10 @@
     return lv === 0 ? "未習得" : `物 +${lv * 9}% / 魔 +${lv * 6}%`;
   });
   const SHARPNESS_RATES = [5, 10, 15, 20, 25, 28, 31, 34, 37, 40];
-  const sharpnessVisionOptions = Array.from({ length: 11 }, (_, lv) => ({
-    value: String(lv),
-    label: lv === 0 ? "未習得" : `Lv${lv}`,
+  // 段の名前は Lv だけ、効いている値は行の右に出す(段に「Lv6(+28%)」と書くと折り返す)
+  const sharpnessVisionOptions = Array.from({ length: 10 }, (_, i) => ({
+    value: String(i + 1),
+    label: String(i + 1),
   }));
   const sharpnessVisionNote = $derived.by(() => {
     const lv = draft.commonSkills.sharpness_vision_level;
@@ -464,13 +463,11 @@
   /** その枠で選べる極限スキル(もう片方の枠で選ばれているものは出さない) */
   function ultimateOptions(slotIndex: number) {
     const other = draft.commonSkills.ultimate.slots[1 - slotIndex];
-    return [
-      { value: "", label: "未習得" },
-      ...ULTIMATE_SKILLS.filter((u) => u !== other).map((u) => ({
-        value: u,
-        label: ULTIMATE_SKILL_LABELS[u],
-      })),
-    ];
+    // 「未習得」は段に入れない(行末の小さな 1 押しで外せる)
+    return ULTIMATE_SKILLS.filter((u) => u !== other).map((u) => ({
+      value: u,
+      label: ULTIMATE_SKILL_LABELS[u],
+    }));
   }
   function setUltimate(slotIndex: number, value: string) {
     draft.commonSkills.ultimate.slots[slotIndex] = value === "" ? null : (value as UltimateSkill);
@@ -1512,97 +1509,133 @@
       </div>
     {/if}
   {:else if sourceId === "commonSkill"}
-    <!-- ほぼ全員が同じ設定なので、**人によって違う 3 つ(オーグメント / 極限 2 枠)を先に置く**。
-         残りは既定で最大まで入れておき、畳む(§00「要らないものを見せない」) -->
+    <!-- ほぼ全員が同じ設定なので、**人によって違うところを先に置く**。
+         残りは既定で最大まで入れて畳む(§00 02)。結果(装備攻撃力・防御力・追加ダメージ)は
+         「いまの実力」が持つので、ここには入力だけを置く -->
     <div class="card">
       <div class="card-title inline">
         まず決める <span class="dim normal">人によって違うのはここ</span>
       </div>
-      <p class="hint dim">
-        wiki「Skill/共通」「Skill/極限」。<b>オーグメント</b>はストロングウェポン・プロテクトアーマー・
-        ハイパーリミットを Lv2 以上にするための前提で、下げるとそれに縛られる Lv も一緒に下がります。
-        <b>極限スキル</b>はゲージスキルのうち 2 つがパッシブとして常時適用されます。
-      </p>
-      <div class="fields">
-        <StepSelect
-          label="オーグメント"
-          options={augmentOptions}
-          bind:value={
-            () => String(draft.commonSkills.augment_level),
-            (v) => setAugmentLevel(Number(v))
-          }
-        />
+      <div class="skill-fields">
+        <div class="skill-field">
+          <span class="k">オーグメント</span>
+          <StepSelect
+            label=""
+            options={augmentOptions}
+            cols={augmentOptions.length}
+            bind:value={
+              () => String(draft.commonSkills.augment_level),
+              (v) => setAugmentLevel(Number(v))
+            }
+          />
+          <button
+            type="button"
+            class="clear"
+            disabled={draft.commonSkills.augment_level === 0}
+            onclick={() => setAugmentLevel(0)}
+          >未習得</button>
+        </div>
         {#each [0, 1] as slotIndex (slotIndex)}
-          <!-- 段が折り返すと「どれを選べるか」が一度で読めない。段の多い欄は 1 行使う(§00 01) -->
-          <div class="wide">
+          {@const picked = draft.commonSkills.ultimate.slots[slotIndex]}
+          <div class="skill-field">
+            <span class="k">極限 枠 {slotIndex + 1}</span>
             <StepSelect
-              label={`極限スキル 枠 ${slotIndex + 1}`}
+              label=""
               options={ultimateOptions(slotIndex)}
+              cols={ultimateOptions(slotIndex).length}
               bind:value={
                 () => draft.commonSkills.ultimate.slots[slotIndex] ?? "",
                 (v) => setUltimate(slotIndex, v)
               }
             />
+            <button
+              type="button"
+              class="clear"
+              disabled={picked === null}
+              onclick={() => setUltimate(slotIndex, "")}
+            >未習得</button>
           </div>
+          {#if picked !== null}
+            <p class="hint dim skill-note">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
+          {/if}
         {/each}
       </div>
-      {#each draft.commonSkills.ultimate.slots.filter((u) => u !== null) as picked (picked)}
-        <p class="hint dim">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
-      {/each}
       {#if ultimateEffects.length > 0}
-        <p class="hint dim">いまの効果: {ultimateEffects.join(" ・ ")}</p>
+        <p class="hint dim">いまの効果: <b use:flash={() => ultimateEffects.join(" ・ ")}>{ultimateEffects.join(" ・ ")}</b></p>
       {/if}
+      <p class="hint dim">
+        wiki「Skill/共通」「Skill/極限」。<b>オーグメント</b>はストロングウェポン・プロテクトアーマー・
+        ハイパーリミットを Lv2 以上にするための前提で、下げるとそれに縛られる Lv も一緒に下がります。
+      </p>
     </div>
 
     <div class="card">
-      <div class="card-title inline">
-        アンリーシュ(能力解放)
-        <span class="num strong">
-          {draft.commonSkills.unleash
-            .filter((u) => u.stat !== null && u.level > 0)
-            .map((u) => `${STAT_LABELS[u.stat!]} +${UNLEASH_RATES[u.level - 1]}%`)
-            .join(" ・ ") || "未使用"}
-        </span>
+      <div class="card-title inline">アンリーシュ(能力解放)</div>
+      <div class="skill-fields">
+        {#each draft.commonSkills.unleash as slot, i (i)}
+          <div class="skill-field">
+            <span class="k">枠 {i + 1}</span>
+            <StepSelect
+              label=""
+              options={unleashStatOptions(i)}
+              cols={unleashStatOptions(i).length}
+              bind:value={() => slot.stat ?? "", (v) => setUnleashStat(i, v)}
+            />
+            <button
+              type="button"
+              class="clear"
+              disabled={slot.stat === null}
+              onclick={() => setUnleashStat(i, "")}
+            >未使用</button>
+            <span class="v num" use:flash={() => (slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`)}>
+              {slot.stat === null ? "—" : `+${UNLEASH_RATES[slot.level - 1]}%`}
+            </span>
+          </div>
+        {/each}
       </div>
       <p class="hint dim">
         選んだステが<b>能力値倍率B</b>で増えます(<b>バフ込みの基本能力値 × 倍率</b>なので、
         バフを盛るほど効きます)。<b>2 ステまで</b>で、同じステは 2 枠に入れられません。
-        Lv は取れる上限(いまは <b>Lv{unleashCap}</b> = +{UNLEASH_RATES[unleashCap - 1]}%)で入ります —
-        違うときは下の「ほぼ全員が同じ設定」で変えてください。
+        Lv は取れる上限(いまは <b>Lv{unleashCap}</b> = +{UNLEASH_RATES[unleashCap - 1]}%)で入ります。
       </p>
-      <div class="fields">
-        {#each draft.commonSkills.unleash as slot, i (i)}
-          <div class="wide">
-            <StepSelect
-              label={`枠 ${i + 1} のステ`}
-              options={unleashStatOptions(i)}
-              bind:value={() => slot.stat ?? "", (v) => setUnleashStat(i, v)}
-            />
-          </div>
-        {/each}
-      </div>
     </div>
 
     <div class="card">
-      <div class="card-title inline">
-        割合追加ダメージ <span class="num strong">+{fmtInt(draft.commonSkills.sharpness_vision_level === 0 ? 0 : [5, 10, 15, 20, 25, 28, 31, 34, 37, 40][draft.commonSkills.sharpness_vision_level - 1])}%</span>
-      </div>
-      <p class="hint dim">
-        シャープネスビジョン。<b>合計ダメージ</b>に乗ります(1 発ごとではありません)。
-        Lv6 以上は各 Lv の習得スクロールが要ります。
-      </p>
-      <div class="fields">
-        <div class="wide">
-        <StepSelect
-          label="シャープネスビジョン"
-          options={sharpnessVisionOptions}
-          bind:value={
-            () => String(draft.commonSkills.sharpness_vision_level),
-            (v) => (draft.commonSkills.sharpness_vision_level = Number(v))
-          }
-        />
+      <div class="card-title inline">シャープネスビジョン</div>
+      <div class="skill-fields">
+        <div class="skill-field">
+          <span class="k">Lv</span>
+          <StepSelect
+            label=""
+            options={sharpnessVisionOptions}
+            cols={sharpnessVisionOptions.length}
+            bind:value={
+              () => String(draft.commonSkills.sharpness_vision_level),
+              (v) => (draft.commonSkills.sharpness_vision_level = Number(v))
+            }
+          />
+          <button
+            type="button"
+            class="clear"
+            disabled={draft.commonSkills.sharpness_vision_level === 0}
+            onclick={() => (draft.commonSkills.sharpness_vision_level = 0)}
+          >未習得</button>
+          <span
+            class="v num"
+            use:bump={() => (draft.commonSkills.sharpness_vision_level === 0
+              ? null
+              : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1])}
+          >
+            {draft.commonSkills.sharpness_vision_level === 0
+              ? "—"
+              : `+${SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1]}%`}
+          </span>
         </div>
       </div>
+      <p class="hint dim">
+        割合追加ダメージは<b>合計ダメージ</b>に乗ります(1 発ごとではありません)。
+        Lv6 以上は各 Lv の習得スクロールが要ります。
+      </p>
     </div>
 
     <div class="card">
@@ -2186,6 +2219,20 @@
   /* 段が 2 つしか無いと、幅なりでは細すぎて押す場所に見えない。段の大きさを先に決める */
   .stage-row > :global(.step-select) { flex: none; }
   .stage-row :global(.seg button) { min-width: 46px; padding: 7px 0; font-size: 13px; }
+  /* 共通スキルの欄。ラベル・段・外す・効いている値を 1 行に、列をそろえて並べる */
+  .skill-fields { margin-top: 9px; display: flex; flex-direction: column; gap: 7px; }
+  .skill-field { display: grid; grid-template-columns: 64px minmax(0, 1fr) 52px 58px; gap: 9px; align-items: center; }
+  .skill-field .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
+  .skill-field .v { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--fg-sub); }
+  /* ほぼ押さない操作。段に 1 列渡さず、言葉のまま小さく置く(記号にしない) */
+  .skill-field .clear {
+    padding: 3px 4px; border-radius: var(--r-chip);
+    background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
+  }
+  .skill-field .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
+  .skill-field .clear:disabled { color: var(--border-soft); }
+  .skill-note { margin: 0 0 0 73px; }
+
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .skill-chip .skill-name { font-weight: 700; }
   .skill-chip .skill-meta {
