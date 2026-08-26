@@ -81,6 +81,15 @@ const WEAPON_SEED_TIERS: &[RandomOptionTier] = &[
 ];
 
 /// 脚カテゴリー17「攻撃時、移動速度が X 以下の場合、Y% の追加ダメージ」の **Y**。
+/// 脚カテゴリー4「移動速度が X 減少し、ダメージ耐性が Y% 増加」の **Y**。
+/// 被ダメージ計算が無いので記録のみ。
+const LEG_RESISTANCE_TIERS: &[RandomOptionTier] = &[
+    tier(Normal, 1.0, 1.0),
+    tier(Valuable, 1.0, 2.0),
+    tier(Rare, 3.0, 4.0),
+    tier(Special, 5.0, 7.0),
+];
+
 const LEG_SLOW_TIERS: &[RandomOptionTier] = &[
     tier(Normal, 2.0, 5.0),
     tier(Valuable, 3.0, 7.0),
@@ -183,6 +192,11 @@ const COMMON_IDS: &[&str] = &[
     "shield-thrust-rate",
     "shield-slash-rate",
     "shield-magic-rate",
+    // 鎧: 耐久系(計算には入らないが、付ける人が多いので記録する)
+    "armor-damage-resistance",
+    "armor-fixed-evasion",
+    // 脚: 耐久系
+    "leg-resistance",
     // 手: 命中率
     "hand-accuracy",
     // カフス: 中ディレイ減少
@@ -429,6 +443,16 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             EvasionPoint,
             RELIC_ACCURACY_TIERS,
             "",
+        ),
+        // --- 脚(耐久系。移動速度を捨ててダメージ耐性を取る形)-----------------
+        def(
+            "leg-resistance",
+            "移動速度が減少し、ダメージ耐性が増加",
+            PartSlot::Leg,
+            4,
+            RecordOnly,
+            LEG_RESISTANCE_TIERS,
+            "カテゴリー4。被ダメージ計算が無いので記録のみ(移動速度も計算対象外)",
         ),
         // --- 脚(追加ダメージ。wiki「ステータス」の一覧で 新-割合)-------------
         def(
