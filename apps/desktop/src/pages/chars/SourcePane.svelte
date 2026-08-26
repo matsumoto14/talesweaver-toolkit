@@ -30,7 +30,7 @@
   import { previewElements } from "../../api/commands";
   import { draftToPayload, type Draft } from "../../draft";
   import {
-    clampToCaps, coreBonus, coreSetSupportValues, coreSetTotalBonus, midpointValues,
+    clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
     neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
     randomOptionValue, rangeSummary, sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
@@ -597,6 +597,15 @@
   const coreRegionTotal = (region: CoreRegion) =>
     coreSetTotalBonus(draft.equipment.thesis_cores[region]);
   // 補助タイプは与ダメージ(攻撃力)には効かないが、装備値 9 種として防御側・回避Pに効く
+  // 地域ごとのコアセット効果はタブが持つ(ゲーム内 UI の地域カードと同じ)。
+  // 全地域の合計は「いまの実力」に出す — 結果を入力エリアに積まない
+  const coreSetOf = (region: CoreRegion) => coreSetEffect(draft.equipment.thesis_cores[region]);
+  /** その地域のコアセット効果(タブに出す短い形) */
+  const coreSetLabelOf = (region: CoreRegion) => {
+    const e = coreSetOf(region);
+    if (e.evolution === null) return "";
+    return e.fixed > 0 ? `+${fmtInt(e.fixed)}` : `+${Math.round(e.rate * 100)}%`;
+  };
   const coreSupport = $derived(coreSetSupportValues(draft.equipment.thesis_cores[coreRegion]));
   const coreSupportSummary = $derived(
     [
@@ -1520,6 +1529,11 @@
           >
             {CORE_REGION_LABELS[region]}
             <span class="num dim" use:bump={() => coreRegionTotal(region)}>{fmtInt(coreRegionTotal(region))}</span>
+            {#if coreSetOf(region).evolution !== null}
+              <span class="tab-set num" use:flash={() => coreSetLabelOf(region)}>{coreSetLabelOf(region)}</span>
+            {:else if coreRegionTotal(region) > 0}
+              <span class="tab-set off num">あと {3 - coreSetOf(region).ready}</span>
+            {/if}
           </button>
         {/each}
       </div>
@@ -1976,6 +1990,13 @@
   /* 地域タブの見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
   .tabs { margin-top: 2px; }
   .tab .num { font-size: 9.5px; margin-left: 5px; }
+  /* ゲームの地域カードと同じく、地域ごとの「コアセット効果」をその地域に出す */
+  .tab-set {
+    margin-left: 4px; padding: 0 5px; border-radius: var(--r-pill);
+    background: var(--state-met-bg); border: 1px solid var(--good-soft);
+    font-size: 9px; font-weight: 700; color: var(--good);
+  }
+  .tab-set.off { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
   .tab-rule { margin-bottom: 9px; }
 
   .core-list { display: flex; flex-direction: column; gap: 7px; }
