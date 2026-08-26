@@ -50,6 +50,7 @@
   import { app } from "../../state.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import Select from "../../ui/Select.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import { ETERNAL_MILESTONES } from "../../draft";
@@ -90,6 +91,8 @@
       0,
     ),
   );
+  // キャラは名前で探すより顔で選ぶほうが速い(ゲーム内も顔で選ぶ)。§06 の 40px。
+  // 名前は必ず併記する(アイコン単独表示は禁止)
   const characterOptions = $derived(app.gameCharacters.map((c) => ({ value: c.id, label: c.name })));
 
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
@@ -98,6 +101,15 @@
     { value: "", label: "未選択(攻撃力を出さない)" },
     ...skills.map((s) => ({ value: s.id, label: s.name })),
   ]);
+  /** 火力の高い順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す */
+  const skillPower = (s: Skill) => s.multiplier * Math.max(1, s.hit_count);
+  const topSkills = $derived([...skills].sort((a, b) => skillPower(b) - skillPower(a)).slice(0, 3));
+  const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+  /** 候補にない主軸を選んでいるとき、または自分で開いたときだけ全部出す */
+  let skillListOpen = $state(false);
+  const skillPickedOutside = $derived(
+    draft.mainSkillId !== "" && !topSkills.some((s) => s.id === draft.mainSkillId),
+  );
   function setGameCharacterId(id: string) {
     if (id === draft.gameCharacterId) return;
     draft.gameCharacterId = id;
@@ -117,6 +129,30 @@
   );
   /** 覚醒 5 でないとエタの意志は効かない(gamedata: 段階 0〜4 は STAGE_CAPS を引く) */
   const eternalActive = $derived(Number(draft.stage) >= 5);
+  /** エタの意志は覚醒 5 の先にあるものなので、触った時点で覚醒は 5 で確定する */
+  function setEternalLevel(level: string) {
+    draft.eternalLevel = level;
+    if (Number(level) > 0) draft.stage = "5";
+  }
+  // 覚醒段階は 4 と 5 しか使わない(このツールの対象)。それ以外は開いたときだけ出す
+  const stageMainOptions = [4, 5].map((i) => ({ value: String(i), label: String(i) }));
+  let stageAllOpen = $state(false);
+  const stageIsLow = $derived(Number(draft.stage) < 4);
+
+  // 属性は主軸スキルで決まる。無属性のスキルのときだけ、乗せる属性を選ばせる
+  // (アンプルで属性を足す運用が多い)
+  const skillElement = $derived(mainSkill?.element ?? null);
+  const elementFromSkill = $derived(skillElement !== null && skillElement !== "neutral");
+  let elementPickOpen = $state(false);
+  /**
+   * 属性は主軸スキルで決まるので、スキルを選んだら供給源もその属性に合わせる(自動値)。
+   * 自分で「別の属性を乗せる」を開いたときは触らない — 例外操作を上書きしない
+   */
+  $effect(() => {
+    if (!elementFromSkill || elementPickOpen) return;
+    if (mainElement === skillElement) return;
+    setMainElement(skillElement as string);
+  });
 
   const PET_TIERS: PetSkillTier[] = ["basic", "true_lv1", "true_lv2", "true_lv3", "true_lv4"];
   // 段の名前だけだと「それでいくつ増えるのか」を毎回引くことになるので、値を段に書く
@@ -717,48 +753,115 @@
           <span class="label">名前</span>
           <input type="text" bind:value={draft.name} maxlength="32" placeholder="表示名" />
         </label>
-        <Select
-          label="キャラ"
-          options={characterOptions}
-          bind:value={() => draft.gameCharacterId, setGameCharacterId}
-        />
-        <StepSelect label="覚醒段階" bind:value={draft.stage} options={stageOptions} full />
-        <!-- エタの意志は数値。節目を押せば一発で、間は数値で詰める(§07 は上から順に試す)。
-             覚醒 5 でないと効かないので、そのときは理由を出して触らせない(§00) -->
-        <div class="eternal" class:off={!eternalActive}>
+        <!-- キャラは顔で選ぶ(ゲーム内も顔で並ぶ)。名前は必ず併記する -->
+        <div class="wide">
+          <span class="label">キャラ</span>
+          <div class="pick-grid">
+            {#each app.gameCharacters as c (c.id)}
+              <button
+                type="button"
+                class="pick"
+                class:on={c.id === draft.gameCharacterId}
+                onclick={() => setGameCharacterId(c.id)}
+              >
+                <Icon kind="character" id={c.id} size={40} label={c.name} />
+                <span class="pick-name">{c.name}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+        <!-- エタの意志は覚醒 5 の先にあるもの。**選んだ時点で覚醒は 5 で確定する**ので、
+             覚醒より先に置く(§00 01 決める順に並べる) -->
+        <div class="wide">
           <span class="label">エタの意志 Lv</span>
-          {#if eternalActive}
-            <div class="eternal-row">
-              <StatInput
-                label=""
-                min={0}
-                max={limits.eternal_level_max}
-                bind:value={
-                  () => Number(draft.eternalLevel),
-                  (v) => (draft.eternalLevel = String(v))
-                }
-              />
-            </div>
+          <div class="eternal-row">
+            <StatInput
+              label=""
+              min={0}
+              max={limits.eternal_level_max}
+              bind:value={
+                () => Number(draft.eternalLevel),
+                (v) => setEternalLevel(String(v))
+              }
+            />
             <StepSelect
               label=""
               options={eternalMilestoneOptions}
-              bind:value={draft.eternalLevel}
-              full
+              cols={eternalMilestoneOptions.length}
+              bind:value={() => draft.eternalLevel, setEternalLevel}
             />
-            <p class="hint dim">節目(20 / 40 / 60 / 80 / 90)を超えると、ダメージ上限・防御力上限・能力値上限の伸びが一段上がります。</p>
-          {:else}
-            <p class="hint dim">覚醒 5 段階で効きます(いまは {draft.stage} 段階)。</p>
+          </div>
+          <p class="hint dim">節目(20 / 40 / 60 / 80 / 90)を超えると、ダメージ上限・防御力上限・能力値上限の伸びが一段上がります。Lv を入れると覚醒は 5 段階になります。</p>
+        </div>
+        <!-- 覚醒段階は 4 と 5 しか使わない。それ以外は開いたときだけ出す(§00 02) -->
+        <div class="stage-field">
+          <span class="label">覚醒段階</span>
+          <div class="stage-row">
+            <StepSelect
+              label=""
+              options={stageAllOpen || stageIsLow ? stageOptions : stageMainOptions}
+              cols={stageAllOpen || stageIsLow ? stageOptions.length : stageMainOptions.length}
+              bind:value={draft.stage}
+            />
+            {#if !stageIsLow}
+              <button type="button" class="chip quiet" class:on={stageAllOpen} onclick={() => (stageAllOpen = !stageAllOpen)}>
+                {stageAllOpen ? "4 / 5 だけ" : "それ以外"}
+              </button>
+            {/if}
+          </div>
+        </div>
+        <!-- 主軸に選ばれるのはほぼ火力上位。3 つを候補に出し、それ以外は開いたときだけ -->
+        <div class="wide">
+          <span class="label">主軸スキル</span>
+          <div class="skill-row">
+            {#each topSkills as sk (sk.id)}
+              <button
+                type="button"
+                class="chip"
+                class:on={draft.mainSkillId === sk.id}
+                onclick={() => (draft.mainSkillId = sk.id)}
+              >
+                <Icon kind="skill" id={sk.id} size={20} label={sk.name} />
+                {sk.name}
+                <span class="num dim">{ELEMENT_LABELS[sk.element]}</span>
+              </button>
+            {/each}
+            {#if skills.length > topSkills.length}
+              <button
+                type="button"
+                class="chip quiet"
+                class:on={skillListOpen || skillPickedOutside}
+                onclick={() => (skillListOpen = !skillListOpen)}
+              >ほかのスキル</button>
+            {/if}
+          </div>
+          {#if skillListOpen || skillPickedOutside}
+            <div class="skill-all open-in">
+              <Select label="" options={mainSkillOptions} bind:value={draft.mainSkillId} />
+            </div>
           {/if}
         </div>
-        <Select label="主軸スキル" options={mainSkillOptions} bind:value={draft.mainSkillId} />
-        <!-- 属性は供給源ごとに選ばせない。実際は全部同じ属性に振るので、ここで 1 回選ぶ。
-             装備の属性強化だけは部位ごとに違うので「装備」に残してある -->
+        <!-- 属性はふつう主軸スキルで決まる。無属性のときだけ「何を乗せるか」を選ばせる -->
         <div class="wide">
-          <StepSelect
-            label={`主属性(ペット・カード・ルーン・アビリティの +${elementSourceTotal} をまとめて乗せる)`}
-            options={elementOptions}
-            bind:value={() => mainElement, setMainElement}
-          />
+          <span class="label">属性</span>
+          {#if elementFromSkill && !elementPickOpen}
+            <p class="element-auto">
+              <b>{ELEMENT_LABELS[skillElement!]}</b>
+              <span class="dim">— 主軸スキル「{mainSkill?.name}」で決まります</span>
+              <button type="button" class="chip quiet" onclick={() => (elementPickOpen = true)}>別の属性を乗せる</button>
+            </p>
+          {:else}
+            {#if skillElement === "neutral"}
+              <p class="hint dim">主軸スキルが無属性なので、アンプルなどで乗せる属性を選びます。</p>
+            {/if}
+            <StepSelect
+              label=""
+              options={elementOptions}
+              cols={elementOptions.length}
+              bind:value={() => mainElement, setMainElement}
+            />
+            <p class="hint dim">ペット・カード・ルーン・アビリティの +{elementSourceTotal} をまとめて乗せます。</p>
+          {/if}
         </div>
       </div>
       {#if elementPreview}
@@ -1844,11 +1947,10 @@
   .card-title .normal { font-weight: 400; font-size: 9px; }
   .card-title.space { margin-top: 12px; }
   .hint { margin: 6px 0 0; font-size: 9.5px; line-height: 1.5; }
-  /* エタの意志。値 → 節目 → 説明 の縦積み。覚醒 5 でないときは畳んで理由だけ出す */
-  .eternal { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .eternal > .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  .eternal-row { max-width: 260px; }
-  .eternal .hint { margin: 0; }
+  /* エタの意志。値の欄と節目を横に並べる(どちらも同じことを決める場所なので) */
+  .eternal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .eternal-row > :global(.stat-input), .eternal-row > :global(.stepper) { flex: 0 0 150px; }
+  .eternal-row > :global(.step-select) { flex: 1 1 260px; min-width: 0; }
   /* Lv の段階選択 + 選択中の効果値 */
   .lv { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .lv .hint { margin: 0; }
@@ -2038,6 +2140,15 @@
 
   /* 同じ形のステが 8 個並ぶ場所の共通形。ラベルを左に置いて 1 ステ 1 行にする —
      ラベルを上に置くと 1 件で 2 行使い、8 件で画面が埋まる(§00 01 / 02) */
+  /* キャラの顔で選ぶ場所(登録ペインと同じ形。見た目は app.css の .pick に置いてある) */
+  .pick-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stage-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .stage-row { display: flex; align-items: center; gap: 8px; }
+  .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .skill-all { margin-top: 7px; max-width: 320px; }
+  .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .element-auto b { font-size: 13px; }
+
   .stat-rows { margin-top: 8px; display: grid; grid-template-columns: 1fr; gap: 5px; }
   /* 2 列にするのは中身が収まるときだけ。狭いと右の列にはみ出して隣の行に重なる */
   .stat-rows.two { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 5px 16px; }

@@ -344,6 +344,23 @@ details.fold .fold-body { margin-top: 10px; }
 .tab.todo { opacity: 0.65; }
 .tab-rule { height: 1px; background: var(--sel-bd); }
 
+/* --- 顔で選ぶ(§06 アイコン 40px + 名前)。キャラの選択はここに寄せる --------------
+   アイコン単独表示は禁止なので、名前を必ず下に置く  */
+.pick {
+  width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 7px 4px; border-radius: var(--r-panel);
+  background: var(--bg-field); border: 1px solid var(--border-soft);
+}
+.pick.on {
+  background: var(--bg-active); border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16);
+}
+.pick .pick-name {
+  max-width: 58px; font-size: 9.5px; color: var(--fg-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pick.on .pick-name { color: var(--fg); font-weight: 700; }
+
 /* --- チップ(§07 形態 3 / §08 バッジ・チップ) --------------------------------
    オン / オフ、または少数の状態の巡回。値はチップの中に書く。
    追加用は破線 + ＋ で、実在のチップと見た目で区別する(§08)  */
