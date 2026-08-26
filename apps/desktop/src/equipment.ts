@@ -320,6 +320,47 @@ export const randomOptionPartSummary = (
     .join(" ・ ");
 };
 
+/**
+ * 全部位のランダムOP を**効き先ごとに合計**した一覧。結果の置き場所(「いまの実力」)で使う。
+ * 入力の行に混ぜると、どの部位の話か分からないまま数字だけが並ぶ。
+ */
+export const randomOptionTotals = (
+  equipment: Equipment,
+  defs: RandomOptionDef[],
+): { label: string; value: string }[] => {
+  const total = new Map<string, number>();
+  const add = (label: string, value: number) => total.set(label, (total.get(label) ?? 0) + value);
+  for (const slot of PART_SLOTS) {
+    for (const option of equipment.parts[slot].random_options) {
+      const def = defs.find((d) => d.id === option.option_id);
+      if (def === undefined || !randomOptionIsApplied(def.effect)) continue;
+      const value = randomOptionValue(option, def);
+      const effect = def.effect;
+      if (typeof effect === "object") {
+        add(`与ダメージ増加(${SKILL_DEPENDENCY_LABELS[effect.dependency_damage_rate]})`, value);
+      } else if (effect === "attack_damage_rate") {
+        add("攻撃ダメージ増加", value);
+      } else if (effect === "added_damage_rate") {
+        add("割合追加ダメージ", value);
+      } else if (effect === "accuracy_point") {
+        add("命中P", value);
+      } else if (effect === "evasion_point") {
+        add("回避P", value);
+      } else if (effect === "accuracy_and_evasion_point") {
+        add("命中P", value);
+        add("回避P", value);
+      } else if (effect === "actual_delay_reduction") {
+        add("中ディレイ", -value);
+      }
+    }
+  }
+  const unit = (label: string) => (label === "命中P" || label === "回避P" ? "" : "%");
+  return [...total].map(([label, value]) => ({
+    label,
+    value: `${value > 0 ? "+" : ""}${value}${unit(label)}`,
+  }));
+};
+
 /** 効き先の表示名。「記録するだけ」の OP はそう分かる文言にする。 */
 export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
   if (typeof effect === "object") {

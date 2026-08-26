@@ -32,8 +32,7 @@
   import {
     clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
     neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
-    randomOptionPartSummary, randomOptionValue, randomOptionValueLabel, rangeSummary,
-    sienaPartStatTotal, valuesSummary,
+    randomOptionValue, randomOptionValueLabel, rangeSummary, sienaPartStatTotal, valuesSummary,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
@@ -1581,8 +1580,6 @@
                 {/each}
                 {#if count === 0}<span class="dim">なし</span>{/if}
               </span>
-              <!-- 同系統は足して 1 つに。枠ごとの値を並べても火力への効きは読めない -->
-              <span class="ro-total num">{randomOptionPartSummary(draft.equipment.parts[slot], app.randomOptions)}</span>
               <span class="chev dim">›</span>
             </button>
           {/if}
@@ -2483,8 +2480,6 @@
   }
   /* 計算に入らない(記録するだけの)枠は破線 + 塗りなし */
   .ro-badge.record-only { background: none; border-style: dashed; color: var(--fg-muted); }
-  /* 効き先ごとの合計。行を見ただけで「火力にいくら効いているか」が分かる */
-  .ro-total { flex: none; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;

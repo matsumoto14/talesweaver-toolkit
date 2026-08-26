@@ -10,7 +10,7 @@
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
-    coreSetEffect, coreSetTotalBonus,
+    coreSetEffect, coreSetTotalBonus, randomOptionTotals,
     equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
     randomOptionRecordOnlyCount, sienaAttackRatePercent,
     sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
@@ -184,6 +184,8 @@
   });
   const roCount = $derived(randomOptionCount(draft.equipment));
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
+  /** ランダムOP の効き先ごとの合計(結果の置き場所)。同系統は足して 1 行にする */
+  const roTotals = $derived(randomOptionTotals(draft.equipment, app.randomOptions));
   const NEUTRAL = "未設定(中立値で計算)";
 
   // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラ固有のパッシブだけ。
@@ -653,6 +655,23 @@
             <p class="dim tiny">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
           {/if}
         </div>
+        {#if roTotals.length > 0 || roRecordOnly > 0}
+          <div class="sheet-card">
+            <!-- ランダムOP の結果。部位ごとの行に混ぜると「どの部位の話か」が分からないまま
+                 数字だけ並ぶので、効き先ごとの合計はここにまとめる -->
+            <div class="card-title">ランダムOP</div>
+            <div class="eq-summary num inset">
+              {#each roTotals as t (t.label)}
+                <span><span class="dim">{t.label}</span> <span use:flash={() => t.value}>{t.value}</span></span>
+              {:else}
+                <span class="dim">計算に入る OP はまだありません</span>
+              {/each}
+            </div>
+            {#if roRecordOnly > 0}
+              <p class="dim tiny">記録するだけの枠が {roRecordOnly} 件あります(発動条件付き・被ダメージ側)。</p>
+            {/if}
+          </div>
+        {/if}
         <div class="sheet-card">
           <!-- 共通スキルの結果。入力側(補正源)には入力だけを置き、効いている量はここで見る -->
           <div class="card-title">共通スキル</div>
