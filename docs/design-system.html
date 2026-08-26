@@ -2450,6 +2450,7 @@ td code { background: var(--card-soft2); }
         <ul>
           <li><strong>v4 と規格シートが食い違ったら v4。</strong>規格シート(Redesign)は探索過程を含み、採らなかった方向も残っている</li>
           <li><strong>色を足す前に、状態の 6 系統と予約色に寄せられないか確認する。</strong>寄せられないなら、それは新しい意味の追加なのでこの文書に足す</li>
+          <li><b>この文書が実演で見せている部品は、見た目を <code>app.css</code> にだけ置く。</b>Svelte 部品のスコープ CSS に写すと、写した時点の解釈で固まってずれる — <code>.stepper</code> は最初、面の色も動きも規格と違う状態で実装された。部品には振る舞いだけを持たせる</li>
           <li>角丸・アイコンサイズ・書体は<strong>段を増やさない。</strong>中間値が必要に見えたら、たいていは階層設計の問題</li>
           <li>密度(11px 見出し・9px ラベル)を役割トークンに寄せると 1 画面の情報量が減る。<strong>寄せるなら意識的な判断として決定記録に残す</strong></li>
           <li>変更したら実機で 3 タブとも確認する(<code>gui-smoke</code>)。スクリーンショットは <code>docs/screenshots/</code></li>
