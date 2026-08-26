@@ -1684,16 +1684,8 @@
 
     <div class="card">
       <div class="card-title inline">
-        ほぼ全員が同じ設定
-        <span class="num strong">
-          装備攻撃力 +{enhanceRatePercent}% ・ 装備防御力 物{fmtInt(defenseRatePercent.physical)}% / 魔{fmtInt(defenseRatePercent.magic)}%
-        </span>
+        ほぼ全員が同じ設定 <span class="dim normal">取り切っている前提で入れてあります</span>
       </div>
-      <p class="hint dim">
-        取り切っている前提で既定を入れてあります。取っていない・Lv が違うときだけ開いてください。
-        {#if sienaDefenseRate > 0}装備防御力にはシエナのオーラの +{sienaDefenseRate}% を含みます。{/if}
-        <b>リンゴの島・ベリネンルミでは装備防御力は常に 100%</b>(wiki 計算式まとめ §防御力)。
-      </p>
       <details class="fold">
         <summary>取っていない・Lv が違うときだけ開く(8 項目)</summary>
         <div class="fold-body fields">
@@ -1764,6 +1756,10 @@
               (v) => (draft.commonSkills.ultimate.hyper_limit_level = Number(v))
             }
           />
+          <p class="hint dim wide">
+            {#if sienaDefenseRate > 0}装備防御力にはシエナのオーラの +{sienaDefenseRate}% を含みます。{/if}
+            <b>リンゴの島・ベリネンルミでは装備防御力は常に 100%</b>(wiki 計算式まとめ §防御力)。
+          </p>
         </div>
       </details>
     </div>
@@ -2177,7 +2173,6 @@
   .card-title.inline .chip.quiet {
     margin-left: auto; align-self: center; min-width: 112px; justify-content: center;
   }
-  .card-title.inline .strong { font-size: 13px; font-weight: 700; }
   .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
   .values-col { flex: 1 1 260px; min-width: 0; }
   .part-elem {
