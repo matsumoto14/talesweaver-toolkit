@@ -2,7 +2,6 @@
   export type SourceId =
     | "status"
     | "equipment"
-    | "element"
     | "pet"
     | "rune"
     | "crown"
@@ -323,6 +322,14 @@
       ...STAT_KINDS.filter((k) => k !== other).map((k) => ({ value: k, label: STAT_LABELS[k] })),
     ];
   };
+  /** いま取れるアンリーシュの上限(レインフォース Lv + 5、最大 10) */
+  const unleashCap = $derived(Math.min(limits.unleash_level_max, reinforceGate));
+  /** ステを選んだら Lv は上限で入れる。ここは「どのステに乗せるか」だけを決める場所 */
+  function setUnleashStat(slotIndex: number, value: string) {
+    const slot = draft.commonSkills.unleash[slotIndex];
+    slot.stat = value === "" ? null : (value as StatKind);
+    slot.level = slot.stat === null ? 0 : unleashCap;
+  }
   const unleashLevelOptions = $derived(
     Array.from({ length: Math.min(limits.unleash_level_max, reinforceGate) + 1 }, (_, lv) => ({
       value: String(lv),
@@ -467,13 +474,32 @@
   }
   const sienaIsEquipmentValues = (slot: PartSlot) => SIENA_EQUIPMENT_VALUE_SLOTS.includes(slot);
 
-  // --- 属性(装備の属性強化以外の供給源) ----------------------------------
+  // --- 主属性 -------------------------------------------------------------
+  // 供給源(ペット / モンスターカード / ルーンスキル / 頭・カフスのアビリティ)は、
+  // 実際には**全部同じ属性に振る**。だから供給源ごとに聞かず、主属性を 1 回選ばせて
+  // まとめて乗せる(§00「要らないものを見せない」)
   const elementSourceDefs = $derived(app.elementSources);
+  const elementOptions = [
+    { value: "", label: "なし" },
+    ...ELEMENTS.map((e) => ({ value: e, label: ELEMENT_LABELS[e] })),
+  ];
+  /** 供給源が全部同じ属性ならそれが主属性。ばらけていたら "" を返す */
+  const mainElement = $derived.by(() => {
+    const picked = elementSourceDefs.map((def) => draft.statSources.elements[def.id] ?? null);
+    const first = picked[0] ?? null;
+    return first !== null && picked.every((e) => e === first) ? first : "";
+  });
+  function setMainElement(value: string) {
+    for (const def of elementSourceDefs) {
+      draft.statSources.elements[def.id] = value === "" ? null : (value as Element);
+    }
+  }
+  const elementSourceTotal = $derived(elementSourceDefs.reduce((n, def) => n + def.value, 0));
   // 内訳は Rust 側で出す(キャラ基礎属性値は gamedata にしか無い)。開いている間だけ引く
   let elementPreview = $state<ElementPreview | null>(null);
   let elementSeq = 0;
   $effect(() => {
-    if (sourceId !== "element") return;
+    if (sourceId !== "status") return;
     const payload = draftToPayload(draft);
     const seq = ++elementSeq;
     previewElements(payload)
@@ -486,7 +512,7 @@
   });
 
   // --- 属性強化(部位ごとに 1 属性) --------------------------------------
-  const elementOptions = [
+  const partElementOptions = [
     { value: "", label: "属性なし" },
     ...EQUIPMENT_ELEMENTS.map((e) => ({ value: e, label: ELEMENT_LABELS[e] })),
   ];
@@ -571,9 +597,8 @@
   );
 
   const TITLES: Record<SourceId, { title: string; note: string }> = {
-    status: { title: "キャラステータス", note: "素ステ・覚醒・エタの意志" },
+    status: { title: "キャラステータス", note: "素ステ・覚醒・エタの意志・主属性" },
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
-    element: { title: "属性", note: "装備の属性強化以外の供給源(乗せる属性を選ぶ)" },
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
     rune: { title: "ルーンスキル", note: `スキル Lv がそのままステに乗る(Lv 0–${limits.rune_level_max})` },
     crown: { title: "クラウン", note: `ステに乗る実値(0–${limits.crown_max})` },
@@ -692,7 +717,28 @@
           {/if}
         </div>
         <Select label="主軸スキル" options={mainSkillOptions} bind:value={draft.mainSkillId} />
+        <!-- 属性は供給源ごとに選ばせない。実際は全部同じ属性に振るので、ここで 1 回選ぶ。
+             装備の属性強化だけは部位ごとに違うので「装備」に残してある -->
+        <div class="wide">
+          <StepSelect
+            label={`主属性(ペット・カード・ルーン・アビリティの +${elementSourceTotal} をまとめて乗せる)`}
+            options={elementOptions}
+            bind:value={() => mainElement, setMainElement}
+          />
+        </div>
       </div>
+      {#if elementPreview}
+        <p class="hint dim">
+          属性値
+          {#each ELEMENTS.filter((e) => elementPreview!.total[e] > 0) as e (e)}
+            <b>{ELEMENT_LABELS[e]} {fmtInt(elementPreview.total[e])}</b>
+            <span class="dim">(キャラ {fmtInt(elementPreview.base[e])} + 装備 {fmtInt(elementPreview.equipment[e])} + 主属性 {fmtInt(elementPreview.sources[e])})</span>
+          {:else}
+            まだどの属性も乗っていません
+          {/each}
+          。与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに +0.625%、+80 で上限 +50%(敵は 120 / 125)。
+        </p>
+      {/if}
       <p class="hint dim">
         {#if skills.length === 0}
           このキャラのスキルはまだ未収録です。収録されるまで攻撃力は出せません。
@@ -909,7 +955,7 @@
             <div class="fields">
               <StepSelect
                 label="属性"
-                options={elementOptions}
+                options={partElementOptions}
                 bind:value={() => part.element ?? "", (v) => setPartElement(slot, v)}
               />
               {#if part.element !== null}
@@ -995,60 +1041,6 @@
         </div>
       {/if}
     </div>
-  {:else if sourceId === "element"}
-    <div class="card">
-      <p class="hint dim">
-        wiki「属性システム」。与ダメージに効くのは<b>攻撃側の属性値 − 敵の属性値</b>の差だけで、
-        差 +1 ごとに +0.625%、+80 で上限 +50% です(カテゴリI)。装備の属性強化は「装備」の部位ごとに、
-        キャラの基礎属性値は wiki 由来で自動です。
-      </p>
-      <div class="fields">
-        {#each elementSourceDefs as def (def.id)}
-          <StepSelect
-            label={`${def.name}(+${def.value})`}
-            options={elementOptions}
-            bind:value={
-              () => draft.statSources.elements[def.id] ?? "",
-              (v) => (draft.statSources.elements[def.id] = v === "" ? null : (v as Element))
-            }
-          />
-        {/each}
-      </div>
-    </div>
-    {#if elementPreview}
-      <div class="card">
-        <div class="card-title">属性値の内訳</div>
-        <table class="eq-table num inset">
-          <thead>
-            <tr>
-              <th></th>
-              {#each ELEMENTS as e (e)}<th class="n">{ELEMENT_LABELS[e]}</th>{/each}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <th class="rh">キャラ基礎</th>
-              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.base[e])}</td>{/each}
-            </tr>
-            <tr>
-              <th class="rh">装備の属性強化</th>
-              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.equipment[e])}</td>{/each}
-            </tr>
-            <tr>
-              <th class="rh">この画面の供給源</th>
-              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.sources[e])}</td>{/each}
-            </tr>
-            <tr class="total">
-              <th class="rh">合計(上限 {fmtInt(limits.element_value_max)})</th>
-              {#each ELEMENTS as e (e)}<td class="n">{fmtInt(elementPreview.total[e])}</td>{/each}
-            </tr>
-          </tbody>
-        </table>
-        <p class="hint dim">
-          敵の属性値は 120 / 125(狩り場情報一覧)。合計がそれを +80 上回ると属性差ボーナスが上限(+50%)に届きます。
-        </p>
-      </div>
-    {/if}
   {:else if sourceId === "pet"}
     <div class="card">
       <div class="fields">
@@ -1322,34 +1314,46 @@
       </div>
     {/if}
   {:else if sourceId === "commonSkill"}
+    <!-- ほぼ全員が同じ設定なので、**人によって違う 3 つ(オーグメント / 極限 2 枠)を先に置く**。
+         残りは既定で最大まで入れておき、畳む(§00「要らないものを見せない」) -->
     <div class="card">
+      <div class="card-title inline">
+        まず決める <span class="dim normal">人によって違うのはここ</span>
+      </div>
       <p class="hint dim">
-        wiki「Skill/共通」。キャラを問わず習得するパッシブです。効き先は
-        <b>装備攻撃力強化倍率</b>(パワーウェポン / ストロングウェポン)、
-        <b>装備防御力倍率</b>(コートアーマー / プロテクトアーマー)、
-        <b>割合追加ダメージ</b>(シャープネスビジョン)の 3 つ。
-        <b>オーグメント</b>はストロングウェポン・プロテクトアーマー・ハイパーリミットを Lv2 以上に
-        するための前提スキルなので、先に上げないと上の Lv が選べません
-        (下げると、それに縛られる Lv も一緒に下がります)。
+        wiki「Skill/共通」「Skill/極限」。<b>オーグメント</b>はストロングウェポン・プロテクトアーマー・
+        ハイパーリミットを Lv2 以上にするための前提で、下げるとそれに縛られる Lv も一緒に下がります。
+        <b>極限スキル</b>はゲージスキルのうち 2 つがパッシブとして常時適用されます。
       </p>
       <div class="fields">
         <StepSelect
-          label="オーグメント(前提スキル)"
+          label="オーグメント"
           options={augmentOptions}
           bind:value={
             () => String(draft.commonSkills.augment_level),
             (v) => setAugmentLevel(Number(v))
           }
         />
-        <StepSelect
-          label="レインフォース(前提スキル)"
-          options={reinforceOptions}
-          bind:value={
-            () => String(draft.commonSkills.reinforce_level),
-            (v) => setReinforceLevel(Number(v))
-          }
-        />
+        {#each [0, 1] as slotIndex (slotIndex)}
+          <!-- 段が折り返すと「どれを選べるか」が一度で読めない。段の多い欄は 1 行使う(§00 01) -->
+          <div class="wide">
+            <StepSelect
+              label={`極限スキル 枠 ${slotIndex + 1}`}
+              options={ultimateOptions(slotIndex)}
+              bind:value={
+                () => draft.commonSkills.ultimate.slots[slotIndex] ?? "",
+                (v) => setUltimate(slotIndex, v)
+              }
+            />
+          </div>
+        {/each}
       </div>
+      {#each draft.commonSkills.ultimate.slots.filter((u) => u !== null) as picked (picked)}
+        <p class="hint dim">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
+      {/each}
+      {#if ultimateEffects.length > 0}
+        <p class="hint dim">いまの効果: {ultimateEffects.join(" ・ ")}</p>
+      {/if}
     </div>
 
     <div class="card">
@@ -1365,131 +1369,20 @@
       <p class="hint dim">
         選んだステが<b>能力値倍率B</b>で増えます(<b>バフ込みの基本能力値 × 倍率</b>なので、
         バフを盛るほど効きます)。<b>2 ステまで</b>で、同じステは 2 枠に入れられません。
-        Lv6 以降は<b>レインフォース</b>の Lv が要ります(下げると Lv も一緒に下がります)。
+        Lv は取れる上限(いまは <b>Lv{unleashCap}</b> = +{UNLEASH_RATES[unleashCap - 1]}%)で入ります —
+        違うときは下の「ほぼ全員が同じ設定」で変えてください。
       </p>
       <div class="fields">
         {#each draft.commonSkills.unleash as slot, i (i)}
-          <StepSelect
-            label={`枠 ${i + 1} のステ`}
-            options={unleashStatOptions(i)}
-            bind:value={
-              () => slot.stat ?? "",
-              (v) => {
-                slot.stat = v === "" ? null : (v as StatKind);
-                if (slot.stat === null) slot.level = 0;
-              }
-            }
-          />
-          <StepSelect
-            label={`枠 ${i + 1} の Lv`}
-            options={unleashLevelOptions}
-            disabled={slot.stat === null}
-            bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
-          />
+          <div class="wide">
+            <StepSelect
+              label={`枠 ${i + 1} のステ`}
+              options={unleashStatOptions(i)}
+              bind:value={() => slot.stat ?? "", (v) => setUnleashStat(i, v)}
+            />
+          </div>
         {/each}
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title inline">装備攻撃力強化 <span class="num strong">+{enhanceRatePercent}%</span></div>
-      <p class="hint dim">ほぼ全員が取っているので既定で入れてあります。取っていない・Lv が違うときだけ触ってください。</p>
-      <div class="fields">
-        <label class="check">
-          <input type="checkbox" bind:checked={draft.commonSkills.power_weapon} />
-          <span>パワーウェポン(+2%)</span>
-        </label>
-        <StepSelect
-          label="ストロングウェポン"
-          options={strongWeaponOptions.filter((o) => Number(o.value) <= augmentGate)}
-          bind:value={
-            () => String(draft.commonSkills.strong_weapon_level),
-            (v) => (draft.commonSkills.strong_weapon_level = Number(v))
-          }
-        />
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title inline">
-        装備防御力倍率
-        <span class="num strong">物 {fmtInt(defenseRatePercent.physical)}% / 魔 {fmtInt(defenseRatePercent.magic)}%</span>
-      </div>
-      <p class="hint dim">
-        装備の物防・魔防に掛かります(防御タブの防御力に効きます)。
-        コートアーマーとプロテクトアーマーは<b>重複可</b>で、シエナのオーラの「防御力増加」もここに加算されます。
-        <b>リンゴの島・ベリネンルミでは常に 100%</b>(wiki 計算式まとめ §防御力)。
-      </p>
-      <div class="fields">
-        <label class="check">
-          <input type="checkbox" bind:checked={draft.commonSkills.coat_armor} />
-          <span>コートアーマー(物+18% / 魔+12%)</span>
-        </label>
-        <div class="lv">
-          <StepSelect
-            label="プロテクトアーマー"
-            options={protectArmorOptions}
-            bind:value={
-              () => String(draft.commonSkills.protect_armor_level),
-              (v) => (draft.commonSkills.protect_armor_level = Number(v))
-            }
-          />
-          <p class="hint dim">{protectArmorNote}</p>
-        </div>
-        <div class="lv">
-          <StepSelect
-            label="改・プロテクトアーマー"
-            options={kaiProtectArmorOptions}
-            bind:value={
-              () => String(draft.commonSkills.kai_protect_armor_level),
-              (v) => (draft.commonSkills.kai_protect_armor_level = Number(v))
-            }
-          />
-          <p class="hint dim">{kaiProtectArmorNote}</p>
-        </div>
-      </div>
-      {#if sienaDefenseRate > 0}
-        <p class="hint dim">シエナのオーラの防御力増加 +{sienaDefenseRate}% を含んでいます。</p>
-      {/if}
-    </div>
-
-    <div class="card">
-      <div class="card-title inline">極限スキル(2 枠)</div>
-      <p class="hint dim">
-        wiki「Skill/極限」。ゲージスキルのうち<b>2 つ</b>がパッシブとして常時適用されます。
-        効果値は <b>基本 + スーパーリミット + ハイパーリミット Lv</b> の加算です
-        (スーパーリミット = ハイパーアタック、ハイパーリミット = エクストリームアタックの極限形)。
-        ハイパーリミットも Lv2 以降はオーグメントが要ります。
-      </p>
-      <div class="fields">
-        {#each [0, 1] as slotIndex (slotIndex)}
-          <StepSelect
-            label={`枠 ${slotIndex + 1}`}
-            options={ultimateOptions(slotIndex)}
-            bind:value={
-              () => draft.commonSkills.ultimate.slots[slotIndex] ?? "",
-              (v) => setUltimate(slotIndex, v)
-            }
-          />
-        {/each}
-        <label class="check">
-          <input type="checkbox" bind:checked={draft.commonSkills.ultimate.super_limit} />
-          <span>スーパーリミット(ハイパーアタックの極限形)</span>
-        </label>
-        <StepSelect
-          label="ハイパーリミット"
-          options={hyperLimitOptions}
-          bind:value={
-            () => String(draft.commonSkills.ultimate.hyper_limit_level),
-            (v) => (draft.commonSkills.ultimate.hyper_limit_level = Number(v))
-          }
-        />
-      </div>
-      {#each draft.commonSkills.ultimate.slots.filter((u) => u !== null) as picked (picked)}
-        <p class="hint dim">{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}</p>
-      {/each}
-      {#if ultimateEffects.length > 0}
-        <p class="hint dim">いまの効果: {ultimateEffects.join(" ・ ")}</p>
-      {/if}
     </div>
 
     <div class="card">
@@ -1501,6 +1394,7 @@
         Lv6 以上は各 Lv の習得スクロールが要ります。
       </p>
       <div class="fields">
+        <div class="wide">
         <StepSelect
           label="シャープネスビジョン"
           options={sharpnessVisionOptions}
@@ -1509,7 +1403,94 @@
             (v) => (draft.commonSkills.sharpness_vision_level = Number(v))
           }
         />
+        </div>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title inline">
+        ほぼ全員が同じ設定
+        <span class="num strong">
+          装備攻撃力 +{enhanceRatePercent}% ・ 装備防御力 物{fmtInt(defenseRatePercent.physical)}% / 魔{fmtInt(defenseRatePercent.magic)}%
+        </span>
+      </div>
+      <p class="hint dim">
+        取り切っている前提で既定を入れてあります。取っていない・Lv が違うときだけ開いてください。
+        {#if sienaDefenseRate > 0}装備防御力にはシエナのオーラの +{sienaDefenseRate}% を含みます。{/if}
+        <b>リンゴの島・ベリネンルミでは装備防御力は常に 100%</b>(wiki 計算式まとめ §防御力)。
+      </p>
+      <details class="fold">
+        <summary>取っていない・Lv が違うときだけ開く(8 項目)</summary>
+        <div class="fold-body fields">
+          <StepSelect
+            label="レインフォース(アンリーシュの前提)"
+            options={reinforceOptions}
+            bind:value={
+              () => String(draft.commonSkills.reinforce_level),
+              (v) => setReinforceLevel(Number(v))
+            }
+          />
+          {#each draft.commonSkills.unleash as slot, i (i)}
+            {#if slot.stat !== null}
+              <StepSelect
+                label={`アンリーシュ 枠 ${i + 1}(${STAT_LABELS[slot.stat]})の Lv`}
+                options={unleashLevelOptions}
+                bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
+              />
+            {/if}
+          {/each}
+          <label class="check">
+            <input type="checkbox" bind:checked={draft.commonSkills.power_weapon} />
+            <span>パワーウェポン(+2%)</span>
+          </label>
+          <StepSelect
+            label="ストロングウェポン"
+            options={strongWeaponOptions.filter((o) => Number(o.value) <= augmentGate)}
+            bind:value={
+              () => String(draft.commonSkills.strong_weapon_level),
+              (v) => (draft.commonSkills.strong_weapon_level = Number(v))
+            }
+          />
+          <label class="check">
+            <input type="checkbox" bind:checked={draft.commonSkills.coat_armor} />
+            <span>コートアーマー(物+18% / 魔+12%)</span>
+          </label>
+          <div class="lv">
+            <StepSelect
+              label="プロテクトアーマー"
+              options={protectArmorOptions}
+              bind:value={
+                () => String(draft.commonSkills.protect_armor_level),
+                (v) => (draft.commonSkills.protect_armor_level = Number(v))
+              }
+            />
+            <p class="hint dim">{protectArmorNote}</p>
+          </div>
+          <div class="lv">
+            <StepSelect
+              label="改・プロテクトアーマー"
+              options={kaiProtectArmorOptions}
+              bind:value={
+                () => String(draft.commonSkills.kai_protect_armor_level),
+                (v) => (draft.commonSkills.kai_protect_armor_level = Number(v))
+              }
+            />
+            <p class="hint dim">{kaiProtectArmorNote}</p>
+          </div>
+          <label class="check">
+            <input type="checkbox" bind:checked={draft.commonSkills.ultimate.super_limit} />
+            <span>スーパーリミット(ハイパーアタックの極限形)</span>
+          </label>
+          <StepSelect
+            label="ハイパーリミット"
+            options={hyperLimitOptions}
+            bind:value={
+              () => String(draft.commonSkills.ultimate.hyper_limit_level),
+              (v) => (draft.commonSkills.ultimate.hyper_limit_level = Number(v))
+            }
+          />
+        </div>
+      </details>
     </div>
   {:else if sourceId === "thesis"}
     <div class="card">
@@ -1762,6 +1743,8 @@
     grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
   }
   .text { display: flex; flex-direction: column; gap: 6px; }
+  /* 段が多くて折り返す欄は 1 行を占める。折り返した段は一度の視線で読めない(§00 01) */
+  .fields > :global(.wide) { grid-column: 1 / -1; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
   input[type="text"] {
     padding: 8px 10px; border-radius: var(--r-panel);

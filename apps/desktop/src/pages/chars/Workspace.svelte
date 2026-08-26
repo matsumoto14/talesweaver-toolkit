@@ -235,7 +235,11 @@
   });
 
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
-    { id: "status", name: "キャラステータス", sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}` },
+    {
+      id: "status",
+      name: "キャラステータス",
+      sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel} ・ 属性 ${elementSummary}`,
+    },
     {
       id: "commonSkill",
       name: "共通スキル",
@@ -245,11 +249,6 @@
       id: "equipment",
       name: "装備",
       sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}`,
-    },
-    {
-      id: "element",
-      name: "属性",
-      sub: elementSummary,
     },
     {
       id: "title",
@@ -302,7 +301,7 @@
   const DEFAULT_ORDER: SourceId[] = [
     "status", "skills", "equipment", "commonSkill", "thesis", "siena", "relic",
     "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
-    "element", "title", "randomOption", "adjust",
+    "title", "randomOption", "adjust",
   ];
   interface SourceLayout {
     /** お気に入り。上に置いて常に開く */

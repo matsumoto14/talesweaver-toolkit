@@ -294,6 +294,20 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 .seg.full { display: flex; width: 100%; }
 .seg.full button { flex: 1; text-align: center; padding: 5px 0; }
 
+/* --- 畳んでおく場所(§00「要らないものを見せない」)-----------------------------
+   ほぼ全員が同じ値で、ふだん触らないものはここに入れる。**要約は畳んだ状態でも出す** —
+   隠すのは操作であって、いまいくつなのかという情報ではない  */
+details.fold { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-soft); }
+details.fold > summary {
+  display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; user-select: none;
+  font-size: 10.5px; color: var(--fg-muted);
+}
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::before { content: "▸"; font-size: 8.5px; color: var(--fg-dim); }
+details.fold[open] > summary::before { content: "▾"; }
+details.fold > summary:hover { color: var(--fg); }
+details.fold .fold-body { margin-top: 10px; }
+
 /* --- タブ(§08)。画面の切り替えと、同じ形の中身を切り替える場所に使う ---------
    選択中は 1px 迫り出して、下の面と地続きになる。だから必ず下に `.tab-rule` を敷く。
    未実装のタブは `.todo`(opacity .65)で「あるが、まだ」を示す  */
