@@ -306,6 +306,17 @@
     ];
   }
 
+  /** 候補の面に出す形。名前だけでは選べないので、カテゴリーと効き先を並べる */
+  const addablePickerOptions = (slot: PartSlot): PickerOption[] =>
+    addableRandomOptions(slot).map((o) => {
+      const def = randomOptionDef(o.value);
+      return {
+        value: o.value,
+        name: def?.name ?? o.label,
+        meta: def ? `カテゴリー${def.category} ・ ${randomOptionEffectLabel(def.effect)}` : undefined,
+        iconId: undefined,
+      };
+    });
   function addRandomOption(slot: PartSlot, id: string) {
     if (id === "") return;
     const def = randomOptionDef(id);
@@ -738,45 +749,31 @@
     {@const def = randomOptionDef(option.option_id)}
     {#if def}
       {@const t = tierOf(def, option.rank)}
+      <!-- 1 OP 1 行。名前 / ランク / 効果値 / 外す を列でそろえる(§00 01) -->
       <div class="ro-row" class:record-only={!randomOptionIsApplied(def.effect)}>
-        <div class="ro-head">
-          <span class="ro-name">{def.name}</span>
-          <span class="ro-cat dim">カテゴリー{def.category}</span>
-          <span class="ro-effect dim">{randomOptionEffectLabel(def.effect)}</span>
-          <button type="button" class="ro-remove" onclick={() => removeRandomOption(slot, index)}>外す</button>
-        </div>
-        <div class="fields">
-          <StepSelect
-            label="ランク"
-            options={rankOptions(def)}
-            bind:value={
-              () => option.rank,
-              (v) => setRandomOptionRank(slot, index, v as RandomOptionRank)
-            }
-          />
-          <StatInput
-            label="効果値"
-            min={t ? t.min : 0}
-            max={t ? t.max : limits.random_option_value_max}
-            step={0.5}
-            format={t ? () => `wiki ${t.min}–${t.max}` : undefined}
-            bind:value={() => randomOptionValue(option, def), (v) => (option.value = v)}
-          />
-        </div>
-        {#if def.note}<p class="hint dim">{def.note}</p>{/if}
+        <span class="ro-name" title={def.name}>{def.name}</span>
+        <!-- ランクは言葉(Valuable / Rare …)なので、幅は中身なり。数字の段と違って詰められない -->
+        <StepSelect
+          label=""
+          options={rankOptions(def)}
+          bind:value={
+            () => option.rank,
+            (v) => setRandomOptionRank(slot, index, v as RandomOptionRank)
+          }
+        />
+        <StatInput
+          label=""
+          min={t ? t.min : 0}
+          max={t ? t.max : limits.random_option_value_max}
+          step={0.5}
+          format={t ? () => `wiki ${t.min}–${t.max}` : undefined}
+          bind:value={() => randomOptionValue(option, def), (v) => (option.value = v)}
+        />
+        <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>外す</button>
       </div>
+      {#if def.note}<p class="hint dim ro-note">{def.note}</p>{/if}
     {/if}
   {/each}
-  <!-- 「1 つ選ぶ」ではなく「追加する」操作なので段階選択にしない。
-       §08「追加用のチップは破線 + ＋。実在のチップと見た目で区別する」 -->
-  <div class="add-row">
-    <span class="label">OP を追加</span>
-    {#each addableRandomOptions(slot) as o (o.value)}
-      <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.value)}>
-        ＋ {o.label}
-      </button>
-    {/each}
-  </div>
 {/snippet}
 
 {#key sourceId}
@@ -1486,14 +1483,35 @@
         グレーの枠は<b>記録するだけ</b>(発動条件付き・未実装の概念)で計算には入りません。
       </p>
     </div>
-    {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
-      {#if app.randomOptions.some((d) => d.slot === slot)}
-        <div class="card">
-          <div class="card-title">{PART_SLOT_LABELS[slot]}</div>
-          {@render randomOptionEditor(slot)}
-        </div>
-      {/if}
-    {/each}
+    <!-- 部位ごとにカードを積むと、付けていない部位まで 1 枚ずつ場所を取る。
+         1 部位 1 行にして、付いている OP だけがその下に増える(§00 02) -->
+    <div class="card">
+      {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
+        {#if app.randomOptions.some((d) => d.slot === slot)}
+          <div class="ro-slot">
+            <div class="ro-slot-head">
+              <span class="ro-slot-name">{PART_SLOT_LABELS[slot]}</span>
+              <span class="ro-slot-count dim num">
+                {draft.equipment.parts[slot].random_options.length > 0
+                  ? `${draft.equipment.parts[slot].random_options.length} 件`
+                  : "なし"}
+              </span>
+              {#if addableRandomOptions(slot).length > 0}
+                <span class="ro-add">
+                  <Picker
+                    options={addablePickerOptions(slot)}
+                    note="この部位に足せる OP(同じカテゴリーは 1 つまで)"
+                    placeholder="＋ OP を追加"
+                    bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
+                  />
+                </span>
+              {/if}
+            </div>
+            {@render randomOptionEditor(slot)}
+          </div>
+        {/if}
+      {/each}
+    </div>
   {:else if sourceId === "title"}
     <div class="card">
       <p class="hint dim">
@@ -2314,23 +2332,27 @@
   .val-cell { display: flex; align-items: baseline; gap: 4px; font-size: 11px; }
 
   /* ランダムオプションの 1 枠 */
+  /* 1 OP 1 行。名前 / ランク / 効果値 / 外す */
   .ro-row {
-    margin-top: 8px; padding: 8px 10px;
-    border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--surface-inset);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto 186px 40px;
+    gap: 9px; align-items: center;
+    padding: 6px 0; border-bottom: 1px dashed var(--border-soft);
   }
-  /* 計算に入らない(記録するだけの)枠は破線 + 塗りなしで見分ける */
-  .ro-row.record-only { border-style: dashed; background: var(--bg-rail); }
-  .ro-row.record-only .ro-name { color: var(--fg-muted); }
-  .ro-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-  .ro-name { font-size: 11px; font-weight: 700; }
-  .ro-cat { flex-shrink: 0; font-size: 9px; }
-  .ro-effect { font-size: 9px; }
-  .ro-remove {
-    margin-left: auto; flex-shrink: 0; padding: 1px 8px;
-    font-size: 9px; color: var(--fg-muted);
-    border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--bg-field);
+  .ro-row.record-only { opacity: 0.75; }
+  .ro-name { min-width: 0; font-size: 11.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ro-row .clear {
+    padding: 3px 4px; border-radius: var(--r-chip);
+    background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
   }
-  .ro-remove:hover { border-color: var(--accent); color: var(--accent); }
+  .ro-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
+  .ro-note { margin: 0 0 6px; }
+  /* 1 部位 1 行。付いている OP だけがその下に増える */
+  .ro-slot { padding: 7px 0; border-bottom: 1px dashed var(--border-soft); }
+  .ro-slot:last-child { border-bottom: 0; }
+  .ro-slot-head { display: grid; grid-template-columns: 64px 48px minmax(0, 1fr); gap: 9px; align-items: center; }
+  .ro-slot-name { font-size: 11.5px; font-weight: 700; color: var(--fg-head); }
+  .ro-slot-count { font-size: 9.5px; }
+  .ro-add { max-width: 260px; justify-self: end; width: 100%; }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
