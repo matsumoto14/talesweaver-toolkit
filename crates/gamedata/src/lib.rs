@@ -12,6 +12,7 @@ pub mod enemies;
 pub mod equipment_catalog;
 pub mod random_options;
 pub mod skills;
+mod skill_targets;
 pub mod titles;
 
 use serde::Serialize;

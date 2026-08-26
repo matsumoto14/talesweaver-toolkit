@@ -75,7 +75,7 @@ pub use random_option::{
     RandomOptionSlot, RandomOptionTier, RandomOptionTotals, RANDOM_OPTION_VALUE_MAX,
 };
 pub use rounding::{floor_int, trunc2};
-pub use skill::{Skill, SkillDependency};
+pub use skill::{Skill, SkillDependency, SkillTarget};
 pub use stat_sources::{
     apply_pins, apply_temporary_adjustments, apply_unleash, build_modifiers,
     preview_effective_stats, stat_limits,

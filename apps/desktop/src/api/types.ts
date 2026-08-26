@@ -16,6 +16,9 @@ export interface GameCharacter {
 
 export type SkillDependency = "stab" | "hack" | "int" | "mr" | "stab_hack" | "hack_int";
 
+// 対象指定(crates/domain/src/skill.rs の SkillTarget)。
+export type SkillTarget = "single" | "area";
+
 export interface Skill {
   id: string;
   name: string;
@@ -25,6 +28,8 @@ export interface Skill {
   critical_multiplier: number;
   /** スキルの属性 */
   element: Element;
+  /** 単体 / 範囲(wiki スキル性能一覧の対象指定)。null = wiki と突き合わせできなかった */
+  target: SkillTarget | null;
   /** スキル命中(wiki 表記 +15 済みの実値)。null = wiki 未記載 */
   accuracy: number | null;
   /** スキルクリティカル率(wiki スキル性能一覧の Cri値)。null = wiki 未記載 */

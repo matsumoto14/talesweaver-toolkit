@@ -1023,3 +1023,17 @@ wiki「テシスコア/コアセット効果」の表が **3〜5 セット効果
 
 - 正: `crates/domain/src/thesis_core.rs` `CoreSet::set_bonus`
 - 表示用の写し: `apps/desktop/src/equipment.ts` `coreSetEffect`(進化段階ごとの成立を `groups` で返す)
+
+## 2026-08-26 スキルの対象指定(単体 / 範囲)を取り込む
+
+主軸スキルは名前だけでは選べない(「単体か範囲か」「何段か」で決める)。wiki 各キャラの
+`Skill/<キャラ名>`「スキル性能一覧」の**対象指定**列を取り込み、`Skill::target` に持たせた。
+
+- 表記はゆれる(`単体` / `範囲/自分中心` / `範囲/位置指定` / `指/位置指定&br;持続10s` /
+  `設置&br;持続60s` / `連射/位置指定`)。**「単体」と書いてあるものだけ Single**、
+  位置・方向・設置・連射のように複数に当たる形は Area にした
+- 生成は `tools/gamedata/skill_targets.py`(手で編集しない)。id は表示名で
+  `skills.rs` と突き合わせる — wiki のアンカーからは機械的に決まらない行があるため
+- 303 件中 300 件が決まり、**3 件は表示名が wiki と一致せず `None`**
+  (`anais_mica_even_bear` / `anais_mica_footstep` / `tichiel_lightning_rod`)。
+  `None` は画面で `?` にする — 「単体」で埋めると嘘になる

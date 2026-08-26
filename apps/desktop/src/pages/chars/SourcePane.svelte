@@ -830,15 +830,21 @@
           <span class="label">主軸スキル</span>
           <div class="skill-row">
             {#each topSkills as sk (sk.id)}
+              <!-- スキルは名前だけでは選べない。単 / 範・段数・属性を名前の隣に出す。
+                   対象指定が wiki と突き合わせできていないものは `?`(0 や「単体」で埋めない) -->
               <button
                 type="button"
-                class="chip"
+                class="chip skill-chip"
                 class:on={draft.mainSkillId === sk.id}
                 onclick={() => (draft.mainSkillId = sk.id)}
               >
                 <Icon kind="skill" id={sk.id} size={20} label={sk.name} />
-                {sk.name}
-                <span class="num dim">{ELEMENT_LABELS[sk.element]}</span>
+                <span class="skill-name">{sk.name}</span>
+                <span class="skill-meta num" class:unknown={sk.target === null}>
+                  {sk.target === null ? "?" : sk.target === "single" ? "単" : "範"}
+                </span>
+                <span class="skill-meta num">{sk.hit_count} 段</span>
+                <span class="skill-meta num">{ELEMENT_LABELS[sk.element]}</span>
               </button>
             {/each}
             {#if skills.length > topSkills.length}
@@ -2167,6 +2173,14 @@
   .stage-row > :global(.step-select) { flex: none; }
   .stage-row :global(.seg button) { min-width: 46px; padding: 7px 0; font-size: 13px; }
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .skill-chip .skill-name { font-weight: 700; }
+  .skill-chip .skill-meta {
+    padding: 0 5px; border-radius: var(--r-pill);
+    background: var(--surface-inset); font-size: 9px; color: var(--fg-muted);
+  }
+  .skill-chip.on .skill-meta { background: rgba(255, 255, 255, 0.7); color: var(--sel-fg); }
+  /* 未収録は破線 + ? で、空白や「単体」で埋めない(§00) */
+  .skill-chip .skill-meta.unknown { background: none; border: 1px dashed var(--border); }
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .element-auto b { font-size: 13px; }

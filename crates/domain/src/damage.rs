@@ -613,6 +613,7 @@ mod tests {
                 hit_count: 1,
                 critical_multiplier: 2.0,
                 element: crate::element::Element::Water,
+                target: Some(crate::skill::SkillTarget::Single),
                 accuracy: Some(92),
                 critical_rate: Some(7),
                 level: 1,
