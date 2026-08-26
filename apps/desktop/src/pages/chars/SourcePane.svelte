@@ -548,9 +548,10 @@
   // 「未装着」は段に入れない。ほぼ選ばれないものが常に 1 列を占めるのは割に合わない。
   // 外すのは行末の小さな × 1 つで足りる(§00 02「要らないものを見せない」)
   const corePowerOptions = CORE_POWER_TYPES.map((t) => ({ value: t, label: CORE_TYPE_LABELS[t] }));
+  // ラベルに「(補助)」を付けない。段が分かれていて、上にも注記がある — 4 回同じ語を読ませない
   const coreSupportOptions = CORE_SUPPORT_TYPES.map((t) => ({
     value: t,
-    label: `${CORE_TYPE_LABELS[t]}(補助)`,
+    label: CORE_TYPE_LABELS[t],
   }));
   const coreSupportInUse = $derived(
     draft.equipment.thesis_cores[coreRegion].slots.some(
@@ -1931,7 +1932,7 @@
 
   .core-list { display: flex; flex-direction: column; gap: 7px; }
   .core-head {
-    display: grid; grid-template-columns: 16px 1fr 34px 66px 48px; gap: 9px;
+    display: grid; grid-template-columns: 16px minmax(0, 1fr) 34px 118px 52px; gap: 9px;
     margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim);
   }
   .core-head .lead { text-align: center; color: var(--fg-muted); font-weight: 700; }
@@ -1958,10 +1959,10 @@
   /* この行の主役。どのコアかより「どこまで育てたか」を見に来ているので、
      ここだけ大きく・濃くする(§00「触る場所だけ大きく」) */
   .stage-trigger {
-    width: 100%; padding: 7px 0; border-radius: var(--r-panel);
+    width: 100%; padding: 9px 0; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border-strong);
     box-shadow: inset 0 1px 0 #fff;
-    font-size: 14px; font-weight: 800; color: var(--fg); letter-spacing: 0.04em;
+    font-size: 17px; font-weight: 800; color: var(--fg); letter-spacing: 0.06em;
   }
   .stage-trigger:hover:not(:disabled) { border-color: var(--accent); background: var(--bg-active); }
   .stage-trigger:disabled { color: var(--fg-off); }
@@ -1974,11 +1975,11 @@
     box-shadow: 0 8px 20px rgba(30, 44, 74, 0.26);
   }
   .stage-pop-h { margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  .stage-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+  .stage-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .stage-cell {
-    padding: 4px 7px; border-radius: var(--r-inset);
+    padding: 7px 10px; border-radius: var(--r-inset);
     background: var(--bg-rail); border: 1px solid var(--border-soft);
-    font-size: 11px; color: var(--fg-sub); white-space: nowrap;
+    font-size: 12.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap;
   }
   .stage-cell:hover:not(.on) { background: var(--bg-active); }
   .stage-cell.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
