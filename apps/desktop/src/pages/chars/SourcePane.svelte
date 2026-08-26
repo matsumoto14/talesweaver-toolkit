@@ -51,6 +51,7 @@
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import Icon from "../../ui/Icon.svelte";
+  import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import Select from "../../ui/Select.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import { ETERNAL_MILESTONES } from "../../draft";
@@ -107,11 +108,11 @@
   /** 一覧でも名前だけにしない。単 / 範・段数・属性を名前の後ろに付ける */
   const skillMeta = (s: Skill) =>
     `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]}`;
-  const mainSkillOptions = $derived([
-    { value: "", label: "未選択(攻撃力を出さない)" },
+  const mainSkillOptions = $derived<PickerOption[]>([
+    { value: "", name: "未選択(攻撃力を出さない)", iconId: null },
     ...[...skills]
       .sort((a, b) => skillPower(b) - skillPower(a))
-      .map((s) => ({ value: s.id, label: `${s.name}(${skillMeta(s)})` })),
+      .map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
   ]);
   const topSkills = $derived([...skills].sort((a, b) => skillPower(b) - skillPower(a)).slice(0, 3));
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
@@ -862,8 +863,15 @@
             {/if}
           </div>
           {#if skillListOpen || skillPickedOutside}
-            <div class="skill-all open-in">
-              <Select label="" options={mainSkillOptions} bind:value={draft.mainSkillId} />
+            <!-- open-in は overflow: hidden なので、重ねて出す候補が切れる。
+                 ここは面が現れるだけなので swap-in(§10 型 3b) -->
+            <div class="skill-all swap-in">
+              <Picker
+                options={mainSkillOptions}
+                note="火力の高い順(倍率 × 段数)"
+                placeholder="スキルを選ぶ"
+                bind:value={draft.mainSkillId}
+              />
             </div>
           {/if}
         </div>
