@@ -2144,6 +2144,9 @@
   .pick-grid { display: flex; flex-wrap: wrap; gap: 6px; }
   .stage-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .stage-row { display: flex; align-items: center; gap: 8px; }
+  /* 段が 2 つしか無いと、幅なりでは細すぎて押す場所に見えない。段の大きさを先に決める */
+  .stage-row > :global(.step-select) { flex: none; }
+  .stage-row :global(.seg button) { min-width: 46px; padding: 7px 0; font-size: 13px; }
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
