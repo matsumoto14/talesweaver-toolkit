@@ -48,6 +48,18 @@
   --cell-full-bg: linear-gradient(180deg, #F3F0FF, #E6E1FA);
   --cell-max-full-bg: linear-gradient(180deg, #CFC9F5, #B3ACE8);
 
+  /* 属性 8 色(§03)。**状態の 6 系統とは別系統**で、意味は「どの属性か」だけ。
+     予約色(金 = 操作待ち / ラベンダー = 保存されない)と読み違えないよう、
+     **彩度を落として面(bg)にだけ使う**。帯・到達判定のバッジには使わない */
+  --elem-fire-bg: #F7DCD3;    --elem-fire-fg: #944A36;
+  --elem-water-bg: #D9E8F8;   --elem-water-fg: #33608F;
+  --elem-wind-bg: #DAEFE0;    --elem-wind-fg: #35734D;
+  --elem-earth-bg: #EDE3CF;   --elem-earth-fg: #6D5A33;
+  --elem-thunder-bg: #F2E9C6; --elem-thunder-fg: #7A661F;
+  --elem-white-bg: #ECF1F8;   --elem-white-fg: #5E6B7E;
+  --elem-black-bg: #DCE0E7;   --elem-black-fg: #3C4351;
+  --elem-neutral-bg: #E7EAF0; --elem-neutral-fg: #6F7A8C;
+
   /* 状態の 6 系統(§03)。到達判定のバッジ・量バー・候補チップはこの 6 つから選ぶ。
      ラベル(「余裕」「通る」…)は画面ごとに変えてよいが、色と意味の対応は変えない。
      参照は src/ui/states.ts 経由(inline style に hex を書かない) */
@@ -312,6 +324,24 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
   width: 100%; gap: 1px; background: var(--border-soft);
 }
 .seg.cols button { border-right: 0; text-align: center; padding: 5px 4px; }
+
+/* 属性のやんわりした面。段・チップ・値の背景に使う(§03 の属性 8 色)。
+   クラスを 2 回書いているのは、`.seg button` のような「要素込みの指定」に負けないため */
+.elem-fire.elem-fire { background: var(--elem-fire-bg); color: var(--elem-fire-fg); }
+.elem-water.elem-water { background: var(--elem-water-bg); color: var(--elem-water-fg); }
+.elem-wind.elem-wind { background: var(--elem-wind-bg); color: var(--elem-wind-fg); }
+.elem-earth.elem-earth { background: var(--elem-earth-bg); color: var(--elem-earth-fg); }
+.elem-thunder.elem-thunder { background: var(--elem-thunder-bg); color: var(--elem-thunder-fg); }
+.elem-white.elem-white { background: var(--elem-white-bg); color: var(--elem-white-fg); }
+.elem-black.elem-black { background: var(--elem-black-bg); color: var(--elem-black-fg); }
+.elem-neutral.elem-neutral { background: var(--elem-neutral-bg); color: var(--elem-neutral-fg); }
+/* 選ばれている段は水色(§03 の選択)が勝つ。属性色は「どれか」を言うだけで、状態は言わない */
+.seg button.on.elem-fire.elem-fire, .seg button.on.elem-water.elem-water,
+.seg button.on.elem-wind.elem-wind, .seg button.on.elem-earth.elem-earth,
+.seg button.on.elem-thunder.elem-thunder, .seg button.on.elem-white.elem-white,
+.seg button.on.elem-black.elem-black, .seg button.on.elem-neutral.elem-neutral {
+  background: var(--sel); color: var(--sel-fg);
+}
 
 /* --- 多数から 1 つ選ぶ(ui/Picker.svelte)-----------------------------------------
    素の <select> の代わり。**1 件 1 行**で、名前のほかに選ぶのに要る値とアイコンを持てる。

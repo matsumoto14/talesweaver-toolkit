@@ -850,7 +850,7 @@
                   {sk.target === null ? "?" : sk.target === "single" ? "単" : "範"}
                 </span>
                 <span class="skill-meta num">{sk.hit_count} 段</span>
-                <span class="skill-meta num">{ELEMENT_LABELS[sk.element]}</span>
+                <span class="skill-meta num elem-{sk.element}">{ELEMENT_LABELS[sk.element]}</span>
               </button>
             {/each}
             {#if skills.length > topSkills.length}
@@ -892,6 +892,7 @@
               label=""
               options={elementOptions}
               cols={elementOptions.length}
+              tone={(v) => (v === "" ? undefined : `elem-${v}`)}
               bind:value={() => mainElement, setMainElement}
             />
             <p class="hint dim">ペット・カード・ルーン・アビリティの +{elementSourceTotal} をまとめて乗せます。</p>

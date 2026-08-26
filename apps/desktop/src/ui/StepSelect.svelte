@@ -21,8 +21,10 @@
     full?: boolean;
     /** 列を固定して並べる(§08 `.seg.cols`)。折り返しても行をまたいで幅が揃う */
     cols?: number;
+    /** 段ごとに足すクラス(属性のやんわりした面など)。`value -> class` */
+    tone?: (value: string) => string | undefined;
   }
-  let { label, value = $bindable(), options, disabled = false, full = false, cols }: Props = $props();
+  let { label, value = $bindable(), options, disabled = false, full = false, cols, tone }: Props = $props();
 </script>
 
 <div class="step-select">
@@ -38,7 +40,7 @@
     {#each options as o (o.value)}
       <button
         type="button"
-        class="step"
+        class="step {tone?.(o.value) ?? ''}"
         class:on={o.value === value}
         role="radio"
         aria-checked={o.value === value}

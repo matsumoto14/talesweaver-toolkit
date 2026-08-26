@@ -357,6 +357,8 @@ li::marker { color: var(--fg-dim); }
 
 /* --- 色見本 --------------------------------------------------------------- */
 
+.elem-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.elem-row .elem { padding: 5px 14px; border-radius: var(--r-panel); font-size: 12px; font-weight: 700; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 8px; }
 .sw {
   display: flex; align-items: center; gap: 9px; text-align: left;
@@ -1520,6 +1522,23 @@ td code { background: var(--card-soft2); }
             <span class="state-badge"><span class="badge b5">条件だけ未達</span> <span class="cap">#EFEEF8 / #6D6AA8 &nbsp;<code>--state-temp-*</code></span></span>
           </div>
         </div>
+
+        <div class="sec">属性 8 色<span class="r">状態の 6 系統とは別系統</span></div>
+        <div class="spec col" style="gap:6px">
+          <div class="elem-row">
+            <span class="elem" style="background:#F7DCD3;color:#944A36">火</span>
+            <span class="elem" style="background:#D9E8F8;color:#33608F">水</span>
+            <span class="elem" style="background:#DAEFE0;color:#35734D">風</span>
+            <span class="elem" style="background:#EDE3CF;color:#6D5A33">土</span>
+            <span class="elem" style="background:#F2E9C6;color:#7A661F">雷</span>
+            <span class="elem" style="background:#ECF1F8;color:#5E6B7E">白</span>
+            <span class="elem" style="background:#DCE0E7;color:#3C4351">黒</span>
+            <span class="elem" style="background:#E7EAF0;color:#6F7A8C">無</span>
+          </div>
+        </div>
+        <p class="cap"><b>意味は「どの属性か」だけで、状態は言わない。</b>だから<strong>彩度を落として面(bg)にだけ使い、帯・到達判定のバッジには使わない</strong> —
+          金(操作待ち)やラベンダー(保存されない)と読み違えられると、予約色の意味が壊れる。
+          選ばれている段は水色(選択)が勝つ。トークンは <code>--elem-&lt;属性&gt;-bg</code> / <code>-fg</code>。</p>
 
         <div class="sec">予約色<span class="r">この用途以外に使わない</span></div>
         <div class="reserved">
