@@ -272,6 +272,16 @@ li::marker { color: var(--fg-dim); }
 
 /* --- 拘りカード ----------------------------------------------------------- */
 
+.core { display: grid; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); gap: 12px; margin: 14px 0 18px; }
+.core-item {
+  padding: 11px 13px 12px; border-radius: var(--r-panel);
+  background: var(--card); border: 1px solid var(--edge); border-top: 3px solid var(--accent);
+}
+.core-item .n { font-family: var(--num); font-size: 9px; font-weight: 700; letter-spacing: .12em; color: var(--fg-dim); }
+.core-item h3 { margin: 2px 0 5px; font-size: 13px; font-weight: 800; color: var(--fg-head); }
+.core-item p { font-size: 11.5px; color: var(--fg-sub); max-width: none; }
+.core-item .ask { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--edge-soft); font-size: 11px; color: var(--fg-muted); }
+.core-item .ask b { display: block; font-size: 9px; letter-spacing: .1em; color: var(--fg-dim); font-weight: 700; margin-bottom: 2px; }
 .tenets { display: grid; grid-template-columns: repeat(auto-fit, minmax(292px, 1fr)); gap: 12px; }
 .tenet {
   display: flex; flex-direction: column; gap: 8px;
@@ -1241,7 +1251,41 @@ td code { background: var(--card-soft2); }
         <span class="note">規格より先に、これが決まっている</span>
       </div>
       <div class="win-body">
-        <p class="lede">規格(色・角丸・書体)は結論であって理由ではない。理由はここにある。<strong>迷ったら規格ではなくこの節に戻る</strong> — 規格が答えを持っていない場面のほうが多いので。</p>
+        <p class="lede">規格(色・角丸・書体)は結論であって理由ではない。理由はここにある。<strong>迷ったら規格ではなくこの節に戻る</strong> — 規格が答えを持っていない場面のほうが多いので。まず <strong>いつでも意識する 5 つ</strong>があり、その下に、作りながら繰り返し口にしていた拘りが並ぶ。</p>
+        <div class="core">
+          <div class="core-item">
+            <span class="n">01</span>
+            <h3>視線を動かさない</h3>
+            <p>一つのことを決めるのに、目を行き来させない。<strong>並びは決める順序に、関係するものは 1 回の視線に入る位置に。</strong>欄が 2 列に折り返した時点で、目は右へ行って左へ戻っている。</p>
+            <p class="ask"><b>自分に問う</b>この欄を決めるまでに、目は何回動く?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">02</span>
+            <h3>要らないものを見せない</h3>
+            <p>いま決めるのに要らない選択肢・値・説明を出さない。<strong>既定で足りているものは、既定の 1 つだけ出す。</strong>選択肢を並べるのは、道具が人に質問しているということ。答えの分かっている質問はしない。</p>
+            <p class="ask"><b>自分に問う</b>いま出ているもののうち、この人が今見なくていいものはどれ?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">03</span>
+            <h3>押した場所は動かない</h3>
+            <p>押した要素が、押したあとも<strong>同じ位置に、同じ内容のまま残る。</strong>上に何かを差し込まない・その場を別の中身に入れ替えない。展開は下か右へ増やす。押した瞬間に対象が視界の外へ流れる画面は、それだけで信用を失う。</p>
+            <p class="ask"><b>自分に問う</b>押したあと、いま押したものはまだそこにある?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">04</span>
+            <h3>変わったら動かす</h3>
+            <p><strong>ぱっと差し替えず、しゅっと動かす。</strong>差し替わった数字は探さないと見つからない。動けば探さなくても分かる。変わったものは全部動かし、変わっていないものは動かさない(§10)。</p>
+            <p class="ask"><b>自分に問う</b>これを押して変わる場所は、全部動く?</p>
+          </div>
+          <div class="core-item">
+            <span class="n">05</span>
+            <h3>考えさせない</h3>
+            <p>上限・単位・既定値・結果をその場に出す。<strong>頭の中で計算・比較・記憶をさせない。</strong>ユーザーが自分のキャラのことだけを考えていられる状態が正解で、道具の都合(欄・並び・単位)を考えさせた時点で負けている。</p>
+            <p class="ask"><b>自分に問う</b>ここでユーザーは、何かを覚えたり計算したりしている?</p>
+          </div>
+        </div>
+        <p><strong>この 5 つが目的で、§01 以降の規格はその手段。</strong>規格に合っているのに画面が良くないときは、たいていこの 5 つのどれかが崩れている。<strong>そして見た目の崩れ(折り返し・余白・ずれ)は、その症状であることが多い。</strong>幅や余白を調整して症状だけ消すと、配分のずれが残ったまま「きれいに間違っている」状態になり、次からは監査にも目にも引っかからなくなる。直すのは出す量と並びのほう。</p>
+
         <p>各カードの「モックでの証拠」は、デザインモック <code>TW Toolkit Prototype v1〜v4</code> と <code>TW Toolkit Redesign</code> に実際に書かれた言葉。後付けの整理ではなく、作りながら繰り返し口にしていたこと。</p>
 
         <div class="tenets">
