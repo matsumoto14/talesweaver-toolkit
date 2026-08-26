@@ -768,10 +768,11 @@
       {#if !character || !target}
         <!-- 上のブロックで案内済み -->
       {:else if side === "defense"}
-        <DefensePanel profile={defense} error={defenseError} />
+        <!-- 攻撃 / 防御 は面ごと入れ替わる。入ってくる面を短く動かす(§10 型 3b) -->
+        <div class="swap-in"><DefensePanel profile={defense} error={defenseError} /></div>
       {:else}
         <!-- 行ける?カード -->
-        <div class="sheet">
+        <div class="sheet swap-in">
           <div class="sheet-head">
             <span class="gem"></span>
             <span class="sheet-title">行ける？</span>

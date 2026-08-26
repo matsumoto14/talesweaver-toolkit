@@ -77,13 +77,18 @@
       <div></div>
     {/if}
     <main>
-      {#if app.tab === "home"}
-        <HomePage />
-      {:else if app.tab === "calc"}
-        <CalcPage />
-      {:else}
-        <CharsPage />
-      {/if}
+      <!-- タブは面ごと入れ替わる。入ってくる面を短く動かして「切り替わった」を見せる(§10 型 3b) -->
+      {#key app.tab}
+        <div class="tabbody swap-in">
+          {#if app.tab === "home"}
+            <HomePage />
+          {:else if app.tab === "calc"}
+            <CalcPage />
+          {:else}
+            <CharsPage />
+          {/if}
+        </div>
+      {/key}
     </main>
   </div>
 </div>
@@ -127,4 +132,5 @@
 
   .body { flex: 1; min-height: 0; display: grid; }
   main { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-mid); }
+  .tabbody { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 </style>

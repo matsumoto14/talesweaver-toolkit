@@ -2106,6 +2106,13 @@ td code { background: var(--card-soft2); }
             <span class="spec-n">translateX(-10px) scaleX(.97)<br>.26〜.32s cubic-bezier(.2,.85,.25,1)<br>transform-origin: left center</span>
           </div>
           <div class="change">
+            <span class="w">面が入れ替わった</span>
+            <span class="how">タブで中身を切り替えたとき。<b>入ってくる面だけ</b>短く動かす —
+              ぱっと差し替わると「切り替えたのか、元からこうだったのか」が一瞬わからない。
+              画面全体を動かす演出にはしない(それは規則 1 に反する)</span>
+            <span class="spec-n">translateY(-5px) + opacity<br>.2s cubic-bezier(.2,.85,.25,1)</span>
+          </div>
+          <div class="change">
             <span class="w">一時的に重なった</span>
             <span class="how">上から降りる。閉じたら跡形もなく消える(レイアウトを押していないので)</span>
             <span class="spec-n">translateY(-6px) scaleY(.97)<br>.17s cubic-bezier(.34,1.2,.64,1)</span>

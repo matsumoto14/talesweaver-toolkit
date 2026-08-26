@@ -1519,7 +1519,8 @@
         経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。
       </p>
     </div>
-    <div class="card">
+    {#key coreRegion}
+    <div class="card swap-in">
       <div class="card-title">
         {CORE_REGION_LABELS[coreRegion]} の 6 枠
         <span class="dim normal">補正値 合計 {fmtInt(coreRegionTotal(coreRegion))}</span>
@@ -1529,6 +1530,10 @@
           このうち補助タイプ({coreSupportSummary})は装備攻撃力には入らず、防御タブの防御力・カット率・回避Pに効きます。
         </p>
       {/if}
+      <!-- 列の名前は 1 回だけ。行ごとにラベルを置くと、6 回同じ言葉を読ませることになる -->
+      <div class="core-head">
+        <span></span><span>タイプ</span><span></span><span class="lead">進化 - 強化</span><span class="r">補正値</span>
+      </div>
       <div class="core-list">
         {#each coreSlotIndexes as index (index)}
           {@const core = coreAt(index)}
@@ -1557,10 +1562,8 @@
               type="button"
               class="core-clear"
               disabled={core === null}
-              title="このコアを外す"
-              aria-label="このコアを外す"
               onclick={() => setCoreType(index, "")}
-            >×</button>
+            >外す</button>
             <span class="core-stage">
               <button
                 type="button"
@@ -1606,6 +1609,7 @@
         セット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
       </p>
     </div>
+    {/key}
   {:else if sourceId === "actualDelay"}
     <div class="card">
       <p class="hint dim">
@@ -1926,30 +1930,40 @@
   .tab-rule { margin-bottom: 9px; }
 
   .core-list { display: flex; flex-direction: column; gap: 7px; }
+  .core-head {
+    display: grid; grid-template-columns: 16px 1fr 34px 66px 48px; gap: 9px;
+    margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim);
+  }
+  .core-head .lead { text-align: center; color: var(--fg-muted); font-weight: 700; }
+  .core-head .r { text-align: right; }
   /* 1 枠 = 1 行。番号・タイプ・進化-強化・補正値が同じ高さに並ぶので、
      6 枠を上から一度の視線で読める(§00「視線を動かさない」) */
   .core-row {
-    display: grid; grid-template-columns: 16px 1fr 20px 54px 48px;
+    display: grid; grid-template-columns: 16px 1fr 34px 66px 48px;
     gap: 9px; align-items: center;
     padding-bottom: 7px; border-bottom: 1px dashed var(--border-soft);
   }
   .core-row:last-child { padding-bottom: 0; border-bottom: 0; }
   .core-slot { font-size: 11px; text-align: center; }
   .core-types { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  /* 外すのは「ほぼ押さない操作」なので、段ではなく小さな 1 つに落とす */
+  /* 外すのは「ほぼ押さない操作」なので、段ではなく小さな 1 つに落とす。
+     ただし記号(×)にしない — 意味を読み取らせるより、言葉で言い切るほうが速い */
   .core-clear {
-    width: 20px; height: 20px; padding: 0; border-radius: var(--r-chip);
-    background: none; border: 0; color: var(--fg-dim); font-size: 12px; line-height: 1;
+    padding: 3px 4px; border-radius: var(--r-chip);
+    background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
   }
   .core-clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
   .core-clear:disabled { color: var(--border-soft); }
   .core-stage { position: relative; }
+  /* この行の主役。どのコアかより「どこまで育てたか」を見に来ているので、
+     ここだけ大きく・濃くする(§00「触る場所だけ大きく」) */
   .stage-trigger {
-    width: 100%; padding: 5px 0; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border);
-    font-size: 11.5px; font-weight: 700; color: var(--fg-sub);
+    width: 100%; padding: 7px 0; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 #fff;
+    font-size: 14px; font-weight: 800; color: var(--fg); letter-spacing: 0.04em;
   }
-  .stage-trigger:hover:not(:disabled) { border-color: var(--accent); }
+  .stage-trigger:hover:not(:disabled) { border-color: var(--accent); background: var(--bg-active); }
   .stage-trigger:disabled { color: var(--fg-off); }
   /* 重なって出るので、開いても行は動かない(§09 規則 3) */
   .stage-overlay { position: fixed; inset: 0; z-index: 30; cursor: default; }
