@@ -7,6 +7,10 @@
   --bg-panel: #F6FBFF;
   --bg-field: #FFFFFF;
   --bg-active: #DCEBFF;
+  /* 選ばれている・押せる主役(タブ・段階選択の選択中・主要ボタン)。§03 Active Tab */
+  --sel: linear-gradient(180deg, #CCF7FF, #90D7FF);
+  --sel-bd: #687287;
+  --sel-fg: #123047;
   --border: #A6BAD3;
   --border-soft: #C1D3E6;
   --border-strong: #798CAC;
@@ -267,6 +271,46 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
     scroll-behavior: auto !important;
   }
 }
+
+/* --- 段階選択(§07 形態 2「段階選択」/ §08 .seg) -----------------------------
+   1 つの枠の中に段が並び、間は弱い区切り線 1 本。段そのものを見せて数字を打たせない。
+   見た目はここだけに置く。振る舞いは src/ui/StepSelect.svelte  */
+.seg {
+  display: inline-flex; flex-wrap: wrap; align-self: flex-start; min-width: 0;
+  border: 1px solid var(--border); border-radius: var(--r-panel); overflow: hidden;
+}
+.seg button {
+  padding: 5px 12px; border: 0; border-right: 1px solid var(--border-soft);
+  background: var(--bg-field); color: var(--fg-muted);
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+  transition: background 0.15s ease;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover:not(:disabled):not(.on) { background: var(--bg-rail); }
+.seg button.on { background: var(--sel); color: var(--sel-fg); font-weight: 700; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.seg button:disabled { cursor: not-allowed; opacity: 0.5; }
+/* 幅いっぱいに割る形(§08 .seg.full) */
+.seg.full { display: flex; width: 100%; }
+.seg.full button { flex: 1; text-align: center; padding: 5px 0; }
+
+/* --- チップ(§07 形態 3 / §08 バッジ・チップ) --------------------------------
+   オン / オフ、または少数の状態の巡回。値はチップの中に書く。
+   追加用は破線 + ＋ で、実在のチップと見た目で区別する(§08)  */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 11px; border-radius: var(--r-pill);
+  background: var(--bg-field); border: 1px solid var(--border-soft);
+  font-size: 11px; font-weight: 500; color: var(--fg-sub);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.chip:hover:not(:disabled) { border-color: var(--accent); }
+/* 選ばれている(オン) */
+.chip.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
+/* 追加用 — 実在のチップと見た目で区別する */
+.chip.add { background: var(--bg-rail); border-style: dashed; border-color: var(--border); color: var(--accent); }
+/* 保存されない・一時的なもの(§03 予約色) */
+.chip.sim { border-color: var(--sim); color: var(--sim-fg); }
 
 /* --- 上限のある入力(§07 形態 4「ステッパー」) --------------------------------
    規格の実演(.ench / .ctrl / .step / .cell / .fillbar / .maxbtn)がそのまま入る。
