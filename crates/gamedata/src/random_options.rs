@@ -25,7 +25,9 @@ pub const RANDOM_OPTION_SOURCE: Source = Source {
     page: "ランダムオプション",
     retrieved_on: "2026-08-25",
     note: "火力・命中・回避に関係する OP のみ収録。枠数は wiki に記載が無く、\
-           制約は「同じカテゴリーは 1 部位に 1 つまで(カテゴリー 0 は除く)」(転移の説明)",
+           制約は「同じカテゴリーは 1 部位に 1 つまで(カテゴリー 0 は除く)」(転移の説明)。\
+           **武器・脚の追加ダメージ系はすべて 追加ダメージ(新-割合)**(wiki「ステータス」\
+           #追加ダメージ(割合)関連 の一覧に武器/脚のランダムオプションが列挙されている)",
 };
 
 use RandomOptionEffect::{
@@ -76,6 +78,22 @@ const WEAPON_SEED_TIERS: &[RandomOptionTier] = &[
     tier(Valuable, 5.0, 8.0),
     tier(Rare, 10.0, 15.0),
     tier(Special, 18.0, 25.0),
+];
+
+/// 脚カテゴリー17「攻撃時、移動速度が X 以下の場合、Y% の追加ダメージ」の **Y**。
+const LEG_SLOW_TIERS: &[RandomOptionTier] = &[
+    tier(Normal, 2.0, 5.0),
+    tier(Valuable, 3.0, 7.0),
+    tier(Rare, 5.0, 9.0),
+    tier(Special, 7.0, 12.0),
+];
+
+/// 脚カテゴリー17「攻撃時、X% の確率で Y% の追加ダメージ(自分は移動速度減少)」の **Y**。
+const LEG_CHANCE_TIERS: &[RandomOptionTier] = &[
+    tier(Normal, 10.0, 10.0),
+    tier(Valuable, 11.0, 12.0),
+    tier(Rare, 13.0, 14.0),
+    tier(Special, 15.0, 18.0),
 ];
 
 const SHIELD_ATTACK_DAMAGE_TIERS: &[RandomOptionTier] = &[
@@ -383,6 +401,25 @@ pub fn random_option_catalog() -> Vec<RandomOptionDef> {
             EvasionPoint,
             RELIC_ACCURACY_TIERS,
             "",
+        ),
+        // --- 脚(追加ダメージ。wiki「ステータス」の一覧で 新-割合)-------------
+        def(
+            "leg-slow-damage",
+            "移動速度が遅いとき、追加ダメージ",
+            PartSlot::Leg,
+            17,
+            AddedDamageRate,
+            LEG_SLOW_TIERS,
+            "追加ダメージ(新-割合)。移動速度が X 以下のときに効く(歩きでも走る速度で判定)",
+        ),
+        def(
+            "leg-chance-damage",
+            "攻撃時、確率で追加ダメージ(自分は移動速度減少)",
+            PartSlot::Leg,
+            17,
+            AddedDamageRate,
+            LEG_CHANCE_TIERS,
+            "追加ダメージ(新-割合)。1〜3% の確率。発動すると自分の移動速度が数段階下がる",
         ),
         // --- 武器 -----------------------------------------------------------
         //
