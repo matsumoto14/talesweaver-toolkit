@@ -28,10 +28,15 @@
      * (§09 規則 4「あとから幅が変わらない」)
      */
     disabledValues?: string[];
+    /**
+     * 1 段の幅(px)。**行ごとに段の数が違うとき**に使う — 幅いっぱいに割ると
+     * 1 段の大きさが行ごとに変わって、そろって見えない
+     */
+    cell?: number;
   }
   let {
     label, value = $bindable(), options, disabled = false, full = false, cols, tone,
-    disabledValues = [],
+    disabledValues = [], cell,
   }: Props = $props();
 </script>
 
@@ -41,7 +46,10 @@
     class="seg"
     class:full
     class:cols={cols !== undefined}
-    style={cols === undefined ? undefined : `--seg-cols: ${cols}`}
+    class:fixed={cell !== undefined}
+    style={cols === undefined
+      ? undefined
+      : `--seg-cols: ${cols}${cell === undefined ? "" : `; --seg-cell: ${cell}px`}`}
     role="radiogroup"
     aria-label={label ?? ""}
   >

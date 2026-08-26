@@ -1557,6 +1557,7 @@
             label=""
             options={augmentOptions}
             cols={augmentOptions.length}
+              cell={36}
             bind:value={
               () => String(draft.commonSkills.augment_level),
               (v) => setAugmentLevel(Number(v))
@@ -1652,6 +1653,7 @@
             label=""
             options={sharpnessOptionsNow}
             cols={sharpnessOptionsNow.length}
+              cell={36}
             bind:value={
               () => String(draft.commonSkills.sharpness_vision_level),
               (v) => (draft.commonSkills.sharpness_vision_level = Number(v))
@@ -1718,6 +1720,7 @@
               label=""
               options={strongWeaponLevels}
               cols={strongWeaponLevels.length}
+              cell={36}
               disabledValues={strongWeaponLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
               bind:value={
                 () => String(draft.commonSkills.strong_weapon_level),
@@ -1755,6 +1758,7 @@
               label=""
               options={protectArmorLevels}
               cols={protectArmorLevels.length}
+              cell={36}
               disabledValues={protectArmorLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
               bind:value={
                 () => String(draft.commonSkills.protect_armor_level),
@@ -1781,6 +1785,7 @@
               label=""
               options={kaiProtectArmorLevels}
               cols={kaiProtectArmorLevels.length}
+              cell={36}
               bind:value={
                 () => String(draft.commonSkills.kai_protect_armor_level),
                 (v) => (draft.commonSkills.kai_protect_armor_level = Number(v))
@@ -1819,6 +1824,7 @@
               label=""
               options={hyperLimitLevels}
               cols={hyperLimitLevels.length}
+              cell={36}
               disabledValues={hyperLimitLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
               bind:value={
                 () => String(draft.commonSkills.ultimate.hyper_limit_level),
@@ -1841,6 +1847,7 @@
               label=""
               options={reinforceLevels}
               cols={reinforceLevels.length}
+              cell={36}
               bind:value={
                 () => String(draft.commonSkills.reinforce_level),
                 (v) => setReinforceLevel(Number(v))
@@ -1864,6 +1871,7 @@
                   label=""
                   options={unleashLevelChoices}
                   cols={unleashLevelChoices.length}
+              cell={36}
                   disabledValues={unleashLevelChoices.filter((o) => Number(o.value) > unleashCap).map((o) => o.value)}
                   bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
                 />
