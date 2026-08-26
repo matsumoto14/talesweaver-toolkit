@@ -1069,6 +1069,7 @@ mod tests {
             effect,
             tiers: TEST_RO_TIERS,
             note: "",
+            common: false,
         };
         vec![
             def("ro-a", 15, domain::RandomOptionEffect::AttackDamageRate),

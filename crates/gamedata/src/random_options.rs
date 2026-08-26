@@ -166,10 +166,38 @@ const fn def(
     tiers: &'static [RandomOptionTier],
     note: &'static str,
 ) -> RandomOptionDef {
-    RandomOptionDef { id, name, slot, category, effect, tiers, note }
+    RandomOptionDef { id, name, slot, category, effect, tiers, note, common: false }
 }
 
+/// **実際によく付ける OP**(ユーザー確認 2026-08-26)。画面はこれをチップで先に出す。
+/// ここに無いものは「ほかの OP」の奥に置くだけで、使えなくなるわけではない。
+const COMMON_IDS: &[&str] = &[
+    // 武器: 火力に直接効く 3 つ + レイド
+    "weapon-boss-damage",
+    "weapon-raid-boss-damage",
+    "weapon-on-hit-physical",
+    "weapon-on-hit-magic",
+    "weapon-stone-damage",
+    // 盾: 攻撃ダメージ増加と依存別の与ダメージ増加(主軸の依存に合わせて 1 つ)
+    "shield-attack-damage",
+    "shield-thrust-rate",
+    "shield-slash-rate",
+    "shield-magic-rate",
+    // 手: 命中率
+    "hand-accuracy",
+    // カフス: 中ディレイ減少
+    "cuffs-actual-delay",
+];
+
 pub fn random_option_catalog() -> Vec<RandomOptionDef> {
+    let mut defs = random_option_defs();
+    for d in &mut defs {
+        d.common = COMMON_IDS.contains(&d.id);
+    }
+    defs
+}
+
+fn random_option_defs() -> Vec<RandomOptionDef> {
     vec![
         // --- 盾(サブアーム)------------------------------------------------
         def(

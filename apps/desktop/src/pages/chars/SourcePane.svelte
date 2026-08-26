@@ -317,6 +317,20 @@
       .join(" ・ ");
   };
   const NEUTRAL_RO = "なし";
+  /** その部位に足せる OP のうち、実際によく付けるもの(gamedata の common) */
+  const addableDefs = (slot: PartSlot): RandomOptionDef[] =>
+    addableRandomOptions(slot)
+      .map((o) => randomOptionDef(o.value))
+      .filter((d): d is RandomOptionDef => d !== undefined);
+  const commonAddable = (slot: PartSlot) => addableDefs(slot).filter((d) => d.common);
+  const otherAddable = (slot: PartSlot) => addableDefs(slot).filter((d) => !d.common);
+  const otherPickerOptions = (slot: PartSlot): PickerOption[] =>
+    otherAddable(slot).map((d) => ({
+      value: d.id,
+      name: d.name,
+      meta: `カテゴリー${d.category} ・ ${randomOptionEffectLabel(d.effect)}`,
+      iconId: undefined,
+    }));
   /** 候補の面に出す形。名前だけでは選べないので、カテゴリーと効き先を並べる */
   const addablePickerOptions = (slot: PartSlot): PickerOption[] =>
     addableRandomOptions(slot).map((o) => {
@@ -350,6 +364,18 @@
       value: r,
       label: RANDOM_OPTION_RANK_LABELS[r],
     }));
+  // **実際に使うのは Special と S・真だけ**(Normal / Valuable / Rare はほぼ付けない。
+  // ユーザー確認 2026-08-26)。下位は開いたときだけ出す
+  const MAIN_RANKS: RandomOptionRank[] = ["special", "s_true"];
+  let rankAllOpen = $state(false);
+  const rankOptionsNow = (def: RandomOptionDef, rank: RandomOptionRank) => {
+    const all = rankOptions(def);
+    if (rankAllOpen || !MAIN_RANKS.includes(rank)) return all;
+    const main = all.filter((o) => MAIN_RANKS.includes(o.value));
+    return main.length > 0 ? main : all;
+  };
+  const hasLowerRanks = (def: RandomOptionDef) =>
+    rankOptions(def).some((o) => !MAIN_RANKS.includes(o.value));
 
   /** ランクを変えるとレンジが変わるので、実測の上書きは外して既定(レンジ上限)へ戻す */
   function setRandomOptionRank(slot: PartSlot, index: number, rank: RandomOptionRank) {
@@ -763,15 +789,26 @@
       <!-- 1 OP 1 行。名前 / ランク / 効果値 / 外す を列でそろえる(§00 01) -->
       <div class="ro-row" class:record-only={!randomOptionIsApplied(def.effect)}>
         <span class="ro-name" title={def.name}>{def.name}</span>
-        <!-- ランクは言葉(Valuable / Rare …)なので、幅は中身なり。数字の段と違って詰められない -->
-        <StepSelect
-          label=""
-          options={rankOptions(def)}
-          bind:value={
-            () => option.rank,
-            (v) => setRandomOptionRank(slot, index, v as RandomOptionRank)
-          }
-        />
+        <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>外す</button>
+        <!-- ランクは言葉なので幅は中身なり。ふだんは Special / S・真 だけ -->
+        <span class="ro-rank">
+          <StepSelect
+            label=""
+            options={rankOptionsNow(def, option.rank)}
+            bind:value={
+              () => option.rank,
+              (v) => setRandomOptionRank(slot, index, v as RandomOptionRank)
+            }
+          />
+          {#if hasLowerRanks(def) && MAIN_RANKS.includes(option.rank)}
+            <button
+              type="button"
+              class="chip quiet"
+              class:on={rankAllOpen}
+              onclick={() => (rankAllOpen = !rankAllOpen)}
+            >{rankAllOpen ? "上位だけ" : "下位も"}</button>
+          {/if}
+        </span>
         <StatInput
           label=""
           min={t ? t.min : 0}
@@ -780,7 +817,6 @@
           format={t ? () => `wiki ${t.min}–${t.max}` : undefined}
           bind:value={() => randomOptionValue(option, def), (v) => (option.value = v)}
         />
-        <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>外す</button>
       </div>
       {#if def.note}<p class="hint dim ro-note">{def.note}</p>{/if}
     {/if}
@@ -1523,12 +1559,23 @@
           <div class="card">
             <div class="card-title">{PART_SLOT_LABELS[slot]}</div>
             {@render randomOptionEditor(slot)}
-            {#if addableRandomOptions(slot).length > 0}
+            <!-- よく付ける OP は見えていて 1 押しで入る。残りは「ほかの OP」の奥
+                 (§07 形態 3 + §08「追加用のチップは破線 + ＋」) -->
+            {#if commonAddable(slot).length > 0}
+              <div class="ro-common">
+                {#each commonAddable(slot) as o (o.id)}
+                  <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.id)}>
+                    ＋ {o.name}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+            {#if otherAddable(slot).length > 0}
               <div class="ro-add">
                 <Picker
-                  options={addablePickerOptions(slot)}
-                  note="この部位に足せる OP(同じカテゴリーは 1 つまで)"
-                  placeholder="＋ OP を追加"
+                  options={otherPickerOptions(slot)}
+                  note="ほかの OP(同じカテゴリーは 1 つまで)"
+                  placeholder="ほかの OP から選ぶ"
                   bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
                 />
               </div>
@@ -2357,12 +2404,15 @@
   .val-cell { display: flex; align-items: baseline; gap: 4px; font-size: 11px; }
 
   /* ランダムオプションの 1 枠 */
-  /* 1 OP 1 行。名前 / ランク / 効果値 / 外す */
+  /* 1 OP 1 枠。名前 + 外すが上、ランクと効果値が下。
+     右のペインは狭いので、ランクの段(言葉 4 つ)を名前と同じ行に置くと折り返す */
   .ro-row {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto 186px 40px;
-    gap: 9px; align-items: center;
-    padding: 6px 0; border-bottom: 1px dashed var(--border-soft);
+    display: grid; grid-template-columns: minmax(0, 1fr) 40px;
+    gap: 5px 9px; align-items: center;
+    padding: 7px 0; border-bottom: 1px dashed var(--border-soft);
   }
+  .ro-rank { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+  .ro-row > :global(.stat-input), .ro-row > :global(.stepper) { grid-column: 1 / -1; max-width: 240px; }
   .ro-row.record-only { opacity: 0.75; }
   .ro-name { min-width: 0; font-size: 11.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ro-row .clear {
@@ -2371,7 +2421,8 @@
   }
   .ro-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
   .ro-note { margin: 0 0 6px; }
-  .ro-add { margin-top: 10px; max-width: 300px; }
+  .ro-common { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .ro-add { margin-top: 8px; max-width: 300px; }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;

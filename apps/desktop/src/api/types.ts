@@ -327,6 +327,8 @@ export interface RandomOptionDef {
   effect: RandomOptionEffect;
   tiers: RandomOptionTier[];
   note: string;
+  /** 実際によく付ける OP。画面はこれをチップで先に出す */
+  common: boolean;
 }
 
 // キャラが付けている 1 枠。crates/domain/src/random_option.rs の RandomOptionSlot。

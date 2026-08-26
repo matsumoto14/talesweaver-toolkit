@@ -1208,6 +1208,7 @@ mod tests {
                 effect: RandomOptionEffect::DependencyDamageRate(SkillDependency::StabHack),
                 tiers: TIERS,
                 note: "",
+                common: false,
             },
             RandomOptionDef {
                 id: "hand-acc",
@@ -1217,6 +1218,7 @@ mod tests {
                 effect: RandomOptionEffect::AccuracyPoint,
                 tiers: TIERS,
                 note: "",
+                common: false,
             },
         ]
     }

@@ -94,6 +94,9 @@ pub struct RandomOptionDef {
     pub tiers: &'static [RandomOptionTier],
     /// 補足(発動条件・記録のみの理由・部位の別名など)
     pub note: &'static str,
+    /// **実際によく付ける OP**。画面はこれをチップで先に出し、残りは奥に置く
+    /// (ユーザー確認 2026-08-26)
+    pub common: bool,
 }
 
 impl RandomOptionDef {
@@ -231,6 +234,7 @@ mod tests {
             effect,
             tiers: TIERS,
             note: "",
+            common: false,
         }
     }
 
