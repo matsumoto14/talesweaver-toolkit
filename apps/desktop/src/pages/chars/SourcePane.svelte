@@ -558,6 +558,19 @@
       (c) => c !== null && !CORE_POWER_TYPES.includes(c.core_type),
     ),
   );
+  /** 補助の段を閉じるときは、補助タイプの枠も外す。
+      見えない段に選択が残ると、画面に出ていない値が効き続ける */
+  function toggleCoreSupport() {
+    if (!(coreShowSupport || coreSupportInUse)) {
+      coreShowSupport = true;
+      return;
+    }
+    const slots = draft.equipment.thesis_cores[coreRegion].slots;
+    slots.forEach((core, i) => {
+      if (core && !CORE_POWER_TYPES.includes(core.core_type)) slots[i] = null;
+    });
+    coreShowSupport = false;
+  }
   const coreTypeOptions = $derived(
     coreShowSupport || coreSupportInUse ? [...corePowerOptions, ...coreSupportOptions] : corePowerOptions,
   );
@@ -1531,9 +1544,8 @@
           type="button"
           class="chip quiet"
           class:on={coreShowSupport || coreSupportInUse}
-          disabled={coreSupportInUse}
-          onclick={() => (coreShowSupport = !coreShowSupport)}
-        >補助タイプも出す</button>
+          onclick={toggleCoreSupport}
+        >{coreShowSupport || coreSupportInUse ? "補助タイプを閉じる" : "補助タイプも出す"}</button>
       </div>
       {#if coreSupportSummary}
         <p class="hint dim">
@@ -1559,12 +1571,15 @@
                 bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
               />
               {#if coreShowSupport || coreSupportInUse}
-                <StepSelect
-                  label=""
-                  options={coreSupportOptions}
-                  cols={4}
-                  bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
-                />
+                <!-- 段が増えるのは「開いた」なので下に伸ばす(§10 型 6) -->
+                <div class="open-in">
+                  <StepSelect
+                    label=""
+                    options={coreSupportOptions}
+                    cols={4}
+                    bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
+                  />
+                </div>
               {/if}
             </span>
             <!-- 進化 - 強化。押すと 5×5 が重なって出るので、押した枠は動かない(§09 規則 3) -->
@@ -1871,7 +1886,11 @@
   .close-detail:hover { color: var(--accent); text-decoration: underline; }
   .card-title.inline { margin: 0; display: flex; align-items: baseline; gap: 8px; }
   /* 見え方を変えるスイッチは右端に控えめに置く(主役は 6 枠そのもの) */
-  .card-title.inline .chip.quiet { margin-left: auto; align-self: center; }
+  /* 押すと言葉が変わる(出す ↔ 閉じる)。幅を先に取っておかないと、押した瞬間に
+     押した場所そのものが動く(§00 03「押した場所は動かない」) */
+  .card-title.inline .chip.quiet {
+    margin-left: auto; align-self: center; min-width: 112px; justify-content: center;
+  }
   .card-title.inline .strong { font-size: 13px; font-weight: 700; }
   .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
   .values-col { flex: 1 1 260px; min-width: 0; }

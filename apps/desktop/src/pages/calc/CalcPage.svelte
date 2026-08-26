@@ -1428,7 +1428,7 @@
   section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   section.mid { background: var(--bg-mid); }
   section.right { background: var(--bg-rail); border-left: 1px solid var(--border-strong); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 13px 16px 18px; }
+  .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 13px 16px 18px; }
   .scroll.pad { padding: 11px; display: flex; flex-direction: column; gap: 9px; }
   .empty { font-size: 12px; }
 

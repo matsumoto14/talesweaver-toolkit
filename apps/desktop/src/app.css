@@ -233,8 +233,11 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 /* 2. 量が変わった — バーの幅。数値と同時に動かす(.meter > .fill の transition) */
 
 /* 3. 場所が増えた — 左端から生えてくる。元からある場所は動かさない(§09 規則 2) */
+/* scaleX を使わない。原点から遠い要素ほど大きく横に流れるので、
+   ペインの右端にあるものが「あとから左右に動いてくる」ように見える(実測 22px)。
+   入場は**全体が同じ量だけ**動く translateX + opacity だけにする */
 @keyframes tw-pane-in {
-  from { opacity: 0; transform: translateX(-10px) scaleX(0.97); }
+  from { opacity: 0; transform: translateX(-8px); }
   to   { opacity: 1; transform: none; }
 }
 .pane-in { animation: tw-pane-in 0.28s cubic-bezier(0.2, 0.85, 0.25, 1); transform-origin: left center; }

@@ -682,7 +682,7 @@
   .src .fav:hover { border-color: var(--gold); color: var(--gold); }
   .src .fav.on { background: #FDF9EE; border-color: var(--gold); color: var(--gold); }
 
-  .src-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .src-list { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 6px; }
   .src {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
@@ -713,7 +713,9 @@
     font-size: 9.5px; line-height: 1.5; color: var(--fg-muted);
   }
 
-  .detail { overflow: auto; padding-left: 6px; }
+  /* 縦スクロールバーが後から出ると幅が縮み、右寄せのものが左へ飛ぶ。
+     場所を先に確保しておく(§09 規則 4「あとから幅が変わらない」) */
+  .detail { overflow: auto; scrollbar-gutter: stable; padding-left: 6px; }
 
   .sheet { flex-shrink: 0; border-top: 1px solid var(--border-strong); background: var(--bg-mid); padding: 8px 16px 10px; }
   .sheet-trigger {

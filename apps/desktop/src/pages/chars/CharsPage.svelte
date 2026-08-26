@@ -26,5 +26,5 @@
 
 <style>
   .page { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg-mid); }
-  .register-wrap { flex: 1; min-height: 0; overflow: auto; padding: 13px 16px 18px; }
+  .register-wrap { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 13px 16px 18px; }
 </style>
