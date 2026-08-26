@@ -66,7 +66,7 @@
   .adj-row .toggle { padding: 0; }
   .adj-desc { font-size: 11px; min-width: 0; }
   .adj-control { width: 100%; min-width: 0; }
-  .adj-control :global(.stat-input) { width: 100%; }
+  .adj-control :global(.stepper) { width: 100%; }
 
   .toggle { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; cursor: pointer; font-size: 12px; min-width: 0; }
   .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }

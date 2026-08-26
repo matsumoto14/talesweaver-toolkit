@@ -267,3 +267,62 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
     scroll-behavior: auto !important;
   }
 }
+
+/* --- 上限のある入力(§07 形態 4「ステッパー」) --------------------------------
+   規格の実演(.ench / .ctrl / .step / .cell / .fillbar / .maxbtn)がそのまま入る。
+   値・上限・進捗・MAX がひとつのセルに同居し、上限に届くとセルが紫になり MAX が
+   反転する。**見た目はここだけに置く** — 部品の中に写すと、写した先でずれる。
+   振る舞い(確定・クランプ・編集の出し入れ)は src/ui/StatInput.svelte  */
+.stepper { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.stepper > .label {
+  font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
+  min-width: 46px; margin-right: 5px; flex: none; white-space: nowrap;
+}
+.stepper .cell {
+  position: relative; flex: 1 1 auto; min-width: 74px; overflow: hidden;
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
+  padding: 4px 7px 5px; border-radius: var(--r-panel);
+  background: var(--bg-field); border: 1px solid var(--cell-bd);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.stepper .cell.editing { border-color: var(--accent); }
+.stepper .cell:not(.editing):hover { border-color: var(--sim); }
+/* 上限を語らない形(§07 形態 1)。/上限 と MAX が無いぶん詰める */
+.stepper .cell.bare { flex: none; width: 74px; }
+.stepper .fill {
+  position: absolute; left: 0; bottom: 0; height: 2px;
+  background: var(--cell-bar); pointer-events: none;
+  transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.stepper .val {
+  min-width: 0; flex: 1 1 auto; text-align: right;
+  font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--cell-fg); background: none; border: none; padding: 0;
+}
+.stepper .val:focus { outline: none; }
+.stepper .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+/* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1) */
+.stepper .val::-webkit-inner-spin-button,
+.stepper .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.stepper input.val { appearance: textfield; }
+.stepper .cap { flex: none; font-size: 8px; color: var(--cell-cap); font-variant-numeric: tabular-nums; }
+.stepper .step {
+  width: 16px; height: 22px; flex: none; padding: 0; line-height: 1;
+  background: none; border: none; border-radius: var(--r-chip);
+  font-size: 13px; font-weight: 700; color: var(--cell-step);
+}
+.stepper .step:hover:not(:disabled) { background: var(--state-temp-bg); color: var(--sim); }
+.stepper .step:disabled { color: var(--border); }
+/* MAX は常設。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) */
+.stepper .max {
+  width: 30px; flex: none; padding: 3px 0; text-align: center;
+  border-radius: var(--r-inset); background: var(--state-temp-bg);
+  border: 1px solid var(--cell-max-bd); color: var(--sim);
+  font-size: 8px; font-weight: 700; transition: background 0.18s ease;
+}
+.stepper .max:hover:not(:disabled) { border-color: var(--sim); }
+/* 上限に届くとセルが紫になり MAX が反転する。「満」は文字ではなく面で伝える(§07) */
+.stepper.full .cell { background: var(--cell-full-bg); border-color: var(--sim); }
+.stepper.full .val { color: var(--sim-fg); }
+.stepper.full .max { background: var(--cell-max-full-bg); border-color: var(--sim-fg); color: var(--cell-fg); }
+.stepper .hint { flex: none; margin-left: 5px; font-size: 11px; white-space: nowrap; }

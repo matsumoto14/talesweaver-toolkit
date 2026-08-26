@@ -3,10 +3,9 @@
   //
   //   [ラベル]  [ 値 /上限  ← セル底に進捗バー ]  [MAX]  [注記]
   //
-  // 寸法・配色・動きは §07「押した瞬間に、結果が動く」の実演(.ench / .ctrl / .step /
-  // .cell / .fillbar / .maxbtn)をそのまま採る。
-  //   セルは白 + ラベンダーの枠、底に 2px の進捗バー、右に MAX。
-  //   上限に届くとセルが紫になり MAX が反転する(.cell.full / .maxbtn.full)。
+  // 見た目は app.css の `.stepper`(§07 実演をそのまま写した共通部品)。
+  // ここには**振る舞いだけ**を置く — 見た目を部品の中に持つと、規格を写し直すたびに
+  // ずれる。実際、最初の実装は面の色も動きも規格と違っていた。
   //
   // ＋ / − は「1 押しに意味がある」欄だけに置く(stepper)。ステータスの刻みは 1 で
   // 上限が 310〜3,000 あり、1 ずつ押す操作にならないため。どの欄もセルを押せば手入力に入る。
@@ -131,7 +130,7 @@
      ふだんは読み取り表示。入力欄は**自動値を上書きする例外操作**なので、押して初めて出す。
      編集に入っても「適用」は挟まない — 触った瞬間に結果が動く(§07)。 -->
 <div
-  class="stat-input"
+  class="stepper"
   class:full
   onfocusout={(e) => {
     // 編集の中で入力欄 → MAX と移る間は閉じない。relatedTarget は再描画のタイミングで
@@ -145,7 +144,7 @@
 >
   {#if label}<span class="label">{label}</span>{/if}
   {#if stepper}
-    <button type="button" class="nudge" onclick={() => nudge(-1)} disabled={value <= min} aria-label="{label} を 1 減らす">−</button>
+    <button type="button" class="step" onclick={() => nudge(-1)} disabled={value <= min} aria-label="{label} を 1 減らす">−</button>
   {/if}
   <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
        上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
@@ -182,73 +181,11 @@
     {#if showCap}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
   </div>
   {#if stepper}
-    <button type="button" class="nudge" onclick={() => nudge(1)} disabled={value >= max} aria-label="{label} を 1 増やす">＋</button>
+    <button type="button" class="step" onclick={() => nudge(1)} disabled={value >= max} aria-label="{label} を 1 増やす">＋</button>
   {/if}
   <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->
   {#if showCap}
-    <button type="button" class="max-btn" onclick={setMax} disabled={full}>MAX</button>
+    <button type="button" class="max" onclick={setMax} disabled={full}>MAX</button>
   {/if}
   {#if hint}<span class="hint dim">{hint}</span>{/if}
 </div>
-
-<style>
-  /* §07 実演の .ctrl。gap 3px で ＋ / − をセルに寄せる */
-  .stat-input { display: flex; align-items: center; gap: 3px; min-width: 0; }
-  .label {
-    font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
-    min-width: 46px; margin-right: 5px; flex-shrink: 0; white-space: nowrap;
-  }
-  /* .cell — 値・上限・進捗がひとつのセルに同居する(§07) */
-  .cell {
-    position: relative; flex: 1 1 auto; min-width: 74px; overflow: hidden;
-    display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
-    padding: 4px 7px 5px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--cell-bd);
-    transition: background 0.18s ease, border-color 0.18s ease;
-  }
-  .cell.editing { border-color: var(--accent); }
-  .cell:not(.editing):hover { border-color: var(--sim); }
-  /* .fillbar — 上限に対していまどのあたりか。伸び縮みが見えるように width を送る */
-  .fill {
-    position: absolute; left: 0; bottom: 0; height: 2px;
-    background: var(--cell-bar); pointer-events: none;
-    transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .val {
-    min-width: 0; flex: 1 1 auto; text-align: right;
-    font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
-    color: var(--cell-fg); background: none; border: none; padding: 0;
-  }
-  .val:focus { outline: none; }
-  .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-  /* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1) */
-  .val::-webkit-inner-spin-button, .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
-  input.val { appearance: textfield; }
-  .cap { flex: none; font-size: 8px; color: var(--cell-cap); font-variant-numeric: tabular-nums; }
-  /* .step — ＋ / − */
-  .nudge {
-    width: 16px; height: 22px; flex: none; padding: 0; line-height: 1;
-    background: none; border: none; border-radius: var(--r-chip);
-    font-size: 13px; font-weight: 700; color: var(--cell-step);
-  }
-  .nudge:hover:not(:disabled) { background: var(--state-temp-bg); color: var(--sim); }
-  .nudge:disabled { color: var(--border); }
-  /* .maxbtn — 常設。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) */
-  .max-btn {
-    width: 30px; flex: none; padding: 3px 0; text-align: center;
-    border-radius: var(--r-inset); background: var(--state-temp-bg);
-    border: 1px solid var(--cell-max-bd); color: var(--sim);
-    font-size: 8px; font-weight: 700;
-    transition: background 0.18s ease;
-  }
-  .max-btn:hover:not(:disabled) { border-color: var(--sim); }
-  /* 上限に届くとセルが紫になり MAX が反転する。「満」は文字ではなく面で伝える(§07) */
-  .stat-input.full .cell { background: var(--cell-full-bg); border-color: var(--sim); }
-  .stat-input.full .val { color: var(--sim-fg); }
-  .stat-input.full .max-btn {
-    background: var(--cell-max-full-bg); border-color: var(--sim-fg); color: var(--cell-fg);
-  }
-  /* 上限を語らない形(形態 1)。/上限 と MAX が無いぶん詰める */
-  .cell.bare { flex: none; width: 74px; }
-  .hint { flex-shrink: 0; margin-left: 5px; font-size: 11px; white-space: nowrap; }
-</style>
