@@ -424,11 +424,20 @@
     return lv === 0 ? "未習得" : `物 +${lv * 9}% / 魔 +${lv * 6}%`;
   });
   const SHARPNESS_RATES = [5, 10, 15, 20, 25, 28, 31, 34, 37, 40];
-  // 段の名前は Lv だけ、効いている値は行の右に出す(段に「Lv6(+28%)」と書くと折り返す)
+  // 段の名前は Lv だけ、効いている値は行の右に出す(段に「Lv6(+28%)」と書くと折り返す)。
+  // **Lv5 まではほぼ全員が同じ**(そこで止まる)なので、ふだんは 5〜10 だけ出す
   const sharpnessVisionOptions = Array.from({ length: 10 }, (_, i) => ({
     value: String(i + 1),
     label: String(i + 1),
   }));
+  const sharpnessMainOptions = sharpnessVisionOptions.slice(4);
+  let sharpnessAllOpen = $state(false);
+  const sharpnessIsLow = $derived(
+    draft.commonSkills.sharpness_vision_level > 0 && draft.commonSkills.sharpness_vision_level < 5,
+  );
+  const sharpnessOptionsNow = $derived(
+    sharpnessAllOpen || sharpnessIsLow ? sharpnessVisionOptions : sharpnessMainOptions,
+  );
   const sharpnessVisionNote = $derived.by(() => {
     const lv = draft.commonSkills.sharpness_vision_level;
     return lv === 0 ? "未習得" : `割合追加ダメージ +${SHARPNESS_RATES[lv - 1]}%`;
@@ -1544,12 +1553,15 @@
               (v) => setAugmentLevel(Number(v))
             }
           />
-          <button
-            type="button"
-            class="clear"
-            disabled={draft.commonSkills.augment_level === 0}
-            onclick={() => setAugmentLevel(0)}
-          >未習得</button>
+          <span class="skill-actions">
+            <button
+              type="button"
+              class="clear"
+              disabled={draft.commonSkills.augment_level === 0}
+              onclick={() => setAugmentLevel(0)}
+            >未習得</button>
+          </span>
+          <span></span>
         </div>
         <div class="skill-field">
           <span class="k">極限スキル</span>
@@ -1601,12 +1613,14 @@
               disabledValues={unleashDisabled(i)}
               bind:value={() => slot.stat ?? "", (v) => setUnleashStat(i, v)}
             />
-            <button
-              type="button"
-              class="clear"
-              disabled={slot.stat === null}
-              onclick={() => setUnleashStat(i, "")}
-            >未使用</button>
+            <span class="skill-actions">
+              <button
+                type="button"
+                class="clear"
+                disabled={slot.stat === null}
+                onclick={() => setUnleashStat(i, "")}
+              >未使用</button>
+            </span>
             <span class="v num" use:flash={() => (slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`)}>
               {slot.stat === null ? "—" : `+${UNLEASH_RATES[slot.level - 1]}%`}
             </span>
@@ -1627,19 +1641,29 @@
           <span class="k">Lv</span>
           <StepSelect
             label=""
-            options={sharpnessVisionOptions}
-            cols={sharpnessVisionOptions.length}
+            options={sharpnessOptionsNow}
+            cols={sharpnessOptionsNow.length}
             bind:value={
               () => String(draft.commonSkills.sharpness_vision_level),
               (v) => (draft.commonSkills.sharpness_vision_level = Number(v))
             }
           />
-          <button
-            type="button"
-            class="clear"
-            disabled={draft.commonSkills.sharpness_vision_level === 0}
-            onclick={() => (draft.commonSkills.sharpness_vision_level = 0)}
-          >未習得</button>
+          <span class="skill-actions">
+            {#if !sharpnessIsLow}
+              <button
+                type="button"
+                class="chip quiet"
+                class:on={sharpnessAllOpen}
+                onclick={() => (sharpnessAllOpen = !sharpnessAllOpen)}
+              >{sharpnessAllOpen ? "5 以上" : "Lv1〜4"}</button>
+            {/if}
+            <button
+              type="button"
+              class="clear"
+              disabled={draft.commonSkills.sharpness_vision_level === 0}
+              onclick={() => (draft.commonSkills.sharpness_vision_level = 0)}
+            >未習得</button>
+          </span>
           <span
             class="v num"
             use:bump={() => (draft.commonSkills.sharpness_vision_level === 0
@@ -2241,7 +2265,10 @@
   .stage-row :global(.seg button) { min-width: 46px; padding: 7px 0; font-size: 13px; }
   /* 共通スキルの欄。ラベル・段・外す・効いている値を 1 行に、列をそろえて並べる */
   .skill-fields { margin-top: 9px; display: flex; flex-direction: column; gap: 7px; }
-  .skill-field { display: grid; grid-template-columns: 64px minmax(0, 1fr) 52px 58px; gap: 9px; align-items: center; }
+  /* 列: ラベル / 段 / 操作(見え方のスイッチ・外す) / 効いている値。
+     操作が無い行でも列は残すので、どの行も同じ位置で並ぶ */
+  .skill-field { display: grid; grid-template-columns: 64px minmax(0, 1fr) 108px 58px; gap: 9px; align-items: center; }
+  .skill-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   .skill-field .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
   .skill-field .v { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--fg-sub); }
   /* ほぼ押さない操作。段に 1 列渡さず、言葉のまま小さく置く(記号にしない) */
@@ -2252,7 +2279,8 @@
   .skill-field .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
   .skill-field .clear:disabled { color: var(--border-soft); }
   .skill-note { margin: 0 0 0 73px; }
-  .ultimate-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* 3 つのチップは段 1 つぶんの幅に収まらないので、操作の列まで使う */
+  .ultimate-row { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 6px; }
   /* 2 件ぶんの高さを先に取る。選んだ数で下が上下しない */
   .ultimate-notes { min-height: 30px; }
   .ultimate-notes .skill-note { min-height: 15px; }
