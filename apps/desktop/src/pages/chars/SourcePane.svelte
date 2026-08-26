@@ -637,7 +637,7 @@
     rune: { title: "ルーンスキル", note: `スキル Lv がそのままステに乗る(Lv 0–${limits.rune_level_max})` },
     crown: { title: "クラウン", note: `ステに乗る実値(0–${limits.crown_max})` },
     monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
-    relic: { title: "神鳥の聖物", note: `0–${limits.sacred_relic_stage_max} 段階(実加算は段階×10)` },
+    relic: { title: "神鳥の聖物", note: `1 段階 +10(0–${limits.sacred_relic_stage_max} 段階)` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・増幅段階と能力値" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
     title: { title: "称号", note: "表示中の 1 件だけが装備の基本能力値に乗る" },
@@ -1151,6 +1151,7 @@
         {#each STAT_KINDS as k (k)}
           <div class="stat-row">
             <span class="k">{STAT_LABELS[k]}</span>
+            <!-- 1 段階 = +10。多くの人は +200(20 段階)で止まるので、そこを 1 押しで置く -->
             <StatInput
               label=""
               min={0}
@@ -1158,6 +1159,7 @@
               stepper
               bind:value={draft.statSources.sacred_relic[k]}
               format={(v) => (v > 0 ? `+${v * 10}` : "")}
+              presets={[{ value: 20, label: "+200" }]}
             />
           </div>
         {/each}
@@ -2033,12 +2035,17 @@
   /* 同じ形のステが 8 個並ぶ場所の共通形。ラベルを左に置いて 1 ステ 1 行にする —
      ラベルを上に置くと 1 件で 2 行使い、8 件で画面が埋まる(§00 01 / 02) */
   .stat-rows { margin-top: 8px; display: grid; grid-template-columns: 1fr; gap: 5px; }
-  .stat-rows.two { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 5px 16px; }
+  /* 2 列にするのは中身が収まるときだけ。狭いと右の列にはみ出して隣の行に重なる */
+  .stat-rows.two { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 5px 16px; }
   .stat-row {
     display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 9px; align-items: center;
     padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft);
   }
   .stat-row .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
+  .stat-row > :global(.stepper) { min-width: 0; }
+  /* 入力欄は数値 2〜4 桁ぶんあれば足りる。行いっぱいに伸ばすと、数字と ＋ / MAX が離れて
+     視線が横に流れる(§00 01)。全行が同じ幅なので端もそろう */
+  .stat-rows.two .stat-row :global(.stepper .cell) { flex: 0 1 104px; }
   .stat-row .v { min-width: 44px; text-align: right; font-size: 12px; font-weight: 700; color: var(--fg-sub); }
 
   .core-list { display: flex; flex-direction: column; gap: 7px; }

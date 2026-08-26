@@ -23,6 +23,12 @@
     step?: number;
     format?: (value: number) => string;
     /**
+     * よく使う値を 1 押しで入れるボタン(§12「MAX を 1 タップで置く」と同じ思想)。
+     * 上限まで盛らないのが普通の値(神鳥の聖物の +200 = 20 段階など)は、
+     * MAX だけ置いても押されない。実際に多い値を隣に出す。
+     */
+    presets?: { value: number; label: string }[];
+    /**
      * 上限に対する進捗を見せるか(§07 形態 4)。**上限まで盛るもの**だけ true —
      * エンチャント・ランダムOP・能力値のように「どこまで届いたか」に意味がある値。
      *
@@ -38,7 +44,7 @@
     stepper?: boolean;
   }
   let {
-    label, value = $bindable(), min, max, step = 1, format, gauge = true, stepper = false,
+    label, value = $bindable(), min, max, step = 1, format, presets = [], gauge = true, stepper = false,
   }: Props = $props();
 
   let text = $state(String(value));
@@ -183,9 +189,20 @@
   {#if stepper}
     <button type="button" class="step" onclick={() => nudge(1)} disabled={value >= max} aria-label="{label} を 1 増やす">＋</button>
   {/if}
+  <!-- よく使う値。MAX と同じく常設する -->
+  {#each presets as p (p.value)}
+    <button
+      type="button"
+      class="preset"
+      class:on={value === p.value}
+      onclick={() => { value = Math.min(max, Math.max(min, p.value)); text = String(value); }}
+    >{p.label}</button>
+  {/each}
   <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->
   {#if showCap}
     <button type="button" class="max" onclick={setMax} disabled={full}>MAX</button>
   {/if}
-  {#if hint}<span class="hint dim">{hint}</span>{/if}
+  <!-- format を渡された欄は**値が 0 でも場所を確保する**。出たり消えたりすると、
+       その行だけ入力欄の幅が変わる(§09 規則 4「あとから幅が変わらない」) -->
+  {#if format}<span class="hint dim fixed">{hint ?? ""}</span>{/if}
 </div>
