@@ -165,16 +165,24 @@ export const coreSetSupportValues = (set: CoreSet): EquipmentValues => {
   return total;
 };
 
-/** セット効果(表示用)。判定と値は domain/thesis_core.rs `CoreSet::set_bonus` と同じ。
- *  強化 4 のコアが 3 個以上そろうと、その中で最も低い進化段階で決まる。6 枠そろうと一段上がる。 */
-export interface CoreSetEffect {
-  /** 発動している進化段階。未発動なら null */
-  evolution: number | null;
-  /** 強化 4 に達しているコアの数 */
-  ready: number;
-  /** 最終ダメージの固定加算 */
+/** コアセット効果(表示用)。判定と値は domain/thesis_core.rs `CoreSet::set_bonus` と同じ。
+ *  セットは**同じ進化段階の強化4 コア**で組み、進化段階ごとに成立した分を**合算**する。
+ *  例: 進化3 ×3 + 進化4 ×3 = +1% と +2% で +3%。同じ段階が 6 個なら 6 セット効果になり、
+ *  3 セット効果は重ねて数えない(進化4 ×6 = +5%)。 */
+export interface CoreSetGroup {
+  evolution: number;
+  count: number;
   fixed: number;
-  /** 最終ダメージの割合(0.02 = +2%) */
+  rate: number;
+}
+export interface CoreSetEffect {
+  /** 成立しているセット(進化段階ごと)。空なら未発動 */
+  groups: CoreSetGroup[];
+  /** 進化を問わず強化 4 に達しているコアの数(あと何個で 1 セット目かを言うのに使う) */
+  ready: number;
+  /** 最終ダメージの固定加算(合算後) */
+  fixed: number;
+  /** 最終ダメージの割合(合算後。0.03 = +3%) */
   rate: number;
 }
 const CORE_SET_BONUS: Record<number, [number, number][]> = {
@@ -187,14 +195,19 @@ const CORE_SET_BONUS: Record<number, [number, number][]> = {
 };
 export const coreSetEffect = (set: CoreSet): CoreSetEffect => {
   const ready = set.slots.filter((c) => c !== null && c.enhancement >= 4).length;
-  for (let evolution = 4; evolution >= 0; evolution--) {
-    const count = set.slots.filter((c) => c !== null && c.enhancement >= 4 && c.evolution >= evolution).length;
-    if (count >= 3) {
-      const [fixed, rate] = CORE_SET_BONUS[evolution][count >= 6 ? 1 : 0];
-      return { evolution, ready, fixed, rate };
-    }
+  const groups: CoreSetGroup[] = [];
+  for (let evolution = 0; evolution <= 4; evolution++) {
+    const count = set.slots.filter((c) => c !== null && c.enhancement >= 4 && c.evolution === evolution).length;
+    if (count < 3) continue;
+    const [fixed, rate] = CORE_SET_BONUS[evolution][count >= 6 ? 1 : 0];
+    groups.push({ evolution, count, fixed, rate });
   }
-  return { evolution: null, ready, fixed: 0, rate: 0 };
+  return {
+    groups,
+    ready,
+    fixed: groups.reduce((n, g) => n + g.fixed, 0),
+    rate: groups.reduce((n, g) => n + g.rate, 0),
+  };
 };
 
 /** 全地域のコア合計のうち最大(補正源リストのサマリ表示用) */

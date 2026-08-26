@@ -244,24 +244,29 @@ impl CoreSet {
 
     /// この地域のセット効果(wiki: コアセット効果)。
     ///
-    /// 「強化4 のコアが 3 個そろうと、その進化段階のセット効果が発生する」(ユーザー確認
-    /// 2026-08-24。例: 進化3強化4 が 3 個 → 進化3 の 3〜5 セット効果)。進化段階が混ざった
-    /// 6 枠では**成立する最も高い進化段階**を採り、その段階のコアが 6 個そろっていれば
-    /// 6 セット効果にする。1 地域から出るセット効果は 1 つ(地域をまたぐと重複する。
-    /// `ThesisCores::set_bonus` を見よ)。
+    /// セットは**同じ進化段階の強化4 コア**で組む(wiki の表が「3〜5 セット効果 / 6 セット効果」
+    /// と個数で分かれているのはこのため)。**進化段階ごとに成立して、成立した分は合算する**
+    /// (ユーザー確認 2026-08-26。例: 進化3強化4 ×3 + 進化4強化4 ×3 = 進化3 の 3set +1% と
+    /// 進化4 の 3set +2% で合計 +3%)。同じ段階が 6 個そろったときは 6 セット効果になり、
+    /// 3 セット効果を重ねては数えない(進化4 ×6 = +5%、+2% は乗らない)。
+    /// 地域をまたぐ分もさらに合算する(`ThesisCores::set_bonus`)。
     pub fn set_bonus(&self) -> CoreSetBonus {
-        for evolution in (0..=CORE_EVOLUTION_MAX).rev() {
+        let mut total = CoreSetBonus::default();
+        for evolution in 0..=CORE_EVOLUTION_MAX {
             let count = self
                 .slots
                 .iter()
                 .flatten()
-                .filter(|c| c.enhancement >= SET_BONUS_ENHANCEMENT && c.evolution >= evolution)
+                .filter(|c| c.enhancement >= SET_BONUS_ENHANCEMENT && c.evolution == evolution)
                 .count();
-            if count >= SET_BONUS_MIN_COUNT {
-                return set_bonus_of(evolution, count >= CORE_SLOT_COUNT);
+            if count < SET_BONUS_MIN_COUNT {
+                continue;
             }
+            let bonus = set_bonus_of(evolution, count >= CORE_SLOT_COUNT);
+            total.final_damage_fixed += bonus.final_damage_fixed;
+            total.final_damage_rate += bonus.final_damage_rate;
         }
-        CoreSetBonus::default()
+        total
     }
 }
 
@@ -423,14 +428,26 @@ mod tests {
         set.slots[5] = None;
         assert!((set.set_bonus().final_damage_rate - 0.02).abs() < 1e-12);
 
-        // 混在は成立する最も高い進化段階を採る。
-        // 進化4 強化4 が 3 個 + 進化0 強化4 が 3 個 → 進化4 の 3set(+2%)
+        // 進化段階ごとに成立して合算する。
+        // 進化4 強化4 が 3 個 + 進化0 強化4 が 3 個 → 進化4 の 3set(+2%)と 進化0 の 3set(+500)
         let mut mixed = filled(4, 4);
         for slot in mixed.slots.iter_mut().skip(3) {
             *slot = core(CoreType::Slash, 0, 4);
         }
         let bonus = mixed.set_bonus();
         assert!((bonus.final_damage_rate - 0.02).abs() < 1e-12);
+        assert_eq!(bonus.final_damage_fixed, 500);
+
+        // 進化3強化4 ×3 + 進化4強化4 ×3 → +1% と +2% で +3%(ユーザー確認 2026-08-26)
+        let mut two_sets = CoreSet::default();
+        for i in 0..3 {
+            two_sets.slots[i] = core(CoreType::Slash, 3, 4);
+        }
+        for i in 3..6 {
+            two_sets.slots[i] = core(CoreType::Slash, 4, 4);
+        }
+        let bonus = two_sets.set_bonus();
+        assert!((bonus.final_damage_rate - 0.03).abs() < 1e-12);
         assert_eq!(bonus.final_damage_fixed, 0);
 
         // 進化3強化4 が 3 個(残りは強化3 でセット対象外)→ 進化3 の 3set(+1%)
@@ -443,12 +460,14 @@ mod tests {
         }
         assert!((three.set_bonus().final_damage_rate - 0.01).abs() < 1e-12);
 
-        // 上位段階が 3 個に満たなければ下の段階で判定する
-        // (進化4強化4 が 2 個 + 進化2強化4 が 4 個 → 進化2 以上が 6 個 = 進化2 の 6set +1%)
+        // 3 個に満たない段階は数に入らない。上位のコアが下位のセットを埋めることもない
+        // (進化4強化4 が 2 個 + 進化2強化4 が 4 個 → 進化2 の 3〜5set(+1,000)だけ)
         let mut lower = filled(2, 4);
         lower.slots[0] = core(CoreType::Slash, 4, 4);
         lower.slots[1] = core(CoreType::Slash, 4, 4);
-        assert!((lower.set_bonus().final_damage_rate - 0.01).abs() < 1e-12);
+        let bonus = lower.set_bonus();
+        assert_eq!(bonus.final_damage_fixed, 1_000);
+        assert_eq!(bonus.final_damage_rate, 0.0);
     }
 
     #[test]

@@ -600,11 +600,14 @@
   // 地域ごとのコアセット効果はタブが持つ(ゲーム内 UI の地域カードと同じ)。
   // 全地域の合計は「いまの実力」に出す — 結果を入力エリアに積まない
   const coreSetOf = (region: CoreRegion) => coreSetEffect(draft.equipment.thesis_cores[region]);
-  /** その地域のコアセット効果(タブに出す短い形) */
+  /** その地域のコアセット効果(タブに出す短い形)。進化段階ごとの分は合算済み */
   const coreSetLabelOf = (region: CoreRegion) => {
     const e = coreSetOf(region);
-    if (e.evolution === null) return "";
-    return e.fixed > 0 ? `+${fmtInt(e.fixed)}` : `+${Math.round(e.rate * 100)}%`;
+    if (e.groups.length === 0) return "";
+    const parts: string[] = [];
+    if (e.rate > 0) parts.push(`+${Math.round(e.rate * 100)}%`);
+    if (e.fixed > 0) parts.push(`+${fmtInt(e.fixed)}`);
+    return parts.join(" ");
   };
   const coreSupport = $derived(coreSetSupportValues(draft.equipment.thesis_cores[coreRegion]));
   const coreSupportSummary = $derived(
@@ -1529,7 +1532,7 @@
           >
             {CORE_REGION_LABELS[region]}
             <span class="num dim" use:bump={() => coreRegionTotal(region)}>{fmtInt(coreRegionTotal(region))}</span>
-            {#if coreSetOf(region).evolution !== null}
+            {#if coreSetOf(region).groups.length > 0}
               <span class="tab-set num" use:flash={() => coreSetLabelOf(region)}>{coreSetLabelOf(region)}</span>
             {:else if coreRegionTotal(region) > 0}
               <span class="tab-set off num">あと {3 - coreSetOf(region).ready}</span>

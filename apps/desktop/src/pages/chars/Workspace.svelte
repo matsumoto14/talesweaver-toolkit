@@ -617,14 +617,16 @@
                   <span use:bump={() => r.total}>{fmtInt(r.total)}</span>
                   <span
                     class="badge"
-                    style="background: {r.set.evolution === null ? STATE.unknown.bg : STATE.met.bg};
-                           border-color: {r.set.evolution === null ? STATE.unknown.bd : STATE.met.bd};
-                           color: {r.set.evolution === null ? STATE.unknown.fg : STATE.met.fg}"
-                  >{r.set.evolution === null ? `あと ${3 - r.set.ready}` : "発動中"}</span>
+                    style="background: {r.set.groups.length === 0 ? STATE.unknown.bg : STATE.met.bg};
+                           border-color: {r.set.groups.length === 0 ? STATE.unknown.bd : STATE.met.bd};
+                           color: {r.set.groups.length === 0 ? STATE.unknown.fg : STATE.met.fg}"
+                  >{r.set.groups.length === 0
+                      ? `あと ${3 - r.set.ready}`
+                      : r.set.groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
                 </span>
               {/each}
             </div>
-            <p class="dim tiny">コア効果(能力値)は対象地域内でのみ有効。コアセット効果は地域ごとに発動して足されます(強化 4 のコア 3 個から)。</p>
+            <p class="dim tiny">コア効果(能力値)は対象地域内でのみ有効。コアセット効果は<b>同じ進化段階の強化 4 コア 3 個ごと</b>に成立し、段階ごと・地域ごとの分が足されます(同じ段階が 6 個なら 6 セット効果になり、3 セット分は重ねません)。</p>
           </div>
         {/if}
         <div class="sheet-card">
