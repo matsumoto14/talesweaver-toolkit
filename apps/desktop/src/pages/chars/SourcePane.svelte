@@ -306,6 +306,17 @@
     ];
   }
 
+  /** ランダムOP のドリルダウン。装備と同じく、押した部位は残して右にペインを足す(§09 規則 2) */
+  let openRandomPart = $state<PartSlot | null>(null);
+  /** その部位に付いている OP の要約(行に出す) */
+  const randomOptionSummary = (slot: PartSlot): string => {
+    const options = draft.equipment.parts[slot].random_options;
+    if (options.length === 0) return NEUTRAL_RO;
+    return options
+      .map((o) => randomOptionDef(o.option_id)?.name ?? o.option_id)
+      .join(" ・ ");
+  };
+  const NEUTRAL_RO = "なし";
   /** 候補の面に出す形。名前だけでは選べないので、カテゴリーと効き先を並べる */
   const addablePickerOptions = (slot: PartSlot): PickerOption[] =>
     addableRandomOptions(slot).map((o) => {
@@ -1483,34 +1494,48 @@
         グレーの枠は<b>記録するだけ</b>(発動条件付き・未実装の概念)で計算には入りません。
       </p>
     </div>
-    <!-- 部位ごとにカードを積むと、付けていない部位まで 1 枚ずつ場所を取る。
-         1 部位 1 行にして、付いている OP だけがその下に増える(§00 02) -->
-    <div class="card">
-      {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
-        {#if app.randomOptions.some((d) => d.slot === slot)}
-          <div class="ro-slot">
-            <div class="ro-slot-head">
-              <span class="ro-slot-name">{PART_SLOT_LABELS[slot]}</span>
-              <span class="ro-slot-count dim num">
-                {draft.equipment.parts[slot].random_options.length > 0
-                  ? `${draft.equipment.parts[slot].random_options.length} 件`
-                  : "なし"}
+    <!-- 装備と同じドリルダウン。押した部位はその場に残り、右にペインが増える(§09 規則 2) -->
+    <div class="part-split" class:open={openRandomPart !== null}>
+      <div class="part-list">
+        {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
+          {#if app.randomOptions.some((d) => d.slot === slot)}
+            {@const count = draft.equipment.parts[slot].random_options.length}
+            <button
+              type="button"
+              class="part-row"
+              class:on={openRandomPart === slot}
+              onclick={() => (openRandomPart = slot)}
+            >
+              <span class="part-main">
+                <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
+                <span class="part-plus" class:on={count > 0}>{count > 0 ? `OP ${count}` : ""}</span>
               </span>
-              {#if addableRandomOptions(slot).length > 0}
-                <span class="ro-add">
-                  <Picker
-                    options={addablePickerOptions(slot)}
-                    note="この部位に足せる OP(同じカテゴリーは 1 つまで)"
-                    placeholder="＋ OP を追加"
-                    bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
-                  />
-                </span>
-              {/if}
-            </div>
+              <span class="part-vals num dim">{randomOptionSummary(slot)}</span>
+              <span class="chev dim">›</span>
+            </button>
+          {/if}
+        {/each}
+      </div>
+      {#if openRandomPart !== null}
+        {@const slot = openRandomPart}
+        <div class="part-detail pane-in">
+          <button type="button" class="close-detail" onclick={() => (openRandomPart = null)}>✕ この部位を閉じる</button>
+          <div class="card">
+            <div class="card-title">{PART_SLOT_LABELS[slot]}</div>
             {@render randomOptionEditor(slot)}
+            {#if addableRandomOptions(slot).length > 0}
+              <div class="ro-add">
+                <Picker
+                  options={addablePickerOptions(slot)}
+                  note="この部位に足せる OP(同じカテゴリーは 1 つまで)"
+                  placeholder="＋ OP を追加"
+                  bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
+                />
+              </div>
+            {/if}
           </div>
-        {/if}
-      {/each}
+        </div>
+      {/if}
     </div>
   {:else if sourceId === "title"}
     <div class="card">
@@ -2346,13 +2371,7 @@
   }
   .ro-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
   .ro-note { margin: 0 0 6px; }
-  /* 1 部位 1 行。付いている OP だけがその下に増える */
-  .ro-slot { padding: 7px 0; border-bottom: 1px dashed var(--border-soft); }
-  .ro-slot:last-child { border-bottom: 0; }
-  .ro-slot-head { display: grid; grid-template-columns: 64px 48px minmax(0, 1fr); gap: 9px; align-items: center; }
-  .ro-slot-name { font-size: 11.5px; font-weight: 700; color: var(--fg-head); }
-  .ro-slot-count { font-size: 9.5px; }
-  .ro-add { max-width: 260px; justify-self: end; width: 100%; }
+  .ro-add { margin-top: 10px; max-width: 300px; }
 
   .contrib-card {
     margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
