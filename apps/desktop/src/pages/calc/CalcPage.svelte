@@ -757,7 +757,7 @@
       label: `Lv${i + 1}(+${(i + 1) * 3}%)`,
     })),
   ];
-  // 武器のエンチャント上限(カタログ item ならその上限、カスタム・未装備は equipment_value_max)
+  // 武器固有の固定エンチャント枠。実物の装備本体補正には左右されない。
   const weaponEnchantCaps = $derived.by(() => {
     const weapon = payload ? weaponOf(payload) : null;
     const item = weapon?.item_id ? app.equipmentCatalog.find((i) => i.id === weapon.item_id) : null;
@@ -1295,6 +1295,7 @@
                 label={EQUIPMENT_STAT_LABELS.thrust}
                 min={0}
                 max={weaponEnchantCaps.thrust}
+                strictMax
                 bind:value={
                   () => weaponOf(payload).enchant.thrust,
                   (v) => editSim((p) => (weaponOf(p).enchant.thrust = v))
@@ -1304,6 +1305,7 @@
                 label={EQUIPMENT_STAT_LABELS.slash}
                 min={0}
                 max={weaponEnchantCaps.slash}
+                strictMax
                 bind:value={
                   () => weaponOf(payload).enchant.slash,
                   (v) => editSim((p) => (weaponOf(p).enchant.slash = v))

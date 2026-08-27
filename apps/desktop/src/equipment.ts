@@ -1,4 +1,4 @@
-// 装備値の共通ヘルパー(部位の基本値レンジ中央・エンチャント上限クランプ・表示用合計)。
+// 装備値の共通ヘルパー(部位の装備本体レンジ中央・エンチャント許容量・表示用合計)。
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
@@ -22,7 +22,7 @@ export const midpointValues = (min: EquipmentValues, max: EquipmentValues): Equi
     EQUIPMENT_VALUE_KEYS.map((k) => [k, Math.floor((min[k] + max[k]) / 2)]),
   ) as unknown as EquipmentValues;
 
-/** 値をカタログの上限(エンチャント上限等)まで clamp する。 */
+/** 値を指定された上限まで clamp する。 */
 export const clampToCaps = (values: EquipmentValues, caps: EquipmentValues): EquipmentValues =>
   Object.fromEntries(
     EQUIPMENT_VALUE_KEYS.map((k) => [k, Math.min(values[k], caps[k])]),

@@ -646,6 +646,9 @@ export type WeaponClass =
   | "great_sword"
   | "holy_staff" | "handbell" | "dual_blade_magic" | "hammer";
 export type WeaponSystem = "stab" | "stab_hack" | "hack" | "int" | "int_hack" | "mr";
+export type WristType =
+  | "shield" | "spellbook" | "knuckle" | "band" | "bracelet" | "pendulum" | "crystal_ball"
+  | "dual_blade_physical" | "physical_magazine" | "magic_magazine" | "dual_blade_magic";
 
 // 装備カタログの 1 アイテム。crates/gamedata/src/equipment_catalog.rs の EquipmentItem。
 export interface EquipmentItem {
@@ -658,8 +661,10 @@ export interface EquipmentItem {
   values_max: EquipmentValues;
   /** 成長装備の各基本能力値の入力上限。通常装備は null */
   growth_cap: number | null;
-  /** エンチャント上限(エンチャント不可は全 0) */
+  /** 装備固有の固定エンチャント枠。実物の装備本体補正には左右されない。 */
   enchant_caps: EquipmentValues;
+  /** 腕装備の区分。バンド固有パッシブの判定元。腕以外は null。 */
+  wrist_type: WristType | null;
   /** 武器のみ非 null */
   weapon_class: WeaponClass | null;
   /** gamedata WeaponSystem。主軸スキルとの候補照合に使う単一ソース。 */

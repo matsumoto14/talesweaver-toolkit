@@ -13,8 +13,8 @@ pub mod enemies;
 pub mod equipment_catalog;
 pub mod masteries;
 pub mod random_options;
-pub mod skills;
 mod skill_targets;
+pub mod skills;
 pub mod titles;
 
 use serde::Serialize;
@@ -24,8 +24,8 @@ pub use awakening::{awakening_caps, awakening_rate, AWAKENING_SOURCE};
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use character_skills::{character_skill_catalog, CHARACTER_SKILL_SOURCE};
 pub use characters::{
-    accuracy_correction,
-    attack_coefficients, characters, equipment_coefficients, find_character, GameCharacter,
+    accuracy_correction, attack_coefficients, characters, equipment_coefficients, find_character,
+    GameCharacter,
 };
 pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};
 pub use elements::{
@@ -33,12 +33,12 @@ pub use elements::{
 };
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
-    armor_class, armor_class_for_type, armor_enhance_multiplier, armor_enhance_rates, enhance_grade_multiplier,
-    enhance_multiplier, enhance_multiplier_range, enhance_rates_for_type, equipment_enhance_type,
-    enhance_rates, equipment_abilities, equipment_catalog, find_equipment_item, item_damage_contributions,
-    ArmorClass, ArmorEnhanceRates, EquipmentItem, WeaponClass, WeaponSystem, weapon_system,
-    EQUIPMENT_ABILITY_SOURCE,
-    EQUIPMENT_CATALOG_SOURCE, ENHANCE_SOURCE,
+    armor_class, armor_class_for_type, armor_enhance_multiplier, armor_enhance_rates,
+    character_wrist_base_bonus, enhance_grade_multiplier, enhance_multiplier,
+    enhance_multiplier_range, enhance_rates, enhance_rates_for_type, equipment_abilities,
+    equipment_catalog, equipment_enhance_type, find_equipment_item, item_damage_contributions,
+    weapon_system, ArmorClass, ArmorEnhanceRates, EquipmentItem, WeaponClass, WeaponSystem,
+    WristType, ENHANCE_SOURCE, EQUIPMENT_ABILITY_SOURCE, EQUIPMENT_CATALOG_SOURCE,
 };
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};

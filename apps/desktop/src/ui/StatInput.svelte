@@ -23,6 +23,8 @@
     value: number;
     min: number;
     max: number;
+    /** max=0 も実上限として扱い、max が外部変更されたら現在値を直ちにクランプする。 */
+    strictMax?: boolean;
     step?: number;
     format?: (value: number) => string;
     /**
@@ -47,13 +49,14 @@
     stepper?: boolean;
   }
   let {
-    label, hideLabel = false, value = $bindable(), min, max, step = 1, format, presets = [], gauge = true, stepper = false,
+    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], gauge = true, stepper = false,
   }: Props = $props();
 
   let text = $state(String(value));
   let lastSyncedValue = value;
 
   $effect(() => {
+    if (strictMax && value > max) value = Math.max(min, max);
     if (value !== lastSyncedValue) {
       lastSyncedValue = value;
       text = String(value);
@@ -62,6 +65,7 @@
 
   function clamp(n: number): number {
     if (n < min) return min;
+    if (strictMax && n > max) return max;
     // 上限の情報が無いとき(max <= min)は上限で縛らない。縛ると手入力が min に落ちるだけになる
     if (max > min && n > max) return max;
     return n;

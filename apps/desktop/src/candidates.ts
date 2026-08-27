@@ -65,8 +65,10 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
       label: "武器と鎧のエンチャントを上限まで",
       cost: "エンチャント",
       apply: (p) => {
-        selectedEquipmentPartOrNeutral(p.equipment.parts.weapon).enchant = { ...weaponItem.enchant_caps };
-        selectedEquipmentPartOrNeutral(p.equipment.parts.armor).enchant = { ...armorItem.enchant_caps };
+        const weapon = selectedEquipmentPartOrNeutral(p.equipment.parts.weapon);
+        const armor = selectedEquipmentPartOrNeutral(p.equipment.parts.armor);
+        weapon.enchant = { ...weaponItem.enchant_caps };
+        armor.enchant = { ...armorItem.enchant_caps };
       },
     });
   }
@@ -92,9 +94,11 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
           weapon.item_id = upgrade.id;
           weapon.custom_name = null;
           weapon.base = { ...upgrade.values_max };
-          // 新アイテムのエンチャント上限まで clamp(SourcePane の pickCatalogItem と同じ扱い。
-          // 例: アクィルス(魔攻上限280)→アビス(同100)への更新で検証エラーにならないように)
-          weapon.enchant = clampToCaps(weapon.enchant, upgrade.enchant_caps);
+          // 新アイテムで追加できる量まで clamp(SourcePane の pickCatalogItem と同じ扱い)。
+          weapon.enchant = clampToCaps(
+            weapon.enchant,
+            upgrade.enchant_caps,
+          );
         },
       });
     }

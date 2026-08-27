@@ -40,7 +40,7 @@
     randomOptionActualDelayPercent, randomOptionValue, randomOptionValueLabel, rangeSummary,
     sienaExtraCapacity, sienaExtraTotal, sienaExtraValue,
     selectedSienaAura, selectedSienaAuraRegistration,
-    sienaPartStatTotal, sienaPartValues, sienaStage, valuesSummary,
+    sienaPartStatTotal, sienaPartValues, sienaStage, sumValues, valuesSummary,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
@@ -361,7 +361,14 @@
   };
   const openPartLabel = $derived(openPart ? PART_SLOT_LABELS[openPart] : "");
   const catalogFor = $derived(
-    openPart ? app.equipmentCatalog.filter((i) => i.slot === openPart) : [],
+    openPart
+      ? app.equipmentCatalog
+          .filter((i) => i.slot === openPart)
+          .sort((a, b) =>
+            sumValues(b.values_max) - sumValues(a.values_max)
+            || sumValues(b.enchant_caps) - sumValues(a.enchant_caps)
+            || a.name.localeCompare(b.name, "ja"))
+      : [],
   );
   const weaponSystemsFor = (dependency: SkillDependency | null): WeaponSystem[] => {
     if (dependency === "stab") return ["stab", "stab_hack"];
@@ -1791,7 +1798,7 @@
           </div>
           <p class="hint dim">通常は突き・斬り・魔攻・魔防の4補正だけ入力します。</p>
           <div class="base-value-toolbar">
-            <span class="base-value-copy"><b>{item?.growth_cap ? "成長値" : "基礎値"}</b><small>{item?.growth_cap ? `上限 ${item.growth_cap}` : item === null ? "カタログ外のため入力" : "選択中の装備から自動"}</small></span>
+            <span class="base-value-copy"><b>{item?.growth_cap ? "成長値" : "装備本体"}</b><small>{item?.growth_cap ? `上限 ${item.growth_cap}` : item === null ? "カタログ外のため入力" : "カタログ値を使用中"}</small></span>
             {#if item !== null}
               {#if item.id === "rising-holic-cuffs"}
                 <button type="button" class="chip growth-preset-button" onclick={() => setAllBaseValues(part, 140)}>全補正140</button>
@@ -1801,7 +1808,7 @@
                 class="chip quiet base-mode-button"
                 aria-pressed={editBaseValues}
                 onclick={() => (editBaseValues = !editBaseValues)}
-              >{editBaseValues ? "編集を終了" : "基礎値編集"}</button>
+              >{editBaseValues ? "編集を終了" : "装備補正を編集"}</button>
             {/if}
           </div>
           <div class="values-paired enchant-first">
@@ -1822,11 +1829,11 @@
                     <span class="ability-spacer" aria-hidden="true"></span>
                   {/if}
                   <div class="equation-enchant">
-                    <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap} bind:value={part.enchant[k]} />
+                    <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap} strictMax={item !== null} bind:value={part.enchant[k]} />
                   </div>
                   <div class="equation-base">
                     {#if editBaseValues || item === null}
-                      <StatInput label="{EQUIPMENT_STAT_LABELS[k]}の基礎値" hideLabel min={0} max={item?.growth_cap ?? limits.equipment_value_max} gauge={false} bind:value={part.base[k]} />
+                      <StatInput label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正" hideLabel min={0} max={item?.growth_cap ?? limits.equipment_value_max} gauge={false} bind:value={part.base[k]} />
                     {:else}
                       <span class="base-readonly"><b class="num" use:flash={() => String(part.base[k])}>{part.base[k]}</b></span>
                     {/if}
