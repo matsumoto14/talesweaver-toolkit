@@ -404,7 +404,7 @@ fn build_damage_input(
     awakening: domain::Awakening,
     skill: Skill,
     enemy: Enemy,
-    core_region: Option<CoreRegion>,
+    content: &domain::Content,
     combo_count: u32,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageInput> {
@@ -434,11 +434,17 @@ fn build_damage_input(
         domain::stat_sources::apply_temporary_adjustments(&mut stat_modifiers, &mut stat_contributions, temp);
     }
     let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog());
-    let equipment_enhanced_totals = equipment.enhanced_totals(core_region);
+    let equipment_enhanced_totals = equipment.enhanced_totals(content.core_region);
     let random_options = equipment.random_option_totals(&gamedata::random_option_catalog());
     let added_damage = weapon_added_damage(&equipment.parts.weapon);
     let title_damage_rate =
         domain::title_attack_damage_rate(equipment.title.as_deref(), &gamedata::title_catalog());
+    let title_added_damage_rate = domain::title_added_damage_rate(
+        equipment.title.as_deref(),
+        &gamedata::title_catalog(),
+        content.game_region,
+        content.enemy_id.as_deref(),
+    );
     let damage_contributions = damage_contributions_of(stat_sources, &equipment);
     let element_value = element_value_for(game_character_id, &equipment, stat_sources, &skill);
     Ok(DamageInput::new(
@@ -454,6 +460,7 @@ fn build_damage_input(
         gamedata::accuracy_correction(skill.dependency),
         random_options,
         title_damage_rate,
+        title_added_damage_rate,
         damage_contributions.clone(),
         added_damage,
         awakening_rate,
@@ -495,7 +502,7 @@ pub fn calculate_damage(
         character.awakening,
         find_skill(&skill_id)?,
         enemy,
-        content.core_region,
+        &content,
         combo_count,
         temporary_adjustments,
     )?;
@@ -532,7 +539,7 @@ pub fn preview_damage(
         character.awakening,
         find_skill(&skill_id)?,
         enemy,
-        content.core_region,
+        &content,
         combo_count,
         temporary_adjustments,
     )?;
@@ -637,6 +644,12 @@ pub fn evaluate_contents(
             let equipment_enhanced_totals = enhanced_for(content.core_region);
             let title_damage_rate =
                 domain::title_attack_damage_rate(character.equipment.title.as_deref(), &titles);
+            let title_added_damage_rate = domain::title_added_damage_rate(
+                character.equipment.title.as_deref(),
+                &titles,
+                content.game_region,
+                content.enemy_id.as_deref(),
+            );
             let enemy = find_enemy(enemy_id)?;
             let mut best: Option<BestSkillDamage> = None;
             let mut best_dependency: Option<domain::SkillDependency> = None;
@@ -654,6 +667,7 @@ pub fn evaluate_contents(
                     gamedata::accuracy_correction(skill.dependency),
                     random_option_totals,
                     title_damage_rate,
+                    title_added_damage_rate,
                     damage_contributions.clone(),
                     added_damage,
                     awakening_rate,

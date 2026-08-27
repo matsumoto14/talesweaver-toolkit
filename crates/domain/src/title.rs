@@ -11,7 +11,22 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::content::GameRegion;
 use crate::equipment::EquipmentValues;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddedDamageCondition {
+    Region(GameRegion),
+    Enemy(&'static str),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct ConditionalAddedDamage {
+    /// 割合追加ダメージ。単位は %。
+    pub percent: f64,
+    pub condition: AddedDamageCondition,
+}
 
 /// 称号の区分(wiki のページ分け)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -39,8 +54,9 @@ pub struct TitleDef {
     /// **[X3] 攻撃ダメージ(基本発動)(上限 +80%)** に称号の「ダメージ増加」が載っている)。
     /// 課金箱シリーズ(明鏡止水〜緋馬の怪火)と一部の名誉の証が持つ。単位は %
     pub attack_damage_percent: f64,
-    /// 入手方法・備考。**条件付き**の追加効果(特定マップで追加ダメージ +20% など)は
-    /// 発動条件を持っていないので計算に入れず、ここに残すだけ
+    /// 特定の地域または敵でだけ発動する割合追加ダメージ。
+    pub conditional_added_damage: Option<ConditionalAddedDamage>,
+    /// 入手方法・備考。
     pub note: &'static str,
 }
 
@@ -59,6 +75,27 @@ pub fn title_values(title: Option<&str>, titles: &[TitleDef]) -> EquipmentValues
 /// 選択中の称号の「ダメージ n% 増加」を Σ% の小数表現で返す(カテゴリX へ入る)。
 pub fn title_attack_damage_rate(title: Option<&str>, titles: &[TitleDef]) -> f64 {
     find(title, titles).map_or(0.0, |t| t.attack_damage_percent / 100.0)
+}
+
+/// 選択中の称号が対象地域または敵に一致するとき、割合追加ダメージを小数で返す。
+pub fn title_added_damage_rate(
+    title: Option<&str>,
+    titles: &[TitleDef],
+    game_region: Option<GameRegion>,
+    enemy_id: Option<&str>,
+) -> f64 {
+    let Some(effect) = find(title, titles).and_then(|t| t.conditional_added_damage) else {
+        return 0.0;
+    };
+    let matches = match effect.condition {
+        AddedDamageCondition::Region(region) => game_region == Some(region),
+        AddedDamageCondition::Enemy(id) => enemy_id == Some(id),
+    };
+    if matches {
+        effect.percent / 100.0
+    } else {
+        0.0
+    }
 }
 
 fn find<'a>(title: Option<&str>, titles: &'a [TitleDef]) -> Option<&'a TitleDef> {
@@ -89,6 +126,10 @@ mod tests {
                 agility: 40,
             },
             attack_damage_percent: 0.0,
+            conditional_added_damage: Some(ConditionalAddedDamage {
+                percent: 20.0,
+                condition: AddedDamageCondition::Region(GameRegion::LostIsland),
+            }),
             note: "",
         }]
     }
@@ -106,5 +147,21 @@ mod tests {
     #[test]
     fn カタログに無いidは中立値() {
         assert_eq!(title_values(Some("nope"), &defs()), EquipmentValues::default());
+    }
+    #[test]
+    fn 条件付き追加ダメージは地域一致時だけ返す() {
+        assert_eq!(
+            title_added_damage_rate(
+                Some("eclipse"),
+                &defs(),
+                Some(GameRegion::LostIsland),
+                None,
+            ),
+            0.20
+        );
+        assert_eq!(
+            title_added_damage_rate(Some("eclipse"), &defs(), Some(GameRegion::Praba), None),
+            0.0
+        );
     }
 }

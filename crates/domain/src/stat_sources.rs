@@ -113,7 +113,8 @@ impl RuneLevels {
 }
 
 /// クラウン(wiki: クラウン)。週次ランク報酬+名声強化で、シーズンごとに戻る。
-/// 枠だけ用意し値はユーザーの手入力とする。ステごと 0..=300、最終固定値層。
+/// 名声強化は +10 刻みで、選択報酬に指定した 1 ステだけ上限が 100 から 300 に伸びる。
+/// 各フィールドは選択報酬を含む画面表示上の実値で、最終固定値層に乗る。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Crown {
     pub stab: u32,
@@ -123,10 +124,22 @@ pub struct Crown {
     pub mr: u32,
     pub dex: u32,
     pub agi: u32,
+    #[serde(default)]
+    pub selected_stat: Option<StatKind>,
 }
 
 impl Crown {
-    pub const MAX_VALUE: u32 = 300;
+    pub const STEP: u32 = 10;
+    pub const BASE_MAX_VALUE: u32 = 100;
+    pub const SELECTED_MAX_VALUE: u32 = 300;
+
+    pub fn max_value(&self, kind: StatKind) -> u32 {
+        if self.selected_stat == Some(kind) {
+            Self::SELECTED_MAX_VALUE
+        } else {
+            Self::BASE_MAX_VALUE
+        }
+    }
 
     pub fn get(&self, kind: StatKind) -> u32 {
         match kind {
@@ -436,12 +449,21 @@ impl StatSources {
             }
 
             let crown = self.crown.get(kind);
-            if crown > Crown::MAX_VALUE {
+            let crown_max = self.crown.max_value(kind);
+            if crown > crown_max {
                 return Err(StatSourceError::OutOfRange {
                     source_name: "クラウン",
                     kind,
                     value: crown,
-                    max: Crown::MAX_VALUE,
+                    max: crown_max,
+                });
+            }
+            if crown % Crown::STEP != 0 {
+                return Err(StatSourceError::InvalidStep {
+                    source_name: "クラウン",
+                    kind,
+                    value: crown,
+                    step: Crown::STEP,
                 });
             }
 
@@ -560,6 +582,8 @@ pub enum StatSourceError {
     ChoiceOutOfRange { id: String },
     #[error("{source_name} の {kind:?} は 0..={max} の範囲で指定してください(指定値 {value})")]
     OutOfRange { source_name: &'static str, kind: StatKind, value: u32, max: u32 },
+    #[error("{source_name} の {kind:?} は {step} 刻みで指定してください(指定値 {value})")]
+    InvalidStep { source_name: &'static str, kind: StatKind, value: u32, step: u32 },
     #[error("バフ '{id}' が重複して選択されています")]
     DuplicateBuff { id: String },
     #[error("バフ '{id}' の入力値が範囲外です({min}..={max}、指定値 {value})")]
@@ -975,7 +999,9 @@ pub fn preview_effective_stats(
 pub struct StatLimits {
     pub base_stat_max: u32,
     pub rune_level_max: u8,
-    pub crown_max: u32,
+    pub crown_base_max: u32,
+    pub crown_selected_max: u32,
+    pub crown_step: u32,
     /// モンスターカードの 1 ステあたり上限(wiki: ステータス「カード装着 +0〜70」)
     pub monster_card_max: u32,
     pub sacred_relic_stage_max: u8,
@@ -1030,7 +1056,9 @@ pub fn stat_limits() -> StatLimits {
     StatLimits {
         base_stat_max: BASE_STAT_MAX,
         rune_level_max: RuneLevels::MAX_LEVEL,
-        crown_max: Crown::MAX_VALUE,
+        crown_base_max: Crown::BASE_MAX_VALUE,
+        crown_selected_max: Crown::SELECTED_MAX_VALUE,
+        crown_step: Crown::STEP,
         monster_card_max: MonsterCards::MAX_VALUE,
         sacred_relic_stage_max: SacredRelic::MAX_STAGE,
         adjustment_add_min: ADJUSTMENT_ADD_MIN,
@@ -1192,7 +1220,10 @@ mod tests {
 
     #[test]
     fn クラウンは最終固定値層に積まれる() {
-        let sources = StatSources { crown: Crown { def: 250, ..Default::default() }, ..Default::default() };
+        let sources = StatSources {
+            crown: Crown { def: 250, selected_stat: Some(StatKind::Def), ..Default::default() },
+            ..Default::default()
+        };
         let (modifiers, contributions) = build_modifiers(&sources, &test_catalog()).unwrap();
         assert_eq!(modifiers.get(StatKind::Def).final_fixed, 250);
         let c = contributions.iter().find(|c| c.kind == StatKind::Def).unwrap();
@@ -1534,14 +1565,49 @@ mod tests {
     }
 
     #[test]
-    fn クラウンは0から300の範囲外を拒否する() {
-        let mut sources = StatSources { crown: Crown { hack: Crown::MAX_VALUE, ..Default::default() }, ..Default::default() };
+    fn クラウンは選択報酬の能力値だけ300まで受ける() {
+        let mut sources = StatSources {
+            crown: Crown {
+                hack: Crown::SELECTED_MAX_VALUE,
+                selected_stat: Some(StatKind::Hack),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         assert!(sources.validate().is_ok());
-        sources.crown.hack = Crown::MAX_VALUE + 1;
+        sources.crown.hack = Crown::SELECTED_MAX_VALUE + Crown::STEP;
         let err = sources.validate().unwrap_err();
         assert!(matches!(
             err,
-            StatSourceError::OutOfRange { source_name: "クラウン", kind: StatKind::Hack, value: 301, max: 300 }
+            StatSourceError::OutOfRange { source_name: "クラウン", kind: StatKind::Hack, value: 310, max: 300 }
+        ));
+    }
+
+    #[test]
+    fn クラウンは未選択の能力値の100超過と10刻み以外を拒否する() {
+        let mut sources = StatSources {
+            crown: Crown { stab: Crown::BASE_MAX_VALUE + Crown::STEP, ..Default::default() },
+            ..Default::default()
+        };
+        assert!(matches!(
+            sources.validate(),
+            Err(StatSourceError::OutOfRange {
+                source_name: "クラウン",
+                kind: StatKind::Stab,
+                value: 110,
+                max: 100,
+            })
+        ));
+
+        sources.crown.stab = 15;
+        assert!(matches!(
+            sources.validate(),
+            Err(StatSourceError::InvalidStep {
+                source_name: "クラウン",
+                kind: StatKind::Stab,
+                value: 15,
+                step: 10,
+            })
         ));
     }
 
@@ -1701,7 +1767,9 @@ mod tests {
         let limits = stat_limits();
         assert_eq!(limits.base_stat_max, BASE_STAT_MAX);
         assert_eq!(limits.rune_level_max, RuneLevels::MAX_LEVEL);
-        assert_eq!(limits.crown_max, Crown::MAX_VALUE);
+        assert_eq!(limits.crown_base_max, Crown::BASE_MAX_VALUE);
+        assert_eq!(limits.crown_selected_max, Crown::SELECTED_MAX_VALUE);
+        assert_eq!(limits.crown_step, Crown::STEP);
         assert_eq!(limits.sacred_relic_stage_max, SacredRelic::MAX_STAGE);
         assert_eq!(limits.adjustment_add_min, ADJUSTMENT_ADD_MIN);
         assert_eq!(limits.adjustment_add_max, ADJUSTMENT_ADD_MAX);

@@ -119,7 +119,10 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
 export const neutralStatSources = (): StatSources => ({
   pet_skills: Object.fromEntries(STAT_KINDS.map((k) => [k, null])) as StatSources["pet_skills"],
   rune_levels: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["rune_levels"],
-  crown: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["crown"],
+  crown: {
+    ...Object.fromEntries(STAT_KINDS.map((k) => [k, 0])),
+    selected_stat: null,
+  } as StatSources["crown"],
   monster_cards: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["monster_cards"],
   sacred_relic: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["sacred_relic"],
   buffs: { choices: [] },

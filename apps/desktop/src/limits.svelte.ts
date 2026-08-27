@@ -8,7 +8,9 @@ import type { StatLimits } from "./api/types";
 const FALLBACK: StatLimits = {
   base_stat_max: 310,
   rune_level_max: 20,
-  crown_max: 300,
+  crown_base_max: 100,
+  crown_selected_max: 300,
+  crown_step: 10,
   monster_card_max: 70,
   sacred_relic_stage_max: 40,
   adjustment_add_min: -3000,

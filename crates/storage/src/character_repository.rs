@@ -1314,6 +1314,7 @@ mod tests {
             level: None,
             values: domain::EquipmentValues { thrust: 40, ..Default::default() },
             attack_damage_percent: 0.0,
+            conditional_added_damage: None,
             note: "",
         }]
     }
@@ -1544,7 +1545,11 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
 
         let mut over_crown = new_character("x");
-        over_crown.stat_sources.crown = Crown { stab: Crown::MAX_VALUE + 1, ..Default::default() };
+        over_crown.stat_sources.crown = Crown {
+            stab: Crown::SELECTED_MAX_VALUE + Crown::STEP,
+            selected_stat: Some(domain::StatKind::Stab),
+            ..Default::default()
+        };
         assert!(matches!(repo.create(&over_crown, &[], &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
 
         let mut over_rune = new_character("x");
@@ -1564,7 +1569,11 @@ mod tests {
         let created = repo.create(&new_character("メイン"), &[], &[], &[], &[], &[], &[]).unwrap();
 
         let mut invalid = new_character("メイン");
-        invalid.stat_sources.crown = Crown { stab: Crown::MAX_VALUE + 1, ..Default::default() };
+        invalid.stat_sources.crown = Crown {
+            stab: Crown::SELECTED_MAX_VALUE + Crown::STEP,
+            selected_stat: Some(domain::StatKind::Stab),
+            ..Default::default()
+        };
         assert!(matches!(repo.update(created.id, &invalid, &[], &[], &[], &[], &[], &[]), Err(StorageError::InvalidValue(_))));
     }
 

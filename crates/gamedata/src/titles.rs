@@ -17,11 +17,13 @@
 //! wiki の表の列は 名称 / 習得Lv / 突き / 斬り / 物防 / 魔攻 / 魔防 / 命中 / 回避 / 敏捷 / Cri で、
 //! 装備補正 9 値と同じ顔ぶれ(並びだけ違う)。 の並びに直して持つ。
 //!
-//! 備考欄の条件付き効果(「喪失の島関連マップで追加ダメージ+20%」など)は発動条件を
-//! 計算対象に持っていないので  に残すだけで計算には入れない。
+//! 備考欄の条件付き割合追加ダメージは、対象地域または敵とともに構造化して持つ。
 //! グループボーナス(「N 個完成で +α」)は所持状況の入力が要るのでスコープ外。
 
-use domain::{EquipmentValues, TitleDef, TitleKind};
+use domain::content::GameRegion;
+use domain::{
+    AddedDamageCondition, ConditionalAddedDamage, EquipmentValues, TitleDef, TitleKind,
+};
 
 use crate::Source;
 
@@ -29,7 +31,7 @@ use crate::Source;
 pub const TITLE_SOURCE: Source = Source {
     page: "称号/normal, 称号/special, 称号/event",
     retrieved_on: "2026-08-26",
-    note: "normal/special は補正値 9 種の合計 15 以上(72 件)、event は無条件のダメージ増加を持つもの(48 件)。備考の条件付き効果とグループボーナスは未実装",
+    note: "normal/special は補正値 9 種の合計 15 以上(72 件)、event は無条件のダメージ増加を持つもの(48 件)。条件付き割合追加ダメージは地域・敵条件で計算。グループボーナスは未実装",
 };
 
 /// wiki の列順ではなく  の並び:
@@ -58,7 +60,10 @@ const fn t(
     values: EquipmentValues,
     note: &'static str,
 ) -> TitleDef {
-    TitleDef { id, name, kind, group, level, values, attack_damage_percent: 0.0, note }
+    TitleDef {
+        id, name, kind, group, level, values, attack_damage_percent: 0.0,
+        conditional_added_damage: None, note,
+    }
 }
 
 /// 無条件の「ダメージ n% 増加」を持つ称号(wiki: ステータスの [X3] 攻撃ダメージ(基本発動))。
@@ -73,7 +78,44 @@ const fn td(
     attack_damage_percent: f64,
     note: &'static str,
 ) -> TitleDef {
-    TitleDef { id, name, kind, group, level, values, attack_damage_percent, note }
+    TitleDef {
+        id, name, kind, group, level, values, attack_damage_percent,
+        conditional_added_damage: None, note,
+    }
+}
+
+fn conditional_added_damage(id: &str) -> Option<ConditionalAddedDamage> {
+    use AddedDamageCondition::{Enemy, Region};
+    use GameRegion::{ArklonUnderground, LostIsland, Praba, ShinchouNest};
+    let region = match id {
+        "eclipse" => Some((20.0, LostIsland)),
+        "shinchou_no_negura" => Some((20.0, ShinchouNest)),
+        "arklon_death_knight" => Some((20.0, ArklonUnderground)),
+        "golmodaf_slayer" | "golron_slayer" | "kyojin_gyakusatsusha" | "kongen_hakaisha" => {
+            Some((10.0, Praba))
+        }
+        _ => None,
+    };
+    if let Some((percent, region)) = region {
+        return Some(ConditionalAddedDamage { percent, condition: Region(region) });
+    }
+
+    let enemy = if id.starts_with("mercurial_shirairon_") {
+        Some("shirairon")
+    } else if id.starts_with("mercurial_silvan_") {
+        Some("silvan")
+    } else if id.starts_with("mercurial_serion_") {
+        Some("serion")
+    } else if id.starts_with("mercurial_sereana_") {
+        Some("sereana")
+    } else if id.starts_with("mercurial_luminous_") {
+        Some("luminous")
+    } else if id.starts_with("arklon_guardian_") {
+        Some("deep_apostle")
+    } else {
+        None
+    };
+    enemy.map(|enemy| ConditionalAddedDamage { percent: 10.0, condition: Enemy(enemy) })
 }
 
 /// **ダメージ増加 → 与ダメージに効く 1 値の大きさ → その 4 値の合計 → 9 値の合計**の順。
@@ -328,6 +370,9 @@ pub fn title_catalog() -> Vec<TitleDef> {
         td("meiyo_teikoku_kishidan_taichou", "名誉の証（帝国騎士団隊長）", Event, "特別EVENT 2024年", None,
            v(30, 20, 20, 20, 20, 20, 20, 20, 20), 20.0, "名誉の証"),
     ];
+    for title in &mut catalog {
+        title.conditional_added_damage = conditional_added_damage(title.id);
+    }
     catalog.sort_by(|a, b| {
         // 装備攻撃力に入る 4 値(wiki: カテゴリA の内訳)。ここだけが与ダメージに効く
         let attack = |t: &TitleDef| {
@@ -458,5 +503,78 @@ mod tests {
     fn マーキュリアル洞窟は30件() {
         let n = title_catalog().into_iter().filter(|t| t.group == "マーキュリアル洞窟").count();
         assert_eq!(n, 30);
+    }
+    #[test]
+    fn wikiのセル継承を全依存称号へ適用する() {
+        let catalog = title_catalog();
+        for (prefix, enemy) in [
+            ("mercurial_shirairon_", "shirairon"),
+            ("mercurial_silvan_", "silvan"),
+            ("mercurial_serion_", "serion"),
+            ("mercurial_sereana_", "sereana"),
+            ("mercurial_luminous_", "luminous"),
+        ] {
+            let titles: Vec<_> = catalog.iter().filter(|t| t.id.starts_with(prefix)).collect();
+            assert_eq!(titles.len(), 6, "{prefix}");
+            for title in titles {
+                assert_eq!(
+                    title.conditional_added_damage,
+                    Some(ConditionalAddedDamage {
+                        percent: 10.0,
+                        condition: AddedDamageCondition::Enemy(enemy),
+                    }),
+                    "{}",
+                    title.id
+                );
+            }
+        }
+        let guardians: Vec<_> =
+            catalog.iter().filter(|t| t.id.starts_with("arklon_guardian_")).collect();
+        assert_eq!(guardians.len(), 6);
+        assert!(guardians.iter().all(|t| t.conditional_added_damage == Some(ConditionalAddedDamage {
+            percent: 10.0,
+            condition: AddedDamageCondition::Enemy("deep_apostle"),
+        })));
+    }
+
+    #[test]
+    fn 地域称号の条件を解決する() {
+        let catalog = title_catalog();
+        assert_eq!(
+            domain::title_added_damage_rate(
+                Some("eclipse"),
+                &catalog,
+                Some(GameRegion::LostIsland),
+                None,
+            ),
+            0.20
+        );
+        assert_eq!(
+            domain::title_added_damage_rate(
+                Some("eclipse"),
+                &catalog,
+                None,
+                Some("eclipse_1"),
+            ),
+            0.0
+        );
+        assert_eq!(
+            domain::title_added_damage_rate(
+                Some("arklon_death_knight"),
+                &catalog,
+                Some(GameRegion::ArklonUnderground),
+                Some("arklon_underground"),
+            ),
+            0.20
+        );
+        assert_eq!(
+            domain::title_added_damage_rate(
+                Some("arklon_death_knight"),
+                &catalog,
+                None,
+                Some("abyss_hell"),
+            ),
+            0.0
+        );
     }
 }

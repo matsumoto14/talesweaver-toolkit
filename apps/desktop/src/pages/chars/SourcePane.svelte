@@ -64,6 +64,9 @@
   import { ETERNAL_MILESTONES } from "../../draft";
   import StatInput from "../../ui/StatInput.svelte";
 
+  /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
+  const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
+
   /** ほかの補正源から入ってくる分の 1 行。押すとその補正源へ飛ぶ */
   interface ExternalSource {
     id: SourceId;
@@ -86,6 +89,38 @@
   let { draft, preview, previewError, skills, sourceId, onOpenSource }: Props = $props();
 
   const STAT_MIN = 1;
+  const crownMax = (kind: StatKind): number =>
+    draft.statSources.crown.selected_stat === kind
+      ? limits.crown_selected_max
+      : limits.crown_base_max;
+  const crownSelectedValue = (): number | null => {
+    const kind = draft.statSources.crown.selected_stat;
+    return kind === null ? null : draft.statSources.crown[kind];
+  };
+  function toggleCrownSelectedStat(kind: StatKind) {
+    const current = draft.statSources.crown.selected_stat;
+    const next = current === kind ? null : kind;
+    if (current !== null && current !== next) {
+      draft.statSources.crown[current] = Math.min(
+        draft.statSources.crown[current],
+        limits.crown_base_max,
+      );
+    }
+    draft.statSources.crown.selected_stat = next;
+  }
+  function setCrownPreset(value: number) {
+    const kind = draft.statSources.crown.selected_stat;
+    if (kind === null) return;
+    draft.statSources.crown[kind] = Math.min(value, crownMax(kind));
+  }
+  function addCrownSelected(amount: number) {
+    const kind = draft.statSources.crown.selected_stat;
+    if (kind === null) return;
+    draft.statSources.crown[kind] = Math.min(
+      crownMax(kind),
+      draft.statSources.crown[kind] + amount,
+    );
+  }
 
   // --- キャラスキル(wiki: 各キャラの Skill ページ / ステータスの各カテゴリ表)-------
   // カタログはキャラを問わず全件持っているので、このキャラのぶんだけ出す。
@@ -369,10 +404,19 @@
   // 装備枠 1 つ。表示中の 1 件だけが効く(所持ぶんの累積ではない。wiki: 称号システム)。
   let titleQuery = $state("");
   const selectedTitle = $derived(app.titles.find((t) => t.id === draft.equipment.title) ?? null);
-  const filteredTitles = $derived.by(() => {
+  /** 普段使う称号。無条件ダメージ +20%以上と、地域称号のうち実用される最上位 2 件。 */
+  const titleIsCommon = (t: TitleDef): boolean =>
+    t.attack_damage_percent >= 20 || t.id === "eclipse" || t.id === "shinchou_no_negura";
+  /** 依存違いの一部だけに追加効果が書かれている場合も、同名の変種はまとめて常設する。 */
+  const commonTitleBases = $derived(
+    new Set(app.titles.filter(titleIsCommon).map((t) => t.name.split(" - ")[0])),
+  );
+  const commonTitles = $derived(app.titles.filter((t) => commonTitleBases.has(t.name.split(" - ")[0])));
+  const otherTitles = $derived(app.titles.filter((t) => !commonTitleBases.has(t.name.split(" - ")[0])));
+  const filteredOtherTitles = $derived.by(() => {
     const q = titleQuery.trim();
-    if (q === "") return app.titles;
-    return app.titles.filter((t) => t.name.includes(q) || t.group.includes(q));
+    if (q === "") return otherTitles;
+    return otherTitles.filter((t) => t.name.includes(q) || t.group.includes(q));
   });
   /** 称号の補正値の要約(値が入っている列だけ)。 */
   const titleSummary = (t: TitleDef): string =>
@@ -383,16 +427,18 @@
   const titleBase = (t: TitleDef): string => t.name.split(" - ")[0];
   /** 同じ称号の変種(突き / 斬り / 魔攻 …)を 1 行にまとめる。
       カタログの並び(ダメージ増加の大きい順)は最初に出てきた変種の位置で保つ */
-  const titleGroups = $derived.by(() => {
+  const groupTitles = (titles: TitleDef[]) => {
     const groups = new Map<string, TitleDef[]>();
-    for (const t of filteredTitles) {
+    for (const t of titles) {
       const base = titleBase(t);
       const list = groups.get(base);
       if (list) list.push(t);
       else groups.set(base, [t]);
     }
     return [...groups].map(([base, items]) => ({ base, items }));
-  });
+  };
+  const commonTitleGroups = $derived(groupTitles(commonTitles));
+  const otherTitleGroups = $derived(groupTitles(filteredOtherTitles));
 
   // --- ランダムオプション -------------------------------------------------
   // 効果値の上限は wiki の一覧表のレンジそのもの。枠数は wiki に記載が無く、代わりに
@@ -1007,7 +1053,10 @@
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
     rune: { title: "ルーンスキル", note: `スキル Lv がそのままステに乗る(Lv 0–${limits.rune_level_max})` },
-    crown: { title: "クラウン", note: `ステに乗る実値(0–${limits.crown_max})` },
+    crown: {
+      title: "クラウン",
+      note: `10 きざみ・通常上限 ${limits.crown_base_max} / 選択報酬は ${limits.crown_selected_max}`,
+    },
     monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
     relic: { title: "神鳥の聖物", note: `ステごとの加算(10 きざみ・0–${limits.sacred_relic_stage_max * 10})` },
     siena: { title: "シエナのオーラ", note: "Lv310 の 8 部位・スロットを 1 個ずつ足す(段階 = スロット数)" },
@@ -1088,6 +1137,49 @@
         />
       </div>
       {#if def.note}<p class="hint dim ro-note">{def.note}</p>{/if}
+    {/if}
+  {/each}
+{/snippet}
+
+<!-- 称号候補。依存違いだけの変種は 1 行にまとめ、選ぶのに必要な効果値を同じ行に出す。 -->
+{#snippet titleRows(groups: { base: string; items: TitleDef[] }[])}
+  {#each groups as g (g.base)}
+    {#if g.items.length === 1}
+      {@const t = g.items[0]}
+      <button
+        type="button"
+        class="item-row"
+        class:on={draft.equipment.title === t.id}
+        onclick={() => (draft.equipment.title = t.id)}
+      >
+        <span class="item-name">{t.name}</span>
+        {#if t.attack_damage_percent > 0}
+          <span class="title-dmg num">ダメ +{t.attack_damage_percent}%</span>
+        {:else if t.note.includes("追加ダメージ")}
+          <span class="title-extra">条件付き追加ダメ</span>
+        {/if}
+      </button>
+    {:else}
+      {@const picked = g.items.find((t) => t.id === draft.equipment.title) ?? null}
+      <div class="item-row group" class:on={picked !== null}>
+        <span class="item-name">{g.base}</span>
+        {#if g.items[0].attack_damage_percent > 0}
+          <span class="title-dmg num">ダメ +{g.items[0].attack_damage_percent}%</span>
+        {:else if g.items.some((t) => t.note.includes("追加ダメージ"))}
+          <span class="title-extra">条件付き追加ダメ</span>
+        {/if}
+        <span class="title-variants">
+          {#each g.items as t (t.id)}
+            <button
+              type="button"
+              class="chip"
+              class:on={draft.equipment.title === t.id}
+              title="{t.name} — {titleSummary(t)}"
+              onclick={() => (draft.equipment.title = t.id)}
+            >{t.name.slice(g.base.length + 3)}</button>
+          {/each}
+        </span>
+      </div>
     {/if}
   {/each}
 {/snippet}
@@ -1589,7 +1681,7 @@
   {:else if sourceId === "rune"}
     <div class="card">
       <div class="stat-rows two">
-        {#each STAT_KINDS as k (k)}
+        {#each PAIRED_STAT_KINDS as k (k)}
           <!-- Lv は段階。1 押しに意味があるので ＋ / − を置く(§07 形態 4) -->
           <div class="stat-row">
             <span class="k">{STAT_LABELS[k]}</span>
@@ -1606,11 +1698,59 @@
     </div>
   {:else if sourceId === "crown"}
     <div class="card">
+      <div class="crown-choice">
+        <span class="crown-choice-label">選択報酬</span>
+        <div class="crown-choice-stats" role="radiogroup" aria-label="クラウンの選択報酬">
+          {#each PAIRED_STAT_KINDS as k (k)}
+            <button
+              type="button"
+              class="chip"
+              class:on={draft.statSources.crown.selected_stat === k}
+              role="radio"
+              aria-checked={draft.statSources.crown.selected_stat === k}
+              onclick={() => toggleCrownSelectedStat(k)}
+            >{STAT_LABELS[k]}</button>
+          {/each}
+        </div>
+        <div class="crown-presets" aria-label="選択報酬のよく使う値">
+          <button
+            type="button"
+            class="chip num"
+            disabled={draft.statSources.crown.selected_stat === null ||
+              crownSelectedValue() === limits.crown_selected_max}
+            onclick={() => addCrownSelected(20)}
+          >+20</button>
+          {#each [260, 280] as value (value)}
+            <button
+              type="button"
+              class="chip num"
+              class:on={crownSelectedValue() === value}
+              disabled={draft.statSources.crown.selected_stat === null}
+              onclick={() => setCrownPreset(value)}
+            >{value}</button>
+          {/each}
+          <button
+            type="button"
+            class="chip num"
+            class:on={crownSelectedValue() === limits.crown_selected_max}
+            disabled={draft.statSources.crown.selected_stat === null}
+            onclick={() => setCrownPreset(limits.crown_selected_max)}
+          >MAX</button>
+        </div>
+        <span class="hint dim">選んだ能力値だけ上限 +{limits.crown_selected_max}。もう一度押すと外せます。</span>
+      </div>
       <div class="stat-rows two">
-        {#each STAT_KINDS as k (k)}
-          <div class="stat-row">
+        {#each PAIRED_STAT_KINDS as k (k)}
+          <div class="stat-row" use:flash={() => String(crownMax(k))}>
             <span class="k">{STAT_LABELS[k]}</span>
-            <StatInput label="" min={0} max={limits.crown_max} stepper bind:value={draft.statSources.crown[k]} />
+            <StatInput
+              label=""
+              min={0}
+              max={crownMax(k)}
+              step={limits.crown_step}
+              stepper
+              bind:value={draft.statSources.crown[k]}
+            />
           </div>
         {/each}
       </div>
@@ -1623,7 +1763,7 @@
         <b>固定値層</b>なので、能力値倍率A(テイルズウィーバーのエネルギー等)の影響を受けます。
       </p>
       <div class="stat-rows two">
-        {#each STAT_KINDS as k (k)}
+        {#each PAIRED_STAT_KINDS as k (k)}
           <div class="stat-row">
             <span class="k">{STAT_LABELS[k]}</span>
             <StatInput
@@ -1640,7 +1780,7 @@
   {:else if sourceId === "relic"}
     <div class="card">
       <div class="stat-rows two">
-        {#each STAT_KINDS as k (k)}
+        {#each PAIRED_STAT_KINDS as k (k)}
           <div class="stat-row">
             <span class="k">{STAT_LABELS[k]}</span>
             <!-- 段階ではなく**実際に増える値**で入れる(1 段階 = +10 なので ＋ を押すと 10 ずつ)。
@@ -1909,83 +2049,71 @@
     </div>
   {:else if sourceId === "title"}
     <div class="card">
-      <p class="hint dim">
-        wiki「称号システム」。<b>表示中の 1 件だけ</b>が効きます(持っている称号の合計ではありません)。
-        補正値は<b>装備の基本能力値</b>に乗り、<b>ダメージ n% 増加</b>はカテゴリX(攻撃ダメージ)に入ります。
-        収録は<b>主要称号のみ</b>({app.titles.length} 件 — normal / special は補正値 9 種の合計 15 以上、
-        event はダメージ増加を持つもの)。並びは<b>ダメージ増加 → 与ダメージに効く 1 値の大きさ</b>の順です
-        (装備攻撃力に入るのは突き/斬り/魔攻/魔防の 4 値だけで、使うのはスキルの依存種別の 1 つ)。
-        備考の<b>条件付き</b>効果(特定マップで追加ダメージ +20% など)とグループボーナスは計算に入りません。
-      </p>
-      <input class="item-search" type="text" placeholder="称号名・グループで探す" bind:value={titleQuery} />
-      <div class="item-list">
-        <button
-          type="button"
-          class="item-row"
-          class:on={draft.equipment.title === null}
-          onclick={() => (draft.equipment.title = null)}
-        >
-          <span class="item-name">未装備</span>
-        </button>
-        {#each titleGroups as g (g.base)}
-          {#if g.items.length === 1}
-            {@const t = g.items[0]}
-            <button
-              type="button"
-              class="item-row"
-              class:on={draft.equipment.title === t.id}
-              onclick={() => (draft.equipment.title = t.id)}
-            >
-              <span class="item-name">{t.name}</span>
-              <!-- ダメージ増加は補正値と桁が違う効き方をするので、値の要約と別枠で出す -->
-              {#if t.attack_damage_percent > 0}
-                <span class="title-dmg num">ダメ +{t.attack_damage_percent}%</span>
-              {/if}
-              <span class="item-vals num dim">{titleSummary(t)}</span>
-            </button>
-          {:else}
-            <!-- 依存違いだけの変種は 1 行にまとめ、どれを持っているかをチップで選ぶ。
-                 4〜6 個なので段階選択に収まる(§07 形態 2)。行ごと押せる場所は作らない -->
-            {@const picked = g.items.find((t) => t.id === draft.equipment.title) ?? null}
-            <div class="item-row group" class:on={picked !== null}>
-              <span class="item-name">{g.base}</span>
-              {#if g.items[0].attack_damage_percent > 0}
-                <span class="title-dmg num">ダメ +{g.items[0].attack_damage_percent}%</span>
-              {/if}
-              <span class="item-vals num dim">{picked ? titleSummary(picked) : ""}</span>
-              <span class="title-variants">
-                {#each g.items as t (t.id)}
-                  <button
-                    type="button"
-                    class="chip"
-                    class:on={draft.equipment.title === t.id}
-                    title="{t.name} — {titleSummary(t)}"
-                    onclick={() => (draft.equipment.title = t.id)}
-                  >{t.name.slice(g.base.length + 3)}</button>
-                {/each}
-              </span>
-            </div>
-          {/if}
-        {/each}
+      <div class="card-title">選択中</div>
+      <div
+        class="contrib-card title-current"
+        class:empty={selectedTitle === null}
+        use:flash={() => selectedTitle?.id ?? "none"}
+      >
+        <span class="item-name strong">{selectedTitle?.name ?? "未選択"}</span>
+        {#if selectedTitle && titleSummary(selectedTitle) !== ""}
+          <span class="item-vals num dim" title={titleSummary(selectedTitle)}>{titleSummary(selectedTitle)}</span>
+        {/if}
+        {#if selectedTitle?.attack_damage_percent}
+          <span class="title-dmg num">ダメージ +{selectedTitle.attack_damage_percent}%</span>
+        {:else if selectedTitle?.note.includes("追加ダメージ")}
+          <span class="title-extra">条件付き追加ダメージ</span>
+        {/if}
+        {#if selectedTitle}
+          <button type="button" class="chip quiet" onclick={() => (draft.equipment.title = null)}>外す</button>
+        {/if}
       </div>
+    </div>
+    <div class="card">
+      <p class="hint dim">
+        <b>表示中の 1 件だけ</b>が効きます。普段使う候補だけを先に出し、それ以外は下の「その他」から選べます。
+      </p>
+      <details class="fold">
+        <summary>称号の補正の入り方</summary>
+        <div class="fold-body">
+          <p class="hint dim">
+            wiki「称号システム」。補正値は<b>装備の基本能力値</b>に乗り、<b>ダメージ n% 増加</b>はカテゴリX(攻撃ダメージ)に入ります。
+            収録は主要称号のみ({app.titles.length} 件)。並びは<b>ダメージ増加 → 与ダメージに効く 1 値の大きさ</b>の順です。
+            条件付き効果とグループボーナスは記録だけで、計算には入りません。
+          </p>
+        </div>
+      </details>
+      <div class="card-title space">
+        よく使う称号 <span class="normal dim">ダメ +20%以上 / エクリプス / 神鳥の塒</span>
+      </div>
+      <div class="item-list title-list">
+        {@render titleRows(commonTitleGroups)}
+      </div>
+      <details class="fold">
+        <summary>その他の称号から選ぶ({otherTitles.length} 件)</summary>
+        <div class="fold-body">
+          <input class="item-search" type="text" placeholder="称号名・グループで探す" bind:value={titleQuery} />
+          {#if otherTitleGroups.length > 0}
+            <div class="item-list title-list">
+              {@render titleRows(otherTitleGroups)}
+            </div>
+          {:else}
+            <p class="hint dim">該当する称号はありません。</p>
+          {/if}
+        </div>
+      </details>
     </div>
     {#if selectedTitle}
       {@const filled = EQUIPMENT_STAT_KINDS.filter((k) => selectedTitle.values[k] !== 0)}
       <div class="card">
         <div class="card-title inline">
-          {selectedTitle.name}
-          {#if selectedTitle.attack_damage_percent > 0}
-            <span class="title-dmg num" use:bump={() => selectedTitle?.attack_damage_percent ?? 0}>
-              ダメージ +{selectedTitle.attack_damage_percent}%
-            </span>
-          {/if}
+          選択中の補正 <span class="normal dim">{selectedTitle.name}</span>
         </div>
         {#if selectedTitle.attack_damage_percent > 0}
           <p class="hint dim">
             ダメージ増加は<b>カテゴリX(攻撃ダメージ)</b>の X3 基本発動に入ります(wiki: ステータス。X3 は上限 +80%)。
           </p>
         {/if}
-        <!-- 課金箱シリーズは 1 値だけの称号が多い。0 の列を並べても比べる材料にならない(§00 02) -->
         {#if filled.length > 0}
           <div class="values-grid">
             {#each filled as k (k)}
@@ -2864,13 +2992,14 @@
     border: 1px solid var(--state-met-bd); border-radius: var(--r-pill); padding: 0 6px;
   }
 
-  /* 変種をまとめた行。1 行目が名前・2 行目が変種のチップ */
+  /* 変種も同じ 1 行に置く。単独称号と高さをそろえ、一覧をリズムよく追えるようにする */
   .item-row.group {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 3px 7px; cursor: default;
+    display: flex; align-items: center; gap: 7px; cursor: default;
   }
   .item-row.group:hover { border-color: var(--border); }
-  .title-variants { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
+  .title-list > .item-row { height: 40px; min-height: 40px; overflow: hidden; }
+  .title-list .item-name { flex: 1; }
+  .title-variants { margin-left: auto; display: flex; flex-wrap: nowrap; gap: 5px; flex-shrink: 0; }
 
   /* マスタリーの 1 段。段名 + 3 択のカード。どの段も 3 択なので列を固定してそろえる */
   .mastery-row {
@@ -2932,6 +3061,16 @@
     flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
     color: var(--sel-fg); background: var(--sel);
     border: 1px solid var(--sel-bd); border-radius: var(--r-pill);
+  }
+  .title-extra {
+    flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
+    color: var(--state-edge-fg); background: var(--state-edge-bg);
+    border: 1px dashed var(--state-edge-bd); border-radius: var(--r-pill);
+  }
+  .title-current { min-height: 40px; flex-wrap: nowrap; }
+  .title-current .item-name { flex: 1; }
+  .title-current .item-vals {
+    min-width: 0; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
   /* 称号の補正値グリッド */
@@ -3092,6 +3231,14 @@
   .stat-rows { margin-top: 8px; display: grid; grid-template-columns: 1fr; gap: 5px; }
   /* 2 列にするのは中身が収まるときだけ。狭いと右の列にはみ出して隣の行に重なる */
   .stat-rows.two { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 5px 16px; }
+  .crown-choice {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-bottom: 8px; border-bottom: 1px dashed var(--border-soft);
+  }
+  .crown-choice-label { font-size: 10px; letter-spacing: 0.08em; color: var(--fg-muted); }
+  .crown-choice-stats { display: flex; gap: 5px; flex-wrap: wrap; }
+  .crown-presets { display: flex; gap: 5px; margin-left: auto; }
+  .crown-choice .hint { flex-basis: 100%; }
   .stat-row {
     display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 9px; align-items: center;
     padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft);

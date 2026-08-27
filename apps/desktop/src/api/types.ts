@@ -67,8 +67,8 @@ export type PetSkillTier = "basic" | "true_lv1" | "true_lv2" | "true_lv3" | "tru
 export type PetSkills = Record<StatKind, PetSkillTier | null>;
 // ルーンスキル。ステごと 0..=20。
 export type RuneLevels = Record<StatKind, number>;
-// クラウン。ステごと 0..=300。
-export type Crown = Record<StatKind, number>;
+// クラウン。通常はステごと 0..=100、選択報酬の 1 ステだけ 0..=300。値は +10 刻み。
+export type Crown = Record<StatKind, number> & { selected_stat: StatKind | null };
 // モンスターカード(カード装着)。ステごと 0..=70、固定値層。
 export type MonsterCards = Record<StatKind, number>;
 // 神鳥の聖物。ステごと 0..=40 段階(実加算値は段階×10)。
@@ -518,8 +518,17 @@ export interface TitleDef {
   values: EquipmentValues;
   /** 無条件の「ダメージ n% 増加」。カテゴリX(攻撃ダメージ)の X3 基本発動に入る。単位は % */
   attack_damage_percent: number;
-  /** 入手方法・備考(**条件付き**の追加効果は計算に入らない) */
+  /** 特定地域または敵でだけ発動する割合追加ダメージ */
+  conditional_added_damage: ConditionalAddedDamage | null;
+  /** 入手方法・備考 */
   note: string;
+}
+
+export type GameRegion = "lost_island" | "shinchou_nest" | "arklon_underground" | "praba";
+export type AddedDamageCondition = { region: GameRegion } | { enemy: string };
+export interface ConditionalAddedDamage {
+  percent: number;
+  condition: AddedDamageCondition;
 }
 
 // テシスコアの地域。crates/domain/src/thesis_core.rs の CoreRegion(snake_case)。
@@ -853,7 +862,9 @@ export interface DpsTriple {
 export interface StatLimits {
   base_stat_max: number;
   rune_level_max: number;
-  crown_max: number;
+  crown_base_max: number;
+  crown_selected_max: number;
+  crown_step: number;
   /** モンスターカードの 1 ステあたり上限 */
   monster_card_max: number;
   sacred_relic_stage_max: number;
@@ -938,6 +949,8 @@ export interface Content {
   requirements: ContentRequirement[];
   /** このコンテンツで効くテシスコアの地域。対応が取れないコンテンツは null */
   core_region: CoreRegion | null;
+  /** 称号などの地域限定効果を判定する、テシスコアとは別のゲーム内地域 */
+  game_region: GameRegion | null;
   /** 判定対象外の入場条件の注記(ルーン Lv・共通スキル等。表示専用) */
   entry_note: string | null;
   team_note: string | null;

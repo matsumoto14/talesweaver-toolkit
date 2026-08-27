@@ -60,6 +60,8 @@ pub struct DamageInput {
     /// 称号の無条件「ダメージ n% 増加」(`title_attack_damage_rate`。カタログの解決は呼び出し側)。
     /// **カテゴリX3 攻撃ダメージ(基本発動)**(上限 +80%)
     pub title_attack_damage_rate: f64,
+    /// 対象地域・敵に一致した称号の割合追加ダメージ(§5 新-割合)。
+    pub title_added_damage_rate: f64,
     /// キャラスキル・マスタリー・バフの、与ダメージ式のカテゴリへの寄与(カタログの解決は
     /// 呼び出し側)。効き先はカテゴリごとに違う(X4 攻撃ダメージ(スキル)、L 最終ダメージ、
     /// E1/E2 スキル倍率増加 …)ので、値だけでなく**どのカテゴリか**を持つ
@@ -112,6 +114,7 @@ impl DamageInput {
         accuracy_correction: AccuracyCorrection,
         random_options: RandomOptionTotals,
         title_attack_damage_rate: f64,
+        title_added_damage_rate: f64,
         damage_contributions: Vec<(DamageCategory, f64)>,
         weapon_added_damage: i64,
         awakening_rate: f64,
@@ -140,6 +143,7 @@ impl DamageInput {
             accuracy_correction,
             random_options,
             title_attack_damage_rate,
+            title_added_damage_rate,
             damage_contributions,
             weapon_added_damage,
             skill,
@@ -459,10 +463,11 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // §5 割合追加ダメージ(新-割合)。「合計ダメージ + 追加ダメージ(武器強化)」に掛かるので、
     // 1 段ごとではなく段数を掛けたあとの合計に乗せる。武器強化の追加固定ダメージは
     // すでに per-hit に入っているので、`合計` がそのまま算出基準になる。
-    // 供給源はシャープネスビジョンと、武器のランダムOP(ボス追加ダメージ・命中時追加ダメージ・
-    // 石を消費する追加ダメージ)。OP 側は発動条件を満たしている前提で入れる
-    let added_rate =
-        input.common_skills.sharpness_vision_rate() + input.random_options.added_damage_rate;
+    // 供給源はシャープネスビジョン、武器のランダムOP、対象条件に一致した称号。
+    // OP 側は発動条件を満たしている前提で入れる。
+    let added_rate = input.common_skills.sharpness_vision_rate()
+        + input.random_options.added_damage_rate
+        + input.title_added_damage_rate;
     let sum = DamageTriple { min: min * hits, max: max * hits, critical: critical * hits };
     let added = DamageTriple {
         min: floor_int(sum.min as f64 * added_rate),
@@ -473,10 +478,11 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         let step = FormulaStep {
             name: "割合追加ダメージ(合計に乗る)".to_string(),
             expression: format!(
-                "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}%",
+                "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}% + 称号 {:.0}%",
                 added_rate * 100.0,
                 input.common_skills.sharpness_vision_rate() * 100.0,
-                input.random_options.added_damage_rate * 100.0
+                input.random_options.added_damage_rate * 100.0,
+                input.title_added_damage_rate * 100.0
             ),
             value: added_rate,
         };
@@ -629,6 +635,7 @@ mod tests {
             equipment_base_totals: EquipmentValues::default(),
             equipment_enhanced_totals: EquipmentValues::default(),
             title_attack_damage_rate: 0.0,
+            title_added_damage_rate: 0.0,
             damage_contributions: Vec::new(),
             equipment_coefficients: EquipmentCoefficients::default(),
             // STAB+HACK 依存(ボーナスなし、ペナルティ (STAB+HACK)/200)
@@ -1037,6 +1044,22 @@ mod tests {
         // ランダムOP 30% + 称号 20% = Σ +50%
         assert!((x.value - 0.50).abs() < 1e-12);
         assert!((x.factor - 1.50).abs() < 1e-12);
+    }
+
+    #[test]
+    fn 条件付き称号はper_hitを変えず合計に割合追加ダメージを加える() {
+        let base = calculate_damage(&input());
+        let mut i = input();
+        i.skill.hit_count = 3;
+        i.title_added_damage_rate = 0.20;
+        let result = calculate_damage(&i);
+
+        assert_eq!(result.per_hit, base.per_hit);
+        assert_eq!(result.added_damage_rate, 0.20);
+        assert_eq!(result.added_damage.max, (result.per_hit.max * 3) / 5);
+        assert_eq!(result.total.max, result.per_hit.max * 3 + result.added_damage.max);
+        let step = result.trace.steps_max.iter().find(|s| s.name == "割合追加ダメージ(合計に乗る)").unwrap();
+        assert!(step.expression.contains("称号 20%"));
     }
 
     #[test]

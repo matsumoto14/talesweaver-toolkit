@@ -16,6 +16,17 @@ use crate::equipment::EquipmentValues;
 use crate::skill::SkillDependency;
 use crate::thesis_core::CoreRegion;
 
+/// ゲーム内で称号などの地域限定効果を判定する地域。
+/// テシスコアの地域とは独立した概念として扱う。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameRegion {
+    LostIsland,
+    ShinchouNest,
+    ArklonUnderground,
+    Praba,
+}
+
 /// 入場条件。判定に使う値は登録キャラのデータから取れるものに限る。
 ///
 /// ルーンレベル(ルーンマスターLv)・共通スキルコンプ等、現行のキャラモデルに無い値は
@@ -117,6 +128,8 @@ pub struct Content {
     /// このコンテンツで効くテシスコアの地域(wiki: テシスコア「実装済みダンジョンコア」の
     /// 発動場所。対応が取れないコンテンツは None = コアの能力値増加は乗らない)
     pub core_region: Option<CoreRegion>,
+    /// 称号など、ゲーム内の地域限定効果を判定する地域。
+    pub game_region: Option<GameRegion>,
     /// 判定対象外の入場条件の注記(ルーンレベル・共通スキルコンプ等。表示専用)
     pub entry_note: Option<String>,
     /// チーム条件の注記(無ければ None)
@@ -206,6 +219,7 @@ mod tests {
             need_per_hit: need,
             requirements,
             core_region: None,
+            game_region: None,
             series: None,
             entry_note: None,
             team_note: None,

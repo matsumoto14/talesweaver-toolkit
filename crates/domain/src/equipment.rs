@@ -1174,6 +1174,7 @@ mod tests {
             level: None,
             values: EquipmentValues { thrust: 40, slash: 40, ..Default::default() },
             attack_damage_percent: 0.0,
+            conditional_added_damage: None,
             note: "",
         }]
     }

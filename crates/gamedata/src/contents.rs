@@ -18,7 +18,7 @@
 //! 対応する列が無く(2026-08-25 再確認)、wiki の取り込みでは埋まらない項目なので
 //! `[仮]`(= wiki 待ち)ではなく「出典がコミュニティ知識」として運用する。
 
-use domain::content::{Content, ContentArea, ContentRequirement, ContentSeries};
+use domain::content::{Content, ContentArea, ContentRequirement, ContentSeries, GameRegion};
 use domain::thesis_core::CoreRegion;
 
 use crate::Source;
@@ -69,10 +69,24 @@ impl Def {
             need_per_hit: self.need_per_hit,
             requirements: self.requirements.to_vec(),
             core_region: core_region_of(self.id),
+            game_region: game_region_of(self.id),
             series: series_of(self.id),
             entry_note: self.entry_note.map(String::from),
             team_note: self.team_note.map(String::from),
         }
+    }
+}
+
+/// 称号など、テシスコアとは別のゲーム内地域限定効果に使う対応。
+pub fn game_region_of(content_id: &str) -> Option<GameRegion> {
+    use GameRegion::*;
+    match content_id {
+        "eclipse_boss" | "eclipse_2" | "eclipse_subjugation" | "lost_forest" => {
+            Some(LostIsland)
+        }
+        "shinchou_normal" | "shinchou_hard" | "relic_sanctuary_shinchou" => Some(ShinchouNest),
+        "arklon_underground" => Some(ArklonUnderground),
+        _ => None,
     }
 }
 
@@ -518,5 +532,20 @@ mod tests {
                 "CORE_REGIONS の '{id}' に対応するコンテンツが無い"
             );
         }
+    }
+    #[test]
+    fn ゲーム内地域は称号の対象だけに限定する() {
+        assert_eq!(game_region_of("eclipse_boss"), Some(GameRegion::LostIsland));
+        assert_eq!(game_region_of("eclipse_2"), Some(GameRegion::LostIsland));
+        assert_eq!(game_region_of("eclipse_subjugation"), Some(GameRegion::LostIsland));
+        assert_eq!(game_region_of("lost_forest"), Some(GameRegion::LostIsland));
+        assert_eq!(game_region_of("shinchou_normal"), Some(GameRegion::ShinchouNest));
+        assert_eq!(game_region_of("shinchou_hard"), Some(GameRegion::ShinchouNest));
+        assert_eq!(game_region_of("relic_sanctuary_shinchou"), Some(GameRegion::ShinchouNest));
+        assert_eq!(game_region_of("arklon_underground"), Some(GameRegion::ArklonUnderground));
+        // テシスコアでは同じアビス地域でも、死の騎士の対象には広げない。
+        assert_eq!(game_region_of("abyss_hell"), None);
+        // 喪失の島称号はアフェティリア等には広げない。
+        assert_eq!(game_region_of("aphetiria_ex"), None);
     }
 }

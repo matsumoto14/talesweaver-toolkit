@@ -48,7 +48,7 @@ pub use common_skill::{
 };
 pub use content::{
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,
-    ContentRequirement, ContentSeries, RequirementCheck,
+    ContentRequirement, ContentSeries, GameRegion, RequirementCheck,
 };
 pub use critical_rate::{
     critical_rate, CriticalRate, CriticalRateError, CriticalRateSourceId, CriticalRateSources,
@@ -99,7 +99,8 @@ pub use stats::{
     StatModifierSet, StatModifiers, StatTrace, BASE_STAT_MAX,
 };
 pub use title::{
-    title_attack_damage_rate, title_values, TitleDef, TitleError, TitleKind,
+    title_added_damage_rate, title_attack_damage_rate, title_values, AddedDamageCondition,
+    ConditionalAddedDamage, TitleDef, TitleError, TitleKind,
 };
 pub use ultimate_skill::{
     UltimateSkill, UltimateSkillError, UltimateSkills, HYPER_LIMIT_LEVEL_MAX, ULTIMATE_SKILL_SLOTS,
