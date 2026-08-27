@@ -12,6 +12,8 @@ export interface Awakening {
 export interface GameCharacter {
   id: string;
   name: string;
+  armor_classes: ArmorClass[];
+  wrist_types: WristType[];
 }
 
 export type SkillDependency = "stab" | "hack" | "int" | "mr" | "stab_hack" | "hack_int";
@@ -646,6 +648,7 @@ export type WeaponClass =
   | "great_sword"
   | "holy_staff" | "handbell" | "dual_blade_magic" | "hammer";
 export type WeaponSystem = "stab" | "stab_hack" | "hack" | "int" | "int_hack" | "mr";
+export type ArmorClass = "light" | "heavy" | "magic" | "suit" | "robe";
 export type WristType =
   | "shield" | "spellbook" | "knuckle" | "band" | "bracelet" | "pendulum" | "crystal_ball"
   | "dual_blade_physical" | "physical_magazine" | "magic_magazine" | "dual_blade_magic";

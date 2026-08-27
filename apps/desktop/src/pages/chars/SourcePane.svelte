@@ -24,7 +24,7 @@
   import type {
     CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentItem, EquipmentPart, PartSlot,
     MasteryDef, PetSkillTier, RandomOptionDef, RandomOptionRank, SienaAuraList, SienaExtraKind, SienaValueKind,
-    Skill, SkillDependency, WeaponClass, WeaponSystem,
+    ArmorClass, Skill, SkillDependency, WeaponClass, WeaponSystem, WristType,
     StatKind, StatPreview, TitleDef, UltimateSkill,
   } from "../../api/types";
   import { isFixedValue, toggleBuff } from "../../buffs";
@@ -326,7 +326,7 @@
   const visibleEquipmentStats = $derived(
     showOtherEquipmentStats ? [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS] : PRIMARY_EQUIPMENT_STATS,
   );
-  let showAllWeapons = $state(false);
+  let showAllEquipmentCandidates = $state(false);
   let itemPickerOpen = $state(false);
   const selectedPartOrNull = (slot: PartSlot) => {
     const list = draft.equipment.parts[slot];
@@ -357,6 +357,7 @@
     itemQuery = "";
     editBaseValues = false;
     showOtherEquipmentStats = false;
+    showAllEquipmentCandidates = false;
     itemPickerOpen = true;
   };
   const openPartLabel = $derived(openPart ? PART_SLOT_LABELS[openPart] : "");
@@ -396,16 +397,70 @@
     const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
     return systems.length > 0 && mainSkill ? `${mainSkill.name}の依存能力に合う武器` : null;
   });
+  const selectedGameCharacter = $derived(
+    app.gameCharacters.find((character) => character.id === draft.gameCharacterId) ?? null,
+  );
+  const armorClassForItem = (item: EquipmentItem): ArmorClass | null => {
+    if (item.enhance_type === "armor_light") return "light";
+    if (item.enhance_type === "armor_heavy") return "heavy";
+    if (item.enhance_type === "armor_magic") return "magic";
+    if (item.enhance_type === "armor_suit") return "suit";
+    if (item.enhance_type === "armor_robe") return "robe";
+    return null;
+  };
+  /** 同じキャラで物理・魔法の専用サブアームが分かれる場合だけ、主軸スキルでも狭める。 */
+  const wristTypesForSelection = (types: WristType[], dependency: SkillDependency | null): WristType[] => {
+    if (dependency === null) return types;
+    if (types.includes("physical_magazine") && types.includes("magic_magazine")) {
+      return dependency === "int" || dependency === "mr" || dependency === "hack_int"
+        ? ["magic_magazine"]
+        : ["physical_magazine"];
+    }
+    if (types.includes("dual_blade_physical") && types.includes("dual_blade_magic")) {
+      return dependency === "int" || dependency === "mr" || dependency === "hack_int"
+        ? ["dual_blade_magic"]
+        : ["dual_blade_physical"];
+    }
+    if (types.includes("spellbook") && types.includes("crystal_ball")) {
+      return dependency === "int" || dependency === "mr" || dependency === "hack_int"
+        ? ["spellbook"]
+        : ["crystal_ball"];
+    }
+    return types;
+  };
+  const equipmentFilterLabel = $derived.by(() => {
+    if (openPart === "weapon") return weaponFilterLabel;
+    if (openPart !== "armor" && openPart !== "shield") return null;
+    if (selectedGameCharacter === null) return null;
+    return openPart === "shield" && mainSkill
+      ? `${selectedGameCharacter.name}・${mainSkill.name}向け`
+      : `${selectedGameCharacter.name}が装備可能`;
+  });
   const filteredCatalog = $derived.by(() => {
     let candidates = itemQuery.trim() === "" ? catalogFor : catalogFor.filter((i) => i.name.includes(itemQuery.trim()));
-    if (openPart !== "weapon") return candidates;
-    const classes = weaponClassesForSkill(mainSkill?.id);
-    const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
-    const matched = classes.length > 0
-      ? candidates.filter((i) => i.weapon_class !== null && classes.includes(i.weapon_class))
-      : candidates.filter((i) => i.weapon_system !== null && systems.includes(i.weapon_system));
+    let matched: EquipmentItem[] = [];
+    if (openPart === "weapon") {
+      const classes = weaponClassesForSkill(mainSkill?.id);
+      const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
+      matched = classes.length > 0
+        ? candidates.filter((i) => i.weapon_class !== null && classes.includes(i.weapon_class))
+        : candidates.filter((i) => i.weapon_system !== null && systems.includes(i.weapon_system));
+    } else if (openPart === "armor" && selectedGameCharacter !== null) {
+      matched = candidates.filter((item) => {
+        const armorClass = armorClassForItem(item);
+        return armorClass !== null && selectedGameCharacter!.armor_classes.includes(armorClass);
+      });
+    } else if (openPart === "shield" && selectedGameCharacter !== null) {
+      const wristTypes = wristTypesForSelection(
+        selectedGameCharacter.wrist_types,
+        mainSkill?.dependency ?? null,
+      );
+      matched = candidates.filter((item) => item.wrist_type !== null && wristTypes.includes(item.wrist_type));
+    } else {
+      return candidates;
+    }
     if (matched.length === 0) return candidates;
-    return showAllWeapons ? [...matched, ...candidates.filter((i) => !matched.includes(i))] : matched;
+    return showAllEquipmentCandidates ? [...matched, ...candidates.filter((i) => !matched.includes(i))] : matched;
   });
   const equippedItem = (slot: PartSlot): EquipmentItem | null => {
     const itemId = selectedPartOrNull(slot)?.item_id;
@@ -584,6 +639,7 @@
   /** 部位詳細を開いたときに、旧データの同カテゴリー重複を1つへ畳む。 */
   function openPartDetail(slot: PartSlot) {
     const part = selectedPartOrNull(slot);
+    showAllEquipmentCandidates = false;
     if (!part) { openPart = slot; itemQuery = ""; itemPickerOpen = false; return; }
     const seen = new Set<string>();
     const normalized = part.abilities.filter((id) => {
@@ -1754,10 +1810,10 @@
             <div class="equipment-picker pane-in">
               <div class="picker-tools">
                 <input class="item-search" type="text" placeholder="装備名で探す" bind:value={itemQuery} />
-                {#if slot === "weapon" && weaponFilterLabel !== null}
-                  <span class="weapon-filter badge">{weaponFilterLabel}</span>
-                  <button type="button" class="chip quiet" onclick={() => (showAllWeapons = !showAllWeapons)}>
-                    {showAllWeapons ? "主軸向けだけ見る" : "すべて見る"}
+                {#if equipmentFilterLabel !== null}
+                  <span class="equipment-filter badge">{equipmentFilterLabel}</span>
+                  <button type="button" class="chip quiet" onclick={() => (showAllEquipmentCandidates = !showAllEquipmentCandidates)}>
+                    {showAllEquipmentCandidates ? "候補だけ見る" : "すべて見る"}
                   </button>
                 {/if}
               </div>
@@ -3652,7 +3708,7 @@
   .ability-spacer { width: 52px; }
   .enchant-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .enchant-card .hint { margin: 4px 0 0; }
-  .weapon-filter { white-space: nowrap; }
+  .equipment-filter { white-space: nowrap; }
   @media (max-width: 850px) {
     .values-paired, .base-value-toolbar { width: min(100%, 438px); }
     .value-pair { grid-template-columns: 40px 392px; }

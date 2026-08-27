@@ -6,34 +6,136 @@ use domain::{
 };
 use serde::Serialize;
 
-use crate::Source;
+use crate::{
+    equipment_catalog::{ArmorClass, WristType},
+    Source,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GameCharacter {
     pub id: &'static str,
     pub name: &'static str,
+    /// Tale Wiki の各防具カテゴリに記載された装備可能種。
+    pub armor_classes: &'static [ArmorClass],
+    /// Tale Wiki の各サブアームカテゴリに記載された装備可能種。
+    pub wrist_types: &'static [WristType],
 }
 
 const CHARACTERS: &[GameCharacter] = &[
-    GameCharacter { id: "lucian", name: "ルシアン" },
-    GameCharacter { id: "boris", name: "ボリス" },
-    GameCharacter { id: "ispin", name: "イスピン" },
-    GameCharacter { id: "maximin", name: "マキシミン" },
-    GameCharacter { id: "tichiel", name: "ティチエル" },
-    GameCharacter { id: "nayatorei", name: "ナヤトレイ" },
-    GameCharacter { id: "siberin", name: "シベリン" },
-    GameCharacter { id: "mira", name: "ミラ" },
-    GameCharacter { id: "joshua", name: "ジョシュア" },
-    GameCharacter { id: "chloe", name: "クロエ" },
-    GameCharacter { id: "ranjie", name: "ランジエ" },
-    GameCharacter { id: "isaac", name: "イサック" },
-    GameCharacter { id: "anais", name: "アナイス" },
-    GameCharacter { id: "isolet", name: "イソレット" },
-    GameCharacter { id: "benya", name: "ベンヤ" },
-    GameCharacter { id: "roamini", name: "ロアミニ" },
-    GameCharacter { id: "nocturne", name: "ノクターン" },
-    GameCharacter { id: "leeche", name: "リーチェ" },
-    GameCharacter { id: "yefnen", name: "イェフネン" },
+    GameCharacter {
+        id: "lucian",
+        name: "ルシアン",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
+        wrist_types: &[WristType::Shield],
+    },
+    GameCharacter {
+        id: "boris",
+        name: "ボリス",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
+        wrist_types: &[WristType::Knuckle],
+    },
+    GameCharacter {
+        id: "ispin",
+        name: "イスピン",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
+        wrist_types: &[WristType::Shield],
+    },
+    GameCharacter {
+        id: "maximin",
+        name: "マキシミン",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
+        wrist_types: &[WristType::Shield, WristType::Knuckle],
+    },
+    GameCharacter {
+        id: "tichiel",
+        name: "ティチエル",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
+        wrist_types: &[WristType::Bracelet],
+    },
+    GameCharacter {
+        id: "nayatorei",
+        name: "ナヤトレイ",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Suit],
+        wrist_types: &[WristType::Band],
+    },
+    GameCharacter {
+        id: "siberin",
+        name: "シベリン",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
+        wrist_types: &[WristType::Knuckle],
+    },
+    GameCharacter {
+        id: "mira",
+        name: "ミラ",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Suit],
+        wrist_types: &[WristType::Band],
+    },
+    GameCharacter {
+        id: "joshua",
+        name: "ジョシュア",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
+        wrist_types: &[WristType::Spellbook, WristType::CrystalBall],
+    },
+    GameCharacter {
+        id: "chloe",
+        name: "クロエ",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
+        wrist_types: &[WristType::Bracelet],
+    },
+    GameCharacter {
+        id: "ranjie",
+        name: "ランジエ",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
+        wrist_types: &[WristType::PhysicalMagazine, WristType::MagicMagazine],
+    },
+    GameCharacter {
+        id: "isaac",
+        name: "イサック",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Suit],
+        wrist_types: &[WristType::Knuckle, WristType::Band],
+    },
+    GameCharacter {
+        id: "anais",
+        name: "アナイス",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
+        wrist_types: &[WristType::Bracelet],
+    },
+    GameCharacter {
+        id: "isolet",
+        name: "イソレット",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
+        wrist_types: &[WristType::DualBladePhysical, WristType::DualBladeMagic],
+    },
+    GameCharacter {
+        id: "benya",
+        name: "ベンヤ",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Suit],
+        wrist_types: &[WristType::Knuckle, WristType::Band, WristType::CrystalBall],
+    },
+    GameCharacter {
+        id: "roamini",
+        name: "ロアミニ",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Suit, ArmorClass::Robe],
+        wrist_types: &[WristType::Band, WristType::Bracelet],
+    },
+    GameCharacter {
+        id: "nocturne",
+        name: "ノクターン",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
+        wrist_types: &[WristType::PhysicalMagazine],
+    },
+    GameCharacter {
+        id: "leeche",
+        name: "リーチェ",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
+        wrist_types: &[WristType::Pendulum],
+    },
+    GameCharacter {
+        id: "yefnen",
+        name: "イェフネン",
+        armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
+        wrist_types: &[WristType::Knuckle],
+    },
 ];
 
 pub fn characters() -> &'static [GameCharacter] {
@@ -122,29 +224,89 @@ pub fn equipment_coefficients(dependency: SkillDependency) -> EquipmentCoefficie
     use SkillDependency::*;
     let (base, enhanced) = match dependency {
         Stab => (
-            EquipmentRates { thrust: 23.75, slash: 3.75, magic_attack: 0.0, magic_defense: 0.0 },
-            EquipmentRates { thrust: 32.5, slash: 18.75, magic_attack: 0.0, magic_defense: 0.0 },
+            EquipmentRates {
+                thrust: 23.75,
+                slash: 3.75,
+                magic_attack: 0.0,
+                magic_defense: 0.0,
+            },
+            EquipmentRates {
+                thrust: 32.5,
+                slash: 18.75,
+                magic_attack: 0.0,
+                magic_defense: 0.0,
+            },
         ),
         Hack => (
-            EquipmentRates { thrust: 3.75, slash: 23.75, magic_attack: 0.0, magic_defense: 0.0 },
-            EquipmentRates { thrust: 18.75, slash: 32.5, magic_attack: 0.0, magic_defense: 0.0 },
+            EquipmentRates {
+                thrust: 3.75,
+                slash: 23.75,
+                magic_attack: 0.0,
+                magic_defense: 0.0,
+            },
+            EquipmentRates {
+                thrust: 18.75,
+                slash: 32.5,
+                magic_attack: 0.0,
+                magic_defense: 0.0,
+            },
         ),
         StabHack => (
-            EquipmentRates { thrust: 14.5, slash: 14.5, magic_attack: 0.0, magic_defense: 0.0 },
-            EquipmentRates { thrust: 28.75, slash: 28.75, magic_attack: 0.0, magic_defense: 0.0 },
+            EquipmentRates {
+                thrust: 14.5,
+                slash: 14.5,
+                magic_attack: 0.0,
+                magic_defense: 0.0,
+            },
+            EquipmentRates {
+                thrust: 28.75,
+                slash: 28.75,
+                magic_attack: 0.0,
+                magic_defense: 0.0,
+            },
         ),
         HackInt => (
-            EquipmentRates { thrust: 0.0, slash: 14.5, magic_attack: 14.5, magic_defense: 0.0 },
-            EquipmentRates { thrust: 0.0, slash: 28.75, magic_attack: 28.75, magic_defense: 0.0 },
+            EquipmentRates {
+                thrust: 0.0,
+                slash: 14.5,
+                magic_attack: 14.5,
+                magic_defense: 0.0,
+            },
+            EquipmentRates {
+                thrust: 0.0,
+                slash: 28.75,
+                magic_attack: 28.75,
+                magic_defense: 0.0,
+            },
         ),
         Int => (
-            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 23.75, magic_defense: 2.5 },
-            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 32.5, magic_defense: 18.25 },
+            EquipmentRates {
+                thrust: 0.0,
+                slash: 0.0,
+                magic_attack: 23.75,
+                magic_defense: 2.5,
+            },
+            EquipmentRates {
+                thrust: 0.0,
+                slash: 0.0,
+                magic_attack: 32.5,
+                magic_defense: 18.25,
+            },
         ),
         Mr => (
-            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 2.5, magic_defense: 20.5 },
+            EquipmentRates {
+                thrust: 0.0,
+                slash: 0.0,
+                magic_attack: 2.5,
+                magic_defense: 20.5,
+            },
             // wiki 注記: 韓国情報の 16.75 と異なるが、この数値(19.25)で適用と明記されている。
-            EquipmentRates { thrust: 0.0, slash: 0.0, magic_attack: 19.25, magic_defense: 32.5 },
+            EquipmentRates {
+                thrust: 0.0,
+                slash: 0.0,
+                magic_attack: 19.25,
+                magic_defense: 32.5,
+            },
         ),
     };
     EquipmentCoefficients { base, enhanced }
@@ -173,8 +335,34 @@ mod tests {
     }
 
     #[test]
+    fn 鎧と腕の装備可能種はwikiのカテゴリ表どおり() {
+        let lucian = find_character("lucian").unwrap();
+        assert_eq!(lucian.armor_classes, &[ArmorClass::Light, ArmorClass::Heavy]);
+        assert_eq!(lucian.wrist_types, &[WristType::Shield]);
+
+        let roamini = find_character("roamini").unwrap();
+        assert_eq!(
+            roamini.armor_classes,
+            &[ArmorClass::Light, ArmorClass::Suit, ArmorClass::Robe]
+        );
+        assert_eq!(roamini.wrist_types, &[WristType::Band, WristType::Bracelet]);
+
+        let isolet = find_character("isolet").unwrap();
+        assert_eq!(
+            isolet.wrist_types,
+            &[WristType::DualBladePhysical, WristType::DualBladeMagic]
+        );
+    }
+
+    #[test]
     fn 依存種別ごとの係数() {
-        let stats = EffectiveStats { stab: 100, hack: 200, int: 300, mr: 400, ..Default::default() };
+        let stats = EffectiveStats {
+            stab: 100,
+            hack: 200,
+            int: 300,
+            mr: 400,
+            ..Default::default()
+        };
         let power = |d| stat_attack_power(&stats, &attack_coefficients(d));
         // 1.08×HACK + 2.1×STAB = 216 + 210
         assert!((power(SkillDependency::Stab) - 426.0).abs() < 1e-9);
@@ -211,10 +399,16 @@ mod tests {
 
         let c = equipment_coefficients(Int);
         assert_eq!((c.base.magic_attack, c.base.magic_defense), (23.75, 2.5));
-        assert_eq!((c.enhanced.magic_attack, c.enhanced.magic_defense), (32.5, 18.25));
+        assert_eq!(
+            (c.enhanced.magic_attack, c.enhanced.magic_defense),
+            (32.5, 18.25)
+        );
 
         let c = equipment_coefficients(Mr);
         assert_eq!((c.base.magic_attack, c.base.magic_defense), (2.5, 20.5));
-        assert_eq!((c.enhanced.magic_attack, c.enhanced.magic_defense), (19.25, 32.5));
+        assert_eq!(
+            (c.enhanced.magic_attack, c.enhanced.magic_defense),
+            (19.25, 32.5)
+        );
     }
 }
