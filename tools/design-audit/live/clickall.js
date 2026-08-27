@@ -80,7 +80,18 @@ const TARGETS = {
       if (!target) { console.log(`  [${tab}] ${name}: 完全に見えているものが無い`); continue; }
       const before = await box(target);
       await target.dispatchEvent("click").catch(() => {});
-      await wait(1300);
+      await wait(60);
+      const movedCandidate = name === "候補(足りない分)" ? {
+        from: await target.evaluate((e) => getComputedStyle(e).animationName).catch(() => "removed"),
+        to: await page.locator(".chip-diff").last().evaluate((e) => getComputedStyle(e).animationName).catch(() => "missing"),
+      } : null;
+      await wait(1240);
+      if (movedCandidate) {
+        const ok = movedCandidate.from.includes("tw-candidate-out") && movedCandidate.to.includes("tw-badge-in");
+        if (!ok) ng++;
+        console.log(`  [${tab}] ${name}: 退出 ${movedCandidate.from} → 移動先 ${movedCandidate.to} ${ok ? "OK" : "NG"}`);
+        continue;
+      }
       const after = await box(target);
       if (!after) { console.log(`  [${tab}] ${name}: 押したあと消えた(要確認)`); ng++; continue; }
       const ok = before[0] === after[0] && before[1] === after[1];

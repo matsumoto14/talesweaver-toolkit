@@ -65,6 +65,8 @@
   --s3-bg:#F6E8E5; --s3-bd:#B08480; --s3-fg:#8C4A42;
   --s4-bg:#ECEEF2; --s4-bd:#A9B4C4; --s4-fg:#5E6E88;
   --s5-bg:#EFEEF8; --s5-bd:#6D6AA8; --s5-fg:#4A4780;
+  --s0-bar:linear-gradient(90deg,#90D7FF,#426DD6);
+  --s2-bar:linear-gradient(90deg,#F0D79A,#C2A057);
 
   /* 角丸 4 段 */
   --r-window: 12px;
@@ -752,27 +754,28 @@ td code { background: var(--card-soft2); }
 .cell {
   position: relative; flex: 1 1 auto; min-width: 0;
   padding: 4px 7px 5px; border-radius: var(--r-panel);
-  background: #fff; border: 1px solid #C6C3E0; overflow: hidden;
+  background: #fff; border: 1px solid var(--edge); overflow: hidden;
   transition: background .18s ease, border-color .18s ease;
 }
 .cell .fillbar {
   position: absolute; left: 0; bottom: 0; height: 2px;
-  background: linear-gradient(90deg,#C6C3E0,var(--sim));
+  background: var(--s0-bar);
   transition: width .32s cubic-bezier(.4,0,.2,1);
 }
 .cell .row { display: flex; align-items: baseline; justify-content: flex-end; gap: 3px; }
-.cell .v { font-family: var(--num); font-size: 12.5px; font-weight: 700; color: #2C2A57; }
-.cell .cap-n { font-family: var(--num); font-size: 8px; color: #9A97BE; }
-.cell.full { background: linear-gradient(180deg,#F3F0FF,#E6E1FA); border-color: var(--sim); }
-.cell.full .v { color: var(--sim-fg); }
+.cell .v { font-family: var(--num); font-size: 12.5px; font-weight: 700; color: var(--fg); }
+.cell .cap-n { font-family: var(--num); font-size: 8px; color: var(--fg-dim); }
+.cell.full { background: #fff; border-color: var(--gold); }
+.cell.full .fillbar { background: var(--s2-bar); }
+.cell.full .v { color: var(--s2-fg); }
 .cell.zero .v { color: #A9A6D6; }
 .maxbtn {
   width: 30px; flex: none; padding: 3px 0; border-radius: var(--r-inset);
-  background: var(--s5-bg); border: 1px solid #A9A6D6; color: var(--sim);
+  background: var(--s0-bg); border: 1px solid var(--edge); color: var(--accent);
   font-family: var(--font); font-size: 8px; font-weight: 700; cursor: pointer;
   transition: background .18s ease;
 }
-.maxbtn.full { background: linear-gradient(180deg,#CFC9F5,#B3ACE8); border-color: var(--sim-fg); color:#2C2A57; }
+.maxbtn.full { background: var(--s2-bg); border-color: var(--gold); color:var(--s2-fg); }
 .maxbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .echo {
@@ -1763,7 +1766,7 @@ td code { background: var(--card-soft2); }
         <div class="sec">差し替え規約<span class="r">実装側の約束</span></div>
         <ul>
           <li>ファイルは <code>src/assets/icons/{characters|mobs|skills|buffs}/&lt;id&gt;.png</code>。<strong>id は gamedata の id と一致</strong>させ、UI 側は id から機械的に解決する。手動のマッピング表は作らない</li>
-          <li>画像は 1:1・余白 8%・影なし(影と枠は UI 側が付ける)。128px 基準で用意すれば 20〜64px を 1 枚で兼用できる</li>
+          <li>画像は 1:1・影なし(影と枠は UI 側が付ける)。通常は 128px 基準。<strong>キャラだけはゲーム内の 24×24 ドット絵を原寸資産とし、CSS の <code>image-rendering: pixelated</code> で 20〜64px に展開する</strong></li>
           <li>解決できない id は破線 + <code>?</code> にフォールバックし、console に 1 行だけ warn(id ごとに 1 回)。<strong>レイアウトは絶対に崩さない</strong></li>
           <li><strong>アイコン単独表示は禁止</strong>(名前と併記)。例外はキャラレールを畳んだときだけで、そのとき呼び出し側が <code>title</code> を付ける</li>
         </ul>
@@ -1817,7 +1820,7 @@ td code { background: var(--card-soft2); }
             <span class="lv">4</span>
             <span class="nm"><b>ステッパー</b><span>連続値だが上限があり、刻みが決まっているとき</span></span>
             <span class="demo">
-              <span class="cap" style="max-width:34ch">＋ / − と MAX で動かす。<br><b style="color:var(--fg-sub)">上限は値の隣に常設</b>し、届いたら面の色が変わる。<br>下の実演がこの形。</span>
+              <span class="cap" style="max-width:34ch">＋ / − と MAX で動かす。<br><b style="color:var(--fg-sub)">上限は値の隣に常設</b>し、届いたらバー・枠・MAX が金になる。<br>下の実演がこの形。</span>
             </span>
           </div>
 
@@ -1866,7 +1869,7 @@ td code { background: var(--card-soft2); }
                 <button class="maxbtn" type="button" data-max="slash" title="上限 400 にする">MAX</button>
               </span>
             </div>
-            <p class="cap" style="margin-top:11px">上限に届くとセルが紫になり MAX が反転する。<b style="color:var(--sim-fg)">「満」は文字ではなく面で伝える</b> — 文字だと 30 行の中で読まれない。</p>
+            <p class="cap" style="margin-top:11px">通常の進捗バーは青。上限に届くとバー・枠・MAX が金になる。<b style="color:var(--s2-fg)">入力可能を示す白い面は変えず、ラベンダーは「保存されない」にだけ使う。</b></p>
           </div>
 
           <div style="display:flex;flex-direction:column;gap:10px">
@@ -2152,6 +2155,11 @@ td code { background: var(--card-soft2); }
               掴んだ行だけ動くと、どこに入ったのかが分からない。群をまたいで移った行は、
               滑りが繋がらないので着地を弾ませる</span>
             <span class="spec-n">FLIP transform .26s<br>cubic-bezier(.33,1,.68,1)</span>
+          </div>
+          <div class="change">
+            <span class="w">候補が移った</span>
+            <span class="how">出発点は短く退出し、<b>移動先を同時に弾ませる。</b>消えただけに見せず、どこへ移ったかを 2 箇所の動きで結ぶ</span>
+            <span class="spec-n">out: translateX(8px) + opacity<br>.18s ease-in<br>to: badge-in .26s</span>
           </div>
         </div>
 
@@ -2460,25 +2468,6 @@ td code { background: var(--card-soft2); }
             チップにすると値と条件が読めなくなる可能性がある。</p>
           <p class="why"><b>決めるのに要るもの</b> チップの中に「値」まで入れて 30 行並べたときに読めるか、の実物確認。</p>
           <span class="where">効くところ: キャラタブ 各補正源ペイン / 計算タブ バフ</span>
-        </div>
-        <div class="dec">
-          <div class="dec-h"><span class="n2">C</span><b>上限に届いたことを金で言うのか、紫で言うのか</b><span class="soonbadge">保留</span></div>
-          <p><strong>この文書の中で食い違っている。</strong>§03 の予約色は<b>金</b>を「上限到達(「満」)」に割り当てているが、
-            §07 の実演は「上限に届くと<b>セルが紫になり</b> MAX が反転する」と書いている。実装の「満」バッジは
-            1 周目までは赤茶(<code>--danger</code>)で、どちらでもなかった — これは誤用なので金に寄せた。
-            残っているのは<b>面をどう塗るか</b>のほう。</p>
-          <p class="why"><b>決めるのに要るもの</b> v4 の実物(§07 の記述は v4 の説明なので、紫が v4 なら §03 の予約色の説明を直す側)。</p>
-          <span class="where">効くところ: 上限のある入力すべて</span>
-        </div>
-        <div class="dec">
-          <div class="dec-h"><span class="n2">D</span><b>押した候補が消えるのを、どう見せるか</b><span class="soonbadge">保留</span></div>
-          <p>「足りない分をどう埋める?」の候補を押すと試し変更に入り、<strong>その候補は一覧から消える</strong>
-            (もう今の数字を超えないので、正しい結果ではある)。§09 規則 5 は「操作したら対象が消えた」を最悪の体験とし、
-            「消えることを動きで見せる」を求めている。<strong>ところが §10 には「行が消える」型が無い。</strong>
-            型を足すのか、消さずに「適用中」として残すのか。</p>
-          <p class="why"><b>いまの逃げ道</b> 押した直後に右カラムのチップ列(試し変更)へ同じ名前が出るので、行き先は追える。
-            ホームの「次に変えるなら」も同じ構造。</p>
-          <span class="where">効くところ: 計算タブ 足りない分をどう埋める / ホーム 次に変えるなら</span>
         </div>
         <div class="dec">
           <div class="dec-h"><span class="n2">E</span><b>ドロップダウンは 5 形態のどこにも無い</b><span class="soonbadge">保留</span></div>

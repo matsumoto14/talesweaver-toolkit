@@ -89,6 +89,8 @@
     font-size: calc(var(--icon-size) * 0.42); font-weight: 700; line-height: 1;
   }
   .icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* キャラは Tale Wiki のゲーム内 24px ドット絵。40/64px でも補間でぼかさない */
+  .icon.character img { image-rendering: pixelated; }
   /* 実画像が来るまでの縞プレースホルダ。系統ごとに地の色を変える */
   .icon.character {
     border-radius: var(--r-window); border-color: var(--border-strong); color: var(--fg-sub);

@@ -2638,23 +2638,38 @@
         スキルの効果は<b>取っているマスタリーで変わります</b>(wiki の各カテゴリ表がその形)。
         上のマスタリーを選び直すと、ここの値も一緒に動きます。
       </p>
-      <div class="buff-list">
+      <!-- 自分のスキルはバフのチップではなく、マスタリーと同じ「アイコン + 名前 + 効果」の
+           スキルカードで出す。選択状態は面の色だけにせず、固定幅の状態バッジでも言い切る。 -->
+      <div class="character-skill-grid">
         {#if ownCharacterSkills.length === 0}
           <p class="empty dim">このキャラのスキルデータは未収録です。</p>
         {/if}
         {#each ownCharacterSkills as def (def.id)}
           {@const label = effectLabel(def, draft.statSources.masteries.picked)}
-          <label class="check">
+          {@const checked = skillChecked(def.id)}
+          <label class="character-skill-card" class:on={checked} title={def.note}>
             <input
               type="checkbox"
-              checked={skillChecked(def.id)}
+              checked={checked}
               onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
             />
-            <span>{def.name}</span>
-            <span class="fixed-value dim num" class:unknown={label === null} use:flash={() => label ?? ""}>
-              {label ?? "マスタリー未取得"}
+            <Icon kind="skill" id={def.id} size={28} label={def.name} />
+            <span class="character-skill-text">
+              <span class="character-skill-head">
+                <span class="character-skill-name">{def.name}</span>
+                <span
+                  class="character-skill-state"
+                  class:on={checked}
+                  use:flash={() => checked ? "適用中" : "未適用"}
+                >{checked ? "適用中" : "未適用"}</span>
+              </span>
+              <span
+                class="character-skill-effect num"
+                class:unknown={label === null}
+                use:flash={() => label ?? ""}
+              >{label ?? "マスタリー未取得"}</span>
+              {#if def.note}<span class="character-skill-note dim">{def.note}</span>{/if}
             </span>
-            {#if def.note}<span class="dim note">{def.note}</span>{/if}
           </label>
         {/each}
       </div>
@@ -2665,11 +2680,18 @@
         {/if}
         {#each allyCharacterSkills as def (def.id)}
           {@const label = effectLabel(def, draft.statSources.masteries.picked)}
+          {@const sourceCharacter = app.gameCharacters.find((c) => c.id === def.game_character_id)}
           <label class="check">
             <input
               type="checkbox"
               checked={skillChecked(def.id)}
               onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
+            />
+            <Icon
+              kind="character"
+              id={def.game_character_id}
+              size={20}
+              label={sourceCharacter?.name ?? def.game_character_id}
             />
             <span>{def.name}</span>
             <span class="fixed-value dim">{label ?? "—"}</span>

@@ -81,17 +81,17 @@ const WATCH = `(() => {
   if (adj >= 0) {
     await page.locator(".src-line").nth(adj).dispatchEvent("click");
     await wait(1200);
-    await page.locator(".adj-stat").nth(1).locator(".value-box.read").first().dispatchEvent("click");
+    await page.locator(".adj-stat").nth(1).locator("button.val.read").first().dispatchEvent("click");
     await wait(700);
     await probe("キャラ・調整で HACK を変える", async () => {
-      const f = page.locator(".adj-stat").nth(1).locator("input.value-box").first();
+      const f = page.locator(".adj-stat").nth(1).locator("input.val").first();
       await f.fill("321");
       await f.dispatchEvent("blur");
     });
     // 戻す
-    await page.locator(".adj-stat").nth(1).locator(".value-box").first().dispatchEvent("click").catch(() => {});
+    await page.locator(".adj-stat").nth(1).locator("button.val.read").first().dispatchEvent("click").catch(() => {});
     await wait(500);
-    const f = page.locator(".adj-stat").nth(1).locator("input.value-box").first();
+    const f = page.locator(".adj-stat").nth(1).locator("input.val").first();
     if (await f.count()) { await f.fill("0"); await f.dispatchEvent("blur"); await wait(900); }
   }
 

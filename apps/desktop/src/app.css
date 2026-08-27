@@ -24,7 +24,7 @@
   --accent: #426DD6;
   --accent-hover: #2B4FA8;
   /* 予約色(§03)。この用途以外に使わない */
-  --gold: #C2A057;       /* 操作待ち・上限・結果。「金が出ている = まだ何か決めていない」 */
+  --gold: #C2A057;       /* 操作待ち・上限・結果 */
   --mob: #A98B86;        /* 敵 */
   --warm: #B0574A;       /* 危険・減る値 */
   --danger: #8C4A42;     /* 削除・届かない */
@@ -37,16 +37,15 @@
   --sim-fg: #4A4780;
   --sim-bg: #FBFAFE;
 
-  /* 上限のある入力欄(§07 形態 4 の実演)。ラベンダー系でまとめる —
-     上限まで盛る操作はその場の試行なので、保存済みの値の面(水色)とは別に見せる */
-  --cell-bd: #C6C3E0;                 /* 通常の枠 */
-  --cell-fg: #2C2A57;                 /* 値 */
-  --cell-cap: #9A97BE;                /* /上限 */
-  --cell-step: #8F8CC4;               /* ＋ / − */
-  --cell-max-bd: #A9A6D6;             /* MAX の枠 */
-  --cell-bar: linear-gradient(90deg, #C6C3E0, var(--sim));
-  --cell-full-bg: linear-gradient(180deg, #F3F0FF, #E6E1FA);
-  --cell-max-full-bg: linear-gradient(180deg, #CFC9F5, #B3ACE8);
+  /* 上限のある入力欄(§07 形態 4 の実演)。通常の進捗は青、上限到達は金。
+     ラベンダーは「保存されない」に予約し、入力面は編集可能を示す白のままにする */
+  --cell-bd: var(--border);            /* 通常の枠 */
+  --cell-fg: var(--fg);                /* 値 */
+  --cell-cap: var(--fg-dim);           /* /上限 */
+  --cell-step: var(--accent);          /* ＋ / − */
+  --cell-max-bd: var(--border);        /* MAX の枠 */
+  --cell-bar: var(--state-goal-bar);
+  --cell-full-bar: var(--state-edge-bar);
 
   /* 属性 8 色(§03)。**状態の 6 系統とは別系統**で、意味は「どの属性か」だけ。
      予約色(金 = 操作待ち / ラベンダー = 保存されない)と読み違えないよう、
@@ -277,6 +276,15 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 }
 .badge-in { animation: tw-badge-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
+/* 候補を試し変更へ移すとき、出発点だけを短く退出させる。移動先は同時に badge-in。 */
+@keyframes tw-candidate-out {
+  to { opacity: 0; transform: translateX(8px) scale(0.98); }
+}
+.whatif-leaving {
+  pointer-events: none;
+  animation: tw-candidate-out 0.18s ease-in forwards;
+}
+
 /* 6. 開いた / 閉じた — 下方向にだけ伸びる。上に伸ばすと上にあるものが全部ずれる */
 @keyframes tw-open {
   from { opacity: 0; max-height: 0; }
@@ -461,10 +469,54 @@ details.fold .fold-body { margin-top: 10px; }
 /* 保存されない・一時的なもの(§03 予約色) */
 .chip.sim { border-color: var(--sim); color: var(--sim-fg); }
 
+/* --- スキル選択カード(§06 アイコン / §07 チップより情報が多い選択) ----------
+   バフの小さなチップと混同しないよう、ゲーム内と同じスキルアイコンを起点に
+   「名前 / 効果 / 適用状態」を 1 枠へまとめる。 */
+.character-skill-grid {
+  margin-top: 8px; display: grid; gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
+}
+.character-skill-card {
+  display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 8px;
+  border-radius: var(--r-panel); background: var(--bg-field);
+  border: 1px solid var(--border); box-shadow: inset 0 1px 0 #fff;
+  color: var(--fg); cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease;
+}
+.character-skill-card:hover { border-color: var(--accent); }
+.character-skill-card.on {
+  background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent);
+}
+.character-skill-card:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
+.character-skill-card input { position: absolute; opacity: 0; width: 0; height: 0; }
+.character-skill-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.character-skill-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.character-skill-name {
+  min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; font-weight: 700; line-height: 1.25;
+}
+/* 押しても名前の幅を動かさないよう、状態語の幅を先に確保する。 */
+.character-skill-state {
+  flex: 0 0 44px; padding: 0 4px; text-align: center; border-radius: var(--r-pill);
+  background: var(--surface-inset); border: 1px solid var(--border-soft);
+  color: var(--fg-muted); font-size: 8.5px; font-weight: 700; line-height: 1.6;
+}
+.character-skill-state.on {
+  background: var(--state-met-bg); border-color: var(--state-met-bd); color: var(--state-met-fg);
+}
+.character-skill-effect { font-size: 10px; color: var(--fg-sub); line-height: 1.25; }
+.character-skill-effect.unknown {
+  align-self: flex-start; padding: 0 4px; border: 1px dashed var(--border);
+  border-radius: var(--r-inset); color: var(--fg-muted);
+}
+.character-skill-note {
+  font-size: 8.5px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2;
+  line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
 /* --- 上限のある入力(§07 形態 4「ステッパー」) --------------------------------
    規格の実演(.ench / .ctrl / .step / .cell / .fillbar / .maxbtn)がそのまま入る。
-   値・上限・進捗・MAX がひとつのセルに同居し、上限に届くとセルが紫になり MAX が
-   反転する。**見た目はここだけに置く** — 部品の中に写すと、写した先でずれる。
+   値・上限・進捗・MAX がひとつのセルに同居し、上限に届くとバーと枠と MAX が
+   金になる。**見た目はここだけに置く** — 部品の中に写すと、写した先でずれる。
    振る舞い(確定・クランプ・編集の出し入れ)は src/ui/StatInput.svelte  */
 .stepper { display: flex; align-items: center; gap: 3px; min-width: 0; }
 .stepper > .label {
@@ -479,7 +531,7 @@ details.fold .fold-body { margin-top: 10px; }
   transition: background 0.18s ease, border-color 0.18s ease;
 }
 .stepper .cell.editing { border-color: var(--accent); }
-.stepper .cell:not(.editing):hover { border-color: var(--sim); }
+.stepper .cell:not(.editing):hover { border-color: var(--accent); }
 /* 上限を語らない形(§07 形態 1)。/上限 と MAX が無いぶん詰める */
 .stepper .cell.bare { flex: none; width: 74px; }
 .stepper .fill {
@@ -519,18 +571,19 @@ details.fold .fold-body { margin-top: 10px; }
   background: none; border: none; border-radius: var(--r-chip);
   font-size: 13px; font-weight: 700; color: var(--cell-step);
 }
-.stepper .step:hover:not(:disabled) { background: var(--state-temp-bg); color: var(--sim); }
+.stepper .step:hover:not(:disabled) { background: var(--state-goal-bg); color: var(--accent-hover); }
 .stepper .step:disabled { color: var(--border); }
 /* MAX は常設。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) */
 .stepper .max {
   width: 30px; flex: none; padding: 3px 0; text-align: center;
-  border-radius: var(--r-inset); background: var(--state-temp-bg);
-  border: 1px solid var(--cell-max-bd); color: var(--sim);
+  border-radius: var(--r-inset); background: var(--state-goal-bg);
+  border: 1px solid var(--cell-max-bd); color: var(--accent);
   font-size: 8px; font-weight: 700; transition: background 0.18s ease;
 }
-.stepper .max:hover:not(:disabled) { border-color: var(--sim); }
-/* 上限に届くとセルが紫になり MAX が反転する。「満」は文字ではなく面で伝える(§07) */
-.stepper.full .cell { background: var(--cell-full-bg); border-color: var(--sim); }
-.stepper.full .val { color: var(--sim-fg); }
-.stepper.full .max { background: var(--cell-max-full-bg); border-color: var(--sim-fg); color: var(--cell-fg); }
+.stepper .max:hover:not(:disabled) { border-color: var(--accent); }
+/* 上限到達は金のバー・枠・MAX で伝える。入力可能な白い面と未保存の紫は使わない(§03 / §07) */
+.stepper.full .fill { background: var(--cell-full-bar); }
+.stepper.full .cell { background: var(--bg-field); border-color: var(--gold); }
+.stepper.full .val { color: var(--state-edge-fg); }
+.stepper.full .max { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
 .stepper .hint { flex: none; margin-left: 5px; font-size: 11px; white-space: nowrap; }

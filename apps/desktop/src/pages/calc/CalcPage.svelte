@@ -28,7 +28,7 @@
   import Select from "../../ui/Select.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import Splitter from "../../ui/Splitter.svelte";
-  import { bump } from "../../ui/motion.svelte";
+  import { bump, flash } from "../../ui/motion.svelte";
   import { badgeStyle, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
@@ -560,6 +560,28 @@
       set: (p, v) => (p.equipment.parts.weapon.enchant.slash = Number(v)),
     },
     {
+      // 「次に変えるなら」の武器更新。基本値まで一緒に替わる 1 操作なので 1 チップで戻す。
+      id: "weapon_item",
+      label: (p) => {
+        const weapon = p.equipment.parts.weapon;
+        const name = app.equipmentCatalog.find((i) => i.id === weapon.item_id)?.name
+          ?? weapon.custom_name
+          ?? "未装着";
+        return `武器 ${name}`;
+      },
+      get: (p) => {
+        const weapon = p.equipment.parts.weapon;
+        return JSON.stringify([weapon.item_id, weapon.custom_name, weapon.base]);
+      },
+      set: (p, v) => {
+        const [itemId, customName, base] = JSON.parse(v);
+        const weapon = p.equipment.parts.weapon;
+        weapon.item_id = itemId;
+        weapon.custom_name = customName;
+        weapon.base = base;
+      },
+    },
+    {
       id: "buffs",
       label: (p) => `バフ選択 ${p.stat_sources.buffs.choices.length}件`,
       get: (p) => JSON.stringify(p.stat_sources.buffs.choices),
@@ -634,6 +656,8 @@
     deltaPct: number;
   }
   let whatIf = $state<WhatIf[]>([]);
+  /** 押した候補は、移動先の差分チップと同時に短く退出させる(§10「移った」)。 */
+  let leavingWhatIfId = $state<string | null>(null);
   /** 試した候補の数。0 件のときに「候補が無い」のか「超えるものが無い」のかを書き分ける */
   let whatIfTried = $state(0);
   let whatIfSeq = 0;
@@ -672,6 +696,7 @@
         if (seq === whatIfSeq) {
           whatIf = rs.filter((w) => w.perHit > base).sort((a, b) => b.perHit - a.perHit);
           whatIfTried = list.length;
+          leavingWhatIfId = null;
         }
       } catch (e) {
         if (seq === whatIfSeq) reportError(errorMessage(e));
@@ -682,6 +707,7 @@
     };
   });
   function applyWhatIf(w: WhatIf) {
+    leavingWhatIfId = w.candidate.id;
     editSim((p) => w.candidate.apply(p));
   }
 
@@ -993,7 +1019,13 @@
               </p>
             {/if}
             {#each whatIf as w (w.candidate.id)}
-              <button type="button" class="whatif" onclick={() => applyWhatIf(w)}>
+              <button
+                type="button"
+                class="whatif"
+                class:whatif-leaving={leavingWhatIfId === w.candidate.id}
+                disabled={leavingWhatIfId === w.candidate.id}
+                onclick={() => applyWhatIf(w)}
+              >
                 <span class="wi-main">
                   <span class="wi-label">{w.candidate.label}</span>
                   <span
@@ -1212,7 +1244,7 @@
              溢れたら横にスクロールさせる(行が増えて下をずらさない) -->
         <div class="chips">
           {#each changedKnobs as k (k.id)}
-            <span class="chip-diff">
+            <span class="chip-diff badge-in" use:flash={() => k.get(app.sim!)}>
               <span>{k.label(app.sim!)}</span>
               <button type="button" class="chip-x" title="この変更だけ戻す" onclick={() => revertKnob(k)}>✕</button>
             </span>
