@@ -128,12 +128,13 @@ pub fn list_masteries() -> Vec<domain::MasteryDef> {
 fn damage_contributions_of(
     sources: &domain::StatSources,
     equipment: &domain::Equipment,
+    dependency: domain::SkillDependency,
 ) -> Vec<(domain::DamageCategory, f64)> {
     let mut out = sources
         .character_skills
         .damage_contributions(gamedata::character_skill_catalog(), &sources.masteries);
     out.extend(equipment.ability_damage_contributions(&gamedata::equipment_abilities()));
-    out.extend(gamedata::item_damage_contributions(equipment));
+    out.extend(gamedata::item_damage_contributions(equipment, dependency));
     out.extend(
         sources
             .masteries
@@ -544,7 +545,7 @@ fn build_damage_input(
         content.game_region,
         content.enemy_id.as_deref(),
     );
-    let damage_contributions = damage_contributions_of(stat_sources, &equipment);
+    let damage_contributions = damage_contributions_of(stat_sources, &equipment, skill.dependency);
     let element_value = element_preview(game_character_id, &equipment, stat_sources)
         .total
         .get(skill.element);
@@ -711,8 +712,6 @@ pub fn evaluate_contents(
         &character.stat_sources.character_skills,
         &character.stat_sources.masteries,
     );
-    let damage_contributions =
-        damage_contributions_of(&character.stat_sources, &character.equipment);
     let skill_uses = gamedata::skill_uses_table();
     // 通常の基本能力値はループ外で集計し、キャラ固有の腕装備パッシブだけ依存種別ごとに派生させる。
     let equipment_base_totals_raw = character
@@ -806,6 +805,11 @@ pub fn evaluate_contents(
             let mut best: Option<BestSkillDamage> = None;
             let mut best_dependency: Option<domain::SkillDependency> = None;
             for skill in &skills {
+                let damage_contributions = damage_contributions_of(
+                    &character.stat_sources,
+                    &character.equipment,
+                    skill.dependency,
+                );
                 let equipment_base_totals = equipment_base_totals_for(skill.dependency);
                 let input = DamageInput::new(
                     character.base_stats.clone(),
@@ -821,7 +825,7 @@ pub fn evaluate_contents(
                     random_option_totals,
                     title_damage_rate,
                     title_added_damage_rate,
-                    damage_contributions.clone(),
+                    damage_contributions,
                     added_damage,
                     awakening_rate,
                     gamedata::awakening_caps(character.awakening).max_damage,

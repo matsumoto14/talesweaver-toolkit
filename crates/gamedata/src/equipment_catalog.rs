@@ -359,6 +359,17 @@ pub fn armor_class(item_id: &str) -> Option<ArmorClass> {
 }
 
 /// 装備カタログの 1 アイテム。
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EquipmentSurvivalEffect {
+    /// 2026-03-04以降のAF「ダメージ緩和」。被ダメージ計算の New2 に相当する。
+    DamageMitigation { percent: f64 },
+    /// 「盾研磨/防御力 +N%」。ダメージ緩和とは別効果なので混ぜない。
+    DefenseRate { percent: f64 },
+    /// 「盾研磨/防御力 +N」。割合表記のない固定値。
+    DefenseFixed { value: i64 },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EquipmentItem {
     pub id: &'static str,
@@ -370,6 +381,12 @@ pub struct EquipmentItem {
     pub values_max: EquipmentValues,
     /// 成長装備の各基本能力値の入力上限。通常装備は `None`。
     pub growth_cap: Option<i64>,
+    /// 補正ごとに上限が違う成長装備。カフスのような一律上限もここへ展開して公開する。
+    pub growth_caps: Option<EquipmentValues>,
+    /// この装備品が持つアビリティ枠。神鳥レリックは0、ルナリアは1。
+    pub ability_slots: usize,
+    /// この装備品が持つ付加オプション枠。神鳥レリックは無し、ルナリアは2。
+    pub random_option_slots: Option<usize>,
     /// 装備固有のエンチャント枠。実物の基本能力値によらず固定。
     /// wiki の「上限」行から `上限 - 基本能力値レンジ上限` で取り込む。エンチャント不可は 0。
     pub enchant_caps: EquipmentValues,
@@ -383,6 +400,12 @@ pub struct EquipmentItem {
     /// 与ダメージ式のカテゴリ(X5 / X6 / Old / O)に入る。
     /// **「一定確率で」のものも発動前提で入れる**(ユーザー確定 2026-08-27: ほぼ発動する)
     pub damage_effects: &'static [SkillEffect],
+    /// AFなどの耐久側固有効果。攻撃者の与ダメージ式へは混ぜず、耐久計算の供給源として分離する。
+    pub survival_effects: &'static [EquipmentSurvivalEffect],
+    /// 候補を主軸スキルへ絞るための推奨依存。効果の発動条件とは別物。
+    pub recommended_dependency: Option<SkillDependency>,
+    /// `damage_effects` がこの依存のスキルにだけ効く場合の条件。
+    pub damage_dependency: Option<SkillDependency>,
     pub source: Source,
 }
 
@@ -411,6 +434,12 @@ impl WikiEquipmentItem {
                 (total - maximum).max(0)
             }
         };
+        let (recommended_dependency, damage_dependency) = item_dependencies(self.id);
+        let godbird_relic = self.id.starts_with("godbird-");
+        let growth_caps = match self.slot {
+            PartSlot::RelicPendant | PartSlot::RelicBracelet => Some(self.values_max),
+            _ => self.growth_cap.map(|cap| v(cap, cap, cap, cap, cap, cap, cap, cap, cap)),
+        };
         EquipmentItem {
             id: self.id,
             slot: self.slot,
@@ -418,6 +447,9 @@ impl WikiEquipmentItem {
             values_min: self.values_min,
             values_max: self.values_max,
             growth_cap: self.growth_cap,
+            growth_caps,
+            ability_slots: if godbird_relic { 0 } else { self.slot.ability_slots() },
+            random_option_slots: if godbird_relic { None } else { self.slot.random_option_slots() },
             enchant_caps: EquipmentValues {
                 thrust: cap(self.enchant_total_caps.thrust, self.values_max.thrust),
                 slash: cap(self.enchant_total_caps.slash, self.values_max.slash),
@@ -442,21 +474,124 @@ impl WikiEquipmentItem {
             weapon_class: self.weapon_class,
             enhance_type: self.enhance_type,
             damage_effects: self.damage_effects,
+            survival_effects: item_survival_effects(self.id),
+            recommended_dependency,
+            damage_dependency,
             source: self.source,
         }
+    }
+}
+
+const SURVIVAL_MITIGATION_10: &[EquipmentSurvivalEffect] =
+    &[EquipmentSurvivalEffect::DamageMitigation { percent: 10.0 }];
+const SURVIVAL_MITIGATION_15: &[EquipmentSurvivalEffect] =
+    &[EquipmentSurvivalEffect::DamageMitigation { percent: 15.0 }];
+const SURVIVAL_MITIGATION_40: &[EquipmentSurvivalEffect] =
+    &[EquipmentSurvivalEffect::DamageMitigation { percent: 40.0 }];
+const SURVIVAL_DEFENSE_FIXED_15: &[EquipmentSurvivalEffect] =
+    &[EquipmentSurvivalEffect::DefenseFixed { value: 15 }];
+const SURVIVAL_DEFENSE_RATE_20: &[EquipmentSurvivalEffect] =
+    &[EquipmentSurvivalEffect::DefenseRate { percent: 20.0 }];
+const SURVIVAL_DEFENSE_RATE_30: &[EquipmentSurvivalEffect] =
+    &[EquipmentSurvivalEffect::DefenseRate { percent: 30.0 }];
+
+fn item_survival_effects(id: &str) -> &'static [EquipmentSurvivalEffect] {
+    match id {
+        // 2024-02-28追加。2026-03-04に「ダメージ耐性」から「ダメージ緩和」へ置換。
+        "psyche-stab" | "psyche-hack" | "psyche-physical" | "psyche-int" | "psyche-mr"
+        | "psyche-hack-int" | "arklon-hack-int" | "eclipse-stab" | "eclipse-hack"
+        | "eclipse-physical" | "eclipse-int" | "eclipse-mr" | "eclipse-hack-int" => {
+            SURVIVAL_MITIGATION_10
+        }
+        // リンゴの島ディフェンシオはWikiの「盾研磨/防御力+15」どおり固定値。
+        "psyche-stab-def" | "psyche-hack-def" | "psyche-physical-def" | "psyche-int-def"
+        | "psyche-mr-def" | "psyche-hack-int-def" => SURVIVAL_DEFENSE_FIXED_15,
+        // アークロン・エクリプスのディフェンシオは「盾研磨/防御力+30%」。
+        "arklon-physical-def" | "arklon-int-def" | "arklon-hack-int-def"
+        | "eclipse-stab-def" | "eclipse-hack-def" | "eclipse-physical-def"
+        | "eclipse-int-def" | "eclipse-mr-def" | "eclipse-hack-int-def" => {
+            SURVIVAL_DEFENSE_RATE_30
+        }
+        // ゆがんだ村の地域表に明記された現行値。
+        "ethereal-stab" | "ethereal-hack" | "ethereal-physical" | "ethereal-int"
+        | "ethereal-mr" | "ethereal-hack-int" => SURVIVAL_MITIGATION_15,
+        "ethereal-stab-def" | "ethereal-hack-def" | "ethereal-physical-def"
+        | "ethereal-int-def" | "ethereal-mr-def" | "ethereal-hack-int-def" => {
+            SURVIVAL_MITIGATION_40
+        }
+        // 現在収録しているコラボAFの「ダメージ20%上昇・防御力20%上昇」。
+        "dungeon-meshi-picking-tools" | "dungeon-meshi-gourmet-guide"
+        | "dungeon-meshi-thistle-book" | "maid-dragon-magic-orb"
+        | "log-horizon-akatsuki-doll" => SURVIVAL_DEFENSE_RATE_20,
+        _ => &[],
+    }
+}
+
+fn item_dependencies(id: &str) -> (Option<SkillDependency>, Option<SkillDependency>) {
+    use SkillDependency::*;
+    match id {
+        "eclipse-stab" => (Some(Stab), Some(Stab)),
+        "eclipse-stab-def" => (Some(Stab), Some(Stab)),
+        "eclipse-hack" => (Some(Hack), Some(Hack)),
+        "eclipse-hack-def" => (Some(Hack), Some(Hack)),
+        "eclipse-physical" => (Some(StabHack), Some(StabHack)),
+        "eclipse-physical-def" => (Some(StabHack), Some(StabHack)),
+        "eclipse-int" => (Some(Int), Some(Int)),
+        "eclipse-int-def" => (Some(Int), Some(Int)),
+        "eclipse-mr" => (Some(Mr), Some(Mr)),
+        "eclipse-mr-def" => (Some(Mr), Some(Mr)),
+        "eclipse-hack-int" => (Some(HackInt), Some(HackInt)),
+        "eclipse-hack-int-def" => (Some(HackInt), Some(HackInt)),
+        "arklon-physical-def" => (Some(StabHack), Some(StabHack)),
+        "arklon-int-def" => (Some(Int), Some(Int)),
+        "arklon-hack-int-def" => (Some(HackInt), Some(HackInt)),
+        "psyche-stab-def" => (Some(Stab), Some(Stab)),
+        "psyche-hack-def" => (Some(Hack), Some(Hack)),
+        "psyche-physical-def" => (Some(StabHack), Some(StabHack)),
+        "psyche-int-def" => (Some(Int), Some(Int)),
+        "psyche-mr-def" => (Some(Mr), Some(Mr)),
+        "psyche-hack-int-def" => (Some(HackInt), Some(HackInt)),
+        "psyche-stab" => (Some(Stab), Some(Stab)),
+        "psyche-hack" => (Some(Hack), Some(Hack)),
+        "psyche-physical" => (Some(StabHack), Some(StabHack)),
+        "psyche-int" => (Some(Int), Some(Int)),
+        "psyche-mr" => (Some(Mr), Some(Mr)),
+        "psyche-hack-int" => (Some(HackInt), Some(HackInt)),
+        "ethereal-stab-def" => (Some(Stab), Some(Stab)),
+        "ethereal-hack-def" => (Some(Hack), Some(Hack)),
+        "ethereal-physical-def" => (Some(StabHack), Some(StabHack)),
+        "ethereal-int-def" => (Some(Int), Some(Int)),
+        "ethereal-mr-def" => (Some(Mr), Some(Mr)),
+        "ethereal-hack-int-def" => (Some(HackInt), Some(HackInt)),
+        "ethereal-stab" => (Some(Stab), None),
+        "ethereal-hack" => (Some(Hack), None),
+        "ethereal-physical" => (Some(StabHack), None),
+        "ethereal-int" => (Some(Int), None),
+        "ethereal-mr" => (Some(Mr), None),
+        "ethereal-hack-int" => (Some(HackInt), None),
+        "dungeon-meshi-picking-tools" => (Some(Stab), None),
+        "dungeon-meshi-gourmet-guide" => (Some(Hack), None),
+        "dungeon-meshi-thistle-book" => (Some(Int), None),
+        "maid-dragon-magic-orb" => (Some(Mr), None),
+        "log-horizon-akatsuki-doll" => (Some(StabHack), None),
+        "arklon-hack-int" => (Some(HackInt), Some(HackInt)),
+        _ => (None, None),
     }
 }
 
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("EquipmentItem", 13)?;
+        let mut s = serializer.serialize_struct("EquipmentItem", 19)?;
         s.serialize_field("id", self.id)?;
         s.serialize_field("slot", &self.slot)?;
         s.serialize_field("name", self.name)?;
         s.serialize_field("values_min", &self.values_min)?;
         s.serialize_field("values_max", &self.values_max)?;
         s.serialize_field("growth_cap", &self.growth_cap)?;
+        s.serialize_field("growth_caps", &self.growth_caps)?;
+        s.serialize_field("ability_slots", &self.ability_slots)?;
+        s.serialize_field("random_option_slots", &self.random_option_slots)?;
         s.serialize_field("enchant_caps", &self.enchant_caps)?;
         s.serialize_field("wrist_type", &self.wrist_type)?;
         s.serialize_field("weapon_class", &self.weapon_class)?;
@@ -476,6 +611,9 @@ impl serde::Serialize for EquipmentItem {
                 .or(self.enhance_type),
         )?;
         s.serialize_field("damage_effects", &self.damage_effects)?;
+        s.serialize_field("survival_effects", &self.survival_effects)?;
+        s.serialize_field("recommended_dependency", &self.recommended_dependency)?;
+        s.serialize_field("damage_dependency", &self.damage_dependency)?;
         s.serialize_field("source", &self.source)?;
         s.end()
     }
@@ -554,6 +692,11 @@ const ITEM_SOURCE_DAMAGE_EFFECT: Source = Source {
     retrieved_on: "2026-08-27",
     note: "エフェクトの攻撃系。「スキル使用時、一定確率で」も発動前提で入れる(ユーザー確定 2026-08-27)。           Lv15 帯の旧コラボ(同じ +3% で補正値が弱い)は wiki に上限行が無いので未収録",
 };
+const ITEM_SOURCE_STALLION_EFFECT: Source = Source {
+    page: "公式お知らせ no=154958 / Item/アクセサリ/エフェクト",
+    retrieved_on: "2026-08-27",
+    note: "主能力の総上限700は公式。その他8補正の総上限255はユーザー確定 2026-08-27",
+};
 
 /// 装着時「与ダメージ+3%」= カテゴリX6 攻撃ダメージ(日本独自)(上限 +30%)。
 const ITEM_DAMAGE_JAPAN_3: &[SkillEffect] = &[SkillEffect::Damage {
@@ -585,6 +728,24 @@ const ITEM_DAMAGE_LEGACY_25: &[SkillEffect] = &[SkillEffect::Damage {
 const ITEM_DAMAGE_PHYSICAL_MAGIC_3: &[SkillEffect] = &[SkillEffect::Damage {
     category: DamageCategory::PhysicalMagicDamageRate,
     percent: 3.0,
+}];
+/// コラボ AF の「一定確率でダメージ20%上昇」。発動前提で X5 に入れる。
+const ITEM_DAMAGE_SPECIAL_20: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageSpecial,
+    percent: 20.0,
+}];
+/// 依存別 AF の攻撃ダメージ。`damage_dependency` が一致するスキルにだけ適用する。
+const ITEM_DAMAGE_DEPENDENCY_20: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::DependencyDamageRate,
+    percent: 20.0,
+}];
+const ITEM_DAMAGE_DEPENDENCY_30: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::DependencyDamageRate,
+    percent: 30.0,
+}];
+const ITEM_DAMAGE_DEPENDENCY_35: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::DependencyDamageRate,
+    percent: 35.0,
 }];
 
 /// wiki Item ページの列順そのまま: 突き / 斬り / 物防 / 魔攻 / 魔防 / 命中 / Cri補正 / 回避 / 敏捷。
@@ -621,6 +782,92 @@ fn effect_item(
         enhance_type: None,
         damage_effects,
         source: ITEM_SOURCE_DAMAGE_EFFECT,
+    }
+}
+
+fn stallion_effect(
+    id: &'static str,
+    name: &'static str,
+    values: EquipmentValues,
+    enchant_total_caps: EquipmentValues,
+) -> WikiEquipmentItem {
+    WikiEquipmentItem {
+        source: ITEM_SOURCE_STALLION_EFFECT,
+        ..effect_item(id, name, values, enchant_total_caps, &[])
+    }
+}
+
+fn defensio_artifact(
+    id: &'static str,
+    name: &'static str,
+    values_min: EquipmentValues,
+    values_max: EquipmentValues,
+    enchant_total_caps: EquipmentValues,
+    damage_effects: &'static [SkillEffect],
+    note: &'static str,
+) -> WikiEquipmentItem {
+    WikiEquipmentItem {
+        id,
+        slot: PartSlot::Artifact,
+        name,
+        values_min,
+        values_max,
+        growth_cap: None,
+        enchant_total_caps,
+        weapon_class: None,
+        enhance_type: None,
+        damage_effects,
+        source: Source {
+            page: "Item/アクセサリー用装備/アーティファクト",
+            retrieved_on: "2026-08-27",
+            note,
+        },
+    }
+}
+
+fn artifact_item(
+    id: &'static str,
+    name: &'static str,
+    values_min: EquipmentValues,
+    values_max: EquipmentValues,
+    enchant_total_caps: EquipmentValues,
+    damage_effects: &'static [SkillEffect],
+    note: &'static str,
+) -> WikiEquipmentItem {
+    defensio_artifact(id, name, values_min, values_max, enchant_total_caps, damage_effects, note)
+}
+
+/// 神鳥・ルナリアレリック。各段階は直前段階の完成値から始まり、表の値まで成長する。
+fn relic_item(
+    id: &'static str,
+    name: &'static str,
+    slot: PartSlot,
+    min_main: i64,
+    min_sub: i64,
+    max_main: i64,
+    max_sub: i64,
+) -> WikiEquipmentItem {
+    let values = |main: i64, sub: i64| match slot {
+        PartSlot::RelicPendant => v(main, main, 0, main, 0, sub, sub, 0, 0),
+        PartSlot::RelicBracelet => v(0, 0, main, 0, main, 0, 0, sub, sub),
+        _ => unreachable!("レリック以外の部位が指定されました"),
+    };
+    WikiEquipmentItem {
+        id,
+        slot,
+        name,
+        values_min: values(min_main, min_sub),
+        values_max: values(max_main, max_sub),
+        growth_cap: None,
+        enchant_total_caps: EquipmentValues::default(),
+        weapon_class: None,
+        enhance_type: None,
+        damage_effects: &[],
+        source: Source {
+            page: "Item/アクセサリ/レリック/神鳥のレリック・ルナリアレリック",
+            retrieved_on: "2026-08-28",
+            note: "直前段階の全補正MAXから開始し、表示段階のMAXまでランダム成長。エンチャント不可",
+        },
     }
 }
 
@@ -1208,6 +1455,324 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             v(255, 255, 255, 255, 255, 255, 255, 255, 255),
             ITEM_DAMAGE_JAPAN_1,
         ),
+        // ── 効果: 21st メモリアル。9補正と総上限が全て確定している現行上位品 ──
+        effect_item("star-sharp-circle", "†スターシャープサークル",
+            v(30, 5, 25, 25, 25, 25, 25, 25, 25),
+            v(600, 400, 255, 255, 255, 255, 255, 255, 255), &[]),
+        effect_item("star-slash-circle", "†スタースラッシュサークル",
+            v(5, 30, 25, 25, 25, 25, 25, 25, 25),
+            v(400, 600, 255, 255, 255, 255, 255, 255, 255), &[]),
+        effect_item("star-magic-circle", "†スターマジックサークル",
+            v(25, 5, 25, 30, 25, 25, 25, 25, 25),
+            v(255, 400, 255, 600, 255, 255, 255, 255, 255), &[]),
+        effect_item("star-holy-circle", "†スターホーリーサークル",
+            v(25, 25, 25, 5, 30, 25, 25, 25, 25),
+            v(255, 255, 255, 400, 600, 255, 255, 255, 255), &[]),
+
+        // ── 効果: 22nd メモリアル。主能力700は公式、その他はユーザー確定の255 ──
+        stallion_effect("stallion-sign-blue", "†スタリオンサイン-ブルー",
+            v(30, 5, 5, 5, 5, 35, 35, 35, 35),
+            v(700, 255, 255, 255, 255, 255, 255, 255, 255)),
+        stallion_effect("stallion-sign-green", "†スタリオンサイン-グリーン",
+            v(5, 30, 5, 5, 5, 35, 35, 35, 35),
+            v(255, 700, 255, 255, 255, 255, 255, 255, 255)),
+        stallion_effect("stallion-sign-purple", "†スタリオンサイン-パープル",
+            v(5, 5, 5, 30, 5, 35, 35, 35, 35),
+            v(255, 255, 255, 700, 255, 255, 255, 255, 255)),
+        stallion_effect("stallion-sign-yellow", "†スタリオンサイン-イエロー",
+            v(5, 5, 5, 5, 30, 35, 35, 35, 35),
+            v(255, 255, 255, 255, 700, 255, 255, 255, 255)),
+
+        // ── AF: 依存別に実用候補を揃える。確率効果は従来方針どおり発動前提 ──
+        WikiEquipmentItem {
+            id: "eclipse-stab-def", slot: PartSlot::Artifact,
+            name: "†エクリプスの突力 - ディフェンシオ",
+            values_min: v(170, 0, 20, 0, 25, 25, 25, 25, 25),
+            values_max: v(190, 0, 30, 0, 35, 35, 35, 35, 35), growth_cap: None,
+            enchant_total_caps: v(220, 0, 50, 0, 55, 55, 55, 55, 55),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。突き依存+30%は同系列規則から補完" },
+        },
+        WikiEquipmentItem {
+            id: "eclipse-hack-def", slot: PartSlot::Artifact,
+            name: "†エクリプスの斬力 - ディフェンシオ",
+            values_min: v(0, 170, 25, 0, 25, 25, 25, 25, 25),
+            values_max: v(0, 190, 35, 0, 35, 35, 35, 35, 35), growth_cap: None,
+            enchant_total_caps: v(0, 220, 55, 0, 55, 55, 55, 55, 55),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。斬り攻撃ダメージ+30%" },
+        },
+        WikiEquipmentItem {
+            id: "eclipse-int", slot: PartSlot::Artifact, name: "†エクリプスの魔力",
+            values_min: v(0, 0, 20, 150, 20, 20, 20, 20, 20),
+            values_max: v(0, 0, 30, 170, 30, 30, 30, 30, 30), growth_cap: None,
+            enchant_total_caps: v(0, 0, 50, 200, 50, 50, 50, 50, 50),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。魔法攻撃ダメージ+30%" },
+        },
+        WikiEquipmentItem {
+            id: "eclipse-mr-def", slot: PartSlot::Artifact,
+            name: "†エクリプスの魔防力 - ディフェンシオ",
+            values_min: v(0, 0, 25, 25, 170, 25, 25, 25, 25),
+            values_max: v(0, 0, 35, 35, 190, 35, 35, 35, 35), growth_cap: None,
+            enchant_total_caps: v(0, 0, 55, 55, 220, 55, 55, 55, 55),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。MR系攻撃ダメージ+30%" },
+        },
+        WikiEquipmentItem {
+            id: "dungeon-meshi-picking-tools", slot: PartSlot::Artifact, name: "†ピッキングツール",
+            values_min: v(115, 0, 30, 0, 20, 18, 15, 15, 18),
+            values_max: v(135, 0, 30, 0, 30, 25, 20, 20, 25), growth_cap: None,
+            enchant_total_caps: v(170, 0, 30, 0, 30, 25, 25, 25, 25),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
+        },
+        WikiEquipmentItem {
+            id: "dungeon-meshi-gourmet-guide", slot: PartSlot::Artifact, name: "†迷宮グルメガイド",
+            values_min: v(0, 115, 30, 0, 20, 18, 15, 15, 18),
+            values_max: v(0, 135, 30, 0, 30, 25, 20, 20, 25), growth_cap: None,
+            enchant_total_caps: v(0, 170, 30, 0, 30, 25, 25, 25, 25),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
+        },
+        WikiEquipmentItem {
+            id: "dungeon-meshi-thistle-book", slot: PartSlot::Artifact, name: "†シスルの魔術書",
+            values_min: v(0, 0, 30, 115, 30, 15, 18, 18, 15),
+            values_max: v(0, 0, 30, 135, 30, 20, 25, 25, 20), growth_cap: None,
+            enchant_total_caps: v(0, 0, 30, 170, 30, 25, 25, 25, 25),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
+        },
+        WikiEquipmentItem {
+            id: "maid-dragon-magic-orb", slot: PartSlot::Artifact, name: "†魔力の玉",
+            values_min: v(0, 0, 30, 90, 90, 39, 19, 44, 33),
+            values_max: v(0, 0, 30, 103, 103, 39, 19, 44, 33), growth_cap: None,
+            enchant_total_caps: v(0, 0, 30, 130, 130, 39, 19, 44, 33),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "メイドラゴンタイアップ。一定確率でダメージ+20%" },
+        },
+        WikiEquipmentItem {
+            id: "log-horizon-akatsuki-doll", slot: PartSlot::Artifact, name: "†アカツキ人形",
+            values_min: v(90, 90, 30, 0, 30, 23, 23, 23, 23),
+            values_max: v(103, 103, 50, 0, 50, 25, 25, 25, 25), growth_cap: None,
+            enchant_total_caps: v(130, 130, 70, 0, 70, 49, 49, 49, 49),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ログ・ホライズンタイアップ。一定確率でダメージ+20%" },
+        },
+        WikiEquipmentItem {
+            id: "arklon-hack-int", slot: PartSlot::Artifact, name: "†アークロンの魔斬力",
+            values_min: v(0, 80, 18, 80, 18, 13, 13, 23, 13),
+            values_max: v(0, 100, 21, 100, 21, 14, 15, 25, 14), growth_cap: None,
+            enchant_total_caps: v(0, 130, 45, 130, 45, 38, 21, 49, 38),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法斬り攻撃ダメージ+20%" },
+        },
+        WikiEquipmentItem {
+            id: "arklon-physical-def", slot: PartSlot::Artifact,
+            name: "†アークロンの物理力 - ディフェンシオ",
+            values_min: v(80, 80, 22, 0, 22, 13, 13, 23, 13),
+            values_max: v(100, 100, 25, 0, 25, 14, 15, 25, 14), growth_cap: None,
+            // Wikiの同一補正行の欠落セルは、数値が同じリストア/スピーディーの上限を採用。
+            enchant_total_caps: v(130, 130, 49, 0, 49, 38, 21, 49, 38),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。物理複合攻撃ダメージ+20%、ディフェンシオ。上限の欠落セルは同補正のリストア/スピーディーと一致" },
+        },
+        WikiEquipmentItem {
+            id: "arklon-int-def", slot: PartSlot::Artifact,
+            name: "†アークロンの魔力 - ディフェンシオ",
+            values_min: v(0, 0, 22, 110, 24, 13, 13, 23, 13),
+            values_max: v(0, 0, 25, 130, 27, 14, 15, 25, 14), growth_cap: None,
+            enchant_total_caps: v(0, 0, 49, 160, 51, 38, 21, 49, 38),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法攻撃ダメージ+20%、ディフェンシオ" },
+        },
+        WikiEquipmentItem {
+            id: "arklon-hack-int-def", slot: PartSlot::Artifact,
+            name: "†アークロンの魔斬力 - ディフェンシオ",
+            values_min: v(0, 90, 22, 90, 22, 13, 13, 23, 13),
+            values_max: v(0, 110, 25, 110, 25, 14, 15, 25, 14), growth_cap: None,
+            enchant_total_caps: v(0, 140, 49, 140, 49, 38, 21, 49, 38),
+            weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法斬り攻撃ダメージ+20%、ディフェンシオ" },
+        },
+
+        // ── AF: プシーキー / エクリプス / エーテリアルの6依存×通常・ディフェンシオ ──
+        artifact_item("psyche-stab", "†プシーキーの突力",
+            v(63, 0, 14, 0, 14, 13, 13, 23, 13), v(66, 0, 17, 0, 17, 14, 15, 25, 14),
+            v(90, 0, 41, 0, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。突き攻撃ダメージ+20%"),
+        artifact_item("psyche-hack", "†プシーキーの斬力",
+            v(0, 63, 14, 0, 14, 13, 13, 23, 13), v(0, 66, 17, 0, 17, 14, 15, 25, 14),
+            v(0, 90, 41, 0, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。斬り攻撃ダメージ+20%"),
+        artifact_item("psyche-physical", "†プシーキーの物理力",
+            v(41, 41, 14, 0, 14, 13, 13, 23, 13), v(44, 44, 17, 0, 17, 14, 15, 25, 14),
+            v(68, 68, 41, 0, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。物理複合攻撃ダメージ+20%"),
+        artifact_item("psyche-int", "†プシーキーの魔力",
+            v(0, 0, 14, 63, 16, 13, 13, 23, 13), v(0, 0, 17, 66, 19, 14, 15, 25, 14),
+            v(0, 0, 41, 90, 43, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。魔法攻撃ダメージ+20%"),
+        artifact_item("psyche-mr", "†プシーキーの魔防力",
+            v(0, 0, 14, 19, 63, 13, 13, 23, 13), v(0, 0, 17, 22, 66, 14, 15, 25, 14),
+            v(0, 0, 41, 46, 90, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。MR系攻撃ダメージ+20%"),
+        artifact_item("psyche-hack-int", "†プシーキーの魔斬力",
+            v(0, 53, 14, 53, 14, 13, 13, 23, 13), v(0, 58, 17, 58, 17, 14, 15, 25, 14),
+            v(0, 82, 41, 82, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。魔法斬り攻撃ダメージ+20%"),
+
+        artifact_item("eclipse-stab", "†エクリプスの突力",
+            v(150, 0, 20, 0, 20, 20, 20, 20, 20), v(170, 0, 30, 0, 30, 30, 30, 30, 30),
+            v(200, 0, 50, 0, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。突き依存+30%は同系列規則から補完"),
+        artifact_item("eclipse-hack", "†エクリプスの斬力",
+            v(0, 150, 20, 0, 20, 20, 20, 20, 20), v(0, 170, 30, 0, 30, 30, 30, 30, 30),
+            v(0, 200, 50, 0, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。斬り攻撃ダメージ+30%"),
+        artifact_item("eclipse-physical", "†エクリプスの物理力",
+            v(120, 120, 20, 0, 20, 20, 20, 20, 20), v(140, 140, 30, 0, 30, 30, 30, 30, 30),
+            v(170, 170, 50, 0, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。上限と物理複合依存+30%は同系列規則から補完"),
+        artifact_item("eclipse-mr", "†エクリプスの魔防力",
+            v(0, 0, 20, 20, 150, 20, 20, 20, 20), v(0, 0, 30, 30, 170, 30, 30, 30, 30),
+            v(0, 0, 50, 50, 200, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。MR系攻撃ダメージ+30%"),
+        artifact_item("eclipse-hack-int", "†エクリプスの魔斬力",
+            v(0, 130, 20, 130, 20, 20, 20, 20, 20), v(0, 150, 30, 150, 30, 30, 30, 30, 30),
+            v(0, 180, 50, 180, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。上限と魔斬依存+30%は同系列規則から補完"),
+
+        artifact_item("ethereal-stab", "†エーテリアルチューブ(突力)",
+            v(210, 0, 30, 0, 30, 30, 30, 30, 30), v(230, 0, 40, 0, 40, 40, 40, 40, 40),
+            v(260, 0, 60, 0, 60, 60, 60, 60, 60), &[],
+            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+        artifact_item("ethereal-hack", "†エーテリアルチューブ(斬力)",
+            v(0, 210, 30, 0, 30, 30, 30, 30, 30), v(0, 230, 40, 0, 40, 40, 40, 40, 40),
+            v(0, 260, 60, 0, 60, 60, 60, 60, 60), &[],
+            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+        artifact_item("ethereal-physical", "†エーテリアルチューブ(物理力)",
+            v(190, 190, 30, 0, 30, 30, 30, 30, 30), v(210, 210, 40, 0, 40, 40, 40, 40, 40),
+            v(240, 240, 60, 0, 60, 60, 60, 60, 60), &[],
+            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+        artifact_item("ethereal-int", "†エーテリアルチューブ(魔力)",
+            v(0, 0, 30, 210, 30, 30, 30, 30, 30), v(0, 0, 40, 230, 40, 40, 40, 40, 40),
+            v(0, 0, 60, 260, 60, 60, 60, 60, 60), &[],
+            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+        artifact_item("ethereal-mr", "†エーテリアルチューブ(魔防力)",
+            v(0, 0, 30, 30, 210, 30, 30, 30, 30), v(0, 0, 40, 40, 230, 40, 40, 40, 40),
+            v(0, 0, 60, 60, 260, 60, 60, 60, 60), &[],
+            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+        artifact_item("ethereal-hack-int", "†エーテリアルチューブ(魔斬力)",
+            v(0, 190, 30, 190, 30, 30, 30, 30, 30), v(0, 210, 40, 210, 40, 40, 40, 40, 40),
+            v(0, 240, 60, 240, 60, 60, 60, 60, 60), &[],
+            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+
+        defensio_artifact("psyche-stab-def", "†プシーキーの突力 - ディフェンシオ",
+            v(69, 0, 20, 0, 20, 16, 16, 26, 16), v(72, 0, 23, 0, 23, 17, 18, 28, 17),
+            v(96, 0, 47, 0, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。突き攻撃ダメージ+20%、ディフェンシオ"),
+        defensio_artifact("psyche-hack-def", "†プシーキーの斬力 - ディフェンシオ",
+            v(0, 69, 20, 0, 20, 16, 16, 26, 16), v(0, 72, 23, 0, 23, 17, 18, 28, 17),
+            v(0, 96, 47, 0, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。斬り攻撃ダメージ+20%、ディフェンシオ"),
+        defensio_artifact("psyche-physical-def", "†プシーキーの物理力 - ディフェンシオ",
+            v(47, 47, 20, 0, 20, 16, 16, 26, 16), v(50, 50, 23, 0, 23, 17, 18, 28, 17),
+            v(74, 74, 47, 0, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。物理複合攻撃ダメージ+20%、ディフェンシオ"),
+        defensio_artifact("psyche-int-def", "†プシーキーの魔力 - ディフェンシオ",
+            v(0, 0, 20, 69, 22, 16, 16, 26, 16), v(0, 0, 23, 72, 25, 17, 18, 28, 17),
+            v(0, 0, 47, 96, 49, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。魔法攻撃ダメージ+20%、ディフェンシオ"),
+        defensio_artifact("psyche-mr-def", "†プシーキーの魔防力 - ディフェンシオ",
+            v(0, 0, 20, 25, 69, 16, 16, 26, 16), v(0, 0, 23, 28, 72, 17, 18, 28, 17),
+            v(0, 0, 47, 52, 96, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。MR系攻撃ダメージ+20%、ディフェンシオ"),
+        defensio_artifact("psyche-hack-int-def", "†プシーキーの魔斬力 - ディフェンシオ",
+            v(0, 61, 20, 61, 20, 16, 16, 26, 16), v(0, 64, 23, 64, 23, 17, 18, 28, 17),
+            v(0, 88, 47, 88, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            "リンゴの島。魔法斬り攻撃ダメージ+20%、ディフェンシオ"),
+
+        defensio_artifact("eclipse-physical-def", "†エクリプスの物理力 - ディフェンシオ",
+            v(140, 140, 25, 0, 25, 25, 25, 25, 25), v(160, 160, 35, 0, 35, 35, 35, 35, 35),
+            v(190, 190, 55, 0, 55, 55, 55, 55, 55), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。補正と物理複合依存+30%は同系列規則から補完"),
+        defensio_artifact("eclipse-int-def", "†エクリプスの魔力 - ディフェンシオ",
+            v(0, 0, 25, 170, 25, 25, 25, 25, 25), v(0, 0, 35, 190, 35, 35, 35, 35, 35),
+            v(0, 0, 55, 220, 55, 55, 55, 55, 55), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。副補正上限と魔攻依存+30%は同系列規則から補完"),
+        defensio_artifact("eclipse-hack-int-def", "†エクリプスの魔斬力 - ディフェンシオ",
+            v(0, 150, 25, 150, 25, 25, 25, 25, 25), v(0, 170, 35, 170, 35, 35, 35, 35, 35),
+            v(0, 200, 55, 200, 55, 55, 55, 55, 55), ITEM_DAMAGE_DEPENDENCY_30,
+            "喪失の島。補正と魔斬依存+30%は同系列規則から補完"),
+
+        defensio_artifact("ethereal-stab-def", "†エーテリアルチューブ(突力) - ディフェンシオ",
+            v(230, 0, 35, 0, 35, 35, 35, 35, 35), v(250, 0, 45, 0, 45, 45, 45, 45, 45),
+            v(280, 0, 65, 0, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。突き依存+35%"),
+        defensio_artifact("ethereal-hack-def", "†エーテリアルチューブ(斬力) - ディフェンシオ",
+            v(0, 230, 35, 0, 35, 35, 35, 35, 35), v(0, 250, 45, 0, 45, 45, 45, 45, 45),
+            v(0, 280, 65, 0, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。斬り依存+35%"),
+        defensio_artifact("ethereal-physical-def", "†エーテリアルチューブ(物理力) - ディフェンシオ",
+            v(210, 210, 35, 0, 35, 35, 35, 35, 35), v(230, 230, 45, 0, 45, 45, 45, 45, 45),
+            v(260, 260, 65, 0, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。物理複合依存+35%"),
+        defensio_artifact("ethereal-int-def", "†エーテリアルチューブ(魔力) - ディフェンシオ",
+            v(0, 0, 35, 230, 35, 35, 35, 35, 35), v(0, 0, 45, 250, 45, 45, 45, 45, 45),
+            v(0, 0, 65, 280, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            "ゆがんだ村。Wiki確定補正。魔攻依存+35%"),
+        defensio_artifact("ethereal-mr-def", "†エーテリアルチューブ(魔防力) - ディフェンシオ",
+            v(0, 0, 35, 35, 230, 35, 35, 35, 35), v(0, 0, 45, 45, 250, 45, 45, 45, 45),
+            v(0, 0, 65, 65, 280, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。魔防依存+35%"),
+        defensio_artifact("ethereal-hack-int-def", "†エーテリアルチューブ(魔斬力) - ディフェンシオ",
+            v(0, 210, 35, 210, 35, 35, 35, 35, 35), v(0, 230, 45, 230, 45, 45, 45, 45, 45),
+            v(0, 260, 65, 260, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。魔斬依存+35%"),
+
+        // ── レリック: 直前段階の完成値から、選択段階の上限までランダム成長 ──
+        relic_item("godbird-pendant-plus1", "†神鳥のペンダント(+1)", PartSlot::RelicPendant, 0, 0, 30, 25),
+        relic_item("godbird-pendant-plus2", "†神鳥のペンダント(+2)", PartSlot::RelicPendant, 30, 25, 50, 45),
+        relic_item("godbird-pendant-plus3", "†神鳥のペンダント(+3)", PartSlot::RelicPendant, 50, 45, 55, 50),
+        relic_item("godbird-pendant-plus4", "†神鳥のペンダント(+4)", PartSlot::RelicPendant, 55, 50, 60, 60),
+        relic_item("godbird-pendant-plus5", "†神鳥のペンダント(+5)", PartSlot::RelicPendant, 60, 60, 65, 65),
+        relic_item("godbird-pendant-plus6", "†神鳥のペンダント(+6)", PartSlot::RelicPendant, 65, 65, 70, 70),
+        relic_item("godbird-pendant-plus7", "†神鳥のペンダント(+7)", PartSlot::RelicPendant, 70, 70, 75, 75),
+        relic_item("godbird-pendant-plus8", "†神鳥のペンダント(+8)", PartSlot::RelicPendant, 75, 75, 80, 80),
+        relic_item("godbird-pendant-plus9", "†神鳥のペンダント(+9)", PartSlot::RelicPendant, 80, 80, 90, 90),
+        relic_item("godbird-pendant-plus10", "†神鳥のペンダント(+10)", PartSlot::RelicPendant, 90, 90, 100, 100),
+        relic_item("lunaria-pendant-plus1", "†ルナリアペンダント(+1)", PartSlot::RelicPendant, 100, 100, 110, 110),
+        relic_item("lunaria-pendant-plus2", "†ルナリアペンダント(+2)", PartSlot::RelicPendant, 110, 110, 120, 120),
+        relic_item("lunaria-pendant-plus3", "†ルナリアペンダント(+3)", PartSlot::RelicPendant, 120, 120, 130, 130),
+        relic_item("lunaria-pendant-plus4", "†ルナリアペンダント(+4)", PartSlot::RelicPendant, 130, 130, 140, 140),
+        relic_item("lunaria-pendant-plus5", "†ルナリアペンダント(+5)", PartSlot::RelicPendant, 140, 140, 150, 150),
+        relic_item("lunaria-pendant-plus6", "†ルナリアペンダント(+6)", PartSlot::RelicPendant, 150, 150, 160, 160),
+        relic_item("lunaria-pendant-plus7", "†ルナリアペンダント(+7)", PartSlot::RelicPendant, 160, 160, 170, 170),
+        relic_item("lunaria-pendant-plus8", "†ルナリアペンダント(+8)", PartSlot::RelicPendant, 170, 170, 180, 180),
+        relic_item("lunaria-pendant-plus9", "†ルナリアペンダント(+9)", PartSlot::RelicPendant, 180, 180, 190, 190),
+        relic_item("lunaria-pendant-plus10", "†ルナリアペンダント(+10)", PartSlot::RelicPendant, 190, 190, 200, 200),
+
+        relic_item("godbird-bracelet-plus1", "†神鳥のブレスレット(+1)", PartSlot::RelicBracelet, 0, 0, 30, 25),
+        relic_item("godbird-bracelet-plus2", "†神鳥のブレスレット(+2)", PartSlot::RelicBracelet, 30, 25, 50, 45),
+        relic_item("godbird-bracelet-plus3", "†神鳥のブレスレット(+3)", PartSlot::RelicBracelet, 50, 45, 55, 50),
+        relic_item("godbird-bracelet-plus4", "†神鳥のブレスレット(+4)", PartSlot::RelicBracelet, 55, 50, 60, 60),
+        relic_item("godbird-bracelet-plus5", "†神鳥のブレスレット(+5)", PartSlot::RelicBracelet, 60, 60, 65, 65),
+        relic_item("godbird-bracelet-plus6", "†神鳥のブレスレット(+6)", PartSlot::RelicBracelet, 65, 65, 70, 70),
+        relic_item("godbird-bracelet-plus7", "†神鳥のブレスレット(+7)", PartSlot::RelicBracelet, 70, 70, 75, 75),
+        relic_item("godbird-bracelet-plus8", "†神鳥のブレスレット(+8)", PartSlot::RelicBracelet, 75, 75, 80, 80),
+        relic_item("godbird-bracelet-plus9", "†神鳥のブレスレット(+9)", PartSlot::RelicBracelet, 80, 80, 90, 90),
+        relic_item("godbird-bracelet-plus10", "†神鳥のブレスレット(+10)", PartSlot::RelicBracelet, 90, 90, 100, 100),
+        relic_item("lunaria-bracelet-plus1", "†ルナリアブレスレット(+1)", PartSlot::RelicBracelet, 100, 100, 110, 110),
+        relic_item("lunaria-bracelet-plus2", "†ルナリアブレスレット(+2)", PartSlot::RelicBracelet, 110, 110, 120, 120),
+        relic_item("lunaria-bracelet-plus3", "†ルナリアブレスレット(+3)", PartSlot::RelicBracelet, 120, 120, 130, 130),
+        relic_item("lunaria-bracelet-plus4", "†ルナリアブレスレット(+4)", PartSlot::RelicBracelet, 130, 130, 140, 140),
+        relic_item("lunaria-bracelet-plus5", "†ルナリアブレスレット(+5)", PartSlot::RelicBracelet, 140, 140, 150, 150),
+        relic_item("lunaria-bracelet-plus6", "†ルナリアブレスレット(+6)", PartSlot::RelicBracelet, 150, 150, 160, 160),
+        relic_item("lunaria-bracelet-plus7", "†ルナリアブレスレット(+7)", PartSlot::RelicBracelet, 160, 160, 170, 170),
+        relic_item("lunaria-bracelet-plus8", "†ルナリアブレスレット(+8)", PartSlot::RelicBracelet, 170, 170, 180, 180),
+        relic_item("lunaria-bracelet-plus9", "†ルナリアブレスレット(+9)", PartSlot::RelicBracelet, 180, 180, 190, 190),
+        relic_item("lunaria-bracelet-plus10", "†ルナリアブレスレット(+10)", PartSlot::RelicBracelet, 190, 190, 200, 200),
     ];
 
     // 盾+ は通常の候補を並べず、ユーザー指定の成長カフスだけを扱う。
@@ -1312,7 +1877,10 @@ pub fn character_wrist_base_bonus(
 ///
 /// `Equipment::ability_damage_contributions` と同じ役割だが、`EquipmentItem` は
 /// `Source` / `WeaponClass` を持つので domain ではなくこちら側にある。
-pub fn item_damage_contributions(equipment: &Equipment) -> Vec<(DamageCategory, f64)> {
+pub fn item_damage_contributions(
+    equipment: &Equipment,
+    dependency: SkillDependency,
+) -> Vec<(DamageCategory, f64)> {
     let catalog = equipment_catalog();
     let effects: Vec<&'static SkillEffect> = equipment
         .parts
@@ -1320,6 +1888,7 @@ pub fn item_damage_contributions(equipment: &Equipment) -> Vec<(DamageCategory, 
         .into_iter()
         .filter_map(|(_, part)| part.item_id.as_deref())
         .filter_map(|id| catalog.iter().find(|item| item.id == id))
+        .filter(|item| item.damage_dependency.is_none_or(|required| required == dependency))
         .flat_map(|item| item.damage_effects.iter())
         .collect();
     domain::damage_contributions(effects.into_iter())
@@ -1347,6 +1916,7 @@ fn new_ability(
             "固定ダメージ/割合ダメージ/魔防/自然回復/命中からランダム"
         }
         EquipmentAbilityFamily::WeaponDelay => "",
+        _ => unreachable!("武器用の新装着アビリティ以外が渡されました"),
     };
     let stat_kind = match family {
         EquipmentAbilityFamily::PointedBlade => Thrust,
@@ -1356,6 +1926,7 @@ fn new_ability(
         EquipmentAbilityFamily::WeaponDelay => {
             unreachable!("新装着アビリティに武器ディレイ系は無い")
         }
+        _ => unreachable!("武器用の新装着アビリティ以外が渡されました"),
     };
     let (fixed, rate, stat_min, stat_max, recovery_min, recovery_max, accuracy_min, accuracy_max) =
         match values
@@ -1407,6 +1978,7 @@ fn new_ability(
         family,
         category: 4,
         slot: PartSlot::Weapon,
+        value_option: None,
         exclusive_group: "weapon-category-4",
         additional_slots: 2,
         additional_effects,
@@ -1433,6 +2005,7 @@ fn fixed_ability(
         family,
         category,
         slot: PartSlot::Weapon,
+        value_option: None,
         exclusive_group: match category {
             1 => "weapon-category-1",
             3 => "weapon-category-3",
@@ -1447,6 +2020,163 @@ fn fixed_ability(
         damage_effects: &[],
     }
 }
+
+fn slot_ability(
+    id: &'static str,
+    name: &'static str,
+    slot: PartSlot,
+    family: EquipmentAbilityFamily,
+    group: &'static str,
+    values: EquipmentValues,
+    effect_summary: &'static str,
+    record_only: bool,
+    damage_effects: &'static [SkillEffect],
+) -> EquipmentAbilityDef {
+    use EquipmentAbilityAdditionalKind::*;
+    let option = |kind, min, max| EquipmentAbilityAdditionalDef { kind, min, max };
+    let value_option = match (slot, family) {
+        (PartSlot::ShieldPlus, EquipmentAbilityFamily::Accuracy) => Some((Accuracy, 7, 13)),
+        (PartSlot::ShieldPlus, EquipmentAbilityFamily::Evasion) => Some((Evasion, 7, 13)),
+        (PartSlot::ShieldPlus, EquipmentAbilityFamily::PointedBlade) => Some((Thrust, 7, 15)),
+        (PartSlot::ShieldPlus, EquipmentAbilityFamily::SharpBlade) => Some((Slash, 7, 15)),
+        (PartSlot::ShieldPlus, EquipmentAbilityFamily::Intelligence) => Some((MagicAttack, 7, 15)),
+        (PartSlot::ShieldPlus, EquipmentAbilityFamily::MagicResistance) => Some((MagicDefense, 7, 15)),
+        (PartSlot::RelicPendant, EquipmentAbilityFamily::PointedBlade) => Some((Thrust, 1, 15)),
+        (PartSlot::RelicPendant, EquipmentAbilityFamily::SharpBlade) => Some((Slash, 1, 15)),
+        (PartSlot::RelicPendant, EquipmentAbilityFamily::Intelligence) => Some((MagicAttack, 1, 15)),
+        (PartSlot::RelicPendant, EquipmentAbilityFamily::MagicResistance) => Some((MagicDefense, 1, 15)),
+        (PartSlot::RelicBracelet, EquipmentAbilityFamily::Accuracy) => Some((Accuracy, 1, 13)),
+        (PartSlot::RelicBracelet, EquipmentAbilityFamily::Evasion) => Some((Evasion, 1, 13)),
+        (PartSlot::RelicBracelet, EquipmentAbilityFamily::Critical) => Some((Critical, 1, 12)),
+        _ => None,
+    }
+    .map(|(kind, min, max)| EquipmentAbilityAdditionalDef { kind, min, max });
+    let (additional_slots, additional_effects, additional_options) = match slot {
+        PartSlot::Armor => {
+            let mut options = vec![
+                option(DamageResistance, 11, 11),
+                option(HpRecovery, 8, 18),
+                option(MpRecovery, 8, 18),
+            ];
+            match family {
+                EquipmentAbilityFamily::Vitality | EquipmentAbilityFamily::ArmorPolish => {
+                    options.push(option(PhysicalDamageReduction, 150, 150));
+                    options.push(option(PhysicalDefense, 10, 16));
+                }
+                EquipmentAbilityFamily::Mana | EquipmentAbilityFamily::MagicResistance => {
+                    options.push(option(MagicDamageReduction, 150, 150));
+                    options.push(option(MagicDefense, 8, 14));
+                }
+                EquipmentAbilityFamily::Evasion => {
+                    options.push(option(EvasionRate, 9, 20));
+                    options.push(option(PhysicalDamageReduction, 100, 100));
+                    options.push(option(MagicDamageReduction, 100, 100));
+                    options.push(option(SpRecovery, 8, 18));
+                }
+                _ => {}
+            }
+            (2, "ランダム追加2枠", options)
+        }
+        PartSlot::Shield => {
+            let reduction = if family == EquipmentAbilityFamily::ShieldPolish {
+                PhysicalDamageReduction
+            } else {
+                MagicDamageReduction
+            };
+            (2, "ランダム追加2枠", vec![
+                option(DamageResistance, 10, 10), option(reduction, 100, 100),
+                option(HpRecovery, 8, 18), option(MpRecovery, 8, 18),
+                option(SpRecovery, 8, 18), option(EvasionRate, 10, 18),
+            ])
+        }
+        PartSlot::ShieldPlus => {
+            let options = if matches!(family, EquipmentAbilityFamily::Accuracy | EquipmentAbilityFamily::Evasion) {
+                vec![
+                    option(DamageResistance, 5, 6), option(PhysicalDamageReduction, 90, 100),
+                    option(MagicDamageReduction, 90, 100), option(HpRecovery, 15, 20),
+                    option(MpRecovery, 15, 20), option(SpRecovery, 15, 20), option(Critical, 5, 10),
+                ]
+            } else {
+                vec![option(FireElement, 10, 30), option(WaterElement, 10, 30),
+                    option(WindElement, 10, 30), option(EarthElement, 10, 30),
+                    option(LightningElement, 10, 30), option(WhiteElement, 10, 30), option(DarkElement, 10, 30)]
+            };
+            (1, "ランダム追加1枠", options)
+        }
+        PartSlot::Hand => (2, "ランダム追加2枠", vec![
+            option(FixedDamage, 10_000, 10_000), option(DamageRate, 9, 9),
+            option(Thrust, 8, 14), option(Slash, 8, 14),
+            option(MagicAttack, 8, 14), option(MagicDefense, 8, 14),
+        ]),
+        PartSlot::Head => {
+            let kinds: [EquipmentAbilityAdditionalKind; 3] = match id {
+                "g-earth-moonstone" => [DarkElement, WaterElement, WindElement],
+                "g-dark-moonstone" => [WaterElement, WindElement, LightningElement],
+                "g-water-moonstone" => [WindElement, LightningElement, WhiteElement],
+                "g-wind-moonstone" => [LightningElement, WhiteElement, FireElement],
+                "g-lightning-moonstone" => [WhiteElement, FireElement, EarthElement],
+                "g-white-moonstone" => [FireElement, EarthElement, DarkElement],
+                _ => [EarthElement, DarkElement, WaterElement],
+            };
+            (1, "ランダム追加1枠", kinds.into_iter().map(|kind| option(kind, 20, 20)).collect())
+        }
+        PartSlot::Leg => (2, "ランダム追加2枠", vec![
+            option(HpRecovery, 8, 18), option(MpRecovery, 8, 18),
+            option(SpRecovery, 8, 18), option(EvasionRate, 7, 15),
+        ]),
+        PartSlot::RelicPendant => (1, "ランダム追加1枠", vec![
+            option(FireElement, 20, 30), option(WaterElement, 20, 30),
+            option(WindElement, 20, 30), option(EarthElement, 20, 30),
+            option(LightningElement, 20, 30), option(WhiteElement, 20, 30),
+            option(DarkElement, 20, 30), option(DamageRate, 5, 10),
+        ]),
+        PartSlot::RelicBracelet => (1, "ランダム追加1枠", vec![
+            option(DamageResistance, 5, 10), option(PhysicalDamageReduction, 90, 100),
+            option(MagicDamageReduction, 90, 100), option(HpRecovery, 15, 20),
+            option(MpRecovery, 15, 20), option(SpRecovery, 15, 20),
+        ]),
+        _ => (0, "", vec![]),
+    };
+    EquipmentAbilityDef {
+        id,
+        name,
+        family,
+        category: 4,
+        slot,
+        value_option,
+        exclusive_group: group,
+        additional_slots,
+        additional_effects,
+        additional_options,
+        record_only,
+        effect_summary,
+        values,
+        damage_effects,
+    }
+}
+
+fn fixed_slot_ability(
+    id: &'static str,
+    name: &'static str,
+    slot: PartSlot,
+    family: EquipmentAbilityFamily,
+    category: u8,
+    group: &'static str,
+    values: EquipmentValues,
+    effect_summary: &'static str,
+) -> EquipmentAbilityDef {
+    let mut def = slot_ability(id, name, slot, family, group, values, effect_summary, false, &[]);
+    def.category = category;
+    def.additional_slots = 0;
+    def.additional_effects = "";
+    def.additional_options.clear();
+    def
+}
+
+const HELM_SKILL_10: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::SkillMultiplierFixed,
+    percent: 10.0,
+}];
 
 /// 武器アビリティは装備攻撃力(突き/斬り/魔攻/魔防)にしか効かない。
 fn a(thrust: i64, slash: i64, magic_attack: i64, magic_defense: i64) -> EquipmentValues {
@@ -1511,6 +2241,7 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
                 EquipmentAbilityFamily::Intelligence => a(0, 0, value, 0),
                 EquipmentAbilityFamily::MagicResistance => a(0, 0, 0, value),
                 EquipmentAbilityFamily::WeaponDelay => EquipmentValues::default(),
+                _ => unreachable!("武器の基本アビリティ以外が渡されました"),
             };
             out.push(fixed_ability(id, name, family, 1, values, summary, false));
         }
@@ -1612,6 +2343,98 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
             },
         ));
     }
+
+
+    // 武器以外は現環境で使う最上位を収録する。ランダム実測値の部位は
+    // 範囲を要約し、固定値として計算へ混ぜない。
+    out.push(slot_ability(
+        "helm-e-skill-attack", "E-スキル攻撃力増加", PartSlot::Helm,
+        EquipmentAbilityFamily::SkillAttack, "helm-skill-attack", EquipmentValues::default(),
+        "スキル攻撃力 +10", false, HELM_SKILL_10,
+    ));
+
+    for (id, name, family, values, summary) in [
+        ("upper-armor-polish", "(上)鎧研磨", EquipmentAbilityFamily::ArmorPolish, EquipmentValues { physical_defense: 40, ..EquipmentValues::default() }, "物防 +40"),
+        ("upper-magic-resistance-armor", "(上)魔法耐性・鎧", EquipmentAbilityFamily::MagicResistance, EquipmentValues { magic_defense: 30, ..EquipmentValues::default() }, "魔防 +30"),
+        ("upper-evasion-armor", "(上)機敏", EquipmentAbilityFamily::Evasion, EquipmentValues { evasion: 3, ..EquipmentValues::default() }, "回避 +3"),
+    ] {
+        out.push(fixed_slot_ability(id, name, PartSlot::Armor, family, 2, "armor-category-2", values, summary));
+    }
+
+    for (id, name, family, values, summary, record_only) in [
+        ("night-star-vitality-armor", "夜星の生命力", EquipmentAbilityFamily::Vitality, EquipmentValues::default(), "最大HP +30,000", true),
+        ("night-star-mana-armor", "夜星のマナ", EquipmentAbilityFamily::Mana, EquipmentValues::default(), "最大MP +9,000", true),
+        ("night-star-armor-polish", "夜星の鎧研磨", EquipmentAbilityFamily::ArmorPolish, EquipmentValues { physical_defense: 60, ..EquipmentValues::default() }, "物防 +60", false),
+        ("night-star-magic-resistance-armor", "夜星の魔法耐性(鎧)", EquipmentAbilityFamily::MagicResistance, EquipmentValues { magic_defense: 60, ..EquipmentValues::default() }, "魔防 +60", false),
+        ("night-star-evasion-armor", "夜星の機敏", EquipmentAbilityFamily::Evasion, EquipmentValues { evasion: 16, ..EquipmentValues::default() }, "回避 +16", false),
+    ] {
+        out.push(slot_ability(id, name, PartSlot::Armor, family, "armor-ability", values, summary, record_only, &[]));
+    }
+
+    for (id, name, family, values, summary) in [
+        ("night-star-shield-polish", "夜星の盾研磨", EquipmentAbilityFamily::ShieldPolish, EquipmentValues { physical_defense: 30, ..EquipmentValues::default() }, "物防 +30"),
+        ("night-star-magic-resistance-shield", "夜星の魔法耐性(盾)", EquipmentAbilityFamily::MagicResistance, EquipmentValues { magic_defense: 15, ..EquipmentValues::default() }, "魔防 +15"),
+    ] {
+        out.push(slot_ability(id, name, PartSlot::Shield, family, "shield-ability", values, summary, false, &[]));
+    }
+
+    for (id, name, family, summary) in [
+        ("mystic-mine-accuracy", "神秘鉱の的中剣", EquipmentAbilityFamily::Accuracy, "命中 +7〜13"),
+        ("mystic-mine-evasion", "神秘鉱の機敏", EquipmentAbilityFamily::Evasion, "回避 +7〜13"),
+        ("mystic-mine-pointed-blade", "神秘鉱の尖った刃", EquipmentAbilityFamily::PointedBlade, "突き +7〜15"),
+        ("mystic-mine-sharp-blade", "神秘鉱の鋭い刃", EquipmentAbilityFamily::SharpBlade, "斬り +7〜15"),
+        ("mystic-mine-intelligence", "神秘鉱の知力", EquipmentAbilityFamily::Intelligence, "魔攻 +7〜15"),
+        ("mystic-mine-magic-resistance", "神秘鉱の耐魔力", EquipmentAbilityFamily::MagicResistance, "魔防 +7〜15"),
+    ] {
+        out.push(slot_ability(id, name, PartSlot::ShieldPlus, family, id, EquipmentValues::default(), summary, false, &[]));
+    }
+
+    for (id, name, summary) in [
+        ("g-fire-moonstone", "G-火の月石", "火属性 +20"),
+        ("g-water-moonstone", "G-水の月石", "水属性 +20"),
+        ("g-wind-moonstone", "G-風の月石", "風属性 +20"),
+        ("g-earth-moonstone", "G-土の月石", "土属性 +20"),
+        ("g-lightning-moonstone", "G-雷の月石", "雷属性 +20"),
+        ("g-white-moonstone", "G-白の月石", "白属性 +20"),
+        ("g-dark-moonstone", "G-黒の月石", "黒属性 +20"),
+    ] {
+        out.push(slot_ability(id, name, PartSlot::Head, EquipmentAbilityFamily::Element, "head-element", EquipmentValues::default(), summary, true, &[]));
+    }
+
+    for (id, name, family, values, summary) in [
+        ("night-star-critical-hand", "夜星の致命打", EquipmentAbilityFamily::Critical, EquipmentValues { critical: 15, ..EquipmentValues::default() }, "クリティカル +15"),
+        ("night-star-accuracy-hand", "夜星の的中剣", EquipmentAbilityFamily::Accuracy, EquipmentValues { accuracy: 16, ..EquipmentValues::default() }, "命中 +16"),
+    ] {
+        out.push(slot_ability(id, name, PartSlot::Hand, family, "hand-ability", values, summary, false, &[]));
+    }
+    for (id, name, family, values, summary) in [
+        ("upper-critical-hand", "(上)致命打", EquipmentAbilityFamily::Critical, EquipmentValues { critical: 3, ..EquipmentValues::default() }, "クリティカル +3"),
+        ("upper-accuracy-hand", "(上)的中剣", EquipmentAbilityFamily::Accuracy, EquipmentValues { accuracy: 3, ..EquipmentValues::default() }, "命中 +3"),
+    ] {
+        out.push(fixed_slot_ability(id, name, PartSlot::Hand, family, 3, "hand-category-3", values, summary));
+    }
+
+    out.push(slot_ability(
+        "night-star-agility-leg", "夜星の敏捷", PartSlot::Leg, EquipmentAbilityFamily::Agility,
+        "leg-ability", EquipmentValues::default(), "移動速度 +12", true, &[],
+    ));
+
+    for (id, name, family, summary) in [
+        ("rest-pointed-blade", "安息の尖った刃", EquipmentAbilityFamily::PointedBlade, "突き +1〜15"),
+        ("rest-sharp-blade", "安息の鋭い刃", EquipmentAbilityFamily::SharpBlade, "斬り +1〜15"),
+        ("rest-intelligence", "安息の知力", EquipmentAbilityFamily::Intelligence, "魔攻 +1〜15"),
+        ("rest-magic-resistance", "安息の耐魔力", EquipmentAbilityFamily::MagicResistance, "魔防 +1〜15"),
+    ] {
+        out.push(slot_ability(id, name, PartSlot::RelicPendant, family, "relic-pendant-ability", EquipmentValues::default(), summary, false, &[]));
+    }
+    for (id, name, family, summary) in [
+        ("immortal-accuracy", "不死の的中剣", EquipmentAbilityFamily::Accuracy, "命中 +1〜13"),
+        ("immortal-evasion", "不死の機敏", EquipmentAbilityFamily::Evasion, "回避 +1〜13"),
+        ("immortal-critical", "不死の致命打", EquipmentAbilityFamily::Critical, "クリティカル +1〜12"),
+        ("immortal-vitality", "不死の生命力", EquipmentAbilityFamily::Vitality, "最大HP +6,000〜10,000"),
+    ] {
+        out.push(slot_ability(id, name, PartSlot::RelicBracelet, family, "relic-bracelet-ability", EquipmentValues::default(), summary, id == "immortal-vitality", &[]));
+    }
     out
 }
 
@@ -1624,7 +2447,7 @@ mod tests {
     fn 追加アビリティは説明だけを持ち自動計算しない() {
         for def in equipment_abilities()
             .into_iter()
-            .filter(|d| d.category == 4)
+            .filter(|d| d.slot == PartSlot::Weapon && d.category == 4)
         {
             assert!(def.damage_effects.is_empty(), "{}", def.id);
             assert_eq!(def.additional_slots, 2, "{}", def.id);
@@ -1658,12 +2481,22 @@ mod tests {
     }
 
     #[test]
-    fn インファーナルより上位のカタログは687件_idは重複しない() {
+    fn 上位装備カタログは780件_idは重複しない() {
         let catalog = equipment_catalog();
         // 既存の手検証済み行を優先し、2026-08-27 の全 Item ページ抽出を名前で重複排除。
-        assert_eq!(catalog.len(), 687);
+        assert_eq!(catalog.len(), 780);
         let ids: HashSet<&str> = catalog.iter().map(|i| i.id).collect();
         assert_eq!(ids.len(), catalog.len());
+    }
+
+    #[test]
+    fn スタリオンサインは主能力700_その他255との差分をエンチャント枠にする() {
+        let blue = find_equipment_item("stallion-sign-blue").unwrap();
+        assert_eq!(blue.values_max, v(30, 5, 5, 5, 5, 35, 35, 35, 35));
+        assert_eq!(blue.enchant_caps, v(670, 250, 250, 250, 250, 220, 220, 220, 220));
+
+        let yellow = find_equipment_item("stallion-sign-yellow").unwrap();
+        assert_eq!(yellow.enchant_caps, v(250, 250, 250, 250, 670, 220, 220, 220, 220));
     }
 
     #[test]
@@ -1922,7 +2755,7 @@ mod tests {
             .iter()
             .filter(|i| !i.damage_effects.is_empty())
             .count();
-        assert_eq!(with_effects, 182);
+        assert_eq!(with_effects, 221);
     }
 
     /// 装備中のアイテムだけが寄与する。カテゴリ側の上限は `CategoryTotals` が掛けるので、
@@ -1930,7 +2763,7 @@ mod tests {
     #[test]
     fn item_damage_contributionsは装備中のアイテムだけを見る() {
         let mut equipment = Equipment::default();
-        assert!(item_damage_contributions(&equipment).is_empty());
+        assert!(item_damage_contributions(&equipment, SkillDependency::Hack).is_empty());
 
         equipment.parts.hand.item_id = Some("gorilla-armcover".to_string());
         equipment.parts.body.item_id = Some("archangel-wing".to_string());
@@ -1938,7 +2771,7 @@ mod tests {
         // カタログに無い id は無視する(保存時に storage が弾いている)
         equipment.parts.helm.item_id = Some("unknown".to_string());
 
-        let mut got = item_damage_contributions(&equipment);
+        let mut got = item_damage_contributions(&equipment, SkillDependency::Hack);
         got.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         assert_eq!(
             got,
@@ -1948,6 +2781,103 @@ mod tests {
                 (DamageCategory::AttackDamageLegacy, 0.25),
             ]
         );
+    }
+
+    #[test]
+    fn afの依存別効果は一致するスキルだけに入る() {
+        let mut equipment = Equipment::default();
+        equipment.parts.artifact.item_id = Some("eclipse-hack-def".to_string());
+        assert_eq!(
+            item_damage_contributions(&equipment, SkillDependency::Hack),
+            vec![(DamageCategory::DependencyDamageRate, 0.30)]
+        );
+        assert!(item_damage_contributions(&equipment, SkillDependency::HackInt).is_empty());
+    }
+
+    #[test]
+    fn afは6依存すべてにディフェンシオ候補がある() {
+        use SkillDependency::*;
+        for dependency in [Stab, Hack, StabHack, Int, Mr, HackInt] {
+            assert!(equipment_catalog().iter().any(|item| {
+                item.slot == PartSlot::Artifact
+                    && item.name.contains("ディフェンシオ")
+                    && item.recommended_dependency == Some(dependency)
+            }), "{dependency:?}");
+        }
+    }
+
+    #[test]
+    fn afの主要3段は各6依存の通常版とディフェンシオを持つ() {
+        for prefix in ["psyche", "eclipse", "ethereal"] {
+            for suffix in ["stab", "hack", "physical", "int", "mr", "hack-int"] {
+                for id in [format!("{prefix}-{suffix}"), format!("{prefix}-{suffix}-def")] {
+                    assert!(find_equipment_item(&id).is_some(), "{id}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn エクリプス魔斬ディフェンシオは魔斬スキルへ与ダメ30パーセント() {
+        let mut equipment = Equipment::default();
+        equipment.parts.artifact.item_id = Some("eclipse-hack-int-def".to_string());
+        assert_eq!(
+            item_damage_contributions(&equipment, SkillDependency::HackInt),
+            vec![(DamageCategory::DependencyDamageRate, 0.30)]
+        );
+        assert!(item_damage_contributions(&equipment, SkillDependency::Int).is_empty());
+    }
+
+    #[test]
+    fn afの耐久効果は攻撃効果と分離して主要3段へ入る() {
+        assert_eq!(
+            find_equipment_item("eclipse-hack-int").unwrap().survival_effects,
+            SURVIVAL_MITIGATION_10
+        );
+        assert_eq!(
+            find_equipment_item("eclipse-hack-int-def").unwrap().survival_effects,
+            SURVIVAL_DEFENSE_RATE_30
+        );
+        assert_eq!(
+            find_equipment_item("ethereal-hack-int").unwrap().survival_effects,
+            SURVIVAL_MITIGATION_15
+        );
+        assert_eq!(
+            find_equipment_item("ethereal-hack-int-def").unwrap().survival_effects,
+            SURVIVAL_MITIGATION_40
+        );
+
+        let mut equipment = Equipment::default();
+        equipment.parts.artifact.item_id = Some("ethereal-hack-int-def".to_string());
+        assert_eq!(
+            item_damage_contributions(&equipment, SkillDependency::HackInt),
+            vec![(DamageCategory::DependencyDamageRate, 0.35)],
+            "緩和40%を自分の与ダメージ式へ混ぜない"
+        );
+    }
+
+    #[test]
+    fn 神鳥とルナリアレリックは20段階あり直前段階の完成値から成長する() {
+        let catalog = equipment_catalog();
+        assert_eq!(catalog.iter().filter(|item| item.id.starts_with("godbird-pendant-") || item.id.starts_with("lunaria-pendant-")).count(), 20);
+        assert_eq!(catalog.iter().filter(|item| item.id.starts_with("godbird-bracelet-") || item.id.starts_with("lunaria-bracelet-")).count(), 20);
+
+        let pendant = find_equipment_item("godbird-pendant-plus2").unwrap();
+        let bracelet = find_equipment_item("godbird-bracelet-plus2").unwrap();
+        assert_eq!(pendant.values_min, v(30, 30, 0, 30, 0, 25, 25, 0, 0));
+        assert_eq!(bracelet.values_min, v(0, 0, 30, 0, 30, 0, 0, 25, 25));
+        assert_eq!(pendant.growth_caps.unwrap(), v(50, 50, 0, 50, 0, 45, 45, 0, 0));
+        assert_eq!(bracelet.growth_caps.unwrap(), v(0, 0, 50, 0, 50, 0, 0, 45, 45));
+        assert_eq!(pendant.enchant_caps, EquipmentValues::default());
+        assert_eq!(bracelet.enchant_caps, EquipmentValues::default());
+        assert_eq!(pendant.ability_slots, 0);
+        assert_eq!(pendant.random_option_slots, None);
+
+        let lunaria = find_equipment_item("lunaria-pendant-plus10").unwrap();
+        assert_eq!(lunaria.values_min, v(190, 190, 0, 190, 0, 190, 190, 0, 0));
+        assert_eq!(lunaria.growth_caps.unwrap(), v(200, 200, 0, 200, 0, 200, 200, 0, 0));
+        assert_eq!(lunaria.ability_slots, 1);
+        assert_eq!(lunaria.random_option_slots, Some(2));
     }
 
     #[test]
@@ -2087,9 +3017,36 @@ mod tests {
     #[test]
     fn 武器アビリティはカテゴリー1_3_4の37件_idは重複しない() {
         let abilities = equipment_abilities();
-        assert_eq!(abilities.len(), 37);
+        assert_eq!(abilities.iter().filter(|a| a.slot == PartSlot::Weapon).count(), 37);
         let ids: HashSet<&str> = abilities.iter().map(|a| a.id).collect();
         assert_eq!(ids.len(), abilities.len());
+    }
+
+    #[test]
+    fn 装着アビリティはwikiに表がある全部位を持つ() {
+        let slots: HashSet<PartSlot> = equipment_abilities().iter().map(|a| a.slot).collect();
+        assert_eq!(
+            slots,
+            HashSet::from([
+                PartSlot::Weapon,
+                PartSlot::Armor,
+                PartSlot::Helm,
+                PartSlot::Shield,
+                PartSlot::ShieldPlus,
+                PartSlot::Head,
+                PartSlot::Hand,
+                PartSlot::Leg,
+                PartSlot::RelicPendant,
+                PartSlot::RelicBracelet,
+            ])
+        );
+        let cuffs: Vec<_> = equipment_abilities()
+            .into_iter()
+            .filter(|a| a.slot == PartSlot::ShieldPlus)
+            .collect();
+        assert_eq!(cuffs.len(), 6);
+        assert!(cuffs.iter().all(|a| a.value_option.is_some()));
+        assert_eq!(PartSlot::ShieldPlus.ability_slots(), 2);
     }
 
     /// カテゴリー4は新装着アビリティ4系統各4件。
@@ -2100,7 +3057,7 @@ mod tests {
         for family in [PointedBlade, SharpBlade, Intelligence, MagicResistance] {
             let members: Vec<_> = abilities
                 .iter()
-                .filter(|a| a.category == 4 && a.family == family)
+                .filter(|a| a.slot == PartSlot::Weapon && a.category == 4 && a.family == family)
                 .collect();
             assert_eq!(members.len(), 4, "{family:?} は 4 件");
             for def in members {

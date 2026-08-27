@@ -889,12 +889,40 @@ fn validate_equipment_catalog(
                         item.slot, slot
                     )));
                 }
-                if let Some(cap) = item.growth_cap {
-                    if let Some((name, value)) = part
+                if part.abilities.len() > item.ability_slots {
+                    return Err(StorageError::InvalidValue(format!(
+                        "装備アイテム '{item_id}' のアビリティは {} 枠までです",
+                        item.ability_slots
+                    )));
+                }
+                if part.random_options.len() > item.random_option_slots.unwrap_or(0) {
+                    return Err(StorageError::InvalidValue(format!(
+                        "装備アイテム '{item_id}' のランダムオプションは {} 枠までです",
+                        item.random_option_slots.unwrap_or(0)
+                    )));
+                }
+                if let Some(caps) = item.growth_caps {
+                    if let Some((name, value, minimum)) = part
                         .base
                         .fields()
                         .into_iter()
-                        .find(|(_, value)| *value > cap)
+                        .zip(item.values_min.fields())
+                        .find_map(|((name, value), (_, minimum))| {
+                            (value < minimum).then_some((name, value, minimum))
+                        })
+                    {
+                        return Err(StorageError::InvalidValue(format!(
+                            "装備アイテム '{item_id}' の{name}成長値 {value} が下限 {minimum} を下回っています"
+                        )));
+                    }
+                    if let Some((name, value, cap)) = part
+                        .base
+                        .fields()
+                        .into_iter()
+                        .zip(caps.fields())
+                        .find_map(|((name, value), (_, cap))| {
+                            (value > cap).then_some((name, value, cap))
+                        })
                     {
                         return Err(StorageError::InvalidValue(format!(
                         "装備アイテム '{item_id}' の{name}成長値 {value} が上限 {cap} を超えています"
@@ -936,6 +964,48 @@ fn validate_equipment_catalog(
                     return Err(StorageError::InvalidValue(format!(
                         "装備アビリティ '{}' は同じ系統がすでに選ばれています(系統ごとに 1 つまで)",
                         def.name
+                    )));
+                }
+            }
+            let mut value_abilities = HashSet::new();
+            for value in &part.ability_values {
+                if !value_abilities.insert(value.ability_id.as_str()) {
+                    return Err(StorageError::InvalidValue(format!(
+                        "装備アビリティ本体値 '{}' が重複しています",
+                        value.ability_id
+                    )));
+                }
+                if !part.abilities.iter().any(|id| id == &value.ability_id) {
+                    return Err(StorageError::InvalidValue(format!(
+                        "装備アビリティ本体値の親 '{}' が選択されていません",
+                        value.ability_id
+                    )));
+                }
+                let def = equipment_abilities
+                    .iter()
+                    .find(|a| a.id == value.ability_id)
+                    .ok_or_else(|| StorageError::InvalidValue(format!(
+                        "未知の装備アビリティ本体値 '{}' です", value.ability_id
+                    )))?;
+                let option = def.value_option.as_ref().ok_or_else(|| StorageError::InvalidValue(format!(
+                    "'{}' は本体の可変値を持ちません", def.name
+                )))?;
+                if value.kind != option.kind || !(option.min..=option.max).contains(&value.value) {
+                    return Err(StorageError::InvalidValue(format!(
+                        "'{}' の本体値は {:?} {}〜{} です",
+                        def.name, option.kind, option.min, option.max
+                    )));
+                }
+            }
+            for ability_id in &part.abilities {
+                if equipment_abilities
+                    .iter()
+                    .find(|a| a.id == ability_id.as_str())
+                    .is_some_and(|def| def.value_option.is_some())
+                    && !value_abilities.contains(ability_id.as_str())
+                {
+                    return Err(StorageError::InvalidValue(format!(
+                        "装備アビリティ '{}' の本体値がありません", ability_id
                     )));
                 }
             }
@@ -1628,6 +1698,7 @@ mod tests {
                 family: EquipmentAbilityFamily::PointedBlade,
                 category: 1,
                 slot: domain::PartSlot::Weapon,
+                value_option: None,
                 exclusive_group: "weapon-category-1",
                 additional_slots: 0,
                 additional_effects: "",
@@ -1646,6 +1717,7 @@ mod tests {
                 family: EquipmentAbilityFamily::PointedBlade,
                 category: 1,
                 slot: domain::PartSlot::Weapon,
+                value_option: None,
                 exclusive_group: "weapon-category-1",
                 additional_slots: 0,
                 additional_effects: "",
@@ -1664,6 +1736,7 @@ mod tests {
                 family: EquipmentAbilityFamily::PointedBlade,
                 category: 4,
                 slot: domain::PartSlot::Weapon,
+                value_option: None,
                 exclusive_group: "weapon-category-4",
                 additional_slots: 2,
                 additional_effects: "",
@@ -1813,6 +1886,9 @@ mod tests {
                 ..Default::default()
             },
             growth_cap: None,
+            growth_caps: None,
+            ability_slots: domain::PartSlot::Weapon.ability_slots(),
+            random_option_slots: domain::PartSlot::Weapon.random_option_slots(),
             enchant_caps: domain::EquipmentValues {
                 thrust: 50,
                 slash: 50,
@@ -1824,6 +1900,9 @@ mod tests {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: gamedata::EQUIPMENT_CATALOG_SOURCE,
         }
     }
@@ -1835,6 +1914,7 @@ mod tests {
             family: domain::EquipmentAbilityFamily::PointedBlade,
             category: 1,
             slot: domain::PartSlot::Weapon,
+            value_option: None,
             exclusive_group: "weapon-category-1",
             additional_slots: 0,
             additional_effects: "",
@@ -2154,10 +2234,33 @@ mod tests {
     }
 
     #[test]
-    fn 成長装備の基礎値が成長上限を超えたら拒否する() {
+    fn 成長装備の基礎値が段階の下限外なら拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut item = test_equipment_item();
         item.growth_cap = Some(200);
+        item.growth_caps = Some(domain::EquipmentValues {
+            thrust: 200,
+            slash: 200,
+            physical_defense: 200,
+            magic_attack: 200,
+            magic_defense: 200,
+            accuracy: 200,
+            critical: 200,
+            evasion: 200,
+            agility: 200,
+        });
+        item.values_min.thrust = 30;
+
+        let mut under = new_character("under");
+        under.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
+        under.equipment.parts.weapon.base = domain::EquipmentValues {
+            thrust: 29,
+            ..Default::default()
+        };
+        assert!(matches!(
+            repo.create(&under, &[], &[item], &[], &[], &[], &[]),
+            Err(StorageError::InvalidValue(_))
+        ));
 
         let mut over = new_character("over");
         over.equipment.parts.weapon.item_id = Some("test-weapon".to_string());

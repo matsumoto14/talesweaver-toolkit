@@ -6,7 +6,10 @@
   import { flip } from "svelte/animate";
   import { cubicOut } from "svelte/easing";
   import { errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
-  import type { CommonSkills, Equipment, RegisteredCharacter, StatPreview, StatSources } from "../../api/types";
+  import type {
+    CommonSkills, Equipment, RegisteredCharacter, SkillDependency,
+    StatPreview, StatSources,
+  } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
   import { actualDelayPercent, dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
@@ -23,6 +26,7 @@
     ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
     ULTIMATE_SKILL_LABELS,
   } from "../../labels";
+  import type { EquipmentStatKind } from "../../labels";
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
@@ -156,6 +160,24 @@
   );
   const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment, app.equipmentAbilities, app.titles));
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
+  /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの要約に出す。 */
+  const equipmentAttackKindsFor = (dependency: SkillDependency | null): EquipmentStatKind[] => {
+    if (dependency === "hack_int") return ["slash", "magic_attack"];
+    if (dependency === "int" || dependency === "mr") return ["magic_attack", "magic_defense"];
+    if (dependency !== null) return ["thrust", "slash"];
+    return ["thrust", "slash", "magic_attack", "magic_defense"];
+  };
+  const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
+  const equipmentSummary = $derived(
+    `基本合計 ${equipmentAttackKinds.map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(eqBaseTotal[k])}`).join(" / ")}`,
+  );
+  const visibleEquipmentStatKinds = $derived.by<EquipmentStatKind[]>(() => {
+    if (!mainSkill) return [...EQUIPMENT_STAT_KINDS];
+    const relevant = new Set<EquipmentStatKind>(equipmentAttackKinds);
+    return EQUIPMENT_STAT_KINDS.filter((k) =>
+      relevant.has(k) || !(["thrust", "slash", "magic_attack"] as EquipmentStatKind[]).includes(k),
+    );
+  });
   const sienaParts = $derived(sienaPartCount(draft.equipment));
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
@@ -305,7 +327,7 @@
     {
       id: "equipment",
       name: "装備",
-      sub: `基本合計 突${fmtInt(eqBaseTotal.thrust)} / 斬${fmtInt(eqBaseTotal.slash)}`,
+      sub: equipmentSummary,
     },
     {
       id: "title",
@@ -733,21 +755,22 @@
             <thead>
               <tr>
                 <th></th>
-                {#each EQUIPMENT_STAT_KINDS as k (k)}<th class="n">{EQUIPMENT_STAT_SHORT[k]}</th>{/each}
+                {#each visibleEquipmentStatKinds as k (k)}<th class="n">{EQUIPMENT_STAT_SHORT[k]}</th>{/each}
               </tr>
             </thead>
             <tbody>
               <tr>
                 <th class="rh">基本</th>
-                {#each EQUIPMENT_STAT_KINDS as k (k)}<td class="n">{fmtInt(eqBaseTotal[k])}</td>{/each}
+                {#each visibleEquipmentStatKinds as k (k)}<td class="n">{fmtInt(eqBaseTotal[k])}</td>{/each}
               </tr>
               <tr>
                 <th class="rh">強化</th>
-                {#each EQUIPMENT_STAT_KINDS as k (k)}<td class="n">{fmtInt(eqEnchantTotal[k])}</td>{/each}
+                {#each visibleEquipmentStatKinds as k (k)}<td class="n">{fmtInt(eqEnchantTotal[k])}</td>{/each}
               </tr>
             </tbody>
           </table>
           <p class="dim tiny">
+            {#if mainSkill}攻撃補正は「{mainSkill.name}」に使う値だけ表示しています。{/if}
             強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も入っています。
             強化のうちテシスコア・シエナのオーラの分はこの表に入りません
             (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。

@@ -44,7 +44,7 @@
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
-    ABILITY_ALLOWED_SLOTS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
+    ABILITY_ALLOWED_SLOTS, abilitySlotCount, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
     CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ELEMENTS,
     ENHANCE_ALLOWED_SLOTS,
     EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT,
@@ -65,6 +65,7 @@
   import StepSelect from "../../ui/StepSelect.svelte";
   import { ETERNAL_MILESTONES } from "../../draft";
   import StatInput from "../../ui/StatInput.svelte";
+  import { slide } from "svelte/transition";
 
   /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
   const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
@@ -316,6 +317,14 @@
       return { value: String(lv), label: `Lv${lv}(+${lv * 3}%)` };
     }),
   ]);
+  const relicKindOptions = [
+    { value: "godbird", label: "神鳥" },
+    { value: "lunaria", label: "ルナリア" },
+  ];
+  const relicLevelOptions = Array.from({ length: 10 }, (_, i) => ({
+    value: String(i + 1),
+    label: `+${i + 1}`,
+  }));
 
 
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
@@ -430,6 +439,7 @@
   };
   const equipmentFilterLabel = $derived.by(() => {
     if (openPart === "weapon") return weaponFilterLabel;
+    if (openPart === "artifact" && mainSkill) return `${mainSkill.name}の依存能力に合うAF`;
     if (openPart !== "armor" && openPart !== "shield") return null;
     if (selectedGameCharacter === null) return null;
     return openPart === "shield" && mainSkill
@@ -456,6 +466,8 @@
         mainSkill?.dependency ?? null,
       );
       matched = candidates.filter((item) => item.wrist_type !== null && wristTypes.includes(item.wrist_type));
+    } else if (openPart === "artifact" && mainSkill !== null) {
+      matched = candidates.filter((item) => item.recommended_dependency === mainSkill!.dependency);
     } else {
       return candidates;
     }
@@ -466,12 +478,25 @@
     const itemId = selectedPartOrNull(slot)?.item_id;
     return itemId ? (app.equipmentCatalog.find((i) => i.id === itemId) ?? null) : null;
   };
-  /** 装着時効果の要約。効果なしは null。装備補正値と違って部位の数値には出ないので、
+  const isRelicSlot = (slot: PartSlot): boolean => slot === "relic_pendant" || slot === "relic_bracelet";
+  const relicKindFor = (slot: PartSlot): string => {
+    const id = equippedItem(slot)?.id ?? "";
+    if (id.startsWith("godbird-")) return "godbird";
+    if (id.startsWith("lunaria-")) return "lunaria";
+    return "";
+  };
+  const relicLevelFor = (slot: PartSlot): string => {
+    const match = equippedItem(slot)?.id.match(/-plus(\d+)$/);
+    return match?.[1] ?? "";
+  };
+  const currentAbilitySlotCount = (slot: PartSlot) =>
+    equippedItem(slot)?.ability_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : abilitySlotCount(slot));
+  /** 攻撃・耐久の装着時効果の要約。効果なしは null。装備補正値と違って部位の数値には出ないので、
       選ぶ前も選んだ後も文字で見せる。`short` は部位行(3 ペインで幅が狭い)用で、
-      カテゴリ名を出すと装備名を押し出してしまうので「与ダメ +5%」だけにする */
+      カテゴリ名を出すと装備名を押し出してしまうので短い効果名だけにする */
   const itemDamageLabel = (item: EquipmentItem | null, short = false): string | null => {
-    if (!item || item.damage_effects.length === 0) return null;
-    const labels = item.damage_effects
+    if (!item) return null;
+    const labels: string[] = item.damage_effects
       .map((e) => {
         if (e === "record_only" || !("damage" in e)) return null;
         const sign = e.damage.percent < 0 ? "−" : "+";
@@ -479,6 +504,15 @@
         return `${head} ${sign}${Math.abs(e.damage.percent)}%`;
       })
       .filter((x): x is string => x !== null);
+    for (const effect of item.survival_effects) {
+      if ("damage_mitigation" in effect) {
+        labels.push(`緩和 +${effect.damage_mitigation.percent}%`);
+      } else if ("defense_rate" in effect) {
+        labels.push(`防御 +${effect.defense_rate.percent}%`);
+      } else if ("defense_fixed" in effect) {
+        labels.push(`防御 +${effect.defense_fixed.value}`);
+      }
+    }
     return labels.length === 0 ? null : labels.join(" ・ ");
   };
   const partDisplayName = (slot: PartSlot): string => {
@@ -488,18 +522,37 @@
     return custom ? `${custom} [仮]` : "未装備";
   };
 
-  function pickCatalogItem(slot: PartSlot, item: EquipmentItem) {
+  function pickCatalogItem(slot: PartSlot, item: EquipmentItem, keepPickerOpen = false) {
     const part = selectedPart(slot);
     part.item_id = item.id;
     part.custom_name = null;
     part.base = { ...item.values_max };
     part.enchant = clampToCaps(part.enchant, item.enchant_caps);
     part.enhance_type = item.enhance_type;
+    part.abilities = part.abilities.slice(0, item.ability_slots);
+    if (item.ability_slots === 0) {
+      part.ability_values = [];
+      part.ability_additions = [];
+    }
+    part.random_options = part.random_options.slice(0, item.random_option_slots ?? 0);
     itemQuery = "";
-    itemPickerOpen = false;
+    itemPickerOpen = keepPickerOpen;
   }
-  function setAllBaseValues(part: EquipmentPart, value: number) {
-    for (const kind of EQUIPMENT_STAT_KINDS) part.base[kind] = value;
+  function pickRelic(slot: PartSlot, kind: string, level: string) {
+    const partName = slot === "relic_pendant" ? "pendant" : "bracelet";
+    const item = app.equipmentCatalog.find((candidate) => candidate.id === `${kind}-${partName}-plus${level}`);
+    if (item) pickCatalogItem(slot, item, true);
+  }
+  function pickRelicKind(slot: PartSlot, kind: string) {
+    pickRelic(slot, kind, relicLevelFor(slot) || "1");
+  }
+  function pickRelicLevel(slot: PartSlot, level: string) {
+    const kind = relicKindFor(slot);
+    if (kind) pickRelic(slot, kind, level);
+  }
+  function nudgeRelicLevel(slot: PartSlot, delta: -1 | 1) {
+    const current = Number(relicLevelFor(slot));
+    if (current >= 1 && current <= 10) pickRelicLevel(slot, String(Math.max(1, Math.min(10, current + delta))));
   }
   function pickUnequipped(slot: PartSlot) {
     draft.equipment.parts[slot].selected_id = null;
@@ -549,7 +602,7 @@
     const system = abilityWeaponSystem(slot);
     const candidates = app.equipmentAbilities.filter((ability) => ability.slot === slot
       && ability.category === category
-      && abilityFitsWeapon(ability.family, system));
+      && (slot !== "weapon" || abilityFitsWeapon(ability.family, system)));
     const preferred = [
       "storm-blade", "gale-blade", "soft-wind-blade", "breeze-blade", "silence-blade",
     ];
@@ -567,12 +620,49 @@
     if (abilityIdForCategory(slot, category) === id) return;
     const previousIds = part.abilities.filter((current) => abilityDef(current)?.category === category);
     part.abilities = part.abilities.filter((current) => abilityDef(current)?.category !== category);
+    part.ability_values = (part.ability_values ?? []).filter(
+      (value) => !previousIds.includes(value.ability_id),
+    );
     part.ability_additions = (part.ability_additions ?? []).filter(
       (addition) => !previousIds.includes(addition.ability_id),
     );
     const def = abilityDef(id);
-    if (def?.slot === slot && def.category === category && abilityFitsWeapon(def.family, abilityWeaponSystem(slot))) {
+    if (def?.slot === slot && def.category === category && (slot !== "weapon" || abilityFitsWeapon(def.family, abilityWeaponSystem(slot)))) {
       part.abilities = [...part.abilities, id];
+    }
+  }
+  const nonWeaponAbilityCandidates = (slot: PartSlot): EquipmentAbilityDef[] =>
+    app.equipmentAbilities.filter((ability) => ability.slot === slot);
+  function toggleNonWeaponAbility(slot: PartSlot, ability: EquipmentAbilityDef) {
+    const part = selectedPart(slot);
+    if (part.abilities.includes(ability.id)) {
+      part.abilities = part.abilities.filter((id) => id !== ability.id);
+      part.ability_values = (part.ability_values ?? []).filter((a) => a.ability_id !== ability.id);
+      part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== ability.id);
+      return;
+    }
+    const replacedIds = part.abilities.filter((id) => abilityDef(id)?.exclusive_group === ability.exclusive_group);
+    if (replacedIds.length > 0) {
+      part.abilities = part.abilities.filter((id) => !replacedIds.includes(id));
+      part.ability_values = (part.ability_values ?? []).filter((value) => !replacedIds.includes(value.ability_id));
+      part.ability_additions = (part.ability_additions ?? []).filter((addition) => !replacedIds.includes(addition.ability_id));
+    }
+    const max = currentAbilitySlotCount(slot);
+    if (part.abilities.length >= max) {
+      if (max === 1) {
+        part.abilities = [];
+        part.ability_values = [];
+        part.ability_additions = [];
+      }
+      else return;
+    }
+    part.abilities = [...part.abilities, ability.id];
+    if (ability.value_option) {
+      part.ability_values = [...(part.ability_values ?? []), {
+        ability_id: ability.id,
+        kind: ability.value_option.kind,
+        value: ability.value_option.max,
+      }];
     }
   }
   const additionalKindLabel = (kind: EquipmentAbilityAdditionalKind): string => ({
@@ -580,39 +670,57 @@
     thrust: "突き攻撃力", slash: "斬り攻撃力", magic_attack: "魔法攻撃力",
     magic_defense: "魔法防御力", hp_recovery: "HP自然回復力",
     mp_recovery: "MP自然回復力", accuracy: "命中率補正",
+    physical_defense: "物理防御力", critical: "クリティカル補正", evasion: "回避率補正",
+    damage_resistance: "ダメージ耐性", physical_damage_reduction: "物理被害減少",
+    magic_damage_reduction: "魔法被害減少", sp_recovery: "SP自然回復力", evasion_rate: "回避率",
+    fire_element: "火属性", water_element: "水属性", wind_element: "風属性", earth_element: "土属性",
+    lightning_element: "雷属性", white_element: "白属性", dark_element: "黒属性",
   }[kind]);
-  const additionsFor = (abilityId: string) =>
-    (selectedPart("weapon").ability_additions ?? []).filter((a) => a.ability_id === abilityId);
-  const additionalAt = (abilityId: string, index: number) => additionsFor(abilityId)[index] ?? null;
-  function setAdditionalValue(abilityId: string, index: number, value: number) {
-    const current = additionalAt(abilityId, index);
+  const abilityRecordedValue = (slot: PartSlot, abilityId: string): number =>
+    (selectedPart(slot).ability_values ?? []).find((value) => value.ability_id === abilityId)?.value ?? 0;
+  function setAbilityRecordedValue(slot: PartSlot, abilityId: string, value: number) {
+    const current = (selectedPart(slot).ability_values ?? []).find((roll) => roll.ability_id === abilityId);
     if (current) current.value = value;
   }
-  const addableAdditionalOptions = (abilityId: string) => {
-    const used = new Set(additionsFor(abilityId).map((addition) => addition.kind));
+  const additionsFor = (slot: PartSlot, abilityId: string) =>
+    (selectedPart(slot).ability_additions ?? []).filter((a) => a.ability_id === abilityId);
+  const additionalRangeLabel = (option: { kind: EquipmentAbilityAdditionalKind; min: number; max: number }): string => {
+    const sign = option.kind === "physical_damage_reduction" || option.kind === "magic_damage_reduction" ? "−" : "+";
+    return option.min === option.max ? `${sign}${option.max.toLocaleString()}` : `${sign}${option.min}〜${option.max}`;
+  };
+  const additionalAt = (slot: PartSlot, abilityId: string, index: number) => additionsFor(slot, abilityId)[index] ?? null;
+  function setAdditionalValue(slot: PartSlot, abilityId: string, index: number, value: number) {
+    const current = additionalAt(slot, abilityId, index);
+    if (current) current.value = value;
+  }
+  const addableAdditionalOptions = (slot: PartSlot, abilityId: string) => {
+    const used = new Set(additionsFor(slot, abilityId).map((addition) => addition.kind));
     return (abilityDef(abilityId)?.additional_options ?? []).filter(
-      (option) => option.kind !== "hp_recovery" && option.kind !== "mp_recovery" && !used.has(option.kind),
+      (option) => (slot !== "weapon" || (option.kind !== "hp_recovery" && option.kind !== "mp_recovery")) && !used.has(option.kind),
     );
   };
-  function addAdditional(abilityId: string, kind: EquipmentAbilityAdditionalKind) {
-    const part = selectedPart("weapon");
-    const current = additionsFor(abilityId);
-    if (current.length >= 2 || current.some((addition) => addition.kind === kind)) return;
+  function addAdditional(slot: PartSlot, abilityId: string, kind: EquipmentAbilityAdditionalKind) {
+    const part = selectedPart(slot);
+    const current = additionsFor(slot, abilityId);
+    const max = abilityDef(abilityId)?.additional_slots ?? 0;
+    if (current.length >= max || current.some((addition) => addition.kind === kind)) return;
     const option = abilityDef(abilityId)?.additional_options.find((candidate) => candidate.kind === kind);
-    if (!option || option.kind === "hp_recovery" || option.kind === "mp_recovery") return;
+    if (!option || (slot === "weapon" && (option.kind === "hp_recovery" || option.kind === "mp_recovery"))) return;
     current.push({ ability_id: abilityId, kind: option.kind, value: option.max });
-    part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId).concat(current.slice(0, 2));
+    part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId).concat(current.slice(0, max));
   }
-  function removeAdditional(abilityId: string, index: number) {
-    const part = selectedPart("weapon");
-    const current = additionsFor(abilityId);
+  function removeAdditional(slot: PartSlot, abilityId: string, index: number) {
+    const part = selectedPart(slot);
+    const current = additionsFor(slot, abilityId);
     current.splice(index, 1);
     part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId).concat(current);
   }
   const abilityImpactSummary = (slot: PartSlot): string => {
     const part = selectedPart(slot);
     const stats = [
-      ["突き", "thrust"], ["斬り", "slash"], ["魔攻", "magic_attack"], ["魔防", "magic_defense"], ["命中", "accuracy"],
+      ["突き", "thrust"], ["斬り", "slash"], ["物防", "physical_defense"],
+      ["魔攻", "magic_attack"], ["魔防", "magic_defense"], ["命中", "accuracy"],
+      ["Cri", "critical"], ["回避", "evasion"], ["敏捷", "agility"],
     ] as const;
     const pieces = stats.flatMap(([label, kind]) => {
       const value = abilityValueForStat(slot, kind);
@@ -623,17 +731,25 @@
     const rate = additions.filter((a) => a.kind === "damage_rate").reduce((sum, a) => sum + a.value, 0);
     if (fixed !== 0) pieces.push(`固定 +${fixed.toLocaleString()}`);
     if (rate !== 0) pieces.push(`ダメージ +${rate}%`);
-    return pieces.length === 0 ? "反映なし" : pieces.join(" / ");
+    if (pieces.length === 0) {
+      const modeled = part.abilities.map(abilityDef).filter((def) => def && !def.record_only).map((def) => def!.effect_summary);
+      return modeled.length > 0 ? modeled.join(" / ") : (part.abilities.length > 0 ? "記録のみ" : "未装着");
+    }
+    return pieces.join(" / ");
   };
   const abilityValueForStat = (slot: PartSlot, kind: EquipmentStatKind): number => {
-    if (slot !== "weapon") return 0;
     const part = selectedPart(slot);
     let value = part.abilities.reduce((sum, id) => sum + (abilityDef(id)?.values[kind] ?? 0), 0);
     const additionKind: Partial<Record<EquipmentStatKind, EquipmentAbilityAdditionalKind>> = {
-      thrust: "thrust", slash: "slash", magic_attack: "magic_attack", magic_defense: "magic_defense", accuracy: "accuracy",
+      thrust: "thrust", slash: "slash", physical_defense: "physical_defense",
+      magic_attack: "magic_attack", magic_defense: "magic_defense", accuracy: "accuracy",
+      critical: "critical", evasion: "evasion",
     };
     const target = additionKind[kind];
-    if (target) value += (part.ability_additions ?? []).filter((addition) => addition.kind === target).reduce((sum, addition) => sum + addition.value, 0);
+    if (target) {
+      value += (part.ability_values ?? []).filter((roll) => roll.kind === target).reduce((sum, roll) => sum + roll.value, 0);
+      value += (part.ability_additions ?? []).filter((addition) => addition.kind === target).reduce((sum, addition) => sum + addition.value, 0);
+    }
     return value;
   };
   /** 部位詳細を開いたときに、旧データの同カテゴリー重複を1つへ畳む。 */
@@ -643,12 +759,15 @@
     if (!part) { openPart = slot; itemQuery = ""; itemPickerOpen = false; return; }
     const seen = new Set<string>();
     const normalized = part.abilities.filter((id) => {
+      if (abilityDef(id)?.slot !== slot) return false;
       const category = abilityDef(id)?.category;
-      if (category === undefined || seen.has(String(category))) return false;
+      if (category === undefined || (slot === "weapon" && seen.has(String(category)))) return false;
       seen.add(String(category));
       return true;
-    }).slice(0, 3);
+    }).slice(0, currentAbilitySlotCount(slot));
     if (normalized.length !== part.abilities.length) part.abilities = normalized;
+    part.ability_values = (part.ability_values ?? []).filter((value) => normalized.includes(value.ability_id));
+    part.ability_additions = (part.ability_additions ?? []).filter((addition) => normalized.includes(addition.ability_id));
     openPart = slot;
     itemPickerOpen = false;
     editBaseValues = false;
@@ -787,7 +906,8 @@
   }
 
   /** その部位に付けられる枠の数(domain: PartSlot::random_option_slots)。武器だけ 3 枠 */
-  const randomOptionSlots = (slot: PartSlot) => (slot === "weapon" ? 3 : 2);
+  const randomOptionSlots = (slot: PartSlot) =>
+    equippedItem(slot)?.random_option_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (slot === "weapon" ? 3 : 2));
   const rankOptions = (def: RandomOptionDef) =>
     RANDOM_OPTION_RANKS.filter((r) => def.tiers.some((t) => t.rank === r)).map((r) => ({
       value: r,
@@ -1797,7 +1917,7 @@
         <div class="card equipment-choice-card">
           <div class="selected-equipment">
             <Icon kind="equipment" id={part.item_id} size={28} label={partDisplayName(slot)} />
-            <span class="selected-equipment-copy">
+            <span class="selected-equipment-copy" use:flash={() => partDisplayName(slot)}>
               <small class="dim">選択中の装備</small>
               <b>{partDisplayName(slot)}</b>
             </span>
@@ -1808,6 +1928,45 @@
           </div>
           {#if itemPickerOpen}
             <div class="equipment-picker pane-in">
+              {#if isRelicSlot(slot)}
+                <div class="relic-selector">
+                  <StepSelect
+                    label="種別"
+                    options={relicKindOptions}
+                    full
+                    bind:value={() => relicKindFor(slot), (value) => pickRelicKind(slot, value)}
+                  />
+                  <div class="relic-level-field">
+                    <span class="relic-field-label">強化段階</span>
+                    <div class="relic-level-control">
+                      <button
+                        type="button"
+                        class="btn relic-nudge"
+                        disabled={Number(relicLevelFor(slot)) <= 1}
+                        aria-label="強化段階を1下げる"
+                        onclick={() => nudgeRelicLevel(slot, -1)}
+                      >−</button>
+                      <StepSelect
+                        options={relicLevelOptions}
+                        cols={5}
+                        disabled={relicKindFor(slot) === ""}
+                        bind:value={() => relicLevelFor(slot), (value) => pickRelicLevel(slot, value)}
+                      />
+                      <button
+                        type="button"
+                        class="btn relic-nudge"
+                        disabled={Number(relicLevelFor(slot)) >= 10 || relicKindFor(slot) === ""}
+                        aria-label="強化段階を1上げる"
+                        onclick={() => nudgeRelicLevel(slot, 1)}
+                      >＋</button>
+                    </div>
+                  </div>
+                  <div class="relic-picker-actions">
+                    <button type="button" class="chip quiet" onclick={() => pickUnequipped(slot)}>未装備</button>
+                    <button type="button" class="chip quiet" onclick={() => pickCustom(slot)}>カタログ外</button>
+                  </div>
+                </div>
+              {:else}
               <div class="picker-tools">
                 <input class="item-search" type="text" placeholder="装備名で探す" bind:value={itemQuery} />
                 {#if equipmentFilterLabel !== null}
@@ -1817,13 +1976,14 @@
                   </button>
                 {/if}
               </div>
-              <div class="item-list">
+              <div class="item-list" class:effectful={slot === "artifact"}>
                 <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name === null} onclick={() => pickUnequipped(slot)}>
                   <Icon kind="equipment" id={null} size={28} label="未装備" />
                   <span class="item-copy"><span class="item-name">未装備</span></span>
                 </button>
                 {#each filteredCatalog as candidate (candidate.id)}
-                  {@const candidateDamage = itemDamageLabel(candidate)}
+                  <!-- 候補カードは名前の識別が主目的。カテゴリ名は詳細へ譲り、短い効果量だけを置く -->
+                  {@const candidateDamage = itemDamageLabel(candidate, true)}
                   <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
                     <Icon kind="equipment" id={candidate.id} size={28} label={candidate.name} />
                     <span class="item-copy">
@@ -1838,6 +1998,7 @@
                   <span class="item-copy"><span class="item-name">カスタム</span><span class="item-vals dim">カタログ外</span></span>
                 </button>
               </div>
+              {/if}
               {#if part.item_id === null && part.custom_name !== null}
                 <label class="text custom-name">
                   <span class="label">装備名 <span class="dim">[仮] カタログ外</span></span>
@@ -1848,17 +2009,42 @@
           {/if}
         </div>
 
+        {#if part.item_id !== null || part.custom_name !== null}
+        {#key item?.id ?? "custom"}
+        <div class="equipment-item-content swap-in">
+        {#if item?.growth_caps}
+        <div class="card growth-equipment-card">
+          <div class="card-title inline growth-equipment-head">
+            <span>装備補正</span>
+            <span class="badge num">成長値</span>
+          </div>
+          <p class="hint dim">この段階の実値を入力します。下限は直前段階の完成値、上限はこの段階のMAXです。エンチャント枠はありません。</p>
+          <div class="stat-rows growth-equipment-values">
+            {#each EQUIPMENT_STAT_KINDS.filter((k) => item.growth_caps![k] > 0) as k (k)}
+              <div class="stat-row">
+                <span class="k">{EQUIPMENT_STAT_LABELS[k]}</span>
+                <StatInput
+                  label="{EQUIPMENT_STAT_LABELS[k]}の装備補正"
+                  hideLabel
+                  min={item.values_min[k]}
+                  max={item.growth_caps[k]}
+                  strictMax
+                  presets={item.id === "rising-holic-cuffs" ? [{ value: 140, label: "140" }] : []}
+                  bind:value={part.base[k]}
+                />
+              </div>
+            {/each}
+          </div>
+        </div>
+        {:else}
         <div class="card enchant-card">
           <div class="card-title inline">
             <span>エンチャント</span>
           </div>
           <p class="hint dim">通常は突き・斬り・魔攻・魔防の4補正だけ入力します。</p>
           <div class="base-value-toolbar">
-            <span class="base-value-copy"><b>{item?.growth_cap ? "成長値" : "装備本体"}</b><small>{item?.growth_cap ? `上限 ${item.growth_cap}` : item === null ? "カタログ外のため入力" : "カタログ値を使用中"}</small></span>
+            <span class="base-value-copy"><b>装備本体</b><small>{item === null ? "カタログ外のため入力" : "カタログ値を使用中"}</small></span>
             {#if item !== null}
-              {#if item.id === "rising-holic-cuffs"}
-                <button type="button" class="chip growth-preset-button" onclick={() => setAllBaseValues(part, 140)}>全補正140</button>
-              {/if}
               <button
                 type="button"
                 class="chip quiet base-mode-button"
@@ -1872,7 +2058,11 @@
               {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
               {@const abilityValue = abilityValueForStat(slot, k)}
               {@const displayTotal = part.base[k] + part.enchant[k] + abilityValue}
-              <div class="value-pair" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(k)}>
+              <div
+                class="value-pair"
+                class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(k)}
+                transition:slide={{ duration: PRIMARY_EQUIPMENT_STATS.includes(k) ? 0 : 220 }}
+              >
                 <b>{EQUIPMENT_STAT_SHORT[k]}</b>
                 <div class="value-equation">
                   <strong class="value-total num" use:bump={() => displayTotal}>
@@ -1911,13 +2101,15 @@
           </div>
           <p class="hint dim">シエナのオーラとテシスコアは各専用欄から自動合流します。</p>
         </div>
+        {/if}
 
-        {#if ABILITY_ALLOWED_SLOTS.includes(slot)}
+        {#if ABILITY_ALLOWED_SLOTS.includes(slot) && currentAbilitySlotCount(slot) > 0}
           <div class="card ability-card">
             <div class="card-title inline">
-              <span>武器アビリティ</span><span class="badge">{part.abilities.length} / 3</span>
+              <span>アビリティ</span><span class="badge">{part.abilities.length} / {currentAbilitySlotCount(slot)}</span>
               <strong class="ability-impact num" use:flash={() => abilityImpactSummary(slot)}>{abilityImpactSummary(slot)}</strong>
             </div>
+            {#if slot === "weapon"}
             <p class="hint dim">ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。</p>
 
             <div class="ability-fixed-list">
@@ -1961,22 +2153,22 @@
                   <div class="ability-additional-panel swap-in">
                     <div class="ability-additional-head">
                       <b>ランダム追加</b>
-                      <span class="badge">{additionsFor(selectedAbility.id).length} / 2</span>
+                      <span class="badge">{additionsFor("weapon", selectedAbility.id).length} / 2</span>
                       <span class="dim">付いている種類を押して足し、実測値を合わせます</span>
                     </div>
-                    {#if additionsFor(selectedAbility.id).length < 2}
+                    {#if additionsFor("weapon", selectedAbility.id).length < 2}
                       <div class="ro-add-row ability-additional-candidates">
-                        {#each addableAdditionalOptions(selectedAbility.id) as option (option.kind)}
-                          <button type="button" class="chip add" onclick={() => addAdditional(selectedAbility.id, option.kind)}>
+                        {#each addableAdditionalOptions("weapon", selectedAbility.id) as option (option.kind)}
+                          <button type="button" class="chip add" onclick={() => addAdditional("weapon", selectedAbility.id, option.kind)}>
                             ＋ {additionalKindLabel(option.kind)}
                             <span class="num dim">
-                              {option.min === option.max ? `+${option.max.toLocaleString()}` : `+${option.min}〜${option.max}`}
+                              {additionalRangeLabel(option)}
                             </span>
                           </button>
                         {/each}
                       </div>
                     {/if}
-                    {#each additionsFor(selectedAbility.id) as additional, additionalIndex (`${additional.kind}-${additionalIndex}`)}
+                    {#each additionsFor("weapon", selectedAbility.id) as additional, additionalIndex (`${additional.kind}-${additionalIndex}`)}
                       {@const additionalDef = selectedAbility.additional_options.find((option) => option.kind === additional?.kind)}
                       {#if additionalDef}
                         <div class="siena-row swap-in">
@@ -1988,9 +2180,9 @@
                             max={additionalDef.max}
                             gauge={false}
                             stepper
-                            bind:value={() => additional.value, (value) => setAdditionalValue(selectedAbility.id, additionalIndex, value)}
+                            bind:value={() => additional.value, (value) => setAdditionalValue("weapon", selectedAbility.id, additionalIndex, value)}
                           />
-                          <button type="button" class="clear" onclick={() => removeAdditional(selectedAbility.id, additionalIndex)}>外す</button>
+                          <button type="button" class="clear" onclick={() => removeAdditional("weapon", selectedAbility.id, additionalIndex)}>外す</button>
                         </div>
                       {/if}
                     {/each}
@@ -1999,6 +2191,84 @@
                 {/if}
               {/each}
             </div>
+            {:else}
+              <p class="hint dim">
+                {currentAbilitySlotCount(slot)}枠まで装着できます。範囲値とランダム追加は選択後に実測値を合わせます。
+              </p>
+              <div class="ability-choice-list non-weapon-ability-list" aria-label="{PART_SLOT_LABELS[slot]}アビリティの候補">
+                {#each nonWeaponAbilityCandidates(slot) as ability (ability.id)}
+                  {@const selected = part.abilities.includes(ability.id)}
+                  <button
+                    type="button"
+                    class:on={selected}
+                    class:record-only={ability.record_only}
+                    class="chip ability-choice"
+                    aria-pressed={selected}
+                    disabled={!selected && part.abilities.length >= currentAbilitySlotCount(slot)}
+                    onclick={() => toggleNonWeaponAbility(slot, ability)}
+                  >
+                    <span>{ability.name}</span>
+                    <span class="ability-choice-effect num">{ability.effect_summary}</span>
+                  </button>
+                {/each}
+              </div>
+              {#each part.abilities as abilityId (abilityId)}
+                {@const ability = abilityDef(abilityId)}
+                {#if ability?.value_option}
+                  <div class="siena-row ability-value-row swap-in">
+                    <span class="ro-name">{ability.name}</span>
+                    <StatInput
+                      label="{ability.name}の実測値"
+                      hideLabel
+                      min={ability.value_option.min}
+                      max={ability.value_option.max}
+                      gauge={false}
+                      stepper
+                      bind:value={() => abilityRecordedValue(slot, ability.id), (value) => setAbilityRecordedValue(slot, ability.id, value)}
+                    />
+                    <span class="num dim">/{ability.value_option.max}</span>
+                  </div>
+                {/if}
+              {/each}
+              {#each part.abilities as abilityId (`addition-${abilityId}`)}
+                {@const ability = abilityDef(abilityId)}
+                {#if ability && ability.additional_slots > 0}
+                  <div class="ability-additional-panel non-weapon-additional-panel swap-in">
+                    <div class="ability-additional-head">
+                      <b>{ability.name}のランダム追加</b>
+                      <span class="badge">{additionsFor(slot, ability.id).length} / {ability.additional_slots}</span>
+                    </div>
+                    {#if additionsFor(slot, ability.id).length < ability.additional_slots}
+                      <div class="ro-add-row ability-additional-candidates">
+                        {#each addableAdditionalOptions(slot, ability.id) as option (option.kind)}
+                          <button type="button" class="chip add" onclick={() => addAdditional(slot, ability.id, option.kind)}>
+                            ＋ {additionalKindLabel(option.kind)}
+                            <span class="num dim">{additionalRangeLabel(option)}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
+                    {#each additionsFor(slot, ability.id) as additional, additionalIndex (`${additional.kind}-${additionalIndex}`)}
+                      {@const option = ability.additional_options.find((candidate) => candidate.kind === additional.kind)}
+                      {#if option}
+                        <div class="siena-row swap-in">
+                          <span class="ro-name">{additionalKindLabel(additional.kind)}</span>
+                          <StatInput
+                            label="{additionalKindLabel(additional.kind)}の実測値"
+                            hideLabel min={option.min} max={option.max} gauge={false} stepper
+                            bind:value={() => additional.value, (value) => setAdditionalValue(slot, ability.id, additionalIndex, value)}
+                          />
+                          <button type="button" class="clear" onclick={() => removeAdditional(slot, ability.id, additionalIndex)}>外す</button>
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              {/each}
+              {#if nonWeaponAbilityCandidates(slot).some((ability) => ability.record_only)}
+                <span class="additional-note dim">破線の候補は効果を保存しますが、現在の計算項目にない値は合計へ加えません。</span>
+              {/if}
+            {/if}
           </div>
         {/if}
 
@@ -2042,11 +2312,14 @@
           </div>
         {/if}
   
-        {#if RANDOM_OPTION_ALLOWED_SLOTS.includes(slot)}
+        {#if RANDOM_OPTION_ALLOWED_SLOTS.includes(slot) && randomOptionSlots(slot) > 0}
           <div class="card">
             <div class="card-title">ランダムオプション</div>
             <p class="hint dim">登録済み {part.random_options.length}件。ランダムオプションは専用の入力エリアで設定します。</p>
           </div>
+        {/if}
+        </div>
+        {/key}
         {/if}
   
         {/if}
@@ -2405,7 +2678,7 @@
     <div class="part-split" class:open={openRandomPart !== null}>
       <div class="part-list">
         {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
-          {#if app.randomOptions.some((d) => d.slot === slot)}
+          {#if app.randomOptions.some((d) => d.slot === slot) && randomOptionSlots(slot) > 0}
             {@const count = selectedPartOrNull(slot)?.random_options.length ?? 0}
             <button
               type="button"
@@ -3374,6 +3647,8 @@
   .equipment-overlay { z-index: 90; padding: 3vh max(14px, 6vw); display: flex; justify-content: center; align-items: flex-start; }
   .part-detail { width: min(980px, 100%); max-height: 94vh; overflow: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 5px; }
   .part-detail > .card { padding: 7px 9px; }
+  .equipment-item-content { display: flex; flex-direction: column; gap: 5px; }
+  .equipment-item-content > .card { padding: 7px 9px; }
   .part-detail-header { position: sticky; top: 0; z-index: 4; min-height: 42px; margin: 0 -8px; padding: 6px 9px 6px 12px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-rail); border-bottom: 1px solid var(--border-strong); box-shadow: 0 4px 9px rgba(18, 27, 42, .09); }
   .part-detail-header > b { font-size: 12px; color: var(--fg-sub); }
   .close-equipment { min-width: 88px; justify-content: center; border-color: var(--border-strong); background: var(--bg-field); font-weight: 700; }
@@ -3420,7 +3695,7 @@
     flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
   }
-  /* 装着時効果は「与ダメージが増えている」状態なので、状態色 §03 の「足りている」を使う */
+  /* 装着時効果は攻撃・耐久とも装備で得ている効果なので、状態色 §03 の「足りている」を使う */
   .part-dmg {
     flex-shrink: 0; font-size: 8.5px; font-weight: 700;
     color: var(--state-met-fg); background: var(--state-met-bg);
@@ -3540,6 +3815,7 @@
     padding: 3px 0; border-bottom: 1px dashed var(--border-soft);
   }
   .siena-row:last-of-type { border-bottom: none; }
+  .non-weapon-additional-panel { margin: 8px 0 0; }
   .siena-row.record-only { opacity: 0.75; }
   .siena-row .clear {
     padding: 1px 5px; font-size: 9px; color: var(--fg-dim);
@@ -3590,6 +3866,8 @@
   /* 変種をまとめた行は 2 段ぶんの高さがあるので、220px だと 3 行しか入らず
      チップが毎回途中で切れる。ペインの下は空いているので伸ばす */
   .item-list { margin-top: 5px; max-height: 300px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px; }
+  /* AF は攻撃/耐久バッジも判断材料。カードを細分化して名前を潰さず、2列程度で読む。 */
+  .item-list.effectful { grid-template-columns: repeat(auto-fill, minmax(min(430px, 100%), 1fr)); }
   .item-row {
     display: flex; align-items: center; gap: 7px;
     min-width: 0; min-height: 42px; padding: 5px 7px; border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
@@ -3611,6 +3889,12 @@
   .equipment-picker { margin-top: 6px; padding: 6px; border-radius: var(--r-inset); }
   .picker-tools { display: flex; align-items: center; gap: 6px; }
   .picker-tools .item-search { flex: 1; }
+  .relic-selector { display: grid; gap: 14px; max-width: 480px; }
+  .relic-level-field { display: grid; gap: 6px; }
+  .relic-field-label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .relic-level-control { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: stretch; gap: 7px; }
+  .relic-nudge { width: 34px; min-height: 54px; padding: 0; font-size: 15px; }
+  .relic-picker-actions { display: flex; gap: 8px; padding-top: 2px; }
 
   /* 地域タブの見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
   .tabs { margin-top: 2px; }
@@ -3690,7 +3974,11 @@
   .base-value-copy small { color: var(--fg-muted); font-size: 9px; }
   /* 押したあと文言が変わっても操作位置を動かさない(§00 03)。 */
   .base-mode-button { flex: 0 0 80px; min-width: 80px; max-width: 80px; justify-content: center; }
-  .growth-preset-button { flex: 0 0 88px; min-width: 88px; justify-content: center; white-space: nowrap; }
+  .growth-equipment-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .growth-equipment-head { align-items: center; }
+  .growth-equipment-values { width: min(100%, 460px); }
+  .growth-equipment-values .stat-row { grid-template-columns: 76px minmax(0, 1fr); }
+  .growth-equipment-values .stat-row :global(.stepper .cell) { flex: 0 1 104px; }
   .enchant-more-toggle {
     grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
     border: 0; border-top: 1px dashed var(--edge-soft); background: none; color: var(--fg-sub);

@@ -135,9 +135,31 @@ impl PartSlot {
         matches!(self, PartSlot::Weapon | PartSlot::Armor)
     }
 
-    /// この部位が武器アビリティを持てるか(wiki: 装備システム/アビリティ。武器のみが火力に効く)。
+    /// この部位が装着アビリティを持てるか(wiki: 装備システム/アビリティ)。
     pub fn allows_abilities(self) -> bool {
-        matches!(self, PartSlot::Weapon)
+        matches!(
+            self,
+            PartSlot::Weapon
+                | PartSlot::Armor
+                | PartSlot::Helm
+                | PartSlot::Shield
+                | PartSlot::ShieldPlus
+                | PartSlot::Head
+                | PartSlot::Hand
+                | PartSlot::Leg
+                | PartSlot::RelicPendant
+                | PartSlot::RelicBracelet
+        )
+    }
+
+    /// 装着アビリティの実スロット数。武器は3、盾＋は2、その他の対応部位は1。
+    pub fn ability_slots(self) -> usize {
+        match self {
+            PartSlot::Weapon => WEAPON_ABILITY_SLOTS,
+            PartSlot::Armor | PartSlot::ShieldPlus | PartSlot::Hand => 2,
+            slot if slot.allows_abilities() => 1,
+            _ => 0,
+        }
     }
 
     /// この部位がシエナのオーラを発現できるか
@@ -269,9 +291,12 @@ pub struct EquipmentPart {
     /// +12 以上の固定ダメージ等級。+11 以下は式で確定するため `None` 固定。
     #[serde(default)]
     pub enhance_grade: Option<EnhanceGrade>,
-    /// 装備アビリティ id(武器のみ非空を許可)
+    /// 装備アビリティ id
     #[serde(default)]
     pub abilities: Vec<String>,
+    /// 装着アビリティ本体の可変補正(カフス・レリック等の実測値)。
+    #[serde(default)]
+    pub ability_values: Vec<EquipmentAbilityAdditional>,
     /// 新装着アビリティにランダム付与された追加アビリティ。
     #[serde(default)]
     pub ability_additions: Vec<EquipmentAbilityAdditional>,
@@ -353,10 +378,10 @@ impl EquipmentPart {
         if !self.abilities.is_empty() && !slot.allows_abilities() {
             return Err(EquipmentError::AbilitiesNotAllowed { slot });
         }
-        if self.abilities.len() > WEAPON_ABILITY_SLOTS {
+        if self.abilities.len() > slot.ability_slots() {
             return Err(EquipmentError::TooManyAbilities {
                 slot,
-                max: WEAPON_ABILITY_SLOTS,
+                max: slot.ability_slots(),
             });
         }
         self.validate_random_options(slot)?;
@@ -386,7 +411,7 @@ pub enum EquipmentError {
     EnhanceAddedDamageNotAllowed { slot: PartSlot, enhance_level: u8 },
     #[error("{slot:?} の装備強化 Lv {enhance_level} では等級を選んでください")]
     EnhanceGradeRequired { slot: PartSlot, enhance_level: u8 },
-    #[error("{slot:?} は装備アビリティの対象外です(武器のみ)")]
+    #[error("{slot:?} は装備アビリティの対象外です")]
     AbilitiesNotAllowed { slot: PartSlot },
     #[error("{slot:?} の装備アビリティは最大 {max} 個です")]
     TooManyAbilities { slot: PartSlot, max: usize },
@@ -430,6 +455,16 @@ pub enum EquipmentAbilityFamily {
     MagicResistance,
     /// 武器ディレイ増減
     WeaponDelay,
+    ArmorPolish,
+    Vitality,
+    Mana,
+    Evasion,
+    ShieldPolish,
+    Critical,
+    Accuracy,
+    Element,
+    Agility,
+    SkillAttack,
 }
 
 /// 新装着アビリティの追加候補。実物で抽選された種類と値を登録する。
@@ -445,6 +480,21 @@ pub enum EquipmentAbilityAdditionalKind {
     HpRecovery,
     MpRecovery,
     Accuracy,
+    PhysicalDefense,
+    Critical,
+    Evasion,
+    DamageResistance,
+    PhysicalDamageReduction,
+    MagicDamageReduction,
+    SpRecovery,
+    EvasionRate,
+    FireElement,
+    WaterElement,
+    WindElement,
+    EarthElement,
+    LightningElement,
+    WhiteElement,
+    DarkElement,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -462,12 +512,22 @@ pub struct EquipmentAbilityAdditionalDef {
 }
 
 impl EquipmentAbilityFamily {
-    pub const ALL: [EquipmentAbilityFamily; 5] = [
+    pub const ALL: [EquipmentAbilityFamily; 15] = [
         EquipmentAbilityFamily::PointedBlade,
         EquipmentAbilityFamily::SharpBlade,
         EquipmentAbilityFamily::Intelligence,
         EquipmentAbilityFamily::MagicResistance,
         EquipmentAbilityFamily::WeaponDelay,
+        EquipmentAbilityFamily::ArmorPolish,
+        EquipmentAbilityFamily::Vitality,
+        EquipmentAbilityFamily::Mana,
+        EquipmentAbilityFamily::Evasion,
+        EquipmentAbilityFamily::ShieldPolish,
+        EquipmentAbilityFamily::Critical,
+        EquipmentAbilityFamily::Accuracy,
+        EquipmentAbilityFamily::Element,
+        EquipmentAbilityFamily::Agility,
+        EquipmentAbilityFamily::SkillAttack,
     ];
 }
 
@@ -482,6 +542,8 @@ pub struct EquipmentAbilityDef {
     pub category: u8,
     /// 適用できる装備部位。
     pub slot: PartSlot,
+    /// アビリティ本体が範囲値を持つ場合の入力定義。
+    pub value_option: Option<EquipmentAbilityAdditionalDef>,
     /// 同じ値は同一装備に共存できない。
     pub exclusive_group: &'static str,
     /// ランダムに付く追加アビリティ枠数。
@@ -655,7 +717,7 @@ impl Equipment {
         Ok(())
     }
 
-    /// 基本能力値の合計(Σ part.base + Σ 武器アビリティの加算値 + 表示中の称号)。
+    /// 基本能力値の合計(Σ part.base + Σ 装備アビリティの加算値 + 表示中の称号)。
     ///
     /// 称号は装備部位ではないが、効き先が基本能力値なのでここで合流させる
     /// (wiki: 称号システム。ユーザー確定 2026-08-25)。
@@ -668,21 +730,17 @@ impl Equipment {
         for (_, part) in self.iter_selected() {
             total = total.add(part.base);
         }
-        for ability_id in self.parts.weapon.selected().into_iter().flat_map(|p| &p.abilities) {
-            if let Some(def) = abilities.iter().find(|a| a.id == *ability_id) {
-                total = total.add(def.values);
-            }
-        }
-        if let Some(part) = self.parts.weapon.selected() {
-            for addition in &part.ability_additions {
-                match addition.kind {
-                    EquipmentAbilityAdditionalKind::Thrust => total.thrust += i64::from(addition.value),
-                    EquipmentAbilityAdditionalKind::Slash => total.slash += i64::from(addition.value),
-                    EquipmentAbilityAdditionalKind::MagicAttack => total.magic_attack += i64::from(addition.value),
-                    EquipmentAbilityAdditionalKind::MagicDefense => total.magic_defense += i64::from(addition.value),
-                    EquipmentAbilityAdditionalKind::Accuracy => total.accuracy += i64::from(addition.value),
-                    _ => {}
+        for (slot, part) in self.iter_selected() {
+            for ability_id in &part.abilities {
+                if let Some(def) = abilities.iter().find(|a| a.id == *ability_id && a.slot == slot) {
+                    total = total.add(def.values);
                 }
+            }
+            for value in &part.ability_values {
+                add_ability_value(&mut total, value);
+            }
+            for addition in &part.ability_additions {
+                add_ability_value(&mut total, addition);
             }
         }
         total.add(title_values(self.title.as_deref(), titles))
@@ -695,12 +753,12 @@ impl Equipment {
         abilities: &[EquipmentAbilityDef],
     ) -> Vec<(DamageCategory, f64)> {
         let effects: Vec<&SkillEffect> = self
-            .parts.weapon.selected().into_iter().flat_map(|p| p.abilities.iter())
-            .filter_map(|id| abilities.iter().find(|a| a.id == id.as_str()))
+            .iter_selected().into_iter()
+            .flat_map(|(slot, part)| part.abilities.iter().filter_map(move |id| abilities.iter().find(|a| a.id == id.as_str() && a.slot == slot)))
             .flat_map(|def| def.damage_effects.iter())
             .collect();
         let mut contributions = damage_contributions(effects.into_iter());
-        if let Some(part) = self.parts.weapon.selected() {
+        for (_, part) in self.iter_selected() {
             for addition in &part.ability_additions {
                 match addition.kind {
                     EquipmentAbilityAdditionalKind::FixedDamage => {
@@ -809,6 +867,20 @@ impl Equipment {
 
     pub fn iter_selected(&self) -> impl Iterator<Item = (PartSlot, &EquipmentPart)> {
         self.parts.iter_lists().into_iter().filter_map(|(slot, parts)| parts.selected().map(|p| (slot, p)))
+    }
+}
+
+fn add_ability_value(total: &mut EquipmentValues, value: &EquipmentAbilityAdditional) {
+    match value.kind {
+        EquipmentAbilityAdditionalKind::Thrust => total.thrust += i64::from(value.value),
+        EquipmentAbilityAdditionalKind::Slash => total.slash += i64::from(value.value),
+        EquipmentAbilityAdditionalKind::MagicAttack => total.magic_attack += i64::from(value.value),
+        EquipmentAbilityAdditionalKind::MagicDefense => total.magic_defense += i64::from(value.value),
+        EquipmentAbilityAdditionalKind::Accuracy => total.accuracy += i64::from(value.value),
+        EquipmentAbilityAdditionalKind::PhysicalDefense => total.physical_defense += i64::from(value.value),
+        EquipmentAbilityAdditionalKind::Critical => total.critical += i64::from(value.value),
+        EquipmentAbilityAdditionalKind::Evasion => total.evasion += i64::from(value.value),
+        _ => {}
     }
 }
 
@@ -933,7 +1005,7 @@ mod tests {
             id: "sharp-blade-e",
             name: "E-鋭い刃",
             family: EquipmentAbilityFamily::SharpBlade,
-            category: 4, slot: PartSlot::Weapon, exclusive_group: "weapon-category-4", additional_slots: 2,
+            category: 4, slot: PartSlot::Weapon, value_option: None, exclusive_group: "weapon-category-4", additional_slots: 2,
             additional_effects: "", additional_options: vec![], record_only: false, effect_summary: "斬り +9",
             values: EquipmentValues { slash: 9, ..Default::default() },
         damage_effects: &[],
@@ -943,6 +1015,18 @@ mod tests {
 
         let enhanced = eq.enhanced_totals(None);
         assert_eq!(enhanced, EquipmentValues { thrust: 10, slash: 20, ..Default::default() });
+    }
+
+    #[test]
+    fn カフスのアビリティ実測値は装備基本値へ入る() {
+        let mut eq = Equipment::default();
+        eq.parts.shield_plus.abilities = vec!["mystic-mine-sharp-blade".into()];
+        eq.parts.shield_plus.ability_values = vec![EquipmentAbilityAdditional {
+            ability_id: "mystic-mine-sharp-blade".into(),
+            kind: EquipmentAbilityAdditionalKind::Slash,
+            value: 13,
+        }];
+        assert_eq!(eq.base_totals(&[], &[]).slash, 13);
     }
 
     #[test]
@@ -1107,13 +1191,13 @@ mod tests {
     }
 
     #[test]
-    fn 武器以外のアビリティは拒否する() {
+    fn 対象外部位のアビリティは拒否し兜は許可する() {
         let mut eq = Equipment::default();
-        eq.parts.helm.abilities = vec!["sharp-blade-e".to_string()];
-        assert!(matches!(eq.validate(), Err(EquipmentError::AbilitiesNotAllowed { slot: PartSlot::Helm })));
+        eq.parts.body.abilities = vec!["unknown".to_string()];
+        assert!(matches!(eq.validate(), Err(EquipmentError::AbilitiesNotAllowed { slot: PartSlot::Body })));
 
         let mut ok = Equipment::default();
-        ok.parts.weapon.abilities = vec!["sharp-blade-e".to_string()];
+        ok.parts.helm.abilities = vec!["helm-e-skill-attack".to_string()];
         assert!(ok.validate().is_ok());
     }
 

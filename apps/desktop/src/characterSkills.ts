@@ -13,6 +13,7 @@ export const DAMAGE_CATEGORY_LABELS: Record<string, string> = {
   final_damage_fixed: "最終ダメージ(固定値)",
   attack_damage_legacy: "攻撃ダメージII",
   physical_magic_damage_rate: "物理/魔法ダメージ増加",
+  dependency_damage_rate: "依存ダメージ",
   attack_damage_isabel: "攻撃ダメージ",
   attack_damage_general: "攻撃ダメージ",
   attack_damage_basic_trigger: "攻撃ダメージ",

@@ -589,8 +589,10 @@ export interface EquipmentPart {
   enhance_type: EquipmentEnhanceType | null;
   /** +12 以上の追加固定ダメージ実測値の上書き。+11 以下は null 固定 */
   enhance_grade: EnhanceGrade | null;
-  /** 装備アビリティ id(武器のみ非空を許可) */
+  /** 装備アビリティ id */
   abilities: string[];
+  /** カフス・レリック等のアビリティ本体の実測値。 */
+  ability_values: EquipmentAbilityAdditional[];
   /** カテゴリー4アビリティで実際に抽選された追加アビリティ。 */
   ability_additions: EquipmentAbilityAdditional[];
   /** ランダムオプション。同じカテゴリーは 1 部位に 1 つまで */
@@ -653,6 +655,11 @@ export type WristType =
   | "shield" | "spellbook" | "knuckle" | "band" | "bracelet" | "pendulum" | "crystal_ball"
   | "dual_blade_physical" | "physical_magazine" | "magic_magazine" | "dual_blade_magic";
 
+export type EquipmentSurvivalEffect =
+  | { damage_mitigation: { percent: number } }
+  | { defense_rate: { percent: number } }
+  | { defense_fixed: { value: number } };
+
 // 装備カタログの 1 アイテム。crates/gamedata/src/equipment_catalog.rs の EquipmentItem。
 export interface EquipmentItem {
   id: string;
@@ -664,6 +671,12 @@ export interface EquipmentItem {
   values_max: EquipmentValues;
   /** 成長装備の各基本能力値の入力上限。通常装備は null */
   growth_cap: number | null;
+  /** 補正ごとの成長上限。通常装備は null */
+  growth_caps: EquipmentValues | null;
+  /** この装備品に付与できるアビリティ枠数。 */
+  ability_slots: number;
+  /** この装備品に付与できるランダムオプション枠数。対象外は null。 */
+  random_option_slots: number | null;
   /** 装備固有の固定エンチャント枠。実物の装備本体補正には左右されない。 */
   enchant_caps: EquipmentValues;
   /** 腕装備の区分。バンド固有パッシブの判定元。腕以外は null。 */
@@ -676,15 +689,26 @@ export interface EquipmentItem {
   enhance_type: EquipmentEnhanceType | null;
   /** 装着時効果(wiki: Item ページ備考の「装着時 …」)。与ダメージ式のカテゴリに入る */
   damage_effects: SkillEffect[];
+  /** 被ダメージ側へ効く耐久効果。与ダメージ計算とは分離する。 */
+  survival_effects: EquipmentSurvivalEffect[];
+  /** 主軸スキルに合う候補を先に出すための依存種別。 */
+  recommended_dependency: SkillDependency | null;
+  /** 装着時効果がこの依存のスキルだけに効く場合の条件。 */
+  damage_dependency: SkillDependency | null;
   source: Source;
 }
 
 // 武器アビリティの効果系統。候補を武器系統へ絞るために使う。
 export type EquipmentAbilityFamily =
-  | "pointed_blade" | "sharp_blade" | "intelligence" | "magic_resistance" | "weapon_delay";
+  | "pointed_blade" | "sharp_blade" | "intelligence" | "magic_resistance" | "weapon_delay"
+  | "armor_polish" | "vitality" | "mana" | "evasion" | "shield_polish" | "critical"
+  | "accuracy" | "element" | "agility" | "skill_attack";
 export type EquipmentAbilityAdditionalKind =
   | "fixed_damage" | "damage_rate" | "thrust" | "slash" | "magic_attack" | "magic_defense"
-  | "hp_recovery" | "mp_recovery" | "accuracy";
+  | "hp_recovery" | "mp_recovery" | "accuracy" | "physical_defense" | "critical" | "evasion"
+  | "damage_resistance" | "physical_damage_reduction" | "magic_damage_reduction" | "sp_recovery"
+  | "evasion_rate" | "fire_element" | "water_element" | "wind_element" | "earth_element"
+  | "lightning_element" | "white_element" | "dark_element";
 export interface EquipmentAbilityAdditional {
   ability_id: string;
   kind: EquipmentAbilityAdditionalKind;
@@ -699,6 +723,7 @@ export interface EquipmentAbilityAdditionalDef {
 // 武器アビリティ定義。crates/domain/src/equipment.rs の EquipmentAbilityDef。
 export interface EquipmentAbilityDef {
   slot: PartSlot;
+  value_option: EquipmentAbilityAdditionalDef | null;
   exclusive_group: string;
   additional_slots: number;
   additional_effects: string;

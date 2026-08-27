@@ -83,12 +83,18 @@ export const PART_SLOT_LABELS: Record<PartSlot, string> = {
 };
 // 装備強化(+1〜+15)を持てる部位(wiki: 装備システム/装備強化。武器・鎧のみ)。
 export const ENHANCE_ALLOWED_SLOTS: PartSlot[] = ["weapon", "armor"];
-// 装備アビリティを持てる部位(wiki: 装備システム/アビリティ。武器のみが火力に効く)。
-export const ABILITY_ALLOWED_SLOTS: PartSlot[] = ["weapon"];
+// 装着アビリティ表がある部位(wiki: 装備システム/アビリティ、新装着アビリティ)。
+export const ABILITY_ALLOWED_SLOTS: PartSlot[] = [
+  "weapon", "armor", "helm", "shield", "shield_plus", "head", "hand", "leg",
+  "relic_pendant", "relic_bracelet",
+];
+export const abilitySlotCount = (slot: PartSlot): number => slot === "weapon" ? 3 : ["armor", "shield_plus", "hand"].includes(slot) ? 2 : ABILITY_ALLOWED_SLOTS.includes(slot) ? 1 : 0;
 // 武器アビリティの系統(crates/domain/src/equipment.rs の EquipmentAbilityFamily)。
 // 表示順は加算先(突き / 斬り / 魔攻 / 魔防)の並びに合わせる。
 export const ABILITY_FAMILIES: EquipmentAbilityFamily[] = [
   "pointed_blade", "sharp_blade", "intelligence", "magic_resistance", "weapon_delay",
+  "armor_polish", "vitality", "mana", "evasion", "shield_polish", "critical",
+  "accuracy", "element", "agility", "skill_attack",
 ];
 export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
   pointed_blade: "尖った刃(突き)",
@@ -96,6 +102,16 @@ export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
   intelligence: "知力(魔攻)",
   magic_resistance: "耐魔力(魔防)",
   weapon_delay: "武器ディレイ",
+  armor_polish: "鎧研磨",
+  vitality: "生命力",
+  mana: "マナ",
+  evasion: "機敏(回避)",
+  shield_polish: "盾研磨",
+  critical: "致命打",
+  accuracy: "的中剣",
+  element: "属性",
+  agility: "敏捷",
+  skill_attack: "スキル攻撃力",
 };
 // シエナのオーラを発現できる部位(wiki: 装備システム冒頭の表「オーラ」行。8 部位)。
 export type SienaPartSlot = keyof SienaAuras;

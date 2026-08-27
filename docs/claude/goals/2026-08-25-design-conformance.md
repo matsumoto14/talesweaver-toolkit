@@ -860,6 +860,21 @@ C. 上限到達を金で言うか紫で言うか / D. 押した候補が消え�
 - 専用スモークで9入力の `max=200`、140一括反映、押下前後のボタン座標不変、取得済みWikiアイコンの
   実画像表示、page/console errorsなしを確認。実機形は `docs/screenshots/255-rising-holic-growth.png`
 
+### 25 周目 — レリック段階の±操作と追加5補正の共通開閉
+
+- レリックの `+1〜+10` 直接選択を残し、左右に固定位置の−/+を追加。+1/+10では端側だけ無効化
+- `物防・命中など5補正` の追加5行へ220msの双方向トランジションを付与。武器・鎧が同じ共通経路を使うことを実機確認し、成長装備は全補正常設のため対象外と分類
+- `npm run build`、`svelte-check` は成功。ソース監査は新規候補0、既存18件のみ
+- `attention.js` / `inputs.js` / `surfaces.js` / `motion.js` / `clickall.js` を実行。§09 規則1は全経路OK、page/console errorsなし
+- 専用スモークで±往復、+10の無効化、武器・鎧の開閉中DOM残存を確認。実機形は `docs/screenshots/228-relic-selector-nudge.png` と `229-equipment-other-stats.png`
+
+### 26 周目 — 装備切替時の詳細領域を共通で動かす
+
+- 神鳥/ルナリア切替時に、装備名をflashし、補正・アビリティ・ランダムOPを含む詳細領域だけを200msで差し替える。選択ボタンの面は固定
+- レリック専用分岐ではなく、装備IDをキーにした全装備共通の詳細領域へ適用。強化段階や通常装備候補の切替にも同じ動作を使う
+- ビルド・Svelteチェック成功。ソース監査は新規候補0、既存18件のみ。実機で神鳥/ルナリアの両方向に `tw-swap-in` を検出
+- `attention.js` / `inputs.js` / `surfaces.js` / `motion.js` / `clickall.js` を再実行。§09 規則1は全経路OK、page/console errorsなし。実機形は `docs/screenshots/230-relic-kind-motion.png`
+
 ## 終了条件の確認
 
 1. **監査チェックリストの全項目が全画面で違反 0** — 10・11 周目で達成。

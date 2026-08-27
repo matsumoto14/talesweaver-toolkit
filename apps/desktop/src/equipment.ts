@@ -130,6 +130,7 @@ export const neutralEquipmentPart = (): EquipmentPart => ({
   enhance_type: null,
   enhance_grade: null,
   abilities: [],
+  ability_values: [],
   ability_additions: [],
   random_options: [],
 });
@@ -145,6 +146,7 @@ export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
   enhance_type: src.enhance_type,
   enhance_grade: src.enhance_grade,
   abilities: [...src.abilities],
+  ability_values: (src.ability_values ?? []).map((a) => ({ ...a })),
   ability_additions: (src.ability_additions ?? []).map((a) => ({ ...a })),
   random_options: (src.random_options ?? []).map((o) => ({ ...o })),
 });
@@ -266,7 +268,7 @@ function sumParts(equipment: Equipment, pick: (p: EquipmentPart) => EquipmentVal
 
 /**
  * 基本能力値の合計(表示用)。Rust 側 `Equipment::base_totals` と**同じ顔ぶれ**にする:
- * Σ part.base + 武器アビリティ + 表示中の称号。カタログを引く必要があるので呼び出し側が渡す。
+ * Σ part.base + 装備アビリティ + 表示中の称号。カタログを引く必要があるので呼び出し側が渡す。
  * (片方だけ欠けると「装備値の表は 0 なのに攻撃力には乗っている」というズレになる)
  */
 export const equipmentBaseTotal = (
@@ -275,16 +277,29 @@ export const equipmentBaseTotal = (
   titles: TitleDef[] = [],
 ): EquipmentValues => {
   const total = sumParts(equipment, (p) => p.base);
-  for (const id of selectedEquipmentPartOrNeutral(equipment.parts.weapon).abilities) {
-    const def = abilities.find((a) => a.id === id);
-    if (def) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += def.values[k];
-  }
-  for (const addition of selectedEquipmentPartOrNeutral(equipment.parts.weapon).ability_additions ?? []) {
-    if (addition.kind === "thrust") total.thrust += addition.value;
-    else if (addition.kind === "slash") total.slash += addition.value;
-    else if (addition.kind === "magic_attack") total.magic_attack += addition.value;
-    else if (addition.kind === "magic_defense") total.magic_defense += addition.value;
-    else if (addition.kind === "accuracy") total.accuracy += addition.value;
+  for (const slot of PART_SLOTS) {
+    const part = selectedEquipmentPartOrNeutral(equipment.parts[slot]);
+    for (const id of part.abilities) {
+      const def = abilities.find((a) => a.id === id && a.slot === slot);
+      if (def) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += def.values[k];
+    }
+    for (const value of part.ability_values ?? []) {
+      if (value.kind === "thrust") total.thrust += value.value;
+      else if (value.kind === "slash") total.slash += value.value;
+      else if (value.kind === "physical_defense") total.physical_defense += value.value;
+      else if (value.kind === "magic_attack") total.magic_attack += value.value;
+      else if (value.kind === "magic_defense") total.magic_defense += value.value;
+      else if (value.kind === "accuracy") total.accuracy += value.value;
+      else if (value.kind === "critical") total.critical += value.value;
+      else if (value.kind === "evasion") total.evasion += value.value;
+    }
+    for (const addition of part.ability_additions ?? []) {
+      if (addition.kind === "thrust") total.thrust += addition.value;
+      else if (addition.kind === "slash") total.slash += addition.value;
+      else if (addition.kind === "magic_attack") total.magic_attack += addition.value;
+      else if (addition.kind === "magic_defense") total.magic_defense += addition.value;
+      else if (addition.kind === "accuracy") total.accuracy += addition.value;
+    }
   }
   const title = titles.find((t) => t.id === equipment.title);
   if (title) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += title.values[k];
