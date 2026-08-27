@@ -745,7 +745,7 @@ pub fn validate(
     Ok(())
 }
 
-/// 装備のカタログ整合性を検証する(未知の item_id/ability id・部位不一致・エンチャント上限超過)。
+/// 装備のカタログ整合性を検証する(未知の item_id/ability id・部位不一致・成長値/エンチャント上限超過)。
 /// `custom`(`item_id` が `None`)のエンチャントは `EQUIPMENT_VALUE_MAX` まで許可する
 /// (`Equipment::validate` の値域チェックで既に検証済み。ここではカタログ item のときだけ
 /// より厳しい `enchant_caps` を追加でチェックする)。
@@ -767,6 +767,13 @@ fn validate_equipment_catalog(
                     "装備アイテム '{item_id}' は {:?} 用ですが {:?} 部位に指定されています",
                     item.slot, slot
                 )));
+            }
+            if let Some(cap) = item.growth_cap {
+                if let Some((name, value)) = part.base.fields().into_iter().find(|(_, value)| *value > cap) {
+                    return Err(StorageError::InvalidValue(format!(
+                        "装備アイテム '{item_id}' の{name}成長値 {value} が上限 {cap} を超えています"
+                    )));
+                }
             }
             let caps = item.enchant_caps;
             if let Some((name, value, cap)) = part.enchant.fields().into_iter()
@@ -1291,7 +1298,10 @@ mod tests {
 
     #[test]
     fn equipmentはjsonで往復する() {
-        use domain::{EquipmentParts, EquipmentPart, EquipmentValues};
+        use domain::{
+            EquipmentPart, EquipmentParts, EquipmentValues, RegisteredSienaAura, SienaAura,
+            SienaAuraList, SienaAuras, SienaSlot, SienaValueKind,
+        };
 
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("メイン");
@@ -1302,6 +1312,20 @@ mod tests {
                     enchant: EquipmentValues { thrust: 60, slash: 60, magic_attack: 0, magic_defense: 0, ..Default::default() },
                     ..Default::default()
                 }.into(),
+                ..Default::default()
+            },
+            siena: SienaAuras {
+                weapon: SienaAuraList {
+                    registered: vec![RegisteredSienaAura {
+                        id: 1,
+                        label: "火力用".into(),
+                        aura: SienaAura {
+                            slots: vec![SienaSlot { kind: SienaValueKind::Thrust, value: 10 }],
+                            extras: vec![],
+                        },
+                    }],
+                    selected_id: Some(1),
+                },
                 ..Default::default()
             },
             ..Default::default()
@@ -1452,8 +1476,10 @@ mod tests {
             name: "テスト武器",
             values_min: domain::EquipmentValues::default(),
             values_max: domain::EquipmentValues { thrust: 100, slash: 100, magic_attack: 0, magic_defense: 0, ..Default::default() },
+            growth_cap: None,
             enchant_caps: domain::EquipmentValues { thrust: 50, slash: 50, magic_attack: 0, magic_defense: 0, ..Default::default() },
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: gamedata::EQUIPMENT_CATALOG_SOURCE,
         }
@@ -1734,6 +1760,26 @@ mod tests {
         ok.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
         ok.equipment.parts.weapon.enchant = domain::EquipmentValues { thrust: 50, ..Default::default() };
         assert!(repo.create(&ok, &[], &[test_equipment_item()], &[], &[], &[], &[]).is_ok());
+    }
+
+    #[test]
+    fn 成長装備の基礎値が成長上限を超えたら拒否する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut item = test_equipment_item();
+        item.growth_cap = Some(200);
+
+        let mut over = new_character("over");
+        over.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
+        over.equipment.parts.weapon.base = domain::EquipmentValues { thrust: 201, ..Default::default() };
+        assert!(matches!(
+            repo.create(&over, &[], &[item], &[], &[], &[], &[]),
+            Err(StorageError::InvalidValue(_))
+        ));
+
+        let mut at_cap = new_character("at-cap");
+        at_cap.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
+        at_cap.equipment.parts.weapon.base = domain::EquipmentValues { thrust: 200, ..Default::default() };
+        assert!(repo.create(&at_cap, &[], &[item], &[], &[], &[], &[]).is_ok());
     }
 
     #[test]

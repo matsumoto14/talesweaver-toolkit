@@ -370,6 +370,18 @@ export interface SienaAura {
   /** 解放済み追加オプションスロットの中身 */
   extras: SienaExtraSlot[];
 }
+export interface RegisteredSienaAura { id: number; label: string; aura: SienaAura; }
+export interface SienaAuraList { registered: RegisteredSienaAura[]; selected_id: number | null; }
+export interface SienaAuras {
+  weapon: SienaAuraList;
+  armor: SienaAuraList;
+  helm: SienaAuraList;
+  shield: SienaAuraList;
+  head: SienaAuraList;
+  body: SienaAuraList;
+  hand: SienaAuraList;
+  leg: SienaAuraList;
+}
 
 // 画面が選択肢を並べるためのカタログ。crates/domain/src/siena.rs の SienaCatalog。
 export interface SienaValueKindDef {
@@ -579,8 +591,6 @@ export interface EquipmentPart {
   abilities: string[];
   /** カテゴリー4アビリティで実際に抽選された追加アビリティ。 */
   ability_additions: EquipmentAbilityAdditional[];
-  /** シエナのオーラ(発現できるのは 8 部位。未発現は中立値) */
-  siena: SienaAura;
   /** ランダムオプション。同じカテゴリーは 1 部位に 1 つまで */
   random_options: RandomOptionSlot[];
 }
@@ -612,6 +622,8 @@ export interface EquipmentParts {
 // crates/domain/src/equipment.rs の Equipment。
 export interface Equipment {
   parts: EquipmentParts;
+  /** 抽出・注入で装備とは独立して付け替える、部位別の登録オーラ。 */
+  siena: SienaAuras;
   /** テシスコア(地域ごとに 6 枠) */
   thesis_cores: ThesisCores;
   /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
@@ -629,7 +641,7 @@ export interface Source {
 export type WeaponClass =
   | "rapier" | "dagger" | "spear" | "small_sword" | "physical_gun" | "claw" | "hand_launcher"
   | "long_sword" | "tachi" | "war_staff" | "short_sword" | "rod" | "nunchaku"
-  | "katana" | "axe" | "whip" | "kara" | "dual_blade_physical" | "scythe" | "arming_sword"
+  | "katana" | "axe" | "whip" | "kara" | "dual_blade_physical" | "scythe" | "arming_sword" | "sword_shape"
   | "magic_wand" | "wand" | "magic_gun" | "scepter" | "totem"
   | "great_sword"
   | "holy_staff" | "handbell" | "dual_blade_magic" | "hammer";
@@ -644,6 +656,8 @@ export interface EquipmentItem {
   values_min: EquipmentValues;
   /** 基本能力値のレンジ上限 */
   values_max: EquipmentValues;
+  /** 成長装備の各基本能力値の入力上限。通常装備は null */
+  growth_cap: number | null;
   /** エンチャント上限(エンチャント不可は全 0) */
   enchant_caps: EquipmentValues;
   /** 武器のみ非 null */

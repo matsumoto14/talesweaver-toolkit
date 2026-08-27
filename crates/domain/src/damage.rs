@@ -610,7 +610,10 @@ fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaSte
 mod tests {
     use super::*;
     use crate::category::CategoryKind;
-    use crate::siena::{SienaAura, SienaExtraKind, SienaExtraSlot, SienaSlot, SienaValueKind};
+    use crate::equipment::PartSlot;
+    use crate::siena::{
+        RegisteredSienaAura, SienaAura, SienaExtraKind, SienaExtraSlot, SienaSlot, SienaValueKind,
+    };
     use crate::skill::SkillDependency;
     use crate::stat_sources::StatAdjustment;
 
@@ -621,6 +624,11 @@ mod tests {
             slots: vec![SienaSlot { kind, value: 1 }; 3],
             extras: vec![SienaExtraSlot { kind: extra, value }],
         }
+    }
+    fn set_siena(equipment: &mut Equipment, slot: PartSlot, aura: SienaAura) {
+        let list = equipment.siena.get_mut(slot).expect("シエナ対象部位");
+        list.registered = vec![RegisteredSienaAura { id: 1, label: String::new(), aura }];
+        list.selected_id = Some(1);
     }
     use crate::stats::{PinSource, StatKind};
 
@@ -1067,8 +1075,8 @@ mod tests {
         let base = calculate_damage(&input()).per_hit.max;
 
         let mut i = input();
-        i.equipment.parts.weapon.siena = siena_extra(SienaValueKind::Thrust, SienaExtraKind::AttackRate, 10.0);
-        i.equipment.parts.armor.siena = siena_extra(SienaValueKind::Stab, SienaExtraKind::AttackRate, 5.0);
+        set_siena(&mut i.equipment, PartSlot::Weapon, siena_extra(SienaValueKind::Thrust, SienaExtraKind::AttackRate, 10.0));
+        set_siena(&mut i.equipment, PartSlot::Armor, siena_extra(SienaValueKind::Stab, SienaExtraKind::AttackRate, 5.0));
         let boosted = calculate_damage(&i);
 
         // New1 は Σ% = +15% として集計される
@@ -1254,8 +1262,11 @@ mod tests {
             hyper_limit_level: 6,
         };
         i.random_options.actual_delay_reduction = 0.03;
-        i.equipment.parts.shield.siena =
-            siena_extra(SienaValueKind::Thrust, SienaExtraKind::ActualDelay, 2.0);
+        set_siena(
+            &mut i.equipment,
+            PartSlot::Shield,
+            siena_extra(SienaValueKind::Thrust, SienaExtraKind::ActualDelay, 2.0),
+        );
         i.actual_delay_skills =
             vec![ActualDelayContribution { source: "剣の司祭".into(), rate: 0.05 }];
 

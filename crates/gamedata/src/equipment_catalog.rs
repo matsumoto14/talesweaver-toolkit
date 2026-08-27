@@ -1,9 +1,8 @@
 //! 装備カタログ(部位別アイテム・武器系統・装備強化倍率・武器アビリティ)。
 //!
 //! 出典: 装備システム / 装備システム/エンチャント / 装備システム/装備強化 / 装備システム/アビリティ /
-//! Item/武器/刀 / Item/武器/太刀 / Item/防具/兜 / Item/防具/鎧/軽鎧 / Item/防具/腕/シールド /
-//! Item/防具/腕/盾＋ / Item/アクセサリ/顔・体・手・足・エフェクト(取得 2026-08-24)。
-//! docs/claude/goals/2026-08-24-equipment-parts.md「wiki 調査結果」「カタログ seed」節参照。
+//! `Link/装備Item` から辿れる武器・防具・アクセサリ各ページ(取得 2026-08-27)。
+//! docs/claude/goals/2026-08-24-equipment-parts.md「インファーナルより上位の全装備カタログ」節参照。
 
 use domain::{
     DamageCategory, EnhanceGrade, EnhanceRates, Equipment, EquipmentAbilityAdditionalDef,
@@ -13,12 +12,16 @@ use domain::{
 
 use crate::Source;
 
+#[path = "equipment_catalog_generated.rs"]
+mod equipment_catalog_generated;
+#[path = "equipment_catalog_sacred_kr.rs"]
+mod equipment_catalog_sacred_kr;
+
 /// 装備カタログの出典。
 pub const EQUIPMENT_CATALOG_SOURCE: Source = Source {
-    page: "Item/武器/刀, Item/武器/太刀, Item/防具/兜, Item/防具/鎧/軽鎧, Item/防具/腕/シールド, \
-           Item/防具/腕/盾＋, Item/アクセサリ/顔・体・手・足・エフェクト",
-    retrieved_on: "2026-08-24",
-    note: "エンドゲーム帯(Lv300/310)のみ収録。他武器種・他 Lv 帯はカスタム入力で運用 `[仮]`",
+    page: "Link/装備Item とリンク先の部位別 Item ページ",
+    retrieved_on: "2026-08-27",
+    note: "各ページで最後のインファーナルより後。数値未確定行は除外",
 };
 
 /// 装備強化(装備システム/装備強化)の出典。
@@ -36,7 +39,7 @@ pub const EQUIPMENT_ABILITY_SOURCE: Source = Source {
 };
 
 /// 武器種(wiki: 装備システム/装備強化「系統」表の該当武器)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WeaponClass {
     // STAB系
@@ -62,6 +65,7 @@ pub enum WeaponClass {
     DualBladePhysical,
     Scythe,
     ArmingSword,
+    SwordShape,
     // INT系
     MagicWand,
     Wand,
@@ -95,7 +99,7 @@ pub fn weapon_system(class: WeaponClass) -> WeaponSystem {
     match class {
         Rapier | Dagger | Spear | SmallSword | PhysicalGun | Claw | HandLauncher => Stab,
         LongSword | Tachi | WarStaff | ShortSword | Rod | Nunchaku => StabHack,
-        Katana | Axe | Whip | Kara | DualBladePhysical | Scythe | ArmingSword => Hack,
+        Katana | Axe | Whip | Kara | DualBladePhysical | Scythe | ArmingSword | SwordShape => Hack,
         MagicWand | Wand | MagicGun | Scepter | Totem => Int,
         GreatSword => IntHack,
         HolyStaff | Handbell | DualBladeMagic | Hammer => Mr,
@@ -214,7 +218,8 @@ pub fn armor_class_for_type(kind: EquipmentEnhanceType) -> Option<ArmorClass> {
 
 /// カタログ品の補正式。鎧は出典文字列から推測せず、アイテムIDへ明示的に割り当てる。
 pub fn equipment_enhance_type(item_id: &str) -> Option<EquipmentEnhanceType> {
-    if let Some(class) = find_equipment_item(item_id).and_then(|item| item.weapon_class) {
+    let item = find_equipment_item(item_id)?;
+    if let Some(class) = item.weapon_class {
         return Some(match weapon_system(class) {
             WeaponSystem::Stab => EquipmentEnhanceType::WeaponStab,
             WeaponSystem::StabHack => EquipmentEnhanceType::WeaponStabHack,
@@ -224,11 +229,7 @@ pub fn equipment_enhance_type(item_id: &str) -> Option<EquipmentEnhanceType> {
             WeaponSystem::Mr => EquipmentEnhanceType::WeaponMr,
         });
     }
-    match item_id {
-        "aquilus-armor" | "abyss-armor" => Some(EquipmentEnhanceType::ArmorLight),
-        "lina-clothes" => Some(EquipmentEnhanceType::ArmorRobe),
-        _ => None,
-    }
+    item.enhance_type
 }
 
 /// 現在収録済み鎧の分類。`equipment_enhance_type` の明示メタデータだけから解決する。
@@ -253,10 +254,14 @@ pub struct EquipmentItem {
     pub values_min: EquipmentValues,
     /// 基本能力値のレンジ上限
     pub values_max: EquipmentValues,
+    /// 成長装備の各基本能力値の入力上限。通常装備は `None`。
+    pub growth_cap: Option<i64>,
     /// エンチャント上限(wiki: Item ページの「上限」行。エンチャント不可は全 0)
     pub enchant_caps: EquipmentValues,
     /// 武器のみ `Some`(強化補正式の系統決定に使う)
     pub weapon_class: Option<WeaponClass>,
+    /// 鎧のみ `Some`。防具種ごとの装備強化補正式を、出典文字列ではなく明示メタデータで持つ。
+    pub enhance_type: Option<EquipmentEnhanceType>,
     /// **装着時効果**(wiki: Item ページ備考の「装着時 …」)。装備補正値ではなく
     /// 与ダメージ式のカテゴリ(X5 / X6 / Old / O)に入る。
     /// **「一定確率で」のものも発動前提で入れる**(ユーザー確定 2026-08-27: ほぼ発動する)
@@ -267,13 +272,21 @@ pub struct EquipmentItem {
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("EquipmentItem", 11)?;
+        let mut s = serializer.serialize_struct("EquipmentItem", 12)?;
         s.serialize_field("id", self.id)?; s.serialize_field("slot", &self.slot)?;
         s.serialize_field("name", self.name)?; s.serialize_field("values_min", &self.values_min)?;
-        s.serialize_field("values_max", &self.values_max)?; s.serialize_field("enchant_caps", &self.enchant_caps)?;
+        s.serialize_field("values_max", &self.values_max)?; s.serialize_field("growth_cap", &self.growth_cap)?;
+        s.serialize_field("enchant_caps", &self.enchant_caps)?;
         s.serialize_field("weapon_class", &self.weapon_class)?;
         s.serialize_field("weapon_system", &self.weapon_class.map(weapon_system))?;
-        s.serialize_field("enhance_type", &equipment_enhance_type(self.id))?;
+        s.serialize_field("enhance_type", &self.weapon_class.map(|class| match weapon_system(class) {
+            WeaponSystem::Stab => EquipmentEnhanceType::WeaponStab,
+            WeaponSystem::StabHack => EquipmentEnhanceType::WeaponStabHack,
+            WeaponSystem::Hack => EquipmentEnhanceType::WeaponHack,
+            WeaponSystem::Int => EquipmentEnhanceType::WeaponInt,
+            WeaponSystem::IntHack => EquipmentEnhanceType::WeaponIntHack,
+            WeaponSystem::Mr => EquipmentEnhanceType::WeaponMr,
+        }).or(self.enhance_type))?;
         s.serialize_field("damage_effects", &self.damage_effects)?; s.serialize_field("source", &self.source)?;
         s.end()
     }
@@ -401,8 +414,10 @@ fn effect_item(
         name,
         values_min: values,
         values_max: values,
+        growth_cap: None,
         enchant_caps,
         weapon_class: None,
+        enhance_type: None,
         damage_effects,
         source: ITEM_SOURCE_DAMAGE_EFFECT,
     }
@@ -439,8 +454,10 @@ fn effect_trigger_3_ranged(
         name,
         values_min,
         values_max,
+        growth_cap: None,
         enchant_caps,
         weapon_class: None,
+        enhance_type: None,
         damage_effects: ITEM_DAMAGE_JAPAN_3,
         source: ITEM_SOURCE_DAMAGE_EFFECT,
     }
@@ -449,15 +466,17 @@ fn effect_trigger_3_ranged(
 /// 装備カタログ。エンドゲーム帯 20 件 +「装着時に与ダメージが上がる」装備 19 件。
 /// 後者は装備補正値だけでなく `damage_effects` を持ち、与ダメージ式のカテゴリに入る。
 pub fn equipment_catalog() -> Vec<EquipmentItem> {
-    vec![
+    let mut catalog = vec![
         EquipmentItem {
             id: "aquilus-scimitar",
             slot: PartSlot::Weapon,
             name: "†アクィルスシミター",
             values_min: v(95, 233, 36, 39, 33, 34, 27, 30, 28),
             values_max: v(105, 243, 39, 45, 35, 36, 30, 31, 31),
+            growth_cap: None,
             enchant_caps: v(280, 300, 280, 280, 280, 280, 37, 280, 280),
             weapon_class: Some(WeaponClass::Katana),
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_KATANA,
         },
@@ -467,8 +486,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスシミター",
             values_min: v(115, 300, 36, 39, 33, 34, 30, 27, 28),
             values_max: v(130, 330, 39, 45, 35, 36, 31, 30, 31),
+            growth_cap: None,
             enchant_caps: v(400, 400, 100, 100, 100, 100, 100, 100, 100),
             weapon_class: Some(WeaponClass::Katana),
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_KATANA,
         },
@@ -478,8 +499,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスフェイクソード",
             values_min: v(167, 170, 39, 41, 33, 34, 29, 29, 29),
             values_max: v(177, 180, 41, 47, 36, 36, 32, 32, 34),
+            growth_cap: None,
             enchant_caps: v(300, 300, 280, 280, 280, 280, 37, 280, 280),
             weapon_class: Some(WeaponClass::Tachi),
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_TACHI,
         },
@@ -489,8 +512,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスフェイクソード",
             values_min: v(215, 215, 39, 41, 33, 34, 29, 29, 29),
             values_max: v(235, 235, 41, 47, 36, 36, 32, 32, 34),
+            growth_cap: None,
             enchant_caps: v(400, 400, 100, 100, 100, 100, 100, 100, 100),
             weapon_class: Some(WeaponClass::Tachi),
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_TACHI,
         },
@@ -500,8 +525,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスブレイド",
             values_min: v(80, 184, 35, 161, 38, 34, 29, 28, 26),
             values_max: v(85, 194, 38, 171, 40, 38, 32, 30, 28),
+            growth_cap: None,
             enchant_caps: v(280, 300, 280, 300, 280, 280, 37, 280, 280),
             weapon_class: Some(WeaponClass::GreatSword),
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_GREAT_SWORD,
         },
@@ -511,8 +538,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスブレード",
             values_min: v(84, 230, 35, 230, 38, 34, 29, 28, 26),
             values_max: v(89, 250, 38, 250, 40, 38, 32, 30, 28),
+            growth_cap: None,
             enchant_caps: v(400, 400, 100, 400, 100, 100, 100, 100, 100),
             weapon_class: Some(WeaponClass::GreatSword),
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_GREAT_SWORD,
         },
@@ -522,8 +551,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスヘルム",
             values_min: v(73, 75, 71, 75, 81, 47, 41, 47, 47),
             values_max: v(83, 85, 81, 85, 91, 57, 51, 57, 57),
+            growth_cap: None,
             enchant_caps: v(113, 115, 105, 115, 121, 81, 57, 81, 81),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_HELM,
         },
@@ -533,8 +564,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスヘルム",
             values_min: v(92, 92, 94, 92, 104, 82, 82, 82, 82),
             values_max: v(102, 102, 124, 102, 134, 92, 92, 92, 92),
+            growth_cap: None,
             enchant_caps: v(122, 122, 154, 122, 164, 112, 112, 112, 112),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_HELM,
         },
@@ -544,8 +577,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスアーマー",
             values_min: v(0, 0, 197, 0, 181, 0, 0, 102, 0),
             values_max: v(0, 0, 207, 0, 191, 0, 0, 112, 0),
+            growth_cap: None,
             enchant_caps: v(0, 0, 237, 0, 221, 0, 0, 136, 0),
             weapon_class: None,
+            enhance_type: Some(EquipmentEnhanceType::ArmorLight),
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ARMOR,
         },
@@ -555,8 +590,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスアーマー",
             values_min: v(0, 0, 260, 0, 230, 0, 0, 100, 0),
             values_max: v(0, 0, 280, 0, 260, 0, 0, 120, 0),
+            growth_cap: None,
             enchant_caps: v(0, 0, 310, 0, 290, 0, 0, 150, 0),
             weapon_class: None,
+            enhance_type: Some(EquipmentEnhanceType::ArmorLight),
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ARMOR,
         },
@@ -566,8 +603,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスシールド",
             values_min: v(0, 0, 177, 0, 172, 0, 0, 0, 0),
             values_max: v(0, 0, 187, 0, 182, 0, 0, 0, 0),
+            growth_cap: None,
             enchant_caps: v(0, 0, 217, 0, 212, 0, 0, 0, 0),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_SHIELD,
         },
@@ -577,8 +616,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスシールド",
             values_min: v(0, 0, 200, 0, 200, 0, 0, 0, 0),
             values_max: v(0, 0, 220, 0, 220, 0, 0, 0, 0),
+            growth_cap: None,
             enchant_caps: v(0, 0, 260, 0, 260, 0, 0, 0, 0),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_SHIELD,
         },
@@ -588,8 +629,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスアミュレット",
             values_min: v(73, 75, 68, 73, 84, 45, 39, 45, 45),
             values_max: v(83, 85, 78, 83, 94, 55, 49, 55, 55),
+            growth_cap: None,
             enchant_caps: v(113, 115, 92, 113, 124, 79, 55, 79, 79),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -599,8 +642,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスアミュレット",
             values_min: v(92, 92, 82, 92, 92, 82, 94, 82, 82),
             values_max: v(102, 102, 92, 102, 102, 92, 124, 92, 92),
+            growth_cap: None,
             enchant_caps: v(122, 122, 112, 122, 122, 112, 154, 112, 112),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -610,8 +655,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスウィング",
             values_min: v(76, 76, 62, 76, 78, 48, 42, 48, 48),
             values_max: v(86, 86, 72, 86, 88, 58, 52, 58, 58),
+            growth_cap: None,
             enchant_caps: v(116, 116, 96, 116, 118, 78, 58, 82, 82),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -621,8 +668,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスウィング",
             values_min: v(94, 94, 82, 94, 82, 82, 82, 82, 82),
             values_max: v(124, 124, 92, 124, 92, 92, 92, 92, 92),
+            growth_cap: None,
             enchant_caps: v(154, 154, 112, 154, 112, 112, 112, 112, 112),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -632,8 +681,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスガントレット",
             values_min: v(72, 72, 56, 72, 72, 90, 44, 44, 44),
             values_max: v(82, 82, 66, 82, 82, 110, 54, 54, 54),
+            growth_cap: None,
             enchant_caps: v(112, 112, 90, 112, 112, 130, 60, 78, 78),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -643,8 +694,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスガントレット",
             values_min: v(92, 92, 82, 92, 92, 150, 82, 82, 82),
             values_max: v(102, 102, 92, 102, 102, 180, 92, 92, 92),
+            growth_cap: None,
             enchant_caps: v(122, 122, 112, 122, 122, 210, 112, 112, 112),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -654,8 +707,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アクィルスブーツ",
             values_min: v(72, 72, 56, 72, 72, 44, 44, 90, 44),
             values_max: v(82, 82, 66, 82, 82, 54, 54, 110, 54),
+            growth_cap: None,
             enchant_caps: v(112, 112, 90, 112, 112, 78, 60, 130, 78),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -665,8 +720,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アビスブーツ",
             values_min: v(92, 92, 82, 92, 92, 82, 82, 150, 82),
             values_max: v(102, 102, 92, 102, 102, 92, 92, 180, 92),
+            growth_cap: None,
             enchant_caps: v(122, 122, 112, 122, 122, 112, 112, 210, 112),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
@@ -676,8 +733,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "[EP]†チャプターアーティファクト",
             values_min: v(1, 1, 1, 1, 1, 1, 1, 1, 1),
             values_max: v(1, 1, 1, 1, 1, 1, 1, 1, 1),
+            growth_cap: None,
             enchant_caps: v(0, 0, 0, 0, 0, 0, 0, 0, 0),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_SHIELD_PLUS,
         },
@@ -687,8 +746,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†アルカディア・メメントモリ",
             values_min: v(50, 50, 50, 50, 50, 50, 50, 50, 50),
             values_max: v(50, 50, 50, 50, 50, 50, 50, 50, 50),
+            growth_cap: None,
             enchant_caps: v(0, 0, 0, 0, 0, 0, 0, 0, 0),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_SHIELD_PLUS,
         },
@@ -700,8 +761,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†ニバンボシ(刀)",
             values_min: v(120, 320, 42, 22, 42, 36, 30, 30, 28),
             values_max: v(160, 360, 45, 27, 45, 36, 30, 31, 31),
+            growth_cap: None,
             enchant_caps: v(460, 480, 100, 100, 100, 105, 105, 100, 100),
             weapon_class: Some(WeaponClass::Katana),
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
             source: ITEM_SOURCE_DAMAGE_KATANA,
         },
@@ -711,8 +774,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†ニバンボシ(太刀)",
             values_min: v(240, 240, 39, 41, 33, 36, 32, 29, 29),
             values_max: v(260, 260, 41, 47, 36, 36, 32, 32, 34),
+            growth_cap: None,
             enchant_caps: v(480, 480, 100, 100, 100, 105, 105, 100, 100),
             weapon_class: Some(WeaponClass::Tachi),
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
             source: ITEM_SOURCE_DAMAGE_TACHI,
         },
@@ -723,8 +788,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†リナの服",
             values_min: v(0, 0, 260, 30, 280, 85, 0, 81, 0),
             values_max: v(0, 0, 280, 45, 300, 115, 0, 91, 0),
+            growth_cap: None,
             enchant_caps: v(0, 0, 300, 150, 350, 120, 0, 105, 0),
             weapon_class: None,
+            enhance_type: Some(EquipmentEnhanceType::ArmorRobe),
             damage_effects: ITEM_DAMAGE_PHYSICAL_MAGIC_3,
             source: ITEM_SOURCE_DAMAGE_ROBE,
         },
@@ -735,8 +802,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†主天使の羽",
             values_min: v(75, 75, 65, 75, 75, 65, 50, 65, 65),
             values_max: v(75, 75, 65, 75, 75, 65, 50, 65, 65),
+            growth_cap: None,
             enchant_caps: v(0, 0, 0, 0, 0, 0, 0, 0, 0),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_LEGACY_25,
             source: ITEM_SOURCE_DAMAGE_BODY,
         },
@@ -746,8 +815,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†シグマウィング",
             values_min: v(75, 75, 65, 75, 75, 65, 50, 65, 65),
             values_max: v(75, 75, 65, 75, 75, 65, 50, 65, 65),
+            growth_cap: None,
             enchant_caps: v(0, 0, 0, 0, 0, 0, 0, 0, 0),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_LEGACY_25,
             source: ITEM_SOURCE_DAMAGE_BODY,
         },
@@ -758,8 +829,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†ゴリラのあーむかばー",
             values_min: v(44, 44, 44, 44, 44, 78, 38, 38, 38),
             values_max: v(54, 54, 54, 54, 54, 100, 48, 48, 48),
+            growth_cap: None,
             enchant_caps: v(90, 90, 80, 90, 80, 118, 54, 66, 66),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_5,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
@@ -769,8 +842,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†タヌキの手袋",
             values_min: v(44, 44, 38, 44, 44, 78, 38, 38, 38),
             values_max: v(54, 54, 48, 54, 54, 100, 48, 48, 48),
+            growth_cap: None,
             enchant_caps: v(112, 90, 112, 112, 112, 130, 60, 78, 78),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_5,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
@@ -780,8 +855,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†イヅツミの手甲",
             values_min: v(80, 80, 82, 60, 60, 150, 82, 82, 82),
             values_max: v(90, 90, 92, 80, 80, 180, 92, 92, 92),
+            growth_cap: None,
             enchant_caps: v(150, 150, 112, 105, 105, 210, 112, 112, 112),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
@@ -791,8 +868,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             name: "†リンの手袋",
             values_min: v(60, 60, 82, 100, 80, 150, 82, 82, 82),
             values_max: v(80, 80, 92, 120, 90, 180, 92, 92, 92),
+            growth_cap: None,
             enchant_caps: v(105, 105, 112, 150, 150, 210, 112, 112, 112),
             weapon_class: None,
+            enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
@@ -837,7 +916,42 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
         // 「装着時：与ダメージ+1%」(確率ではない)
         effect_item("logh-lost", "†ロスト", v(22, 22, 22, 22, 22, 22, 22, 22, 22),
             v(255, 255, 255, 255, 255, 255, 255, 255, 255), ITEM_DAMAGE_JAPAN_1),
-    ]
+    ];
+
+    // 盾+ は通常の候補を並べず、ユーザー指定の成長カフスだけを扱う。
+    catalog.retain(|item| item.slot != PartSlot::ShieldPlus);
+    catalog.push(EquipmentItem {
+        id: "rising-holic-cuffs",
+        slot: PartSlot::ShieldPlus,
+        name: "†ライジングホリックカフス",
+        values_min: v(140, 140, 140, 140, 140, 140, 140, 140, 140),
+        values_max: v(140, 140, 140, 140, 140, 140, 140, 140, 140),
+        growth_cap: Some(200),
+        enchant_caps: EquipmentValues::default(),
+        weapon_class: None,
+        enhance_type: None,
+        damage_effects: &[],
+        source: Source {
+            page: "Item/防具/腕/盾＋",
+            retrieved_on: "2026-08-27",
+            note: "成長コンテンツ。初期入力は全補正140、成長上限は全補正200。表示名はユーザー指定",
+        },
+    });
+
+    // 既存の手検証済みデータ(装着時効果を含む)を優先し、同名の自動抽出行は足さない。
+    for item in equipment_catalog_generated::wiki_equipment_catalog() {
+        if !catalog.iter().any(|existing| existing.name == item.name) {
+            catalog.push(item);
+        }
+    }
+    // 日本 Tale Wiki で数値が確定している同名行を優先し、未収録のセイクリッド装備だけを
+    // 韓国コミュニティ資料から補完する。
+    for item in equipment_catalog_sacred_kr::sacred_equipment_catalog() {
+        if !catalog.iter().any(|existing| existing.name == item.name) {
+            catalog.push(item);
+        }
+    }
+    catalog
 }
 
 pub fn find_equipment_item(id: &str) -> Option<EquipmentItem> {
@@ -1030,12 +1144,64 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn カタログは51件_idは重複しない() {
+    fn インファーナルより上位のカタログは687件_idは重複しない() {
         let catalog = equipment_catalog();
-        // エンドゲーム帯 22 件 + 装着時効果つき 29 件
-        assert_eq!(catalog.len(), 51);
+        // 既存の手検証済み行を優先し、2026-08-27 の全 Item ページ抽出を名前で重複排除。
+        assert_eq!(catalog.len(), 687);
         let ids: HashSet<&str> = catalog.iter().map(|i| i.id).collect();
         assert_eq!(ids.len(), catalog.len());
+    }
+
+    #[test]
+    fn セイクリッド通常と改を全部位104件収録し上限は基本最大値以上() {
+        let sacred: Vec<_> = equipment_catalog()
+            .into_iter()
+            .filter(|item| item.name.contains("セイクリッド"))
+            .collect();
+        assert_eq!(sacred.len(), 104);
+
+        for item in sacred {
+            let maximums = [
+                item.values_max.thrust,
+                item.values_max.slash,
+                item.values_max.physical_defense,
+                item.values_max.magic_attack,
+                item.values_max.magic_defense,
+                item.values_max.accuracy,
+                item.values_max.critical,
+                item.values_max.evasion,
+                item.values_max.agility,
+            ];
+            let caps = [
+                item.enchant_caps.thrust,
+                item.enchant_caps.slash,
+                item.enchant_caps.physical_defense,
+                item.enchant_caps.magic_attack,
+                item.enchant_caps.magic_defense,
+                item.enchant_caps.accuracy,
+                item.enchant_caps.critical,
+                item.enchant_caps.evasion,
+                item.enchant_caps.agility,
+            ];
+            for (maximum, cap) in maximums.into_iter().zip(caps) {
+                assert!(maximum == 0 || cap >= maximum, "{}: 基本最大 {maximum} > 上限 {cap}", item.name);
+            }
+        }
+    }
+
+    #[test]
+    fn 韓国コミュニティ資料で照合したセイクリッドブレードを収録する() {
+        let sacred = find_equipment_item("wiki-1a51cc7cf165").unwrap();
+        assert_eq!(sacred.name, "†セイクリッドブレード");
+        assert_eq!(sacred.values_min.slash, 410);
+        assert_eq!(sacred.values_max.slash, 450);
+        assert_eq!(sacred.enchant_caps.slash, 750);
+
+        let improved = find_equipment_item("wiki-6a2669c83e79").unwrap();
+        assert_eq!(improved.name, "†改・セイクリッドブレード");
+        assert_eq!(improved.values_min.slash, 480);
+        assert_eq!(improved.values_max.slash, 530);
+        assert_eq!(improved.enchant_caps.slash, 840);
     }
 
     /// 装着時効果は wiki ステータス のカテゴリ表どおりの効き先に入る。
@@ -1069,7 +1235,7 @@ mod tests {
         }
         let with_effects =
             equipment_catalog().iter().filter(|i| !i.damage_effects.is_empty()).count();
-        assert_eq!(with_effects, 29);
+        assert_eq!(with_effects, 182);
     }
 
     /// 装備中のアイテムだけが寄与する。カテゴリ側の上限は `CategoryTotals` が掛けるので、
@@ -1109,10 +1275,38 @@ mod tests {
     }
 
     #[test]
-    fn 盾プラスはエンチャント不可() {
-        for item in equipment_catalog().into_iter().filter(|i| i.slot == PartSlot::ShieldPlus) {
-            assert_eq!(item.enchant_caps, EquipmentValues::default());
+    fn 全装備のレンジと上限は値域内で鎧は強化種別を持つ() {
+        for item in equipment_catalog() {
+            for ((label, min), (_, max)) in item.values_min.fields().into_iter().zip(item.values_max.fields()) {
+                assert!((0..=max).contains(&min), "{} の {} レンジが逆", item.name, label);
+                assert!(max <= domain::EQUIPMENT_VALUE_MAX, "{} の {} が値域外", item.name, label);
+            }
+            for (label, cap) in item.enchant_caps.fields() {
+                assert!((0..=domain::EQUIPMENT_VALUE_MAX).contains(&cap), "{} の {} 上限が値域外", item.name, label);
+            }
+            if item.slot == PartSlot::Armor {
+                assert!(item.enhance_type.is_some(), "{} は鎧なのに強化種別が無い", item.name);
+            }
         }
+    }
+
+    #[test]
+    fn 全31武器種とコラボ装備を収録する() {
+        let catalog = equipment_catalog();
+        assert_eq!(catalog.iter().filter_map(|item| item.weapon_class).collect::<HashSet<_>>().len(), 31);
+        assert!(catalog.iter().any(|item| item.name == "†エクリプスシミター"));
+        assert!(catalog.iter().any(|item| item.name == "†ニバンボシ(刀)"));
+        assert!(catalog.iter().any(|item| item.weapon_class == Some(WeaponClass::SwordShape)));
+    }
+
+    #[test]
+    fn 盾プラスは初期140で成長上限200かつエンチャント不可() {
+        let items: Vec<_> = equipment_catalog().into_iter().filter(|i| i.slot == PartSlot::ShieldPlus).collect();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name, "†ライジングホリックカフス");
+        assert_eq!(items[0].values_max, v(140, 140, 140, 140, 140, 140, 140, 140, 140));
+        assert_eq!(items[0].growth_cap, Some(200));
+        assert_eq!(items[0].enchant_caps, EquipmentValues::default());
     }
 
     #[test]

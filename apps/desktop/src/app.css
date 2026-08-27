@@ -112,6 +112,23 @@
   --font-num: "M PLUS 1 Code", ui-monospace, SFMono-Regular, monospace;
 }
 
+/* シエナのオーラ登録。装備登録と同じ「所持一覧 + 装着中」の語彙を使う。 */
+.siena-mark {
+  flex: none; width: 28px; height: 28px; display: grid; place-items: center;
+  color: var(--accent-hover); background: linear-gradient(160deg, var(--bg-field), var(--bg-active));
+  border: 1px solid var(--accent); border-radius: var(--r-panel); font-size: 14px;
+}
+.siena-mark.off { color: var(--fg-dim); background: var(--surface-inset); border-color: var(--border); }
+.siena-mini-mark { color: var(--accent); font-size: 8.5px; }
+.siena-quick-switches { margin: -2px 0 2px 38px; }
+.siena-registration-actions { justify-content: space-between; gap: 8px; }
+.siena-registration-actions > .part-switches { flex: 1; padding: 0; }
+.registration-name-card:has(.siena-delete) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px;
+}
+.siena-delete { margin-bottom: 1px; }
+.siena-unattached { min-height: 90px; display: grid; place-items: center; text-align: center; }
+
 * { box-sizing: border-box; }
 
 html, body, #app { height: 100%; margin: 0; }

@@ -1361,21 +1361,24 @@ mod tests {
     /// 武器(基本値・エンチャント・シエナのオーラのステ加算)と手(基本値のみ)を持つ装備。
     fn test_equipment() -> Equipment {
         use crate::equipment::{EquipmentPart, EquipmentParts, EquipmentValues};
-        use crate::siena::{SienaAura, SienaExtraKind, SienaExtraSlot, SienaSlot, SienaValueKind};
+        use crate::siena::{
+            RegisteredSienaAura, SienaAura, SienaAuraList, SienaAuras, SienaExtraKind,
+            SienaExtraSlot, SienaSlot, SienaValueKind,
+        };
+        let aura = SienaAura {
+            slots: vec![
+                SienaSlot { kind: SienaValueKind::Thrust, value: 10 },
+                SienaSlot { kind: SienaValueKind::Thrust, value: 10 },
+                SienaSlot { kind: SienaValueKind::Slash, value: 10 },
+                SienaSlot { kind: SienaValueKind::Slash, value: 10 },
+            ],
+            extras: vec![SienaExtraSlot { kind: SienaExtraKind::AllStats, value: 5.0 }],
+        };
         Equipment {
             parts: EquipmentParts {
                 weapon: EquipmentPart {
                     base: EquipmentValues { thrust: 150, slash: 150, ..Default::default() },
                     enchant: EquipmentValues { thrust: 60, slash: 60, ..Default::default() },
-                    siena: SienaAura {
-                        slots: vec![
-                            SienaSlot { kind: SienaValueKind::Thrust, value: 10 },
-                            SienaSlot { kind: SienaValueKind::Thrust, value: 10 },
-                            SienaSlot { kind: SienaValueKind::Slash, value: 10 },
-                            SienaSlot { kind: SienaValueKind::Slash, value: 10 },
-                        ],
-                        extras: vec![SienaExtraSlot { kind: SienaExtraKind::AllStats, value: 5.0 }],
-                    },
                     ..Default::default()
                 }
                 .into(),
@@ -1384,6 +1387,13 @@ mod tests {
                     ..Default::default()
                 }
                 .into(),
+                ..Default::default()
+            },
+            siena: SienaAuras {
+                weapon: SienaAuraList {
+                    registered: vec![RegisteredSienaAura { id: 1, label: String::new(), aura }],
+                    selected_id: Some(1),
+                },
                 ..Default::default()
             },
             ..Default::default()

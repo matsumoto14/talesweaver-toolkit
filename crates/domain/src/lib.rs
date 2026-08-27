@@ -81,9 +81,9 @@ pub use random_option::{
 };
 pub use rounding::{floor_int, trunc2};
 pub use siena::{
-    siena_catalog, SienaAura, SienaCatalog, SienaError, SienaExtraKind, SienaExtraKindDef,
-    SienaExtraSlot, SienaSlot, SienaValueKind, SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES,
-    SIENA_STAGE_MAX,
+    siena_catalog, RegisteredSienaAura, SienaAura, SienaAuraList, SienaAuras, SienaCatalog,
+    SienaError, SienaExtraKind, SienaExtraKindDef, SienaExtraSlot, SienaSlot, SienaValueKind,
+    SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES, SIENA_STAGE_MAX,
 };
 pub use skill::{Skill, SkillDependency, SkillTarget};
 pub use stat_sources::{

@@ -559,9 +559,131 @@ impl SienaAura {
     }
 }
 
+/// 抽出して所持しているシエナのオーラ 1 個。
+/// wiki「抽出・注入」により、オーラは装備から分離して同一部位へ付け替えられる。
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct RegisteredSienaAura {
+    /// キャラ内で不変の登録ID。
+    #[serde(default)]
+    pub id: u64,
+    /// 同じ部位の複数オーラを見分ける任意ラベル。
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub aura: SienaAura,
+}
+
+/// 同一部位に注入できるオーラの所持一覧と、現在装着中の 1 個。
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct SienaAuraList {
+    #[serde(default)]
+    pub registered: Vec<RegisteredSienaAura>,
+    #[serde(default)]
+    pub selected_id: Option<u64>,
+}
+
+impl SienaAuraList {
+    pub fn selected(&self) -> Option<&RegisteredSienaAura> {
+        self.selected_id.and_then(|id| self.registered.iter().find(|entry| entry.id == id))
+    }
+
+    pub fn validate(&self, slot: PartSlot) -> Result<(), SienaError> {
+        if self.selected_id.is_some() && self.selected().is_none() {
+            return Err(SienaError::UnknownSelectedId { slot });
+        }
+        let mut ids = std::collections::HashSet::new();
+        for entry in &self.registered {
+            if entry.id == 0 || !ids.insert(entry.id) {
+                return Err(SienaError::DuplicateRegistrationId { slot, id: entry.id });
+            }
+            entry.aura.validate(slot)?;
+        }
+        Ok(())
+    }
+}
+
+/// 発現可能な 8 部位のオーラ所持一覧。装備品の登録一覧とは独立して切り替える。
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct SienaAuras {
+    #[serde(default)]
+    pub weapon: SienaAuraList,
+    #[serde(default)]
+    pub armor: SienaAuraList,
+    #[serde(default)]
+    pub helm: SienaAuraList,
+    #[serde(default)]
+    pub shield: SienaAuraList,
+    #[serde(default)]
+    pub head: SienaAuraList,
+    #[serde(default)]
+    pub body: SienaAuraList,
+    #[serde(default)]
+    pub hand: SienaAuraList,
+    #[serde(default)]
+    pub leg: SienaAuraList,
+}
+
+impl SienaAuras {
+    const SLOTS: [PartSlot; 8] = [
+        PartSlot::Weapon,
+        PartSlot::Armor,
+        PartSlot::Helm,
+        PartSlot::Shield,
+        PartSlot::Head,
+        PartSlot::Body,
+        PartSlot::Hand,
+        PartSlot::Leg,
+    ];
+
+    pub fn get(&self, slot: PartSlot) -> Option<&SienaAuraList> {
+        match slot {
+            PartSlot::Weapon => Some(&self.weapon),
+            PartSlot::Armor => Some(&self.armor),
+            PartSlot::Helm => Some(&self.helm),
+            PartSlot::Shield => Some(&self.shield),
+            PartSlot::Head => Some(&self.head),
+            PartSlot::Body => Some(&self.body),
+            PartSlot::Hand => Some(&self.hand),
+            PartSlot::Leg => Some(&self.leg),
+            _ => None,
+        }
+    }
+
+    pub fn get_mut(&mut self, slot: PartSlot) -> Option<&mut SienaAuraList> {
+        match slot {
+            PartSlot::Weapon => Some(&mut self.weapon),
+            PartSlot::Armor => Some(&mut self.armor),
+            PartSlot::Helm => Some(&mut self.helm),
+            PartSlot::Shield => Some(&mut self.shield),
+            PartSlot::Head => Some(&mut self.head),
+            PartSlot::Body => Some(&mut self.body),
+            PartSlot::Hand => Some(&mut self.hand),
+            PartSlot::Leg => Some(&mut self.leg),
+            _ => None,
+        }
+    }
+
+    pub fn iter_selected(&self) -> impl Iterator<Item = (PartSlot, &SienaAura)> {
+        Self::SLOTS
+            .into_iter()
+            .filter_map(|slot| self.get(slot)?.selected().map(|entry| (slot, &entry.aura)))
+    }
+
+    pub fn validate(&self) -> Result<(), SienaError> {
+        for slot in Self::SLOTS {
+            self.get(slot).expect("allowed Siena slot").validate(slot)?;
+        }
+        Ok(())
+    }
+}
+
 /// シエナのオーラの入力値・部位制約違反。
 #[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
 pub enum SienaError {
+    #[error("{slot:?} の選択中オーラIDは登録一覧にありません")]
+    UnknownSelectedId { slot: PartSlot },
+    #[error("{slot:?} のオーラ登録ID {id} が重複または0です")]
+    DuplicateRegistrationId { slot: PartSlot, id: u64 },
     #[error("{slot:?} はシエナのオーラの対象外です(兜/鎧/武器/盾/頭/体/手/足のみ)")]
     NotAllowed { slot: PartSlot },
     #[error("{slot:?} の能力値スロットは {max} 個までです(指定 {count} 個)")]

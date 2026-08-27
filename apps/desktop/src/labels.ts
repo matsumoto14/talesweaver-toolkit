@@ -1,6 +1,6 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
-  CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier,
+  CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier, SienaAuras,
   RandomOptionRank, SkillDependency, StatKind, StatLayer, UltimateSkill,
 } from "./api/types";
 
@@ -98,12 +98,13 @@ export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
   weapon_delay: "武器ディレイ",
 };
 // シエナのオーラを発現できる部位(wiki: 装備システム冒頭の表「オーラ」行。8 部位)。
-export const SIENA_ALLOWED_SLOTS: PartSlot[] = [
+export type SienaPartSlot = keyof SienaAuras;
+export const SIENA_ALLOWED_SLOTS: SienaPartSlot[] = [
   "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg",
 ];
 // シエナのオーラの能力値が装備補正(強化能力値)になる部位(wiki: 能力値一覧(武器/盾))。
 // それ以外の部位はステの最終固定値増加になる。
-export const SIENA_EQUIPMENT_VALUE_SLOTS: PartSlot[] = ["weapon", "shield"];
+export const SIENA_EQUIPMENT_VALUE_SLOTS: SienaPartSlot[] = ["weapon", "shield"];
 
 // ランダムオプションを持てる部位(wiki: 装備システム冒頭の表「転移」行。効果・AF は対象外)。
 export const RANDOM_OPTION_ALLOWED_SLOTS: PartSlot[] = PART_SLOTS.filter(

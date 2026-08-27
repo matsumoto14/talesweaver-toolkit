@@ -3,12 +3,12 @@
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
   CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentPartList, EquipmentValues,
-  EquipmentAbilityDef, RandomOptionDef, RandomOptionEffect, RandomOptionSlot, SienaAura,
-  SienaExtraKind, ThesisCores, TitleDef,
+  EquipmentAbilityDef, RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
+  SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores, TitleDef,
 } from "./api/types";
 import {
   CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENT_ALLOWED_SLOTS, ELEMENTS, EQUIPMENT_STAT_KINDS,
-  EQUIPMENT_STAT_SHORT, PART_SLOTS, SKILL_DEPENDENCY_LABELS, STAT_KINDS,
+  EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS, STAT_KINDS,
 } from "./labels";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
@@ -52,6 +52,21 @@ export const cloneSienaAura = (src: SienaAura): SienaAura => ({
   slots: src.slots.map((s) => ({ ...s })),
   extras: src.extras.map((e) => ({ ...e })),
 });
+export const neutralSienaAuraList = (): SienaAuraList => ({ registered: [], selected_id: null });
+export const neutralSienaAuras = (): SienaAuras =>
+  Object.fromEntries(SIENA_ALLOWED_SLOTS.map((slot) => [slot, neutralSienaAuraList()])) as unknown as SienaAuras;
+export const cloneRegisteredSienaAura = (src: RegisteredSienaAura): RegisteredSienaAura => ({
+  id: src.id, label: src.label, aura: cloneSienaAura(src.aura),
+});
+export const cloneSienaAuras = (src: SienaAuras): SienaAuras =>
+  Object.fromEntries(SIENA_ALLOWED_SLOTS.map((slot) => [slot, {
+    selected_id: src[slot].selected_id,
+    registered: src[slot].registered.map(cloneRegisteredSienaAura),
+  }])) as unknown as SienaAuras;
+export const selectedSienaAuraRegistration = (list: SienaAuraList): RegisteredSienaAura | null =>
+  list.registered.find((entry) => entry.id === list.selected_id) ?? null;
+export const selectedSienaAura = (list: SienaAuraList): SienaAura | null =>
+  selectedSienaAuraRegistration(list)?.aura ?? null;
 
 /** 増幅段階 = 能力値スロットの数(wiki: 段階ごとに 1 個解放)。 */
 export const sienaStage = (siena: SienaAura): number => siena.slots.length;
@@ -116,7 +131,6 @@ export const neutralEquipmentPart = (): EquipmentPart => ({
   enhance_grade: null,
   abilities: [],
   ability_additions: [],
-  siena: neutralSienaAura(),
   random_options: [],
 });
 
@@ -132,7 +146,6 @@ export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
   enhance_grade: src.enhance_grade,
   abilities: [...src.abilities],
   ability_additions: (src.ability_additions ?? []).map((a) => ({ ...a })),
-  siena: cloneSienaAura(src.siena),
   random_options: (src.random_options ?? []).map((o) => ({ ...o })),
 });
 
@@ -297,7 +310,7 @@ export const randomOptionActualDelayPercent = (
 
 /** シエナのオーラの追加オプションの合計 %(全部位。表示用)。 */
 export const sienaExtraTotal = (equipment: Equipment, kind: SienaExtraKind): number =>
-  PART_SLOTS.reduce((sum, slot) => sum + sienaExtraValue(selectedEquipmentPartOrNeutral(equipment.parts[slot]).siena, kind), 0);
+  SIENA_ALLOWED_SLOTS.reduce((sum, slot) => sum + sienaExtraValue(selectedSienaAura(equipment.siena[slot]) ?? neutralSienaAura(), kind), 0);
 
 /** シエナのオーラの攻撃力増加(New1)の合計 %(表示用)。 */
 export const sienaAttackRatePercent = (equipment: Equipment): number =>
@@ -305,7 +318,7 @@ export const sienaAttackRatePercent = (equipment: Equipment): number =>
 
 /** シエナのオーラのステ加算の合計(全部位・全ステ。表示用)。 */
 export const sienaStatTotal = (equipment: Equipment): number =>
-  PART_SLOTS.reduce((sum, slot) => sum + sienaPartStatTotal(selectedEquipmentPartOrNeutral(equipment.parts[slot]).siena), 0);
+  SIENA_ALLOWED_SLOTS.reduce((sum, slot) => sum + sienaPartStatTotal(selectedSienaAura(equipment.siena[slot]) ?? neutralSienaAura()), 0);
 
 // --- ランダムオプション ---------------------------------------------------
 // 判定・集計は Rust 側(crates/domain/src/random_option.rs)。ここは表示・編集用。
@@ -451,4 +464,4 @@ export const randomOptionRecordOnlyCount = (equipment: Equipment, defs: RandomOp
 
 /** シエナのオーラを発現している部位数(表示用)。 */
 export const sienaPartCount = (equipment: Equipment): number =>
-  PART_SLOTS.filter((slot) => sienaStage(selectedEquipmentPartOrNeutral(equipment.parts[slot]).siena) > 0).length;
+  SIENA_ALLOWED_SLOTS.filter((slot) => sienaStage(selectedSienaAura(equipment.siena[slot]) ?? neutralSienaAura()) > 0).length;

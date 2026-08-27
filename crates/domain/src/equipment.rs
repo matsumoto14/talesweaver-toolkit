@@ -14,7 +14,7 @@ use crate::random_option::{
     RandomOptionDef, RandomOptionError, RandomOptionSlot, RandomOptionTotals,
     RANDOM_OPTION_VALUE_MAX,
 };
-use crate::siena::{SienaAura, SienaError};
+use crate::siena::{SienaAuras, SienaError};
 use crate::stats::StatKind;
 use crate::thesis_core::{CoreRegion, ThesisCoreError, ThesisCores};
 use crate::title::{title_values, TitleDef};
@@ -275,9 +275,6 @@ pub struct EquipmentPart {
     /// 新装着アビリティにランダム付与された追加アビリティ。
     #[serde(default)]
     pub ability_additions: Vec<EquipmentAbilityAdditional>,
-    /// シエナのオーラ(発現できるのは 8 部位。未発現は中立値)
-    #[serde(default)]
-    pub siena: SienaAura,
     /// ランダムオプション(wiki: ランダムオプション)。同じカテゴリーは 1 部位に 1 つまで
     /// (カテゴリー整合性はカタログを引ける `storage` 側で検証する)
     #[serde(default)]
@@ -320,7 +317,6 @@ impl EquipmentPart {
     fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
         self.base.validate()?;
         self.enchant.validate()?;
-        self.siena.validate(slot)?;
         if self.enhance_level > ENHANCE_LEVEL_MAX {
             return Err(EquipmentError::EnhanceLevelOutOfRange {
                 slot,
@@ -513,6 +509,9 @@ pub struct EquipmentAbilityDef {
 pub struct Equipment {
     #[serde(default)]
     pub parts: EquipmentParts,
+    /// 抽出・注入で装備と独立して付け替える、部位別シエナのオーラ登録一覧。
+    #[serde(default)]
+    pub siena: SienaAuras,
     /// テシスコア(地域ごとに 6 枠)。火力タイプの補正は強化能力値へ合流する
     #[serde(default)]
     pub thesis_cores: ThesisCores,
@@ -651,6 +650,7 @@ impl Equipment {
         for (slot, parts) in self.parts.iter_lists() {
             parts.validate(slot)?;
         }
+        self.siena.validate()?;
         self.thesis_cores.validate()?;
         Ok(())
     }
@@ -722,10 +722,12 @@ impl Equipment {
     /// 対象ダンジョン内でのみ有効なので、`None`(コアが効かないコンテンツ)なら加算しない。
     pub fn enhanced_totals(&self, region: Option<CoreRegion>) -> EquipmentValues {
         let mut total = EquipmentValues::default();
-        for (slot, part) in self.iter_selected() {
+        for (_, part) in self.iter_selected() {
             total = total.add(part.enchant);
+        }
+        for (slot, aura) in self.siena.iter_selected() {
             if slot.siena_values_are_equipment() {
-                total = total.add(part.siena.values());
+                total = total.add(aura.values());
             }
         }
         total.add(self.thesis_cores.equipment_values(region))
@@ -748,21 +750,21 @@ impl Equipment {
 
     /// シエナのオーラの追加オプション「攻撃力増加」の合計(wiki: New1)。Σ% の小数表現。
     pub fn siena_attack_rate(&self) -> f64 {
-        self.iter_selected().map(|(_, part)| part.siena.attack_rate_percent()).sum::<f64>()
+        self.siena.iter_selected().map(|(_, aura)| aura.attack_rate_percent()).sum::<f64>()
             / 100.0
     }
 
     /// シエナのオーラの追加オプション「防御力増加」の合計。Σ% の小数表現。
     /// 装備防御力倍率へ合流する(`CommonSkills::defense_rates` の引数)。
     pub fn siena_defense_rate(&self) -> f64 {
-        self.iter_selected().map(|(_, part)| part.siena.defense_rate_percent()).sum::<f64>()
+        self.siena.iter_selected().map(|(_, aura)| aura.defense_rate_percent()).sum::<f64>()
             / 100.0
     }
 
     /// シエナのオーラの追加オプション「中ディレイ減少」の合計。Σ% の小数表現。
     /// 中ディレイ減少値(倍率B)へ合流する(wiki: ステータス「中ディレイ倍率B」)。
     pub fn siena_actual_delay_reduction(&self) -> f64 {
-        self.iter_selected().map(|(_, part)| part.siena.actual_delay_percent()).sum::<f64>()
+        self.siena.iter_selected().map(|(_, aura)| aura.actual_delay_percent()).sum::<f64>()
             / 100.0
     }
 
@@ -772,7 +774,7 @@ impl Equipment {
     /// wiki は「同一名称の効果同士で加算されるかどうかは要検証」としているが、
     /// 他の追加オプション(攻撃力増加・防御力増加・中ディレイ減少)と同じく部位ぶん加算する `[仮]`。
     pub fn siena_critical_rate(&self) -> f64 {
-        self.iter_selected().map(|(_, part)| part.siena.critical_rate_percent()).sum::<f64>()
+        self.siena.iter_selected().map(|(_, aura)| aura.critical_rate_percent()).sum::<f64>()
             / 100.0
     }
 
@@ -790,8 +792,8 @@ impl Equipment {
     /// シエナのオーラによるステ加算の合計(能力値スロット + 全ステータス増加。最終固定値層に乗る)。
     pub fn siena_stat_bonus(&self) -> SienaStatBonus {
         let mut total = SienaStatBonus::default();
-        for (_, part) in self.iter_selected() {
-            total = total.add(part.siena.stat_bonus());
+        for (_, aura) in self.siena.iter_selected() {
+            total = total.add(aura.stat_bonus());
         }
         total
     }
@@ -876,7 +878,10 @@ pub fn weapon_added_damage(weapon_base: &EquipmentValues, rates: &EnhanceRates, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::siena::{SienaExtraKind, SienaExtraSlot, SienaSlot, SienaValueKind, SIENA_STAGE_MAX};
+    use crate::siena::{
+        RegisteredSienaAura, SienaAura, SienaAuraList, SienaExtraKind, SienaExtraSlot, SienaSlot,
+        SienaValueKind, SIENA_STAGE_MAX,
+    };
 
     fn coefficients() -> EquipmentCoefficients {
         EquipmentCoefficients {
@@ -1157,21 +1162,27 @@ mod tests {
         }
     }
 
+    fn set_siena(eq: &mut Equipment, slot: PartSlot, aura: SienaAura) {
+        let list = eq.siena.get_mut(slot).expect("シエナ対象部位");
+        list.registered = vec![RegisteredSienaAura { id: 1, label: String::new(), aura }];
+        list.selected_id = Some(1);
+    }
+
     #[test]
     fn シエナのオーラの能力値は武器と盾だけ強化能力値に入る() {
         let mut eq = Equipment::default();
         eq.parts.weapon.enchant = EquipmentValues { thrust: 10, ..Default::default() };
-        eq.parts.weapon.siena = siena_values(6, 4);
-        eq.parts.shield.siena = siena_values(0, 5);
+        set_siena(&mut eq, PartSlot::Weapon, siena_values(6, 4));
+        set_siena(&mut eq, PartSlot::Shield, siena_values(0, 5));
         // 武器・盾以外はステ加算(装備補正には入らない)
-        eq.parts.helm.siena = SienaAura {
+        set_siena(&mut eq, PartSlot::Helm, SienaAura {
             slots: vec![
                 SienaSlot { kind: SienaValueKind::Stab, value: 10 },
                 SienaSlot { kind: SienaValueKind::Stab, value: 10 },
                 SienaSlot { kind: SienaValueKind::Hack, value: 10 },
             ],
             extras: Vec::new(),
-        };
+        });
         assert!(eq.validate().is_ok());
 
         assert_eq!(
@@ -1196,11 +1207,62 @@ mod tests {
             };
             let mut aura = siena_stage(3, kind);
             aura.extras.push(SienaExtraSlot { kind: SienaExtraKind::AttackRate, value: rate });
-            eq.parts.get_mut(slot).siena = aura;
+            set_siena(&mut eq, slot, aura);
         }
         assert!(eq.validate().is_ok());
         assert!((eq.siena_attack_rate() - 0.15).abs() < 1e-12);
         assert_eq!(Equipment::default().siena_attack_rate(), 0.0);
+    }
+
+    #[test]
+    fn シエナのオーラは登録一覧の装着中だけ反映する() {
+        let mut low = siena_stage(3, SienaValueKind::Thrust);
+        low.extras.push(SienaExtraSlot { kind: SienaExtraKind::AttackRate, value: 3.0 });
+        let mut high = siena_stage(3, SienaValueKind::Thrust);
+        high.extras.push(SienaExtraSlot { kind: SienaExtraKind::AttackRate, value: 9.0 });
+        let mut eq = Equipment::default();
+        eq.siena.weapon = SienaAuraList {
+            registered: vec![
+                RegisteredSienaAura { id: 1, label: "普段用".into(), aura: low },
+                RegisteredSienaAura { id: 2, label: "火力用".into(), aura: high },
+            ],
+            selected_id: Some(2),
+        };
+
+        assert!(eq.validate().is_ok());
+        assert!((eq.siena_attack_rate() - 0.09).abs() < 1e-12);
+        eq.siena.weapon.selected_id = Some(1);
+        assert!((eq.siena_attack_rate() - 0.03).abs() < 1e-12);
+        eq.siena.weapon.selected_id = None;
+        assert_eq!(eq.siena_attack_rate(), 0.0);
+        assert_eq!(eq.siena.weapon.registered.len(), 2);
+    }
+
+    #[test]
+    fn シエナ登録の未知選択idと重複idは拒否する() {
+        let mut eq = Equipment::default();
+        set_siena(&mut eq, PartSlot::Weapon, siena_values(1, 0));
+        eq.siena.weapon.selected_id = Some(2);
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::Siena(SienaError::UnknownSelectedId {
+                slot: PartSlot::Weapon
+            }))
+        ));
+
+        eq.siena.weapon.selected_id = Some(1);
+        eq.siena.weapon.registered.push(RegisteredSienaAura {
+            id: 1,
+            label: "重複".into(),
+            aura: siena_values(1, 0),
+        });
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::Siena(SienaError::DuplicateRegistrationId {
+                slot: PartSlot::Weapon,
+                id: 1
+            }))
+        ));
     }
 
     #[test]
@@ -1209,15 +1271,15 @@ mod tests {
         // 武器・盾も追加オプションは持てる(wiki: 追加オプションは全ての部位で共通)
         let mut weapon = siena_stage(3, SienaValueKind::Thrust);
         weapon.extras.push(SienaExtraSlot { kind: SienaExtraKind::AllStats, value: 30.0 });
-        eq.parts.weapon.siena = weapon;
-        eq.parts.helm.siena = SienaAura {
+        set_siena(&mut eq, PartSlot::Weapon, weapon);
+        set_siena(&mut eq, PartSlot::Helm, SienaAura {
             slots: vec![
                 SienaSlot { kind: SienaValueKind::Stab, value: 10 },
                 SienaSlot { kind: SienaValueKind::Stab, value: 2 },
                 SienaSlot { kind: SienaValueKind::Def, value: 1 },
             ],
             extras: vec![SienaExtraSlot { kind: SienaExtraKind::AllStats, value: 21.0 }],
-        };
+        });
         assert!(eq.validate().is_ok());
 
         // 武器 30 + 兜 21 が全ステに乗り、STAB だけ能力値スロットの 12 が上乗せされる
@@ -1231,17 +1293,9 @@ mod tests {
 
     #[test]
     fn シエナのオーラの部位制約() {
-        // 盾+ / 効果 / AF / レリックは発現できない
-        let mut eq = Equipment::default();
-        eq.parts.shield_plus.siena = siena_values(1, 0);
-        assert!(matches!(
-            eq.validate(),
-            Err(EquipmentError::Siena(SienaError::NotAllowed { slot: PartSlot::ShieldPlus }))
-        ));
-
         // 武器・盾以外は装備補正の能力値を持てない
         let mut eq = Equipment::default();
-        eq.parts.helm.siena = siena_values(1, 0);
+        set_siena(&mut eq, PartSlot::Helm, siena_values(1, 0));
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::Siena(SienaError::KindNotAllowed { slot: PartSlot::Helm, .. }))
@@ -1249,7 +1303,7 @@ mod tests {
 
         // 武器・盾はステ加算を持てない
         let mut eq = Equipment::default();
-        eq.parts.weapon.siena = siena_stage(1, SienaValueKind::Stab);
+        set_siena(&mut eq, PartSlot::Weapon, siena_stage(1, SienaValueKind::Stab));
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::Siena(SienaError::KindNotAllowed { slot: PartSlot::Weapon, .. }))
@@ -1257,7 +1311,7 @@ mod tests {
 
         // 段階(= スロット数)の上限
         let mut eq = Equipment::default();
-        eq.parts.armor.siena = siena_stage(SIENA_STAGE_MAX + 1, SienaValueKind::Stab);
+        set_siena(&mut eq, PartSlot::Armor, siena_stage(SIENA_STAGE_MAX + 1, SienaValueKind::Stab));
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::Siena(SienaError::TooManySlots { .. }))

@@ -9,7 +9,7 @@ import type {
   RegisteredCharacter,
   StatSources,
 } from "./api/types";
-import { cloneEquipmentPart, cloneThesisCores, neutralEquipmentPart, neutralThesisCores } from "./equipment";
+import { cloneEquipmentPart, cloneSienaAuras, cloneThesisCores, neutralEquipmentPart, neutralSienaAuras, neutralThesisCores } from "./equipment";
 import { PART_SLOTS, STAT_KINDS } from "./labels";
 
 /**
@@ -44,6 +44,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   parts: Object.fromEntries(
     PART_SLOTS.map((slot) => [slot, { selected_id: src.parts[slot].selected_id, registered: src.parts[slot].registered.map(cloneEquipmentPart) }]),
   ) as unknown as EquipmentParts,
+  siena: cloneSienaAuras(src.siena),
   thesis_cores: cloneThesisCores(src.thesis_cores),
   title: src.title ?? null,
 });
@@ -51,6 +52,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
 /** 新規登録キャラの装備の初期値(全部位 未装備)。 */
 export const defaultEquipment = (): Equipment => ({
   parts: Object.fromEntries(PART_SLOTS.map((slot) => [slot, { registered: [], selected_id: null } satisfies EquipmentPartList])) as unknown as EquipmentParts,
+  siena: neutralSienaAuras(),
   thesis_cores: neutralThesisCores(),
   title: null,
 });
