@@ -32,8 +32,8 @@ pub use actual_delay::{
     ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
 };
 pub use character_skill::{
-    CharacterSkillCatalog, CharacterSkillDef, CharacterSkillError, CharacterSkills,
-    MasteryOverride, SkillAudience, SkillEffect,
+    damage_contributions, CharacterSkillCatalog, CharacterSkillDef, CharacterSkillError,
+    CharacterSkills, MasteryOverride, SkillAudience, SkillEffect,
 };
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,

@@ -218,7 +218,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>能力値倍率B: 初期 0%、下限 -30%(デバフ側)</li>
 <li>5 つのレイヤー(割合増加/固定値/倍率A/倍率B/最終固定値)それぞれにバフ・アイテムがぶら下がる。同名枠内は重複不可</li>
 <li>レイヤー別バフ一覧(常用バフ 16 件): wiki「ステータス」#jc16a054。カタログの実装は <code>crates/gamedata/src/buffs.rs</code>(型は <code>domain::stat_sources</code>)</li>
-<li>キャラスキル(自身/味方のステ上昇、9 件、<code>BuffGroup::CharacterSkill</code>/<code>AllySkill</code>)の一覧も同じ <code>crates/gamedata/src/buffs.rs</code> に置く。出典は各キャラの wiki <code>Skill/&lt;キャラ&gt;</code> ページ(<a href="../claude/goals/2026-08-21-character-screen-v2.md">docs/claude/goals/2026-08-21-character-screen-v2.md</a>「wiki 調査結果」参照。層の一部は <span class="tag warm">仮</span>)</li>
+<li>キャラスキル(キャラのパッシブ・自己バフ・味方バフ)は <code>crates/gamedata/src/character_skills.rs</code>。効き先(ステ / 中ディレイ / 攻撃ダメージ)が違っても 1 つのカタログにまとめ、マスタリーで値が変わるものは <code>mastery_overrides</code> で持つ(decisions.md「2026-08-27 キャラスキルの器を 1 本にする」)。バフカタログ(<code>buffs.rs</code>)は消費アイテム・イベントの常用バフ専用</li>
 </ul>
 <h3 id="_1">固定値層の供給源(抜粋)</h3>
 <p>出典: ステータス「固定値増加/減少」(取得 2026-08-25)。倍率A の<strong>前</strong>に足される層。</p>
@@ -283,7 +283,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>イスピン エンカレッジ / ロアミニ ア・プチ / パウアトゥン 等</td>
 <td>+10%</td>
-<td>未収録(キャラスキル)</td>
+<td><code>character_skills.rs</code>(キャラスキル)</td>
 </tr>
 <tr>
 <td>ブレイクアーマー・カース・ペンジュラム 等の減少</td>
@@ -509,7 +509,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃ダメージII</td>
 <td><span class="kind rate">割合</span></td>
 <td>初期100%、下限30%、上限300%</td>
-<td>表記は「攻撃ダメージ(vsモンスター/プレイヤー)」</td>
+<td>表記は「攻撃ダメージ(vsモンスター/プレイヤー)」。<strong>体装備</strong>†主天使の羽 / †シグマウィング +25%(要塞占領報酬)</td>
 </tr>
 <tr>
 <td class="sym">N</td>
@@ -523,7 +523,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>物理/魔法ダメージ増加</td>
 <td><span class="kind rate">割合</span></td>
 <td></td>
-<td></td>
+<td><strong>鎧</strong>†リナの服「魔法での与ダメージ +3%」。wiki 注記どおり物理攻撃にも乗るので依存で分けない</td>
 </tr>
 <tr>
 <td class="sym">P</td>
@@ -586,14 +586,56 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃ダメージ(基本発動)(固定値)</td>
 <td><span class="kind fixed">固定値</span></td>
 <td>上限1000</td>
-<td>武器/手アビリティ</td>
+<td><strong>新装着アビリティ</strong>の追加アビリティ「ダメージ増加 +5,000〜10,000」(<code>Item/合成/装着アビリティシステム/新装着アビリティ</code>)。追加アビリティは候補プールから<strong>ランダムに 2 つ</strong>付くので、器はランダムオプションと同じ「枠を選ぶ」形が要る。未収録</td>
 </tr>
 <tr>
 <td class="sym">X</td>
 <td>攻撃ダメージ</td>
 <td><span class="kind rate">割合</span></td>
-<td></td>
-<td>サブカテゴリ合算: X1イザベル(上限+50%)、X2一般(+30%)、X3基本発動(+80%)、X4スキル(+65%)、X5特殊(上限不明)、X6日本独自(+30%)。<strong>ランダムオプション</strong>「攻撃ダメージが X% 増加」(盾・レリック右)がここに入る</td>
+<td>上限は<strong>副カテゴリごと</strong></td>
+<td>X1イザベル(+50%)、X2一般(+30%)、X3基本発動(+80%)、X4スキル(+65%)、X5特殊(wiki は「+??%」= 未記載)、X6日本独自(+30%) の<strong>合算</strong>。親 X 自体に上限は無く、<strong>子に上限を掛けてから足す</strong>(<code>CategoryTotals::value</code>)。X1〜X6 すべてに供給源が入っている</td>
+</tr>
+<tr>
+<td class="sym">X1</td>
+<td>攻撃ダメージ(イザベル)</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限 +50%</td>
+<td>消費アイテム(ユキダルマン族の特製ポーション +20%、イルミネーション祭りのドリンク +10% ほか)</td>
+</tr>
+<tr>
+<td class="sym">X2</td>
+<td>攻撃ダメージ(一般)</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限 +30%</td>
+<td>消費アイテム・バフ・ルーン(覚醒の秘薬 +5%、テイルズウィーバーのエネルギー +5%、狂戦士のルーン +10% ほか)</td>
+</tr>
+<tr>
+<td class="sym">X3</td>
+<td>攻撃ダメージ(基本発動)</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限 +80%</td>
+<td><strong>称号</strong>の無条件「ダメージ n% 増加」(課金箱シリーズ・名誉の証)と、<strong>武器アビリティ R-/L-/E- 段の追加効果</strong>「ダメージ増加 +3/+4/+6%」。手アビリティ(致命打・的中剣)は部位未対応で未収録</td>
+</tr>
+<tr>
+<td class="sym">X4</td>
+<td>攻撃ダメージ(スキル)</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限 +65%</td>
+<td><strong>キャラスキル</strong>(<code>character_skills.rs</code>、49 件)と<strong>マスタリー</strong>(<code>masteries.rs</code>)。マキシミンの極・呪われた魔剣のように、マスタリーでスキルの値が変わるものは <code>mastery_overrides</code> で持つ。キャラページの「マスタリースキル」の節には Ver8.20 前の古い値が残っているので、<strong>数値はカテゴリ表(= スキル性能一覧)を正とする</strong>(decisions.md 2026-08-27)</td>
+</tr>
+<tr>
+<td class="sym">X5</td>
+<td>攻撃ダメージ(特殊)</td>
+<td><span class="kind rate">割合</span></td>
+<td>wiki 未記載</td>
+<td><strong>ランダムオプション</strong>「攻撃ダメージが X% 増加」(サブアーム・レリック右)と、<strong>エフェクト</strong>「装着時攻撃力が3%増加」(幻獣・記念の祝福紋様)。上限が分からないので決め打ちしない。AF「全攻撃ダメージ増加」は wiki が「+x%」で値を書いていないので未収録</td>
+</tr>
+<tr>
+<td class="sym">X6</td>
+<td>攻撃ダメージ(日本独自)</td>
+<td><span class="kind rate">割合</span></td>
+<td>上限 +30%</td>
+<td>消費アイテム(略奪パン +20%、茹でミミック +10%)と、<strong>コラボ装備</strong>の装着時効果(武器 +3%、手 †ゴリラのあーむかばー / †タヌキの手袋 +5%、†イヅツミの手甲 / †リンの手袋 +3%、エフェクト †ロスト +1%)。<strong>エフェクトの「スキル使用時、一定確率で 3% 上昇」も発動前提で入れる</strong>(ユーザー確定 2026-08-27: ほぼ発動する)</td>
 </tr>
 <tr>
 <td class="sym">Y</td>
@@ -856,7 +898,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
     アフェティリア(N) / セリニアコス(H) / キシニク(H) / レリックの聖域20 / レイティアH)。
     AGI だけの敵(アビスヘル 等)は AGI を持つが率は出さない</li>
 <li>スキルの Cri値(<code>Skill::critical_rate</code>)は S5 で収録済み。wiki が <code>-</code> の 28 件では出さない</li>
-<li><strong>クリティカル率増加</strong>(上限 +100%)は値が確定している 3 件だけ収録: 極のルーン +20 / 設計者の研究室 +30 / 致命打 +100。
+<li><strong>クリティカル率増加</strong>(上限 +100%)は値が確定している 3 件だけ収録: 極のルーン +20 / 設計者の研究室(B グループの研究段階 × 3・最大 10 段階 = +30)/ 致命打 +100。
     値が <code>n</code> の「バフ」は<strong>旧仕様なので不要</strong>(ユーザー確定 2026-08-25)</li>
 <li><strong>ペット会心(×1.1)とシエナのオーラは AGI 由来の項に掛かる乗数</strong>で、加算項ではない。
     シエナのオーラの追加オプション「クリティカル確率」(1 部位 0〜10%)を収録済み。

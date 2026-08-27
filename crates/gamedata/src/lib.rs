@@ -34,7 +34,8 @@ pub use elements::{
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
     enhance_multiplier, enhance_multiplier_range, enhance_rates, equipment_abilities,
-    equipment_catalog, find_equipment_item, EquipmentItem, WeaponClass, EQUIPMENT_ABILITY_SOURCE,
+    equipment_catalog, find_equipment_item, item_damage_contributions, EquipmentItem, WeaponClass,
+    EQUIPMENT_ABILITY_SOURCE,
     EQUIPMENT_CATALOG_SOURCE, ENHANCE_SOURCE,
 };
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};

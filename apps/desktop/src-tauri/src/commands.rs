@@ -113,7 +113,8 @@ pub fn list_masteries() -> Vec<domain::MasteryDef> {
     gamedata::mastery_catalog().to_vec()
 }
 
-/// 与ダメージ式のカテゴリへの寄与(キャラスキル + マスタリー + バフ + 装備アビリティ)。
+/// 与ダメージ式のカテゴリへの寄与
+/// (キャラスキル + マスタリー + バフ + 装備アビリティ + 装備アイテムの装着時効果)。
 /// カタログが分かれているのでここでまとめる。
 fn damage_contributions_of(
     sources: &domain::StatSources,
@@ -124,6 +125,7 @@ fn damage_contributions_of(
         &sources.masteries,
     );
     out.extend(equipment.ability_damage_contributions(&gamedata::equipment_abilities()));
+    out.extend(gamedata::item_damage_contributions(equipment));
     out.extend(sources.masteries.damage_contributions(gamedata::mastery_catalog()));
     out.extend(domain::stat_sources::buff_damage_contributions(
         &sources.buffs,

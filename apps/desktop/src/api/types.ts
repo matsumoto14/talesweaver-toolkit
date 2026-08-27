@@ -630,6 +630,8 @@ export interface EquipmentItem {
   enchant_caps: EquipmentValues;
   /** 武器のみ非 null */
   weapon_class: WeaponClass | null;
+  /** 装着時効果(wiki: Item ページ備考の「装着時 …」)。与ダメージ式のカテゴリに入る */
+  damage_effects: SkillEffect[];
   source: Source;
 }
 
