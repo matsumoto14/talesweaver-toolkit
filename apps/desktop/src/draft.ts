@@ -4,7 +4,7 @@ import type {
   BaseStats,
   CommonSkills,
   Equipment,
-  EquipmentParts,
+  EquipmentParts, EquipmentPartList,
   NewCharacter,
   RegisteredCharacter,
   StatSources,
@@ -42,7 +42,7 @@ export interface Draft {
 
 export const cloneEquipment = (src: Equipment): Equipment => ({
   parts: Object.fromEntries(
-    PART_SLOTS.map((slot) => [slot, cloneEquipmentPart(src.parts[slot])]),
+    PART_SLOTS.map((slot) => [slot, { selected_id: src.parts[slot].selected_id, registered: src.parts[slot].registered.map(cloneEquipmentPart) }]),
   ) as unknown as EquipmentParts,
   thesis_cores: cloneThesisCores(src.thesis_cores),
   title: src.title ?? null,
@@ -50,7 +50,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
 
 /** 新規登録キャラの装備の初期値(全部位 未装備)。 */
 export const defaultEquipment = (): Equipment => ({
-  parts: Object.fromEntries(PART_SLOTS.map((slot) => [slot, neutralEquipmentPart()])) as unknown as EquipmentParts,
+  parts: Object.fromEntries(PART_SLOTS.map((slot) => [slot, { registered: [], selected_id: null } satisfies EquipmentPartList])) as unknown as EquipmentParts,
   thesis_cores: neutralThesisCores(),
   title: null,
 });

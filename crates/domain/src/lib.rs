@@ -67,10 +67,11 @@ pub use element::{
 };
 pub use enemy::Enemy;
 pub use equipment::{
-    equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceRates, Equipment,
-    EquipmentAbilityDef, EquipmentAbilityFamily,
-    EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentParts, EquipmentRates,
-    EquipmentValues, PartSlot, SienaStatBonus, ENHANCE_LEVEL_MAX,
+    equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceGrade, EnhanceRates, Equipment,
+    EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef, EquipmentAbilityAdditionalKind,
+    EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentEnhanceType,
+    EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentPartList, EquipmentParts, EquipmentRates,
+    EquipmentValues, PartSlot, SienaStatBonus, ENHANCE_LEVEL_MAX, WEAPON_ABILITY_SLOTS,
     ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
 };
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};

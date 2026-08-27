@@ -559,6 +559,8 @@ export type ThesisCores = Record<CoreRegion, CoreSet>;
 
 // 装備部位 1 つ。crates/domain/src/equipment.rs の EquipmentPart。
 export interface EquipmentPart {
+  id: number;
+  label: string;
   /** カタログ参照(EquipmentItem.id)。null = 未装備またはカスタム */
   item_id: string | null;
   /** カタログ外アイテムの表示名 `[仮]` */
@@ -569,35 +571,41 @@ export interface EquipmentPart {
   enchant: EquipmentValues;
   /** 装備強化 Lv(0..=15)。武器・鎧のみ 0 超を許可 */
   enhance_level: number;
+  /** 固定ダメージ補正式。カタログ品は自動、カタログ外はユーザー選択。 */
+  enhance_type: EquipmentEnhanceType | null;
   /** +12 以上の追加固定ダメージ実測値の上書き。+11 以下は null 固定 */
-  enhance_added_damage: number | null;
+  enhance_grade: EnhanceGrade | null;
   /** 装備アビリティ id(武器のみ非空を許可) */
   abilities: string[];
+  /** カテゴリー4アビリティで実際に抽選された追加アビリティ。 */
+  ability_additions: EquipmentAbilityAdditional[];
   /** シエナのオーラ(発現できるのは 8 部位。未発現は中立値) */
   siena: SienaAura;
-  /** 付与した属性(1 部位 1 属性)。null = 属性なし */
-  element: Element | null;
-  /** 付与した属性値(0..=9) */
-  element_value: number;
   /** ランダムオプション。同じカテゴリーは 1 部位に 1 つまで */
   random_options: RandomOptionSlot[];
 }
 
+export type EnhanceGrade = "lowest" | "low" | "middle" | "high" | "highest";
+export type EquipmentEnhanceType =
+  | "weapon_stab" | "weapon_stab_hack" | "weapon_hack" | "weapon_int" | "weapon_int_hack" | "weapon_mr"
+  | "armor_light" | "armor_heavy" | "armor_magic" | "armor_suit" | "armor_robe";
+export interface EquipmentPartList { registered: EquipmentPart[]; selected_id: number | null; }
+
 // 12 部位。crates/domain/src/equipment.rs の EquipmentParts(named field)。
 export interface EquipmentParts {
-  weapon: EquipmentPart;
-  armor: EquipmentPart;
-  helm: EquipmentPart;
-  shield: EquipmentPart;
-  shield_plus: EquipmentPart;
-  head: EquipmentPart;
-  body: EquipmentPart;
-  hand: EquipmentPart;
-  leg: EquipmentPart;
-  effect: EquipmentPart;
-  artifact: EquipmentPart;
-  relic_pendant: EquipmentPart;
-  relic_bracelet: EquipmentPart;
+  weapon: EquipmentPartList;
+  armor: EquipmentPartList;
+  helm: EquipmentPartList;
+  shield: EquipmentPartList;
+  shield_plus: EquipmentPartList;
+  head: EquipmentPartList;
+  body: EquipmentPartList;
+  hand: EquipmentPartList;
+  leg: EquipmentPartList;
+  effect: EquipmentPartList;
+  artifact: EquipmentPartList;
+  relic_pendant: EquipmentPartList;
+  relic_bracelet: EquipmentPartList;
 }
 
 // 装備補正一式(部位別装備 13 スロット + パワーウェポン/ストロングウェポン)。
@@ -625,6 +633,7 @@ export type WeaponClass =
   | "magic_wand" | "wand" | "magic_gun" | "scepter" | "totem"
   | "great_sword"
   | "holy_staff" | "handbell" | "dual_blade_magic" | "hammer";
+export type WeaponSystem = "stab" | "stab_hack" | "hack" | "int" | "int_hack" | "mr";
 
 // 装備カタログの 1 アイテム。crates/gamedata/src/equipment_catalog.rs の EquipmentItem。
 export interface EquipmentItem {
@@ -639,21 +648,46 @@ export interface EquipmentItem {
   enchant_caps: EquipmentValues;
   /** 武器のみ非 null */
   weapon_class: WeaponClass | null;
+  /** gamedata WeaponSystem。主軸スキルとの候補照合に使う単一ソース。 */
+  weapon_system: WeaponSystem | null;
+  /** 装備強化の固定ダメージ補正式。 */
+  enhance_type: EquipmentEnhanceType | null;
   /** 装着時効果(wiki: Item ページ備考の「装着時 …」)。与ダメージ式のカテゴリに入る */
   damage_effects: SkillEffect[];
   source: Source;
 }
 
-// 武器アビリティの系統。crates/domain/src/equipment.rs の EquipmentAbilityFamily。
-// 同じ系統は 1 部位に 1 つだけ(段が違っても併用できない)。
+// 武器アビリティの効果系統。候補を武器系統へ絞るために使う。
 export type EquipmentAbilityFamily =
-  | "pointed_blade" | "sharp_blade" | "intelligence" | "magic_resistance";
+  | "pointed_blade" | "sharp_blade" | "intelligence" | "magic_resistance" | "weapon_delay";
+export type EquipmentAbilityAdditionalKind =
+  | "fixed_damage" | "damage_rate" | "thrust" | "slash" | "magic_attack" | "magic_defense"
+  | "hp_recovery" | "mp_recovery" | "accuracy";
+export interface EquipmentAbilityAdditional {
+  ability_id: string;
+  kind: EquipmentAbilityAdditionalKind;
+  value: number;
+}
+export interface EquipmentAbilityAdditionalDef {
+  kind: EquipmentAbilityAdditionalKind;
+  min: number;
+  max: number;
+}
 
 // 武器アビリティ定義。crates/domain/src/equipment.rs の EquipmentAbilityDef。
 export interface EquipmentAbilityDef {
+  slot: PartSlot;
+  exclusive_group: string;
+  additional_slots: number;
+  additional_effects: string;
+  additional_options: EquipmentAbilityAdditionalDef[];
+  record_only: boolean;
   family: EquipmentAbilityFamily;
+  /** 同じカテゴリーは同一装備に1つまで。 */
+  category: number;
   id: string;
   name: string;
+  effect_summary: string;
   /** 装備攻撃力(基本能力値)への加算値 */
   values: EquipmentValues;
   /** 追加効果(R- 以上に付く「ダメージ増加 +n%」。カテゴリX3) */
@@ -877,7 +911,6 @@ export interface StatLimits {
   /** 装備強化 Lv 上限(wiki: 装備システム/装備強化。+1〜+15) */
   enhance_level_max: number;
   /** +12 以上の追加固定ダメージ実測値の上限(実用上の安全域)`[仮]` */
-  enhance_added_damage_max: number;
   /** テシスコアの装着枠数 */
   core_slot_count: number;
   core_evolution_max: number;

@@ -22,7 +22,7 @@ use crate::attack_power::{
 };
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
-    PartSlot, ENHANCE_ADDED_DAMAGE_MAX, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
+    PartSlot, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
 };
 use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
 use crate::common_skill::{CommonSkills, STRONG_WEAPON_LEVEL_MAX};
@@ -1013,7 +1013,6 @@ pub struct StatLimits {
     pub strong_weapon_level_max: u8,
     /// 装備強化 Lv 上限(wiki: 装備システム/装備強化。+1〜+15)
     pub enhance_level_max: u8,
-    pub enhance_added_damage_max: i64,
     /// テシスコアの装着枠数(wiki: テシスコア効果)
     pub core_slot_count: usize,
     pub core_evolution_max: u8,
@@ -1068,7 +1067,6 @@ pub fn stat_limits() -> StatLimits {
         equipment_value_max: EQUIPMENT_VALUE_MAX,
         strong_weapon_level_max: STRONG_WEAPON_LEVEL_MAX,
         enhance_level_max: ENHANCE_LEVEL_MAX,
-        enhance_added_damage_max: ENHANCE_ADDED_DAMAGE_MAX,
         core_slot_count: CORE_SLOT_COUNT,
         core_evolution_max: CORE_EVOLUTION_MAX,
         core_enhancement_max: CORE_ENHANCEMENT_MAX,
@@ -1379,11 +1377,13 @@ mod tests {
                         extras: vec![SienaExtraSlot { kind: SienaExtraKind::AllStats, value: 5.0 }],
                     },
                     ..Default::default()
-                },
+                }
+                .into(),
                 hand: EquipmentPart {
                     base: EquipmentValues { thrust: 30, slash: 30, ..Default::default() },
                     ..Default::default()
-                },
+                }
+                .into(),
                 ..Default::default()
             },
             ..Default::default()
@@ -1455,9 +1455,8 @@ mod tests {
         }
         // 何も付いていない部位の寄与は 0、武器の寄与は正
         let weapon = attack.part_contributions.iter().find(|c| c.slot == PartSlot::Weapon).unwrap();
-        let helm = attack.part_contributions.iter().find(|c| c.slot == PartSlot::Helm).unwrap();
         assert!(weapon.value > 0);
-        assert_eq!(helm.value, 0);
+        assert!(attack.part_contributions.iter().all(|c| c.slot != PartSlot::Helm));
     }
 
     #[test]
@@ -1778,6 +1777,5 @@ mod tests {
         assert_eq!(limits.equipment_value_max, EQUIPMENT_VALUE_MAX);
         assert_eq!(limits.strong_weapon_level_max, STRONG_WEAPON_LEVEL_MAX);
         assert_eq!(limits.enhance_level_max, crate::equipment::ENHANCE_LEVEL_MAX);
-        assert_eq!(limits.enhance_added_damage_max, crate::equipment::ENHANCE_ADDED_DAMAGE_MAX);
     }
 }

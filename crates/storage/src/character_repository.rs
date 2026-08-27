@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use domain::{
-    Awakening, BaseStats, BuffCatalog, CharacterSkillCatalog, CommonSkills, Equipment,
-    EquipmentAbilityDef, RandomOptionDef, StatSources, TitleDef,
+    Awakening, BaseStats, BuffCatalog, CharacterSkillCatalog, CommonSkills, EnhanceGrade, Equipment,
+    EquipmentAbilityDef, EquipmentValues, RandomOptionDef, StatSources, TitleDef,
 };
 use gamedata::EquipmentItem;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS characters (
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
 /// v6 で `common_skills` 列が加わった。パワーウェポン / ストロングウェポンは
 /// v5 まで `equipment` 列の中にあり、移行で `common_skills` へ移す。
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id";
 
@@ -169,6 +169,157 @@ fn migrate_relic_to_pendant(conn: &Connection) -> Result<()> {
         parts.insert("relic_pendant".to_string(), relic);
         let migrated = serde_json::to_string(&value)?;
         conn.execute("UPDATE characters SET equipment = ?1 WHERE id = ?2", params![migrated, id])?;
+    }
+    Ok(())
+}
+
+/// v8: 各部位1件の装備を、登録一覧と選択IDへ一度だけ包む。
+fn migrate_equipment_to_registered_lists(conn: &Connection) -> Result<()> {
+    fn classify_old_added_damage(
+        slot: &str,
+        map: &serde_json::Map<String, serde_json::Value>,
+        actual: i64,
+        level: u8,
+    ) -> EnhanceGrade {
+        let values = |key: &str| -> EquipmentValues {
+            map.get(key).cloned().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default()
+        };
+        let values = values("base").add(values("enchant"));
+        let kind = map.get("item_id").and_then(|v| v.as_str()).and_then(gamedata::equipment_enhance_type);
+        let candidate = |grade| {
+            if slot == "weapon" {
+                let rates = kind.and_then(gamedata::enhance_rates_for_type)?;
+                let multiplier = gamedata::enhance_grade_multiplier(level, grade)?;
+                Some(domain::weapon_added_damage(&values, &rates, multiplier))
+            } else if slot == "armor" {
+                let class = kind.and_then(gamedata::armor_class_for_type)?;
+                let multiplier = gamedata::armor_enhance_multiplier(level, Some(grade))?;
+                let rates = gamedata::armor_enhance_rates(class);
+                let correction = values.physical_defense as f64 * rates.physical_defense
+                    + values.magic_defense as f64 * rates.magic_defense;
+                Some((correction.trunc() * multiplier).trunc() as i64)
+            } else { None }
+        };
+        [EnhanceGrade::Lowest, EnhanceGrade::Low, EnhanceGrade::Middle, EnhanceGrade::High, EnhanceGrade::Highest]
+            .into_iter()
+            .filter_map(|grade| candidate(grade).map(|value| (grade, (value - actual).abs())))
+            .min_by_key(|(_, distance)| *distance)
+            .map(|(grade, _)| grade)
+            .unwrap_or(EnhanceGrade::Highest)
+    }
+    fn values_are_zero(value: Option<&serde_json::Value>) -> bool {
+        value
+            .and_then(serde_json::Value::as_object)
+            .is_none_or(|values| values.values().all(|value| value.as_i64().unwrap_or(0) == 0))
+    }
+    fn array_is_empty(value: Option<&serde_json::Value>) -> bool {
+        value.and_then(serde_json::Value::as_array).is_none_or(Vec::is_empty)
+    }
+    fn old_part_is_empty(part: &serde_json::Value) -> bool {
+        let Some(map) = part.as_object() else { return true };
+        map.get("item_id").is_none_or(serde_json::Value::is_null)
+            && map.get("custom_name").is_none_or(|value| {
+                value.is_null() || value.as_str().is_some_and(str::is_empty)
+            })
+            && values_are_zero(map.get("base"))
+            && values_are_zero(map.get("enchant"))
+            && map.get("enhance_level").and_then(serde_json::Value::as_u64).unwrap_or(0) == 0
+            && array_is_empty(map.get("abilities"))
+            && array_is_empty(map.get("random_options"))
+            && map.get("siena").is_none_or(|siena| {
+                array_is_empty(siena.get("slots")) && array_is_empty(siena.get("extras"))
+            })
+    }
+
+    let mut stmt = conn.prepare("SELECT id, equipment FROM characters")?;
+    let rows: Vec<(i64, String)> = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (character_id, json) in rows {
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        let Some(parts) = value.get_mut("parts").and_then(|p| p.as_object_mut()) else { continue };
+        let mut changed = false;
+        for (slot, part) in parts.iter_mut() {
+            if part.get("registered").is_some() { continue; }
+            let mut old = part.take();
+            if old_part_is_empty(&old) {
+                *part = serde_json::json!({ "registered": [], "selected_id": null });
+                changed = true;
+                continue;
+            }
+            if let Some(map) = old.as_object_mut() {
+                map.insert("id".into(), serde_json::json!(1));
+                map.insert("label".into(), serde_json::json!(""));
+                let level = map.get("enhance_level").and_then(|v| v.as_u64()).unwrap_or(0);
+                let old_added_damage = map.get("enhance_added_damage").and_then(|v| v.as_i64());
+                let grade = old_added_damage
+                    .map(|actual| classify_old_added_damage(slot, map, actual, level as u8))
+                    .unwrap_or(EnhanceGrade::Highest);
+                map.remove("enhance_added_damage");
+                map.insert("enhance_grade".into(), if level >= 12 { serde_json::to_value(grade)? } else { serde_json::Value::Null });
+                if let Some(kind) = map.get("item_id").and_then(|v| v.as_str()).and_then(gamedata::equipment_enhance_type) {
+                    map.insert("enhance_type".into(), serde_json::to_value(kind)?);
+                }
+                map.remove("element");
+                map.remove("element_value");
+            }
+            *part = serde_json::json!({ "registered": [old], "selected_id": 1 });
+            changed = true;
+        }
+        if changed {
+            conn.execute("UPDATE characters SET equipment = ?1 WHERE id = ?2", params![serde_json::to_string(&value)?, character_id])?;
+        }
+    }
+    Ok(())
+}
+
+/// 現行カタログから消えた装備アビリティを除去し、補正式メタデータを補完する。
+/// カタログ更新後も装備以外の編集・保存を妨げないため、起動時に冪等に実行する。
+fn migrate_equipment_registration_metadata(conn: &Connection) -> Result<()> {
+    let ability_defs = gamedata::equipment_abilities();
+    let valid_abilities: HashSet<&str> = ability_defs.iter().map(|a| a.id).collect();
+    let mut stmt = conn.prepare("SELECT id, equipment FROM characters")?;
+    let rows: Vec<(i64, String)> = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (character_id, json) in rows {
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        let Some(parts) = value.get_mut("parts").and_then(|p| p.as_object_mut()) else { continue };
+        let mut changed = false;
+        for list in parts.values_mut() {
+            let Some(registered) = list.get_mut("registered").and_then(|v| v.as_array_mut()) else { continue };
+            for part in registered {
+                let Some(map) = part.as_object_mut() else { continue };
+                if let Some(abilities) = map.get_mut("abilities").and_then(|v| v.as_array_mut()) {
+                    let before = abilities.len();
+                    abilities.retain(|id| id.as_str().is_some_and(|id| valid_abilities.contains(id)));
+                    // 旧実装は「効果系統」を排他単位にしていたが、正しくはカテゴリー単位。
+                    // 新定義で同一カテゴリーになった保存値は先頭を残し、武器の3枠までに正規化する。
+                    let mut categories = HashSet::new();
+                    abilities.retain(|id| {
+                        id.as_str()
+                            .and_then(|id| ability_defs.iter().find(|def| def.id == id))
+                            .is_some_and(|def| categories.insert(def.category))
+                    });
+                    abilities.truncate(domain::WEAPON_ABILITY_SLOTS);
+                    changed |= abilities.len() != before;
+                }
+                if map.get("enhance_type").is_none_or(serde_json::Value::is_null) {
+                    if let Some(kind) = map.get("item_id").and_then(|v| v.as_str()).and_then(gamedata::equipment_enhance_type) {
+                        map.insert("enhance_type".into(), serde_json::to_value(kind)?);
+                        changed = true;
+                    }
+                }
+                let level = map.get("enhance_level").and_then(|v| v.as_u64()).unwrap_or(0);
+                if level >= 12 && map.get("enhance_grade").is_none_or(serde_json::Value::is_null) {
+                    map.insert("enhance_grade".into(), serde_json::json!("highest"));
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            conn.execute("UPDATE characters SET equipment = ?1 WHERE id = ?2", params![serde_json::to_string(&value)?, character_id])?;
+        }
     }
     Ok(())
 }
@@ -405,6 +556,8 @@ impl CharacterRepository {
         }
         migrate_equipment_to_parts(&conn)?;
         migrate_relic_to_pendant(&conn)?;
+        migrate_equipment_to_registered_lists(&conn)?;
+        migrate_equipment_registration_metadata(&conn)?;
         migrate_weapon_skills_to_common(&conn)?;
         migrate_removed_buffs(&conn)?;
         migrate_character_skills(&conn)?;
@@ -602,7 +755,8 @@ fn validate_equipment_catalog(
     equipment_abilities: &[EquipmentAbilityDef],
     random_options: &[RandomOptionDef],
 ) -> Result<()> {
-    for (slot, part) in equipment.parts.iter() {
+    for (slot, parts) in equipment.parts.iter_lists() {
+      for part in &parts.registered {
         if let Some(item_id) = &part.item_id {
             let item = equipment_catalog
                 .iter()
@@ -615,20 +769,17 @@ fn validate_equipment_catalog(
                 )));
             }
             let caps = item.enchant_caps;
-            let over = part.enchant.thrust > caps.thrust
-                || part.enchant.slash > caps.slash
-                || part.enchant.magic_attack > caps.magic_attack
-                || part.enchant.magic_defense > caps.magic_defense;
-            if over {
+            if let Some((name, value, cap)) = part.enchant.fields().into_iter()
+                .zip(caps.fields())
+                .find_map(|((name, value), (_, cap))| (value > cap).then_some((name, value, cap)))
+            {
                 return Err(StorageError::InvalidValue(format!(
-                    "装備アイテム '{item_id}' のエンチャントが上限を超えています(上限 突{} 斬{} 魔攻{} 魔防{})",
-                    caps.thrust, caps.slash, caps.magic_attack, caps.magic_defense
+                    "装備アイテム '{item_id}' の{name}エンチャント {value} が上限 {cap} を超えています"
                 )));
             }
         }
-        // アビリティは系統(尖った刃/鋭い刃/知力/耐魔力)ごとに 1 つまで。
-        // 段が違っても同じ系統は併用できない(wiki: 装備システム/アビリティ)。
-        let mut families = HashSet::new();
+        // アビリティはカテゴリーごとに1つまで。同じ攻撃系統でもカテゴリー1と4は併用できる。
+        let mut groups = HashSet::new();
         for ability_id in &part.abilities {
             let def = equipment_abilities
                 .iter()
@@ -636,14 +787,45 @@ fn validate_equipment_catalog(
                 .ok_or_else(|| {
                     StorageError::InvalidValue(format!("未知の装備アビリティ '{ability_id}' です"))
                 })?;
-            if !families.insert(def.family) {
+            if def.slot != slot {
+                return Err(StorageError::InvalidValue(format!("装備アビリティ '{}' は {:?} 用です", def.name, def.slot)));
+            }
+            if !groups.insert(def.exclusive_group) {
                 return Err(StorageError::InvalidValue(format!(
                     "装備アビリティ '{}' は同じ系統がすでに選ばれています(系統ごとに 1 つまで)",
                     def.name
                 )));
             }
         }
+        let mut addition_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for addition in &part.ability_additions {
+            if !part.abilities.iter().any(|id| id == &addition.ability_id) {
+                return Err(StorageError::InvalidValue(format!(
+                    "追加アビリティの親 '{}' が選択されていません", addition.ability_id
+                )));
+            }
+            let def = equipment_abilities.iter().find(|a| a.id == addition.ability_id).ok_or_else(|| {
+                StorageError::InvalidValue(format!("未知の追加アビリティ親 '{}' です", addition.ability_id))
+            })?;
+            let count = addition_counts.entry(def.id).or_default();
+            *count += 1;
+            if *count > usize::from(def.additional_slots) {
+                return Err(StorageError::InvalidValue(format!(
+                    "'{}' の追加アビリティは{}枠までです", def.name, def.additional_slots
+                )));
+            }
+            let option = def.additional_options.iter().find(|o| o.kind == addition.kind).ok_or_else(|| {
+                StorageError::InvalidValue(format!("'{}' には {:?} の追加候補がありません", def.name, addition.kind))
+            })?;
+            if !(option.min..=option.max).contains(&addition.value) {
+                return Err(StorageError::InvalidValue(format!(
+                    "'{}' の追加アビリティ値 {} は {}〜{} の範囲外です",
+                    def.name, addition.value, option.min, option.max
+                )));
+            }
+        }
         validate_random_options(slot, part, random_options)?;
+      }
     }
     Ok(())
 }
@@ -1022,6 +1204,64 @@ mod tests {
     }
 
     #[test]
+    fn v8装備移行は空部位を登録せず実装備だけ選択中にする() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE characters (id INTEGER PRIMARY KEY, equipment TEXT NOT NULL);").unwrap();
+        let old = serde_json::json!({
+            "parts": {
+                "weapon": {
+                    "item_id": null, "custom_name": null, "base": {}, "enchant": {},
+                    "enhance_level": 0, "enhance_added_damage": null,
+                    "abilities": [], "siena": { "slots": [], "extras": [] }, "random_options": []
+                },
+                "armor": {
+                    "item_id": "abyss-armor", "custom_name": null,
+                    "base": { "physical_defense": 280, "magic_defense": 260 }, "enchant": {},
+                    "enhance_level": 15, "enhance_added_damage": 746200,
+                    "abilities": [], "siena": { "slots": [], "extras": [] }, "random_options": []
+                }
+            }
+        });
+        conn.execute("INSERT INTO characters (id, equipment) VALUES (1, ?1)", [old.to_string()]).unwrap();
+
+        migrate_equipment_to_registered_lists(&conn).unwrap();
+        let raw: String = conn.query_row("SELECT equipment FROM characters WHERE id = 1", [], |row| row.get(0)).unwrap();
+        let migrated: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let weapon = &migrated["parts"]["weapon"];
+        assert_eq!(weapon["registered"].as_array().unwrap().len(), 0);
+        assert!(weapon["selected_id"].is_null());
+        let armor = &migrated["parts"]["armor"];
+        assert_eq!(armor["registered"].as_array().unwrap().len(), 1);
+        assert_eq!(armor["selected_id"], 1);
+        assert_eq!(armor["registered"][0]["enhance_grade"], "lowest");
+        assert_eq!(armor["registered"][0]["enhance_type"], "armor_light");
+        assert!(armor["registered"][0].get("enhance_added_damage").is_none());
+    }
+
+    #[test]
+    fn 現行装備メタデータ移行は旧アビリティを除去して保存可能にする() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE characters (id INTEGER PRIMARY KEY, equipment TEXT NOT NULL);").unwrap();
+        let equipment = serde_json::json!({
+            "parts": {
+                "weapon": { "registered": [{
+                    "id": 1, "item_id": "abyss-scimitar", "abilities": ["sharp-blade-high", "night-star-sharp-blade"],
+                    "enhance_level": 12, "enhance_grade": null
+                }], "selected_id": 1 }
+            }
+        });
+        conn.execute("INSERT INTO characters (id, equipment) VALUES (1, ?1)", [equipment.to_string()]).unwrap();
+
+        migrate_equipment_registration_metadata(&conn).unwrap();
+        let raw: String = conn.query_row("SELECT equipment FROM characters WHERE id = 1", [], |row| row.get(0)).unwrap();
+        let migrated: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let weapon = &migrated["parts"]["weapon"]["registered"][0];
+        assert_eq!(weapon["abilities"], serde_json::json!(["night-star-sharp-blade"]));
+        assert_eq!(weapon["enhance_grade"], "highest");
+        assert_eq!(weapon["enhance_type"], "weapon_hack");
+    }
+
+    #[test]
     fn stat_sourcesはjsonで往復する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("メイン");
@@ -1061,7 +1301,7 @@ mod tests {
                     base: EquipmentValues { thrust: 150, slash: 150, magic_attack: 0, magic_defense: 0, ..Default::default() },
                     enchant: EquipmentValues { thrust: 60, slash: 60, magic_attack: 0, magic_defense: 0, ..Default::default() },
                     ..Default::default()
-                },
+                }.into(),
                 ..Default::default()
             },
             ..Default::default()
@@ -1079,7 +1319,7 @@ mod tests {
     }
 
     #[test]
-    fn 同じ系統のアビリティを2つ持つと拒否する() {
+    fn 同じカテゴリーのアビリティを2つ持つと拒否する() {
         use domain::{EquipmentAbilityFamily, EquipmentParts, EquipmentPart};
 
         let repo = CharacterRepository::open_in_memory().unwrap();
@@ -1088,6 +1328,7 @@ mod tests {
                 id: "pointed-blade-low",
                 name: "(下)尖った刃",
                 family: EquipmentAbilityFamily::PointedBlade,
+                category: 1, slot: domain::PartSlot::Weapon, exclusive_group: "weapon-category-1", additional_slots: 0, additional_effects: "", additional_options: vec![], record_only: false, effect_summary: "突き +2",
                 values: domain::EquipmentValues { thrust: 2, ..Default::default() },
             damage_effects: &[],
             },
@@ -1095,14 +1336,16 @@ mod tests {
                 id: "pointed-blade-e",
                 name: "E-尖った刃",
                 family: EquipmentAbilityFamily::PointedBlade,
+                category: 1, slot: domain::PartSlot::Weapon, exclusive_group: "weapon-category-1", additional_slots: 0, additional_effects: "", additional_options: vec![], record_only: false, effect_summary: "突き +9",
                 values: domain::EquipmentValues { thrust: 9, ..Default::default() },
             damage_effects: &[],
             },
             EquipmentAbilityDef {
-                id: "sharp-blade-e",
-                name: "E-鋭い刃",
-                family: EquipmentAbilityFamily::SharpBlade,
-                values: domain::EquipmentValues { slash: 9, ..Default::default() },
+                id: "night-star-pointed-blade",
+                name: "夜星の尖った刃",
+                family: EquipmentAbilityFamily::PointedBlade,
+                category: 4, slot: domain::PartSlot::Weapon, exclusive_group: "weapon-category-4", additional_slots: 2, additional_effects: "", additional_options: vec![], record_only: false, effect_summary: "突き +20",
+                values: domain::EquipmentValues { thrust: 20, ..Default::default() },
             damage_effects: &[],
             },
         ];
@@ -1112,7 +1355,7 @@ mod tests {
                 weapon: EquipmentPart {
                     abilities: vec!["pointed-blade-low".into(), "pointed-blade-e".into()],
                     ..Default::default()
-                },
+                }.into(),
                 ..Default::default()
             },
             ..Default::default()
@@ -1120,8 +1363,8 @@ mod tests {
         let err = repo.create(&c, &[], &[], &abilities, &[], &[], &[]).unwrap_err();
         assert!(err.to_string().contains("系統"), "{err}");
 
-        // 系統が違えば通る
-        c.equipment.parts.weapon.abilities = vec!["pointed-blade-e".into(), "sharp-blade-e".into()];
+        // 同じ突き系統でもカテゴリーが違えば通る
+        c.equipment.parts.weapon.abilities = vec!["pointed-blade-e".into(), "night-star-pointed-blade".into()];
         repo.create(&c, &[], &[], &abilities, &[], &[], &[]).unwrap();
     }
 
@@ -1221,6 +1464,7 @@ mod tests {
             id: "test-ability",
             name: "テストアビリティ",
             family: domain::EquipmentAbilityFamily::PointedBlade,
+            category: 1, slot: domain::PartSlot::Weapon, exclusive_group: "weapon-category-1", additional_slots: 0, additional_effects: "", additional_options: vec![], record_only: false, effect_summary: "突き +2",
             values: domain::EquipmentValues::default(),
             damage_effects: &[],
         }

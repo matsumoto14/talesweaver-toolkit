@@ -22,9 +22,9 @@
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
-    CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityFamily, EquipmentItem, PartSlot,
+    CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityAdditionalKind, EquipmentAbilityFamily, EquipmentItem, PartSlot,
     MasteryDef, PetSkillTier, RandomOptionDef, RandomOptionRank, SienaExtraKind, SienaValueKind,
-    Skill,
+    Skill, SkillDependency, WeaponClass, WeaponSystem,
     StatKind, StatPreview, TitleDef, UltimateSkill,
   } from "../../api/types";
   import { isFixedValue, toggleBuff } from "../../buffs";
@@ -43,7 +43,7 @@
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
-    ABILITY_ALLOWED_SLOTS, ABILITY_FAMILIES, ABILITY_FAMILY_LABELS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
+    ABILITY_ALLOWED_SLOTS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
     CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ELEMENTS,
     ENHANCE_ALLOWED_SLOTS,
     EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT,
@@ -53,6 +53,7 @@
     SIENA_EQUIPMENT_VALUE_SLOTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
     ULTIMATE_SKILLS, ULTIMATE_SKILL_EFFECTS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
+  import type { EquipmentStatKind } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { app } from "../../state.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
@@ -66,6 +67,11 @@
 
   /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
   const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
+  /** 装備で日常的にエンチャントする4補正。ゲーム内の呼び方どおり S/H/I/M を先に並べる。 */
+  const PRIMARY_EQUIPMENT_STATS: EquipmentStatKind[] = ["thrust", "slash", "magic_attack", "magic_defense"];
+  const OTHER_EQUIPMENT_STATS: EquipmentStatKind[] = EQUIPMENT_STAT_KINDS.filter(
+    (kind) => !PRIMARY_EQUIPMENT_STATS.includes(kind),
+  );
 
   /** ほかの補正源から入ってくる分の 1 行。押すとその補正源へ飛ぶ */
   interface ExternalSource {
@@ -314,15 +320,85 @@
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
   let itemQuery = $state("");
+  let editBaseValues = $state(false);
+  let showOtherEquipmentStats = $state(false);
+  const visibleEquipmentStats = $derived(
+    showOtherEquipmentStats ? [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS] : PRIMARY_EQUIPMENT_STATS,
+  );
+  let showAllWeapons = $state(false);
+  let itemPickerOpen = $state(false);
+  const selectedPartOrNull = (slot: PartSlot) => {
+    const list = draft.equipment.parts[slot];
+    return list.registered.find((p) => p.id === list.selected_id) ?? null;
+  };
+  const closeEquipmentOnEscape = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && openPart !== null) openPart = null;
+  };
+  const selectedPart = (slot: PartSlot) => {
+    const list = draft.equipment.parts[slot];
+    let part = list.registered.find((p) => p.id === list.selected_id);
+    if (!part) {
+      part = neutralEquipmentPart();
+      part.id = Math.max(0, ...list.registered.map((p) => p.id)) + 1;
+      list.registered.push(part);
+      list.selected_id = part.id;
+    }
+    return part;
+  };
+  const createEquipmentRegistration = (slot: PartSlot) => {
+    const list = draft.equipment.parts[slot];
+    const next = neutralEquipmentPart();
+    next.id = Math.max(0, ...list.registered.map((p) => p.id)) + 1;
+    next.label = `装備 ${list.registered.length + 1}`;
+    list.registered.push(next); list.selected_id = next.id;
+    itemQuery = "";
+    editBaseValues = false;
+    showOtherEquipmentStats = false;
+    itemPickerOpen = true;
+  };
   const openPartLabel = $derived(openPart ? PART_SLOT_LABELS[openPart] : "");
   const catalogFor = $derived(
     openPart ? app.equipmentCatalog.filter((i) => i.slot === openPart) : [],
   );
-  const filteredCatalog = $derived(
-    itemQuery.trim() === "" ? catalogFor : catalogFor.filter((i) => i.name.includes(itemQuery.trim())),
-  );
+  const weaponSystemsFor = (dependency: SkillDependency | null): WeaponSystem[] => {
+    if (dependency === "stab") return ["stab", "stab_hack"];
+    if (dependency === "hack") return ["hack", "stab_hack", "int_hack"];
+    if (dependency === "int") return ["int", "int_hack"];
+    if (dependency === "mr") return ["mr"];
+    if (dependency === "stab_hack") return ["stab_hack"];
+    if (dependency === "hack_int") return ["int_hack"];
+    return [];
+  };
+  /** 依存能力だけでは刀/太刀/大剣を区別できないスキルの実用武器。 */
+  const weaponClassesForSkill = (skillId: string | undefined): WeaponClass[] => {
+    if (skillId === "boris_continuous") return ["katana"];
+    if (skillId === "boris_blur_sword") return ["tachi"];
+    if (skillId === "boris_ice_attack_sword") return ["great_sword"];
+    return [];
+  };
+  const weaponClassLabel = (weaponClass: WeaponClass): string => {
+    const labels: Partial<Record<WeaponClass, string>> = { katana: "刀", tachi: "太刀", great_sword: "大剣" };
+    return labels[weaponClass] ?? weaponClass;
+  };
+  const weaponFilterLabel = $derived.by(() => {
+    const classes = weaponClassesForSkill(mainSkill?.id);
+    if (classes.length > 0) return `${mainSkill!.name} → ${classes.map(weaponClassLabel).join("・")}`;
+    const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
+    return systems.length > 0 && mainSkill ? `${mainSkill.name}の依存能力に合う武器` : null;
+  });
+  const filteredCatalog = $derived.by(() => {
+    let candidates = itemQuery.trim() === "" ? catalogFor : catalogFor.filter((i) => i.name.includes(itemQuery.trim()));
+    if (openPart !== "weapon") return candidates;
+    const classes = weaponClassesForSkill(mainSkill?.id);
+    const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
+    const matched = classes.length > 0
+      ? candidates.filter((i) => i.weapon_class !== null && classes.includes(i.weapon_class))
+      : candidates.filter((i) => i.weapon_system !== null && systems.includes(i.weapon_system));
+    if (matched.length === 0) return candidates;
+    return showAllWeapons ? [...matched, ...candidates.filter((i) => !matched.includes(i))] : matched;
+  });
   const equippedItem = (slot: PartSlot): EquipmentItem | null => {
-    const itemId = draft.equipment.parts[slot].item_id;
+    const itemId = selectedPartOrNull(slot)?.item_id;
     return itemId ? (app.equipmentCatalog.find((i) => i.id === itemId) ?? null) : null;
   };
   /** 装着時効果の要約。効果なしは null。装備補正値と違って部位の数値には出ないので、
@@ -343,26 +419,31 @@
   const partDisplayName = (slot: PartSlot): string => {
     const item = equippedItem(slot);
     if (item) return item.name;
-    const custom = draft.equipment.parts[slot].custom_name;
+    const custom = selectedPartOrNull(slot)?.custom_name;
     return custom ? `${custom} [仮]` : "未装備";
   };
 
   function pickCatalogItem(slot: PartSlot, item: EquipmentItem) {
-    const part = draft.equipment.parts[slot];
+    const part = selectedPart(slot);
     part.item_id = item.id;
     part.custom_name = null;
-    part.base = midpointValues(item.values_min, item.values_max);
+    part.base = { ...item.values_max };
     part.enchant = clampToCaps(part.enchant, item.enchant_caps);
+    part.enhance_type = item.enhance_type;
     itemQuery = "";
+    itemPickerOpen = false;
   }
   function pickUnequipped(slot: PartSlot) {
-    draft.equipment.parts[slot] = neutralEquipmentPart();
+    draft.equipment.parts[slot].selected_id = null;
     itemQuery = "";
+    itemPickerOpen = false;
   }
   function pickCustom(slot: PartSlot) {
-    const part = draft.equipment.parts[slot];
+    const part = selectedPart(slot);
+    const wasCatalogItem = part.item_id !== null;
     part.item_id = null;
     if (part.custom_name === null) part.custom_name = "";
+    if (wasCatalogItem) part.enhance_type = null;
     itemQuery = "";
   }
 
@@ -370,34 +451,132 @@
   const partContribution = (slot: PartSlot): number | null =>
     preview?.attack?.part_contributions.find((c) => c.slot === slot)?.value ?? null;
 
-  // アビリティは系統(尖った刃 / 鋭い刃 / 知力 / 耐魔力)ごとに 1 つだけ。Select 4 行にして
-  // 排他を構造で保証する(段違いの重複チェックが通ってしまう問題の解消。storage 側も検証する)。
+  // 武器アビリティは3スロット。同じカテゴリーは1つまでだが、同じ攻撃系統でも
+  // カテゴリー1「下級斬り」とカテゴリー4「夜星の鋭い刃」は併用できる。
   const abilityDef = (id: string) => app.equipmentAbilities.find((a) => a.id === id) ?? null;
-  const abilityOptions = (family: EquipmentAbilityFamily) => [
-    { value: "", label: "なし" },
-    ...app.equipmentAbilities.filter((a) => a.family === family).map((a) => ({ value: a.id, label: a.name })),
-  ];
-  /** その部位でこの系統に選ばれているアビリティ id(未選択は "") */
-  const abilityOf = (slot: PartSlot, family: EquipmentAbilityFamily): string =>
-    draft.equipment.parts[slot].abilities.find((id) => abilityDef(id)?.family === family) ?? "";
-  /** 同じ系統の既存選択を必ず 1 つに置き換える(旧データの重複もここで解消される) */
-  function setAbility(slot: PartSlot, family: EquipmentAbilityFamily, id: string) {
-    const part = draft.equipment.parts[slot];
-    const others = part.abilities.filter((a) => abilityDef(a)?.family !== family);
-    part.abilities = id === "" ? others : [...others, id];
+  const abilityFitsWeapon = (family: EquipmentAbilityFamily, system: WeaponSystem | null): boolean => {
+    if (family === "weapon_delay" || system === null) return true;
+    if (system === "stab") return family === "pointed_blade";
+    if (system === "hack") return family === "sharp_blade";
+    if (system === "stab_hack") return family === "pointed_blade" || family === "sharp_blade";
+    if (system === "int") return family === "intelligence";
+    if (system === "int_hack") return family === "sharp_blade" || family === "intelligence";
+    return family === "magic_resistance";
+  };
+  const abilityWeaponSystem = (slot: PartSlot): WeaponSystem | null => {
+    const catalogSystem = equippedItem(slot)?.weapon_system;
+    if (catalogSystem) return catalogSystem;
+    switch (selectedPartOrNull(slot)?.enhance_type) {
+      case "weapon_stab": return "stab";
+      case "weapon_stab_hack": return "stab_hack";
+      case "weapon_hack": return "hack";
+      case "weapon_int": return "int";
+      case "weapon_int_hack": return "int_hack";
+      case "weapon_mr": return "mr";
+      default: return null;
+    }
+  };
+  /** 普段使う候補だけを、シエナのオーラと同じ追加チップとして出す。 */
+  const commonAbilityCandidates = (slot: PartSlot, category: number) => {
+    const system = abilityWeaponSystem(slot);
+    if (system === null && category !== 3) return [];
+    const candidates = app.equipmentAbilities.filter((ability) => {
+      const isCommon = category === 1
+        ? ability.id.startsWith("lower-grade-")
+        : category === 3
+          ? ability.id === "storm-blade"
+          : category === 4 && (
+            ability.id.startsWith("night-star-")
+            || ability.id.startsWith("loss-")
+            || ability.id.startsWith("abyss-")
+          );
+      return isCommon
+      && ability.slot === slot
+      && ability.category === category
+      && abilityFitsWeapon(ability.family, system);
+    });
+    const tierOrder = (id: string) => id.startsWith("night-star-") ? 0 : id.startsWith("loss-") ? 1 : 2;
+    return candidates.sort((a, b) => tierOrder(a.id) - tierOrder(b.id));
+  };
+  const selectedAbilityDefs = (slot: PartSlot) => {
+    const order = [1, 4, 3];
+    return selectedPart(slot).abilities
+      .flatMap((id) => { const ability = abilityDef(id); return ability ? [ability] : []; })
+      .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+  };
+  function addAbility(slot: PartSlot, id: string) {
+    const part = selectedPart(slot);
+    const def = abilityDef(id);
+    if (!def || part.abilities.length >= 3 || part.abilities.some((current) => abilityDef(current)?.category === def.category)) return;
+    part.abilities.push(id);
   }
-  /** 部位詳細を開いたときに、旧データの同系統重複を 1 つへ畳む(保存時に弾かれる値を残さない) */
+  function removeAbility(slot: PartSlot, id: string) {
+    const part = selectedPart(slot);
+    part.abilities = part.abilities.filter((current) => current !== id);
+    part.ability_additions = (part.ability_additions ?? []).filter((addition) => addition.ability_id !== id);
+  }
+  const additionalKindLabel = (kind: EquipmentAbilityAdditionalKind): string => ({
+    fixed_damage: "ダメージ増加", damage_rate: "ダメージ増加率",
+    thrust: "突き攻撃力", slash: "斬り攻撃力", magic_attack: "魔法攻撃力",
+    magic_defense: "魔法防御力", hp_recovery: "HP自然回復力",
+    mp_recovery: "MP自然回復力", accuracy: "命中率補正",
+  }[kind]);
+  const additionsFor = (abilityId: string) =>
+    (selectedPart("weapon").ability_additions ?? []).filter((a) => a.ability_id === abilityId);
+  const additionalAt = (abilityId: string, index: number) => additionsFor(abilityId)[index] ?? null;
+  const addableAdditionalOptions = (abilityId: string) => {
+    const def = abilityDef(abilityId);
+    const used = new Set(additionsFor(abilityId).map((addition) => addition.kind));
+    return (def?.additional_options ?? []).filter(
+      (option) => option.kind !== "hp_recovery" && option.kind !== "mp_recovery" && !used.has(option.kind),
+    );
+  };
+  function addAdditional(abilityId: string, kind: EquipmentAbilityAdditionalKind) {
+    const part = selectedPart("weapon");
+    const current = additionsFor(abilityId);
+    if (current.length >= 2 || current.some((addition) => addition.kind === kind)) return;
+    const option = abilityDef(abilityId)?.additional_options.find((candidate) => candidate.kind === kind);
+    if (!option || option.kind === "hp_recovery" || option.kind === "mp_recovery") return;
+    current.push({ ability_id: abilityId, kind: option.kind, value: option.max });
+    part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId).concat(current.slice(0, 2));
+  }
+  function removeAdditional(abilityId: string, index: number) {
+    const part = selectedPart("weapon");
+    const current = additionsFor(abilityId);
+    current.splice(index, 1);
+    part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId).concat(current);
+  }
+  function setAdditionalValue(abilityId: string, index: number, value: number) {
+    const current = additionalAt(abilityId, index);
+    if (current) current.value = value;
+  }
+  const abilityValueForStat = (slot: PartSlot, kind: EquipmentStatKind): number => {
+    if (slot !== "weapon") return 0;
+    const part = selectedPart(slot);
+    let value = part.abilities.reduce((sum, id) => sum + (abilityDef(id)?.values[kind] ?? 0), 0);
+    const additionKind: Partial<Record<EquipmentStatKind, EquipmentAbilityAdditionalKind>> = {
+      thrust: "thrust", slash: "slash", magic_attack: "magic_attack", magic_defense: "magic_defense", accuracy: "accuracy",
+    };
+    const target = additionKind[kind];
+    if (target) value += (part.ability_additions ?? []).filter((addition) => addition.kind === target).reduce((sum, addition) => sum + addition.value, 0);
+    return value;
+  };
+  /** 部位詳細を開いたときに、旧データの同カテゴリー重複を1つへ畳む。 */
   function openPartDetail(slot: PartSlot) {
-    const part = draft.equipment.parts[slot];
+    const part = selectedPartOrNull(slot);
+    if (!part) { openPart = slot; itemQuery = ""; itemPickerOpen = false; return; }
     const seen = new Set<string>();
     const normalized = part.abilities.filter((id) => {
-      const family = abilityDef(id)?.family;
-      if (family === undefined || seen.has(family)) return false;
-      seen.add(family);
+      const category = abilityDef(id)?.category;
+      if (category === undefined || seen.has(String(category))) return false;
+      seen.add(String(category));
       return true;
-    });
+    }).slice(0, 3);
     if (normalized.length !== part.abilities.length) part.abilities = normalized;
     openPart = slot;
+    itemPickerOpen = false;
+    editBaseValues = false;
+    showOtherEquipmentStats = false;
   }
 
   // --- 称号 ---------------------------------------------------------------
@@ -448,7 +627,7 @@
 
   /** その部位に足せる OP(未選択 かつ カテゴリーが空いているもの) */
   function addableRandomOptions(slot: PartSlot) {
-    const part = draft.equipment.parts[slot];
+    const part = selectedPart(slot);
     const takenIds = new Set(part.random_options.map((o) => o.option_id));
     const takenCategories = new Set(
       part.random_options.map((o) => randomOptionDef(o.option_id)?.category).filter((c) => c !== undefined && c !== 0),
@@ -466,7 +645,7 @@
   let openRandomPart = $state<PartSlot | null>(null);
   /** その部位に付いている OP の要約(行に出す) */
   const randomOptionSummary = (slot: PartSlot): string => {
-    const options = draft.equipment.parts[slot].random_options;
+    const options = selectedPart(slot).random_options;
     if (options.length === 0) return NEUTRAL_RO;
     return options
       .map((o) => randomOptionDef(o.option_id)?.name ?? o.option_id)
@@ -520,14 +699,14 @@
     if (!def || def.tiers.length === 0) return;
     // 既定は一覧のいちばん上位のランク(手持ちがそれ未満なら下げてもらう)
     const rank = def.tiers[def.tiers.length - 1].rank;
-    draft.equipment.parts[slot].random_options = [
-      ...draft.equipment.parts[slot].random_options,
+    selectedPart(slot).random_options = [
+      ...selectedPart(slot).random_options,
       { option_id: id, rank, value: null },
     ];
   }
 
   function removeRandomOption(slot: PartSlot, index: number) {
-    const part = draft.equipment.parts[slot];
+    const part = selectedPart(slot);
     part.random_options = part.random_options.filter((_, i) => i !== index);
   }
 
@@ -553,7 +732,7 @@
 
   /** ランクを変えるとレンジが変わるので、実測の上書きは外して既定(レンジ上限)へ戻す */
   function setRandomOptionRank(slot: PartSlot, index: number, rank: RandomOptionRank) {
-    const option = draft.equipment.parts[slot].random_options[index];
+    const option = selectedPart(slot).random_options[index];
     option.rank = rank;
     option.value = null;
   }
@@ -675,7 +854,7 @@
   });
   /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。表示用 */
   const sienaDefenseRate = $derived(
-    PART_SLOTS.reduce((n, slot) => n + sienaExtraValue(draft.equipment.parts[slot].siena, "defense_rate"), 0),
+    PART_SLOTS.reduce((n, slot) => n + sienaExtraValue(selectedPartOrNull(slot)?.siena ?? neutralEquipmentPart().siena, "defense_rate"), 0),
   );
   const defenseRatePercent = $derived.by(() => {
     const c = draft.commonSkills;
@@ -782,7 +961,7 @@
     {
       id: "equipment",
       name: "装備クリティカル補正",
-      value: PART_SLOTS.reduce((n, slot) => n + draft.equipment.parts[slot].base.critical + draft.equipment.parts[slot].enchant.critical, 0),
+      value: PART_SLOTS.reduce((n, slot) => n + (selectedPartOrNull(slot)?.base.critical ?? 0) + (selectedPartOrNull(slot)?.enchant.critical ?? 0), 0),
       format: (v) => `+${fmtInt(v)}`,
       note: "(装備クリティカル補正 + 1) × 2 の項",
     },
@@ -818,15 +997,30 @@
   );
 
   const enhanceLevelOptions = $derived(
-    Array.from({ length: limits.enhance_level_max + 1 }, (_, lv) => ({
+    [0, 10, 11, 12, 13, 14, 15].map((lv) => ({
       value: String(lv), label: lv === 0 ? "強化なし" : `+${lv}`,
     })),
   );
+  const enhanceGradeOptions = [
+    { value: "lowest", label: "最下" }, { value: "low", label: "下" },
+    { value: "middle", label: "中" }, { value: "high", label: "上" },
+    { value: "highest", label: "最上" },
+  ];
+  const weaponEnhanceTypeOptions = [
+    { value: "", label: "種別を選択" },
+    { value: "weapon_stab", label: "突き系" }, { value: "weapon_stab_hack", label: "物理複合系" },
+    { value: "weapon_hack", label: "斬り系" }, { value: "weapon_int", label: "魔法系" },
+    { value: "weapon_int_hack", label: "魔剣系" }, { value: "weapon_mr", label: "魔法防御系" },
+  ];
+  const armorEnhanceTypeOptions = [
+    { value: "", label: "種別を選択" }, { value: "armor_light", label: "軽鎧" },
+    { value: "armor_heavy", label: "重鎧" }, { value: "armor_magic", label: "魔鎧" },
+    { value: "armor_suit", label: "スーツ" }, { value: "armor_robe", label: "ローブ" },
+  ];
   function setEnhanceLevel(slot: PartSlot, level: number) {
-    const part = draft.equipment.parts[slot];
+    const part = selectedPart(slot);
     part.enhance_level = level;
-    // +11 以下は追加固定ダメージの上書きを許可しない(domain 側の制約に合わせる)
-    if (level < 12) part.enhance_added_damage = null;
+    part.enhance_grade = level >= 12 ? (part.enhance_grade ?? "highest") : null;
   }
 
   // --- シエナのオーラ(部位ごと) ------------------------------------------
@@ -843,10 +1037,10 @@
   const sienaValueDef = (kind: SienaValueKind) => app.siena.values.find((d) => d.kind === kind);
   const sienaExtraDef = (kind: SienaExtraKind) => app.siena.extras.find((d) => d.kind === kind);
   const sienaCapacity = (slot: PartSlot) =>
-    sienaExtraCapacity(draft.equipment.parts[slot].siena, app.siena.extra_unlock_stages);
+    sienaExtraCapacity(selectedPartOrNull(slot)?.siena ?? neutralEquipmentPart().siena, app.siena.extra_unlock_stages);
   /** まだ付いていない追加オプション(wiki: 同じ種類は同じ装備の別スロットには出ない) */
   const sienaAddableExtras = (slot: PartSlot) => {
-    const used = new Set(draft.equipment.parts[slot].siena.extras.map((e) => e.kind));
+    const used = new Set((selectedPartOrNull(slot)?.siena.extras ?? []).map((e) => e.kind));
     return app.siena.extras
       .filter((d) => !used.has(d.kind))
       .sort((a, b) => Number(b.is_modeled) - Number(a.is_modeled));
@@ -858,10 +1052,10 @@
   function addSienaSlot(slot: PartSlot, kind: SienaValueKind) {
     const def = sienaValueDef(kind);
     if (!def) return;
-    draft.equipment.parts[slot].siena.slots.push({ kind, value: def.max });
+    selectedPart(slot).siena.slots.push({ kind, value: def.max });
   }
   function removeSienaSlot(slot: PartSlot, index: number) {
-    const siena = draft.equipment.parts[slot].siena;
+    const siena = selectedPart(slot).siena;
     siena.slots.splice(index, 1);
     // 段階が下がって枠が閉じたら、はみ出た追加オプションも落とす(値だけ残る幽霊状態を作らない)
     const capacity = sienaExtraCapacity(siena, app.siena.extra_unlock_stages);
@@ -870,13 +1064,13 @@
   function addSienaExtra(slot: PartSlot, kind: SienaExtraKind) {
     const def = sienaExtraDef(kind);
     if (!def || def.choices.length === 0) return;
-    draft.equipment.parts[slot].siena.extras.push({
+    selectedPart(slot).siena.extras.push({
       kind,
       value: def.choices[def.choices.length - 1],
     });
   }
   const removeSienaExtra = (slot: PartSlot, index: number) =>
-    draft.equipment.parts[slot].siena.extras.splice(index, 1);
+    selectedPart(slot).siena.extras.splice(index, 1);
 
   // --- 主属性 -------------------------------------------------------------
   // 供給源(ペット / モンスターカード / ルーンスキル / 頭・カフスのアビリティ)は、
@@ -915,20 +1109,9 @@
       });
   });
 
-  // --- 属性強化(部位ごとに 1 属性) --------------------------------------
-  const partElementOptions = [
-    { value: "", label: "属性なし" },
-    ...EQUIPMENT_ELEMENTS.map((e) => ({ value: e, label: ELEMENT_LABELS[e] })),
-  ];
-  function setPartElement(slot: PartSlot, value: string) {
-    const part = draft.equipment.parts[slot];
-    part.element = value === "" ? null : (value as Element);
-    // 属性を外したら値も消す(0 と「属性なし」を食い違わせない)
-    if (part.element === null) part.element_value = 0;
-  }
   /** 部位の行に出す要約。段階はバッジで出しているので、ここでは効き先の合計だけ */
   const sienaSummary = (slot: PartSlot): string => {
-    const siena = draft.equipment.parts[slot].siena;
+    const siena = selectedPartOrNull(slot)?.siena ?? neutralEquipmentPart().siena;
     if (sienaStage(siena) === 0) return "未発現";
     const parts: string[] = [];
     if (sienaIsEquipmentValues(slot)) {
@@ -946,7 +1129,7 @@
   /** 行に出すバッジ。段階 10 だと 13 個になるので上位だけ出し、残りは「+N」で畳む(§00 01) */
   const SIENA_BADGE_MAX = 4;
   const sienaBadges = (slot: PartSlot) => {
-    const siena = draft.equipment.parts[slot].siena;
+    const siena = selectedPartOrNull(slot)?.siena ?? neutralEquipmentPart().siena;
     const rows: { key: string; text: string; title: string; modeled: boolean }[] = [];
     siena.slots.forEach((s, i) => {
       const def = sienaValueDef(s.kind);
@@ -1074,6 +1257,8 @@
   const signed = (n: number) => `${n >= 0 ? "+" : ""}${fmtInt(n)}`;
 </script>
 
+<svelte:window onkeydown={closeEquipmentOnEscape} />
+
 <!-- ランダムオプションの編集(装備の部位詳細と「ランダムOP」ペインで共有する) -->
 <!-- ほかの補正源から入ってくる分。**0 の行も出す** — ここは「この値がどこから来るか」の
      地図でもあるので、入っていない供給源を消すと存在に気づけない。0 の行は薄くする。
@@ -1098,7 +1283,13 @@
 {/snippet}
 
 {#snippet randomOptionEditor(slot: PartSlot)}
-  {@const part = draft.equipment.parts[slot]}
+  {@const part = selectedPartOrNull(slot)}
+  {#if part === null}
+    <div class="empty-note">
+      <span>先にこの部位の装備を登録してください。</span>
+      <button type="button" class="chip" onclick={() => onOpenSource("equipment")}>装備へ ›</button>
+    </div>
+  {:else}
   {#each part.random_options as option, index (option.option_id)}
     {@const def = randomOptionDef(option.option_id)}
     {#if def}
@@ -1139,6 +1330,7 @@
       {#if def.note}<p class="hint dim ro-note">{def.note}</p>{/if}
     {/if}
   {/each}
+  {/if}
 {/snippet}
 
 <!-- 称号候補。依存違いだけの変種は 1 行にまとめ、選ぶのに必要な効果値を同じ行に出す。 -->
@@ -1434,196 +1626,285 @@
     <div class="part-split" class:open={openPart !== null}>
       <div class="part-list">
     {#each PART_SLOTS as slot (slot)}
-      {@const part = draft.equipment.parts[slot]}
+      {@const part = selectedPartOrNull(slot)}
+      {@const list = draft.equipment.parts[slot]}
       {@const canEnhance = ENHANCE_ALLOWED_SLOTS.includes(slot)}
       {@const damageLabel = itemDamageLabel(equippedItem(slot), true)}
       <button type="button" class="part-row" class:on={openPart === slot} onclick={() => openPartDetail(slot)}>
+        <Icon kind="equipment" id={part?.item_id ?? null} size={28} label={partDisplayName(slot)} />
         <span class="part-main">
           <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
           <span class="part-item">{partDisplayName(slot)}</span>
+          <span class="part-abi" use:bump={() => list.registered.length}>登録 {list.registered.length}</span>
           <!-- 強化バッジの枠は常に確保する。出ても行の中身がずれない(§12) -->
           {#if canEnhance}
-            <span class="part-plus" class:on={part.enhance_level > 0}
-            >{part.enhance_level > 0 ? `+${part.enhance_level}` : ""}</span>
+            <span class="part-plus" class:on={(part?.enhance_level ?? 0) > 0}
+            >{(part?.enhance_level ?? 0) > 0 ? `+${part!.enhance_level}` : ""}</span>
           {/if}
-          {#if part.abilities.length > 0}
-            <span class="part-abi">アビリティ {part.abilities.length}</span>
+          {#if (part?.abilities.length ?? 0) > 0}
+            <span class="part-abi">アビリティ {part!.abilities.length}</span>
           {/if}
           <!-- 装着時効果は装備補正値の列に出ないので、行にバッジで残す(§00 ②/⑤) -->
           {#if damageLabel !== null}
             <span class="part-dmg" use:flash={() => damageLabel}>{damageLabel}</span>
           {/if}
-          {#if part.random_options.length > 0}
-            <span class="part-abi">OP {part.random_options.length}</span>
-          {/if}
-          {#if part.element !== null}
-            <span class="part-elem">{ELEMENT_LABELS[part.element]}{part.element_value}</span>
+          {#if (part?.random_options.length ?? 0) > 0}
+            <span class="part-abi">OP {part!.random_options.length}</span>
           {/if}
         </span>
-        <span class="part-vals num dim">{valuesSummary(part.base)}</span>
+        <span class="part-vals num dim">{part ? valuesSummary(part.base) : "—"}</span>
         <span class="chev dim">›</span>
       </button>
+      {#if list.registered.length > 1}
+        <div class="part-switches">
+          {#each list.registered as registered (registered.id)}
+            <button type="button" class:on={registered.id === list.selected_id} onclick={() => (list.selected_id = registered.id)}>
+              <Icon kind="equipment" id={registered.item_id} size={20} label={registered.label || `装備 ${registered.id}`} />
+              {registered.label || app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name || `装備 ${registered.id}`}
+            </button>
+          {/each}
+        </div>
+      {/if}
     {/each}
       </div>
       {#if openPart !== null}
         {@const slot = openPart}
-        {@const part = draft.equipment.parts[slot]}
+        {@const part = selectedPartOrNull(slot)}
         {@const item = equippedItem(slot)}
         {@const contribution = partContribution(slot)}
-        <div class="part-detail pane-in">
-        <button type="button" class="close-detail" onclick={() => (openPart = null)}>✕ この部位を閉じる</button>
-        <div class="contrib-card" class:empty={contribution === null}>
-          <span class="contrib-label">この枠の寄与</span>
-          {#if contribution === null}
-            <span class="contrib-note dim">「キャラステータス」で主軸スキルを選ぶと出ます</span>
-          {:else}
-            <span class="contrib-value num">−{fmtInt(contribution)}</span>
-            <span class="contrib-note dim">外すと攻撃力がこれだけ減ります(テシスコアの地域分を除く)</span>
-          {/if}
+        <div class="equipment-overlay modal-overlay" role="presentation">
+        <div class="part-detail modal-surface pane-in" role="dialog" aria-modal="true" aria-label={`${openPartLabel}の装備登録`}>
+        <div class="part-detail-header">
+          <b>{openPartLabel}の装備登録</b>
+          <button type="button" class="btn close-equipment" onclick={() => (openPart = null)}>閉じる <span aria-hidden="true">×</span></button>
         </div>
-        <div class="card">
-          <div class="card-title">{openPartLabel}: アイテム選択</div>
-          <input
-            class="item-search"
-            type="text"
-            placeholder="装備名で探す"
-            bind:value={itemQuery}
-          />
-          <div class="item-list">
-            <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name === null} onclick={() => pickUnequipped(slot)}>
-              <span class="item-name">未装備</span>
-            </button>
-            {#each filteredCatalog as candidate (candidate.id)}
-              {@const candidateDamage = itemDamageLabel(candidate)}
-              <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
-                <span class="item-name">{candidate.name}</span>
-                {#if candidateDamage !== null}
-                  <span class="part-dmg">{candidateDamage}</span>
-                {/if}
-                <span class="item-vals num dim">
-                  {rangeSummary(candidate.values_min, candidate.values_max)}
-                </span>
-              </button>
-            {/each}
-            <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name !== null} onclick={() => pickCustom(slot)}>
-              <span class="item-name">カスタム(カタログ外)</span>
+        {#if part === null}
+          <div class="card empty"><p class="hint dim">この部位にはまだ装備が登録されていません。</p>
+            <button type="button" class="btn primary" onclick={() => createEquipmentRegistration(slot)}>＋ 新しい装備を登録</button>
+          </div>
+        {:else}
+        <div class="part-actions">
+          <span class="editing-registration badge">編集中: {part.label || `装備 ${part.id}`}</span>
+          <button type="button" class="btn" onclick={() => createEquipmentRegistration(slot)}>＋ 新しい装備を登録</button>
+          <button type="button" class="chip quiet" onclick={() => {
+            const list = draft.equipment.parts[slot];
+            const index = list.registered.findIndex((p) => p.id === list.selected_id);
+            if (index >= 0) list.registered.splice(index, 1);
+            list.selected_id = list.registered[0]?.id ?? null;
+          }}>この登録を削除</button>
+        </div>
+        <div class="card registration-name-card">
+          <label class="text custom-name">
+            <span class="label">登録名 <span class="dim">同じ装備を複数持つときの見分け方</span></span>
+            <input type="text" bind:value={part.label} maxlength="40" placeholder="例: ボス用" />
+          </label>
+        </div>
+
+        <div class="card equipment-choice-card">
+          <div class="selected-equipment">
+            <Icon kind="equipment" id={part.item_id} size={28} label={partDisplayName(slot)} />
+            <span class="selected-equipment-copy">
+              <small class="dim">選択中の装備</small>
+              <b>{partDisplayName(slot)}</b>
+            </span>
+            {#if contribution !== null}<span class="contrib-inline num" use:flash={() => String(contribution)}>寄与 {fmtInt(contribution)}</span>{/if}
+            <button type="button" class="btn" onclick={() => (itemPickerOpen = !itemPickerOpen)}>
+              {itemPickerOpen ? "候補を閉じる" : "装備を変更"}
             </button>
           </div>
-          {#if part.item_id === null && part.custom_name !== null}
-            <label class="text custom-name">
-              <span class="label">表示名 <span class="dim">[仮] 例外操作(カタログ外)</span></span>
-              <input type="text" bind:value={part.custom_name} maxlength="40" placeholder="装備名" />
-            </label>
-          {/if}
-        </div>
-  
-        <div class="card">
-          <div class="values-cols">
-            <div class="values-col">
-              <div class="card-title">基本(装備品ごとに固定)</div>
-              <p class="hint dim">
-                {#if item}wiki レンジ(MR で個体差あり)。上書きは例外操作
-                {:else}カタログ外のため手入力(例外操作)
+          {#if itemPickerOpen}
+            <div class="equipment-picker pane-in">
+              <div class="picker-tools">
+                <input class="item-search" type="text" placeholder="装備名で探す" bind:value={itemQuery} />
+                {#if slot === "weapon" && weaponFilterLabel !== null}
+                  <span class="weapon-filter badge">{weaponFilterLabel}</span>
+                  <button type="button" class="chip quiet" onclick={() => (showAllWeapons = !showAllWeapons)}>
+                    {showAllWeapons ? "主軸向けだけ見る" : "すべて見る"}
+                  </button>
                 {/if}
-              </p>
-              <div class="fields">
-                {#each EQUIPMENT_STAT_KINDS as k (k)}
-                  <!-- 基本値は §12 の形態 1(自動)。装備品を選んだ瞬間に確定する値で、
-                       上限まで盛るものではない。上限(1,000)は入力ミスを防ぐための一律値なので
-                       進捗も MAX も出さない — 出すと「1,000 まで盛れる」と読めてしまう。
-                       MR による個体差で上書きできるので、目安として wiki レンジだけ添える -->
-                  <StatInput
-                    label={EQUIPMENT_STAT_LABELS[k]}
-                    min={0}
-                    max={limits.equipment_value_max}
-                    gauge={false}
-                    bind:value={part.base[k]}
-                    format={item ? () => `wiki ${item.values_min[k]}–${item.values_max[k]}` : undefined}
-                  />
-                {/each}
               </div>
-            </div>
-            <div class="values-col">
-              <div class="card-title">エンチャント(呪文書で伸ばす)</div>
-              <p class="hint dim">上限はアイテム個別(カタログ外は{fmtInt(limits.equipment_value_max)})</p>
-              <div class="fields">
-                {#each EQUIPMENT_STAT_KINDS as k (k)}
-                  {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
-                  <StatInput
-                    label={EQUIPMENT_STAT_LABELS[k]}
-                    min={0}
-                    max={cap}
-                    bind:value={part.enchant[k]}
-                  />
+              <div class="item-list">
+                <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name === null} onclick={() => pickUnequipped(slot)}>
+                  <Icon kind="equipment" id={null} size={28} label="未装備" />
+                  <span class="item-copy"><span class="item-name">未装備</span></span>
+                </button>
+                {#each filteredCatalog as candidate (candidate.id)}
+                  {@const candidateDamage = itemDamageLabel(candidate)}
+                  <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
+                    <Icon kind="equipment" id={candidate.id} size={28} label={candidate.name} />
+                    <span class="item-copy">
+                      <span class="item-name">{candidate.name}</span>
+                      <span class="item-vals num dim">{rangeSummary(candidate.values_min, candidate.values_max)}</span>
+                    </span>
+                    {#if candidateDamage !== null}<span class="part-dmg">{candidateDamage}</span>{/if}
+                  </button>
                 {/each}
+                <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name !== null} onclick={() => pickCustom(slot)}>
+                  <Icon kind="equipment" id={null} size={28} label="カスタム" />
+                  <span class="item-copy"><span class="item-name">カスタム</span><span class="item-vals dim">カタログ外</span></span>
+                </button>
               </div>
-            </div>
-          </div>
-          <p class="hint dim">
-            エンチャントにシエナのオーラとテシスコアの分は含めないでください(それぞれの補正源で入力すると
-            強化能力値に自動で合流します。ここにも入れると二重計上になります)。
-          </p>
-        </div>
-  
-        {#if ELEMENT_ALLOWED_SLOTS.includes(slot)}
-          <div class="card">
-            <div class="card-title">属性強化</div>
-            <p class="hint dim">1 部位につき 1 属性。無属性は付与できません(wiki: 装備システム/属性強化)</p>
-            <div class="fields">
-              <StepSelect
-                label="属性"
-                options={partElementOptions}
-                bind:value={() => part.element ?? "", (v) => setPartElement(slot, v)}
-              />
-              {#if part.element !== null}
-                <StatInput
-                  label="属性値"
-                  min={0}
-                  max={limits.equipment_element_value_max}
-                  bind:value={part.element_value}
-                />
+              {#if part.item_id === null && part.custom_name !== null}
+                <label class="text custom-name">
+                  <span class="label">装備名 <span class="dim">[仮] カタログ外</span></span>
+                  <input type="text" bind:value={part.custom_name} maxlength="40" placeholder="装備名" />
+                </label>
               {/if}
+            </div>
+          {/if}
+        </div>
+
+        <div class="card enchant-card">
+          <div class="card-title inline">
+            <span>エンチャント</span><span class="badge b0">主な入力</span>
+            <button
+              type="button"
+              class="chip quiet"
+              aria-expanded={showOtherEquipmentStats}
+              onclick={() => (showOtherEquipmentStats = !showOtherEquipmentStats)}
+            >{showOtherEquipmentStats ? "その他5補正を閉じる" : "その他5補正"}</button>
+            <button type="button" class="chip quiet base-edit-button" onclick={() => (editBaseValues = !editBaseValues)}>
+              {editBaseValues ? "基本値編集を閉じる" : "基本値を例外編集"}
+            </button>
+          </div>
+          <p class="hint dim">通常は S / H / I / M だけ入力します。数値は 合計(+エンチャント) とアビリティ加算です。</p>
+          <div class="values-paired enchant-first">
+            <div class="value-pair value-head"><b>能力値</b><b>エンチャント</b><span>基本</span><strong>合計（内訳）</strong></div>
+            <div class="value-pair value-head second-head"><b>能力値</b><b>エンチャント</b><span>基本</span><strong>合計（内訳）</strong></div>
+            {#each visibleEquipmentStats as k (k)}
+              {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
+              {@const abilityValue = abilityValueForStat(slot, k)}
+              {@const displayTotal = part.base[k] + part.enchant[k] + abilityValue}
+              <div class="value-pair" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(k)}>
+                <b>{EQUIPMENT_STAT_SHORT[k]}</b>
+                <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" min={0} max={cap} bind:value={part.enchant[k]} />
+                {#if editBaseValues || item === null}
+                  <StatInput label="基本" min={0} max={limits.equipment_value_max} gauge={false} bind:value={part.base[k]} />
+                {:else}
+                  <span class="base-readonly"><small>基本</small><b class="num" use:flash={() => String(part.base[k])}>{part.base[k]}</b></span>
+                {/if}
+                <strong class="value-total num" use:bump={() => displayTotal}>
+                  <span class="total-main">{displayTotal}</span><span class="enchant-part">(+{part.enchant[k]})</span>
+                  {#if abilityValue !== 0}<span class="ability-part">アビ +{abilityValue}</span>{/if}
+                </strong>
+              </div>
+            {/each}
+          </div>
+          <p class="hint dim">シエナのオーラとテシスコアは各専用欄から自動合流します。</p>
+        </div>
+
+        {#if ABILITY_ALLOWED_SLOTS.includes(slot)}
+          <div class="card ability-card">
+            <div class="card-title inline">
+              <span>武器アビリティ</span><span class="badge">{part.abilities.length} / 3</span>
+            </div>
+            <p class="hint dim">同じカテゴリーは1つまで。普段使う候補を押して足し、変更するときは「外す」から選び直します。</p>
+
+            {#if part.abilities.length < 3}
+              <div class="ability-add-groups">
+                {#each [1, 4, 3] as category (category)}
+                  {@const alreadySelected = part.abilities.some((id) => abilityDef(id)?.category === category)}
+                  {@const candidates = alreadySelected ? [] : commonAbilityCandidates(slot, category)}
+                  {#if candidates.length > 0}
+                    <div class="ability-add-group" class:optional={category === 3}>
+                      <span class="ability-category">カテゴリ{category}{category === 3 ? "（任意）" : ""}</span>
+                      <div class="ro-add-row">
+                        {#each candidates as candidate (candidate.id)}
+                          <button type="button" class="chip add" onclick={() => addAbility(slot, candidate.id)}>
+                            ＋ {candidate.name} <span class="chip-effect">{candidate.effect_summary}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+
+            <div class="ability-slots">
+              {#each selectedAbilityDefs(slot) as selectedAbility (selectedAbility.id)}
+                <div class="ability-selected-row swap-in">
+                  <span class="badge">カテゴリ{selectedAbility.category}</span>
+                  <span class="ability-name">{selectedAbility.name}</span>
+                  <span class="ability-effect">{selectedAbility.effect_summary}</span>
+                  <button type="button" class="clear" onclick={() => removeAbility(slot, selectedAbility.id)}>✕ 外す</button>
+                </div>
+                {#if selectedAbility.additional_slots > 0}
+                  <div class="additional-abilities swap-in">
+                    <div class="additional-heading">
+                      <span class="additional-title">ランダム追加</span>
+                      <span class="badge">{additionsFor(selectedAbility.id).length} / 2</span>
+                    </div>
+                    {#if additionsFor(selectedAbility.id).length < 2}
+                      <div class="ro-add-row additional-candidates">
+                        {#each addableAdditionalOptions(selectedAbility.id) as option (option.kind)}
+                          <button type="button" class="chip add" onclick={() => addAdditional(selectedAbility.id, option.kind)}>
+                            ＋ {additionalKindLabel(option.kind)}
+                            <span class="chip-effect">{option.min === option.max ? `+${option.max}` : `+${option.min}〜${option.max}`}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
+                    {#each additionsFor(selectedAbility.id) as additional, additionalIndex (`${additional.kind}-${additionalIndex}`)}
+                      {@const additionalDef = selectedAbility.additional_options.find((option) => option.kind === additional.kind)}
+                      {#if additionalDef}
+                        <div class="additional-row swap-in">
+                          <span class="ro-name">{additionalKindLabel(additional.kind)}</span>
+                          <StatInput
+                            label="{additionalKindLabel(additional.kind)}の値"
+                            min={additionalDef.min}
+                            max={additionalDef.max}
+                            gauge={false}
+                            stepper
+                            bind:value={() => additional.value, (value) => setAdditionalValue(selectedAbility.id, additionalIndex, value)}
+                          />
+                          <button type="button" class="clear" onclick={() => removeAdditional(selectedAbility.id, additionalIndex)}>✕ 外す</button>
+                        </div>
+                      {/if}
+                    {/each}
+                    <span class="additional-note dim">固定ダメージ・割合・攻撃補正・命中だけを表示し、計算へ反映します。</span>
+                  </div>
+                {/if}
+              {/each}
             </div>
           </div>
         {/if}
-  
+
+        {#if ELEMENT_ALLOWED_SLOTS.includes(slot)}
+          <p class="hint dim">属性強化はキャラで選択中の属性を自動で +9 反映します。</p>
+        {/if}
+
         {#if ENHANCE_ALLOWED_SLOTS.includes(slot)}
           <div class="card">
             <div class="card-title">装備強化</div>
+            {#if part.item_id === null && part.custom_name !== null}
+              <Select
+                label="装備種別"
+                options={slot === "weapon" ? weaponEnhanceTypeOptions : armorEnhanceTypeOptions}
+                bind:value={() => part.enhance_type ?? "", (v) => (part.enhance_type = v === "" ? null : v as typeof part.enhance_type)}
+              />
+              <p class="hint dim">固定ダメージの補正式にだけ使います。</p>
+            {/if}
             <StepSelect
               label="強化 Lv"
               options={enhanceLevelOptions}
               bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
             />
-            {#if slot === "armor"}
-              <p class="hint dim">鎧の強化は最大 HP のみに効きます(火力計算には反映されません)。</p>
-            {:else if part.enhance_level >= 12}
-              <label class="check">
-                <input
-                  type="checkbox"
-                  checked={part.enhance_added_damage !== null}
-                  onchange={(e) => (part.enhance_added_damage = e.currentTarget.checked ? 0 : null)}
-                />
-                <span>追加固定ダメージ(ゲーム内表示値)を実測で上書き(未チェックはレンジ上限で自動計算)</span>
-              </label>
-              {#if part.enhance_added_damage !== null}
-                <div class="fields">
-                  <StatInput
-                    label="追加固定ダメージ"
-                    min={0}
-                    max={limits.enhance_added_damage_max}
-                    bind:value={
-                      () => part.enhance_added_damage ?? 0,
-                      (v) => (part.enhance_added_damage = v)
-                    }
-                  />
-                </div>
-              {/if}
+            {#if part.enhance_level > 0 && part.enhance_type === null}
+              <p class="preview-error">装備種別を選ぶと固定ダメージを計算できます。</p>
+            {/if}
+            {#if part.enhance_level >= 12}
+              <StepSelect
+                label="等級"
+                options={enhanceGradeOptions}
+                bind:value={() => part.enhance_grade ?? "highest", (v) => (part.enhance_grade = v as typeof part.enhance_grade)}
+              />
+              <p class="hint dim">等級内の上限値を使用します。倍率の端数は四捨五入します。</p>
             {:else if part.enhance_level > 0}
-              {#if item}
+              {#if part.enhance_type !== null || item}
                 <p class="hint dim">追加固定ダメージは自動計算されます(ダメージ計算タブのトレースに表示)。</p>
               {:else}
-                <p class="hint dim">カタログ外アイテムは追加固定ダメージを自動計算できません(+12 以上にすると実測値を入力できます)。</p>
+                <p class="hint dim">装備種別を選ぶと追加固定ダメージを自動計算します。</p>
               {/if}
             {/if}
           </div>
@@ -1632,29 +1913,12 @@
         {#if RANDOM_OPTION_ALLOWED_SLOTS.includes(slot)}
           <div class="card">
             <div class="card-title">ランダムオプション</div>
-            <p class="hint dim">
-              同じカテゴリーの OP は 1 部位に 1 つだけです(wiki: 転移)。効果値は触らなければレンジ上限で計算します。
-              収録しているのは火力・命中・回避に関係する OP だけで、グレーの枠は<b>記録するだけ</b>で計算には入りません。
-            </p>
-            {@render randomOptionEditor(slot)}
+            <p class="hint dim">登録済み {part.random_options.length}件。ランダムオプションは専用の入力エリアで設定します。</p>
           </div>
         {/if}
   
-        {#if ABILITY_ALLOWED_SLOTS.includes(slot)}
-          <div class="card">
-            <div class="card-title">アビリティ</div>
-            <p class="hint dim">装備攻撃力に効く 4 系統。同じ系統は段が違っても 1 つだけ付きます(武器のみ)</p>
-            <div class="fields">
-              {#each ABILITY_FAMILIES as family (family)}
-                <Select
-                  label={ABILITY_FAMILY_LABELS[family]}
-                  options={abilityOptions(family)}
-                  bind:value={() => abilityOf(slot, family), (id) => setAbility(slot, family, id)}
-                />
-              {/each}
-            </div>
-          </div>
         {/if}
+        </div>
         </div>
       {/if}
     </div>
@@ -1818,7 +2082,7 @@
     <div class="part-split" class:open={openSienaPart !== null}>
       <div class="part-list">
         {#each SIENA_ALLOWED_SLOTS as slot (slot)}
-          {@const siena = draft.equipment.parts[slot].siena}
+          {@const siena = selectedPartOrNull(slot)?.siena ?? neutralEquipmentPart().siena}
           {@const stage = sienaStage(siena)}
           {@const badges = sienaBadges(slot)}
           <button type="button" class="part-row" class:on={openSienaPart === slot} onclick={() => (openSienaPart = slot)}>
@@ -1846,7 +2110,7 @@
       </div>
       {#if openSienaPart !== null}
         {@const slot = openSienaPart}
-        {@const siena = draft.equipment.parts[slot].siena}
+        {@const siena = selectedPartOrNull(slot)?.siena ?? neutralEquipmentPart().siena}
         {@const stage = sienaStage(siena)}
         {@const capacity = sienaCapacity(slot)}
         <div class="part-detail pane-in">
@@ -1975,7 +2239,7 @@
       <div class="part-list">
         {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
           {#if app.randomOptions.some((d) => d.slot === slot)}
-            {@const count = draft.equipment.parts[slot].random_options.length}
+            {@const count = selectedPartOrNull(slot)?.random_options.length ?? 0}
             <button
               type="button"
               class="part-row"
@@ -1987,7 +2251,7 @@
               </span>
               <!-- 付いている OP を短い名前のバッジで並べる。名前をそのまま出すと 1 行に入らない -->
               <span class="ro-badges">
-                {#each draft.equipment.parts[slot].random_options as o (o.option_id)}
+                {#each selectedPartOrNull(slot)?.random_options ?? [] as o (o.option_id)}
                   {@const def = randomOptionDef(o.option_id)}
                   {#if def}
                     <!-- バッジは「何が付いているか」だけ。いくら効いているかは行の要約で出す -->
@@ -2014,10 +2278,10 @@
             {@render randomOptionEditor(slot)}
             <!-- 枠は 1 装備 2 つ。**1 つ目を決めたら 2 つ目の候補を出す** —
                  候補を 2 枠ぶん並べても、実際に選べるのは順番に 1 つずつ(§00 02) -->
-            {#if draft.equipment.parts[slot].random_options.length < randomOptionSlots(slot)}
+            {#if selectedPartOrNull(slot) !== null && (selectedPartOrNull(slot)?.random_options.length ?? 0) < randomOptionSlots(slot)}
               <div class="ro-next swap-in">
                 <span class="ro-next-label">
-                  枠 {draft.equipment.parts[slot].random_options.length + 1}
+                  枠 {(selectedPartOrNull(slot)?.random_options.length ?? 0) + 1}
                   <span class="dim">/ {randomOptionSlots(slot)}</span>
                 </span>
                 {#if commonAddable(slot).length > 0}
@@ -2937,12 +3201,16 @@
   /* 装備ドリルダウン: 部位一覧 */
   /* 装備のドリルダウン(§09 規則 2)。掘るたびに右へペインが増え、前の階層は消えない。
      詳細を開いているときだけ一覧を細くし、値サマリを畳む — 狭いときだけ左から畳む、の形 */
-  .part-split { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+  .part-split { min-width: 0; }
   .part-list { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
   /* シエナは一覧の上に説明カードがあるので、まとめて 1 列にする */
-  .part-split.open .part-list { flex: 0 0 232px; }
-  .part-split.open .part-vals { display: none; }
-  .part-detail { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 9px; }
+  .equipment-overlay { z-index: 90; padding: 3vh max(14px, 6vw); display: flex; justify-content: center; align-items: flex-start; }
+  .part-detail { width: min(980px, 100%); max-height: 94vh; overflow: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .part-detail > .card { padding: 7px 9px; }
+  .part-detail-header { position: sticky; top: 0; z-index: 4; min-height: 42px; margin: 0 -8px; padding: 6px 9px 6px 12px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-rail); border-bottom: 1px solid var(--border-strong); box-shadow: 0 4px 9px rgba(18, 27, 42, .09); }
+  .part-detail-header > b { font-size: 12px; color: var(--fg-sub); }
+  .close-equipment { min-width: 88px; justify-content: center; border-color: var(--border-strong); background: var(--bg-field); font-weight: 700; }
+  .close-equipment span { font-size: 15px; line-height: 1; }
   .part-row {
     display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
@@ -3155,16 +3423,28 @@
   .item-search:focus { outline: none; border-color: var(--accent); }
   /* 変種をまとめた行は 2 段ぶんの高さがあるので、220px だと 3 行しか入らず
      チップが毎回途中で切れる。ペインの下は空いているので伸ばす */
-  .item-list { margin-top: 7px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .item-list { margin-top: 5px; max-height: 300px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px; }
   .item-row {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 7px 9px; border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
+    display: flex; align-items: center; gap: 7px;
+    min-width: 0; min-height: 42px; padding: 5px 7px; border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .item-row:hover { border-color: var(--accent); }
   .item-row.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); }
   .item-name { min-width: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item-vals { flex-shrink: 0; font-size: 9.5px; }
-  .custom-name { margin-top: 9px; }
+  .item-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+  .item-copy .item-vals { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-row .part-dmg { flex-shrink: 0; }
+  .custom-name { margin-top: 6px; }
+  .registration-name-card .custom-name { margin: 0; display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr); align-items: center; gap: 10px; }
+  .selected-equipment { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+  .selected-equipment-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; line-height: 1.15; }
+  .selected-equipment-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .selected-equipment .btn { flex-shrink: 0; }
+  .contrib-inline { flex-shrink: 0; color: var(--fg-sub); font-size: 10px; }
+  .equipment-picker { margin-top: 6px; padding: 6px; border-radius: var(--r-inset); }
+  .picker-tools { display: flex; align-items: center; gap: 6px; }
+  .picker-tools .item-search { flex: 1; }
 
   /* 地域タブの見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
   .tabs { margin-top: 2px; }
@@ -3226,6 +3506,49 @@
   .skill-chip .skill-meta.unknown { background: none; border: 1px dashed var(--border); }
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .part-switches, .part-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 2px 4px; }
+  .part-switches button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--edge-soft); border-radius: var(--r-pill); background: var(--card-soft); padding: 2px 7px 2px 3px; font-size: 10px; }
+  .part-switches button.on { border-color: var(--accent); color: var(--accent-deep); background: var(--s0-bg); }
+  .editing-registration { background: var(--state-temp-bg); border-color: var(--state-temp-bd); color: var(--state-temp-fg); }
+  .values-paired { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; margin-top: 4px; }
+  .value-pair { display: grid; grid-template-columns: minmax(48px, .45fr) minmax(150px, 1.3fr) minmax(78px, .65fr) minmax(102px, .85fr); gap: 5px; align-items: center; }
+  .value-pair.value-head { min-height: 18px; color: var(--fg-muted); font-size: 9px; }
+  .value-pair.value-head b:nth-child(2) { color: var(--accent-deep); }
+  .value-pair.value-head strong { text-align: right; }
+  .value-pair.secondary-stat { opacity: .82; }
+  .base-readonly { min-height: 30px; padding: 3px 7px; border: 1px solid var(--frame); border-radius: var(--r-inset); background: var(--inset); display: flex; align-items: center; justify-content: space-between; }
+  .base-readonly small { color: var(--fg-muted); }
+  .base-edit-button { margin-left: auto; }
+  .value-total { min-width: 102px; display: flex; align-items: baseline; justify-content: flex-end; gap: 2px; white-space: nowrap; text-align: right; color: var(--accent-deep); }
+  .total-main { font-size: 13px; }
+  .enchant-part { font-size: 10px; color: var(--fg-sub); }
+  .ability-part { margin-left: 2px; padding: 1px 4px; border-radius: var(--r-pill); background: var(--surface-inset); color: var(--accent-deep); font-size: 8.5px; }
+  .enchant-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .enchant-card .hint { margin: 4px 0 0; }
+  .ability-card .hint { margin: 3px 0 5px; }
+  .ability-add-groups { margin: 6px 0 8px; display: grid; gap: 5px; }
+  .ability-add-group { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 7px; align-items: start; }
+  .ability-add-group.optional { opacity: .78; }
+  .ability-category { padding-top: 4px; color: var(--fg-muted); font-size: 9px; font-weight: 700; }
+  .ability-add-group .ro-add-row, .additional-candidates { margin: 0; padding: 0; border-bottom: 0; }
+  .chip-effect { margin-left: 4px; color: var(--fg-muted); font-size: 9px; }
+  .ability-slots { display: grid; gap: 5px; }
+  .ability-selected-row { display: grid; grid-template-columns: 72px minmax(150px, .8fr) minmax(130px, 1fr) 52px; gap: 7px; align-items: center; padding: 4px 6px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset); }
+  .ability-name { font-size: 11px; font-weight: 700; }
+  .ability-effect { padding: 4px 7px; border-radius: var(--r-inset); background: var(--inset); color: var(--fg-sub); font-size: 10px; }
+  .ability-card .clear, .additional-abilities .clear { padding: 2px 6px; font-size: 9px; color: var(--danger); background: var(--state-short-bg); border: 1px solid var(--state-short-bd); border-radius: var(--r-pill); white-space: nowrap; }
+  .ability-card .clear:hover, .additional-abilities .clear:hover { background: var(--state-short-bg); color: var(--danger); }
+  .additional-abilities { margin: -1px 0 4px 18px; padding: 7px 9px; display: grid; gap: 5px; border-left: 2px solid var(--accent); background: var(--inset); border-radius: var(--r-inset); }
+  .additional-heading { display: flex; align-items: center; gap: 7px; }
+  .additional-title { font-size: 10px; font-weight: 700; color: var(--accent-deep); }
+  .additional-row { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(260px, 1.3fr) 52px; gap: 7px; align-items: center; padding-top: 4px; border-top: 1px dashed var(--border-soft); }
+  .additional-row > :global(.stepper) { min-width: 0; }
+  .additional-note { font-size: 9px; }
+  .weapon-filter { white-space: nowrap; }
+  @media (max-width: 850px) {
+    .values-paired { grid-template-columns: minmax(0, 1fr); }
+    .second-head { display: none; }
+  }
   .element-auto b { font-size: 13px; }
 
   .stat-rows { margin-top: 8px; display: grid; grid-template-columns: 1fr; gap: 5px; }

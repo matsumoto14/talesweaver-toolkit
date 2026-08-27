@@ -2,7 +2,7 @@
 // 現行のキャラモデル(部位別装備 12 スロット + PW/SW)で実際に表現できる変更だけを挙げる。
 // 効果は preview_damage(Rust 側)で再計算する。ここは候補の列挙(表示)のみ。
 import type { EquipmentItem, NewCharacter } from "./api/types";
-import { clampToCaps, midpointValues, sumValues } from "./equipment";
+import { clampToCaps, selectedEquipmentPartOrNeutral, sumValues } from "./equipment";
 import { limits } from "./limits.svelte";
 import { STATE } from "./ui/states";
 
@@ -49,11 +49,13 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
     });
   }
 
-  const weaponItem = current.equipment.parts.weapon.item_id
-    ? (catalog.find((i) => i.id === current.equipment.parts.weapon.item_id) ?? null)
+  const currentWeapon = selectedEquipmentPartOrNeutral(current.equipment.parts.weapon);
+  const currentArmor = selectedEquipmentPartOrNeutral(current.equipment.parts.armor);
+  const weaponItem = currentWeapon.item_id
+    ? (catalog.find((i) => i.id === currentWeapon.item_id) ?? null)
     : null;
-  const armorItem = current.equipment.parts.armor.item_id
-    ? (catalog.find((i) => i.id === current.equipment.parts.armor.item_id) ?? null)
+  const armorItem = currentArmor.item_id
+    ? (catalog.find((i) => i.id === currentArmor.item_id) ?? null)
     : null;
 
   // カタログ item のときのみ(カスタム・未装備は候補から除外)
@@ -63,8 +65,8 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
       label: "武器と鎧のエンチャントを上限まで",
       cost: "エンチャント",
       apply: (p) => {
-        p.equipment.parts.weapon.enchant = { ...weaponItem.enchant_caps };
-        p.equipment.parts.armor.enchant = { ...armorItem.enchant_caps };
+        selectedEquipmentPartOrNeutral(p.equipment.parts.weapon).enchant = { ...weaponItem.enchant_caps };
+        selectedEquipmentPartOrNeutral(p.equipment.parts.armor).enchant = { ...armorItem.enchant_caps };
       },
     });
   }
@@ -86,10 +88,10 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
         label: `武器を${upgrade.name}に更新`,
         cost: "装備更新",
         apply: (p) => {
-          const weapon = p.equipment.parts.weapon;
+          const weapon = selectedEquipmentPartOrNeutral(p.equipment.parts.weapon);
           weapon.item_id = upgrade.id;
           weapon.custom_name = null;
-          weapon.base = midpointValues(upgrade.values_min, upgrade.values_max);
+          weapon.base = { ...upgrade.values_max };
           // 新アイテムのエンチャント上限まで clamp(SourcePane の pickCatalogItem と同じ扱い。
           // 例: アクィルス(魔攻上限280)→アビス(同100)への更新で検証エラーにならないように)
           weapon.enchant = clampToCaps(weapon.enchant, upgrade.enchant_caps);

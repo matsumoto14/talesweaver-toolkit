@@ -20,7 +20,6 @@ const FALLBACK: StatLimits = {
   equipment_value_max: 1000,
   strong_weapon_level_max: 6,
   enhance_level_max: 15,
-  enhance_added_damage_max: 9999999,
   core_slot_count: 6,
   core_evolution_max: 4,
   core_enhancement_max: 4,

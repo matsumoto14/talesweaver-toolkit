@@ -341,32 +341,47 @@ pub fn get_stat_limits() -> domain::StatLimits {
 /// `item_id` → カタログの `weapon_class` → 系統ごとの補正式、の順で解決する。
 /// - 強化 Lv 0 は 0
 /// - +1〜+11 は確定倍率で式から算出
-/// - +12 以上は `enhance_added_damage`(実測上書き)があればそれ、無ければ**レンジ上限**の倍率で算出
-///   (wiki 装備システム/装備強化「強化数値の再設定」: 再設定呪文書で振り直せるので、
-///   実用上の想定値はレンジの最上値。ユーザー決定 2026-08-25)
-/// - カスタム武器(カタログ外・`weapon_class` 不明)は式で算出できないため `enhance_added_damage ?? 0`
+/// - +12 以上は選択等級の確率区分上端で算出する
 fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     if weapon.enhance_level == 0 {
         return 0;
     }
-    let weapon_class = weapon
-        .item_id
-        .as_deref()
-        .and_then(gamedata::find_equipment_item)
-        .and_then(|item| item.weapon_class);
-    let Some(weapon_class) = weapon_class else {
-        return weapon.enhance_added_damage.unwrap_or(0);
+    let enhance_type = weapon.enhance_type.or_else(|| {
+        weapon.item_id.as_deref().and_then(gamedata::equipment_enhance_type)
+    });
+    let Some(rates) = enhance_type.and_then(gamedata::enhance_rates_for_type) else {
+        return 0;
     };
-    let rates = gamedata::enhance_rates(weapon_class);
+    let values = weapon.base.add(weapon.enchant);
     if let Some(multiplier) = gamedata::enhance_multiplier(weapon.enhance_level) {
-        return domain::weapon_added_damage(&weapon.base, &rates, multiplier);
+        return domain::weapon_added_damage(&values, &rates, multiplier);
     }
-    if let Some(added) = weapon.enhance_added_damage {
-        return added;
-    }
-    let (_min_multiplier, max_multiplier) =
-        gamedata::enhance_multiplier_range(weapon.enhance_level).unwrap_or((0.0, 0.0));
-    domain::weapon_added_damage(&weapon.base, &rates, max_multiplier)
+    let Some(grade) = weapon.enhance_grade else { return 0; };
+    let multiplier = gamedata::enhance_grade_multiplier(weapon.enhance_level, grade).unwrap_or(0.0);
+    domain::weapon_added_damage(&weapon.base.add(weapon.enchant), &rates, multiplier)
+}
+
+fn armor_added_damage(armor: &EquipmentPart) -> i64 {
+    if armor.enhance_level == 0 { return 0; }
+    let enhance_type = armor.enhance_type.or_else(|| {
+        armor.item_id.as_deref().and_then(gamedata::equipment_enhance_type)
+    });
+    let Some(class) = enhance_type.and_then(gamedata::armor_class_for_type) else { return 0; };
+    armor_added_damage_for_class(armor, class)
+}
+
+fn armor_added_damage_for_class(armor: &EquipmentPart, class: gamedata::ArmorClass) -> i64 {
+    let multiplier = gamedata::armor_enhance_multiplier(armor.enhance_level, armor.enhance_grade).unwrap_or(0.0);
+    let values = armor.base.add(armor.enchant);
+    let rates = gamedata::armor_enhance_rates(class);
+    let correction = values.physical_defense as f64 * rates.physical_defense
+        + values.magic_defense as f64 * rates.magic_defense;
+    (correction.trunc() * multiplier).trunc() as i64
+}
+
+fn selected_element(sources: &domain::ElementSources) -> Option<domain::Element> {
+    [sources.pet, sources.monster_card, sources.rune, sources.helm_ability, sources.cuffs_ability]
+        .into_iter().flatten().find(|e| e.can_enchant_equipment())
 }
 
 /// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
@@ -378,7 +393,7 @@ fn element_preview(
 ) -> domain::ElementPreview {
     domain::ElementPreview::new(
         gamedata::element_base(game_character_id),
-        equipment.element_values(),
+        equipment.element_values(selected_element(&stat_sources.elements)),
         stat_sources.elements.values(gamedata::element_source_catalog()),
     )
 }
@@ -436,7 +451,8 @@ fn build_damage_input(
     let equipment_base_totals = equipment.base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog());
     let equipment_enhanced_totals = equipment.enhanced_totals(content.core_region);
     let random_options = equipment.random_option_totals(&gamedata::random_option_catalog());
-    let added_damage = weapon_added_damage(&equipment.parts.weapon);
+    let added_damage = equipment.parts.weapon.selected().map(weapon_added_damage).unwrap_or(0)
+        + equipment.parts.armor.selected().map(armor_added_damage).unwrap_or(0);
     let title_damage_rate =
         domain::title_attack_damage_rate(equipment.title.as_deref(), &gamedata::title_catalog());
     let title_added_damage_rate = domain::title_added_damage_rate(
@@ -446,7 +462,7 @@ fn build_damage_input(
         content.enemy_id.as_deref(),
     );
     let damage_contributions = damage_contributions_of(stat_sources, &equipment);
-    let element_value = element_value_for(game_character_id, &equipment, stat_sources, &skill);
+    let element_value = element_preview(game_character_id, &equipment, stat_sources).total.get(skill.element);
     Ok(DamageInput::new(
         base_stats.clone(),
         stat_modifiers,
@@ -605,7 +621,8 @@ pub fn evaluate_contents(
     // 装備集計(基本能力値・武器追加固定ダメージ)はキャラのみ依存なのでループの外で 1 回だけ計算する。
     let equipment_base_totals = character.equipment.base_totals(&equipment_abilities, &titles);
     let random_option_totals = character.equipment.random_option_totals(&random_options);
-    let added_damage = weapon_added_damage(&character.equipment.parts.weapon);
+    let added_damage = character.equipment.parts.weapon.selected().map(weapon_added_damage).unwrap_or(0)
+        + character.equipment.parts.armor.selected().map(armor_added_damage).unwrap_or(0);
     // 強化能力値はテシスコアの地域で変わるので、地域ごとに 1 回だけ集計してループ内で使い回す
     // (地域は 4 つ + 地域なし。コンテンツごとに再集計すると最重量パスで無駄な再計算になる)。
     let enhanced_totals_of = |region: Option<CoreRegion>| character.equipment.enhanced_totals(region);
@@ -714,15 +731,15 @@ pub fn evaluate_contents(
 
 #[cfg(test)]
 mod tests {
-    use super::weapon_added_damage;
-    use domain::{EquipmentPart, EquipmentValues};
+    use super::{armor_added_damage, armor_added_damage_for_class, weapon_added_damage};
+    use domain::{EnhanceGrade, EquipmentEnhanceType, EquipmentPart, EquipmentValues};
 
     // 刀(HACK系: 斬×6.67 + 突×1.00)・突100/斬300 → INT(300×6.67+100) = 2101
-    fn weapon(item_id: Option<&str>, level: u8, added: Option<i64>) -> EquipmentPart {
+    fn weapon(item_id: Option<&str>, level: u8, grade: Option<EnhanceGrade>) -> EquipmentPart {
         EquipmentPart {
             item_id: item_id.map(String::from),
             enhance_level: level,
-            enhance_added_damage: added,
+            enhance_grade: grade,
             base: EquipmentValues { thrust: 100, slash: 300, ..Default::default() },
             ..Default::default()
         }
@@ -734,9 +751,9 @@ mod tests {
     }
 
     #[test]
-    fn カタログ外武器は上書きが無ければ0_あればその値() {
+    fn カタログ外武器は式を特定できないため0() {
         assert_eq!(weapon_added_damage(&weapon(None, 5, None)), 0);
-        assert_eq!(weapon_added_damage(&weapon(None, 12, Some(12345))), 12345);
+        assert_eq!(weapon_added_damage(&weapon(None, 12, Some(EnhanceGrade::Highest))), 0);
     }
 
     #[test]
@@ -746,11 +763,33 @@ mod tests {
     }
 
     #[test]
-    fn レンジ倍率帯は上書き優先_無ければレンジ上限() {
-        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, Some(311220))), 311220);
+    fn 確定倍率帯もエンチャント込みで算出する() {
+        let mut value = weapon(Some("abyss-scimitar"), 10, None);
+        value.enchant = EquipmentValues { thrust: 10, slash: 20, ..Default::default() };
+        // INT((110 + 320×6.67) × 28.8) = 64,627、奇数なので 64,626
+        assert_eq!(weapon_added_damage(&value), 64_626);
+    }
+
+    #[test]
+    fn レンジ倍率帯は等級上端を使う() {
         // +12 レンジ上限 280 → INT(2101×280) = 588280(偶数)
-        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, None)), 588280);
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 12, Some(EnhanceGrade::Highest))), 588280);
         // +15 レンジ上限 880 → INT(2101×880) = 1848880(偶数)
-        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 15, None)), 1848880);
+        assert_eq!(weapon_added_damage(&weapon(Some("abyss-scimitar"), 15, Some(EnhanceGrade::Highest))), 1848880);
+    }
+
+    #[test]
+    fn 魔鎧15最上は画像の追加固定ダメージになる() {
+        let armor = EquipmentPart {
+            enhance_level: 15,
+            enhance_grade: Some(EnhanceGrade::Highest),
+            enhance_type: Some(EquipmentEnhanceType::ArmorMagic),
+            base: EquipmentValues { physical_defense: 650, magic_defense: 510, ..Default::default() },
+            ..Default::default()
+        };
+        // (650×3.8 + 510×4.0) × 440 = 1,984,400
+        assert_eq!(armor_added_damage_for_class(&armor, gamedata::ArmorClass::Magic), 1_984_400);
+        // カタログ外でも、登録時に選んだ魔鎧種別から本番経路で同じ値になる。
+        assert_eq!(armor_added_damage(&armor), 1_984_400);
     }
 }

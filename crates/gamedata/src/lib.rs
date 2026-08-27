@@ -33,8 +33,10 @@ pub use elements::{
 };
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
-    enhance_multiplier, enhance_multiplier_range, enhance_rates, equipment_abilities,
-    equipment_catalog, find_equipment_item, item_damage_contributions, EquipmentItem, WeaponClass,
+    armor_class, armor_class_for_type, armor_enhance_multiplier, armor_enhance_rates, enhance_grade_multiplier,
+    enhance_multiplier, enhance_multiplier_range, enhance_rates_for_type, equipment_enhance_type,
+    enhance_rates, equipment_abilities, equipment_catalog, find_equipment_item, item_damage_contributions,
+    ArmorClass, ArmorEnhanceRates, EquipmentItem, WeaponClass, WeaponSystem, weapon_system,
     EQUIPMENT_ABILITY_SOURCE,
     EQUIPMENT_CATALOG_SOURCE, ENHANCE_SOURCE,
 };

@@ -9,7 +9,7 @@ use crate::character_skill::{damage_contributions, SkillEffect};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::element::{Element, ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX};
+use crate::element::{Element, ElementValues};
 use crate::random_option::{
     RandomOptionDef, RandomOptionError, RandomOptionSlot, RandomOptionTotals,
     RANDOM_OPTION_VALUE_MAX,
@@ -50,11 +50,22 @@ pub struct EquipmentValues {
 pub const EQUIPMENT_VALUE_MAX: i64 = 1000;
 /// 装備強化の Lv 上限(wiki: 装備システム/装備強化。+1〜+15)。
 pub const ENHANCE_LEVEL_MAX: u8 = 15;
+/// 武器に追加できる装着アビリティのスロット数。
+/// 出典: Item/合成/装着アビリティシステム「種別 / スロット数」(武器 = 3)。
+pub const WEAPON_ABILITY_SLOTS: usize = 3;
 /// +12 以上で追加固定ダメージがレンジ振り(MR)になる境界(wiki: +11 覚醒までは確定値)。
 pub const ENHANCE_LEVEL_RANDOM_RANGE_MIN: u8 = 12;
-/// +12 以上の追加固定ダメージ実測値の上限(wiki に明記なし。+15 最上位帯でも数百万に収まる
-/// 実用上の安全域として暫定採用)`[仮]`。
-pub const ENHANCE_ADDED_DAMAGE_MAX: i64 = 9_999_999;
+/// +12〜+15 の追加固定ダメージ等級。各等級は wiki の確率区分
+/// (10/30/70/95/100%)の上端を使う。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EnhanceGrade { Lowest, Low, Middle, High, Highest }
+
+impl EnhanceGrade {
+    pub fn percentile(self) -> f64 {
+        match self { Self::Lowest => 0.10, Self::Low => 0.30, Self::Middle => 0.70, Self::High => 0.95, Self::Highest => 1.0 }
+    }
+}
 
 impl EquipmentValues {
     /// (表示名, 値)の 9 組。検証・UI ラベル・合計表示の唯一の並び順にする。
@@ -231,6 +242,12 @@ impl SienaStatBonus {
 /// 装備部位 1 つ。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct EquipmentPart {
+    /// キャラ内で不変の登録ID。
+    #[serde(default)]
+    pub id: u64,
+    /// 同名装備を見分ける任意ラベル。
+    #[serde(default)]
+    pub label: String,
     /// gamedata カタログ参照(`EquipmentItem::id`)。`None` = 未装備またはカスタム
     #[serde(default)]
     pub item_id: Option<String>,
@@ -246,21 +263,21 @@ pub struct EquipmentPart {
     /// 装備強化 Lv(0..=15)。武器・鎧以外は 0 のみ許可
     #[serde(default)]
     pub enhance_level: u8,
-    /// +12 以上の追加固定ダメージ実測値の上書き。+11 以下は式で確定するため `None` 固定
+    /// 固定ダメージの補正式。カタログ外装備でもユーザーが種別を選べば計算できる。
     #[serde(default)]
-    pub enhance_added_damage: Option<i64>,
+    pub enhance_type: Option<EquipmentEnhanceType>,
+    /// +12 以上の固定ダメージ等級。+11 以下は式で確定するため `None` 固定。
+    #[serde(default)]
+    pub enhance_grade: Option<EnhanceGrade>,
     /// 装備アビリティ id(武器のみ非空を許可)
     #[serde(default)]
     pub abilities: Vec<String>,
+    /// 新装着アビリティにランダム付与された追加アビリティ。
+    #[serde(default)]
+    pub ability_additions: Vec<EquipmentAbilityAdditional>,
     /// シエナのオーラ(発現できるのは 8 部位。未発現は中立値)
     #[serde(default)]
     pub siena: SienaAura,
-    /// 付与した属性(wiki 装備システム/属性強化「1属性のみ装着可能」)。`None` = 属性なし
-    #[serde(default)]
-    pub element: Option<Element>,
-    /// 付与した属性値(0..=9)。`element` が `None` なら 0
-    #[serde(default)]
-    pub element_value: i64,
     /// ランダムオプション(wiki: ランダムオプション)。同じカテゴリーは 1 部位に 1 つまで
     /// (カテゴリー整合性はカタログを引ける `storage` 側で検証する)
     #[serde(default)]
@@ -268,27 +285,6 @@ pub struct EquipmentPart {
 }
 
 impl EquipmentPart {
-    /// 属性強化(wiki 装備システム/属性強化)。1 部位 1 属性・0〜9・盾+/レリックは対象外。
-    fn validate_element(&self, slot: PartSlot) -> Result<(), EquipmentError> {
-        if !(0..=EQUIPMENT_ELEMENT_VALUE_MAX).contains(&self.element_value) {
-            return Err(EquipmentError::ElementValueOutOfRange {
-                slot,
-                value: self.element_value,
-                max: EQUIPMENT_ELEMENT_VALUE_MAX,
-            });
-        }
-        let Some(element) = self.element else {
-            return Ok(());
-        };
-        if !slot.allows_element() {
-            return Err(EquipmentError::ElementNotAllowed { slot });
-        }
-        if !element.can_enchant_equipment() {
-            return Err(EquipmentError::ElementNeutralNotAllowed { slot });
-        }
-        Ok(())
-    }
-
     /// ランダムオプションの部位制約と値域。カタログ整合性(未知 id・カテゴリー重複)は
     /// カタログを引ける `storage` 側で見る。
     fn validate_random_options(&self, slot: PartSlot) -> Result<(), RandomOptionError> {
@@ -325,7 +321,6 @@ impl EquipmentPart {
         self.base.validate()?;
         self.enchant.validate()?;
         self.siena.validate(slot)?;
-        self.validate_element(slot)?;
         if self.enhance_level > ENHANCE_LEVEL_MAX {
             return Err(EquipmentError::EnhanceLevelOutOfRange {
                 slot,
@@ -336,20 +331,37 @@ impl EquipmentPart {
         if self.enhance_level > 0 && !slot.allows_enhance() {
             return Err(EquipmentError::EnhanceNotAllowed { slot });
         }
-        if self.enhance_added_damage.is_some() && self.enhance_level < ENHANCE_LEVEL_RANDOM_RANGE_MIN {
+        if self.enhance_level > 0 {
+            let Some(kind) = self.enhance_type else {
+                return Err(EquipmentError::EnhanceTypeRequired { slot, enhance_level: self.enhance_level });
+            };
+            let compatible = match slot {
+                PartSlot::Weapon => matches!(kind,
+                    EquipmentEnhanceType::WeaponStab | EquipmentEnhanceType::WeaponStabHack
+                    | EquipmentEnhanceType::WeaponHack | EquipmentEnhanceType::WeaponInt
+                    | EquipmentEnhanceType::WeaponIntHack | EquipmentEnhanceType::WeaponMr),
+                PartSlot::Armor => matches!(kind,
+                    EquipmentEnhanceType::ArmorLight | EquipmentEnhanceType::ArmorHeavy
+                    | EquipmentEnhanceType::ArmorMagic | EquipmentEnhanceType::ArmorSuit
+                    | EquipmentEnhanceType::ArmorRobe),
+                _ => false,
+            };
+            if !compatible { return Err(EquipmentError::EnhanceTypeNotAllowed { slot, kind }); }
+        }
+        if self.enhance_grade.is_some() && self.enhance_level < ENHANCE_LEVEL_RANDOM_RANGE_MIN {
             return Err(EquipmentError::EnhanceAddedDamageNotAllowed { slot, enhance_level: self.enhance_level });
         }
-        if let Some(added) = self.enhance_added_damage {
-            if !(0..=ENHANCE_ADDED_DAMAGE_MAX).contains(&added) {
-                return Err(EquipmentError::EnhanceAddedDamageOutOfRange {
-                    slot,
-                    value: added,
-                    max: ENHANCE_ADDED_DAMAGE_MAX,
-                });
-            }
+        if self.enhance_level >= ENHANCE_LEVEL_RANDOM_RANGE_MIN && self.enhance_grade.is_none() {
+            return Err(EquipmentError::EnhanceGradeRequired { slot, enhance_level: self.enhance_level });
         }
         if !self.abilities.is_empty() && !slot.allows_abilities() {
             return Err(EquipmentError::AbilitiesNotAllowed { slot });
+        }
+        if self.abilities.len() > WEAPON_ABILITY_SLOTS {
+            return Err(EquipmentError::TooManyAbilities {
+                slot,
+                max: WEAPON_ABILITY_SLOTS,
+            });
         }
         self.validate_random_options(slot)?;
         Ok(())
@@ -360,24 +372,28 @@ impl EquipmentPart {
 /// (シエナのオーラの攻撃力増加が % の実数なので `Eq` は導出しない)
 #[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
 pub enum EquipmentError {
+    #[error("{slot:?} の登録装備ID {id} が0または重複しています")]
+    DuplicatePartId { slot: PartSlot, id: u64 },
+    #[error("{slot:?} の選択中装備IDが登録一覧にありません")]
+    UnknownSelectedId { slot: PartSlot },
     #[error("装備補正の{field}は 0〜{max} の範囲で指定してください(指定値 {value})")]
     ValueOutOfRange { field: &'static str, value: i64, max: i64 },
     #[error("{slot:?} の装備強化 Lv は 0〜{max} です(指定値 {value})")]
     EnhanceLevelOutOfRange { slot: PartSlot, value: u8, max: u8 },
     #[error("{slot:?} は装備強化の対象外です(武器・鎧のみ)")]
     EnhanceNotAllowed { slot: PartSlot },
+    #[error("{slot:?} の装備強化 Lv {enhance_level} では装備種別を選んでください")]
+    EnhanceTypeRequired { slot: PartSlot, enhance_level: u8 },
+    #[error("{slot:?} に装備強化種別 {kind:?} は指定できません")]
+    EnhanceTypeNotAllowed { slot: PartSlot, kind: EquipmentEnhanceType },
     #[error("{slot:?} の追加固定ダメージ上書きは強化 Lv {enhance_level} では指定できません(+12 以上のみ)")]
     EnhanceAddedDamageNotAllowed { slot: PartSlot, enhance_level: u8 },
-    #[error("{slot:?} の追加固定ダメージは 0〜{max} の範囲で指定してください(指定値 {value})")]
-    EnhanceAddedDamageOutOfRange { slot: PartSlot, value: i64, max: i64 },
+    #[error("{slot:?} の装備強化 Lv {enhance_level} では等級を選んでください")]
+    EnhanceGradeRequired { slot: PartSlot, enhance_level: u8 },
     #[error("{slot:?} は装備アビリティの対象外です(武器のみ)")]
     AbilitiesNotAllowed { slot: PartSlot },
-    #[error("{slot:?} は属性強化の対象外です(盾+・レリック以外)")]
-    ElementNotAllowed { slot: PartSlot },
-    #[error("無属性は装備に付与できません(火/水/風/土/雷/白/黒のみ)")]
-    ElementNeutralNotAllowed { slot: PartSlot },
-    #[error("{slot:?} の属性値は 0〜{max} です(指定値 {value})")]
-    ElementValueOutOfRange { slot: PartSlot, value: i64, max: i64 },
+    #[error("{slot:?} の装備アビリティは最大 {max} 個です")]
+    TooManyAbilities { slot: PartSlot, max: usize },
     #[error(transparent)]
     ThesisCore(#[from] ThesisCoreError),
     #[error(transparent)]
@@ -386,8 +402,25 @@ pub enum EquipmentError {
     Siena(#[from] SienaError),
 }
 
-/// 武器アビリティの系統(wiki: 装備システム/アビリティ。尖った刃/鋭い刃/知力/耐魔力)。
-/// 同じ系統は 1 部位に 1 つだけ付く(段が違っても併用できない)。
+/// 装備強化の固定ダメージ補正式。カタログ品は自動設定し、カタログ外だけ選択する。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EquipmentEnhanceType {
+    WeaponStab,
+    WeaponStabHack,
+    WeaponHack,
+    WeaponInt,
+    WeaponIntHack,
+    WeaponMr,
+    ArmorLight,
+    ArmorHeavy,
+    ArmorMagic,
+    ArmorSuit,
+    ArmorRobe,
+}
+
+/// 武器アビリティの効果系統。候補を武器の攻撃系統へ絞るために使う。
+/// 排他単位はこの系統ではなく `category`（同じ斬り系でもカテゴリー1と4は併用できる）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EquipmentAbilityFamily {
@@ -399,14 +432,46 @@ pub enum EquipmentAbilityFamily {
     Intelligence,
     /// 耐魔力(魔法防御力)
     MagicResistance,
+    /// 武器ディレイ増減
+    WeaponDelay,
+}
+
+/// 新装着アビリティの追加候補。実物で抽選された種類と値を登録する。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EquipmentAbilityAdditionalKind {
+    FixedDamage,
+    DamageRate,
+    Thrust,
+    Slash,
+    MagicAttack,
+    MagicDefense,
+    HpRecovery,
+    MpRecovery,
+    Accuracy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EquipmentAbilityAdditional {
+    pub ability_id: String,
+    pub kind: EquipmentAbilityAdditionalKind,
+    pub value: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EquipmentAbilityAdditionalDef {
+    pub kind: EquipmentAbilityAdditionalKind,
+    pub min: i32,
+    pub max: i32,
 }
 
 impl EquipmentAbilityFamily {
-    pub const ALL: [EquipmentAbilityFamily; 4] = [
+    pub const ALL: [EquipmentAbilityFamily; 5] = [
         EquipmentAbilityFamily::PointedBlade,
         EquipmentAbilityFamily::SharpBlade,
         EquipmentAbilityFamily::Intelligence,
         EquipmentAbilityFamily::MagicResistance,
+        EquipmentAbilityFamily::WeaponDelay,
     ];
 }
 
@@ -415,8 +480,24 @@ impl EquipmentAbilityFamily {
 pub struct EquipmentAbilityDef {
     pub id: &'static str,
     pub name: &'static str,
-    /// 系統。1 部位につき同じ系統は 1 つまで
+    /// 効果系統。UI の武器別候補絞り込みに使う。
     pub family: EquipmentAbilityFamily,
+    /// 装着カテゴリー。同じカテゴリーは同一装備に1つまで。
+    pub category: u8,
+    /// 適用できる装備部位。
+    pub slot: PartSlot,
+    /// 同じ値は同一装備に共存できない。
+    pub exclusive_group: &'static str,
+    /// ランダムに付く追加アビリティ枠数。
+    pub additional_slots: u8,
+    /// 追加候補の要約。自動適用せず記録のみ。
+    pub additional_effects: &'static str,
+    /// ランダム追加枠に出現し得る種類と値域。
+    pub additional_options: Vec<EquipmentAbilityAdditionalDef>,
+    /// 現在の計算式に未収録の効果か。
+    pub record_only: bool,
+    /// 画面に出す効果要約。計算未収録の効果も空欄にしない。
+    pub effect_summary: &'static str,
     /// 装備攻撃力(基本能力値)への加算値
     pub values: EquipmentValues,
     /// **追加効果**(wiki: アビリティ表の「追加効果」列)。R- 以上の段に付く
@@ -445,36 +526,89 @@ pub struct Equipment {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct EquipmentParts {
     #[serde(default)]
-    pub weapon: EquipmentPart,
+    pub weapon: EquipmentPartList,
     #[serde(default)]
-    pub armor: EquipmentPart,
+    pub armor: EquipmentPartList,
     #[serde(default)]
-    pub helm: EquipmentPart,
+    pub helm: EquipmentPartList,
     #[serde(default)]
-    pub shield: EquipmentPart,
+    pub shield: EquipmentPartList,
     #[serde(default)]
-    pub shield_plus: EquipmentPart,
+    pub shield_plus: EquipmentPartList,
     #[serde(default)]
-    pub head: EquipmentPart,
+    pub head: EquipmentPartList,
     #[serde(default)]
-    pub body: EquipmentPart,
+    pub body: EquipmentPartList,
     #[serde(default)]
-    pub hand: EquipmentPart,
+    pub hand: EquipmentPartList,
     #[serde(default)]
-    pub leg: EquipmentPart,
+    pub leg: EquipmentPartList,
     #[serde(default)]
-    pub effect: EquipmentPart,
+    pub effect: EquipmentPartList,
     #[serde(default)]
-    pub artifact: EquipmentPart,
+    pub artifact: EquipmentPartList,
     #[serde(default)]
-    pub relic_pendant: EquipmentPart,
+    pub relic_pendant: EquipmentPartList,
     #[serde(default)]
-    pub relic_bracelet: EquipmentPart,
+    pub relic_bracelet: EquipmentPartList,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EquipmentPartList {
+    #[serde(default)]
+    pub registered: Vec<EquipmentPart>,
+    #[serde(default)]
+    pub selected_id: Option<u64>,
+}
+
+impl Default for EquipmentPartList {
+    fn default() -> Self { Self { registered: Vec::new(), selected_id: None } }
+}
+
+impl From<EquipmentPart> for EquipmentPartList {
+    fn from(mut part: EquipmentPart) -> Self {
+        if part.id == 0 { part.id = 1; }
+        let id = part.id;
+        Self { registered: vec![part], selected_id: Some(id) }
+    }
+}
+
+impl std::ops::Deref for EquipmentPartList {
+    type Target = EquipmentPart;
+    fn deref(&self) -> &Self::Target { self.selected().expect("EquipmentPartList selected_id invariant") }
+}
+impl std::ops::DerefMut for EquipmentPartList {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        if self.selected().is_none() {
+            let id = self.registered.iter().map(|p| p.id).max().unwrap_or(0) + 1;
+            let mut part = EquipmentPart::default(); part.id = id;
+            self.registered.push(part); self.selected_id = Some(id);
+        }
+        self.selected_mut().expect("EquipmentPartList selected_id invariant")
+    }
+}
+
+impl EquipmentPartList {
+    pub fn selected(&self) -> Option<&EquipmentPart> { self.selected_id.and_then(|id| self.registered.iter().find(|p| p.id == id)) }
+    pub fn selected_mut(&mut self) -> Option<&mut EquipmentPart> { let id = self.selected_id?; self.registered.iter_mut().find(|p| p.id == id) }
+    pub fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
+        if self.selected_id.is_some() && self.selected().is_none() { return Err(EquipmentError::UnknownSelectedId { slot }); }
+        let mut ids = std::collections::HashSet::new();
+        for part in &self.registered {
+            if part.id == 0 || !ids.insert(part.id) { return Err(EquipmentError::DuplicatePartId { slot, id: part.id }); }
+            part.validate(slot)?;
+        }
+        Ok(())
+    }
 }
 
 impl EquipmentParts {
+    /// 選択中の部位だけを列挙する。
+    pub fn iter(&self) -> Vec<(PartSlot, &EquipmentPart)> {
+        self.iter_lists().into_iter().filter_map(|(slot, parts)| parts.selected().map(|p| (slot, p))).collect()
+    }
     /// 13 部位を `(PartSlot, &EquipmentPart)` で列挙する。
-    pub fn iter(&self) -> [(PartSlot, &EquipmentPart); 13] {
+    pub fn iter_lists(&self) -> [(PartSlot, &EquipmentPartList); 13] {
         [
             (PartSlot::Weapon, &self.weapon),
             (PartSlot::Armor, &self.armor),
@@ -493,7 +627,7 @@ impl EquipmentParts {
     }
 
     /// 部位を可変で引く。
-    pub fn get_mut(&mut self, slot: PartSlot) -> &mut EquipmentPart {
+    pub fn get_mut(&mut self, slot: PartSlot) -> &mut EquipmentPartList {
         match slot {
             PartSlot::Weapon => &mut self.weapon,
             PartSlot::Armor => &mut self.armor,
@@ -514,8 +648,8 @@ impl EquipmentParts {
 
 impl Equipment {
     pub fn validate(&self) -> Result<(), EquipmentError> {
-        for (slot, part) in self.parts.iter() {
-            part.validate(slot)?;
+        for (slot, parts) in self.parts.iter_lists() {
+            parts.validate(slot)?;
         }
         self.thesis_cores.validate()?;
         Ok(())
@@ -531,12 +665,24 @@ impl Equipment {
         titles: &[TitleDef],
     ) -> EquipmentValues {
         let mut total = EquipmentValues::default();
-        for (_, part) in self.parts.iter() {
+        for (_, part) in self.iter_selected() {
             total = total.add(part.base);
         }
-        for ability_id in &self.parts.weapon.abilities {
+        for ability_id in self.parts.weapon.selected().into_iter().flat_map(|p| &p.abilities) {
             if let Some(def) = abilities.iter().find(|a| a.id == *ability_id) {
                 total = total.add(def.values);
+            }
+        }
+        if let Some(part) = self.parts.weapon.selected() {
+            for addition in &part.ability_additions {
+                match addition.kind {
+                    EquipmentAbilityAdditionalKind::Thrust => total.thrust += i64::from(addition.value),
+                    EquipmentAbilityAdditionalKind::Slash => total.slash += i64::from(addition.value),
+                    EquipmentAbilityAdditionalKind::MagicAttack => total.magic_attack += i64::from(addition.value),
+                    EquipmentAbilityAdditionalKind::MagicDefense => total.magic_defense += i64::from(addition.value),
+                    EquipmentAbilityAdditionalKind::Accuracy => total.accuracy += i64::from(addition.value),
+                    _ => {}
+                }
             }
         }
         total.add(title_values(self.title.as_deref(), titles))
@@ -549,14 +695,25 @@ impl Equipment {
         abilities: &[EquipmentAbilityDef],
     ) -> Vec<(DamageCategory, f64)> {
         let effects: Vec<&SkillEffect> = self
-            .parts
-            .weapon
-            .abilities
-            .iter()
+            .parts.weapon.selected().into_iter().flat_map(|p| p.abilities.iter())
             .filter_map(|id| abilities.iter().find(|a| a.id == id.as_str()))
             .flat_map(|def| def.damage_effects.iter())
             .collect();
-        damage_contributions(effects.into_iter())
+        let mut contributions = damage_contributions(effects.into_iter());
+        if let Some(part) = self.parts.weapon.selected() {
+            for addition in &part.ability_additions {
+                match addition.kind {
+                    EquipmentAbilityAdditionalKind::FixedDamage => {
+                        contributions.push((DamageCategory::BasicTriggerDamageFixed, addition.value as f64));
+                    }
+                    EquipmentAbilityAdditionalKind::DamageRate => {
+                        contributions.push((DamageCategory::AttackDamageBasicTrigger, addition.value as f64 / 100.0));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        contributions
     }
 
     /// 強化能力値の合計(Σ part.enchant + Σ シエナのオーラの能力値(武器/盾)+ テシスコア)。
@@ -565,7 +722,7 @@ impl Equipment {
     /// 対象ダンジョン内でのみ有効なので、`None`(コアが効かないコンテンツ)なら加算しない。
     pub fn enhanced_totals(&self, region: Option<CoreRegion>) -> EquipmentValues {
         let mut total = EquipmentValues::default();
-        for (slot, part) in self.parts.iter() {
+        for (slot, part) in self.iter_selected() {
             total = total.add(part.enchant);
             if slot.siena_values_are_equipment() {
                 total = total.add(part.siena.values());
@@ -579,7 +736,7 @@ impl Equipment {
     /// カタログに無い id の枠は無視する(保存時に `storage` が弾いている)。
     pub fn random_option_totals(&self, defs: &[RandomOptionDef]) -> RandomOptionTotals {
         let mut totals = RandomOptionTotals::default();
-        for (_, part) in self.parts.iter() {
+        for (_, part) in self.iter_selected() {
             for option in &part.random_options {
                 if let Some(def) = defs.iter().find(|d| d.id == option.option_id.as_str()) {
                     totals.add(def, option);
@@ -591,21 +748,21 @@ impl Equipment {
 
     /// シエナのオーラの追加オプション「攻撃力増加」の合計(wiki: New1)。Σ% の小数表現。
     pub fn siena_attack_rate(&self) -> f64 {
-        self.parts.iter().into_iter().map(|(_, part)| part.siena.attack_rate_percent()).sum::<f64>()
+        self.iter_selected().map(|(_, part)| part.siena.attack_rate_percent()).sum::<f64>()
             / 100.0
     }
 
     /// シエナのオーラの追加オプション「防御力増加」の合計。Σ% の小数表現。
     /// 装備防御力倍率へ合流する(`CommonSkills::defense_rates` の引数)。
     pub fn siena_defense_rate(&self) -> f64 {
-        self.parts.iter().into_iter().map(|(_, part)| part.siena.defense_rate_percent()).sum::<f64>()
+        self.iter_selected().map(|(_, part)| part.siena.defense_rate_percent()).sum::<f64>()
             / 100.0
     }
 
     /// シエナのオーラの追加オプション「中ディレイ減少」の合計。Σ% の小数表現。
     /// 中ディレイ減少値(倍率B)へ合流する(wiki: ステータス「中ディレイ倍率B」)。
     pub fn siena_actual_delay_reduction(&self) -> f64 {
-        self.parts.iter().into_iter().map(|(_, part)| part.siena.actual_delay_percent()).sum::<f64>()
+        self.iter_selected().map(|(_, part)| part.siena.actual_delay_percent()).sum::<f64>()
             / 100.0
     }
 
@@ -615,17 +772,17 @@ impl Equipment {
     /// wiki は「同一名称の効果同士で加算されるかどうかは要検証」としているが、
     /// 他の追加オプション(攻撃力増加・防御力増加・中ディレイ減少)と同じく部位ぶん加算する `[仮]`。
     pub fn siena_critical_rate(&self) -> f64 {
-        self.parts.iter().into_iter().map(|(_, part)| part.siena.critical_rate_percent()).sum::<f64>()
+        self.iter_selected().map(|(_, part)| part.siena.critical_rate_percent()).sum::<f64>()
             / 100.0
     }
 
     /// 装備に付与した属性値の合計(属性ごと)。
-    pub fn element_values(&self) -> ElementValues {
+    pub fn element_values(&self, selected: Option<Element>) -> ElementValues {
         let mut total = ElementValues::default();
-        for (_, part) in self.parts.iter() {
-            if let Some(element) = part.element {
-                *total.get_mut(element) += part.element_value;
-            }
+        if let Some(element) = selected.filter(|e| e.can_enchant_equipment()) {
+            for (_, _) in self.iter_selected().filter(|(slot, part)| {
+                slot.allows_element() && (part.item_id.is_some() || part.custom_name.as_deref().is_some_and(|n| !n.is_empty()))
+            }) { *total.get_mut(element) += 9; }
         }
         total
     }
@@ -633,17 +790,23 @@ impl Equipment {
     /// シエナのオーラによるステ加算の合計(能力値スロット + 全ステータス増加。最終固定値層に乗る)。
     pub fn siena_stat_bonus(&self) -> SienaStatBonus {
         let mut total = SienaStatBonus::default();
-        for (_, part) in self.parts.iter() {
+        for (_, part) in self.iter_selected() {
             total = total.add(part.siena.stat_bonus());
         }
         total
     }
 
     /// その部位だけを未装備(中立値)にした複製。部位ごとの寄与(外したときの差分)を出すのに使う。
-    pub fn without_part(&self, slot: PartSlot) -> Equipment {
+    pub fn without_selected_part(&self, slot: PartSlot) -> Equipment {
         let mut copy = self.clone();
-        *copy.parts.get_mut(slot) = EquipmentPart::default();
+        copy.parts.get_mut(slot).selected_id = None;
         copy
+    }
+
+    pub fn without_part(&self, slot: PartSlot) -> Equipment { self.without_selected_part(slot) }
+
+    pub fn iter_selected(&self) -> impl Iterator<Item = (PartSlot, &EquipmentPart)> {
+        self.parts.iter_lists().into_iter().filter_map(|(slot, parts)| parts.selected().map(|p| (slot, p)))
     }
 }
 
@@ -725,7 +888,7 @@ mod tests {
     fn equipment_with(weapon_base: EquipmentValues, weapon_enchant: EquipmentValues) -> Equipment {
         Equipment {
             parts: EquipmentParts {
-                weapon: EquipmentPart { base: weapon_base, enchant: weapon_enchant, ..Default::default() },
+                weapon: EquipmentPart { base: weapon_base, enchant: weapon_enchant, ..Default::default() }.into(),
                 ..Default::default()
             },
             ..Default::default()
@@ -765,6 +928,8 @@ mod tests {
             id: "sharp-blade-e",
             name: "E-鋭い刃",
             family: EquipmentAbilityFamily::SharpBlade,
+            category: 4, slot: PartSlot::Weapon, exclusive_group: "weapon-category-4", additional_slots: 2,
+            additional_effects: "", additional_options: vec![], record_only: false, effect_summary: "斬り +9",
             values: EquipmentValues { slash: 9, ..Default::default() },
         damage_effects: &[],
         }];
@@ -773,6 +938,39 @@ mod tests {
 
         let enhanced = eq.enhanced_totals(None);
         assert_eq!(enhanced, EquipmentValues { thrust: 10, slash: 20, ..Default::default() });
+    }
+
+    #[test]
+    fn 新装着アビリティのランダム追加は補正値_w_x3へ入る() {
+        use EquipmentAbilityAdditionalKind::*;
+        let mut eq = equipment_with(EquipmentValues::default(), EquipmentValues::default());
+        eq.parts.weapon.ability_additions = vec![
+            EquipmentAbilityAdditional { ability_id: "night-star-sharp-blade".into(), kind: Slash, value: 18 },
+            EquipmentAbilityAdditional { ability_id: "night-star-sharp-blade".into(), kind: Accuracy, value: 16 },
+        ];
+        let base = eq.base_totals(&[], &[]);
+        assert_eq!(base.slash, 18);
+        assert_eq!(base.accuracy, 16);
+
+        eq.parts.weapon.ability_additions = vec![
+            EquipmentAbilityAdditional { ability_id: "night-star-sharp-blade".into(), kind: FixedDamage, value: 10_000 },
+            EquipmentAbilityAdditional { ability_id: "night-star-sharp-blade".into(), kind: DamageRate, value: 11 },
+        ];
+        let contributions = eq.ability_damage_contributions(&[]);
+        assert!(contributions.contains(&(DamageCategory::BasicTriggerDamageFixed, 10_000.0)));
+        assert!(contributions.contains(&(DamageCategory::AttackDamageBasicTrigger, 0.11)));
+    }
+
+    #[test]
+    fn 武器アビリティは3枠まで() {
+        let mut eq = Equipment::default();
+        eq.parts.weapon.abilities = vec!["a".into(), "b".into(), "c".into()];
+        assert!(eq.validate().is_ok());
+        eq.parts.weapon.abilities.push("d".into());
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::TooManyAbilities { slot: PartSlot::Weapon, max: 3 })
+        ));
     }
 
 
@@ -821,39 +1019,23 @@ mod tests {
     }
 
     #[test]
-    fn 装備の属性は部位ごとに1属性で合計される() {
+    fn 選択属性は実装備の対象部位へ9ずつ自動反映される() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.element = Some(Element::Water);
-        eq.parts.weapon.element_value = 9;
-        eq.parts.armor.element = Some(Element::Water);
-        eq.parts.armor.element_value = 8;
-        eq.parts.helm.element = Some(Element::Fire);
-        eq.parts.helm.element_value = 7;
+        eq.parts.weapon.item_id = Some("weapon".into());
+        eq.parts.armor.custom_name = Some("custom armor".into());
         assert!(eq.validate().is_ok());
-        let values = eq.element_values();
-        assert_eq!(values.get(Element::Water), 17);
-        assert_eq!(values.get(Element::Fire), 7);
+        let values = eq.element_values(Some(Element::Water));
+        assert_eq!(values.get(Element::Water), 18);
+        assert_eq!(values.get(Element::Fire), 0);
         assert_eq!(values.get(Element::Neutral), 0);
     }
 
     #[test]
-    fn 属性の値域と部位制約() {
+    fn 無属性と未装備には属性強化を反映しない() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.element = Some(Element::Water);
-        eq.parts.weapon.element_value = EQUIPMENT_ELEMENT_VALUE_MAX + 1;
-        assert!(matches!(eq.validate(), Err(EquipmentError::ElementValueOutOfRange { .. })));
-
-        // 無属性は装備に付与できない
-        let mut eq = Equipment::default();
-        eq.parts.weapon.element = Some(Element::Neutral);
-        assert!(matches!(eq.validate(), Err(EquipmentError::ElementNeutralNotAllowed { .. })));
-
-        // 盾+ とレリックは属性強化の対象外
-        for slot in [PartSlot::ShieldPlus, PartSlot::RelicPendant, PartSlot::RelicBracelet] {
-            let mut eq = Equipment::default();
-            eq.parts.get_mut(slot).element = Some(Element::Fire);
-            assert!(matches!(eq.validate(), Err(EquipmentError::ElementNotAllowed { .. })));
-        }
+        eq.parts.shield_plus.item_id = Some("cuffs".into());
+        assert_eq!(eq.element_values(Some(Element::Neutral)), ElementValues::default());
+        assert_eq!(eq.element_values(Some(Element::Fire)), ElementValues::default());
     }
 
     #[test]
@@ -864,9 +1046,13 @@ mod tests {
 
         let mut eq = Equipment::default();
         eq.parts.weapon.enhance_level = ENHANCE_LEVEL_MAX;
+        eq.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        eq.parts.weapon.enhance_grade = Some(EnhanceGrade::Highest);
         assert!(eq.validate().is_ok());
         let mut eq2 = Equipment::default();
         eq2.parts.armor.enhance_level = ENHANCE_LEVEL_MAX;
+        eq2.parts.armor.enhance_type = Some(EquipmentEnhanceType::ArmorLight);
+        eq2.parts.armor.enhance_grade = Some(EnhanceGrade::Highest);
         assert!(eq2.validate().is_ok());
 
         let mut over = Equipment::default();
@@ -875,10 +1061,11 @@ mod tests {
     }
 
     #[test]
-    fn 強化11以下でのadded_damage上書きは拒否する() {
+    fn 強化等級は12以上だけ許可する() {
         let mut eq = Equipment::default();
         eq.parts.weapon.enhance_level = 11;
-        eq.parts.weapon.enhance_added_damage = Some(100);
+        eq.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        eq.parts.weapon.enhance_grade = Some(EnhanceGrade::Highest);
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::EnhanceAddedDamageNotAllowed { slot: PartSlot::Weapon, .. })
@@ -886,8 +1073,32 @@ mod tests {
 
         let mut ok = Equipment::default();
         ok.parts.weapon.enhance_level = 12;
-        ok.parts.weapon.enhance_added_damage = Some(140);
+        ok.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        ok.parts.weapon.enhance_grade = Some(EnhanceGrade::Highest);
         assert!(ok.validate().is_ok());
+    }
+
+    #[test]
+    fn 強化12以上は等級必須() {
+        let mut eq = Equipment::default();
+        eq.parts.weapon.enhance_level = 12;
+        eq.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::EnhanceGradeRequired { slot: PartSlot::Weapon, enhance_level: 12 })
+        ));
+    }
+
+    #[test]
+    fn 強化する装備は部位に合う種別が必須() {
+        let mut missing = Equipment::default();
+        missing.parts.weapon.enhance_level = 10;
+        assert!(matches!(missing.validate(), Err(EquipmentError::EnhanceTypeRequired { .. })));
+
+        let mut mismatch = Equipment::default();
+        mismatch.parts.weapon.enhance_level = 10;
+        mismatch.parts.weapon.enhance_type = Some(EquipmentEnhanceType::ArmorMagic);
+        assert!(matches!(mismatch.validate(), Err(EquipmentError::EnhanceTypeNotAllowed { .. })));
     }
 
     #[test]
@@ -920,17 +1131,11 @@ mod tests {
     }
 
     #[test]
-    fn 追加固定ダメージ上書きの値域違反は拒否する() {
+    fn 登録idの0と重複は拒否する() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.enhance_level = 12;
-        eq.parts.weapon.enhance_added_damage = Some(-1);
-        assert!(matches!(eq.validate(), Err(EquipmentError::EnhanceAddedDamageOutOfRange { .. })));
-
-        eq.parts.weapon.enhance_added_damage = Some(ENHANCE_ADDED_DAMAGE_MAX + 1);
-        assert!(matches!(eq.validate(), Err(EquipmentError::EnhanceAddedDamageOutOfRange { .. })));
-
-        eq.parts.weapon.enhance_added_damage = Some(ENHANCE_ADDED_DAMAGE_MAX);
-        assert!(eq.validate().is_ok());
+        eq.parts.weapon.registered.push(EquipmentPart::default());
+        eq.parts.weapon.selected_id = Some(0);
+        assert!(matches!(eq.validate(), Err(EquipmentError::DuplicatePartId { .. })));
     }
 
     fn siena_values(thrust: i64, slash: i64) -> SienaAura {

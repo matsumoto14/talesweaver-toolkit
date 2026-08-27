@@ -2,12 +2,12 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentValues,
+  CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentPartList, EquipmentValues,
   EquipmentAbilityDef, RandomOptionDef, RandomOptionEffect, RandomOptionSlot, SienaAura,
   SienaExtraKind, ThesisCores, TitleDef,
 } from "./api/types";
 import {
-  CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENTS, EQUIPMENT_STAT_KINDS,
+  CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENT_ALLOWED_SLOTS, ELEMENTS, EQUIPMENT_STAT_KINDS,
   EQUIPMENT_STAT_SHORT, PART_SLOTS, SKILL_DEPENDENCY_LABELS, STAT_KINDS,
 } from "./labels";
 
@@ -105,39 +105,51 @@ export const cloneThesisCores = (src: ThesisCores): ThesisCores =>
   Object.fromEntries(CORE_REGIONS.map((r) => [r, cloneCoreSet(src[r])])) as unknown as ThesisCores;
 
 export const neutralEquipmentPart = (): EquipmentPart => ({
+  id: 0,
+  label: "",
   item_id: null,
   custom_name: null,
   base: zeroValues(),
   enchant: zeroValues(),
   enhance_level: 0,
-  enhance_added_damage: null,
+  enhance_type: null,
+  enhance_grade: null,
   abilities: [],
+  ability_additions: [],
   siena: neutralSienaAura(),
-  element: null,
-  element_value: 0,
   random_options: [],
 });
 
 export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
+  id: src.id,
+  label: src.label,
   item_id: src.item_id,
   custom_name: src.custom_name,
   base: { ...src.base },
   enchant: { ...src.enchant },
   enhance_level: src.enhance_level,
-  enhance_added_damage: src.enhance_added_damage,
+  enhance_type: src.enhance_type,
+  enhance_grade: src.enhance_grade,
   abilities: [...src.abilities],
+  ability_additions: (src.ability_additions ?? []).map((a) => ({ ...a })),
   siena: cloneSienaAura(src.siena),
-  element: src.element,
-  element_value: src.element_value,
   random_options: (src.random_options ?? []).map((o) => ({ ...o })),
 });
 
+export const selectedEquipmentPart = (list: EquipmentPartList): EquipmentPart | null =>
+  list.registered.find((part) => part.id === list.selected_id) ?? null;
+
+export const selectedEquipmentPartOrNeutral = (list: EquipmentPartList): EquipmentPart =>
+  selectedEquipmentPart(list) ?? neutralEquipmentPart();
+
 /** 装備に付与した属性値の合計(属性ごと)。表示用(計算は Rust 側)。 */
-export const equipmentElementValues = (equipment: Equipment): Record<Element, number> => {
+export const equipmentElementValues = (equipment: Equipment, element: Element | null): Record<Element, number> => {
   const total = Object.fromEntries(ELEMENTS.map((e) => [e, 0])) as Record<Element, number>;
-  for (const slot of PART_SLOTS) {
-    const part = equipment.parts[slot];
-    if (part.element) total[part.element] += part.element_value;
+  if (element === null) return total;
+  for (const slot of ELEMENT_ALLOWED_SLOTS) {
+    const part = selectedEquipmentPart(equipment.parts[slot]);
+    const isEquipment = part?.item_id !== null || (part?.custom_name?.trim().length ?? 0) > 0;
+    if (part && isEquipment) total[element] += 9;
   }
   return total;
 };
@@ -231,7 +243,9 @@ export const thesisCoresBestTotal = (cores: ThesisCores): number =>
 function sumParts(equipment: Equipment, pick: (p: EquipmentPart) => EquipmentValues): EquipmentValues {
   const total = zeroValues();
   for (const slot of PART_SLOTS) {
-    const v = pick(equipment.parts[slot]);
+    const part = selectedEquipmentPart(equipment.parts[slot]);
+    if (!part) continue;
+    const v = pick(part);
     for (const k of EQUIPMENT_VALUE_KEYS) total[k] += v[k];
   }
   return total;
@@ -248,9 +262,16 @@ export const equipmentBaseTotal = (
   titles: TitleDef[] = [],
 ): EquipmentValues => {
   const total = sumParts(equipment, (p) => p.base);
-  for (const id of equipment.parts.weapon.abilities) {
+  for (const id of selectedEquipmentPartOrNeutral(equipment.parts.weapon).abilities) {
     const def = abilities.find((a) => a.id === id);
     if (def) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += def.values[k];
+  }
+  for (const addition of selectedEquipmentPartOrNeutral(equipment.parts.weapon).ability_additions ?? []) {
+    if (addition.kind === "thrust") total.thrust += addition.value;
+    else if (addition.kind === "slash") total.slash += addition.value;
+    else if (addition.kind === "magic_attack") total.magic_attack += addition.value;
+    else if (addition.kind === "magic_defense") total.magic_defense += addition.value;
+    else if (addition.kind === "accuracy") total.accuracy += addition.value;
   }
   const title = titles.find((t) => t.id === equipment.title);
   if (title) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += title.values[k];
@@ -267,7 +288,7 @@ export const randomOptionActualDelayPercent = (
   PART_SLOTS.reduce(
     (sum, slot) =>
       sum +
-      equipment.parts[slot].random_options.reduce((n, option) => {
+      selectedEquipmentPartOrNeutral(equipment.parts[slot]).random_options.reduce((n, option) => {
         const def = defs.find((d) => d.id === option.option_id);
         return def?.effect === "actual_delay_reduction" ? n + randomOptionValue(option, def) : n;
       }, 0),
@@ -276,7 +297,7 @@ export const randomOptionActualDelayPercent = (
 
 /** シエナのオーラの追加オプションの合計 %(全部位。表示用)。 */
 export const sienaExtraTotal = (equipment: Equipment, kind: SienaExtraKind): number =>
-  PART_SLOTS.reduce((sum, slot) => sum + sienaExtraValue(equipment.parts[slot].siena, kind), 0);
+  PART_SLOTS.reduce((sum, slot) => sum + sienaExtraValue(selectedEquipmentPartOrNeutral(equipment.parts[slot]).siena, kind), 0);
 
 /** シエナのオーラの攻撃力増加(New1)の合計 %(表示用)。 */
 export const sienaAttackRatePercent = (equipment: Equipment): number =>
@@ -284,7 +305,7 @@ export const sienaAttackRatePercent = (equipment: Equipment): number =>
 
 /** シエナのオーラのステ加算の合計(全部位・全ステ。表示用)。 */
 export const sienaStatTotal = (equipment: Equipment): number =>
-  PART_SLOTS.reduce((sum, slot) => sum + sienaPartStatTotal(equipment.parts[slot].siena), 0);
+  PART_SLOTS.reduce((sum, slot) => sum + sienaPartStatTotal(selectedEquipmentPartOrNeutral(equipment.parts[slot]).siena), 0);
 
 // --- ランダムオプション ---------------------------------------------------
 // 判定・集計は Rust 側(crates/domain/src/random_option.rs)。ここは表示・編集用。
@@ -364,7 +385,7 @@ export const randomOptionTotals = (
   const total = new Map<string, number>();
   const add = (label: string, value: number) => total.set(label, (total.get(label) ?? 0) + value);
   for (const slot of PART_SLOTS) {
-    for (const option of equipment.parts[slot].random_options) {
+    for (const option of selectedEquipmentPartOrNeutral(equipment.parts[slot]).random_options) {
       const def = defs.find((d) => d.id === option.option_id);
       if (def === undefined || !randomOptionIsApplied(def.effect)) continue;
       const value = randomOptionValue(option, def);
@@ -414,14 +435,14 @@ export const randomOptionIsApplied = (effect: RandomOptionEffect): boolean => ef
 
 /** 全部位のランダムOP の枠数(補正源リストのサマリ用)。 */
 export const randomOptionCount = (equipment: Equipment): number =>
-  PART_SLOTS.reduce((n, slot) => n + equipment.parts[slot].random_options.length, 0);
+  PART_SLOTS.reduce((n, slot) => n + selectedEquipmentPartOrNeutral(equipment.parts[slot]).random_options.length, 0);
 
 /** 計算に入らない(記録するだけの)枠数。 */
 export const randomOptionRecordOnlyCount = (equipment: Equipment, defs: RandomOptionDef[]): number =>
   PART_SLOTS.reduce(
     (n, slot) =>
       n +
-      equipment.parts[slot].random_options.filter((o) => {
+      selectedEquipmentPartOrNeutral(equipment.parts[slot]).random_options.filter((o) => {
         const def = defs.find((d) => d.id === o.option_id);
         return def !== undefined && !randomOptionIsApplied(def.effect);
       }).length,
@@ -430,4 +451,4 @@ export const randomOptionRecordOnlyCount = (equipment: Equipment, defs: RandomOp
 
 /** シエナのオーラを発現している部位数(表示用)。 */
 export const sienaPartCount = (equipment: Equipment): number =>
-  PART_SLOTS.filter((slot) => sienaStage(equipment.parts[slot].siena) > 0).length;
+  PART_SLOTS.filter((slot) => sienaStage(selectedEquipmentPartOrNeutral(equipment.parts[slot]).siena) > 0).length;

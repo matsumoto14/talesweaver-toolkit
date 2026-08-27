@@ -88,13 +88,14 @@ export const ABILITY_ALLOWED_SLOTS: PartSlot[] = ["weapon"];
 // 武器アビリティの系統(crates/domain/src/equipment.rs の EquipmentAbilityFamily)。
 // 表示順は加算先(突き / 斬り / 魔攻 / 魔防)の並びに合わせる。
 export const ABILITY_FAMILIES: EquipmentAbilityFamily[] = [
-  "pointed_blade", "sharp_blade", "intelligence", "magic_resistance",
+  "pointed_blade", "sharp_blade", "intelligence", "magic_resistance", "weapon_delay",
 ];
 export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
   pointed_blade: "尖った刃(突き)",
   sharp_blade: "鋭い刃(斬り)",
   intelligence: "知力(魔攻)",
   magic_resistance: "耐魔力(魔防)",
+  weapon_delay: "武器ディレイ",
 };
 // シエナのオーラを発現できる部位(wiki: 装備システム冒頭の表「オーラ」行。8 部位)。
 export const SIENA_ALLOWED_SLOTS: PartSlot[] = [

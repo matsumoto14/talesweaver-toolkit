@@ -14,6 +14,7 @@
     toggleBuff, userInputRange,
   } from "../../buffs";
   import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
+  import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import { ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { limits } from "../../limits.svelte";
@@ -44,6 +45,7 @@
   const character = $derived(selectedCharacter());
   const savedPayload = $derived(character ? payloadOf(character) : null);
   const payload = $derived(app.sim ?? savedPayload);
+  const weaponOf = (p: NewCharacter) => selectedEquipmentPartOrNeutral(p.equipment.parts.weapon);
 
   // --- 対象(コンテンツ) --------------------------------------------------
   // ダメージ計算には敵データが要るので、enemy_id を持つコンテンツだけを対象に出す
@@ -549,33 +551,33 @@
     },
     {
       id: "weapon_enchant_thrust",
-      label: (p) => `武器エンチャント 突き ${fmtInt(p.equipment.parts.weapon.enchant.thrust)}`,
-      get: (p) => String(p.equipment.parts.weapon.enchant.thrust),
-      set: (p, v) => (p.equipment.parts.weapon.enchant.thrust = Number(v)),
+      label: (p) => `武器エンチャント 突き ${fmtInt(weaponOf(p).enchant.thrust)}`,
+      get: (p) => String(weaponOf(p).enchant.thrust),
+      set: (p, v) => (weaponOf(p).enchant.thrust = Number(v)),
     },
     {
       id: "weapon_enchant_slash",
-      label: (p) => `武器エンチャント 斬り ${fmtInt(p.equipment.parts.weapon.enchant.slash)}`,
-      get: (p) => String(p.equipment.parts.weapon.enchant.slash),
-      set: (p, v) => (p.equipment.parts.weapon.enchant.slash = Number(v)),
+      label: (p) => `武器エンチャント 斬り ${fmtInt(weaponOf(p).enchant.slash)}`,
+      get: (p) => String(weaponOf(p).enchant.slash),
+      set: (p, v) => (weaponOf(p).enchant.slash = Number(v)),
     },
     {
       // 「次に変えるなら」の武器更新。基本値まで一緒に替わる 1 操作なので 1 チップで戻す。
       id: "weapon_item",
       label: (p) => {
-        const weapon = p.equipment.parts.weapon;
+        const weapon = weaponOf(p);
         const name = app.equipmentCatalog.find((i) => i.id === weapon.item_id)?.name
           ?? weapon.custom_name
           ?? "未装着";
         return `武器 ${name}`;
       },
       get: (p) => {
-        const weapon = p.equipment.parts.weapon;
+        const weapon = weaponOf(p);
         return JSON.stringify([weapon.item_id, weapon.custom_name, weapon.base]);
       },
       set: (p, v) => {
         const [itemId, customName, base] = JSON.parse(v);
-        const weapon = p.equipment.parts.weapon;
+        const weapon = weaponOf(p);
         weapon.item_id = itemId;
         weapon.custom_name = customName;
         weapon.base = base;
@@ -757,7 +759,7 @@
   ];
   // 武器のエンチャント上限(カタログ item ならその上限、カスタム・未装備は equipment_value_max)
   const weaponEnchantCaps = $derived.by(() => {
-    const weapon = payload?.equipment.parts.weapon;
+    const weapon = payload ? weaponOf(payload) : null;
     const item = weapon?.item_id ? app.equipmentCatalog.find((i) => i.id === weapon.item_id) : null;
     return {
       thrust: item?.enchant_caps.thrust ?? limits.equipment_value_max,
@@ -1294,8 +1296,8 @@
                 min={0}
                 max={weaponEnchantCaps.thrust}
                 bind:value={
-                  () => payload.equipment.parts.weapon.enchant.thrust,
-                  (v) => editSim((p) => (p.equipment.parts.weapon.enchant.thrust = v))
+                  () => weaponOf(payload).enchant.thrust,
+                  (v) => editSim((p) => (weaponOf(p).enchant.thrust = v))
                 }
               />
               <StatInput
@@ -1303,8 +1305,8 @@
                 min={0}
                 max={weaponEnchantCaps.slash}
                 bind:value={
-                  () => payload.equipment.parts.weapon.enchant.slash,
-                  (v) => editSim((p) => (p.equipment.parts.weapon.enchant.slash = v))
+                  () => weaponOf(payload).enchant.slash,
+                  (v) => editSim((p) => (weaponOf(p).enchant.slash = v))
                 }
               />
             </div>

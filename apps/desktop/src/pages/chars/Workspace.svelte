@@ -260,9 +260,15 @@
     return `${t.name}(${parts.join(" ・ ")})`;
   });
 
+  const selectedEquipmentElement = $derived.by(() => {
+    const picked = app.elementSources.map((def) => draft.statSources.elements[def.id] ?? null);
+    const first = picked[0] ?? null;
+    return first !== null && picked.every((element) => element === first) ? first : null;
+  });
+
   // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
   const elementSummary = $derived.by(() => {
-    const values = equipmentElementValues(draft.equipment);
+    const values = equipmentElementValues(draft.equipment, selectedEquipmentElement);
     for (const def of app.elementSources) {
       const element = draft.statSources.elements[def.id];
       if (element) values[element] += def.value;

@@ -6,7 +6,7 @@
   //
   // **アイコン単独表示は禁止**(名前と併記する)。例外はキャラレールを畳んだときだけで、
   // そのときは呼び出し側が title を付ける。
-  export type IconKind = "character" | "mob" | "skill" | "buff" | "mastery";
+  export type IconKind = "character" | "mob" | "skill" | "buff" | "mastery" | "equipment";
   /** 20 = 行内・チップ / 28 = 一覧行 / 40 = 選択カード / 64 = キャラ詳細 */
   export type IconSize = 20 | 28 | 40 | 64;
 
@@ -16,6 +16,7 @@
     skill: "skills",
     buff: "buffs",
     mastery: "masteries",
+    equipment: "equipment",
   };
 
   /// 枠の見た目。マスタリーはスキルの一種なのでスキルの枠を使う(段は色で区別しない)
@@ -25,6 +26,7 @@
     skill: "skill",
     buff: "buff",
     mastery: "skill",
+    equipment: "equipment",
   };
 
   // Vite の glob import。実画像が 1 枚も無ければ空オブジェクトになるだけで、ビルドは通る。
@@ -108,6 +110,11 @@
     border-radius: var(--r-pill); border-color: var(--sim); color: var(--sim-fg);
     background: repeating-linear-gradient(135deg, #F2F1FA 0 4px, #E4E2F2 4px 8px);
   }
+  .icon.equipment {
+    border-radius: var(--r-inset); border-color: var(--border-strong); color: var(--fg-sub);
+    background: repeating-linear-gradient(135deg, #EEF4FB 0 4px, #D9E6F4 4px 8px);
+  }
+  .icon.equipment img { image-rendering: pixelated; object-fit: contain; }
   /* 解決できない id。空白にせず破線 + ? で「データが無い」と分かるようにする */
   .icon.missing { border-style: dashed; box-shadow: none; }
 </style>

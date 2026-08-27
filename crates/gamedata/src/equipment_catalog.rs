@@ -6,7 +6,8 @@
 //! docs/claude/goals/2026-08-24-equipment-parts.md「wiki 調査結果」「カタログ seed」節参照。
 
 use domain::{
-    DamageCategory, EnhanceRates, Equipment, EquipmentAbilityDef, EquipmentAbilityFamily,
+    DamageCategory, EnhanceGrade, EnhanceRates, Equipment, EquipmentAbilityAdditionalDef,
+    EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentEnhanceType,
     EquipmentValues, PartSlot, SkillEffect,
 };
 
@@ -30,8 +31,8 @@ pub const ENHANCE_SOURCE: Source = Source {
 /// 武器アビリティ(装備システム/アビリティ)の出典。
 pub const EQUIPMENT_ABILITY_SOURCE: Source = Source {
     page: "装備システム/アビリティ",
-    retrieved_on: "2026-08-24",
-    note: "装備攻撃力(基本能力値)に効く武器の4系統×7段のみ収録。R以上のダメージ増加%等は§5スコープ外",
+    retrieved_on: "2026-08-27",
+    note: "武器3スロット。カテゴリー1/3は旧装着アビリティ、カテゴリー4は新装着アビリティページ。追加効果は自動適用しない",
 };
 
 /// 武器種(wiki: 装備システム/装備強化「系統」表の該当武器)。
@@ -77,8 +78,9 @@ pub enum WeaponClass {
 }
 
 /// 武器系統(wiki: 装備システム/装備強化「系統」列)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WeaponSystem {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WeaponSystem {
     Stab,
     StabHack,
     Hack,
@@ -87,7 +89,7 @@ enum WeaponSystem {
     Mr,
 }
 
-fn weapon_system(class: WeaponClass) -> WeaponSystem {
+pub fn weapon_system(class: WeaponClass) -> WeaponSystem {
     use WeaponClass::*;
     use WeaponSystem::*;
     match class {
@@ -131,6 +133,18 @@ pub fn enhance_rates(class: WeaponClass) -> EnhanceRates {
     }
 }
 
+pub fn enhance_rates_for_type(kind: EquipmentEnhanceType) -> Option<EnhanceRates> {
+    Some(match kind {
+        EquipmentEnhanceType::WeaponStab => EnhanceRates { thrust: 6.67, slash: 1.00, magic_attack: 0.0, magic_defense: 0.0 },
+        EquipmentEnhanceType::WeaponStabHack => EnhanceRates { thrust: 4.55, slash: 4.55, magic_attack: 0.0, magic_defense: 0.0 },
+        EquipmentEnhanceType::WeaponHack => EnhanceRates { thrust: 1.00, slash: 6.67, magic_attack: 0.0, magic_defense: 0.0 },
+        EquipmentEnhanceType::WeaponInt => EnhanceRates { thrust: 0.0, slash: 0.0, magic_attack: 6.95, magic_defense: 1.05 },
+        EquipmentEnhanceType::WeaponIntHack => EnhanceRates { thrust: 0.0, slash: 3.85, magic_attack: 4.55, magic_defense: 0.0 },
+        EquipmentEnhanceType::WeaponMr => EnhanceRates { thrust: 0.0, slash: 0.0, magic_attack: 0.70, magic_defense: 7.70 },
+        _ => return None,
+    })
+}
+
 /// 装備強化 +1〜+11 の確定倍率(wiki: 装備システム/装備強化)。範囲外は `None`。
 pub fn enhance_multiplier(level: u8) -> Option<f64> {
     match level {
@@ -160,8 +174,77 @@ pub fn enhance_multiplier_range(level: u8) -> Option<(f64, f64)> {
     }
 }
 
+/// 確率区分の上端に対応する倍率。倍率は整数へ四捨五入する。
+pub fn enhance_grade_multiplier(level: u8, grade: EnhanceGrade) -> Option<f64> {
+    let (min, max) = enhance_multiplier_range(level)?;
+    Some((min + (max - min) * grade.percentile()).round())
+}
+
+pub fn armor_enhance_multiplier(level: u8, grade: Option<EnhanceGrade>) -> Option<f64> {
+    enhance_multiplier(level).or_else(|| grade.and_then(|g| enhance_grade_multiplier(level, g))).map(|v| v / 2.0)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArmorClass { Light, Heavy, Magic, Suit, Robe }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArmorEnhanceRates { pub physical_defense: f64, pub magic_defense: f64 }
+
+pub fn armor_enhance_rates(class: ArmorClass) -> ArmorEnhanceRates {
+    match class {
+        ArmorClass::Light => ArmorEnhanceRates { physical_defense: 3.90, magic_defense: 4.00 },
+        ArmorClass::Heavy => ArmorEnhanceRates { physical_defense: 3.10, magic_defense: 3.80 },
+        ArmorClass::Magic => ArmorEnhanceRates { physical_defense: 3.80, magic_defense: 4.00 },
+        ArmorClass::Suit => ArmorEnhanceRates { physical_defense: 7.80, magic_defense: 0.00 },
+        ArmorClass::Robe => ArmorEnhanceRates { physical_defense: 4.00, magic_defense: 3.80 },
+    }
+}
+
+pub fn armor_class_for_type(kind: EquipmentEnhanceType) -> Option<ArmorClass> {
+    match kind {
+        EquipmentEnhanceType::ArmorLight => Some(ArmorClass::Light),
+        EquipmentEnhanceType::ArmorHeavy => Some(ArmorClass::Heavy),
+        EquipmentEnhanceType::ArmorMagic => Some(ArmorClass::Magic),
+        EquipmentEnhanceType::ArmorSuit => Some(ArmorClass::Suit),
+        EquipmentEnhanceType::ArmorRobe => Some(ArmorClass::Robe),
+        _ => None,
+    }
+}
+
+/// カタログ品の補正式。鎧は出典文字列から推測せず、アイテムIDへ明示的に割り当てる。
+pub fn equipment_enhance_type(item_id: &str) -> Option<EquipmentEnhanceType> {
+    if let Some(class) = find_equipment_item(item_id).and_then(|item| item.weapon_class) {
+        return Some(match weapon_system(class) {
+            WeaponSystem::Stab => EquipmentEnhanceType::WeaponStab,
+            WeaponSystem::StabHack => EquipmentEnhanceType::WeaponStabHack,
+            WeaponSystem::Hack => EquipmentEnhanceType::WeaponHack,
+            WeaponSystem::Int => EquipmentEnhanceType::WeaponInt,
+            WeaponSystem::IntHack => EquipmentEnhanceType::WeaponIntHack,
+            WeaponSystem::Mr => EquipmentEnhanceType::WeaponMr,
+        });
+    }
+    match item_id {
+        "aquilus-armor" | "abyss-armor" => Some(EquipmentEnhanceType::ArmorLight),
+        "lina-clothes" => Some(EquipmentEnhanceType::ArmorRobe),
+        _ => None,
+    }
+}
+
+/// 現在収録済み鎧の分類。`equipment_enhance_type` の明示メタデータだけから解決する。
+pub fn armor_class(item_id: &str) -> Option<ArmorClass> {
+    match equipment_enhance_type(item_id)? {
+        EquipmentEnhanceType::ArmorLight => Some(ArmorClass::Light),
+        EquipmentEnhanceType::ArmorHeavy => Some(ArmorClass::Heavy),
+        EquipmentEnhanceType::ArmorMagic => Some(ArmorClass::Magic),
+        EquipmentEnhanceType::ArmorSuit => Some(ArmorClass::Suit),
+        EquipmentEnhanceType::ArmorRobe => Some(ArmorClass::Robe),
+        _ => None,
+    }
+}
+
 /// 装備カタログの 1 アイテム。
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EquipmentItem {
     pub id: &'static str,
     pub slot: PartSlot,
@@ -181,6 +264,21 @@ pub struct EquipmentItem {
     pub source: Source,
 }
 
+impl serde::Serialize for EquipmentItem {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("EquipmentItem", 11)?;
+        s.serialize_field("id", self.id)?; s.serialize_field("slot", &self.slot)?;
+        s.serialize_field("name", self.name)?; s.serialize_field("values_min", &self.values_min)?;
+        s.serialize_field("values_max", &self.values_max)?; s.serialize_field("enchant_caps", &self.enchant_caps)?;
+        s.serialize_field("weapon_class", &self.weapon_class)?;
+        s.serialize_field("weapon_system", &self.weapon_class.map(weapon_system))?;
+        s.serialize_field("enhance_type", &equipment_enhance_type(self.id))?;
+        s.serialize_field("damage_effects", &self.damage_effects)?; s.serialize_field("source", &self.source)?;
+        s.end()
+    }
+}
+
 const ITEM_SOURCE_NOTE_KATANA: Source = Source {
     page: "Item/武器/刀",
     retrieved_on: "2026-08-24",
@@ -190,6 +288,11 @@ const ITEM_SOURCE_NOTE_TACHI: Source = Source {
     page: "Item/武器/太刀",
     retrieved_on: "2026-08-24",
     note: "エンドゲーム帯(Lv300/310)",
+};
+const ITEM_SOURCE_NOTE_GREAT_SWORD: Source = Source {
+    page: "Item/武器/大剣",
+    retrieved_on: "2026-08-27",
+    note: "エンドゲーム帯(Lv300/310)。氷撃斬向け",
 };
 const ITEM_SOURCE_NOTE_HELM: Source = Source {
     page: "Item/防具/兜",
@@ -390,6 +493,28 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::Tachi),
             damage_effects: &[],
             source: ITEM_SOURCE_NOTE_TACHI,
+        },
+        EquipmentItem {
+            id: "aquilus-great-sword",
+            slot: PartSlot::Weapon,
+            name: "†アクィルスブレイド",
+            values_min: v(80, 184, 35, 161, 38, 34, 29, 28, 26),
+            values_max: v(85, 194, 38, 171, 40, 38, 32, 30, 28),
+            enchant_caps: v(280, 300, 280, 300, 280, 280, 37, 280, 280),
+            weapon_class: Some(WeaponClass::GreatSword),
+            damage_effects: &[],
+            source: ITEM_SOURCE_NOTE_GREAT_SWORD,
+        },
+        EquipmentItem {
+            id: "abyss-great-sword",
+            slot: PartSlot::Weapon,
+            name: "†アビスブレード",
+            values_min: v(84, 230, 35, 230, 38, 34, 29, 28, 26),
+            values_max: v(89, 250, 38, 250, 40, 38, 32, 30, 28),
+            enchant_caps: v(400, 400, 100, 400, 100, 100, 100, 100, 100),
+            weapon_class: Some(WeaponClass::GreatSword),
+            damage_effects: &[],
+            source: ITEM_SOURCE_NOTE_GREAT_SWORD,
         },
         EquipmentItem {
             id: "aquilus-helm",
@@ -737,128 +862,178 @@ pub fn item_damage_contributions(equipment: &Equipment) -> Vec<(DamageCategory, 
     domain::damage_contributions(effects.into_iter())
 }
 
-fn ability(
+fn new_ability(
     id: &'static str,
     name: &'static str,
     family: EquipmentAbilityFamily,
     values: EquipmentValues,
+    effect_summary: &'static str,
 ) -> EquipmentAbilityDef {
-    EquipmentAbilityDef { id, name, family, values, damage_effects: &[] }
+    use EquipmentAbilityAdditionalKind::*;
+    let additional_effects = match family {
+        EquipmentAbilityFamily::PointedBlade => "固定ダメージ/割合ダメージ/突き/自然回復/命中からランダム",
+        EquipmentAbilityFamily::SharpBlade => "固定ダメージ/割合ダメージ/斬り/自然回復/命中からランダム",
+        EquipmentAbilityFamily::Intelligence => "固定ダメージ/割合ダメージ/魔攻/自然回復/命中からランダム",
+        EquipmentAbilityFamily::MagicResistance => "固定ダメージ/割合ダメージ/魔防/自然回復/命中からランダム",
+        EquipmentAbilityFamily::WeaponDelay => "",
+    };
+    let stat_kind = match family {
+        EquipmentAbilityFamily::PointedBlade => Thrust,
+        EquipmentAbilityFamily::SharpBlade => Slash,
+        EquipmentAbilityFamily::Intelligence => MagicAttack,
+        EquipmentAbilityFamily::MagicResistance => MagicDefense,
+        EquipmentAbilityFamily::WeaponDelay => unreachable!("新装着アビリティに武器ディレイ系は無い"),
+    };
+    let (fixed, rate, stat_min, stat_max, recovery_min, recovery_max, accuracy_min, accuracy_max) =
+        match values.thrust.max(values.slash).max(values.magic_attack).max(values.magic_defense) {
+            11 => (5000, 8, 5, 10, 4, 14, 6, 10),
+            13 => (6000, 9, 7, 12, 6, 16, 8, 12),
+            17 => (7000, 10, 7, 15, 6, 16, 8, 14),
+            _ => (10000, 11, 9, 18, 8, 18, 10, 16),
+        };
+    let additional_options = vec![
+        EquipmentAbilityAdditionalDef { kind: FixedDamage, min: fixed, max: fixed },
+        EquipmentAbilityAdditionalDef { kind: DamageRate, min: rate, max: rate },
+        EquipmentAbilityAdditionalDef { kind: stat_kind, min: stat_min, max: stat_max },
+        EquipmentAbilityAdditionalDef { kind: HpRecovery, min: recovery_min, max: recovery_max },
+        EquipmentAbilityAdditionalDef { kind: MpRecovery, min: recovery_min, max: recovery_max },
+        EquipmentAbilityAdditionalDef { kind: Accuracy, min: accuracy_min, max: accuracy_max },
+    ];
+    EquipmentAbilityDef {
+        id, name, family, category: 4, slot: PartSlot::Weapon,
+        exclusive_group: "weapon-category-4",
+        additional_slots: 2, additional_effects, additional_options, record_only: false,
+        effect_summary, values, damage_effects: &[],
+    }
 }
 
-/// 追加効果「ダメージ増加 +n%」付き(wiki: アビリティ表の「追加効果」列。R- 以上の段)。
-/// **装備攻撃力ではなくカテゴリX3(攻撃ダメージ(基本発動)、上限 +80%)に入る。**
-fn ability_with_damage(
+fn fixed_ability(
     id: &'static str,
     name: &'static str,
     family: EquipmentAbilityFamily,
+    category: u8,
     values: EquipmentValues,
-    damage_effects: &'static [SkillEffect],
+    effect_summary: &'static str,
+    record_only: bool,
 ) -> EquipmentAbilityDef {
-    EquipmentAbilityDef { id, name, family, values, damage_effects }
+    EquipmentAbilityDef {
+        id, name, family, category, slot: PartSlot::Weapon,
+        exclusive_group: match category {
+            1 => "weapon-category-1",
+            3 => "weapon-category-3",
+            _ => "weapon-category-other",
+        },
+        additional_slots: 0, additional_effects: "", additional_options: vec![], record_only,
+        effect_summary, values, damage_effects: &[],
+    }
 }
-
-/// R- 段の追加効果。全 4 系統で共通の +3%。
-const DAMAGE_3: &[SkillEffect] = &[SkillEffect::Damage {
-    category: DamageCategory::AttackDamageBasicTrigger,
-    percent: 3.0,
-}];
-/// L- 段の追加効果。
-const DAMAGE_4: &[SkillEffect] = &[SkillEffect::Damage {
-    category: DamageCategory::AttackDamageBasicTrigger,
-    percent: 4.0,
-}];
-/// E- 段の追加効果。
-const DAMAGE_6: &[SkillEffect] = &[SkillEffect::Damage {
-    category: DamageCategory::AttackDamageBasicTrigger,
-    percent: 6.0,
-}];
 
 /// 武器アビリティは装備攻撃力(突き/斬り/魔攻/魔防)にしか効かない。
 fn a(thrust: i64, slash: i64, magic_attack: i64, magic_defense: i64) -> EquipmentValues {
     EquipmentValues { thrust, slash, magic_attack, magic_defense, ..Default::default() }
 }
 
-/// 武器アビリティカタログ(4 系統 × 7 段 = 28 件。wiki: 装備システム/アビリティ)。
-/// 段は (下)/(中)/(上)/N-/R-/L-/E- で装備攻撃力 +2/+3/+4/+6/+7/+8/+9。
-///
-/// **R- 以上には追加効果「ダメージ増加 +3/+4/+6%」が付く。**これは装備攻撃力ではなく
-/// 与ダメージ式のカテゴリX3(攻撃ダメージ(基本発動)、上限 +80%)に入る。
+/// 武器アビリティ。武器は最大3スロットで、同じカテゴリーは1つまで。
+/// カテゴリー1と4は同じ攻撃系統でも併用できる（例: 下級斬り + 夜星の鋭い刃）。
+/// カテゴリー4の追加アビリティはランダムなので自動適用しない。
 pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
-    vec![
-        // 尖った刃(突き攻撃力)
-        ability("pointed-blade-low", "(下)尖った刃", EquipmentAbilityFamily::PointedBlade, a(2, 0, 0, 0)),
-        ability("pointed-blade-mid", "(中)尖った刃", EquipmentAbilityFamily::PointedBlade, a(3, 0, 0, 0)),
-        ability("pointed-blade-high", "(上)尖った刃", EquipmentAbilityFamily::PointedBlade, a(4, 0, 0, 0)),
-        ability("pointed-blade-n", "N-尖った刃", EquipmentAbilityFamily::PointedBlade, a(6, 0, 0, 0)),
-        ability_with_damage("pointed-blade-r", "R-尖った刃", EquipmentAbilityFamily::PointedBlade, a(7, 0, 0, 0), DAMAGE_3),
-        ability_with_damage("pointed-blade-l", "L-尖った刃", EquipmentAbilityFamily::PointedBlade, a(8, 0, 0, 0), DAMAGE_4),
-        ability_with_damage("pointed-blade-e", "E-尖った刃", EquipmentAbilityFamily::PointedBlade, a(9, 0, 0, 0), DAMAGE_6),
-        // 鋭い刃(斬り攻撃力)
-        ability("sharp-blade-low", "(下)鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 2, 0, 0)),
-        ability("sharp-blade-mid", "(中)鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 3, 0, 0)),
-        ability("sharp-blade-high", "(上)鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 4, 0, 0)),
-        ability("sharp-blade-n", "N-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 6, 0, 0)),
-        ability_with_damage("sharp-blade-r", "R-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 7, 0, 0), DAMAGE_3),
-        ability_with_damage("sharp-blade-l", "L-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 8, 0, 0), DAMAGE_4),
-        ability_with_damage("sharp-blade-e", "E-鋭い刃", EquipmentAbilityFamily::SharpBlade, a(0, 9, 0, 0), DAMAGE_6),
-        // 知力(魔法攻撃力)
-        ability("intelligence-low", "(下)知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 2, 0)),
-        ability("intelligence-mid", "(中)知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 3, 0)),
-        ability("intelligence-high", "(上)知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 4, 0)),
-        ability("intelligence-n", "N-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 6, 0)),
-        ability_with_damage("intelligence-r", "R-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 7, 0), DAMAGE_3),
-        ability_with_damage("intelligence-l", "L-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 8, 0), DAMAGE_4),
-        ability_with_damage("intelligence-e", "E-知力", EquipmentAbilityFamily::Intelligence, a(0, 0, 9, 0), DAMAGE_6),
-        // 耐魔力(魔法防御力)
-        ability("magic-resistance-low", "(下)耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 2)),
-        ability("magic-resistance-mid", "(中)耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 3)),
-        ability("magic-resistance-high", "(上)耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 4)),
-        ability("magic-resistance-n", "N-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 6)),
-        ability_with_damage("magic-resistance-r", "R-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 7), DAMAGE_3),
-        ability_with_damage("magic-resistance-l", "L-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 8), DAMAGE_4),
-        ability_with_damage("magic-resistance-e", "E-耐魔力", EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, 9), DAMAGE_6),
-    ]
+    let mut out = Vec::new();
+
+    // カテゴリー1: 旧アビリティ。2026年追加の「下級〜」も同カテゴリー。
+    for (family, entries) in [
+        (EquipmentAbilityFamily::PointedBlade, [
+            ("low-pointed-blade", "(下)尖った刃", 2, "突き +2"),
+            ("middle-pointed-blade", "(中)尖った刃", 3, "突き +3"),
+            ("upper-pointed-blade", "(上)尖った刃", 4, "突き +4"),
+            ("lower-grade-stab", "下級突き", 12, "突き +12"),
+        ]),
+        (EquipmentAbilityFamily::SharpBlade, [
+            ("low-sharp-blade", "(下)鋭い刃", 2, "斬り +2"),
+            ("middle-sharp-blade", "(中)鋭い刃", 3, "斬り +3"),
+            ("upper-sharp-blade", "(上)鋭い刃", 4, "斬り +4"),
+            ("lower-grade-slash", "下級斬り", 12, "斬り +12"),
+        ]),
+        (EquipmentAbilityFamily::Intelligence, [
+            ("low-intelligence", "(下)知力", 2, "魔攻 +2"),
+            ("middle-intelligence", "(中)知力", 3, "魔攻 +3"),
+            ("upper-intelligence", "(上)知力", 4, "魔攻 +4"),
+            ("lower-grade-magic-attack", "下級魔法攻撃", 12, "魔攻 +12"),
+        ]),
+        (EquipmentAbilityFamily::MagicResistance, [
+            ("low-magic-resistance", "(下)耐魔力", 2, "魔防 +2"),
+            ("middle-magic-resistance", "(中)耐魔力", 3, "魔防 +3"),
+            ("upper-magic-resistance", "(上)耐魔力", 4, "魔防 +4"),
+            ("lower-grade-magic-defense", "下級魔法防御", 12, "魔防 +12"),
+        ]),
+    ] {
+        for (id, name, value, summary) in entries {
+            let values = match family {
+                EquipmentAbilityFamily::PointedBlade => a(value, 0, 0, 0),
+                EquipmentAbilityFamily::SharpBlade => a(0, value, 0, 0),
+                EquipmentAbilityFamily::Intelligence => a(0, 0, value, 0),
+                EquipmentAbilityFamily::MagicResistance => a(0, 0, 0, value),
+                EquipmentAbilityFamily::WeaponDelay => EquipmentValues::default(),
+            };
+            out.push(fixed_ability(id, name, family, 1, values, summary, false));
+        }
+    }
+
+    // カテゴリー3: 武器ディレイは前/後ディレイに作用し、中ディレイには作用しない。
+    // 現環境では後ディレイがほぼ 0 になるため DPS 計算の対象外とし、記録表示のみ。
+    for (id, name, summary) in [
+        ("gale-blade", "疾風の刃", "武器ディレイ -5%"),
+        ("storm-blade", "暴風の刃", "武器ディレイ -7%"),
+        ("soft-wind-blade", "軟風の刃", "武器ディレイ +5%"),
+        ("breeze-blade", "微風の刃", "武器ディレイ +10%"),
+        ("silence-blade", "静寂の刃", "武器ディレイ +15%"),
+    ] {
+        out.push(fixed_ability(
+            id, name, EquipmentAbilityFamily::WeaponDelay, 3,
+            EquipmentValues::default(), summary, true,
+        ));
+    }
+
+    for (id, name, value) in [
+        ("ancient-pointed-blade", "古代精霊の尖った刃", 11), ("abyss-pointed-blade", "深淵の尖った刃", 13),
+        ("loss-pointed-blade", "喪失の尖った刃", 17), ("night-star-pointed-blade", "夜星の尖った刃", 20),
+    ] { out.push(new_ability(id, name, EquipmentAbilityFamily::PointedBlade, a(value, 0, 0, 0), match value { 11 => "突き +11", 13 => "突き +13", 17 => "突き +17", _ => "突き +20" })); }
+    for (id, name, value) in [
+        ("ancient-sharp-blade", "古代精霊の鋭い刃", 11), ("abyss-sharp-blade", "深淵の鋭い刃", 13),
+        ("loss-sharp-blade", "喪失の鋭い刃", 17), ("night-star-sharp-blade", "夜星の鋭い刃", 20),
+    ] { out.push(new_ability(id, name, EquipmentAbilityFamily::SharpBlade, a(0, value, 0, 0), match value { 11 => "斬り +11", 13 => "斬り +13", 17 => "斬り +17", _ => "斬り +20" })); }
+    for (id, name, value) in [
+        ("ancient-intelligence", "古代精霊の知力", 11), ("abyss-intelligence", "深淵の知力", 13),
+        ("loss-intelligence", "喪失の知力", 17), ("night-star-intelligence", "夜星の知力", 20),
+    ] { out.push(new_ability(id, name, EquipmentAbilityFamily::Intelligence, a(0, 0, value, 0), match value { 11 => "魔攻 +11", 13 => "魔攻 +13", 17 => "魔攻 +17", _ => "魔攻 +20" })); }
+    for (id, name, value) in [
+        ("ancient-magic-resistance", "古代精霊の耐魔力", 11), ("abyss-magic-resistance", "深淵の耐魔力", 13),
+        ("loss-magic-resistance", "喪失の耐魔力", 17), ("night-star-magic-resistance", "夜星の耐魔力", 20),
+    ] { out.push(new_ability(id, name, EquipmentAbilityFamily::MagicResistance, a(0, 0, 0, value), match value { 11 => "魔防 +11", 13 => "魔防 +13", 17 => "魔防 +17", _ => "魔防 +20" })); }
+    out
 }
 
 #[cfg(test)]
 mod tests {
-    use domain::{DamageCategory, SkillEffect};
+    use domain::DamageCategory;
 
-    /// R- 以上のアビリティには追加効果「ダメージ増加 +3/+4/+6%」が付く
-    /// (wiki: 装備システム/アビリティ の「追加効果」列)。**装備攻撃力ではなくカテゴリX3**。
+    /// 追加アビリティは抽選結果なので、登録した基本アビリティから自動適用しない。
     #[test]
-    fn r_以上のアビリティはx3のダメージ増加を持つ() {
-        let expected = [("-r", 3.0), ("-l", 4.0), ("-e", 6.0)];
-        for def in equipment_abilities() {
-            let want = expected.iter().find(|(suffix, _)| def.id.ends_with(suffix));
-            match want {
-                Some((_, percent)) => assert_eq!(
-                    def.damage_effects,
-                    &[SkillEffect::Damage {
-                        category: DamageCategory::AttackDamageBasicTrigger,
-                        percent: *percent,
-                    }],
-                    "{}",
-                    def.id
-                ),
-                None => assert!(def.damage_effects.is_empty(), "{}", def.id),
-            }
+    fn 追加アビリティは説明だけを持ち自動計算しない() {
+        for def in equipment_abilities().into_iter().filter(|d| d.category == 4) {
+            assert!(def.damage_effects.is_empty(), "{}", def.id);
+            assert_eq!(def.additional_slots, 2, "{}", def.id);
+            assert!(def.additional_effects.contains("ランダム"), "{}", def.id);
         }
-        // 4 系統 × R/L/E = 12 件
-        let with_damage =
-            equipment_abilities().iter().filter(|d| !d.damage_effects.is_empty()).count();
-        assert_eq!(with_damage, 12);
     }
 
     use super::*;
     use std::collections::HashSet;
 
     #[test]
-    fn カタログは49件_idは重複しない() {
+    fn カタログは51件_idは重複しない() {
         let catalog = equipment_catalog();
-        // エンドゲーム帯 20 件 + 装着時効果つき 29 件
-        assert_eq!(catalog.len(), 49);
+        // エンドゲーム帯 22 件 + 装着時効果つき 29 件
+        assert_eq!(catalog.len(), 51);
         let ids: HashSet<&str> = catalog.iter().map(|i| i.id).collect();
         assert_eq!(ids.len(), catalog.len());
     }
@@ -980,21 +1155,21 @@ mod tests {
     }
 
     #[test]
-    fn 武器アビリティは28件_idは重複しない() {
+    fn 武器アビリティはカテゴリー1_3_4の37件_idは重複しない() {
         let abilities = equipment_abilities();
-        assert_eq!(abilities.len(), 28);
+        assert_eq!(abilities.len(), 37);
         let ids: HashSet<&str> = abilities.iter().map(|a| a.id).collect();
         assert_eq!(ids.len(), abilities.len());
     }
 
-    /// 系統は UI の「系統ごとに 1 つ選ぶ」4 行と storage の重複検証の両方が使う。
+    /// カテゴリー4は新装着アビリティ4系統各4件。
     #[test]
-    fn アビリティは4系統各7段で系統と加算先が対応する() {
+    fn アビリティは4系統各4件で記録値と追加枠情報を持つ() {
         use domain::EquipmentAbilityFamily::*;
         let abilities = equipment_abilities();
         for family in [PointedBlade, SharpBlade, Intelligence, MagicResistance] {
-            let members: Vec<_> = abilities.iter().filter(|a| a.family == family).collect();
-            assert_eq!(members.len(), 7, "{family:?} は 7 段");
+            let members: Vec<_> = abilities.iter().filter(|a| a.category == 4 && a.family == family).collect();
+            assert_eq!(members.len(), 4, "{family:?} は 4 件");
             for def in members {
                 let nonzero = [
                     (def.values.thrust, PointedBlade),
@@ -1005,23 +1180,51 @@ mod tests {
                 for (value, owner) in nonzero {
                     assert_eq!(value != 0, owner == family, "{} の加算先が系統と食い違う", def.id);
                 }
+                assert!(def.damage_effects.is_empty(), "追加アビリティは自動適用しない");
+                assert_eq!(def.additional_slots, 2);
+                assert!(!def.additional_effects.is_empty());
+                assert_eq!(def.additional_options.len(), 6);
+                assert!(!def.record_only, "基本アビリティ値は計算へ反映する");
             }
         }
     }
 
     #[test]
-    fn 尖った刃eは突き9() {
+    fn 夜星の尖った刃は突き20() {
         let abilities = equipment_abilities();
-        let def = abilities.iter().find(|a| a.id == "pointed-blade-e").unwrap();
-        assert_eq!(def.name, "E-尖った刃");
-        assert_eq!(def.values, a(9, 0, 0, 0));
+        let def = abilities.iter().find(|a| a.id == "night-star-pointed-blade").unwrap();
+        assert_eq!(def.name, "夜星の尖った刃");
+        assert_eq!(def.values, a(20, 0, 0, 0));
+        use domain::EquipmentAbilityAdditionalKind::*;
+        assert_eq!(def.additional_options.iter().find(|o| o.kind == FixedDamage).map(|o| (o.min, o.max)), Some((10_000, 10_000)));
+        assert_eq!(def.additional_options.iter().find(|o| o.kind == DamageRate).map(|o| (o.min, o.max)), Some((11, 11)));
+        assert_eq!(def.additional_options.iter().find(|o| o.kind == Thrust).map(|o| (o.min, o.max)), Some((9, 18)));
+        assert_eq!(def.additional_options.iter().find(|o| o.kind == Accuracy).map(|o| (o.min, o.max)), Some((10, 16)));
     }
 
     #[test]
-    fn 耐魔力下は魔防2() {
+    fn ユーザー例の3枠はカテゴリーが異なる() {
         let abilities = equipment_abilities();
-        let def = abilities.iter().find(|a| a.id == "magic-resistance-low").unwrap();
-        assert_eq!(def.name, "(下)耐魔力");
-        assert_eq!(def.values, a(0, 0, 0, 2));
+        let picked = ["night-star-sharp-blade", "lower-grade-slash", "storm-blade"]
+            .map(|id| abilities.iter().find(|a| a.id == id).unwrap());
+        assert_eq!(picked.map(|a| a.category), [4, 1, 3]);
+        assert_eq!(picked[0].values.slash, 20);
+        assert_eq!(picked[1].values.slash, 12);
+        assert_eq!(picked[2].effect_summary, "武器ディレイ -7%");
+    }
+
+    #[test]
+    fn 古代精霊の耐魔力は魔防11() {
+        let abilities = equipment_abilities();
+        let def = abilities.iter().find(|a| a.id == "ancient-magic-resistance").unwrap();
+        assert_eq!(def.name, "古代精霊の耐魔力");
+        assert_eq!(def.values, a(0, 0, 0, 11));
+    }
+
+    #[test]
+    fn 強化等級はwiki確率区分の上端を四捨五入する() {
+        use domain::EnhanceGrade::*;
+        assert_eq!([Lowest, Low, Middle, High, Highest].map(|grade| enhance_grade_multiplier(15, grade).unwrap()), [700.0, 740.0, 820.0, 870.0, 880.0]);
+        assert_eq!([Lowest, Low, Middle, High, Highest].map(|grade| armor_enhance_multiplier(15, Some(grade)).unwrap()), [350.0, 370.0, 410.0, 435.0, 440.0]);
     }
 }
