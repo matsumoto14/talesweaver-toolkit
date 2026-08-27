@@ -22,7 +22,7 @@
   // 選択した補正源の編集ペイン。draft($state プロキシ)のネストしたプロパティを直接書き換える。
   // 専門用語(層名など)は「補正の内訳」以外に出さない(既存決定を踏襲)。
   import type {
-    CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityAdditionalKind, EquipmentAbilityFamily, EquipmentItem, PartSlot,
+    CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentItem, PartSlot,
     MasteryDef, PetSkillTier, RandomOptionDef, RandomOptionRank, SienaExtraKind, SienaValueKind,
     Skill, SkillDependency, WeaponClass, WeaponSystem,
     StatKind, StatPreview, TitleDef, UltimateSkill,
@@ -476,44 +476,36 @@
       default: return null;
     }
   };
-  /** 普段使う候補だけを、シエナのオーラと同じ追加チップとして出す。 */
-  const commonAbilityCandidates = (slot: PartSlot, category: number) => {
+  /** 収録候補を武器系統で絞る。カスタム武器で系統不明なら、選べなくしないため全系統を出す。 */
+  const abilityCandidates = (slot: PartSlot, category: number) => {
     const system = abilityWeaponSystem(slot);
-    if (system === null && category !== 3) return [];
-    const candidates = app.equipmentAbilities.filter((ability) => {
-      const isCommon = category === 1
-        ? ability.id.startsWith("lower-grade-")
-        : category === 3
-          ? ability.id === "storm-blade"
-          : category === 4 && (
-            ability.id.startsWith("night-star-")
-            || ability.id.startsWith("loss-")
-            || ability.id.startsWith("abyss-")
-          );
-      return isCommon
-      && ability.slot === slot
+    const candidates = app.equipmentAbilities.filter((ability) => ability.slot === slot
       && ability.category === category
-      && abilityFitsWeapon(ability.family, system);
-    });
-    const tierOrder = (id: string) => id.startsWith("night-star-") ? 0 : id.startsWith("loss-") ? 1 : 2;
-    return candidates.sort((a, b) => tierOrder(a.id) - tierOrder(b.id));
+      && abilityFitsWeapon(ability.family, system));
+    const preferred = [
+      "storm-blade", "gale-blade", "soft-wind-blade", "breeze-blade", "silence-blade",
+    ];
+    const score = (ability: EquipmentAbilityDef) => Math.max(
+      ability.values.thrust, ability.values.slash, ability.values.magic_attack, ability.values.magic_defense,
+    );
+    return candidates.sort((a, b) => category === 3
+      ? preferred.indexOf(a.id) - preferred.indexOf(b.id)
+      : score(b) - score(a));
   };
-  const selectedAbilityDefs = (slot: PartSlot) => {
-    const order = [1, 4, 3];
-    return selectedPart(slot).abilities
-      .flatMap((id) => { const ability = abilityDef(id); return ability ? [ability] : []; })
-      .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
-  };
-  function addAbility(slot: PartSlot, id: string) {
+  const abilityIdForCategory = (slot: PartSlot, category: number): string =>
+    selectedPart(slot).abilities.find((id) => abilityDef(id)?.category === category) ?? "";
+  function setAbilityForCategory(slot: PartSlot, category: number, id: string) {
     const part = selectedPart(slot);
+    if (abilityIdForCategory(slot, category) === id) return;
+    const previousIds = part.abilities.filter((current) => abilityDef(current)?.category === category);
+    part.abilities = part.abilities.filter((current) => abilityDef(current)?.category !== category);
+    part.ability_additions = (part.ability_additions ?? []).filter(
+      (addition) => !previousIds.includes(addition.ability_id),
+    );
     const def = abilityDef(id);
-    if (!def || part.abilities.length >= 3 || part.abilities.some((current) => abilityDef(current)?.category === def.category)) return;
-    part.abilities.push(id);
-  }
-  function removeAbility(slot: PartSlot, id: string) {
-    const part = selectedPart(slot);
-    part.abilities = part.abilities.filter((current) => current !== id);
-    part.ability_additions = (part.ability_additions ?? []).filter((addition) => addition.ability_id !== id);
+    if (def?.slot === slot && def.category === category && abilityFitsWeapon(def.family, abilityWeaponSystem(slot))) {
+      part.abilities = [...part.abilities, id];
+    }
   }
   const additionalKindLabel = (kind: EquipmentAbilityAdditionalKind): string => ({
     fixed_damage: "ダメージ増加", damage_rate: "ダメージ増加率",
@@ -524,10 +516,13 @@
   const additionsFor = (abilityId: string) =>
     (selectedPart("weapon").ability_additions ?? []).filter((a) => a.ability_id === abilityId);
   const additionalAt = (abilityId: string, index: number) => additionsFor(abilityId)[index] ?? null;
+  function setAdditionalValue(abilityId: string, index: number, value: number) {
+    const current = additionalAt(abilityId, index);
+    if (current) current.value = value;
+  }
   const addableAdditionalOptions = (abilityId: string) => {
-    const def = abilityDef(abilityId);
     const used = new Set(additionsFor(abilityId).map((addition) => addition.kind));
-    return (def?.additional_options ?? []).filter(
+    return (abilityDef(abilityId)?.additional_options ?? []).filter(
       (option) => option.kind !== "hp_recovery" && option.kind !== "mp_recovery" && !used.has(option.kind),
     );
   };
@@ -546,10 +541,22 @@
     current.splice(index, 1);
     part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId).concat(current);
   }
-  function setAdditionalValue(abilityId: string, index: number, value: number) {
-    const current = additionalAt(abilityId, index);
-    if (current) current.value = value;
-  }
+  const abilityImpactSummary = (slot: PartSlot): string => {
+    const part = selectedPart(slot);
+    const stats = [
+      ["突き", "thrust"], ["斬り", "slash"], ["魔攻", "magic_attack"], ["魔防", "magic_defense"], ["命中", "accuracy"],
+    ] as const;
+    const pieces = stats.flatMap(([label, kind]) => {
+      const value = abilityValueForStat(slot, kind);
+      return value === 0 ? [] : [`${label} +${value}`];
+    });
+    const additions = part.ability_additions ?? [];
+    const fixed = additions.filter((a) => a.kind === "fixed_damage").reduce((sum, a) => sum + a.value, 0);
+    const rate = additions.filter((a) => a.kind === "damage_rate").reduce((sum, a) => sum + a.value, 0);
+    if (fixed !== 0) pieces.push(`固定 +${fixed.toLocaleString()}`);
+    if (rate !== 0) pieces.push(`ダメージ +${rate}%`);
+    return pieces.length === 0 ? "反映なし" : pieces.join(" / ");
+  };
   const abilityValueForStat = (slot: PartSlot, kind: EquipmentStatKind): number => {
     if (slot !== "weapon") return 0;
     const part = selectedPart(slot);
@@ -1797,72 +1804,85 @@
           <div class="card ability-card">
             <div class="card-title inline">
               <span>武器アビリティ</span><span class="badge">{part.abilities.length} / 3</span>
+              <strong class="ability-impact num" use:flash={() => abilityImpactSummary(slot)}>{abilityImpactSummary(slot)}</strong>
             </div>
-            <p class="hint dim">同じカテゴリーは1つまで。普段使う候補を押して足し、変更するときは「外す」から選び直します。</p>
+            <p class="hint dim">ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。</p>
 
-            {#if part.abilities.length < 3}
-              <div class="ability-add-groups">
-                {#each [1, 4, 3] as category (category)}
-                  {@const alreadySelected = part.abilities.some((id) => abilityDef(id)?.category === category)}
-                  {@const candidates = alreadySelected ? [] : commonAbilityCandidates(slot, category)}
-                  {#if candidates.length > 0}
-                    <div class="ability-add-group" class:optional={category === 3}>
-                      <span class="ability-category">カテゴリ{category}{category === 3 ? "（任意）" : ""}</span>
-                      <div class="ro-add-row">
-                        {#each candidates as candidate (candidate.id)}
-                          <button type="button" class="chip add" onclick={() => addAbility(slot, candidate.id)}>
-                            ＋ {candidate.name} <span class="chip-effect">{candidate.effect_summary}</span>
-                          </button>
-                        {/each}
-                      </div>
-                    </div>
-                  {/if}
-                {/each}
-              </div>
-            {/if}
-
-            <div class="ability-slots">
-              {#each selectedAbilityDefs(slot) as selectedAbility (selectedAbility.id)}
-                <div class="ability-selected-row swap-in">
-                  <span class="badge">カテゴリ{selectedAbility.category}</span>
-                  <span class="ability-name">{selectedAbility.name}</span>
-                  <span class="ability-effect">{selectedAbility.effect_summary}</span>
-                  <button type="button" class="clear" onclick={() => removeAbility(slot, selectedAbility.id)}>✕ 外す</button>
+            <div class="ability-fixed-list">
+              {#each [
+                { category: 1, label: "基本補正", note: "従来アビリティ" },
+                { category: 4, label: "新装着", note: "追加効果2枠" },
+                { category: 3, label: "武器ディレイ", note: "任意・計算対象外" },
+              ] as row (row.category)}
+                {@const selectedAbilityId = abilityIdForCategory(slot, row.category)}
+                {@const selectedAbility = abilityDef(selectedAbilityId)}
+                <div class="ability-fixed-row">
+                  <div class="ability-fixed-label">
+                    <b>{row.label}</b>
+                    <span>{row.note} ・ カテゴリ{row.category}</span>
+                  </div>
+                  <div class="ability-choice-list" aria-label="{row.label}の候補">
+                    <button
+                      type="button"
+                      class:on={selectedAbilityId === ""}
+                      class="chip ability-choice-none"
+                      aria-pressed={selectedAbilityId === ""}
+                      onclick={() => setAbilityForCategory(slot, row.category, "")}
+                    >装着しない</button>
+                    {#each abilityCandidates(slot, row.category) as ability (ability.id)}
+                      <button
+                        type="button"
+                        class:on={selectedAbilityId === ability.id}
+                        class:record-only={ability.record_only}
+                        class="chip ability-choice"
+                        aria-pressed={selectedAbilityId === ability.id}
+                        onclick={() => setAbilityForCategory(slot, row.category, ability.id)}
+                      >
+                        <span>{ability.name}</span>
+                        <span class="ability-choice-effect num">{ability.effect_summary}</span>
+                      </button>
+                    {/each}
+                  </div>
                 </div>
-                {#if selectedAbility.additional_slots > 0}
-                  <div class="additional-abilities swap-in">
-                    <div class="additional-heading">
-                      <span class="additional-title">ランダム追加</span>
+
+                {#if row.category === 4 && selectedAbility?.additional_slots}
+                  <div class="ability-additional-panel swap-in">
+                    <div class="ability-additional-head">
+                      <b>ランダム追加</b>
                       <span class="badge">{additionsFor(selectedAbility.id).length} / 2</span>
+                      <span class="dim">付いている種類を押して足し、実測値を合わせます</span>
                     </div>
                     {#if additionsFor(selectedAbility.id).length < 2}
-                      <div class="ro-add-row additional-candidates">
+                      <div class="ro-add-row ability-additional-candidates">
                         {#each addableAdditionalOptions(selectedAbility.id) as option (option.kind)}
                           <button type="button" class="chip add" onclick={() => addAdditional(selectedAbility.id, option.kind)}>
                             ＋ {additionalKindLabel(option.kind)}
-                            <span class="chip-effect">{option.min === option.max ? `+${option.max}` : `+${option.min}〜${option.max}`}</span>
+                            <span class="num dim">
+                              {option.min === option.max ? `+${option.max.toLocaleString()}` : `+${option.min}〜${option.max}`}
+                            </span>
                           </button>
                         {/each}
                       </div>
                     {/if}
                     {#each additionsFor(selectedAbility.id) as additional, additionalIndex (`${additional.kind}-${additionalIndex}`)}
-                      {@const additionalDef = selectedAbility.additional_options.find((option) => option.kind === additional.kind)}
+                      {@const additionalDef = selectedAbility.additional_options.find((option) => option.kind === additional?.kind)}
                       {#if additionalDef}
-                        <div class="additional-row swap-in">
+                        <div class="siena-row swap-in">
                           <span class="ro-name">{additionalKindLabel(additional.kind)}</span>
                           <StatInput
                             label="{additionalKindLabel(additional.kind)}の値"
+                            hideLabel
                             min={additionalDef.min}
                             max={additionalDef.max}
                             gauge={false}
                             stepper
                             bind:value={() => additional.value, (value) => setAdditionalValue(selectedAbility.id, additionalIndex, value)}
                           />
-                          <button type="button" class="clear" onclick={() => removeAdditional(selectedAbility.id, additionalIndex)}>✕ 外す</button>
+                          <button type="button" class="clear" onclick={() => removeAdditional(selectedAbility.id, additionalIndex)}>外す</button>
                         </div>
                       {/if}
                     {/each}
-                    <span class="additional-note dim">固定ダメージ・割合・攻撃補正・命中だけを表示し、計算へ反映します。</span>
+                    <span class="additional-note dim">固定ダメージ・割合・攻撃補正・命中を保存し、計算へ反映します。</span>
                   </div>
                 {/if}
               {/each}
@@ -3525,25 +3545,6 @@
   .ability-part { margin-left: 2px; padding: 1px 4px; border-radius: var(--r-pill); background: var(--surface-inset); color: var(--accent-deep); font-size: 8.5px; }
   .enchant-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .enchant-card .hint { margin: 4px 0 0; }
-  .ability-card .hint { margin: 3px 0 5px; }
-  .ability-add-groups { margin: 6px 0 8px; display: grid; gap: 5px; }
-  .ability-add-group { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 7px; align-items: start; }
-  .ability-add-group.optional { opacity: .78; }
-  .ability-category { padding-top: 4px; color: var(--fg-muted); font-size: 9px; font-weight: 700; }
-  .ability-add-group .ro-add-row, .additional-candidates { margin: 0; padding: 0; border-bottom: 0; }
-  .chip-effect { margin-left: 4px; color: var(--fg-muted); font-size: 9px; }
-  .ability-slots { display: grid; gap: 5px; }
-  .ability-selected-row { display: grid; grid-template-columns: 72px minmax(150px, .8fr) minmax(130px, 1fr) 52px; gap: 7px; align-items: center; padding: 4px 6px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset); }
-  .ability-name { font-size: 11px; font-weight: 700; }
-  .ability-effect { padding: 4px 7px; border-radius: var(--r-inset); background: var(--inset); color: var(--fg-sub); font-size: 10px; }
-  .ability-card .clear, .additional-abilities .clear { padding: 2px 6px; font-size: 9px; color: var(--danger); background: var(--state-short-bg); border: 1px solid var(--state-short-bd); border-radius: var(--r-pill); white-space: nowrap; }
-  .ability-card .clear:hover, .additional-abilities .clear:hover { background: var(--state-short-bg); color: var(--danger); }
-  .additional-abilities { margin: -1px 0 4px 18px; padding: 7px 9px; display: grid; gap: 5px; border-left: 2px solid var(--accent); background: var(--inset); border-radius: var(--r-inset); }
-  .additional-heading { display: flex; align-items: center; gap: 7px; }
-  .additional-title { font-size: 10px; font-weight: 700; color: var(--accent-deep); }
-  .additional-row { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(260px, 1.3fr) 52px; gap: 7px; align-items: center; padding-top: 4px; border-top: 1px dashed var(--border-soft); }
-  .additional-row > :global(.stepper) { min-width: 0; }
-  .additional-note { font-size: 9px; }
   .weapon-filter { white-space: nowrap; }
   @media (max-width: 850px) {
     .values-paired { grid-template-columns: minmax(0, 1fr); }

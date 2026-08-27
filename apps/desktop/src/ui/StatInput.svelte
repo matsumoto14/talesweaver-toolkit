@@ -18,6 +18,8 @@
   // value との比較ではなく専用変数で判定する)。
   interface Props {
     label: string;
+    /** 列の左側ですでに同じ名前を表示しているとき、見えるラベルだけ省く。aria-label は維持する。 */
+    hideLabel?: boolean;
     value: number;
     min: number;
     max: number;
@@ -45,7 +47,7 @@
     stepper?: boolean;
   }
   let {
-    label, value = $bindable(), min, max, step = 1, format, presets = [], gauge = true, stepper = false,
+    label, hideLabel = false, value = $bindable(), min, max, step = 1, format, presets = [], gauge = true, stepper = false,
   }: Props = $props();
 
   let text = $state(String(value));
@@ -149,7 +151,7 @@
     }, 0);
   }}
 >
-  {#if label}<span class="label">{label}</span>{/if}
+  {#if label && !hideLabel}<span class="label">{label}</span>{/if}
   {#if stepper}
     <button type="button" class="step" onclick={() => nudge(-1)} disabled={value <= min} aria-label="{label} を 1 減らす">−</button>
   {/if}
