@@ -290,6 +290,21 @@
     const itemId = draft.equipment.parts[slot].item_id;
     return itemId ? (app.equipmentCatalog.find((i) => i.id === itemId) ?? null) : null;
   };
+  /** 装着時効果の要約。効果なしは null。装備補正値と違って部位の数値には出ないので、
+      選ぶ前も選んだ後も文字で見せる。`short` は部位行(3 ペインで幅が狭い)用で、
+      カテゴリ名を出すと装備名を押し出してしまうので「与ダメ +5%」だけにする */
+  const itemDamageLabel = (item: EquipmentItem | null, short = false): string | null => {
+    if (!item || item.damage_effects.length === 0) return null;
+    const labels = item.damage_effects
+      .map((e) => {
+        if (e === "record_only" || !("damage" in e)) return null;
+        const sign = e.damage.percent < 0 ? "−" : "+";
+        const head = short ? "与ダメ" : damageCategoryLabel(e.damage.category);
+        return `${head} ${sign}${Math.abs(e.damage.percent)}%`;
+      })
+      .filter((x): x is string => x !== null);
+    return labels.length === 0 ? null : labels.join(" ・ ");
+  };
   const partDisplayName = (slot: PartSlot): string => {
     const item = equippedItem(slot);
     if (item) return item.name;
@@ -1329,6 +1344,7 @@
     {#each PART_SLOTS as slot (slot)}
       {@const part = draft.equipment.parts[slot]}
       {@const canEnhance = ENHANCE_ALLOWED_SLOTS.includes(slot)}
+      {@const damageLabel = itemDamageLabel(equippedItem(slot), true)}
       <button type="button" class="part-row" class:on={openPart === slot} onclick={() => openPartDetail(slot)}>
         <span class="part-main">
           <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
@@ -1340,6 +1356,10 @@
           {/if}
           {#if part.abilities.length > 0}
             <span class="part-abi">アビリティ {part.abilities.length}</span>
+          {/if}
+          <!-- 装着時効果は装備補正値の列に出ないので、行にバッジで残す(§00 ②/⑤) -->
+          {#if damageLabel !== null}
+            <span class="part-dmg" use:flash={() => damageLabel}>{damageLabel}</span>
           {/if}
           {#if part.random_options.length > 0}
             <span class="part-abi">OP {part.random_options.length}</span>
@@ -1382,8 +1402,12 @@
               <span class="item-name">未装備</span>
             </button>
             {#each filteredCatalog as candidate (candidate.id)}
+              {@const candidateDamage = itemDamageLabel(candidate)}
               <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
                 <span class="item-name">{candidate.name}</span>
+                {#if candidateDamage !== null}
+                  <span class="part-dmg">{candidateDamage}</span>
+                {/if}
                 <span class="item-vals num dim">
                   {rangeSummary(candidate.values_min, candidate.values_max)}
                 </span>
@@ -2810,6 +2834,12 @@
   .part-abi {
     flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
+  }
+  /* 装着時効果は「与ダメージが増えている」状態なので、状態色 §03 の「足りている」を使う */
+  .part-dmg {
+    flex-shrink: 0; font-size: 8.5px; font-weight: 700;
+    color: var(--state-met-fg); background: var(--state-met-bg);
+    border: 1px solid var(--state-met-bd); border-radius: var(--r-pill); padding: 0 6px;
   }
 
   /* 変種をまとめた行。1 行目が名前・2 行目が変種のチップ */
