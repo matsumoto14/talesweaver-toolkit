@@ -37,26 +37,27 @@ const UNLEASH_FREE_LEVEL_MAX: u8 = 5;
 pub const UNLEASH_SLOTS: usize = 2;
 
 /// パワーウェポンの装備攻撃力強化倍率(wiki: 自身の装備補正を 2% 増加)。
-const POWER_WEAPON_RATE: f64 = 0.02;
+/// UI(選択肢のラベル・数値表示)は `StatLimits::power_weapon_rate` で参照する(写経しない)。
+pub const POWER_WEAPON_RATE: f64 = 0.02;
 /// ストロングウェポンの Lv あたりの装備攻撃力強化倍率(3%/6%/9%/12%/15%/18%)。
-const STRONG_WEAPON_RATE_PER_LEVEL: f64 = 0.03;
+pub const STRONG_WEAPON_RATE_PER_LEVEL: f64 = 0.03;
 /// コートアーマーの装備防御力倍率(物理 18% / 魔法 12%)。
-const COAT_ARMOR_PHYSICAL_RATE: f64 = 0.18;
-const COAT_ARMOR_MAGIC_RATE: f64 = 0.12;
+pub const COAT_ARMOR_PHYSICAL_RATE: f64 = 0.18;
+pub const COAT_ARMOR_MAGIC_RATE: f64 = 0.12;
 /// プロテクトアーマー Lv1〜6 の装備防御力倍率(物理 36/45/54/63/72/81%)。
-const PROTECT_ARMOR_PHYSICAL: [f64; 6] = [0.36, 0.45, 0.54, 0.63, 0.72, 0.81];
+pub const PROTECT_ARMOR_PHYSICAL: [f64; 6] = [0.36, 0.45, 0.54, 0.63, 0.72, 0.81];
 /// 同(魔法 24/30/36/42/48/54%)。
-const PROTECT_ARMOR_MAGIC: [f64; 6] = [0.24, 0.30, 0.36, 0.42, 0.48, 0.54];
+pub const PROTECT_ARMOR_MAGIC: [f64; 6] = [0.24, 0.30, 0.36, 0.42, 0.48, 0.54];
 /// 改・プロテクトアーマー Lv1〜5(物理 9/18/27/36/45%)。
-const KAI_PROTECT_ARMOR_PHYSICAL: [f64; 5] = [0.09, 0.18, 0.27, 0.36, 0.45];
+pub const KAI_PROTECT_ARMOR_PHYSICAL: [f64; 5] = [0.09, 0.18, 0.27, 0.36, 0.45];
 /// 同(魔法 6/12/18/24/30%)。
-const KAI_PROTECT_ARMOR_MAGIC: [f64; 5] = [0.06, 0.12, 0.18, 0.24, 0.30];
+pub const KAI_PROTECT_ARMOR_MAGIC: [f64; 5] = [0.06, 0.12, 0.18, 0.24, 0.30];
 /// シャープネスビジョン Lv1〜10 の割合追加ダメージ(5/10/15/20/25/28/31/34/37/40%)。
-const SHARPNESS_VISION: [f64; 10] = [0.05, 0.10, 0.15, 0.20, 0.25, 0.28, 0.31, 0.34, 0.37, 0.40];
+pub const SHARPNESS_VISION: [f64; 10] = [0.05, 0.10, 0.15, 0.20, 0.25, 0.28, 0.31, 0.34, 0.37, 0.40];
 /// アンリーシュ Lv1〜10 の能力値倍率B(wiki Skill/共通「バフ等含むステータス値 × 強化倍率[%]」
 /// +1/+2/+3/+4/+5/+8/+11/+14/+17/+20%)。ユーザーの実測(基本能力値 506 で
 /// 990/995/1000/1005/1010/1025/1040/1055/1071/1086)と 1 の位まで一致する(2026-08-25)。
-const UNLEASH: [f64; 10] = [0.01, 0.02, 0.03, 0.04, 0.05, 0.08, 0.11, 0.14, 0.17, 0.20];
+pub const UNLEASH: [f64; 10] = [0.01, 0.02, 0.03, 0.04, 0.05, 0.08, 0.11, 0.14, 0.17, 0.20];
 
 /// アンリーシュ(能力解放)の 1 枠。ステを 1 つ選んで Lv を上げる。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

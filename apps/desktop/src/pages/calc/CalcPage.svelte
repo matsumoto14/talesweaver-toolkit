@@ -750,13 +750,13 @@
       if (c) fn(c);
     });
   }
-  const strongWeaponOptions = [
+  const strongWeaponOptions = $derived([
     { value: "0", label: "なし" },
-    ...Array.from({ length: limits.strong_weapon_level_max }, (_, i) => ({
-      value: String(i + 1),
-      label: `Lv${i + 1}(+${(i + 1) * 3}%)`,
-    })),
-  ];
+    ...Array.from({ length: limits.strong_weapon_level_max }, (_, i) => {
+      const percent = Math.round((i + 1) * limits.strong_weapon_rate_per_level * 100);
+      return { value: String(i + 1), label: `Lv${i + 1}(+${percent}%)` };
+    }),
+  ]);
   // 武器固有の固定エンチャント枠。実物の装備本体補正には左右されない。
   const weaponEnchantCaps = $derived.by(() => {
     const weapon = payload ? weaponOf(payload) : null;

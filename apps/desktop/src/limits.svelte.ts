@@ -39,6 +39,26 @@ const FALLBACK: StatLimits = {
   critical_rate_bonus_max: 100,
   architect_lab_stage_max: 10,
   architect_lab_per_stage: 3,
+  ultimate_rune_bonus_max: 20,
+  deadly_blow_bonus_max: 100,
+  power_weapon_rate: 0.02,
+  strong_weapon_rate_per_level: 0.03,
+  coat_armor_physical_rate: 0.18,
+  coat_armor_magic_rate: 0.12,
+  protect_armor_physical_rates: [0.36, 0.45, 0.54, 0.63, 0.72, 0.81],
+  protect_armor_magic_rates: [0.24, 0.30, 0.36, 0.42, 0.48, 0.54],
+  kai_protect_armor_physical_rates: [0.09, 0.18, 0.27, 0.36, 0.45],
+  kai_protect_armor_magic_rates: [0.06, 0.12, 0.18, 0.24, 0.30],
+  sharpness_vision_rates: [0.05, 0.10, 0.15, 0.20, 0.25, 0.28, 0.31, 0.34, 0.37, 0.40],
+  unleash_rates: [0.01, 0.02, 0.03, 0.04, 0.05, 0.08, 0.11, 0.14, 0.17, 0.20],
+  pet_skill_tier_bonus: [
+    { tier: "basic", bonus: 20 },
+    { tier: "true_lv1", bonus: 30 },
+    { tier: "true_lv2", bonus: 40 },
+    { tier: "true_lv3", bonus: 50 },
+    { tier: "true_lv4", bonus: 60 },
+  ],
+  sacred_relic_value_per_stage: 10,
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

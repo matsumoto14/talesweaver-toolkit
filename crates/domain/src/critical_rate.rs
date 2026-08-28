@@ -105,10 +105,14 @@ impl CriticalRateSources {
         }
     }
 
+    /// クリティカル率増加の合計(上限を掛ける前)。UI の「頭打ち」表示に使う。
+    pub fn raw_bonus(&self) -> f64 {
+        CriticalRateSourceId::ALL.iter().map(|id| self.value_of(*id)).sum()
+    }
+
     /// クリティカル率増加の合計(上限 +100%)。ペット会心は倍率なのでここには入らない。
     pub fn bonus(&self) -> f64 {
-        let sum: f64 = CriticalRateSourceId::ALL.iter().map(|id| self.value_of(*id)).sum();
-        sum.min(CRITICAL_RATE_BONUS_MAX)
+        self.raw_bonus().min(CRITICAL_RATE_BONUS_MAX)
     }
 
     /// 研究段階が wiki の上限に収まっているか。

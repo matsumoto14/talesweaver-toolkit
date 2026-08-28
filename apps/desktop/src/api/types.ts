@@ -862,6 +862,41 @@ export interface StatPreview {
   contributions: StatContribution[];
   /** 主軸スキル未選択なら null */
   attack: AttackPreview | null;
+  /** 共通スキル(Skill/共通・Skill/極限)の効き先サマリ */
+  common_skill: CommonSkillPreview;
+  /** クリティカル率増加(計算式まとめ #CriticalChance)の合計 */
+  critical_rate_bonus: CriticalRateBonusPreview;
+  /** 神鳥の聖物の段階→最終固定値換算の合計(Σ) */
+  sacred_relic_total: number;
+}
+
+// crates/domain/src/stat_sources.rs の CommonSkillPreview。
+export interface CommonSkillPreview {
+  /** 装備防御力倍率(コートアーマー + プロテクトアーマー + 改・プロテクトアーマー + シエナのオーラの防御力増加)。1.0 が中立値の乗数 */
+  defense_rates: DefenseRates;
+  /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。Σ% の小数表現 */
+  equipment_attack_rate: number;
+  ultimate: UltimateSkillPreview;
+}
+
+// crates/domain/src/stat_sources.rs の UltimateSkillPreview。
+export interface UltimateSkillPreview {
+  /** スコープアイのクリティカルダメージ増加。Σ% の小数表現 */
+  critical_damage_rate: number;
+  /** フルスロットルの中ディレイ減少。Σ% の小数表現 */
+  actual_delay_reduction: number;
+  /** フルスロットルの単体チャネリングスキル段数増加 */
+  added_hit_count: number;
+  /** ワイドフォーカスのスキル範囲増加(火力には効かない) */
+  skill_range_bonus: number;
+}
+
+// crates/domain/src/stat_sources.rs の CriticalRateBonusPreview。
+export interface CriticalRateBonusPreview {
+  /** 上限を掛ける前の合計(「頭打ち」表示に使う) */
+  raw: number;
+  /** 上限 +100% を掛けた合計 */
+  value: number;
 }
 
 // crates/domain/src/defense.rs の DefenseProfile。割合は小数表現(50% → 0.5)。
@@ -1003,6 +1038,37 @@ export interface StatLimits {
   architect_lab_stage_max: number;
   /** 設計者の研究室 1 段階あたりのクリティカル率増加 */
   architect_lab_per_stage: number;
+  /** 極のルーンのクリティカル率増加(最大レベル時) */
+  ultimate_rune_bonus_max: number;
+  /** 致命打のクリティカル率増加 */
+  deadly_blow_bonus_max: number;
+  /** パワーウェポンの装備攻撃力強化倍率。Σ% の小数表現 */
+  power_weapon_rate: number;
+  /** ストロングウェポン 1Lv あたりの装備攻撃力強化倍率。Σ% の小数表現 */
+  strong_weapon_rate_per_level: number;
+  /** コートアーマーの装備防御力倍率(物理 / 魔法)。Σ% の小数表現 */
+  coat_armor_physical_rate: number;
+  coat_armor_magic_rate: number;
+  /** プロテクトアーマー Lv1〜6 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。index 0 = Lv1 */
+  protect_armor_physical_rates: number[];
+  protect_armor_magic_rates: number[];
+  /** 改・プロテクトアーマー Lv1〜5 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。index 0 = Lv1 */
+  kai_protect_armor_physical_rates: number[];
+  kai_protect_armor_magic_rates: number[];
+  /** シャープネスビジョン Lv1〜10 の割合追加ダメージ。Σ% の小数表現。index 0 = Lv1 */
+  sharpness_vision_rates: number[];
+  /** アンリーシュ Lv1〜10 の能力値倍率B。Σ% の小数表現。index 0 = Lv1 */
+  unleash_rates: number[];
+  /** ペット S スキルの段階ごとの固定値ボーナス */
+  pet_skill_tier_bonus: PetSkillTierBonus[];
+  /** 神鳥の聖物 1 段階あたりの最終固定値 */
+  sacred_relic_value_per_stage: number;
+}
+
+// crates/domain/src/stat_sources.rs の PetSkillTierBonus。
+export interface PetSkillTierBonus {
+  tier: PetSkillTier;
+  bonus: number;
 }
 
 

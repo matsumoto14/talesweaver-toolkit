@@ -150,14 +150,13 @@
   const monsterCardTotal = $derived(
     STAT_KINDS.reduce((s, k) => s + draft.statSources.monster_cards[k], 0),
   );
-  const relicTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.sacred_relic[k] * 10, 0));
+  const relicTotal = $derived(preview?.sacred_relic_total ?? 0);
   const skillCount = $derived(draft.statSources.character_skills.skill_ids.length);
   const adjustCount = $derived(
     STAT_KINDS.filter((k) => draft.statSources.adjustments[k].add !== 0 || draft.statSources.adjustments[k].pin !== null).length,
   );
-  const enhanceRatePercent = $derived(
-    (draft.commonSkills.power_weapon ? 2 : 0) + draft.commonSkills.strong_weapon_level * 3,
-  );
+  /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。計算は Rust 側 */
+  const enhanceRatePercent = $derived(Math.round((preview?.common_skill.equipment_attack_rate ?? 0) * 100));
   const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment, app.equipmentAbilities, app.titles));
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
   /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの要約に出す。 */
@@ -216,16 +215,14 @@
     return `${ids.length} 件 ・ 合計 −${percent}%`;
   });
 
-  // 共通スキルの効き先(結果側の表示用)。入力は補正源、結果はここ
-  const UNLEASH_RATES = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
-  const SHARPNESS_RATES = [5, 10, 15, 20, 25, 28, 31, 34, 37, 40];
+  // 共通スキルの効き先(結果側の表示用)。入力は補正源、計算は Rust 側(preview / limits)を参照する
+  const UNLEASH_RATES = $derived(limits.unleash_rates.map((r) => Math.round(r * 100)));
+  const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
+  /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)の**増加分**(100% を含まない)。計算は Rust 側 */
   const defenseRatePercent = $derived.by(() => {
-    const c = draft.commonSkills;
-    const pa = c.protect_armor_level;
-    const base =
-      (c.coat_armor ? 18 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
-    const magic = (c.coat_armor ? 12 : 0) + (pa > 0 ? [24, 30, 36, 42, 48, 54][pa - 1] : 0) + c.kai_protect_armor_level * 6;
-    return { physical: base, magic };
+    const rates = preview?.common_skill.defense_rates;
+    if (!rates) return { physical: 0, magic: 0 };
+    return { physical: Math.round((rates.physical - 1) * 100), magic: Math.round((rates.magic - 1) * 100) };
   });
   const sharpnessRatePercent = $derived(
     draft.commonSkills.sharpness_vision_level === 0
@@ -250,24 +247,17 @@
     const c = draft.commonSkills;
     const parts: string[] = [];
     if (enhanceRatePercent > 0) parts.push(`装備攻撃力 +${enhanceRatePercent}%`);
-    const pa = c.protect_armor_level;
-    const defense =
-      (c.coat_armor ? 18 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
-    if (defense > 0) parts.push(`装備防御力 物+${defense}%`);
+    if (defenseRatePercent.physical > 0) parts.push(`装備防御力 物+${defenseRatePercent.physical}%`);
     if (c.sharpness_vision_level > 0) {
-      parts.push(`追加ダメージ +${[5, 10, 15, 20, 25, 28, 31, 34, 37, 40][c.sharpness_vision_level - 1]}%`);
+      parts.push(`追加ダメージ +${sharpnessRatePercent}%`);
     }
     const ultimate = c.ultimate.slots.filter((u) => u !== null);
     if (ultimate.length > 0) {
       parts.push(`極限 ${ultimate.map((u) => ULTIMATE_SKILL_LABELS[u]).join(" / ")}`);
     }
     // アンリーシュ(能力解放)。効き先は能力値倍率B
-    const unleash = (c.unleash ?? []).filter((u) => u.stat !== null && u.level > 0);
-    if (unleash.length > 0) {
-      const rates = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
-      parts.push(
-        `解放 ${unleash.map((u) => `${STAT_LABELS[u.stat!]} +${rates[u.level - 1]}%`).join(" / ")}`,
-      );
+    if (unleashSummary !== "未使用") {
+      parts.push(`解放 ${unleashSummary}`);
     }
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
@@ -305,11 +295,8 @@
     const c = draft.statSources.critical_rate;
     const parts: string[] = [];
     if (c.pet) parts.push("ペット会心 ×1.1");
-    const bonus =
-      (c.ultimate_rune ? 20 : 0) +
-      c.architect_lab_stage * limits.architect_lab_per_stage +
-      (c.deadly_blow ? 100 : 0);
-    if (bonus > 0) parts.push(`増加 +${Math.min(100, bonus)}%`);
+    const bonus = preview?.critical_rate_bonus.value ?? 0;
+    if (bonus > 0) parts.push(`増加 +${Math.round(bonus)}%`);
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 

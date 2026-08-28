@@ -166,12 +166,8 @@
       label: String(i),
     })),
   );
-  /** クリティカル率増加の合計(上限を掛ける前) */
-  const criticalRateBonus = $derived(
-    (draft.statSources.critical_rate.ultimate_rune ? 20 : 0) +
-      architectLabBonus +
-      (draft.statSources.critical_rate.deadly_blow ? 100 : 0),
-  );
+  /** クリティカル率増加の合計(上限を掛ける前。計算は Rust 側) */
+  const criticalRateBonus = $derived(preview?.critical_rate_bonus.raw ?? 0);
 
   // --- マスタリー(wiki: 各キャラの Skill ページ。段ごとに 1 つ)-----------
   // 同じ段の選択肢は効き先がばらばら(中ディレイ / カテゴリX / ステ / 未収録)なので、
@@ -296,19 +292,21 @@
     setMainElement(skillElement as string);
   });
 
-  const PET_TIERS: PetSkillTier[] = ["basic", "true_lv1", "true_lv2", "true_lv3", "true_lv4"];
   // 段の名前だけだと「それでいくつ増えるのか」を毎回引くことになるので、値を段に書く
-  const PET_SKILL_BONUS: Record<PetSkillTier, number> = {
-    basic: 20, true_lv1: 30, true_lv2: 40, true_lv3: 50, true_lv4: 60,
-  };
-  const petSkillOptions = [
+  // (正は crates/domain/src/stat_sources.rs の PetSkillTier::bonus。limits.pet_skill_tier_bonus 経由で引く)
+  const petSkillBonusOf = (tier: PetSkillTier) =>
+    limits.pet_skill_tier_bonus.find((b) => b.tier === tier)?.bonus ?? 0;
+  const petSkillOptions = $derived([
     { value: "", label: "なし" },
-    ...PET_TIERS.map((t) => ({ value: t, label: `${PET_SKILL_TIER_LABELS[t]} +${PET_SKILL_BONUS[t]}` })),
-  ];
+    ...limits.pet_skill_tier_bonus.map((b) => ({
+      value: b.tier,
+      label: `${PET_SKILL_TIER_LABELS[b.tier]} +${b.bonus}`,
+    })),
+  ]);
   const petSkillValue = (k: StatKind) => draft.statSources.pet_skills[k] ?? "";
   const petSkillBonus = (k: StatKind) => {
     const tier = draft.statSources.pet_skills[k];
-    return tier ? PET_SKILL_BONUS[tier] : 0;
+    return tier ? petSkillBonusOf(tier) : 0;
   };
   const setPetSkillValue = (k: StatKind, v: string) => {
     draft.statSources.pet_skills[k] = (v === "" ? null : v) as PetSkillTier | null;
@@ -318,7 +316,8 @@
     { value: "0", label: "なし" },
     ...Array.from({ length: limits.strong_weapon_level_max }, (_, i) => {
       const lv = i + 1;
-      return { value: String(lv), label: `Lv${lv}(+${lv * 3}%)` };
+      const percent = Math.round(lv * limits.strong_weapon_rate_per_level * 100);
+      return { value: String(lv), label: `Lv${lv}(+${percent}%)` };
     }),
   ]);
   const relicKindOptions = [
@@ -1065,7 +1064,8 @@
     c.ultimate.hyper_limit_level = Math.min(c.ultimate.hyper_limit_level, max);
   }
   // アンリーシュ(能力解放)。効き先は能力値倍率B。Lv6 以降はレインフォース(Lv5 まで)が前提。
-  const UNLEASH_RATES = [1, 2, 3, 4, 5, 8, 11, 14, 17, 20];
+  // 正は crates/domain/src/common_skill.rs の UNLEASH。limits.unleash_rates(Σ% の小数表現)経由で引く
+  const UNLEASH_RATES = $derived(limits.unleash_rates.map((r) => Math.round(r * 100)));
   const reinforceGate = $derived(draft.commonSkills.reinforce_level + 5);
   /** レインフォース Lv を下げたら、それに縛られるアンリーシュの Lv も一緒に下げる */
   function setReinforceLevel(level: number) {
@@ -1117,8 +1117,9 @@
     })).filter((o) => !o.disabled);
   // 段階選択に並べるのでラベルは Lv だけ。効果値は選択中のものを注記で出す
   // (全段の効果を並べると 7 段で 4 行になり、1 画面の情報量が減る)
-  const PROTECT_ARMOR_RATES = [36, 45, 54, 63, 72, 81];
-  const PROTECT_ARMOR_MAGIC = [24, 30, 36, 42, 48, 54];
+  // 正は crates/domain/src/common_skill.rs の PROTECT_ARMOR_PHYSICAL / _MAGIC
+  const PROTECT_ARMOR_RATES = $derived(limits.protect_armor_physical_rates.map((r) => Math.round(r * 100)));
+  const PROTECT_ARMOR_MAGIC = $derived(limits.protect_armor_magic_rates.map((r) => Math.round(r * 100)));
   // 畳んだ中の段も上と同じ形にする。名前は Lv の数字だけ、効いている値は行の右
   const levelChoices = (max: number) =>
     Array.from({ length: max }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }));
@@ -1139,9 +1140,13 @@
   }));
   const kaiProtectArmorNote = $derived.by(() => {
     const lv = draft.commonSkills.kai_protect_armor_level;
-    return lv === 0 ? "未習得" : `物 +${lv * 9}% / 魔 +${lv * 6}%`;
+    if (lv === 0) return "未習得";
+    const physical = Math.round(limits.kai_protect_armor_physical_rates[lv - 1] * 100);
+    const magic = Math.round(limits.kai_protect_armor_magic_rates[lv - 1] * 100);
+    return `物 +${physical}% / 魔 +${magic}%`;
   });
-  const SHARPNESS_RATES = [5, 10, 15, 20, 25, 28, 31, 34, 37, 40];
+  // 正は crates/domain/src/common_skill.rs の SHARPNESS_VISION
+  const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
   // 段の名前は Lv だけ、効いている値は行の右に出す(段に「Lv6(+28%)」と書くと折り返す)。
   // **Lv5 まではほぼ全員が同じ**(そこで止まる)なので、ふだんは 5〜10 だけ出す
   const sharpnessVisionOptions = Array.from({ length: 10 }, (_, i) => ({
@@ -1162,22 +1167,6 @@
   });
   /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。表示用 */
   const sienaDefenseRate = $derived(sienaExtraTotal(draft.equipment, "defense_rate"));
-  const defenseRatePercent = $derived.by(() => {
-    const c = draft.commonSkills;
-    const pa = c.protect_armor_level;
-    const kai = c.kai_protect_armor_level;
-    const physical =
-      (c.coat_armor ? 18 : 0) +
-      (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) +
-      kai * 9 +
-      sienaDefenseRate;
-    const magic =
-      (c.coat_armor ? 12 : 0) +
-      (pa > 0 ? [24, 30, 36, 42, 48, 54][pa - 1] : 0) +
-      kai * 6 +
-      sienaDefenseRate;
-    return { physical: 100 + physical, magic: 100 + magic };
-  });
 
   // --- 極限スキル(wiki: Skill/極限)---------------------------------------
   // 3 択から 2 つ。効果値は 基本 + スーパーリミット + ハイパーリミット Lv の加算。
@@ -1213,35 +1202,28 @@
     const empty = slots.indexOf(null);
     if (empty !== -1) slots[empty] = skill;
   }
-  /** 選択中の極限スキルの効果値(表示用。計算は Rust 側) */
+  /** 選択中の極限スキルの効果値(表示用。計算は Rust 側 = preview.common_skill.ultimate) */
   const ultimateEffects = $derived.by(() => {
     const u = draft.commonSkills.ultimate;
-    const superLimit = u.super_limit;
-    const lv = u.hyper_limit_level;
-    const hyper = (table: number[]) => (lv === 0 ? 0 : table[lv - 1]);
+    const effects = preview?.common_skill.ultimate;
     const out: string[] = [];
     if (u.slots.includes("scope_eye")) {
-      out.push(`クリティカルダメージ +${20 + (superLimit ? 3 : 0) + hyper([7, 9, 11, 13, 15, 17])}%`);
+      out.push(`クリティカルダメージ +${Math.round((effects?.critical_damage_rate ?? 0) * 100)}%`);
     }
     if (u.slots.includes("full_throttle")) {
-      const hits = hyper([0, 0, 0, 1, 2, 3]);
       out.push(`中ディレイ −${fullThrottlePercent}%`);
-      out.push(`単体チャネリング段数 +${hits}`);
+      out.push(`単体チャネリング段数 +${effects?.added_hit_count ?? 0}`);
     }
     if (u.slots.includes("wide_focus")) {
-      out.push(`スキル範囲 +${4 + (superLimit ? 2 : 0) + hyper([4, 6, 8, 10, 12, 14])}`);
+      out.push(`スキル範囲 +${effects?.skill_range_bonus ?? 0}`);
     }
     return out;
   });
 
-  /** フルスロットル(共通スキル)の中ディレイ減少 %。0 = 未装着 */
-  const fullThrottlePercent = $derived.by(() => {
-    const u = draft.commonSkills.ultimate;
-    if (!u.slots.includes("full_throttle")) return 0;
-    const lv = u.hyper_limit_level;
-    const hyper = lv === 0 ? 0 : [7, 9, 11, 13, 15, 17][lv - 1];
-    return 25 + (u.super_limit ? 3 : 0) + hyper;
-  });
+  /** フルスロットル(共通スキル)の中ディレイ減少 %。0 = 未装着(計算は Rust 側) */
+  const fullThrottlePercent = $derived(
+    Math.round((preview?.common_skill.ultimate.actual_delay_reduction ?? 0) * 100),
+  );
 
   /** 中ディレイ減少に、この補正源の外から入ってくる分 */
   const delayFromOthers = $derived<ExternalSource[]>([
@@ -1298,9 +1280,8 @@
     },
   ]);
 
-  const enhanceRatePercent = $derived(
-    (draft.commonSkills.power_weapon ? 2 : 0) + draft.commonSkills.strong_weapon_level * 3,
-  );
+  /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。計算は Rust 側 */
+  const enhanceRatePercent = $derived(Math.round((preview?.common_skill.equipment_attack_rate ?? 0) * 100));
 
   const enhanceLevelOptions = $derived(
     [0, 10, 11, 12, 13, 14, 15].map((lv) => ({
@@ -1567,7 +1548,10 @@
       note: `10 きざみ・通常上限 ${limits.crown_base_max} / 選択報酬は ${limits.crown_selected_max}`,
     },
     monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
-    relic: { title: "神鳥の聖物", note: `ステごとの加算(10 きざみ・0–${limits.sacred_relic_stage_max * 10})` },
+    relic: {
+      title: "神鳥の聖物",
+      note: `ステごとの加算(${limits.sacred_relic_value_per_stage} きざみ・0–${limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage})`,
+    },
     siena: { title: "シエナのオーラ", note: "部位ごとに登録し、装着中の 1 件だけが反映" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
     title: { title: "称号", note: "表示中の 1 件だけが装備の基本能力値に乗る" },
@@ -2590,18 +2574,18 @@
         {#each PAIRED_STAT_KINDS as k (k)}
           <div class="stat-row">
             <span class="k">{STAT_LABELS[k]}</span>
-            <!-- 段階ではなく**実際に増える値**で入れる(1 段階 = +10 なので ＋ を押すと 10 ずつ)。
-                 多くの人は 200 で止まるので、そこを 1 押しで置く。保存は段階のまま -->
+            <!-- 段階ではなく**実際に増える値**で入れる(1 段階 = +{limits.sacred_relic_value_per_stage} なので
+                 ＋ を押すとその値ずつ)。多くの人は 200 で止まるので、そこを 1 押しで置く。保存は段階のまま -->
             <StatInput
               label=""
               min={0}
-              max={limits.sacred_relic_stage_max * 10}
-              step={10}
+              max={limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage}
+              step={limits.sacred_relic_value_per_stage}
               stepper
               presets={[{ value: 200, label: "200" }]}
               bind:value={
-                () => draft.statSources.sacred_relic[k] * 10,
-                (v) => (draft.statSources.sacred_relic[k] = Math.round(v / 10))
+                () => draft.statSources.sacred_relic[k] * limits.sacred_relic_value_per_stage,
+                (v) => (draft.statSources.sacred_relic[k] = Math.round(v / limits.sacred_relic_value_per_stage))
               }
             />
           </div>
@@ -3182,7 +3166,11 @@
               >取っている</button>
             </span>
             <span class="skill-actions"></span>
-            <span class="v num">{draft.commonSkills.coat_armor ? "物18 / 魔12%" : "—"}</span>
+            <span class="v num">
+              {draft.commonSkills.coat_armor
+                ? `物${Math.round(limits.coat_armor_physical_rate * 100)} / 魔${Math.round(limits.coat_armor_magic_rate * 100)}%`
+                : "—"}
+            </span>
           </div>
           <div class="skill-field">
             <span class="k">プロテクトアーマー</span>
@@ -3524,13 +3512,13 @@
         <label class="check">
           <input type="checkbox" bind:checked={draft.statSources.critical_rate.ultimate_rune} />
           <span>極のルーン</span>
-          <span class="fixed-value dim">+20%</span>
+          <span class="fixed-value dim">+{limits.ultimate_rune_bonus_max}%</span>
           <span class="dim note">最大レベル時</span>
         </label>
         <label class="check">
           <input type="checkbox" bind:checked={draft.statSources.critical_rate.deadly_blow} />
           <span>致命打</span>
-          <span class="fixed-value dim">+100%</span>
+          <span class="fixed-value dim">+{limits.deadly_blow_bonus_max}%</span>
         </label>
       </div>
       <!-- 設計者の研究室だけは段階制(wiki: B グループは最大 10 段階・1 段階 +3)。

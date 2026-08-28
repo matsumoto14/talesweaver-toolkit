@@ -14,7 +14,7 @@ use crate::category::DamageCategory;
 use crate::character_skill::{
     damage_contributions, CharacterSkillCatalog, CharacterSkills, SkillEffect,
 };
-use crate::critical_rate::CriticalRateSources;
+use crate::critical_rate::{CriticalRateSourceId, CriticalRateSources};
 use crate::element::ElementSources;
 use crate::mastery::{MasteryCatalog, Masteries};
 use crate::attack_power::{
@@ -25,7 +25,7 @@ use crate::equipment::{
     PartSlot, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
 };
 use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
-use crate::common_skill::{CommonSkills, STRONG_WEAPON_LEVEL_MAX};
+use crate::common_skill::{CommonSkills, DefenseRates, STRONG_WEAPON_LEVEL_MAX};
 use crate::title::TitleDef;
 use crate::stats::{
     effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind, StatModifierSet,
@@ -45,6 +45,14 @@ pub enum PetSkillTier {
 }
 
 impl PetSkillTier {
+    pub const ALL: [PetSkillTier; 5] = [
+        PetSkillTier::Basic,
+        PetSkillTier::TrueLv1,
+        PetSkillTier::TrueLv2,
+        PetSkillTier::TrueLv3,
+        PetSkillTier::TrueLv4,
+    ];
+
     /// 固定値ボーナス(wiki: PET。Lv5 +70 は JP 未実装のため未収録)。
     pub fn bonus(self) -> i64 {
         match self {
@@ -55,6 +63,17 @@ impl PetSkillTier {
             PetSkillTier::TrueLv4 => 60,
         }
     }
+}
+
+/// 段階ごとの固定値ボーナス(UI の選択肢ラベル用。`StatLimits::pet_skill_tier_bonus`)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PetSkillTierBonus {
+    pub tier: PetSkillTier,
+    pub bonus: i64,
+}
+
+fn pet_skill_tier_bonuses() -> Vec<PetSkillTierBonus> {
+    PetSkillTier::ALL.iter().map(|&tier| PetSkillTierBonus { tier, bonus: tier.bonus() }).collect()
 }
 
 /// ペット S スキル。ステごとに 1 つ(上位段階を選ぶと置き換わる。加算にはならない)。
@@ -198,8 +217,8 @@ pub struct SacredRelic {
 
 impl SacredRelic {
     pub const MAX_STAGE: u8 = 40;
-    /// 1 段階あたりの最終固定値。
-    const VALUE_PER_STAGE: i64 = 10;
+    /// 1 段階あたりの最終固定値。UI は `StatLimits::sacred_relic_value_per_stage` を参照する
+    pub const VALUE_PER_STAGE: i64 = 10;
 
     pub fn get(&self, kind: StatKind) -> u8 {
         match kind {
@@ -850,6 +869,46 @@ pub struct StatPreview {
     pub contributions: Vec<StatContribution>,
     /// 主軸スキル未選択なら `None`
     pub attack: Option<AttackPreview>,
+    /// 共通スキル(wiki: Skill/共通・Skill/極限)の効き先サマリ。
+    /// 正は `common_skill.rs` / `ultimate_skill.rs`(TS に写経しない)
+    pub common_skill: CommonSkillPreview,
+    /// クリティカル率増加(wiki: 計算式まとめ `#CriticalChance`)の合計。正は `critical_rate.rs`
+    pub critical_rate_bonus: CriticalRateBonusPreview,
+    /// 神鳥の聖物の段階→最終固定値換算の合計(Σ、正は `stat_sources::SacredRelic`)
+    pub sacred_relic_total: i64,
+}
+
+/// 共通スキルの効き先サマリ(装備攻撃力強化倍率・装備防御力倍率・極限スキルの効果値)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CommonSkillPreview {
+    /// 装備防御力倍率(コートアーマー + プロテクトアーマー + 改・プロテクトアーマー +
+    /// シエナのオーラの防御力増加)。初期値 1.0 の乗数(`DefenseRates::NEUTRAL`)
+    pub defense_rates: DefenseRates,
+    /// 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。Σ% の小数表現
+    pub equipment_attack_rate: f64,
+    pub ultimate: UltimateSkillPreview,
+}
+
+/// 極限スキル(wiki: Skill/極限)の効果値。正は `ultimate_skill::UltimateSkills`
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct UltimateSkillPreview {
+    /// スコープアイのクリティカルダメージ増加。Σ% の小数表現
+    pub critical_damage_rate: f64,
+    /// フルスロットルの中ディレイ減少。Σ% の小数表現
+    pub actual_delay_reduction: f64,
+    /// フルスロットルの単体チャネリングスキル段数増加
+    pub added_hit_count: u32,
+    /// ワイドフォーカスのスキル範囲増加(火力には効かない)
+    pub skill_range_bonus: f64,
+}
+
+/// クリティカル率増加(wiki `#CriticalChance`)の合計。正は `critical_rate::CriticalRateSources`
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CriticalRateBonusPreview {
+    /// 上限を掛ける前の合計(「頭打ち」表示に使う)
+    pub raw: f64,
+    /// 上限 +100% を掛けた合計
+    pub value: f64,
 }
 
 /// シエナのオーラのステ加算(wiki: 能力値一覧(その他の部位)・追加オプション「全ステータス増加」)を
@@ -991,11 +1050,35 @@ pub fn preview_effective_stats(
             Some(AttackPreview { breakdown, part_contributions })
         }
     };
-    Ok(StatPreview { stats, traces, contributions, attack })
+    let common_skill = CommonSkillPreview {
+        defense_rates: common.defense_rates(equipment.siena_defense_rate()),
+        equipment_attack_rate: common.equipment_attack_rate(),
+        ultimate: UltimateSkillPreview {
+            critical_damage_rate: common.ultimate.critical_damage_rate(),
+            actual_delay_reduction: common.ultimate.actual_delay_reduction(),
+            added_hit_count: common.ultimate.added_hit_count(),
+            skill_range_bonus: common.ultimate.skill_range_bonus(),
+        },
+    };
+    let critical_rate_bonus = CriticalRateBonusPreview {
+        raw: sources.critical_rate.raw_bonus(),
+        value: sources.critical_rate.bonus(),
+    };
+    let sacred_relic_total: i64 =
+        StatKind::ALL.iter().map(|&k| sources.sacred_relic.value(k)).sum();
+    Ok(StatPreview {
+        stats,
+        traces,
+        contributions,
+        attack,
+        common_skill,
+        critical_rate_bonus,
+        sacred_relic_total,
+    })
 }
 
 /// UI がリテラルで持たず参照するための値域上限一覧(起動時に 1 回取得する想定)。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatLimits {
     pub base_stat_max: u32,
     pub rune_level_max: u8,
@@ -1049,6 +1132,31 @@ pub struct StatLimits {
     pub architect_lab_stage_max: u8,
     /// 設計者の研究室 1 段階あたりのクリティカル率増加(wiki: 設計者の研究室 永続バフ)
     pub architect_lab_per_stage: f64,
+    /// 極のルーンのクリティカル率増加(最大レベル時。wiki `#CriticalChance`)
+    pub ultimate_rune_bonus_max: f64,
+    /// 致命打のクリティカル率増加(wiki `#CriticalChance`)
+    pub deadly_blow_bonus_max: f64,
+    /// パワーウェポンの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
+    pub power_weapon_rate: f64,
+    /// ストロングウェポン 1Lv あたりの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
+    pub strong_weapon_rate_per_level: f64,
+    /// コートアーマーの装備防御力倍率(物理 / 魔法。wiki: Skill/共通)。Σ% の小数表現
+    pub coat_armor_physical_rate: f64,
+    pub coat_armor_magic_rate: f64,
+    /// プロテクトアーマー Lv1〜6 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。選択肢の注記に使う
+    pub protect_armor_physical_rates: Vec<f64>,
+    pub protect_armor_magic_rates: Vec<f64>,
+    /// 改・プロテクトアーマー Lv1〜5 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現
+    pub kai_protect_armor_physical_rates: Vec<f64>,
+    pub kai_protect_armor_magic_rates: Vec<f64>,
+    /// シャープネスビジョン Lv1〜10 の割合追加ダメージ。Σ% の小数表現
+    pub sharpness_vision_rates: Vec<f64>,
+    /// アンリーシュ Lv1〜10 の能力値倍率B。Σ% の小数表現
+    pub unleash_rates: Vec<f64>,
+    /// ペット S スキルの段階ごとの固定値ボーナス(wiki: PET)
+    pub pet_skill_tier_bonus: Vec<PetSkillTierBonus>,
+    /// 神鳥の聖物 1 段階あたりの最終固定値(wiki: 神鳥の聖物)
+    pub sacred_relic_value_per_stage: i64,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -1086,6 +1194,20 @@ pub fn stat_limits() -> StatLimits {
         critical_rate_bonus_max: crate::critical_rate::CRITICAL_RATE_BONUS_MAX,
         architect_lab_stage_max: crate::critical_rate::ARCHITECT_LAB_STAGE_MAX,
         architect_lab_per_stage: crate::critical_rate::ARCHITECT_LAB_PER_STAGE,
+        ultimate_rune_bonus_max: CriticalRateSourceId::UltimateRune.max_value(),
+        deadly_blow_bonus_max: CriticalRateSourceId::DeadlyBlow.max_value(),
+        power_weapon_rate: crate::common_skill::POWER_WEAPON_RATE,
+        strong_weapon_rate_per_level: crate::common_skill::STRONG_WEAPON_RATE_PER_LEVEL,
+        coat_armor_physical_rate: crate::common_skill::COAT_ARMOR_PHYSICAL_RATE,
+        coat_armor_magic_rate: crate::common_skill::COAT_ARMOR_MAGIC_RATE,
+        protect_armor_physical_rates: crate::common_skill::PROTECT_ARMOR_PHYSICAL.to_vec(),
+        protect_armor_magic_rates: crate::common_skill::PROTECT_ARMOR_MAGIC.to_vec(),
+        kai_protect_armor_physical_rates: crate::common_skill::KAI_PROTECT_ARMOR_PHYSICAL.to_vec(),
+        kai_protect_armor_magic_rates: crate::common_skill::KAI_PROTECT_ARMOR_MAGIC.to_vec(),
+        sharpness_vision_rates: crate::common_skill::SHARPNESS_VISION.to_vec(),
+        unleash_rates: crate::common_skill::UNLEASH.to_vec(),
+        pet_skill_tier_bonus: pet_skill_tier_bonuses(),
+        sacred_relic_value_per_stage: SacredRelic::VALUE_PER_STAGE,
     }
 }
 
