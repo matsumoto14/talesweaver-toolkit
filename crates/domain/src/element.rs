@@ -37,6 +37,16 @@ impl Element {
     pub fn can_enchant_equipment(self) -> bool {
         self != Element::Neutral
     }
+
+    /// 攻撃に実際に乗る属性。属性付きスキルはその属性、無属性スキルはキャラが
+    /// 供給源(アンプル等)で乗せている属性(`ElementSources::selected`)。どちらも無ければ無属性
+    pub fn effective_for_attack(self, enchanted: Option<Element>) -> Element {
+        if self == Element::Neutral {
+            enchanted.unwrap_or(Element::Neutral)
+        } else {
+            self
+        }
+    }
 }
 
 /// キャラの属性値の上限(wiki 属性システム「属性値の上限は255です」)。
@@ -214,6 +224,14 @@ impl ElementPreview {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn 無属性スキルには乗せた属性が効き属性スキルは自分の属性を保つ() {
+        use super::Element::*;
+        assert_eq!(Neutral.effective_for_attack(Some(Fire)), Fire);
+        assert_eq!(Neutral.effective_for_attack(None), Neutral);
+        assert_eq!(Water.effective_for_attack(Some(Fire)), Water);
+    }
+
     use super::*;
 
     #[test]

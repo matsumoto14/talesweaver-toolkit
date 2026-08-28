@@ -716,9 +716,8 @@ fn build_damage_input(
     );
     let damage_contributions =
         gamedata::damage_contributions_of(stat_sources, buffs, &equipment, skill.dependency);
-    let element_value = gamedata::element_preview(game_character_id, &equipment, stat_sources)
-        .total
-        .get(skill.element);
+    let element_value =
+        gamedata::element_value_for(game_character_id, &equipment, stat_sources, &skill);
     let coefficients = dependency_coefficients(skill.dependency);
     Ok(material.build_input(
         skill,

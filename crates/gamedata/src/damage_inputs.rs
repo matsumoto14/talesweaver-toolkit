@@ -77,5 +77,5 @@ pub fn element_value_for(
 ) -> i64 {
     element_preview(game_character_id, equipment, stat_sources)
         .total
-        .get(skill.element)
+        .get(skill.element.effective_for_attack(stat_sources.elements.selected()))
 }
