@@ -167,7 +167,14 @@
         .then((rs) => {
           if (!isCurrent()) return;
           skillTotals = Object.fromEntries(
-            rs.map(([id, r]) => [id, { perHit: r.per_hit.max, total: r.total.max }]),
+            rs.map(([id, r]) => {
+              // 各スキル自身の critical_chance で判定する(主役のクリモードを流用しない)
+              const rCrit = r.critical_chance > 0;
+              return [
+                id,
+                { perHit: rCrit ? r.per_hit.critical : r.per_hit.max, total: rCrit ? r.total.critical : r.total.max },
+              ];
+            }),
           );
         })
         .catch((e) => reportError(errorMessage(e))),
@@ -270,8 +277,16 @@
   const clearCount = $derived(evals.filter((e) => e.clear).length);
 
   // --- 表示値 -------------------------------------------------------------
-  const perHit = $derived(result?.per_hit.max ?? null);
-  const savedPerHit = $derived(savedResult?.per_hit.max ?? null);
+  // クリティカルが出る前提を主役の値にする(ユーザー判断 2026-08-29)。
+  // critical_chance は Rust 側で 0..1 に正規化済み(wiki 未記載は 1.0 = 確定扱い)なので、
+  // 0 のときだけ非クリティカルを主役にする。
+  const critMode = $derived((result?.critical_chance ?? 0) > 0);
+  const pick = <T extends { max: number; critical: number }>(t: T | null | undefined): number | null =>
+    t ? (critMode ? t.critical : t.max) : null;
+  const perHit = $derived(pick(result?.per_hit));
+  const savedPerHit = $derived(pick(savedResult?.per_hit));
+  const totalValue = $derived(pick(result?.total));
+  const dpsValue = $derived(pick(result?.dps));
   const deltaPct = $derived(
     perHit !== null && savedPerHit !== null && savedPerHit > 0
       ? Math.round((perHit / savedPerHit - 1) * 100)
@@ -296,9 +311,10 @@
   const BADGE: Badge[] = [...REACH_BADGES, { label: "判定中", state: "unknown" }];
 
   // --- なぜこの数字?(トレースの式から組み立て) ---------------------------
-  const stepsMax = $derived(result?.trace.steps_max ?? []);
+  // 主役がクリティカル前提なら、トレースの段もクリティカル側の到達値で揃える。
+  const steps = $derived(critMode ? (result?.trace.steps_critical ?? []) : (result?.trace.steps_max ?? []));
   const stepValue = (name: string): number | null =>
-    stepsMax.find((s) => s.name === name)?.value ?? null;
+    steps.find((s) => s.name === name)?.value ?? null;
   // 攻撃力(A)の内訳は Rust の AttackPowerBreakdown をそのまま使う(UI で式を持たない)
   const atk = $derived(result?.trace.attack ?? null);
   const atkA = $derived(atk?.value ?? null);
@@ -365,7 +381,7 @@
     const rows: FlowRow[] = [
       { k: "抜けた分(素通り)", add: pierced, mult: "—", c: "var(--fg-dim)", to: pierced, step: "攻撃力−防御力" },
     ];
-    for (const s of stepsMax) {
+    for (const s of steps) {
       if (!FACTOR_STEPS.has(s.name) && !RUNNING_STEPS.has(s.name)) continue;
       // 到達値は Rust の FormulaStep.reached。倍率列は倍率の段はその値、到達値で返る段は前段との比(表示用)
       const mult = FACTOR_STEPS.has(s.name)
@@ -436,7 +452,7 @@
   function toggleDetail(key: string) {
     openDetails = isDetailOpen(key) ? openDetails.filter((k) => k !== key) : [...openDetails, key];
   }
-  const stepOf = (name: string): FormulaStep | null => stepsMax.find((s) => s.name === name) ?? null;
+  const stepOf = (name: string): FormulaStep | null => steps.find((s) => s.name === name) ?? null;
   const categoryOf = (c: DamageCategory): CategoryTrace | null =>
     result?.trace.categories.find((x) => x.category === c) ?? null;
   /** カテゴリに実際に値を足した供給源(トレースの category_contributions から)。 */
@@ -598,48 +614,67 @@
     }
     return { mult: flowMultLabel, delta: perHit - pierced, to: perHit, mats, idle: 0, expr: null };
   });
-  /** 鎖「合計」: 1 発 × 段数 ＋ 割合追加ダメージ。クリティカルは倍率と発生率で読む */
+  /** クリ率の段階表示(6 段)。design-system の状態色の段に収める(新しい色は作らない)。 */
+  const CRIT_CHANCE_STAGES: { max: number; label: string; state: import("../../ui/states").StateKey }[] = [
+    { max: 0, label: "出ない", state: "unknown" },
+    { max: 25, label: "まれ", state: "short" },
+    { max: 50, label: "ときどき", state: "edge" },
+    { max: 75, label: "半分以上", state: "edge" },
+    { max: 100, label: "ほぼ確定", state: "met" },
+    { max: Infinity, label: "確定", state: "goal" },
+  ];
+  const critChanceStage = (p: number) => {
+    if (p <= 0) return CRIT_CHANCE_STAGES[0];
+    if (p < 25) return CRIT_CHANCE_STAGES[1];
+    if (p < 50) return CRIT_CHANCE_STAGES[2];
+    if (p < 75) return CRIT_CHANCE_STAGES[3];
+    if (p < 100) return CRIT_CHANCE_STAGES[4];
+    return CRIT_CHANCE_STAGES[5];
+  };
+  /** 鎖「合計」: 1 発 × 段数 ＋ 割合追加ダメージ。クリ率は段階表示で読む */
   const totalDetail = $derived.by<Detail | null>(() => {
     const r = result;
-    if (r === null || perHit === null) return null;
+    if (r === null || perHit === null || totalValue === null) return null;
+    const added = pick(r.added_damage) ?? 0;
     const mats: Mat[] = [
       {
-        label: `1 発 ${fmtInt(r.per_hit.max)} × ${r.hit_count} 段`,
+        label: `1 発 ${fmtInt(perHit)} × ${r.hit_count} 段`,
         mult: `×${r.hit_count}`,
-        value: fmtInt(r.total.max - r.added_damage.max),
+        value: fmtInt(totalValue - added),
       },
     ];
-    if (r.added_damage.max !== 0) {
+    if (added !== 0) {
       mats.push({
         label: "割合追加ダメージ(合計に乗る)",
         mult: `+${fmtNum(r.added_damage_rate * 100)}%`,
-        value: fmtInt(r.added_damage.max),
+        value: fmtInt(added),
         sub: "シャープネスビジョン・ランダムOP・称号",
       });
     }
-    mats.push({
-      label: "クリティカルのとき",
-      mult: skill ? `×${fmtNum(skill.critical_multiplier)}` : undefined,
-      value: fmtInt(r.total.critical),
-      sub: r.critical_rate ? `発生 ${r.critical_rate.value.toFixed(1)}%` : "発生率は未収録",
-    });
+    if (!critMode) {
+      mats.push({
+        label: "クリティカルなら",
+        mult: skill ? `×${fmtNum(skill.critical_multiplier)}` : undefined,
+        value: fmtInt(r.total.critical),
+      });
+    }
     mats.push({ label: "乱数が最小のとき", value: fmtInt(r.total.min) });
     return {
       mult: `×${r.hit_count} 段`,
-      delta: r.total.max - perHit,
-      to: r.total.max,
+      delta: totalValue - perHit,
+      to: totalValue,
       mats,
       idle: 0,
       expr: stepOf("割合追加ダメージ(合計に乗る)")?.expression ?? null,
     };
   });
-  /** 鎖「1 秒あたり」: 合計 × 回/分 ÷ 60 と、実ディレイの内訳 */
+  /** 鎖「1 秒あたり」: 合計 × 回/分 ÷ 60 と、実ディレイの内訳。期待値はクリ率で按分した材料も足す */
   const dpsDetail = $derived.by<Detail | null>(() => {
     const r = result;
     const d = r?.actual_delay ?? null;
-    if (r === null || d === null || r.dps === null) return null;
+    if (r === null || d === null || r.dps === null || dpsValue === null || totalValue === null) return null;
     const mats: Mat[] = [
-      { label: "合計ダメージ", value: fmtInt(r.total.max) },
+      { label: "合計ダメージ", value: fmtInt(totalValue) },
       {
         label: "基本中ディレイ",
         value: `${d.base.toFixed(2)}s`,
@@ -667,10 +702,17 @@
       value: `${Math.round(d.uses_per_minute)} 回/分`,
       sub: d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ",
     });
+    if (r.expected_dps !== null && r.critical_chance > 0 && r.critical_chance < 1) {
+      mats.push({
+        label: "期待値(クリ率で按分)",
+        value: fmtInt(Math.round(r.expected_dps)),
+        sub: `合計(非クリ) × ${((1 - r.critical_chance) * 100).toFixed(1)}% + 合計(クリ) × ${(r.critical_chance * 100).toFixed(1)}%`,
+      });
+    }
     return {
       mult: `÷ ${d.value.toFixed(2)}s`,
       delta: null,
-      to: Math.round(r.dps.max),
+      to: Math.round(dpsValue),
       mats,
       idle: 0,
       expr: "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60",
@@ -720,15 +762,18 @@
       });
     }
     // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)
-    if (result !== null && result.capped_loss.max > 0) {
-      const before = result.per_hit.max + result.capped_loss.max;
-      out.push({
-        k: "ダメージ上限(1 段ごと)",
-        raw: fmtInt(before),
-        val: fmtInt(result.damage_cap),
-        loss: fmtInt(result.capped_loss.max),
-        kept: before > 0 ? result.per_hit.max / before : 1,
-      });
+    if (result !== null && perHit !== null) {
+      const loss = pick(result.capped_loss) ?? 0;
+      if (loss > 0) {
+        const before = perHit + loss;
+        out.push({
+          k: "ダメージ上限(1 段ごと)",
+          raw: fmtInt(before),
+          val: fmtInt(result.damage_cap),
+          loss: fmtInt(loss),
+          kept: before > 0 ? perHit / before : 1,
+        });
+      }
     }
     // 防御力上限。防御タブと同じ値だが、棚卸しのために回らせない
     if (defense !== null) {
@@ -1329,11 +1374,22 @@
                 aria-expanded={isDetailOpen("total")} onclick={() => toggleDetail("total")}
               >
                 <span class="nl">合計</span>
-                <span class="num nv" use:bump={() => result?.total.max ?? null}>{result ? fmtInt(result.total.max) : "—"}</span>
+                <span class="num nv" use:bump={() => totalValue}>{totalValue !== null ? fmtInt(totalValue) : "—"}</span>
                 <span class="nsub num">
-                  クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
-                  {result ? fmtInt(result.total.critical) : "—"}
-                  {#if result?.critical_rate}・ 発生 <span use:bump={() => result?.critical_rate?.value ?? null}>{result.critical_rate.value.toFixed(1)}%</span>{/if}
+                  {#if result}
+                    {#if result.critical_rate === null}
+                      {#key "unrecorded"}
+                        <span class="badge crit-badge" style={badgeStyle({ label: "", state: "unknown" })}>クリ率 未記載 → 確定扱い</span>
+                      {/key}
+                    {:else}
+                      {@const stage = critChanceStage(result.critical_chance * 100)}
+                      {#key stage.label}
+                        <span class="badge crit-badge" style={badgeStyle({ label: "", state: stage.state })}
+                        >{stage.label} {result.critical_rate.value.toFixed(1)}%</span>
+                      {/key}
+                    {/if}
+                    {#if !critMode}・ クリなら ×{skill ? fmtNum(skill.critical_multiplier) : "—"} {fmtInt(result.total.critical)}{/if}
+                  {/if}
                 </span>
               </button>
               <span class="op num">÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}</span>s</span>
@@ -1342,9 +1398,13 @@
                 aria-expanded={isDetailOpen("dps")} onclick={() => toggleDetail("dps")}
               >
                 <span class="nl">1 秒あたり</span>
-                <span class="num nv" use:bump={() => (result?.dps ? Math.round(result.dps.max) : null)}>{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
+                <span class="num nv" use:bump={() => dpsValue}>{dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"}</span>
                 <span class="nsub dim">
-                  {#if result?.actual_delay}{Math.round(result.actual_delay.uses_per_minute)} 回/分 ・ {/if}判定は付けない
+                  {#if result?.actual_delay}{Math.round(result.actual_delay.uses_per_minute)} 回/分 ・ {/if}{critMode ? "クリ確定" : "非クリ"}
+                  {#if result && result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
+                    ・ 期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {(result.critical_chance * 100).toFixed(1)}%)
+                  {/if}
+                  ・ 判定は付けない
                 </span>
               </button>
               <span class="op">→</span>

@@ -1171,6 +1171,13 @@ export interface DamageResult {
   actual_delay: ActualDelay | null;
   /** 1 秒あたりの与ダメージ(合計 / 中ディレイ)。null = 中ディレイが出せない */
   dps: DpsTriple | null;
+  /**
+   * クリティカル率(0..1)。critical_rate が null(wiki 未記載)のときは
+   * 1.0(クリティカル確定扱い。未記載は確定扱い(ユーザー判断 2026-08-29))
+   */
+  critical_chance: number;
+  /** クリ率を考慮した DPS の期待値(dps.max × (1 − p) + dps.critical × p)。dps が null なら null */
+  expected_dps: number | null;
   trace: DamageTrace;
 }
 

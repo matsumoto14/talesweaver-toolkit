@@ -263,6 +263,13 @@ pub struct DamageResult {
     pub actual_delay: Option<ActualDelay>,
     /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。中ディレイが出せないなら `None`
     pub dps: Option<DpsTriple>,
+    /// クリティカル率(0..1)。`critical_rate` が `Some` ならその値を 0..1 にクランプしたもの。
+    /// wiki 未記載で `critical_rate` が `None` のときは **1.0(クリティカル確定扱い)**
+    /// (未記載は確定扱い(ユーザー判断 2026-08-29))。
+    pub critical_chance: f64,
+    /// クリ率を考慮した DPS の期待値(`dps.max × (1 − p) + dps.critical × p`)。
+    /// `dps` が `None` なら `None`
+    pub expected_dps: Option<f64>,
     pub trace: DamageTrace,
 }
 
@@ -860,6 +867,15 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         }
     });
 
+    // クリ率(0..1)。未記載(`critical_chance` が `None`)は確定扱い(ユーザー判断 2026-08-29)。
+    let critical_chance_ratio = match &critical_chance {
+        Some(c) => (c.value / 100.0).clamp(0.0, 1.0),
+        None => 1.0,
+    };
+    let expected_dps = dps
+        .as_ref()
+        .map(|d| d.max * (1.0 - critical_chance_ratio) + d.critical * critical_chance_ratio);
+
     DamageResult {
         per_hit: DamageTriple { min, max, critical },
         total,
@@ -874,6 +890,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         critical_rate: critical_chance,
         actual_delay: delay,
         dps,
+        critical_chance: critical_chance_ratio,
+        expected_dps,
         trace: DamageTrace {
             stats: stat_traces,
             attack,
@@ -1880,6 +1898,40 @@ mod tests {
         let boosted = calculate_damage(&i).critical_rate.unwrap();
         assert!((boosted.bonus - 20.0).abs() < 1e-12);
         assert!(boosted.raw > base.raw);
+    }
+
+    // クリ率が wiki 未記載(critical_rate が None)ならクリティカル確定扱い(ユーザー判断 2026-08-29)。
+    #[test]
+    fn クリ率が未記載ならクリティカル確定扱いで期待値はクリdpsと一致する() {
+        let result = calculate_damage(&input());
+        assert!(result.critical_rate.is_none());
+        assert_eq!(result.critical_chance, 1.0);
+        assert_eq!(result.expected_dps, result.dps.map(|d| d.critical));
+    }
+
+    // クリ率 40% なら期待値は非クリdpsとクリdpsの線形補間になる。
+    #[test]
+    fn クリ率がある場合の期待dpsは線形補間になる() {
+        let mut i = input();
+        i.base_stats.agi = 300;
+        set_equipment_base(
+            &mut i,
+            EquipmentValues {
+                critical: 200,
+                ..Default::default()
+            },
+        );
+        i.enemy.agi = Some(1420);
+        i.enemy.critical_taken_rate = Some(0.0);
+        i.skill.critical_rate = Some(13);
+        let result = calculate_damage(&i);
+        let p = result.critical_rate.unwrap().value / 100.0;
+        // 意図的にクリ率が 0% でも 100% でもないケースになっている前提
+        assert!(p > 0.0 && p < 1.0);
+        assert!((result.critical_chance - p).abs() < 1e-12);
+        let dps = result.dps.unwrap();
+        let expected = dps.max * (1.0 - p) + dps.critical * p;
+        assert!((result.expected_dps.unwrap() - expected).abs() < 1e-9);
     }
 
     // wiki Quest/覚醒クエスト「各能力の上限値」/ エタの意志: 最終能力値の上限
