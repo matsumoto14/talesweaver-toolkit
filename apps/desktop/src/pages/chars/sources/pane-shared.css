@@ -1,0 +1,578 @@
+/*
+ * SourcePane とその子ペイン(pages/chars/sources/*.svelte)が共有するスタイル。
+ * クラスの大半が複数のペインコンポーネントをまたいで使われており(.stat-row / .check /
+ * .part-row / .siena-row / .ro-row / .card-title.inline など)、Svelte のスコープ付き
+ * <style> は定義した1コンポーネントの DOM にしかクラスを紐付けないため、ペインごとに
+ * <style> を分割すると見た目が壊れる。そのため元の SourcePane.svelte の <style> を
+ * 内容そのままここへ移し、SourcePane.svelte から素の CSS として import してグローバル化した。
+ * 見た目・DOM は変更していない(構造リファクタリングのみ)。
+ */
+  .pane { display: flex; flex-direction: column; gap: 9px; padding-bottom: 10px; }
+  .pane-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; }
+  .pane-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
+  .pane-head .dim { margin-left: auto; font-size: 9px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview-error { margin: 0; padding: 0 2px; font-size: 11px; color: var(--warm); }
+
+  .card-title .normal { font-weight: 400; font-size: 9px; }
+  .card-title.space { margin-top: 12px; }
+  .hint { margin: 6px 0 0; font-size: 9.5px; line-height: 1.5; }
+  /* エタの意志。値の欄と節目を横に並べる(どちらも同じことを決める場所なので) */
+  .eternal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .eternal-row > :global(.stat-input), .eternal-row > :global(.stepper) { flex: 0 0 150px; }
+  .eternal-row > :global(.step-select) { flex: 1 1 260px; min-width: 0; }
+  /* Lv の段階選択 + 選択中の効果値 */
+  .lv { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+  /* 入力セルは親の幅まで伸びる(§07 実演の .ctrl が 1fr)。1 列で受けると値が
+     右端まで離れて読めないので、232px の段に割って伸び先を絞る */
+  .add-row { margin-top: 9px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .fields {
+    margin-top: 9px; display: grid; gap: 9px 16px;
+    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  }
+  .text { display: flex; flex-direction: column; gap: 6px; }
+  /* 段が多くて折り返す欄は 1 行を占める。折り返した段は一度の視線で読めない(§00 01) */
+  .fields > :global(.wide) { grid-column: 1 / -1; }
+  .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  input[type="text"] {
+    padding: 8px 10px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg);
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+  .tbl { margin-top: 8px; overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); }
+  table.grid td.stat-cell { min-width: 180px; }
+  .stat-cell :global(.stepper) { justify-content: flex-end; }
+  .final { white-space: nowrap; }
+  .strong { font-weight: 700; }
+  .pin-badge {
+    margin-left: 6px; vertical-align: middle;
+    font-size: 9px; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
+  }
+  details.contrib { margin-top: 8px; }
+  details.contrib summary { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-muted); cursor: pointer; user-select: none; }
+  details.contrib summary:hover { color: var(--fg); }
+  .empty { margin: 6px 0 0; padding: 4px 0; font-size: 11px; }
+
+  /* オン / オフはチップで出す(§07 形態 3)。素のチェックボックスは 5 形態のどれでもない。
+     値はチップの中に書く — 選ぶ = 値が確定する。計算タブのバフチップと同じ形にそろえる */
+  .check {
+    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    padding: 4px 11px; border-radius: var(--r-pill);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
+    color: var(--fg-sub); font-size: 11px; font-weight: 500; cursor: pointer;
+  }
+  .check:hover { border-color: var(--accent); }
+  .check:has(input:checked) {
+    background: linear-gradient(180deg, #CCF7FF, #90D7FF);
+    border-color: #687287; color: #123047; font-weight: 700;
+  }
+  .check:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
+  /* チェックボックスそのものは出さない。選ばれているかは面の色が言う */
+  .check input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .check .fixed-value, .check .note { color: inherit; opacity: 0.75; }
+  /* チップは横に並べる(1 行 1 個だと 30 行の一覧になる) */
+  .buff-list { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .note { font-size: 10px; }
+  /* 「満」は上限に届いた印。金 = 上限(§03 予約色)。枠は常に確保して行をずらさない */
+  .cap-badge {
+    display: inline-block; min-width: 20px; text-align: center;
+    font-size: 9px; letter-spacing: 0.05em; color: transparent; border: 1px solid transparent;
+    border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
+  }
+  .cap-badge.on { color: var(--state-edge-fg); border-color: var(--gold); background: var(--state-edge-bg); }
+  /* 素ステ → 最終。灰が素ステ、青が補正で乗った分(§11) */
+  .grow {
+    display: flex; width: 100%; min-width: 74px; height: 7px; overflow: hidden;
+    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-soft);
+  }
+  .grow > i { display: block; transition: width 0.38s cubic-bezier(0.4, 0, 0.2, 1); }
+  .grow > .base { background: var(--flow-base); }
+  .grow > .add { background: var(--accent); }
+  .fixed-value { font-size: 11px; font-weight: 500; }
+  /* マスタリー待ちで値が決まらないものは破線で出す(0 や空白で埋めない。§03) */
+  .fixed-value.unknown {
+    padding: 0 4px; border: 1px dashed var(--border); border-radius: 4px; opacity: 0.6;
+  }
+
+  /* 装備ドリルダウン: 部位一覧 */
+  /* 装備のドリルダウン(§09 規則 2)。掘るたびに右へペインが増え、前の階層は消えない。
+     詳細を開いているときだけ一覧を細くし、値サマリを畳む — 狭いときだけ左から畳む、の形 */
+  .part-split { min-width: 0; }
+  .part-list { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  /* シエナは一覧の上に説明カードがあるので、まとめて 1 列にする */
+  .equipment-overlay { z-index: 90; padding: 3vh max(14px, 6vw); display: flex; justify-content: center; align-items: flex-start; }
+  .part-detail { width: min(980px, 100%); max-height: 94vh; overflow: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .part-detail > .card { padding: 7px 9px; }
+  .equipment-item-content { display: flex; flex-direction: column; gap: 5px; }
+  .equipment-item-content > .card { padding: 7px 9px; }
+  .part-detail-header { position: sticky; top: 0; z-index: 4; min-height: 42px; margin: 0 -8px; padding: 6px 9px 6px 12px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-rail); border-bottom: 1px solid var(--border-strong); box-shadow: 0 4px 9px rgba(18, 27, 42, .09); }
+  .part-detail-header > b { font-size: 12px; color: var(--fg-sub); }
+  .close-equipment { min-width: 88px; justify-content: center; border-color: var(--border-strong); background: var(--bg-field); font-weight: 700; }
+  .close-equipment span { font-size: 15px; line-height: 1; }
+  .part-row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
+  }
+  .part-row:hover { border-color: var(--accent); }
+  /* いま右に開いている部位。押した行がその場に残っていることを面で示す */
+  .part-row.on { background: var(--bg-active); border-color: var(--accent); }
+  .part-main { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 7px; }
+  .part-name { flex-shrink: 0; font-size: 11px; font-weight: 700; }
+  .part-item { min-width: 0; font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .part-plus {
+    flex-shrink: 0; min-width: 30px; text-align: center;
+    padding: 0 6px; border-radius: var(--r-pill);
+    background: transparent; border: 1px solid transparent;
+    font-size: 9px; font-weight: 700; color: transparent;
+  }
+  .part-plus.on { background: var(--state-short-bg); border-color: var(--mob); color: #7A4B45; }
+  .part-plus.wide { min-width: 46px; }
+  .part-vals { flex-shrink: 0; font-size: 9.5px; }
+  .chev { flex-shrink: 0; font-size: 11px; }
+
+  /* 装備ドリルダウン: 部位詳細。一覧が消えないので「戻る」は要らない — 閉じるだけ */
+  .close-detail { align-self: flex-start; padding: 2px 2px; font-size: var(--t-label); color: var(--fg-muted); }
+  .close-detail:hover { color: var(--accent); text-decoration: underline; }
+  .card-title.inline { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+  /* 見え方を変えるスイッチは右端に控えめに置く(主役は 6 枠そのもの) */
+  /* 押すと言葉が変わる(出す ↔ 閉じる)。幅を先に取っておかないと、押した瞬間に
+     押した場所そのものが動く(§00 03「押した場所は動かない」) */
+  .card-title.inline .chip.quiet {
+    margin-left: auto; align-self: center; min-width: 112px; justify-content: center;
+  }
+  .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+  .values-col { flex: 1 1 260px; min-width: 0; }
+  .part-elem {
+    flex-shrink: 0; padding: 1px 6px; font-size: 9px; font-weight: 700;
+    color: var(--fg-muted); background: var(--surface-inset);
+    border: 1px solid var(--border); border-radius: var(--r-pill);
+  }
+  .part-abi {
+    flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
+  }
+  /* 装着時効果は攻撃・耐久とも装備で得ている効果なので、状態色 §03 の「足りている」を使う */
+  .part-dmg {
+    flex-shrink: 0; font-size: 8.5px; font-weight: 700;
+    color: var(--state-met-fg); background: var(--state-met-bg);
+    border: 1px solid var(--state-met-bd); border-radius: var(--r-pill); padding: 0 6px;
+  }
+  /* 変種も同じ 1 行に置く。単独称号と高さをそろえ、一覧をリズムよく追えるようにする */
+  .item-row.group {
+    display: flex; align-items: center; gap: 7px; cursor: default;
+  }
+  .item-row.group:hover { border-color: var(--border); }
+  .title-list > .item-row { height: 40px; min-height: 40px; overflow: hidden; }
+  .title-list .item-name { flex: 1; }
+  .title-variants { margin-left: auto; display: flex; flex-wrap: nowrap; gap: 5px; flex-shrink: 0; }
+
+  /* マスタリーの 1 段。段名 + 3 択のカード。どの段も 3 択なので列を固定してそろえる */
+  .mastery-row {
+    display: grid; grid-template-columns: 24px minmax(0, 1fr);
+    gap: 9px; align-items: start;
+    padding: 6px 0; border-bottom: 1px dashed var(--border-soft);
+  }
+  .mastery-row:last-of-type { border-bottom: none; }
+  .mastery-tier { padding-top: 9px; font-size: 10px; font-weight: 700; color: var(--fg-dim); }
+  .mastery-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  /* 1 択 = アイコン + 名前 + 効果。効果を出さないと「どれを選ぶか」を別画面で調べることになる(§00 05) */
+  .mastery-option {
+    display: flex; align-items: center; gap: 7px; min-width: 0; text-align: left;
+    padding: 6px 8px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg);
+    cursor: pointer;
+  }
+  .mastery-option:hover { border-color: var(--accent); }
+  .mastery-option.on {
+    background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent);
+  }
+  /* 計算に入らない(記録するだけの)選択肢 */
+  .mastery-option.record-only { border-style: dashed; color: var(--fg-muted); }
+  .mastery-option.record-only.on { border-style: solid; }
+  .mastery-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .mastery-name { font-size: 11px; font-weight: 700; line-height: 1.25; }
+  /* 効果は 2 行で打ち切る。長い 1 択(騎士道・冬を降らせる子)に合わせて段の高さが
+     ばらつくと、3 列そろえた意味が無くなる。全文は title に出る */
+  .mastery-effect {
+    font-size: 9px; color: var(--fg-muted); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .mastery-option.on .mastery-effect { color: var(--fg-sub); }
+
+  /* 設計者の研究室(段階制)。チェックの列に混ぜず 1 段だけ独立させる */
+  .lab-field {
+    margin: 7px 0; display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  }
+  .lab-label { font-size: 11.5px; font-weight: 700; }
+  .lab-note { display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted); }
+  .lab-value { min-width: 52px; font-size: 12.5px; font-weight: 700; }
+
+  /* ほかの補正源から入る分の 1 行。名前 / 値 / その補正源へ移るボタン */
+  .ext-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 9px; align-items: center;
+    padding: 3px 0; border-bottom: 1px dashed var(--border-soft);
+  }
+  .ext-row:last-of-type { border-bottom: none; }
+  /* まだ入っていない供給源。消さずに薄くする(どこから来るかの地図として残す) */
+  .ext-row.empty { opacity: 0.55; }
+  .ext-name { min-width: 0; font-size: 11.5px; font-weight: 700; }
+  .ext-note { display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted); }
+  .ext-value { font-size: 12.5px; font-weight: 700; min-width: 56px; text-align: right; }
+
+  /* 称号のダメージ増加。補正値と効き方が違うので値の要約と分けて出す */
+  .title-dmg {
+    flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
+    color: var(--sel-fg); background: var(--sel);
+    border: 1px solid var(--sel-bd); border-radius: var(--r-pill);
+  }
+  .title-extra {
+    flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
+    color: var(--state-edge-fg); background: var(--state-edge-bg);
+    border: 1px dashed var(--state-edge-bd); border-radius: var(--r-pill);
+  }
+  .title-current { min-height: 40px; flex-wrap: nowrap; }
+  .title-current .item-name { flex: 1; }
+  .title-current .item-vals {
+    min-width: 0; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* 称号の補正値グリッド */
+  .values-grid { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 6px; }
+  .val-cell { display: flex; align-items: baseline; gap: 4px; font-size: 11px; }
+
+  /* ランダムオプションの 1 枠 */
+  /* 1 OP 1 枠。名前 + 外すが上、ランクと効果値が下。
+     右のペインは狭いので、ランクの段(言葉 4 つ)を名前と同じ行に置くと折り返す */
+  .ro-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) 40px;
+    gap: 5px 9px; align-items: center;
+    padding: 7px 0; border-bottom: 1px dashed var(--border-soft);
+  }
+  .ro-rank { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+  .ro-row > :global(.stat-input), .ro-row > :global(.stepper) { grid-column: 1 / -1; max-width: 240px; }
+  .ro-row.record-only { opacity: 0.75; }
+  .ro-name { min-width: 0; font-size: 11.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ro-row .clear {
+    padding: 3px 4px; border-radius: var(--r-inset);
+    background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
+  }
+  .ro-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
+  .ro-note { margin: 0 0 6px; }
+  .ro-next { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--border-soft); }
+  .ro-next-label { font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .ro-common { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px; }
+  /* シエナのオーラの 1 枠。名前 / 値 / 外す が 1 行に収まる
+     (ランダムOP と違ってランクの段が無いので 2 行いらない) */
+  .siena-row {
+    display: grid; grid-template-columns: minmax(0, 132px) minmax(0, 1fr) 40px;
+    gap: 9px; align-items: center;
+    padding: 3px 0; border-bottom: 1px dashed var(--border-soft);
+  }
+  .siena-row:last-of-type { border-bottom: none; }
+  .non-weapon-additional-panel { margin: 8px 0 0; }
+  .siena-row.record-only { opacity: 0.75; }
+  .siena-row .clear {
+    padding: 1px 5px; font-size: 9px; color: var(--fg-dim);
+    background: none; border: 1px solid var(--border-soft); border-radius: var(--r-pill);
+  }
+  .siena-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
+  /* 効き先。名前の下に小さく置く(行は増やさない) */
+  .siena-to {
+    display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* 「足す」を行より上に常設する列。押しても動かない位置に置く(§09 規則 1) */
+  .ro-add-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 9px; padding-bottom: 9px; border-bottom: 1px dashed var(--border-soft);
+  }
+  .ro-add { margin-top: 8px; max-width: 300px; }
+  /* 部位の行に「何が付いているか」を短い名前のバッジで並べる。
+     名前をそのまま出すと 1 行に入らないので、gamedata の short を使う */
+  .ro-badges {
+    min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px;
+  }
+  .ro-badge {
+    padding: 1px 7px; border-radius: var(--r-pill);
+    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg-sub);
+    font-size: 9px; font-weight: 700; white-space: nowrap;
+  }
+  /* 計算に入らない(記録するだけの)枠は破線 + 塗りなし */
+  .ro-badge.record-only { background: none; border-style: dashed; color: var(--fg-muted); }
+  /* 畳んだ残り数。数そのものは主役ではないので面を持たせない */
+  .ro-badge.more { background: none; border-color: var(--border-soft); color: var(--fg-dim); }
+
+  .contrib-card {
+    margin-top: 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+    padding: 8px 11px; border-radius: var(--r-panel);
+    background: linear-gradient(180deg, #fff, #EFF5FD); border: 1px solid #9FB4D0;
+  }
+  .contrib-card.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
+  .contrib-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
+  .contrib-value { font-size: 15px; font-weight: 700; }
+  .contrib-note { font-size: 9px; line-height: 1.5; }
+  .item-search {
+    margin-top: 8px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg); font-size: 11px;
+  }
+  .item-search:focus { outline: none; border-color: var(--accent); }
+  /* 変種をまとめた行は 2 段ぶんの高さがあるので、220px だと 3 行しか入らず
+     チップが毎回途中で切れる。ペインの下は空いているので伸ばす */
+  .item-list { margin-top: 5px; max-height: 300px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px; }
+  /* AF は攻撃/耐久バッジも判断材料。カードを細分化して名前を潰さず、2列程度で読む。 */
+  .item-list.effectful { grid-template-columns: repeat(auto-fill, minmax(min(430px, 100%), 1fr)); }
+  .item-row {
+    display: flex; align-items: center; gap: 7px;
+    min-width: 0; min-height: 42px; padding: 5px 7px; border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
+  }
+  .item-row:hover { border-color: var(--accent); }
+  .item-row.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); }
+  .item-name { min-width: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-vals { flex-shrink: 0; font-size: 9.5px; }
+  .item-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+  .item-copy .item-vals { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-row .part-dmg { flex-shrink: 0; }
+  .custom-name { margin-top: 6px; }
+  .registration-name-card .custom-name { margin: 0; display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr); align-items: center; gap: 10px; }
+  .selected-equipment { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+  .selected-equipment-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; line-height: 1.15; }
+  .selected-equipment-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .selected-equipment .btn { flex-shrink: 0; }
+  .contrib-inline { flex-shrink: 0; color: var(--fg-sub); font-size: 10px; }
+  .equipment-picker { margin-top: 6px; padding: 6px; border-radius: var(--r-inset); }
+  .picker-tools { display: flex; align-items: center; gap: 6px; }
+  .picker-tools .item-search { flex: 1; }
+  .relic-selector { display: grid; gap: 14px; max-width: 480px; }
+  .relic-picker-actions { display: flex; gap: 8px; padding-top: 2px; }
+
+  /* 地域タブの見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
+  .tabs { margin-top: 2px; }
+  .tab .num { font-size: 9.5px; margin-left: 5px; }
+  /* ゲームの地域カードと同じく、地域ごとの「コアセット効果」をその地域に出す */
+  .tab-set {
+    margin-left: 4px; padding: 0 5px; border-radius: var(--r-pill);
+    background: var(--state-met-bg); border: 1px solid var(--good-soft);
+    font-size: 9px; font-weight: 700; color: var(--good);
+  }
+  .tab-set.off { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
+  .tab-rule { margin-bottom: 9px; }
+
+  /* 同じ形のステが 8 個並ぶ場所の共通形。ラベルを左に置いて 1 ステ 1 行にする —
+     ラベルを上に置くと 1 件で 2 行使い、8 件で画面が埋まる(§00 01 / 02) */
+  /* キャラの顔で選ぶ場所(登録ペインと同じ形。見た目は app.css の .pick に置いてある) */
+  .pick-grid { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .char-now { display: flex; align-items: center; gap: 9px; }
+  .char-now .char-name { font-size: 13px; font-weight: 700; }
+  .char-now .chip { margin-left: 4px; }
+  .stage-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .stage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .stage-row > :global(.chip) { flex: none; }
+  /* 段が 2 つしか無いと、幅なりでは細すぎて押す場所に見えない。段の大きさを先に決める */
+  .stage-row > :global(.step-select) { flex: none; }
+  .stage-row :global(.seg button) { min-width: 46px; padding: 7px 0; font-size: 13px; }
+  /* 共通スキルの欄。ラベル・段・外す・効いている値を 1 行に、列をそろえて並べる */
+  .skill-fields { margin-top: 9px; display: flex; flex-direction: column; gap: 7px; }
+  /* 列: ラベル / 段 / 操作(見え方のスイッチ・外す) / 効いている値。
+     操作が無い行でも列は残すので、どの行も同じ位置で並ぶ */
+  .skill-field { display: grid; grid-template-columns: 100px minmax(0, 1fr) 104px 100px; gap: 8px; align-items: center; }
+  .skill-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; white-space: nowrap; }
+  .chip-row { display: flex; align-items: center; gap: 6px; }
+  .skill-field .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
+  .skill-field .v { white-space: nowrap; }
+  .skill-field .v { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--fg-sub); }
+  /* ほぼ押さない操作。段に 1 列渡さず、言葉のまま小さく置く(記号にしない) */
+  .skill-field .clear {
+    padding: 3px 4px; border-radius: var(--r-inset);
+    background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
+  }
+  .skill-field .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
+  .skill-field .clear:disabled { color: var(--border-soft); }
+  .skill-note { margin: 0 0 0 113px; }
+  /* 3 つのチップは段 1 つぶんの幅に収まらないので、操作の列まで使う */
+  .ultimate-row { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 6px; }
+  /* 2 件ぶんの高さを先に取る。選んだ数で下が上下しない */
+  .ultimate-notes { min-height: 30px; }
+  .ultimate-notes .skill-note { min-height: 15px; }
+
+  .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .skill-chip .skill-name { font-weight: 700; }
+  .skill-chip .skill-meta {
+    padding: 0 5px; border-radius: var(--r-pill);
+    background: var(--surface-inset); font-size: 9px; color: var(--fg-muted);
+  }
+  .skill-chip.on .skill-meta { background: rgba(255, 255, 255, 0.7); color: var(--sel-fg); }
+  /* 未収録は破線 + ? で、空白や「単体」で埋めない(§00) */
+  .skill-chip .skill-meta.unknown { background: none; border: 1px dashed var(--border); }
+  .skill-all { margin-top: 7px; max-width: 320px; }
+  .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .part-switches, .part-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 2px 4px; }
+  .part-switches button { position: relative; cursor: grab; user-select: none; -webkit-user-drag: element; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--bg-panel); padding: 2px 7px 2px 3px; font-size: 10px; }
+  .part-switches button:active { cursor: grabbing; }
+  .part-switches button.on { border-color: var(--accent); color: var(--accent-hover); background: var(--state-goal-bg); }
+  .part-switches button.dragging { opacity: .45; }
+  .part-switches button.drop-before::before, .part-switches button.drop-after::after {
+    content: ""; position: absolute; top: -3px; bottom: -3px; width: 2px;
+    background: var(--accent); border-radius: var(--r-pill);
+  }
+  .part-switches button.drop-before::before { left: -4px; }
+  .part-switches button.drop-after::after { right: -4px; }
+  .registration-grip { color: var(--fg-off); font-size: 10px; line-height: 1; }
+  .part-switches button:hover .registration-grip, .part-switches button.dragging .registration-grip { color: var(--accent); }
+  .registration-order { margin: 7px 4px 3px; padding: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset); }
+  .delete-registration { width: 174px; color: var(--danger); border-color: var(--state-short-bd); }
+  .delete-registration.confirm { background: var(--state-short-bg); font-weight: 700; }
+  .editing-registration { background: var(--state-temp-bg); border-color: var(--state-temp-bd); color: var(--state-temp-fg); }
+  .values-paired { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin-top: 4px; }
+  .value-pair { width: min(100%, 520px); display: grid; grid-template-columns: 44px 464px; gap: 6px; align-items: center; }
+  .value-pair.plan-stat { width: min(100%, 800px); grid-template-columns: 44px 464px minmax(220px, 1fr); }
+  .value-pair.secondary-stat { opacity: .82; }
+  .value-equation { display: grid; grid-template-columns: 102px 52px 214px 62px; gap: 6px; align-items: center; }
+  .equation-base { width: 62px; display: grid; align-items: center; }
+  .equation-base :global(.stepper .cell.bare) { width: 62px; min-width: 62px; }
+  .equation-enchant { width: 214px; display: grid; align-items: center; }
+  .enchant-plan {
+    min-width: 0; min-height: 30px; padding: 3px 7px; display: grid;
+    grid-template-columns: 75px minmax(0, 1fr) 34px; align-items: center; gap: 7px;
+    border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset);
+  }
+  .plan-remaining { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+  .plan-remaining small { color: var(--fg-muted); font-size: 8.5px; }
+  .plan-remaining b { color: var(--accent-hover); font-size: 12.5px; }
+  .plan-recipe { min-width: 0; color: var(--fg-sub); font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+  .enchant-plan > .badge { min-width: 34px; text-align: center; }
+  .enchant-plan.complete .plan-remaining b, .enchant-plan.complete .plan-recipe { color: var(--state-edge-fg); }
+  .base-value-toolbar { width: min(100%, 520px); min-height: 29px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft); display: grid; grid-template-columns: 44px 102px 52px 214px 62px; column-gap: 6px; align-items: center; }
+  .base-value-copy { grid-column: 5; display: flex; align-items: baseline; justify-content: center; gap: 3px; white-space: nowrap; }
+  .base-value-copy b { font-size: 9.5px; color: var(--fg-sub); }
+  .base-value-copy small { color: var(--fg-muted); font-size: 9px; }
+  .growth-equipment-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .growth-equipment-head { align-items: center; }
+  .growth-equipment-values { width: min(100%, 460px); }
+  .growth-equipment-values .stat-row { grid-template-columns: 76px minmax(0, 1fr); }
+  .growth-equipment-values .stat-row :global(.stepper .cell) { flex: 0 1 104px; }
+  .enchant-more-toggle {
+    width: min(100%, 520px); grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
+    border: 0; border-top: 1px dashed var(--border-soft); background: none; color: var(--fg-sub);
+    display: flex; align-items: center; justify-content: space-between; text-align: left;
+  }
+  .enchant-more-toggle:hover { color: var(--accent-hover); }
+  .enchant-more-toggle > span:first-child { display: flex; align-items: baseline; gap: 8px; }
+  .enchant-more-toggle b { font-size: 10px; }
+  .enchant-more-toggle small { color: var(--fg-muted); font-size: 9px; }
+  .enchant-more-toggle .toggle-state { width: 56px; text-align: right; color: var(--accent-hover); font-size: 9.5px; }
+  .value-total { width: 102px; display: grid; grid-template-columns: 38px 62px; gap: 2px; align-items: baseline; white-space: nowrap; color: var(--accent-hover); }
+  .total-main { width: 38px; font-size: 13px; text-align: right; }
+  .enchant-part { width: 62px; color: var(--fg-muted); font-size: 9px; font-weight: 500; text-align: left; }
+  .ability-part { width: 52px; padding: 1px 4px; border-radius: var(--r-pill); background: var(--surface-inset); color: var(--accent-hover); font-size: 8.5px; font-weight: 700; text-align: center; white-space: nowrap; }
+  .ability-spacer { width: 52px; }
+  .enchant-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .enchant-card .hint { margin: 4px 0 0; }
+  .equipment-filter { white-space: nowrap; }
+  @media (max-width: 850px) {
+    .values-paired, .base-value-toolbar { width: min(100%, 508px); }
+    .base-value-toolbar { grid-template-columns: 40px 94px 48px 214px 58px; }
+    .value-pair { grid-template-columns: 40px 462px; }
+    .value-pair.plan-stat { width: min(100%, 508px); grid-template-columns: 40px 462px; }
+    .enchant-plan { grid-column: 2; margin-top: 2px; }
+    .value-equation { grid-template-columns: 94px 48px 214px 58px; }
+    .equation-base { width: 58px; }
+    .equation-base :global(.stepper .cell.bare) { width: 58px; min-width: 58px; }
+    .equation-enchant { width: 214px; }
+    .value-total { width: 94px; grid-template-columns: 36px 56px; }
+    .total-main { width: 36px; }
+    .enchant-part { width: 56px; }
+    .ability-part, .ability-spacer { width: 48px; }
+  }
+  .element-auto b { font-size: 13px; }
+
+  .stat-rows { margin-top: 8px; display: grid; grid-template-columns: 1fr; gap: 5px; }
+  /* 2 列にするのは中身が収まるときだけ。狭いと右の列にはみ出して隣の行に重なる */
+  .stat-rows.two { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 5px 16px; }
+  .crown-choice {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-bottom: 8px; border-bottom: 1px dashed var(--border-soft);
+  }
+  .crown-choice-label { font-size: 10px; letter-spacing: 0.08em; color: var(--fg-muted); }
+  .crown-choice-stats { display: flex; gap: 5px; flex-wrap: wrap; }
+  .crown-presets { display: flex; gap: 5px; margin-left: auto; }
+  .crown-choice .hint { flex-basis: 100%; }
+  .stat-row {
+    display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 9px; align-items: center;
+    padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft);
+  }
+  .stat-row .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
+  .stat-row > :global(.stepper) { min-width: 0; }
+  /* 入力欄は数値 2〜4 桁ぶんあれば足りる。行いっぱいに伸ばすと、数字と ＋ / MAX が離れて
+     視線が横に流れる(§00 01)。全行が同じ幅なので端もそろう */
+  .stat-rows.two .stat-row :global(.stepper .cell) { flex: 0 1 104px; }
+  .stat-row .v { min-width: 44px; text-align: right; font-size: 12px; font-weight: 700; color: var(--fg-sub); }
+
+  .core-list { display: flex; flex-direction: column; gap: 7px; }
+  /* 読み取り専用の要約なのでインセット。面の色ではなくバッジで状態を言う
+     (意味のある帯・面は 1 画面 2 種まで。§02) */
+  .core-head {
+    display: grid; grid-template-columns: 16px minmax(0, 1fr) 34px 118px 52px; gap: 9px;
+    margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim);
+  }
+  .core-head .lead { text-align: center; color: var(--fg-muted); font-weight: 700; }
+  .core-head .r { text-align: right; }
+  /* 1 枠 = 1 行。番号・タイプ・進化-強化・補正値が同じ高さに並ぶので、
+     6 枠を上から一度の視線で読める(§00「視線を動かさない」) */
+  .core-row {
+    display: grid; grid-template-columns: 16px 1fr 34px 66px 48px;
+    gap: 9px; align-items: center;
+    padding-bottom: 7px; border-bottom: 1px dashed var(--border-soft);
+  }
+  .core-row:last-child { padding-bottom: 0; border-bottom: 0; }
+  .core-slot { font-size: 11px; text-align: center; }
+  .core-types { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  /* 外すのは「ほぼ押さない操作」なので、段ではなく小さな 1 つに落とす。
+     ただし記号(×)にしない — 意味を読み取らせるより、言葉で言い切るほうが速い */
+  .core-clear {
+    padding: 3px 4px; border-radius: var(--r-inset);
+    background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
+  }
+  .core-clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
+  .core-clear:disabled { color: var(--border-soft); }
+  .core-stage { position: relative; }
+  /* この行の主役。どのコアかより「どこまで育てたか」を見に来ているので、
+     ここだけ大きく・濃くする(§00「触る場所だけ大きく」) */
+  .stage-trigger {
+    width: 100%; padding: 9px 0; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 #fff;
+    font-size: 17px; font-weight: 800; color: var(--fg); letter-spacing: 0.06em;
+  }
+  .stage-trigger:hover:not(:disabled) { border-color: var(--accent); background: var(--bg-active); }
+  .stage-trigger:disabled { color: var(--fg-off); }
+  /* 重なって出るので、開いても行は動かない(§09 規則 3) */
+  .stage-overlay { position: fixed; inset: 0; z-index: 30; cursor: default; }
+  /* 右端に近い場所から開くので、右をそろえて左へ広げる。中央合わせだと枠から溢れる */
+  .stage-pop {
+    position: absolute; z-index: 31; top: calc(100% + 5px); right: 0;
+    padding: 8px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border-strong);
+    box-shadow: 0 10px 24px rgba(30, 44, 74, 0.28);
+  }
+  .stage-pop.up { top: auto; bottom: calc(100% + 5px); transform-origin: bottom center; }
+  .stage-pop-h { margin-bottom: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--fg-dim); }
+  .stage-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .stage-cell {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    width: 60px; padding: 6px 0 5px; border-radius: var(--r-inset);
+    background: var(--bg-rail); border: 1px solid var(--border-soft);
+    white-space: nowrap;
+  }
+  .stage-cell b { font-size: 13px; font-weight: 800; color: var(--fg-sub); letter-spacing: 0.04em; }
+  .stage-cell .cell-bonus { font-size: 9px; color: var(--fg-dim); }
+  .stage-cell.on b, .stage-cell.on .cell-bonus { color: var(--sel-fg); }
+  .stage-cell:hover:not(.on) { background: var(--bg-active); }
+  .stage-cell.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
+  .core-bonus { font-size: 12px; font-weight: 700; text-align: right; }
+  .core-bonus.support { color: var(--fg-muted); font-weight: 400; }
+
