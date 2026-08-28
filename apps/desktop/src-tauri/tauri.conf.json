@@ -24,7 +24,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
     "publisher": "matsumoto",
     "category": "Utility",
     "shortDescription": "TalesWeaver プレイヤー向けのダメージ計算・強化提案ツール(非公式)",

@@ -112,7 +112,7 @@ jobs:
         shell: pwsh
         run: |
           $paths = $env:ARTIFACTS | ConvertFrom-Json
-          # NSIS の .exe を「最新」として配る(msi より導入がやさしい)。
+          # 配るのは NSIS の .exe だけ(tauri.conf.json の targets も nsis のみ)。
           $setup = $paths | Where-Object { $_ -like "*-setup.exe" } | Select-Object -First 1
           if (-not $setup) { throw "NSIS インストーラが見つかりません: $($paths -join ', ')" }
 

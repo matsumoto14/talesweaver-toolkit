@@ -67,6 +67,15 @@ dl.tw-context.dev/v0.2.0/<元のファイル名>         版ごとに保存
 手動実行では `dev/<実行番号>/` に置くだけで `latest/` は更新しないので、
 公開中のダウンロードには影響しない。
 
+## 配布物は NSIS の `.exe` だけ
+
+MSI は作らない。配布先は個人のプレイヤーで、紹介ページのボタンも `.exe` を指しており、
+自動更新も NSIS で動くため。MSI は企業の一括展開向けで、この用途では使われない。
+
+加えて WiX は MSI を `en-US`(コードページ 1252)で作るので、`shortDescription` /
+`longDescription` の日本語を格納できず `light.exe` が失敗する。MSI を復活させるなら
+説明文を英語にするか `bundle.windows.wix.language` を `ja-JP` にする必要がある。
+
 ## 毎回の手順
 
 ```sh
