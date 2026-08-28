@@ -433,6 +433,21 @@
       .filter((c) => !NOT_EFFORT.has(c.category) && c.factor > 1)
       .sort((a, b) => b.factor - a.factor)[0] ?? null,
   );
+  /**
+   * 「ここを伸ばすのが効率いい」= 割合カテゴリに +1% 足したときの最終ダメージの伸び。
+   * 同一カテゴリ内は加算なので伸びは `1 / factor`(いま積んでいる量が少ないほど大きい)。
+   * 上限に達したカテゴリは伸びないので外す。候補はすでに積んでいる(供給源がある)ものだけ
+   * (中立のカテゴリは全部 ×1.00 で並ぶので順位が付けられない)
+   */
+  const bestLever = $derived(
+    activeCategories
+      .filter((c) => c.kind === "rate" && !NOT_EFFORT.has(c.category) && !catAtCap(c) && c.factor > 0)
+      .sort((a, b) => a.factor - b.factor)[0] ?? null,
+  );
+  /** bestLever に +1% 足したときの最終ダメージの伸び(%) */
+  const bestLeverGain = $derived(bestLever ? (1 / bestLever.factor) : 0);
+  const fmtHeadroom = (c: CategoryTrace) =>
+    c.cap && c.cap.max !== null ? `上限まで あと ${fmtNum((c.cap.max - c.value) * 100)}%` : "上限なし";
   /** topLever が乗っている段(帯の行を太字にするため) */
   const topLeverStep = $derived(
     topLever ? (steps.find((s) => s.categories.includes(topLever.category as DamageCategory))?.name ?? null) : null,
@@ -1556,6 +1571,9 @@
                 攻撃力が相手の防御力に届いていないので、倍率は何もかかりません。まず攻撃力を上げる必要があります。
               {:else if topLever}
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
+                {#if bestLever}
+                  <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>+{bestLeverGain.toFixed(2)}%</span> 伸びます({fmtHeadroom(bestLever)})。
+                {/if}
               {:else}
                 倍率はまだ何もかかっていません。
               {/if}
