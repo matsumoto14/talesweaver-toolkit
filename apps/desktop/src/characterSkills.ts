@@ -4,26 +4,12 @@
 // - 自分のスキルは、取っているマスタリーで効果が丸ごと差し替わる
 import type { CharacterSkillDef, DamageCategory, SkillEffect } from "./api/types";
 import { STAT_LABELS } from "./labels";
+import { limits } from "./limits.svelte";
 
-/** 与ダメージ式のカテゴリの日本語名(crates/domain/src/category.rs の label と合わせる) */
-export const DAMAGE_CATEGORY_LABELS: Record<string, string> = {
-  skill_multiplier_rate: "スキル倍率増加",
-  skill_multiplier_fixed: "スキル倍率増加(固定値)",
-  final_damage_rate: "最終ダメージ",
-  final_damage_fixed: "最終ダメージ(固定値)",
-  attack_damage_legacy: "攻撃ダメージII",
-  physical_magic_damage_rate: "物理/魔法ダメージ増加",
-  dependency_damage_rate: "依存ダメージ",
-  attack_damage_isabel: "攻撃ダメージ",
-  attack_damage_general: "攻撃ダメージ",
-  attack_damage_basic_trigger: "攻撃ダメージ",
-  attack_damage_skill: "攻撃ダメージ",
-  attack_damage_special: "攻撃ダメージ",
-  attack_damage_japan: "攻撃ダメージ",
-  basic_trigger_damage_fixed: "攻撃ダメージ(固定値)",
-};
+/** 与ダメージ式のカテゴリの日本語名。唯一の正は Rust の DamageCategory::label
+ * (StatLimits.damage_category_labels 経由。crates/domain/src/category.rs)。 */
 export const damageCategoryLabel = (c: DamageCategory): string =>
-  DAMAGE_CATEGORY_LABELS[c] ?? c;
+  limits.damage_category_labels.find((d) => d.category === c)?.label ?? c;
 
 /** 取っているマスタリーを踏まえた実際の効果 */
 export function resolvedEffects(def: CharacterSkillDef, pickedMasteries: string[]): SkillEffect[] {

@@ -3,6 +3,7 @@ import type {
   CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier, SienaAuras,
   RandomOptionRank, SkillDependency, StatKind, StatLayer, UltimateSkill,
 } from "./api/types";
+import { limits } from "./limits.svelte";
 
 export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex", "agi"];
 export const STAT_LABELS: Record<StatKind, string> = {
@@ -31,17 +32,11 @@ export const EQUIPMENT_STAT_KINDS = [
   "accuracy", "critical", "evasion", "agility",
 ] as const;
 export type EquipmentStatKind = (typeof EQUIPMENT_STAT_KINDS)[number];
-export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = {
-  thrust: "突き攻撃力",
-  slash: "斬り攻撃力",
-  physical_defense: "物理防御力",
-  magic_attack: "魔法攻撃力",
-  magic_defense: "魔法防御力",
-  accuracy: "命中率補正",
-  critical: "クリティカル補正",
-  evasion: "回避率補正",
-  agility: "敏捷度補正",
-};
+// 唯一の正は Rust の EquipmentValues::fields()(StatLimits.equipment_stat_labels 経由)。
+// CoreType(テシスコア)の表示名も同じテーブルを引く(装備補正とテシスコアで敏捷度補正の表記が食い違っていた事故の再発防止)。
+export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = Object.fromEntries(
+  limits.equipment_stat_labels.map((e) => [e.kind, e.label]),
+) as Record<EquipmentStatKind, string>;
 // 表・部位行など幅の狭いところ用の短縮名。
 export const EQUIPMENT_STAT_SHORT: Record<EquipmentStatKind, string> = {
   thrust: "突き", slash: "斬り", physical_defense: "物防", magic_attack: "魔攻", magic_defense: "魔防",
@@ -56,38 +51,24 @@ export const ELEMENT_LABELS: Record<Element, string> = {
 };
 // 装備に付与できるのは無属性以外(wiki: 装備システム/属性強化「1属性のみ装着可能(火、水、風、土、雷、白、黒)」)。
 export const EQUIPMENT_ELEMENTS: Element[] = ELEMENTS.filter((e) => e !== "neutral");
-// 属性強化を持てる部位(wiki: 装備システム冒頭の表「属性強化」行。盾+・レリックは対象外)。
-export const ELEMENT_ALLOWED_SLOTS: PartSlot[] = [
-  "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg", "effect", "artifact",
-];
-
-// 装備部位(crates/domain/src/equipment.rs の PartSlot)の表示名・並び順(wiki: 装備システム ページ冒頭の表)。
-export const PART_SLOTS: PartSlot[] = [
-  "weapon", "armor", "helm", "shield", "shield_plus",
-  "head", "body", "hand", "leg", "effect", "artifact", "relic_pendant", "relic_bracelet",
-];
-export const PART_SLOT_LABELS: Record<PartSlot, string> = {
-  weapon: "武器",
-  armor: "鎧",
-  helm: "兜",
-  shield: "盾",
-  shield_plus: "盾+",
-  head: "頭",
-  body: "体",
-  hand: "手",
-  leg: "足",
-  effect: "効果",
-  artifact: "AF",
-  relic_pendant: "レリック(ペンダント)",
-  relic_bracelet: "レリック(ブレスレット)",
-};
+// 装備部位ごとの枠数・可否ルールと部位の並び順(crates/domain/src/equipment.rs の PartSlot の鏡像)。
+// 唯一の正は Rust(StatLimits.part_slot_rules)。以下は全てそこからの導出 — ここに新しい判定を足さない。
+export const PART_SLOTS: PartSlot[] = limits.part_slot_rules.map((r) => r.slot);
+export const PART_SLOT_LABELS: Record<PartSlot, string> = Object.fromEntries(
+  limits.part_slot_rules.map((r) => [r.slot, r.label]),
+) as Record<PartSlot, string>;
 // 装備強化(+1〜+15)を持てる部位(wiki: 装備システム/装備強化。武器・鎧のみ)。
-export const ENHANCE_ALLOWED_SLOTS: PartSlot[] = ["weapon", "armor"];
+export const ENHANCE_ALLOWED_SLOTS: PartSlot[] =
+  limits.part_slot_rules.filter((r) => r.allows_enhance).map((r) => r.slot);
 // 装着アビリティ表がある部位(wiki: 装備システム/アビリティ、新装着アビリティ)。
-export const ABILITY_ALLOWED_SLOTS: PartSlot[] = [
-  "weapon", "armor", "helm", "shield", "shield_plus", "head", "hand", "leg",
-  "relic_pendant", "relic_bracelet",
-];
+export const ABILITY_ALLOWED_SLOTS: PartSlot[] =
+  limits.part_slot_rules.filter((r) => r.allows_ability).map((r) => r.slot);
+// 属性強化を持てる部位(wiki: 装備システム冒頭の表「属性強化」行。盾+・レリックは対象外)。
+export const ELEMENT_ALLOWED_SLOTS: PartSlot[] =
+  limits.part_slot_rules.filter((r) => r.allows_element).map((r) => r.slot);
+// ランダムオプションを持てる部位(wiki: 装備システム冒頭の表「転移」行。効果・AF は対象外)。
+export const RANDOM_OPTION_ALLOWED_SLOTS: PartSlot[] =
+  limits.part_slot_rules.filter((r) => r.allows_random_option).map((r) => r.slot);
 // 武器アビリティの系統(crates/domain/src/equipment.rs の EquipmentAbilityFamily)。
 // 表示順は加算先(突き / 斬り / 魔攻 / 魔防)の並びに合わせる。
 export const ABILITY_FAMILIES: EquipmentAbilityFamily[] = [
@@ -114,17 +95,14 @@ export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
 };
 // シエナのオーラを発現できる部位(wiki: 装備システム冒頭の表「オーラ」行。8 部位)。
 export type SienaPartSlot = keyof SienaAuras;
-export const SIENA_ALLOWED_SLOTS: SienaPartSlot[] = [
-  "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg",
-];
+export const SIENA_ALLOWED_SLOTS: SienaPartSlot[] =
+  limits.part_slot_rules.filter((r) => r.allows_siena).map((r) => r.slot as SienaPartSlot);
 // シエナのオーラの能力値が装備補正(強化能力値)になる部位(wiki: 能力値一覧(武器/盾))。
 // それ以外の部位はステの最終固定値増加になる。
-export const SIENA_EQUIPMENT_VALUE_SLOTS: SienaPartSlot[] = ["weapon", "shield"];
+export const SIENA_EQUIPMENT_VALUE_SLOTS: SienaPartSlot[] = limits.part_slot_rules
+  .filter((r) => r.siena_counts_as_equipment)
+  .map((r) => r.slot as SienaPartSlot);
 
-// ランダムオプションを持てる部位(wiki: 装備システム冒頭の表「転移」行。効果・AF は対象外)。
-export const RANDOM_OPTION_ALLOWED_SLOTS: PartSlot[] = PART_SLOTS.filter(
-  (s) => s !== "effect" && s !== "artifact",
-);
 // ランダムオプションのランク(wiki 一覧表の列)。左ほど下位。
 export const RANDOM_OPTION_RANKS: RandomOptionRank[] = [
   "normal", "valuable", "rare", "special", "s_true",
@@ -173,15 +151,8 @@ export const CORE_REGION_LABELS: Record<CoreRegion, string> = {
 export const CORE_POWER_TYPES: CoreType[] = ["thrust", "slash", "magic_attack", "magic_defense"];
 export const CORE_SUPPORT_TYPES: CoreType[] = ["physical_defense", "evasion", "agility", "accuracy"];
 export const CORE_TYPES: CoreType[] = [...CORE_POWER_TYPES, ...CORE_SUPPORT_TYPES];
-export const CORE_TYPE_LABELS: Record<CoreType, string> = {
-  thrust: "突き攻撃力",
-  slash: "斬り攻撃力",
-  magic_attack: "魔法攻撃力",
-  magic_defense: "魔法防御力",
-  physical_defense: "物理防御力",
-  evasion: "回避率補正",
-  agility: "敏捷性補正",
-  accuracy: "命中率補正",
-};
+// CoreType は EquipmentStatKind から critical を除いた 8 種と同じ文字列(crates/domain/src/thesis_core.rs
+// の CoreType::label が EquipmentValues の表示名をそのまま引く)。表記ゆれ防止のため同じテーブルを使う。
+export const CORE_TYPE_LABELS: Record<CoreType, string> = EQUIPMENT_STAT_LABELS;
 // テシスコアの装着枠数(wiki: テシスコア効果「装着位置」1〜6)。
 export const CORE_SLOT_COUNT = 6;

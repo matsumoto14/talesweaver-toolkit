@@ -1217,6 +1217,26 @@ pub struct StatLimits {
     pub core_support_bonus_table: Vec<Vec<i64>>,
     /// 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん
     pub part_slot_rules: Vec<PartSlotRule>,
+    /// 与ダメージ式カテゴリ(`DamageCategory`)の日本語名。36 カテゴリぶん、`DamageCategory::ALL` の順
+    pub damage_category_labels: Vec<DamageCategoryLabel>,
+    /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentValues::FIELD_LABELS` の順。
+    /// `CoreType`(テシスコア)の表示名もここと同じ(8 種が重なる。critical は含まない)
+    pub equipment_stat_labels: Vec<EquipmentStatLabel>,
+}
+
+/// `DamageCategory` 1 件の表示名(`stat_limits` 経由で UI に配る)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DamageCategoryLabel {
+    pub category: DamageCategory,
+    pub label: String,
+}
+
+/// 装備補正 1 値の表示名(`stat_limits` 経由で UI に配る)。`kind` は serde のフィールド名
+/// (`EquipmentValues::FIELD_LABELS` のキー)と一致する。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EquipmentStatLabel {
+    pub kind: String,
+    pub label: String,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -1274,9 +1294,24 @@ pub fn stat_limits() -> StatLimits {
             .into_iter()
             .map(|slot| PartSlotRule {
                 slot,
+                label: slot.label().to_string(),
                 ability_slots: slot.ability_slots(),
+                allows_ability: slot.allows_abilities(),
+                allows_enhance: slot.allows_enhance(),
+                allows_siena: slot.allows_siena(),
+                siena_counts_as_equipment: slot.siena_values_are_equipment(),
+                allows_random_option: slot.allows_random_option(),
                 random_option_slots: slot.random_option_slots(),
+                allows_element: slot.allows_element(),
             })
+            .collect(),
+        damage_category_labels: DamageCategory::ALL
+            .into_iter()
+            .map(|category| DamageCategoryLabel { category, label: category.label().to_string() })
+            .collect(),
+        equipment_stat_labels: EquipmentValues::FIELD_LABELS
+            .into_iter()
+            .map(|(kind, label)| EquipmentStatLabel { kind: kind.to_string(), label: label.to_string() })
             .collect(),
     }
 }

@@ -68,20 +68,45 @@ impl EnhanceGrade {
 }
 
 impl EquipmentValues {
+    /// 装備補正 9 値の表示名。唯一の正。`CoreType::label`(thesis_core.rs)は
+    /// 対応する 8 種をここから引く(装備補正とテシスコアで敏捷度補正の表記が食い違わないようにする)。
+    pub const THRUST_LABEL: &'static str = "突き攻撃力";
+    pub const SLASH_LABEL: &'static str = "斬り攻撃力";
+    pub const PHYSICAL_DEFENSE_LABEL: &'static str = "物理防御力";
+    pub const MAGIC_ATTACK_LABEL: &'static str = "魔法攻撃力";
+    pub const MAGIC_DEFENSE_LABEL: &'static str = "魔法防御力";
+    pub const ACCURACY_LABEL: &'static str = "命中率補正";
+    pub const CRITICAL_LABEL: &'static str = "クリティカル補正";
+    pub const EVASION_LABEL: &'static str = "回避率補正";
+    pub const AGILITY_LABEL: &'static str = "敏捷度補正";
+
     /// (表示名, 値)の 9 組。検証・UI ラベル・合計表示の唯一の並び順にする。
     pub fn fields(&self) -> [(&'static str, i64); 9] {
         [
-            ("突き攻撃力", self.thrust),
-            ("斬り攻撃力", self.slash),
-            ("物理防御力", self.physical_defense),
-            ("魔法攻撃力", self.magic_attack),
-            ("魔法防御力", self.magic_defense),
-            ("命中率補正", self.accuracy),
-            ("クリティカル補正", self.critical),
-            ("回避率補正", self.evasion),
-            ("敏捷度補正", self.agility),
+            (Self::THRUST_LABEL, self.thrust),
+            (Self::SLASH_LABEL, self.slash),
+            (Self::PHYSICAL_DEFENSE_LABEL, self.physical_defense),
+            (Self::MAGIC_ATTACK_LABEL, self.magic_attack),
+            (Self::MAGIC_DEFENSE_LABEL, self.magic_defense),
+            (Self::ACCURACY_LABEL, self.accuracy),
+            (Self::CRITICAL_LABEL, self.critical),
+            (Self::EVASION_LABEL, self.evasion),
+            (Self::AGILITY_LABEL, self.agility),
         ]
     }
+
+    /// (serde フィールド名, 表示名)の 9 組。`StatLimits::equipment_stat_labels` の元。
+    pub const FIELD_LABELS: [(&'static str, &'static str); 9] = [
+        ("thrust", Self::THRUST_LABEL),
+        ("slash", Self::SLASH_LABEL),
+        ("physical_defense", Self::PHYSICAL_DEFENSE_LABEL),
+        ("magic_attack", Self::MAGIC_ATTACK_LABEL),
+        ("magic_defense", Self::MAGIC_DEFENSE_LABEL),
+        ("accuracy", Self::ACCURACY_LABEL),
+        ("critical", Self::CRITICAL_LABEL),
+        ("evasion", Self::EVASION_LABEL),
+        ("agility", Self::AGILITY_LABEL),
+    ];
 
     fn validate(&self) -> Result<(), EquipmentError> {
         for (field, value) in self.fields() {
@@ -222,16 +247,49 @@ impl PartSlot {
     pub fn siena_values_are_equipment(self) -> bool {
         matches!(self, PartSlot::Weapon | PartSlot::Shield)
     }
+
+    /// 表示名(wiki: 装備システム ページ冒頭の表)。唯一の正 — UI 側はここを参照する。
+    pub fn label(self) -> &'static str {
+        match self {
+            PartSlot::Weapon => "武器",
+            PartSlot::Armor => "鎧",
+            PartSlot::Helm => "兜",
+            PartSlot::Shield => "盾",
+            PartSlot::ShieldPlus => "盾+",
+            PartSlot::Head => "頭",
+            PartSlot::Body => "体",
+            PartSlot::Hand => "手",
+            PartSlot::Leg => "足",
+            PartSlot::Effect => "効果",
+            PartSlot::Artifact => "AF",
+            PartSlot::RelicPendant => "レリック(ペンダント)",
+            PartSlot::RelicBracelet => "レリック(ブレスレット)",
+        }
+    }
 }
 
-/// 部位ごとの枠数ルール(ドラフト非依存の定数。UI がリテラルで持たず参照する。`StatLimits` に載せる)。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// 部位ごとの枠数・可否ルール(ドラフト非依存の定数。UI がリテラルで持たず参照する。
+/// `StatLimits::part_slot_rules` に載る。各フィールドは `PartSlot` の同名メソッドの写し)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PartSlotRule {
     pub slot: PartSlot,
+    pub label: String,
     /// この部位の装着アビリティの実スロット数
     pub ability_slots: usize,
+    /// この部位が装着アビリティを持てるか
+    pub allows_ability: bool,
+    /// この部位が装備強化(+1〜+15)を持てるか
+    pub allows_enhance: bool,
+    /// この部位がシエナのオーラを発現できるか
+    pub allows_siena: bool,
+    /// シエナのオーラの能力値がこの部位では「装備補正」として付くか
+    pub siena_counts_as_equipment: bool,
+    /// この部位がランダムオプションを持てるか
+    pub allows_random_option: bool,
     /// この部位に付けられるランダムオプションの数(持てない部位は `None`)
     pub random_option_slots: Option<usize>,
+    /// この部位が属性強化を持てるか
+    pub allows_element: bool,
 }
 
 /// シエナのオーラによるステ加算(wiki: 能力値一覧(その他の部位)の STAB〜AGI と、

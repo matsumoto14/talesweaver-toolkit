@@ -190,23 +190,46 @@ export interface CriticalRate {
   value: number;
 }
 
-// 与ダメージ式のカテゴリ。crates/domain/src/category.rs の DamageCategory(rename_all snake_case)。
-// 効き先として使うのは一部だけなので、必要なものを列挙する。
+// 与ダメージ式のカテゴリ。crates/domain/src/category.rs の DamageCategory(rename_all snake_case、
+// ALL の 36 variant)と正確に一致させる(任意文字列を許すエスケープハッチは持たず exhaustive check を効かせる)。
+// 表示名は Rust 由来(StatLimits.damage_category_labels / CategoryTrace.label)を使う。
 export type DamageCategory =
+  | "attack_power"
+  | "attack_random"
+  | "target_defense"
+  | "skill_multiplier"
   | "skill_multiplier_rate"
   | "skill_multiplier_fixed"
-  | "final_damage_rate"
+  | "critical_multiplier"
+  | "critical_damage_rate"
+  | "combo_bonus"
+  | "element_bonus"
+  | "player_cut_rate"
+  | "siena_aura_attack_rate"
   | "final_damage_fixed"
+  | "final_damage_rate"
+  | "cut_rate_a"
+  | "damage_reduction"
   | "attack_damage_legacy"
+  | "awakening_damage"
   | "physical_magic_damage_rate"
+  | "dependency_damage_rate"
+  | "damage_absorb"
+  | "taken_damage_rate"
+  | "taken_damage_reduction"
+  | "damage_amplify"
+  | "damage_resistance"
+  | "damage_mitigation"
+  | "cut_rate_b"
+  | "basic_trigger_damage_fixed"
+  | "attack_damage_rate"
   | "attack_damage_isabel"
   | "attack_damage_general"
   | "attack_damage_basic_trigger"
   | "attack_damage_skill"
   | "attack_damage_special"
   | "attack_damage_japan"
-  | "basic_trigger_damage_fixed"
-  | (string & {});
+  | "pvp_correction";
 
 // スキル・マスタリー・バフの効き先。crates/domain/src/character_skill.rs の SkillEffect。
 export type SkillEffect =
@@ -687,11 +710,19 @@ export interface PartEquipmentValues {
   slot: PartSlot;
   values: EquipmentValues;
 }
-// crates/domain/src/equipment.rs の PartSlotRule。部位ごとの枠数ルール(ドラフト非依存)。
+// crates/domain/src/equipment.rs の PartSlotRule。部位ごとの枠数・可否ルール(ドラフト非依存、
+// PartSlot の同名メソッドの写し)。唯一の正 — labels.ts の可否テーブルはここを参照する。
 export interface PartSlotRule {
   slot: PartSlot;
+  label: string;
   ability_slots: number;
+  allows_ability: boolean;
+  allows_enhance: boolean;
+  allows_siena: boolean;
+  siena_counts_as_equipment: boolean;
+  allows_random_option: boolean;
   random_option_slots: number | null;
+  allows_element: boolean;
 }
 export type WristType =
   | "shield" | "spellbook" | "knuckle" | "band" | "bracelet" | "pendulum" | "crystal_ball"
@@ -1122,6 +1153,22 @@ export interface StatLimits {
   core_support_bonus_table: number[][];
   /** 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん */
   part_slot_rules: PartSlotRule[];
+  /** 与ダメージ式カテゴリの日本語名。36 カテゴリぶん、DamageCategory::ALL の順 */
+  damage_category_labels: DamageCategoryLabel[];
+  /** 装備補正 9 値の表示名。EquipmentValues::FIELD_LABELS の順(CoreType の表示名も同じ) */
+  equipment_stat_labels: EquipmentStatLabel[];
+}
+
+// crates/domain/src/stat_sources.rs の DamageCategoryLabel。
+export interface DamageCategoryLabel {
+  category: DamageCategory;
+  label: string;
+}
+
+// crates/domain/src/stat_sources.rs の EquipmentStatLabel。kind は EquipmentStatKind と同じ文字列。
+export interface EquipmentStatLabel {
+  kind: string;
+  label: string;
 }
 
 // crates/domain/src/stat_sources.rs の PetSkillTierBonus。

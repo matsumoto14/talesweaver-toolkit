@@ -6,7 +6,7 @@
 //!   (docs/damage-formula.md §4 A「強化能力値(エンチャント・テシスコア・シエナのオーラ等)」)
 //! - 能力値の増加は対象ダンジョン内でのみ有効。セット効果は全地域で発動する
 //!
-//! 補助タイプ(物理防御力・回避率補正・敏捷性補正・命中率補正)も収録する(ユーザー要望)。
+//! 補助タイプ(物理防御力・回避率補正・敏捷度補正・命中率補正)も収録する(ユーザー要望)。
 //! 装備補正 9 値に持ち場があるので強化能力値(`equipment_values`)に合流する。与ダメージ式の
 //! 装備係数はこの 4 種が 0 なので攻撃力には効かず、防御側(§6)と回避P(§7)にだけ効く。
 //! 入場条件「コア N」の合計には火力と同じように効く。経験値タイプはシオカンヘイム専用で、
@@ -108,16 +108,18 @@ impl CoreType {
         CoreType::Accuracy,
     ];
 
+    /// 表示名。`EquipmentValues::fields` の対応する 9 値のうち 8 種と表記を共有する
+    /// (唯一の正は `EquipmentValues`。ここで独自の表記を持たない)。
     pub fn label(self) -> &'static str {
         match self {
-            CoreType::Thrust => "突き攻撃力",
-            CoreType::Slash => "斬り攻撃力",
-            CoreType::MagicAttack => "魔法攻撃力",
-            CoreType::MagicDefense => "魔法防御力",
-            CoreType::PhysicalDefense => "物理防御力",
-            CoreType::Evasion => "回避率補正",
-            CoreType::Agility => "敏捷性補正",
-            CoreType::Accuracy => "命中率補正",
+            CoreType::Thrust => EquipmentValues::THRUST_LABEL,
+            CoreType::Slash => EquipmentValues::SLASH_LABEL,
+            CoreType::MagicAttack => EquipmentValues::MAGIC_ATTACK_LABEL,
+            CoreType::MagicDefense => EquipmentValues::MAGIC_DEFENSE_LABEL,
+            CoreType::PhysicalDefense => EquipmentValues::PHYSICAL_DEFENSE_LABEL,
+            CoreType::Evasion => EquipmentValues::EVASION_LABEL,
+            CoreType::Agility => EquipmentValues::AGILITY_LABEL,
+            CoreType::Accuracy => EquipmentValues::ACCURACY_LABEL,
         }
     }
 
