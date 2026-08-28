@@ -96,10 +96,14 @@ jobs:
       # (手で同期しないことが唯一の担保)。
       #
       #   dl.tw-context.dev/latest/TW-Context-setup.exe   ← 毎回上書き。ページが指す先
-      #   dl.tw-context.dev/<タグ>/<元のファイル名>          ← 版ごとに保存
+      #   dl.tw-context.dev/<タグ>/TW-Context_<版>_x64-setup.exe
       # 手動実行では dev/<実行番号>/ に上げるだけで、latest/ は触らない。
       # タグを打つ前にこの経路を一度通しておけるようにするため
       # (初回リリースでいきなり権限やバケット名の間違いに当たらないように)。
+      #
+      # 成果物名は `TW Context_0.1.0_x64-setup.exe` とスペースを含む。PowerShell →
+      # npx.cmd → node と渡る間に Windows の引数分割で壊れるので、**スペースの無い
+      # パスへ写してから**アップロードする(URL も読みやすくなる)。
       - name: インストーラを R2 に上げる
         if: env.CLOUDFLARE_API_TOKEN != ''
         env:
@@ -111,21 +115,35 @@ jobs:
           PREFIX: ${{ github.ref_type == 'tag' && github.ref_name || format('dev/{0}', github.run_number) }}
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $paths = $env:ARTIFACTS | ConvertFrom-Json
           # 配るのは NSIS の .exe だけ(tauri.conf.json の targets も nsis のみ)。
           $setup = $paths | Where-Object { $_ -like "*-setup.exe" } | Select-Object -First 1
           if (-not $setup) { throw "NSIS インストーラが見つかりません: $($paths -join ', ')" }
 
+          $staging = Join-Path $env:RUNNER_TEMP "r2"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+          function Publish-Object($localPath, $key) {
+            Write-Host "アップロード: $key"
+            npx --yes wrangler@4 r2 object put "$env:BUCKET/$key" `
+              --file "$localPath" `
+              --content-type "application/vnd.microsoft.portable-executable" `
+              --remote --force
+            if ($LASTEXITCODE -ne 0) { throw "アップロードに失敗: $key" }
+          }
+
           foreach ($path in $paths) {
-            $name = Split-Path $path -Leaf
-            Write-Host "アップロード: $env:PREFIX/$name"
-            npx --yes wrangler@4 r2 object put "$env:BUCKET/$env:PREFIX/$name" --file "$path" --remote
+            # スペースを落とした名前で置く。URL がエンコードだらけにならない。
+            $name = (Split-Path $path -Leaf) -replace ' ', '-'
+            $staged = Join-Path $staging $name
+            Copy-Item -LiteralPath $path -Destination $staged -Force
+            Publish-Object $staged "$env:PREFIX/$name"
           }
 
           if ($env:IS_RELEASE -eq "true") {
-            Write-Host "アップロード: latest/TW-Context-setup.exe ($(Split-Path $setup -Leaf))"
-            npx --yes wrangler@4 r2 object put "$env:BUCKET/latest/TW-Context-setup.exe" `
-              --file "$setup" --content-type "application/vnd.microsoft.portable-executable" --remote
+            $stagedSetup = Join-Path $staging ((Split-Path $setup -Leaf) -replace ' ', '-')
+            Publish-Object $stagedSetup "latest/TW-Context-setup.exe"
           } else {
             Write-Host "手動実行なので latest/ は更新しない($env:PREFIX に置いただけ)"
           }
