@@ -44,8 +44,7 @@ npm install
 # KV を作って、出た id を wrangler.toml に書く
 npx wrangler kv namespace create INQUIRY
 
-npx wrangler secret put GITHUB_APP_ID
-npx wrangler secret put GITHUB_INSTALLATION_ID
+# 秘密はこの 2 つだけ。App ID と installation id は wrangler.toml の [vars] にある
 npx wrangler secret put GITHUB_APP_PRIVATE_KEY   # app-key-pkcs8.pem の全文を貼る
 npx wrangler secret put NONCE_SECRET             # 任意の乱数(openssl rand -hex 32)
 

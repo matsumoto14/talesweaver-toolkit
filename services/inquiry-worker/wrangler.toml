@@ -22,9 +22,12 @@ GITHUB_OWNER = "matsumoto14"
 GITHUB_REPO = "talesweaver-toolkit"
 # 付けるラベル(リポジトリ側にあらかじめ作っておく)
 ISSUE_LABELS = "from-app,unverified"
+# App ID と installation id は GitHub App のページで誰でも見られる識別子で、
+# 秘密情報ではない(秘密鍵が無ければ何もできない)。手で入れる項目を減らすためここに置く。
+GITHUB_APP_ID = "4746900"
+GITHUB_INSTALLATION_ID = "157175345"
 
-# シークレット(wrangler secret put で入れる。ここには書かない):
-#   GITHUB_APP_ID              GitHub App の App ID
-#   GITHUB_APP_PRIVATE_KEY     GitHub App の秘密鍵(PKCS#8 PEM 全文)
-#   GITHUB_INSTALLATION_ID     このリポジトリへの installation id
+# シークレット(ダッシュボードの Variables and Secrets、または wrangler secret put。
+# ここには書かない):
+#   GITHUB_APP_PRIVATE_KEY     GitHub App の秘密鍵(PKCS#8 に変換した PEM 全文)
 #   NONCE_SECRET               PoW の nonce に署名する任意の乱数文字列
