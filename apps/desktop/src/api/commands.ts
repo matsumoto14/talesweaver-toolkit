@@ -1,7 +1,7 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, CharacterSkillDef, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, CharacterSkillDef, ComboSkillType, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
@@ -35,7 +35,8 @@ export const previewEffectiveStats = (
 });
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
-) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, temporaryAdjustments });
+  comboSkillType: ComboSkillType | null = null,
+) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter) =>
@@ -69,7 +70,8 @@ export const listContents = () => invoke<ContentArea[]>("list_contents");
 export const previewDamage = (
   character: NewCharacter, skillId: string, contentId: string, comboCount: number,
   temporaryAdjustments: Adjustments | null = null,
-) => invoke<DamageResult>("preview_damage", { character, skillId, contentId, comboCount, temporaryAdjustments });
+  comboSkillType: ComboSkillType | null = null,
+) => invoke<DamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments });
 /**
  * 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価)。
  * `dependencySkillId` を渡すと、装備条件(スキル依存で比較先が変わる)をそのスキルで判定する。

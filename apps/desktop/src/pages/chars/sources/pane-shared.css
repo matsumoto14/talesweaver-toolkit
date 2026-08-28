@@ -392,6 +392,11 @@
   .skill-chip .skill-meta.unknown { background: none; border: 1px dashed var(--border); }
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .element-picked {
+    min-width: 34px; padding: 2px 9px; text-align: center;
+    border: 1px solid currentColor; border-radius: var(--r-pill);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+  }
   .part-switches, .part-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 2px 4px; }
   .part-switches button { position: relative; cursor: grab; user-select: none; -webkit-user-drag: element; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--bg-panel); padding: 2px 7px 2px 3px; font-size: 10px; }
   .part-switches button:active { cursor: grabbing; }

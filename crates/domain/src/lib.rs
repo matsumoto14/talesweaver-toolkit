@@ -90,7 +90,9 @@ pub use siena::{
     SienaError, SienaExtraKind, SienaExtraKindDef, SienaExtraSlot, SienaSlot, SienaValueKind,
     SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES, SIENA_STAGE_MAX,
 };
-pub use skill::{Skill, SkillDependency, SkillTarget};
+pub use skill::{
+    ComboSkillType, ComboSkillTypeError, ComboSkillVariant, Skill, SkillDependency, SkillTarget,
+};
 pub use stat_sources::{
     apply_character_skills, apply_masteries, apply_pins, apply_temporary_adjustments, apply_unleash, build_modifiers,
     preview_effective_stats, stat_limits,

@@ -11,7 +11,7 @@
 //!   未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)。詳細は
 //!   docs/claude/decisions.md「2026-08-25 全キャラのスキル取込」
 
-use domain::{Element, Skill, SkillDependency};
+use domain::{ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency};
 
 use crate::skill_targets::SKILL_TARGETS;
 
@@ -776,6 +776,30 @@ impl SkillRecord {
                 .find(|(id, _)| *id == self.skill_id().as_str())
                 .and_then(|(_, delay)| *delay),
             actual_delay_fixed: ACTUAL_DELAY_FIXED.contains(&self.skill_id().as_str()),
+            combo_variants: if self.skill_id() == "maximin_continuous" {
+                vec![
+                    ComboSkillVariant {
+                        combo_type: ComboSkillType::General,
+                        multiplier: 5.55,
+                        hit_count: 11,
+                        base_actual_delay: 1.4,
+                    },
+                    ComboSkillVariant {
+                        combo_type: ComboSkillType::Instant,
+                        multiplier: 5.20,
+                        hit_count: 10,
+                        base_actual_delay: 1.0,
+                    },
+                    ComboSkillVariant {
+                        combo_type: ComboSkillType::Chain,
+                        multiplier: 5.20,
+                        hit_count: 12,
+                        base_actual_delay: 1.6,
+                    },
+                ]
+            } else {
+                Vec::new()
+            },
         }
     }
 }
@@ -796,6 +820,37 @@ pub fn find_skill(id: &str) -> Option<Skill> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn マキシミンの連は3つのコンボタイプを持つ() {
+        let skill = find_skill("maximin_continuous").unwrap();
+        assert_eq!(skill.combo_variants.len(), 3);
+        assert_eq!(skill.combo_variants[0].combo_type, ComboSkillType::General);
+        assert_eq!(
+            (
+                skill.combo_variants[0].multiplier,
+                skill.combo_variants[0].hit_count,
+                skill.combo_variants[0].base_actual_delay,
+            ),
+            (5.55, 11, 1.4),
+        );
+        assert_eq!(
+            (
+                skill.combo_variants[1].multiplier,
+                skill.combo_variants[1].hit_count,
+                skill.combo_variants[1].base_actual_delay,
+            ),
+            (5.20, 10, 1.0),
+        );
+        assert_eq!(
+            (
+                skill.combo_variants[2].multiplier,
+                skill.combo_variants[2].hit_count,
+                skill.combo_variants[2].base_actual_delay,
+            ),
+            (5.20, 12, 1.6),
+        );
+    }
 
     /// wiki「Skill#f8e303fb」の区分 `続` + 対象指定 `単体` で抽出した 7 件。
     /// これ以外に段数が増えるスキルがあると火力が過大になる。

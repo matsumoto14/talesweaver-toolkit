@@ -436,6 +436,19 @@ fn dependency_coefficients(dependency: domain::SkillDependency) -> DependencyCoe
     }
 }
 
+fn resolve_combo_skill_type(
+    skill: Skill,
+    equipment: &domain::Equipment,
+    combo_skill_type: Option<domain::ComboSkillType>,
+) -> CommandResult<Skill> {
+    match combo_skill_type {
+        Some(combo_type) => skill
+            .resolve_combo_variant(combo_type, equipment.siena_actual_delay_reduction())
+            .map_err(|e| e.to_string()),
+        None => Ok(skill),
+    }
+}
+
 /// 与ダメージ計算のうち、スキル・敵・コンテンツによらない共通材料を組み立てる
 /// (calculate_damage / preview_damage / evaluate_contents 共通。`domain::DamageMaterial` 参照)。
 fn build_damage_material(
@@ -519,6 +532,7 @@ fn build_damage_input(
     enemy: Enemy,
     content: &domain::Content,
     combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageInput> {
     let material = build_damage_material(
@@ -529,6 +543,7 @@ fn build_damage_input(
         awakening,
         temporary_adjustments.as_ref(),
     )?;
+    let skill = resolve_combo_skill_type(skill, &equipment, combo_skill_type)?;
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_base_totals = equipment
         .base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog())
@@ -575,6 +590,7 @@ pub fn calculate_damage(
     skill_id: String,
     content_id: String,
     combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
     let character = with_repo(&state, |repo| repo.get(character_id))?;
@@ -598,6 +614,7 @@ pub fn calculate_damage(
         enemy,
         &content,
         combo_count,
+        combo_skill_type,
         temporary_adjustments,
     )?;
     Ok(domain::calculate_damage(&input))
@@ -610,6 +627,7 @@ pub fn preview_damage(
     skill_id: String,
     content_id: String,
     combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
     validate_character_draft(&character)?;
@@ -633,6 +651,7 @@ pub fn preview_damage(
         enemy,
         &content,
         combo_count,
+        combo_skill_type,
         temporary_adjustments,
     )?;
     Ok(domain::calculate_damage(&input))
@@ -736,8 +755,20 @@ pub fn evaluate_contents(
 
 #[cfg(test)]
 mod tests {
-    use super::{armor_added_damage, weapon_added_damage};
-    use domain::{EnhanceGrade, EquipmentEnhanceType, EquipmentPart, EquipmentValues};
+    use super::{armor_added_damage, resolve_combo_skill_type, weapon_added_damage};
+    use domain::{
+        ComboSkillType, EnhanceGrade, Equipment, EquipmentEnhanceType, EquipmentPart,
+        EquipmentValues,
+    };
+
+    #[test]
+    fn api境界は未対応スキルへのコンボタイプ指定を拒否する() {
+        let skill = gamedata::find_skill("maximin_moonlight_sword").unwrap();
+        let error =
+            resolve_combo_skill_type(skill, &Equipment::default(), Some(ComboSkillType::General))
+                .unwrap_err();
+        assert!(error.contains("対応していません"));
+    }
 
     // 刀(HACK系: 斬×6.67 + 突×1.00)・突100/斬300 → INT(300×6.67+100) = 2101
     fn weapon(item_id: Option<&str>, level: u8, grade: Option<EnhanceGrade>) -> EquipmentPart {

@@ -26,7 +26,7 @@
     void loadSkills(gameCharacterId);
   });
   const skills = $derived(skillsByCharacter[gameCharacterId] ?? []);
-  /** 火力の高い順(StatusPane と同じ形) */
+  /** 中ディレイ込みの継続火力順(StatusPane と同じ形) */
   const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(あとで選ぶ)"));
   /** キャラを選び直したら前キャラのスキル id を残さない */
   function pickGameCharacter(id: string) {
@@ -107,7 +107,7 @@
     <div class="row skill-row">
       <span class="label">主軸スキル</span>
       <span class="skill-select">
-        <Picker options={mainSkillOptions} note="火力の高い順(倍率 × 段数)" placeholder="あとで選ぶ" bind:value={mainSkillId} />
+        <Picker options={mainSkillOptions} note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)" placeholder="あとで選ぶ" bind:value={mainSkillId} />
       </span>
       <span class="hint dim">
         {skills.length === 0 ? "このキャラのスキルは未収録" : "攻撃力の依存種別を決めます。あとで変更できます"}

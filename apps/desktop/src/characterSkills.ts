@@ -89,19 +89,47 @@ export function damagePercentByCategory(
 // --- 主軸スキル(攻撃力の依存種別を決める、Skill 由来)------------------------
 // キャラ登録(RegisterPane)とキャラワークスペース(StatusPane)で同じ選び方をする。
 
-/** 火力の目安(倍率 × 段数)。並び順に使う */
+/** 1 回ぶんの火力の目安(倍率 × 段数)。 */
 export const skillPower = (s: Skill): number => s.multiplier * Math.max(1, s.hit_count);
+
+/** 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。中ディレイ不明なら比較不能。 */
+export const skillPowerPerSecond = (s: Skill): number | null =>
+  s.base_actual_delay !== null && s.base_actual_delay > 0
+    ? skillPower(s) / s.base_actual_delay
+    : null;
+
+/**
+ * 主軸候補の順。対ボスで使う単体スキルを先にし、
+ * その中を中ディレイ込みの継続火力順にする。依存種別では絞らない。
+ * 斬り・物理複合・魔剣など、別ビルドの入口を候補から消さないため。
+ * 中ディレイ不明のものは既知のものより後ろで、1 回ぶんの火力順にする。
+ */
+export function compareMainSkills(a: Skill, b: Skill): number {
+  if (a.target === "single" && b.target !== "single") return -1;
+  if (a.target !== "single" && b.target === "single") return 1;
+  const aRate = skillPowerPerSecond(a);
+  const bRate = skillPowerPerSecond(b);
+  if (aRate !== null && bRate !== null) return bRate - aRate;
+  if (aRate !== null) return -1;
+  if (bRate !== null) return 1;
+  return skillPower(b) - skillPower(a);
+}
 
 /** 名前だけでは選べない。単 / 範・段数・属性を名前の隣に出す */
 export const skillMeta = (s: Skill): string =>
-  `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]}`;
+  `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ` +
+  `${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]} ・ ` +
+  `中 ${s.base_actual_delay === null ? "?" : `${s.base_actual_delay}s`}`;
 
-/** 火力の高い順のスキル選択肢(先頭に未選択枠)。空欄の文言は呼び出し側の文脈で変える */
-export function mainSkillOptions(skills: Skill[], emptyLabel: string): PickerOption[] {
+/** 単体優先・中ディレイ込みの継続火力順の選択肢。空欄の文言は呼び出し側の文脈で変える。 */
+export function mainSkillOptions(
+  skills: Skill[],
+  emptyLabel: string,
+): PickerOption[] {
   return [
     { value: "", name: emptyLabel, iconId: null },
     ...[...skills]
-      .sort((a, b) => skillPower(b) - skillPower(a))
+      .sort(compareMainSkills)
       .map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
   ];
 }

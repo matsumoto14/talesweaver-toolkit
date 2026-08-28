@@ -6,7 +6,7 @@
     errorMessage, evaluateContents, listSkills, previewDamage, previewDefense, updateCharacter,
   } from "../../api/commands";
   import type {
-    Adjustments, BuffDefinition, ContentEvaluation, DamageResult, DefenseProfile, NewCharacter,
+    Adjustments, BuffDefinition, ComboSkillType, ContentEvaluation, DamageResult, DefenseProfile, NewCharacter,
     Skill, StatKind,
   } from "../../api/types";
   import {
@@ -98,6 +98,16 @@
       .catch((e) => reportError(errorMessage(e)));
   });
   const skill = $derived(skills.find((s) => s.id === skillId) ?? null);
+  let comboSkillType = $state<ComboSkillType>("general");
+  const selectedComboSkillType = $derived<ComboSkillType | null>(
+    skill && skill.combo_variants.length > 0 ? comboSkillType : null,
+  );
+  let lastComboSkillId = untrack(() => skillId);
+  $effect(() => {
+    if (skillId === lastComboSkillId) return;
+    lastComboSkillId = skillId;
+    comboSkillType = "general";
+  });
   let skillOpen = $state(false);
   /** ピッカーの並びは合計ダメージの降順(v4 指定)。合計が未取得のものは登録順で末尾 */
   const pickerSkills = $derived(
@@ -898,7 +908,7 @@
               {#key badgeState}
                 <span class="badge badge-in gatebadge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
               {/key}
-              <span class="op num">×{skill?.hit_count ?? 1} 段</span>
+              <span class="op num">×<span use:bump={() => result?.hit_count ?? null}>{result?.hit_count ?? 1}</span> 段</span>
               <div class="node mid">
                 <span class="nl">合計</span>
                 <span class="num nv" use:bump={() => result?.total.max ?? null}>{result ? fmtInt(result.total.max) : "—"}</span>
@@ -1475,6 +1485,16 @@
   .sk-line1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .sk-name { min-width: 0; flex: 1; font-size: 11.5px; font-weight: 700; color: #3E2B26; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sk-meta { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .combo-type-row {
+    margin: 8px 11px 0; padding: 8px 10px;
+    display: grid; grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); align-items: end; gap: 10px;
+    background: var(--surface-inset); border: 1px solid var(--border-strong); border-radius: var(--r-inset);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  }
+  .combo-type-note { min-width: 0; padding-bottom: 3px; font-size: 9px; line-height: 1.45; }
+  @media (max-width: 720px) {
+    .combo-type-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  }
 
   .hero { padding: 11px 13px 12px; }
   .hero-num { font-size: var(--t-result); line-height: 1; font-weight: var(--w-strong); }

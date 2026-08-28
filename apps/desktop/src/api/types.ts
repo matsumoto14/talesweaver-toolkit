@@ -35,6 +35,15 @@ export type SkillDependency = "stab" | "hack" | "int" | "mr" | "stab_hack" | "ha
 // 対象指定(crates/domain/src/skill.rs の SkillTarget)。
 export type SkillTarget = "single" | "area";
 
+export type ComboSkillType = "general" | "instant" | "chain";
+
+export interface ComboSkillVariant {
+  combo_type: ComboSkillType;
+  multiplier: number;
+  hit_count: number;
+  base_actual_delay: number;
+}
+
 export interface Skill {
   id: string;
   name: string;
@@ -58,6 +67,8 @@ export interface Skill {
   base_actual_delay: number | null;
   /** 中ディレイが固定で減少が効かない(wiki の「(固定)」表記) */
   actual_delay_fixed: boolean;
+  /** 対応するコンボスキルタイプ。空ならタイプ選択非対応 */
+  combo_variants: ComboSkillVariant[];
 }
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
@@ -1049,6 +1060,10 @@ export interface DamageResult {
   per_hit: DamageTriple;
   total: DamageTriple;
   hit_count: number;
+  /** コンボスキルタイプ解決後の倍率 */
+  effective_skill_multiplier: number;
+  /** コンボスキルタイプ解決後の基本中ディレイ */
+  effective_base_actual_delay: number | null;
   /** 与ダメージの上限(1 段ごとに適用) */
   damage_cap: number;
   /** 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない */

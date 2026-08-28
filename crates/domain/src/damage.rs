@@ -196,6 +196,10 @@ pub struct DamageResult {
     /// 与ダメージ × 段数
     pub total: DamageTriple,
     pub hit_count: u32,
+    /// コンボスキルタイプを解決したあとのスキル倍率。
+    pub effective_skill_multiplier: f64,
+    /// コンボスキルタイプを解決したあとの基本中ディレイ。
+    pub effective_base_actual_delay: Option<f64>,
     /// 与ダメージの上限(1 段ごとに適用)
     pub damage_cap: i64,
     /// 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない
@@ -560,6 +564,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         per_hit: DamageTriple { min, max, critical },
         total,
         hit_count,
+        effective_skill_multiplier: input.skill.multiplier,
+        effective_base_actual_delay: input.skill.base_actual_delay,
         damage_cap: input.damage_cap,
         capped_loss,
         added_damage_rate: added_rate,
@@ -675,6 +681,7 @@ mod tests {
                 single_target_channeling: false,
                 base_actual_delay: Some(1.4),
                 actual_delay_fixed: false,
+                combo_variants: Vec::new(),
             },
             enemy: Enemy {
                 id: "e".into(),

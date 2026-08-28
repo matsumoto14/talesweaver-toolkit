@@ -355,6 +355,7 @@ mod tests {
             single_target_channeling: false,
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
+            combo_variants: Vec::new(),
         }
     }
 
