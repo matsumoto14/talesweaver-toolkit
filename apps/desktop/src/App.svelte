@@ -2,6 +2,7 @@
   // 画面枠: 上部タブ(ホーム/ダメージ計算/キャラ)+ 左キャラレール + エラー帯。
   // 構成は デザインモック TW Toolkit Prototype v4 に合わせる(規格は docs/design-system.html)。
   import { onMount } from "svelte";
+  import brandLogo from "./assets/brand/tw-context-logo.png";
   import AboutPanel from "./AboutPanel.svelte";
   import { errorMessage, getStartupNotice } from "./api/commands";
   import CharacterRail from "./CharacterRail.svelte";
@@ -49,8 +50,7 @@
 <div class="shell">
   <header class="topbar">
     <div class="brand">
-      <span class="mark"></span>
-      <span class="name">TW CONTEXT</span>
+      <img src={brandLogo} alt="TW Context" />
     </div>
     <nav class="tabs">
       {#each TABS as t (t.id)}
@@ -126,13 +126,8 @@
     border-bottom: 1px solid var(--sel-bd);
     display: flex; align-items: center; gap: 14px;
   }
-  .brand { display: flex; align-items: center; gap: 9px; }
-  .brand .mark {
-    width: 22px; height: 22px; border-radius: var(--r-inset);
-    background: linear-gradient(160deg, #fff, #8EB9FC);
-    border: 1px solid var(--sel-bd);
-  }
-  .brand .name { font-weight: 800; font-size: 12.5px; letter-spacing: 0.08em; white-space: nowrap; }
+  .brand { display: flex; align-items: center; flex-shrink: 0; }
+  .brand img { width: auto; height: 48px; display: block; object-fit: contain; }
 
   /* 見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
   .tabs { margin-left: 8px; align-self: flex-end; }
