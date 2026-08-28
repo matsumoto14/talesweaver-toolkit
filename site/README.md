@@ -39,7 +39,7 @@ R2 バケットとトークンの用意は `.github/RELEASE.md` を参照。
 
 ## 差し替えが要るもの
 
-- `img/calc.png` は `docs/screenshots/133-conformance-calc.png` の暫定コピー。
+- `img/calc.png` は検証時の計算画面の暫定コピー。
   **ブランド表記が旧称 `TW TOOLKIT` のままで、検証用の雑なキャラ名が写っている**。
   公開前に、現在の UI で見栄えのする状態を撮り直して差し替える
 - 署名を導入したら、「WindowsによってPCが保護されました」の節を消す

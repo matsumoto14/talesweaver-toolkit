@@ -1,6 +1,6 @@
 ---
 name: gui-smoke
-description: Tauri デスクトップアプリを実機起動し、WebView2 のリモートデバッグ(CDP)+ Playwright で画面操作・スモークテスト・スクリーンショット撮影を行う。UI 変更の実機確認、docs/screenshots の更新、画面の回帰確認を頼まれたときに使う。
+description: Tauri デスクトップアプリを実機起動し、WebView2 のリモートデバッグ(CDP)+ Playwright で画面操作・スモークテスト・スクリーンショット撮影を行う。UI 変更の実機確認、スクリーンショット撮影、画面の回帰確認を頼まれたときに使う。
 ---
 
 # GUI スモークテスト(WebView2 CDP + Playwright)
@@ -19,7 +19,7 @@ description: Tauri デスクトップアプリを実機起動し、WebView2 の�
    ```
    NODE_PATH=/c/github/private/twtoolkit/node_modules node <script>.js
    ```
-4. **撮影**: スクリーンショットは `docs/screenshots/<NN>-<内容>.png`(fullPage、ビューポート 1280×840 が標準)。既存番号と重複させない。
+4. **撮影**: スクリーンショットは一時ディレクトリ(セッションの scratchpad など)に `<NN>-<内容>.png` で出す(fullPage、ビューポート 1280×840 が標準)。リポには残さない。
 5. **終了**: 起動したプロセスを止める(`Stop-Process -Name talesweaver-toolkit` または tauri dev のウィンドウを閉じる)。
 
 ## 注意

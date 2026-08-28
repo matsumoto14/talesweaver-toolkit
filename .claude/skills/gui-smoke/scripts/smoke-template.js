@@ -2,7 +2,7 @@
 // 実行: NODE_PATH=/c/github/private/twtoolkit/node_modules node smoke.js
 const { chromium } = require("playwright-core");
 
-const OUT = "C:/github/private/talesweaver-toolkit/docs/screenshots/";
+const OUT = process.env.SMOKE_OUT || "C:/Users/takea/AppData/Local/Temp/claude-smoke/";
 const log = (...a) => console.log(...a);
 
 (async () => {
