@@ -269,7 +269,7 @@ pub fn enhance_multiplier_range(level: u8) -> Option<(f64, f64)> {
 /// 確率区分の上端に対応する倍率。倍率は整数へ四捨五入する。
 pub fn enhance_grade_multiplier(level: u8, grade: EnhanceGrade) -> Option<f64> {
     let (min, max) = enhance_multiplier_range(level)?;
-    Some((min + (max - min) * grade.percentile()).round())
+    Some(domain::round_int(min + (max - min) * grade.percentile()) as f64)
 }
 
 pub fn armor_enhance_multiplier(level: u8, grade: Option<EnhanceGrade>) -> Option<f64> {

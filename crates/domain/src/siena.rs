@@ -470,7 +470,7 @@ impl SienaAura {
 
     /// 追加オプション「全ステータス増加」。同じ種類は 1 部位に 1 個までなので合計で足りる。
     pub fn all_stats(&self) -> i64 {
-        self.extra_total(SienaExtraKind::AllStats).round() as i64
+        crate::rounding::round_int(self.extra_total(SienaExtraKind::AllStats))
     }
 
     /// この部位のステ加算の合計(能力値スロット + 全ステータス増加)。

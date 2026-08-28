@@ -67,7 +67,7 @@ pub use element::{
 };
 pub use enemy::Enemy;
 pub use equipment::{
-    equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceGrade, EnhanceRates, Equipment,
+    armor_added_damage, equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceGrade, EnhanceRates, Equipment,
     EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef, EquipmentAbilityAdditionalKind,
     EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentEnhanceType,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentPartList, EquipmentParts, EquipmentRates,
@@ -79,7 +79,7 @@ pub use random_option::{
     DependencyRates, RandomOptionDef, RandomOptionEffect, RandomOptionError, RandomOptionRank,
     RandomOptionSlot, RandomOptionTier, RandomOptionTotals, RANDOM_OPTION_VALUE_MAX,
 };
-pub use rounding::{floor_int, trunc2};
+pub use rounding::{floor_int, round_int, trunc2, trunc_int};
 pub use siena::{
     siena_catalog, RegisteredSienaAura, SienaAura, SienaAuraList, SienaAuras, SienaCatalog,
     SienaError, SienaExtraKind, SienaExtraKindDef, SienaExtraSlot, SienaSlot, SienaValueKind,

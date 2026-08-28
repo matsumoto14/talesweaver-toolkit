@@ -439,17 +439,11 @@ fn armor_added_damage(armor: &EquipmentPart) -> i64 {
     let Some(class) = enhance_type.and_then(gamedata::armor_class_for_type) else {
         return 0;
     };
-    armor_added_damage_for_class(armor, class)
-}
-
-fn armor_added_damage_for_class(armor: &EquipmentPart, class: gamedata::ArmorClass) -> i64 {
     let multiplier =
         gamedata::armor_enhance_multiplier(armor.enhance_level, armor.enhance_grade).unwrap_or(0.0);
     let values = armor.base.add(armor.enchant);
     let rates = gamedata::armor_enhance_rates(class);
-    let correction = values.physical_defense as f64 * rates.physical_defense
-        + values.magic_defense as f64 * rates.magic_defense;
-    (correction.trunc() * multiplier).trunc() as i64
+    domain::armor_added_damage(&values, rates.physical_defense, rates.magic_defense, multiplier)
 }
 
 fn selected_element(sources: &domain::ElementSources) -> Option<domain::Element> {
@@ -911,7 +905,7 @@ pub fn evaluate_contents(
 
 #[cfg(test)]
 mod tests {
-    use super::{armor_added_damage, armor_added_damage_for_class, weapon_added_damage};
+    use super::{armor_added_damage, weapon_added_damage};
     use domain::{EnhanceGrade, EquipmentEnhanceType, EquipmentPart, EquipmentValues};
 
     // 刀(HACK系: 斬×6.67 + 突×1.00)・突100/斬300 → INT(300×6.67+100) = 2101
@@ -1002,12 +996,7 @@ mod tests {
             },
             ..Default::default()
         };
-        // (650×3.8 + 510×4.0) × 440 = 1,984,400
-        assert_eq!(
-            armor_added_damage_for_class(&armor, gamedata::ArmorClass::Magic),
-            1_984_400
-        );
-        // カタログ外でも、登録時に選んだ魔鎧種別から本番経路で同じ値になる。
+        // (650×3.8 + 510×4.0) × 440 = 1,984,400。式自体のテストは domain::armor_added_damage 側にある。
         assert_eq!(armor_added_damage(&armor), 1_984_400);
     }
 }

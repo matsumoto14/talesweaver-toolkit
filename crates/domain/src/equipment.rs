@@ -938,13 +938,30 @@ pub fn weapon_added_damage(weapon_base: &EquipmentValues, rates: &EnhanceRates, 
         + weapon_base.slash as f64 * rates.slash
         + weapon_base.magic_attack as f64 * rates.magic_attack
         + weapon_base.magic_defense as f64 * rates.magic_defense;
-    let inner = correction.trunc();
-    let added = (inner * multiplier).trunc() as i64;
+    let inner = crate::rounding::trunc_int(correction) as f64;
+    let added = crate::rounding::trunc_int(inner * multiplier);
     if added % 2 != 0 {
         added - 1
     } else {
         added
     }
+}
+
+/// 鎧系装備の追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
+///
+/// `補正 = 物防×r.physical_defense + 魔防×r.magic_defense`
+/// `追加効果 = INT(INT(補正) × 倍率)`(武器と異なり奇数切捨は適用しない)。
+/// 係数(`physical_defense_rate`/`magic_defense_rate`)は鎧種別ごとに gamedata が持つので引数で受ける。
+pub fn armor_added_damage(
+    armor_base: &EquipmentValues,
+    physical_defense_rate: f64,
+    magic_defense_rate: f64,
+    multiplier: f64,
+) -> i64 {
+    let correction =
+        armor_base.physical_defense as f64 * physical_defense_rate + armor_base.magic_defense as f64 * magic_defense_rate;
+    let inner = crate::rounding::trunc_int(correction) as f64;
+    crate::rounding::trunc_int(inner * multiplier)
 }
 
 #[cfg(test)]
@@ -1217,6 +1234,14 @@ mod tests {
         let rates = EnhanceRates { thrust: 1.0, slash: 0.0, magic_attack: 0.0, magic_defense: 0.0 };
         let weapon = EquipmentValues { thrust: 101, ..Default::default() };
         assert_eq!(weapon_added_damage(&weapon, &rates, 1.0), 100);
+    }
+
+    // wiki 例: 魔鎧+15最上(物防係数3.8・魔防係数4.0)・物防650/魔防510
+    // → INT(650×3.8 + 510×4.0) × 440 = INT(4,510) × 440 = 1,984,400(武器と異なり奇数切捨は無い)
+    #[test]
+    fn 鎧追加固定ダメージ_魔鎧15最上の式() {
+        let armor = EquipmentValues { physical_defense: 650, magic_defense: 510, ..Default::default() };
+        assert_eq!(armor_added_damage(&armor, 3.8, 4.0, 440.0), 1_984_400);
     }
 
     #[test]

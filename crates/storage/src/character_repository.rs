@@ -207,9 +207,12 @@ fn migrate_equipment_to_registered_lists(conn: &Connection) -> Result<()> {
                 let class = kind.and_then(gamedata::armor_class_for_type)?;
                 let multiplier = gamedata::armor_enhance_multiplier(level, Some(grade))?;
                 let rates = gamedata::armor_enhance_rates(class);
-                let correction = values.physical_defense as f64 * rates.physical_defense
-                    + values.magic_defense as f64 * rates.magic_defense;
-                Some((correction.trunc() * multiplier).trunc() as i64)
+                Some(domain::armor_added_damage(
+                    &values,
+                    rates.physical_defense,
+                    rates.magic_defense,
+                    multiplier,
+                ))
             } else {
                 None
             }
