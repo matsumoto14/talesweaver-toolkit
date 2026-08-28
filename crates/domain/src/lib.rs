@@ -10,6 +10,7 @@ pub mod awakening;
 pub mod category;
 pub mod common_skill;
 pub mod content;
+pub mod content_evaluation;
 pub mod critical_rate;
 pub mod damage;
 pub mod defense;
@@ -50,6 +51,10 @@ pub use content::{
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation,
     ContentRequirement, ContentSeries, GameRegion, RequirementCheck,
 };
+pub use content_evaluation::{
+    evaluate_contents_for_character, DamageMaterial, DependencyCoefficients,
+    SkillEvaluationInput, WristBonusMaterial,
+};
 pub use critical_rate::{
     critical_rate, CriticalRate, CriticalRateError, CriticalRateSourceId, CriticalRateSources,
     ARCHITECT_LAB_PER_STAGE, ARCHITECT_LAB_STAGE_MAX, CRITICAL_RATE_BONUS_MAX,
@@ -67,11 +72,11 @@ pub use element::{
 };
 pub use enemy::Enemy;
 pub use equipment::{
-    armor_added_damage, equipment_attack_power, equipment_values_attack, weapon_added_damage, EnhanceGrade, EnhanceRates, Equipment,
+    armor_added_damage, equipment_attack_power, equipment_values_attack, weapon_added_damage, wrist_base_bonus, EnhanceGrade, EnhanceRates, Equipment,
     EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef, EquipmentAbilityAdditionalKind,
     EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentEnhanceType,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentPartList, EquipmentParts, EquipmentRates,
-    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus, ENHANCE_LEVEL_MAX,
+    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus, WristBonusRule, ENHANCE_LEVEL_MAX,
     WEAPON_ABILITY_SLOTS, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
 };
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};

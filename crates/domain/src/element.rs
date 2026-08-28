@@ -173,6 +173,16 @@ impl ElementSources {
         }
         total
     }
+
+    /// 装備に付与できる属性の優先順位で 1 つ選ぶ(ペット → モンスターカード → ルーン →
+    /// 頭アビ → カフスアビ。中立属性は装備付与できないので除外)。
+    /// 呼び出し側(コマンド層)で属性強化の対象属性を決めるのに使う。
+    pub fn selected(&self) -> Option<Element> {
+        [self.pet, self.monster_card, self.rune, self.helm_ability, self.cuffs_ability]
+            .into_iter()
+            .flatten()
+            .find(|e| e.can_enchant_equipment())
+    }
 }
 
 /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。画面表示用。

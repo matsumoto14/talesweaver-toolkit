@@ -1083,6 +1083,85 @@ pub fn armor_added_damage(
     crate::rounding::trunc_int(inner * multiplier)
 }
 
+/// キャラ固有パッシブによる、腕装備の補正から「基本能力値」への派生ルール。
+///
+/// バンド系(`BandAgility*`)は「バンドの敏捷(基本+エンチャント)の 0.7 倍
+/// (小数点以下切り捨て)」を対象キャラの主軸ステへ振る。振り先はキャラごとに
+/// 固定/主軸スキル依存/ステ大小比較のいずれかで決まる(gamedata の
+/// `GameCharacter::wrist_bonus` がキャラごとにどのルールかを持つ)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WristBonusRule {
+    /// ボリス・マキシミン: バンド判定なし。腕(盾/ナックル)の突き(基本+エンチャント+
+    /// シエナ盾のオーラ突き)を魔攻の基本補正に変換する。
+    ThrustToMagicAttack,
+    /// ナヤトレイ・イサック: バンドのみ。主軸スキル依存で突き(STAB/STAB+HACK)/
+    /// 斬り(HACK)へ振る。それ以外の依存は変換しない。
+    BandAgilityByDependency,
+    /// ミラ: バンドのみ。常に斬りへ振る。
+    BandAgilityToSlash,
+    /// ベンヤ: バンドのみ。HACK と MR の大小比較で斬り/魔防へ振る(同値は変換しない)。
+    BandAgilityByStatComparison,
+    /// ロアミニ: バンドのみ。常に魔攻へ振る。
+    BandAgilityToMagicAttack,
+}
+
+/// バンド敏捷の 0.7 倍(小数点以下切り捨て)。
+fn band_agility_bonus(agility: i64) -> i64 {
+    crate::rounding::trunc_int(agility as f64 * 0.7)
+}
+
+/// `WristBonusRule` を適用し、腕装備補正から派生する基本能力値を返す。
+///
+/// `is_band` は選択中の腕装備がバンド種別かどうか(装備カタログの `WristType` 解決は
+/// gamedata が行う。domain はカタログを知らないため引数で受ける)。`wrist_totals` は
+/// 選択中の腕装備の基本+エンチャント合計、`siena_thrust` はシエナ盾のオーラの突き
+/// (`ThrustToMagicAttack` のみ使う)。元の腕装備の基本/エンチャント値そのものは
+/// 変更しない(このルールは派生先へ「足す」値だけを返す)。
+pub fn wrist_base_bonus(
+    rule: Option<WristBonusRule>,
+    is_band: bool,
+    base_stats: &crate::stats::BaseStats,
+    style_dependency: crate::skill::SkillDependency,
+    wrist_totals: EquipmentValues,
+    siena_thrust: i64,
+) -> EquipmentValues {
+    use crate::skill::SkillDependency;
+
+    let Some(rule) = rule else {
+        return EquipmentValues::default();
+    };
+    if rule == WristBonusRule::ThrustToMagicAttack {
+        return EquipmentValues {
+            magic_attack: wrist_totals.thrust + siena_thrust,
+            ..Default::default()
+        };
+    }
+    if !is_band {
+        return EquipmentValues::default();
+    }
+    let bonus = band_agility_bonus(wrist_totals.agility);
+    let mut values = EquipmentValues::default();
+    match rule {
+        WristBonusRule::BandAgilityByDependency => match style_dependency {
+            SkillDependency::Stab | SkillDependency::StabHack => values.thrust = bonus,
+            SkillDependency::Hack => values.slash = bonus,
+            _ => {}
+        },
+        WristBonusRule::BandAgilityToSlash => values.slash = bonus,
+        WristBonusRule::BandAgilityByStatComparison => {
+            if base_stats.hack > base_stats.mr {
+                values.slash = bonus;
+            } else if base_stats.hack < base_stats.mr {
+                values.magic_defense = bonus;
+            }
+        }
+        WristBonusRule::BandAgilityToMagicAttack => values.magic_attack = bonus,
+        WristBonusRule::ThrustToMagicAttack => unreachable!("above早期returnで処理済み"),
+    }
+    values
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1710,4 +1789,81 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn バンド敏捷の0点7倍は整数演算の切り捨て割り算と同値() {
+        // 旧実装は `agility * 7 / 10`(i64 の 0 方向切り捨て)。band_agility_bonus は
+        // 浮動小数×0.7 を trunc_int で丸めるので、実在しうる範囲で結果が一致することを担保する。
+        for agility in -50..=2000i64 {
+            assert_eq!(
+                band_agility_bonus(agility),
+                agility * 7 / 10,
+                "agility={agility}"
+            );
+        }
+    }
+
+    #[test]
+    fn wrist_base_bonusはルールなしなら常に加算しない() {
+        use crate::skill::SkillDependency;
+        let stats = crate::stats::BaseStats::default();
+        let totals = EquipmentValues { thrust: 100, agility: 100, ..Default::default() };
+        assert_eq!(
+            wrist_base_bonus(None, true, &stats, SkillDependency::Stab, totals, 0),
+            EquipmentValues::default()
+        );
+    }
+
+    #[test]
+    fn thrust_to_magic_attackはバンド判定なしで突きを魔攻へ変換する() {
+        use crate::skill::SkillDependency;
+        let stats = crate::stats::BaseStats::default();
+        let totals = EquipmentValues { thrust: 100, ..Default::default() };
+        let bonus = wrist_base_bonus(
+            Some(WristBonusRule::ThrustToMagicAttack),
+            false,
+            &stats,
+            SkillDependency::HackInt,
+            totals,
+            35,
+        );
+        assert_eq!(bonus.magic_attack, 135);
+        assert_eq!(bonus.thrust, 0, "元の突き値を移動せず派生値だけ返す");
+    }
+
+    #[test]
+    fn band系ルールはバンド以外なら変換しない() {
+        use crate::skill::SkillDependency;
+        let stats = crate::stats::BaseStats { hack: 200, mr: 100, ..Default::default() };
+        let totals = EquipmentValues { agility: 100, ..Default::default() };
+        for rule in [
+            WristBonusRule::BandAgilityByDependency,
+            WristBonusRule::BandAgilityToSlash,
+            WristBonusRule::BandAgilityByStatComparison,
+            WristBonusRule::BandAgilityToMagicAttack,
+        ] {
+            assert_eq!(
+                wrist_base_bonus(Some(rule), false, &stats, SkillDependency::Hack, totals, 0),
+                EquipmentValues::default(),
+                "{rule:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn band_agility_by_stat_comparisonは同値なら変換しない() {
+        use crate::skill::SkillDependency;
+        let stats = crate::stats::BaseStats { hack: 100, mr: 100, ..Default::default() };
+        let totals = EquipmentValues { agility: 100, ..Default::default() };
+        assert_eq!(
+            wrist_base_bonus(
+                Some(WristBonusRule::BandAgilityByStatComparison),
+                true,
+                &stats,
+                SkillDependency::Hack,
+                totals,
+                0
+            ),
+            EquipmentValues::default()
+        );
+    }
 }

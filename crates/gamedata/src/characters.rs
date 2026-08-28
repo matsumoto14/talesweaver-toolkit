@@ -2,7 +2,7 @@
 
 use domain::{
     AccuracyCorrection, AttackCoefficients, EquipmentCoefficients, EquipmentRates, SkillDependency,
-    StatKind,
+    StatKind, WristBonusRule,
 };
 use serde::Serialize;
 
@@ -19,6 +19,9 @@ pub struct GameCharacter {
     pub armor_classes: &'static [ArmorClass],
     /// Tale Wiki の各サブアームカテゴリに記載された装備可能種。
     pub wrist_types: &'static [WristType],
+    /// キャラ固有パッシブによる、腕装備補正の基本能力値への派生ルール。無いキャラは `None`
+    /// (出典: Item/防具/腕 各キャラページの「特殊効果」欄)。
+    pub wrist_bonus: Option<WristBonusRule>,
 }
 
 const CHARACTERS: &[GameCharacter] = &[
@@ -27,114 +30,133 @@ const CHARACTERS: &[GameCharacter] = &[
         name: "ルシアン",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
         wrist_types: &[WristType::Shield],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "boris",
         name: "ボリス",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Knuckle],
+        wrist_bonus: Some(WristBonusRule::ThrustToMagicAttack),
     },
     GameCharacter {
         id: "ispin",
         name: "イスピン",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
         wrist_types: &[WristType::Shield],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "maximin",
         name: "マキシミン",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Shield, WristType::Knuckle],
+        wrist_bonus: Some(WristBonusRule::ThrustToMagicAttack),
     },
     GameCharacter {
         id: "tichiel",
         name: "ティチエル",
         armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
         wrist_types: &[WristType::Bracelet],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "nayatorei",
         name: "ナヤトレイ",
         armor_classes: &[ArmorClass::Light, ArmorClass::Suit],
         wrist_types: &[WristType::Band],
+        wrist_bonus: Some(WristBonusRule::BandAgilityByDependency),
     },
     GameCharacter {
         id: "siberin",
         name: "シベリン",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
         wrist_types: &[WristType::Knuckle],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "mira",
         name: "ミラ",
         armor_classes: &[ArmorClass::Light, ArmorClass::Suit],
         wrist_types: &[WristType::Band],
+        wrist_bonus: Some(WristBonusRule::BandAgilityToSlash),
     },
     GameCharacter {
         id: "joshua",
         name: "ジョシュア",
         armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
         wrist_types: &[WristType::Spellbook, WristType::CrystalBall],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "chloe",
         name: "クロエ",
         armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
         wrist_types: &[WristType::Bracelet],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "ranjie",
         name: "ランジエ",
         armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
         wrist_types: &[WristType::PhysicalMagazine, WristType::MagicMagazine],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "isaac",
         name: "イサック",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Suit],
         wrist_types: &[WristType::Knuckle, WristType::Band],
+        wrist_bonus: Some(WristBonusRule::BandAgilityByDependency),
     },
     GameCharacter {
         id: "anais",
         name: "アナイス",
         armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
         wrist_types: &[WristType::Bracelet],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "isolet",
         name: "イソレット",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::DualBladePhysical, WristType::DualBladeMagic],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "benya",
         name: "ベンヤ",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Suit],
         wrist_types: &[WristType::Knuckle, WristType::Band, WristType::CrystalBall],
+        wrist_bonus: Some(WristBonusRule::BandAgilityByStatComparison),
     },
     GameCharacter {
         id: "roamini",
         name: "ロアミニ",
         armor_classes: &[ArmorClass::Light, ArmorClass::Suit, ArmorClass::Robe],
         wrist_types: &[WristType::Band, WristType::Bracelet],
+        wrist_bonus: Some(WristBonusRule::BandAgilityToMagicAttack),
     },
     GameCharacter {
         id: "nocturne",
         name: "ノクターン",
         armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
         wrist_types: &[WristType::PhysicalMagazine],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "leeche",
         name: "リーチェ",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Pendulum],
+        wrist_bonus: None,
     },
     GameCharacter {
         id: "yefnen",
         name: "イェフネン",
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Knuckle],
+        wrist_bonus: None,
     },
 ];
 

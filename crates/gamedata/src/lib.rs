@@ -8,6 +8,7 @@ pub mod buffs;
 pub mod character_skills;
 pub mod characters;
 pub mod contents;
+pub mod damage_inputs;
 pub mod elements;
 pub mod enemies;
 pub mod equipment_catalog;
@@ -28,17 +29,21 @@ pub use characters::{
     GameCharacter,
 };
 pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};
+pub use damage_inputs::{
+    actual_delay_contributions, damage_contributions_of, element_preview, element_value_for,
+};
 pub use elements::{
     element_base, element_source_catalog, ELEMENT_BASE_SOURCE, ELEMENT_SOURCE_CATALOG_SOURCE,
 };
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
     armor_class, armor_class_for_type, armor_enhance_multiplier, armor_enhance_rates,
-    character_wrist_base_bonus, enhance_grade_multiplier, enhance_multiplier,
-    enhance_multiplier_range, enhance_rates, enhance_rates_for_type, equipment_abilities,
-    equipment_catalog, equipment_enhance_type, find_equipment_item, item_damage_contributions,
-    weapon_system, ArmorClass, ArmorEnhanceRates, EquipmentItem, WeaponClass, WeaponSystem,
-    WristType, ENHANCE_SOURCE, EQUIPMENT_ABILITY_SOURCE, EQUIPMENT_CATALOG_SOURCE,
+    character_wrist_base_bonus, character_wrist_bonus_material, enhance_grade_multiplier,
+    enhance_multiplier, enhance_multiplier_range, enhance_rates, enhance_rates_for_type,
+    equipment_abilities, equipment_catalog, equipment_enhance_type, find_equipment_item,
+    item_damage_contributions, weapon_system, ArmorClass, ArmorEnhanceRates, EquipmentItem,
+    WeaponClass, WeaponSystem, WristType, ENHANCE_SOURCE, EQUIPMENT_ABILITY_SOURCE,
+    EQUIPMENT_CATALOG_SOURCE,
 };
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};

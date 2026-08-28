@@ -16,6 +16,17 @@ pub enum SkillDependency {
     HackInt,
 }
 
+impl SkillDependency {
+    pub const ALL: [SkillDependency; 6] = [
+        SkillDependency::Stab,
+        SkillDependency::Hack,
+        SkillDependency::Int,
+        SkillDependency::Mr,
+        SkillDependency::StabHack,
+        SkillDependency::HackInt,
+    ];
+}
+
 /// 対象指定(wiki スキル性能一覧の「対象指定」列)。
 ///
 /// 単体は 1 体、範囲は位置指定・方向指定・自分中心・設置などをまとめたもの。

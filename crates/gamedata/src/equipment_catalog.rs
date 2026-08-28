@@ -1823,11 +1823,46 @@ pub fn find_equipment_item(id: &str) -> Option<EquipmentItem> {
     equipment_catalog().into_iter().find(|item| item.id == id)
 }
 
+/// `character_wrist_base_bonus` の材料(キャラのルール・バンド判定・腕合計値)だけを解決する。
+///
+/// 依存種別ごとに何度も呼ばず 1 回だけ材料を作り、複数の依存種別ぶんの変換を domain 側で
+/// まとめて計算できるようにする(`evaluate_contents` のように依存種別が複数あるとき用)。
+pub fn character_wrist_bonus_material(
+    game_character_id: &str,
+    equipment: &Equipment,
+    catalog: &[EquipmentItem],
+) -> domain::WristBonusMaterial {
+    let Some(wrist) = equipment.parts.shield.selected() else {
+        return domain::WristBonusMaterial::default();
+    };
+    let rule = crate::characters::find_character(game_character_id).and_then(|c| c.wrist_bonus);
+    let is_band = wrist
+        .item_id
+        .as_deref()
+        .and_then(|id| catalog.iter().find(|item| item.id == id))
+        .is_some_and(|item| item.wrist_type == Some(WristType::Band));
+    let siena_thrust = equipment
+        .siena
+        .shield
+        .selected()
+        .map(|entry| entry.aura.values().thrust)
+        .unwrap_or(0);
+    domain::WristBonusMaterial {
+        rule,
+        is_band,
+        wrist_totals: wrist.base.add(wrist.enchant),
+        siena_thrust,
+        // どの依存種別で振り先を選ぶかは呼び出し側(commands.rs)が決める(キャラの主軸
+        // スキルを使うかどうかは文脈依存のため、ここでは解決しない)。
+        style_dependency_override: None,
+    }
+}
+
 /// キャラ固有パッシブにより、腕装備の補正から「基本能力値」へ派生する装備補正。
 ///
-/// 元の `base` / `enchant` は変更しない。ボリス・マキシミンはエンチャント分も
-/// 派生先では基本補正として扱う。バンド系も同様に、バンドの表示補正合計を参照して
-/// 0.7 倍(小数点以下切り捨て)した値を基本補正へ足す。
+/// どのキャラがどのルールか(`WristBonusRule`)は `characters::find_character` が持つデータ。
+/// ここでは腕装備の選択状態とカタログから `WristType`(バンドかどうか)を解決し、
+/// 実際の変換計算は `domain::wrist_base_bonus` に委ねる(元の `base` / `enchant` は変更しない)。
 pub fn character_wrist_base_bonus(
     game_character_id: &str,
     base_stats: &BaseStats,
@@ -1835,46 +1870,15 @@ pub fn character_wrist_base_bonus(
     equipment: &Equipment,
     catalog: &[EquipmentItem],
 ) -> EquipmentValues {
-    let Some(wrist) = equipment.parts.shield.selected() else {
-        return EquipmentValues::default();
-    };
-
-    if matches!(game_character_id, "boris" | "maximin") {
-        let siena_thrust = equipment
-            .siena
-            .shield
-            .selected()
-            .map(|entry| entry.aura.values().thrust)
-            .unwrap_or(0);
-        return EquipmentValues {
-            magic_attack: wrist.base.thrust + wrist.enchant.thrust + siena_thrust,
-            ..Default::default()
-        };
-    }
-
-    let is_band = wrist
-        .item_id
-        .as_deref()
-        .and_then(|id| catalog.iter().find(|item| item.id == id))
-        .is_some_and(|item| item.wrist_type == Some(WristType::Band));
-    if !is_band {
-        return EquipmentValues::default();
-    }
-    let bonus = (wrist.base.agility + wrist.enchant.agility) * 7 / 10;
-    let mut values = EquipmentValues::default();
-    match game_character_id {
-        "nayatorei" | "isaac" => match style_dependency {
-            SkillDependency::Stab | SkillDependency::StabHack => values.thrust = bonus,
-            SkillDependency::Hack => values.slash = bonus,
-            _ => {}
-        },
-        "mira" => values.slash = bonus,
-        "benya" if base_stats.hack > base_stats.mr => values.slash = bonus,
-        "benya" if base_stats.hack < base_stats.mr => values.magic_defense = bonus,
-        "roamini" => values.magic_attack = bonus,
-        _ => {}
-    }
-    values
+    let material = character_wrist_bonus_material(game_character_id, equipment, catalog);
+    domain::wrist_base_bonus(
+        material.rule,
+        material.is_band,
+        base_stats,
+        style_dependency,
+        material.wrist_totals,
+        material.siena_thrust,
+    )
 }
 
 /// 装備しているアイテムそのものの装着時効果を、与ダメージ式のカテゴリ寄与に変換する。

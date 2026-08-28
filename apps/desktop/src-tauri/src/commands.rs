@@ -1,9 +1,10 @@
 //! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは String に変換して返す。
 
 use domain::{
-    evaluate_content, AttackPowerCoefficients, BestSkillDamage, BuffDefinition, CommonSkills,
-    Content, ContentArea, ContentEvaluation, CoreRegion, DamageInput, DamageResult, DefenseProfile,
-    Enemy, EquipmentAbilityDef, EquipmentPart, RandomOptionDef, Skill, TitleDef,
+    evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, CommonSkills,
+    Content, ContentArea, ContentEvaluation, DamageInput, DamageMaterial, DamageResult,
+    DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef, EquipmentPart,
+    RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
@@ -120,7 +121,7 @@ pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::Elemen
         gamedata::character_skill_catalog(),
     )
     .map_err(|e| e.to_string())?;
-    Ok(element_preview(
+    Ok(gamedata::element_preview(
         &character.game_character_id,
         &character.equipment,
         &character.stat_sources,
@@ -153,52 +154,6 @@ pub fn list_random_options() -> Vec<RandomOptionDef> {
 #[tauri::command]
 pub fn list_masteries() -> Vec<domain::MasteryDef> {
     gamedata::mastery_catalog().to_vec()
-}
-
-/// 与ダメージ式のカテゴリへの寄与
-/// (キャラスキル + マスタリー + バフ + 装備アビリティ + 装備アイテムの装着時効果)。
-/// カタログが分かれているのでここでまとめる。
-fn damage_contributions_of(
-    sources: &domain::StatSources,
-    equipment: &domain::Equipment,
-    dependency: domain::SkillDependency,
-) -> Vec<(domain::DamageCategory, f64)> {
-    let mut out = sources
-        .character_skills
-        .damage_contributions(gamedata::character_skill_catalog(), &sources.masteries);
-    out.extend(equipment.ability_damage_contributions(&gamedata::equipment_abilities()));
-    out.extend(gamedata::item_damage_contributions(equipment, dependency));
-    out.extend(
-        sources
-            .masteries
-            .damage_contributions(gamedata::mastery_catalog()),
-    );
-    out.extend(domain::stat_sources::buff_damage_contributions(
-        &sources.buffs,
-        &gamedata::buff_catalog(),
-    ));
-    out
-}
-
-/// 中ディレイ減少の寄与(キャラスキル + マスタリー)。
-/// キャラスキルとマスタリーはカタログが別なので、ここでまとめる。
-fn actual_delay_contributions(
-    skills: &domain::CharacterSkills,
-    masteries: &domain::Masteries,
-) -> Vec<domain::ActualDelayContribution> {
-    let mut out = skills.actual_delay_contributions(gamedata::character_skill_catalog(), masteries);
-    let catalog = gamedata::mastery_catalog();
-    for id in &masteries.picked {
-        if let Some(def) = catalog.iter().find(|d| d.id == id.as_str()) {
-            if let domain::SkillEffect::ActualDelay { percent } = def.effect {
-                out.push(domain::ActualDelayContribution {
-                    source: format!("マスタリー【{}】", def.name),
-                    rate: percent / 100.0,
-                });
-            }
-        }
-    }
-    out
 }
 
 /// シエナのオーラで選べる能力値・追加オプションのカタログ(wiki: 装備システム/シエナのオーラ)。
@@ -446,48 +401,93 @@ fn armor_added_damage(armor: &EquipmentPart) -> i64 {
     domain::armor_added_damage(&values, rates.physical_defense, rates.magic_defense, multiplier)
 }
 
-fn selected_element(sources: &domain::ElementSources) -> Option<domain::Element> {
-    [
-        sources.pet,
-        sources.monster_card,
-        sources.rune,
-        sources.helm_ability,
-        sources.cuffs_ability,
-    ]
-    .into_iter()
-    .flatten()
-    .find(|e| e.can_enchant_equipment())
+/// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を gamedata から解決する。
+fn dependency_coefficients(dependency: domain::SkillDependency) -> DependencyCoefficients {
+    DependencyCoefficients {
+        attack: gamedata::attack_coefficients(dependency),
+        equipment: gamedata::equipment_coefficients(dependency),
+        accuracy: gamedata::accuracy_correction(dependency),
+    }
 }
 
-/// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
-/// 装備以外の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)。合計は上限 255。
-fn element_preview(
-    game_character_id: &str,
-    equipment: &domain::Equipment,
+/// 与ダメージ計算のうち、スキル・敵・コンテンツによらない共通材料を組み立てる
+/// (calculate_damage / preview_damage / evaluate_contents 共通。`domain::DamageMaterial` 参照)。
+///
+/// `apply_character_skill_stats` は既存挙動の差を temporarily 保持するための引数:
+/// 計算タブ(calculate_damage/preview_damage)はキャラスキルのステ補正を適用するが、
+/// ホームの evaluate_contents は元実装から適用していなかった(未確認の既存差異。
+/// docs/claude/goals 参照して要フォローアップ)。挙動を変えない移設のためここで温存する。
+fn build_damage_material(
+    base_stats: &domain::BaseStats,
     stat_sources: &domain::StatSources,
-) -> domain::ElementPreview {
-    domain::ElementPreview::new(
-        gamedata::element_base(game_character_id),
-        equipment.element_values(selected_element(&stat_sources.elements)),
-        stat_sources
-            .elements
-            .values(gamedata::element_source_catalog()),
-    )
-}
-
-/// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
-fn element_value_for(
-    game_character_id: &str,
     equipment: &domain::Equipment,
-    stat_sources: &domain::StatSources,
-    skill: &Skill,
-) -> i64 {
-    element_preview(game_character_id, equipment, stat_sources)
-        .total
-        .get(skill.element)
+    common_skills: CommonSkills,
+    awakening: domain::Awakening,
+    temporary_adjustments: Option<&domain::Adjustments>,
+    apply_character_skill_stats: bool,
+) -> CommandResult<DamageMaterial> {
+    let (mut stat_modifiers, mut stat_contributions) =
+        domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog())
+            .map_err(|e| e.to_string())?;
+    domain::stat_sources::apply_siena_stats(&mut stat_modifiers, &mut stat_contributions, equipment);
+    domain::stat_sources::apply_masteries(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &stat_sources.masteries,
+        gamedata::mastery_catalog(),
+    );
+    if apply_character_skill_stats {
+        domain::stat_sources::apply_character_skills(
+            &mut stat_modifiers,
+            &mut stat_contributions,
+            &stat_sources.character_skills,
+            &stat_sources.masteries,
+            gamedata::character_skill_catalog(),
+        );
+    }
+    domain::stat_sources::apply_unleash(&mut stat_modifiers, &mut stat_contributions, &common_skills);
+    if let Some(temp) = temporary_adjustments {
+        temp.validate().map_err(|e| e.to_string())?;
+        domain::stat_sources::apply_temporary_adjustments(
+            &mut stat_modifiers,
+            &mut stat_contributions,
+            temp,
+        );
+    }
+    let added_damage = equipment
+        .parts
+        .weapon
+        .selected()
+        .map(weapon_added_damage)
+        .unwrap_or(0)
+        + equipment
+            .parts
+            .armor
+            .selected()
+            .map(armor_added_damage)
+            .unwrap_or(0);
+    Ok(DamageMaterial {
+        base_stats: base_stats.clone(),
+        stat_modifiers,
+        stat_contributions,
+        equipment: equipment.clone(),
+        common_skills,
+        random_options: equipment.random_option_totals(&gamedata::random_option_catalog()),
+        weapon_added_damage: added_damage,
+        awakening_rate: gamedata::awakening_rate(awakening),
+        damage_cap: gamedata::awakening_caps(awakening).max_damage,
+        stat_cap: gamedata::awakening_caps(awakening).max_stat,
+        pins: stat_sources.adjustments.clone(),
+        actual_delay_skills: gamedata::actual_delay_contributions(
+            &stat_sources.character_skills,
+            &stat_sources.masteries,
+        ),
+        critical_rate_sources: stat_sources.critical_rate,
+        skill_uses: gamedata::skill_uses_table(),
+    })
 }
 
-/// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage / evaluate_contents 共通)。
+/// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage 共通)。
 #[allow(clippy::too_many_arguments)]
 fn build_damage_input(
     base_stats: &domain::BaseStats,
@@ -503,43 +503,15 @@ fn build_damage_input(
     combo_count: u32,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageInput> {
-    let coefficients = gamedata::attack_coefficients(skill.dependency);
-    let equipment_coefficients = gamedata::equipment_coefficients(skill.dependency);
-    let awakening_rate = gamedata::awakening_rate(awakening);
-    let (mut stat_modifiers, mut stat_contributions) =
-        domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog())
-            .map_err(|e| e.to_string())?;
-    domain::stat_sources::apply_siena_stats(
-        &mut stat_modifiers,
-        &mut stat_contributions,
+    let material = build_damage_material(
+        base_stats,
+        stat_sources,
         &equipment,
-    );
-    domain::stat_sources::apply_masteries(
-        &mut stat_modifiers,
-        &mut stat_contributions,
-        &stat_sources.masteries,
-        gamedata::mastery_catalog(),
-    );
-    domain::stat_sources::apply_character_skills(
-        &mut stat_modifiers,
-        &mut stat_contributions,
-        &stat_sources.character_skills,
-        &stat_sources.masteries,
-        gamedata::character_skill_catalog(),
-    );
-    domain::stat_sources::apply_unleash(
-        &mut stat_modifiers,
-        &mut stat_contributions,
-        &common_skills,
-    );
-    if let Some(temp) = &temporary_adjustments {
-        temp.validate().map_err(|e| e.to_string())?;
-        domain::stat_sources::apply_temporary_adjustments(
-            &mut stat_modifiers,
-            &mut stat_contributions,
-            temp,
-        );
-    }
+        common_skills,
+        awakening,
+        temporary_adjustments.as_ref(),
+        true,
+    )?;
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_base_totals = equipment
         .base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog())
@@ -551,19 +523,6 @@ fn build_damage_input(
             &equipment_catalog,
         ));
     let equipment_enhanced_totals = equipment.enhanced_totals(content.core_region);
-    let random_options = equipment.random_option_totals(&gamedata::random_option_catalog());
-    let added_damage = equipment
-        .parts
-        .weapon
-        .selected()
-        .map(weapon_added_damage)
-        .unwrap_or(0)
-        + equipment
-            .parts
-            .armor
-            .selected()
-            .map(armor_added_damage)
-            .unwrap_or(0);
     let title_damage_rate =
         domain::title_attack_damage_rate(equipment.title.as_deref(), &gamedata::title_catalog());
     let title_added_damage_rate = domain::title_added_damage_rate(
@@ -572,38 +531,23 @@ fn build_damage_input(
         content.game_region,
         content.enemy_id.as_deref(),
     );
-    let damage_contributions = damage_contributions_of(stat_sources, &equipment, skill.dependency);
-    let element_value = element_preview(game_character_id, &equipment, stat_sources)
+    let damage_contributions = gamedata::damage_contributions_of(stat_sources, &equipment, skill.dependency);
+    let element_value = gamedata::element_preview(game_character_id, &equipment, stat_sources)
         .total
         .get(skill.element);
-    Ok(DamageInput::new(
-        base_stats.clone(),
-        stat_modifiers,
-        stat_contributions,
-        coefficients,
-        equipment,
-        common_skills,
-        equipment_base_totals,
-        equipment_enhanced_totals,
-        equipment_coefficients,
-        gamedata::accuracy_correction(skill.dependency),
-        random_options,
-        title_damage_rate,
-        title_added_damage_rate,
-        damage_contributions.clone(),
-        added_damage,
-        awakening_rate,
-        gamedata::awakening_caps(awakening).max_damage,
-        gamedata::awakening_caps(awakening).max_stat,
+    let coefficients = dependency_coefficients(skill.dependency);
+    Ok(material.build_input(
         skill,
         enemy,
         combo_count,
-        element_value,
-        stat_sources.adjustments.clone(),
         temporary_adjustments,
-        actual_delay_contributions(&stat_sources.character_skills, &stat_sources.masteries),
-        stat_sources.critical_rate,
-        gamedata::skill_uses_table(),
+        coefficients,
+        equipment_base_totals,
+        equipment_enhanced_totals,
+        title_damage_rate,
+        title_added_damage_rate,
+        damage_contributions,
+        element_value,
     ))
 }
 
@@ -713,34 +657,32 @@ pub fn evaluate_contents(
     )
     .map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
-    // ループ不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
+    let enemies = gamedata::enemies();
+    // コンテンツの enemy_id は敵カタログに必ず存在する(gamedata のテストで担保)。
+    // ここで一括検証し、domain 側のループは検索失敗を気にしなくてよいようにする。
+    for area in gamedata::content_areas() {
+        for content in &area.contents {
+            if let Some(enemy_id) = content.enemy_id.as_deref() {
+                if !enemies.iter().any(|e| e.id == enemy_id) {
+                    return Err(format!("敵 '{enemy_id}' が見つかりません"));
+                }
+            }
+        }
+    }
+
+    // 評価ループの不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
     // カタログとステ補正を再構築すると、この最重量パスで無駄な再計算になる(PR レビュー指摘)。
-    let (mut stat_modifiers, mut stat_contributions) =
-        domain::stat_sources::build_modifiers(&character.stat_sources, &catalog)
-            .map_err(|e| e.to_string())?;
-    domain::stat_sources::apply_siena_stats(
-        &mut stat_modifiers,
-        &mut stat_contributions,
+    // NOTE: 既存挙動を保つため apply_character_skill_stats=false(下の build_damage_material
+    // コメント参照)。
+    let material = build_damage_material(
+        &character.base_stats,
+        &character.stat_sources,
         &character.equipment,
-    );
-    domain::stat_sources::apply_masteries(
-        &mut stat_modifiers,
-        &mut stat_contributions,
-        &character.stat_sources.masteries,
-        gamedata::mastery_catalog(),
-    );
-    domain::stat_sources::apply_unleash(
-        &mut stat_modifiers,
-        &mut stat_contributions,
-        &character.common_skills,
-    );
-    let awakening_rate = gamedata::awakening_rate(character.awakening);
-    let actual_delay_skills = actual_delay_contributions(
-        &character.stat_sources.character_skills,
-        &character.stat_sources.masteries,
-    );
-    let skill_uses = gamedata::skill_uses_table();
-    // 通常の基本能力値はループ外で集計し、キャラ固有の腕装備パッシブだけ依存種別ごとに派生させる。
+        character.common_skills,
+        character.awakening,
+        None,
+        false,
+    )?;
     let equipment_base_totals_raw = character
         .equipment
         .base_totals(&equipment_abilities, &titles);
@@ -750,157 +692,50 @@ pub fn evaluate_contents(
         .map(find_skill)
         .transpose()?
         .map(|skill| skill.dependency);
-    let equipment_base_totals_for = |dependency: domain::SkillDependency| {
-        equipment_base_totals_raw.add(gamedata::character_wrist_base_bonus(
+    let wrist_bonus = WristBonusMaterial {
+        style_dependency_override: character_style_dependency,
+        ..gamedata::character_wrist_bonus_material(
             &character.game_character_id,
-            &character.base_stats,
-            character_style_dependency.unwrap_or(dependency),
             &character.equipment,
             &equipment_catalog,
-        ))
+        )
     };
-    let random_option_totals = character.equipment.random_option_totals(&random_options);
-    let added_damage = character
-        .equipment
-        .parts
-        .weapon
-        .selected()
-        .map(weapon_added_damage)
-        .unwrap_or(0)
-        + character
-            .equipment
-            .parts
-            .armor
-            .selected()
-            .map(armor_added_damage)
-            .unwrap_or(0);
-    // 強化能力値はテシスコアの地域で変わるので、地域ごとに 1 回だけ集計してループ内で使い回す
-    // (地域は 4 つ + 地域なし。コンテンツごとに再集計すると最重量パスで無駄な再計算になる)。
-    let enhanced_totals_of =
-        |region: Option<CoreRegion>| character.equipment.enhanced_totals(region);
-    let enhanced_by_region: Vec<(Option<CoreRegion>, domain::EquipmentValues)> =
-        std::iter::once(None)
-            .chain(CoreRegion::ALL.into_iter().map(Some))
-            .map(|region| (region, enhanced_totals_of(region)))
-            .collect();
-    let enhanced_for = |region: Option<CoreRegion>| {
-        enhanced_by_region
-            .iter()
-            .find(|(r, _)| *r == region)
-            .map(|(_, v)| *v)
-            .unwrap_or_default()
-    };
+    // スキルごとに変わるがコンテンツには依存しない値(依存種別の係数・カテゴリ寄与・
+    // 属性値)は、コンテンツの数だけ繰り返さずキャラのスキル数ぶんだけ 1 回作る。
+    let skill_inputs: Vec<SkillEvaluationInput> = skills
+        .iter()
+        .map(|skill| SkillEvaluationInput {
+            skill: skill.clone(),
+            coefficients: dependency_coefficients(skill.dependency),
+            damage_contributions: gamedata::damage_contributions_of(
+                &character.stat_sources,
+                &character.equipment,
+                skill.dependency,
+            ),
+            element_value: gamedata::element_value_for(
+                &character.game_character_id,
+                &character.equipment,
+                &character.stat_sources,
+                skill,
+            ),
+        })
+        .collect();
     // 呼び出し側がスキルを指定したら、装備条件の比較先はそのスキルの依存で固定する。
     let fixed_dependency = match dependency_skill_id {
         None => None,
         Some(id) => Some(find_skill(&id)?.dependency),
     };
-    let mut evaluations = Vec::new();
-    for area in gamedata::content_areas() {
-        for content in &area.contents {
-            // 敵データが無いコンテンツ(入場条件のみ判定)は火力計算をしない。装備条件の
-            // 比較先はキャラの代表スキル(一覧の先頭)の依存種別で決める。
-            let thesis_core_total = character
-                .equipment
-                .thesis_cores
-                .total_bonus(content.core_region);
-            let Some(enemy_id) = content.enemy_id.as_deref() else {
-                let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.dependency));
-                let equipment_base_totals = dependency
-                    .map(&equipment_base_totals_for)
-                    .unwrap_or(equipment_base_totals_raw);
-                evaluations.push(evaluate_content(
-                    content,
-                    None,
-                    &equipment_base_totals,
-                    character.awakening,
-                    dependency,
-                    thesis_core_total,
-                ));
-                continue;
-            };
-            let equipment_enhanced_totals = enhanced_for(content.core_region);
-            let title_damage_rate =
-                domain::title_attack_damage_rate(character.equipment.title.as_deref(), &titles);
-            let title_added_damage_rate = domain::title_added_damage_rate(
-                character.equipment.title.as_deref(),
-                &titles,
-                content.game_region,
-                content.enemy_id.as_deref(),
-            );
-            let enemy = find_enemy(enemy_id)?;
-            let mut best: Option<BestSkillDamage> = None;
-            let mut best_dependency: Option<domain::SkillDependency> = None;
-            for skill in &skills {
-                let damage_contributions = damage_contributions_of(
-                    &character.stat_sources,
-                    &character.equipment,
-                    skill.dependency,
-                );
-                let equipment_base_totals = equipment_base_totals_for(skill.dependency);
-                let input = DamageInput::new(
-                    character.base_stats.clone(),
-                    stat_modifiers.clone(),
-                    stat_contributions.clone(),
-                    gamedata::attack_coefficients(skill.dependency),
-                    character.equipment.clone(),
-                    character.common_skills,
-                    equipment_base_totals,
-                    equipment_enhanced_totals,
-                    gamedata::equipment_coefficients(skill.dependency),
-                    gamedata::accuracy_correction(skill.dependency),
-                    random_option_totals,
-                    title_damage_rate,
-                    title_added_damage_rate,
-                    damage_contributions,
-                    added_damage,
-                    awakening_rate,
-                    gamedata::awakening_caps(character.awakening).max_damage,
-                    gamedata::awakening_caps(character.awakening).max_stat,
-                    skill.clone(),
-                    enemy.clone(),
-                    0,
-                    element_value_for(
-                        &character.game_character_id,
-                        &character.equipment,
-                        &character.stat_sources,
-                        skill,
-                    ),
-                    character.stat_sources.adjustments.clone(),
-                    None,
-                    actual_delay_skills.clone(),
-                    character.stat_sources.critical_rate,
-                    skill_uses.clone(),
-                );
-                let result = domain::calculate_damage(&input);
-                if best
-                    .as_ref()
-                    .is_none_or(|b| result.per_hit.max > b.per_hit_max)
-                {
-                    best = Some(BestSkillDamage {
-                        skill_id: skill.id.clone(),
-                        per_hit_max: result.per_hit.max,
-                        total_max: result.total.max,
-                    });
-                    // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
-                    best_dependency = Some(skill.dependency);
-                }
-            }
-            let requirement_dependency = fixed_dependency.or(best_dependency);
-            let equipment_base_totals = requirement_dependency
-                .map(&equipment_base_totals_for)
-                .unwrap_or(equipment_base_totals_raw);
-            evaluations.push(evaluate_content(
-                content,
-                best,
-                &equipment_base_totals,
-                character.awakening,
-                requirement_dependency,
-                thesis_core_total,
-            ));
-        }
-    }
-    Ok(evaluations)
+    Ok(evaluate_contents_for_character(
+        &material,
+        &gamedata::content_areas(),
+        &enemies,
+        &skill_inputs,
+        equipment_base_totals_raw,
+        wrist_bonus,
+        &titles,
+        character.awakening,
+        fixed_dependency,
+    ))
 }
 
 #[cfg(test)]
