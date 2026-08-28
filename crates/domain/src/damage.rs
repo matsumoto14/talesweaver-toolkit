@@ -465,8 +465,10 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // すでに per-hit に入っているので、`合計` がそのまま算出基準になる。
     // 供給源はシャープネスビジョン、武器のランダムOP、対象条件に一致した称号。
     // OP 側は発動条件を満たしている前提で入れる。
+    let random_option_added_rate =
+        input.random_options.added_damage_rate_for(input.skill.dependency);
     let added_rate = input.common_skills.sharpness_vision_rate()
-        + input.random_options.added_damage_rate
+        + random_option_added_rate
         + input.title_added_damage_rate;
     let sum = DamageTriple { min: min * hits, max: max * hits, critical: critical * hits };
     let added = DamageTriple {
@@ -481,7 +483,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
                 "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}% + 称号 {:.0}%",
                 added_rate * 100.0,
                 input.common_skills.sharpness_vision_rate() * 100.0,
-                input.random_options.added_damage_rate * 100.0,
+                random_option_added_rate * 100.0,
                 input.title_added_damage_rate * 100.0
             ),
             value: added_rate,
@@ -1068,6 +1070,19 @@ mod tests {
         assert_eq!(result.total.max, result.per_hit.max * 3 + result.added_damage.max);
         let step = result.trace.steps_max.iter().find(|s| s.name == "割合追加ダメージ(合計に乗る)").unwrap();
         assert!(step.expression.contains("称号 20%"));
+    }
+
+    #[test]
+    fn 命中時ランダムOPは物理と魔法の依存種別に合う方だけ乗る() {
+        let mut physical = input();
+        physical.random_options.added_damage_rate = 0.10;
+        physical.random_options.physical_added_damage_rate = 0.14;
+        physical.random_options.magic_added_damage_rate = 0.15;
+        assert!((calculate_damage(&physical).added_damage_rate - 0.24).abs() < 1e-12);
+
+        let mut magic = physical;
+        magic.skill.dependency = SkillDependency::HackInt;
+        assert!((calculate_damage(&magic).added_damage_rate - 0.25).abs() < 1e-12);
     }
 
     #[test]

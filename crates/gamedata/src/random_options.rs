@@ -1,10 +1,11 @@
 //! ランダムオプションのカタログ。
 //!
-//! 出典: wiki「ランダムオプション」(取得 2026-08-25)。部位ごとの節 + 転移の説明。
+//! 出典: wiki「ランダムオプション」(取得 2026-08-28)。部位ごとの節 + 転移の説明。
 //!
 //! **収録範囲は火力・命中・回避に関係する OP だけ**。wiki の一覧は HP/MP/移動速度/経験値/変身/
 //! 効果音まで含む数百件だが、それらは計算にも記録にも使いようが無いので入れない。
-//! 発動条件付き(後方から・ボス限定など)や、まだ実装していない概念(中ディレイ・最小回避率補正・
+//! 発動条件付き(後方から・ボス限定など)は条件を満たす前提で計算する。依存種別が明記された
+//! 命中時 OP は選択スキルとの一致も判定する。まだ実装していない概念(最小回避率補正・
 //! 被ダメージ側)に効く OP は `RandomOptionEffect::RecordOnly` で入れて「記録するだけ」と出す。
 //!
 //! 部位名の対応(wiki の節名 → `PartSlot`):
@@ -28,7 +29,7 @@ use crate::Source;
 /// ランダムオプションカタログの出典。
 pub const RANDOM_OPTION_SOURCE: Source = Source {
     page: "ランダムオプション",
-    retrieved_on: "2026-08-25",
+    retrieved_on: "2026-08-28",
     note: "火力・命中・回避に関係する OP のみ収録。枠数は wiki に記載が無く、\
            制約は「同じカテゴリーは 1 部位に 1 つまで(カテゴリー 0 は除く)」(転移の説明)。\
            **武器・脚の追加ダメージ系はすべて 追加ダメージ(新-割合)**(wiki「ステータス」\
@@ -37,7 +38,8 @@ pub const RANDOM_OPTION_SOURCE: Source = Source {
 
 use RandomOptionEffect::{
     AccuracyAndEvasionPoint, AccuracyPoint, ActualDelayReduction, AddedDamageRate,
-    AttackDamageRate, DependencyDamageRate, EvasionPoint, RecordOnly,
+    AttackDamageRate, DependencyDamageRate, EvasionPoint, MagicAddedDamageRate,
+    PhysicalAddedDamageRate, RecordOnly,
 };
 use RandomOptionRank::{Normal, Rare, STrue, Special, Valuable};
 
@@ -68,7 +70,7 @@ const RELIC_RESISTANCE_TIERS: &[RandomOptionTier] =
 const RELIC_ACCURACY_TIERS: &[RandomOptionTier] =
     &[tier(Valuable, 3.0, 5.0), tier(Rare, 6.0, 10.0), tier(Special, 11.0, 15.0)];
 
-/// 武器カテゴリー11「物理 / 魔法攻撃が的中した場合、X% の確率で Y% の追加ダメージ」の **Y**。
+/// 武器カテゴリー1「物理 / 魔法攻撃が的中した場合、X% の確率で Y% の追加ダメージ」の **Y**。
 /// 確率 X は満たしている前提で入れる(ユーザー確認 2026-08-26)。
 const WEAPON_ON_HIT_TIERS: &[RandomOptionTier] = &[
     tier(Normal, 10.0, 11.0),
@@ -589,8 +591,8 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             "weapon-on-hit-physical",
             "物理攻撃が的中した場合、確率で追加ダメージ",
             PartSlot::Weapon,
-            11,
-            AddedDamageRate,
+            1,
+            PhysicalAddedDamageRate,
             WEAPON_ON_HIT_TIERS,
             "追加ダメージ(新-割合)。物理依存(STAB / HACK / STAB+HACK / 熊)のスキルで、\
              的中時に 5〜6% の確率。値は効いたときの Y%",
@@ -599,8 +601,8 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             "weapon-on-hit-magic",
             "魔法攻撃が的中した場合、確率で追加ダメージ",
             PartSlot::Weapon,
-            11,
-            AddedDamageRate,
+            1,
+            MagicAddedDamageRate,
             WEAPON_ON_HIT_TIERS,
             "追加ダメージ(新-割合)。魔法依存(INT / MR / HACK+INT)のスキルで、\
              的中時に 5〜6% の確率。値は効いたときの Y%",
@@ -645,6 +647,17 @@ mod tests {
     fn every_option_is_on_a_random_option_slot() {
         for d in random_option_catalog() {
             assert!(d.slot.allows_random_option(), "{} は RO を持てない部位", d.id);
+        }
+    }
+
+    #[test]
+    fn 武器の命中時追加ダメージはカテゴリー1() {
+        for id in ["weapon-on-hit-physical", "weapon-on-hit-magic"] {
+            let def = random_option_catalog()
+                .into_iter()
+                .find(|d| d.id == id)
+                .unwrap();
+            assert_eq!(def.category, 1);
         }
     }
 

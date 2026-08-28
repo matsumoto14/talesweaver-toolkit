@@ -2,9 +2,9 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  CoreSet, Element, Equipment, EquipmentPart, EquipmentPartList, EquipmentValues,
+  CoreSet, Element, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList, EquipmentValues,
   RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
-  SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores,
+  SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, SkillDependency, ThesisCores,
 } from "./api/types";
 import {
   CORE_REGIONS, CORE_SLOT_COUNT, ELEMENT_ALLOWED_SLOTS, ELEMENTS, EQUIPMENT_STAT_KINDS,
@@ -12,6 +12,21 @@ import {
 } from "./labels";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
+
+/**
+ * 装備画像に使う ID。改・セイクリッドはゲーム内で通常版と同じ画像なので、
+ * 対応する通常版の ID を返す。対応行が未収録なら自分の ID のまま `?` を表示する。
+ */
+export const equipmentIconId = (
+  itemId: string | null,
+  catalog: EquipmentItem[],
+): string | null => {
+  if (itemId === null) return null;
+  const item = catalog.find((candidate) => candidate.id === itemId);
+  if (!item?.name.startsWith("†改・セイクリッド")) return itemId;
+  const normalName = item.name.replace("†改・", "†");
+  return catalog.find((candidate) => candidate.name === normalName)?.id ?? itemId;
+};
 
 export const zeroValues = (): EquipmentValues =>
   Object.fromEntries(EQUIPMENT_VALUE_KEYS.map((k) => [k, 0])) as unknown as EquipmentValues;
@@ -244,6 +259,10 @@ export const randomOptionPartSummary = (
       add("攻撃ダメ", value);
     } else if (effect === "added_damage_rate") {
       add("追加ダメ", value);
+    } else if (effect === "physical_added_damage_rate") {
+      add("物理追加ダメ", value);
+    } else if (effect === "magic_added_damage_rate") {
+      add("魔法追加ダメ", value);
     } else if (effect === "accuracy_point") {
       add("命中P", value);
     } else if (effect === "evasion_point") {
@@ -283,6 +302,10 @@ export const randomOptionTotals = (
         add("攻撃ダメージ増加", value);
       } else if (effect === "added_damage_rate") {
         add("割合追加ダメージ", value);
+      } else if (effect === "physical_added_damage_rate") {
+        add("割合追加ダメージ(物理依存)", value);
+      } else if (effect === "magic_added_damage_rate") {
+        add("割合追加ダメージ(魔法依存)", value);
       } else if (effect === "accuracy_point") {
         add("命中P", value);
       } else if (effect === "evasion_point") {
@@ -310,6 +333,8 @@ export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
   switch (effect) {
     case "attack_damage_rate": return "攻撃ダメージ増加";
     case "added_damage_rate": return "割合追加ダメージ";
+    case "physical_added_damage_rate": return "割合追加ダメージ(物理依存のみ)";
+    case "magic_added_damage_rate": return "割合追加ダメージ(魔法依存のみ)";
     case "accuracy_point": return "命中P";
     case "evasion_point": return "回避P";
     case "accuracy_and_evasion_point": return "命中P・回避P";
@@ -319,6 +344,21 @@ export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
 };
 
 export const randomOptionIsApplied = (effect: RandomOptionEffect): boolean => effect !== "record_only";
+
+/** 選択スキルの依存種別で発動できる OP か。条件を持たない OP とスキル未選択時は候補に残す。 */
+export const randomOptionMatchesDependency = (
+  effect: RandomOptionEffect,
+  dependency: SkillDependency | null,
+): boolean => {
+  if (dependency === null) return true;
+  if (effect === "physical_added_damage_rate") {
+    return dependency === "stab" || dependency === "hack" || dependency === "stab_hack";
+  }
+  if (effect === "magic_added_damage_rate") {
+    return dependency === "int" || dependency === "mr" || dependency === "hack_int";
+  }
+  return true;
+};
 
 /** 全部位のランダムOP の枠数(補正源リストのサマリ用)。 */
 export const randomOptionCount = (equipment: Equipment): number =>

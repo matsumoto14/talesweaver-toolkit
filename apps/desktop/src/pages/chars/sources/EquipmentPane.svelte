@@ -7,7 +7,7 @@
   import { damageCategoryLabel } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import {
-    clampToCaps, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
+    clampToCaps, equipmentIconId, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
   } from "../../../equipment";
   import { fmtInt } from "../../../format";
   import {
@@ -44,6 +44,7 @@
   ]);
 
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+  const iconId = (itemId: string | null) => equipmentIconId(itemId, app.equipmentCatalog);
 
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
@@ -634,7 +635,7 @@
       ondragend={() => { draggedEquipmentRegistration = null; equipmentRegistrationDropAt = null; }}
     >
       <span class="registration-grip" aria-hidden="true">⠿</span>
-      <Icon kind="equipment" id={registered.item_id} size={20} label={registered.label || `装備 ${registered.id}`} />
+      <Icon kind="equipment" id={iconId(registered.item_id)} size={20} label={registered.label || `装備 ${registered.id}`} />
       {registered.label || app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name || `装備 ${registered.id}`}
     </button>
   {/each}
@@ -650,7 +651,7 @@
   {@const canEnhance = ENHANCE_ALLOWED_SLOTS.includes(slot)}
   {@const damageLabel = itemDamageLabel(equippedItem(slot), true)}
   <button type="button" class="part-row" class:on={openPart === slot} onclick={() => openPartDetail(slot)}>
-    <Icon kind="equipment" id={part?.item_id ?? null} size={28} label={partDisplayName(slot)} />
+    <Icon kind="equipment" id={iconId(part?.item_id ?? null)} size={28} label={partDisplayName(slot)} />
     <span class="part-main">
       <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
       <span class="part-item">{partDisplayName(slot)}</span>
@@ -721,7 +722,7 @@
 
     <div class="card equipment-choice-card">
       <div class="selected-equipment">
-        <Icon kind="equipment" id={part.item_id} size={28} label={partDisplayName(slot)} />
+        <Icon kind="equipment" id={iconId(part.item_id)} size={28} label={partDisplayName(slot)} />
         <span class="selected-equipment-copy" use:flash={() => partDisplayName(slot)}>
           <small class="dim">選択中の装備</small>
           <b>{partDisplayName(slot)}</b>
@@ -772,7 +773,7 @@
               <!-- 候補カードは名前の識別が主目的。カテゴリ名は詳細へ譲り、短い効果量だけを置く -->
               {@const candidateDamage = itemDamageLabel(candidate, true)}
               <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
-                <Icon kind="equipment" id={candidate.id} size={28} label={candidate.name} />
+                <Icon kind="equipment" id={iconId(candidate.id)} size={28} label={candidate.name} />
                 <span class="item-copy">
                   <span class="item-name">{candidate.name}</span>
                   <span class="item-vals num dim">{rangeSummary(candidate.values_min, candidate.values_max)}</span>

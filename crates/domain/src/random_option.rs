@@ -52,6 +52,10 @@ pub enum RandomOptionEffect {
     /// **発動条件(ボス限定・確率・石の消費)は満たしている前提で常に効くものとして入れる**
     /// (ユーザー確認 2026-08-26)。条件は `note` に残す
     AddedDamageRate,
+    /// 物理依存(STAB / HACK / STAB+HACK)の攻撃が的中したときだけ発動する割合追加ダメージ
+    PhysicalAddedDamageRate,
+    /// 魔法依存(INT / MR / HACK+INT)の攻撃が的中したときだけ発動する割合追加ダメージ
+    MagicAddedDamageRate,
     /// 命中P への加算(wiki `#AccuracyPoint`: 命中P割合増加の計算後に加算)
     AccuracyPoint,
     /// 回避P への加算
@@ -170,6 +174,10 @@ pub struct RandomOptionTotals {
     pub attack_damage_rate: f64,
     /// §5「新-割合」の割合追加ダメージ。Σ% の小数表現
     pub added_damage_rate: f64,
+    /// 物理依存スキルにだけ乗る §5「新-割合」。Σ% の小数表現
+    pub physical_added_damage_rate: f64,
+    /// 魔法依存スキルにだけ乗る §5「新-割合」。Σ% の小数表現
+    pub magic_added_damage_rate: f64,
     /// 命中P への加算
     pub accuracy_point: i64,
     /// 回避P への加算
@@ -190,6 +198,12 @@ impl RandomOptionTotals {
             }
             RandomOptionEffect::AttackDamageRate => self.attack_damage_rate += value / 100.0,
             RandomOptionEffect::AddedDamageRate => self.added_damage_rate += value / 100.0,
+            RandomOptionEffect::PhysicalAddedDamageRate => {
+                self.physical_added_damage_rate += value / 100.0;
+            }
+            RandomOptionEffect::MagicAddedDamageRate => {
+                self.magic_added_damage_rate += value / 100.0;
+            }
             RandomOptionEffect::AccuracyPoint => self.accuracy_point += value as i64,
             RandomOptionEffect::EvasionPoint => self.evasion_point += value as i64,
             RandomOptionEffect::AccuracyAndEvasionPoint => {
@@ -201,6 +215,19 @@ impl RandomOptionTotals {
             }
             RandomOptionEffect::RecordOnly => self.record_only_count += 1,
         }
+    }
+
+    /// 選択スキルに実際に乗る割合追加ダメージ。物理・魔法の命中時 OP は依存種別で排他。
+    pub fn added_damage_rate_for(&self, dependency: SkillDependency) -> f64 {
+        self.added_damage_rate
+            + match dependency {
+                SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
+                    self.physical_added_damage_rate
+                }
+                SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
+                    self.magic_added_damage_rate
+                }
+            }
     }
 }
 
@@ -285,6 +312,22 @@ mod tests {
         totals.add(&d, &slot);
         assert_eq!(totals.accuracy_point, 8);
         assert_eq!(totals.evasion_point, 8);
+    }
+
+    #[test]
+    fn on_hit_added_damage_lands_only_on_matching_attack_type() {
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
+        let mut totals = RandomOptionTotals::default();
+        totals.add(&def(RandomOptionEffect::PhysicalAddedDamageRate), &slot);
+
+        assert_eq!(totals.added_damage_rate_for(SkillDependency::Stab), 0.08);
+        assert_eq!(totals.added_damage_rate_for(SkillDependency::StabHack), 0.08);
+        assert_eq!(totals.added_damage_rate_for(SkillDependency::Int), 0.0);
+        assert_eq!(totals.added_damage_rate_for(SkillDependency::HackInt), 0.0);
     }
 
     #[test]

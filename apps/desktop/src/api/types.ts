@@ -465,6 +465,8 @@ export type RandomOptionEffect =
   | { dependency_damage_rate: SkillDependency }
   | "attack_damage_rate"
   | "added_damage_rate"
+  | "physical_added_damage_rate"
+  | "magic_added_damage_rate"
   | "accuracy_point"
   | "evasion_point"
   | "accuracy_and_evasion_point"

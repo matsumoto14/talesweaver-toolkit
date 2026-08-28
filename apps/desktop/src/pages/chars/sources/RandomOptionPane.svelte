@@ -4,7 +4,8 @@
   import type { Draft } from "../../../draft";
   import {
     neutralEquipmentPart,
-    randomOptionEffectLabel, randomOptionIsApplied, randomOptionValue, randomOptionValueLabel,
+    randomOptionEffectLabel, randomOptionIsApplied, randomOptionMatchesDependency,
+    randomOptionValue, randomOptionValueLabel,
   } from "../../../equipment";
   import { PART_SLOT_LABELS, RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANKS, RANDOM_OPTION_RANK_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
@@ -91,10 +92,16 @@
       return 2;
     };
     return addableDefs(slot)
-      .filter((d) => d.common)
+      .filter((d) => d.common && randomOptionMatchesDependency(d.effect, dependency))
       .sort((a, b) => rank(a) - rank(b));
   };
-  const otherAddable = (slot: PartSlot) => addableDefs(slot).filter((d) => !d.common);
+  // 主軸に合わない「よく使う OP」は消さず、ほかの OP から到達可能にする。
+  const otherAddable = (slot: PartSlot) => {
+    const dependency = mainSkill?.dependency ?? null;
+    return addableDefs(slot).filter(
+      (d) => !d.common || !randomOptionMatchesDependency(d.effect, dependency),
+    );
+  };
   const otherPickerOptions = (slot: PartSlot): PickerOption[] =>
     otherAddable(slot).map((d) => ({
       value: d.id,
