@@ -130,6 +130,23 @@ pub enum PartSlot {
 }
 
 impl PartSlot {
+    /// 13 部位すべて(表示順 = wiki: 装備システム ページ冒頭の表の並び)。
+    pub const ALL: [PartSlot; 13] = [
+        PartSlot::Weapon,
+        PartSlot::Armor,
+        PartSlot::Helm,
+        PartSlot::Shield,
+        PartSlot::ShieldPlus,
+        PartSlot::Head,
+        PartSlot::Body,
+        PartSlot::Hand,
+        PartSlot::Leg,
+        PartSlot::Effect,
+        PartSlot::Artifact,
+        PartSlot::RelicPendant,
+        PartSlot::RelicBracelet,
+    ];
+
     /// この部位が装備強化(+1〜+15)を持てるか(wiki: 装備システム/装備強化。武器・鎧のみ)。
     pub fn allows_enhance(self) -> bool {
         matches!(self, PartSlot::Weapon | PartSlot::Armor)
@@ -205,6 +222,16 @@ impl PartSlot {
     pub fn siena_values_are_equipment(self) -> bool {
         matches!(self, PartSlot::Weapon | PartSlot::Shield)
     }
+}
+
+/// 部位ごとの枠数ルール(ドラフト非依存の定数。UI がリテラルで持たず参照する。`StatLimits` に載せる)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PartSlotRule {
+    pub slot: PartSlot,
+    /// この部位の装着アビリティの実スロット数
+    pub ability_slots: usize,
+    /// この部位に付けられるランダムオプションの数(持てない部位は `None`)
+    pub random_option_slots: Option<usize>,
 }
 
 /// シエナのオーラによるステ加算(wiki: 能力値一覧(その他の部位)の STAB〜AGI と、
@@ -731,19 +758,23 @@ impl Equipment {
             total = total.add(part.base);
         }
         for (slot, part) in self.iter_selected() {
-            for ability_id in &part.abilities {
-                if let Some(def) = abilities.iter().find(|a| a.id == *ability_id && a.slot == slot) {
-                    total = total.add(def.values);
-                }
-            }
-            for value in &part.ability_values {
-                add_ability_value(&mut total, value);
-            }
-            for addition in &part.ability_additions {
-                add_ability_value(&mut total, addition);
-            }
+            total = total.add(part_ability_values(slot, part, abilities));
         }
         total.add(title_values(self.title.as_deref(), titles))
+    }
+
+    /// 部位別のアビリティ由来の装備補正(表示用の内訳。part.base・称号は含まない)。
+    /// `base_totals` の二項目(装備アビリティの合計)を部位ごとに割ったもの。
+    pub fn ability_values_by_part(
+        &self,
+        abilities: &[EquipmentAbilityDef],
+    ) -> Vec<PartEquipmentValues> {
+        self.iter_selected()
+            .map(|(slot, part)| PartEquipmentValues {
+                slot,
+                values: part_ability_values(slot, part, abilities),
+            })
+            .collect()
     }
 
     /// アビリティの追加効果(wiki: アビリティ表の「追加効果」列)を
@@ -868,6 +899,36 @@ impl Equipment {
     pub fn iter_selected(&self) -> impl Iterator<Item = (PartSlot, &EquipmentPart)> {
         self.parts.iter_lists().into_iter().filter_map(|(slot, parts)| parts.selected().map(|p| (slot, p)))
     }
+}
+
+/// 部位 1 つぶんの値(表示用。基本能力値の内訳やシエナのオーラ部位値など、部位キー付きで返す
+/// プレビュー値に共通で使う)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PartEquipmentValues {
+    pub slot: PartSlot,
+    pub values: EquipmentValues,
+}
+
+/// 1 部位ぶんのアビリティ由来の装備補正(アビリティ定義値 + ロール値 + 追加効果)。
+/// part.base・称号は含まない(`base_totals` / `ability_values_by_part` が共有する)。
+fn part_ability_values(
+    slot: PartSlot,
+    part: &EquipmentPart,
+    abilities: &[EquipmentAbilityDef],
+) -> EquipmentValues {
+    let mut total = EquipmentValues::default();
+    for ability_id in &part.abilities {
+        if let Some(def) = abilities.iter().find(|a| a.id == *ability_id && a.slot == slot) {
+            total = total.add(def.values);
+        }
+    }
+    for value in &part.ability_values {
+        add_ability_value(&mut total, value);
+    }
+    for addition in &part.ability_additions {
+        add_ability_value(&mut total, addition);
+    }
+    total
 }
 
 fn add_ability_value(total: &mut EquipmentValues, value: &EquipmentAbilityAdditional) {

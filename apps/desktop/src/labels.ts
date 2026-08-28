@@ -88,7 +88,6 @@ export const ABILITY_ALLOWED_SLOTS: PartSlot[] = [
   "weapon", "armor", "helm", "shield", "shield_plus", "head", "hand", "leg",
   "relic_pendant", "relic_bracelet",
 ];
-export const abilitySlotCount = (slot: PartSlot): number => slot === "weapon" ? 3 : ["armor", "shield_plus", "hand"].includes(slot) ? 2 : ABILITY_ALLOWED_SLOTS.includes(slot) ? 1 : 0;
 // 武器アビリティの系統(crates/domain/src/equipment.rs の EquipmentAbilityFamily)。
 // 表示順は加算先(突き / 斬り / 魔攻 / 魔防)の並びに合わせる。
 export const ABILITY_FAMILIES: EquipmentAbilityFamily[] = [

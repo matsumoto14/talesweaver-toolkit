@@ -1902,6 +1902,7 @@ mod tests {
             wrist_type: None,
             weapon_class: None,
             enhance_type: None,
+            armor_class: None,
             damage_effects: &[],
             survival_effects: &[],
             recommended_dependency: None,

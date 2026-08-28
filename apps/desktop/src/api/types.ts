@@ -585,6 +585,23 @@ export interface CoreSet {
 // 地域ごとのコアセット。crates/domain/src/thesis_core.rs の ThesisCores。
 export type ThesisCores = Record<CoreRegion, CoreSet>;
 
+// セット効果(wiki: コアセット効果)。最終ダメージの固定加算(K)と割合(L)。
+// crates/domain/src/thesis_core.rs の CoreSetBonus。
+export interface CoreSetBonus {
+  /** 最終ダメージの固定加算(合算後) */
+  final_damage_fixed: number;
+  /** 最終ダメージの割合。Σ% の小数表現(合算後。0.03 = +3%) */
+  final_damage_rate: number;
+}
+
+// 進化段階ごとに成立したセット効果の内訳。crates/domain/src/thesis_core.rs の CoreSetGroup。
+export interface CoreSetGroup {
+  evolution: number;
+  /** 成立に使った枚数(3〜6) */
+  count: number;
+  bonus: CoreSetBonus;
+}
+
 // 装備部位 1 つ。crates/domain/src/equipment.rs の EquipmentPart。
 export interface EquipmentPart {
   id: number;
@@ -665,6 +682,17 @@ export type WeaponClass =
   | "holy_staff" | "handbell" | "dual_blade_magic" | "hammer";
 export type WeaponSystem = "stab" | "stab_hack" | "hack" | "int" | "int_hack" | "mr";
 export type ArmorClass = "light" | "heavy" | "magic" | "suit" | "robe";
+// crates/domain/src/equipment.rs の PartEquipmentValues。部位キー付きの装備補正値(表示用)。
+export interface PartEquipmentValues {
+  slot: PartSlot;
+  values: EquipmentValues;
+}
+// crates/domain/src/equipment.rs の PartSlotRule。部位ごとの枠数ルール(ドラフト非依存)。
+export interface PartSlotRule {
+  slot: PartSlot;
+  ability_slots: number;
+  random_option_slots: number | null;
+}
 export type WristType =
   | "shield" | "spellbook" | "knuckle" | "band" | "bracelet" | "pendulum" | "crystal_ball"
   | "dual_blade_physical" | "physical_magazine" | "magic_magazine" | "dual_blade_magic";
@@ -701,6 +729,8 @@ export interface EquipmentItem {
   weapon_system: WeaponSystem | null;
   /** 装備強化の固定ダメージ補正式。 */
   enhance_type: EquipmentEnhanceType | null;
+  /** 鎧のみ非 null(`armor_class_for_type(enhance_type)`)。キャラの装備可能クラスとの突き合わせに使う。 */
+  armor_class: ArmorClass | null;
   /** 装着時効果(wiki: Item ページ備考の「装着時 …」)。与ダメージ式のカテゴリに入る */
   damage_effects: SkillEffect[];
   /** 被ダメージ側へ効く耐久効果。与ダメージ計算とは分離する。 */
@@ -868,6 +898,29 @@ export interface StatPreview {
   critical_rate_bonus: CriticalRateBonusPreview;
   /** 神鳥の聖物の段階→最終固定値換算の合計(Σ) */
   sacred_relic_total: number;
+  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号)。正は Equipment::base_totals */
+  equipment_base_total: EquipmentValues;
+  /** 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳) */
+  part_ability_values: PartEquipmentValues[];
+  /** シエナのオーラの能力値スロットの装備補正(部位別。武器/盾以外は常に 0) */
+  siena_part_values: PartEquipmentValues[];
+  /** テシスコアの地域別プレビュー(CoreRegion 4 件) */
+  thesis_cores: ThesisCoreRegionPreview[];
+}
+
+// crates/domain/src/stat_sources.rs の ThesisCoreRegionPreview。テシスコア 1 地域ぶんの表示用プレビュー。
+export interface ThesisCoreRegionPreview {
+  region: CoreRegion;
+  /** 6 枠の補正値合計(入場条件「コア N」と同じ値) */
+  total_bonus: number;
+  /** 強化能力値への加算(火力 + 補助) */
+  values: EquipmentValues;
+  /** 成立しているセット(進化段階ごと)。空なら未発動 */
+  set_groups: CoreSetGroup[];
+  /** 進化を問わず強化 4 に達しているコアの数 */
+  ready: number;
+  /** この地域のセット効果の合計(合算後) */
+  set_bonus: CoreSetBonus;
 }
 
 // crates/domain/src/stat_sources.rs の CommonSkillPreview。
@@ -1063,6 +1116,12 @@ export interface StatLimits {
   pet_skill_tier_bonus: PetSkillTierBonus[];
   /** 神鳥の聖物 1 段階あたりの最終固定値 */
   sacred_relic_value_per_stage: number;
+  /** テシスコア・火力タイプの補正値テーブル(wiki: 進化強化表「火力」列)。添字は [進化段階][強化段階] */
+  core_power_bonus_table: number[][];
+  /** テシスコア・補助タイプの補正値テーブル(wiki: 進化強化表「補助」列) */
+  core_support_bonus_table: number[][];
+  /** 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん */
+  part_slot_rules: PartSlotRule[];
 }
 
 // crates/domain/src/stat_sources.rs の PetSkillTierBonus。

@@ -59,6 +59,35 @@ const FALLBACK: StatLimits = {
     { tier: "true_lv4", bonus: 60 },
   ],
   sacred_relic_value_per_stage: 10,
+  core_power_bonus_table: [
+    [1, 2, 3, 4, 5],
+    [6, 7, 8, 9, 10],
+    [12, 14, 16, 18, 20],
+    [23, 26, 29, 32, 35],
+    [40, 50, 60, 70, 80],
+  ],
+  core_support_bonus_table: [
+    [1, 2, 3, 4, 5],
+    [6, 7, 8, 9, 10],
+    [12, 14, 16, 18, 20],
+    [23, 26, 29, 32, 35],
+    [40, 45, 50, 55, 60],
+  ],
+  part_slot_rules: [
+    { slot: "weapon", ability_slots: 3, random_option_slots: 3 },
+    { slot: "armor", ability_slots: 2, random_option_slots: 2 },
+    { slot: "helm", ability_slots: 1, random_option_slots: 2 },
+    { slot: "shield", ability_slots: 1, random_option_slots: 2 },
+    { slot: "shield_plus", ability_slots: 2, random_option_slots: 2 },
+    { slot: "head", ability_slots: 1, random_option_slots: 2 },
+    { slot: "body", ability_slots: 0, random_option_slots: 2 },
+    { slot: "hand", ability_slots: 2, random_option_slots: 2 },
+    { slot: "leg", ability_slots: 1, random_option_slots: 2 },
+    { slot: "effect", ability_slots: 0, random_option_slots: null },
+    { slot: "artifact", ability_slots: 0, random_option_slots: null },
+    { slot: "relic_pendant", ability_slots: 1, random_option_slots: 2 },
+    { slot: "relic_bracelet", ability_slots: 1, random_option_slots: 2 },
+  ],
 };
 
 export const limits = $state<StatLimits>({ ...FALLBACK });

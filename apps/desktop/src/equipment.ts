@@ -2,12 +2,12 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  CoreRegion, CoreSet, CoreType, Element, Equipment, EquipmentPart, EquipmentPartList, EquipmentValues,
-  EquipmentAbilityDef, RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
-  SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores, TitleDef,
+  CoreSet, Element, Equipment, EquipmentPart, EquipmentPartList, EquipmentValues,
+  RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
+  SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores,
 } from "./api/types";
 import {
-  CORE_POWER_TYPES, CORE_REGIONS, CORE_SLOT_COUNT, ELEMENT_ALLOWED_SLOTS, ELEMENTS, EQUIPMENT_STAT_KINDS,
+  CORE_REGIONS, CORE_SLOT_COUNT, ELEMENT_ALLOWED_SLOTS, ELEMENTS, EQUIPMENT_STAT_KINDS,
   EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS, STAT_KINDS,
 } from "./labels";
 
@@ -84,22 +84,6 @@ const SIENA_STAT_KINDS = new Set<string>(STAT_KINDS);
 export const sienaSlotStatTotal = (siena: SienaAura): number =>
   siena.slots.filter((s) => SIENA_STAT_KINDS.has(s.kind)).reduce((sum, s) => sum + s.value, 0);
 
-/** 能力値スロットの装備補正合計(武器/盾)。表示用。
- *  複合の内訳(物理複合5 = 突き3 + 斬り2)は crates/domain/src/siena.rs と同じ分け方。 */
-export const sienaPartValues = (siena: SienaAura): EquipmentValues => {
-  const values = zeroValues();
-  for (const s of siena.slots) {
-    const major = Math.ceil(s.value / 2);
-    if (s.kind === "thrust") values.thrust += s.value;
-    else if (s.kind === "slash") values.slash += s.value;
-    else if (s.kind === "magic_attack") values.magic_attack += s.value;
-    else if (s.kind === "magic_defense") values.magic_defense += s.value;
-    else if (s.kind === "physical_composite") { values.thrust += major; values.slash += s.value - major; }
-    else if (s.kind === "magic_slash") { values.magic_attack += major; values.slash += s.value - major; }
-  }
-  return values;
-};
-
 /** 部位ごとのステ加算合計(能力値スロット + 全ステータス増加 × 7 ステ)。表示用 */
 export const sienaPartStatTotal = (siena: SienaAura): number =>
   sienaSlotStatTotal(siena) + sienaExtraValue(siena, "all_stats") * STAT_KINDS.length;
@@ -169,92 +153,6 @@ export const equipmentElementValues = (equipment: Equipment, element: Element | 
   return total;
 };
 
-/** テシスコアの補正値(wiki: 進化強化表)。判定・計算は Rust 側。ここは表示用。 */
-const CORE_POWER_BONUS: number[][] = [
-  [1, 2, 3, 4, 5],
-  [6, 7, 8, 9, 10],
-  [12, 14, 16, 18, 20],
-  [23, 26, 29, 32, 35],
-  [40, 50, 60, 70, 80],
-];
-/** 補助タイプは進化4 の強化1 以降だけ火力と値が分かれる。 */
-const CORE_SUPPORT_BONUS: number[][] = [
-  [1, 2, 3, 4, 5],
-  [6, 7, 8, 9, 10],
-  [12, 14, 16, 18, 20],
-  [23, 26, 29, 32, 35],
-  [40, 45, 50, 55, 60],
-];
-
-/** コア 1 個の補正値(表示用) */
-export const coreBonus = (type: CoreType, evolution: number, enhancement: number): number => {
-  const table = CORE_POWER_TYPES.includes(type) ? CORE_POWER_BONUS : CORE_SUPPORT_BONUS;
-  return table[evolution]?.[enhancement] ?? 0;
-};
-
-/** 6 枠の補正値合計(入場条件「コア N」と同じ値。表示用) */
-export const coreSetTotalBonus = (set: CoreSet): number =>
-  set.slots.reduce((sum, core) => sum + (core ? coreBonus(core.core_type, core.evolution, core.enhancement) : 0), 0);
-
-/** 6 枠の補助タイプの合計(装備値 9 種のうち 物防/回避/敏捷/命中)。表示用 */
-export const coreSetSupportValues = (set: CoreSet): EquipmentValues => {
-  const total = zeroValues();
-  for (const core of set.slots) {
-    if (!core || CORE_POWER_TYPES.includes(core.core_type)) continue;
-    total[core.core_type] += coreBonus(core.core_type, core.evolution, core.enhancement);
-  }
-  return total;
-};
-
-/** コアセット効果(表示用)。判定と値は domain/thesis_core.rs `CoreSet::set_bonus` と同じ。
- *  セットは**同じ進化段階の強化4 コア**で組み、進化段階ごとに成立した分を**合算**する。
- *  例: 進化3 ×3 + 進化4 ×3 = +1% と +2% で +3%。同じ段階が 6 個なら 6 セット効果になり、
- *  3 セット効果は重ねて数えない(進化4 ×6 = +5%)。 */
-export interface CoreSetGroup {
-  evolution: number;
-  count: number;
-  fixed: number;
-  rate: number;
-}
-export interface CoreSetEffect {
-  /** 成立しているセット(進化段階ごと)。空なら未発動 */
-  groups: CoreSetGroup[];
-  /** 進化を問わず強化 4 に達しているコアの数(あと何個で 1 セット目かを言うのに使う) */
-  ready: number;
-  /** 最終ダメージの固定加算(合算後) */
-  fixed: number;
-  /** 最終ダメージの割合(合算後。0.03 = +3%) */
-  rate: number;
-}
-const CORE_SET_BONUS: Record<number, [number, number][]> = {
-  // [進化段階]: [3〜5 個, 6 個] の順に [固定, 割合]
-  0: [[500, 0], [800, 0]],
-  1: [[700, 0], [1400, 0]],
-  2: [[1000, 0], [0, 0.01]],
-  3: [[0, 0.01], [0, 0.02]],
-  4: [[0, 0.02], [0, 0.05]],
-};
-export const coreSetEffect = (set: CoreSet): CoreSetEffect => {
-  const ready = set.slots.filter((c) => c !== null && c.enhancement >= 4).length;
-  const groups: CoreSetGroup[] = [];
-  for (let evolution = 0; evolution <= 4; evolution++) {
-    const count = set.slots.filter((c) => c !== null && c.enhancement >= 4 && c.evolution === evolution).length;
-    if (count < 3) continue;
-    const [fixed, rate] = CORE_SET_BONUS[evolution][count >= 6 ? 1 : 0];
-    groups.push({ evolution, count, fixed, rate });
-  }
-  return {
-    groups,
-    ready,
-    fixed: groups.reduce((n, g) => n + g.fixed, 0),
-    rate: groups.reduce((n, g) => n + g.rate, 0),
-  };
-};
-
-/** 全地域のコア合計のうち最大(補正源リストのサマリ表示用) */
-export const thesisCoresBestTotal = (cores: ThesisCores): number =>
-  Math.max(0, ...CORE_REGIONS.map((r: CoreRegion) => coreSetTotalBonus(cores[r])));
-
 function sumParts(equipment: Equipment, pick: (p: EquipmentPart) => EquipmentValues): EquipmentValues {
   const total = zeroValues();
   for (const slot of PART_SLOTS) {
@@ -266,48 +164,6 @@ function sumParts(equipment: Equipment, pick: (p: EquipmentPart) => EquipmentVal
   return total;
 }
 
-/**
- * 基本能力値の合計(表示用)。Rust 側 `Equipment::base_totals` と**同じ顔ぶれ**にする:
- * Σ part.base + 装備アビリティ + 表示中の称号。カタログを引く必要があるので呼び出し側が渡す。
- * (片方だけ欠けると「装備値の表は 0 なのに攻撃力には乗っている」というズレになる)
- */
-export const equipmentBaseTotal = (
-  equipment: Equipment,
-  abilities: EquipmentAbilityDef[] = [],
-  titles: TitleDef[] = [],
-): EquipmentValues => {
-  const total = sumParts(equipment, (p) => p.base);
-  for (const slot of PART_SLOTS) {
-    const part = selectedEquipmentPartOrNeutral(equipment.parts[slot]);
-    for (const id of part.abilities) {
-      const def = abilities.find((a) => a.id === id && a.slot === slot);
-      if (def) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += def.values[k];
-    }
-    for (const value of part.ability_values ?? []) {
-      if (value.kind === "thrust") total.thrust += value.value;
-      else if (value.kind === "slash") total.slash += value.value;
-      else if (value.kind === "physical_defense") total.physical_defense += value.value;
-      else if (value.kind === "magic_attack") total.magic_attack += value.value;
-      else if (value.kind === "magic_defense") total.magic_defense += value.value;
-      else if (value.kind === "accuracy") total.accuracy += value.value;
-      else if (value.kind === "critical") total.critical += value.value;
-      else if (value.kind === "evasion") total.evasion += value.value;
-    }
-    for (const addition of part.ability_additions ?? []) {
-      if (addition.kind === "thrust") total.thrust += addition.value;
-      else if (addition.kind === "slash") total.slash += addition.value;
-      else if (addition.kind === "physical_defense") total.physical_defense += addition.value;
-      else if (addition.kind === "magic_attack") total.magic_attack += addition.value;
-      else if (addition.kind === "magic_defense") total.magic_defense += addition.value;
-      else if (addition.kind === "accuracy") total.accuracy += addition.value;
-      else if (addition.kind === "critical") total.critical += addition.value;
-      else if (addition.kind === "evasion") total.evasion += addition.value;
-    }
-  }
-  const title = titles.find((t) => t.id === equipment.title);
-  if (title) for (const k of EQUIPMENT_VALUE_KEYS) total[k] += title.values[k];
-  return total;
-};
 /** Σ part.enchant(表示用。実際の集計は Rust 側 Equipment::enhanced_totals)。 */
 export const equipmentEnchantTotal = (equipment: Equipment): EquipmentValues => sumParts(equipment, (p) => p.enchant);
 

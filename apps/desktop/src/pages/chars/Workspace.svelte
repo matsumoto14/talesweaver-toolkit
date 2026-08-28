@@ -14,15 +14,15 @@
   import { actualDelayPercent, dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
-    coreSetEffect, coreSetTotalBonus, randomOptionTotals,
-    equipmentBaseTotal, equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
+    randomOptionTotals,
+    equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
     randomOptionRecordOnlyCount, sienaAttackRatePercent,
-    sienaPartCount, sienaStatTotal, thesisCoresBestTotal,
+    sienaPartCount, sienaStatTotal, zeroValues,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
   import { limits } from "../../limits.svelte";
   import {
-    CORE_REGION_LABELS, CORE_REGIONS,
+    CORE_REGION_LABELS,
     ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
     ULTIMATE_SKILL_LABELS,
   } from "../../labels";
@@ -157,7 +157,8 @@
   );
   /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。計算は Rust 側 */
   const enhanceRatePercent = $derived(Math.round((preview?.common_skill.equipment_attack_rate ?? 0) * 100));
-  const eqBaseTotal = $derived(equipmentBaseTotal(draft.equipment, app.equipmentAbilities, app.titles));
+  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号)。計算は Rust 側(preview) */
+  const eqBaseTotal = $derived(preview?.equipment_base_total ?? zeroValues());
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
   /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの要約に出す。 */
   const equipmentAttackKindsFor = (dependency: SkillDependency | null): EquipmentStatKind[] => {
@@ -180,20 +181,14 @@
   const sienaParts = $derived(sienaPartCount(draft.equipment));
   const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
   const sienaStats = $derived(sienaStatTotal(draft.equipment));
-  const coreBestTotal = $derived(thesisCoresBestTotal(draft.equipment.thesis_cores));
   // テシスコアの結果(合計とセット効果)は**編集する場所ではなく結果の場所**に出す。
   // 6 枠の入力エリアに置くと、その分だけ触る場所が下がる(§00 02)。
-  // セット効果は地域ごとに発動して足される(domain: ThesisCores::set_bonus)
-  const coreRegionRows = $derived(
-    CORE_REGIONS.map((region) => ({
-      region,
-      total: coreSetTotalBonus(draft.equipment.thesis_cores[region]),
-      set: coreSetEffect(draft.equipment.thesis_cores[region]),
-    })).filter((r) => r.total > 0),
-  );
+  // 計算は Rust 側(preview.thesis_cores)。セット効果は地域ごとに発動して足される
+  const coreBestTotal = $derived(Math.max(0, ...(preview?.thesis_cores.map((r) => r.total_bonus) ?? [])));
+  const coreRegionRows = $derived((preview?.thesis_cores ?? []).filter((r) => r.total_bonus > 0));
   const coreSetTotalLabel = $derived.by(() => {
-    const fixed = coreRegionRows.reduce((n, r) => n + r.set.fixed, 0);
-    const rate = coreRegionRows.reduce((n, r) => n + r.set.rate, 0);
+    const fixed = coreRegionRows.reduce((n, r) => n + r.set_bonus.final_damage_fixed, 0);
+    const rate = coreRegionRows.reduce((n, r) => n + r.set_bonus.final_damage_rate, 0);
     const parts: string[] = [];
     if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
     if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
@@ -721,15 +716,15 @@
               {#each coreRegionRows as r (r.region)}
                 <span>
                   <span class="dim">{CORE_REGION_LABELS[r.region]}</span>
-                  <span use:bump={() => r.total}>{fmtInt(r.total)}</span>
+                  <span use:bump={() => r.total_bonus}>{fmtInt(r.total_bonus)}</span>
                   <span
                     class="badge"
-                    style="background: {r.set.groups.length === 0 ? STATE.unknown.bg : STATE.met.bg};
-                           border-color: {r.set.groups.length === 0 ? STATE.unknown.bd : STATE.met.bd};
-                           color: {r.set.groups.length === 0 ? STATE.unknown.fg : STATE.met.fg}"
-                  >{r.set.groups.length === 0
-                      ? `あと ${3 - r.set.ready}`
-                      : r.set.groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
+                    style="background: {r.set_groups.length === 0 ? STATE.unknown.bg : STATE.met.bg};
+                           border-color: {r.set_groups.length === 0 ? STATE.unknown.bd : STATE.met.bd};
+                           color: {r.set_groups.length === 0 ? STATE.unknown.fg : STATE.met.fg}"
+                  >{r.set_groups.length === 0
+                      ? `あと ${3 - r.ready}`
+                      : r.set_groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
                 </span>
               {/each}
             </div>

@@ -30,7 +30,8 @@ const SET_BONUS_ENHANCEMENT: u8 = CORE_ENHANCEMENT_MAX;
 const SET_BONUS_MIN_COUNT: usize = 3;
 
 /// 火力タイプの補正値(wiki: 進化強化表の「火力」列)。添字は [進化段階][強化段階]。
-const POWER_BONUS: [[i64; 5]; 5] = [
+/// UI がリテラルで持たず参照するための公開テーブル(`StatLimits::core_power_bonus_table`)。
+pub const POWER_BONUS: [[i64; 5]; 5] = [
     [1, 2, 3, 4, 5],
     [6, 7, 8, 9, 10],
     [12, 14, 16, 18, 20],
@@ -40,7 +41,8 @@ const POWER_BONUS: [[i64; 5]; 5] = [
 
 /// 補助タイプの補正値(wiki: 進化強化表の「補助」列)。進化3 までは火力と同じで、
 /// 進化4 の強化1 以降だけ分かれる(火力 50/60/70/80 に対して 45/50/55/60)。
-const SUPPORT_BONUS: [[i64; 5]; 5] = [
+/// UI がリテラルで持たず参照するための公開テーブル(`StatLimits::core_support_bonus_table`)。
+pub const SUPPORT_BONUS: [[i64; 5]; 5] = [
     [1, 2, 3, 4, 5],
     [6, 7, 8, 9, 10],
     [12, 14, 16, 18, 20],
@@ -180,6 +182,15 @@ pub struct CoreSetBonus {
     pub final_damage_rate: f64,
 }
 
+/// 進化段階ごとに成立したセット効果(表示用の内訳)。`CoreSet::set_groups` が返す。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CoreSetGroup {
+    pub evolution: u8,
+    /// 成立に使った枚数(3〜6)
+    pub count: usize,
+    pub bonus: CoreSetBonus,
+}
+
 /// 進化段階 evolution の強化4コアが 3〜5 個 / 6 個そろったときのセット効果(wiki の表)。
 fn set_bonus_of(evolution: u8, six: bool) -> CoreSetBonus {
     let (fixed, rate) = match (evolution, six) {
@@ -242,16 +253,20 @@ impl CoreSet {
         values
     }
 
-    /// この地域のセット効果(wiki: コアセット効果)。
+    /// 強化 4 に達しているコアの数(進化段階を問わない。「あと何個で 1 セット目か」を言うのに使う)。
+    pub fn ready_count(&self) -> usize {
+        self.slots.iter().flatten().filter(|c| c.enhancement >= SET_BONUS_ENHANCEMENT).count()
+    }
+
+    /// 進化段階ごとに成立しているセットの内訳(表示用)。`set_bonus` の合算前の内訳。
     ///
     /// セットは**同じ進化段階の強化4 コア**で組む(wiki の表が「3〜5 セット効果 / 6 セット効果」
     /// と個数で分かれているのはこのため)。**進化段階ごとに成立して、成立した分は合算する**
     /// (ユーザー確認 2026-08-26。例: 進化3強化4 ×3 + 進化4強化4 ×3 = 進化3 の 3set +1% と
     /// 進化4 の 3set +2% で合計 +3%)。同じ段階が 6 個そろったときは 6 セット効果になり、
     /// 3 セット効果を重ねては数えない(進化4 ×6 = +5%、+2% は乗らない)。
-    /// 地域をまたぐ分もさらに合算する(`ThesisCores::set_bonus`)。
-    pub fn set_bonus(&self) -> CoreSetBonus {
-        let mut total = CoreSetBonus::default();
+    pub fn set_groups(&self) -> Vec<CoreSetGroup> {
+        let mut groups = Vec::new();
         for evolution in 0..=CORE_EVOLUTION_MAX {
             let count = self
                 .slots
@@ -262,11 +277,23 @@ impl CoreSet {
             if count < SET_BONUS_MIN_COUNT {
                 continue;
             }
-            let bonus = set_bonus_of(evolution, count >= CORE_SLOT_COUNT);
-            total.final_damage_fixed += bonus.final_damage_fixed;
-            total.final_damage_rate += bonus.final_damage_rate;
+            groups.push(CoreSetGroup {
+                evolution,
+                count,
+                bonus: set_bonus_of(evolution, count >= CORE_SLOT_COUNT),
+            });
         }
-        total
+        groups
+    }
+
+    /// この地域のセット効果(wiki: コアセット効果)。`set_groups` の合算値。
+    /// 地域をまたぐ分もさらに合算する(`ThesisCores::set_bonus`)。
+    pub fn set_bonus(&self) -> CoreSetBonus {
+        self.set_groups().into_iter().fold(CoreSetBonus::default(), |mut total, group| {
+            total.final_damage_fixed += group.bonus.final_damage_fixed;
+            total.final_damage_rate += group.bonus.final_damage_rate;
+            total
+        })
     }
 }
 

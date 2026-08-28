@@ -24,7 +24,7 @@
   import type {
     CoreRegion, CoreType, Element, ElementPreview, EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentItem, EquipmentPart, PartSlot,
     MasteryDef, PetSkillTier, RandomOptionDef, RandomOptionRank, SienaAuraList, SienaExtraKind, SienaValueKind,
-    ArmorClass, Skill, SkillDependency, WeaponClass, WeaponSystem, WristType,
+    Skill, SkillDependency, WeaponClass, WeaponSystem, WristType,
     StatKind, StatPreview, TitleDef, UltimateSkill,
   } from "../../api/types";
   import { isFixedValue, toggleBuff } from "../../buffs";
@@ -35,16 +35,16 @@
   import { previewElements } from "../../api/commands";
   import { draftToPayload, type Draft } from "../../draft";
   import {
-    clampToCaps, coreBonus, coreSetEffect, coreSetSupportValues, coreSetTotalBonus, midpointValues,
+    clampToCaps, midpointValues,
     neutralEquipmentPart, neutralSienaAura, randomOptionEffectLabel, randomOptionIsApplied,
     randomOptionActualDelayPercent, randomOptionValue, randomOptionValueLabel, rangeSummary,
     sienaExtraCapacity, sienaExtraTotal, sienaExtraValue,
     selectedSienaAura, selectedSienaAuraRegistration,
-    sienaPartStatTotal, sienaPartValues, sienaStage, sumValues, valuesSummary,
+    sienaPartStatTotal, sienaStage, sumValues, valuesSummary, zeroValues,
   } from "../../equipment";
   import { fmtInt, formatLayerValue } from "../../format";
   import {
-    ABILITY_ALLOWED_SLOTS, abilitySlotCount, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
+    ABILITY_ALLOWED_SLOTS, CORE_POWER_TYPES, CORE_REGION_LABELS, CORE_REGIONS, CORE_SLOT_COUNT,
     CORE_SUPPORT_TYPES, CORE_TYPE_LABELS, ELEMENT_ALLOWED_SLOTS, ELEMENT_LABELS, ELEMENTS,
     ENHANCE_ALLOWED_SLOTS,
     EQUIPMENT_ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT,
@@ -462,14 +462,6 @@
   const selectedGameCharacter = $derived(
     app.gameCharacters.find((character) => character.id === draft.gameCharacterId) ?? null,
   );
-  const armorClassForItem = (item: EquipmentItem): ArmorClass | null => {
-    if (item.enhance_type === "armor_light") return "light";
-    if (item.enhance_type === "armor_heavy") return "heavy";
-    if (item.enhance_type === "armor_magic") return "magic";
-    if (item.enhance_type === "armor_suit") return "suit";
-    if (item.enhance_type === "armor_robe") return "robe";
-    return null;
-  };
   /** 同じキャラで物理・魔法の専用サブアームが分かれる場合だけ、主軸スキルでも狭める。 */
   const wristTypesForSelection = (types: WristType[], dependency: SkillDependency | null): WristType[] => {
     if (dependency === null) return types;
@@ -509,10 +501,9 @@
         ? candidates.filter((i) => i.weapon_class !== null && classes.includes(i.weapon_class))
         : candidates.filter((i) => i.weapon_system !== null && systems.includes(i.weapon_system));
     } else if (openPart === "armor" && selectedGameCharacter !== null) {
-      matched = candidates.filter((item) => {
-        const armorClass = armorClassForItem(item);
-        return armorClass !== null && selectedGameCharacter!.armor_classes.includes(armorClass);
-      });
+      matched = candidates.filter((item) =>
+        item.armor_class !== null && selectedGameCharacter!.armor_classes.includes(item.armor_class),
+      );
     } else if (openPart === "shield" && selectedGameCharacter !== null) {
       const wristTypes = wristTypesForSelection(
         selectedGameCharacter.wrist_types,
@@ -542,8 +533,10 @@
     const match = equippedItem(slot)?.id.match(/-plus(\d+)$/);
     return match?.[1] ?? "";
   };
+  /** 部位ごとの枠数ルール(domain: PartSlot::ability_slots / random_option_slots)。 */
+  const partSlotRule = (slot: PartSlot) => limits.part_slot_rules.find((r) => r.slot === slot) ?? null;
   const currentAbilitySlotCount = (slot: PartSlot) =>
-    equippedItem(slot)?.ability_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : abilitySlotCount(slot));
+    equippedItem(slot)?.ability_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (partSlotRule(slot)?.ability_slots ?? 0));
   /** 攻撃・耐久の装着時効果の要約。効果なしは null。装備補正値と違って部位の数値には出ないので、
       選ぶ前も選んだ後も文字で見せる。`short` は部位行(3 ペインで幅が狭い)用で、
       カテゴリ名を出すと装備名を押し出してしまうので短い効果名だけにする */
@@ -835,7 +828,7 @@
       ["Cri", "critical"], ["回避", "evasion"], ["敏捷", "agility"],
     ] as const;
     const pieces = stats.flatMap(([label, kind]) => {
-      const value = abilityValueForStat(slot, kind);
+      const value = partAbilityValues(slot)[kind];
       return value === 0 ? [] : [`${label} +${value}`];
     });
     const additions = part.ability_additions ?? [];
@@ -849,21 +842,9 @@
     }
     return pieces.join(" / ");
   };
-  const abilityValueForStat = (slot: PartSlot, kind: EquipmentStatKind): number => {
-    const part = selectedPart(slot);
-    let value = part.abilities.reduce((sum, id) => sum + (abilityDef(id)?.values[kind] ?? 0), 0);
-    const additionKind: Partial<Record<EquipmentStatKind, EquipmentAbilityAdditionalKind>> = {
-      thrust: "thrust", slash: "slash", physical_defense: "physical_defense",
-      magic_attack: "magic_attack", magic_defense: "magic_defense", accuracy: "accuracy",
-      critical: "critical", evasion: "evasion",
-    };
-    const target = additionKind[kind];
-    if (target) {
-      value += (part.ability_values ?? []).filter((roll) => roll.kind === target).reduce((sum, roll) => sum + roll.value, 0);
-      value += (part.ability_additions ?? []).filter((addition) => addition.kind === target).reduce((sum, addition) => sum + addition.value, 0);
-    }
-    return value;
-  };
+  /** 基本能力値のうち、この部位の装備アビリティ由来の分(表示用の内訳)。計算は Rust 側(preview) */
+  const partAbilityValues = (slot: PartSlot) =>
+    preview?.part_ability_values.find((p) => p.slot === slot)?.values ?? zeroValues();
   /** 部位詳細を開いたときに、旧データの同カテゴリー重複を1つへ畳む。 */
   function openPartDetail(slot: PartSlot) {
     const part = selectedPartOrNull(slot);
@@ -1018,7 +999,7 @@
 
   /** その部位に付けられる枠の数(domain: PartSlot::random_option_slots)。武器だけ 3 枠 */
   const randomOptionSlots = (slot: PartSlot) =>
-    equippedItem(slot)?.random_option_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (slot === "weapon" ? 3 : 2));
+    equippedItem(slot)?.random_option_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (partSlotRule(slot)?.random_option_slots ?? 0));
   const rankOptions = (def: RandomOptionDef) =>
     RANDOM_OPTION_RANKS.filter((r) => def.tiers.some((t) => t.rank === r)).map((r) => ({
       value: r,
@@ -1415,6 +1396,9 @@
       });
   });
 
+  /** 能力値スロットの装備補正合計(武器/盾)。計算は Rust 側(preview) */
+  const sienaPartValues = (slot: SienaPartSlot) =>
+    preview?.siena_part_values.find((p) => p.slot === slot)?.values ?? zeroValues();
   /** 部位の行に出す要約。段階はバッジで出しているので、ここでは効き先の合計だけ */
   const sienaSummary = (slot: SienaPartSlot): string => {
     const siena = sienaForDisplay(slot);
@@ -1422,7 +1406,7 @@
     if (sienaStage(siena) === 0) return "未発現";
     const parts: string[] = [];
     if (sienaIsEquipmentValues(slot)) {
-      const v = sienaPartValues(siena);
+      const v = sienaPartValues(slot);
       const top = EQUIPMENT_STAT_KINDS.filter((k) => v[k] > 0)
         .map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(v[k])}`);
       if (top.length > 0) parts.push(top.join(" / "));
@@ -1499,6 +1483,11 @@
       Array.from({ length: limits.core_enhancement_max + 1 }, (_, en) => ({ ev, en })),
     ),
   );
+  /** コア 1 個の補正値(表示用)。テーブル自体は Rust 側のデータ(limits.core_*_bonus_table)。 */
+  const coreBonus = (type: CoreType, evolution: number, enhancement: number): number => {
+    const table = CORE_POWER_TYPES.includes(type) ? limits.core_power_bonus_table : limits.core_support_bonus_table;
+    return table[evolution]?.[enhancement] ?? 0;
+  };
   const coreAt = (index: number) => draft.equipment.thesis_cores[coreRegion].slots[index] ?? null;
   function setCoreType(index: number, value: string) {
     const slots = draft.equipment.thesis_cores[coreRegion].slots;
@@ -1510,22 +1499,23 @@
     core.evolution = evolution;
     core.enhancement = enhancement;
   }
-  const coreRegionTotal = (region: CoreRegion) =>
-    coreSetTotalBonus(draft.equipment.thesis_cores[region]);
   // 補助タイプは与ダメージ(攻撃力)には効かないが、装備値 9 種として防御側・回避Pに効く
   // 地域ごとのコアセット効果はタブが持つ(ゲーム内 UI の地域カードと同じ)。
-  // 全地域の合計は「いまの実力」に出す — 結果を入力エリアに積まない
-  const coreSetOf = (region: CoreRegion) => coreSetEffect(draft.equipment.thesis_cores[region]);
+  // 全地域の合計は「いまの実力」に出す — 結果を入力エリアに積まない。計算は Rust 側(preview)
+  const coreRegionPreview = (region: CoreRegion) =>
+    preview?.thesis_cores.find((r) => r.region === region) ?? null;
+  const coreRegionTotal = (region: CoreRegion) => coreRegionPreview(region)?.total_bonus ?? 0;
+  const coreSetOf = (region: CoreRegion) => coreRegionPreview(region);
   /** その地域のコアセット効果(タブに出す短い形)。進化段階ごとの分は合算済み */
   const coreSetLabelOf = (region: CoreRegion) => {
     const e = coreSetOf(region);
-    if (e.groups.length === 0) return "";
+    if (!e || e.set_groups.length === 0) return "";
     const parts: string[] = [];
-    if (e.rate > 0) parts.push(`+${Math.round(e.rate * 100)}%`);
-    if (e.fixed > 0) parts.push(`+${fmtInt(e.fixed)}`);
+    if (e.set_bonus.final_damage_rate > 0) parts.push(`+${Math.round(e.set_bonus.final_damage_rate * 100)}%`);
+    if (e.set_bonus.final_damage_fixed > 0) parts.push(`+${fmtInt(e.set_bonus.final_damage_fixed)}`);
     return parts.join(" ");
   };
-  const coreSupport = $derived(coreSetSupportValues(draft.equipment.thesis_cores[coreRegion]));
+  const coreSupport = $derived(coreRegionPreview(coreRegion)?.values ?? zeroValues());
   const coreSupportSummary = $derived(
     [
       ["物防", coreSupport.physical_defense],
@@ -2164,7 +2154,7 @@
           <div class="values-paired enchant-first">
             {#each visibleEquipmentStats as k, index (k)}
               {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
-              {@const abilityValue = abilityValueForStat(slot, k)}
+              {@const abilityValue = partAbilityValues(slot)[k]}
               {@const displayTotal = part.base[k] + part.enchant[k] + abilityValue}
               {@const completionPlan = enchantCompletionPlan(cap - part.enchant[k])}
               <div
@@ -3322,10 +3312,10 @@
           >
             {CORE_REGION_LABELS[region]}
             <span class="num dim" use:bump={() => coreRegionTotal(region)}>{fmtInt(coreRegionTotal(region))}</span>
-            {#if coreSetOf(region).groups.length > 0}
+            {#if (coreSetOf(region)?.set_groups.length ?? 0) > 0}
               <span class="tab-set num" use:flash={() => coreSetLabelOf(region)}>{coreSetLabelOf(region)}</span>
             {:else if coreRegionTotal(region) > 0}
-              <span class="tab-set off num">あと {3 - coreSetOf(region).ready}</span>
+              <span class="tab-set off num">あと {3 - (coreSetOf(region)?.ready ?? 0)}</span>
             {/if}
           </button>
         {/each}

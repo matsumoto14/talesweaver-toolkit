@@ -71,8 +71,8 @@ pub use equipment::{
     EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef, EquipmentAbilityAdditionalKind,
     EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentEnhanceType,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentPartList, EquipmentParts, EquipmentRates,
-    EquipmentValues, PartSlot, SienaStatBonus, ENHANCE_LEVEL_MAX, WEAPON_ABILITY_SLOTS,
-    ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
+    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus, ENHANCE_LEVEL_MAX,
+    WEAPON_ABILITY_SLOTS, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
 };
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};
 pub use random_option::{
@@ -94,7 +94,7 @@ pub use stat_sources::{
     MonsterCards, PartAttackContribution,
     PetSkillTier, PetSkillTierBonus,
     PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution, StatLayer, StatLimits,
-    StatPreview, StatSourceError, StatSources, UltimateSkillPreview,
+    StatPreview, StatSourceError, StatSources, ThesisCoreRegionPreview, UltimateSkillPreview,
 };
 pub use stats::{
     effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PinSource, StatKind,
@@ -108,6 +108,6 @@ pub use ultimate_skill::{
     UltimateSkill, UltimateSkillError, UltimateSkills, HYPER_LIMIT_LEVEL_MAX, ULTIMATE_SKILL_SLOTS,
 };
 pub use thesis_core::{
-    CoreRegion, CoreSet, CoreSetBonus, CoreType, ThesisCore, ThesisCoreError, ThesisCores,
-    CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT,
+    CoreRegion, CoreSet, CoreSetBonus, CoreSetGroup, CoreType, ThesisCore, ThesisCoreError, ThesisCores,
+    CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT, POWER_BONUS, SUPPORT_BONUS,
 };

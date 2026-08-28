@@ -22,9 +22,12 @@ use crate::attack_power::{
 };
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
-    PartSlot, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
+    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
 };
-use crate::thesis_core::{CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT};
+use crate::thesis_core::{
+    CoreRegion, CoreSetBonus, CoreSetGroup, CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX, CORE_SLOT_COUNT,
+    POWER_BONUS, SUPPORT_BONUS,
+};
 use crate::common_skill::{CommonSkills, DefenseRates, STRONG_WEAPON_LEVEL_MAX};
 use crate::title::TitleDef;
 use crate::stats::{
@@ -876,6 +879,32 @@ pub struct StatPreview {
     pub critical_rate_bonus: CriticalRateBonusPreview,
     /// 神鳥の聖物の段階→最終固定値換算の合計(Σ、正は `stat_sources::SacredRelic`)
     pub sacred_relic_total: i64,
+    /// 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号)。正は `Equipment::base_totals`
+    pub equipment_base_total: EquipmentValues,
+    /// 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳)。
+    /// 正は `Equipment::ability_values_by_part`
+    pub part_ability_values: Vec<PartEquipmentValues>,
+    /// シエナのオーラの能力値スロットの装備補正(部位別。武器/盾以外は常に 0)。
+    /// 正は `SienaAura::values`
+    pub siena_part_values: Vec<PartEquipmentValues>,
+    /// テシスコアの地域別プレビュー(`CoreRegion::ALL` の順)。正は `crates/domain/src/thesis_core.rs`
+    pub thesis_cores: Vec<ThesisCoreRegionPreview>,
+}
+
+/// テシスコア 1 地域ぶんの表示用プレビュー(6 枠の合計・セット効果)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ThesisCoreRegionPreview {
+    pub region: CoreRegion,
+    /// 6 枠の補正値合計(入場条件「コア N」と同じ値。正は `CoreSet::total_bonus`)
+    pub total_bonus: i64,
+    /// 強化能力値への加算(火力 + 補助。正は `CoreSet::equipment_values`)
+    pub values: EquipmentValues,
+    /// 成立しているセット(進化段階ごと)。空なら未発動。正は `CoreSet::set_groups`
+    pub set_groups: Vec<CoreSetGroup>,
+    /// 進化を問わず強化 4 に達しているコアの数。正は `CoreSet::ready_count`
+    pub ready: usize,
+    /// この地域のセット効果の合計(合算後)。正は `CoreSet::set_bonus`
+    pub set_bonus: CoreSetBonus,
 }
 
 /// 共通スキルの効き先サマリ(装備攻撃力強化倍率・装備防御力倍率・極限スキルの効果値)。
@@ -1066,6 +1095,27 @@ pub fn preview_effective_stats(
     };
     let sacred_relic_total: i64 =
         StatKind::ALL.iter().map(|&k| sources.sacred_relic.value(k)).sum();
+    let equipment_base_total = equipment.base_totals(abilities, titles);
+    let part_ability_values = equipment.ability_values_by_part(abilities);
+    let siena_part_values = equipment
+        .siena
+        .iter_selected()
+        .map(|(slot, aura)| PartEquipmentValues { slot, values: aura.values() })
+        .collect();
+    let thesis_cores = CoreRegion::ALL
+        .into_iter()
+        .map(|region| {
+            let set = equipment.thesis_cores.get(region);
+            ThesisCoreRegionPreview {
+                region,
+                total_bonus: set.total_bonus(),
+                values: set.equipment_values(),
+                set_groups: set.set_groups(),
+                ready: set.ready_count(),
+                set_bonus: set.set_bonus(),
+            }
+        })
+        .collect();
     Ok(StatPreview {
         stats,
         traces,
@@ -1074,6 +1124,10 @@ pub fn preview_effective_stats(
         common_skill,
         critical_rate_bonus,
         sacred_relic_total,
+        equipment_base_total,
+        part_ability_values,
+        siena_part_values,
+        thesis_cores,
     })
 }
 
@@ -1157,6 +1211,12 @@ pub struct StatLimits {
     pub pet_skill_tier_bonus: Vec<PetSkillTierBonus>,
     /// 神鳥の聖物 1 段階あたりの最終固定値(wiki: 神鳥の聖物)
     pub sacred_relic_value_per_stage: i64,
+    /// テシスコア・火力タイプの補正値テーブル(wiki: 進化強化表「火力」列)。添字は [進化段階][強化段階]
+    pub core_power_bonus_table: Vec<Vec<i64>>,
+    /// テシスコア・補助タイプの補正値テーブル(wiki: 進化強化表「補助」列)
+    pub core_support_bonus_table: Vec<Vec<i64>>,
+    /// 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん
+    pub part_slot_rules: Vec<PartSlotRule>,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -1208,6 +1268,16 @@ pub fn stat_limits() -> StatLimits {
         unleash_rates: crate::common_skill::UNLEASH.to_vec(),
         pet_skill_tier_bonus: pet_skill_tier_bonuses(),
         sacred_relic_value_per_stage: SacredRelic::VALUE_PER_STAGE,
+        core_power_bonus_table: POWER_BONUS.iter().map(|row| row.to_vec()).collect(),
+        core_support_bonus_table: SUPPORT_BONUS.iter().map(|row| row.to_vec()).collect(),
+        part_slot_rules: PartSlot::ALL
+            .into_iter()
+            .map(|slot| PartSlotRule {
+                slot,
+                ability_slots: slot.ability_slots(),
+                random_option_slots: slot.random_option_slots(),
+            })
+            .collect(),
     }
 }
 

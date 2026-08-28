@@ -396,6 +396,9 @@ pub struct EquipmentItem {
     pub weapon_class: Option<WeaponClass>,
     /// 鎧のみ `Some`。防具種ごとの装備強化補正式を、出典文字列ではなく明示メタデータで持つ。
     pub enhance_type: Option<EquipmentEnhanceType>,
+    /// 鎧のみ `Some`(`armor_class_for_type(enhance_type)`)。UI がキャラの装備可能クラスと
+    /// 突き合わせるための鎧分類(wiki: 装備システム/防具区分)。
+    pub armor_class: Option<ArmorClass>,
     /// **装着時効果**(wiki: Item ページ備考の「装着時 …」)。装備補正値ではなく
     /// 与ダメージ式のカテゴリ(X5 / X6 / Old / O)に入る。
     /// **「一定確率で」のものも発動前提で入れる**(ユーザー確定 2026-08-27: ほぼ発動する)
@@ -473,6 +476,7 @@ impl WikiEquipmentItem {
             wrist_type: wrist_type_from_page(self.source.page),
             weapon_class: self.weapon_class,
             enhance_type: self.enhance_type,
+            armor_class: self.enhance_type.and_then(armor_class_for_type),
             damage_effects: self.damage_effects,
             survival_effects: item_survival_effects(self.id),
             recommended_dependency,
@@ -582,7 +586,7 @@ fn item_dependencies(id: &str) -> (Option<SkillDependency>, Option<SkillDependen
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("EquipmentItem", 19)?;
+        let mut s = serializer.serialize_struct("EquipmentItem", 20)?;
         s.serialize_field("id", self.id)?;
         s.serialize_field("slot", &self.slot)?;
         s.serialize_field("name", self.name)?;
@@ -610,6 +614,7 @@ impl serde::Serialize for EquipmentItem {
                 })
                 .or(self.enhance_type),
         )?;
+        s.serialize_field("armor_class", &self.armor_class)?;
         s.serialize_field("damage_effects", &self.damage_effects)?;
         s.serialize_field("survival_effects", &self.survival_effects)?;
         s.serialize_field("recommended_dependency", &self.recommended_dependency)?;
