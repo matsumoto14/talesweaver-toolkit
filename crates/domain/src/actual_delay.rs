@@ -43,6 +43,8 @@ pub struct ActualDelay {
     pub reduction: f64,
     /// 倍率A(コンボボーナス)。2 コンボ以上で 0.5
     pub combo_rate: f64,
+    /// 下限 0.3s を掛ける前の中ディレイ(秒)。`基本 × (1 − 減少) × 倍率A`
+    pub raw: f64,
     /// 中ディレイ(秒)。下限 0.3s 適用後
     pub value: f64,
     /// 下限 0.3s で頭打ちになったか
@@ -72,9 +74,16 @@ pub fn actual_delay(
 ) -> ActualDelay {
     let reduction_raw: f64 = contributions.iter().map(|c| c.rate).sum();
     // 「(固定)」の中ディレイには減少が乗らない(コンボボーナスは倍率A なので別枠)
-    let reduction = if fixed { 0.0 } else { reduction_raw.min(ACTUAL_DELAY_REDUCTION_MAX) };
-    let combo_rate =
-        if combo_count >= COMBO_DELAY_THRESHOLD { COMBO_DELAY_RATE } else { 1.0 };
+    let reduction = if fixed {
+        0.0
+    } else {
+        reduction_raw.min(ACTUAL_DELAY_REDUCTION_MAX)
+    };
+    let combo_rate = if combo_count >= COMBO_DELAY_THRESHOLD {
+        COMBO_DELAY_RATE
+    } else {
+        1.0
+    };
     let raw = base * (1.0 - reduction) * combo_rate;
     let value = raw.max(ACTUAL_DELAY_MIN);
     // 実測表はコンボボーナス無し・減少が効くスキルの計測なので、その条件のときだけ使う
@@ -86,6 +95,7 @@ pub fn actual_delay(
         reduction_raw,
         reduction,
         combo_rate,
+        raw,
         value,
         floored: value > raw,
         fixed,
@@ -126,7 +136,11 @@ fn bracket(axis: &[f64], value: f64) -> Option<(usize, usize, f64)> {
     }
     let lower = upper - 1;
     let span = axis[upper] - axis[lower];
-    let ratio = if span == 0.0 { 0.0 } else { (value - axis[lower]) / span };
+    let ratio = if span == 0.0 {
+        0.0
+    } else {
+        (value - axis[lower]) / span
+    };
     Some((lower, upper, ratio))
 }
 
@@ -148,12 +162,19 @@ mod tests {
     use super::*;
 
     fn c(source: &str, rate: f64) -> ActualDelayContribution {
-        ActualDelayContribution { source: source.to_string(), rate }
+        ActualDelayContribution {
+            source: source.to_string(),
+            rate,
+        }
     }
 
     /// 実測表を使わないテスト用の空表(格子が無いので必ず式にフォールバックする)。
     fn no_table() -> SkillUsesTable {
-        SkillUsesTable { reduction_percents: Vec::new(), base_delays: Vec::new(), uses: Vec::new() }
+        SkillUsesTable {
+            reduction_percents: Vec::new(),
+            base_delays: Vec::new(),
+            uses: Vec::new(),
+        }
     }
 
     /// ユーザー提供の計測表の一部(総減少 48% / 64% × 基本 0.8s / 1.6s)。
@@ -180,7 +201,13 @@ mod tests {
     // wiki `#ActualDelay`: 減少値の上限 70%。コンボボーナスは対象外
     #[test]
     fn 減少値は70パーセントで頭打ち() {
-        let d = actual_delay(1.4, false, vec![c("A", 0.45), c("B", 0.30), c("C", 0.05)], 0, &no_table());
+        let d = actual_delay(
+            1.4,
+            false,
+            vec![c("A", 0.45), c("B", 0.30), c("C", 0.05)],
+            0,
+            &no_table(),
+        );
         assert!((d.reduction_raw - 0.80).abs() < 1e-12);
         assert_eq!(d.reduction, 0.70);
         assert!((d.value - 1.4 * 0.30).abs() < 1e-12);
@@ -243,5 +270,4 @@ mod tests {
         let fixed = actual_delay(0.8, true, vec![c("A", 0.48)], 0, &table());
         assert!(!fixed.uses_measured);
     }
-
 }

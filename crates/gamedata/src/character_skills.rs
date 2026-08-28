@@ -42,30 +42,41 @@ const ALL_STATS: &[StatKind] = &StatKind::ALL;
 const DELAY_5: &[SkillEffect] = &[SkillEffect::ActualDelay { percent: 5.0 }];
 /// 極・スパートの AGI +10%(倍率B)。中ディレイ減少は素だと減衰するので記録のみ。
 const SPURT_AGI: &[SkillEffect] = &[
-    SkillEffect::StatRate { stats: AGI, percent: 10.0, layer: StatLayer::MultiplierB },
+    SkillEffect::StatRate {
+        stats: AGI,
+        percent: 10.0,
+        layer: StatLayer::MultiplierB,
+    },
     SkillEffect::RecordOnly,
 ];
 /// マスタリー【グッドフェイス】を取ると中ディレイ低下率が 5% 固定になる。
 const SPURT_GOOD_FACE: &[SkillEffect] = &[
-    SkillEffect::StatRate { stats: AGI, percent: 10.0, layer: StatLayer::MultiplierB },
+    SkillEffect::StatRate {
+        stats: AGI,
+        percent: 10.0,
+        layer: StatLayer::MultiplierB,
+    },
     SkillEffect::ActualDelay { percent: 5.0 },
 ];
 /// 極・呪われた魔剣。攻撃ダメージは [X4]、被ダメージ増加は [S4] で未配線。
-const CURSED_SWORD_5: &[SkillEffect] =
-    &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }, SkillEffect::RecordOnly];
-const CURSED_SWORD_5_ATTACK_ONLY: &[SkillEffect] =
-    &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }];
-const CURSED_SWORD_7: &[SkillEffect] =
-    &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 7.0,
-            }, SkillEffect::RecordOnly];
+const CURSED_SWORD_5: &[SkillEffect] = &[
+    SkillEffect::Damage {
+        category: DamageCategory::AttackDamageSkill,
+        percent: 5.0,
+    },
+    SkillEffect::RecordOnly,
+];
+const CURSED_SWORD_5_ATTACK_ONLY: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageSkill,
+    percent: 5.0,
+}];
+const CURSED_SWORD_7: &[SkillEffect] = &[
+    SkillEffect::Damage {
+        category: DamageCategory::AttackDamageSkill,
+        percent: 7.0,
+    },
+    SkillEffect::RecordOnly,
+];
 
 const WIKI: &str = "https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9";
 
@@ -166,12 +177,18 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         audience: SkillAudience::SelfOnly,
         effects: CURSED_SWORD_5,
         mastery_overrides: &[
-            MasteryOverride { mastery_id: "maximin_m3_1", effects: CURSED_SWORD_5 },
+            MasteryOverride {
+                mastery_id: "maximin_m3_1",
+                effects: CURSED_SWORD_5,
+            },
             MasteryOverride {
                 mastery_id: "maximin_m3_2",
                 effects: CURSED_SWORD_5_ATTACK_ONLY,
             },
-            MasteryOverride { mastery_id: "maximin_m3_3", effects: CURSED_SWORD_7 },
+            MasteryOverride {
+                mastery_id: "maximin_m3_3",
+                effects: CURSED_SWORD_7,
+            },
         ],
         source_url: WIKI,
         note: "持続2分・CT10分。M3 の三択で値が変わる。被ダメージ +5% は未配線",
@@ -193,9 +210,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
                     layer: StatLayer::MultiplierB,
                 },
                 SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 3.0,
-            },
+                    category: DamageCategory::AttackDamageSkill,
+                    percent: 3.0,
+                },
             ],
         }],
         source_url: WIKI,
@@ -264,10 +281,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ラグランジュ神速剣",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "lucian_m2_2", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "lucian_m2_2",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 5.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【強剣】。前後ディレイも増える",
     },
@@ -277,10 +297,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "極・連撃 / 極・無双乱舞 / 極・旋風斬",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "lucian_m3_3", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "lucian_m3_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 5.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【力を込めた連撃】。この 3 スキルを主軸にするときだけ ON にする",
     },
@@ -290,9 +313,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "鉄壁",
         audience: SkillAudience::Ally,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 5.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "味方にも",
@@ -303,9 +326,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "冬を乗り越える者",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 6.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 6.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -316,10 +339,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ジンネマン家の生き残り",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "boris_m2_2", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "boris_m2_2",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 3.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【必滅者】",
     },
@@ -329,10 +355,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "スノーガード<騎士道>",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "boris_m3_3", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "boris_m3_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 3.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【騎士道】。<騎士道>が 30 スタック時の値(持続30s)",
     },
@@ -342,9 +371,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "護衛武士",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -355,9 +384,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "キャプテン",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -368,10 +397,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ハイジャンプ",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "mira_m2_3", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "mira_m2_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 3.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【ヴァイパーズアイ】(持続 5 分)",
     },
@@ -381,9 +413,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "鍛造<プロモーション>",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 3.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 3.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -394,10 +426,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "鍛造",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "ispin_m3_3", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "ispin_m3_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 2.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【ハードトレーニング】で<鍛造>バフに攻撃ダメージが付く(持続 2 分)",
     },
@@ -407,9 +442,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ノン・ルトゥール",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 4.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 4.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -420,9 +455,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "少年家長",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "パッシブ",
@@ -433,9 +468,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "勉強用チンキ剤",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 10.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 10.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -446,9 +481,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "赤い目の名薬",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 20.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 20.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -459,9 +494,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "赤い目の名薬(ペナルティ)",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: -20.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: -20.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "名薬の反動。攻撃ダメージが下がる",
@@ -472,9 +507,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "苗族",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -485,13 +520,26 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "バーサーク",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "siberin_m5_1", effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }] }, MasteryOverride { mastery_id: "siberin_m5_2", effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 3.0,
-            }] }, MasteryOverride { mastery_id: "siberin_m5_3", effects: &[] }],
+        mastery_overrides: &[
+            MasteryOverride {
+                mastery_id: "siberin_m5_1",
+                effects: &[SkillEffect::Damage {
+                    category: DamageCategory::AttackDamageSkill,
+                    percent: 5.0,
+                }],
+            },
+            MasteryOverride {
+                mastery_id: "siberin_m5_2",
+                effects: &[SkillEffect::Damage {
+                    category: DamageCategory::AttackDamageSkill,
+                    percent: 3.0,
+                }],
+            },
+            MasteryOverride {
+                mastery_id: "siberin_m5_3",
+                effects: &[],
+            },
+        ],
         source_url: WIKI,
         note: "M5 の型で変わる。防御型は攻撃ダメージが上がらない",
     },
@@ -501,10 +549,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "霊媒<幽霊>",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "joshua_m2_2", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "joshua_m2_2",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 3.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【アノーイングネイバー】",
     },
@@ -514,9 +565,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "糸と針",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -527,10 +578,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ソウルバースト",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "joshua_m4_3", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "joshua_m4_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 5.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【エクソダス】",
     },
@@ -540,13 +594,22 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "マナウォール",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "chloe_m5_2", effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }] }, MasteryOverride { mastery_id: "chloe_m5_3", effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 7.0,
-            }] }],
+        mastery_overrides: &[
+            MasteryOverride {
+                mastery_id: "chloe_m5_2",
+                effects: &[SkillEffect::Damage {
+                    category: DamageCategory::AttackDamageSkill,
+                    percent: 5.0,
+                }],
+            },
+            MasteryOverride {
+                mastery_id: "chloe_m5_3",
+                effects: &[SkillEffect::Damage {
+                    category: DamageCategory::AttackDamageSkill,
+                    percent: 7.0,
+                }],
+            },
+        ],
         source_url: WIKI,
         note: "M5 の型で変わる。防御型は攻撃ダメージが上がらない",
     },
@@ -556,9 +619,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "魔法研究者<渡空>",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -569,9 +632,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "アップライジング",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 10.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 10.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "敵味方に効果有",
@@ -582,9 +645,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ダルクロイツの武術家<招式>",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 5.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -595,9 +658,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "娘持ちの父親",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -608,9 +671,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "生き別れの弟",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -621,9 +684,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "共にいられる喜び",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 3.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 3.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -644,9 +707,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ルシベアバリア",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 3.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 3.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "wiki は +1〜3%。最大値で入れている",
@@ -657,9 +720,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ファイヤーオーラ",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 5.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -670,9 +733,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ハードウエポン",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 20.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 20.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "wiki は +5,13〜20%。最大値で入れている",
@@ -683,9 +746,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ゾーンバースト<武威>",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -696,13 +759,16 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "光の歌",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }],
-        mastery_overrides: &[MasteryOverride { mastery_id: "isolet_m3_3", effects: &[SkillEffect::Damage {
+            category: DamageCategory::AttackDamageSkill,
+            percent: 5.0,
+        }],
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "isolet_m3_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 10.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【光の歌（攻撃）】で +10% になる",
     },
@@ -712,9 +778,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "高貴な孤独",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 3.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 3.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -725,9 +791,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "ボリス",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -738,10 +804,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "極・トランススピリット",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "benya_m4_1", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "benya_m4_1",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 10.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【トランススピリット】で選択",
     },
@@ -751,10 +820,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "極・アルトリスティックスピリット",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "benya_m4_2", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "benya_m4_2",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 7.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【アルトリスティックスピリット】で選択。自身のぶん",
     },
@@ -764,9 +836,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "極・アルトリスティックスピリット(味方)",
         audience: SkillAudience::Ally,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 5.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "使い手のマスタリー【アルトリスティックスピリット】が前提",
@@ -777,10 +849,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "極・ハーモニックスピリット",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "benya_m4_3", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "benya_m4_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 7.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【ハーモニックスピリット】で選択",
     },
@@ -790,9 +865,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "グレイスターブローチ",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -803,13 +878,16 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "カース・ペンジュラム",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 15.0,
-            }],
-        mastery_overrides: &[MasteryOverride { mastery_id: "roamini_m1_3", effects: &[SkillEffect::Damage {
+            category: DamageCategory::AttackDamageSkill,
+            percent: 15.0,
+        }],
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "roamini_m1_3",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 20.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【シンボルオブスピリット】で +20%(CT 1.5 倍)",
     },
@@ -819,9 +897,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "苗族",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -832,9 +910,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "コスモス<調和>",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -845,9 +923,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "テイルズウィーバー守護者",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -858,9 +936,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "エレクトリックバースト",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 3.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 3.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -871,9 +949,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "友達",
         audience: SkillAudience::SelfOnly,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 2.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 2.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "",
@@ -884,10 +962,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "極・攻撃の熱気",
         audience: SkillAudience::SelfOnly,
         effects: &[],
-        mastery_overrides: &[MasteryOverride { mastery_id: "leeche_m4_2", effects: &[SkillEffect::Damage {
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "leeche_m4_2",
+            effects: &[SkillEffect::Damage {
                 category: DamageCategory::AttackDamageSkill,
                 percent: 3.0,
-            }] }],
+            }],
+        }],
         source_url: WIKI,
         note: "マスタリー【極・攻撃の熱気】で選択",
     },
@@ -897,14 +978,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         name: "極・攻撃の熱気(味方)",
         audience: SkillAudience::Ally,
         effects: &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }],
+            category: DamageCategory::AttackDamageSkill,
+            percent: 5.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "使い手のマスタリー【極・攻撃の熱気】が前提",
     },
-
     // --- スキル倍率増加(割合)(wiki ステータス [E1]スキル倍率増加I(割合))---
     CharacterSkillDef {
         id: "isaac_energy_field",
@@ -914,7 +994,10 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "isaac_m2_2",
-            effects: &[SkillEffect::Damage { category: DamageCategory::SkillMultiplierRate, percent: 50.0 }],
+            effects: &[SkillEffect::Damage {
+                category: DamageCategory::SkillMultiplierRate,
+                percent: 50.0,
+            }],
         }],
         source_url: WIKI,
         note: "マスタリー【プリチャージ】",
@@ -927,7 +1010,10 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "roamini_m2_2",
-            effects: &[SkillEffect::Damage { category: DamageCategory::SkillMultiplierRate, percent: 50.0 }],
+            effects: &[SkillEffect::Damage {
+                category: DamageCategory::SkillMultiplierRate,
+                percent: 50.0,
+            }],
         }],
         source_url: WIKI,
         note: "マスタリー【良心】",
@@ -940,7 +1026,10 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "yefnen_m3_2",
-            effects: &[SkillEffect::Damage { category: DamageCategory::SkillMultiplierRate, percent: 20.0 }],
+            effects: &[SkillEffect::Damage {
+                category: DamageCategory::SkillMultiplierRate,
+                percent: 20.0,
+            }],
         }],
         source_url: WIKI,
         note: "マスタリー【鋭い欠片】のフラグ。爆発の −20% は未収録",
@@ -953,7 +1042,10 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "yefnen_m3_3",
-            effects: &[SkillEffect::Damage { category: DamageCategory::SkillMultiplierRate, percent: -10.0 }],
+            effects: &[SkillEffect::Damage {
+                category: DamageCategory::SkillMultiplierRate,
+                percent: -10.0,
+            }],
         }],
         source_url: WIKI,
         note: "マスタリー【べたつく欠片】。持続ダメージが減る代わりに攻撃ダメージ減少を与える",
@@ -963,7 +1055,10 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "yefnen",
         name: "速剣",
         audience: SkillAudience::SelfOnly,
-        effects: &[SkillEffect::Damage { category: DamageCategory::SkillMultiplierRate, percent: -10.0 }],
+        effects: &[SkillEffect::Damage {
+            category: DamageCategory::SkillMultiplierRate,
+            percent: -10.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "ソードシェイプ系スキルのスキル倍率が下がる",
@@ -974,7 +1069,10 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "ダークブレッシング",
         audience: SkillAudience::SelfOnly,
-        effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 100.0 }],
+        effects: &[SkillEffect::Damage {
+            category: DamageCategory::FinalDamageRate,
+            percent: 100.0,
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "極・ミラクルスピリットの追加効果。上限 +45% で頭打ちになる",
@@ -1049,15 +1147,23 @@ mod tests {
     use domain::{CharacterSkills, Masteries};
 
     /// テスト用: カテゴリX4(攻撃ダメージ(スキル))の合計。
-    fn x4(rates: &[(DamageCategory, f64)]) -> f64 {
-        rates.iter().filter(|(c, _)| *c == DamageCategory::AttackDamageSkill).map(|(_, v)| v).sum()
+    fn x4(contributions: &[domain::DamageContribution]) -> f64 {
+        contributions
+            .iter()
+            .filter(|c| c.category == DamageCategory::AttackDamageSkill)
+            .map(|c| c.value)
+            .sum()
     }
 
     fn on(ids: &[&str]) -> CharacterSkills {
-        CharacterSkills { skill_ids: ids.iter().map(|s| s.to_string()).collect() }
+        CharacterSkills {
+            skill_ids: ids.iter().map(|s| s.to_string()).collect(),
+        }
     }
     fn picked(ids: &[&str]) -> Masteries {
-        Masteries { picked: ids.iter().map(|s| s.to_string()).collect() }
+        Masteries {
+            picked: ids.iter().map(|s| s.to_string()).collect(),
+        }
     }
 
     /// 収録件数。カタログを入れ替えたら数を更新する(黙って増減させない)。
@@ -1071,12 +1177,16 @@ mod tests {
     #[test]
     fn ダメージへの効き先は効き先ごとの範囲に収まる() {
         for skill in CHARACTER_SKILLS {
-            let all = skill
-                .effects
-                .iter()
-                .chain(skill.mastery_overrides.iter().flat_map(|o| o.effects.iter()));
+            let all = skill.effects.iter().chain(
+                skill
+                    .mastery_overrides
+                    .iter()
+                    .flat_map(|o| o.effects.iter()),
+            );
             for effect in all {
-                let SkillEffect::Damage { category, percent } = effect else { continue };
+                let SkillEffect::Damage { category, percent } = effect else {
+                    continue;
+                };
                 let range = match category {
                     // [X4] 攻撃ダメージ(スキル)。ティチエルの名薬ペナルティが −20%
                     DamageCategory::AttackDamageSkill => -20.0..=20.0,
@@ -1086,7 +1196,12 @@ mod tests {
                     DamageCategory::FinalDamageRate => 0.0..=100.0,
                     other => panic!("{} の効き先 {other:?} に範囲が決まっていない", skill.id),
                 };
-                assert!(range.contains(percent), "{} {} {percent}", skill.id, category.label());
+                assert!(
+                    range.contains(percent),
+                    "{} {} {percent}",
+                    skill.id,
+                    category.label()
+                );
             }
         }
     }
@@ -1098,7 +1213,11 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), CHARACTER_SKILLS.len());
         for d in CHARACTER_SKILLS {
-            assert!(crate::find_character(d.game_character_id).is_some(), "{} が一覧に無い", d.id);
+            assert!(
+                crate::find_character(d.game_character_id).is_some(),
+                "{} が一覧に無い",
+                d.id
+            );
         }
     }
 
@@ -1112,7 +1231,9 @@ mod tests {
                 let def = masteries
                     .iter()
                     .find(|m| m.id == over.mastery_id)
-                    .unwrap_or_else(|| panic!("{} の差し替え元 {} が無い", skill.id, over.mastery_id));
+                    .unwrap_or_else(|| {
+                        panic!("{} の差し替え元 {} が無い", skill.id, over.mastery_id)
+                    });
                 assert_eq!(
                     def.game_character_id, skill.game_character_id,
                     "{} と {} でキャラが違う",
@@ -1134,7 +1255,12 @@ mod tests {
             let all: Vec<&SkillEffect> = skill
                 .effects
                 .iter()
-                .chain(skill.mastery_overrides.iter().flat_map(|o| o.effects.iter()))
+                .chain(
+                    skill
+                        .mastery_overrides
+                        .iter()
+                        .flat_map(|o| o.effects.iter()),
+                )
                 .collect();
             for effect in all {
                 if let SkillEffect::ActualDelay { percent } = effect {
@@ -1153,10 +1279,17 @@ mod tests {
         for masteries in [picked(&[]), picked(&["mira_m4_2"])] {
             assert_eq!(
                 spurt.stat_rates(catalog, &masteries),
-                vec![(domain::StatKind::Agi, 0.10, StatLayer::MultiplierB, "極・スパート")]
+                vec![(
+                    domain::StatKind::Agi,
+                    0.10,
+                    StatLayer::MultiplierB,
+                    "極・スパート"
+                )]
             );
         }
-        assert!(spurt.actual_delay_contributions(catalog, &picked(&[])).is_empty());
+        assert!(spurt
+            .actual_delay_contributions(catalog, &picked(&[]))
+            .is_empty());
         let with = spurt.actual_delay_contributions(catalog, &picked(&["mira_m4_2"]));
         assert_eq!(with.len(), 1);
         assert!((with[0].rate - 0.05).abs() < 1e-12);
@@ -1171,7 +1304,10 @@ mod tests {
 
         const BASE: u32 = 271;
         // 素ステ以外の補正で basic を 375 にする(実測時の状態)
-        let mut m = StatModifiers { fixed: 375 - i64::from(BASE), ..Default::default() };
+        let mut m = StatModifiers {
+            fixed: 375 - i64::from(BASE),
+            ..Default::default()
+        };
         let (before, _) = effective_stat(StatKind::Agi, BASE, &m, i64::MAX);
         assert_eq!(before, 375);
 
@@ -1199,10 +1335,12 @@ mod tests {
         let sword = on(&["maximin_cursed_sword"]);
         assert!((x4(&sword.damage_contributions(catalog, &picked(&[]))) - 0.05).abs() < 1e-12);
         assert!(
-            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_2"]))) - 0.05).abs() < 1e-12
+            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_2"]))) - 0.05).abs()
+                < 1e-12
         );
         assert!(
-            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_3"]))) - 0.07).abs() < 1e-12
+            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_3"]))) - 0.07).abs()
+                < 1e-12
         );
     }
 }

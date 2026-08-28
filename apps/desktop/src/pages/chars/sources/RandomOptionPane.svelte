@@ -9,11 +9,13 @@
   } from "../../../equipment";
   import { PART_SLOT_LABELS, RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANKS, RANDOM_OPTION_RANK_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
-  import { app } from "../../../state.svelte";
+  import { app, equipmentFocus } from "../../../state.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import type { SourceId } from "../sourceId";
+  import { flash } from "../../../ui/motion.svelte";
+  import { tick, untrack } from "svelte";
 
   interface Props {
     draft: Draft;
@@ -72,6 +74,32 @@
 
   /** ランダムOP のドリルダウン。装備と同じく、押した部位は残して右にペインを足す(§09 規則 2) */
   let openRandomPart = $state<PartSlot | null>(null);
+
+  // --- エラー帯からの「ここを開く」 -------------------------------------
+  // 帯が指した部位を開き、該当 OP 行を光らせて見える位置まで送る(§00 ④)。
+  let detailEl = $state<HTMLElement | null>(null);
+  let focusedOptionId = $state<string | null>(null);
+  let focusSeq = $state(0);
+  const focusToken = (optionId: string) => (focusedOptionId === optionId ? String(focusSeq) : "");
+  async function revealFocused(optionId: string) {
+    await tick();
+    detailEl?.querySelector(`[data-option-id="${CSS.escape(optionId)}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  $effect(() => {
+    const request = equipmentFocus.request;
+    if (!request || request.randomOptionId === null) return;
+    const optionId = request.randomOptionId;
+    untrack(() => {
+      const list = draft.equipment.parts[request.slot];
+      if (list.registered.some((p) => p.id === request.partId)) list.selected_id = request.partId;
+      openRandomPart = request.slot;
+      focusedOptionId = optionId;
+      focusSeq = request.seq;
+      equipmentFocus.request = null;
+      void revealFocused(optionId);
+    });
+  });
   const NEUTRAL_RO = "なし";
   /** その部位に足せる OP のうち、実際によく付けるもの(gamedata の common) */
   const addableDefs = (slot: PartSlot): RandomOptionDef[] =>
@@ -165,7 +193,12 @@
     {#if def}
       {@const t = tierOf(def, option.rank)}
       <!-- 1 OP 1 行。名前 / ランク / 効果値 / 外す を列でそろえる(§00 01) -->
-      <div class="ro-row" class:record-only={!randomOptionIsApplied(def.effect)}>
+      <div
+        class="ro-row"
+        class:record-only={!randomOptionIsApplied(def.effect)}
+        data-option-id={option.option_id}
+        use:flash={() => focusToken(option.option_id)}
+      >
         <span class="ro-name" title={def.name}>{def.name}</span>
         <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>外す</button>
         <!-- ランクは言葉なので幅は中身なり。ふだんは Special / S・真 だけ -->
@@ -249,7 +282,7 @@
   </div>
   {#if openRandomPart !== null}
     {@const slot = openRandomPart}
-    <div class="part-detail pane-in">
+    <div class="part-detail pane-in" bind:this={detailEl}>
       <button type="button" class="close-detail" onclick={() => (openRandomPart = null)}>✕ この部位を閉じる</button>
       <div class="card">
         <div class="card-title">{PART_SLOT_LABELS[slot]}</div>

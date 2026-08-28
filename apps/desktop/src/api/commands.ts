@@ -1,17 +1,26 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, CharacterSkillDef, ComboSkillType, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, BuffSelection, BuffSet, CategoryTrace, CharacterSkillDef, ComboSkillType, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
-  TitleDef,
+  TitleDef, ValidationLocation,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
 export const listSkills = (gameCharacterId: string) => invoke<Skill[]>("list_skills", { gameCharacterId });
 export const listEnemies = () => invoke<Enemy[]>("list_enemies");
 export const listBuffCatalog = () => invoke<BuffDefinition[]>("list_buff_catalog");
+export const summarizeBuffSelection = (buffs: BuffSelection) =>
+  invoke<CategoryTrace[]>("summarize_buff_selection", { buffs });
+export const listBuffSets = () => invoke<BuffSet[]>("list_buff_sets");
+export const createBuffSet = (name: string, choices: BuffSelection) => invoke<BuffSet>("create_buff_set", { name, choices });
+export const updateBuffSet = (id: number, name: string, choices: BuffSelection) => invoke<BuffSet>("update_buff_set", { id, name, choices });
+export const duplicateBuffSet = (id: number) => invoke<BuffSet>("duplicate_buff_set", { id });
+export const deleteBuffSet = (id: number) => invoke<void>("delete_buff_set", { id });
+export const setDefaultBuffSet = (characterId: number, buffSetId: number | null) =>
+  invoke<RegisteredCharacter>("set_default_buff_set", { characterId, buffSetId });
 /** 属性値の供給源カタログ(装備の属性強化以外) */
 export const listElementSources = () => invoke<ElementSourceDef[]>("list_element_sources");
 /** 属性値の内訳(キャラ基礎 / 装備 / 供給源 / 合計)。保存前のキャラデータで出す */
@@ -29,18 +38,18 @@ export const deleteCharacter = (id: number) => invoke<void>("delete_character", 
  */
 export const previewEffectiveStats = (
   baseStats: BaseStats, statSources: StatSources, equipment: Equipment, commonSkills: CommonSkills,
-  awakening: Awakening, mainSkillId: string | null,
+  awakening: Awakening, mainSkillId: string | null, buffs: BuffSelection = { choices: [] },
 ) => invoke<StatPreview>("preview_effective_stats", {
-  baseStats, statSources, equipment, commonSkills, awakening, mainSkillId,
+  baseStats, statSources, equipment, commonSkills, awakening, mainSkillId, buffs,
 });
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
-  comboSkillType: ComboSkillType | null = null,
-) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments });
+  comboSkillType: ComboSkillType | null = null, buffs: BuffSelection = { choices: [] },
+) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments, buffs });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
-export const previewDefense = (character: NewCharacter) =>
-  invoke<DefenseProfile>("preview_defense", { character });
+export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
+  invoke<DefenseProfile>("preview_defense", { character, buffs });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
 /** ランダムオプションのカタログ(wiki: ランダムオプション) */
@@ -61,8 +70,21 @@ export const getAppInfo = () => invoke<AppInfo>("get_app_info");
 export const getStartupNotice = () => invoke<StartupNotice | null>("get_startup_notice");
 
 /** invoke の reject(String)を表示用文字列にする */
+/** Tauri コマンドが返すエラー(src-tauri の CommandError)。`location` 付きなら帯からそこへ飛べる。 */
+type CommandError = { message: string; location: ValidationLocation | null };
+
+const asCommandError = (e: unknown): CommandError | null =>
+  typeof e === "object" && e !== null && "message" in e && "location" in e ? (e as CommandError) : null;
+
 export function errorMessage(e: unknown): string {
+  const command = asCommandError(e);
+  if (command) return command.message;
   return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+}
+
+/** エラーが指している装備の場所。無ければ null(帯に「ここを開く」は出さない)。 */
+export function errorLocation(e: unknown): ValidationLocation | null {
+  return asCommandError(e)?.location ?? null;
 }
 
 export const listContents = () => invoke<ContentArea[]>("list_contents");
@@ -71,13 +93,15 @@ export const previewDamage = (
   character: NewCharacter, skillId: string, contentId: string, comboCount: number,
   temporaryAdjustments: Adjustments | null = null,
   comboSkillType: ComboSkillType | null = null,
-) => invoke<DamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments });
+  buffs: BuffSelection = { choices: [] },
+) => invoke<DamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments, buffs });
 /**
  * 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価)。
  * `dependencySkillId` を渡すと、装備条件(スキル依存で比較先が変わる)をそのスキルで判定する。
  */
-export const evaluateContents = (character: NewCharacter, dependencySkillId?: string) =>
+export const evaluateContents = (character: NewCharacter, dependencySkillId?: string, buffs: BuffSelection = { choices: [] }) =>
   invoke<ContentEvaluation[]>("evaluate_contents", {
     character,
     dependencySkillId: dependencySkillId ?? null,
+    buffs,
   });

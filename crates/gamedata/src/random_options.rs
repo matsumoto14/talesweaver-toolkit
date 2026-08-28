@@ -38,8 +38,8 @@ pub const RANDOM_OPTION_SOURCE: Source = Source {
 
 use RandomOptionEffect::{
     AccuracyAndEvasionPoint, AccuracyPoint, ActualDelayReduction, AddedDamageRate,
-    AttackDamageRate, DependencyDamageRate, EvasionPoint, MagicAddedDamageRate,
-    MagicDamageAmplify, PhysicalAddedDamageRate, PhysicalDamageAmplify, RecordOnly,
+    AttackDamageRate, DependencyDamageRate, EvasionPoint, MagicAddedDamageRate, MagicDamageAmplify,
+    PhysicalAddedDamageRate, PhysicalDamageAmplify, RecordOnly,
 };
 use RandomOptionRank::{Normal, Rare, STrue, Special, Valuable};
 
@@ -57,18 +57,30 @@ const SHIELD_DEPENDENCY_TIERS: &[RandomOptionTier] = &[
 ];
 
 /// レリック(右)カテゴリー15。依存別攻撃力増加と攻撃ダメージ増加が同じレンジ。
-const RELIC_CATEGORY15_TIERS: &[RandomOptionTier] =
-    &[tier(Valuable, 3.0, 4.0), tier(Rare, 5.0, 7.0), tier(Special, 8.0, 10.0)];
+const RELIC_CATEGORY15_TIERS: &[RandomOptionTier] = &[
+    tier(Valuable, 3.0, 4.0),
+    tier(Rare, 5.0, 7.0),
+    tier(Special, 8.0, 10.0),
+];
 
 /// レリック(左)カテゴリー3 / カテゴリー10。
 /// レリック(左)カテゴリー1「レリックダンジョンモンスター攻撃時、X% の追加ダメージ」。
-const RELIC_DUNGEON_TIERS: &[RandomOptionTier] =
-    &[tier(Valuable, 5.0, 6.0), tier(Rare, 7.0, 8.0), tier(Special, 9.0, 10.0)];
+const RELIC_DUNGEON_TIERS: &[RandomOptionTier] = &[
+    tier(Valuable, 5.0, 6.0),
+    tier(Rare, 7.0, 8.0),
+    tier(Special, 9.0, 10.0),
+];
 
-const RELIC_RESISTANCE_TIERS: &[RandomOptionTier] =
-    &[tier(Valuable, 3.0, 4.0), tier(Rare, 5.0, 7.0), tier(Special, 8.0, 10.0)];
-const RELIC_ACCURACY_TIERS: &[RandomOptionTier] =
-    &[tier(Valuable, 3.0, 5.0), tier(Rare, 6.0, 10.0), tier(Special, 11.0, 15.0)];
+const RELIC_RESISTANCE_TIERS: &[RandomOptionTier] = &[
+    tier(Valuable, 3.0, 4.0),
+    tier(Rare, 5.0, 7.0),
+    tier(Special, 8.0, 10.0),
+];
+const RELIC_ACCURACY_TIERS: &[RandomOptionTier] = &[
+    tier(Valuable, 3.0, 5.0),
+    tier(Rare, 6.0, 10.0),
+    tier(Special, 11.0, 15.0),
+];
 
 /// 武器カテゴリー1「物理 / 魔法攻撃が的中した場合、X% の確率で Y% の追加ダメージ」の **Y**。
 /// 確率 X は満たしている前提で入れる(ユーザー確認 2026-08-26)。
@@ -90,8 +102,11 @@ const WEAPON_ON_HIT_AMPLIFY_TIERS: &[RandomOptionTier] = &[
 ];
 
 /// 武器カテゴリー16「攻撃時、強化の石を 1 個消耗する代わりに X% の追加ダメージ」。
-const WEAPON_STONE_TIERS: &[RandomOptionTier] =
-    &[tier(Rare, 18.0, 25.0), tier(Special, 30.0, 45.0), tier(STrue, 35.0, 48.0)];
+const WEAPON_STONE_TIERS: &[RandomOptionTier] = &[
+    tier(Rare, 18.0, 25.0),
+    tier(Special, 30.0, 45.0),
+    tier(STrue, 35.0, 48.0),
+];
 
 /// 武器カテゴリー16「攻撃時、X SEED を消耗する代わりに Y% の追加ダメージ」の **Y**。
 const WEAPON_SEED_TIERS: &[RandomOptionTier] = &[
@@ -168,8 +183,11 @@ const WEAPON_BOSS_TIERS: &[RandomOptionTier] = &[
     tier(Special, 15.0, 18.0),
     tier(STrue, 15.0, 21.0),
 ];
-const WEAPON_RAID_BOSS_TIERS: &[RandomOptionTier] =
-    &[tier(Valuable, 2.0, 3.0), tier(Rare, 5.0, 10.0), tier(Special, 15.0, 18.0)];
+const WEAPON_RAID_BOSS_TIERS: &[RandomOptionTier] = &[
+    tier(Valuable, 2.0, 3.0),
+    tier(Rare, 5.0, 10.0),
+    tier(Special, 15.0, 18.0),
+];
 const WEAPON_BACK_ATTACK_TIERS: &[RandomOptionTier] = &[
     tier(Normal, 1.0, 3.0),
     tier(Valuable, 4.0, 5.0),
@@ -196,7 +214,17 @@ const fn def(
     tiers: &'static [RandomOptionTier],
     note: &'static str,
 ) -> RandomOptionDef {
-    RandomOptionDef { id, name, short: short_name(name), slot, category, effect, tiers, note, common: false }
+    RandomOptionDef {
+        id,
+        name,
+        short: short_name(name),
+        slot,
+        category,
+        effect,
+        tiers,
+        note,
+        common: false,
+    }
 }
 
 /// 一覧のバッジに出す短い名前。長い名前をそのまま並べると 1 行に収まらない。
@@ -219,15 +247,24 @@ const SHORT_NAMES: &[(&str, &str)] = &[
     ("レリックダンジョンのモンスターに追加ダメージ", "レリックD"),
     ("移動速度が減少し、ダメージ耐性が増加", "耐性(速度減)"),
     ("移動速度が遅いとき、追加ダメージ", "低速時"),
-    ("攻撃時、確率で追加ダメージ(自分は移動速度減少)", "確率(速度減)"),
+    (
+        "攻撃時、確率で追加ダメージ(自分は移動速度減少)",
+        "確率(速度減)",
+    ),
     ("一般ボスモンスター攻撃時、追加ダメージ", "一般ボス"),
     ("レイドボスモンスター攻撃時、追加ダメージ", "レイドボス"),
     ("対象の後方から攻撃した場合、追加ダメージ", "後方"),
     ("近接する対象攻撃時、追加ダメージ", "近接"),
     ("物理攻撃が的中した場合、確率で追加ダメージ", "物理命中"),
     ("魔法攻撃が的中した場合、確率で追加ダメージ", "魔法命中"),
-    ("物理攻撃が的中した場合、対象の被物理ダメージ増加", "物理増幅"),
-    ("魔法攻撃が的中した場合、対象の被魔法ダメージ増加", "魔法増幅"),
+    (
+        "物理攻撃が的中した場合、対象の被物理ダメージ増加",
+        "物理増幅",
+    ),
+    (
+        "魔法攻撃が的中した場合、対象の被魔法ダメージ増加",
+        "魔法増幅",
+    ),
     ("強化の石を 1 個消耗する代わりに追加ダメージ", "強化の石"),
     ("SEED を消耗する代わりに追加ダメージ", "SEED"),
 ];
@@ -276,7 +313,6 @@ const COMMON_IDS: &[&str] = &[
     // カフス: 中ディレイ減少
     "cuffs-actual-delay",
 ];
-
 
 pub fn random_option_catalog() -> Vec<RandomOptionDef> {
     let mut defs = random_option_defs();
@@ -682,7 +718,11 @@ mod tests {
     #[test]
     fn every_option_is_on_a_random_option_slot() {
         for d in random_option_catalog() {
-            assert!(d.slot.allows_random_option(), "{} は RO を持てない部位", d.id);
+            assert!(
+                d.slot.allows_random_option(),
+                "{} は RO を持てない部位",
+                d.id
+            );
         }
     }
 
@@ -699,7 +739,10 @@ mod tests {
 
     #[test]
     fn 武器の命中時被ダメージ増加はカテゴリー15で効果は常に10パーセント() {
-        for id in ["weapon-on-hit-physical-amplify", "weapon-on-hit-magic-amplify"] {
+        for id in [
+            "weapon-on-hit-physical-amplify",
+            "weapon-on-hit-magic-amplify",
+        ] {
             let def = random_option_catalog()
                 .into_iter()
                 .find(|d| d.id == id)
@@ -735,6 +778,9 @@ mod tests {
                 .collect()
         };
         assert_eq!(categories(PartSlot::RelicPendant), HashSet::from([15]));
-        assert_eq!(categories(PartSlot::RelicBracelet), HashSet::from([1, 3, 10]));
+        assert_eq!(
+            categories(PartSlot::RelicBracelet),
+            HashSet::from([1, 3, 10])
+        );
     }
 }

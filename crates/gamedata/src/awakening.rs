@@ -24,8 +24,13 @@ const STAGE_RATES: [f64; 5] = [1.0, 1.0, 1.2, 1.4, 1.6];
 
 /// 覚醒段階 0〜4 の上限 (ダメージ, 防御力)(wiki: Quest/覚醒クエスト「各能力の上限値」の
 /// 初期値 / 1次 / 2次 / 3次 / 4次覚醒の行)。
-const STAGE_CAPS: [(i64, i64); 5] =
-    [(7_000, 4_300), (9_999, 6_100), (12_000, 7_900), (15_000, 9_700), (18_000, 9_700)];
+const STAGE_CAPS: [(i64, i64); 5] = [
+    (7_000, 4_300),
+    (9_999, 6_100),
+    (12_000, 7_900),
+    (15_000, 9_700),
+    (18_000, 9_700),
+];
 
 /// 覚醒段階 0〜4 の最終能力値の上限(wiki ステータス「ステータス上限は1500」)。
 const STAGE_STAT_CAP: i64 = 1_500;
@@ -92,10 +97,18 @@ pub fn awakening_caps(awakening: Awakening) -> AwakeningCaps {
     let stage = usize::from(awakening.stage);
     if stage < STAGE_CAPS.len() {
         let (max_damage, max_defense) = STAGE_CAPS[stage];
-        return AwakeningCaps { max_damage, max_defense, max_stat: STAGE_STAT_CAP };
+        return AwakeningCaps {
+            max_damage,
+            max_defense,
+            max_stat: STAGE_STAT_CAP,
+        };
     }
     let (max_damage, max_defense, max_stat) = ETERNAL_CAPS[eternal_index(awakening)];
-    AwakeningCaps { max_damage, max_defense, max_stat }
+    AwakeningCaps {
+        max_damage,
+        max_defense,
+        max_stat,
+    }
 }
 
 fn eternal_index(awakening: Awakening) -> usize {
@@ -107,11 +120,17 @@ mod tests {
     use super::*;
 
     fn rate(stage: u8, eternal_level: u8) -> f64 {
-        awakening_rate(Awakening { stage, eternal_level })
+        awakening_rate(Awakening {
+            stage,
+            eternal_level,
+        })
     }
 
     fn caps(stage: u8, eternal_level: u8) -> AwakeningCaps {
-        awakening_caps(Awakening { stage, eternal_level })
+        awakening_caps(Awakening {
+            stage,
+            eternal_level,
+        })
     }
 
     #[test]
@@ -146,10 +165,38 @@ mod tests {
         assert_eq!(caps(4, 0).max_defense, 9_700);
         assert_eq!(caps(4, 0).max_stat, 1_500);
         // 二次極限(エタ Lv0)
-        assert_eq!(caps(5, 0), AwakeningCaps { max_damage: 3_000_000, max_defense: 12_000, max_stat: 1_500 });
+        assert_eq!(
+            caps(5, 0),
+            AwakeningCaps {
+                max_damage: 3_000_000,
+                max_defense: 12_000,
+                max_stat: 1_500
+            }
+        );
         // エタの成長(Lv1 / Lv80 / Lv100 = MAX)
-        assert_eq!(caps(5, 1), AwakeningCaps { max_damage: 3_160_000, max_defense: 13_100, max_stat: 1_510 });
-        assert_eq!(caps(5, 80), AwakeningCaps { max_damage: 21_500_000, max_defense: 21_500, max_stat: 2_200 });
-        assert_eq!(caps(5, 100), AwakeningCaps { max_damage: 29_500_000, max_defense: 24_000, max_stat: 2_400 });
+        assert_eq!(
+            caps(5, 1),
+            AwakeningCaps {
+                max_damage: 3_160_000,
+                max_defense: 13_100,
+                max_stat: 1_510
+            }
+        );
+        assert_eq!(
+            caps(5, 80),
+            AwakeningCaps {
+                max_damage: 21_500_000,
+                max_defense: 21_500,
+                max_stat: 2_200
+            }
+        );
+        assert_eq!(
+            caps(5, 100),
+            AwakeningCaps {
+                max_damage: 29_500_000,
+                max_defense: 24_000,
+                max_stat: 2_400
+            }
+        );
     }
 }

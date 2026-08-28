@@ -5,7 +5,10 @@
 //! バフは個別にコードで分岐せず「カテゴリ(層)+ 数値 + 重複枠」を持つデータとして持つ
 //! (CLAUDE.md 原則)。型定義は domain 側(`domain::stat_sources`)、実データはここ。
 
-use domain::{BuffDefinition, BuffTarget, BuffValue, DamageCategory, SkillEffect, StatLayer};
+use domain::{
+    BuffDefinition, BuffOrigin, BuffPurpose, BuffTarget, BuffValue, DamageCategory, SkillEffect,
+    StatLayer,
+};
 
 use crate::Source;
 
@@ -22,6 +25,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "illumination_drink",
             name: "イルミネーション祭りのドリンク",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.30),
@@ -34,6 +39,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "snowman_potion",
             name: "ユキダルマン族の特製ポーション",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.30),
@@ -46,6 +53,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "charge_potion",
             name: "充填の秘薬",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.20),
@@ -58,6 +67,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "buff_concentrate",
             name: "バフ濃縮液",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.10),
@@ -70,6 +81,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "guardian_potion",
             name: "守護者のためのポーション",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::Minigame,
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.10),
@@ -82,6 +95,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "isabelle_ratio",
             name: "イザベルの秘法(比率)",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::MultiplierA,
             value: BuffValue::Fixed(1.1),
@@ -96,6 +111,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "isabelle_fixed",
             name: "イザベルの秘法(固定)",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::Fixed,
             value: BuffValue::Fixed(20.0),
@@ -111,6 +128,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "isabelle_rare_percent",
             name: "イザベルの特選秘薬(割合)",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.50),
@@ -123,6 +142,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "isabelle_rare_fixed",
             name: "イザベルの特選秘薬(固定)",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::Fixed,
             value: BuffValue::Fixed(100.0),
@@ -137,6 +158,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "event_buff",
             name: "イベントバフ",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Event,
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Choice(vec![0.10, 0.20, 0.30, 0.50]),
@@ -149,6 +172,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "trust_potion",
             name: "改・信頼の薬",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::Fixed,
             value: BuffValue::UserInput { min: 0.0, max: 33.0 },
@@ -161,6 +186,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "fixed_increase",
             name: "固定増加系(メバルのフライ等)",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
             target: BuffTarget::UserSelected,
             layer: StatLayer::Fixed,
             // wiki に明記の上限が無いため、実用上の安全域として暫定 999(docs/claude/decisions.md 参照)。
@@ -174,18 +201,22 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "club_effect",
             name: "クラブ効果",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Club,
             target: BuffTarget::UserSelected,
             layer: StatLayer::Fixed,
-            value: BuffValue::Fixed(7.0),
+            value: BuffValue::UserInput { min: 1.0, max: 7.0 },
             exclusive_slots: vec![],
             source_url: WIKI_URL,
-            note: "wiki ステータスの表記は +1〜7 だが上限の +7 固定で持つ(装備強化・ランダムOP と同じ                   「上書きが無ければ上限」の方針。ユーザー確定 2026-08-25)。+20 はクラブSエフェクト",
-            default_value: None,
+            note: "クラブレベルに応じて +1〜7。+20 はクラブSエフェクト",
+            default_value: Some(7.0),
             damage_effects: &[],
         },
         BuffDefinition {
             id: "club_s_effect",
             name: "クラブSエフェクト",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::Club,
             target: BuffTarget::UserSelected,
             layer: StatLayer::Fixed,
             value: BuffValue::Fixed(20.0),
@@ -198,6 +229,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "tales_weaver_energy",
             name: "テイルズウィーバーのエネルギー",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::Skill,
             target: BuffTarget::AllStats,
             layer: StatLayer::MultiplierA,
             value: BuffValue::Fixed(1.1),
@@ -207,22 +240,12 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
         },
-        BuffDefinition {
-            id: "unleash",
-            name: "アンリーシュ",
-            target: BuffTarget::AllStats,
-            layer: StatLayer::MultiplierB,
-            value: BuffValue::Fixed(0.20),
-            exclusive_slots: vec![],
-            source_url: WIKI_URL,
-            note: "ON/OFFのみ、+20%固定",
-            default_value: None,
-            damage_effects: &[],
-        },
         // --- ダメージにだけ効くバフ(ステは上げない。wiki ステータスの [X1]〜[X6] / [L])---
         BuffDefinition {
             id: "isabel_damage",
             name: "イザベルの秘法(ダメージ)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -236,6 +259,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "isabel_special_damage",
             name: "イザベルの特選秘薬(ダメージ)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -249,6 +274,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "moonlight_potion",
             name: "月光のポーション",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -262,6 +289,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "silver_sword_stew",
             name: "<シルバーソード>のクリームシチュー",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -275,6 +304,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "festival_food",
             name: "おいしいフェスティバル料理",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Event,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -288,6 +319,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "awakening_elixir",
             name: "覚醒の秘薬",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -301,6 +334,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "strength_ham",
             name: "怪力のハム",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -314,6 +349,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "ancient_ganapoly_mana",
             name: "古代ガナポリーマナの破片",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Minigame,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -327,6 +364,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "attendance_buff",
             name: "スペシャル出席チェックバフ",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Event,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -340,6 +379,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "daily_burning_buff",
             name: "定着支援バフ(デイリーバーニング)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Event,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -353,6 +394,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "soul_link_explore",
             name: "ソウルリンク探検(攻撃力 +5%)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::SoulLink,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -366,6 +409,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "berserker_rune",
             name: "狂戦士のルーン",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Rune,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -379,19 +424,23 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "fever",
             name: "フィーバー",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::BattleState,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
             exclusive_slots: Vec::new(),
             source_url: WIKI_URL,
-            note: "[X3] 上限 +80%",
+            note: "[X3] 上限 +80%。全ステータス +30 は未収録",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageBasicTrigger, percent: 10.0 }],
         },
         BuffDefinition {
             id: "deep_rune_attack",
             name: "深化ルーン(攻撃)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Rune,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -405,6 +454,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "plunder_bread",
             name: "略奪パン",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -418,6 +469,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "boiled_mimic",
             name: "茹でミミック",
+            purposes: &[BuffPurpose::Damage, BuffPurpose::Durability],
+            origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -431,6 +484,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "soul_link_status",
             name: "ソウルリンク(リンクステータス)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::SoulLink,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -444,6 +499,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "ancient_relic_minigame",
             name: "古代レリックの聖域ミニゲームバフ",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Minigame,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
@@ -465,8 +522,18 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn 常用バフは34件() {
-        assert_eq!(buff_catalog().len(), 34);
+    fn 常用バフは33件() {
+        assert_eq!(buff_catalog().len(), 33);
+        assert!(!buff_catalog().iter().any(|d| d.id == "unleash"));
+    }
+
+    #[test]
+    fn 複数の目的に所属できる() {
+        let catalog = buff_catalog();
+        let snowman = catalog.iter().find(|d| d.id == "snowman_potion").unwrap();
+        assert_eq!(snowman.purposes, &[BuffPurpose::Stats, BuffPurpose::Damage]);
+        let mimic = catalog.iter().find(|d| d.id == "boiled_mimic").unwrap();
+        assert_eq!(mimic.purposes, &[BuffPurpose::Damage, BuffPurpose::Durability]);
     }
 
     /// ダメージにだけ効くバフは**ステを上げない**(`RecordOnly`)。
@@ -481,10 +548,18 @@ mod tests {
             .collect();
         assert_eq!(with_damage.len(), 24);
         // ステと与ダメージの両方に効くもの
-        for id in ["guardian_potion", "club_s_effect", "snowman_potion", "tales_weaver_energy"] {
+        for id in [
+            "guardian_potion",
+            "club_s_effect",
+            "snowman_potion",
+            "tales_weaver_energy",
+        ] {
             let d = catalog.iter().find(|d| d.id == id).unwrap();
             assert!(!d.damage_effects.is_empty(), "{id}");
-            assert!(!matches!(d.value, BuffValue::RecordOnly), "{id} はステにも効く");
+            assert!(
+                !matches!(d.value, BuffValue::RecordOnly),
+                "{id} はステにも効く"
+            );
         }
     }
 
@@ -493,6 +568,30 @@ mod tests {
         let catalog = buff_catalog();
         let ids: HashSet<&str> = catalog.iter().map(|d| d.id).collect();
         assert_eq!(ids.len(), catalog.len());
+        assert!(catalog.iter().all(|d| !d.purposes.is_empty()));
+    }
+
+    #[test]
+    fn バフ選択サマリはカテゴリ別上限を適用する() {
+        let catalog = buff_catalog();
+        let buffs = domain::BuffSelection {
+            choices: ["snowman_potion", "festival_food", "silver_sword_stew"]
+                .into_iter()
+                .map(|id| domain::BuffChoice {
+                    buff_id: id.to_string(),
+                    stat: None,
+                    choice_index: None,
+                    value: None,
+                })
+                .collect(),
+        };
+        let summary = domain::summarize_buff_selection(&buffs, &catalog).unwrap();
+        let isabel = summary
+            .iter()
+            .find(|row| row.category == DamageCategory::AttackDamageIsabel)
+            .unwrap();
+        assert!((isabel.raw - 0.60).abs() < 1e-12);
+        assert!((isabel.value - 0.50).abs() < 1e-12);
     }
 
     #[test]
@@ -539,17 +638,15 @@ mod tests {
     }
 
     #[test]
-    fn アンリーシュは倍率bの加算2割() {
-        let catalog = buff_catalog();
-        let def = catalog.iter().find(|d| d.id == "unleash").unwrap();
-        assert!(matches!(def.value, BuffValue::Fixed(v) if (v - 0.20).abs() < 1e-12));
-        assert_eq!(def.layer, StatLayer::MultiplierB);
-    }
-
-    #[test]
     fn 排他枠を持つバフが存在する() {
         let catalog = buff_catalog();
-        let illumination = catalog.iter().find(|d| d.id == "illumination_drink").unwrap();
-        assert_eq!(illumination.exclusive_slots, vec!["percent_slot_1", "percent_slot_2"]);
+        let illumination = catalog
+            .iter()
+            .find(|d| d.id == "illumination_drink")
+            .unwrap();
+        assert_eq!(
+            illumination.exclusive_slots,
+            vec!["percent_slot_1", "percent_slot_2"]
+        );
     }
 }

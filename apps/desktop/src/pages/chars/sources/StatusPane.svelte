@@ -348,9 +348,6 @@
             </td>
             <td class="n final ro">
               <span class="strong" use:bump={() => preview?.stats[k] ?? null}>{preview ? fmtInt(preview.stats[k]) : "—"}</span>
-              {#if trace?.pinned_from !== null && trace?.pinned_from !== undefined}
-                <span class="pin-badge" title={`固定前: ${fmtInt(trace.pinned_from)}`}>固定</span>
-              {/if}
               <!-- 「満」の枠は常に確保する。出たときに行がずれない(§09 規則 4 / §11) -->
               <span
                 class="cap-badge"

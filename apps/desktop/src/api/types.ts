@@ -115,9 +115,16 @@ export type BuffValue =
   /** 記録するだけ(wiki に効果はあるが未配線)。マスタリーの段の状態を表すために選べる */
   | "record_only";
 
+/** 選ぶ人の目的。1つのバフが複数に所属できる。 */
+export type BuffPurpose = "stats" | "damage" | "durability";
+/** 効果を得る場所の手掛かり。 */
+export type BuffOrigin = "item" | "event" | "club" | "skill" | "rune" | "soul_link" | "battle_state" | "minigame";
+
 export interface BuffDefinition {
   id: string;
   name: string;
+  purposes: BuffPurpose[];
+  origin: BuffOrigin;
   target: BuffTarget;
   layer: StatLayer;
   value: BuffValue;
@@ -141,6 +148,12 @@ export interface BuffSelection {
   choices: BuffChoice[];
 }
 
+export interface BuffSet {
+  id: number;
+  name: string;
+  choices: BuffSelection;
+}
+
 export interface StatAdjustment {
   /** このステに +N する(固定値層への加算) */
   add: number;
@@ -156,8 +169,6 @@ export interface StatSources {
   /** モンスターカード(wiki: ステータス「カード装着」)。ステごと 0〜70、固定値層 */
   monster_cards: MonsterCards;
   sacred_relic: SacredRelic;
-  buffs: BuffSelection;
-  adjustments: Adjustments;
   /** 装備の属性強化以外の属性値の供給源 */
   elements: ElementSources;
   /** ON にしているキャラスキル(パッシブ・自己バフ・味方バフ) */
@@ -313,6 +324,8 @@ export interface ActualDelay {
   reduction: number;
   /** 倍率A(コンボボーナス)。2 コンボ以上で 0.5 */
   combo_rate: number;
+  /** 下限 0.3s を掛ける前の中ディレイ(秒) */
+  raw: number;
   /** 中ディレイ(秒)。下限 0.3s 適用後 */
   value: number;
   /** 下限 0.3s で頭打ちになったか */
@@ -362,6 +375,18 @@ export interface StatContribution {
   kind: StatKind;
   layer: StatLayer;
   value: number;
+  /** この要因がそのステの最終能力値を何ポイント動かしたか(実数) */
+  effect: number;
+}
+
+/** ステ攻撃力に実際に使っている依存ステ 1 つぶん(crates/domain/src/attack_power.rs) */
+export interface StatAttackPart {
+  kind: StatKind;
+  /** そのステの最終能力値 */
+  effective: number;
+  coefficient: number;
+  /** 最終能力値 × 係数 */
+  contribution: number;
 }
 
 // 装備補正 9 種(wiki Item ページの列順: 突き/斬り/物防/魔攻/魔防/命中/Cri/回避/敏捷)。
@@ -377,6 +402,15 @@ export interface EquipmentValues {
   evasion: number;
   agility: number;
 }
+
+// crates/domain/src/validation.rs の ValidationLocation。検証エラーが「どこの話か」を運ぶ。
+// エラー帯はこれを使って該当部位の詳細まで飛ぶ。
+export type ValidationLocation = {
+  slot: PartSlot;
+  partId: number;
+  abilityId: string | null;
+  randomOptionId: string | null;
+};
 
 // 装備部位。crates/domain/src/equipment.rs の PartSlot(snake_case)。
 export type PartSlot =
@@ -843,6 +877,7 @@ export interface RegisteredCharacter {
   main_skill_id: string | null;
   /** 共通スキル(wiki: Skill/共通) */
   common_skills: CommonSkills;
+  default_buff_set_id: number | null;
 }
 
 export interface NewCharacter {
@@ -855,6 +890,7 @@ export interface NewCharacter {
   /** 共通スキル(wiki: Skill/共通) */
   common_skills: CommonSkills;
   main_skill_id: string | null;
+  default_buff_set_id: number | null;
 }
 
 export type CategoryKind = "assigned" | "fixed" | "rate";
@@ -876,9 +912,6 @@ export interface CategoryTrace {
   cap: CategoryCap | null;
 }
 
-// pin(能力値の固定)の出所。crates/domain/src/stats.rs の PinSource(snake_case)。
-export type PinSource = "saved" | "temporary";
-
 export interface StatTrace {
   kind: StatKind;
   base: number;
@@ -895,10 +928,8 @@ export interface StatTrace {
   stat_cap: number;
   /** 上限で捨てられた分。0 なら上限に当たっていない */
   capped_loss: number;
-  /** pin(能力値の固定)が適用された場合の上書き前の値。未適用は null */
+  /** pin(能力値の固定。計算タブの一時調整のみ)が適用された場合の上書き前の値。未適用は null */
   pinned_from: number | null;
-  /** pin の出所。未適用は null */
-  pin_source: PinSource | null;
 }
 
 // 7 ステータスすべての最終能力値。crates/domain/src/stats.rs の EffectiveStats。
@@ -914,6 +945,8 @@ export interface AttackPowerBreakdown {
   equipment_enhanced_attack: number;
   /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン) */
   enhance_rate: number;
+  /** 強化倍率で足される分 [装備攻撃力/25 × 倍率] × 25 */
+  enhance_bonus: number;
   /** 攻撃力(A) */
   value: number;
 }
@@ -1039,6 +1072,52 @@ export interface FormulaStep {
   name: string;
   expression: string;
   value: number;
+  /** この段を終えた時点の到達値(式の途中積)。式の外の段は value と同じ */
+  reached: number;
+  /** この段が消費したカテゴリ(wiki §3)。式の外で足す段(攻撃力の内訳など)は空 */
+  categories: DamageCategory[];
+}
+
+// crates/domain/src/damage.rs の DamageContribution。カテゴリ集計 1 行ぶんの供給源
+// (スキル名・マスタリー名・バフ名・アビリティ名など)。「なぜこの数字?」パネルの
+// カテゴリ材料行を掘り下げたときの供給源表に使う
+export interface DamageContribution {
+  source: string;
+  category: DamageCategory;
+  value: number;
+}
+
+// crates/domain/src/common_skill.rs の RateContribution。割合供給源 1 行(トレース表示用)。
+export interface RateContribution {
+  source: string;
+  value: number;
+}
+
+// crates/domain/src/equipment.rs の EquipmentAttackLayer。
+export type EquipmentAttackLayer = "base" | "enhanced";
+
+// crates/domain/src/equipment.rs の EquipmentValueKind。装備攻撃力に効く装備値種別。
+export type EquipmentValueKind = "thrust" | "slash" | "magic_attack" | "magic_defense";
+
+// crates/domain/src/equipment.rs の EquipmentAttackSource。装備攻撃力の内訳 1 行に効いた
+// 供給源 1 件(部位実測値・部位アビリティ・称号・手首補正・エンチャント・シエナのオーラ・
+// テシスコア)。Σamount = part.amount、Σcontribution = part.contribution
+export interface EquipmentAttackSource {
+  source: string;
+  amount: number;
+  contribution: number;
+}
+
+// crates/domain/src/equipment.rs の EquipmentAttackPart。装備攻撃力の内訳 1 行
+// (層 × 装備値種別)。Σcontribution = 装備攻撃力
+export interface EquipmentAttackPart {
+  layer: EquipmentAttackLayer;
+  value: EquipmentValueKind;
+  amount: number;
+  coefficient: number;
+  contribution: number;
+  /** この値に効いた供給源(非 0 のみ) */
+  sources: EquipmentAttackSource[];
 }
 
 export interface DamageTriple {
@@ -1049,9 +1128,19 @@ export interface DamageTriple {
 
 export interface DamageTrace {
   stats: StatTrace[];
+  /** 攻撃力(A)の内訳 */
+  attack: AttackPowerBreakdown;
   /** ステ補正源(ペット/ルーン/クラウン/聖物/バフ/調整値)の寄与内訳 */
   stat_contributions: StatContribution[];
+  /** ステ攻撃力に効いている依存ステごとの内訳(合計 = ステ攻撃力) */
+  stat_attack_parts: StatAttackPart[];
   categories: CategoryTrace[];
+  /** カテゴリ集計に実際に値を足した供給源の一覧(非 0 のみ)。カテゴリ材料行の掘り下げに使う */
+  category_contributions: DamageContribution[];
+  /** 装備攻撃力の内訳(層 × 装備値種別)。Σcontribution = 装備攻撃力 */
+  equipment_attack_parts: EquipmentAttackPart[];
+  /** 装備攻撃力強化倍率の供給源(パワーウェポン/ストロングウェポン)。Σvalue = 強化倍率 */
+  equipment_enhance_sources: RateContribution[];
   steps_min: FormulaStep[];
   steps_max: FormulaStep[];
   steps_critical: FormulaStep[];

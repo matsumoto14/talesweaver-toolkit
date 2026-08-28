@@ -29,7 +29,9 @@ pub const SKILL_USES_SOURCE: Source = Source {
 };
 
 /// 総中ディレイ減少 %(元表の 0/2/…/16/21/26% に 48% を足したもの。26% は上限 70% で頭打ち)。
-const USES_REDUCTIONS: [f64; 11] = [48.0, 50.0, 52.0, 54.0, 56.0, 58.0, 60.0, 62.0, 64.0, 69.0, 70.0];
+const USES_REDUCTIONS: [f64; 11] = [
+    48.0, 50.0, 52.0, 54.0, 56.0, 58.0, 60.0, 62.0, 64.0, 69.0, 70.0,
+];
 /// 基本中ディレイ(秒)。元表の列。
 const USES_BASE_DELAYS: [f64; 5] = [0.8, 1.0, 1.2, 1.4, 1.6];
 /// `[総減少 %][基本中ディレイ]` = 60 秒あたりのスキル回数。
@@ -72,7 +74,10 @@ mod uses_tests {
             assert!(row.windows(2).all(|w| w[0] > w[1]), "{row:?}");
         }
         // 上限 70% の行が最後(実装の ACTUAL_DELAY_REDUCTION_MAX と一致)
-        assert_eq!(*t.reduction_percents.last().unwrap(), domain::ACTUAL_DELAY_REDUCTION_MAX * 100.0);
+        assert_eq!(
+            *t.reduction_percents.last().unwrap(),
+            domain::ACTUAL_DELAY_REDUCTION_MAX * 100.0
+        );
     }
 
     #[test]

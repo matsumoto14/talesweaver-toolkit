@@ -64,6 +64,7 @@
           // ほぼ全員が毎回上書きすることになる(ux-guidelines「初期値は実用値」)
           awakening: { stage: DEFAULT_AWAKENING_STAGE, eternal_level: 0 },
           stat_sources: neutralStatSources(),
+          default_buff_set_id: null,
           equipment: defaultEquipment(),
           common_skills: defaultCommonSkills(),
           main_skill_id: mainSkillId === "" ? null : mainSkillId,

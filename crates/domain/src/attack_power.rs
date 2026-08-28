@@ -13,9 +13,48 @@ pub struct AttackCoefficients {
     pub secondary: (StatKind, f64),
 }
 
-/// ステ由来攻撃力(切捨て前)。
+/// ステ攻撃力に効いている依存ステ 1 つぶん。「攻撃力の計算に実際に使っているステ」だけを持つ
+/// (係数 0 のステ・依存に出てこないステは行にしない)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct StatAttackPart {
+    pub kind: StatKind,
+    /// そのステの最終能力値
+    pub effective: i64,
+    /// スキル依存種別ごとの係数
+    pub coefficient: f64,
+    /// ステ攻撃力への寄与(最終能力値 × 係数)
+    pub contribution: f64,
+}
+
+/// ステ攻撃力の依存ステごとの内訳。同じステが主/副に重なるときは係数を足して 1 行にまとめる。
+pub fn stat_attack_parts(stats: &EffectiveStats, c: &AttackCoefficients) -> Vec<StatAttackPart> {
+    let mut parts: Vec<StatAttackPart> = Vec::with_capacity(2);
+    for (kind, coefficient) in [c.primary, c.secondary] {
+        if coefficient == 0.0 {
+            continue;
+        }
+        match parts.iter_mut().find(|p| p.kind == kind) {
+            Some(part) => {
+                part.coefficient += coefficient;
+                part.contribution = part.effective as f64 * part.coefficient;
+            }
+            None => parts.push(StatAttackPart {
+                kind,
+                effective: stats.get(kind),
+                coefficient,
+                contribution: stats.get(kind) as f64 * coefficient,
+            }),
+        }
+    }
+    parts
+}
+
+/// ステ由来攻撃力(切捨て前)。内訳(`stat_attack_parts`)の合計と一致させるため、同じ経路で作る。
 pub fn stat_attack_power(stats: &EffectiveStats, c: &AttackCoefficients) -> f64 {
-    stats.get(c.primary.0) as f64 * c.primary.1 + stats.get(c.secondary.0) as f64 * c.secondary.1
+    stat_attack_parts(stats, c)
+        .iter()
+        .map(|p| p.contribution)
+        .sum()
 }
 
 /// 攻撃力(wiki: カテゴリA)。
@@ -37,6 +76,8 @@ pub struct AttackPowerBreakdown {
     pub equipment_enhanced_attack: f64,
     /// 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)
     pub enhance_rate: f64,
+    /// 強化倍率で足される分 `[装備攻撃力/25 × 倍率] × 25`。A − [ステ + 装備] と一致する
+    pub enhance_bonus: i64,
     /// 攻撃力(A)
     pub value: i64,
 }
@@ -61,6 +102,7 @@ pub fn attack_power_breakdown(
         equipment_base_attack,
         equipment_enhanced_attack,
         enhance_rate,
+        enhance_bonus: floor_int(equipment_attack / 25.0 * enhance_rate) * 25,
         value: attack_power(stat_attack, equipment_attack, enhance_rate),
     }
 }
@@ -78,10 +120,37 @@ mod tests {
 
     #[test]
     fn ステ由来攻撃力は係数の線形和() {
-        let stats = EffectiveStats { stab: 100, hack: 200, ..Default::default() };
-        let c = AttackCoefficients { primary: (StatKind::Stab, 2.1), secondary: (StatKind::Hack, 1.08) };
+        let stats = EffectiveStats {
+            stab: 100,
+            hack: 200,
+            ..Default::default()
+        };
+        let c = AttackCoefficients {
+            primary: (StatKind::Stab, 2.1),
+            secondary: (StatKind::Hack, 1.08),
+        };
         // 100 * 2.1 + 200 * 1.08 = 210 + 216 = 426
         assert!((stat_attack_power(&stats, &c) - 426.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn 依存ステの寄与合計はステ攻撃力と一致する() {
+        let stats = EffectiveStats {
+            int: 1200,
+            hack: 800,
+            ..Default::default()
+        };
+        let c = AttackCoefficients {
+            primary: (StatKind::Int, 2.1),
+            secondary: (StatKind::Hack, 1.08),
+        };
+        let parts = stat_attack_parts(&stats, &c);
+        // 依存に出てくる 2 ステだけが行になる(全 7 ステは並べない)
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].kind, StatKind::Int);
+        assert_eq!(parts[1].kind, StatKind::Hack);
+        let sum: f64 = parts.iter().map(|p| p.contribution).sum();
+        assert!((sum - stat_attack_power(&stats, &c)).abs() < 1e-9);
     }
 
     #[test]

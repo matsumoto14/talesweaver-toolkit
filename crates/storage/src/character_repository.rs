@@ -33,6 +33,8 @@ pub struct RegisteredCharacter {
     /// 主軸スキル(gamedata の `Skill::id`)。攻撃力(A)の依存種別を決める。
     /// スキル未収録のキャラがあるので未選択(`None`)を許す
     pub main_skill_id: Option<String>,
+    /// このキャラで計算時に最初に選ぶバフセット。
+    pub default_buff_set_id: Option<i64>,
 }
 
 /// 登録リクエスト。
@@ -48,6 +50,8 @@ pub struct NewCharacter {
     #[serde(default)]
     pub common_skills: CommonSkills,
     pub main_skill_id: Option<String>,
+    #[serde(default)]
+    pub default_buff_set_id: Option<i64>,
 }
 
 /// v1 相当(`stat_sources`/`equipment` 列を含まない、main ブランチ時代の実スキーマ)。
@@ -76,9 +80,115 @@ CREATE TABLE IF NOT EXISTS characters (
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
 /// v6 で `common_skills` 列が加わった。パワーウェポン / ストロングウェポンは
 /// v5 まで `equipment` 列の中にあり、移行で `common_skills` へ移す。
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_VERSION: i64 = 10;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id";
+
+/// v9: キャラ JSON に埋め込まれていた常用バフを独立したセットへ移す。
+/// 1キャラずつ作り、同じ内容でも統合しない。全処理を単一 transaction にする。
+fn migrate_buff_sets(conn: &Connection) -> Result<()> {
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS buff_sets (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            choices TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );",
+    )?;
+    let columns: HashSet<String> = {
+        let mut stmt = tx.prepare("PRAGMA table_info(characters)")?;
+        let values = stmt
+            .query_map([], |row| row.get(1))?
+            .collect::<rusqlite::Result<_>>()?;
+        values
+    };
+    if !columns.contains("default_buff_set_id") {
+        tx.execute_batch(
+            "ALTER TABLE characters ADD COLUMN default_buff_set_id INTEGER REFERENCES buff_sets(id) ON DELETE SET NULL;"
+        )?;
+    }
+    let rows: Vec<(i64, String, String, Option<i64>)> = {
+        let mut stmt =
+            tx.prepare("SELECT id, name, stat_sources, default_buff_set_id FROM characters")?;
+        let values = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        values
+    };
+    for (id, name, json, default_id) in rows {
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        let choices = value.get("buffs").and_then(|v| v.get("choices")).cloned();
+        let Some(map) = value.as_object_mut() else {
+            continue;
+        };
+        let had_buffs = map.remove("buffs").is_some();
+        if default_id.is_none()
+            && choices
+                .as_ref()
+                .and_then(|v| v.as_array())
+                .is_some_and(|v| !v.is_empty())
+        {
+            let selection = serde_json::json!({ "choices": choices.unwrap() });
+            tx.execute(
+                "INSERT INTO buff_sets (name, choices) VALUES (?1, ?2)",
+                params![
+                    format!("{}の常用バフ", name),
+                    serde_json::to_string(&selection)?
+                ],
+            )?;
+            tx.execute(
+                "UPDATE characters SET default_buff_set_id = ?1 WHERE id = ?2",
+                params![tx.last_insert_rowid(), id],
+            )?;
+        }
+        if had_buffs {
+            tx.execute(
+                "UPDATE characters SET stat_sources = ?1 WHERE id = ?2",
+                params![serde_json::to_string(&value)?, id],
+            )?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// v10: バフではなく共通スキルで設定するアンリーシュを独立済みのセットから除き、
+/// 固定 +7 から 1〜7 入力へ変わったクラブ効果には従来値の 7 を補う。
+fn migrate_unleash_from_buff_sets(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, choices FROM buff_sets")?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (id, json) in rows {
+        let mut selection: serde_json::Value = serde_json::from_str(&json)?;
+        let Some(choices) = selection.get_mut("choices").and_then(|v| v.as_array_mut()) else {
+            continue;
+        };
+        let before = choices.len();
+        choices.retain(|choice| choice.get("buff_id").and_then(|v| v.as_str()) != Some("unleash"));
+        let mut changed = choices.len() != before;
+        for choice in choices.iter_mut() {
+            if choice.get("buff_id").and_then(|v| v.as_str()) == Some("club_effect")
+                && choice.get("value").is_none_or(|value| value.is_null())
+            {
+                choice["value"] = serde_json::json!(7.0);
+                changed = true;
+            }
+        }
+        if changed {
+            conn.execute(
+                "UPDATE buff_sets SET choices = ?1 WHERE id = ?2",
+                params![serde_json::to_string(&selection)?, id],
+            )?;
+        }
+    }
+    Ok(())
+}
 
 /// `stat_sources`/`equipment` 列(JSON テキスト)を domain の型として読み出すための橋渡し。
 struct StatSourcesColumn(StatSources);
@@ -418,6 +528,8 @@ fn migrate_equipment_registration_metadata(conn: &Connection) -> Result<()> {
 const REMOVED_BUFF_IDS: &[&str] = &[
     // マスタリー【シルバースカル優勝者】→ `masteries` の boris_m2_3 へ移動(2026-08-27)
     "boris_silver_skull",
+    // 共通スキル「アンリーシュ」で設定するため、常用バフから除外(2026-08-29)
+    "unleash",
 ];
 
 /// 中ディレイ減少スキル(いまはキャラスキル)のカタログから消えた id。
@@ -607,7 +719,7 @@ fn migrate_weapon_skills_to_common(conn: &Connection) -> Result<()> {
 }
 
 pub struct CharacterRepository {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl CharacterRepository {
@@ -666,6 +778,9 @@ impl CharacterRepository {
         migrate_weapon_skills_to_common(&conn)?;
         migrate_removed_buffs(&conn)?;
         migrate_character_skills(&conn)?;
+        // v9 は旧バフに混在していたキャラスキルを分離した後の choices を抽出する。
+        migrate_buff_sets(&conn)?;
+        migrate_unleash_from_buff_sets(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -695,8 +810,8 @@ impl CharacterRepository {
         let equipment_json = serde_json::to_string(&new.equipment)?;
         let common_skills_json = serde_json::to_string(&new.common_skills)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 new.name,
                 new.game_character_id,
@@ -713,6 +828,7 @@ impl CharacterRepository {
                 equipment_json,
                 common_skills_json,
                 new.main_skill_id,
+                new.default_buff_set_id,
             ],
         )?;
         self.get(self.conn.last_insert_rowid())
@@ -748,8 +864,8 @@ impl CharacterRepository {
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
                 awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
-                common_skills = ?14, main_skill_id = ?15
-             WHERE id = ?16",
+                common_skills = ?14, main_skill_id = ?15, default_buff_set_id = ?16
+             WHERE id = ?17",
             params![
                 update.name,
                 update.game_character_id,
@@ -766,6 +882,7 @@ impl CharacterRepository {
                 equipment_json,
                 common_skills_json,
                 update.main_skill_id,
+                update.default_buff_set_id,
                 id,
             ],
         )?;
@@ -810,7 +927,7 @@ impl CharacterRepository {
 /// 登録リクエストの検証(値域・バフ整合性・装備カタログ整合性)。保存前プレビュー(preview_damage 等)からも使う。
 pub fn validate(
     new: &NewCharacter,
-    catalog: &BuffCatalog,
+    _catalog: &BuffCatalog,
     equipment_catalog: &[EquipmentItem],
     equipment_abilities: &[EquipmentAbilityDef],
     random_options: &[RandomOptionDef],
@@ -822,43 +939,39 @@ pub fn validate(
     }
     new.base_stats
         .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
     if new.awakening.stage > Awakening::MAX_STAGE {
-        return Err(StorageError::InvalidValue(format!(
-            "覚醒段階は 0〜{} です",
-            Awakening::MAX_STAGE
-        )));
+        return Err(StorageError::InvalidValue(
+            format!("覚醒段階は 0〜{} です", Awakening::MAX_STAGE).into(),
+        ));
     }
     if new.awakening.eternal_level > Awakening::MAX_ETERNAL_LEVEL {
-        return Err(StorageError::InvalidValue(format!(
-            "エタの意志 Lv は 0〜{} です",
-            Awakening::MAX_ETERNAL_LEVEL
-        )));
+        return Err(StorageError::InvalidValue(
+            format!("エタの意志 Lv は 0〜{} です", Awakening::MAX_ETERNAL_LEVEL).into(),
+        ));
     }
     new.stat_sources
         .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
     new.stat_sources
         .character_skills
         .validate(character_skills, &new.game_character_id)
-        .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
-    domain::stat_sources::build_modifiers(&new.stat_sources, catalog)
-        .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
     new.equipment
         .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
     new.common_skills
         .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string()))?;
+        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
     new.equipment
         .validate_against_catalog(equipment_catalog, equipment_abilities, random_options)
         .map_err(StorageError::InvalidValue)?;
     // 称号は装備部位ではないので部位ループの外で見る(1 枠・カタログ参照のみ)
     if let Some(id) = &new.equipment.title {
         if !titles.iter().any(|t| t.id == id.as_str()) {
-            return Err(StorageError::InvalidValue(format!(
-                "未知の称号 '{id}' です"
-            )));
+            return Err(StorageError::InvalidValue(
+                format!("未知の称号 '{id}' です").into(),
+            ));
         }
     }
     Ok(())
@@ -886,17 +999,167 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         equipment: row.get::<_, EquipmentColumn>("equipment")?.0,
         common_skills: row.get::<_, CommonSkillsColumn>("common_skills")?.0,
         main_skill_id: row.get("main_skill_id")?,
+        default_buff_set_id: row.get("default_buff_set_id")?,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use domain::{
-        BuffChoice, BuffDefinition, BuffSelection, BuffTarget, BuffValue, Crown, PetSkillTier,
-        PetSkills, RuneLevels, SacredRelic, StatLayer, StatSources,
+        BuffChoice, BuffDefinition, BuffOrigin, BuffPurpose, BuffSelection, BuffTarget, BuffValue, Crown,
+        PetSkillTier, PetSkills, RuneLevels, SacredRelic, StatLayer, StatSources,
     };
 
     use super::*;
+
+    fn v8_buff_migration_connection() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE characters ADD COLUMN stat_sources TEXT NOT NULL DEFAULT '{}';
+             ALTER TABLE characters ADD COLUMN default_dummy TEXT;
+             PRAGMA user_version = 8;",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn v9移行はキャラごとにバフセットを作り再実行しても増えない() {
+        let conn = v8_buff_migration_connection();
+        let sources = serde_json::json!({
+            "buffs": { "choices": [{"buff_id":"trust_potion","stat":null,"choice_index":null,"value":10.0}] }
+        }).to_string();
+        for (id, name) in [(1, "A"), (2, "B")] {
+            conn.execute(
+                "INSERT INTO characters (id,name,game_character_id,stab,hack,int,def,mr,dex,agi,awakening_stage,eternal_level,stat_sources)
+                 VALUES (?1,?2,'boris',1,1,1,1,1,1,1,0,0,?3)",
+                params![id, name, sources],
+            ).unwrap();
+        }
+        migrate_buff_sets(&conn).unwrap();
+        migrate_buff_sets(&conn).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM buff_sets", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            count, 2,
+            "同じ choices でもキャラごとに1件、再openでは増えない"
+        );
+        let defaults: Vec<Option<i64>> = {
+            let mut stmt = conn
+                .prepare("SELECT default_buff_set_id FROM characters ORDER BY id")
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap()
+        };
+        assert!(defaults.iter().all(Option::is_some));
+        assert_ne!(defaults[0], defaults[1]);
+        let json: String = conn
+            .query_row(
+                "SELECT stat_sources FROM characters WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(serde_json::from_str::<serde_json::Value>(&json)
+            .unwrap()
+            .get("buffs")
+            .is_none());
+    }
+
+    #[test]
+    fn v10移行はアンリーシュを除きクラブ効果へ従来値を補う() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE buff_sets (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                choices TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );",
+        ).unwrap();
+        let choices = serde_json::json!({
+            "choices": [
+                {"buff_id":"unleash","stat":null,"choice_index":null,"value":null},
+                {"buff_id":"trust_potion","stat":null,"choice_index":null,"value":10.0},
+                {"buff_id":"club_effect","stat":"stab","choice_index":null,"value":null}
+            ]
+        });
+        conn.execute(
+            "INSERT INTO buff_sets (name, choices) VALUES ('移行前', ?1)",
+            [choices.to_string()],
+        ).unwrap();
+
+        migrate_unleash_from_buff_sets(&conn).unwrap();
+        migrate_unleash_from_buff_sets(&conn).unwrap();
+
+        let json: String = conn.query_row(
+            "SELECT choices FROM buff_sets WHERE name = '移行前'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        let migrated: BuffSelection = serde_json::from_str(&json).unwrap();
+        assert_eq!(migrated.choices.len(), 2);
+        assert_eq!(migrated.choices[0].buff_id, "trust_potion");
+        assert_eq!(migrated.choices[1].buff_id, "club_effect");
+        assert_eq!(migrated.choices[1].value, Some(7.0));
+    }
+
+    #[test]
+    fn v9移行失敗はテーブル追加と抽出をまとめてrollbackする() {
+        let conn = v8_buff_migration_connection();
+        conn.execute(
+            "INSERT INTO characters (id,name,game_character_id,stab,hack,int,def,mr,dex,agi,awakening_stage,eternal_level,stat_sources)
+             VALUES (1,'broken','boris',1,1,1,1,1,1,1,0,0,'{')",
+            [],
+        ).unwrap();
+        assert!(migrate_buff_sets(&conn).is_err());
+        let has_column: bool = {
+            let mut stmt = conn.prepare("PRAGMA table_info(characters)").unwrap();
+            stmt.query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap()
+                .iter()
+                .any(|name| name == "default_buff_set_id")
+        };
+        assert!(!has_column);
+        let has_table: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='buff_sets')", [], |row| row.get(0)
+        ).unwrap();
+        assert!(!has_table);
+    }
+
+    #[test]
+    fn バフセットcrudと削除時の既定解除が動く() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let choices = BuffSelection {
+            choices: vec![buff_choice("illumination_drink")],
+        };
+        let created = repo
+            .create_buff_set("普段", &choices, &test_catalog())
+            .unwrap();
+        let renamed = repo
+            .update_buff_set(created.id, "ボス", &choices, &test_catalog())
+            .unwrap();
+        assert_eq!(renamed.name, "ボス");
+        let copy = repo.duplicate_buff_set(created.id).unwrap();
+        assert_eq!(copy.choices, choices);
+        let mut character = new_character("x");
+        character.default_buff_set_id = Some(created.id);
+        let registered = repo
+            .create(&character, &test_catalog(), &[], &[], &[], &[], &[])
+            .unwrap();
+        repo.delete_buff_set(created.id).unwrap();
+        assert_eq!(repo.get(registered.id).unwrap().default_buff_set_id, None);
+        assert!(repo
+            .create_buff_set("  ", &BuffSelection::default(), &test_catalog())
+            .is_err());
+    }
 
     fn new_character(name: &str) -> NewCharacter {
         NewCharacter {
@@ -919,6 +1182,7 @@ mod tests {
             equipment: Equipment::default(),
             common_skills: CommonSkills::default(),
             main_skill_id: None,
+            default_buff_set_id: None,
         }
     }
 
@@ -930,6 +1194,8 @@ mod tests {
             BuffDefinition {
                 id: "trust_potion",
                 name: "改・信頼の薬",
+                purposes: &[BuffPurpose::Stats],
+                origin: BuffOrigin::Item,
                 target: BuffTarget::AllStats,
                 layer: StatLayer::Fixed,
                 value: BuffValue::UserInput {
@@ -945,6 +1211,8 @@ mod tests {
             BuffDefinition {
                 id: "illumination_drink",
                 name: "イルミネーション祭りのドリンク",
+                purposes: &[BuffPurpose::Stats],
+                origin: BuffOrigin::Item,
                 target: BuffTarget::AllStats,
                 layer: StatLayer::PercentOfBase,
                 value: BuffValue::Fixed(0.30),
@@ -957,6 +1225,8 @@ mod tests {
             BuffDefinition {
                 id: "charge_potion",
                 name: "充填の秘薬",
+                purposes: &[BuffPurpose::Stats],
+                origin: BuffOrigin::Item,
                 target: BuffTarget::AllStats,
                 layer: StatLayer::PercentOfBase,
                 value: BuffValue::Fixed(0.20),
@@ -1352,14 +1622,6 @@ mod tests {
                 int: 40,
                 ..Default::default()
             },
-            buffs: BuffSelection {
-                choices: vec![BuffChoice {
-                    buff_id: "trust_potion".to_string(),
-                    stat: None,
-                    choice_index: None,
-                    value: Some(33.0),
-                }],
-            },
             ..Default::default()
         };
         let created = repo
@@ -1745,14 +2007,26 @@ mod tests {
         migrate_removed_buffs(&repo.conn).unwrap();
         migrate_character_skills(&repo.conn).unwrap();
 
-        let ids: Vec<String> = repo
-            .get(created.id)
-            .unwrap()
-            .stat_sources
-            .buffs
-            .choices
-            .iter()
-            .map(|c| c.buff_id.clone())
+        let migrated_json: String = repo
+            .conn
+            .query_row(
+                "SELECT stat_sources FROM characters WHERE id = ?1",
+                [created.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let migrated_value: serde_json::Value = serde_json::from_str(&migrated_json).unwrap();
+        let ids: Vec<String> = migrated_value
+            .get("buffs")
+            .and_then(|v| v.get("choices"))
+            .and_then(|v| v.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|v| {
+                v.get("buff_id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+            })
             .collect();
         // 消えた id は落ち、キャラスキルだった siberin_charm はバフから抜けている
         assert!(ids.is_empty(), "{ids:?}");
@@ -2163,15 +2437,14 @@ mod tests {
     #[test]
     fn createは排他枠が重複するバフ選択を拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
-        let mut c = new_character("x");
-        c.stat_sources.buffs = BuffSelection {
+        let choices = BuffSelection {
             choices: vec![
                 buff_choice("illumination_drink"),
                 buff_choice("charge_potion"),
             ],
         };
         assert!(matches!(
-            repo.create(&c, &test_catalog(), &[], &[], &[], &[], &[]),
+            repo.create_buff_set("x", &choices, &test_catalog()),
             Err(StorageError::InvalidValue(_))
         ));
     }
@@ -2191,25 +2464,80 @@ mod tests {
             )
             .unwrap();
 
-        let mut invalid = new_character("メイン");
-        invalid.stat_sources.buffs = BuffSelection {
+        let invalid = BuffSelection {
             choices: vec![
                 buff_choice("illumination_drink"),
                 buff_choice("charge_potion"),
             ],
         };
         assert!(matches!(
-            repo.update(
-                created.id,
-                &invalid,
-                &test_catalog(),
-                &[],
-                &[],
-                &[],
-                &[],
-                &[]
-            ),
+            repo.update_buff_set(created.id, "invalid", &invalid, &test_catalog()),
             Err(StorageError::InvalidValue(_))
         ));
+    }
+
+    /// エラー帯から該当部位へ飛べるように、装備の検証エラーは「どこの話か」を持つ。
+    #[test]
+    fn 装備アビリティ本体値の孤児は部位とアビリティidを指す() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
+        c.equipment.parts.weapon.base = domain::EquipmentValues {
+            thrust: 100,
+            slash: 100,
+            ..Default::default()
+        };
+        // abilities には無いのに本体値だけ残っている(検証を足す前に保存された旧データ)。
+        c.equipment.parts.weapon.ability_values = vec![domain::EquipmentAbilityAdditional {
+            ability_id: "test-ability".to_string(),
+            kind: domain::EquipmentAbilityAdditionalKind::Thrust,
+            value: 1,
+        }];
+        let part_id = c.equipment.parts.weapon.registered[0].id;
+        let Err(StorageError::InvalidValue(error)) = repo.create(
+            &c,
+            &[],
+            &[test_equipment_item()],
+            &[test_equipment_ability()],
+            &[],
+            &[],
+            &[],
+        ) else {
+            panic!("孤児の本体値は拒否されるはず");
+        };
+        assert_eq!(
+            error.location,
+            Some(domain::ValidationLocation {
+                slot: domain::PartSlot::Weapon,
+                part_id,
+                ability_id: Some("test-ability".to_string()),
+                random_option_id: None,
+            })
+        );
+    }
+
+    #[test]
+    fn ランダムオプションの検証エラーは部位とオプションidを指す() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("x");
+        c.equipment.parts.shield.random_options = vec![domain::RandomOptionSlot {
+            option_id: "nope".to_string(),
+            rank: domain::RandomOptionRank::Rare,
+            value: None,
+        }];
+        let part_id = c.equipment.parts.shield.registered[0].id;
+        let Err(StorageError::InvalidValue(error)) = repo.create(&c, &[], &[], &[], &[], &[], &[])
+        else {
+            panic!("未知のランダムオプションは拒否されるはず");
+        };
+        assert_eq!(
+            error.location,
+            Some(domain::ValidationLocation {
+                slot: domain::PartSlot::Shield,
+                part_id,
+                ability_id: None,
+                random_option_id: Some("nope".to_string()),
+            })
+        );
     }
 }

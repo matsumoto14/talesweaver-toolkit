@@ -49,7 +49,6 @@
       lines.push(`覚醒 ${character.awakening.stage} / エタ Lv${character.awakening.eternal_level}`);
       if (character.main_skill_id) lines.push(`主軸スキル: ${character.main_skill_id}`);
     }
-    if (app.calcSkillId) lines.push(`計算中のスキル: ${app.calcSkillId}`);
     if (app.calcTargetId) lines.push(`計算中の対象: ${app.calcTargetId}`);
     return lines.join("\n");
   });

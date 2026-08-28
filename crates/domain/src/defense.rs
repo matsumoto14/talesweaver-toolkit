@@ -128,13 +128,14 @@ pub struct AccuracyCorrection {
 impl AccuracyCorrection {
     /// 依存ボーナス(切り捨て前)。
     pub fn bonus_value(&self, stats: &EffectiveStats) -> f64 {
-        self.bonus.map_or(0.0, |(kind, rate)| stats.get(kind) as f64 * rate)
+        self.bonus
+            .map_or(0.0, |(kind, rate)| stats.get(kind) as f64 * rate)
     }
 
     /// 依存ペナルティ(切り捨て前)。
     pub fn penalty_value(&self, stats: &EffectiveStats) -> f64 {
-        let sum = stats.get(self.penalty_primary)
-            + self.penalty_secondary.map_or(0, |k| stats.get(k));
+        let sum =
+            stats.get(self.penalty_primary) + self.penalty_secondary.map_or(0, |k| stats.get(k));
         sum as f64 / self.penalty_divisor
     }
 }
@@ -209,7 +210,12 @@ pub fn defense_profile(
         )),
         combo_evasion,
         evasion_point: EvasionPoints {
-            physical: evasion_point(stats, equipment, physical_type_bonus, random_options.evasion_point),
+            physical: evasion_point(
+                stats,
+                equipment,
+                physical_type_bonus,
+                random_options.evasion_point,
+            ),
             magic: evasion_point(
                 stats,
                 equipment,
@@ -236,24 +242,39 @@ mod tests {
     use super::*;
 
     fn stats(def: i64, mr: i64, agi: i64) -> EffectiveStats {
-        EffectiveStats { def, mr, agi, ..Default::default() }
+        EffectiveStats {
+            def,
+            mr,
+            agi,
+            ..Default::default()
+        }
     }
 
     /// 上限に当たらない値(上限の挙動は専用テストで見る)
     fn no_caps() -> AwakeningCaps {
-        AwakeningCaps { max_damage: i64::MAX, max_defense: i64::MAX, max_stat: i64::MAX }
+        AwakeningCaps {
+            max_damage: i64::MAX,
+            max_defense: i64::MAX,
+            max_stat: i64::MAX,
+        }
     }
 
     #[test]
     fn 防御力はステ3倍と装備防御6倍() {
-        let p = defense_profile(&stats(200, 150, 0), &EquipmentValues {
-            physical_defense: 60,
-            magic_defense: 40,
-            ..Default::default()
-        }, no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
+        let p = defense_profile(
+            &stats(200, 150, 0),
+            &EquipmentValues {
+                physical_defense: 60,
+                magic_defense: 40,
+                ..Default::default()
+            },
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
         assert_eq!(p.physical_defense, 960); // 200*3 + 60*6
         assert_eq!(p.magic_defense, 690); // 150*3 + 40*6
-        // (200+150)*1.5 + (60 + 40)*3 = 525 + 300 = 825
+                                          // (200+150)*1.5 + (60 + 40)*3 = 525 + 300 = 825
         assert_eq!(p.composite_defense, 825);
         assert_eq!(p.equipment_physical_defense, 60);
         assert_eq!(p.equipment_magic_defense, 40);
@@ -261,7 +282,13 @@ mod tests {
 
     #[test]
     fn カット率は1マイナスaを80足したaで割った値() {
-        let p = defense_profile(&stats(200, 150, 0), &EquipmentValues::default(), no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
+        let p = defense_profile(
+            &stats(200, 150, 0),
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
         // a = 3 + [(200-1)/10] = 3 + 19 = 22 → 1 − 22/102
         assert!((p.physical_cut_rate - (1.0 - 22.0 / 102.0)).abs() < 1e-9);
         // a = 3 + [(150-1)/10] = 3 + 14 = 17 → 1 − 17/97
@@ -272,11 +299,17 @@ mod tests {
 
     #[test]
     fn カット率の装備防御は生の値で足す() {
-        let p = defense_profile(&stats(200, 150, 0), &EquipmentValues {
-            physical_defense: 100,
-            magic_defense: 50,
-            ..Default::default()
-        }, no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
+        let p = defense_profile(
+            &stats(200, 150, 0),
+            &EquipmentValues {
+                physical_defense: 100,
+                magic_defense: 50,
+                ..Default::default()
+            },
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
         // a = 3 + [(200+100-1)/10] = 3 + 29 = 32
         assert!((p.physical_cut_rate - (1.0 - 32.0 / 112.0)).abs() < 1e-9);
         // a = 3 + [(150+50-1)/10] = 3 + 19 = 22
@@ -289,18 +322,54 @@ mod tests {
     fn 特殊回避は下限20上限63に収まる() {
         // MR/AGI が 0 なら 10% → 下限 20%
         let zero = EquipmentValues::default();
-        assert!((defense_profile(&stats(0, 0, 0), &zero, no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL).combo_evasion - 0.20).abs() < 1e-9);
+        assert!(
+            (defense_profile(
+                &stats(0, 0, 0),
+                &zero,
+                no_caps(),
+                &RandomOptionTotals::default(),
+                DefenseRates::NEUTRAL
+            )
+            .combo_evasion
+                - 0.20)
+                .abs()
+                < 1e-9
+        );
         // 10 + 150/15 + 200/7.5 = 10 + 10 + 26.666.. = 46.666..%
-        let p = defense_profile(&stats(0, 150, 200), &zero, no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
+        let p = defense_profile(
+            &stats(0, 150, 200),
+            &zero,
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
         assert!((p.combo_evasion - 0.4666666666666667).abs() < 1e-9);
         // 上限 63%
-        assert!((defense_profile(&stats(0, 310, 310), &zero, no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL).combo_evasion - 0.63).abs() < 1e-9);
+        assert!(
+            (defense_profile(
+                &stats(0, 310, 310),
+                &zero,
+                no_caps(),
+                &RandomOptionTotals::default(),
+                DefenseRates::NEUTRAL
+            )
+            .combo_evasion
+                - 0.63)
+                .abs()
+                < 1e-9
+        );
     }
 
     #[test]
     fn 回避Pは15足すAGI1_2倍足す攻撃タイプ別増加() {
         // DEF200 / MR150 / AGI100、STAB+HACK は 0、装備なし
-        let p = defense_profile(&stats(200, 150, 100), &EquipmentValues::default(), no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
+        let p = defense_profile(
+            &stats(200, 150, 100),
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
         // 物理: 15 + 120 + (400 + 0)/7 = 135 + 57.142.. = 192.14.. → 192
         assert_eq!(p.evasion_point.physical, 192);
         // 魔法: 15 + 120 + 300/7 = 135 + 42.857.. → 177
@@ -311,11 +380,17 @@ mod tests {
 
     #[test]
     fn 回避Pは装備回避率を1_2倍で装備敏捷度を7分の1で足す() {
-        let p = defense_profile(&stats(200, 150, 100), &EquipmentValues {
-            evasion: 50,
-            agility: 70,
-            ..Default::default()
-        }, no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
+        let p = defense_profile(
+            &stats(200, 150, 100),
+            &EquipmentValues {
+                evasion: 50,
+                agility: 70,
+                ..Default::default()
+            },
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
         // 複合: 15 + (100+50)*1.2 + 70/7 + 350/7 = 15 + 180 + 10 + 50 = 255
         assert_eq!(p.evasion_point.composite, 255);
         assert_eq!(p.equipment_evasion, 50);
@@ -325,18 +400,52 @@ mod tests {
     #[test]
     fn 回避Pにランダムオプションの回避率増加が足される() {
         let eq = EquipmentValues::default();
-        let totals = RandomOptionTotals { evasion_point: 15, ..Default::default() };
-        let base = defense_profile(&stats(200, 150, 100), &eq, no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
-        let with_ro = defense_profile(&stats(200, 150, 100), &eq, no_caps(), &totals, DefenseRates::NEUTRAL);
-        assert_eq!(with_ro.evasion_point.physical, base.evasion_point.physical + 15);
+        let totals = RandomOptionTotals {
+            evasion_point: 15,
+            ..Default::default()
+        };
+        let base = defense_profile(
+            &stats(200, 150, 100),
+            &eq,
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let with_ro = defense_profile(
+            &stats(200, 150, 100),
+            &eq,
+            no_caps(),
+            &totals,
+            DefenseRates::NEUTRAL,
+        );
+        assert_eq!(
+            with_ro.evasion_point.physical,
+            base.evasion_point.physical + 15
+        );
         assert_eq!(with_ro.evasion_point.magic, base.evasion_point.magic + 15);
-        assert_eq!(with_ro.evasion_point.composite, base.evasion_point.composite + 15);
+        assert_eq!(
+            with_ro.evasion_point.composite,
+            base.evasion_point.composite + 15
+        );
     }
 
     #[test]
     fn 物理の回避P増加は突き足す斬りを100で割って切捨ててから足す() {
-        let s = EffectiveStats { def: 0, mr: 0, agi: 0, stab: 250, hack: 260, ..Default::default() };
-        let p = defense_profile(&s, &EquipmentValues::default(), no_caps(), &RandomOptionTotals::default(), DefenseRates::NEUTRAL);
+        let s = EffectiveStats {
+            def: 0,
+            mr: 0,
+            agi: 0,
+            stab: 250,
+            hack: 260,
+            ..Default::default()
+        };
+        let p = defense_profile(
+            &s,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
         // [(250+260)/100] = 5 → 15 + 0 + 5/7 = 15.714.. → 15
         assert_eq!(p.evasion_point.physical, 15);
     }

@@ -30,11 +30,31 @@ pub const ELEMENT_SOURCE_CATALOG_SOURCE: Source = Source {
 };
 
 const ELEMENT_SOURCES: &[ElementSourceDef] = &[
-    ElementSourceDef { id: ElementSourceId::Pet, name: "ペット", value: 10 },
-    ElementSourceDef { id: ElementSourceId::MonsterCard, name: "モンスターカード", value: 30 },
-    ElementSourceDef { id: ElementSourceId::Rune, name: "ルーンスキル", value: 20 },
-    ElementSourceDef { id: ElementSourceId::HelmAbility, name: "頭アビリティ", value: 20 },
-    ElementSourceDef { id: ElementSourceId::CuffsAbility, name: "カフスアビリティ", value: 30 },
+    ElementSourceDef {
+        id: ElementSourceId::Pet,
+        name: "ペット",
+        value: 10,
+    },
+    ElementSourceDef {
+        id: ElementSourceId::MonsterCard,
+        name: "モンスターカード",
+        value: 30,
+    },
+    ElementSourceDef {
+        id: ElementSourceId::Rune,
+        name: "ルーンスキル",
+        value: 20,
+    },
+    ElementSourceDef {
+        id: ElementSourceId::HelmAbility,
+        name: "頭アビリティ",
+        value: 20,
+    },
+    ElementSourceDef {
+        id: ElementSourceId::CuffsAbility,
+        name: "カフスアビリティ",
+        value: 30,
+    },
 ];
 
 /// 属性値の供給源カタログ(装備の属性強化以外)。
@@ -67,16 +87,18 @@ pub fn element_base(character_id: &str) -> ElementValues {
     ELEMENT_BASES
         .iter()
         .find(|(id, ..)| *id == character_id)
-        .map(|&(_, fire, water, wind, earth, thunder, white, black, neutral)| ElementValues {
-            fire,
-            water,
-            wind,
-            earth,
-            thunder,
-            white,
-            black,
-            neutral,
-        })
+        .map(
+            |&(_, fire, water, wind, earth, thunder, white, black, neutral)| ElementValues {
+                fire,
+                water,
+                wind,
+                earth,
+                thunder,
+                white,
+                black,
+                neutral,
+            },
+        )
         .unwrap_or_default()
 }
 
@@ -114,7 +136,10 @@ mod tests {
     #[test]
     fn 収録キャラはすべてプレイアブル一覧にある() {
         for (id, ..) in ELEMENT_BASES {
-            assert!(crate::find_character(id).is_some(), "{id} がキャラ一覧に無い");
+            assert!(
+                crate::find_character(id).is_some(),
+                "{id} がキャラ一覧に無い"
+            );
         }
     }
 }

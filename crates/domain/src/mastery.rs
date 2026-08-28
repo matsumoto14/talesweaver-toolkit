@@ -27,8 +27,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::category::DamageCategory;
 use crate::character_skill::{damage_contributions, SkillEffect};
+use crate::damage::DamageContribution;
 use crate::stat_sources::StatLayer;
 use crate::stats::StatKind;
 
@@ -57,7 +57,9 @@ pub struct Masteries {
 
 impl Masteries {
     fn defs<'a>(&'a self, catalog: &'a MasteryCatalog) -> impl Iterator<Item = &'a MasteryDef> {
-        self.picked.iter().filter_map(|id| catalog.iter().find(|d| d.id == id.as_str()))
+        self.picked
+            .iter()
+            .filter_map(|id| catalog.iter().find(|d| d.id == id.as_str()))
     }
 
     /// その段で選んでいるマスタリー。
@@ -78,9 +80,12 @@ impl Masteries {
             .sum()
     }
 
-    /// 与ダメージ式のカテゴリへの寄与(カテゴリ, 値)。
-    pub fn damage_contributions(&self, catalog: &MasteryCatalog) -> Vec<(DamageCategory, f64)> {
-        damage_contributions(self.defs(catalog).map(|d| &d.effect))
+    /// 与ダメージ式のカテゴリへの寄与。`source` は `マスタリー【名】`。
+    pub fn damage_contributions(&self, catalog: &MasteryCatalog) -> Vec<DamageContribution> {
+        damage_contributions(
+            self.defs(catalog)
+                .map(|d| (format!("マスタリー【{}】", d.name), &d.effect)),
+        )
     }
 
     /// ステ増加への寄与(ステ, Σ% の小数表現, 層, マスタリー名)。
@@ -90,7 +95,12 @@ impl Masteries {
     ) -> Vec<(StatKind, f64, StatLayer, &'a str)> {
         let mut out = Vec::new();
         for def in self.defs(catalog) {
-            if let SkillEffect::StatRate { stats, percent, layer } = def.effect {
+            if let SkillEffect::StatRate {
+                stats,
+                percent,
+                layer,
+            } = def.effect
+            {
                 for kind in stats {
                     out.push((*kind, percent / 100.0, layer, def.name));
                 }
@@ -130,8 +140,13 @@ impl Masteries {
 pub enum MasteryError {
     #[error("未知のマスタリー '{id}' です")]
     Unknown { id: String },
-    #[error("マスタリー '{id}' はこのキャラ(game_character_id={game_character_id})のものではありません")]
-    ForeignCharacter { id: String, game_character_id: String },
+    #[error(
+        "マスタリー '{id}' はこのキャラ(game_character_id={game_character_id})のものではありません"
+    )]
+    ForeignCharacter {
+        id: String,
+        game_character_id: String,
+    },
     #[error("マスタリー M{tier} は 1 つだけ選べます")]
     TierConflict { tier: u8 },
 }
@@ -139,6 +154,7 @@ pub enum MasteryError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::category::DamageCategory;
 
     const CATALOG: &[MasteryDef] = &[
         MasteryDef {
@@ -183,12 +199,18 @@ mod tests {
     ];
 
     /// テスト用: カテゴリX4(攻撃ダメージ(スキル))の合計。
-    fn x4(rates: &[(DamageCategory, f64)]) -> f64 {
-        rates.iter().filter(|(c, _)| *c == DamageCategory::AttackDamageSkill).map(|(_, v)| v).sum()
+    fn x4(contributions: &[DamageContribution]) -> f64 {
+        contributions
+            .iter()
+            .filter(|c| c.category == DamageCategory::AttackDamageSkill)
+            .map(|c| c.value)
+            .sum()
     }
 
     fn picked(ids: &[&str]) -> Masteries {
-        Masteries { picked: ids.iter().map(|s| s.to_string()).collect() }
+        Masteries {
+            picked: ids.iter().map(|s| s.to_string()).collect(),
+        }
     }
 
     #[test]
@@ -199,8 +221,18 @@ mod tests {
         assert_eq!(
             m.stat_rates(CATALOG),
             vec![
-                (StatKind::Hack, 0.10, StatLayer::MultiplierB, "シルバースカル優勝者"),
-                (StatKind::Def, 0.10, StatLayer::MultiplierB, "シルバースカル優勝者"),
+                (
+                    StatKind::Hack,
+                    0.10,
+                    StatLayer::MultiplierB,
+                    "シルバースカル優勝者"
+                ),
+                (
+                    StatKind::Def,
+                    0.10,
+                    StatLayer::MultiplierB,
+                    "シルバースカル優勝者"
+                ),
             ]
         );
 
@@ -214,14 +246,20 @@ mod tests {
         let m = picked(&["boris_m2_survivor"]);
         assert_eq!(x4(&m.damage_contributions(CATALOG)), 0.0);
         assert_eq!(m.stat_rates(CATALOG), vec![]);
-        assert_eq!(m.picked_in(CATALOG, 2).map(|d| d.id), Some("boris_m2_survivor"));
+        assert_eq!(
+            m.picked_in(CATALOG, 2).map(|d| d.id),
+            Some("boris_m2_survivor")
+        );
         assert!(m.validate(CATALOG, "boris").is_ok());
     }
 
     #[test]
     fn 同じ段は1つしか選べない() {
         let m = picked(&["boris_m1_issen", "boris_m1_zangeki"]);
-        assert!(matches!(m.validate(CATALOG, "boris"), Err(MasteryError::TierConflict { tier: 1 })));
+        assert!(matches!(
+            m.validate(CATALOG, "boris"),
+            Err(MasteryError::TierConflict { tier: 1 })
+        ));
     }
 
     #[test]
@@ -232,6 +270,9 @@ mod tests {
             Err(MasteryError::ForeignCharacter { .. })
         ));
         let m = picked(&["nope"]);
-        assert!(matches!(m.validate(CATALOG, "boris"), Err(MasteryError::Unknown { .. })));
+        assert!(matches!(
+            m.validate(CATALOG, "boris"),
+            Err(MasteryError::Unknown { .. })
+        ));
     }
 }

@@ -6,8 +6,8 @@
     errorMessage, evaluateContents, listSkills, previewDamage, previewDefense, updateCharacter,
   } from "../../api/commands";
   import type {
-    Adjustments, BuffDefinition, ComboSkillType, ContentEvaluation, DamageResult, DefenseProfile, NewCharacter,
-    Skill, StatKind,
+    Adjustments, BuffChoice, BuffDefinition, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
+    DamageResult, DefenseProfile, FormulaStep, NewCharacter, Skill, StatKind,
   } from "../../api/types";
   import {
     isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
@@ -16,7 +16,9 @@
   import { candidatesFor, COST_COLORS, tryCandidates, type Candidate } from "../../candidates";
   import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
-  import { ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import {
+    ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
+  } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
     app, flatContents, payloadOf, selectedCharacter, totalContents as totalContentsCount, upsertCharacter,
@@ -40,6 +42,11 @@
   const DEFAULT_RIGHT_WIDTH = 380;
 
   const COMBO_THRESHOLD = 3;
+  const COMBO_SKILL_TYPE_OPTIONS = [
+    { value: "general", label: "一般" },
+    { value: "instant", label: "瞬撃" },
+    { value: "chain", label: "連撃" },
+  ];
 
   const character = $derived(selectedCharacter());
   const savedPayload = $derived(character ? payloadOf(character) : null);
@@ -71,10 +78,9 @@
     app.calcTargetId = contents[(targetIndex + dir + contents.length) % contents.length].content.id;
   }
 
-  // --- スキル(キャラ種で引き直し) ----------------------------------------
+  // --- スキル(キャラタブの主軸スキルが正) --------------------------------
   let skills = $state<Skill[]>([]);
-  let skillId = $state("");
-  // 取得済みスキルが属するキャラ種(非リアクティブ)。キャラ種が変わった瞬間に skillId を
+  // 取得済みスキルが属するキャラ種(非リアクティブ)。キャラ種が変わった瞬間に一覧を
   // 同期的に空へ戻す。残すと listSkills の応答まで「別キャラのステ × 前キャラのスキル」で
   // 計算・表示されてしまう(Rust 側はスキル所有チェックをしない。PR レビュー指摘)。
   let skillsGid: string | null = null;
@@ -83,20 +89,37 @@
     if (gid === skillsGid) return; // 保存等でキャラのオブジェクトだけ変わった場合は選択を保つ
     skillsGid = gid;
     skills = [];
-    skillId = "";
+    skillOverride = null;
     if (!gid) return;
     listSkills(gid)
       .then((list) => {
         if (skillsGid !== gid) return; // 切替済みの古い応答は捨てる
         skills = list;
-        // ホームからの遷移はホームの判定に使ったスキル(最大ダメージ)を引き継ぐ。
-        const handoff = app.calcSkillId;
-        app.calcSkillId = null;
-        if (handoff && list.some((s) => s.id === handoff)) skillId = handoff;
-        else skillId = list[0]?.id ?? "";
       })
       .catch((e) => reportError(errorMessage(e)));
   });
+  /** キャラタブで選んだ主軸スキル。この画面のスキルはこれが正 */
+  const mainSkill = $derived(skills.find((s) => s.id === character?.main_skill_id) ?? null);
+  /**
+   * この画面での選び直し(例外操作)。null = 主軸に従う。
+   * キャラを替えたとき・キャラタブで主軸を変えたときは主軸に揃え直す(下の $effect)。
+   * 保存はしない ＝ ラベンダー(--sim)で見せる。
+   */
+  let skillOverride = $state<string | null>(null);
+  let lastMainSkillId = untrack(() => character?.main_skill_id ?? null);
+  $effect(() => {
+    const id = character?.main_skill_id ?? null;
+    if (id === lastMainSkillId) return;
+    lastMainSkillId = id;
+    skillOverride = null;
+  });
+  // 主軸が未設定・未収録のときだけ先頭スキルにフォールバックする
+  const skillId = $derived(
+    (skillOverride !== null && skills.some((s) => s.id === skillOverride) ? skillOverride : null)
+      ?? mainSkill?.id
+      ?? skills[0]?.id
+      ?? "",
+  );
   const skill = $derived(skills.find((s) => s.id === skillId) ?? null);
   let comboSkillType = $state<ComboSkillType>("general");
   const selectedComboSkillType = $derived<ComboSkillType | null>(
@@ -108,6 +131,8 @@
     lastComboSkillId = skillId;
     comboSkillType = "general";
   });
+  /** 主軸と違うスキルで計算している状態 */
+  const skillOverridden = $derived(mainSkill !== null && skillId !== mainSkill.id);
   let skillOpen = $state(false);
   /** ピッカーの並びは合計ダメージの降順(v4 指定)。合計が未取得のものは登録順で末尾 */
   const pickerSkills = $derived(
@@ -125,9 +150,19 @@
     const temp = JSON.parse(JSON.stringify(temporaryAdjustments)) as Adjustments;
     const contentId = target.content.id;
     const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const selectedSkillId = skillId;
+    const comboType = selectedComboSkillType;
+    const buffs = JSON.parse(JSON.stringify(app.calcBuffs));
     skillLatest.run((isCurrent) =>
       Promise.all(
-        skills.map(async (s) => [s.id, await previewDamage(p, s.id, contentId, comboCount, temp)] as const),
+        skills.map(async (s) => [
+          s.id,
+          await previewDamage(
+            p, s.id, contentId, comboCount, temp,
+            s.id === selectedSkillId ? comboType : (s.combo_variants.length > 0 ? "general" : null),
+            buffs,
+          ),
+        ] as const),
       )
         .then((rs) => {
           if (!isCurrent()) return;
@@ -157,6 +192,7 @@
     if (id === lastCharacterId) return;
     lastCharacterId = id;
     temporaryAdjustments = neutralAdjustments();
+    skillOverride = null;
   });
 
   // --- 計算(payload と saved の両方) -------------------------------------
@@ -170,8 +206,10 @@
     const t = target;
     const sid = skillId;
     const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboType = selectedComboSkillType;
     const simActive = app.sim !== null;
     const tempJson = JSON.stringify(temporaryAdjustments);
+    const buffsJson = JSON.stringify(app.calcBuffs);
     if (!pJson || !sp || !t || !sid) {
       requestLatest.cancel();
       result = null;
@@ -181,9 +219,13 @@
     calculating = true;
     requestLatest.run(async (isCurrent) => {
       try {
-        const main = await previewDamage(JSON.parse(pJson), sid, t.content.id, comboCount, JSON.parse(tempJson));
+        const main = await previewDamage(
+          JSON.parse(pJson), sid, t.content.id, comboCount, JSON.parse(tempJson), comboType, JSON.parse(buffsJson),
+        );
         const saved = simActive
-          ? await previewDamage(sp, sid, t.content.id, comboCount, JSON.parse(tempJson))
+          ? await previewDamage(
+              sp, sid, t.content.id, comboCount, JSON.parse(tempJson), comboType, JSON.parse(buffsJson),
+            )
           : main;
         if (isCurrent()) {
           result = main;
@@ -209,13 +251,14 @@
     // 計算タブは「今このスキルで戦う」文脈なので、装備条件も選択中スキルの依存で判定する
     // (ホームはコンテンツごとの最大ダメージスキルで判定する)。
     const sid = skillId;
+    const buffsJson = JSON.stringify(app.calcBuffs);
     if (!pJson) {
       evalLatest.cancel();
       evals = [];
       return;
     }
     evalLatest.run((isCurrent) => {
-      evaluateContents(JSON.parse(pJson), sid || undefined)
+      evaluateContents(JSON.parse(pJson), sid || undefined, JSON.parse(buffsJson))
         .then((rs) => {
           if (isCurrent()) evals = rs;
         })
@@ -256,27 +299,28 @@
   const stepsMax = $derived(result?.trace.steps_max ?? []);
   const stepValue = (name: string): number | null =>
     stepsMax.find((s) => s.name === name)?.value ?? null;
-  const atkA = $derived(stepValue("攻撃力(A)"));
-  const atkStat = $derived(stepValue("ステ攻撃力"));
-  const atkEquip = $derived(stepValue("装備攻撃力"));
-  const atkBonus = $derived(
-    atkA !== null && atkStat !== null && atkEquip !== null
-      ? Math.max(0, atkA - Math.floor(atkStat + atkEquip))
-      : 0,
-  );
+  // 攻撃力(A)の内訳は Rust の AttackPowerBreakdown をそのまま使う(UI で式を持たない)
+  const atk = $derived(result?.trace.attack ?? null);
+  const atkA = $derived(atk?.value ?? null);
   const atkRows = $derived.by(() => {
-    if (atkA === null) return [];
+    if (atk === null) return [];
     const raw = [
-      { k: "ステ攻撃力", v: atkStat ?? 0, c: "var(--flow-base)", note: "素ステ・補正源から" },
-      { k: "装備攻撃力", v: atkEquip ?? 0, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
-      { k: "装備攻撃力強化倍率", v: atkBonus, c: "var(--flow-2)", note: "パワーW・ストロングW" },
+      { k: "ステ攻撃力", v: atk.stat_attack, c: "var(--flow-base)", note: "素ステ・補正源から" },
+      { k: "装備攻撃力", v: atk.equipment_base_attack + atk.equipment_enhanced_attack, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
+      { k: "装備攻撃力強化倍率", v: atk.enhance_bonus, c: "var(--flow-2)", note: "パワーW・ストロングW" },
     ].filter((x) => x.v > 0);
     const total = raw.reduce((a, x) => a + x.v, 0) || 1;
-    return raw.map((x) => ({
-      ...x,
-      pct: `${Math.max(1.5, (x.v / total) * 100).toFixed(2)}%`,
-      share: `${Math.round((x.v / total) * 100)}%`,
-    }));
+    let running = 0;
+    return raw.map((x, i) => {
+      running += x.v;
+      return {
+        ...x,
+        pct: `${Math.max(1.5, (x.v / total) * 100).toFixed(2)}%`,
+        share: `${Math.round((x.v / total) * 100)}%`,
+        // 最後の段は必ず A に着地させる(切捨ての端数で足し算が合わなくなるのを防ぐ)
+        to: i === raw.length - 1 ? atk.value : running,
+      };
+    });
   });
   const defenseValue = $derived(
     result?.trace.categories.find((c) => c.symbol === "C")?.value ?? null,
@@ -294,6 +338,10 @@
     add: number;
     mult: string;
     c: string;
+    /** その段までの到達値 */
+    to: number;
+    /** 対応する Rust の段名。材料(カテゴリ)はこの段の `categories` から引く */
+    step: string;
   }
   const FLOW_COLORS: Record<string, string> = {
     "スキル倍率": "var(--flow-1)",
@@ -314,16 +362,17 @@
   const flowRows = $derived.by<FlowRow[]>(() => {
     if (pierced === null) return [];
     let running = pierced;
-    const rows: FlowRow[] = [{ k: "抜けた分(素通り)", add: pierced, mult: "—", c: "var(--fg-dim)" }];
+    const rows: FlowRow[] = [
+      { k: "抜けた分(素通り)", add: pierced, mult: "—", c: "var(--fg-dim)", to: pierced, step: "攻撃力−防御力" },
+    ];
     for (const s of stepsMax) {
-      if (FACTOR_STEPS.has(s.name)) {
-        const next = running * s.value;
-        rows.push({ k: s.name, add: next - running, mult: `×${s.value.toFixed(2)}`, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)" });
-        running = next;
-      } else if (RUNNING_STEPS.has(s.name)) {
-        rows.push({ k: s.name, add: s.value - running, mult: "—", c: FLOW_COLORS[s.name] ?? "var(--fg-dim)" });
-        running = s.value;
-      }
+      if (!FACTOR_STEPS.has(s.name) && !RUNNING_STEPS.has(s.name)) continue;
+      // 到達値は Rust の FormulaStep.reached。倍率列は倍率の段はその値、到達値で返る段は前段との比(表示用)
+      const mult = FACTOR_STEPS.has(s.name)
+        ? `×${s.value.toFixed(2)}`
+        : running > 0 ? `×${(s.reached / running).toFixed(2)}` : "—";
+      rows.push({ k: s.name, add: s.reached - running, mult, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)", to: s.reached, step: s.name });
+      running = s.reached;
     }
     return rows;
   });
@@ -353,6 +402,280 @@
     return c.kind === "rate" ? `${fmtNum(loss * 100)}%` : fmtNum(loss);
   };
   const cappedCategories = $derived(activeCategories.filter((c) => catLoss(c) > 1e-9));
+
+  // --- 数値を開いて詳細を確認する(§00 03: 開くのは押した行の下だけ) ----------
+  // 値はすべて Rust 由来(DamageTrace / DamageResult)。UI で作るのは 2 値の差分だけ。
+  /** 内訳 1 行。列は band-row と同じ段(ラベル / 倍率 / 実数 / 補足) */
+  interface Mat {
+    label: string;
+    mult?: string;
+    value: string;
+    sub?: string;
+    /** `value` の数値。変わったら動かす(§00 04)ためだけに使う */
+    n?: number;
+    /** 押すと直下に `subs` が開く行。省略なら開かない行 */
+    key?: string;
+    subs?: Mat[];
+  }
+  interface Detail {
+    /** この段の倍率(×n) */
+    mult: string;
+    /** この段が足した実数(+n / −n)。倍率だけの段は null */
+    delta: number | null;
+    /** その段までの到達値 */
+    to: number | null;
+    mats: Mat[];
+    /** 中立(±0)で出さなかったカテゴリ枠の数 */
+    idle: number;
+    /** Rust の式(FormulaStep.expression) */
+    expr: string | null;
+  }
+  /** 開いている内訳。行ごとに独立させる(1 つ開いても他は閉じない ＝ 押した行が動かない) */
+  let openDetails = $state<string[]>([]);
+  const isDetailOpen = (key: string) => openDetails.includes(key);
+  function toggleDetail(key: string) {
+    openDetails = isDetailOpen(key) ? openDetails.filter((k) => k !== key) : [...openDetails, key];
+  }
+  const stepOf = (name: string): FormulaStep | null => stepsMax.find((s) => s.name === name) ?? null;
+  const categoryOf = (c: DamageCategory): CategoryTrace | null =>
+    result?.trace.categories.find((x) => x.category === c) ?? null;
+  /** カテゴリに実際に値を足した供給源(トレースの category_contributions から)。 */
+  const catContributions = (c: string) =>
+    (result?.trace.category_contributions ?? []).filter((x) => x.category === c);
+  const fmtContributionValue = (kind: CategoryTrace["kind"], v: number) =>
+    kind === "rate" ? `${v >= 0 ? "+" : ""}${fmtNum(v * 100)}%` : fmtNum(v);
+  const catMat = (c: CategoryTrace): Mat => {
+    // A 攻撃力は ① と同じ構成(ステ攻撃力 / 装備攻撃力 / 強化倍率)で開く。供給源 1 行では読めない
+    if (c.category === "attack_power" && atkRows.length > 0) {
+      return {
+        label: `${c.symbol} ${c.label}`,
+        value: fmtCatValue(c),
+        key: "cat:attack_power",
+        subs: atkRows.map((a) => ({
+          label: a.k,
+          value: fmtInt(Math.round(a.v)),
+          sub: a.note,
+          n: Math.round(a.v),
+        })),
+      };
+    }
+    const contributions = catContributions(c.category);
+    return {
+      label: `${c.symbol} ${c.label}`,
+      mult: c.kind === "rate" ? `×${fmtNum(c.factor)}` : undefined,
+      value: fmtCatValue(c),
+      sub: catLoss(c) > 1e-9 ? `上限で −${fmtCatLoss(c)}` : undefined,
+      key: contributions.length > 0 ? `cat:${c.category}` : undefined,
+      subs:
+        contributions.length > 0
+          ? contributions.map((x) => ({
+              label: x.source,
+              value: fmtContributionValue(c.kind, x.value),
+              n: x.value,
+            }))
+          : undefined,
+    };
+  };
+  /** 段の内訳。材料は Rust が段ごとに申告したカテゴリ(FormulaStep.categories)から引く */
+  function stepDetail(name: string, mult: string, delta: number | null, to: number | null): Detail {
+    const step = stepOf(name);
+    const cats = (step?.categories ?? []).map(categoryOf).filter((c): c is CategoryTrace => c !== null);
+    const active = cats.filter((c) => c.kind === "assigned" || c.value !== 0);
+    return {
+      mult, delta, to,
+      mats: active.map(catMat),
+      idle: cats.length - active.length,
+      expr: step?.expression ?? null,
+    };
+  }
+  /**
+   * ステ 1 つに効かせている要因の一覧(素ステ + 補正源 + 上限で捨てた分)。
+   * 実数(何ポイント動かしたか)は Rust の `StatContribution.effect`。UI で再計算しない。
+   * 素ステ + Σ実数 − 捨てた分 = 最終能力値。
+   */
+  function statFactorMats(kind: StatKind): Mat[] {
+    const st = result?.trace.stats.find((s) => s.kind === kind);
+    if (!st) return [];
+    const mats: Mat[] = [
+      { label: "素ステ(振り分け)", value: fmtInt(st.base), n: st.base },
+    ];
+    for (const c of result?.trace.stat_contributions ?? []) {
+      if (c.kind !== kind) continue;
+      mats.push({
+        label: c.source,
+        value: `${c.effect < 0 ? "−" : "+"}${fmtInt(Math.abs(c.effect))}`,
+        sub: `${STAT_LAYER_LABELS[c.layer]} ${formatLayerValue(c.layer, c.value)}`,
+        n: c.effect,
+      });
+    }
+    if (st.capped_loss > 0) {
+      mats.push({
+        label: "上限で捨てた分",
+        value: `−${fmtInt(st.capped_loss)}`,
+        sub: `上限 ${fmtInt(st.stat_cap)}`,
+        n: -st.capped_loss,
+      });
+    }
+    if (st.pinned_from !== null) {
+      mats.push({
+        label: "一時調整で固定",
+        value: fmtInt(st.effective),
+        sub: `固定前 ${fmtInt(st.pinned_from)}`,
+        n: st.effective,
+      });
+    }
+    return mats;
+  }
+  const EQUIPMENT_ATTACK_LAYER_LABELS: Record<string, string> = { base: "基本", enhanced: "強化" };
+  /** 攻撃力の構成行の内訳。ステ攻撃力は「実際に使っている依存ステ」だけを並べ、押すと要因まで開く */
+  function atkDetail(a: (typeof atkRows)[number]): Detail {
+    const mats: Mat[] = [];
+    if (a.k === "ステ攻撃力") {
+      for (const p of result?.trace.stat_attack_parts ?? []) {
+        mats.push({
+          label: STAT_LABELS[p.kind],
+          mult: `×${fmtNum(p.coefficient)}`,
+          value: fmtInt(Math.round(p.contribution)),
+          sub: `能力値 ${fmtInt(p.effective)}`,
+          n: Math.round(p.contribution),
+          key: `atkstat:${p.kind}`,
+          subs: statFactorMats(p.kind),
+        });
+      }
+    } else if (a.k === "装備攻撃力") {
+      for (const p of result?.trace.equipment_attack_parts ?? []) {
+        mats.push({
+          label: `${EQUIPMENT_ATTACK_LAYER_LABELS[p.layer]} ${EQUIPMENT_STAT_LABELS[p.value]}`,
+          mult: `×${fmtNum(p.coefficient)}`,
+          value: fmtInt(Math.round(p.contribution)),
+          sub: `装備値 ${fmtInt(p.amount)}`,
+          n: Math.round(p.contribution),
+          key: `eqatk:${p.layer}:${p.value}`,
+          subs: p.sources.map((s) => ({
+            label: s.source,
+            mult: `×${fmtNum(p.coefficient)}`,
+            value: fmtInt(Math.round(s.contribution)),
+            sub: `装備値 ${fmtInt(s.amount)}`,
+            n: Math.round(s.contribution),
+          })),
+        });
+      }
+    } else if (a.k === "装備攻撃力強化倍率") {
+      for (const s of result?.trace.equipment_enhance_sources ?? []) {
+        mats.push({
+          label: s.source,
+          mult: `+${fmtNum(s.value * 100)}%`,
+          value: `+${fmtNum(s.value * 100)}%`,
+          n: s.value,
+        });
+      }
+    }
+    return {
+      mult: a.k === "装備攻撃力強化倍率" && atk ? `+${fmtNum(atk.enhance_rate * 100)}%` : "—",
+      delta: a.v,
+      to: a.to,
+      mats,
+      idle: 0,
+      expr: a.k === "装備攻撃力" ? (stepOf("装備攻撃力")?.expression ?? null) : null,
+    };
+  }
+  /** 鎖「1 発」: 抜けた分から 1 発までの各段(倍率・実数・到達値) */
+  const perHitDetail = $derived.by<Detail | null>(() => {
+    const r = result;
+    if (r === null || perHit === null || pierced === null) return null;
+    const mats: Mat[] = flowRows.map((f) => ({
+      label: f.k,
+      mult: f.mult === "—" ? undefined : f.mult,
+      value: `${f.add < 0 ? "−" : "+"}${fmtInt(Math.round(Math.abs(f.add)))}`,
+      sub: `到達 ${fmtInt(Math.round(f.to))}`,
+    }));
+    if (r.capped_loss.max > 0) {
+      mats.push({
+        label: "ダメージ上限(1 段ごと)",
+        value: fmtInt(r.damage_cap),
+        sub: `上限で −${fmtInt(r.capped_loss.max)}`,
+      });
+    }
+    return { mult: flowMultLabel, delta: perHit - pierced, to: perHit, mats, idle: 0, expr: null };
+  });
+  /** 鎖「合計」: 1 発 × 段数 ＋ 割合追加ダメージ。クリティカルは倍率と発生率で読む */
+  const totalDetail = $derived.by<Detail | null>(() => {
+    const r = result;
+    if (r === null || perHit === null) return null;
+    const mats: Mat[] = [
+      {
+        label: `1 発 ${fmtInt(r.per_hit.max)} × ${r.hit_count} 段`,
+        mult: `×${r.hit_count}`,
+        value: fmtInt(r.total.max - r.added_damage.max),
+      },
+    ];
+    if (r.added_damage.max !== 0) {
+      mats.push({
+        label: "割合追加ダメージ(合計に乗る)",
+        mult: `+${fmtNum(r.added_damage_rate * 100)}%`,
+        value: fmtInt(r.added_damage.max),
+        sub: "シャープネスビジョン・ランダムOP・称号",
+      });
+    }
+    mats.push({
+      label: "クリティカルのとき",
+      mult: skill ? `×${fmtNum(skill.critical_multiplier)}` : undefined,
+      value: fmtInt(r.total.critical),
+      sub: r.critical_rate ? `発生 ${r.critical_rate.value.toFixed(1)}%` : "発生率は未収録",
+    });
+    mats.push({ label: "乱数が最小のとき", value: fmtInt(r.total.min) });
+    return {
+      mult: `×${r.hit_count} 段`,
+      delta: r.total.max - perHit,
+      to: r.total.max,
+      mats,
+      idle: 0,
+      expr: stepOf("割合追加ダメージ(合計に乗る)")?.expression ?? null,
+    };
+  });
+  /** 鎖「1 秒あたり」: 合計 × 回/分 ÷ 60 と、実ディレイの内訳 */
+  const dpsDetail = $derived.by<Detail | null>(() => {
+    const r = result;
+    const d = r?.actual_delay ?? null;
+    if (r === null || d === null || r.dps === null) return null;
+    const mats: Mat[] = [
+      { label: "合計ダメージ", value: fmtInt(r.total.max) },
+      {
+        label: "基本中ディレイ",
+        value: `${d.base.toFixed(2)}s`,
+        sub: d.fixed ? "固定(減少が効かない)" : undefined,
+      },
+    ];
+    for (const c of d.contributions) {
+      mats.push({ label: `↳ ${c.source}`, value: `−${(c.rate * 100).toFixed(0)}%` });
+    }
+    mats.push({
+      label: "中ディレイ減少(上限 70%)",
+      value: `${(d.reduction * 100).toFixed(0)}%`,
+      sub: d.reduction_raw > d.reduction ? `選択中は ${(d.reduction_raw * 100).toFixed(0)}%` : undefined,
+    });
+    if (d.combo_rate < 1) {
+      mats.push({ label: `コンボ(倍率A・${COMBO_THRESHOLD} コンボ以上)`, mult: `×${fmtNum(d.combo_rate)}`, value: "" });
+    }
+    mats.push({
+      label: "中ディレイ",
+      value: `${d.value.toFixed(2)}s`,
+      sub: d.floored ? "下限 0.3s で頭打ち" : undefined,
+    });
+    mats.push({
+      label: "スキル回数",
+      value: `${Math.round(d.uses_per_minute)} 回/分`,
+      sub: d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ",
+    });
+    return {
+      mult: `÷ ${d.value.toFixed(2)}s`,
+      delta: null,
+      to: Math.round(r.dps.max),
+      mats,
+      idle: 0,
+      expr: "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60",
+    };
+  });
 
   // --- 効いていない分の棚卸し(design-system §14 決定 2)---------------------
   // 上限で捨てた分は 能力値上限 / カテゴリ上限 / ダメージ上限 / 防御力上限 / 中ディレイ
@@ -441,7 +764,7 @@
         });
       }
       if (ad.floored) {
-        const want = ad.base * (1 - ad.reduction) * ad.combo_rate;
+        const want = ad.raw;
         out.push({
           k: "中ディレイの下限(0.3s)",
           raw: `${want.toFixed(2)}s`,
@@ -462,12 +785,13 @@
   $effect(() => {
     // 防御側は対象コンテンツに依らない。キャラ(試し変更込み)が変わったときだけ引き直す
     const p = payload;
+    const buffsJson = JSON.stringify(app.calcBuffs);
     if (!p) {
       defense = null;
       return;
     }
     defenseLatest.run((isCurrent) =>
-      previewDefense(p)
+      previewDefense(p, JSON.parse(buffsJson))
         .then((d) => {
           if (isCurrent()) {
             defense = d;
@@ -578,18 +902,6 @@
         weapon.base = base;
       },
     },
-    {
-      id: "buffs",
-      label: (p) => `バフ選択 ${p.stat_sources.buffs.choices.length}件`,
-      get: (p) => JSON.stringify(p.stat_sources.buffs.choices),
-      set: (p, v) => (p.stat_sources.buffs.choices = JSON.parse(v)),
-    },
-    {
-      id: "adjust",
-      label: () => "調整",
-      get: (p) => JSON.stringify(p.stat_sources.adjustments),
-      set: (p, v) => (p.stat_sources.adjustments = JSON.parse(v)),
-    },
     // 以下は計算タブの編集 UI からは変わらないが、sim が他の経路で差分を持ったときに
     // 「試し変更中なのにチップが空」にならないよう網羅する(独立レビュー指摘)。
     {
@@ -664,6 +976,9 @@
     const t = target;
     const sid = skillId;
     const base = perHit;
+    const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboType = selectedComboSkillType;
+    const buffsJson = JSON.stringify(app.calcBuffs);
     if (!pJson || !t || !sid || base === null) {
       whatIfLatest.cancel();
       whatIf = [];
@@ -677,7 +992,9 @@
         const rs = await tryCandidates(
           list,
           () => JSON.parse(pJson) as NewCharacter,
-          (p) => previewDamage(p, sid, t.content.id, combo ? COMBO_THRESHOLD : 0, JSON.parse(tempJson)),
+          (p) => previewDamage(
+            p, sid, t.content.id, comboCount, JSON.parse(tempJson), comboType, JSON.parse(buffsJson),
+          ),
           base,
           (w) => w.perHit > base,
         );
@@ -701,7 +1018,7 @@
   // バフカタログは常用バフ専用(キャラスキルは補正源のキャラスキル欄)
   const consumableBuffs = $derived(app.catalog);
   const buffOn = (def: BuffDefinition) =>
-    (payload?.stat_sources.buffs.choices ?? []).some((c) => c.buff_id === def.id);
+    app.calcBuffs.choices.some((c) => c.buff_id === def.id);
   /**
    * バフの 3 状態(v4)。保存済みかどうかで「常時(マイセット)」と「追加枠」を分ける。
    * - `always`: キャラに保存済み = 毎回のっている常用セット
@@ -710,29 +1027,34 @@
    * 常時への昇格は保存操作(「試し変更を保存」)で行う。チップのクリックで DB を書かない。
    */
   const buffState = (def: BuffDefinition): "always" | "extra" | "off" => {
-    const saved = (savedPayload?.stat_sources.buffs.choices ?? []).some((c) => c.buff_id === def.id);
+    const saved = (app.buffSets.find((set) => set.id === app.calcBuffSetId)?.choices.choices ?? [])
+      .some((c) => c.buff_id === def.id);
     if (!buffOn(def)) return "off";
     return saved ? "always" : "extra";
   };
   const BUFF_STATE_LABEL = { always: "常", extra: "追", off: "" } as const;
   const alwaysBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "always").length);
   const extraBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "extra").length);
+  function chooseCalcBuffSet(value: string) {
+    const id = value === "" ? null : Number(value);
+    app.calcBuffSetId = id;
+    const set = app.buffSets.find((item) => item.id === id);
+    app.calcBuffs = JSON.parse(JSON.stringify(set?.choices ?? { choices: [] }));
+  }
   function toggleBuffChip(def: BuffDefinition) {
-    editSim((p) => {
-      p.stat_sources.buffs.choices = toggleBuff(p.stat_sources.buffs.choices, def, !buffOn(def));
-    });
+    app.calcBuffs = { choices: toggleBuff(app.calcBuffs.choices, def, !buffOn(def)) };
   }
   // ON のバフのうち、対象ステ・効果量の選択肢・手入力を持つものの詳細編集(試し変更として反映)
   const statOptions = STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }));
   const buffChoiceOf = (buffId: string) =>
-    payload?.stat_sources.buffs.choices.find((c) => c.buff_id === buffId) ?? null;
+    app.calcBuffs.choices.find((c) => c.buff_id === buffId) ?? null;
   const hasDetail = (def: BuffDefinition) =>
     isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value) !== null || isFixedValue(def.value);
-  function editBuffChoice(buffId: string, fn: (c: NewCharacter["stat_sources"]["buffs"]["choices"][number]) => void) {
-    editSim((p) => {
-      const c = p.stat_sources.buffs.choices.find((x) => x.buff_id === buffId);
-      if (c) fn(c);
-    });
+  function editBuffChoice(buffId: string, fn: (c: BuffChoice) => void) {
+    const choices = app.calcBuffs.choices.map((choice) => ({ ...choice }));
+    const choice = choices.find((item) => item.buff_id === buffId);
+    if (choice) fn(choice);
+    app.calcBuffs = { choices };
   }
   const strongWeaponOptions = $derived([
     { value: "0", label: "なし" },
@@ -755,6 +1077,61 @@
   // 上の contents(対象ピッカー用)は敵データを持つものだけに絞っているため数え方が違う
   const totalContents = $derived(totalContentsCount());
 </script>
+
+<!-- 押した数値の内訳。押した行の直下にだけ開く(§00 03)。
+     列は band-row と同じ段にそろえ、面はインセット = 読み取り専用(§02)。 -->
+{#snippet detailBox(d: Detail)}
+  <div class="detail open-in">
+    <div class="dt-head">
+      <span class="dt-hk dim">倍率</span>
+      <span class="num dt-hv">{d.mult}</span>
+      <span class="dt-hk dim">実数</span>
+      <span class="num dt-hv" class:bad={(d.delta ?? 0) < 0}
+      >{d.delta === null ? "—" : `${d.delta < 0 ? "−" : "+"}${fmtInt(Math.round(Math.abs(d.delta)))}`}</span>
+      <span class="dt-hk dim">到達値</span>
+      <span class="num dt-hv big" use:bump={() => d.to}
+      >{d.to === null ? "—" : fmtInt(Math.round(d.to))}</span>
+    </div>
+    {#each d.mats as m, i (i)}
+      {#if m.key}
+        {@const key = m.key}
+        <!-- 押すと要因の一覧が直下に開く(押した行は動かない) -->
+        <button
+          type="button" class="dt-row dt-row-btn"
+          aria-expanded={isDetailOpen(key)} onclick={() => toggleDetail(key)}
+        >
+          <span class="dt-label">{m.label}</span>
+          <span class="num dt-mult dim">{m.mult ?? ""}</span>
+          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span>
+          <span class="num dt-sub dim">{m.sub ?? ""}</span>
+        </button>
+        {#if isDetailOpen(key)}
+          <div class="dt-subs open-in">
+            {#each m.subs ?? [] as sm, j (j)}
+              <div class="dt-row">
+                <span class="dt-label">{sm.label}</span>
+                <span class="num dt-mult dim">{sm.mult ?? ""}</span>
+                <span class="num dt-val" class:bad={(sm.n ?? 0) < 0} use:bump={() => sm.n ?? null}>{sm.value}</span>
+                <span class="num dt-sub dim">{sm.sub ?? ""}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {:else}
+        <div class="dt-row">
+          <span class="dt-label">{m.label}</span>
+          <span class="num dt-mult dim">{m.mult ?? ""}</span>
+          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span>
+          <span class="num dt-sub dim">{m.sub ?? ""}</span>
+        </div>
+      {/if}
+    {/each}
+    {#if d.idle > 0}
+      <p class="dt-note dim">他 {d.idle} 枠は中立(±0)なので、この段では効いていません。</p>
+    {/if}
+    {#if d.expr}<p class="dt-expr dim">{d.expr}</p>{/if}
+  </div>
+{/snippet}
 
 <SplitPage
   midTitle="行ける？"
@@ -851,13 +1228,29 @@
                   <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill?.name ?? "スキル"} />
                   <span class="sk-name">{skill?.name ?? ""}</span>
                   {#if skills.length > 1}<span class="t-chev" class:rot={skillOpen}>▼</span>{/if}
+                  <!-- 主軸(キャラタブ)と違うスキルで計算している例外状態。保存されないので
+                       ラベンダー(--sim)。行の高さは変えない -->
+                  {#if skillOverridden}
+                    <span class="sk-override badge-in" use:flash={() => skillId}>ここで上書き中</span>
+                  {/if}
                 </span>
                 <span class="sk-meta num dim">
-                  ×{skill ? fmtNum(skill.multiplier) : "—"} ・ {skill?.hit_count ?? "—"}段 ・ Cri×{skill ? fmtNum(skill.critical_multiplier) : "—"}
+                  ×<span use:flash={() => result ? fmtNum(result.effective_skill_multiplier) : "—"}>{result ? fmtNum(result.effective_skill_multiplier) : "—"}</span>
+                  ・ <span use:flash={() => result ? String(result.hit_count) : "—"}>{result?.hit_count ?? "—"}</span>段
+                  ・ 中 <span use:flash={() => result?.effective_base_actual_delay != null ? `${fmtNum(result.effective_base_actual_delay)}s` : "?"}>{result?.effective_base_actual_delay != null ? `${fmtNum(result.effective_base_actual_delay)}s` : "?"}</span>
+                  ・ Cri×{skill ? fmtNum(skill.critical_multiplier) : "—"}
                   {#if skill}・ {ELEMENT_LABELS[skill.element]}属性{/if}
                   {#if result?.accuracy_point != null}・ 命中P {fmtInt(result.accuracy_point)}{/if}
                 </span>
               </button>
+              <!-- 1 クリックで主軸に戻す。ボタン in ボタンにできないので行の中の兄弟に置く -->
+              {#if skillOverridden}
+                <button
+                  type="button" class="sk-reset badge-in"
+                  title={mainSkill ? `主軸スキル「${mainSkill.name}」に戻す` : ""}
+                  onclick={() => (skillOverride = null)}
+                >主軸に戻す</button>
+              {/if}
             {/if}
           </div>
           {#if skillOpen && skills.length > 1}
@@ -871,7 +1264,7 @@
                   class="pop-row"
                   class:on={s.id === skillId}
                   onclick={() => {
-                    skillId = s.id;
+                    skillOverride = s.id;
                     skillOpen = false;
                   }}
                 >
@@ -884,6 +1277,25 @@
             </div>
           {/if}
 
+          {#if skill && skill.combo_variants.length > 0}
+            <div class="combo-type-row">
+              <StepSelect
+                label="コンボタイプ"
+                options={COMBO_SKILL_TYPE_OPTIONS}
+                full
+                bind:value={
+                  () => comboSkillType,
+                  (v) => (comboSkillType = v as ComboSkillType)
+                }
+              />
+              <span class="combo-type-note dim">
+                {comboSkillType === "chain"
+                  ? "シエナのオーラの中ディレイ減少に応じて倍率・段数も変わります"
+                  : "タイプを押すと倍率・段数・中ディレイへすぐ反映します"}
+              </span>
+            </div>
+          {/if}
+
           <!-- この一発 -->
           <div class="hero">
             <!-- 鎖(§14 決定 1)。1 発は**ゲート**(防御を抜けるか・目安を超えるかの閾値判定)、
@@ -893,7 +1305,10 @@
                  合格」の基準がゲーム側に存在しないので、付けたら嘘になる。
                  44px の主役数値は増やさない(金の帯 = 答えは 1 つ。§02)。鎖が右に伸びるだけ。 -->
             <div class="chain">
-              <div class="node gate">
+              <button
+                type="button" class="node gate"
+                aria-expanded={isDetailOpen("perHit")} onclick={() => toggleDetail("perHit")}
+              >
                 <span class="nl">1 発</span>
                 <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
                 {#if simActive}
@@ -904,12 +1319,15 @@
                     ・ 登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}
                   </span>
                 {/if}
-              </div>
+              </button>
               {#key badgeState}
                 <span class="badge badge-in gatebadge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
               {/key}
               <span class="op num">×<span use:bump={() => result?.hit_count ?? null}>{result?.hit_count ?? 1}</span> 段</span>
-              <div class="node mid">
+              <button
+                type="button" class="node mid"
+                aria-expanded={isDetailOpen("total")} onclick={() => toggleDetail("total")}
+              >
                 <span class="nl">合計</span>
                 <span class="num nv" use:bump={() => result?.total.max ?? null}>{result ? fmtInt(result.total.max) : "—"}</span>
                 <span class="nsub num">
@@ -917,15 +1335,18 @@
                   {result ? fmtInt(result.total.critical) : "—"}
                   {#if result?.critical_rate}・ 発生 <span use:bump={() => result?.critical_rate?.value ?? null}>{result.critical_rate.value.toFixed(1)}%</span>{/if}
                 </span>
-              </div>
+              </button>
               <span class="op num">÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}</span>s</span>
-              <div class="node rate">
+              <button
+                type="button" class="node rate"
+                aria-expanded={isDetailOpen("dps")} onclick={() => toggleDetail("dps")}
+              >
                 <span class="nl">1 秒あたり</span>
                 <span class="num nv" use:bump={() => (result?.dps ? Math.round(result.dps.max) : null)}>{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
                 <span class="nsub dim">
                   {#if result?.actual_delay}{Math.round(result.actual_delay.uses_per_minute)} 回/分 ・ {/if}判定は付けない
                 </span>
-              </div>
+              </button>
               <span class="op">→</span>
               <!-- 討伐時間。敵 HP を gamedata に持っていないので破線 +「—」で出す。
                    0 で埋めると画面が嘘をつく(§00 欠けを正常な状態として見せる) -->
@@ -935,6 +1356,10 @@
                 <span class="nsub dim">敵 HP が未収録</span>
               </div>
             </div>
+            <!-- 鎖の各数値の内訳。押した節は動かず、鎖の直下に増える(§00 03) -->
+            {#if isDetailOpen("perHit") && perHitDetail}{@render detailBox(perHitDetail)}{/if}
+            {#if isDetailOpen("total") && totalDetail}{@render detailBox(totalDetail)}{/if}
+            {#if isDetailOpen("dps") && dpsDetail}{@render detailBox(dpsDetail)}{/if}
             <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
             <div class="hero-sentence">
               <span class="sentence" class:ok={ratio >= 1} class:ng={ratio < 1}>
@@ -988,7 +1413,7 @@
                 クリティカル率は出せません(この敵の AGI / クリティカル被撃率、またはスキルの Cri値が wiki 未記載)。
               </div>
             {/if}
-            {#if skill && skill.base_actual_delay === null}
+            {#if result && result.effective_base_actual_delay === null}
               <div class="delay-note dim">このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。</div>
             {/if}
           </div>
@@ -1072,13 +1497,17 @@
               </div>
               <div class="band-rows">
                 {#each atkRows as a (a.k)}
-                  <div class="band-row">
+                  <button
+                    type="button" class="band-row"
+                    aria-expanded={isDetailOpen(`atk:${a.k}`)} onclick={() => toggleDetail(`atk:${a.k}`)}
+                  >
                     <span class="swatch" style="background: {a.c};"></span>
                     <span class="br-label">{a.k}</span>
                     <span class="br-note dim">{a.note}</span>
                     <span class="num br-val" use:bump={() => Math.round(a.v)}>{fmtInt(Math.round(a.v))}</span>
                     <span class="num br-share dim" use:bump={() => parseFloat(a.share)}>{a.share}</span>
-                  </div>
+                  </button>
+                  {#if isDetailOpen(`atk:${a.k}`)}{@render detailBox(atkDetail(a))}{/if}
                 {/each}
               </div>
 
@@ -1114,13 +1543,17 @@
               </div>
               <div class="band-rows">
                 {#each flowRows as f (f.k)}
-                  <div class="band-row">
+                  <button
+                    type="button" class="band-row"
+                    aria-expanded={isDetailOpen(`flow:${f.k}`)} onclick={() => toggleDetail(`flow:${f.k}`)}
+                  >
                     <span class="swatch" style="background: {f.c};"></span>
                     <span class="br-label" class:strong={topLever?.k === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
                     <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(Math.abs(f.add))}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span>
                     <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
-                  </div>
+                  </button>
+                  {#if isDetailOpen(`flow:${f.k}`)}{@render detailBox(stepDetail(f.step, f.mult, f.add, f.to))}{/if}
                 {/each}
               </div>
 
@@ -1181,7 +1614,7 @@
               </div>
 
               {#if result}
-                <TracePanel trace={result.trace} {character} />
+                <TracePanel trace={result.trace} />
               {/if}
               </div>
             {/if}
@@ -1290,15 +1723,22 @@
             <span class="card-title">バフ</span>
             <span class="dim small">押した瞬間に数字が動きます</span>
           </div>
+          <label class="calc-buff-set">
+            <span>使うセット</span>
+            <select value={app.calcBuffSetId ?? ""} onchange={(e) => chooseCalcBuffSet(e.currentTarget.value)}>
+              <option value="">なし</option>
+              {#each app.buffSets as set (set.id)}<option value={set.id}>{set.name}</option>{/each}
+            </select>
+          </label>
           <p class="buff-legend dim">
-            <span class="lg always">常</span> 常時 = マイセット(キャラに保存済み・{alwaysBuffCount} 件)
+            <span class="lg always">常</span> セット内({alwaysBuffCount} 件)
             ／ <span class="lg extra">追</span> 追加 = この計算だけ({extraBuffCount} 件・保存されません)
-            ／ 無印 使わない。<b>常時にするには「試し変更を保存」</b>。
+            ／ 無印 使わない。
           </p>
           <div class="buff-chips">
             {#each consumableBuffs as def (def.id)}
               {@const state = buffState(def)}
-              {@const blocked = state === "off" && isBlocked(payload.stat_sources.buffs.choices, app.catalog, def)}
+              {@const blocked = state === "off" && isBlocked(app.calcBuffs.choices, app.catalog, def)}
               <button
                 type="button"
                 class="buff-chip"
@@ -1363,7 +1803,7 @@
               </div>
             {/if}
           {/each}
-          <p class="buff-note dim">変更は試し変更として反映されます。「キャラに保存」で常用セットとして残ります。</p>
+          <p class="buff-note dim">変更はこの計算だけに反映され、バフセットやキャラには保存されません。</p>
         </div>
 
         <!-- 調整(一時) -->
@@ -1476,15 +1916,28 @@
   .pop-row.on .pop-name { font-weight: 700; }
   .pop-row .strong { font-weight: 700; }
 
-  .skill-row { position: relative; z-index: 2; padding: 8px 11px 0; }
+  .skill-row { position: relative; z-index: 2; padding: 8px 11px 0; display: flex; align-items: center; gap: 7px; }
   .skill-trigger {
-    width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 1px;
+    min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 1px;
     padding: 5px 9px; border-radius: var(--r-panel); background: #F4F9FE; border: 1px solid #D6E2F0; text-align: left;
   }
   .skill-trigger:hover { background: var(--bg-rail); }
   .sk-line1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .sk-name { min-width: 0; flex: 1; font-size: 11.5px; font-weight: 700; color: #3E2B26; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sk-meta { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 主軸を上書き中の印と戻し先。保存されない状態なのでラベンダー(--sim)。
+     どちらも行の高さを変えない小物で、主軸どおりのときは出ない(§00 02) */
+  .sk-override {
+    flex-shrink: 0; padding: 0 6px; border-radius: var(--r-pill);
+    background: var(--state-temp-bg); border: 1px solid var(--sim); color: var(--sim-fg);
+    font-size: 8.5px; font-weight: 700; white-space: nowrap;
+  }
+  .sk-reset {
+    flex-shrink: 0; padding: 4px 9px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--sim); color: var(--sim-fg);
+    font-size: 9.5px; font-weight: 700; white-space: nowrap;
+  }
+  .sk-reset:hover { background: var(--state-temp-bg); }
   .combo-type-row {
     margin: 8px 11px 0; padding: 8px 10px;
     display: grid; grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); align-items: end; gap: 10px;
@@ -1518,6 +1971,10 @@
   .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
   .chain .op { font-size: 12px; color: var(--fg-dim); padding-bottom: 3px; white-space: nowrap; }
   .chain .gatebadge { align-self: flex-end; margin-bottom: 3px; }
+  /* 押すと内訳が鎖の直下に開く。hover は塗りだけで、余白を足して隣を動かさない(§00 03) */
+  .chain button.node { text-align: left; border-radius: var(--r-inset); }
+  .chain button.node:hover { background: var(--bg-active); box-shadow: 0 0 0 4px var(--bg-active); }
+  .chain button.node:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   /* まだデータが来ていない段。0 で埋めず、破線で「無い」と見せる(§00) */
   /* まだデータが来ていない段は 1 行に畳む(§00 触らない場所は 1 行に)。
      破線 = 「無い」の記号。0 で埋めない */
@@ -1584,6 +2041,41 @@
   .br-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
   .br-val.bad { color: var(--danger); }
   .br-share { flex-shrink: 0; width: 32px; text-align: right; font-size: 9.5px; }
+  /* 構成行・段フローの行は押すと内訳が直下に開く。行の位置・高さは変わらない */
+  button.band-row { width: 100%; text-align: left; border-radius: var(--r-inset); }
+  button.band-row:hover { background: var(--bg-active); box-shadow: 0 0 0 3px var(--bg-active); }
+  button.band-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 押した数値の内訳。読み取り専用なのでインセット面、列は band-row と同じ段にそろえる */
+  .detail {
+    margin: 6px 0 2px; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px;
+    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  }
+  .dt-head { display: flex; align-items: baseline; gap: 6px 7px; flex-wrap: wrap; }
+  .dt-hk { font-size: 9px; letter-spacing: 0.06em; }
+  .dt-hv { min-width: 62px; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
+  .dt-hv.big { font-size: 13px; color: var(--fg); }
+  .dt-hv.bad { color: var(--danger); }
+  .dt-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .dt-label { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dt-mult { flex-shrink: 0; width: 48px; text-align: right; font-size: 9.5px; }
+  .dt-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 10px; font-weight: 700; color: var(--fg-sub); }
+  .dt-sub { flex-shrink: 0; width: 112px; text-align: right; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dt-val.bad { color: var(--danger); }
+  /* ステの行は押すと要因が直下に開く。行の位置・高さは変わらない */
+  button.dt-row-btn {
+    width: 100%; text-align: left; padding: 1px 3px; margin: 0 -3px;
+    border: 0; background: none; color: inherit; font: inherit; border-radius: var(--r-inset);
+  }
+  button.dt-row-btn:hover { background: var(--bg-active); }
+  button.dt-row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dt-subs {
+    display: flex; flex-direction: column; gap: 3px;
+    margin: 2px 0 3px 8px; padding-left: 8px; border-left: 1px solid var(--border-soft);
+  }
+  .dt-note, .dt-expr { margin: 2px 0 0; font-size: 9px; line-height: 1.6; }
+  .dt-expr { font-family: var(--font-num); word-break: break-all; }
   .pierce-note { margin-top: 7px; display: flex; align-items: center; gap: 10px; font-size: 9.5px; color: var(--fg-muted); min-width: 0; }
   .def-warn { min-width: 0; flex: 1; text-align: right; font-family: var(--font); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .def-warn.bad { color: var(--danger); }
@@ -1677,6 +2169,8 @@
   .mat-note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }
 
   .buff-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .calc-buff-set { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--fg-muted); }
+  .calc-buff-set select { min-width: 160px; height: 28px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--bg-field); color: var(--fg); }
   .buff-chip {
     padding: 4px 9px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border-soft);

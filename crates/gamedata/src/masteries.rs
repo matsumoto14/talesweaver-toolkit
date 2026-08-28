@@ -2056,7 +2056,11 @@ mod tests {
         let mut ids = HashSet::new();
         for d in MASTERIES {
             assert!(ids.insert(d.id), "id 重複: {}", d.id);
-            assert!(crate::find_character(d.game_character_id).is_some(), "{} が一覧に無い", d.id);
+            assert!(
+                crate::find_character(d.game_character_id).is_some(),
+                "{} が一覧に無い",
+                d.id
+            );
         }
     }
 
@@ -2096,8 +2100,11 @@ mod tests {
     /// (両方に持たせると二重に数える)。増やすときは wiki を読み直したうえで足す。
     #[test]
     fn 計算に入るのは12件() {
-        let modeled: Vec<&str> =
-            MASTERIES.iter().filter(|d| d.effect.is_modeled()).map(|d| d.id).collect();
+        let modeled: Vec<&str> = MASTERIES
+            .iter()
+            .filter(|d| d.effect.is_modeled())
+            .map(|d| d.id)
+            .collect();
         assert_eq!(
             modeled,
             [
@@ -2120,8 +2127,11 @@ mod tests {
     /// ボリスの段は wiki どおり M1〜M4。
     #[test]
     fn ボリスは4段() {
-        let tiers: HashSet<u8> =
-            MASTERIES.iter().filter(|d| d.game_character_id == "boris").map(|d| d.tier).collect();
+        let tiers: HashSet<u8> = MASTERIES
+            .iter()
+            .filter(|d| d.game_character_id == "boris")
+            .map(|d| d.tier)
+            .collect();
         let mut tiers: Vec<u8> = tiers.into_iter().collect();
         tiers.sort_unstable();
         assert_eq!(tiers, [1, 2, 3, 4]);

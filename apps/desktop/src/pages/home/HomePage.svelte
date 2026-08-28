@@ -6,7 +6,7 @@
   import { candidatesFor, COST_COLORS, tryCandidates, type Candidate } from "../../candidates";
   import { fmtInt } from "../../format";
   import {
-    app, evaluationFor, flatContents, payloadOf, refreshEvaluation, selectedCharacter, totalContents,
+    app, buffSelectionFor, evaluationFor, flatContents, payloadOf, refreshEvaluation, selectedCharacter, totalContents,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
@@ -234,7 +234,7 @@
         const results = await tryCandidates(
           list,
           () => payloadOf(c),
-          (p) => previewDamage(p, skillId, contentId, 0),
+          (p) => previewDamage(p, skillId, contentId, 0, null, null, buffSelectionFor(c)),
           baseDamage,
         );
         if (isCurrent()) advice = results;
@@ -252,14 +252,12 @@
     a.candidate.apply(p);
     app.sim = p;
     app.calcTargetId = goal.content.id;
-    app.calcSkillId = goal.ev?.damage?.skill_id ?? null;
     app.tab = "calc";
   }
 
   function tryInCalc() {
     if (!selectedRow) return;
     app.calcTargetId = selectedRow.content.id;
-    app.calcSkillId = selectedRow.ev?.damage?.skill_id ?? null;
     app.tab = "calc";
   }
 

@@ -130,7 +130,8 @@ pub struct RandomOptionSlot {
 impl RandomOptionSlot {
     /// この枠の効果値。上書きが無ければレンジ上限。
     pub fn value(&self, def: &RandomOptionDef) -> f64 {
-        self.value.unwrap_or_else(|| def.tier(self.rank).map_or(0.0, |t| t.max))
+        self.value
+            .unwrap_or_else(|| def.tier(self.rank).map_or(0.0, |t| t.max))
     }
 }
 
@@ -263,9 +264,16 @@ pub enum RandomOptionError {
     #[error("{slot:?} はランダムオプションの対象外です(効果・AF 以外)")]
     NotAllowed { slot: crate::equipment::PartSlot },
     #[error("ランダムオプション '{option_id}' の効果値は 0〜{max} です(指定値 {value})")]
-    ValueOutOfRange { option_id: String, value: f64, max: f64 },
+    ValueOutOfRange {
+        option_id: String,
+        value: f64,
+        max: f64,
+    },
     #[error("{slot:?} のランダムオプションは {max} 枠までです")]
-    TooMany { slot: crate::equipment::PartSlot, max: usize },
+    TooMany {
+        slot: crate::equipment::PartSlot,
+        max: usize,
+    },
 }
 
 /// ランダムオプションの効果値の上限(wiki に全 OP 共通の上限は無い。
@@ -278,8 +286,16 @@ mod tests {
     use crate::equipment::PartSlot;
 
     const TIERS: &[RandomOptionTier] = &[
-        RandomOptionTier { rank: RandomOptionRank::Rare, min: 6.0, max: 8.0 },
-        RandomOptionTier { rank: RandomOptionRank::Special, min: 10.0, max: 25.0 },
+        RandomOptionTier {
+            rank: RandomOptionRank::Rare,
+            min: 6.0,
+            max: 8.0,
+        },
+        RandomOptionTier {
+            rank: RandomOptionRank::Special,
+            min: 10.0,
+            max: 25.0,
+        },
     ];
 
     fn def(effect: RandomOptionEffect) -> RandomOptionDef {
@@ -320,20 +336,34 @@ mod tests {
 
     #[test]
     fn dependency_rate_lands_on_matching_dependency_only() {
-        let d = def(RandomOptionEffect::DependencyDamageRate(SkillDependency::Stab));
-        let slot =
-            RandomOptionSlot { option_id: "test".into(), rank: RandomOptionRank::Rare, value: None };
+        let d = def(RandomOptionEffect::DependencyDamageRate(
+            SkillDependency::Stab,
+        ));
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
         let mut totals = RandomOptionTotals::default();
         totals.add(&d, &slot);
-        assert_eq!(totals.dependency_damage_rate.get(SkillDependency::Stab), 0.08);
-        assert_eq!(totals.dependency_damage_rate.get(SkillDependency::Hack), 0.0);
+        assert_eq!(
+            totals.dependency_damage_rate.get(SkillDependency::Stab),
+            0.08
+        );
+        assert_eq!(
+            totals.dependency_damage_rate.get(SkillDependency::Hack),
+            0.0
+        );
     }
 
     #[test]
     fn accuracy_and_evasion_lands_on_both() {
         let d = def(RandomOptionEffect::AccuracyAndEvasionPoint);
-        let slot =
-            RandomOptionSlot { option_id: "test".into(), rank: RandomOptionRank::Rare, value: None };
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
         let mut totals = RandomOptionTotals::default();
         totals.add(&d, &slot);
         assert_eq!(totals.accuracy_point, 8);
@@ -367,7 +397,10 @@ mod tests {
         totals.add(&def(RandomOptionEffect::PhysicalAddedDamageRate), &slot);
 
         assert_eq!(totals.added_damage_rate_for(SkillDependency::Stab), 0.08);
-        assert_eq!(totals.added_damage_rate_for(SkillDependency::StabHack), 0.08);
+        assert_eq!(
+            totals.added_damage_rate_for(SkillDependency::StabHack),
+            0.08
+        );
         assert_eq!(totals.added_damage_rate_for(SkillDependency::Int), 0.0);
         assert_eq!(totals.added_damage_rate_for(SkillDependency::HackInt), 0.0);
     }

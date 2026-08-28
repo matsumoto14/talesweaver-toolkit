@@ -13,14 +13,16 @@ use crate::actual_delay::{ActualDelayContribution, SkillUsesTable};
 use crate::attack_power::AttackCoefficients;
 use crate::awakening::Awakening;
 use crate::calculate_damage;
-use crate::category::DamageCategory;
 use crate::common_skill::CommonSkills;
 use crate::content::{evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation};
 use crate::critical_rate::CriticalRateSources;
+use crate::damage::{DamageContribution, DamageInput};
 use crate::defense::AccuracyCorrection;
-use crate::damage::DamageInput;
 use crate::enemy::Enemy;
-use crate::equipment::{wrist_base_bonus, Equipment, EquipmentCoefficients, EquipmentValues, WristBonusRule};
+use crate::equipment::{
+    sum_equipment_value_sources, wrist_base_bonus, Equipment, EquipmentCoefficients,
+    EquipmentValueSource, EquipmentValues, WristBonusRule,
+};
 use crate::random_option::RandomOptionTotals;
 use crate::skill::{Skill, SkillDependency};
 use crate::stat_sources::{Adjustments, StatContribution};
@@ -52,7 +54,6 @@ pub struct DamageMaterial {
     pub awakening_rate: f64,
     pub damage_cap: i64,
     pub stat_cap: i64,
-    pub pins: Adjustments,
     pub actual_delay_skills: Vec<ActualDelayContribution>,
     pub critical_rate_sources: CriticalRateSources,
     pub skill_uses: SkillUsesTable,
@@ -68,11 +69,11 @@ impl DamageMaterial {
         combo_count: u32,
         temporary_pins: Option<Adjustments>,
         coefficients: DependencyCoefficients,
-        equipment_base_totals: EquipmentValues,
-        equipment_enhanced_totals: EquipmentValues,
+        equipment_base_sources: Vec<EquipmentValueSource>,
+        equipment_enhanced_sources: Vec<EquipmentValueSource>,
         title_damage_rate: f64,
         title_added_damage_rate: f64,
-        damage_contributions: Vec<(DamageCategory, f64)>,
+        damage_contributions: Vec<DamageContribution>,
         element_value: i64,
     ) -> DamageInput {
         DamageInput::new(
@@ -82,8 +83,8 @@ impl DamageMaterial {
             coefficients.attack,
             self.equipment.clone(),
             self.common_skills,
-            equipment_base_totals,
-            equipment_enhanced_totals,
+            equipment_base_sources,
+            equipment_enhanced_sources,
             coefficients.equipment,
             coefficients.accuracy,
             self.random_options,
@@ -98,7 +99,6 @@ impl DamageMaterial {
             enemy,
             combo_count,
             element_value,
-            self.pins.clone(),
             temporary_pins,
             self.actual_delay_skills.clone(),
             self.critical_rate_sources,
@@ -116,7 +116,7 @@ impl DamageMaterial {
 pub struct SkillEvaluationInput {
     pub skill: Skill,
     pub coefficients: DependencyCoefficients,
-    pub damage_contributions: Vec<(DamageCategory, f64)>,
+    pub damage_contributions: Vec<DamageContribution>,
     pub element_value: i64,
 }
 
@@ -135,12 +135,14 @@ pub struct WristBonusMaterial {
 }
 
 impl WristBonusMaterial {
-    /// 依存種別ごとの装備基本能力値(腕装備パッシブ込み)をあらかじめ全 6 種ぶん組み立てる。
-    fn base_totals_by_dependency(
+    /// 依存種別ごとの装備基本能力値の供給源(腕装備パッシブ込み)をあらかじめ全 6 種ぶん組み立てる。
+    /// 腕装備パッシブは非 0 のときだけ「手首補正」という 1 供給源として追加する
+    /// (「なぜこの数字?」パネルの装備攻撃力掘り下げに使う)。
+    fn base_sources_by_dependency(
         &self,
         base_stats: &BaseStats,
-        equipment_base_totals_raw: EquipmentValues,
-    ) -> [(SkillDependency, EquipmentValues); 6] {
+        equipment_base_sources_raw: &[EquipmentValueSource],
+    ) -> [(SkillDependency, Vec<EquipmentValueSource>); 6] {
         SkillDependency::ALL.map(|dependency| {
             let style_dependency = self.style_dependency_override.unwrap_or(dependency);
             let bonus = wrist_base_bonus(
@@ -151,7 +153,14 @@ impl WristBonusMaterial {
                 self.wrist_totals,
                 self.siena_thrust,
             );
-            (dependency, equipment_base_totals_raw.add(bonus))
+            let mut sources = equipment_base_sources_raw.to_vec();
+            if bonus != EquipmentValues::default() {
+                sources.push(EquipmentValueSource {
+                    source: "手首補正".to_string(),
+                    values: bonus,
+                });
+            }
+            (dependency, sources)
         })
     }
 }
@@ -174,31 +183,32 @@ pub fn evaluate_contents_for_character(
     content_areas: &[ContentArea],
     enemies: &[Enemy],
     skills: &[SkillEvaluationInput],
-    equipment_base_totals_raw: EquipmentValues,
+    equipment_base_sources_raw: Vec<EquipmentValueSource>,
     wrist_bonus: WristBonusMaterial,
     titles: &[TitleDef],
     awakening: Awakening,
     fixed_dependency: Option<SkillDependency>,
 ) -> Vec<ContentEvaluation> {
-    let equipment_base_totals_by_dependency =
-        wrist_bonus.base_totals_by_dependency(&material.base_stats, equipment_base_totals_raw);
-    let equipment_base_totals_for = |dependency: SkillDependency| {
-        equipment_base_totals_by_dependency
+    let equipment_base_sources_by_dependency = wrist_bonus
+        .base_sources_by_dependency(&material.base_stats, &equipment_base_sources_raw);
+    let equipment_base_sources_for = |dependency: SkillDependency| {
+        equipment_base_sources_by_dependency
             .iter()
             .find(|(d, _)| *d == dependency)
-            .map(|(_, v)| *v)
-            .unwrap_or(equipment_base_totals_raw)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_else(|| equipment_base_sources_raw.clone())
     };
 
-    let enhanced_by_region: Vec<(Option<CoreRegion>, EquipmentValues)> = std::iter::once(None)
-        .chain(CoreRegion::ALL.into_iter().map(Some))
-        .map(|region| (region, material.equipment.enhanced_totals(region)))
-        .collect();
+    let enhanced_by_region: Vec<(Option<CoreRegion>, Vec<EquipmentValueSource>)> =
+        std::iter::once(None)
+            .chain(CoreRegion::ALL.into_iter().map(Some))
+            .map(|region| (region, material.equipment.enhanced_sources(region)))
+            .collect();
     let enhanced_for = |region: Option<CoreRegion>| {
         enhanced_by_region
             .iter()
             .find(|(r, _)| *r == region)
-            .map(|(_, v)| *v)
+            .map(|(_, v)| v.clone())
             .unwrap_or_default()
     };
 
@@ -212,8 +222,8 @@ pub fn evaluate_contents_for_character(
                 material,
                 enemies,
                 skills,
-                equipment_base_totals_raw,
-                &equipment_base_totals_for,
+                &equipment_base_sources_raw,
+                &equipment_base_sources_for,
                 &enhanced_for,
                 title,
                 titles,
@@ -231,38 +241,63 @@ fn evaluate_one_content(
     material: &DamageMaterial,
     enemies: &[Enemy],
     skills: &[SkillEvaluationInput],
-    equipment_base_totals_raw: EquipmentValues,
-    equipment_base_totals_for: &impl Fn(SkillDependency) -> EquipmentValues,
-    enhanced_for: &impl Fn(Option<CoreRegion>) -> EquipmentValues,
+    equipment_base_sources_raw: &[EquipmentValueSource],
+    equipment_base_sources_for: &impl Fn(SkillDependency) -> Vec<EquipmentValueSource>,
+    enhanced_for: &impl Fn(Option<CoreRegion>) -> Vec<EquipmentValueSource>,
     title: Option<&str>,
     titles: &[TitleDef],
     awakening: Awakening,
     fixed_dependency: Option<SkillDependency>,
 ) -> ContentEvaluation {
-    let thesis_core_total = material.equipment.thesis_cores.total_bonus(content.core_region);
+    let thesis_core_total = material
+        .equipment
+        .thesis_cores
+        .total_bonus(content.core_region);
 
     // 敵データが無いコンテンツ(入場条件のみ判定)は火力計算をしない。装備条件の
     // 比較先はキャラの代表スキル(一覧の先頭)の依存種別で決める。
     let Some(enemy_id) = content.enemy_id.as_deref() else {
         let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.skill.dependency));
-        let equipment_base_totals =
-            dependency.map(equipment_base_totals_for).unwrap_or(equipment_base_totals_raw);
-        return evaluate_content(content, None, &equipment_base_totals, awakening, dependency, thesis_core_total);
+        let equipment_base_totals = dependency.map(equipment_base_sources_for).map_or_else(
+            || sum_equipment_value_sources(equipment_base_sources_raw),
+            |sources| sum_equipment_value_sources(&sources),
+        );
+        return evaluate_content(
+            content,
+            None,
+            &equipment_base_totals,
+            awakening,
+            dependency,
+            thesis_core_total,
+        );
     };
 
     let Some(enemy) = enemies.iter().find(|e| e.id == enemy_id) else {
         // データ整合性上、通常は発生しない(コンテンツの enemy_id は敵カタログに必ず
         // 存在する。gamedata のテストで担保)。万一のズレでも panic せず未判定として返す。
         let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.skill.dependency));
-        let equipment_base_totals =
-            dependency.map(equipment_base_totals_for).unwrap_or(equipment_base_totals_raw);
-        return evaluate_content(content, None, &equipment_base_totals, awakening, dependency, thesis_core_total);
+        let equipment_base_totals = dependency.map(equipment_base_sources_for).map_or_else(
+            || sum_equipment_value_sources(equipment_base_sources_raw),
+            |sources| sum_equipment_value_sources(&sources),
+        );
+        return evaluate_content(
+            content,
+            None,
+            &equipment_base_totals,
+            awakening,
+            dependency,
+            thesis_core_total,
+        );
     };
 
-    let equipment_enhanced_totals = enhanced_for(content.core_region);
+    let equipment_enhanced_sources = enhanced_for(content.core_region);
     let title_damage_rate = title_attack_damage_rate(title, titles);
-    let title_added_damage_rate =
-        title_added_damage_rate(title, titles, content.game_region, content.enemy_id.as_deref());
+    let title_added_damage_rate = title_added_damage_rate(
+        title,
+        titles,
+        content.game_region,
+        content.enemy_id.as_deref(),
+    );
 
     let mut best: Option<BestSkillDamage> = None;
     let mut best_dependency: Option<SkillDependency> = None;
@@ -273,15 +308,18 @@ fn evaluate_one_content(
             0,
             None,
             entry.coefficients,
-            equipment_base_totals_for(entry.skill.dependency),
-            equipment_enhanced_totals,
+            equipment_base_sources_for(entry.skill.dependency),
+            equipment_enhanced_sources.clone(),
             title_damage_rate,
             title_added_damage_rate,
             entry.damage_contributions.clone(),
             entry.element_value,
         );
         let result = calculate_damage(&input);
-        if best.as_ref().is_none_or(|b| result.per_hit.max > b.per_hit_max) {
+        if best
+            .as_ref()
+            .is_none_or(|b| result.per_hit.max > b.per_hit_max)
+        {
             best = Some(BestSkillDamage {
                 skill_id: entry.skill.id.clone(),
                 per_hit_max: result.per_hit.max,
@@ -293,8 +331,10 @@ fn evaluate_one_content(
     }
 
     let requirement_dependency = fixed_dependency.or(best_dependency);
-    let equipment_base_totals =
-        requirement_dependency.map(equipment_base_totals_for).unwrap_or(equipment_base_totals_raw);
+    let equipment_base_totals = requirement_dependency.map(equipment_base_sources_for).map_or_else(
+        || sum_equipment_value_sources(equipment_base_sources_raw),
+        |sources| sum_equipment_value_sources(&sources),
+    );
     evaluate_content(
         content,
         best,
@@ -308,9 +348,7 @@ fn evaluate_one_content(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::character_skill::{
-        CharacterSkillDef, CharacterSkills, SkillAudience, SkillEffect,
-    };
+    use crate::character_skill::{CharacterSkillDef, CharacterSkills, SkillAudience, SkillEffect};
     use crate::critical_rate::CriticalRateSources;
     use crate::defense::AccuracyCorrection;
     use crate::element::Element;
@@ -320,8 +358,11 @@ mod tests {
     use crate::stats::{BaseStats, StatKind, StatModifierSet};
 
     const STAB_DEF: &[StatKind] = &[StatKind::Stab, StatKind::Def];
-    const ELITE_SWORDSMAN: &[SkillEffect] =
-        &[SkillEffect::StatRate { stats: STAB_DEF, percent: 10.0, layer: crate::stat_sources::StatLayer::MultiplierB }];
+    const ELITE_SWORDSMAN: &[SkillEffect] = &[SkillEffect::StatRate {
+        stats: STAB_DEF,
+        percent: 10.0,
+        layer: crate::stat_sources::StatLayer::MultiplierB,
+    }];
 
     /// マスタリーを取ってはじめて効果が出るキャラスキル(character_skill.rs のテストデータを
     /// 単純化したもの)。STAB/DEF +10%(倍率B)。
@@ -409,10 +450,15 @@ mod tests {
 
     fn material(apply_skill: bool) -> DamageMaterial {
         let stat_sources = StatSources::default();
-        let (mut modifiers, mut contributions) = build_modifiers(&stat_sources, &[]).unwrap();
+        let (mut modifiers, mut contributions) =
+            build_modifiers(&stat_sources, &crate::BuffSelection::default(), &[]).unwrap();
         if apply_skill {
-            let skills = CharacterSkills { skill_ids: vec!["test_possession_swordsman".into()] };
-            let masteries = Masteries { picked: vec!["test_m2_3".into()] };
+            let skills = CharacterSkills {
+                skill_ids: vec!["test_possession_swordsman".into()],
+            };
+            let masteries = Masteries {
+                picked: vec!["test_m2_3".into()],
+            };
             crate::stat_sources::apply_character_skills(
                 &mut modifiers,
                 &mut contributions,
@@ -422,7 +468,15 @@ mod tests {
             );
         }
         DamageMaterial {
-            base_stats: BaseStats { stab: 500, hack: 500, int: 0, def: 0, mr: 0, dex: 100, agi: 0 },
+            base_stats: BaseStats {
+                stab: 500,
+                hack: 500,
+                int: 0,
+                def: 0,
+                mr: 0,
+                dex: 100,
+                agi: 0,
+            },
             stat_modifiers: modifiers,
             stat_contributions: contributions,
             equipment: Equipment::default(),
@@ -432,10 +486,13 @@ mod tests {
             awakening_rate: 1.0,
             damage_cap: i64::MAX,
             stat_cap: i64::MAX,
-            pins: Adjustments::default(),
             actual_delay_skills: Vec::new(),
             critical_rate_sources: CriticalRateSources::default(),
-            skill_uses: SkillUsesTable { reduction_percents: Vec::new(), base_delays: Vec::new(), uses: Vec::new() },
+            skill_uses: SkillUsesTable {
+                reduction_percents: Vec::new(),
+                base_delays: Vec::new(),
+                uses: Vec::new(),
+            },
         }
     }
 
@@ -452,7 +509,7 @@ mod tests {
             &content_area(),
             &[enemy()],
             &skills,
-            EquipmentValues::default(),
+            Vec::new(),
             WristBonusMaterial::default(),
             &[],
             Awakening::default(),

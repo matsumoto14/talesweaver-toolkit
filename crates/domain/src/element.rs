@@ -178,10 +178,16 @@ impl ElementSources {
     /// 頭アビ → カフスアビ。中立属性は装備付与できないので除外)。
     /// 呼び出し側(コマンド層)で属性強化の対象属性を決めるのに使う。
     pub fn selected(&self) -> Option<Element> {
-        [self.pet, self.monster_card, self.rune, self.helm_ability, self.cuffs_ability]
-            .into_iter()
-            .flatten()
-            .find(|e| e.can_enchant_equipment())
+        [
+            self.pet,
+            self.monster_card,
+            self.rune,
+            self.helm_ability,
+            self.cuffs_ability,
+        ]
+        .into_iter()
+        .flatten()
+        .find(|e| e.can_enchant_equipment())
     }
 }
 
@@ -197,7 +203,12 @@ pub struct ElementPreview {
 
 impl ElementPreview {
     pub fn new(base: ElementValues, equipment: ElementValues, sources: ElementValues) -> Self {
-        Self { base, equipment, sources, total: base.add(equipment).add(sources).clamp_to_max() }
+        Self {
+            base,
+            equipment,
+            sources,
+            total: base.add(equipment).add(sources).clamp_to_max(),
+        }
     }
 }
 
@@ -207,8 +218,16 @@ mod tests {
 
     #[test]
     fn 属性値は属性ごとに足して255で頭打ち() {
-        let base = ElementValues { water: 10, thunder: 5, ..Default::default() };
-        let equipment = ElementValues { water: 90, fire: 300, ..Default::default() };
+        let base = ElementValues {
+            water: 10,
+            thunder: 5,
+            ..Default::default()
+        };
+        let equipment = ElementValues {
+            water: 90,
+            fire: 300,
+            ..Default::default()
+        };
         let total = base.add(equipment).clamp_to_max();
         assert_eq!(total.get(Element::Water), 100);
         assert_eq!(total.get(Element::Thunder), 5);
@@ -219,9 +238,21 @@ mod tests {
     #[test]
     fn 供給源は選んだ属性にカタログの値を足す() {
         let defs = [
-            ElementSourceDef { id: ElementSourceId::Pet, name: "ペット", value: 10 },
-            ElementSourceDef { id: ElementSourceId::MonsterCard, name: "モンスターカード", value: 30 },
-            ElementSourceDef { id: ElementSourceId::Rune, name: "ルーンスキル", value: 20 },
+            ElementSourceDef {
+                id: ElementSourceId::Pet,
+                name: "ペット",
+                value: 10,
+            },
+            ElementSourceDef {
+                id: ElementSourceId::MonsterCard,
+                name: "モンスターカード",
+                value: 30,
+            },
+            ElementSourceDef {
+                id: ElementSourceId::Rune,
+                name: "ルーンスキル",
+                value: 20,
+            },
         ];
         let sources = ElementSources {
             pet: Some(Element::Water),
@@ -233,7 +264,10 @@ mod tests {
         assert_eq!(values.get(Element::Water), 40);
         assert_eq!(values.get(Element::Fire), 20);
         // 未選択(None)の供給源は足さない
-        assert_eq!(ElementSources::default().values(&defs), ElementValues::default());
+        assert_eq!(
+            ElementSources::default().values(&defs),
+            ElementValues::default()
+        );
     }
 
     #[test]

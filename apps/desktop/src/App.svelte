@@ -8,9 +8,10 @@
   import CharacterRail from "./CharacterRail.svelte";
   import { loadStatLimits } from "./limits.svelte";
   import CalcPage from "./pages/calc/CalcPage.svelte";
+  import BuffsPage from "./pages/buffs/BuffsPage.svelte";
   import CharsPage from "./pages/chars/CharsPage.svelte";
   import HomePage from "./pages/home/HomePage.svelte";
-  import { app, loadAll, type Tab } from "./state.svelte";
+  import { app, focusErrorTarget, loadAll, type Tab } from "./state.svelte";
   import { dismissError, reportError, reportNotice, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import Splitter from "./ui/Splitter.svelte";
@@ -18,6 +19,7 @@
   const TABS: { id: Tab; label: string }[] = [
     { id: "home", label: "ホーム" },
     { id: "calc", label: "ダメージ計算" },
+    { id: "buffs", label: "バフ" },
     { id: "chars", label: "キャラ" },
   ];
 
@@ -78,6 +80,15 @@
   {#if toast.message}
     <div class="toast" class:notice={toast.kind === "notice"} role="alert">
       <span>{toast.message}</span>
+      <!-- どこの話か分かるエラーは、読ませるだけで終わらせない。押せばその場所が開く(§00 ⑤) -->
+      {#if toast.target}
+        {@const target = toast.target}
+        <button
+          type="button"
+          class="toast-goto"
+          onclick={() => { focusErrorTarget(target); dismissError(); }}
+        >ここを開く ›</button>
+      {/if}
       <button type="button" onclick={dismissError} aria-label="閉じる">×</button>
     </div>
   {/if}
@@ -108,6 +119,8 @@
             <HomePage />
           {:else if app.tab === "calc"}
             <CalcPage />
+          {:else if app.tab === "buffs"}
+            <BuffsPage />
           {:else}
             <CharsPage />
           {/if}
@@ -161,7 +174,15 @@
   .toast.notice {
     background: var(--state-edge-bg); border-color: var(--state-edge-bd);
   }
-  .toast button { margin-left: auto; color: var(--fg-muted); font-size: 14px; }
+  .toast span { margin-right: auto; }
+  .toast button { color: var(--fg-muted); font-size: 14px; }
+  /* 「読むだけ」の帯の中で、押せるものだけ形を持たせる(§00 ⑤ 考えさせない) */
+  .toast-goto {
+    flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
+    border: 1px solid var(--danger); background: #fff;
+    color: var(--danger); font-size: 11px; font-weight: 600;
+  }
+  .toast-goto:hover { background: var(--danger); color: #fff; }
 
   .body {
     flex: 1; min-height: 0; display: grid;

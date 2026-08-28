@@ -56,6 +56,17 @@ export function defaultChoice(def: BuffDefinition): BuffChoice {
   return choice;
 }
 
+/** 保存済み選択から、このバフの実際の効果値を解決する。記録のみ・不完全値は null。 */
+export function resolvedBuffValue(choice: BuffChoice, def: BuffDefinition): number | null {
+  if (isFixedValue(def.value)) return def.value.fixed;
+  if (isChoiceValue(def.value)) {
+    const index = choice.choice_index;
+    return index !== null && Number.isInteger(index) ? (def.value.choice[index] ?? null) : null;
+  }
+  if (userInputRange(def.value)) return choice.value;
+  return null;
+}
+
 /** バフの ON/OFF を反映した新しい選択配列を返す(元の配列は変更しない) */
 export function toggleBuff(choices: BuffChoice[], def: BuffDefinition, checked: boolean): BuffChoice[] {
   if (checked) return [...choices, defaultChoice(def)];

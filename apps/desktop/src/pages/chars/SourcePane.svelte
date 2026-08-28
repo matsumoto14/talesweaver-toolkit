@@ -26,7 +26,6 @@
   import StatusPane from "./sources/StatusPane.svelte";
   import ThesisCorePane from "./sources/ThesisCorePane.svelte";
   import TitlePane from "./sources/TitlePane.svelte";
-  import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import { fmtInt } from "../../format";
@@ -125,7 +124,6 @@
     skills: { title: "キャラスキル", note: "マスタリー(段ごとに 1 つ)と、自分・味方のスキル" },
     actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
     criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 +${limits.critical_rate_bonus_max}%)` },
-    adjust: { title: "調整", note: "検証・仮定用の例外操作" },
   };
 </script>
 
@@ -281,18 +279,6 @@
     <CriticalRatePane {draft} {preview} {skills} {onOpenSource} />
   {:else if sourceId === "skills"}
     <CharacterSkillPane {draft} />
-  {:else if sourceId === "adjust"}
-    <div class="card">
-      <p class="hint dim">「このステに +N」「最終能力値を N に固定」の 2 種。検証・未収録データ用の例外操作です。</p>
-      <AdjustmentEditor
-        adjustments={draft.statSources.adjustments}
-        addMin={limits.adjustment_add_min}
-        addMax={limits.adjustment_add_max}
-        pinMin={limits.adjustment_pin_min}
-        pinMax={limits.adjustment_pin_max}
-        pinDefault={(k) => preview?.stats[k] ?? draft.baseStats[k]}
-      />
-    </div>
   {/if}
 </div>
 {/key}

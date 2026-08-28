@@ -1,18 +1,69 @@
-//! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは String に変換して返す。
+//! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは `CommandError` に変換して返す。
 
 use domain::{
-    evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, CommonSkills,
-    Content, ContentArea, ContentEvaluation, DamageInput, DamageMaterial, DamageResult,
-    DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef, EquipmentPart,
-    RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
+    evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
+    CommonSkills, Content, ContentArea, ContentEvaluation, DamageInput, DamageMaterial,
+    DamageResult, DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef,
+    EquipmentPart, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
 use gamedata::{EquipmentItem, GameCharacter};
-use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
+use storage::{BuffSet, CharacterRepository, NewCharacter, RegisteredCharacter};
 use tauri::{Manager, State};
 
 use crate::{AppInfo, AppState};
 
-type CommandResult<T> = Result<T, String>;
+type CommandResult<T> = Result<T, CommandError>;
+
+/// フロントに返すエラー。文言だけでなく「どこの話か」(装備の部位・アビリティ)も運ぶ。
+/// エラー帯はこの `location` を使って該当部位の詳細まで飛ぶ。
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandError {
+    pub message: String,
+    pub location: Option<domain::ValidationLocation>,
+}
+
+impl From<String> for CommandError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            location: None,
+        }
+    }
+}
+
+impl From<&str> for CommandError {
+    fn from(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+            location: None,
+        }
+    }
+}
+
+impl From<domain::ValidationError> for CommandError {
+    fn from(error: domain::ValidationError) -> Self {
+        Self {
+            message: error.message,
+            location: error.location,
+        }
+    }
+}
+
+impl From<storage::StorageError> for CommandError {
+    fn from(error: storage::StorageError) -> Self {
+        match error {
+            storage::StorageError::InvalidValue(invalid) => Self {
+                message: format!("不正な値: {}", invalid.message),
+                location: invalid.location,
+            },
+            other => Self {
+                message: other.to_string(),
+                location: None,
+            },
+        }
+    }
+}
 
 fn with_repo<T>(
     state: &State<'_, AppState>,
@@ -22,15 +73,16 @@ fn with_repo<T>(
         .repo
         .lock()
         .map_err(|e| format!("リポジトリのロックに失敗: {e}"))?;
-    f(&repo).map_err(|e| e.to_string())
+    f(&repo).map_err(CommandError::from)
 }
 
 fn find_skill(skill_id: &str) -> CommandResult<Skill> {
-    gamedata::find_skill(skill_id).ok_or_else(|| format!("スキル '{skill_id}' が見つかりません"))
+    gamedata::find_skill(skill_id)
+        .ok_or_else(|| format!("スキル '{skill_id}' が見つかりません").into())
 }
 
 fn find_enemy(enemy_id: &str) -> CommandResult<Enemy> {
-    gamedata::find_enemy(enemy_id).ok_or_else(|| format!("敵 '{enemy_id}' が見つかりません"))
+    gamedata::find_enemy(enemy_id).ok_or_else(|| format!("敵 '{enemy_id}' が見つかりません").into())
 }
 
 /// 保存前のキャラデータ(draft)を検証する。DB には書き込まないプレビュー系コマンド
@@ -39,30 +91,44 @@ fn find_enemy(enemy_id: &str) -> CommandResult<Enemy> {
 /// `storage::character_repository::validate` と同じ検証内容だが、こちらは永続化を経由しないので
 /// `storage` を呼ばず domain の検証(`Equipment::validate_against_catalog` を含む)を直接呼ぶ
 /// (`storage::character_repository::validate` は登録・更新の保存直前チェック用)。
-fn validate_character_draft(character: &NewCharacter) -> CommandResult<()> {
+fn validate_character_draft(character: &NewCharacter, buffs: &BuffSelection) -> CommandResult<()> {
     if character.name.trim().is_empty() {
         return Err("名前が空です".into());
     }
     character.base_stats.validate().map_err(|e| e.to_string())?;
     if character.awakening.stage > domain::Awakening::MAX_STAGE {
-        return Err(format!("覚醒段階は 0〜{} です", domain::Awakening::MAX_STAGE));
+        return Err(format!("覚醒段階は 0〜{} です", domain::Awakening::MAX_STAGE).into());
     }
     if character.awakening.eternal_level > domain::Awakening::MAX_ETERNAL_LEVEL {
         return Err(format!(
             "エタの意志 Lv は 0〜{} です",
             domain::Awakening::MAX_ETERNAL_LEVEL
-        ));
+        )
+        .into());
     }
-    character.stat_sources.validate().map_err(|e| e.to_string())?;
+    character
+        .stat_sources
+        .validate()
+        .map_err(|e| e.to_string())?;
     character
         .stat_sources
         .character_skills
-        .validate(gamedata::character_skill_catalog(), &character.game_character_id)
+        .validate(
+            gamedata::character_skill_catalog(),
+            &character.game_character_id,
+        )
         .map_err(|e| e.to_string())?;
-    domain::stat_sources::build_modifiers(&character.stat_sources, &gamedata::buff_catalog())
-        .map_err(|e| e.to_string())?;
+    domain::stat_sources::build_modifiers(
+        &character.stat_sources,
+        buffs,
+        &gamedata::buff_catalog(),
+    )
+    .map_err(|e| e.to_string())?;
     character.equipment.validate().map_err(|e| e.to_string())?;
-    character.common_skills.validate().map_err(|e| e.to_string())?;
+    character
+        .common_skills
+        .validate()
+        .map_err(|e| e.to_string())?;
     character.equipment.validate_against_catalog(
         &gamedata::equipment_catalog(),
         &gamedata::equipment_abilities(),
@@ -70,8 +136,11 @@ fn validate_character_draft(character: &NewCharacter) -> CommandResult<()> {
     )?;
     // 称号は装備部位ではないので部位ループの外で見る(1 枠・カタログ参照のみ)
     if let Some(id) = &character.equipment.title {
-        if !gamedata::title_catalog().iter().any(|t| t.id == id.as_str()) {
-            return Err(format!("未知の称号 '{id}' です"));
+        if !gamedata::title_catalog()
+            .iter()
+            .any(|t| t.id == id.as_str())
+        {
+            return Err(format!("未知の称号 '{id}' です").into());
         }
     }
     Ok(())
@@ -83,11 +152,9 @@ fn find_content(content_id: &str) -> CommandResult<Content> {
         .into_iter()
         .flat_map(|area| area.contents)
         .find(|c| c.id == content_id)
-        .ok_or_else(|| format!("コンテンツ '{content_id}' が見つかりません"))?;
+        .ok_or_else(|| CommandError::from(format!("コンテンツ '{content_id}' が見つかりません")))?;
     if content.enemy_id.is_none() {
-        return Err(format!(
-            "コンテンツ '{content_id}' には敵データがありません"
-        ));
+        return Err(format!("コンテンツ '{content_id}' には敵データがありません").into());
     }
     Ok(content)
 }
@@ -145,6 +212,13 @@ pub fn list_buff_catalog() -> Vec<BuffDefinition> {
     gamedata::buff_catalog()
 }
 
+/// バフセット単体の与ダメージカテゴリ合計。ゲームUIと同じカテゴリ名・上限を使う。
+#[tauri::command]
+pub fn summarize_buff_selection(buffs: BuffSelection) -> CommandResult<Vec<domain::CategoryTrace>> {
+    domain::summarize_buff_selection(&buffs, &gamedata::buff_catalog())
+        .map_err(|e| e.to_string().into())
+}
+
 /// 属性値の供給源カタログ(装備の属性強化以外。ペット / モンスターカード / ルーン /
 /// 頭アビリティ / カフスアビリティ)。
 #[tauri::command]
@@ -155,7 +229,7 @@ pub fn list_element_sources() -> Vec<domain::ElementSourceDef> {
 /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
 #[tauri::command]
 pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
-    validate_character_draft(&character)?;
+    validate_character_draft(&character, &BuffSelection::default())?;
     Ok(gamedata::element_preview(
         &character.game_character_id,
         &character.equipment,
@@ -216,6 +290,56 @@ pub fn list_characters(state: State<'_, AppState>) -> CommandResult<Vec<Register
     with_repo(&state, |repo| repo.list())
 }
 
+#[tauri::command]
+pub fn list_buff_sets(state: State<'_, AppState>) -> CommandResult<Vec<BuffSet>> {
+    with_repo(&state, |repo| repo.list_buff_sets())
+}
+
+#[tauri::command]
+pub fn create_buff_set(
+    state: State<'_, AppState>,
+    name: String,
+    choices: BuffSelection,
+) -> CommandResult<BuffSet> {
+    with_repo(&state, |repo| {
+        repo.create_buff_set(&name, &choices, &gamedata::buff_catalog())
+    })
+}
+
+#[tauri::command]
+pub fn update_buff_set(
+    state: State<'_, AppState>,
+    id: i64,
+    name: String,
+    choices: BuffSelection,
+) -> CommandResult<BuffSet> {
+    with_repo(&state, |repo| {
+        repo.update_buff_set(id, &name, &choices, &gamedata::buff_catalog())
+    })
+}
+
+#[tauri::command]
+pub fn duplicate_buff_set(state: State<'_, AppState>, id: i64) -> CommandResult<BuffSet> {
+    with_repo(&state, |repo| repo.duplicate_buff_set(id))
+}
+
+#[tauri::command]
+pub fn delete_buff_set(state: State<'_, AppState>, id: i64) -> CommandResult<()> {
+    with_repo(&state, |repo| repo.delete_buff_set(id))
+}
+
+#[tauri::command]
+pub fn set_default_buff_set(
+    state: State<'_, AppState>,
+    character_id: i64,
+    buff_set_id: Option<i64>,
+) -> CommandResult<RegisteredCharacter> {
+    with_repo(&state, |repo| {
+        repo.set_default_buff_set(character_id, buff_set_id)?;
+        repo.get(character_id)
+    })
+}
+
 /// 主軸スキル(攻撃力の依存種別を決める)はそのキャラのスキル一覧に含まれている必要がある。
 /// キャラ種を変えたときに前キャラのスキルが残るのを防ぐ。未選択(`None`)は許す。
 fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
@@ -226,10 +350,10 @@ fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
         .iter()
         .any(|s| &s.id == skill_id)
     {
-        return Err(format!(
+        return Err(CommandError::from(format!(
             "主軸スキル '{skill_id}' は '{}' のスキルではありません",
             character.game_character_id
-        ));
+        )));
     }
     Ok(())
 }
@@ -240,10 +364,10 @@ pub fn create_character(
     character: NewCharacter,
 ) -> CommandResult<RegisteredCharacter> {
     if gamedata::find_character(&character.game_character_id).is_none() {
-        return Err(format!(
+        return Err(CommandError::from(format!(
             "ゲームキャラ '{}' は未登録です",
             character.game_character_id
-        ));
+        )));
     }
     validate_main_skill(&character)?;
     with_repo(&state, |repo| {
@@ -266,10 +390,10 @@ pub fn update_character(
     character: NewCharacter,
 ) -> CommandResult<RegisteredCharacter> {
     if gamedata::find_character(&character.game_character_id).is_none() {
-        return Err(format!(
+        return Err(CommandError::from(format!(
             "ゲームキャラ '{}' は未登録です",
             character.game_character_id
-        ));
+        )));
     }
     validate_main_skill(&character)?;
     with_repo(&state, |repo| {
@@ -309,6 +433,7 @@ fn attack_coefficients_of(
 pub fn preview_effective_stats(
     base_stats: domain::BaseStats,
     stat_sources: domain::StatSources,
+    buffs: BuffSelection,
     equipment: domain::Equipment,
     common_skills: CommonSkills,
     awakening: domain::Awakening,
@@ -318,6 +443,7 @@ pub fn preview_effective_stats(
     domain::preview_effective_stats(
         &base_stats,
         &stat_sources,
+        &buffs,
         &equipment,
         &common_skills,
         &gamedata::buff_catalog(),
@@ -328,7 +454,7 @@ pub fn preview_effective_stats(
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string().into())
 }
 
 /// 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。保存前のキャラデータで出す。
@@ -336,11 +462,15 @@ pub fn preview_effective_stats(
 /// 与ダメージ式とは別経路なので対象コンテンツを取らない。装備補正 9 値は
 /// 基本能力値 + 強化能力値(地域なし = テシスコアを含まない)の合計を渡す。
 #[tauri::command]
-pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile> {
-    validate_character_draft(&character)?;
+pub fn preview_defense(
+    character: NewCharacter,
+    buffs: BuffSelection,
+) -> CommandResult<DefenseProfile> {
+    validate_character_draft(&character, &buffs)?;
     let preview = domain::preview_effective_stats(
         &character.base_stats,
         &character.stat_sources,
+        &buffs,
         &character.equipment,
         &character.common_skills,
         &gamedata::buff_catalog(),
@@ -424,7 +554,12 @@ fn armor_added_damage(armor: &EquipmentPart) -> i64 {
         gamedata::armor_enhance_multiplier(armor.enhance_level, armor.enhance_grade).unwrap_or(0.0);
     let values = armor.base.add(armor.enchant);
     let rates = gamedata::armor_enhance_rates(class);
-    domain::armor_added_damage(&values, rates.physical_defense, rates.magic_defense, multiplier)
+    domain::armor_added_damage(
+        &values,
+        rates.physical_defense,
+        rates.magic_defense,
+        multiplier,
+    )
 }
 
 /// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を gamedata から解決する。
@@ -444,7 +579,7 @@ fn resolve_combo_skill_type(
     match combo_skill_type {
         Some(combo_type) => skill
             .resolve_combo_variant(combo_type, equipment.siena_actual_delay_reduction())
-            .map_err(|e| e.to_string()),
+            .map_err(|e| e.to_string().into()),
         None => Ok(skill),
     }
 }
@@ -454,15 +589,20 @@ fn resolve_combo_skill_type(
 fn build_damage_material(
     base_stats: &domain::BaseStats,
     stat_sources: &domain::StatSources,
+    buffs: &BuffSelection,
     equipment: &domain::Equipment,
     common_skills: CommonSkills,
     awakening: domain::Awakening,
     temporary_adjustments: Option<&domain::Adjustments>,
 ) -> CommandResult<DamageMaterial> {
     let (mut stat_modifiers, mut stat_contributions) =
-        domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog())
+        domain::stat_sources::build_modifiers(stat_sources, buffs, &gamedata::buff_catalog())
             .map_err(|e| e.to_string())?;
-    domain::stat_sources::apply_siena_stats(&mut stat_modifiers, &mut stat_contributions, equipment);
+    domain::stat_sources::apply_siena_stats(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        equipment,
+    );
     domain::stat_sources::apply_masteries(
         &mut stat_modifiers,
         &mut stat_contributions,
@@ -476,7 +616,11 @@ fn build_damage_material(
         &stat_sources.masteries,
         gamedata::character_skill_catalog(),
     );
-    domain::stat_sources::apply_unleash(&mut stat_modifiers, &mut stat_contributions, &common_skills);
+    domain::stat_sources::apply_unleash(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &common_skills,
+    );
     if let Some(temp) = temporary_adjustments {
         temp.validate().map_err(|e| e.to_string())?;
         domain::stat_sources::apply_temporary_adjustments(
@@ -508,7 +652,6 @@ fn build_damage_material(
         awakening_rate: gamedata::awakening_rate(awakening),
         damage_cap: gamedata::awakening_caps(awakening).max_damage,
         stat_cap: gamedata::awakening_caps(awakening).max_stat,
-        pins: stat_sources.adjustments.clone(),
         actual_delay_skills: gamedata::actual_delay_contributions(
             &stat_sources.character_skills,
             &stat_sources.masteries,
@@ -525,6 +668,7 @@ fn build_damage_input(
     game_character_id: &str,
     character_style_dependency: Option<domain::SkillDependency>,
     stat_sources: &domain::StatSources,
+    buffs: &BuffSelection,
     equipment: domain::Equipment,
     common_skills: CommonSkills,
     awakening: domain::Awakening,
@@ -538,6 +682,7 @@ fn build_damage_input(
     let material = build_damage_material(
         base_stats,
         stat_sources,
+        buffs,
         &equipment,
         common_skills,
         awakening,
@@ -545,16 +690,22 @@ fn build_damage_input(
     )?;
     let skill = resolve_combo_skill_type(skill, &equipment, combo_skill_type)?;
     let equipment_catalog = gamedata::equipment_catalog();
-    let equipment_base_totals = equipment
-        .base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog())
-        .add(gamedata::character_wrist_base_bonus(
-            game_character_id,
-            base_stats,
-            character_style_dependency.unwrap_or(skill.dependency),
-            &equipment,
-            &equipment_catalog,
-        ));
-    let equipment_enhanced_totals = equipment.enhanced_totals(content.core_region);
+    let mut equipment_base_sources = equipment
+        .base_sources(&gamedata::equipment_abilities(), &gamedata::title_catalog());
+    let wrist_bonus = gamedata::character_wrist_base_bonus(
+        game_character_id,
+        base_stats,
+        character_style_dependency.unwrap_or(skill.dependency),
+        &equipment,
+        &equipment_catalog,
+    );
+    if wrist_bonus != domain::EquipmentValues::default() {
+        equipment_base_sources.push(domain::EquipmentValueSource {
+            source: "手首補正".to_string(),
+            values: wrist_bonus,
+        });
+    }
+    let equipment_enhanced_sources = equipment.enhanced_sources(content.core_region);
     let title_damage_rate =
         domain::title_attack_damage_rate(equipment.title.as_deref(), &gamedata::title_catalog());
     let title_added_damage_rate = domain::title_added_damage_rate(
@@ -563,7 +714,8 @@ fn build_damage_input(
         content.game_region,
         content.enemy_id.as_deref(),
     );
-    let damage_contributions = gamedata::damage_contributions_of(stat_sources, &equipment, skill.dependency);
+    let damage_contributions =
+        gamedata::damage_contributions_of(stat_sources, buffs, &equipment, skill.dependency);
     let element_value = gamedata::element_preview(game_character_id, &equipment, stat_sources)
         .total
         .get(skill.element);
@@ -574,8 +726,8 @@ fn build_damage_input(
         combo_count,
         temporary_adjustments,
         coefficients,
-        equipment_base_totals,
-        equipment_enhanced_totals,
+        equipment_base_sources,
+        equipment_enhanced_sources,
         title_damage_rate,
         title_added_damage_rate,
         damage_contributions,
@@ -592,6 +744,7 @@ pub fn calculate_damage(
     combo_count: u32,
     combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
+    buffs: BuffSelection,
 ) -> CommandResult<DamageResult> {
     let character = with_repo(&state, |repo| repo.get(character_id))?;
     let style_dependency = character
@@ -607,6 +760,7 @@ pub fn calculate_damage(
         &character.game_character_id,
         style_dependency,
         &character.stat_sources,
+        &buffs,
         character.equipment,
         character.common_skills,
         character.awakening,
@@ -624,13 +778,14 @@ pub fn calculate_damage(
 #[tauri::command]
 pub fn preview_damage(
     character: NewCharacter,
+    buffs: BuffSelection,
     skill_id: String,
     content_id: String,
     combo_count: u32,
     combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
-    validate_character_draft(&character)?;
+    validate_character_draft(&character, &buffs)?;
     let content = find_content(&content_id)?;
     let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
     let style_dependency = character
@@ -644,6 +799,7 @@ pub fn preview_damage(
         &character.game_character_id,
         style_dependency,
         &character.stat_sources,
+        &buffs,
         character.equipment,
         character.common_skills,
         character.awakening,
@@ -666,9 +822,10 @@ pub fn preview_damage(
 #[tauri::command]
 pub fn evaluate_contents(
     character: NewCharacter,
+    buffs: BuffSelection,
     dependency_skill_id: Option<String>,
 ) -> CommandResult<Vec<ContentEvaluation>> {
-    validate_character_draft(&character)?;
+    validate_character_draft(&character, &buffs)?;
     // 後段のループで繰り返し使う(下の「評価ループの不変値」コメント参照)。
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_abilities = gamedata::equipment_abilities();
@@ -681,7 +838,7 @@ pub fn evaluate_contents(
         for content in &area.contents {
             if let Some(enemy_id) = content.enemy_id.as_deref() {
                 if !enemies.iter().any(|e| e.id == enemy_id) {
-                    return Err(format!("敵 '{enemy_id}' が見つかりません"));
+                    return Err(format!("敵 '{enemy_id}' が見つかりません").into());
                 }
             }
         }
@@ -693,14 +850,15 @@ pub fn evaluate_contents(
     let material = build_damage_material(
         &character.base_stats,
         &character.stat_sources,
+        &buffs,
         &character.equipment,
         character.common_skills,
         character.awakening,
         None,
     )?;
-    let equipment_base_totals_raw = character
+    let equipment_base_sources_raw = character
         .equipment
-        .base_totals(&equipment_abilities, &titles);
+        .base_sources(&equipment_abilities, &titles);
     let character_style_dependency = character
         .main_skill_id
         .as_deref()
@@ -724,6 +882,7 @@ pub fn evaluate_contents(
             coefficients: dependency_coefficients(skill.dependency),
             damage_contributions: gamedata::damage_contributions_of(
                 &character.stat_sources,
+                &buffs,
                 &character.equipment,
                 skill.dependency,
             ),
@@ -745,7 +904,7 @@ pub fn evaluate_contents(
         &gamedata::content_areas(),
         &enemies,
         &skill_inputs,
-        equipment_base_totals_raw,
+        equipment_base_sources_raw,
         wrist_bonus,
         &titles,
         character.awakening,
@@ -767,7 +926,7 @@ mod tests {
         let error =
             resolve_combo_skill_type(skill, &Equipment::default(), Some(ComboSkillType::General))
                 .unwrap_err();
-        assert!(error.contains("対応していません"));
+        assert!(error.message.contains("対応していません"));
     }
 
     // 刀(HACK系: 斬×6.67 + 突×1.00)・突100/斬300 → INT(300×6.67+100) = 2101
