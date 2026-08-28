@@ -1,0 +1,21 @@
+name = "tw-toolkit-inquiry"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# nonce の使用済み記録とレート制限のカウンタ。どちらも TTL 付きの短命なキー。
+# 作成: wrangler kv namespace create INQUIRY
+[[kv_namespaces]]
+binding = "INQUIRY"
+id = "<wrangler kv namespace create INQUIRY で出た id>"
+
+[vars]
+GITHUB_OWNER = "matsumoto14"
+GITHUB_REPO = "talesweaver-toolkit"
+# 付けるラベル(リポジトリ側にあらかじめ作っておく)
+ISSUE_LABELS = "from-app,unverified"
+
+# シークレット(wrangler secret put で入れる。ここには書かない):
+#   GITHUB_APP_ID              GitHub App の App ID
+#   GITHUB_APP_PRIVATE_KEY     GitHub App の秘密鍵(PKCS#8 PEM 全文)
+#   GITHUB_INSTALLATION_ID     このリポジトリへの installation id
+#   NONCE_SECRET               PoW の nonce に署名する任意の乱数文字列
