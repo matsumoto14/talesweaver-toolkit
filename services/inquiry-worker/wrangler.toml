@@ -1,6 +1,13 @@
-name = "tw-toolkit-inquiry"
+# Workers Builds が繋がっている Worker の名前と一致させること。
+# ずれていると、ローカルの `wrangler deploy` が別の Worker を新しく作ってしまう。
+name = "talesweaver-toolkit"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
+
+# 例外のスタックをダッシュボードの Observability から読めるようにする。
+# 無いと、原因不明の 500 を推測で追うことになる。
+[observability]
+enabled = true
 
 # nonce の使用済み記録とレート制限のカウンタ。どちらも TTL 付きの短命なキー。
 # 作成: wrangler kv namespace create INQUIRY(または ダッシュボード → Storage & Databases → KV)

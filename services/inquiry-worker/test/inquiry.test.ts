@@ -10,12 +10,15 @@ import worker, { type Env } from "../src/index";
 let privateKeyPem = "";
 
 beforeAll(async () => {
-  const pair = await crypto.subtle.generateKey(
+  // workers-types の generateKey / exportKey は共用体を返すので、鍵種を絞る。
+  const pair = (await crypto.subtle.generateKey(
     { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
     true,
     ["sign", "verify"],
+  )) as CryptoKeyPair;
+  const pkcs8 = new Uint8Array(
+    (await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer,
   );
-  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
   const base64 = Buffer.from(pkcs8).toString("base64").replace(/(.{64})/g, "$1\n");
   privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${base64}\n-----END PRIVATE KEY-----\n`;
 });
@@ -115,6 +118,20 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("設定漏れ", () => {
+  it("シークレットが欠けていたら、何が足りないかを返す", async () => {
+    const env = makeEnv();
+    env.NONCE_SECRET = "";
+
+    const response = await worker.fetch(challenge(), env);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()) as { error: string }).toMatchObject({
+      error: expect.stringContaining("NONCE_SECRET"),
+    });
+  });
+});
 
 describe("challenge", () => {
   it("nonce と難易度を返す", async () => {

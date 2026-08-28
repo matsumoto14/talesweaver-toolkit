@@ -24,6 +24,13 @@ export interface Env {
 /** PoW の難易度(先頭の 0 ビット数)。20 でおよそ 100 万回、実測で 1 秒前後。 */
 const POW_DIFFICULTY_BITS = 20;
 
+/** `wrangler secret put` / ダッシュボードで入れる 4 つ。1 つでも欠けると動かない。 */
+function missingSecrets(env: Env): string[] {
+  return (
+    ["NONCE_SECRET", "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_INSTALLATION_ID"] as const
+  ).filter((name) => !env[name]);
+}
+
 function difficultyOf(env: Env): number {
   const override = Number(env.POW_DIFFICULTY_BITS);
   return Number.isFinite(override) && override > 0 ? override : POW_DIFFICULTY_BITS;
@@ -53,6 +60,13 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+
+    // 設定漏れは「サーバー側で問題が起きました」に化けさせない。何が足りないかを返す。
+    // (未設定の NONCE_SECRET は HMAC の鍵長 0 になり、原因の分からない例外になる)
+    const missing = missingSecrets(env);
+    if (missing.length > 0) {
+      return cors(json({ error: `中継サーバーが未設定です: ${missing.join(", ")}` }, 503));
+    }
 
     try {
       if (url.pathname === "/challenge" && request.method === "GET") {
