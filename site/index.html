@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TW Context — TalesWeaver のダメージ計算ツール(非公式)</title>
+<meta name="description" content="登録したキャラクターを軸に、ダメージ計算・強化提案・コンテンツ入場ロードマップを出す Windows 向けデスクトップツール。非公式・無料。">
+<meta property="og:title" content="TW Context">
+<meta property="og:description" content="TalesWeaver のダメージ計算ツール(非公式)。なぜその数字になるかまで追えます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tw-context.dev/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=M+PLUS+1+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* 配色はアプリの app.css(docs/design-system.html)と同じトークンを使う。
+   サイトとアプリで色がずれると、ダウンロードした人が別物に見える。 */
+:root {
+  --bg: #C9D8EE; --bg-mid: #DEEBF7; --bg-rail: #EAF2FB; --bg-panel: #F6FBFF; --bg-field: #FFFFFF;
+  --sel: linear-gradient(180deg, #CCF7FF, #90D7FF); --sel-bd: #687287; --sel-fg: #123047;
+  --border: #A6BAD3; --border-soft: #C1D3E6; --border-strong: #798CAC;
+  --fg: #1B2331; --fg-head: #26334A; --fg-sub: #3B4A63; --fg-muted: #5E6E88; --fg-dim: #93A0B2;
+  --accent: #426DD6; --accent-hover: #2B4FA8;
+  --gold: #C2A057; --warm: #B0574A; --good: #2E6B4C;
+  --r-window: 14px; --r-panel: 10px; --r-inset: 6px; --r-pill: 999px;
+  --font: "M PLUS Rounded 1c", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "M PLUS 1 Code", ui-monospace, SFMono-Regular, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; font-family: var(--font); color: var(--fg); background: var(--bg-mid);
+  font-size: 15px; line-height: 1.75; -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+
+header.top {
+  background: linear-gradient(180deg, #DBE6F8, #AEC7F0);
+  border-bottom: 1px solid var(--sel-bd);
+}
+header.top .wrap { display: flex; align-items: center; gap: 10px; height: 56px; }
+.mark {
+  width: 24px; height: 24px; border-radius: var(--r-inset);
+  background: linear-gradient(160deg, #fff, #8EB9FC); border: 1px solid var(--sel-bd);
+}
+.brand { font-weight: 800; letter-spacing: 0.08em; font-size: 14px; }
+header.top nav { margin-left: auto; display: flex; gap: 18px; font-size: 13px; }
+
+/* 非公式であることは最初に読ませる。ここが一番人目に付く面なので、控えめにしない */
+.disclaimer {
+  background: #FDF3DE; border-bottom: 1px solid var(--gold);
+  font-size: 13px; color: #6B5718;
+}
+.disclaimer .wrap { padding-top: 10px; padding-bottom: 10px; }
+
+.hero { padding: 56px 0 40px; text-align: center; }
+.hero h1 { font-size: 40px; line-height: 1.25; margin: 0 0 12px; letter-spacing: 0.01em; }
+.hero .lead { font-size: 17px; color: var(--fg-sub); margin: 0 auto 28px; max-width: 620px; }
+
+.download { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.btn-dl {
+  display: inline-block; padding: 14px 34px; border-radius: var(--r-pill);
+  background: var(--sel); border: 1px solid var(--sel-bd); color: var(--sel-fg);
+  font: 800 17px var(--font); text-decoration: none; box-shadow: inset 0 1px 0 #fff, 0 2px 8px rgba(27,35,49,.14);
+}
+.btn-dl:hover { filter: brightness(1.05); color: var(--sel-fg); }
+.dl-meta { font-size: 12.5px; color: var(--fg-muted); font-family: var(--font-num); }
+.dl-sub { font-size: 13px; color: var(--fg-muted); }
+
+.shot { margin: 40px auto 0; max-width: 100%; }
+.shot img {
+  width: 100%; height: auto; display: block;
+  border: 1px solid var(--border-strong); border-radius: var(--r-window);
+  box-shadow: 0 18px 44px rgba(18,27,42,.22);
+}
+.shot figcaption { font-size: 12.5px; color: var(--fg-muted); text-align: center; margin-top: 10px; }
+
+section { padding: 44px 0; }
+section h2 { font-size: 24px; margin: 0 0 6px; color: var(--fg-head); }
+section .sub { color: var(--fg-muted); font-size: 14px; margin: 0 0 24px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.card {
+  background: var(--bg-panel); border: 1px solid var(--border-soft);
+  border-radius: var(--r-panel); padding: 16px 18px;
+}
+.card h3 { margin: 0 0 6px; font-size: 15px; }
+.card p { margin: 0; font-size: 13.5px; color: var(--fg-sub); line-height: 1.7; }
+
+.band { background: var(--bg-rail); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+
+table.spec { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.spec th, table.spec td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+table.spec th { width: 180px; color: var(--fg-muted); font-weight: 700; font-size: 13px; white-space: nowrap; }
+
+details.note {
+  background: var(--bg-panel); border: 1px solid var(--border-soft);
+  border-radius: var(--r-panel); padding: 12px 16px; margin-top: 14px;
+}
+details.note summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+details.note p, details.note ol { font-size: 13.5px; color: var(--fg-sub); }
+code { font-family: var(--font-num); font-size: 0.92em; background: var(--bg-rail); padding: 1px 5px; border-radius: var(--r-inset); }
+
+footer { padding: 32px 0 48px; font-size: 13px; color: var(--fg-muted); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+footer a { color: var(--fg-sub); }
+
+@media (max-width: 640px) {
+  .hero { padding: 36px 0 28px; }
+  .hero h1 { font-size: 30px; }
+  header.top nav { gap: 12px; font-size: 12px; }
+  table.spec th { width: auto; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="brand">TW CONTEXT</span>
+    <nav>
+      <a href="#features">できること</a>
+      <a href="#spec">動作環境</a>
+      <a href="https://github.com/matsumoto14/talesweaver-toolkit">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="disclaimer">
+  <div class="wrap">
+    <strong>非公式ツールです。</strong>
+    TalesWeaver の開発元・運営元とは一切関係がなく、公認・提携・後援を受けていません。
+    ゲームクライアントには接続せず、ゲームのファイルも読み書きしません。
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>その数字が、どこから来たのか</h1>
+    <p class="lead">
+      登録したキャラクターを軸に、ダメージ計算・強化提案・コンテンツ入場の可否を出す
+      Windows 向けのデスクトップツール。<br>
+      結果だけでなく、<strong>攻撃力の内訳・防御の抜け方・効いている倍率</strong>まで展開して確認できます。
+    </p>
+
+    <div class="download">
+      <a class="btn-dl" id="dl" href="https://github.com/matsumoto14/talesweaver-toolkit/releases">
+        Windows 版をダウンロード
+      </a>
+      <span class="dl-meta" id="dl-meta">最新版を確認しています…</span>
+      <span class="dl-sub">無料・インストール不要の設定なし。<a href="https://github.com/matsumoto14/talesweaver-toolkit/releases">過去の版</a></span>
+    </div>
+
+    <details class="note">
+      <summary>「WindowsによってPCが保護されました」と出たら</summary>
+      <p>
+        現在のインストーラには発行元の署名を付けていないため、初回起動時に SmartScreen の警告が出ます。
+        中身を確認したうえで進めたい場合は、警告の <code>詳細情報</code> を押して
+        <code>実行</code> を選んでください。
+      </p>
+      <p>
+        ソースコードはすべて公開しており、配布ファイルは
+        <a href="https://github.com/matsumoto14/talesweaver-toolkit/actions">GitHub Actions</a>
+        が同じソースからビルドしたものです。署名は導入を進めています。
+      </p>
+    </details>
+  </div>
+
+  <figure class="shot">
+    <img src="img/calc.png" alt="ダメージ計算画面。合計ダメージと、その内訳が展開されている" width="1280" height="840" loading="lazy">
+    <figcaption>ダメージ計算画面 — 1 発 / 合計 / クリティカルと、その根拠</figcaption>
+  </figure>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>できること</h2>
+    <p class="sub">Tale Wiki の数値を同梱しているので、wiki で調べられる値を手で入れる必要はありません。</p>
+    <div class="cards">
+      <div class="card">
+        <h3>キャラクター管理</h3>
+        <p>名前とキャラだけで登録。素ステ・覚醒・装備・シエナのオーラ・テシスコア・称号・ルーン・共通スキル・マスタリーまで、触ると保存前でも最終能力値が即座に再計算されます。</p>
+      </div>
+      <div class="card">
+        <h3>ダメージ計算</h3>
+        <p>キャラ・スキル・コンテンツを選ぶだけ。1 発(最小/最大)・合計・クリティカル(発生率つき)と、1 秒あたりの火力を出します。</p>
+      </div>
+      <div class="card">
+        <h3>なぜこの数字?</h3>
+        <p>攻撃力の内訳、相手の防御をどれだけ抜けているか、どの倍率で伸びているか。能力値計算から与ダメージ式の各段まで、全部たどれます。</p>
+      </div>
+      <div class="card">
+        <h3>もし〜だったら</h3>
+        <p>装備やステータスを仮に変えたときの差分を、キャラに保存せず試せます。次に何を強化すべきかが数字で出ます。</p>
+      </div>
+      <div class="card">
+        <h3>入場ロードマップ</h3>
+        <p>エリアごとのコンテンツ到達一覧。入場条件に対して何がどれだけ足りないかを並べます。</p>
+      </div>
+      <div class="card">
+        <h3>防御側も</h3>
+        <p>物理 / 魔法 / 複合の防御力・カット率・回避 P・特殊回避を、攻撃側と同じ粒度で確認できます。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="spec">
+  <div class="wrap">
+    <h2>動作環境とデータの扱い</h2>
+    <p class="sub">インストールした PC の中で完結します。</p>
+    <table class="spec">
+      <tr><th>OS</th><td>Windows 10 / 11(64bit)</td></tr>
+      <tr><th>必要なもの</th><td>Microsoft Edge WebView2 ランタイム(Windows 11 と、最近の Windows 10 には最初から入っています)</td></tr>
+      <tr><th>保存先</th><td><code>%APPDATA%\dev.twcontext.app\tw-context.sqlite</code><br>更新のたびに自動でバックアップします(直近 3 世代)</td></tr>
+      <tr><th>通信</th><td>自動的な外部通信はありません。ネットに出るのは<strong>問い合わせを送ったとき</strong>と<strong>起動時の更新確認</strong>だけです。問い合わせは送信前に内容が全文表示されます</td></tr>
+      <tr><th>ゲームとの関係</th><td>ゲームクライアントには接続せず、ゲームのファイルもメモリも読み書きしません。あなたが入力した情報だけで計算します</td></tr>
+      <tr><th>料金</th><td>無料。ソースコードは <a href="https://github.com/matsumoto14/talesweaver-toolkit">MIT ライセンス</a>で公開しています</td></tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>数値の出典</h2>
+    <p class="sub">
+      スキル倍率・敵ステータス・装備補正・入場条件などは、コミュニティ運営の
+      <a href="https://talewiki.com/">Tale Wiki</a> を一次ソースとして取り込んでいます。
+      wiki に記載が無く、コミュニティの実測値に依っている数値は、アプリ内で <code>[仮]</code> と表示しています。
+    </p>
+    <p class="sub">
+      同梱しているアイコン画像の著作権はゲームの権利者に帰属します。詳細と、権利者の方からの
+      削除のご依頼については
+      <a href="https://github.com/matsumoto14/talesweaver-toolkit/blob/main/NOTICE.md">NOTICE.md</a>
+      をご覧ください。
+    </p>
+    <p class="sub">
+      不具合の報告や要望は
+      <a href="https://github.com/matsumoto14/talesweaver-toolkit/issues">GitHub の Issue</a>
+      か、アプリ右上の「情報」から直接送れます。
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>TW Context — 非公式ファンツール</span>
+    <a href="https://github.com/matsumoto14/talesweaver-toolkit">ソースコード</a>
+    <a href="https://github.com/matsumoto14/talesweaver-toolkit/blob/main/NOTICE.md">権利表記</a>
+    <a href="https://github.com/matsumoto14/talesweaver-toolkit/blob/main/CHANGELOG.md">変更履歴</a>
+    <a href="https://github.com/matsumoto14/talesweaver-toolkit/blob/main/SECURITY.md">セキュリティ</a>
+  </div>
+</footer>
+
+<script>
+// ダウンロードボタンは R2 の固定 URL を指す(リリースのたびに上書きされる)。
+// 版と日付だけを GitHub API から補う。取れなくてもボタンは常に押せる。
+(function () {
+  var LATEST = "https://dl.tw-context.dev/latest/TW-Context-setup.exe";
+  var API = "https://api.github.com/repos/matsumoto14/talesweaver-toolkit/releases/latest";
+
+  var button = document.getElementById("dl");
+  var meta = document.getElementById("dl-meta");
+  button.href = LATEST;
+
+  fetch(API, { headers: { accept: "application/vnd.github+json" } })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (release) {
+      var date = new Date(release.published_at).toLocaleDateString("ja-JP");
+      meta.textContent = release.tag_name + " ・ " + date;
+    })
+    .catch(function () {
+      // リリース前・API 制限・オフライン。ボタンは生きているので出所だけ示す。
+      meta.textContent = "最新版";
+    });
+})();
+</script>
+</body>
+</html>

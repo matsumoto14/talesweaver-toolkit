@@ -66,6 +66,7 @@ jobs:
           Write-Host "signCommand を設定しました"
 
       - name: ビルドして Release に添付
+        id: build
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,3 +89,35 @@ jobs:
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
+
+      # --- 紹介ページ用の配布 (R2) ---------------------------------------------
+      # tw-context.dev のダウンロードボタンは R2 の固定 URL を指している。
+      # **同じビルドの成果物をそのまま上げる**ので、Releases と中身がずれない
+      # (手で同期しないことが唯一の担保)。
+      #
+      #   dl.tw-context.dev/latest/TW-Context-setup.exe   ← 毎回上書き。ページが指す先
+      #   dl.tw-context.dev/<タグ>/<元のファイル名>          ← 版ごとに保存
+      - name: インストーラを R2 に上げる
+        if: env.CLOUDFLARE_API_TOKEN != '' && github.ref_type == 'tag'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BUCKET: tw-context-downloads
+          ARTIFACTS: ${{ steps.build.outputs.artifactPaths }}
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $paths = $env:ARTIFACTS | ConvertFrom-Json
+          # NSIS の .exe を「最新」として配る(msi より導入がやさしい)。
+          $setup = $paths | Where-Object { $_ -like "*-setup.exe" } | Select-Object -First 1
+          if (-not $setup) { throw "NSIS インストーラが見つかりません: $($paths -join ', ')" }
+
+          foreach ($path in $paths) {
+            $name = Split-Path $path -Leaf
+            Write-Host "アップロード: $TAG/$name"
+            npx --yes wrangler@4 r2 object put "$env:BUCKET/$env:TAG/$name" --file "$path" --remote
+          }
+
+          Write-Host "アップロード: latest/TW-Context-setup.exe ($(Split-Path $setup -Leaf))"
+          npx --yes wrangler@4 r2 object put "$env:BUCKET/latest/TW-Context-setup.exe" `
+            --file "$setup" --content-type "application/vnd.microsoft.portable-executable" --remote

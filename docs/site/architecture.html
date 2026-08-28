@@ -239,6 +239,13 @@ SvelteKit は使っていないため <code>src/lib/</code> は置かない(<cod
 <li>唯一の外部通信先。エンドポイントは <code>apps/desktop/src/inquiry.ts</code> と
   <code>tauri.conf.json</code> の <code>connect-src</code> の <strong>2 か所</strong>に書くので、変えるときは両方直す</li>
 </ul>
+<h3 id="site">site/ — 紹介ページ(アプリ外)</h3>
+<ul>
+<li><code>tw-context.dev</code> に置く静的 HTML 1 枚。ビルド不要。Cloudflare Pages の別プロジェクトとして配る</li>
+<li>配色はアプリの <code>app.css</code> のトークンを写す。サイトとアプリで色がずれると別物に見える</li>
+<li>ダウンロードボタンは R2 の固定 URL(<code>dl.tw-context.dev/latest/…</code>)を指す。
+  中身はリリースワークフローが同じビルド成果物から上書きするので、Releases とずれない</li>
+</ul>
 <h2 id="_4">依存の向き</h2>
 <pre><code>apps/desktop → storage, gamedata, domain
 storage      → domain(型のため)

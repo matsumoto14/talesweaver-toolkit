@@ -39,6 +39,30 @@ GitHub の **Variables** に:
 `AZURE_CLIENT_ID` が空のときは署名ステップを飛ばして未署名でビルドする
 (ローカルや設定前でもワークフローが通る)。
 
+### 3. 配布先(R2)
+
+紹介ページ tw-context.dev のダウンロードボタンは、GitHub Releases ではなく
+**R2 の固定 URL** を指す。リリースのたびにページを書き換えなくて済むようにするため。
+
+1. R2 で **`tw-context-downloads`** バケットを作る
+2. バケットの Settings → Public access → **Custom domain** に `dl.tw-context.dev` を繋ぐ
+3. API トークン(**Account → R2 → Edit** 権限)を作り、GitHub の Secrets に登録:
+
+| 名前 | 中身 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | R2 の編集権限を持つトークン |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
+
+置かれ方:
+
+```
+dl.tw-context.dev/latest/TW-Context-setup.exe   毎回上書き。ページが指す先
+dl.tw-context.dev/v0.2.0/<元のファイル名>         版ごとに保存
+```
+
+**同じビルドの成果物をそのまま両方へ上げる**ので、Releases と R2 で中身がずれない。
+手で片方だけ差し替えないこと。`CLOUDFLARE_API_TOKEN` が空のときはこのステップを飛ばす。
+
 ## 毎回の手順
 
 ```sh
