@@ -15,8 +15,8 @@ use crate::Source;
 /// バフカタログの出典。
 pub const BUFF_CATALOG_SOURCE: Source = Source {
     page: "ステータス#jc16a054",
-    retrieved_on: "2026-08-21",
-    note: "常用バフのプリセット16件。値の符号・層は docs/claude/goals/2026-08-21-character-stat-sources.md 参照",
+    retrieved_on: "2026-08-29",
+    note: "常用バフ36件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照",
 };
 
 /// 常用バフのカタログ。
@@ -214,17 +214,46 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         },
         BuffDefinition {
             id: "club_s_effect",
-            name: "クラブSエフェクト",
-            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            name: "クラブSエフェクト(攻撃力+5%)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Club,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec!["club_s_effect"],
+            source_url: CLUB_WIKI_URL,
+            note: "7日。課金箱。ステータス版のクラブSエフェクトとは同時使用不可",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 5.0 }],
+        },
+        BuffDefinition {
+            id: "club_s_effect_single_stat",
+            name: "クラブSエフェクト(単一ステ+20)",
+            purposes: &[BuffPurpose::Stats],
             origin: BuffOrigin::Club,
             target: BuffTarget::UserSelected,
             layer: StatLayer::Fixed,
             value: BuffValue::Fixed(20.0),
-            exclusive_slots: vec![],
-            source_url: WIKI_URL,
-            note: "+20固定。クラブ効果(+7)とは別のバフで、同時に掛けられる",
+            exclusive_slots: vec!["club_s_effect"],
+            source_url: CLUB_WIKI_URL,
+            note: "STAB/HACK/INT/DEF/MR/DEX/AGIから選択。7日。課金箱",
             default_value: None,
-            damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 5.0 }],
+            damage_effects: &[],
+        },
+        BuffDefinition {
+            id: "club_s_effect_all_stats",
+            name: "クラブSエフェクト(ALL)",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Club,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::Fixed,
+            value: BuffValue::Choice(vec![5.0, 10.0, 15.0, 20.0]),
+            exclusive_slots: vec!["club_s_effect"],
+            source_url: CLUB_WIKI_URL,
+            note: "ALL+5/+10/+15/+20。期間と入手方法は商品ごとに異なる",
+            default_value: None,
+            damage_effects: &[],
         },
         BuffDefinition {
             id: "tales_weaver_energy",
@@ -325,9 +354,24 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
-            exclusive_slots: Vec::new(),
+            exclusive_slots: vec!["awakening_elixir"],
             source_url: WIKI_URL,
-            note: "[X2] 上限 +30%。改・覚醒の秘薬も同値",
+            note: "[X2] 上限 +30%。改・覚醒の秘薬とは重複不可",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+        },
+        BuffDefinition {
+            id: "improved_awakening_elixir",
+            name: "改・覚醒の秘薬",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec!["awakening_elixir"],
+            source_url: ITEM_BUFF_WIKI_URL,
+            note: "[X2] 上限 +30%。覚醒の秘薬とは重複不可",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
         },
@@ -515,6 +559,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
 }
 
 const WIKI_URL: &str = "https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9#jc16a054";
+const ITEM_BUFF_WIKI_URL: &str = "https://talewiki.com/?cmd=read&page=Item%2F%BE%C3%CC%D7%C9%CA%2F%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9%CA%E4%BD%F5";
+const CLUB_WIKI_URL: &str = "https://talewiki.com/?%A5%AF%A5%E9%A5%D6#club_S_effect";
 
 #[cfg(test)]
 mod tests {
@@ -522,8 +568,8 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn 常用バフは33件() {
-        assert_eq!(buff_catalog().len(), 33);
+    fn 常用バフは36件() {
+        assert_eq!(buff_catalog().len(), 36);
         assert!(!buff_catalog().iter().any(|d| d.id == "unleash"));
     }
 
@@ -537,20 +583,27 @@ mod tests {
     }
 
     /// ダメージにだけ効くバフは**ステを上げない**(`RecordOnly`)。
-    /// 逆に、ステと与ダメージの両方に効くバフもある(守護者のためのポーション・クラブSエフェクト)。
+    /// 逆に、ステと与ダメージの両方に効くバフもある(守護者のためのポーション等)。
     #[test]
     fn ダメージへの効き先を持つバフ() {
         let catalog = buff_catalog();
+        for buff in &catalog {
+            assert_eq!(
+                buff.purposes.contains(&BuffPurpose::Damage),
+                !buff.damage_effects.is_empty(),
+                "{} の火力目的とダメージ効果が一致していない",
+                buff.id,
+            );
+        }
         let with_damage: Vec<&str> = catalog
             .iter()
             .filter(|d| !d.damage_effects.is_empty())
             .map(|d| d.id)
             .collect();
-        assert_eq!(with_damage.len(), 24);
+        assert_eq!(with_damage.len(), 25);
         // ステと与ダメージの両方に効くもの
         for id in [
             "guardian_potion",
-            "club_s_effect",
             "snowman_potion",
             "tales_weaver_energy",
         ] {
@@ -561,6 +614,47 @@ mod tests {
                 "{id} はステにも効く"
             );
         }
+    }
+
+    #[test]
+    fn クラブsエフェクトは効果別で同時使用できない() {
+        let catalog = buff_catalog();
+        let variants: Vec<_> = [
+            "club_s_effect",
+            "club_s_effect_single_stat",
+            "club_s_effect_all_stats",
+        ]
+        .into_iter()
+        .map(|id| catalog.iter().find(|d| d.id == id).unwrap())
+        .collect();
+        assert!(variants.iter().all(|d| d.exclusive_slots == vec!["club_s_effect"]));
+
+        let attack = variants[0];
+        assert_eq!(attack.purposes, &[BuffPurpose::Damage]);
+        assert!(matches!(attack.value, BuffValue::RecordOnly));
+
+        let single = variants[1];
+        assert_eq!(single.purposes, &[BuffPurpose::Stats]);
+        assert!(matches!(single.target, BuffTarget::UserSelected));
+        assert!(matches!(single.value, BuffValue::Fixed(20.0)));
+
+        let all = variants[2];
+        assert_eq!(all.purposes, &[BuffPurpose::Stats]);
+        assert!(matches!(all.target, BuffTarget::AllStats));
+        assert_eq!(all.value, BuffValue::Choice(vec![5.0, 10.0, 15.0, 20.0]));
+    }
+
+    #[test]
+    fn 覚醒の秘薬2種は別アイテムで同時使用できない() {
+        let catalog = buff_catalog();
+        let normal = catalog.iter().find(|d| d.id == "awakening_elixir").unwrap();
+        let improved = catalog
+            .iter()
+            .find(|d| d.id == "improved_awakening_elixir")
+            .unwrap();
+        assert_eq!(normal.damage_effects, improved.damage_effects);
+        assert_eq!(normal.exclusive_slots, improved.exclusive_slots);
+        assert_eq!(normal.exclusive_slots, vec!["awakening_elixir"]);
     }
 
     #[test]

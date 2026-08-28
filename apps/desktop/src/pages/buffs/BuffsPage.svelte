@@ -4,7 +4,7 @@
     previewEffectiveStats, summarizeBuffSelection, updateBuffSet,
   } from "../../api/commands";
   import type {
-    BuffChoice, BuffDefinition, BuffOrigin, BuffPurpose, BuffSet, BuffTarget,
+    BuffChoice, BuffDefinition, BuffOrigin, BuffPurpose, BuffSet, BuffTarget, DamageCategory,
     CategoryTrace, DefenseProfile, EffectiveStats, StatKind,
   } from "../../api/types";
   import {
@@ -23,13 +23,20 @@
 
   const PURPOSES: { id: BuffPurpose; label: string; description: string }[] = [
     { id: "stats", label: "ステータスを上げたい", description: "能力値が伸びる効果" },
-    { id: "damage", label: "火力を上げたい", description: "攻撃ダメージなど、与える量を伸ばす効果" },
+    { id: "damage", label: "火力を上げたい", description: "攻撃ダメージ効果を持つバフ" },
     { id: "durability", label: "耐久を上げたい", description: "受けるダメージや生存力に関わる効果" },
   ];
   const ORIGIN_LABELS: Record<BuffOrigin, string> = {
     item: "アイテム", event: "イベント", club: "クラブ", skill: "スキル",
     rune: "ルーン", soul_link: "ソウルリンク", battle_state: "戦闘中", minigame: "ミニゲーム",
   };
+  type DamageGroup = "general" | "isabel" | "japan" | "other";
+  const DAMAGE_GROUPS: { id: DamageGroup; label: string }[] = [
+    { id: "general", label: "一般" },
+    { id: "isabel", label: "イザベル" },
+    { id: "japan", label: "日本独自" },
+    { id: "other", label: "その他" },
+  ];
 
   let selectedId = $state<number | null>(null);
   let newName = $state("");
@@ -39,16 +46,34 @@
   let confirmDeleteId = $state<number | null>(null);
   let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null;
   let activePurpose = $state<BuffPurpose>("stats");
+  let activeDamageGroup = $state<DamageGroup>("general");
   let damageSummary = $state<CategoryTrace[]>([]);
   let statBefore = $state<EffectiveStats | null>(null);
   let statAfter = $state<EffectiveStats | null>(null);
   let defenseBefore = $state<DefenseProfile | null>(null);
   let defenseAfter = $state<DefenseProfile | null>(null);
   let summaryLoading = $state(false);
+  let editingBuffId = $state<string | null>(null);
+  let draftChoice = $state<BuffChoice | null>(null);
   let summarySeq = 0;
   const selected = $derived(app.buffSets.find((set) => set.id === selectedId) ?? app.buffSets[0] ?? null);
   const activePurposeMeta = $derived(PURPOSES.find((purpose) => purpose.id === activePurpose) ?? PURPOSES[0]);
-  const activeDefinitions = $derived(app.catalog.filter((def) => def.purposes.includes(activePurpose)));
+  const matchesPurpose = (def: BuffDefinition, purpose: BuffPurpose) =>
+    purpose === "damage" ? def.damage_effects.length > 0 : def.purposes.includes(purpose);
+  const damageCategories = (def: BuffDefinition): DamageCategory[] =>
+    def.damage_effects.flatMap((effect) => effect !== "record_only" && "damage" in effect ? [effect.damage.category] : []);
+  const matchesDamageGroup = (def: BuffDefinition, group: DamageGroup) => {
+    const categories = damageCategories(def);
+    if (group === "general") return categories.includes("attack_damage_general");
+    if (group === "isabel") return categories.includes("attack_damage_isabel");
+    if (group === "japan") return categories.includes("attack_damage_japan");
+    return categories.some((category) => ![
+      "attack_damage_general", "attack_damage_isabel", "attack_damage_japan",
+    ].includes(category));
+  };
+  const activeDefinitions = $derived(app.catalog.filter((def) =>
+    matchesPurpose(def, activePurpose) && (activePurpose !== "damage" || matchesDamageGroup(def, activeDamageGroup))
+  ));
 
   $effect(() => {
     if (selectedId === null && app.buffSets.length > 0) selectedId = app.buffSets[0].id;
@@ -180,6 +205,8 @@
   }
 
   const on = (def: BuffDefinition) => selected?.choices.choices.some((choice) => choice.buff_id === def.id) ?? false;
+  const needsInput = (def: BuffDefinition) =>
+    isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value) !== null;
   const exclusive = (def: BuffDefinition) => def.exclusive_slots.length > 0 ? def.exclusive_slots.join(" / ") : "独立";
   const statOptions = STAT_KINDS.map((kind) => ({ value: kind, label: STAT_LABELS[kind] }));
 
@@ -211,19 +238,78 @@
   }
 
   const purposeSelectedCount = (purpose: BuffPurpose) =>
-    app.catalog.filter((def) => def.purposes.includes(purpose) && on(def)).length;
+    app.catalog.filter((def) => matchesPurpose(def, purpose) && on(def)).length;
+  const damageGroupSelectedCount = (group: DamageGroup) =>
+    app.catalog.filter((def) => matchesPurpose(def, "damage") && matchesDamageGroup(def, group) && on(def)).length;
+
+  function choosePurpose(purpose: BuffPurpose) {
+    cancelInput();
+    activePurpose = purpose;
+  }
+
+  function chooseDamageGroup(group: DamageGroup) {
+    cancelInput();
+    activeDamageGroup = group;
+  }
 
   const selectedChoice = (buffId: string) => selected?.choices.choices.find((choice) => choice.buff_id === buffId) ?? null;
   const formatDelta = (value: number, digits = 0) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
 
-  async function editChoice(buffId: string, edit: (choice: BuffChoice) => void) {
-    if (!selected || (saving && !persisting)) return;
+  function cardEffectText(def: BuffDefinition): string {
+    const damage = def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null);
+    const primary = activePurpose === "damage" && damage.length > 0 ? damage.join(" ・ ") : effectSummary(def);
+    if (!needsInput(def)) return primary;
+    const choice = selectedChoice(def.id);
+    if (!choice) return `${primary} ・ クリックして設定`;
+    if (activePurpose === "damage") return `${primary} ・ クリックで解除`;
+    const parts: string[] = [];
+    if (isUserSelectedTarget(def.target) && choice.stat) parts.push(STAT_LABELS[choice.stat]);
+    if (isChoiceValue(def.value)) {
+      const value = def.value.choice[choice.choice_index ?? 0];
+      if (value !== undefined) parts.push(formatLayerValue(def.layer, value));
+    } else if (userInputRange(def.value)) {
+      parts.push(formatLayerValue(def.layer, choice.value ?? def.default_value ?? userInputRange(def.value)!.min));
+    }
+    return `${parts.join(" ") || primary} ・ クリックで解除`;
+  }
+
+  async function activate(def: BuffDefinition) {
+    if (!needsInput(def)) {
+      await toggle(def);
+      return;
+    }
+    if (on(def)) {
+      await toggle(def);
+      return;
+    }
+    const initial = toggleBuff([], def, true).find((choice) => choice.buff_id === def.id) ?? null;
+    editingBuffId = initial ? def.id : null;
+    draftChoice = initial ? JSON.parse(JSON.stringify(initial)) : null;
+  }
+
+  function editDraft(edit: (choice: BuffChoice) => void) {
+    if (!draftChoice) return;
+    const next: BuffChoice = JSON.parse(JSON.stringify(draftChoice));
+    edit(next);
+    draftChoice = next;
+  }
+
+  function cancelInput() {
+    editingBuffId = null;
+    draftChoice = null;
+  }
+
+  async function confirmInput(def: BuffDefinition) {
+    if (!selected || !draftChoice || editingBuffId !== def.id || saving) return;
     const next: BuffSet = JSON.parse(JSON.stringify(selected));
-    const choice = next.choices.choices.find((item) => item.buff_id === buffId);
-    if (!choice) return;
-    edit(choice);
+    next.choices.choices = toggleBuff(next.choices.choices, def, true);
+    const index = next.choices.choices.findIndex((choice) => choice.buff_id === def.id);
+    if (index < 0) return;
+    next.choices.choices[index] = JSON.parse(JSON.stringify(draftChoice));
+    cancelInput();
     await persist(next);
   }
+
 </script>
 
 <div class="buff-page">
@@ -261,21 +347,21 @@
       <div class="groups">
         <div class="category-switch" role="tablist" aria-label="伸ばしたい効果">
           {#each PURPOSES as purpose (purpose.id)}
-            {@const definitions = app.catalog.filter((def) => def.purposes.includes(purpose.id))}
+            {@const definitions = app.catalog.filter((def) => matchesPurpose(def, purpose.id))}
             {@const picked = purposeSelectedCount(purpose.id)}
             <button
               class="chip category-tab"
               class:on={activePurpose === purpose.id}
               role="tab"
               aria-selected={activePurpose === purpose.id}
-              onclick={() => (activePurpose = purpose.id)}
+              onclick={() => choosePurpose(purpose.id)}
             >
               <span>{purpose.label}</span>
               <span class="group-count num" use:bump={() => picked}>{picked}/{definitions.length}</span>
             </button>
           {/each}
         </div>
-        <section class="buff-group" use:flash={() => activePurpose}>
+        <section class="buff-group" use:flash={() => `${activePurpose}:${activeDamageGroup}`}>
           <div class="group-summary">
             <span class="group-copy"><strong>{activePurposeMeta.label}</strong><small>{activePurposeMeta.description}</small></span>
             {#if activePurpose === "stats"}
@@ -284,40 +370,66 @@
               </button>
             {/if}
           </div>
+          {#if activePurpose === "damage"}
+            <div class="damage-switch" role="tablist" aria-label="攻撃ダメージの種類">
+              {#each DAMAGE_GROUPS as group (group.id)}
+                {@const definitions = app.catalog.filter((def) => matchesPurpose(def, "damage") && matchesDamageGroup(def, group.id))}
+                {@const picked = damageGroupSelectedCount(group.id)}
+                <button
+                  class="chip damage-tab"
+                  class:on={activeDamageGroup === group.id}
+                  role="tab"
+                  aria-selected={activeDamageGroup === group.id}
+                  onclick={() => chooseDamageGroup(group.id)}
+                >
+                  <span>{group.label}</span>
+                  <span class="group-count num" use:bump={() => picked}>{picked}/{definitions.length}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
           <div class="chips">
             {#each activeDefinitions as def (def.id)}
               {@const blocked = !on(def) && isBlocked(selected.choices.choices, app.catalog, def)}
-              {@const choice = selectedChoice(def.id)}
-              <div class="buff-option" class:on={on(def)} use:flash={() => (on(def) ? "on" : "off")}>
-                <button
-                  class="buff-toggle"
-                  disabled={blocked || saving}
-                  onclick={() => toggle(def)}
-                  title={buffTooltip(def, blocked)}
-                  aria-label={`${def.name}。${effectSummary(def)}`}
-                >
-                  <Icon kind="buff" id={def.id} size={28} label={def.name} />
-                  <span class="chip-copy">
-                    <strong>{def.name}</strong><small>{effectSummary(def)}</small>
-                    <span class="origin-badge">{ORIGIN_LABELS[def.origin]}</span>
-                  </span>
-                  <span class="info" aria-hidden="true">ⓘ</span>
-                </button>
-                {#if choice && (isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value))}
-                  <div class="choice-editor">
-                    {#if isUserSelectedTarget(def.target)}
-                      <StepSelect label="対象ステ" options={statOptions} bind:value={() => choice.stat ?? STAT_KINDS[0], (value) => editChoice(def.id, (item) => (item.stat = value as StatKind))} />
-                    {/if}
-                    {#if isChoiceValue(def.value)}
-                      {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
-                      <StepSelect label="段階" {options} bind:value={() => String(choice.choice_index ?? 0), (value) => editChoice(def.id, (item) => (item.choice_index = Number(value)))} />
-                    {/if}
-                    {#if userInputRange(def.value)}
-                      {@const range = userInputRange(def.value)!}
-                      {@const scale = isPercentLayer(def.layer) ? 100 : 1}
-                      <StatInput label={def.id === "club_effect" ? "クラブ効果" : (isPercentLayer(def.layer) ? "値 (%)" : "値")} min={range.min * scale} max={range.max * scale} bind:value={() => (choice.value ?? def.default_value ?? range.min) * scale, (value) => editChoice(def.id, (item) => (item.value = value / scale))} />
-                    {/if}
+              {@const editing = editingBuffId === def.id && draftChoice !== null}
+              <div class="buff-option" class:on={on(def)} class:editing use:flash={() => (on(def) ? "on" : "off")}>
+                <span class="buff-icon"><Icon kind="buff" id={def.id} size={28} label={def.name} /></span>
+                {#if editing && draftChoice}
+                  <div class="inline-editor">
+                    <div class="edit-copy"><strong>{def.name}</strong><small>値を決めて確定</small></div>
+                    <div class="choice-editor">
+                      {#if isUserSelectedTarget(def.target)}
+                        <StepSelect label="対象ステ" options={statOptions} cols={4} bind:value={() => draftChoice!.stat ?? STAT_KINDS[0], (value) => editDraft((item) => (item.stat = value as StatKind))} />
+                      {/if}
+                      {#if isChoiceValue(def.value)}
+                        {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
+                        <StepSelect label="段階" {options} bind:value={() => String(draftChoice!.choice_index ?? 0), (value) => editDraft((item) => (item.choice_index = Number(value)))} />
+                      {/if}
+                      {#if userInputRange(def.value)}
+                        {@const range = userInputRange(def.value)!}
+                        {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                        <StatInput label={def.id === "club_effect" ? "クラブ効果" : (isPercentLayer(def.layer) ? "値 (%)" : "値")} min={range.min * scale} max={range.max * scale} bind:value={() => (draftChoice!.value ?? def.default_value ?? range.min) * scale, (value) => editDraft((item) => (item.value = value / scale))} />
+                      {/if}
+                    </div>
+                    <div class="edit-actions">
+                      <button type="button" class="btn" onclick={cancelInput}>キャンセル</button>
+                      <button type="button" class="btn primary" onclick={() => confirmInput(def)}>確定</button>
+                    </div>
                   </div>
+                {:else}
+                  <button
+                    class="buff-toggle"
+                    disabled={blocked || saving}
+                    onclick={() => activate(def)}
+                    title={buffTooltip(def, blocked)}
+                    aria-label={`${def.name}。${cardEffectText(def)}`}
+                  >
+                    <span class="chip-copy">
+                      <strong>{def.name}</strong><small class:input-hint={needsInput(def) && !on(def)}>{cardEffectText(def)}</small>
+                      <span class="origin-badge">{ORIGIN_LABELS[def.origin]}</span>
+                    </span>
+                    <span class="info" aria-hidden="true">ⓘ</span>
+                  </button>
                 {/if}
               </div>
             {/each}
@@ -374,6 +486,8 @@
   </aside>
 </div>
 
+<svelte:window onkeydown={(event) => { if (event.key === "Escape") cancelInput(); }} />
+
 <style>
   .buff-page { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(360px, 1fr) 290px; gap: 10px; padding: 12px; overflow: auto; }
   .sets, .catalog, .summary { min-height: 0; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--r-panel); overflow: hidden; box-shadow: inset 0 1px #fff; }
@@ -387,23 +501,36 @@
   .set-list > button.on { background: var(--sel-card); border-color: var(--sel-bd); }
   .set-list small { margin-left: auto; min-width: 2ch; text-align: right; }
   .set-list p, .empty { margin: 12px; color: var(--fg-muted); font-size: 11px; }
-  .groups { flex: 1; min-height: 0; padding: 8px; display: flex; flex-direction: column; gap: 7px; overflow-y: auto; scrollbar-gutter: stable; }
+  .groups { flex: 1; min-height: 0; padding: 8px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; }
   .category-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
   .category-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
   .category-tab > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .buff-group { border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); box-shadow: inset 0 1px #fff; overflow: hidden; }
+  .buff-group { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); box-shadow: inset 0 1px #fff; overflow: hidden; }
   .group-summary { min-height: 41px; padding: 6px 9px; display: flex; align-items: center; gap: 10px; }
   .group-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .group-summary small { color: var(--fg-muted); font-size: 9px; }
   .group-count { margin-left: auto; min-width: 5ch; color: inherit; text-align: right; font-size: 9px; }
+  .damage-switch { padding: 0 7px 7px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .damage-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
   .guide-link { flex: none; padding: 2px 4px; color: var(--fg-muted); font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }
   .guide-link:hover { color: var(--accent-hover); }
-  .chips { padding: 7px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px; border-top: 1px solid var(--border-soft); align-items: start; }
-  .buff-option { min-width: 0; border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); overflow: hidden; }
+  .chips { flex: 1; min-height: 0; padding: 7px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); grid-auto-rows: max-content; gap: 6px; border-top: 1px solid var(--border-soft); align-content: start; align-items: start; overflow-y: auto; scrollbar-gutter: stable; }
+  .buff-option { position: relative; min-width: 0; border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); overflow: hidden; }
   .buff-option.on { border-color: var(--sel-bd); background: var(--sel-card); box-shadow: inset 0 0 0 1px var(--sel-bd); }
-  .buff-toggle { width: 100%; min-height: 52px; padding: 6px 7px; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--fg); text-align: left; }
+  .buff-option.editing { border-color: var(--sim); background: var(--state-temp-bg); box-shadow: inset 0 0 0 1px var(--sim); }
+  .buff-icon { position: absolute; z-index: 1; top: 16px; left: 7px; width: 28px; height: 28px; transition: top .2s ease; }
+  .buff-option.editing .buff-icon { top: 9px; }
+  .buff-toggle { width: 100%; min-height: 60px; padding: 6px 7px 6px 48px; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--fg); text-align: left; }
   .buff-toggle:disabled { opacity: .45; }
-  .choice-editor { padding: 7px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border-soft); background: var(--bg-field); }
+  .inline-editor { min-height: 60px; padding: 7px; animation: buff-edit-in .2s ease-out; }
+  .edit-copy { min-height: 35px; margin-left: 41px; display: flex; flex-direction: column; justify-content: center; }
+  .edit-copy strong { font-size: 10px; }
+  .edit-copy small { color: var(--sim-fg); font-size: 9px; }
+  .choice-editor { margin-top: 5px; padding: 7px; display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--bg-field); box-shadow: inset 0 1px #fff; }
+  .edit-actions { margin-top: 7px; display: flex; justify-content: flex-end; gap: 5px; }
+  .input-hint { color: var(--sim-fg) !important; }
+  @keyframes buff-edit-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .inline-editor { animation: none; } .buff-icon { transition: none; } }
   .chip-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .chip-copy strong, .chip-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chip-copy strong { font-size: 10px; }
