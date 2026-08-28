@@ -101,14 +101,23 @@ jobs:
       # タグを打つ前にこの経路を一度通しておけるようにするため
       # (初回リリースでいきなり権限やバケット名の間違いに当たらないように)。
       #
-      # 成果物名は `TW Context_0.1.0_x64-setup.exe` とスペースを含む。PowerShell →
-      # npx.cmd → node と渡る間に Windows の引数分割で壊れるので、**スペースの無い
-      # パスへ写してから**アップロードする(URL も読みやすくなる)。
+      # 上げ方は **S3 互換 API**(wrangler ではない)。`wrangler r2 object put` は
+      # Cloudflare の REST API を叩くため、アカウント全体の `Workers R2 Storage: Edit`
+      # を要求して 403 になる。バケット単位に絞った R2 トークンは S3 API 用なので、
+      # 最小権限を保ったままならこちらを使う。
+      #
+      # 成果物名 `TW Context_0.1.0_x64-setup.exe` のスペースは `-` に落として置く
+      # (URL がエンコードだらけにならないように)。
       - name: インストーラを R2 に上げる
-        if: env.CLOUDFLARE_API_TOKEN != ''
+        if: env.AWS_ACCESS_KEY_ID != ''
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # R2 は AWS CLI v2 の既定チェックサムに対応しないので、要求時だけに絞る
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: tw-context
           ARTIFACTS: ${{ steps.build.outputs.artifactPaths }}
           IS_RELEASE: ${{ github.ref_type == 'tag' }}
@@ -126,10 +135,10 @@ jobs:
 
           function Publish-Object($localPath, $key) {
             Write-Host "アップロード: $key"
-            npx --yes wrangler@4 r2 object put "$env:BUCKET/$key" `
-              --file "$localPath" `
+            aws s3 cp "$localPath" "s3://$env:BUCKET/$key" `
+              --endpoint-url "$env:ENDPOINT" `
               --content-type "application/vnd.microsoft.portable-executable" `
-              --remote --force
+              --only-show-errors
             if ($LASTEXITCODE -ne 0) { throw "アップロードに失敗: $key" }
           }
 

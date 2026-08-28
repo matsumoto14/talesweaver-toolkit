@@ -46,12 +46,20 @@ GitHub の **Variables** に:
 
 1. R2 で **`tw-context`** バケットを作る
 2. バケットの Settings → Public access → **Custom domain** に `dl.tw-context.dev` を繋ぐ
-3. API トークン(**Account → R2 → Edit** 権限)を作り、GitHub の Secrets に登録:
+3. R2 → **Manage API Tokens** でトークンを作る。権限は
+   **Object Read & Write**、対象は `tw-context` バケットのみでよい
+4. 発行画面に出る **Access Key ID / Secret Access Key** を GitHub の Secrets に登録:
 
 | 名前 | 中身 |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | R2 の編集権限を持つトークン |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
+| `R2_ACCESS_KEY_ID` | 発行画面の Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | 発行画面の Secret Access Key(**一度しか表示されない**) |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID(S3 エンドポイントに使う) |
+
+アップロードは **S3 互換 API**(`aws s3 cp`)で行う。`wrangler r2 object put` は
+Cloudflare の REST API を叩くため、**アカウント全体の `Workers R2 Storage: Edit`**
+を要求して 403 になる。バケット単位に絞ったトークンは S3 API 用なので、
+最小権限を保つならこちらを使う(Token value ではなく Access Key の方が要る)。
 
 置かれ方:
 
