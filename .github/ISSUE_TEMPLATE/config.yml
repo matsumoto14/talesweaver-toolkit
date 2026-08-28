@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 権利者の方へ(掲載データの削除・修正)
+    url: https://github.com/matsumoto14/talesweaver-toolkit/blob/main/NOTICE.md
+    about: 同梱している画像・データの出典と、削除をご希望の場合の窓口です

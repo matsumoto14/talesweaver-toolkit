@@ -1,6 +1,20 @@
 // Tauri コマンドの入出力の型。Rust の serde 構造体(crates/domain, storage, gamedata)の写し。
 // 手で同期しているため、Rust 側の構造体を変えたらここも必ず変える。
 
+/** 情報パネルに出すアプリ情報(desktop の `AppInfo`。camelCase) */
+export interface AppInfo {
+  version: string;
+  /** 登録キャラの保存先。「データは端末内だけ」を裏づけるために出す */
+  databasePath: string;
+}
+
+/** 起動時の復元などの通知(desktop の `StartupNoticePayload`。camelCase) */
+export interface StartupNotice {
+  message: string;
+  /** false のとき、この起動で加えた変更は保存されない */
+  persistsChanges: boolean;
+}
+
 export type StatKind = "stab" | "hack" | "int" | "def" | "mr" | "dex" | "agi";
 export type BaseStats = Record<StatKind, number>;
 

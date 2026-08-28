@@ -1,7 +1,7 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, Awakening, BaseStats, BuffDefinition, CharacterSkillDef, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, CharacterSkillDef, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
@@ -53,6 +53,11 @@ export const listTitles = () => invoke<TitleDef[]>("list_titles");
 /** キャラスキルのカタログ(パッシブ・自己バフ・味方バフ)。味方スキルは誰でも ON にできる */
 export const listCharacterSkills = () =>
   invoke<CharacterSkillDef[]>("list_character_skills");
+
+/** 情報パネルに出すアプリ情報(版・保存先) */
+export const getAppInfo = () => invoke<AppInfo>("get_app_info");
+/** 起動時に復元などが起きたときだけ返る。通常起動は null */
+export const getStartupNotice = () => invoke<StartupNotice | null>("get_startup_notice");
 
 /** invoke の reject(String)を表示用文字列にする */
 export function errorMessage(e: unknown): string {

@@ -1,0 +1,42 @@
+name: 不具合の報告
+description: 動かない・値がおかしい・落ちる
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        アプリの右上「情報」から送ると、バージョンなどが自動で入るので楽です。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 何が起きましたか
+      placeholder: 例) 極・横斬りのダメージが 0 になる
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: どう操作すると起きますか
+      placeholder: |
+        1. キャラ「ボリス」を選ぶ
+        2. ダメージ計算タブでスキルに「極・横斬り」を選ぶ
+        3. 合計が 0 と出る
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: バージョン
+      description: 右上「情報」に出ています
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 本当はどうなるはずでしたか
+      description: ゲーム内の実測値が分かる場合は書いてください(数値のずれの調査に一番役立ちます)

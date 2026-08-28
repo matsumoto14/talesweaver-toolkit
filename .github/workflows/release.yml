@@ -1,0 +1,90 @@
+name: Release
+
+# `v0.2.0` のようなタグを push するとインストーラを作って Release に添付する。
+# 版は tools/release/bump.py で 3 ファイルまとめて上げてから commit → タグの順。
+on:
+  push:
+    tags: ["v*"]
+  # 署名やビルドの試験用。Release は下書きのまま作られる。
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: 依存を入れる
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: テスト
+        run: cargo test --workspace
+
+      # --- コード署名(Azure Trusted Signing) ------------------------------------
+      # 署名しないと初回起動で SmartScreen の「不明な発行元」が出る。
+      # 秘密は tauri.conf.json に置かず、シークレットが揃っているときだけ
+      # ビルド直前に signCommand を差し込む(ローカルの未署名ビルドはそのまま動く)。
+      - name: 署名ツールを入れる
+        if: env.AZURE_CLIENT_ID != ''
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: cargo install trusted-signing-cli --locked
+
+      - name: signCommand を差し込む
+        if: env.AZURE_CLIENT_ID != ''
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+        shell: pwsh
+        run: |
+          $path = "apps/desktop/src-tauri/tauri.conf.json"
+          $conf = Get-Content $path -Raw | ConvertFrom-Json
+          if (-not $conf.bundle.PSObject.Properties.Name.Contains("windows")) {
+            $conf.bundle | Add-Member -NotePropertyName windows -NotePropertyValue ([pscustomobject]@{})
+          }
+          $command = "trusted-signing-cli -e $env:SIGNING_ENDPOINT -a $env:SIGNING_ACCOUNT -c $env:SIGNING_PROFILE %1"
+          $conf.bundle.windows | Add-Member -NotePropertyName signCommand -NotePropertyValue $command -Force
+          $conf | ConvertTo-Json -Depth 20 | Set-Content $path -Encoding utf8
+          Write-Host "signCommand を設定しました"
+
+      - name: ビルドして Release に添付
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 署名(未設定ならビルドは未署名で通る)
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          # 自動更新の署名鍵(未設定なら latest.json は作られない)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}-dev', github.run_number) }}
+          releaseName: ${{ github.ref_type == 'tag' && github.ref_name || 'ビルド確認(下書き)' }}
+          releaseBody: |
+            変更点は [CHANGELOG.md](https://github.com/matsumoto14/talesweaver-toolkit/blob/main/CHANGELOG.md) を見てください。
+
+            **これは非公式ツールです。** ゲームの開発元・運営元とは関係がありません。
+          # タグからのリリースも下書きで作る。中身を見てから自分で公開する。
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true

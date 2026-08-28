@@ -2,14 +2,15 @@
   // 画面枠: 上部タブ(ホーム/ダメージ計算/キャラ)+ 左キャラレール + エラー帯。
   // 構成は デザインモック TW Toolkit Prototype v4 に合わせる(規格は docs/design-system.html)。
   import { onMount } from "svelte";
-  import { errorMessage } from "./api/commands";
+  import AboutPanel from "./AboutPanel.svelte";
+  import { errorMessage, getStartupNotice } from "./api/commands";
   import CharacterRail from "./CharacterRail.svelte";
   import { loadStatLimits } from "./limits.svelte";
   import CalcPage from "./pages/calc/CalcPage.svelte";
   import CharsPage from "./pages/chars/CharsPage.svelte";
   import HomePage from "./pages/home/HomePage.svelte";
   import { app, loadAll, type Tab } from "./state.svelte";
-  import { dismissError, reportError, toast } from "./toast.svelte";
+  import { dismissError, reportError, reportNotice, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import Splitter from "./ui/Splitter.svelte";
 
@@ -28,9 +29,17 @@
       : `minmax(200px, ${railWidth.value.width ?? DEFAULT_RAIL_WIDTH}px) 6px minmax(0, 1fr)`,
   );
 
+  let aboutOpen = $state(false);
+
   onMount(() => {
     loadStatLimits().catch((e) => reportError(errorMessage(e)));
     void loadAll();
+    // バックアップからの復元など、読み飛ばされては困る事実は自動で消さない帯に出す。
+    getStartupNotice()
+      .then((notice) => {
+        if (notice) reportNotice(notice.message);
+      })
+      .catch((e) => reportError(errorMessage(e)));
   });
 </script>
 
@@ -53,13 +62,25 @@
         <span>試し変更中 — 保存されていません</span>
       </div>
     {/if}
+    <button
+      type="button"
+      class="about-open"
+      class:pushed={app.sim === null}
+      onclick={() => (aboutOpen = true)}
+      aria-label="情報"
+      title="このアプリについて"
+    >i</button>
   </header>
 
   {#if toast.message}
-    <div class="toast" role="alert">
+    <div class="toast" class:notice={toast.kind === "notice"} role="alert">
       <span>{toast.message}</span>
       <button type="button" onclick={dismissError} aria-label="閉じる">×</button>
     </div>
+  {/if}
+
+  {#if aboutOpen}
+    <AboutPanel onClose={() => (aboutOpen = false)} />
   {/if}
 
   <div class="body" style="grid-template-columns: {gridTemplateColumns};">
@@ -121,12 +142,26 @@
   }
   .sim-note .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sim); }
 
+  /* 情報。sim-note が出ていないときだけ自分で右端へ寄る(出ている間は隣に並ぶ) */
+  .about-open {
+    width: 22px; height: 22px; flex-shrink: 0;
+    border-radius: 50%; border: 1px solid var(--sel-bd);
+    background: rgba(255, 255, 255, 0.7); color: var(--fg-muted);
+    font-size: 11px; font-weight: var(--w-strong); font-style: italic; line-height: 1;
+  }
+  .about-open.pushed { margin-left: auto; }
+  .about-open:hover { background: #fff; color: var(--accent); }
+
   .toast {
     position: absolute; top: 58px; left: 16px; right: 16px; z-index: 50;
     display: flex; align-items: center; gap: 12px; padding: 9px 12px;
     border-radius: var(--r-panel);
     background: #FDF1EF; border: 1px solid var(--danger); border-left-width: 3px;
     color: var(--fg); font-size: 12px;
+  }
+  /* 起動時の復元など、失敗ではないが読み飛ばされては困る事実(自動では消えない) */
+  .toast.notice {
+    background: var(--state-edge-bg); border-color: var(--state-edge-bd);
   }
   .toast button { margin-left: auto; color: var(--fg-muted); font-size: 14px; }
 

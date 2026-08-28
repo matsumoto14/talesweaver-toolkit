@@ -5,15 +5,27 @@ mod commands;
 use std::fs;
 use std::sync::Mutex;
 
-use storage::CharacterRepository;
+use storage::{CharacterRepository, StartupNotice};
 use tauri::Manager;
 
 /// アプリ全体で共有する状態。
 pub struct AppState {
     pub repo: Mutex<CharacterRepository>,
+    /// 起動時にバックアップ復元などが起きたときだけ入る。フロントがエラー帯に出す。
+    pub startup_notice: Option<StartupNotice>,
+}
+
+/// 情報パネルに出すアプリ情報。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppInfo {
+    pub version: String,
+    /// 登録キャラの保存先。「データは端末内だけ」を裏づけるために出す。
+    pub database_path: String,
 }
 
 const DATABASE_FILE_NAME: &str = "talesweaver-toolkit.sqlite";
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,11 +33,18 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
-            let repo = CharacterRepository::open(data_dir.join(DATABASE_FILE_NAME))?;
-            app.manage(AppState { repo: Mutex::new(repo) });
+            let database_path = data_dir.join(DATABASE_FILE_NAME);
+            // 開く前にマイグレーション前の状態を残し、開けなければ復元する(起動不能にしない)。
+            let outcome = storage::open_with_backup(&database_path, APP_VERSION)?;
+            app.manage(AppState {
+                repo: Mutex::new(outcome.repo),
+                startup_notice: outcome.notice,
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_app_info,
+            commands::get_startup_notice,
             commands::list_game_characters,
             commands::list_skills,
             commands::list_enemies,

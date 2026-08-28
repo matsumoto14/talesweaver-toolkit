@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Tauri のビルドと同じ土俵で検証する(配布先が Windows のため)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: 依存を入れる
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Rust のテスト
+        run: cargo test --workspace
+
+      # `cargo fmt --check` / `clippy -D warnings` は既存コードが通らないので入れていない。
+      # 入れるなら、まず一括整形の commit を単独で切ること。
+
+      - name: フロントのビルドと型チェック
+        working-directory: apps/desktop
+        run: |
+          npm run build
+          npx svelte-check --tsconfig ./tsconfig.json --threshold error

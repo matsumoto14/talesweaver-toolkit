@@ -7,9 +7,9 @@ use domain::{
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{CharacterRepository, NewCharacter, RegisteredCharacter};
-use tauri::State;
+use tauri::{Manager, State};
 
-use crate::AppState;
+use crate::{AppInfo, AppState};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -45,6 +45,39 @@ fn find_content(content_id: &str) -> CommandResult<Content> {
         ));
     }
     Ok(content)
+}
+
+/// 起動時に復元などが起きたことの通知。通常起動なら `None`。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupNoticePayload {
+    pub message: String,
+    /// `false` のとき、この起動で加えた変更は保存されない。
+    pub persists_changes: bool,
+}
+
+#[tauri::command]
+pub fn get_app_info(app: tauri::AppHandle) -> CommandResult<AppInfo> {
+    let database_path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("保存先を特定できません: {e}"))?
+        .join("talesweaver-toolkit.sqlite");
+    Ok(AppInfo {
+        version: crate::APP_VERSION.to_string(),
+        database_path: database_path.display().to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn get_startup_notice(state: State<'_, AppState>) -> Option<StartupNoticePayload> {
+    state
+        .startup_notice
+        .as_ref()
+        .map(|notice| StartupNoticePayload {
+            message: notice.message(),
+            persists_changes: notice.persists_changes(),
+        })
 }
 
 #[tauri::command]

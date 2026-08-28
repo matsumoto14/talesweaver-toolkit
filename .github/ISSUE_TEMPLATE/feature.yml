@@ -1,0 +1,16 @@
+name: 要望
+description: こういう機能がほしい・ここが使いにくい
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: 何ができるようになってほしいですか
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: いまはどうしていますか
+      description: 代わりにやっている手順や、困っている場面を書いてもらえると設計しやすくなります

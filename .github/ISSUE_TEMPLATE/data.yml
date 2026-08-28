@@ -1,0 +1,34 @@
+name: データの誤り・追加の要望
+description: スキル倍率・敵ステータス・装備の値が違う、未収録のものを入れてほしい
+labels: ["gamedata"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        数値は [Tale Wiki](https://talewiki.com/) を一次ソースにしています。
+        wiki に載っていない値は、実測値を書いてもらえると助かります。
+
+  - type: input
+    id: target
+    attributes:
+      label: 対象
+      placeholder: 例) ボリスの「極・連撃」/ エクリプスボス / †アビスシミター
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: いまの値と、正しい値
+      placeholder: |
+        いま: 段数 10
+        正しい: 段数 13(フルスロットル時)
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: 出典
+      description: wiki のページ名、または実測した状況
+      placeholder: 例) Skill/ボリス のスキル性能一覧 / テスト鯖の案山子で実測
