@@ -478,6 +478,8 @@ export type RandomOptionEffect =
   | "added_damage_rate"
   | "physical_added_damage_rate"
   | "magic_added_damage_rate"
+  | "physical_damage_amplify"
+  | "magic_damage_amplify"
   | "accuracy_point"
   | "evasion_point"
   | "accuracy_and_evasion_point"

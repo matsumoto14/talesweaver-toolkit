@@ -39,7 +39,7 @@ pub const RANDOM_OPTION_SOURCE: Source = Source {
 use RandomOptionEffect::{
     AccuracyAndEvasionPoint, AccuracyPoint, ActualDelayReduction, AddedDamageRate,
     AttackDamageRate, DependencyDamageRate, EvasionPoint, MagicAddedDamageRate,
-    PhysicalAddedDamageRate, RecordOnly,
+    MagicDamageAmplify, PhysicalAddedDamageRate, PhysicalDamageAmplify, RecordOnly,
 };
 use RandomOptionRank::{Normal, Rare, STrue, Special, Valuable};
 
@@ -72,11 +72,21 @@ const RELIC_ACCURACY_TIERS: &[RandomOptionTier] =
 
 /// 武器カテゴリー1「物理 / 魔法攻撃が的中した場合、X% の確率で Y% の追加ダメージ」の **Y**。
 /// 確率 X は満たしている前提で入れる(ユーザー確認 2026-08-26)。
-const WEAPON_ON_HIT_TIERS: &[RandomOptionTier] = &[
+const WEAPON_ON_HIT_ADDED_TIERS: &[RandomOptionTier] = &[
     tier(Normal, 10.0, 11.0),
     tier(Valuable, 12.0, 13.0),
     tier(Rare, 13.0, 14.0),
     tier(Special, 14.0, 15.0),
+];
+
+/// 武器カテゴリー15「物理 / 魔法攻撃が的中した場合、X% の確率で対象が受ける
+/// 物理 / 魔法ダメージが Y 秒間 10% 増加」。計算ではデバフ発動中の固定 +10% を入れる。
+const WEAPON_ON_HIT_AMPLIFY_TIERS: &[RandomOptionTier] = &[
+    tier(Normal, 10.0, 10.0),
+    tier(Valuable, 10.0, 10.0),
+    tier(Rare, 10.0, 10.0),
+    tier(Special, 10.0, 10.0),
+    tier(STrue, 10.0, 10.0),
 ];
 
 /// 武器カテゴリー16「攻撃時、強化の石を 1 個消耗する代わりに X% の追加ダメージ」。
@@ -216,6 +226,8 @@ const SHORT_NAMES: &[(&str, &str)] = &[
     ("近接する対象攻撃時、追加ダメージ", "近接"),
     ("物理攻撃が的中した場合、確率で追加ダメージ", "物理命中"),
     ("魔法攻撃が的中した場合、確率で追加ダメージ", "魔法命中"),
+    ("物理攻撃が的中した場合、対象の被物理ダメージ増加", "物理増幅"),
+    ("魔法攻撃が的中した場合、対象の被魔法ダメージ増加", "魔法増幅"),
     ("強化の石を 1 個消耗する代わりに追加ダメージ", "強化の石"),
     ("SEED を消耗する代わりに追加ダメージ", "SEED"),
 ];
@@ -233,6 +245,8 @@ const COMMON_IDS: &[&str] = &[
     "weapon-raid-boss-damage",
     "weapon-on-hit-physical",
     "weapon-on-hit-magic",
+    "weapon-on-hit-physical-amplify",
+    "weapon-on-hit-magic-amplify",
     "weapon-stone-damage",
     // 盾: 攻撃ダメージ増加と依存別の与ダメージ増加(主軸の依存に合わせて 1 つ)
     "shield-attack-damage",
@@ -593,9 +607,9 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             PartSlot::Weapon,
             1,
             PhysicalAddedDamageRate,
-            WEAPON_ON_HIT_TIERS,
+            WEAPON_ON_HIT_ADDED_TIERS,
             "追加ダメージ(新-割合)。物理依存(STAB / HACK / STAB+HACK / 熊)のスキルで、\
-             的中時に 5〜6% の確率。値は効いたときの Y%",
+             的中時に 2〜6% の確率。値は効いたときの Y%",
         ),
         def(
             "weapon-on-hit-magic",
@@ -603,9 +617,31 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             PartSlot::Weapon,
             1,
             MagicAddedDamageRate,
-            WEAPON_ON_HIT_TIERS,
+            WEAPON_ON_HIT_ADDED_TIERS,
             "追加ダメージ(新-割合)。魔法依存(INT / MR / HACK+INT)のスキルで、\
-             的中時に 5〜6% の確率。値は効いたときの Y%",
+             的中時に 2〜6% の確率。値は効いたときの Y%",
+        ),
+        def(
+            "weapon-on-hit-physical-amplify",
+            "物理攻撃が的中した場合、対象の被物理ダメージ増加",
+            PartSlot::Weapon,
+            15,
+            PhysicalDamageAmplify,
+            WEAPON_ON_HIT_AMPLIFY_TIERS,
+            "カテゴリT(ダメージ増幅) +10%。物理依存(STAB / HACK / STAB+HACK / 熊)の\
+             的中時に発動。確率 / 持続秒数は N 1%/5秒、V 2%/8秒、R 3%/15秒、\
+             S 5%/20秒、S・真 10%/25秒",
+        ),
+        def(
+            "weapon-on-hit-magic-amplify",
+            "魔法攻撃が的中した場合、対象の被魔法ダメージ増加",
+            PartSlot::Weapon,
+            15,
+            MagicDamageAmplify,
+            WEAPON_ON_HIT_AMPLIFY_TIERS,
+            "カテゴリT(ダメージ増幅) +10%。魔法依存(INT / MR / HACK+INT)の的中時に発動。\
+             確率 / 持続秒数は N 1%/5秒、V 2%/8秒、R 3%/15秒、S 5%/20秒、\
+             S・真 10%/25秒",
         ),
         def(
             "weapon-stone-damage",
@@ -658,6 +694,22 @@ mod tests {
                 .find(|d| d.id == id)
                 .unwrap();
             assert_eq!(def.category, 1);
+        }
+    }
+
+    #[test]
+    fn 武器の命中時被ダメージ増加はカテゴリー15で効果は常に10パーセント() {
+        for id in ["weapon-on-hit-physical-amplify", "weapon-on-hit-magic-amplify"] {
+            let def = random_option_catalog()
+                .into_iter()
+                .find(|d| d.id == id)
+                .unwrap();
+            assert_eq!(def.category, 15);
+            assert_eq!(def.tiers.len(), 5);
+            assert!(def
+                .tiers
+                .iter()
+                .all(|tier| tier.min == 10.0 && tier.max == 10.0));
         }
     }
 

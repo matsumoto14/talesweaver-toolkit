@@ -263,6 +263,10 @@ export const randomOptionPartSummary = (
       add("物理追加ダメ", value);
     } else if (effect === "magic_added_damage_rate") {
       add("魔法追加ダメ", value);
+    } else if (effect === "physical_damage_amplify") {
+      add("物理ダメージ増幅", value);
+    } else if (effect === "magic_damage_amplify") {
+      add("魔法ダメージ増幅", value);
     } else if (effect === "accuracy_point") {
       add("命中P", value);
     } else if (effect === "evasion_point") {
@@ -306,6 +310,10 @@ export const randomOptionTotals = (
         add("割合追加ダメージ(物理依存)", value);
       } else if (effect === "magic_added_damage_rate") {
         add("割合追加ダメージ(魔法依存)", value);
+      } else if (effect === "physical_damage_amplify") {
+        add("ダメージ増幅(物理依存)", value);
+      } else if (effect === "magic_damage_amplify") {
+        add("ダメージ増幅(魔法依存)", value);
       } else if (effect === "accuracy_point") {
         add("命中P", value);
       } else if (effect === "evasion_point") {
@@ -335,6 +343,8 @@ export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
     case "added_damage_rate": return "割合追加ダメージ";
     case "physical_added_damage_rate": return "割合追加ダメージ(物理依存のみ)";
     case "magic_added_damage_rate": return "割合追加ダメージ(魔法依存のみ)";
+    case "physical_damage_amplify": return "ダメージ増幅(物理依存のみ)";
+    case "magic_damage_amplify": return "ダメージ増幅(魔法依存のみ)";
     case "accuracy_point": return "命中P";
     case "evasion_point": return "回避P";
     case "accuracy_and_evasion_point": return "命中P・回避P";
@@ -355,6 +365,12 @@ export const randomOptionMatchesDependency = (
     return dependency === "stab" || dependency === "hack" || dependency === "stab_hack";
   }
   if (effect === "magic_added_damage_rate") {
+    return dependency === "int" || dependency === "mr" || dependency === "hack_int";
+  }
+  if (effect === "physical_damage_amplify") {
+    return dependency === "stab" || dependency === "hack" || dependency === "stab_hack";
+  }
+  if (effect === "magic_damage_amplify") {
     return dependency === "int" || dependency === "mr" || dependency === "hack_int";
   }
   return true;

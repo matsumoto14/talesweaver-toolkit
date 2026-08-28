@@ -56,6 +56,10 @@ pub enum RandomOptionEffect {
     PhysicalAddedDamageRate,
     /// 魔法依存(INT / MR / HACK+INT)の攻撃が的中したときだけ発動する割合追加ダメージ
     MagicAddedDamageRate,
+    /// 物理依存(STAB / HACK / STAB+HACK)の攻撃が的中したときに付くカテゴリT「ダメージ増幅」
+    PhysicalDamageAmplify,
+    /// 魔法依存(INT / MR / HACK+INT)の攻撃が的中したときに付くカテゴリT「ダメージ増幅」
+    MagicDamageAmplify,
     /// 命中P への加算(wiki `#AccuracyPoint`: 命中P割合増加の計算後に加算)
     AccuracyPoint,
     /// 回避P への加算
@@ -178,6 +182,10 @@ pub struct RandomOptionTotals {
     pub physical_added_damage_rate: f64,
     /// 魔法依存スキルにだけ乗る §5「新-割合」。Σ% の小数表現
     pub magic_added_damage_rate: f64,
+    /// 物理依存スキルにだけ乗るカテゴリT「ダメージ増幅」。Σ% の小数表現
+    pub physical_damage_amplify: f64,
+    /// 魔法依存スキルにだけ乗るカテゴリT「ダメージ増幅」。Σ% の小数表現
+    pub magic_damage_amplify: f64,
     /// 命中P への加算
     pub accuracy_point: i64,
     /// 回避P への加算
@@ -204,6 +212,12 @@ impl RandomOptionTotals {
             RandomOptionEffect::MagicAddedDamageRate => {
                 self.magic_added_damage_rate += value / 100.0;
             }
+            RandomOptionEffect::PhysicalDamageAmplify => {
+                self.physical_damage_amplify += value / 100.0;
+            }
+            RandomOptionEffect::MagicDamageAmplify => {
+                self.magic_damage_amplify += value / 100.0;
+            }
             RandomOptionEffect::AccuracyPoint => self.accuracy_point += value as i64,
             RandomOptionEffect::EvasionPoint => self.evasion_point += value as i64,
             RandomOptionEffect::AccuracyAndEvasionPoint => {
@@ -228,6 +242,18 @@ impl RandomOptionTotals {
                     self.magic_added_damage_rate
                 }
             }
+    }
+
+    /// 選択スキルに実際に乗るカテゴリT「ダメージ増幅」。物理・魔法の命中時 OP は依存種別で排他。
+    pub fn damage_amplify_for(&self, dependency: SkillDependency) -> f64 {
+        match dependency {
+            SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
+                self.physical_damage_amplify
+            }
+            SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
+                self.magic_damage_amplify
+            }
+        }
     }
 }
 
@@ -312,6 +338,22 @@ mod tests {
         totals.add(&d, &slot);
         assert_eq!(totals.accuracy_point, 8);
         assert_eq!(totals.evasion_point, 8);
+    }
+
+    #[test]
+    fn on_hit_damage_amplify_lands_only_on_matching_attack_type() {
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
+        let mut totals = RandomOptionTotals::default();
+        totals.add(&def(RandomOptionEffect::PhysicalDamageAmplify), &slot);
+
+        assert_eq!(totals.damage_amplify_for(SkillDependency::Stab), 0.08);
+        assert_eq!(totals.damage_amplify_for(SkillDependency::StabHack), 0.08);
+        assert_eq!(totals.damage_amplify_for(SkillDependency::Int), 0.0);
+        assert_eq!(totals.damage_amplify_for(SkillDependency::HackInt), 0.0);
     }
 
     #[test]

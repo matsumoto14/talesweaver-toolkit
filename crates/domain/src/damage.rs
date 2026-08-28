@@ -379,6 +379,10 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         DependencyDamageRate,
         input.random_options.dependency_damage_rate.get(input.skill.dependency),
     );
+    totals.add(
+        DamageAmplify,
+        input.random_options.damage_amplify_for(input.skill.dependency),
+    );
     // カテゴリX は X1〜X6 の合計で、**上限が子ごとに違う**(X3 +80% / X4 +65% / X5 未記載)。
     // 親の `AttackDamageRate` は子の合計として読み出されるので、ここでは子に足す
     totals.add(AttackDamageBasicTrigger, input.title_attack_damage_rate);
@@ -1080,16 +1084,27 @@ mod tests {
     }
 
     #[test]
-    fn 命中時ランダムOPは物理と魔法の依存種別に合う方だけ乗る() {
+    fn 命中時ランダムOPは依存種別に合うカテゴリTだけ乗り追加ダメージには入らない() {
         let mut physical = input();
         physical.random_options.added_damage_rate = 0.10;
         physical.random_options.physical_added_damage_rate = 0.14;
         physical.random_options.magic_added_damage_rate = 0.15;
-        assert!((calculate_damage(&physical).added_damage_rate - 0.24).abs() < 1e-12);
+        physical.random_options.physical_damage_amplify = 0.10;
+        physical.random_options.magic_damage_amplify = 0.20;
+        let physical_result = calculate_damage(&physical);
+        assert!((physical_result.added_damage_rate - 0.24).abs() < 1e-12);
+        let physical_t =
+            physical_result.trace.categories.iter().find(|c| c.symbol == "T").unwrap();
+        assert!((physical_t.value - 0.10).abs() < 1e-12);
+        assert!((physical_t.factor - 1.10).abs() < 1e-12);
 
         let mut magic = physical;
         magic.skill.dependency = SkillDependency::HackInt;
-        assert!((calculate_damage(&magic).added_damage_rate - 0.25).abs() < 1e-12);
+        let magic_result = calculate_damage(&magic);
+        assert!((magic_result.added_damage_rate - 0.25).abs() < 1e-12);
+        let magic_t =
+            magic_result.trace.categories.iter().find(|c| c.symbol == "T").unwrap();
+        assert!((magic_t.value - 0.20).abs() < 1e-12);
     }
 
     #[test]
