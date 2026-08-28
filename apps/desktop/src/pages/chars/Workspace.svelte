@@ -27,9 +27,10 @@
     ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import type { EquipmentStatKind } from "../../labels";
-  import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
+  import { app, loadSkills, removeCharacter, skillsByCharacter, totalContents as totalContentsCount, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
+  import { latest } from "../../ui/latest.svelte";
   import { adjustDropIndex, dropHalfIndex } from "../../ui/reorder.svelte";
   import { badgeStyle } from "../../ui/states";
   import Splitter from "../../ui/Splitter.svelte";
@@ -81,8 +82,7 @@
   // 即時プレビュー(100ms debounce)。エラーはペイン内に控えめに表示(トーストは出さない)。
   let preview = $state<StatPreview | null>(null);
   let previewError = $state<string | null>(null);
-  let debounceHandle: ReturnType<typeof setTimeout> | undefined;
-  let previewSeq = 0;
+  const previewLatest = latest({ debounce: 100 });
   $effect(() => {
     const baseStats = { ...draft.baseStats };
     const statSources = JSON.parse(JSON.stringify(draft.statSources)) as StatSources;
@@ -94,23 +94,19 @@
     // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
     const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
-    if (debounceHandle) clearTimeout(debounceHandle);
-    const seq = ++previewSeq;
-    debounceHandle = setTimeout(() => {
+    previewLatest.run((isCurrent) =>
       previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, mainSkillId)
         .then((p) => {
-          if (seq === previewSeq) {
+          if (isCurrent()) {
             preview = p;
             previewError = null;
           }
         })
         .catch((e) => {
-          if (seq === previewSeq) previewError = errorMessage(e);
-        });
-    }, 100);
-    return () => {
-      if (debounceHandle) clearTimeout(debounceHandle);
-    };
+          if (isCurrent()) previewError = errorMessage(e);
+        }),
+    );
+    return () => previewLatest.cancel();
   });
 
   async function save() {
@@ -502,7 +498,7 @@
   const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
 
   // --- いまの実力 ---------------------------------------------------------
-  const totalContents = $derived(app.areas.reduce((n, a) => n + a.contents.length, 0));
+  const totalContents = $derived(totalContentsCount());
   const savedClearCount = $derived((app.evaluations[character.id] ?? []).filter((e) => e.clear).length);
 </script>
 
@@ -746,11 +742,11 @@
             <tbody>
               <tr>
                 <th class="rh">基本</th>
-                {#each visibleEquipmentStatKinds as k (k)}<td class="n">{fmtInt(eqBaseTotal[k])}</td>{/each}
+                {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqBaseTotal[k]}>{fmtInt(eqBaseTotal[k])}</td>{/each}
               </tr>
               <tr>
                 <th class="rh">強化</th>
-                {#each visibleEquipmentStatKinds as k (k)}<td class="n">{fmtInt(eqEnchantTotal[k])}</td>{/each}
+                {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqEnchantTotal[k]}>{fmtInt(eqEnchantTotal[k])}</td>{/each}
               </tr>
             </tbody>
           </table>
@@ -763,7 +759,7 @@
         </div>
         <div class="sheet-card">
           <div class="card-title">このキャラで通るのは</div>
-          <div class="clear num"><span class="strong">{savedClearCount}</span><span class="dim"> / {totalContents}</span></div>
+          <div class="clear num"><span class="strong" use:bump={() => savedClearCount}>{savedClearCount}</span><span class="dim"> / {totalContents}</span></div>
           <p class="dim tiny">保存済みデータでの判定。一覧は<b>ホーム</b>で。</p>
         </div>
         <button type="button" class="delete" class:confirm={confirmDelete} onclick={removeThis}>

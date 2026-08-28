@@ -1,9 +1,8 @@
 <script lang="ts">
   // 「skills」補正源のペイン。マスタリー(段ごとに 1 つ)と、自分・味方のスキル。
   import type { MasteryDef } from "../../../api/types";
-  import { allySkills, damageCategoryLabel, effectLabel, ownSkills, toggleCharacterSkill } from "../../../characterSkills";
+  import { allySkills, effectLabel, ownSkills, singleEffectLabel, toggleCharacterSkill } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
-  import { STAT_LABELS } from "../../../labels";
   import { app } from "../../../state.svelte";
   import { flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
@@ -48,16 +47,7 @@
   }
   /** 効き先の要約。記録のみは wiki の効果だけ出し、未収録の理由は title に回す
       (カードは 3 列なので、理由まで入れると行が伸びて段の高さがそろわない) */
-  const masteryEffectLabel = (m: MasteryDef): string => {
-    const e = m.effect;
-    if (e === "record_only") return m.note.split(" — ")[0];
-    if ("stat_rate" in e) {
-      return `${e.stat_rate.stats.map((k) => STAT_LABELS[k]).join(" / ")} +${e.stat_rate.percent}%`;
-    }
-    if ("actual_delay" in e) return `中ディレイ −${e.actual_delay.percent}%`;
-    const sign = e.damage.percent < 0 ? "−" : "+";
-    return `${damageCategoryLabel(e.damage.category)} ${sign}${Math.abs(e.damage.percent)}%`;
-  };
+  const masteryEffectLabel = (m: MasteryDef): string => singleEffectLabel(m.effect) ?? m.note.split(" — ")[0];
   const masteryIsModeled = (m: MasteryDef): boolean => m.effect !== "record_only";
 </script>
 

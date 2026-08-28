@@ -1,7 +1,8 @@
 <script lang="ts">
   // 左のキャラレール。全タブ共通の「どのキャラの話をしているか」を担う。
-  import { app, gameCharacterName, selectCharacter } from "./state.svelte";
+  import { app, gameCharacterName, selectCharacter, totalContents } from "./state.svelte";
   import Icon from "./ui/Icon.svelte";
+  import { bump } from "./ui/motion.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import { dropHalfIndex, moveItem } from "./ui/reorder.svelte";
 
@@ -11,7 +12,7 @@
   }
   let { collapsed, onToggle }: Props = $props();
 
-  const totalContents = $derived(app.areas.reduce((n, a) => n + a.contents.length, 0));
+  const total = $derived(totalContents());
   const clearCount = (id: number) => (app.evaluations[id] ?? []).filter((e) => e.clear).length;
   const characterOrder = persisted<number[]>("tw-character-order", []);
   const orderedCharacters = $derived.by(() => {
@@ -80,7 +81,7 @@
         class:drop-before={characterDropAt === index}
         class:drop-after={characterDropAt === index + 1 && index === orderedCharacters.length - 1}
         draggable="true"
-        title="{c.name}({gameCharacterName(c.game_character_id)}) クリア可 {clearCount(c.id)} / {totalContents}"
+        title="{c.name}({gameCharacterName(c.game_character_id)}) クリア可 {clearCount(c.id)} / {total}"
         onclick={() => selectCharacter(c.id)}
         ondragstart={(event) => startCharacterDrag(event, c.id)}
         ondragover={(event) => dragCharacterOver(event, index)}
@@ -101,11 +102,11 @@
             <span class="cls">{gameCharacterName(c.game_character_id)} / 覚醒{c.awakening.stage}</span>
           </span>
           <span class="count">
-            <span class="ok num">{clearCount(c.id)}<span class="total"> / {totalContents}</span></span>
+            <span class="ok num" use:bump={() => clearCount(c.id)}>{clearCount(c.id)}<span class="total"> / {total}</span></span>
             <span class="cap">クリア可</span>
           </span>
         {:else}
-          <span class="mini num">{clearCount(c.id)}</span>
+          <span class="mini num" use:bump={() => clearCount(c.id)}>{clearCount(c.id)}</span>
         {/if}
       </button>
     {/each}

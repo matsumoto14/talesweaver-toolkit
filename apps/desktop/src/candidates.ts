@@ -21,6 +21,41 @@ export const COST_COLORS: Record<Candidate["cost"], [string, string, string]> = 
   装備更新: [STATE.short.bg, STATE.short.bd, STATE.short.fg],
 };
 
+export interface CandidateResult {
+  candidate: Candidate;
+  perHit: number;
+  deltaPct: number;
+}
+
+/**
+ * 候補を実際に適用してダメージを引き直し、いまの値との差分(%)付きで返す。
+ * CalcPage の「もし〜だったら」と HomePage の「次に変えるなら」で同じ形をしていたブロック
+ * (Promise.allSettled → apply → previewDamage → deltaPct 計算 → 並び替え)をここに集約する。
+ * 1 候補の失敗(装備検証エラー等)で他候補まで消さない(独立レビュー指摘)。並びは perHit 降順。
+ */
+export async function tryCandidates(
+  candidates: Candidate[],
+  build: () => NewCharacter,
+  run: (p: NewCharacter) => Promise<{ per_hit: { max: number } }>,
+  base: number,
+  filter?: (r: CandidateResult) => boolean,
+): Promise<CandidateResult[]> {
+  const settled = await Promise.allSettled(
+    candidates.map(async (candidate) => {
+      const p = build();
+      candidate.apply(p);
+      const r = await run(p);
+      return {
+        candidate,
+        perHit: r.per_hit.max,
+        deltaPct: base > 0 ? Math.round((r.per_hit.max / base - 1) * 100) : 0,
+      };
+    }),
+  );
+  const results = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+  return (filter ? results.filter(filter) : results).sort((a, b) => b.perHit - a.perHit);
+}
+
 export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): Candidate[] {
   const out: Candidate[] = [];
   if (!current.common_skills.power_weapon) {

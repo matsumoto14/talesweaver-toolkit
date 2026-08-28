@@ -2,16 +2,16 @@
   // キャラ登録(v4): 呼び名 + 19 職のアイコン選択だけ。詳細は登録後にワークスペースで育てる
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import { createCharacter, errorMessage } from "../../api/commands";
-  import { dropForeignSkills } from "../../characterSkills";
-  import type { NewCharacter, Skill } from "../../api/types";
+  import { dropForeignSkills, mainSkillOptions as buildMainSkillOptions } from "../../characterSkills";
+  import type { NewCharacter } from "../../api/types";
   import { DEFAULT_AWAKENING_STAGE, defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
-  import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
+  import { STAT_KINDS } from "../../labels";
   import {
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
-  import Picker, { type PickerOption } from "../../ui/Picker.svelte";
+  import Picker from "../../ui/Picker.svelte";
 
   let name = $state("");
   let gameCharacterId = $state("boris");
@@ -26,15 +26,8 @@
     void loadSkills(gameCharacterId);
   });
   const skills = $derived(skillsByCharacter[gameCharacterId] ?? []);
-  /** 名前だけでは選べない。単 / 範・段数・属性を並べ、火力の高い順にする(SourcePane と同じ形) */
-  const skillMeta = (s: Skill) =>
-    `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]}`;
-  const mainSkillOptions = $derived<PickerOption[]>([
-    { value: "", name: "未選択(あとで選ぶ)", iconId: null },
-    ...[...skills]
-      .sort((a, b) => b.multiplier * Math.max(1, b.hit_count) - a.multiplier * Math.max(1, a.hit_count))
-      .map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
-  ]);
+  /** 火力の高い順(StatusPane と同じ形) */
+  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(あとで選ぶ)"));
   /** キャラを選び直したら前キャラのスキル id を残さない */
   function pickGameCharacter(id: string) {
     if (id === gameCharacterId) return;

@@ -18,6 +18,7 @@ import {
   listSkills,
   listTitles,
 } from "./api/commands";
+import { latestByKey } from "./ui/latest.svelte";
 import type {
   CharacterSkillDef,
   BuffDefinition,
@@ -116,6 +117,14 @@ export function flatContents(): { areaId: string; areaName: string; content: Con
   );
 }
 
+/**
+ * 全コンテンツ数(エリア横断)。「クリアできるのは N / 全体」系の分母を
+ * ここ 1 箇所に集約する(キャラレール・ホーム・キャラワークスペース・計算タブで共通)。
+ */
+export function totalContents(): number {
+  return app.areas.reduce((n, a) => n + a.contents.length, 0);
+}
+
 export function findContent(contentId: string): Content | null {
   for (const a of app.areas) {
     const c = a.contents.find((x) => x.id === contentId);
@@ -128,20 +137,21 @@ export function evaluationFor(characterId: number, contentId: string): ContentEv
   return app.evaluations[characterId]?.find((e) => e.content_id === contentId) ?? null;
 }
 
-// キャラ id ごとの最新リクエスト番号(非リアクティブ)。古い応答を捨てるためのガード。
-const evaluationSeqs: Record<number, number> = {};
+// キャラ id ごとの最新リクエストだけを反映するレースガード。古い応答を捨てる。
+const evaluationLatest = latestByKey<number>();
 
 export async function refreshEvaluation(c: RegisteredCharacter): Promise<void> {
-  const seq = (evaluationSeqs[c.id] = (evaluationSeqs[c.id] ?? 0) + 1);
-  try {
-    const evaluations = await evaluateContents(payloadOf(c));
-    // 古い応答、および削除済みキャラの応答は反映しない(削除済みキーの復活防止)
-    if (evaluationSeqs[c.id] === seq && app.characters.some((x) => x.id === c.id)) {
-      app.evaluations[c.id] = evaluations;
+  await evaluationLatest.run(c.id, async (isCurrent) => {
+    try {
+      const evaluations = await evaluateContents(payloadOf(c));
+      // 古い応答、および削除済みキャラの応答は反映しない(削除済みキーの復活防止)
+      if (isCurrent() && app.characters.some((x) => x.id === c.id)) {
+        app.evaluations[c.id] = evaluations;
+      }
+    } catch (e) {
+      reportError(errorMessage(e));
     }
-  } catch (e) {
-    reportError(errorMessage(e));
-  }
+  });
 }
 
 export function selectCharacter(id: number | null): void {

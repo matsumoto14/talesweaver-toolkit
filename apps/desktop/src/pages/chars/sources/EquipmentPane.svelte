@@ -850,7 +850,7 @@
             <div class="value-equation">
               <strong class="value-total num" use:bump={() => displayTotal}>
                 <span class="total-main">{displayTotal}</span>
-                <span class="enchant-part">（＋{part.enchant[k]}）</span>
+                <span class="enchant-part" use:bump={() => part.enchant[k]}>（＋{part.enchant[k]}）</span>
               </strong>
               {#if abilityValue !== 0}
                 <span class="ability-part">アビ{abilityValue}</span>

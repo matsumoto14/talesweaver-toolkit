@@ -2,13 +2,16 @@
   // 「status」補正源のペイン。キャラ選択・覚醒・エタの意志・主軸スキル・主属性・能力値の一覧。
   import type { Element, ElementPreview, Skill, StatKind, StatPreview } from "../../../api/types";
   import { previewElements } from "../../../api/commands";
+  import { mainSkillOptions as buildMainSkillOptions, skillPower } from "../../../characterSkills";
   import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
   import { fmtInt, formatLayerValue } from "../../../format";
   import { ELEMENT_LABELS, ELEMENTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
   import Icon from "../../../ui/Icon.svelte";
-  import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
+  import { latest } from "../../../ui/latest.svelte";
+  import { bump, flash } from "../../../ui/motion.svelte";
+  import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
 
@@ -55,17 +58,8 @@
   const stageIsLow = $derived(Number(draft.stage) < 4);
 
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
-  /** 火力の高い順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す */
-  const skillPower = (s: Skill) => s.multiplier * Math.max(1, s.hit_count);
-  /** 一覧でも名前だけにしない。単 / 範・段数・属性を名前の後ろに付ける */
-  const skillMeta = (s: Skill) =>
-    `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]}`;
-  const mainSkillOptions = $derived<PickerOption[]>([
-    { value: "", name: "未選択(攻撃力を出さない)", iconId: null },
-    ...[...skills]
-      .sort((a, b) => skillPower(b) - skillPower(a))
-      .map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
-  ]);
+  /** 火力の高い順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す(RegisterPane と同じ形) */
+  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(攻撃力を出さない)"));
   const topSkills = $derived([...skills].sort((a, b) => skillPower(b) - skillPower(a)).slice(0, 3));
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
   /** 候補にない主軸を選んでいるとき、または自分で開いたときだけ全部出す */
@@ -112,17 +106,18 @@
   });
   // 内訳は Rust 側で出す(キャラ基礎属性値は gamedata にしか無い)。開いている間だけ引く
   let elementPreview = $state<ElementPreview | null>(null);
-  let elementSeq = 0;
+  const elementLatest = latest();
   $effect(() => {
     const payload = draftToPayload(draft);
-    const seq = ++elementSeq;
-    previewElements(payload)
-      .then((p) => {
-        if (seq === elementSeq) elementPreview = p;
-      })
-      .catch(() => {
-        if (seq === elementSeq) elementPreview = null;
-      });
+    elementLatest.run((isCurrent) =>
+      previewElements(payload)
+        .then((p) => {
+          if (isCurrent()) elementPreview = p;
+        })
+        .catch(() => {
+          if (isCurrent()) elementPreview = null;
+        }),
+    );
   });
 
   const traceFor = (k: StatKind) => preview?.traces.find((t) => t.kind === k) ?? null;
@@ -274,7 +269,7 @@
     <p class="hint dim">
       属性値
       {#each ELEMENTS.filter((e) => elementPreview!.total[e] > 0) as e (e)}
-        <b>{ELEMENT_LABELS[e]} {fmtInt(elementPreview.total[e])}</b>
+        <b use:bump={() => elementPreview?.total[e] ?? null}>{ELEMENT_LABELS[e]} {fmtInt(elementPreview.total[e])}</b>
         <span class="dim">(キャラ {fmtInt(elementPreview.base[e])} + 装備 {fmtInt(elementPreview.equipment[e])} + 主属性 {fmtInt(elementPreview.sources[e])})</span>
       {:else}
         まだどの属性も乗っていません
@@ -309,7 +304,7 @@
             <td class="n stat-cell">
               <StatInput label="" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
             </td>
-            <td class="n muted ro">{diff === null ? "—" : signed(diff)}</td>
+            <td class="n muted ro" use:bump={() => diff}>{diff === null ? "—" : signed(diff)}</td>
             <!-- 素ステ → 最終を 1 本のバーで(§11)。数字の羅列ではなく「どれだけ伸びたか」を見せる。
                  灰が素ステ(振り分け)、青が補正で乗った分。長さは最終能力値の上限に対する割合 -->
             <td class="ro">
@@ -322,7 +317,7 @@
               </span>
             </td>
             <td class="n final ro">
-              <span class="strong">{preview ? fmtInt(preview.stats[k]) : "—"}</span>
+              <span class="strong" use:bump={() => preview?.stats[k] ?? null}>{preview ? fmtInt(preview.stats[k]) : "—"}</span>
               {#if trace?.pinned_from !== null && trace?.pinned_from !== undefined}
                 <span class="pin-badge" title={`固定前: ${fmtInt(trace.pinned_from)}`}>固定</span>
               {/if}
@@ -333,6 +328,7 @@
                 title={trace && trace.capped_loss > 0
                   ? `上限 ${fmtInt(trace.stat_cap)} で ${fmtInt(trace.capped_loss)} 捨てています。上限は覚醒段階とエタの意志 Lv で上がります`
                   : ""}
+                use:flash={() => (trace !== null && trace !== undefined && trace.capped_loss > 0 ? "cap" : "open")}
               >{trace && trace.capped_loss > 0 ? "満" : ""}</span>
             </td>
           </tr>

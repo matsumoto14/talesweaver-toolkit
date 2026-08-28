@@ -3,17 +3,18 @@
   // 判定はすべて Rust 側(evaluate_contents)。この画面は表示と選択のみ。
   import { errorMessage, listSkills, previewDamage } from "../../api/commands";
   import type { Content, ContentEvaluation, NewCharacter } from "../../api/types";
-  import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
+  import { candidatesFor, COST_COLORS, tryCandidates, type Candidate } from "../../candidates";
   import { fmtInt } from "../../format";
   import {
-    app, evaluationFor, flatContents, payloadOf, refreshEvaluation, selectedCharacter,
+    app, evaluationFor, flatContents, payloadOf, refreshEvaluation, selectedCharacter, totalContents,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import RequirementList from "../../ui/RequirementList.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
-  import { bump } from "../../ui/motion.svelte";
+  import { latest } from "../../ui/latest.svelte";
+  import { bump, flash } from "../../ui/motion.svelte";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
 
   const DEFAULT_RIGHT_WIDTH = 330;
@@ -21,7 +22,7 @@
   const pins = persisted("tw-v4-pins", { ids: [] as string[] });
 
   const character = $derived(selectedCharacter());
-  const totalCount = $derived(app.areas.reduce((n, a) => n + a.contents.length, 0));
+  const totalCount = $derived(totalContents());
 
   // 判定に使ったスキル名の表示用(evaluate_contents は「最大ダメージのスキル」で判定する)
   let skillNames = $state<Record<string, string>>({});
@@ -212,44 +213,36 @@
     deltaPct: number;
   }
   let advice = $state<Advice[]>([]);
-  let adviceSeq = 0;
-  let adviceHandle: ReturnType<typeof setTimeout> | undefined;
+  const adviceLatest = latest({ debounce: 150 });
   $effect(() => {
     const c = character;
     const g = goal;
     // 依存を明示的に読む(保存データの変化でも再計算する)
     void app.evaluations[c?.id ?? -1];
-    if (adviceHandle) clearTimeout(adviceHandle);
     // 敵データが無いコンテンツ(enemy_id なし)は火力を比較できないので候補を出さない
     if (!c || !g?.ev?.damage || !g.content.enemy_id) {
+      adviceLatest.cancel();
       advice = [];
       return;
     }
     const skillId = g.ev.damage.skill_id;
     const contentId = g.content.id;
     const baseDamage = g.ev.damage.per_hit_max;
-    const seq = ++adviceSeq;
-    adviceHandle = setTimeout(async () => {
+    adviceLatest.run(async (isCurrent) => {
       try {
         const list = candidatesFor(payloadOf(c), app.equipmentCatalog);
-        // 1 候補の失敗(装備検証エラー等)で他候補まで消さない(独立レビュー指摘)
-        const settled = await Promise.allSettled(
-          list.map(async (candidate) => {
-            const p = payloadOf(c);
-            candidate.apply(p);
-            const r = await previewDamage(p, skillId, contentId, 0);
-            return { candidate, perHit: r.per_hit.max, deltaPct: Math.round((r.per_hit.max / baseDamage - 1) * 100) };
-          }),
+        const results = await tryCandidates(
+          list,
+          () => payloadOf(c),
+          (p) => previewDamage(p, skillId, contentId, 0),
+          baseDamage,
         );
-        const results = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-        if (seq === adviceSeq) advice = results.sort((a, b) => b.perHit - a.perHit);
+        if (isCurrent()) advice = results;
       } catch (e) {
-        if (seq === adviceSeq) reportError(errorMessage(e));
+        if (isCurrent()) reportError(errorMessage(e));
       }
-    }, 150);
-    return () => {
-      if (adviceHandle) clearTimeout(adviceHandle);
-    };
+    });
+    return () => adviceLatest.cancel();
   });
 
   function applyAdvice(a: Advice) {
@@ -297,10 +290,10 @@
         {/if}
         <div class="summary">
           <span class="cap">クリアできるのは</span>
-          <span class="big-wrap"><span class="big num">{clearCount}</span><span class="of num">/ {totalCount}</span></span>
+          <span class="big-wrap"><span class="big num" use:bump={() => clearCount}>{clearCount}</span><span class="of num">/ {totalCount}</span></span>
           <span class="entry-pill">
             <span class="dim">入場条件だけなら</span>
-            <span class="num strong">{entryCount}</span>
+            <span class="num strong" use:bump={() => entryCount}>{entryCount}</span>
             <span class="num dim">/ {totalCount}</span>
           </span>
         </div>
@@ -426,12 +419,12 @@
               <span class="num huge" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
               <span class="dim">1発(最大)</span>
             </div>
-            <div class="sel-need num dim">目安 {fmtInt(r.content.need_per_hit)}</div>
+            <div class="sel-need num dim" use:bump={() => r.content.need_per_hit}>目安 {fmtInt(r.content.need_per_hit)}</div>
             {#if r.ev?.damage}
               <div class="sel-skill dim">
                 スキル: {skillNames[r.ev.damage.skill_id] ?? r.ev.damage.skill_id}(最大ダメージのスキルで判定)
               </div>
-              <div class="sel-note" class:ok>
+              <div class="sel-note" class:ok use:flash={() => (ok ? "ok" : String(Math.max(1, Math.round((1 - ratioOf(r)) * 100))))}>
                 {ok
                   ? "火力は目安を超えています(参考値)。"
                   : `目安まで あと ${Math.max(1, Math.round((1 - ratioOf(r)) * 100))}%。`}
@@ -472,7 +465,7 @@
                 <button type="button" class="fav" class:act onclick={() => (selectedContentId = f.content.id)}>
                   <span class="mark" class:act>{act ? "★" : "☆"}</span>
                   <span class="fav-name">{f.content.name}</span>
-                  <span class="num muted">{f.ev?.damage ? fmtInt(f.ev.damage.per_hit_max) : "—"}</span>
+                  <span class="num muted" use:bump={() => f.ev?.damage?.per_hit_max ?? null}>{f.ev?.damage ? fmtInt(f.ev.damage.per_hit_max) : "—"}</span>
                 </button>
               {/each}
             </div>
@@ -492,12 +485,12 @@
                 <button type="button" class="advice" class:reach onclick={() => applyAdvice(a)}>
                   <span class="adv-row">
                     <span class="adv-label">{a.candidate.label}</span>
-                    <span class="num adv-delta" class:up={a.deltaPct > 0}>
+                    <span class="num adv-delta" class:up={a.deltaPct > 0} use:bump={() => a.deltaPct}>
                       {a.deltaPct === 0 ? "±0%" : `${a.deltaPct > 0 ? "+" : ""}${a.deltaPct}%`}
                     </span>
                   </span>
                   <span class="adv-row sub">
-                    <span class="num dim">{fmtInt(a.perHit)} / 目安 {fmtInt(need)}</span>
+                    <span class="num dim" use:bump={() => a.perHit}>{fmtInt(a.perHit)} / 目安 {fmtInt(need)}</span>
                     <span class="cost" style={triadStyle(COST_COLORS[a.candidate.cost])}>{a.candidate.cost}</span>
                   </span>
                 </button>

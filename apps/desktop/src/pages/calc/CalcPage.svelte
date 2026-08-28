@@ -13,13 +13,13 @@
     isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
     toggleBuff, userInputRange,
   } from "../../buffs";
-  import { candidatesFor, COST_COLORS, type Candidate } from "../../candidates";
+  import { candidatesFor, COST_COLORS, tryCandidates, type Candidate } from "../../candidates";
   import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import { ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
-    app, flatContents, payloadOf, selectedCharacter, upsertCharacter,
+    app, flatContents, payloadOf, selectedCharacter, totalContents as totalContentsCount, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
@@ -31,6 +31,7 @@
   import SheetCard from "../../ui/SheetCard.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
+  import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
@@ -105,7 +106,7 @@
 
   // スキル一覧の対象別ダメージ(ドロップダウンを開いたときに計算)
   let skillTotals = $state<Record<string, { perHit: number; total: number }>>({});
-  let skillSeq = 0;
+  const skillLatest = latest();
   $effect(() => {
     // 対象・キャラ・試し変更が変わったら古い合計を出さない(PR レビュー指摘)
     skillTotals = {};
@@ -114,17 +115,18 @@
     const temp = JSON.parse(JSON.stringify(temporaryAdjustments)) as Adjustments;
     const contentId = target.content.id;
     const comboCount = combo ? COMBO_THRESHOLD : 0;
-    const seq = ++skillSeq;
-    Promise.all(
-      skills.map(async (s) => [s.id, await previewDamage(p, s.id, contentId, comboCount, temp)] as const),
-    )
-      .then((rs) => {
-        if (seq !== skillSeq) return;
-        skillTotals = Object.fromEntries(
-          rs.map(([id, r]) => [id, { perHit: r.per_hit.max, total: r.total.max }]),
-        );
-      })
-      .catch((e) => reportError(errorMessage(e)));
+    skillLatest.run((isCurrent) =>
+      Promise.all(
+        skills.map(async (s) => [s.id, await previewDamage(p, s.id, contentId, comboCount, temp)] as const),
+      )
+        .then((rs) => {
+          if (!isCurrent()) return;
+          skillTotals = Object.fromEntries(
+            rs.map(([id, r]) => [id, { perHit: r.per_hit.max, total: r.total.max }]),
+          );
+        })
+        .catch((e) => reportError(errorMessage(e))),
+    );
   });
 
   let combo = $state(false);
@@ -151,8 +153,7 @@
   let result = $state<DamageResult | null>(null);
   let savedResult = $state<DamageResult | null>(null);
   let calculating = $state(false);
-  let requestSeq = 0;
-  let debounceHandle: ReturnType<typeof setTimeout> | undefined;
+  const requestLatest = latest({ debounce: 120 });
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null; // sim のネスト変更も拾う
     const sp = savedPayload;
@@ -161,63 +162,56 @@
     const comboCount = combo ? COMBO_THRESHOLD : 0;
     const simActive = app.sim !== null;
     const tempJson = JSON.stringify(temporaryAdjustments);
-    if (debounceHandle) clearTimeout(debounceHandle);
     if (!pJson || !sp || !t || !sid) {
+      requestLatest.cancel();
       result = null;
       savedResult = null;
       return;
     }
-    const seq = ++requestSeq;
     calculating = true;
-    debounceHandle = setTimeout(async () => {
+    requestLatest.run(async (isCurrent) => {
       try {
         const main = await previewDamage(JSON.parse(pJson), sid, t.content.id, comboCount, JSON.parse(tempJson));
         const saved = simActive
           ? await previewDamage(sp, sid, t.content.id, comboCount, JSON.parse(tempJson))
           : main;
-        if (seq === requestSeq) {
+        if (isCurrent()) {
           result = main;
           savedResult = saved;
         }
       } catch (e) {
-        if (seq === requestSeq) {
+        if (isCurrent()) {
           result = null;
           reportError(errorMessage(e));
         }
       } finally {
-        if (seq === requestSeq) calculating = false;
+        if (isCurrent()) calculating = false;
       }
-    }, 120);
-    return () => {
-      if (debounceHandle) clearTimeout(debounceHandle);
-    };
+    });
+    return () => requestLatest.cancel();
   });
 
   // --- 入場条件・通るのは(payload 基準、Rust 側で判定) --------------------
   let evals = $state<ContentEvaluation[]>([]);
-  let evalSeq = 0;
-  let evalHandle: ReturnType<typeof setTimeout> | undefined;
+  const evalLatest = latest({ debounce: 200 });
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null;
     // 計算タブは「今このスキルで戦う」文脈なので、装備条件も選択中スキルの依存で判定する
     // (ホームはコンテンツごとの最大ダメージスキルで判定する)。
     const sid = skillId;
-    if (evalHandle) clearTimeout(evalHandle);
     if (!pJson) {
+      evalLatest.cancel();
       evals = [];
       return;
     }
-    const seq = ++evalSeq;
-    evalHandle = setTimeout(() => {
+    evalLatest.run((isCurrent) => {
       evaluateContents(JSON.parse(pJson), sid || undefined)
         .then((rs) => {
-          if (seq === evalSeq) evals = rs;
+          if (isCurrent()) evals = rs;
         })
         .catch((e) => reportError(errorMessage(e)));
-    }, 200);
-    return () => {
-      if (evalHandle) clearTimeout(evalHandle);
-    };
+    });
+    return () => evalLatest.cancel();
   });
   const targetEval = $derived(target ? (evals.find((e) => e.content_id === target.content.id) ?? null) : null);
   const clearCount = $derived(evals.filter((e) => e.clear).length);
@@ -454,7 +448,7 @@
   let side = $state<"attack" | "defense">("attack");
   let defense = $state<DefenseProfile | null>(null);
   let defenseError = $state<string | null>(null);
-  let defenseSeq = 0;
+  const defenseLatest = latest();
   $effect(() => {
     // 防御側は対象コンテンツに依らない。キャラ(試し変更込み)が変わったときだけ引き直す
     const p = payload;
@@ -462,17 +456,18 @@
       defense = null;
       return;
     }
-    const seq = ++defenseSeq;
-    previewDefense(p)
-      .then((d) => {
-        if (seq === defenseSeq) {
-          defense = d;
-          defenseError = null;
-        }
-      })
-      .catch((e) => {
-        if (seq === defenseSeq) defenseError = errorMessage(e);
-      });
+    defenseLatest.run((isCurrent) =>
+      previewDefense(p)
+        .then((d) => {
+          if (isCurrent()) {
+            defense = d;
+            defenseError = null;
+          }
+        })
+        .catch((e) => {
+          if (isCurrent()) defenseError = errorMessage(e);
+        }),
+    );
   });
 
   // --- 試し変更(sim) ------------------------------------------------------
@@ -652,51 +647,40 @@
   let leavingWhatIfId = $state<string | null>(null);
   /** 試した候補の数。0 件のときに「候補が無い」のか「超えるものが無い」のかを書き分ける */
   let whatIfTried = $state(0);
-  let whatIfSeq = 0;
-  let whatIfHandle: ReturnType<typeof setTimeout> | undefined;
+  const whatIfLatest = latest({ debounce: 250 });
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null;
     const tempJson = JSON.stringify(temporaryAdjustments);
     const t = target;
     const sid = skillId;
     const base = perHit;
-    if (whatIfHandle) clearTimeout(whatIfHandle);
     if (!pJson || !t || !sid || base === null) {
+      whatIfLatest.cancel();
       whatIf = [];
       whatIfTried = 0;
       return;
     }
-    const seq = ++whatIfSeq;
-    whatIfHandle = setTimeout(async () => {
+    whatIfLatest.run(async (isCurrent) => {
       try {
         const current = JSON.parse(pJson) as NewCharacter;
         const list = candidatesFor(current, app.equipmentCatalog);
-        // 1 候補の失敗(装備検証エラー等)で他候補まで消さない(独立レビュー指摘)
-        const settled = await Promise.allSettled(
-          list.map(async (candidate) => {
-            const p = JSON.parse(pJson) as NewCharacter;
-            candidate.apply(p);
-            const r = await previewDamage(p, sid, t.content.id, combo ? COMBO_THRESHOLD : 0, JSON.parse(tempJson));
-            return {
-              candidate,
-              perHit: r.per_hit.max,
-              deltaPct: base > 0 ? Math.round((r.per_hit.max / base - 1) * 100) : 0,
-            };
-          }),
+        const rs = await tryCandidates(
+          list,
+          () => JSON.parse(pJson) as NewCharacter,
+          (p) => previewDamage(p, sid, t.content.id, combo ? COMBO_THRESHOLD : 0, JSON.parse(tempJson)),
+          base,
+          (w) => w.perHit > base,
         );
-        const rs = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-        if (seq === whatIfSeq) {
-          whatIf = rs.filter((w) => w.perHit > base).sort((a, b) => b.perHit - a.perHit);
+        if (isCurrent()) {
+          whatIf = rs;
           whatIfTried = list.length;
           leavingWhatIfId = null;
         }
       } catch (e) {
-        if (seq === whatIfSeq) reportError(errorMessage(e));
+        if (isCurrent()) reportError(errorMessage(e));
       }
-    }, 250);
-    return () => {
-      if (whatIfHandle) clearTimeout(whatIfHandle);
-    };
+    });
+    return () => whatIfLatest.cancel();
   });
   function applyWhatIf(w: WhatIf) {
     leavingWhatIfId = w.candidate.id;
@@ -757,7 +741,9 @@
     };
   });
 
-  const totalContents = $derived(contents.length);
+  // 「通るのは」の分母は入場条件だけを見る全コンテンツ数(他画面と統一)。
+  // 上の contents(対象ピッカー用)は敵データを持つものだけに絞っているため数え方が違う
+  const totalContents = $derived(totalContentsCount());
 </script>
 
 <SplitPage
@@ -902,7 +888,7 @@
                 <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
                 {#if simActive}
                   <span class="nsub num">
-                    <span class:up={deltaPct > 0} class:down={deltaPct < 0}>
+                    <span class:up={deltaPct > 0} class:down={deltaPct < 0} use:bump={() => deltaPct}>
                       {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
                     </span>
                     ・ 登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}
@@ -919,10 +905,10 @@
                 <span class="nsub num">
                   クリティカル ×{skill ? fmtNum(skill.critical_multiplier) : "—"}
                   {result ? fmtInt(result.total.critical) : "—"}
-                  {#if result?.critical_rate}・ 発生 {result.critical_rate.value.toFixed(1)}%{/if}
+                  {#if result?.critical_rate}・ 発生 <span use:bump={() => result?.critical_rate?.value ?? null}>{result.critical_rate.value.toFixed(1)}%</span>{/if}
                 </span>
               </div>
-              <span class="op num">÷ {result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}s</span>
+              <span class="op num">÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}</span>s</span>
               <div class="node rate">
                 <span class="nl">1 秒あたり</span>
                 <span class="num nv" use:bump={() => (result?.dps ? Math.round(result.dps.max) : null)}>{result?.dps ? fmtInt(Math.round(result.dps.max)) : "—"}</span>
@@ -1080,8 +1066,8 @@
                     <span class="swatch" style="background: {a.c};"></span>
                     <span class="br-label">{a.k}</span>
                     <span class="br-note dim">{a.note}</span>
-                    <span class="num br-val">{fmtInt(Math.round(a.v))}</span>
-                    <span class="num br-share dim">{a.share}</span>
+                    <span class="num br-val" use:bump={() => Math.round(a.v)}>{fmtInt(Math.round(a.v))}</span>
+                    <span class="num br-share dim" use:bump={() => parseFloat(a.share)}>{a.share}</span>
                   </div>
                 {/each}
               </div>
@@ -1122,8 +1108,8 @@
                     <span class="swatch" style="background: {f.c};"></span>
                     <span class="br-label" class:strong={topLever?.k === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
-                    <span class="num br-val" class:bad={f.add < 0}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span>
-                    <span class="num br-share dim">{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
+                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(Math.abs(f.add))}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span>
+                    <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
                   </div>
                 {/each}
               </div>
@@ -1141,14 +1127,14 @@
                     {#each lostRows as r (r.k)}
                       <div class="lost-row">
                         <span class="lost-label">{r.k}</span>
-                        <span class="num lost-raw">{r.raw}</span>
+                        <span class="num lost-raw" use:flash={() => r.raw}>{r.raw}</span>
                         <span class="lost-arrow dim">→ 上限</span>
-                        <span class="num lost-val">{r.val}</span>
+                        <span class="num lost-val" use:flash={() => r.val}>{r.val}</span>
                         <span class="lost-bar" aria-hidden="true">
                           <i style="width: {(r.kept * 100).toFixed(1)}%"></i>
                           <i class="cut" style="width: {(100 - r.kept * 100).toFixed(1)}%"></i>
                         </span>
-                        <span class="num lost-loss">{r.loss} は無効</span>
+                        <span class="num lost-loss" use:flash={() => r.loss}>{r.loss} は無効</span>
                       </div>
                     {/each}
                   </div>
@@ -1164,9 +1150,9 @@
                 </div>
                 <div class="mat-chips">
                   {#each activeCategories as c (c.category)}
-                    <span class="mat-chip" class:cap={catAtCap(c)}>
+                    <span class="mat-chip" class:cap={catAtCap(c)} use:flash={() => (catAtCap(c) ? "cap" : "open")}>
                       <span class="dim">{c.label}</span>
-                      <span class="num strong">{fmtCatValue(c)}</span>
+                      <span class="num strong" use:flash={() => fmtCatValue(c)}>{fmtCatValue(c)}</span>
                       {#if catAtCap(c)}<span class="full">満</span>{/if}
                     </span>
                   {/each}
@@ -1361,7 +1347,8 @@
                   />
                 {/if}
                 {#if isFixedValue(def.value)}
-                  <span class="dim bd-fixed">値: {formatLayerValue(def.layer, def.value.fixed)}</span>
+                  {@const fixedLabel = formatLayerValue(def.layer, def.value.fixed)}
+                  <span class="dim bd-fixed" use:flash={() => fixedLabel}>値: {fixedLabel}</span>
                 {/if}
               </div>
             {/if}

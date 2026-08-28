@@ -3,6 +3,7 @@
   import type { CategoryTrace, DamageTrace, RegisteredCharacter, StatContribution, StatTrace } from "../../api/types";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
+  import { bump } from "../../ui/motion.svelte";
 
   let { trace, character = null }: { trace: DamageTrace; character?: RegisteredCharacter | null } = $props();
 
@@ -66,7 +67,7 @@
           <tr>
             <td>{STAT_LABELS[s.kind]}</td>
             <td class="n strong final">
-              <span>{fmtInt(s.effective)}</span>
+              <span use:bump={() => s.effective}>{fmtInt(s.effective)}</span>
               {#if s.pinned_from !== null}
                 <span class="pin-badge" title={pinnedBeforeLabel(s)}>固定</span>
               {/if}
@@ -126,8 +127,8 @@
             <td class="sym">{c.symbol}</td>
             <td>{c.label}</td>
             <td class="muted">{KIND_LABEL[c.kind]}</td>
-            <td class="n">{fmtValue(c)}</td>
-            <td class="n strong">{fmtNum(c.factor)}</td>
+            <td class="n" use:bump={() => c.value}>{fmtValue(c)}</td>
+            <td class="n strong" use:bump={() => c.factor}>{fmtNum(c.factor)}</td>
             <td class="n muted">{fmtCap(c)}</td>
           </tr>
         {/each}

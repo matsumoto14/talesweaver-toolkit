@@ -1,8 +1,10 @@
 <script lang="ts">
   // 「actualDelay」補正源のペイン。このキャラ固有の中ディレイ減少スキルと、
   // ほかの補正源から入ってくる分(共通スキル・マスタリー・ランダムOP・シエナ)の一覧。
-  import type { StatPreview } from "../../../api/types";
-  import { actualDelayPercent, effectLabel, ownSkills, toggleCharacterSkill } from "../../../characterSkills";
+  import type { SkillEffect, StatPreview } from "../../../api/types";
+  import {
+    actualDelayPercent, effectLabel, ownSkills, sumActualDelayPercent, toggleCharacterSkill,
+  } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import { randomOptionActualDelayPercent, sienaExtraTotal } from "../../../equipment";
   import { app } from "../../../state.svelte";
@@ -43,14 +45,13 @@
     ),
   );
   /** マスタリーぶんの中ディレイ減少 % */
-  const masteryDelayPercent = $derived.by(() => {
-    let sum = 0;
-    for (const id of draft.statSources.masteries.picked) {
-      const e = app.masteries.find((m) => m.id === id)?.effect;
-      if (e !== undefined && e !== "record_only" && "actual_delay" in e) sum += e.actual_delay.percent;
-    }
-    return sum;
-  });
+  const masteryDelayPercent = $derived(
+    sumActualDelayPercent(
+      draft.statSources.masteries.picked
+        .map((id) => app.masteries.find((m) => m.id === id)?.effect)
+        .filter((e): e is SkillEffect => e !== undefined),
+    ),
+  );
   /** フルスロットル(共通スキル)の中ディレイ減少 %。0 = 未装着(計算は Rust 側) */
   const fullThrottlePercent = $derived(
     Math.round((preview?.common_skill.ultimate.actual_delay_reduction ?? 0) * 100),
