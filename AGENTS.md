@@ -2,7 +2,7 @@
 
 TalesWeaver(MMORPG)プレイヤー向けデスクトップツール。Tauri(Rust)+ SQLite(rusqlite)+ TypeScript/Svelte。
 機能と全体構成は docs/architecture.md、進捗は docs/status.md。
-docs/ 直下は人向け。docs/claude/ はエージェント向け(決定記録 adr/、運用 workflow.md)。
+docs/ 直下は人向け。決定記録は docs/adr/(テーマ別 ADR)、エージェント運用は docs/workflow.md。
 
 ## アーキテクチャ(構造ファースト)
 
@@ -52,7 +52,7 @@ docs/ 直下は人向け。docs/claude/ はエージェント向け(決定記録
 
 ## 実行ワークフロー
 
-メインセッション(Fable 5)が司令塔・最終判断者。Subagent は必要なときだけ使う。詳細と判断基準は docs/claude/workflow.md。
+メインセッション(Fable 5)が司令塔・最終判断者。Subagent は必要なときだけ使う。詳細と判断基準は docs/workflow.md。
 
 **IMPORTANT: Subagent として実行されている場合はこの節を無視し、与えられたタスクを自分で直接遂行する。`Agent` を起動しない。**
 

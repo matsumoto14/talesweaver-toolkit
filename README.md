@@ -76,8 +76,8 @@ cd apps/desktop && npm run build && npx svelte-check   # フロント単体チ�
 - [docs/status.md](docs/status.md) — 進捗
 - [docs/legacy-twtoolkit.md](docs/legacy-twtoolkit.md) — 旧リポジトリの棚卸し
 
-エージェント向け(決定記録・運用): [docs/claude/](docs/claude/) — adr/(テーマ別の決定記録)、
-workflow.md(運用ガイド)
+エージェント向け(決定記録・運用): [docs/adr/](docs/adr/)(テーマ別の決定記録)、
+[docs/workflow.md](docs/workflow.md)(運用ガイド)
 
 ## 貢献・問い合わせ
 

@@ -1,6 +1,6 @@
 # Claude Code 運用ガイド
 
-CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用推奨。背景は docs/claude/adr/010-agent-workflow.md。
+CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用推奨。背景は docs/adr/010-agent-workflow.md。
 
 ## Agent 定義
 
