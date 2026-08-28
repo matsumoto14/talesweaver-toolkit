@@ -1,4 +1,4 @@
-# TalesWeaver Toolkit
+# TW Context
 
 TalesWeaver(MMORPG)プレイヤー向けのデスクトップツールキット。
 登録したキャラクターを軸に、ダメージ計算・強化提案・コンテンツ入場ロードマップを提供します。
@@ -30,7 +30,7 @@ TalesWeaver(MMORPG)プレイヤー向けのデスクトップツールキット�
 ## データの扱い
 
 - 登録したキャラクター情報は**お使いの PC の中だけ**に保存されます
-  (`%APPDATA%\com.talesweaver.toolkit\talesweaver-toolkit.sqlite`)
+  (`%APPDATA%\dev.twcontext.app\talesweaver-toolkit.sqlite`)
 - 外部へ送信するのは、アプリ内の**問い合わせを送ったときだけ**です。
   送信前に送る内容が全文表示されるので、確認してから送れます
 - 更新のたびにデータベースを自動でバックアップします(直近 3 世代)

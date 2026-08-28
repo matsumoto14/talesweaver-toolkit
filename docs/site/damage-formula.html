@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ダメージ計算仕様 · TalesWeaver Toolkit</title>
+<title>ダメージ計算仕様 · TW Context</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;600&family=Noto+Sans+JP:wght@400;700&display=swap">
 <style>/* 配色はアプリ(apps/desktop/src/app.css)のトークンに合わせたダーク基調。ライトは同じ色相で反転 */
@@ -127,7 +127,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <body>
 <div class="shell">
 <aside class="side">
-  <a class="brand" href="index.html"><span class="dot"></span>TalesWeaver Toolkit</a>
+  <a class="brand" href="index.html"><span class="dot"></span>TW Context</a>
   <nav class="site-nav">
     <div class="label">DOCS</div>
     <a href="index.html"><span>概要</span><small>何ができるか・セットアップ</small></a><a href="architecture.html"><span>アーキテクチャ</span><small>クレート構成・フロント階層・依存の向き</small></a><a href="ux-guidelines.html"><span>UX ガイドライン</span><small>UI を作るときの 4 原則</small></a><a href="damage-formula.html" class="current"><span>ダメージ計算仕様</span><small>talewiki を整理した計算モデル</small></a><a href="status.html"><span>進捗</span><small>goal ごとの到達点</small></a>
@@ -397,255 +397,54 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <td>攻撃力</td>
 <td><span class="kind assign">代入</span></td>
 <td></td>
-<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備攻撃力強化倍率] * 25</code>。ステ攻撃力・装備攻撃力の係数はスキル依存種別(STAB/HACK/INT/MR/STAB+HACK/HACK+INT)ごとに wiki「計算式まとめ#BaseAttackPower」の表(取得 2026-08-22)で定義(<code>crates/gamedata/src/characters.rs</code>)。装備攻撃力は「基本能力値」(エンチャント除く素の装備補正・キャラスキル・アビリティ・<strong>称号</strong>)と「強化能力値」(エンチャント + シエナのオーラの能力値(武器/盾)+ テシスコアの火力タイプ補正)の 2 系統に分かれ、それぞれ別係数。テシスコアの能力値増加は<strong>対象ダンジョン内でのみ有効</strong>なので、強化能力値の集計は計算対象コンテンツの地域(<code>Content::core_region</code>)で変わる。テシスコアの補助タイプ(物防/回避/敏捷/命中)は与ダメージ式に入らないが、装備値の合計(<code>Equipment::support_totals</code>)としては保持する。装備攻撃力強化倍率 = パワーウェポン+2%(wiki Skill/共通)+ ストロングウェポン Lv×3%(Lv1〜6 = 3〜18%、同ページ)。どちらも<strong>共通スキル</strong>なので <code>CommonSkills</code> が持つ(ストロングウェポンの Lv2 以降はオーグメントの LvUp が前提)</td>
-</tr>
-<tr>
-<td class="sym">B</td>
-<td>攻撃力乱数部分</td>
-<td><span class="kind assign">代入</span></td>
-<td>最小1</td>
-<td>最大 = <code>{(ステ由来攻撃力 + DEX*3)/18} + 1</code></td>
-</tr>
-<tr>
-<td class="sym">C</td>
-<td>攻撃対象の防御力</td>
-<td><span class="kind fixed">固定値</span></td>
-<td></td>
-<td>敵データ。能力値減少デバフで低下。強打効果(確率で防御一定割合無視: ペット強打 7%/-100%(極限後-50%)、スキル強打 15%/-15% 等)は別枠</td>
-</tr>
-<tr>
-<td class="sym">D</td>
-<td>スキル倍率</td>
-<td><span class="kind assign">代入</span></td>
-<td></td>
-<td>スキルごと</td>
-</tr>
-<tr>
-<td class="sym">E1</td>
-<td>スキル倍率増加(割合)</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td class="sym">E2</td>
-<td>スキル倍率増加(固定値)</td>
-<td><span class="kind assign">代入</span></td>
-<td></td>
-<td>兜アビリティ等</td>
-</tr>
-<tr>
-<td class="sym">F</td>
-<td>Cri倍率</td>
-<td><span class="kind assign">代入</span></td>
-<td></td>
-<td>スキルごと。<strong>非クリティカル時は <code>{F×G}</code> ごと 1.0</strong>(G の供給源はすべて「クリティカルダメージ増加」で非クリには乗らない)</td>
-</tr>
-<tr>
-<td class="sym">G</td>
-<td>クリティカルダメージ増加</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>小数点以下切り捨て。<strong>極限スキル「スコープアイ」</strong>(基本+20% + スーパーリミット+3 + ハイパーリミット Lv1〜6 で +7〜+17 = 最大 +40%。wiki Skill/極限)</td>
-</tr>
-<tr>
-<td class="sym">H</td>
-<td>コンボボーナス</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>3コンボ以上で +15%</td>
-</tr>
-<tr>
-<td class="sym">I</td>
-<td>属性差ボーナス</td>
-<td><span class="kind rate">割合</span></td>
-<td>+0〜+50%</td>
-<td>属性差1あたり +0.625%。小数点以下切捨、下限+0%</td>
-</tr>
-<tr>
-<td class="sym">J</td>
-<td>カット率(プレイヤー)</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td><code>a = 3 + [(DEF+装備DEF−1)/10]</code>(物理)、MR版(魔法)、<code>(DEF+装備DEF+MR+装備MR−1)/20</code>(複合)。<code>r = 1 − a/(a+80)</code></td>
-</tr>
-<tr>
-<td class="sym">New1</td>
-<td>攻撃力増加(シエナのオーラ)</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>シエナのオーラの<strong>追加オプション「攻撃力増加」</strong>(1〜10%)。wiki「装備システム/シエナのオーラ#追加オプション一覧」に「実際は与ダメージ割合増加(新規カテゴリ)」と明記。同じ種類のオプションは同じ装備の別スロットに出ないため 1 部位 1 個、8 部位分が加算される(<code>Equipment::siena_attack_rate</code>)</td>
-</tr>
-<tr>
-<td class="sym">K</td>
-<td>最終ダメージ(固定値)</td>
-<td><span class="kind fixed">固定値</span></td>
-<td>上限1000</td>
-<td><strong>テシスコアのセット効果</strong>(強化4のコアが 3〜5 個 / 6 個で進化段階に応じて +500〜+1,400。wiki「テシスコア#コアセット効果」)。セット効果は地域ごとに発動して<strong>重複する</strong>ので 4 地域分が加算され、上限 1000 で頭打ちになる。式の下限も兼ねる</td>
-</tr>
-<tr>
-<td class="sym">L</td>
-<td>最終ダメージ</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限+45%</td>
-<td><strong>テシスコアのセット効果</strong>の上位段階(進化2の6セット〜進化4の6セットで +1〜+5%)。地域ごとに発動して重複するので最大 4 地域分が加算される(<code>ThesisCores::set_bonus</code>)</td>
-</tr>
-<tr>
-<td class="sym">V1</td>
-<td>カット率A</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>モンスター素体ごとの設定</td>
-</tr>
-<tr>
-<td class="sym">M</td>
-<td>被害減少</td>
-<td><span class="kind fixed">固定値</span></td>
-<td></td>
-<td>鎧/盾/カフスアビリティ、敵側設定</td>
-</tr>
-<tr>
-<td class="sym">Old</td>
-<td>攻撃ダメージII</td>
-<td><span class="kind rate">割合</span></td>
-<td>初期100%、下限30%、上限300%</td>
-<td>表記は「攻撃ダメージ(vsモンスター/プレイヤー)」。<strong>体装備</strong>†主天使の羽 / †シグマウィング +25%(要塞占領報酬)</td>
-</tr>
-<tr>
-<td class="sym">N</td>
-<td>覚醒ダメージ</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>覚醒・極限 +10〜100%、エタの意志</td>
-</tr>
-<tr>
-<td class="sym">O</td>
-<td>物理/魔法ダメージ増加</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td><strong>鎧</strong>†リナの服「魔法での与ダメージ +3%」。wiki 注記どおり物理攻撃にも乗るので依存で分けない</td>
-</tr>
-<tr>
-<td class="sym">P</td>
-<td>特定依存ダメージ増加</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限+73%</td>
-<td>STAB/STAB+HACK/HACK/HACK+INT/INT/MR 系統別。<strong>ランダムオプション</strong>「突き/斬り/物理複合/魔法/神聖/魔法斬り 攻撃力が X% 増加」(盾・レリック右)がここに入る。wiki 補足に「特定のスキルの与ダメージが X% 増加」とあり、スキルの依存種別が一致したときだけ乗る(<code>Equipment::random_option_totals</code>)</td>
-</tr>
-<tr>
-<td class="sym">Q</td>
-<td>物理/魔法ダメージ吸収</td>
-<td><span class="kind rate">割合</span></td>
-<td>+0〜+70%</td>
-<td>式では (1−Q)。被ダメージ軽減</td>
-</tr>
-<tr>
-<td class="sym">R</td>
-<td>物理/魔法被ダメージ倍率</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td class="sym">S</td>
-<td>被ダメージ減少</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>サブカテゴリ合算: S1秘薬(上限+20%)、S2一般(+15%)、S3基本発動(+15%)、S4スキル(-30%〜+30%)、S5その他。式では (1−S)</td>
-</tr>
-<tr>
-<td class="sym">T</td>
-<td>ダメージ増幅</td>
-<td><span class="kind rate">割合</span></td>
-<td>初期100%</td>
-<td></td>
-</tr>
-<tr>
-<td class="sym">U</td>
-<td>ダメージ耐性</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限+62%</td>
-<td>式では (1−U)。回復もカット。ダメージ上限・回復上限にも適用</td>
-</tr>
-<tr>
-<td class="sym">New2</td>
-<td>ダメージ緩和</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限+40%</td>
-<td>式では (1−New2)。ダメージ上限に適用、回復上限には非適用。計算タイミング未確定</td>
-</tr>
-<tr>
-<td class="sym">V2</td>
-<td>カット率B</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>コンテンツごとの個別設定</td>
-</tr>
-<tr>
-<td class="sym">W</td>
-<td>攻撃ダメージ(基本発動)(固定値)</td>
-<td><span class="kind fixed">固定値</span></td>
-<td>上限1000</td>
-<td><strong>新装着アビリティ</strong>の追加アビリティ「ダメージ増加 +5,000〜10,000」(<code>Item/合成/装着アビリティシステム/新装着アビリティ</code>)。追加アビリティは候補プールから<strong>ランダムに 2 つ</strong>付くので、器はランダムオプションと同じ「枠を選ぶ」形が要る。未収録</td>
-</tr>
-<tr>
-<td class="sym">X</td>
-<td>攻撃ダメージ</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限は<strong>副カテゴリごと</strong></td>
-<td>X1イザベル(+50%)、X2一般(+30%)、X3基本発動(+80%)、X4スキル(+65%)、X5特殊(wiki は「+??%」= 未記載)、X6日本独自(+30%) の<strong>合算</strong>。親 X 自体に上限は無く、<strong>子に上限を掛けてから足す</strong>(<code>CategoryTotals::value</code>)。X1〜X6 すべてに供給源が入っている</td>
-</tr>
-<tr>
-<td class="sym">X1</td>
-<td>攻撃ダメージ(イザベル)</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限 +50%</td>
-<td>消費アイテム(ユキダルマン族の特製ポーション +20%、イルミネーション祭りのドリンク +10% ほか)</td>
-</tr>
-<tr>
-<td class="sym">X2</td>
-<td>攻撃ダメージ(一般)</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限 +30%</td>
-<td>消費アイテム・バフ・ルーン(覚醒の秘薬 +5%、テイルズウィーバーのエネルギー +5%、狂戦士のルーン +10% ほか)</td>
-</tr>
-<tr>
-<td class="sym">X3</td>
-<td>攻撃ダメージ(基本発動)</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限 +80%</td>
-<td><strong>称号</strong>の無条件「ダメージ n% 増加」(課金箱シリーズ・名誉の証)と、<strong>武器アビリティ R-/L-/E- 段の追加効果</strong>「ダメージ増加 +3/+4/+6%」。手アビリティ(致命打・的中剣)は部位未対応で未収録</td>
-</tr>
-<tr>
-<td class="sym">X4</td>
-<td>攻撃ダメージ(スキル)</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限 +65%</td>
-<td><strong>キャラスキル</strong>(<code>character_skills.rs</code>、49 件)と<strong>マスタリー</strong>(<code>masteries.rs</code>)。マキシミンの極・呪われた魔剣のように、マスタリーでスキルの値が変わるものは <code>mastery_overrides</code> で持つ。キャラページの「マスタリースキル」の節には Ver8.20 前の古い値が残っているので、<strong>数値はカテゴリ表(= スキル性能一覧)を正とする</strong>(decisions.md 2026-08-27)</td>
-</tr>
-<tr>
-<td class="sym">X5</td>
-<td>攻撃ダメージ(特殊)</td>
-<td><span class="kind rate">割合</span></td>
-<td>wiki 未記載</td>
-<td><strong>ランダムオプション</strong>「攻撃ダメージが X% 増加」(サブアーム・レリック右)と、<strong>エフェクト</strong>「装着時攻撃力が3%増加」(幻獣・記念の祝福紋様)。上限が分からないので決め打ちしない。AF「全攻撃ダメージ増加」は wiki が「+x%」で値を書いていないので未収録</td>
-</tr>
-<tr>
-<td class="sym">X6</td>
-<td>攻撃ダメージ(日本独自)</td>
-<td><span class="kind rate">割合</span></td>
-<td>上限 +30%</td>
-<td>消費アイテム(略奪パン +20%、茹でミミック +10%)と、<strong>コラボ装備</strong>の装着時効果(武器 +3%、手 †ゴリラのあーむかばー / †タヌキの手袋 +5%、†イヅツミの手甲 / †リンの手袋 +3%、エフェクト †ロスト +1%)。<strong>エフェクトの「スキル使用時、一定確率で 3% 上昇」も発動前提で入れる</strong>(ユーザー確定 2026-08-27: ほぼ発動する)</td>
-</tr>
-<tr>
-<td class="sym">Y</td>
-<td>PVP補正</td>
-<td><span class="kind rate">割合</span></td>
-<td></td>
-<td>5%(固定ダメージにも適用。追加ダメージ(武器強化)のみ 10%)</td>
+<td><code>[ステ攻撃力 + 装備攻撃力] + [装備攻撃力/25 * 装備攻撃力強化倍率] * 25</code>。ステ攻撃力・装備攻撃力の係数はスキル依存種別(STAB/HACK/INT/MR/STAB+HACK/HACK+INT)ごとに wiki「計算式まとめ#BaseAttackPower」の表(取得 2026-08-22)で定義(<code>crates/gamedata/src/characters.rs</code>)。装備攻撃力は「基本能力値」(エンチャント除く素の装備補正・キャラスキル・アビリティ・<strong>称号</strong>)と「強化能力値」(エンチャント + シエナのオーラの能力値(武器/盾)+ テシスコアの火力タイプ補正)の 2 系統に分かれ、それぞれ別係数。ただしキャラ固有パッシブが参照する腕装備補正は派生値を基本能力値へ加える(下記)。テシスコアの能力値増加は<strong>対象ダンジョン内でのみ有効</strong>なので、強化能力値の集計は計算対象コンテンツの地域(<code>Content::core_region</code>)で変わる。テシスコアの補助タイプ(物防/回避/敏捷/命中)は与ダメージ式に入らないが、装備値の合計(<code>Equipment::support_totals</code>)としては保持する。装備攻撃力強化倍率 = パワーウェポン+2%(wiki Skill/共通)+ ストロングウェポン Lv×3%(Lv1〜6 = 3〜18%、同ページ)。どちらも<strong>共通スキル</strong>なので <code>CommonSkills</code> が持つ(ストロングウェポンの Lv2 以降はオーグメントの LvUp が前提)</td>
 </tr>
 </tbody>
 </table></div>
+<p>キャラ固有の腕装備変換(<code>Skill/&lt;キャラ&gt;</code>、取得 2026-08-27):</p>
+<ul>
+<li>ボリス／マキシミン「魔法を扱う剣士」: 腕装備の突き補正 <code>(基本 + エンチャント + 盾に注入したシエナのオーラ) × 1.0</code> を魔法攻撃力の<strong>基本能力値</strong>へ加える。元の突きエンチャント枠は強化能力値のまま保持する。</li>
+<li>ナヤトレイ／イサック: バンドの敏捷補正 <code>(基本 + エンチャント) × 0.7</code> を切り捨て、突き・物理複合型は突き、斬り型は斬りの基本能力値へ加える。</li>
+<li>ミラ: 同じバンド敏捷の 0.7 倍切り捨てを斬りの基本能力値へ加える。</li>
+<li>ベンヤ: 同値を、素HACK &gt; 素MR なら斬り、素HACK &lt; 素MR なら魔法防御の基本能力値へ加える。同値なら wiki に条件がないため加えない。</li>
+<li>ロアミニ: 同値を魔法攻撃力の基本能力値へ加える。</li>
+</ul>
+<p>型は登録済みの主軸スキル依存から決める。主軸未選択時だけ、現在計算しているスキル依存を使う。盾＋は盾部位とは別スロットなので、この変換対象に含めない。
+| B | 攻撃力乱数部分 | 代入 | 最小1 | 最大 = <code>{(ステ由来攻撃力 + DEX*3)/18} + 1</code> |
+| C | 攻撃対象の防御力 | 固定値 | | 敵データ。能力値減少デバフで低下。強打効果(確率で防御一定割合無視: ペット強打 7%/-100%(極限後-50%)、スキル強打 15%/-15% 等)は別枠 |
+| D | スキル倍率 | 代入 | | スキルごと |
+| E1 | スキル倍率増加(割合) | 割合 | | |
+| E2 | スキル倍率増加(固定値) | 代入 | | 兜アビリティ等 |
+| F | Cri倍率 | 代入 | | スキルごと。<strong>非クリティカル時は <code>{F×G}</code> ごと 1.0</strong>(G の供給源はすべて「クリティカルダメージ増加」で非クリには乗らない) |
+| G | クリティカルダメージ増加 | 割合 | | 小数点以下切り捨て。<strong>極限スキル「スコープアイ」</strong>(基本+20% + スーパーリミット+3 + ハイパーリミット Lv1〜6 で +7〜+17 = 最大 +40%。wiki Skill/極限)|
+| H | コンボボーナス | 割合 | | 3コンボ以上で +15% |
+| I | 属性差ボーナス | 割合 | +0〜+50% | 属性差1あたり +0.625%。小数点以下切捨、下限+0% |
+| J | カット率(プレイヤー) | 割合 | | <code>a = 3 + [(DEF+装備DEF−1)/10]</code>(物理)、MR版(魔法)、<code>(DEF+装備DEF+MR+装備MR−1)/20</code>(複合)。<code>r = 1 − a/(a+80)</code> |
+| New1 | 攻撃力増加(シエナのオーラ) | 割合 | | シエナのオーラの<strong>追加オプション「攻撃力増加」</strong>(1〜10%)。wiki「装備システム/シエナのオーラ#追加オプション一覧」に「実際は与ダメージ割合増加(新規カテゴリ)」と明記。同じ種類のオプションは同じ装備の別スロットに出ないため 1 部位 1 個、8 部位分が加算される(<code>Equipment::siena_attack_rate</code>) |
+| K | 最終ダメージ(固定値) | 固定値 | 上限1000 | <strong>テシスコアのセット効果</strong>(強化4のコアが 3〜5 個 / 6 個で進化段階に応じて +500〜+1,400。wiki「テシスコア#コアセット効果」)。セット効果は地域ごとに発動して<strong>重複する</strong>ので 4 地域分が加算され、上限 1000 で頭打ちになる。式の下限も兼ねる |
+| L | 最終ダメージ | 割合 | 上限+45% | <strong>テシスコアのセット効果</strong>の上位段階(進化2の6セット〜進化4の6セットで +1〜+5%)。地域ごとに発動して重複するので最大 4 地域分が加算される(<code>ThesisCores::set_bonus</code>) |
+| V1 | カット率A | 割合 | | モンスター素体ごとの設定 |
+| M | 被害減少 | 固定値 | | 鎧/盾/カフスアビリティ、敵側設定 |
+| Old | 攻撃ダメージII | 割合 | 初期100%、下限30%、上限300% | 表記は「攻撃ダメージ(vsモンスター/プレイヤー)」。<strong>体装備</strong>†主天使の羽 / †シグマウィング +25%(要塞占領報酬)|
+| N | 覚醒ダメージ | 割合 | | 覚醒・極限 +10〜100%、エタの意志 |
+| O | 物理/魔法ダメージ増加 | 割合 | | <strong>鎧</strong>†リナの服「魔法での与ダメージ +3%」。wiki 注記どおり物理攻撃にも乗るので依存で分けない |
+| P | 特定依存ダメージ増加 | 割合 | 上限+73% | STAB/STAB+HACK/HACK/HACK+INT/INT/MR 系統別。<strong>ランダムオプション</strong>「突き/斬り/物理複合/魔法/神聖/魔法斬り 攻撃力が X% 増加」(盾・レリック右)がここに入る。wiki 補足に「特定のスキルの与ダメージが X% 増加」とあり、スキルの依存種別が一致したときだけ乗る(<code>Equipment::random_option_totals</code>)|
+| Q | 物理/魔法ダメージ吸収 | 割合 | +0〜+70% | 式では (1−Q)。被ダメージ軽減 |
+| R | 物理/魔法被ダメージ倍率 | 割合 | | |
+| S | 被ダメージ減少 | 割合 | | サブカテゴリ合算: S1秘薬(上限+20%)、S2一般(+15%)、S3基本発動(+15%)、S4スキル(-30%〜+30%)、S5その他。式では (1−S) |
+| T | ダメージ増幅 | 割合 | 初期100% | |
+| U | ダメージ耐性 | 割合 | 上限+62% | 式では (1−U)。回復もカット。ダメージ上限・回復上限にも適用 |
+| New2 | ダメージ緩和 | 割合 | 上限+40% | 式では (1−New2)。ダメージ上限に適用、回復上限には非適用。計算タイミング未確定 |
+| V2 | カット率B | 割合 | | コンテンツごとの個別設定 |
+| W | 攻撃ダメージ(基本発動)(固定値) | 固定値 | 上限1000 | <strong>新装着アビリティ</strong>の追加アビリティ「ダメージ増加 +5,000〜10,000」(<code>Item/合成/装着アビリティシステム/新装着アビリティ</code>)。カテゴリー4を選ぶと出るランダム追加2枠で種類と実測値を選び、計算へ反映する |
+| X | 攻撃ダメージ | 割合 | 上限は<strong>副カテゴリごと</strong> | X1イザベル(+50%)、X2一般(+30%)、X3基本発動(+80%)、X4スキル(+65%)、X5特殊(wiki は「+??%」= 未記載)、X6日本独自(+30%) の<strong>合算</strong>。親 X 自体に上限は無く、<strong>子に上限を掛けてから足す</strong>(<code>CategoryTotals::value</code>)。X1〜X6 すべてに供給源が入っている |
+| X1 | 攻撃ダメージ(イザベル) | 割合 | 上限 +50% | 消費アイテム(ユキダルマン族の特製ポーション +20%、イルミネーション祭りのドリンク +10% ほか) |
+| X2 | 攻撃ダメージ(一般) | 割合 | 上限 +30% | 消費アイテム・バフ・ルーン(覚醒の秘薬 +5%、テイルズウィーバーのエネルギー +5%、狂戦士のルーン +10% ほか) |
+| X3 | 攻撃ダメージ(基本発動) | 割合 | 上限 +80% | <strong>称号</strong>の無条件「ダメージ n% 増加」(課金箱シリーズ・名誉の証)、<strong>武器アビリティ R-/L-/E- 段の追加効果</strong>「ダメージ増加 +3/+4/+6%」、新装着アビリティのランダム追加「ダメージ増加率 +8〜11%」。手アビリティ(致命打・的中剣)は部位未対応で未収録 |
+| X4 | 攻撃ダメージ(スキル) | 割合 | 上限 +65% | <strong>キャラスキル</strong>(<code>character_skills.rs</code>、49 件)と<strong>マスタリー</strong>(<code>masteries.rs</code>)。マキシミンの極・呪われた魔剣のように、マスタリーでスキルの値が変わるものは <code>mastery_overrides</code> で持つ。キャラページの「マスタリースキル」の節には Ver8.20 前の古い値が残っているので、<strong>数値はカテゴリ表(= スキル性能一覧)を正とする</strong>(decisions.md 2026-08-27) |
+| X5 | 攻撃ダメージ(特殊) | 割合 | wiki 未記載 | <strong>ランダムオプション</strong>「攻撃ダメージが X% 増加」(サブアーム・レリック右)と、<strong>エフェクト</strong>「装着時攻撃力が3%増加」(幻獣・記念の祝福紋様)。上限が分からないので決め打ちしない。AF「全攻撃ダメージ増加」は wiki が「+x%」で値を書いていないので未収録 |
+| X6 | 攻撃ダメージ(日本独自) | 割合 | 上限 +30% | 消費アイテム(略奪パン +20%、茹でミミック +10%)と、<strong>コラボ装備</strong>の装着時効果(武器 +3%、手 †ゴリラのあーむかばー / †タヌキの手袋 +5%、†イヅツミの手甲 / †リンの手袋 +3%、エフェクト †ロスト +1%)。<strong>エフェクトの「スキル使用時、一定確率で 3% 上昇」も発動前提で入れる</strong>(ユーザー確定 2026-08-27: ほぼ発動する)|
+| Y | PVP補正 | 割合 | | 5%(固定ダメージにも適用。追加ダメージ(武器強化)のみ 10%) |</p>
 <h2 id="5">5. 追加ダメージ(与ダメージ式の外)</h2>
 <div class="tbl"><table>
 <thead>
@@ -674,7 +473,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>新-割合</td>
 <td>合計ダメージ + 追加ダメージ(武器強化)</td>
-<td><strong>シャープネスビジョン Lv1〜10 = 5/10/15/20/25/28/31/34/37/40%(実装済み)</strong>、称号、<strong>武器・脚のランダムOP(実装済み)</strong>。wiki「ステータス」#追加ダメージ(割合)関連 の一覧に、武器 OP(ボス・命中時・石/SEED 消費・後方・近接など)と脚 OP(移動速度・確率)が<strong>すべて 新-割合として</strong>列挙されている。発動条件(ボス限定・確率・石の消費)は<strong>満たしている前提で計算に入れる</strong>(決定記録 2026-08-26)。称号の条件付き効果はまだ記録するだけ</td>
+<td><strong>シャープネスビジョン Lv1〜10 = 5/10/15/20/25/28/31/34/37/40%(実装済み)</strong>、<strong>称号の地域・敵限定追加ダメージ(実装済み)</strong>、<strong>武器・脚のランダムOP(実装済み)</strong>。wiki「ステータス」#追加ダメージ(割合)関連 の一覧に、武器 OP(ボス・命中時・石/SEED 消費・後方・近接など)と脚 OP(移動速度・確率)が<strong>すべて 新-割合として</strong>列挙されている。ランダム OP の発動条件(ボス限定・確率・石の消費)は<strong>満たしている前提</strong>、称号は選択中コンテンツのゲーム内地域または敵 ID と一致したときだけ計算に入れる(決定記録 2026-08-27)</td>
 </tr>
 <tr>
 <td><span class="kind fixed">固定値</span></td>
@@ -1108,8 +907,9 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li>実測表は<strong>コンボボーナス無し・中ディレイ減少が効くスキル</strong>の計測なので、
   2 コンボ以上や「(固定)」の中ディレイでは式で出す</li>
 <li><strong>CI(コンボインターバル)は考慮しない</strong>(ユーザー決定 2026-08-25)。コンボによる DPS はサポート外</li>
-<li>前後ディレイ(前隙・後隙)は wiki 自身が「省略」としているので DPS に入れていない
-  (ミラのマスタリー【アドレナリン】【リズミカル】も同じ理由で未収録)</li>
+<li>前後ディレイ(前隙・後隙)は DPS に入れない。武器ディレイ系アビリティも前/後ディレイに作用するもので、
+  <strong>中ディレイ減少には該当しない</strong>。現環境では後ディレイがほぼ 0 になるため計算対象外とする
+  (ミラのマスタリー【アドレナリン】【リズミカル】も同じ扱い)</li>
 </ul>
 <h2 id="13">13. 実装への示唆</h2>
 <ul>
@@ -1165,7 +965,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <tr>
 <td>称号/normal・称号/special</td>
 <td>称号 565 件の補正値 9 種</td>
-<td>取込済み(<code>titles.rs</code>)。<strong>主要称号のみ</strong>(補正値の合計 15 以上 = 72 件)。装備枠 1 つで表示中の 1 件だけが<strong>基本能力値</strong>に乗る。備考の条件付き効果とグループボーナスは未実装</td>
+<td>取込済み(<code>titles.rs</code>)。<strong>主要称号のみ</strong>(補正値の合計 15 以上 = 72 件)。装備枠 1 つで表示中の 1 件だけが<strong>基本能力値</strong>に乗る。地域・敵限定の割合追加ダメージは実装済み。グループボーナスは未実装</td>
 </tr>
 <tr>
 <td>ランダムオプション</td>

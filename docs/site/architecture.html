@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>アーキテクチャ · TalesWeaver Toolkit</title>
+<title>アーキテクチャ · TW Context</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;600&family=Noto+Sans+JP:wght@400;700&display=swap">
 <style>/* 配色はアプリ(apps/desktop/src/app.css)のトークンに合わせたダーク基調。ライトは同じ色相で反転 */
@@ -127,7 +127,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <body>
 <div class="shell">
 <aside class="side">
-  <a class="brand" href="index.html"><span class="dot"></span>TalesWeaver Toolkit</a>
+  <a class="brand" href="index.html"><span class="dot"></span>TW Context</a>
   <nav class="site-nav">
     <div class="label">DOCS</div>
     <a href="index.html"><span>概要</span><small>何ができるか・セットアップ</small></a><a href="architecture.html" class="current"><span>アーキテクチャ</span><small>クレート構成・フロント階層・依存の向き</small></a><a href="ux-guidelines.html"><span>UX ガイドライン</span><small>UI を作るときの 4 原則</small></a><a href="damage-formula.html"><span>ダメージ計算仕様</span><small>talewiki を整理した計算モデル</small></a><a href="status.html"><span>進捗</span><small>goal ごとの到達点</small></a>
@@ -174,8 +174,9 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <h2 id="_3">クレート構成と責務</h2>
 <h3 id="cratesdomain">crates/domain — ドメインモデルと計算(核)</h3>
 <ul>
-<li><strong>モデル</strong>: <code>Character</code>(素ステ・装備・スキル構成・覚醒/エタ・バフセット)、<code>Equipment</code>(部位別 12 スロット + 称号 + テシスコア。部位ごとにアイテム参照/カスタム・基本能力値・エンチャント・強化 Lv・武器アビリティ・属性強化・シエナのオーラ・<strong>ランダムオプション</strong>を持ち、装備攻撃力・入場条件は集計値で計算)、<code>CommonSkills</code>(共通スキル。装備攻撃力強化倍率・装備防御力倍率・割合追加ダメージ)、<code>Skill</code>、<code>Buff</code>、<code>Enemy</code>、<code>Content</code>(入場条件)</li>
+<li><strong>モデル</strong>: <code>Character</code>(素ステ・装備・スキル構成・覚醒/エタ・バフセット)、<code>Equipment</code>(部位別 12 スロット + 部位別シエナ登録 + 称号 + テシスコア。装備部位はアイテム参照/カスタム・基本能力値・エンチャント・強化 Lv・武器アビリティ・<strong>ランダムオプション</strong>を持つ。シエナのオーラは抽出・注入できるため装備登録と独立した部位別登録一覧 + 装着中IDで持ち、装着中だけを装備攻撃力等へ集計)、<code>CommonSkills</code>(共通スキル。装備攻撃力強化倍率・装備防御力倍率・割合追加ダメージ)、<code>Skill</code>、<code>Buff</code>、<code>Enemy</code>、<code>Content</code>(入場条件)</li>
 <li><strong>計算</strong>: 能力値計算 → カテゴリ集計 → 与ダメージ式 → 段数・追加ダメージ の4段パイプライン(<a href="damage-formula.html">docs/damage-formula.md</a> §13)</li>
+<li><strong>装備の所有形</strong>: 各部位は登録リストと選択中IDを持つ。保存検証は登録全件、計算は選択中だけ。属性強化はキャラの選択属性を対象の実装備へ +9 自動反映する</li>
 <li><strong>機能サービス</strong>: ダメージ計算・強化提案・ロードマップ判定・索引。すべて <code>Character</code> を入力に取る純関数群</li>
 <li>制約:</li>
 <li><strong>I/O を一切持たない</strong>(SQLite・ファイル・ネットワーク禁止)。引数で受けて結果を返すだけ。決定的で全面的にユニットテスト可能</li>
@@ -202,7 +203,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 </ul>
 <p>フロントエンドの階層(<code>apps/desktop/src/</code>):</p>
 <pre><code>main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠
-CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線)
+CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線。表示順は端末内設定として保持)
 state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・選択・コンテンツ判定・試し変更 sim)
 api/types.ts           Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
 api/commands.ts        invoke ラッパー
@@ -229,12 +230,22 @@ SvelteKit は使っていないため <code>src/lib/</code> は置かない(<cod
 <li>EUC-JP PukiWiki の取得(<code>cmd=source</code>)→ パース → gamedata の生成。手法は <a href="damage-formula.html">docs/damage-formula.md</a> 取得メモと旧リポの scrapeSkills.js を参照</li>
 <li>生成物との差分検出(wiki 更新の検知)をここで行う</li>
 </ul>
+<h3 id="servicesinquiry-worker">services/inquiry-worker — 問い合わせの中継(アプリ外)</h3>
+<ul>
+<li>アプリの「情報 → 問い合わせ」から送られた内容を GitHub Issue にする Cloudflare Workers</li>
+<li><strong>アプリ本体からは独立している</strong>。ここが落ちても計算・保存は動く(問い合わせが送れないだけ)</li>
+<li>アプリに秘密を持たせないための中継。GitHub App の秘密鍵は Worker のシークレットにあり、
+  アプリ側は認証を持たない。代わりに proof-of-work + IP ハッシュのレート制限で匿名投稿を守る</li>
+<li>唯一の外部通信先。エンドポイントは <code>apps/desktop/src/inquiry.ts</code> と
+  <code>tauri.conf.json</code> の <code>connect-src</code> の <strong>2 か所</strong>に書くので、変えるときは両方直す</li>
+</ul>
 <h2 id="_4">依存の向き</h2>
 <pre><code>apps/desktop → storage, gamedata, domain
 storage      → domain(型のため)
 gamedata     → domain(型のため)
 domain       → (何にも依存しない)
 tools/scraper→ gamedata(スキーマ共有)
+services/    → (どのクレートにも依存しない。HTTP でだけ繋がる)
 </code></pre>
 <p>domain が最内層。逆流(domain → storage 等)は禁止。</p>
 <h2 id="_5">語彙の規約</h2>

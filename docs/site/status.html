@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>進捗 · TalesWeaver Toolkit</title>
+<title>進捗 · TW Context</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;600&family=Noto+Sans+JP:wght@400;700&display=swap">
 <style>/* 配色はアプリ(apps/desktop/src/app.css)のトークンに合わせたダーク基調。ライトは同じ色相で反転 */
@@ -127,7 +127,7 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <body>
 <div class="shell">
 <aside class="side">
-  <a class="brand" href="index.html"><span class="dot"></span>TalesWeaver Toolkit</a>
+  <a class="brand" href="index.html"><span class="dot"></span>TW Context</a>
   <nav class="site-nav">
     <div class="label">DOCS</div>
     <a href="index.html"><span>概要</span><small>何ができるか・セットアップ</small></a><a href="architecture.html"><span>アーキテクチャ</span><small>クレート構成・フロント階層・依存の向き</small></a><a href="ux-guidelines.html"><span>UX ガイドライン</span><small>UI を作るときの 4 原則</small></a><a href="damage-formula.html"><span>ダメージ計算仕様</span><small>talewiki を整理した計算モデル</small></a><a href="status.html" class="current"><span>進捗</span><small>goal ごとの到達点</small></a>
@@ -145,7 +145,14 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
     
 <p>1 goal 1 行。詳細は各 goal 文書と <code>git log</code>。</p>
 <ul class="timeline">
-<li class="event"><time>2026-08-21</time><div><a href="../claude/goals/2026-08-21-minimal-e2e.md">最小 E2E</a>: キャラ登録 → スキル・敵選択 → ダメージ計算 + トレースが動く。装備・属性は未実装(中立値)</div></li>
+<li class="event"><time>2026-08-27</time><div><a href="../claude/goals/2026-08-27-equipment-registration.md">装備登録と入力精度の刷新</a>: 部位別の複数登録・即時切替、基本値の自動設定、属性+9自動反映、強化等級、武器+鎧の固定ダメージ。装着アビリティは兜・鎧・武器・盾・盾＋・頭・手・足・レリック左右に対応。効果8件、AF45件（プシーキー・エクリプス・エーテリアルの6依存×通常版/ディフェンシオを含む）、神鳥レリック左右を追加。storage v8で旧JSONを移行</div></li>
+<li class="event"><time>2026-08-27</time><div><a href="../claude/goals/2026-08-27-siena-registration.md">シエナのオーラを独立登録に変更</a>: wiki「抽出・注入」の実体に合わせ、オーラを装備登録の内包値から部位別の所持一覧 + 装着中IDへ分離。装備を切り替えてもオーラは維持され、未装着・複数登録・即時切替ができる。計算は装着中だけ、検証は登録全件。編集は装備と同じ明示クローズ式オーバーレイ</div></li>
+<li>
+<p>2026-08-27 スキルアイコン: Tale Wiki 各キャラの <code>Skill/&lt;キャラ名&gt;</code> ページと通常スキル303件・キャラスキル71件を表示名で機械照合し、全件同梱。3件は両カタログで同じidを共有するため <code>assets/icons/skills</code> は19キャラ371枚。取込スクリプトとPNG署名・ID網羅の検査で再現可能にした</p>
+</li>
+<li>
+<p>2026-08-21 <a href="../claude/goals/2026-08-21-minimal-e2e.md">最小 E2E</a>: キャラ登録 → スキル・敵選択 → ダメージ計算 + トレースが動く。装備・属性は未実装(中立値)</p>
+</li>
 <li class="event"><time>2026-08-21</time><div><a href="../claude/goals/2026-08-21-character-stat-sources.md">キャラステータス補正源</a>: ペット S スキル・ルーン・クラウン・神鳥の聖物・常用バフ・調整値を登録でき、ダメージ計算が自動反映してステトレースに寄与内訳を出す。装備値側(称号・装備アビリティ等)は未実装</div></li>
 <li class="event"><time>2026-08-21</time><div>画面レイアウトの可変化: サイドバー折りたたみ・列リサイズ(<a href="../claude/decisions.md">docs/claude/decisions.md</a>「画面レイアウトの可変化」)</div></li>
 <li class="event"><time>2026-08-21</time><div><a href="../claude/goals/2026-08-21-ux-guidelines-character-screen.md">キャラ画面の UX ガイドライン適用</a>: 登録(名前+キャラ種のみ)と詳細設定を分離、ダメージ計算に一時調整の経路を追加</div></li>
@@ -186,7 +193,8 @@ pre.formula { font-size: 14px; line-height: 1.7; padding: 20px 22px; border-colo
 <li class="event"><time>2026-08-25</time><div><a href="../claude/goals/2026-08-25-design-conformance.md">UI をデザインシステムに適合させる</a>: docs/design-system.html を正として周回中(12 周目)。11 周目で一度は終了条件を満たしたが、<strong>「押すと状態が変わる要素」を §09 規則 1 の監査経路に入れていなかった</strong>ため、バフを押すと押したチップが 69px 動く違反が残っていた(ユーザー指摘)。機械監査 <code>tools/design-audit/run.py</code>(10 ルール)と実機監査 <code>tools/design-audit/live/</code>(8 本)を用意し、以後の周で毎回走らせる形にした。主な着地: <strong>色をすべてトークン経由に</strong>(状態の 6 系統を <code>src/ui/states.ts</code> に集約、内訳の色 <code>--flow-*</code> を新設)、<strong>§10「動きと変化」を実装</strong>(実質未実装だった。数値の跳ね・ペインの出現・ポップオーバー・バッジ・開閉 + reduced-motion)、<strong>装備のドリルダウンを 3 ペイン化</strong>(置き換えをやめて右に増やす)、<strong>入力を 5 形態に寄せる</strong>(素の <code>&lt;select&gt;</code> → 段階選択、チェックボックス → チップ、フィールドは「表示が既定・編集は例外」)、<strong>§14 の決定 6 件をすべて実装</strong>(鎖 / 効いていない分の棚卸し / 補正源の並び = お気に入り + ドラッグ / 相手依存の値 / 収録度バッジ / 試し変更 3 件)。規格側も 6 箇所直した(トークン名の併記・内訳の色の節・コストのタグ・実寸スケールに 10・斜線の但し書き・§14 の整理)。<strong>保留 6 件(A〜F)は v4 の実物を見れば決まる</strong>ものとして §14 に登録。実機検証は docs/screenshots/120〜141(132〜134 が最終の 3 タブ)</div></li>
 <li class="event"><time>2026-08-26</time><div>シエナのオーラの入力刷新・称号のダメージ増加(claude/decisions.md 2026-08-26): オーラは「スロットを 1 個ずつ選んで積む」形に、称号/event の「ダメージ n% 増加」をカテゴリX に取り込み。実機検証は docs/screenshots/176〜195</div></li>
 <li class="event"><time>2026-08-27</time><div><a href="../claude/decisions.md「マスタリーは『段ごとに 1 つ』の独立モデルにする」">マスタリー</a>: wiki 各キャラの「マスタリースキル」表から 18 キャラ 243 件を収録。段(M1〜M4、リーチェのみ 15 段)ごとに 3 択で 1 つ。効き先がばらばら(中ディレイ / カテゴリX / ステ / 未収録)なので 1 カタログにまとめ、計算に入るのは無条件で言い切っているものだけ。アイコン 243 枚も wiki から取込。実機検証は docs/screenshots/196〜197</div></li>
-<li class="event"><time>2026-08-27</time><div><a href="../claude/goals/2026-08-27-damage-category-sources.md">与ダメージ式のカテゴリに供給源を配線</a>: 効き先が「ステ増加」専用の器に縛られていて、<strong>同じバフが 2 つのカテゴリに効いていても片方しか入らなかった</strong>問題を解いた。<code>SkillEffect::Damage { category, percent }</code> に一般化してバフ・キャラスキル・マスタリー・装備アビリティで共有し、上限はカテゴリ側が持つ形に。<strong>キャラスキルの器を 1 本に統合</strong>(ステ上昇のバフ / 中ディレイ専用カタログ / 器なしの攻撃ダメージ に散っていた 3 つ)。マスタリーは「スキルの性能を書き換える選択子」(<code>mastery_overrides</code>)として wiki のカテゴリ表と同じ形にし、二重計上ハック 5 件を解消。<strong>カテゴリX を X1〜X6 に分割</strong>(上限が +50/+30/+80/+65/未記載/+30% と別)し、親 X は子に上限を掛けてから足す。新規収録: X4 のキャラスキル 49 件・X1/X2/X6 の消費アイテム 15 件・X3 の武器アビリティ追加効果 12 件・L 最終ダメージ 5 件・E1 スキル倍率増加 5 件。カタログはキャラスキル 16→71 件、バフ 16→34 件、カテゴリ 30→36 件。wiki の「マスタリースキル」節に Ver8.20 前の古い値が混ざる(11 件)ことが分かり、<strong>数値はスキル性能一覧 = カテゴリ表を正</strong>と決めた。<strong>装備アイテムそのものの装着時効果</strong>も <code>EquipmentItem::damage_effects</code> で持つようにし、X5 のエフェクト(幻獣・記念の祝福紋様)10 件、X6 のコラボ装備(武器 †ニバンボシ・手 †ゴリラのあーむかばー・エフェクトの「一定確率で +3%」ほか)16 件、Old の †主天使の羽 / †シグマウィング、O の †リナの服 を収録(装備カタログ 20→49 件)。<strong>X1〜X6 すべてに供給源が入った</strong>(実機検証は docs/screenshots/207〜209)。残りは新装着アビリティ(<code>W</code> の出典が判明。追加アビリティが候補プールからランダム 2 つなので枠の器が要る)と手/兜アビリティの部位対応(goal 文書の「残っている課題」)。実機検証は docs/screenshots/198〜206</div></li>
+<li class="event"><time>2026-08-27</time><div><a href="../claude/goals/2026-08-27-damage-category-sources.md">与ダメージ式のカテゴリに供給源を配線</a>: 効き先が「ステ増加」専用の器に縛られていて、<strong>同じバフが 2 つのカテゴリに効いていても片方しか入らなかった</strong>問題を解いた。<code>SkillEffect::Damage { category, percent }</code> に一般化してバフ・キャラスキル・マスタリー・装備アビリティで共有し、上限はカテゴリ側が持つ形に。<strong>キャラスキルの器を 1 本に統合</strong>し、カテゴリXを X1〜X6 に分割。装備アイテムの効果も含めて<strong>X1〜X6すべてに供給源が入った</strong>。さらに新装着アビリティのカテゴリー4へランダム追加2枠を実装し、固定ダメージ <code>W</code>、割合 <code>X3</code>、攻撃補正・命中を計算へ接続した。HP/MP回復は記録のみ。残りは手/兜/鎧アビリティの部位対応。実機検証は docs/screenshots/198〜209、232〜233</div></li>
+<li class="event"><time>2026-08-27</time><div><a href="../claude/goals/2026-08-27-equipment-registration.md">装備登録UX</a>: ボリスの極・連 / 極・残影斬 / 極・氷撃斬から刀 / 太刀 / 大剣へ候補を直接絞り、大剣2件と公式アイコンを追加(装備カタログ51件)。装備補正は S/H/I/M を先頭4枠、残り5補正を折り畳み、<code>合計(+エンチャント)</code> とアビ加算を同じ行に表示。武器アビリティ本体もランダム追加もプルダウンを使わず、固定3段の候補チップと選択済み追加行で完結させ、反映要約も常設した。登録画面は背景や候補選択で閉じず、スクロール中も見える「閉じる ×」か Escape だけで閉じる。実機検証は docs/screenshots/232〜234、242〜243</div></li>
 </ul>
     <footer class="doc-foot">原本: <code>docs/status.md</code>(md が正。HTML は <code>tools/docs-site/build.py</code> の生成物)</footer>
   </article>
