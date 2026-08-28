@@ -412,11 +412,6 @@ fn dependency_coefficients(dependency: domain::SkillDependency) -> DependencyCoe
 
 /// 与ダメージ計算のうち、スキル・敵・コンテンツによらない共通材料を組み立てる
 /// (calculate_damage / preview_damage / evaluate_contents 共通。`domain::DamageMaterial` 参照)。
-///
-/// `apply_character_skill_stats` は既存挙動の差を temporarily 保持するための引数:
-/// 計算タブ(calculate_damage/preview_damage)はキャラスキルのステ補正を適用するが、
-/// ホームの evaluate_contents は元実装から適用していなかった(未確認の既存差異。
-/// docs/claude/goals 参照して要フォローアップ)。挙動を変えない移設のためここで温存する。
 fn build_damage_material(
     base_stats: &domain::BaseStats,
     stat_sources: &domain::StatSources,
@@ -424,7 +419,6 @@ fn build_damage_material(
     common_skills: CommonSkills,
     awakening: domain::Awakening,
     temporary_adjustments: Option<&domain::Adjustments>,
-    apply_character_skill_stats: bool,
 ) -> CommandResult<DamageMaterial> {
     let (mut stat_modifiers, mut stat_contributions) =
         domain::stat_sources::build_modifiers(stat_sources, &gamedata::buff_catalog())
@@ -436,15 +430,13 @@ fn build_damage_material(
         &stat_sources.masteries,
         gamedata::mastery_catalog(),
     );
-    if apply_character_skill_stats {
-        domain::stat_sources::apply_character_skills(
-            &mut stat_modifiers,
-            &mut stat_contributions,
-            &stat_sources.character_skills,
-            &stat_sources.masteries,
-            gamedata::character_skill_catalog(),
-        );
-    }
+    domain::stat_sources::apply_character_skills(
+        &mut stat_modifiers,
+        &mut stat_contributions,
+        &stat_sources.character_skills,
+        &stat_sources.masteries,
+        gamedata::character_skill_catalog(),
+    );
     domain::stat_sources::apply_unleash(&mut stat_modifiers, &mut stat_contributions, &common_skills);
     if let Some(temp) = temporary_adjustments {
         temp.validate().map_err(|e| e.to_string())?;
@@ -510,7 +502,6 @@ fn build_damage_input(
         common_skills,
         awakening,
         temporary_adjustments.as_ref(),
-        true,
     )?;
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_base_totals = equipment
@@ -672,8 +663,7 @@ pub fn evaluate_contents(
 
     // 評価ループの不変値(キャラのみ依存)は 1 回だけ構築する。コンテンツ×スキルごとに
     // カタログとステ補正を再構築すると、この最重量パスで無駄な再計算になる(PR レビュー指摘)。
-    // NOTE: 既存挙動を保つため apply_character_skill_stats=false(下の build_damage_material
-    // コメント参照)。
+    // 計算タブ(build_damage_input)と同じ材料構築を通るため、キャラスキルのステ補正も適用する。
     let material = build_damage_material(
         &character.base_stats,
         &character.stat_sources,
@@ -681,7 +671,6 @@ pub fn evaluate_contents(
         character.common_skills,
         character.awakening,
         None,
-        false,
     )?;
     let equipment_base_totals_raw = character
         .equipment

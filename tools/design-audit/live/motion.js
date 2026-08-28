@@ -70,7 +70,7 @@ const WATCH = `(() => {
   // 対象の切替は画面が入れ替わるので §10「変わった要素だけ動かす」の対象外。
   // **同じ対象のまま材料を変える**操作で測る
   await probe("計算・パワーウェポンを切り替える", async () => {
-    await page.locator("label.pw input[type=checkbox]").first().dispatchEvent("click");
+    await page.locator(".pw input[type=checkbox]").first().dispatchEvent("click");
   });
 
   // --- キャラタブ: 調整でステを変える(最終能力値・サマリー・攻撃力が同時に変わる)

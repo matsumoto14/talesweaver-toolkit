@@ -304,3 +304,174 @@ fn evaluate_one_content(
         thesis_core_total,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::character_skill::{
+        CharacterSkillDef, CharacterSkills, SkillAudience, SkillEffect,
+    };
+    use crate::critical_rate::CriticalRateSources;
+    use crate::defense::AccuracyCorrection;
+    use crate::element::Element;
+    use crate::mastery::Masteries;
+    use crate::skill::{SkillDependency, SkillTarget};
+    use crate::stat_sources::{build_modifiers, StatSources};
+    use crate::stats::{BaseStats, StatKind, StatModifierSet};
+
+    const STAB_DEF: &[StatKind] = &[StatKind::Stab, StatKind::Def];
+    const ELITE_SWORDSMAN: &[SkillEffect] =
+        &[SkillEffect::StatRate { stats: STAB_DEF, percent: 10.0, layer: crate::stat_sources::StatLayer::MultiplierB }];
+
+    /// マスタリーを取ってはじめて効果が出るキャラスキル(character_skill.rs のテストデータを
+    /// 単純化したもの)。STAB/DEF +10%(倍率B)。
+    const CATALOG: &[CharacterSkillDef] = &[CharacterSkillDef {
+        id: "test_possession_swordsman",
+        game_character_id: "test_char",
+        name: "憑依【剣闘士】",
+        audience: SkillAudience::SelfOnly,
+        effects: &[],
+        mastery_overrides: &[crate::character_skill::MasteryOverride {
+            mastery_id: "test_m2_3",
+            effects: ELITE_SWORDSMAN,
+        }],
+        source_url: "",
+        note: "",
+    }];
+
+    fn skill() -> Skill {
+        Skill {
+            id: "s".into(),
+            name: "テスト斬り".into(),
+            dependency: SkillDependency::StabHack,
+            multiplier: 0.99,
+            hit_count: 1,
+            critical_multiplier: 2.0,
+            element: Element::Water,
+            target: Some(SkillTarget::Single),
+            accuracy: Some(92),
+            critical_rate: Some(7),
+            level: 1,
+            single_target_channeling: false,
+            base_actual_delay: Some(1.4),
+            actual_delay_fixed: false,
+        }
+    }
+
+    fn enemy() -> Enemy {
+        Enemy {
+            id: "e".into(),
+            name: "テスト敵".into(),
+            defense: 990,
+            damage_reduction: 0,
+            cut_rate_a: 1.0,
+            element_threshold: 90,
+            agi: None,
+            critical_taken_rate: None,
+        }
+    }
+
+    fn content_area() -> Vec<ContentArea> {
+        vec![ContentArea {
+            id: "area".into(),
+            name: "テスト地域".into(),
+            contents: vec![Content {
+                id: "c".into(),
+                name: "テスト".into(),
+                series: None,
+                enemy_id: Some("e".into()),
+                need_per_hit: None,
+                requirements: Vec::new(),
+                core_region: None,
+                game_region: None,
+                entry_note: None,
+                team_note: None,
+            }],
+        }]
+    }
+
+    fn coefficients() -> DependencyCoefficients {
+        DependencyCoefficients {
+            attack: AttackCoefficients {
+                primary: (StatKind::Stab, 1.8),
+                secondary: (StatKind::Hack, 1.8),
+            },
+            equipment: EquipmentCoefficients::default(),
+            accuracy: AccuracyCorrection {
+                bonus: None,
+                penalty_primary: StatKind::Stab,
+                penalty_secondary: Some(StatKind::Hack),
+                penalty_divisor: 200.0,
+            },
+        }
+    }
+
+    fn material(apply_skill: bool) -> DamageMaterial {
+        let stat_sources = StatSources::default();
+        let (mut modifiers, mut contributions) = build_modifiers(&stat_sources, &[]).unwrap();
+        if apply_skill {
+            let skills = CharacterSkills { skill_ids: vec!["test_possession_swordsman".into()] };
+            let masteries = Masteries { picked: vec!["test_m2_3".into()] };
+            crate::stat_sources::apply_character_skills(
+                &mut modifiers,
+                &mut contributions,
+                &skills,
+                &masteries,
+                CATALOG,
+            );
+        }
+        DamageMaterial {
+            base_stats: BaseStats { stab: 500, hack: 500, int: 0, def: 0, mr: 0, dex: 100, agi: 0 },
+            stat_modifiers: modifiers,
+            stat_contributions: contributions,
+            equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
+            random_options: RandomOptionTotals::default(),
+            weapon_added_damage: 0,
+            awakening_rate: 1.0,
+            damage_cap: i64::MAX,
+            stat_cap: i64::MAX,
+            pins: Adjustments::default(),
+            actual_delay_skills: Vec::new(),
+            critical_rate_sources: CriticalRateSources::default(),
+            skill_uses: SkillUsesTable { reduction_percents: Vec::new(), base_delays: Vec::new(), uses: Vec::new() },
+        }
+    }
+
+    fn evaluate(apply_skill: bool) -> Vec<ContentEvaluation> {
+        let material = material(apply_skill);
+        let skills = vec![SkillEvaluationInput {
+            skill: skill(),
+            coefficients: coefficients(),
+            damage_contributions: Vec::new(),
+            element_value: 0,
+        }];
+        evaluate_contents_for_character(
+            &material,
+            &content_area(),
+            &[enemy()],
+            &skills,
+            EquipmentValues::default(),
+            WristBonusMaterial::default(),
+            &[],
+            Awakening::default(),
+            None,
+        )
+    }
+
+    /// ホームの全コンテンツ評価(`evaluate_contents_for_character`)は計算タブと同じ
+    /// `DamageMaterial` を経由する。キャラスキルのステ補正(`apply_character_skills`)を
+    /// 適用した material を渡せば、評価結果にもそのステ補正が反映されることを確認する
+    /// (commands.rs 側で常に適用するようにした変更の回帰ガード)。
+    #[test]
+    fn キャラスキルのステ補正が全コンテンツ評価に反映される() {
+        let without = evaluate(false);
+        let with = evaluate(true);
+        let dmg_without = without[0].damage.as_ref().unwrap().per_hit_max;
+        let dmg_with = with[0].damage.as_ref().unwrap().per_hit_max;
+        assert!(
+            dmg_with > dmg_without,
+            "ステ補正ありのほうが火力が高いはず: without={dmg_without}, with={dmg_with}"
+        );
+    }
+}

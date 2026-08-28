@@ -10,7 +10,7 @@ const TARGETS = {
     ["段階選択(ストロングW)", ".seg .step"],
     ["バフチップ", ".buff-chip:not([disabled])"],
     ["候補(足りない分)", "button.whatif"],
-    ["パワーウェポン", "label.pw"],
+    ["パワーウェポン", ".pw label.check"],
   ],
   ホーム: [
     ["お気に入りの ★", "button.pin"],
