@@ -353,6 +353,8 @@
     k: string;
     add: number;
     mult: string;
+    /** 倍率の実数(前段との比)。段の順序に依存しない「効き」の指標 */
+    factor: number;
     c: string;
     /** その段までの到達値 */
     to: number;
@@ -379,22 +381,23 @@
     if (pierced === null) return [];
     let running = pierced;
     const rows: FlowRow[] = [
-      { k: "抜けた分(素通り)", add: pierced, mult: "—", c: "var(--fg-dim)", to: pierced, step: "攻撃力−防御力" },
+      { k: "抜けた分(素通り)", add: pierced, mult: "—", factor: 1, c: "var(--fg-dim)", to: pierced, step: "攻撃力−防御力" },
     ];
     for (const s of steps) {
       if (!FACTOR_STEPS.has(s.name) && !RUNNING_STEPS.has(s.name)) continue;
       // 到達値は Rust の FormulaStep.reached。倍率列は倍率の段はその値、到達値で返る段は前段との比(表示用)
-      const mult = FACTOR_STEPS.has(s.name)
-        ? `×${s.value.toFixed(2)}`
-        : running > 0 ? `×${(s.reached / running).toFixed(2)}` : "—";
-      rows.push({ k: s.name, add: s.reached - running, mult, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)", to: s.reached, step: s.name });
+      const factor = FACTOR_STEPS.has(s.name) ? s.value : running > 0 ? s.reached / running : 1;
+      const mult = FACTOR_STEPS.has(s.name) || running > 0 ? `×${factor.toFixed(2)}` : "—";
+      rows.push({ k: s.name, add: s.reached - running, mult, factor, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)", to: s.reached, step: s.name });
       running = s.reached;
     }
     return rows;
   });
   const flowTotal = $derived(flowRows.reduce((a, r) => a + Math.max(0, r.add), 0) || 1);
+  // 「一番効いている」は倍率で選ぶ。足した実数で比べると後段ほど大きな値に掛かるので
+  // 最後の段(攻撃ダメージ・PVP補正)が構造的に常勝してしまう(ユーザー指摘 2026-08-29)
   const topLever = $derived(
-    [...flowRows.slice(1)].filter((r) => r.add > 0).sort((a, b) => b.add - a.add)[0] ?? null,
+    [...flowRows.slice(1)].filter((r) => r.factor > 1).sort((a, b) => b.factor - a.factor)[0] ?? null,
   );
   const flowMultLabel = $derived(
     pierced !== null && pierced > 0 && perHit !== null ? `×${(perHit / pierced).toFixed(1)}` : "—",
@@ -1536,7 +1539,7 @@
               {#if noPierce}
                 攻撃力が相手の防御力に届いていないので、倍率は何もかかりません。まず攻撃力を上げる必要があります。
               {:else if topLever}
-                いま一番効いているのは「{topLever.k}」。ここが最終ダメージの {Math.round((topLever.add / flowTotal) * 100)}% を作っています。
+                いま一番大きい倍率は「{topLever.k}」の ×{topLever.factor.toFixed(2)}。抜けた分を {flowMultLabel} にする中で最も効いています。
               {:else}
                 倍率はまだ何もかかっていません。
               {/if}
