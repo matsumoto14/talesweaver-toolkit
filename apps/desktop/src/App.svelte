@@ -23,10 +23,13 @@
   const DEFAULT_RAIL_WIDTH = 280;
   const railWidth = persisted("tw-v4-rail", { width: DEFAULT_RAIL_WIDTH });
   const railCollapsed = persisted("tw-v4-rail-collapsed", false);
+  const expandedRailWidth = $derived(
+    Math.max(200, Math.min(380, railWidth.value.width ?? DEFAULT_RAIL_WIDTH)),
+  );
   const gridTemplateColumns = $derived(
     railCollapsed.value
       ? "64px 0px minmax(0, 1fr)"
-      : `minmax(200px, ${railWidth.value.width ?? DEFAULT_RAIL_WIDTH}px) 6px minmax(0, 1fr)`,
+      : `${expandedRailWidth}px 6px minmax(0, 1fr)`,
   );
 
   let aboutOpen = $state(false);
@@ -165,7 +168,10 @@
   }
   .toast button { margin-left: auto; color: var(--fg-muted); font-size: 14px; }
 
-  .body { flex: 1; min-height: 0; display: grid; }
+  .body {
+    flex: 1; min-height: 0; display: grid;
+    transition: grid-template-columns 260ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
   main { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-mid); }
   .tabbody { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 </style>

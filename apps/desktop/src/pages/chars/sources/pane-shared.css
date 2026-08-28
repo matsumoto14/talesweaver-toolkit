@@ -32,7 +32,7 @@
   }
   .text { display: flex; flex-direction: column; gap: 6px; }
   /* 段が多くて折り返す欄は 1 行を占める。折り返した段は一度の視線で読めない(§00 01) */
-  .fields > :global(.wide) { grid-column: 1 / -1; }
+  .fields > .wide { grid-column: 1 / -1; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
   input[type="text"] {
     padding: 8px 10px; border-radius: var(--r-panel);
