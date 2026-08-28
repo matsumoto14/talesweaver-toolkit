@@ -44,7 +44,7 @@ GitHub の **Variables** に:
 紹介ページ tw-context.dev のダウンロードボタンは、GitHub Releases ではなく
 **R2 の固定 URL** を指す。リリースのたびにページを書き換えなくて済むようにするため。
 
-1. R2 で **`tw-context-downloads`** バケットを作る
+1. R2 で **`tw-context`** バケットを作る
 2. バケットの Settings → Public access → **Custom domain** に `dl.tw-context.dev` を繋ぐ
 3. API トークン(**Account → R2 → Edit** 権限)を作り、GitHub の Secrets に登録:
 
