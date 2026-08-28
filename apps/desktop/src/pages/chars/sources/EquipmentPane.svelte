@@ -20,6 +20,7 @@
   import { app } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
+  import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Select from "../../../ui/Select.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
@@ -100,7 +101,7 @@
     if (draggedEquipmentRegistration?.slot !== slot) return;
     event.preventDefault();
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    equipmentRegistrationDropAt = { slot, index: index + (event.clientX < rect.left + rect.width / 2 ? 0 : 1) };
+    equipmentRegistrationDropAt = { slot, index: dropHalfIndex(rect, event.clientX, index, "x") };
   };
   const dropEquipmentRegistration = (event: DragEvent, slot: PartSlot) => {
     event.preventDefault();
@@ -109,12 +110,10 @@
     draggedEquipmentRegistration = null;
     equipmentRegistrationDropAt = null;
     if (dragging?.slot !== slot || dropAt?.slot !== slot) return;
-    const registered = draft.equipment.parts[slot].registered;
-    const from = registered.findIndex((part) => part.id === dragging.id);
+    const list = draft.equipment.parts[slot];
+    const from = list.registered.findIndex((part) => part.id === dragging.id);
     if (from === -1) return;
-    const [part] = registered.splice(from, 1);
-    const target = from < dropAt.index ? dropAt.index - 1 : dropAt.index;
-    registered.splice(Math.max(0, Math.min(registered.length, target)), 0, part);
+    list.registered = moveItem(list.registered, from, dropAt.index);
   };
   const removeSelectedEquipmentRegistration = (slot: PartSlot) => {
     const list = draft.equipment.parts[slot];

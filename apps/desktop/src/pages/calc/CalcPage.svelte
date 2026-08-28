@@ -23,22 +23,20 @@
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
-  import { persisted } from "../../ui/persistedState.svelte";
+  import CheckChip from "../../ui/CheckChip.svelte";
   import Icon from "../../ui/Icon.svelte";
   import DefensePanel from "./DefensePanel.svelte";
+  import RequirementList from "../../ui/RequirementList.svelte";
   import Select from "../../ui/Select.svelte";
+  import SheetCard from "../../ui/SheetCard.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
-  import Splitter from "../../ui/Splitter.svelte";
+  import SplitPage from "../../ui/SplitPage.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
-  import { badgeStyle, STATE, type Badge } from "../../ui/states";
+  import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
 
   const DEFAULT_RIGHT_WIDTH = 380;
-  const layoutWidths = persisted("tw-v4-calc", { right: DEFAULT_RIGHT_WIDTH });
-  const gridTemplateColumns = $derived(
-    `minmax(320px, 1fr) 6px minmax(280px, ${layoutWidths.value.right ?? DEFAULT_RIGHT_WIDTH}px)`,
-  );
 
   const COMBO_THRESHOLD = 3;
 
@@ -247,16 +245,8 @@
     if (hasReqs && !entryOk) return ratio >= 1 ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   });
-  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)
-  const BADGE: Badge[] = [
-    { label: "余裕", state: "goal" },
-    { label: "通る", state: "met" },
-    { label: "ぎりぎり", state: "edge" },
-    { label: "届かない", state: "short" },
-    { label: "条件・火力とも未達", state: "unknown" },
-    { label: "条件だけ未達", state: "temp" },
-    { label: "判定中", state: "unknown" },
-  ];
+  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)。先頭 6 件は共通(ui/states.ts)
+  const BADGE: Badge[] = [...REACH_BADGES, { label: "判定中", state: "unknown" }];
 
   // --- なぜこの数字?(トレースの式から組み立て) ---------------------------
   const stepsMax = $derived(result?.trace.steps_max ?? []);
@@ -770,13 +760,20 @@
   const totalContents = $derived(contents.length);
 </script>
 
-<div class="layout" style="grid-template-columns: {gridTemplateColumns};">
-  <section class="mid">
-    <div class="head-bar">
-      <span class="title">行ける？</span>
-      <span class="note">→ 足りない分をどう埋める？ → なぜこの数字？</span>
-    </div>
-    <div class="scroll">
+<SplitPage
+  midTitle="行ける？"
+  midNote="→ 足りない分をどう埋める？ → なぜこの数字？"
+  rightTitle="計算の材料"
+  rightNote={character?.name ?? ""}
+  persistKey="tw-v4-calc"
+  defaultRight={DEFAULT_RIGHT_WIDTH}
+  minMid={320}
+  minRight={280}
+  splitterLabel="計算シートと材料の境界"
+  midScrollStyle="scrollbar-gutter: stable;"
+  rightScrollStyle="padding: 11px;"
+>
+  {#snippet mid()}
       {#if !character}
         <p class="empty dim">キャラを登録するとダメージ計算ができます。</p>
       {:else if !target}
@@ -801,13 +798,8 @@
         <div class="swap-in"><DefensePanel profile={defense} error={defenseError} /></div>
       {:else}
         <!-- 行ける?カード -->
-        <div class="sheet swap-in">
-          <div class="sheet-head">
-            <span class="gem"></span>
-            <span class="sheet-title">行ける？</span>
-            <span class="sheet-char dim">{character.name}{calculating ? " ・ 計算中…" : ""}</span>
-          </div>
-
+        <div class="swap-in">
+        <SheetCard tone="gold" title="行ける？" note={character.name + (calculating ? " ・ 計算中…" : "")}>
           <!-- 対象プレート -->
           <div class="target-row">
             <button type="button" class="step" onclick={() => stepTarget(-1)}>◀</button>
@@ -1004,6 +996,7 @@
               <div class="delay-note dim">このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。</div>
             {/if}
           </div>
+        </SheetCard>
         </div>
 
         <!-- もし〜だったら -->
@@ -1030,10 +1023,7 @@
               >
                 <span class="wi-main">
                   <span class="wi-label">{w.candidate.label}</span>
-                  <span
-                    class="cost"
-                    style="background: {COST_COLORS[w.candidate.cost][0]}; border-color: {COST_COLORS[w.candidate.cost][1]}; color: {COST_COLORS[w.candidate.cost][2]};"
-                  >{w.candidate.cost}</span>
+                  <span class="cost" style={triadStyle(COST_COLORS[w.candidate.cost])}>{w.candidate.cost}</span>
                 </span>
                 <span class="wi-nums">
                   <span class="num wi-pct">+{w.deltaPct}%</span>
@@ -1202,23 +1192,8 @@
           </div>
         </div>
       {/if}
-    </div>
-  </section>
-
-  <Splitter
-    bind:value={layoutWidths.value.right}
-    min={280}
-    defaultValue={DEFAULT_RIGHT_WIDTH}
-    controls="next"
-    label="計算シートと材料の境界"
-  />
-
-  <section class="right">
-    <div class="head-bar">
-      <span class="title">計算の材料</span>
-      <span class="note">{character?.name ?? ""}</span>
-    </div>
-    <div class="scroll pad">
+  {/snippet}
+  {#snippet right()}
       {#if character && payload}
         <!-- 試し変更バー -->
         <div class="sim-bar" class:active={simDirty}>
@@ -1267,17 +1242,14 @@
             <span class="card-title">装備</span>
             <span class="dim small">変更は試し変更として反映</span>
           </div>
-          <label class="pw">
-            <input
-              type="checkbox"
+          <div class="pw">
+            <CheckChip
               checked={payload.common_skills.power_weapon}
-              onchange={(e) => {
-                const v = e.currentTarget.checked;
-                editSim((p) => (p.common_skills.power_weapon = v));
-              }}
-            />
-            <span>パワーウェポン(+2%)</span>
-          </label>
+              onCheckedChange={(v) => editSim((p) => (p.common_skills.power_weapon = v))}
+            >
+              <span>パワーウェポン(+2%)</span>
+            </CheckChip>
+          </div>
           <div class="sw">
             <StepSelect
               label="ストロングウェポン"
@@ -1414,10 +1386,11 @@
         </details>
 
         <!-- コンボ -->
-        <label class="combo">
-          <input type="checkbox" bind:checked={combo} />
-          <span>{COMBO_THRESHOLD} コンボ以上(+15%)</span>
-        </label>
+        <div class="combo">
+          <CheckChip checked={combo} onCheckedChange={(v) => (combo = v)}>
+            <span>{COMBO_THRESHOLD} コンボ以上(+15%)</span>
+          </CheckChip>
+        </div>
 
         <!-- 入場条件 -->
         {#if target}
@@ -1429,15 +1402,7 @@
             {#if target.content.requirements.length === 0}
               <p class="buff-note dim">{target.content.name} に入場条件はありません。</p>
             {:else if targetEval}
-              <div class="reqs">
-                {#each targetEval.checks as c (c.label)}
-                  <div class="req" class:ng={!c.ok}>
-                    <span class="req-label">{c.label}</span>
-                    <span class="num dim">{fmtInt(c.current)} / {fmtInt(c.required)}</span>
-                    <span class="req-tag">{c.ok ? "OK" : `あと ${fmtInt(c.required - c.current)}`}</span>
-                  </div>
-                {/each}
-              </div>
+              <RequirementList checks={targetEval.checks} />
               {#if hasEquipmentReq}
                 <!-- 装備条件は突き/斬り/魔攻/魔防/複合の別条件で、使うスキルの依存で比較先が決まる -->
                 <p class="buff-note dim">
@@ -1456,29 +1421,14 @@
       {:else}
         <p class="empty dim">キャラを選択してください。</p>
       {/if}
-    </div>
-  </section>
-</div>
+  {/snippet}
+</SplitPage>
 
 <style>
-  .layout { flex: 1; min-height: 0; display: grid; }
-  section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-  section.mid { background: var(--bg-mid); }
-  section.right { background: var(--bg-rail); border-left: 1px solid var(--border-strong); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 13px 16px 18px; }
-  .scroll.pad { padding: 11px; display: flex; flex-direction: column; gap: 9px; }
+  /* .layout / section / .scroll は ui/SplitPage.svelte(padding の差は rightScrollStyle で指定) */
   .empty { font-size: 12px; }
 
-  /* 行ける?カード */
-  .sheet { position: relative; border-radius: var(--r-window); border: 1px solid #687287; box-shadow: 0 1px 0 rgba(121, 140, 172, 0.4); background: var(--bg-field); }
-  .sheet-head {
-    display: flex; align-items: center; gap: 8px; padding: 7px 13px;
-    border-radius: var(--r-window) 12px 0 0;
-    background: linear-gradient(180deg, #F2E3BD, #DCC27E); border-bottom: 1px solid #BFA155;
-  }
-  .gem { flex-shrink: 0; width: 9px; height: 9px; transform: rotate(45deg); background: linear-gradient(160deg, #fff, #C9A227); border: 1px solid #A9821F; }
-  .sheet-title { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #4A3C12; white-space: nowrap; }
-  .sheet-char { min-width: 0; flex: 1; font-size: 9px; color: #6B5A24; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 行ける?カード。.sheet-card/.sheet-head/.gem/.sheet-title/.sheet-char は ui/SheetCard.svelte */
 
   .target-row { position: relative; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 10px 11px 0; background: linear-gradient(180deg, #F4F9FE, #fff); }
   .step {
@@ -1521,14 +1471,10 @@
     border-bottom: 1px solid #EDF2F9; text-align: left;
   }
   .pop-row:hover { background: #F1F7FE; }
-  .pop-row.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); }
+  .pop-row.on { background: var(--sel-card); }
   .pop-row .dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; }
-  /* 収録度(§14 決定 5)。破線 = 「まだ無い」の記号 */
-  .coverage {
-    flex-shrink: 0; padding: 0 6px; border-radius: var(--r-pill);
-    border: 1px dashed var(--border); background: var(--bg-rail);
-    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
-  }
+  /* .coverage は app.css(§14 決定 5)。この画面だけ詰めた padding にする */
+  .coverage { padding: 0 6px; }
   .pop-name { min-width: 0; flex: 1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pop-row.on .pop-name { font-weight: 700; }
   .pop-row .strong { font-weight: 700; }
@@ -1699,11 +1645,9 @@
   .sim-limit { min-height: 15px; padding: 0 11px 7px; font-size: 9.5px; color: var(--fg-dim); }
   .sim-limit.hit { color: var(--fg); font-weight: 700; }
 
-  .card-head { display: flex; align-items: center; gap: 8px; }
-  .small { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* .card-head / .small は app.css */
 
-  .pw { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 11.5px; cursor: pointer; }
-  .pw input { accent-color: var(--accent); }
+  .pw { margin-top: 8px; }
   .sw { margin-top: 8px; }
   .eq-details { margin-top: 9px; border-top: 1px dashed var(--border-soft); }
   .eq-details summary { padding: 8px 0 0; font-size: var(--t-label); color: var(--fg-muted); cursor: pointer; }
@@ -1719,7 +1663,7 @@
   }
   .side-tab:hover:not(.on) { border-color: var(--accent); }
   .side-tab.on {
-    background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); color: #123047;
+    background: var(--sel-card); border-color: var(--accent); color: var(--sel-fg);
     box-shadow: inset 0 1px 0 #fff;
   }
 
@@ -1733,8 +1677,8 @@
   }
   .buff-chip:hover:not(:disabled) { border-color: var(--accent); }
   .buff-chip.on {
-    background: linear-gradient(180deg, #CCF7FF, #90D7FF);
-    border-color: #687287; color: #123047; font-weight: 700;
+    background: var(--sel);
+    border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700;
   }
   /* 追加枠は「保存されない」ので、その専用色(--sim)にそろえる */
   .buff-chip.on.extra {
@@ -1755,7 +1699,7 @@
     display: inline-block; padding: 0 5px; border-radius: var(--r-pill);
     font-size: 8.5px; font-weight: 700; border: 1px solid;
   }
-  .buff-legend .lg.always { background: #CCF7FF; border-color: #687287; color: #123047; }
+  .buff-legend .lg.always { background: #CCF7FF; border-color: var(--sel-bd); color: var(--sel-fg); }
   .buff-legend .lg.extra { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
   .entry-note {
@@ -1774,18 +1718,5 @@
   .card.adj summary { cursor: pointer; font-size: 11px; }
   .adj-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
 
-  .combo { display: flex; align-items: center; gap: 8px; padding: 2px 4px; font-size: 11.5px; cursor: pointer; }
-  .combo input { accent-color: var(--accent); }
-
-  .reqs { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
-  .req {
-    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-panel);
-    background: #F4F9FE; border: 1px solid var(--border-soft);
-  }
-  .req.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); }
-  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: var(--fg-sub); white-space: nowrap; }
-  .req.ng .req-label { color: var(--danger); }
-  .req .num { font-size: 10px; white-space: nowrap; }
-  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
-  .req.ng .req-tag { color: var(--danger); }
+  /* .reqs/.req/.req-label/.req-tag は app.css(ui/RequirementList.svelte 経由) */
 </style>

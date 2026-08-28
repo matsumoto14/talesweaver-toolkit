@@ -172,17 +172,15 @@
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
   .section-label { padding: 10px 2px 8px; }
-  .tbl { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); }
+  /* .tbl は app.css(この画面だけ margin-bottom を持つ) */
+  .tbl { margin: 0 0 8px; }
   .empty { padding: 10px 12px; font-size: 11px; }
   td.sym { font-weight: 700; color: var(--accent); }
   td.strong { font-weight: 500; }
   td.final { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .capped { color: #B5443A; font-weight: 700; }
   .cap-note { margin: 4px 0 0; font-size: 9px; color: #B5443A; }
-  .pin-badge {
-    font-size: 9px; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent);
-    border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
-  }
+  /* .pin-badge は app.css */
   td.expr { white-space: normal; color: var(--fg-muted); font-size: 11px; min-width: 260px; }
   tr.active td { background: var(--bg-active); }
   tr.active td.sym { color: var(--warm); }

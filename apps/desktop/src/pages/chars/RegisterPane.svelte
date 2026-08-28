@@ -160,7 +160,7 @@
     padding: 7px 4px; border-radius: var(--r-panel);
     background: var(--bg-field); border: 1px solid var(--border-soft);
   }
-  .pick.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16); }
+  .pick.on { background: var(--sel-card); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.16); }
   .pick-name { max-width: 58px; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pick.on .pick-name { color: var(--fg); font-weight: 700; }
 

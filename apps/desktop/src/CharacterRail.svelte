@@ -3,6 +3,7 @@
   import { app, gameCharacterName, selectCharacter } from "./state.svelte";
   import Icon from "./ui/Icon.svelte";
   import { persisted } from "./ui/persistedState.svelte";
+  import { dropHalfIndex, moveItem } from "./ui/reorder.svelte";
 
   interface Props {
     collapsed: boolean;
@@ -32,7 +33,7 @@
     if (draggedCharacterId === null) return;
     event.preventDefault();
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    characterDropAt = index + (event.clientY < rect.top + rect.height / 2 ? 0 : 1);
+    characterDropAt = dropHalfIndex(rect, event.clientY, index, "y");
   }
   function dropCharacter(event: DragEvent) {
     event.preventDefault();
@@ -40,10 +41,7 @@
     const ids = orderedCharacters.map((character) => character.id);
     const from = ids.indexOf(draggedCharacterId);
     if (from === -1) return;
-    const [id] = ids.splice(from, 1);
-    const target = from < characterDropAt ? characterDropAt - 1 : characterDropAt;
-    ids.splice(Math.max(0, Math.min(ids.length, target)), 0, id);
-    characterOrder.value = ids;
+    characterOrder.value = moveItem(ids, from, characterDropAt);
     draggedCharacterId = null;
     characterDropAt = null;
   }

@@ -11,15 +11,12 @@
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
-  import Splitter from "../../ui/Splitter.svelte";
+  import RequirementList from "../../ui/RequirementList.svelte";
+  import SplitPage from "../../ui/SplitPage.svelte";
   import { bump } from "../../ui/motion.svelte";
-  import { badgeStyle, STATE, type Badge } from "../../ui/states";
+  import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
 
   const DEFAULT_RIGHT_WIDTH = 330;
-  const layoutWidths = persisted("tw-v4-home", { right: DEFAULT_RIGHT_WIDTH });
-  const gridTemplateColumns = $derived(
-    `minmax(300px, 1fr) 6px minmax(240px, ${layoutWidths.value.right ?? DEFAULT_RIGHT_WIDTH}px)`,
-  );
 
   const pins = persisted("tw-v4-pins", { ids: [] as string[] });
 
@@ -82,14 +79,9 @@
     if (!r.ev.damage) return "スキル未収録";
     return null;
   }
-  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)
+  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)。先頭 6 件は共通(ui/states.ts)
   const BADGE: Badge[] = [
-    { label: "余裕", state: "goal" },
-    { label: "通る", state: "met" },
-    { label: "ぎりぎり", state: "edge" },
-    { label: "届かない", state: "short" },
-    { label: "条件・火力とも未達", state: "unknown" },
-    { label: "条件だけ未達", state: "temp" },
+    ...REACH_BADGES,
     // 火力の判定ができない行。理由は行頭の収録度バッジが言うので、ここでは繰り返さない
     { label: "火力は判定できません", state: "unknown" },
     { label: "入場OK", state: "met" },
@@ -281,13 +273,19 @@
   const areas = $derived(app.areas);
 </script>
 
-<div class="layout" style="grid-template-columns: {gridTemplateColumns};">
-  <section class="mid">
-    <div class="head-bar">
-      <span class="title">どこにどのくらい通るか</span>
-      <span class="note">目安＝実用的に周回できる1発量(コミュニティ知識)</span>
-    </div>
-    <div class="scroll">
+<SplitPage
+  midTitle="どこにどのくらい通るか"
+  midNote="目安＝実用的に周回できる1発量(コミュニティ知識)"
+  rightTitle="選択中"
+  rightNote={selectedRow?.areaName ?? ""}
+  persistKey="tw-v4-home"
+  defaultRight={DEFAULT_RIGHT_WIDTH}
+  minMid={300}
+  minRight={240}
+  splitterLabel="一覧と選択中の境界"
+  rightScrollStyle="gap: 11px;"
+>
+  {#snippet mid()}
       {#if !character}
         <p class="empty dim">キャラを登録すると、ここに到達一覧が出ます。左下の「＋ キャラを登録」からどうぞ。</p>
       {:else}
@@ -364,7 +362,7 @@
                           {@const list = seriesRowsOf(series.id)}
                           {@const maxStep = list[list.length - 1]?.content.series?.step ?? series.step}
                           <span class="name">{series.name}</span>
-                          <span class="stepper">
+                          <span class="series-stepper">
                             <button
                               type="button" class="st" aria-label="難易度を下げる"
                               disabled={series.step <= (list[0]?.content.series?.step ?? series.step)}
@@ -413,23 +411,8 @@
           目安ダメージは wiki に無い値で、コミュニティ知識・実測が出典です(実測で更新)。
         </p>
       {/if}
-    </div>
-  </section>
-
-  <Splitter
-    bind:value={layoutWidths.value.right}
-    min={240}
-    defaultValue={DEFAULT_RIGHT_WIDTH}
-    controls="next"
-    label="一覧と選択中の境界"
-  />
-
-  <section class="right">
-    <div class="head-bar">
-      <span class="title">選択中</span>
-      <span class="note">{selectedRow?.areaName ?? ""}</span>
-    </div>
-    <div class="scroll pad">
+  {/snippet}
+  {#snippet right()}
       {#if character && selectedRow}
         {@const r = selectedRow}
         {@const ok = !!r.ev?.reaches_need}
@@ -469,15 +452,7 @@
             <div class="sel-team">チーム条件: {r.content.team_note}</div>
           {/if}
           {#if r.ev && r.ev.checks.length > 0}
-            <div class="reqs">
-              {#each r.ev.checks as c (c.label)}
-                <div class="req" class:ng={!c.ok}>
-                  <span class="req-label">{c.label}</span>
-                  <span class="num dim">{fmtInt(c.current)} / {fmtInt(c.required)}</span>
-                  <span class="req-tag">{c.ok ? "OK" : `あと ${fmtInt(c.required - c.current)}`}</span>
-                </div>
-              {/each}
-            </div>
+            <RequirementList checks={r.ev.checks} style="margin-top: 7px;" />
           {/if}
           {#if r.content.entry_note}
             <!-- ルーン Lv・共通スキル・コア等、キャラモデルに値が無く判定できない条件 -->
@@ -523,10 +498,7 @@
                   </span>
                   <span class="adv-row sub">
                     <span class="num dim">{fmtInt(a.perHit)} / 目安 {fmtInt(need)}</span>
-                    <span
-                      class="cost"
-                      style="background: {COST_COLORS[a.candidate.cost][0]}; border-color: {COST_COLORS[a.candidate.cost][1]}; color: {COST_COLORS[a.candidate.cost][2]};"
-                    >{a.candidate.cost}</span>
+                    <span class="cost" style={triadStyle(COST_COLORS[a.candidate.cost])}>{a.candidate.cost}</span>
                   </span>
                 </button>
               {/each}
@@ -537,17 +509,11 @@
       {:else}
         <p class="empty dim">キャラを選択してください。</p>
       {/if}
-    </div>
-  </section>
-</div>
+  {/snippet}
+</SplitPage>
 
 <style>
-  .layout { flex: 1; min-height: 0; display: grid; }
-  section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-  section.mid { background: var(--bg-mid); }
-  section.right { background: var(--bg-rail); border-left: 1px solid var(--border-strong); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 13px 16px 18px; }
-  .scroll.pad { padding: 12px; }
+  /* .layout / section / .scroll は ui/SplitPage.svelte(gap の差は rightScrollStyle で指定) */
   .empty { font-size: 12px; }
 
   .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
@@ -576,7 +542,8 @@
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
   .collapsed-note { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: var(--t-label); text-align: left; overflow: hidden; }
   .collapsed-note .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .stepper {
+  /* 難易度送り。app.css §07 の .stepper(StatInput 専用)と紛らわしいので別名にする */
+  .series-stepper {
     flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
     padding: 1px 4px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border-soft);
@@ -601,11 +568,11 @@
     padding: 9px 12px; border-radius: var(--r-window); cursor: pointer;
     background: var(--bg-field); border: 1px solid var(--border-soft);
   }
-  .row.sel { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.18); }
+  .row.sel { background: var(--sel-card); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.18); }
   .frontier {
     display: inline-flex; align-items: center; margin-bottom: 6px; padding: 2px 9px; border-radius: var(--r-pill);
-    background: linear-gradient(180deg, #CCF7FF, #90D7FF); border: 1px solid #687287;
-    font-size: 9.5px; font-weight: 700; color: #123047;
+    background: var(--sel); border: 1px solid var(--sel-bd);
+    font-size: 9.5px; font-weight: 700; color: var(--sel-fg);
   }
   .row-main { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .pin {
@@ -625,12 +592,7 @@
   .row-bar .badge { margin-left: auto; }
 
   .row-note { margin-top: 5px; display: flex; align-items: center; gap: 7px; min-width: 0; }
-  /* 収録度(§14 決定 5)。破線 = 「まだ無い」の記号。行内の歯抜けはこの 1 つが引き受ける */
-  .coverage {
-    flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill);
-    border: 1px dashed var(--border); background: var(--bg-rail);
-    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
-  }
+  /* .coverage は app.css(§14 決定 5)。行内の歯抜けはこの 1 つが引き受ける */
   .entry-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; }
   .note-text { flex: 1; min-width: 0; font-size: var(--t-label); color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .note-text.unmet { color: var(--danger); font-weight: 700; }
@@ -643,7 +605,6 @@
   .foot { margin: 14px 0 0; font-size: 10px; line-height: 1.7; }
 
   /* 右カラム */
-  .scroll.pad { display: flex; flex-direction: column; gap: 11px; }
   .sel-card {
     padding: 14px; border-radius: var(--r-window);
     background: linear-gradient(180deg, var(--sim-bg), #F1F0FA);
@@ -689,20 +650,12 @@
     background: var(--state-temp-bg); border: 1px solid var(--sim);
     font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--sim-fg);
   }
-  .reqs { margin-top: 7px; display: flex; flex-direction: column; gap: 5px; }
-  .req {
-    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-panel);
-    background: #F4F9FE; border: 1px solid var(--border-soft);
-  }
-  .req.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); }
-  .req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: var(--fg-sub); white-space: nowrap; }
-  .req.ng .req-label { color: var(--danger); }
-  .req .num { font-size: 10px; white-space: nowrap; }
-  .req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
-  .req.ng .req-tag { color: var(--danger); }
+  /* .reqs/.req/.req-label/.req-tag は app.css(ui/RequirementList.svelte 経由)。
+     margin-top の微差(CalcPage 8px / ここ 7px)はコンポーネント境界を跨ぐため
+     RequirementList の style prop で個別指定している */
 
-  .card-head { display: flex; align-items: center; gap: 8px; }
-  .small { font-size: 9.5px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* .card-head / .small は app.css。ここは HomePage 固有のサイズ差だけ上書き */
+  .card-head .small { font-size: 9.5px; }
   .fav-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .fav {
     display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: var(--r-panel);

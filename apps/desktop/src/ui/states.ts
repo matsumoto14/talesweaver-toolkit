@@ -43,3 +43,20 @@ export const badgeStyle = (b: Badge): string => {
   const c = STATE[b.state];
   return `background: ${c.bg}; border-color: ${c.bd}; color: ${c.fg};`;
 };
+
+/** [面, 枠, 文字] の 3 つ組みから inline style を組み立てる。COST_COLORS など、
+ * バッジではないが同じ「面・枠・文字」の 3 点で色分けするチップに使う。 */
+export const triadStyle = ([bg, bd, fg]: [string, string, string]): string =>
+  `background: ${bg}; border-color: ${bd}; color: ${fg};`;
+
+/** 到達判定バッジの先頭 6 種(design-system §03 の状態 6 系統に対応)。
+ * HomePage / CalcPage の BADGE 配列の先頭 6 件が完全一致していたので、ここへ集約する。
+ * 画面ごとに追加の行(未収録・条件のみ等)が要るときは、この配列の後ろへ足す。 */
+export const REACH_BADGES: Badge[] = [
+  { label: "余裕", state: "goal" },
+  { label: "通る", state: "met" },
+  { label: "ぎりぎり", state: "edge" },
+  { label: "届かない", state: "short" },
+  { label: "条件・火力とも未達", state: "unknown" },
+  { label: "条件だけ未達", state: "temp" },
+];

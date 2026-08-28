@@ -11,6 +11,9 @@
   --sel: linear-gradient(180deg, #CCF7FF, #90D7FF);
   --sel-bd: #687287;
   --sel-fg: #123047;
+  /* 選択中カード(顔で選ぶ・行・チップの「いま選んでいる」面)。--sel より淡い青系で、
+     主役ボタンの --sel と混同しない */
+  --sel-card: linear-gradient(180deg, #D9ECFF, #C2E1FF);
   --border: #A6BAD3;
   --border-soft: #C1D3E6;
   --border-strong: #798CAC;
@@ -92,6 +95,8 @@
   /* 窓の3層目(規格シート 2a のインセット面)。表・読み取り専用の数値をここに載せて、
      編集できる面(--bg-field の白)と区別する */
   --surface-inset: #C1D3E6;
+  /* 重なって出るポップオーバー(候補一覧・ドリルダウンの段選択)の影 */
+  --shadow-pop: 0 10px 24px rgba(30, 44, 74, 0.28);
 
   /* 角丸は 4 段(v4 系列。規格シート 3a の 16px 系列は採らない。decisions 2026-08-25) */
   --r-window: 12px;  /* 窓・大カード */
@@ -173,6 +178,43 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   background: var(--bg-field); border: 1px solid var(--border-strong);
 }
 .card-title { font-weight: 700; font-size: 11px; color: var(--fg-head); white-space: nowrap; }
+/* カード見出し行。タイトルの右に注記(件数・状態)を 1 つだけ添える */
+.card-head { display: flex; align-items: center; gap: 8px; }
+.card-head .small {
+  margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 収録度(§14 決定 5)。破線 = 「まだ無い」の記号。一覧の行頭に 1 つだけ出す */
+.coverage {
+  flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill);
+  border: 1px dashed var(--border); background: var(--bg-rail);
+  font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
+}
+
+/* 固定(pin)された能力値の注記チップ。表の値の隣に添える */
+.pin-badge {
+  font-size: 9px; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: var(--r-inset); padding: 1px 4px; cursor: default;
+}
+
+/* 読み取り専用の表を囲む枠(インセット面)。margin は文脈ごとに呼び出し側で決める */
+.tbl {
+  overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--r-panel);
+  background: var(--surface-inset);
+}
+
+/* 入場条件の 1 行。「あと N」を金でも赤でもなく面の色差で伝える */
+.reqs { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.req {
+  display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r-panel);
+  background: #F4F9FE; border: 1px solid var(--border-soft);
+}
+.req.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); }
+.req-label { min-width: 0; flex: 1; font-size: var(--t-label); font-weight: 500; color: var(--fg-sub); white-space: nowrap; }
+.req.ng .req-label { color: var(--danger); }
+.req .num { font-size: 10px; white-space: nowrap; }
+.req-tag { flex-shrink: 0; font-size: 9.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; }
+.req.ng .req-tag { color: var(--danger); }
 
 .badge {
   flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
@@ -408,7 +450,7 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
   max-height: 280px; overflow-y: auto; overscroll-behavior: contain;
   border-radius: var(--r-window); background: var(--bg-field);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 10px 24px rgba(30, 44, 74, 0.28), inset 0 0 0 1px #fff;
+  box-shadow: var(--shadow-pop), inset 0 0 0 1px #fff;
 }
 .picker-pop-head {
   position: sticky; top: 0; z-index: 1;
@@ -534,6 +576,25 @@ details.fold .fold-body { margin-top: 10px; }
 /* 保存されない・一時的なもの(§03 予約色) */
 .chip.sim { border-color: var(--sim); color: var(--sim-fg); }
 
+/* --- チェックチップ(ui/CheckChip.svelte / §07 形態 3) ---------------------------
+   オン / オフの選択肢を素のチェックボックスではなくチップで出す。素のチェックボックスは
+   5 形態のどれでもない。値はチップの中に書く — 選ぶ = 値が確定する */
+.check {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 4px 11px; border-radius: var(--r-pill);
+  background: var(--bg-field); border: 1px solid var(--border-soft);
+  color: var(--fg-sub); font-size: 11px; font-weight: 500; cursor: pointer;
+}
+.check:hover { border-color: var(--accent); }
+.check:has(input:checked) {
+  background: var(--sel);
+  border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700;
+}
+.check:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
+/* チェックボックスそのものは出さない。選ばれているかは面の色が言う */
+.check input { position: absolute; opacity: 0; width: 0; height: 0; }
+.check .fixed-value, .check .note { color: inherit; opacity: 0.75; }
+
 /* --- スキル選択カード(§06 アイコン / §07 チップより情報が多い選択) ----------
    バフの小さなチップと混同しないよう、ゲーム内と同じスキルアイコンを起点に
    「名前 / 効果 / 適用状態」を 1 枠へまとめる。 */
@@ -549,7 +610,7 @@ details.fold .fold-body { margin-top: 10px; }
 }
 .character-skill-card:hover { border-color: var(--accent); }
 .character-skill-card.on {
-  background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent);
+  background: var(--sel-card); border-color: var(--accent);
 }
 .character-skill-card:has(input:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
 .character-skill-card input { position: absolute; opacity: 0; width: 0; height: 0; }

@@ -3,6 +3,7 @@
   // 計算は Rust 側(crates/domain/src/defense.rs)。ここは表示だけ。
   import type { DefenseProfile } from "../../api/types";
   import { fmtInt, fmtNum } from "../../format";
+  import SheetCard from "../../ui/SheetCard.svelte";
 
   interface Props {
     profile: DefenseProfile | null;
@@ -19,13 +20,7 @@
   );
 </script>
 
-<div class="sheet">
-  <div class="sheet-head">
-    <span class="gem"></span>
-    <span class="sheet-title">どれだけ耐える？</span>
-    <span class="sheet-char dim">対象コンテンツに依らない自分の値です</span>
-  </div>
-
+<SheetCard tone="blue" title="どれだけ耐える？" note="対象コンテンツに依らない自分の値です">
   {#if error}
     <p class="err">{error}</p>
   {:else if !profile}
@@ -139,24 +134,10 @@
       </p>
     </div>
   {/if}
-</div>
+</SheetCard>
 
 <style>
-  .sheet {
-    border-radius: var(--r-window); background: var(--bg-panel);
-    border: 1px solid var(--border-strong); overflow: hidden;
-  }
-  .sheet-head {
-    display: flex; align-items: center; gap: 8px; padding: 8px 13px;
-    background: linear-gradient(180deg, #E9F1FB, #D8E6F6); border-bottom: 1px solid var(--border);
-  }
-  .gem {
-    width: 9px; height: 9px; flex-shrink: 0; transform: rotate(45deg);
-    background: var(--head-bar); border: 1px solid #4C6689;
-  }
-  .sheet-title { font-size: 12px; font-weight: 800; color: var(--fg-head); white-space: nowrap; }
-  .sheet-char { margin-left: auto; font-size: 9.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-
+  /* .sheet-card/.sheet-head/.gem/.sheet-title/.sheet-char は ui/SheetCard.svelte */
   .empty, .err { margin: 0; padding: 16px 13px; font-size: 11px; }
   .err { color: var(--danger); }
 

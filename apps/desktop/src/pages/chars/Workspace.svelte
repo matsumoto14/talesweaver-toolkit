@@ -30,7 +30,8 @@
   import { app, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
-  import { STATE } from "../../ui/states";
+  import { adjustDropIndex, dropHalfIndex } from "../../ui/reorder.svelte";
+  import { badgeStyle } from "../../ui/states";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
@@ -127,12 +128,16 @@
   }
 
   let confirmDelete = $state(false);
+  let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null;
   async function removeThis() {
     if (!confirmDelete) {
       confirmDelete = true;
-      setTimeout(() => (confirmDelete = false), 4000);
+      if (confirmDeleteTimer !== null) clearTimeout(confirmDeleteTimer);
+      confirmDeleteTimer = setTimeout(() => (confirmDelete = false), 4000);
       return;
     }
+    if (confirmDeleteTimer !== null) clearTimeout(confirmDeleteTimer);
+    confirmDeleteTimer = null;
     try {
       await deleteCharacter(character.id);
       removeCharacter(character.id);
@@ -459,7 +464,7 @@
     if (dragId === null) return;
     e.preventDefault();
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    dropAt = { list, index: e.clientY < r.top + r.height / 2 ? index : index + 1 };
+    dropAt = { list, index: dropHalfIndex(r, e.clientY, index, "y") };
   }
   function onDragOverList(e: DragEvent, list: "fav" | "rest", count: number) {
     if (dragId === null) return;
@@ -479,7 +484,7 @@
     };
     const arr = next[at.list];
     const from = ordered[at.list].indexOf(id);
-    const index = from !== -1 && from < at.index ? at.index - 1 : at.index;
+    const index = adjustDropIndex(from, at.index);
     arr.splice(Math.max(0, Math.min(arr.length, index)), 0, id);
     layout.value = next;
     follow(id);
@@ -719,9 +724,7 @@
                   <span use:bump={() => r.total_bonus}>{fmtInt(r.total_bonus)}</span>
                   <span
                     class="badge"
-                    style="background: {r.set_groups.length === 0 ? STATE.unknown.bg : STATE.met.bg};
-                           border-color: {r.set_groups.length === 0 ? STATE.unknown.bd : STATE.met.bd};
-                           color: {r.set_groups.length === 0 ? STATE.unknown.fg : STATE.met.fg}"
+                    style={badgeStyle({ label: "", state: r.set_groups.length === 0 ? "unknown" : "met" })}
                   >{r.set_groups.length === 0
                       ? `あと ${3 - r.ready}`
                       : r.set_groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
@@ -840,7 +843,7 @@
     background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .src:hover:not(.planned) { border-color: var(--accent); }
-  .src.on { background: linear-gradient(180deg, #D9ECFF, #C2E1FF); border-color: var(--accent); }
+  .src.on { background: var(--sel-card); border-color: var(--accent); }
   .src.planned { background: #F0F3F7; border-style: dashed; cursor: default; }
   .src-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .src-name { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
