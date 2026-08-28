@@ -1,4 +1,4 @@
-# TalesWeaver Toolkit
+# TW Context
 
 TalesWeaver(MMORPG)プレイヤー向けデスクトップツール。Tauri(Rust)+ SQLite(rusqlite)+ TypeScript/Svelte。
 機能と全体構成は docs/architecture.md、進捗は docs/status.md。
@@ -40,7 +40,7 @@ docs/ 直下は人向け(HTML 版は docs/site/、`python tools/docs-site/build.
 - フロント: `cd apps/desktop && npm run build && npx svelte-check`
 - 開発起動: `cd apps/desktop && npm run tauri dev`
 - GUI の実機確認・撮影は `gui-smoke` skill の手順で行う(Subagent に出すなら `smoke-tester`)
-- DB: `%APPDATA%\dev.twcontext.app\talesweaver-toolkit.sqlite`
+- DB: `%APPDATA%\dev.twcontext.app\tw-context.sqlite`
 
 ## 原則
 

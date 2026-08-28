@@ -30,7 +30,7 @@
 ロールバック手段がバックアップしかないため、配布開始前に入れる。
 
 - `crates/storage` に置く(SQLite の面倒を見るのは storage の責務。desktop は呼ぶだけ)
-- 開く前に `talesweaver-toolkit.sqlite.bak.<app_version>` へコピー。同名があれば上書きしない
+- 開く前に `tw-context.sqlite.bak.<app_version>` へコピー。同名があれば上書きしない
   (= その版で既に取ってある)。**直近 3 世代**だけ残す
 - マイグレーションが失敗したら、壊れた DB を `*.broken.<timestamp>` へ退避 → 最新の bak から
   復元 → 再試行。それも失敗したら空 DB で起動する(**起動不能にしない**)

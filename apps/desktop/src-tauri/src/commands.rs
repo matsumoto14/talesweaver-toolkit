@@ -107,7 +107,7 @@ pub fn get_app_info(app: tauri::AppHandle) -> CommandResult<AppInfo> {
         .path()
         .app_data_dir()
         .map_err(|e| format!("保存先を特定できません: {e}"))?
-        .join("talesweaver-toolkit.sqlite");
+        .join(crate::DATABASE_FILE_NAME);
     Ok(AppInfo {
         version: crate::APP_VERSION.to_string(),
         database_path: database_path.display().to_string(),

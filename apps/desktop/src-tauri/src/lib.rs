@@ -24,7 +24,8 @@ pub struct AppInfo {
     pub database_path: String,
 }
 
-const DATABASE_FILE_NAME: &str = "talesweaver-toolkit.sqlite";
+/// 登録キャラの保存先ファイル名。情報パネルにも同じ値を出すので、ここだけに置く。
+pub const DATABASE_FILE_NAME: &str = "tw-context.sqlite";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

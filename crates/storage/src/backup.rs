@@ -245,7 +245,7 @@ mod tests {
     }
 
     fn db_path(dir: &Path) -> PathBuf {
-        dir.join("talesweaver-toolkit.sqlite")
+        dir.join("tw-context.sqlite")
     }
 
     #[test]
@@ -272,7 +272,7 @@ mod tests {
         let outcome = open_with_backup(&path, "0.1.0").unwrap();
 
         assert_eq!(outcome.notice, None);
-        assert!(dir.join("talesweaver-toolkit.sqlite.bak.0.1.0").exists());
+        assert!(dir.join("tw-context.sqlite.bak.0.1.0").exists());
     }
 
     #[test]
@@ -297,7 +297,7 @@ mod tests {
         for minor in 1..=5u64 {
             open_with_backup(&path, &format!("0.{minor}.0")).unwrap();
             // 新旧は更新時刻で決めるので、同一秒に固まらないようずらす。
-            let backup = dir.join(format!("talesweaver-toolkit.sqlite.bak.0.{minor}.0"));
+            let backup = dir.join(format!("tw-context.sqlite.bak.0.{minor}.0"));
             if backup.exists() {
                 let file = fs::OpenOptions::new().write(true).open(&backup).unwrap();
                 file.set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000 + minor))

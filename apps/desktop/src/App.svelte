@@ -47,7 +47,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="mark"></span>
-      <span class="name">TW TOOLKIT</span>
+      <span class="name">TW CONTEXT</span>
     </div>
     <nav class="tabs">
       {#each TABS as t (t.id)}

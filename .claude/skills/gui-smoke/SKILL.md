@@ -27,7 +27,7 @@ description: Tauri デスクトップアプリを実機起動し、WebView2 の�
 - パスは **Bash ツールなら `/c/github/...`(`cd C:\...` は使えない)**、PowerShell が必要な操作(`Stop-Process` 等)は `PowerShell` ツールで実行する
 - 入力値は司令塔の依頼文の値をそのまま使う。依頼に無い値を自分で決めない(domain テストと同じ値で実機確認する運用)
 
-- **開発 DB `%APPDATA%\dev.twcontext.app\talesweaver-toolkit.sqlite` を削除しない。** 検証用キャラは名前に「検証」を付けて作り、終わったら画面から削除する
+- **開発 DB `%APPDATA%\dev.twcontext.app\tw-context.sqlite` を削除しない。** 検証用キャラは名前に「検証」を付けて作り、終わったら画面から削除する
 - セレクタは DOM 構造(`.group-head` / `label.field` / `nav button` など)に依存する。UI 変更後は先に `page.content()` を短く確認してから書く
 - `tauri dev` は Rust 変更で自動再起動する。再起動後は CDP に再接続が必要
 - 報告はログ全文ではなく「確認項目 → OK/NG、NG の再現手順、スクリーンショットのパス」のみ
