@@ -6,7 +6,7 @@
 |---|---|---|---|
 | キャラ | `characters/` | `<id>.png` | `gamedata::characters()` の `GameCharacter::id`(例 `boris.png`) |
 | Mob | `mobs/` | `<id>.png` | `gamedata::enemies()` の `Enemy::id` |
-| スキル | `skills/` | `<id>.png` | `gamedata::skills_for()` の `Skill::id`(例 `boris_goku_ren.png`) |
+| スキル | `skills/` | `<id>.png` | `gamedata::skills_for()` の `Skill::id`(例 `boris_continuous.png`) |
 | バフ | `buffs/` | `<id>.png` | `gamedata::buff_catalog()` の `BuffDefinition::id` |
 | マスタリー | `masteries/` | `<id>.png` | `gamedata::mastery_catalog()` の `MasteryDef::id`(例 `boris_m1_issen.png`)。枠はスキルと同じ |
 | 装備 | `equipment/` | `<id>.png` | `gamedata::equipment_catalog()` の `EquipmentItem::id` |
@@ -22,3 +22,7 @@ wiki の画像は `?plugin=ref&page=<ページ名(EUC-JP の URL エンコード
 
 2026-08-27の上位装備カタログでは、生成594件のうち装備行に画像参照がある309件を同梱した。
 参照のない285件（ライジングホリックカフスを含む）は `?` 表示のままにする。
+
+2026-08-27に通常スキル303件とキャラスキル71件を Tale Wiki 各 `Skill/<キャラ名>` ページの
+表示名と機械照合し、全件のアイコンを同梱した。3件は両カタログで同じidを共有するため、
+`skills/` は19キャラ合計371枚。再取込は `tools/gamedata/import_skill_icons.py` を使う。
