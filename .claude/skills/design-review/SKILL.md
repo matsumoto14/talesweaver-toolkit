@@ -6,7 +6,7 @@ description: 画面を「いつでも意識する 5 つ」(docs/design-system.ht
 # デザインレビュー
 
 正は **docs/design-system.html**(出典はモック `docs/mock/Repo UI mockup directions/TW Toolkit Prototype v4.dc.html`。
-食い違ったら v4 が正)。進行中の goal は `docs/claude/goals/2026-08-25-design-conformance.md`。
+食い違ったら v4 が正)。適合ループの決定記録は `docs/claude/adr/006-ui-design-system.md`。
 
 ## 見るもの — §00「いつでも意識する 5 つ」
 
@@ -95,7 +95,7 @@ NODE_PATH=/c/github/private/twtoolkit/node_modules node tools/design-audit/live/
 
 ## ⑤ 記録
 
-goal `docs/claude/goals/2026-08-25-design-conformance.md` の「周ごとの記録」に 1 節足す。
+`docs/claude/adr/006-ui-design-system.md` の「経緯」に、方針が変わった点だけ 1 行足す(作業ログは書かない)。
 **見送りは理由込みで書く** — 理由の無い見送りは次の周で蒸し返す。
 終了条件は「全項目 0 + 残りは §14 に登録済み + **2 周連続で新規違反 0**」。
 

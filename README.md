@@ -7,7 +7,7 @@ TalesWeaver(MMORPG)プレイヤー向けのデスクトップツールキット�
 > ゲームクライアントには接続せず、ゲームのファイルも読み書きしません。
 > 同梱しているデータ・画像の出典と権利については [NOTICE.md](NOTICE.md) を参照してください。
 
-![ダメージ計算画面](docs/screenshots/26-damage.png)
+![ダメージ計算画面](docs/readme-damage.png)
 
 ## できること
 
@@ -67,7 +67,7 @@ cd apps/desktop && npm run build && npx svelte-check   # フロント単体チ�
 
 ## ドキュメント
 
-ブラウザで読むなら [docs/site/index.html](docs/site/index.html)(md から生成。`python tools/docs-site/build.py`)。
+
 
 - [docs/architecture.md](docs/architecture.md) — クレート構成・フロント階層・依存の向き
 - [docs/ux-guidelines.md](docs/ux-guidelines.md) — UI 実装時の判断基準(4 原則)
@@ -76,8 +76,8 @@ cd apps/desktop && npm run build && npx svelte-check   # フロント単体チ�
 - [docs/status.md](docs/status.md) — 進捗
 - [docs/legacy-twtoolkit.md](docs/legacy-twtoolkit.md) — 旧リポジトリの棚卸し
 
-エージェント向け(作業記録・運用): [docs/claude/](docs/claude/) — decisions.md(設計判断と仮決定)、
-goals/(各 goal の受け入れ条件)、workflow.md(運用ガイド)
+エージェント向け(決定記録・運用): [docs/claude/](docs/claude/) — adr/(テーマ別の決定記録)、
+workflow.md(運用ガイド)
 
 ## 貢献・問い合わせ
 

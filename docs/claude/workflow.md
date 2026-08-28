@@ -1,6 +1,6 @@
 # Claude Code 運用ガイド
 
-CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用推奨。背景は docs/claude/decisions.md「2026-08-22 Claude Code エージェント運用の整理」。
+CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用推奨。背景は docs/claude/adr/010-agent-workflow.md。
 
 ## Agent 定義
 
@@ -47,7 +47,7 @@ CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用�
 
 ## Context 管理(ユーザー操作の推奨)
 
-- goal(docs/claude/goals/)1 本を完了して commit したら `/clear`。1 セッションに複数 goal を載せない。
+- ひとまとまりの作業(goal)を完了して commit したら `/clear`。1 セッションに複数 goal を載せない。
 - context が 150k を超えたら区切りで `/compact`(自動 compact は上限付近でしか動かず、1M context ではほぼ発動しない)。
 - 放置したセッションを再開するときは、続きが本当に必要か考え、必要なら最初に `/compact`。
 - `/code-review` は専用セッションで起動する(内部で 17 本前後の Agent が起動する)。

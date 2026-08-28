@@ -2,7 +2,7 @@
 
 TalesWeaver(MMORPG)プレイヤー向けデスクトップツール。Tauri(Rust)+ SQLite(rusqlite)+ TypeScript/Svelte。
 機能と全体構成は docs/architecture.md、進捗は docs/status.md。
-docs/ 直下は人向け(HTML 版は docs/site/、`python tools/docs-site/build.py` で再生成)。docs/claude/ はエージェント向け(決定記録 decisions.md、goal 文書 goals/、運用 workflow.md)。
+docs/ 直下は人向け。docs/claude/ はエージェント向け(決定記録 adr/、運用 workflow.md)。
 
 ## アーキテクチャ(構造ファースト)
 

@@ -25,5 +25,5 @@ python .claude/skills/talewiki-fetch/scripts/fetch_page.py <ページ名> [出�
 ## 調査結果の置き場所
 
 - 計算式: docs/damage-formula.md
-- キャラ・スキル・バフの数値: docs/claude/goals/<goal>.md の「wiki 調査結果」節、または gamedata クレートのリテラル
-- 数値の採用判断は docs/claude/decisions.md に記録する
+- キャラ・スキル・バフの数値: gamedata クレートのリテラル
+- 数値の採用判断は docs/claude/adr/ の該当 ADR に記録する
