@@ -394,11 +394,6 @@
     return rows;
   });
   const flowTotal = $derived(flowRows.reduce((a, r) => a + Math.max(0, r.add), 0) || 1);
-  // 「一番効いている」は倍率で選ぶ。足した実数で比べると後段ほど大きな値に掛かるので
-  // 最後の段(攻撃ダメージ・PVP補正)が構造的に常勝してしまう(ユーザー指摘 2026-08-29)
-  const topLever = $derived(
-    [...flowRows.slice(1)].filter((r) => r.factor > 1).sort((a, b) => b.factor - a.factor)[0] ?? null,
-  );
   const flowMultLabel = $derived(
     pierced !== null && pierced > 0 && perHit !== null ? `×${(perHit / pierced).toFixed(1)}` : "—",
   );
@@ -421,6 +416,27 @@
     return c.kind === "rate" ? `${fmtNum(loss * 100)}%` : fmtNum(loss);
   };
   const cappedCategories = $derived(activeCategories.filter((c) => catLoss(c) > 1e-9));
+  /**
+   * 「一番効いている」は**プレイヤーが積み上げられるカテゴリ**の中から倍率で選ぶ。
+   * - 段(スキル倍率・クリティカル)で比べると、スキル固有の値(D/F)が常勝して努力の範疇外になる
+   * - 足した実数で比べると後段ほど大きな値に掛かり、最後の段が構造的に常勝する
+   * (ユーザー指摘 2026-08-29)。代入(A〜D/F)・敵側(C/M/V1/Q/R/S/U/New2/V2)・PVP(Y)・
+   * 子を持つ親(X)は候補から外す
+   */
+  const NOT_EFFORT = new Set<string>([
+    "target_defense", "damage_reduction", "cut_rate_a", "damage_absorb", "taken_damage_rate",
+    "taken_damage_reduction", "damage_resistance", "damage_mitigation", "cut_rate_b",
+    "attack_damage_legacy", "attack_damage_rate", "pvp_correction",
+  ]);
+  const topLever = $derived(
+    activeCategories
+      .filter((c) => !NOT_EFFORT.has(c.category) && c.factor > 1)
+      .sort((a, b) => b.factor - a.factor)[0] ?? null,
+  );
+  /** topLever が乗っている段(帯の行を太字にするため) */
+  const topLeverStep = $derived(
+    topLever ? (steps.find((s) => s.categories.includes(topLever.category as DamageCategory))?.name ?? null) : null,
+  );
 
   // --- 数値を開いて詳細を確認する(§00 03: 開くのは押した行の下だけ) ----------
   // 値はすべて Rust 由来(DamageTrace / DamageResult)。UI で作るのは 2 値の差分だけ。
@@ -1539,7 +1555,7 @@
               {#if noPierce}
                 攻撃力が相手の防御力に届いていないので、倍率は何もかかりません。まず攻撃力を上げる必要があります。
               {:else if topLever}
-                いま一番大きい倍率は「{topLever.k}」の ×{topLever.factor.toFixed(2)}。抜けた分を {flowMultLabel} にする中で最も効いています。
+                いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
               {:else}
                 倍率はまだ何もかかっていません。
               {/if}
@@ -1611,7 +1627,7 @@
                     aria-expanded={isDetailOpen(`flow:${f.k}`)} onclick={() => toggleDetail(`flow:${f.k}`)}
                   >
                     <span class="swatch" style="background: {f.c};"></span>
-                    <span class="br-label" class:strong={topLever?.k === f.k} class:bad={f.add < 0}>{f.k}</span>
+                    <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
                     <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(Math.abs(f.add))}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span>
                     <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
