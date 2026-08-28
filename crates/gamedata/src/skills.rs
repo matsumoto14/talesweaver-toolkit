@@ -11,7 +11,7 @@
 //!   未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)。詳細は
 //!   docs/claude/decisions.md「2026-08-25 全キャラのスキル取込」
 
-use domain::{Element, Skill, SkillDependency};
+use domain::{ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency};
 
 use crate::skill_targets::SKILL_TARGETS;
 
@@ -776,6 +776,30 @@ impl SkillRecord {
                 .find(|(id, _)| *id == self.skill_id().as_str())
                 .and_then(|(_, delay)| *delay),
             actual_delay_fixed: ACTUAL_DELAY_FIXED.contains(&self.skill_id().as_str()),
+            combo_variants: if self.skill_id() == "maximin_continuous" {
+                vec![
+                    ComboSkillVariant {
+                        combo_type: ComboSkillType::General,
+                        multiplier: 5.55,
+                        hit_count: 11,
+                        base_actual_delay: 1.4,
+                    },
+                    ComboSkillVariant {
+                        combo_type: ComboSkillType::Instant,
+                        multiplier: 5.20,
+                        hit_count: 10,
+                        base_actual_delay: 1.0,
+                    },
+                    ComboSkillVariant {
+                        combo_type: ComboSkillType::Chain,
+                        multiplier: 5.20,
+                        hit_count: 12,
+                        base_actual_delay: 1.6,
+                    },
+                ]
+            } else {
+                Vec::new()
+            },
         }
     }
 }
@@ -790,12 +814,46 @@ pub fn skills_for(character_id: &str) -> Vec<Skill> {
 }
 
 pub fn find_skill(id: &str) -> Option<Skill> {
-    SKILLS.iter().find(|s| s.skill_id() == id).map(SkillRecord::to_skill)
+    SKILLS
+        .iter()
+        .find(|s| s.skill_id() == id)
+        .map(SkillRecord::to_skill)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn マキシミンの連は3つのコンボタイプを持つ() {
+        let skill = find_skill("maximin_continuous").unwrap();
+        assert_eq!(skill.combo_variants.len(), 3);
+        assert_eq!(skill.combo_variants[0].combo_type, ComboSkillType::General);
+        assert_eq!(
+            (
+                skill.combo_variants[0].multiplier,
+                skill.combo_variants[0].hit_count,
+                skill.combo_variants[0].base_actual_delay,
+            ),
+            (5.55, 11, 1.4),
+        );
+        assert_eq!(
+            (
+                skill.combo_variants[1].multiplier,
+                skill.combo_variants[1].hit_count,
+                skill.combo_variants[1].base_actual_delay,
+            ),
+            (5.20, 10, 1.0),
+        );
+        assert_eq!(
+            (
+                skill.combo_variants[2].multiplier,
+                skill.combo_variants[2].hit_count,
+                skill.combo_variants[2].base_actual_delay,
+            ),
+            (5.20, 12, 1.6),
+        );
+    }
 
     /// wiki「Skill#f8e303fb」の区分 `続` + 対象指定 `単体` で抽出した 7 件。
     /// これ以外に段数が増えるスキルがあると火力が過大になる。
@@ -804,7 +862,10 @@ mod tests {
         assert_eq!(SINGLE_TARGET_CHANNELING.len(), 7);
         for id in SINGLE_TARGET_CHANNELING {
             let skill = find_skill(id).unwrap_or_else(|| panic!("{id} がカタログに無い"));
-            assert!(skill.single_target_channeling, "{id} にフラグが立っていない");
+            assert!(
+                skill.single_target_channeling,
+                "{id} にフラグが立っていない"
+            );
         }
         let flagged = crate::characters()
             .into_iter()
@@ -825,13 +886,22 @@ mod tests {
         assert_eq!(ids.len(), SKILLS.len());
         for record in SKILLS {
             let id = record.skill_id();
-            assert!(ACTUAL_DELAYS.iter().any(|(k, _)| *k == id), "{id} の動作が無い");
+            assert!(
+                ACTUAL_DELAYS.iter().any(|(k, _)| *k == id),
+                "{id} の動作が無い"
+            );
         }
-        let missing: Vec<&str> =
-            ACTUAL_DELAYS.iter().filter(|(_, d)| d.is_none()).map(|(id, _)| *id).collect();
+        let missing: Vec<&str> = ACTUAL_DELAYS
+            .iter()
+            .filter(|(_, d)| d.is_none())
+            .map(|(id, _)| *id)
+            .collect();
         assert_eq!(missing, ["tichiel_sparkling_kite"]);
         // 秒が読めた行はすべて正の値
-        assert!(ACTUAL_DELAYS.iter().filter_map(|(_, d)| *d).all(|d| d > 0.0));
+        assert!(ACTUAL_DELAYS
+            .iter()
+            .filter_map(|(_, d)| *d)
+            .all(|d| d > 0.0));
     }
 
     #[test]
@@ -846,12 +916,28 @@ mod tests {
     #[test]
     fn 中ディレイのスポットチェック() {
         // wiki Skill/ボリス: 極・残影斬 1.4s / †極・横斬り 0.8s
-        assert_eq!(find_skill("boris_blur_sword").unwrap().base_actual_delay, Some(1.4));
-        assert_eq!(find_skill("boris_horizontal_sword").unwrap().base_actual_delay, Some(0.8));
+        assert_eq!(
+            find_skill("boris_blur_sword").unwrap().base_actual_delay,
+            Some(1.4)
+        );
+        assert_eq!(
+            find_skill("boris_horizontal_sword")
+                .unwrap()
+                .base_actual_delay,
+            Some(0.8)
+        );
         // wiki Skill/ルシアン: 極・連撃(チャネリング)は 10s
-        assert_eq!(find_skill("lucian_streak").unwrap().base_actual_delay, Some(10.0));
+        assert_eq!(
+            find_skill("lucian_streak").unwrap().base_actual_delay,
+            Some(10.0)
+        );
         // wiki Skill/イェフネン: 極・連・パイクは `1.5s/1s`([加速]時)。基本値の 1.5s を採る
-        assert_eq!(find_skill("yefnen_continuous_pike").unwrap().base_actual_delay, Some(1.5));
+        assert_eq!(
+            find_skill("yefnen_continuous_pike")
+                .unwrap()
+                .base_actual_delay,
+            Some(1.5)
+        );
     }
 
     #[test]
@@ -884,7 +970,10 @@ mod tests {
             let s = find_skill(id).unwrap();
             assert!((s.multiplier - multiplier).abs() < 1e-9, "{id} の倍率");
             assert_eq!(s.hit_count, hit_count, "{id} の段数");
-            assert!((s.critical_multiplier - critical).abs() < 1e-9, "{id} の Cri倍");
+            assert!(
+                (s.critical_multiplier - critical).abs() < 1e-9,
+                "{id} の Cri倍"
+            );
         }
     }
 
@@ -899,7 +988,11 @@ mod tests {
     #[test]
     fn 収録キャラはすべてプレイアブル一覧にある() {
         for s in SKILLS {
-            assert!(crate::find_character(s.character_id).is_some(), "{} が一覧に無い", s.character_id);
+            assert!(
+                crate::find_character(s.character_id).is_some(),
+                "{} が一覧に無い",
+                s.character_id
+            );
         }
     }
 }

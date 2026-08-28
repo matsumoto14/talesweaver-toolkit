@@ -238,7 +238,8 @@ mod tests {
 
     fn temp_dir(label: &str) -> PathBuf {
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("tw-backup-{label}-{}-{unique}", unix_seconds()));
+        let dir =
+            std::env::temp_dir().join(format!("tw-backup-{label}-{}-{unique}", unix_seconds()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -300,8 +301,10 @@ mod tests {
             let backup = dir.join(format!("tw-context.sqlite.bak.0.{minor}.0"));
             if backup.exists() {
                 let file = fs::OpenOptions::new().write(true).open(&backup).unwrap();
-                file.set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000 + minor))
-                    .unwrap();
+                file.set_modified(
+                    UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000 + minor),
+                )
+                .unwrap();
             }
         }
 
@@ -370,7 +373,11 @@ mod tests {
         }
         assert!(!outcome.notice.as_ref().unwrap().persists_changes());
         assert!(path.exists(), "ユーザーのファイルは消さない");
-        assert_eq!(fs::metadata(&path).unwrap().len(), before, "書き換えもしない");
+        assert_eq!(
+            fs::metadata(&path).unwrap().len(),
+            before,
+            "書き換えもしない"
+        );
         // マイグレーション前の状態はバックアップとして残っている。
         assert_eq!(list_backups(&path).unwrap().len(), 1);
     }

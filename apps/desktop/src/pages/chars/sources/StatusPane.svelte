@@ -1,8 +1,9 @@
 <script lang="ts">
   // 「status」補正源のペイン。キャラ選択・覚醒・エタの意志・主軸スキル・主属性・能力値の一覧。
+  import { untrack } from "svelte";
   import type { Element, ElementPreview, Skill, StatKind, StatPreview } from "../../../api/types";
   import { previewElements } from "../../../api/commands";
-  import { mainSkillOptions as buildMainSkillOptions, skillPower } from "../../../characterSkills";
+  import { compareMainSkills, mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
   import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
   import { fmtInt, formatLayerValue } from "../../../format";
   import { ELEMENT_LABELS, ELEMENTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../../labels";
@@ -58,10 +59,10 @@
   const stageIsLow = $derived(Number(draft.stage) < 4);
 
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
-  /** 火力の高い順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す(RegisterPane と同じ形) */
-  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(攻撃力を出さない)"));
-  const topSkills = $derived([...skills].sort((a, b) => skillPower(b) - skillPower(a)).slice(0, 3));
+  /** 中ディレイ込みの継続火力順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す。 */
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(攻撃力を出さない)"));
+  const topSkills = $derived([...skills].sort(compareMainSkills).slice(0, 3));
   /** 候補にない主軸を選んでいるとき、または自分で開いたときだけ全部出す */
   let skillListOpen = $state(false);
   const skillPickedOutside = $derived(
@@ -94,13 +95,30 @@
       draft.statSources.elements[def.id] = value === "" ? null : (value as Element);
     }
   }
+  /** 属性を選んだら、属性ありスキルと同じ確定表示へ戻す。 */
+  function chooseMainElement(value: string) {
+    setMainElement(value);
+    elementOverrideForSkill = elementFromSkill && value !== skillElement ? draft.mainSkillId : null;
+    if (value !== "") elementPickOpen = false;
+  }
   const elementSourceTotal = $derived(elementSourceDefs.reduce((n, def) => n + def.value, 0));
+  // 保存済みデータがスキル属性と違う場合は、利用者が選んだ上書きとして維持する。
+  let elementOverrideForSkill = $state(untrack(() =>
+    elementFromSkill && mainElement !== "" && mainElement !== skillElement ? draft.mainSkillId : null
+  ));
+  let lastElementSkillId = untrack(() => draft.mainSkillId);
   /**
    * 属性は主軸スキルで決まるので、スキルを選んだら供給源もその属性に合わせる(自動値)。
    * 自分で「別の属性を乗せる」を開いたときは触らない — 例外操作を上書きしない
    */
   $effect(() => {
-    if (!elementFromSkill || elementPickOpen) return;
+    const currentSkillId = draft.mainSkillId;
+    if (currentSkillId !== lastElementSkillId) {
+      lastElementSkillId = currentSkillId;
+      elementOverrideForSkill = null;
+      elementPickOpen = false;
+    }
+    if (!elementFromSkill || elementOverrideForSkill === draft.mainSkillId) return;
     if (mainElement === skillElement) return;
     setMainElement(skillElement as string);
   });
@@ -217,6 +235,10 @@
             </span>
             <span class="skill-meta num">{sk.hit_count} 段</span>
             <span class="skill-meta num elem-{sk.element}">{ELEMENT_LABELS[sk.element]}</span>
+            <span
+              class="skill-meta num"
+              use:flash={() => sk.base_actual_delay === null ? "?" : `${sk.base_actual_delay}s`}
+            >中 {sk.base_actual_delay === null ? "?" : `${sk.base_actual_delay}s`}</span>
           </button>
         {/each}
         {#if skills.length > topSkills.length}
@@ -234,7 +256,7 @@
         <div class="skill-all swap-in">
           <Picker
             options={mainSkillOptions}
-            note="火力の高い順(倍率 × 段数)"
+            note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)"
             placeholder="スキルを選ぶ"
             bind:value={draft.mainSkillId}
           />
@@ -244,11 +266,19 @@
     <!-- 属性はふつう主軸スキルで決まる。無属性のときだけ「何を乗せるか」を選ばせる -->
     <div class="wide">
       <span class="label">属性</span>
-      {#if elementFromSkill && !elementPickOpen}
+      {#if (elementFromSkill || mainElement !== "") && !elementPickOpen}
+        {@const displayedElement = (elementFromSkill && elementOverrideForSkill !== draft.mainSkillId ? skillElement : mainElement) as Element}
         <p class="element-auto">
-          <b>{ELEMENT_LABELS[skillElement!]}</b>
-          <span class="dim">— 主軸スキル「{mainSkill?.name}」で決まります</span>
-          <button type="button" class="chip quiet" onclick={() => (elementPickOpen = true)}>別の属性を乗せる</button>
+          <b
+            class="element-picked elem-{displayedElement}"
+            use:flash={() => displayedElement}
+          >{ELEMENT_LABELS[displayedElement]}</b>
+          <span class="dim">
+            {elementFromSkill && elementOverrideForSkill !== draft.mainSkillId
+              ? `— 主軸スキル「${mainSkill?.name}」で決まります`
+              : "— アンプルなどで乗せる属性"}
+          </span>
+          <button type="button" class="chip quiet" onclick={() => (elementPickOpen = true)}>変更</button>
         </p>
       {:else}
         {#if skillElement === "neutral"}
@@ -259,7 +289,7 @@
           options={elementOptions}
           cols={elementOptions.length}
           tone={(v) => (v === "" ? undefined : `elem-${v}`)}
-          bind:value={() => mainElement, setMainElement}
+          bind:value={() => mainElement, chooseMainElement}
         />
         <p class="hint dim">ペット・カード・ルーン・アビリティの +{elementSourceTotal} をまとめて乗せます。</p>
       {/if}
@@ -318,9 +348,6 @@
             </td>
             <td class="n final ro">
               <span class="strong" use:bump={() => preview?.stats[k] ?? null}>{preview ? fmtInt(preview.stats[k]) : "—"}</span>
-              {#if trace?.pinned_from !== null && trace?.pinned_from !== undefined}
-                <span class="pin-badge" title={`固定前: ${fmtInt(trace.pinned_from)}`}>固定</span>
-              {/if}
               <!-- 「満」の枠は常に確保する。出たときに行がずれない(§09 規則 4 / §11) -->
               <span
                 class="cap-badge"

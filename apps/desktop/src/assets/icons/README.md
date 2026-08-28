@@ -26,3 +26,13 @@ wiki の画像は `?plugin=ref&page=<ページ名(EUC-JP の URL エンコード
 2026-08-27に通常スキル303件とキャラスキル71件を Tale Wiki 各 `Skill/<キャラ名>` ページの
 表示名と機械照合し、全件のアイコンを同梱した。3件は両カタログで同じidを共有するため、
 `skills/` は19キャラ合計371枚。再取込は `tools/gamedata/import_skill_icons.py` を使う。
+
+2026-08-28に AF カタログ45件を Tale Wiki の
+`Item/アクセサリー用装備/アーティファクト` と照合し、取得できた同名添付35件を
+`equipment/` に取り込んだ。Wiki上で添付が無い、または参照だけが残って実体が無い10件は
+別装備の画像を流用せず `?` のままにする。再取込は
+`tools/gamedata/import_artifact_icons.py` を使う。
+
+2026-08-29にバフ34件を Tale Wiki の `ステータス` 表と照合し、行に直接アイコン参照がある
+28件を `buffs/` に取り込んだ。専用画像を確認できない6件は、似た効果の画像を流用せず
+`?` のままにする。再取込は `tools/gamedata/import_buff_icons.py` を使う。

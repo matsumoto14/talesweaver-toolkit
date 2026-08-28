@@ -38,6 +38,43 @@ pub enum SkillTarget {
     Area,
 }
 
+/// 「連」系スキルで選べるコンボスキルタイプ。
+/// 3 コンボ以上のダメージボーナス(`DamageInput::combo_count`)とは別の仕組み。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComboSkillType {
+    General,
+    Instant,
+    Chain,
+}
+
+/// コンボスキルタイプごとの基礎性能。対応スキルだけがこの一覧を持つ。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ComboSkillVariant {
+    pub combo_type: ComboSkillType,
+    pub multiplier: f64,
+    pub hit_count: u32,
+    pub base_actual_delay: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComboSkillTypeError {
+    pub skill_id: String,
+    pub combo_type: ComboSkillType,
+}
+
+impl std::fmt::Display for ComboSkillTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "スキル '{}' はコンボタイプ '{:?}' に対応していません",
+            self.skill_id, self.combo_type
+        )
+    }
+}
+
+impl std::error::Error for ComboSkillTypeError {}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -74,4 +111,122 @@ pub struct Skill {
     /// 中ディレイが固定で減少が効かない(wiki スキル性能一覧の「(固定)」表記)
     #[serde(default)]
     pub actual_delay_fixed: bool,
+    /// 対応するコンボスキルタイプ。空ならタイプ選択非対応。
+    #[serde(default)]
+    pub combo_variants: Vec<ComboSkillVariant>,
+}
+
+impl Skill {
+    /// 選択したコンボスキルタイプとシエナのオーラから、今回の計算に使う性能を解決する。
+    pub fn resolve_combo_variant(
+        &self,
+        combo_type: ComboSkillType,
+        siena_actual_delay_reduction: f64,
+    ) -> Result<Self, ComboSkillTypeError> {
+        let variant = self
+            .combo_variants
+            .iter()
+            .find(|variant| variant.combo_type == combo_type)
+            .ok_or_else(|| ComboSkillTypeError {
+                skill_id: self.id.clone(),
+                combo_type,
+            })?;
+        let mut resolved = self.clone();
+        resolved.multiplier = variant.multiplier;
+        resolved.hit_count = variant.hit_count;
+        resolved.base_actual_delay = Some(variant.base_actual_delay);
+        if combo_type == ComboSkillType::Chain {
+            // wiki 表は 2% 刻み。段数は 6% ごと、倍率は各 6% 区間で +0/+10/+20pt。
+            let step = ((siena_actual_delay_reduction.max(0.0) * 100.0 + 1e-9) / 2.0)
+                .floor()
+                .min(8.0) as u32;
+            resolved.hit_count += step / 3;
+            resolved.multiplier += f64::from(step % 3) * 0.10;
+        }
+        Ok(resolved)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn combo_skill() -> Skill {
+        Skill {
+            id: "continuous".into(),
+            name: "極・連".into(),
+            dependency: SkillDependency::Hack,
+            multiplier: 5.55,
+            hit_count: 11,
+            critical_multiplier: 2.5,
+            element: Element::Neutral,
+            target: Some(SkillTarget::Single),
+            accuracy: Some(100),
+            critical_rate: Some(5),
+            level: 10,
+            single_target_channeling: false,
+            base_actual_delay: Some(1.4),
+            actual_delay_fixed: false,
+            combo_variants: vec![
+                ComboSkillVariant {
+                    combo_type: ComboSkillType::General,
+                    multiplier: 5.55,
+                    hit_count: 11,
+                    base_actual_delay: 1.4,
+                },
+                ComboSkillVariant {
+                    combo_type: ComboSkillType::Instant,
+                    multiplier: 5.20,
+                    hit_count: 10,
+                    base_actual_delay: 1.0,
+                },
+                ComboSkillVariant {
+                    combo_type: ComboSkillType::Chain,
+                    multiplier: 5.20,
+                    hit_count: 12,
+                    base_actual_delay: 1.6,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn 連撃はシエナ減少率を2パーセント刻みの下側閾値で解決する() {
+        let skill = combo_skill();
+        let cases = [
+            (0.00, 5.20, 12),
+            (0.02, 5.30, 12),
+            (0.04, 5.40, 12),
+            (0.06, 5.20, 13),
+            (0.08, 5.30, 13),
+            (0.10, 5.40, 13),
+            (0.12, 5.20, 14),
+            (0.14, 5.30, 14),
+            (0.16, 5.40, 14),
+        ];
+        for (reduction, multiplier, hit_count) in cases {
+            let resolved = skill
+                .resolve_combo_variant(ComboSkillType::Chain, reduction)
+                .unwrap();
+            assert!(
+                (resolved.multiplier - multiplier).abs() < 1e-12,
+                "{reduction}"
+            );
+            assert_eq!(resolved.hit_count, hit_count, "{reduction}");
+            assert_eq!(resolved.base_actual_delay, Some(1.6));
+        }
+        let below = skill
+            .resolve_combo_variant(ComboSkillType::Chain, 0.039)
+            .unwrap();
+        assert!((below.multiplier - 5.30).abs() < 1e-12);
+    }
+
+    #[test]
+    fn 未対応タイプは拒否する() {
+        let mut skill = combo_skill();
+        skill.combo_variants.clear();
+        assert!(skill
+            .resolve_combo_variant(ComboSkillType::General, 0.0)
+            .is_err());
+    }
 }

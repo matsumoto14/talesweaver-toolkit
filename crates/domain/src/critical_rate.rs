@@ -96,18 +96,29 @@ impl CriticalRateSources {
     pub fn value_of(&self, id: CriticalRateSourceId) -> f64 {
         match id {
             CriticalRateSourceId::UltimateRune => {
-                if self.ultimate_rune { id.max_value() } else { 0.0 }
+                if self.ultimate_rune {
+                    id.max_value()
+                } else {
+                    0.0
+                }
             }
             CriticalRateSourceId::ArchitectLab => self.architect_lab_bonus(),
             CriticalRateSourceId::DeadlyBlow => {
-                if self.deadly_blow { id.max_value() } else { 0.0 }
+                if self.deadly_blow {
+                    id.max_value()
+                } else {
+                    0.0
+                }
             }
         }
     }
 
     /// クリティカル率増加の合計(上限を掛ける前)。UI の「頭打ち」表示に使う。
     pub fn raw_bonus(&self) -> f64 {
-        CriticalRateSourceId::ALL.iter().map(|id| self.value_of(*id)).sum()
+        CriticalRateSourceId::ALL
+            .iter()
+            .map(|id| self.value_of(*id))
+            .sum()
     }
 
     /// クリティカル率増加の合計(上限 +100%)。ペット会心は倍率なのでここには入らない。
@@ -183,12 +194,13 @@ pub fn critical_rate(
 ) -> CriticalRate {
     let denominator = (agi + target_agi) as f64;
     // AGI も対象AGI も 0 なら 0 除算になる。その場合は AGI 由来の項を 0 にする
-    let agi_ratio = if denominator == 0.0 { 0.0 } else { agi as f64 / denominator };
-    let from_agi = (equipment_critical + 1) as f64
-        * 2.0
-        * agi_ratio
-        * sources.pet_rate()
-        * (1.0 + siena_rate);
+    let agi_ratio = if denominator == 0.0 {
+        0.0
+    } else {
+        agi as f64 / denominator
+    };
+    let from_agi =
+        (equipment_critical + 1) as f64 * 2.0 * agi_ratio * sources.pet_rate() * (1.0 + siena_rate);
     let bonus = sources.bonus();
     let raw = from_agi + skill_critical_rate + bonus + target_taken_rate;
     CriticalRate {
@@ -214,7 +226,15 @@ mod tests {
     //   + スキル Cri値 13 + 増加 0 + 被撃率A −350 = −27.7 → 下限 0%
     #[test]
     fn 被撃率aが効いて下限0になる() {
-        let r = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.0, -350.0);
+        let r = critical_rate(
+            300,
+            1500,
+            1420,
+            13.0,
+            &CriticalRateSources::default(),
+            0.0,
+            -350.0,
+        );
         assert!((r.from_agi - 602.0 * (1500.0 / 2920.0)).abs() < 1e-9);
         assert!(r.raw < 0.0);
         assert_eq!(r.value, 0.0);
@@ -231,7 +251,15 @@ mod tests {
         // 増加は 20 + 30 = 50
         assert_eq!(sources.bonus(), 50.0);
         let r = critical_rate(300, 1500, 1420, 13.0, &sources, 0.0, -350.0);
-        let base = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.0, -350.0);
+        let base = critical_rate(
+            300,
+            1500,
+            1420,
+            13.0,
+            &CriticalRateSources::default(),
+            0.0,
+            -350.0,
+        );
         // ペット会心 ×1.1
         assert!((r.from_agi - base.from_agi * 1.1).abs() < 1e-9);
         assert!(r.raw > base.raw);
@@ -253,7 +281,10 @@ mod tests {
     #[test]
     fn 設計者の研究室は段階ごとに3ずつ増える() {
         for stage in 0..=ARCHITECT_LAB_STAGE_MAX {
-            let sources = CriticalRateSources { architect_lab_stage: stage, ..Default::default() };
+            let sources = CriticalRateSources {
+                architect_lab_stage: stage,
+                ..Default::default()
+            };
             assert_eq!(sources.architect_lab_bonus(), f64::from(stage) * 3.0);
             assert_eq!(sources.bonus(), f64::from(stage) * 3.0);
             assert!(sources.validate().is_ok());
@@ -271,7 +302,15 @@ mod tests {
     // wiki `#CriticalChance`: 下限 0% / 上限 100%
     #[test]
     fn 上限は100パーセント() {
-        let r = critical_rate(3000, 2000, 100, 15.0, &CriticalRateSources::default(), 0.0, 0.0);
+        let r = critical_rate(
+            3000,
+            2000,
+            100,
+            15.0,
+            &CriticalRateSources::default(),
+            0.0,
+            0.0,
+        );
         assert!(r.raw > 100.0);
         assert_eq!(r.value, 100.0);
     }
@@ -279,8 +318,24 @@ mod tests {
     // wiki `#CriticalChance`: シエナのオーラは AGI 由来の項に掛かる乗数(加算項ではない)
     #[test]
     fn シエナのオーラはagi由来の項に乗算で効く() {
-        let base = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.0, -350.0);
-        let siena = critical_rate(300, 1500, 1420, 13.0, &CriticalRateSources::default(), 0.80, -350.0);
+        let base = critical_rate(
+            300,
+            1500,
+            1420,
+            13.0,
+            &CriticalRateSources::default(),
+            0.0,
+            -350.0,
+        );
+        let siena = critical_rate(
+            300,
+            1500,
+            1420,
+            13.0,
+            &CriticalRateSources::default(),
+            0.80,
+            -350.0,
+        );
         assert!((siena.from_agi - base.from_agi * 1.80).abs() < 1e-9);
         assert!((siena.siena_rate - 0.80).abs() < 1e-12);
         // 加算項(スキル Cri値・増加・被撃率)は変わらない

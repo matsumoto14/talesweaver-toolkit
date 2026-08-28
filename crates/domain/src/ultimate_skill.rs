@@ -50,8 +50,11 @@ pub enum UltimateSkill {
 }
 
 impl UltimateSkill {
-    pub const ALL: [UltimateSkill; 3] =
-        [UltimateSkill::ScopeEye, UltimateSkill::FullThrottle, UltimateSkill::WideFocus];
+    pub const ALL: [UltimateSkill; 3] = [
+        UltimateSkill::ScopeEye,
+        UltimateSkill::FullThrottle,
+        UltimateSkill::WideFocus,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -96,7 +99,11 @@ impl UltimateSkills {
         if !self.has(UltimateSkill::ScopeEye) {
             return 0.0;
         }
-        let super_limit = if self.super_limit { SCOPE_EYE_SUPER } else { 0.0 };
+        let super_limit = if self.super_limit {
+            SCOPE_EYE_SUPER
+        } else {
+            0.0
+        };
         (SCOPE_EYE_BASE + super_limit + self.hyper(&SCOPE_EYE_HYPER)) / 100.0
     }
 
@@ -105,7 +112,11 @@ impl UltimateSkills {
         if !self.has(UltimateSkill::FullThrottle) {
             return 0.0;
         }
-        let super_limit = if self.super_limit { FULL_THROTTLE_DELAY_SUPER } else { 0.0 };
+        let super_limit = if self.super_limit {
+            FULL_THROTTLE_DELAY_SUPER
+        } else {
+            0.0
+        };
         (FULL_THROTTLE_DELAY_BASE + super_limit + self.hyper(&FULL_THROTTLE_DELAY_HYPER)) / 100.0
     }
 
@@ -123,7 +134,11 @@ impl UltimateSkills {
         if !self.has(UltimateSkill::WideFocus) {
             return 0.0;
         }
-        let super_limit = if self.super_limit { WIDE_FOCUS_SUPER } else { 0.0 };
+        let super_limit = if self.super_limit {
+            WIDE_FOCUS_SUPER
+        } else {
+            0.0
+        };
         WIDE_FOCUS_BASE + super_limit + self.hyper(&WIDE_FOCUS_HYPER)
     }
 
@@ -144,7 +159,9 @@ impl UltimateSkills {
         }
         let [first, second] = self.slots;
         if first.is_some() && first == second {
-            return Err(UltimateSkillError::Duplicated { name: first.unwrap().name() });
+            return Err(UltimateSkillError::Duplicated {
+                name: first.unwrap().name(),
+            });
         }
         Ok(())
     }
@@ -165,7 +182,11 @@ mod tests {
     use super::*;
 
     fn with(skill: UltimateSkill, super_limit: bool, hyper: u8) -> UltimateSkills {
-        UltimateSkills { slots: [Some(skill), None], super_limit, hyper_limit_level: hyper }
+        UltimateSkills {
+            slots: [Some(skill), None],
+            super_limit,
+            hyper_limit_level: hyper,
+        }
     }
 
     // wiki Skill/極限: 基本 +20% / スーパーリミット +3 / ハイパーリミット Lv6 +17 → 最大値 +40%
@@ -216,10 +237,16 @@ mod tests {
             slots: [Some(UltimateSkill::ScopeEye), Some(UltimateSkill::ScopeEye)],
             ..Default::default()
         };
-        assert!(matches!(s.validate(6), Err(UltimateSkillError::Duplicated { .. })));
+        assert!(matches!(
+            s.validate(6),
+            Err(UltimateSkillError::Duplicated { .. })
+        ));
 
         let ok = UltimateSkills {
-            slots: [Some(UltimateSkill::ScopeEye), Some(UltimateSkill::FullThrottle)],
+            slots: [
+                Some(UltimateSkill::ScopeEye),
+                Some(UltimateSkill::FullThrottle),
+            ],
             ..Default::default()
         };
         assert!(ok.validate(6).is_ok());
@@ -230,7 +257,10 @@ mod tests {
     fn ハイパーリミットもオーグメントに縛られる() {
         let s = with(UltimateSkill::ScopeEye, false, 6);
         assert!(s.validate(6).is_ok());
-        assert!(matches!(s.validate(1), Err(UltimateSkillError::AugmentRequired { .. })));
+        assert!(matches!(
+            s.validate(1),
+            Err(UltimateSkillError::AugmentRequired { .. })
+        ));
 
         // オーグメント無しでも Lv1 は取れる
         let lv1 = with(UltimateSkill::ScopeEye, false, 1);
@@ -240,6 +270,9 @@ mod tests {
     #[test]
     fn lv上限を超える値は拒否する() {
         let s = with(UltimateSkill::ScopeEye, false, 7);
-        assert!(matches!(s.validate(7), Err(UltimateSkillError::HyperLimitOutOfRange { .. })));
+        assert!(matches!(
+            s.validate(7),
+            Err(UltimateSkillError::HyperLimitOutOfRange { .. })
+        ));
     }
 }

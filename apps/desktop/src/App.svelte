@@ -2,14 +2,16 @@
   // 画面枠: 上部タブ(ホーム/ダメージ計算/キャラ)+ 左キャラレール + エラー帯。
   // 構成は デザインモック TW Toolkit Prototype v4 に合わせる(規格は docs/design-system.html)。
   import { onMount } from "svelte";
+  import brandLogo from "./assets/brand/tw-context-logo.png";
   import AboutPanel from "./AboutPanel.svelte";
   import { errorMessage, getStartupNotice } from "./api/commands";
   import CharacterRail from "./CharacterRail.svelte";
   import { loadStatLimits } from "./limits.svelte";
   import CalcPage from "./pages/calc/CalcPage.svelte";
+  import BuffsPage from "./pages/buffs/BuffsPage.svelte";
   import CharsPage from "./pages/chars/CharsPage.svelte";
   import HomePage from "./pages/home/HomePage.svelte";
-  import { app, loadAll, type Tab } from "./state.svelte";
+  import { app, focusErrorTarget, loadAll, type Tab } from "./state.svelte";
   import { dismissError, reportError, reportNotice, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import Splitter from "./ui/Splitter.svelte";
@@ -17,16 +19,20 @@
   const TABS: { id: Tab; label: string }[] = [
     { id: "home", label: "ホーム" },
     { id: "calc", label: "ダメージ計算" },
+    { id: "buffs", label: "バフ" },
     { id: "chars", label: "キャラ" },
   ];
 
   const DEFAULT_RAIL_WIDTH = 280;
   const railWidth = persisted("tw-v4-rail", { width: DEFAULT_RAIL_WIDTH });
   const railCollapsed = persisted("tw-v4-rail-collapsed", false);
+  const expandedRailWidth = $derived(
+    Math.max(200, Math.min(380, railWidth.value.width ?? DEFAULT_RAIL_WIDTH)),
+  );
   const gridTemplateColumns = $derived(
     railCollapsed.value
       ? "64px 0px minmax(0, 1fr)"
-      : `minmax(200px, ${railWidth.value.width ?? DEFAULT_RAIL_WIDTH}px) 6px minmax(0, 1fr)`,
+      : `${expandedRailWidth}px 6px minmax(0, 1fr)`,
   );
 
   let aboutOpen = $state(false);
@@ -46,8 +52,7 @@
 <div class="shell">
   <header class="topbar">
     <div class="brand">
-      <span class="mark"></span>
-      <span class="name">TW CONTEXT</span>
+      <img src={brandLogo} alt="TW Context" />
     </div>
     <nav class="tabs">
       {#each TABS as t (t.id)}
@@ -75,6 +80,15 @@
   {#if toast.message}
     <div class="toast" class:notice={toast.kind === "notice"} role="alert">
       <span>{toast.message}</span>
+      <!-- どこの話か分かるエラーは、読ませるだけで終わらせない。押せばその場所が開く(§00 ⑤) -->
+      {#if toast.target}
+        {@const target = toast.target}
+        <button
+          type="button"
+          class="toast-goto"
+          onclick={() => { focusErrorTarget(target); dismissError(); }}
+        >ここを開く ›</button>
+      {/if}
       <button type="button" onclick={dismissError} aria-label="閉じる">×</button>
     </div>
   {/if}
@@ -105,6 +119,8 @@
             <HomePage />
           {:else if app.tab === "calc"}
             <CalcPage />
+          {:else if app.tab === "buffs"}
+            <BuffsPage />
           {:else}
             <CharsPage />
           {/if}
@@ -123,13 +139,8 @@
     border-bottom: 1px solid var(--sel-bd);
     display: flex; align-items: center; gap: 14px;
   }
-  .brand { display: flex; align-items: center; gap: 9px; }
-  .brand .mark {
-    width: 22px; height: 22px; border-radius: var(--r-inset);
-    background: linear-gradient(160deg, #fff, #8EB9FC);
-    border: 1px solid var(--sel-bd);
-  }
-  .brand .name { font-weight: 800; font-size: 12.5px; letter-spacing: 0.08em; white-space: nowrap; }
+  .brand { display: flex; align-items: center; flex-shrink: 0; }
+  .brand img { width: auto; height: 48px; display: block; object-fit: contain; }
 
   /* 見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
   .tabs { margin-left: 8px; align-self: flex-end; }
@@ -163,9 +174,20 @@
   .toast.notice {
     background: var(--state-edge-bg); border-color: var(--state-edge-bd);
   }
-  .toast button { margin-left: auto; color: var(--fg-muted); font-size: 14px; }
+  .toast span { margin-right: auto; }
+  .toast button { color: var(--fg-muted); font-size: 14px; }
+  /* 「読むだけ」の帯の中で、押せるものだけ形を持たせる(§00 ⑤ 考えさせない) */
+  .toast-goto {
+    flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
+    border: 1px solid var(--danger); background: #fff;
+    color: var(--danger); font-size: 11px; font-weight: 600;
+  }
+  .toast-goto:hover { background: var(--danger); color: #fff; }
 
-  .body { flex: 1; min-height: 0; display: grid; }
+  .body {
+    flex: 1; min-height: 0; display: grid;
+    transition: grid-template-columns 260ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
   main { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-mid); }
   .tabbody { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 </style>

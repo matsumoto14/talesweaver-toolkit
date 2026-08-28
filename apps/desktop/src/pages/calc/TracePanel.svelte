@@ -1,21 +1,15 @@
 <script lang="ts">
   // 詳細トレース(能力値・カテゴリ・式の各段)。「なぜこの数字？」の最深部。
-  import type { CategoryTrace, DamageTrace, RegisteredCharacter, StatContribution, StatTrace } from "../../api/types";
+  import type { CategoryTrace, DamageTrace, StatContribution, StatTrace } from "../../api/types";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import { bump } from "../../ui/motion.svelte";
 
-  let { trace, character = null }: { trace: DamageTrace; character?: RegisteredCharacter | null } = $props();
+  let { trace }: { trace: DamageTrace } = $props();
 
-  // 「固定前」の表示値: pin の出所(pin_source、サーバ側 apply_pins が決定)が temporary
-  // (計算リクエストの一時調整による上書き)で、かつキャラに保存済みの固定(pin)があるときは、
-  // 「自分が普段固定している値」を基準にするほうが伝わりやすいのでそちらを見せる。
+  // pin(能力値の固定)は計算タブの一時調整だけから来る。
   function pinnedBeforeLabel(s: StatTrace): string {
     if (s.pinned_from === null) return "";
-    if (s.pin_source === "temporary") {
-      const savedPin = character?.stat_sources.adjustments[s.kind].pin ?? null;
-      if (savedPin !== null) return `保存済みの固定 ${fmtInt(savedPin)} を一時的に上書き`;
-    }
     return `固定前: ${fmtInt(s.pinned_from)}`;
   }
 
@@ -45,6 +39,17 @@
   const contributions = $derived<StatContribution[]>(
     STAT_KINDS.flatMap((k) => trace.stat_contributions.filter((c) => c.kind === k)),
   );
+
+  /** カテゴリ供給源内訳。カテゴリの並び(trace.categories = 式に現れる順)ごとにまとめる */
+  const categoryContributions = $derived(
+    trace.categories.flatMap((c) =>
+      trace.category_contributions
+        .filter((x) => x.category === c.category)
+        .map((x) => ({ ...x, symbol: c.symbol, label: c.label, kind: c.kind })),
+    ),
+  );
+  const fmtContributionValue = (kind: CategoryTrace["kind"], v: number) =>
+    kind === "rate" ? `${v >= 0 ? "+" : ""}${fmtNum(v * 100)}%` : fmtNum(v);
 </script>
 
 <details class="trace">
@@ -134,6 +139,27 @@
         {/each}
       </tbody>
     </table>
+  </div>
+
+  <div class="section-label"><span>(b-1) カテゴリ供給源内訳</span><span class="rule"></span></div>
+  <div class="tbl">
+    {#if categoryContributions.length === 0}
+      <p class="empty dim">供給源なし</p>
+    {:else}
+      <table class="grid ro">
+        <thead><tr><th>記号</th><th>カテゴリ</th><th>出典</th><th class="n">値</th></tr></thead>
+        <tbody>
+          {#each categoryContributions as c, i (i)}
+            <tr>
+              <td class="sym">{c.symbol}</td>
+              <td>{c.label}</td>
+              <td class="muted">{c.source}</td>
+              <td class="n" use:bump={() => c.value}>{fmtContributionValue(c.kind, c.value)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
   </div>
 
   <div class="section-label">

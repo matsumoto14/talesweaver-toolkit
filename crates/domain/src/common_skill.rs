@@ -36,6 +36,13 @@ const UNLEASH_FREE_LEVEL_MAX: u8 = 5;
 /// アンリーシュの枠数(wiki Skill/共通: 2 つまで使用可能)。
 pub const UNLEASH_SLOTS: usize = 2;
 
+/// 割合供給源 1 行(トレース表示用)。「なぜこの数字?」パネルの掘り下げに使う汎用の形。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RateContribution {
+    pub source: String,
+    pub value: f64,
+}
+
 /// パワーウェポンの装備攻撃力強化倍率(wiki: 自身の装備補正を 2% 増加)。
 /// UI(選択肢のラベル・数値表示)は `StatLimits::power_weapon_rate` で参照する(写経しない)。
 pub const POWER_WEAPON_RATE: f64 = 0.02;
@@ -53,7 +60,8 @@ pub const KAI_PROTECT_ARMOR_PHYSICAL: [f64; 5] = [0.09, 0.18, 0.27, 0.36, 0.45];
 /// 同(魔法 6/12/18/24/30%)。
 pub const KAI_PROTECT_ARMOR_MAGIC: [f64; 5] = [0.06, 0.12, 0.18, 0.24, 0.30];
 /// シャープネスビジョン Lv1〜10 の割合追加ダメージ(5/10/15/20/25/28/31/34/37/40%)。
-pub const SHARPNESS_VISION: [f64; 10] = [0.05, 0.10, 0.15, 0.20, 0.25, 0.28, 0.31, 0.34, 0.37, 0.40];
+pub const SHARPNESS_VISION: [f64; 10] =
+    [0.05, 0.10, 0.15, 0.20, 0.25, 0.28, 0.31, 0.34, 0.37, 0.40];
 /// アンリーシュ Lv1〜10 の能力値倍率B(wiki Skill/共通「バフ等含むステータス値 × 強化倍率[%]」
 /// +1/+2/+3/+4/+5/+8/+11/+14/+17/+20%)。ユーザーの実測(基本能力値 506 で
 /// 990/995/1000/1005/1010/1025/1040/1055/1071/1086)と 1 の位まで一致する(2026-08-25)。
@@ -79,7 +87,10 @@ pub struct DefenseRates {
 
 impl DefenseRates {
     /// 補正なし。リンゴの島・ベリネンルミではコンテンツ側の仕様で常にこれになる(wiki §6)。
-    pub const NEUTRAL: DefenseRates = DefenseRates { physical: 1.0, magic: 1.0 };
+    pub const NEUTRAL: DefenseRates = DefenseRates {
+        physical: 1.0,
+        magic: 1.0,
+    };
 }
 
 impl Default for DefenseRates {
@@ -128,8 +139,29 @@ pub struct CommonSkills {
 impl CommonSkills {
     /// 装備攻撃力強化倍率(wiki: カテゴリA の内訳)。パワーウェポン + ストロングウェポン Lv×3%。
     pub fn equipment_attack_rate(&self) -> f64 {
-        let power = if self.power_weapon { POWER_WEAPON_RATE } else { 0.0 };
-        power + f64::from(self.strong_weapon_level) * STRONG_WEAPON_RATE_PER_LEVEL
+        self.equipment_attack_rate_sources()
+            .iter()
+            .map(|s| s.value)
+            .sum()
+    }
+
+    /// 装備攻撃力強化倍率の供給源内訳。Σvalue = `equipment_attack_rate`(計算を二重に書かない)。
+    /// 「なぜこの数字?」パネルの「装備攻撃力強化倍率」の材料掘り下げに使う
+    pub fn equipment_attack_rate_sources(&self) -> Vec<RateContribution> {
+        let mut out = Vec::new();
+        if self.power_weapon {
+            out.push(RateContribution {
+                source: "パワーウェポン".to_string(),
+                value: POWER_WEAPON_RATE,
+            });
+        }
+        if self.strong_weapon_level > 0 {
+            out.push(RateContribution {
+                source: format!("ストロングウェポン Lv{}", self.strong_weapon_level),
+                value: f64::from(self.strong_weapon_level) * STRONG_WEAPON_RATE_PER_LEVEL,
+            });
+        }
+        out
     }
 
     /// 装備防御力倍率(wiki §6)。初期 100% にコートアーマー・プロテクトアーマー・
@@ -169,8 +201,7 @@ impl CommonSkills {
         if self.sharpness_vision_level == 0 {
             return 0.0;
         }
-        SHARPNESS_VISION
-            [(self.sharpness_vision_level as usize - 1).min(SHARPNESS_VISION.len() - 1)]
+        SHARPNESS_VISION[(self.sharpness_vision_level as usize - 1).min(SHARPNESS_VISION.len() - 1)]
     }
 
     /// オーグメントで解放されている Lv 上限(wiki: Lv2 以降はオーグメントの LvUp が必要)。
@@ -203,14 +234,26 @@ impl CommonSkills {
                 Ok(())
             }
         };
-        check("ストロングウェポン", self.strong_weapon_level, STRONG_WEAPON_LEVEL_MAX)?;
-        check("プロテクトアーマー", self.protect_armor_level, PROTECT_ARMOR_LEVEL_MAX)?;
+        check(
+            "ストロングウェポン",
+            self.strong_weapon_level,
+            STRONG_WEAPON_LEVEL_MAX,
+        )?;
+        check(
+            "プロテクトアーマー",
+            self.protect_armor_level,
+            PROTECT_ARMOR_LEVEL_MAX,
+        )?;
         check(
             "改・プロテクトアーマー",
             self.kai_protect_armor_level,
             KAI_PROTECT_ARMOR_LEVEL_MAX,
         )?;
-        check("シャープネスビジョン", self.sharpness_vision_level, SHARPNESS_VISION_LEVEL_MAX)?;
+        check(
+            "シャープネスビジョン",
+            self.sharpness_vision_level,
+            SHARPNESS_VISION_LEVEL_MAX,
+        )?;
         check("オーグメント", self.augment_level, AUGMENT_LEVEL_MAX)?;
         check("レインフォース", self.reinforce_level, REINFORCE_LEVEL_MAX)?;
         // オーグメント制約(wiki Skill/共通の該当行に赤字で明記)
@@ -246,7 +289,9 @@ impl CommonSkills {
         }
         let [first, second] = self.unleash;
         if first.stat.is_some() && first.stat == second.stat {
-            return Err(CommonSkillError::UnleashDuplicated { kind: first.stat.unwrap() });
+            return Err(CommonSkillError::UnleashDuplicated {
+                kind: first.stat.unwrap(),
+            });
         }
         Ok(())
     }
@@ -255,11 +300,24 @@ impl CommonSkills {
 #[derive(Debug, Clone, PartialEq, thiserror::Error, Serialize, Deserialize)]
 pub enum CommonSkillError {
     #[error("{name}の Lv は 0〜{max} です(指定値 {value})")]
-    LevelOutOfRange { name: &'static str, value: u8, max: u8 },
+    LevelOutOfRange {
+        name: &'static str,
+        value: u8,
+        max: u8,
+    },
     #[error("{name} Lv{value} にはオーグメントの Lv が足りません(オーグメント Lv{augment_level} では Lv{max} まで)")]
-    AugmentRequired { name: &'static str, value: u8, augment_level: u8, max: u8 },
+    AugmentRequired {
+        name: &'static str,
+        value: u8,
+        augment_level: u8,
+        max: u8,
+    },
     #[error("アンリーシュ Lv{value} にはレインフォースの Lv が足りません(レインフォース Lv{reinforce_level} では Lv{max} まで)")]
-    ReinforceRequired { value: u8, reinforce_level: u8, max: u8 },
+    ReinforceRequired {
+        value: u8,
+        reinforce_level: u8,
+        max: u8,
+    },
     #[error("アンリーシュの 2 枠が同じステ({kind:?})です(別のステを選んでください)")]
     UnleashDuplicated { kind: StatKind },
     #[error(transparent)]
@@ -271,7 +329,10 @@ mod tests {
     use super::*;
 
     fn unleash(stat: StatKind, level: u8) -> UnleashSlot {
-        UnleashSlot { stat: Some(stat), level }
+        UnleashSlot {
+            stat: Some(stat),
+            level,
+        }
     }
 
     /// wiki Skill/共通「能力解放 - XXX(アンリーシュ)」: +1/+2/+3/+4/+5/+8/+11/+14/+17/+20%。
@@ -332,7 +393,10 @@ mod tests {
         // Lv 上限そのもの
         assert!(matches!(
             with(11, 5).validate(),
-            Err(CommonSkillError::LevelOutOfRange { name: "アンリーシュ", .. })
+            Err(CommonSkillError::LevelOutOfRange {
+                name: "アンリーシュ",
+                ..
+            })
         ));
     }
 
@@ -344,7 +408,9 @@ mod tests {
         };
         assert!(matches!(
             same.validate(),
-            Err(CommonSkillError::UnleashDuplicated { kind: StatKind::Stab })
+            Err(CommonSkillError::UnleashDuplicated {
+                kind: StatKind::Stab
+            })
         ));
         let ok = CommonSkills {
             unleash: [unleash(StatKind::Stab, 1), unleash(StatKind::Hack, 2)],
@@ -355,7 +421,11 @@ mod tests {
 
     #[test]
     fn 装備攻撃力強化倍率はパワーウェポンとストロングウェポンの和() {
-        let s = CommonSkills { power_weapon: true, strong_weapon_level: 6, ..Default::default() };
+        let s = CommonSkills {
+            power_weapon: true,
+            strong_weapon_level: 6,
+            ..Default::default()
+        };
         assert!((s.equipment_attack_rate() - 0.20).abs() < 1e-12);
         assert_eq!(CommonSkills::default().equipment_attack_rate(), 0.0);
     }
@@ -363,7 +433,11 @@ mod tests {
     // wiki Skill/共通: コートアーマー 物18%/魔12%、プロテクトアーマー Lv6 物81%/魔54%
     #[test]
     fn 装備防御力倍率はコートアーマーとプロテクトアーマーの加算() {
-        let s = CommonSkills { coat_armor: true, protect_armor_level: 6, ..Default::default() };
+        let s = CommonSkills {
+            coat_armor: true,
+            protect_armor_level: 6,
+            ..Default::default()
+        };
         let r = s.defense_rates(0.0);
         assert!((r.physical - (1.0 + 0.18 + 0.81)).abs() < 1e-12);
         assert!((r.magic - (1.0 + 0.12 + 0.54)).abs() < 1e-12);
@@ -385,7 +459,10 @@ mod tests {
     // wiki 装備システム/シエナのオーラ: 防御力増加は装備防御力倍率増加でプロテクトアーマーと加算
     #[test]
     fn シエナの防御力増加は装備防御力倍率に加算される() {
-        let s = CommonSkills { protect_armor_level: 1, ..Default::default() };
+        let s = CommonSkills {
+            protect_armor_level: 1,
+            ..Default::default()
+        };
         let r = s.defense_rates(0.10);
         assert!((r.physical - (1.0 + 0.36 + 0.10)).abs() < 1e-12);
         assert!((r.magic - (1.0 + 0.24 + 0.10)).abs() < 1e-12);
@@ -393,14 +470,21 @@ mod tests {
 
     #[test]
     fn 未習得の装備防御力倍率は中立値() {
-        assert_eq!(CommonSkills::default().defense_rates(0.0), DefenseRates::NEUTRAL);
+        assert_eq!(
+            CommonSkills::default().defense_rates(0.0),
+            DefenseRates::NEUTRAL
+        );
     }
 
     // wiki Skill/共通: Lv1〜5 は 5/10/15/20/25%、Lv6〜10 は 28/31/34/37/40%
     #[test]
     fn シャープネスビジョンは最大40パーセント() {
         let lv = |n| {
-            CommonSkills { sharpness_vision_level: n, ..Default::default() }.sharpness_vision_rate()
+            CommonSkills {
+                sharpness_vision_level: n,
+                ..Default::default()
+            }
+            .sharpness_vision_rate()
         };
         assert_eq!(lv(0), 0.0);
         assert!((lv(5) - 0.25).abs() < 1e-12);
@@ -411,20 +495,36 @@ mod tests {
     // wiki Skill/共通: ストロングウェポン・プロテクトアーマーは Lv2 以降にオーグメントの LvUp が要る
     #[test]
     fn オーグメントが足りないlvは拒否する() {
-        let mut s = CommonSkills { strong_weapon_level: 6, augment_level: 5, ..Default::default() };
+        let mut s = CommonSkills {
+            strong_weapon_level: 6,
+            augment_level: 5,
+            ..Default::default()
+        };
         assert!(s.validate().is_ok());
 
         s.augment_level = 4;
-        assert!(matches!(s.validate(), Err(CommonSkillError::AugmentRequired { .. })));
+        assert!(matches!(
+            s.validate(),
+            Err(CommonSkillError::AugmentRequired { .. })
+        ));
 
         // オーグメント無しでも Lv1 は取れる
-        let lv1 = CommonSkills { strong_weapon_level: 1, ..Default::default() };
+        let lv1 = CommonSkills {
+            strong_weapon_level: 1,
+            ..Default::default()
+        };
         assert!(lv1.validate().is_ok());
     }
 
     #[test]
     fn lv上限を超える値は拒否する() {
-        let s = CommonSkills { sharpness_vision_level: 11, ..Default::default() };
-        assert!(matches!(s.validate(), Err(CommonSkillError::LevelOutOfRange { .. })));
+        let s = CommonSkills {
+            sharpness_vision_level: 11,
+            ..Default::default()
+        };
+        assert!(matches!(
+            s.validate(),
+            Err(CommonSkillError::LevelOutOfRange { .. })
+        ));
     }
 }

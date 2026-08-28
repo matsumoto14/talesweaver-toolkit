@@ -7,7 +7,7 @@
   import { damageCategoryLabel } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import {
-    clampToCaps, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
+    clampToCaps, equipmentIconId, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
   } from "../../../equipment";
   import { fmtInt } from "../../../format";
   import {
@@ -17,7 +17,7 @@
   } from "../../../labels";
   import type { EquipmentStatKind } from "../../../labels";
   import { limits } from "../../../limits.svelte";
-  import { app } from "../../../state.svelte";
+  import { app, equipmentFocus } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
@@ -25,6 +25,7 @@
   import StepSelect from "../../../ui/StepSelect.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import { slide } from "svelte/transition";
+  import { tick, untrack } from "svelte";
 
   interface Props {
     draft: Draft;
@@ -44,6 +45,7 @@
   ]);
 
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+  const iconId = (itemId: string | null) => equipmentIconId(itemId, app.equipmentCatalog);
 
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
@@ -295,7 +297,7 @@
     part.base = { ...item.values_max };
     part.enchant = clampToCaps(part.enchant, item.enchant_caps);
     part.enhance_type = item.enhance_type;
-    part.abilities = part.abilities.slice(0, item.ability_slots);
+    replaceAbilities(part, part.abilities.slice(0, item.ability_slots));
     if (item.ability_slots === 0) {
       part.ability_values = [];
       part.ability_additions = [];
@@ -400,6 +402,38 @@
   // 武器アビリティは3スロット。同じカテゴリーは1つまでだが、同じ攻撃系統でも
   // カテゴリー1「下級斬り」とカテゴリー4「夜星の鋭い刃」は併用できる。
   const abilityDef = (id: string) => app.equipmentAbilities.find((a) => a.id === id) ?? null;
+  /**
+   * 装着アビリティを差し替え、そこで外れたアビリティの本体値・追加値も一緒に落とす。
+   * 元から親のいない孤児(検証を足す前に保存された旧データ)は残す — 黙って捨てず、
+   * 部位詳細で「アビリティに戻す / 値を捨てる」を選ばせる。
+   */
+  function replaceAbilities(part: EquipmentPart, next: string[]) {
+    const removed = part.abilities.filter((id) => !next.includes(id));
+    part.abilities = next;
+    if (removed.length === 0) return;
+    part.ability_values = (part.ability_values ?? []).filter((v) => !removed.includes(v.ability_id));
+    part.ability_additions = (part.ability_additions ?? []).filter((a) => !removed.includes(a.ability_id));
+  }
+  /** 本体一覧(abilities)に無いのに値だけ残っている親 id。旧データでだけ出る。 */
+  const orphanAbilityIds = (slot: PartSlot): string[] => {
+    const part = selectedPartOrNull(slot);
+    if (!part) return [];
+    const ids = [
+      ...(part.ability_values ?? []).map((v) => v.ability_id),
+      ...(part.ability_additions ?? []).map((a) => a.ability_id),
+    ];
+    return [...new Set(ids)].filter((id) => !part.abilities.includes(id));
+  };
+  function restoreOrphanAbility(slot: PartSlot, abilityId: string) {
+    const part = selectedPart(slot);
+    if (part.abilities.includes(abilityId)) return;
+    part.abilities = [...part.abilities, abilityId];
+  }
+  function dropOrphanAbility(slot: PartSlot, abilityId: string) {
+    const part = selectedPart(slot);
+    part.ability_values = (part.ability_values ?? []).filter((v) => v.ability_id !== abilityId);
+    part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId);
+  }
   const abilityFitsWeapon = (family: EquipmentAbilityFamily, system: WeaponSystem | null): boolean => {
     if (family === "weapon_delay" || system === null) return true;
     if (system === "stab") return family === "pointed_blade";
@@ -482,7 +516,9 @@
       else return;
     }
     part.abilities = [...part.abilities, ability.id];
-    if (ability.value_option) {
+    // 孤児の本体値が残っていれば作り直さない(作ると本体値が重複して保存できなくなる)
+    const hasValue = (part.ability_values ?? []).some((v) => v.ability_id === ability.id);
+    if (ability.value_option && !hasValue) {
       part.ability_values = [...(part.ability_values ?? []), {
         ability_id: ability.id,
         kind: ability.value_option.kind,
@@ -578,13 +614,38 @@
       seen.add(String(category));
       return true;
     }).slice(0, currentAbilitySlotCount(slot));
-    if (normalized.length !== part.abilities.length) part.abilities = normalized;
-    part.ability_values = (part.ability_values ?? []).filter((value) => normalized.includes(value.ability_id));
-    part.ability_additions = (part.ability_additions ?? []).filter((addition) => normalized.includes(addition.ability_id));
+    replaceAbilities(part, normalized);
     openPart = slot;
     itemPickerOpen = false;
     showOtherEquipmentStats = false;
   }
+  // --- エラー帯からの「ここを開く」 -------------------------------------
+  // 帯が指した部位を開き、該当アビリティ行を光らせて見える位置まで送る(§00 ④)。
+  let detailEl = $state<HTMLElement | null>(null);
+  let focusedAbilityId = $state<string | null>(null);
+  let focusSeq = $state(0);
+  /** 光らせる対象だけ値が変わるトークン。`use:flash` はこれの変化で動く */
+  const focusToken = (abilityId: string) => (focusedAbilityId === abilityId ? String(focusSeq) : "");
+  async function revealFocused(abilityId: string | null) {
+    await tick();
+    if (abilityId === null) return;
+    const row = detailEl?.querySelector(`[data-ability-id="${CSS.escape(abilityId)}"]`);
+    row?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  $effect(() => {
+    const request = equipmentFocus.request;
+    if (!request || request.randomOptionId !== null) return;
+    untrack(() => {
+      const list = draft.equipment.parts[request.slot];
+      if (list.registered.some((p) => p.id === request.partId)) list.selected_id = request.partId;
+      openPartDetail(request.slot);
+      focusedAbilityId = request.abilityId;
+      focusSeq = request.seq;
+      equipmentFocus.request = null;
+      void revealFocused(request.abilityId);
+    });
+  });
+
   const randomOptionSlots = (slot: PartSlot) =>
     equippedItem(slot)?.random_option_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (partSlotRule(slot)?.random_option_slots ?? 0));
 
@@ -634,7 +695,7 @@
       ondragend={() => { draggedEquipmentRegistration = null; equipmentRegistrationDropAt = null; }}
     >
       <span class="registration-grip" aria-hidden="true">⠿</span>
-      <Icon kind="equipment" id={registered.item_id} size={20} label={registered.label || `装備 ${registered.id}`} />
+      <Icon kind="equipment" id={iconId(registered.item_id)} size={20} label={registered.label || `装備 ${registered.id}`} />
       {registered.label || app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name || `装備 ${registered.id}`}
     </button>
   {/each}
@@ -650,7 +711,7 @@
   {@const canEnhance = ENHANCE_ALLOWED_SLOTS.includes(slot)}
   {@const damageLabel = itemDamageLabel(equippedItem(slot), true)}
   <button type="button" class="part-row" class:on={openPart === slot} onclick={() => openPartDetail(slot)}>
-    <Icon kind="equipment" id={part?.item_id ?? null} size={28} label={partDisplayName(slot)} />
+    <Icon kind="equipment" id={iconId(part?.item_id ?? null)} size={28} label={partDisplayName(slot)} />
     <span class="part-main">
       <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
       <span class="part-item">{partDisplayName(slot)}</span>
@@ -687,7 +748,7 @@
     {@const item = equippedItem(slot)}
     {@const contribution = partContribution(slot)}
     <div class="equipment-overlay modal-overlay" role="presentation">
-    <div class="part-detail modal-surface pane-in" role="dialog" aria-modal="true" aria-label={`${openPartLabel}の装備登録`}>
+    <div class="part-detail modal-surface pane-in" bind:this={detailEl} role="dialog" aria-modal="true" aria-label={`${openPartLabel}の装備登録`}>
     <div class="part-detail-header">
       <b>{openPartLabel}の装備登録</b>
       <button type="button" class="btn close-equipment" onclick={() => (openPart = null)}>閉じる <span aria-hidden="true">×</span></button>
@@ -721,7 +782,7 @@
 
     <div class="card equipment-choice-card">
       <div class="selected-equipment">
-        <Icon kind="equipment" id={part.item_id} size={28} label={partDisplayName(slot)} />
+        <Icon kind="equipment" id={iconId(part.item_id)} size={28} label={partDisplayName(slot)} />
         <span class="selected-equipment-copy" use:flash={() => partDisplayName(slot)}>
           <small class="dim">選択中の装備</small>
           <b>{partDisplayName(slot)}</b>
@@ -772,7 +833,7 @@
               <!-- 候補カードは名前の識別が主目的。カテゴリ名は詳細へ譲り、短い効果量だけを置く -->
               {@const candidateDamage = itemDamageLabel(candidate, true)}
               <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
-                <Icon kind="equipment" id={candidate.id} size={28} label={candidate.name} />
+                <Icon kind="equipment" id={iconId(candidate.id)} size={28} label={candidate.name} />
                 <span class="item-copy">
                   <span class="item-name">{candidate.name}</span>
                   <span class="item-vals num dim">{rangeSummary(candidate.values_min, candidate.values_max)}</span>
@@ -915,7 +976,11 @@
           ] as row (row.category)}
             {@const selectedAbilityId = abilityIdForCategory(slot, row.category)}
             {@const selectedAbility = abilityDef(selectedAbilityId)}
-            <div class="ability-fixed-row">
+            <div
+              class="ability-fixed-row"
+              data-ability-id={selectedAbilityId}
+              use:flash={() => focusToken(selectedAbilityId)}
+            >
               <div class="ability-fixed-label">
                 <b>{row.label}</b>
                 <span>{row.note} ・ カテゴリ{row.category}</span>
@@ -1010,7 +1075,11 @@
           {#each part.abilities as abilityId (abilityId)}
             {@const ability = abilityDef(abilityId)}
             {#if ability?.value_option}
-              <div class="siena-row ability-value-row swap-in">
+              <div
+                class="siena-row ability-value-row swap-in"
+                data-ability-id={ability.id}
+                use:flash={() => focusToken(ability.id)}
+              >
                 <span class="ro-name">{ability.name}</span>
                 <StatInput
                   label="{ability.name}の実測値"
@@ -1028,7 +1097,11 @@
           {#each part.abilities as abilityId (`addition-${abilityId}`)}
             {@const ability = abilityDef(abilityId)}
             {#if ability && ability.additional_slots > 0}
-              <div class="ability-additional-panel non-weapon-additional-panel swap-in">
+              <div
+                class="ability-additional-panel non-weapon-additional-panel swap-in"
+                data-ability-id={ability.id}
+                use:flash={() => focusToken(ability.id)}
+              >
                 <div class="ability-additional-head">
                   <b>{ability.name}のランダム追加</b>
                   <span class="badge">{additionsFor(slot, ability.id).length} / {ability.additional_slots}</span>
@@ -1064,6 +1137,26 @@
             <span class="additional-note dim">破線の候補は効果を保存しますが、現在の計算項目にない値は合計へ加えません。</span>
           {/if}
         {/if}
+
+        <!-- 本体一覧に無いのに値だけ残っている旧データ。黙って捨てず、その場で 1 クリックで決めさせる -->
+        {#each orphanAbilityIds(slot) as orphanId (orphanId)}
+          {@const orphan = abilityDef(orphanId)}
+          <div
+            class="siena-row orphan-row swap-in"
+            data-ability-id={orphanId}
+            use:flash={() => focusToken(orphanId)}
+          >
+            <span class="ro-name">{orphan?.name ?? orphanId}</span>
+            <span class="orphan-note">本体一覧に無い値が残っています</span>
+            <button
+              type="button"
+              class="chip add"
+              disabled={orphan === null || part.abilities.length >= currentAbilitySlotCount(slot)}
+              onclick={() => restoreOrphanAbility(slot, orphanId)}
+            >アビリティに戻す</button>
+            <button type="button" class="clear" onclick={() => dropOrphanAbility(slot, orphanId)}>値を捨てる</button>
+          </div>
+        {/each}
       </div>
     {/if}
 

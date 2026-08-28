@@ -474,7 +474,9 @@ impl WikiEquipmentItem {
         };
         let growth_caps = match self.slot {
             PartSlot::RelicPendant | PartSlot::RelicBracelet => Some(self.values_max),
-            _ => self.growth_cap.map(|cap| v(cap, cap, cap, cap, cap, cap, cap, cap, cap)),
+            _ => self
+                .growth_cap
+                .map(|cap| v(cap, cap, cap, cap, cap, cap, cap, cap, cap)),
         };
         EquipmentItem {
             id: self.id,
@@ -539,7 +541,6 @@ const SURVIVAL_DEFENSE_RATE_20: &[EquipmentSurvivalEffect] =
     &[EquipmentSurvivalEffect::DefenseRate { percent: 20.0 }];
 const SURVIVAL_DEFENSE_RATE_30: &[EquipmentSurvivalEffect] =
     &[EquipmentSurvivalEffect::DefenseRate { percent: 30.0 }];
-
 
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -2043,7 +2044,10 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
 }
 
 pub fn find_equipment_item(id: &str) -> Option<EquipmentItem> {
-    cached_equipment_catalog().iter().copied().find(|item| item.id == id)
+    cached_equipment_catalog()
+        .iter()
+        .copied()
+        .find(|item| item.id == id)
 }
 
 /// `character_wrist_base_bonus` の材料(キャラのルール・バンド判定・腕合計値)だけを解決する。
@@ -2112,16 +2116,19 @@ pub fn character_wrist_base_bonus(
 pub fn item_damage_contributions(
     equipment: &Equipment,
     dependency: SkillDependency,
-) -> Vec<(DamageCategory, f64)> {
+) -> Vec<domain::DamageContribution> {
     let catalog = equipment_catalog();
-    let effects: Vec<&'static SkillEffect> = equipment
+    let effects: Vec<(String, &'static SkillEffect)> = equipment
         .parts
         .iter()
         .into_iter()
         .filter_map(|(_, part)| part.item_id.as_deref())
         .filter_map(|id| catalog.iter().find(|item| item.id == id))
-        .filter(|item| item.damage_dependency.is_none_or(|required| required == dependency))
-        .flat_map(|item| item.damage_effects.iter())
+        .filter(|item| {
+            item.damage_dependency
+                .is_none_or(|required| required == dependency)
+        })
+        .flat_map(|item| item.damage_effects.iter().map(move |e| (item.name.to_string(), e)))
         .collect();
     domain::damage_contributions(effects.into_iter())
 }
@@ -2272,11 +2279,17 @@ fn slot_ability(
         (PartSlot::ShieldPlus, EquipmentAbilityFamily::PointedBlade) => Some((Thrust, 7, 15)),
         (PartSlot::ShieldPlus, EquipmentAbilityFamily::SharpBlade) => Some((Slash, 7, 15)),
         (PartSlot::ShieldPlus, EquipmentAbilityFamily::Intelligence) => Some((MagicAttack, 7, 15)),
-        (PartSlot::ShieldPlus, EquipmentAbilityFamily::MagicResistance) => Some((MagicDefense, 7, 15)),
+        (PartSlot::ShieldPlus, EquipmentAbilityFamily::MagicResistance) => {
+            Some((MagicDefense, 7, 15))
+        }
         (PartSlot::RelicPendant, EquipmentAbilityFamily::PointedBlade) => Some((Thrust, 1, 15)),
         (PartSlot::RelicPendant, EquipmentAbilityFamily::SharpBlade) => Some((Slash, 1, 15)),
-        (PartSlot::RelicPendant, EquipmentAbilityFamily::Intelligence) => Some((MagicAttack, 1, 15)),
-        (PartSlot::RelicPendant, EquipmentAbilityFamily::MagicResistance) => Some((MagicDefense, 1, 15)),
+        (PartSlot::RelicPendant, EquipmentAbilityFamily::Intelligence) => {
+            Some((MagicAttack, 1, 15))
+        }
+        (PartSlot::RelicPendant, EquipmentAbilityFamily::MagicResistance) => {
+            Some((MagicDefense, 1, 15))
+        }
         (PartSlot::RelicBracelet, EquipmentAbilityFamily::Accuracy) => Some((Accuracy, 1, 13)),
         (PartSlot::RelicBracelet, EquipmentAbilityFamily::Evasion) => Some((Evasion, 1, 13)),
         (PartSlot::RelicBracelet, EquipmentAbilityFamily::Critical) => Some((Critical, 1, 12)),
@@ -2315,31 +2328,58 @@ fn slot_ability(
             } else {
                 MagicDamageReduction
             };
-            (2, "ランダム追加2枠", vec![
-                option(DamageResistance, 10, 10), option(reduction, 100, 100),
-                option(HpRecovery, 8, 18), option(MpRecovery, 8, 18),
-                option(SpRecovery, 8, 18), option(EvasionRate, 10, 18),
-            ])
+            (
+                2,
+                "ランダム追加2枠",
+                vec![
+                    option(DamageResistance, 10, 10),
+                    option(reduction, 100, 100),
+                    option(HpRecovery, 8, 18),
+                    option(MpRecovery, 8, 18),
+                    option(SpRecovery, 8, 18),
+                    option(EvasionRate, 10, 18),
+                ],
+            )
         }
         PartSlot::ShieldPlus => {
-            let options = if matches!(family, EquipmentAbilityFamily::Accuracy | EquipmentAbilityFamily::Evasion) {
+            let options = if matches!(
+                family,
+                EquipmentAbilityFamily::Accuracy | EquipmentAbilityFamily::Evasion
+            ) {
                 vec![
-                    option(DamageResistance, 5, 6), option(PhysicalDamageReduction, 90, 100),
-                    option(MagicDamageReduction, 90, 100), option(HpRecovery, 15, 20),
-                    option(MpRecovery, 15, 20), option(SpRecovery, 15, 20), option(Critical, 5, 10),
+                    option(DamageResistance, 5, 6),
+                    option(PhysicalDamageReduction, 90, 100),
+                    option(MagicDamageReduction, 90, 100),
+                    option(HpRecovery, 15, 20),
+                    option(MpRecovery, 15, 20),
+                    option(SpRecovery, 15, 20),
+                    option(Critical, 5, 10),
                 ]
             } else {
-                vec![option(FireElement, 10, 30), option(WaterElement, 10, 30),
-                    option(WindElement, 10, 30), option(EarthElement, 10, 30),
-                    option(LightningElement, 10, 30), option(WhiteElement, 10, 30), option(DarkElement, 10, 30)]
+                vec![
+                    option(FireElement, 10, 30),
+                    option(WaterElement, 10, 30),
+                    option(WindElement, 10, 30),
+                    option(EarthElement, 10, 30),
+                    option(LightningElement, 10, 30),
+                    option(WhiteElement, 10, 30),
+                    option(DarkElement, 10, 30),
+                ]
             };
             (1, "ランダム追加1枠", options)
         }
-        PartSlot::Hand => (2, "ランダム追加2枠", vec![
-            option(FixedDamage, 10_000, 10_000), option(DamageRate, 9, 9),
-            option(Thrust, 8, 14), option(Slash, 8, 14),
-            option(MagicAttack, 8, 14), option(MagicDefense, 8, 14),
-        ]),
+        PartSlot::Hand => (
+            2,
+            "ランダム追加2枠",
+            vec![
+                option(FixedDamage, 10_000, 10_000),
+                option(DamageRate, 9, 9),
+                option(Thrust, 8, 14),
+                option(Slash, 8, 14),
+                option(MagicAttack, 8, 14),
+                option(MagicDefense, 8, 14),
+            ],
+        ),
         PartSlot::Head => {
             let kinds: [EquipmentAbilityAdditionalKind; 3] = match id {
                 "g-earth-moonstone" => [DarkElement, WaterElement, WindElement],
@@ -2350,23 +2390,48 @@ fn slot_ability(
                 "g-white-moonstone" => [FireElement, EarthElement, DarkElement],
                 _ => [EarthElement, DarkElement, WaterElement],
             };
-            (1, "ランダム追加1枠", kinds.into_iter().map(|kind| option(kind, 20, 20)).collect())
+            (
+                1,
+                "ランダム追加1枠",
+                kinds.into_iter().map(|kind| option(kind, 20, 20)).collect(),
+            )
         }
-        PartSlot::Leg => (2, "ランダム追加2枠", vec![
-            option(HpRecovery, 8, 18), option(MpRecovery, 8, 18),
-            option(SpRecovery, 8, 18), option(EvasionRate, 7, 15),
-        ]),
-        PartSlot::RelicPendant => (1, "ランダム追加1枠", vec![
-            option(FireElement, 20, 30), option(WaterElement, 20, 30),
-            option(WindElement, 20, 30), option(EarthElement, 20, 30),
-            option(LightningElement, 20, 30), option(WhiteElement, 20, 30),
-            option(DarkElement, 20, 30), option(DamageRate, 5, 10),
-        ]),
-        PartSlot::RelicBracelet => (1, "ランダム追加1枠", vec![
-            option(DamageResistance, 5, 10), option(PhysicalDamageReduction, 90, 100),
-            option(MagicDamageReduction, 90, 100), option(HpRecovery, 15, 20),
-            option(MpRecovery, 15, 20), option(SpRecovery, 15, 20),
-        ]),
+        PartSlot::Leg => (
+            2,
+            "ランダム追加2枠",
+            vec![
+                option(HpRecovery, 8, 18),
+                option(MpRecovery, 8, 18),
+                option(SpRecovery, 8, 18),
+                option(EvasionRate, 7, 15),
+            ],
+        ),
+        PartSlot::RelicPendant => (
+            1,
+            "ランダム追加1枠",
+            vec![
+                option(FireElement, 20, 30),
+                option(WaterElement, 20, 30),
+                option(WindElement, 20, 30),
+                option(EarthElement, 20, 30),
+                option(LightningElement, 20, 30),
+                option(WhiteElement, 20, 30),
+                option(DarkElement, 20, 30),
+                option(DamageRate, 5, 10),
+            ],
+        ),
+        PartSlot::RelicBracelet => (
+            1,
+            "ランダム追加1枠",
+            vec![
+                option(DamageResistance, 5, 10),
+                option(PhysicalDamageReduction, 90, 100),
+                option(MagicDamageReduction, 90, 100),
+                option(HpRecovery, 15, 20),
+                option(MpRecovery, 15, 20),
+                option(SpRecovery, 15, 20),
+            ],
+        ),
         _ => (0, "", vec![]),
     };
     EquipmentAbilityDef {
@@ -2397,7 +2462,17 @@ fn fixed_slot_ability(
     values: EquipmentValues,
     effect_summary: &'static str,
 ) -> EquipmentAbilityDef {
-    let mut def = slot_ability(id, name, slot, family, group, values, effect_summary, false, &[]);
+    let mut def = slot_ability(
+        id,
+        name,
+        slot,
+        family,
+        group,
+        values,
+        effect_summary,
+        false,
+        &[],
+    );
     def.category = category;
     def.additional_slots = 0;
     def.additional_effects = "";
@@ -2576,49 +2651,212 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ));
     }
 
-
     // 武器以外は現環境で使う最上位を収録する。ランダム実測値の部位は
     // 範囲を要約し、固定値として計算へ混ぜない。
     out.push(slot_ability(
-        "helm-e-skill-attack", "E-スキル攻撃力増加", PartSlot::Helm,
-        EquipmentAbilityFamily::SkillAttack, "helm-skill-attack", EquipmentValues::default(),
-        "スキル攻撃力 +10", false, HELM_SKILL_10,
+        "helm-e-skill-attack",
+        "E-スキル攻撃力増加",
+        PartSlot::Helm,
+        EquipmentAbilityFamily::SkillAttack,
+        "helm-skill-attack",
+        EquipmentValues::default(),
+        "スキル攻撃力 +10",
+        false,
+        HELM_SKILL_10,
     ));
 
     for (id, name, family, values, summary) in [
-        ("upper-armor-polish", "(上)鎧研磨", EquipmentAbilityFamily::ArmorPolish, EquipmentValues { physical_defense: 40, ..EquipmentValues::default() }, "物防 +40"),
-        ("upper-magic-resistance-armor", "(上)魔法耐性・鎧", EquipmentAbilityFamily::MagicResistance, EquipmentValues { magic_defense: 30, ..EquipmentValues::default() }, "魔防 +30"),
-        ("upper-evasion-armor", "(上)機敏", EquipmentAbilityFamily::Evasion, EquipmentValues { evasion: 3, ..EquipmentValues::default() }, "回避 +3"),
+        (
+            "upper-armor-polish",
+            "(上)鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            EquipmentValues {
+                physical_defense: 40,
+                ..EquipmentValues::default()
+            },
+            "物防 +40",
+        ),
+        (
+            "upper-magic-resistance-armor",
+            "(上)魔法耐性・鎧",
+            EquipmentAbilityFamily::MagicResistance,
+            EquipmentValues {
+                magic_defense: 30,
+                ..EquipmentValues::default()
+            },
+            "魔防 +30",
+        ),
+        (
+            "upper-evasion-armor",
+            "(上)機敏",
+            EquipmentAbilityFamily::Evasion,
+            EquipmentValues {
+                evasion: 3,
+                ..EquipmentValues::default()
+            },
+            "回避 +3",
+        ),
     ] {
-        out.push(fixed_slot_ability(id, name, PartSlot::Armor, family, 2, "armor-category-2", values, summary));
+        out.push(fixed_slot_ability(
+            id,
+            name,
+            PartSlot::Armor,
+            family,
+            2,
+            "armor-category-2",
+            values,
+            summary,
+        ));
     }
 
     for (id, name, family, values, summary, record_only) in [
-        ("night-star-vitality-armor", "夜星の生命力", EquipmentAbilityFamily::Vitality, EquipmentValues::default(), "最大HP +30,000", true),
-        ("night-star-mana-armor", "夜星のマナ", EquipmentAbilityFamily::Mana, EquipmentValues::default(), "最大MP +9,000", true),
-        ("night-star-armor-polish", "夜星の鎧研磨", EquipmentAbilityFamily::ArmorPolish, EquipmentValues { physical_defense: 60, ..EquipmentValues::default() }, "物防 +60", false),
-        ("night-star-magic-resistance-armor", "夜星の魔法耐性(鎧)", EquipmentAbilityFamily::MagicResistance, EquipmentValues { magic_defense: 60, ..EquipmentValues::default() }, "魔防 +60", false),
-        ("night-star-evasion-armor", "夜星の機敏", EquipmentAbilityFamily::Evasion, EquipmentValues { evasion: 16, ..EquipmentValues::default() }, "回避 +16", false),
+        (
+            "night-star-vitality-armor",
+            "夜星の生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +30,000",
+            true,
+        ),
+        (
+            "night-star-mana-armor",
+            "夜星のマナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +9,000",
+            true,
+        ),
+        (
+            "night-star-armor-polish",
+            "夜星の鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            EquipmentValues {
+                physical_defense: 60,
+                ..EquipmentValues::default()
+            },
+            "物防 +60",
+            false,
+        ),
+        (
+            "night-star-magic-resistance-armor",
+            "夜星の魔法耐性(鎧)",
+            EquipmentAbilityFamily::MagicResistance,
+            EquipmentValues {
+                magic_defense: 60,
+                ..EquipmentValues::default()
+            },
+            "魔防 +60",
+            false,
+        ),
+        (
+            "night-star-evasion-armor",
+            "夜星の機敏",
+            EquipmentAbilityFamily::Evasion,
+            EquipmentValues {
+                evasion: 16,
+                ..EquipmentValues::default()
+            },
+            "回避 +16",
+            false,
+        ),
     ] {
-        out.push(slot_ability(id, name, PartSlot::Armor, family, "armor-ability", values, summary, record_only, &[]));
+        out.push(slot_ability(
+            id,
+            name,
+            PartSlot::Armor,
+            family,
+            "armor-ability",
+            values,
+            summary,
+            record_only,
+            &[],
+        ));
     }
 
     for (id, name, family, values, summary) in [
-        ("night-star-shield-polish", "夜星の盾研磨", EquipmentAbilityFamily::ShieldPolish, EquipmentValues { physical_defense: 30, ..EquipmentValues::default() }, "物防 +30"),
-        ("night-star-magic-resistance-shield", "夜星の魔法耐性(盾)", EquipmentAbilityFamily::MagicResistance, EquipmentValues { magic_defense: 15, ..EquipmentValues::default() }, "魔防 +15"),
+        (
+            "night-star-shield-polish",
+            "夜星の盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            EquipmentValues {
+                physical_defense: 30,
+                ..EquipmentValues::default()
+            },
+            "物防 +30",
+        ),
+        (
+            "night-star-magic-resistance-shield",
+            "夜星の魔法耐性(盾)",
+            EquipmentAbilityFamily::MagicResistance,
+            EquipmentValues {
+                magic_defense: 15,
+                ..EquipmentValues::default()
+            },
+            "魔防 +15",
+        ),
     ] {
-        out.push(slot_ability(id, name, PartSlot::Shield, family, "shield-ability", values, summary, false, &[]));
+        out.push(slot_ability(
+            id,
+            name,
+            PartSlot::Shield,
+            family,
+            "shield-ability",
+            values,
+            summary,
+            false,
+            &[],
+        ));
     }
 
     for (id, name, family, summary) in [
-        ("mystic-mine-accuracy", "神秘鉱の的中剣", EquipmentAbilityFamily::Accuracy, "命中 +7〜13"),
-        ("mystic-mine-evasion", "神秘鉱の機敏", EquipmentAbilityFamily::Evasion, "回避 +7〜13"),
-        ("mystic-mine-pointed-blade", "神秘鉱の尖った刃", EquipmentAbilityFamily::PointedBlade, "突き +7〜15"),
-        ("mystic-mine-sharp-blade", "神秘鉱の鋭い刃", EquipmentAbilityFamily::SharpBlade, "斬り +7〜15"),
-        ("mystic-mine-intelligence", "神秘鉱の知力", EquipmentAbilityFamily::Intelligence, "魔攻 +7〜15"),
-        ("mystic-mine-magic-resistance", "神秘鉱の耐魔力", EquipmentAbilityFamily::MagicResistance, "魔防 +7〜15"),
+        (
+            "mystic-mine-accuracy",
+            "神秘鉱の的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            "命中 +7〜13",
+        ),
+        (
+            "mystic-mine-evasion",
+            "神秘鉱の機敏",
+            EquipmentAbilityFamily::Evasion,
+            "回避 +7〜13",
+        ),
+        (
+            "mystic-mine-pointed-blade",
+            "神秘鉱の尖った刃",
+            EquipmentAbilityFamily::PointedBlade,
+            "突き +7〜15",
+        ),
+        (
+            "mystic-mine-sharp-blade",
+            "神秘鉱の鋭い刃",
+            EquipmentAbilityFamily::SharpBlade,
+            "斬り +7〜15",
+        ),
+        (
+            "mystic-mine-intelligence",
+            "神秘鉱の知力",
+            EquipmentAbilityFamily::Intelligence,
+            "魔攻 +7〜15",
+        ),
+        (
+            "mystic-mine-magic-resistance",
+            "神秘鉱の耐魔力",
+            EquipmentAbilityFamily::MagicResistance,
+            "魔防 +7〜15",
+        ),
     ] {
-        out.push(slot_ability(id, name, PartSlot::ShieldPlus, family, id, EquipmentValues::default(), summary, false, &[]));
+        out.push(slot_ability(
+            id,
+            name,
+            PartSlot::ShieldPlus,
+            family,
+            id,
+            EquipmentValues::default(),
+            summary,
+            false,
+            &[],
+        ));
     }
 
     for (id, name, summary) in [
@@ -2630,42 +2868,174 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ("g-white-moonstone", "G-白の月石", "白属性 +20"),
         ("g-dark-moonstone", "G-黒の月石", "黒属性 +20"),
     ] {
-        out.push(slot_ability(id, name, PartSlot::Head, EquipmentAbilityFamily::Element, "head-element", EquipmentValues::default(), summary, true, &[]));
+        out.push(slot_ability(
+            id,
+            name,
+            PartSlot::Head,
+            EquipmentAbilityFamily::Element,
+            "head-element",
+            EquipmentValues::default(),
+            summary,
+            true,
+            &[],
+        ));
     }
 
     for (id, name, family, values, summary) in [
-        ("night-star-critical-hand", "夜星の致命打", EquipmentAbilityFamily::Critical, EquipmentValues { critical: 15, ..EquipmentValues::default() }, "クリティカル +15"),
-        ("night-star-accuracy-hand", "夜星の的中剣", EquipmentAbilityFamily::Accuracy, EquipmentValues { accuracy: 16, ..EquipmentValues::default() }, "命中 +16"),
+        (
+            "night-star-critical-hand",
+            "夜星の致命打",
+            EquipmentAbilityFamily::Critical,
+            EquipmentValues {
+                critical: 15,
+                ..EquipmentValues::default()
+            },
+            "クリティカル +15",
+        ),
+        (
+            "night-star-accuracy-hand",
+            "夜星の的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            EquipmentValues {
+                accuracy: 16,
+                ..EquipmentValues::default()
+            },
+            "命中 +16",
+        ),
     ] {
-        out.push(slot_ability(id, name, PartSlot::Hand, family, "hand-ability", values, summary, false, &[]));
+        out.push(slot_ability(
+            id,
+            name,
+            PartSlot::Hand,
+            family,
+            "hand-ability",
+            values,
+            summary,
+            false,
+            &[],
+        ));
     }
     for (id, name, family, values, summary) in [
-        ("upper-critical-hand", "(上)致命打", EquipmentAbilityFamily::Critical, EquipmentValues { critical: 3, ..EquipmentValues::default() }, "クリティカル +3"),
-        ("upper-accuracy-hand", "(上)的中剣", EquipmentAbilityFamily::Accuracy, EquipmentValues { accuracy: 3, ..EquipmentValues::default() }, "命中 +3"),
+        (
+            "upper-critical-hand",
+            "(上)致命打",
+            EquipmentAbilityFamily::Critical,
+            EquipmentValues {
+                critical: 3,
+                ..EquipmentValues::default()
+            },
+            "クリティカル +3",
+        ),
+        (
+            "upper-accuracy-hand",
+            "(上)的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            EquipmentValues {
+                accuracy: 3,
+                ..EquipmentValues::default()
+            },
+            "命中 +3",
+        ),
     ] {
-        out.push(fixed_slot_ability(id, name, PartSlot::Hand, family, 3, "hand-category-3", values, summary));
+        out.push(fixed_slot_ability(
+            id,
+            name,
+            PartSlot::Hand,
+            family,
+            3,
+            "hand-category-3",
+            values,
+            summary,
+        ));
     }
 
     out.push(slot_ability(
-        "night-star-agility-leg", "夜星の敏捷", PartSlot::Leg, EquipmentAbilityFamily::Agility,
-        "leg-ability", EquipmentValues::default(), "移動速度 +12", true, &[],
+        "night-star-agility-leg",
+        "夜星の敏捷",
+        PartSlot::Leg,
+        EquipmentAbilityFamily::Agility,
+        "leg-ability",
+        EquipmentValues::default(),
+        "移動速度 +12",
+        true,
+        &[],
     ));
 
     for (id, name, family, summary) in [
-        ("rest-pointed-blade", "安息の尖った刃", EquipmentAbilityFamily::PointedBlade, "突き +1〜15"),
-        ("rest-sharp-blade", "安息の鋭い刃", EquipmentAbilityFamily::SharpBlade, "斬り +1〜15"),
-        ("rest-intelligence", "安息の知力", EquipmentAbilityFamily::Intelligence, "魔攻 +1〜15"),
-        ("rest-magic-resistance", "安息の耐魔力", EquipmentAbilityFamily::MagicResistance, "魔防 +1〜15"),
+        (
+            "rest-pointed-blade",
+            "安息の尖った刃",
+            EquipmentAbilityFamily::PointedBlade,
+            "突き +1〜15",
+        ),
+        (
+            "rest-sharp-blade",
+            "安息の鋭い刃",
+            EquipmentAbilityFamily::SharpBlade,
+            "斬り +1〜15",
+        ),
+        (
+            "rest-intelligence",
+            "安息の知力",
+            EquipmentAbilityFamily::Intelligence,
+            "魔攻 +1〜15",
+        ),
+        (
+            "rest-magic-resistance",
+            "安息の耐魔力",
+            EquipmentAbilityFamily::MagicResistance,
+            "魔防 +1〜15",
+        ),
     ] {
-        out.push(slot_ability(id, name, PartSlot::RelicPendant, family, "relic-pendant-ability", EquipmentValues::default(), summary, false, &[]));
+        out.push(slot_ability(
+            id,
+            name,
+            PartSlot::RelicPendant,
+            family,
+            "relic-pendant-ability",
+            EquipmentValues::default(),
+            summary,
+            false,
+            &[],
+        ));
     }
     for (id, name, family, summary) in [
-        ("immortal-accuracy", "不死の的中剣", EquipmentAbilityFamily::Accuracy, "命中 +1〜13"),
-        ("immortal-evasion", "不死の機敏", EquipmentAbilityFamily::Evasion, "回避 +1〜13"),
-        ("immortal-critical", "不死の致命打", EquipmentAbilityFamily::Critical, "クリティカル +1〜12"),
-        ("immortal-vitality", "不死の生命力", EquipmentAbilityFamily::Vitality, "最大HP +6,000〜10,000"),
+        (
+            "immortal-accuracy",
+            "不死の的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            "命中 +1〜13",
+        ),
+        (
+            "immortal-evasion",
+            "不死の機敏",
+            EquipmentAbilityFamily::Evasion,
+            "回避 +1〜13",
+        ),
+        (
+            "immortal-critical",
+            "不死の致命打",
+            EquipmentAbilityFamily::Critical,
+            "クリティカル +1〜12",
+        ),
+        (
+            "immortal-vitality",
+            "不死の生命力",
+            EquipmentAbilityFamily::Vitality,
+            "最大HP +6,000〜10,000",
+        ),
     ] {
-        out.push(slot_ability(id, name, PartSlot::RelicBracelet, family, "relic-bracelet-ability", EquipmentValues::default(), summary, id == "immortal-vitality", &[]));
+        out.push(slot_ability(
+            id,
+            name,
+            PartSlot::RelicBracelet,
+            family,
+            "relic-bracelet-ability",
+            EquipmentValues::default(),
+            summary,
+            id == "immortal-vitality",
+            &[],
+        ));
     }
     out
 }
@@ -2673,6 +3043,11 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
 #[cfg(test)]
 mod tests {
     use domain::DamageCategory;
+
+    /// テスト用: `DamageContribution` を (カテゴリ, 値) に落として比較しやすくする。
+    fn pairs(contributions: &[domain::DamageContribution]) -> Vec<(DamageCategory, f64)> {
+        contributions.iter().map(|c| (c.category, c.value)).collect()
+    }
 
     /// 追加アビリティは抽選結果なので、登録した基本アビリティから自動適用しない。
     #[test]
@@ -2725,10 +3100,16 @@ mod tests {
     fn スタリオンサインは主能力700_その他255との差分をエンチャント枠にする() {
         let blue = find_equipment_item("stallion-sign-blue").unwrap();
         assert_eq!(blue.values_max, v(30, 5, 5, 5, 5, 35, 35, 35, 35));
-        assert_eq!(blue.enchant_caps, v(670, 250, 250, 250, 250, 220, 220, 220, 220));
+        assert_eq!(
+            blue.enchant_caps,
+            v(670, 250, 250, 250, 250, 220, 220, 220, 220)
+        );
 
         let yellow = find_equipment_item("stallion-sign-yellow").unwrap();
-        assert_eq!(yellow.enchant_caps, v(250, 250, 250, 250, 670, 220, 220, 220, 220));
+        assert_eq!(
+            yellow.enchant_caps,
+            v(250, 250, 250, 250, 670, 220, 220, 220, 220)
+        );
     }
 
     #[test]
@@ -3003,7 +3384,7 @@ mod tests {
         // カタログに無い id は無視する(保存時に storage が弾いている)
         equipment.parts.helm.item_id = Some("unknown".to_string());
 
-        let mut got = item_damage_contributions(&equipment, SkillDependency::Hack);
+        let mut got = pairs(&item_damage_contributions(&equipment, SkillDependency::Hack));
         got.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         assert_eq!(
             got,
@@ -3020,7 +3401,7 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.parts.artifact.item_id = Some("eclipse-hack-def".to_string());
         assert_eq!(
-            item_damage_contributions(&equipment, SkillDependency::Hack),
+            pairs(&item_damage_contributions(&equipment, SkillDependency::Hack)),
             vec![(DamageCategory::DependencyDamageRate, 0.30)]
         );
         assert!(item_damage_contributions(&equipment, SkillDependency::HackInt).is_empty());
@@ -3030,11 +3411,14 @@ mod tests {
     fn afは6依存すべてにディフェンシオ候補がある() {
         use SkillDependency::*;
         for dependency in [Stab, Hack, StabHack, Int, Mr, HackInt] {
-            assert!(equipment_catalog().iter().any(|item| {
-                item.slot == PartSlot::Artifact
-                    && item.name.contains("ディフェンシオ")
-                    && item.recommended_dependency == Some(dependency)
-            }), "{dependency:?}");
+            assert!(
+                equipment_catalog().iter().any(|item| {
+                    item.slot == PartSlot::Artifact
+                        && item.name.contains("ディフェンシオ")
+                        && item.recommended_dependency == Some(dependency)
+                }),
+                "{dependency:?}"
+            );
         }
     }
 
@@ -3042,7 +3426,10 @@ mod tests {
     fn afの主要3段は各6依存の通常版とディフェンシオを持つ() {
         for prefix in ["psyche", "eclipse", "ethereal"] {
             for suffix in ["stab", "hack", "physical", "int", "mr", "hack-int"] {
-                for id in [format!("{prefix}-{suffix}"), format!("{prefix}-{suffix}-def")] {
+                for id in [
+                    format!("{prefix}-{suffix}"),
+                    format!("{prefix}-{suffix}-def"),
+                ] {
                     assert!(find_equipment_item(&id).is_some(), "{id}");
                 }
             }
@@ -3054,7 +3441,7 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.parts.artifact.item_id = Some("eclipse-hack-int-def".to_string());
         assert_eq!(
-            item_damage_contributions(&equipment, SkillDependency::HackInt),
+            pairs(&item_damage_contributions(&equipment, SkillDependency::HackInt)),
             vec![(DamageCategory::DependencyDamageRate, 0.30)]
         );
         assert!(item_damage_contributions(&equipment, SkillDependency::Int).is_empty());
@@ -3063,26 +3450,34 @@ mod tests {
     #[test]
     fn afの耐久効果は攻撃効果と分離して主要3段へ入る() {
         assert_eq!(
-            find_equipment_item("eclipse-hack-int").unwrap().survival_effects,
+            find_equipment_item("eclipse-hack-int")
+                .unwrap()
+                .survival_effects,
             SURVIVAL_MITIGATION_10
         );
         assert_eq!(
-            find_equipment_item("eclipse-hack-int-def").unwrap().survival_effects,
+            find_equipment_item("eclipse-hack-int-def")
+                .unwrap()
+                .survival_effects,
             SURVIVAL_DEFENSE_RATE_30
         );
         assert_eq!(
-            find_equipment_item("ethereal-hack-int").unwrap().survival_effects,
+            find_equipment_item("ethereal-hack-int")
+                .unwrap()
+                .survival_effects,
             SURVIVAL_MITIGATION_15
         );
         assert_eq!(
-            find_equipment_item("ethereal-hack-int-def").unwrap().survival_effects,
+            find_equipment_item("ethereal-hack-int-def")
+                .unwrap()
+                .survival_effects,
             SURVIVAL_MITIGATION_40
         );
 
         let mut equipment = Equipment::default();
         equipment.parts.artifact.item_id = Some("ethereal-hack-int-def".to_string());
         assert_eq!(
-            item_damage_contributions(&equipment, SkillDependency::HackInt),
+            pairs(&item_damage_contributions(&equipment, SkillDependency::HackInt)),
             vec![(DamageCategory::DependencyDamageRate, 0.35)],
             "緩和40%を自分の与ダメージ式へ混ぜない"
         );
@@ -3091,15 +3486,35 @@ mod tests {
     #[test]
     fn 神鳥とルナリアレリックは20段階あり直前段階の完成値から成長する() {
         let catalog = equipment_catalog();
-        assert_eq!(catalog.iter().filter(|item| item.id.starts_with("godbird-pendant-") || item.id.starts_with("lunaria-pendant-")).count(), 20);
-        assert_eq!(catalog.iter().filter(|item| item.id.starts_with("godbird-bracelet-") || item.id.starts_with("lunaria-bracelet-")).count(), 20);
+        assert_eq!(
+            catalog
+                .iter()
+                .filter(|item| item.id.starts_with("godbird-pendant-")
+                    || item.id.starts_with("lunaria-pendant-"))
+                .count(),
+            20
+        );
+        assert_eq!(
+            catalog
+                .iter()
+                .filter(|item| item.id.starts_with("godbird-bracelet-")
+                    || item.id.starts_with("lunaria-bracelet-"))
+                .count(),
+            20
+        );
 
         let pendant = find_equipment_item("godbird-pendant-plus2").unwrap();
         let bracelet = find_equipment_item("godbird-bracelet-plus2").unwrap();
         assert_eq!(pendant.values_min, v(30, 30, 0, 30, 0, 25, 25, 0, 0));
         assert_eq!(bracelet.values_min, v(0, 0, 30, 0, 30, 0, 0, 25, 25));
-        assert_eq!(pendant.growth_caps.unwrap(), v(50, 50, 0, 50, 0, 45, 45, 0, 0));
-        assert_eq!(bracelet.growth_caps.unwrap(), v(0, 0, 50, 0, 50, 0, 0, 45, 45));
+        assert_eq!(
+            pendant.growth_caps.unwrap(),
+            v(50, 50, 0, 50, 0, 45, 45, 0, 0)
+        );
+        assert_eq!(
+            bracelet.growth_caps.unwrap(),
+            v(0, 0, 50, 0, 50, 0, 0, 45, 45)
+        );
         assert_eq!(pendant.enchant_caps, EquipmentValues::default());
         assert_eq!(bracelet.enchant_caps, EquipmentValues::default());
         assert_eq!(pendant.ability_slots, 0);
@@ -3107,7 +3522,10 @@ mod tests {
 
         let lunaria = find_equipment_item("lunaria-pendant-plus10").unwrap();
         assert_eq!(lunaria.values_min, v(190, 190, 0, 190, 0, 190, 190, 0, 0));
-        assert_eq!(lunaria.growth_caps.unwrap(), v(200, 200, 0, 200, 0, 200, 200, 0, 0));
+        assert_eq!(
+            lunaria.growth_caps.unwrap(),
+            v(200, 200, 0, 200, 0, 200, 200, 0, 0)
+        );
         assert_eq!(lunaria.ability_slots, 1);
         assert_eq!(lunaria.random_option_slots, Some(2));
     }
@@ -3249,7 +3667,13 @@ mod tests {
     #[test]
     fn 武器アビリティはカテゴリー1_3_4の37件_idは重複しない() {
         let abilities = equipment_abilities();
-        assert_eq!(abilities.iter().filter(|a| a.slot == PartSlot::Weapon).count(), 37);
+        assert_eq!(
+            abilities
+                .iter()
+                .filter(|a| a.slot == PartSlot::Weapon)
+                .count(),
+            37
+        );
         let ids: HashSet<&str> = abilities.iter().map(|a| a.id).collect();
         assert_eq!(ids.len(), abilities.len());
     }

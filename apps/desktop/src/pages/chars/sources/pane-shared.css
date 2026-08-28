@@ -32,7 +32,7 @@
   }
   .text { display: flex; flex-direction: column; gap: 6px; }
   /* 段が多くて折り返す欄は 1 行を占める。折り返した段は一度の視線で読めない(§00 01) */
-  .fields > :global(.wide) { grid-column: 1 / -1; }
+  .fields > .wide { grid-column: 1 / -1; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
   input[type="text"] {
     padding: 8px 10px; border-radius: var(--r-panel);
@@ -46,8 +46,6 @@
   .stat-cell :global(.stepper) { justify-content: flex-end; }
   .final { white-space: nowrap; }
   .strong { font-weight: 700; }
-  /* .pin-badge は app.css。ここは非 flex の .final に添えるので余白を自分で持つ */
-  .pin-badge { margin-left: 6px; vertical-align: middle; }
   details.contrib { margin-top: 8px; }
   details.contrib summary { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-muted); cursor: pointer; user-select: none; }
   details.contrib summary:hover { color: var(--fg); }
@@ -262,6 +260,14 @@
     background: none; border: 1px solid var(--border-soft); border-radius: var(--r-pill);
   }
   .siena-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
+  /* 本体一覧に無い値が残っている行(旧データ)。捨てるか戻すかを決めてもらうまで残すので、
+     「届かない・危険」の状態色をそのまま使い、新しい色は足さない(§03) */
+  .orphan-row {
+    grid-template-columns: minmax(0, 132px) minmax(0, 1fr) auto auto;
+    margin: 4px 0; padding: 4px 6px; border-bottom: none; border-radius: var(--r-inset);
+    background: var(--state-short-bg); border: 1px solid var(--state-short-bd);
+  }
+  .orphan-note { font-size: 9px; color: var(--danger); }
   /* 効き先。名前の下に小さく置く(行は増やさない) */
   .siena-to {
     display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted);
@@ -392,6 +398,11 @@
   .skill-chip .skill-meta.unknown { background: none; border: 1px dashed var(--border); }
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .element-picked {
+    min-width: 34px; padding: 2px 9px; text-align: center;
+    border: 1px solid currentColor; border-radius: var(--r-pill);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+  }
   .part-switches, .part-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 2px 4px; }
   .part-switches button { position: relative; cursor: grab; user-select: none; -webkit-user-drag: element; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--bg-panel); padding: 2px 7px 2px 3px; font-size: 10px; }
   .part-switches button:active { cursor: grabbing; }
@@ -557,4 +568,3 @@
   .stage-cell.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700; }
   .core-bonus { font-size: 12px; font-weight: 700; text-align: right; }
   .core-bonus.support { color: var(--fg-muted); font-weight: 400; }
-

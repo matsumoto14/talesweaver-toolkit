@@ -138,7 +138,10 @@ pub fn enemies() -> Vec<Enemy> {
 }
 
 pub fn find_enemy(id: &str) -> Option<Enemy> {
-    ENEMIES.iter().find(|e| e.id == id).map(EnemyRecord::to_enemy)
+    ENEMIES
+        .iter()
+        .find(|e| e.id == id)
+        .map(EnemyRecord::to_enemy)
 }
 
 #[cfg(test)]
@@ -182,9 +185,14 @@ mod tests {
             ]
         );
         // 被撃率だけあって AGI が無い行は作らない(式の分母に AGI が要る)
-        assert!(ENEMIES.iter().all(|e| e.critical_taken_rate.is_none() || e.agi.is_some()));
+        assert!(ENEMIES
+            .iter()
+            .all(|e| e.critical_taken_rate.is_none() || e.agi.is_some()));
         // 被撃率は負値(wiki の -250〜-930%)
-        assert!(ENEMIES.iter().filter_map(|e| e.critical_taken_rate).all(|r| r < 0.0));
+        assert!(ENEMIES
+            .iter()
+            .filter_map(|e| e.critical_taken_rate)
+            .all(|r| r < 0.0));
         // wiki 裏取り: エクリプス ボス(ソロ) 200+1220=1420 / -350%
         let e = find_enemy("eclipse_1").unwrap();
         assert_eq!(e.agi, Some(1420));
@@ -214,7 +222,9 @@ mod tests {
         assert!(odin.defense <= 53_500);
         assert!((odin.cut_rate_a - 0.49).abs() < 1e-12);
         // カット率は乗数として 0 < v <= 1
-        assert!(enemies().iter().all(|e| e.cut_rate_a > 0.0 && e.cut_rate_a <= 1.0));
+        assert!(enemies()
+            .iter()
+            .all(|e| e.cut_rate_a > 0.0 && e.cut_rate_a <= 1.0));
     }
 
     #[test]

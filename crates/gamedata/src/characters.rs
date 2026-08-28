@@ -359,7 +359,10 @@ mod tests {
     #[test]
     fn 鎧と腕の装備可能種はwikiのカテゴリ表どおり() {
         let lucian = find_character("lucian").unwrap();
-        assert_eq!(lucian.armor_classes, &[ArmorClass::Light, ArmorClass::Heavy]);
+        assert_eq!(
+            lucian.armor_classes,
+            &[ArmorClass::Light, ArmorClass::Heavy]
+        );
         assert_eq!(lucian.wrist_types, &[WristType::Shield]);
 
         let roamini = find_character("roamini").unwrap();

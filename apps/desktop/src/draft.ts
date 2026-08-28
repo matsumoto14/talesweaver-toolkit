@@ -1,6 +1,5 @@
 // キャラ編集で共有する編集中ドラフトの型と組み立て関数(キャラタブと登録ペインで使用)。
 import type {
-  Adjustments,
   BaseStats,
   CommonSkills,
   Equipment,
@@ -38,6 +37,7 @@ export interface Draft {
   commonSkills: CommonSkills;
   /** 主軸スキル(攻撃力の依存種別を決める)。"" = 未選択 */
   mainSkillId: string;
+  defaultBuffSetId: number | null;
 }
 
 export const cloneEquipment = (src: Equipment): Equipment => ({
@@ -101,17 +101,12 @@ export const defaultCommonSkills = (): CommonSkills => ({
   ultimate: { slots: [null, null], super_limit: true, hyper_limit_level: DEFAULT_HYPER_LIMIT_LEVEL },
 });
 
-export const cloneAdjustments = (src: Adjustments): Adjustments =>
-  Object.fromEntries(STAT_KINDS.map((k) => [k, { add: src[k].add, pin: src[k].pin }])) as Adjustments;
-
 export const cloneStatSources = (src: StatSources): StatSources => ({
   pet_skills: { ...src.pet_skills },
   rune_levels: { ...src.rune_levels },
   crown: { ...src.crown },
   monster_cards: { ...(src.monster_cards ?? {}) } as StatSources["monster_cards"],
   sacred_relic: { ...src.sacred_relic },
-  buffs: { choices: src.buffs.choices.map((b) => ({ ...b })) },
-  adjustments: cloneAdjustments(src.adjustments),
   elements: { ...src.elements },
   character_skills: { skill_ids: [...(src.character_skills?.skill_ids ?? [])] },
   masteries: { picked: [...(src.masteries?.picked ?? [])] },
@@ -127,8 +122,6 @@ export const neutralStatSources = (): StatSources => ({
   } as StatSources["crown"],
   monster_cards: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["monster_cards"],
   sacred_relic: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["sacred_relic"],
-  buffs: { choices: [] },
-  adjustments: Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as StatSources["adjustments"],
   elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
   character_skills: { skill_ids: [] },
   masteries: { picked: [] },
@@ -145,6 +138,7 @@ export const buildDraft = (c: RegisteredCharacter): Draft => ({
   equipment: cloneEquipment(c.equipment),
   commonSkills: cloneCommonSkills(c.common_skills),
   mainSkillId: c.main_skill_id ?? "",
+  defaultBuffSetId: c.default_buff_set_id,
 });
 
 /** Draft → コマンドに渡すペイロード(保存・保存前プレビューの両方で使う) */
@@ -157,4 +151,5 @@ export const draftToPayload = (draft: Draft): NewCharacter => ({
   equipment: cloneEquipment(draft.equipment),
   common_skills: cloneCommonSkills(draft.commonSkills),
   main_skill_id: draft.mainSkillId === "" ? null : draft.mainSkillId,
+  default_buff_set_id: draft.defaultBuffSetId,
 });

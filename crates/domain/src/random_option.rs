@@ -52,6 +52,14 @@ pub enum RandomOptionEffect {
     /// **発動条件(ボス限定・確率・石の消費)は満たしている前提で常に効くものとして入れる**
     /// (ユーザー確認 2026-08-26)。条件は `note` に残す
     AddedDamageRate,
+    /// 物理依存(STAB / HACK / STAB+HACK)の攻撃が的中したときだけ発動する割合追加ダメージ
+    PhysicalAddedDamageRate,
+    /// 魔法依存(INT / MR / HACK+INT)の攻撃が的中したときだけ発動する割合追加ダメージ
+    MagicAddedDamageRate,
+    /// 物理依存(STAB / HACK / STAB+HACK)の攻撃が的中したときに付くカテゴリT「ダメージ増幅」
+    PhysicalDamageAmplify,
+    /// 魔法依存(INT / MR / HACK+INT)の攻撃が的中したときに付くカテゴリT「ダメージ増幅」
+    MagicDamageAmplify,
     /// 命中P への加算(wiki `#AccuracyPoint`: 命中P割合増加の計算後に加算)
     AccuracyPoint,
     /// 回避P への加算
@@ -122,7 +130,8 @@ pub struct RandomOptionSlot {
 impl RandomOptionSlot {
     /// この枠の効果値。上書きが無ければレンジ上限。
     pub fn value(&self, def: &RandomOptionDef) -> f64 {
-        self.value.unwrap_or_else(|| def.tier(self.rank).map_or(0.0, |t| t.max))
+        self.value
+            .unwrap_or_else(|| def.tier(self.rank).map_or(0.0, |t| t.max))
     }
 }
 
@@ -170,6 +179,14 @@ pub struct RandomOptionTotals {
     pub attack_damage_rate: f64,
     /// §5「新-割合」の割合追加ダメージ。Σ% の小数表現
     pub added_damage_rate: f64,
+    /// 物理依存スキルにだけ乗る §5「新-割合」。Σ% の小数表現
+    pub physical_added_damage_rate: f64,
+    /// 魔法依存スキルにだけ乗る §5「新-割合」。Σ% の小数表現
+    pub magic_added_damage_rate: f64,
+    /// 物理依存スキルにだけ乗るカテゴリT「ダメージ増幅」。Σ% の小数表現
+    pub physical_damage_amplify: f64,
+    /// 魔法依存スキルにだけ乗るカテゴリT「ダメージ増幅」。Σ% の小数表現
+    pub magic_damage_amplify: f64,
     /// 命中P への加算
     pub accuracy_point: i64,
     /// 回避P への加算
@@ -190,6 +207,18 @@ impl RandomOptionTotals {
             }
             RandomOptionEffect::AttackDamageRate => self.attack_damage_rate += value / 100.0,
             RandomOptionEffect::AddedDamageRate => self.added_damage_rate += value / 100.0,
+            RandomOptionEffect::PhysicalAddedDamageRate => {
+                self.physical_added_damage_rate += value / 100.0;
+            }
+            RandomOptionEffect::MagicAddedDamageRate => {
+                self.magic_added_damage_rate += value / 100.0;
+            }
+            RandomOptionEffect::PhysicalDamageAmplify => {
+                self.physical_damage_amplify += value / 100.0;
+            }
+            RandomOptionEffect::MagicDamageAmplify => {
+                self.magic_damage_amplify += value / 100.0;
+            }
             RandomOptionEffect::AccuracyPoint => self.accuracy_point += value as i64,
             RandomOptionEffect::EvasionPoint => self.evasion_point += value as i64,
             RandomOptionEffect::AccuracyAndEvasionPoint => {
@@ -202,6 +231,31 @@ impl RandomOptionTotals {
             RandomOptionEffect::RecordOnly => self.record_only_count += 1,
         }
     }
+
+    /// 選択スキルに実際に乗る割合追加ダメージ。物理・魔法の命中時 OP は依存種別で排他。
+    pub fn added_damage_rate_for(&self, dependency: SkillDependency) -> f64 {
+        self.added_damage_rate
+            + match dependency {
+                SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
+                    self.physical_added_damage_rate
+                }
+                SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
+                    self.magic_added_damage_rate
+                }
+            }
+    }
+
+    /// 選択スキルに実際に乗るカテゴリT「ダメージ増幅」。物理・魔法の命中時 OP は依存種別で排他。
+    pub fn damage_amplify_for(&self, dependency: SkillDependency) -> f64 {
+        match dependency {
+            SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
+                self.physical_damage_amplify
+            }
+            SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
+                self.magic_damage_amplify
+            }
+        }
+    }
 }
 
 /// ランダムオプションの値域・部位制約違反。
@@ -210,9 +264,16 @@ pub enum RandomOptionError {
     #[error("{slot:?} はランダムオプションの対象外です(効果・AF 以外)")]
     NotAllowed { slot: crate::equipment::PartSlot },
     #[error("ランダムオプション '{option_id}' の効果値は 0〜{max} です(指定値 {value})")]
-    ValueOutOfRange { option_id: String, value: f64, max: f64 },
+    ValueOutOfRange {
+        option_id: String,
+        value: f64,
+        max: f64,
+    },
     #[error("{slot:?} のランダムオプションは {max} 枠までです")]
-    TooMany { slot: crate::equipment::PartSlot, max: usize },
+    TooMany {
+        slot: crate::equipment::PartSlot,
+        max: usize,
+    },
 }
 
 /// ランダムオプションの効果値の上限(wiki に全 OP 共通の上限は無い。
@@ -225,8 +286,16 @@ mod tests {
     use crate::equipment::PartSlot;
 
     const TIERS: &[RandomOptionTier] = &[
-        RandomOptionTier { rank: RandomOptionRank::Rare, min: 6.0, max: 8.0 },
-        RandomOptionTier { rank: RandomOptionRank::Special, min: 10.0, max: 25.0 },
+        RandomOptionTier {
+            rank: RandomOptionRank::Rare,
+            min: 6.0,
+            max: 8.0,
+        },
+        RandomOptionTier {
+            rank: RandomOptionRank::Special,
+            min: 10.0,
+            max: 25.0,
+        },
     ];
 
     fn def(effect: RandomOptionEffect) -> RandomOptionDef {
@@ -267,24 +336,73 @@ mod tests {
 
     #[test]
     fn dependency_rate_lands_on_matching_dependency_only() {
-        let d = def(RandomOptionEffect::DependencyDamageRate(SkillDependency::Stab));
-        let slot =
-            RandomOptionSlot { option_id: "test".into(), rank: RandomOptionRank::Rare, value: None };
+        let d = def(RandomOptionEffect::DependencyDamageRate(
+            SkillDependency::Stab,
+        ));
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
         let mut totals = RandomOptionTotals::default();
         totals.add(&d, &slot);
-        assert_eq!(totals.dependency_damage_rate.get(SkillDependency::Stab), 0.08);
-        assert_eq!(totals.dependency_damage_rate.get(SkillDependency::Hack), 0.0);
+        assert_eq!(
+            totals.dependency_damage_rate.get(SkillDependency::Stab),
+            0.08
+        );
+        assert_eq!(
+            totals.dependency_damage_rate.get(SkillDependency::Hack),
+            0.0
+        );
     }
 
     #[test]
     fn accuracy_and_evasion_lands_on_both() {
         let d = def(RandomOptionEffect::AccuracyAndEvasionPoint);
-        let slot =
-            RandomOptionSlot { option_id: "test".into(), rank: RandomOptionRank::Rare, value: None };
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
         let mut totals = RandomOptionTotals::default();
         totals.add(&d, &slot);
         assert_eq!(totals.accuracy_point, 8);
         assert_eq!(totals.evasion_point, 8);
+    }
+
+    #[test]
+    fn on_hit_damage_amplify_lands_only_on_matching_attack_type() {
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
+        let mut totals = RandomOptionTotals::default();
+        totals.add(&def(RandomOptionEffect::PhysicalDamageAmplify), &slot);
+
+        assert_eq!(totals.damage_amplify_for(SkillDependency::Stab), 0.08);
+        assert_eq!(totals.damage_amplify_for(SkillDependency::StabHack), 0.08);
+        assert_eq!(totals.damage_amplify_for(SkillDependency::Int), 0.0);
+        assert_eq!(totals.damage_amplify_for(SkillDependency::HackInt), 0.0);
+    }
+
+    #[test]
+    fn on_hit_added_damage_lands_only_on_matching_attack_type() {
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Rare,
+            value: None,
+        };
+        let mut totals = RandomOptionTotals::default();
+        totals.add(&def(RandomOptionEffect::PhysicalAddedDamageRate), &slot);
+
+        assert_eq!(totals.added_damage_rate_for(SkillDependency::Stab), 0.08);
+        assert_eq!(
+            totals.added_damage_rate_for(SkillDependency::StabHack),
+            0.08
+        );
+        assert_eq!(totals.added_damage_rate_for(SkillDependency::Int), 0.0);
+        assert_eq!(totals.added_damage_rate_for(SkillDependency::HackInt), 0.0);
     }
 
     #[test]

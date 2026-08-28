@@ -10,17 +10,22 @@
 /// カタログが分かれているのでここでまとめる。
 pub fn damage_contributions_of(
     sources: &domain::StatSources,
+    buffs: &domain::BuffSelection,
     equipment: &domain::Equipment,
     dependency: domain::SkillDependency,
-) -> Vec<(domain::DamageCategory, f64)> {
+) -> Vec<domain::DamageContribution> {
     let mut out = sources
         .character_skills
         .damage_contributions(crate::character_skill_catalog(), &sources.masteries);
     out.extend(equipment.ability_damage_contributions(&crate::equipment_abilities()));
     out.extend(crate::item_damage_contributions(equipment, dependency));
-    out.extend(sources.masteries.damage_contributions(crate::mastery_catalog()));
+    out.extend(
+        sources
+            .masteries
+            .damage_contributions(crate::mastery_catalog()),
+    );
     out.extend(domain::stat_sources::buff_damage_contributions(
-        &sources.buffs,
+        buffs,
         &crate::buff_catalog(),
     ));
     out
@@ -57,7 +62,9 @@ pub fn element_preview(
     domain::ElementPreview::new(
         crate::element_base(game_character_id),
         equipment.element_values(stat_sources.elements.selected()),
-        stat_sources.elements.values(crate::element_source_catalog()),
+        stat_sources
+            .elements
+            .values(crate::element_source_catalog()),
     )
 }
 
@@ -70,5 +77,5 @@ pub fn element_value_for(
 ) -> i64 {
     element_preview(game_character_id, equipment, stat_sources)
         .total
-        .get(skill.element)
+        .get(skill.element.effective_for_attack(stat_sources.elements.selected()))
 }

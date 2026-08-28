@@ -66,8 +66,12 @@ pub enum CoreRegion {
 }
 
 impl CoreRegion {
-    pub const ALL: [CoreRegion; 4] =
-        [CoreRegion::Mercurial, CoreRegion::Abyss, CoreRegion::Eclipse, CoreRegion::Rubicona];
+    pub const ALL: [CoreRegion; 4] = [
+        CoreRegion::Mercurial,
+        CoreRegion::Abyss,
+        CoreRegion::Eclipse,
+        CoreRegion::Rubicona,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -146,7 +150,11 @@ impl ThesisCore {
     /// 補正値(wiki: 進化強化表。火力タイプは「火力」列、命中は「補助」列)。
     /// 値域外(検証前のデータ)は 0 を返す。
     pub fn bonus(&self) -> i64 {
-        let table = if self.core_type.is_power() { &POWER_BONUS } else { &SUPPORT_BONUS };
+        let table = if self.core_type.is_power() {
+            &POWER_BONUS
+        } else {
+            &SUPPORT_BONUS
+        };
         table
             .get(self.evolution as usize)
             .and_then(|row| row.get(self.enhancement as usize))
@@ -208,7 +216,10 @@ fn set_bonus_of(evolution: u8, six: bool) -> CoreSetBonus {
         (4, true) => (0, 0.05),
         _ => (0, 0.0),
     };
-    CoreSetBonus { final_damage_fixed: fixed, final_damage_rate: rate }
+    CoreSetBonus {
+        final_damage_fixed: fixed,
+        final_damage_rate: rate,
+    }
 }
 
 /// 1 地域分の 6 枠。None の枠は未装着。
@@ -257,7 +268,11 @@ impl CoreSet {
 
     /// 強化 4 に達しているコアの数(進化段階を問わない。「あと何個で 1 セット目か」を言うのに使う)。
     pub fn ready_count(&self) -> usize {
-        self.slots.iter().flatten().filter(|c| c.enhancement >= SET_BONUS_ENHANCEMENT).count()
+        self.slots
+            .iter()
+            .flatten()
+            .filter(|c| c.enhancement >= SET_BONUS_ENHANCEMENT)
+            .count()
     }
 
     /// 進化段階ごとに成立しているセットの内訳(表示用)。`set_bonus` の合算前の内訳。
@@ -291,11 +306,13 @@ impl CoreSet {
     /// この地域のセット効果(wiki: コアセット効果)。`set_groups` の合算値。
     /// 地域をまたぐ分もさらに合算する(`ThesisCores::set_bonus`)。
     pub fn set_bonus(&self) -> CoreSetBonus {
-        self.set_groups().into_iter().fold(CoreSetBonus::default(), |mut total, group| {
-            total.final_damage_fixed += group.bonus.final_damage_fixed;
-            total.final_damage_rate += group.bonus.final_damage_rate;
-            total
-        })
+        self.set_groups()
+            .into_iter()
+            .fold(CoreSetBonus::default(), |mut total, group| {
+                total.final_damage_fixed += group.bonus.final_damage_fixed;
+                total.final_damage_rate += group.bonus.final_damage_rate;
+                total
+            })
     }
 }
 
@@ -375,9 +392,19 @@ impl ThesisCores {
 #[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
 pub enum ThesisCoreError {
     #[error("{region:?} の {slot} 番のテシスコアの進化段階は 0〜{max} です(指定値 {value})")]
-    EvolutionOutOfRange { region: CoreRegion, slot: usize, value: u8, max: u8 },
+    EvolutionOutOfRange {
+        region: CoreRegion,
+        slot: usize,
+        value: u8,
+        max: u8,
+    },
     #[error("{region:?} の {slot} 番のテシスコアの強化段階は 0〜{max} です(指定値 {value})")]
-    EnhancementOutOfRange { region: CoreRegion, slot: usize, value: u8, max: u8 },
+    EnhancementOutOfRange {
+        region: CoreRegion,
+        slot: usize,
+        value: u8,
+        max: u8,
+    },
 }
 
 #[cfg(test)]
@@ -385,17 +412,28 @@ mod tests {
     use super::*;
 
     fn core(core_type: CoreType, evolution: u8, enhancement: u8) -> Option<ThesisCore> {
-        Some(ThesisCore { core_type, evolution, enhancement })
+        Some(ThesisCore {
+            core_type,
+            evolution,
+            enhancement,
+        })
     }
 
     fn filled(evolution: u8, enhancement: u8) -> CoreSet {
-        CoreSet { slots: [core(CoreType::Slash, evolution, enhancement); CORE_SLOT_COUNT] }
+        CoreSet {
+            slots: [core(CoreType::Slash, evolution, enhancement); CORE_SLOT_COUNT],
+        }
     }
 
     #[test]
     fn 火力補正値はwikiの進化強化表どおり() {
         let bonus = |evolution, enhancement| {
-            ThesisCore { core_type: CoreType::Thrust, evolution, enhancement }.bonus()
+            ThesisCore {
+                core_type: CoreType::Thrust,
+                evolution,
+                enhancement,
+            }
+            .bonus()
         };
         assert_eq!(bonus(0, 0), 1);
         assert_eq!(bonus(1, 4), 10);
@@ -429,7 +467,13 @@ mod tests {
         };
         assert_eq!(
             set.equipment_values(),
-            EquipmentValues { thrust: 80, slash: 81, magic_attack: 12, magic_defense: 29, ..Default::default() }
+            EquipmentValues {
+                thrust: 80,
+                slash: 81,
+                magic_attack: 12,
+                magic_defense: 29,
+                ..Default::default()
+            }
         );
         assert_eq!(set.total_bonus(), 80 + 80 + 1 + 12 + 29);
     }
@@ -442,7 +486,10 @@ mod tests {
         // 進化0 強化4 が 6 個 → 最終ダメージ +800(固定値)
         assert_eq!(
             filled(0, 4).set_bonus(),
-            CoreSetBonus { final_damage_fixed: 800, final_damage_rate: 0.0 }
+            CoreSetBonus {
+                final_damage_fixed: 800,
+                final_damage_rate: 0.0
+            }
         );
 
         // 進化4 強化4 が 6 個 → 最終ダメージ +5%
@@ -514,7 +561,10 @@ mod tests {
         *cores.get_mut(CoreRegion::Eclipse) = filled(4, 4);
 
         assert_eq!(cores.equipment_values(Some(CoreRegion::Abyss)).slash, 120);
-        assert_eq!(cores.equipment_values(Some(CoreRegion::Mercurial)), EquipmentValues::default());
+        assert_eq!(
+            cores.equipment_values(Some(CoreRegion::Mercurial)),
+            EquipmentValues::default()
+        );
         // 地域なし(コアが効かないコンテンツ)は加算しない
         assert_eq!(cores.equipment_values(None), EquipmentValues::default());
 
@@ -531,7 +581,10 @@ mod tests {
     fn 値域違反は拒否する() {
         let mut cores = ThesisCores::default();
         cores.abyss.slots[0] = core(CoreType::Slash, CORE_EVOLUTION_MAX + 1, 0);
-        assert!(matches!(cores.validate(), Err(ThesisCoreError::EvolutionOutOfRange { .. })));
+        assert!(matches!(
+            cores.validate(),
+            Err(ThesisCoreError::EvolutionOutOfRange { .. })
+        ));
 
         let mut cores = ThesisCores::default();
         cores.abyss.slots[5] = core(CoreType::Slash, 0, CORE_ENHANCEMENT_MAX + 1);
@@ -547,7 +600,12 @@ mod tests {
     fn 補助タイプは補助列の補正値を使い強化能力値には入らない() {
         // 進化3 までは火力と同じ、進化4 の強化1 以降だけ分かれる(wiki 進化強化表)
         let support = |evolution, enhancement| {
-            ThesisCore { core_type: CoreType::Accuracy, evolution, enhancement }.bonus()
+            ThesisCore {
+                core_type: CoreType::Accuracy,
+                evolution,
+                enhancement,
+            }
+            .bonus()
         };
         assert_eq!(support(3, 4), 35);
         assert_eq!(support(4, 0), 40);
@@ -562,13 +620,32 @@ mod tests {
             CoreType::Accuracy,
         ] {
             assert!(!core_type.is_power());
-            assert_eq!(ThesisCore { core_type, evolution: 4, enhancement: 4 }.bonus(), 60);
+            assert_eq!(
+                ThesisCore {
+                    core_type,
+                    evolution: 4,
+                    enhancement: 4
+                }
+                .bonus(),
+                60
+            );
         }
-        for core_type in
-            [CoreType::Thrust, CoreType::Slash, CoreType::MagicAttack, CoreType::MagicDefense]
-        {
+        for core_type in [
+            CoreType::Thrust,
+            CoreType::Slash,
+            CoreType::MagicAttack,
+            CoreType::MagicDefense,
+        ] {
             assert!(core_type.is_power());
-            assert_eq!(ThesisCore { core_type, evolution: 4, enhancement: 4 }.bonus(), 80);
+            assert_eq!(
+                ThesisCore {
+                    core_type,
+                    evolution: 4,
+                    enhancement: 4
+                }
+                .bonus(),
+                80
+            );
         }
 
         // 補助コアで 6 枠を埋めると命中率補正だけが積まれる(与ダメージ式の係数は 0)
@@ -577,7 +654,10 @@ mod tests {
         };
         assert_eq!(
             set.equipment_values(),
-            EquipmentValues { accuracy: 360, ..Default::default() }
+            EquipmentValues {
+                accuracy: 360,
+                ..Default::default()
+            }
         );
         assert_eq!(set.total_bonus(), 360);
 

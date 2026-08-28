@@ -31,7 +31,11 @@ pub const CONTENTS_SOURCE: Source = Source {
 
 /// 装備補正条件。`single` = S/H/I 列、`mr` = M 列、`composite` = 複合列(表の "-" は 0)。
 const fn equip(single: i64, mr: i64, composite: i64) -> ContentRequirement {
-    ContentRequirement::EquipmentBySkill { single, mr, composite }
+    ContentRequirement::EquipmentBySkill {
+        single,
+        mr,
+        composite,
+    }
 }
 
 const fn stage(v: u8) -> ContentRequirement {
@@ -81,9 +85,7 @@ impl Def {
 pub fn game_region_of(content_id: &str) -> Option<GameRegion> {
     use GameRegion::*;
     match content_id {
-        "eclipse_boss" | "eclipse_2" | "eclipse_subjugation" | "lost_forest" => {
-            Some(LostIsland)
-        }
+        "eclipse_boss" | "eclipse_2" | "eclipse_subjugation" | "lost_forest" => Some(LostIsland),
         "shinchou_normal" | "shinchou_hard" | "relic_sanctuary_shinchou" => Some(ShinchouNest),
         "arklon_underground" => Some(ArklonUnderground),
         _ => None,
@@ -99,7 +101,11 @@ const SERIES: &[(&str, &str)] = &[("relic_sanctuary_", "レリックの聖域")]
 fn series_of(id: &str) -> Option<ContentSeries> {
     SERIES.iter().find_map(|(prefix, name)| {
         let step = id.strip_prefix(prefix)?.parse::<u32>().ok()?;
-        Some(ContentSeries { id: prefix.trim_end_matches('_').to_string(), name: name.to_string(), step })
+        Some(ContentSeries {
+            id: prefix.trim_end_matches('_').to_string(),
+            name: name.to_string(),
+            step,
+        })
     })
 }
 
@@ -158,7 +164,10 @@ const CORE_REGIONS: &[(&str, CoreRegion)] = &[
 
 /// コンテンツ id → テシスコアの地域。表に無ければ None(コアの能力値増加は乗らない)。
 pub fn core_region_of(content_id: &str) -> Option<CoreRegion> {
-    CORE_REGIONS.iter().find(|(id, _)| *id == content_id).map(|(_, region)| *region)
+    CORE_REGIONS
+        .iter()
+        .find(|(id, _)| *id == content_id)
+        .map(|(_, region)| *region)
 }
 
 /// 下位コンテンツ共通の注記(swiki: リンゴと煩わしい怒り以外はルーンレベル30 必要)。
@@ -353,7 +362,10 @@ mod tests {
     use crate::enemies::{enemies, find_enemy};
 
     fn all_contents() -> Vec<Content> {
-        content_areas().into_iter().flat_map(|a| a.contents).collect()
+        content_areas()
+            .into_iter()
+            .flat_map(|a| a.contents)
+            .collect()
     }
 
     /// 系列は id の接頭辞 + 末尾の数値で決まる。数値でない末尾(神鳥・キシニク)は系列に入れない。
@@ -396,7 +408,10 @@ mod tests {
         for c in all_contents() {
             match (&c.enemy_id, c.need_per_hit) {
                 (Some(id), Some(need)) => {
-                    assert!(find_enemy(id).is_some(), "enemy_id '{id}' が enemies.rs に無い");
+                    assert!(
+                        find_enemy(id).is_some(),
+                        "enemy_id '{id}' が enemies.rs に無い"
+                    );
                     assert!(need > 0, "'{}' の目安ダメージが 0 以下", c.id);
                 }
                 (None, None) => {}
@@ -407,9 +422,16 @@ mod tests {
 
     #[test]
     fn 全敵がいずれかのコンテンツから参照される() {
-        let referenced: Vec<String> = all_contents().into_iter().filter_map(|c| c.enemy_id).collect();
+        let referenced: Vec<String> = all_contents()
+            .into_iter()
+            .filter_map(|c| c.enemy_id)
+            .collect();
         for enemy in enemies() {
-            assert!(referenced.contains(&enemy.id), "敵 '{}' を参照するコンテンツが無い", enemy.id);
+            assert!(
+                referenced.contains(&enemy.id),
+                "敵 '{}' を参照するコンテンツが無い",
+                enemy.id
+            );
         }
     }
 
@@ -421,7 +443,11 @@ mod tests {
                 .iter()
                 .filter(|r| matches!(r, ContentRequirement::EquipmentBySkill { .. }))
                 .count();
-            assert!(n <= 1, "'{}' に装備条件が複数ある(スキル依存で 1 件に畳む設計)", c.id);
+            assert!(
+                n <= 1,
+                "'{}' に装備条件が複数ある(スキル依存で 1 件に畳む設計)",
+                c.id
+            );
         }
     }
 
@@ -437,7 +463,10 @@ mod tests {
         // アビスEX: 5次覚醒・1500/1700/2100、エタ条件なし("-")
         let ex = by_id("abyss_ex");
         assert!(ex.requirements.contains(&equip(1_500, 1_700, 2_100)));
-        assert!(!ex.requirements.iter().any(|r| matches!(r, ContentRequirement::EternalLevel(_))));
+        assert!(!ex
+            .requirements
+            .iter()
+            .any(|r| matches!(r, ContentRequirement::EternalLevel(_))));
 
         // 追従する喜び(ハード) = レイティアH: エタ61・3900/4000/5900
         let leitia_h = by_id("leitia_h");
@@ -446,7 +475,10 @@ mod tests {
         assert!(leitia_h.requirements.contains(&equip(3_900, 4_000, 5_900)));
 
         // 見つめる悲しみ(ノーマル) = 設計者N
-        assert_eq!(by_id("architect_n").enemy_id.as_deref(), Some("architect_n"));
+        assert_eq!(
+            by_id("architect_n").enemy_id.as_deref(),
+            Some("architect_n")
+        );
 
         // エタのみ条件のコンテンツは装備条件を持たない
         let vestige = by_id("vestige_ruins");
@@ -457,19 +489,34 @@ mod tests {
     fn コア要求は実条件として持ちテシスコア合計で判定する() {
         let areas = content_areas();
         let by_id = |id: &str| {
-            areas.iter().flat_map(|a| &a.contents).find(|c| c.id == id).unwrap().clone()
+            areas
+                .iter()
+                .flat_map(|a| &a.contents)
+                .find(|c| c.id == id)
+                .unwrap()
+                .clone()
         };
 
         // swiki「コア 480」= 6 枠すべて進化4強化4(火力補正 80 × 6)
         let ex = by_id("aphetiria_ex");
-        assert!(ex.requirements.contains(&ContentRequirement::ThesisCoreTotal(480)));
+        assert!(ex
+            .requirements
+            .contains(&ContentRequirement::ThesisCoreTotal(480)));
         // コア要求は entry_note から外し、判定できない条件だけを注記に残す
         assert_eq!(ex.entry_note.as_deref(), Some(UPPER));
 
-        assert!(by_id("luminous_ex").requirements.contains(&ContentRequirement::ThesisCoreTotal(60)));
-        assert!(by_id("abyss_ex").requirements.contains(&ContentRequirement::ThesisCoreTotal(120)));
-        assert!(by_id("architect_h").requirements.contains(&ContentRequirement::ThesisCoreTotal(210)));
-        assert!(by_id("last_battle").requirements.contains(&ContentRequirement::ThesisCoreTotal(300)));
+        assert!(by_id("luminous_ex")
+            .requirements
+            .contains(&ContentRequirement::ThesisCoreTotal(60)));
+        assert!(by_id("abyss_ex")
+            .requirements
+            .contains(&ContentRequirement::ThesisCoreTotal(120)));
+        assert!(by_id("architect_h")
+            .requirements
+            .contains(&ContentRequirement::ThesisCoreTotal(210)));
+        assert!(by_id("last_battle")
+            .requirements
+            .contains(&ContentRequirement::ThesisCoreTotal(300)));
         // コア要求が無いコンテンツには条件を足さない
         assert!(!by_id("ringo")
             .requirements
@@ -502,7 +549,12 @@ mod tests {
     fn テシスコアの地域はwikiの発動場所どおり() {
         let areas = content_areas();
         let region = |id: &str| {
-            areas.iter().flat_map(|a| &a.contents).find(|c| c.id == id).unwrap().core_region
+            areas
+                .iter()
+                .flat_map(|a| &a.contents)
+                .find(|c| c.id == id)
+                .unwrap()
+                .core_region
         };
         assert_eq!(region("luminous_ex"), Some(CoreRegion::Mercurial));
         assert_eq!(region("abyss_ex"), Some(CoreRegion::Abyss));
@@ -537,12 +589,27 @@ mod tests {
     fn ゲーム内地域は称号の対象だけに限定する() {
         assert_eq!(game_region_of("eclipse_boss"), Some(GameRegion::LostIsland));
         assert_eq!(game_region_of("eclipse_2"), Some(GameRegion::LostIsland));
-        assert_eq!(game_region_of("eclipse_subjugation"), Some(GameRegion::LostIsland));
+        assert_eq!(
+            game_region_of("eclipse_subjugation"),
+            Some(GameRegion::LostIsland)
+        );
         assert_eq!(game_region_of("lost_forest"), Some(GameRegion::LostIsland));
-        assert_eq!(game_region_of("shinchou_normal"), Some(GameRegion::ShinchouNest));
-        assert_eq!(game_region_of("shinchou_hard"), Some(GameRegion::ShinchouNest));
-        assert_eq!(game_region_of("relic_sanctuary_shinchou"), Some(GameRegion::ShinchouNest));
-        assert_eq!(game_region_of("arklon_underground"), Some(GameRegion::ArklonUnderground));
+        assert_eq!(
+            game_region_of("shinchou_normal"),
+            Some(GameRegion::ShinchouNest)
+        );
+        assert_eq!(
+            game_region_of("shinchou_hard"),
+            Some(GameRegion::ShinchouNest)
+        );
+        assert_eq!(
+            game_region_of("relic_sanctuary_shinchou"),
+            Some(GameRegion::ShinchouNest)
+        );
+        assert_eq!(
+            game_region_of("arklon_underground"),
+            Some(GameRegion::ArklonUnderground)
+        );
         // テシスコアでは同じアビス地域でも、死の騎士の対象には広げない。
         assert_eq!(game_region_of("abyss_hell"), None);
         // 喪失の島称号はアフェティリア等には広げない。

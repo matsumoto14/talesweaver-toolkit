@@ -5,7 +5,7 @@
   import { untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { cubicOut } from "svelte/easing";
-  import { errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
+  import { errorLocation, errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
   import type {
     CommonSkills, Equipment, RegisteredCharacter, SkillDependency,
     StatPreview, StatSources,
@@ -27,7 +27,7 @@
     ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import type { EquipmentStatKind } from "../../labels";
-  import { app, loadSkills, removeCharacter, skillsByCharacter, totalContents as totalContentsCount, upsertCharacter } from "../../state.svelte";
+  import { app, characterSourceFocus, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, totalContents as totalContentsCount, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import { latest } from "../../ui/latest.svelte";
@@ -95,7 +95,10 @@
     const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
     previewLatest.run((isCurrent) =>
-      previewEffectiveStats(baseStats, statSources, equipment, commonSkills, awakening, mainSkillId)
+      previewEffectiveStats(
+        baseStats, statSources, equipment, commonSkills, awakening, mainSkillId,
+        app.buffSets.find((set) => set.id === draft.defaultBuffSetId)?.choices ?? { choices: [] },
+      )
         .then((p) => {
           if (isCurrent()) {
             preview = p;
@@ -117,7 +120,9 @@
       initialSnapshot = JSON.stringify(draft);
       upsertCharacter(saved);
     } catch (e) {
-      reportError(errorMessage(e));
+      // どこの話か分かるエラーは帯から飛べるようにする。キャラは呼び出し側しか知らない
+      const location = errorLocation(e);
+      reportError(errorMessage(e), location ? { characterId: character.id, location } : null);
     } finally {
       saving = false;
     }
@@ -145,6 +150,20 @@
   // --- 補正源リスト -------------------------------------------------------
   let openSource = $state<SourceId>("status");
 
+  $effect(() => {
+    const request = characterSourceFocus.request;
+    if (!request || app.selectedId !== character.id) return;
+    openSource = request.sourceId;
+  });
+
+  // エラー帯の「ここを開く」で指された場所は、まず補正源を開くところまでをここが担う。
+  // 部位を開いて該当行を光らせるのは、開いた先のペイン(装備 / ランダムOP)が続きをやる。
+  $effect(() => {
+    const request = equipmentFocus.request;
+    if (!request || app.selectedId !== character.id) return;
+    openSource = request.randomOptionId !== null ? "randomOption" : "equipment";
+  });
+
   const petCount = $derived(STAT_KINDS.filter((k) => draft.statSources.pet_skills[k] !== null).length);
   const runeTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.rune_levels[k], 0));
   const crownTotal = $derived(STAT_KINDS.reduce((s, k) => s + draft.statSources.crown[k], 0));
@@ -153,9 +172,6 @@
   );
   const relicTotal = $derived(preview?.sacred_relic_total ?? 0);
   const skillCount = $derived(draft.statSources.character_skills.skill_ids.length);
-  const adjustCount = $derived(
-    STAT_KINDS.filter((k) => draft.statSources.adjustments[k].add !== 0 || draft.statSources.adjustments[k].pin !== null).length,
-  );
   /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。計算は Rust 側 */
   const enhanceRatePercent = $derived(Math.round((preview?.common_skill.equipment_attack_rate ?? 0) * 100));
   /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号)。計算は Rust 側(preview) */
@@ -354,7 +370,6 @@
     { id: "criticalRate", name: "クリティカル率", sub: criticalRateSummary },
     { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
     { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
-    { id: "adjust", name: "調整", sub: adjustCount > 0 ? `${adjustCount} ステに適用` : NEUTRAL },
   ]);
   // 補正源の並びはプレイヤーが決める(design-system §14 決定 3)。
   //
@@ -367,7 +382,7 @@
   const DEFAULT_ORDER: SourceId[] = [
     "status", "skills", "equipment", "commonSkill", "thesis", "siena", "relic",
     "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
-    "title", "randomOption", "adjust",
+    "title", "randomOption",
   ];
   interface SourceLayout {
     /** お気に入り。上に置いて常に開く */
@@ -435,7 +450,7 @@
       movedTimer = setTimeout(() => (movedId = null), 400);
     });
   }
-  /** 動かした行を追いかける。自分でつまんで運んだときだけ使う(§09 規則 5) */
+  /** 行を追いかける。自分で起こした移動(ドラッグ・未設定ジャンプ)だけで使う(§09 規則 5) */
   function follow(id: string) {
     clearTimeout(movedTimer);
     movedId = null;
@@ -495,7 +510,20 @@
   }
 
   const PLANNED: string[] = [];
-  const neutralCount = $derived(sources.filter((s) => s.sub === NEUTRAL).length);
+  /** 未設定の補正源(表示順)。バッジから順に開いて回れる */
+  const neutralIds = $derived(
+    [...ordered.fav, ...ordered.rest].filter((id) => sources.find((s) => s.id === id)?.sub === NEUTRAL),
+  );
+  const neutralCount = $derived(neutralIds.length);
+
+  /** 未設定バッジで次の未設定を開く。自分で起こした移動なので追いかける(§09 規則 5) */
+  function jumpToNeutral() {
+    if (neutralIds.length === 0) return;
+    const at = neutralIds.indexOf(openSource);
+    const id = neutralIds[(at + 1) % neutralIds.length] as SourceId;
+    openSource = id;
+    follow(id);
+  }
 
   // --- いまの実力 ---------------------------------------------------------
   const totalContents = $derived(totalContentsCount());
@@ -507,6 +535,15 @@
     <span class="char-name">{draft.name || "(名前未設定)"}</span>
     {#if dirty}<span class="unsaved">未保存</span>{/if}
     <span class="spacer"></span>
+    <label class="buff-default">
+      <span>いつものバフ</span>
+      <select bind:value={draft.defaultBuffSetId}>
+        <option value={null}>なし</option>
+        {#each app.buffSets as set (set.id)}
+          <option value={set.id}>{set.name}</option>
+        {/each}
+      </select>
+    </label>
     <button type="button" class="btn primary" disabled={!canSubmit} onclick={save}>
       {saving ? "保存中…" : "保存"}
     </button>
@@ -516,8 +553,11 @@
     <section class="sources">
       <div class="src-head">
         <span class="src-title">補正源</span>
-        {#if neutralCount > 0}<span class="src-unset">未設定 {neutralCount} 件</span>{/if}
-        <span class="dim">押して中身を変える ・ つかんで並べ替え</span>
+        {#if neutralCount > 0}
+          <button type="button" class="src-unset" title="次の未設定を開く" onclick={jumpToNeutral}>
+            未設定 {neutralCount} 件 ›
+          </button>
+        {/if}
       </div>
       <div class="src-list">
         <!-- お気に入りと そのほか の 2 段。重さの差はプレイヤーが ★ で決める(§14 決定 3) -->
@@ -771,6 +811,8 @@
 </div>
 
 <style>
+  .buff-default { display: flex; align-items: center; gap: 7px; color: var(--fg-muted); font-size: 10px; }
+  .buff-default select { min-width: 150px; height: 28px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--bg-field); color: var(--fg); }
   .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
   .toolbar {
@@ -789,11 +831,12 @@
 
   .src-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 7px; }
   .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
-  .src-head .dim { margin-left: auto; font-size: 9px; }
   .src-unset {
     font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
-    border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
+    background: #fff; border: 1px solid var(--border-strong); border-radius: var(--r-pill); padding: 0 6px;
+    cursor: pointer;
   }
+  .src-unset:hover { border-color: var(--accent); color: var(--accent); }
   /* お気に入りと そのほか の 2 段(§14 決定 3)。重さの差はプレイヤーが決める */
   .src-group { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .group-head {

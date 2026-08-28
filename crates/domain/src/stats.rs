@@ -50,7 +50,11 @@ pub const BASE_STAT_MAX: u32 = 310;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize)]
 pub enum BaseStatsError {
     #[error("{kind:?} は 1〜{max} の範囲で指定してください(指定値 {value})")]
-    OutOfRange { kind: StatKind, value: u32, max: u32 },
+    OutOfRange {
+        kind: StatKind,
+        value: u32,
+        max: u32,
+    },
 }
 
 /// 素ステータス(オリジナル)。
@@ -83,7 +87,11 @@ impl BaseStats {
         for kind in StatKind::ALL {
             let value = self.get(kind);
             if !(1..=BASE_STAT_MAX).contains(&value) {
-                return Err(BaseStatsError::OutOfRange { kind, value, max: BASE_STAT_MAX });
+                return Err(BaseStatsError::OutOfRange {
+                    kind,
+                    value,
+                    max: BASE_STAT_MAX,
+                });
             }
         }
         Ok(())
@@ -130,18 +138,7 @@ impl Default for StatModifiers {
 }
 
 /// 倍率B の下限(wiki §2)。
-const MULTIPLIER_B_MIN: f64 = -0.30;
-
-/// pin(能力値の固定)の出所。フロント側で値の一致比較により推測するのをやめ、
-/// サーバ側(`apply_pins`)が決定した出所をそのまま返す。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PinSource {
-    /// キャラに保存済みの調整値による pin
-    Saved,
-    /// 計算リクエストの一時調整による pin(保存済み pin があれば一時的に上書き)
-    Temporary,
-}
+pub const MULTIPLIER_B_MIN: f64 = -0.30;
 
 /// 能力値計算の中間値。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -167,10 +164,9 @@ pub struct StatTrace {
     pub stat_cap: i64,
     /// 上限で捨てられた分。0 なら上限に当たっていない
     pub capped_loss: i64,
-    /// pin(能力値の固定)が適用された場合の上書き前の値(`stat_sources::apply_pins` が事後に設定する)
+    /// pin(能力値の固定。計算リクエストの一時調整のみ)が適用された場合の上書き前の値
+    /// (`stat_sources::apply_pins` が事後に設定する)
     pub pinned_from: Option<i64>,
-    /// pin の出所(`stat_sources::apply_pins` が事後に設定する)
-    pub pin_source: Option<PinSource>,
 }
 
 /// 1 ステータス分の能力値計算(wiki §2)。`cap` は最終能力値の上限
@@ -202,7 +198,6 @@ pub fn effective_stat(kind: StatKind, base: u32, m: &StatModifiers, cap: i64) ->
         stat_cap: cap,
         capped_loss: raw - effective,
         pinned_from: None,
-        pin_source: None,
     };
     (effective, trace)
 }
@@ -324,37 +319,57 @@ mod tests {
     fn 割合増加はバフごとに切捨ててから加算する() {
         // 335 * 0.1 = 33.5 → 33、335 * 0.05 = 16.75 → 16。合計 49
         // (まとめて 15% なら 50.25 → 50 になるので、バフごと切捨ての差が出る)
-        let m = StatModifiers { percent_of_base: vec![0.1, 0.05], ..StatModifiers::neutral() };
+        let m = StatModifiers {
+            percent_of_base: vec![0.1, 0.05],
+            ..StatModifiers::neutral()
+        };
         assert_eq!(stat(335, &m), 335 + 33 + 16);
     }
 
     #[test]
     fn 固定値は倍率aの前に加算される() {
-        let m = StatModifiers { fixed: 50, multiplier_a: vec![1.1], ..StatModifiers::neutral() };
+        let m = StatModifiers {
+            fixed: 50,
+            multiplier_a: vec![1.1],
+            ..StatModifiers::neutral()
+        };
         // (100 + 50) * 1.1 = 165
         assert_eq!(stat(100, &m), 165);
     }
 
     #[test]
     fn 倍率aは乗算で重なり結果を切捨てる() {
-        let m = StatModifiers { multiplier_a: vec![1.1, 1.1], ..StatModifiers::neutral() };
+        let m = StatModifiers {
+            multiplier_a: vec![1.1, 1.1],
+            ..StatModifiers::neutral()
+        };
         // 101 * 1.21 = 122.21 → 122
         assert_eq!(stat(101, &m), 122);
     }
 
     #[test]
     fn 倍率bは基本能力値に掛けて切捨て下限はマイナス30パーセント() {
-        let m = StatModifiers { multiplier_b: 0.25, ..StatModifiers::neutral() };
+        let m = StatModifiers {
+            multiplier_b: 0.25,
+            ..StatModifiers::neutral()
+        };
         // 101 + [101 * 0.25 = 25.25] = 126
         assert_eq!(stat(101, &m), 126);
-        let m = StatModifiers { multiplier_b: -0.5, ..StatModifiers::neutral() };
+        let m = StatModifiers {
+            multiplier_b: -0.5,
+            ..StatModifiers::neutral()
+        };
         // 下限 -0.30: 100 + [100 * -0.3] = 70
         assert_eq!(stat(100, &m), 70);
     }
 
     #[test]
     fn 最終固定値は最後に加算される() {
-        let m = StatModifiers { multiplier_a: vec![2.0], final_fixed: -7, ..StatModifiers::neutral() };
+        let m = StatModifiers {
+            multiplier_a: vec![2.0],
+            final_fixed: -7,
+            ..StatModifiers::neutral()
+        };
         assert_eq!(stat(10, &m), 13);
     }
 
@@ -378,24 +393,43 @@ mod tests {
 
     #[test]
     fn 素ステの範囲外は拒否する() {
-        let mut base = BaseStats { stab: 310, hack: 310, int: 310, def: 310, mr: 310, dex: 310, agi: 310 };
+        let mut base = BaseStats {
+            stab: 310,
+            hack: 310,
+            int: 310,
+            def: 310,
+            mr: 310,
+            dex: 310,
+            agi: 310,
+        };
         assert!(base.validate().is_ok());
         base.int = 0;
         assert!(matches!(
             base.validate(),
-            Err(BaseStatsError::OutOfRange { kind: StatKind::Int, value: 0, max: BASE_STAT_MAX })
+            Err(BaseStatsError::OutOfRange {
+                kind: StatKind::Int,
+                value: 0,
+                max: BASE_STAT_MAX
+            })
         ));
         base.int = 311;
         assert!(matches!(
             base.validate(),
-            Err(BaseStatsError::OutOfRange { kind: StatKind::Int, value: 311, max: BASE_STAT_MAX })
+            Err(BaseStatsError::OutOfRange {
+                kind: StatKind::Int,
+                value: 311,
+                max: BASE_STAT_MAX
+            })
         ));
     }
 
     // wiki Quest/覚醒クエスト「各能力の上限値」/ エタの意志: 最終能力値は上限で頭打ち
     #[test]
     fn 最終能力値は上限で頭打ちになり捨てた分をトレースに残す() {
-        let m = StatModifiers { fixed: 1000, ..StatModifiers::neutral() };
+        let m = StatModifiers {
+            fixed: 1000,
+            ..StatModifiers::neutral()
+        };
         let (value, trace) = effective_stat(StatKind::Stab, 300, &m, 1000);
         assert_eq!(value, 1000);
         assert_eq!(trace.stat_cap, 1000);
@@ -409,9 +443,28 @@ mod tests {
 
     #[test]
     fn 七種すべてを計算しトレースを返す() {
-        let base = BaseStats { stab: 1, hack: 2, int: 3, def: 4, mr: 5, dex: 6, agi: 7 };
+        let base = BaseStats {
+            stab: 1,
+            hack: 2,
+            int: 3,
+            def: 4,
+            mr: 5,
+            dex: 6,
+            agi: 7,
+        };
         let (stats, traces) = effective_stats(&base, &StatModifierSet::default(), NO_CAP);
-        assert_eq!(stats, EffectiveStats { stab: 1, hack: 2, int: 3, def: 4, mr: 5, dex: 6, agi: 7 });
+        assert_eq!(
+            stats,
+            EffectiveStats {
+                stab: 1,
+                hack: 2,
+                int: 3,
+                def: 4,
+                mr: 5,
+                dex: 6,
+                agi: 7
+            }
+        );
         assert_eq!(traces.len(), 7);
         for kind in StatKind::ALL {
             assert_eq!(stats.get(kind), i64::from(base.get(kind)));

@@ -16,5 +16,4 @@ export type SourceId =
   | "actualDelay"
   | "criticalRate"
   | "thesis"
-  | "skills"
-  | "adjust";
+  | "skills";

@@ -21,9 +21,7 @@
 //! グループボーナス(「N 個完成で +α」)は所持状況の入力が要るのでスコープ外。
 
 use domain::content::GameRegion;
-use domain::{
-    AddedDamageCondition, ConditionalAddedDamage, EquipmentValues, TitleDef, TitleKind,
-};
+use domain::{AddedDamageCondition, ConditionalAddedDamage, EquipmentValues, TitleDef, TitleKind};
 
 use crate::Source;
 
@@ -61,8 +59,15 @@ const fn t(
     note: &'static str,
 ) -> TitleDef {
     TitleDef {
-        id, name, kind, group, level, values, attack_damage_percent: 0.0,
-        conditional_added_damage: None, note,
+        id,
+        name,
+        kind,
+        group,
+        level,
+        values,
+        attack_damage_percent: 0.0,
+        conditional_added_damage: None,
+        note,
     }
 }
 
@@ -79,8 +84,15 @@ const fn td(
     note: &'static str,
 ) -> TitleDef {
     TitleDef {
-        id, name, kind, group, level, values, attack_damage_percent,
-        conditional_added_damage: None, note,
+        id,
+        name,
+        kind,
+        group,
+        level,
+        values,
+        attack_damage_percent,
+        conditional_added_damage: None,
+        note,
     }
 }
 
@@ -374,7 +386,11 @@ mod tests {
         for t in title_catalog() {
             let sum: i64 = t.values.fields().iter().map(|(_, v)| v).sum();
             if t.kind == TitleKind::Event {
-                assert!(t.attack_damage_percent > 0.0, "{} にダメージ増加が無い", t.name);
+                assert!(
+                    t.attack_damage_percent > 0.0,
+                    "{} にダメージ増加が無い",
+                    t.name
+                );
             } else {
                 assert!(sum >= 15, "{} の合計が {}", t.name, sum);
             }
@@ -390,7 +406,10 @@ mod tests {
                 assert_eq!(t.kind, TitleKind::Event, "{}", t.name);
             }
         }
-        let n = title_catalog().iter().filter(|t| t.attack_damage_percent > 0.0).count();
+        let n = title_catalog()
+            .iter()
+            .filter(|t| t.attack_damage_percent > 0.0)
+            .count();
         assert_eq!(n, 48);
     }
 
@@ -451,20 +470,35 @@ mod tests {
             .take(5)
             .map(|t| t.group)
             .collect();
-        assert_eq!(names, ["緋馬の怪火", "緋馬の怪火", "緋馬の怪火", "緋馬の怪火", "蒼蛇の幽影"]);
+        assert_eq!(
+            names,
+            [
+                "緋馬の怪火",
+                "緋馬の怪火",
+                "緋馬の怪火",
+                "緋馬の怪火",
+                "蒼蛇の幽影"
+            ]
+        );
     }
 
     /// wiki の最上位。全 9 値 +40(喪失の島)。
     #[test]
     fn エクリプスは全補正40() {
-        let eclipse = title_catalog().into_iter().find(|t| t.id == "eclipse").unwrap();
+        let eclipse = title_catalog()
+            .into_iter()
+            .find(|t| t.id == "eclipse")
+            .unwrap();
         assert!(eclipse.values.fields().iter().all(|(_, v)| *v == 40));
     }
 
     /// マーキュリアル洞窟のボス別称号は 5 ボス × 6 依存 = 30 件。
     #[test]
     fn マーキュリアル洞窟は30件() {
-        let n = title_catalog().into_iter().filter(|t| t.group == "マーキュリアル洞窟").count();
+        let n = title_catalog()
+            .into_iter()
+            .filter(|t| t.group == "マーキュリアル洞窟")
+            .count();
         assert_eq!(n, 30);
     }
     #[test]
@@ -477,7 +511,10 @@ mod tests {
             ("mercurial_sereana_", "sereana"),
             ("mercurial_luminous_", "luminous"),
         ] {
-            let titles: Vec<_> = catalog.iter().filter(|t| t.id.starts_with(prefix)).collect();
+            let titles: Vec<_> = catalog
+                .iter()
+                .filter(|t| t.id.starts_with(prefix))
+                .collect();
             assert_eq!(titles.len(), 6, "{prefix}");
             for title in titles {
                 assert_eq!(
@@ -491,13 +528,16 @@ mod tests {
                 );
             }
         }
-        let guardians: Vec<_> =
-            catalog.iter().filter(|t| t.id.starts_with("arklon_guardian_")).collect();
+        let guardians: Vec<_> = catalog
+            .iter()
+            .filter(|t| t.id.starts_with("arklon_guardian_"))
+            .collect();
         assert_eq!(guardians.len(), 6);
-        assert!(guardians.iter().all(|t| t.conditional_added_damage == Some(ConditionalAddedDamage {
-            percent: 10.0,
-            condition: AddedDamageCondition::Enemy("deep_apostle"),
-        })));
+        assert!(guardians.iter().all(|t| t.conditional_added_damage
+            == Some(ConditionalAddedDamage {
+                percent: 10.0,
+                condition: AddedDamageCondition::Enemy("deep_apostle"),
+            })));
     }
 
     #[test]
@@ -513,12 +553,7 @@ mod tests {
             0.20
         );
         assert_eq!(
-            domain::title_added_damage_rate(
-                Some("eclipse"),
-                &catalog,
-                None,
-                Some("eclipse_1"),
-            ),
+            domain::title_added_damage_rate(Some("eclipse"), &catalog, None, Some("eclipse_1"),),
             0.0
         );
         assert_eq!(

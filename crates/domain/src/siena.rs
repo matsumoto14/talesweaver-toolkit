@@ -441,7 +441,10 @@ impl SienaAura {
 
     /// いま解放されている追加オプションの枠数(段階 3/7/10 で 1/2/3)。
     pub fn extra_capacity(&self) -> usize {
-        SIENA_EXTRA_UNLOCK_STAGES.iter().filter(|s| self.stage() >= **s).count()
+        SIENA_EXTRA_UNLOCK_STAGES
+            .iter()
+            .filter(|s| self.stage() >= **s)
+            .count()
     }
 
     pub fn is_neutral(&self) -> bool {
@@ -502,7 +505,11 @@ impl SienaAura {
     }
 
     fn extra_total(&self, kind: SienaExtraKind) -> f64 {
-        self.extras.iter().filter(|e| e.kind == kind).map(|e| e.value).sum()
+        self.extras
+            .iter()
+            .filter(|e| e.kind == kind)
+            .map(|e| e.value)
+            .sum()
     }
 
     pub(crate) fn validate(&self, slot: PartSlot) -> Result<(), SienaError> {
@@ -521,7 +528,10 @@ impl SienaAura {
         }
         for value_slot in &self.slots {
             if !value_slot.kind.allowed_on(slot) {
-                return Err(SienaError::KindNotAllowed { slot, kind: value_slot.kind });
+                return Err(SienaError::KindNotAllowed {
+                    slot,
+                    kind: value_slot.kind,
+                });
             }
             let (min, max) = value_slot.kind.range();
             if !(min..=max).contains(&value_slot.value) {
@@ -545,9 +555,17 @@ impl SienaAura {
         for (i, extra) in self.extras.iter().enumerate() {
             // wiki:「同じ種類のオプションは別のスロットには登場しない」(同じ装備の中で)
             if self.extras[..i].iter().any(|e| e.kind == extra.kind) {
-                return Err(SienaError::DuplicateExtra { slot, kind: extra.kind });
+                return Err(SienaError::DuplicateExtra {
+                    slot,
+                    kind: extra.kind,
+                });
             }
-            if !extra.kind.choices().iter().any(|c| (c - extra.value).abs() < 1e-9) {
+            if !extra
+                .kind
+                .choices()
+                .iter()
+                .any(|c| (c - extra.value).abs() < 1e-9)
+            {
                 return Err(SienaError::ExtraValueOutOfRange {
                     slot,
                     kind: extra.kind,
@@ -584,7 +602,8 @@ pub struct SienaAuraList {
 
 impl SienaAuraList {
     pub fn selected(&self) -> Option<&RegisteredSienaAura> {
-        self.selected_id.and_then(|id| self.registered.iter().find(|entry| entry.id == id))
+        self.selected_id
+            .and_then(|id| self.registered.iter().find(|entry| entry.id == id))
     }
 
     pub fn validate(&self, slot: PartSlot) -> Result<(), SienaError> {
@@ -687,9 +706,16 @@ pub enum SienaError {
     #[error("{slot:?} はシエナのオーラの対象外です(兜/鎧/武器/盾/頭/体/手/足のみ)")]
     NotAllowed { slot: PartSlot },
     #[error("{slot:?} の能力値スロットは {max} 個までです(指定 {count} 個)")]
-    TooManySlots { slot: PartSlot, count: usize, max: usize },
+    TooManySlots {
+        slot: PartSlot,
+        count: usize,
+        max: usize,
+    },
     #[error("{slot:?} に「{}」は出ません", kind.label())]
-    KindNotAllowed { slot: PartSlot, kind: SienaValueKind },
+    KindNotAllowed {
+        slot: PartSlot,
+        kind: SienaValueKind,
+    },
     #[error("{slot:?} の「{}」は {min}〜{max} です(指定値 {value})", kind.label())]
     ValueOutOfRange {
         slot: PartSlot,
@@ -698,12 +724,26 @@ pub enum SienaError {
         min: i64,
         max: i64,
     },
-    #[error("{slot:?} は段階 {stage} なので追加オプションは {capacity} 個までです(指定 {count} 個)")]
-    TooManyExtras { slot: PartSlot, count: usize, capacity: usize, stage: usize },
+    #[error(
+        "{slot:?} は段階 {stage} なので追加オプションは {capacity} 個までです(指定 {count} 個)"
+    )]
+    TooManyExtras {
+        slot: PartSlot,
+        count: usize,
+        capacity: usize,
+        stage: usize,
+    },
     #[error("{slot:?} に「{}」は 1 個までです", kind.label())]
-    DuplicateExtra { slot: PartSlot, kind: SienaExtraKind },
+    DuplicateExtra {
+        slot: PartSlot,
+        kind: SienaExtraKind,
+    },
     #[error("{slot:?} の「{}」に {value} はありません", kind.label())]
-    ExtraValueOutOfRange { slot: PartSlot, kind: SienaExtraKind, value: f64 },
+    ExtraValueOutOfRange {
+        slot: PartSlot,
+        kind: SienaExtraKind,
+        value: f64,
+    },
 }
 
 #[cfg(test)]
@@ -752,7 +792,10 @@ mod tests {
     fn stat_slots_and_all_stats_add_up() {
         let aura = SienaAura {
             slots: vec![slot(SienaValueKind::Stab, 10), slot(SienaValueKind::Agi, 4)],
-            extras: vec![SienaExtraSlot { kind: SienaExtraKind::AllStats, value: 30.0 }],
+            extras: vec![SienaExtraSlot {
+                kind: SienaExtraKind::AllStats,
+                value: 30.0,
+            }],
         };
         let bonus = aura.stat_bonus();
         assert_eq!(bonus.stab, 40);
@@ -762,12 +805,18 @@ mod tests {
 
     #[test]
     fn kind_lists_do_not_mix_between_weapon_and_other_parts() {
-        let weapon = SienaAura { slots: vec![slot(SienaValueKind::Stab, 1)], extras: vec![] };
+        let weapon = SienaAura {
+            slots: vec![slot(SienaValueKind::Stab, 1)],
+            extras: vec![],
+        };
         assert!(matches!(
             weapon.validate(PartSlot::Weapon),
             Err(SienaError::KindNotAllowed { .. })
         ));
-        let helm = SienaAura { slots: vec![slot(SienaValueKind::Thrust, 1)], extras: vec![] };
+        let helm = SienaAura {
+            slots: vec![slot(SienaValueKind::Thrust, 1)],
+            extras: vec![],
+        };
         assert!(matches!(
             helm.validate(PartSlot::Helm),
             Err(SienaError::KindNotAllowed { .. })
@@ -779,7 +828,10 @@ mod tests {
         let two_slots = vec![slot(SienaValueKind::Stab, 1), slot(SienaValueKind::Agi, 1)];
         let aura = SienaAura {
             slots: two_slots.clone(),
-            extras: vec![SienaExtraSlot { kind: SienaExtraKind::AttackRate, value: 10.0 }],
+            extras: vec![SienaExtraSlot {
+                kind: SienaExtraKind::AttackRate,
+                value: 10.0,
+            }],
         };
         // 段階 2 は追加オプション 0 枠
         assert!(matches!(
@@ -792,8 +844,14 @@ mod tests {
         let aura = SienaAura {
             slots,
             extras: vec![
-                SienaExtraSlot { kind: SienaExtraKind::AttackRate, value: 10.0 },
-                SienaExtraSlot { kind: SienaExtraKind::AttackRate, value: 3.0 },
+                SienaExtraSlot {
+                    kind: SienaExtraKind::AttackRate,
+                    value: 10.0,
+                },
+                SienaExtraSlot {
+                    kind: SienaExtraKind::AttackRate,
+                    value: 3.0,
+                },
             ],
         };
         assert!(matches!(
@@ -804,14 +862,24 @@ mod tests {
 
     #[test]
     fn values_outside_the_wiki_range_are_rejected() {
-        let aura = SienaAura { slots: vec![slot(SienaValueKind::Accuracy, 7)], extras: vec![] };
+        let aura = SienaAura {
+            slots: vec![slot(SienaValueKind::Accuracy, 7)],
+            extras: vec![],
+        };
         assert!(matches!(
             aura.validate(PartSlot::Helm),
             Err(SienaError::ValueOutOfRange { min: 1, max: 6, .. })
         ));
         let aura = SienaAura {
-            slots: vec![slot(SienaValueKind::Stab, 1), slot(SienaValueKind::Stab, 1), slot(SienaValueKind::Stab, 1)],
-            extras: vec![SienaExtraSlot { kind: SienaExtraKind::ActualDelay, value: 1.5 }],
+            slots: vec![
+                slot(SienaValueKind::Stab, 1),
+                slot(SienaValueKind::Stab, 1),
+                slot(SienaValueKind::Stab, 1),
+            ],
+            extras: vec![SienaExtraSlot {
+                kind: SienaExtraKind::ActualDelay,
+                value: 1.5,
+            }],
         };
         assert!(matches!(
             aura.validate(PartSlot::Helm),

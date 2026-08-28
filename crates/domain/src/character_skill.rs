@@ -35,6 +35,7 @@ use thiserror::Error;
 
 use crate::actual_delay::ActualDelayContribution;
 use crate::category::{CategoryKind, DamageCategory};
+use crate::damage::DamageContribution;
 use crate::mastery::Masteries;
 use crate::stat_sources::StatLayer;
 use crate::stats::StatKind;
@@ -56,7 +57,10 @@ pub enum SkillEffect {
     ///
     /// 割合カテゴリは % 表記(5.0 = +5%)、固定値カテゴリはその値そのもの。
     /// 攻撃ダメージ(X)は X1〜X6 で上限が違うので、どの副カテゴリかまで指定する
-    Damage { category: DamageCategory, percent: f64 },
+    Damage {
+        category: DamageCategory,
+        percent: f64,
+    },
     /// **記録するだけ**。wiki に効果はあるが、まだ配線していない
     /// (被ダメージ・移動速度・確率発動・条件付き・減衰する値)
     RecordOnly,
@@ -181,14 +185,17 @@ impl CharacterSkills {
         out
     }
 
-    /// 与ダメージ式のカテゴリへの寄与(カテゴリ, 値)。割合は Σ% の小数表現、固定値はそのまま。
+    /// 与ダメージ式のカテゴリへの寄与。割合は Σ% の小数表現、固定値はそのまま。
+    /// `source` はこのスキル名(マスタリーで差し替わっていても表示はスキル名のまま)
     pub fn damage_contributions(
         &self,
         catalog: &CharacterSkillCatalog,
         masteries: &Masteries,
-    ) -> Vec<(DamageCategory, f64)> {
+    ) -> Vec<DamageContribution> {
         damage_contributions(
-            self.resolved(catalog, masteries).iter().flat_map(|(_, effects)| effects.iter()),
+            self.resolved(catalog, masteries)
+                .into_iter()
+                .flat_map(|(def, effects)| effects.iter().map(move |e| (def.name.to_string(), e))),
         )
     }
 
@@ -201,7 +208,12 @@ impl CharacterSkills {
         let mut out = Vec::new();
         for (def, effects) in self.resolved(catalog, masteries) {
             for effect in effects {
-                if let SkillEffect::StatRate { stats, percent, layer } = effect {
+                if let SkillEffect::StatRate {
+                    stats,
+                    percent,
+                    layer,
+                } = effect
+                {
                     for kind in *stats {
                         out.push((*kind, percent / 100.0, *layer, def.name));
                     }
@@ -223,8 +235,7 @@ impl CharacterSkills {
                 .iter()
                 .find(|d| d.id == id.as_str())
                 .ok_or_else(|| CharacterSkillError::Unknown { id: id.clone() })?;
-            if def.audience == SkillAudience::SelfOnly
-                && def.game_character_id != game_character_id
+            if def.audience == SkillAudience::SelfOnly && def.game_character_id != game_character_id
             {
                 return Err(CharacterSkillError::ForeignCharacter {
                     id: id.clone(),
@@ -240,16 +251,22 @@ impl CharacterSkills {
     }
 }
 
-/// 効き先の並びを与ダメージ式のカテゴリ寄与に畳む。バフ・キャラスキルで共有する。
+/// 効き先の並びを与ダメージ式のカテゴリ寄与に畳む。バフ・キャラスキル・マスタリー・
+/// 装備アビリティ・装備アイテムで共有する。`source` は人が読める供給源名
+/// (スキル名・マスタリー名・バフ名・アビリティ名・アイテム名)
 pub fn damage_contributions<'a>(
-    effects: impl Iterator<Item = &'a SkillEffect>,
-) -> Vec<(DamageCategory, f64)> {
+    effects: impl Iterator<Item = (String, &'a SkillEffect)>,
+) -> Vec<DamageContribution> {
     effects
-        .filter_map(|e| match e {
+        .filter_map(|(source, e)| match e {
             // 割合カテゴリは % 表記なので小数に直す。固定値カテゴリはそのまま
-            SkillEffect::Damage { category, percent } => Some(match category.kind() {
-                CategoryKind::Rate => (*category, percent / 100.0),
-                _ => (*category, *percent),
+            SkillEffect::Damage { category, percent } => Some(DamageContribution {
+                source,
+                category: *category,
+                value: match category.kind() {
+                    CategoryKind::Rate => percent / 100.0,
+                    _ => *percent,
+                },
             }),
             _ => None,
         })
@@ -261,7 +278,10 @@ pub enum CharacterSkillError {
     #[error("未知のキャラスキルです: {id}")]
     Unknown { id: String },
     #[error("キャラスキル '{id}' はこのキャラ(game_character_id={game_character_id})のスキルではありません")]
-    ForeignCharacter { id: String, game_character_id: String },
+    ForeignCharacter {
+        id: String,
+        game_character_id: String,
+    },
     #[error("キャラスキル '{id}' が重複して選択されています")]
     Duplicated { id: String },
 }
@@ -278,17 +298,23 @@ mod tests {
     const SPURT_GOOD_FACE: &[SkillEffect] = &[SkillEffect::ActualDelay { percent: 5.0 }];
     /// マキシミンの極・呪われた魔剣。M3 の三択で +5% / +5% / +7% に分岐する。
     const CURSED_BASE: &[SkillEffect] = &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 5.0,
-            }];
+        category: DamageCategory::AttackDamageSkill,
+        percent: 5.0,
+    }];
     const CURSED_EGO: &[SkillEffect] = &[SkillEffect::Damage {
-                category: DamageCategory::AttackDamageSkill,
-                percent: 7.0,
-            }];
-    const AGI_UP: &[SkillEffect] =
-        &[SkillEffect::StatRate { stats: AGI, percent: 10.0, layer: StatLayer::MultiplierB }];
-    const ELITE_SWORDSMAN: &[SkillEffect] =
-        &[SkillEffect::StatRate { stats: STAB_DEF, percent: 10.0, layer: StatLayer::MultiplierB }];
+        category: DamageCategory::AttackDamageSkill,
+        percent: 7.0,
+    }];
+    const AGI_UP: &[SkillEffect] = &[SkillEffect::StatRate {
+        stats: AGI,
+        percent: 10.0,
+        layer: StatLayer::MultiplierB,
+    }];
+    const ELITE_SWORDSMAN: &[SkillEffect] = &[SkillEffect::StatRate {
+        stats: STAB_DEF,
+        percent: 10.0,
+        layer: StatLayer::MultiplierB,
+    }];
 
     const CATALOG: &[CharacterSkillDef] = &[
         CharacterSkillDef {
@@ -344,23 +370,33 @@ mod tests {
     ];
 
     /// テスト用: カテゴリX4(攻撃ダメージ(スキル))の合計。
-    fn x4(rates: &[(DamageCategory, f64)]) -> f64 {
-        rates.iter().filter(|(c, _)| *c == DamageCategory::AttackDamageSkill).map(|(_, v)| v).sum()
+    fn x4(contributions: &[DamageContribution]) -> f64 {
+        contributions
+            .iter()
+            .filter(|c| c.category == DamageCategory::AttackDamageSkill)
+            .map(|c| c.value)
+            .sum()
     }
 
     fn on(ids: &[&str]) -> CharacterSkills {
-        CharacterSkills { skill_ids: ids.iter().map(|s| s.to_string()).collect() }
+        CharacterSkills {
+            skill_ids: ids.iter().map(|s| s.to_string()).collect(),
+        }
     }
 
     fn picked(ids: &[&str]) -> Masteries {
-        Masteries { picked: ids.iter().map(|s| s.to_string()).collect() }
+        Masteries {
+            picked: ids.iter().map(|s| s.to_string()).collect(),
+        }
     }
 
     #[test]
     fn マスタリーがスキルの効果を差し替える() {
         let skills = on(&["mira_spurt"]);
         // 素のスパートは減衰するので中ディレイに入らない
-        assert!(skills.actual_delay_contributions(CATALOG, &picked(&[])).is_empty());
+        assert!(skills
+            .actual_delay_contributions(CATALOG, &picked(&[]))
+            .is_empty());
         // 【グッドフェイス】で 5% 固定になる
         let c = skills.actual_delay_contributions(CATALOG, &picked(&["mira_m4_2"]));
         assert_eq!(c.len(), 1);
@@ -377,10 +413,14 @@ mod tests {
         let skills = on(&["maximin_cursed_sword"]);
         assert!((x4(&skills.damage_contributions(CATALOG, &picked(&[]))) - 0.05).abs() < 1e-12);
         assert!(
-            (x4(&skills.damage_contributions(CATALOG, &picked(&["maximin_m3_3"]))) - 0.07).abs() < 1e-12
+            (x4(&skills.damage_contributions(CATALOG, &picked(&["maximin_m3_3"]))) - 0.07).abs()
+                < 1e-12
         );
         // スキルを ON にしていなければ、マスタリーを取っていても入らない
-        assert_eq!(x4(&on(&[]).damage_contributions(CATALOG, &picked(&["maximin_m3_3"]))), 0.0);
+        assert_eq!(
+            x4(&on(&[]).damage_contributions(CATALOG, &picked(&["maximin_m3_3"]))),
+            0.0
+        );
     }
 
     #[test]
@@ -390,15 +430,27 @@ mod tests {
         assert_eq!(
             skills.stat_rates(CATALOG, &picked(&["joshua_m2_3"])),
             vec![
-                (StatKind::Stab, 0.10, StatLayer::MultiplierB, "憑依【剣闘士】"),
-                (StatKind::Def, 0.10, StatLayer::MultiplierB, "憑依【剣闘士】"),
+                (
+                    StatKind::Stab,
+                    0.10,
+                    StatLayer::MultiplierB,
+                    "憑依【剣闘士】"
+                ),
+                (
+                    StatKind::Def,
+                    0.10,
+                    StatLayer::MultiplierB,
+                    "憑依【剣闘士】"
+                ),
             ]
         );
     }
 
     #[test]
     fn 味方スキルは誰でもonにできて自身のスキルは所有キャラだけ() {
-        assert!(on(&["ispin_encourage"]).validate(CATALOG, "maximin").is_ok());
+        assert!(on(&["ispin_encourage"])
+            .validate(CATALOG, "maximin")
+            .is_ok());
         assert!(matches!(
             on(&["mira_spurt"]).validate(CATALOG, "maximin"),
             Err(CharacterSkillError::ForeignCharacter { .. })

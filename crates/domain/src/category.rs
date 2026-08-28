@@ -25,11 +25,17 @@ pub struct CategoryCap {
 
 impl CategoryCap {
     const fn max(max: f64) -> Self {
-        Self { min: None, max: Some(max) }
+        Self {
+            min: None,
+            max: Some(max),
+        }
     }
 
     const fn range(min: f64, max: f64) -> Self {
-        Self { min: Some(min), max: Some(max) }
+        Self {
+            min: Some(min),
+            max: Some(max),
+        }
     }
 
     fn clamp(&self, value: f64) -> f64 {
@@ -183,20 +189,43 @@ impl DamageCategory {
             TargetDefense | FinalDamageFixed | DamageReduction | BasicTriggerDamageFixed => {
                 CategoryKind::Fixed
             }
-            SkillMultiplierRate | CriticalDamageRate | ComboBonus | ElementBonus | PlayerCutRate
-            | SienaAuraAttackRate | FinalDamageRate | CutRateA | AttackDamageLegacy
-            | AwakeningDamage | PhysicalMagicDamageRate | DependencyDamageRate | DamageAbsorb
-            | TakenDamageRate | TakenDamageReduction | DamageAmplify | DamageResistance
-            | DamageMitigation | CutRateB | AttackDamageRate | AttackDamageIsabel
-            | AttackDamageGeneral | AttackDamageBasicTrigger | AttackDamageSkill
-            | AttackDamageSpecial | AttackDamageJapan | PvpCorrection => CategoryKind::Rate,
+            SkillMultiplierRate
+            | CriticalDamageRate
+            | ComboBonus
+            | ElementBonus
+            | PlayerCutRate
+            | SienaAuraAttackRate
+            | FinalDamageRate
+            | CutRateA
+            | AttackDamageLegacy
+            | AwakeningDamage
+            | PhysicalMagicDamageRate
+            | DependencyDamageRate
+            | DamageAbsorb
+            | TakenDamageRate
+            | TakenDamageReduction
+            | DamageAmplify
+            | DamageResistance
+            | DamageMitigation
+            | CutRateB
+            | AttackDamageRate
+            | AttackDamageIsabel
+            | AttackDamageGeneral
+            | AttackDamageBasicTrigger
+            | AttackDamageSkill
+            | AttackDamageSpecial
+            | AttackDamageJapan
+            | PvpCorrection => CategoryKind::Rate,
         }
     }
 
     /// 式の中で `(1 − 値)` として掛かる割合カテゴリ。
     pub fn is_subtractive(self) -> bool {
         use DamageCategory::*;
-        matches!(self, DamageAbsorb | TakenDamageReduction | DamageResistance | DamageMitigation)
+        matches!(
+            self,
+            DamageAbsorb | TakenDamageReduction | DamageResistance | DamageMitigation
+        )
     }
 
     /// 集計値の上限・下限(wiki §4)。**上限は子カテゴリごとに違う**ので、
@@ -344,7 +373,9 @@ pub struct CategoryTotals {
 impl CategoryTotals {
     /// 中立値。割合 = +0%(係数 1.0)、固定値 = 0、代入 = 0.0(呼び出し側が必ず代入する)。
     pub fn neutral() -> Self {
-        Self { values: vec![0.0; DamageCategory::ALL.len()] }
+        Self {
+            values: vec![0.0; DamageCategory::ALL.len()],
+        }
     }
 
     /// 値を入れる。割合・固定値は同一カテゴリ内で加算、代入は置き換え。
@@ -366,7 +397,10 @@ impl CategoryTotals {
     /// カテゴリX は子(X3/X4/X5)の生の和 — 親に直接足す供給源は無い。
     pub fn raw(&self, category: DamageCategory) -> f64 {
         if category == DamageCategory::AttackDamageRate {
-            return DamageCategory::ATTACK_DAMAGE_CHILDREN.iter().map(|c| self.raw(*c)).sum();
+            return DamageCategory::ATTACK_DAMAGE_CHILDREN
+                .iter()
+                .map(|c| self.raw(*c))
+                .sum();
         }
         self.values[category.index()]
     }
@@ -377,7 +411,10 @@ impl CategoryTotals {
     /// 親でまとめて上限を掛けると、片方が上限に届いていてももう片方が伸びてしまう。
     pub fn value(&self, category: DamageCategory) -> f64 {
         if category == DamageCategory::AttackDamageRate {
-            return DamageCategory::ATTACK_DAMAGE_CHILDREN.iter().map(|c| self.value(*c)).sum();
+            return DamageCategory::ATTACK_DAMAGE_CHILDREN
+                .iter()
+                .map(|c| self.value(*c))
+                .sum();
         }
         let raw = self.raw(category);
         match category.cap() {
@@ -427,13 +464,21 @@ mod tests {
     #[test]
     fn all_は全カテゴリを重複なく宣言順に持つ() {
         assert_eq!(DamageCategory::ALL.len(), 36);
-        let mut symbols: Vec<_> = DamageCategory::ALL.iter().map(|c| c.wiki_symbol()).collect();
+        let mut symbols: Vec<_> = DamageCategory::ALL
+            .iter()
+            .map(|c| c.wiki_symbol())
+            .collect();
         symbols.sort_unstable();
         symbols.dedup();
         assert_eq!(symbols.len(), 36);
         // `index()` は variant の宣言順に依存するので ALL の並びと一致させる
         for (i, c) in DamageCategory::ALL.iter().enumerate() {
-            assert_eq!(c.index(), i, "{} の位置が ALL と一致しない", c.wiki_symbol());
+            assert_eq!(
+                c.index(),
+                i,
+                "{} の位置が ALL と一致しない",
+                c.wiki_symbol()
+            );
         }
     }
 
@@ -503,7 +548,11 @@ mod tests {
         assert!((t.get(FinalDamageRate) - 1.40).abs() < 1e-12);
         let trace = t.trace();
         let l = trace.iter().find(|c| c.symbol == "L").unwrap();
-        assert!((l.raw - 0.40).abs() < 1e-12 && (l.value - 0.40).abs() < 1e-12 && (l.factor - 1.40).abs() < 1e-12);
+        assert!(
+            (l.raw - 0.40).abs() < 1e-12
+                && (l.value - 0.40).abs() < 1e-12
+                && (l.factor - 1.40).abs() < 1e-12
+        );
     }
 
     #[test]

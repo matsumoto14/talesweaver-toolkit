@@ -43,7 +43,11 @@ pub enum ContentRequirement {
     /// Stab/Hack/Int → `single` を 突き/斬り/魔攻 と比較、Mr → `mr` を 魔防 と比較、
     /// StabHack/HackInt → `composite` を 突き+斬り / 斬り+魔攻 と比較。
     /// 値 0 は「その系統の条件なし」(チェックを生成しない)。
-    EquipmentBySkill { single: i64, mr: i64, composite: i64 },
+    EquipmentBySkill {
+        single: i64,
+        mr: i64,
+        composite: i64,
+    },
     /// テシスコアの火力補正合計がこの値以上(swiki の「コア N」)。
     /// 判定対象は `Content::core_region` の地域のコアセット(地域不明なら全地域の最大値)。
     ThesisCoreTotal(i64),
@@ -73,10 +77,16 @@ impl ContentRequirement {
             ContentRequirement::AwakeningStage(v) => {
                 ("覚醒段階", i64::from(awakening.stage), i64::from(v))
             }
-            ContentRequirement::EternalLevel(v) => {
-                ("エタの意志 Lv", i64::from(awakening.eternal_level), i64::from(v))
-            }
-            ContentRequirement::EquipmentBySkill { single, mr, composite } => match dependency {
+            ContentRequirement::EternalLevel(v) => (
+                "エタの意志 Lv",
+                i64::from(awakening.eternal_level),
+                i64::from(v),
+            ),
+            ContentRequirement::EquipmentBySkill {
+                single,
+                mr,
+                composite,
+            } => match dependency {
                 None => ("装備補正(スキル未収録のため判定不可)", 0, single),
                 Some(SkillDependency::Stab) => ("装備 突き(基本)", equipment_base.thrust, single),
                 Some(SkillDependency::Hack) => ("装備 斬り(基本)", equipment_base.slash, single),
@@ -97,7 +107,12 @@ impl ContentRequirement {
             },
             ContentRequirement::ThesisCoreTotal(v) => ("テシスコア 合計", thesis_core_total, v),
         };
-        RequirementCheck { label: label.to_string(), current, required, ok: current >= required }
+        RequirementCheck {
+            label: label.to_string(),
+            current,
+            required,
+            ok: current >= required,
+        }
     }
 }
 
@@ -207,8 +222,19 @@ pub fn evaluate_content(
 mod tests {
     use super::*;
 
-    fn equipment(thrust: i64, slash: i64, magic_attack: i64, magic_defense: i64) -> EquipmentValues {
-        EquipmentValues { thrust, slash, magic_attack, magic_defense, ..Default::default() }
+    fn equipment(
+        thrust: i64,
+        slash: i64,
+        magic_attack: i64,
+        magic_defense: i64,
+    ) -> EquipmentValues {
+        EquipmentValues {
+            thrust,
+            slash,
+            magic_attack,
+            magic_defense,
+            ..Default::default()
+        }
     }
 
     fn content(need: Option<i64>, requirements: Vec<ContentRequirement>) -> Content {
@@ -226,8 +252,11 @@ mod tests {
         }
     }
 
-    const EQ_REQ: ContentRequirement =
-        ContentRequirement::EquipmentBySkill { single: 1500, mr: 1700, composite: 2100 };
+    const EQ_REQ: ContentRequirement = ContentRequirement::EquipmentBySkill {
+        single: 1500,
+        mr: 1700,
+        composite: 2100,
+    };
 
     #[test]
     fn 装備条件はスキル依存で比較先が変わる() {
@@ -236,14 +265,27 @@ mod tests {
         let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Stab), 0);
         assert!(c.ok);
         assert_eq!((c.current, c.required), (1500, 1500));
-        assert!(!EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Hack), 0).ok);
-        assert!(EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Int), 0).ok);
+        assert!(
+            !EQ_REQ
+                .check(&eq, Awakening::default(), Some(SkillDependency::Hack), 0)
+                .ok
+        );
+        assert!(
+            EQ_REQ
+                .check(&eq, Awakening::default(), Some(SkillDependency::Int), 0)
+                .ok
+        );
 
         let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::Mr), 0);
         assert!(!c.ok);
         assert_eq!((c.current, c.required), (1699, 1700));
 
-        let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::StabHack), 0);
+        let c = EQ_REQ.check(
+            &eq,
+            Awakening::default(),
+            Some(SkillDependency::StabHack),
+            0,
+        );
         assert!(c.ok);
         assert_eq!((c.current, c.required), (2900, 2100));
         let c = EQ_REQ.check(&eq, Awakening::default(), Some(SkillDependency::HackInt), 0);
@@ -257,22 +299,50 @@ mod tests {
     #[test]
     fn 覚醒とエタの判定は境界値を含む() {
         let eq = EquipmentValues::default();
-        let aw = Awakening { stage: 5, eternal_level: 41 };
-        assert!(ContentRequirement::AwakeningStage(5).check(&eq, aw, None, 0).ok);
-        assert!(ContentRequirement::EternalLevel(41).check(&eq, aw, None, 0).ok);
-        assert!(!ContentRequirement::EternalLevel(42).check(&eq, aw, None, 0).ok);
+        let aw = Awakening {
+            stage: 5,
+            eternal_level: 41,
+        };
+        assert!(
+            ContentRequirement::AwakeningStage(5)
+                .check(&eq, aw, None, 0)
+                .ok
+        );
+        assert!(
+            ContentRequirement::EternalLevel(41)
+                .check(&eq, aw, None, 0)
+                .ok
+        );
+        assert!(
+            !ContentRequirement::EternalLevel(42)
+                .check(&eq, aw, None, 0)
+                .ok
+        );
     }
 
     #[test]
     fn クリア判定は火力と入場条件の両方を見る() {
         let eq = equipment(400, 300, 0, 0);
         let aw = Awakening::default();
-        let dmg = |per: i64| Some(BestSkillDamage { skill_id: "s".into(), per_hit_max: per, total_max: per });
+        let dmg = |per: i64| {
+            Some(BestSkillDamage {
+                skill_id: "s".into(),
+                per_hit_max: per,
+                total_max: per,
+            })
+        };
         let dep = Some(SkillDependency::Stab);
 
         // 火力・条件とも満たす
         let e = evaluate_content(
-            &content(Some(1000), vec![ContentRequirement::EquipmentBySkill { single: 100, mr: 0, composite: 0 }]),
+            &content(
+                Some(1000),
+                vec![ContentRequirement::EquipmentBySkill {
+                    single: 100,
+                    mr: 0,
+                    composite: 0,
+                }],
+            ),
             dmg(1000),
             &eq,
             aw,
@@ -286,14 +356,24 @@ mod tests {
         assert!(e.entry_ok && !e.reaches_need && !e.clear);
 
         // 条件だけ未達
-        let e = evaluate_content(&content(Some(1000), vec![ContentRequirement::EternalLevel(1)]), dmg(1000), &eq, aw, dep, 0);
+        let e = evaluate_content(
+            &content(Some(1000), vec![ContentRequirement::EternalLevel(1)]),
+            dmg(1000),
+            &eq,
+            aw,
+            dep,
+            0,
+        );
         assert!(!e.entry_ok && e.reaches_need && !e.clear);
     }
 
     #[test]
     fn 敵データなしコンテンツは条件のみで判定する() {
         let eq = EquipmentValues::default();
-        let aw = Awakening { stage: 3, eternal_level: 0 };
+        let aw = Awakening {
+            stage: 3,
+            eternal_level: 0,
+        };
         let e = evaluate_content(
             &content(None, vec![ContentRequirement::AwakeningStage(3)]),
             None,
@@ -320,7 +400,14 @@ mod tests {
     fn required_0の装備条件はチェックを生成しない() {
         // 表で複合列が "-" のコンテンツ(リンゴ等): 複合スキルのキャラには条件なし
         let e = evaluate_content(
-            &content(None, vec![ContentRequirement::EquipmentBySkill { single: 800, mr: 980, composite: 0 }]),
+            &content(
+                None,
+                vec![ContentRequirement::EquipmentBySkill {
+                    single: 800,
+                    mr: 980,
+                    composite: 0,
+                }],
+            ),
             None,
             &EquipmentValues::default(),
             Awakening::default(),
@@ -333,7 +420,14 @@ mod tests {
 
     #[test]
     fn スキル未収録はダメージ不明としてクリア不可() {
-        let e = evaluate_content(&content(Some(1), vec![]), None, &EquipmentValues::default(), Awakening::default(), None, 0);
+        let e = evaluate_content(
+            &content(Some(1), vec![]),
+            None,
+            &EquipmentValues::default(),
+            Awakening::default(),
+            None,
+            0,
+        );
         assert!(e.entry_ok);
         assert!(!e.reaches_need && !e.clear);
         assert!(e.damage.is_none());

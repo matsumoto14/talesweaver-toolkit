@@ -12,6 +12,13 @@ JSON 列として持たせる構成で始まり、機能追加のたびに列追
 
 ## 決定
 
+### v9: バフセットをキャラから独立させる(2026-08-29)
+
+- `buff_sets(id, name, choices, created_at)` を追加し、`characters.default_buff_set_id` は nullable FK (`ON DELETE SET NULL`) とする
+- 旧 `stat_sources.buffs` は、非空のキャラごとに「{name}の常用バフ」へ抽出する。同一 choices でも統合しない
+- テーブル作成・列追加・抽出・旧JSONからの削除は単一transactionで行い、再open時は既定IDが付いた行を再移行しない
+- `StatSources` はキャラ固有の恒常補正源だけを持ち、バフは計算要求ごとの `BuffSelection` として明示する
+
 - **rusqlite(features = ["bundled"])を採用**。SQLite を同梱でき実行環境に依存しない
   (2026-08-21 最小 E2E)。
 - **DB ファイルは Tauri 標準の `app_data_dir` に置く**。パスは `%APPDATA%\dev.twcontext.app\tw-context.sqlite`

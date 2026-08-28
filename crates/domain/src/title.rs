@@ -146,17 +146,15 @@ mod tests {
 
     #[test]
     fn カタログに無いidは中立値() {
-        assert_eq!(title_values(Some("nope"), &defs()), EquipmentValues::default());
+        assert_eq!(
+            title_values(Some("nope"), &defs()),
+            EquipmentValues::default()
+        );
     }
     #[test]
     fn 条件付き追加ダメージは地域一致時だけ返す() {
         assert_eq!(
-            title_added_damage_rate(
-                Some("eclipse"),
-                &defs(),
-                Some(GameRegion::LostIsland),
-                None,
-            ),
+            title_added_damage_rate(Some("eclipse"), &defs(), Some(GameRegion::LostIsland), None,),
             0.20
         );
         assert_eq!(
