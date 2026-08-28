@@ -3,10 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
 # nonce の使用済み記録とレート制限のカウンタ。どちらも TTL 付きの短命なキー。
-# 作成: wrangler kv namespace create INQUIRY
+# 作成: wrangler kv namespace create INQUIRY(または ダッシュボード → Storage & Databases → KV)
+# namespace id は秘密情報ではないのでコミットしてよい。`binding` はコード側の名前で、
+# namespace の表示名と一致していなくてよい。
 [[kv_namespaces]]
 binding = "INQUIRY"
-id = "<wrangler kv namespace create INQUIRY で出た id>"
+id = "3076805c790b44d28b38f9123312d0cd"
 
 [vars]
 GITHUB_OWNER = "matsumoto14"
