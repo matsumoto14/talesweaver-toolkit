@@ -439,13 +439,18 @@
    * 上限に達したカテゴリは伸びないので外す。候補はすでに積んでいる(供給源がある)ものだけ
    * (中立のカテゴリは全部 ×1.00 で並ぶので順位が付けられない)
    */
-  const bestLever = $derived(
+  const bestLevers = $derived(
     activeCategories
       .filter((c) => c.kind === "rate" && !NOT_EFFORT.has(c.category) && !catAtCap(c) && c.factor > 0)
-      .sort((a, b) => a.factor - b.factor)[0] ?? null,
+      .sort((a, b) => a.factor - b.factor),
   );
-  /** bestLever に +1% 足したときの最終ダメージの伸び(%) */
-  const bestLeverGain = $derived(bestLever ? (1 / bestLever.factor) : 0);
+  const bestLever = $derived(bestLevers[0] ?? null);
+  /** 次の候補(2 位以降)。押した行の下に開く */
+  const nextLevers = $derived(bestLevers.slice(1));
+  let nextLeversOpen = $state(false);
+  /** +1% 足したときの最終ダメージの伸び(%) */
+  const leverGain = (c: CategoryTrace) => 1 / c.factor;
+  const bestLeverGain = $derived(bestLever ? leverGain(bestLever) : 0);
   const fmtHeadroom = (c: CategoryTrace) =>
     c.cap && c.cap.max !== null ? `上限まで あと ${fmtNum((c.cap.max - c.value) * 100)}%` : "上限なし";
   /** topLever が乗っている段(帯の行を太字にするため) */
@@ -1573,6 +1578,25 @@
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
                 {#if bestLever}
                   <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>+{bestLeverGain.toFixed(2)}%</span> 伸びます({fmtHeadroom(bestLever)})。
+                  {#if nextLevers.length > 0}
+                    <button type="button" class="chip quiet" class:on={nextLeversOpen} aria-expanded={nextLeversOpen} onclick={() => (nextLeversOpen = !nextLeversOpen)}>
+                      次の候補 {nextLevers.length}
+                    </button>
+                  {/if}
+                {/if}
+                {#if bestLever && nextLeversOpen && nextLevers.length > 0}
+                  <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段 -->
+                  <div class="lever-list open-in">
+                    {#each nextLevers as c, i (c.category)}
+                      <div class="dt-row">
+                        <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
+                        <span class="num dt-mult dim">{fmtCatValue(c)}</span>
+                        <span class="num dt-val" use:bump={() => leverGain(c)}>+{leverGain(c).toFixed(2)}%</span>
+                        <span class="num dt-sub dim">{fmtHeadroom(c)}</span>
+                      </div>
+                    {/each}
+                    <p class="dt-note dim">+1% 足したときの最終ダメージの伸び。いま積んでいる量が少ないカテゴリほど 1% の価値が高い。</p>
+                  </div>
                 {/if}
               {:else}
                 倍率はまだ何もかかっていません。
@@ -2114,6 +2138,12 @@
   .flow-line .strong { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
   .flow-line .good.strong { color: var(--flow-3); }
   .flow-line .final { font-size: 15px; font-weight: 700; color: var(--fg); }
+  .lever-note .chip { margin-left: 6px; vertical-align: middle; }
+  .lever-list {
+    margin-top: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px;
+    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  }
   .lever-note {
     margin-top: 9px; padding: 8px 10px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
