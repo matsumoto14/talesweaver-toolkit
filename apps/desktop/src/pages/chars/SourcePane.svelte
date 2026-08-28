@@ -659,6 +659,7 @@
       : dependency === "int" ? ["magic_attack"]
       : dependency === "mr" ? ["magic_defense"]
       : dependency === "int_hack" ? ["slash", "magic_attack"]
+      : dependency === "hack_int" ? ["slash", "magic_attack"]
       : [];
     const supportedDependencyStats = dependencyStats.filter((kind) => item.enchant_caps[kind] > 0);
     if (supportedDependencyStats.length > 0) return supportedDependencyStats;
@@ -3936,7 +3937,7 @@
   .ro-row.record-only { opacity: 0.75; }
   .ro-name { min-width: 0; font-size: 11.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ro-row .clear {
-    padding: 3px 4px; border-radius: var(--r-chip);
+    padding: 3px 4px; border-radius: var(--r-inset);
     background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
   }
   .ro-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
@@ -4066,7 +4067,7 @@
   .skill-field .v { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--fg-sub); }
   /* ほぼ押さない操作。段に 1 列渡さず、言葉のまま小さく置く(記号にしない) */
   .skill-field .clear {
-    padding: 3px 4px; border-radius: var(--r-chip);
+    padding: 3px 4px; border-radius: var(--r-inset);
     background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
   }
   .skill-field .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
@@ -4090,9 +4091,9 @@
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .part-switches, .part-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 2px 4px; }
-  .part-switches button { position: relative; cursor: grab; user-select: none; -webkit-user-drag: element; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--edge-soft); border-radius: var(--r-pill); background: var(--card-soft); padding: 2px 7px 2px 3px; font-size: 10px; }
+  .part-switches button { position: relative; cursor: grab; user-select: none; -webkit-user-drag: element; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--bg-panel); padding: 2px 7px 2px 3px; font-size: 10px; }
   .part-switches button:active { cursor: grabbing; }
-  .part-switches button.on { border-color: var(--accent); color: var(--accent-deep); background: var(--s0-bg); }
+  .part-switches button.on { border-color: var(--accent); color: var(--accent-hover); background: var(--state-goal-bg); }
   .part-switches button.dragging { opacity: .45; }
   .part-switches button.drop-before::before, .part-switches button.drop-after::after {
     content: ""; position: absolute; top: -3px; bottom: -3px; width: 2px;
@@ -4102,7 +4103,7 @@
   .part-switches button.drop-after::after { right: -4px; }
   .registration-grip { color: var(--fg-off); font-size: 10px; line-height: 1; }
   .part-switches button:hover .registration-grip, .part-switches button.dragging .registration-grip { color: var(--accent); }
-  .registration-order { margin: 7px 4px 3px; padding: 7px; border: 1px solid var(--edge-soft); border-radius: var(--r-inset); background: var(--inset); }
+  .registration-order { margin: 7px 4px 3px; padding: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset); }
   .delete-registration { width: 174px; color: var(--danger); border-color: var(--state-short-bd); }
   .delete-registration.confirm { background: var(--state-short-bg); font-weight: 700; }
   .editing-registration { background: var(--state-temp-bg); border-color: var(--state-temp-bd); color: var(--state-temp-fg); }
@@ -4117,15 +4118,15 @@
   .enchant-plan {
     min-width: 0; min-height: 30px; padding: 3px 7px; display: grid;
     grid-template-columns: 75px minmax(0, 1fr) 34px; align-items: center; gap: 7px;
-    border: 1px solid var(--edge-soft); border-radius: var(--r-inset); background: var(--inset);
+    border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset);
   }
   .plan-remaining { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
   .plan-remaining small { color: var(--fg-muted); font-size: 8.5px; }
-  .plan-remaining b { color: var(--accent-deep); font-size: 12.5px; }
+  .plan-remaining b { color: var(--accent-hover); font-size: 12.5px; }
   .plan-recipe { min-width: 0; color: var(--fg-sub); font-size: 9.5px; font-weight: 700; white-space: nowrap; }
   .enchant-plan > .badge { min-width: 34px; text-align: center; }
   .enchant-plan.complete .plan-remaining b, .enchant-plan.complete .plan-recipe { color: var(--state-edge-fg); }
-  .base-value-toolbar { width: min(100%, 520px); min-height: 29px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--edge-soft); display: grid; grid-template-columns: 44px 102px 52px 214px 62px; column-gap: 6px; align-items: center; }
+  .base-value-toolbar { width: min(100%, 520px); min-height: 29px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft); display: grid; grid-template-columns: 44px 102px 52px 214px 62px; column-gap: 6px; align-items: center; }
   .base-value-copy { grid-column: 5; display: flex; align-items: baseline; justify-content: center; gap: 3px; white-space: nowrap; }
   .base-value-copy b { font-size: 9.5px; color: var(--fg-sub); }
   .base-value-copy small { color: var(--fg-muted); font-size: 9px; }
@@ -4136,18 +4137,18 @@
   .growth-equipment-values .stat-row :global(.stepper .cell) { flex: 0 1 104px; }
   .enchant-more-toggle {
     width: min(100%, 520px); grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
-    border: 0; border-top: 1px dashed var(--edge-soft); background: none; color: var(--fg-sub);
+    border: 0; border-top: 1px dashed var(--border-soft); background: none; color: var(--fg-sub);
     display: flex; align-items: center; justify-content: space-between; text-align: left;
   }
-  .enchant-more-toggle:hover { color: var(--accent-deep); }
+  .enchant-more-toggle:hover { color: var(--accent-hover); }
   .enchant-more-toggle > span:first-child { display: flex; align-items: baseline; gap: 8px; }
   .enchant-more-toggle b { font-size: 10px; }
   .enchant-more-toggle small { color: var(--fg-muted); font-size: 9px; }
-  .enchant-more-toggle .toggle-state { width: 56px; text-align: right; color: var(--accent-deep); font-size: 9.5px; }
-  .value-total { width: 102px; display: grid; grid-template-columns: 38px 62px; gap: 2px; align-items: baseline; white-space: nowrap; color: var(--accent-deep); }
+  .enchant-more-toggle .toggle-state { width: 56px; text-align: right; color: var(--accent-hover); font-size: 9.5px; }
+  .value-total { width: 102px; display: grid; grid-template-columns: 38px 62px; gap: 2px; align-items: baseline; white-space: nowrap; color: var(--accent-hover); }
   .total-main { width: 38px; font-size: 13px; text-align: right; }
   .enchant-part { width: 62px; color: var(--fg-muted); font-size: 9px; font-weight: 500; text-align: left; }
-  .ability-part { width: 52px; padding: 1px 4px; border-radius: var(--r-pill); background: var(--surface-inset); color: var(--accent-deep); font-size: 8.5px; font-weight: 700; text-align: center; white-space: nowrap; }
+  .ability-part { width: 52px; padding: 1px 4px; border-radius: var(--r-pill); background: var(--surface-inset); color: var(--accent-hover); font-size: 8.5px; font-weight: 700; text-align: center; white-space: nowrap; }
   .ability-spacer { width: 52px; }
   .enchant-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .enchant-card .hint { margin: 4px 0 0; }
@@ -4213,7 +4214,7 @@
   /* 外すのは「ほぼ押さない操作」なので、段ではなく小さな 1 つに落とす。
      ただし記号(×)にしない — 意味を読み取らせるより、言葉で言い切るほうが速い */
   .core-clear {
-    padding: 3px 4px; border-radius: var(--r-chip);
+    padding: 3px 4px; border-radius: var(--r-inset);
     background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
   }
   .core-clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }

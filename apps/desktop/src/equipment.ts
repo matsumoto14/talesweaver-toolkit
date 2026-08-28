@@ -296,9 +296,12 @@ export const equipmentBaseTotal = (
     for (const addition of part.ability_additions ?? []) {
       if (addition.kind === "thrust") total.thrust += addition.value;
       else if (addition.kind === "slash") total.slash += addition.value;
+      else if (addition.kind === "physical_defense") total.physical_defense += addition.value;
       else if (addition.kind === "magic_attack") total.magic_attack += addition.value;
       else if (addition.kind === "magic_defense") total.magic_defense += addition.value;
       else if (addition.kind === "accuracy") total.accuracy += addition.value;
+      else if (addition.kind === "critical") total.critical += addition.value;
+      else if (addition.kind === "evasion") total.evasion += addition.value;
     }
   }
   const title = titles.find((t) => t.id === equipment.title);

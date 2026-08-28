@@ -224,7 +224,7 @@
     const pa = c.protect_armor_level;
     const base =
       (c.coat_armor ? 18 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
-    const magic = (c.coat_armor ? 12 : 0) + (pa > 0 ? [36, 45, 54, 63, 72, 81][pa - 1] : 0) + c.kai_protect_armor_level * 9;
+    const magic = (c.coat_armor ? 12 : 0) + (pa > 0 ? [24, 30, 36, 42, 48, 54][pa - 1] : 0) + c.kai_protect_armor_level * 6;
     return { physical: base, magic };
   });
   const sharpnessRatePercent = $derived(
