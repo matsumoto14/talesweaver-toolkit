@@ -74,7 +74,7 @@ pub use enemy::Enemy;
 pub use equipment::{
     armor_added_damage, equipment_attack_power, equipment_values_attack, weapon_added_damage, wrist_base_bonus, EnhanceGrade, EnhanceRates, Equipment,
     EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef, EquipmentAbilityAdditionalKind,
-    EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentEnhanceType,
+    EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentCatalogEntry, EquipmentEnhanceType,
     EquipmentCoefficients, EquipmentError, EquipmentPart, EquipmentPartList, EquipmentParts, EquipmentRates,
     EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus, WristBonusRule, ENHANCE_LEVEL_MAX,
     WEAPON_ABILITY_SLOTS, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,

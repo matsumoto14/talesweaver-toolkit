@@ -33,6 +33,50 @@ fn find_enemy(enemy_id: &str) -> CommandResult<Enemy> {
     gamedata::find_enemy(enemy_id).ok_or_else(|| format!("敵 '{enemy_id}' が見つかりません"))
 }
 
+/// 保存前のキャラデータ(draft)を検証する。DB には書き込まないプレビュー系コマンド
+/// (preview_elements / preview_defense / preview_damage / evaluate_contents)専用。
+///
+/// `storage::character_repository::validate` と同じ検証内容だが、こちらは永続化を経由しないので
+/// `storage` を呼ばず domain の検証(`Equipment::validate_against_catalog` を含む)を直接呼ぶ
+/// (`storage::character_repository::validate` は登録・更新の保存直前チェック用)。
+fn validate_character_draft(character: &NewCharacter) -> CommandResult<()> {
+    if character.name.trim().is_empty() {
+        return Err("名前が空です".into());
+    }
+    character.base_stats.validate().map_err(|e| e.to_string())?;
+    if character.awakening.stage > domain::Awakening::MAX_STAGE {
+        return Err(format!("覚醒段階は 0〜{} です", domain::Awakening::MAX_STAGE));
+    }
+    if character.awakening.eternal_level > domain::Awakening::MAX_ETERNAL_LEVEL {
+        return Err(format!(
+            "エタの意志 Lv は 0〜{} です",
+            domain::Awakening::MAX_ETERNAL_LEVEL
+        ));
+    }
+    character.stat_sources.validate().map_err(|e| e.to_string())?;
+    character
+        .stat_sources
+        .character_skills
+        .validate(gamedata::character_skill_catalog(), &character.game_character_id)
+        .map_err(|e| e.to_string())?;
+    domain::stat_sources::build_modifiers(&character.stat_sources, &gamedata::buff_catalog())
+        .map_err(|e| e.to_string())?;
+    character.equipment.validate().map_err(|e| e.to_string())?;
+    character.common_skills.validate().map_err(|e| e.to_string())?;
+    character.equipment.validate_against_catalog(
+        &gamedata::equipment_catalog(),
+        &gamedata::equipment_abilities(),
+        &gamedata::random_option_catalog(),
+    )?;
+    // 称号は装備部位ではないので部位ループの外で見る(1 枠・カタログ参照のみ)
+    if let Some(id) = &character.equipment.title {
+        if !gamedata::title_catalog().iter().any(|t| t.id == id.as_str()) {
+            return Err(format!("未知の称号 '{id}' です"));
+        }
+    }
+    Ok(())
+}
+
 /// 計算対象のコンテンツを引く。敵データが無いコンテンツはダメージ計算の対象にできない。
 fn find_content(content_id: &str) -> CommandResult<Content> {
     let content = gamedata::content_areas()
@@ -111,16 +155,7 @@ pub fn list_element_sources() -> Vec<domain::ElementSourceDef> {
 /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
 #[tauri::command]
 pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
-    storage::validate_new_character(
-        &character,
-        &gamedata::buff_catalog(),
-        &gamedata::equipment_catalog(),
-        &gamedata::equipment_abilities(),
-        &gamedata::random_option_catalog(),
-        &gamedata::title_catalog(),
-        gamedata::character_skill_catalog(),
-    )
-    .map_err(|e| e.to_string())?;
+    validate_character_draft(&character)?;
     Ok(gamedata::element_preview(
         &character.game_character_id,
         &character.equipment,
@@ -302,16 +337,7 @@ pub fn preview_effective_stats(
 /// 基本能力値 + 強化能力値(地域なし = テシスコアを含まない)の合計を渡す。
 #[tauri::command]
 pub fn preview_defense(character: NewCharacter) -> CommandResult<DefenseProfile> {
-    storage::validate_new_character(
-        &character,
-        &gamedata::buff_catalog(),
-        &gamedata::equipment_catalog(),
-        &gamedata::equipment_abilities(),
-        &gamedata::random_option_catalog(),
-        &gamedata::title_catalog(),
-        gamedata::character_skill_catalog(),
-    )
-    .map_err(|e| e.to_string())?;
+    validate_character_draft(&character)?;
     let preview = domain::preview_effective_stats(
         &character.base_stats,
         &character.stat_sources,
@@ -586,16 +612,7 @@ pub fn preview_damage(
     combo_count: u32,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
-    storage::validate_new_character(
-        &character,
-        &gamedata::buff_catalog(),
-        &gamedata::equipment_catalog(),
-        &gamedata::equipment_abilities(),
-        &gamedata::random_option_catalog(),
-        &gamedata::title_catalog(),
-        gamedata::character_skill_catalog(),
-    )
-    .map_err(|e| e.to_string())?;
+    validate_character_draft(&character)?;
     let content = find_content(&content_id)?;
     let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
     let style_dependency = character
@@ -632,21 +649,11 @@ pub fn evaluate_contents(
     character: NewCharacter,
     dependency_skill_id: Option<String>,
 ) -> CommandResult<Vec<ContentEvaluation>> {
-    let catalog = gamedata::buff_catalog();
+    validate_character_draft(&character)?;
+    // 後段のループで繰り返し使う(下の「評価ループの不変値」コメント参照)。
     let equipment_catalog = gamedata::equipment_catalog();
     let equipment_abilities = gamedata::equipment_abilities();
-    let random_options = gamedata::random_option_catalog();
     let titles = gamedata::title_catalog();
-    storage::validate_new_character(
-        &character,
-        &catalog,
-        &equipment_catalog,
-        &equipment_abilities,
-        &random_options,
-        &titles,
-        gamedata::character_skill_catalog(),
-    )
-    .map_err(|e| e.to_string())?;
     let skills = gamedata::skills_for(&character.game_character_id);
     let enemies = gamedata::enemies();
     // コンテンツの enemy_id は敵カタログに必ず存在する(gamedata のテストで担保)。

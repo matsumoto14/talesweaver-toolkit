@@ -412,6 +412,33 @@ pub struct EquipmentItem {
     pub source: Source,
 }
 
+/// `Equipment::validate_against_catalog`(domain)がカタログを検証できるようにする実装。
+/// domain は gamedata に依存できないので、domain 側にトレイトを置いてこちらで実装する
+/// (`base_totals` が `&[EquipmentAbilityDef]` を受ける依存方向と同じ)。
+impl domain::EquipmentCatalogEntry for EquipmentItem {
+    fn id(&self) -> &str {
+        self.id
+    }
+    fn slot(&self) -> PartSlot {
+        self.slot
+    }
+    fn ability_slots(&self) -> usize {
+        self.ability_slots
+    }
+    fn random_option_slots(&self) -> Option<usize> {
+        self.random_option_slots
+    }
+    fn values_min(&self) -> EquipmentValues {
+        self.values_min
+    }
+    fn growth_caps(&self) -> Option<EquipmentValues> {
+        self.growth_caps
+    }
+    fn enchant_caps(&self) -> EquipmentValues {
+        self.enchant_caps
+    }
+}
+
 /// wiki の生データ。公開モデルへ変換するときに総上限を固定のエンチャント枠へ変える。
 #[derive(Debug, Clone, Copy)]
 struct WikiEquipmentItem {
@@ -425,6 +452,14 @@ struct WikiEquipmentItem {
     weapon_class: Option<WeaponClass>,
     enhance_type: Option<EquipmentEnhanceType>,
     damage_effects: &'static [SkillEffect],
+    /// AFなどの耐久側固有効果。
+    survival_effects: &'static [EquipmentSurvivalEffect],
+    /// 候補を主軸スキルへ絞るための推奨依存。
+    recommended_dependency: Option<SkillDependency>,
+    /// `damage_effects` がこの依存のスキルにだけ効く場合の条件。
+    damage_dependency: Option<SkillDependency>,
+    /// 神鳥レリックはアビリティ・付加オプション枠を持たない(ルナリアと違う特例)。
+    no_ability_or_random_option_slots: bool,
     source: Source,
 }
 
@@ -437,8 +472,6 @@ impl WikiEquipmentItem {
                 (total - maximum).max(0)
             }
         };
-        let (recommended_dependency, damage_dependency) = item_dependencies(self.id);
-        let godbird_relic = self.id.starts_with("godbird-");
         let growth_caps = match self.slot {
             PartSlot::RelicPendant | PartSlot::RelicBracelet => Some(self.values_max),
             _ => self.growth_cap.map(|cap| v(cap, cap, cap, cap, cap, cap, cap, cap, cap)),
@@ -451,8 +484,16 @@ impl WikiEquipmentItem {
             values_max: self.values_max,
             growth_cap: self.growth_cap,
             growth_caps,
-            ability_slots: if godbird_relic { 0 } else { self.slot.ability_slots() },
-            random_option_slots: if godbird_relic { None } else { self.slot.random_option_slots() },
+            ability_slots: if self.no_ability_or_random_option_slots {
+                0
+            } else {
+                self.slot.ability_slots()
+            },
+            random_option_slots: if self.no_ability_or_random_option_slots {
+                None
+            } else {
+                self.slot.random_option_slots()
+            },
             enchant_caps: EquipmentValues {
                 thrust: cap(self.enchant_total_caps.thrust, self.values_max.thrust),
                 slash: cap(self.enchant_total_caps.slash, self.values_max.slash),
@@ -478,9 +519,9 @@ impl WikiEquipmentItem {
             enhance_type: self.enhance_type,
             armor_class: self.enhance_type.and_then(armor_class_for_type),
             damage_effects: self.damage_effects,
-            survival_effects: item_survival_effects(self.id),
-            recommended_dependency,
-            damage_dependency,
+            survival_effects: self.survival_effects,
+            recommended_dependency: self.recommended_dependency,
+            damage_dependency: self.damage_dependency,
             source: self.source,
         }
     }
@@ -499,89 +540,6 @@ const SURVIVAL_DEFENSE_RATE_20: &[EquipmentSurvivalEffect] =
 const SURVIVAL_DEFENSE_RATE_30: &[EquipmentSurvivalEffect] =
     &[EquipmentSurvivalEffect::DefenseRate { percent: 30.0 }];
 
-fn item_survival_effects(id: &str) -> &'static [EquipmentSurvivalEffect] {
-    match id {
-        // 2024-02-28追加。2026-03-04に「ダメージ耐性」から「ダメージ緩和」へ置換。
-        "psyche-stab" | "psyche-hack" | "psyche-physical" | "psyche-int" | "psyche-mr"
-        | "psyche-hack-int" | "arklon-hack-int" | "eclipse-stab" | "eclipse-hack"
-        | "eclipse-physical" | "eclipse-int" | "eclipse-mr" | "eclipse-hack-int" => {
-            SURVIVAL_MITIGATION_10
-        }
-        // リンゴの島ディフェンシオはWikiの「盾研磨/防御力+15」どおり固定値。
-        "psyche-stab-def" | "psyche-hack-def" | "psyche-physical-def" | "psyche-int-def"
-        | "psyche-mr-def" | "psyche-hack-int-def" => SURVIVAL_DEFENSE_FIXED_15,
-        // アークロン・エクリプスのディフェンシオは「盾研磨/防御力+30%」。
-        "arklon-physical-def" | "arklon-int-def" | "arklon-hack-int-def"
-        | "eclipse-stab-def" | "eclipse-hack-def" | "eclipse-physical-def"
-        | "eclipse-int-def" | "eclipse-mr-def" | "eclipse-hack-int-def" => {
-            SURVIVAL_DEFENSE_RATE_30
-        }
-        // ゆがんだ村の地域表に明記された現行値。
-        "ethereal-stab" | "ethereal-hack" | "ethereal-physical" | "ethereal-int"
-        | "ethereal-mr" | "ethereal-hack-int" => SURVIVAL_MITIGATION_15,
-        "ethereal-stab-def" | "ethereal-hack-def" | "ethereal-physical-def"
-        | "ethereal-int-def" | "ethereal-mr-def" | "ethereal-hack-int-def" => {
-            SURVIVAL_MITIGATION_40
-        }
-        // 現在収録しているコラボAFの「ダメージ20%上昇・防御力20%上昇」。
-        "dungeon-meshi-picking-tools" | "dungeon-meshi-gourmet-guide"
-        | "dungeon-meshi-thistle-book" | "maid-dragon-magic-orb"
-        | "log-horizon-akatsuki-doll" => SURVIVAL_DEFENSE_RATE_20,
-        _ => &[],
-    }
-}
-
-fn item_dependencies(id: &str) -> (Option<SkillDependency>, Option<SkillDependency>) {
-    use SkillDependency::*;
-    match id {
-        "eclipse-stab" => (Some(Stab), Some(Stab)),
-        "eclipse-stab-def" => (Some(Stab), Some(Stab)),
-        "eclipse-hack" => (Some(Hack), Some(Hack)),
-        "eclipse-hack-def" => (Some(Hack), Some(Hack)),
-        "eclipse-physical" => (Some(StabHack), Some(StabHack)),
-        "eclipse-physical-def" => (Some(StabHack), Some(StabHack)),
-        "eclipse-int" => (Some(Int), Some(Int)),
-        "eclipse-int-def" => (Some(Int), Some(Int)),
-        "eclipse-mr" => (Some(Mr), Some(Mr)),
-        "eclipse-mr-def" => (Some(Mr), Some(Mr)),
-        "eclipse-hack-int" => (Some(HackInt), Some(HackInt)),
-        "eclipse-hack-int-def" => (Some(HackInt), Some(HackInt)),
-        "arklon-physical-def" => (Some(StabHack), Some(StabHack)),
-        "arklon-int-def" => (Some(Int), Some(Int)),
-        "arklon-hack-int-def" => (Some(HackInt), Some(HackInt)),
-        "psyche-stab-def" => (Some(Stab), Some(Stab)),
-        "psyche-hack-def" => (Some(Hack), Some(Hack)),
-        "psyche-physical-def" => (Some(StabHack), Some(StabHack)),
-        "psyche-int-def" => (Some(Int), Some(Int)),
-        "psyche-mr-def" => (Some(Mr), Some(Mr)),
-        "psyche-hack-int-def" => (Some(HackInt), Some(HackInt)),
-        "psyche-stab" => (Some(Stab), Some(Stab)),
-        "psyche-hack" => (Some(Hack), Some(Hack)),
-        "psyche-physical" => (Some(StabHack), Some(StabHack)),
-        "psyche-int" => (Some(Int), Some(Int)),
-        "psyche-mr" => (Some(Mr), Some(Mr)),
-        "psyche-hack-int" => (Some(HackInt), Some(HackInt)),
-        "ethereal-stab-def" => (Some(Stab), Some(Stab)),
-        "ethereal-hack-def" => (Some(Hack), Some(Hack)),
-        "ethereal-physical-def" => (Some(StabHack), Some(StabHack)),
-        "ethereal-int-def" => (Some(Int), Some(Int)),
-        "ethereal-mr-def" => (Some(Mr), Some(Mr)),
-        "ethereal-hack-int-def" => (Some(HackInt), Some(HackInt)),
-        "ethereal-stab" => (Some(Stab), None),
-        "ethereal-hack" => (Some(Hack), None),
-        "ethereal-physical" => (Some(StabHack), None),
-        "ethereal-int" => (Some(Int), None),
-        "ethereal-mr" => (Some(Mr), None),
-        "ethereal-hack-int" => (Some(HackInt), None),
-        "dungeon-meshi-picking-tools" => (Some(Stab), None),
-        "dungeon-meshi-gourmet-guide" => (Some(Hack), None),
-        "dungeon-meshi-thistle-book" => (Some(Int), None),
-        "maid-dragon-magic-orb" => (Some(Mr), None),
-        "log-horizon-akatsuki-doll" => (Some(StabHack), None),
-        "arklon-hack-int" => (Some(HackInt), Some(HackInt)),
-        _ => (None, None),
-    }
-}
 
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -786,6 +744,10 @@ fn effect_item(
         weapon_class: None,
         enhance_type: None,
         damage_effects,
+        no_ability_or_random_option_slots: false,
+        survival_effects: &[],
+        recommended_dependency: None,
+        damage_dependency: None,
         source: ITEM_SOURCE_DAMAGE_EFFECT,
     }
 }
@@ -797,11 +759,16 @@ fn stallion_effect(
     enchant_total_caps: EquipmentValues,
 ) -> WikiEquipmentItem {
     WikiEquipmentItem {
+        no_ability_or_random_option_slots: false,
+        survival_effects: &[],
+        recommended_dependency: None,
+        damage_dependency: None,
         source: ITEM_SOURCE_STALLION_EFFECT,
         ..effect_item(id, name, values, enchant_total_caps, &[])
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn defensio_artifact(
     id: &'static str,
     name: &'static str,
@@ -809,6 +776,9 @@ fn defensio_artifact(
     values_max: EquipmentValues,
     enchant_total_caps: EquipmentValues,
     damage_effects: &'static [SkillEffect],
+    survival_effects: &'static [EquipmentSurvivalEffect],
+    recommended_dependency: Option<SkillDependency>,
+    damage_dependency: Option<SkillDependency>,
     note: &'static str,
 ) -> WikiEquipmentItem {
     WikiEquipmentItem {
@@ -822,6 +792,10 @@ fn defensio_artifact(
         weapon_class: None,
         enhance_type: None,
         damage_effects,
+        no_ability_or_random_option_slots: false,
+        survival_effects,
+        recommended_dependency,
+        damage_dependency,
         source: Source {
             page: "Item/アクセサリー用装備/アーティファクト",
             retrieved_on: "2026-08-27",
@@ -830,6 +804,7 @@ fn defensio_artifact(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn artifact_item(
     id: &'static str,
     name: &'static str,
@@ -837,9 +812,23 @@ fn artifact_item(
     values_max: EquipmentValues,
     enchant_total_caps: EquipmentValues,
     damage_effects: &'static [SkillEffect],
+    survival_effects: &'static [EquipmentSurvivalEffect],
+    recommended_dependency: Option<SkillDependency>,
+    damage_dependency: Option<SkillDependency>,
     note: &'static str,
 ) -> WikiEquipmentItem {
-    defensio_artifact(id, name, values_min, values_max, enchant_total_caps, damage_effects, note)
+    defensio_artifact(
+        id,
+        name,
+        values_min,
+        values_max,
+        enchant_total_caps,
+        damage_effects,
+        survival_effects,
+        recommended_dependency,
+        damage_dependency,
+        note,
+    )
 }
 
 /// 神鳥・ルナリアレリック。各段階は直前段階の完成値から始まり、表の値まで成長する。
@@ -857,6 +846,8 @@ fn relic_item(
         PartSlot::RelicBracelet => v(0, 0, main, 0, main, 0, 0, sub, sub),
         _ => unreachable!("レリック以外の部位が指定されました"),
     };
+    // 神鳥レリックはアビリティ・付加オプション枠を持たない(ルナリアレリックは持つ)。
+    let no_ability_or_random_option_slots = id.starts_with("godbird-");
     WikiEquipmentItem {
         id,
         slot,
@@ -868,6 +859,10 @@ fn relic_item(
         weapon_class: None,
         enhance_type: None,
         damage_effects: &[],
+        no_ability_or_random_option_slots,
+        survival_effects: &[],
+        recommended_dependency: None,
+        damage_dependency: None,
         source: Source {
             page: "Item/アクセサリ/レリック/神鳥のレリック・ルナリアレリック",
             retrieved_on: "2026-08-28",
@@ -922,13 +917,29 @@ fn effect_trigger_3_ranged(
         weapon_class: None,
         enhance_type: None,
         damage_effects: ITEM_DAMAGE_JAPAN_3,
+        no_ability_or_random_option_slots: false,
+        survival_effects: &[],
+        recommended_dependency: None,
+        damage_dependency: None,
         source: ITEM_SOURCE_DAMAGE_EFFECT,
     }
 }
 
 /// 装備カタログ。エンドゲーム帯 20 件 +「装着時に与ダメージが上がる」装備 19 件。
 /// 後者は装備補正値だけでなく `damage_effects` を持ち、与ダメージ式のカテゴリに入る。
+///
+/// 静的データなので `build_equipment_catalog` の結果をプロセス内で 1 回だけ組み立て、
+/// 以降は複製を返す(`find_equipment_item` など呼び出し頻度の高い箇所からの再構築を避ける)。
 pub fn equipment_catalog() -> Vec<EquipmentItem> {
+    cached_equipment_catalog().to_vec()
+}
+
+fn cached_equipment_catalog() -> &'static [EquipmentItem] {
+    static CACHE: std::sync::OnceLock<Vec<EquipmentItem>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(build_equipment_catalog)
+}
+
+fn build_equipment_catalog() -> Vec<EquipmentItem> {
     let mut catalog = vec![
         WikiEquipmentItem {
             id: "aquilus-scimitar",
@@ -941,6 +952,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::Katana),
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_KATANA,
         },
         WikiEquipmentItem {
@@ -954,6 +969,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::Katana),
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_KATANA,
         },
         WikiEquipmentItem {
@@ -967,6 +986,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::Tachi),
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_TACHI,
         },
         WikiEquipmentItem {
@@ -980,6 +1003,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::Tachi),
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_TACHI,
         },
         WikiEquipmentItem {
@@ -993,6 +1020,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::GreatSword),
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_GREAT_SWORD,
         },
         WikiEquipmentItem {
@@ -1006,6 +1037,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::GreatSword),
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_GREAT_SWORD,
         },
         WikiEquipmentItem {
@@ -1019,6 +1054,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_HELM,
         },
         WikiEquipmentItem {
@@ -1032,6 +1071,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_HELM,
         },
         WikiEquipmentItem {
@@ -1045,6 +1088,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: Some(EquipmentEnhanceType::ArmorLight),
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ARMOR,
         },
         WikiEquipmentItem {
@@ -1058,6 +1105,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: Some(EquipmentEnhanceType::ArmorLight),
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ARMOR,
         },
         WikiEquipmentItem {
@@ -1071,6 +1122,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_SHIELD,
         },
         WikiEquipmentItem {
@@ -1084,6 +1139,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_SHIELD,
         },
         WikiEquipmentItem {
@@ -1097,6 +1156,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1110,6 +1173,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1123,6 +1190,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1136,6 +1207,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1149,6 +1224,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1162,6 +1241,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1175,6 +1258,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1188,6 +1275,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1201,6 +1292,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_SHIELD_PLUS,
         },
         WikiEquipmentItem {
@@ -1214,6 +1309,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: &[],
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_NOTE_SHIELD_PLUS,
         },
         // ── 装着時効果つき(与ダメージ式のカテゴリに入る)──────────────────────
@@ -1229,6 +1328,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::Katana),
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_KATANA,
         },
         WikiEquipmentItem {
@@ -1242,6 +1345,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: Some(WeaponClass::Tachi),
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_TACHI,
         },
         // カテゴリO 物理/魔法ダメージ増加
@@ -1256,6 +1363,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: Some(EquipmentEnhanceType::ArmorRobe),
             damage_effects: ITEM_DAMAGE_PHYSICAL_MAGIC_3,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_ROBE,
         },
         // カテゴリOld 攻撃ダメージII(要塞占領報酬。2 種は補正値まで同じ)
@@ -1270,6 +1381,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_LEGACY_25,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_BODY,
         },
         WikiEquipmentItem {
@@ -1283,6 +1398,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_LEGACY_25,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_BODY,
         },
         // カテゴリX6: 手装備。けものフレンズコラボは +5%、ダンジョン飯コラボは +3%
@@ -1297,6 +1416,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_5,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         WikiEquipmentItem {
@@ -1310,6 +1433,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_5,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         WikiEquipmentItem {
@@ -1323,6 +1450,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         WikiEquipmentItem {
@@ -1336,6 +1467,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             weapon_class: None,
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
+            no_ability_or_random_option_slots: false,
+            survival_effects: &[],
+            recommended_dependency: None,
+            damage_dependency: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         // カテゴリX5 攻撃ダメージ(特殊): エフェクト(装着時攻撃力 +3%)
@@ -1496,6 +1631,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(190, 0, 30, 0, 35, 35, 35, 35, 35), growth_cap: None,
             enchant_total_caps: v(220, 0, 50, 0, 55, 55, 55, 55, 55),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_30,
+            recommended_dependency: Some(SkillDependency::Stab),
+            damage_dependency: Some(SkillDependency::Stab),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。突き依存+30%は同系列規則から補完" },
         },
         WikiEquipmentItem {
@@ -1505,6 +1644,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 190, 35, 0, 35, 35, 35, 35, 35), growth_cap: None,
             enchant_total_caps: v(0, 220, 55, 0, 55, 55, 55, 55, 55),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_30,
+            recommended_dependency: Some(SkillDependency::Hack),
+            damage_dependency: Some(SkillDependency::Hack),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。斬り攻撃ダメージ+30%" },
         },
         WikiEquipmentItem {
@@ -1513,6 +1656,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 0, 30, 170, 30, 30, 30, 30, 30), growth_cap: None,
             enchant_total_caps: v(0, 0, 50, 200, 50, 50, 50, 50, 50),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_MITIGATION_10,
+            recommended_dependency: Some(SkillDependency::Int),
+            damage_dependency: Some(SkillDependency::Int),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。魔法攻撃ダメージ+30%" },
         },
         WikiEquipmentItem {
@@ -1522,6 +1669,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 0, 35, 35, 190, 35, 35, 35, 35), growth_cap: None,
             enchant_total_caps: v(0, 0, 55, 55, 220, 55, 55, 55, 55),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_30,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_30,
+            recommended_dependency: Some(SkillDependency::Mr),
+            damage_dependency: Some(SkillDependency::Mr),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。MR系攻撃ダメージ+30%" },
         },
         WikiEquipmentItem {
@@ -1530,6 +1681,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(135, 0, 30, 0, 30, 25, 20, 20, 25), growth_cap: None,
             enchant_total_caps: v(170, 0, 30, 0, 30, 25, 25, 25, 25),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_20,
+            recommended_dependency: Some(SkillDependency::Stab),
+            damage_dependency: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1538,6 +1693,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 135, 30, 0, 30, 25, 20, 20, 25), growth_cap: None,
             enchant_total_caps: v(0, 170, 30, 0, 30, 25, 25, 25, 25),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_20,
+            recommended_dependency: Some(SkillDependency::Hack),
+            damage_dependency: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1546,6 +1705,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 0, 30, 135, 30, 20, 25, 25, 20), growth_cap: None,
             enchant_total_caps: v(0, 0, 30, 170, 30, 25, 25, 25, 25),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_20,
+            recommended_dependency: Some(SkillDependency::Int),
+            damage_dependency: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1554,6 +1717,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 0, 30, 103, 103, 39, 19, 44, 33), growth_cap: None,
             enchant_total_caps: v(0, 0, 30, 130, 130, 39, 19, 44, 33),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_20,
+            recommended_dependency: Some(SkillDependency::Mr),
+            damage_dependency: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "メイドラゴンタイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1562,6 +1729,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(103, 103, 50, 0, 50, 25, 25, 25, 25), growth_cap: None,
             enchant_total_caps: v(130, 130, 70, 0, 70, 49, 49, 49, 49),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_SPECIAL_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_20,
+            recommended_dependency: Some(SkillDependency::StabHack),
+            damage_dependency: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ログ・ホライズンタイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1570,6 +1741,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 100, 21, 100, 21, 14, 15, 25, 14), growth_cap: None,
             enchant_total_caps: v(0, 130, 45, 130, 45, 38, 21, 49, 38),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_MITIGATION_10,
+            recommended_dependency: Some(SkillDependency::HackInt),
+            damage_dependency: Some(SkillDependency::HackInt),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法斬り攻撃ダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1580,6 +1755,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             // Wikiの同一補正行の欠落セルは、数値が同じリストア/スピーディーの上限を採用。
             enchant_total_caps: v(130, 130, 49, 0, 49, 38, 21, 49, 38),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_30,
+            recommended_dependency: Some(SkillDependency::StabHack),
+            damage_dependency: Some(SkillDependency::StabHack),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。物理複合攻撃ダメージ+20%、ディフェンシオ。上限の欠落セルは同補正のリストア/スピーディーと一致" },
         },
         WikiEquipmentItem {
@@ -1589,6 +1768,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 0, 25, 130, 27, 14, 15, 25, 14), growth_cap: None,
             enchant_total_caps: v(0, 0, 49, 160, 51, 38, 21, 49, 38),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_30,
+            recommended_dependency: Some(SkillDependency::Int),
+            damage_dependency: Some(SkillDependency::Int),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法攻撃ダメージ+20%、ディフェンシオ" },
         },
         WikiEquipmentItem {
@@ -1598,6 +1781,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
             values_max: v(0, 110, 25, 110, 25, 14, 15, 25, 14), growth_cap: None,
             enchant_total_caps: v(0, 140, 49, 140, 49, 38, 21, 49, 38),
             weapon_class: None, enhance_type: None, damage_effects: ITEM_DAMAGE_DEPENDENCY_20,
+            no_ability_or_random_option_slots: false,
+            survival_effects: SURVIVAL_DEFENSE_RATE_30,
+            recommended_dependency: Some(SkillDependency::HackInt),
+            damage_dependency: Some(SkillDependency::HackInt),
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法斬り攻撃ダメージ+20%、ディフェンシオ" },
         },
 
@@ -1605,135 +1792,167 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
         artifact_item("psyche-stab", "†プシーキーの突力",
             v(63, 0, 14, 0, 14, 13, 13, 23, 13), v(66, 0, 17, 0, 17, 14, 15, 25, 14),
             v(90, 0, 41, 0, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::Stab), Some(SkillDependency::Stab),
             "リンゴの島。突き攻撃ダメージ+20%"),
         artifact_item("psyche-hack", "†プシーキーの斬力",
             v(0, 63, 14, 0, 14, 13, 13, 23, 13), v(0, 66, 17, 0, 17, 14, 15, 25, 14),
             v(0, 90, 41, 0, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::Hack), Some(SkillDependency::Hack),
             "リンゴの島。斬り攻撃ダメージ+20%"),
         artifact_item("psyche-physical", "†プシーキーの物理力",
             v(41, 41, 14, 0, 14, 13, 13, 23, 13), v(44, 44, 17, 0, 17, 14, 15, 25, 14),
             v(68, 68, 41, 0, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::StabHack), Some(SkillDependency::StabHack),
             "リンゴの島。物理複合攻撃ダメージ+20%"),
         artifact_item("psyche-int", "†プシーキーの魔力",
             v(0, 0, 14, 63, 16, 13, 13, 23, 13), v(0, 0, 17, 66, 19, 14, 15, 25, 14),
             v(0, 0, 41, 90, 43, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::Int), Some(SkillDependency::Int),
             "リンゴの島。魔法攻撃ダメージ+20%"),
         artifact_item("psyche-mr", "†プシーキーの魔防力",
             v(0, 0, 14, 19, 63, 13, 13, 23, 13), v(0, 0, 17, 22, 66, 14, 15, 25, 14),
             v(0, 0, 41, 46, 90, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::Mr), Some(SkillDependency::Mr),
             "リンゴの島。MR系攻撃ダメージ+20%"),
         artifact_item("psyche-hack-int", "†プシーキーの魔斬力",
             v(0, 53, 14, 53, 14, 13, 13, 23, 13), v(0, 58, 17, 58, 17, 14, 15, 25, 14),
             v(0, 82, 41, 82, 41, 38, 21, 49, 38), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::HackInt), Some(SkillDependency::HackInt),
             "リンゴの島。魔法斬り攻撃ダメージ+20%"),
 
         artifact_item("eclipse-stab", "†エクリプスの突力",
             v(150, 0, 20, 0, 20, 20, 20, 20, 20), v(170, 0, 30, 0, 30, 30, 30, 30, 30),
             v(200, 0, 50, 0, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::Stab), Some(SkillDependency::Stab),
             "喪失の島。突き依存+30%は同系列規則から補完"),
         artifact_item("eclipse-hack", "†エクリプスの斬力",
             v(0, 150, 20, 0, 20, 20, 20, 20, 20), v(0, 170, 30, 0, 30, 30, 30, 30, 30),
             v(0, 200, 50, 0, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::Hack), Some(SkillDependency::Hack),
             "喪失の島。斬り攻撃ダメージ+30%"),
         artifact_item("eclipse-physical", "†エクリプスの物理力",
             v(120, 120, 20, 0, 20, 20, 20, 20, 20), v(140, 140, 30, 0, 30, 30, 30, 30, 30),
             v(170, 170, 50, 0, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::StabHack), Some(SkillDependency::StabHack),
             "喪失の島。上限と物理複合依存+30%は同系列規則から補完"),
         artifact_item("eclipse-mr", "†エクリプスの魔防力",
             v(0, 0, 20, 20, 150, 20, 20, 20, 20), v(0, 0, 30, 30, 170, 30, 30, 30, 30),
             v(0, 0, 50, 50, 200, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::Mr), Some(SkillDependency::Mr),
             "喪失の島。MR系攻撃ダメージ+30%"),
         artifact_item("eclipse-hack-int", "†エクリプスの魔斬力",
             v(0, 130, 20, 130, 20, 20, 20, 20, 20), v(0, 150, 30, 150, 30, 30, 30, 30, 30),
             v(0, 180, 50, 180, 50, 50, 50, 50, 50), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_MITIGATION_10, Some(SkillDependency::HackInt), Some(SkillDependency::HackInt),
             "喪失の島。上限と魔斬依存+30%は同系列規則から補完"),
 
         artifact_item("ethereal-stab", "†エーテリアルチューブ(突力)",
             v(210, 0, 30, 0, 30, 30, 30, 30, 30), v(230, 0, 40, 0, 40, 40, 40, 40, 40),
             v(260, 0, 60, 0, 60, 60, 60, 60, 60), &[],
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Stab), None,
             "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
         artifact_item("ethereal-hack", "†エーテリアルチューブ(斬力)",
             v(0, 210, 30, 0, 30, 30, 30, 30, 30), v(0, 230, 40, 0, 40, 40, 40, 40, 40),
             v(0, 260, 60, 0, 60, 60, 60, 60, 60), &[],
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Hack), None,
             "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
         artifact_item("ethereal-physical", "†エーテリアルチューブ(物理力)",
             v(190, 190, 30, 0, 30, 30, 30, 30, 30), v(210, 210, 40, 0, 40, 40, 40, 40, 40),
             v(240, 240, 60, 0, 60, 60, 60, 60, 60), &[],
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::StabHack), None,
             "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
         artifact_item("ethereal-int", "†エーテリアルチューブ(魔力)",
             v(0, 0, 30, 210, 30, 30, 30, 30, 30), v(0, 0, 40, 230, 40, 40, 40, 40, 40),
             v(0, 0, 60, 260, 60, 60, 60, 60, 60), &[],
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Int), None,
             "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
         artifact_item("ethereal-mr", "†エーテリアルチューブ(魔防力)",
             v(0, 0, 30, 30, 210, 30, 30, 30, 30), v(0, 0, 40, 40, 230, 40, 40, 40, 40),
             v(0, 0, 60, 60, 260, 60, 60, 60, 60), &[],
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Mr), None,
             "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
         artifact_item("ethereal-hack-int", "†エーテリアルチューブ(魔斬力)",
             v(0, 190, 30, 190, 30, 30, 30, 30, 30), v(0, 210, 40, 210, 40, 40, 40, 40, 40),
             v(0, 240, 60, 240, 60, 60, 60, 60, 60), &[],
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::HackInt), None,
             "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
 
         defensio_artifact("psyche-stab-def", "†プシーキーの突力 - ディフェンシオ",
             v(69, 0, 20, 0, 20, 16, 16, 26, 16), v(72, 0, 23, 0, 23, 17, 18, 28, 17),
             v(96, 0, 47, 0, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_DEFENSE_FIXED_15, Some(SkillDependency::Stab), Some(SkillDependency::Stab),
             "リンゴの島。突き攻撃ダメージ+20%、ディフェンシオ"),
         defensio_artifact("psyche-hack-def", "†プシーキーの斬力 - ディフェンシオ",
             v(0, 69, 20, 0, 20, 16, 16, 26, 16), v(0, 72, 23, 0, 23, 17, 18, 28, 17),
             v(0, 96, 47, 0, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_DEFENSE_FIXED_15, Some(SkillDependency::Hack), Some(SkillDependency::Hack),
             "リンゴの島。斬り攻撃ダメージ+20%、ディフェンシオ"),
         defensio_artifact("psyche-physical-def", "†プシーキーの物理力 - ディフェンシオ",
             v(47, 47, 20, 0, 20, 16, 16, 26, 16), v(50, 50, 23, 0, 23, 17, 18, 28, 17),
             v(74, 74, 47, 0, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_DEFENSE_FIXED_15, Some(SkillDependency::StabHack), Some(SkillDependency::StabHack),
             "リンゴの島。物理複合攻撃ダメージ+20%、ディフェンシオ"),
         defensio_artifact("psyche-int-def", "†プシーキーの魔力 - ディフェンシオ",
             v(0, 0, 20, 69, 22, 16, 16, 26, 16), v(0, 0, 23, 72, 25, 17, 18, 28, 17),
             v(0, 0, 47, 96, 49, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_DEFENSE_FIXED_15, Some(SkillDependency::Int), Some(SkillDependency::Int),
             "リンゴの島。魔法攻撃ダメージ+20%、ディフェンシオ"),
         defensio_artifact("psyche-mr-def", "†プシーキーの魔防力 - ディフェンシオ",
             v(0, 0, 20, 25, 69, 16, 16, 26, 16), v(0, 0, 23, 28, 72, 17, 18, 28, 17),
             v(0, 0, 47, 52, 96, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_DEFENSE_FIXED_15, Some(SkillDependency::Mr), Some(SkillDependency::Mr),
             "リンゴの島。MR系攻撃ダメージ+20%、ディフェンシオ"),
         defensio_artifact("psyche-hack-int-def", "†プシーキーの魔斬力 - ディフェンシオ",
             v(0, 61, 20, 61, 20, 16, 16, 26, 16), v(0, 64, 23, 64, 23, 17, 18, 28, 17),
             v(0, 88, 47, 88, 47, 41, 24, 52, 41), ITEM_DAMAGE_DEPENDENCY_20,
+            SURVIVAL_DEFENSE_FIXED_15, Some(SkillDependency::HackInt), Some(SkillDependency::HackInt),
             "リンゴの島。魔法斬り攻撃ダメージ+20%、ディフェンシオ"),
 
         defensio_artifact("eclipse-physical-def", "†エクリプスの物理力 - ディフェンシオ",
             v(140, 140, 25, 0, 25, 25, 25, 25, 25), v(160, 160, 35, 0, 35, 35, 35, 35, 35),
             v(190, 190, 55, 0, 55, 55, 55, 55, 55), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_DEFENSE_RATE_30, Some(SkillDependency::StabHack), Some(SkillDependency::StabHack),
             "喪失の島。補正と物理複合依存+30%は同系列規則から補完"),
         defensio_artifact("eclipse-int-def", "†エクリプスの魔力 - ディフェンシオ",
             v(0, 0, 25, 170, 25, 25, 25, 25, 25), v(0, 0, 35, 190, 35, 35, 35, 35, 35),
             v(0, 0, 55, 220, 55, 55, 55, 55, 55), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_DEFENSE_RATE_30, Some(SkillDependency::Int), Some(SkillDependency::Int),
             "喪失の島。副補正上限と魔攻依存+30%は同系列規則から補完"),
         defensio_artifact("eclipse-hack-int-def", "†エクリプスの魔斬力 - ディフェンシオ",
             v(0, 150, 25, 150, 25, 25, 25, 25, 25), v(0, 170, 35, 170, 35, 35, 35, 35, 35),
             v(0, 200, 55, 200, 55, 55, 55, 55, 55), ITEM_DAMAGE_DEPENDENCY_30,
+            SURVIVAL_DEFENSE_RATE_30, Some(SkillDependency::HackInt), Some(SkillDependency::HackInt),
             "喪失の島。補正と魔斬依存+30%は同系列規則から補完"),
 
         defensio_artifact("ethereal-stab-def", "†エーテリアルチューブ(突力) - ディフェンシオ",
             v(230, 0, 35, 0, 35, 35, 35, 35, 35), v(250, 0, 45, 0, 45, 45, 45, 45, 45),
             v(280, 0, 65, 0, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_40, Some(SkillDependency::Stab), Some(SkillDependency::Stab),
             "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。突き依存+35%"),
         defensio_artifact("ethereal-hack-def", "†エーテリアルチューブ(斬力) - ディフェンシオ",
             v(0, 230, 35, 0, 35, 35, 35, 35, 35), v(0, 250, 45, 0, 45, 45, 45, 45, 45),
             v(0, 280, 65, 0, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_40, Some(SkillDependency::Hack), Some(SkillDependency::Hack),
             "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。斬り依存+35%"),
         defensio_artifact("ethereal-physical-def", "†エーテリアルチューブ(物理力) - ディフェンシオ",
             v(210, 210, 35, 0, 35, 35, 35, 35, 35), v(230, 230, 45, 0, 45, 45, 45, 45, 45),
             v(260, 260, 65, 0, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_40, Some(SkillDependency::StabHack), Some(SkillDependency::StabHack),
             "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。物理複合依存+35%"),
         defensio_artifact("ethereal-int-def", "†エーテリアルチューブ(魔力) - ディフェンシオ",
             v(0, 0, 35, 230, 35, 35, 35, 35, 35), v(0, 0, 45, 250, 45, 45, 45, 45, 45),
             v(0, 0, 65, 280, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_40, Some(SkillDependency::Int), Some(SkillDependency::Int),
             "ゆがんだ村。Wiki確定補正。魔攻依存+35%"),
         defensio_artifact("ethereal-mr-def", "†エーテリアルチューブ(魔防力) - ディフェンシオ",
             v(0, 0, 35, 35, 230, 35, 35, 35, 35), v(0, 0, 45, 45, 250, 45, 45, 45, 45),
             v(0, 0, 65, 65, 280, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_40, Some(SkillDependency::Mr), Some(SkillDependency::Mr),
             "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。魔防依存+35%"),
         defensio_artifact("ethereal-hack-int-def", "†エーテリアルチューブ(魔斬力) - ディフェンシオ",
             v(0, 210, 35, 210, 35, 35, 35, 35, 35), v(0, 230, 45, 230, 45, 45, 45, 45, 45),
             v(0, 260, 65, 260, 65, 65, 65, 65, 65), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_40, Some(SkillDependency::HackInt), Some(SkillDependency::HackInt),
             "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。魔斬依存+35%"),
 
         // ── レリック: 直前段階の完成値から、選択段階の上限までランダム成長 ──
@@ -1793,6 +2012,10 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
         weapon_class: None,
         enhance_type: None,
         damage_effects: &[],
+        no_ability_or_random_option_slots: false,
+        survival_effects: &[],
+        recommended_dependency: None,
+        damage_dependency: None,
         source: Source {
             page: "Item/防具/腕/盾＋",
             retrieved_on: "2026-08-27",
@@ -1820,7 +2043,7 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
 }
 
 pub fn find_equipment_item(id: &str) -> Option<EquipmentItem> {
-    equipment_catalog().into_iter().find(|item| item.id == id)
+    cached_equipment_catalog().iter().copied().find(|item| item.id == id)
 }
 
 /// `character_wrist_base_bonus` の材料(キャラのルール・バンド判定・腕合計値)だけを解決する。

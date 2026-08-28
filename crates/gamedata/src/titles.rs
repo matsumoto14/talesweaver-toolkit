@@ -84,40 +84,6 @@ const fn td(
     }
 }
 
-fn conditional_added_damage(id: &str) -> Option<ConditionalAddedDamage> {
-    use AddedDamageCondition::{Enemy, Region};
-    use GameRegion::{ArklonUnderground, LostIsland, Praba, ShinchouNest};
-    let region = match id {
-        "eclipse" => Some((20.0, LostIsland)),
-        "shinchou_no_negura" => Some((20.0, ShinchouNest)),
-        "arklon_death_knight" => Some((20.0, ArklonUnderground)),
-        "golmodaf_slayer" | "golron_slayer" | "kyojin_gyakusatsusha" | "kongen_hakaisha" => {
-            Some((10.0, Praba))
-        }
-        _ => None,
-    };
-    if let Some((percent, region)) = region {
-        return Some(ConditionalAddedDamage { percent, condition: Region(region) });
-    }
-
-    let enemy = if id.starts_with("mercurial_shirairon_") {
-        Some("shirairon")
-    } else if id.starts_with("mercurial_silvan_") {
-        Some("silvan")
-    } else if id.starts_with("mercurial_serion_") {
-        Some("serion")
-    } else if id.starts_with("mercurial_sereana_") {
-        Some("sereana")
-    } else if id.starts_with("mercurial_luminous_") {
-        Some("luminous")
-    } else if id.starts_with("arklon_guardian_") {
-        Some("deep_apostle")
-    } else {
-        None
-    };
-    enemy.map(|enemy| ConditionalAddedDamage { percent: 10.0, condition: Enemy(enemy) })
-}
-
 /// **ダメージ増加 → 与ダメージに効く 1 値の大きさ → その 4 値の合計 → 9 値の合計**の順。
 /// UI はこの順でそのまま出す。
 ///
@@ -128,12 +94,12 @@ fn conditional_added_damage(id: &str) -> Option<ConditionalAddedDamage> {
 /// 名誉の証(トーデン兄妹)の 突き50 + 斬り50 + …(9 値合計 205)より効く。
 pub fn title_catalog() -> Vec<TitleDef> {
     let mut catalog = vec![
-        t("eclipse", "エクリプス", Special, "喪失の島", None,
-          v(40, 40, 40, 40, 40, 40, 40, 40, 40), "移動速度+5 / 喪失の島関連マップで追加ダメージ+20%"),
-        t("shinchou_no_negura", "神鳥の塒", Special, "神鳥の塒", None,
-          v(30, 30, 30, 30, 30, 30, 30, 30, 30), "移動速度+5 / 神鳥の塒関連マップで追加ダメージ+20%"),
-        t("arklon_death_knight", "死の騎士", Special, "アークロン要塞", None,
-          v(20, 20, 20, 20, 20, 20, 20, 20, 20), "移動速度+5 / アークロン地下要塞関連マップでの追加ダメージ+20%"),
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::LostIsland) }), ..t("eclipse", "エクリプス", Special, "喪失の島", None,
+          v(40, 40, 40, 40, 40, 40, 40, 40, 40), "移動速度+5 / 喪失の島関連マップで追加ダメージ+20%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::ShinchouNest) }), ..t("shinchou_no_negura", "神鳥の塒", Special, "神鳥の塒", None,
+          v(30, 30, 30, 30, 30, 30, 30, 30, 30), "移動速度+5 / 神鳥の塒関連マップで追加ダメージ+20%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::ArklonUnderground) }), ..t("arklon_death_knight", "死の騎士", Special, "アークロン要塞", None,
+          v(20, 20, 20, 20, 20, 20, 20, 20, 20), "移動速度+5 / アークロン地下要塞関連マップでの追加ダメージ+20%") },
         t("rune_kizuna_5", "ルーンの絆Ⅴ", Special, "ルーン", None,
           v(11, 11, 11, 11, 11, 11, 11, 11, 11), "テイルズID内の8キャラLv310達成 / レアドロップ率+100%"),
         t("rune_kizuna_3", "ルーンの絆Ⅲ", Special, "ルーン", None,
@@ -156,100 +122,100 @@ pub fn title_catalog() -> Vec<TitleDef> {
           v(4, 4, 6, 4, 4, 6, 3, 6, 6), "週間順位3位 / レアドロップ率+50%・合成成功率+30%"),
         t("eiyuu", "英雄", Special, "星の戦場", None,
           v(4, 4, 6, 4, 4, 5, 5, 5, 5), "星の戦場ランキング報酬(シーズン)2位 / 獲得経験値+10%、レア取得確率+10%"),
-        t("golmodaf_slayer", "ゴルモダフスレイヤー", Special, "プラバ前哨基地", None,
-          v(10, 10, 0, 10, 10, 0, 0, 0, 0), "ゴルモダフ討伐(24時間) / 移動速度+5、プラバ関連マップで追加ダメージ+10%"),
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Region(GameRegion::Praba) }), ..t("golmodaf_slayer", "ゴルモダフスレイヤー", Special, "プラバ前哨基地", None,
+          v(10, 10, 0, 10, 10, 0, 0, 0, 0), "ゴルモダフ討伐(24時間) / 移動速度+5、プラバ関連マップで追加ダメージ+10%") },
         t("haou", "覇王", Special, "星の戦場", None,
           v(4, 4, 5, 4, 4, 5, 3, 4, 4), "星の戦場ランキング報酬(シーズン)3位 / 経験値追加獲得、レア取得確率+10％"),
         t("ken_no_shisai_kouhosha", "剣の司祭の候補者", Special, "剣の才能", None,
           v(3, 3, 4, 3, 3, 4, 2, 4, 4), "週間順位4〜50位"),
         t("bishokuka", "美食家", Normal, "月の島", None,
           v(5, 5, 3, 5, 5, 2, 2, 3, 0), "シノンのクエスト「食べ物をよこせ (反復)」を20回以上クリア"),
-        t("golron_slayer", "ゴルロンスレイヤー", Special, "プラバ前哨基地", None,
-          v(7, 7, 0, 7, 7, 0, 0, 0, 0), "ゴルロン討伐(24時間) / 移動速度+5、プラバ関連マップで追加ダメージ+10%"),
-        t("kyojin_gyakusatsusha", "巨人虐殺者", Special, "プラバ前哨基地", None,
-          v(3, 3, 3, 3, 3, 3, 3, 3, 3), "巨人族殲滅戦ランキング1〜3位 / 移動速度+5、プラバ関連マップで追加ダメージ+10%"),
-        t("kongen_hakaisha", "根源破壊者", Special, "プラバ前哨基地", None,
-          v(3, 3, 3, 3, 3, 3, 3, 3, 3), "スルトの力の根源ミッションランキング1〜3位 / 移動速度+5、プラバ関連マップで追加ダメージ+10%"),
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Region(GameRegion::Praba) }), ..t("golron_slayer", "ゴルロンスレイヤー", Special, "プラバ前哨基地", None,
+          v(7, 7, 0, 7, 7, 0, 0, 0, 0), "ゴルロン討伐(24時間) / 移動速度+5、プラバ関連マップで追加ダメージ+10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Region(GameRegion::Praba) }), ..t("kyojin_gyakusatsusha", "巨人虐殺者", Special, "プラバ前哨基地", None,
+          v(3, 3, 3, 3, 3, 3, 3, 3, 3), "巨人族殲滅戦ランキング1〜3位 / 移動速度+5、プラバ関連マップで追加ダメージ+10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Region(GameRegion::Praba) }), ..t("kongen_hakaisha", "根源破壊者", Special, "プラバ前哨基地", None,
+          v(3, 3, 3, 3, 3, 3, 3, 3, 3), "スルトの力の根源ミッションランキング1〜3位 / 移動速度+5、プラバ関連マップで追加ダメージ+10%") },
         t("senjou_no_shihaisha", "戦場の支配者", Special, "星の戦場", None,
           v(3, 3, 2, 3, 3, 4, 3, 2, 3), "星の戦場ランキング報酬(シーズン)4〜50位 / 経験値追加獲得、レア取得確率+5％"),
         t("genkai_toppa", "限界突破！", Normal, "TalesWeaverマニア", None,
           v(3, 3, 2, 4, 2, 2, 4, 1, 1), "2次覚醒達成"),
         t("kouki_naru_hane", "高貴なる羽", Special, "新テイルズウィーバー★", None,
           v(2, 2, 0, 0, 0, 5, 4, 5, 4), "Lv270達成"),
-        t("arklon_guardian_hack", "アークロン要塞守護者 - HACK", Special, "アークロン要塞", None,
-          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("arklon_guardian_int", "アークロン要塞守護者 - INT", Special, "アークロン要塞", None,
-          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~"),
-        t("arklon_guardian_stab", "アークロン要塞守護者 - STAB", Special, "アークロン要塞", None,
-          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "/ 深淵の使徒に追加ダメージ +10%"),
-        t("arklon_guardian_stab_hack", "アークロン要塞守護者 - 物理複合", Special, "アークロン要塞", None,
-          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("arklon_guardian_hack_int", "アークロン要塞守護者 - 魔法斬り", Special, "アークロン要塞", None,
-          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~"),
-        t("arklon_guardian_mr", "アークロン要塞守護者 - 魔法防御", Special, "アークロン要塞", None,
-          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~"),
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("deep_apostle") }), ..t("arklon_guardian_hack", "アークロン要塞守護者 - HACK", Special, "アークロン要塞", None,
+          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("deep_apostle") }), ..t("arklon_guardian_int", "アークロン要塞守護者 - INT", Special, "アークロン要塞", None,
+          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("deep_apostle") }), ..t("arklon_guardian_stab", "アークロン要塞守護者 - STAB", Special, "アークロン要塞", None,
+          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "/ 深淵の使徒に追加ダメージ +10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("deep_apostle") }), ..t("arklon_guardian_stab_hack", "アークロン要塞守護者 - 物理複合", Special, "アークロン要塞", None,
+          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("deep_apostle") }), ..t("arklon_guardian_hack_int", "アークロン要塞守護者 - 魔法斬り", Special, "アークロン要塞", None,
+          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("deep_apostle") }), ..t("arklon_guardian_mr", "アークロン要塞守護者 - 魔法防御", Special, "アークロン要塞", None,
+          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~") },
         t("negai_no_kagami", "願いの鏡の放浪者", Special, "エピソード3:共鳴", None,
           v(4, 4, 4, 4, 4, 0, 0, 0, 0), "EP3CP7クリア"),
-        t("mercurial_shirairon_hack", "シライロン - 斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_shirairon_stab_hack", "シライロン - 物理複合", Special, "マーキュリアル洞窟", None,
-          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_shirairon_stab", "シライロン - 突き", Special, "マーキュリアル洞窟", None,
-          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "シライロン（レアドロップ） / シライロンに追加ダメージ +10%"),
-        t("mercurial_shirairon_int", "シライロン - 魔法攻撃", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_shirairon_hack_int", "シライロン - 魔法斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_shirairon_mr", "シライロン - 魔法防御", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~"),
-        t("mercurial_silvan_hack", "シルバン - 斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_silvan_stab_hack", "シルバン - 物理複合", Special, "マーキュリアル洞窟", None,
-          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_silvan_stab", "シルバン - 突き", Special, "マーキュリアル洞窟", None,
-          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "シルバン（レアドロップ） / シルバンに追加ダメージ +10%"),
-        t("mercurial_silvan_int", "シルバン - 魔法攻撃", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_silvan_hack_int", "シルバン - 魔法斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_silvan_mr", "シルバン - 魔法防御", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~"),
-        t("mercurial_serion_hack", "セリオン - 斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_serion_stab_hack", "セリオン - 物理複合", Special, "マーキュリアル洞窟", None,
-          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_serion_stab", "セリオン - 突き", Special, "マーキュリアル洞窟", None,
-          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "セリオン（レアドロップ） / セリオンに追加ダメージ +10%"),
-        t("mercurial_serion_int", "セリオン - 魔法攻撃", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_serion_hack_int", "セリオン - 魔法斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_serion_mr", "セリオン - 魔法防御", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~"),
-        t("mercurial_sereana_hack", "セレアナ - 斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_sereana_stab_hack", "セレアナ - 物理複合", Special, "マーキュリアル洞窟", None,
-          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_sereana_stab", "セレアナ - 突き", Special, "マーキュリアル洞窟", None,
-          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "セレアナ（レアドロップ） / セレアナに追加ダメージ +10%"),
-        t("mercurial_sereana_int", "セレアナ - 魔法攻撃", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_sereana_hack_int", "セレアナ - 魔法斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_sereana_mr", "セレアナ - 魔法防御", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~"),
-        t("mercurial_luminous_hack", "ルミナス - 斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_luminous_stab_hack", "ルミナス - 物理複合", Special, "マーキュリアル洞窟", None,
-          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_luminous_stab", "ルミナス - 突き", Special, "マーキュリアル洞窟", None,
-          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "ルミナス（レアドロップ） / ルミナスに追加ダメージ +10%"),
-        t("mercurial_luminous_int", "ルミナス - 魔法攻撃", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_luminous_hack_int", "ルミナス - 魔法斬り", Special, "マーキュリアル洞窟", None,
-          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~"),
-        t("mercurial_luminous_mr", "ルミナス - 魔法防御", Special, "マーキュリアル洞窟", None,
-          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~"),
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("shirairon") }), ..t("mercurial_shirairon_hack", "シライロン - 斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("shirairon") }), ..t("mercurial_shirairon_stab_hack", "シライロン - 物理複合", Special, "マーキュリアル洞窟", None,
+          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("shirairon") }), ..t("mercurial_shirairon_stab", "シライロン - 突き", Special, "マーキュリアル洞窟", None,
+          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "シライロン（レアドロップ） / シライロンに追加ダメージ +10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("shirairon") }), ..t("mercurial_shirairon_int", "シライロン - 魔法攻撃", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("shirairon") }), ..t("mercurial_shirairon_hack_int", "シライロン - 魔法斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("shirairon") }), ..t("mercurial_shirairon_mr", "シライロン - 魔法防御", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("silvan") }), ..t("mercurial_silvan_hack", "シルバン - 斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("silvan") }), ..t("mercurial_silvan_stab_hack", "シルバン - 物理複合", Special, "マーキュリアル洞窟", None,
+          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("silvan") }), ..t("mercurial_silvan_stab", "シルバン - 突き", Special, "マーキュリアル洞窟", None,
+          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "シルバン（レアドロップ） / シルバンに追加ダメージ +10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("silvan") }), ..t("mercurial_silvan_int", "シルバン - 魔法攻撃", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("silvan") }), ..t("mercurial_silvan_hack_int", "シルバン - 魔法斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("silvan") }), ..t("mercurial_silvan_mr", "シルバン - 魔法防御", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("serion") }), ..t("mercurial_serion_hack", "セリオン - 斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("serion") }), ..t("mercurial_serion_stab_hack", "セリオン - 物理複合", Special, "マーキュリアル洞窟", None,
+          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("serion") }), ..t("mercurial_serion_stab", "セリオン - 突き", Special, "マーキュリアル洞窟", None,
+          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "セリオン（レアドロップ） / セリオンに追加ダメージ +10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("serion") }), ..t("mercurial_serion_int", "セリオン - 魔法攻撃", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("serion") }), ..t("mercurial_serion_hack_int", "セリオン - 魔法斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("serion") }), ..t("mercurial_serion_mr", "セリオン - 魔法防御", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("sereana") }), ..t("mercurial_sereana_hack", "セレアナ - 斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("sereana") }), ..t("mercurial_sereana_stab_hack", "セレアナ - 物理複合", Special, "マーキュリアル洞窟", None,
+          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("sereana") }), ..t("mercurial_sereana_stab", "セレアナ - 突き", Special, "マーキュリアル洞窟", None,
+          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "セレアナ（レアドロップ） / セレアナに追加ダメージ +10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("sereana") }), ..t("mercurial_sereana_int", "セレアナ - 魔法攻撃", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("sereana") }), ..t("mercurial_sereana_hack_int", "セレアナ - 魔法斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("sereana") }), ..t("mercurial_sereana_mr", "セレアナ - 魔法防御", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("luminous") }), ..t("mercurial_luminous_hack", "ルミナス - 斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 20, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("luminous") }), ..t("mercurial_luminous_stab_hack", "ルミナス - 物理複合", Special, "マーキュリアル洞窟", None,
+          v(10, 10, 0, 0, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("luminous") }), ..t("mercurial_luminous_stab", "ルミナス - 突き", Special, "マーキュリアル洞窟", None,
+          v(20, 0, 0, 0, 0, 0, 0, 0, 0), "ルミナス（レアドロップ） / ルミナスに追加ダメージ +10%") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("luminous") }), ..t("mercurial_luminous_int", "ルミナス - 魔法攻撃", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 20, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("luminous") }), ..t("mercurial_luminous_hack_int", "ルミナス - 魔法斬り", Special, "マーキュリアル洞窟", None,
+          v(0, 10, 0, 10, 0, 0, 0, 0, 0), "~") },
+        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 10.0, condition: AddedDamageCondition::Enemy("luminous") }), ..t("mercurial_luminous_mr", "ルミナス - 魔法防御", Special, "マーキュリアル洞窟", None,
+          v(0, 0, 0, 0, 20, 0, 0, 0, 0), "~") },
         t("shouri_no_shuyaku", "勝利の主役", Special, "星の戦場", None,
           v(2, 2, 2, 2, 2, 3, 3, 2, 2), "星の戦場ランキング報酬(シーズン)51〜100位"),
         t("mankai_no_hana", "満開の花", Normal, "月の島", None,
@@ -370,9 +336,6 @@ pub fn title_catalog() -> Vec<TitleDef> {
         td("meiyo_teikoku_kishidan_taichou", "名誉の証（帝国騎士団隊長）", Event, "特別EVENT 2024年", None,
            v(30, 20, 20, 20, 20, 20, 20, 20, 20), 20.0, "名誉の証"),
     ];
-    for title in &mut catalog {
-        title.conditional_added_damage = conditional_added_damage(title.id);
-    }
     catalog.sort_by(|a, b| {
         // 装備攻撃力に入る 4 値(wiki: カテゴリA の内訳)。ここだけが与ダメージに効く
         let attack = |t: &TitleDef| {

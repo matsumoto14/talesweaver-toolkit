@@ -386,14 +386,14 @@ pub struct EquipmentPart {
     #[serde(default)]
     pub ability_additions: Vec<EquipmentAbilityAdditional>,
     /// ランダムオプション(wiki: ランダムオプション)。同じカテゴリーは 1 部位に 1 つまで
-    /// (カテゴリー整合性はカタログを引ける `storage` 側で検証する)
+    /// (カテゴリー整合性は `Equipment::validate_against_catalog` がカタログを受けて検証する)
     #[serde(default)]
     pub random_options: Vec<RandomOptionSlot>,
 }
 
 impl EquipmentPart {
     /// ランダムオプションの部位制約と値域。カタログ整合性(未知 id・カテゴリー重複)は
-    /// カタログを引ける `storage` 側で見る。
+    /// カタログを引数で受ける `Equipment::validate_against_catalog` で見る。
     fn validate_random_options(&self, slot: PartSlot) -> Result<(), RandomOptionError> {
         if self.random_options.is_empty() {
             return Ok(());
@@ -792,6 +792,20 @@ impl EquipmentParts {
     }
 }
 
+/// カタログを引ける層(`gamedata` の `EquipmentItem` 相当)が渡す装備品 1 件のビュー。
+/// domain は gamedata に依存できないので、`base_totals` が `&[EquipmentAbilityDef]` を
+/// 受ける流儀と同じく、カタログの中身は呼び出し側(gamedata の `EquipmentItem`)がこのトレイトを
+/// 実装して渡す。
+pub trait EquipmentCatalogEntry {
+    fn id(&self) -> &str;
+    fn slot(&self) -> PartSlot;
+    fn ability_slots(&self) -> usize;
+    fn random_option_slots(&self) -> Option<usize>;
+    fn values_min(&self) -> EquipmentValues;
+    fn growth_caps(&self) -> Option<EquipmentValues>;
+    fn enchant_caps(&self) -> EquipmentValues;
+}
+
 impl Equipment {
     pub fn validate(&self) -> Result<(), EquipmentError> {
         for (slot, parts) in self.parts.iter_lists() {
@@ -799,6 +813,239 @@ impl Equipment {
         }
         self.siena.validate()?;
         self.thesis_cores.validate()?;
+        Ok(())
+    }
+
+    /// 装備のカタログ整合性を検証する(未知の item_id/ability id・部位不一致・成長値/エンチャント枠超過・
+    /// アビリティのカテゴリー重複・ランダムオプションのカテゴリー重複)。呼び出し側(保存前の `storage`、
+    /// DB に書かないプレビュー系コマンド双方)がカタログを渡す(`base_totals` と同じ依存方向)。
+    ///
+    /// `custom`(`item_id` が `None`)のエンチャントは `Equipment::validate` の値域チェックで
+    /// 既に検証済み。ここではカタログ item のときだけカタログ固有の `enchant_caps` を追加でチェックする。
+    pub fn validate_against_catalog<C: EquipmentCatalogEntry>(
+        &self,
+        equipment_catalog: &[C],
+        equipment_abilities: &[EquipmentAbilityDef],
+        random_options: &[RandomOptionDef],
+    ) -> Result<(), String> {
+        for (slot, parts) in self.parts.iter_lists() {
+            for part in &parts.registered {
+                if let Some(item_id) = &part.item_id {
+                    let item = equipment_catalog
+                        .iter()
+                        .find(|i| i.id() == item_id.as_str())
+                        .ok_or_else(|| format!("未知の装備アイテム '{item_id}' です"))?;
+                    if item.slot() != slot {
+                        return Err(format!(
+                            "装備アイテム '{item_id}' は {:?} 用ですが {:?} 部位に指定されています",
+                            item.slot(),
+                            slot
+                        ));
+                    }
+                    if part.abilities.len() > item.ability_slots() {
+                        return Err(format!(
+                            "装備アイテム '{item_id}' のアビリティは {} 枠までです",
+                            item.ability_slots()
+                        ));
+                    }
+                    if part.random_options.len() > item.random_option_slots().unwrap_or(0) {
+                        return Err(format!(
+                            "装備アイテム '{item_id}' のランダムオプションは {} 枠までです",
+                            item.random_option_slots().unwrap_or(0)
+                        ));
+                    }
+                    if let Some(caps) = item.growth_caps() {
+                        if let Some((name, value, minimum)) = part
+                            .base
+                            .fields()
+                            .into_iter()
+                            .zip(item.values_min().fields())
+                            .find_map(|((name, value), (_, minimum))| {
+                                (value < minimum).then_some((name, value, minimum))
+                            })
+                        {
+                            return Err(format!(
+                                "装備アイテム '{item_id}' の{name}成長値 {value} が下限 {minimum} を下回っています"
+                            ));
+                        }
+                        if let Some((name, value, cap)) = part
+                            .base
+                            .fields()
+                            .into_iter()
+                            .zip(caps.fields())
+                            .find_map(|((name, value), (_, cap))| {
+                                (value > cap).then_some((name, value, cap))
+                            })
+                        {
+                            return Err(format!(
+                                "装備アイテム '{item_id}' の{name}成長値 {value} が上限 {cap} を超えています"
+                            ));
+                        }
+                    }
+                    if let Some((name, enchant, cap)) = part
+                        .enchant
+                        .fields()
+                        .into_iter()
+                        .zip(item.enchant_caps().fields())
+                        .find_map(|((name, enchant), (_, cap))| {
+                            (enchant > cap).then_some((name, enchant, cap))
+                        })
+                    {
+                        return Err(format!(
+                            "装備アイテム '{item_id}' の{name}エンチャント {enchant} が枠 {cap} を超えています"
+                        ));
+                    }
+                }
+                // アビリティはカテゴリーごとに1つまで。同じ攻撃系統でもカテゴリー1と4は併用できる。
+                let mut groups = std::collections::HashSet::new();
+                for ability_id in &part.abilities {
+                    let def = equipment_abilities
+                        .iter()
+                        .find(|a| a.id == ability_id.as_str())
+                        .ok_or_else(|| format!("未知の装備アビリティ '{ability_id}' です"))?;
+                    if def.slot != slot {
+                        return Err(format!(
+                            "装備アビリティ '{}' は {:?} 用です",
+                            def.name, def.slot
+                        ));
+                    }
+                    if !groups.insert(def.exclusive_group) {
+                        return Err(format!(
+                            "装備アビリティ '{}' は同じ系統がすでに選ばれています(系統ごとに 1 つまで)",
+                            def.name
+                        ));
+                    }
+                }
+                let mut value_abilities = std::collections::HashSet::new();
+                for value in &part.ability_values {
+                    if !value_abilities.insert(value.ability_id.as_str()) {
+                        return Err(format!(
+                            "装備アビリティ本体値 '{}' が重複しています",
+                            value.ability_id
+                        ));
+                    }
+                    if !part.abilities.iter().any(|id| id == &value.ability_id) {
+                        return Err(format!(
+                            "装備アビリティ本体値の親 '{}' が選択されていません",
+                            value.ability_id
+                        ));
+                    }
+                    let def = equipment_abilities
+                        .iter()
+                        .find(|a| a.id == value.ability_id)
+                        .ok_or_else(|| {
+                            format!("未知の装備アビリティ本体値 '{}' です", value.ability_id)
+                        })?;
+                    let option = def
+                        .value_option
+                        .as_ref()
+                        .ok_or_else(|| format!("'{}' は本体の可変値を持ちません", def.name))?;
+                    if value.kind != option.kind || !(option.min..=option.max).contains(&value.value) {
+                        return Err(format!(
+                            "'{}' の本体値は {:?} {}〜{} です",
+                            def.name, option.kind, option.min, option.max
+                        ));
+                    }
+                }
+                for ability_id in &part.abilities {
+                    if equipment_abilities
+                        .iter()
+                        .find(|a| a.id == ability_id.as_str())
+                        .is_some_and(|def| def.value_option.is_some())
+                        && !value_abilities.contains(ability_id.as_str())
+                    {
+                        return Err(format!(
+                            "装備アビリティ '{}' の本体値がありません",
+                            ability_id
+                        ));
+                    }
+                }
+                let mut addition_counts: std::collections::HashMap<&str, usize> =
+                    std::collections::HashMap::new();
+                for addition in &part.ability_additions {
+                    if !part.abilities.iter().any(|id| id == &addition.ability_id) {
+                        return Err(format!(
+                            "追加アビリティの親 '{}' が選択されていません",
+                            addition.ability_id
+                        ));
+                    }
+                    let def = equipment_abilities
+                        .iter()
+                        .find(|a| a.id == addition.ability_id)
+                        .ok_or_else(|| {
+                            format!("未知の追加アビリティ親 '{}' です", addition.ability_id)
+                        })?;
+                    let count = addition_counts.entry(def.id).or_default();
+                    *count += 1;
+                    if *count > usize::from(def.additional_slots) {
+                        return Err(format!(
+                            "'{}' の追加アビリティは{}枠までです",
+                            def.name, def.additional_slots
+                        ));
+                    }
+                    let option = def
+                        .additional_options
+                        .iter()
+                        .find(|o| o.kind == addition.kind)
+                        .ok_or_else(|| {
+                            format!("'{}' には {:?} の追加候補がありません", def.name, addition.kind)
+                        })?;
+                    if !(option.min..=option.max).contains(&addition.value) {
+                        return Err(format!(
+                            "'{}' の追加アビリティ値 {} は {}〜{} の範囲外です",
+                            def.name, addition.value, option.min, option.max
+                        ));
+                    }
+                }
+                Self::validate_random_options_catalog(slot, part, random_options)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// ランダムオプションのカタログ整合性(未知 id・部位不一致・未収録ランク・カテゴリー重複)。
+    ///
+    /// wiki「ランダムオプション」転移の説明: 「同じカテゴリーのオプションを共存させることは出来ず、
+    /// 転移させると優先的に上書きされる。ただし、カテゴリーなし(一覧表では 0 表記)はその限りではない」。
+    /// 部位ごとの枠数は wiki に記載が無いので数では縛らない。
+    fn validate_random_options_catalog(
+        slot: PartSlot,
+        part: &EquipmentPart,
+        random_options: &[RandomOptionDef],
+    ) -> Result<(), String> {
+        let mut categories = std::collections::HashSet::new();
+        let mut ids = std::collections::HashSet::new();
+        for option in &part.random_options {
+            let def = random_options
+                .iter()
+                .find(|d| d.id == option.option_id.as_str())
+                .ok_or_else(|| format!("未知のランダムオプション '{}' です", option.option_id))?;
+            if def.slot != slot {
+                return Err(format!(
+                    "ランダムオプション '{}' は {:?} 用ですが {:?} 部位に指定されています",
+                    def.name, def.slot, slot
+                ));
+            }
+            if def.tier(option.rank).is_none() {
+                return Err(format!(
+                    "ランダムオプション '{}' に {:?} ランクはありません",
+                    def.name, option.rank
+                ));
+            }
+            if !ids.insert(def.id) {
+                return Err(format!(
+                    "ランダムオプション '{}' が同じ部位に重複しています",
+                    def.name
+                ));
+            }
+            // カテゴリー 0 は「カテゴリーなし」で共存できる
+            if def.category != 0 && !categories.insert(def.category) {
+                return Err(format!(
+                    "ランダムオプション '{}' はカテゴリー{} が同じ部位ですでに選ばれています(同じカテゴリーは 1 つまで)",
+                    def.name, def.category
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -882,7 +1129,7 @@ impl Equipment {
 
     /// 全部位のランダムオプションの集計。カタログは呼び出し側が渡す
     /// (`base_totals` の武器アビリティと同じ依存方向。domain は gamedata に依存できない)。
-    /// カタログに無い id の枠は無視する(保存時に `storage` が弾いている)。
+    /// カタログに無い id の枠は無視する(保存前に `Equipment::validate_against_catalog` が弾いている)。
     pub fn random_option_totals(&self, defs: &[RandomOptionDef]) -> RandomOptionTotals {
         let mut totals = RandomOptionTotals::default();
         for (_, part) in self.iter_selected() {
