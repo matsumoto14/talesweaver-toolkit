@@ -33,6 +33,8 @@
      * MAX だけ置いても押されない。実際に多い値を隣に出す。
      */
     presets?: { value: number; label: string }[];
+    /** 現在値へ加算する定型値。エンチャントカード(+12/+14/+17/+20)のような反復入力に使う。 */
+    increments?: number[];
     /**
      * 上限に対する進捗を見せるか(§07 形態 4)。**上限まで盛るもの**だけ true —
      * エンチャント・ランダムOP・能力値のように「どこまで届いたか」に意味がある値。
@@ -47,9 +49,11 @@
      * 神鳥の聖物(1 段階 = +10)やルーンスキル Lv。能力値の 1 は誤差なので置かない。
      */
     stepper?: boolean;
+    /** 自動値を通常はプレーンな読み取りテキストで見せ、触れたときだけ入力面にする。 */
+    readAsText?: boolean;
   }
   let {
-    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], gauge = true, stepper = false,
+    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], increments = [], gauge = true, stepper = false, readAsText = false,
   }: Props = $props();
 
   let text = $state(String(value));
@@ -115,6 +119,14 @@
     text = String(max);
   }
 
+  function addAmount(amount: number) {
+    const next = clamp(value + amount);
+    if (next === value) return;
+    value = next;
+    lastSyncedValue = next;
+    text = String(next);
+  }
+
   const hint = $derived(format ? format(value) : null);
   const full = $derived(value >= max);
   /**
@@ -145,6 +157,7 @@
 <div
   class="stepper"
   class:full
+  class:read-as-text={readAsText}
   onfocusout={(e) => {
     // 編集の中で入力欄 → MAX と移る間は閉じない。relatedTarget は再描画のタイミングで
     // null になることがあるので、次のフレームで「いまフォーカスがこの部品の外にあるか」を見る
@@ -204,6 +217,15 @@
       class:on={value === p.value}
       onclick={() => { value = Math.min(max, Math.max(min, p.value)); text = String(value); }}
     >{p.label}</button>
+  {/each}
+  {#each increments as amount (amount)}
+    <button
+      type="button"
+      class="increment num"
+      onclick={() => addAmount(amount)}
+      disabled={full}
+      aria-label="{label}に{amount}加算"
+    >+{amount}</button>
   {/each}
   <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->
   {#if showCap}

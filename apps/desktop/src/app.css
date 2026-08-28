@@ -599,6 +599,10 @@ details.fold .fold-body { margin-top: 10px; }
 .stepper .cell:not(.editing):hover { border-color: var(--accent); }
 /* 上限を語らない形(§07 形態 1)。/上限 と MAX が無いぶん詰める */
 .stepper .cell.bare { flex: none; width: 74px; }
+/* カタログ由来などの自動値。通常時は入力欄に見せず、触れたときだけ同じ寸法の入力面へ変える。 */
+.stepper.read-as-text .cell.bare:not(.editing) { background: transparent; border-color: transparent; }
+.stepper.read-as-text .cell.bare:not(.editing):hover { background: var(--surface-inset); border-color: var(--edge-soft); }
+.stepper.read-as-text .cell.bare:not(.editing) .val.read { cursor: text; }
 .stepper .fill {
   position: absolute; left: 0; bottom: 0; height: 2px;
   background: var(--cell-bar); pointer-events: none;
@@ -631,6 +635,14 @@ details.fold .fold-body { margin-top: 10px; }
 }
 .stepper .preset:hover { border-color: var(--sim); color: var(--sim); }
 .stepper .preset.on { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
+.stepper .increment {
+  width: 23px; height: 22px; flex: none; padding: 0; text-align: center;
+  border-radius: var(--r-inset); background: var(--state-goal-bg);
+  border: 1px solid var(--cell-bd); color: var(--accent-deep);
+  font-size: 8.5px; font-weight: 700;
+}
+.stepper .increment:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-hover); }
+.stepper .increment:disabled { color: var(--border); background: none; }
 .stepper .step {
   width: 16px; height: 22px; flex: none; padding: 0; line-height: 1;
   background: none; border: none; border-radius: var(--r-chip);

@@ -74,6 +74,10 @@
   const OTHER_EQUIPMENT_STATS: EquipmentStatKind[] = EQUIPMENT_STAT_KINDS.filter(
     (kind) => !PRIMARY_EQUIPMENT_STATS.includes(kind),
   );
+  /** 通常エンチャントを持つ全部位。成長装備の盾+とレリックは別の入力モデル。 */
+  const ENCHANT_PLAN_SLOTS = new Set<PartSlot>([
+    "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg", "effect", "artifact",
+  ]);
 
   /** ほかの補正源から入ってくる分の 1 行。押すとその補正源へ飛ぶ */
   interface ExternalSource {
@@ -330,13 +334,16 @@
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
   let itemQuery = $state("");
-  let editBaseValues = $state(false);
   let showOtherEquipmentStats = $state(false);
   const visibleEquipmentStats = $derived(
     showOtherEquipmentStats ? [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS] : PRIMARY_EQUIPMENT_STATS,
   );
   let showAllEquipmentCandidates = $state(false);
   let itemPickerOpen = $state(false);
+  let draggedEquipmentRegistration = $state<{ slot: PartSlot; id: number } | null>(null);
+  let equipmentRegistrationDropAt = $state<{ slot: PartSlot; index: number } | null>(null);
+  let confirmEquipmentDeleteId = $state<number | null>(null);
+  let confirmEquipmentDeleteTimer: ReturnType<typeof setTimeout> | null = null;
   const selectedPartOrNull = (slot: PartSlot) => {
     const list = draft.equipment.parts[slot];
     return list.registered.find((p) => p.id === list.selected_id) ?? null;
@@ -364,10 +371,57 @@
     next.label = `装備 ${list.registered.length + 1}`;
     list.registered.push(next); list.selected_id = next.id;
     itemQuery = "";
-    editBaseValues = false;
     showOtherEquipmentStats = false;
     showAllEquipmentCandidates = false;
     itemPickerOpen = true;
+  };
+  const selectEquipmentRegistration = (slot: PartSlot, id: number) => {
+    draft.equipment.parts[slot].selected_id = id;
+    confirmEquipmentDeleteId = null;
+  };
+  const startEquipmentRegistrationDrag = (event: DragEvent, slot: PartSlot, id: number) => {
+    draggedEquipmentRegistration = { slot, id };
+    event.dataTransfer?.setData("text/plain", String(id));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  };
+  const dragEquipmentRegistrationOver = (event: DragEvent, slot: PartSlot, index: number) => {
+    if (draggedEquipmentRegistration?.slot !== slot) return;
+    event.preventDefault();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    equipmentRegistrationDropAt = { slot, index: index + (event.clientX < rect.left + rect.width / 2 ? 0 : 1) };
+  };
+  const dropEquipmentRegistration = (event: DragEvent, slot: PartSlot) => {
+    event.preventDefault();
+    const dragging = draggedEquipmentRegistration;
+    const dropAt = equipmentRegistrationDropAt;
+    draggedEquipmentRegistration = null;
+    equipmentRegistrationDropAt = null;
+    if (dragging?.slot !== slot || dropAt?.slot !== slot) return;
+    const registered = draft.equipment.parts[slot].registered;
+    const from = registered.findIndex((part) => part.id === dragging.id);
+    if (from === -1) return;
+    const [part] = registered.splice(from, 1);
+    const target = from < dropAt.index ? dropAt.index - 1 : dropAt.index;
+    registered.splice(Math.max(0, Math.min(registered.length, target)), 0, part);
+  };
+  const removeSelectedEquipmentRegistration = (slot: PartSlot) => {
+    const list = draft.equipment.parts[slot];
+    const id = list.selected_id;
+    if (id === null) return;
+    if (confirmEquipmentDeleteId !== id) {
+      confirmEquipmentDeleteId = id;
+      if (confirmEquipmentDeleteTimer !== null) clearTimeout(confirmEquipmentDeleteTimer);
+      confirmEquipmentDeleteTimer = setTimeout(() => (confirmEquipmentDeleteId = null), 4000);
+      return;
+    }
+    if (confirmEquipmentDeleteTimer !== null) clearTimeout(confirmEquipmentDeleteTimer);
+    confirmEquipmentDeleteTimer = null;
+    confirmEquipmentDeleteId = null;
+    const index = list.registered.findIndex((part) => part.id === id);
+    if (index === -1) return;
+    list.registered.splice(index, 1);
+    list.selected_id = list.registered[Math.min(index, list.registered.length - 1)]?.id ?? null;
+    itemPickerOpen = false;
   };
   const openPartLabel = $derived(openPart ? PART_SLOT_LABELS[openPart] : "");
   const catalogFor = $derived(
@@ -550,10 +604,6 @@
     const kind = relicKindFor(slot);
     if (kind) pickRelic(slot, kind, level);
   }
-  function nudgeRelicLevel(slot: PartSlot, delta: -1 | 1) {
-    const current = Number(relicLevelFor(slot));
-    if (current >= 1 && current <= 10) pickRelicLevel(slot, String(Math.max(1, Math.min(10, current + delta))));
-  }
   function pickUnequipped(slot: PartSlot) {
     draft.equipment.parts[slot].selected_id = null;
     itemQuery = "";
@@ -566,6 +616,68 @@
     if (part.custom_name === null) part.custom_name = "";
     if (wasCatalogItem) part.enhance_type = null;
     itemQuery = "";
+  }
+
+  /** 上限までのエンチャント案。+17を基本に、端数18/19を避けつつ1回減らせる最小個数だけ+20を使う。 */
+  function enchantCompletionPlan(remainingValue: number) {
+    const remaining = Math.max(0, Math.trunc(remainingValue));
+    if (remaining === 0) return { remaining, twentyCount: 0, seventeenCount: 0, remainder: 0, count: 0 };
+    const baseCount = Math.ceil(remaining / 17);
+    const reducedCount = baseCount - 1;
+    // まず「+17だけ」より1回少ない組み合わせを探す。+20の個数を外側から増やすことで、
+    // 見つかったものが+20を最小限にした案になる。同数なら+17が多い案を優先する。
+    for (let twentyCount = 0; twentyCount <= reducedCount; twentyCount += 1) {
+      for (let seventeenCount = reducedCount - twentyCount; seventeenCount >= 0; seventeenCount -= 1) {
+        const remainderSlots = reducedCount - twentyCount - seventeenCount;
+        if (remainderSlots > 1) continue;
+        const remainder = remaining - twentyCount * 20 - seventeenCount * 17;
+        if ((remainderSlots === 0 && remainder === 0)
+          || (remainderSlots === 1 && remainder >= 1 && remainder <= 16)) {
+          return { remaining, twentyCount, seventeenCount, remainder, count: reducedCount };
+        }
+      }
+    }
+    const seventeenCount = Math.floor(remaining / 17);
+    const remainder = remaining % 17;
+    return { remaining, twentyCount: 0, seventeenCount, remainder, count: seventeenCount + (remainder > 0 ? 1 : 0) };
+  }
+  function enchantCompletionLabel(plan: ReturnType<typeof enchantCompletionPlan>): string {
+    const parts: string[] = [];
+    if (plan.twentyCount > 0) parts.push(`20 × ${plan.twentyCount}`);
+    if (plan.seventeenCount > 0) parts.push(`17 × ${plan.seventeenCount}`);
+    if (plan.remainder > 0) parts.push(`端数 ${plan.remainder}`);
+    return parts.length === 0 ? "" : `+${parts.join(" + ")}`;
+  }
+  function enchantPlanStatsFor(item: EquipmentItem | null): EquipmentStatKind[] {
+    if (item === null || !ENCHANT_PLAN_SLOTS.has(item.slot)) return [];
+    if (item?.weapon_class === "katana") return ["thrust", "slash"];
+    // 武器以外は選んだ装備の専用系統(AF等)を優先し、汎用品は主軸スキルの係数へ合わせる。
+    const dependency = item.weapon_system ?? item.recommended_dependency ?? mainSkill?.dependency ?? null;
+    const dependencyStats: EquipmentStatKind[] = dependency === "stab" ? ["thrust"]
+      : dependency === "hack" ? ["slash"]
+      : dependency === "stab_hack" ? ["thrust", "slash"]
+      : dependency === "int" ? ["magic_attack"]
+      : dependency === "mr" ? ["magic_defense"]
+      : dependency === "int_hack" ? ["slash", "magic_attack"]
+      : [];
+    const supportedDependencyStats = dependencyStats.filter((kind) => item.enchant_caps[kind] > 0);
+    if (supportedDependencyStats.length > 0) return supportedDependencyStats;
+
+    // 鎧・盾は攻撃補正を持たない品がある。火力係数が当たらない場合は、その部位で
+    // 実際に伸ばせる耐久の主要補正へ案内する(物防・魔防・回避は詳細を開いた行に表示)。
+    if (item.slot === "armor" || item.slot === "shield") {
+      return (["physical_defense", "magic_defense", "evasion"] as EquipmentStatKind[])
+        .filter((kind) => item.enchant_caps[kind] > 0);
+    }
+
+    // 主軸スキル未選択でも案内自体を消さない。効果は最大枠の系統、その他の汎用品は
+    // エンチャント可能なSHIMを候補にする。
+    const supportedPrimary = PRIMARY_EQUIPMENT_STATS.filter((kind) => item.enchant_caps[kind] > 0);
+    if (item.slot === "effect" && supportedPrimary.length > 0) {
+      const maxCap = Math.max(...supportedPrimary.map((kind) => item.enchant_caps[kind]));
+      return supportedPrimary.filter((kind) => item.enchant_caps[kind] === maxCap);
+    }
+    return supportedPrimary;
   }
 
   /** その部位の攻撃力(A)への寄与(外すと減る量)。主軸スキル未選択なら null */
@@ -770,7 +882,6 @@
     part.ability_additions = (part.ability_additions ?? []).filter((addition) => normalized.includes(addition.ability_id));
     openPart = slot;
     itemPickerOpen = false;
-    editBaseValues = false;
     showOtherEquipmentStats = false;
   }
 
@@ -1871,8 +1982,21 @@
       </button>
       {#if list.registered.length > 1}
         <div class="part-switches">
-          {#each list.registered as registered (registered.id)}
-            <button type="button" class:on={registered.id === list.selected_id} onclick={() => (list.selected_id = registered.id)}>
+          {#each list.registered as registered, index (registered.id)}
+            <button
+              type="button"
+              class:on={registered.id === list.selected_id}
+              class:dragging={draggedEquipmentRegistration?.slot === slot && draggedEquipmentRegistration.id === registered.id}
+              class:drop-before={equipmentRegistrationDropAt?.slot === slot && equipmentRegistrationDropAt.index === index}
+              class:drop-after={equipmentRegistrationDropAt?.slot === slot && equipmentRegistrationDropAt.index === index + 1 && index === list.registered.length - 1}
+              draggable="true"
+              onclick={() => selectEquipmentRegistration(slot, registered.id)}
+              ondragstart={(event) => startEquipmentRegistrationDrag(event, slot, registered.id)}
+              ondragover={(event) => dragEquipmentRegistrationOver(event, slot, index)}
+              ondrop={(event) => dropEquipmentRegistration(event, slot)}
+              ondragend={() => { draggedEquipmentRegistration = null; equipmentRegistrationDropAt = null; }}
+            >
+              <span class="registration-grip" aria-hidden="true">⠿</span>
               <Icon kind="equipment" id={registered.item_id} size={20} label={registered.label || `装備 ${registered.id}`} />
               {registered.label || app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name || `装備 ${registered.id}`}
             </button>
@@ -1892,6 +2016,29 @@
           <b>{openPartLabel}の装備登録</b>
           <button type="button" class="btn close-equipment" onclick={() => (openPart = null)}>閉じる <span aria-hidden="true">×</span></button>
         </div>
+        {#if draft.equipment.parts[slot].registered.length > 1}
+          <div class="part-switches registration-order" aria-label="装備登録の並び順">
+            {#each draft.equipment.parts[slot].registered as registered, index (registered.id)}
+              <button
+                type="button"
+                class:on={registered.id === draft.equipment.parts[slot].selected_id}
+                class:dragging={draggedEquipmentRegistration?.slot === slot && draggedEquipmentRegistration.id === registered.id}
+                class:drop-before={equipmentRegistrationDropAt?.slot === slot && equipmentRegistrationDropAt.index === index}
+                class:drop-after={equipmentRegistrationDropAt?.slot === slot && equipmentRegistrationDropAt.index === index + 1 && index === draft.equipment.parts[slot].registered.length - 1}
+                draggable="true"
+                onclick={() => selectEquipmentRegistration(slot, registered.id)}
+                ondragstart={(event) => startEquipmentRegistrationDrag(event, slot, registered.id)}
+                ondragover={(event) => dragEquipmentRegistrationOver(event, slot, index)}
+                ondrop={(event) => dropEquipmentRegistration(event, slot)}
+                ondragend={() => { draggedEquipmentRegistration = null; equipmentRegistrationDropAt = null; }}
+              >
+                <span class="registration-grip" aria-hidden="true">⠿</span>
+                <Icon kind="equipment" id={registered.item_id} size={20} label={registered.label || `装備 ${registered.id}`} />
+                {registered.label || app.equipmentCatalog.find((item) => item.id === registered.item_id)?.name || `装備 ${registered.id}`}
+              </button>
+            {/each}
+          </div>
+        {/if}
         {#if part === null}
           <div class="card empty"><p class="hint dim">この部位にはまだ装備が登録されていません。</p>
             <button type="button" class="btn primary" onclick={() => createEquipmentRegistration(slot)}>＋ 新しい装備を登録</button>
@@ -1900,12 +2047,12 @@
         <div class="part-actions">
           <span class="editing-registration badge">編集中: {part.label || `装備 ${part.id}`}</span>
           <button type="button" class="btn" onclick={() => createEquipmentRegistration(slot)}>＋ 新しい装備を登録</button>
-          <button type="button" class="chip quiet" onclick={() => {
-            const list = draft.equipment.parts[slot];
-            const index = list.registered.findIndex((p) => p.id === list.selected_id);
-            if (index >= 0) list.registered.splice(index, 1);
-            list.selected_id = list.registered[0]?.id ?? null;
-          }}>この登録を削除</button>
+          <button
+            type="button"
+            class="btn delete-registration"
+            class:confirm={confirmEquipmentDeleteId === part.id}
+            onclick={() => removeSelectedEquipmentRegistration(slot)}
+          >{confirmEquipmentDeleteId === part.id ? "もう一度押すと削除します" : "この登録を削除"}</button>
         </div>
         <div class="card registration-name-card">
           <label class="text custom-name">
@@ -1936,31 +2083,13 @@
                     full
                     bind:value={() => relicKindFor(slot), (value) => pickRelicKind(slot, value)}
                   />
-                  <div class="relic-level-field">
-                    <span class="relic-field-label">強化段階</span>
-                    <div class="relic-level-control">
-                      <button
-                        type="button"
-                        class="btn relic-nudge"
-                        disabled={Number(relicLevelFor(slot)) <= 1}
-                        aria-label="強化段階を1下げる"
-                        onclick={() => nudgeRelicLevel(slot, -1)}
-                      >−</button>
-                      <StepSelect
-                        options={relicLevelOptions}
-                        cols={5}
-                        disabled={relicKindFor(slot) === ""}
-                        bind:value={() => relicLevelFor(slot), (value) => pickRelicLevel(slot, value)}
-                      />
-                      <button
-                        type="button"
-                        class="btn relic-nudge"
-                        disabled={Number(relicLevelFor(slot)) >= 10 || relicKindFor(slot) === ""}
-                        aria-label="強化段階を1上げる"
-                        onclick={() => nudgeRelicLevel(slot, 1)}
-                      >＋</button>
-                    </div>
-                  </div>
+                  <StepSelect
+                    label="強化段階"
+                    options={relicLevelOptions}
+                    cols={5}
+                    disabled={relicKindFor(slot) === ""}
+                    bind:value={() => relicLevelFor(slot), (value) => pickRelicLevel(slot, value)}
+                  />
                   <div class="relic-picker-actions">
                     <button type="button" class="chip quiet" onclick={() => pickUnequipped(slot)}>未装備</button>
                     <button type="button" class="chip quiet" onclick={() => pickCustom(slot)}>カタログ外</button>
@@ -2029,6 +2158,7 @@
                   min={item.values_min[k]}
                   max={item.growth_caps[k]}
                   strictMax
+                  stepper
                   presets={item.id === "rising-holic-cuffs" ? [{ value: 140, label: "140" }] : []}
                   bind:value={part.base[k]}
                 />
@@ -2037,29 +2167,24 @@
           </div>
         </div>
         {:else}
+        {@const enchantPlanStats = enchantPlanStatsFor(item)}
         <div class="card enchant-card">
           <div class="card-title inline">
             <span>エンチャント</span>
           </div>
           <p class="hint dim">通常は突き・斬り・魔攻・魔防の4補正だけ入力します。</p>
           <div class="base-value-toolbar">
-            <span class="base-value-copy"><b>装備本体</b><small>{item === null ? "カタログ外のため入力" : "カタログ値を使用中"}</small></span>
-            {#if item !== null}
-              <button
-                type="button"
-                class="chip quiet base-mode-button"
-                aria-pressed={editBaseValues}
-                onclick={() => (editBaseValues = !editBaseValues)}
-              >{editBaseValues ? "編集を終了" : "装備補正を編集"}</button>
-            {/if}
+            <span class="base-value-copy" title={item === null ? "カタログ外のため入力" : "数値を押すと例外編集"}><b>装備本体</b><small>{item === null ? "入力" : "自動"}</small></span>
           </div>
           <div class="values-paired enchant-first">
             {#each visibleEquipmentStats as k, index (k)}
               {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
               {@const abilityValue = abilityValueForStat(slot, k)}
               {@const displayTotal = part.base[k] + part.enchant[k] + abilityValue}
+              {@const completionPlan = enchantCompletionPlan(cap - part.enchant[k])}
               <div
                 class="value-pair"
+                class:plan-stat={enchantPlanStats.includes(k)}
                 class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(k)}
                 transition:slide={{ duration: PRIMARY_EQUIPMENT_STATS.includes(k) ? 0 : 220 }}
               >
@@ -2075,16 +2200,28 @@
                     <span class="ability-spacer" aria-hidden="true"></span>
                   {/if}
                   <div class="equation-enchant">
-                    <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap} strictMax={item !== null} bind:value={part.enchant[k]} />
+                    <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap} strictMax={item !== null} increments={[12, 14, 17, 20]} bind:value={part.enchant[k]} />
                   </div>
                   <div class="equation-base">
-                    {#if editBaseValues || item === null}
-                      <StatInput label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正" hideLabel min={0} max={item?.growth_cap ?? limits.equipment_value_max} gauge={false} bind:value={part.base[k]} />
-                    {:else}
-                      <span class="base-readonly"><b class="num" use:flash={() => String(part.base[k])}>{part.base[k]}</b></span>
-                    {/if}
+                    <StatInput label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正" hideLabel min={0} max={item?.growth_cap ?? limits.equipment_value_max} gauge={false} readAsText={item !== null} bind:value={part.base[k]} />
                   </div>
                 </div>
+                {#if item !== null && enchantPlanStats.includes(k)}
+                  <div
+                    class="enchant-plan"
+                    class:complete={completionPlan.remaining === 0}
+                    use:flash={() => `${completionPlan.remaining}:${completionPlan.twentyCount}:${completionPlan.seventeenCount}:${completionPlan.remainder}`}
+                  >
+                    <span class="plan-remaining"><small>上限まであと</small><b class="num">{completionPlan.remaining}</b></span>
+                    {#if completionPlan.remaining > 0}
+                      <span class="plan-recipe num">{enchantCompletionLabel(completionPlan)}</span>
+                      <span class="badge num">{completionPlan.count}回</span>
+                    {:else}
+                      <span class="plan-recipe">強化完了</span>
+                      <span class="badge">MAX</span>
+                    {/if}
+                  </div>
+                {/if}
               </div>
               {#if index === PRIMARY_EQUIPMENT_STATS.length - 1}
                 <button
@@ -3890,10 +4027,6 @@
   .picker-tools { display: flex; align-items: center; gap: 6px; }
   .picker-tools .item-search { flex: 1; }
   .relic-selector { display: grid; gap: 14px; max-width: 480px; }
-  .relic-level-field { display: grid; gap: 6px; }
-  .relic-field-label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  .relic-level-control { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: stretch; gap: 7px; }
-  .relic-nudge { width: 34px; min-height: 54px; padding: 0; font-size: 15px; }
   .relic-picker-actions { display: flex; gap: 8px; padding-top: 2px; }
 
   /* 地域タブの見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
@@ -3957,30 +4090,52 @@
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .part-switches, .part-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 2px 4px; }
-  .part-switches button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--edge-soft); border-radius: var(--r-pill); background: var(--card-soft); padding: 2px 7px 2px 3px; font-size: 10px; }
+  .part-switches button { position: relative; cursor: grab; user-select: none; -webkit-user-drag: element; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--edge-soft); border-radius: var(--r-pill); background: var(--card-soft); padding: 2px 7px 2px 3px; font-size: 10px; }
+  .part-switches button:active { cursor: grabbing; }
   .part-switches button.on { border-color: var(--accent); color: var(--accent-deep); background: var(--s0-bg); }
+  .part-switches button.dragging { opacity: .45; }
+  .part-switches button.drop-before::before, .part-switches button.drop-after::after {
+    content: ""; position: absolute; top: -3px; bottom: -3px; width: 2px;
+    background: var(--accent); border-radius: var(--r-pill);
+  }
+  .part-switches button.drop-before::before { left: -4px; }
+  .part-switches button.drop-after::after { right: -4px; }
+  .registration-grip { color: var(--fg-off); font-size: 10px; line-height: 1; }
+  .part-switches button:hover .registration-grip, .part-switches button.dragging .registration-grip { color: var(--accent); }
+  .registration-order { margin: 7px 4px 3px; padding: 7px; border: 1px solid var(--edge-soft); border-radius: var(--r-inset); background: var(--inset); }
+  .delete-registration { width: 174px; color: var(--danger); border-color: var(--state-short-bd); }
+  .delete-registration.confirm { background: var(--state-short-bg); font-weight: 700; }
   .editing-registration { background: var(--state-temp-bg); border-color: var(--state-temp-bd); color: var(--state-temp-fg); }
-  .values-paired { width: min(100%, 460px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin-top: 4px; }
-  .value-pair { display: grid; grid-template-columns: 44px 410px; gap: 6px; align-items: center; }
+  .values-paired { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin-top: 4px; }
+  .value-pair { width: min(100%, 520px); display: grid; grid-template-columns: 44px 464px; gap: 6px; align-items: center; }
+  .value-pair.plan-stat { width: min(100%, 800px); grid-template-columns: 44px 464px minmax(220px, 1fr); }
   .value-pair.secondary-stat { opacity: .82; }
-  .value-equation { display: grid; grid-template-columns: 102px 52px 160px 62px; gap: 6px; align-items: center; }
+  .value-equation { display: grid; grid-template-columns: 102px 52px 214px 62px; gap: 6px; align-items: center; }
   .equation-base { width: 62px; display: grid; align-items: center; }
   .equation-base :global(.stepper .cell.bare) { width: 62px; min-width: 62px; }
-  .equation-enchant { width: 160px; display: grid; align-items: center; }
-  .base-readonly { width: 62px; min-height: 30px; padding: 3px 7px; border: 1px solid var(--frame); border-radius: var(--r-inset); background: var(--inset); display: flex; align-items: center; justify-content: flex-end; }
-  .base-value-toolbar { width: min(100%, 460px); min-height: 29px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--edge-soft); display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-  .base-value-copy { display: flex; align-items: baseline; gap: 6px; }
+  .equation-enchant { width: 214px; display: grid; align-items: center; }
+  .enchant-plan {
+    min-width: 0; min-height: 30px; padding: 3px 7px; display: grid;
+    grid-template-columns: 75px minmax(0, 1fr) 34px; align-items: center; gap: 7px;
+    border: 1px solid var(--edge-soft); border-radius: var(--r-inset); background: var(--inset);
+  }
+  .plan-remaining { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+  .plan-remaining small { color: var(--fg-muted); font-size: 8.5px; }
+  .plan-remaining b { color: var(--accent-deep); font-size: 12.5px; }
+  .plan-recipe { min-width: 0; color: var(--fg-sub); font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+  .enchant-plan > .badge { min-width: 34px; text-align: center; }
+  .enchant-plan.complete .plan-remaining b, .enchant-plan.complete .plan-recipe { color: var(--state-edge-fg); }
+  .base-value-toolbar { width: min(100%, 520px); min-height: 29px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--edge-soft); display: grid; grid-template-columns: 44px 102px 52px 214px 62px; column-gap: 6px; align-items: center; }
+  .base-value-copy { grid-column: 5; display: flex; align-items: baseline; justify-content: center; gap: 3px; white-space: nowrap; }
   .base-value-copy b { font-size: 9.5px; color: var(--fg-sub); }
   .base-value-copy small { color: var(--fg-muted); font-size: 9px; }
-  /* 押したあと文言が変わっても操作位置を動かさない(§00 03)。 */
-  .base-mode-button { flex: 0 0 80px; min-width: 80px; max-width: 80px; justify-content: center; }
   .growth-equipment-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .growth-equipment-head { align-items: center; }
   .growth-equipment-values { width: min(100%, 460px); }
   .growth-equipment-values .stat-row { grid-template-columns: 76px minmax(0, 1fr); }
   .growth-equipment-values .stat-row :global(.stepper .cell) { flex: 0 1 104px; }
   .enchant-more-toggle {
-    grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
+    width: min(100%, 520px); grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
     border: 0; border-top: 1px dashed var(--edge-soft); background: none; color: var(--fg-sub);
     display: flex; align-items: center; justify-content: space-between; text-align: left;
   }
@@ -3998,12 +4153,15 @@
   .enchant-card .hint { margin: 4px 0 0; }
   .equipment-filter { white-space: nowrap; }
   @media (max-width: 850px) {
-    .values-paired, .base-value-toolbar { width: min(100%, 438px); }
-    .value-pair { grid-template-columns: 40px 392px; }
-    .value-equation { grid-template-columns: 94px 48px 144px 58px; }
+    .values-paired, .base-value-toolbar { width: min(100%, 508px); }
+    .base-value-toolbar { grid-template-columns: 40px 94px 48px 214px 58px; }
+    .value-pair { grid-template-columns: 40px 462px; }
+    .value-pair.plan-stat { width: min(100%, 508px); grid-template-columns: 40px 462px; }
+    .enchant-plan { grid-column: 2; margin-top: 2px; }
+    .value-equation { grid-template-columns: 94px 48px 214px 58px; }
     .equation-base { width: 58px; }
     .equation-base :global(.stepper .cell.bare) { width: 58px; min-width: 58px; }
-    .equation-enchant { width: 144px; }
+    .equation-enchant { width: 214px; }
     .value-total { width: 94px; grid-template-columns: 36px 56px; }
     .total-main { width: 36px; }
     .enchant-part { width: 56px; }

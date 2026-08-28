@@ -58,7 +58,7 @@
 
 ```
 main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠
-CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線)
+CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線。表示順は端末内設定として保持)
 state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・選択・コンテンツ判定・試し変更 sim)
 api/types.ts           Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
 api/commands.ts        invoke ラッパー
