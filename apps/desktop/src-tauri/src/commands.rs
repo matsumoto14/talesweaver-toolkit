@@ -7,7 +7,7 @@ use domain::{
     EquipmentPart, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
 use gamedata::{EquipmentItem, GameCharacter};
-use storage::{BuffSet, CharacterRepository, NewCharacter, RegisteredCharacter};
+use storage::{BuffSet, CharacterRepository, DamageSnapshot, NewCharacter, RegisteredCharacter};
 use tauri::{Manager, State};
 
 use crate::{AppInfo, AppState};
@@ -413,6 +413,27 @@ pub fn update_character(
 #[tauri::command]
 pub fn delete_character(state: State<'_, AppState>, id: i64) -> CommandResult<()> {
     with_repo(&state, |repo| repo.delete(id))
+}
+
+#[tauri::command]
+pub fn get_damage_snapshot(
+    state: State<'_, AppState>,
+    character_id: i64,
+) -> CommandResult<Option<DamageSnapshot>> {
+    with_repo(&state, |repo| repo.get_damage_snapshot(character_id))
+}
+
+#[tauri::command]
+pub fn set_damage_snapshot(
+    state: State<'_, AppState>,
+    character_id: i64,
+    skill_id: String,
+    content_id: String,
+    per_hit: i64,
+) -> CommandResult<DamageSnapshot> {
+    with_repo(&state, |repo| {
+        repo.set_damage_snapshot(character_id, &skill_id, &content_id, per_hit)
+    })
 }
 
 /// キャラの主軸スキルから攻撃力(A)の係数一式を引く。未選択なら `None`(攻撃力を出さない)。

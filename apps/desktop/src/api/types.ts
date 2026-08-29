@@ -158,6 +158,15 @@ export interface BuffSet {
   choices: BuffSelection;
 }
 
+// crates/storage/src/damage_snapshot_repository.rs。前回起動時のダメージ計算記録(1キャラ1件、履歴なし)。
+export interface DamageSnapshot {
+  character_id: number;
+  skill_id: string;
+  content_id: string;
+  per_hit: number;
+  taken_at: string;
+}
+
 export interface StatAdjustment {
   /** このステに +N する(固定値層への加算) */
   add: number;
@@ -904,6 +913,8 @@ export interface RegisteredCharacter {
   /** 共通スキル(wiki: Skill/共通) */
   common_skills: CommonSkills;
   default_buff_set_id: number | null;
+  /** 最終保存日時(ISO8601 UTC)。この列より前に作られたキャラは null(表示しない) */
+  updated_at: string | null;
 }
 
 export interface NewCharacter {

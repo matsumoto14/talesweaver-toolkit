@@ -1,7 +1,7 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, BuffSelection, BuffSet, CategoryTrace, CharacterSkillDef, ComboSkillType, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, BuffSelection, BuffSet, CategoryTrace, CharacterSkillDef, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
@@ -32,6 +32,10 @@ export const createCharacter = (character: NewCharacter) =>
 export const updateCharacter = (id: number, character: NewCharacter) =>
   invoke<RegisteredCharacter>("update_character", { id, character });
 export const deleteCharacter = (id: number) => invoke<void>("delete_character", { id });
+export const getDamageSnapshot = (characterId: number) =>
+  invoke<DamageSnapshot | null>("get_damage_snapshot", { characterId });
+export const setDamageSnapshot = (characterId: number, skillId: string, contentId: string, perHit: number) =>
+  invoke<DamageSnapshot>("set_damage_snapshot", { characterId, skillId, contentId, perHit });
 /**
  * 保存しない試算。draft の base_stats/stat_sources/equipment から最終能力値と寄与内訳を得る。
  * `mainSkillId`(主軸スキル)を渡すとその依存種別で攻撃力(A)も返る。null なら攻撃力は出ない。

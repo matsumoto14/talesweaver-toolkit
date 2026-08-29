@@ -4,11 +4,13 @@
 mod backup;
 mod buff_set_repository;
 mod character_repository;
+mod damage_snapshot_repository;
 
 pub use backup::{open_with_backup, OpenOutcome, StartupNotice};
 pub use buff_set_repository::BuffSet;
 pub use character_repository::validate as validate_new_character;
 pub use character_repository::{CharacterRepository, NewCharacter, RegisteredCharacter};
+pub use damage_snapshot_repository::DamageSnapshot;
 
 use thiserror::Error;
 

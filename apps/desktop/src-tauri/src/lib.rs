@@ -75,6 +75,8 @@ pub fn run() {
             commands::create_character,
             commands::update_character,
             commands::delete_character,
+            commands::get_damage_snapshot,
+            commands::set_damage_snapshot,
             commands::calculate_damage,
             commands::preview_damage,
             commands::evaluate_contents,
