@@ -412,10 +412,12 @@
               {gameCharacterName(character.game_character_id)} / 覚醒{character.awakening.stage} ・ エタ意志
               <span class="num strong">Lv {character.awakening.eternal_level}</span>
             </span>
-            <span class="rune-chip" class:unset={runeUnset}>
-              {runeUnset ? "ルーン 未設定" : "ルーン設定済み"}
-              <button type="button" class="rune-cta" onclick={() => focusCharacterSource("rune")}>設定 ›</button>
-            </span>
+            {#if runeUnset}
+              <span class="rune-chip">
+                ルーン 未設定
+                <button type="button" class="rune-cta" onclick={() => focusCharacterSource("rune")}>設定 ›</button>
+              </span>
+            {/if}
           </div>
           <div class="hero-panels">
             <div class="hero-panel">
@@ -765,12 +767,10 @@
     background: var(--state-edge-bg); border: 1px solid var(--gold);
     font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg); white-space: nowrap;
   }
-  .rune-chip.unset { background: var(--bg-field); border-color: var(--border-soft); color: var(--fg-muted); }
   .rune-cta {
     display: inline-flex; align-items: center; padding: 0 7px; border-radius: var(--r-pill);
     background: #fff; border: 1px solid var(--gold); font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg);
   }
-  .rune-chip.unset .rune-cta { border-color: var(--border-soft); color: var(--accent); }
 
   .hero-panels { min-width: 0; flex: 1; display: flex; align-items: stretch; gap: 6px; }
   .hero-panel {
