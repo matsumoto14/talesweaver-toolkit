@@ -309,6 +309,12 @@
       ? `${Math.min(100, (heroSpot.perHit / heroGoal.content.need_per_hit) * 100).toFixed(1)}%`
       : "0%",
   );
+  /** 次の目標の火力が必要値未満か(おすすめ強化を出す条件) */
+  const heroPowerShort = $derived(
+    heroGoal?.content.need_per_hit != null && heroSpot != null && heroSpot.perHit < heroGoal.content.need_per_hit,
+  );
+  /** 次の目標の入場条件が未達か(条件の行を出す条件) */
+  const heroEntryUnmet = $derived(heroGoal?.ev != null && !heroGoal.ev.entry_ok);
   $effect(() => {
     const c = character;
     const g = heroGoal;
@@ -556,7 +562,18 @@
           {/if}
         </div>
 
-        {#if heroAdvice.length > 0}
+        <!-- 足りないものに合わせて出す: 入場条件未達なら条件の行、火力未達ならおすすめ強化。
+             火力が既に届いているのに「届かせるなら +0%」を並べない(§00 考えさせない) -->
+        {#if heroEntryUnmet}
+          <div class="hero-advice">
+            <span class="hero-advice-title">あとは入場条件 — 満たすなら</span>
+            <button type="button" class="hero-advice-row" onclick={() => (app.tab = "chars")}>
+              <span class="hero-advice-label">入場まで: {heroGoal?.ev ? unmetText(heroGoal.ev) : ""}</span>
+              <span class="chev dim">›</span>
+            </button>
+          </div>
+        {/if}
+        {#if heroAdvice.length > 0 && heroPowerShort}
           <div class="hero-advice">
             <span class="hero-advice-title">おすすめ強化 — 届かせるなら</span>
             <div class="hero-advice-list">
