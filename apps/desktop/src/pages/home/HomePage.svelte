@@ -274,7 +274,33 @@
   interface HeroAdvice { candidate: Candidate; perHit: number; deltaPct: number }
   let heroAccuracy = $state<number | null>(null);
   let heroAdvice = $state<HeroAdvice[]>([]);
+  /** スポットライトの /hit(previewDamage の結果)。主軸スキル設定済みならそのスキルの値 */
+  let heroDamage = $state<{ skillId: string; perHit: number } | null>(null);
   const heroAdviceLatest = latest({ debounce: 150 });
+
+  /**
+   * スポットライトに出すスキルと /hit。キャラが主軸スキルを選んでいればそれ(自分のビルドの答え)、
+   * 未選択・previewDamage 反映前は到達判定と同じ最大ダメージスキルで埋める。
+   */
+  const heroSpot = $derived(
+    heroGoal?.ev?.damage
+      ? (heroDamage ?? { skillId: heroGoal.ev.damage.skill_id, perHit: heroGoal.ev.damage.per_hit_max })
+      : null,
+  );
+  /** スポットライトの到達状態(rowState と同じ段。判定値は heroSpot の /hit) */
+  const heroSpotState = $derived.by(() => {
+    const g = heroGoal;
+    const s = heroSpot;
+    if (!g?.ev || g.content.need_per_hit === null || !s) return 6;
+    const ratio = s.perHit / g.content.need_per_hit;
+    if (!g.ev.entry_ok) return ratio >= 1 ? 5 : 4;
+    return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
+  });
+  const heroSpotPct = $derived(
+    heroGoal?.content.need_per_hit && heroSpot
+      ? `${Math.min(100, (heroSpot.perHit / heroGoal.content.need_per_hit) * 100).toFixed(1)}%`
+      : "0%",
+  );
   $effect(() => {
     const c = character;
     const g = heroGoal;
@@ -285,12 +311,14 @@
       heroAdviceLatest.cancel();
       heroAccuracy = null;
       heroAdvice = [];
+      heroDamage = null;
       return;
     }
-    const skillId = g.ev.damage.skill_id;
+    // 主軸スキル設定済みならスポットライト・おすすめもそのスキルで計算(未設定は判定スキル = 最大ダメージ)
+    const skillId = c.main_skill_id ?? g.ev.damage.skill_id;
     const contentId = g.content.id;
-    const baseDamage = g.ev.damage.per_hit_max;
     const buffs = buffSelectionFor(c);
+    heroDamage = null;
     heroAdviceLatest.run(async (isCurrent) => {
       try {
         const current = await previewDamage(payloadOf(c), skillId, contentId, 0, null, null, buffs);
@@ -299,10 +327,11 @@
           candidates,
           () => payloadOf(c),
           (p) => previewDamage(p, skillId, contentId, 0, null, null, buffs),
-          baseDamage,
+          current.per_hit.max,
         );
         if (isCurrent()) {
           heroAccuracy = current.accuracy_point;
+          heroDamage = { skillId, perHit: current.per_hit.max };
           heroAdvice = results.slice(0, 3);
         }
       } catch (e) {
@@ -478,27 +507,27 @@
             <span class="hero-goal-name">なし — 全 {fmtInt(totalCount)} コンテンツ クリア可</span>
           {:else}
             <span class="hero-goal-name">{heroGoal.content.series?.name ?? heroGoal.content.name}</span>
-            {#if heroGoal.content.need_per_hit === null || !heroGoal.ev?.damage}
+            {#if heroGoal.content.need_per_hit === null || !heroSpot}
               <span class="hero-goal-note dim">{noteOf(heroGoal).text}</span>
             {:else}
               <span class="hero-div"></span>
               <Icon
-                kind="skill" id={heroGoal.ev.damage.skill_id} size={28}
-                label={skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}
+                kind="skill" id={heroSpot.skillId} size={28}
+                label={skillNames[heroSpot.skillId] ?? heroSpot.skillId}
               />
-              <span class="hero-goal-skill">{skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}</span>
+              <span class="hero-goal-skill">{skillNames[heroSpot.skillId] ?? heroSpot.skillId}</span>
               <span class="meter hero-meter">
-                <span class="fill" style="width: {pctOf(heroGoal)}; background: {STATE[BADGE[rowState(heroGoal)].state].bar};"></span>
+                <span class="fill" style="width: {heroSpotPct}; background: {STATE[BADGE[heroSpotState].state].bar};"></span>
               </span>
               <span class="hero-spot-wrap">
-                <span class="num hero-spot" use:bump={() => heroGoal?.ev?.damage?.per_hit_max ?? null}>
-                  {fmtInt(heroGoal.ev.damage.per_hit_max)}
+                <span class="num hero-spot" use:bump={() => heroSpot?.perHit ?? null}>
+                  {fmtInt(heroSpot.perHit)}
                 </span>
                 <span class="num dim"> / {fmtInt(heroGoal.content.need_per_hit)}</span>
               </span>
-              {#key rowState(heroGoal)}
-                <span class="badge" style={badgeStyle(BADGE[rowState(heroGoal)])} use:flash={() => String(rowState(heroGoal))}>
-                  {BADGE[rowState(heroGoal)].label}
+              {#key heroSpotState}
+                <span class="badge" style={badgeStyle(BADGE[heroSpotState])} use:flash={() => String(heroSpotState)}>
+                  {BADGE[heroSpotState].label}
                 </span>
               {/key}
             {/if}
