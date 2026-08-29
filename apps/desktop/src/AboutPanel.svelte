@@ -2,7 +2,9 @@
   // 情報パネル: 版・非公式表記・出典・データの扱い。
   // 明示クローズ式オーバーレイ(装備登録と同じ形)。背景クリックでは閉じず、
   // 「閉じる ×」か Escape だけで閉じる(§00 押した場所は動かない)。
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { onMount } from "svelte";
+  import authorPortrait from "./assets/author-xkanba.png";
   import { errorMessage, getAppInfo } from "./api/commands";
   import type { AppInfo } from "./api/types";
   import { reportError } from "./toast.svelte";
@@ -20,6 +22,15 @@
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key === "Escape") onClose();
   };
+
+  async function openExternal(event: MouseEvent, url: string) {
+    event.preventDefault();
+    try {
+      await openUrl(url);
+    } catch (error) {
+      reportError(errorMessage(error));
+    }
+  }
 </script>
 
 <svelte:window onkeydown={closeOnEscape} />
@@ -62,24 +73,54 @@
       </div>
 
       <div class="card">
-        <div class="card-title">数値の出典</div>
+        <div class="card-title">数値・計算仕様の参考資料</div>
         <p>
           スキル倍率・敵ステータス・装備補正などは、コミュニティ運営の
           <b>Tale Wiki</b>(talewiki.com)を一次ソースとして取り込んでいます。
         </p>
-        <p class="muted">
-          wiki に記載が無く、コミュニティの実測値に依っている数値は、画面上で
-          <span class="provisional">[仮]</span> と表示しています。
+        <p>
+          一部の敵ステータスは、せせなぎさんが公開している実測・検証情報を参考に収録しています。
+          また、ダメージ計算の仕様整理と結果の照合には、同氏のダメージ計算ツールを参考にしています。
         </p>
         <p class="muted">
-          コミュニティによる検証・情報提供:
+          参考にした公開情報・ツール:
           <a
             class="source-link"
             href="https://x.com/sese_nagi1125?s=11"
             target="_blank"
             rel="noreferrer"
+            onclick={(event) => openExternal(event, "https://x.com/sese_nagi1125?s=11")}
           >せせなぎさん（@sese_nagi1125）</a>
         </p>
+        <p class="muted">
+          この記載は公開情報へのクレジットであり、本ツールの公認・監修・共同開発を示すものではありません。
+        </p>
+        <p class="muted">
+          wiki に記載が無く、コミュニティの実測値に依っている数値は、画面上で
+          <span class="provisional">[仮]</span> と表示しています。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">作者について</div>
+        <div class="author">
+          <img class="author-portrait" src={authorPortrait} alt="作者 xかんばのゲーム内キャラクター" />
+          <div class="author-detail">
+            <b class="author-name">xかんば</b>
+            <span class="author-server">エルフィンタサーバーで活動しています</span>
+            <p>
+              システム開発のお仕事のご依頼・ご相談は、ゲーム内の「xかんば」または
+              XのDMへお願いします。
+            </p>
+            <a
+              class="source-link"
+              href="https://x.com/tw_xkanba?s=11"
+              target="_blank"
+              rel="noreferrer"
+              onclick={(event) => openExternal(event, "https://x.com/tw_xkanba?s=11")}
+            >@tw_xkanba（X）</a>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -133,5 +174,16 @@
     color: var(--accent); font-weight: var(--w-strong);
     text-decoration: underline; text-underline-offset: 2px;
   }
-  .source-link:hover { color: var(--accent-deep); }
+  .source-link:hover { color: var(--accent-hover); }
+
+  .author { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: start; }
+  .author-portrait {
+    width: 64px; height: 64px; object-fit: cover; object-position: center 34%;
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-inset);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.75);
+  }
+  .author-detail { min-width: 0; }
+  .author-name { display: block; font-size: 13px; color: var(--fg); }
+  .author-server { display: block; margin: 1px 0 6px; font-size: var(--t-label); color: var(--fg-muted); }
+  .author-detail p { margin-bottom: 5px; }
 </style>
