@@ -962,18 +962,33 @@ pub struct UpgradeCandidate {
 
 /// 現武器と同じ `weapon_class` の上位カタログ品への更新候補(gamedata 固有の選定なので
 /// ここで組み立てる。domain は `weapon_class` を知らない)。
-fn weapon_update_change(
+///
+/// カタログ最強 1 本ではなく**現武器に近い順に最大 3 本**を挙げる。最強品(改セイクリッド級)は
+/// 大半のユーザーに入手困難で、一足飛びの提案は「次の一手」にならない。近い順なら
+/// rank_candidates の「届く候補の増分最小を先頭」と噛み合い、手近な武器が自然に前へ出る。
+/// 入手性(相場帯)をカタログに持たせるコスト軸は今後の課題(issue #14 相場共有と接続)。
+const WEAPON_UPDATE_CANDIDATES: usize = 3;
+
+fn weapon_update_changes(
     equipment: &domain::Equipment,
     common_skills: CommonSkills,
     catalog: &[EquipmentItem],
-) -> Option<domain::CandidateChange> {
-    let weapon = equipment.parts.get(domain::PartSlot::Weapon).selected()?;
-    let item_id = weapon.item_id.as_deref()?;
-    let current = catalog.iter().find(|i| i.id == item_id)?;
-    let weapon_class = current.weapon_class?;
+) -> Vec<domain::CandidateChange> {
+    let Some(weapon) = equipment.parts.get(domain::PartSlot::Weapon).selected() else {
+        return Vec::new();
+    };
+    let Some(item_id) = weapon.item_id.as_deref() else {
+        return Vec::new();
+    };
+    let Some(current) = catalog.iter().find(|i| i.id == item_id) else {
+        return Vec::new();
+    };
+    let Some(weapon_class) = current.weapon_class else {
+        return Vec::new();
+    };
     let sum = |v: domain::EquipmentValues| -> i64 { v.fields().into_iter().map(|(_, value)| value).sum() };
     let current_sum = sum(current.values_max);
-    let upgrade = catalog
+    let mut upgrades: Vec<&EquipmentItem> = catalog
         .iter()
         .filter(|i| {
             i.slot == domain::PartSlot::Weapon
@@ -981,23 +996,30 @@ fn weapon_update_change(
                 && i.id != current.id
                 && sum(i.values_max) > current_sum
         })
-        .max_by_key(|i| sum(i.values_max))?;
-    let mut new_equipment = equipment.clone();
-    let part = new_equipment
-        .parts
-        .get_mut(domain::PartSlot::Weapon)
-        .selected_mut()?;
-    part.item_id = Some(upgrade.id.to_string());
-    part.custom_name = None;
-    part.base = upgrade.values_max;
-    part.enchant = part.enchant.clamp_to(upgrade.enchant_caps);
-    Some(domain::CandidateChange {
-        id: "weapon-upgrade".to_string(),
-        label: format!("武器を{}に更新", upgrade.name),
-        cost: domain::CandidateCost::EquipmentUpdate,
-        equipment: new_equipment,
-        common_skills,
-    })
+        .collect();
+    upgrades.sort_by_key(|i| sum(i.values_max));
+    upgrades
+        .into_iter()
+        .take(WEAPON_UPDATE_CANDIDATES)
+        .filter_map(|upgrade| {
+            let mut new_equipment = equipment.clone();
+            let part = new_equipment
+                .parts
+                .get_mut(domain::PartSlot::Weapon)
+                .selected_mut()?;
+            part.item_id = Some(upgrade.id.to_string());
+            part.custom_name = None;
+            part.base = upgrade.values_max;
+            part.enchant = part.enchant.clamp_to(upgrade.enchant_caps);
+            Some(domain::CandidateChange {
+                id: format!("weapon-upgrade-{}", upgrade.id),
+                label: format!("武器を{}に更新", upgrade.name),
+                cost: domain::CandidateCost::EquipmentUpdate,
+                equipment: new_equipment,
+                common_skills,
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -1071,13 +1093,11 @@ pub fn list_upgrade_candidates(
         resolved_enhance_type(domain::PartSlot::Armor),
         &enchant_caps,
     );
-    if let Some(change) = weapon_update_change(
+    changes.extend(weapon_update_changes(
         &character.equipment,
         character.common_skills,
         &equipment_catalog,
-    ) {
-        changes.push(change);
-    }
+    ));
 
     let mut outcomes = Vec::with_capacity(changes.len());
     for change in &changes {
