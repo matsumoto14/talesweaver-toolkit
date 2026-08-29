@@ -35,6 +35,7 @@
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
+  import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
@@ -646,23 +647,6 @@
     }
     return { mult: flowMultLabel, delta: perHit - pierced, to: perHit, mats, idle: 0, expr: null };
   });
-  /** クリ率の段階表示(6 段)。design-system の状態色の段に収める(新しい色は作らない)。 */
-  const CRIT_CHANCE_STAGES: { max: number; label: string; state: import("../../ui/states").StateKey }[] = [
-    { max: 0, label: "出ない", state: "unknown" },
-    { max: 25, label: "まれ", state: "short" },
-    { max: 50, label: "ときどき", state: "edge" },
-    { max: 75, label: "半分以上", state: "edge" },
-    { max: 100, label: "ほぼ確定", state: "met" },
-    { max: Infinity, label: "確定", state: "goal" },
-  ];
-  const critChanceStage = (p: number) => {
-    if (p <= 0) return CRIT_CHANCE_STAGES[0];
-    if (p < 25) return CRIT_CHANCE_STAGES[1];
-    if (p < 50) return CRIT_CHANCE_STAGES[2];
-    if (p < 75) return CRIT_CHANCE_STAGES[3];
-    if (p < 100) return CRIT_CHANCE_STAGES[4];
-    return CRIT_CHANCE_STAGES[5];
-  };
   /** 鎖「合計」: 1 発 × 段数 ＋ 割合追加ダメージ。クリ率は段階表示で読む */
   const totalDetail = $derived.by<Detail | null>(() => {
     const r = result;

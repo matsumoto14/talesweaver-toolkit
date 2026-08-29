@@ -27,6 +27,7 @@
     refreshEvaluation, selectedCharacter, totalContents,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import { critChanceStage } from "../../ui/critChance";
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
@@ -275,7 +276,14 @@
   let heroAccuracy = $state<number | null>(null);
   let heroAdvice = $state<HeroAdvice[]>([]);
   /** スポットライトの /hit(previewDamage の結果)。主軸スキル設定済みならそのスキルの値 */
-  let heroDamage = $state<{ skillId: string; perHit: number } | null>(null);
+  let heroDamage = $state<{
+    skillId: string;
+    perHit: number;
+    /** クリティカル率(0..1)。critRate が null(wiki 未記載)なら確定扱いの 1.0 */
+    critChance: number;
+    /** wiki スキル性能一覧の Cri値。null = 未記載 */
+    critRate: number | null;
+  } | null>(null);
   const heroAdviceLatest = latest({ debounce: 150 });
 
   /**
@@ -331,7 +339,12 @@
         );
         if (isCurrent()) {
           heroAccuracy = current.accuracy_point;
-          heroDamage = { skillId, perHit: current.per_hit_primary };
+          heroDamage = {
+            skillId,
+            perHit: current.per_hit_primary,
+            critChance: current.critical_chance,
+            critRate: current.critical_rate?.value ?? null,
+          };
           heroAdvice = results.slice(0, 3);
         }
       } catch (e) {
@@ -516,6 +529,14 @@
                 label={skillNames[heroSpot.skillId] ?? heroSpot.skillId}
               />
               <span class="hero-goal-skill">{skillNames[heroSpot.skillId] ?? heroSpot.skillId}</span>
+              {#if heroDamage}
+                {@const stage = critChanceStage(heroDamage.critChance * 100)}
+                {#key stage.label}
+                  <span class="badge" style={badgeStyle({ label: "", state: heroDamage.critRate === null ? "unknown" : stage.state })} use:flash={() => stage.label}>
+                    {heroDamage.critRate === null ? "クリ 確定扱い" : `クリ${stage.label} ${heroDamage.critRate.toFixed(1)}%`}
+                  </span>
+                {/key}
+              {/if}
               <span class="meter hero-meter">
                 <span class="fill" style="width: {heroSpotPct}; background: {STATE[BADGE[heroSpotState].state].bar};"></span>
               </span>
