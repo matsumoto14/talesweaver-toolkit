@@ -28,6 +28,7 @@ pub fn damage_contributions_of(
         buffs,
         &crate::buff_catalog(),
     ));
+    out.extend(sources.soul_link.damage_contributions());
     out
 }
 

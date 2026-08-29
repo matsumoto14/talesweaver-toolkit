@@ -317,7 +317,7 @@ fn migrate_equipment_to_registered_lists(conn: &Connection) -> Result<()> {
                 let class = kind.and_then(gamedata::armor_class_for_type)?;
                 let multiplier = gamedata::armor_enhance_multiplier(level, Some(grade))?;
                 let rates = gamedata::armor_enhance_rates(class);
-                Some(domain::armor_added_damage(
+                Some(domain::armor_added_hp(
                     &values,
                     rates.physical_defense,
                     rates.magic_defense,
@@ -1377,7 +1377,6 @@ mod tests {
         .unwrap();
 
         let repo = CharacterRepository::from_connection(conn).unwrap();
-
         let list = repo.list().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].stat_sources, StatSources::default());
@@ -2353,6 +2352,29 @@ mod tests {
         assert_eq!(result.stat_sources.rune_levels.stab, 20);
 
         assert_eq!(repo.get(created.id).unwrap(), result);
+    }
+
+    #[test]
+    fn ソウルリンクlvはstat_sourcesのjsonで往復する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut character = new_character("リンク済み");
+        character.stat_sources.soul_link = domain::SoulLinkStatus {
+            thrust_level: 1,
+            slash_level: 2,
+            magic_attack_level: 3,
+            magic_defense_level: 4,
+            critical_damage_level: 7,
+            final_damage_level: 3,
+            weapon_enhance_level: 11,
+            armor_enhance_level: 12,
+        };
+        let created = repo
+            .create(&character, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(
+            repo.get(created.id).unwrap().stat_sources.soul_link,
+            character.stat_sources.soul_link
+        );
     }
 
     #[test]

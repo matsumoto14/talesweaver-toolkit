@@ -22,6 +22,7 @@ pub mod random_option;
 pub mod rounding;
 pub mod siena;
 pub mod skill;
+pub mod soul_link;
 pub mod stat_sources;
 pub mod stats;
 pub mod thesis_core;
@@ -73,7 +74,7 @@ pub use element::{
 };
 pub use enemy::Enemy;
 pub use equipment::{
-    armor_added_damage, equipment_attack_parts, equipment_attack_power, equipment_values_attack,
+    armor_added_hp, equipment_attack_parts, equipment_attack_power, equipment_values_attack,
     sum_equipment_value_sources, weapon_added_damage, wrist_base_bonus, EnhanceGrade,
     EnhanceRates, Equipment, EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef,
     EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily,
@@ -97,6 +98,7 @@ pub use siena::{
 pub use skill::{
     ComboSkillType, ComboSkillTypeError, ComboSkillVariant, Skill, SkillDependency, SkillTarget,
 };
+pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{
     apply_character_skills, apply_masteries, apply_pins, apply_temporary_adjustments,
     apply_unleash, build_modifiers, preview_effective_stats, stat_limits, summarize_buff_selection, Adjustments,

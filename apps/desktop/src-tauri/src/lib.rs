@@ -70,6 +70,7 @@ pub fn run() {
             commands::preview_effective_stats,
             commands::preview_defense,
             commands::get_stat_limits,
+            commands::get_new_character_stat_sources,
             commands::list_characters,
             commands::create_character,
             commands::update_character,

@@ -162,6 +162,26 @@ export interface StatAdjustment {
 }
 export type Adjustments = Record<StatKind, StatAdjustment>;
 
+// crates/domain/src/soul_link.rs。リンクステータス 1〜10 の現在 Lv。
+export interface SoulLinkStatus {
+  thrust_level: number;
+  slash_level: number;
+  magic_attack_level: number;
+  magic_defense_level: number;
+  critical_damage_level: number;
+  final_damage_level: number;
+  weapon_enhance_level: number;
+  armor_enhance_level: number;
+}
+
+export interface SoulLinkPreview {
+  equipment_values: EquipmentValues;
+  critical_damage_rate: number;
+  final_damage_rate: number;
+  weapon_added_damage_multiplier: number;
+  armor_added_hp_rate: number;
+}
+
 export interface StatSources {
   pet_skills: PetSkills;
   rune_levels: RuneLevels;
@@ -177,6 +197,8 @@ export interface StatSources {
   masteries: Masteries;
   /** クリティカル率の供給源(wiki: 計算式まとめ #CriticalChance) */
   critical_rate: CriticalRateSources;
+  /** ソウルリンク 1〜10。1〜4は装備基本能力、5〜7は戦闘計算、8〜10は記録用 */
+  soul_link: SoulLinkStatus;
 }
 
 // crates/domain/src/critical_rate.rs の CriticalRateSources。
@@ -977,7 +999,9 @@ export interface StatPreview {
   critical_rate_bonus: CriticalRateBonusPreview;
   /** 神鳥の聖物の段階→最終固定値換算の合計(Σ) */
   sacred_relic_total: number;
-  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号)。正は Equipment::base_totals */
+  /** ソウルリンク 1〜10 の Rust 計算済み派生値 */
+  soul_link: SoulLinkPreview;
+  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号 + ソウルリンク) */
   equipment_base_total: EquipmentValues;
   /** 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳) */
   part_ability_values: PartEquipmentValues[];
@@ -1197,6 +1221,12 @@ export interface StatLimits {
   /** モンスターカードの 1 ステあたり上限 */
   monster_card_max: number;
   sacred_relic_stage_max: number;
+  /** ソウルリンクのリンクステータス 1〜4 の Lv 上限 */
+  soul_link_equipment_level_max: number;
+  soul_link_critical_damage_level_max: number;
+  soul_link_final_damage_level_max: number;
+  soul_link_weapon_enhance_level_max: number;
+  soul_link_armor_enhance_level_max: number;
   adjustment_add_min: number;
   adjustment_add_max: number;
   adjustment_pin_min: number;

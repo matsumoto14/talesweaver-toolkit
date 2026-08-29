@@ -4,6 +4,7 @@
 export type SourceId =
   | "status"
   | "equipment"
+  | "soulLink"
   | "pet"
   | "rune"
   | "crown"

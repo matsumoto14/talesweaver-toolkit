@@ -1173,7 +1173,9 @@
             options={slot === "weapon" ? weaponEnhanceTypeOptions : armorEnhanceTypeOptions}
             bind:value={() => part.enhance_type ?? "", (v) => (part.enhance_type = v === "" ? null : v as typeof part.enhance_type)}
           />
-          <p class="hint dim">固定ダメージの補正式にだけ使います。</p>
+          <p class="hint dim">
+            {slot === "weapon" ? "追加固定ダメージの補正式に使います。" : "追加HPの算出条件として保存します。"}
+          </p>
         {/if}
         <StepSelect
           label="強化 Lv"
@@ -1181,7 +1183,11 @@
           bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
         />
         {#if part.enhance_level > 0 && part.enhance_type === null}
-          <p class="preview-error">装備種別を選ぶと固定ダメージを計算できます。</p>
+          <p class="preview-error">
+            {slot === "weapon"
+              ? "装備種別を選ぶと追加固定ダメージを計算できます。"
+              : "装備種別を選んでください(追加HPの算出条件に使用します)。"}
+          </p>
         {/if}
         {#if part.enhance_level >= 12}
           <StepSelect
@@ -1192,9 +1198,17 @@
           <p class="hint dim">等級内の上限値を使用します。倍率の端数は四捨五入します。</p>
         {:else if part.enhance_level > 0}
           {#if part.enhance_type !== null || item}
-            <p class="hint dim">追加固定ダメージは自動計算されます(ダメージ計算タブのトレースに表示)。</p>
+            <p class="hint dim">
+              {slot === "weapon"
+                ? "追加固定ダメージは自動計算されます(ダメージ計算タブのトレースに表示)。"
+                : "追加HPの算出条件として保存します。現在はHP表示へ反映せず、与ダメージにも加算しません。"}
+            </p>
           {:else}
-            <p class="hint dim">装備種別を選ぶと追加固定ダメージを自動計算します。</p>
+            <p class="hint dim">
+              {slot === "weapon"
+                ? "装備種別を選ぶと追加固定ダメージを自動計算します。"
+                : "装備種別を選んでください(追加HPの算出条件に使用します)。"}
+            </p>
           {/if}
         {/if}
       </div>
