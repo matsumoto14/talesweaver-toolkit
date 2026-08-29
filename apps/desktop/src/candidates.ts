@@ -1,7 +1,7 @@
 // 「次に変えるなら / もし〜だったら」の強化候補。
 // 現行のキャラモデル(部位別装備 12 スロット + PW/SW)で実際に表現できる変更だけを挙げる。
 // 効果は preview_damage(Rust 側)で再計算する。ここは候補の列挙(表示)のみ。
-import type { EquipmentItem, NewCharacter } from "./api/types";
+import type { CandidateCost, EquipmentItem, NewCharacter } from "./api/types";
 import { clampToCaps, selectedEquipmentPartOrNeutral, sumValues } from "./equipment";
 import { limits } from "./limits.svelte";
 import { STATE } from "./ui/states";
@@ -9,16 +9,23 @@ import { STATE } from "./ui/states";
 export interface Candidate {
   id: string;
   label: string;
-  /** 手間の目安タグ(表示のみ) */
-  cost: "すぐできる" | "エンチャント" | "装備更新";
+  /** 手間の目安タグ(表示のみ)。種別は domain の CandidateCost(crates/domain/src/candidate.rs) */
+  cost: CandidateCost;
   apply: (p: NewCharacter) => void;
 }
 
+/** cost タグの表示文字列(日本語)。 */
+export const COST_LABELS: Record<CandidateCost, string> = {
+  quick_win: "すぐできる",
+  enchant: "エンチャント",
+  equipment_update: "装備更新",
+};
+
 /** cost タグ → [面, 枠, 文字]。状態の 6 系統をそのまま流用する(design-system §03) */
-export const COST_COLORS: Record<Candidate["cost"], [string, string, string]> = {
-  すぐできる: [STATE.met.bg, STATE.met.bd, STATE.met.fg],
-  エンチャント: [STATE.goal.bg, STATE.goal.bd, STATE.goal.fg],
-  装備更新: [STATE.short.bg, STATE.short.bd, STATE.short.fg],
+export const COST_COLORS: Record<CandidateCost, [string, string, string]> = {
+  quick_win: [STATE.met.bg, STATE.met.bd, STATE.met.fg],
+  enchant: [STATE.goal.bg, STATE.goal.bd, STATE.goal.fg],
+  equipment_update: [STATE.short.bg, STATE.short.bd, STATE.short.fg],
 };
 
 export interface CandidateResult {
@@ -62,7 +69,7 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
     out.push({
       id: "pw",
       label: "パワーウェポンを ON に",
-      cost: "すぐできる",
+      cost: "quick_win",
       apply: (p) => {
         p.common_skills.power_weapon = true;
       },
@@ -72,7 +79,7 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
     out.push({
       id: "sw",
       label: `ストロングウェポンを Lv${limits.strong_weapon_level_max} に`,
-      cost: "すぐできる",
+      cost: "quick_win",
       apply: (p) => {
         p.common_skills.strong_weapon_level = limits.strong_weapon_level_max;
         // Lv2 以降はオーグメントの Lv が要る(wiki Skill/共通)
@@ -98,7 +105,7 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
     out.push({
       id: "enchant-max",
       label: "武器と鎧のエンチャントを上限まで",
-      cost: "エンチャント",
+      cost: "enchant",
       apply: (p) => {
         const weapon = selectedEquipmentPartOrNeutral(p.equipment.parts.weapon);
         const armor = selectedEquipmentPartOrNeutral(p.equipment.parts.armor);
@@ -123,7 +130,7 @@ export function candidatesFor(current: NewCharacter, catalog: EquipmentItem[]): 
       out.push({
         id: "weapon-upgrade",
         label: `武器を${upgrade.name}に更新`,
-        cost: "装備更新",
+        cost: "equipment_update",
         apply: (p) => {
           const weapon = selectedEquipmentPartOrNeutral(p.equipment.parts.weapon);
           weapon.item_id = upgrade.id;

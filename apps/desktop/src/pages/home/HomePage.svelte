@@ -1,12 +1,17 @@
 <script lang="ts">
-  // ホーム: 選択中キャラが「どこにどのくらい通るか」の到達一覧(v4 デザイン)。
-  // 判定はすべて Rust 側(evaluate_contents)。この画面は表示と選択のみ。
-  import { errorMessage, listSkills, previewDamage } from "../../api/commands";
-  import type { Content, ContentEvaluation, NewCharacter } from "../../api/types";
-  import { candidatesFor, COST_COLORS, tryCandidates, type Candidate } from "../../candidates";
+  // ホーム: 選択中キャラの「キャラの窓」ヒーロー(現況・次の目標・おすすめ強化)+
+  // 「どこにどのくらい通るか」の到達一覧(v4 デザイン)。
+  // 判定はすべて Rust 側(evaluate_contents / preview_effective_stats / preview_defense / preview_damage)。
+  // この画面は表示と選択のみ。
+  import { errorMessage, listSkills, previewDamage, previewDefense, previewEffectiveStats } from "../../api/commands";
+  import type { Content, ContentEvaluation, DefenseProfile, NewCharacter, StatPreview } from "../../api/types";
+  import { candidatesFor, COST_COLORS, COST_LABELS, tryCandidates, type Candidate } from "../../candidates";
+  import { equipmentEnchantTotal } from "../../equipment";
   import { fmtInt } from "../../format";
+  import { STAT_KINDS, STAT_LABELS } from "../../labels";
   import {
-    app, buffSelectionFor, evaluationFor, flatContents, payloadOf, refreshEvaluation, selectedCharacter, totalContents,
+    app, buffSelectionFor, evaluationFor, flatContents, focusCharacterSource, gameCharacterName, payloadOf,
+    refreshEvaluation, selectedCharacter, totalContents,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
@@ -134,6 +139,8 @@
   const selectedRow = $derived(
     rows.find((r) => r.content.id === selectedContentId) ?? rows.find((r) => r.content.id === frontierId) ?? rows[0] ?? null,
   );
+  /** ヒーローの「次の目標」= 到達一覧で上から最初の届かないコンテンツ(お気に入りには影響されない) */
+  const heroGoal = $derived(rows.find((r) => r.content.id === frontierId) ?? null);
 
   // --- 段数違いの系列(レリックの聖域 10〜19段)は 1 行 + 難易度ステッパーに畳む ---
   // 10 行並ぶと一覧のノイズになるだけで、実際に見たいのは「いまどの段まで行けるか」。
@@ -204,57 +211,6 @@
   );
   const favDone = $derived(pins.value.ids.length - favRows.length);
 
-  // 次に変えるなら: 目標 = お気に入りの先頭 → 最初の未クリア → 選択中
-  const goal = $derived(favRows[0] ?? rows.find((r) => r.ev && !r.ev.clear) ?? selectedRow);
-
-  interface Advice {
-    candidate: Candidate;
-    perHit: number;
-    deltaPct: number;
-  }
-  let advice = $state<Advice[]>([]);
-  const adviceLatest = latest({ debounce: 150 });
-  $effect(() => {
-    const c = character;
-    const g = goal;
-    // 依存を明示的に読む(保存データの変化でも再計算する)
-    void app.evaluations[c?.id ?? -1];
-    // 敵データが無いコンテンツ(enemy_id なし)は火力を比較できないので候補を出さない
-    if (!c || !g?.ev?.damage || !g.content.enemy_id) {
-      adviceLatest.cancel();
-      advice = [];
-      return;
-    }
-    const skillId = g.ev.damage.skill_id;
-    const contentId = g.content.id;
-    const baseDamage = g.ev.damage.per_hit_max;
-    adviceLatest.run(async (isCurrent) => {
-      try {
-        const list = candidatesFor(payloadOf(c), app.equipmentCatalog);
-        const results = await tryCandidates(
-          list,
-          () => payloadOf(c),
-          (p) => previewDamage(p, skillId, contentId, 0, null, null, buffSelectionFor(c)),
-          baseDamage,
-        );
-        if (isCurrent()) advice = results;
-      } catch (e) {
-        if (isCurrent()) reportError(errorMessage(e));
-      }
-    });
-    return () => adviceLatest.cancel();
-  });
-
-  function applyAdvice(a: Advice) {
-    if (!character || !goal) return;
-    // 既存の試し変更があればその上に候補を重ねる(無確認で破棄しない。PR レビュー指摘)
-    const p = JSON.parse(JSON.stringify(app.sim ?? payloadOf(character))) as NewCharacter;
-    a.candidate.apply(p);
-    app.sim = p;
-    app.calcTargetId = goal.content.id;
-    app.tab = "calc";
-  }
-
   function tryInCalc() {
     if (!selectedRow) return;
     app.calcTargetId = selectedRow.content.id;
@@ -262,11 +218,120 @@
   }
 
   const areas = $derived(app.areas);
+
+  // ===== ヒーロー(キャラの窓): 選択中キャラの現況 =============================
+
+  // 7 ステ・装備基礎値(previewEffectiveStats)と防御側(preview_defense)
+  let heroStats = $state<StatPreview | null>(null);
+  let heroDefense = $state<DefenseProfile | null>(null);
+  const heroStatsLatest = latest({ debounce: 120 });
+  $effect(() => {
+    const c = character;
+    if (!c) {
+      heroStatsLatest.cancel();
+      heroStats = null;
+      heroDefense = null;
+      return;
+    }
+    const p = payloadOf(c);
+    const buffs = buffSelectionFor(c);
+    heroStatsLatest.run(async (isCurrent) => {
+      try {
+        const [stats, defense] = await Promise.all([
+          previewEffectiveStats(
+            p.base_stats, p.stat_sources, p.equipment, p.common_skills, p.awakening, p.main_skill_id, buffs,
+          ),
+          previewDefense(p, buffs),
+        ]);
+        if (isCurrent()) {
+          heroStats = stats;
+          heroDefense = defense;
+        }
+      } catch (e) {
+        if (isCurrent()) reportError(errorMessage(e));
+      }
+    });
+    return () => heroStatsLatest.cancel();
+  });
+
+  // 装備値の内訳(基礎+エンチャ=合計)。基礎(称号・アビリティ込み)は preview、エンチャ分は
+  // クライアント側の Σpart.enchant(equipment.ts。実際の集計元は Rust 側 Equipment::enhanced_totals)。
+  const heroEnchant = $derived(character ? equipmentEnchantTotal(character.equipment) : null);
+  const heroThrustTotal = $derived(
+    heroStats && heroEnchant ? heroStats.equipment_base_total.thrust + heroEnchant.thrust : null,
+  );
+  const heroSlashTotal = $derived(
+    heroStats && heroEnchant ? heroStats.equipment_base_total.slash + heroEnchant.slash : null,
+  );
+
+  // ルーン(wiki: ルーンマスター)は 7 種すべて未設定なら「操作待ち」の金チップ
+  const runeUnset = $derived(
+    character ? Object.values(character.stat_sources.rune_levels).every((v) => v === 0) : true,
+  );
+
+  // 命中P(次の目標のスキルで判定。BestSkillDamage には無いので previewDamage を別途叩く)と、
+  // おすすめ強化(candidatesFor → tryCandidates → perHit 降順の上位 3 件。既存候補システムを再利用)
+  interface HeroAdvice { candidate: Candidate; perHit: number; deltaPct: number }
+  let heroAccuracy = $state<number | null>(null);
+  let heroAdvice = $state<HeroAdvice[]>([]);
+  const heroAdviceLatest = latest({ debounce: 150 });
+  $effect(() => {
+    const c = character;
+    const g = heroGoal;
+    // 依存を明示的に読む(保存データの変化でも再計算する)
+    void app.evaluations[c?.id ?? -1];
+    // 敵データが無いコンテンツ(enemy_id なし)は火力を比較できないので候補を出さない
+    if (!c || !g?.ev?.damage || !g.content.enemy_id) {
+      heroAdviceLatest.cancel();
+      heroAccuracy = null;
+      heroAdvice = [];
+      return;
+    }
+    const skillId = g.ev.damage.skill_id;
+    const contentId = g.content.id;
+    const baseDamage = g.ev.damage.per_hit_max;
+    const buffs = buffSelectionFor(c);
+    heroAdviceLatest.run(async (isCurrent) => {
+      try {
+        const current = await previewDamage(payloadOf(c), skillId, contentId, 0, null, null, buffs);
+        const candidates = candidatesFor(payloadOf(c), app.equipmentCatalog);
+        const results = await tryCandidates(
+          candidates,
+          () => payloadOf(c),
+          (p) => previewDamage(p, skillId, contentId, 0, null, null, buffs),
+          baseDamage,
+        );
+        if (isCurrent()) {
+          heroAccuracy = current.accuracy_point;
+          heroAdvice = results.slice(0, 3);
+        }
+      } catch (e) {
+        if (isCurrent()) reportError(errorMessage(e));
+      }
+    });
+    return () => heroAdviceLatest.cancel();
+  });
+
+  function tryHeroGoalInCalc() {
+    if (!heroGoal) return;
+    app.calcTargetId = heroGoal.content.id;
+    app.tab = "calc";
+  }
+
+  function applyHeroAdvice(a: HeroAdvice) {
+    if (!character || !heroGoal) return;
+    // 既存の試し変更があればその上に候補を重ねる(無確認で破棄しない。PR レビュー指摘)
+    const p = JSON.parse(JSON.stringify(app.sim ?? payloadOf(character))) as NewCharacter;
+    a.candidate.apply(p);
+    app.sim = p;
+    app.calcTargetId = heroGoal.content.id;
+    app.tab = "calc";
+  }
 </script>
 
 <SplitPage
-  midTitle="どこにどのくらい通るか"
-  midNote="目安＝実用的に周回できる1発量(コミュニティ知識)"
+  midTitle="今日の TW"
+  midNote={character ? `${character.name} の現況` : ""}
   rightTitle="選択中"
   rightNote={selectedRow?.areaName ?? ""}
   persistKey="tw-v4-home"
@@ -280,123 +345,262 @@
       {#if !character}
         <p class="empty dim">キャラを登録すると、ここに到達一覧が出ます。左下の「＋ キャラを登録」からどうぞ。</p>
       {:else}
-        {#if !app.evaluations[character.id]}
-          <div class="retry-row">
-            <span class="dim">到達判定を取得できていません。</span>
-            <button type="button" class="btn" onclick={() => character && refreshEvaluation(character)}>再判定</button>
+        <!-- ===== キャラの窓ヒーロー: 言葉(左)と数値(右)を空間で分離する ===== -->
+        <div class="hero">
+          <div class="hero-top">
+            <div class="hero-id">
+              <Icon kind="character" id={character.game_character_id} size={64} label={character.name} />
+              <span class="hero-id-name">{character.name}</span>
+              <span class="hero-id-class">
+                {gameCharacterName(character.game_character_id)} / 覚醒{character.awakening.stage} ・ エタ意志
+                <span class="num strong">Lv {character.awakening.eternal_level}</span>
+              </span>
+              <span class="rune-chip" class:unset={runeUnset}>
+                {runeUnset ? "ルーン 未設定" : "ルーン設定済み"}
+                <button type="button" class="rune-cta" onclick={() => focusCharacterSource("rune")}>設定 ›</button>
+              </span>
+            </div>
+            <div class="hero-panels">
+              <div class="hero-panel">
+                <span class="hero-panel-title">ステータス</span>
+                {#each STAT_KINDS as k, i (k)}
+                  <span class="hero-row" class:first={i === 0}>
+                    <span class="hero-row-label">{STAT_LABELS[k]}</span>
+                    <span class="num hero-row-value" use:bump={() => heroStats?.stats[k] ?? null}>
+                      {heroStats ? fmtInt(heroStats.stats[k]) : "—"}
+                    </span>
+                  </span>
+                {/each}
+              </div>
+              <div class="hero-panel">
+                <span class="hero-panel-title">装備・命中</span>
+                <span class="hero-row first">
+                  <span class="hero-row-label">突き</span>
+                  <span class="hero-row-value-wrap">
+                    <span class="num hero-sub">
+                      {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.thrust)} +${fmtInt(heroEnchant.thrust)}` : ""}
+                    </span>
+                    <span class="num hero-row-value" use:bump={() => heroThrustTotal}>
+                      {heroThrustTotal !== null ? fmtInt(heroThrustTotal) : "—"}
+                    </span>
+                  </span>
+                </span>
+                <span class="hero-row">
+                  <span class="hero-row-label">斬り</span>
+                  <span class="hero-row-value-wrap">
+                    <span class="num hero-sub">
+                      {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.slash)} +${fmtInt(heroEnchant.slash)}` : ""}
+                    </span>
+                    <span class="num hero-row-value" use:bump={() => heroSlashTotal}>
+                      {heroSlashTotal !== null ? fmtInt(heroSlashTotal) : "—"}
+                    </span>
+                  </span>
+                </span>
+                <span class="hero-row">
+                  <span class="hero-row-label">命中P</span>
+                  <span class="num hero-row-value" use:bump={() => heroAccuracy}>
+                    {heroAccuracy !== null ? fmtInt(heroAccuracy) : "—"}
+                  </span>
+                </span>
+                <span class="hero-row">
+                  <span class="hero-row-label">回避P</span>
+                  <span class="num hero-row-value" use:bump={() => heroDefense?.evasion_point.physical ?? null}>
+                    {heroDefense ? fmtInt(heroDefense.evasion_point.physical) : "—"}
+                  </span>
+                </span>
+              </div>
+            </div>
           </div>
-        {/if}
-        <div class="summary">
-          <span class="cap">クリアできるのは</span>
-          <span class="big-wrap"><span class="big num" use:bump={() => clearCount}>{clearCount}</span><span class="of num">/ {totalCount}</span></span>
-          <span class="entry-pill">
-            <span class="dim">入場条件だけなら</span>
-            <span class="num strong" use:bump={() => entryCount}>{entryCount}</span>
-            <span class="num dim">/ {totalCount}</span>
-          </span>
+
+          <!-- 次の目標スポットライト(全幅 — 右列に入れるとメーターが潰れる) -->
+          <div class="hero-goal">
+            <span class="tag">次の目標</span>
+            {#if !app.evaluations[character.id]}
+              <span class="dim">到達判定を取得できていません。</span>
+            {:else if !heroGoal}
+              <span class="hero-goal-name">なし — 全 {fmtInt(totalCount)} コンテンツ クリア可</span>
+            {:else}
+              <span class="hero-goal-name">{heroGoal.content.series?.name ?? heroGoal.content.name}</span>
+              {#if heroGoal.content.need_per_hit === null || !heroGoal.ev?.damage}
+                <span class="hero-goal-note dim">{noteOf(heroGoal).text}</span>
+              {:else}
+                <span class="hero-div"></span>
+                <Icon
+                  kind="skill" id={heroGoal.ev.damage.skill_id} size={28}
+                  label={skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}
+                />
+                <span class="hero-goal-skill">{skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}</span>
+                <span class="meter hero-meter">
+                  <span class="fill" style="width: {pctOf(heroGoal)}; background: {STATE[BADGE[rowState(heroGoal)].state].bar};"></span>
+                </span>
+                <span class="hero-spot-wrap">
+                  <span class="num hero-spot" use:bump={() => heroGoal?.ev?.damage?.per_hit_max ?? null}>
+                    {fmtInt(heroGoal.ev.damage.per_hit_max)}
+                  </span>
+                  <span class="num dim"> / {fmtInt(heroGoal.content.need_per_hit)}</span>
+                </span>
+                {#key rowState(heroGoal)}
+                  <span class="badge" style={badgeStyle(BADGE[rowState(heroGoal)])} use:flash={() => String(rowState(heroGoal))}>
+                    {BADGE[rowState(heroGoal)].label}
+                  </span>
+                {/key}
+              {/if}
+              <button type="button" class="cta" onclick={tryHeroGoalInCalc}>計算タブで詰める ›</button>
+            {/if}
+          </div>
+
+          {#if heroAdvice.length > 0}
+            <div class="hero-advice">
+              <span class="hero-advice-title">おすすめ強化 — 届かせるなら</span>
+              <div class="hero-advice-list">
+                {#each heroAdvice as a, i (a.candidate.id)}
+                  {@const need = heroGoal?.content.need_per_hit ?? 0}
+                  {@const reach = a.perHit >= need}
+                  <button type="button" class="hero-advice-row" onclick={() => applyHeroAdvice(a)}>
+                    <span class="rank num">{i + 1}</span>
+                    <span class="cost" style={triadStyle(COST_COLORS[a.candidate.cost])}>{COST_LABELS[a.candidate.cost]}</span>
+                    <span class="hero-advice-label">{a.candidate.label}</span>
+                    <span class="hero-advice-nums">
+                      <span class="num" use:bump={() => a.perHit}>{fmtInt(a.perHit)}</span>
+                      <span class="num" use:bump={() => a.deltaPct}>{a.deltaPct > 0 ? " +" : " "}{a.deltaPct}%</span>
+                    </span>
+                    {#if reach}
+                      <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
+                    {/if}
+                    <span class="chev dim">›</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
 
-        <div class="areas">
-          {#each areas as area (area.id)}
-            {@const open = isAreaOpen(area.id)}
-            {@const shown = areaDisplayRows(area.id)}
-            {@const okCount = shown.filter((r) => r.ev?.clear).length}
-            <div class="area">
-              <div class="area-head">
-                <span class="area-name">{area.name}</span>
-                {#if open}
-                  <span class="area-rule"></span>
-                {:else}
-                  <button type="button" class="collapsed-note" onclick={() => toggleArea(area.id)}>
-                    <span class="ok-dot"></span>
-                    <!-- 系列は代表 1 行の名前だけ出す(10 段ぶん並べると畳んだ意味がない) -->
-                    <span class="dim">全部クリア可 — {shown.map((r) => r.content.series?.name ?? r.content.name).join("・")}</span>
-                  </button>
-                {/if}
-                <!-- 開閉で幅が変わると、押したボタン自身が動く(§09 規則 1・4)。件数は常に出す -->
-                <button type="button" class="area-toggle" onclick={() => toggleArea(area.id)}>
-                  <span class="num">{okCount}/{shown.length}</span>
-                  <span class="chev">{open ? "▴" : "▾"}</span>
-                </button>
+        <!-- ===== どこまでいける?: 既存の到達一覧(ピン含む)をそのまま畳んで置く ===== -->
+        <details class="fold reach-fold" open>
+          <summary>
+            <span class="area-name">どこまでいける?</span>
+            <span class="area-rule"></span>
+          </summary>
+          <div class="fold-body">
+            {#if !app.evaluations[character.id]}
+              <div class="retry-row">
+                <span class="dim">到達判定を取得できていません。</span>
+                <button type="button" class="btn" onclick={() => character && refreshEvaluation(character)}>再判定</button>
               </div>
-              {#if open}
-                <div class="rows open-in">
-                  {#each shown as r (r.content.series?.id ?? r.content.id)}
-                    {@const st = rowState(r)}
-                    {@const cov = coverage(r)}
-                    {@const note = noteOf(r)}
-                    {@const sel = selectedRow?.content.id === r.content.id}
-                    <div
-                      class="row"
-                      class:sel
-                      role="button"
-                      tabindex="0"
-                      onclick={() => (selectedContentId = r.content.id)}
-                      onkeydown={(e) => e.key === "Enter" && (selectedContentId = r.content.id)}
-                    >
-                      {#if r.content.id === frontierId}
-                        <div class="frontier">次はここ</div>
-                      {/if}
-                      <div class="row-main">
-                        <button
-                          type="button"
-                          class="pin"
-                          class:on={pinned(r.content.id)}
-                          title={pinned(r.content.id) ? "お気に入りから外す" : "お気に入りに追加"}
-                          onclick={(e) => togglePin(e, r.content.id)}
-                        >★</button>
-                        <Icon kind="mob" id={r.content.enemy_id} size={28} label={r.content.name} />
-                        <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
-                        {#if cov !== null}<span class="coverage">{cov}</span>{/if}
-                        {#if r.content.series}
-                          {@const series = r.content.series}
-                          {@const list = seriesRowsOf(series.id)}
-                          {@const maxStep = list[list.length - 1]?.content.series?.step ?? series.step}
-                          <span class="name">{series.name}</span>
-                          <span class="series-stepper">
-                            <button
-                              type="button" class="st" aria-label="難易度を下げる"
-                              disabled={series.step <= (list[0]?.content.series?.step ?? series.step)}
-                              onclick={(e) => stepSeries(e, series.id, -1)}
-                            >◀</button>
-                            <span class="st-label num">難易度 {series.step} / {maxStep}</span>
-                            <button
-                              type="button" class="st" aria-label="難易度を上げる"
-                              disabled={series.step >= maxStep}
-                              onclick={(e) => stepSeries(e, series.id, 1)}
-                            >▶</button>
-                          </span>
-                        {:else}
-                          <span class="name">{r.content.name}</span>
-                        {/if}
-                        <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
-                      </div>
-                      <div class="row-bar">
-                        <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
-                        {#if r.content.need_per_hit === null}
-                          <span class="need num dim">入場条件のみ</span>
-                        {:else}
-                          <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
-                          {#if ratioOf(r) >= 1.15}
-                            <span class="over num">×{ratioOf(r).toFixed(1)}</span>
-                          {/if}
-                        {/if}
-                        {#key st}<span class="badge badge-in" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>{/key}
-                      </div>
-                      <div class="row-note">
-                        <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? STATE.unknown.bd : r.ev?.entry_ok ? STATE.met.bd : STATE.short.bd};"></span>
-                        <span class="note-text" class:unmet={note.unmet}>{note.text}</span>
-                        {#if r.content.team_note}
-                          <span class="team" title="チーム条件: {r.content.team_note}">チーム</span>
-                        {/if}
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
+            {/if}
+            <div class="summary">
+              <span class="cap">クリアできるのは</span>
+              <span class="big-wrap"><span class="big num" use:bump={() => clearCount}>{clearCount}</span><span class="of num">/ {totalCount}</span></span>
+              <span class="entry-pill">
+                <span class="dim">入場条件だけなら</span>
+                <span class="num strong" use:bump={() => entryCount}>{entryCount}</span>
+                <span class="num dim">/ {totalCount}</span>
+              </span>
             </div>
-          {/each}
-        </div>
+
+            <div class="areas">
+              {#each areas as area (area.id)}
+                {@const open = isAreaOpen(area.id)}
+                {@const shown = areaDisplayRows(area.id)}
+                {@const okCount = shown.filter((r) => r.ev?.clear).length}
+                <div class="area">
+                  <div class="area-head">
+                    <span class="area-name">{area.name}</span>
+                    {#if open}
+                      <span class="area-rule"></span>
+                    {:else}
+                      <button type="button" class="collapsed-note" onclick={() => toggleArea(area.id)}>
+                        <span class="ok-dot"></span>
+                        <!-- 系列は代表 1 行の名前だけ出す(10 段ぶん並べると畳んだ意味がない) -->
+                        <span class="dim">全部クリア可 — {shown.map((r) => r.content.series?.name ?? r.content.name).join("・")}</span>
+                      </button>
+                    {/if}
+                    <!-- 開閉で幅が変わると、押したボタン自身が動く(§09 規則 1・4)。件数は常に出す -->
+                    <button type="button" class="area-toggle" onclick={() => toggleArea(area.id)}>
+                      <span class="num">{okCount}/{shown.length}</span>
+                      <span class="chev">{open ? "▴" : "▾"}</span>
+                    </button>
+                  </div>
+                  {#if open}
+                    <div class="rows open-in">
+                      {#each shown as r (r.content.series?.id ?? r.content.id)}
+                        {@const st = rowState(r)}
+                        {@const cov = coverage(r)}
+                        {@const note = noteOf(r)}
+                        {@const sel = selectedRow?.content.id === r.content.id}
+                        <div
+                          class="row"
+                          class:sel
+                          role="button"
+                          tabindex="0"
+                          onclick={() => (selectedContentId = r.content.id)}
+                          onkeydown={(e) => e.key === "Enter" && (selectedContentId = r.content.id)}
+                        >
+                          {#if r.content.id === frontierId}
+                            <div class="frontier">次はここ</div>
+                          {/if}
+                          <div class="row-main">
+                            <button
+                              type="button"
+                              class="pin"
+                              class:on={pinned(r.content.id)}
+                              title={pinned(r.content.id) ? "お気に入りから外す" : "お気に入りに追加"}
+                              onclick={(e) => togglePin(e, r.content.id)}
+                            >★</button>
+                            <Icon kind="mob" id={r.content.enemy_id} size={28} label={r.content.name} />
+                            <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
+                            {#if cov !== null}<span class="coverage">{cov}</span>{/if}
+                            {#if r.content.series}
+                              {@const series = r.content.series}
+                              {@const list = seriesRowsOf(series.id)}
+                              {@const maxStep = list[list.length - 1]?.content.series?.step ?? series.step}
+                              <span class="name">{series.name}</span>
+                              <span class="series-stepper">
+                                <button
+                                  type="button" class="st" aria-label="難易度を下げる"
+                                  disabled={series.step <= (list[0]?.content.series?.step ?? series.step)}
+                                  onclick={(e) => stepSeries(e, series.id, -1)}
+                                >◀</button>
+                                <span class="st-label num">難易度 {series.step} / {maxStep}</span>
+                                <button
+                                  type="button" class="st" aria-label="難易度を上げる"
+                                  disabled={series.step >= maxStep}
+                                  onclick={(e) => stepSeries(e, series.id, 1)}
+                                >▶</button>
+                              </span>
+                            {:else}
+                              <span class="name">{r.content.name}</span>
+                            {/if}
+                            <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
+                          </div>
+                          <div class="row-bar">
+                            <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
+                            {#if r.content.need_per_hit === null}
+                              <span class="need num dim">入場条件のみ</span>
+                            {:else}
+                              <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
+                              {#if ratioOf(r) >= 1.15}
+                                <span class="over num">×{ratioOf(r).toFixed(1)}</span>
+                              {/if}
+                            {/if}
+                            {#key st}<span class="badge badge-in" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>{/key}
+                          </div>
+                          <div class="row-note">
+                            <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? STATE.unknown.bd : r.ev?.entry_ok ? STATE.met.bd : STATE.short.bd};"></span>
+                            <span class="note-text" class:unmet={note.unmet}>{note.text}</span>
+                            {#if r.content.team_note}
+                              <span class="team" title="チーム条件: {r.content.team_note}">チーム</span>
+                            {/if}
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        </details>
         <p class="foot dim">
           入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
           目安ダメージは wiki に無い値で、コミュニティ知識・実測が出典です(実測で更新)。
@@ -459,7 +663,7 @@
             </div>
             <div class="fav-list">
               {#each favRows as f (f.content.id)}
-                {@const act = goal?.content.id === f.content.id}
+                {@const act = heroGoal?.content.id === f.content.id}
                 <button type="button" class="fav" class:act onclick={() => (selectedContentId = f.content.id)}>
                   <span class="mark" class:act>{act ? "★" : "☆"}</span>
                   <span class="fav-name">{f.content.name}</span>
@@ -467,34 +671,6 @@
                 </button>
               {/each}
             </div>
-          </div>
-        {/if}
-
-        {#if goal && advice.length > 0}
-          <div class="card advice-card">
-            <div class="card-head">
-              <span class="card-title">次に変えるなら</span>
-              <span class="dim small">目標: {goal.content.name}</span>
-            </div>
-            <div class="advice-list">
-              {#each advice as a (a.candidate.id)}
-                {@const need = goal.content.need_per_hit ?? 0}
-                {@const reach = a.perHit >= need}
-                <button type="button" class="advice" class:reach onclick={() => applyAdvice(a)}>
-                  <span class="adv-row">
-                    <span class="adv-label">{a.candidate.label}</span>
-                    <span class="num adv-delta" class:up={a.deltaPct > 0} use:bump={() => a.deltaPct}>
-                      {a.deltaPct === 0 ? "±0%" : `${a.deltaPct > 0 ? "+" : ""}${a.deltaPct}%`}
-                    </span>
-                  </span>
-                  <span class="adv-row sub">
-                    <span class="num dim" use:bump={() => a.perHit}>{fmtInt(a.perHit)} / 目安 {fmtInt(need)}</span>
-                    <span class="cost" style={triadStyle(COST_COLORS[a.candidate.cost])}>{a.candidate.cost}</span>
-                  </span>
-                </button>
-              {/each}
-            </div>
-            <p class="advice-foot dim">押すと計算シートに移動して、その変更を当てた状態から試せます。</p>
           </div>
         {/if}
       {:else}
@@ -508,6 +684,80 @@
   .empty { font-size: 12px; }
 
   .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
+
+  /* ===== キャラの窓ヒーロー ============================================= */
+  .hero {
+    display: flex; flex-direction: column; gap: 10px; padding: 13px 15px; border-radius: var(--r-window);
+    background: linear-gradient(180deg, #fff, #E8F1FB 94%);
+    border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 #fff, 0 1px 3px rgba(30, 44, 74, 0.12);
+  }
+  .hero-top { display: flex; align-items: stretch; gap: 14px; min-width: 0; }
+
+  .hero-id {
+    flex: none; width: 172px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 10px 10px 9px; border-radius: var(--r-panel); background: var(--bg-panel); border: 1px solid var(--border-soft);
+  }
+  .hero-id-name { font-size: 14px; font-weight: 800; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero-id-class { font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; text-align: center; }
+  .hero-id-class .strong { font-weight: 700; color: var(--fg); }
+  .rune-chip {
+    display: flex; align-items: center; gap: 5px; padding: 1px 4px 1px 9px; border-radius: var(--r-pill);
+    background: var(--state-edge-bg); border: 1px solid var(--gold);
+    font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg); white-space: nowrap;
+  }
+  .rune-chip.unset { background: var(--bg-field); border-color: var(--border-soft); color: var(--fg-muted); }
+  .rune-cta {
+    display: inline-flex; align-items: center; padding: 0 7px; border-radius: var(--r-pill);
+    background: #fff; border: 1px solid var(--gold); font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg);
+  }
+  .rune-chip.unset .rune-cta { border-color: var(--border-soft); color: var(--accent); }
+
+  .hero-panels { min-width: 0; flex: 1; display: flex; align-items: stretch; gap: 6px; }
+  .hero-panel {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 7px 0 8px;
+    border-radius: var(--r-panel); background: var(--bg-panel); border: 1px solid var(--border-soft);
+  }
+  .hero-panel-title { padding: 0 11px 4px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
+  .hero-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 11px; border-top: 1px dashed var(--border-soft); min-width: 0; }
+  .hero-row.first { border-top: none; }
+  .hero-row-label { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-muted); white-space: nowrap; }
+  .hero-row-value { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--fg); white-space: nowrap; }
+  .hero-row-value-wrap { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
+  .hero-sub { font-size: 8.5px; color: var(--fg-dim); white-space: nowrap; }
+
+  .hero-goal {
+    display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: var(--r-panel);
+    background: var(--bg-panel); border: 1px solid var(--border-strong); min-width: 0;
+  }
+  .hero-goal-name { min-width: 0; flex: none; max-width: 170px; font-size: 12px; font-weight: 800; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-goal-note { min-width: 0; flex: 1; font-size: var(--t-label); }
+  .hero-div { width: 1px; align-self: stretch; background: var(--border-soft); }
+  .hero-goal-skill { min-width: 0; max-width: 100px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-meter { flex: 1; height: 12px; }
+  .hero-spot-wrap { flex-shrink: 0; white-space: nowrap; }
+  .hero-spot { font-size: 27px; line-height: 1; font-weight: 700; color: #16223A; text-shadow: 0 1px 0 #fff; }
+
+  .hero-advice { display: flex; flex-direction: column; gap: 5px; border-top: 1px dashed var(--border-soft); padding-top: 9px; }
+  .hero-advice-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
+  .hero-advice-list { display: flex; flex-direction: column; gap: 5px; }
+  .hero-advice-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--r-panel);
+    background: var(--bg-field); border: 1px solid var(--border-soft); min-width: 0; text-align: left;
+  }
+  .hero-advice-row:hover { border-color: var(--accent); }
+  .hero-advice-row .rank {
+    flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%;
+    background: var(--bg-rail); border: 1px solid var(--border-soft); font-size: 10px; font-weight: 700; color: var(--fg-sub);
+  }
+  .hero-advice-label { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-advice-nums { flex-shrink: 0; white-space: nowrap; }
+  .hero-advice-nums .num { font-size: 12px; font-weight: 700; color: var(--sim-fg); }
+  .hero-advice-nums .num:last-child { font-size: 9px; }
+  .hero-advice-row .chev { flex-shrink: 0; font-size: 9px; }
+
+  /* ===== どこまでいける?(既存の到達一覧を fold に収める) ================= */
+  .reach-fold { margin-top: 4px; }
 
   .summary {
     display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-radius: var(--r-window);
@@ -658,20 +908,5 @@
   .fav-name { min-width: 0; flex: 1; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fav.act .fav-name { font-weight: 700; }
 
-  .advice-card { border-color: var(--accent); }
-  .advice-list { margin-top: 9px; display: flex; flex-direction: column; gap: 7px; }
-  .advice {
-    display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border-radius: var(--r-panel); text-align: left;
-    background: var(--bg-panel); border: 1px solid var(--border-soft); box-shadow: inset 0 1px 0 #fff;
-  }
-  .advice.reach { background: linear-gradient(180deg, #F3FBF6, #E4F4EB); border-color: var(--good-soft); }
-  .advice:hover { border-color: var(--accent); }
-  .adv-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .adv-row.sub { margin-top: 0; }
-  .adv-label { min-width: 0; flex: 1; font-size: 11.5px; font-weight: 500; }
-  .adv-delta { flex-shrink: 0; font-size: 11.5px; font-weight: 700; color: var(--fg-dim); }
-  .adv-delta.up { color: var(--good); }
-  .adv-row.sub .num { font-size: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .cost { flex-shrink: 0; margin-left: auto; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
-  .advice-foot { margin: 8px 0 0; font-size: 9.5px; line-height: 1.6; }
+  .cost { flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
 </style>

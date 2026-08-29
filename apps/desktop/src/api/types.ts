@@ -115,6 +115,10 @@ export type BuffValue =
   /** 記録するだけ(wiki に効果はあるが未配線)。マスタリーの段の状態を表すために選べる */
   | "record_only";
 
+// crates/domain/src/candidate.rs の CandidateCost。「おすすめ強化」候補の手間タグ(表示専用)。
+// シエナのオーラ強化など種別は今後も増える(candidate.rs のコメント参照)。
+export type CandidateCost = "quick_win" | "enchant" | "equipment_update";
+
 /** 選ぶ人の目的。1つのバフが複数に所属できる。 */
 export type BuffPurpose = "stats" | "damage" | "durability";
 /** 効果を得る場所の手掛かり。 */

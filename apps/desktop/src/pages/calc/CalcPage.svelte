@@ -13,7 +13,7 @@
     isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
     toggleBuff, userInputRange,
   } from "../../buffs";
-  import { candidatesFor, COST_COLORS, tryCandidates, type Candidate } from "../../candidates";
+  import { candidatesFor, COST_COLORS, COST_LABELS, tryCandidates, type Candidate } from "../../candidates";
   import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import {
@@ -1543,7 +1543,7 @@
               >
                 <span class="wi-main">
                   <span class="wi-label">{w.candidate.label}</span>
-                  <span class="cost" style={triadStyle(COST_COLORS[w.candidate.cost])}>{w.candidate.cost}</span>
+                  <span class="cost" style={triadStyle(COST_COLORS[w.candidate.cost])}>{COST_LABELS[w.candidate.cost]}</span>
                 </span>
                 <span class="wi-nums">
                   <span class="num wi-pct">+{w.deltaPct}%</span>
