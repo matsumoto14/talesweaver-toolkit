@@ -15,7 +15,7 @@
     setDamageSnapshot,
   } from "../../api/commands";
   import type {
-    Content, ContentEvaluation, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, StatPreview,
+    Content, ContentEvaluation, DamageResult, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, StatPreview,
   } from "../../api/types";
   import { candidatesFor, COST_COLORS, COST_LABELS, tryCandidates, type Candidate } from "../../candidates";
   import { equipmentEnchantTotal, equipmentIconId, sumValues } from "../../equipment";
@@ -319,6 +319,8 @@
     const contentId = g.content.id;
     const buffs = buffSelectionFor(c);
     heroDamage = null;
+    // 計算タブの主役値と同じ選び方: クリ発生率 > 0 ならクリティカル、0 なら非クリ最大(CalcPage の critMode)
+    const pickPerHit = (r: DamageResult) => (r.critical_chance > 0 ? r.per_hit.critical : r.per_hit.max);
     heroAdviceLatest.run(async (isCurrent) => {
       try {
         const current = await previewDamage(payloadOf(c), skillId, contentId, 0, null, null, buffs);
@@ -326,12 +328,15 @@
         const results = await tryCandidates(
           candidates,
           () => payloadOf(c),
-          (p) => previewDamage(p, skillId, contentId, 0, null, null, buffs),
-          current.per_hit.max,
+          (p) =>
+            previewDamage(p, skillId, contentId, 0, null, null, buffs).then((r) => ({
+              per_hit: { max: pickPerHit(r) },
+            })),
+          pickPerHit(current),
         );
         if (isCurrent()) {
           heroAccuracy = current.accuracy_point;
-          heroDamage = { skillId, perHit: current.per_hit.max };
+          heroDamage = { skillId, perHit: pickPerHit(current) };
           heroAdvice = results.slice(0, 3);
         }
       } catch (e) {
