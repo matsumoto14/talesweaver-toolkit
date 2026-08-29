@@ -154,8 +154,17 @@
 
   // フロンティア(最初の未クリア)
   const frontierId = $derived(rows.find((r) => r.ev && !r.ev.clear)?.content.id ?? null);
-  /** ヒーローの「次の目標」= 到達一覧で上から最初の届かないコンテンツ */
-  const heroGoal = $derived(rows.find((r) => r.content.id === frontierId) ?? null);
+  /**
+   * ヒーローの「次の目標」= 火力目標(必要 /hit)のある最初の未クリア。
+   * 入場条件だけのコンテンツ(敵データなし)が先にあっても飛ばす — スポットライトの答えは
+   * 「どのスキルでどのくらい出るか」であり、それが出せない目標を主役に据えない。
+   * 火力目標のある未クリアが 1 つも無ければ frontier(最初の未クリア)へ落とす。
+   */
+  const heroGoal = $derived(
+    rows.find((r) => r.ev && !r.ev.clear && r.content.need_per_hit !== null && r.ev.damage) ??
+      rows.find((r) => r.content.id === frontierId) ??
+      null,
+  );
 
   // --- 段数違いの系列(レリックの聖域 10〜19段)は 1 行 + 難易度ステッパーに畳む ---
   // 10 行並ぶと一覧のノイズになるだけで、実際に見たいのは「いまどの段まで行けるか」。
