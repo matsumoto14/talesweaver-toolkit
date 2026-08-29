@@ -15,8 +15,8 @@
     previewEffectiveStats, setDamageSnapshot,
   } from "../../api/commands";
   import type {
-    Content, ContentEvaluation, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, StatPreview,
-    UpgradeCandidate,
+    Content, ContentEvaluation, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, SkillDependency,
+    StatPreview, UpgradeCandidate,
   } from "../../api/types";
   import { COST_COLORS, COST_LABELS } from "../../candidates";
   import { equipmentEnchantTotal, equipmentIconId, sumValues } from "../../equipment";
@@ -46,16 +46,22 @@
   };
   const daysAgo = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 
-  // 判定に使ったスキル名の表示用(evaluate_contents は「最大ダメージのスキル」で判定する)
+  // 判定に使ったスキル名の表示用(evaluate_contents は「最大ダメージのスキル」で判定する)。
+  // 依存種別は「装備・命中」パネルの表示行の切り替えに使う
   let skillNames = $state<Record<string, string>>({});
+  let skillDeps = $state<Record<string, SkillDependency>>({});
   $effect(() => {
     const gid = character?.game_character_id;
     if (!gid) {
       skillNames = {};
+      skillDeps = {};
       return;
     }
     listSkills(gid)
-      .then((list) => (skillNames = Object.fromEntries(list.map((s) => [s.id, s.name]))))
+      .then((list) => {
+        skillNames = Object.fromEntries(list.map((s) => [s.id, s.name]));
+        skillDeps = Object.fromEntries(list.map((s) => [s.id, s.dependency]));
+      })
       .catch((e) => reportError(errorMessage(e)));
   });
 
@@ -264,12 +270,31 @@
   // 装備値の内訳(基礎+エンチャ=合計)。基礎(称号・アビリティ込み)は preview、エンチャ分は
   // クライアント側の Σpart.enchant(equipment.ts。実際の集計元は Rust 側 Equipment::enhanced_totals)。
   const heroEnchant = $derived(character ? equipmentEnchantTotal(character.equipment) : null);
-  const heroThrustTotal = $derived(
-    heroStats && heroEnchant ? heroStats.equipment_base_total.thrust + heroEnchant.thrust : null,
-  );
-  const heroSlashTotal = $derived(
-    heroStats && heroEnchant ? heroStats.equipment_base_total.slash + heroEnchant.slash : null,
-  );
+  // 装備値の表示行はスポットライトのスキルの依存で切り替える(HI 依存に突きを見せない)。
+  // 対はドメインの装備攻撃力係数(gamedata equipment_coefficients)で係数を持つ 2 系統
+  const EQUIP_ROW_KEYS: Record<SkillDependency, ["thrust" | "slash" | "magic_attack" | "magic_defense", "thrust" | "slash" | "magic_attack" | "magic_defense"]> = {
+    stab: ["thrust", "slash"],
+    hack: ["thrust", "slash"],
+    stab_hack: ["thrust", "slash"],
+    hack_int: ["slash", "magic_attack"],
+    int: ["magic_attack", "magic_defense"],
+    mr: ["magic_defense", "magic_attack"],
+  };
+  const EQUIP_ROW_LABELS = { thrust: "突き", slash: "斬り", magic_attack: "魔攻", magic_defense: "魔防" } as const;
+  const heroEquipRows = $derived.by(() => {
+    const stats = heroStats;
+    const enchant = heroEnchant;
+    if (!stats || !enchant) return [];
+    const skillId = heroSpot?.skillId ?? character?.main_skill_id ?? null;
+    const dep = (skillId ? skillDeps[skillId] : null) ?? "stab_hack";
+    return EQUIP_ROW_KEYS[dep].map((key) => ({
+      key,
+      label: EQUIP_ROW_LABELS[key],
+      base: stats.equipment_base_total[key],
+      enchant: enchant[key],
+      total: stats.equipment_base_total[key] + enchant[key],
+    }));
+  });
 
   // 命中P(次の目標のスキルで判定。BestSkillDamage には無いので previewDamage を別途叩く)と、
   // おすすめ強化(list_upgrade_candidates。列挙・並び順は Rust 側。上位 3 件を表示)
@@ -488,28 +513,21 @@
             </div>
             <div class="hero-panel">
               <span class="hero-panel-title">装備・命中</span>
-              <span class="hero-row first">
-                <span class="hero-row-label">突き</span>
-                <span class="hero-row-value-wrap">
-                  <span class="num hero-sub">
-                    {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.thrust)} +${fmtInt(heroEnchant.thrust)}` : ""}
-                  </span>
-                  <span class="num hero-row-value" use:bump={() => heroThrustTotal}>
-                    {heroThrustTotal !== null ? fmtInt(heroThrustTotal) : "—"}
+              {#each heroEquipRows as row, i (row.key)}
+                <span class="hero-row" class:first={i === 0}>
+                  <span class="hero-row-label">{row.label}</span>
+                  <span class="hero-row-value-wrap">
+                    <span class="num hero-sub">{fmtInt(row.base)} +{fmtInt(row.enchant)}</span>
+                    <span class="num hero-row-value" use:bump={() => row.total}>{fmtInt(row.total)}</span>
                   </span>
                 </span>
-              </span>
-              <span class="hero-row">
-                <span class="hero-row-label">斬り</span>
-                <span class="hero-row-value-wrap">
-                  <span class="num hero-sub">
-                    {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.slash)} +${fmtInt(heroEnchant.slash)}` : ""}
-                  </span>
-                  <span class="num hero-row-value" use:bump={() => heroSlashTotal}>
-                    {heroSlashTotal !== null ? fmtInt(heroSlashTotal) : "—"}
-                  </span>
+              {/each}
+              {#if heroEquipRows.length === 0}
+                <span class="hero-row first">
+                  <span class="hero-row-label">装備</span>
+                  <span class="num hero-row-value">—</span>
                 </span>
-              </span>
+              {/if}
               <span class="hero-row">
                 <span class="hero-row-label">命中P</span>
                 <span class="num hero-row-value" use:bump={() => heroAccuracy}>

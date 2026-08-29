@@ -199,7 +199,8 @@ const evaluationLatest = latestByKey<number>();
 export async function refreshEvaluation(c: RegisteredCharacter): Promise<void> {
   await evaluationLatest.run(c.id, async (isCurrent) => {
     try {
-      const evaluations = await evaluateContents(payloadOf(c), undefined, buffSelectionFor(c));
+      // 主軸スキル設定済みなら装備条件(依存で比較先が変わる)もそのスキルで判定する
+      const evaluations = await evaluateContents(payloadOf(c), c.main_skill_id ?? undefined, buffSelectionFor(c));
       // 古い応答、および削除済みキャラの応答は反映しない(削除済みキーの復活防止)
       if (isCurrent() && app.characters.some((x) => x.id === c.id)) {
         app.evaluations[c.id] = evaluations;
