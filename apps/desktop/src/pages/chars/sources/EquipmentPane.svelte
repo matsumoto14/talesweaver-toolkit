@@ -17,7 +17,7 @@
   } from "../../../labels";
   import type { EquipmentStatKind } from "../../../labels";
   import { limits } from "../../../limits.svelte";
-  import { app, equipmentFocus } from "../../../state.svelte";
+  import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
@@ -643,6 +643,16 @@
       focusSeq = request.seq;
       equipmentFocus.request = null;
       void revealFocused(request.abilityId);
+    });
+  });
+
+  // --- ホームの部位タイルから「この部位を開く」だけの要求(光らせる行は無い) ---
+  $effect(() => {
+    const request = equipmentPartFocus.request;
+    if (!request) return;
+    untrack(() => {
+      openPartDetail(request.slot);
+      equipmentPartFocus.request = null;
     });
   });
 

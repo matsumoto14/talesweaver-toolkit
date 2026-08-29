@@ -1,12 +1,25 @@
+<script lang="ts" module>
+  // 「目安火力が変わった」影響カードは、キャラごとにセッション中 1 回だけ判定する
+  // (起動中に何度もホームへ戻っても再表示しない)。モジュールスコープなので
+  // タブ切替でこのコンポーネントが作り直されても保持される。
+  const checkedSnapshotIds = new Set<number>();
+</script>
+
 <script lang="ts">
   // ホーム: 選択中キャラの「キャラの窓」ヒーロー(現況・次の目標・おすすめ強化)+
-  // 「どこにどのくらい通るか」の到達一覧(v4 デザイン)。
+  // 今日の期限・影響 + 反映(部位タイル)+ 到達一覧(畳み)+ うごみ、のブリーフィング型 1 カラム。
   // 判定はすべて Rust 側(evaluate_contents / preview_effective_stats / preview_defense / preview_damage)。
   // この画面は表示と選択のみ。
-  import { errorMessage, listSkills, previewDamage, previewDefense, previewEffectiveStats } from "../../api/commands";
-  import type { Content, ContentEvaluation, DefenseProfile, NewCharacter, StatPreview } from "../../api/types";
+  import {
+    errorMessage, getDamageSnapshot, listSkills, previewDamage, previewDefense, previewEffectiveStats,
+    setDamageSnapshot,
+  } from "../../api/commands";
+  import type {
+    Content, ContentEvaluation, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, StatPreview,
+  } from "../../api/types";
   import { candidatesFor, COST_COLORS, COST_LABELS, tryCandidates, type Candidate } from "../../candidates";
-  import { equipmentEnchantTotal } from "../../equipment";
+  import { equipmentEnchantTotal, equipmentIconId, sumValues } from "../../equipment";
+  import { FEED_ITEMS } from "../../feed";
   import { fmtInt } from "../../format";
   import { STAT_KINDS, STAT_LABELS } from "../../labels";
   import {
@@ -15,19 +28,21 @@
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
-  import { persisted } from "../../ui/persistedState.svelte";
-  import RequirementList from "../../ui/RequirementList.svelte";
-  import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
 
-  const DEFAULT_RIGHT_WIDTH = 330;
-
-  const pins = persisted("tw-v4-pins", { ids: [] as string[] });
-
   const character = $derived(selectedCharacter());
   const totalCount = $derived(totalContents());
+
+  const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+  const today = new Date();
+  const todayLabel = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}(${WEEKDAYS[today.getDay()]})`;
+  const fmtMonthDay = (iso: string) => {
+    const d = new Date(iso);
+    return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const daysAgo = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 
   // 判定に使ったスキル名の表示用(evaluate_contents は「最大ダメージのスキル」で判定する)
   let skillNames = $state<Record<string, string>>({});
@@ -56,8 +71,6 @@
       ev: character ? evaluationFor(character.id, content.id) : null,
     })),
   );
-  const clearCount = $derived(rows.filter((r) => r.ev?.clear).length);
-  const entryCount = $derived(rows.filter((r) => r.ev?.entry_ok).length);
 
   // 行の状態: 0余裕 1通る 2ぎりぎり 3届かない 4条件・火力とも未達 5条件だけ未達 6スキル未収録 7判定中
   //           8 入場OK(火力データなし) 9 入場条件が未達(火力データなし)
@@ -76,7 +89,7 @@
    * 収録度 — この敵についてどこまで分かっているか(design-system §14 決定 5)。
    *
    * 到達判定(バッジ)とは別の軸なので、同じ場所に混ぜない。行ごとに歯抜けを見せると
-   * 30 行の一覧で破線が増えて画面が壊れて見えるので、**行頭に 1 つだけ**宣言する。
+   * 一覧で破線が増えて画面が壊れて見えるので、**行頭に 1 つだけ**宣言する。
    * 完全に分かっている行は `null` — 全行に並ぶとバッジが装飾になる。
    */
   function coverage(r: Row): string | null {
@@ -133,13 +146,15 @@
     return { text: `入場まで: ${unmetText(r.ev)}`, unmet: true };
   }
 
-  // 選択とフロンティア(最初の未クリア)
-  let selectedContentId = $state<string | null>(null);
+  /** どこまでいける?一覧の行を押すと、その対象を選んだ状態で計算タブへ移る(押した場所は動かさず、遷移で詳細を賄う)。 */
+  function openInCalc(contentId: string) {
+    app.calcTargetId = contentId;
+    app.tab = "calc";
+  }
+
+  // フロンティア(最初の未クリア)
   const frontierId = $derived(rows.find((r) => r.ev && !r.ev.clear)?.content.id ?? null);
-  const selectedRow = $derived(
-    rows.find((r) => r.content.id === selectedContentId) ?? rows.find((r) => r.content.id === frontierId) ?? rows[0] ?? null,
-  );
-  /** ヒーローの「次の目標」= 到達一覧で上から最初の届かないコンテンツ(お気に入りには影響されない) */
+  /** ヒーローの「次の目標」= 到達一覧で上から最初の届かないコンテンツ */
   const heroGoal = $derived(rows.find((r) => r.content.id === frontierId) ?? null);
 
   // --- 段数違いの系列(レリックの聖域 10〜19段)は 1 行 + 難易度ステッパーに畳む ---
@@ -162,7 +177,6 @@
     const next = list[Math.min(list.length - 1, Math.max(0, i + dir))];
     if (next?.content.series) {
       seriesStep[seriesId] = next.content.series.step;
-      selectedContentId = next.content.id;
     }
   }
 
@@ -184,38 +198,20 @@
     return out;
   }
 
-  // エリアの開閉(既定: 全クリアのエリアは畳む)
+  // エリアの開閉(既定: 全部畳む。fold 自体も既定で畳む)
   let openAreas = $state<Record<string, boolean>>({});
   function areaRows(areaId: string): Row[] {
     return rows.filter((r) => r.areaId === areaId);
   }
   function isAreaOpen(areaId: string): boolean {
-    const explicit = openAreas[areaId];
-    if (explicit !== undefined) return explicit;
-    return !areaRows(areaId).every((r) => r.ev?.clear);
+    return openAreas[areaId] ?? false;
   }
   function toggleArea(areaId: string) {
     openAreas[areaId] = !isAreaOpen(areaId);
   }
 
-  // お気に入り(localStorage のみ。未クリアだけ表示)
-  const pinned = (id: string) => pins.value.ids.includes(id);
-  function togglePin(e: MouseEvent, id: string) {
-    e.stopPropagation();
-    pins.value.ids = pinned(id) ? pins.value.ids.filter((x) => x !== id) : [...pins.value.ids, id];
-  }
-  const favRows = $derived(
-    pins.value.ids
-      .map((id) => rows.find((r) => r.content.id === id))
-      .filter((r): r is Row => !!r && !!r.ev && !r.ev.clear),
-  );
-  const favDone = $derived(pins.value.ids.length - favRows.length);
-
-  function tryInCalc() {
-    if (!selectedRow) return;
-    app.calcTargetId = selectedRow.content.id;
-    app.tab = "calc";
-  }
+  /** 未収録(収録度バッジが出る)コンテンツ数。fold の畳み要約に使う。 */
+  const uncoveredCount = $derived(rows.filter((r) => coverage(r) !== null).length);
 
   const areas = $derived(app.areas);
 
@@ -327,363 +323,426 @@
     app.calcTargetId = heroGoal.content.id;
     app.tab = "calc";
   }
+
+  // ===== 影響カード: 前回起動からの目安火力の変化(セッション中キャラごと初回のみ) ======
+  interface ImpactCard {
+    characterId: number;
+    skillId: string;
+    contentId: string;
+    perHit: number;
+    prevPerHit: number;
+  }
+  let impactCard = $state<ImpactCard | null>(null);
+  $effect(() => {
+    const c = character;
+    const g = heroGoal;
+    if (!c || !g?.ev?.damage || checkedSnapshotIds.has(c.id)) return;
+    checkedSnapshotIds.add(c.id);
+    const skillId = g.ev.damage.skill_id;
+    const contentId = g.content.id;
+    const perHit = g.ev.damage.per_hit_max;
+    (async () => {
+      try {
+        const prev = await getDamageSnapshot(c.id);
+        if (prev && prev.per_hit !== perHit) {
+          impactCard = { characterId: c.id, skillId, contentId, perHit, prevPerHit: prev.per_hit };
+        }
+        await setDamageSnapshot(c.id, skillId, contentId, perHit);
+      } catch (e) {
+        reportError(errorMessage(e));
+      }
+    })();
+  });
+
+  // ===== 反映ゾーン: 部位タイル(ADR 004 の部位列)。押すとキャラタブの装備ペインの該当部位へ ======
+  const REACH_TILES: { slot: PartSlot; label: string }[] = [
+    { slot: "helm", label: "兜" },
+    { slot: "armor", label: "鎧" },
+    { slot: "weapon", label: "武器" },
+    { slot: "shield", label: "盾" },
+    { slot: "shield_plus", label: "カフス(盾+)" },
+    { slot: "head", label: "頭" },
+    { slot: "hand", label: "手" },
+    { slot: "leg", label: "足" },
+    { slot: "relic_pendant", label: "レリック左" },
+    { slot: "relic_bracelet", label: "レリック右" },
+  ];
+  const isRelicTile = (slot: PartSlot) => slot === "relic_pendant" || slot === "relic_bracelet";
+  function partOf(slot: PartSlot): EquipmentPart | null {
+    if (!character) return null;
+    const list = character.equipment.parts[slot];
+    return list.registered.find((p) => p.id === list.selected_id) ?? null;
+  }
+  /** タイルの現在値要約。未装備は「未設定」(§03 操作待ち・金)、レリックは Lv n、
+   *  強化Lvを持つ部位(武器・鎧)はその段、それ以外はエンチャント合計。 */
+  function partValue(slot: PartSlot, part: EquipmentPart | null): { text: string; unset: boolean } {
+    if (isRelicTile(slot)) {
+      const level = part?.item_id?.match(/-plus(\d+)$/)?.[1];
+      return level ? { text: `Lv${level}`, unset: false } : { text: "未設定", unset: true };
+    }
+    if (!part || (part.item_id === null && part.custom_name === null)) return { text: "未設定", unset: true };
+    if (slot === "weapon" || slot === "armor") {
+      return { text: part.enhance_level > 0 ? `+${part.enhance_level}` : "強化なし", unset: false };
+    }
+    const total = sumValues(part.enchant);
+    return { text: total > 0 ? `+${total}` : "±0", unset: false };
+  }
+  /** シエナのオーラは装着中の登録数(部位を跨いだ合計)。8 部位すべてに発現できるので独立管理。 */
+  const auraCount = $derived(
+    character ? Object.values(character.equipment.siena).filter((l) => l.selected_id !== null).length : 0,
+  );
 </script>
 
-<SplitPage
-  midTitle="今日の TW"
-  midNote={character ? `${character.name} の現況` : ""}
-  rightTitle="選択中"
-  rightNote={selectedRow?.areaName ?? ""}
-  persistKey="tw-v4-home"
-  defaultRight={DEFAULT_RIGHT_WIDTH}
-  minMid={300}
-  minRight={240}
-  splitterLabel="一覧と選択中の境界"
-  rightScrollStyle="gap: 11px;"
->
-  {#snippet mid()}
-      {#if !character}
-        <p class="empty dim">キャラを登録すると、ここに到達一覧が出ます。左下の「＋ キャラを登録」からどうぞ。</p>
-      {:else}
-        <!-- ===== キャラの窓ヒーロー: 言葉(左)と数値(右)を空間で分離する ===== -->
-        <div class="hero">
-          <div class="hero-top">
-            <div class="hero-id">
-              <Icon kind="character" id={character.game_character_id} size={64} label={character.name} />
-              <span class="hero-id-name">{character.name}</span>
-              <span class="hero-id-class">
-                {gameCharacterName(character.game_character_id)} / 覚醒{character.awakening.stage} ・ エタ意志
-                <span class="num strong">Lv {character.awakening.eternal_level}</span>
-              </span>
-              <span class="rune-chip" class:unset={runeUnset}>
-                {runeUnset ? "ルーン 未設定" : "ルーン設定済み"}
-                <button type="button" class="rune-cta" onclick={() => focusCharacterSource("rune")}>設定 ›</button>
-              </span>
-            </div>
-            <div class="hero-panels">
-              <div class="hero-panel">
-                <span class="hero-panel-title">ステータス</span>
-                {#each STAT_KINDS as k, i (k)}
-                  <span class="hero-row" class:first={i === 0}>
-                    <span class="hero-row-label">{STAT_LABELS[k]}</span>
-                    <span class="num hero-row-value" use:bump={() => heroStats?.stats[k] ?? null}>
-                      {heroStats ? fmtInt(heroStats.stats[k]) : "—"}
-                    </span>
-                  </span>
-                {/each}
-              </div>
-              <div class="hero-panel">
-                <span class="hero-panel-title">装備・命中</span>
-                <span class="hero-row first">
-                  <span class="hero-row-label">突き</span>
-                  <span class="hero-row-value-wrap">
-                    <span class="num hero-sub">
-                      {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.thrust)} +${fmtInt(heroEnchant.thrust)}` : ""}
-                    </span>
-                    <span class="num hero-row-value" use:bump={() => heroThrustTotal}>
-                      {heroThrustTotal !== null ? fmtInt(heroThrustTotal) : "—"}
-                    </span>
-                  </span>
-                </span>
-                <span class="hero-row">
-                  <span class="hero-row-label">斬り</span>
-                  <span class="hero-row-value-wrap">
-                    <span class="num hero-sub">
-                      {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.slash)} +${fmtInt(heroEnchant.slash)}` : ""}
-                    </span>
-                    <span class="num hero-row-value" use:bump={() => heroSlashTotal}>
-                      {heroSlashTotal !== null ? fmtInt(heroSlashTotal) : "—"}
-                    </span>
-                  </span>
-                </span>
-                <span class="hero-row">
-                  <span class="hero-row-label">命中P</span>
-                  <span class="num hero-row-value" use:bump={() => heroAccuracy}>
-                    {heroAccuracy !== null ? fmtInt(heroAccuracy) : "—"}
-                  </span>
-                </span>
-                <span class="hero-row">
-                  <span class="hero-row-label">回避P</span>
-                  <span class="num hero-row-value" use:bump={() => heroDefense?.evasion_point.physical ?? null}>
-                    {heroDefense ? fmtInt(heroDefense.evasion_point.physical) : "—"}
-                  </span>
-                </span>
-              </div>
-            </div>
+<div class="home">
+  <div class="head-bar">
+    <span class="title">今日の TW</span>
+    <span class="note">{todayLabel}{character ? ` ・ ${character.name} の現況` : ""}</span>
+  </div>
+  <div class="scroll">
+    {#if !character}
+      <p class="empty dim">キャラを登録すると、ここに今日の状況が出ます。左のレールの「＋ キャラを登録」からどうぞ。</p>
+    {:else}
+      <!-- ===== キャラの窓ヒーロー: 言葉(左)と数値(右)を空間で分離する ===== -->
+      <div class="hero">
+        <div class="hero-top">
+          <div class="hero-id">
+            <Icon kind="character" id={character.game_character_id} size={64} label={character.name} />
+            <span class="hero-id-name">{character.name}</span>
+            <span class="hero-id-class">
+              {gameCharacterName(character.game_character_id)} / 覚醒{character.awakening.stage} ・ エタ意志
+              <span class="num strong">Lv {character.awakening.eternal_level}</span>
+            </span>
+            <span class="rune-chip" class:unset={runeUnset}>
+              {runeUnset ? "ルーン 未設定" : "ルーン設定済み"}
+              <button type="button" class="rune-cta" onclick={() => focusCharacterSource("rune")}>設定 ›</button>
+            </span>
           </div>
-
-          <!-- 次の目標スポットライト(全幅 — 右列に入れるとメーターが潰れる) -->
-          <div class="hero-goal">
-            <span class="tag">次の目標</span>
-            {#if !app.evaluations[character.id]}
-              <span class="dim">到達判定を取得できていません。</span>
-            {:else if !heroGoal}
-              <span class="hero-goal-name">なし — 全 {fmtInt(totalCount)} コンテンツ クリア可</span>
-            {:else}
-              <span class="hero-goal-name">{heroGoal.content.series?.name ?? heroGoal.content.name}</span>
-              {#if heroGoal.content.need_per_hit === null || !heroGoal.ev?.damage}
-                <span class="hero-goal-note dim">{noteOf(heroGoal).text}</span>
-              {:else}
-                <span class="hero-div"></span>
-                <Icon
-                  kind="skill" id={heroGoal.ev.damage.skill_id} size={28}
-                  label={skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}
-                />
-                <span class="hero-goal-skill">{skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}</span>
-                <span class="meter hero-meter">
-                  <span class="fill" style="width: {pctOf(heroGoal)}; background: {STATE[BADGE[rowState(heroGoal)].state].bar};"></span>
-                </span>
-                <span class="hero-spot-wrap">
-                  <span class="num hero-spot" use:bump={() => heroGoal?.ev?.damage?.per_hit_max ?? null}>
-                    {fmtInt(heroGoal.ev.damage.per_hit_max)}
+          <div class="hero-panels">
+            <div class="hero-panel">
+              <span class="hero-panel-title">ステータス</span>
+              {#each STAT_KINDS as k, i (k)}
+                <span class="hero-row" class:first={i === 0}>
+                  <span class="hero-row-label">{STAT_LABELS[k]}</span>
+                  <span class="num hero-row-value" use:bump={() => heroStats?.stats[k] ?? null}>
+                    {heroStats ? fmtInt(heroStats.stats[k]) : "—"}
                   </span>
-                  <span class="num dim"> / {fmtInt(heroGoal.content.need_per_hit)}</span>
                 </span>
-                {#key rowState(heroGoal)}
-                  <span class="badge" style={badgeStyle(BADGE[rowState(heroGoal)])} use:flash={() => String(rowState(heroGoal))}>
-                    {BADGE[rowState(heroGoal)].label}
-                  </span>
-                {/key}
-              {/if}
-              <button type="button" class="cta" onclick={tryHeroGoalInCalc}>計算タブで詰める ›</button>
-            {/if}
-          </div>
-
-          {#if heroAdvice.length > 0}
-            <div class="hero-advice">
-              <span class="hero-advice-title">おすすめ強化 — 届かせるなら</span>
-              <div class="hero-advice-list">
-                {#each heroAdvice as a, i (a.candidate.id)}
-                  {@const need = heroGoal?.content.need_per_hit ?? 0}
-                  {@const reach = a.perHit >= need}
-                  <button type="button" class="hero-advice-row" onclick={() => applyHeroAdvice(a)}>
-                    <span class="rank num">{i + 1}</span>
-                    <span class="cost" style={triadStyle(COST_COLORS[a.candidate.cost])}>{COST_LABELS[a.candidate.cost]}</span>
-                    <span class="hero-advice-label">{a.candidate.label}</span>
-                    <span class="hero-advice-nums">
-                      <span class="num" use:bump={() => a.perHit}>{fmtInt(a.perHit)}</span>
-                      <span class="num" use:bump={() => a.deltaPct}>{a.deltaPct > 0 ? " +" : " "}{a.deltaPct}%</span>
-                    </span>
-                    {#if reach}
-                      <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
-                    {/if}
-                    <span class="chev dim">›</span>
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
-
-        <!-- ===== どこまでいける?: 既存の到達一覧(ピン含む)をそのまま畳んで置く ===== -->
-        <details class="fold reach-fold" open>
-          <summary>
-            <span class="area-name">どこまでいける?</span>
-            <span class="area-rule"></span>
-          </summary>
-          <div class="fold-body">
-            {#if !app.evaluations[character.id]}
-              <div class="retry-row">
-                <span class="dim">到達判定を取得できていません。</span>
-                <button type="button" class="btn" onclick={() => character && refreshEvaluation(character)}>再判定</button>
-              </div>
-            {/if}
-            <div class="summary">
-              <span class="cap">クリアできるのは</span>
-              <span class="big-wrap"><span class="big num" use:bump={() => clearCount}>{clearCount}</span><span class="of num">/ {totalCount}</span></span>
-              <span class="entry-pill">
-                <span class="dim">入場条件だけなら</span>
-                <span class="num strong" use:bump={() => entryCount}>{entryCount}</span>
-                <span class="num dim">/ {totalCount}</span>
-              </span>
-            </div>
-
-            <div class="areas">
-              {#each areas as area (area.id)}
-                {@const open = isAreaOpen(area.id)}
-                {@const shown = areaDisplayRows(area.id)}
-                {@const okCount = shown.filter((r) => r.ev?.clear).length}
-                <div class="area">
-                  <div class="area-head">
-                    <span class="area-name">{area.name}</span>
-                    {#if open}
-                      <span class="area-rule"></span>
-                    {:else}
-                      <button type="button" class="collapsed-note" onclick={() => toggleArea(area.id)}>
-                        <span class="ok-dot"></span>
-                        <!-- 系列は代表 1 行の名前だけ出す(10 段ぶん並べると畳んだ意味がない) -->
-                        <span class="dim">全部クリア可 — {shown.map((r) => r.content.series?.name ?? r.content.name).join("・")}</span>
-                      </button>
-                    {/if}
-                    <!-- 開閉で幅が変わると、押したボタン自身が動く(§09 規則 1・4)。件数は常に出す -->
-                    <button type="button" class="area-toggle" onclick={() => toggleArea(area.id)}>
-                      <span class="num">{okCount}/{shown.length}</span>
-                      <span class="chev">{open ? "▴" : "▾"}</span>
-                    </button>
-                  </div>
-                  {#if open}
-                    <div class="rows open-in">
-                      {#each shown as r (r.content.series?.id ?? r.content.id)}
-                        {@const st = rowState(r)}
-                        {@const cov = coverage(r)}
-                        {@const note = noteOf(r)}
-                        {@const sel = selectedRow?.content.id === r.content.id}
-                        <div
-                          class="row"
-                          class:sel
-                          role="button"
-                          tabindex="0"
-                          onclick={() => (selectedContentId = r.content.id)}
-                          onkeydown={(e) => e.key === "Enter" && (selectedContentId = r.content.id)}
-                        >
-                          {#if r.content.id === frontierId}
-                            <div class="frontier">次はここ</div>
-                          {/if}
-                          <div class="row-main">
-                            <button
-                              type="button"
-                              class="pin"
-                              class:on={pinned(r.content.id)}
-                              title={pinned(r.content.id) ? "お気に入りから外す" : "お気に入りに追加"}
-                              onclick={(e) => togglePin(e, r.content.id)}
-                            >★</button>
-                            <Icon kind="mob" id={r.content.enemy_id} size={28} label={r.content.name} />
-                            <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
-                            {#if cov !== null}<span class="coverage">{cov}</span>{/if}
-                            {#if r.content.series}
-                              {@const series = r.content.series}
-                              {@const list = seriesRowsOf(series.id)}
-                              {@const maxStep = list[list.length - 1]?.content.series?.step ?? series.step}
-                              <span class="name">{series.name}</span>
-                              <span class="series-stepper">
-                                <button
-                                  type="button" class="st" aria-label="難易度を下げる"
-                                  disabled={series.step <= (list[0]?.content.series?.step ?? series.step)}
-                                  onclick={(e) => stepSeries(e, series.id, -1)}
-                                >◀</button>
-                                <span class="st-label num">難易度 {series.step} / {maxStep}</span>
-                                <button
-                                  type="button" class="st" aria-label="難易度を上げる"
-                                  disabled={series.step >= maxStep}
-                                  onclick={(e) => stepSeries(e, series.id, 1)}
-                                >▶</button>
-                              </span>
-                            {:else}
-                              <span class="name">{r.content.name}</span>
-                            {/if}
-                            <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
-                          </div>
-                          <div class="row-bar">
-                            <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
-                            {#if r.content.need_per_hit === null}
-                              <span class="need num dim">入場条件のみ</span>
-                            {:else}
-                              <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
-                              {#if ratioOf(r) >= 1.15}
-                                <span class="over num">×{ratioOf(r).toFixed(1)}</span>
-                              {/if}
-                            {/if}
-                            {#key st}<span class="badge badge-in" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>{/key}
-                          </div>
-                          <div class="row-note">
-                            <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? STATE.unknown.bd : r.ev?.entry_ok ? STATE.met.bd : STATE.short.bd};"></span>
-                            <span class="note-text" class:unmet={note.unmet}>{note.text}</span>
-                            {#if r.content.team_note}
-                              <span class="team" title="チーム条件: {r.content.team_note}">チーム</span>
-                            {/if}
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
               {/each}
             </div>
-          </div>
-        </details>
-        <p class="foot dim">
-          入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
-          目安ダメージは wiki に無い値で、コミュニティ知識・実測が出典です(実測で更新)。
-        </p>
-      {/if}
-  {/snippet}
-  {#snippet right()}
-      {#if character && selectedRow}
-        {@const r = selectedRow}
-        {@const ok = !!r.ev?.reaches_need}
-        <div class="sel-card">
-          <div class="sel-name">{r.content.name}</div>
-          {#if r.content.need_per_hit === null}
-            <!-- 敵データが無いコンテンツ: 火力を出さず入場条件だけを示す -->
-            <div class="sel-entry-only dim">敵データ未収録のため、入場条件のみ判定しています。</div>
-          {:else}
-            <div class="sel-dmg">
-              <span class="num huge" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
-              <span class="dim">1発(最大)</span>
+            <div class="hero-panel">
+              <span class="hero-panel-title">装備・命中</span>
+              <span class="hero-row first">
+                <span class="hero-row-label">突き</span>
+                <span class="hero-row-value-wrap">
+                  <span class="num hero-sub">
+                    {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.thrust)} +${fmtInt(heroEnchant.thrust)}` : ""}
+                  </span>
+                  <span class="num hero-row-value" use:bump={() => heroThrustTotal}>
+                    {heroThrustTotal !== null ? fmtInt(heroThrustTotal) : "—"}
+                  </span>
+                </span>
+              </span>
+              <span class="hero-row">
+                <span class="hero-row-label">斬り</span>
+                <span class="hero-row-value-wrap">
+                  <span class="num hero-sub">
+                    {heroStats && heroEnchant ? `${fmtInt(heroStats.equipment_base_total.slash)} +${fmtInt(heroEnchant.slash)}` : ""}
+                  </span>
+                  <span class="num hero-row-value" use:bump={() => heroSlashTotal}>
+                    {heroSlashTotal !== null ? fmtInt(heroSlashTotal) : "—"}
+                  </span>
+                </span>
+              </span>
+              <span class="hero-row">
+                <span class="hero-row-label">命中P</span>
+                <span class="num hero-row-value" use:bump={() => heroAccuracy}>
+                  {heroAccuracy !== null ? fmtInt(heroAccuracy) : "—"}
+                </span>
+              </span>
+              <span class="hero-row">
+                <span class="hero-row-label">回避P</span>
+                <span class="num hero-row-value" use:bump={() => heroDefense?.evasion_point.physical ?? null}>
+                  {heroDefense ? fmtInt(heroDefense.evasion_point.physical) : "—"}
+                </span>
+              </span>
             </div>
-            <div class="sel-need num dim" use:bump={() => r.content.need_per_hit}>目安 {fmtInt(r.content.need_per_hit)}</div>
-            {#if r.ev?.damage}
-              <div class="sel-skill dim">
-                スキル: {skillNames[r.ev.damage.skill_id] ?? r.ev.damage.skill_id}(最大ダメージのスキルで判定)
-              </div>
-              <div class="sel-note" class:ok use:flash={() => (ok ? "ok" : String(Math.max(1, Math.round((1 - ratioOf(r)) * 100))))}>
-                {ok
-                  ? "火力は目安を超えています(参考値)。"
-                  : `目安まで あと ${Math.max(1, Math.round((1 - ratioOf(r)) * 100))}%。`}
-              </div>
-            {:else}
-              <div class="sel-note">スキル未収録のため火力を判定できません。</div>
-            {/if}
-            <button type="button" class="try" onclick={tryInCalc}>計算シートで試す</button>
-          {/if}
-          <div class="sel-entry" class:ng={r.ev ? !r.ev.entry_ok && r.content.requirements.length > 0 : false}>
-            {r.content.requirements.length === 0
-              ? "入場条件はありません。"
-              : r.ev?.entry_ok
-                ? "入場条件をすべて満たしています。"
-                : `入場条件が ${r.ev?.checks.filter((c) => !c.ok).length ?? 0} 項目 未達`}
           </div>
-          {#if r.content.team_note}
-            <div class="sel-team">チーム条件: {r.content.team_note}</div>
-          {/if}
-          {#if r.ev && r.ev.checks.length > 0}
-            <RequirementList checks={r.ev.checks} style="margin-top: 7px;" />
-          {/if}
-          {#if r.content.entry_note}
-            <!-- ルーン Lv・共通スキル・コア等、キャラモデルに値が無く判定できない条件 -->
-            <div class="sel-entry-note">{r.content.entry_note}</div>
+        </div>
+
+        <!-- 次の目標スポットライト(全幅 — 右列に入れるとメーターが潰れる) -->
+        <div class="hero-goal">
+          <span class="tag">次の目標</span>
+          {#if !app.evaluations[character.id]}
+            <span class="dim">到達判定を取得できていません。</span>
+          {:else if !heroGoal}
+            <span class="hero-goal-name">なし — 全 {fmtInt(totalCount)} コンテンツ クリア可</span>
+          {:else}
+            <span class="hero-goal-name">{heroGoal.content.series?.name ?? heroGoal.content.name}</span>
+            {#if heroGoal.content.need_per_hit === null || !heroGoal.ev?.damage}
+              <span class="hero-goal-note dim">{noteOf(heroGoal).text}</span>
+            {:else}
+              <span class="hero-div"></span>
+              <Icon
+                kind="skill" id={heroGoal.ev.damage.skill_id} size={28}
+                label={skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}
+              />
+              <span class="hero-goal-skill">{skillNames[heroGoal.ev.damage.skill_id] ?? heroGoal.ev.damage.skill_id}</span>
+              <span class="meter hero-meter">
+                <span class="fill" style="width: {pctOf(heroGoal)}; background: {STATE[BADGE[rowState(heroGoal)].state].bar};"></span>
+              </span>
+              <span class="hero-spot-wrap">
+                <span class="num hero-spot" use:bump={() => heroGoal?.ev?.damage?.per_hit_max ?? null}>
+                  {fmtInt(heroGoal.ev.damage.per_hit_max)}
+                </span>
+                <span class="num dim"> / {fmtInt(heroGoal.content.need_per_hit)}</span>
+              </span>
+              {#key rowState(heroGoal)}
+                <span class="badge" style={badgeStyle(BADGE[rowState(heroGoal)])} use:flash={() => String(rowState(heroGoal))}>
+                  {BADGE[rowState(heroGoal)].label}
+                </span>
+              {/key}
+            {/if}
+            <button type="button" class="cta" onclick={tryHeroGoalInCalc}>計算タブで詰める ›</button>
           {/if}
         </div>
 
-        {#if favRows.length > 0}
-          <div class="card">
-            <div class="card-head">
-              <span class="card-title">お気に入り</span>
-              {#if favDone > 0}<span class="dim small">クリア済み {favDone} 件は非表示</span>{/if}
-            </div>
-            <div class="fav-list">
-              {#each favRows as f (f.content.id)}
-                {@const act = heroGoal?.content.id === f.content.id}
-                <button type="button" class="fav" class:act onclick={() => (selectedContentId = f.content.id)}>
-                  <span class="mark" class:act>{act ? "★" : "☆"}</span>
-                  <span class="fav-name">{f.content.name}</span>
-                  <span class="num muted" use:bump={() => f.ev?.damage?.per_hit_max ?? null}>{f.ev?.damage ? fmtInt(f.ev.damage.per_hit_max) : "—"}</span>
+        {#if heroAdvice.length > 0}
+          <div class="hero-advice">
+            <span class="hero-advice-title">おすすめ強化 — 届かせるなら</span>
+            <div class="hero-advice-list">
+              {#each heroAdvice as a, i (a.candidate.id)}
+                {@const need = heroGoal?.content.need_per_hit ?? 0}
+                {@const reach = a.perHit >= need}
+                <button type="button" class="hero-advice-row" onclick={() => applyHeroAdvice(a)}>
+                  <span class="rank num">{i + 1}</span>
+                  <span class="cost" style={triadStyle(COST_COLORS[a.candidate.cost])}>{COST_LABELS[a.candidate.cost]}</span>
+                  <span class="hero-advice-label">{a.candidate.label}</span>
+                  <span class="hero-advice-nums">
+                    <span class="num" use:bump={() => a.perHit}>{fmtInt(a.perHit)}</span>
+                    <span class="num" use:bump={() => a.deltaPct}>{a.deltaPct > 0 ? " +" : " "}{a.deltaPct}%</span>
+                  </span>
+                  {#if reach}
+                    <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
+                  {/if}
+                  <span class="chev dim">›</span>
                 </button>
               {/each}
             </div>
           </div>
         {/if}
-      {:else}
-        <p class="empty dim">キャラを選択してください。</p>
+      </div>
+
+      <!-- ===== 期限・影響(今日のカード)。0 件の日は列ごと出さない ===== -->
+      {#if impactCard && impactCard.characterId === character.id}
+        {@const card = impactCard}
+        <div class="section">
+          <div class="area-head">
+            <span class="area-name">期限・影響</span>
+            <span class="area-rule"></span>
+          </div>
+          <div class="brief-card" use:flash={() => String(card.perHit)}>
+            <span class="tag">影響</span>
+            <Icon
+              kind="skill" id={card.skillId} size={28}
+              label={skillNames[card.skillId] ?? card.skillId}
+            />
+            <span class="brief-copy">
+              <span class="brief-title">
+                目安火力が <span class="num" use:bump={() => card.perHit}>{fmtInt(card.perHit)}</span> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
+                <span class="num" style="color: {card.perHit >= card.prevPerHit ? 'var(--good)' : 'var(--danger)'}">
+                  {card.perHit >= card.prevPerHit ? "+" : ""}{fmtInt(card.perHit - card.prevPerHit)}
+                </span>
+              </span>
+              <span class="brief-why">前回 <span class="num">{fmtInt(card.prevPerHit)}</span></span>
+            </span>
+            <button type="button" class="cta" onclick={() => openInCalc(card.contentId)}>なぜこの数字? ›</button>
+          </div>
+        </div>
       {/if}
-  {/snippet}
-</SplitPage>
+
+      <!-- ===== 反映: 部位タイル。押すとキャラタブの装備ペインの該当部位へ ===== -->
+      <div class="section">
+        <div class="area-head">
+          <span class="area-name">反映</span>
+          <span class="area-rule"></span>
+          {#if character.updated_at}
+            <span class="last-reflect dim">
+              最終反映 <span class="num">{fmtMonthDay(character.updated_at)}</span>
+              ({daysAgo(character.updated_at) === 0 ? "今日" : `${daysAgo(character.updated_at)} 日前`})
+            </span>
+          {/if}
+        </div>
+        <div class="parts-grid">
+          {#each REACH_TILES as t (t.slot)}
+            {@const part = partOf(t.slot)}
+            {@const val = partValue(t.slot, part)}
+            <button type="button" class="part-tile" onclick={() => focusCharacterSource("equipment", t.slot)}>
+              <Icon kind="equipment" id={part ? equipmentIconId(part.item_id, app.equipmentCatalog) : null} size={20} label={t.label} />
+              <span class="part-tile-name">{t.label}</span>
+              {#if val.unset}
+                <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+              {:else}
+                <span class="num part-tile-val" use:flash={() => val.text}>{val.text}</span>
+              {/if}
+              <span class="chev dim">›</span>
+            </button>
+          {/each}
+          <button type="button" class="part-tile" onclick={() => focusCharacterSource("siena")}>
+            <Icon kind="equipment" id={null} size={20} label="オーラ" />
+            <span class="part-tile-name">オーラ</span>
+            <span class="num part-tile-val" use:flash={() => String(auraCount)}>{auraCount} 部位</span>
+            <span class="chev dim">›</span>
+          </button>
+        </div>
+        <button type="button" class="cta tile-more" onclick={() => (app.tab = "chars")}>そのほかの設定(ペット・ルーン・バフ) ›</button>
+      </div>
+
+      <!-- ===== どこまでいける?: 畳み既定。エリア 4 行 → 押すと直下に一覧が展開(§09 規則 1) ===== -->
+      <details class="fold reach-fold">
+        <summary>
+          <span class="area-name">どこまでいける?</span>
+          <span class="fold-count">未収録 <span class="num">{uncoveredCount}</span></span>
+        </summary>
+        <div class="fold-body">
+          {#if !app.evaluations[character.id]}
+            <div class="retry-row">
+              <span class="dim">到達判定を取得できていません。</span>
+              <button type="button" class="btn" onclick={() => character && refreshEvaluation(character)}>再判定</button>
+            </div>
+          {/if}
+          <div class="areas">
+            {#each areas as area (area.id)}
+              {@const open = isAreaOpen(area.id)}
+              {@const shown = areaDisplayRows(area.id)}
+              {@const okCount = shown.filter((r) => r.ev?.clear).length}
+              <div class="area">
+                <button type="button" class="mini-row" onclick={() => toggleArea(area.id)}>
+                  <span class="name">{area.name}</span>
+                  <span class="meter">
+                    <span
+                      class="fill"
+                      style="width: {shown.length ? (okCount / shown.length) * 100 : 0}%; background: var(--state-met-bar);"
+                    ></span>
+                  </span>
+                  <span class="num count">{okCount} / {shown.length}</span>
+                  <span class="chev dim">{open ? "▴" : "▾"}</span>
+                </button>
+                {#if open}
+                  <div class="rows open-in">
+                    {#each shown as r (r.content.series?.id ?? r.content.id)}
+                      {@const st = rowState(r)}
+                      {@const cov = coverage(r)}
+                      {@const note = noteOf(r)}
+                      <div
+                        class="row"
+                        role="button"
+                        tabindex="0"
+                        onclick={() => openInCalc(r.content.id)}
+                        onkeydown={(e) => e.key === "Enter" && openInCalc(r.content.id)}
+                      >
+                        {#if r.content.id === frontierId}
+                          <div class="frontier">次はここ</div>
+                        {/if}
+                        <div class="row-main">
+                          <Icon kind="mob" id={r.content.enemy_id} size={28} label={r.content.name} />
+                          <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
+                          {#if cov !== null}<span class="coverage">{cov}</span>{/if}
+                          {#if r.content.series}
+                            {@const series = r.content.series}
+                            {@const list = seriesRowsOf(series.id)}
+                            {@const maxStep = list[list.length - 1]?.content.series?.step ?? series.step}
+                            <span class="name">{series.name}</span>
+                            <span class="series-stepper">
+                              <button
+                                type="button" class="st" aria-label="難易度を下げる"
+                                disabled={series.step <= (list[0]?.content.series?.step ?? series.step)}
+                                onclick={(e) => stepSeries(e, series.id, -1)}
+                              >◀</button>
+                              <span class="st-label num">難易度 {series.step} / {maxStep}</span>
+                              <button
+                                type="button" class="st" aria-label="難易度を上げる"
+                                disabled={series.step >= maxStep}
+                                onclick={(e) => stepSeries(e, series.id, 1)}
+                              >▶</button>
+                            </span>
+                          {:else}
+                            <span class="name">{r.content.name}</span>
+                          {/if}
+                          <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
+                          <span class="chev dim">›</span>
+                        </div>
+                        <div class="row-bar">
+                          <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
+                          {#if r.content.need_per_hit === null}
+                            <span class="need num dim">入場条件のみ</span>
+                          {:else}
+                            <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
+                            {#if ratioOf(r) >= 1.15}
+                              <span class="over num">×{ratioOf(r).toFixed(1)}</span>
+                            {/if}
+                          {/if}
+                          {#key st}<span class="badge badge-in" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>{/key}
+                        </div>
+                        <div class="row-note">
+                          <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? STATE.unknown.bd : r.ev?.entry_ok ? STATE.met.bd : STATE.short.bd};"></span>
+                          <span class="note-text" class:unmet={note.unmet}>{note.text}</span>
+                          {#if r.content.team_note}
+                            <span class="team" title="チーム条件: {r.content.team_note}">チーム</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      </details>
+
+      <!-- ===== うごき: 上のカードに入らなかった新着(ツールの更新履歴。外部フィードは今回スコープ外) ===== -->
+      <div class="section">
+        <div class="area-head">
+          <span class="area-name">うごき</span>
+          <span class="area-rule"></span>
+        </div>
+        {#each FEED_ITEMS as item (item.date + item.title)}
+          <div class="tl-row">
+            <span class="tl-date num">{fmtMonthDay(item.date)}</span>
+            <span class="tag">{item.source === "tool" ? "ツール" : item.source === "official" ? "TW公式" : "韓国"}</span>
+            <span class="tl-text">{item.title}</span>
+            {#if item.note}<span class="tl-note">{item.note}</span>{/if}
+            {#if item.url}<span class="ext dim">↗</span>{/if}
+          </div>
+        {/each}
+      </div>
+
+      <p class="foot dim">
+        入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
+        目安ダメージは wiki に無い値で、コミュニティ知識・実測が出典です(実測で更新)。
+      </p>
+    {/if}
+  </div>
+</div>
 
 <style>
-  /* .layout / section / .scroll は ui/SplitPage.svelte(gap の差は rightScrollStyle で指定) */
+  .home { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--bg-mid); }
+  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 940px; }
   .empty { font-size: 12px; }
 
   .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
+
+  /* 帯ラベル・行動チップ。「うごき」= ソース分類、影響カード = カード種別、と 1 部品 2 用途 */
+  .tag {
+    flex: none; width: 52px; text-align: center; padding: 1px 0; border-radius: var(--r-pill);
+    background: var(--surface-inset); border: 1px solid var(--border-soft);
+    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
+  }
+  .cta {
+    flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: var(--r-pill);
+    background: #fff; border: 1px solid var(--border-soft); font-size: 9.5px; font-weight: 700; color: var(--accent); white-space: nowrap;
+  }
+  .cta:hover { border-color: var(--accent); }
 
   /* ===== キャラの窓ヒーロー ============================================= */
   .hero {
@@ -755,76 +814,65 @@
   .hero-advice-nums .num { font-size: 12px; font-weight: 700; color: var(--sim-fg); }
   .hero-advice-nums .num:last-child { font-size: 9px; }
   .hero-advice-row .chev { flex-shrink: 0; font-size: 9px; }
+  .cost { flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
 
-  /* ===== どこまでいける?(既存の到達一覧を fold に収める) ================= */
-  .reach-fold { margin-top: 4px; }
-
-  .summary {
-    display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-radius: var(--r-window);
-    background: linear-gradient(180deg, #fff, #E8F1FB 92%);
-    border: 1px solid var(--border-strong);
-    box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(30, 44, 74, 0.1);
-  }
-  .summary .cap { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--fg-muted); white-space: nowrap; }
-  .summary .big-wrap { display: flex; align-items: baseline; gap: 5px; }
-  .summary .big { font-size: 27px; line-height: 1; font-weight: 700; color: #16223A; text-shadow: 0 1px 0 #fff; }
-  .summary .of { font-size: 12px; color: #7E8EA6; white-space: nowrap; }
-  .entry-pill {
-    flex-shrink: 0; margin-left: auto; display: flex; align-items: baseline; gap: 6px;
-    padding: 4px 11px; border-radius: var(--r-pill);
-    background: rgba(255, 255, 255, 0.75); border: 1px solid var(--border-soft);
-    font-size: 9.5px; white-space: nowrap;
-  }
-  .entry-pill .strong { font-size: 12px; font-weight: 700; color: var(--accent-hover); }
-
-  .areas { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+  /* ===== 汎用セクション見出し(期限・影響 / 反映 / うごき) ===== */
+  .section { display: flex; flex-direction: column; gap: 6px; }
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
-  .collapsed-note { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: var(--t-label); text-align: left; overflow: hidden; }
-  .collapsed-note .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* 難易度送り。app.css §07 の .stepper(StatInput 専用)と紛らわしいので別名にする */
-  .series-stepper {
-    flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
-    padding: 1px 4px; border-radius: var(--r-pill);
-    background: var(--bg-field); border: 1px solid var(--border-soft);
-  }
-  .st {
-    width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
-    border-radius: var(--r-pill); font-size: 8.5px; color: var(--accent);
-  }
-  .st:hover:not(:disabled) { background: var(--bg-active); }
-  .st-label { font-size: 9px; color: var(--fg-muted); white-space: nowrap; }
+  .last-reflect { flex: none; font-size: 9px; white-space: nowrap; }
 
-  .ok-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--good-soft); }
-  .area-toggle {
-    flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
-    padding: 2px 9px; border-radius: var(--r-pill);
-    background: var(--bg-field); border: 1px solid var(--border-soft);
-    font-size: 9px; font-weight: 700; color: var(--accent); white-space: nowrap;
+  /* ===== 期限・影響カード ===== */
+  .brief-card {
+    display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-radius: var(--r-window);
+    background: var(--bg-field); border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(30, 44, 74, 0.08);
   }
+  .brief-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .brief-title { font-size: 14px; font-weight: 800; color: var(--fg-head); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brief-why { font-size: 10px; color: var(--fg-muted); line-height: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .rows { padding-top: 7px; display: flex; flex-direction: column; gap: 6px; }
+  /* ===== 反映: 部位タイル ===== */
+  .parts-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .part-tile {
+    display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: var(--r-window);
+    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left; min-width: 0;
+  }
+  .part-tile:hover { border-color: var(--accent); }
+  .part-tile-name { min-width: 0; flex: 1; font-size: 10px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .part-tile-val { flex-shrink: 0; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .tile-more { align-self: flex-start; }
+
+  /* ===== どこまでいける?(details.fold は app.css 側の畳み見た目を継承) ===== */
+  .reach-fold summary { display: flex; align-items: center; gap: 9px; }
+  .fold-count { font-size: 10.5px; font-weight: 700; color: var(--fg-sub); }
+
+  .areas { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+  .area { display: flex; flex-direction: column; gap: 6px; }
+  .mini-row {
+    display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: var(--r-window);
+    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
+  }
+  .mini-row:hover { border-color: var(--accent); }
+  .mini-row .name { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini-row .meter { width: 90px; flex: none; }
+  .mini-row .count { flex: none; width: 46px; text-align: right; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); }
+
+  .rows { padding-left: 6px; display: flex; flex-direction: column; gap: 6px; }
   .row {
     padding: 9px 12px; border-radius: var(--r-window); cursor: pointer;
     background: var(--bg-field); border: 1px solid var(--border-soft);
   }
-  .row.sel { background: var(--sel-card); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66, 109, 214, 0.18); }
   .frontier {
     display: inline-flex; align-items: center; margin-bottom: 6px; padding: 2px 9px; border-radius: var(--r-pill);
     background: var(--sel); border: 1px solid var(--sel-bd);
     font-size: 9.5px; font-weight: 700; color: var(--sel-fg);
   }
   .row-main { display: flex; align-items: center; gap: 9px; min-width: 0; }
-  .pin {
-    width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-    border-radius: var(--r-inset); border: 1px solid var(--border-soft); font-size: 10px; color: var(--fg-dim);
-  }
-  .pin.on { background: var(--bg-active); border-color: var(--accent); color: var(--accent-hover); }
-
   .row-main .name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row.sel .row-main .name { font-weight: 700; }
   .row-main .dmg { flex-shrink: 0; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .row-main .chev { flex-shrink: 0; font-size: 9px; }
 
   .row-bar { margin-top: 6px; display: flex; align-items: center; gap: 9px; }
   .row-bar .meter { flex: 1 1 auto; min-width: 40px; }
@@ -843,70 +891,28 @@
     font-size: 8.5px; font-weight: 700; color: var(--sim-fg);
   }
 
-  .foot { margin: 14px 0 0; font-size: 10px; line-height: 1.7; }
+  /* 難易度送り。app.css §07 の .stepper(StatInput 専用)と紛らわしいので別名にする */
+  .series-stepper {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+    padding: 1px 4px; border-radius: var(--r-pill);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
+  }
+  .st {
+    width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+    border-radius: var(--r-pill); font-size: 8.5px; color: var(--accent);
+  }
+  .st:hover:not(:disabled) { background: var(--bg-active); }
+  .st-label { font-size: 9px; color: var(--fg-muted); white-space: nowrap; }
 
-  /* 右カラム */
-  .sel-card {
-    padding: 14px; border-radius: var(--r-window);
-    background: linear-gradient(180deg, var(--sim-bg), #F1F0FA);
-    border: 1px solid var(--sim); box-shadow: inset 0 1px 0 #fff;
+  /* ===== うごき ===== */
+  .tl-row {
+    display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-radius: var(--r-window);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
   }
-  /* このカード群の親になる大見出し(規格の見出し段) */
-  .sel-name { font-size: var(--t-heading); font-weight: var(--w-strong); letter-spacing: 0.02em; color: var(--fg); line-height: 1.25; }
-  .sel-dmg { margin-top: 2px; display: flex; align-items: baseline; gap: 7px; }
-  /* 右カラムの選択中は結果の数値の 2 段目(§05: 44 / 40 / 27) */
-  .huge { font-size: 40px; line-height: 1.05; font-weight: 700; }
-  .sel-need { margin-top: 4px; font-size: var(--t-label); }
-  .sel-skill { margin-top: 4px; font-size: 9.5px; line-height: 1.5; }
-  .sel-note {
-    margin-top: 9px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: var(--state-edge-bg); border: 1px solid #E3CB93;
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--state-edge-fg);
-  }
-  .sel-note.ok { background: var(--state-met-bg); border-color: var(--good-soft); color: var(--good); }
-  .try {
-    margin-top: 8px; width: 100%; text-align: center; padding: 9px; border-radius: var(--r-panel);
-    background: linear-gradient(180deg, var(--sim), var(--sim-strong)); border: 1px solid #3C3A6B;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
-    font-size: 11px; font-weight: 700; color: #fff;
-  }
-  .sel-entry {
-    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: #F4F9FE; border: 1px solid var(--border-soft);
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--fg-sub);
-  }
-  .sel-entry.ng { background: var(--state-short-bg); border-color: var(--state-short-bd); color: var(--danger); }
-  .sel-entry-only {
-    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: #F7F8FB; border: 1px dashed var(--border-soft);
-    font-size: var(--t-label); line-height: 1.6;
-  }
-  .sel-entry-note {
-    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: #FDF9EE; border: 1px solid var(--gold);
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--state-edge-fg);
-  }
-  .sel-team {
-    margin-top: 7px; padding: 7px 10px; border-radius: var(--r-panel);
-    background: var(--state-temp-bg); border: 1px solid var(--sim);
-    font-size: var(--t-label); font-weight: 500; line-height: 1.6; color: var(--sim-fg);
-  }
-  /* .reqs/.req/.req-label/.req-tag は app.css(ui/RequirementList.svelte 経由)。
-     margin-top の微差(CalcPage 8px / ここ 7px)はコンポーネント境界を跨ぐため
-     RequirementList の style prop で個別指定している */
+  .tl-date { flex: none; width: 38px; font-size: 9.5px; color: var(--fg-dim); }
+  .tl-text { min-width: 0; flex: 1; font-size: 11px; color: var(--fg-sub); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-note { flex: none; font-size: 9.5px; color: var(--fg-dim); white-space: nowrap; }
+  .ext { flex: none; font-size: 10px; }
 
-  /* .card-head / .small は app.css。ここは HomePage 固有のサイズ差だけ上書き */
-  .card-head .small { font-size: 9.5px; }
-  .fav-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-  .fav {
-    display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
-  }
-  .fav.act { background: #F1F6FF; border-color: var(--accent); }
-  .fav .mark { flex-shrink: 0; font-size: 10px; color: var(--fg-dim); }
-  .fav .mark.act { color: var(--accent-hover); }
-  .fav-name { min-width: 0; flex: 1; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fav.act .fav-name { font-weight: 700; }
-
-  .cost { flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
+  .foot { margin: 0; font-size: 10px; line-height: 1.7; }
 </style>

@@ -34,6 +34,7 @@ import type {
   EquipmentItem,
   GameCharacter,
   NewCharacter,
+  PartSlot,
   RandomOptionDef,
   MasteryDef,
   RegisteredCharacter,
@@ -116,13 +117,20 @@ export const equipmentFocus = $state<{ request: (ValidationLocation & { seq: num
 export const characterSourceFocus = $state<{ request: { sourceId: SourceId; seq: number } | null }>({
   request: null,
 });
+/** ホームの部位タイルから、装備ペインの特定の部位を直接開くための要求(補正源は必ず equipment)。 */
+export const equipmentPartFocus = $state<{ request: { slot: PartSlot; seq: number } | null }>({
+  request: null,
+});
 let focusSeq = 0;
 
-export function focusCharacterSource(sourceId: SourceId) {
+export function focusCharacterSource(sourceId: SourceId, part?: PartSlot) {
   app.tab = "chars";
   app.registerOpen = false;
   focusSeq += 1;
   characterSourceFocus.request = { sourceId, seq: focusSeq };
+  if (sourceId === "equipment" && part) {
+    equipmentPartFocus.request = { slot: part, seq: focusSeq };
+  }
 }
 
 /** エラーが指す場所へ画面を移す(キャラタブ → 該当キャラ → 該当部位)。 */
