@@ -90,7 +90,7 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 
 ### services/inquiry-worker — 問い合わせの中継(アプリ外)
 
-- アプリの「情報 → 問い合わせ」から送られた内容を GitHub Issue にする Cloudflare Workers
+- アプリ右上の「問い合わせ」から送られた内容を GitHub Issue にする Cloudflare Workers
 - **アプリ本体からは独立している**。ここが落ちても計算・保存は動く(問い合わせが送れないだけ)
 - アプリに秘密を持たせないための中継。GitHub App の秘密鍵は Worker のシークレットにあり、
   アプリ側は認証を持たない。代わりに proof-of-work + IP ハッシュのレート制限で匿名投稿を守る
