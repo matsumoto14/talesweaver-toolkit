@@ -3,17 +3,18 @@
   // 右カラムは「計算の材料」(試し変更・バフ・入場条件)。計算はすべて Rust 側(preview_damage)。
   import { untrack } from "svelte";
   import {
-    errorMessage, evaluateContents, listSkills, previewDamage, previewDefense, updateCharacter,
+    errorMessage, evaluateContents, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
+    updateCharacter,
   } from "../../api/commands";
   import type {
     Adjustments, BuffChoice, BuffDefinition, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
-    DamageResult, DefenseProfile, FormulaStep, NewCharacter, Skill, StatKind,
+    DamageResult, DefenseProfile, FormulaStep, NewCharacter, Skill, StatKind, UpgradeCandidate,
   } from "../../api/types";
   import {
     isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
     toggleBuff, userInputRange,
   } from "../../buffs";
-  import { candidatesFor, COST_COLORS, COST_LABELS, tryCandidates, type Candidate } from "../../candidates";
+  import { COST_COLORS, COST_LABELS } from "../../candidates";
   import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import {
@@ -1020,48 +1021,34 @@
   }
 
   // --- もし〜だったら ------------------------------------------------------
-  interface WhatIf {
-    candidate: Candidate;
-    perHit: number;
-    deltaPct: number;
-  }
-  let whatIf = $state<WhatIf[]>([]);
+  // 列挙・試算・並び順(+0 除外)は list_upgrade_candidates(Rust 側 domain::candidate)。
+  // コンボ・一時調整は「この一発」表示と同条件(現在のコンボ・一時調整)で試算する。
+  let whatIf = $state<UpgradeCandidate[]>([]);
   /** 押した候補は、移動先の差分チップと同時に短く退出させる(§10「移った」)。 */
   let leavingWhatIfId = $state<string | null>(null);
-  /** 試した候補の数。0 件のときに「候補が無い」のか「超えるものが無い」のかを書き分ける */
-  let whatIfTried = $state(0);
   const whatIfLatest = latest({ debounce: 250 });
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null;
-    const tempJson = JSON.stringify(temporaryAdjustments);
     const t = target;
     const sid = skillId;
     const base = perHit;
     const comboCount = combo ? COMBO_THRESHOLD : 0;
     const comboType = selectedComboSkillType;
+    const tempJson = JSON.stringify(temporaryAdjustments);
     const buffsJson = JSON.stringify(app.calcBuffs);
     if (!pJson || !t || !sid || base === null) {
       whatIfLatest.cancel();
       whatIf = [];
-      whatIfTried = 0;
       return;
     }
     whatIfLatest.run(async (isCurrent) => {
       try {
         const current = JSON.parse(pJson) as NewCharacter;
-        const list = candidatesFor(current, app.equipmentCatalog);
-        const rs = await tryCandidates(
-          list,
-          () => JSON.parse(pJson) as NewCharacter,
-          (p) => previewDamage(
-            p, sid, t.content.id, comboCount, JSON.parse(tempJson), comboType, JSON.parse(buffsJson),
-          ),
-          base,
-          (w) => w.perHit > base,
+        const rs = await listUpgradeCandidates(
+          current, sid, t.content.id, comboCount, comboType, JSON.parse(tempJson), JSON.parse(buffsJson),
         );
         if (isCurrent()) {
           whatIf = rs;
-          whatIfTried = list.length;
           leavingWhatIfId = null;
         }
       } catch (e) {
@@ -1070,9 +1057,15 @@
     });
     return () => whatIfLatest.cancel();
   });
-  function applyWhatIf(w: WhatIf) {
-    leavingWhatIfId = w.candidate.id;
-    editSim((p) => w.candidate.apply(p));
+  function applyWhatIf(w: UpgradeCandidate) {
+    leavingWhatIfId = w.id;
+    // editSim と同じ SIM_LIMIT ガード(w.applied は列挙時点の payload + 候補 1 件ぶんの変更)
+    if (savedPayload !== null && KNOBS.filter((k) => k.get(w.applied) !== k.get(savedPayload)).length > SIM_LIMIT) {
+      simLimited = true;
+      return;
+    }
+    simLimited = false;
+    app.sim = w.applied;
   }
 
   // --- 右カラム: バフ・装備の編集(試し変更として) -------------------------
@@ -1504,27 +1497,23 @@
           </div>
           <div class="panel-body">
             {#if whatIf.length === 0}
-              <p class="wi-empty dim">
-                {whatIfTried === 0
-                  ? "いま変えられる場所がありません。共通スキル・エンチャントはすでに上限です。"
-                  : `${whatIfTried} 件ためしましたが、どれもいまの数字を超えませんでした。`}
-              </p>
+              <p class="wi-empty dim">いま変えられる場所がありません。共通スキル・エンチャント・強化・オーラはすでに上限です。</p>
             {/if}
-            {#each whatIf as w (w.candidate.id)}
+            {#each whatIf as w (w.id)}
               <button
                 type="button"
                 class="whatif"
-                class:whatif-leaving={leavingWhatIfId === w.candidate.id}
-                disabled={leavingWhatIfId === w.candidate.id}
+                class:whatif-leaving={leavingWhatIfId === w.id}
+                disabled={leavingWhatIfId === w.id}
                 onclick={() => applyWhatIf(w)}
               >
                 <span class="wi-main">
-                  <span class="wi-label">{w.candidate.label}</span>
-                  <span class="cost" style={triadStyle(COST_COLORS[w.candidate.cost])}>{COST_LABELS[w.candidate.cost]}</span>
+                  <span class="wi-label">{w.label}</span>
+                  <span class="cost" style={triadStyle(COST_COLORS[w.cost])}>{COST_LABELS[w.cost]}</span>
                 </span>
                 <span class="wi-nums">
-                  <span class="num wi-pct">+{w.deltaPct}%</span>
-                  <span class="num dim">{fmtInt(w.perHit)}</span>
+                  <span class="num wi-pct">{w.delta_pct > 0 ? "+" : ""}{w.delta_pct}%</span>
+                  <span class="num dim">{fmtInt(w.per_hit_primary)}</span>
                 </span>
               </button>
             {/each}

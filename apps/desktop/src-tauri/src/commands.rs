@@ -944,6 +944,170 @@ pub fn evaluate_contents(
     ))
 }
 
+/// 「次に変えるなら / おすすめ強化」候補を列挙し、それぞれの試算結果を 1 回の IPC で返す。
+/// 列挙・並び順は domain 側(`crates/domain/src/candidate.rs`)。ここは gamedata カタログの解決
+/// (強化補正種別・エンチャント上限・武器の上位品探し)と試算(preview_damage と同じ経路)を担う。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UpgradeCandidate {
+    pub id: String,
+    pub label: String,
+    pub cost: domain::CandidateCost,
+    pub per_hit_primary: i64,
+    pub delta_pct: i32,
+    /// 必要 /hit 以上か。`need_per_hit` が無いコンテンツでは常に `false`。
+    pub reaches: bool,
+    /// この候補を適用したキャラ payload。UI はこれをそのまま whatif の sim に入れる。
+    pub applied: NewCharacter,
+}
+
+/// 現武器と同じ `weapon_class` の上位カタログ品への更新候補(gamedata 固有の選定なので
+/// ここで組み立てる。domain は `weapon_class` を知らない)。
+fn weapon_update_change(
+    equipment: &domain::Equipment,
+    common_skills: CommonSkills,
+    catalog: &[EquipmentItem],
+) -> Option<domain::CandidateChange> {
+    let weapon = equipment.parts.get(domain::PartSlot::Weapon).selected()?;
+    let item_id = weapon.item_id.as_deref()?;
+    let current = catalog.iter().find(|i| i.id == item_id)?;
+    let weapon_class = current.weapon_class?;
+    let sum = |v: domain::EquipmentValues| -> i64 { v.fields().into_iter().map(|(_, value)| value).sum() };
+    let current_sum = sum(current.values_max);
+    let upgrade = catalog
+        .iter()
+        .filter(|i| {
+            i.slot == domain::PartSlot::Weapon
+                && i.weapon_class == Some(weapon_class)
+                && i.id != current.id
+                && sum(i.values_max) > current_sum
+        })
+        .max_by_key(|i| sum(i.values_max))?;
+    let mut new_equipment = equipment.clone();
+    let part = new_equipment
+        .parts
+        .get_mut(domain::PartSlot::Weapon)
+        .selected_mut()?;
+    part.item_id = Some(upgrade.id.to_string());
+    part.custom_name = None;
+    part.base = upgrade.values_max;
+    part.enchant = part.enchant.clamp_to(upgrade.enchant_caps);
+    Some(domain::CandidateChange {
+        id: "weapon-upgrade".to_string(),
+        label: format!("武器を{}に更新", upgrade.name),
+        cost: domain::CandidateCost::EquipmentUpdate,
+        equipment: new_equipment,
+        common_skills,
+    })
+}
+
+#[tauri::command]
+pub fn list_upgrade_candidates(
+    character: NewCharacter,
+    buffs: BuffSelection,
+    skill_id: String,
+    content_id: String,
+    combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
+    temporary_adjustments: Option<domain::Adjustments>,
+) -> CommandResult<Vec<UpgradeCandidate>> {
+    validate_character_draft(&character, &buffs)?;
+    let content = find_content(&content_id)?;
+    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
+    let skill = find_skill(&skill_id)?;
+    let style_dependency = character
+        .main_skill_id
+        .as_deref()
+        .map(find_skill)
+        .transpose()?
+        .map(|s| s.dependency);
+
+    let per_hit = |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<i64> {
+        let input = build_damage_input(
+            &character.base_stats,
+            &character.game_character_id,
+            style_dependency,
+            &character.stat_sources,
+            &buffs,
+            equipment,
+            common_skills,
+            character.awakening,
+            skill.clone(),
+            enemy.clone(),
+            &content,
+            combo_count,
+            combo_skill_type,
+            temporary_adjustments.clone(),
+        )?;
+        Ok(domain::calculate_damage(&input).per_hit_primary)
+    };
+
+    let base = per_hit(character.equipment.clone(), character.common_skills)?;
+
+    let equipment_catalog = gamedata::equipment_catalog();
+    let resolved_enhance_type = |slot: domain::PartSlot| -> Option<domain::EquipmentEnhanceType> {
+        let part = character.equipment.parts.get(slot).selected()?;
+        part.enhance_type.or_else(|| {
+            part.item_id
+                .as_deref()
+                .and_then(gamedata::equipment_enhance_type)
+        })
+    };
+    let enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)> = character
+        .equipment
+        .parts
+        .iter()
+        .into_iter()
+        .filter_map(|(slot, part)| {
+            let item_id = part.item_id.as_deref()?;
+            let item = equipment_catalog.iter().find(|i| i.id == item_id)?;
+            Some((slot, item.enchant_caps))
+        })
+        .collect();
+
+    let mut changes = domain::list_candidate_changes(
+        &character.equipment,
+        &character.common_skills,
+        resolved_enhance_type(domain::PartSlot::Weapon),
+        resolved_enhance_type(domain::PartSlot::Armor),
+        &enchant_caps,
+    );
+    if let Some(change) = weapon_update_change(
+        &character.equipment,
+        character.common_skills,
+        &equipment_catalog,
+    ) {
+        changes.push(change);
+    }
+
+    let mut outcomes = Vec::with_capacity(changes.len());
+    for change in &changes {
+        let result = per_hit(change.equipment.clone(), change.common_skills)?;
+        outcomes.push((change.id.clone(), result));
+    }
+    let ranked = domain::rank_candidates(outcomes, base, content.need_per_hit);
+
+    let mut by_id: std::collections::HashMap<String, domain::CandidateChange> =
+        changes.into_iter().map(|c| (c.id.clone(), c)).collect();
+    Ok(ranked
+        .into_iter()
+        .filter_map(|r| {
+            let change = by_id.remove(&r.id)?;
+            let mut applied = character.clone();
+            applied.equipment = change.equipment;
+            applied.common_skills = change.common_skills;
+            Some(UpgradeCandidate {
+                id: change.id,
+                label: change.label,
+                cost: change.cost,
+                per_hit_primary: r.per_hit_primary,
+                delta_pct: r.delta_pct,
+                reaches: r.reaches,
+                applied,
+            })
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

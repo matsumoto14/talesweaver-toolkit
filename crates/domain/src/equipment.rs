@@ -135,6 +135,22 @@ impl EquipmentValues {
         Ok(())
     }
 
+    /// 各フィールドを `caps` の対応値で頭打ちにする(装備更新でエンチャントが新しい枠を
+    /// 超えないようにする。UI 側の `clampToCaps` と同じ)。
+    pub fn clamp_to(self, caps: EquipmentValues) -> EquipmentValues {
+        EquipmentValues {
+            thrust: self.thrust.min(caps.thrust),
+            slash: self.slash.min(caps.slash),
+            physical_defense: self.physical_defense.min(caps.physical_defense),
+            magic_attack: self.magic_attack.min(caps.magic_attack),
+            magic_defense: self.magic_defense.min(caps.magic_defense),
+            accuracy: self.accuracy.min(caps.accuracy),
+            critical: self.critical.min(caps.critical),
+            evasion: self.evasion.min(caps.evasion),
+            agility: self.agility.min(caps.agility),
+        }
+    }
+
     pub fn add(self, other: EquipmentValues) -> EquipmentValues {
         EquipmentValues {
             thrust: self.thrust + other.thrust,
@@ -873,6 +889,25 @@ impl EquipmentParts {
             (PartSlot::RelicPendant, &self.relic_pendant),
             (PartSlot::RelicBracelet, &self.relic_bracelet),
         ]
+    }
+
+    /// 部位を引く(`get_mut` の不変版)。
+    pub fn get(&self, slot: PartSlot) -> &EquipmentPartList {
+        match slot {
+            PartSlot::Weapon => &self.weapon,
+            PartSlot::Armor => &self.armor,
+            PartSlot::Helm => &self.helm,
+            PartSlot::Shield => &self.shield,
+            PartSlot::ShieldPlus => &self.shield_plus,
+            PartSlot::Head => &self.head,
+            PartSlot::Body => &self.body,
+            PartSlot::Hand => &self.hand,
+            PartSlot::Leg => &self.leg,
+            PartSlot::Effect => &self.effect,
+            PartSlot::Artifact => &self.artifact,
+            PartSlot::RelicPendant => &self.relic_pendant,
+            PartSlot::RelicBracelet => &self.relic_bracelet,
+        }
     }
 
     /// 部位を可変で引く。

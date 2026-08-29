@@ -116,8 +116,21 @@ export type BuffValue =
   | "record_only";
 
 // crates/domain/src/candidate.rs の CandidateCost。「おすすめ強化」候補の手間タグ(表示専用)。
-// シエナのオーラ強化など種別は今後も増える(candidate.rs のコメント参照)。
-export type CandidateCost = "quick_win" | "enchant" | "equipment_update";
+export type CandidateCost = "quick_win" | "enchant" | "equipment_update" | "enhance" | "aura";
+
+// list_upgrade_candidates の戻り値 1 件(src-tauri の UpgradeCandidate)。
+// 列挙・並び順は Rust 側(domain::candidate)。UI は上位 N 件を表示し、行クリックで
+// `applied` をそのまま app.sim に入れて計算タブへ遷移する。
+export interface UpgradeCandidate {
+  id: string;
+  label: string;
+  cost: CandidateCost;
+  per_hit_primary: number;
+  delta_pct: number;
+  /** 必要 /hit 以上か。need_per_hit の無いコンテンツでは常に false */
+  reaches: boolean;
+  applied: NewCharacter;
+}
 
 /** 選ぶ人の目的。1つのバフが複数に所属できる。 */
 export type BuffPurpose = "stats" | "damage" | "durability";

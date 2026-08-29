@@ -40,7 +40,10 @@ pub use attack_power::{
     AttackPowerBreakdown,
 };
 pub use awakening::{Awakening, AwakeningCaps};
-pub use candidate::CandidateCost;
+pub use candidate::{
+    aura_candidates, enchant_candidates, enhance_candidates, list_candidate_changes,
+    quick_win_candidates, rank_candidates, CandidateChange, CandidateCost, RankedCandidate,
+};
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use character_skill::{
     damage_contributions, CharacterSkillCatalog, CharacterSkillDef, CharacterSkillError,

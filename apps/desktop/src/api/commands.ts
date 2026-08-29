@@ -5,7 +5,7 @@ import type {
   NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
-  TitleDef, ValidationLocation,
+  TitleDef, UpgradeCandidate, ValidationLocation,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -112,3 +112,15 @@ export const evaluateContents = (character: NewCharacter, dependencySkillId?: st
     dependencySkillId: dependencySkillId ?? null,
     buffs,
   });
+/**
+ * 「次に変えるなら / おすすめ強化」候補を 1 回の IPC でまとめて試算する。
+ * 列挙・並び順(届かせるなら正直に・+0 除外)は Rust 側(domain::candidate)。
+ */
+export const listUpgradeCandidates = (
+  character: NewCharacter, skillId: string, contentId: string, comboCount = 0,
+  comboSkillType: ComboSkillType | null = null,
+  temporaryAdjustments: Adjustments | null = null,
+  buffs: BuffSelection = { choices: [] },
+) => invoke<UpgradeCandidate[]>("list_upgrade_candidates", {
+  character, buffs, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments,
+});

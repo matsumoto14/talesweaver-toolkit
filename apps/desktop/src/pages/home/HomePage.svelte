@@ -11,13 +11,14 @@
   // 判定はすべて Rust 側(evaluate_contents / preview_effective_stats / preview_defense / preview_damage)。
   // この画面は表示と選択のみ。
   import {
-    errorMessage, getDamageSnapshot, listSkills, previewDamage, previewDefense, previewEffectiveStats,
-    setDamageSnapshot,
+    errorMessage, getDamageSnapshot, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
+    previewEffectiveStats, setDamageSnapshot,
   } from "../../api/commands";
   import type {
     Content, ContentEvaluation, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, StatPreview,
+    UpgradeCandidate,
   } from "../../api/types";
-  import { candidatesFor, COST_COLORS, COST_LABELS, tryCandidates, type Candidate } from "../../candidates";
+  import { COST_COLORS, COST_LABELS } from "../../candidates";
   import { equipmentEnchantTotal, equipmentIconId, sumValues } from "../../equipment";
   import { FEED_ITEMS } from "../../feed";
   import { fmtInt } from "../../format";
@@ -271,10 +272,9 @@
   );
 
   // 命中P(次の目標のスキルで判定。BestSkillDamage には無いので previewDamage を別途叩く)と、
-  // おすすめ強化(candidatesFor → tryCandidates → perHit 降順の上位 3 件。既存候補システムを再利用)
-  interface HeroAdvice { candidate: Candidate; perHit: number; deltaPct: number }
+  // おすすめ強化(list_upgrade_candidates。列挙・並び順は Rust 側。上位 3 件を表示)
   let heroAccuracy = $state<number | null>(null);
-  let heroAdvice = $state<HeroAdvice[]>([]);
+  let heroAdvice = $state<UpgradeCandidate[]>([]);
   /** スポットライトの /hit(previewDamage の結果)。主軸スキル設定済みならそのスキルの値 */
   let heroDamage = $state<{
     skillId: string;
@@ -336,13 +336,7 @@
     heroAdviceLatest.run(async (isCurrent) => {
       try {
         const current = await previewDamage(payloadOf(c), skillId, contentId, 0, null, null, buffs);
-        const candidates = candidatesFor(payloadOf(c), app.equipmentCatalog);
-        const results = await tryCandidates(
-          candidates,
-          () => payloadOf(c),
-          (p) => previewDamage(p, skillId, contentId, 0, null, null, buffs),
-          current.per_hit_primary,
-        );
+        const results = await listUpgradeCandidates(payloadOf(c), skillId, contentId, 0, null, null, buffs);
         if (isCurrent()) {
           heroAccuracy = current.accuracy_point;
           heroDamage = {
@@ -366,13 +360,28 @@
     app.tab = "calc";
   }
 
-  function applyHeroAdvice(a: HeroAdvice) {
-    if (!character || !heroGoal) return;
-    // 既存の試し変更があればその上に候補を重ねる(無確認で破棄しない。PR レビュー指摘)
-    const p = JSON.parse(JSON.stringify(app.sim ?? payloadOf(character))) as NewCharacter;
-    a.candidate.apply(p);
-    app.sim = p;
-    app.calcTargetId = heroGoal.content.id;
+  async function applyHeroAdvice(a: UpgradeCandidate) {
+    const g = heroGoal;
+    if (!character || !g?.ev?.damage) return;
+    if (app.sim === null) {
+      app.sim = a.applied;
+      app.calcTargetId = g.content.id;
+      app.tab = "calc";
+      return;
+    }
+    // 既存の試し変更(app.sim)がある場合は無確認で捨てず、その上に重ねる。
+    // 同じ候補 id が sim 基点でも成立するなら、その applied を採用する。
+    const skillId = character.main_skill_id ?? g.ev.damage.skill_id;
+    const buffs = buffSelectionFor(character);
+    try {
+      const results = await listUpgradeCandidates(app.sim, skillId, g.content.id, 0, null, null, buffs);
+      const same = results.find((r) => r.id === a.id);
+      if (same) app.sim = same.applied;
+      // 同 id が見つからない(sim で適用済み等)場合は sim を変えず計算タブへ遷移だけする。
+    } catch (e) {
+      reportError(errorMessage(e));
+    }
+    app.calcTargetId = g.content.id;
     app.tab = "calc";
   }
 
@@ -577,18 +586,16 @@
           <div class="hero-advice">
             <span class="hero-advice-title">おすすめ強化 — 届かせるなら</span>
             <div class="hero-advice-list">
-              {#each heroAdvice as a, i (a.candidate.id)}
-                {@const need = heroGoal?.content.need_per_hit ?? 0}
-                {@const reach = a.perHit >= need}
+              {#each heroAdvice as a, i (a.id)}
                 <button type="button" class="hero-advice-row" onclick={() => applyHeroAdvice(a)}>
                   <span class="rank num">{i + 1}</span>
-                  <span class="cost" style={triadStyle(COST_COLORS[a.candidate.cost])}>{COST_LABELS[a.candidate.cost]}</span>
-                  <span class="hero-advice-label">{a.candidate.label}</span>
+                  <span class="cost" style={triadStyle(COST_COLORS[a.cost])}>{COST_LABELS[a.cost]}</span>
+                  <span class="hero-advice-label">{a.label}</span>
                   <span class="hero-advice-nums">
-                    <span class="num" use:bump={() => a.perHit}>{fmtInt(a.perHit)}</span>
-                    <span class="num" use:bump={() => a.deltaPct}>{a.deltaPct > 0 ? " +" : " "}{a.deltaPct}%</span>
+                    <span class="num" use:bump={() => a.per_hit_primary}>{fmtInt(a.per_hit_primary)}</span>
+                    <span class="num" use:bump={() => a.delta_pct}>{a.delta_pct > 0 ? " +" : " "}{a.delta_pct}%</span>
                   </span>
-                  {#if reach}
+                  {#if a.reaches}
                     <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
                   {/if}
                   <span class="chev dim">›</span>
