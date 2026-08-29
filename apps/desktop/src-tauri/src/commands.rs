@@ -482,9 +482,10 @@ pub fn preview_defense(
         gamedata::awakening_caps(character.awakening).max_stat,
     )
     .map_err(|e| e.to_string())?;
-    let equipment_totals = character
-        .equipment
-        .base_totals(&gamedata::equipment_abilities(), &gamedata::title_catalog())
+    // preview と同じ基本能力値(装備 + アビリティ + 称号 + ソウルリンク)を使う。
+    // ソウルリンクはエンチャントではなく基本能力値へ直接加算する。
+    let equipment_totals = preview
+        .equipment_base_total
         .add(character.equipment.enhanced_totals(None));
     Ok(domain::defense_profile(
         &preview.stats,
@@ -505,6 +506,11 @@ pub fn preview_defense(
 #[tauri::command]
 pub fn get_stat_limits() -> domain::StatLimits {
     domain::stat_sources::stat_limits()
+}
+
+#[tauri::command]
+pub fn get_new_character_stat_sources() -> domain::StatSources {
+    domain::StatSources::for_new_character()
 }
 
 /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
@@ -537,7 +543,8 @@ fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
     domain::weapon_added_damage(&weapon.base.add(weapon.enchant), &rates, multiplier)
 }
 
-fn armor_added_damage(armor: &EquipmentPart) -> i64 {
+#[cfg(test)]
+fn armor_added_hp(armor: &EquipmentPart) -> i64 {
     if armor.enhance_level == 0 {
         return 0;
     }
@@ -554,7 +561,7 @@ fn armor_added_damage(armor: &EquipmentPart) -> i64 {
         gamedata::armor_enhance_multiplier(armor.enhance_level, armor.enhance_grade).unwrap_or(0.0);
     let values = armor.base.add(armor.enchant);
     let rates = gamedata::armor_enhance_rates(class);
-    domain::armor_added_damage(
+    domain::armor_added_hp(
         &values,
         rates.physical_defense,
         rates.magic_defense,
@@ -629,18 +636,17 @@ fn build_damage_material(
             temp,
         );
     }
-    let added_damage = equipment
+    let weapon_added_damage = equipment
         .parts
         .weapon
         .selected()
         .map(weapon_added_damage)
-        .unwrap_or(0)
-        + equipment
-            .parts
-            .armor
-            .selected()
-            .map(armor_added_damage)
-            .unwrap_or(0);
+        .unwrap_or(0);
+    // リンクステータス7は、武器強化で丸め終えた追加固定ダメージへ倍率を掛けて再度切り捨てる。
+    // リンクステータス8は鎧の追加HPであり、与ダメージには加えない。
+    let added_damage = stat_sources
+        .soul_link
+        .weapon_added_damage(weapon_added_damage);
     Ok(DamageMaterial {
         base_stats: base_stats.clone(),
         stat_modifiers,
@@ -690,8 +696,11 @@ fn build_damage_input(
     )?;
     let skill = resolve_combo_skill_type(skill, &equipment, combo_skill_type)?;
     let equipment_catalog = gamedata::equipment_catalog();
-    let mut equipment_base_sources = equipment
-        .base_sources(&gamedata::equipment_abilities(), &gamedata::title_catalog());
+    let mut equipment_base_sources =
+        equipment.base_sources(&gamedata::equipment_abilities(), &gamedata::title_catalog());
+    if let Some(source) = stat_sources.soul_link.equipment_source() {
+        equipment_base_sources.push(source);
+    }
     let wrist_bonus = gamedata::character_wrist_base_bonus(
         game_character_id,
         base_stats,
@@ -855,9 +864,12 @@ pub fn evaluate_contents(
         character.awakening,
         None,
     )?;
-    let equipment_base_sources_raw = character
+    let mut equipment_base_sources_raw = character
         .equipment
         .base_sources(&equipment_abilities, &titles);
+    if let Some(source) = character.stat_sources.soul_link.equipment_source() {
+        equipment_base_sources_raw.push(source);
+    }
     let character_style_dependency = character
         .main_skill_id
         .as_deref()
@@ -913,10 +925,13 @@ pub fn evaluate_contents(
 
 #[cfg(test)]
 mod tests {
-    use super::{armor_added_damage, resolve_combo_skill_type, weapon_added_damage};
+    use super::{
+        armor_added_hp, build_damage_input, resolve_combo_skill_type, weapon_added_damage,
+    };
     use domain::{
-        ComboSkillType, EnhanceGrade, Equipment, EquipmentEnhanceType, EquipmentPart,
-        EquipmentValues,
+        BaseStats, BuffSelection, ComboSkillType, CommonSkills, DamageCategory, EnhanceGrade,
+        Equipment, EquipmentEnhanceType, EquipmentPart, EquipmentValues, SoulLinkStatus,
+        StatSources,
     };
 
     #[test]
@@ -1004,7 +1019,7 @@ mod tests {
     }
 
     #[test]
-    fn 魔鎧15最上は画像の追加固定ダメージになる() {
+    fn 魔鎧15最上は画像の追加hpになる() {
         let armor = EquipmentPart {
             enhance_level: 15,
             enhance_grade: Some(EnhanceGrade::Highest),
@@ -1016,7 +1031,89 @@ mod tests {
             },
             ..Default::default()
         };
-        // (650×3.8 + 510×4.0) × 440 = 1,984,400。式自体のテストは domain::armor_added_damage 側にある。
-        assert_eq!(armor_added_damage(&armor), 1_984_400);
+        // (650×3.8 + 510×4.0) × 440 = 1,984,400。与ダメージには接続しない。
+        assert_eq!(armor_added_hp(&armor), 1_984_400);
+    }
+
+    #[test]
+    fn 実入力組立てはソウルリンク1から7を一度だけ反映する() {
+        let sources = StatSources {
+            soul_link: SoulLinkStatus {
+                thrust_level: 1,
+                slash_level: 2,
+                magic_attack_level: 3,
+                magic_defense_level: 4,
+                critical_damage_level: 1,
+                final_damage_level: 1,
+                weapon_enhance_level: 4,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut equipment = Equipment::default();
+        equipment.parts.weapon = weapon(Some("abyss-scimitar"), 10, None).into();
+        let content = gamedata::content_areas()
+            .into_iter()
+            .flat_map(|area| area.contents)
+            .find(|content| content.id == "ringo")
+            .unwrap();
+        let input = build_damage_input(
+            &BaseStats {
+                stab: 100,
+                hack: 100,
+                int: 1,
+                def: 1,
+                mr: 1,
+                dex: 1,
+                agi: 1,
+            },
+            "boris",
+            None,
+            &sources,
+            &BuffSelection::default(),
+            equipment,
+            CommonSkills::default(),
+            domain::Awakening::default(),
+            gamedata::find_skill("boris_horizontal_sword").unwrap(),
+            gamedata::find_enemy("ringo_boss").unwrap(),
+            &content,
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let soul_sources: Vec<_> = input
+            .equipment_base_sources
+            .iter()
+            .filter(|source| source.source == "ソウルリンク")
+            .collect();
+        assert_eq!(soul_sources.len(), 1);
+        assert_eq!(
+            soul_sources[0].values,
+            EquipmentValues {
+                thrust: 2,
+                slash: 4,
+                magic_attack: 6,
+                magic_defense: 8,
+                ..Default::default()
+            }
+        );
+        let soul_damage: Vec<_> = input
+            .damage_contributions
+            .iter()
+            .filter(|source| source.source == "ソウルリンク")
+            .collect();
+        assert_eq!(soul_damage.len(), 2);
+        assert!(soul_damage.iter().any(|source| {
+            source.category == DamageCategory::CriticalDamageRate
+                && (source.value - 0.015).abs() < f64::EPSILON
+        }));
+        assert!(soul_damage.iter().any(|source| {
+            source.category == DamageCategory::FinalDamageRate
+                && (source.value - 0.04).abs() < f64::EPSILON
+        }));
+        // 武器+10の丸め済み60,508へリンクLv4の+40%を掛けて切り捨てる。
+        assert_eq!(input.weapon_added_damage, 84_711);
     }
 }

@@ -1,10 +1,10 @@
 <script lang="ts">
   // キャラ登録(v4): 呼び名 + 19 職のアイコン選択だけ。詳細は登録後にワークスペースで育てる
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
-  import { createCharacter, errorMessage } from "../../api/commands";
+  import { createCharacter, errorMessage, getNewCharacterStatSources } from "../../api/commands";
   import { dropForeignSkills, mainSkillOptions as buildMainSkillOptions } from "../../characterSkills";
   import type { NewCharacter } from "../../api/types";
-  import { DEFAULT_AWAKENING_STAGE, defaultCommonSkills, defaultEquipment, neutralStatSources } from "../../draft";
+  import { DEFAULT_AWAKENING_STAGE, defaultCommonSkills, defaultEquipment } from "../../draft";
   import { STAT_KINDS } from "../../labels";
   import {
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
@@ -63,7 +63,7 @@
           // このツールのターゲット層は**覚醒 5**(遅くても 4)。既定を 0 にすると
           // ほぼ全員が毎回上書きすることになる(ux-guidelines「初期値は実用値」)
           awakening: { stage: DEFAULT_AWAKENING_STAGE, eternal_level: 0 },
-          stat_sources: neutralStatSources(),
+          stat_sources: await getNewCharacterStatSources(),
           default_buff_set_id: null,
           equipment: defaultEquipment(),
           common_skills: defaultCommonSkills(),

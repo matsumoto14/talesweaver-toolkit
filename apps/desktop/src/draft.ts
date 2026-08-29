@@ -111,21 +111,7 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   character_skills: { skill_ids: [...(src.character_skills?.skill_ids ?? [])] },
   masteries: { picked: [...(src.masteries?.picked ?? [])] },
   critical_rate: { ...src.critical_rate },
-});
-
-export const neutralStatSources = (): StatSources => ({
-  pet_skills: Object.fromEntries(STAT_KINDS.map((k) => [k, null])) as StatSources["pet_skills"],
-  rune_levels: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["rune_levels"],
-  crown: {
-    ...Object.fromEntries(STAT_KINDS.map((k) => [k, 0])),
-    selected_stat: null,
-  } as StatSources["crown"],
-  monster_cards: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["monster_cards"],
-  sacred_relic: Object.fromEntries(STAT_KINDS.map((k) => [k, 0])) as StatSources["sacred_relic"],
-  elements: { pet: null, monster_card: null, rune: null, helm_ability: null, cuffs_ability: null },
-  character_skills: { skill_ids: [] },
-  masteries: { picked: [] },
-  critical_rate: { pet: false, ultimate_rune: false, architect_lab_stage: 0, deadly_blow: false },
+  soul_link: { ...src.soul_link },
 });
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({

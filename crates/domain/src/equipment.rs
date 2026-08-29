@@ -412,10 +412,11 @@ pub struct EquipmentPart {
     /// 装備強化 Lv(0..=15)。武器・鎧以外は 0 のみ許可
     #[serde(default)]
     pub enhance_level: u8,
-    /// 固定ダメージの補正式。カタログ外装備でもユーザーが種別を選べば計算できる。
+    /// 装備強化の追加効果(武器の固定ダメージ / 鎧の追加HP)の補正式。
+    /// カタログ外装備でもユーザーが種別を選べば計算できる。
     #[serde(default)]
     pub enhance_type: Option<EquipmentEnhanceType>,
-    /// +12 以上の固定ダメージ等級。+11 以下は式で確定するため `None` 固定。
+    /// +12 以上の追加効果等級。+11 以下は式で確定するため `None` 固定。
     #[serde(default)]
     pub enhance_grade: Option<EnhanceGrade>,
     /// 装備アビリティ id
@@ -580,7 +581,8 @@ pub enum EquipmentError {
     Siena(#[from] SienaError),
 }
 
-/// 装備強化の固定ダメージ補正式。カタログ品は自動設定し、カタログ外だけ選択する。
+/// 装備強化の追加効果補正式。武器は固定ダメージ、鎧は追加HPを算出する。
+/// カタログ品は自動設定し、カタログ外だけ選択する。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EquipmentEnhanceType {
@@ -1731,12 +1733,12 @@ pub fn weapon_added_damage(
     }
 }
 
-/// 鎧系装備の追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
+/// 鎧系装備の装備強化による追加 HP。
 ///
 /// `補正 = 物防×r.physical_defense + 魔防×r.magic_defense`
 /// `追加効果 = INT(INT(補正) × 倍率)`(武器と異なり奇数切捨は適用しない)。
 /// 係数(`physical_defense_rate`/`magic_defense_rate`)は鎧種別ごとに gamedata が持つので引数で受ける。
-pub fn armor_added_damage(
+pub fn armor_added_hp(
     armor_base: &EquipmentValues,
     physical_defense_rate: f64,
     magic_defense_rate: f64,
@@ -2254,13 +2256,13 @@ mod tests {
     // wiki 例: 魔鎧+15最上(物防係数3.8・魔防係数4.0)・物防650/魔防510
     // → INT(650×3.8 + 510×4.0) × 440 = INT(4,510) × 440 = 1,984,400(武器と異なり奇数切捨は無い)
     #[test]
-    fn 鎧追加固定ダメージ_魔鎧15最上の式() {
+    fn 鎧追加hp_魔鎧15最上の式() {
         let armor = EquipmentValues {
             physical_defense: 650,
             magic_defense: 510,
             ..Default::default()
         };
-        assert_eq!(armor_added_damage(&armor, 3.8, 4.0, 440.0), 1_984_400);
+        assert_eq!(armor_added_hp(&armor, 3.8, 4.0, 440.0), 1_984_400);
     }
 
     #[test]

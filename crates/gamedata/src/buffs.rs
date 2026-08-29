@@ -16,7 +16,7 @@ use crate::Source;
 pub const BUFF_CATALOG_SOURCE: Source = Source {
     page: "ステータス#jc16a054",
     retrieved_on: "2026-08-29",
-    note: "常用バフ36件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照",
+    note: "常用バフ35件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照",
 };
 
 /// 常用バフのカタログ。
@@ -526,21 +526,6 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageJapan, percent: 10.0 }],
         },
         BuffDefinition {
-            id: "soul_link_status",
-            name: "ソウルリンク(リンクステータス)",
-            purposes: &[BuffPurpose::Damage],
-            origin: BuffOrigin::SoulLink,
-            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
-            target: BuffTarget::AllStats,
-            layer: StatLayer::PercentOfBase,
-            value: BuffValue::RecordOnly,
-            exclusive_slots: Vec::new(),
-            source_url: WIKI_URL,
-            note: "[L] 上限 +45%。wiki は +4〜20%。最大値で入れている",
-            default_value: None,
-            damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 20.0 }],
-        },
-        BuffDefinition {
             id: "ancient_relic_minigame",
             name: "古代レリックの聖域ミニゲームバフ",
             purposes: &[BuffPurpose::Damage],
@@ -568,9 +553,10 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn 常用バフは36件() {
-        assert_eq!(buff_catalog().len(), 36);
+    fn 常用バフは35件() {
+        assert_eq!(buff_catalog().len(), 35);
         assert!(!buff_catalog().iter().any(|d| d.id == "unleash"));
+        assert!(!buff_catalog().iter().any(|d| d.id == "soul_link_status"));
     }
 
     #[test]
@@ -600,7 +586,7 @@ mod tests {
             .filter(|d| !d.damage_effects.is_empty())
             .map(|d| d.id)
             .collect();
-        assert_eq!(with_damage.len(), 25);
+        assert_eq!(with_damage.len(), 24);
         // ステと与ダメージの両方に効くもの
         for id in [
             "guardian_potion",

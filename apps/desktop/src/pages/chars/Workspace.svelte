@@ -170,11 +170,16 @@
   const monsterCardTotal = $derived(
     STAT_KINDS.reduce((s, k) => s + draft.statSources.monster_cards[k], 0),
   );
+  const soulLinkSummary = $derived(
+    preview
+      ? `基本 突+${preview.soul_link.equipment_values.thrust} / 斬+${preview.soul_link.equipment_values.slash} / 魔攻+${preview.soul_link.equipment_values.magic_attack} / 魔防+${preview.soul_link.equipment_values.magic_defense} ・ クリ+${Number((preview.soul_link.critical_damage_rate * 100).toFixed(1))}% ・ 最終+${Number((preview.soul_link.final_damage_rate * 100).toFixed(1))}% ・ 武器×${preview.soul_link.weapon_added_damage_multiplier.toFixed(1)}`
+      : "計算中",
+  );
   const relicTotal = $derived(preview?.sacred_relic_total ?? 0);
   const skillCount = $derived(draft.statSources.character_skills.skill_ids.length);
   /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。計算は Rust 側 */
   const enhanceRatePercent = $derived(Math.round((preview?.common_skill.equipment_attack_rate ?? 0) * 100));
-  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号)。計算は Rust 側(preview) */
+  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号 + ソウルリンク)。計算は Rust 側(preview) */
   const eqBaseTotal = $derived(preview?.equipment_base_total ?? zeroValues());
   const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
   /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの要約に出す。 */
@@ -329,6 +334,11 @@
       sub: equipmentSummary,
     },
     {
+      id: "soulLink",
+      name: "ソウルリンク",
+      sub: soulLinkSummary,
+    },
+    {
       id: "title",
       name: "称号",
       sub: titleSummary,
@@ -380,7 +390,7 @@
   //
   // ★ はホームタブのコンテンツと同じ操作なので、覚えることが増えない。
   const DEFAULT_ORDER: SourceId[] = [
-    "status", "skills", "equipment", "commonSkill", "thesis", "siena", "relic",
+    "status", "skills", "equipment", "soulLink", "commonSkill", "thesis", "siena", "relic",
     "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
     "title", "randomOption",
   ];

@@ -22,6 +22,7 @@
   import EquipmentPane from "./sources/EquipmentPane.svelte";
   import RandomOptionPane from "./sources/RandomOptionPane.svelte";
   import SienaPane from "./sources/SienaPane.svelte";
+  import SoulLinkPane from "./sources/SoulLinkPane.svelte";
   import StatRows from "./sources/StatRows.svelte";
   import StatusPane from "./sources/StatusPane.svelte";
   import ThesisCorePane from "./sources/ThesisCorePane.svelte";
@@ -105,6 +106,7 @@
   const TITLES: Record<SourceId, { title: string; note: string }> = {
     status: { title: "キャラステータス", note: "素ステ・覚醒・エタの意志・主属性" },
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
+    soulLink: { title: "ソウルリンク", note: "全項目を計算に反映" },
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
     rune: { title: "ルーンスキル", note: `スキル Lv がそのままステに乗る(Lv 0–${limits.rune_level_max})` },
     crown: {
@@ -140,6 +142,8 @@
     <StatusPane {draft} {preview} {skills} />
   {:else if sourceId === "equipment"}
     <EquipmentPane {draft} {preview} {skills} />
+  {:else if sourceId === "soulLink"}
+    <SoulLinkPane {draft} {preview} />
   {:else if sourceId === "pet"}
     <div class="card">
       <!-- 8 ステが同じ形で並ぶので 1 ステ 1 行。段は列を固定して行をまたいで揃える(§00 01) -->

@@ -28,6 +28,11 @@ use crate::equipment::{
 };
 use crate::mastery::{Masteries, MasteryCatalog};
 use crate::rounding::floor_int;
+use crate::soul_link::{
+    SoulLinkError, SoulLinkPreview, SoulLinkStatus, SOUL_LINK_ARMOR_ENHANCE_LEVEL_MAX,
+    SOUL_LINK_CRITICAL_DAMAGE_LEVEL_MAX, SOUL_LINK_EQUIPMENT_LEVEL_MAX,
+    SOUL_LINK_FINAL_DAMAGE_LEVEL_MAX, SOUL_LINK_WEAPON_ENHANCE_LEVEL_MAX,
+};
 use crate::stats::{
     effective_stats, BaseStats, BaseStatsError, EffectiveStats, StatKind, StatModifierSet,
     StatTrace, BASE_STAT_MAX, MULTIPLIER_B_MIN,
@@ -484,9 +489,19 @@ pub struct StatSources {
     /// 選んでいるマスタリー(wiki: 各キャラの Skill ページ。段ごとに 1 つ)
     #[serde(default)]
     pub masteries: Masteries,
+    /// ソウルリンクのリンクステータス 1〜10。
+    /// 1〜4 は装備基本能力、5〜7 は戦闘計算、8〜10 は記録用。
+    #[serde(default)]
+    pub soul_link: SoulLinkStatus,
 }
 
 impl StatSources {
+    /// 新規登録するキャラクターの恒常補正源。
+    /// ソウルリンクを含め、未開放・未習得の中立値で始める。
+    pub fn for_new_character() -> Self {
+        Self::default()
+    }
+
     /// ルーンスキル(0..=20)/クラウン(0..=300)/聖物(0..=40段階)の値域を検証する。
     /// ペットは enum で構造的に制約済みなので対象外。
     pub fn validate(&self) -> Result<(), StatSourceError> {
@@ -541,6 +556,7 @@ impl StatSources {
             }
         }
         self.critical_rate.validate()?;
+        self.soul_link.validate()?;
         Ok(())
     }
 }
@@ -661,6 +677,8 @@ pub struct StatContribution {
 
 #[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
 pub enum StatSourceError {
+    #[error(transparent)]
+    SoulLink(#[from] SoulLinkError),
     #[error(transparent)]
     CriticalRate(#[from] crate::critical_rate::CriticalRateError),
     #[error("排他枠 '{slot}' が重複しています")]
@@ -970,7 +988,10 @@ pub struct StatPreview {
     pub critical_rate_bonus: CriticalRateBonusPreview,
     /// 神鳥の聖物の段階→最終固定値換算の合計(Σ、正は `stat_sources::SacredRelic`)
     pub sacred_relic_total: i64,
-    /// 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号)。正は `Equipment::base_totals`
+    /// ソウルリンク 1〜10 の Rust 計算済み派生値。
+    pub soul_link: SoulLinkPreview,
+    /// 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号 + ソウルリンク)。
+    /// 装備由来の正は `Equipment::base_totals`、ソウルリンク由来の正は `SoulLinkStatus::equipment_values`。
     pub equipment_base_total: EquipmentValues,
     /// 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳)。
     /// 正は `Equipment::ability_values_by_part`
@@ -1176,6 +1197,7 @@ fn effective_stats_with(
 fn attack_power_of(
     stats: &EffectiveStats,
     equipment: &Equipment,
+    soul_link: SoulLinkStatus,
     common: &CommonSkills,
     abilities: &[EquipmentAbilityDef],
     titles: &[TitleDef],
@@ -1184,7 +1206,9 @@ fn attack_power_of(
     attack_power_breakdown(
         stat_attack_power(stats, &coefficients.stat),
         equipment_values_attack(
-            &equipment.base_totals(abilities, titles),
+            &equipment
+                .base_totals(abilities, titles)
+                .add(soul_link.equipment_values()),
             &coefficients.equipment.base,
         ),
         equipment_values_attack(
@@ -1232,7 +1256,15 @@ pub fn preview_effective_stats(
         None => None,
         Some(coefficients) => {
             let breakdown =
-                attack_power_of(&stats, equipment, common, abilities, titles, &coefficients);
+                attack_power_of(
+                    &stats,
+                    equipment,
+                    sources.soul_link,
+                    common,
+                    abilities,
+                    titles,
+                    &coefficients,
+                );
             // 部位を外すとシエナのオーラのステ加算も消える = 最終能力値まで動く。
             // 差分は「その装備を外した状態を丸ごと計算し直した A」との差にする。
             let mut part_contributions = Vec::with_capacity(12);
@@ -1252,6 +1284,7 @@ pub fn preview_effective_stats(
                 let a_without = attack_power_of(
                     &stats_without,
                     &without,
+                    sources.soul_link,
                     common,
                     abilities,
                     titles,
@@ -1286,7 +1319,9 @@ pub fn preview_effective_stats(
         .iter()
         .map(|&k| sources.sacred_relic.value(k))
         .sum();
-    let equipment_base_total = equipment.base_totals(abilities, titles);
+    let equipment_base_total = equipment
+        .base_totals(abilities, titles)
+        .add(sources.soul_link.equipment_values());
     let part_ability_values = equipment.ability_values_by_part(abilities);
     let siena_part_values = equipment
         .siena
@@ -1318,6 +1353,7 @@ pub fn preview_effective_stats(
         common_skill,
         critical_rate_bonus,
         sacred_relic_total,
+        soul_link: sources.soul_link.preview(),
         equipment_base_total,
         part_ability_values,
         siena_part_values,
@@ -1336,6 +1372,12 @@ pub struct StatLimits {
     /// モンスターカードの 1 ステあたり上限(wiki: ステータス「カード装着 +0〜70」)
     pub monster_card_max: u32,
     pub sacred_relic_stage_max: u8,
+    /// ソウルリンクのリンクステータス 1〜4 の Lv 上限。
+    pub soul_link_equipment_level_max: u8,
+    pub soul_link_critical_damage_level_max: u8,
+    pub soul_link_final_damage_level_max: u8,
+    pub soul_link_weapon_enhance_level_max: u8,
+    pub soul_link_armor_enhance_level_max: u8,
     pub adjustment_add_min: i64,
     pub adjustment_add_max: i64,
     pub adjustment_pin_min: i64,
@@ -1442,6 +1484,11 @@ pub fn stat_limits() -> StatLimits {
         crown_step: Crown::STEP,
         monster_card_max: MonsterCards::MAX_VALUE,
         sacred_relic_stage_max: SacredRelic::MAX_STAGE,
+        soul_link_equipment_level_max: SOUL_LINK_EQUIPMENT_LEVEL_MAX,
+        soul_link_critical_damage_level_max: SOUL_LINK_CRITICAL_DAMAGE_LEVEL_MAX,
+        soul_link_final_damage_level_max: SOUL_LINK_FINAL_DAMAGE_LEVEL_MAX,
+        soul_link_weapon_enhance_level_max: SOUL_LINK_WEAPON_ENHANCE_LEVEL_MAX,
+        soul_link_armor_enhance_level_max: SOUL_LINK_ARMOR_ENHANCE_LEVEL_MAX,
         adjustment_add_min: ADJUSTMENT_ADD_MIN,
         adjustment_add_max: ADJUSTMENT_ADD_MAX,
         adjustment_pin_min: ADJUSTMENT_PIN_MIN,
@@ -2009,6 +2056,58 @@ mod tests {
     }
 
     #[test]
+    fn ソウルリンクはエンチャントでなく装備基本能力値に入る() {
+        let base = BaseStats {
+            stab: 100,
+            hack: 100,
+            int: 1,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
+        let sources = StatSources {
+            soul_link: SoulLinkStatus {
+                thrust_level: 1,
+                slash_level: 2,
+                magic_attack_level: 3,
+                magic_defense_level: 4,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let preview = preview_effective_stats(
+            &base,
+            &sources,
+            &BuffSelection::default(),
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &test_catalog(),
+            &[],
+            &[],
+            &[],
+            &[],
+            Some(test_attack_coefficients()),
+            NO_CAP,
+        )
+        .unwrap();
+
+        assert_eq!(
+            preview.equipment_base_total,
+            EquipmentValues {
+                thrust: 2,
+                slash: 4,
+                magic_attack: 6,
+                magic_defense: 8,
+                ..Default::default()
+            }
+        );
+        let attack = preview.attack.unwrap().breakdown;
+        assert!((attack.equipment_base_attack - (2.0 * 14.5 + 4.0 * 14.5)).abs() < 1e-9);
+        assert_eq!(attack.equipment_enhanced_attack, 0.0);
+    }
+
+    #[test]
     fn 部位の寄与は外したときの攻撃力との差に一致する() {
         let base = BaseStats {
             stab: 100,
@@ -2504,6 +2603,26 @@ mod tests {
         assert_eq!(limits.crown_selected_max, Crown::SELECTED_MAX_VALUE);
         assert_eq!(limits.crown_step, Crown::STEP);
         assert_eq!(limits.sacred_relic_stage_max, SacredRelic::MAX_STAGE);
+        assert_eq!(
+            limits.soul_link_equipment_level_max,
+            SOUL_LINK_EQUIPMENT_LEVEL_MAX
+        );
+        assert_eq!(
+            limits.soul_link_critical_damage_level_max,
+            SOUL_LINK_CRITICAL_DAMAGE_LEVEL_MAX
+        );
+        assert_eq!(
+            limits.soul_link_final_damage_level_max,
+            SOUL_LINK_FINAL_DAMAGE_LEVEL_MAX
+        );
+        assert_eq!(
+            limits.soul_link_weapon_enhance_level_max,
+            SOUL_LINK_WEAPON_ENHANCE_LEVEL_MAX
+        );
+        assert_eq!(
+            limits.soul_link_armor_enhance_level_max,
+            SOUL_LINK_ARMOR_ENHANCE_LEVEL_MAX
+        );
         assert_eq!(limits.adjustment_add_min, ADJUSTMENT_ADD_MIN);
         assert_eq!(limits.adjustment_add_max, ADJUSTMENT_ADD_MAX);
         assert_eq!(limits.adjustment_pin_min, ADJUSTMENT_PIN_MIN);
@@ -2514,5 +2633,10 @@ mod tests {
             limits.enhance_level_max,
             crate::equipment::ENHANCE_LEVEL_MAX
         );
+    }
+
+    #[test]
+    fn 新規キャラ既定値はソウルリンクを含め未開放() {
+        assert_eq!(StatSources::for_new_character(), StatSources::default());
     }
 }

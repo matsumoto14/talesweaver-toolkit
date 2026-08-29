@@ -47,6 +47,9 @@ export const calculateDamage = (
   comboSkillType: ComboSkillType | null = null, buffs: BuffSelection = { choices: [] },
 ) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments, buffs });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
+/** Rust domain が定める新規キャラ用の未開放・未習得状態。 */
+export const getNewCharacterStatSources = () =>
+  invoke<StatSources>("get_new_character_stat_sources");
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
   invoke<DefenseProfile>("preview_defense", { character, buffs });

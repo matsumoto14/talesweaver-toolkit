@@ -1344,6 +1344,41 @@ mod tests {
     }
 
     #[test]
+    fn ソウルリンクgはクリティカルだけに効きlは45パーセントで止まる() {
+        let base = calculate_damage(&input());
+        let mut i = input();
+        i.damage_contributions = vec![
+            DamageContribution {
+                source: "ソウルリンク".into(),
+                category: DamageCategory::CriticalDamageRate,
+                value: 0.30,
+            },
+            DamageContribution {
+                source: "ソウルリンク".into(),
+                category: DamageCategory::FinalDamageRate,
+                value: 0.20,
+            },
+            DamageContribution {
+                source: "既存L".into(),
+                category: DamageCategory::FinalDamageRate,
+                value: 0.40,
+            },
+        ];
+        let result = calculate_damage(&i);
+        // G は非クリティカルへ入らない。L は非クリ・クリの両方へ同じように効く。
+        assert_eq!(result.per_hit.max, (base.per_hit.max as f64 * 1.45) as i64);
+        assert!(result.per_hit.critical > (base.per_hit.critical as f64 * 1.45) as i64);
+        let l = result.trace.categories.iter()
+            .find(|row| row.category == DamageCategory::FinalDamageRate).unwrap();
+        assert!((l.raw - 0.60).abs() < 1e-9);
+        assert_eq!(l.value, 0.45);
+        assert_eq!(l.factor, 1.45);
+        assert!(result.trace.category_contributions.iter().any(|row| {
+            row.source == "ソウルリンク" && row.category == DamageCategory::CriticalDamageRate
+        }));
+    }
+
+    #[test]
     fn 最終ダメージ固定値が下限になる() {
         use DamageCategory::*;
         let mut t = CategoryTotals::neutral();
@@ -1570,6 +1605,22 @@ mod tests {
             r.trace.steps_min.last().unwrap().name,
             "武器強化(追加固定ダメージ)"
         );
+    }
+
+    #[test]
+    fn ソウルリンク武器強化倍率の後にhit分割する() {
+        let mut i = input();
+        i.skill.hit_count = 9;
+        i.weapon_added_damage = crate::SoulLinkStatus {
+            weapon_enhance_level: 10,
+            ..Default::default()
+        }
+        .weapon_added_damage(2488);
+        let base = calculate_damage(&input());
+        let result = calculate_damage(&i);
+        // Lv10で 2倍した 4,976 を9段へ分割し、1段あたり552。
+        assert_eq!(result.per_hit.max, base.per_hit.max + 552);
+        assert_eq!(result.total.max, result.per_hit.max * 9);
     }
 
     #[test]
