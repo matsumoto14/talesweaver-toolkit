@@ -260,11 +260,6 @@
     heroStats && heroEnchant ? heroStats.equipment_base_total.slash + heroEnchant.slash : null,
   );
 
-  // ルーン(wiki: ルーンマスター)は 7 種すべて未設定なら「操作待ち」の金チップ
-  const runeUnset = $derived(
-    character ? Object.values(character.stat_sources.rune_levels).every((v) => v === 0) : true,
-  );
-
   // 命中P(次の目標のスキルで判定。BestSkillDamage には無いので previewDamage を別途叩く)と、
   // おすすめ強化(candidatesFor → tryCandidates → perHit 降順の上位 3 件。既存候補システムを再利用)
   interface HeroAdvice { candidate: Candidate; perHit: number; deltaPct: number }
@@ -412,12 +407,6 @@
               {gameCharacterName(character.game_character_id)} / 覚醒{character.awakening.stage} ・ エタ意志
               <span class="num strong">Lv {character.awakening.eternal_level}</span>
             </span>
-            {#if runeUnset}
-              <span class="rune-chip">
-                ルーン 未設定
-                <button type="button" class="rune-cta" onclick={() => focusCharacterSource("rune")}>設定 ›</button>
-              </span>
-            {/if}
           </div>
           <div class="hero-panels">
             <div class="hero-panel">
@@ -762,16 +751,6 @@
   .hero-id-name { font-size: 14px; font-weight: 800; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hero-id-class { font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; text-align: center; }
   .hero-id-class .strong { font-weight: 700; color: var(--fg); }
-  .rune-chip {
-    display: flex; align-items: center; gap: 5px; padding: 1px 4px 1px 9px; border-radius: var(--r-pill);
-    background: var(--state-edge-bg); border: 1px solid var(--gold);
-    font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg); white-space: nowrap;
-  }
-  .rune-cta {
-    display: inline-flex; align-items: center; padding: 0 7px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--gold); font-size: 8.5px; font-weight: 700; color: var(--state-edge-fg);
-  }
-
   .hero-panels { min-width: 0; flex: 1; display: flex; align-items: stretch; gap: 6px; }
   .hero-panel {
     flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 7px 0 8px;
