@@ -167,14 +167,7 @@
         .then((rs) => {
           if (!isCurrent()) return;
           skillTotals = Object.fromEntries(
-            rs.map(([id, r]) => {
-              // 各スキル自身の critical_chance で判定する(主役のクリモードを流用しない)
-              const rCrit = r.critical_chance > 0;
-              return [
-                id,
-                { perHit: rCrit ? r.per_hit.critical : r.per_hit.max, total: rCrit ? r.total.critical : r.total.max },
-              ];
-            }),
+            rs.map(([id, r]) => [id, { perHit: r.per_hit_primary, total: r.total_primary }]),
           );
         })
         .catch((e) => reportError(errorMessage(e))),
@@ -277,15 +270,15 @@
   const clearCount = $derived(evals.filter((e) => e.clear).length);
 
   // --- 表示値 -------------------------------------------------------------
-  // クリティカルが出る前提を主役の値にする(ユーザー判断 2026-08-29)。
-  // critical_chance は Rust 側で 0..1 に正規化済み(wiki 未記載は 1.0 = 確定扱い)なので、
-  // 0 のときだけ非クリティカルを主役にする。
+  // 主役の値の選び方(クリ発生率 > 0 ならクリティカル、0 なら非クリ最大)は Rust 側
+  // (DamageTriple::primary)に一元化済み。ここは per_hit_primary / total_primary を読むだけ。
+  // critMode はトレースの段・内訳表示の切替(表示都合)にだけ使う。
   const critMode = $derived((result?.critical_chance ?? 0) > 0);
   const pick = <T extends { max: number; critical: number }>(t: T | null | undefined): number | null =>
     t ? (critMode ? t.critical : t.max) : null;
-  const perHit = $derived(pick(result?.per_hit));
-  const savedPerHit = $derived(pick(savedResult?.per_hit));
-  const totalValue = $derived(pick(result?.total));
+  const perHit = $derived(result?.per_hit_primary ?? null);
+  const savedPerHit = $derived(savedResult?.per_hit_primary ?? null);
+  const totalValue = $derived(result?.total_primary ?? null);
   const dpsValue = $derived(pick(result?.dps));
   const deltaPct = $derived(
     perHit !== null && savedPerHit !== null && savedPerHit > 0
@@ -1295,7 +1288,7 @@
                     <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
                     {#if cov !== null}<span class="coverage">{cov}</span>{/if}
                     <span class="pop-name">{c.name}</span>
-                    <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_max) : "—"}</span>
+                    <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_primary) : "—"}</span>
                   </button>
                 {/each}
               {/each}

@@ -1189,6 +1189,13 @@ export interface DamageResult {
   /** 1 段あたりの与ダメージ(ダメージ上限を適用したあと) */
   per_hit: DamageTriple;
   total: DamageTriple;
+  /**
+   * 主役の 1 段あたりダメージ(クリ発生率 > 0 ならクリティカル、0 なら非クリ最大。
+   * ユーザー判断 2026-08-29)。計算タブ・ホームの表示、コンテンツ到達判定はこの値を使う
+   */
+  per_hit_primary: number;
+  /** 主役の合計ダメージ */
+  total_primary: number;
   hit_count: number;
   /** コンボスキルタイプ解決後の倍率 */
   effective_skill_multiplier: number;
@@ -1390,8 +1397,10 @@ export interface ContentArea {
 
 export interface BestSkillDamage {
   skill_id: string;
-  per_hit_max: number;
-  total_max: number;
+  /** 1 ヒットの主役値(クリ発生率 > 0 ならクリティカル、0 なら非クリ最大) */
+  per_hit_primary: number;
+  /** 合計の主役値 = 1 ヒットの主役値 × 段数 */
+  total_primary: number;
 }
 
 export interface ContentEvaluation {

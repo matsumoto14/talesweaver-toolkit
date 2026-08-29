@@ -43,7 +43,7 @@ export interface CandidateResult {
 export async function tryCandidates(
   candidates: Candidate[],
   build: () => NewCharacter,
-  run: (p: NewCharacter) => Promise<{ per_hit: { max: number } }>,
+  run: (p: NewCharacter) => Promise<{ per_hit_primary: number }>,
   base: number,
   filter?: (r: CandidateResult) => boolean,
 ): Promise<CandidateResult[]> {
@@ -54,8 +54,8 @@ export async function tryCandidates(
       const r = await run(p);
       return {
         candidate,
-        perHit: r.per_hit.max,
-        deltaPct: base > 0 ? Math.round((r.per_hit.max / base - 1) * 100) : 0,
+        perHit: r.per_hit_primary,
+        deltaPct: base > 0 ? Math.round((r.per_hit_primary / base - 1) * 100) : 0,
       };
     }),
   );

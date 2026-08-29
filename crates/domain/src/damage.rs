@@ -206,6 +206,16 @@ pub struct DamageTriple {
     pub critical: i64,
 }
 
+impl DamageTriple {
+    /// 主役のダメージ値(計算タブ・ホームの表示、コンテンツ到達判定が使う値)。
+    /// クリ発生率(`critical_chance`、0..1)が 0 より大きいならクリティカル値、
+    /// 0(クリが出ないスキル)なら非クリの最大値を返す(ユーザー判断 2026-08-29)。
+    /// この選択規則の実装はここ 1 箇所だけにし、他はすべてこれを呼ぶ。
+    pub fn primary(&self, critical_chance: f64) -> i64 {
+        if critical_chance > 0.0 { self.critical } else { self.max }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DamageTrace {
     pub stats: Vec<StatTrace>,
@@ -237,6 +247,11 @@ pub struct DamageResult {
     pub per_hit: DamageTriple,
     /// 与ダメージ × 段数
     pub total: DamageTriple,
+    /// 主役の 1 段あたりダメージ(`per_hit.primary(critical_chance)`)。計算タブ・ホームが
+    /// 表示に使う値で、コンテンツ到達判定もこの値で判定する(ユーザー判断 2026-08-29)
+    pub per_hit_primary: i64,
+    /// 主役の合計ダメージ(`total.primary(critical_chance)`)
+    pub total_primary: i64,
     pub hit_count: u32,
     /// コンボスキルタイプを解決したあとのスキル倍率。
     pub effective_skill_multiplier: f64,
@@ -876,9 +891,12 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         .as_ref()
         .map(|d| d.max * (1.0 - critical_chance_ratio) + d.critical * critical_chance_ratio);
 
+    let per_hit = DamageTriple { min, max, critical };
     DamageResult {
-        per_hit: DamageTriple { min, max, critical },
+        per_hit,
         total,
+        per_hit_primary: per_hit.primary(critical_chance_ratio),
+        total_primary: total.primary(critical_chance_ratio),
         hit_count,
         effective_skill_multiplier: input.skill.multiplier,
         effective_base_actual_delay: input.skill.base_actual_delay,

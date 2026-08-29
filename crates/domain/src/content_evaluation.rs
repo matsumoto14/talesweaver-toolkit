@@ -318,12 +318,12 @@ fn evaluate_one_content(
         let result = calculate_damage(&input);
         if best
             .as_ref()
-            .is_none_or(|b| result.per_hit.max > b.per_hit_max)
+            .is_none_or(|b| result.per_hit_primary > b.per_hit_primary)
         {
             best = Some(BestSkillDamage {
                 skill_id: entry.skill.id.clone(),
-                per_hit_max: result.per_hit.max,
-                total_max: result.total.max,
+                per_hit_primary: result.per_hit_primary,
+                total_primary: result.total_primary,
             });
             // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
             best_dependency = Some(entry.skill.dependency);
@@ -525,8 +525,8 @@ mod tests {
     fn キャラスキルのステ補正が全コンテンツ評価に反映される() {
         let without = evaluate(false);
         let with = evaluate(true);
-        let dmg_without = without[0].damage.as_ref().unwrap().per_hit_max;
-        let dmg_with = with[0].damage.as_ref().unwrap().per_hit_max;
+        let dmg_without = without[0].damage.as_ref().unwrap().per_hit_primary;
+        let dmg_with = with[0].damage.as_ref().unwrap().per_hit_primary;
         assert!(
             dmg_with > dmg_without,
             "ステ補正ありのほうが火力が高いはず: without={dmg_without}, with={dmg_with}"

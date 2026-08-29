@@ -15,7 +15,7 @@
     setDamageSnapshot,
   } from "../../api/commands";
   import type {
-    Content, ContentEvaluation, DamageResult, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, StatPreview,
+    Content, ContentEvaluation, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, StatPreview,
   } from "../../api/types";
   import { candidatesFor, COST_COLORS, COST_LABELS, tryCandidates, type Candidate } from "../../candidates";
   import { equipmentEnchantTotal, equipmentIconId, sumValues } from "../../equipment";
@@ -80,7 +80,7 @@
     if (!r.ev) return 6;
     if (r.content.need_per_hit === null) return r.ev.entry_ok ? 7 : 8;
     if (!r.ev.damage) return 6;
-    const ratio = r.ev.damage.per_hit_max / r.content.need_per_hit;
+    const ratio = r.ev.damage.per_hit_primary / r.content.need_per_hit;
     if (!r.ev.entry_ok) return r.ev.reaches_need ? 5 : 4;
     return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
   }
@@ -113,7 +113,7 @@
       if (!r.ev || r.ev.checks.length === 0) return r.ev?.entry_ok ? 1 : 0;
       return r.ev.checks.filter((c) => c.ok).length / r.ev.checks.length;
     }
-    return r.ev?.damage ? r.ev.damage.per_hit_max / r.content.need_per_hit : 0;
+    return r.ev?.damage ? r.ev.damage.per_hit_primary / r.content.need_per_hit : 0;
   };
   const pctOf = (r: Row) => `${Math.min(100, ratioOf(r) * 100).toFixed(1)}%`;
 
@@ -284,7 +284,7 @@
    */
   const heroSpot = $derived(
     heroGoal?.ev?.damage
-      ? (heroDamage ?? { skillId: heroGoal.ev.damage.skill_id, perHit: heroGoal.ev.damage.per_hit_max })
+      ? (heroDamage ?? { skillId: heroGoal.ev.damage.skill_id, perHit: heroGoal.ev.damage.per_hit_primary })
       : null,
   );
   /** スポットライトの到達状態(rowState と同じ段。判定値は heroSpot の /hit) */
@@ -319,8 +319,6 @@
     const contentId = g.content.id;
     const buffs = buffSelectionFor(c);
     heroDamage = null;
-    // 計算タブの主役値と同じ選び方: クリ発生率 > 0 ならクリティカル、0 なら非クリ最大(CalcPage の critMode)
-    const pickPerHit = (r: DamageResult) => (r.critical_chance > 0 ? r.per_hit.critical : r.per_hit.max);
     heroAdviceLatest.run(async (isCurrent) => {
       try {
         const current = await previewDamage(payloadOf(c), skillId, contentId, 0, null, null, buffs);
@@ -328,15 +326,12 @@
         const results = await tryCandidates(
           candidates,
           () => payloadOf(c),
-          (p) =>
-            previewDamage(p, skillId, contentId, 0, null, null, buffs).then((r) => ({
-              per_hit: { max: pickPerHit(r) },
-            })),
-          pickPerHit(current),
+          (p) => previewDamage(p, skillId, contentId, 0, null, null, buffs),
+          current.per_hit_primary,
         );
         if (isCurrent()) {
           heroAccuracy = current.accuracy_point;
-          heroDamage = { skillId, perHit: pickPerHit(current) };
+          heroDamage = { skillId, perHit: current.per_hit_primary };
           heroAdvice = results.slice(0, 3);
         }
       } catch (e) {
@@ -378,7 +373,7 @@
     checkedSnapshotIds.add(c.id);
     const skillId = g.ev.damage.skill_id;
     const contentId = g.content.id;
-    const perHit = g.ev.damage.per_hit_max;
+    const perHit = g.ev.damage.per_hit_primary;
     (async () => {
       try {
         const prev = await getDamageSnapshot(c.id);
@@ -702,7 +697,7 @@
                           {:else}
                             <span class="name">{r.content.name}</span>
                           {/if}
-                          <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_max ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_max) : "—"}</span>
+                          <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_primary ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"}</span>
                           <span class="chev dim">›</span>
                         </div>
                         <div class="row-bar">

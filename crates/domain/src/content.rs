@@ -163,10 +163,11 @@ pub struct ContentArea {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BestSkillDamage {
     pub skill_id: String,
-    /// 1 ヒット(最大)
-    pub per_hit_max: i64,
-    /// 合計(最大)= 1 ヒット × 段数
-    pub total_max: i64,
+    /// 1 ヒットの主役値(`DamageTriple::primary`。クリ発生率 > 0 ならクリティカル、
+    /// 0 なら非クリ最大。ユーザー判断 2026-08-29)
+    pub per_hit_primary: i64,
+    /// 合計の主役値 = 1 ヒットの主役値 × 段数
+    pub total_primary: i64,
 }
 
 /// コンテンツ 1 件の判定結果。
@@ -206,7 +207,7 @@ pub fn evaluate_content(
     let entry_ok = checks.iter().all(|c| c.ok);
     let reaches_need = match content.need_per_hit {
         None => true,
-        Some(need) => damage.as_ref().is_some_and(|d| d.per_hit_max >= need),
+        Some(need) => damage.as_ref().is_some_and(|d| d.per_hit_primary >= need),
     };
     ContentEvaluation {
         content_id: content.id.clone(),
@@ -327,8 +328,8 @@ mod tests {
         let dmg = |per: i64| {
             Some(BestSkillDamage {
                 skill_id: "s".into(),
-                per_hit_max: per,
-                total_max: per,
+                per_hit_primary: per,
+                total_primary: per,
             })
         };
         let dep = Some(SkillDependency::Stab);
