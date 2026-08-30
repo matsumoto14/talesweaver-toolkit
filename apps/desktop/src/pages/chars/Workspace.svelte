@@ -1,8 +1,27 @@
+<script module lang="ts">
+  import type { Draft } from "../../draft";
+
+  /**
+   * キャラ id → まだ確定していない draft のキャッシュ(モジュールスコープ、複数マウントで共有)。
+   *
+   * 親 CharsPage/App が {#key} でこのコンポーネントを作り直す設計だが、破棄時の flush(下の
+   * onDestroy)は fire-and-forget なので、保存の IPC が完了して app.characters が更新される前に
+   * 再マウントが起きうる。そのとき素直に buildDraft(character) すると古い値に戻ってしまい、
+   * そこへ何か 1 つ編集しただけで直前に保存された値をまるごと上書きしてしまう
+   * (独立レビュー指摘: 再マウント時の stale draft によるデータ消失)。
+   *
+   * dirty になった時点・保存が in-flight の間はここへ入れておき、mount 時はまずここを見る。
+   * 保存が成功してそれ以上の未送信の変更が無くなった時点、およびキャラ削除時に消す。
+   */
+  const pendingDrafts = new Map<number, { draft: Draft; initialSnapshot: string }>();
+</script>
+
 <script lang="ts">
   // 選択キャラのワークスペース(v4): 左に補正源リスト、右に選択した補正源の編集ペイン、
   // 下に「いまの実力」シート。draft(編集状態)を 1 つの $state に持ち、保存はキャラ単位で 1 ボタン。
   // 親 CharsPage が {#key character.id} で作り直す前提($effect による再同期は書かない)。
-  import { untrack } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
+  import { onDestroy, untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { cubicOut } from "svelte/easing";
   import {
@@ -14,14 +33,14 @@
   } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
   import { dropForeignSkills } from "../../characterSkills";
-  import { buildDraft, draftToPayload, type Draft } from "../../draft";
+  import { buildDraft, draftToPayload } from "../../draft";
   import { cloneEquipmentPart, randomOptionCount, sienaPartCount } from "../../equipment";
   import { fmtInt } from "../../format";
   import {
     ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { app, characterSourceFocus, enqueueCharacterSave, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
-  import { reportError } from "../../toast.svelte";
+  import { reportError, reportNotice } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { adjustDropIndex, dropHalfIndex } from "../../ui/reorder.svelte";
@@ -46,7 +65,6 @@
   }
   let { character }: Props = $props();
 
-
   const DEFAULT_LIST_WIDTH = 280;
   const layoutWidths = persisted("tw-v4-chars", { list: DEFAULT_LIST_WIDTH });
   const gridTemplateColumns = $derived(
@@ -54,10 +72,14 @@
   );
 
   // 親が {#key} でこのコンポーネントを作り直す前提なので初期値だけ untrack で取る。
+  // ただし直前のマウントに確定していない draft(pendingDrafts)が残っていればそちらを使う —
+  // このファイル冒頭(module スコープ)のコメント参照。
   const initial = untrack(() => character);
-  let initialSnapshot = $state(JSON.stringify(buildDraft(initial)));
-  let draft = $state<Draft>(buildDraft(initial));
-  const dirty = $derived(JSON.stringify(draft) !== initialSnapshot);
+  const pending = pendingDrafts.get(initial.id);
+  let initialSnapshot = $state(pending ? pending.initialSnapshot : JSON.stringify(buildDraft(initial)));
+  let draft = $state<Draft>(pending ? pending.draft : buildDraft(initial));
+  const draftSnapshot = $derived(JSON.stringify(draft));
+  const dirty = $derived(draftSnapshot !== initialSnapshot);
 
   /**
    * ホームの「今日の強化」タイルは、このワークスペースを開いたままでも同じキャラの
@@ -111,7 +133,25 @@
   });
 
   let saving = $state(false);
-  const canSubmit = $derived(draft.name.trim().length > 0 && draft.gameCharacterId !== "" && !saving && dirty);
+  // 名前未入力・キャラ種未選択のときは保存できない(失敗させない)。手動保存時代の canSubmit を転用。
+  const canAutoSave = $derived(draft.name.trim().length > 0 && draft.gameCharacterId !== "");
+  /** ツールバーの状態表示用。保存できない理由(§00 05 考えさせない — 理由を言葉で出す) */
+  const unsavedReason = $derived(
+    draft.gameCharacterId === "" ? "キャラを選んでください" : draft.name.trim().length === 0 ? "名前を入力してください" : null,
+  );
+
+  /**
+   * dirty(保存が要る)か saving(送信中)のあいだ、このキャラの draft をモジュールスコープの
+   * pendingDrafts へ入れておく。再マウント時の stale draft 対策(このファイル冒頭の注記)。
+   * 両方とも false になった時点(=送信済みで、それ以上の未送信の変更も無い)でエントリを消す。
+   */
+  $effect(() => {
+    if (dirty || saving) {
+      pendingDrafts.set(character.id, { draft, initialSnapshot });
+    } else {
+      pendingDrafts.delete(character.id);
+    }
+  });
 
   // キャラ種を切り替えたら旧キャラ専用のキャラスキルを落とす(幽霊スキル対策、既存決定を踏襲)。
   let lastGameCharacterId = draft.gameCharacterId;
@@ -180,21 +220,53 @@
     return () => skillEffectsLatest.cancel();
   });
 
-  async function save() {
-    if (!canSubmit) return;
+  /** 直前に自動保存で出したエラーメッセージ。同じ内容の連打を防ぐ(空 flush では読まない)。 */
+  let lastAutoSaveError: string | null = null;
+  /** 保存が in-flight のあいだに来た呼び出しを捨てず、完了後にもう一度だけやり直すためのフラグ
+   *  (独立レビュー指摘: 保存中の debounce が捨てられ、未送信分が「保存済み」扱いになる)。 */
+  let saveAgain = false;
+
+  async function autoSave() {
+    if (!canAutoSave) return;
+    if (saving) {
+      saveAgain = true;
+      return;
+    }
     saving = true;
+    // 保存直前の時点で app.sim(試し変更)があったかどうかで、破棄したことを知らせるか決める。
+    // upsertCharacter が無条件で app.sim を null にする(state.svelte.ts のコメント参照)ので先に見ておく
+    const hadSim = app.sim !== null;
     try {
       // ホームの直更新タイルと同じキューへ通し、キャラ単位で保存を直列化する
       // (理由は上の HOME_DIRECT_SLOTS の $effect コメント参照)。
-      const saved = await enqueueCharacterSave(character.id, () => draftToPayload(draft));
-      initialSnapshot = JSON.stringify(draft);
+      // enqueueCharacterSave は「自分の番」が来てからペイロードビルダーを呼ぶので、
+      // initialSnapshot に採る draft のスナップショットも同じビルダーの中(=実際に送信した瞬間)
+      // で取る。await の後に draft を読み直すと、保存中に入った編集まで「保存済み」に取り込んで
+      // しまう(独立レビュー指摘)。
+      let sent = "";
+      const saved = await enqueueCharacterSave(character.id, () => {
+        sent = JSON.stringify(draft);
+        return draftToPayload(draft);
+      });
+      initialSnapshot = sent;
       upsertCharacter(saved);
+      lastAutoSaveError = null;
+      if (hadSim) reportNotice("キャラを保存したので、ダメージ計算の試し変更を解除しました");
     } catch (e) {
-      // どこの話か分かるエラーは帯から飛べるようにする。キャラは呼び出し側しか知らない
-      const location = errorLocation(e);
-      reportError(errorMessage(e), location ? { characterId: character.id, location } : null);
+      // どこの話か分かるエラーは帯から飛べるようにする。キャラは呼び出し側しか知らない。
+      // ただし自動保存は手動より高頻度なので、直前と同じメッセージなら再表示しない(連打防止)
+      const message = errorMessage(e);
+      if (message !== lastAutoSaveError) {
+        lastAutoSaveError = message;
+        const location = errorLocation(e);
+        reportError(message, location ? { characterId: character.id, location } : null);
+      }
     } finally {
       saving = false;
+      if (saveAgain) {
+        saveAgain = false;
+        void autoSave();
+      }
     }
   }
 
@@ -211,6 +283,7 @@
     confirmDeleteTimer = null;
     try {
       await deleteCharacter(character.id);
+      pendingDrafts.delete(character.id);
       removeCharacter(character.id);
     } catch (e) {
       reportError(errorMessage(e));
@@ -219,6 +292,38 @@
 
   // --- 補正源リスト -------------------------------------------------------
   let openSource = $state<SourceId>("status");
+
+  /** この編集で変更した補正源(左のリストに小さなドットで出す)。クリアはしない — 再マウントで消える。
+      素の Set は $state に入れても深く追跡されない(.add() が再描画を起こさない)ので SvelteSet を使う */
+  const changedSources = new SvelteSet<SourceId>();
+
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // draft が変わったら 600ms の debounce で自動保存する。開いていた補正源があれば「変更元」として記録する
+  $effect(() => {
+    void draftSnapshot; // 依存: draft の深い変更を拾う
+    if (!dirty) return;
+    changedSources.add(openSource);
+    if (saveTimer !== null) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void autoSave();
+    }, 600);
+  });
+
+  // タブ切替・キャラ切替でこのワークスペースが破棄されるとき、debounce 待ち中の未送信分を
+  // 待たずに即 flush する(タイマーごと消えると「未保存の変更が消える」問題がそのまま残る)。
+  // タイマーの有無ではなく dirty を見る — !canAutoSave で早期 return した直後に離脱すると
+  // タイマーは既に消えているが未送信の変更はまだ残っている(独立レビュー指摘)。
+  // その変更は pendingDrafts に残るので、!canAutoSave のときここで autoSave() を呼んでも
+  // 何も送らず消える心配は無い。保存の完了は待たない(fire-and-forget)。
+  onDestroy(() => {
+    if (saveTimer !== null) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (dirty) void autoSave();
+  });
 
   $effect(() => {
     const request = characterSourceFocus.request;
@@ -584,7 +689,6 @@
 <div class="workspace">
   <div class="toolbar">
     <span class="char-name">{draft.name || "(名前未設定)"}</span>
-    {#if dirty}<span class="unsaved">未保存</span>{/if}
     <span class="spacer"></span>
     <label class="buff-default">
       <span>いつものバフ</span>
@@ -595,9 +699,13 @@
         {/each}
       </select>
     </label>
-    <button type="button" class="btn primary" disabled={!canSubmit} onclick={save}>
-      {saving ? "保存中…" : "保存"}
-    </button>
+    <!-- debounce 待ち(dirty かつ未送信)も「保存中…」に含める。まだ書き込んでいないあいだ
+         「保存済み」と出すのは嘘になる — この表示の役目は保存を信用させることなので譲れない。
+         ただし保存できない状態(名前未入力・キャラ種未選択)のときは「保存中…」ではなく理由を
+         警告として出す(独立レビュー指摘: 理由の無い「保存中…」のまま編集が消えていた) -->
+    <span class="save-status dim" class:warn={!canAutoSave && dirty}>
+      {!canAutoSave && dirty ? `未保存 — ${unsavedReason}` : saving || dirty ? "保存中…" : "保存済み"}
+    </span>
     <button type="button" class="btn danger delete" class:confirm={confirmDelete} onclick={removeThis}>
       {confirmDelete ? "もう一度押すと削除します" : "このキャラを削除"}
     </button>
@@ -672,6 +780,13 @@
                   <span class="src-name">{s.name}</span>
                   <span class="src-sub num" use:flash={() => s.sub}>{s.sub}</span>
                 </span>
+                <span
+                  class="src-changed"
+                  class:show={changedSources.has(s.id)}
+                  use:flash={() => (changedSources.has(s.id) ? "on" : "off")}
+                  title={changedSources.has(s.id) ? "この編集で変更(保存済み)" : undefined}
+                  aria-hidden="true"
+                ></span>
                 <span class="chev dim">›</span>
               </div>
             {/each}
@@ -749,10 +864,11 @@
     padding: 10px 16px 0;
   }
   .char-name { font-size: 13px; font-weight: 800; }
-  .unsaved {
-    font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--warm);
-    border: 1px solid var(--warm); border-radius: var(--r-pill); padding: 1px 8px;
-  }
+  /* 押せない状態表示(§00 03 押した場所は動かない — ボタンにしない)。
+     文言が「保存済み」/「保存中…」/「未保存 — 理由」で長さが変わるので、右寄せ + 幅を
+     先に確保して隣の削除ボタンが動かないようにする(§00 03、design-system §09 規則 4) */
+  .save-status { flex-shrink: 0; min-width: 190px; font-size: 10px; text-align: right; white-space: nowrap; }
+  .save-status.warn { font-weight: 700; color: var(--warm); }
   .spacer { flex: 1; }
 
   .cols { flex: 1; min-height: 0; display: grid; padding: 10px 16px 8px; column-gap: 0; }
@@ -817,6 +933,13 @@
   .src-name { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .src.planned .src-name, .src.planned .src-sub { color: var(--fg-off); }
   .src-sub { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* この編集で変更した補正源の印。場所は常に確保し、opacity だけで出し入れする
+     (§09 規則 4「あとから幅が変わらない」)。初回だけ badge-in(use:flash)で光る */
+  .src-changed {
+    flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); opacity: 0;
+  }
+  .src-changed.show { opacity: 1; }
   .chev { flex-shrink: 0; font-size: 11px; }
 
   .src-note {

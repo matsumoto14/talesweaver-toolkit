@@ -299,7 +299,7 @@ export function upsertCharacter(c: RegisteredCharacter, opts: { preserveSim?: bo
   // (独立レビュー指摘: クロスタブのサイレントなデータ消失)。
   // ただし呼び出し側がこの保存内容を app.sim にも既に同期済み(preserveSim)なら消さない —
   // ホームの直更新タイルは 1 手ごとに保存が飛ぶため、そのたびに無条件で試し変更を消すと
-  // 計算タブの作業がサイレントに消える(独立レビュー指摘)。Workspace の明示保存など、
+  // 計算タブの作業がサイレントに消える(独立レビュー指摘)。Workspace の自動保存など、
   // sim と無関係な保存はこれまでどおり無条件でリセットする。
   if (c.id === app.selectedId && !opts.preserveSim) app.sim = null;
   if (c.id === app.selectedId && app.calcBuffSetId !== c.default_buff_set_id) syncCalcBuffs(c);
