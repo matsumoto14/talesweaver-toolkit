@@ -16,6 +16,19 @@
   .card-title .normal { font-weight: 400; font-size: 9px; }
   .card-title.space { margin-top: 12px; }
   .hint { margin: 6px 0 0; font-size: 9.5px; line-height: 1.5; }
+  .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }
+
+  /* ペインの先頭に置く、読み取り専用の「効いている量」ブロック(いまの実力シートから移設)。
+     カード見出しは持たない — ペイン自体が既にその補正源の名前を出しているため、中身だけを置く。
+     Workspace.svelte(攻撃力カード)とここで共有する */
+  .result-value { margin-top: 4px; }
+  .result-value .strong { font-size: 19px; font-weight: 700; }
+  .eq-summary { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
+  .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; border-spacing: 0; overflow: hidden; font-size: 11px; }
+  .eq-table th, .eq-table td { padding: 3px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.55); }
+  .eq-table thead th { font-size: 9px; font-weight: 700; color: var(--fg-muted); background: none; position: static; }
+  .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
+  .eq-table .n { text-align: right; }
   /* エタの意志。値の欄と節目を横に並べる(どちらも同じことを決める場所なので) */
   .eternal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .eternal-row > :global(.stat-input), .eternal-row > :global(.stepper) { flex: 0 0 150px; }

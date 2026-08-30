@@ -7,6 +7,7 @@
   import { CORE_POWER_TYPES, CORE_REGIONS, CORE_REGION_LABELS, CORE_SLOT_COUNT, CORE_SUPPORT_TYPES, CORE_TYPE_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
+  import { badgeStyle } from "../../../ui/states";
   import StepSelect from "../../../ui/StepSelect.svelte";
 
   interface Props {
@@ -14,6 +15,17 @@
     preview: StatPreview | null;
   }
   let { draft, preview }: Props = $props();
+
+  // --- 効いている量(結果) --------------------------------------------------
+  // コアセット効果(全地域)の合計と地域別の内訳。計算は Rust 側(preview.thesis_cores)
+  const coreRegionRows = $derived((preview?.thesis_cores ?? []).filter((r) => r.total_bonus > 0));
+  const coreSetTotalLabel = $derived.by(() => {
+    const { final_damage_fixed: fixed, final_damage_rate: rate } = preview?.thesis_core_set_bonus_total ?? { final_damage_fixed: 0, final_damage_rate: 0 };
+    const parts: string[] = [];
+    if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
+    if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
+    return parts.length === 0 ? "未発動" : parts.join(" と ");
+  });
 
   // --- テシスコア(地域ごとに 6 枠) ---------------------------------------
   let coreRegion = $state<CoreRegion>("abyss");
@@ -114,6 +126,29 @@
   );
 </script>
 
+{#if coreRegionRows.length > 0}
+  <!-- 効いている量(結果)。ゲーム内の言葉に合わせる(Tecith Core System:「コア効果」「コアセット効果」)。
+       ペイン自体が既に「テシスコア」の名前を出しているので見出しは持たない -->
+  <div class="result-value num">
+    <span class="dim tiny">コアセット効果(全地域) 最終ダメージ</span>
+    <span class="strong" use:flash={() => coreSetTotalLabel}>{coreSetTotalLabel}</span>
+  </div>
+  <div class="eq-summary num inset">
+    {#each coreRegionRows as r (r.region)}
+      <span>
+        <span class="dim">{CORE_REGION_LABELS[r.region]}</span>
+        <span use:bump={() => r.total_bonus}>{fmtInt(r.total_bonus)}</span>
+        <span
+          class="badge"
+          style={badgeStyle({ label: "", state: r.set_groups.length === 0 ? "unknown" : "met" })}
+        >{r.set_groups.length === 0
+            ? `あと ${3 - r.ready}`
+            : r.set_groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
+      </span>
+    {/each}
+  </div>
+  <p class="dim tiny">コア効果(能力値)は対象地域内でのみ有効。コアセット効果は<b>同じ進化段階の強化 4 コア 3 個ごと</b>に成立し、段階ごと・地域ごとの分が足されます(同じ段階が 6 個なら 6 セット効果になり、3 セット分は重ねません)。</p>
+{/if}
 <div class="card">
   <div class="card-title">地域</div>
   <!-- 地域は「同じ形の 6 枠を切り替える」ので §08 のタブ。選んだ地域の下と地続きになる -->

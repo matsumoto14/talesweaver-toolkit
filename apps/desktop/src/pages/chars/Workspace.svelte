@@ -10,31 +10,36 @@
   } from "../../api/commands";
   import type {
     CharacterSkillEffectsView, CommonSkills, Element, ElementValues, Equipment, EquipmentPart, PartSlot,
-    RegisteredCharacter, SkillDependency, StatPreview, StatSources,
+    RegisteredCharacter, StatPreview, StatSources,
   } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
   import { dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
+  import { cloneEquipmentPart, randomOptionCount, sienaPartCount } from "../../equipment";
+  import { fmtInt } from "../../format";
   import {
-    cloneEquipmentPart, randomOptionCount, sienaPartCount, zeroValues,
-  } from "../../equipment";
-  import { fmtInt, fmtNum } from "../../format";
-  import { limits } from "../../limits.svelte";
-  import {
-    CORE_REGION_LABELS,
-    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, PART_SLOTS, SKILL_DEPENDENCIES,
-    SKILL_DEPENDENCY_LABELS, STAT_KINDS, STAT_LABELS, ULTIMATE_SKILL_LABELS,
+    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
-  import type { EquipmentStatKind } from "../../labels";
-  import { app, characterSourceFocus, enqueueCharacterSave, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, totalContents as totalContentsCount, upsertCharacter } from "../../state.svelte";
+  import { app, characterSourceFocus, enqueueCharacterSave, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { adjustDropIndex, dropHalfIndex } from "../../ui/reorder.svelte";
-  import { badgeStyle } from "../../ui/states";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
+  // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
+  import "./sources/pane-shared.css";
+  import {
+    defenseRatePercent as defenseRatePercentOf,
+    equipmentAttackKindsFor,
+    equipmentAttackRatePercent,
+    equipmentBaseTotal,
+    equipmentEnhancedTotal,
+    randomOptionRecordOnlyCount,
+    sharpnessRatePercent as sharpnessRatePercentOf,
+    unleashSummary as unleashSummaryOf,
+  } from "./summaries";
 
   interface Props {
     character: RegisteredCharacter;
@@ -47,7 +52,6 @@
   const gridTemplateColumns = $derived(
     `minmax(220px, ${layoutWidths.value.list ?? DEFAULT_LIST_WIDTH}px) 6px minmax(300px, 1fr)`,
   );
-  const sheetOpen = persisted("tw-v4-strength", { open: false });
 
   // 親が {#key} でこのコンポーネントを作り直す前提なので初期値だけ untrack で取る。
   const initial = untrack(() => character);
@@ -243,83 +247,31 @@
   );
   const relicTotal = $derived(preview?.sacred_relic_total ?? 0);
   const skillCount = $derived(draft.statSources.character_skills.skill_ids.length);
-  /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。計算は Rust 側 */
-  const enhanceRatePercent = $derived(Math.round((preview?.common_skill.equipment_attack_rate ?? 0) * 100));
-  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号 + ソウルリンク)。計算は Rust 側(preview) */
-  const eqBaseTotal = $derived(preview?.equipment_base_total ?? zeroValues());
-  /** 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分)。計算は Rust 側(preview) */
-  const eqEnchantTotal = $derived(preview?.equipment_enhanced_total ?? zeroValues());
-  /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの要約に出す。 */
-  const equipmentAttackKindsFor = (dependency: SkillDependency | null): EquipmentStatKind[] => {
-    if (dependency === "hack_int") return ["slash", "magic_attack"];
-    if (dependency === "int" || dependency === "mr") return ["magic_attack", "magic_defense"];
-    if (dependency !== null) return ["thrust", "slash"];
-    return ["thrust", "slash", "magic_attack", "magic_defense"];
-  };
+  /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。行サブタイトルと共通スキルペインの
+   *  両方が使うので summaries.ts の共有関数(計算は Rust 側 preview) */
+  const enhanceRatePercent = $derived(equipmentAttackRatePercent(preview));
+  /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号 + ソウルリンク)。行サブタイトルと
+   *  装備ペインの両方が使うので summaries.ts の共有関数(計算は Rust 側 preview) */
+  const eqBaseTotal = $derived(equipmentBaseTotal(preview));
+  /** 強化能力値の合計。いまの実力バーの装備ブロックと共有(summaries.ts。計算は Rust 側 preview) */
+  const eqEnhancedTotal = $derived(equipmentEnhancedTotal(preview));
   const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
   const equipmentSummary = $derived(
     `基本合計 ${equipmentAttackKinds.map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(eqBaseTotal[k])}`).join(" / ")}`,
   );
-  const visibleEquipmentStatKinds = $derived.by<EquipmentStatKind[]>(() => {
-    if (!mainSkill) return [...EQUIPMENT_STAT_KINDS];
-    const relevant = new Set<EquipmentStatKind>(equipmentAttackKinds);
-    return EQUIPMENT_STAT_KINDS.filter((k) =>
-      relevant.has(k) || !(["thrust", "slash", "magic_attack"] as EquipmentStatKind[]).includes(k),
-    );
-  });
   const sienaParts = $derived(sienaPartCount(draft.equipment));
   /** シエナのオーラの攻撃力増加(New1)の合計 %。計算は Rust 側(preview) */
   const sienaRate = $derived(Math.round((preview?.siena_attack_rate ?? 0) * 100));
   /** シエナのオーラのステ加算(能力値スロット + 全ステ増加)の 7 ステ合計。計算は Rust 側(preview) */
   const sienaStats = $derived(preview?.siena_stat_total ?? 0);
-  // テシスコアの結果(合計とセット効果)は**編集する場所ではなく結果の場所**に出す。
-  // 6 枠の入力エリアに置くと、その分だけ触る場所が下がる(§00 02)。
-  // 計算は Rust 側(preview.thesis_cores)。セット効果は地域ごとに発動して足される
+  // テシスコアの合計(コア効果の最大)は行サブタイトルにだけ出す。セット効果・地域別の内訳は
+  // ThesisCorePane 側(結果の置き場所)。計算は Rust 側(preview.thesis_cores)
   const coreBestTotal = $derived(Math.max(0, ...(preview?.thesis_cores.map((r) => r.total_bonus) ?? [])));
-  const coreRegionRows = $derived((preview?.thesis_cores ?? []).filter((r) => r.total_bonus > 0));
-  const coreSetTotalLabel = $derived.by(() => {
-    const { final_damage_fixed: fixed, final_damage_rate: rate } = preview?.thesis_core_set_bonus_total ?? { final_damage_fixed: 0, final_damage_rate: 0 };
-    const parts: string[] = [];
-    if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
-    if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
-    return parts.length === 0 ? "未発動" : parts.join(" と ");
-  });
   const roCount = $derived(randomOptionCount(draft.equipment));
-  const roRecordOnly = $derived(preview?.random_option_totals.record_only_count ?? 0);
-  /**
-   * ランダムOP の効き先ごとの合計(結果の置き場所)。同系統は足して 1 行にする。
-   * 集計は Rust 側(preview.random_option_totals)。ここは効き先の日本語ラベルへの対応づけだけ
-   */
+  /** ランダムOP のうち記録するだけの枠数。行サブタイトルと RandomOptionPane の両方が使うので
+   *  summaries.ts の共有関数(計算は Rust 側 preview) */
+  const roRecordOnly = $derived(randomOptionRecordOnlyCount(preview));
   const pct = (v: number) => Number((v * 100).toFixed(2));
-  const roTotals = $derived.by<{ label: string; value: string }[]>(() => {
-    const t = preview?.random_option_totals;
-    if (!t) return [];
-    const rows: { label: string; value: string }[] = [];
-    const addPercent = (label: string, v: number) => {
-      if (v === 0) return;
-      const n = pct(v);
-      rows.push({ label, value: `${n > 0 ? "+" : ""}${n}%` });
-    };
-    const addPoint = (label: string, v: number) => {
-      if (v === 0) return;
-      rows.push({ label, value: `${v > 0 ? "+" : ""}${v}` });
-    };
-    for (const dep of SKILL_DEPENDENCIES) {
-      addPercent(`与ダメージ増加(${SKILL_DEPENDENCY_LABELS[dep]})`, t.dependency_damage_rate[dep]);
-    }
-    addPercent("攻撃ダメージ増加", t.attack_damage_rate);
-    addPercent("割合追加ダメージ", t.added_damage_rate);
-    addPercent("割合追加ダメージ(物理依存)", t.physical_added_damage_rate);
-    addPercent("割合追加ダメージ(魔法依存)", t.magic_added_damage_rate);
-    addPercent("ダメージ増幅(物理依存)", t.physical_damage_amplify);
-    addPercent("ダメージ増幅(魔法依存)", t.magic_damage_amplify);
-    addPoint("命中P", t.accuracy_point);
-    addPoint("回避P", t.evasion_point);
-    if (t.actual_delay_reduction !== 0) {
-      rows.push({ label: "中ディレイ", value: `−${pct(t.actual_delay_reduction)}%` });
-    }
-    return rows;
-  });
   const NEUTRAL = "未設定(中立値で計算)";
 
   // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラスキルのぶんだけ。
@@ -333,32 +285,11 @@
     return `${ids.length} 件 ・ 合計 −${percent}%`;
   });
 
-  // 共通スキルの効き先(結果側の表示用)。入力は補正源、計算は Rust 側(preview / limits)を参照する
-  const UNLEASH_RATES = $derived(limits.unleash_rates.map((r) => Math.round(r * 100)));
-  const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
-  /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)の**増加分**(100% を含まない)。計算は Rust 側 */
-  const defenseRatePercent = $derived.by(() => {
-    const rates = preview?.common_skill.defense_rates;
-    if (!rates) return { physical: 0, magic: 0 };
-    return { physical: Math.round((rates.physical - 1) * 100), magic: Math.round((rates.magic - 1) * 100) };
-  });
-  const sharpnessRatePercent = $derived(
-    draft.commonSkills.sharpness_vision_level === 0
-      ? 0
-      : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1],
-  );
-  const unleashSummary = $derived(
-    (draft.commonSkills.unleash ?? [])
-      .filter((u) => u.stat !== null && u.level > 0)
-      .map((u) => `${STAT_LABELS[u.stat!]} +${UNLEASH_RATES[u.level - 1]}%`)
-      .join(" / ") || "未使用",
-  );
-  const ultimatePicked = $derived(
-    draft.commonSkills.ultimate.slots
-      .filter((u) => u !== null)
-      .map((u) => ULTIMATE_SKILL_LABELS[u])
-      .join(" / ") || "未習得",
-  );
+  // 共通スキルの効き先(結果側の表示用)。入力は補正源、計算は Rust 側(preview / limits)を参照する。
+  // 行サブタイトルと共通スキルペインの両方が使うものは summaries.ts の共有関数を呼ぶ
+  const defenseRatePercent = $derived(defenseRatePercentOf(preview));
+  const sharpnessRatePercent = $derived(sharpnessRatePercentOf(draft));
+  const unleashSummary = $derived(unleashSummaryOf(draft));
 
   // 共通スキル(wiki: Skill/共通)。効き先ごとに 1 行でまとめる
   const commonSkillSummary = $derived.by(() => {
@@ -648,10 +579,6 @@
     openSource = id;
     follow(id);
   }
-
-  // --- いまの実力 ---------------------------------------------------------
-  const totalContents = $derived(totalContentsCount());
-  const savedClearCount = $derived((app.evaluations[character.id] ?? []).filter((e) => e.clear).length);
 </script>
 
 <div class="workspace">
@@ -670,6 +597,9 @@
     </label>
     <button type="button" class="btn primary" disabled={!canSubmit} onclick={save}>
       {saving ? "保存中…" : "保存"}
+    </button>
+    <button type="button" class="btn danger delete" class:confirm={confirmDelete} onclick={removeThis}>
+      {confirmDelete ? "もう一度押すと削除します" : "このキャラを削除"}
     </button>
   </div>
 
@@ -756,24 +686,6 @@
           </div>
         {/each}
       </div>
-      <div class="attack-foot" class:empty={!preview?.attack}>
-        <div class="attack-head">
-          <span class="attack-label">いまの攻撃力</span>
-          <span class="attack-skill dim">{mainSkill ? mainSkill.name : "主軸スキル未選択"}</span>
-        </div>
-        {#if preview?.attack}
-          <div class="attack-value num" use:bump={() => preview?.attack?.breakdown.value ?? null}>{fmtInt(preview.attack.breakdown.value)}</div>
-          <div class="attack-parts num dim">
-            ステ {fmtNum(Math.floor(preview.attack.breakdown.stat_attack))}
-            ・ 装備基本 {fmtNum(Math.floor(preview.attack.breakdown.equipment_base_attack))}
-            ・ 装備強化 {fmtNum(Math.floor(preview.attack.breakdown.equipment_enhanced_attack))}
-            ・ 強化倍率 +{Math.round(preview.attack.breakdown.enhance_rate * 100)}%
-          </div>
-          <p class="attack-note dim">テシスコアの能力値は地域ごとなので、この値には入っていません(ダメージ計算タブでは対象の地域で入ります)。</p>
-        {:else}
-          <p class="attack-note dim">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
-        {/if}
-      </div>
       <p class="src-note dim">常用バフは<b>ダメージ計算</b>タブの「計算の材料」で選べます。グレーの補正源はこれから。</p>
     </section>
 
@@ -800,140 +712,30 @@
   </div>
 
   <div class="sheet">
-    <button type="button" class="sheet-trigger" onclick={() => (sheetOpen.value.open = !sheetOpen.value.open)}>
-      <span class="sheet-title">いまの実力</span>
-      <span class="sheet-summary num dim">
-        {#if preview}
-          {#each STAT_KINDS as k, i (k)}
-            {#if i > 0}<span class="sep"> ・ </span>{/if}{STAT_LABELS[k]}
-            <span use:bump={() => preview?.stats[k] ?? null}>{fmtInt(preview.stats[k])}</span>
-          {/each}
-        {:else}
-          計算中…
-        {/if}
+    <span class="sheet-title">いまの実力</span>
+    <span class="sheet-equipment num dim">
+      装備
+      {#each equipmentAttackKinds as k, i (k)}
+        {#if i > 0}<span class="sep"> ・ </span>{/if}{EQUIPMENT_STAT_SHORT[k]}
+        <span use:bump={() => eqBaseTotal[k]}>{fmtInt(eqBaseTotal[k])}</span>
+        <span class="enhance" use:bump={() => eqEnhancedTotal[k]}>+{fmtInt(eqEnhancedTotal[k])}</span>
+      {/each}
+    </span>
+    {#if mainSkill}
+      <span class="sheet-attack">
+        <span class="attack-label">攻撃力(A)</span>
+        <span class="num strong" use:bump={() => preview?.attack?.breakdown.value ?? null}>
+          {preview?.attack ? fmtInt(preview.attack.breakdown.value) : "—"}
+        </span>
+        <span class="dim">{mainSkill.name}</span>
       </span>
-      <span class="sheet-chev">{sheetOpen.value.open ? "▴" : "▾"}</span>
-    </button>
-    {#if sheetOpen.value.open}
-      <div class="sheet-body open-in">
-        <div class="sheet-card">
-          <div class="card-title">最終能力値</div>
-          <div class="stat-grid inset">
-            {#each STAT_KINDS as k (k)}
-              <span class="stat-cell">
-                <span class="dim">{STAT_LABELS[k]}</span>
-                <span class="num strong" use:bump={() => preview?.stats[k] ?? null}>{preview ? fmtInt(preview.stats[k]) : "—"}</span>
-              </span>
-            {/each}
-          </div>
-        </div>
-        <div class="sheet-card">
-          <div class="card-title">攻撃力(A){mainSkill ? ` — ${mainSkill.name}` : ""}</div>
-          {#if preview?.attack}
-            <div class="clear num"><span class="strong" use:bump={() => preview?.attack?.breakdown.value ?? null}>{fmtInt(preview.attack.breakdown.value)}</span></div>
-            <div class="eq-summary num inset">
-              <span><span class="dim">ステ攻撃力</span> {fmtNum(preview.attack.breakdown.stat_attack)}</span>
-              <span><span class="dim">装備基本</span> {fmtNum(preview.attack.breakdown.equipment_base_attack)}</span>
-              <span><span class="dim">装備強化</span> {fmtNum(preview.attack.breakdown.equipment_enhanced_attack)}</span>
-              <span><span class="dim">強化倍率</span> +{Math.round(preview.attack.breakdown.enhance_rate * 100)}%</span>
-            </div>
-            <p class="dim tiny">テシスコアの能力値は地域ごとのため未加算(地域なしの値)。</p>
-          {:else}
-            <p class="dim tiny">「キャラステータス」で<b>主軸スキル</b>を選ぶと攻撃力が出ます。</p>
-          {/if}
-        </div>
-        {#if roTotals.length > 0 || roRecordOnly > 0}
-          <div class="sheet-card">
-            <!-- ランダムOP の結果。部位ごとの行に混ぜると「どの部位の話か」が分からないまま
-                 数字だけ並ぶので、効き先ごとの合計はここにまとめる -->
-            <div class="card-title">ランダムOP</div>
-            <div class="eq-summary num inset">
-              {#each roTotals as t (t.label)}
-                <span><span class="dim">{t.label}</span> <span use:flash={() => t.value}>{t.value}</span></span>
-              {:else}
-                <span class="dim">計算に入る OP はまだありません</span>
-              {/each}
-            </div>
-            {#if roRecordOnly > 0}
-              <p class="dim tiny">記録するだけの枠が {roRecordOnly} 件あります(発動条件付き・被ダメージ側)。</p>
-            {/if}
-          </div>
-        {/if}
-        <div class="sheet-card">
-          <!-- 共通スキルの結果。入力側(補正源)には入力だけを置き、効いている量はここで見る -->
-          <div class="card-title">共通スキル</div>
-          <div class="eq-summary num inset">
-            <span><span class="dim">装備攻撃力強化</span> +{enhanceRatePercent}%</span>
-            <span><span class="dim">装備防御力</span> 物 {fmtInt(defenseRatePercent.physical)}% / 魔 {fmtInt(defenseRatePercent.magic)}%</span>
-            <span><span class="dim">割合追加ダメージ</span> +{sharpnessRatePercent}%</span>
-            <span><span class="dim">アンリーシュ</span> {unleashSummary}</span>
-          </div>
-          <p class="dim tiny">オーグメント Lv{draft.commonSkills.augment_level} ・ 極限 {ultimatePicked}</p>
-        </div>
-        {#if coreRegionRows.length > 0}
-          <div class="sheet-card">
-            <!-- ゲーム内の言葉に合わせる(Tecith Core System: 「コア効果」「コアセット効果」)。
-                 ゲームは左列にセット効果の合計を出しているので、こちらも合計を先に置く -->
-            <div class="card-title">テシスコア</div>
-            <div class="clear num">
-              <span class="dim tiny">コアセット効果(全地域) 最終ダメージ</span>
-              <span class="strong" use:flash={() => coreSetTotalLabel}>{coreSetTotalLabel}</span>
-            </div>
-            <div class="eq-summary num inset">
-              {#each coreRegionRows as r (r.region)}
-                <span>
-                  <span class="dim">{CORE_REGION_LABELS[r.region]}</span>
-                  <span use:bump={() => r.total_bonus}>{fmtInt(r.total_bonus)}</span>
-                  <span
-                    class="badge"
-                    style={badgeStyle({ label: "", state: r.set_groups.length === 0 ? "unknown" : "met" })}
-                  >{r.set_groups.length === 0
-                      ? `あと ${3 - r.ready}`
-                      : r.set_groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
-                </span>
-              {/each}
-            </div>
-            <p class="dim tiny">コア効果(能力値)は対象地域内でのみ有効。コアセット効果は<b>同じ進化段階の強化 4 コア 3 個ごと</b>に成立し、段階ごと・地域ごとの分が足されます(同じ段階が 6 個なら 6 セット効果になり、3 セット分は重ねません)。</p>
-          </div>
-        {/if}
-        <div class="sheet-card">
-          <div class="card-title">装備値(全部位の合計)</div>
-          <table class="eq-table num inset">
-            <thead>
-              <tr>
-                <th></th>
-                {#each visibleEquipmentStatKinds as k (k)}<th class="n">{EQUIPMENT_STAT_SHORT[k]}</th>{/each}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th class="rh">基本</th>
-                {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqBaseTotal[k]}>{fmtInt(eqBaseTotal[k])}</td>{/each}
-              </tr>
-              <tr>
-                <th class="rh">強化</th>
-                {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqEnchantTotal[k]}>{fmtInt(eqEnchantTotal[k])}</td>{/each}
-              </tr>
-            </tbody>
-          </table>
-          <p class="dim tiny">
-            {#if mainSkill}攻撃補正は「{mainSkill.name}」に使う値だけ表示しています。{/if}
-            強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も、
-            強化にはシエナのオーラ(武器/盾)の分も入っています。
-            強化のうちテシスコアの分だけこの表に入りません
-            (対象地域を選ぶダメージ計算タブでのみ強化能力値へ合流します)。
-          </p>
-        </div>
-        <div class="sheet-card">
-          <div class="card-title">このキャラで通るのは</div>
-          <div class="clear num"><span class="strong" use:bump={() => savedClearCount}>{savedClearCount}</span><span class="dim"> / {totalContents}</span></div>
-          <p class="dim tiny">保存済みデータでの判定。一覧は<b>ホーム</b>で。</p>
-        </div>
-        <button type="button" class="delete" class:confirm={confirmDelete} onclick={removeThis}>
-          {confirmDelete ? "もう一度押すと削除します" : "このキャラを削除"}
-        </button>
-      </div>
+    {:else}
+      <span class="sheet-attack dim">主軸スキルを選ぶと攻撃力が出ます</span>
     {/if}
+    <span class="spacer"></span>
+    <button type="button" class="btn ghost sheet-goto" onclick={() => (app.tab = "calc")}>
+      ダメージを見る ›
+    </button>
   </div>
 </div>
 
@@ -1016,17 +818,6 @@
   .src.planned .src-name, .src.planned .src-sub { color: var(--fg-off); }
   .src-sub { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chev { flex-shrink: 0; font-size: 11px; }
-  .attack-foot {
-    flex-shrink: 0; margin-top: 8px; padding: 9px 11px; border-radius: var(--r-panel);
-    background: linear-gradient(180deg, #fff, #EFF5FD); border: 1px solid #9FB4D0;
-  }
-  .attack-foot.empty { background: var(--bg-rail); border-style: dashed; border-color: var(--border); }
-  .attack-head { display: flex; align-items: baseline; gap: 8px; }
-  .attack-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
-  .attack-skill { margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .attack-value { margin-top: 2px; font-size: 19px; font-weight: 700; line-height: 1.1; }
-  .attack-parts { margin-top: 3px; font-size: 9px; line-height: 1.6; }
-  .attack-note { margin: 4px 0 0; font-size: 9px; line-height: 1.55; }
 
   .src-note {
     flex-shrink: 0; margin: 10px 0 0; padding: 9px 11px; border-radius: var(--r-panel);
@@ -1038,48 +829,28 @@
      場所を先に確保しておく(§09 規則 4「あとから幅が変わらない」) */
   .detail { overflow: auto; scrollbar-gutter: stable; padding-left: 6px; }
 
-  .sheet { flex-shrink: 0; border-top: 1px solid var(--border-strong); background: var(--bg-mid); padding: 8px 16px 10px; }
-  .sheet-trigger {
-    width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--r-panel);
-    background: linear-gradient(180deg, #fff, #F1F6FC); border: 1px solid #9FB4D0;
-    box-shadow: inset 0 1px 0 #fff; text-align: left;
+  /* 開閉しない 1 行の結果バー。押した場所は動かない — 高さ固定で桁が増えても伸び縮みしない */
+  .sheet {
+    flex-shrink: 0; height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 9px;
+    border-top: 1px solid var(--border-strong); background: var(--bg-mid); padding: 0 16px;
   }
-  .sheet-trigger:hover { border-color: var(--head-bar); }
   .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: var(--fg-head); white-space: nowrap; }
-  .sheet-summary { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sheet-chev {
-    flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-    border-radius: var(--r-inset); background: var(--bg-field); border: 1px solid var(--border);
-    font-size: 9px; font-weight: 700; color: var(--accent);
+  /* 火力の材料(装備値)。相手ありきのダメージは出さない — このバーの役目は装備↑攻撃力(A)まで */
+  /* flex: 1 で伸ばすと装備値と攻撃力が 1216px の両端に離れ、視線が横断する(§00 01)。
+     材料 → 結果 は隣り合わせにして左に固め、余白は右のボタンの手前に集める */
+  .sheet-equipment {
+    min-width: 0; flex: 0 1 auto; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .sheet-body { margin-top: 8px; max-height: 220px; overflow: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
-  /* インセット面(表・最終能力値)の内側余白が増えた分、5 枚(4 カード + 削除)が
-     1 行に収まるよう basis を詰める */
-  .sheet-card {
-    flex: 1 1 210px; min-width: 0; padding: 11px 12px; border-radius: var(--r-window);
-    background: var(--bg-field); border: 1px solid var(--border-strong);
-  }
-  /* 桁が増えても隣が動かない(§09 規則 4)。flex + 折り返しだと値の幅で列がずれるので、
-     列そのものを grid で決める。列数はカラム幅で決まり、**値の桁では変わらない** */
-  .stat-grid {
-    margin-top: 6px; padding: 7px 9px;
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 5px 10px;
-  }
-  .stat-cell { min-width: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10px; overflow: hidden; }
-  .stat-cell .dim { flex-shrink: 0; }
-  .stat-cell .strong { font-size: 12px; font-weight: 700; }
-  .eq-summary { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
-  .eq-table { margin-top: 6px; width: 100%; border-collapse: collapse; border-spacing: 0; overflow: hidden; font-size: 11px; }
-  .eq-table th, .eq-table td { padding: 3px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.55); }
-  .eq-table thead th { font-size: 9px; font-weight: 700; color: var(--fg-muted); background: none; position: static; }
-  .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
-  .eq-table .n { text-align: right; }
-  .clear { margin-top: 4px; }
-  .clear .strong { font-size: 19px; font-weight: 700; }
-  .tiny { margin: 4px 0 0; font-size: 9.5px; line-height: 1.6; }
+  .sheet-equipment .enhance { color: var(--good); }
+  /* 主軸スキルの攻撃力(A)。ダメージと取り違えないようラベルを必ず数字の前に置く */
+  .sheet-attack { flex-shrink: 0; margin-left: 9px; display: flex; align-items: baseline; gap: 6px; font-size: 9.5px; white-space: nowrap; }
+  .attack-label { font-weight: 700; color: var(--fg-head); }
+  .sheet-attack .strong { font-size: 13px; }
+  .sheet-goto { flex-shrink: 0; padding: 5px 10px; font-size: var(--t-label); white-space: nowrap; }
+  /* 「保存」の真隣に置くと押し間違える。ひと呼吸ぶん離す(2 段階確認はそのまま) */
   .delete {
-    flex-shrink: 0; align-self: stretch; padding: 8px 14px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--state-short-bd); font-size: var(--t-label); color: var(--danger);
+    flex-shrink: 0; margin-left: 14px; padding: 7px 12px; border-radius: var(--r-panel);
+    background: var(--bg-field); border-color: var(--state-short-bd); font-size: var(--t-label); color: var(--danger);
   }
   .delete.confirm { background: var(--state-short-bg); font-weight: 700; }
 </style>

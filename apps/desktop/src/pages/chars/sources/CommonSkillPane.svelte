@@ -7,12 +7,31 @@
   import { flash } from "../../../ui/motion.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import SkillLevelField from "./SkillLevelField.svelte";
+  import {
+    defenseRatePercent as defenseRatePercentOf,
+    equipmentAttackRatePercent,
+    sharpnessRatePercent as sharpnessRatePercentOf,
+    unleashSummary as unleashSummaryOf,
+  } from "../summaries";
 
   interface Props {
     draft: Draft;
     preview: StatPreview | null;
   }
   let { draft, preview }: Props = $props();
+
+  // --- 効いている量(結果) --------------------------------------------------
+  // 行サブタイトルと共有するものは summaries.ts の共有関数(計算は Rust 側 preview / limits)
+  const enhanceRatePercent = $derived(equipmentAttackRatePercent(preview));
+  const defenseRatePercent = $derived(defenseRatePercentOf(preview));
+  const sharpnessRatePercent = $derived(sharpnessRatePercentOf(draft));
+  const unleashSummary = $derived(unleashSummaryOf(draft));
+  const ultimatePicked = $derived(
+    draft.commonSkills.ultimate.slots
+      .filter((u) => u !== null)
+      .map((u) => ULTIMATE_SKILL_LABELS[u])
+      .join(" / ") || "未習得",
+  );
 
   // アンリーシュ(能力解放)。効き先は能力値倍率B。Lv6 以降はレインフォース(Lv5 まで)が前提。
   // 正は crates/domain/src/common_skill.rs の UNLEASH。limits.unleash_rates(Σ% の小数表現)経由で引く
@@ -159,6 +178,15 @@
   });
   const ultimateEffectsText = $derived(ultimateEffects.join(" ・ "));
 </script>
+
+<!-- 効いている量(結果)。ペイン自体が既に「共通スキル」の名前を出しているので見出しは持たない -->
+<div class="eq-summary num inset">
+  <span><span class="dim">装備攻撃力強化</span> +{enhanceRatePercent}%</span>
+  <span><span class="dim">装備防御力</span> 物 {defenseRatePercent.physical}% / 魔 {defenseRatePercent.magic}%</span>
+  <span><span class="dim">割合追加ダメージ</span> +{sharpnessRatePercent}%</span>
+  <span><span class="dim">アンリーシュ</span> {unleashSummary}</span>
+</div>
+<p class="dim tiny">オーグメント Lv{draft.commonSkills.augment_level} ・ 極限 {ultimatePicked}</p>
 
 <div class="card">
   <div class="card-title inline">

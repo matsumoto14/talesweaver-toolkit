@@ -276,7 +276,7 @@
   {:else if sourceId === "siena"}
     <SienaPane {draft} {preview} />
   {:else if sourceId === "randomOption"}
-    <RandomOptionPane {draft} {skills} {onOpenSource} />
+    <RandomOptionPane {draft} {preview} {skills} {onOpenSource} />
   {:else if sourceId === "title"}
     <TitlePane {draft} />
   {:else if sourceId === "commonSkill"}

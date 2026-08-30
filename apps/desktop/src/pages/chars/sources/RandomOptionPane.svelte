@@ -1,13 +1,16 @@
 <script lang="ts">
   // 「randomOption」補正源のペイン。装備と同じ部位ドリルダウン(§09 規則 2)。
-  import type { PartSlot, RandomOptionDef, RandomOptionRank, Skill } from "../../../api/types";
+  import type { PartSlot, RandomOptionDef, RandomOptionRank, Skill, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import {
     neutralEquipmentPart,
     randomOptionEffectLabel, randomOptionIsApplied, randomOptionMatchesDependency,
     randomOptionValue, randomOptionValueLabel,
   } from "../../../equipment";
-  import { PART_SLOT_LABELS, RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANKS, RANDOM_OPTION_RANK_LABELS } from "../../../labels";
+  import {
+    PART_SLOT_LABELS, RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANKS, RANDOM_OPTION_RANK_LABELS,
+    SKILL_DEPENDENCIES, SKILL_DEPENDENCY_LABELS,
+  } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { app, equipmentFocus } from "../../../state.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
@@ -16,13 +19,52 @@
   import type { SourceId } from "../sourceId";
   import { flash } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
+  import { randomOptionRecordOnlyCount } from "../summaries";
 
   interface Props {
     draft: Draft;
+    preview: StatPreview | null;
     skills: Skill[];
     onOpenSource: (id: SourceId) => void;
   }
-  let { draft, skills, onOpenSource }: Props = $props();
+  let { draft, preview, skills, onOpenSource }: Props = $props();
+
+  /** ランダムOP のうち記録するだけの枠数。行サブタイトルとも共有(summaries.ts) */
+  const roRecordOnly = $derived(randomOptionRecordOnlyCount(preview));
+  const pct = (v: number) => Number((v * 100).toFixed(2));
+  /**
+   * ランダムOP の効き先ごとの合計(結果の置き場所)。同系統は足して 1 行にする。
+   * 集計は Rust 側(preview.random_option_totals)。ここは効き先の日本語ラベルへの対応づけだけ
+   */
+  const roTotals = $derived.by<{ label: string; value: string }[]>(() => {
+    const t = preview?.random_option_totals;
+    if (!t) return [];
+    const rows: { label: string; value: string }[] = [];
+    const addPercent = (label: string, v: number) => {
+      if (v === 0) return;
+      const n = pct(v);
+      rows.push({ label, value: `${n > 0 ? "+" : ""}${n}%` });
+    };
+    const addPoint = (label: string, v: number) => {
+      if (v === 0) return;
+      rows.push({ label, value: `${v > 0 ? "+" : ""}${v}` });
+    };
+    for (const dep of SKILL_DEPENDENCIES) {
+      addPercent(`与ダメージ増加(${SKILL_DEPENDENCY_LABELS[dep]})`, t.dependency_damage_rate[dep]);
+    }
+    addPercent("攻撃ダメージ増加", t.attack_damage_rate);
+    addPercent("割合追加ダメージ", t.added_damage_rate);
+    addPercent("割合追加ダメージ(物理依存)", t.physical_added_damage_rate);
+    addPercent("割合追加ダメージ(魔法依存)", t.magic_added_damage_rate);
+    addPercent("ダメージ増幅(物理依存)", t.physical_damage_amplify);
+    addPercent("ダメージ増幅(魔法依存)", t.magic_damage_amplify);
+    addPoint("命中P", t.accuracy_point);
+    addPoint("回避P", t.evasion_point);
+    if (t.actual_delay_reduction !== 0) {
+      rows.push({ label: "中ディレイ", value: `−${pct(t.actual_delay_reduction)}%` });
+    }
+    return rows;
+  });
 
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
 
@@ -236,6 +278,19 @@
   {/if}
 {/snippet}
 
+<!-- 効いている量(結果)。ペイン自体が既に「ランダムOP」の名前を出しているので見出しは持たない -->
+{#if roTotals.length > 0 || roRecordOnly > 0}
+  <div class="eq-summary num inset">
+    {#each roTotals as t (t.label)}
+      <span><span class="dim">{t.label}</span> <span use:flash={() => t.value}>{t.value}</span></span>
+    {:else}
+      <span class="dim">計算に入る OP はまだありません</span>
+    {/each}
+  </div>
+  {#if roRecordOnly > 0}
+    <p class="dim tiny">記録するだけの枠が {roRecordOnly} 件あります(発動条件付き・被ダメージ側)。</p>
+  {/if}
+{/if}
 <div class="card">
   <p class="hint dim">
     wiki「ランダムオプション」。装備補正 9 値には乗らず、与ダメージ式のカテゴリ(依存別の与ダメージ増加・

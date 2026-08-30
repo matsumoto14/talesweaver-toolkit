@@ -19,6 +19,7 @@
   import { limits } from "../../../limits.svelte";
   import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
+  import { equipmentAttackKindsFor, equipmentAttackRatePercent, equipmentBaseTotal } from "../summaries";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Select from "../../../ui/Select.svelte";
@@ -46,6 +47,23 @@
 
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
   const iconId = (itemId: string | null) => equipmentIconId(itemId, app.equipmentCatalog);
+
+  // --- 効いている量(結果。部位一覧ビューの先頭に置く) ------------------------
+  /** 基本能力値の合計。行サブタイトルとも共有(summaries.ts。計算は Rust 側 preview) */
+  const eqBaseTotal = $derived(equipmentBaseTotal(preview));
+  /** 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分)。計算は Rust 側(preview) */
+  const eqEnchantTotal = $derived(preview?.equipment_enhanced_total ?? zeroValues());
+  /** 装備攻撃力強化倍率。行サブタイトルとも共有(summaries.ts) */
+  const enhanceRatePercent = $derived(equipmentAttackRatePercent(preview));
+  const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
+  /** wiki の装備攻撃力係数が 0 でない補正を先頭に、耐久系は主軸未選択でも常に出す */
+  const visibleEquipmentStatKinds = $derived.by<EquipmentStatKind[]>(() => {
+    if (!mainSkill) return [...EQUIPMENT_STAT_KINDS];
+    const relevant = new Set<EquipmentStatKind>(equipmentAttackKinds);
+    return EQUIPMENT_STAT_KINDS.filter((k) =>
+      relevant.has(k) || !(["thrust", "slash", "magic_attack"] as EquipmentStatKind[]).includes(k),
+    );
+  });
 
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
@@ -719,6 +737,33 @@
      その場に残り、別の部位を押せばそのまま横に移れる — 戻るのに「戻る」が要らない -->
 <div class="part-split" class:open={openPart !== null}>
   <div class="part-list">
+  <!-- 効いている量(結果)。ペイン自体が既に「装備」の名前を出しているので見出しは持たない。
+       部位詳細ビューには出さず、部位一覧ビューの先頭にだけ置く -->
+  <table class="eq-table num inset">
+    <thead>
+      <tr>
+        <th></th>
+        {#each visibleEquipmentStatKinds as k (k)}<th class="n">{EQUIPMENT_STAT_SHORT[k]}</th>{/each}
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th class="rh">基本</th>
+        {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqBaseTotal[k]}>{fmtInt(eqBaseTotal[k])}</td>{/each}
+      </tr>
+      <tr>
+        <th class="rh">強化</th>
+        {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqEnchantTotal[k]}>{fmtInt(eqEnchantTotal[k])}</td>{/each}
+      </tr>
+    </tbody>
+  </table>
+  <p class="dim tiny">
+    {#if mainSkill}攻撃補正は「{mainSkill.name}」に使う値だけ表示しています。{/if}
+    強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も、
+    強化にはシエナのオーラ(武器/盾)の分も入っています。
+    強化のうちテシスコアの分だけこの表に入りません
+    (対象地域を選ぶダメージ計算タブでのみ強化能力値へ合流します)。
+  </p>
 {#each PART_SLOTS as slot (slot)}
   {@const part = selectedPartOrNull(slot)}
   {@const list = draft.equipment.parts[slot]}
