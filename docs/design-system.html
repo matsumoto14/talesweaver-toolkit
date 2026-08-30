@@ -2497,6 +2497,58 @@ td code { background: var(--card-soft2); }
             <b>規格側を実装に寄せる</b>可能性が高い。v4 に共通フッターがあるかどうかで決まる。</p>
           <span class="where">効くところ: キャラタブ 装備 / いまの実力フッター</span>
         </div>
+
+        <div class="dec">
+          <div class="dec-h"><span class="n2">G</span><b>キャラタブが §09 規則 1 の実機監査から丸ごと外れている</b><span class="soonbadge">保留</span></div>
+          <p><code>clickall.js</code>(押せる要素を総当たりし、押す前後の <code>offsetTop</code> を比べる)は、
+            キャラタブの 16 ペインを毎回 <b>TARGETS から外して</b>走らせている。キャラタブは自動保存なので、
+            監査が押すと開発 DB の実データが書き換わり、あとで実装のバグと区別が付かなくなるため。</p>
+          <p class="why"><b>なぜ困るか</b> 画面数でいえば大半がこの検査に一度もかかっていない。
+            計算タブで見つかった「押すと押した行が消える」「押すと下が流れる」の 2 件は、
+            同じ形がキャラタブにあっても誰も気づけない。
+            <b>着手条件</b>: 監査用に使い捨てのキャラを作って選び、終わったら消す仕組みを
+            <code>gui-smoke</code> 側に用意すること。それができるまでこの穴は埋まらない。</p>
+          <span class="where">効くところ: キャラタブ 全 16 ペイン / tools/design-audit/live/clickall.js</span>
+        </div>
+
+        <div class="dec">
+          <div class="dec-h"><span class="n2">H</span><b>監査の「見つからず」が 2 つの意味を持っている</b><span class="soonbadge">保留</span></div>
+          <p><code>clickall.js</code> の ⚠ は「セレクタが古い」と「このキャラ・この状態では要素が出ない」を
+            区別できない。実例: <code>button.fill-btn</code>(目安に届いているキャラでは出ない)、
+            <code>.row</code>(エリアを開かないと無い)。どちらも実装は正しい。</p>
+          <p class="why"><b>なぜ困るか</b> 本当にセレクタが古くなったときに埋もれる。今周は
+            <code>motion.js</code> と <code>attention.js</code> と <code>clickall.js</code> で
+            同じ「静かに測らなくなる」事故が 5 件出ている。
+            <b>着手条件</b>: ターゲット側に「この状態では出なくてよい」を宣言できるようにする。
+            宣言の無いターゲットが見つからなければ、それは古いセレクタとして扱う。</p>
+          <span class="where">効くところ: tools/design-audit/live/clickall.js</span>
+        </div>
+
+        <div class="dec">
+          <div class="dec-h"><span class="n2">I</span><b>バフのチップ群が 31 行に折り返している(A1)</b><span class="soonbadge">保留</span></div>
+          <p><code>attention.js</code> の A1 が、計算タブ右ペインの <code>.buff-chips</code> を 31 行、
+            バフタブの <code>.chips</code> を 10 行として挙げ続けている。A2 / A4 / A5 は全画面 0 件なので、
+            残っているのはこれだけ。</p>
+          <p class="why"><b>どちらが正しいか</b> バフは「セットを組む」ための一覧なので、
+            数が多いこと自体は情報として要る(§00 02 の判断は人がする)。ただし計算タブ側は
+            <b>その計算で使うものを選ぶ</b>だけの場なので、同じ量を出す理由が弱い。
+            <b>着手条件</b>: 計算タブのバフを「セット内 + 追加」だけに畳めるか、
+            実プレイでどれだけ追加バフを触るかを見てから決める。数だけ見て減らすと情報が足りなくなる。</p>
+          <span class="where">効くところ: ダメージ計算 計算の材料 / バフタブ</span>
+        </div>
+
+        <div class="dec">
+          <div class="dec-h"><span class="n2">J</span><b>「いつものバフ」「使うセット」を段階選択に降ろすか</b><span class="soonbadge">保留</span></div>
+          <p><code>inputs.js</code> が全 17 画面で「段階選択に降ろせる &lt;select&gt;(選択肢 2)」として挙げる。
+            §07 は「並べられる数の選択肢をドロップダウンに入れない」と言っている。</p>
+          <p class="why"><b>どちらが正しいか</b> バフセットは<b>ユーザーが増やせる</b>ので、
+            いま 2 件でも 20 件になりうる。件数で形態を切り替える分岐を作ると、
+            同じ欄が日によって違う形になって §00 05 を崩す。実装は意図して &lt;select&gt; のままにしてある
+            (コメント済み)。<b>規格の穴</b>の可能性が高い — §07 に「件数が可変のものは
+            上限が決まっている選択肢と同じに扱わない」を足すのが筋。
+            <b>着手条件</b>: §07 に可変件数の扱いを書き足すかどうかを決める。</p>
+          <span class="where">効くところ: 全画面ヘッダ いつものバフ / ダメージ計算 使うセット</span>
+        </div>
       </div>
     </section>
 
