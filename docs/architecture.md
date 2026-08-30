@@ -59,7 +59,9 @@
 フロントエンドの階層(`apps/desktop/src/`):
 
 ```
-main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠
+main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠。
+                       main.ts は値域上限(get_stat_limits)を取り切ってから App を動的 import する
+                       (labels.ts などがモジュール評価時に上限を読むため。フォールバック値は持たない)
 CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線。表示順は端末内設定として保持)
 state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・カスタム画像data URL・選択・コンテンツ判定・試し変更 sim)
 api/types.ts           Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
