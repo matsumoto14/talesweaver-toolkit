@@ -60,6 +60,13 @@ pub struct TitleDef {
     pub note: &'static str,
 }
 
+impl TitleDef {
+    /// 装備の基本能力値への加算 9 値の合計(称号ピッカーの要約表示に使う)。
+    pub fn equipment_value_total(&self) -> i64 {
+        self.values.fields().into_iter().map(|(_, v)| v).sum()
+    }
+}
+
 /// 称号の値域・カタログ整合性違反。
 #[derive(Debug, Clone, PartialEq, thiserror::Error, Serialize, Deserialize)]
 pub enum TitleError {

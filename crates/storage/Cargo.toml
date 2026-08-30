@@ -10,3 +10,4 @@ domain = { path = "../domain" }
 gamedata = { path = "../gamedata" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 thiserror = "2"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }

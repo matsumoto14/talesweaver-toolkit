@@ -13,12 +13,14 @@ import {
   listEquipmentAbilities,
   listEquipmentCatalog,
   listGameCharacters,
+  listCharacterIcons,
   listRandomOptions,
   listMasteries,
   listSienaKinds,
   listCharacterSkills,
   listSkills,
   listTitles,
+  updateCharacter,
 } from "./api/commands";
 import { latestByKey } from "./ui/latest.svelte";
 import type {
@@ -34,6 +36,7 @@ import type {
   EquipmentItem,
   GameCharacter,
   NewCharacter,
+  PartSlot,
   RandomOptionDef,
   MasteryDef,
   RegisteredCharacter,
@@ -51,6 +54,8 @@ export const app = $state({
   tab: "home" as Tab,
   loading: true,
   characters: [] as RegisteredCharacter[],
+  /** 登録キャラ id → 正規化済み PNG data URL。BLOB はここだけで表示用へ変換済み。 */
+  characterIcons: {} as Record<number, string>,
   gameCharacters: [] as GameCharacter[],
   areas: [] as ContentArea[],
   catalog: [] as BuffDefinition[],
@@ -60,7 +65,8 @@ export const app = $state({
   /** ランダムオプションのカタログ(wiki: ランダムオプション) */
   randomOptions: [] as RandomOptionDef[],
   /** シエナのオーラで選べる能力値・追加オプション(wiki: 装備システム/シエナのオーラ) */
-  siena: { values: [], extras: [], extra_unlock_stages: [3, 7, 10], stage_max: 10 } as SienaCatalog,
+  // extra_unlock_stages は固定 3 要素のタプル型。loadAll() 完了までは選択不可なので値そのものに意味は無い
+  siena: { values: [], extras: [], extra_unlock_stages: [0, 0, 0], stage_max: 0 } as SienaCatalog,
   /** 称号のカタログ(主要称号のみ) */
   titles: [] as TitleDef[],
   /** 中ディレイ減少スキル(wiki: ステータス「中ディレイ倍率B」)。キャラ固有のパッシブのみ */
@@ -116,13 +122,20 @@ export const equipmentFocus = $state<{ request: (ValidationLocation & { seq: num
 export const characterSourceFocus = $state<{ request: { sourceId: SourceId; seq: number } | null }>({
   request: null,
 });
+/** ホームの部位タイルから、装備ペインの特定の部位を直接開くための要求(補正源は必ず equipment)。 */
+export const equipmentPartFocus = $state<{ request: { slot: PartSlot; seq: number } | null }>({
+  request: null,
+});
 let focusSeq = 0;
 
-export function focusCharacterSource(sourceId: SourceId) {
+export function focusCharacterSource(sourceId: SourceId, part?: PartSlot) {
   app.tab = "chars";
   app.registerOpen = false;
   focusSeq += 1;
   characterSourceFocus.request = { sourceId, seq: focusSeq };
+  if (sourceId === "equipment" && part) {
+    equipmentPartFocus.request = { slot: part, seq: focusSeq };
+  }
 }
 
 /** エラーが指す場所へ画面を移す(キャラタブ → 該当キャラ → 該当部位)。 */
@@ -191,7 +204,8 @@ const evaluationLatest = latestByKey<number>();
 export async function refreshEvaluation(c: RegisteredCharacter): Promise<void> {
   await evaluationLatest.run(c.id, async (isCurrent) => {
     try {
-      const evaluations = await evaluateContents(payloadOf(c), undefined, buffSelectionFor(c));
+      // 主軸スキル設定済みなら装備条件(依存で比較先が変わる)もそのスキルで判定する
+      const evaluations = await evaluateContents(payloadOf(c), c.main_skill_id ?? undefined, buffSelectionFor(c));
       // 古い応答、および削除済みキャラの応答は反映しない(削除済みキーの復活防止)
       if (isCurrent() && app.characters.some((x) => x.id === c.id)) {
         app.evaluations[c.id] = evaluations;
@@ -215,10 +229,11 @@ export function selectCharacter(id: number | null): void {
 export async function loadAll(): Promise<void> {
   try {
     const [
-      characters, gameCharacters, areas, catalog, buffSets, equipmentCatalog, equipmentAbilities, elementSources,
+      characters, characterIcons, gameCharacters, areas, catalog, buffSets, equipmentCatalog, equipmentAbilities, elementSources,
       randomOptions, titles, characterSkills, siena, masteries,
     ] = await Promise.all([
       listCharacters(),
+      listCharacterIcons(),
       listGameCharacters(),
       listContents(),
       listBuffCatalog(),
@@ -233,6 +248,7 @@ export async function loadAll(): Promise<void> {
       listMasteries(),
     ]);
     app.characters = characters;
+    app.characterIcons = Object.fromEntries(characterIcons.map((icon) => [icon.characterId, icon.dataUrl]));
     app.gameCharacters = gameCharacters;
     app.areas = areas;
     app.catalog = catalog;
@@ -255,15 +271,37 @@ export async function loadAll(): Promise<void> {
   }
 }
 
+// キャラ id ごとに保存を直列化するキュー。update_character は毎回キャラ全体を送る
+// full-overwrite 方式なので、同じキャラを 2 箇所(例: キャラタブの保存とホームの
+// 直更新タイル)からほぼ同時に保存すると、後から解決した方が先に解決した方の変更を
+// 巻き戻してしまう事故が起きる。ここへ通せば、待っている間の 2 件目は 1 件目の結果が
+// app.characters に反映されたあとに実行されるので、必ず最新状態の上に積み重なる
+// (`buildPayload` を「送信の瞬間」まで遅延評価する ⇒ 待っている間に相手が確定させた
+// 変更を拾ってから送る)。
+const characterSaveChains = new Map<number, Promise<unknown>>();
+export function enqueueCharacterSave(
+  characterId: number,
+  buildPayload: () => NewCharacter,
+): Promise<RegisteredCharacter> {
+  const prev = characterSaveChains.get(characterId) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(() => updateCharacter(characterId, buildPayload()));
+  characterSaveChains.set(characterId, next);
+  return next;
+}
+
 /** 登録・更新後の反映(コンテンツ判定も更新する) */
-export function upsertCharacter(c: RegisteredCharacter): void {
+export function upsertCharacter(c: RegisteredCharacter, opts: { preserveSim?: boolean } = {}): void {
   const i = app.characters.findIndex((x) => x.id === c.id);
   if (i >= 0) app.characters[i] = c;
   else app.characters.push(c);
   // 選択中キャラが(どのタブからでも)保存されたら試し変更は破棄する。
   // sim は保存時点のスナップショットなので、残すと古い値で最新の保存を上書きできてしまう
   // (独立レビュー指摘: クロスタブのサイレントなデータ消失)。
-  if (c.id === app.selectedId) app.sim = null;
+  // ただし呼び出し側がこの保存内容を app.sim にも既に同期済み(preserveSim)なら消さない —
+  // ホームの直更新タイルは 1 手ごとに保存が飛ぶため、そのたびに無条件で試し変更を消すと
+  // 計算タブの作業がサイレントに消える(独立レビュー指摘)。Workspace の明示保存など、
+  // sim と無関係な保存はこれまでどおり無条件でリセットする。
+  if (c.id === app.selectedId && !opts.preserveSim) app.sim = null;
   if (c.id === app.selectedId && app.calcBuffSetId !== c.default_buff_set_id) syncCalcBuffs(c);
   void refreshEvaluation(c);
 }
@@ -271,6 +309,7 @@ export function upsertCharacter(c: RegisteredCharacter): void {
 export function removeCharacter(id: number): void {
   app.characters = app.characters.filter((c) => c.id !== id);
   delete app.evaluations[id];
+  delete app.characterIcons[id];
   if (app.selectedId === id) {
     app.selectedId = app.characters[0]?.id ?? null;
     app.sim = null;

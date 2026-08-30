@@ -47,6 +47,7 @@
 
 - 登録キャラ・バフセット・設定のみ。静的データは入れない(この分離が Web/モバイル展開時の差し替え範囲を最小化する)
 - `buff_sets` は名前と `BuffSelection` を持ち、`characters.default_buff_set_id` は「いつものセット」だけを参照する。計算時は `StatSources` とバフ選択を別引数で domain へ渡す
+- `character_icons` は登録キャラごとの任意画像を128×128 PNGのBLOBで持つ。`characters` 削除時にCASCADEし、ゲーム内キャラの静的アイコンやdomainモデルには混ぜない
 - domain の型との変換はここで行う。domain は SQLite を知らない
 
 ### apps/desktop — Tauri シェル
@@ -58,9 +59,11 @@
 フロントエンドの階層(`apps/desktop/src/`):
 
 ```
-main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠
+main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠。
+                       main.ts は値域上限(get_stat_limits)を取り切ってから App を動的 import する
+                       (labels.ts などがモジュール評価時に上限を読むため。フォールバック値は持たない)
 CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線。表示順は端末内設定として保持)
-state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・選択・コンテンツ判定・試し変更 sim)
+state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・カスタム画像data URL・選択・コンテンツ判定・試し変更 sim)
 api/types.ts           Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
 api/commands.ts        invoke ラッパー
 ui/                    画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
@@ -81,7 +84,7 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 - **`pages/home/`**: `HomePage.svelte` — 到達一覧(エリア → コンテンツ、目安バー・バッジ・入場条件ノート)、お気に入り(localStorage)、「次に変えるなら」(候補を `preview_damage` で再計算し、押すと計算タブの試し変更に入る)
 - **`pages/calc/`**: `CalcPage.svelte` — 対象プレート(◀▶ + エリア別一覧)、スキル選択、1発(最大)+ 合計/クリティカル、もし〜だったら、なぜこの数字?(攻撃力の内訳 / 防御を抜く / 倍率で伸ばす。トレースの式から組み立て)/ `TracePanel.svelte` — 詳細トレース。右カラム「計算の材料」= 試し変更(sim)・装備・バフ・調整・コンボ・入場条件
 - **`pages/buffs/`**: セット一覧 → 静的カタログからの選択 → 効果・排他枠要約。独自バフ定義は作らない
-- **`pages/chars/`**: `CharsPage.svelte`(外枠)/ `RegisterPane.svelte`(名前 + 19 職アイコンのみの最小登録・コピー登録)/ `Workspace.svelte`(draft 管理・`preview_effective_stats` の即時プレビュー・保存・いまの実力シート)/ `SourcePane.svelte`(補正源ドリルダウンの編集ペイン)
+- **`pages/chars/`**: `CharsPage.svelte`(外枠)/ `RegisterPane.svelte`(名前 + 19 職アイコンのみの最小登録・コピー登録)/ `Workspace.svelte`(draft 管理・`preview_effective_stats` の即時プレビュー・保存・いまの実力シート)/ `SourcePane.svelte`(補正源ドリルダウンの編集ペイン)。登録後のStatusPaneだけで任意画像を選び、レール・ホーム・現在キャラへ共通反映する
 
 ### tools/scraper — talewiki 取り込み(※未実装)
 
@@ -90,7 +93,7 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 
 ### services/inquiry-worker — 問い合わせの中継(アプリ外)
 
-- アプリの「情報 → 問い合わせ」から送られた内容を GitHub Issue にする Cloudflare Workers
+- アプリ右上の「問い合わせ」から送られた内容を GitHub Issue にする Cloudflare Workers
 - **アプリ本体からは独立している**。ここが落ちても計算・保存は動く(問い合わせが送れないだけ)
 - アプリに秘密を持たせないための中継。GitHub App の秘密鍵は Worker のシークレットにあり、
   アプリ側は認証を持たない。代わりに proof-of-work + IP ハッシュのレート制限で匿名投稿を守る

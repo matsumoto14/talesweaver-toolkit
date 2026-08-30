@@ -74,6 +74,8 @@ pub struct AttackPowerBreakdown {
     pub equipment_base_attack: f64,
     /// 装備の強化能力値(エンチャント + シエナのオーラ + テシスコア)に係数を掛けた分
     pub equipment_enhanced_attack: f64,
+    /// 装備攻撃力(基本 + 強化)。`equipment_base_attack + equipment_enhanced_attack` と一致する
+    pub equipment_attack: f64,
     /// 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)
     pub enhance_rate: f64,
     /// 強化倍率で足される分 `[装備攻撃力/25 × 倍率] × 25`。A − [ステ + 装備] と一致する
@@ -101,6 +103,7 @@ pub fn attack_power_breakdown(
         stat_attack,
         equipment_base_attack,
         equipment_enhanced_attack,
+        equipment_attack,
         enhance_rate,
         enhance_bonus: floor_int(equipment_attack / 25.0 * enhance_rate) * 25,
         value: attack_power(stat_attack, equipment_attack, enhance_rate),

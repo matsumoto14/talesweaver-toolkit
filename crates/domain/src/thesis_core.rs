@@ -192,6 +192,16 @@ pub struct CoreSetBonus {
     pub final_damage_rate: f64,
 }
 
+impl CoreSetBonus {
+    /// 地域をまたいだ合算(`ThesisCoreRegionPreview::set_bonus` の全地域合計に使う)。
+    pub fn add(self, other: CoreSetBonus) -> CoreSetBonus {
+        CoreSetBonus {
+            final_damage_fixed: self.final_damage_fixed + other.final_damage_fixed,
+            final_damage_rate: self.final_damage_rate + other.final_damage_rate,
+        }
+    }
+}
+
 /// 進化段階ごとに成立したセット効果(表示用の内訳)。`CoreSet::set_groups` が返す。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CoreSetGroup {

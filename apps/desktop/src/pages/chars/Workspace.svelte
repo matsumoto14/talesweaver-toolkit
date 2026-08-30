@@ -5,29 +5,28 @@
   import { untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { cubicOut } from "svelte/easing";
-  import { errorLocation, errorMessage, previewEffectiveStats, updateCharacter } from "../../api/commands";
+  import {
+    equipmentElementValues, errorLocation, errorMessage, previewEffectiveStats, resolveCharacterSkillEffects,
+  } from "../../api/commands";
   import type {
-    CommonSkills, Equipment, RegisteredCharacter, SkillDependency,
-    StatPreview, StatSources,
+    CharacterSkillEffectsView, CommonSkills, Element, ElementValues, Equipment, EquipmentPart, PartSlot,
+    RegisteredCharacter, SkillDependency, StatPreview, StatSources,
   } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
-  import { actualDelayPercent, dropForeignSkills } from "../../characterSkills";
+  import { dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload, type Draft } from "../../draft";
   import {
-    randomOptionTotals,
-    equipmentElementValues, equipmentEnchantTotal, randomOptionCount,
-    randomOptionRecordOnlyCount, sienaAttackRatePercent,
-    sienaPartCount, sienaStatTotal, zeroValues,
+    cloneEquipmentPart, randomOptionCount, sienaPartCount, zeroValues,
   } from "../../equipment";
   import { fmtInt, fmtNum } from "../../format";
   import { limits } from "../../limits.svelte";
   import {
     CORE_REGION_LABELS,
-    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS,
-    ULTIMATE_SKILL_LABELS,
+    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, PART_SLOTS, SKILL_DEPENDENCIES,
+    SKILL_DEPENDENCY_LABELS, STAT_KINDS, STAT_LABELS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import type { EquipmentStatKind } from "../../labels";
-  import { app, characterSourceFocus, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, totalContents as totalContentsCount, upsertCharacter } from "../../state.svelte";
+  import { app, characterSourceFocus, enqueueCharacterSave, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, totalContents as totalContentsCount, upsertCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
   import { latest } from "../../ui/latest.svelte";
@@ -55,6 +54,57 @@
   let initialSnapshot = $state(JSON.stringify(buildDraft(initial)));
   let draft = $state<Draft>(buildDraft(initial));
   const dirty = $derived(JSON.stringify(draft) !== initialSnapshot);
+
+  /**
+   * ホームの「今日の強化」タイルは、このワークスペースを開いたままでも同じキャラの
+   * レリック左右・カフスの成長値・エンチャント・神鳥の聖物を直接保存できる
+   * (state.svelte.ts の upsertCharacter 経由)。draft/initialSnapshot は mount 時点の
+   * スナップショットで固定する設計(このファイル冒頭の注記)なので、そのままだと直更新の
+   * 内容が見えず、ここで何か保存すると古い値で上書きしてしまう。
+   *
+   * ホームが直更新しうる対象は「装備部位のどれか」と「stat_sources.sacred_relic のどれか」に
+   * 広がった(武器・鎧の強化Lvだけの頃と違い、部位を個別に列挙する意味が薄い)ので、部位は
+   * 13 部位すべて(PART_SLOTS)、聖物は 7 ステすべてを対象に、**この画面でまだ触っていない
+   * (dirty でない)項目だけ**追随させるという同じ規則を、項目ごとに素直に流す形にした。
+   * 触っている最中の項目は編集内容を優先してそのまま残す(そのケースは稀な衝突として許容し、
+   * 警告は出さない — 触った直後に保存すればホーム側の変更を意図せず巻き戻すが、同じキャラの
+   * 同じ項目をホームとキャラタブの両方で同時に触る状況自体が稀なため)。
+   */
+  $effect(() => {
+    // --- 装備部位(13 部位すべて。武器・鎧の強化Lvもここに乗るので slot は限定しない) ---
+    for (const slot of PART_SLOTS) {
+      const incomingList = character.equipment.parts[slot];
+      const incomingPart = incomingList.registered.find((p) => p.id === incomingList.selected_id);
+      if (!incomingPart) continue;
+      const draftList = draft.equipment.parts[slot];
+      const draftIdx = draftList.registered.findIndex((p) => p.id === draftList.selected_id);
+      if (draftIdx < 0 || draftList.registered[draftIdx].id !== incomingPart.id) continue;
+      const draftPart = draftList.registered[draftIdx];
+      if (JSON.stringify(draftPart) === JSON.stringify(incomingPart)) continue; // 差分なし
+      const baseline = JSON.parse(initialSnapshot) as Draft;
+      const baselineList = baseline.equipment.parts[slot];
+      const baselinePart = baselineList.registered.find((p: EquipmentPart) => p.id === draftPart.id);
+      if (baselinePart && JSON.stringify(baselinePart) !== JSON.stringify(draftPart)) continue; // 編集中は上書きしない
+      draftList.registered[draftIdx] = cloneEquipmentPart(incomingPart);
+      if (baselinePart) {
+        const idx = baselineList.registered.findIndex((p: EquipmentPart) => p.id === incomingPart.id);
+        if (idx >= 0) baselineList.registered[idx] = incomingPart;
+        initialSnapshot = JSON.stringify(baseline);
+      }
+    }
+    // --- 神鳥の聖物(stat_sources.sacred_relic。ステごとに独立して直更新されるので 1 ステずつ見る) ---
+    for (const k of STAT_KINDS) {
+      const incomingValue = character.stat_sources.sacred_relic[k];
+      const draftValue = draft.statSources.sacred_relic[k];
+      if (incomingValue === draftValue) continue; // 差分なし
+      const baseline = JSON.parse(initialSnapshot) as Draft;
+      const baselineValue = baseline.statSources.sacred_relic[k];
+      if (baselineValue !== draftValue) continue; // 編集中は上書きしない
+      draft.statSources.sacred_relic[k] = incomingValue;
+      baseline.statSources.sacred_relic[k] = incomingValue;
+      initialSnapshot = JSON.stringify(baseline);
+    }
+  });
 
   let saving = $state(false);
   const canSubmit = $derived(draft.name.trim().length > 0 && draft.gameCharacterId !== "" && !saving && dirty);
@@ -112,11 +162,27 @@
     return () => previewLatest.cancel();
   });
 
+  // キャラスキル全件ぶんの、選んでいるマスタリーを踏まえた実際の効果(マスタリー解決は Rust 側)。
+  // CharacterSkillPane / ActualDelayPane の効果ラベル表示に使う
+  let resolvedSkillEffects = $state<CharacterSkillEffectsView[]>([]);
+  const skillEffectsLatest = latest({ debounce: 100 });
+  $effect(() => {
+    const masteries = { picked: [...draft.statSources.masteries.picked] };
+    skillEffectsLatest.run((isCurrent) =>
+      resolveCharacterSkillEffects(masteries).then((r) => {
+        if (isCurrent()) resolvedSkillEffects = r;
+      }),
+    );
+    return () => skillEffectsLatest.cancel();
+  });
+
   async function save() {
     if (!canSubmit) return;
     saving = true;
     try {
-      const saved = await updateCharacter(character.id, draftToPayload(draft));
+      // ホームの直更新タイルと同じキューへ通し、キャラ単位で保存を直列化する
+      // (理由は上の HOME_DIRECT_SLOTS の $effect コメント参照)。
+      const saved = await enqueueCharacterSave(character.id, () => draftToPayload(draft));
       initialSnapshot = JSON.stringify(draft);
       upsertCharacter(saved);
     } catch (e) {
@@ -181,7 +247,8 @@
   const enhanceRatePercent = $derived(Math.round((preview?.common_skill.equipment_attack_rate ?? 0) * 100));
   /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号 + ソウルリンク)。計算は Rust 側(preview) */
   const eqBaseTotal = $derived(preview?.equipment_base_total ?? zeroValues());
-  const eqEnchantTotal = $derived(equipmentEnchantTotal(draft.equipment));
+  /** 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分)。計算は Rust 側(preview) */
+  const eqEnchantTotal = $derived(preview?.equipment_enhanced_total ?? zeroValues());
   /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの要約に出す。 */
   const equipmentAttackKindsFor = (dependency: SkillDependency | null): EquipmentStatKind[] => {
     if (dependency === "hack_int") return ["slash", "magic_attack"];
@@ -201,25 +268,58 @@
     );
   });
   const sienaParts = $derived(sienaPartCount(draft.equipment));
-  const sienaRate = $derived(sienaAttackRatePercent(draft.equipment));
-  const sienaStats = $derived(sienaStatTotal(draft.equipment));
+  /** シエナのオーラの攻撃力増加(New1)の合計 %。計算は Rust 側(preview) */
+  const sienaRate = $derived(Math.round((preview?.siena_attack_rate ?? 0) * 100));
+  /** シエナのオーラのステ加算(能力値スロット + 全ステ増加)の 7 ステ合計。計算は Rust 側(preview) */
+  const sienaStats = $derived(preview?.siena_stat_total ?? 0);
   // テシスコアの結果(合計とセット効果)は**編集する場所ではなく結果の場所**に出す。
   // 6 枠の入力エリアに置くと、その分だけ触る場所が下がる(§00 02)。
   // 計算は Rust 側(preview.thesis_cores)。セット効果は地域ごとに発動して足される
   const coreBestTotal = $derived(Math.max(0, ...(preview?.thesis_cores.map((r) => r.total_bonus) ?? [])));
   const coreRegionRows = $derived((preview?.thesis_cores ?? []).filter((r) => r.total_bonus > 0));
   const coreSetTotalLabel = $derived.by(() => {
-    const fixed = coreRegionRows.reduce((n, r) => n + r.set_bonus.final_damage_fixed, 0);
-    const rate = coreRegionRows.reduce((n, r) => n + r.set_bonus.final_damage_rate, 0);
+    const { final_damage_fixed: fixed, final_damage_rate: rate } = preview?.thesis_core_set_bonus_total ?? { final_damage_fixed: 0, final_damage_rate: 0 };
     const parts: string[] = [];
     if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
     if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
     return parts.length === 0 ? "未発動" : parts.join(" と ");
   });
   const roCount = $derived(randomOptionCount(draft.equipment));
-  const roRecordOnly = $derived(randomOptionRecordOnlyCount(draft.equipment, app.randomOptions));
-  /** ランダムOP の効き先ごとの合計(結果の置き場所)。同系統は足して 1 行にする */
-  const roTotals = $derived(randomOptionTotals(draft.equipment, app.randomOptions));
+  const roRecordOnly = $derived(preview?.random_option_totals.record_only_count ?? 0);
+  /**
+   * ランダムOP の効き先ごとの合計(結果の置き場所)。同系統は足して 1 行にする。
+   * 集計は Rust 側(preview.random_option_totals)。ここは効き先の日本語ラベルへの対応づけだけ
+   */
+  const pct = (v: number) => Number((v * 100).toFixed(2));
+  const roTotals = $derived.by<{ label: string; value: string }[]>(() => {
+    const t = preview?.random_option_totals;
+    if (!t) return [];
+    const rows: { label: string; value: string }[] = [];
+    const addPercent = (label: string, v: number) => {
+      if (v === 0) return;
+      const n = pct(v);
+      rows.push({ label, value: `${n > 0 ? "+" : ""}${n}%` });
+    };
+    const addPoint = (label: string, v: number) => {
+      if (v === 0) return;
+      rows.push({ label, value: `${v > 0 ? "+" : ""}${v}` });
+    };
+    for (const dep of SKILL_DEPENDENCIES) {
+      addPercent(`与ダメージ増加(${SKILL_DEPENDENCY_LABELS[dep]})`, t.dependency_damage_rate[dep]);
+    }
+    addPercent("攻撃ダメージ増加", t.attack_damage_rate);
+    addPercent("割合追加ダメージ", t.added_damage_rate);
+    addPercent("割合追加ダメージ(物理依存)", t.physical_added_damage_rate);
+    addPercent("割合追加ダメージ(魔法依存)", t.magic_added_damage_rate);
+    addPercent("ダメージ増幅(物理依存)", t.physical_damage_amplify);
+    addPercent("ダメージ増幅(魔法依存)", t.magic_damage_amplify);
+    addPoint("命中P", t.accuracy_point);
+    addPoint("回避P", t.evasion_point);
+    if (t.actual_delay_reduction !== 0) {
+      rows.push({ label: "中ディレイ", value: `−${pct(t.actual_delay_reduction)}%` });
+    }
+    return rows;
+  });
   const NEUTRAL = "未設定(中立値で計算)";
 
   // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラスキルのぶんだけ。
@@ -227,7 +327,8 @@
   const delaySummary = $derived.by(() => {
     const ids = draft.statSources.character_skills.skill_ids;
     if (ids.length === 0) return NEUTRAL;
-    const percent = actualDelayPercent(ids, app.characterSkills, draft.statSources.masteries.picked);
+    // 供給源別の内訳(preview.character_skill_actual_delay)は Rust 側で解決済み。ここは合計するだけ
+    const percent = pct((preview?.character_skill_actual_delay ?? []).reduce((sum, c) => sum + c.rate, 0));
     if (percent === 0) return `${ids.length} 件`;
     return `${ids.length} 件 ・ 合計 −${percent}%`;
   });
@@ -283,8 +384,7 @@
   const titleSummary = $derived.by(() => {
     const t = app.titles.find((x) => x.id === draft.equipment.title);
     if (!t) return NEUTRAL;
-    const total = EQUIPMENT_STAT_KINDS.reduce((n, k) => n + t.values[k], 0);
-    const parts = [`合計 +${fmtInt(total)}`];
+    const parts = [`合計 +${fmtInt(t.equipment_value_total)}`];
     if (t.attack_damage_percent > 0) parts.unshift(`ダメ +${t.attack_damage_percent}%`);
     return `${t.name}(${parts.join(" ・ ")})`;
   });
@@ -295,14 +395,28 @@
     return first !== null && picked.every((element) => element === first) ? first : null;
   });
 
+  /** 装備の属性強化の合計(部位ごとに +9)。計算は Rust 側(Equipment::element_values) */
+  let equipmentElementTotals = $state<ElementValues | null>(null);
+  const elementLatest = latest({ debounce: 100 });
+  $effect(() => {
+    const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
+    const element = selectedEquipmentElement;
+    elementLatest.run((isCurrent) =>
+      equipmentElementValues(equipment, element)
+        .then((v) => { if (isCurrent()) equipmentElementTotals = v; })
+        .catch(() => { if (isCurrent()) equipmentElementTotals = null; }),
+    );
+    return () => elementLatest.cancel();
+  });
+
   // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
   const elementSummary = $derived.by(() => {
-    const values = equipmentElementValues(draft.equipment, selectedEquipmentElement);
+    const values = { ...equipmentElementTotals } as Record<Element, number>;
     for (const def of app.elementSources) {
       const element = draft.statSources.elements[def.id];
-      if (element) values[element] += def.value;
+      if (element) values[element] = (values[element] ?? 0) + def.value;
     }
-    const parts = ELEMENTS.filter((e) => values[e] > 0).map((e) => `${ELEMENT_LABELS[e]}${values[e]}`);
+    const parts = ELEMENTS.filter((e) => (values[e] ?? 0) > 0).map((e) => `${ELEMENT_LABELS[e]}${values[e]}`);
     return parts.length === 0 ? NEUTRAL : parts.join(" / ");
   });
 
@@ -673,10 +787,12 @@
 
     <section class="detail">
       <SourcePane
+        characterId={character.id}
         {draft}
         {preview}
         {previewError}
         {skills}
+        {resolvedSkillEffects}
         sourceId={openSource}
         onOpenSource={(id) => (openSource = id)}
       />
@@ -802,9 +918,10 @@
           </table>
           <p class="dim tiny">
             {#if mainSkill}攻撃補正は「{mainSkill.name}」に使う値だけ表示しています。{/if}
-            強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も入っています。
-            強化のうちテシスコア・シエナのオーラの分はこの表に入りません
-            (それぞれの補正源で入力した分が計算時に強化能力値へ合流します)。
+            強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も、
+            強化にはシエナのオーラ(武器/盾)の分も入っています。
+            強化のうちテシスコアの分だけこの表に入りません
+            (対象地域を選ぶダメージ計算タブでのみ強化能力値へ合流します)。
           </p>
         </div>
         <div class="sheet-card">

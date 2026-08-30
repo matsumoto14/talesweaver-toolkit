@@ -1,11 +1,11 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, BuffSelection, BuffSet, CategoryTrace, CharacterSkillDef, ComboSkillType, CommonSkills, DamageResult, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
-  NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, BuffSelection, BuffSet, CategoryTrace, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
+  Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
-  TitleDef, ValidationLocation,
+  TitleDef, UpgradeCandidate, ValidationLocation,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -26,12 +26,24 @@ export const listElementSources = () => invoke<ElementSourceDef[]>("list_element
 /** 属性値の内訳(キャラ基礎 / 装備 / 供給源 / 合計)。保存前のキャラデータで出す */
 export const previewElements = (character: NewCharacter) =>
   invoke<ElementPreview>("preview_elements", { character });
+/** 装備の属性強化の合計(部位ごとに +9)。対象属性は呼び出し側が決める */
+export const equipmentElementValues = (equipment: Equipment, element: Element | null) =>
+  invoke<ElementValues>("equipment_element_values", { equipment, element });
 export const listCharacters = () => invoke<RegisteredCharacter[]>("list_characters");
 export const createCharacter = (character: NewCharacter) =>
   invoke<RegisteredCharacter>("create_character", { character });
 export const updateCharacter = (id: number, character: NewCharacter) =>
   invoke<RegisteredCharacter>("update_character", { id, character });
 export const deleteCharacter = (id: number) => invoke<void>("delete_character", { id });
+export const listCharacterIcons = () => invoke<CharacterIcon[]>("list_character_icons");
+export const setCharacterIcon = (characterId: number, source: Uint8Array) =>
+  invoke<CharacterIcon>("set_character_icon", { characterId, source: Array.from(source) });
+export const resetCharacterIcon = (characterId: number) =>
+  invoke<void>("reset_character_icon", { characterId });
+export const getDamageSnapshot = (characterId: number) =>
+  invoke<DamageSnapshot | null>("get_damage_snapshot", { characterId });
+export const setDamageSnapshot = (characterId: number, skillId: string, contentId: string, perHit: number) =>
+  invoke<DamageSnapshot>("set_damage_snapshot", { characterId, skillId, contentId, perHit });
 /**
  * 保存しない試算。draft の base_stats/stat_sources/equipment から最終能力値と寄与内訳を得る。
  * `mainSkillId`(主軸スキル)を渡すとその依存種別で攻撃力(A)も返る。null なら攻撃力は出ない。
@@ -66,6 +78,9 @@ export const listTitles = () => invoke<TitleDef[]>("list_titles");
 /** キャラスキルのカタログ(パッシブ・自己バフ・味方バフ)。味方スキルは誰でも ON にできる */
 export const listCharacterSkills = () =>
   invoke<CharacterSkillDef[]>("list_character_skills");
+/** キャラスキル全件ぶんの、選んでいるマスタリーを踏まえた実際の効果(マスタリー解決は Rust 側) */
+export const resolveCharacterSkillEffects = (masteries: Masteries) =>
+  invoke<CharacterSkillEffectsView[]>("resolve_character_skill_effects", { masteries });
 
 /** 情報パネルに出すアプリ情報(版・保存先) */
 export const getAppInfo = () => invoke<AppInfo>("get_app_info");
@@ -108,3 +123,15 @@ export const evaluateContents = (character: NewCharacter, dependencySkillId?: st
     dependencySkillId: dependencySkillId ?? null,
     buffs,
   });
+/**
+ * 「次に変えるなら / おすすめ強化」候補を 1 回の IPC でまとめて試算する。
+ * 列挙・並び順(届かせるなら正直に・+0 除外)は Rust 側(domain::candidate)。
+ */
+export const listUpgradeCandidates = (
+  character: NewCharacter, skillId: string, contentId: string, comboCount = 0,
+  comboSkillType: ComboSkillType | null = null,
+  temporaryAdjustments: Adjustments | null = null,
+  buffs: BuffSelection = { choices: [] },
+) => invoke<UpgradeCandidate[]>("list_upgrade_candidates", {
+  character, buffs, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments,
+});

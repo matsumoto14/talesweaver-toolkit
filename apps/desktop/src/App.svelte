@@ -4,9 +4,9 @@
   import { onMount } from "svelte";
   import brandLogo from "./assets/brand/tw-context-logo.png";
   import AboutPanel from "./AboutPanel.svelte";
+  import InquiryPanel from "./InquiryPanel.svelte";
   import { errorMessage, getStartupNotice } from "./api/commands";
   import CharacterRail from "./CharacterRail.svelte";
-  import { loadStatLimits } from "./limits.svelte";
   import CalcPage from "./pages/calc/CalcPage.svelte";
   import BuffsPage from "./pages/buffs/BuffsPage.svelte";
   import CharsPage from "./pages/chars/CharsPage.svelte";
@@ -36,9 +36,9 @@
   );
 
   let aboutOpen = $state(false);
+  let inquiryOpen = $state(false);
 
   onMount(() => {
-    loadStatLimits().catch((e) => reportError(errorMessage(e)));
     void loadAll();
     // バックアップからの復元など、読み飛ばされては困る事実は自動で消さない帯に出す。
     getStartupNotice()
@@ -67,14 +67,20 @@
         <span>試し変更中 — 保存されていません</span>
       </div>
     {/if}
-    <button
-      type="button"
-      class="about-open"
-      class:pushed={app.sim === null}
-      onclick={() => (aboutOpen = true)}
-      aria-label="情報"
-      title="このアプリについて"
-    >i</button>
+    <div class="utility-actions" class:pushed={app.sim === null}>
+      <button
+        type="button"
+        class="utility-open"
+        onclick={() => (aboutOpen = true)}
+        aria-label="インフォメーション"
+        title="このアプリについて"
+      ><span aria-hidden="true">i</span>インフォメーション</button>
+      <button
+        type="button"
+        class="utility-open"
+        onclick={() => (inquiryOpen = true)}
+      ><span aria-hidden="true">?</span>問い合わせ</button>
+    </div>
   </header>
 
   {#if toast.message}
@@ -95,6 +101,9 @@
 
   {#if aboutOpen}
     <AboutPanel onClose={() => (aboutOpen = false)} />
+  {/if}
+  {#if inquiryOpen}
+    <InquiryPanel onClose={() => (inquiryOpen = false)} />
   {/if}
 
   <div class="body" style="grid-template-columns: {gridTemplateColumns};">
@@ -153,15 +162,22 @@
   }
   .sim-note .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sim); }
 
-  /* 情報。sim-note が出ていないときだけ自分で右端へ寄る(出ている間は隣に並ぶ) */
-  .about-open {
-    width: 22px; height: 22px; flex-shrink: 0;
-    border-radius: 50%; border: 1px solid var(--sel-bd);
+  /* 補助導線。名前を併記し、情報と問い合わせを押す前から区別できるようにする。 */
+  .utility-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .utility-actions.pushed { margin-left: auto; }
+  .utility-open {
+    height: 26px; padding: 0 9px 0 6px;
+    display: flex; align-items: center; gap: 5px;
+    border-radius: var(--r-pill); border: 1px solid var(--sel-bd);
     background: rgba(255, 255, 255, 0.7); color: var(--fg-muted);
-    font-size: 11px; font-weight: var(--w-strong); font-style: italic; line-height: 1;
+    font-size: var(--t-label); font-weight: var(--w-strong); line-height: 1; white-space: nowrap;
   }
-  .about-open.pushed { margin-left: auto; }
-  .about-open:hover { background: #fff; color: var(--accent); }
+  .utility-open span {
+    width: 16px; height: 16px; display: grid; place-items: center;
+    border-radius: 50%; background: var(--bg-panel); border: 1px solid var(--border-soft);
+    font-family: var(--font-num); font-size: 9px; font-weight: var(--w-strong);
+  }
+  .utility-open:hover { background: #fff; color: var(--accent); }
 
   .toast {
     position: absolute; top: 58px; left: 16px; right: 16px; z-index: 50;

@@ -3,17 +3,17 @@
   // 右カラムは「計算の材料」(試し変更・バフ・入場条件)。計算はすべて Rust 側(preview_damage)。
   import { untrack } from "svelte";
   import {
-    errorMessage, evaluateContents, listSkills, previewDamage, previewDefense, updateCharacter,
+    errorMessage, evaluateContents, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
   } from "../../api/commands";
   import type {
     Adjustments, BuffChoice, BuffDefinition, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
-    DamageResult, DefenseProfile, FormulaStep, NewCharacter, Skill, StatKind,
+    DamageResult, DefenseProfile, FormulaStep, NewCharacter, Skill, StatKind, UpgradeCandidate,
   } from "../../api/types";
   import {
     isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
     toggleBuff, userInputRange,
   } from "../../buffs";
-  import { candidatesFor, COST_COLORS, tryCandidates, type Candidate } from "../../candidates";
+  import { COST_COLORS, COST_LABELS } from "../../candidates";
   import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import {
@@ -21,7 +21,8 @@
   } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
-    app, flatContents, payloadOf, selectedCharacter, totalContents as totalContentsCount, upsertCharacter,
+    app, enqueueCharacterSave, flatContents, payloadOf, selectedCharacter, totalContents as totalContentsCount,
+    upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
@@ -35,13 +36,13 @@
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
+  import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
 
   const DEFAULT_RIGHT_WIDTH = 380;
 
-  const COMBO_THRESHOLD = 3;
   const COMBO_SKILL_TYPE_OPTIONS = [
     { value: "general", label: "一般" },
     { value: "instant", label: "瞬撃" },
@@ -149,7 +150,7 @@
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
     const temp = JSON.parse(JSON.stringify(temporaryAdjustments)) as Adjustments;
     const contentId = target.content.id;
-    const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const selectedSkillId = skillId;
     const comboType = selectedComboSkillType;
     const buffs = JSON.parse(JSON.stringify(app.calcBuffs));
@@ -167,14 +168,7 @@
         .then((rs) => {
           if (!isCurrent()) return;
           skillTotals = Object.fromEntries(
-            rs.map(([id, r]) => {
-              // 各スキル自身の critical_chance で判定する(主役のクリモードを流用しない)
-              const rCrit = r.critical_chance > 0;
-              return [
-                id,
-                { perHit: rCrit ? r.per_hit.critical : r.per_hit.max, total: rCrit ? r.total.critical : r.total.max },
-              ];
-            }),
+            rs.map(([id, r]) => [id, { perHit: r.per_hit_primary, total: r.total_primary }]),
           );
         })
         .catch((e) => reportError(errorMessage(e))),
@@ -212,7 +206,7 @@
     const sp = savedPayload;
     const t = target;
     const sid = skillId;
-    const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const comboType = selectedComboSkillType;
     const simActive = app.sim !== null;
     const tempJson = JSON.stringify(temporaryAdjustments);
@@ -277,15 +271,15 @@
   const clearCount = $derived(evals.filter((e) => e.clear).length);
 
   // --- 表示値 -------------------------------------------------------------
-  // クリティカルが出る前提を主役の値にする(ユーザー判断 2026-08-29)。
-  // critical_chance は Rust 側で 0..1 に正規化済み(wiki 未記載は 1.0 = 確定扱い)なので、
-  // 0 のときだけ非クリティカルを主役にする。
+  // 主役の値の選び方(クリ発生率 > 0 ならクリティカル、0 なら非クリ最大)は Rust 側
+  // (DamageTriple::primary)に一元化済み。ここは per_hit_primary / total_primary を読むだけ。
+  // critMode はトレースの段・内訳表示の切替(表示都合)にだけ使う。
   const critMode = $derived((result?.critical_chance ?? 0) > 0);
   const pick = <T extends { max: number; critical: number }>(t: T | null | undefined): number | null =>
     t ? (critMode ? t.critical : t.max) : null;
-  const perHit = $derived(pick(result?.per_hit));
-  const savedPerHit = $derived(pick(savedResult?.per_hit));
-  const totalValue = $derived(pick(result?.total));
+  const perHit = $derived(result?.per_hit_primary ?? null);
+  const savedPerHit = $derived(savedResult?.per_hit_primary ?? null);
+  const totalValue = $derived(result?.total_primary ?? null);
   const dpsValue = $derived(pick(result?.dps));
   const deltaPct = $derived(
     perHit !== null && savedPerHit !== null && savedPerHit > 0
@@ -322,7 +316,7 @@
     if (atk === null) return [];
     const raw = [
       { k: "ステ攻撃力", v: atk.stat_attack, c: "var(--flow-base)", note: "素ステ・補正源から" },
-      { k: "装備攻撃力", v: atk.equipment_base_attack + atk.equipment_enhanced_attack, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
+      { k: "装備攻撃力", v: atk.equipment_attack, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
       { k: "装備攻撃力強化倍率", v: atk.enhance_bonus, c: "var(--flow-2)", note: "パワーW・ストロングW" },
     ].filter((x) => x.v > 0);
     const total = raw.reduce((a, x) => a + x.v, 0) || 1;
@@ -651,37 +645,36 @@
         sub: `上限で −${fmtInt(r.capped_loss.max)}`,
       });
     }
-    return { mult: flowMultLabel, delta: perHit - pierced, to: perHit, mats, idle: 0, expr: null };
+    return {
+      mult: flowMultLabel,
+      delta: perHit - pierced,
+      to: perHit,
+      mats,
+      idle: 0,
+      expr: "ゲームの表記ダメージ(スキル分のみ)。武器強化の追加固定ダメージは含まない(合計の内訳を見る)",
+    };
   });
-  /** クリ率の段階表示(6 段)。design-system の状態色の段に収める(新しい色は作らない)。 */
-  const CRIT_CHANCE_STAGES: { max: number; label: string; state: import("../../ui/states").StateKey }[] = [
-    { max: 0, label: "出ない", state: "unknown" },
-    { max: 25, label: "まれ", state: "short" },
-    { max: 50, label: "ときどき", state: "edge" },
-    { max: 75, label: "半分以上", state: "edge" },
-    { max: 100, label: "ほぼ確定", state: "met" },
-    { max: Infinity, label: "確定", state: "goal" },
-  ];
-  const critChanceStage = (p: number) => {
-    if (p <= 0) return CRIT_CHANCE_STAGES[0];
-    if (p < 25) return CRIT_CHANCE_STAGES[1];
-    if (p < 50) return CRIT_CHANCE_STAGES[2];
-    if (p < 75) return CRIT_CHANCE_STAGES[3];
-    if (p < 100) return CRIT_CHANCE_STAGES[4];
-    return CRIT_CHANCE_STAGES[5];
-  };
-  /** 鎖「合計」: 1 発 × 段数 ＋ 割合追加ダメージ。クリ率は段階表示で読む */
+  /** 鎖「合計」: (1 発 × 段数) ＋ (武器強化の追加固定 × 段数) ＋ 割合追加ダメージ。クリ率は段階表示で読む */
   const totalDetail = $derived.by<Detail | null>(() => {
     const r = result;
     if (r === null || perHit === null || totalValue === null) return null;
     const added = pick(r.added_damage) ?? 0;
+    const skillTotal = pick(r.skill_total) ?? 0;
     const mats: Mat[] = [
       {
-        label: `1 発 ${fmtInt(perHit)} × ${r.hit_count} 段`,
+        label: `1 発(表記ダメージ) ${fmtInt(perHit)} × ${r.hit_count} 段`,
         mult: `×${r.hit_count}`,
-        value: fmtInt(totalValue - added),
+        value: fmtInt(skillTotal),
       },
     ];
+    if (r.weapon_added_per_hit !== 0) {
+      mats.push({
+        label: `武器強化(追加固定) ${fmtInt(r.weapon_added_per_hit)} × ${r.hit_count} 段`,
+        mult: `×${r.hit_count}`,
+        value: fmtInt(r.weapon_added_total),
+        sub: "上限なし・表記ダメージとは別枠",
+      });
+    }
     if (added !== 0) {
       mats.push({
         label: "割合追加ダメージ(合計に乗る)",
@@ -724,17 +717,17 @@
       mats.push({ label: `↳ ${c.source}`, value: `−${(c.rate * 100).toFixed(0)}%` });
     }
     mats.push({
-      label: "中ディレイ減少(上限 70%)",
+      label: `中ディレイ減少(上限 ${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
       value: `${(d.reduction * 100).toFixed(0)}%`,
       sub: d.reduction_raw > d.reduction ? `選択中は ${(d.reduction_raw * 100).toFixed(0)}%` : undefined,
     });
     if (d.combo_rate < 1) {
-      mats.push({ label: `コンボ(倍率A・${COMBO_THRESHOLD} コンボ以上)`, mult: `×${fmtNum(d.combo_rate)}`, value: "" });
+      mats.push({ label: `コンボ(倍率A・${limits.combo_bonus_threshold} コンボ以上)`, mult: `×${fmtNum(d.combo_rate)}`, value: "" });
     }
     mats.push({
       label: "中ディレイ",
       value: `${d.value.toFixed(2)}s`,
-      sub: d.floored ? "下限 0.3s で頭打ち" : undefined,
+      sub: d.floored ? `下限 ${limits.actual_delay_min.toFixed(1)}s で頭打ち` : undefined,
     });
     mats.push({
       label: "スキル回数",
@@ -835,12 +828,12 @@
         }
       }
     }
-    // 中ディレイ。減少値の上限(70%)と秒そのものの下限(0.3s)は別の捨て方なので分けて出す
+    // 中ディレイ。減少値の上限と秒そのものの下限は別の捨て方なので分けて出す
     const ad = result?.actual_delay ?? null;
     if (ad !== null) {
       if (ad.reduction_raw > ad.reduction + 1e-9) {
         out.push({
-          k: "中ディレイ減少の上限(70%)",
+          k: `中ディレイ減少の上限(${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
           raw: `${(ad.reduction_raw * 100).toFixed(0)}%`,
           val: `${(ad.reduction * 100).toFixed(0)}%`,
           loss: `${((ad.reduction_raw - ad.reduction) * 100).toFixed(0)}%`,
@@ -850,7 +843,7 @@
       if (ad.floored) {
         const want = ad.raw;
         out.push({
-          k: "中ディレイの下限(0.3s)",
+          k: `中ディレイの下限(${limits.actual_delay_min.toFixed(1)}s)`,
           raw: `${want.toFixed(2)}s`,
           val: `${ad.value.toFixed(2)}s`,
           loss: `${(ad.value - want).toFixed(2)}s ぶん遅い`,
@@ -922,7 +915,11 @@
     if (!character || !app.sim) return;
     saving = true;
     try {
-      const saved = await updateCharacter(character.id, JSON.parse(JSON.stringify(app.sim)));
+      // 試し変更の保存もキャラ単位の保存キューへ通す(ホームの直更新・キャラタブの保存と
+      // 同じ full-overwrite なので、直列化しないと互いの変更を巻き戻す)。payload はユーザーが
+      // 明示した試し変更のスナップショットなので、ここで確定させてからキューに載せる。
+      const payload = JSON.parse(JSON.stringify(app.sim)) as NewCharacter;
+      const saved = await enqueueCharacterSave(character.id, () => payload);
       upsertCharacter(saved);
       app.sim = null;
     } catch (e) {
@@ -1043,48 +1040,34 @@
   }
 
   // --- もし〜だったら ------------------------------------------------------
-  interface WhatIf {
-    candidate: Candidate;
-    perHit: number;
-    deltaPct: number;
-  }
-  let whatIf = $state<WhatIf[]>([]);
+  // 列挙・試算・並び順(+0 除外)は list_upgrade_candidates(Rust 側 domain::candidate)。
+  // コンボ・一時調整は「この一発」表示と同条件(現在のコンボ・一時調整)で試算する。
+  let whatIf = $state<UpgradeCandidate[]>([]);
   /** 押した候補は、移動先の差分チップと同時に短く退出させる(§10「移った」)。 */
   let leavingWhatIfId = $state<string | null>(null);
-  /** 試した候補の数。0 件のときに「候補が無い」のか「超えるものが無い」のかを書き分ける */
-  let whatIfTried = $state(0);
   const whatIfLatest = latest({ debounce: 250 });
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null;
-    const tempJson = JSON.stringify(temporaryAdjustments);
     const t = target;
     const sid = skillId;
     const base = perHit;
-    const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const comboType = selectedComboSkillType;
+    const tempJson = JSON.stringify(temporaryAdjustments);
     const buffsJson = JSON.stringify(app.calcBuffs);
     if (!pJson || !t || !sid || base === null) {
       whatIfLatest.cancel();
       whatIf = [];
-      whatIfTried = 0;
       return;
     }
     whatIfLatest.run(async (isCurrent) => {
       try {
         const current = JSON.parse(pJson) as NewCharacter;
-        const list = candidatesFor(current, app.equipmentCatalog);
-        const rs = await tryCandidates(
-          list,
-          () => JSON.parse(pJson) as NewCharacter,
-          (p) => previewDamage(
-            p, sid, t.content.id, comboCount, JSON.parse(tempJson), comboType, JSON.parse(buffsJson),
-          ),
-          base,
-          (w) => w.perHit > base,
+        const rs = await listUpgradeCandidates(
+          current, sid, t.content.id, comboCount, comboType, JSON.parse(tempJson), JSON.parse(buffsJson),
         );
         if (isCurrent()) {
           whatIf = rs;
-          whatIfTried = list.length;
           leavingWhatIfId = null;
         }
       } catch (e) {
@@ -1093,9 +1076,15 @@
     });
     return () => whatIfLatest.cancel();
   });
-  function applyWhatIf(w: WhatIf) {
-    leavingWhatIfId = w.candidate.id;
-    editSim((p) => w.candidate.apply(p));
+  function applyWhatIf(w: UpgradeCandidate) {
+    leavingWhatIfId = w.id;
+    // editSim と同じ SIM_LIMIT ガード(w.applied は列挙時点の payload + 候補 1 件ぶんの変更)
+    if (savedPayload !== null && KNOBS.filter((k) => k.get(w.applied) !== k.get(savedPayload)).length > SIM_LIMIT) {
+      simLimited = true;
+      return;
+    }
+    simLimited = false;
+    app.sim = w.applied;
   }
 
   // --- 右カラム: バフ・装備の編集(試し変更として) -------------------------
@@ -1295,7 +1284,7 @@
                     <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
                     {#if cov !== null}<span class="coverage">{cov}</span>{/if}
                     <span class="pop-name">{c.name}</span>
-                    <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_max) : "—"}</span>
+                    <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_primary) : "—"}</span>
                   </button>
                 {/each}
               {/each}
@@ -1481,10 +1470,10 @@
                 {#if d.fixed}
                   ×(固定・減少が効かない)
                 {:else if d.reduction > 0}
-                  × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 70%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
+                  × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 {Math.round(limits.actual_delay_reduction_max * 100)}%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
                 {/if}
-                {#if d.combo_rate < 1}× 0.5(2 コンボ以上){/if}
-                = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 0.3s</span>{/if}
+                {#if d.combo_rate < 1}× {fmtNum(d.combo_rate)}(中ディレイ減少 {limits.combo_delay_threshold} コンボ以上){/if}
+                = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 {limits.actual_delay_min.toFixed(1)}s</span>{/if}
                 {#if d.contributions.length > 0}
                   ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
                 {/if}
@@ -1527,27 +1516,23 @@
           </div>
           <div class="panel-body">
             {#if whatIf.length === 0}
-              <p class="wi-empty dim">
-                {whatIfTried === 0
-                  ? "いま変えられる場所がありません。共通スキル・エンチャントはすでに上限です。"
-                  : `${whatIfTried} 件ためしましたが、どれもいまの数字を超えませんでした。`}
-              </p>
+              <p class="wi-empty dim">いま変えられる場所がありません。共通スキル・エンチャント・強化・オーラはすでに上限です。</p>
             {/if}
-            {#each whatIf as w (w.candidate.id)}
+            {#each whatIf as w (w.id)}
               <button
                 type="button"
                 class="whatif"
-                class:whatif-leaving={leavingWhatIfId === w.candidate.id}
-                disabled={leavingWhatIfId === w.candidate.id}
+                class:whatif-leaving={leavingWhatIfId === w.id}
+                disabled={leavingWhatIfId === w.id}
                 onclick={() => applyWhatIf(w)}
               >
                 <span class="wi-main">
-                  <span class="wi-label">{w.candidate.label}</span>
-                  <span class="cost" style={triadStyle(COST_COLORS[w.candidate.cost])}>{w.candidate.cost}</span>
+                  <span class="wi-label">{w.label}</span>
+                  <span class="cost" style={triadStyle(COST_COLORS[w.cost])}>{COST_LABELS[w.cost]}</span>
                 </span>
                 <span class="wi-nums">
-                  <span class="num wi-pct">+{w.deltaPct}%</span>
-                  <span class="num dim">{fmtInt(w.perHit)}</span>
+                  <span class="num wi-pct">{w.delta_pct > 0 ? "+" : ""}{w.delta_pct}%</span>
+                  <span class="num dim">{fmtInt(w.per_hit_primary)}</span>
                 </span>
               </button>
             {/each}
@@ -1946,7 +1931,7 @@
         <!-- コンボ -->
         <div class="combo">
           <CheckChip checked={combo} onCheckedChange={(v) => (combo = v)}>
-            <span>{COMBO_THRESHOLD} コンボ以上(+15%)</span>
+            <span>{limits.combo_bonus_threshold} コンボ以上(ダメージ +{Math.round(limits.combo_bonus_rate * 100)}%)</span>
           </CheckChip>
         </div>
 

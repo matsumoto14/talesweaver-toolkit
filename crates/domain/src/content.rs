@@ -39,7 +39,9 @@ pub enum ContentRequirement {
     AwakeningStage(u8),
     /// エタの意志 Lv がこの値以上
     EternalLevel(u8),
-    /// 装備補正(基本能力値)。比較先は判定に使うスキルの依存種別で選ぶ:
+    /// 装備補正。判定値は基本能力値+強化能力値(エンチャント・シエナのオーラ)で、
+    /// テシスコアの能力値増加は対象ダンジョン内限定のため含めない。
+    /// 比較先は判定に使うスキルの依存種別で選ぶ:
     /// Stab/Hack/Int → `single` を 突き/斬り/魔攻 と比較、Mr → `mr` を 魔防 と比較、
     /// StabHack/HackInt → `composite` を 突き+斬り / 斬り+魔攻 と比較。
     /// 値 0 は「その系統の条件なし」(チェックを生成しない)。
@@ -63,12 +65,12 @@ pub struct RequirementCheck {
 }
 
 impl ContentRequirement {
-    /// `equipment_base` は `Equipment::base_totals` で集計済みの基本能力値。
+    /// `equipment` は基本能力値+強化能力値(テシスコア除く)の集計済み合計。
     /// `dependency` は判定に使うスキルの依存種別(スキル未収録キャラは None)。
     /// `thesis_core_total` はこのコンテンツの地域で効くテシスコアの火力補正合計。
     pub fn check(
         &self,
-        equipment_base: &EquipmentValues,
+        equipment: &EquipmentValues,
         awakening: Awakening,
         dependency: Option<SkillDependency>,
         thesis_core_total: i64,
@@ -88,20 +90,20 @@ impl ContentRequirement {
                 composite,
             } => match dependency {
                 None => ("装備補正(スキル未収録のため判定不可)", 0, single),
-                Some(SkillDependency::Stab) => ("装備 突き(基本)", equipment_base.thrust, single),
-                Some(SkillDependency::Hack) => ("装備 斬り(基本)", equipment_base.slash, single),
+                Some(SkillDependency::Stab) => ("装備 突き", equipment.thrust, single),
+                Some(SkillDependency::Hack) => ("装備 斬り", equipment.slash, single),
                 Some(SkillDependency::Int) => {
-                    ("装備 魔攻(基本)", equipment_base.magic_attack, single)
+                    ("装備 魔攻", equipment.magic_attack, single)
                 }
-                Some(SkillDependency::Mr) => ("装備 魔防(基本)", equipment_base.magic_defense, mr),
+                Some(SkillDependency::Mr) => ("装備 魔防", equipment.magic_defense, mr),
                 Some(SkillDependency::StabHack) => (
-                    "装備 突き+斬り(基本)",
-                    equipment_base.thrust + equipment_base.slash,
+                    "装備 突き+斬り",
+                    equipment.thrust + equipment.slash,
                     composite,
                 ),
                 Some(SkillDependency::HackInt) => (
-                    "装備 斬り+魔攻(基本)",
-                    equipment_base.slash + equipment_base.magic_attack,
+                    "装備 斬り+魔攻",
+                    equipment.slash + equipment.magic_attack,
                     composite,
                 ),
             },
@@ -163,10 +165,11 @@ pub struct ContentArea {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BestSkillDamage {
     pub skill_id: String,
-    /// 1 ヒット(最大)
-    pub per_hit_max: i64,
-    /// 合計(最大)= 1 ヒット × 段数
-    pub total_max: i64,
+    /// 1 ヒットの主役値(`DamageTriple::primary`。クリ発生率 > 0 ならクリティカル、
+    /// 0 なら非クリ最大。ユーザー判断 2026-08-29)
+    pub per_hit_primary: i64,
+    /// 合計の主役値 = 1 ヒットの主役値 × 段数
+    pub total_primary: i64,
 }
 
 /// コンテンツ 1 件の判定結果。
@@ -191,7 +194,7 @@ pub struct ContentEvaluation {
 pub fn evaluate_content(
     content: &Content,
     damage: Option<BestSkillDamage>,
-    equipment_base: &EquipmentValues,
+    equipment: &EquipmentValues,
     awakening: Awakening,
     dependency: Option<SkillDependency>,
     thesis_core_total: i64,
@@ -199,14 +202,14 @@ pub fn evaluate_content(
     let checks: Vec<RequirementCheck> = content
         .requirements
         .iter()
-        .map(|r| r.check(equipment_base, awakening, dependency, thesis_core_total))
+        .map(|r| r.check(equipment, awakening, dependency, thesis_core_total))
         // required 0 は「その系統の条件なし」(例: 表で複合列が "-" のコンテンツ)
         .filter(|c| c.required > 0)
         .collect();
     let entry_ok = checks.iter().all(|c| c.ok);
     let reaches_need = match content.need_per_hit {
         None => true,
-        Some(need) => damage.as_ref().is_some_and(|d| d.per_hit_max >= need),
+        Some(need) => damage.as_ref().is_some_and(|d| d.per_hit_primary >= need),
     };
     ContentEvaluation {
         content_id: content.id.clone(),
@@ -327,8 +330,8 @@ mod tests {
         let dmg = |per: i64| {
             Some(BestSkillDamage {
                 skill_id: "s".into(),
-                per_hit_max: per,
-                total_max: per,
+                per_hit_primary: per,
+                total_primary: per,
             })
         };
         let dep = Some(SkillDependency::Stab);

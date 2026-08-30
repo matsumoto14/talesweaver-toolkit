@@ -4,7 +4,7 @@
   import type { Draft } from "../../../draft";
   import {
     neutralSienaAura, selectedSienaAura, selectedSienaAuraRegistration,
-    sienaExtraCapacity, sienaExtraValue, sienaPartStatTotal, sienaStage, zeroValues,
+    sienaExtraCapacity, sienaExtraValue, sienaStage, zeroValues,
   } from "../../../equipment";
   import { fmtInt } from "../../../format";
   import {
@@ -110,7 +110,8 @@
         .map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(v[k])}`);
       if (top.length > 0) parts.push(top.join(" / "));
     }
-    const statTotal = sienaPartStatTotal(siena);
+    // 正は SienaAura::stat_bonus().total()(preview.siena_part_stat_totals。部位別の内訳)
+    const statTotal = preview?.siena_part_stat_totals.find((p) => p.slot === slot)?.value ?? 0;
     if (statTotal > 0) parts.push(`ステ +${fmtInt(statTotal)}`);
     const attack = sienaExtraValue(siena, "attack_rate");
     if (attack > 0) parts.push(`攻撃力 +${attack}%`);

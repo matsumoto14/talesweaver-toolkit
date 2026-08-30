@@ -235,6 +235,22 @@ pub fn evaluate_contents_for_character(
     evaluations
 }
 
+/// 入場条件の装備補正の判定値 = 基本能力値(依存別。腕変換込み)+強化能力値
+/// (エンチャント・シエナのオーラ)。テシスコアの能力値増加は対象ダンジョン内
+/// 限定のため含めない(`enhanced_for(None)` で除外。ユーザー確認 2026-08-29)。
+fn entry_equipment_totals(
+    dependency: Option<SkillDependency>,
+    equipment_base_sources_raw: &[EquipmentValueSource],
+    equipment_base_sources_for: &impl Fn(SkillDependency) -> Vec<EquipmentValueSource>,
+    enhanced_for: &impl Fn(Option<CoreRegion>) -> Vec<EquipmentValueSource>,
+) -> EquipmentValues {
+    let base = dependency.map(equipment_base_sources_for).map_or_else(
+        || sum_equipment_value_sources(equipment_base_sources_raw),
+        |sources| sum_equipment_value_sources(&sources),
+    );
+    base.add(sum_equipment_value_sources(&enhanced_for(None)))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn evaluate_one_content(
     content: &Content,
@@ -258,14 +274,16 @@ fn evaluate_one_content(
     // 比較先はキャラの代表スキル(一覧の先頭)の依存種別で決める。
     let Some(enemy_id) = content.enemy_id.as_deref() else {
         let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.skill.dependency));
-        let equipment_base_totals = dependency.map(equipment_base_sources_for).map_or_else(
-            || sum_equipment_value_sources(equipment_base_sources_raw),
-            |sources| sum_equipment_value_sources(&sources),
+        let equipment_entry_totals = entry_equipment_totals(
+            dependency,
+            equipment_base_sources_raw,
+            equipment_base_sources_for,
+            enhanced_for,
         );
         return evaluate_content(
             content,
             None,
-            &equipment_base_totals,
+            &equipment_entry_totals,
             awakening,
             dependency,
             thesis_core_total,
@@ -276,14 +294,16 @@ fn evaluate_one_content(
         // データ整合性上、通常は発生しない(コンテンツの enemy_id は敵カタログに必ず
         // 存在する。gamedata のテストで担保)。万一のズレでも panic せず未判定として返す。
         let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.skill.dependency));
-        let equipment_base_totals = dependency.map(equipment_base_sources_for).map_or_else(
-            || sum_equipment_value_sources(equipment_base_sources_raw),
-            |sources| sum_equipment_value_sources(&sources),
+        let equipment_entry_totals = entry_equipment_totals(
+            dependency,
+            equipment_base_sources_raw,
+            equipment_base_sources_for,
+            enhanced_for,
         );
         return evaluate_content(
             content,
             None,
-            &equipment_base_totals,
+            &equipment_entry_totals,
             awakening,
             dependency,
             thesis_core_total,
@@ -318,12 +338,12 @@ fn evaluate_one_content(
         let result = calculate_damage(&input);
         if best
             .as_ref()
-            .is_none_or(|b| result.per_hit.max > b.per_hit_max)
+            .is_none_or(|b| result.per_hit_primary > b.per_hit_primary)
         {
             best = Some(BestSkillDamage {
                 skill_id: entry.skill.id.clone(),
-                per_hit_max: result.per_hit.max,
-                total_max: result.total.max,
+                per_hit_primary: result.per_hit_primary,
+                total_primary: result.total_primary,
             });
             // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
             best_dependency = Some(entry.skill.dependency);
@@ -331,14 +351,16 @@ fn evaluate_one_content(
     }
 
     let requirement_dependency = fixed_dependency.or(best_dependency);
-    let equipment_base_totals = requirement_dependency.map(equipment_base_sources_for).map_or_else(
-        || sum_equipment_value_sources(equipment_base_sources_raw),
-        |sources| sum_equipment_value_sources(&sources),
+    let equipment_entry_totals = entry_equipment_totals(
+        requirement_dependency,
+        equipment_base_sources_raw,
+        equipment_base_sources_for,
+        enhanced_for,
     );
     evaluate_content(
         content,
         best,
-        &equipment_base_totals,
+        &equipment_entry_totals,
         awakening,
         requirement_dependency,
         thesis_core_total,
@@ -397,6 +419,8 @@ mod tests {
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
             combo_variants: Vec::new(),
+            power: Skill::compute_power(0.99, 1),
+            power_per_second: Skill::compute_power_per_second(Skill::compute_power(0.99, 1), Some(1.4)),
         }
     }
 
@@ -525,11 +549,43 @@ mod tests {
     fn キャラスキルのステ補正が全コンテンツ評価に反映される() {
         let without = evaluate(false);
         let with = evaluate(true);
-        let dmg_without = without[0].damage.as_ref().unwrap().per_hit_max;
-        let dmg_with = with[0].damage.as_ref().unwrap().per_hit_max;
+        let dmg_without = without[0].damage.as_ref().unwrap().per_hit_primary;
+        let dmg_with = with[0].damage.as_ref().unwrap().per_hit_primary;
         assert!(
             dmg_with > dmg_without,
             "ステ補正ありのほうが火力が高いはず: without={dmg_without}, with={dmg_with}"
         );
+    }
+
+    /// 入場条件の装備補正は基本+強化(エンチャント等)で判定し、テシスコアの
+    /// 能力値増加(対象ダンジョン内限定)は含めない(ユーザー確認 2026-08-29)。
+    /// コア除外は `enhanced_for(None)` を渡すことで表現される。
+    #[test]
+    fn 入場条件の判定値はエンチャントを含みテシスコアを含まない() {
+        let base = vec![EquipmentValueSource {
+            source: "基本".into(),
+            values: EquipmentValues {
+                slash: 100,
+                ..Default::default()
+            },
+        }];
+        let enhanced = |region: Option<CoreRegion>| match region {
+            None => vec![EquipmentValueSource {
+                source: "エンチャント".into(),
+                values: EquipmentValues {
+                    slash: 50,
+                    ..Default::default()
+                },
+            }],
+            Some(_) => vec![EquipmentValueSource {
+                source: "コア込み(入場判定に使ってはいけない)".into(),
+                values: EquipmentValues {
+                    slash: 9_999,
+                    ..Default::default()
+                },
+            }],
+        };
+        let totals = entry_equipment_totals(None, &base, &|_| base.clone(), &enhanced);
+        assert_eq!(totals.slash, 150);
     }
 }

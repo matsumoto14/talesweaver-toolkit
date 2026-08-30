@@ -606,6 +606,11 @@ impl SienaAuraList {
             .and_then(|id| self.registered.iter().find(|entry| entry.id == id))
     }
 
+    pub fn selected_mut(&mut self) -> Option<&mut RegisteredSienaAura> {
+        let id = self.selected_id?;
+        self.registered.iter_mut().find(|entry| entry.id == id)
+    }
+
     pub fn validate(&self, slot: PartSlot) -> Result<(), SienaError> {
         if self.selected_id.is_some() && self.selected().is_none() {
             return Err(SienaError::UnknownSelectedId { slot });

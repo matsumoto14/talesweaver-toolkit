@@ -114,9 +114,25 @@ pub struct Skill {
     /// 対応するコンボスキルタイプ。空ならタイプ選択非対応。
     #[serde(default)]
     pub combo_variants: Vec<ComboSkillVariant>,
+    /// 1 回ぶんの火力の目安(倍率 × 段数)。主軸スキル候補の並び順に使う(UI 側は再計算しない)
+    pub power: f64,
+    /// 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。基本中ディレイ不明なら比較不能
+    pub power_per_second: Option<f64>,
 }
 
 impl Skill {
+    /// 1 回ぶんの火力の目安(倍率 × 段数)。0 段のスキルは無いので段数は最低 1 扱い。
+    pub fn compute_power(multiplier: f64, hit_count: u32) -> f64 {
+        multiplier * f64::from(hit_count.max(1))
+    }
+
+    /// 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。基本中ディレイが未収録 / 0 以下なら比較不能
+    pub fn compute_power_per_second(power: f64, base_actual_delay: Option<f64>) -> Option<f64> {
+        base_actual_delay
+            .filter(|&delay| delay > 0.0)
+            .map(|delay| power / delay)
+    }
+
     /// 選択したコンボスキルタイプとシエナのオーラから、今回の計算に使う性能を解決する。
     pub fn resolve_combo_variant(
         &self,
@@ -143,6 +159,9 @@ impl Skill {
             resolved.hit_count += step / 3;
             resolved.multiplier += f64::from(step % 3) * 0.10;
         }
+        resolved.power = Self::compute_power(resolved.multiplier, resolved.hit_count);
+        resolved.power_per_second =
+            Self::compute_power_per_second(resolved.power, resolved.base_actual_delay);
         Ok(resolved)
     }
 }
@@ -187,6 +206,11 @@ mod tests {
                     base_actual_delay: 1.6,
                 },
             ],
+            power: Skill::compute_power(5.55, 11),
+            power_per_second: Skill::compute_power_per_second(
+                Skill::compute_power(5.55, 11),
+                Some(1.4),
+            ),
         }
     }
 

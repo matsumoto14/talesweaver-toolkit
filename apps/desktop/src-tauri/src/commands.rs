@@ -1,5 +1,6 @@
 //! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは `CommandError` に変換して返す。
 
+use base64::Engine;
 use domain::{
     evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
     CommonSkills, Content, ContentArea, ContentEvaluation, DamageInput, DamageMaterial,
@@ -7,7 +8,9 @@ use domain::{
     EquipmentPart, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
 use gamedata::{EquipmentItem, GameCharacter};
-use storage::{BuffSet, CharacterRepository, NewCharacter, RegisteredCharacter};
+use storage::{
+    BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, NewCharacter, RegisteredCharacter,
+};
 use tauri::{Manager, State};
 
 use crate::{AppInfo, AppState};
@@ -226,6 +229,17 @@ pub fn list_element_sources() -> Vec<domain::ElementSourceDef> {
     gamedata::element_source_catalog().to_vec()
 }
 
+/// 装備の属性強化の合計(部位ごとに +9。対象属性は呼び出し側が決める — キャラ画面は
+/// 「全部位の属性が一致しているか」を見た draft 編集中の選択を渡す)。
+/// 計算は `Equipment::element_values` そのもの(フロントに再実装を持たせない)。
+#[tauri::command]
+pub fn equipment_element_values(
+    equipment: domain::Equipment,
+    element: Option<domain::Element>,
+) -> domain::ElementValues {
+    equipment.element_values(element)
+}
+
 /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
 #[tauri::command]
 pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
@@ -279,10 +293,50 @@ pub fn list_character_skills() -> Vec<domain::CharacterSkillDef> {
     gamedata::character_skill_catalog().to_vec()
 }
 
+/// キャラスキル 1 件ぶんの、取っているマスタリーを踏まえた実際の効果。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CharacterSkillEffectsView {
+    pub id: String,
+    pub effects: Vec<domain::SkillEffect>,
+}
+
+/// マスタリーによる効果差し替えを解決した、キャラスキル全件ぶんの効果。
+///
+/// `CharacterSkillDef::effects` はマスタリー未反映の素の値なので、選んでいるマスタリーで
+/// 差し替わった後の値を見せる画面(キャラスキル選択・中ディレイ補正源)はここを呼ぶ
+/// (`character_skill.rs` の `effects()` をそのまま呼ぶだけで、解決規則をフロントに持たせない)。
+#[tauri::command]
+pub fn resolve_character_skill_effects(
+    masteries: domain::Masteries,
+) -> Vec<CharacterSkillEffectsView> {
+    gamedata::character_skill_catalog()
+        .iter()
+        .map(|def| CharacterSkillEffectsView {
+            id: def.id.to_string(),
+            effects: def.effects(&masteries).to_vec(),
+        })
+        .collect()
+}
+
+/// 称号 1 件の表示用ビュー。`TitleDef` に、フロントで再計算させない事前計算値を添える。
+#[derive(serde::Serialize)]
+pub struct TitleView {
+    #[serde(flatten)]
+    pub def: TitleDef,
+    /// 装備の基本能力値への加算 9 値の合計。正は `TitleDef::equipment_value_total`
+    pub equipment_value_total: i64,
+}
+
 /// 称号のカタログ(wiki: 称号システム)。主要称号のみ。
 #[tauri::command]
-pub fn list_titles() -> Vec<TitleDef> {
+pub fn list_titles() -> Vec<TitleView> {
     gamedata::title_catalog()
+        .into_iter()
+        .map(|def| TitleView {
+            equipment_value_total: def.equipment_value_total(),
+            def,
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -415,6 +469,68 @@ pub fn delete_character(state: State<'_, AppState>, id: i64) -> CommandResult<()
     with_repo(&state, |repo| repo.delete(id))
 }
 
+/// 登録キャラの表示画像。保存済み PNG をそのまま data URL にして返す(端末内だけで使う)。
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterIconDto {
+    pub character_id: i64,
+    pub data_url: String,
+}
+
+impl From<CharacterIcon> for CharacterIconDto {
+    fn from(icon: CharacterIcon) -> Self {
+        Self {
+            character_id: icon.character_id,
+            data_url: format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(icon.png)
+            ),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn list_character_icons(state: State<'_, AppState>) -> CommandResult<Vec<CharacterIconDto>> {
+    let icons = with_repo(&state, |repo| repo.list_character_icons())?;
+    Ok(icons.into_iter().map(CharacterIconDto::from).collect())
+}
+
+#[tauri::command]
+pub fn set_character_icon(
+    state: State<'_, AppState>,
+    character_id: i64,
+    source: Vec<u8>,
+) -> CommandResult<CharacterIconDto> {
+    let icon = with_repo(&state, |repo| repo.set_character_icon(character_id, &source))?;
+    Ok(CharacterIconDto::from(icon))
+}
+
+#[tauri::command]
+pub fn reset_character_icon(state: State<'_, AppState>, character_id: i64) -> CommandResult<()> {
+    with_repo(&state, |repo| repo.reset_character_icon(character_id))
+}
+
+#[tauri::command]
+pub fn get_damage_snapshot(
+    state: State<'_, AppState>,
+    character_id: i64,
+) -> CommandResult<Option<DamageSnapshot>> {
+    with_repo(&state, |repo| repo.get_damage_snapshot(character_id))
+}
+
+#[tauri::command]
+pub fn set_damage_snapshot(
+    state: State<'_, AppState>,
+    character_id: i64,
+    skill_id: String,
+    content_id: String,
+    per_hit: i64,
+) -> CommandResult<DamageSnapshot> {
+    with_repo(&state, |repo| {
+        repo.set_damage_snapshot(character_id, &skill_id, &content_id, per_hit)
+    })
+}
+
 /// キャラの主軸スキルから攻撃力(A)の係数一式を引く。未選択なら `None`(攻撃力を出さない)。
 fn attack_coefficients_of(
     main_skill_id: Option<&str>,
@@ -451,6 +567,7 @@ pub fn preview_effective_stats(
         gamedata::character_skill_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
+        &gamedata::random_option_catalog(),
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
     )
@@ -478,6 +595,7 @@ pub fn preview_defense(
         gamedata::character_skill_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
+        &gamedata::random_option_catalog(),
         None,
         gamedata::awakening_caps(character.awakening).max_stat,
     )
@@ -923,6 +1041,190 @@ pub fn evaluate_contents(
     ))
 }
 
+/// 「次に変えるなら / おすすめ強化」候補を列挙し、それぞれの試算結果を 1 回の IPC で返す。
+/// 列挙・並び順は domain 側(`crates/domain/src/candidate.rs`)。ここは gamedata カタログの解決
+/// (強化補正種別・エンチャント上限・武器の上位品探し)と試算(preview_damage と同じ経路)を担う。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UpgradeCandidate {
+    pub id: String,
+    pub label: String,
+    pub cost: domain::CandidateCost,
+    pub per_hit_primary: i64,
+    pub delta_pct: i32,
+    /// 必要 /hit 以上か。`need_per_hit` が無いコンテンツでは常に `false`。
+    pub reaches: bool,
+    /// この候補を適用したキャラ payload。UI はこれをそのまま whatif の sim に入れる。
+    pub applied: NewCharacter,
+}
+
+/// 現武器と同じ `weapon_class` の上位カタログ品への更新候補(gamedata 固有の選定なので
+/// ここで組み立てる。domain は `weapon_class` を知らない)。
+///
+/// カタログ最強 1 本ではなく**現武器に近い順に最大 3 本**を挙げる。最強品(改セイクリッド級)は
+/// 大半のユーザーに入手困難で、一足飛びの提案は「次の一手」にならない。近い順なら
+/// rank_candidates の「届く候補の増分最小を先頭」と噛み合い、手近な武器が自然に前へ出る。
+/// 入手性(相場帯)をカタログに持たせるコスト軸は今後の課題(issue #14 相場共有と接続)。
+const WEAPON_UPDATE_CANDIDATES: usize = 3;
+
+fn weapon_update_changes(
+    equipment: &domain::Equipment,
+    common_skills: CommonSkills,
+    catalog: &[EquipmentItem],
+) -> Vec<domain::CandidateChange> {
+    let Some(weapon) = equipment.parts.get(domain::PartSlot::Weapon).selected() else {
+        return Vec::new();
+    };
+    let Some(item_id) = weapon.item_id.as_deref() else {
+        return Vec::new();
+    };
+    let Some(current) = catalog.iter().find(|i| i.id == item_id) else {
+        return Vec::new();
+    };
+    let Some(weapon_class) = current.weapon_class else {
+        return Vec::new();
+    };
+    let sum = |v: domain::EquipmentValues| -> i64 { v.fields().into_iter().map(|(_, value)| value).sum() };
+    let current_sum = sum(current.values_max);
+    let mut upgrades: Vec<&EquipmentItem> = catalog
+        .iter()
+        .filter(|i| {
+            i.slot == domain::PartSlot::Weapon
+                && i.weapon_class == Some(weapon_class)
+                && i.id != current.id
+                && sum(i.values_max) > current_sum
+        })
+        .collect();
+    upgrades.sort_by_key(|i| sum(i.values_max));
+    upgrades
+        .into_iter()
+        .take(WEAPON_UPDATE_CANDIDATES)
+        .filter_map(|upgrade| {
+            let mut new_equipment = equipment.clone();
+            let part = new_equipment
+                .parts
+                .get_mut(domain::PartSlot::Weapon)
+                .selected_mut()?;
+            part.item_id = Some(upgrade.id.to_string());
+            part.custom_name = None;
+            part.base = upgrade.values_max;
+            part.enchant = part.enchant.clamp_to(upgrade.enchant_caps);
+            Some(domain::CandidateChange {
+                id: format!("weapon-upgrade-{}", upgrade.id),
+                label: format!("武器を{}に更新", upgrade.name),
+                cost: domain::CandidateCost::EquipmentUpdate,
+                equipment: new_equipment,
+                common_skills,
+            })
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn list_upgrade_candidates(
+    character: NewCharacter,
+    buffs: BuffSelection,
+    skill_id: String,
+    content_id: String,
+    combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
+    temporary_adjustments: Option<domain::Adjustments>,
+) -> CommandResult<Vec<UpgradeCandidate>> {
+    validate_character_draft(&character, &buffs)?;
+    let content = find_content(&content_id)?;
+    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
+    let skill = find_skill(&skill_id)?;
+    let style_dependency = character
+        .main_skill_id
+        .as_deref()
+        .map(find_skill)
+        .transpose()?
+        .map(|s| s.dependency);
+
+    let per_hit = |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<i64> {
+        let input = build_damage_input(
+            &character.base_stats,
+            &character.game_character_id,
+            style_dependency,
+            &character.stat_sources,
+            &buffs,
+            equipment,
+            common_skills,
+            character.awakening,
+            skill.clone(),
+            enemy.clone(),
+            &content,
+            combo_count,
+            combo_skill_type,
+            temporary_adjustments.clone(),
+        )?;
+        Ok(domain::calculate_damage(&input).per_hit_primary)
+    };
+
+    let base = per_hit(character.equipment.clone(), character.common_skills)?;
+
+    let equipment_catalog = gamedata::equipment_catalog();
+    let resolved_enhance_type = |slot: domain::PartSlot| -> Option<domain::EquipmentEnhanceType> {
+        let part = character.equipment.parts.get(slot).selected()?;
+        part.enhance_type.or_else(|| {
+            part.item_id
+                .as_deref()
+                .and_then(gamedata::equipment_enhance_type)
+        })
+    };
+    let enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)> = character
+        .equipment
+        .parts
+        .iter()
+        .into_iter()
+        .filter_map(|(slot, part)| {
+            let item_id = part.item_id.as_deref()?;
+            let item = equipment_catalog.iter().find(|i| i.id == item_id)?;
+            Some((slot, item.enchant_caps))
+        })
+        .collect();
+
+    let mut changes = domain::list_candidate_changes(
+        &character.equipment,
+        &character.common_skills,
+        resolved_enhance_type(domain::PartSlot::Weapon),
+        resolved_enhance_type(domain::PartSlot::Armor),
+        &enchant_caps,
+    );
+    changes.extend(weapon_update_changes(
+        &character.equipment,
+        character.common_skills,
+        &equipment_catalog,
+    ));
+
+    let mut outcomes = Vec::with_capacity(changes.len());
+    for change in &changes {
+        let result = per_hit(change.equipment.clone(), change.common_skills)?;
+        outcomes.push((change.id.clone(), result));
+    }
+    let ranked = domain::rank_candidates(outcomes, base, content.need_per_hit);
+
+    let mut by_id: std::collections::HashMap<String, domain::CandidateChange> =
+        changes.into_iter().map(|c| (c.id.clone(), c)).collect();
+    Ok(ranked
+        .into_iter()
+        .filter_map(|r| {
+            let change = by_id.remove(&r.id)?;
+            let mut applied = character.clone();
+            applied.equipment = change.equipment;
+            applied.common_skills = change.common_skills;
+            Some(UpgradeCandidate {
+                id: change.id,
+                label: change.label,
+                cost: change.cost,
+                per_hit_primary: r.per_hit_primary,
+                delta_pct: r.delta_pct,
+                reaches: r.reaches,
+                applied,
+            })
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1116,4 +1418,6 @@ mod tests {
         // 武器+10の丸め済み60,508へリンクLv4の+40%を掛けて切り捨てる。
         assert_eq!(input.weapon_added_damage, 84_711);
     }
+
+
 }

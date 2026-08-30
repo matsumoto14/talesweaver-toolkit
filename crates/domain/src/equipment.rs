@@ -135,6 +135,22 @@ impl EquipmentValues {
         Ok(())
     }
 
+    /// 各フィールドを `caps` の対応値で頭打ちにする(装備更新でエンチャントが新しい枠を
+    /// 超えないようにする。UI 側の `clampToCaps` と同じ)。
+    pub fn clamp_to(self, caps: EquipmentValues) -> EquipmentValues {
+        EquipmentValues {
+            thrust: self.thrust.min(caps.thrust),
+            slash: self.slash.min(caps.slash),
+            physical_defense: self.physical_defense.min(caps.physical_defense),
+            magic_attack: self.magic_attack.min(caps.magic_attack),
+            magic_defense: self.magic_defense.min(caps.magic_defense),
+            accuracy: self.accuracy.min(caps.accuracy),
+            critical: self.critical.min(caps.critical),
+            evasion: self.evasion.min(caps.evasion),
+            agility: self.agility.min(caps.agility),
+        }
+    }
+
     pub fn add(self, other: EquipmentValues) -> EquipmentValues {
         EquipmentValues {
             thrust: self.thrust + other.thrust,
@@ -385,6 +401,11 @@ impl SienaStatBonus {
             *total.get_mut(kind) += other.get(kind);
         }
         total
+    }
+
+    /// 7 ステの合計(表示用。部位ごと・全部位合計のどちらにも使う)。
+    pub fn total(&self) -> i64 {
+        StatKind::ALL.iter().map(|&k| self.get(k)).sum()
     }
 }
 
@@ -875,6 +896,25 @@ impl EquipmentParts {
         ]
     }
 
+    /// 部位を引く(`get_mut` の不変版)。
+    pub fn get(&self, slot: PartSlot) -> &EquipmentPartList {
+        match slot {
+            PartSlot::Weapon => &self.weapon,
+            PartSlot::Armor => &self.armor,
+            PartSlot::Helm => &self.helm,
+            PartSlot::Shield => &self.shield,
+            PartSlot::ShieldPlus => &self.shield_plus,
+            PartSlot::Head => &self.head,
+            PartSlot::Body => &self.body,
+            PartSlot::Hand => &self.hand,
+            PartSlot::Leg => &self.leg,
+            PartSlot::Effect => &self.effect,
+            PartSlot::Artifact => &self.artifact,
+            PartSlot::RelicPendant => &self.relic_pendant,
+            PartSlot::RelicBracelet => &self.relic_bracelet,
+        }
+    }
+
     /// 部位を可変で引く。
     pub fn get_mut(&mut self, slot: PartSlot) -> &mut EquipmentPartList {
         match slot {
@@ -1301,6 +1341,17 @@ impl Equipment {
             .collect()
     }
 
+    /// 部位別のエンチャント値(表示用の内訳。`part.enchant` そのものを
+    /// `ability_values_by_part` と同じ形で返す。part 1 つぶんの「装備値の合計」表示に使う)。
+    pub fn enchant_values_by_part(&self) -> Vec<PartEquipmentValues> {
+        self.iter_selected()
+            .map(|(slot, part)| PartEquipmentValues {
+                slot,
+                values: part.enchant,
+            })
+            .collect()
+    }
+
     /// アビリティの追加効果(wiki: アビリティ表の「追加効果」列)を
     /// 与ダメージ式のカテゴリ寄与に変換する。装備攻撃力への加算は `base_totals` が別に見る。
     pub fn ability_damage_contributions(
@@ -1497,6 +1548,13 @@ impl Equipment {
 pub struct PartEquipmentValues {
     pub slot: PartSlot,
     pub values: EquipmentValues,
+}
+
+/// 部位 1 つぶんの単純な合計値(表示用。シエナのオーラのステ加算合計など)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PartStatTotal {
+    pub slot: PartSlot,
+    pub value: i64,
 }
 
 /// 1 部位ぶんのアビリティ由来の装備補正(アビリティ定義値 + ロール値 + 追加効果)。
@@ -1959,6 +2017,27 @@ mod tests {
                 ..Default::default()
             }
         );
+    }
+
+    #[test]
+    fn 部位別エンチャント内訳の合計は強化能力値の合計と一致する() {
+        let eq = equipment_with(
+            EquipmentValues {
+                thrust: 100,
+                slash: 200,
+                ..Default::default()
+            },
+            EquipmentValues {
+                thrust: 10,
+                slash: 20,
+                ..Default::default()
+            },
+        );
+        let by_part = eq.enchant_values_by_part();
+        let summed = by_part
+            .iter()
+            .fold(EquipmentValues::default(), |acc, p| acc.add(p.values));
+        assert_eq!(summed, eq.enhanced_totals(None));
     }
 
     #[test]

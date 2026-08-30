@@ -219,6 +219,16 @@ impl DamageCategory {
         }
     }
 
+    /// 供給源の値が **% 表記**かどうか(集計へ入れるときに 1/100 する)。
+    ///
+    /// 割合カテゴリのほか、E2「スキル倍率増加(固定値)」も含める。wiki ステータスの E2 供給源は
+    /// すべて %(兜の「スキル攻撃力増加」+1〜10% / +5〜60%、アナイス「ディトネート特化」+100%)で、
+    /// スキル倍率(D)と同じ「1.0 = 100%」の目盛りに足す値だからそのままの数値では 100 倍になる。
+    /// 旧リポ twtoolkit の Excel v4.00 実装(`skillTerm = skillMultiplier + helmetAbility / 100`)と一致。
+    pub fn is_percent_source(self) -> bool {
+        matches!(self.kind(), CategoryKind::Rate) || matches!(self, DamageCategory::SkillMultiplierFixed)
+    }
+
     /// 式の中で `(1 − 値)` として掛かる割合カテゴリ。
     pub fn is_subtractive(self) -> bool {
         use DamageCategory::*;

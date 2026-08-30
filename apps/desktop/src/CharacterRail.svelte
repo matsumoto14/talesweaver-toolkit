@@ -95,6 +95,7 @@
           id={c.game_character_id}
           size={collapsed ? 40 : 28}
           label="{c.name}({gameCharacterName(c.game_character_id)})"
+          source={app.characterIcons[c.id] ?? null}
         />
         {#if !collapsed}
           <span class="meta">

@@ -64,6 +64,15 @@
     const table = CORE_POWER_TYPES.includes(type) ? limits.core_power_bonus_table : limits.core_support_bonus_table;
     return table[evolution]?.[enhancement] ?? 0;
   };
+  // 入場条件「コア N」の説明文で使う例(火力: 進化1強化4 / 進化4強化4、補助: 進化4強化4)。数値は limits の表から引く
+  const powerEvo1En4 = $derived(coreBonus("thrust", 1, limits.core_enhancement_max) * limits.core_slot_count);
+  const powerEvo4En4 = $derived(
+    coreBonus("thrust", limits.core_evolution_max, limits.core_enhancement_max) * limits.core_slot_count,
+  );
+  const supportEvo4En4 = $derived(
+    coreBonus("physical_defense", limits.core_evolution_max, limits.core_enhancement_max),
+  );
+  const supportEvo4En4Total = $derived(supportEvo4En4 * limits.core_slot_count);
   const coreAt = (index: number) => draft.equipment.thesis_cores[coreRegion].slots[index] ?? null;
   function setCoreType(index: number, value: string) {
     const slots = draft.equipment.thesis_cores[coreRegion].slots;
@@ -142,8 +151,10 @@
         経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。
       </p>
       <p class="hint dim">
-        入場条件の「コア N」はこの 6 枠の合計と同じ値です(火力の進化1強化4 ×6 = 60、進化4強化4 ×6 = 480。
-        補助タイプは進化4強化4 でも 60 なので 6 枠でも 360 止まり)。
+        入場条件の「コア N」はこの {limits.core_slot_count} 枠の合計と同じ値です(火力の進化1強化{limits.core_enhancement_max}
+        ×{limits.core_slot_count} = {powerEvo1En4}、進化{limits.core_evolution_max}強化{limits.core_enhancement_max}
+        ×{limits.core_slot_count} = {powerEvo4En4}。補助タイプは進化{limits.core_evolution_max}強化{limits.core_enhancement_max}
+        でも {supportEvo4En4} なので {limits.core_slot_count} 枠でも {supportEvo4En4Total} 止まり)。
         コアセット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
       </p>
     </div>

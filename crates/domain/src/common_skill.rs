@@ -32,7 +32,7 @@ pub const UNLEASH_LEVEL_MAX: u8 = 10;
 /// レインフォースの Lv 上限(wiki Skill/共通: Lv5)。アンリーシュ Lv6 以降の前提。
 pub const REINFORCE_LEVEL_MAX: u8 = 5;
 /// レインフォース無しで取れるアンリーシュの Lv(wiki: Lv6 以降が LvUp 必要 = Lv5 までは不要)。
-const UNLEASH_FREE_LEVEL_MAX: u8 = 5;
+pub const UNLEASH_FREE_LEVEL_MAX: u8 = 5;
 /// アンリーシュの枠数(wiki Skill/共通: 2 つまで使用可能)。
 pub const UNLEASH_SLOTS: usize = 2;
 

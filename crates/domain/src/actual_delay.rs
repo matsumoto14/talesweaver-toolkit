@@ -21,7 +21,7 @@ pub const ACTUAL_DELAY_MIN: f64 = 0.3;
 /// コンボボーナスの倍率A(wiki ステータス「中ディレイ倍率A / コンボ / 2コンボ以上のコンボボーナス −50%」)。
 const COMBO_DELAY_RATE: f64 = 0.5;
 /// コンボボーナスが付くコンボ数。
-const COMBO_DELAY_THRESHOLD: u32 = 2;
+pub const COMBO_DELAY_THRESHOLD: u32 = 2;
 /// 実測表の計測時間(秒)。表は「60 秒あたりのスキル回数」(ユーザー確定 2026-08-25)。
 pub const SECONDS_PER_MINUTE: f64 = 60.0;
 

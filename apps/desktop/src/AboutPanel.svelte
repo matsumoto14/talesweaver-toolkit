@@ -2,16 +2,12 @@
   // 情報パネル: 版・非公式表記・出典・データの扱い。
   // 明示クローズ式オーバーレイ(装備登録と同じ形)。背景クリックでは閉じず、
   // 「閉じる ×」か Escape だけで閉じる(§00 押した場所は動かない)。
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { onMount } from "svelte";
+  import authorPortrait from "./assets/author-xkanba.png";
   import { errorMessage, getAppInfo } from "./api/commands";
   import type { AppInfo } from "./api/types";
-  import {
-    INQUIRY_ENDPOINT, INQUIRY_KINDS, preview, send,
-    type InquiryDraft, type InquiryKind, type SentInquiry,
-  } from "./inquiry";
-  import { app } from "./state.svelte";
   import { reportError } from "./toast.svelte";
-  import StepSelect from "./ui/StepSelect.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -24,55 +20,16 @@
   });
 
   const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !sending) onClose();
+    if (event.key === "Escape") onClose();
   };
 
-  // --- 問い合わせ -------------------------------------------------------------
-  let kind = $state<InquiryKind>("bug");
-  let title = $state("");
-  let body = $state("");
-  let includeDiagnostics = $state(true);
-  let sending = $state(false);
-  let progress = $state("");
-  let sent = $state<SentInquiry | null>(null);
-
-  /** 調査に効くのに本人が書けない情報だけを集める。個人を特定するものは入れない。 */
-  const diagnostics = $derived.by(() => {
-    const character = app.characters.find((c) => c.id === app.selectedId);
-    const lines = [
-      `アプリ: ${info?.version ?? "?"}`,
-      `環境: ${navigator.userAgent}`,
-      `画面: ${app.tab}`,
-    ];
-    if (character) {
-      lines.push(`選択中のキャラ種: ${character.game_character_id}`);
-      lines.push(`覚醒 ${character.awakening.stage} / エタ Lv${character.awakening.eternal_level}`);
-      if (character.main_skill_id) lines.push(`主軸スキル: ${character.main_skill_id}`);
-    }
-    if (app.calcTargetId) lines.push(`計算中の対象: ${app.calcTargetId}`);
-    return lines.join("\n");
-  });
-
-  const draft = $derived<InquiryDraft>({ kind, title, body, diagnostics });
-  const canSubmit = $derived(title.trim().length > 0 && body.trim().length > 0);
-
-  async function submit() {
-    sending = true;
-    progress = "";
+  async function openExternal(event: MouseEvent, url: string) {
+    event.preventDefault();
     try {
-      sent = await send(draft, includeDiagnostics, (m) => (progress = m));
-    } catch (e) {
-      reportError(errorMessage(e));
-    } finally {
-      sending = false;
-      progress = "";
+      await openUrl(url);
+    } catch (error) {
+      reportError(errorMessage(error));
     }
-  }
-
-  function reset() {
-    sent = null;
-    title = "";
-    body = "";
   }
 </script>
 
@@ -110,20 +67,33 @@
         </p>
         <div class="path inset">{info?.databasePath ?? "—"}</div>
         <p class="muted">
-          外部へ送信するのは、問い合わせを送ったときだけです。
-          送る内容は送信前に全文表示されます。
-        </p>
-        <div class="path inset">{INQUIRY_ENDPOINT}</div>
-        <p class="muted">
+          問い合わせを送る場合も、送信内容は別画面で事前に全文表示されます。
           アップデートのたびに、このファイルのバックアップを直近 3 世代まで自動で保存します。
         </p>
       </div>
 
       <div class="card">
-        <div class="card-title">数値の出典</div>
+        <div class="card-title">数値・計算仕様の参考資料</div>
         <p>
           スキル倍率・敵ステータス・装備補正などは、コミュニティ運営の
           <b>Tale Wiki</b>(talewiki.com)を一次ソースとして取り込んでいます。
+        </p>
+        <p>
+          一部の敵ステータスは、せせなぎさんが公開している実測・検証情報を参考に収録しています。
+          また、ダメージ計算の仕様整理と結果の照合には、同氏のダメージ計算ツールを参考にしています。
+        </p>
+        <p class="muted">
+          参考にした公開情報・ツール:
+          <a
+            class="source-link"
+            href="https://x.com/sese_nagi1125?s=11"
+            target="_blank"
+            rel="noreferrer"
+            onclick={(event) => openExternal(event, "https://x.com/sese_nagi1125?s=11")}
+          >せせなぎさん（@sese_nagi1125）</a>
+        </p>
+        <p class="muted">
+          この記載は公開情報へのクレジットであり、本ツールの公認・監修・共同開発を示すものではありません。
         </p>
         <p class="muted">
           wiki に記載が無く、コミュニティの実測値に依っている数値は、画面上で
@@ -132,50 +102,30 @@
       </div>
 
       <div class="card">
-        <div class="card-title">ライセンス</div>
-        <p>ソースコードと文書は MIT License。同梱しているゲーム由来の画像・数値データは対象外です。</p>
+        <div class="card-title">作者について</div>
+        <div class="author">
+          <img class="author-portrait" src={authorPortrait} alt="作者 xかんばのゲーム内キャラクター" />
+          <div class="author-detail">
+            <b class="author-name">xかんば</b>
+            <span class="author-server">エルフィンタサーバーで活動しています</span>
+            <p>
+              システム開発のお仕事のご依頼・ご相談は、ゲーム内の「xかんば」または
+              XのDMへお願いします。
+            </p>
+            <a
+              class="source-link"
+              href="https://x.com/tw_xkanba?s=11"
+              target="_blank"
+              rel="noreferrer"
+              onclick={(event) => openExternal(event, "https://x.com/tw_xkanba?s=11")}
+            >@tw_xkanba（X）</a>
+          </div>
+        </div>
       </div>
 
-      <!-- 問い合わせ。押した場所より上には何も差し込まない(§00 押した場所は動かない) -->
-      <div class="card inquiry">
-        <div class="card-title">問い合わせ</div>
-
-        {#if sent}
-          <p>送信しました。やり取りはこのページで行います。</p>
-          <div class="path inset">{sent.url}</div>
-          <p class="muted">アプリからは返信を受け取れないので、この URL を控えてください。</p>
-          <button type="button" class="btn" onclick={reset}>続けて送る</button>
-        {:else}
-          <p class="muted warn-line">
-            送った内容は<b>公開のページに載ります</b>。本名・メールアドレス・ゲーム内 ID は書かないでください。
-          </p>
-
-          <StepSelect bind:value={kind} options={INQUIRY_KINDS} full />
-
-          <label class="line">
-            <span class="line-label">件名</span>
-            <input type="text" bind:value={title} maxlength="120" placeholder="例) 極・連撃のダメージが 0 になる" />
-          </label>
-
-          <label class="line">
-            <span class="line-label">内容</span>
-            <textarea bind:value={body} maxlength="4000" rows="5" placeholder="どう操作すると起きるか、本当はどうなるはずかを書いてください"></textarea>
-          </label>
-
-          <label class="diag-toggle">
-            <input type="checkbox" bind:checked={includeDiagnostics} />
-            バージョンなどの情報を一緒に送る
-          </label>
-
-          <!-- 送る全文は常に出しておく。「確認する」を挟むとボタンが下へ押し出されるうえ、
-               1 手増える(§00 押した場所は動かない / 考えさせない) -->
-          <div class="preview-label">送られる内容</div>
-          <div class="preview inset">{preview(draft, includeDiagnostics)}</div>
-
-          <button type="button" class="btn primary" onclick={submit} disabled={!canSubmit || sending}>
-            {sending ? progress || "送信中…" : "この内容で送る"}
-          </button>
-        {/if}
+      <div class="card">
+        <div class="card-title">ライセンス</div>
+        <p>ソースコードと文書は MIT License。同梱しているゲーム由来の画像・数値データは対象外です。</p>
       </div>
     </div>
   </div>
@@ -220,31 +170,20 @@
   }
 
   .provisional { color: var(--accent); font-weight: var(--w-strong); }
-
-  /* --- 問い合わせ --- */
-  .inquiry { display: flex; flex-direction: column; gap: 8px; }
-  .inquiry .card-title, .inquiry p { margin: 0; }
-  .warn-line { color: var(--state-edge-fg); }
-
-  .line { display: flex; flex-direction: column; gap: 3px; }
-  .line-label { font-size: var(--t-label); color: var(--fg-muted); }
-  .line input, .line textarea {
-    width: 100%; padding: 6px 8px;
-    background: var(--bg-field); border: 1px solid var(--border); border-radius: var(--r-inset);
-    font-family: inherit; font-size: var(--t-body); color: var(--fg);
+  .source-link {
+    color: var(--accent); font-weight: var(--w-strong);
+    text-decoration: underline; text-underline-offset: 2px;
   }
-  .line textarea { resize: vertical; line-height: 1.6; }
-  .line input:focus, .line textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .source-link:hover { color: var(--accent-hover); }
 
-  .diag-toggle {
-    display: flex; align-items: center; gap: 6px;
-    font-size: var(--t-label); color: var(--fg-muted);
+  .author { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: start; }
+  .author-portrait {
+    width: 64px; height: 64px; object-fit: cover; object-position: center 34%;
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-inset);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.75);
   }
-
-  .preview-label { font-size: var(--t-label); color: var(--fg-muted); }
-  .preview {
-    padding: 8px 10px; max-height: 170px; overflow-y: auto;
-    font-family: var(--font-num); font-size: 11px; line-height: 1.6;
-    white-space: pre-wrap; word-break: break-word;
-  }
+  .author-detail { min-width: 0; }
+  .author-name { display: block; font-size: 13px; color: var(--fg); }
+  .author-server { display: block; margin: 1px 0 6px; font-size: var(--t-label); color: var(--fg-muted); }
+  .author-detail p { margin-bottom: 5px; }
 </style>

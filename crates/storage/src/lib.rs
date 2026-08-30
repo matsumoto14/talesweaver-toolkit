@@ -4,11 +4,15 @@
 mod backup;
 mod buff_set_repository;
 mod character_repository;
+mod character_icon_repository;
+mod damage_snapshot_repository;
 
 pub use backup::{open_with_backup, OpenOutcome, StartupNotice};
 pub use buff_set_repository::BuffSet;
 pub use character_repository::validate as validate_new_character;
 pub use character_repository::{CharacterRepository, NewCharacter, RegisteredCharacter};
+pub use character_icon_repository::CharacterIcon;
+pub use damage_snapshot_repository::DamageSnapshot;
 
 use thiserror::Error;
 
@@ -18,6 +22,8 @@ pub enum StorageError {
     Database(#[from] rusqlite::Error),
     #[error("キャラクター(id={0})が見つかりません")]
     CharacterNotFound(i64),
+    #[error("キャラクター画像が不正です: {0}")]
+    InvalidCharacterIcon(String),
     #[error("バフセット(id={0})が見つかりません")]
     BuffSetNotFound(i64),
     /// 検証エラー。文言だけでなく「どこの話か」(装備の部位・アビリティ)も運ぶ。

@@ -2,13 +2,14 @@
   // 「status」補正源のペイン。キャラ選択・覚醒・エタの意志・主軸スキル・主属性・能力値の一覧。
   import { untrack } from "svelte";
   import type { Element, ElementPreview, Skill, StatKind, StatPreview } from "../../../api/types";
-  import { previewElements } from "../../../api/commands";
+  import { errorMessage, previewElements, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
   import { compareMainSkills, mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
   import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
   import { fmtInt, formatLayerValue } from "../../../format";
   import { ELEMENT_LABELS, ELEMENTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
+  import { reportError } from "../../../toast.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
@@ -17,11 +18,12 @@
   import StepSelect from "../../../ui/StepSelect.svelte";
 
   interface Props {
+    characterId: number;
     draft: Draft;
     preview: StatPreview | null;
     skills: Skill[];
   }
-  let { draft, preview, skills }: Props = $props();
+  let { characterId, draft, preview, skills }: Props = $props();
 
   const STAT_MIN = 1;
 
@@ -32,6 +34,45 @@
   );
   /** キャラは登録時に決めるもの。ふだんは畳んでおく */
   let charPickOpen = $state(false);
+  let iconSaving = $state(false);
+  let iconChanged = $state(false);
+  let iconChangedTimer: ReturnType<typeof setTimeout> | undefined;
+  function markIconChanged() {
+    clearTimeout(iconChangedTimer);
+    iconChanged = false;
+    requestAnimationFrame(() => {
+      iconChanged = true;
+      iconChangedTimer = setTimeout(() => (iconChanged = false), 350);
+    });
+  }
+  async function chooseIcon(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    iconSaving = true;
+    try {
+      const saved = await setCharacterIcon(characterId, new Uint8Array(await file.arrayBuffer()));
+      app.characterIcons[characterId] = saved.dataUrl;
+      markIconChanged();
+    } catch (e) {
+      reportError(errorMessage(e));
+    } finally {
+      iconSaving = false;
+    }
+  }
+  async function resetIcon() {
+    iconSaving = true;
+    try {
+      await resetCharacterIcon(characterId);
+      delete app.characterIcons[characterId];
+      markIconChanged();
+    } catch (e) {
+      reportError(errorMessage(e));
+    } finally {
+      iconSaving = false;
+    }
+  }
   function setGameCharacterId(id: string) {
     if (id === draft.gameCharacterId) return;
     draft.gameCharacterId = id;
@@ -153,8 +194,22 @@
     <div class="wide">
       <span class="label">キャラ</span>
       <div class="char-now">
-        <Icon kind="character" id={draft.gameCharacterId} size={40} label={gameCharacterName} />
+        <span class="current-icon" class:icon-changed={iconChanged}>
+          <Icon kind="character" id={draft.gameCharacterId} size={40} label={gameCharacterName} source={app.characterIcons[characterId] ?? null} />
+        </span>
         <span class="char-name">{gameCharacterName}</span>
+        <label class="chip quiet icon-pick" aria-disabled={iconSaving}>
+          {iconSaving ? "画像を処理中…" : app.characterIcons[characterId] ? "画像を変更" : "画像を選ぶ"}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            disabled={iconSaving}
+            onchange={chooseIcon}
+          />
+        </label>
+        {#if app.characterIcons[characterId]}
+          <button type="button" class="chip quiet" disabled={iconSaving} onclick={resetIcon}>標準に戻す</button>
+        {/if}
         <button type="button" class="chip quiet" class:on={charPickOpen} onclick={() => (charPickOpen = !charPickOpen)}>
           {charPickOpen ? "閉じる" : "変更"}
         </button>
@@ -304,7 +359,8 @@
       {:else}
         まだどの属性も乗っていません
       {/each}
-      。与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに +0.625%、+80 で上限 +50%(敵は 120 / 125)。
+      。与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに +{limits.element_bonus_percent_per_point}%、
+      +{Math.round(limits.element_bonus_max / (limits.element_bonus_percent_per_point / 100))} で上限 +{Math.round(limits.element_bonus_max * 100)}%(敵は 120 / 125 が多い)。
     </p>
   {/if}
   <p class="hint dim">
@@ -317,6 +373,21 @@
     {/if}
   </p>
 </div>
+
+<style>
+  .icon-pick { cursor: pointer; }
+  .icon-pick[aria-disabled="true"] { opacity: .58; cursor: wait; }
+  .icon-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .current-icon { display: inline-flex; border-radius: var(--r-window); }
+  .current-icon.icon-changed { animation: icon-change .35s ease-out; }
+  @keyframes icon-change {
+    0% { transform: scale(.9); box-shadow: 0 0 0 3px rgba(66, 109, 214, .24); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(66, 109, 214, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .current-icon.icon-changed { animation: none; outline: 2px solid var(--accent); outline-offset: 2px; }
+  }
+</style>
 <div class="card">
   <div class="card-title">能力値 <span class="dim normal">設定を触ると即時更新</span></div>
   <div class="tbl">

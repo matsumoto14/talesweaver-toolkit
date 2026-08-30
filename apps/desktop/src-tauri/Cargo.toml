@@ -12,7 +12,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
 serde = { workspace = true }
 domain = { path = "../../../crates/domain" }
 gamedata = { path = "../../../crates/gamedata" }
 storage = { path = "../../../crates/storage" }
+base64 = "0.22"

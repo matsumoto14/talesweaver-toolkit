@@ -37,11 +37,11 @@ pub struct DamageContribution {
 }
 
 /// 3 コンボ以上で付くコンボボーナス(wiki: カテゴリH)。
-const COMBO_BONUS_RATE: f64 = 0.15;
+pub const COMBO_BONUS_RATE: f64 = 0.15;
 /// コンボボーナスが付くコンボ数。
-const COMBO_BONUS_THRESHOLD: u32 = 3;
+pub const COMBO_BONUS_THRESHOLD: u32 = 3;
 /// 属性差 1 あたりの属性差ボーナス(%)(wiki: カテゴリI)。
-const ELEMENT_BONUS_PERCENT_PER_POINT: f64 = 0.625;
+pub const ELEMENT_BONUS_PERCENT_PER_POINT: f64 = 0.625;
 /// 対モンスターの与ダメージ下限。
 const MIN_DAMAGE_TO_MONSTER: i64 = 1;
 
@@ -206,6 +206,16 @@ pub struct DamageTriple {
     pub critical: i64,
 }
 
+impl DamageTriple {
+    /// 主役のダメージ値(計算タブ・ホームの表示、コンテンツ到達判定が使う値)。
+    /// クリ発生率(`critical_chance`、0..1)が 0 より大きいならクリティカル値、
+    /// 0(クリが出ないスキル)なら非クリの最大値を返す(ユーザー判断 2026-08-29)。
+    /// この選択規則の実装はここ 1 箇所だけにし、他はすべてこれを呼ぶ。
+    pub fn primary(&self, critical_chance: f64) -> i64 {
+        if critical_chance > 0.0 { self.critical } else { self.max }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DamageTrace {
     pub stats: Vec<StatTrace>,
@@ -233,10 +243,24 @@ pub struct DamageTrace {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DamageResult {
-    /// 1 段あたりの与ダメージ(ダメージ上限を適用したあと)
+    /// 1 段あたりの与ダメージ(スキル分のみ。ダメージ上限を適用したあと)。
+    /// ゲームの表記ダメージに相当し、武器強化の追加固定ダメージは含まない
     pub per_hit: DamageTriple,
-    /// 与ダメージ × 段数
+    /// 実際に敵へ入る総量: `skill_total + weapon_added_total + 割合追加ダメージ`
     pub total: DamageTriple,
+    /// 与ダメージ(表記ダメージ)の合計 = `per_hit × 段数`
+    pub skill_total: DamageTriple,
+    /// 武器強化の追加固定ダメージの合計 = `weapon_added_per_hit × 段数`
+    pub weapon_added_total: i64,
+    /// 武器の装備強化による追加固定ダメージ(1 段あたり。`INT(weapon_added_damage / 段数)`)。
+    /// 与ダメージ式の外・ダメージ上限の対象外で、ゲームは表記ダメージと別枠で表示する
+    pub weapon_added_per_hit: i64,
+    /// 主役の 1 段あたりダメージ(`per_hit.primary(critical_chance)`)。ゲームの表記ダメージ
+    /// (スキル分のみ・武器強化の追加固定ダメージを含まない)。計算タブ・ホームが表示に使う値で、
+    /// コンテンツ到達判定もこの値で判定する(ユーザー判断 2026-08-29 / 2026-08-30)
+    pub per_hit_primary: i64,
+    /// 主役の合計ダメージ(`total.primary(critical_chance)`)
+    pub total_primary: i64,
     pub hit_count: u32,
     /// コンボスキルタイプを解決したあとのスキル倍率。
     pub effective_skill_multiplier: f64,
@@ -693,47 +717,10 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     let hit_count = input.skill.hit_count + added_hits;
     let hits = i64::from(hit_count);
 
-    // §5 武器強化の追加固定ダメージ(与ダメージ式の外)。1 体あたり per-hit 追加 = INT(追加ダメージ / hits)、
-    // 合計追加 = per-hit 追加 × hits(wiki: 装備システム/装備強化のヒット分割仕様)。
-    let per_hit_added = if hit_count > 0 {
-        input.weapon_added_damage / hits
-    } else {
-        0
-    };
-    let (min, max, critical) = (
-        min + per_hit_added,
-        max + per_hit_added,
-        critical + per_hit_added,
-    );
-    if per_hit_added != 0 {
-        let step = FormulaStep {
-            name: "武器強化(追加固定ダメージ)".to_string(),
-            expression: format!(
-                "INT({} / {hits}) = {per_hit_added}",
-                input.weapon_added_damage
-            ),
-            value: per_hit_added as f64,
-            reached: per_hit_added as f64,
-            categories: Vec::new(),
-        };
-        steps_min.push(step.clone());
-        steps_max.push(step.clone());
-        steps_critical.push(step);
-    }
-
-    // 命中P(wiki: 計算式まとめ #AccuracyPoint)。与ダメージ式には入らないが、必中に必要な
-    // 命中P(狩り場情報一覧)と見比べられるように結果に載せる。
-    let accuracy = input.skill.accuracy.map(|skill_accuracy| {
-        accuracy_point(
-            &stats,
-            &input.accuracy_correction,
-            equipment_base_totals.accuracy + equipment_enhanced_totals.accuracy,
-            skill_accuracy,
-            input.random_options.accuracy_point,
-        )
-    });
-
     // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)。
+    // **与ダメージ(スキル分)にだけ効く**(docs/damage-formula.md §3「『与ダメージ』には
+    // ダメージ上限がある。『追加ダメージ』には上限がない」)。武器強化の追加固定ダメージは
+    // 式の外・上限の対象外なので、上限はここで先に掛ける。
     // 捨てられた分は 0 と区別できるように別で持つ(UI が「上限で捨てた分」を出す)。
     let cap = |value: i64| value.min(input.damage_cap);
     let (capped_min, capped_max, capped_critical) = (cap(min), cap(max), cap(critical));
@@ -756,9 +743,45 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     }
     let (min, max, critical) = (capped_min, capped_max, capped_critical);
 
-    // §5 割合追加ダメージ(新-割合)。「合計ダメージ + 追加ダメージ(武器強化)」に掛かるので、
-    // 1 段ごとではなく段数を掛けたあとの合計に乗せる。武器強化の追加固定ダメージは
-    // すでに per-hit に入っているので、`合計` がそのまま算出基準になる。
+    // §5 武器強化の追加固定ダメージ(与ダメージ式の外・ダメージ上限の対象外)。
+    // 1 体あたり per-hit 追加 = INT(追加ダメージ / hits)、合計追加 = per-hit 追加 × hits
+    // (wiki: 装備システム/装備強化のヒット分割仕様)。ゲームは表記ダメージ(与ダメージ)と
+    // この追加ダメージを別々に表示するため、`per_hit` には足し込まない。
+    let weapon_added_per_hit = if hit_count > 0 {
+        input.weapon_added_damage / hits
+    } else {
+        0
+    };
+    if weapon_added_per_hit != 0 {
+        let step = FormulaStep {
+            name: "武器強化(追加固定ダメージ)".to_string(),
+            expression: format!(
+                "INT({} / {hits}) = {weapon_added_per_hit} ※上限なし・式の外",
+                input.weapon_added_damage
+            ),
+            value: weapon_added_per_hit as f64,
+            reached: weapon_added_per_hit as f64,
+            categories: Vec::new(),
+        };
+        steps_min.push(step.clone());
+        steps_max.push(step.clone());
+        steps_critical.push(step);
+    }
+
+    // 命中P(wiki: 計算式まとめ #AccuracyPoint)。与ダメージ式には入らないが、必中に必要な
+    // 命中P(狩り場情報一覧)と見比べられるように結果に載せる。
+    let accuracy = input.skill.accuracy.map(|skill_accuracy| {
+        accuracy_point(
+            &stats,
+            &input.accuracy_correction,
+            equipment_base_totals.accuracy + equipment_enhanced_totals.accuracy,
+            skill_accuracy,
+            input.random_options.accuracy_point,
+        )
+    });
+
+    // §5 割合追加ダメージ(新-割合)。「合計ダメージ(与ダメージ合計 + 武器強化追加合計)」に
+    // 掛かるので、1 段ごとではなく段数を掛けたあとの合計に乗せる。
     // 供給源はシャープネスビジョン、武器のランダムOP、対象条件に一致した称号。
     // OP 側は発動条件を満たしている前提で入れる。
     let random_option_added_rate = input
@@ -772,10 +795,16 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         max: max * hits,
         critical: critical * hits,
     };
+    let weapon_added_total = weapon_added_per_hit * hits;
+    let added_damage_base = DamageTriple {
+        min: sum.min + weapon_added_total,
+        max: sum.max + weapon_added_total,
+        critical: sum.critical + weapon_added_total,
+    };
     let added = DamageTriple {
-        min: floor_int(sum.min as f64 * added_rate),
-        max: floor_int(sum.max as f64 * added_rate),
-        critical: floor_int(sum.critical as f64 * added_rate),
+        min: floor_int(added_damage_base.min as f64 * added_rate),
+        max: floor_int(added_damage_base.max as f64 * added_rate),
+        critical: floor_int(added_damage_base.critical as f64 * added_rate),
     };
     if added.max != 0 {
         let step = FormulaStep {
@@ -853,9 +882,9 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         )
     });
     let total = DamageTriple {
-        min: sum.min + added.min,
-        max: sum.max + added.max,
-        critical: sum.critical + added.critical,
+        min: sum.min + weapon_added_total + added.min,
+        max: sum.max + weapon_added_total + added.max,
+        critical: sum.critical + weapon_added_total + added.critical,
     };
     // DPS は「合計ダメージ × 60 秒あたりのスキル回数 / 60」。回数は実測表(格子の外だけ式)。
     let dps = delay.as_ref().map(|d| {
@@ -876,9 +905,15 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         .as_ref()
         .map(|d| d.max * (1.0 - critical_chance_ratio) + d.critical * critical_chance_ratio);
 
+    let per_hit = DamageTriple { min, max, critical };
     DamageResult {
-        per_hit: DamageTriple { min, max, critical },
+        per_hit,
         total,
+        skill_total: sum,
+        weapon_added_total,
+        weapon_added_per_hit,
+        per_hit_primary: per_hit.primary(critical_chance_ratio),
+        total_primary: total.primary(critical_chance_ratio),
         hit_count,
         effective_skill_multiplier: input.skill.multiplier,
         effective_base_actual_delay: input.skill.base_actual_delay,
@@ -1048,6 +1083,11 @@ mod tests {
                 base_actual_delay: Some(1.4),
                 actual_delay_fixed: false,
                 combo_variants: Vec::new(),
+                power: Skill::compute_power(0.99, 1),
+                power_per_second: Skill::compute_power_per_second(
+                    Skill::compute_power(0.99, 1),
+                    Some(1.4),
+                ),
             },
             enemy: Enemy {
                 id: "e".into(),
@@ -1180,6 +1220,28 @@ mod tests {
             .steps_max
             .iter()
             .any(|s| s.name == "ダメージ上限"));
+    }
+
+    // ダメージ上限は与ダメージ(スキル分)にだけ効く。武器強化の追加固定ダメージは
+    // 上限を超えて合計に残る(docs/damage-formula.md §3/§5)。
+    #[test]
+    fn ダメージ上限は与ダメージにだけ効き武器強化の追加固定は上限を超えて合計に残る() {
+        let mut i = input();
+        i.skill.hit_count = 3;
+        i.weapon_added_damage = 900; // INT(900/3) = 300
+        let uncapped = calculate_damage(&i);
+        assert_eq!(uncapped.weapon_added_per_hit, 300);
+        assert!(uncapped.capped_loss.max == 0);
+
+        // 上限をスキル分の per_hit ぎりぎりに設定する。武器強化を含めた値より小さい。
+        i.damage_cap = uncapped.per_hit.max - 100;
+        let capped = calculate_damage(&i);
+        assert_eq!(capped.per_hit.max, i.damage_cap);
+        assert_eq!(capped.capped_loss.max, 100);
+        // 武器強化の追加固定は上限の影響を受けず 300 のまま
+        assert_eq!(capped.weapon_added_per_hit, 300);
+        // 合計 = (上限 + 武器強化300) × 3段
+        assert_eq!(capped.total.max, (i.damage_cap + 300) * 3);
     }
 
     #[test]
@@ -1587,20 +1649,20 @@ mod tests {
     }
 
     // §5 武器強化の追加固定ダメージ(与ダメージ式の外)。goal 文書の例: 追加 2488・9hit → per-hit 276。
+    // per_hit(表記ダメージ)には足し込まず、`weapon_added_per_hit` に別で持つ。
     #[test]
-    fn 武器強化の追加固定ダメージはhit数で分割してper_hitとtotalに加算される() {
+    fn 武器強化の追加固定ダメージはhit数で分割してweapon_added_per_hitとtotalに加算される() {
         let mut i = input();
         i.skill.hit_count = 9;
         i.weapon_added_damage = 2488;
         let base = calculate_damage(&input());
         let r = calculate_damage(&i);
         // INT(2488 / 9) = 276
-        assert_eq!(r.per_hit.min, base.per_hit.min + 276);
-        assert_eq!(r.per_hit.max, base.per_hit.max + 276);
-        assert_eq!(r.per_hit.critical, base.per_hit.critical + 276);
-        assert_eq!(r.total.min, r.per_hit.min * 9);
-        assert_eq!(r.total.max, r.per_hit.max * 9);
-        assert_eq!(r.total.critical, r.per_hit.critical * 9);
+        assert_eq!(r.per_hit, base.per_hit);
+        assert_eq!(r.weapon_added_per_hit, 276);
+        assert_eq!(r.total.min, (r.per_hit.min + 276) * 9);
+        assert_eq!(r.total.max, (r.per_hit.max + 276) * 9);
+        assert_eq!(r.total.critical, (r.per_hit.critical + 276) * 9);
         assert_eq!(
             r.trace.steps_min.last().unwrap().name,
             "武器強化(追加固定ダメージ)"
@@ -1618,9 +1680,10 @@ mod tests {
         .weapon_added_damage(2488);
         let base = calculate_damage(&input());
         let result = calculate_damage(&i);
-        // Lv10で 2倍した 4,976 を9段へ分割し、1段あたり552。
-        assert_eq!(result.per_hit.max, base.per_hit.max + 552);
-        assert_eq!(result.total.max, result.per_hit.max * 9);
+        // Lv10で 2倍した 4,976 を9段へ分割し、1段あたり552。per_hit は変わらない。
+        assert_eq!(result.per_hit.max, base.per_hit.max);
+        assert_eq!(result.weapon_added_per_hit, 552);
+        assert_eq!(result.total.max, (result.per_hit.max + 552) * 9);
     }
 
     #[test]

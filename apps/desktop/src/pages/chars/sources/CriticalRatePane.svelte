@@ -1,10 +1,10 @@
 <script lang="ts">
   // 「criticalRate」補正源のペイン。ペット会心・極のルーン・致命打・設計者の研究室と、
   // ほかの補正源から自動で入ってくる分(装備クリティカル補正・AGI・主軸スキルの Cri値・シエナ)。
-  import type { PartSlot, Skill, StatPreview } from "../../../api/types";
+  // 合算・研究室段階の換算・シエナの %→倍率換算はすべて Rust 側(preview_effective_stats)が
+  // 解決済みなので、ここは preview の値を表示用に整形するだけ。
+  import type { Skill, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
-  import { sienaExtraTotal } from "../../../equipment";
-  import { PART_SLOTS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { fmtInt } from "../../../format";
   import { bump } from "../../../ui/motion.svelte";
@@ -21,15 +21,10 @@
   let { draft, preview, skills, onOpenSource }: Props = $props();
 
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
-  const selectedPartOrNull = (slot: PartSlot) => {
-    const list = draft.equipment.parts[slot];
-    return list.registered.find((p) => p.id === list.selected_id) ?? null;
-  };
 
-  /** 設計者の研究室ぶんのクリティカル率増加(研究段階 × 1 段階あたりの増加量) */
-  const architectLabBonus = $derived(
-    draft.statSources.critical_rate.architect_lab_stage * limits.architect_lab_per_stage,
-  );
+  /** 設計者の研究室ぶんのクリティカル率増加(研究段階 × 1 段階あたりの増加量)。正は
+   *  CriticalRateSources::architect_lab_bonus(preview.critical_rate_bonus.architect_lab_bonus) */
+  const architectLabBonus = $derived(preview?.critical_rate_bonus.architect_lab_bonus ?? 0);
   /** 研究段階の選択肢。0〜10 段階を「N 段階(+3N%)」で並べる(§07 形態 2) */
   const architectLabOptions = $derived(
     Array.from({ length: limits.architect_lab_stage_max + 1 }, (_, i) => ({
@@ -39,13 +34,17 @@
   );
   /** クリティカル率増加の合計(上限を掛ける前。計算は Rust 側) */
   const criticalRateBonus = $derived(preview?.critical_rate_bonus.raw ?? 0);
+  /** 装備クリティカル補正の合計(基本 + 強化。バッチ 2 で preview に入った合計をそのまま使う) */
+  const equipmentCriticalTotal = $derived(
+    (preview?.equipment_base_total.critical ?? 0) + (preview?.equipment_enhanced_total.critical ?? 0),
+  );
 
   /** クリティカル率に、この補正源の外から入ってくる分 */
   const criticalFromOthers = $derived<ExternalSource[]>([
     {
       id: "equipment",
       name: "装備クリティカル補正",
-      value: PART_SLOTS.reduce((n, slot) => n + (selectedPartOrNull(slot)?.base.critical ?? 0) + (selectedPartOrNull(slot)?.enchant.critical ?? 0), 0),
+      value: equipmentCriticalTotal,
       format: (v) => `+${fmtInt(v)}`,
       note: "(装備クリティカル補正 + 1) × 2 の項",
     },
@@ -70,8 +69,8 @@
     {
       id: "siena",
       name: "シエナのオーラのクリティカル確率",
-      value: sienaExtraTotal(draft.equipment, "critical_rate"),
-      format: (v) => `×${(1 + v / 100).toFixed(2)}`,
+      value: preview?.siena_critical_rate ?? 0,
+      format: (v) => `×${(1 + v).toFixed(2)}`,
       note: "AGI 由来の項に乗算。下の合計には入らない",
     },
   ]);
@@ -81,7 +80,7 @@
   <p class="hint dim">
     wiki「計算式まとめ <b>#CriticalChance</b>」。クリティカル率は
     <b>(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象のAGI)) × ペット会心
-    ＋ スキルの Cri値 ＋ クリティカル率増加 ＋ 対象のクリティカル被撃率</b>で、下限 0% / 上限 100%。
+    ＋ スキルの Cri値 ＋ クリティカル率増加 ＋ 対象のクリティカル被撃率</b>で、下限 {limits.critical_rate_min}% / 上限 {limits.critical_rate_max}%。
     装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入るので、
     ここで選ぶのは<b>ペット会心と「クリティカル率増加」</b>だけです(自動で入る分は下に出します)。
     対象のAGI とクリティカル被撃率は wiki 狩り場情報一覧に値がある敵だけに入っているので、
@@ -91,7 +90,7 @@
     <label class="check">
       <input type="checkbox" bind:checked={draft.statSources.critical_rate.pet} />
       <span>ペット会心</span>
-      <span class="fixed-value dim">×1.1</span>
+      <span class="fixed-value dim">×{limits.pet_critical_rate}</span>
     </label>
     <label class="check">
       <input type="checkbox" bind:checked={draft.statSources.critical_rate.ultimate_rune} />

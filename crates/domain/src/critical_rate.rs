@@ -21,7 +21,11 @@ use serde::{Deserialize, Serialize};
 /// クリティカル率増加の上限(wiki `#CriticalChance`「クリティカル率増加(上限+100%)」)。
 pub const CRITICAL_RATE_BONUS_MAX: f64 = 100.0;
 /// ペット会心(wiki: 「クリティカル率1.1倍」)。
-const PET_CRITICAL_RATE: f64 = 1.1;
+pub const PET_CRITICAL_RATE: f64 = 1.1;
+/// クリティカル率の下限(wiki `#CriticalChance`「下限0% / 上限100%」)。
+pub const CRITICAL_RATE_MIN: f64 = 0.0;
+/// クリティカル率の上限。
+pub const CRITICAL_RATE_MAX: f64 = 100.0;
 
 /// クリティカル率増加の供給源(wiki `#CriticalChance` の「クリティカル率増加」表)。
 /// 「バフ」は値が `n` で不定なので入れず、値が確定している 3 件だけを持つ。
@@ -213,7 +217,7 @@ pub fn critical_rate(
         bonus,
         target_taken_rate,
         raw,
-        value: raw.clamp(0.0, 100.0),
+        value: raw.clamp(CRITICAL_RATE_MIN, CRITICAL_RATE_MAX),
     }
 }
 

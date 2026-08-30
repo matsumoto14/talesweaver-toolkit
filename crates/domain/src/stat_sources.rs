@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::actual_delay::ActualDelayContribution;
 use crate::attack_power::{
     attack_power_breakdown, stat_attack_power, AttackCoefficients, AttackPowerBreakdown,
 };
@@ -23,10 +24,11 @@ use crate::damage::DamageContribution;
 use crate::element::ElementSources;
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
-    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, ENHANCE_LEVEL_MAX,
-    EQUIPMENT_VALUE_MAX,
+    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, PartStatTotal,
+    ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
 };
 use crate::mastery::{Masteries, MasteryCatalog};
+use crate::random_option::{RandomOptionDef, RandomOptionTotals};
 use crate::rounding::floor_int;
 use crate::soul_link::{
     SoulLinkError, SoulLinkPreview, SoulLinkStatus, SOUL_LINK_ARMOR_ENHANCE_LEVEL_MAX,
@@ -252,6 +254,13 @@ impl SacredRelic {
     /// 段階を最終固定値(0..=+400)に変換する。
     pub fn value(&self, kind: StatKind) -> i64 {
         i64::from(self.get(kind)) * Self::VALUE_PER_STAGE
+    }
+
+    /// 最終固定値から段階へ逆算する(UI の「実際に増える値」入力用)。範囲外は clamp し、
+    /// 1 段階に満たない端数は切り捨てる(他の domain 換算と同じ floor 規約)。
+    pub fn stage_from_value(value: i64) -> u8 {
+        let max_value = i64::from(Self::MAX_STAGE) * Self::VALUE_PER_STAGE;
+        (value.clamp(0, max_value) / Self::VALUE_PER_STAGE) as u8
     }
 }
 
@@ -1001,6 +1010,36 @@ pub struct StatPreview {
     pub siena_part_values: Vec<PartEquipmentValues>,
     /// テシスコアの地域別プレビュー(`CoreRegion::ALL` の順)。正は `crates/domain/src/thesis_core.rs`
     pub thesis_cores: Vec<ThesisCoreRegionPreview>,
+    /// 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分。地域なし = テシスコアを含まない)。
+    /// 正は `Equipment::enhanced_totals`
+    pub equipment_enhanced_total: EquipmentValues,
+    /// 強化能力値のうち `part.enchant` だけを部位別に割ったもの(表示用の内訳)。
+    /// 正は `Equipment::enchant_values_by_part`
+    pub part_enchant_values: Vec<PartEquipmentValues>,
+    /// 全部位のランダムオプションの効き先別集計。正は `Equipment::random_option_totals`
+    pub random_option_totals: RandomOptionTotals,
+    /// シエナのオーラのステ加算(能力値スロット + 全ステータス増加)の 7 ステ合計。
+    /// 正は `Equipment::siena_stat_bonus`
+    pub siena_stat_total: i64,
+    /// シエナのオーラの追加オプション「攻撃力増加」の合計。Σ% の小数表現。正は `Equipment::siena_attack_rate`
+    pub siena_attack_rate: f64,
+    /// テシスコアのセット効果の全地域合計(`thesis_cores` の `set_bonus` を合算したもの)。
+    pub thesis_core_set_bonus_total: CoreSetBonus,
+    /// ON にしているキャラスキルぶんの中ディレイ減少の供給源(Σ% の小数表現)。
+    /// 正は `CharacterSkills::actual_delay_contributions`。上限(70%)を掛ける前の内訳
+    pub character_skill_actual_delay: Vec<ActualDelayContribution>,
+    /// マスタリーぶんの中ディレイ減少の合計(Σ% の小数表現)。正は `Masteries::actual_delay_reduction`
+    pub mastery_actual_delay: f64,
+    /// シエナのオーラの追加オプション「防御力増加」の合計。Σ% の小数表現。正は `Equipment::siena_defense_rate`
+    pub siena_defense_rate: f64,
+    /// シエナのオーラの追加オプション「中ディレイ減少」の合計。Σ% の小数表現。
+    /// 正は `Equipment::siena_actual_delay_reduction`
+    pub siena_actual_delay_rate: f64,
+    /// シエナのオーラの追加オプション「クリティカル確率」の合計。Σ% の小数表現(AGI 由来の項への乗数)。
+    /// 正は `Equipment::siena_critical_rate`
+    pub siena_critical_rate: f64,
+    /// シエナのオーラのステ加算合計を部位別に割ったもの(表示用の内訳)。正は `SienaAura::stat_bonus` の `total()`
+    pub siena_part_stat_totals: Vec<PartStatTotal>,
 }
 
 /// テシスコア 1 地域ぶんの表示用プレビュー(6 枠の合計・セット効果)。
@@ -1050,6 +1089,9 @@ pub struct CriticalRateBonusPreview {
     pub raw: f64,
     /// 上限 +100% を掛けた合計
     pub value: f64,
+    /// 設計者の研究室ぶんのクリティカル率増加(研究段階 × 1 段階あたりの増加量)。
+    /// 正は `CriticalRateSources::architect_lab_bonus`
+    pub architect_lab_bonus: f64,
 }
 
 /// シエナのオーラのステ加算(wiki: 能力値一覧(その他の部位)・追加オプション「全ステータス増加」)を
@@ -1235,6 +1277,7 @@ pub fn preview_effective_stats(
     character_skills: &CharacterSkillCatalog,
     abilities: &[EquipmentAbilityDef],
     titles: &[TitleDef],
+    random_options: &[RandomOptionDef],
     coefficients: Option<AttackPowerCoefficients>,
     stat_cap: i64,
 ) -> Result<StatPreview, StatSourceError> {
@@ -1314,6 +1357,7 @@ pub fn preview_effective_stats(
     let critical_rate_bonus = CriticalRateBonusPreview {
         raw: sources.critical_rate.raw_bonus(),
         value: sources.critical_rate.bonus(),
+        architect_lab_bonus: sources.critical_rate.architect_lab_bonus(),
     };
     let sacred_relic_total: i64 = StatKind::ALL
         .iter()
@@ -1331,7 +1375,15 @@ pub fn preview_effective_stats(
             values: aura.values(),
         })
         .collect();
-    let thesis_cores = CoreRegion::ALL
+    let siena_part_stat_totals = equipment
+        .siena
+        .iter_selected()
+        .map(|(slot, aura)| PartStatTotal {
+            slot,
+            value: aura.stat_bonus().total(),
+        })
+        .collect();
+    let thesis_cores: Vec<ThesisCoreRegionPreview> = CoreRegion::ALL
         .into_iter()
         .map(|region| {
             let set = equipment.thesis_cores.get(region);
@@ -1345,6 +1397,11 @@ pub fn preview_effective_stats(
             }
         })
         .collect();
+    let siena_stat_bonus = equipment.siena_stat_bonus();
+    let siena_stat_total: i64 = siena_stat_bonus.total();
+    let thesis_core_set_bonus_total = thesis_cores
+        .iter()
+        .fold(CoreSetBonus::default(), |acc, r| acc.add(r.set_bonus));
     Ok(StatPreview {
         stats,
         traces,
@@ -1358,6 +1415,20 @@ pub fn preview_effective_stats(
         part_ability_values,
         siena_part_values,
         thesis_cores,
+        equipment_enhanced_total: equipment.enhanced_totals(None),
+        part_enchant_values: equipment.enchant_values_by_part(),
+        random_option_totals: equipment.random_option_totals(random_options),
+        siena_stat_total,
+        siena_attack_rate: equipment.siena_attack_rate(),
+        thesis_core_set_bonus_total,
+        character_skill_actual_delay: sources
+            .character_skills
+            .actual_delay_contributions(character_skills, &sources.masteries),
+        mastery_actual_delay: sources.masteries.actual_delay_reduction(masteries),
+        siena_defense_rate: equipment.siena_defense_rate(),
+        siena_actual_delay_rate: equipment.siena_actual_delay_reduction(),
+        siena_critical_rate: equipment.siena_critical_rate(),
+        siena_part_stat_totals,
     })
 }
 
@@ -1458,6 +1529,54 @@ pub struct StatLimits {
     /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentValues::FIELD_LABELS` の順。
     /// `CoreType`(テシスコア)の表示名もここと同じ(8 種が重なる。critical は含まない)
     pub equipment_stat_labels: Vec<EquipmentStatLabel>,
+    /// コンボボーナスが付くコンボ数(wiki: カテゴリH)
+    pub combo_bonus_threshold: u32,
+    /// 中ディレイのコンボボーナスが付くコンボ数(wiki `#ActualDelay`)
+    pub combo_delay_threshold: u32,
+    /// コンボボーナスの割合(wiki: カテゴリH)。Σ% の小数表現
+    pub combo_bonus_rate: f64,
+    /// 中ディレイ減少値の上限(wiki `#ActualDelay`)。Σ% の小数表現
+    pub actual_delay_reduction_max: f64,
+    /// 中ディレイの下限(秒。wiki `#ActualDelay`)
+    pub actual_delay_min: f64,
+    /// レインフォース無しで取れるアンリーシュの Lv(wiki: Skill/共通)
+    pub unleash_free_level_max: u8,
+    /// +12 以上で追加固定ダメージがレンジ振り(MR)になる境界(wiki: 装備システム/装備強化)
+    pub enhance_grade_min_level: u8,
+    /// 属性差 1 あたりの属性差ボーナス(wiki: カテゴリI)。Σ% の小数表現
+    pub element_bonus_percent_per_point: f64,
+    /// 属性差ボーナス(カテゴリI)の上限。Σ% の小数表現
+    pub element_bonus_max: f64,
+    /// カット率 J の分母(wiki カテゴリJ: `r = 1 − a/(a+80)`)
+    pub cut_rate_denominator: f64,
+    /// カット率 J の `a` の定数項(`a = 3 + [(合計 − 1) / 除数]`)
+    pub cut_rate_a_base: f64,
+    /// カット率 J の `a` の除数(物理 / 魔法)
+    pub cut_rate_divisor: f64,
+    /// カット率 J の `a` の除数(複合)
+    pub cut_rate_composite_divisor: f64,
+    /// 防御力(物理 / 魔法)のステ係数(`DEF*3 + 装備×倍率×6`)
+    pub defense_stat_multiplier: f64,
+    /// 防御力(物理 / 魔法)の装備係数
+    pub defense_equipment_multiplier: f64,
+    /// 複合防御力のステ係数(`(DEF+MR)*1.5 + 装備×3`)
+    pub composite_defense_stat_multiplier: f64,
+    /// 複合防御力の装備係数
+    pub composite_defense_equipment_multiplier: f64,
+    /// 回避Pの定数項(`回避P = [15 + (AGI + 装備回避率)×1.2 + 装備敏捷度/7 + ...]`)
+    pub evasion_point_base: f64,
+    /// 回避Pの AGI 係数
+    pub evasion_point_agi_rate: f64,
+    /// 回避Pの攻撃タイプ別増加の共通除数
+    pub evasion_type_divisor: f64,
+    /// 回避P(物理)の `[(STAB+HACK)/100]` の除数
+    pub evasion_physical_attack_divisor: f64,
+    /// ペット会心の倍率(wiki `#CriticalChance`)
+    pub pet_critical_rate: f64,
+    /// クリティカル率の下限(wiki `#CriticalChance`)
+    pub critical_rate_min: f64,
+    /// クリティカル率の上限
+    pub critical_rate_max: f64,
 }
 
 /// `DamageCategory` 1 件の表示名(`stat_limits` 経由で UI に配る)。
@@ -1560,6 +1679,33 @@ pub fn stat_limits() -> StatLimits {
                 label: label.to_string(),
             })
             .collect(),
+        combo_bonus_threshold: crate::damage::COMBO_BONUS_THRESHOLD,
+        combo_delay_threshold: crate::actual_delay::COMBO_DELAY_THRESHOLD,
+        combo_bonus_rate: crate::damage::COMBO_BONUS_RATE,
+        actual_delay_reduction_max: crate::actual_delay::ACTUAL_DELAY_REDUCTION_MAX,
+        actual_delay_min: crate::actual_delay::ACTUAL_DELAY_MIN,
+        unleash_free_level_max: crate::common_skill::UNLEASH_FREE_LEVEL_MAX,
+        enhance_grade_min_level: crate::equipment::ENHANCE_LEVEL_RANDOM_RANGE_MIN,
+        element_bonus_percent_per_point: crate::damage::ELEMENT_BONUS_PERCENT_PER_POINT,
+        element_bonus_max: DamageCategory::ElementBonus
+            .cap()
+            .and_then(|c| c.max)
+            .expect("ElementBonus は上限つき"),
+        cut_rate_denominator: crate::defense::CUT_RATE_DENOMINATOR,
+        cut_rate_a_base: crate::defense::CUT_RATE_A_BASE,
+        cut_rate_divisor: crate::defense::CUT_RATE_DIVISOR,
+        cut_rate_composite_divisor: crate::defense::CUT_RATE_COMPOSITE_DIVISOR,
+        defense_stat_multiplier: crate::defense::DEFENSE_STAT_MULTIPLIER,
+        defense_equipment_multiplier: crate::defense::DEFENSE_EQUIPMENT_MULTIPLIER,
+        composite_defense_stat_multiplier: crate::defense::COMPOSITE_DEFENSE_STAT_MULTIPLIER,
+        composite_defense_equipment_multiplier: crate::defense::COMPOSITE_DEFENSE_EQUIPMENT_MULTIPLIER,
+        evasion_point_base: crate::defense::EVASION_POINT_BASE,
+        evasion_point_agi_rate: crate::defense::EVASION_POINT_AGI_RATE,
+        evasion_type_divisor: crate::defense::EVASION_TYPE_DIVISOR,
+        evasion_physical_attack_divisor: crate::defense::EVASION_PHYSICAL_ATTACK_DIVISOR,
+        pet_critical_rate: crate::critical_rate::PET_CRITICAL_RATE,
+        critical_rate_min: crate::critical_rate::CRITICAL_RATE_MIN,
+        critical_rate_max: crate::critical_rate::CRITICAL_RATE_MAX,
     }
 }
 
@@ -2003,6 +2149,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             None,
             NO_CAP,
         )
@@ -2029,6 +2176,7 @@ mod tests {
             &equipment,
             &test_common_skills(),
             &test_catalog(),
+            &[],
             &[],
             &[],
             &[],
@@ -2087,6 +2235,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             Some(test_attack_coefficients()),
             NO_CAP,
         )
@@ -2132,6 +2281,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             Some(coefficients),
             NO_CAP,
         )
@@ -2147,6 +2297,7 @@ mod tests {
                 &without,
                 &test_common_skills(),
                 &test_catalog(),
+                &[],
                 &[],
                 &[],
                 &[],
@@ -2633,6 +2784,85 @@ mod tests {
             limits.enhance_level_max,
             crate::equipment::ENHANCE_LEVEL_MAX
         );
+        assert_eq!(limits.combo_bonus_threshold, crate::damage::COMBO_BONUS_THRESHOLD);
+        assert_eq!(
+            limits.combo_delay_threshold,
+            crate::actual_delay::COMBO_DELAY_THRESHOLD
+        );
+        assert_eq!(limits.combo_bonus_rate, crate::damage::COMBO_BONUS_RATE);
+        assert_eq!(
+            limits.actual_delay_reduction_max,
+            crate::actual_delay::ACTUAL_DELAY_REDUCTION_MAX
+        );
+        assert_eq!(limits.actual_delay_min, crate::actual_delay::ACTUAL_DELAY_MIN);
+        assert_eq!(
+            limits.unleash_free_level_max,
+            crate::common_skill::UNLEASH_FREE_LEVEL_MAX
+        );
+        assert_eq!(
+            limits.enhance_grade_min_level,
+            crate::equipment::ENHANCE_LEVEL_RANDOM_RANGE_MIN
+        );
+        assert_eq!(
+            limits.element_bonus_percent_per_point,
+            crate::damage::ELEMENT_BONUS_PERCENT_PER_POINT
+        );
+        assert_eq!(
+            limits.element_bonus_max,
+            DamageCategory::ElementBonus.cap().unwrap().max.unwrap()
+        );
+        assert_eq!(limits.cut_rate_denominator, crate::defense::CUT_RATE_DENOMINATOR);
+        assert_eq!(limits.cut_rate_a_base, crate::defense::CUT_RATE_A_BASE);
+        assert_eq!(limits.cut_rate_divisor, crate::defense::CUT_RATE_DIVISOR);
+        assert_eq!(
+            limits.cut_rate_composite_divisor,
+            crate::defense::CUT_RATE_COMPOSITE_DIVISOR
+        );
+        assert_eq!(
+            limits.defense_stat_multiplier,
+            crate::defense::DEFENSE_STAT_MULTIPLIER
+        );
+        assert_eq!(
+            limits.defense_equipment_multiplier,
+            crate::defense::DEFENSE_EQUIPMENT_MULTIPLIER
+        );
+        assert_eq!(
+            limits.composite_defense_stat_multiplier,
+            crate::defense::COMPOSITE_DEFENSE_STAT_MULTIPLIER
+        );
+        assert_eq!(
+            limits.composite_defense_equipment_multiplier,
+            crate::defense::COMPOSITE_DEFENSE_EQUIPMENT_MULTIPLIER
+        );
+        assert_eq!(limits.evasion_point_base, crate::defense::EVASION_POINT_BASE);
+        assert_eq!(
+            limits.evasion_point_agi_rate,
+            crate::defense::EVASION_POINT_AGI_RATE
+        );
+        assert_eq!(limits.evasion_type_divisor, crate::defense::EVASION_TYPE_DIVISOR);
+        assert_eq!(
+            limits.evasion_physical_attack_divisor,
+            crate::defense::EVASION_PHYSICAL_ATTACK_DIVISOR
+        );
+        assert_eq!(limits.pet_critical_rate, crate::critical_rate::PET_CRITICAL_RATE);
+        assert_eq!(limits.critical_rate_min, crate::critical_rate::CRITICAL_RATE_MIN);
+        assert_eq!(limits.critical_rate_max, crate::critical_rate::CRITICAL_RATE_MAX);
+    }
+
+    #[test]
+    fn 聖物の実値は段階へ切り捨てで逆算する() {
+        assert_eq!(SacredRelic::stage_from_value(0), 0);
+        assert_eq!(SacredRelic::stage_from_value(10), 1);
+        // 1 段階(10)に満たない端数は切り捨てる(四捨五入しない)
+        assert_eq!(SacredRelic::stage_from_value(15), 1);
+        assert_eq!(SacredRelic::stage_from_value(19), 1);
+        // 上限を超える値は最大段階に clamp する
+        assert_eq!(
+            SacredRelic::stage_from_value(10_000),
+            SacredRelic::MAX_STAGE
+        );
+        // 負値は 0 に clamp する
+        assert_eq!(SacredRelic::stage_from_value(-5), 0);
     }
 
     #[test]

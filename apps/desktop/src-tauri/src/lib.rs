@@ -31,6 +31,7 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
@@ -58,6 +59,7 @@ pub fn run() {
             commands::delete_buff_set,
             commands::set_default_buff_set,
             commands::list_element_sources,
+            commands::equipment_element_values,
             commands::preview_elements,
             commands::list_contents,
             commands::list_equipment_catalog,
@@ -67,6 +69,7 @@ pub fn run() {
             commands::list_masteries,
             commands::list_titles,
             commands::list_character_skills,
+            commands::resolve_character_skill_effects,
             commands::preview_effective_stats,
             commands::preview_defense,
             commands::get_stat_limits,
@@ -75,9 +78,15 @@ pub fn run() {
             commands::create_character,
             commands::update_character,
             commands::delete_character,
+            commands::list_character_icons,
+            commands::set_character_icon,
+            commands::reset_character_icon,
+            commands::get_damage_snapshot,
+            commands::set_damage_snapshot,
             commands::calculate_damage,
             commands::preview_damage,
             commands::evaluate_contents,
+            commands::list_upgrade_candidates,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri アプリの起動に失敗");

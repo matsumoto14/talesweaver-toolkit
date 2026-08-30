@@ -35,6 +35,8 @@ pub struct RegisteredCharacter {
     pub main_skill_id: Option<String>,
     /// このキャラで計算時に最初に選ぶバフセット。
     pub default_buff_set_id: Option<i64>,
+    /// 最終保存日時(ISO8601 UTC)。v11 未満で作られた既存行は NULL(表示しない)。
+    pub updated_at: Option<String>,
 }
 
 /// 登録リクエスト。
@@ -80,9 +82,12 @@ CREATE TABLE IF NOT EXISTS characters (
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
 /// v6 で `common_skills` 列が加わった。パワーウェポン / ストロングウェポンは
 /// v5 まで `equipment` 列の中にあり、移行で `common_skills` へ移す。
-const SCHEMA_VERSION: i64 = 10;
+/// v11 で `characters.updated_at`(最終保存日時)と `damage_snapshots` テーブルが加わり、
+/// v12 で登録キャラごとの表示画像 `character_icons` が加わった。
+/// (ホームの影響カード用。docs/claude/goals 参照)。
+const SCHEMA_VERSION: i64 = 12;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id, updated_at";
 
 /// v9: キャラ JSON に埋め込まれていた常用バフを独立したセットへ移す。
 /// 1キャラずつ作り、同じ内容でも統合しない。全処理を単一 transaction にする。
@@ -187,6 +192,31 @@ fn migrate_unleash_from_buff_sets(conn: &Connection) -> Result<()> {
             )?;
         }
     }
+    Ok(())
+}
+
+/// v11: 最終保存日時(`characters.updated_at`)と前回ダメージ計算の記録(`damage_snapshots`)を追加する。
+/// 既存行の `updated_at` は NULL のまま(フロントは NULL なら表示しない)。
+fn migrate_damage_snapshots(conn: &Connection) -> Result<()> {
+    let columns: HashSet<String> = {
+        let mut stmt = conn.prepare("PRAGMA table_info(characters)")?;
+        let values = stmt
+            .query_map([], |row| row.get(1))?
+            .collect::<rusqlite::Result<_>>()?;
+        values
+    };
+    if !columns.contains("updated_at") {
+        conn.execute_batch("ALTER TABLE characters ADD COLUMN updated_at TEXT;")?;
+    }
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS damage_snapshots (
+            character_id INTEGER PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
+            skill_id     TEXT    NOT NULL,
+            content_id   TEXT    NOT NULL,
+            per_hit      INTEGER NOT NULL,
+            taken_at     TEXT    NOT NULL
+        );",
+    )?;
     Ok(())
 }
 
@@ -781,6 +811,8 @@ impl CharacterRepository {
         // v9 は旧バフに混在していたキャラスキルを分離した後の choices を抽出する。
         migrate_buff_sets(&conn)?;
         migrate_unleash_from_buff_sets(&conn)?;
+        migrate_damage_snapshots(&conn)?;
+        crate::character_icon_repository::migrate_character_icons(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -810,8 +842,8 @@ impl CharacterRepository {
         let equipment_json = serde_json::to_string(&new.equipment)?;
         let common_skills_json = serde_json::to_string(&new.common_skills)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
             params![
                 new.name,
                 new.game_character_id,
@@ -864,7 +896,8 @@ impl CharacterRepository {
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
                 awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
-                common_skills = ?14, main_skill_id = ?15, default_buff_set_id = ?16
+                common_skills = ?14, main_skill_id = ?15, default_buff_set_id = ?16,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE id = ?17",
             params![
                 update.name,
@@ -1000,6 +1033,7 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         common_skills: row.get::<_, CommonSkillsColumn>("common_skills")?.0,
         main_skill_id: row.get("main_skill_id")?,
         default_buff_set_id: row.get("default_buff_set_id")?,
+        updated_at: row.get("updated_at")?,
     })
 }
 
@@ -1011,6 +1045,19 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn v11からv12で既存キャラを変えず画像テーブルを追加する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        repo.conn.execute("INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills)
+            VALUES ('既存', 'boris', 1,1,1,1,1,1,1,4,0,'{}','{}','{}')", []).unwrap();
+        repo.conn.execute_batch("DROP TABLE character_icons; PRAGMA user_version = 11;").unwrap();
+        let conn = repo.conn;
+        let migrated = CharacterRepository::from_connection(conn).unwrap();
+        assert_eq!(migrated.conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0)).unwrap(), 12);
+        assert_eq!(migrated.conn.query_row("SELECT name FROM characters", [], |row| row.get::<_, String>(0)).unwrap(), "既存");
+        assert_eq!(migrated.conn.query_row("SELECT count(*) FROM character_icons", [], |row| row.get::<_, i64>(0)).unwrap(), 0);
+    }
 
     fn v8_buff_migration_connection() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -1107,6 +1154,54 @@ mod tests {
         assert_eq!(migrated.choices[0].buff_id, "trust_potion");
         assert_eq!(migrated.choices[1].buff_id, "club_effect");
         assert_eq!(migrated.choices[1].value, Some(7.0));
+    }
+
+    #[test]
+    fn v11移行は既存キャラを保ったままupdated_at列とdamage_snapshotsテーブルを追加する() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION).unwrap();
+        conn.execute(
+            "INSERT INTO characters (id,name,game_character_id,stab,hack,int,def,mr,dex,agi,awakening_stage,eternal_level)
+             VALUES (1,'既存','boris',1,1,1,1,1,1,1,0,0)",
+            [],
+        ).unwrap();
+
+        migrate_damage_snapshots(&conn).unwrap();
+        migrate_damage_snapshots(&conn).unwrap();
+
+        let name: String = conn
+            .query_row("SELECT name FROM characters WHERE id=1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(name, "既存");
+        let updated_at: Option<String> = conn
+            .query_row("SELECT updated_at FROM characters WHERE id=1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(updated_at, None, "既存行の updated_at は NULL のまま");
+        let has_table: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='damage_snapshots')",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert!(has_table);
+    }
+
+    #[test]
+    fn create_updateはupdated_atを埋める() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let created = repo
+            .create(&new_character("a"), &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert!(created.updated_at.is_some());
+
+        let updated = new_character("a改");
+        let result = repo
+            .update(created.id, &updated, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert!(result.updated_at.is_some());
     }
 
     #[test]
