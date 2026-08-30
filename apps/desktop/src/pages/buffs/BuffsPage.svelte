@@ -265,6 +265,23 @@
     return damage.join(" ・ ") || "効果を記録";
   }
 
+  /** 選べない理由(同じ重複枠を占めている、いまセットに入っているバフの名前)。
+   *  title を hover しなくても画面(チップ本体)から読めるように、ここを唯一の
+   *  文面の出どころにして buffTooltip とチップの両方から使う。 */
+  function blockingBuffNames(def: BuffDefinition): string {
+    if (!selected || def.exclusive_slots.length === 0) return "";
+    const slots = new Set(def.exclusive_slots);
+    return selected.choices.choices
+      .map((choice) => app.catalog.find((d) => d.id === choice.buff_id))
+      .filter((d): d is BuffDefinition => d !== undefined && d.exclusive_slots.some((s) => slots.has(s)))
+      .map((d) => d.name)
+      .join(" / ");
+  }
+  function blockReason(def: BuffDefinition): string {
+    const names = blockingBuffNames(def);
+    return names ? `${names} と選べません` : "選択不可";
+  }
+
   function buffTooltip(def: BuffDefinition, blocked: boolean): string {
     const purposes = def.purposes.map((purpose) => PURPOSES.find((item) => item.id === purpose)?.label ?? purpose).join(" / ");
     const lines = [def.name, `目的: ${purposes}`, `種類: ${ORIGIN_LABELS[def.origin]}`, `主効果: ${effectSummary(def)}`, `対象: ${targetLabel(def.target)}`];
@@ -272,10 +289,15 @@
     if (damage.length > 0 && !isRecordOnly(def.value)) lines.push(`追加効果: ${damage.join(" ・ ")}`);
     lines.push(`重複: ${exclusive(def)}`);
     if (def.note) lines.push(`補足: ${def.note}`);
-    if (blocked) lines.unshift("選択不可: 同じ重複枠のバフが選ばれています", "");
+    if (blocked) lines.unshift(blockReason(def), "");
     return lines.join("\n");
   }
 
+  // 目的タブの分子(purposeSelectedCount)は matchesPurpose が「複数の目的を持つバフ」を
+  // 許すぶん重複して数えている(例: ステ+火力どちらの目的も持つバフは両方の分子に入る)。
+  // そのため 3 タブの分子を足しても右列の summary の「n 件 ON」には一致しない。
+  // これは意図的な仕様(ユーザー判断: 直さない) — 次に「合計が合わない」と気付いたときの
+  // ためにここへ書いておく。
   const purposeSelectedCount = (purpose: BuffPurpose) =>
     app.catalog.filter((def) => matchesPurpose(def, purpose) && on(def)).length;
   const damageGroupSelectedCount = (group: DamageGroup) =>
@@ -517,7 +539,18 @@
                     aria-label={`${def.name}。${effectLine(def)}${needsInput(def) ? "。クリックして設定" : ""}`}
                   >
                     <span class="chip-copy">
-                      <strong>{def.name}</strong>
+                      <span class="chip-head">
+                        <strong>{def.name}</strong>
+                        <!-- ON / 選べない の状態バッジ。枠は 3 状態すべてで常に確保し(空のときは
+                             透明)、ここだけ見れば ON・OFF・選択不可の判別が付くようにする
+                             (§00 05・03: バッジが出た瞬間に幅が変わって隣が動くのを防ぐ) -->
+                        <span
+                          class="chip-state"
+                          class:on={isOn}
+                          class:blocked
+                          use:flash={() => (isOn ? "on" : blocked ? "blocked" : "off")}
+                        >{isOn ? "選択中" : blocked ? "選択不可" : ""}</span>
+                      </span>
                       {#if isOn && top}
                         <!-- ON: このキャラで実際に何点伸びたかを行ごとに出す(§00 05)。ステ増分と
                              ダメージ効果は別行 — 1 行に連結すると長い名前のダメージ効果で溢れる
@@ -526,9 +559,11 @@
                              stopPropagation で切り離す(§00 03: 押した場所は動かさない)。 -->
                         <span class="chip-effect" use:flash={() => effectLine(def)}>
                           {#if top.shown.length > 0}
-                            <small>
-                              {top.shown.join(" / ")}
+                            <small class="chip-effect-row">
+                              <span class="chip-effect-values">{top.shown.join(" / ")}</span>
                               {#if top.restCount > 0}
+                                <!-- トグル面の中央に押し分けの要る的を置かない — 行の右端に、縦の区切りで
+                                     「ここだけ別の的」と分かるようにする(実機で誤タップ報告あり)。 -->
                                 <button
                                   type="button"
                                   class="rest-link"
@@ -541,6 +576,11 @@
                           {#if dmg}<small>{dmg}</small>{/if}
                           {#if top.shown.length === 0 && !dmg}<small>{effectSummary(def)}</small>{/if}
                         </span>
+                      {:else if blocked}
+                        <!-- 選べない理由をここに出す(title 無しで読めるように)。同じ
+                             chip-effect の枠を使い、OFF 単独のときの説明文と入れ替える形にして
+                             新しい行を増やさない(チップの高さを崩さない) -->
+                        <span class="chip-effect"><small class="block-reason" use:flash={() => blockReason(def)}>{blockReason(def)}</small></span>
                       {:else}
                         <span class="chip-effect"><small use:flash={() => effectLine(def)}>{effectLine(def)}</small></span>
                       {/if}
@@ -672,9 +712,21 @@
   /* ステ増分・ダメージ効果の行を積む場所。件数が 0〜2 行のどれでも同じ高さを確保し、
      チップの高さが行内で揃うようにする(5周目 実機指摘: チップの高さは全チップで揃える)。 */
   .chip-effect { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 22px; }
+  /* ステ増分の値と「ほか n」を同じ行の左右に離す。値はトグル本体の一部(押すと ON/OFF)、
+     「ほか n」は別の的(押すとポップオーバー)なので、中央で押し分けさせない — 右端に寄せ、
+     縦の区切り線で「ここだけ別」と分かるようにする(実機で中央を押して誤爆した報告あり)。 */
+  .chip-effect-row { display: flex; align-items: baseline; gap: 6px; }
+  .chip-effect-values { flex: 1; min-width: 0; }
   /* 「ほか n」= 割愛した増分の中身を辿るボタン。チップ本体のトグルとは別の押せる要素だと
-     分かるよう下線を付け、チップの色そのものは変えない(§00 03 と衝突させない)。 */
-  .rest-link { display: inline; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+     分かるよう下線を付け、チップの色そのものは変えない(§00 03 と衝突させない)。
+     margin-left: auto で行の右端に固定し、border-left の区切りと左パディングで
+     独立した的として十分な広さを確保する(高さ・幅はチップ側を変えない)。 */
+  .rest-link {
+    flex-shrink: 0; align-self: stretch; display: inline-flex; align-items: center;
+    margin-left: auto; padding: 0 0 0 8px; border: 0; border-left: 1px solid var(--border-soft);
+    background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px;
+    white-space: nowrap; cursor: pointer;
+  }
   .rest-link:hover { color: var(--accent-hover); }
   .rest-popover {
     position: absolute; z-index: 6; top: calc(100% + 4px); left: 7px; right: 7px;
@@ -701,9 +753,23 @@
   .choice-editor { padding: 7px; display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--bg-field); box-shadow: inset 0 1px #fff; }
   .chip-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .chip-copy strong, .chip-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip-head { display: flex; align-items: center; gap: 6px; }
+  .chip-head strong { min-width: 0; flex: 1; }
+  /* ON / 選べない のバッジ。3 状態(ON・OFF・選べない)のどれでも同じ場所を占めるよう、
+     OFF のときも要素自体は出したまま透明にする(枠だけ確保) — CalcPage の「常/追」バッジ
+     (chip-state)と同じ手当て。ON は「セットに保存される」の水色(--sel、他の ON チップと
+     同系色)、選べないは新しい色を作らず §03 の状態 6 系統の unknown(対象外・判定不能)を使う。 */
+  .chip-state {
+    flex-shrink: 0; min-width: 46px; padding: 1px 6px; border-radius: var(--r-pill);
+    border: 1px solid transparent; background: transparent; color: transparent;
+    font-size: 8.5px; font-weight: 700; text-align: center; white-space: nowrap;
+  }
+  .chip-state.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); }
+  .chip-state.blocked { background: var(--state-unknown-bg); border-color: var(--state-unknown-bd); color: var(--state-unknown-fg); }
   /* チップ本体の要約行(.chip-effect 内)だけは、省略記号で切らず自然に折り返す — 幅で
      症状を消すのではなく、行を分けて出す量そのものを収める(5周目 実機指摘)。 */
   .chip-effect small { overflow: visible; text-overflow: clip; white-space: normal; }
+  .block-reason { color: var(--state-unknown-fg) !important; }
   .chip-copy strong { font-size: 10px; }
   .chips small { color: var(--fg-muted); font-size: 9px; }
   /* 効果値とは別行の操作ヒント。同じ行に混ぜない(§00 05 考えさせない) */
