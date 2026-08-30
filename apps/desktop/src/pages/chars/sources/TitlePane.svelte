@@ -134,7 +134,7 @@
   <div class="card-title space">
     よく使う称号 <span class="normal dim">ダメ +20%以上 / エクリプス / 神鳥の塒</span>
   </div>
-  <div class="item-list title-list">
+  <div class="item-list title-list effectful">
     {@render titleRows(commonTitleGroups)}
   </div>
   <details class="fold">
@@ -142,7 +142,7 @@
     <div class="fold-body">
       <input class="item-search" type="text" placeholder="称号名・グループで探す" bind:value={titleQuery} />
       {#if otherTitleGroups.length > 0}
-        <div class="item-list title-list">
+        <div class="item-list title-list effectful">
           {@render titleRows(otherTitleGroups)}
         </div>
       {:else}

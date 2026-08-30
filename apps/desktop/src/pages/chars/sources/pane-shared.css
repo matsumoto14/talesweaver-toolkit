@@ -145,7 +145,8 @@
   }
   .item-row.group:hover { border-color: var(--border); }
   .title-list > .item-row { height: 40px; min-height: 40px; overflow: hidden; }
-  .title-list .item-name { flex: 1; }
+  /* 名前が消えると「どの称号か」が分からなくなる。変種チップより名前を先に確保する(§00 05) */
+  .title-list .item-name { flex: 1; min-width: 5.5em; }
   .title-variants { margin-left: auto; display: flex; flex-wrap: nowrap; gap: 5px; flex-shrink: 0; }
 
   /* マスタリーの 1 段。段名 + 3 択のカード。どの段も 3 択なので列を固定してそろえる */
