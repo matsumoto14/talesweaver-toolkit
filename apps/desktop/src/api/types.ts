@@ -1199,12 +1199,26 @@ export interface DamageTrace {
 }
 
 export interface DamageResult {
-  /** 1 段あたりの与ダメージ(ダメージ上限を適用したあと) */
+  /**
+   * 1 段あたりの与ダメージ(スキル分のみ。ダメージ上限を適用したあと)。
+   * ゲームの表記ダメージに相当し、武器強化の追加固定ダメージは含まない
+   */
   per_hit: DamageTriple;
+  /** 実際に敵へ入る総量: per_hit × 段数 + weapon_added_per_hit × 段数 + 割合追加ダメージ */
   total: DamageTriple;
   /**
+   * 武器の装備強化による追加固定ダメージ(1 段あたり)。与ダメージ式の外・ダメージ上限の対象外で、
+   * ゲームは表記ダメージ(per_hit)と別枠で表示する
+   */
+  weapon_added_per_hit: number;
+  /** 与ダメージ(表記ダメージ)の合計 = per_hit × 段数 */
+  skill_total: DamageTriple;
+  /** 武器強化の追加固定ダメージの合計 = weapon_added_per_hit × 段数 */
+  weapon_added_total: number;
+  /**
    * 主役の 1 段あたりダメージ(クリ発生率 > 0 ならクリティカル、0 なら非クリ最大。
-   * ユーザー判断 2026-08-29)。計算タブ・ホームの表示、コンテンツ到達判定はこの値を使う
+   * ユーザー判断 2026-08-29)。ゲームの表記ダメージ(スキル分のみ)。計算タブ・ホームの表示、
+   * コンテンツ到達判定はこの値を使う
    */
   per_hit_primary: number;
   /** 主役の合計ダメージ */

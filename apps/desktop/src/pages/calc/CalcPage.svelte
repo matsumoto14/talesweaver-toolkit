@@ -646,20 +646,36 @@
         sub: `上限で −${fmtInt(r.capped_loss.max)}`,
       });
     }
-    return { mult: flowMultLabel, delta: perHit - pierced, to: perHit, mats, idle: 0, expr: null };
+    return {
+      mult: flowMultLabel,
+      delta: perHit - pierced,
+      to: perHit,
+      mats,
+      idle: 0,
+      expr: "ゲームの表記ダメージ(スキル分のみ)。武器強化の追加固定ダメージは含まない(合計の内訳を見る)",
+    };
   });
-  /** 鎖「合計」: 1 発 × 段数 ＋ 割合追加ダメージ。クリ率は段階表示で読む */
+  /** 鎖「合計」: (1 発 × 段数) ＋ (武器強化の追加固定 × 段数) ＋ 割合追加ダメージ。クリ率は段階表示で読む */
   const totalDetail = $derived.by<Detail | null>(() => {
     const r = result;
     if (r === null || perHit === null || totalValue === null) return null;
     const added = pick(r.added_damage) ?? 0;
+    const skillTotal = pick(r.skill_total) ?? 0;
     const mats: Mat[] = [
       {
-        label: `1 発 ${fmtInt(perHit)} × ${r.hit_count} 段`,
+        label: `1 発(表記ダメージ) ${fmtInt(perHit)} × ${r.hit_count} 段`,
         mult: `×${r.hit_count}`,
-        value: fmtInt(totalValue - added),
+        value: fmtInt(skillTotal),
       },
     ];
+    if (r.weapon_added_per_hit !== 0) {
+      mats.push({
+        label: `武器強化(追加固定) ${fmtInt(r.weapon_added_per_hit)} × ${r.hit_count} 段`,
+        mult: `×${r.hit_count}`,
+        value: fmtInt(r.weapon_added_total),
+        sub: "上限なし・表記ダメージとは別枠",
+      });
+    }
     if (added !== 0) {
       mats.push({
         label: "割合追加ダメージ(合計に乗る)",

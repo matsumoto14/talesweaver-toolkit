@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::actual_delay::ActualDelayContribution;
-use crate::category::{CategoryKind, DamageCategory};
+use crate::category::DamageCategory;
 use crate::damage::DamageContribution;
 use crate::mastery::Masteries;
 use crate::stat_sources::StatLayer;
@@ -80,10 +80,13 @@ impl SkillEffect {
                 format!("{} +{percent}%", names.join(" / "))
             }
             SkillEffect::ActualDelay { percent } => format!("中ディレイ −{percent}%"),
-            SkillEffect::Damage { category, percent } => match category.kind() {
-                CategoryKind::Fixed => format!("{} +{percent}", category.label()),
-                _ => format!("{} +{percent}%", category.label()),
-            },
+            SkillEffect::Damage { category, percent } => {
+                if category.is_percent_source() {
+                    format!("{} +{percent}%", category.label())
+                } else {
+                    format!("{} +{percent}", category.label())
+                }
+            }
             SkillEffect::RecordOnly => "記録のみ".to_string(),
         }
     }
@@ -259,13 +262,14 @@ pub fn damage_contributions<'a>(
 ) -> Vec<DamageContribution> {
     effects
         .filter_map(|(source, e)| match e {
-            // 割合カテゴリは % 表記なので小数に直す。固定値カテゴリはそのまま
+            // % 表記のカテゴリ(割合と E2)は小数に直す。実数の固定値カテゴリはそのまま
             SkillEffect::Damage { category, percent } => Some(DamageContribution {
                 source,
                 category: *category,
-                value: match category.kind() {
-                    CategoryKind::Rate => percent / 100.0,
-                    _ => *percent,
+                value: if category.is_percent_source() {
+                    percent / 100.0
+                } else {
+                    *percent
                 },
             }),
             _ => None,
@@ -289,6 +293,31 @@ pub enum CharacterSkillError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// E2「スキル倍率増加(固定値)」の供給源は wiki 上すべて %(兜アビリティ +1〜10% 等)。
+    /// スキル倍率(D)と同じ目盛りなので 1/100 して入れる(旧リポ Excel v4.00 と一致)。
+    #[test]
+    fn e2は割合と同じくパーセントを小数へ直す() {
+        let effect = SkillEffect::Damage {
+            category: DamageCategory::SkillMultiplierFixed,
+            percent: 10.0,
+        };
+        let contributions = damage_contributions([("E-スキル攻撃力増加".to_string(), &effect)].into_iter());
+        assert_eq!(contributions.len(), 1);
+        assert!((contributions[0].value - 0.10).abs() < 1e-12);
+        assert_eq!(effect.label(), "スキル倍率増加(固定値) +10%");
+    }
+
+    /// 実数で持つ固定値カテゴリ(K・W)はそのまま。
+    #[test]
+    fn 実数の固定値カテゴリはそのまま入る() {
+        let effect = SkillEffect::Damage {
+            category: DamageCategory::FinalDamageFixed,
+            percent: 500.0,
+        };
+        let contributions = damage_contributions([("テシスコア".to_string(), &effect)].into_iter());
+        assert_eq!(contributions[0].value, 500.0);
+    }
 
     const AGI: &[StatKind] = &[StatKind::Agi];
     const STAB_DEF: &[StatKind] = &[StatKind::Stab, StatKind::Def];
