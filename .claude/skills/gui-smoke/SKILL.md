@@ -9,6 +9,11 @@ description: Tauri デスクトップアプリを実機起動し、WebView2 の�
 
 ## 手順
 
+0. **開発 DB を退避する**(アプリを起動する**前**。必ず先にやる):
+   ```
+   powershell -File .claude/skills/gui-smoke/scripts/db-guard.ps1 -Action save
+   ```
+   アプリが起動中だと WAL の途中を掴むので、起動前でないと弾かれる。
 1. **起動**(バックグラウンド。初回の Rust ビルドは数分):
    ```
    powershell -File .claude/skills/gui-smoke/scripts/start-app.ps1
@@ -21,13 +26,21 @@ description: Tauri デスクトップアプリを実機起動し、WebView2 の�
    ```
 4. **撮影**: スクリーンショットは一時ディレクトリ(セッションの scratchpad など)に `<NN>-<内容>.png` で出す(fullPage、ビューポート 1280×840 が標準)。リポには残さない。
 5. **終了**: 起動したプロセスを止める(`Stop-Process -Name talesweaver-toolkit` または tauri dev のウィンドウを閉じる)。
+6. **開発 DB を復元する**(プロセスを止めた**後**。必ずやる):
+   ```
+   powershell -File .claude/skills/gui-smoke/scripts/db-guard.ps1 -Action restore
+   ```
+   書き換わっていたかどうかも出力されるので、**その 1 行を報告に含める**。
 
 ## 注意
 
 - パスは **Bash ツールなら `/c/github/...`(`cd C:\...` は使えない)**、PowerShell が必要な操作(`Stop-Process` 等)は `PowerShell` ツールで実行する
 - 入力値は司令塔の依頼文の値をそのまま使う。依頼に無い値を自分で決めない(domain テストと同じ値で実機確認する運用)
 
-- **開発 DB `%APPDATA%\dev.twcontext.app\tw-context.sqlite` を削除しない。** 検証用キャラは名前に「検証」を付けて作り、終わったら画面から削除する
+- **開発 DB は手順 0 / 6 の `db-guard.ps1` で守る。**「押したら必ず元に戻すこと」を守らせる
+  運用は**すでに失敗している** — 押し間違い・戻し忘れ・戻したつもりの誤検証が実際に起き、
+  ユーザーのバフセットが 13 → 15 → 14 件と変わって元に戻せなくなった(2026-08-30)。
+  人の注意力に頼らず、前後で丸ごと退避 / 復元する。DB を削除しないこと
 - セレクタは DOM 構造(`.group-head` / `label.field` / `nav button` など)に依存する。UI 変更後は先に `page.content()` を短く確認してから書く
 - `tauri dev` は Rust 変更で自動再起動する。再起動後は CDP に再接続が必要
 - 報告はログ全文ではなく「確認項目 → OK/NG、NG の再現手順、スクリーンショットのパス」のみ
