@@ -60,6 +60,20 @@ const CHECK = `(() => {
     await wait(1700);
     await check(tab);
   }
+  // バフタブ。目的タブごとに出る量が大きく変わるので 3 つとも測る
+  // (ここを巡回していなかったせいで、チップの増分がはみ出していたのを 3 周見逃した)
+  await page.locator("nav.tabs button", { hasText: "バフ" }).click({ force: true });
+  await wait(1600);
+  await check("バフ");
+  for (const purpose of ["火力を上げたい", "耐久を上げたい"]) {
+    const tab = page.locator(".category-tab", { hasText: purpose });
+    if (await tab.count()) {
+      await tab.first().dispatchEvent("click");
+      await wait(900);
+      await check(`バフ・${purpose}`);
+    }
+  }
+
   await page.locator("nav.tabs button", { hasText: "キャラ" }).click({ force: true });
   await wait(1500);
   const panes = await page.locator(".src-name").allInnerTexts();

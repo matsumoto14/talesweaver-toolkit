@@ -7,15 +7,20 @@ const TARGETS = {
   ダメージ計算: [
     ["攻撃 / 防御タブ", "button.side-tab"],
     ["対象の ◀▶", "button.step"],
-    ["段階選択(ストロングW)", ".seg .step"],
+    ["極限スキルのチップ", "button.ultimate-chip:not([disabled])"],
     ["バフチップ", ".buff-chip:not([disabled])"],
-    ["候補(足りない分)", "button.whatif"],
-    ["パワーウェポン", ".pw label.check"],
+    ["候補(足りない分)", "button.fill-btn"],
+    // エンチャントの伸びしろ(試し変更。保存を伴わない = ダメージ計算タブの他項目と同じ扱い)。
+    // MAX を押すとその行が一覧から消え、繰り上がった別の行を誤操作させた実害があった箇所
+    // (修正済み)。同じ index の要素を押す前後で位置を比べる既存の仕組みで、行が消えて
+    // 繰り上がれば座標がずれ、最後の行が消えれば after が null になるので拾える
+    ["エンチャント MAX", ".enchant-rows button.max"],
   ],
   ホーム: [
-    ["お気に入りの ★", "button.pin"],
-    ["エリアの折りたたみ", "button.area-toggle"],
-    ["到達一覧の行", ".row"],
+    ["今日の強化タイル", "button.today-tile"],
+    ["エリアの折りたたみ", "button.mini-row"],
+    // 到達一覧の行はエリアを開かないと DOM に無い。openSel で最初のエリア行を先に押してから測る
+    ["到達一覧の行", ".row", null, "button.mini-row"],
   ],
   キャラ: [
     ["補正源の行", ".src-line"],
@@ -40,15 +45,21 @@ const TARGETS = {
     loc.evaluate((e) => (e.offsetParent === null ? null : [e.offsetLeft, e.offsetTop])).catch(() => null);
   const resetSim = async () => {
     const r = page.locator("button.btn", { hasText: "ぜんぶ戻す" });
-    if ((await r.count()) && (await r.first().isEnabled())) { await r.first().click(); await wait(1300); }
+    // 登録どおりのあいだ、このボタンは枠だけ残して visibility:hidden + inert で隠してある。
+    // isEnabled() は隠れていても true を返すので、見えているかも見ないと click で固まる
+    if ((await r.count()) && (await r.first().isVisible()) && (await r.first().isEnabled())) {
+      await r.first().click();
+      await wait(1300);
+    }
   };
 
   await page.reload({ waitUntil: "load" });
   await wait(2600);
 
   let ng = 0;
+  let missing = 0;
   for (const [tab, list] of Object.entries(TARGETS)) {
-    for (const [name, sel, pane] of list) {
+    for (const [name, sel, pane, openSel] of list) {
       // 前の測定で開いたペイン・スクロール位置が残っていると座標が動いて見える。
       // 1 件ごとにリロードして同じ初期状態から測る
       await page.reload({ waitUntil: "load" });
@@ -67,9 +78,21 @@ const TARGETS = {
           await wait(1200);
         }
       }
+      if (openSel) {
+        // 対象がデフォルトで畳まれている等、先に別の要素を押さないと DOM に現れないもの
+        // (例: 到達一覧の行はエリアを開くまで存在しない)
+        const opener = page.locator(openSel).first();
+        if (await opener.count()) {
+          await opener.scrollIntoViewIfNeeded().catch(() => {});
+          await opener.click({ force: true }).catch(() => {});
+          await wait(900);
+        }
+      }
       const all = page.locator(sel);
       const n = await all.count();
-      if (n === 0) { console.log(`  [${tab}] ${name}: 見つからず`); continue; }
+      // セレクタが古くなって 1 件も見つからないと、この項目は静かに測られないまま素通りする
+      // (実際に何周も気づけなかった)。ここは NG と同じ扱いで目立たせる
+      if (n === 0) { console.log(`  [${tab}] ${name}: ⚠ セレクタが見つからず測定できていません(${sel})`); missing++; continue; }
       // 完全に見えている要素を選ぶ(見切れているとフォーカスで視界に入れるためにスクロールする)
       let target = null;
       for (let i = 0; i < Math.min(n, 8); i++) {
@@ -101,6 +124,7 @@ const TARGETS = {
   }
   await resetSim();
   console.log(ng === 0 ? "§09 規則 1: 全経路 OK" : `§09 規則 1: ${ng} 件 NG`);
+  if (missing > 0) console.log(`⚠ ${missing} 件はセレクタが見つからず未測定(TARGETS を現行 DOM に合わせて直すこと)`);
   console.log(errs.length ? "ERRORS:\n" + errs.join("\n") : "no page/console errors");
   await browser.close();
 })().catch((e) => { console.error("FAILED", e.message); process.exit(1); });

@@ -68,31 +68,26 @@ const WATCH = `(() => {
   await page.locator("nav.tabs button", { hasText: "ダメージ計算" }).click({ force: true });
   await wait(1800);
   // 対象の切替は画面が入れ替わるので §10「変わった要素だけ動かす」の対象外。
-  // **同じ対象のまま材料を変える**操作で測る
-  await probe("計算・パワーウェポンを切り替える", async () => {
-    await page.locator(".pw input[type=checkbox]").first().dispatchEvent("click");
+  // **同じ対象のまま材料を変える**操作で測る。どちらも試し変更(sim)なので保存されない —
+  // キャラタブの入力は自動保存で実データを壊すため、probe は計算タブの sim だけで組む
+  await probe("計算・コンボ条件を切り替える", async () => {
+    await page.locator(".combo .check input[type=checkbox]").first().dispatchEvent("click");
   });
+  // 戻す
+  await page.locator(".combo .check input[type=checkbox]").first().dispatchEvent("click").catch(() => {});
+  await wait(700);
 
-  // --- キャラタブ: 調整でステを変える(最終能力値・サマリー・攻撃力が同時に変わる)
-  await page.locator("nav.tabs button", { hasText: "キャラ" }).click({ force: true });
-  await wait(1500);
-  const names = await page.locator(".src-name").allInnerTexts();
-  const adj = names.indexOf("調整");
-  if (adj >= 0) {
-    await page.locator(".src-line").nth(adj).dispatchEvent("click");
-    await wait(1200);
-    await page.locator(".adj-stat").nth(1).locator("button.val.read").first().dispatchEvent("click");
-    await wait(700);
-    await probe("キャラ・調整で HACK を変える", async () => {
-      const f = page.locator(".adj-stat").nth(1).locator("input.val").first();
-      await f.fill("321");
-      await f.dispatchEvent("blur");
+  // --- 極限スキルを入れ替える(1 発・合計・1 秒あたり・クリ率が同時に変わる)
+  const ult = page.locator(".ultimate-chip:not([disabled])");
+  if (await ult.count()) {
+    await probe("計算・極限スキルを外す", async () => {
+      await ult.first().dispatchEvent("click");
     });
     // 戻す
-    await page.locator(".adj-stat").nth(1).locator("button.val.read").first().dispatchEvent("click").catch(() => {});
-    await wait(500);
-    const f = page.locator(".adj-stat").nth(1).locator("input.val").first();
-    if (await f.count()) { await f.fill("0"); await f.dispatchEvent("blur"); await wait(900); }
+    await ult.first().dispatchEvent("click").catch(() => {});
+    await wait(700);
+  } else {
+    console.log("  [計算・極限スキル] 押せるチップが無いので未実行");
   }
 
   await browser.close();

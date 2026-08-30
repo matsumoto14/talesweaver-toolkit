@@ -58,10 +58,10 @@ RULES = {
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
 # 密度は意識的な選択なので「役割トークンに寄せる」のではなく、この集合に収まるかを見る
-FONT_SCALE = {44, 40, 27, 19, 15, 14, 13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5}
+FONT_SCALE = {44, 40, 27, 19, 17, 15, 14, 13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5, 8}
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
-CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)\b")
+CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
 
 HEX = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
 # 面としてべた塗りしている背景。グラデーションや影の中の色は「面」ではない
@@ -271,7 +271,7 @@ def check_font_scale(chunk: Chunk, out: list[Finding]) -> None:
         size = float(m.group(1))
         if size not in FONT_SCALE:
             out.append(Finding("R10", chunk.path, chunk.line_of(m.start(1)), f"{m.group(1)}px",
-                               "44 / 40 / 27 / 19 / 15 / 14 / 13 / 12.5 / 12 / 11.5 / 11 / 10.5 / 10 / 9.5 / 9 / 8.5 の外"))
+                               "44 / 40 / 27 / 19 / 17 / 15 / 14 / 13 / 12.5 / 12 / 11.5 / 11 / 10.5 / 10 / 9.5 / 9 / 8.5 / 8 の外"))
 
 
 def check_control_radius(chunk: Chunk, out: list[Finding]) -> None:

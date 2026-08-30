@@ -55,7 +55,11 @@ const CHECK = `(() => {
   out.A3.push({ segTotal: segs.reduce((a, s) => a + s.n, 0), chips, top: segs.sort((a, b) => b.n - a.n).slice(0, 5) });
 
   // A4 はみ出し・省略
-  document.querySelectorAll("div, section, span, td, th, p, button").forEach((el) => {
+  // タグ名を並べて絞ると、並べ忘れたタグが永久に測られない。実際 <small> が抜けていて、
+  // バフチップの効果行が省略記号で切れているのを 5 周見逃した。全要素を見て枠だけ除く
+  const SKIP_TAGS = new Set(["HTML", "BODY", "SCRIPT", "STYLE", "HEAD", "META", "LINK", "TITLE"]);
+  document.querySelectorAll("*").forEach((el) => {
+    if (SKIP_TAGS.has(el.tagName)) return;
     const cs = getComputedStyle(el);
     if (cs.overflowX !== "visible" && cs.overflowX !== "hidden") return;
     if (el.clientWidth > 0 && el.scrollWidth - el.clientWidth > 1) {
@@ -115,6 +119,20 @@ const CHECK = `(() => {
   if (await open.count()) { await open.first().dispatchEvent("click"); await wait(1000); await check("計算・なぜこの数字"); }
   const def = page.locator("button", { hasText: /^防御$/ });
   if (await def.count()) { await def.first().dispatchEvent("click"); await wait(1300); await check("計算・防御"); }
+
+  // バフタブ。目的タブごとに出る量が大きく変わるので 3 つとも測る
+  // (ここを巡回していなかったせいで、チップの増分がはみ出していたのを 3 周見逃した)
+  await page.locator("nav.tabs button", { hasText: "バフ" }).click({ force: true });
+  await wait(1600);
+  await check("バフ");
+  for (const purpose of ["火力を上げたい", "耐久を上げたい"]) {
+    const tab = page.locator(".category-tab", { hasText: purpose });
+    if (await tab.count()) {
+      await tab.first().dispatchEvent("click");
+      await wait(900);
+      await check(`バフ・${purpose}`);
+    }
+  }
 
   await page.locator("nav.tabs button", { hasText: "キャラ" }).click({ force: true });
   await wait(1500);
