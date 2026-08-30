@@ -10,8 +10,9 @@
   // 共有状態」だけを持つ。各補正源固有の状態・markup・style は pages/chars/sources/*.svelte へ
   // 分割してある。ペインをまたいで使う CSS クラス(.stat-row / .check / .part-row など)は
   // sources/pane-shared.css にまとめてグローバル読み込みしている(理由はそのファイル冒頭を参照)。
-  import type { PetSkillTier, Skill, StatKind, StatPreview } from "../../api/types";
+  import type { CharacterSkillEffectsView, PetSkillTier, Skill, StatKind, StatPreview } from "../../api/types";
   import type { Draft } from "../../draft";
+  import { sacredRelicStageFromValue, sacredRelicValue } from "../../equipment";
   import { limits } from "../../limits.svelte";
   import type { SourceId } from "./sourceId";
   import "./sources/pane-shared.css";
@@ -37,16 +38,19 @@
   const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
 
   interface Props {
+    characterId: number;
     draft: Draft;
     preview: StatPreview | null;
     previewError: string | null;
     /** 主軸スキルの選択肢(キャラ種のスキル一覧)。親が引く */
     skills: Skill[];
+    /** キャラスキル全件ぶんの、選んでいるマスタリーを踏まえた実際の効果(マスタリー解決は Rust 側) */
+    resolvedSkillEffects: CharacterSkillEffectsView[];
     sourceId: SourceId;
     /** ほかの補正源へ飛ぶ(この値がどこから来ているかを追えるようにする) */
     onOpenSource: (id: SourceId) => void;
   }
-  let { draft, preview, previewError, skills, sourceId, onOpenSource }: Props = $props();
+  let { characterId, draft, preview, previewError, skills, resolvedSkillEffects, sourceId, onOpenSource }: Props = $props();
 
   // --- ペット S スキル ------------------------------------------------------
   // 段の名前だけだと「それでいくつ増えるのか」を毎回引くことになるので、値を段に書く
@@ -139,7 +143,7 @@
   {#if previewError}<p class="preview-error">{previewError}</p>{/if}
 
   {#if sourceId === "status"}
-    <StatusPane {draft} {preview} {skills} />
+    <StatusPane {characterId} {draft} {preview} {skills} />
   {:else if sourceId === "equipment"}
     <EquipmentPane {draft} {preview} {skills} />
   {:else if sourceId === "soulLink"}
@@ -260,8 +264,10 @@
           stepper
           presets={[{ value: 200, label: "200" }]}
           bind:value={
-            () => draft.statSources.sacred_relic[k] * limits.sacred_relic_value_per_stage,
-            (v) => (draft.statSources.sacred_relic[k] = Math.round(v / limits.sacred_relic_value_per_stage))
+            () => sacredRelicValue(draft.statSources.sacred_relic[k], limits.sacred_relic_value_per_stage),
+            (v) => (draft.statSources.sacred_relic[k] = sacredRelicStageFromValue(
+              v, limits.sacred_relic_stage_max, limits.sacred_relic_value_per_stage,
+            ))
           }
         />
       {/snippet}
@@ -278,11 +284,11 @@
   {:else if sourceId === "thesis"}
     <ThesisCorePane {draft} {preview} />
   {:else if sourceId === "actualDelay"}
-    <ActualDelayPane {draft} {preview} {onOpenSource} />
+    <ActualDelayPane {draft} {preview} {resolvedSkillEffects} {onOpenSource} />
   {:else if sourceId === "criticalRate"}
     <CriticalRatePane {draft} {preview} {skills} {onOpenSource} />
   {:else if sourceId === "skills"}
-    <CharacterSkillPane {draft} />
+    <CharacterSkillPane {draft} {resolvedSkillEffects} />
   {/if}
 </div>
 {/key}

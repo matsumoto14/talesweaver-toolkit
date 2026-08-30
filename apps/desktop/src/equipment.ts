@@ -2,14 +2,15 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  CoreSet, Element, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList, EquipmentValues,
+  CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList, EquipmentValues,
   RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
   SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, SkillDependency, ThesisCores,
 } from "./api/types";
 import {
-  CORE_REGIONS, CORE_SLOT_COUNT, ELEMENT_ALLOWED_SLOTS, ELEMENTS, EQUIPMENT_STAT_KINDS,
-  EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS, STAT_KINDS,
+  CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS,
+  EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS,
 } from "./labels";
+import { limits } from "./limits.svelte";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
 
@@ -42,6 +43,42 @@ export const clampToCaps = (values: EquipmentValues, caps: EquipmentValues): Equ
   Object.fromEntries(
     EQUIPMENT_VALUE_KEYS.map((k) => [k, Math.min(values[k], caps[k])]),
   ) as unknown as EquipmentValues;
+
+/**
+ * カタログ品を部位へ適用した結果を返す(EquipmentPane の pickCatalogItem と同じ規則。
+ * ホームの「今日の強化」レリック段数ステッパーがこの結果と一致させるために共有する)。
+ * item_id / base(= values_max) / enchant(enchant_caps でクランプ) / enhance_type を差し替え、
+ * アビリティ枠・ランダムオプション枠を新しい装備の枠数に切り詰める(枠外のアビリティの
+ * 実測値・追加値も一緒に落とす)。
+ */
+export const applyCatalogItem = (part: EquipmentPart, item: EquipmentItem): EquipmentPart => {
+  const abilities = part.abilities.slice(0, item.ability_slots);
+  const droppedAbilityIds = part.abilities.filter((id) => !abilities.includes(id));
+  return {
+    ...part,
+    item_id: item.id,
+    custom_name: null,
+    base: { ...item.values_max },
+    enchant: clampToCaps(part.enchant, item.enchant_caps),
+    enhance_type: item.enhance_type,
+    abilities,
+    ability_values: part.ability_values.filter((v) => !droppedAbilityIds.includes(v.ability_id)),
+    ability_additions: part.ability_additions.filter((a) => !droppedAbilityIds.includes(a.ability_id)),
+    random_options: part.random_options.slice(0, item.random_option_slots ?? 0),
+  };
+};
+
+/**
+ * 強化 Lv とその等級(enhance_grade)を、Rust 側の検証(crates/domain/src/equipment.rs)が
+ * 要求する不変条件を保ったまま一緒に書き換える: Lv >= 12 は enhance_grade 必須(未設定なら
+ * 「最上」を既定にする)、Lv < 12 は enhance_grade 禁止(null に戻す)。EquipmentPane の直接編集と
+ * ホーム「今日の強化」のステッパー双方から使う(2 箇所に同じ規則を書かないため)。
+ */
+export const applyEnhanceLevel = (part: EquipmentPart, level: number): EquipmentPart => ({
+  ...part,
+  enhance_level: level,
+  enhance_grade: level >= limits.enhance_grade_min_level ? (part.enhance_grade ?? "highest") : null,
+});
 
 /** 9 値の合計(候補の「上位品」判定など、大小比較の目安にのみ使う)。 */
 export const sumValues = (v: EquipmentValues): number =>
@@ -93,15 +130,6 @@ export const sienaExtraCapacity = (siena: SienaAura, unlockStages: readonly numb
 /** 追加オプションの合計 %(同じ種類は 1 部位 1 個なので実質その値)。 */
 export const sienaExtraValue = (siena: SienaAura, kind: SienaExtraKind): number =>
   siena.extras.filter((e) => e.kind === kind).reduce((sum, e) => sum + e.value, 0);
-
-/** 能力値スロットのうち STAB〜AGI の合計。 */
-const SIENA_STAT_KINDS = new Set<string>(STAT_KINDS);
-export const sienaSlotStatTotal = (siena: SienaAura): number =>
-  siena.slots.filter((s) => SIENA_STAT_KINDS.has(s.kind)).reduce((sum, s) => sum + s.value, 0);
-
-/** 部位ごとのステ加算合計(能力値スロット + 全ステータス増加 × 7 ステ)。表示用 */
-export const sienaPartStatTotal = (siena: SienaAura): number =>
-  sienaSlotStatTotal(siena) + sienaExtraValue(siena, "all_stats") * STAT_KINDS.length;
 
 export const neutralCoreSet = (): CoreSet => ({ slots: Array(CORE_SLOT_COUNT).fill(null) });
 
@@ -156,58 +184,20 @@ export const selectedEquipmentPart = (list: EquipmentPartList): EquipmentPart | 
 export const selectedEquipmentPartOrNeutral = (list: EquipmentPartList): EquipmentPart =>
   selectedEquipmentPart(list) ?? neutralEquipmentPart();
 
-/** 装備に付与した属性値の合計(属性ごと)。表示用(計算は Rust 側)。 */
-export const equipmentElementValues = (equipment: Equipment, element: Element | null): Record<Element, number> => {
-  const total = Object.fromEntries(ELEMENTS.map((e) => [e, 0])) as Record<Element, number>;
-  if (element === null) return total;
-  for (const slot of ELEMENT_ALLOWED_SLOTS) {
-    const part = selectedEquipmentPart(equipment.parts[slot]);
-    const isEquipment = part?.item_id !== null || (part?.custom_name?.trim().length ?? 0) > 0;
-    if (part && isEquipment) total[element] += 9;
-  }
-  return total;
-};
+// --- 神鳥の聖物 -------------------------------------------------------------
+// 段階↔実際の値の換算。正は crates/domain/src/stat_sources.rs の SacredRelic::value /
+// stage_from_value(段階 × 1段あたりの値、逆算は端数切り捨て)。
+// ステッパー1押しごとに押した瞬間へ反映する楽観更新(§00 04)のため IPC を挟めず、ここで同じ式をミラーする。
 
-function sumParts(equipment: Equipment, pick: (p: EquipmentPart) => EquipmentValues): EquipmentValues {
-  const total = zeroValues();
-  for (const slot of PART_SLOTS) {
-    const part = selectedEquipmentPart(equipment.parts[slot]);
-    if (!part) continue;
-    const v = pick(part);
-    for (const k of EQUIPMENT_VALUE_KEYS) total[k] += v[k];
-  }
-  return total;
-}
+/** 段階 → 実際に増える値。 */
+export const sacredRelicValue = (stage: number, valuePerStage: number): number => stage * valuePerStage;
 
-/** Σ part.enchant(表示用。実際の集計は Rust 側 Equipment::enhanced_totals)。 */
-export const equipmentEnchantTotal = (equipment: Equipment): EquipmentValues => sumParts(equipment, (p) => p.enchant);
-
-/** ランダムOP の中ディレイ減少の合計 %(表示用)。ほかの補正源から入る分の内訳に使う。 */
-export const randomOptionActualDelayPercent = (
-  equipment: Equipment,
-  defs: RandomOptionDef[],
-): number =>
-  PART_SLOTS.reduce(
-    (sum, slot) =>
-      sum +
-      selectedEquipmentPartOrNeutral(equipment.parts[slot]).random_options.reduce((n, option) => {
-        const def = defs.find((d) => d.id === option.option_id);
-        return def?.effect === "actual_delay_reduction" ? n + randomOptionValue(option, def) : n;
-      }, 0),
-    0,
-  );
-
-/** シエナのオーラの追加オプションの合計 %(全部位。表示用)。 */
-export const sienaExtraTotal = (equipment: Equipment, kind: SienaExtraKind): number =>
-  SIENA_ALLOWED_SLOTS.reduce((sum, slot) => sum + sienaExtraValue(selectedSienaAura(equipment.siena[slot]) ?? neutralSienaAura(), kind), 0);
-
-/** シエナのオーラの攻撃力増加(New1)の合計 %(表示用)。 */
-export const sienaAttackRatePercent = (equipment: Equipment): number =>
-  sienaExtraTotal(equipment, "attack_rate");
-
-/** シエナのオーラのステ加算の合計(全部位・全ステ。表示用)。 */
-export const sienaStatTotal = (equipment: Equipment): number =>
-  SIENA_ALLOWED_SLOTS.reduce((sum, slot) => sum + sienaPartStatTotal(selectedSienaAura(equipment.siena[slot]) ?? neutralSienaAura()), 0);
+/** 実際の値 → 段階(端数切り捨て・範囲外は clamp)。 */
+export const sacredRelicStageFromValue = (
+  value: number,
+  stageMax: number,
+  valuePerStage: number,
+): number => Math.max(0, Math.min(stageMax, Math.floor(value / valuePerStage)));
 
 // --- ランダムオプション ---------------------------------------------------
 // 判定・集計は Rust 側(crates/domain/src/random_option.rs)。ここは表示・編集用。
@@ -235,102 +225,6 @@ export const randomOptionValueLabel = (slot: RandomOptionSlot, def: RandomOption
     default:
       return `+${value}%`;
   }
-};
-
-/**
- * その部位に付いている OP を**効き先ごとに合計**した要約。
- * 同じ系統(追加ダメージどうし・与ダメージ増加どうし)は足して 1 つに見せる —
- * 枠ごとの値を並べても、火力にいくら効いているかは読み取れない。
- */
-export const randomOptionPartSummary = (
-  part: EquipmentPart,
-  defs: RandomOptionDef[],
-): string => {
-  const total = new Map<string, number>();
-  const add = (label: string, value: number) => total.set(label, (total.get(label) ?? 0) + value);
-  for (const slot of part.random_options) {
-    const def = defs.find((d) => d.id === slot.option_id);
-    if (def === undefined || !randomOptionIsApplied(def.effect)) continue;
-    const value = randomOptionValue(slot, def);
-    const effect = def.effect;
-    if (typeof effect === "object") {
-      add("与ダメ", value);
-    } else if (effect === "attack_damage_rate") {
-      add("攻撃ダメ", value);
-    } else if (effect === "added_damage_rate") {
-      add("追加ダメ", value);
-    } else if (effect === "physical_added_damage_rate") {
-      add("物理追加ダメ", value);
-    } else if (effect === "magic_added_damage_rate") {
-      add("魔法追加ダメ", value);
-    } else if (effect === "physical_damage_amplify") {
-      add("物理ダメージ増幅", value);
-    } else if (effect === "magic_damage_amplify") {
-      add("魔法ダメージ増幅", value);
-    } else if (effect === "accuracy_point") {
-      add("命中P", value);
-    } else if (effect === "evasion_point") {
-      add("回避P", value);
-    } else if (effect === "accuracy_and_evasion_point") {
-      add("命中P", value);
-      add("回避P", value);
-    } else if (effect === "actual_delay_reduction") {
-      add("中ディレイ", -value);
-    }
-  }
-  const unit = (label: string) => (label === "命中P" || label === "回避P" ? "" : "%");
-  return [...total]
-    .map(([label, value]) => `${label} ${value > 0 ? "+" : ""}${value}${unit(label)}`)
-    .join(" ・ ");
-};
-
-/**
- * 全部位のランダムOP を**効き先ごとに合計**した一覧。結果の置き場所(「いまの実力」)で使う。
- * 入力の行に混ぜると、どの部位の話か分からないまま数字だけが並ぶ。
- */
-export const randomOptionTotals = (
-  equipment: Equipment,
-  defs: RandomOptionDef[],
-): { label: string; value: string }[] => {
-  const total = new Map<string, number>();
-  const add = (label: string, value: number) => total.set(label, (total.get(label) ?? 0) + value);
-  for (const slot of PART_SLOTS) {
-    for (const option of selectedEquipmentPartOrNeutral(equipment.parts[slot]).random_options) {
-      const def = defs.find((d) => d.id === option.option_id);
-      if (def === undefined || !randomOptionIsApplied(def.effect)) continue;
-      const value = randomOptionValue(option, def);
-      const effect = def.effect;
-      if (typeof effect === "object") {
-        add(`与ダメージ増加(${SKILL_DEPENDENCY_LABELS[effect.dependency_damage_rate]})`, value);
-      } else if (effect === "attack_damage_rate") {
-        add("攻撃ダメージ増加", value);
-      } else if (effect === "added_damage_rate") {
-        add("割合追加ダメージ", value);
-      } else if (effect === "physical_added_damage_rate") {
-        add("割合追加ダメージ(物理依存)", value);
-      } else if (effect === "magic_added_damage_rate") {
-        add("割合追加ダメージ(魔法依存)", value);
-      } else if (effect === "physical_damage_amplify") {
-        add("ダメージ増幅(物理依存)", value);
-      } else if (effect === "magic_damage_amplify") {
-        add("ダメージ増幅(魔法依存)", value);
-      } else if (effect === "accuracy_point") {
-        add("命中P", value);
-      } else if (effect === "evasion_point") {
-        add("回避P", value);
-      } else if (effect === "accuracy_and_evasion_point") {
-        add("命中P", value);
-        add("回避P", value);
-      } else if (effect === "actual_delay_reduction") {
-        add("中ディレイ", -value);
-      }
-    }
-  }
-  const unit = (label: string) => (label === "命中P" || label === "回避P" ? "" : "%");
-  return [...total].map(([label, value]) => ({
-    label,
-    value: `${value > 0 ? "+" : ""}${value}${unit(label)}`,
-  }));
 };
 
 /** 効き先の表示名。「記録するだけ」の OP はそう分かる文言にする。 */

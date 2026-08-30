@@ -7,7 +7,7 @@
   import { damageCategoryLabel } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import {
-    clampToCaps, equipmentIconId, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
+    applyEnhanceLevel, clampToCaps, equipmentIconId, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
   } from "../../../equipment";
   import { fmtInt } from "../../../format";
   import {
@@ -601,6 +601,9 @@
   /** 基本能力値のうち、この部位の装備アビリティ由来の分(表示用の内訳)。計算は Rust 側(preview) */
   const partAbilityValues = (slot: PartSlot) =>
     preview?.part_ability_values.find((p) => p.slot === slot)?.values ?? zeroValues();
+  /** 強化能力値のうち、この部位のエンチャント分(part.enchant そのもの)。計算は Rust 側(preview) */
+  const partEnchantValues = (slot: PartSlot) =>
+    preview?.part_enchant_values.find((p) => p.slot === slot)?.values ?? zeroValues();
   /** 部位詳細を開いたときに、旧データの同カテゴリー重複を1つへ畳む。 */
   function openPartDetail(slot: PartSlot) {
     const part = selectedPartOrNull(slot);
@@ -682,8 +685,9 @@
   ];
   function setEnhanceLevel(slot: PartSlot, level: number) {
     const part = selectedPart(slot);
-    part.enhance_level = level;
-    part.enhance_grade = level >= 12 ? (part.enhance_grade ?? "highest") : null;
+    const next = applyEnhanceLevel(part, level);
+    part.enhance_level = next.enhance_level;
+    part.enhance_grade = next.enhance_grade;
   }
 </script>
 
@@ -909,7 +913,7 @@
         {#each visibleEquipmentStats as k, index (k)}
           {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
           {@const abilityValue = partAbilityValues(slot)[k]}
-          {@const displayTotal = part.base[k] + part.enchant[k] + abilityValue}
+          {@const displayTotal = part.base[k] + partEnchantValues(slot)[k] + abilityValue}
           {@const completionPlan = enchantCompletionPlan(cap - part.enchant[k])}
           <div
             class="value-pair"

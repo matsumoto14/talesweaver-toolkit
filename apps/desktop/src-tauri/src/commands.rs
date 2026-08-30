@@ -1,5 +1,6 @@
 //! フロントエンドから呼ばれるコマンド。ロジックは書かない。エラーは `CommandError` に変換して返す。
 
+use base64::Engine;
 use domain::{
     evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
     CommonSkills, Content, ContentArea, ContentEvaluation, DamageInput, DamageMaterial,
@@ -7,7 +8,9 @@ use domain::{
     EquipmentPart, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
 use gamedata::{EquipmentItem, GameCharacter};
-use storage::{BuffSet, CharacterRepository, DamageSnapshot, NewCharacter, RegisteredCharacter};
+use storage::{
+    BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, NewCharacter, RegisteredCharacter,
+};
 use tauri::{Manager, State};
 
 use crate::{AppInfo, AppState};
@@ -226,6 +229,17 @@ pub fn list_element_sources() -> Vec<domain::ElementSourceDef> {
     gamedata::element_source_catalog().to_vec()
 }
 
+/// 装備の属性強化の合計(部位ごとに +9。対象属性は呼び出し側が決める — キャラ画面は
+/// 「全部位の属性が一致しているか」を見た draft 編集中の選択を渡す)。
+/// 計算は `Equipment::element_values` そのもの(フロントに再実装を持たせない)。
+#[tauri::command]
+pub fn equipment_element_values(
+    equipment: domain::Equipment,
+    element: Option<domain::Element>,
+) -> domain::ElementValues {
+    equipment.element_values(element)
+}
+
 /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
 #[tauri::command]
 pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
@@ -279,10 +293,50 @@ pub fn list_character_skills() -> Vec<domain::CharacterSkillDef> {
     gamedata::character_skill_catalog().to_vec()
 }
 
+/// キャラスキル 1 件ぶんの、取っているマスタリーを踏まえた実際の効果。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CharacterSkillEffectsView {
+    pub id: String,
+    pub effects: Vec<domain::SkillEffect>,
+}
+
+/// マスタリーによる効果差し替えを解決した、キャラスキル全件ぶんの効果。
+///
+/// `CharacterSkillDef::effects` はマスタリー未反映の素の値なので、選んでいるマスタリーで
+/// 差し替わった後の値を見せる画面(キャラスキル選択・中ディレイ補正源)はここを呼ぶ
+/// (`character_skill.rs` の `effects()` をそのまま呼ぶだけで、解決規則をフロントに持たせない)。
+#[tauri::command]
+pub fn resolve_character_skill_effects(
+    masteries: domain::Masteries,
+) -> Vec<CharacterSkillEffectsView> {
+    gamedata::character_skill_catalog()
+        .iter()
+        .map(|def| CharacterSkillEffectsView {
+            id: def.id.to_string(),
+            effects: def.effects(&masteries).to_vec(),
+        })
+        .collect()
+}
+
+/// 称号 1 件の表示用ビュー。`TitleDef` に、フロントで再計算させない事前計算値を添える。
+#[derive(serde::Serialize)]
+pub struct TitleView {
+    #[serde(flatten)]
+    pub def: TitleDef,
+    /// 装備の基本能力値への加算 9 値の合計。正は `TitleDef::equipment_value_total`
+    pub equipment_value_total: i64,
+}
+
 /// 称号のカタログ(wiki: 称号システム)。主要称号のみ。
 #[tauri::command]
-pub fn list_titles() -> Vec<TitleDef> {
+pub fn list_titles() -> Vec<TitleView> {
     gamedata::title_catalog()
+        .into_iter()
+        .map(|def| TitleView {
+            equipment_value_total: def.equipment_value_total(),
+            def,
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -415,6 +469,47 @@ pub fn delete_character(state: State<'_, AppState>, id: i64) -> CommandResult<()
     with_repo(&state, |repo| repo.delete(id))
 }
 
+/// 登録キャラの表示画像。保存済み PNG をそのまま data URL にして返す(端末内だけで使う)。
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterIconDto {
+    pub character_id: i64,
+    pub data_url: String,
+}
+
+impl From<CharacterIcon> for CharacterIconDto {
+    fn from(icon: CharacterIcon) -> Self {
+        Self {
+            character_id: icon.character_id,
+            data_url: format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(icon.png)
+            ),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn list_character_icons(state: State<'_, AppState>) -> CommandResult<Vec<CharacterIconDto>> {
+    let icons = with_repo(&state, |repo| repo.list_character_icons())?;
+    Ok(icons.into_iter().map(CharacterIconDto::from).collect())
+}
+
+#[tauri::command]
+pub fn set_character_icon(
+    state: State<'_, AppState>,
+    character_id: i64,
+    source: Vec<u8>,
+) -> CommandResult<CharacterIconDto> {
+    let icon = with_repo(&state, |repo| repo.set_character_icon(character_id, &source))?;
+    Ok(CharacterIconDto::from(icon))
+}
+
+#[tauri::command]
+pub fn reset_character_icon(state: State<'_, AppState>, character_id: i64) -> CommandResult<()> {
+    with_repo(&state, |repo| repo.reset_character_icon(character_id))
+}
+
 #[tauri::command]
 pub fn get_damage_snapshot(
     state: State<'_, AppState>,
@@ -472,6 +567,7 @@ pub fn preview_effective_stats(
         gamedata::character_skill_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
+        &gamedata::random_option_catalog(),
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
     )
@@ -499,6 +595,7 @@ pub fn preview_defense(
         gamedata::character_skill_catalog(),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
+        &gamedata::random_option_catalog(),
         None,
         gamedata::awakening_caps(character.awakening).max_stat,
     )
@@ -1321,4 +1418,6 @@ mod tests {
         // 武器+10の丸め済み60,508へリンクLv4の+40%を掛けて切り捨てる。
         assert_eq!(input.weapon_added_damage, 84_711);
     }
+
+
 }

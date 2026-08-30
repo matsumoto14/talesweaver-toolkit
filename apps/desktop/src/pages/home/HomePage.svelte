@@ -7,7 +7,7 @@
 
 <script lang="ts">
   // ホーム: 選択中キャラの「キャラの窓」ヒーロー(現況・次の目標・おすすめ強化)+
-  // 今日の期限・影響 + 反映(部位タイル)+ 到達一覧(畳み)+ うごみ、のブリーフィング型 1 カラム。
+  // 今日の期限・影響 + 今日の強化(5 項目タイル。押すとグリッド全体の下に展開)+ 到達一覧(畳み)+ うごき、のブリーフィング型 1 カラム。
   // 判定はすべて Rust 側(evaluate_contents / preview_effective_stats / preview_defense / preview_damage)。
   // この画面は表示と選択のみ。
   import {
@@ -15,17 +15,21 @@
     previewEffectiveStats, setDamageSnapshot,
   } from "../../api/commands";
   import type {
-    Content, ContentEvaluation, DefenseProfile, EquipmentPart, NewCharacter, PartSlot, SkillDependency,
-    StatPreview, UpgradeCandidate,
+    Content, ContentEvaluation, DefenseProfile, EquipmentItem, EquipmentPart, PartSlot,
+    RegisteredCharacter, SkillDependency, StatKind, StatPreview, UpgradeCandidate,
   } from "../../api/types";
   import { COST_COLORS, COST_LABELS } from "../../candidates";
-  import { equipmentEnchantTotal, equipmentIconId, sumValues } from "../../equipment";
+  import {
+    applyCatalogItem, equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, valuesSummary,
+  } from "../../equipment";
   import { FEED_ITEMS } from "../../feed";
   import { fmtInt } from "../../format";
-  import { STAT_KINDS, STAT_LABELS } from "../../labels";
+  import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import type { EquipmentStatKind } from "../../labels";
+  import { limits } from "../../limits.svelte";
   import {
-    app, buffSelectionFor, evaluationFor, flatContents, focusCharacterSource, gameCharacterName, payloadOf,
-    refreshEvaluation, selectedCharacter, totalContents,
+    app, buffSelectionFor, enqueueCharacterSave, evaluationFor, flatContents, focusCharacterSource, gameCharacterName,
+    payloadOf, refreshEvaluation, selectedCharacter, totalContents, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { critChanceStage } from "../../ui/critChance";
@@ -33,6 +37,7 @@
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
+  import StatInput from "../../ui/StatInput.svelte";
 
   const character = $derived(selectedCharacter());
   const totalCount = $derived(totalContents());
@@ -267,9 +272,8 @@
     return () => heroStatsLatest.cancel();
   });
 
-  // 装備値の内訳(基礎+エンチャ=合計)。基礎(称号・アビリティ込み)は preview、エンチャ分は
-  // クライアント側の Σpart.enchant(equipment.ts。実際の集計元は Rust 側 Equipment::enhanced_totals)。
-  const heroEnchant = $derived(character ? equipmentEnchantTotal(character.equipment) : null);
+  // 装備値の内訳(基本能力値 + 強化能力値 = 合計)。どちらも preview(Rust 側の計算済み値)。
+  const heroEnhanced = $derived(heroStats?.equipment_enhanced_total ?? null);
   // 装備値の表示行はスポットライトのスキルの依存で切り替える(HI 依存に突きを見せない)。
   // 対はドメインの装備攻撃力係数(gamedata equipment_coefficients)で係数を持つ 2 系統
   const EQUIP_ROW_KEYS: Record<SkillDependency, ["thrust" | "slash" | "magic_attack" | "magic_defense", "thrust" | "slash" | "magic_attack" | "magic_defense"]> = {
@@ -283,16 +287,16 @@
   const EQUIP_ROW_LABELS = { thrust: "突き", slash: "斬り", magic_attack: "魔攻", magic_defense: "魔防" } as const;
   const heroEquipRows = $derived.by(() => {
     const stats = heroStats;
-    const enchant = heroEnchant;
-    if (!stats || !enchant) return [];
+    const enhanced = heroEnhanced;
+    if (!stats || !enhanced) return [];
     const skillId = heroSpot?.skillId ?? character?.main_skill_id ?? null;
     const dep = (skillId ? skillDeps[skillId] : null) ?? "stab_hack";
     return EQUIP_ROW_KEYS[dep].map((key) => ({
       key,
       label: EQUIP_ROW_LABELS[key],
       base: stats.equipment_base_total[key],
-      enchant: enchant[key],
-      total: stats.equipment_base_total[key] + enchant[key],
+      enhanced: enhanced[key],
+      total: stats.equipment_base_total[key] + enhanced[key],
     }));
   });
 
@@ -440,43 +444,365 @@
     })();
   });
 
-  // ===== 反映ゾーン: 部位タイル(ADR 004 の部位列)。押すとキャラタブの装備ペインの該当部位へ ======
-  const REACH_TILES: { slot: PartSlot; label: string }[] = [
-    { slot: "helm", label: "兜" },
-    { slot: "armor", label: "鎧" },
-    { slot: "weapon", label: "武器" },
-    { slot: "shield", label: "盾" },
-    { slot: "shield_plus", label: "カフス(盾+)" },
-    { slot: "head", label: "頭" },
-    { slot: "hand", label: "手" },
-    { slot: "leg", label: "足" },
-    { slot: "relic_pendant", label: "レリック左" },
-    { slot: "relic_bracelet", label: "レリック右" },
-  ];
-  const isRelicTile = (slot: PartSlot) => slot === "relic_pendant" || slot === "relic_bracelet";
+  // ===== 今日の強化: 5 つの項目タイル。押すとグリッド全体の下に展開する ==========================
+  // ユーザーからの訂正: 装備強化(武器・鎧の強化Lv)は低頻度。実際のデイリーはレリック・カフス・
+  // 神鳥の聖物・エンチャント・シエナのオーラなので、直更新の対象はこの 5 つにする。
+  // 武器・鎧の強化Lvは「そのほかの設定」からキャラタブへ回す。
+  type TodayTile = "sacredRelic" | "cuffs" | "enchant" | "equipRelic" | "siena";
+  let openTile = $state<TodayTile | null>(null);
+  function toggleTile(t: TodayTile) {
+    openTile = openTile === t ? null : t;
+  }
+
+  // エンチャントは間違って盛ってしまっても直せるように、値を押すとその場でテキスト編集にする
+  // (StatInput の read↔editing パターンと同じ考え方。増分チップはやり直しの手段を持たないため)。
+  let editingEnchant = $state<string | null>(null);
+  function commitEnchantText(slot: PartSlot, k: EnchantDepKey, cap: number, raw: string) {
+    const n = Math.round(Number(raw));
+    const clamped = Number.isFinite(n) ? Math.max(0, Math.min(cap, n)) : 0;
+    commitEnchant(character!, slot, k, clamped);
+    editingEnchant = null;
+  }
+
   function partOf(slot: PartSlot): EquipmentPart | null {
     if (!character) return null;
     const list = character.equipment.parts[slot];
     return list.registered.find((p) => p.id === list.selected_id) ?? null;
   }
-  /** タイルの現在値要約。未装備は「未設定」(§03 操作待ち・金)、レリックは Lv n、
-   *  強化Lvを持つ部位(武器・鎧)はその段、それ以外はエンチャント合計。 */
-  function partValue(slot: PartSlot, part: EquipmentPart | null): { text: string; unset: boolean } {
-    if (isRelicTile(slot)) {
-      const level = part?.item_id?.match(/-plus(\d+)$/)?.[1];
-      return level ? { text: `Lv${level}`, unset: false } : { text: "未設定", unset: true };
+  const isUnequipped = (part: EquipmentPart | null) =>
+    !part || (part.item_id === null && part.custom_name === null);
+  const itemOf = (part: EquipmentPart | null): EquipmentItem | null =>
+    part?.item_id ? (app.equipmentCatalog.find((it) => it.id === part.item_id) ?? null) : null;
+  /**
+   * get/set が触れる対象の最小形。RegisteredCharacter・app.sim(NewCharacter)・保存前ペイロードの
+   * いずれも equipment/stat_sources を持つので、この形だけを要求すれば 3 者に共通で使える
+   * (試し変更 app.sim もここを通じて最新に保つ。バグB対応)。
+   */
+  type FieldSaveTarget = { equipment: RegisteredCharacter["equipment"]; stat_sources: RegisteredCharacter["stat_sources"] };
+
+  interface FieldSaveState<T> { timer: ReturnType<typeof setTimeout> | null; baseline: T }
+  const fieldSaveState: Record<string, FieldSaveState<unknown>> = {};
+
+  /**
+   * 直更新の保存を汎用化したもの(部位・stat_sources 共通。Home の「今日の強化」の全項目が
+   * ここを通る — 項目ごとに保存の仕組みを複製しない)。get/set で「キャラのどこを読み書きするか」
+   * だけを渡す。実際の送信は enqueueCharacterSave(キャラ単位で直列化)へ通す — update_character は
+   * 毎回キャラ全体を送る full-overwrite 方式なので、ここでの保存とキャラタブの保存
+   * (Workspace.svelte の save())がほぼ同時に走ると、後から解決した方が先に解決した方の変更を
+   * 巻き戻す事故になる。共有キューを通せば、待っている間の 2 件目は 1 件目の結果を必ず拾ってから
+   * 送信されるので、その事故が起きない。
+   *
+   * 連打・通信中の追加編集を失わない設計(独立レビュー指摘: 送信中の押下が黙って消える事故):
+   * - ステッパー連打は「+N したい」という単一の意図なので、key(キャラ id + 項目)ごとに debounce
+   *   して最新値だけを 1 回送る。
+   * - 送信中(enqueueCharacterSave の応答待ち)にさらに押されても state は消さない。押した分は
+   *   その場で楽観反映され、新しい debounce タイマーが張られて次のバーストとして続けて送られる。
+   * - 応答が返ると upsertCharacter がキャラをオブジェクトごと差し替えるため、応答待ちの間に
+   *   進んだ「まだ送っていない最新値」がその差し替えで消える窓ができる。ここは応答が来た瞬間に
+   *   「差し替え直前の実際の値」を読み、差し替え後のオブジェクトへ同じ値を re-apply することで
+   *   埋める(flushFieldUpdate 内)。
+   * - state を消してよいのは、消す時点で新しい debounce タイマーが張られていない(＝これ以上
+   *   送るべき保留編集が無い)ときだけ。
+   *
+   * 試し変更(app.sim)もサイレントに失わない(独立レビュー指摘: ステッパー1押しで sim が消える):
+   * app.sim は equipment/stat_sources を持つ NewCharacter なので、楽観更新と同じ set() をそのまま
+   * 適用して常に最新に保つ。upsertCharacter 側には preserveSim を渡し、ここで既に同期済みの
+   * sim を無条件リセットさせない(元の全消し判断は sim と無関係な保存を前提にしていたため)。
+   */
+  function commitFieldUpdate<T>(
+    c: RegisteredCharacter,
+    key: string,
+    get: (c: FieldSaveTarget) => T,
+    set: (c: FieldSaveTarget, value: T) => void,
+    nextValue: T,
+  ) {
+    let state = fieldSaveState[key] as FieldSaveState<T> | undefined;
+    if (!state) {
+      state = { timer: null, baseline: get(c) };
+      fieldSaveState[key] = state as FieldSaveState<unknown>;
     }
-    if (!part || (part.item_id === null && part.custom_name === null)) return { text: "未設定", unset: true };
-    if (slot === "weapon" || slot === "armor") {
-      return { text: part.enhance_level > 0 ? `+${part.enhance_level}` : "強化なし", unset: false };
-    }
-    const total = sumValues(part.enchant);
-    return { text: total > 0 ? `+${total}` : "±0", unset: false };
+    set(c, nextValue); // 楽観更新: 押した瞬間に数字が動く(§00 考えさせない)
+    if (app.sim && app.selectedId === c.id) set(app.sim, nextValue); // 試し変更も同じ変更で最新に保つ
+    if (state.timer) clearTimeout(state.timer);
+    const characterId = c.id;
+    const st = state;
+    st.timer = setTimeout(() => {
+      st.timer = null;
+      void flushFieldUpdate(characterId, key, get, set);
+    }, 350);
   }
-  /** シエナのオーラは装着中の登録数(部位を跨いだ合計)。8 部位すべてに発現できるので独立管理。 */
-  const auraCount = $derived(
-    character ? Object.values(character.equipment.siena).filter((l) => l.selected_id !== null).length : 0,
+  async function flushFieldUpdate<T>(
+    characterId: number,
+    key: string,
+    get: (c: FieldSaveTarget) => T,
+    set: (c: FieldSaveTarget, value: T) => void,
+  ): Promise<void> {
+    const state = fieldSaveState[key] as FieldSaveState<T> | undefined;
+    if (!state) return;
+    try {
+      // buildPayload はキューで自分の番が来た瞬間に呼ばれる。待っている間に別の保存(キャラタブ
+      // など)が先に確定していたら、その結果を含む最新の app.characters から組み立てる。
+      const saved = await enqueueCharacterSave(characterId, () => {
+        const c = app.characters.find((x) => x.id === characterId);
+        if (!c) throw new Error("character not found");
+        return payloadOf(c);
+      });
+      // 差し替え直前の「いま画面にある値」を控える。通信中にさらに押されていれば、これは
+      // 今回送った値より先へ進んでいる(取りこぼし対策)。
+      const liveBefore = app.characters.find((x) => x.id === characterId);
+      const latestValue = liveBefore ? get(liveBefore) : state.baseline;
+      const confirmedValue = get(saved);
+      upsertCharacter(saved, { preserveSim: true }); // ここでオブジェクトごと差し替わる
+      if (JSON.stringify(latestValue) !== JSON.stringify(confirmedValue)) {
+        // 差し替え後の新しいオブジェクトへ、通信中に進んだ分を re-apply する(押した分を消さない)
+        const liveAfter = app.characters.find((x) => x.id === characterId);
+        if (liveAfter) set(liveAfter, latestValue);
+      }
+      state.baseline = confirmedValue;
+      // まだ新しい debounce タイマーが張られていなければ(=これ以上保留の編集が無い)完了
+      if (!state.timer) delete fieldSaveState[key];
+    } catch (e) {
+      delete fieldSaveState[key];
+      const c = app.characters.find((x) => x.id === characterId);
+      if (c) {
+        set(c, state.baseline); // 失敗: 見た目を保存済みの値へ巻き戻す
+        if (app.sim && app.selectedId === characterId) set(app.sim, state.baseline); // 試し変更も揃えて戻す
+      }
+      reportError(errorMessage(e));
+    }
+  }
+
+  // --- 1. 神鳥の聖物(stat_sources.sacred_relic)。表示は SourcePane.svelte の relic セクション
+  //    (254-266行)と完全に揃える: 実値 = 段階 × value_per_stage、1 押し = 1 段階。 ---
+  const SACRED_RELIC_MAX_VALUE = limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage;
+  function sacredRelicValueOf(c: RegisteredCharacter, k: StatKind): number {
+    return sacredRelicValue(c.stat_sources.sacred_relic[k] ?? 0, limits.sacred_relic_value_per_stage);
+  }
+  function commitSacredRelic(c: RegisteredCharacter, k: StatKind, value: number) {
+    const stage = sacredRelicStageFromValue(
+      value,
+      limits.sacred_relic_stage_max,
+      limits.sacred_relic_value_per_stage,
+    );
+    commitFieldUpdate(
+      c, `${c.id}:sacred_relic:${k}`,
+      (cc) => cc.stat_sources.sacred_relic[k],
+      (cc, v) => { cc.stat_sources.sacred_relic[k] = v; },
+      stage,
+    );
+  }
+  /** 何か盛ってあるかだけを見る(閉じたタイルの「未設定」バッジ判定)。内訳は開いて見せる —
+   *  閉じた面に略字を並べるとノイズになるため(ユーザー判断)。 */
+  const sacredRelicSet = $derived.by(() => {
+    const c = character;
+    return c ? STAT_KINDS.some((k) => sacredRelicValueOf(c, k) > 0) : false;
+  });
+
+  // --- 2. カフス(shield_plus の成長値)。編集規則は EquipmentPane.svelte の
+  //    growth-equipment-card(874-895行)と完全に同じにする: 対象ステは growth_caps[k] > 0 の
+  //    ものだけ、範囲は values_min[k]..growth_caps[k](スカラーの growth_cap ではない)。
+  //    growth_caps を持たない装備(通常のカフス)・未装備はステッパーを出さない。 ---
+  function cuffsPart(c: FieldSaveTarget): EquipmentPart | null {
+    const list = c.equipment.parts.shield_plus;
+    return list.registered.find((p) => p.id === list.selected_id) ?? null;
+  }
+  const cuffsItem = $derived(character ? itemOf(cuffsPart(character)) : null);
+  const cuffsGrowthKeys = $derived(
+    cuffsItem?.growth_caps ? EQUIPMENT_STAT_KINDS.filter((k) => cuffsItem!.growth_caps![k] > 0) : [],
   );
+  /** ステッパーを出せない理由。未装備は「未設定」、装備済みだが成長枠が無い(通常のカフス)は
+   *  区別できる文言にする。ステッパーを出せるときは null。 */
+  const cuffsUnsetLabel = $derived.by(() => {
+    const c = character;
+    if (!c || isUnequipped(cuffsPart(c))) return "未設定";
+    if (!cuffsItem?.growth_caps) return "成長装備ではありません";
+    return null;
+  });
+  function commitCuffsBase(c: RegisteredCharacter, k: EquipmentStatKind, value: number) {
+    commitFieldUpdate(
+      c, `${c.id}:shield_plus:base:${k}`,
+      (cc) => cuffsPart(cc)?.base[k] ?? 0,
+      (cc, v) => { const p = cuffsPart(cc); if (p) p.base[k] = v; },
+      value,
+    );
+  }
+  const cuffsSummary = $derived.by(() => {
+    const c = character;
+    const part = c ? cuffsPart(c) : null;
+    const keys = cuffsGrowthKeys;
+    const item = cuffsItem;
+    if (!c || !part || !item?.growth_caps || keys.length === 0) return null;
+    const growthCaps = item.growth_caps;
+    return {
+      value: keys.reduce((n, k) => n + part.base[k], 0),
+      max: keys.reduce((n, k) => n + growthCaps[k], 0),
+    };
+  });
+
+  // --- 3. エンチャント(各部位の part.enchant)。軸を主軸スキルの依存ステ(1〜2 本)に絞る
+  //    (heroEquipRows と同じ EQUIP_ROW_KEYS を使う)。行 = そのステのエンチャント枠を持つ
+  //    装備済み部位だけ(枠 0 の部位・未装備は出さない)。 ---
+  type EnchantDepKey = "thrust" | "slash" | "magic_attack" | "magic_defense";
+  const ENCHANT_SLOTS: PartSlot[] = ["weapon", "armor", "helm", "shield", "shield_plus", "head", "hand", "leg"];
+  const ENCHANT_SLOT_LABELS: Record<string, string> = {
+    weapon: "武器", armor: "鎧", helm: "兜", shield: "盾", shield_plus: "カフス", head: "頭", hand: "手", leg: "足",
+  };
+  /** キャラタブと同じ 4 種 + MAX(ユーザー要望: 増分の種類を絞りすぎないでほしい)。 */
+  const ENCHANT_INCREMENTS = [12, 14, 17, 20] as const;
+  const enchantDepKeys = $derived.by(() => {
+    const skillId = character?.main_skill_id ?? null;
+    const dep = (skillId ? skillDeps[skillId] : null) ?? "stab_hack";
+    return EQUIP_ROW_KEYS[dep];
+  });
+  function enchantCap(part: EquipmentPart, k: EnchantDepKey): number {
+    const item = itemOf(part);
+    return item ? item.enchant_caps[k] : limits.equipment_value_max;
+  }
+  const enchantRows = $derived.by(() => {
+    if (!character) return [];
+    const keys = enchantDepKeys;
+    const rows: { slot: PartSlot; part: EquipmentPart }[] = [];
+    for (const slot of ENCHANT_SLOTS) {
+      const part = partOf(slot);
+      if (!part || isUnequipped(part)) continue;
+      if (keys.some((k) => enchantCap(part, k) > 0)) rows.push({ slot, part });
+    }
+    return rows;
+  });
+  function commitEnchant(c: RegisteredCharacter, slot: PartSlot, k: EnchantDepKey, value: number) {
+    commitFieldUpdate(
+      c, `${c.id}:${slot}:enchant:${k}`,
+      (cc) => {
+        const l = cc.equipment.parts[slot];
+        return l.registered.find((p) => p.id === l.selected_id)?.enchant[k] ?? 0;
+      },
+      (cc, v) => {
+        const l = cc.equipment.parts[slot];
+        const p = l.registered.find((x) => x.id === l.selected_id);
+        if (p) p.enchant[k] = v;
+      },
+      value,
+    );
+  }
+  const enchantSummary = $derived.by(() => {
+    const rows = enchantRows;
+    const keys = enchantDepKeys;
+    if (rows.length === 0) return null;
+    let value = 0;
+    let max = 0;
+    for (const { part } of rows) {
+      for (const k of keys) {
+        const cap = enchantCap(part, k);
+        if (cap <= 0) continue;
+        value += part.enchant[k];
+        max += cap;
+      }
+    }
+    return { value, max };
+  });
+
+  // --- 4. レリック左右。カタログの次段(+レベル)へ差し替える(EquipmentPane.pickRelicLevel と
+  //    同じ結果になるよう equipment.ts の applyCatalogItem を共有する)。神鳥は 1→10、ルナリアは
+  //    別系列で 1→10(kind の外へは踏み出さない。相手 kind への切り替えはキャラタブで行う)。
+  //    各段には補正値の範囲があり(gamedata: relic_item は growth_caps = values_max)、実際の値は
+  //    直前段階のMAXから始まり表示段階のMAXまで育つ(wiki)。+レベルで次の段へ進めるのは、
+  //    いまの段の補正値を上限まで上げてから、というゲーム内の順序をそのまま表現する。
+  const RELIC_ROWS = [
+    { slot: "relic_pendant", side: "左" },
+    { slot: "relic_bracelet", side: "右" },
+  ] as const;
+  const RELIC_KIND_LABELS = { godbird: "神鳥", lunaria: "ルナリア" } as const;
+  const relicPartName = (slot: "relic_pendant" | "relic_bracelet") =>
+    slot === "relic_pendant" ? "pendant" : "bracelet";
+  const relicKindOf = (itemId: string): "godbird" | "lunaria" | null =>
+    itemId.startsWith("godbird-") ? "godbird" : itemId.startsWith("lunaria-") ? "lunaria" : null;
+  const relicLevelOf = (itemId: string): number | null => {
+    const m = itemId.match(/-plus(\d+)$/);
+    return m ? Number(m[1]) : null;
+  };
+  const relicItemFor = (slot: "relic_pendant" | "relic_bracelet", kind: string, level: number): EquipmentItem | null =>
+    app.equipmentCatalog.find((it) => it.id === `${kind}-${relicPartName(slot)}-plus${level}`) ?? null;
+  /** 同 kind(神鳥/ルナリア)でカタログに存在する最大 Lv。この kind の系列の外へは踏み出さない。 */
+  const relicMaxLevel = (slot: "relic_pendant" | "relic_bracelet", kind: string): number => {
+    const prefix = `${kind}-${relicPartName(slot)}-plus`;
+    return app.equipmentCatalog.reduce((max, it) => {
+      if (!it.id.startsWith(prefix)) return max;
+      const lv = Number(it.id.slice(prefix.length));
+      return Number.isFinite(lv) ? Math.max(max, lv) : max;
+    }, 0);
+  };
+  /** いまの段で補正値を上げられるステ(カタログの growth_caps がそのまま今の段の上限)。 */
+  function relicGrowthKeys(item: EquipmentItem | null): EquipmentStatKind[] {
+    return item?.growth_caps ? EQUIPMENT_STAT_KINDS.filter((k) => item.growth_caps![k] > 0) : [];
+  }
+  /** 補正値がいまの段の上限まで埋まっているか。埋まっていなければ次の段には進めない
+   *  (ゲーム内の育成順序: 補正値が育ち切ってから+レベル)。育成対象ステが無ければ常に true。 */
+  function relicGrowthComplete(part: EquipmentPart, item: EquipmentItem | null): boolean {
+    const keys = relicGrowthKeys(item);
+    return keys.length === 0 || keys.every((k) => part.base[k] >= item!.growth_caps![k]);
+  }
+  interface RelicState {
+    value: number; max: number; kind: "godbird" | "lunaria";
+    canDown: boolean; canUp: boolean; growthDone: boolean;
+  }
+  function relicState(slot: "relic_pendant" | "relic_bracelet", part: EquipmentPart | null): RelicState | null {
+    if (!part || part.item_id === null) return null;
+    const kind = relicKindOf(part.item_id);
+    const level = relicLevelOf(part.item_id);
+    if (!kind || level === null) return null;
+    const max = relicMaxLevel(slot, kind);
+    const growthDone = relicGrowthComplete(part, itemOf(part));
+    return { value: level, max, kind, canDown: level > 1, canUp: level < max && growthDone, growthDone };
+  }
+  function commitRelicLevel(c: RegisteredCharacter, slot: "relic_pendant" | "relic_bracelet", nextPart: EquipmentPart) {
+    commitFieldUpdate(
+      c, `${c.id}:${slot}`,
+      (cc) => {
+        const l = cc.equipment.parts[slot];
+        return l.registered.find((p) => p.id === l.selected_id) ?? nextPart;
+      },
+      (cc, part) => {
+        const l = cc.equipment.parts[slot];
+        const i = l.registered.findIndex((p) => p.id === l.selected_id);
+        if (i >= 0) l.registered[i] = part;
+      },
+      nextPart,
+    );
+  }
+  /** 段の補正値(part.base)の直更新。カフスの成長値編集(commitCuffsBase)と同じ形。 */
+  function commitRelicBase(c: RegisteredCharacter, slot: "relic_pendant" | "relic_bracelet", k: EquipmentStatKind, value: number) {
+    commitFieldUpdate(
+      c, `${c.id}:${slot}:base:${k}`,
+      (cc) => {
+        const l = cc.equipment.parts[slot];
+        return l.registered.find((p) => p.id === l.selected_id)?.base[k] ?? 0;
+      },
+      (cc, v) => {
+        const l = cc.equipment.parts[slot];
+        const p = l.registered.find((x) => x.id === l.selected_id);
+        if (p) p.base[k] = v;
+      },
+      value,
+    );
+  }
+  function stepRelicLevel(slot: "relic_pendant" | "relic_bracelet", dir: number) {
+    const c = character;
+    const part = partOf(slot);
+    if (!c || !part || part.item_id === null) return;
+    const kind = relicKindOf(part.item_id);
+    const level = relicLevelOf(part.item_id);
+    if (!kind || level === null) return;
+    if (dir > 0 && !relicGrowthComplete(part, itemOf(part))) return; // 補正値が上限に届くまで進めない
+    const item = relicItemFor(slot, kind, level + dir);
+    if (!item) return;
+    const next = applyCatalogItem(part, item);
+    // レリックは直前段階のMAXから育って表示段階のMAXに到達する(wiki 注記)。applyCatalogItem は
+    // 通常装備と同じく base を values_max(=この段の完成値)にするが、レリックを「段を上げた」
+    // 直後は正しくは「まだ育っていない」状態(補正値 = この段の下限 = 直前段階の完成値)。
+    // 段を下げる(dir<0)方向は「その段は育成済みだった」扱いのまま(values_max)でよい。
+    const base = dir > 0 ? { ...item.values_min } : next.base;
+    commitRelicLevel(c, slot, { ...next, base });
+  }
 </script>
 
 <div class="home">
@@ -492,7 +818,7 @@
       <div class="hero">
         <div class="hero-top">
           <div class="hero-id">
-            <Icon kind="character" id={character.game_character_id} size={64} label={character.name} />
+            <Icon kind="character" id={character.game_character_id} size={64} label={character.name} source={app.characterIcons[character.id] ?? null} />
             <span class="hero-id-name">{character.name}</span>
             <span class="hero-id-class">
               {gameCharacterName(character.game_character_id)} / 覚醒{character.awakening.stage} ・ エタ意志
@@ -517,7 +843,7 @@
                 <span class="hero-row" class:first={i === 0}>
                   <span class="hero-row-label">{row.label}</span>
                   <span class="hero-row-value-wrap">
-                    <span class="num hero-sub">{fmtInt(row.base)} +{fmtInt(row.enchant)}</span>
+                    <span class="num hero-sub">{fmtInt(row.base)} +{fmtInt(row.enhanced)}</span>
                     <span class="num hero-row-value" use:bump={() => row.total}>{fmtInt(row.total)}</span>
                   </span>
                 </span>
@@ -574,7 +900,7 @@
                 <span class="fill" style="width: {heroSpotPct}; background: {STATE[BADGE[heroSpotState].state].bar};"></span>
               </span>
               <span class="hero-spot-wrap">
-                <span class="num hero-spot" use:bump={() => heroSpot?.perHit ?? null}>
+                <span class="num hero-spot" use:bump={() => heroSpot?.perHit ?? null} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)">
                   {fmtInt(heroSpot.perHit)}
                 </span>
                 <span class="num dim"> / {fmtInt(heroGoal.content.need_per_hit)}</span>
@@ -610,7 +936,7 @@
                   <span class="cost" style={triadStyle(COST_COLORS[a.cost])}>{COST_LABELS[a.cost]}</span>
                   <span class="hero-advice-label">{a.label}</span>
                   <span class="hero-advice-nums">
-                    <span class="num" use:bump={() => a.per_hit_primary}>{fmtInt(a.per_hit_primary)}</span>
+                    <span class="num" use:bump={() => a.per_hit_primary} title="表記ダメージ(スキル分のみ)">{fmtInt(a.per_hit_primary)}</span>
                     <span class="num" use:bump={() => a.delta_pct}>{a.delta_pct > 0 ? " +" : " "}{a.delta_pct}%</span>
                   </span>
                   {#if a.reaches}
@@ -652,41 +978,232 @@
         </div>
       {/if}
 
-      <!-- ===== 反映: 部位タイル。押すとキャラタブの装備ペインの該当部位へ ===== -->
+      <!-- ===== 今日の強化: 5 項目タイル。押すと**グリッド全体の下**に展開する(押した場所は動かない・
+           同時に開くのは 1 つだけ)。武器・鎧の強化Lvは低頻度なので「そのほかの設定」からキャラタブへ ===== -->
       <div class="section">
         <div class="area-head">
-          <span class="area-name">反映</span>
+          <span class="area-name">今日の強化</span>
           <span class="area-rule"></span>
           {#if character.updated_at}
-            <span class="last-reflect dim">
-              最終反映 <span class="num">{fmtMonthDay(character.updated_at)}</span>
+            <span class="last-enhance dim">
+              最後の強化 <span class="num">{fmtMonthDay(character.updated_at)}</span>
               ({daysAgo(character.updated_at) === 0 ? "今日" : `${daysAgo(character.updated_at)} 日前`})
             </span>
           {/if}
         </div>
-        <div class="parts-grid">
-          {#each REACH_TILES as t (t.slot)}
-            {@const part = partOf(t.slot)}
-            {@const val = partValue(t.slot, part)}
-            <button type="button" class="part-tile" onclick={() => focusCharacterSource("equipment", t.slot)}>
-              <Icon kind="equipment" id={part ? equipmentIconId(part.item_id, app.equipmentCatalog) : null} size={20} label={t.label} />
-              <span class="part-tile-name">{t.label}</span>
-              {#if val.unset}
+        <div class="today-grid">
+          <button type="button" class="today-tile" class:open={openTile === "sacredRelic"} onclick={() => toggleTile("sacredRelic")}>
+            <div class="today-tile-head">
+              <span class="today-tile-name">神鳥の聖物</span>
+              {#if !sacredRelicSet}
                 <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
-              {:else}
-                <span class="num part-tile-val" use:flash={() => val.text}>{val.text}</span>
               {/if}
+            </div>
+          </button>
+          <button type="button" class="today-tile" class:open={openTile === "cuffs"} onclick={() => toggleTile("cuffs")}>
+            <div class="today-tile-head">
+              <span class="today-tile-name">カフス</span>
+              {#if !cuffsSummary}
+                <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? "未設定", state: "edge" })}>{cuffsUnsetLabel ?? "未設定"}</span>
+              {/if}
+            </div>
+          </button>
+          <button type="button" class="today-tile" class:open={openTile === "enchant"} onclick={() => toggleTile("enchant")}>
+            <div class="today-tile-head">
+              <span class="today-tile-name">エンチャント</span>
+              {#if !enchantSummary}
+                <span class="badge" style={badgeStyle({ label: "対象なし", state: "edge" })}>対象なし</span>
+              {/if}
+            </div>
+          </button>
+          <button type="button" class="today-tile" class:open={openTile === "equipRelic"} onclick={() => toggleTile("equipRelic")}>
+            <div class="today-tile-head">
+              <span class="today-tile-name">レリック</span>
+            </div>
+          </button>
+          <button type="button" class="today-tile" onclick={() => focusCharacterSource("siena")}>
+            <div class="today-tile-head">
+              <span class="today-tile-name">シエナのオーラ</span>
               <span class="chev dim">›</span>
-            </button>
-          {/each}
-          <button type="button" class="part-tile" onclick={() => focusCharacterSource("siena")}>
-            <Icon kind="equipment" id={null} size={20} label="オーラ" />
-            <span class="part-tile-name">オーラ</span>
-            <span class="num part-tile-val" use:flash={() => String(auraCount)}>{auraCount} 部位</span>
-            <span class="chev dim">›</span>
+            </div>
           </button>
         </div>
-        <button type="button" class="cta tile-more" onclick={() => (app.tab = "chars")}>そのほかの設定(ペット・ルーン・バフ) ›</button>
+
+        {#if openTile}
+          <div class="today-expand">
+            {#if openTile === "sacredRelic"}
+              <div class="expand-head">
+                <span class="expand-title">神鳥の聖物</span>
+                <span class="dim expand-note">ステごとの加算({limits.sacred_relic_value_per_stage} きざみ・0–{SACRED_RELIC_MAX_VALUE})</span>
+              </div>
+              <div class="expand-rows two-col">
+                {#each STAT_KINDS as k (k)}
+                  <div class="expand-row" use:flash={() => String(sacredRelicValueOf(character, k))}>
+                    <span class="expand-row-label">{STAT_LABELS[k]}</span>
+                    <StatInput
+                      label="{STAT_LABELS[k]}の聖物" hideLabel
+                      min={0} max={SACRED_RELIC_MAX_VALUE} step={limits.sacred_relic_value_per_stage} stepper
+                      bind:value={
+                        () => sacredRelicValueOf(character, k),
+                        (v) => commitSacredRelic(character, k, v)
+                      }
+                    />
+                  </div>
+                {/each}
+              </div>
+            {:else if openTile === "cuffs"}
+              <div class="expand-head">
+                <span class="expand-title">カフス</span>
+                <span class="dim expand-note">この段階の実値。下限は直前段階の完成値、上限はこの段階のMAX</span>
+              </div>
+              {#if cuffsGrowthKeys.length === 0}
+                <button type="button" class="expand-nav" onclick={() => focusCharacterSource("equipment", "shield_plus")}>
+                  <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? "未設定", state: "edge" })}>{cuffsUnsetLabel ?? "未設定"}</span>
+                  <span class="expand-nav-text">キャラタブで装備を選ぶ</span>
+                  <span class="chev dim">›</span>
+                </button>
+              {:else}
+                {@const item = cuffsItem}
+                <div class="expand-rows">
+                  {#each cuffsGrowthKeys as k (k)}
+                    <div class="expand-row" use:flash={() => String(cuffsPart(character)?.base[k] ?? 0)}>
+                      <span class="expand-row-label">{EQUIPMENT_STAT_LABELS[k]}</span>
+                      <StatInput
+                        label="{EQUIPMENT_STAT_LABELS[k]}の装備補正" hideLabel
+                        min={item!.values_min[k]} max={item!.growth_caps![k]} strictMax stepper
+                        bind:value={
+                          () => cuffsPart(character)?.base[k] ?? 0,
+                          (v) => commitCuffsBase(character, k, v)
+                        }
+                      />
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            {:else if openTile === "enchant"}
+              <div class="expand-head">
+                <span class="expand-title">エンチャント</span>
+                <span class="dim expand-note">主軸: {enchantDepKeys.map((k) => EQUIP_ROW_LABELS[k]).join("・")}</span>
+                <button type="button" class="cta expand-more" onclick={() => (app.tab = "chars")}>ほかのステはキャラタブへ ›</button>
+              </div>
+              {#if enchantRows.length === 0}
+                <p class="dim expand-empty">主軸スキルの依存ステを盛れる部位が装備されていません。</p>
+              {:else}
+                <div class="expand-rows">
+                  {#each enchantRows as row (row.slot)}
+                    <div class="expand-row enchant-row">
+                      <span class="expand-row-label">{ENCHANT_SLOT_LABELS[row.slot]}</span>
+                      <div class="enchant-row-cols">
+                        {#each enchantDepKeys as k (k)}
+                          {@const cap = enchantCap(row.part, k)}
+                          {#if cap > 0}
+                            {@const cur = partOf(row.slot)?.enchant[k] ?? 0}
+                            <div class="enchant-stat">
+                              <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
+                              <span class="enchant-stat-val">
+                                {#if editingEnchant === `${row.slot}:${k}`}
+                                  <input
+                                    class="enchant-stat-input num" type="number" min="0" max={cap} value={cur}
+                                    onblur={(e) => commitEnchantText(row.slot, k, cap, e.currentTarget.value)}
+                                    onkeydown={(e) => {
+                                      if (e.key === "Enter") e.currentTarget.blur();
+                                      if (e.key === "Escape") editingEnchant = null;
+                                    }}
+                                    {@attach (node) => { node.focus(); node.select(); }}
+                                  />
+                                {:else}
+                                  <button
+                                    type="button" class="num enchant-stat-num" use:bump={() => cur}
+                                    aria-label="{EQUIPMENT_STAT_SHORT[k]}のエンチャントを編集"
+                                    onclick={() => (editingEnchant = `${row.slot}:${k}`)}
+                                  >{fmtInt(cur)}</button>
+                                {/if}
+                                <span class="num dim">/{fmtInt(cap)}</span>
+                              </span>
+                              <span class="enchant-stat-chips">
+                                {#each ENCHANT_INCREMENTS as amt (amt)}
+                                  <button
+                                    type="button" class="chip-add" disabled={cur >= cap}
+                                    onclick={() => commitEnchant(character, row.slot, k, Math.min(cap, cur + amt))}
+                                  >+{amt}</button>
+                                {/each}
+                                <button
+                                  type="button" class="chip-add chip-max" disabled={cur >= cap}
+                                  onclick={() => commitEnchant(character, row.slot, k, cap)}
+                                >MAX</button>
+                                <button
+                                  type="button" class="chip-add chip-zero" disabled={cur <= 0}
+                                  onclick={() => commitEnchant(character, row.slot, k, 0)}
+                                >0</button>
+                              </span>
+                            </div>
+                          {/if}
+                        {/each}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            {:else if openTile === "equipRelic"}
+              <div class="expand-head"><span class="expand-title">レリック</span></div>
+              <div class="expand-rows">
+                {#each RELIC_ROWS as r (r.slot)}
+                  {@const part = partOf(r.slot)}
+                  {@const rs = relicState(r.slot, part)}
+                  {@const item = itemOf(part)}
+                  {@const growthKeys = relicGrowthKeys(item)}
+                  <div class="expand-row relic-row">
+                    <span class="expand-row-label">レリック{r.side}</span>
+                    {#if rs}
+                      <div class="relic-row-body">
+                        <div class="relic-row-head">
+                          <span class="badge" style={badgeStyle({ label: RELIC_KIND_LABELS[rs.kind], state: "unknown" })}>{RELIC_KIND_LABELS[rs.kind]}</span>
+                          <div class="today-stepper">
+                            <button type="button" class="dst" aria-label="レリック{r.side}を下げる" disabled={!rs.canDown} onclick={() => stepRelicLevel(r.slot, -1)}>−</button>
+                            <span class="today-stepper-val">
+                              <span class="num" use:bump={() => rs!.value}>Lv{rs.value}</span>
+                              <span class="num dim">/ {rs.max}</span>
+                            </span>
+                            <button type="button" class="dst" aria-label="レリック{r.side}を上げる" disabled={!rs.canUp} onclick={() => stepRelicLevel(r.slot, 1)}>+</button>
+                          </div>
+                        </div>
+                        {#if growthKeys.length > 0}
+                          <div class="relic-growth-rows">
+                            {#each growthKeys as k (k)}
+                              <div class="enchant-stat" use:flash={() => String(partOf(r.slot)?.base[k] ?? 0)}>
+                                <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
+                                <StatInput
+                                  label="{EQUIPMENT_STAT_SHORT[k]}の補正値" hideLabel
+                                  min={item!.values_min[k]} max={item!.growth_caps![k]} strictMax stepper
+                                  bind:value={
+                                    () => partOf(r.slot)?.base[k] ?? 0,
+                                    (v) => commitRelicBase(character, r.slot, k, v)
+                                  }
+                                />
+                              </div>
+                            {/each}
+                          </div>
+                          {#if !rs.growthDone}
+                            <p class="relic-hint dim">補正値が上限まで届くと次の段へ進めます</p>
+                          {/if}
+                        {:else}
+                          <span class="expand-row-vals num dim">{valuesSummary(part!.base)}</span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <button type="button" class="expand-nav" onclick={() => focusCharacterSource("equipment", r.slot)}>
+                        <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+                        <span class="chev dim">›</span>
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <button type="button" class="cta tile-more" onclick={() => (app.tab = "chars")}>そのほかの設定(武器・鎧の強化・ペット・ルーン・バフ) ›</button>
       </div>
 
       <!-- ===== どこまでいける?: 畳み既定。エリア 4 行 → 押すと直下に一覧が展開(§09 規則 1) ===== -->
@@ -760,7 +1277,7 @@
                           {:else}
                             <span class="name">{r.content.name}</span>
                           {/if}
-                          <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_primary ?? null}>{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"}</span>
+                          <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_primary ?? null} title="表記ダメージ(スキル分のみ)">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"}</span>
                           <span class="chev dim">›</span>
                         </div>
                         <div class="row-bar">
@@ -896,12 +1413,12 @@
   .hero-advice-row .chev { flex-shrink: 0; font-size: 9px; }
   .cost { flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
 
-  /* ===== 汎用セクション見出し(期限・影響 / 反映 / うごき) ===== */
+  /* ===== 汎用セクション見出し(期限・影響 / 今日の強化 / うごき) ===== */
   .section { display: flex; flex-direction: column; gap: 6px; }
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
-  .last-reflect { flex: none; font-size: 9px; white-space: nowrap; }
+  .last-enhance { flex: none; font-size: 9px; white-space: nowrap; }
 
   /* ===== 期限・影響カード ===== */
   .brief-card {
@@ -913,16 +1430,79 @@
   .brief-title { font-size: 14px; font-weight: 800; color: var(--fg-head); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .brief-why { font-size: 10px; color: var(--fg-muted); line-height: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* ===== 反映: 部位タイル ===== */
-  .parts-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-  .part-tile {
-    display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: var(--r-window);
-    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left; min-width: 0;
+  /* ===== 今日の強化: 5 項目タイル。閉じているときは要約(合計/上限)+ 内訳、押すと下に展開する ===== */
+  .today-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .today-tile {
+    display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 0; padding: 9px 12px;
+    border-radius: var(--r-window); background: var(--bg-field); border: 1px solid var(--border-soft);
+    box-shadow: inset 0 1px 0 #fff; text-align: left;
   }
-  .part-tile:hover { border-color: var(--accent); }
-  .part-tile-name { min-width: 0; flex: 1; font-size: 10px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .part-tile-val { flex-shrink: 0; font-size: 12px; font-weight: 700; white-space: nowrap; }
-  .tile-more { align-self: flex-start; }
+  .today-tile:hover { border-color: var(--accent); }
+  /* 開いているタイルだけ枠を強める(押した場所が分かる。§00 押した場所は動かない) */
+  .today-tile.open { border-color: var(--accent); background: var(--bg-panel); }
+  .today-tile-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .today-tile-name { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* ===== 今日の強化: 展開(押したタイルの上には差し込まず、グリッド全体の下に出す) ===== */
+  .today-expand {
+    display: flex; flex-direction: column; gap: 8px; padding: 11px 13px; border-radius: var(--r-window);
+    background: var(--bg-panel); border: 1px solid var(--border-soft);
+  }
+  .expand-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .expand-title { font-size: 10.5px; font-weight: 800; color: var(--fg-head); white-space: nowrap; }
+  .expand-note { min-width: 0; flex: 1; font-size: 9.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .expand-more { flex: none; }
+  .expand-empty { margin: 0; font-size: 10.5px; }
+  .expand-rows { display: flex; flex-direction: column; gap: 5px; }
+  .expand-rows.two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 12px; }
+  .expand-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .expand-row-label { flex: none; width: 56px; font-size: 10px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .enchant-row { align-items: flex-start; }
+  .enchant-row-cols { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  /* エンチャント行: 短縮ステ名 + 値/上限 + 増分チップ2種(押した場所は動かない・幅は詰める) */
+  .enchant-stat { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .enchant-stat-label { flex: none; width: 26px; font-size: 9px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; }
+  .enchant-stat-val { flex: none; min-width: 62px; display: flex; align-items: baseline; gap: 2px; }
+  .enchant-stat-val .num { font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--fg-head); }
+  .enchant-stat-val .num.dim { font-size: 9px; font-weight: 700; }
+  /* 押すとテキスト編集にできる(戻す手段が増分チップだけだと足りないため。§07 形態5の例外運用) */
+  .enchant-stat-num { padding: 0; background: none; border: none; cursor: text; }
+  .enchant-stat-num:hover { text-decoration: underline dotted; }
+  .enchant-stat-input {
+    width: 44px; padding: 1px 3px; border-radius: var(--r-inset); background: #fff;
+    border: 1px solid var(--accent); font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+  }
+  .enchant-stat-chips { flex: none; display: flex; flex-wrap: wrap; gap: 3px; max-width: 190px; }
+  .chip-add {
+    flex: none; padding: 2px 7px; border-radius: var(--r-inset); background: var(--state-goal-bg);
+    border: 1px solid var(--cell-bd); color: var(--accent-hover); font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .chip-add:hover:not(:disabled) { border-color: var(--accent); }
+  .chip-add:disabled { color: var(--border); background: none; }
+  .chip-max { border-style: dashed; }
+  .chip-zero { color: var(--fg-muted); } /* 一発で0へ戻す取り消しチップ */
+  .expand-row-vals { flex: none; max-width: 130px; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .expand-nav { display: flex; align-items: center; gap: 8px; padding: 2px 0; text-align: left; }
+  .expand-nav-text { flex: 1; min-width: 0; font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .relic-row { align-items: flex-start; }
+  .relic-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .relic-row-head { display: flex; align-items: center; gap: 8px; }
+  .relic-growth-rows { display: flex; flex-direction: column; gap: 4px; }
+  .relic-hint { margin: 0; font-size: 9px; color: var(--fg-muted); }
+
+  /* レリック左右の −/値/+(既存の直更新タイルと同じ見た目を踏襲) */
+  .today-stepper { flex: none; display: flex; align-items: center; gap: 4px; } /* 押しやすさ優先で −/値/+ を近接させる(離れすぎ対策) */
+  .dst {
+    width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center;
+    border-radius: var(--r-inset); background: var(--state-goal-bg); border: 1px solid var(--cell-bd);
+    color: var(--accent-hover); font-size: 12px; font-weight: 700;
+  }
+  .dst:hover:not(:disabled) { border-color: var(--accent); }
+  .dst:disabled { color: var(--border); background: none; } /* 上限・下限(§00 考えさせない: 押せないボタンで示す) */
+  /* min-width で桁が増減しても幅を変えない(§00 押した場所は動かない) */
+  .today-stepper-val { flex: none; min-width: 46px; display: flex; align-items: baseline; justify-content: center; gap: 2px; }
+
+  .tile-more { align-self: flex-start; margin-top: 2px; }
+  .tile-more { align-self: flex-start; margin-top: 2px; }
 
   /* ===== どこまでいける?(details.fold は app.css 側の畳み見た目を継承) ===== */
   .reach-fold summary { display: flex; align-items: center; gap: 9px; }

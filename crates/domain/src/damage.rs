@@ -37,11 +37,11 @@ pub struct DamageContribution {
 }
 
 /// 3 コンボ以上で付くコンボボーナス(wiki: カテゴリH)。
-const COMBO_BONUS_RATE: f64 = 0.15;
+pub const COMBO_BONUS_RATE: f64 = 0.15;
 /// コンボボーナスが付くコンボ数。
-const COMBO_BONUS_THRESHOLD: u32 = 3;
+pub const COMBO_BONUS_THRESHOLD: u32 = 3;
 /// 属性差 1 あたりの属性差ボーナス(%)(wiki: カテゴリI)。
-const ELEMENT_BONUS_PERCENT_PER_POINT: f64 = 0.625;
+pub const ELEMENT_BONUS_PERCENT_PER_POINT: f64 = 0.625;
 /// 対モンスターの与ダメージ下限。
 const MIN_DAMAGE_TO_MONSTER: i64 = 1;
 
@@ -1083,6 +1083,11 @@ mod tests {
                 base_actual_delay: Some(1.4),
                 actual_delay_fixed: false,
                 combo_variants: Vec::new(),
+                power: Skill::compute_power(0.99, 1),
+                power_per_second: Skill::compute_power_per_second(
+                    Skill::compute_power(0.99, 1),
+                    Some(1.4),
+                ),
             },
             enemy: Enemy {
                 id: "e".into(),

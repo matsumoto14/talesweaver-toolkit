@@ -2,7 +2,6 @@
   // 「commonSkill」補正源のペイン。キャラ横断のパッシブ(オーグメントが Lv の前提)。
   import type { StatKind, StatPreview, UltimateSkill } from "../../../api/types";
   import type { Draft } from "../../../draft";
-  import { sienaExtraTotal } from "../../../equipment";
   import { STAT_KINDS, STAT_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_EFFECTS, ULTIMATE_SKILL_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { flash } from "../../../ui/motion.svelte";
@@ -18,17 +17,20 @@
   // アンリーシュ(能力解放)。効き先は能力値倍率B。Lv6 以降はレインフォース(Lv5 まで)が前提。
   // 正は crates/domain/src/common_skill.rs の UNLEASH。limits.unleash_rates(Σ% の小数表現)経由で引く
   const UNLEASH_RATES = $derived(limits.unleash_rates.map((r) => Math.round(r * 100)));
-  const reinforceGate = $derived(draft.commonSkills.reinforce_level + 5);
+  const reinforceGate = $derived(draft.commonSkills.reinforce_level + limits.unleash_free_level_max);
   /** レインフォース Lv を下げたら、それに縛られるアンリーシュの Lv も一緒に下げる */
   function setReinforceLevel(level: number) {
     const c = draft.commonSkills;
     c.reinforce_level = level;
-    for (const slot of c.unleash) slot.level = Math.min(slot.level, level + 5);
+    for (const slot of c.unleash) slot.level = Math.min(slot.level, level + limits.unleash_free_level_max);
   }
   const reinforceOptions = $derived(
     Array.from({ length: limits.reinforce_level_max + 1 }, (_, i) => ({
       value: String(i),
-      label: i === 0 ? `未習得(アンリーシュ Lv5 まで)` : `Lv${i}(アンリーシュ Lv${i + 5} まで)`,
+      label:
+        i === 0
+          ? `未習得(アンリーシュ Lv${limits.unleash_free_level_max} まで)`
+          : `Lv${i}(アンリーシュ Lv${i + limits.unleash_free_level_max} まで)`,
     })),
   );
   const unleashStatOptions = STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }));
@@ -80,6 +82,8 @@
       label: lv === 0 ? "未習得" : label(lv),
       disabled: lv > augmentGate,
     })).filter((o) => !o.disabled);
+  // 正は crates/domain/src/common_skill.rs の STRONG_WEAPON_RATE_PER_LEVEL
+  const STRONG_WEAPON_RATE_PER_LEVEL = $derived(Math.round(limits.strong_weapon_rate_per_level * 100));
   // 正は crates/domain/src/common_skill.rs の PROTECT_ARMOR_PHYSICAL / _MAGIC
   const PROTECT_ARMOR_RATES = $derived(limits.protect_armor_physical_rates.map((r) => Math.round(r * 100)));
   const PROTECT_ARMOR_MAGIC = $derived(limits.protect_armor_magic_rates.map((r) => Math.round(r * 100)));
@@ -92,6 +96,9 @@
   const hyperLimitLevels = $derived(levelChoices(limits.hyper_limit_level_max));
   const reinforceLevels = $derived(levelChoices(limits.reinforce_level_max));
   const unleashLevelChoices = $derived(levelChoices(limits.unleash_level_max));
+  // 正は crates/domain/src/common_skill.rs の KAI_PROTECT_ARMOR_PHYSICAL / _MAGIC
+  const KAI_PROTECT_ARMOR_RATES = $derived(limits.kai_protect_armor_physical_rates.map((r) => Math.round(r * 100)));
+  const KAI_PROTECT_ARMOR_MAGIC = $derived(limits.kai_protect_armor_magic_rates.map((r) => Math.round(r * 100)));
   // 正は crates/domain/src/common_skill.rs の SHARPNESS_VISION
   const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
   // 段の名前は Lv だけ、効いている値は行の右に出す(段に「Lv6(+28%)」と書くと折り返す)。
@@ -108,8 +115,9 @@
   const sharpnessOptionsNow = $derived(
     sharpnessAllOpen || sharpnessIsLow ? sharpnessVisionOptions : sharpnessMainOptions,
   );
-  /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)。表示用 */
-  const sienaDefenseRate = $derived(sienaExtraTotal(draft.equipment, "defense_rate"));
+  /** 装備防御力倍率(共通スキル + シエナのオーラの防御力増加)のうちシエナぶん。表示用。
+   *  正は Equipment::siena_defense_rate(preview.siena_defense_rate。Σ% の小数表現) */
+  const sienaDefenseRate = $derived(Math.round((preview?.siena_defense_rate ?? 0) * 100));
 
   // --- 極限スキル(wiki: Skill/極限)---------------------------------------
   // 3 択から 2 つ。効果値は 基本 + スーパーリミット + ハイパーリミット Lv の加算。
@@ -297,7 +305,7 @@
           >取っている</button>
         </span>
         <span class="skill-actions"></span>
-        <span class="v num">{draft.commonSkills.power_weapon ? "+2%" : "—"}</span>
+        <span class="v num">{draft.commonSkills.power_weapon ? `+${Math.round(limits.power_weapon_rate * 100)}%` : "—"}</span>
       </div>
       <SkillLevelField
         label="ストロングウェポン"
@@ -310,9 +318,9 @@
         clearLabel="未習得"
         clearDisabled={draft.commonSkills.strong_weapon_level === 0}
         onClear={() => (draft.commonSkills.strong_weapon_level = 0)}
-        valueText={draft.commonSkills.strong_weapon_level === 0 ? "—" : `+${draft.commonSkills.strong_weapon_level * 3}%`}
+        valueText={draft.commonSkills.strong_weapon_level === 0 ? "—" : `+${draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}%`}
         valueMotion="bump"
-        valueKey={draft.commonSkills.strong_weapon_level * 3}
+        valueKey={draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}
       />
       <div class="skill-field">
         <span class="k">コートアーマー</span>
@@ -360,9 +368,9 @@
         onClear={() => (draft.commonSkills.kai_protect_armor_level = 0)}
         valueText={draft.commonSkills.kai_protect_armor_level === 0
           ? "—"
-          : `物${draft.commonSkills.kai_protect_armor_level * 9} / 魔${draft.commonSkills.kai_protect_armor_level * 6}%`}
+          : `物${KAI_PROTECT_ARMOR_RATES[draft.commonSkills.kai_protect_armor_level - 1]} / 魔${KAI_PROTECT_ARMOR_MAGIC[draft.commonSkills.kai_protect_armor_level - 1]}%`}
         valueMotion="bump"
-        valueKey={draft.commonSkills.kai_protect_armor_level * 9}
+        valueKey={draft.commonSkills.kai_protect_armor_level}
       />
       <div class="skill-field">
         <span class="k">スーパーリミット</span>

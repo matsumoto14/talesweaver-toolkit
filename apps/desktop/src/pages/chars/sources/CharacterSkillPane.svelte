@@ -1,7 +1,9 @@
 <script lang="ts">
   // 「skills」補正源のペイン。マスタリー(段ごとに 1 つ)と、自分・味方のスキル。
-  import type { MasteryDef } from "../../../api/types";
-  import { allySkills, effectLabel, ownSkills, singleEffectLabel, toggleCharacterSkill } from "../../../characterSkills";
+  import type { CharacterSkillEffectsView, MasteryDef } from "../../../api/types";
+  import {
+    allySkills, effectLabel, ownSkills, resolvedEffectsOf, singleEffectLabel, toggleCharacterSkill,
+  } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import { app } from "../../../state.svelte";
   import { flash } from "../../../ui/motion.svelte";
@@ -9,8 +11,9 @@
 
   interface Props {
     draft: Draft;
+    resolvedSkillEffects: CharacterSkillEffectsView[];
   }
-  let { draft }: Props = $props();
+  let { draft, resolvedSkillEffects }: Props = $props();
 
   // --- キャラスキル(wiki: 各キャラの Skill ページ / ステータスの各カテゴリ表)-------
   // カタログはキャラを問わず全件持っているので、このキャラのぶんだけ出す。
@@ -103,7 +106,7 @@
       <p class="empty dim">このキャラのスキルデータは未収録です。</p>
     {/if}
     {#each ownCharacterSkills as def (def.id)}
-      {@const label = effectLabel(def, draft.statSources.masteries.picked)}
+      {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       {@const checked = skillChecked(def.id)}
       <label class="character-skill-card" class:on={checked} title={def.note}>
         <input
@@ -137,7 +140,7 @@
       <p class="empty dim">味方から受けるスキルデータは未収録です。</p>
     {/if}
     {#each allyCharacterSkills as def (def.id)}
-      {@const label = effectLabel(def, draft.statSources.masteries.picked)}
+      {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       {@const sourceCharacter = app.gameCharacters.find((c) => c.id === def.game_character_id)}
       <label class="check">
         <input

@@ -755,6 +755,11 @@ impl SkillRecord {
     }
 
     fn to_skill(&self) -> Skill {
+        let base_actual_delay = ACTUAL_DELAYS
+            .iter()
+            .find(|(id, _)| *id == self.skill_id().as_str())
+            .and_then(|(_, delay)| *delay);
+        let power = Skill::compute_power(self.multiplier, self.hit_count);
         Skill {
             id: self.skill_id(),
             name: self.name.to_string(),
@@ -771,10 +776,7 @@ impl SkillRecord {
             critical_rate: self.critical_rate,
             level: self.level,
             single_target_channeling: SINGLE_TARGET_CHANNELING.contains(&self.skill_id().as_str()),
-            base_actual_delay: ACTUAL_DELAYS
-                .iter()
-                .find(|(id, _)| *id == self.skill_id().as_str())
-                .and_then(|(_, delay)| *delay),
+            base_actual_delay,
             actual_delay_fixed: ACTUAL_DELAY_FIXED.contains(&self.skill_id().as_str()),
             combo_variants: if self.skill_id() == "maximin_continuous" {
                 vec![
@@ -800,6 +802,8 @@ impl SkillRecord {
             } else {
                 Vec::new()
             },
+            power,
+            power_per_second: Skill::compute_power_per_second(power, base_actual_delay),
         }
     }
 }

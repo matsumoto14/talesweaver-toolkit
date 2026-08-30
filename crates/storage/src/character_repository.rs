@@ -82,9 +82,10 @@ CREATE TABLE IF NOT EXISTS characters (
 /// (docs/claude/goals/2026-08-24-equipment-parts.md 決定6)。
 /// v6 で `common_skills` 列が加わった。パワーウェポン / ストロングウェポンは
 /// v5 まで `equipment` 列の中にあり、移行で `common_skills` へ移す。
-/// v11 で `characters.updated_at`(最終保存日時)と `damage_snapshots` テーブルが加わった
+/// v11 で `characters.updated_at`(最終保存日時)と `damage_snapshots` テーブルが加わり、
+/// v12 で登録キャラごとの表示画像 `character_icons` が加わった。
 /// (ホームの影響カード用。docs/claude/goals 参照)。
-const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_VERSION: i64 = 12;
 
 const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id, updated_at";
 
@@ -811,6 +812,7 @@ impl CharacterRepository {
         migrate_buff_sets(&conn)?;
         migrate_unleash_from_buff_sets(&conn)?;
         migrate_damage_snapshots(&conn)?;
+        crate::character_icon_repository::migrate_character_icons(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -1043,6 +1045,19 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn v11からv12で既存キャラを変えず画像テーブルを追加する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        repo.conn.execute("INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills)
+            VALUES ('既存', 'boris', 1,1,1,1,1,1,1,4,0,'{}','{}','{}')", []).unwrap();
+        repo.conn.execute_batch("DROP TABLE character_icons; PRAGMA user_version = 11;").unwrap();
+        let conn = repo.conn;
+        let migrated = CharacterRepository::from_connection(conn).unwrap();
+        assert_eq!(migrated.conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0)).unwrap(), 12);
+        assert_eq!(migrated.conn.query_row("SELECT name FROM characters", [], |row| row.get::<_, String>(0)).unwrap(), "既存");
+        assert_eq!(migrated.conn.query_row("SELECT count(*) FROM character_icons", [], |row| row.get::<_, i64>(0)).unwrap(), 0);
+    }
 
     fn v8_buff_migration_connection() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

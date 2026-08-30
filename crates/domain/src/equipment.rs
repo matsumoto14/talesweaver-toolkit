@@ -402,6 +402,11 @@ impl SienaStatBonus {
         }
         total
     }
+
+    /// 7 ステの合計(表示用。部位ごと・全部位合計のどちらにも使う)。
+    pub fn total(&self) -> i64 {
+        StatKind::ALL.iter().map(|&k| self.get(k)).sum()
+    }
 }
 
 /// 装備部位 1 つ。
@@ -1336,6 +1341,17 @@ impl Equipment {
             .collect()
     }
 
+    /// 部位別のエンチャント値(表示用の内訳。`part.enchant` そのものを
+    /// `ability_values_by_part` と同じ形で返す。part 1 つぶんの「装備値の合計」表示に使う)。
+    pub fn enchant_values_by_part(&self) -> Vec<PartEquipmentValues> {
+        self.iter_selected()
+            .map(|(slot, part)| PartEquipmentValues {
+                slot,
+                values: part.enchant,
+            })
+            .collect()
+    }
+
     /// アビリティの追加効果(wiki: アビリティ表の「追加効果」列)を
     /// 与ダメージ式のカテゴリ寄与に変換する。装備攻撃力への加算は `base_totals` が別に見る。
     pub fn ability_damage_contributions(
@@ -1532,6 +1548,13 @@ impl Equipment {
 pub struct PartEquipmentValues {
     pub slot: PartSlot,
     pub values: EquipmentValues,
+}
+
+/// 部位 1 つぶんの単純な合計値(表示用。シエナのオーラのステ加算合計など)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PartStatTotal {
+    pub slot: PartSlot,
+    pub value: i64,
 }
 
 /// 1 部位ぶんのアビリティ由来の装備補正(アビリティ定義値 + ロール値 + 追加効果)。
@@ -1994,6 +2017,27 @@ mod tests {
                 ..Default::default()
             }
         );
+    }
+
+    #[test]
+    fn 部位別エンチャント内訳の合計は強化能力値の合計と一致する() {
+        let eq = equipment_with(
+            EquipmentValues {
+                thrust: 100,
+                slash: 200,
+                ..Default::default()
+            },
+            EquipmentValues {
+                thrust: 10,
+                slash: 20,
+                ..Default::default()
+            },
+        );
+        let by_part = eq.enchant_values_by_part();
+        let summed = by_part
+            .iter()
+            .fold(EquipmentValues::default(), |acc, p| acc.add(p.values));
+        assert_eq!(summed, eq.enhanced_totals(None));
     }
 
     #[test]

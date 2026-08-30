@@ -115,6 +115,7 @@ export const RANDOM_OPTION_RANK_LABELS: Record<RandomOptionRank, string> = {
   s_true: "S・真",
 };
 // スキル依存種別(crates/domain/src/skill.rs の SkillDependency)。ランダムOP の効き先表示に使う。
+export const SKILL_DEPENDENCIES: SkillDependency[] = ["stab", "hack", "stab_hack", "int", "mr", "hack_int"];
 export const SKILL_DEPENDENCY_LABELS: Record<SkillDependency, string> = {
   stab: "突き(STAB依存)",
   hack: "斬り(HACK依存)",

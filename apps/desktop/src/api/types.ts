@@ -69,6 +69,10 @@ export interface Skill {
   actual_delay_fixed: boolean;
   /** 対応するコンボスキルタイプ。空ならタイプ選択非対応 */
   combo_variants: ComboSkillVariant[];
+  /** 1 回ぶんの火力の目安(倍率 × 段数)。主軸スキル候補の並び順に使う(フロントは再計算しない) */
+  power: number;
+  /** 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。null = 基本中ディレイ未収録で比較不能 */
+  power_per_second: number | null;
 }
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
@@ -356,6 +360,14 @@ export interface CharacterSkills {
   skill_ids: string[];
 }
 
+// resolve_character_skill_effects の戻り値要素。マスタリーによる効果差し替えを解決済みの効果。
+// 正は crates/domain/src/character_skill.rs の CharacterSkillDef::effects()(src-tauri/src/commands.rs
+// の CharacterSkillEffectsView 経由)。フロントは差し替え規則を再実装しない。
+export interface CharacterSkillEffectsView {
+  id: string;
+  effects: SkillEffect[];
+}
+
 // crates/domain/src/actual_delay.rs の ActualDelayContribution / ActualDelay。
 export interface ActualDelayContribution {
   source: string;
@@ -599,6 +611,33 @@ export interface RandomOptionSlot {
   value: number | null;
 }
 
+// 特定依存ダメージ増加(カテゴリP)の依存種別ごとの Σ%。crates/domain/src/random_option.rs の DependencyRates。
+export interface DependencyRates {
+  stab: number;
+  hack: number;
+  int: number;
+  mr: number;
+  stab_hack: number;
+  hack_int: number;
+}
+
+// 全部位のランダムオプションの集計。crates/domain/src/random_option.rs の RandomOptionTotals。
+// 割合は Σ% の小数表現(+8% → 0.08)。
+export interface RandomOptionTotals {
+  dependency_damage_rate: DependencyRates;
+  attack_damage_rate: number;
+  added_damage_rate: number;
+  physical_added_damage_rate: number;
+  magic_added_damage_rate: number;
+  physical_damage_amplify: number;
+  magic_damage_amplify: number;
+  accuracy_point: number;
+  evasion_point: number;
+  actual_delay_reduction: number;
+  /** 計算に反映しなかった枠の数 */
+  record_only_count: number;
+}
+
 // 極限スキル(wiki: Skill/極限)。crates/domain/src/ultimate_skill.rs の UltimateSkill。
 export type UltimateSkill = "scope_eye" | "full_throttle" | "wide_focus";
 
@@ -670,6 +709,8 @@ export interface TitleDef {
   conditional_added_damage: ConditionalAddedDamage | null;
   /** 入手方法・備考 */
   note: string;
+  /** 装備の基本能力値への加算 9 値の合計(表示用。計算は Rust 側 `TitleDef::equipment_value_total`) */
+  equipment_value_total: number;
 }
 
 export type GameRegion = "lost_island" | "shinchou_nest" | "arklon_underground" | "praba";
@@ -930,6 +971,12 @@ export interface RegisteredCharacter {
   updated_at: string | null;
 }
 
+/** 登録キャラごとの正規化済み表示画像。data URLは端末内だけで使う。 */
+export interface CharacterIcon {
+  characterId: number;
+  dataUrl: string;
+}
+
 export interface NewCharacter {
   name: string;
   game_character_id: string;
@@ -993,6 +1040,8 @@ export interface AttackPowerBreakdown {
   equipment_base_attack: number;
   /** 装備の強化能力値に係数を掛けた分(テシスコアは地域なしのため含まない) */
   equipment_enhanced_attack: number;
+  /** 装備攻撃力(基本 + 強化)。equipment_base_attack + equipment_enhanced_attack と一致する */
+  equipment_attack: number;
   /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン) */
   enhance_rate: number;
   /** 強化倍率で足される分 [装備攻撃力/25 × 倍率] × 25 */
@@ -1037,6 +1086,36 @@ export interface StatPreview {
   siena_part_values: PartEquipmentValues[];
   /** テシスコアの地域別プレビュー(CoreRegion 4 件) */
   thesis_cores: ThesisCoreRegionPreview[];
+  /** 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分。地域なし = テシスコアを含まない) */
+  equipment_enhanced_total: EquipmentValues;
+  /** 強化能力値のうち part.enchant だけを部位別に割ったもの(表示用の内訳) */
+  part_enchant_values: PartEquipmentValues[];
+  /** 全部位のランダムオプションの効き先別集計 */
+  random_option_totals: RandomOptionTotals;
+  /** シエナのオーラのステ加算(能力値スロット + 全ステータス増加)の 7 ステ合計 */
+  siena_stat_total: number;
+  /** シエナのオーラの追加オプション「攻撃力増加」の合計。Σ% の小数表現 */
+  siena_attack_rate: number;
+  /** テシスコアのセット効果の全地域合計 */
+  thesis_core_set_bonus_total: CoreSetBonus;
+  /** ON にしているキャラスキルぶんの中ディレイ減少の供給源(Σ% の小数表現)。上限を掛ける前の内訳 */
+  character_skill_actual_delay: ActualDelayContribution[];
+  /** マスタリーぶんの中ディレイ減少の合計。Σ% の小数表現 */
+  mastery_actual_delay: number;
+  /** シエナのオーラの追加オプション「防御力増加」の合計。Σ% の小数表現 */
+  siena_defense_rate: number;
+  /** シエナのオーラの追加オプション「中ディレイ減少」の合計。Σ% の小数表現 */
+  siena_actual_delay_rate: number;
+  /** シエナのオーラの追加オプション「クリティカル確率」の合計。Σ% の小数表現(AGI 由来の項への乗数) */
+  siena_critical_rate: number;
+  /** シエナのオーラのステ加算合計を部位別に割ったもの(表示用の内訳) */
+  siena_part_stat_totals: PartStatTotal[];
+}
+
+// crates/domain/src/equipment.rs の PartStatTotal。
+export interface PartStatTotal {
+  slot: PartSlot;
+  value: number;
 }
 
 // crates/domain/src/stat_sources.rs の ThesisCoreRegionPreview。テシスコア 1 地域ぶんの表示用プレビュー。
@@ -1081,6 +1160,8 @@ export interface CriticalRateBonusPreview {
   raw: number;
   /** 上限 +100% を掛けた合計 */
   value: number;
+  /** 設計者の研究室ぶんのクリティカル率増加(研究段階 × 1 段階あたりの増加量) */
+  architect_lab_bonus: number;
 }
 
 // crates/domain/src/defense.rs の DefenseProfile。割合は小数表現(50% → 0.5)。
@@ -1351,6 +1432,54 @@ export interface StatLimits {
   damage_category_labels: DamageCategoryLabel[];
   /** 装備補正 9 値の表示名。EquipmentValues::FIELD_LABELS の順(CoreType の表示名も同じ) */
   equipment_stat_labels: EquipmentStatLabel[];
+  /** コンボボーナスが付くコンボ数 */
+  combo_bonus_threshold: number;
+  /** 中ディレイのコンボボーナスが付くコンボ数 */
+  combo_delay_threshold: number;
+  /** コンボボーナスの割合。Σ% の小数表現 */
+  combo_bonus_rate: number;
+  /** 中ディレイ減少値の上限。Σ% の小数表現 */
+  actual_delay_reduction_max: number;
+  /** 中ディレイの下限(秒) */
+  actual_delay_min: number;
+  /** レインフォース無しで取れるアンリーシュの Lv */
+  unleash_free_level_max: number;
+  /** +12 以上で追加固定ダメージがレンジ振り(MR)になる境界 */
+  enhance_grade_min_level: number;
+  /** 属性差 1 あたりの属性差ボーナス。Σ% の小数表現 */
+  element_bonus_percent_per_point: number;
+  /** 属性差ボーナス(カテゴリI)の上限。Σ% の小数表現 */
+  element_bonus_max: number;
+  /** カット率 J の分母(r = 1 − a/(a+分母)) */
+  cut_rate_denominator: number;
+  /** カット率 J の a の定数項(a = 定数項 + [(合計 − 1) / 除数]) */
+  cut_rate_a_base: number;
+  /** カット率 J の a の除数(物理 / 魔法) */
+  cut_rate_divisor: number;
+  /** カット率 J の a の除数(複合) */
+  cut_rate_composite_divisor: number;
+  /** 防御力(物理 / 魔法)のステ係数 */
+  defense_stat_multiplier: number;
+  /** 防御力(物理 / 魔法)の装備係数 */
+  defense_equipment_multiplier: number;
+  /** 複合防御力のステ係数 */
+  composite_defense_stat_multiplier: number;
+  /** 複合防御力の装備係数 */
+  composite_defense_equipment_multiplier: number;
+  /** 回避Pの定数項 */
+  evasion_point_base: number;
+  /** 回避Pの AGI 係数 */
+  evasion_point_agi_rate: number;
+  /** 回避Pの攻撃タイプ別増加の共通除数 */
+  evasion_type_divisor: number;
+  /** 回避P(物理)の [(STAB+HACK)/100] の除数 */
+  evasion_physical_attack_divisor: number;
+  /** ペット会心の倍率 */
+  pet_critical_rate: number;
+  /** クリティカル率の下限 */
+  critical_rate_min: number;
+  /** クリティカル率の上限 */
+  critical_rate_max: number;
 }
 
 // crates/domain/src/stat_sources.rs の DamageCategoryLabel。

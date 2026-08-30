@@ -19,7 +19,21 @@ use crate::rounding::floor_int;
 use crate::stats::{EffectiveStats, StatKind};
 
 /// カット率 J の分母定数(wiki カテゴリJ: `r = 1 − a/(a+80)`)。
-const CUT_RATE_DENOMINATOR: f64 = 80.0;
+pub const CUT_RATE_DENOMINATOR: f64 = 80.0;
+/// カット率 J の `a` の定数項(wiki カテゴリJ: `a = 3 + [(合計 − 1) / 除数]`)。
+pub const CUT_RATE_A_BASE: f64 = 3.0;
+/// カット率 J の `a` の除数(物理 / 魔法)。
+pub const CUT_RATE_DIVISOR: f64 = 10.0;
+/// カット率 J の `a` の除数(複合)。
+pub const CUT_RATE_COMPOSITE_DIVISOR: f64 = 20.0;
+/// 防御力(物理 / 魔法)のステ係数(wiki 戦闘能力値: `DEF*3 + 装備物防*倍率*6`)。
+pub const DEFENSE_STAT_MULTIPLIER: f64 = 3.0;
+/// 防御力(物理 / 魔法)の装備係数。
+pub const DEFENSE_EQUIPMENT_MULTIPLIER: f64 = 6.0;
+/// 複合防御力のステ係数(wiki 戦闘能力値: `(DEF+MR)*1.5 + 装備×3`)。
+pub const COMPOSITE_DEFENSE_STAT_MULTIPLIER: f64 = 1.5;
+/// 複合防御力の装備係数。
+pub const COMPOSITE_DEFENSE_EQUIPMENT_MULTIPLIER: f64 = 3.0;
 
 /// 特殊回避(コンボ回避)の下限・上限 %(wiki §7)。
 const COMBO_EVASION_MIN_PERCENT: f64 = 20.0;
@@ -27,12 +41,12 @@ const COMBO_EVASION_MAX_PERCENT: f64 = 63.0;
 
 /// 回避P の定数項と AGI 係数(wiki `#EvasionPoint`:
 /// `回避P = [15 + (AGI + 装備回避率)*1.2 + 装備敏捷度/7 + 回避P増加 + 攻撃タイプに応じた回避P増加]`)。
-const EVASION_POINT_BASE: f64 = 15.0;
-const EVASION_POINT_AGI_RATE: f64 = 1.2;
+pub const EVASION_POINT_BASE: f64 = 15.0;
+pub const EVASION_POINT_AGI_RATE: f64 = 1.2;
 /// 攻撃タイプ別 回避P増加の共通除数(wiki `#EvasionPoint`)。
-const EVASION_TYPE_DIVISOR: f64 = 7.0;
+pub const EVASION_TYPE_DIVISOR: f64 = 7.0;
 /// 物理の回避P増加に入る `[(STAB+HACK)/100]` の除数。
-const EVASION_PHYSICAL_ATTACK_DIVISOR: f64 = 100.0;
+pub const EVASION_PHYSICAL_ATTACK_DIVISOR: f64 = 100.0;
 
 /// 攻撃タイプ別の回避P(wiki `#EvasionPoint`)。敵の攻撃タイプに合わせた回避Pが要る。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,7 +104,7 @@ fn cut_rate(a: f64) -> f64 {
 
 /// カット率 J の `a`。`3 + [(合計 − 1) / 除数]`。
 fn cut_rate_a(sum: i64, divisor: f64) -> f64 {
-    3.0 + floor_int((sum - 1) as f64 / divisor) as f64
+    CUT_RATE_A_BASE + floor_int((sum - 1) as f64 / divisor) as f64
 }
 
 /// 回避P。`type_bonus` は攻撃タイプに応じた回避P増加、`random_option` はランダムオプションの
@@ -189,9 +203,14 @@ pub fn defense_profile(
         + floor_int((stats.stab + stats.hack) as f64 / EVASION_PHYSICAL_ATTACK_DIVISOR) as f64)
         / EVASION_TYPE_DIVISOR;
 
-    let raw_physical = floor_int(def * 3.0 + eq_physical * 6.0);
-    let raw_magic = floor_int(mr * 3.0 + eq_magic * 6.0);
-    let raw_composite = floor_int((def + mr) * 1.5 + (eq_physical + eq_magic) * 3.0);
+    let raw_physical =
+        floor_int(def * DEFENSE_STAT_MULTIPLIER + eq_physical * DEFENSE_EQUIPMENT_MULTIPLIER);
+    let raw_magic =
+        floor_int(mr * DEFENSE_STAT_MULTIPLIER + eq_magic * DEFENSE_EQUIPMENT_MULTIPLIER);
+    let raw_composite = floor_int(
+        (def + mr) * COMPOSITE_DEFENSE_STAT_MULTIPLIER
+            + (eq_physical + eq_magic) * COMPOSITE_DEFENSE_EQUIPMENT_MULTIPLIER,
+    );
     let cap = |value: i64| value.min(caps.max_defense);
 
     DefenseProfile {
@@ -202,11 +221,14 @@ pub fn defense_profile(
         physical_defense_loss: raw_physical - cap(raw_physical),
         magic_defense_loss: raw_magic - cap(raw_magic),
         composite_defense_loss: raw_composite - cap(raw_composite),
-        physical_cut_rate: cut_rate(cut_rate_a(stats.def + equipment.physical_defense, 10.0)),
-        magic_cut_rate: cut_rate(cut_rate_a(stats.mr + equipment.magic_defense, 10.0)),
+        physical_cut_rate: cut_rate(cut_rate_a(
+            stats.def + equipment.physical_defense,
+            CUT_RATE_DIVISOR,
+        )),
+        magic_cut_rate: cut_rate(cut_rate_a(stats.mr + equipment.magic_defense, CUT_RATE_DIVISOR)),
         composite_cut_rate: cut_rate(cut_rate_a(
             stats.def + equipment.physical_defense + stats.mr + equipment.magic_defense,
-            20.0,
+            CUT_RATE_COMPOSITE_DIVISOR,
         )),
         combo_evasion,
         evasion_point: EvasionPoints {

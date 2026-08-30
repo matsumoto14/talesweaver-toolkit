@@ -1,8 +1,11 @@
-// キャラスキル(パッシブ・自己バフ・味方バフ)の選択と効果の解決。
-// crates/domain/src/character_skill.rs と同じ規則で解く:
-// - 味方スキルは相手のマスタリーが分からないので差し替えを見ない
-// - 自分のスキルは、取っているマスタリーで効果が丸ごと差し替わる
-import type { CharacterSkillDef, DamageCategory, Skill, SkillEffect } from "./api/types";
+// キャラスキル(パッシブ・自己バフ・味方バフ)の選択と表示。
+// マスタリーによる効果の差し替え・中ディレイ/ダメージの合算は Rust 側(preview_effective_stats /
+// resolve_character_skill_effects)がすべて解決した結果を返すので、ここでは再実装しない
+// (crates/domain/src/character_skill.rs の effects() / actual_delay_contributions() /
+// damage_contributions() が唯一の正)。
+import type {
+  CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect,
+} from "./api/types";
 import { ELEMENT_LABELS, STAT_LABELS } from "./labels";
 import { limits } from "./limits.svelte";
 import type { PickerOption } from "./ui/Picker.svelte";
@@ -11,15 +14,6 @@ import type { PickerOption } from "./ui/Picker.svelte";
  * (StatLimits.damage_category_labels 経由。crates/domain/src/category.rs)。 */
 export const damageCategoryLabel = (c: DamageCategory): string =>
   limits.damage_category_labels.find((d) => d.category === c)?.label ?? c;
-
-/** 取っているマスタリーを踏まえた実際の効果 */
-export function resolvedEffects(def: CharacterSkillDef, pickedMasteries: string[]): SkillEffect[] {
-  if (def.audience === "ally") return def.effects;
-  const override = def.mastery_overrides.find((o) => pickedMasteries.includes(o.mastery_id));
-  return override ? override.effects : def.effects;
-}
-
-export const isRecordOnlyEffect = (e: SkillEffect): boolean => e === "record_only";
 
 /** 単一の効果を 1 行の要約文字列にする。record_only は null(呼び出し側が既定文言を出す)。
  * キャラスキル(複数効果を並べる effectLabel)とマスタリー(1 択なのでこれをそのまま使う)で共通 */
@@ -35,68 +29,22 @@ export function singleEffectLabel(e: SkillEffect): string | null {
   return `${damageCategoryLabel(category)} ${sign}${Math.abs(percent)}%`;
 }
 
-/** 効き先の要約(1 行)。記録のみしか無いスキルは null(呼び出し側が note を出す) */
-export function effectLabel(def: CharacterSkillDef, pickedMasteries: string[]): string | null {
-  const labels = resolvedEffects(def, pickedMasteries)
-    .map(singleEffectLabel)
-    .filter((s): s is string => s !== null);
+/** 効き先の要約(1 行)。`effects` はマスタリー解決済み(resolve_character_skill_effects の結果)。
+ * 記録のみしか無いスキルは null(呼び出し側が note を出す) */
+export function effectLabel(effects: SkillEffect[]): string | null {
+  const labels = effects.map(singleEffectLabel).filter((s): s is string => s !== null);
   return labels.length === 0 ? null : labels.join(" ・ ");
 }
 
-/** 効果のリストから中ディレイ減少 % の合計を出す。キャラスキル(下)とマスタリーで共通 */
-export function sumActualDelayPercent(effects: SkillEffect[]): number {
-  let sum = 0;
-  for (const e of effects) {
-    if (e !== "record_only" && "actual_delay" in e) sum += e.actual_delay.percent;
-  }
-  return sum;
-}
-
-/** ON にしているスキルの中ディレイ減少の合計 %(このキャラのぶんだけ) */
-export function actualDelayPercent(
-  skillIds: string[],
-  catalog: CharacterSkillDef[],
-  pickedMasteries: string[],
-): number {
-  let sum = 0;
-  for (const id of skillIds) {
-    const def = catalog.find((d) => d.id === id);
-    if (!def) continue;
-    sum += sumActualDelayPercent(resolvedEffects(def, pickedMasteries));
-  }
-  return sum;
-}
-
-/** ON にしているスキルの、与ダメージ式カテゴリごとの合計 %(効き先ごとに上限が違う) */
-export function damagePercentByCategory(
-  skillIds: string[],
-  catalog: CharacterSkillDef[],
-  pickedMasteries: string[],
-): Map<DamageCategory, number> {
-  const out = new Map<DamageCategory, number>();
-  for (const id of skillIds) {
-    const def = catalog.find((d) => d.id === id);
-    if (!def) continue;
-    for (const e of resolvedEffects(def, pickedMasteries)) {
-      if (e === "record_only" || !("damage" in e)) continue;
-      const { category, percent } = e.damage;
-      out.set(category, (out.get(category) ?? 0) + percent);
-    }
-  }
-  return out;
-}
+/** キャラスキル 1 件ぶんの、マスタリー解決済みの効果(resolve_character_skill_effects の結果から引く)。
+ * まだ取得できていなければ空配列(record_only 扱いと同じ表示になる) */
+export const resolvedEffectsOf = (id: string, resolved: CharacterSkillEffectsView[]): SkillEffect[] =>
+  resolved.find((e) => e.id === id)?.effects ?? [];
 
 // --- 主軸スキル(攻撃力の依存種別を決める、Skill 由来)------------------------
 // キャラ登録(RegisterPane)とキャラワークスペース(StatusPane)で同じ選び方をする。
-
-/** 1 回ぶんの火力の目安(倍率 × 段数)。 */
-export const skillPower = (s: Skill): number => s.multiplier * Math.max(1, s.hit_count);
-
-/** 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。中ディレイ不明なら比較不能。 */
-export const skillPowerPerSecond = (s: Skill): number | null =>
-  s.base_actual_delay !== null && s.base_actual_delay > 0
-    ? skillPower(s) / s.base_actual_delay
-    : null;
+// 火力の目安(power / power_per_second)は gamedata 側で確定済みの値をそのまま使う
+// (正は crates/domain/src/skill.rs の Skill::compute_power / compute_power_per_second)。
 
 /**
  * 主軸候補の順。対ボスで使う単体スキルを先にし、
@@ -107,12 +55,10 @@ export const skillPowerPerSecond = (s: Skill): number | null =>
 export function compareMainSkills(a: Skill, b: Skill): number {
   if (a.target === "single" && b.target !== "single") return -1;
   if (a.target !== "single" && b.target === "single") return 1;
-  const aRate = skillPowerPerSecond(a);
-  const bRate = skillPowerPerSecond(b);
-  if (aRate !== null && bRate !== null) return bRate - aRate;
-  if (aRate !== null) return -1;
-  if (bRate !== null) return 1;
-  return skillPower(b) - skillPower(a);
+  if (a.power_per_second !== null && b.power_per_second !== null) return b.power_per_second - a.power_per_second;
+  if (a.power_per_second !== null) return -1;
+  if (b.power_per_second !== null) return 1;
+  return b.power - a.power;
 }
 
 /** 名前だけでは選べない。単 / 範・段数・属性を名前の隣に出す */

@@ -3,6 +3,7 @@
   // 計算は Rust 側(crates/domain/src/defense.rs)。ここは表示だけ。
   import type { DefenseProfile } from "../../api/types";
   import { fmtInt, fmtNum } from "../../format";
+  import { limits } from "../../limits.svelte";
   import { bump } from "../../ui/motion.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
 
@@ -30,27 +31,30 @@
     <div class="block">
       <div class="block-head">
         <span class="block-title">防御力</span>
-        <span class="formula num dim">[ステ×3 + 装備防御×倍率×6](複合は (DEF+MR)×1.5 + 装備×3)</span>
+        <span class="formula num dim">
+          [ステ×{limits.defense_stat_multiplier} + 装備防御×倍率×{limits.defense_equipment_multiplier}]
+          (複合は (DEF+MR)×{limits.composite_defense_stat_multiplier} + 装備×{limits.composite_defense_equipment_multiplier})
+        </span>
       </div>
       <div class="rows">
         <div class="row">
           <span class="rl">物理防御力</span>
           <span class="num rv" use:bump={() => profile.physical_defense}>{fmtInt(profile.physical_defense)}</span>
           <span class="rn dim">
-            DEF×3 + 装備物防 {fmtInt(profile.equipment_physical_defense)}×{fmtNum(profile.defense_rates.physical)}×6
+            DEF×{limits.defense_stat_multiplier} + 装備物防 {fmtInt(profile.equipment_physical_defense)}×{fmtNum(profile.defense_rates.physical)}×{limits.defense_equipment_multiplier}
           </span>
         </div>
         <div class="row">
           <span class="rl">魔法防御力</span>
           <span class="num rv" use:bump={() => profile.magic_defense}>{fmtInt(profile.magic_defense)}</span>
           <span class="rn dim">
-            MR×3 + 装備魔防 {fmtInt(profile.equipment_magic_defense)}×{fmtNum(profile.defense_rates.magic)}×6
+            MR×{limits.defense_stat_multiplier} + 装備魔防 {fmtInt(profile.equipment_magic_defense)}×{fmtNum(profile.defense_rates.magic)}×{limits.defense_equipment_multiplier}
           </span>
         </div>
         <div class="row">
           <span class="rl">複合防御力</span>
           <span class="num rv" use:bump={() => profile.composite_defense}>{fmtInt(profile.composite_defense)}</span>
-          <span class="rn dim">(DEF+MR)×1.5 + 装備×3</span>
+          <span class="rn dim">(DEF+MR)×{limits.composite_defense_stat_multiplier} + 装備×{limits.composite_defense_equipment_multiplier}</span>
         </div>
         <div class="row">
           <span class="rl">装備防御力倍率</span>
@@ -78,7 +82,9 @@
     <div class="block">
       <div class="block-head">
         <span class="block-title">カット率(与ダメージ式の J)</span>
-        <span class="formula num dim">r = 1 − a / (a + 80)、a = 3 + [(防御ステ + 装備防御 − 1) / 10]</span>
+        <span class="formula num dim">
+          r = 1 − a / (a + {limits.cut_rate_denominator})、a = {limits.cut_rate_a_base} + [(防御ステ + 装備防御 − 1) / {limits.cut_rate_divisor}]
+        </span>
       </div>
       <div class="rows">
         <div class="row">
@@ -94,7 +100,7 @@
         <div class="row">
           <span class="rl">複合</span>
           <span class="num rv" use:bump={() => profile.composite_cut_rate}>{pct(profile.composite_cut_rate)}</span>
-          <span class="rn dim">DEF + 装備物防 + MR + 装備魔防 から(除数 20)</span>
+          <span class="rn dim">DEF + 装備物防 + MR + 装備魔防 から(除数 {limits.cut_rate_composite_divisor})</span>
         </div>
       </div>
       <p class="note dim">防御力には上限があり、上限に届いたあとの軽減はこのカット率が担います。</p>
@@ -103,24 +109,26 @@
     <div class="block">
       <div class="block-head">
         <span class="block-title">回避</span>
-        <span class="formula num dim">回避P = [15 + (AGI + 装備回避率)×1.2 + 装備敏捷度/7 + 攻撃タイプ別増加]</span>
+        <span class="formula num dim">
+          回避P = [{limits.evasion_point_base} + (AGI + 装備回避率)×{limits.evasion_point_agi_rate} + 装備敏捷度/{limits.evasion_type_divisor} + 攻撃タイプ別増加]
+        </span>
       </div>
       <div class="rows">
         <div class="row">
           <span class="rl">回避P(物理)</span>
           <span class="num rv" use:bump={() => profile.evasion_point.physical}>{fmtInt(profile.evasion_point.physical)}</span>
-          <span class="rn dim">+ (DEF×2 + [(突き+斬り)/100]) / 7</span>
+          <span class="rn dim">+ (DEF×2 + [(突き+斬り)/{limits.evasion_physical_attack_divisor}]) / {limits.evasion_type_divisor}</span>
         </div>
         <div class="row">
           <span class="rl">回避P(魔法)</span>
           <span class="num rv" use:bump={() => profile.evasion_point.magic}>{fmtInt(profile.evasion_point.magic)}</span>
-          <span class="rn dim">+ MR×2 / 7</span>
+          <span class="rn dim">+ MR×2 / {limits.evasion_type_divisor}</span>
         </div>
         <div class="row">
           <span class="rl">回避P(複合)</span>
           <span class="num rv" use:bump={() => profile.evasion_point.composite}>{fmtInt(profile.evasion_point.composite)}</span>
           <span class="rn dim">
-            + (DEF+MR) / 7。装備回避率 {fmtInt(profile.equipment_evasion)}×1.2 + 装備敏捷度 {fmtInt(profile.equipment_agility)}/7 を含む
+            + (DEF+MR) / {limits.evasion_type_divisor}。装備回避率 {fmtInt(profile.equipment_evasion)}×{limits.evasion_point_agi_rate} + 装備敏捷度 {fmtInt(profile.equipment_agility)}/{limits.evasion_type_divisor} を含む
           </span>
         </div>
         <div class="row">

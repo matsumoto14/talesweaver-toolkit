@@ -61,16 +61,20 @@
     size?: IconSize;
     /** 読み上げ・title に使う名前。単独表示のとき(レール折りたたみ)は必須 */
     label: string;
+    /** 登録キャラだけが渡す任意画像。候補一覧などは未指定のまま静的アイコンを使う。 */
+    source?: string | null;
   }
-  let { kind, id, size = 28, label }: Props = $props();
+  let { kind, id, size = 28, label, source = null }: Props = $props();
 
-  const url = $derived(id === null ? null : iconUrl(kind, id));
+  const url = $derived(source ?? (id === null ? null : iconUrl(kind, id)));
+  const custom = $derived(source !== null);
   const missing = $derived(id !== null && url === null);
 </script>
 
 <span
   class="icon {FRAMES[kind]}"
   class:missing
+  class:custom
   style="--icon-size: {size}px"
   role="img"
   aria-label={label}
@@ -93,6 +97,7 @@
   .icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* キャラは Tale Wiki のゲーム内 24px ドット絵。40/64px でも補間でぼかさない */
   .icon.character img { image-rendering: pixelated; }
+  .icon.character.custom img { image-rendering: auto; }
   /* 実画像が来るまでの縞プレースホルダ。系統ごとに地の色を変える */
   .icon.character {
     border-radius: var(--r-window); border-color: var(--border-strong); color: var(--fg-sub);

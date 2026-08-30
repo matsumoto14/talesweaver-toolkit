@@ -7,7 +7,6 @@
   import InquiryPanel from "./InquiryPanel.svelte";
   import { errorMessage, getStartupNotice } from "./api/commands";
   import CharacterRail from "./CharacterRail.svelte";
-  import { loadStatLimits } from "./limits.svelte";
   import CalcPage from "./pages/calc/CalcPage.svelte";
   import BuffsPage from "./pages/buffs/BuffsPage.svelte";
   import CharsPage from "./pages/chars/CharsPage.svelte";
@@ -40,7 +39,6 @@
   let inquiryOpen = $state(false);
 
   onMount(() => {
-    loadStatLimits().catch((e) => reportError(errorMessage(e)));
     void loadAll();
     // バックアップからの復元など、読み飛ばされては困る事実は自動で消さない帯に出す。
     getStartupNotice()

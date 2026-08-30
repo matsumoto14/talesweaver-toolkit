@@ -4,7 +4,6 @@
   import { untrack } from "svelte";
   import {
     errorMessage, evaluateContents, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
-    updateCharacter,
   } from "../../api/commands";
   import type {
     Adjustments, BuffChoice, BuffDefinition, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
@@ -22,7 +21,8 @@
   } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
-    app, flatContents, payloadOf, selectedCharacter, totalContents as totalContentsCount, upsertCharacter,
+    app, enqueueCharacterSave, flatContents, payloadOf, selectedCharacter, totalContents as totalContentsCount,
+    upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
@@ -43,7 +43,6 @@
 
   const DEFAULT_RIGHT_WIDTH = 380;
 
-  const COMBO_THRESHOLD = 3;
   const COMBO_SKILL_TYPE_OPTIONS = [
     { value: "general", label: "一般" },
     { value: "instant", label: "瞬撃" },
@@ -151,7 +150,7 @@
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
     const temp = JSON.parse(JSON.stringify(temporaryAdjustments)) as Adjustments;
     const contentId = target.content.id;
-    const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const selectedSkillId = skillId;
     const comboType = selectedComboSkillType;
     const buffs = JSON.parse(JSON.stringify(app.calcBuffs));
@@ -207,7 +206,7 @@
     const sp = savedPayload;
     const t = target;
     const sid = skillId;
-    const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const comboType = selectedComboSkillType;
     const simActive = app.sim !== null;
     const tempJson = JSON.stringify(temporaryAdjustments);
@@ -317,7 +316,7 @@
     if (atk === null) return [];
     const raw = [
       { k: "ステ攻撃力", v: atk.stat_attack, c: "var(--flow-base)", note: "素ステ・補正源から" },
-      { k: "装備攻撃力", v: atk.equipment_base_attack + atk.equipment_enhanced_attack, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
+      { k: "装備攻撃力", v: atk.equipment_attack, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
       { k: "装備攻撃力強化倍率", v: atk.enhance_bonus, c: "var(--flow-2)", note: "パワーW・ストロングW" },
     ].filter((x) => x.v > 0);
     const total = raw.reduce((a, x) => a + x.v, 0) || 1;
@@ -718,17 +717,17 @@
       mats.push({ label: `↳ ${c.source}`, value: `−${(c.rate * 100).toFixed(0)}%` });
     }
     mats.push({
-      label: "中ディレイ減少(上限 70%)",
+      label: `中ディレイ減少(上限 ${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
       value: `${(d.reduction * 100).toFixed(0)}%`,
       sub: d.reduction_raw > d.reduction ? `選択中は ${(d.reduction_raw * 100).toFixed(0)}%` : undefined,
     });
     if (d.combo_rate < 1) {
-      mats.push({ label: `コンボ(倍率A・${COMBO_THRESHOLD} コンボ以上)`, mult: `×${fmtNum(d.combo_rate)}`, value: "" });
+      mats.push({ label: `コンボ(倍率A・${limits.combo_bonus_threshold} コンボ以上)`, mult: `×${fmtNum(d.combo_rate)}`, value: "" });
     }
     mats.push({
       label: "中ディレイ",
       value: `${d.value.toFixed(2)}s`,
-      sub: d.floored ? "下限 0.3s で頭打ち" : undefined,
+      sub: d.floored ? `下限 ${limits.actual_delay_min.toFixed(1)}s で頭打ち` : undefined,
     });
     mats.push({
       label: "スキル回数",
@@ -829,12 +828,12 @@
         }
       }
     }
-    // 中ディレイ。減少値の上限(70%)と秒そのものの下限(0.3s)は別の捨て方なので分けて出す
+    // 中ディレイ。減少値の上限と秒そのものの下限は別の捨て方なので分けて出す
     const ad = result?.actual_delay ?? null;
     if (ad !== null) {
       if (ad.reduction_raw > ad.reduction + 1e-9) {
         out.push({
-          k: "中ディレイ減少の上限(70%)",
+          k: `中ディレイ減少の上限(${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
           raw: `${(ad.reduction_raw * 100).toFixed(0)}%`,
           val: `${(ad.reduction * 100).toFixed(0)}%`,
           loss: `${((ad.reduction_raw - ad.reduction) * 100).toFixed(0)}%`,
@@ -844,7 +843,7 @@
       if (ad.floored) {
         const want = ad.raw;
         out.push({
-          k: "中ディレイの下限(0.3s)",
+          k: `中ディレイの下限(${limits.actual_delay_min.toFixed(1)}s)`,
           raw: `${want.toFixed(2)}s`,
           val: `${ad.value.toFixed(2)}s`,
           loss: `${(ad.value - want).toFixed(2)}s ぶん遅い`,
@@ -916,7 +915,11 @@
     if (!character || !app.sim) return;
     saving = true;
     try {
-      const saved = await updateCharacter(character.id, JSON.parse(JSON.stringify(app.sim)));
+      // 試し変更の保存もキャラ単位の保存キューへ通す(ホームの直更新・キャラタブの保存と
+      // 同じ full-overwrite なので、直列化しないと互いの変更を巻き戻す)。payload はユーザーが
+      // 明示した試し変更のスナップショットなので、ここで確定させてからキューに載せる。
+      const payload = JSON.parse(JSON.stringify(app.sim)) as NewCharacter;
+      const saved = await enqueueCharacterSave(character.id, () => payload);
       upsertCharacter(saved);
       app.sim = null;
     } catch (e) {
@@ -1048,7 +1051,7 @@
     const t = target;
     const sid = skillId;
     const base = perHit;
-    const comboCount = combo ? COMBO_THRESHOLD : 0;
+    const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const comboType = selectedComboSkillType;
     const tempJson = JSON.stringify(temporaryAdjustments);
     const buffsJson = JSON.stringify(app.calcBuffs);
@@ -1467,10 +1470,10 @@
                 {#if d.fixed}
                   ×(固定・減少が効かない)
                 {:else if d.reduction > 0}
-                  × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 70%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
+                  × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 {Math.round(limits.actual_delay_reduction_max * 100)}%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
                 {/if}
-                {#if d.combo_rate < 1}× 0.5(2 コンボ以上){/if}
-                = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 0.3s</span>{/if}
+                {#if d.combo_rate < 1}× {fmtNum(d.combo_rate)}(中ディレイ減少 {limits.combo_delay_threshold} コンボ以上){/if}
+                = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 {limits.actual_delay_min.toFixed(1)}s</span>{/if}
                 {#if d.contributions.length > 0}
                   ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
                 {/if}
@@ -1928,7 +1931,7 @@
         <!-- コンボ -->
         <div class="combo">
           <CheckChip checked={combo} onCheckedChange={(v) => (combo = v)}>
-            <span>{COMBO_THRESHOLD} コンボ以上(+15%)</span>
+            <span>{limits.combo_bonus_threshold} コンボ以上(ダメージ +{Math.round(limits.combo_bonus_rate * 100)}%)</span>
           </CheckChip>
         </div>
 
