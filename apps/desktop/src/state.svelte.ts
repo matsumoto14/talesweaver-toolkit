@@ -161,6 +161,19 @@ export function payloadOf(c: RegisteredCharacter): NewCharacter {
   return JSON.parse(JSON.stringify(rest)) as NewCharacter;
 }
 
+/**
+ * 試し変更(app.sim)が保存値と異なるか。判定はここ 1 箇所だけに置く —
+ * 上部バー(App.svelte)と計算タブ右ペイン(CalcPage.svelte)が別々に
+ * 「app.sim !== null」と「JSON.stringify での差分比較」を持つと、値を触ってから
+ * 元に戻したときに app.sim が非 null のまま残り、上は「試し変更中」・下は「登録どおり」
+ * と矛盾する表示になる(5周目 実機指摘)。両方がこの関数を読むことで揃える。
+ */
+export function simIsDirty(): boolean {
+  if (app.sim === null) return false;
+  const c = selectedCharacter();
+  return c !== null && JSON.stringify(app.sim) !== JSON.stringify(payloadOf(c));
+}
+
 export function buffSelectionFor(c: RegisteredCharacter): BuffSelection {
   const choices = app.buffSets.find((set) => set.id === c.default_buff_set_id)?.choices ?? { choices: [] };
   return JSON.parse(JSON.stringify(choices)) as BuffSelection;

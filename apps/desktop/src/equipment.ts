@@ -61,6 +61,9 @@ export const applyCatalogItem = (part: EquipmentPart, item: EquipmentItem): Equi
     base: { ...item.values_max },
     enchant: clampToCaps(part.enchant, item.enchant_caps),
     enhance_type: item.enhance_type,
+    // カタログ品はカタログの enchant_caps が正(resolve_enchant_caps)。カスタム時代の
+    // 実測上限を残すとカスタムへ戻したときに古い値が復活するので消す。
+    enchant_caps: null,
     abilities,
     ability_values: part.ability_values.filter((v) => !droppedAbilityIds.includes(v.ability_id)),
     ability_additions: part.ability_additions.filter((a) => !droppedAbilityIds.includes(a.ability_id)),
@@ -160,6 +163,7 @@ export const neutralEquipmentPart = (): EquipmentPart => ({
   ability_values: [],
   ability_additions: [],
   random_options: [],
+  enchant_caps: null,
 });
 
 export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
@@ -176,6 +180,7 @@ export const cloneEquipmentPart = (src: EquipmentPart): EquipmentPart => ({
   ability_values: (src.ability_values ?? []).map((a) => ({ ...a })),
   ability_additions: (src.ability_additions ?? []).map((a) => ({ ...a })),
   random_options: (src.random_options ?? []).map((o) => ({ ...o })),
+  enchant_caps: src.enchant_caps ? { ...src.enchant_caps } : null,
 });
 
 export const selectedEquipmentPart = (list: EquipmentPartList): EquipmentPart | null =>

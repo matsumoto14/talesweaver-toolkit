@@ -453,9 +453,28 @@ pub struct EquipmentPart {
     /// (カテゴリー整合性は `Equipment::validate_against_catalog` がカタログを受けて検証する)
     #[serde(default)]
     pub random_options: Vec<RandomOptionSlot>,
+    /// カタログ外装備のエンチャント上限(実測)。カタログ品が付いていれば
+    /// `EquipmentCatalogEntry::enchant_caps` が正で、こちらは使わない
+    /// (先例: `enhance_type` と同じ「カタログ外でもユーザーが入れれば計算できる」枠)。
+    #[serde(default)]
+    pub enchant_caps: Option<EquipmentValues>,
 }
 
 impl EquipmentPart {
+    /// エンチャント上限を解決する: カタログ品が付いていればカタログの `enchant_caps` が正、
+    /// 無ければパートの実測 `enchant_caps`、どちらも無ければ「未収録」(`None`)。
+    /// この解決順をドメイン側の 1 箇所に持たせ、呼び出し側(commands.rs 等)で
+    /// 分岐を書き直させない(ADR 001: 値域上限にフォールバックを持たない)。
+    pub fn resolve_enchant_caps<C: EquipmentCatalogEntry>(&self, catalog: &[C]) -> Option<EquipmentValues> {
+        match &self.item_id {
+            Some(item_id) => catalog
+                .iter()
+                .find(|i| i.id() == item_id.as_str())
+                .map(|i| i.enchant_caps()),
+            None => self.enchant_caps,
+        }
+    }
+
     /// ランダムオプションの部位制約と値域。カタログ整合性(未知 id・カテゴリー重複)は
     /// カタログを引数で受ける `Equipment::validate_against_catalog` で見る。
     fn validate_random_options(&self, slot: PartSlot) -> Result<(), RandomOptionError> {
@@ -494,6 +513,9 @@ impl EquipmentPart {
     fn validate(&self, slot: PartSlot) -> Result<(), EquipmentError> {
         self.base.validate()?;
         self.enchant.validate()?;
+        if let Some(caps) = self.enchant_caps {
+            caps.validate()?;
+        }
         if self.enhance_level > ENHANCE_LEVEL_MAX {
             return Err(EquipmentError::EnhanceLevelOutOfRange {
                 slot,
@@ -963,8 +985,9 @@ impl Equipment {
     /// アビリティのカテゴリー重複・ランダムオプションのカテゴリー重複)。呼び出し側(保存前の `storage`、
     /// DB に書かないプレビュー系コマンド双方)がカタログを渡す(`base_totals` と同じ依存方向)。
     ///
-    /// `custom`(`item_id` が `None`)のエンチャントは `Equipment::validate` の値域チェックで
-    /// 既に検証済み。ここではカタログ item のときだけカタログ固有の `enchant_caps` を追加でチェックする。
+    /// `custom`(`item_id` が `None`)のエンチャントは `Equipment::validate` の値域チェック(0〜共通上限)
+    /// で既に検証済み。ここではカタログ item のときはカタログ固有の `enchant_caps` を、
+    /// custom で実測上限(`EquipmentPart::enchant_caps`)が入っているときはそれを追加でチェックする。
     pub fn validate_against_catalog<C: EquipmentCatalogEntry>(
         &self,
         equipment_catalog: &[C],
@@ -1058,6 +1081,26 @@ impl Equipment {
                         return Err(ValidationError::at(
                             format!(
                                 "装備アイテム '{item_id}' の{name}エンチャント {enchant} が枠 {cap} を超えています"
+                            ),
+                            here(),
+                        ));
+                    }
+                } else if let Some(caps) = part.enchant_caps {
+                    // カタログ外(カスタム名)装備。実測の `enchant_caps` が入っていれば、
+                    // カタログ品と同じ枠超過チェックをかける(カタログ品が付いているときの
+                    // `enchant_caps` はここでは参照しない — カタログが正)。
+                    if let Some((name, enchant, cap)) = part
+                        .enchant
+                        .fields()
+                        .into_iter()
+                        .zip(caps.fields())
+                        .find_map(|((name, enchant), (_, cap))| {
+                            (enchant > cap).then_some((name, enchant, cap))
+                        })
+                    {
+                        return Err(ValidationError::at(
+                            format!(
+                                "カスタム装備の{name}エンチャント {enchant} が実測上限 {cap} を超えています"
                             ),
                             here(),
                         ));
@@ -2925,5 +2968,117 @@ mod tests {
             ),
             EquipmentValues::default()
         );
+    }
+
+    // --- resolve_enchant_caps: カタログ → パート実測 → 未収録(None)の解決順 --------------
+
+    struct MockCatalogEntry {
+        id: &'static str,
+        enchant_caps: EquipmentValues,
+    }
+    impl EquipmentCatalogEntry for MockCatalogEntry {
+        fn id(&self) -> &str {
+            self.id
+        }
+        fn slot(&self) -> PartSlot {
+            PartSlot::Weapon
+        }
+        fn ability_slots(&self) -> usize {
+            0
+        }
+        fn random_option_slots(&self) -> Option<usize> {
+            None
+        }
+        fn values_min(&self) -> EquipmentValues {
+            EquipmentValues::default()
+        }
+        fn growth_caps(&self) -> Option<EquipmentValues> {
+            None
+        }
+        fn enchant_caps(&self) -> EquipmentValues {
+            self.enchant_caps
+        }
+    }
+
+    #[test]
+    fn resolve_enchant_capsはカタログ品ならカタログの上限を正とする() {
+        let catalog = [MockCatalogEntry {
+            id: "sword-1",
+            enchant_caps: EquipmentValues {
+                slash: 300,
+                ..Default::default()
+            },
+        }];
+        let part = EquipmentPart {
+            item_id: Some("sword-1".to_string()),
+            // カタログ品が付いているので、これは無視される。
+            enchant_caps: Some(EquipmentValues {
+                slash: 999,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            part.resolve_enchant_caps(&catalog),
+            Some(EquipmentValues {
+                slash: 300,
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn resolve_enchant_capsはカタログ外ならパートの実測上限を使う() {
+        let catalog: [MockCatalogEntry; 0] = [];
+        let part = EquipmentPart {
+            item_id: None,
+            custom_name: Some("自作の剣".to_string()),
+            enchant_caps: Some(EquipmentValues {
+                slash: 250,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            part.resolve_enchant_caps(&catalog),
+            Some(EquipmentValues {
+                slash: 250,
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn resolve_enchant_capsはどちらも無ければ未収録() {
+        let catalog: [MockCatalogEntry; 0] = [];
+        let part = EquipmentPart {
+            item_id: None,
+            custom_name: Some("自作の剣".to_string()),
+            enchant_caps: None,
+            ..Default::default()
+        };
+        assert_eq!(part.resolve_enchant_caps(&catalog), None);
+    }
+
+    #[test]
+    fn カスタム装備のエンチャントが実測上限を超えると検証エラー() {
+        let mut equipment = Equipment::default();
+        equipment.parts.weapon = EquipmentPart {
+            item_id: None,
+            custom_name: Some("自作の剣".to_string()),
+            enchant: EquipmentValues {
+                slash: 260,
+                ..Default::default()
+            },
+            enchant_caps: Some(EquipmentValues {
+                slash: 250,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+        .into();
+        let catalog: [MockCatalogEntry; 0] = [];
+        let result = equipment.validate_against_catalog(&catalog, &[], &[]);
+        assert!(result.is_err(), "実測上限超過を検出できていない: {result:?}");
     }
 }

@@ -3,33 +3,37 @@
   // 右カラムは「計算の材料」(試し変更・バフ・入場条件)。計算はすべて Rust 側(preview_damage)。
   import { untrack } from "svelte";
   import {
-    errorMessage, evaluateContents, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
+    errorMessage, evaluateContents, listEnchantGains, listSkills, listUpgradeCandidates, previewDamage,
+    previewDefense, previewEffectiveStats,
   } from "../../api/commands";
   import type {
     Adjustments, BuffChoice, BuffDefinition, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
-    DamageResult, DefenseProfile, FormulaStep, NewCharacter, Skill, StatKind, UpgradeCandidate,
+    DamageResult, DefenseProfile, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill, StatKind,
+    UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
     isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
     toggleBuff, userInputRange,
   } from "../../buffs";
-  import { COST_COLORS, COST_LABELS } from "../../candidates";
-  import { selectedEquipmentPartOrNeutral } from "../../equipment";
-  import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import {
-    ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
+    enchantCap, enchantDepKeysFor, enchantRows as enchantRowsOf, ENCHANT_SLOT_LABELS, setEnchantValue,
+    type EnchantDepKey,
+  } from "../../enchant";
+  import { selectedEquipmentPartOrNeutral } from "../../equipment";
+  import { fmtInt, fmtNum, formatLayerValue, topRowsText } from "../../format";
+  import {
+    ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, STAT_LABELS,
+    STAT_LAYER_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
-    app, enqueueCharacterSave, flatContents, payloadOf, selectedCharacter, totalContents as totalContentsCount,
+    app, enqueueCharacterSave, flatContents, focusCharacterSource, payloadOf, selectedCharacter, simIsDirty,
     upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
-  import AdjustmentEditor from "../../ui/AdjustmentEditor.svelte";
   import CheckChip from "../../ui/CheckChip.svelte";
   import Icon from "../../ui/Icon.svelte";
   import DefensePanel from "./DefensePanel.svelte";
-  import RequirementList from "../../ui/RequirementList.svelte";
   import Select from "../../ui/Select.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
@@ -37,7 +41,7 @@
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import { critChanceStage } from "../../ui/critChance";
-  import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
+  import { badgeStyle, REACH_BADGES, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
 
@@ -148,7 +152,7 @@
     skillTotals = {};
     if (!skillOpen || !payload || !target || skills.length === 0) return;
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
-    const temp = JSON.parse(JSON.stringify(temporaryAdjustments)) as Adjustments;
+    const temp = JSON.parse(JSON.stringify(NEUTRAL_ADJUSTMENTS)) as Adjustments;
     const contentId = target.content.id;
     const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const selectedSkillId = skillId;
@@ -178,21 +182,16 @@
   let combo = $state(false);
 
   // --- 一時調整 -------------------------------------------------------------
-  // 計算リクエストにのみ乗せ、「キャラに保存」の対象にしない(旧仕様を踏襲。
-  // sim に混ぜると「もしステ+50なら」が保存で永続化されてしまう。PR レビュー指摘)。
-  const neutralAdjustments = (): Adjustments =>
+  // この画面に編集 UI は無い(「調整(一時)」カードは削除済み)。previewDamage 系コマンドは
+  // Adjustments を必須パラメータとして取るため、中立値を渡す。
+  const NEUTRAL_ADJUSTMENTS: Adjustments =
     Object.fromEntries(STAT_KINDS.map((k) => [k, { add: 0, pin: null }])) as Adjustments;
-  let temporaryAdjustments = $state<Adjustments>(neutralAdjustments());
-  const hasTemporaryAdjustments = $derived(
-    STAT_KINDS.some((k) => temporaryAdjustments[k].add !== 0 || temporaryAdjustments[k].pin !== null),
-  );
-  // キャラを切り替えたら一時調整をリセット(前のキャラの調整を引き継がない)
+  // キャラを切り替えたらスキルの選び直しをリセット(前のキャラの選択を引き継がない)
   let lastCharacterId = untrack(() => character?.id);
   $effect(() => {
     const id = character?.id;
     if (id === lastCharacterId) return;
     lastCharacterId = id;
-    temporaryAdjustments = neutralAdjustments();
     skillOverride = null;
   });
 
@@ -209,7 +208,7 @@
     const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const comboType = selectedComboSkillType;
     const simActive = app.sim !== null;
-    const tempJson = JSON.stringify(temporaryAdjustments);
+    const tempJson = JSON.stringify(NEUTRAL_ADJUSTMENTS);
     const buffsJson = JSON.stringify(app.calcBuffs);
     if (!pJson || !sp || !t || !sid) {
       requestLatest.cancel();
@@ -268,7 +267,6 @@
     return () => evalLatest.cancel();
   });
   const targetEval = $derived(target ? (evals.find((e) => e.content_id === target.content.id) ?? null) : null);
-  const clearCount = $derived(evals.filter((e) => e.clear).length);
 
   // --- 表示値 -------------------------------------------------------------
   // 主役の値の選び方(クリ発生率 > 0 ならクリティカル、0 なら非クリ最大)は Rust 側
@@ -289,9 +287,6 @@
   const need = $derived(target?.content.need_per_hit ?? 0);
   const ratio = $derived(perHit !== null && need > 0 ? perHit / need : 0);
   const hasReqs = $derived((target?.content.requirements.length ?? 0) > 0);
-  const hasEquipmentReq = $derived(
-    target?.content.requirements.some((r) => "equipment_by_skill" in r) ?? false,
-  );
   // 評価が未取得の間は入場条件を「不明」として扱い、未達コンテンツに「通る/余裕」を
   // 出さない(ダメージ 120ms・評価 200ms のデバウンス差で毎回この窓が開く。PR レビュー指摘)
   const entryKnown = $derived(!hasReqs || targetEval !== null);
@@ -902,13 +897,15 @@
     simLimited = false;
     app.sim = p;
   }
-  const simActive = $derived(app.sim !== null);
-  const simDirty = $derived(
-    app.sim !== null && savedPayload !== null && JSON.stringify(app.sim) !== JSON.stringify(savedPayload),
-  );
+  // 保存値との差分があるかどうかの判定は state.svelte.ts の simIsDirty に一本化
+  // (JSON.stringify の比較をここでもう一度書かない。上部バーと同じ関数を読む)。
+  const simDirty = $derived(simIsDirty());
   function resetSim() {
     app.sim = null;
     simLimited = false;
+    // 伸びしろの土台(登録値)が変わるので、エンチャント一覧の「見えたことがある」記録も
+    // 撮り直す(enchantShownKeys)。
+    enchantShownKeys = new Set();
   }
   let saving = $state(false);
   async function saveSim() {
@@ -950,16 +947,30 @@
       set: (p, v) => (p.common_skills.strong_weapon_level = Number(v)),
     },
     {
-      id: "weapon_enchant_thrust",
-      label: (p) => `武器エンチャント 突き ${fmtInt(weaponOf(p).enchant.thrust)}`,
-      get: (p) => String(weaponOf(p).enchant.thrust),
-      set: (p, v) => (weaponOf(p).enchant.thrust = Number(v)),
+      // 部位・ステをまたぐので 1 チップに束ねる(全部位ぶんをまとめて 1 操作として戻す)
+      id: "enchant",
+      label: () => "エンチャント",
+      get: (p) => JSON.stringify(PART_SLOTS.map((s) => selectedEquipmentPartOrNeutral(p.equipment.parts[s]).enchant)),
+      set: (p, v) => {
+        const values = JSON.parse(v) as EquipmentValues[];
+        PART_SLOTS.forEach((s, i) => {
+          const list = p.equipment.parts[s];
+          const part = list.registered.find((x) => x.id === list.selected_id);
+          if (part) part.enchant = values[i];
+        });
+      },
     },
     {
-      id: "weapon_enchant_slash",
-      label: (p) => `武器エンチャント 斬り ${fmtInt(weaponOf(p).enchant.slash)}`,
-      get: (p) => String(weaponOf(p).enchant.slash),
-      set: (p, v) => (weaponOf(p).enchant.slash = Number(v)),
+      id: "ultimate",
+      label: (p) =>
+        `極限 ${
+          p.common_skills.ultimate.slots
+            .filter((s): s is UltimateSkill => s !== null)
+            .map((s) => ULTIMATE_SKILL_LABELS[s])
+            .join("・") || "未選択"
+        }`,
+      get: (p) => JSON.stringify(p.common_skills.ultimate.slots),
+      set: (p, v) => (p.common_skills.ultimate.slots = JSON.parse(v)),
     },
     {
       // 「次に変えるなら」の武器更新。基本値まで一緒に替わる 1 操作なので 1 チップで戻す。
@@ -1045,6 +1056,8 @@
   let whatIf = $state<UpgradeCandidate[]>([]);
   /** 押した候補は、移動先の差分チップと同時に短く退出させる(§10「移った」)。 */
   let leavingWhatIfId = $state<string | null>(null);
+  /** 「足りない分をどう埋める?」1 行の 2 位以降。押した行の直下に開く(§00 03) */
+  let fillMoreOpen = $state(false);
   const whatIfLatest = latest({ debounce: 250 });
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null;
@@ -1053,7 +1066,7 @@
     const base = perHit;
     const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const comboType = selectedComboSkillType;
-    const tempJson = JSON.stringify(temporaryAdjustments);
+    const tempJson = JSON.stringify(NEUTRAL_ADJUSTMENTS);
     const buffsJson = JSON.stringify(app.calcBuffs);
     if (!pJson || !t || !sid || base === null) {
       whatIfLatest.cancel();
@@ -1129,26 +1142,222 @@
     if (choice) fn(choice);
     app.calcBuffs = { choices };
   }
-  const strongWeaponOptions = $derived([
-    { value: "0", label: "なし" },
-    ...Array.from({ length: limits.strong_weapon_level_max }, (_, i) => {
-      const percent = Math.round((i + 1) * limits.strong_weapon_rate_per_level * 100);
-      return { value: String(i + 1), label: `Lv${i + 1}(+${percent}%)` };
-    }),
-  ]);
-  // 武器固有の固定エンチャント枠。実物の装備本体補正には左右されない。
-  const weaponEnchantCaps = $derived.by(() => {
-    const weapon = payload ? weaponOf(payload) : null;
-    const item = weapon?.item_id ? app.equipmentCatalog.find((i) => i.id === weapon.item_id) : null;
-    return {
-      thrust: item?.enchant_caps.thrust ?? limits.equipment_value_max,
-      slash: item?.enchant_caps.slash ?? limits.equipment_value_max,
-    };
+  // --- 極限スキル(試し変更)。2 枠のうち何を選ぶかだけをこの画面で切り替える -----------
+  // 超・ハイパーリミットの Lv はキャラタブ(共通スキル)の設定が正。ここでは触らない。
+  const ultimatePickedCount = $derived(
+    payload?.common_skills.ultimate.slots.filter((s) => s !== null).length ?? 0,
+  );
+  // 枠数は Rust 側の定数(ULTIMATE_SKILL_SLOTS)そのまま。写経せず、データの配列長から引く
+  const ultimateSlotCount = $derived(payload?.common_skills.ultimate.slots.length ?? 0);
+  const ultimateFull = $derived(ultimateSlotCount > 0 && ultimatePickedCount >= ultimateSlotCount);
+  function toggleUltimate(skillId: UltimateSkill) {
+    editSim((p) => {
+      const slots = p.common_skills.ultimate.slots;
+      const at = slots.indexOf(skillId);
+      if (at !== -1) {
+        slots[at] = null;
+        return;
+      }
+      const empty = slots.indexOf(null);
+      if (empty !== -1) slots[empty] = skillId;
+    });
+  }
+  /** チップに併記する効果値。写経しない — Rust 側 preview_effective_stats(common_skill.ultimate)
+   *  から引く。2 回の呼び出しで 3 種すべての効果値を取れる(枠は 2 つしかないので)。 */
+  let ultimateEffects = $state<{
+    critical_damage_rate: number; actual_delay_reduction: number; added_hit_count: number; skill_range_bonus: number;
+  } | null>(null);
+  const ultimateLatest = latest({ debounce: 150 });
+  $effect(() => {
+    const p = payload;
+    if (!p) {
+      ultimateLatest.cancel();
+      ultimateEffects = null;
+      return;
+    }
+    const pJson = JSON.stringify(p);
+    const buffs = JSON.parse(JSON.stringify(app.calcBuffs));
+    ultimateLatest.run(async (isCurrent) => {
+      try {
+        const withCombat = JSON.parse(pJson) as NewCharacter;
+        withCombat.common_skills.ultimate.slots = ["scope_eye", "full_throttle"];
+        const withRange = JSON.parse(pJson) as NewCharacter;
+        withRange.common_skills.ultimate.slots = ["wide_focus", null];
+        const [a, b] = await Promise.all([
+          previewEffectiveStats(
+            withCombat.base_stats, withCombat.stat_sources, withCombat.equipment, withCombat.common_skills,
+            withCombat.awakening, withCombat.main_skill_id, buffs,
+          ),
+          previewEffectiveStats(
+            withRange.base_stats, withRange.stat_sources, withRange.equipment, withRange.common_skills,
+            withRange.awakening, withRange.main_skill_id, buffs,
+          ),
+        ]);
+        if (isCurrent()) {
+          ultimateEffects = {
+            critical_damage_rate: a.common_skill.ultimate.critical_damage_rate,
+            actual_delay_reduction: a.common_skill.ultimate.actual_delay_reduction,
+            added_hit_count: a.common_skill.ultimate.added_hit_count,
+            skill_range_bonus: b.common_skill.ultimate.skill_range_bonus,
+          };
+        }
+      } catch (e) {
+        if (isCurrent()) reportError(errorMessage(e));
+      }
+    });
+    return () => ultimateLatest.cancel();
   });
+  function ultimateChipNote(skillId: UltimateSkill): string {
+    const e = ultimateEffects;
+    if (!e) return "";
+    if (skillId === "scope_eye") return `クリダメ +${Math.round(e.critical_damage_rate * 100)}%`;
+    if (skillId === "full_throttle") {
+      return `中ディレイ −${Math.round(e.actual_delay_reduction * 100)}% ・段数 +${e.added_hit_count}`;
+    }
+    return `範囲 +${Math.round(e.skill_range_bonus)}(火力には効きません)`;
+  }
 
-  // 「通るのは」の分母は入場条件だけを見る全コンテンツ数(他画面と統一)。
-  // 上の contents(対象ピッカー用)は敵データを持つものだけに絞っているため数え方が違う
-  const totalContents = $derived(totalContentsCount());
+  // --- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る ------
+  // 考え方はホーム(HomePage.svelte)の enchantRows と同じで、こちらは enchant.ts を共用する。
+  const enchantDepKeys = $derived<EnchantDepKey[]>(skill ? enchantDepKeysFor(skill.dependency) : []);
+  const enchantRowsList = $derived.by(() => {
+    if (!payload) return [];
+    const keys = enchantDepKeys;
+    if (keys.length === 0) return [];
+    return enchantRowsOf(payload.equipment, keys, app.equipmentCatalog).filter(
+      (r) =>
+        r.capUnknown ||
+        keys.some((k) => r.part.enchant[k] < (enchantCap(r.part, k, app.equipmentCatalog) ?? 0)) ||
+        // 一度出した行は、伸びしろを使い切っても消さない(§00 03 押した場所は動かない)。
+        // ここを見落として「ステ単位」だけ覚えていたため、依存ステが 1 本しか無い部位(兜)は
+        // その 1 本を MAX にすると**行ごと**消え、下の行が同じ位置へ繰り上がっていた。
+        // 実機の clickall.js が NG(0,46) で検出した。
+        keys.some((k) => enchantShownKeys.has(`${r.slot}:${k}`)),
+    );
+  });
+  /** 「MAX まで積むと +x%」。行 × ステごとの伸び率は Rust(list_enchant_gains)がまとめて返す
+   *  (伸び率の式・丸めをフロントで組み立て直さない。エンチャント候補も選択中スキルの依存ステに
+   *  Rust 側で絞られている)。 */
+  let enchantGains = $state<Record<string, number>>({});
+  const enchantLatest = latest({ debounce: 200 });
+  $effect(() => {
+    const pJson = payload ? JSON.stringify(payload) : null;
+    const t = target;
+    const sid = skillId;
+    const rowCount = enchantRowsList.length;
+    const comboCount = combo ? limits.combo_bonus_threshold : 0;
+    const comboType = selectedComboSkillType;
+    const tempJson = JSON.stringify(NEUTRAL_ADJUSTMENTS);
+    const buffsJson = JSON.stringify(app.calcBuffs);
+    if (!pJson || !t || !sid || rowCount === 0) {
+      enchantLatest.cancel();
+      enchantGains = {};
+      return;
+    }
+    enchantLatest.run((isCurrent) =>
+      listEnchantGains(
+        JSON.parse(pJson) as NewCharacter, sid, t.content.id, comboCount,
+        comboType, JSON.parse(tempJson), JSON.parse(buffsJson),
+      )
+        .then((gains) => {
+          if (isCurrent()) {
+            enchantGains = Object.fromEntries(gains.map((g) => [`${g.slot}:${g.key}`, g.delta_pct]));
+          }
+        })
+        .catch((e) => reportError(errorMessage(e))),
+    );
+    return () => enchantLatest.cancel();
+  });
+  /**
+   * 行の中で実際に伸びしろがあるステだけを残す(その時点の cur/gain で見た「素の」判定)。
+   * - 上限に達したステ(cur >= cap)は出さない(「上限」の文字も出さない)
+   * - MAX まで積んでも最終ダメージが動かない(改善しない)ステも出さない
+   *   (list_enchant_gains は改善しない組を rank_candidates が既に除外して返すので、
+   *   マップに無い = 伸びしろ無し。試算が返る前は undefined のまま残す)
+   */
+  function enchantVisibleKeys(row: (typeof enchantRowsList)[number]): EnchantDepKey[] {
+    return enchantDepKeys.filter((k) => {
+      const cap = enchantCap(row.part, k, app.equipmentCatalog) ?? 0;
+      if (cap <= 0 || row.part.enchant[k] >= cap) return false;
+      const gain = enchantGains[`${row.slot}:${k}`];
+      return gain !== 0;
+    });
+  }
+  /**
+   * §00 03「押した場所は動かない」/ §09 規則 1: 一度この一覧に出た「行 × ステ」は、この画面を
+   * 開いている(= このキャラ・対象・スキルを見ている)あいだは消さない。MAX を押した直後に
+   * その行が一覧から消えて下の行が繰り上がり、繰り上がった別の行を誤って書き換える実害が
+   * 実機検証で確認された。ここで積んだ集合は「見えたことがある」だけを覚え、伸びしろが
+   * 復活しても・失っても行の位置は動かさない。
+   *
+   * 撮り直す(空にする)タイミング:
+   * - キャラ・対象・スキルが変わったとき(下の $effect。見ている一覧の意味自体が変わる)
+   * - 「ぜんぶ戻す」で試し変更を全部捨てたとき(resetSim。伸びしろの土台が登録値に戻るため)
+   */
+  let enchantShownKeys = $state<Set<string>>(new Set());
+  $effect(() => {
+    // 依存トリガーだけを読む(値は使わない) — 新しい一覧として撮り直す
+    void character?.id;
+    void target?.content.id;
+    void skillId;
+    enchantShownKeys = new Set();
+  });
+  $effect(() => {
+    let next: Set<string> | null = null;
+    for (const row of enchantRowsList) {
+      if (row.capUnknown) continue;
+      for (const k of enchantVisibleKeys(row)) {
+        const id = `${row.slot}:${k}`;
+        if (!enchantShownKeys.has(id)) {
+          if (!next) next = new Set(enchantShownKeys);
+          next.add(id);
+        }
+      }
+    }
+    if (next) enchantShownKeys = next;
+  });
+  /** 表示用の可視判定。「いま伸びしろがある」に加えて「見えたことがある」も可視の理由にする
+   *  (enchantShownKeys)。cap <= 0(そもそも枠が無い)だけは無条件で出さない。 */
+  function enchantVisibleKeysStable(row: (typeof enchantRowsList)[number]): EnchantDepKey[] {
+    const live = new Set(enchantVisibleKeys(row));
+    return enchantDepKeys.filter((k) => {
+      const cap = enchantCap(row.part, k, app.equipmentCatalog) ?? 0;
+      if (cap <= 0) return false;
+      return live.has(k) || enchantShownKeys.has(`${row.slot}:${k}`);
+    });
+  }
+  /** ステが全部落ちた行は行ごと出さない(§00 02・05: 押しても何も起きない欄を並べない)。
+   *  上限が未収録の行(capUnknown)は例外 — 落とすと「なぜ出ないか」が分からなくなるので、
+   *  伸びしろの代わりに「上限未入力」の案内行として残す。 */
+  const visibleEnchantRows = $derived(
+    enchantRowsList
+      .map((row) => ({ row, keys: row.capUnknown ? [] : enchantVisibleKeysStable(row) }))
+      .filter((x) => x.row.capUnknown || x.keys.length > 0),
+  );
+
+  // --- バフ 1 件ごとの寄与(ON にしたチップに併記)。実計算(previewDamage)のトレースが
+  //     供給源名で内訳を持っている(catContributions と同じデータ)ので、そこから該当バフの
+  //     行だけ拾う。写経で数字を作らない。ステ側は stat_contributions ではなく
+  //     stat_source_effects を使う(cap 込みで倍率A/B の増幅も一貫して割り振られる帰属)。
+  //     全ステに乗るバフは 7 件そのまま並べるとチップ幅から欠けるので、ステ側は効きの大きい
+  //     上位 2 件 + ほか n に絞る(バフタブの statDeltaText と同じ topRowsText を使い、
+  //     二重管理にしない)。 ---
+  function buffContributionText(def: BuffDefinition): string {
+    const statRows = (result?.trace.stat_source_effects ?? [])
+      .filter((c) => c.source === def.name && c.effect !== 0)
+      .map((c) => ({ label: `${STAT_LABELS[c.kind]} ${c.effect > 0 ? "+" : ""}${fmtInt(c.effect)}`, value: c.effect }));
+    const parts: string[] = [];
+    if (statRows.length > 0) parts.push(topRowsText(statRows));
+    for (const c of result?.trace.category_contributions ?? []) {
+      if (c.source === def.name && c.value !== 0) {
+        const cat = result?.trace.categories.find((x) => x.category === c.category);
+        const label = cat ? `${cat.symbol}` : c.category;
+        parts.push(`${label} ${c.value > 0 ? "+" : ""}${fmtNum(c.value * 100)}%`);
+      }
+    }
+    return parts.join(" ・ ");
+  }
+
 </script>
 
 <!-- 押した数値の内訳。押した行の直下にだけ開く(§00 03)。
@@ -1208,7 +1417,7 @@
 
 <SplitPage
   midTitle="行ける？"
-  midNote="→ 足りない分をどう埋める？ → なぜこの数字？"
+  midNote="→ なぜこの数字？"
   rightTitle="計算の材料"
   rightNote={character?.name ?? ""}
   persistKey="tw-v4-calc"
@@ -1384,7 +1593,7 @@
               >
                 <span class="nl">1 発</span>
                 <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
-                {#if simActive}
+                {#if simDirty}
                   <span class="nsub num">
                     <span class:up={deltaPct > 0} class:down={deltaPct < 0} use:bump={() => deltaPct}>
                       {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
@@ -1432,17 +1641,10 @@
                   {#if result && result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
                     ・ 期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {(result.critical_chance * 100).toFixed(1)}%)
                   {/if}
-                  ・ 判定は付けない
                 </span>
               </button>
-              <span class="op">→</span>
-              <!-- 討伐時間。敵 HP を gamedata に持っていないので破線 +「—」で出す。
-                   0 で埋めると画面が嘘をつく(§00 欠けを正常な状態として見せる) -->
-              <div class="node pending">
-                <span class="nl">討伐時間</span>
-                <span class="num nv">— 秒</span>
-                <span class="nsub dim">敵 HP が未収録</span>
-              </div>
+              <!-- 討伐時間は敵 HP が gamedata に未収録(この画面に限らず全体で未実装)なので
+                   ノードごと出さない(§00 02。0 や「—」で埋めると画面が嘘をつく) -->
             </div>
             <!-- 鎖の各数値の内訳。押した節は動かず、鎖の直下に増える(§00 03) -->
             {#if isDetailOpen("perHit") && perHitDetail}{@render detailBox(perHitDetail)}{/if}
@@ -1456,13 +1658,53 @@
                 {:else if noPierce}
                   防御力を抜けていません(攻撃力 {atkA !== null ? fmtInt(atkA) : "—"} ≤ 防御力 {defenseValue !== null ? fmtInt(defenseValue) : "—"})
                 {:else if ratio >= 1}
-                  目安の {ratio.toFixed(2)} 倍。火力は足りています。
+                  <!-- 桁が離れた倍率をそのまま出すと意味を成さない(ユーザー指摘)。一定倍率を
+                       超えたら倍率を出さず「大きく超えている」とだけ伝える -->
+                  {ratio >= 10 ? "目安を大きく超えています。" : `目安の ${ratio.toFixed(2)} 倍。火力は足りています。`}
                 {:else}
                   目安まで あと {fmtInt(need - perHit)}(+{Math.max(1, Math.round((need / Math.max(perHit, 1) - 1) * 100))}% 必要)
                 {/if}
               </span>
               <span class="num dim">目安 {fmtInt(need)}</span>
             </div>
+            <!-- 足りない分をどう埋める? を 1 行に(旧: 紫のパネル)。候補が無い・すでに目安に
+                 届いているときは行ごと消す(§00 02) -->
+            {#if perHit !== null && ratio < 1 && whatIf.length > 0}
+              {@const top = whatIf[0]}
+              <div class="fill-line">
+                <button
+                  type="button" class="fill-btn"
+                  class:whatif-leaving={leavingWhatIfId === top.id}
+                  disabled={leavingWhatIfId === top.id}
+                  onclick={() => applyWhatIf(top)}
+                >
+                  <span class="dim">→ 一番効くのは</span>
+                  <span class="fill-label">{top.label}</span>
+                  <span class="num fill-pct">({top.delta_pct > 0 ? "+" : ""}{top.delta_pct}%)</span>
+                </button>
+                {#if whatIf.length > 1}
+                  <button
+                    type="button" class="fill-more-toggle"
+                    aria-expanded={fillMoreOpen} onclick={() => (fillMoreOpen = !fillMoreOpen)}
+                  >{fillMoreOpen ? "▲" : `他 ${whatIf.length - 1} 件 ›`}</button>
+                {/if}
+              </div>
+              {#if fillMoreOpen && whatIf.length > 1}
+                <div class="fill-list open-in">
+                  {#each whatIf.slice(1) as w (w.id)}
+                    <button
+                      type="button" class="fill-more-row"
+                      class:whatif-leaving={leavingWhatIfId === w.id}
+                      disabled={leavingWhatIfId === w.id}
+                      onclick={() => applyWhatIf(w)}
+                    >
+                      <span class="dt-label">{w.label}</span>
+                      <span class="num dt-val">{w.delta_pct > 0 ? "+" : ""}{w.delta_pct}%</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            {/if}
             {#if result?.actual_delay}
               {@const d = result.actual_delay}
               <div class="delay-note dim">
@@ -1506,37 +1748,6 @@
             {/if}
           </div>
         </SheetCard>
-        </div>
-
-        <!-- もし〜だったら -->
-        <div class="panel purple">
-          <div class="panel-head purple">
-            <span class="panel-title">足りない分をどう埋める？</span>
-            <span class="panel-note">押すと試し変更に入ります(保存されません)</span>
-          </div>
-          <div class="panel-body">
-            {#if whatIf.length === 0}
-              <p class="wi-empty dim">いま変えられる場所がありません。共通スキル・エンチャント・強化・オーラはすでに上限です。</p>
-            {/if}
-            {#each whatIf as w (w.id)}
-              <button
-                type="button"
-                class="whatif"
-                class:whatif-leaving={leavingWhatIfId === w.id}
-                disabled={leavingWhatIfId === w.id}
-                onclick={() => applyWhatIf(w)}
-              >
-                <span class="wi-main">
-                  <span class="wi-label">{w.label}</span>
-                  <span class="cost" style={triadStyle(COST_COLORS[w.cost])}>{COST_LABELS[w.cost]}</span>
-                </span>
-                <span class="wi-nums">
-                  <span class="num wi-pct">{w.delta_pct > 0 ? "+" : ""}{w.delta_pct}%</span>
-                  <span class="num dim">{fmtInt(w.per_hit_primary)}</span>
-                </span>
-              </button>
-            {/each}
-          </div>
         </div>
 
         <!-- なぜこの数字? -->
@@ -1736,19 +1947,24 @@
             <span class="sim-dot" class:active={simDirty}></span>
             <span class="sim-title">{simDirty ? "試し変更中" : "登録どおり"}</span>
             <!-- 差分の枠も常に確保する。出た瞬間に行が 1px 伸びて下がずれる(§09 規則 4) -->
-            <span class="num sim-delta" class:on={simActive} class:up={deltaPct > 0} class:down={deltaPct < 0}
-            >{simActive ? (deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`) : ""}</span>
+            <span class="num sim-delta" class:on={simDirty} class:up={deltaPct > 0} class:down={deltaPct < 0}
+            >{simDirty ? (deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`) : ""}</span>
           </div>
-          <div class="sim-note-text dim">
-            {simDirty
-              ? "保存されていません。チップの ✕ で1つずつ戻せます。"
-              : "下の材料を変えると、その場で数字が動きます(保存されません)。"}
-          </div>
-          <!-- 試し変更に入っても下がずれないよう、操作の枠は常に確保する(§09 規則 1・4)。
-               ここは押した材料(装備・バフ)より**上**にあるので、差し込むと押したものが流れる -->
-          <div class="sim-actions">
-            <button type="button" class="btn" disabled={!simDirty} onclick={resetSim}>ぜんぶ戻す</button>
-            <button type="button" class="btn primary" disabled={!simDirty || saving} onclick={saveSim}>{saving ? "保存中…" : "キャラに保存"}</button>
+          <!-- 文言は状態で変えない。「登録どおり」は 2 行・「試し変更中」は 1 行に折り返して
+               いたため、切り替えた瞬間に 1 行ぶん縮んで**下の材料が丸ごと上へ吸い上げられた**
+               (実機で押した MAX ボタン自身が 11px 逃げた。§00 03 / §09 規則 1)。
+               高さを確保する手も試したが、1 行の状態で下に空きが出て §00 02 を崩す。
+               状態は上のタイトルと帯の色が伝えるので、ここは動かない 1 行だけ置く -->
+          <div class="sim-note-text dim">ここでの変更は保存されません。</div>
+          <!-- ボタンは常に置き、登録どおりのときは隠すだけにする(§00 03 / §09 規則 1)。
+               {#if} で出し入れすると、枠の min-height とボタンの実高(padding 7+7 + border 1+1
+               + 行高 ≒ 33px)が食い違い、出た瞬間に 3px 伸びて**下の材料が流れる**。実機の
+               clickall.js が NG(0,3) で検出した。高さを数値で合わせても書体が変われば再発する
+               ので、本物のボタンで枠を満たして構造的に一致させる。
+               inert は隠しているあいだフォーカスもクリックも通さない(押せるものは見せない) -->
+          <div class="sim-actions" class:idle={!simDirty} inert={!simDirty}>
+            <button type="button" class="btn" onclick={resetSim}>ぜんぶ戻す</button>
+            <button type="button" class="btn primary" disabled={saving} onclick={saveSim}>{saving ? "保存中…" : "キャラに保存"}</button>
           </div>
         </div>
 
@@ -1762,65 +1978,89 @@
             </span>
           {/each}
         </div>
-        <!-- 上限の注記は固定領域。行を差し込んで下をずらさない(§07) -->
+        <!-- 上限の注記は固定領域。登録どおり(0 件)のときは中身だけ出さず、枠は常に確保する
+             (§09 規則 1・4)。ここは押した材料(装備・バフ)より上なので、丸ごと差し込むと
+             押したものが流れる -->
         <div class="sim-limit" class:hit={simLimited}>
           {#if simLimited}
             試し変更は同時 {SIM_LIMIT} 件までです。どれかを ✕ で戻すか、「キャラに保存」で確定してください。
-          {:else}
+          {:else if changedKnobs.length > 0}
             同時に試せるのは {changedKnobs.length} / {SIM_LIMIT} 件です。
           {/if}
         </div>
 
-        <!-- 装備(試し変更) -->
+        <!-- 極限スキル(試し変更)。3 種から 2 つ選ぶ(§07 形態 3: チップで入れる/外す) -->
         <div class="card">
           <div class="card-head">
-            <span class="card-title">装備</span>
-            <span class="dim small">変更は試し変更として反映</span>
+            <span class="card-title">極限スキル</span>
+            <span class="dim small num" use:bump={() => ultimatePickedCount}>{ultimatePickedCount} / {ultimateSlotCount}</span>
           </div>
-          <div class="pw">
-            <CheckChip
-              checked={payload.common_skills.power_weapon}
-              onCheckedChange={(v) => editSim((p) => (p.common_skills.power_weapon = v))}
-            >
-              <span>パワーウェポン(+2%)</span>
-            </CheckChip>
+          <div class="ultimate-chips">
+            {#each ULTIMATE_SKILLS as u (u)}
+              {@const on = payload.common_skills.ultimate.slots.includes(u)}
+              <button
+                type="button" class="ultimate-chip" class:on
+                disabled={!on && ultimateFull}
+                title={!on && ultimateFull ? `${ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。` : undefined}
+                onclick={() => toggleUltimate(u)}
+              >
+                <span class="uc-name">{ULTIMATE_SKILL_LABELS[u]}</span>
+                <span class="uc-note dim" use:flash={() => ultimateChipNote(u)}>{ultimateChipNote(u)}</span>
+              </button>
+            {/each}
           </div>
-          <div class="sw">
-            <StepSelect
-              label="ストロングウェポン"
-              options={strongWeaponOptions}
-              bind:value={
-                () => String(payload.common_skills.strong_weapon_level),
-                (v) => editSim((p) => (p.common_skills.strong_weapon_level = Number(v)))
-              }
-            />
+          {#if ultimateFull}
+            <p class="eq-note dim badge-in">{ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。</p>
+          {/if}
+          <p class="eq-note dim">超・ハイパーリミットの Lv は<b>キャラ</b>タブ(共通スキル)の設定を使います。</p>
+        </div>
+
+        <!-- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">エンチャントの伸びしろ</span>
+            <span class="dim small">主軸: {enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・") || "—"}</span>
+            <span class="dim small num" use:bump={() => visibleEnchantRows.length}>{visibleEnchantRows.length} 件</span>
           </div>
-          <details class="eq-details">
-            <summary>武器のエンチャント(突き・斬り)</summary>
-            <div class="eq-grid">
-              <StatInput
-                label={EQUIPMENT_STAT_LABELS.thrust}
-                min={0}
-                max={weaponEnchantCaps.thrust}
-                strictMax
-                bind:value={
-                  () => weaponOf(payload).enchant.thrust,
-                  (v) => editSim((p) => (weaponOf(p).enchant.thrust = v))
-                }
-              />
-              <StatInput
-                label={EQUIPMENT_STAT_LABELS.slash}
-                min={0}
-                max={weaponEnchantCaps.slash}
-                strictMax
-                bind:value={
-                  () => weaponOf(payload).enchant.slash,
-                  (v) => editSim((p) => (weaponOf(p).enchant.slash = v))
-                }
-              />
+          {#if visibleEnchantRows.length === 0}
+            <p class="eq-note dim">主軸スキルの依存ステを盛れる部位がないか、すでに上限です。</p>
+          {:else}
+            <div class="enchant-rows">
+              {#each visibleEnchantRows as { row, keys } (row.slot)}
+                <div class="enchant-row">
+                  <span class="enchant-row-label">{ENCHANT_SLOT_LABELS[row.slot]}</span>
+                  {#if row.capUnknown}
+                    <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("equipment", row.slot)}>
+                      <span class="coverage" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
+                      <span class="chev dim">›</span>
+                    </button>
+                  {:else}
+                  <div class="enchant-row-cols">
+                    {#each keys as k (k)}
+                      {@const cap = enchantCap(row.part, k, app.equipmentCatalog) ?? 0}
+                      {@const gain = enchantGains[`${row.slot}:${k}`]}
+                      <div class="enchant-stat">
+                        <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
+                        <StatInput
+                          label=""
+                          min={0}
+                          max={cap}
+                          strictMax
+                          bind:value={
+                            () => row.part.enchant[k],
+                            (v) => editSim((p) => setEnchantValue(p.equipment, row.slot, k, v))
+                          }
+                        />
+                        <span class="num enchant-gain" class:up={(gain ?? 0) > 0} use:bump={() => gain ?? null}
+                        >{gain !== undefined ? `MAX で +${gain}%` : ""}</span>
+                      </div>
+                    {/each}
+                  </div>
+                  {/if}
+                </div>
+              {/each}
             </div>
-            <p class="eq-note dim">武器のアイテム変更・基本能力値・強化 Lv・アビリティ・他の部位は<b>キャラ</b>タブで編集します。</p>
-          </details>
+          {/if}
         </div>
 
         <!-- バフ -->
@@ -1854,7 +2094,14 @@
                 title={blocked ? "同枠の他バフと排他です" : def.note || undefined}
                 onclick={() => toggleBuffChip(def)}
               >
-                <span>{def.name}</span>
+                <span class="buff-chip-copy">
+                  <span>{def.name}</span>
+                  <!-- ON にしたチップの実際の寄与(供給源ごとの実数)。写経しない -->
+                  {#if state !== "off"}
+                    {@const note = buffContributionText(def)}
+                    {#if note}<span class="buff-chip-note dim" use:flash={() => note}>{note}</span>{/if}
+                  {/if}
+                </span>
                 <!-- 状態バッジの枠は常に確保する。付いた瞬間にチップが伸びると、
                      隣のチップが折り返して並びが動く(§09 規則 4) -->
                 <span class="chip-state" class:on={state !== "off"}
@@ -1912,55 +2159,12 @@
           <p class="buff-note dim">変更はこの計算だけに反映され、バフセットやキャラには保存されません。</p>
         </div>
 
-        <!-- 調整(一時) -->
-        <details class="card adj">
-          <summary class="card-title">
-            調整(一時) — 「もしステが +50 なら」{hasTemporaryAdjustments ? " ・ 調整あり" : ""}
-          </summary>
-          <p class="adj-note dim">計算にのみ反映されます。「キャラに保存」には含まれません(保存する調整はキャラタブで)。</p>
-          <AdjustmentEditor
-            adjustments={temporaryAdjustments}
-            addMin={limits.adjustment_add_min}
-            addMax={limits.adjustment_add_max}
-            pinMin={limits.adjustment_pin_min}
-            pinMax={limits.adjustment_pin_max}
-            pinDefault={(k) => result?.trace.stats.find((s) => s.kind === k)?.effective ?? payload.base_stats[k]}
-          />
-        </details>
-
         <!-- コンボ -->
         <div class="combo">
           <CheckChip checked={combo} onCheckedChange={(v) => (combo = v)}>
             <span>{limits.combo_bonus_threshold} コンボ以上(ダメージ +{Math.round(limits.combo_bonus_rate * 100)}%)</span>
           </CheckChip>
         </div>
-
-        <!-- 入場条件 -->
-        {#if target}
-          <div class="card">
-            <div class="card-head">
-              <span class="card-title">入場条件</span>
-              <span class="dim small">通るのは {clearCount} / {totalContents}</span>
-            </div>
-            {#if target.content.requirements.length === 0}
-              <p class="buff-note dim">{target.content.name} に入場条件はありません。</p>
-            {:else if targetEval}
-              <RequirementList checks={targetEval.checks} />
-              {#if hasEquipmentReq}
-                <!-- 装備条件は突き/斬り/魔攻/魔防/複合の別条件で、使うスキルの依存で比較先が決まる -->
-                <p class="buff-note dim">
-                  装備条件は選択中のスキル{skill ? `「${skill.name}」` : ""}の依存で判定しています(突き / 斬り / 魔攻 / 魔防 / 複合のいずれか 1 つを満たせば OK)。
-                </p>
-              {/if}
-            {/if}
-            {#if target.content.entry_note}
-              <p class="entry-note">{target.content.entry_note}</p>
-            {/if}
-            {#if target.content.team_note}
-              <p class="buff-note dim">チーム条件: {target.content.team_note}</p>
-            {/if}
-          </div>
-        {/if}
       {:else}
         <p class="empty dim">キャラを選択してください。</p>
       {/if}
@@ -1996,7 +2200,7 @@
   .pop {
     position: absolute; left: 10px; right: 10px; top: 88px; z-index: 41;
     max-height: 262px; overflow-y: auto; overscroll-behavior: contain;
-    border-radius: var(--r-window); background: var(--bg-field); border: 1px solid #687287;
+    border-radius: var(--r-window); background: var(--bg-field); border: 1px solid var(--sel-bd);
     box-shadow: 0 10px 24px rgba(30, 44, 74, 0.3), inset 0 0 0 1px #fff;
   }
   .pop.gold { border-color: #A9821F; box-shadow: 0 10px 24px rgba(74, 60, 18, 0.28), inset 0 0 0 1px #fff; }
@@ -2081,24 +2285,12 @@
   .chain button.node { text-align: left; border-radius: var(--r-inset); }
   .chain button.node:hover { background: var(--bg-active); box-shadow: 0 0 0 4px var(--bg-active); }
   .chain button.node:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  /* まだデータが来ていない段。0 で埋めず、破線で「無い」と見せる(§00) */
-  /* まだデータが来ていない段は 1 行に畳む(§00 触らない場所は 1 行に)。
-     破線 = 「無い」の記号。0 で埋めない */
-  .chain .node.pending {
-    flex-direction: row; align-items: baseline; gap: 6px;
-    padding: 3px 9px; border-radius: var(--r-panel);
-    border: 1px dashed var(--border); background: var(--bg-rail);
-  }
-  .chain .node.pending .nv { font-size: 13px; color: var(--fg-off); }
-
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
 
   /* パネル(もし〜/なぜ) */
   .panel { margin-top: 11px; border-radius: var(--r-window); overflow: hidden; border: 1px solid var(--border-strong); background: var(--bg-field); }
-  .panel.purple { border-color: var(--sim); background: var(--sim-bg); }
   .panel-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 12px; text-align: left; }
-  .panel-head.purple { background: linear-gradient(180deg, var(--sim), var(--sim-strong)); border-bottom: 1px solid var(--sim-strong); }
   .panel-head.blue { background: linear-gradient(180deg, #DBE6F8, #AEC7F0); border-bottom: 1px solid var(--border-strong); cursor: pointer; }
   .panel-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: #fff; white-space: nowrap; }
   .panel-title.dark { color: var(--fg); }
@@ -2106,18 +2298,23 @@
   .panel-note.dark { color: #40536F; }
   .panel-body { padding: 11px 13px 12px; }
 
-  .whatif {
-    width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
-    border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
+  /* 足りない分をどう埋める? を 1 行に(旧: 紫のパネル)。押した場所は動かない(§00 03) */
+  .fill-line { margin-top: 8px; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .fill-btn {
+    min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 3px 6px;
+    border-radius: var(--r-inset); text-align: left; font-size: 10.5px;
   }
-  .whatif:last-child { margin-bottom: 0; }
-  .whatif:hover { border-color: var(--sim); background: #F7F6FC; }
-  .wi-main { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
-  .wi-label { min-width: 0; flex: 1; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cost { flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill); border: 1px solid; font-size: 8.5px; font-weight: 700; white-space: nowrap; }
-  .wi-nums { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; }
-  .wi-pct { font-size: 12.5px; font-weight: 700; color: var(--sim-fg); }
-  .wi-empty { margin: 0; padding: 9px 11px; font-size: 11px; line-height: 1.6; }
+  .fill-btn:hover:not(:disabled) { background: var(--state-temp-bg); }
+  .fill-label { min-width: 0; flex-shrink: 1; font-weight: 700; color: var(--sim-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fill-pct { flex-shrink: 0; font-weight: 700; color: var(--good); }
+  .fill-more-toggle { flex-shrink: 0; padding: 2px 6px; border-radius: var(--r-inset); font-size: 9px; color: var(--fg-muted); }
+  .fill-more-toggle:hover { color: var(--fg); background: var(--bg-active); }
+  .fill-list {
+    margin-top: 4px; padding: 5px 7px; display: flex; flex-direction: column; gap: 2px;
+    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
+  }
+  .fill-more-row { width: 100%; display: flex; align-items: center; gap: 8px; padding: 2px 3px; border-radius: var(--r-inset); text-align: left; }
+  .fill-more-row:hover:not(:disabled) { background: var(--bg-active); }
 
   .flow-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 9px; }
   .flow-line .strong { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
@@ -2187,7 +2384,7 @@
     margin: 2px 0 3px 8px; padding-left: 8px; border-left: 1px solid var(--border-soft);
   }
   .dt-note, .dt-expr { margin: 2px 0 0; font-size: 9px; line-height: 1.6; }
-  .dt-expr { font-family: var(--font-num); word-break: break-all; }
+  .dt-expr { font-family: var(--font-num); font-variant-numeric: tabular-nums; word-break: break-all; }
   .pierce-note { margin-top: 7px; display: flex; align-items: center; gap: 10px; font-size: 9.5px; color: var(--fg-muted); min-width: 0; }
   .def-warn { min-width: 0; flex: 1; text-align: right; font-family: var(--font); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .def-warn.bad { color: var(--danger); }
@@ -2233,8 +2430,10 @@
   .sim-delta.on { color: var(--fg-dim); }
   .sim-delta.on.up { color: var(--good); }
   .sim-delta.on.down { color: var(--danger); }
-  .sim-note-text { margin-top: 3px; font-size: 9px; line-height: 1.6; text-wrap: pretty; }
-  .sim-actions { margin-top: 8px; display: flex; gap: 7px; min-height: 30px; }
+  .sim-note-text { margin-top: 3px; font-size: 9px; line-height: 1.6; white-space: nowrap; }
+  .sim-actions { margin-top: 8px; display: flex; gap: 7px; }
+  /* 登録どおりのあいだは見せない。枠(高さ)だけ残す */
+  .sim-actions.idle { visibility: hidden; }
   .sim-actions .btn { flex: 1; }
 
   /* 高さを固定する。件数で行が増えると、下にある材料(装備・バフ)がずれる */
@@ -2258,13 +2457,35 @@
 
   /* .card-head / .small は app.css */
 
-  .pw { margin-top: 8px; }
-  .sw { margin-top: 8px; }
-  .eq-details { margin-top: 9px; border-top: 1px dashed var(--border-soft); }
-  .eq-details summary { padding: 8px 0 0; font-size: var(--t-label); color: var(--fg-muted); cursor: pointer; }
-  .eq-details summary:hover { color: var(--fg); }
-  .eq-grid { display: flex; flex-direction: column; gap: 7px; padding-top: 8px; }
   .eq-note { margin: 8px 0 0; font-size: 9.5px; line-height: 1.6; }
+
+  /* 極限スキル(2 枠の選択チップ)。§07 形態 3: 押して入れる / 押して外す */
+  .ultimate-chips { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .ultimate-chip {
+    width: 100%; display: flex; align-items: baseline; gap: 8px; padding: 6px 10px;
+    border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
+  }
+  .ultimate-chip:hover:not(:disabled) { border-color: var(--accent); }
+  .ultimate-chip:disabled { opacity: 0.5; }
+  .ultimate-chip.on { background: var(--sel); border-color: var(--sel-bd); box-shadow: inset 0 0 0 1px var(--sel-bd); }
+  .uc-name { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
+  .ultimate-chip.on .uc-name { color: var(--sel-fg); }
+  .uc-note { min-width: 0; flex: 1; text-align: right; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* エンチャントの伸びしろ。部位ごとに 現在/上限/MAX での伸び幅を横並びで見せる */
+  .enchant-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .enchant-row { display: flex; flex-direction: column; gap: 4px; }
+  .enchant-row-label { font-size: 10px; font-weight: 700; color: var(--fg-muted); }
+  .enchant-row-cols { display: flex; flex-direction: column; gap: 5px; }
+  .enchant-stat { display: flex; align-items: center; gap: 7px; }
+  .enchant-stat-label { flex-shrink: 0; width: 30px; font-size: 9.5px; color: var(--fg-muted); }
+  .enchant-gain { flex-shrink: 0; min-width: 84px; text-align: right; font-size: 9.5px; color: var(--fg-dim); }
+  .enchant-gain.up { color: var(--good); font-weight: 700; }
+  /* 上限が未収録(カタログ外で実測上限も未入力)の行。押すとキャラタブの装備編集へ */
+  .enchant-cap-unknown {
+    display: flex; align-items: center; gap: 8px; padding: 2px 0; background: none; border: none;
+    cursor: pointer; text-align: left; width: 100%;
+  }
 
   .side-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
   .side-tab {
@@ -2284,11 +2505,14 @@
   .calc-buff-set { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--fg-muted); }
   .calc-buff-set select { min-width: 160px; height: 28px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--bg-field); color: var(--fg); }
   .buff-chip {
-    padding: 4px 9px; border-radius: var(--r-pill);
+    display: inline-flex; align-items: center; padding: 4px 9px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border-soft);
     font-size: 10px; font-weight: 500; color: var(--fg-muted); white-space: nowrap;
   }
   .buff-chip:hover:not(:disabled) { border-color: var(--accent); }
+  .buff-chip-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  /* ON にしたチップの実際の寄与。写経しない(previewDamage のトレースから引く) */
+  .buff-chip-note { font-size: 8.5px; font-weight: 700; }
   .buff-chip.on {
     background: var(--sel);
     border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700;
@@ -2315,11 +2539,6 @@
   .buff-legend .lg.always { background: #CCF7FF; border-color: var(--sel-bd); color: var(--sel-fg); }
   .buff-legend .lg.extra { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
-  .entry-note {
-    margin: 8px 0 0; padding: 7px 9px; border-radius: var(--r-panel);
-    background: #FDF9EE; border: 1px solid var(--gold);
-    font-size: 9px; font-weight: 500; line-height: 1.6; color: var(--state-edge-fg);
-  }
   .buff-detail {
     margin-top: 7px; padding: 7px 9px; border-radius: var(--r-panel);
     background: var(--bg-panel); border: 1px dashed var(--border-soft);
@@ -2328,8 +2547,4 @@
   .bd-name { font-size: 10px; font-weight: 700; color: var(--fg-sub); }
   .bd-fixed { font-size: 10px; }
 
-  .card.adj summary { cursor: pointer; font-size: 11px; }
-  .adj-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
-
-  /* .reqs/.req/.req-label/.req-tag は app.css(ui/RequirementList.svelte 経由) */
 </style>

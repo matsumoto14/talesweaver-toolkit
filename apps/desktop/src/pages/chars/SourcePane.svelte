@@ -124,7 +124,7 @@
     },
     siena: { title: "シエナのオーラ", note: "部位ごとに登録し、装着中の 1 件だけが反映" },
     randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
-    title: { title: "称号", note: "表示中の 1 件だけが装備の基本能力値に乗る" },
+    title: { title: "称号", note: "表示中の 1 件だけ有効" },
     commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     skills: { title: "キャラスキル", note: "マスタリー(段ごとに 1 つ)と、自分・味方のスキル" },
@@ -278,7 +278,7 @@
   {:else if sourceId === "randomOption"}
     <RandomOptionPane {draft} {preview} {skills} {onOpenSource} />
   {:else if sourceId === "title"}
-    <TitlePane {draft} />
+    <TitlePane {draft} {skills} />
   {:else if sourceId === "commonSkill"}
     <CommonSkillPane {draft} {preview} />
   {:else if sourceId === "thesis"}

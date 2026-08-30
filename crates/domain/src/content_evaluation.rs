@@ -377,7 +377,7 @@ mod tests {
     use crate::mastery::Masteries;
     use crate::skill::{SkillDependency, SkillTarget};
     use crate::stat_sources::{build_modifiers, StatSources};
-    use crate::stats::{BaseStats, StatKind, StatModifierSet};
+    use crate::stats::{BaseStats, StatKind};
 
     const STAB_DEF: &[StatKind] = &[StatKind::Stab, StatKind::Def];
     const ELITE_SWORDSMAN: &[SkillEffect] = &[SkillEffect::StatRate {

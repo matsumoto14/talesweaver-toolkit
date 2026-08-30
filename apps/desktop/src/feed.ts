@@ -10,8 +10,6 @@ export interface FeedItem {
   source: FeedSource;
   kind?: FeedKind;
   title: string;
-  /** 元記事などアプリ外のリンク。無ければアプリ内で完結する行として扱う */
-  url?: string;
   /** 期限つきイベントの締切(ISO8601)。期限カードの選定にのみ使う(今回は生成しない) */
   deadline?: string;
   note?: string;

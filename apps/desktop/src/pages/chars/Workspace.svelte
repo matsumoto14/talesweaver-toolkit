@@ -25,10 +25,10 @@
   import { flip } from "svelte/animate";
   import { cubicOut } from "svelte/easing";
   import {
-    equipmentElementValues, errorLocation, errorMessage, previewEffectiveStats, resolveCharacterSkillEffects,
+    errorLocation, errorMessage, previewEffectiveStats, resolveCharacterSkillEffects,
   } from "../../api/commands";
   import type {
-    CharacterSkillEffectsView, CommonSkills, Element, ElementValues, Equipment, EquipmentPart, PartSlot,
+    CharacterSkillEffectsView, CommonSkills, Equipment, EquipmentPart, PartSlot,
     RegisteredCharacter, StatPreview, StatSources,
   } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
@@ -37,7 +37,7 @@
   import { cloneEquipmentPart, randomOptionCount, sienaPartCount } from "../../equipment";
   import { fmtInt } from "../../format";
   import {
-    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
+    EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { app, characterSourceFocus, enqueueCharacterSave, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportNotice } from "../../toast.svelte";
@@ -345,11 +345,27 @@
   const monsterCardTotal = $derived(
     STAT_KINDS.reduce((s, k) => s + draft.statSources.monster_cards[k], 0),
   );
-  const soulLinkSummary = $derived(
-    preview
-      ? `基本 突+${preview.soul_link.equipment_values.thrust} / 斬+${preview.soul_link.equipment_values.slash} / 魔攻+${preview.soul_link.equipment_values.magic_attack} / 魔防+${preview.soul_link.equipment_values.magic_defense} ・ クリ+${Number((preview.soul_link.critical_damage_rate * 100).toFixed(1))}% ・ 最終+${Number((preview.soul_link.final_damage_rate * 100).toFixed(1))}% ・ 武器×${preview.soul_link.weapon_added_damage_multiplier.toFixed(1)}`
-      : "計算中",
-  );
+  // ソウルリンクは基本値 4 種 + クリ/最終/武器倍率の最大 7 項目を持つが、列幅 157px には
+  // 短い項目でも 2 つが精一杯。ゼロの基本値(例: 突+0)は出さず、効き方の強い順
+  // (最終ダメ → クリダメ → 武器倍率 → 基本値)に並べて先頭 2 件だけを残す
+  // (開いた先の ContribCard.svelte で全項目が見える)
+  const soulLinkSummary = $derived.by(() => {
+    if (!preview) return "計算中";
+    const v = preview.soul_link.equipment_values;
+    const finalPct = Number((preview.soul_link.final_damage_rate * 100).toFixed(1));
+    const critPct = Number((preview.soul_link.critical_damage_rate * 100).toFixed(1));
+    const weapon = preview.soul_link.weapon_added_damage_multiplier;
+    const candidates = [
+      finalPct > 0 ? `最終+${finalPct}%` : null,
+      critPct > 0 ? `クリ+${critPct}%` : null,
+      weapon > 1 ? `武器×${weapon.toFixed(1)}` : null,
+      v.thrust > 0 ? `突+${v.thrust}` : null,
+      v.slash > 0 ? `斬+${v.slash}` : null,
+      v.magic_attack > 0 ? `魔攻+${v.magic_attack}` : null,
+      v.magic_defense > 0 ? `魔防+${v.magic_defense}` : null,
+    ].filter((x): x is string => x !== null);
+    return candidates.length > 0 ? candidates.slice(0, 2).join(" ・ ") : NEUTRAL;
+  });
   const relicTotal = $derived(preview?.sacred_relic_total ?? 0);
   const skillCount = $derived(draft.statSources.character_skills.skill_ids.length);
   /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。行サブタイトルと共通スキルペインの
@@ -413,47 +429,21 @@
     if (unleashSummary !== "未使用") {
       parts.push(`解放 ${unleashSummary}`);
     }
-    return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
+    // 行の補足は 1 行に収まる分だけ。全部詰めると必ず切れる(実測: 4 項目は言うまでもなく、
+    // 2 項目でも「装備攻撃力 +20% ・ 装備防御力 物+144%」で列幅 157px を超えて切れる)ので、
+    // 一番効いている項目を 1 つだけ出す。全項目は開いた先のペインで見える
+    return parts.length === 0 ? NEUTRAL : parts.slice(0, 1).join(" ・ ");
   });
 
-  // 称号は 1 枠。表示中の 1 件だけが効く(wiki: 称号システム)
+  // 称号は 1 枠。表示中の 1 件だけが効く(wiki: 称号システム)。
+  // 列幅 157px には称号名(依存違いの変種は「- 斬り」まで含む)と値を両方出す余地が無いので、
+  // 一番効いている 1 値(ダメ増加があればそれ、無ければ装備基本能力値の合計)だけを添える
+  // (詳しい内訳は開いた先の TitlePane.svelte で見える)
   const titleSummary = $derived.by(() => {
     const t = app.titles.find((x) => x.id === draft.equipment.title);
     if (!t) return NEUTRAL;
-    const parts = [`合計 +${fmtInt(t.equipment_value_total)}`];
-    if (t.attack_damage_percent > 0) parts.unshift(`ダメ +${t.attack_damage_percent}%`);
-    return `${t.name}(${parts.join(" ・ ")})`;
-  });
-
-  const selectedEquipmentElement = $derived.by(() => {
-    const picked = app.elementSources.map((def) => draft.statSources.elements[def.id] ?? null);
-    const first = picked[0] ?? null;
-    return first !== null && picked.every((element) => element === first) ? first : null;
-  });
-
-  /** 装備の属性強化の合計(部位ごとに +9)。計算は Rust 側(Equipment::element_values) */
-  let equipmentElementTotals = $state<ElementValues | null>(null);
-  const elementLatest = latest({ debounce: 100 });
-  $effect(() => {
-    const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
-    const element = selectedEquipmentElement;
-    elementLatest.run((isCurrent) =>
-      equipmentElementValues(equipment, element)
-        .then((v) => { if (isCurrent()) equipmentElementTotals = v; })
-        .catch(() => { if (isCurrent()) equipmentElementTotals = null; }),
-    );
-    return () => elementLatest.cancel();
-  });
-
-  // 装備の属性強化 + 装備以外の供給源。0 の属性は出さない(全部 0 なら未設定扱い)
-  const elementSummary = $derived.by(() => {
-    const values = { ...equipmentElementTotals } as Record<Element, number>;
-    for (const def of app.elementSources) {
-      const element = draft.statSources.elements[def.id];
-      if (element) values[element] = (values[element] ?? 0) + def.value;
-    }
-    const parts = ELEMENTS.filter((e) => (values[e] ?? 0) > 0).map((e) => `${ELEMENT_LABELS[e]}${values[e]}`);
-    return parts.length === 0 ? NEUTRAL : parts.join(" / ");
+    const headline = t.attack_damage_percent > 0 ? `ダメ +${t.attack_damage_percent}%` : `合計 +${fmtInt(t.equipment_value_total)}`;
+    return `${t.name}(${headline})`;
   });
 
   // クリティカル率(wiki: 計算式まとめ #CriticalChance)。ここはペット会心と増加だけ。
@@ -471,7 +461,9 @@
     {
       id: "status",
       name: "キャラステータス",
-      sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel} ・ 属性 ${elementSummary}`,
+      // 一番効いている 2 項目(覚醒段階とエタの意志 Lv は能力値上限を決める)だけ。属性はここでは
+      // 出さない(開いた先のペインに出る。全部詰めると必ず切れる)
+      sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}`,
     },
     {
       id: "commonSkill",
@@ -692,6 +684,10 @@
     <span class="spacer"></span>
     <label class="buff-default">
       <span>いつものバフ</span>
+      <!-- バフセットはユーザーが増やしていくもので上限が無い。§07 形態 2(段階選択)は
+           「選択肢が有限で並べても横に溢れない」ときのもの(ui/StepSelect.svelte 冒頭コメント)。
+           いまは 2 件でも、セットが増えるたびに段が横に溢れて折り返すのでは意味が変わってしまう
+           ので、件数に関わらず select で固定する(機械監査「選択肢2は§07形態2に降ろせる」への回答) -->
       <select bind:value={draft.defaultBuffSetId}>
         <option value={null}>なし</option>
         {#each app.buffSets as set (set.id)}
@@ -878,7 +874,7 @@
   .src-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .src-unset {
     font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
-    background: #fff; border: 1px solid var(--border-strong); border-radius: var(--r-pill); padding: 0 6px;
+    background: var(--bg-field); border: 1px solid var(--border-strong); border-radius: var(--r-pill); padding: 0 6px;
     cursor: pointer;
   }
   .src-unset:hover { border-color: var(--accent); color: var(--accent); }

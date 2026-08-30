@@ -215,9 +215,9 @@ pub fn list_buff_catalog() -> Vec<BuffDefinition> {
     gamedata::buff_catalog()
 }
 
-/// バフセット単体の与ダメージカテゴリ合計。ゲームUIと同じカテゴリ名・上限を使う。
+/// バフセット単体の与ダメージカテゴリ合計 + バフ別配賦。ゲームUIと同じカテゴリ名・上限を使う。
 #[tauri::command]
-pub fn summarize_buff_selection(buffs: BuffSelection) -> CommandResult<Vec<domain::CategoryTrace>> {
+pub fn summarize_buff_selection(buffs: BuffSelection) -> CommandResult<domain::BuffDamageSummary> {
     domain::summarize_buff_selection(&buffs, &gamedata::buff_catalog())
         .map_err(|e| e.to_string().into())
 }
@@ -621,9 +621,41 @@ pub fn preview_defense(
     ))
 }
 
+/// スキル依存種別(`SkillDependency`)ごとに、エンチャントで見るべき装備値 2 種
+/// (`domain::enchant_dependency_keys` = 装備攻撃力係数が非 0 の 2 種)。
+/// フロントで「依存種別 → ステ 2 本」のルール表を持たないための静的テーブル
+/// (StatLimits と同じく起動時に 1 回だけ取得する)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EnchantDependencyKeys {
+    pub dependency: domain::SkillDependency,
+    pub keys: Vec<String>,
+}
+
+/// `domain::StatLimits` に `enchant_dependency_keys` を足したもの。gamedata(装備攻撃力係数)を
+/// 要る値なので domain 側には置けず(domain は gamedata に依存できない)、ここで合成する。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StatLimitsPayload {
+    #[serde(flatten)]
+    pub base: domain::StatLimits,
+    pub enchant_dependency_keys: Vec<EnchantDependencyKeys>,
+}
+
 #[tauri::command]
-pub fn get_stat_limits() -> domain::StatLimits {
-    domain::stat_sources::stat_limits()
+pub fn get_stat_limits() -> StatLimitsPayload {
+    let enchant_dependency_keys = domain::SkillDependency::ALL
+        .into_iter()
+        .map(|dependency| EnchantDependencyKeys {
+            dependency,
+            keys: domain::enchant_dependency_keys(&gamedata::equipment_coefficients(dependency))
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        })
+        .collect();
+    StatLimitsPayload {
+        base: domain::stat_sources::stat_limits(),
+        enchant_dependency_keys,
+    }
 }
 
 #[tauri::command]
@@ -1176,12 +1208,12 @@ pub fn list_upgrade_candidates(
         .parts
         .iter()
         .into_iter()
-        .filter_map(|(slot, part)| {
-            let item_id = part.item_id.as_deref()?;
-            let item = equipment_catalog.iter().find(|i| i.id == item_id)?;
-            Some((slot, item.enchant_caps))
-        })
+        .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
         .collect();
+    // エンチャント候補はこのコンテンツで実際に振る主軸スキル(skill_id)の依存ステだけに絞る
+    // (突き/斬り/魔攻/魔防の 4 種全部を出すと、主軸に効かない提案が混ざる)。
+    let enchant_allowed_keys =
+        domain::enchant_dependency_keys(&gamedata::equipment_coefficients(skill.dependency));
 
     let mut changes = domain::list_candidate_changes(
         &character.equipment,
@@ -1189,6 +1221,7 @@ pub fn list_upgrade_candidates(
         resolved_enhance_type(domain::PartSlot::Weapon),
         resolved_enhance_type(domain::PartSlot::Armor),
         &enchant_caps,
+        &enchant_allowed_keys,
     );
     changes.extend(weapon_update_changes(
         &character.equipment,
@@ -1223,6 +1256,136 @@ pub fn list_upgrade_candidates(
             })
         })
         .collect())
+}
+
+/// 「エンチャントの伸びしろ」1 行ぶん(部位 × ステ)。UI はこれを id ではなく
+/// `slot`/`key` で直接引き当てる(装備の行・列と 1:1 対応させるため)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EnchantGain {
+    pub slot: domain::PartSlot,
+    /// `EquipmentValues` のフィールド名("thrust"/"slash"/"magic_attack"/"magic_defense")
+    pub key: String,
+    /// 「MAX まで積むと base に対して何 % 伸びるか」(`rank_candidates` と同じ丸め)
+    pub delta_pct: i32,
+}
+
+/// 選択中スキルの依存ステだけに絞った、部位・ステごとの「MAX まで積むと +x%」。
+/// `list_upgrade_candidates` と同じ `enchant_candidates` + `rank_candidates` の経路を使う
+/// (伸び率の式をフロントに持たせない。丸め方の食い違いを起こさない)。改善しない(0%以下)組は
+/// `rank_candidates` が既に除外するので、返らない id はそのまま「伸びしろ無し」を意味する。
+#[tauri::command]
+pub fn list_enchant_gains(
+    character: NewCharacter,
+    buffs: BuffSelection,
+    skill_id: String,
+    content_id: String,
+    combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
+    temporary_adjustments: Option<domain::Adjustments>,
+) -> CommandResult<Vec<EnchantGain>> {
+    validate_character_draft(&character, &buffs)?;
+    let content = find_content(&content_id)?;
+    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
+    let skill = find_skill(&skill_id)?;
+    let style_dependency = character
+        .main_skill_id
+        .as_deref()
+        .map(find_skill)
+        .transpose()?
+        .map(|s| s.dependency);
+
+    let per_hit = |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<i64> {
+        let input = build_damage_input(
+            &character.base_stats,
+            &character.game_character_id,
+            style_dependency,
+            &character.stat_sources,
+            &buffs,
+            equipment,
+            common_skills,
+            character.awakening,
+            skill.clone(),
+            enemy.clone(),
+            &content,
+            combo_count,
+            combo_skill_type,
+            temporary_adjustments.clone(),
+        )?;
+        Ok(domain::calculate_damage(&input).per_hit_primary)
+    };
+
+    let base = per_hit(character.equipment.clone(), character.common_skills)?;
+
+    let equipment_catalog = gamedata::equipment_catalog();
+    let enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)> = character
+        .equipment
+        .parts
+        .iter()
+        .into_iter()
+        .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
+        .collect();
+    let enchant_allowed_keys =
+        domain::enchant_dependency_keys(&gamedata::equipment_coefficients(skill.dependency));
+
+    let changes = domain::enchant_candidates(
+        &character.equipment,
+        &character.common_skills,
+        &enchant_caps,
+        &enchant_allowed_keys,
+    );
+
+    let mut outcomes = Vec::with_capacity(changes.len());
+    for change in &changes {
+        let result = per_hit(change.equipment.clone(), change.common_skills)?;
+        outcomes.push((change.id.clone(), result));
+    }
+    let ranked = domain::rank_candidates(outcomes, base, None);
+
+    // id は "enchant-{slot:?}-{key}"(小文字化)形式だが、`{:?}` は元の PartSlot の
+    // 表記ゆれ(例: ShieldPlus → シリアライズは shield_plus だが Debug は shieldplus)を持つので
+    // id をパースし直さず、変更を組み立てた `changes` から slot/key を直接引く
+    let by_id: std::collections::HashMap<String, &domain::CandidateChange> =
+        changes.iter().map(|c| (c.id.clone(), c)).collect();
+    Ok(ranked
+        .into_iter()
+        .filter_map(|r| {
+            let change = by_id.get(&r.id)?;
+            let (slot, key) = enchant_id_slot_key(&character.equipment, change)?;
+            Some(EnchantGain {
+                slot,
+                key,
+                delta_pct: r.delta_pct,
+            })
+        })
+        .collect())
+}
+
+/// `enchant_candidates` が作った 1 候補から、実際に変わった部位・ステを引き当てる
+/// (id の文字列パースに頼らない。`domain::PartSlot::ALL` × 4 種の差分を見て特定する)。
+fn enchant_id_slot_key(
+    before: &domain::Equipment,
+    change: &domain::CandidateChange,
+) -> Option<(domain::PartSlot, String)> {
+    const KEYS: [(&str, fn(&domain::EquipmentValues) -> i64); 4] = [
+        ("thrust", |v| v.thrust),
+        ("slash", |v| v.slash),
+        ("magic_attack", |v| v.magic_attack),
+        ("magic_defense", |v| v.magic_defense),
+    ];
+    for slot in domain::PartSlot::ALL {
+        let Some(before_part) = before.parts.get(slot).selected() else {
+            continue;
+        };
+        let Some(after_part) = change.equipment.parts.get(slot).selected() else {
+            continue;
+        };
+        for (key, get) in KEYS {
+            if get(&after_part.enchant) != get(&before_part.enchant) {
+                return Some((slot, key.to_string()));
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]

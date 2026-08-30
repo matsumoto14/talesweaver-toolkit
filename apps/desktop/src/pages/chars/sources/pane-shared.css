@@ -86,7 +86,7 @@
   .fixed-value { font-size: 11px; font-weight: 500; }
   /* マスタリー待ちで値が決まらないものは破線で出す(0 や空白で埋めない。§03) */
   .fixed-value.unknown {
-    padding: 0 4px; border: 1px dashed var(--border); border-radius: 4px; opacity: 0.6;
+    padding: 0 4px; border: 1px dashed var(--border); border-radius: var(--r-inset); opacity: 0.6;
   }
 
   /* 装備ドリルダウン: 部位一覧 */
@@ -152,11 +152,14 @@
     color: var(--state-met-fg); background: var(--state-met-bg);
     border: 1px solid var(--state-met-bd); border-radius: var(--r-pill); padding: 0 6px;
   }
-  /* 変種も同じ 1 行に置く。単独称号と高さをそろえ、一覧をリズムよく追えるようにする */
+  /* 変種も同じ 1 行に置く。単独称号と高さをそろえ、一覧をリズムよく追えるようにする。
+     未選択のあいだは行自体が「既定の変種を選ぶ」ボタン(cursor: pointer)。選択中は
+     変種チップがその場を引き継ぐので、行としては押しても動かない(cursor: default) */
   .item-row.group {
-    display: flex; align-items: center; gap: 7px; cursor: default;
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
   }
-  .item-row.group:hover { border-color: var(--border); }
+  .item-row.group.on { cursor: default; }
+  .item-row.group:not(.on):hover { border-color: var(--accent); }
   .title-list > .item-row { height: 40px; min-height: 40px; overflow: hidden; }
   /* 名前が消えると「どの称号か」が分からなくなる。変種チップより名前を先に確保する(§00 05) */
   .title-list .item-name { flex: 1; min-width: 5.5em; }
@@ -217,11 +220,12 @@
   .ext-note { display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted); }
   .ext-value { font-size: 12.5px; font-weight: 700; min-width: 56px; text-align: right; }
 
-  /* 称号のダメージ増加。補正値と効き方が違うので値の要約と分けて出す */
+  /* 称号のダメージ増加。読み取り専用の値なのでインセット(白 = 編集できる面と区別する。§01/§02)。
+     補正値と効き方が違うので値の要約とも分けて出す */
   .title-dmg {
     flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
-    color: var(--sel-fg); background: var(--sel);
-    border: 1px solid var(--sel-bd); border-radius: var(--r-pill);
+    color: var(--fg-sub); background: var(--surface-inset);
+    border: 1px solid var(--border-soft); border-radius: var(--r-pill);
   }
   .title-extra {
     flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;

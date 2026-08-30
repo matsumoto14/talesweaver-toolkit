@@ -35,7 +35,7 @@
   .sheet-char { min-width: 0; flex: 1; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* 金 = 「行ける?」(CalcPage)。中に .pop の絶対配置ポップを持つので position: relative が要る */
-  .sheet-card.gold { position: relative; border-color: #687287; box-shadow: 0 1px 0 rgba(121, 140, 172, 0.4); }
+  .sheet-card.gold { position: relative; border-color: var(--sel-bd); box-shadow: 0 1px 0 rgba(121, 140, 172, 0.4); }
   .sheet-card.gold .sheet-head { padding: 7px 13px; background: linear-gradient(180deg, #F2E3BD, #DCC27E); border-bottom: 1px solid #BFA155; }
   .sheet-card.gold .gem { background: linear-gradient(160deg, #fff, #C9A227); border: 1px solid #A9821F; }
   .sheet-card.gold .sheet-title { font-size: 11px; letter-spacing: 0.08em; color: #4A3C12; }

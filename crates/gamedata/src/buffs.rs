@@ -667,6 +667,7 @@ mod tests {
         };
         let summary = domain::summarize_buff_selection(&buffs, &catalog).unwrap();
         let isabel = summary
+            .categories
             .iter()
             .find(|row| row.category == DamageCategory::AttackDamageIsabel)
             .unwrap();

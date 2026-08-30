@@ -23,7 +23,10 @@ use crate::equipment::{
 use crate::random_option::RandomOptionTotals;
 use crate::rounding::{floor_int, trunc2};
 use crate::skill::Skill;
-use crate::stat_sources::{apply_pins, fill_contribution_effects, Adjustments, StatContribution};
+use crate::stat_sources::{
+    apply_pins, contribution_source_effects, fill_contribution_effects, Adjustments, StatContribution,
+    StatSourceEffect,
+};
 use crate::stats::{effective_stats, BaseStats, StatModifierSet, StatTrace};
 
 /// 与ダメージ式のカテゴリ集計 1 行ぶんの寄与(トレース表示用)。「なぜこの数字?」パネルの
@@ -222,8 +225,12 @@ pub struct DamageTrace {
     /// 攻撃力(A)の内訳(ステ攻撃力 / 装備攻撃力 / 強化倍率の加算分)
     pub attack: AttackPowerBreakdown,
     /// ステ補正源(ペット/ルーン/クラウン/聖物/バフ/調整値)の寄与内訳。
-    /// `effect` に「そのステを何ポイント動かしたか」の実数が入っている
+    /// `effect` は「層のステップ幅」(倍率A/B を持つ補正源が増幅ぶんを自分の行で受け取る)であって、
+    /// その補正源単体の実質的な影響ではない。1 件の実質的な影響が要るときは `stat_source_effects` を使う
     pub stat_contributions: Vec<StatContribution>,
+    /// 補正源 1 件ぶんの帰属(「この要因が無かったら最終能力値がいくつ動くか」、倍率A/B の増幅込み)。
+    /// `Σ per-source == 最終 − 素ステ` が常に厳密に成り立つ(`contribution_source_effects`)
+    pub stat_source_effects: Vec<StatSourceEffect>,
     /// ステ攻撃力に実際に使っている依存ステごとの内訳(能力値・係数・寄与)。
     /// 合計 = ステ攻撃力
     pub stat_attack_parts: Vec<StatAttackPart>,
@@ -939,6 +946,12 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
                 );
                 contributions
             },
+            stat_source_effects: contribution_source_effects(
+                &input.stat_contributions,
+                &input.base_stats,
+                &input.stat_modifiers,
+                input.stat_cap,
+            ),
             stat_attack_parts: attack_parts,
             categories: totals_max.trace(),
             category_contributions,

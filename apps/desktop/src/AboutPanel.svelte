@@ -79,8 +79,8 @@
           <b>Tale Wiki</b>(talewiki.com)を一次ソースとして取り込んでいます。
         </p>
         <p>
-          一部の敵ステータスは、せせなぎさんが公開している実測・検証情報を参考に収録しています。
-          また、ダメージ計算の仕様整理と結果の照合には、同氏のダメージ計算ツールを参考にしています。
+          一部のステータスや計算式などは、せせなぎさんが公開している実測・検証情報や
+          ダメージ計算ツールを参考に収録・整理しています。
         </p>
         <p class="muted">
           参考にした公開情報・ツール:
@@ -94,10 +94,6 @@
         </p>
         <p class="muted">
           この記載は公開情報へのクレジットであり、本ツールの公認・監修・共同開発を示すものではありません。
-        </p>
-        <p class="muted">
-          wiki に記載が無く、コミュニティの実測値に依っている数値は、画面上で
-          <span class="provisional">[仮]</span> と表示しています。
         </p>
       </div>
 
@@ -160,16 +156,16 @@
   .card p:last-child { margin-bottom: 0; }
   .card p.muted { color: var(--fg-muted); }
 
-  .version { font-size: 20px; font-weight: var(--w-strong); }
+  .version { font-size: 19px; font-weight: var(--w-strong); }
   .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
   .path {
     padding: 6px 8px; margin: 4px 0 8px;
     font-family: var(--font-num); font-size: 10.5px; color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
     word-break: break-all;
   }
 
-  .provisional { color: var(--accent); font-weight: var(--w-strong); }
   .source-link {
     color: var(--accent); font-weight: var(--w-strong);
     text-decoration: underline; text-underline-offset: 2px;

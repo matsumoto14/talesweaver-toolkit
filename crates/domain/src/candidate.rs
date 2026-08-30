@@ -9,10 +9,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::common_skill::{CommonSkills, STRONG_WEAPON_LEVEL_MAX};
+use crate::common_skill::{
+    CommonSkills, POWER_WEAPON_RATE, STRONG_WEAPON_LEVEL_MAX, STRONG_WEAPON_RATE_PER_LEVEL,
+};
 use crate::equipment::{
-    Equipment, EquipmentEnhanceType, EquipmentValues, EnhanceGrade, PartSlot,
-    ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN,
+    Equipment, EquipmentCoefficients, EquipmentEnhanceType, EquipmentRates, EquipmentValues, EnhanceGrade,
+    PartSlot, ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN,
 };
 use crate::siena::SIENA_STAGE_MAX;
 
@@ -33,9 +35,6 @@ pub enum CandidateCost {
     Aura,
 }
 
-/// エンチャントの「次の切りの良い段階」の刻み幅。
-pub const ENCHANT_STEP: i64 = 10;
-
 /// 候補 1 件ぶんの変更(適用済み)。呼び出し側はこれをそのまま元キャラの
 /// `equipment`/`common_skills` に差し替えて試算する。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -55,7 +54,7 @@ pub fn quick_win_candidates(equipment: &Equipment, common_skills: &CommonSkills)
         skills.power_weapon = true;
         out.push(CandidateChange {
             id: "pw".to_string(),
-            label: "パワーウェポンを ON に".to_string(),
+            label: format!("パワーウェポンを ON に(装備攻撃力強化 +{}%)", (POWER_WEAPON_RATE * 100.0).round() as i64),
             cost: CandidateCost::QuickWin,
             equipment: equipment.clone(),
             common_skills: skills,
@@ -66,9 +65,13 @@ pub fn quick_win_candidates(equipment: &Equipment, common_skills: &CommonSkills)
         skills.strong_weapon_level = STRONG_WEAPON_LEVEL_MAX;
         // Lv2 以降はオーグメントの Lv が要る(wiki Skill/共通)
         skills.augment_level = skills.augment_level.max(STRONG_WEAPON_LEVEL_MAX - 1);
+        let rate = f64::from(STRONG_WEAPON_LEVEL_MAX) * STRONG_WEAPON_RATE_PER_LEVEL;
         out.push(CandidateChange {
             id: "sw".to_string(),
-            label: format!("ストロングウェポンを Lv{STRONG_WEAPON_LEVEL_MAX} に"),
+            label: format!(
+                "ストロングウェポンを Lv{STRONG_WEAPON_LEVEL_MAX} に(装備攻撃力強化 +{}%)",
+                (rate * 100.0).round() as i64
+            ),
             cost: CandidateCost::QuickWin,
             equipment: equipment.clone(),
             common_skills: skills,
@@ -96,9 +99,6 @@ pub fn enhance_candidates(
         let Some(part) = equipment.parts.get(slot).selected() else {
             continue;
         };
-        if part.item_id.is_none() {
-            continue;
-        }
         let Some(kind) = resolved_type else {
             continue;
         };
@@ -120,7 +120,7 @@ pub fn enhance_candidates(
         }
         out.push(CandidateChange {
             id: format!("enhance-{slot:?}").to_lowercase(),
-            label: format!("{}の強化を +{new_level} に", slot.label()),
+            label: format!("{}の強化 +{} → +{new_level}", slot.label(), part.enhance_level),
             cost: CandidateCost::Enhance,
             equipment: eq,
             common_skills: *common_skills,
@@ -129,60 +129,90 @@ pub fn enhance_candidates(
     out
 }
 
-/// 値 1 つを「次の切りの良い段階」(`ENCHANT_STEP` の次の倍数、上限で丸め)へ進める。
-fn step_enchant_value(current: i64, cap: i64) -> i64 {
-    if current >= cap {
-        return current;
-    }
-    (((current / ENCHANT_STEP) + 1) * ENCHANT_STEP).min(cap)
+/// エンチャントの候補にする 4 種(与ダメージ式に入る値だけ。命中/Cri補正/回避/敏捷は
+/// この一覧の目的の外なので出さない)。`(serde キー, 表示名, getter, setter)`。
+const ENCHANT_CANDIDATE_FIELDS: [(
+    &str,
+    &str,
+    fn(&EquipmentValues) -> i64,
+    fn(&mut EquipmentValues, i64),
+); 4] = [
+    ("thrust", EquipmentValues::THRUST_LABEL, |v| v.thrust, |v, x| v.thrust = x),
+    ("slash", EquipmentValues::SLASH_LABEL, |v| v.slash, |v, x| v.slash = x),
+    ("magic_attack", EquipmentValues::MAGIC_ATTACK_LABEL, |v| v.magic_attack, |v, x| {
+        v.magic_attack = x
+    }),
+    ("magic_defense", EquipmentValues::MAGIC_DEFENSE_LABEL, |v| v.magic_defense, |v, x| {
+        v.magic_defense = x
+    }),
+];
+
+/// スキル依存種別(`SkillDependency`)が実際に装備攻撃力へ効かせる装備値 2 種(装備攻撃力係数が
+/// 基本/強化のどちらかで非 0 のもの)。エンチャント候補をこの 2 種に絞るのに使う
+/// (命中/Cri/回避/敏捷はこの一覧の目的の外なので、そもそも `ENCHANT_CANDIDATE_FIELDS` に無い)。
+/// ゲームのルール表(依存種別 → 見るステ)を UI 側に持たせず、装備攻撃力係数(gamedata)という
+/// 既存の唯一の正から引く。
+pub fn enchant_dependency_keys(coefficients: &EquipmentCoefficients) -> Vec<&'static str> {
+    ENCHANT_CANDIDATE_FIELDS
+        .iter()
+        .filter(|&&(key, _, _, _)| {
+            let rate = |r: &EquipmentRates| match key {
+                "thrust" => r.thrust,
+                "slash" => r.slash,
+                "magic_attack" => r.magic_attack,
+                "magic_defense" => r.magic_defense,
+                _ => 0.0,
+            };
+            rate(&coefficients.base) != 0.0 || rate(&coefficients.enhanced) != 0.0
+        })
+        .map(|&(key, _, _, _)| key)
+        .collect()
 }
 
-fn step_enchant(current: EquipmentValues, cap: EquipmentValues) -> EquipmentValues {
-    EquipmentValues {
-        thrust: step_enchant_value(current.thrust, cap.thrust),
-        slash: step_enchant_value(current.slash, cap.slash),
-        physical_defense: step_enchant_value(current.physical_defense, cap.physical_defense),
-        magic_attack: step_enchant_value(current.magic_attack, cap.magic_attack),
-        magic_defense: step_enchant_value(current.magic_defense, cap.magic_defense),
-        accuracy: step_enchant_value(current.accuracy, cap.accuracy),
-        critical: step_enchant_value(current.critical, cap.critical),
-        evasion: step_enchant_value(current.evasion, cap.evasion),
-        agility: step_enchant_value(current.agility, cap.agility),
-    }
-}
-
-/// 部位別のエンチャント刻み。`caps` は呼び出し側がカタログから引いた部位ごとの
-/// エンチャント上限(カタログ item が付いている部位だけ渡ってくる)。
+/// 部位・ステごとに「上限まで積んだ場合」を候補にする(ユーザー指摘: 中途半端な刻みは
+/// 効果がほぼ無く、`rank_candidates` の順位も意味を持たない。上限まで一気に進める)。
+/// `caps` は呼び出し側がカタログから引いた部位ごとのエンチャント上限
+/// (カタログ item が付いている部位だけ渡ってくる)。`allowed_keys` は候補にするステ
+/// (`enchant_dependency_keys` で絞ったもの。空なら絞らず 4 種すべてを候補にする)。
 pub fn enchant_candidates(
     equipment: &Equipment,
     common_skills: &CommonSkills,
     caps: &[(PartSlot, EquipmentValues)],
+    allowed_keys: &[&str],
 ) -> Vec<CandidateChange> {
     let mut out = Vec::new();
     for &(slot, cap) in caps {
         let Some(part) = equipment.parts.get(slot).selected() else {
             continue;
         };
-        if part.item_id.is_none() {
-            continue;
+        for &(key, label, get, set) in &ENCHANT_CANDIDATE_FIELDS {
+            if !allowed_keys.is_empty() && !allowed_keys.contains(&key) {
+                continue;
+            }
+            let current = get(&part.enchant);
+            let max = get(&cap);
+            if current >= max {
+                continue;
+            }
+            let mut eq = equipment.clone();
+            let mut_part = eq
+                .parts
+                .get_mut(slot)
+                .selected_mut()
+                .expect("selected part exists (checked above)");
+            set(&mut mut_part.enchant, max);
+            out.push(CandidateChange {
+                id: format!("enchant-{slot:?}-{key}").to_lowercase(),
+                label: format!(
+                    "{}のエンチャント {label} +{}({current} → {max} 上限)",
+                    slot.label(),
+                    max - current,
+                ),
+                cost: CandidateCost::Enchant,
+                equipment: eq,
+                common_skills: *common_skills,
+            });
         }
-        let target = step_enchant(part.enchant, cap);
-        if target == part.enchant {
-            continue;
-        }
-        let mut eq = equipment.clone();
-        eq.parts
-            .get_mut(slot)
-            .selected_mut()
-            .expect("selected part exists (checked above)")
-            .enchant = target;
-        out.push(CandidateChange {
-            id: format!("enchant-{slot:?}").to_lowercase(),
-            label: format!("{}のエンチャントを次の段階へ", slot.label()),
-            cost: CandidateCost::Enchant,
-            equipment: eq,
-            common_skills: *common_skills,
-        });
     }
     out
 }
@@ -198,6 +228,7 @@ pub fn aura_candidates(equipment: &Equipment, common_skills: &CommonSkills) -> V
         let Some(seed) = aura.slots.iter().max_by_key(|s| s.value).copied() else {
             continue;
         };
+        let old_stage = aura.stage();
         let mut eq = equipment.clone();
         let entry = eq
             .siena
@@ -210,7 +241,7 @@ pub fn aura_candidates(equipment: &Equipment, common_skills: &CommonSkills) -> V
         out.push(CandidateChange {
             id: format!("aura-{slot:?}").to_lowercase(),
             label: format!(
-                "{}のオーラを{new_stage}段階に({}で試算)",
+                "{}のオーラ {old_stage} → {new_stage}段階({}で試算)",
                 slot.label(),
                 seed.kind.label()
             ),
@@ -230,6 +261,7 @@ pub fn list_candidate_changes(
     weapon_enhance_type: Option<EquipmentEnhanceType>,
     armor_enhance_type: Option<EquipmentEnhanceType>,
     enchant_caps: &[(PartSlot, EquipmentValues)],
+    enchant_allowed_keys: &[&str],
 ) -> Vec<CandidateChange> {
     let mut out = quick_win_candidates(equipment, common_skills);
     out.extend(enhance_candidates(
@@ -238,7 +270,12 @@ pub fn list_candidate_changes(
         weapon_enhance_type,
         armor_enhance_type,
     ));
-    out.extend(enchant_candidates(equipment, common_skills, enchant_caps));
+    out.extend(enchant_candidates(
+        equipment,
+        common_skills,
+        enchant_caps,
+        enchant_allowed_keys,
+    ));
     out.extend(aura_candidates(equipment, common_skills));
     out
 }
@@ -355,6 +392,26 @@ mod tests {
     }
 
     #[test]
+    fn 強化候補はカスタム装備でも種別が解決できれば出る() {
+        // item_id が無い(カタログ外)装備でも、part.enhance_type が入っていて
+        // 呼び出し側の解決結果(resolved_type)が Some なら候補に上がる。
+        let mut equipment = Equipment::default();
+        let mut part = EquipmentPart::default();
+        part.enhance_type = Some(EquipmentEnhanceType::WeaponStab);
+        equipment.parts.weapon = EquipmentPartList::from(part);
+        let common_skills = CommonSkills::default();
+        let candidates = enhance_candidates(
+            &equipment,
+            &common_skills,
+            Some(EquipmentEnhanceType::WeaponStab),
+            None,
+        );
+        assert_eq!(candidates.len(), 1);
+        let part = candidates[0].equipment.parts.weapon.selected().unwrap();
+        assert_eq!(part.enhance_level, 1);
+    }
+
+    #[test]
     fn 強化候補は12到達で等級を自動で埋める() {
         let mut equipment = Equipment::default();
         let mut part = catalog_part("w1");
@@ -392,11 +449,33 @@ mod tests {
     }
 
     #[test]
-    fn エンチャントは次の10刻みへ上限で丸める() {
+    fn 依存ステの絞り込みは係数が非0の2種だけ残す() {
+        let coefficients = EquipmentCoefficients {
+            base: EquipmentRates {
+                thrust: 0.0,
+                slash: 14.5,
+                magic_attack: 14.5,
+                magic_defense: 0.0,
+            },
+            enhanced: EquipmentRates {
+                thrust: 0.0,
+                slash: 28.75,
+                magic_attack: 28.75,
+                magic_defense: 0.0,
+            },
+        };
+        let keys = enchant_dependency_keys(&coefficients);
+        assert_eq!(keys, vec!["slash", "magic_attack"]);
+    }
+
+    #[test]
+    fn エンチャント候補は依存ステで絞り込める() {
         let mut equipment = Equipment::default();
         let mut part = catalog_part("w1");
         part.enchant = EquipmentValues {
-            thrust: 23,
+            thrust: 10,
+            slash: 10,
+            magic_attack: 10,
             ..Default::default()
         };
         equipment.parts.weapon = EquipmentPartList::from(part);
@@ -405,13 +484,87 @@ mod tests {
             PartSlot::Weapon,
             EquipmentValues {
                 thrust: 100,
+                slash: 100,
+                magic_attack: 100,
                 ..Default::default()
             },
         )];
-        let candidates = enchant_candidates(&equipment, &common_skills, &caps);
+        // 斬りだけに絞ると、突き・魔攻の候補は出ない
+        let candidates = enchant_candidates(&equipment, &common_skills, &caps, &["slash"]);
         assert_eq!(candidates.len(), 1);
-        let applied = candidates[0].equipment.parts.weapon.selected().unwrap();
-        assert_eq!(applied.enchant.thrust, 30);
+        assert_eq!(candidates[0].id, "enchant-weapon-slash");
+    }
+
+    #[test]
+    fn エンチャント候補はカタログ外装備でも上限が解決できれば出る() {
+        // item_id が無い(カスタム)装備でも、呼び出し側が resolve_enchant_caps で
+        // 実測上限を解決していれば caps に載り、候補に上がる。
+        let mut equipment = Equipment::default();
+        let mut part = EquipmentPart::default();
+        part.enchant = EquipmentValues {
+            thrust: 10,
+            ..Default::default()
+        };
+        equipment.parts.weapon = EquipmentPartList::from(part);
+        let common_skills = CommonSkills::default();
+        let caps = [(
+            PartSlot::Weapon,
+            EquipmentValues {
+                thrust: 50,
+                ..Default::default()
+            },
+        )];
+        let candidates = enchant_candidates(&equipment, &common_skills, &caps, &[]);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].id, "enchant-weapon-thrust");
+    }
+
+    #[test]
+    fn エンチャント候補はカタログ外装備で上限未解決なら出ない() {
+        // caps に載らない(呼び出し側が未収録と判断した)部位は候補にしない。
+        let mut equipment = Equipment::default();
+        let mut part = EquipmentPart::default();
+        part.enchant = EquipmentValues {
+            thrust: 10,
+            ..Default::default()
+        };
+        equipment.parts.weapon = EquipmentPartList::from(part);
+        let common_skills = CommonSkills::default();
+        assert!(enchant_candidates(&equipment, &common_skills, &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn エンチャントは上限まで一気に進む() {
+        let mut equipment = Equipment::default();
+        let mut part = catalog_part("w1");
+        part.enchant = EquipmentValues {
+            thrust: 23,
+            slash: 10,
+            ..Default::default()
+        };
+        equipment.parts.weapon = EquipmentPartList::from(part);
+        let common_skills = CommonSkills::default();
+        let caps = [(
+            PartSlot::Weapon,
+            EquipmentValues {
+                thrust: 100,
+                slash: 50,
+                ..Default::default()
+            },
+        )];
+        let candidates = enchant_candidates(&equipment, &common_skills, &caps, &[]);
+        // 突き・斬りそれぞれ 1 候補ずつ(魔攻/魔防は現在も上限も 0 なので出ない)
+        assert_eq!(candidates.len(), 2);
+        let thrust = candidates.iter().find(|c| c.id == "enchant-weapon-thrust").unwrap();
+        let applied = thrust.equipment.parts.weapon.selected().unwrap();
+        // 上限までまとめて進み、他フィールドは変えない
+        assert_eq!(applied.enchant.thrust, 100);
+        assert_eq!(applied.enchant.slash, 10);
+        assert!(thrust.label.contains("+77"));
+        assert!(thrust.label.contains("23"));
+        assert!(thrust.label.contains("100"));
+        let slash = candidates.iter().find(|c| c.id == "enchant-weapon-slash").unwrap();
+        assert!(slash.label.contains("+40"));
     }
 
     #[test]
@@ -431,7 +584,7 @@ mod tests {
                 ..Default::default()
             },
         )];
-        assert!(enchant_candidates(&equipment, &common_skills, &caps).is_empty());
+        assert!(enchant_candidates(&equipment, &common_skills, &caps, &[]).is_empty());
     }
 
     #[test]
@@ -479,7 +632,7 @@ mod tests {
     fn 列挙は装備未登録オーラなしでもパニックしない() {
         let equipment = Equipment::default();
         let common_skills = CommonSkills::default();
-        let changes = list_candidate_changes(&equipment, &common_skills, None, None, &[]);
+        let changes = list_candidate_changes(&equipment, &common_skills, None, None, &[], &[]);
         // PW/SW のクイックウィンだけは常に出る
         assert_eq!(changes.len(), 2);
     }

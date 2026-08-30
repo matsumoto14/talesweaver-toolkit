@@ -7,7 +7,7 @@
   import { damageCategoryLabel } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import {
-    applyEnhanceLevel, clampToCaps, equipmentIconId, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
+    applyCatalogItem, applyEnhanceLevel, equipmentIconId, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
   } from "../../../equipment";
   import { fmtInt } from "../../../format";
   import {
@@ -308,19 +308,11 @@
     return custom ? `${custom} [仮]` : "未装備";
   };
 
+  // カタログ品を当てる規則は equipment.ts の applyCatalogItem 1 本だけに置く。
+  // こことホーム(レリック段数ステッパー)で同じ規則を二重に書くと、片方だけ直す事故が起きる。
   function pickCatalogItem(slot: PartSlot, item: EquipmentItem, keepPickerOpen = false) {
     const part = selectedPart(slot);
-    part.item_id = item.id;
-    part.custom_name = null;
-    part.base = { ...item.values_max };
-    part.enchant = clampToCaps(part.enchant, item.enchant_caps);
-    part.enhance_type = item.enhance_type;
-    replaceAbilities(part, part.abilities.slice(0, item.ability_slots));
-    if (item.ability_slots === 0) {
-      part.ability_values = [];
-      part.ability_additions = [];
-    }
-    part.random_options = part.random_options.slice(0, item.random_option_slots ?? 0);
+    Object.assign(part, applyCatalogItem(part, item));
     itemQuery = "";
     itemPickerOpen = keepPickerOpen;
   }
@@ -954,12 +946,40 @@
       <div class="base-value-toolbar">
         <span class="base-value-copy" title={item === null ? "カタログ外のため入力" : "数値を押すと例外編集"}><b>装備本体</b><small>{item === null ? "入力" : "自動"}</small></span>
       </div>
+      {#if item === null}
+        {@const capStats = EQUIPMENT_STAT_KINDS.filter((k) => part.enchant[k] > 0 || (part.enchant_caps?.[k] ?? 0) > 0)}
+        <div class="card custom-enchant-caps">
+          <div class="card-title inline">
+            <span>エンチャント上限</span>
+            <span class="dim small">カタログ外は自動で分からないため実測値を入力</span>
+          </div>
+          {#if capStats.length === 0}
+            <p class="hint dim">下でエンチャント値を入れると、ここにその補正の上限入力が出ます。</p>
+          {:else}
+            <div class="stat-rows custom-enchant-cap-rows">
+              {#each capStats as k (k)}
+                <div class="stat-row">
+                  <span class="k">{EQUIPMENT_STAT_SHORT[k]}</span>
+                  <StatInput
+                    label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント上限" hideLabel gauge={false}
+                    min={0} max={limits.equipment_value_max}
+                    bind:value={
+                      () => part.enchant_caps?.[k] ?? 0,
+                      (v) => { part.enchant_caps = { ...(part.enchant_caps ?? zeroValues()), [k]: v }; }
+                    }
+                  />
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
       <div class="values-paired enchant-first">
         {#each visibleEquipmentStats as k, index (k)}
-          {@const cap = item ? item.enchant_caps[k] : limits.equipment_value_max}
+          {@const cap = item ? item.enchant_caps[k] : (part.enchant_caps?.[k] ?? null)}
           {@const abilityValue = partAbilityValues(slot)[k]}
           {@const displayTotal = part.base[k] + partEnchantValues(slot)[k] + abilityValue}
-          {@const completionPlan = enchantCompletionPlan(cap - part.enchant[k])}
+          {@const completionPlan = cap !== null ? enchantCompletionPlan(cap - part.enchant[k]) : null}
           <div
             class="value-pair"
             class:plan-stat={enchantPlanStats.includes(k)}
@@ -978,13 +998,14 @@
                 <span class="ability-spacer" aria-hidden="true"></span>
               {/if}
               <div class="equation-enchant">
-                <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap} strictMax={item !== null} increments={[12, 14, 17, 20]} bind:value={part.enchant[k]} />
+                <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap ?? 0} strictMax={cap !== null} increments={[12, 14, 17, 20]} bind:value={part.enchant[k]} />
+                {#if cap === null}<span class="coverage" title="この補正のエンチャント上限が未収録です。上のエンチャント上限で入力してください">?</span>{/if}
               </div>
               <div class="equation-base">
                 <StatInput label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正" hideLabel min={0} max={item?.growth_cap ?? limits.equipment_value_max} gauge={false} readAsText={item !== null} bind:value={part.base[k]} />
               </div>
             </div>
-            {#if item !== null && enchantPlanStats.includes(k)}
+            {#if completionPlan !== null && enchantPlanStats.includes(k)}
               <div
                 class="enchant-plan"
                 class:complete={completionPlan.remaining === 0}

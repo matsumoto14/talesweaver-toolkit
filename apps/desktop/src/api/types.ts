@@ -136,6 +136,17 @@ export interface UpgradeCandidate {
   applied: NewCharacter;
 }
 
+// 与ダメージ式に入るエンチャント対象の装備値 4 種(EquipmentValues のフィールド名)。
+export type EnchantDepKey = "thrust" | "slash" | "magic_attack" | "magic_defense";
+
+// list_enchant_gains の戻り値 1 件(src-tauri の EnchantGain)。「エンチャントの伸びしろ」の
+// 部位×ステごとの MAX 試算。伸び率の式(delta_pct)は rank_candidates と同じ丸めで Rust 側が返す。
+export interface EnchantGain {
+  slot: PartSlot;
+  key: EnchantDepKey;
+  delta_pct: number;
+}
+
 /** 選ぶ人の目的。1つのバフが複数に所属できる。 */
 export type BuffPurpose = "stats" | "damage" | "durability";
 /** 効果を得る場所の手掛かり。 */
@@ -435,7 +446,17 @@ export interface StatContribution {
   kind: StatKind;
   layer: StatLayer;
   value: number;
-  /** この要因がそのステの最終能力値を何ポイント動かしたか(実数) */
+  /** 層の計算順で見たときのステップ幅(倍率A/B を持つ補正源は、先に積んだ他の補正源を増幅した
+   *  分も自分の effect に乗る)。「この補正源が無かったら最終能力値がいくつ動くか」を知りたいときは
+   *  StatSourceEffect(source_effects / stat_source_effects)を使う */
+  effect: number;
+}
+
+// crates/domain/src/stat_sources.rs の StatSourceEffect。fill_contribution_effects と同じ
+// 層順ステップ幅を、上限(cap)込みで返す(Σ が必ず最終能力値 − 素ステに一致する)。
+export interface StatSourceEffect {
+  source: string;
+  kind: StatKind;
   effect: number;
 }
 
@@ -789,6 +810,9 @@ export interface EquipmentPart {
   ability_additions: EquipmentAbilityAdditional[];
   /** ランダムオプション。同じカテゴリーは 1 部位に 1 つまで */
   random_options: RandomOptionSlot[];
+  /** カタログ外(カスタム名)装備のエンチャント上限(実測)。カタログ品が付いているときは
+   *  無視される(カタログの enchant_caps が正)。`null` = 未収録。 */
+  enchant_caps: EquipmentValues | null;
 }
 
 export type EnhanceGrade = "lowest" | "low" | "middle" | "high" | "highest";
@@ -1009,6 +1033,20 @@ export interface CategoryTrace {
   cap: CategoryCap | null;
 }
 
+// crates/domain/src/stat_sources.rs の BuffDamageEffect。バフ 1 件ぶんが、カテゴリ上限適用後の
+// 集計値へどれだけ配賦されるか(同一カテゴリの effect を全部足すと CategoryTrace.value に一致する)。
+export interface BuffDamageEffect {
+  buff_name: string;
+  category: string;
+  effect: number;
+}
+
+// crates/domain/src/stat_sources.rs の BuffDamageSummary(summarize_buff_selection の戻り値)。
+export interface BuffDamageSummary {
+  categories: CategoryTrace[];
+  buff_effects: BuffDamageEffect[];
+}
+
 export interface StatTrace {
   kind: StatKind;
   base: number;
@@ -1068,6 +1106,7 @@ export interface StatPreview {
   stats: EffectiveStats;
   traces: StatTrace[];
   contributions: StatContribution[];
+  source_effects: StatSourceEffect[];
   /** 主軸スキル未選択なら null */
   attack: AttackPreview | null;
   /** 共通スキル(Skill/共通・Skill/極限)の効き先サマリ */
@@ -1110,6 +1149,9 @@ export interface StatPreview {
   siena_critical_rate: number;
   /** シエナのオーラのステ加算合計を部位別に割ったもの(表示用の内訳) */
   siena_part_stat_totals: PartStatTotal[];
+  /** 選択中バフが足した固定値/割合増加のうち、倍率A/B を持つ補正源(マスタリー等)に
+   *  増幅されて最終能力値へ乗った分(ステ別)。バフ未選択なら全ステ 0 */
+  buff_stat_amplification: EffectiveStats;
 }
 
 // crates/domain/src/equipment.rs の PartStatTotal。
@@ -1265,6 +1307,8 @@ export interface DamageTrace {
   attack: AttackPowerBreakdown;
   /** ステ補正源(ペット/ルーン/クラウン/聖物/バフ/調整値)の寄与内訳 */
   stat_contributions: StatContribution[];
+  /** 補正源 1 件ぶんの帰属(cap 込みで Σ が最終能力値 − 素ステに一致する) */
+  stat_source_effects: StatSourceEffect[];
   /** ステ攻撃力に効いている依存ステごとの内訳(合計 = ステ攻撃力) */
   stat_attack_parts: StatAttackPart[];
   categories: CategoryTrace[];
@@ -1480,6 +1524,9 @@ export interface StatLimits {
   critical_rate_min: number;
   /** クリティカル率の上限 */
   critical_rate_max: number;
+  /** スキル依存種別ごとの、エンチャントで見るべき装備値 2 種(src-tauri の EnchantDependencyKeys)。
+   *  「依存種別 → ステ 2 本」のルール表をフロントに持たない(装備攻撃力係数から Rust 側が引く) */
+  enchant_dependency_keys: { dependency: SkillDependency; keys: EnchantDepKey[] }[];
 }
 
 // crates/domain/src/stat_sources.rs の DamageCategoryLabel。

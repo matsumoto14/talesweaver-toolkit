@@ -41,8 +41,9 @@ pub use attack_power::{
 };
 pub use awakening::{Awakening, AwakeningCaps};
 pub use candidate::{
-    aura_candidates, enchant_candidates, enhance_candidates, list_candidate_changes,
-    quick_win_candidates, rank_candidates, CandidateChange, CandidateCost, RankedCandidate,
+    aura_candidates, enchant_candidates, enchant_dependency_keys, enhance_candidates,
+    list_candidate_changes, quick_win_candidates, rank_candidates, CandidateChange, CandidateCost,
+    RankedCandidate,
 };
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use character_skill::{
@@ -106,12 +107,13 @@ pub use skill::{
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{
     apply_character_skills, apply_masteries, apply_pins, apply_temporary_adjustments,
-    apply_unleash, build_modifiers, preview_effective_stats, stat_limits, summarize_buff_selection, Adjustments,
-    AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice, BuffDefinition, BuffOrigin, BuffPurpose,
-    BuffSelection, BuffTarget, BuffValue, CommonSkillPreview, CriticalRateBonusPreview, Crown,
-    MonsterCards, PartAttackContribution, PetSkillTier, PetSkillTierBonus, PetSkills, RuneLevels,
-    SacredRelic, StatAdjustment, StatContribution, StatLayer, StatLimits, StatPreview,
-    StatSourceError, StatSources, ThesisCoreRegionPreview, UltimateSkillPreview,
+    apply_unleash, build_modifiers, contribution_source_effects, preview_effective_stats, stat_limits,
+    summarize_buff_selection, Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice,
+    BuffDamageEffect, BuffDamageSummary, BuffDefinition, BuffOrigin, BuffPurpose, BuffSelection, BuffTarget,
+    BuffValue, CommonSkillPreview, CriticalRateBonusPreview, Crown, MonsterCards, PartAttackContribution,
+    PetSkillTier, PetSkillTierBonus, PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution,
+    StatLayer, StatLimits, StatPreview, StatSourceError, StatSourceEffect, StatSources, ThesisCoreRegionPreview,
+    UltimateSkillPreview,
 };
 pub use stats::{
     effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, StatKind,

@@ -150,6 +150,7 @@
   .path {
     padding: 6px 8px; margin: 4px 0 8px;
     font-family: var(--font-num); font-size: 10.5px; color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
     word-break: break-all;
   }
   .line { display: flex; flex-direction: column; gap: 3px; }
@@ -170,10 +171,12 @@
   .preview {
     padding: 8px 10px; max-height: 170px; overflow-y: auto;
     font-family: var(--font-num); font-size: 11px; line-height: 1.6;
+    font-variant-numeric: tabular-nums;
     white-space: pre-wrap; word-break: break-word;
   }
   .endpoint {
     font-family: var(--font-num); font-size: 9.5px; color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
 </style>

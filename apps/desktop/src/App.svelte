@@ -11,7 +11,7 @@
   import BuffsPage from "./pages/buffs/BuffsPage.svelte";
   import CharsPage from "./pages/chars/CharsPage.svelte";
   import HomePage from "./pages/home/HomePage.svelte";
-  import { app, focusErrorTarget, loadAll, type Tab } from "./state.svelte";
+  import { app, focusErrorTarget, loadAll, simIsDirty, type Tab } from "./state.svelte";
   import { dismissError, reportError, reportNotice, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import Splitter from "./ui/Splitter.svelte";
@@ -61,13 +61,13 @@
         </button>
       {/each}
     </nav>
-    {#if app.sim !== null}
+    {#if simIsDirty()}
       <div class="sim-note">
         <span class="dot"></span>
         <span>試し変更中 — 保存されていません</span>
       </div>
     {/if}
-    <div class="utility-actions" class:pushed={app.sim === null}>
+    <div class="utility-actions" class:pushed={!simIsDirty()}>
       <button
         type="button"
         class="utility-open"
@@ -176,8 +176,9 @@
     width: 16px; height: 16px; display: grid; place-items: center;
     border-radius: 50%; background: var(--bg-panel); border: 1px solid var(--border-soft);
     font-family: var(--font-num); font-size: 9px; font-weight: var(--w-strong);
+    font-variant-numeric: tabular-nums;
   }
-  .utility-open:hover { background: #fff; color: var(--accent); }
+  .utility-open:hover { background: var(--bg-field); color: var(--accent); }
 
   .toast {
     position: absolute; top: 58px; left: 16px; right: 16px; z-index: 50;
@@ -195,7 +196,7 @@
   /* 「読むだけ」の帯の中で、押せるものだけ形を持たせる(§00 ⑤ 考えさせない) */
   .toast-goto {
     flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
-    border: 1px solid var(--danger); background: #fff;
+    border: 1px solid var(--danger); background: var(--bg-field);
     color: var(--danger); font-size: 11px; font-weight: 600;
   }
   .toast-goto:hover { background: var(--danger); color: #fff; }

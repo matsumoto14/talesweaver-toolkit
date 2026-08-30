@@ -1,11 +1,11 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDefinition, BuffSelection, BuffSet, CategoryTrace, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
-  TitleDef, UpgradeCandidate, ValidationLocation,
+  TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -13,7 +13,7 @@ export const listSkills = (gameCharacterId: string) => invoke<Skill[]>("list_ski
 export const listEnemies = () => invoke<Enemy[]>("list_enemies");
 export const listBuffCatalog = () => invoke<BuffDefinition[]>("list_buff_catalog");
 export const summarizeBuffSelection = (buffs: BuffSelection) =>
-  invoke<CategoryTrace[]>("summarize_buff_selection", { buffs });
+  invoke<BuffDamageSummary>("summarize_buff_selection", { buffs });
 export const listBuffSets = () => invoke<BuffSet[]>("list_buff_sets");
 export const createBuffSet = (name: string, choices: BuffSelection) => invoke<BuffSet>("create_buff_set", { name, choices });
 export const updateBuffSet = (id: number, name: string, choices: BuffSelection) => invoke<BuffSet>("update_buff_set", { id, name, choices });
@@ -133,5 +133,17 @@ export const listUpgradeCandidates = (
   temporaryAdjustments: Adjustments | null = null,
   buffs: BuffSelection = { choices: [] },
 ) => invoke<UpgradeCandidate[]>("list_upgrade_candidates", {
+  character, buffs, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments,
+});
+/**
+ * 「エンチャントの伸びしろ」(部位×ステごとの MAX 試算)。選択中スキルの依存ステだけに絞り、
+ * 伸び率(delta_pct)は rank_candidates と同じ式・丸めで Rust 側が返す(フロントで割り算しない)。
+ */
+export const listEnchantGains = (
+  character: NewCharacter, skillId: string, contentId: string, comboCount = 0,
+  comboSkillType: ComboSkillType | null = null,
+  temporaryAdjustments: Adjustments | null = null,
+  buffs: BuffSelection = { choices: [] },
+) => invoke<EnchantGain[]>("list_enchant_gains", {
   character, buffs, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments,
 });

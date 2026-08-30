@@ -11,7 +11,7 @@
 <div class="page">
   <div class="head-bar">
     <span class="title">キャラの登録と補正源</span>
-    <span class="note">{showRegister ? "名前とキャラだけで登録できます" : "ドリルダウンで編集・保存はキャラ単位"}</span>
+    <span class="note">{showRegister ? "名前とキャラだけで登録できます" : "編集すると自動で保存されます"}</span>
   </div>
   {#if showRegister}
     <div class="register-wrap">

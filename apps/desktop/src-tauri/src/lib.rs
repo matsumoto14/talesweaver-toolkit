@@ -87,6 +87,7 @@ pub fn run() {
             commands::preview_damage,
             commands::evaluate_contents,
             commands::list_upgrade_candidates,
+            commands::list_enchant_gains,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri アプリの起動に失敗");

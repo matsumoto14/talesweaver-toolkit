@@ -652,23 +652,55 @@ pub fn buff_damage_contributions(
     damage_contributions(effects.into_iter())
 }
 
+/// バフ 1 件ぶんが、カテゴリ上限適用後の集計値へどれだけ配賦されるか。
+/// 「このバフを足したことでカテゴリの値(キャップ適用後)がどれだけ動いたか」を表すので、
+/// 同一カテゴリの `effect` を全部足すと必ずそのカテゴリの `CategoryTrace::value` に一致する
+/// (`fill_contribution_effects` と同じ、累積再構築による telescoping)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuffDamageEffect {
+    pub buff_name: String,
+    pub category: DamageCategory,
+    pub effect: f64,
+}
+
+/// `summarize_buff_selection` の結果(カテゴリ別集計 + バフ別配賦)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuffDamageSummary {
+    pub categories: Vec<crate::category::CategoryTrace>,
+    pub buff_effects: Vec<BuffDamageEffect>,
+}
+
 /// バフセットだけが与ダメージカテゴリへ足す量。通常のダメージ計算と同じ
 /// `CategoryTotals` を通すため、X1/X2 などカテゴリごとの上限も適用済みで返る。
+/// バフ 1 件ぶんの寄与は「このバフを足す前後でカテゴリの値(キャップ適用後)がどれだけ動いたか」
+/// を選択順に積み上げて出す(単独計算で引き直さない。§00 05: 数字の出どころを全部見せる)。
 pub fn summarize_buff_selection(
     buffs: &BuffSelection,
     catalog: &BuffCatalog,
-) -> Result<Vec<crate::category::CategoryTrace>, StatSourceError> {
+) -> Result<BuffDamageSummary, StatSourceError> {
     // 未知 ID・入力不足・排他違反を、能力値プレビューと同じ規則で検証する。
     build_modifiers(&StatSources::default(), buffs, catalog)?;
     let mut totals = crate::category::CategoryTotals::neutral();
+    let mut buff_effects = Vec::new();
     for contribution in buff_damage_contributions(buffs, catalog) {
+        let before = totals.value(contribution.category);
         totals.add(contribution.category, contribution.value);
+        let after = totals.value(contribution.category);
+        buff_effects.push(BuffDamageEffect {
+            buff_name: contribution.source,
+            category: contribution.category,
+            effect: after - before,
+        });
     }
-    Ok(totals
+    let categories = totals
         .trace()
         .into_iter()
         .filter(|row| row.category != DamageCategory::AttackDamageRate && row.raw != 0.0)
-        .collect())
+        .collect();
+    Ok(BuffDamageSummary {
+        categories,
+        buff_effects,
+    })
 }
 
 /// 寄与内訳の 1 行(ステトレース向け)。
@@ -982,12 +1014,54 @@ pub struct AttackPreview {
     pub part_contributions: Vec<PartAttackContribution>,
 }
 
+/// 選択中バフが足した固定値/割合増加が、倍率A/B を持つ補正源(マスタリー等)に増幅されて
+/// 最終能力値へ乗った分(ステ別)。`EffectiveStats` と同じ「ステごとの値」の持ち方。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct BuffStatAmplification {
+    pub stab: i64,
+    pub hack: i64,
+    pub int: i64,
+    pub def: i64,
+    pub mr: i64,
+    pub dex: i64,
+    pub agi: i64,
+}
+
+impl BuffStatAmplification {
+    pub fn get(&self, kind: StatKind) -> i64 {
+        match kind {
+            StatKind::Stab => self.stab,
+            StatKind::Hack => self.hack,
+            StatKind::Int => self.int,
+            StatKind::Def => self.def,
+            StatKind::Mr => self.mr,
+            StatKind::Dex => self.dex,
+            StatKind::Agi => self.agi,
+        }
+    }
+
+    fn set(&mut self, kind: StatKind, value: i64) {
+        match kind {
+            StatKind::Stab => self.stab = value,
+            StatKind::Hack => self.hack = value,
+            StatKind::Int => self.int = value,
+            StatKind::Def => self.def = value,
+            StatKind::Mr => self.mr = value,
+            StatKind::Dex => self.dex = value,
+            StatKind::Agi => self.agi = value,
+        }
+    }
+}
+
 /// `preview_effective_stats` の結果(最終能力値・トレース・寄与内訳・攻撃力)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatPreview {
     pub stats: EffectiveStats,
     pub traces: Vec<StatTrace>,
     pub contributions: Vec<StatContribution>,
+    /// 補正源 1 件ぶんの帰属(「この要因が無かったら最終能力値がいくつ動くか」)。
+    /// `contributions[].effect`(層のステップ幅)とは別物 — 詳細は `contribution_source_effects`。
+    pub source_effects: Vec<StatSourceEffect>,
     /// 主軸スキル未選択なら `None`
     pub attack: Option<AttackPreview>,
     /// 共通スキル(wiki: Skill/共通・Skill/極限)の効き先サマリ。
@@ -1040,6 +1114,14 @@ pub struct StatPreview {
     pub siena_critical_rate: f64,
     /// シエナのオーラのステ加算合計を部位別に割ったもの(表示用の内訳)。正は `SienaAura::stat_bonus` の `total()`
     pub siena_part_stat_totals: Vec<PartStatTotal>,
+    /// 選択中バフが足した固定値/割合増加が、倍率A/B を持つ補正源(マスタリー等)に増幅されて
+    /// 最終能力値へ乗った分(ステ別)。バフ行の `source_effects` はその補正源自身が
+    /// 吸収する前の層ステップ幅しか持たないため、そこだけ合計すると
+    /// 「バフ無し→バフ有りで最終能力値が実際に何点動いたか」に届かない。その不足分がこれ。
+    /// 定義(ステ `kind` ごと): (バフ有りの最終値 − バフ無しの最終値) − Σ(source_effects のうち
+    /// そのステ・バフ由来の行)。バフ未選択なら全ステ 0。フロントで引き算しない(ADR 001)
+    /// ためここで確定させて返す。
+    pub buff_stat_amplification: BuffStatAmplification,
 }
 
 /// テシスコア 1 地域ぶんの表示用プレビュー(6 枠の合計・セット効果)。
@@ -1145,7 +1227,7 @@ pub fn apply_unleash(
     }
 }
 
-/// 寄与内訳の `effect`(その要因が最終能力値を何ポイント動かしたか)を埋める。
+/// 寄与内訳の `effect`(その要因の層が最終能力値まで何ポイント積み上がったか、層のステップ幅)を埋める。
 /// 補正が出そろってからでないと層の重なり方が決まらないので、`build_modifiers` と
 /// `apply_*` をすべて呼び終えたあとに 1 回だけ呼ぶ。
 ///
@@ -1154,7 +1236,17 @@ pub fn apply_unleash(
 /// - 固定値 / 最終固定値: 値そのまま
 /// - 倍率A / 倍率B: その倍率を掛ける前と後の差(前から順に積む)
 ///
-/// これにより `素ステ + Σeffect − 上限で捨てた分 = 最終能力値` が成り立つ。
+/// これにより `素ステ + Σeffect − 上限で捨てた分 = 最終能力値` が成り立つ(上限を跨いだ場合は
+/// `capped_loss` を別途差し引く必要がある。上限込みで Σ をそのまま最終値に一致させたいときは
+/// `contribution_source_effects` を使う)。
+///
+/// **注意**: この `effect` は「層の計算順(割合増加 → 固定値 → 倍率A → 倍率B → 最終固定値)で
+/// 見たときのステップ幅」であって、「この補正源が無かったら最終能力値がいくつ動くか」ではない。
+/// 倍率A/B を持つ補正源(マスタリー等)は、自分より先に積まれた割合増加/固定値の補正源(バフ等)を
+/// 増幅した分を自分の `effect` に乗せて受け取る。割合増加/固定値層の補正源の `source` だけを
+/// フィルタして合計しても、その補正源が実際に最終能力値へ与えている影響(後続の倍率で増幅された
+/// 分を含む)には一致しない — その影響を含めた合計を知りたいなら、対象の補正源を除いた状態で
+/// この関数の呼び出し元(`preview_effective_stats` 等)をもう一度呼んで差分を取る(before/after)。
 pub fn fill_contribution_effects(
     contributions: &mut [StatContribution],
     base: &BaseStats,
@@ -1197,6 +1289,97 @@ pub fn fill_contribution_effects(
     }
 }
 
+/// `contribution_source_effects` が返す、補正源 1 件ぶんの帰属。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StatSourceEffect {
+    pub source: String,
+    pub kind: StatKind,
+    /// この要因の `effect`(上限を跨いだ分もそのまま織り込んだ値)
+    pub effect: i64,
+}
+
+/// `fill_contribution_effects` と同じ「層順のステップ幅」を、**`cap` を織り込んだ形**で返す
+/// (`fill_contribution_effects` は生値ベースで、上限を跨いだときは呼び出し側が `capped_loss` を
+/// 別途差し引く必要があった)。
+///
+/// 定義(累積再構築): `contributions` を層順(割合増加 → 固定値 → 倍率A → 倍率B → 最終固定値)に
+/// 積みながら、「先頭から i 番目までの寄与だけを適用して最終能力値の式をまるごと計算し直した値」を
+/// `total_i` とし(`cap` を毎回適用)、`effect_i = total_i − total_{i-1}` を返す。
+/// 各段の floor を含めて式を丸ごと引き直すので、**`素ステ + Σeffect = 最終能力値(上限適用後)` が
+/// 上限を跨いでも常に厳密に成り立つ**(単独計算/leave-one-out は floor と乗算のせいで一致しないため
+/// 採らない)。
+///
+/// **注意**: `fill_contribution_effects` と同様、これは層順で見たときのステップ幅であり、
+/// 「この補正源が無かったら最終能力値がいくつ動くか(倍率A/B による増幅込みの実質的な影響)」
+/// ではない(倍率A/B の補正源が、先に積んだ補正源を増幅した分を自分の `effect` に乗せて受け取る。
+/// その影響を含めた値が要るときは呼び出し元で before/after を取る)。
+///
+/// 倍率A の実際の係数は `modifiers`(`StatModifierSet`)から層内の出現順で引く
+/// (`StatContribution::value` はマスタリー等では「率」、バフでは「係数そのもの」と単位が
+/// 異なることがあり、`c.value` をそのまま倍率として使えないため)。他の層は
+/// `StatContribution::value` が常に `modifiers` へ加算した値そのものと一致する。
+pub fn contribution_source_effects(
+    contributions: &[StatContribution],
+    base: &BaseStats,
+    modifiers: &StatModifierSet,
+    cap: i64,
+) -> Vec<StatSourceEffect> {
+    let mut out = Vec::with_capacity(contributions.len());
+    for kind in StatKind::ALL {
+        let m = modifiers.get(kind);
+        let base_value = i64::from(base.get(kind));
+
+        let raw_total = |percent_n: usize, fixed: i64, mult_a_n: usize, mult_b: f64, final_fixed: i64| -> i64 {
+            let percent_total: i64 = m.percent_of_base[..percent_n]
+                .iter()
+                .map(|rate| floor_int(base_value as f64 * rate))
+                .sum();
+            let before_multiplier = base_value + percent_total + fixed;
+            let multiplier_a_product: f64 = m.multiplier_a[..mult_a_n].iter().product();
+            let basic = floor_int(before_multiplier as f64 * multiplier_a_product);
+            let multiplier_b = mult_b.max(MULTIPLIER_B_MIN);
+            let multiplier_b_bonus = floor_int(basic as f64 * multiplier_b);
+            basic + multiplier_b_bonus + final_fixed
+        };
+
+        let mut percent_n = 0usize;
+        let mut fixed = 0i64;
+        let mut mult_a_n = 0usize;
+        let mut mult_b = 0.0f64;
+        let mut final_fixed = 0i64;
+        let mut prev_total = raw_total(percent_n, fixed, mult_a_n, mult_b, final_fixed).min(cap);
+
+        for layer in [
+            StatLayer::PercentOfBase,
+            StatLayer::Fixed,
+            StatLayer::MultiplierA,
+            StatLayer::MultiplierB,
+            StatLayer::FinalFixed,
+        ] {
+            for c in contributions
+                .iter()
+                .filter(|c| c.kind == kind && c.layer == layer)
+            {
+                match layer {
+                    StatLayer::PercentOfBase => percent_n += 1,
+                    StatLayer::Fixed => fixed += c.value as i64,
+                    StatLayer::MultiplierA => mult_a_n += 1,
+                    StatLayer::MultiplierB => mult_b += c.value,
+                    StatLayer::FinalFixed => final_fixed += c.value as i64,
+                }
+                let total = raw_total(percent_n, fixed, mult_a_n, mult_b, final_fixed).min(cap);
+                out.push(StatSourceEffect {
+                    source: c.source.clone(),
+                    kind,
+                    effect: total - prev_total,
+                });
+                prev_total = total;
+            }
+        }
+    }
+    out
+}
+
 /// `BaseStats` + `StatSources` + 装備(シエナのオーラ)から最終能力値を組み立てる(pin 込み)。
 /// 装備が最終能力値に効く経路(シエナのオーラのステ加算)を含むので、部位ごとの寄与を出すときは
 /// 装備を差し替えてここから丸ごと引き直す。
@@ -1211,7 +1394,15 @@ fn effective_stats_with(
     masteries: &MasteryCatalog,
     character_skills: &CharacterSkillCatalog,
     stat_cap: i64,
-) -> Result<(EffectiveStats, Vec<StatTrace>, Vec<StatContribution>), StatSourceError> {
+) -> Result<
+    (
+        EffectiveStats,
+        Vec<StatTrace>,
+        Vec<StatContribution>,
+        Vec<StatSourceEffect>,
+    ),
+    StatSourceError,
+> {
     let (mut modifiers, mut contributions) = build_modifiers(sources, buffs, catalog)?;
     apply_siena_stats(&mut modifiers, &mut contributions, equipment);
     apply_masteries(
@@ -1229,8 +1420,9 @@ fn effective_stats_with(
     );
     apply_unleash(&mut modifiers, &mut contributions, common);
     fill_contribution_effects(&mut contributions, base, &modifiers);
+    let source_effects = contribution_source_effects(&contributions, base, &modifiers, stat_cap);
     let (stats, traces) = effective_stats(base, &modifiers, stat_cap);
-    Ok((stats, traces, contributions))
+    Ok((stats, traces, contributions, source_effects))
 }
 
 /// 最終能力値と装備から攻撃力(A)を内訳付きで出す。ダメージ計算(`calculate_damage`)と
@@ -1284,7 +1476,7 @@ pub fn preview_effective_stats(
     base.validate()?;
     sources.validate()?;
     equipment.validate()?;
-    let (stats, traces, contributions) = effective_stats_with(
+    let (stats, traces, contributions, source_effects) = effective_stats_with(
         base,
         sources,
         buffs,
@@ -1313,7 +1505,7 @@ pub fn preview_effective_stats(
             let mut part_contributions = Vec::with_capacity(12);
             for (slot, _) in equipment.parts.iter() {
                 let without = equipment.without_part(slot);
-                let (stats_without, _, _) = effective_stats_with(
+                let (stats_without, _, _, _) = effective_stats_with(
                     base,
                     sources,
                     buffs,
@@ -1399,6 +1591,38 @@ pub fn preview_effective_stats(
         .collect();
     let siena_stat_bonus = equipment.siena_stat_bonus();
     let siena_stat_total: i64 = siena_stat_bonus.total();
+    let buff_stat_amplification: BuffStatAmplification = if buffs.choices.is_empty() {
+        BuffStatAmplification::default()
+    } else {
+        let (baseline_stats, _, _, _) = effective_stats_with(
+            base,
+            sources,
+            &BuffSelection::default(),
+            equipment,
+            common,
+            catalog,
+            masteries,
+            character_skills,
+            stat_cap,
+        )?;
+        let buff_names: HashSet<&str> = buffs
+            .choices
+            .iter()
+            .filter_map(|c| catalog.iter().find(|d| d.id == c.buff_id))
+            .map(|d| d.name)
+            .collect();
+        let mut amplification = BuffStatAmplification::default();
+        for kind in StatKind::ALL {
+            let total_diff = stats.get(kind) - baseline_stats.get(kind);
+            let buff_rows_total: i64 = source_effects
+                .iter()
+                .filter(|e| e.kind == kind && buff_names.contains(e.source.as_str()))
+                .map(|e| e.effect)
+                .sum();
+            amplification.set(kind, total_diff - buff_rows_total);
+        }
+        amplification
+    };
     let thesis_core_set_bonus_total = thesis_cores
         .iter()
         .fold(CoreSetBonus::default(), |acc, r| acc.add(r.set_bonus));
@@ -1406,6 +1630,7 @@ pub fn preview_effective_stats(
         stats,
         traces,
         contributions,
+        source_effects,
         attack,
         common_skill,
         critical_rate_bonus,
@@ -1429,6 +1654,7 @@ pub fn preview_effective_stats(
         siena_actual_delay_rate: equipment.siena_actual_delay_reduction(),
         siena_critical_rate: equipment.siena_critical_rate(),
         siena_part_stat_totals,
+        buff_stat_amplification,
     })
 }
 
@@ -1776,6 +2002,276 @@ mod tests {
             i64::from(trace.base) + total - trace.capped_loss,
             trace.effective
         );
+    }
+
+    /// `contribution_source_effects` は `fill_contribution_effects` と同じ層順ステップ幅を
+    /// `cap` 込みで返す。割合増加・固定値・倍率A・倍率Bを同時に持つケースで、上限に当たっても
+    /// 厳密に `Σ per-source == 最終 − 素ステ` が成り立つことを確認する。
+    #[test]
+    fn 補正源ごとの帰属の合計は最終能力値と一致する() {
+        let kind = StatKind::Int;
+        let base = BaseStats {
+            stab: 1,
+            hack: 1,
+            int: 300,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
+        let mut modifiers = StatModifierSet::default();
+        {
+            let m = modifiers.get_mut(kind);
+            m.percent_of_base = vec![0.1, 0.05];
+            m.fixed = 90;
+            m.multiplier_a = vec![1.1, 1.05];
+            m.multiplier_b = 0.2 + 0.05;
+            m.final_fixed = 330;
+        }
+        let contributions = vec![
+            c("割合1", kind, StatLayer::PercentOfBase, 0.1),
+            c("割合2", kind, StatLayer::PercentOfBase, 0.05),
+            c("ペット", kind, StatLayer::Fixed, 60.0),
+            c("ルーン", kind, StatLayer::Fixed, 30.0),
+            c("マスタリー(倍率A1)", kind, StatLayer::MultiplierA, 1.1),
+            c("マスタリー(倍率A2)", kind, StatLayer::MultiplierA, 1.05),
+            c("アンリーシュ", kind, StatLayer::MultiplierB, 0.2),
+            c("倍率B2", kind, StatLayer::MultiplierB, 0.05),
+            c("クラウン", kind, StatLayer::FinalFixed, 300.0),
+            c("聖物", kind, StatLayer::FinalFixed, 30.0),
+        ];
+
+        // 上限に当たらない場合
+        let (_, trace) = effective_stat(kind, base.get(kind), modifiers.get(kind), NO_CAP);
+        let effects = contribution_source_effects(&contributions, &base, &modifiers, NO_CAP);
+        let total: i64 = effects.iter().map(|x| x.effect).sum();
+        assert_eq!(i64::from(trace.base) + total, trace.effective);
+        // 層順(割合増加→固定値→倍率A→倍率B→最終固定値)に積む方式なので、倍率A/B を持つ補正源
+        // (マスタリー・アンリーシュ)が、先に積んだ割合増加/固定値の補正源(バフ等)を増幅した分を
+        // 自分の行に受け取る。ペット(固定値)は素の値のまま、マスタリーの行がその増幅ぶんを持つ
+        let pet = effects.iter().find(|e| e.source == "ペット").unwrap();
+        assert_eq!(pet.effect, 60);
+        let mastery_total: i64 = effects
+            .iter()
+            .filter(|e| e.source.starts_with("マスタリー"))
+            .map(|e| e.effect)
+            .sum();
+        assert!(mastery_total > 0, "倍率Aの行が増幅ぶんを持つはず: {mastery_total}");
+
+        // 上限で頭打ちでも、累積再構築なら差し引きなしで厳密に一致する
+        let cap = 800;
+        let (_, trace) = effective_stat(kind, base.get(kind), modifiers.get(kind), cap);
+        let effects = contribution_source_effects(&contributions, &base, &modifiers, cap);
+        let total: i64 = effects.iter().map(|x| x.effect).sum();
+        assert!(trace.capped_loss > 0);
+        assert_eq!(i64::from(trace.base) + total, trace.effective);
+    }
+
+    /// バフの固定値がマスタリーの倍率B に増幅された分を `buff_stat_amplification` が拾うこと。
+    /// 実機で見つかったズレ(HACK/DEX)の再現: バフが固定値を足す → マスタリーの倍率B がそれを
+    /// 増幅する → バフ行の `source_effects` だけ合計しても最終能力値の増分に届かない。
+    #[test]
+    fn バフが倍率を持つ補正源に増幅された分をbuff_stat_amplificationが返す() {
+        use crate::mastery::MasteryDef;
+
+        const MASTERY_CATALOG: &[MasteryDef] = &[MasteryDef {
+            id: "test_m2_silver_skull",
+            game_character_id: "test",
+            tier: 2,
+            name: "シルバースカル優勝者",
+            effect: SkillEffect::StatRate {
+                stats: &[StatKind::Hack],
+                percent: 25.0,
+                layer: StatLayer::MultiplierB,
+            },
+            note: "",
+        }];
+
+        let base = BaseStats {
+            stab: 1,
+            hack: 100,
+            int: 1,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
+        let sources = StatSources {
+            masteries: Masteries {
+                picked: vec!["test_m2_silver_skull".to_string()],
+            },
+            ..Default::default()
+        };
+        let buffs = BuffSelection {
+            choices: vec![BuffChoice {
+                buff_id: "club_effect".to_string(),
+                stat: Some(StatKind::Hack),
+                choice_index: None,
+                value: None,
+            }],
+        };
+        let catalog = test_catalog();
+
+        let preview = preview_effective_stats(
+            &base,
+            &sources,
+            &buffs,
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &catalog,
+            MASTERY_CATALOG,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            NO_CAP,
+        )
+        .unwrap();
+
+        // クラブ効果(Hack +7、固定値)がマスタリーの倍率B(+10%)に増幅される
+        // → floor(100 + 7) * 1.1 - floor(100 * 1.1) の差のうち、バフ行(+7)を超えた分
+        let baseline = preview_effective_stats(
+            &base,
+            &sources,
+            &BuffSelection::default(),
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &catalog,
+            MASTERY_CATALOG,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            NO_CAP,
+        )
+        .unwrap();
+        let total_diff = preview.stats.get(StatKind::Hack) - baseline.stats.get(StatKind::Hack);
+        let buff_row: i64 = preview
+            .source_effects
+            .iter()
+            .filter(|e| e.source == "クラブ効果")
+            .map(|e| e.effect)
+            .sum();
+        assert!(total_diff > buff_row, "マスタリーの倍率で増幅されるはず");
+        assert_eq!(
+            preview.buff_stat_amplification.get(StatKind::Hack),
+            total_diff - buff_row
+        );
+        assert!(preview.buff_stat_amplification.get(StatKind::Hack) > 0);
+        // 増幅は Hack だけに乗る(他ステは無関係)
+        assert_eq!(preview.buff_stat_amplification.get(StatKind::Stab), 0);
+
+        // バフ無しなら全ステ 0
+        assert_eq!(baseline.buff_stat_amplification, BuffStatAmplification::default());
+    }
+
+    /// Σ(バフ行の source_effects) + 増幅 == バフあり − バフなし が、ステごとに厳密に成り立つこと。
+    #[test]
+    fn バフ行と増幅の合計はステごとに最終能力値の増分と厳密に一致する() {
+        use crate::mastery::MasteryDef;
+
+        const MASTERY_CATALOG: &[MasteryDef] = &[MasteryDef {
+            id: "test_m2_silver_skull",
+            game_character_id: "test",
+            tier: 2,
+            name: "シルバースカル優勝者",
+            effect: SkillEffect::StatRate {
+                stats: &[StatKind::Hack],
+                percent: 25.0,
+                layer: StatLayer::MultiplierB,
+            },
+            note: "",
+        }];
+
+        let base = BaseStats {
+            stab: 50,
+            hack: 100,
+            int: 30,
+            def: 40,
+            mr: 20,
+            dex: 60,
+            agi: 70,
+        };
+        let sources = StatSources {
+            masteries: Masteries {
+                picked: vec!["test_m2_silver_skull".to_string()],
+            },
+            ..Default::default()
+        };
+        let buffs = BuffSelection {
+            choices: vec![
+                BuffChoice {
+                    buff_id: "illumination_drink".to_string(),
+                    stat: None,
+                    choice_index: None,
+                    value: None,
+                },
+                BuffChoice {
+                    buff_id: "club_effect".to_string(),
+                    stat: Some(StatKind::Hack),
+                    choice_index: None,
+                    value: None,
+                },
+            ],
+        };
+        let catalog = test_catalog();
+
+        let preview = preview_effective_stats(
+            &base,
+            &sources,
+            &buffs,
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &catalog,
+            MASTERY_CATALOG,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            NO_CAP,
+        )
+        .unwrap();
+        let baseline = preview_effective_stats(
+            &base,
+            &sources,
+            &BuffSelection::default(),
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &catalog,
+            MASTERY_CATALOG,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            NO_CAP,
+        )
+        .unwrap();
+
+        let buff_names: HashSet<&str> = buffs
+            .choices
+            .iter()
+            .filter_map(|c| catalog.iter().find(|d| d.id == c.buff_id))
+            .map(|d| d.name)
+            .collect();
+
+        for kind in StatKind::ALL {
+            let total_diff = preview.stats.get(kind) - baseline.stats.get(kind);
+            let buff_rows_total: i64 = preview
+                .source_effects
+                .iter()
+                .filter(|e| e.kind == kind && buff_names.contains(e.source.as_str()))
+                .map(|e| e.effect)
+                .sum();
+            assert_eq!(
+                buff_rows_total + preview.buff_stat_amplification.get(kind),
+                total_diff,
+                "{kind:?} で Σ(source_effects) + 増幅 != 増分"
+            );
+        }
     }
 
     /// domain は gamedata に依存できないため、テスト用に必要分だけ縮小したカタログを用意する。

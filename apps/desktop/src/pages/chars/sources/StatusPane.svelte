@@ -375,9 +375,12 @@
 </div>
 
 <style>
-  .icon-pick { cursor: pointer; }
+  .icon-pick { position: relative; cursor: pointer; }
   .icon-pick[aria-disabled="true"] { opacity: .58; cursor: wait; }
-  .icon-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  /* 見た目としては消すが、サイズはアイコン段の外(1px)で固定しない — label 全体を覆って
+     clip-path で視覚的にだけ隠す(クリックはラベルのテキスト側が受ける想定なので
+     pointer-events は無効のまま) */
+  .icon-pick input { position: absolute; inset: 0; clip-path: inset(100%); pointer-events: none; }
   .current-icon { display: inline-flex; border-radius: var(--r-window); }
   .current-icon.icon-changed { animation: icon-change .35s ease-out; }
   @keyframes icon-change {

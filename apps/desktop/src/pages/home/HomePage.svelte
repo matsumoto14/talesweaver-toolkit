@@ -20,11 +20,18 @@
   } from "../../api/types";
   import { COST_COLORS, COST_LABELS } from "../../candidates";
   import {
-    applyCatalogItem, equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, valuesSummary,
+    enchantCap as enchantCapShared, enchantDepKeysFor, enchantRows as enchantRowsShared, ENCHANT_SLOT_LABELS,
+    type EnchantDepKey,
+  } from "../../enchant";
+  import {
+    applyCatalogItem, equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
+    valuesSummary,
   } from "../../equipment";
   import { FEED_ITEMS } from "../../feed";
   import { fmtInt } from "../../format";
-  import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import {
+    EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, SIENA_ALLOWED_SLOTS, STAT_KINDS, STAT_LABELS,
+  } from "../../labels";
   import type { EquipmentStatKind } from "../../labels";
   import { limits } from "../../limits.svelte";
   import {
@@ -234,6 +241,8 @@
 
   /** 未収録(収録度バッジが出る)コンテンツ数。fold の畳み要約に使う。 */
   const uncoveredCount = $derived(rows.filter((r) => coverage(r) !== null).length);
+  /** 見出しの主役はクリア済み数(現況)。未収録数は詳細情報として脇に残す(§00 02)。 */
+  const clearedCount = $derived(rows.filter((r) => r.ev?.clear).length);
 
   const areas = $derived(app.areas);
 
@@ -275,15 +284,8 @@
   // 装備値の内訳(基本能力値 + 強化能力値 = 合計)。どちらも preview(Rust 側の計算済み値)。
   const heroEnhanced = $derived(heroStats?.equipment_enhanced_total ?? null);
   // 装備値の表示行はスポットライトのスキルの依存で切り替える(HI 依存に突きを見せない)。
-  // 対はドメインの装備攻撃力係数(gamedata equipment_coefficients)で係数を持つ 2 系統
-  const EQUIP_ROW_KEYS: Record<SkillDependency, ["thrust" | "slash" | "magic_attack" | "magic_defense", "thrust" | "slash" | "magic_attack" | "magic_defense"]> = {
-    stab: ["thrust", "slash"],
-    hack: ["thrust", "slash"],
-    stab_hack: ["thrust", "slash"],
-    hack_int: ["slash", "magic_attack"],
-    int: ["magic_attack", "magic_defense"],
-    mr: ["magic_defense", "magic_attack"],
-  };
+  // 依存種別 → 見るステ 2 本はドメイン(装備攻撃力係数)から起動時に引いた静的テーブルを使う
+  // (enchant.ts の enchantDepKeysFor。ルール表をフロントに持たない)。
   const EQUIP_ROW_LABELS = { thrust: "突き", slash: "斬り", magic_attack: "魔攻", magic_defense: "魔防" } as const;
   const heroEquipRows = $derived.by(() => {
     const stats = heroStats;
@@ -291,7 +293,7 @@
     if (!stats || !enhanced) return [];
     const skillId = heroSpot?.skillId ?? character?.main_skill_id ?? null;
     const dep = (skillId ? skillDeps[skillId] : null) ?? "stab_hack";
-    return EQUIP_ROW_KEYS[dep].map((key) => ({
+    return enchantDepKeysFor(dep).map((key) => ({
       key,
       label: EQUIP_ROW_LABELS[key],
       base: stats.equipment_base_total[key],
@@ -344,6 +346,17 @@
   );
   /** 次の目標の入場条件が未達か(条件の行を出す条件) */
   const heroEntryUnmet = $derived(heroGoal?.ev != null && !heroGoal.ev.entry_ok);
+  /** 命中Pが出せない理由(design-system: 未収録は空白や「—」ではなく理由を読める形にする)。
+   *  算出できているときは null。 */
+  const heroAccuracyReason = $derived.by(() => {
+    if (heroAccuracy !== null) return null;
+    const g = heroGoal;
+    if (!g) return "対象コンテンツなし";
+    if (!g.ev) return "判定中";
+    if (g.content.enemy_id === null) return "敵データ未収録";
+    if (!g.ev.damage) return "スキル未収録";
+    return "算出中";
+  });
   $effect(() => {
     const c = character;
     const g = heroGoal;
@@ -597,6 +610,12 @@
     const c = character;
     return c ? STAT_KINDS.some((k) => sacredRelicValueOf(c, k) > 0) : false;
   });
+  /** まだ伸ばせる余地(全ステ合計、上限まで)。「合計 +N」ではなく「あと伸ばせる分」だけを見せる
+   *  (ユーザー判断: 意味のない達成量の合計は出さない)。 */
+  const sacredRelicRemaining = $derived.by(() => {
+    const c = character;
+    return c ? STAT_KINDS.reduce((sum, k) => sum + Math.max(0, SACRED_RELIC_MAX_VALUE - sacredRelicValueOf(c, k)), 0) : 0;
+  });
 
   // --- 2. カフス(shield_plus の成長値)。編集規則は EquipmentPane.svelte の
   //    growth-equipment-card(874-895行)と完全に同じにする: 対象ステは growth_caps[k] > 0 の
@@ -638,36 +657,29 @@
       max: keys.reduce((n, k) => n + growthCaps[k], 0),
     };
   });
+  /** この段階の上限までの残り(段が上がれば別の上限に変わる。「いまの段」だけを見る)。 */
+  const cuffsRemaining = $derived(cuffsSummary ? cuffsSummary.max - cuffsSummary.value : null);
 
   // --- 3. エンチャント(各部位の part.enchant)。軸を主軸スキルの依存ステ(1〜2 本)に絞る
-  //    (heroEquipRows と同じ EQUIP_ROW_KEYS を使う)。行 = そのステのエンチャント枠を持つ
-  //    装備済み部位だけ(枠 0 の部位・未装備は出さない)。 ---
-  type EnchantDepKey = "thrust" | "slash" | "magic_attack" | "magic_defense";
-  const ENCHANT_SLOTS: PartSlot[] = ["weapon", "armor", "helm", "shield", "shield_plus", "head", "hand", "leg"];
-  const ENCHANT_SLOT_LABELS: Record<string, string> = {
-    weapon: "武器", armor: "鎧", helm: "兜", shield: "盾", shield_plus: "カフス", head: "頭", hand: "手", leg: "足",
-  };
+  //    (heroEquipRows と同じ enchantDepKeysFor を使う)。行 = そのステのエンチャント枠を持つ
+  //    装備済み部位だけ(枠 0 の部位・未装備・カタログ外の品は出さない)。
+  //    ルール表・上限のフォールバックは enchant.ts(ドメイン経由の 1 本)に寄せている。 ---
   /** キャラタブと同じ 4 種 + MAX(ユーザー要望: 増分の種類を絞りすぎないでほしい)。 */
   const ENCHANT_INCREMENTS = [12, 14, 17, 20] as const;
   const enchantDepKeys = $derived.by(() => {
     const skillId = character?.main_skill_id ?? null;
     const dep = (skillId ? skillDeps[skillId] : null) ?? "stab_hack";
-    return EQUIP_ROW_KEYS[dep];
+    return enchantDepKeysFor(dep);
   });
-  function enchantCap(part: EquipmentPart, k: EnchantDepKey): number {
-    const item = itemOf(part);
-    return item ? item.enchant_caps[k] : limits.equipment_value_max;
+  /** 上限が分からなければ `null`(ADR 001: フォールバックを持たない)。呼び出し側は「?」扱いで見せる。 */
+  function enchantCap(part: EquipmentPart, k: EnchantDepKey): number | null {
+    return enchantCapShared(part, k, app.equipmentCatalog);
   }
+  /** 上限が 1 本も分からない(カタログ外で実測上限も未入力)部位は落とさず「未収録」行として出す
+   *  (enchant.ts 共通。CalcPage と同じ経路)。 */
   const enchantRows = $derived.by(() => {
     if (!character) return [];
-    const keys = enchantDepKeys;
-    const rows: { slot: PartSlot; part: EquipmentPart }[] = [];
-    for (const slot of ENCHANT_SLOTS) {
-      const part = partOf(slot);
-      if (!part || isUnequipped(part)) continue;
-      if (keys.some((k) => enchantCap(part, k) > 0)) rows.push({ slot, part });
-    }
-    return rows;
+    return enchantRowsShared(character.equipment, enchantDepKeys, app.equipmentCatalog);
   });
   function commitEnchant(c: RegisteredCharacter, slot: PartSlot, k: EnchantDepKey, value: number) {
     commitFieldUpdate(
@@ -693,12 +705,32 @@
     for (const { part } of rows) {
       for (const k of keys) {
         const cap = enchantCap(part, k);
-        if (cap <= 0) continue;
+        if (cap === null || cap <= 0) continue;
         value += part.enchant[k];
         max += cap;
       }
     }
     return { value, max };
+  });
+  /** まだ上限に届いていない部位の数と、その残り量の合計(主軸スキルの依存ステのみ)。
+   *  上限が未収録の部位(capUnknown)は数に入れない — 別途「未収録」行として案内する。 */
+  const enchantRemaining = $derived.by(() => {
+    const rows = enchantRows;
+    const keys = enchantDepKeys;
+    let remain = 0;
+    const shortParts = new Set<PartSlot>();
+    for (const { slot, part } of rows) {
+      for (const k of keys) {
+        const cap = enchantCap(part, k);
+        if (cap === null || cap <= 0) continue;
+        const short = cap - part.enchant[k];
+        if (short > 0) {
+          remain += short;
+          shortParts.add(slot);
+        }
+      }
+    }
+    return { remain, parts: shortParts.size };
   });
 
   // --- 4. レリック左右。カタログの次段(+レベル)へ差し替える(EquipmentPane.pickRelicLevel と
@@ -803,6 +835,39 @@
     const base = dir > 0 ? { ...item.values_min } : next.base;
     commitRelicLevel(c, slot, { ...next, base });
   }
+  /** 片側の残り(補正値がまだ上限に届いていなければそちら優先。届いていれば次の段への Lv 差)。
+   *  null = その側は未装備。 */
+  function relicSideRemaining(slot: "relic_pendant" | "relic_bracelet"): { text: string; done: boolean } | null {
+    const part = partOf(slot);
+    const rs = relicState(slot, part);
+    if (!rs) return null;
+    const item = itemOf(part);
+    const growthKeys = relicGrowthKeys(item);
+    if (growthKeys.length > 0 && !rs.growthDone) {
+      const remain = growthKeys.reduce((sum, k) => sum + Math.max(0, item!.growth_caps![k] - part!.base[k]), 0);
+      return { text: `補正値あと${fmtInt(remain)}`, done: false };
+    }
+    if (rs.canUp) return { text: `Lvあと${fmtInt(rs.max - rs.value)}`, done: false };
+    return { text: "上限", done: true };
+  }
+  const relicSides = $derived(RELIC_ROWS.map((r) => ({ side: r.side, info: relicSideRemaining(r.slot) })));
+  const relicEquippedSides = $derived(relicSides.filter((s) => s.info !== null));
+
+  // --- 5. シエナのオーラ: 部位ごとの段階(増幅段階 = 足したスロット数)を合算する。
+  //    ここはタイル自体がキャラタブへ遷移するだけなので展開は持たない。 ---
+  const sienaEquippedStages = $derived.by(() => {
+    const c = character;
+    if (!c) return [];
+    return SIENA_ALLOWED_SLOTS
+      .map((slot) => selectedSienaAura(c.equipment.siena[slot]))
+      .filter((a): a is NonNullable<typeof a> => a !== null)
+      .map((a) => sienaStage(a));
+  });
+  const sienaSummary = $derived.by(() => {
+    const stages = sienaEquippedStages;
+    if (stages.length === 0) return null;
+    return { value: stages.reduce((s, v) => s + v, 0), max: stages.length * app.siena.stage_max };
+  });
 </script>
 
 <div class="home">
@@ -856,9 +921,13 @@
               {/if}
               <span class="hero-row">
                 <span class="hero-row-label">命中P</span>
-                <span class="num hero-row-value" use:bump={() => heroAccuracy}>
-                  {heroAccuracy !== null ? fmtInt(heroAccuracy) : "—"}
-                </span>
+                {#if heroAccuracy !== null}
+                  <span class="num hero-row-value" use:bump={() => heroAccuracy}>{fmtInt(heroAccuracy)}</span>
+                {:else}
+                  <span class="hero-row-value-wrap">
+                    <span class="coverage" title="命中Pを算出できません: {heroAccuracyReason}">{heroAccuracyReason}</span>
+                  </span>
+                {/if}
               </span>
               <span class="hero-row">
                 <span class="hero-row-label">回避P</span>
@@ -876,7 +945,7 @@
           {#if !app.evaluations[character.id]}
             <span class="dim">到達判定を取得できていません。</span>
           {:else if !heroGoal}
-            <span class="hero-goal-name">なし — 全 {fmtInt(totalCount)} コンテンツ クリア可</span>
+            <span class="hero-goal-name hero-goal-name-full">なし — 全 {fmtInt(totalCount)} コンテンツ クリア可</span>
           {:else}
             <span class="hero-goal-name">{heroGoal.content.series?.name ?? heroGoal.content.name}</span>
             {#if heroGoal.content.need_per_hit === null || !heroSpot}
@@ -997,35 +1066,74 @@
               <span class="today-tile-name">神鳥の聖物</span>
               {#if !sacredRelicSet}
                 <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+              {:else if sacredRelicRemaining <= 0}
+                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
               {/if}
             </div>
+            {#if sacredRelicSet && sacredRelicRemaining > 0}
+              <span class="today-tile-note num" use:flash={() => String(sacredRelicRemaining)}>残り {fmtInt(sacredRelicRemaining)}</span>
+            {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "cuffs"} onclick={() => toggleTile("cuffs")}>
             <div class="today-tile-head">
               <span class="today-tile-name">カフス</span>
               {#if !cuffsSummary}
                 <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? "未設定", state: "edge" })}>{cuffsUnsetLabel ?? "未設定"}</span>
+              {:else if cuffsRemaining !== null && cuffsRemaining <= 0}
+                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
               {/if}
             </div>
+            {#if cuffsRemaining !== null && cuffsRemaining > 0}
+              <span class="today-tile-note num" use:flash={() => String(cuffsRemaining)}>この段階 残り {fmtInt(cuffsRemaining)}</span>
+            {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "enchant"} onclick={() => toggleTile("enchant")}>
             <div class="today-tile-head">
               <span class="today-tile-name">エンチャント</span>
               {#if !enchantSummary}
                 <span class="badge" style={badgeStyle({ label: "対象なし", state: "edge" })}>対象なし</span>
+              {:else if enchantRemaining.remain <= 0}
+                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
               {/if}
             </div>
+            {#if enchantSummary && enchantRemaining.remain > 0}
+              <span class="today-tile-note num" use:flash={() => String(enchantRemaining.remain)}>
+                {fmtInt(enchantRemaining.parts)}部位 残り {fmtInt(enchantRemaining.remain)}
+              </span>
+            {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "equipRelic"} onclick={() => toggleTile("equipRelic")}>
             <div class="today-tile-head">
               <span class="today-tile-name">レリック</span>
+              {#if relicEquippedSides.length === 0}
+                <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+              {:else if relicEquippedSides.every((s) => s.info!.done)}
+                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
+              {/if}
             </div>
+            {#if relicEquippedSides.length > 0 && !relicEquippedSides.every((s) => s.info!.done)}
+              <span class="today-tile-note" use:flash={() => relicEquippedSides.map((s) => s.info!.text).join()}>
+                {relicEquippedSides.map((s) => `${s.side} ${s.info!.done ? "上限" : s.info!.text}`).join(" ・ ")}
+              </span>
+            {/if}
           </button>
-          <button type="button" class="today-tile" onclick={() => focusCharacterSource("siena")}>
+          <button
+            type="button" class="today-tile today-tile-nav" onclick={() => focusCharacterSource("siena")}
+            title="キャラタブへ移動して編集します"
+          >
             <div class="today-tile-head">
               <span class="today-tile-name">シエナのオーラ</span>
-              <span class="chev dim">›</span>
+              {#if !sienaSummary}
+                <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+              {:else if sienaSummary.max - sienaSummary.value <= 0}
+                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
+              {/if}
+              <span class="chev dim" aria-hidden="true">↗</span>
             </div>
+            {#if sienaSummary && sienaSummary.max - sienaSummary.value > 0}
+              {@const remain = sienaSummary.max - sienaSummary.value}
+              <span class="today-tile-note num" use:flash={() => String(remain)}>増幅 残り {fmtInt(remain)} 段</span>
+            {/if}
           </button>
         </div>
 
@@ -1093,10 +1201,16 @@
                   {#each enchantRows as row (row.slot)}
                     <div class="expand-row enchant-row">
                       <span class="expand-row-label">{ENCHANT_SLOT_LABELS[row.slot]}</span>
+                      {#if row.capUnknown}
+                        <button type="button" class="expand-nav" onclick={() => focusCharacterSource("equipment", row.slot)}>
+                          <span class="coverage" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
+                          <span class="chev dim">›</span>
+                        </button>
+                      {:else}
                       <div class="enchant-row-cols">
                         {#each enchantDepKeys as k (k)}
                           {@const cap = enchantCap(row.part, k)}
-                          {#if cap > 0}
+                          {#if cap !== null && cap > 0}
                             {@const cur = partOf(row.slot)?.enchant[k] ?? 0}
                             <div class="enchant-stat">
                               <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
@@ -1140,6 +1254,7 @@
                           {/if}
                         {/each}
                       </div>
+                      {/if}
                     </div>
                   {/each}
                 </div>
@@ -1210,7 +1325,13 @@
       <details class="fold reach-fold">
         <summary>
           <span class="area-name">どこまでいける?</span>
-          <span class="fold-count">未収録 <span class="num">{uncoveredCount}</span></span>
+          <span class="fold-count">
+            クリア済み <span class="num" use:bump={() => clearedCount}>{fmtInt(clearedCount)}</span>
+            <span class="dim">/ {fmtInt(totalCount)}</span>
+          </span>
+          {#if uncoveredCount > 0}
+            <span class="fold-note dim">未収録 <span class="num">{fmtInt(uncoveredCount)}</span></span>
+          {/if}
         </summary>
         <div class="fold-body">
           {#if !app.evaluations[character.id]}
@@ -1309,22 +1430,37 @@
         </div>
       </details>
 
-      <!-- ===== うごき: 上のカードに入らなかった新着(ツールの更新履歴。外部フィードは今回スコープ外) ===== -->
-      <div class="section">
-        <div class="area-head">
-          <span class="area-name">うごき</span>
-          <span class="area-rule"></span>
-        </div>
-        {#each FEED_ITEMS as item (item.date + item.title)}
-          <div class="tl-row">
-            <span class="tl-date num">{fmtMonthDay(item.date)}</span>
-            <span class="tag">{item.source === "tool" ? "ツール" : item.source === "official" ? "TW公式" : "韓国"}</span>
-            <span class="tl-text">{item.title}</span>
-            {#if item.note}<span class="tl-note">{item.note}</span>{/if}
-            {#if item.url}<span class="ext dim">↗</span>{/if}
+      <!-- ===== うごき: 上のカードに入らなかった新着(ツールの更新履歴。外部フィードは今回スコープ外)。
+           「今日の状況」ではないので最新 1 件だけ出し、残りは畳む(§00 02) ===== -->
+      {#if FEED_ITEMS.length > 0}
+        <div class="section">
+          <div class="area-head">
+            <span class="area-name">うごき</span>
+            <span class="area-rule"></span>
           </div>
-        {/each}
-      </div>
+          <div class="tl-row">
+            <span class="tl-date num">{fmtMonthDay(FEED_ITEMS[0].date)}</span>
+            <span class="tag">{FEED_ITEMS[0].source === "tool" ? "ツール" : FEED_ITEMS[0].source === "official" ? "TW公式" : "韓国"}</span>
+            <span class="tl-text">{FEED_ITEMS[0].title}</span>
+            {#if FEED_ITEMS[0].note}<span class="tl-note">{FEED_ITEMS[0].note}</span>{/if}
+          </div>
+          {#if FEED_ITEMS.length > 1}
+            <details class="fold">
+              <summary>ほか {fmtInt(FEED_ITEMS.length - 1)} 件</summary>
+              <div class="fold-body tl-rest">
+                {#each FEED_ITEMS.slice(1) as item (item.date + item.title)}
+                  <div class="tl-row">
+                    <span class="tl-date num">{fmtMonthDay(item.date)}</span>
+                    <span class="tag">{item.source === "tool" ? "ツール" : item.source === "official" ? "TW公式" : "韓国"}</span>
+                    <span class="tl-text">{item.title}</span>
+                    {#if item.note}<span class="tl-note">{item.note}</span>{/if}
+                  </div>
+                {/each}
+              </div>
+            </details>
+          {/if}
+        </div>
+      {/if}
 
       <p class="foot dim">
         入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
@@ -1349,7 +1485,7 @@
   }
   .cta {
     flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: var(--r-pill);
-    background: #fff; border: 1px solid var(--border-soft); font-size: 9.5px; font-weight: 700; color: var(--accent); white-space: nowrap;
+    background: var(--bg-field); border: 1px solid var(--border-soft); font-size: 9.5px; font-weight: 700; color: var(--accent); white-space: nowrap;
   }
   .cta:hover { border-color: var(--accent); }
 
@@ -1387,6 +1523,8 @@
     background: var(--bg-panel); border: 1px solid var(--border-strong); min-width: 0;
   }
   .hero-goal-name { min-width: 0; flex: none; max-width: 170px; font-size: 12px; font-weight: 800; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 「次の目標なし」は他に並ぶ要素が無いので、170px の幅制限を外して全文を見せる(§00 01 折り返し対策) */
+  .hero-goal-name-full { flex: 1; max-width: none; }
   .hero-goal-note { min-width: 0; flex: 1; font-size: var(--t-label); }
   .hero-div { width: 1px; align-self: stretch; background: var(--border-soft); }
   .hero-goal-skill { min-width: 0; max-width: 100px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1442,6 +1580,12 @@
   .today-tile.open { border-color: var(--accent); background: var(--bg-panel); }
   .today-tile-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .today-tile-name { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* まだ伸ばせる余地(§00 04: 数値が変われば use:flash で気づかせる) */
+  .today-tile-note { min-width: 0; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .today-tile-head .chev { flex-shrink: 0; font-size: 9px; }
+  /* シエナのオーラだけ展開ではなくキャラタブへ飛ぶ。外部遷移を示す ↗ を常設し、押す前に
+     区別できるようにする(押した場所は動かない §00 に対する例外なので明示する) */
+  .today-tile-nav:hover { border-color: var(--sim); }
   /* ===== 今日の強化: 展開(押したタイルの上には差し込まず、グリッド全体の下に出す) ===== */
   .today-expand {
     display: flex; flex-direction: column; gap: 8px; padding: 11px 13px; border-radius: var(--r-window);
@@ -1468,7 +1612,7 @@
   .enchant-stat-num { padding: 0; background: none; border: none; cursor: text; }
   .enchant-stat-num:hover { text-decoration: underline dotted; }
   .enchant-stat-input {
-    width: 44px; padding: 1px 3px; border-radius: var(--r-inset); background: #fff;
+    width: 44px; padding: 1px 3px; border-radius: var(--r-inset); background: var(--bg-field);
     border: 1px solid var(--accent); font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums;
   }
   .enchant-stat-chips { flex: none; display: flex; flex-wrap: wrap; gap: 3px; max-width: 190px; }
@@ -1507,6 +1651,8 @@
   /* ===== どこまでいける?(details.fold は app.css 側の畳み見た目を継承) ===== */
   .reach-fold summary { display: flex; align-items: center; gap: 9px; }
   .fold-count { font-size: 10.5px; font-weight: 700; color: var(--fg-sub); }
+  /* 未収録数は見出しの主役(クリア済み)より控えめに(§00 02: いま要らないものは弱める) */
+  .fold-note { margin-left: auto; font-size: 9.5px; }
 
   .areas { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
   .area { display: flex; flex-direction: column; gap: 6px; }
@@ -1572,7 +1718,7 @@
   .tl-date { flex: none; width: 38px; font-size: 9.5px; color: var(--fg-dim); }
   .tl-text { min-width: 0; flex: 1; font-size: 11px; color: var(--fg-sub); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tl-note { flex: none; font-size: 9.5px; color: var(--fg-dim); white-space: nowrap; }
-  .ext { flex: none; font-size: 10px; }
+  .tl-rest { display: flex; flex-direction: column; gap: 6px; }
 
   .foot { margin: 0; font-size: 10px; line-height: 1.7; }
 </style>
