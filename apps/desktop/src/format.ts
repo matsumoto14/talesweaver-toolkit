@@ -2,6 +2,12 @@ import type { StatLayer } from "./api/types";
 
 export const fmtInt = (n: number) => n.toLocaleString("ja-JP");
 
+/** ISO8601(YYYY-MM-DD)を MM-DD に。ホームの「最後の強化」とお知らせの公開日で使う */
+export const fmtMonthDay = (iso: string) => {
+  const d = new Date(iso);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 /** 小数は最大4桁、整数は桁区切りのみ */
 export const fmtNum = (n: number) =>
   n.toLocaleString("ja-JP", { maximumFractionDigits: 4 });

@@ -7,7 +7,7 @@
 
 <script lang="ts">
   // ホーム: 選択中キャラの「キャラの窓」ヒーロー(現況・次の目標・おすすめ強化)+
-  // 今日の期限・影響 + 今日の強化(5 項目タイル。押すとグリッド全体の下に展開)+ 到達一覧(畳み)+ うごき、のブリーフィング型 1 カラム。
+  // 今日の期限・影響 + 今日の強化(5 項目タイル。押すとグリッド全体の下に展開)+ 到達一覧(畳み)のブリーフィング型 1 カラム(更新内容は「お知らせ」タブ)。
   // 判定はすべて Rust 側(evaluate_contents / preview_effective_stats / preview_defense / preview_damage)。
   // この画面は表示と選択のみ。
   import {
@@ -27,8 +27,7 @@
     applyCatalogItem, equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
     valuesSummary,
   } from "../../equipment";
-  import { FEED_ITEMS } from "../../feed";
-  import { fmtInt } from "../../format";
+  import { fmtInt, fmtMonthDay } from "../../format";
   import {
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, SIENA_ALLOWED_SLOTS, STAT_KINDS, STAT_LABELS,
   } from "../../labels";
@@ -52,10 +51,6 @@
   const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
   const today = new Date();
   const todayLabel = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}(${WEEKDAYS[today.getDay()]})`;
-  const fmtMonthDay = (iso: string) => {
-    const d = new Date(iso);
-    return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  };
   const daysAgo = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 
   // 判定に使ったスキル名の表示用(evaluate_contents は「最大ダメージのスキル」で判定する)。
@@ -1430,38 +1425,6 @@
         </div>
       </details>
 
-      <!-- ===== うごき: 上のカードに入らなかった新着(ツールの更新履歴。外部フィードは今回スコープ外)。
-           「今日の状況」ではないので最新 1 件だけ出し、残りは畳む(§00 02) ===== -->
-      {#if FEED_ITEMS.length > 0}
-        <div class="section">
-          <div class="area-head">
-            <span class="area-name">うごき</span>
-            <span class="area-rule"></span>
-          </div>
-          <div class="tl-row">
-            <span class="tl-date num">{fmtMonthDay(FEED_ITEMS[0].date)}</span>
-            <span class="tag">{FEED_ITEMS[0].source === "tool" ? "ツール" : FEED_ITEMS[0].source === "official" ? "TW公式" : "韓国"}</span>
-            <span class="tl-text">{FEED_ITEMS[0].title}</span>
-            {#if FEED_ITEMS[0].note}<span class="tl-note">{FEED_ITEMS[0].note}</span>{/if}
-          </div>
-          {#if FEED_ITEMS.length > 1}
-            <details class="fold">
-              <summary>ほか {fmtInt(FEED_ITEMS.length - 1)} 件</summary>
-              <div class="fold-body tl-rest">
-                {#each FEED_ITEMS.slice(1) as item (item.date + item.title)}
-                  <div class="tl-row">
-                    <span class="tl-date num">{fmtMonthDay(item.date)}</span>
-                    <span class="tag">{item.source === "tool" ? "ツール" : item.source === "official" ? "TW公式" : "韓国"}</span>
-                    <span class="tl-text">{item.title}</span>
-                    {#if item.note}<span class="tl-note">{item.note}</span>{/if}
-                  </div>
-                {/each}
-              </div>
-            </details>
-          {/if}
-        </div>
-      {/if}
-
       <p class="foot dim">
         入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
         目安ダメージは wiki に無い値で、コミュニティ知識・実測が出典です(実測で更新)。
@@ -1477,7 +1440,7 @@
 
   .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
 
-  /* 帯ラベル・行動チップ。「うごき」= ソース分類、影響カード = カード種別、と 1 部品 2 用途 */
+  /* 帯ラベル・行動チップ。影響カードのカード種別に使う */
   .tag {
     flex: none; width: 52px; text-align: center; padding: 1px 0; border-radius: var(--r-pill);
     background: var(--surface-inset); border: 1px solid var(--border-soft);
@@ -1551,7 +1514,7 @@
   .hero-advice-row .chev { flex-shrink: 0; font-size: 9px; }
   .cost { flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
 
-  /* ===== 汎用セクション見出し(期限・影響 / 今日の強化 / うごき) ===== */
+  /* ===== 汎用セクション見出し(期限・影響 / 今日の強化 / どこまでいける?) ===== */
   .section { display: flex; flex-direction: column; gap: 6px; }
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
@@ -1709,16 +1672,6 @@
   }
   .st:hover:not(:disabled) { background: var(--bg-active); }
   .st-label { font-size: 9px; color: var(--fg-muted); white-space: nowrap; }
-
-  /* ===== うごき ===== */
-  .tl-row {
-    display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-radius: var(--r-window);
-    background: var(--bg-field); border: 1px solid var(--border-soft);
-  }
-  .tl-date { flex: none; width: 38px; font-size: 9.5px; color: var(--fg-dim); }
-  .tl-text { min-width: 0; flex: 1; font-size: 11px; color: var(--fg-sub); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tl-note { flex: none; font-size: 9.5px; color: var(--fg-dim); white-space: nowrap; }
-  .tl-rest { display: flex; flex-direction: column; gap: 6px; }
 
   .foot { margin: 0; font-size: 10px; line-height: 1.7; }
 </style>

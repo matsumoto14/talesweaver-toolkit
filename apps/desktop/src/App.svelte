@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 画面枠: 上部タブ(ホーム/ダメージ計算/キャラ)+ 左キャラレール + エラー帯。
+  // 画面枠: 上部タブ(ホーム/ダメージ計算/バフ/キャラ/お知らせ)+ 左キャラレール + エラー帯。
   // 構成は デザインモック TW Toolkit Prototype v4 に合わせる(規格は docs/design-system.html)。
   import { onMount } from "svelte";
   import brandLogo from "./assets/brand/tw-context-logo.png";
@@ -11,6 +11,7 @@
   import BuffsPage from "./pages/buffs/BuffsPage.svelte";
   import CharsPage from "./pages/chars/CharsPage.svelte";
   import HomePage from "./pages/home/HomePage.svelte";
+  import NewsPage from "./pages/news/NewsPage.svelte";
   import { app, focusErrorTarget, loadAll, simIsDirty, type Tab } from "./state.svelte";
   import { dismissError, reportError, reportNotice, runUndo, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
@@ -21,6 +22,7 @@
     { id: "calc", label: "ダメージ計算" },
     { id: "buffs", label: "バフ" },
     { id: "chars", label: "キャラ" },
+    { id: "news", label: "お知らせ" },
   ];
 
   const DEFAULT_RAIL_WIDTH = 280;
@@ -134,6 +136,8 @@
             <CalcPage />
           {:else if app.tab === "buffs"}
             <BuffsPage />
+          {:else if app.tab === "news"}
+            <NewsPage />
           {:else}
             <CharsPage />
           {/if}
