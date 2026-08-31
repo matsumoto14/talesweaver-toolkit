@@ -1,5 +1,5 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import type {
   Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,

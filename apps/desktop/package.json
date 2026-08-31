@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:wasm": "wasm-pack build ../../crates/web --target web",
+    "build:web": "npm run build:wasm && vite build --config vite.web.config.ts",
+    "preview:web": "vite preview --config vite.web.config.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri"
   },
@@ -21,6 +24,7 @@
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^26.4.0",
     "svelte": "^5",
     "svelte-check": "^4",
     "typescript": "^5",

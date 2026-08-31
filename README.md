@@ -65,6 +65,19 @@ cd apps/desktop && npm run tauri dev    # 開発起動(初回の Rust ビルド�
 cd apps/desktop && npm run build && npx svelte-check   # フロント単体チェック
 ```
 
+### ブラウザ版(保存なし)
+
+同じ画面を WASM(`crates/web`)の上で動かす。ダメージ計算は動くが、保存が要る操作
+(キャラ登録・バフセット・実測)は「まだ使えません」を返す。
+
+```sh
+cargo install wasm-pack                 # 未導入なら 1 回だけ
+rustup target add wasm32-unknown-unknown
+
+cd apps/desktop && npm run build:web    # WASM をビルドして dist-web に出す
+cd apps/desktop && npm run preview:web  # dist-web を配信して確認
+```
+
 ## ドキュメント
 
 
