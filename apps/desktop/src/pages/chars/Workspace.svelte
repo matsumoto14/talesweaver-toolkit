@@ -325,10 +325,15 @@
     if (dirty) void autoSave();
   });
 
+  // 別タブからの「この補正源を開く」要求。読んだらその場で捨てる — 残したままだと、
+  // 自動保存が app.characters を差し替えるたびにこの $effect が(character プロップの変化で)
+  // 走り直し、ユーザーが自分で開き直した補正源を古い要求で上書きしてしまう
+  // (例: ホームのシエナタイル → 共通スキルを開く → Lv 変更 → 保存 → シエナに戻される)。
   $effect(() => {
     const request = characterSourceFocus.request;
     if (!request || app.selectedId !== character.id) return;
     openSource = request.sourceId;
+    characterSourceFocus.request = null;
   });
 
   // エラー帯の「ここを開く」で指された場所は、まず補正源を開くところまでをここが担う。
