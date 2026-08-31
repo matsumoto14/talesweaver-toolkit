@@ -328,8 +328,12 @@ pub struct ComboCycle {
     pub interval: Option<f64>,
     /// CI がスキルの中ディレイより長く、下限として効いたか
     pub interval_binding: bool,
+    /// サイクルのうちスキル側にかかる時間 = `max(スキルの中ディレイ, CI)`
+    pub skill_gap: f64,
     /// 1 サイクルの所要時間(秒)
     pub seconds: f64,
+    /// スキルを撃てる回数(回/分)= 60 ÷ サイクル。実測表はコンボなしの計測なので使わない
+    pub uses_per_minute: f64,
 }
 
 /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。
@@ -599,7 +603,9 @@ pub fn calculate_damage_with_combo(input: &DamageInput, normal_attack: &Skill) -
         skill_delay: skill_seconds,
         interval: normal_attack.combo_interval,
         interval_binding: normal_attack.combo_interval.is_some_and(|i| i > skill_seconds),
+        skill_gap: gap,
         seconds,
+        uses_per_minute: SECONDS_PER_MINUTE / seconds,
     });
     result
 }
@@ -2253,6 +2259,14 @@ mod tests {
         // CI が効くぶんサイクルが伸び、DPS は下がる
         assert!(long_combo.seconds > short.combo.unwrap().seconds);
         assert!(long.dps.unwrap().max < short.dps.unwrap().max);
+    }
+
+    #[test]
+    fn コンボの回数は1分をサイクルで割った値() {
+        let result = calculate_damage_with_combo(&input(), &normal_attack(Some(0.32)));
+        let combo = result.combo.unwrap();
+        assert!((combo.uses_per_minute - 60.0 / combo.seconds).abs() < 1e-12);
+        assert!((combo.skill_gap - combo.skill_delay.max(0.32)).abs() < 1e-12);
     }
 
     #[test]

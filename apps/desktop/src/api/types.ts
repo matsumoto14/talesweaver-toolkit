@@ -1412,8 +1412,12 @@ export interface ComboCycle {
   interval: number | null;
   /** CI がスキルの中ディレイより長く、下限として効いたか */
   interval_binding: boolean;
+  /** サイクルのうちスキル側にかかる時間 = max(スキルの中ディレイ, CI) */
+  skill_gap: number;
   /** 1 サイクルの所要時間(秒) */
   seconds: number;
+  /** スキルを撃てる回数(回/分)= 60 ÷ サイクル */
+  uses_per_minute: number;
 }
 
 export interface DpsTriple {

@@ -776,7 +776,7 @@
       mats.push({
         label: "1 サイクル",
         value: `${cycle.seconds.toFixed(2)}s`,
-        sub: `通常攻撃 ${cycle.normal_delay.toFixed(2)}s + ${Math.max(cycle.skill_delay, cycle.interval ?? 0).toFixed(2)}s`,
+        sub: `通常攻撃 ${cycle.normal_delay.toFixed(2)}s + ${cycle.skill_gap.toFixed(2)}s`,
       });
     } else {
       mats.push({
@@ -1859,7 +1859,7 @@
                   <!-- コンボ中は「スキルを何回撃てるか」= 1 分 ÷ サイクル。
                        スキルの中ディレイだけで数えると、通常攻撃を挟むぶんを落として速く見える -->
                   {#if result?.combo}
-                    {Math.round(60 / result.combo.seconds)} 回/分 ・
+                    {Math.round(result.combo.uses_per_minute)} 回/分 ・
                   {:else if result?.actual_delay}
                     {Math.round(result.actual_delay.uses_per_minute)} 回/分 ・
                   {/if}{critMode ? "クリ確定" : "非クリ"}
