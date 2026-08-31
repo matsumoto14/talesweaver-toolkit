@@ -222,6 +222,8 @@ const AREAS: &[(&str, &str, &[Def])] = &[
         Def { id: "abyss_hell", name: "アビス(ヘル)", enemy_id: Some("abyss_hell"), need_per_hit: Some(3_000),
               requirements: &[stage(4), equip(1_250, 1_450, 2_000)],
               entry_note: Some("ルーンレベル 30 必要(判定対象外)/ アクィルス+10しまくったらいける"), team_note: None },
+        Def { id: "arklon_underground", name: "アークロン地下要塞", enemy_id: Some("arklon_underground"), need_per_hit: Some(1_500),
+              requirements: &[], entry_note: None, team_note: None },
     ]),
     // ================= エクリプス =================
     // 喪失の島(記憶の森 前哨基地)から入る一群。アフェティリアとその区画ボス(セリニアコス /
@@ -267,6 +269,10 @@ const AREAS: &[(&str, &str, &[Def])] = &[
         Def { id: "aphetiria_ex", name: "アフェティリアEX", enemy_id: Some("kisinik_ex"), need_per_hit: Some(20_000),
               requirements: &[STAGE5, eternal(41), equip(2_500, 3_000, 4_000), core(480)],
               entry_note: UPPER_NOTE, team_note: None },
+        Def { id: "lost_forest", name: "喪失の森", enemy_id: Some("lost_forest"), need_per_hit: Some(6_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "valley_soldier", name: "異界の峡谷 兵士", enemy_id: Some("valley_soldier"), need_per_hit: Some(10_000),
+              requirements: &[], entry_note: None, team_note: None },
     ]),
     // ================= コアマスターダンジョン =================
     // 各ダンジョンのコアマスター難度(wiki「ミニゲーム/コアマスターダンジョン」の実装済みダンジョン表:
@@ -338,6 +344,8 @@ const AREAS: &[(&str, &str, &[Def])] = &[
         Def { id: "architect_h", name: "見つめる悲しみ(ハード)", enemy_id: Some("architect_h"), need_per_hit: Some(22_000),
               requirements: &[STAGE5, eternal(61), equip(3_900, 4_000, 5_900), core(210)],
               entry_note: UPPER_NOTE, team_note: None },
+        Def { id: "clamor", name: "クラモール", enemy_id: Some("clamor"), need_per_hit: Some(4_000),
+              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
     ]),
     // ================= 古代レリックの聖域 =================
     // 1 コンテンツ 20 段(wiki「ミニゲーム/古代レリックの聖域」難易度表: 1〜10 段のボスが神鳥、
@@ -371,22 +379,13 @@ const AREAS: &[(&str, &str, &[Def])] = &[
               entry_note: UPPER_NOTE, team_note: None },
     ]),
     // ================= その他(区分未確定) =================
-    // ゲーム内「コンテンツ基本情報」の左メニューに出ない、または所属を wiki で確定できなかったもの。
-    // フィールドボス(アークロン地下要塞・喪失の森・異界の峡谷 兵士)と参加型レイド(トゥタトゥール・
-    // クラモール・キマイラ)。確定したらここから移す
-    ("other", "その他(区分未確定)", &[
+    // ゲーム内「コンテンツ基本情報」の左メニューに出ないもの。参加型レイドの 2 件で、
+    // ユーザー確認(2026-09-01)でもここが正しい(残りの 4 件は所属が確定して各エリアへ移した)
+    ("other", "その他", &[
         Def { id: "tutatur", name: "トゥタトゥール", enemy_id: Some("tutatur"), need_per_hit: Some(2_000),
-              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
-        Def { id: "arklon_underground", name: "アークロン地下要塞", enemy_id: Some("arklon_underground"), need_per_hit: Some(1_500),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "clamor", name: "クラモール", enemy_id: Some("clamor"), need_per_hit: Some(4_000),
               requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
         Def { id: "chimera", name: "キマイラ", enemy_id: Some("chimera"), need_per_hit: Some(20_000),
               requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
-        Def { id: "lost_forest", name: "喪失の森", enemy_id: Some("lost_forest"), need_per_hit: Some(6_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "valley_soldier", name: "異界の峡谷 兵士", enemy_id: Some("valley_soldier"), need_per_hit: Some(10_000),
-              requirements: &[], entry_note: None, team_note: None },
     ]),
 ];
 
@@ -456,12 +455,13 @@ mod tests {
         const EXPECTED: &[(&str, &[&str])] = &[
             ("mercurial", &["ringo"]),
             ("shinchou", &["shinchou_normal", "shinchou_hard"]),
-            ("abyss", &["abyss_normal", "abyss_hard", "abyss_hell"]),
+            ("abyss", &["abyss_normal", "abyss_hard", "abyss_hell", "arklon_underground"]),
             ("eclipse", &[
                 "detachment_subjugation", "eclipse_boss", "eclipse_2", "aphetiria_normal",
                 "moon_queen_training", "eclipse_subjugation", "valley_defense",
                 "last_battle_1", "last_battle_2", "selinacos_h", "last_battle", "goitia_h",
                 "aphetiria_hard", "selinacos_ex", "goitia_ex", "aphetiria_ex",
+                "lost_forest", "valley_soldier",
             ]),
             ("core_master", &["luminous_ex", "abyss_ex"]),
             ("vestige", &["vestige_ruins"]),
@@ -472,7 +472,7 @@ mod tests {
             ("rubicona", &[
                 "annoying_anger", "longed_pleasure", "chaotic_land", "colorless_land",
                 "architect_mine", "void_domain", "leitia_n", "architect_n",
-                "pleasure_afterimage", "leitia_h", "architect_h",
+                "pleasure_afterimage", "leitia_h", "architect_h", "clamor",
             ]),
             ("ancient_relic_sanctuary", &[
                 "relic_sanctuary_shinchou",
@@ -481,12 +481,8 @@ mod tests {
                 "relic_sanctuary_16", "relic_sanctuary_17", "relic_sanctuary_18",
                 "relic_sanctuary_19", "relic_sanctuary_kisinik",
             ]),
-            // 所属を wiki で確定できなかったもの(フィールドボス・参加型レイド)。
-            // 確定したらここから該当エリアへ移す。
-            ("other", &[
-                "tutatur", "arklon_underground", "clamor", "chimera",
-                "lost_forest", "valley_soldier",
-            ]),
+            // 左メニューに出ない参加型レイドだけが残る(所属確定分は各エリアへ移した)。
+            ("other", &["tutatur", "chimera"]),
         ];
 
         let actual: Vec<(String, Vec<String>)> = content_areas()
