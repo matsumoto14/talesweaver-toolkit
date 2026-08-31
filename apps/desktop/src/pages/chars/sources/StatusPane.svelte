@@ -1,12 +1,17 @@
 <script lang="ts">
   // 「status」補正源のペイン。キャラ選択・覚醒・エタの意志・主軸スキル・主属性・能力値の一覧。
   import { untrack } from "svelte";
-  import type { Element, ElementPreview, Skill, StatKind, StatPreview } from "../../../api/types";
+  import type {
+    Element, ElementPreview, Skill, StatKind, StatPreview, StatSourceGroup,
+  } from "../../../api/types";
   import { errorMessage, previewElements, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
   import { compareMainSkills, mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
   import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
   import { fmtInt, formatLayerValue } from "../../../format";
-  import { ELEMENT_LABELS, ELEMENTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../../labels";
+  import {
+    ELEMENT_LABELS, ELEMENTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
+    STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
+  } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
   import { reportError } from "../../../toast.svelte";
@@ -181,6 +186,19 @@
 
   const traceFor = (k: StatKind) => preview?.traces.find((t) => t.kind === k) ?? null;
   const signed = (n: number) => `${n >= 0 ? "+" : ""}${fmtInt(n)}`;
+
+  // ゲーム内の能力値と突き合わせるとき、合わない原因は「登録内容の抜け」であって計算ではない。
+  // どこから来た上昇かが見えないと、抜けているのがバフなのか装備なのかを人が当てるしかない。
+  // 区分ごとの帰属は Rust が出す(group_effects)。ここでは引くだけで、足し算はしない(ADR 001)
+  const groupEffect = (k: StatKind, g: StatSourceGroup) =>
+    preview?.group_effects.find((e) => e.kind === k && e.group === g)?.effect ?? null;
+  /** 「補正」列に重ねる出どころの内訳。開かなくても hover で答えが出る(§00 05) */
+  const groupTitle = (k: StatKind) =>
+    preview === null
+      ? ""
+      : STAT_SOURCE_GROUPS.map(
+          (g) => `${STAT_SOURCE_GROUP_LABELS[g]} ${signed(groupEffect(k, g) ?? 0)}`,
+        ).join(" / ");
 </script>
 
 <div class="card">
@@ -408,7 +426,7 @@
             <td class="n stat-cell">
               <StatInput label="" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
             </td>
-            <td class="n muted ro" use:bump={() => diff}>{diff === null ? "—" : signed(diff)}</td>
+            <td class="n muted ro" title={groupTitle(k)} use:bump={() => diff}>{diff === null ? "—" : signed(diff)}</td>
             <!-- 素ステ → 最終を 1 本のバーで(§11)。数字の羅列ではなく「どれだけ伸びたか」を見せる。
                  灰が素ステ(振り分け)、青が補正で乗った分。長さは最終能力値の上限に対する割合 -->
             <td class="ro">
@@ -437,26 +455,63 @@
       </tbody>
     </table>
   </div>
+  <!-- ゲーム内の数字と合わないときに見る場所。ふだんは畳んでおき(§00 02)、
+       開くと「バフ / 装備 / そのほか」で上昇分が割れる。区分の合計は必ず最終能力値に一致する -->
   <details class="contrib">
-    <summary>補正の内訳 <span class="dim">{preview ? preview.contributions.length : 0} 件</span></summary>
-    {#if !preview || preview.contributions.length === 0}
+    <summary>上昇の出どころ <span class="dim">バフ / 装備 / そのほか</span></summary>
+    {#if !preview || preview.source_effects.length === 0}
       <p class="empty dim">補正源なし(素ステのみ)</p>
     {:else}
       <div class="tbl">
-        <table class="grid ro">
-          <thead><tr><th>ステ</th><th>出典</th><th>層</th><th class="n">値</th></tr></thead>
+        <table class="grid ro group-tbl">
+          <thead>
+            <tr>
+              <th>ステ</th>
+              <th class="n">素</th>
+              {#each STAT_SOURCE_GROUPS as g (g)}<th class="n">{STAT_SOURCE_GROUP_LABELS[g]}</th>{/each}
+              <th class="n">最終</th>
+            </tr>
+          </thead>
           <tbody>
-            {#each STAT_KINDS.flatMap((k) => preview!.contributions.filter((c) => c.kind === k)) as c, i (i)}
+            {#each STAT_KINDS as k (k)}
               <tr>
-                <td>{STAT_LABELS[c.kind]}</td>
-                <td class="muted">{c.source}</td>
-                <td class="muted">{STAT_LAYER_LABELS[c.layer]}</td>
-                <td class="n">{formatLayerValue(c.layer, c.value)}</td>
+                <td>{STAT_LABELS[k]}</td>
+                <td class="n muted">{fmtInt(draft.baseStats[k])}</td>
+                {#each STAT_SOURCE_GROUPS as g (g)}
+                  {@const e = groupEffect(k, g)}
+                  <!-- 0 の区分は薄く出す。行や列が消えると、次に見たとき同じ場所を探し直すことになる -->
+                  <td class="n" class:zero={e === 0} use:bump={() => e}>{e === null ? "—" : signed(e)}</td>
+                {/each}
+                <td class="n strong" use:bump={() => preview?.stats[k] ?? null}>
+                  {preview ? fmtInt(preview.stats[k]) : "—"}
+                </td>
               </tr>
             {/each}
           </tbody>
         </table>
       </div>
+      <p class="note dim">素 + バフ + 装備 + そのほか = 最終(上限で捨てた分も織り込み済み)。倍率をかける補正源は、先に乗った固定値を増やした分も自分の区分で受け取ります。</p>
+      <!-- 「どの層の 1 件が抜けているか」までは、ここを開いて 1 件ずつ見る -->
+      <details class="contrib inner">
+        <summary>1 件ずつ見る <span class="dim">{preview.source_effects.length} 件</span></summary>
+        <div class="tbl">
+          <table class="grid ro">
+            <thead><tr><th>ステ</th><th>区分</th><th>出典</th><th>層</th><th class="n">値</th><th class="n">効果</th></tr></thead>
+            <tbody>
+              {#each preview.source_effects as e, i (i)}
+                <tr>
+                  <td>{STAT_LABELS[e.kind]}</td>
+                  <td class="muted">{STAT_SOURCE_GROUP_LABELS[e.group]}</td>
+                  <td class="muted">{e.source}</td>
+                  <td class="muted">{STAT_LAYER_LABELS[e.layer]}</td>
+                  <td class="n">{formatLayerValue(e.layer, e.value)}</td>
+                  <td class="n" use:bump={() => e.effect}>{signed(e.effect)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </details>
     {/if}
   </details>
 </div>

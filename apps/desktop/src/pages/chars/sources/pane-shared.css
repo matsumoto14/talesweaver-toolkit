@@ -62,6 +62,12 @@
   details.contrib { margin-top: 8px; }
   details.contrib summary { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-muted); cursor: pointer; user-select: none; }
   details.contrib summary:hover { color: var(--fg); }
+  /* 内訳の中の内訳(1 件ずつ)。開いても外側の位置は動かない */
+  details.contrib.inner { margin-top: 6px; }
+  /* 出どころの表。桁が増えても列幅が動かないよう最小幅を持たせる(§00 03) */
+  table.grid.group-tbl td.n, table.grid.group-tbl th.n { min-width: 58px; }
+  /* 0 の区分は薄く。行や列ごと消すと、次に見たとき同じ場所を探し直すことになる */
+  table.grid.group-tbl td.zero { color: var(--fg-off); }
   .empty { margin: 6px 0 0; padding: 4px 0; font-size: 11px; }
 
   /* .check チップは app.css(ui/CheckChip.svelte のスタイル)。ここは横並びの置き場だけ */

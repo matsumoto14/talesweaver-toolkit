@@ -28,7 +28,7 @@
     errorLocation, errorMessage, previewEffectiveStats, resolveCharacterSkillEffects,
   } from "../../api/commands";
   import type {
-    CharacterSkillEffectsView, CommonSkills, Equipment, EquipmentPart, PartSlot,
+    BuffSelection, CharacterSkillEffectsView, CommonSkills, Equipment, EquipmentPart, PartSlot,
     RegisteredCharacter, StatPreview, StatSources,
   } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
@@ -188,10 +188,15 @@
     // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
     const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
+    // いつものバフも**この場で**読む。previewLatest.run は debounce するので、run に渡す
+    // closure の中で読んだ値は $effect の依存に入らない — バフを付け替えても再計算が走らず、
+    // 能力値だけ古いまま残っていた(上の deep copy が同じ理由でここに置かれているのと同じ)
+    const buffs = JSON.parse(JSON.stringify(
+      app.buffSets.find((set) => set.id === draft.defaultBuffSetId)?.choices ?? { choices: [] },
+    )) as BuffSelection;
     previewLatest.run((isCurrent) =>
       previewEffectiveStats(
-        baseStats, statSources, equipment, commonSkills, awakening, mainSkillId,
-        app.buffSets.find((set) => set.id === draft.defaultBuffSetId)?.choices ?? { choices: [] },
+        baseStats, statSources, equipment, commonSkills, awakening, mainSkillId, buffs,
       )
         .then((p) => {
           if (isCurrent()) {
