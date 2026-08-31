@@ -8456,7 +8456,8 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             values_min: v(0, 0, 19, 120, 210, 32, 17, 20, 15),
             values_max: v(0, 0, 21, 150, 230, 32, 17, 21, 17),
             growth_cap: None,
-            enchant_total_caps: v(0, 0, 100, 450, 0, 105, 105, 100, 100),
+            // 魔防上限は wiki 表記「420?」(未確認値)をユーザー判断で採用。
+            enchant_total_caps: v(0, 0, 100, 450, 420, 105, 105, 100, 100),
             weapon_class: Some(WeaponClass::DualBladeMagic),
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
@@ -10808,7 +10809,8 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             values_min: v(0, 0, 19, 120, 210, 32, 17, 20, 15),
             values_max: v(0, 0, 21, 150, 230, 32, 17, 21, 17),
             growth_cap: None,
-            enchant_total_caps: v(0, 0, 100, 450, 0, 105, 105, 100, 100),
+            // 魔防上限は wiki 表記「420?」(未確認値)をユーザー判断で採用。
+            enchant_total_caps: v(0, 0, 100, 450, 420, 105, 105, 100, 100),
             weapon_class: None,
             enhance_type: None,
             damage_effects: ITEM_DAMAGE_JAPAN_3,
