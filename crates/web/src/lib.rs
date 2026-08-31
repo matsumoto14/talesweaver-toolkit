@@ -5,6 +5,9 @@
 //! 引数は Tauri と同じ camelCase の JS オブジェクトで来るので、コマンドごとに
 //! `#[serde(rename_all = "camelCase")]` の引数 struct で受ける(名前は Tauri 側の引数名が正)。
 
+#[cfg(test)]
+mod args_check;
+
 use commands::CommandError;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};

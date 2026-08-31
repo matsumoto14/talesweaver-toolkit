@@ -31,6 +31,12 @@ jobs:
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
 
+      # ブラウザ版のビルド(npm run build:web)に要る。cargo install は数分かかるので
+      # ビルド済みバイナリを使う
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
       - name: 依存を入れる
         working-directory: apps/desktop
         run: npm ci
@@ -38,11 +44,34 @@ jobs:
       - name: Rust のテスト
         run: cargo test --workspace
 
-      # 計算(domain / gamedata)はブラウザでも動かせる状態を保つ。OS や DB に依存する
-      # コードが混ざるとここで落ちる。保存(crates/storage)は rusqlite なので対象外で、
-      # Web 版を出すときは別実装になる(docs/architecture.md)
-      - name: 計算部分が wasm でビルドできる
-        run: cargo check -p domain -p gamedata --target wasm32-unknown-unknown
+      # ブラウザ版が動く状態を保つ。OS や DB に依存するコードが `domain` / `gamedata` /
+      # `commands` / `web` に混ざるとここで落ちる。保存(crates/storage)は rusqlite なので
+      # 対象外で、ブラウザ版の保存は TS 側(IndexedDB)にある(docs/adr/012-web-build.md)
+      - name: ブラウザ版が wasm でビルドできる
+        run: cargo check -p domain -p gamedata -p commands -p web --target wasm32-unknown-unknown
+
+      # 画面が Tauri のプラグインを直接 import してよいのは、ブラウザ用の実体を
+      # vite.web.config.ts で alias 差し替えしているものだけ。ここが増えると
+      # ブラウザ版はビルドを通ったまま実行時に落ちるので、静かに壊れる前に止める。
+      # 呼び出しの境界(api/)とブラウザ用の実体(web/)は対象外
+      - name: 画面が Tauri を直接触っていない
+        shell: bash
+        working-directory: apps/desktop
+        run: |
+          bad=0
+          while IFS= read -r line; do
+            module=$(printf '%s' "$line" | grep -o '@tauri-apps/[a-z0-9/-]*' | head -1)
+            case "$module" in
+              @tauri-apps/plugin-*) grep -q "\"$module\"" vite.web.config.ts && continue ;;
+            esac
+            echo "NG: $line"; bad=1
+          done < <(grep -rn '@tauri-apps/' src --include='*.ts' --include='*.svelte' | grep -v '^src/api/' | grep -v '^src/web/')
+          if [ "$bad" != 0 ]; then
+            echo "画面から Tauri を直接使うと、ブラウザ版で動かなくなる。"
+            echo "コマンドなら src/api/commands.ts 経由に、プラグインなら src/web/ に実体を置いて"
+            echo "vite.web.config.ts で alias すること。"
+            exit 1
+          fi
 
       # `cargo fmt --check` / `clippy -D warnings` は既存コードが通らないので入れていない。
       # 入れるなら、まず一括整形の commit を単独で切ること。
@@ -52,3 +81,9 @@ jobs:
         run: |
           npm run build
           npx svelte-check --tsconfig ./tsconfig.json --threshold error
+
+      # デスクトップ版だけ直してブラウザ版を置き去りにしないための番人。
+      # WASM を作り直してから、同じ画面をブラウザ向けにビルドする
+      - name: ブラウザ版のビルド
+        working-directory: apps/desktop
+        run: npm run build:web
