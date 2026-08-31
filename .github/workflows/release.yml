@@ -157,14 +157,32 @@ jobs:
 
             # --- 自動更新の配信元 ------------------------------------------------
             # アプリが見に行くのは dl.tw-context.dev/latest/latest.json(tauri.conf.json の
-            # plugins.updater.endpoints)。tauri-action が作る latest.json は GitHub Release の
-            # asset を指しているが、**Release は下書きで作る**ので公開まで 404 になる。
-            # 版ごとに残す R2 のパスへ向き先だけ差し替えて上げる(署名はそのまま使える)。
-            $updaterJson = $paths | Where-Object { $_ -like "*latest.json" } | Select-Object -First 1
-            if (-not $updaterJson) { throw "latest.json がありません(TAURI_SIGNING_PRIVATE_KEY 未設定?)。自動更新を配れないのでここで止めます" }
-            $manifest = Get-Content $updaterJson -Raw -Encoding utf8 | ConvertFrom-Json
-            foreach ($platform in $manifest.platforms.PSObject.Properties) {
-              $platform.Value.url = "https://dl.tw-context.dev/$env:PREFIX/$setupName"
+            # plugins.updater.endpoints)。
+            #
+            # tauri-action も latest.json を作るが、**それは Release へ直接上げるだけで
+            # artifactPaths には出てこない**(2026-08-31 の v0.1.0 で確認)。しかも中身は
+            # 下書き Release の asset を指していて公開まで 404 になる。
+            # 材料(署名 = .sig、置き先 = R2 のパス、版 = タグ)はここに揃っているので、
+            # 配信用の latest.json はこの場で組み立てる。
+            $signature = $paths | Where-Object { $_ -like "*-setup.exe.sig" } | Select-Object -First 1
+            if (-not $signature) { throw "署名 (.sig) がありません(TAURI_SIGNING_PRIVATE_KEY 未設定?)。自動更新を配れないのでここで止めます" }
+
+            # 版はタグを正にする。tauri.conf.json とずれていたら、更新を配ったあとに
+            # 「入れたのに新しい版のお知らせが出続ける」ことになるのでここで止める。
+            $tagVersion = $env:PREFIX -replace '^v', ''
+            $confVersion = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw -Encoding utf8 | ConvertFrom-Json).version
+            if ($tagVersion -ne $confVersion) { throw "タグ($tagVersion)と tauri.conf.json($confVersion)の版が違います。tools/release/bump.py で揃えてからタグを打ってください" }
+
+            $manifest = [ordered]@{
+              version   = $tagVersion
+              notes     = "変更点はアプリの「お知らせ」タブで見られます。"
+              pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+              platforms = [ordered]@{
+                "windows-x86_64" = [ordered]@{
+                  signature = (Get-Content $signature -Raw -Encoding utf8).Trim()
+                  url       = "https://dl.tw-context.dev/$env:PREFIX/$setupName"
+                }
+              }
             }
             $stagedManifest = Join-Path $staging "latest.json"
             $manifest | ConvertTo-Json -Depth 20 | Set-Content $stagedManifest -Encoding utf8
