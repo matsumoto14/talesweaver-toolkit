@@ -1,6 +1,6 @@
 <script lang="ts">
   // 問い合わせパネル。情報パネルとは分け、右上から直接開く。
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { errorMessage, getAppInfo } from "./api/commands";
   import type { AppInfo } from "./api/types";
   import {
@@ -11,12 +11,16 @@
   import { reportError } from "./toast.svelte";
   import StepSelect from "./ui/StepSelect.svelte";
 
-  let { onClose }: { onClose: () => void } = $props();
+  let { onClose, prefill = null }: { onClose: () => void; prefill?: InquiryDraft | null } = $props();
 
   let info = $state<AppInfo | null>(null);
-  let kind = $state<InquiryKind>("bug");
-  let title = $state("");
-  let body = $state("");
+  // 実測から開いたときは中身が入った状態で始める(そのまま送れる。書き足しもできる)。
+  // このパネルは開くたびに作り直されるので、下書きは**開いた時点の値**でよい
+  // (あとから prefill が変わってユーザーの書きかけを上書きする方が困る)
+  const seed = untrack(() => prefill);
+  let kind = $state<InquiryKind>(seed?.kind ?? "bug");
+  let title = $state(seed?.title ?? "");
+  let body = $state(seed?.body ?? "");
   let includeDiagnostics = $state(true);
   let sending = $state(false);
   let progress = $state("");
@@ -46,6 +50,9 @@
       if (character.main_skill_id) lines.push(`主軸スキル: ${character.main_skill_id}`);
     }
     if (app.calcTargetId) lines.push(`計算中の対象: ${app.calcTargetId}`);
+    // 実測の条件(集計用の JSON)。中継側は診断情報だけをコードブロックに入れるので、
+    // 機械で読む値はここに置く(本文の ``` は中継側で潰される)
+    if (prefill?.diagnostics) lines.push("", prefill.diagnostics);
     return lines.join("\n");
   });
 

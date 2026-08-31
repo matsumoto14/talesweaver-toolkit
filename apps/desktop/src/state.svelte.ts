@@ -46,12 +46,18 @@ import type {
   ValidationLocation,
 } from "./api/types";
 import { reportError, type ErrorTarget } from "./toast.svelte";
+import type { InquiryDraft } from "./inquiry";
 import type { SourceId } from "./pages/chars/sourceId";
 
 export type Tab = "home" | "calc" | "buffs" | "chars" | "news";
 
 export const app = $state({
   tab: "home" as Tab,
+  /**
+   * 実測ダメージの送信で開く問い合わせの下書き(計算タブ →`InquiryPanel`)。
+   * 開いたら null に戻す。送信経路も見せ方も問い合わせと同じにするため、専用の面は作らない
+   */
+  inquiryPrefill: null as InquiryDraft | null,
   loading: true,
   characters: [] as RegisteredCharacter[],
   /** 登録キャラ id → 正規化済み PNG data URL。BLOB はここだけで表示用へ変換済み。 */

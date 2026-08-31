@@ -115,8 +115,15 @@
   {#if aboutOpen}
     <AboutPanel onClose={() => (aboutOpen = false)} />
   {/if}
-  {#if inquiryOpen}
-    <InquiryPanel onClose={() => (inquiryOpen = false)} />
+  <!-- 実測の送信(計算タブ)も同じパネルを使う。送信前に全文を見せる作法を 1 か所に保つ -->
+  {#if inquiryOpen || app.inquiryPrefill}
+    <InquiryPanel
+      prefill={app.inquiryPrefill}
+      onClose={() => {
+        inquiryOpen = false;
+        app.inquiryPrefill = null;
+      }}
+    />
   {/if}
 
   <div class="body" style="grid-template-columns: {gridTemplateColumns};">
