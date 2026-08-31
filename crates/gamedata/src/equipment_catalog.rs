@@ -2006,8 +2006,8 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
         id: "rising-holic-cuffs",
         slot: PartSlot::ShieldPlus,
         name: "†ライジングホリックカフス",
-        values_min: v(140, 140, 140, 140, 140, 140, 140, 140, 140),
-        values_max: v(140, 140, 140, 140, 140, 140, 140, 140, 140),
+        values_min: v(1, 1, 1, 1, 1, 1, 1, 1, 1),
+        values_max: v(1, 1, 1, 1, 1, 1, 1, 1, 1),
         growth_cap: Some(200),
         enchant_total_caps: EquipmentValues::default(),
         weapon_class: None,
@@ -2020,7 +2020,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
         source: Source {
             page: "Item/防具/腕/盾＋",
             retrieved_on: "2026-08-27",
-            note: "成長コンテンツ。初期入力は全補正140、成長上限は全補正200。表示名はユーザー指定",
+            note: "成長コンテンツ。初期入力は全補正1、成長上限は全補正200。表示名はユーザー指定",
         },
     });
 
@@ -3610,17 +3610,14 @@ mod tests {
     }
 
     #[test]
-    fn 盾プラスは初期140で成長上限200かつエンチャント不可() {
+    fn 盾プラスは初期1で成長上限200かつエンチャント不可() {
         let items: Vec<_> = equipment_catalog()
             .into_iter()
             .filter(|i| i.slot == PartSlot::ShieldPlus)
             .collect();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].name, "†ライジングホリックカフス");
-        assert_eq!(
-            items[0].values_max,
-            v(140, 140, 140, 140, 140, 140, 140, 140, 140)
-        );
+        assert_eq!(items[0].values_max, v(1, 1, 1, 1, 1, 1, 1, 1, 1));
         assert_eq!(items[0].growth_cap, Some(200));
         assert_eq!(items[0].enchant_caps, EquipmentValues::default());
     }
