@@ -4,16 +4,39 @@
 
 ### 1. 自動更新の署名鍵
 
+**鍵は生成済み**で、公開鍵は `apps/desktop/src-tauri/tauri.conf.json` の
+`plugins.updater.pubkey` に入っている。残っているのは Secrets への登録だけ:
+
+- **秘密鍵** `~/.tauri/tw-context.key` の中身 → GitHub の Secrets に `TAURI_SIGNING_PRIVATE_KEY`
+- パスフレーズは付けていないので `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` は登録しなくてよい
+
+秘密鍵はリポジトリに入れない。失うと**既存ユーザーへ更新を配れなくなる**ので別途保管する
+(この 1 ファイルを無くすと、以後の版は「新しい版があります」を出せず、手で入れ直してもらうことになる)。
+
+作り直すとき(パスフレーズを付けたい・鍵を漏らした)は、**まだ誰にも配っていない今のうちだけ**
+差し替えが自由:
+
 ```sh
 cd apps/desktop
-npx tauri signer generate -w ~/.tauri/talesweaver-toolkit.key
+npx tauri signer generate -w ~/.tauri/tw-context.key -p "<パスフレーズ>" -f
 ```
 
-- **公開鍵**(`.pub` の中身)→ `tauri.conf.json` の `plugins.updater.pubkey` に置く
-- **秘密鍵**(`.key` の中身)→ GitHub の Secrets に `TAURI_SIGNING_PRIVATE_KEY`
-- パスフレーズ → `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+`.pub` の中身を `tauri.conf.json` の `pubkey` に貼り直す。配布後に鍵を変えると、
+**古い版は新しい署名を検証できず更新できなくなる**(手で入れ直してもらうしかない)。
 
-秘密鍵はリポジトリに入れない。失うと**既存ユーザーへ更新を配れなくなる**ので別途保管する。
+### 1-2. 自動更新の配信元
+
+アプリが見に行くのは `https://dl.tw-context.dev/latest/latest.json`(R2)。
+紹介ページのダウンロードと同じ経路にして、GitHub が落ちていても更新できるようにしている。
+
+tauri-action が作る `latest.json` は GitHub Release の asset を指しているが、
+**Release は下書きで作る**ので公開まで 404 になる。リリース CI が向き先を
+`https://dl.tw-context.dev/<タグ>/<インストーラ名>` に差し替えてから
+`latest/latest.json` として上げる(署名はそのまま使える)。
+
+つまり **タグを push した時点で、既存ユーザーの次回起動に更新のお知らせが出る**。
+下書き Release を見てから配りたいなら、タグを打つ前に手動実行で確かめること
+(手動実行では `dev/<実行番号>/` に置くだけで `latest/` は触らない)。
 
 ### 2. コード署名(Azure Trusted Signing)
 
@@ -97,6 +120,21 @@ git push origin main v0.2.0
 タグを push すると Actions がビルドして **下書きの Release** を作る。
 中身(インストーラが署名されているか、`latest.json` があるか)を確認してから公開する。
 公開した瞬間に、既存ユーザーの次回起動で更新のお知らせが出る。
+
+## お知らせ(アプリの「お知らせ」タブ)を直す
+
+更新内容・これから実装するもの・既知の不具合は
+**`apps/desktop/src/data/news.json` の 1 か所**にある。これを直して main に push すると、
+`.github/workflows/news.yml` が形を検査して R2(`news/news.json`)へ上げ、
+**アプリを出し直さずに全ユーザーの表示が変わる**(次の起動から)。
+
+取得はアプリの Rust 側から行うので、R2 に CORS 設定は要らない(許可先は
+`src-tauri/capabilities/default.json` の `http:default` で `dl.tw-context.dev` だけ)。
+同じファイルをアプリに同梱もしているので、通信できないユーザーには同梱ぶんが出る。
+だから **リリースのときは news.json も一緒に更新する**(同梱ぶんが古いままにならないように)。
+
+- 版を出した → `releases` の先頭に `version` / `date` / `changes` を足す
+- 直した不具合 → `knownIssues` から消して、その版の `changes` に `"kind": "fixed"` で載せる
 
 ## リリースの間隔
 

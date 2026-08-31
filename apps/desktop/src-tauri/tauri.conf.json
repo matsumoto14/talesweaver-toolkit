@@ -25,6 +25,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "publisher": "matsumoto",
     "category": "Utility",
     "shortDescription": "TalesWeaver プレイヤー向けのダメージ計算・強化提案ツール(非公式)",
@@ -37,5 +38,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://dl.tw-context.dev/latest/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzMDM2NDY3QjM1RTAyRkQKUldUOUFsNnpaMlFEOC9tRmdsalExVGRYcFhldDAxVCtOWjFjYWIrMjdqQXlxeHExMUJud2liL1EK",
+      "windows": { "installMode": "passive" }
+    }
   }
 }

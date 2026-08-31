@@ -32,6 +32,11 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // 自動更新(お知らせタブから当てる)と、更新後の再起動。
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        // お知らせの取得(許可先は capabilities の http:default で dl.tw-context.dev だけ)。
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;

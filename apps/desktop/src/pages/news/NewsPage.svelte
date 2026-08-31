@@ -1,8 +1,24 @@
 <script lang="ts">
-  // お知らせ: 公開済みの版の更新内容 + これから実装するもの + 既知の不具合。
-  // データは src/releaseNotes.ts(正は CHANGELOG.md)。この画面は表示と開閉だけで、通信も判定もしない。
+  // お知らせ: アプリ自身の更新 + 公開済みの版の更新内容 + これから実装するもの + 既知の不具合。
+  // 中身は配信元(R2)の news.json が正で、取れなければ同梱ぶん(src/news.ts)。
+  // 更新はここからだけ当てる(勝手に落として当てない)。
+  import { onMount } from "svelte";
+  import { errorMessage, getAppInfo } from "../../api/commands";
   import { fmtInt, fmtMonthDay } from "../../format";
-  import { CHANGE_LABELS, KNOWN_ISSUES, PLANNED, RELEASE_NOTES } from "../../releaseNotes";
+  import { BUNDLED_NEWS, CHANGE_LABELS, fetchNews, type News } from "../../news";
+  import { reportError } from "../../toast.svelte";
+  import { installUpdate, restartApp, updater } from "../../update.svelte";
+  import { bump } from "../../ui/motion.svelte";
+
+  let news = $state<News>(BUNDLED_NEWS);
+  let currentVersion = $state("");
+
+  onMount(() => {
+    void fetchNews().then((v) => (news = v));
+    getAppInfo()
+      .then((info) => (currentVersion = info.version))
+      .catch((e) => reportError(errorMessage(e)));
+  });
 </script>
 
 {#snippet backlogRow(label: string, title: string | undefined, text: string)}
@@ -15,6 +31,41 @@
 
 <div class="news">
   <div class="scroll">
+    <!-- アプリ自身の更新。最新のときは何も出さない(§00 02 要らないものを見せない) -->
+    {#if updater.status !== "idle" && updater.status !== "checking" && updater.status !== "current"}
+      <div class="update" class:done={updater.status === "ready"} class:failed={updater.status === "failed"}>
+        <div class="update-head">
+          <span class="rn-flag update-flag">更新</span>
+          {#if updater.status === "ready"}
+            <b class="update-title">v{updater.version} を入れました</b>
+            <span class="update-note">再起動すると新しい版になります</span>
+            <button type="button" class="btn primary" onclick={() => void restartApp()}>再起動して使う</button>
+          {:else if updater.status === "failed"}
+            <b class="update-title">更新できませんでした</b>
+            <span class="update-note">{updater.error}</span>
+            <button type="button" class="btn" onclick={() => void installUpdate()}>もう一度</button>
+          {:else if updater.status === "available"}
+            <b class="update-title">新しい版 v{updater.version} があります</b>
+            <span class="update-note">いまの版は v{currentVersion}</span>
+            <button type="button" class="btn primary" onclick={() => void installUpdate()}>更新する</button>
+          {:else}
+            <b class="update-title">v{updater.version} を{updater.status === "installing" ? "入れています" : "落としています"}</b>
+            <span class="update-note num" use:bump={() => updater.percent}>
+              {updater.percent >= 0 ? `${updater.percent}%` : "…"}
+            </span>
+          {/if}
+        </div>
+        {#if updater.status === "downloading" || updater.status === "installing"}
+          <div class="meter">
+            <div class="fill" style:width={`${updater.percent >= 0 ? updater.percent : 100}%`}></div>
+          </div>
+        {/if}
+        {#if updater.status === "available" && updater.notes}
+          <p class="update-body">{updater.notes}</p>
+        {/if}
+      </div>
+    {/if}
+
     <!-- 版・予定・不具合は同じ畳みの形で並べ、最新の版だけ開いて出す(§00 02)。
          予定と不具合は「まだ版に入っていない」ので破線 + 専用バッジで公開済みと区別する -->
     <div class="section">
@@ -22,7 +73,7 @@
         <span class="area-name">更新内容</span>
         <span class="area-rule"></span>
       </div>
-      {#each RELEASE_NOTES as note, index (note.version)}
+      {#each news.releases as note, index (note.version)}
         <details class="fold rn-fold" open={index === 0}>
           <summary>
             <span class="rn-version">v{note.version}</span>
@@ -39,32 +90,32 @@
       {/each}
     </div>
 
-    {#if PLANNED.length > 0}
+    {#if news.planned.length > 0}
       <div class="section">
         <div class="area-head">
           <span class="area-name">これから</span>
           <span class="rn-flag planned">予定</span>
           <span class="area-rule"></span>
-          <span class="rn-count">{fmtInt(PLANNED.length)} 件</span>
+          <span class="rn-count">{fmtInt(news.planned.length)} 件</span>
         </div>
         <div class="rn-list pending">
-          {#each PLANNED as item (item.text)}
+          {#each news.planned as item (item.text)}
             {@render backlogRow("予定", item.title, item.text)}
           {/each}
         </div>
       </div>
     {/if}
 
-    {#if KNOWN_ISSUES.length > 0}
+    {#if news.knownIssues.length > 0}
       <div class="section">
         <div class="area-head">
           <span class="area-name">既知の不具合</span>
           <span class="rn-flag issue">不具合</span>
           <span class="area-rule"></span>
-          <span class="rn-count">{fmtInt(KNOWN_ISSUES.length)} 件</span>
+          <span class="rn-count">{fmtInt(news.knownIssues.length)} 件</span>
         </div>
         <div class="rn-list pending">
-          {#each KNOWN_ISSUES as item (item.text)}
+          {#each news.knownIssues as item (item.text)}
             {@render backlogRow("不具合", item.title, item.text)}
           {/each}
         </div>
@@ -115,6 +166,22 @@
   .rn-flag.planned { background: var(--state-goal-bg); border-color: var(--state-goal-bd); color: var(--state-goal-fg); }
   .rn-flag.issue { background: var(--state-short-bg); border-color: var(--state-short-bd); color: var(--state-short-fg); }
   .rn-list.pending .rn-row { border-style: dashed; background: var(--bg-panel); }
+
+  /* アプリ自身の更新。押すまで何も起きないので、面は編集できる白 + 操作待ちの金枠 */
+  .update {
+    display: flex; flex-direction: column; gap: 8px; padding: 11px 13px; border-radius: var(--r-window);
+    background: linear-gradient(180deg, #fff, var(--state-edge-bg) 96%); border: 1px solid var(--state-edge-bd);
+    box-shadow: inset 0 1px 0 #fff, 0 1px 3px rgba(30, 44, 74, 0.1);
+  }
+  .update.done { background: linear-gradient(180deg, #fff, var(--state-met-bg) 96%); border-color: var(--state-met-bd); }
+  .update.failed { background: linear-gradient(180deg, #fff, var(--state-short-bg) 96%); border-color: var(--state-short-bd); }
+  .update-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .update-flag { background: var(--state-edge-bg); border-color: var(--state-edge-bd); color: var(--state-edge-fg); }
+  .update-title { flex: none; font-size: 12px; font-weight: 800; color: var(--fg-head); }
+  .update-note { min-width: 0; flex: 1; font-size: 10px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .update-head .btn { flex: none; }
+  .update .meter > .fill { background: var(--state-edge-bar); }
+  .update-body { margin: 0; font-size: 10.5px; color: var(--fg-sub); line-height: 1.6; white-space: pre-wrap; }
 
   .foot { margin: 0; font-size: 10px; line-height: 1.7; }
 </style>

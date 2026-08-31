@@ -1,0 +1,58 @@
+name: News
+
+# お知らせ(アプリの「お知らせ」タブ)の中身を配信する。
+# アプリは dl.tw-context.dev/news/news.json を起動時に読み、取れなければ同梱ぶんを出す。
+# だから **アプリを出し直さずに、予定・既知の不具合・更新内容を直せる**。
+# 元ファイルは同梱にも使う apps/desktop/src/data/news.json 1 つだけ(手で 2 か所を揃えない)。
+on:
+  push:
+    branches: [main]
+    paths: ["apps/desktop/src/data/news.json"]
+  workflow_dispatch:
+
+concurrency:
+  group: news
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 形が壊れた JSON を配ると、アプリ側は同梱ぶんに落ちて黙って古い内容を出し続ける。
+      # 気づけないので、配る前にここで落とす。
+      - name: JSON を確かめる
+        run: |
+          python - <<'PY'
+          import json, sys
+          news = json.load(open("apps/desktop/src/data/news.json", encoding="utf-8"))
+          kinds = {"added", "changed", "fixed"}
+          assert isinstance(news.get("releases"), list), "releases が無い"
+          for release in news["releases"]:
+              assert release["version"] and release["date"], release
+              for change in release["changes"]:
+                  assert change["kind"] in kinds and change["text"], change
+          for key in ("planned", "knownIssues"):
+              assert isinstance(news.get(key), list), f"{key} が無い"
+              for item in news[key]:
+                  assert item["text"], item
+          print(f"OK: 版 {len(news['releases'])} / 予定 {len(news['planned'])} / 不具合 {len(news['knownIssues'])}")
+          PY
+
+      - name: R2 に上げる
+        if: env.AWS_ACCESS_KEY_ID != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # R2 は AWS CLI v2 の既定チェックサムに対応しないので、要求時だけに絞る
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          aws s3 cp apps/desktop/src/data/news.json s3://tw-context/news/news.json \
+            --endpoint-url "$ENDPOINT" \
+            --content-type "application/json; charset=utf-8" \
+            --cache-control "public, max-age=300" \
+            --only-show-errors

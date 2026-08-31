@@ -14,6 +14,7 @@
   import NewsPage from "./pages/news/NewsPage.svelte";
   import { app, focusErrorTarget, loadAll, simIsDirty, type Tab } from "./state.svelte";
   import { dismissError, reportError, reportNotice, runUndo, toast } from "./toast.svelte";
+  import { checkForUpdate, updater } from "./update.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import Splitter from "./ui/Splitter.svelte";
 
@@ -37,11 +38,16 @@
       : `${expandedRailWidth}px 6px minmax(0, 1fr)`,
   );
 
+  // お知らせタブに出す「まだ当てていない更新がある」印。押して当てたら消える。
+  const updateWaiting = $derived(updater.status === "available" || updater.status === "ready");
+
   let aboutOpen = $state(false);
   let inquiryOpen = $state(false);
 
   onMount(() => {
     void loadAll();
+    // 新しい版があるかだけ見に行く。当てるのはお知らせタブで押されたときだけ。
+    void checkForUpdate();
     // バックアップからの復元など、読み飛ばされては困る事実は自動で消さない帯に出す。
     getStartupNotice()
       .then((notice) => {
@@ -60,6 +66,7 @@
       {#each TABS as t (t.id)}
         <button type="button" class="tab" class:on={app.tab === t.id} onclick={() => (app.tab = t.id)}>
           {t.label}
+          {#if t.id === "news" && updateWaiting}<span class="tab-dot" aria-label="新しい版があります"></span>{/if}
         </button>
       {/each}
     </nav>
@@ -161,6 +168,11 @@
 
   /* 見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
   .tabs { margin-left: 8px; align-self: flex-end; }
+  /* 更新が待っている印。タブの幅を動かさないよう、文字の右に 6px だけ足す(§00 03) */
+  .tab-dot {
+    display: inline-block; margin-left: 6px; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gold); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
+  }
 
   .sim-note {
     margin-left: auto; display: flex; align-items: center; gap: 8px;

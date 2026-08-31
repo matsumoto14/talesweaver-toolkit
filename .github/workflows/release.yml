@@ -133,11 +133,11 @@ jobs:
           $staging = Join-Path $env:RUNNER_TEMP "r2"
           New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
-          function Publish-Object($localPath, $key) {
+          function Publish-Object($localPath, $key, $contentType = "application/vnd.microsoft.portable-executable") {
             Write-Host "アップロード: $key"
             aws s3 cp "$localPath" "s3://$env:BUCKET/$key" `
               --endpoint-url "$env:ENDPOINT" `
-              --content-type "application/vnd.microsoft.portable-executable" `
+              --content-type "$contentType" `
               --only-show-errors
             if ($LASTEXITCODE -ne 0) { throw "アップロードに失敗: $key" }
           }
@@ -151,8 +151,24 @@ jobs:
           }
 
           if ($env:IS_RELEASE -eq "true") {
-            $stagedSetup = Join-Path $staging ((Split-Path $setup -Leaf) -replace ' ', '-')
+            $setupName = (Split-Path $setup -Leaf) -replace ' ', '-'
+            $stagedSetup = Join-Path $staging $setupName
             Publish-Object $stagedSetup "latest/TW-Context-setup.exe"
+
+            # --- 自動更新の配信元 ------------------------------------------------
+            # アプリが見に行くのは dl.tw-context.dev/latest/latest.json(tauri.conf.json の
+            # plugins.updater.endpoints)。tauri-action が作る latest.json は GitHub Release の
+            # asset を指しているが、**Release は下書きで作る**ので公開まで 404 になる。
+            # 版ごとに残す R2 のパスへ向き先だけ差し替えて上げる(署名はそのまま使える)。
+            $updaterJson = $paths | Where-Object { $_ -like "*latest.json" } | Select-Object -First 1
+            if (-not $updaterJson) { throw "latest.json がありません(TAURI_SIGNING_PRIVATE_KEY 未設定?)。自動更新を配れないのでここで止めます" }
+            $manifest = Get-Content $updaterJson -Raw -Encoding utf8 | ConvertFrom-Json
+            foreach ($platform in $manifest.platforms.PSObject.Properties) {
+              $platform.Value.url = "https://dl.tw-context.dev/$env:PREFIX/$setupName"
+            }
+            $stagedManifest = Join-Path $staging "latest.json"
+            $manifest | ConvertTo-Json -Depth 20 | Set-Content $stagedManifest -Encoding utf8
+            Publish-Object $stagedManifest "latest/latest.json" "application/json"
           } else {
             Write-Host "手動実行なので latest/ は更新しない($env:PREFIX に置いただけ)"
           }

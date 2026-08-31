@@ -11,6 +11,12 @@
         { "url": "https://x.com/sese_nagi1125*" },
         { "url": "https://x.com/tw_xkanba*" }
       ]
+    },
+    "updater:default",
+    "process:allow-restart",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://dl.tw-context.dev/*" }]
     }
   ]
 }
