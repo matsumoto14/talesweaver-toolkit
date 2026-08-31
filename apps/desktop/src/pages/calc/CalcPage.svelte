@@ -440,6 +440,8 @@
   /** 次の候補(2 位以降)。押した行の下に開く */
   const nextLevers = $derived(bestLevers.slice(1));
   let nextLeversOpen = $state(false);
+  /** 積み上げの助言(いま効いている / 次に伸ばす)を開いているか。ふだんは畳む */
+  let leverOpen = $state(false);
   /** +1% 足したときの最終ダメージの伸び(%) */
   const leverGain = (c: CategoryTrace) => 1 / c.factor;
   const bestLeverGain = $derived(bestLever ? leverGain(bestLever) : 0);
@@ -1931,10 +1933,22 @@
               <span class="arrow num dim">→</span>
               <span class="num final" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
             </div>
-            <div class="lever-note">
-              {#if noPierce}
+            <!-- 積み上げの助言はトグル(ユーザー指示 2026-08-31)。ふだんは畳んでおき、押したときだけ
+                 下に開く。押すボタンは上の行に居座るので、開いても押した場所は動かない(§00 03)。
+                 ただし「攻撃力が届いていない」「倍率ゼロ」は畳まない — 数字が伸びない理由そのもので、
+                 畳むと「なぜこの数字?」に答えないまま閉じることになる -->
+            {#if noPierce}
+              <div class="lever-note">
                 攻撃力が相手の防御力に届いていないので、倍率は何もかかりません。まず攻撃力を上げる必要があります。
-              {:else if topLever}
+              </div>
+            {:else if topLever}
+              <div class="lever-toggle">
+                <button type="button" class="chip quiet" class:on={leverOpen} aria-expanded={leverOpen} onclick={() => (leverOpen = !leverOpen)}>
+                  {leverOpen ? "閉じる" : "どこが効いてる？"}
+                </button>
+              </div>
+              {#if leverOpen}
+              <div class="lever-note open-in">
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
                 {#if bestLever}
                   <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>+{bestLeverGain.toFixed(2)}%</span> 伸びます({fmtHeadroom(bestLever)})。
@@ -1958,10 +1972,11 @@
                     <p class="dt-note dim">+1% 足したときの最終ダメージの伸び。いま積んでいる量が少ないカテゴリほど 1% の価値が高い。</p>
                   </div>
                 {/if}
-              {:else}
-                倍率はまだ何もかかっていません。
+              </div>
               {/if}
-            </div>
+            {:else}
+              <div class="lever-note">倍率はまだ何もかかっていません。</div>
+            {/if}
 
             {#if flowOpen}
               <div class="open-in">
@@ -2464,6 +2479,9 @@
     border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
   }
+  .lever-toggle { margin-top: 9px; }
+  /* トグルの直下に開くので、上マージンは詰める(帯が二重に空かない) */
+  .lever-toggle + .lever-note { margin-top: 6px; }
   .lever-note {
     margin-top: 9px; padding: 8px 10px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
