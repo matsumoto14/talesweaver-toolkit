@@ -26,8 +26,25 @@
     void loadSkills(gameCharacterId);
   });
   const skills = $derived(skillsByCharacter[gameCharacterId] ?? []);
-  /** 中ディレイ込みの継続火力順(StatusPane と同じ形) */
-  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(あとで選ぶ)"));
+  /**
+   * コピーで引き継げるコピー元の主軸スキル。キャラ種が違うコピーでは、コピー元の主軸が
+   * 選択中のキャラ種に無いことがある(スキルはキャラ種ごと)。その場合は引き継がない —
+   * 持ち込んでも依存種別を引けない幽霊 id になるだけなので(キャラスキルの dropForeignSkills と同じ考え方)。
+   */
+  const inheritedMainSkill = $derived(
+    source?.main_skill_id && skills.some((s) => s.id === source.main_skill_id) ? source.main_skill_id : null,
+  );
+  /** 中ディレイ込みの継続火力順(StatusPane と同じ形)。
+   *  空欄は経路で意味が変わる(未装備で登録 = 未選択 / コピー = コピー元のまま)ので、
+   *  引き継げる主軸があるときはそれを空欄の文言に書く(§00 05 考えさせない)。 */
+  const mainSkillOptions = $derived(
+    buildMainSkillOptions(
+      skills,
+      inheritedMainSkill
+        ? `未選択(コピーは「${skills.find((s) => s.id === inheritedMainSkill)?.name ?? inheritedMainSkill}」のまま)`
+        : "未選択(あとで選ぶ)",
+    ),
+  );
   /** キャラを選び直したら前キャラのスキル id を残さない */
   function pickGameCharacter(id: string) {
     if (id === gameCharacterId) return;
@@ -45,7 +62,10 @@
           ...payloadOf(source),
           name: name.trim() || selectedGame.name,
           game_character_id: gameCharacterId,
-          main_skill_id: mainSkillId === "" ? null : mainSkillId,
+          // 主軸スキルは攻撃力の依存種別を決める要。フォーム未選択のときにフォームの値
+          // (null)で上書きすると、コピー元が持っていた主軸が黙って落ちる事故になるので、
+          // 未選択のときはコピー元を引き継ぐ(選んだときだけ上書き)。
+          main_skill_id: mainSkillId === "" ? inheritedMainSkill : mainSkillId,
         };
         if (source.game_character_id !== gameCharacterId) {
           // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルを落とす(幽霊スキル対策)
