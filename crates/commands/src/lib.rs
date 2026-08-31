@@ -280,6 +280,39 @@ pub fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
     Ok(())
 }
 
+/// 保存する前の検証だけを行う(保存はしない)。ブラウザ版は保存先が IndexedDB(TS 側)なので、
+/// 保存層を通らない。デスクトップ版の `create_character` / `update_character` が保存までに
+/// 通すのと同じ順序・同じ文言にする(保存層のエラー変換が付ける「不正な値: 」もここで付ける)。
+pub fn validate_character(character: NewCharacter) -> CommandResult<()> {
+    if gamedata::find_character(&character.game_character_id).is_none() {
+        return Err(format!(
+            "ゲームキャラ '{}' は未登録です",
+            character.game_character_id
+        )
+        .into());
+    }
+    validate_main_skill(&character)?;
+    // 保存時はバフ選択を伴わないので、バフは既定(何も選んでいない)で見る
+    validate_character_draft(&character, &BuffSelection::default()).map_err(|e| CommandError {
+        message: format!("不正な値: {}", e.message),
+        location: e.location,
+    })
+}
+
+/// 同上のバフセット版(`buff_set_repository` の `validate_buff_set` と同じ内容)。
+pub fn validate_buff_set(name: String, choices: BuffSelection) -> CommandResult<()> {
+    if name.trim().is_empty() {
+        return Err("不正な値: バフセット名が空です".into());
+    }
+    domain::stat_sources::build_modifiers(
+        &domain::StatSources::default(),
+        &choices,
+        &gamedata::buff_catalog(),
+    )
+    .map_err(|e| CommandError::from(format!("不正な値: {e}")))?;
+    Ok(())
+}
+
 /// キャラの主軸スキルから攻撃力(A)の係数一式を引く。未選択なら `None`(攻撃力を出さない)。
 fn attack_coefficients_of(
     main_skill_id: Option<&str>,

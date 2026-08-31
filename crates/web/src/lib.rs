@@ -10,15 +10,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-/// 保存(SQLite)が要るコマンドに返すエラー。ブラウザ版はまだ保存先を持たないので、
-/// 黙って空を返さず「使えない」とはっきり言う(画面のエラー帯がそのまま出す)。
-fn not_available() -> Result<JsValue, JsValue> {
-    Err(to_error(CommandError {
-        message: "この操作はブラウザ版ではまだ使えません".to_string(),
-        location: None,
-    }))
-}
-
 /// 戻り値の変換規則。Tauri は JSON を経由するので、それに合わせる:
 /// - map を JS の `Map` ではなく素のオブジェクトにする(`#[serde(flatten)]` を含む型が
 ///   map として直列化されるため。Map で返すと画面がプロパティを読めない)
@@ -87,6 +78,13 @@ struct EquipmentElementValuesArgs {
 #[serde(rename_all = "camelCase")]
 struct CharacterArgs {
     character: domain::NewCharacter,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ValidateBuffSetArgs {
+    name: String,
+    choices: domain::BuffSelection,
 }
 
 #[derive(Deserialize)]
@@ -199,6 +197,15 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
             let a: CharacterArgs = args_of(command, args)?;
             done(commands::preview_elements(a.character))
         }
+        // 保存の前チェック。保存自体は TS 側(IndexedDB)が行うが、検証は domain を持つこちらで見る
+        "validate_character" => {
+            let a: CharacterArgs = args_of(command, args)?;
+            done(commands::validate_character(a.character))
+        }
+        "validate_buff_set" => {
+            let a: ValidateBuffSetArgs = args_of(command, args)?;
+            done(commands::validate_buff_set(a.name, a.choices))
+        }
         "resolve_character_skill_effects" => {
             let a: MasteriesArgs = args_of(command, args)?;
             ok(commands::resolve_character_skill_effects(a.masteries))
@@ -276,26 +283,6 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
                 a.temporary_adjustments,
             ))
         }
-
-        // --- 保存(SQLite)が要るコマンド。ブラウザ版にはまだ保存先が無い ---
-        "get_app_info"
-        | "get_startup_notice"
-        | "list_characters"
-        | "create_character"
-        | "update_character"
-        | "delete_character"
-        | "list_buff_sets"
-        | "create_buff_set"
-        | "update_buff_set"
-        | "duplicate_buff_set"
-        | "delete_buff_set"
-        | "set_default_buff_set"
-        | "list_character_icons"
-        | "set_character_icon"
-        | "reset_character_icon"
-        | "get_damage_snapshot"
-        | "set_damage_snapshot"
-        | "calculate_damage" => not_available(),
 
         other => Err(to_error(CommandError {
             message: format!("未知のコマンド '{other}'"),
