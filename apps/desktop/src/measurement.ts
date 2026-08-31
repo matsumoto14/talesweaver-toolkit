@@ -50,6 +50,8 @@ export interface MeasurementSample {
   stats: EffectiveStats | null;
   /** そのときのツールの計算値(敵が未収録なら null) */
   expected: number | null;
+  /** そのとき装備していた武器の名前。点ごとに何を替えたのかが分かるように残す */
+  weapon: string | null;
 }
 
 /** 計算値のうち、実測と突き合わせる側の値。敵が未収録なら null */
@@ -81,20 +83,21 @@ export function measurementDraft(
   const lines = [
     `${label} を ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`,
     "",
-    listed ? "| 攻撃力 | 実測 | 計算 | 差 | 発数 |" : "| 攻撃力 | 実測 | 発数 |",
-    listed ? "|---:|---:|---:|---:|---:|" : "|---:|---:|---:|",
+    listed ? "| 武器 | 攻撃力 | 実測 | 計算 | 差 | 発数 |" : "| 武器 | 攻撃力 | 実測 | 発数 |",
+    listed ? "|---|---:|---:|---:|---:|---:|" : "|---|---:|---:|---:|",
   ];
   for (const sample of samples) {
     const attack = sample.attack !== null ? fmtInt(sample.attack) : "—";
     const damage = `${fmtInt(sample.damage)}${sample.critical ? "(クリ)" : ""}`;
+    const weapon = sample.weapon ?? "—";
     if (listed) {
       const gap = damageGap(sample.damage, sample.expected);
       lines.push(
-        `| ${attack} | ${damage} | ${sample.expected !== null ? fmtInt(Math.trunc(sample.expected)) : "—"} `
+        `| ${weapon} | ${attack} | ${damage} | ${sample.expected !== null ? fmtInt(Math.trunc(sample.expected)) : "—"} `
         + `| ${gap === null ? "—" : `${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(1)}%`} | ${fmtInt(sample.hits)} |`,
       );
     } else {
-      lines.push(`| ${attack} | ${damage} | ${fmtInt(sample.hits)} |`);
+      lines.push(`| ${weapon} | ${attack} | ${damage} | ${fmtInt(sample.hits)} |`);
     }
   }
   if (!listed) {
@@ -147,6 +150,7 @@ function measurementPayload(conditions: MeasurementConditions, samples: Measurem
       attack: sample.attack,
       stats: sample.stats,
       expected: sample.expected,
+      weapon: sample.weapon,
       note: sample.note.trim() || null,
     })),
   };

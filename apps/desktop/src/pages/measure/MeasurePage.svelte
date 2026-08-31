@@ -14,6 +14,7 @@
     canSeparate, damageGap, expectedDamage, measurementDraft, type MeasurementSample,
   } from "../../measurement";
   import { app, flatContents, payloadOf, selectedCharacter } from "../../state.svelte";
+  import type { NewCharacter } from "../../api/types";
   import { reportError } from "../../toast.svelte";
   import CheckChip from "../../ui/CheckChip.svelte";
   import { latest } from "../../ui/latest.svelte";
@@ -22,7 +23,36 @@
   import StepSelect from "../../ui/StepSelect.svelte";
 
   const character = $derived(selectedCharacter());
-  const payload = $derived(character ? payloadOf(character) : null);
+  const savedPayload = $derived(character ? payloadOf(character) : null);
+
+  // --- 測るときの武器 --------------------------------------------------------
+  // 2 点目は「攻撃力を変えた点」でないと意味がない。キャラタブへ戻って装備を替えて
+  // 帰ってくる導線は重いので、**登録済みの武器をここで切り替えられる**ようにする。
+  // 切り替えても**保存しない**(この画面のコピーを差し替えるだけ)。
+  const weapons = $derived(savedPayload?.equipment.parts.weapon.registered ?? []);
+  const savedWeaponId = $derived(savedPayload?.equipment.parts.weapon.selected_id ?? null);
+  let weaponOverride = $state<number | null>(null);
+  /** `null` = 外して測る(登録が 1 件でも攻撃力を変えられる) */
+  let weaponRemoved = $state(false);
+  const weaponId = $derived(
+    weaponRemoved
+      ? null
+      : (weapons.some((w) => w.id === weaponOverride) ? weaponOverride : savedWeaponId),
+  );
+  const weaponLabel = (id: number | null) =>
+    id === null ? "武器なし" : (weapons.find((w) => w.id === id)?.label || "(名前なし)");
+  const weaponOptions = $derived([
+    ...weapons.map((w) => ({ value: String(w.id), label: w.label || "(名前なし)" })),
+    { value: "none", label: "外す" },
+  ]);
+  /** 武器だけ差し替えたコピー。DB にも app.sim にも書かない */
+  const payload = $derived.by<NewCharacter | null>(() => {
+    if (!savedPayload) return null;
+    if (weaponId === savedWeaponId) return savedPayload;
+    const copy = JSON.parse(JSON.stringify(savedPayload)) as NewCharacter;
+    copy.equipment.parts.weapon.selected_id = weaponId;
+    return copy;
+  });
 
   // --- 対象 -----------------------------------------------------------------
   const TARGET_KINDS = [
@@ -133,6 +163,7 @@
         attack: attack?.value ?? null,
         stats,
         expected,
+        weapon: weaponLabel(weaponId),
       },
     ];
     measuredDamage = null;
@@ -217,6 +248,28 @@
           }
           options={skills.map((s) => ({ value: s.id, name: s.name }))}
         />
+        {#if weapons.length > 0}
+          <!-- 攻撃力を変える一番かんたんな手段。押した瞬間に攻撃力が変わる(保存はされない)。
+               登録が 1 件でも「外す」で 2 点目を作れる -->
+          <StepSelect
+            label="測るときの武器"
+            options={weaponOptions}
+            cols={2}
+            bind:value={
+              () => (weaponId === null ? "none" : String(weaponId)),
+              (v) => {
+                weaponRemoved = v === "none";
+                if (v !== "none") weaponOverride = Number(v);
+              }
+            }
+          />
+        {/if}
+        {#if weaponId !== savedWeaponId}
+          <p class="note dim">
+            この画面だけ <b>{weaponLabel(weaponId)}</b> で計算しています。
+            キャラに登録した装備(<b>{weaponLabel(savedWeaponId)}</b>)は変わりません。
+          </p>
+        {/if}
         <div class="attack-row">
           <span class="dim">攻撃力(A)</span>
           <span class="num" use:bump={() => attack?.value ?? null}>{attack ? fmtInt(attack.value) : "—"}</span>
@@ -300,15 +353,16 @@
                 <span class="num">{fmtInt(sample.damage)}</span>
                 {#if sample.critical}<span class="tag crit">クリ</span>{/if}
                 <span class="dim">{fmtInt(sample.hits)} 発中</span>
+                {#if sample.weapon}<span class="dim sample-note">{sample.weapon}</span>{/if}
                 {#if sample.note}<span class="dim sample-note">{sample.note}</span>{/if}
-                <button type="button" class="btn danger sample-del" onclick={() => removeSample(index)}>外す</button>
+                <button type="button" class="btn danger sample-del" onclick={() => removeSample(index)}>消す</button>
               </div>
             {/each}
           </div>
           <p class="note dim" class:ready={separable}>
             {separable
               ? "攻撃力の違う点が 2 つ以上あります。防御力とカット率を分けて逆算できます。"
-              : "攻撃力が同じ点だけです。装備を替えてもう 1 点足すと、防御力とカット率を分けられます。"}
+              : "攻撃力が同じ点だけです。上の「測るときの武器」を替えて(外すのでも構いません)、もう 1 点測ってください。"}
           </p>
         {/if}
 
