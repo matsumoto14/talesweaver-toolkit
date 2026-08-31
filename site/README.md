@@ -31,6 +31,15 @@ https://dl.tw-context.dev/latest/TW-Context-setup.exe
 
 R2 バケットとトークンの用意は `.github/RELEASE.md` を参照。
 
+## 「ブラウザで試す」の飛び先
+
+ダウンロードボタンの下の導線は **`https://app.tw-context.dev/`**(ブラウザ版)を指す。
+主役はインストール版のままなので、同じ大きさのボタンを並べず文字リンクにしてある。
+
+ブラウザ版は**このページとは別の Pages プロジェクト**(`tw-context-app`)で、
+`.github/workflows/web.yml` が push のたびに配る。Pages プロジェクトの作り方・
+カスタムドメイン・R2 の CORS 設定は `docs/web-deploy.md` を参照。
+
 ## 色
 
 配色はアプリの `apps/desktop/src/app.css` と同じトークンを写している

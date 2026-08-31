@@ -68,6 +68,10 @@ header.top nav { margin-left: auto; display: flex; gap: 18px; font-size: 13px; }
 .btn-dl:hover { filter: brightness(1.05); color: var(--sel-fg); }
 .dl-meta { font-size: 12.5px; color: var(--fg-muted); font-family: var(--font-num); }
 .dl-sub { font-size: 13px; color: var(--fg-muted); }
+/* ブラウザ版は「入口」。インストール版が主なので、同じ大きさのボタンを並べて
+   選ばせず、下に文字リンクで置く(押す先を迷わせない) */
+.dl-try { font-size: 13px; color: var(--fg-muted); margin-top: 4px; }
+.dl-try a { font-weight: 700; }
 
 .shot { margin: 40px auto 0; max-width: 100%; }
 .shot img {
@@ -152,6 +156,10 @@ footer a { color: var(--fg-sub); }
       </a>
       <span class="dl-meta" id="dl-meta">最新版を確認しています…</span>
       <span class="dl-sub">無料・インストール不要の設定なし。<a href="https://github.com/matsumoto14/talesweaver-toolkit/releases">過去の版</a></span>
+      <span class="dl-try">
+        入れる前に触ってみるなら <a href="https://app.tw-context.dev/">ブラウザで試す</a>
+        — 登録したデータはそのブラウザの中に保存され、消すと一緒に消えます。
+      </span>
     </div>
 
     <details class="note">

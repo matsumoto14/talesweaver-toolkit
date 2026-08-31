@@ -1,0 +1,74 @@
+name: Web
+
+# ブラウザ版(apps/desktop/dist-web)を Cloudflare Pages に配る。
+# 置き先は https://app.tw-context.dev(手順は docs/web-deploy.md)。
+#
+# **Pages の Git 接続は使わない。** ブラウザ版のビルドには Rust の
+# wasm32-unknown-unknown ターゲットと wasm-pack が要る(npm run build:wasm)。
+# Pages のビルド環境にそれを用意させると、こちらで固定できない土台の上で
+# 毎回コンパイルすることになって壊れやすい。ビルドは CI と同じ土俵(ここ)で
+# 済ませ、Pages には**出来上がった静的ファイルだけ**を送る。
+#
+# 紹介ページ(site/)の Pages プロジェクトとは別プロジェクトにする。
+# ページを直したつもりでアプリを落とさないため(site/README.md と同じ判断)。
+on:
+  push:
+    branches: [main]
+    # 画面・WASM・Rust の中身が変わったときだけ。docs や site の更新では回さない。
+    paths:
+      - "apps/desktop/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # Tauri のインストーラは作らないので Windows である必要がない(その分速い)。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      # ci.yml と同じ入れ方(cargo install は数分かかるのでビルド済みを使う)
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: 依存を入れる
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: ブラウザ版をビルドする
+        working-directory: apps/desktop
+        run: npm run build:web
+
+      # 秘密が無いフォーク・環境ではビルドまでで止める(release.yml の R2 と同じ流儀)。
+      # ビルド自体は必ず走らせて、壊れたことに気づけるようにしておく。
+      - name: Cloudflare Pages に配る
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >
+          npx --yes wrangler@4 pages deploy apps/desktop/dist-web
+          --project-name tw-context-app
+          --branch main
