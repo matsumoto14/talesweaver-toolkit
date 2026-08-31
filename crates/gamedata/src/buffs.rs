@@ -300,17 +300,21 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         },
         BuffDefinition {
             id: "club_s_effect_single_stat",
-            name: "クラブSエフェクト(単一ステ+20)",
+            name: "クラブSエフェクト(ステータス+20)",
             purposes: &[BuffPurpose::Stats],
             origin: BuffOrigin::Club,
-            target: BuffTarget::UserSelected,
+            // wiki(クラブ #club_S_effect)は STAB+20・HACK+20… とステごとに**別アイテム**で
+            // 並べており、1 つしか付けられないとは書いていない。ユーザー実測 2026-09-01 でも
+            // STAB+20 と HACK+20 は同時に効いたので、クラブ効果と同じ「対象ステを複数選ぶ」形にする
+            target: BuffTarget::UserSelectedMulti,
             layer: StatLayer::Fixed,
+            // ステごとに +20 固定(wiki の表記どおり。ステ別に量が変わる商品は無い)
             value: BuffValue::Fixed(20.0),
             // wiki に併用制限の記載が無く、ユーザー実測 2026-09-01 でも他の S エフェクトと
             // 同時に効くため排他枠は持たせない
             exclusive_slots: vec![],
             source_url: CLUB_WIKI_URL,
-            note: "STAB/HACK/INT/DEF/MR/DEX/AGIから選択。7日。課金箱",
+            note: "STAB/HACK/INT/DEF/MR/DEX/AGIから複数選択。ステごとに +20。7日。課金箱",
             default_value: None,
             damage_effects: &[],
         },
@@ -772,7 +776,9 @@ mod tests {
 
         let single = variants[1];
         assert_eq!(single.purposes, &[BuffPurpose::Stats]);
-        assert!(matches!(single.target, BuffTarget::UserSelected));
+        // ステ別に別アイテムとして売られており(wiki)、ユーザー実測 2026-09-01 でも
+        // STAB+20 と HACK+20 は同時に効く。クラブ効果と同じ複数選択の形
+        assert!(matches!(single.target, BuffTarget::UserSelectedMulti));
         assert!(matches!(single.value, BuffValue::Fixed(20.0)));
 
         let all = variants[2];

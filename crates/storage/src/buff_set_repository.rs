@@ -138,3 +138,49 @@ fn validate_buff_set(name: &str, choices: &BuffSelection, catalog: &BuffCatalog)
         .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::StatKind;
+
+    /// クラブSエフェクト(ステータス+20)は「1 ステだけ」の形で保存されてきた。
+    /// 複数ステを選べる形に変えても保存形(`stat` 付きの 1 件)は同じなので、
+    /// 既存のバフセットはそのまま同じ +20 として読める(移行は要らない)。
+    /// ここが崩れるとユーザーのバフセットが黙って弱くなるため、実データのカタログで確かめる。
+    #[test]
+    fn クラブsエフェクトの既存バフセットは複数選択化後も同じ効果() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        repo.conn
+            .execute(
+                "INSERT INTO buff_sets (name, choices) VALUES ('移行前', ?1)",
+                [r#"{"choices":[{"buff_id":"club_s_effect_single_stat","stat":"stab","choice_index":null,"value":null}]}"#],
+            )
+            .unwrap();
+
+        let set = repo.list_buff_sets().unwrap().pop().unwrap();
+        let catalog = gamedata::buff_catalog();
+        let (modifiers, _) =
+            domain::stat_sources::build_modifiers(&StatSources::default(), &set.choices, &catalog)
+                .unwrap();
+        assert_eq!(modifiers.get(StatKind::Stab).fixed, 20);
+        assert_eq!(modifiers.get(StatKind::Hack).fixed, 0);
+
+        // 新しい形では 2 ステ目を足せる(wiki はステ別に別アイテム / ユーザー実測 2026-09-01)
+        let mut choices = set.choices.clone();
+        choices.choices.push(domain::BuffChoice {
+            buff_id: "club_s_effect_single_stat".to_string(),
+            stat: Some(StatKind::Hack),
+            choice_index: None,
+            value: None,
+        });
+        let saved = repo
+            .update_buff_set(set.id, &set.name, &choices, &catalog)
+            .unwrap();
+        let (modifiers, _) =
+            domain::stat_sources::build_modifiers(&StatSources::default(), &saved.choices, &catalog)
+                .unwrap();
+        assert_eq!(modifiers.get(StatKind::Stab).fixed, 20);
+        assert_eq!(modifiers.get(StatKind::Hack).fixed, 20);
+    }
+}
