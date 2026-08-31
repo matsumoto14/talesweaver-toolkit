@@ -49,7 +49,7 @@ import { reportError, type ErrorTarget } from "./toast.svelte";
 import type { InquiryDraft } from "./inquiry";
 import type { SourceId } from "./pages/chars/sourceId";
 
-export type Tab = "home" | "calc" | "buffs" | "chars" | "news";
+export type Tab = "home" | "calc" | "buffs" | "chars" | "measure" | "news";
 
 export const app = $state({
   tab: "home" as Tab,

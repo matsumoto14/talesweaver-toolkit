@@ -22,7 +22,6 @@
   } from "../../enchant";
   import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue, topRowsText } from "../../format";
-  import { damageGap, expectedDamage, measurementDraft } from "../../measurement";
   import {
     ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, STAT_LABELS,
     STAT_LAYER_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_LABELS,
@@ -805,49 +804,6 @@
         : "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60",
     };
   });
-
-  // --- 実測と比べる ---------------------------------------------------------
-  // 敵の防御力・カット率・被害減少は wiki が「約」「推定値」としか書いておらず、
-  // ゲーム内でも見られない。実測から逆算するしか確かめる手が無い(docs/enemy-verification.md)。
-  // ここは**集める側**。突き合わせは送られた条件つきの実測を見て行う。
-  let measureOpen = $state(false);
-  let measuredDamage = $state<number | null>(null);
-  let measuredCritical = $state(false);
-  let measuredHits = $state(10);
-  let measuredNote = $state("");
-  const measuredExpected = $derived(result ? expectedDamage(result, measuredCritical) : null);
-  const measuredGap = $derived(
-    measuredDamage !== null && measuredExpected !== null
-      ? damageGap(measuredDamage, measuredExpected)
-      : null,
-  );
-  const canSendMeasurement = $derived(
-    measuredDamage !== null && measuredDamage > 0 && result !== null && skill !== null && target !== null,
-  );
-
-  function sendMeasurement() {
-    if (!result || !skill || !target || measuredDamage === null) return;
-    app.inquiryPrefill = measurementDraft(
-      {
-        gameCharacterId: character?.game_character_id ?? "",
-        awakeningStage: character?.awakening.stage ?? 0,
-        eternalLevel: character?.awakening.eternal_level ?? 0,
-        skill,
-        comboSkillType: selectedComboSkillType,
-        contentId: target.content.id,
-        contentName: target.content.name,
-        enemyId: target.content.enemy_id,
-        normalAttack: normalAttacks.find((s) => s.id === comboNormalAttackId) ?? null,
-        result,
-      },
-      {
-        damage: measuredDamage,
-        critical: measuredCritical,
-        hits: measuredHits,
-        note: measuredNote,
-      },
-    );
-  }
 
   // --- 効いていない分の棚卸し(design-system §14 決定 2)---------------------
   // 上限で捨てた分は 能力値上限 / カテゴリ上限 / ダメージ上限 / 防御力上限 / 中ディレイ
@@ -2027,78 +1983,6 @@
         </SheetCard>
         </div>
 
-        <!-- 実測と比べる。敵の値は wiki が「約」「推定値」としか書かず、ゲーム内でも
-             見られないので、実測から逆算するしかない(docs/enemy-verification.md)。
-             ここは集める側 — ふだんは畳んでおき、開いた人だけが使う(§00 02) -->
-        <div class="panel">
-          <button type="button" class="panel-head" onclick={() => (measureOpen = !measureOpen)}>
-            <span class="panel-title">実測と比べる</span>
-            <span class="panel-note dim">{measureOpen ? "閉じる" : "ゲームで出た値を送る"}</span>
-            <span class="t-chev" class:rot={measureOpen}>▼</span>
-          </button>
-          {#if measureOpen}
-            <div class="panel-body measure">
-              <p class="measure-lead dim">
-                敵の防御力・カット率は wiki でも「約」「推定値」で、ゲーム内では見られません。
-                <b>実測を集めて逆算する</b>しか確かめる方法がないので、出た値を送ってもらえると助かります。
-              </p>
-              <div class="measure-row">
-                <label class="measure-field">
-                  <span class="label">実測ダメージ(1 発)</span>
-                  <input
-                    class="num-field" type="number" min="1" inputmode="numeric"
-                    value={measuredDamage ?? ""}
-                    oninput={(e) => {
-                      const v = Number(e.currentTarget.value);
-                      measuredDamage = Number.isFinite(v) && v > 0 ? Math.trunc(v) : null;
-                    }}
-                  />
-                </label>
-                <label class="measure-field short">
-                  <span class="label">何発中の最大</span>
-                  <input
-                    class="num-field" type="number" min="1" inputmode="numeric"
-                    value={measuredHits}
-                    oninput={(e) => {
-                      const v = Number(e.currentTarget.value);
-                      measuredHits = Number.isFinite(v) && v > 0 ? Math.trunc(v) : 1;
-                    }}
-                  />
-                </label>
-                <CheckChip checked={measuredCritical} onCheckedChange={(v) => (measuredCritical = v)}>
-                  <span>クリティカルだった</span>
-                </CheckChip>
-              </div>
-              <div class="measure-result">
-                <!-- 鎖の「1 発」はクリ率 > 0 ならクリティカル側を出しているので、
-                     どちら側と比べているかを必ず書く(数字が食い違って見える) -->
-                <span class="dim">このツールの計算({measuredCritical ? "クリティカル" : "非クリ最大"})</span>
-                <span class="num">{measuredExpected !== null ? fmtInt(Math.trunc(measuredExpected)) : "—"}</span>
-                <span class="dim">差</span>
-                <span class="num" class:warn={measuredGap !== null && Math.abs(measuredGap) >= 0.05}
-                  use:bump={() => measuredGap}
-                >
-                  {measuredGap === null ? "—" : `${measuredGap >= 0 ? "+" : ""}${(measuredGap * 100).toFixed(1)}%`}
-                </span>
-              </div>
-              <label class="measure-field wide">
-                <span class="label">気づいたこと(任意)</span>
-                <input
-                  class="text-field" type="text" maxlength="200"
-                  placeholder="強打が乗ったかも / 上限に当たっていそう など"
-                  bind:value={measuredNote}
-                />
-              </label>
-              <div class="measure-send">
-                <button type="button" class="btn primary" disabled={!canSendMeasurement} onclick={sendMeasurement}>
-                  この実測を送る
-                </button>
-                <span class="dim">送信前に全文を確認できます。条件(スキル・敵・攻撃力)も一緒に送られます。</span>
-              </div>
-            </div>
-          {/if}
-        </div>
-
         <!-- なぜこの数字? -->
         <div class="panel">
           <button type="button" class="panel-head blue" onclick={() => (flowOpen = !flowOpen)}>
@@ -2619,30 +2503,6 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   }
   .combo-type-note { min-width: 0; padding-bottom: 3px; font-size: 9px; line-height: 1.45; }
-  /* ===== 実測と比べる ===== */
-  .measure { display: flex; flex-direction: column; gap: 9px; }
-  .measure-lead { margin: 0; font-size: 10.5px; line-height: 1.6; }
-  .measure-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
-  .measure-field { display: flex; flex-direction: column; gap: 3px; }
-  .measure-field .label { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-muted); }
-  /* 上限のない自由入力(§07 形態 5)。スピナーは他の数値欄に無いので消して見た目をそろえる */
-  .measure-field .num-field { width: 132px; appearance: textfield; }
-  .measure-field .num-field::-webkit-outer-spin-button,
-  .measure-field .num-field::-webkit-inner-spin-button { appearance: none; margin: 0; }
-  .measure-field.short .num-field { width: 72px; }
-  .measure-field.wide { width: 100%; }
-  .text-field {
-    width: 100%; padding: 4px 8px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid var(--border); font-size: 11px; color: var(--fg);
-  }
-  .measure-result {
-    display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: var(--r-window);
-    background: var(--surface-inset); border: 1px solid var(--border-soft); font-size: 10px;
-  }
-  .measure-result .num { font-size: 12.5px; font-weight: 700; }
-  .measure-result .num.warn { color: var(--warm); }
-  .measure-send { display: flex; align-items: center; gap: 10px; font-size: 9.5px; flex-wrap: wrap; }
-
   /* コンボの成立条件と、挟む通常攻撃の段。ON のときだけ出るので、
      押した場所より下にしか増えない(§00 03) */
   .combo-normal { margin-top: 8px; }
