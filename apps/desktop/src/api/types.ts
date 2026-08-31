@@ -108,8 +108,21 @@ export type SacredRelic = Record<StatKind, number>;
 // 能力値計算の5レイヤー(wiki §2)。crates/domain/src/stats.rs の StatLayer(snake_case)。
 export type StatLayer = "percent_of_base" | "fixed" | "multiplier_a" | "multiplier_b" | "final_fixed";
 
+/** 「対象ステを選ぶ」バフの、ステごとの実際の効き。crates/domain/src/stat_sources.rs の
+ *  BuffTargetStatGain。`gain` はそのステに振ったときに最終能力値が動く点数で、
+ *  素ステが上限に張り付いていれば 0(= 選んでも何も起きない)。 */
+export interface BuffTargetStatGain {
+  kind: StatKind;
+  gain: number;
+}
+
 // バフの対象ステ。crates/domain/src/stat_sources.rs の BuffTarget(rename_all snake_case、外部タグ付け)。
-export type BuffTarget = "all_stats" | { stat: StatKind } | "user_selected" | { stats: StatKind[] };
+export type BuffTarget =
+  | "all_stats"
+  | { stat: StatKind }
+  | "user_selected"
+  | "user_selected_multi"
+  | { stats: StatKind[] };
 
 // バフの値の決め方。crates/domain/src/stat_sources.rs の BuffValue(rename_all snake_case、外部タグ付け)。
 export type BuffValue =

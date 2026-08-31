@@ -1,31 +1,32 @@
 <script lang="ts">
   import {
-    createBuffSet, deleteBuffSet, duplicateBuffSet, errorMessage, previewDefense,
-    previewEffectiveStats, summarizeBuffSelection, updateBuffSet,
+    buffTargetStatGains, createBuffSet, deleteBuffSet, duplicateBuffSet, errorMessage, previewDefense,
+    previewEffectiveStats, setDefaultBuffSet, summarizeBuffSelection, updateBuffSet,
   } from "../../api/commands";
   import type {
     BuffChoice, BuffDamageEffect, BuffDefinition, BuffOrigin, BuffPurpose, BuffSet, BuffTarget,
+    BuffTargetStatGain,
     DamageCategory, CategoryTrace, DefenseProfile, EffectiveStats, StatKind, StatSourceEffect,
   } from "../../api/types";
   import {
-    isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isRecordOnly, isUserSelectedTarget,
-    toggleBuff, userInputRange,
+    BUFF_PURPOSES, isBlocked, isChoiceValue, isFixedValue, isMultiTarget, isPercentLayer, isRecordOnly,
+    matchesPurpose,
+    isUserSelectedTarget, pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
   import { fmtInt, formatLayerValue, topRows, topRowsText, type TopRows } from "../../format";
   import { singleEffectLabel } from "../../characterSkills";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
-  import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter } from "../../state.svelte";
-  import { reportError } from "../../toast.svelte";
-  import { bump, flash } from "../../ui/motion.svelte";
+  import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
+  import { reportError, reportUndo } from "../../toast.svelte";
+  import { bump, flash, swap } from "../../ui/motion.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
+  import StepToggle from "../../ui/StepToggle.svelte";
+  import Spinner from "../../ui/Spinner.svelte";
+  import { positionPopover } from "../../ui/popover";
   import Icon from "../../ui/Icon.svelte";
 
-  const PURPOSES: { id: BuffPurpose; label: string; description: string }[] = [
-    { id: "stats", label: "ステータスを上げたい", description: "能力値が伸びる効果" },
-    { id: "damage", label: "火力を上げたい", description: "攻撃ダメージ効果を持つバフ" },
-    { id: "durability", label: "耐久を上げたい", description: "受けるダメージや生存力に関わる効果" },
-  ];
+  const PURPOSES = BUFF_PURPOSES;
   const ORIGIN_LABELS: Record<BuffOrigin, string> = {
     item: "アイテム", event: "イベント", club: "クラブ", skill: "スキル",
     rune: "ルーン", soul_link: "ソウルリンク", battle_state: "戦闘中", minigame: "ミニゲーム",
@@ -50,6 +51,9 @@
   /** チップの「ほか n」を開いて中身(割愛したステ増分)を見ている ON バフの id。
    *  常に高々 1 件(§00 03: 押した場所は動かさない = 場所を固定した使い捨てのポップオーバー)。 */
   let openInfoId = $state<string | null>(null);
+  /** 値の調整を開いている ON バフの id。「ほか n」と同じく高々 1 件で、同時には開かない
+   *  (§00 03: 押した場所は動かさない = 場所を固定した使い捨ての重なりもの) */
+  let openEditorId = $state<string | null>(null);
   let activePurpose = $state<BuffPurpose>("stats");
   let activeDamageGroup = $state<DamageGroup>("general");
   let damageSummary = $state<CategoryTrace[]>([]);
@@ -70,11 +74,13 @@
    *  ドメイン(summarize_buff_selection)がカテゴリ上限適用後の値をバフへ配賦した結果を
    *  そのまま返すので、フロントで単独計算を組み立て直さない(Σ per-buff == カテゴリ合計)。 */
   let buffDamageEffects = $state<BuffDamageEffect[]>([]);
+  /** 「対象ステを選ぶ」バフの、このキャラでの効き(ドメインが返す最終能力値の増分)。
+   *  バフ id → ステごとの gain。並べ替えはこの値を見てフロントで行う。 */
+  let targetStatGains = $state<Record<string, BuffTargetStatGain[]>>({});
+  let gainsSeq = 0;
   let summarySeq = 0;
   const selected = $derived(app.buffSets.find((set) => set.id === selectedId) ?? app.buffSets[0] ?? null);
   const activePurposeMeta = $derived(PURPOSES.find((purpose) => purpose.id === activePurpose) ?? PURPOSES[0]);
-  const matchesPurpose = (def: BuffDefinition, purpose: BuffPurpose) =>
-    purpose === "damage" ? def.damage_effects.length > 0 : def.purposes.includes(purpose);
   const damageCategories = (def: BuffDefinition): DamageCategory[] =>
     def.damage_effects.flatMap((effect) => effect !== "record_only" && "damage" in effect ? [effect.damage.category] : []);
   const matchesDamageGroup = (def: BuffDefinition, group: DamageGroup) => {
@@ -140,6 +146,70 @@
     })();
   });
 
+  $effect(() => {
+    const character = selectedCharacter();
+    const choices = selected ? JSON.parse(JSON.stringify(selected.choices)) : null;
+    const targets = app.catalog.filter((def) => isUserSelectedTarget(def.target));
+    const seq = ++gainsSeq;
+    if (!character || !choices || targets.length === 0) {
+      targetStatGains = {};
+      return;
+    }
+    void (async () => {
+      try {
+        const draft = payloadOf(character);
+        const rows = await Promise.all(
+          targets.map(async (def) => [def.id, await buffTargetStatGains(draft, choices, def.id)] as const),
+        );
+        if (seq !== gainsSeq) return;
+        targetStatGains = Object.fromEntries(rows);
+      } catch (e) {
+        if (seq === gainsSeq) reportError(errorMessage(e));
+      }
+    })();
+  });
+
+  /** 対象ステの段を「このキャラで効く順」に並べる。効きが同じなら STAT_KINDS の順で安定させる。
+   *  効きの計算はドメイン(buff_target_stat_gains)。ここでやるのは並べ替えと見せ方だけ。 */
+  function statOptionsFor(def: BuffDefinition) {
+    const gains = targetStatGains[def.id];
+    const gainOf = (kind: StatKind) => gains?.find((g) => g.kind === kind)?.gain ?? null;
+    const order = [...STAT_KINDS].sort((a, b) => {
+      const ga = gainOf(a), gb = gainOf(b);
+      if (ga === null || gb === null || ga === gb) return STAT_KINDS.indexOf(a) - STAT_KINDS.indexOf(b);
+      return gb - ga;
+    });
+    return order.map((kind) => ({ value: kind, label: STAT_LABELS[kind] }));
+  }
+  /** 選んでも最終能力値が 1 も動かないステ(素ステが上限に張り付いている)。
+   *  段は消さずに押せなくする — 消すと段の数が変わって幅が動く(§09 規則 4)。
+   *  育成が進んで上限に余裕ができれば、そのまま押せるようになる。 */
+  const cappedStats = (def: BuffDefinition): StatKind[] =>
+    (targetStatGains[def.id] ?? []).filter((g) => g.gain === 0).map((g) => g.kind);
+  const cappedTitle = (def: BuffDefinition) => (value: string) =>
+    cappedStats(def).includes(value as StatKind)
+      ? `${STAT_LABELS[value as StatKind]} は上限に達しているので、選んでも最終能力値は動きません`
+      : undefined;
+  /** ON にしたときの既定の対象ステ = いちばん効くもの(初期値は実用値、ux-guidelines) */
+  const bestStatFor = (def: BuffDefinition): StatKind | undefined => {
+    const gains = targetStatGains[def.id];
+    if (!gains || gains.length === 0) return undefined;
+    return [...gains].sort((a, b) => b.gain - a.gain)[0].kind;
+  };
+
+  function openEditor(def: BuffDefinition) {
+    openInfoId = null;
+    openEditorId = openEditorId === def.id ? null : def.id;
+  }
+  /** 重なりものは、外を押したときと Esc で閉じる。開いたままにすると「まだ開いている」ことを
+   *  覚えておく必要が出る(§00 05)。トリガ自身とポップオーバーの中は対象外 */
+  function closeOverlays(event: MouseEvent) {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(".rest-popover, .rest-link")) return;
+    openInfoId = null;
+    openEditorId = null;
+  }
+
   function replaceSet(set: BuffSet) {
     const index = app.buffSets.findIndex((item) => item.id === set.id);
     if (index >= 0) app.buffSets[index] = set;
@@ -182,28 +252,53 @@
 
   /** バフの ON/OFF。ON にする瞬間から実用値(defaultChoice)で確定する — 「初期値は
    *  常に埋まっている」の原則(ux-guidelines)通り、適用ボタンは挟まない。
-   *  値の調整が要るバフは ON のあいだチップがその場で編集フォームに変わる(下の .expanded) */
+   *  値の調整が要るバフは、チップの下に最初から確保してある調整欄(.editor-slot)が
+   *  ON のあいだだけ中身を見せる */
   async function toggle(def: BuffDefinition) {
     if (!selected || saving) return;
     if (openInfoId === def.id) openInfoId = null;
+    if (openEditorId === def.id) openEditorId = null;
     const next: BuffSet = JSON.parse(JSON.stringify(selected));
-    next.choices.choices = toggleBuff(next.choices.choices, def, !next.choices.choices.some((c) => c.buff_id === def.id));
+    next.choices.choices = toggleBuff(next.choices.choices, def, !next.choices.choices.some((c) => c.buff_id === def.id), bestStatFor(def));
     await persist(next);
   }
 
-  /** ON 中のバフの、いまの保存済み選択(値の調整フォームが直接読み書きする) */
-  const liveChoice = (def: BuffDefinition): BuffChoice | null =>
-    selected?.choices.choices.find((c) => c.buff_id === def.id) ?? null;
+  /** ON 中のバフの、いまの保存済み選択(値の調整フォームが直接読み書きする)。
+   *  複数ステ対象(クラブ効果)は 1 ステ = 1 choice なので `stat` で引き当てる */
+  const liveChoice = (def: BuffDefinition, stat?: StatKind): BuffChoice | null =>
+    selected?.choices.choices.find(
+      (c) => c.buff_id === def.id && (stat === undefined || c.stat === stat),
+    ) ?? null;
 
   /** 値の調整フォームの入力。触った瞬間に確定する(§07: 適用ボタンを挟まない) */
-  async function updateChoice(def: BuffDefinition, edit: (choice: BuffChoice) => void) {
+  async function updateChoice(
+    def: BuffDefinition,
+    edit: (choice: BuffChoice) => void,
+    stat?: StatKind,
+  ) {
     if (!selected || saving) return;
     const next: BuffSet = JSON.parse(JSON.stringify(selected));
-    const index = next.choices.choices.findIndex((c) => c.buff_id === def.id);
+    const index = next.choices.choices.findIndex(
+      (c) => c.buff_id === def.id && (stat === undefined || c.stat === stat),
+    );
     if (index < 0) return;
     edit(next.choices.choices[index]);
     await persist(next);
   }
+
+  /** 複数ステ対象バフの、1 ステぶんの ON/OFF。最後の 1 つを外すとバフ自体が OFF になる
+   *  (「外す」と同じ結果になるので、外し方を 2 通り覚えさせない) */
+  async function toggleStat(def: BuffDefinition, stat: StatKind, next: boolean) {
+    if (!selected || saving) return;
+    if (openInfoId === def.id) openInfoId = null;
+    const draft: BuffSet = JSON.parse(JSON.stringify(selected));
+    draft.choices.choices = toggleBuffStat(draft.choices.choices, def, stat, next);
+    await persist(draft);
+  }
+
+  /** 複数ステ対象バフで、いま選ばれているステ */
+  const chosenStats = (def: BuffDefinition): StatKind[] =>
+    pickedStats(selected?.choices.choices ?? [], def);
 
   async function duplicate() {
     if (!selected || saving) return;
@@ -213,45 +308,91 @@
     finally { saving = false; }
   }
 
+  /** 確認中のセット。`confirmDeleteId` を直に読まず、いま消そうとしている実体で持つ —
+   *  選択が動いても確認の対象は動かない(押した時点の対象を最後まで指す) */
+  const pendingDelete = $derived(app.buffSets.find((set) => set.id === confirmDeleteId) ?? null);
+  /** そのセットを「いつものバフ」にしているキャラ。削除で紐付けが外れる先 */
+  const charactersUsing = (setId: number) =>
+    app.characters.filter((character) => character.default_buff_set_id === setId);
+
   function requestRemove() {
     if (!selected || saving) return;
     confirmDeleteId = selected.id;
     if (confirmDeleteTimer !== null) clearTimeout(confirmDeleteTimer);
-    confirmDeleteTimer = setTimeout(() => (confirmDeleteId = null), 4000);
+    // 対象名と影響を読んでから決める時間を取る(4 秒だと読み終わる前に消えていた)
+    confirmDeleteTimer = setTimeout(() => (confirmDeleteId = null), 10000);
+  }
+
+  function cancelRemove() {
+    if (confirmDeleteTimer !== null) clearTimeout(confirmDeleteTimer);
+    confirmDeleteTimer = null;
+    confirmDeleteId = null;
   }
 
   async function remove() {
-    if (!selected || saving || confirmDeleteId !== selected.id) return;
+    // 消すのは**確認したセット**。「いま選ばれているセット」で消すと、削除のあいだに
+    // 選択が動いたときに別のものが消える(実機で本番セットを失った)
+    const deleted = pendingDelete;
+    if (!deleted || saving) return;
     if (confirmDeleteTimer !== null) clearTimeout(confirmDeleteTimer);
     confirmDeleteTimer = null;
     confirmDeleteId = null;
     saving = true;
     try {
-      const deletedId = selected.id;
+      const deletedId = deleted.id;
+      // 消える前に、戻すのに要るものを控える(名前・中身・「いつものバフ」にしていたキャラ)。
+      // DB 側は ON DELETE SET NULL なので、キャラの紐付けは黙って外れる — 戻すときに
+      // ここから付け直す
+      const snapshot = { name: deleted.name, choices: JSON.parse(JSON.stringify(deleted.choices)) };
+      const affectedIds = app.characters
+        .filter((character) => character.default_buff_set_id === deletedId)
+        .map((character) => character.id);
+      // 削除後の選択は**消したものの隣**へ。先頭に飛ばすと、続けて「削除」を押したときに
+      // 見ていたものと違うセットが消える(実機で本番セットを失った)
+      const removedIndex = app.buffSets.findIndex((set) => set.id === deletedId);
+
       await deleteBuffSet(deletedId);
       app.buffSets = app.buffSets.filter((set) => set.id !== deletedId);
-      const affectedIds = new Set(
-        app.characters.filter((character) => character.default_buff_set_id === deletedId).map((character) => character.id),
-      );
+      const affected = new Set(affectedIds);
       app.characters = app.characters.map((character) =>
-        affectedIds.has(character.id) ? { ...character, default_buff_set_id: null } : character,
+        affected.has(character.id) ? { ...character, default_buff_set_id: null } : character,
       );
-      selectedId = app.buffSets[0]?.id ?? null;
+      // 選択を動かすのは、消えたのがまさに見ていたセットだったときだけ
+      if (selectedId === deletedId || selectedId === null) {
+        const neighbour = app.buffSets[Math.min(removedIndex, app.buffSets.length - 1)];
+        selectedId = neighbour?.id ?? null;
+      }
       if (app.calcBuffSetId === deletedId) syncCalcBuffs(selectedCharacter());
-      await Promise.all(app.characters.filter((character) => affectedIds.has(character.id)).map(refreshEvaluation));
+      await Promise.all(app.characters.filter((character) => affected.has(character.id)).map(refreshEvaluation));
+      reportUndo(`「${snapshot.name}」を削除しました`, () => restore(snapshot, affectedIds));
     } catch (e) { reportError(errorMessage(e)); }
     finally { saving = false; }
+  }
+
+  /** 削除したセットを作り直し、「いつものバフ」にしていたキャラへ付け直す。
+   *  作り直しなので id は変わる — 参照はここで張り替える */
+  async function restore(
+    snapshot: { name: string; choices: BuffSet["choices"] },
+    characterIds: number[],
+  ) {
+    try {
+      const created = await createBuffSet(snapshot.name, snapshot.choices);
+      replaceSet(created);
+      const updated = await Promise.all(characterIds.map((id) => setDefaultBuffSet(id, created.id)));
+      for (const character of updated) upsertCharacter(character);
+      if (app.calcBuffSetId === null) syncCalcBuffs(selectedCharacter());
+    } catch (e) { reportError(errorMessage(e)); }
   }
 
   const on = (def: BuffDefinition) => selected?.choices.choices.some((choice) => choice.buff_id === def.id) ?? false;
   const needsInput = (def: BuffDefinition) =>
     isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value) !== null;
   const exclusive = (def: BuffDefinition) => def.exclusive_slots.length > 0 ? def.exclusive_slots.join(" / ") : "独立";
-  const statOptions = STAT_KINDS.map((kind) => ({ value: kind, label: STAT_LABELS[kind] }));
 
   function targetLabel(target: BuffTarget): string {
     if (target === "all_stats") return "全ステータス";
     if (target === "user_selected") return "選択したステータス";
+    if (target === "user_selected_multi") return "選択したステータス(複数可)";
     if ("stat" in target) return STAT_LABELS[target.stat];
     return target.stats.map((stat) => STAT_LABELS[stat]).join(" / ");
   }
@@ -371,32 +512,6 @@
 
   const formatDelta = (value: number, digits = 0) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
 
-  /** 「ほか n」ポップオーバー(.rest-popover)を、開いた場所の直下に置いたまま画面外へ
-   *  はみ出さないよう位置決めする Svelte action(§09 規則 1: 押した場所=トリガ自身は動かさない、
-   *  規則 3: 重なるものはレイアウトを押さない — どちらも絶対配置のまま完結させる)。
-   *  下に入らなければ上に開く(フリップ)。上にも入り切らなければ、収まる高さに
-   *  クランプして中身だけスクロールにする(画面外に開いたまま放置しない)。 */
-  function positionRestPopover(node: HTMLElement) {
-    const margin = 8;
-    const rect = node.getBoundingClientRect();
-    if (rect.bottom > window.innerHeight - margin) {
-      node.classList.add("flip-up");
-      const flipped = node.getBoundingClientRect();
-      if (flipped.top < margin) {
-        const available = Math.max(flipped.bottom - margin, 60);
-        node.style.maxHeight = `${available}px`;
-        node.style.overflowY = "auto";
-      }
-    }
-    return {
-      destroy() {
-        node.classList.remove("flip-up");
-        node.style.maxHeight = "";
-        node.style.overflowY = "";
-      },
-    };
-  }
-
   /** チップに出す効果の説明。「クリックして…」の操作ヒントとは別行にする(§00 05)。
    *  ON のチップは静的な定義文ではなく、このキャラで実際に何点(何%)伸びたかを出す
    *  (ユーザー合意: ON にしたチップに増分を出す)。OFF のチップは従来どおりカタログの説明 */
@@ -407,6 +522,11 @@
     return effectSummary(def);
   }
 </script>
+
+<svelte:window
+  onclick={closeOverlays}
+  onkeydown={(e) => { if (e.key === "Escape") { openInfoId = null; openEditorId = null; } }}
+/>
 
 <div class="buff-page">
   <aside class="sets">
@@ -423,6 +543,22 @@
       {/each}
       {#if app.buffSets.length === 0}<p>セットを作ると、キャラや計算で使えます。</p>{/if}
     </div>
+    <!-- 削除の確認は**消える対象(セット一覧)の隣**に出す。削除ボタンの真下だと目的タブに
+         重なって押せなくなるうえ、何が消えるのかは対象から離れたところで読むことになる。
+         リストの下は空きなので、出しても既にある行を動かさない(§09 規則 2) -->
+    {#if pendingDelete}
+      {@const users = charactersUsing(pendingDelete.id)}
+      <div class="delete-confirm" role="alert">
+        <strong>「{pendingDelete.name}」を削除します</strong>
+        {#if users.length > 0}
+          <small>{users.map((character) => character.name).join(" / ")} の「いつものバフ」が外れます</small>
+        {/if}
+        <div class="confirm-actions">
+          <button class="btn danger" disabled={saving} onclick={remove}>削除する</button>
+          <button class="btn" disabled={saving} onclick={cancelRemove}>やめる</button>
+        </div>
+      </div>
+    {/if}
   </aside>
 
   <section class="catalog">
@@ -432,13 +568,6 @@
         <input value={selected.name} disabled={saving} aria-label="バフセット名" onchange={(e) => persist({ ...selected, name: e.currentTarget.value })} />
         <button class="btn" onclick={duplicate}>複製</button>
         <button class="btn danger delete-set" disabled={saving} onclick={requestRemove}>削除</button>
-        {#if confirmDeleteId === selected.id}
-          <div class="delete-confirm" role="alert">
-            <span>このセットを削除します</span>
-            <button class="btn danger" disabled={saving} onclick={remove}>削除する</button>
-            <button class="btn" disabled={saving} onclick={() => (confirmDeleteId = null)}>やめる</button>
-          </div>
-        {/if}
       </div>
       <div class="groups">
         <div class="category-switch" role="tablist" aria-label="伸ばしたい効果">
@@ -457,7 +586,9 @@
             </button>
           {/each}
         </div>
-        <section class="buff-group" use:flash={() => `${activePurpose}:${activeDamageGroup}`}>
+        <!-- 面の入れ替えは型 3b(swap-in = 上から短く入る)。型 5 の badge-in(flash)を
+             ここに使うと、面ぜんたいが中心から膨らんで他タブの切り替えと動きが揃わない -->
+        <section class="buff-group" use:swap={() => `${activePurpose}:${activeDamageGroup}`}>
           <div class="group-summary">
             <span class="group-copy"><strong>{activePurposeMeta.label}</strong><small>{activePurposeMeta.description}</small></span>
             {#if activePurpose === "stats"}
@@ -487,127 +618,181 @@
           <div class="chips">
             {#each activeDefinitions as def (def.id)}
               {@const blocked = !on(def) && isBlocked(selected.choices.choices, app.catalog, def)}
-              {@const expanded = on(def) && needsInput(def)}
-              <div
-                class="buff-option" class:on={on(def)} class:expanded
-                class:info-open={openInfoId === def.id}
-                use:flash={() => (on(def) ? "on" : "off")}
-              >
+              {@const isOn = on(def)}
+              {@const hasEditor = needsInput(def)}
+              {@const top = isOn ? statTop(def) : null}
+              {@const dmg = isOn ? damageText(def) : null}
+              {@const openHere = openInfoId === def.id || openEditorId === def.id}
+              <!-- チップの大きさは ON/OFF で変えない。値の調整も増分の内訳も**重ねて**出す
+                   (§09 規則 3: 重なるものはレイアウトを押さない / 閉じたときに何も動かない)。
+                   チップ自体も動かさない — ON/OFF が変わったことは中の状態バッジが弾んで伝える
+                   (§10 型 5「行そのものは動かさない」) -->
+              <div class="buff-option" class:on={isOn} class:info-open={openHere}>
                 <span class="buff-icon"><Icon kind="buff" id={def.id} size={28} label={def.name} /></span>
-                {#if expanded}
-                  <!-- ON のあいだ、チップそのものが値の調整フォームに変わる。適用ボタンは無く、
-                       触った瞬間に確定する(§07)。外すはここに常設の 1 つだけ -->
-                  <div class="buff-config">
-                    <div class="config-head">
+                <!-- 「ほか n」「設定」を独立したボタンにするため、チップ本体はネイティブ button
+                     ではなく role="button" の div にする(button の中に button は入れられない)。
+                     クリック・キー操作の意味は button と同じに保つ。 -->
+                <div
+                  class="buff-toggle"
+                  class:disabled={blocked || saving}
+                  role="button"
+                  tabindex={blocked || saving ? -1 : 0}
+                  aria-disabled={blocked || saving}
+                  aria-pressed={isOn}
+                  onclick={() => { if (!blocked && !saving) toggle(def); }}
+                  onkeydown={(e) => {
+                    if ((e.key === "Enter" || e.key === " ") && !blocked && !saving) { e.preventDefault(); toggle(def); }
+                  }}
+                  title={buffTooltip(def, blocked)}
+                  aria-label={`${def.name}。${effectLine(def)}`}
+                >
+                  <span class="chip-copy">
+                    <span class="chip-head">
                       <strong>{def.name}</strong>
-                      <span class="config-effect num" use:flash={() => statDeltaText(def) ?? effectSummary(def)}>{statDeltaText(def) ?? effectSummary(def)}</span>
-                      <button type="button" class="clear" disabled={saving} onclick={() => toggle(def)}>外す</button>
-                    </div>
-                    <div class="choice-editor">
-                      {#if isUserSelectedTarget(def.target)}
-                        <StepSelect label="対象ステ" options={statOptions} cols={4} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
-                      {/if}
-                      {#if isChoiceValue(def.value)}
-                        {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
-                        <StepSelect label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
-                      {/if}
-                      {#if userInputRange(def.value)}
-                        {@const range = userInputRange(def.value)!}
-                        {@const scale = isPercentLayer(def.layer) ? 100 : 1}
-                        <StatInput label={def.id === "club_effect" ? "クラブ効果" : (isPercentLayer(def.layer) ? "値 (%)" : "値")} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
-                      {/if}
-                    </div>
-                  </div>
-                {:else}
-                  {@const isOn = on(def)}
-                  {@const top = isOn ? statTop(def) : null}
-                  {@const dmg = isOn ? damageText(def) : null}
-                  <!-- 「ほか n」を独立したボタンにするため、チップ本体はネイティブ button ではなく
-                       role="button" の div にする(button の中に button は入れられない)。
-                       クリック・キー操作の意味は button と同じに保つ。 -->
-                  <div
-                    class="buff-toggle"
-                    class:disabled={blocked || saving}
-                    role="button"
-                    tabindex={blocked || saving ? -1 : 0}
-                    aria-disabled={blocked || saving}
-                    onclick={() => { if (!blocked && !saving) toggle(def); }}
-                    onkeydown={(e) => {
-                      if ((e.key === "Enter" || e.key === " ") && !blocked && !saving) { e.preventDefault(); toggle(def); }
-                    }}
-                    title={buffTooltip(def, blocked)}
-                    aria-label={`${def.name}。${effectLine(def)}${needsInput(def) ? "。クリックして設定" : ""}`}
-                  >
-                    <span class="chip-copy">
-                      <span class="chip-head">
-                        <strong>{def.name}</strong>
-                        <!-- ON / 選べない の状態バッジ。枠は 3 状態すべてで常に確保し(空のときは
-                             透明)、ここだけ見れば ON・OFF・選択不可の判別が付くようにする
-                             (§00 05・03: バッジが出た瞬間に幅が変わって隣が動くのを防ぐ) -->
-                        <span
-                          class="chip-state"
-                          class:on={isOn}
-                          class:blocked
-                          use:flash={() => (isOn ? "on" : blocked ? "blocked" : "off")}
-                        >{isOn ? "選択中" : blocked ? "選択不可" : ""}</span>
-                      </span>
-                      {#if isOn && top}
-                        <!-- ON: このキャラで実際に何点伸びたかを行ごとに出す(§00 05)。ステ増分と
-                             ダメージ効果は別行 — 1 行に連結すると長い名前のダメージ効果で溢れる
-                             (5周目 実機指摘)。「ほか n」は押せる要素にして中身を辿れるようにする
-                             (title だけに情報を追いやらない)。チップ本体のトグルとは
-                             stopPropagation で切り離す(§00 03: 押した場所は動かさない)。 -->
-                        <span class="chip-effect" use:flash={() => effectLine(def)}>
-                          {#if top.shown.length > 0}
-                            <small class="chip-effect-row">
-                              <span class="chip-effect-values">{top.shown.join(" / ")}</span>
-                              {#if top.restCount > 0}
-                                <!-- トグル面の中央に押し分けの要る的を置かない — 行の右端に、縦の区切りで
-                                     「ここだけ別の的」と分かるようにする(実機で誤タップ報告あり)。 -->
-                                <button
-                                  type="button"
-                                  class="rest-link"
-                                  onclick={(e) => { e.stopPropagation(); openInfoId = openInfoId === def.id ? null : def.id; }}
-                                  aria-expanded={openInfoId === def.id}
-                                >ほか {top.restCount}</button>
-                              {/if}
-                            </small>
-                          {/if}
-                          {#if dmg}<small>{dmg}</small>{/if}
-                          {#if top.shown.length === 0 && !dmg}<small>{effectSummary(def)}</small>{/if}
-                        </span>
-                      {:else if blocked}
-                        <!-- 選べない理由をここに出す(title 無しで読めるように)。同じ
-                             chip-effect の枠を使い、OFF 単独のときの説明文と入れ替える形にして
-                             新しい行を増やさない(チップの高さを崩さない) -->
-                        <span class="chip-effect"><small class="block-reason" use:flash={() => blockReason(def)}>{blockReason(def)}</small></span>
-                      {:else}
-                        <span class="chip-effect"><small use:flash={() => effectLine(def)}>{effectLine(def)}</small></span>
-                      {/if}
-                      {#if needsInput(def)}<small class="op-hint">クリックして設定</small>{/if}
-                      <span class="origin-badge">{ORIGIN_LABELS[def.origin]}</span>
+                      <!-- ON / 選べない の状態バッジ。枠は 3 状態すべてで常に確保し(空のときは
+                           透明)、ここだけ見れば ON・OFF・選択不可の判別が付くようにする
+                           (§00 05・03: バッジが出た瞬間に幅が変わって隣が動くのを防ぐ) -->
+                      <span
+                        class="chip-state"
+                        class:on={isOn}
+                        class:blocked
+                        use:flash={() => (isOn ? "on" : blocked ? "blocked" : "off")}
+                      >{isOn ? "選択中" : blocked ? "選択不可" : ""}</span>
                     </span>
-                    {#if isOn && top && openInfoId === def.id}
-                      {@const restRows = statRows(def)}
-                      <!-- 「ほか n」の中身。押した場所(チップ)の直下に出し、レイアウトは押さない
-                           (絶対配置なので下のチップを動かさない)。 -->
-                      <div
-                        class="rest-popover"
-                        role="dialog"
-                        tabindex="-1"
-                        aria-label={`${def.name} の全ステ増分`}
-                        use:positionRestPopover
-                        onclick={(e) => e.stopPropagation()}
-                        onkeydown={(e) => e.stopPropagation()}
-                      >
-                        {#each restRows as row (row.label)}
-                          <div class="num">{row.label}</div>
-                        {/each}
-                        <button type="button" class="rest-close" onclick={(e) => { e.stopPropagation(); openInfoId = null; }}>閉じる</button>
-                      </div>
+                    {#if isOn && top}
+                      <!-- ON: このキャラで実際に何点伸びたかを行ごとに出す(§00 05)。ステ増分と
+                           ダメージ効果は別行 — 1 行に連結すると長い名前のダメージ効果で溢れる
+                           (5周目 実機指摘)。行の右端に開く的を 1 つだけ置く:
+                           値の調整が要るバフは「設定」(調整と内訳を兼ねる)、
+                           それ以外で割愛した増分があるときだけ「ほか n」。
+                           2 つ並べると 288px に収まらないうえ、押し分けを迫ることになる。 -->
+                      <span class="chip-effect" use:flash={() => effectLine(def)}>
+                        {#if top.shown.length > 0}
+                          <small class="chip-effect-row">
+                            <span class="chip-effect-values">{top.shown.join(" / ")}</span>
+                            {#if hasEditor}
+                              <!-- トグル面の中央に押し分けの要る的を置かない — 行の右端に、縦の区切りで
+                                   「ここだけ別の的」と分かるようにする(実機で誤タップ報告あり)。 -->
+                              <button
+                                type="button"
+                                class="rest-link"
+                                onclick={(e) => { e.stopPropagation(); openEditor(def); }}
+                                aria-expanded={openEditorId === def.id}
+                              >設定</button>
+                            {:else if top.restCount > 0}
+                              <button
+                                type="button"
+                                class="rest-link"
+                                onclick={(e) => { e.stopPropagation(); openInfoId = openInfoId === def.id ? null : def.id; openEditorId = null; }}
+                                aria-expanded={openInfoId === def.id}
+                              >ほか {top.restCount}</button>
+                            {/if}
+                          </small>
+                        {/if}
+                        {#if dmg}<small>{dmg}</small>{/if}
+                        {#if top.shown.length === 0 && !dmg}<small>{effectSummary(def)}</small>{/if}
+                      </span>
+                    {:else if blocked}
+                      <!-- 選べない理由をここに出す(title 無しで読めるように)。同じ
+                           chip-effect の枠を使い、OFF 単独のときの説明文と入れ替える形にして
+                           新しい行を増やさない(チップの高さを崩さない) -->
+                      <span class="chip-effect"><small class="block-reason" use:flash={() => blockReason(def)}>{blockReason(def)}</small></span>
+                    {:else}
+                      <span class="chip-effect"><small use:flash={() => effectLine(def)}>{effectLine(def)}</small></span>
                     {/if}
-                  </div>
-                {/if}
+                    <span class="origin-badge">{ORIGIN_LABELS[def.origin]}</span>
+                  </span>
+                  {#if isOn && top && openInfoId === def.id}
+                    {@const restRows = statRows(def)}
+                    <!-- 「ほか n」の中身。押した場所(チップ)の直下に出し、レイアウトは押さない
+                         (絶対配置なので下のチップを動かさない)。 -->
+                    <div
+                      class="popover rest-popover"
+                      role="dialog"
+                      tabindex="-1"
+                      aria-label={`${def.name} の全ステ増分`}
+                      use:positionPopover
+                      onclick={(e) => e.stopPropagation()}
+                      onkeydown={(e) => e.stopPropagation()}
+                    >
+                      {#each restRows as row (row.label)}
+                        <div class="num">{row.label}</div>
+                      {/each}
+                      <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); openInfoId = null; }}>閉じる</button>
+                    </div>
+                  {/if}
+                  {#if isOn && hasEditor && openEditorId === def.id}
+                    {@const restRows = statRows(def)}
+                    <!-- 値の調整。**チップに重ねて**出すのでレイアウトを押さない(§09 規則 3)。
+                         適用ボタンは無く、触った瞬間に確定する(§07)。割愛した増分の内訳も
+                         ここに入れて、押す的を 1 つに保つ。 -->
+                    <div
+                      class="popover rest-popover editor-popover"
+                      role="dialog"
+                      tabindex="-1"
+                      aria-label={`${def.name} の設定`}
+                      use:positionPopover
+                      onclick={(e) => e.stopPropagation()}
+                      onkeydown={(e) => e.stopPropagation()}
+                    >
+                      <div class="choice-editor">
+                        {#if isMultiTarget(def.target)}
+                          <!-- クラブエフェクトはステごとに 1 つずつ、別々の段で併用できる
+                               (wiki: クラブ)。段の並びと押せる段はドメインの「効き」から決める -->
+                          {@const picked = chosenStats(def)}
+                          {@const range = userInputRange(def.value)}
+                          <StepToggle
+                            label="対象ステ"
+                            options={statOptionsFor(def)}
+                            cols={STAT_KINDS.length}
+                            max={STAT_KINDS.length}
+                            values={picked}
+                            disabled={saving}
+                            disabledValues={cappedStats(def)}
+                            titleFor={cappedTitle(def)}
+                            onToggle={(value, next) => toggleStat(def, value as StatKind, next)}
+                          />
+                          {#if range}
+                            {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                            <div class="per-stat">
+                              {#each picked as stat (stat)}
+                                <StatInput
+                                  label={STAT_LABELS[stat]}
+                                  min={range.min * scale}
+                                  max={range.max * scale}
+                                  bind:value={() => (liveChoice(def, stat)?.value ?? def.default_value ?? range.min) * scale,
+                                    (value) => updateChoice(def, (c) => (c.value = value / scale), stat)}
+                                />
+                              {/each}
+                            </div>
+                          {/if}
+                        {:else}
+                          {#if isUserSelectedTarget(def.target)}
+                            <StepSelect label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
+                          {/if}
+                          {#if isChoiceValue(def.value)}
+                            {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
+                            <StepSelect label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
+                          {/if}
+                          {#if userInputRange(def.value)}
+                            {@const range = userInputRange(def.value)!}
+                            {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                            <StatInput label={isPercentLayer(def.layer) ? "値 (%)" : "値"} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
+                          {/if}
+                        {/if}
+                      </div>
+                      {#if top && restRows.length > top.shown.length}
+                        <!-- チップに出し切れなかった増分。「ほか n」を別の的にせず、ここに畳む -->
+                        <div class="editor-rows">
+                          {#each restRows as row (row.label)}
+                            <div class="num">{row.label}</div>
+                          {/each}
+                        </div>
+                      {/if}
+                      <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); openEditorId = null; }}>閉じる</button>
+                    </div>
+                  {/if}
+                </div>
               </div>
             {/each}
           </div>
@@ -619,11 +804,15 @@
   </section>
 
   <aside class="summary">
-    <div class="bar">現在の効果</div>
+    <div class="bar">現在の効果<Spinner active={summaryLoading} label="バフの効果を集計しています" /></div>
     {#if selected}
-      <div class="count num" use:bump={() => selected.choices.choices.length}>{selected.choices.choices.length}<small>件 ON</small></div>
-      {#if summaryLoading}<p class="summary-note">集計しています…</p>{/if}
-      <div class="summary-block" use:flash={() => JSON.stringify(statAfter)}>
+      <!-- 跳ねるのは**変わった数字だけ**(§10 型 1)。カードに use:bump を付けると
+           scale(1.07) が面ごと掛かり、カードの幅が 264 → 282px に膨らんで戻る。
+           数字側は 2 桁ぶんの幅を先に取ってあるので、桁が増えても「件 ON」は動かない -->
+      <div class="count">
+        <span class="count-value num" use:bump={() => selected.choices.choices.length}>{selected.choices.choices.length}</span><small>件 ON</small>
+      </div>
+      <div class="summary-block">
         <div class="summary-head">
           <strong>ステータス</strong>
           {#if hasAmplification}<small class="amp-caption">( )は他の補正と重なって増えた分</small>{/if}
@@ -641,7 +830,7 @@
           </div>
         {:else}<p>キャラを選ぶと、実際に何点伸びるか表示します。</p>{/if}
       </div>
-      <div class="summary-block" use:flash={() => JSON.stringify(damageSummary)}>
+      <div class="summary-block">
         <strong>攻撃ダメージ</strong>
         {#if damageSummary.length > 0}
           <div class="damage-list">
@@ -652,14 +841,20 @@
           </div>
         {:else}<p>選択中のバフによる攻撃ダメージ増加はありません。</p>{/if}
       </div>
-      <div class="summary-block" use:flash={() => JSON.stringify(defenseAfter)}>
+      <div class="summary-block">
         <strong>耐久</strong>
         {#if defenseBefore && defenseAfter}
+          {@const physical = defenseAfter.physical_defense - defenseBefore.physical_defense}
+          {@const magic = defenseAfter.magic_defense - defenseBefore.magic_defense}
+          {@const composite = defenseAfter.composite_defense - defenseBefore.composite_defense}
+          {@const evasion = (defenseAfter.combo_evasion - defenseBefore.combo_evasion) * 100}
           <div class="summary-grid">
-            <span>物理防御力</span><span class="num">{formatDelta(defenseAfter.physical_defense - defenseBefore.physical_defense)}</span>
-            <span>魔法防御力</span><span class="num">{formatDelta(defenseAfter.magic_defense - defenseBefore.magic_defense)}</span>
-            <span>複合防御力</span><span class="num">{formatDelta(defenseAfter.composite_defense - defenseBefore.composite_defense)}</span>
-            <span>コンボ回避</span><span class="num">{formatDelta((defenseAfter.combo_evasion - defenseBefore.combo_evasion) * 100, 1)}%</span>
+            <!-- 変わったのは数値なので、動かすのは数値だけ(§10 型 1)。ブロックごと
+                 badge-in で膨らませると、どの行が動いたのか読めなくなる -->
+            <span>物理防御力</span><span class="num" use:bump={() => physical}>{formatDelta(physical)}</span>
+            <span>魔法防御力</span><span class="num" use:bump={() => magic}>{formatDelta(magic)}</span>
+            <span>複合防御力</span><span class="num" use:bump={() => composite}>{formatDelta(composite)}</span>
+            <span>コンボ回避</span><span class="num" use:bump={() => evasion}>{formatDelta(evasion, 1)}%</span>
           </div>
         {:else}<p>キャラを選ぶと、防御力などの変化を表示します。</p>{/if}
         {#if selected.choices.choices.some((choice) => choice.buff_id === "boiled_mimic")}
@@ -696,22 +891,34 @@
   .damage-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
   .guide-link { flex: none; padding: 2px 4px; color: var(--fg-muted); font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }
   .guide-link:hover { color: var(--accent-hover); }
-  .chips { flex: 1; min-height: 0; padding: 7px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); grid-auto-rows: max-content; gap: 6px; border-top: 1px solid var(--border-soft); align-content: start; align-items: start; overflow-y: auto; scrollbar-gutter: stable; }
-  .buff-option { position: relative; min-width: 0; border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); overflow: hidden; }
+  /* チップ 1 枚の高さは**中身より先に**ここで決める(§09 規則 4)。中身の積み上げに任せると、
+     効果が 1 行のバフと 2 行のバフ、バッジが出るチップと出ないチップで数 px ずつ食い違い、
+     ON/OFF のたびに下がずれる。高さは「何が入るか」から式で置く — 数字を実測に合わせて
+     いじると、行が 1 本増えたときに同じことを繰り返す。 */
+  .chips {
+    /* 効果は最大 2 行(ステ増分 + ダメージ効果)。1 行 13px + 行間 2px */
+    --chip-effect-h: 28px;
+    /* 名前の行 + 効果 + 種類バッジ(margin 込み) + トグルの上下余白と枠線 */
+    --chip-h: calc(16px + var(--chip-effect-h) + 19px + 14px);
+    flex: 1; min-height: 0; padding: 7px; display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    grid-auto-rows: var(--chip-h); gap: 6px;
+    border-top: 1px solid var(--border-soft);
+    align-content: start; overflow-y: auto; scrollbar-gutter: stable;
+  }
+  .buff-option { position: relative; min-width: 0; height: 100%; border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); overflow: hidden; }
   .buff-option.on { border-color: var(--sel-bd); background: var(--sel-card); box-shadow: inset 0 0 0 1px var(--sel-bd); }
-  /* 値の調整フォームに変わっているあいだは、グリッドの 1 列に収まらない中身があっても
-     隣のチップを押し出さない — 行いっぱいに広がる(§00 03「押した場所は動かない」) */
-  .buff-option.expanded { grid-column: 1 / -1; border-color: var(--sim); background: var(--state-temp-bg); box-shadow: inset 0 0 0 1px var(--sim); }
   /* 「ほか n」のポップオーバーはチップの外(下)へはみ出すので、開いている間だけ
      overflow:hidden を外して見えるようにする(§00 03: 押した場所は動かさない = 隣のチップは押し出さない)。 */
   .buff-option.info-open { overflow: visible; z-index: 7; }
   .buff-icon { position: absolute; z-index: 1; top: 16px; left: 7px; width: 28px; height: 28px; transition: top .2s ease; }
-  .buff-option.expanded .buff-icon { top: 9px; }
-  .buff-toggle { position: relative; width: 100%; min-height: 60px; padding: 6px 7px 6px 48px; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--fg); text-align: left; cursor: pointer; }
+  .buff-toggle { position: relative; width: 100%; height: 100%; padding: 6px 7px 6px 48px; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--fg); text-align: left; cursor: pointer; }
   .buff-toggle.disabled { opacity: .45; cursor: default; }
-  /* ステ増分・ダメージ効果の行を積む場所。件数が 0〜2 行のどれでも同じ高さを確保し、
-     チップの高さが行内で揃うようにする(5周目 実機指摘: チップの高さは全チップで揃える)。 */
-  .chip-effect { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 22px; }
+  /* ステ増分・ダメージ効果の行を積む場所。**2 行ぶんの高さを常に取る** — ON にした瞬間に
+     ダメージ効果の行が増えて 9px 伸びると、下のチップが動く(§09 規則 4: サイズはデータが
+     来る前に決まっている)。OFF・1 行・2 行のどれでも同じ高さで、中身だけ変わる。 */
+  /* 効果の行。枠は先に決まっていて、中身が 0 行でも 2 行でもここが伸び縮みしない */
+  .chip-effect { flex: none; height: var(--chip-effect-h); display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; }
   /* ステ増分の値と「ほか n」を同じ行の左右に離す。値はトグル本体の一部(押すと ON/OFF)、
      「ほか n」は別の的(押すとポップオーバー)なので、中央で押し分けさせない — 右端に寄せ、
      縦の区切り線で「ここだけ別」と分かるようにする(実機で中央を押して誤爆した報告あり)。 */
@@ -728,39 +935,28 @@
     white-space: nowrap; cursor: pointer;
   }
   .rest-link:hover { color: var(--accent-hover); }
-  .rest-popover {
-    position: absolute; z-index: 6; top: calc(100% + 4px); left: 7px; right: 7px;
-    display: flex; flex-direction: column; gap: 3px; padding: 8px 9px;
-    border: 1px solid var(--sel-bd); border-radius: var(--r-inset);
-    background: var(--bg-field); box-shadow: var(--shadow-pop);
-    color: var(--fg); font-size: 9px; cursor: default;
-  }
-  /* .chips のスクロール領域の下端付近で開くと下に入り切らない場合のフリップ先。
-     押した「ほか n」自身の位置(トリガ)は動かさず、ポップオーバーだけが上に開く
-     (positionRestPopover が付ける。§09 規則 1・3)。 */
-  .rest-popover:global(.flip-up) { top: auto; bottom: calc(100% + 4px); }
-  .rest-close { align-self: flex-end; margin-top: 2px; padding: 2px 8px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--surface-inset); color: var(--fg-muted); font-size: 8.5px; }
-  .rest-close:hover { color: var(--fg); }
-  .buff-config { min-height: 60px; padding: 7px 7px 7px 41px; display: flex; flex-direction: column; gap: 6px; }
-  .config-head { display: flex; align-items: center; gap: 8px; }
-  .config-head strong { flex: 1; min-width: 0; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .config-effect { flex-shrink: 0; font-size: 10.5px; font-weight: 700; color: var(--sim-fg); }
-  .config-head .clear {
-    flex-shrink: 0; padding: 3px 4px; border-radius: var(--r-inset);
-    background: none; border: 0; color: var(--fg-dim); font-size: 9.5px; line-height: 1;
-  }
-  .config-head .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
+  /* チップの直下・チップ幅に合わせて出す(面そのものは app.css の .popover) */
+  .rest-popover { top: calc(100% + 4px); left: 7px; right: 7px; }
+  /* 値の調整。「ほか n」と同じ重なりもの(.rest-popover)に乗せる — 幅はチップに合わせ、
+     中身だけ差し替える。レイアウトは押さないので、開いても閉じても何も動かない */
+  .editor-popover { gap: 7px; }
+  .editor-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; padding-top: 6px; border-top: 1px solid var(--border-soft); }
   .choice-editor { padding: 7px; display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--bg-field); box-shadow: inset 0 1px #fff; }
-  .chip-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+  /* 選んだステごとの値。1 ステで幅いっぱいのバーにすると数値 1 つに面積を使いすぎるので
+     2 列に畳む。重なりものの中なので、増えて伸びても下のチップは動かない */
+  .per-stat { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+  .chip-copy { min-width: 0; flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: center; }
   .chip-copy strong, .chip-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chip-head { display: flex; align-items: center; gap: 6px; }
+  .chip-head { flex: none; height: 16px; display: flex; align-items: center; gap: 6px; }
   .chip-head strong { min-width: 0; flex: 1; }
   /* ON / 選べない のバッジ。3 状態(ON・OFF・選べない)のどれでも同じ場所を占めるよう、
      OFF のときも要素自体は出したまま透明にする(枠だけ確保) — CalcPage の「常/追」バッジ
      (chip-state)と同じ手当て。ON は「セットに保存される」の水色(--sel、他の ON チップと
      同系色)、選べないは新しい色を作らず §03 の状態 6 系統の unknown(対象外・判定不能)を使う。 */
   .chip-state {
-    flex-shrink: 0; min-width: 46px; padding: 1px 6px; border-radius: var(--r-pill);
+    /* 高さは chip-head(16px 固定)が決める。文字が入るかどうかで動かない */
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    min-width: 46px; height: 100%; padding: 0 6px; border-radius: var(--r-pill);
     border: 1px solid transparent; background: transparent; color: transparent;
     font-size: 8.5px; font-weight: 700; text-align: center; white-space: nowrap;
   }
@@ -773,12 +969,12 @@
   .chip-copy strong { font-size: 10px; }
   .chips small { color: var(--fg-muted); font-size: 9px; }
   /* 効果値とは別行の操作ヒント。同じ行に混ぜない(§00 05 考えさせない) */
-  .op-hint { color: var(--sim-fg) !important; }
-  .origin-badge { align-self: flex-start; margin-top: 3px; padding: 1px 6px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--surface-inset); color: var(--fg-muted); font-size: 8.5px; line-height: 1.4; white-space: nowrap; }
+  .origin-badge { flex: none; align-self: flex-start; margin-top: 3px; padding: 1px 6px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--surface-inset); color: var(--fg-muted); font-size: 8.5px; line-height: 1.4; white-space: nowrap; }
   .summary { background: var(--bg-raised); }
-  .count { margin: 12px; padding: 13px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--surface-inset); box-shadow: inset 0 1px #fff; font-size: 27px; font-weight: 700; }
+  .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--surface-inset); box-shadow: inset 0 1px #fff; font-size: 27px; font-weight: 700; }
+  .count-value { min-width: 2ch; text-align: right; }
   .count small { margin-left: 6px; font-family: var(--font); font-size: 10px; font-weight: 500; }
-  .summary-note { margin: 0 12px 8px; color: var(--fg-muted); font-size: 9px; }
+
   .summary-block { margin: 0 12px 8px; padding: 9px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset); box-shadow: inset 0 1px #fff; }
   .summary-block > strong { display: block; margin-bottom: 6px; font-size: 10px; }
   .summary-block p { margin: 0; color: var(--fg-muted); font-size: 9px; }
@@ -796,13 +992,19 @@
   .unmodeled { margin-top: 7px; padding: 5px 6px; border: 1px dashed var(--border); border-radius: var(--r-inset); color: var(--fg-muted); font-size: 8.5px; }
   .danger { color: var(--danger); }
   .delete-set { width: 58px; flex: none; }
+  /* 消える対象(セット一覧)の直下。何も覆わないので absolute にしない —
+     出しても動くのは自分より下の空きだけ */
   .delete-confirm {
-    position: absolute; z-index: 5; top: 43px; right: 10px;
-    display: flex; align-items: center; gap: 7px; padding: 8px;
+    margin: 0 8px; padding: 9px;
+    display: flex; flex-direction: column; gap: 6px;
     border: 1px solid var(--danger); border-radius: var(--r-panel);
     background: var(--bg-field); box-shadow: var(--shadow-pop);
-    color: var(--fg); font-size: 10px; white-space: nowrap;
+    color: var(--fg); font-size: 10px;
   }
+  .delete-confirm strong { font-size: 11px; }
+  .delete-confirm small { color: var(--fg-muted); }
+  .confirm-actions { display: flex; gap: 7px; }
+  .confirm-actions .btn { flex: 1; justify-content: center; }
   @media (max-width: 1100px) { .category-switch { grid-template-columns: 1fr; } }
   @media (max-width: 950px) { .buff-page { grid-template-columns: 220px minmax(320px, 1fr); } .summary { grid-column: 1 / -1; } }
 </style>

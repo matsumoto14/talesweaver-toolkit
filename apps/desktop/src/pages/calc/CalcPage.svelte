@@ -7,13 +7,14 @@
     previewDefense, previewEffectiveStats,
   } from "../../api/commands";
   import type {
-    Adjustments, BuffChoice, BuffDefinition, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
+    Adjustments, BuffChoice, BuffDefinition, BuffPurpose, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
     DamageResult, DefenseProfile, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill, StatKind,
     UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
-    isBlocked, isChoiceValue, isFixedValue, isPercentLayer, isUserSelectedTarget,
-    toggleBuff, userInputRange,
+    BUFF_PURPOSES, isBlocked, isChoiceValue, isMultiTarget, isPercentLayer, isUserSelectedTarget,
+    matchesPurpose,
+    pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
   import {
     enchantCap, enchantDepKeysFor, enchantRows as enchantRowsOf, ENCHANT_SLOT_LABELS, setEnchantValue,
@@ -37,6 +38,8 @@
   import Select from "../../ui/Select.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
+  import StepToggle from "../../ui/StepToggle.svelte";
+  import { positionPopover } from "../../ui/popover";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
@@ -1127,20 +1130,52 @@
     const set = app.buffSets.find((item) => item.id === id);
     app.calcBuffs = JSON.parse(JSON.stringify(set?.choices ?? { choices: [] }));
   }
+  /** 値の調整を開いているバフの id。高々 1 件で、重ねて出す(下に積むとペインが伸びる) */
+  let buffEditorId = $state<string | null>(null);
+  /** いま開いている目的グループ。null = 全部畳んである(既定)。同時に開くのは 1 つ */
+  let openBuffPurpose = $state<BuffPurpose | null>(null);
+  /** 「計算の材料」で開いているまとまり。null = 全部畳んである(既定)。
+   *  実プレイでは一度に 1 つしか触らないので、開くのも 1 つに絞る — 全部開くと
+   *  3512px(表示域の 4.6 画面ぶん)になり、目的のものまでスクロールで探すことになる */
+  let openMaterial = $state<"ultimate" | "enchant" | "buffs" | null>(null);
+  function toggleMaterial(id: "ultimate" | "enchant" | "buffs") {
+    openMaterial = openMaterial === id ? null : id;
+    if (openMaterial !== "buffs") openBuffPurpose = null;
+  }
+  function openBuffEditor(def: BuffDefinition) {
+    buffEditorId = buffEditorId === def.id ? null : def.id;
+  }
+  /** 重なりものは外を押したときと Esc で閉じる。トリガ自身と中身は対象外 */
+  function closeBuffEditor(event: MouseEvent) {
+    if ((event.target as HTMLElement | null)?.closest(".popover, .chip-config")) return;
+    buffEditorId = null;
+  }
+
   function toggleBuffChip(def: BuffDefinition) {
+    if (buffEditorId === def.id) buffEditorId = null;
     app.calcBuffs = { choices: toggleBuff(app.calcBuffs.choices, def, !buffOn(def)) };
   }
   // ON のバフのうち、対象ステ・効果量の選択肢・手入力を持つものの詳細編集(試し変更として反映)
   const statOptions = STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }));
   const buffChoiceOf = (buffId: string) =>
     app.calcBuffs.choices.find((c) => c.buff_id === buffId) ?? null;
+  const buffChoiceOfStat = (buffId: string, stat: StatKind) =>
+    app.calcBuffs.choices.find((c) => c.buff_id === buffId && c.stat === stat) ?? null;
+  /** この画面で**触れる**ものがあるか。固定値のバフは読むだけなので含めない —
+   *  値はチップ本体の寄与表示で既に見えていて、開いても「値: +30%」と出るだけだった */
   const hasDetail = (def: BuffDefinition) =>
-    isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value) !== null || isFixedValue(def.value);
-  function editBuffChoice(buffId: string, fn: (c: BuffChoice) => void) {
+    isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value) !== null;
+  function editBuffChoice(buffId: string, fn: (c: BuffChoice) => void, stat?: StatKind) {
     const choices = app.calcBuffs.choices.map((choice) => ({ ...choice }));
-    const choice = choices.find((item) => item.buff_id === buffId);
+    const choice = choices.find(
+      (item) => item.buff_id === buffId && (stat === undefined || item.stat === stat),
+    );
     if (choice) fn(choice);
     app.calcBuffs = { choices };
+  }
+  /** 複数ステ対象バフ(クラブ効果)の、1 ステぶんの ON/OFF。試し変更なので保存はしない */
+  function toggleBuffStatChip(def: BuffDefinition, stat: StatKind, next: boolean) {
+    app.calcBuffs = { choices: toggleBuffStat(app.calcBuffs.choices, def, stat, next) };
   }
   // --- 極限スキル(試し変更)。2 枠のうち何を選ぶかだけをこの画面で切り替える -----------
   // 超・ハイパーリミットの Lv はキャラタブ(共通スキル)の設定が正。ここでは触らない。
@@ -1415,6 +1450,135 @@
   </div>
 {/snippet}
 
+  {#snippet buffChip(def: BuffDefinition)}
+                {@const state = buffState(def)}
+                {@const blocked = state === "off" && isBlocked(app.calcBuffs.choices, app.catalog, def)}
+                {@const detail = state !== "off" && hasDetail(def)}
+                <!-- 「設定」を独立した的にするため、チップ本体はネイティブ button ではなく
+                     role="button" の div にする(button の中に button は入れられない)。
+                     値の調整は**チップに重ねて**開く(§09 規則 3)— 下に積むと、ON にした数だけ
+                     ペインが伸びる(実測: 詳細 11 件で 1330px)。 -->
+                <div
+                  class="buff-chip"
+                  class:on={state !== "off"}
+                  class:extra={state === "extra"}
+                  class:disabled={blocked}
+                  role="button"
+                  tabindex={blocked ? -1 : 0}
+                  aria-disabled={blocked}
+                  aria-pressed={state !== "off"}
+                  title={blocked ? "同枠の他バフと排他です" : def.note || undefined}
+                  onclick={() => { if (!blocked) toggleBuffChip(def); }}
+                  onkeydown={(e) => {
+                    if ((e.key === "Enter" || e.key === " ") && !blocked) { e.preventDefault(); toggleBuffChip(def); }
+                  }}
+                >
+                  <!-- アイコンは行内サイズ(20)。名前は必ず併記する(§08: アイコン単独表示は禁止)。
+                       未収録の id は破線 + ? になり、その場でも幅は変わらない -->
+                  <Icon kind="buff" id={def.id} size={20} label={def.name} />
+                  <span class="buff-chip-copy">
+                    <span>{def.name}</span>
+                    <!-- ON にしたチップの実際の寄与(供給源ごとの実数)。写経しない -->
+                    {#if state !== "off"}
+                      {@const note = buffContributionText(def)}
+                      {#if note}<span class="buff-chip-note dim" use:flash={() => note}>{note}</span>{/if}
+                    {/if}
+                  </span>
+                  {#if detail}
+                    <button
+                      type="button"
+                      class="chip-config"
+                      onclick={(e) => { e.stopPropagation(); openBuffEditor(def); }}
+                      aria-expanded={buffEditorId === def.id}
+                      aria-label={`${def.name} の設定`}
+                    >設定</button>
+                  {/if}
+                  <!-- 状態バッジの枠は常に確保する。付いた瞬間にチップが伸びると、
+                       隣のチップが折り返して並びが動く(§09 規則 4) -->
+                  <span class="chip-state" class:on={state !== "off"}
+                  >{state !== "off" ? BUFF_STATE_LABEL[state] : ""}</span>
+                  {#if detail && buffEditorId === def.id}
+                    {@const choice = buffChoiceOf(def.id)}
+                    {#if choice}
+                      <div
+                        class="popover buff-editor"
+                        role="dialog"
+                        tabindex="-1"
+                        aria-label={`${def.name} の設定`}
+                        use:positionPopover
+                        onclick={(e) => e.stopPropagation()}
+                        onkeydown={(e) => e.stopPropagation()}
+                      >
+                        {#if isMultiTarget(def.target)}
+                          <!-- クラブエフェクトはステごとに 1 つずつ併用できる。ここでは対象ステの
+                               出し入れだけを試せるようにし、値はバフタブ側の設定を引き継ぐ -->
+                          <StepToggle
+                            label="対象ステ"
+                            options={statOptions}
+                            max={STAT_KINDS.length}
+                            values={pickedStats(app.calcBuffs.choices, def)}
+                            onToggle={(v, next) => toggleBuffStatChip(def, v as StatKind, next)}
+                          />
+                        {:else if isUserSelectedTarget(def.target)}
+                          <StepSelect
+                            label="対象ステ"
+                            options={statOptions}
+                            bind:value={
+                              () => choice.stat ?? STAT_KINDS[0],
+                              (v) => editBuffChoice(def.id, (c) => (c.stat = v as StatKind))
+                            }
+                          />
+                        {/if}
+                        {#if isChoiceValue(def.value)}
+                          {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
+                          <Select
+                            label="値"
+                            {options}
+                            bind:value={
+                              () => String(choice.choice_index ?? 0),
+                              (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
+                            }
+                          />
+                        {/if}
+                        {#if userInputRange(def.value)}
+                          {@const range = userInputRange(def.value)!}
+                          {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                          {#if isMultiTarget(def.target)}
+                            {#each pickedStats(app.calcBuffs.choices, def) as stat (stat)}
+                              <StatInput
+                                label={STAT_LABELS[stat]}
+                                min={range.min * scale}
+                                max={range.max * scale}
+                                bind:value={
+                                  () => (buffChoiceOfStat(def.id, stat)?.value ?? def.default_value ?? range.min) * scale,
+                                  (v) => editBuffChoice(def.id, (c) => (c.value = v / scale), stat)
+                                }
+                              />
+                            {/each}
+                          {:else}
+                            <StatInput
+                              label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
+                              min={range.min * scale}
+                              max={range.max * scale}
+                              bind:value={
+                                () => (choice.value ?? 0) * scale,
+                                (v) => editBuffChoice(def.id, (c) => (c.value = v / scale))
+                              }
+                            />
+                          {/if}
+                        {/if}
+                        <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); buffEditorId = null; }}>閉じる</button>
+                      </div>
+                    {/if}
+                  {/if}
+                </div>
+  {/snippet}
+
+<svelte:window
+  onclick={closeBuffEditor}
+  onkeydown={(e) => { if (e.key === "Escape") buffEditorId = null; }}
+/>
+
 <SplitPage
   midTitle="行ける？"
   midNote="→ なぜこの数字？"
@@ -1454,7 +1618,7 @@
       {:else}
         <!-- 行ける?カード -->
         <div class="swap-in">
-        <SheetCard tone="gold" title="行ける？" note={character.name + (calculating ? " ・ 計算中…" : "")}>
+        <SheetCard tone="gold" title="行ける？" note={character.name} busy={calculating}>
           <!-- 対象プレート -->
           <div class="target-row">
             <button type="button" class="step" onclick={() => stepTarget(-1)}>◀</button>
@@ -1991,10 +2155,15 @@
 
         <!-- 極限スキル(試し変更)。3 種から 2 つ選ぶ(§07 形態 3: チップで入れる/外す) -->
         <div class="card">
-          <div class="card-head">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "ultimate"} onclick={() => toggleMaterial("ultimate")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "ultimate" ? "▾" : "▸"}</span>
+            <!-- 見出しの顔。中身を代表する 1 つを置く(名前と併記なので §08 の単独表示にあたらない)。
+                 画像が未収録なら破線 + ? になるだけで、幅は変わらない -->
+            <Icon kind="skill" id="scope_eye" size={20} label="極限スキル" />
             <span class="card-title">極限スキル</span>
             <span class="dim small num" use:bump={() => ultimatePickedCount}>{ultimatePickedCount} / {ultimateSlotCount}</span>
-          </div>
+          </button>
+          {#if openMaterial === "ultimate"}
           <div class="ultimate-chips">
             {#each ULTIMATE_SKILLS as u (u)}
               {@const on = payload.common_skills.ultimate.slots.includes(u)}
@@ -2004,6 +2173,7 @@
                 title={!on && ultimateFull ? `${ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。` : undefined}
                 onclick={() => toggleUltimate(u)}
               >
+                <Icon kind="skill" id={u} size={20} label={ULTIMATE_SKILL_LABELS[u]} />
                 <span class="uc-name">{ULTIMATE_SKILL_LABELS[u]}</span>
                 <span class="uc-note dim" use:flash={() => ultimateChipNote(u)}>{ultimateChipNote(u)}</span>
               </button>
@@ -2013,15 +2183,22 @@
             <p class="eq-note dim badge-in">{ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。</p>
           {/if}
           <p class="eq-note dim">超・ハイパーリミットの Lv は<b>キャラ</b>タブ(共通スキル)の設定を使います。</p>
+          {/if}
         </div>
 
         <!-- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る -->
         <div class="card">
-          <div class="card-head">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "enchant"} onclick={() => toggleMaterial("enchant")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "enchant" ? "▾" : "▸"}</span>
+            <!-- †エクリプスウィング(体)。エンチャントは装備を伸ばす話なので、その顔として置く -->
+            <Icon kind="equipment" id="wiki-af444f9bf21d" size={20} label="エンチャントの伸びしろ" />
             <span class="card-title">エンチャントの伸びしろ</span>
-            <span class="dim small">主軸: {enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・") || "—"}</span>
+            <!-- 見出しの注記は件数 1 つだけ。アイコンぶん幅が減っていて、主軸を並べると
+                 右端の件数が切れる(§00 05: 読めない文字は出さない)。主軸は中に出す -->
             <span class="dim small num" use:bump={() => visibleEnchantRows.length}>{visibleEnchantRows.length} 件</span>
-          </div>
+          </button>
+          {#if openMaterial === "enchant"}
+            <p class="enchant-dep dim">主軸: {enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・") || "—"}</p>
           {#if visibleEnchantRows.length === 0}
             <p class="eq-note dim">主軸スキルの依存ステを盛れる部位がないか、すでに上限です。</p>
           {:else}
@@ -2061,14 +2238,18 @@
               {/each}
             </div>
           {/if}
+          {/if}
         </div>
 
         <!-- バフ -->
         <div class="card">
-          <div class="card-head">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "buffs"} onclick={() => toggleMaterial("buffs")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "buffs" ? "▾" : "▸"}</span>
+            <Icon kind="buff" id="illumination_drink" size={20} label="バフ" />
             <span class="card-title">バフ</span>
-            <span class="dim small">押した瞬間に数字が動きます</span>
-          </div>
+            <span class="dim small num" use:bump={() => alwaysBuffCount + extraBuffCount}>{alwaysBuffCount + extraBuffCount} 件</span>
+          </button>
+          {#if openMaterial === "buffs"}
           <label class="calc-buff-set">
             <span>使うセット</span>
             <select value={app.calcBuffSetId ?? ""} onchange={(e) => chooseCalcBuffSet(e.currentTarget.value)}>
@@ -2081,82 +2262,34 @@
             ／ <span class="lg extra">追</span> 追加 = この計算だけ({extraBuffCount} 件・保存されません)
             ／ 無印 使わない。
           </p>
-          <div class="buff-chips">
-            {#each consumableBuffs as def (def.id)}
-              {@const state = buffState(def)}
-              {@const blocked = state === "off" && isBlocked(app.calcBuffs.choices, app.catalog, def)}
+          <!-- 目的ごとに畳む。35 個を全部並べると 31 行(1177px)になり、ペインの大半を
+               バフが占める。見出しは常に同じ場所にあり、開いても**その下に生えるだけ**で
+               上は動かない(§09 規則 2)。どこに何件入れているかは見出しの n/m で分かるので、
+               閉じたままでも「使い忘れ」に気づける -->
+          {#each BUFF_PURPOSES as purpose (purpose.id)}
+            {@const defs = consumableBuffs.filter((d) => matchesPurpose(d, purpose.id))}
+            {@const picked = defs.filter((d) => buffState(d) !== "off").length}
+            {#if defs.length > 0}
               <button
                 type="button"
-                class="buff-chip"
-                class:on={state !== "off"}
-                class:extra={state === "extra"}
-                disabled={blocked}
-                title={blocked ? "同枠の他バフと排他です" : def.note || undefined}
-                onclick={() => toggleBuffChip(def)}
+                class="buff-group-head"
+                class:open={openBuffPurpose === purpose.id}
+                aria-expanded={openBuffPurpose === purpose.id}
+                onclick={() => (openBuffPurpose = openBuffPurpose === purpose.id ? null : purpose.id)}
               >
-                <span class="buff-chip-copy">
-                  <span>{def.name}</span>
-                  <!-- ON にしたチップの実際の寄与(供給源ごとの実数)。写経しない -->
-                  {#if state !== "off"}
-                    {@const note = buffContributionText(def)}
-                    {#if note}<span class="buff-chip-note dim" use:flash={() => note}>{note}</span>{/if}
-                  {/if}
-                </span>
-                <!-- 状態バッジの枠は常に確保する。付いた瞬間にチップが伸びると、
-                     隣のチップが折り返して並びが動く(§09 規則 4) -->
-                <span class="chip-state" class:on={state !== "off"}
-                >{state !== "off" ? BUFF_STATE_LABEL[state] : ""}</span>
+                <span class="bg-caret" aria-hidden="true">{openBuffPurpose === purpose.id ? "▾" : "▸"}</span>
+                <span class="bg-label">{purpose.label}</span>
+                <span class="bg-count num" use:bump={() => picked}>{picked}/{defs.length}</span>
               </button>
-            {/each}
-          </div>
-          {#each consumableBuffs.filter((d) => buffOn(d) && hasDetail(d)) as def (def.id)}
-            {@const choice = buffChoiceOf(def.id)}
-            {#if choice}
-              <div class="buff-detail">
-                <Icon kind="buff" id={def.id} size={20} label={def.name} />
-                <span class="bd-name">{def.name}</span>
-                {#if isUserSelectedTarget(def.target)}
-                  <StepSelect
-                    label="対象ステ"
-                    options={statOptions}
-                    bind:value={
-                      () => choice.stat ?? STAT_KINDS[0],
-                      (v) => editBuffChoice(def.id, (c) => (c.stat = v as StatKind))
-                    }
-                  />
-                {/if}
-                {#if isChoiceValue(def.value)}
-                  {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
-                  <Select
-                    label="値"
-                    {options}
-                    bind:value={
-                      () => String(choice.choice_index ?? 0),
-                      (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
-                    }
-                  />
-                {/if}
-                {#if userInputRange(def.value)}
-                  {@const range = userInputRange(def.value)!}
-                  {@const scale = isPercentLayer(def.layer) ? 100 : 1}
-                  <StatInput
-                    label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
-                    min={range.min * scale}
-                    max={range.max * scale}
-                    bind:value={
-                      () => (choice.value ?? 0) * scale,
-                      (v) => editBuffChoice(def.id, (c) => (c.value = v / scale))
-                    }
-                  />
-                {/if}
-                {#if isFixedValue(def.value)}
-                  {@const fixedLabel = formatLayerValue(def.layer, def.value.fixed)}
-                  <span class="dim bd-fixed" use:flash={() => fixedLabel}>値: {fixedLabel}</span>
-                {/if}
-              </div>
+              {#if openBuffPurpose === purpose.id}
+                <div class="buff-chips">
+                  {#each defs as def (def.id)}{@render buffChip(def)}{/each}
+                </div>
+              {/if}
             {/if}
           {/each}
           <p class="buff-note dim">変更はこの計算だけに反映され、バフセットやキャラには保存されません。</p>
+          {/if}
         </div>
 
         <!-- コンボ -->
@@ -2462,7 +2595,7 @@
   /* 極限スキル(2 枠の選択チップ)。§07 形態 3: 押して入れる / 押して外す */
   .ultimate-chips { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .ultimate-chip {
-    width: 100%; display: flex; align-items: baseline; gap: 8px; padding: 6px 10px;
+    width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
     border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
   .ultimate-chip:hover:not(:disabled) { border-color: var(--accent); }
@@ -2501,16 +2634,51 @@
 
   .mat-note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }
 
-  .buff-chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+  /* 35 個を pill で流すと幅がまちまちで、251px の器では 31 行中 26 行が 1 個だけだった
+     (実測)。横に並ぶ利点が出ないうえ、名前の頭が縦に揃わず探しにくい。**1 列の行**にして、
+     頭を揃える。丸(--r-pill)は「小さな状態の印」に使う形なので、行にはインセットの角丸 */
+  .buff-chips {
+    /* 1 行 = アイコン 20 と、名前 + 寄与の 2 行(13 + 1 + 12)のうち高いほう + 余白と枠線 */
+    --buff-text-h: 26px;
+    --buff-row-h: calc(var(--buff-text-h) + 8px + 2px);
+    margin-top: 5px; margin-bottom: 3px; display: flex; flex-direction: column; gap: 3px;
+  }
+  .enchant-dep { margin: 6px 0 0; font-size: 9px; }
+  /* カード見出しの開閉。押しても見出し自身は動かず、中身がその下に生えるだけ */
+  .card-head.toggle {
+    width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer;
+  }
+  .card-head.toggle:hover .card-title { color: var(--accent); }
+
+  /* 目的グループの見出し。押しても見出し自身は動かず、中身がその下に生えるだけ */
+  .buff-group-head {
+    width: 100%; margin-top: 5px; padding: 5px 8px;
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border-soft); border-radius: var(--r-inset);
+    background: var(--surface-inset); color: var(--fg-sub);
+    font-size: 10px; font-weight: 700; text-align: left; cursor: pointer;
+  }
+  .buff-group-head:hover { border-color: var(--accent); }
+  .buff-group-head.open { background: var(--sel-card); border-color: var(--sel-bd); color: var(--sel-fg); }
+  /* 開閉の印は幅を固定する。▸ と ▾ で幅が変わると隣のラベルが動く(§09 規則 1) */
+  .bg-caret { flex: none; width: 10px; text-align: center; font-size: 9px; }
+  .bg-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bg-count { flex: none; min-width: 5ch; text-align: right; font-size: 9px; font-weight: 500; }
   .calc-buff-set { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--fg-muted); }
   .calc-buff-set select { min-width: 160px; height: 28px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--bg-field); color: var(--fg); }
   .buff-chip {
-    display: inline-flex; align-items: center; padding: 4px 9px; border-radius: var(--r-pill);
+    /* 重なりもの(.buff-editor)の位置の基準。チップ自身は動かさない */
+    position: relative;
+    /* 行の高さは中身より先に決める(§09 規則 4)。ON になると寄与の行が増えるが、
+       枠は 2 行ぶん取ってあるので下の行は動かない */
+    width: 100%; height: var(--buff-row-h); display: flex; align-items: center; gap: 7px;
+    padding: 4px 8px; border-radius: var(--r-inset);
     background: var(--bg-field); border: 1px solid var(--border-soft);
-    font-size: 10px; font-weight: 500; color: var(--fg-muted); white-space: nowrap;
+    font-size: 10px; font-weight: 500; color: var(--fg-muted); text-align: left; cursor: pointer;
   }
-  .buff-chip:hover:not(:disabled) { border-color: var(--accent); }
-  .buff-chip-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .buff-chip:hover:not(.disabled) { border-color: var(--accent); }
+  .buff-chip-copy { flex: 1; min-width: 0; height: var(--buff-text-h); display: flex; flex-direction: column; justify-content: center; gap: 1px; overflow: hidden; }
+  .buff-chip-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* ON にしたチップの実際の寄与。写経しない(previewDamage のトレースから引く) */
   .buff-chip-note { font-size: 8.5px; font-weight: 700; }
   .buff-chip.on {
@@ -2539,12 +2707,16 @@
   .buff-legend .lg.always { background: #CCF7FF; border-color: var(--sel-bd); color: var(--sel-fg); }
   .buff-legend .lg.extra { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
-  .buff-detail {
-    margin-top: 7px; padding: 7px 9px; border-radius: var(--r-panel);
-    background: var(--bg-panel); border: 1px dashed var(--border-soft);
-    display: flex; flex-direction: column; gap: 7px;
+  /* 値の調整。チップに重ねて出すので、ON にした数だけペインが伸びることがない */
+  .buff-editor { top: calc(100% + 4px); left: 0; min-width: 210px; gap: 7px; }
+  /* チップ本体(押すと ON/OFF)とは別の的。縦の区切りで「ここだけ別」と分かるようにする */
+  .chip-config {
+    flex: none; margin-left: 6px; padding: 0 0 0 6px;
+    border: 0; border-left: 1px solid currentColor; background: none;
+    color: inherit; font: inherit; font-size: 8.5px; text-decoration: underline;
+    text-underline-offset: 2px; cursor: pointer; opacity: .8;
   }
-  .bd-name { font-size: 10px; font-weight: 700; color: var(--fg-sub); }
-  .bd-fixed { font-size: 10px; }
+  .chip-config:hover { opacity: 1; }
+  .buff-chip.disabled { opacity: .45; cursor: default; }
 
 </style>

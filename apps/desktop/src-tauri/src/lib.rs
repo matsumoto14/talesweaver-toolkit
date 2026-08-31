@@ -71,6 +71,7 @@ pub fn run() {
             commands::list_character_skills,
             commands::resolve_character_skill_effects,
             commands::preview_effective_stats,
+            commands::buff_target_stat_gains,
             commands::preview_defense,
             commands::get_stat_limits,
             commands::get_new_character_stat_sources,

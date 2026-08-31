@@ -5,6 +5,7 @@
   import { bump } from "./ui/motion.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import { dropHalfIndex, moveItem } from "./ui/reorder.svelte";
+  import Spinner from "./ui/Spinner.svelte";
 
   interface Props {
     collapsed: boolean;
@@ -58,6 +59,9 @@
     {#if !collapsed}
       <span class="title">キャラ</span>
       <span class="note">{app.characters.length} 人登録済み</span>
+      <!-- 読み込み中の印は見出しの帯に置く。一覧の中に出し入れすると、
+           読み終わった瞬間に下のキャラが上へずれる(§09 規則 3) -->
+      <Spinner active={app.loading} label="キャラを読み込んでいます" />
     {/if}
     <button
       type="button"
@@ -68,9 +72,6 @@
     >{collapsed ? "›" : "‹"}</button>
   </div>
   <div class="list">
-    {#if app.loading}
-      <p class="note-text dim">読み込み中…</p>
-    {/if}
     {#each orderedCharacters as c, index (c.id)}
       {@const selected = c.id === app.selectedId}
       <button

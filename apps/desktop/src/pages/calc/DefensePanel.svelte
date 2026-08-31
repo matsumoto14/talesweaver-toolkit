@@ -22,11 +22,13 @@
   );
 </script>
 
-<SheetCard tone="blue" title="どれだけ耐える？" note="対象コンテンツに依らない自分の値です">
+<SheetCard tone="blue" title="どれだけ耐える？" note="対象コンテンツに依らない自分の値です" busy={!error && !profile}>
   {#if error}
     <p class="err">{error}</p>
   {:else if !profile}
-    <p class="empty dim">計算中…</p>
+    <!-- まだ値が来ていない。文言は出さず(待っていることは見出しの印が伝える)、
+         行の高さだけ確保して、値が入った瞬間に下がずれないようにする -->
+    <p class="empty dim" aria-hidden="true">&nbsp;</p>
   {:else}
     <div class="block">
       <div class="block-head">

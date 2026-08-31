@@ -167,7 +167,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 /* カラム最上部の帯(v4: 濃青地に白文字) */
 .head-bar {
   height: 30px; flex-shrink: 0; padding: 0 14px;
-  background: var(--head-bar);
+  background: var(--head-bar); color: #fff;
   display: flex; align-items: center; gap: 8px;
 }
 .head-bar .title { font-weight: 700; font-size: var(--t-label); letter-spacing: 0.1em; color: #fff; white-space: nowrap; }
@@ -362,6 +362,32 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
   to   { opacity: 1; max-height: 1400px; }
 }
 .open-in { animation: tw-open 0.34s ease; overflow: hidden; transform-origin: top center; }
+
+/* トリガの直下に重なるもの(§09 規則 3: 周りを押さない / 閉じたら何も動かない)。
+   面だけをここで決め、どこに出すか(left/right/top)は置く場所ごとに指定する。
+   画面外へのフリップは ui/popover.ts の action が .flip-up を付けて行う。 */
+.popover {
+  position: absolute; z-index: 6;
+  display: flex; flex-direction: column; gap: 3px; padding: 8px 9px;
+  border: 1px solid var(--sel-bd); border-radius: var(--r-inset);
+  background: var(--bg-field); box-shadow: var(--shadow-pop);
+  color: var(--fg); font-size: 9px; cursor: default;
+}
+.popover.flip-up { top: auto; bottom: calc(100% + 4px); }
+/* 重なりものを閉じる小さなボタン */
+.popover-close {
+  align-self: flex-end; margin-top: 2px; padding: 2px 8px;
+  border: 1px solid var(--border-soft); border-radius: var(--r-pill);
+  background: var(--surface-inset); color: var(--fg-muted); font-size: 8.5px;
+}
+.popover-close:hover { color: var(--fg); }
+
+/* 確定していないことを示す印(ui/Spinner.svelte)。型 1〜6 の「変化を見せる動き」とは別で、
+   **これから変わる値がある**ことだけを伝える。置き場所は見出しの帯など、レイアウトを
+   押さないところに限る(本文に出し入れすると、待っているあいだ下が上下する)。 */
+@keyframes tw-spin {
+  to { transform: rotate(360deg); }
+}
 
 /* 動きを消しても変化が分かること。ここで消えて意味が伝わらなくなるなら、
    それは動きに頼りすぎているサイン — 色と数値だけで伝わる状態を先に作る */

@@ -293,8 +293,12 @@ pub enum BuffTarget {
     AllStats,
     /// 特定の 1 ステに固定で適用
     Stat(StatKind),
-    /// 登録時にどのステかを選ぶ(例: 固定増加系・クラブ効果)
+    /// 登録時にどのステかを選ぶ(例: 固定増加系)。1 バフにつき 1 ステ
     UserSelected,
+    /// 登録時にどのステかを選ぶ。**同じバフを複数のステに、それぞれ別の値で**掛けられる
+    /// (クラブエフェクト: クラブレベルに応じた枠数だけ併用でき、上昇項目が同じものは
+    ///  併用できない = 同じステを 2 回は選べない)。選択は 1 ステ 1 件で表す。
+    UserSelectedMulti,
     /// 複数の特定ステに同じ値を適用(例: ロアミニの極・パウアトゥンが DEF/MR に効く)
     Stats(&'static [StatKind]),
 }
@@ -750,6 +754,8 @@ pub enum StatSourceError {
     },
     #[error("バフ '{id}' が重複して選択されています")]
     DuplicateBuff { id: String },
+    #[error("バフ '{id}' の {kind:?} が重複して選択されています")]
+    DuplicateBuffStat { id: String, kind: StatKind },
     #[error("バフ '{id}' の入力値が範囲外です({min}..={max}、指定値 {value})")]
     ValueOutOfRange {
         id: String,
@@ -855,14 +861,14 @@ pub fn build_modifiers(
     }
 
     let mut used_slots: HashSet<&'static str> = HashSet::new();
-    let mut used_buff_ids: HashSet<&str> = HashSet::new();
+    // 選択の一意性。`UserSelectedMulti` のバフだけは同じ id を複数回置けるので、
+    // ステまで含めた組で見る(同じステを 2 回は置けない = wiki「上昇項目が同じ
+    // エフェクトを併用することは出来ない」)。
+    let mut used_choices: HashSet<(&str, Option<StatKind>)> = HashSet::new();
+    // 排他枠を数えたバフ。複数エントリのバフが自分自身と枠を取り合わないよう、
+    // 枠は 1 バフにつき 1 回だけ押さえる。
+    let mut slotted_buff_ids: HashSet<&str> = HashSet::new();
     for choice in &buffs.choices {
-        if !used_buff_ids.insert(choice.buff_id.as_str()) {
-            return Err(StatSourceError::DuplicateBuff {
-                id: choice.buff_id.clone(),
-            });
-        }
-
         let def = catalog
             .iter()
             .find(|d| d.id == choice.buff_id)
@@ -870,11 +876,26 @@ pub fn build_modifiers(
                 id: choice.buff_id.clone(),
             })?;
 
-        for slot in def.exclusive_slots.iter().copied() {
-            if !used_slots.insert(slot) {
-                return Err(StatSourceError::ExclusiveSlotConflict {
-                    slot: slot.to_string(),
-                });
+        let multi = matches!(def.target, BuffTarget::UserSelectedMulti);
+        if !used_choices.insert((choice.buff_id.as_str(), multi.then_some(choice.stat).flatten())) {
+            return match (multi, choice.stat) {
+                (true, Some(stat)) => Err(StatSourceError::DuplicateBuffStat {
+                    id: choice.buff_id.clone(),
+                    kind: stat,
+                }),
+                _ => Err(StatSourceError::DuplicateBuff {
+                    id: choice.buff_id.clone(),
+                }),
+            };
+        }
+
+        if slotted_buff_ids.insert(choice.buff_id.as_str()) {
+            for slot in def.exclusive_slots.iter().copied() {
+                if !used_slots.insert(slot) {
+                    return Err(StatSourceError::ExclusiveSlotConflict {
+                        slot: slot.to_string(),
+                    });
+                }
             }
         }
 
@@ -913,7 +934,7 @@ pub fn build_modifiers(
         let targets: Vec<StatKind> = match def.target {
             BuffTarget::AllStats => StatKind::ALL.to_vec(),
             BuffTarget::Stat(kind) => vec![kind],
-            BuffTarget::UserSelected => {
+            BuffTarget::UserSelected | BuffTarget::UserSelectedMulti => {
                 vec![choice.stat.ok_or_else(|| StatSourceError::MissingStat {
                     id: def.id.to_string(),
                 })?]
@@ -1451,6 +1472,98 @@ fn attack_power_of(
         ),
         common.equipment_attack_rate(),
     )
+}
+
+/// 「対象ステを選ぶ」バフ(`BuffTarget::UserSelected` / `UserSelectedMulti`)の、
+/// **ステごとの実際の効き**。そのステに振ったときに最終能力値が何点動くかを返す。
+///
+/// カタログの生値をそのまま出さないのは、**上限で頭打ちになる分がキャラごとに違う**ため。
+/// 素ステが `stat_cap` に張り付いているステは、+7 のバフを乗せても最終能力値は 1 も動かない
+/// (実測: マキシミンの STAB)。呼び出し側が「選んでも何も起きないステ」を見分けられるよう、
+/// その場合は `gain = 0` を返す。
+///
+/// 並び順は付けない — どう見せるか(効く順に並べる・0 を畳む)は表示側の判断。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct BuffTargetStatGain {
+    pub kind: StatKind,
+    /// そのステに振ったときの最終能力値の増分(上限で頭打ちなら 0)
+    pub gain: i64,
+}
+
+/// `def` を各ステに振ったときの最終能力値の増分を、全ステぶん求める。
+///
+/// 基準は「`def` を外した選択」。`buffs` に `def` が既に入っていても、その選択は基準から
+/// 除いて測る(いま選んでいるステが有利に出ないようにする)。
+#[allow(clippy::too_many_arguments)]
+pub fn buff_target_stat_gains(
+    base: &BaseStats,
+    sources: &StatSources,
+    buffs: &BuffSelection,
+    equipment: &Equipment,
+    common: &CommonSkills,
+    catalog: &BuffCatalog,
+    masteries: &MasteryCatalog,
+    character_skills: &CharacterSkillCatalog,
+    def: &BuffDefinition,
+    stat_cap: i64,
+) -> Result<Vec<BuffTargetStatGain>, StatSourceError> {
+    let mut without = buffs.clone();
+    without.choices.retain(|choice| choice.buff_id != def.id);
+    let (baseline, ..) = effective_stats_with(
+        base,
+        sources,
+        &without,
+        equipment,
+        common,
+        catalog,
+        masteries,
+        character_skills,
+        stat_cap,
+    )?;
+
+    let mut gains = Vec::with_capacity(StatKind::ALL.len());
+    for kind in StatKind::ALL {
+        let mut trial = without.clone();
+        trial.choices.push(BuffChoice {
+            buff_id: def.id.to_string(),
+            stat: Some(kind),
+            choice_index: match &def.value {
+                BuffValue::Choice(_) => Some(0),
+                _ => None,
+            },
+            value: match &def.value {
+                BuffValue::UserInput { min, max } => {
+                    Some(def.default_value.unwrap_or(*max).clamp(*min, *max))
+                }
+                _ => None,
+            },
+        });
+        let after = match effective_stats_with(
+            base,
+            sources,
+            &trial,
+            equipment,
+            common,
+            catalog,
+            masteries,
+            character_skills,
+            stat_cap,
+        ) {
+            Ok((stats, ..)) => stats,
+            // 同じ排他枠を別のバフが押さえていて、そもそもこのバフを足せない。
+            // 効きを測る対象になっていないので、ステごとの行を作らずに空で返す
+            // (呼び出し側は「並べ替えの材料が無い」= 既定の並びのまま、で扱える)。
+            Err(StatSourceError::ExclusiveSlotConflict { .. }) => return Ok(Vec::new()),
+            Err(e) => return Err(e),
+        };
+        // 対象ステ以外にも動くバフ(倍率で他ステが増幅される等)があるので、全ステの差を足す
+        let gain = StatKind::ALL
+            .iter()
+            .map(|k| after.get(*k) - baseline.get(*k))
+            .sum();
+        gains.push(BuffTargetStatGain { kind, gain });
+    }
+    Ok(gains)
 }
 
 /// `BaseStats` + `StatSources` + 装備から最終能力値と(主軸スキルがあれば)攻撃力を組み立てる。
@@ -2342,7 +2455,7 @@ mod tests {
                 name: "クラブ効果",
                 purposes: &[BuffPurpose::Stats],
                 origin: BuffOrigin::Skill,
-                target: BuffTarget::UserSelected,
+                target: BuffTarget::UserSelectedMulti,
                 layer: StatLayer::Fixed,
                 value: BuffValue::Fixed(7.0),
                 exclusive_slots: vec![],
@@ -2932,6 +3045,59 @@ mod tests {
         );
     }
 
+    #[test]
+    fn クラブ効果は複数のステに同時に掛けられる() {
+        // クラブエフェクトはステごとに 1 つずつ、枠数だけ併用できる(wiki: クラブ)。
+        let buffs = BuffSelection {
+            choices: vec![
+                BuffChoice {
+                    stat: Some(StatKind::Stab),
+                    ..choice("club_effect")
+                },
+                BuffChoice {
+                    stat: Some(StatKind::Dex),
+                    ..choice("club_effect")
+                },
+            ],
+        };
+        let (modifiers, contributions) =
+            build_modifiers(&StatSources::default(), &buffs, &test_catalog()).unwrap();
+        assert_eq!(modifiers.get(StatKind::Stab).fixed, 7);
+        assert_eq!(modifiers.get(StatKind::Dex).fixed, 7);
+        assert_eq!(modifiers.get(StatKind::Hack).fixed, 0);
+        // 内訳もステごとに 1 行ずつ立つ(チップの増分表示がここから作られる)
+        assert_eq!(
+            contributions
+                .iter()
+                .filter(|c| c.source == "クラブ効果")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn クラブ効果で同じステを二重に選ぶとエラーになる() {
+        // 「上昇項目が同じエフェクトを併用することは出来ない」(wiki: クラブ)
+        let buffs = BuffSelection {
+            choices: vec![
+                BuffChoice {
+                    stat: Some(StatKind::Stab),
+                    ..choice("club_effect")
+                },
+                BuffChoice {
+                    stat: Some(StatKind::Stab),
+                    ..choice("club_effect")
+                },
+            ],
+        };
+        let err = build_modifiers(&StatSources::default(), &buffs, &test_catalog()).unwrap_err();
+        assert!(matches!(
+            err,
+            StatSourceError::DuplicateBuffStat { id, kind }
+            if id == "club_effect" && kind == StatKind::Stab
+        ));
+    }
+
     // --- 3.5. StatSources::validate() が各補正源の値域を拒否する ---
 
     #[test]
@@ -3121,6 +3287,102 @@ mod tests {
             base.validate(),
             Err(BaseStatsError::OutOfRange { value: 311, .. })
         ));
+    }
+
+    // --- 4.4. buff_target_stat_gains(対象ステを選ぶバフの、ステごとの実際の効き) ---
+
+    fn gains_for(base: BaseStats, cap: i64) -> Vec<BuffTargetStatGain> {
+        let catalog = test_catalog();
+        let def = catalog.iter().find(|d| d.id == "club_effect").unwrap();
+        buff_target_stat_gains(
+            &base,
+            &StatSources::default(),
+            &BuffSelection::default(),
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &catalog,
+            &[],
+            &[],
+            def,
+            cap,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn 対象ステの効きは全ステぶん返る() {
+        let gains = gains_for(BaseStats { stab: 1, hack: 1, int: 1, def: 1, mr: 1, dex: 1, agi: 1 }, NO_CAP);
+        assert_eq!(gains.len(), StatKind::ALL.len());
+        // test_catalog の club_effect は Fixed(7.0)。上限に当たらなければどのステも +7
+        assert!(gains.iter().all(|g| g.gain == 7), "{gains:?}");
+    }
+
+    #[test]
+    fn 上限に張り付いたステの効きは0になる() {
+        // STAB だけ上限(10)に達している状態。ここへ +7 を乗せても最終能力値は動かない
+        let base = BaseStats { stab: 10, hack: 1, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+        let gains = gains_for(base, 10);
+        let stab = gains.iter().find(|g| g.kind == StatKind::Stab).unwrap();
+        let hack = gains.iter().find(|g| g.kind == StatKind::Hack).unwrap();
+        assert_eq!(stab.gain, 0, "上限に張り付いたステは選んでも動かない");
+        assert_eq!(hack.gain, 7);
+    }
+
+    #[test]
+    fn 対象ステの効きはいま選んでいるステに左右されない() {
+        // 既に DEX を選んでいる状態でも、基準は「このバフを外した状態」なので
+        // どのステも同じ +7 が返る(選択中のステだけ 0 に見える、という罠を防ぐ)
+        let base = BaseStats { stab: 1, hack: 1, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+        let catalog = test_catalog();
+        let def = catalog.iter().find(|d| d.id == "club_effect").unwrap();
+        let buffs = BuffSelection {
+            choices: vec![BuffChoice {
+                stat: Some(StatKind::Dex),
+                ..choice("club_effect")
+            }],
+        };
+        let gains = buff_target_stat_gains(
+            &base,
+            &StatSources::default(),
+            &buffs,
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &catalog,
+            &[],
+            &[],
+            def,
+            NO_CAP,
+        )
+        .unwrap();
+        assert!(gains.iter().all(|g| g.gain == 7), "{gains:?}");
+    }
+
+    #[test]
+    fn 排他枠が埋まっているバフの効きは空で返る() {
+        // illumination_drink と同じ枠を charge_potion が押さえている状態では、
+        // illumination_drink はそもそも足せない — エラーにせず「材料なし」を返す
+        let catalog = test_catalog();
+        let def = catalog
+            .iter()
+            .find(|d| d.id == "illumination_drink")
+            .unwrap();
+        let buffs = BuffSelection {
+            choices: vec![choice("charge_potion")],
+        };
+        let gains = buff_target_stat_gains(
+            &BaseStats { stab: 1, hack: 1, int: 1, def: 1, mr: 1, dex: 1, agi: 1 },
+            &StatSources::default(),
+            &buffs,
+            &Equipment::default(),
+            &CommonSkills::default(),
+            &catalog,
+            &[],
+            &[],
+            def,
+            NO_CAP,
+        )
+        .unwrap();
+        assert!(gains.is_empty());
     }
 
     // --- 4.5. apply_temporary_adjustments(計算リクエストにのみ乗る一時調整) ---

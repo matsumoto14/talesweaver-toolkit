@@ -38,6 +38,29 @@ export function bump(node: HTMLElement, get: () => number | null) {
  * 補正源リストの行サマリーのように、右のペインを触ると左の要約も変わるもので使う。
  * 片方だけ動かないと、動かないほうが古い値に見える(§10 規則 2)。
  */
+/**
+ * **面の中身が入れ替わった**ことを見せる(§10 型 3b「入ってくる面だけ短く動かす」)。
+ * タブで中身を差し替えたのに何も動かないと、切り替えたのか元からこうだったのかが
+ * 一瞬わからない。`flash`(型 5)と取り違えると、面ぜんたいが中心から膨らんで
+ * 他のタブ切り替えと動きが揃わなくなる — バッジは flash、面は swap。
+ */
+export function swap(node: HTMLElement, get: () => string) {
+  const clear = () => node.classList.remove("swap-in");
+  let prev = get();
+  $effect(() => {
+    const next = get();
+    if (next === prev) return;
+    prev = next;
+    clear();
+    void node.offsetWidth;
+    node.classList.add("swap-in");
+  });
+  $effect(() => {
+    node.addEventListener("animationend", clear);
+    return () => node.removeEventListener("animationend", clear);
+  });
+}
+
 export function flash(node: HTMLElement, get: () => string) {
   const clear = () => node.classList.remove("badge-in");
   let prev = get();

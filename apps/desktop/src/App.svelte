@@ -12,7 +12,7 @@
   import CharsPage from "./pages/chars/CharsPage.svelte";
   import HomePage from "./pages/home/HomePage.svelte";
   import { app, focusErrorTarget, loadAll, simIsDirty, type Tab } from "./state.svelte";
-  import { dismissError, reportError, reportNotice, toast } from "./toast.svelte";
+  import { dismissError, reportError, reportNotice, runUndo, toast } from "./toast.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import Splitter from "./ui/Splitter.svelte";
 
@@ -84,7 +84,7 @@
   </header>
 
   {#if toast.message}
-    <div class="toast" class:notice={toast.kind === "notice"} role="alert">
+    <div class="toast" class:notice={toast.kind === "notice"} class:undo={toast.kind === "undo"} role="alert">
       <span>{toast.message}</span>
       <!-- どこの話か分かるエラーは、読ませるだけで終わらせない。押せばその場所が開く(§00 ⑤) -->
       {#if toast.target}
@@ -94,6 +94,10 @@
           class="toast-goto"
           onclick={() => { focusErrorTarget(target); dismissError(); }}
         >ここを開く ›</button>
+      {/if}
+      <!-- 消したものを戻す。押せるのはこの帯が出ているあいだだけ -->
+      {#if toast.undoable}
+        <button type="button" class="toast-goto" onclick={runUndo}>元に戻す</button>
       {/if}
       <button type="button" onclick={dismissError} aria-label="閉じる">×</button>
     </div>
@@ -191,6 +195,14 @@
   .toast.notice {
     background: var(--state-edge-bg); border-color: var(--state-edge-bd);
   }
+  /* 取り消せる操作の直後。失敗ではないので危険色にしない — 押せるのは「元に戻す」だけ */
+  .toast.undo {
+    background: var(--state-edge-bg); border-color: var(--state-edge-bd);
+  }
+  .toast.undo .toast-goto {
+    border-color: var(--accent); color: var(--accent);
+  }
+  .toast.undo .toast-goto:hover { background: var(--accent); color: #fff; }
   .toast span { margin-right: auto; }
   .toast button { color: var(--fg-muted); font-size: 14px; }
   /* 「読むだけ」の帯の中で、押せるものだけ形を持たせる(§00 ⑤ 考えさせない) */

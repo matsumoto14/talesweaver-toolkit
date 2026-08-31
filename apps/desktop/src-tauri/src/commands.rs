@@ -574,6 +574,40 @@ pub fn preview_effective_stats(
     .map_err(|e| e.to_string().into())
 }
 
+/// 「対象ステを選ぶ」バフの、ステごとの実際の効き(最終能力値が何点動くか)。
+///
+/// カタログの生値ではなく **このキャラでの効き** を返す — 素ステが上限に張り付いている
+/// ステはバフを乗せても動かない(`gain = 0`)。並べ方・見せ方は呼び出し側の判断。
+#[tauri::command]
+pub fn buff_target_stat_gains(
+    base_stats: domain::BaseStats,
+    stat_sources: domain::StatSources,
+    buffs: BuffSelection,
+    equipment: domain::Equipment,
+    common_skills: CommonSkills,
+    awakening: domain::Awakening,
+    buff_id: String,
+) -> CommandResult<Vec<domain::BuffTargetStatGain>> {
+    let catalog = gamedata::buff_catalog();
+    let def = catalog
+        .iter()
+        .find(|d| d.id == buff_id)
+        .ok_or_else(|| CommandError::from(format!("未知のバフです: {buff_id}")))?;
+    domain::buff_target_stat_gains(
+        &base_stats,
+        &stat_sources,
+        &buffs,
+        &equipment,
+        &common_skills,
+        &catalog,
+        gamedata::mastery_catalog(),
+        gamedata::character_skill_catalog(),
+        def,
+        gamedata::awakening_caps(awakening).max_stat,
+    )
+    .map_err(|e| e.to_string().into())
+}
+
 /// 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。保存前のキャラデータで出す。
 ///
 /// 与ダメージ式とは別経路なので対象コンテンツを取らない。装備補正 9 値は

@@ -203,12 +203,15 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             name: "クラブ効果",
             purposes: &[BuffPurpose::Stats],
             origin: BuffOrigin::Club,
-            target: BuffTarget::UserSelected,
+            // エフェクトは 1 ステにつき 1 つで、クラブレベルの枠数まで併用できる
+            // (Lv7:1種 → Lv15:2 → Lv20:3 → Lv25:4 → Lv30:5 → Lv31:6 → Lv36:7種)。
+            // 上昇項目が同じものは併用できないので、実質の上限はステの数 = 7。
+            target: BuffTarget::UserSelectedMulti,
             layer: StatLayer::Fixed,
             value: BuffValue::UserInput { min: 1.0, max: 7.0 },
             exclusive_slots: vec![],
-            source_url: WIKI_URL,
-            note: "クラブレベルに応じて +1〜7。+20 はクラブSエフェクト",
+            source_url: CLUB_WIKI_URL,
+            note: "ステごとに +1〜7。使える数はクラブレベル次第。+20 はクラブSエフェクト",
             default_value: Some(7.0),
             damage_effects: &[],
         },

@@ -1,7 +1,7 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
@@ -19,6 +19,21 @@ export const createBuffSet = (name: string, choices: BuffSelection) => invoke<Bu
 export const updateBuffSet = (id: number, name: string, choices: BuffSelection) => invoke<BuffSet>("update_buff_set", { id, name, choices });
 export const duplicateBuffSet = (id: number) => invoke<BuffSet>("duplicate_buff_set", { id });
 export const deleteBuffSet = (id: number) => invoke<void>("delete_buff_set", { id });
+/** 「対象ステを選ぶ」バフの、このキャラでのステごとの効き。並べ方は呼び出し側で決める */
+export const buffTargetStatGains = (
+  character: NewCharacter,
+  buffs: BuffSelection,
+  buffId: string,
+) =>
+  invoke<BuffTargetStatGain[]>("buff_target_stat_gains", {
+    baseStats: character.base_stats,
+    statSources: character.stat_sources,
+    buffs,
+    equipment: character.equipment,
+    commonSkills: character.common_skills,
+    awakening: character.awakening,
+    buffId,
+  });
 export const setDefaultBuffSet = (characterId: number, buffSetId: number | null) =>
   invoke<RegisteredCharacter>("set_default_buff_set", { characterId, buffSetId });
 /** 属性値の供給源カタログ(装備の属性強化以外) */

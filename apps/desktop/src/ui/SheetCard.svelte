@@ -2,15 +2,21 @@
   // 「行ける?」(CalcPage・金)と「どれだけ耐える?」(DefensePanel・青)で構造が完全一致していた
   // シート枠(.sheet/.sheet-head/.gem/.sheet-title)を色だけ切り替えて共有する。
   import type { Snippet } from "svelte";
+  import Spinner from "./Spinner.svelte";
 
   interface Props {
     tone: "gold" | "blue";
     title: string;
     /** ヘッダー右側の淡い説明文 */
     note?: string;
+    /**
+     * 中の数字がまだ確定していない。**見出しの帯に印を出すだけ**で、中身の文言は変えない —
+     * 説明文に「・計算中…」を足すと帯の文字数が変わり、押した場所が動く(§09 規則 1)
+     */
+    busy?: boolean;
     children: Snippet;
   }
-  let { tone, title, note = "", children }: Props = $props();
+  let { tone, title, note = "", busy = false, children }: Props = $props();
 </script>
 
 <div class="sheet-card {tone}">
@@ -18,6 +24,7 @@
     <span class="gem"></span>
     <span class="sheet-title">{title}</span>
     <span class="sheet-char dim">{note}</span>
+    <Spinner active={busy} />
   </div>
   {@render children()}
 </div>

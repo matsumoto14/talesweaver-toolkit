@@ -36,3 +36,7 @@ wiki の画像は `?plugin=ref&page=<ページ名(EUC-JP の URL エンコード
 2026-08-29にバフ34件を Tale Wiki の `ステータス` 表と照合し、行に直接アイコン参照がある
 28件を `buffs/` に取り込んだ。専用画像を確認できない6件は、似た効果の画像を流用せず
 `?` のままにする。再取込は `tools/gamedata/import_buff_icons.py` を使う。
+
+2026-08-31に極限スキル3件(`scope_eye` / `full_throttle` / `wide_focus`)を Tale Wiki の
+`Skill/ゲージスキル` ページの添付から同梱した(`?plugin=ref` 経由)。極限は `Skill/極限` ページに
+表があるが、画像の実体は `Skill/ゲージスキル` に添付されている。
