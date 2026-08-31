@@ -761,7 +761,8 @@
       // コンボは 1 サイクル(通常攻撃 → スキル)で割る。実測表はコンボなしの計測なので使わない
       mats.push({
         label: `通常攻撃(${cycle.normal_attack_name})`,
-        value: fmtInt(cycle.normal_attack_total.max),
+        // 合計ダメージ(total_primary)と同じ側を出す。ここだけ非クリだと足し算が合わなく見える
+        value: fmtInt(pick(cycle.normal_attack_total) ?? 0),
         sub: `中ディレイ ${cycle.normal_delay.toFixed(2)}s`,
       });
       mats.push({
