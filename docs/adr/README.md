@@ -15,3 +15,4 @@ goal 文書と時系列の決定ログ(decisions.md)を 2026-08-28 にテーマ�
 - [009 一般公開・配布](009-public-release.md) — NOTICE、TW Context、配布 CI + R2、問い合わせ中継、CSP
 - [010 エージェント運用](010-agent-workflow.md) — Small/Normal/Complex 3 段階と再委譲禁止の背景
 - [011 ソウルリンク](011-soul-link.md) — リンクステータス 1〜4 をキャラ単位で保持し、装備基本能力へ直加算
+- [012 デスクトップとブラウザの両対応](012-web-build.md) — 境界は commands.ts 1 枚、実体は alias で差し替え。計算は共通 crate・保存は各プラットフォーム

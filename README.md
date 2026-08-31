@@ -30,7 +30,8 @@ TalesWeaver(MMORPG)プレイヤー向けのデスクトップツールキット�
 ## データの扱い
 
 - 登録したキャラクター情報は**お使いの PC の中だけ**に保存されます
-  (`%APPDATA%\dev.twcontext.app\tw-context.sqlite`)
+  (`%APPDATA%\dev.twcontext.app\tw-context.sqlite`)。
+  ブラウザ版では**そのブラウザの中だけ**(IndexedDB)で、どちらも外へは出ません
 - 外部へ送信するのは、アプリ内の**問い合わせを送ったときだけ**です。
   送信前に送る内容が全文表示されるので、確認してから送れます
 - 更新のたびにデータベースを自動でバックアップします(直近 3 世代)
@@ -41,13 +42,15 @@ TalesWeaver(MMORPG)プレイヤー向けのデスクトップツールキット�
 |---|---|
 | アプリ | Tauri 2(Rust) |
 | フロント | Svelte 5 + TypeScript + Vite |
-| データ保存 | SQLite(rusqlite) |
+| データ保存 | SQLite(rusqlite)/ ブラウザ版は IndexedDB |
 
 ```
 crates/domain            ドメインモデルと計算(I/O なし・決定的)
 crates/gamedata          wiki 由来の静的データ(出典付き)
-crates/storage           登録キャラの永続化
-apps/desktop             Tauri シェル + UI
+crates/commands          保存に触らないコマンドの中身(デスクトップ / ブラウザ共通)
+crates/storage           登録キャラの永続化(デスクトップ版。rusqlite)
+crates/web               ブラウザ版の入口(WASM。保存は IndexedDB で TS 側)
+apps/desktop             Tauri シェル + UI(画面は両方で同じもの)
 services/inquiry-worker  問い合わせを GitHub Issue にする中継(Cloudflare Workers)
 ```
 
@@ -65,18 +68,23 @@ cd apps/desktop && npm run tauri dev    # 開発起動(初回の Rust ビルド�
 cd apps/desktop && npm run build && npx svelte-check   # フロント単体チェック
 ```
 
-### ブラウザ版(保存なし)
+### ブラウザ版
 
-同じ画面を WASM(`crates/web`)の上で動かす。ダメージ計算は動くが、保存が要る操作
-(キャラ登録・バフセット・実測)は「まだ使えません」を返す。
+同じ画面・同じ計算を、Tauri の代わりに WASM(`crates/web`)の上で動かす。保存は
+SQLite ではなくブラウザの IndexedDB に入る(キャラ登録も計算もそのまま使える)。
+切り替えは実行時分岐ではなく Vite の alias(`vite.web.config.ts`)なので、
+デスクトップ版のバンドルに WASM は入らない。設計は [docs/adr/012-web-build.md](docs/adr/012-web-build.md)。
 
 ```sh
-cargo install wasm-pack                 # 未導入なら 1 回だけ
+cargo install wasm-pack --locked        # 未導入なら 1 回だけ
 rustup target add wasm32-unknown-unknown
 
 cd apps/desktop && npm run build:web    # WASM をビルドして dist-web に出す
 cd apps/desktop && npm run preview:web  # dist-web を配信して確認
 ```
+
+保存先がブラウザの中なので、サイトデータを消すと一緒に消える。情報パネルの
+**書き出す / 読み込む**(JSON 1 ファイル)でデスクトップ版と行き来できる。
 
 ## ドキュメント
 

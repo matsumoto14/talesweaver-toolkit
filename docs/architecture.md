@@ -5,23 +5,43 @@
 ## 全体像
 
 ```
-┌─────────────────────────────────────────────┐
-│ apps/desktop (Tauri シェル)                   │
-│   src/ … フロントエンド(TS)。表示と入力のみ     │
-│   commands … domain への薄いアダプタ           │
-└──────────────┬──────────────────────────────┘
-               │
+┌──────────────────────────────────────────────────────────┐
+│ apps/desktop/src … フロントエンド(TS)。表示と入力のみ      │
+│   api/commands.ts = コマンド呼び出しの唯一の境界(44 本)    │
+└──────────────┬───────────────────────────┬───────────────┘
+┌──────────────┴───────────┐  ┌────────────┴───────────────┐
+│ デスクトップ版(Tauri)   │  │ ブラウザ版(WASM)         │
+│ apps/desktop/src-tauri    │  │ crates/web + api/         │
+│ + crates/storage(SQLite) │  │ browserStore(IndexedDB)  │
+└──────────────┬───────────┘  └────────────┬───────────────┘
+               ├───────────────────────────┘
+┌──────────────┴───────────┐
+│ crates/commands           │ 保存に触らないコマンドの中身
+└──────────────┬───────────┘ (両方がここを呼ぶ)
 ┌──────────────┴───────────┐  ┌────────────────┐
 │ crates/domain             │←─│ crates/gamedata │
 │ 純粋なドメインモデル+計算   │  │ 静的データの型と  │
 │ I/O なし・決定的           │  │ ローダ(wiki由来) │
-└──────────────┬───────────┘  └───────┬────────┘
-               │                      ↑ 生成
-┌──────────────┴───────────┐  ┌───────┴────────┐
-│ crates/storage            │  │ tools/scraper ※ │
-│ SQLite(ユーザーデータのみ) │  │ talewiki 取込み  │
-└──────────────────────────┘  └────────────────┘
+└──────────────────────────┘  └───────┬────────┘
+                                      ↑ 生成
+                              ┌───────┴────────┐
+                              │ tools/scraper ※ │
+                              │ talewiki 取込み  │
+                              └────────────────┘
 ```
+
+デスクトップ版とブラウザ版は同じ画面・同じ計算で、違うのは**保存と外の口だけ**。
+どの crate がどちらで動くかは次のとおり(決定の理由は docs/adr/012-web-build.md):
+
+| | 中身 | デスクトップ | ブラウザ |
+|---|---|---|---|
+| `crates/domain` | ドメインモデルと計算(I/O なし) | ○ | ○ |
+| `crates/gamedata` | wiki 由来の静的データ | ○ | ○ |
+| `crates/commands` | 保存に触らないコマンドの中身 | ○ | ○ |
+| `crates/web` | ブラウザ版の `invoke`(wasm-bindgen) | — | ○ |
+| `crates/storage` | 登録キャラの保存(rusqlite) | ○ | — |
+| `apps/desktop/src-tauri` | Tauri コマンド・OS 連携・バックアップ | ○ | — |
+| `apps/desktop/src/api/browserStore.ts` | ブラウザ版の保存(IndexedDB) | — | ○ |
 
 ## クレート構成と責務
 
@@ -46,16 +66,31 @@
 ### crates/storage — ユーザーデータ(SQLite)
 
 - 登録キャラ・バフセット・設定のみ。静的データは入れない(この分離が Web/モバイル展開時の差し替え範囲を最小化する)
-- **Web 版に持っていける範囲**(2026-08-31 時点): `domain` の依存は `serde` + `thiserror`、
-  `gamedata` は `serde` + `domain` だけで、OS にも DB にも触っていないので **wasm32 でそのままビルドできる**
-  (CI が毎回確かめる)。画面も無改造で、差し替えるのは `api/commands.ts` の `invoke` だけ
-  (44 コマンドすべてがこの 1 ファイルを通る)。
-  **書き直しが要るのは保存だけ** — `crates/storage` は `rusqlite` なので wasm では動かない。
-  Web 版はブラウザ側(localStorage / IndexedDB)に持つことになり、デスクトップとデータは
-  行き来しないので、出すならエクスポート / インポートが要る
+- `rusqlite` を使うのでブラウザでは動かない。ブラウザ版の保存は TS 側(`api/browserStore.ts`、
+  IndexedDB)にあり、デスクトップとデータは行き来しない(下の「ブラウザ版」を参照)
 - `buff_sets` は名前と `BuffSelection` を持ち、`characters.default_buff_set_id` は「いつものセット」だけを参照する。計算時は `StatSources` とバフ選択を別引数で domain へ渡す
 - `character_icons` は登録キャラごとの任意画像を128×128 PNGのBLOBで持つ。`characters` 削除時にCASCADEし、ゲーム内キャラの静的アイコンやdomainモデルには混ぜない
 - domain の型との変換はここで行う。domain は SQLite を知らない
+
+### crates/commands — 保存に触らないコマンドの中身
+
+- ダメージ計算・能力値プレビュー・カタログ列挙・検証など、**保存に触らないコマンドの中身**。
+  Tauri にも SQLite にも依存しないので wasm32 でそのままビルドできる
+- デスクトップ版(`src-tauri`)とブラウザ版(`crates/web`)の両方がここを呼ぶ。計算が
+  2 つに分かれると、片方だけ直った状態に気づけないため、実体は 1 つに保つ
+- 逆に**保存は共通化しない**。保存が要るコマンドは各プラットフォームの入口が受け持つ
+
+### crates/web — ブラウザ版の入口(WASM)
+
+- 公開するのは `invoke(command, args)` の 1 本だけで、形は Tauri の `invoke` と同じ。
+  画面は import 先が差し替わるだけで済み、コマンドごとのバインディングを持たない
+- 44 コマンドのうち **26 はここが `commands` を呼んでそのまま返し、18 は TS 側**
+  (`api/invoke.wasm.ts` → `browserStore.ts`)が IndexedDB で処理する。保存の前検証だけは
+  `domain` を持つこちら側に問う(文言をデスクトップ版と揃えるため)
+- 引数は Tauri と同じ camelCase で来るので、コマンドごとの引数 struct で受ける。名前の
+  食い違いは実行時にしか出ないため、`args_check.rs` が画面の呼び出しと突き合わせる
+- ビルドは `npm run build:web`(wasm-pack + `vite.web.config.ts`)。差し替えは**実行時分岐では
+  なく vite の alias** なので、デスクトップ版のバンドルに WASM は入らない
 
 ### apps/desktop — Tauri シェル
 
@@ -71,8 +106,12 @@ main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・�
                        (labels.ts などがモジュール評価時に上限を読むため。フォールバック値は持たない)
 CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線。表示順は端末内設定として保持)
 state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・カスタム画像data URL・選択・コンテンツ判定・試し変更 sim)
-api/types.ts           Tauri コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
-api/commands.ts        invoke ラッパー
+api/types.ts           コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
+api/commands.ts        invoke ラッパー。画面からコマンドを呼ぶ唯一の入口(44 本)
+api/invoke.ts          呼び出しの実体。デスクトップは Tauri、ブラウザは invoke.wasm.ts に
+                       vite の alias で差し替わる(画面はどちらか知らない)
+api/browserStore.ts    ブラウザ版の保存(IndexedDB)/ api/transfer.ts データの書き出し・読み込み
+web/                   ブラウザ版での Tauri プラグイン相当(外部リンク・HTTP・更新・プロセス)
 ui/                    画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
 pages/<機能>/          機能ごとの画面と、その画面専用の部品
 buffs.ts               バフ選択の共通ロジック(純関数)
