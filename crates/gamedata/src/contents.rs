@@ -1,5 +1,10 @@
 //! コンテンツカタログ(エリア → コンテンツ)。ホームの到達一覧・入場条件判定に使う。
 //!
+//! エリアの区分と並び順はゲーム内「コンテンツ基本情報」の左メニューに合わせる(ユーザー提供の
+//! スクリーンショット 2026-09-01 + talewiki「ミニゲーム/*」で各コンテンツの所属を裏取り)。
+//! swiki の節構成(下位 / 上位 …)はゲーム内に無い区分で、画面で探すときの手掛かりにならない。
+//! テシスコアの地域(`CoreRegion`)とは別物なので混ぜない。
+//!
 //! 入場条件は swiki「コンテンツ入場条件」(<https://erumisutoburvip.swiki.jp/>、取得 2026-08-24)を
 //! 正とする。表の列 S/H/I(突き/斬り/魔攻)・M(魔防)・複合(突斬 or 斬魔)は、使うスキルの
 //! 依存種別で比較先が決まる別条件で「いずれかを満たしていれば OK」(表の概要、ユーザー確認済み)。
@@ -24,8 +29,8 @@ use domain::thesis_core::CoreRegion;
 use crate::Source;
 
 pub const CONTENTS_SOURCE: Source = Source {
-    page: "swiki コンテンツ入場条件(入場条件・コンテンツ構成)+ 暫定値(目安ダメージ)",
-    retrieved_on: "2026-08-24",
+    page: "swiki コンテンツ入場条件(入場条件)+ ゲーム内コンテンツ基本情報 / talewiki ミニゲーム(エリア区分)+ 暫定値(目安ダメージ)",
+    retrieved_on: "2026-09-01",
     note: "装備条件 S/H/I・M・複合はスキル依存で比較先が決まる(いずれか 1 つ充足で OK)。「コア N」はテシスコアの火力補正合計として実判定する。判定できない条件(ルーン Lv・共通スキル等)は entry_note に表示専用。目安ダメージは全件 [仮]",
 };
 
@@ -181,62 +186,54 @@ const UPPER_NOTE: Option<&str> = Some(UPPER);
 /// 上位コンテンツ共通の覚醒条件(5 次覚醒)。
 const STAGE5: ContentRequirement = stage(5);
 
+/// エリア = ゲーム内「コンテンツ基本情報」の左メニューの単位。並び順もその順に合わせる
+/// (swiki の節構成 = 下位 / 上位 …はゲーム内に無い区分なので、ユーザーが画面で探せない)。
+/// 各エリアの中は今までどおり難度昇順。
+///
+/// 左メニューにあってもコンテンツを 1 件も持たないもの(プラバ前哨基地・忘却の地下墓所・
+/// シミュレーション異空間)は行を出さない(空の 0 / 0 を並べても読む値が無い)。
 #[rustfmt::skip]
 const AREAS: &[(&str, &str, &[Def])] = &[
-    // ================= 下位コンテンツ(swiki *下位コンテンツ) =================
-    ("lower", "下位コンテンツ", &[
+    // ================= マーキュリアル洞窟 =================
+    // リンゴの島のダンジョン。入場条件は wiki「ミニゲーム/マーキュリアル洞窟」のチーム条件と一致する
+    ("mercurial", "マーキュリアル洞窟", &[
         Def { id: "ringo", name: "リンゴ", enemy_id: Some("ringo_boss"), need_per_hit: Some(2_000),
               requirements: &[stage(3), equip(800, 980, 0)],
               entry_note: Some("配布インファ程度"), team_note: None },
-        Def { id: "abyss_normal", name: "アビス(ノーマル)", enemy_id: None, need_per_hit: None,
-              requirements: &[stage(3), equip(900, 1_100, 1_650)],
-              entry_note: Some("ルーンレベル 30 必要(判定対象外)/ 配布インファ+α程度"), team_note: None },
+    ]),
+    // ================= 神鳥の塒 =================
+    ("shinchou", "神鳥の塒", &[
         Def { id: "shinchou_normal", name: "神鳥の塒(ノーマル)", enemy_id: None, need_per_hit: None,
               requirements: &[stage(3), equip(900, 1_100, 1_650)],
               entry_note: Some("ルーンレベル 30 必要(判定対象外)/ 配布インファ+α程度"), team_note: None },
-        Def { id: "luminous_ex", name: "ルミナスEX", enemy_id: None, need_per_hit: None,
-              requirements: &[stage(3), equip(900, 1_300, 1_500), core(60)],
-              entry_note: RUNE30, team_note: None },
-        Def { id: "annoying_anger", name: "煩わしい怒り", enemy_id: None, need_per_hit: None,
-              requirements: &[stage(3), equip(1_000, 1_180, 1_750)],
-              entry_note: None, team_note: None },
-        Def { id: "abyss_hard", name: "アビス(ハード)", enemy_id: None, need_per_hit: None,
-              requirements: &[stage(4), equip(1_100, 1_300, 1_850)],
-              entry_note: Some("ルーンレベル 30 必要(判定対象外)/ アクィルス未強化〜+α程度"), team_note: None },
         Def { id: "shinchou_hard", name: "神鳥の塒(ハード)", enemy_id: None, need_per_hit: None,
               requirements: &[stage(4), equip(1_150, 1_350, 1_900)],
+              entry_note: Some("ルーンレベル 30 必要(判定対象外)/ アクィルス未強化〜+α程度"), team_note: None },
+    ]),
+    // ================= アビス =================
+    // アークロン要塞のディフェンスモード。難易度は 一般 / ハード / ヘル(wiki「ミニゲーム/アビス」)
+    ("abyss", "アビス", &[
+        Def { id: "abyss_normal", name: "アビス(ノーマル)", enemy_id: None, need_per_hit: None,
+              requirements: &[stage(3), equip(900, 1_100, 1_650)],
+              entry_note: Some("ルーンレベル 30 必要(判定対象外)/ 配布インファ+α程度"), team_note: None },
+        Def { id: "abyss_hard", name: "アビス(ハード)", enemy_id: None, need_per_hit: None,
+              requirements: &[stage(4), equip(1_100, 1_300, 1_850)],
               entry_note: Some("ルーンレベル 30 必要(判定対象外)/ アクィルス未強化〜+α程度"), team_note: None },
         Def { id: "abyss_hell", name: "アビス(ヘル)", enemy_id: Some("abyss_hell"), need_per_hit: Some(3_000),
               requirements: &[stage(4), equip(1_250, 1_450, 2_000)],
               entry_note: Some("ルーンレベル 30 必要(判定対象外)/ アクィルス+10しまくったらいける"), team_note: None },
-        Def { id: "longed_pleasure", name: "憧れの楽しみ", enemy_id: None, need_per_hit: None,
-              requirements: &[stage(4), equip(1_250, 1_450, 2_000)],
-              entry_note: RUNE30, team_note: None },
-        Def { id: "relic_sanctuary_shinchou", name: "古代レリックの聖域(神鳥)", enemy_id: None, need_per_hit: None,
-              requirements: &[stage(3), equip(1_250, 1_450, 2_000)],
-              entry_note: RUNE30, team_note: None },
     ]),
-    // ============ エタレベルのみが条件(swiki *エタレベルのみが条件のコンテンツ) ============
-    ("eternal_only", "エタレベルのみが条件", &[
-        Def { id: "vestige_ruins", name: "ヴェスティージの廃墟", enemy_id: None, need_per_hit: None,
-              requirements: &[eternal(1)], entry_note: None, team_note: None },
-        Def { id: "orlie_defense_hell", name: "オルリー防衛戦(ヘル)", enemy_id: None, need_per_hit: None,
-              requirements: &[eternal(1)], entry_note: Some("ノーマル 1 回クリア必要(判定対象外)"), team_note: None },
+    // ================= エクリプス =================
+    // 喪失の島(記憶の森 前哨基地)から入る一群。アフェティリアとその区画ボス(セリニアコス /
+    // ゴイティア / キシニク)、月の女王の軍の訓練所・別動隊討伐・最後の決戦・異界の峡谷防衛戦を含む
+    ("eclipse", "エクリプス", &[
         Def { id: "detachment_subjugation", name: "別動隊討伐", enemy_id: None, need_per_hit: None,
               requirements: &[eternal(1)], entry_note: None, team_note: None },
-        Def { id: "siokan_boss_subjugation", name: "シオカンヘイムボス討伐戦", enemy_id: Some("siokan_boss"), need_per_hit: Some(5_000),
-              requirements: &[eternal(1)], entry_note: None, team_note: None },
-        Def { id: "odin_total_war", name: "オーディン全面戦争", enemy_id: Some("odin"), need_per_hit: Some(8_000),
-              requirements: &[eternal(10)], entry_note: None, team_note: None },
-    ]),
-    // ================= 上位コンテンツ(swiki *上位コンテンツ) =================
-    ("upper", "上位コンテンツ", &[
-        Def { id: "abyss_ex", name: "アビスEX", enemy_id: Some("abyss_core_master"), need_per_hit: Some(3_500),
-              requirements: &[STAGE5, equip(1_500, 1_700, 2_100), core(120)],
-              entry_note: UPPER_NOTE, team_note: Some("改IHは不要") },
         Def { id: "eclipse_boss", name: "エクリプスボス", enemy_id: Some("eclipse_1"), need_per_hit: Some(6_000),
               requirements: &[STAGE5, equip(1_600, 1_800, 2_350)],
               entry_note: UPPER_NOTE, team_note: Some("ソロは入場条件よりもだいぶ難易度低い") },
+        Def { id: "eclipse_2", name: "エクリプス ボス2", enemy_id: Some("eclipse_2"), need_per_hit: Some(6_500),
+              requirements: &[], entry_note: None, team_note: None },
         Def { id: "aphetiria_normal", name: "アフェティリア(ノーマル)", enemy_id: Some("aphetiria_n"), need_per_hit: Some(7_000),
               requirements: &[STAGE5, eternal(5), equip(1_600, 1_800, 2_350)],
               entry_note: UPPER_NOTE, team_note: Some("ソロの場合エタ制限のみだがソロはきつい") },
@@ -246,12 +243,74 @@ const AREAS: &[(&str, &str, &[Def])] = &[
         Def { id: "eclipse_subjugation", name: "エクリプスボス討伐戦", enemy_id: Some("eclipse_subjugation"), need_per_hit: Some(12_000),
               requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900), core(120)],
               entry_note: UPPER_NOTE, team_note: None },
+        Def { id: "valley_defense", name: "異界の峡谷防衛戦", enemy_id: Some("valley_captain"), need_per_hit: Some(12_000),
+              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700), core(300)],
+              entry_note: UPPER_NOTE, team_note: None },
+        Def { id: "last_battle_1", name: "最後の決戦1", enemy_id: Some("last_battle_1"), need_per_hit: Some(12_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "last_battle_2", name: "最後の決戦2", enemy_id: Some("last_battle_2"), need_per_hit: Some(13_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "selinacos_h", name: "セリニアコス(H)", enemy_id: Some("selinacos_h"), need_per_hit: Some(14_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "last_battle", name: "最後の決戦", enemy_id: Some("last_battle_3"), need_per_hit: Some(15_000),
+              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700), core(300)],
+              entry_note: UPPER_NOTE, team_note: None },
+        Def { id: "goitia_h", name: "ゴイティア(H)", enemy_id: Some("goitia_h"), need_per_hit: Some(15_000),
+              requirements: &[], entry_note: None, team_note: None },
         Def { id: "aphetiria_hard", name: "アフェティリア(ハード)", enemy_id: Some("kisinik_h"), need_per_hit: Some(16_000),
               requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900), core(120)],
               entry_note: UPPER_NOTE, team_note: Some("活躍するには靴エフェ合わせて 400 くらいほしい") },
-        Def { id: "relic_sanctuary_kisinik", name: "古代レリックの聖域(キシニク)", enemy_id: Some("relic_sanctuary_20"), need_per_hit: Some(16_000),
-              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900)],
+        Def { id: "selinacos_ex", name: "セリニアコス(EX)", enemy_id: Some("selinacos_ex"), need_per_hit: Some(18_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "goitia_ex", name: "ゴイティア(EX)", enemy_id: Some("goitia_ex"), need_per_hit: Some(18_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "aphetiria_ex", name: "アフェティリアEX", enemy_id: Some("kisinik_ex"), need_per_hit: Some(20_000),
+              requirements: &[STAGE5, eternal(41), equip(2_500, 3_000, 4_000), core(480)],
               entry_note: UPPER_NOTE, team_note: None },
+    ]),
+    // ================= コアマスターダンジョン =================
+    // 各ダンジョンのコアマスター難度(wiki「ミニゲーム/コアマスターダンジョン」の実装済みダンジョン表:
+    // マーキュリアル洞窟(ルミナス)/ アビス深層)。敵名も「アビスコアマスター」
+    ("core_master", "コアマスターダンジョン", &[
+        Def { id: "luminous_ex", name: "ルミナスEX", enemy_id: None, need_per_hit: None,
+              requirements: &[stage(3), equip(900, 1_300, 1_500), core(60)],
+              entry_note: RUNE30, team_note: None },
+        Def { id: "abyss_ex", name: "アビスEX", enemy_id: Some("abyss_core_master"), need_per_hit: Some(3_500),
+              requirements: &[STAGE5, equip(1_500, 1_700, 2_100), core(120)],
+              entry_note: UPPER_NOTE, team_note: Some("改IHは不要") },
+    ]),
+    // ================= ヴェスティージダンジョン =================
+    ("vestige", "ヴェスティージダンジョン", &[
+        Def { id: "vestige_ruins", name: "ヴェスティージの廃墟", enemy_id: None, need_per_hit: None,
+              requirements: &[eternal(1)], entry_note: None, team_note: None },
+    ]),
+    // ================= オルリー防衛戦 =================
+    ("orlie", "オルリー防衛戦", &[
+        Def { id: "orlie_defense_hell", name: "オルリー防衛戦(ヘル)", enemy_id: None, need_per_hit: None,
+              requirements: &[eternal(1)], entry_note: Some("ノーマル 1 回クリア必要(判定対象外)"), team_note: None },
+    ]),
+    // ================= シオカンヘイム =================
+    // シオカンヘイム要塞。兄弟の鍛冶場はジナパから、オーディンは酷寒の支配者の最終ボス
+    ("siokan", "シオカンヘイム", &[
+        Def { id: "brothers_forge", name: "兄弟の鍛冶場", enemy_id: Some("brothers_forge"), need_per_hit: Some(3_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "siokan_boss_subjugation", name: "シオカンヘイムボス討伐戦", enemy_id: Some("siokan_boss"), need_per_hit: Some(5_000),
+              requirements: &[eternal(1)], entry_note: None, team_note: None },
+        Def { id: "odin_total_war", name: "オーディン全面戦争", enemy_id: Some("odin"), need_per_hit: Some(8_000),
+              requirements: &[eternal(10)], entry_note: None, team_note: None },
+        Def { id: "odin_rank", name: "オーディン(ランク)", enemy_id: Some("odin_rank"), need_per_hit: Some(9_000),
+              requirements: &[], entry_note: None, team_note: Some("ランキング戦") },
+    ]),
+    // ================= ルビコナ =================
+    // 八色鳥の丘(煩わしい怒り / 憧れの楽しみ)とゆがんだ村(混乱した大地・空虚の領域・
+    // ゆがんだ村ボス戦 = 追従する喜び / 見つめる悲しみ / 喜びの残像)
+    ("rubicona", "ルビコナ", &[
+        Def { id: "annoying_anger", name: "煩わしい怒り", enemy_id: None, need_per_hit: None,
+              requirements: &[stage(3), equip(1_000, 1_180, 1_750)],
+              entry_note: None, team_note: None },
+        Def { id: "longed_pleasure", name: "憧れの楽しみ", enemy_id: None, need_per_hit: None,
+              requirements: &[stage(4), equip(1_250, 1_450, 2_000)],
+              entry_note: RUNE30, team_note: None },
         Def { id: "chaotic_land", name: "混乱した大地", enemy_id: None, need_per_hit: None,
               requirements: &[STAGE5, eternal(20), equip(2_200, 2_600, 3_500)],
               entry_note: UPPER_NOTE, team_note: None },
@@ -261,15 +320,6 @@ const AREAS: &[(&str, &str, &[Def])] = &[
         Def { id: "architect_mine", name: "設計者の採掘場", enemy_id: None, need_per_hit: None,
               requirements: &[STAGE5, eternal(20), equip(2_200, 2_600, 3_500)],
               entry_note: Some("ルーンレベル 40・共通スキルコンプリート・カフス(盾+)の上限 140 以上 必要(判定対象外)"), team_note: None },
-        Def { id: "valley_defense", name: "異界の峡谷防衛戦", enemy_id: Some("valley_captain"), need_per_hit: Some(12_000),
-              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700), core(300)],
-              entry_note: UPPER_NOTE, team_note: None },
-        Def { id: "last_battle", name: "最後の決戦", enemy_id: Some("last_battle_3"), need_per_hit: Some(15_000),
-              requirements: &[STAGE5, eternal(21), equip(2_500, 2_700, 3_700), core(300)],
-              entry_note: UPPER_NOTE, team_note: None },
-        Def { id: "aphetiria_ex", name: "アフェティリアEX", enemy_id: Some("kisinik_ex"), need_per_hit: Some(20_000),
-              requirements: &[STAGE5, eternal(41), equip(2_500, 3_000, 4_000), core(480)],
-              entry_note: UPPER_NOTE, team_note: None },
         Def { id: "void_domain", name: "空虚の領域", enemy_id: None, need_per_hit: None,
               requirements: &[STAGE5, eternal(41), equip(3_100, 3_500, 4_900)],
               entry_note: UPPER_NOTE, team_note: None },
@@ -289,38 +339,13 @@ const AREAS: &[(&str, &str, &[Def])] = &[
               requirements: &[STAGE5, eternal(61), equip(3_900, 4_000, 5_900), core(210)],
               entry_note: UPPER_NOTE, team_note: None },
     ]),
-    // ======== 入場条件表に無い敵(実測表由来。火力の目安確認用。条件は未収録) ========
-    ("other_targets", "その他の対象(条件データなし)", &[
-        Def { id: "tutatur", name: "トゥタトゥール", enemy_id: Some("tutatur"), need_per_hit: Some(2_000),
-              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
-        Def { id: "arklon_underground", name: "アークロン地下要塞", enemy_id: Some("arklon_underground"), need_per_hit: Some(1_500),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "clamor", name: "クラモール", enemy_id: Some("clamor"), need_per_hit: Some(4_000),
-              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
-        Def { id: "brothers_forge", name: "兄弟の鍛冶場", enemy_id: Some("brothers_forge"), need_per_hit: Some(3_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "odin_rank", name: "オーディン(ランク)", enemy_id: Some("odin_rank"), need_per_hit: Some(9_000),
-              requirements: &[], entry_note: None, team_note: Some("ランキング戦") },
-        Def { id: "chimera", name: "キマイラ", enemy_id: Some("chimera"), need_per_hit: Some(20_000),
-              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
-        Def { id: "lost_forest", name: "喪失の森", enemy_id: Some("lost_forest"), need_per_hit: Some(6_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "eclipse_2", name: "エクリプス ボス2", enemy_id: Some("eclipse_2"), need_per_hit: Some(6_500),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "selinacos_h", name: "セリニアコス(H)", enemy_id: Some("selinacos_h"), need_per_hit: Some(14_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "goitia_h", name: "ゴイティア(H)", enemy_id: Some("goitia_h"), need_per_hit: Some(15_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "selinacos_ex", name: "セリニアコス(EX)", enemy_id: Some("selinacos_ex"), need_per_hit: Some(18_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "goitia_ex", name: "ゴイティア(EX)", enemy_id: Some("goitia_ex"), need_per_hit: Some(18_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "valley_soldier", name: "異界の峡谷 兵士", enemy_id: Some("valley_soldier"), need_per_hit: Some(10_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "last_battle_1", name: "最後の決戦1", enemy_id: Some("last_battle_1"), need_per_hit: Some(12_000),
-              requirements: &[], entry_note: None, team_note: None },
-        Def { id: "last_battle_2", name: "最後の決戦2", enemy_id: Some("last_battle_2"), need_per_hit: Some(13_000),
-              requirements: &[], entry_note: None, team_note: None },
+    // ================= 古代レリックの聖域 =================
+    // 1 コンテンツ 20 段(wiki「ミニゲーム/古代レリックの聖域」難易度表: 1〜10 段のボスが神鳥、
+    // 11〜20 段がキシニク)。10〜19 段は系列として 1 行に畳む
+    ("ancient_relic_sanctuary", "古代レリックの聖域", &[
+        Def { id: "relic_sanctuary_shinchou", name: "古代レリックの聖域(神鳥)", enemy_id: None, need_per_hit: None,
+              requirements: &[stage(3), equip(1_250, 1_450, 2_000)],
+              entry_note: RUNE30, team_note: None },
         Def { id: "relic_sanctuary_10", name: "レリックの聖域 10段", enemy_id: Some("relic_sanctuary_10"), need_per_hit: Some(6_000),
               requirements: &[], entry_note: None, team_note: None },
         Def { id: "relic_sanctuary_11", name: "レリックの聖域 11段", enemy_id: Some("relic_sanctuary_11"), need_per_hit: Some(8_000),
@@ -340,6 +365,27 @@ const AREAS: &[(&str, &str, &[Def])] = &[
         Def { id: "relic_sanctuary_18", name: "レリックの聖域 18段", enemy_id: Some("relic_sanctuary_18"), need_per_hit: Some(13_500),
               requirements: &[], entry_note: None, team_note: None },
         Def { id: "relic_sanctuary_19", name: "レリックの聖域 19段", enemy_id: Some("relic_sanctuary_19"), need_per_hit: Some(14_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "relic_sanctuary_kisinik", name: "古代レリックの聖域(キシニク)", enemy_id: Some("relic_sanctuary_20"), need_per_hit: Some(16_000),
+              requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900)],
+              entry_note: UPPER_NOTE, team_note: None },
+    ]),
+    // ================= その他(区分未確定) =================
+    // ゲーム内「コンテンツ基本情報」の左メニューに出ない、または所属を wiki で確定できなかったもの。
+    // フィールドボス(アークロン地下要塞・喪失の森・異界の峡谷 兵士)と参加型レイド(トゥタトゥール・
+    // クラモール・キマイラ)。確定したらここから移す
+    ("other", "その他(区分未確定)", &[
+        Def { id: "tutatur", name: "トゥタトゥール", enemy_id: Some("tutatur"), need_per_hit: Some(2_000),
+              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
+        Def { id: "arklon_underground", name: "アークロン地下要塞", enemy_id: Some("arklon_underground"), need_per_hit: Some(1_500),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "clamor", name: "クラモール", enemy_id: Some("clamor"), need_per_hit: Some(4_000),
+              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
+        Def { id: "chimera", name: "キマイラ", enemy_id: Some("chimera"), need_per_hit: Some(20_000),
+              requirements: &[], entry_note: None, team_note: Some("参加型レイド") },
+        Def { id: "lost_forest", name: "喪失の森", enemy_id: Some("lost_forest"), need_per_hit: Some(6_000),
+              requirements: &[], entry_note: None, team_note: None },
+        Def { id: "valley_soldier", name: "異界の峡谷 兵士", enemy_id: Some("valley_soldier"), need_per_hit: Some(10_000),
               requirements: &[], entry_note: None, team_note: None },
     ]),
 ];
@@ -401,6 +447,61 @@ mod tests {
         area_ids.sort_unstable();
         area_ids.dedup();
         assert_eq!(area_ids.len(), n);
+    }
+
+    /// 区分をゲーム内の単位に組み直したときに、コンテンツを取りこぼさない・二重に置かないための固定。
+    /// エリア id ごとの所属を全 59 件そのまま書き出す(件数だけだと入れ替えを見逃す)。
+    #[test]
+    fn 全コンテンツがゲーム内の区分に1件ずつ属する() {
+        const EXPECTED: &[(&str, &[&str])] = &[
+            ("mercurial", &["ringo"]),
+            ("shinchou", &["shinchou_normal", "shinchou_hard"]),
+            ("abyss", &["abyss_normal", "abyss_hard", "abyss_hell"]),
+            ("eclipse", &[
+                "detachment_subjugation", "eclipse_boss", "eclipse_2", "aphetiria_normal",
+                "moon_queen_training", "eclipse_subjugation", "valley_defense",
+                "last_battle_1", "last_battle_2", "selinacos_h", "last_battle", "goitia_h",
+                "aphetiria_hard", "selinacos_ex", "goitia_ex", "aphetiria_ex",
+            ]),
+            ("core_master", &["luminous_ex", "abyss_ex"]),
+            ("vestige", &["vestige_ruins"]),
+            ("orlie", &["orlie_defense_hell"]),
+            ("siokan", &[
+                "brothers_forge", "siokan_boss_subjugation", "odin_total_war", "odin_rank",
+            ]),
+            ("rubicona", &[
+                "annoying_anger", "longed_pleasure", "chaotic_land", "colorless_land",
+                "architect_mine", "void_domain", "leitia_n", "architect_n",
+                "pleasure_afterimage", "leitia_h", "architect_h",
+            ]),
+            ("ancient_relic_sanctuary", &[
+                "relic_sanctuary_shinchou",
+                "relic_sanctuary_10", "relic_sanctuary_11", "relic_sanctuary_12",
+                "relic_sanctuary_13", "relic_sanctuary_14", "relic_sanctuary_15",
+                "relic_sanctuary_16", "relic_sanctuary_17", "relic_sanctuary_18",
+                "relic_sanctuary_19", "relic_sanctuary_kisinik",
+            ]),
+            // 所属を wiki で確定できなかったもの(フィールドボス・参加型レイド)。
+            // 確定したらここから該当エリアへ移す。
+            ("other", &[
+                "tutatur", "arklon_underground", "clamor", "chimera",
+                "lost_forest", "valley_soldier",
+            ]),
+        ];
+
+        let actual: Vec<(String, Vec<String>)> = content_areas()
+            .into_iter()
+            .map(|a| (a.id, a.contents.into_iter().map(|c| c.id).collect()))
+            .collect();
+        let expected: Vec<(String, Vec<String>)> = EXPECTED
+            .iter()
+            .map(|(id, ids)| {
+                ((*id).to_string(), ids.iter().map(|s| (*s).to_string()).collect())
+            })
+            .collect();
+        // 並び順もゲーム内の左メニュー順に固定する(Vec 同士の比較で順序ごと見る)
+        assert_eq!(actual, expected);
+        assert_eq!(all_contents().len(), 59, "コンテンツ総数が変わっている");
     }
 
     #[test]
