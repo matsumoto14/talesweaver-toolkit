@@ -17,9 +17,10 @@ import type {
 const DB_NAME = "tw-context";
 /**
  * スキーマ版。ストアを足す・作り直すときに上げ、`onupgradeneeded` で移行する。
- * いまは v1(初版)だけ。移行の枠組みは必要になってから足す。
+ * v2 でキャラに `goal_content_id`(ホームの「次の目標」)が加わった
+ * (SQLite 側の v13 と同じ移行。既存キャラは未設定 = 自動判定のまま)。
  */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const CHARACTERS = "characters";
 const BUFF_SETS = "buff_sets";
@@ -59,7 +60,7 @@ let connection: Promise<IDBDatabase> | null = null;
 function open(): Promise<IDBDatabase> {
   connection ??= new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, SCHEMA_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       // キーは SQLite の主キーと同じ列にする(取り出し順もそのまま id 昇順になる)
       if (!db.objectStoreNames.contains(CHARACTERS)) db.createObjectStore(CHARACTERS, { keyPath: "id" });
@@ -67,6 +68,19 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(ICONS)) db.createObjectStore(ICONS, { keyPath: "characterId" });
       if (!db.objectStoreNames.contains(SNAPSHOTS)) db.createObjectStore(SNAPSHOTS, { keyPath: "character_id" });
       if (!db.objectStoreNames.contains(COUNTERS)) db.createObjectStore(COUNTERS, { keyPath: "name" });
+      // v2: 既存キャラに「次の目標」を未設定(null)として足す。列の無い行を残して
+      // undefined のまま読ませない(SQLite 側の ALTER TABLE と同じ扱いに揃える)。
+      if (event.oldVersion > 0 && event.oldVersion < 2) {
+        const characters = request.transaction!.objectStore(CHARACTERS);
+        const cursorRequest = characters.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const row = cursor.value as Partial<RegisteredCharacter>;
+          if (row.goal_content_id === undefined) cursor.update({ ...row, goal_content_id: null });
+          cursor.continue();
+        };
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>

@@ -87,6 +87,7 @@ mod tests {
             equipment: domain::Equipment::default(),
             common_skills: domain::CommonSkills::default(),
             main_skill_id: None,
+            goal_content_id: None,
             default_buff_set_id: None,
         }
     }

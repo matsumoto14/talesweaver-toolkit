@@ -26,6 +26,11 @@ pub struct NewCharacter {
     #[serde(default)]
     pub common_skills: CommonSkills,
     pub main_skill_id: Option<String>,
+    /// ホームの「次の目標」に据えるコンテンツ(gamedata の `Content::id`)。
+    /// `None` はユーザーが決めていない状態で、そのときは画面が自動で選ぶ。
+    /// 「クリアできる」と「周回したい」は別なので、自動判定を置き換える例外操作として持つ。
+    #[serde(default)]
+    pub goal_content_id: Option<String>,
     #[serde(default)]
     pub default_buff_set_id: Option<i64>,
 }

@@ -1027,6 +1027,8 @@ export interface RegisteredCharacter {
   equipment: Equipment;
   /** 主軸スキル(攻撃力の依存種別を決める)。未選択は null */
   main_skill_id: string | null;
+  /** ホームの「次の目標」に据えるコンテンツ。未設定(null)なら自動で選ぶ */
+  goal_content_id: string | null;
   /** 共通スキル(wiki: Skill/共通) */
   common_skills: CommonSkills;
   default_buff_set_id: number | null;
@@ -1050,6 +1052,8 @@ export interface NewCharacter {
   /** 共通スキル(wiki: Skill/共通) */
   common_skills: CommonSkills;
   main_skill_id: string | null;
+  /** ホームの「次の目標」に据えるコンテンツ。未設定(null)なら自動で選ぶ */
+  goal_content_id: string | null;
   default_buff_set_id: number | null;
 }
 

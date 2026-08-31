@@ -130,6 +130,15 @@
       baseline.statSources.sacred_relic[k] = incomingValue;
       initialSnapshot = JSON.stringify(baseline);
     }
+    // --- ホームの「次の目標」。この画面には編集する場所が無いので、条件なしで最新に追随する。
+    //     追随させないと、ホームで目標を選んだ直後にこの画面が保存したときに巻き戻る。 ---
+    const incomingGoal = character.goal_content_id ?? "";
+    if (incomingGoal !== draft.goalContentId) {
+      draft.goalContentId = incomingGoal;
+      const baseline = JSON.parse(initialSnapshot) as Draft;
+      baseline.goalContentId = incomingGoal;
+      initialSnapshot = JSON.stringify(baseline);
+    }
   });
 
   let saving = $state(false);

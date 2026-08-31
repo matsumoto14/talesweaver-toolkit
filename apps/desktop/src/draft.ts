@@ -37,6 +37,12 @@ export interface Draft {
   commonSkills: CommonSkills;
   /** 主軸スキル(攻撃力の依存種別を決める)。"" = 未選択 */
   mainSkillId: string;
+  /**
+   * ホームの「次の目標」。"" = 未設定(自動で選ぶ)。
+   * キャラタブでは編集しないが、保存はキャラ全体の上書きなので**必ず持ち回る** —
+   * ここから落とすとキャラタブを保存した瞬間にホームで選んだ目標が消える。
+   */
+  goalContentId: string;
   defaultBuffSetId: number | null;
 }
 
@@ -124,6 +130,7 @@ export const buildDraft = (c: RegisteredCharacter): Draft => ({
   equipment: cloneEquipment(c.equipment),
   commonSkills: cloneCommonSkills(c.common_skills),
   mainSkillId: c.main_skill_id ?? "",
+  goalContentId: c.goal_content_id ?? "",
   defaultBuffSetId: c.default_buff_set_id,
 });
 
@@ -137,5 +144,6 @@ export const draftToPayload = (draft: Draft): NewCharacter => ({
   equipment: cloneEquipment(draft.equipment),
   common_skills: cloneCommonSkills(draft.commonSkills),
   main_skill_id: draft.mainSkillId === "" ? null : draft.mainSkillId,
+  goal_content_id: draft.goalContentId === "" ? null : draft.goalContentId,
   default_buff_set_id: draft.defaultBuffSetId,
 });

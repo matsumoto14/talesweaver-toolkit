@@ -34,6 +34,9 @@ pub struct RegisteredCharacter {
     /// 主軸スキル(gamedata の `Skill::id`)。攻撃力(A)の依存種別を決める。
     /// スキル未収録のキャラがあるので未選択(`None`)を許す
     pub main_skill_id: Option<String>,
+    /// ホームの「次の目標」に据えるコンテンツ(gamedata の `Content::id`)。
+    /// 未設定(`None`)なら画面が自動で選ぶ。
+    pub goal_content_id: Option<String>,
     /// このキャラで計算時に最初に選ぶバフセット。
     pub default_buff_set_id: Option<i64>,
     /// 最終保存日時(ISO8601 UTC)。v11 未満で作られた既存行は NULL(表示しない)。
@@ -69,9 +72,10 @@ CREATE TABLE IF NOT EXISTS characters (
 /// v11 で `characters.updated_at`(最終保存日時)と `damage_snapshots` テーブルが加わり、
 /// v12 で登録キャラごとの表示画像 `character_icons` が加わった。
 /// (ホームの影響カード用。docs/claude/goals 参照)。
-const SCHEMA_VERSION: i64 = 12;
+/// v13 で `goal_content_id`(ホームの「次の目標」をユーザーが選んだときの保存先)が加わった。
+const SCHEMA_VERSION: i64 = 13;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id, updated_at";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, goal_content_id, default_buff_set_id, updated_at";
 
 /// v9: キャラ JSON に埋め込まれていた常用バフを独立したセットへ移す。
 /// 1キャラずつ作り、同じ内容でも統合しない。全処理を単一 transaction にする。
@@ -779,6 +783,10 @@ impl CharacterRepository {
         if !existing_columns.contains("main_skill_id") {
             conn.execute_batch("ALTER TABLE characters ADD COLUMN main_skill_id TEXT;")?;
         }
+        // v13: ホームの「次の目標」。既存キャラは未設定(NULL)= 自動判定のままで読める。
+        if !existing_columns.contains("goal_content_id") {
+            conn.execute_batch("ALTER TABLE characters ADD COLUMN goal_content_id TEXT;")?;
+        }
         // v6: 共通スキル。既存キャラは `{}`(全部未習得)で読める。
         if !existing_columns.contains("common_skills") {
             conn.execute_batch(
@@ -826,8 +834,8 @@ impl CharacterRepository {
         let equipment_json = serde_json::to_string(&new.equipment)?;
         let common_skills_json = serde_json::to_string(&new.common_skills)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, default_buff_set_id, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, goal_content_id, default_buff_set_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
             params![
                 new.name,
                 new.game_character_id,
@@ -844,6 +852,7 @@ impl CharacterRepository {
                 equipment_json,
                 common_skills_json,
                 new.main_skill_id,
+                new.goal_content_id,
                 new.default_buff_set_id,
             ],
         )?;
@@ -880,9 +889,10 @@ impl CharacterRepository {
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
                 awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
-                common_skills = ?14, main_skill_id = ?15, default_buff_set_id = ?16,
+                common_skills = ?14, main_skill_id = ?15, goal_content_id = ?16,
+                default_buff_set_id = ?17,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-             WHERE id = ?17",
+             WHERE id = ?18",
             params![
                 update.name,
                 update.game_character_id,
@@ -899,6 +909,7 @@ impl CharacterRepository {
                 equipment_json,
                 common_skills_json,
                 update.main_skill_id,
+                update.goal_content_id,
                 update.default_buff_set_id,
                 id,
             ],
@@ -1016,6 +1027,7 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         equipment: row.get::<_, EquipmentColumn>("equipment")?.0,
         common_skills: row.get::<_, CommonSkillsColumn>("common_skills")?.0,
         main_skill_id: row.get("main_skill_id")?,
+        goal_content_id: row.get("goal_content_id")?,
         default_buff_set_id: row.get("default_buff_set_id")?,
         updated_at: row.get("updated_at")?,
     })
@@ -1038,7 +1050,7 @@ mod tests {
         repo.conn.execute_batch("DROP TABLE character_icons; PRAGMA user_version = 11;").unwrap();
         let conn = repo.conn;
         let migrated = CharacterRepository::from_connection(conn).unwrap();
-        assert_eq!(migrated.conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0)).unwrap(), 12);
+        assert_eq!(migrated.conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0)).unwrap(), SCHEMA_VERSION);
         assert_eq!(migrated.conn.query_row("SELECT name FROM characters", [], |row| row.get::<_, String>(0)).unwrap(), "既存");
         assert_eq!(migrated.conn.query_row("SELECT count(*) FROM character_icons", [], |row| row.get::<_, i64>(0)).unwrap(), 0);
     }
@@ -1261,6 +1273,7 @@ mod tests {
             equipment: Equipment::default(),
             common_skills: CommonSkills::default(),
             main_skill_id: None,
+            goal_content_id: None,
             default_buff_set_id: None,
         }
     }
@@ -1891,6 +1904,84 @@ mod tests {
             .update(created.id, &cleared, &[], &[], &[], &[], &[], &[])
             .unwrap();
         assert_eq!(updated.main_skill_id, None);
+    }
+
+    #[test]
+    fn goal_content_idは往復し未設定はnullで読める() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("目標");
+        c.goal_content_id = Some("relic-sanctuary-15".to_string());
+        let created = repo.create(&c, &[], &[], &[], &[], &[], &[]).unwrap();
+        assert_eq!(created.goal_content_id.as_deref(), Some("relic-sanctuary-15"));
+        assert_eq!(
+            repo.get(created.id).unwrap().goal_content_id.as_deref(),
+            Some("relic-sanctuary-15")
+        );
+
+        // 「自動で選ぶ」に戻す = None を保存できること(自動をやめないための出口)。
+        let mut cleared = c.clone();
+        cleared.goal_content_id = None;
+        let updated = repo
+            .update(created.id, &cleared, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(updated.goal_content_id, None);
+    }
+
+    /// v12 の DB(`goal_content_id` 列が無い)を開いても既存キャラは壊れず、目標は未設定で読める。
+    #[test]
+    fn goal_content_id列の無いv12dbを開くと既存キャラは未設定で読める() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id)
+            VALUES ('v12データ', 'boris', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'boris_goku_zaneizan');
+            PRAGMA user_version = 12;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let list = repo.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "v12データ");
+        // 既存の値は壊れない
+        assert_eq!(list[0].main_skill_id.as_deref(), Some("boris_goku_zaneizan"));
+        assert_eq!(list[0].base_stats.stab, 300);
+        // 目標は未設定 = 自動判定のまま
+        assert_eq!(list[0].goal_content_id, None);
+
+        // 移行後の行も含めて create/update が使えること。
+        let created = repo
+            .create(&new_character("追加データ"), &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(created.goal_content_id, None);
+        let mut existing = new_character("v12データ");
+        existing.goal_content_id = Some("relic-sanctuary-15".to_string());
+        let updated = repo
+            .update(list[0].id, &existing, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(updated.goal_content_id.as_deref(), Some("relic-sanctuary-15"));
     }
 
     /// v4 の DB(`main_skill_id` 列が無い)を開いても落ちず、既存キャラは主軸スキル未選択で読める。

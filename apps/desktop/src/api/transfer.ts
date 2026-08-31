@@ -102,6 +102,7 @@ export async function importAll(file: TransferFile): Promise<ImportResult> {
       equipment: character.equipment,
       common_skills: character.common_skills,
       main_skill_id: character.main_skill_id,
+      goal_content_id: character.goal_content_id,
       default_buff_set_id: null,
     };
     const created = await createCharacter(draft);

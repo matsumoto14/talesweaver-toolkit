@@ -68,6 +68,8 @@
           equipment: defaultEquipment(),
           common_skills: defaultCommonSkills(),
           main_skill_id: mainSkillId === "" ? null : mainSkillId,
+          // 「次の目標」は登録時には決めない。ホームが自動で選び、要るときだけ上書きする
+          goal_content_id: null,
         };
       }
       const saved = await createCharacter(payload);
