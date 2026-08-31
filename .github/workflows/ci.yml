@@ -17,6 +17,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Web 版の道を閉じないための番人(下の wasm ビルドで使う)
+          targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -34,6 +37,12 @@ jobs:
 
       - name: Rust のテスト
         run: cargo test --workspace
+
+      # 計算(domain / gamedata)はブラウザでも動かせる状態を保つ。OS や DB に依存する
+      # コードが混ざるとここで落ちる。保存(crates/storage)は rusqlite なので対象外で、
+      # Web 版を出すときは別実装になる(docs/architecture.md)
+      - name: 計算部分が wasm でビルドできる
+        run: cargo check -p domain -p gamedata --target wasm32-unknown-unknown
 
       # `cargo fmt --check` / `clippy -D warnings` は既存コードが通らないので入れていない。
       # 入れるなら、まず一括整形の commit を単独で切ること。

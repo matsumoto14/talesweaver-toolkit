@@ -46,6 +46,13 @@
 ### crates/storage — ユーザーデータ(SQLite)
 
 - 登録キャラ・バフセット・設定のみ。静的データは入れない(この分離が Web/モバイル展開時の差し替え範囲を最小化する)
+- **Web 版に持っていける範囲**(2026-08-31 時点): `domain` の依存は `serde` + `thiserror`、
+  `gamedata` は `serde` + `domain` だけで、OS にも DB にも触っていないので **wasm32 でそのままビルドできる**
+  (CI が毎回確かめる)。画面も無改造で、差し替えるのは `api/commands.ts` の `invoke` だけ
+  (44 コマンドすべてがこの 1 ファイルを通る)。
+  **書き直しが要るのは保存だけ** — `crates/storage` は `rusqlite` なので wasm では動かない。
+  Web 版はブラウザ側(localStorage / IndexedDB)に持つことになり、デスクトップとデータは
+  行き来しないので、出すならエクスポート / インポートが要る
 - `buff_sets` は名前と `BuffSelection` を持ち、`characters.default_buff_set_id` は「いつものセット」だけを参照する。計算時は `StatSources` とバフ選択を別引数で domain へ渡す
 - `character_icons` は登録キャラごとの任意画像を128×128 PNGのBLOBで持つ。`characters` 削除時にCASCADEし、ゲーム内キャラの静的アイコンやdomainモデルには混ぜない
 - domain の型との変換はここで行う。domain は SQLite を知らない
