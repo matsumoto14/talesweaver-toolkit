@@ -7,3 +7,4 @@ __pycache__/
 .agents/
 apps/desktop/dist-web/
 crates/web/pkg/
+.wrangler/
