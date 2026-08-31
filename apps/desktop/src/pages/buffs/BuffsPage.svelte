@@ -170,8 +170,16 @@
   });
 
   /** 対象ステの段を「このキャラで効く順」に並べる。効きが同じなら STAT_KINDS の順で安定させる。
-   *  効きの計算はドメイン(buff_target_stat_gains)。ここでやるのは並べ替えと見せ方だけ。 */
+   *  効きの計算はドメイン(buff_target_stat_gains)。ここでやるのは並べ替えと見せ方だけ。
+   *
+   *  ただし**複数ステを選ぶバフ(クラブ効果)は常に STAT_KINDS の順**で置く。効き順にすると、
+   *  1 つ選んだ瞬間に残りの効きが変わって段が並び替わり、次に押したい段が別の場所へ動く
+   *  (§00 03: 押した場所は動かない)。値の行(.per-stat)も STAT_KINDS 順なので、
+   *  段と行の並びがそのまま対応する。 */
   function statOptionsFor(def: BuffDefinition) {
+    if (isMultiTarget(def.target)) {
+      return STAT_KINDS.map((kind) => ({ value: kind, label: STAT_LABELS[kind] }));
+    }
     const gains = targetStatGains[def.id];
     const gainOf = (kind: StatKind) => gains?.find((g) => g.kind === kind)?.gain ?? null;
     const order = [...STAT_KINDS].sort((a, b) => {
@@ -908,8 +916,9 @@
   }
   .buff-option { position: relative; min-width: 0; height: 100%; border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); overflow: hidden; }
   .buff-option.on { border-color: var(--sel-bd); background: var(--sel-card); box-shadow: inset 0 0 0 1px var(--sel-bd); }
-  /* 「ほか n」のポップオーバーはチップの外(下)へはみ出すので、開いている間だけ
-     overflow:hidden を外して見えるようにする(§00 03: 押した場所は動かさない = 隣のチップは押し出さない)。 */
+  /* 重なりものはチップの外(下)へはみ出すので、開いている間だけ overflow:hidden を外す。
+     チップ一覧そのもの(.chips)のスクロール枠を越える分は ui/popover.ts が fixed に
+     置き換えて逃がす(§00 03: 押した場所は動かさない = 隣のチップは押し出さない)。 */
   .buff-option.info-open { overflow: visible; z-index: 7; }
   .buff-icon { position: absolute; z-index: 1; top: 16px; left: 7px; width: 28px; height: 28px; transition: top .2s ease; }
   .buff-toggle { position: relative; width: 100%; height: 100%; padding: 6px 7px 6px 48px; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--fg); text-align: left; cursor: pointer; }
@@ -942,9 +951,10 @@
   .editor-popover { gap: 7px; }
   .editor-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; padding-top: 6px; border-top: 1px solid var(--border-soft); }
   .choice-editor { padding: 7px; display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--bg-field); box-shadow: inset 0 1px #fff; }
-  /* 選んだステごとの値。1 ステで幅いっぱいのバーにすると数値 1 つに面積を使いすぎるので
-     2 列に畳む。重なりものの中なので、増えて伸びても下のチップは動かない */
-  .per-stat { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+  /* 選んだステごとの値。**1 ステ 1 行**で積む — 2 列に畳むとチップ幅(272px)では
+     ラベル・数値欄・MAX が重なって読めなかった(実機報告)。行が増えて伸びた分は
+     ui/popover.ts が置き直す(上に開く / 収まる高さでスクロール)ので、下のチップは動かない */
+  .per-stat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .chip-copy { min-width: 0; flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: center; }
   .chip-copy strong, .chip-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chip-head { flex: none; height: 16px; display: flex; align-items: center; gap: 6px; }

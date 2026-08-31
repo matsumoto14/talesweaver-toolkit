@@ -366,6 +366,8 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 /* トリガの直下に重なるもの(§09 規則 3: 周りを押さない / 閉じたら何も動かない)。
    面だけをここで決め、どこに出すか(left/right/top)は置く場所ごとに指定する。
    画面外へのフリップは ui/popover.ts の action が .flip-up を付けて行う。 */
+/* 置き場所は ui/popover.ts が決める(開いたあと fixed に置き換えて、スクロールする一覧の
+   枠に切られないようにする)。ここでは CSS で「トリガ直下」の初期位置と見た目だけを持つ */
 .popover {
   position: absolute; z-index: 6;
   display: flex; flex-direction: column; gap: 3px; padding: 8px 9px;
@@ -373,7 +375,6 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
   background: var(--bg-field); box-shadow: var(--shadow-pop);
   color: var(--fg); font-size: 9px; cursor: default;
 }
-.popover.flip-up { top: auto; bottom: calc(100% + 4px); }
 /* 重なりものを閉じる小さなボタン */
 .popover-close {
   align-self: flex-end; margin-top: 2px; padding: 2px 8px;
