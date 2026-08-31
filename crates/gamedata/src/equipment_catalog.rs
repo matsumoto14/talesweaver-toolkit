@@ -35,8 +35,8 @@ pub const ENHANCE_SOURCE: Source = Source {
 /// 武器アビリティ(装備システム/アビリティ)の出典。
 pub const EQUIPMENT_ABILITY_SOURCE: Source = Source {
     page: "装備システム/アビリティ",
-    retrieved_on: "2026-08-27",
-    note: "武器3スロット。カテゴリー1/3は旧装着アビリティ、カテゴリー4は新装着アビリティページ。追加効果は自動適用しない",
+    retrieved_on: "2026-09-01",
+    note: "武器3スロット。カテゴリー1/3は旧装着アビリティ。カテゴリー4は装備システムUIのN-/R-/L-/E-系と、新装着アビリティページのアイテム方式(夜星など)の2経路。ランダム追加効果は自動適用しない",
 };
 
 /// 武器種(wiki: 装備システム/装備強化「系統」表の該当武器)。
@@ -2128,7 +2128,11 @@ pub fn item_damage_contributions(
             item.damage_dependency
                 .is_none_or(|required| required == dependency)
         })
-        .flat_map(|item| item.damage_effects.iter().map(move |e| (item.name.to_string(), e)))
+        .flat_map(|item| {
+            item.damage_effects
+                .iter()
+                .map(move |e| (item.name.to_string(), e))
+        })
         .collect();
     domain::damage_contributions(effects.into_iter())
 }
@@ -2479,6 +2483,100 @@ fn fixed_slot_ability(
     def.additional_options.clear();
     def
 }
+
+/// 防具アビリティの単一補正。武器の `a` と同じで、要約と値がずれないよう 1 か所に寄せる。
+fn pd(physical_defense: i64) -> EquipmentValues {
+    EquipmentValues {
+        physical_defense,
+        ..EquipmentValues::default()
+    }
+}
+fn md(magic_defense: i64) -> EquipmentValues {
+    EquipmentValues {
+        magic_defense,
+        ..EquipmentValues::default()
+    }
+}
+fn ev(evasion: i64) -> EquipmentValues {
+    EquipmentValues {
+        evasion,
+        ..EquipmentValues::default()
+    }
+}
+fn cr(critical: i64) -> EquipmentValues {
+    EquipmentValues {
+        critical,
+        ..EquipmentValues::default()
+    }
+}
+fn ac(accuracy: i64) -> EquipmentValues {
+    EquipmentValues {
+        accuracy,
+        ..EquipmentValues::default()
+    }
+}
+
+/// 装備システム UI から付けるカテゴリー4(N- / R- / L- / E- 系)。
+/// アビリティアイテム方式(夜星など)と違い「追加効果」列は表で固定なので、
+/// ランダム追加枠を持たない。追加効果のうち計算へ入るのはダメージ増加(X3)だけで、
+/// 防御率・回避率は `EquipmentAbilityDef` に受け皿が無い(装備アイテム側の
+/// `survival_effects` にしかない)ため、要約の文言としてだけ残す。
+fn ui_category4(
+    id: &'static str,
+    name: &'static str,
+    slot: PartSlot,
+    family: EquipmentAbilityFamily,
+    group: &'static str,
+    values: EquipmentValues,
+    effect_summary: &'static str,
+    record_only: bool,
+    damage_effects: &'static [SkillEffect],
+) -> EquipmentAbilityDef {
+    let mut def = slot_ability(
+        id,
+        name,
+        slot,
+        family,
+        group,
+        values,
+        effect_summary,
+        record_only,
+        damage_effects,
+    );
+    def.value_option = None;
+    def.additional_slots = 0;
+    def.additional_effects = "";
+    def.additional_options.clear();
+    def
+}
+
+/// 追加効果を持たない段(N- など)。同じタプル配列に並べるための空スライス。
+const NO_EFFECTS: &[SkillEffect] = &[];
+
+const HELM_SKILL_1: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::SkillMultiplierFixed,
+    percent: 1.0,
+}];
+
+const HELM_SKILL_5: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::SkillMultiplierFixed,
+    percent: 5.0,
+}];
+
+/// 「ダメージ増加 +n%」はカテゴリX3(攻撃ダメージ(基本発動)・上限 +80%)に入る。
+/// X3 の説明に「武器/手アビリティ」と名指しがあるので、装備攻撃力ではなくこちらへ足す。
+const ATTACK_DAMAGE_X3_3: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageBasicTrigger,
+    percent: 3.0,
+}];
+const ATTACK_DAMAGE_X3_4: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageBasicTrigger,
+    percent: 4.0,
+}];
+const ATTACK_DAMAGE_X3_6: &[SkillEffect] = &[SkillEffect::Damage {
+    category: DamageCategory::AttackDamageBasicTrigger,
+    percent: 6.0,
+}];
 
 const HELM_SKILL_10: &[SkillEffect] = &[SkillEffect::Damage {
     category: DamageCategory::SkillMultiplierFixed,
@@ -3037,6 +3135,581 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
             &[],
         ));
     }
+
+    // 装備システム/アビリティ カテゴリー4(N- / R- / L- / E- 系)。装備システム UI から
+    // SEED で付ける現行の等級ラダーで、上の夜星系(アビリティアイテム方式)とは入手経路が別。
+    // 表の 1 列目(効果)を装備補正へ入れ、2 列目(追加効果)はダメージ増加だけ X3 へ入れる。
+    // 最大HP/最大MP・移動速度・属性は `EquipmentValues` に受け皿が無いので record_only。
+    for (id, name, summary, effects) in [
+        (
+            "helm-r-skill-attack",
+            "R-スキル攻撃力増加",
+            "スキル攻撃力 +1",
+            HELM_SKILL_1,
+        ),
+        (
+            "helm-l-skill-attack",
+            "L-スキル攻撃力増加",
+            "スキル攻撃力 +5",
+            HELM_SKILL_5,
+        ),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Helm,
+            EquipmentAbilityFamily::SkillAttack,
+            "helm-skill-attack",
+            EquipmentValues::default(),
+            summary,
+            false,
+            effects,
+        ));
+    }
+
+    for (id, name, family, values, summary, record_only) in [
+        (
+            "n-armor-polish",
+            "N-鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            pd(15),
+            "物防 +15",
+            false,
+        ),
+        (
+            "r-armor-polish",
+            "R-鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            pd(17),
+            "物防 +17・防御率 +5%",
+            false,
+        ),
+        (
+            "l-armor-polish",
+            "L-鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            pd(19),
+            "物防 +19・防御率 +5%",
+            false,
+        ),
+        (
+            "e-armor-polish",
+            "E-鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            pd(30),
+            "物防 +30・防御率 +6%",
+            false,
+        ),
+        (
+            "n-magic-resistance-armor",
+            "N-魔法耐性・鎧",
+            EquipmentAbilityFamily::MagicResistance,
+            md(16),
+            "魔防 +16",
+            false,
+        ),
+        (
+            "r-magic-resistance-armor",
+            "R-魔法耐性・鎧",
+            EquipmentAbilityFamily::MagicResistance,
+            md(18),
+            "魔防 +18・防御率 +5%",
+            false,
+        ),
+        (
+            "l-magic-resistance-armor",
+            "L-魔法耐性・鎧",
+            EquipmentAbilityFamily::MagicResistance,
+            md(23),
+            "魔防 +23・防御率 +5%",
+            false,
+        ),
+        (
+            "e-magic-resistance-armor",
+            "E-魔法耐性・鎧",
+            EquipmentAbilityFamily::MagicResistance,
+            md(30),
+            "魔防 +30・防御率 +6%",
+            false,
+        ),
+        (
+            "n-evasion-armor",
+            "N-機敏",
+            EquipmentAbilityFamily::Evasion,
+            ev(4),
+            "回避 +4",
+            false,
+        ),
+        (
+            "r-evasion-armor",
+            "R-機敏",
+            EquipmentAbilityFamily::Evasion,
+            ev(5),
+            "回避 +5・回避率 +3%",
+            false,
+        ),
+        (
+            "l-evasion-armor",
+            "L-機敏",
+            EquipmentAbilityFamily::Evasion,
+            ev(6),
+            "回避 +6・回避率 +4%",
+            false,
+        ),
+        (
+            "e-evasion-armor",
+            "E-機敏",
+            EquipmentAbilityFamily::Evasion,
+            ev(7),
+            "回避 +7・回避率 +5%",
+            false,
+        ),
+        (
+            "n-vitality-armor",
+            "N-生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +300",
+            true,
+        ),
+        (
+            "r-vitality-armor",
+            "R-生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +330",
+            true,
+        ),
+        (
+            "l-vitality-armor",
+            "L-生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +350",
+            true,
+        ),
+        (
+            "e-vitality-armor",
+            "E-生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +1,000",
+            true,
+        ),
+        (
+            "n-mana-armor",
+            "N-マナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +200",
+            true,
+        ),
+        (
+            "r-mana-armor",
+            "R-マナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +225",
+            true,
+        ),
+        (
+            "l-mana-armor",
+            "L-マナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +250",
+            true,
+        ),
+        (
+            "e-mana-armor",
+            "E-マナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +1,000",
+            true,
+        ),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Armor,
+            family,
+            "armor-ability",
+            values,
+            summary,
+            record_only,
+            &[],
+        ));
+    }
+
+    for (id, name, family, values, summary, effects) in [
+        (
+            "n-pointed-blade",
+            "N-尖った刃",
+            EquipmentAbilityFamily::PointedBlade,
+            a(6, 0, 0, 0),
+            "突き +6",
+            NO_EFFECTS,
+        ),
+        (
+            "r-pointed-blade",
+            "R-尖った刃",
+            EquipmentAbilityFamily::PointedBlade,
+            a(7, 0, 0, 0),
+            "突き +7・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "l-pointed-blade",
+            "L-尖った刃",
+            EquipmentAbilityFamily::PointedBlade,
+            a(8, 0, 0, 0),
+            "突き +8・与ダメ +4%",
+            ATTACK_DAMAGE_X3_4,
+        ),
+        (
+            "e-pointed-blade",
+            "E-尖った刃",
+            EquipmentAbilityFamily::PointedBlade,
+            a(9, 0, 0, 0),
+            "突き +9・与ダメ +6%",
+            ATTACK_DAMAGE_X3_6,
+        ),
+        (
+            "n-sharp-blade",
+            "N-鋭い刃",
+            EquipmentAbilityFamily::SharpBlade,
+            a(0, 6, 0, 0),
+            "斬り +6",
+            NO_EFFECTS,
+        ),
+        (
+            "r-sharp-blade",
+            "R-鋭い刃",
+            EquipmentAbilityFamily::SharpBlade,
+            a(0, 7, 0, 0),
+            "斬り +7・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "l-sharp-blade",
+            "L-鋭い刃",
+            EquipmentAbilityFamily::SharpBlade,
+            a(0, 8, 0, 0),
+            "斬り +8・与ダメ +4%",
+            ATTACK_DAMAGE_X3_4,
+        ),
+        (
+            "e-sharp-blade",
+            "E-鋭い刃",
+            EquipmentAbilityFamily::SharpBlade,
+            a(0, 9, 0, 0),
+            "斬り +9・与ダメ +6%",
+            ATTACK_DAMAGE_X3_6,
+        ),
+        (
+            "n-intelligence",
+            "N-知力",
+            EquipmentAbilityFamily::Intelligence,
+            a(0, 0, 6, 0),
+            "魔攻 +6",
+            NO_EFFECTS,
+        ),
+        (
+            "r-intelligence",
+            "R-知力",
+            EquipmentAbilityFamily::Intelligence,
+            a(0, 0, 7, 0),
+            "魔攻 +7・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "l-intelligence",
+            "L-知力",
+            EquipmentAbilityFamily::Intelligence,
+            a(0, 0, 8, 0),
+            "魔攻 +8・与ダメ +4%",
+            ATTACK_DAMAGE_X3_4,
+        ),
+        (
+            "e-intelligence",
+            "E-知力",
+            EquipmentAbilityFamily::Intelligence,
+            a(0, 0, 9, 0),
+            "魔攻 +9・与ダメ +6%",
+            ATTACK_DAMAGE_X3_6,
+        ),
+        (
+            "n-magic-resistance",
+            "N-耐魔力",
+            EquipmentAbilityFamily::MagicResistance,
+            a(0, 0, 0, 6),
+            "魔防 +6",
+            NO_EFFECTS,
+        ),
+        (
+            "r-magic-resistance",
+            "R-耐魔力",
+            EquipmentAbilityFamily::MagicResistance,
+            a(0, 0, 0, 7),
+            "魔防 +7・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "l-magic-resistance",
+            "L-耐魔力",
+            EquipmentAbilityFamily::MagicResistance,
+            a(0, 0, 0, 8),
+            "魔防 +8・与ダメ +4%",
+            ATTACK_DAMAGE_X3_4,
+        ),
+        (
+            "e-magic-resistance",
+            "E-耐魔力",
+            EquipmentAbilityFamily::MagicResistance,
+            a(0, 0, 0, 9),
+            "魔防 +9・与ダメ +6%",
+            ATTACK_DAMAGE_X3_6,
+        ),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Weapon,
+            family,
+            "weapon-category-4",
+            values,
+            summary,
+            false,
+            effects,
+        ));
+    }
+
+    // 失われた魂は本体効果が最大HPで計算へ入らない。破線(record_only)で出す以上、
+    // 追加効果のダメージ増加だけをこっそり合計へ混ぜると表示と食い違うので入れない。
+    for (id, name, summary) in [
+        ("n-lost-soul", "N-失われた魂", "最大HP +1,000・与ダメ +4%"),
+        ("r-lost-soul", "R-失われた魂", "最大HP +2,000・与ダメ +5%"),
+        ("l-lost-soul", "L-失われた魂", "最大HP +4,000・与ダメ +6%"),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Weapon,
+            EquipmentAbilityFamily::Vitality,
+            "weapon-category-4",
+            EquipmentValues::default(),
+            summary,
+            true,
+            &[],
+        ));
+    }
+
+    for (id, name, family, values, summary) in [
+        (
+            "n-shield-polish",
+            "N-盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            pd(13),
+            "物防 +13",
+        ),
+        (
+            "r-shield-polish",
+            "R-盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            pd(14),
+            "物防 +14・防御率 +4%",
+        ),
+        (
+            "l-shield-polish",
+            "L-盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            pd(15),
+            "物防 +15・防御率 +4%",
+        ),
+        (
+            "e-shield-polish",
+            "E-盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            pd(16),
+            "物防 +16・防御率 +5%",
+        ),
+        (
+            "n-magic-resistance-shield",
+            "N-魔法耐性・盾",
+            EquipmentAbilityFamily::MagicResistance,
+            md(4),
+            "魔防 +4",
+        ),
+        (
+            "r-magic-resistance-shield",
+            "R-魔法耐性・盾",
+            EquipmentAbilityFamily::MagicResistance,
+            md(5),
+            "魔防 +5・防御率 +4%",
+        ),
+        (
+            "l-magic-resistance-shield",
+            "L-魔法耐性・盾",
+            EquipmentAbilityFamily::MagicResistance,
+            md(6),
+            "魔防 +6・防御率 +4%",
+        ),
+        (
+            "e-magic-resistance-shield",
+            "E-魔法耐性・盾",
+            EquipmentAbilityFamily::MagicResistance,
+            md(7),
+            "魔防 +7・防御率 +5%",
+        ),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Shield,
+            family,
+            "shield-ability",
+            values,
+            summary,
+            false,
+            &[],
+        ));
+    }
+
+    // 月石は最上位(G-)だけ既収録だった。属性値は装備補正 9 値に無いので record_only。
+    for (id, name, summary) in [
+        ("n-fire-moonstone", "N-火の月石", "火属性 +5"),
+        ("r-fire-moonstone", "R-火の月石", "火属性 +10"),
+        ("l-fire-moonstone", "L-火の月石", "火属性 +15"),
+        ("n-water-moonstone", "N-水の月石", "水属性 +5"),
+        ("r-water-moonstone", "R-水の月石", "水属性 +10"),
+        ("l-water-moonstone", "L-水の月石", "水属性 +15"),
+        ("n-wind-moonstone", "N-風の月石", "風属性 +5"),
+        ("r-wind-moonstone", "R-風の月石", "風属性 +10"),
+        ("l-wind-moonstone", "L-風の月石", "風属性 +15"),
+        ("n-earth-moonstone", "N-土の月石", "土属性 +5"),
+        ("r-earth-moonstone", "R-土の月石", "土属性 +10"),
+        ("l-earth-moonstone", "L-土の月石", "土属性 +15"),
+        ("n-lightning-moonstone", "N-雷の月石", "雷属性 +5"),
+        ("r-lightning-moonstone", "R-雷の月石", "雷属性 +10"),
+        ("l-lightning-moonstone", "L-雷の月石", "雷属性 +15"),
+        ("n-white-moonstone", "N-白の月石", "白属性 +5"),
+        ("r-white-moonstone", "R-白の月石", "白属性 +10"),
+        ("l-white-moonstone", "L-白の月石", "白属性 +15"),
+        ("n-dark-moonstone", "N-黒の月石", "黒属性 +5"),
+        ("r-dark-moonstone", "R-黒の月石", "黒属性 +10"),
+        ("l-dark-moonstone", "L-黒の月石", "黒属性 +15"),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Head,
+            EquipmentAbilityFamily::Element,
+            "head-element",
+            EquipmentValues::default(),
+            summary,
+            true,
+            &[],
+        ));
+    }
+
+    for (id, name, family, values, summary, effects) in [
+        (
+            "n-critical-hand",
+            "N-致命打",
+            EquipmentAbilityFamily::Critical,
+            cr(4),
+            "クリティカル +4",
+            NO_EFFECTS,
+        ),
+        (
+            "r-critical-hand",
+            "R-致命打",
+            EquipmentAbilityFamily::Critical,
+            cr(5),
+            "クリティカル +5・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "l-critical-hand",
+            "L-致命打",
+            EquipmentAbilityFamily::Critical,
+            cr(6),
+            "クリティカル +6・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "e-critical-hand",
+            "E-致命打",
+            EquipmentAbilityFamily::Critical,
+            cr(7),
+            "クリティカル +7・与ダメ +4%",
+            ATTACK_DAMAGE_X3_4,
+        ),
+        (
+            "n-accuracy-hand",
+            "N-的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            ac(4),
+            "命中 +4",
+            NO_EFFECTS,
+        ),
+        (
+            "r-accuracy-hand",
+            "R-的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            ac(5),
+            "命中 +5・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "l-accuracy-hand",
+            "L-的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            ac(6),
+            "命中 +6・与ダメ +3%",
+            ATTACK_DAMAGE_X3_3,
+        ),
+        (
+            "e-accuracy-hand",
+            "E-的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            ac(7),
+            "命中 +7・与ダメ +4%",
+            ATTACK_DAMAGE_X3_4,
+        ),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Hand,
+            family,
+            "hand-ability",
+            values,
+            summary,
+            false,
+            effects,
+        ));
+    }
+
+    for (id, name, summary) in [
+        ("r-agility-leg", "R-敏捷", "移動速度 +1・回避率 +1%"),
+        ("l-agility-leg", "L-敏捷", "移動速度 +2・回避率 +2%"),
+        ("e-agility-leg", "E-敏捷", "移動速度 +3・回避率 +3%"),
+    ] {
+        out.push(ui_category4(
+            id,
+            name,
+            PartSlot::Leg,
+            EquipmentAbilityFamily::Agility,
+            "leg-ability",
+            EquipmentValues::default(),
+            summary,
+            true,
+            &[],
+        ));
+    }
+
     out
 }
 
@@ -3046,15 +3719,20 @@ mod tests {
 
     /// テスト用: `DamageContribution` を (カテゴリ, 値) に落として比較しやすくする。
     fn pairs(contributions: &[domain::DamageContribution]) -> Vec<(DamageCategory, f64)> {
-        contributions.iter().map(|c| (c.category, c.value)).collect()
+        contributions
+            .iter()
+            .map(|c| (c.category, c.value))
+            .collect()
     }
 
     /// 追加アビリティは抽選結果なので、登録した基本アビリティから自動適用しない。
+    /// カテゴリー4でもランダム追加枠を持つのはアビリティアイテム方式(夜星系)だけで、
+    /// 装備システム UI の N-/R-/L-/E- 系は表で追加効果が決まっているため枠を持たない。
     #[test]
     fn 追加アビリティは説明だけを持ち自動計算しない() {
         for def in equipment_abilities()
             .into_iter()
-            .filter(|d| d.slot == PartSlot::Weapon && d.category == 4)
+            .filter(|d| d.slot == PartSlot::Weapon && d.category == 4 && d.additional_slots > 0)
         {
             assert!(def.damage_effects.is_empty(), "{}", def.id);
             assert_eq!(def.additional_slots, 2, "{}", def.id);
@@ -3384,7 +4062,10 @@ mod tests {
         // カタログに無い id は無視する(保存時に storage が弾いている)
         equipment.parts.helm.item_id = Some("unknown".to_string());
 
-        let mut got = pairs(&item_damage_contributions(&equipment, SkillDependency::Hack));
+        let mut got = pairs(&item_damage_contributions(
+            &equipment,
+            SkillDependency::Hack,
+        ));
         got.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         assert_eq!(
             got,
@@ -3401,7 +4082,10 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.parts.artifact.item_id = Some("eclipse-hack-def".to_string());
         assert_eq!(
-            pairs(&item_damage_contributions(&equipment, SkillDependency::Hack)),
+            pairs(&item_damage_contributions(
+                &equipment,
+                SkillDependency::Hack
+            )),
             vec![(DamageCategory::DependencyDamageRate, 0.30)]
         );
         assert!(item_damage_contributions(&equipment, SkillDependency::HackInt).is_empty());
@@ -3441,7 +4125,10 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.parts.artifact.item_id = Some("eclipse-hack-int-def".to_string());
         assert_eq!(
-            pairs(&item_damage_contributions(&equipment, SkillDependency::HackInt)),
+            pairs(&item_damage_contributions(
+                &equipment,
+                SkillDependency::HackInt
+            )),
             vec![(DamageCategory::DependencyDamageRate, 0.30)]
         );
         assert!(item_damage_contributions(&equipment, SkillDependency::Int).is_empty());
@@ -3477,7 +4164,10 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.parts.artifact.item_id = Some("ethereal-hack-int-def".to_string());
         assert_eq!(
-            pairs(&item_damage_contributions(&equipment, SkillDependency::HackInt)),
+            pairs(&item_damage_contributions(
+                &equipment,
+                SkillDependency::HackInt
+            )),
             vec![(DamageCategory::DependencyDamageRate, 0.35)],
             "緩和40%を自分の与ダメージ式へ混ぜない"
         );
@@ -3662,14 +4352,14 @@ mod tests {
     }
 
     #[test]
-    fn 武器アビリティはカテゴリー1_3_4の37件_idは重複しない() {
+    fn 武器アビリティはカテゴリー1_3_4の56件_idは重複しない() {
         let abilities = equipment_abilities();
         assert_eq!(
             abilities
                 .iter()
                 .filter(|a| a.slot == PartSlot::Weapon)
                 .count(),
-            37
+            56
         );
         let ids: HashSet<&str> = abilities.iter().map(|a| a.id).collect();
         assert_eq!(ids.len(), abilities.len());
@@ -3702,7 +4392,7 @@ mod tests {
         assert_eq!(PartSlot::ShieldPlus.ability_slots(), 2);
     }
 
-    /// カテゴリー4は新装着アビリティ4系統各4件。
+    /// アビリティアイテム方式(古代精霊〜夜星)は4系統各4件。
     #[test]
     fn アビリティは4系統各4件で記録値と追加枠情報を持つ() {
         use domain::EquipmentAbilityFamily::*;
@@ -3710,7 +4400,12 @@ mod tests {
         for family in [PointedBlade, SharpBlade, Intelligence, MagicResistance] {
             let members: Vec<_> = abilities
                 .iter()
-                .filter(|a| a.slot == PartSlot::Weapon && a.category == 4 && a.family == family)
+                .filter(|a| {
+                    a.slot == PartSlot::Weapon
+                        && a.category == 4
+                        && a.family == family
+                        && a.additional_slots > 0
+                })
                 .collect();
             assert_eq!(members.len(), 4, "{family:?} は 4 件");
             for def in members {
@@ -3737,6 +4432,75 @@ mod tests {
                 assert_eq!(def.additional_options.len(), 6);
                 assert!(!def.record_only, "基本アビリティ値は計算へ反映する");
             }
+        }
+    }
+
+    /// 装備システム/アビリティ カテゴリー4(N-/R-/L-/E- 系)の取り込み件数を wiki の表と
+    /// 突き合わせて固定する。ランダム追加枠を持たないことが、アビリティアイテム方式との区別。
+    #[test]
+    fn 装備システムuiのカテゴリー4は部位ごとにwikiの表どおり() {
+        let abilities = equipment_abilities();
+        let ui: Vec<_> = abilities
+            .iter()
+            .filter(|a| {
+                a.category == 4
+                    && a.name
+                        .split('-')
+                        .next()
+                        .is_some_and(|head| matches!(head, "N" | "R" | "L" | "E" | "G"))
+            })
+            .collect();
+        let count = |slot: PartSlot| ui.iter().filter(|a| a.slot == slot).count();
+        // 兜3(R/L/E) 鎧20(5系統×4) 武器19(4系統×4 + 失われた魂3) 盾8(2系統×4)
+        // 頭28(7属性×4) 手8(2系統×4) 足3(R/L/E)
+        assert_eq!(count(PartSlot::Helm), 3);
+        assert_eq!(count(PartSlot::Armor), 20);
+        assert_eq!(count(PartSlot::Weapon), 19);
+        assert_eq!(count(PartSlot::Shield), 8);
+        assert_eq!(count(PartSlot::Head), 28);
+        assert_eq!(count(PartSlot::Hand), 8);
+        assert_eq!(count(PartSlot::Leg), 3);
+        assert_eq!(ui.len(), 89);
+        // 表で追加効果が決まっているのでランダム追加枠を持たない(頭の G- 月石だけは
+        // アビリティアイテム方式でも取れるため、先に収録した 1 枠付きの定義を使う)。
+        for def in ui.iter().filter(|a| a.slot != PartSlot::Head) {
+            assert_eq!(def.additional_slots, 0, "{}", def.id);
+            assert!(!def.effect_summary.is_empty(), "{}", def.id);
+        }
+    }
+
+    /// 1 列目の効果は装備補正へ、2 列目のダメージ増加は X3 へ入る。
+    #[test]
+    fn e_鎧研磨は物防30_r_尖った刃は突き7とx3の3パーセント() {
+        let abilities = equipment_abilities();
+        let armor = abilities.iter().find(|a| a.id == "e-armor-polish").unwrap();
+        assert_eq!(armor.name, "E-鎧研磨");
+        assert_eq!(armor.values.physical_defense, 30);
+        assert!(!armor.record_only);
+
+        let weapon = abilities
+            .iter()
+            .find(|a| a.id == "r-pointed-blade")
+            .unwrap();
+        assert_eq!(weapon.values, a(7, 0, 0, 0));
+        assert_eq!(
+            weapon.damage_effects,
+            &[SkillEffect::Damage {
+                category: DamageCategory::AttackDamageBasicTrigger,
+                percent: 3.0,
+            }]
+        );
+
+        // 最大HP・移動速度・属性は EquipmentValues に無いので記録のみ。
+        for id in [
+            "n-vitality-armor",
+            "n-mana-armor",
+            "r-agility-leg",
+            "n-fire-moonstone",
+        ] {
+            let def = abilities.iter().find(|a| a.id == id).unwrap();
+            assert!(def.record_only, "{id}");
+            assert_eq!(def.values, EquipmentValues::default(), "{id}");
         }
     }
 
