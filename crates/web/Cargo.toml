@@ -1,0 +1,16 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2021"
+
+# cdylib: wasm-pack が吐く wasm 本体。rlib: 同 crate 内のテストから触れるようにするため。
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { workspace = true }
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+commands = { path = "../commands" }
+domain = { path = "../domain" }
+gamedata = { path = "../gamedata" }
