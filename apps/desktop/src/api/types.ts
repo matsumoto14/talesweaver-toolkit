@@ -67,6 +67,10 @@ export interface Skill {
   base_actual_delay: number | null;
   /** 中ディレイが固定で減少が効かない(wiki の「(固定)」表記) */
   actual_delay_fixed: boolean;
+  /** 通常攻撃(wiki スキル性能一覧の † = 基本攻撃)。コンボで間に挟むのはこれ */
+  normal_attack: boolean;
+  /** コンボインターバル(秒)。通常攻撃だけが持つ。null = wiki の CI 値表に無い */
+  combo_interval: number | null;
   /** 対応するコンボスキルタイプ。空ならタイプ選択非対応 */
   combo_variants: ComboSkillVariant[];
   /** 1 回ぶんの火力の目安(倍率 × 段数)。主軸スキル候補の並び順に使う(フロントは再計算しない) */
@@ -1389,7 +1393,27 @@ export interface DamageResult {
   critical_chance: number;
   /** クリ率を考慮した DPS の期待値(dps.max × (1 − p) + dps.critical × p)。dps が null なら null */
   expected_dps: number | null;
+  /** コンボ(間に通常攻撃を挟む)の 1 サイクル。入っているとき dps はサイクルで割った値 */
+  combo: ComboCycle | null;
   trace: DamageTrace;
+}
+
+/**
+ * コンボの 1 サイクル(通常攻撃 → スキル)。
+ * サイクル = 通常攻撃の中ディレイ + max(スキルの中ディレイ, コンボインターバル)。
+ */
+export interface ComboCycle {
+  normal_attack_name: string;
+  /** 通常攻撃 1 発の合計ダメージ */
+  normal_attack_total: DamageTriple;
+  normal_delay: number;
+  skill_delay: number;
+  /** コンボインターバル(秒)。null = wiki の CI 値表に無い */
+  interval: number | null;
+  /** CI がスキルの中ディレイより長く、下限として効いたか */
+  interval_binding: boolean;
+  /** 1 サイクルの所要時間(秒) */
+  seconds: number;
 }
 
 export interface DpsTriple {

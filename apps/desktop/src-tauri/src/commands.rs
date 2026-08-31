@@ -927,6 +927,22 @@ fn build_damage_input(
     ))
 }
 
+/// コンボするなら「通常攻撃 → スキル」の 1 サイクルで、しないならスキル単体で計算する。
+///
+/// 通常攻撃を挟まないとコンボボーナスは成立しないので、コンボ扱いなのに通常攻撃が
+/// 渡ってこないとき(そのキャラの通常攻撃が未収録)は、倍率だけ乗った単体計算になる。
+fn damage_with_optional_combo(
+    input: &domain::DamageInput,
+    combo_count: u32,
+    normal_attack_id: Option<&str>,
+) -> CommandResult<DamageResult> {
+    let Some(id) = normal_attack_id.filter(|_| combo_count > 0) else {
+        return Ok(domain::calculate_damage(input));
+    };
+    let normal = find_skill(id)?;
+    Ok(domain::calculate_damage_with_combo(input, &normal))
+}
+
 #[tauri::command]
 pub fn calculate_damage(
     state: State<'_, AppState>,
@@ -935,6 +951,7 @@ pub fn calculate_damage(
     content_id: String,
     combo_count: u32,
     combo_skill_type: Option<domain::ComboSkillType>,
+    normal_attack_id: Option<String>,
     temporary_adjustments: Option<domain::Adjustments>,
     buffs: BuffSelection,
 ) -> CommandResult<DamageResult> {
@@ -963,7 +980,7 @@ pub fn calculate_damage(
         combo_skill_type,
         temporary_adjustments,
     )?;
-    Ok(domain::calculate_damage(&input))
+    Ok(damage_with_optional_combo(&input, combo_count, normal_attack_id.as_deref())?)
 }
 
 /// 保存前のキャラデータ(編集中 draft・試し変更)でダメージ計算する。DB には書き込まない。
@@ -975,6 +992,7 @@ pub fn preview_damage(
     content_id: String,
     combo_count: u32,
     combo_skill_type: Option<domain::ComboSkillType>,
+    normal_attack_id: Option<String>,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<DamageResult> {
     validate_character_draft(&character, &buffs)?;
@@ -1002,7 +1020,7 @@ pub fn preview_damage(
         combo_skill_type,
         temporary_adjustments,
     )?;
-    Ok(domain::calculate_damage(&input))
+    Ok(damage_with_optional_combo(&input, combo_count, normal_attack_id.as_deref())?)
 }
 
 /// 全コンテンツを判定する(ホームの到達一覧・キャラレールのクリア数)。

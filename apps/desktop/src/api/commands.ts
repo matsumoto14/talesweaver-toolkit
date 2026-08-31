@@ -72,7 +72,8 @@ export const previewEffectiveStats = (
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
   comboSkillType: ComboSkillType | null = null, buffs: BuffSelection = { choices: [] },
-) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments, buffs });
+  normalAttackId: string | null = null,
+) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
 /** Rust domain が定める新規キャラ用の未開放・未習得状態。 */
 export const getNewCharacterStatSources = () =>
@@ -122,12 +123,14 @@ export function errorLocation(e: unknown): ValidationLocation | null {
 
 export const listContents = () => invoke<ContentArea[]>("list_contents");
 /** 保存前のキャラデータ(編集中 draft・試し変更)でダメージ計算する。DB には書き込まない */
+/** `normalAttackId` はコンボで間に挟む通常攻撃。渡すと DPS が「通常攻撃 → スキル」の 1 サイクルになる */
 export const previewDamage = (
   character: NewCharacter, skillId: string, contentId: string, comboCount: number,
   temporaryAdjustments: Adjustments | null = null,
   comboSkillType: ComboSkillType | null = null,
   buffs: BuffSelection = { choices: [] },
-) => invoke<DamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, temporaryAdjustments, buffs });
+  normalAttackId: string | null = null,
+) => invoke<DamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
 /**
  * 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価)。
  * `dependencySkillId` を渡すと、装備条件(スキル依存で比較先が変わる)をそのスキルで判定する。

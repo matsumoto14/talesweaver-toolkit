@@ -68,8 +68,8 @@ pub use critical_rate::{
     ARCHITECT_LAB_PER_STAGE, ARCHITECT_LAB_STAGE_MAX, CRITICAL_RATE_BONUS_MAX,
 };
 pub use damage::{
-    calculate_damage, evaluate, DamageContribution, DamageInput, DamageResult, DamageTrace,
-    DamageTriple, DpsTriple, FormulaStep,
+    calculate_damage, calculate_damage_with_combo, evaluate, ComboCycle, DamageContribution,
+    DamageInput, DamageResult, DamageTrace, DamageTriple, DpsTriple, FormulaStep,
 };
 pub use defense::{
     accuracy_point, defense_profile, AccuracyCorrection, DefenseProfile, EvasionPoints,

@@ -111,6 +111,15 @@ pub struct Skill {
     /// 中ディレイが固定で減少が効かない(wiki スキル性能一覧の「(固定)」表記)
     #[serde(default)]
     pub actual_delay_fixed: bool,
+    /// 通常攻撃(wiki スキル性能一覧の `†` = 基本攻撃)。コンボで間に挟むのはこれ
+    #[serde(default)]
+    pub normal_attack: bool,
+    /// コンボインターバル(秒)。通常攻撃だけが持つ(wiki 計算式まとめ `#g7881516`)。
+    /// 通常攻撃の中ディレイが終わってから数え始め、終わるまで次の行動が撃てないので、
+    /// **最速コンボでは「次に使うスキルの中ディレイの下限」**として効く。
+    /// `None` = wiki の CI 値表に無い(下限を出せないので、その旨を表示する)
+    #[serde(default)]
+    pub combo_interval: Option<f64>,
     /// 対応するコンボスキルタイプ。空ならタイプ選択非対応。
     #[serde(default)]
     pub combo_variants: Vec<ComboSkillVariant>,
@@ -186,6 +195,8 @@ mod tests {
             single_target_channeling: false,
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
+            normal_attack: false,
+            combo_interval: None,
             combo_variants: vec![
                 ComboSkillVariant {
                     combo_type: ComboSkillType::General,

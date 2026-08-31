@@ -301,7 +301,35 @@ pub struct DamageResult {
     /// クリ率を考慮した DPS の期待値(`dps.max × (1 − p) + dps.critical × p`)。
     /// `dps` が `None` なら `None`
     pub expected_dps: Option<f64>,
+    /// コンボ(間に通常攻撃を挟む)の 1 サイクル。`calculate_damage_with_combo` でだけ入る。
+    /// これが入っているとき `dps` はサイクルで割った値になっている
+    #[serde(default)]
+    pub combo: Option<ComboCycle>,
     pub trace: DamageTrace,
+}
+
+/// コンボの 1 サイクル(通常攻撃 → スキル)。
+///
+/// wiki 計算式まとめ `#g7881516`: コンボインターバル(CI)は通常攻撃の中ディレイが
+/// 終わってから数え始め、終わるまで次の行動が撃てない。スキルの中ディレイは CI と
+/// 並行して進むので、**サイクル = 通常攻撃の中ディレイ + max(スキルの中ディレイ, CI)**。
+/// ダメージは通常攻撃 1 発ぶんが上乗せされる。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ComboCycle {
+    /// 間に挟む通常攻撃
+    pub normal_attack_name: String,
+    /// 通常攻撃 1 発の合計ダメージ
+    pub normal_attack_total: DamageTriple,
+    /// 通常攻撃の中ディレイ(秒)
+    pub normal_delay: f64,
+    /// スキルの中ディレイ(秒)
+    pub skill_delay: f64,
+    /// コンボインターバル(秒)。`None` = wiki の CI 値表に無い(下限を出せない)
+    pub interval: Option<f64>,
+    /// CI がスキルの中ディレイより長く、下限として効いたか
+    pub interval_binding: bool,
+    /// 1 サイクルの所要時間(秒)
+    pub seconds: f64,
 }
 
 /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。
@@ -521,6 +549,59 @@ fn add_traced(
             value,
         });
     }
+}
+
+/// コンボ(間に通常攻撃を挟む)ときのダメージ。1 発ぶんの数字は `calculate_damage` と同じで、
+/// **DPS だけがサイクル基準**になる。
+///
+/// コンボボーナス(倍率A・中ディレイ半減)は通常攻撃を挟んで初めて成立するので、
+/// 「スキルを連打したまま倍率だけ上がる」計算にはしない。1 サイクルは
+/// `通常攻撃の中ディレイ + max(スキルの中ディレイ, コンボインターバル)` で、
+/// ダメージはスキル + 通常攻撃の 2 発ぶん。
+///
+/// 中ディレイが出せない(wiki の「動作」列が秒で読めない)スキル・通常攻撃では、
+/// サイクルを作れないので `calculate_damage` と同じ結果を返す。
+pub fn calculate_damage_with_combo(input: &DamageInput, normal_attack: &Skill) -> DamageResult {
+    let mut result = calculate_damage(input);
+    let mut normal_input = input.clone();
+    normal_input.skill = normal_attack.clone();
+    let normal = calculate_damage(&normal_input);
+
+    let (Some(skill_delay), Some(normal_delay)) =
+        (result.actual_delay.as_ref(), normal.actual_delay.as_ref())
+    else {
+        return result;
+    };
+    let skill_seconds = skill_delay.value;
+    let normal_seconds = normal_delay.value;
+    // CI は通常攻撃の中ディレイのあとに走り、スキルの中ディレイと並行して進む。
+    // 未収録(None)なら下限なしで、スキルの中ディレイをそのまま使う。
+    let gap = normal_attack
+        .combo_interval
+        .map_or(skill_seconds, |interval| skill_seconds.max(interval));
+    let seconds = normal_seconds + gap;
+    if seconds <= 0.0 {
+        return result;
+    }
+
+    let per_second = |skill: i64, normal: i64| (skill + normal) as f64 / seconds;
+    result.dps = Some(DpsTriple {
+        min: per_second(result.total.min, normal.total.min),
+        max: per_second(result.total.max, normal.total.max),
+        critical: per_second(result.total.critical, normal.total.critical),
+    });
+    let p = result.critical_chance;
+    result.expected_dps = result.dps.as_ref().map(|d| d.max * (1.0 - p) + d.critical * p);
+    result.combo = Some(ComboCycle {
+        normal_attack_name: normal_attack.name.clone(),
+        normal_attack_total: normal.total,
+        normal_delay: normal_seconds,
+        skill_delay: skill_seconds,
+        interval: normal_attack.combo_interval,
+        interval_binding: normal_attack.combo_interval.is_some_and(|i| i > skill_seconds),
+        seconds,
+    });
+    result
 }
 
 pub fn calculate_damage(input: &DamageInput) -> DamageResult {
@@ -934,6 +1015,8 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         dps,
         critical_chance: critical_chance_ratio,
         expected_dps,
+        // コンボは calculate_damage_with_combo で後から入れる(1 発の計算には要らない)
+        combo: None,
         trace: DamageTrace {
             stats: stat_traces,
             attack,
@@ -1095,6 +1178,8 @@ mod tests {
                 single_target_channeling: false,
                 base_actual_delay: Some(1.4),
                 actual_delay_fixed: false,
+                normal_attack: false,
+                combo_interval: None,
                 combo_variants: Vec::new(),
                 power: Skill::compute_power(0.99, 1),
                 power_per_second: Skill::compute_power_per_second(
@@ -2121,6 +2206,74 @@ mod tests {
         let dps = result.dps.unwrap();
         assert!((dps.max - result.total.max as f64 / delay.value).abs() < 1e-9);
         assert!((dps.critical - result.total.critical as f64 / delay.value).abs() < 1e-9);
+    }
+
+    // --- コンボ(間に通常攻撃を挟む)-------------------------------------
+
+    /// テスト用の通常攻撃。基本中ディレイ 0.6s、CI は引数で変える
+    fn normal_attack(combo_interval: Option<f64>) -> Skill {
+        let mut skill = input().skill;
+        skill.id = "n".into();
+        skill.name = "†極・突き".into();
+        skill.normal_attack = true;
+        skill.base_actual_delay = Some(0.6);
+        skill.combo_interval = combo_interval;
+        skill
+    }
+
+    #[test]
+    fn コンボのdpsは通常攻撃を挟んだ1サイクルで割る() {
+        let i = input();
+        let normal = normal_attack(Some(0.32));
+        let result = calculate_damage_with_combo(&i, &normal);
+        let combo = result.combo.clone().expect("コンボ");
+
+        // 通常攻撃 1 発ぶんのダメージが乗り、時間は 通常攻撃の中ディレイ + max(スキル, CI)
+        assert!((combo.seconds - (combo.normal_delay + combo.skill_delay.max(0.32))).abs() < 1e-12);
+        let expected = (result.total.max + combo.normal_attack_total.max) as f64 / combo.seconds;
+        assert!((result.dps.unwrap().max - expected).abs() < 1e-9);
+        // 1 発ぶんの数字はコンボなしと変わらない
+        assert_eq!(result.total, calculate_damage(&i).total);
+    }
+
+    #[test]
+    fn コンボインターバルが長いとスキルの中ディレイの下限になる() {
+        let mut i = input();
+        // 中ディレイ 1.4s → 減少 80%(上限 70%)で 0.42s まで下がる
+        i.actual_delay_skills = vec![crate::actual_delay::ActualDelayContribution {
+            source: "テスト".into(),
+            rate: 0.7,
+        }];
+        let short = calculate_damage_with_combo(&i, &normal_attack(Some(0.3)));
+        let long = calculate_damage_with_combo(&i, &normal_attack(Some(0.55)));
+
+        assert!(!short.combo.clone().unwrap().interval_binding);
+        let long_combo = long.combo.clone().unwrap();
+        assert!(long_combo.interval_binding);
+        // CI が効くぶんサイクルが伸び、DPS は下がる
+        assert!(long_combo.seconds > short.combo.unwrap().seconds);
+        assert!(long.dps.unwrap().max < short.dps.unwrap().max);
+    }
+
+    #[test]
+    fn コンボインターバルが未収録なら下限なしで出す() {
+        let i = input();
+        let result = calculate_damage_with_combo(&i, &normal_attack(None));
+        let combo = result.combo.unwrap();
+        assert_eq!(combo.interval, None);
+        assert!(!combo.interval_binding);
+        assert!((combo.seconds - (combo.normal_delay + combo.skill_delay)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn 動作が取れない通常攻撃ではコンボのサイクルを作らない() {
+        let i = input();
+        let mut normal = normal_attack(Some(0.32));
+        normal.base_actual_delay = None;
+        let result = calculate_damage_with_combo(&i, &normal);
+        assert!(result.combo.is_none());
+        // DPS はスキル単体のまま
+        assert_eq!(result.dps, calculate_damage(&i).dps);
     }
 
     #[test]

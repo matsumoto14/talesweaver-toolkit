@@ -394,6 +394,73 @@ struct SkillRecord {
     level: u8,
 }
 
+/// コンボインターバル(秒)。wiki 計算式まとめ `#g7881516` の CI 値表(取得 2026-08-31)。
+///
+/// 通常攻撃(`†` 基本攻撃)ごとの値で、通常攻撃の中ディレイが終わってから数え始める。
+/// 最速コンボでは「次に使うスキルの中ディレイの下限」として効くので、コンボの DPS に要る。
+/// - `270(実測250)` と併記された行(イェフネン)は**実測値**を採る
+/// - CI 値表にあってもスキル性能一覧の † 行が無いもの(依存が未対応で除外した行)は入らない
+/// - 表に無い通常攻撃(アナイスの 5 件)は `None`。下限を出せないので、その旨を画面に出す
+///
+/// 取り込みは `tools/gamedata/import_combo_intervals.py`(突き合わせできない行は標準エラーに出る)。
+#[rustfmt::skip]
+const COMBO_INTERVALS: &[(&str, f64)] = &[
+    ("lucian_butt", 0.32),  // ルシアン 突き
+    ("lucian_horizontal_sword", 0.4),  // ルシアン 横斬り
+    ("lucian_vertical_sword", 0.35),  // ルシアン 縦斬り
+    ("boris_vertical_sword", 0.45),  // ボリス 縦斬り
+    ("boris_horizontal_sword", 0.4),  // ボリス 横斬り
+    ("boris_ice_break", 0.5),  // ボリス アイスブレイク
+    ("ispin_step_in", 0.32),  // イスピン ステップイン
+    ("ispin_scratch", 0.4),  // イスピン スクラッチ
+    ("ispin_over_cut", 0.35),  // イスピン オーバーカット
+    ("maximin_sword", 0.45),  // マキシミン スラッシュ
+    ("maximin_air_break", 0.5),  // マキシミン エアブレイク
+    ("maximin_attracted_sword", 0.4),  // マキシミン 引き付け斬り
+    ("tichiel_twinkle", 0.3),  // ティチエル トゥインクル
+    ("tichiel_smash", 0.35),  // ティチエル スマッシュ
+    ("nayatorei_cross_thrust", 0.3),  // ナヤトレイ クロススラスト
+    ("nayatorei_slash", 0.35),  // ナヤトレイ スラッシュ
+    ("nayatorei_dual_hit", 0.35),  // ナヤトレイ デュアルヒット
+    ("siberin_thrust", 0.35),  // シベリン 突き
+    ("siberin_brandy", 0.45),  // シベリン ブランディ
+    ("siberin_beat_down", 0.4),  // シベリン ビートダウン
+    ("siberin_turning", 0.55),  // シベリン ターニング
+    ("mira_whip", 0.4),  // ミラ ウィップ
+    ("mira_hit_whip", 0.35),  // ミラ ヒットウィップ
+    ("mira_hard_whip", 0.45),  // ミラ ハードウィップ
+    ("mira_cool_whip", 0.3),  // ミラ クールウィップ
+    ("joshua_sting", 0.32),  // ジョシュア スティング
+    ("joshua_death_claw", 0.3),  // ジョシュア デスクロー
+    ("chloe_fire_beat", 0.3),  // クロエ ファイヤービート
+    ("chloe_air_beat", 0.3),  // クロエ エアビート
+    ("chloe_stone_beat", 0.3),  // クロエ ストーンビート
+    ("chloe_ice_beat", 0.3),  // クロエ アイスビート
+    ("chloe_lightning_beat", 0.3),  // クロエ ライトニングビート
+    ("ranjie_gunshot", 0.3),  // ランジエ 射撃
+    ("ranjie_dual_shot", 0.32),  // ランジエ デュアルショット
+    ("ranjie_hard_shot", 0.35),  // ランジエ ハードショット
+    ("ranjie_magic_bullet", 0.35),  // ランジエ 魔弾
+    ("ranjie_magical_dual_shot", 0.37),  // ランジエ ﾏｼﾞｶﾙﾃﾞｭｱﾙｼｮｯﾄ
+    ("ranjie_magical_hard_shot", 0.4),  // ランジエ ﾏｼﾞｶﾙﾊｰﾄﾞｼｮｯﾄ
+    ("isaac_jab", 0.25),  // イサック ジャブ
+    ("isaac_straight", 0.3),  // イサック ストレート
+    ("isaac_double_kick", 0.27),  // イサック ダブルキック
+    ("isaac_jab_punch", 0.25),  // イサック 刻み突き
+    ("isaac_forefist_punch", 0.3),  // イサック 正拳突き
+    ("isaac_backfist_strike", 0.27),  // イサック 裏拳打ち
+    ("anais_fairy_light", 0.3),  // アナイス フェアリーライト
+    ("isolet_devine_beat", 0.3),  // イソレット ディバインビート
+    ("isolet_butt", 0.35),  // イソレット 突き
+    ("isolet_horizontal_sword", 0.3),  // イソレット 横切り
+    ("roamini_darkness_flare", 0.3),  // ロアミニ ダークネスフレア
+    ("roamini_poison_dart", 0.3),  // ロアミニ ポイズンダーツ
+    ("nocturne_launcher", 0.3),  // ノクターン ランチャー
+    ("leeche_monpureine_skill_1", 0.32),  // リーチェ トンド
+    ("leeche_monpureine_skill_3", 0.32),  // リーチェ プンタ
+    ("leeche_monpureine_skill_2", 0.35),  // リーチェ フェンデンテ
+];
+
 #[allow(clippy::too_many_arguments)]
 const fn s(
     character_id: &'static str,
@@ -778,6 +845,12 @@ impl SkillRecord {
             single_target_channeling: SINGLE_TARGET_CHANNELING.contains(&self.skill_id().as_str()),
             base_actual_delay,
             actual_delay_fixed: ACTUAL_DELAY_FIXED.contains(&self.skill_id().as_str()),
+            // 通常攻撃は wiki スキル性能一覧の † (基本攻撃)。名前がそのまま印になっている
+            normal_attack: self.name.starts_with('†'),
+            combo_interval: COMBO_INTERVALS
+                .iter()
+                .find(|(id, _)| *id == self.skill_id().as_str())
+                .map(|(_, seconds)| *seconds),
             combo_variants: if self.skill_id() == "maximin_continuous" {
                 vec![
                     ComboSkillVariant {

@@ -418,6 +418,8 @@ mod tests {
             single_target_channeling: false,
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
+            normal_attack: false,
+            combo_interval: None,
             combo_variants: Vec::new(),
             power: Skill::compute_power(0.99, 1),
             power_per_second: Skill::compute_power_per_second(Skill::compute_power(0.99, 1), Some(1.4)),

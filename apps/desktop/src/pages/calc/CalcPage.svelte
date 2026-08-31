@@ -184,6 +184,30 @@
 
   let combo = $state(false);
 
+  // --- コンボで挟む通常攻撃 --------------------------------------------------
+  // コンボボーナス(倍率A・中ディレイ半減)は通常攻撃を挟んで初めて成立する。
+  // どれを挟むかで CI(次のスキルの中ディレイの下限)が変わるので、速い順に段で並べ、
+  // **既定は一番速いもの**にする(ユーザーに選ばせないのが既定。§ux 原則 1)。
+  let normalAttackOverride = $state<string | null>(null);
+  const normalAttacks = $derived(
+    [...skills.filter((s) => s.normal_attack)].sort(
+      (a, b) => (a.combo_interval ?? Infinity) - (b.combo_interval ?? Infinity),
+    ),
+  );
+  const normalAttackOptions = $derived(
+    normalAttacks.map((s) => ({
+      value: s.id,
+      // 「†極・突き」の飾りは段では邪魔なので落とし、CI を添える(未収録は ?)
+      label: `${s.name.replace(/^†[^・]*・/, "")} ${s.combo_interval !== null ? `${s.combo_interval.toFixed(2)}s` : "?"}`,
+    })),
+  );
+  const normalAttackId = $derived(
+    normalAttacks.some((s) => s.id === normalAttackOverride)
+      ? normalAttackOverride
+      : (normalAttacks[0]?.id ?? null),
+  );
+  const comboNormalAttackId = $derived(combo ? normalAttackId : null);
+
   // --- 一時調整 -------------------------------------------------------------
   // この画面に編集 UI は無い(「調整(一時)」カードは削除済み)。previewDamage 系コマンドは
   // Adjustments を必須パラメータとして取るため、中立値を渡す。
@@ -210,6 +234,7 @@
     const sid = skillId;
     const comboCount = combo ? limits.combo_bonus_threshold : 0;
     const comboType = selectedComboSkillType;
+    const normalId = comboNormalAttackId;
     const simActive = app.sim !== null;
     const tempJson = JSON.stringify(NEUTRAL_ADJUSTMENTS);
     const buffsJson = JSON.stringify(app.calcBuffs);
@@ -224,10 +249,12 @@
       try {
         const main = await previewDamage(
           JSON.parse(pJson), sid, t.content.id, comboCount, JSON.parse(tempJson), comboType, JSON.parse(buffsJson),
+          normalId,
         );
         const saved = simActive
           ? await previewDamage(
               sp, sid, t.content.id, comboCount, JSON.parse(tempJson), comboType, JSON.parse(buffsJson),
+              normalId,
             )
           : main;
         if (isCurrent()) {
@@ -722,18 +749,42 @@
       sub: d.reduction_raw > d.reduction ? `選択中は ${(d.reduction_raw * 100).toFixed(0)}%` : undefined,
     });
     if (d.combo_rate < 1) {
-      mats.push({ label: `コンボ(倍率A・${limits.combo_bonus_threshold} コンボ以上)`, mult: `×${fmtNum(d.combo_rate)}`, value: "" });
+      mats.push({ label: "コンボ(倍率A。間に通常攻撃を挟む)", mult: `×${fmtNum(d.combo_rate)}`, value: "" });
     }
     mats.push({
       label: "中ディレイ",
       value: `${d.value.toFixed(2)}s`,
       sub: d.floored ? `下限 ${limits.actual_delay_min.toFixed(1)}s で頭打ち` : undefined,
     });
-    mats.push({
-      label: "スキル回数",
-      value: `${Math.round(d.uses_per_minute)} 回/分`,
-      sub: d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ",
-    });
+    const cycle = r.combo;
+    if (cycle) {
+      // コンボは 1 サイクル(通常攻撃 → スキル)で割る。実測表はコンボなしの計測なので使わない
+      mats.push({
+        label: `通常攻撃(${cycle.normal_attack_name})`,
+        value: fmtInt(cycle.normal_attack_total.max),
+        sub: `中ディレイ ${cycle.normal_delay.toFixed(2)}s`,
+      });
+      mats.push({
+        label: "コンボインターバル",
+        value: cycle.interval !== null ? `${cycle.interval.toFixed(2)}s` : "?",
+        sub: cycle.interval === null
+          ? "wiki 未収録。スキルの中ディレイをそのまま使っています"
+          : cycle.interval_binding
+            ? "スキルの中ディレイより長いので、こちらが下限になります"
+            : "スキルの中ディレイのほうが長いので効きません",
+      });
+      mats.push({
+        label: "1 サイクル",
+        value: `${cycle.seconds.toFixed(2)}s`,
+        sub: `通常攻撃 ${cycle.normal_delay.toFixed(2)}s + ${Math.max(cycle.skill_delay, cycle.interval ?? 0).toFixed(2)}s`,
+      });
+    } else {
+      mats.push({
+        label: "スキル回数",
+        value: `${Math.round(d.uses_per_minute)} 回/分`,
+        sub: d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ",
+      });
+    }
     if (r.expected_dps !== null && r.critical_chance > 0 && r.critical_chance < 1) {
       mats.push({
         label: "期待値(クリ率で按分)",
@@ -742,12 +793,14 @@
       });
     }
     return {
-      mult: `÷ ${d.value.toFixed(2)}s`,
+      mult: `÷ ${(cycle?.seconds ?? d.value).toFixed(2)}s`,
       delta: null,
       to: Math.round(dpsValue),
       mats,
       idle: 0,
-      expr: "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60",
+      expr: cycle
+        ? "1 秒あたり = (スキルの合計 + 通常攻撃の合計) ÷ 1 サイクル"
+        : "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60",
     };
   });
 
@@ -1803,7 +1856,13 @@
                 <span class="nl">1 秒あたり</span>
                 <span class="num nv" use:bump={() => dpsValue}>{dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"}</span>
                 <span class="nsub dim">
-                  {#if result?.actual_delay}{Math.round(result.actual_delay.uses_per_minute)} 回/分 ・ {/if}{critMode ? "クリ確定" : "非クリ"}
+                  <!-- コンボ中は「スキルを何回撃てるか」= 1 分 ÷ サイクル。
+                       スキルの中ディレイだけで数えると、通常攻撃を挟むぶんを落として速く見える -->
+                  {#if result?.combo}
+                    {Math.round(60 / result.combo.seconds)} 回/分 ・
+                  {:else if result?.actual_delay}
+                    {Math.round(result.actual_delay.uses_per_minute)} 回/分 ・
+                  {/if}{critMode ? "クリ確定" : "非クリ"}
                   {#if result && result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
                     ・ 期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {(result.critical_chance * 100).toFixed(1)}%)
                   {/if}
@@ -1880,17 +1939,24 @@
                 {:else if d.reduction > 0}
                   × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 {Math.round(limits.actual_delay_reduction_max * 100)}%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
                 {/if}
-                {#if d.combo_rate < 1}× {fmtNum(d.combo_rate)}(中ディレイ減少 {limits.combo_delay_threshold} コンボ以上){/if}
+                {#if d.combo_rate < 1}× {fmtNum(d.combo_rate)}(コンボ){/if}
                 = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 {limits.actual_delay_min.toFixed(1)}s</span>{/if}
                 {#if d.contributions.length > 0}
                   ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
                 {/if}
                 <br />
-                1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
-                {#if d.uses_measured}
-                  (<b>実測表</b>: 総減少 {(d.reduction * 100).toFixed(0)}% × 基本 {d.base.toFixed(1)}s)
+                {#if result?.combo}
+                  {@const c = result.combo}
+                  1 サイクル = 通常攻撃 {c.normal_delay.toFixed(2)}s + max(スキル {c.skill_delay.toFixed(2)}s,
+                  CI {c.interval !== null ? `${c.interval.toFixed(2)}s` : "?"}) = {c.seconds.toFixed(2)}s
+                  ／ 1 秒あたり = (スキル + {c.normal_attack_name})の合計 ÷ 1 サイクル
                 {:else}
-                  (実測表の範囲外なので 60 ÷ 中ディレイ の式で算出)
+                  1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
+                  {#if d.uses_measured}
+                    (<b>実測表</b>: 総減少 {(d.reduction * 100).toFixed(0)}% × 基本 {d.base.toFixed(1)}s)
+                  {:else}
+                    (実測表の範囲外なので 60 ÷ 中ディレイ の式で算出)
+                  {/if}
                 {/if}
               </div>
             {/if}
@@ -2312,11 +2378,39 @@
           {/if}
         </div>
 
-        <!-- コンボ -->
+        <!-- コンボ。倍率A のコンボボーナスと中ディレイ半減は「{limits.combo_bonus_threshold} コンボ以上」で付くが、
+             ユーザーが決めるのは「コンボするかどうか」なので、コンボ数は出さない。
+             代わりに**成立条件**(間に通常攻撃を挟む)を ON のときだけ添える(§00 05 考えさせない) -->
         <div class="combo">
           <CheckChip checked={combo} onCheckedChange={(v) => (combo = v)}>
-            <span>{limits.combo_bonus_threshold} コンボ以上(ダメージ +{Math.round(limits.combo_bonus_rate * 100)}%)</span>
+            <span>コンボする</span>
           </CheckChip>
+          <p class="combo-note dim">
+            ダメージ +{Math.round(limits.combo_bonus_rate * 100)}% ・ 中ディレイ半分。
+            <b>スキル → 通常攻撃 → スキル</b>のように、間に通常攻撃を挟むと成立します。
+          </p>
+          {#if combo}
+            {#if normalAttackOptions.length > 0}
+              <div class="combo-normal">
+                <StepSelect
+                  label="挟む通常攻撃"
+                  options={normalAttackOptions}
+                  cols={2}
+                  bind:value={
+                    () => normalAttackId ?? "",
+                    (v) => (normalAttackOverride = v)
+                  }
+                />
+              </div>
+            {:else}
+              <p class="combo-note dim missing">
+                このキャラの通常攻撃は未収録なので、挟む通常攻撃ぶんの時間とダメージを出せません。
+              </p>
+            {/if}
+            <p class="combo-note dim">
+              1 秒あたりの火力は、挟む通常攻撃ぶんの時間とダメージも入れた 1 サイクルで出しています。
+            </p>
+          {/if}
         </div>
       {:else}
         <p class="empty dim">キャラを選択してください。</p>
@@ -2408,6 +2502,14 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   }
   .combo-type-note { min-width: 0; padding-bottom: 3px; font-size: 9px; line-height: 1.45; }
+  /* コンボの成立条件と、挟む通常攻撃の段。ON のときだけ出るので、
+     押した場所より下にしか増えない(§00 03) */
+  .combo-normal { margin-top: 8px; }
+  .combo-note { margin: 6px 0 0; font-size: 10px; line-height: 1.6; }
+  /* 未収録は破線 + 理由(0 や空欄で埋めない) */
+  .combo-note.missing {
+    padding: 5px 9px; border: 1px dashed var(--border); border-radius: var(--r-panel); background: var(--bg-rail);
+  }
   @media (max-width: 720px) {
     .combo-type-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   }
