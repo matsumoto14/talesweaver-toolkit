@@ -10,7 +10,7 @@ mod damage_snapshot_repository;
 pub use backup::{open_with_backup, OpenOutcome, StartupNotice};
 pub use buff_set_repository::BuffSet;
 pub use character_repository::validate as validate_new_character;
-pub use character_repository::{CharacterRepository, NewCharacter, RegisteredCharacter};
+pub use character_repository::{CharacterRepository, RegisteredCharacter};
 pub use character_icon_repository::CharacterIcon;
 pub use damage_snapshot_repository::DamageSnapshot;
 

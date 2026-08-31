@@ -8,6 +8,7 @@ pub mod attack_power;
 pub mod awakening;
 pub mod candidate;
 pub mod category;
+pub mod character;
 pub mod character_skill;
 pub mod common_skill;
 pub mod content;
@@ -46,6 +47,7 @@ pub use candidate::{
     RankedCandidate,
 };
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
+pub use character::NewCharacter;
 pub use character_skill::{
     damage_contributions, CharacterSkillCatalog, CharacterSkillDef, CharacterSkillError,
     CharacterSkills, MasteryOverride, SkillAudience, SkillEffect,

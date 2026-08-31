@@ -5,7 +5,8 @@ use std::path::Path;
 
 use domain::{
     Awakening, BaseStats, BuffCatalog, CharacterSkillCatalog, CommonSkills, EnhanceGrade,
-    Equipment, EquipmentAbilityDef, EquipmentValues, RandomOptionDef, StatSources, TitleDef,
+    Equipment, EquipmentAbilityDef, EquipmentValues, NewCharacter, RandomOptionDef, StatSources,
+    TitleDef,
 };
 use gamedata::EquipmentItem;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
@@ -37,23 +38,6 @@ pub struct RegisteredCharacter {
     pub default_buff_set_id: Option<i64>,
     /// 最終保存日時(ISO8601 UTC)。v11 未満で作られた既存行は NULL(表示しない)。
     pub updated_at: Option<String>,
-}
-
-/// 登録リクエスト。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct NewCharacter {
-    pub name: String,
-    pub game_character_id: String,
-    pub base_stats: BaseStats,
-    pub awakening: Awakening,
-    pub stat_sources: StatSources,
-    pub equipment: Equipment,
-    /// 共通スキル(wiki: Skill/共通)
-    #[serde(default)]
-    pub common_skills: CommonSkills,
-    pub main_skill_id: Option<String>,
-    #[serde(default)]
-    pub default_buff_set_id: Option<i64>,
 }
 
 /// v1 相当(`stat_sources`/`equipment` 列を含まない、main ブランチ時代の実スキーマ)。

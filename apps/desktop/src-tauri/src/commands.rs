@@ -5,12 +5,11 @@ use domain::{
     evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
     CommonSkills, Content, ContentArea, ContentEvaluation, DamageInput, DamageMaterial,
     DamageResult, DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef,
-    EquipmentPart, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
+    EquipmentPart, NewCharacter, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef,
+    WristBonusMaterial,
 };
 use gamedata::{EquipmentItem, GameCharacter};
-use storage::{
-    BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, NewCharacter, RegisteredCharacter,
-};
+use storage::{BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, RegisteredCharacter};
 use tauri::{Manager, State};
 
 use crate::{AppInfo, AppState};

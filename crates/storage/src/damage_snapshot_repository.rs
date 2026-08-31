@@ -64,7 +64,7 @@ impl CharacterRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::NewCharacter;
+    use domain::NewCharacter;
 
     fn new_character(name: &str) -> NewCharacter {
         NewCharacter {
