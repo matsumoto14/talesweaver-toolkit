@@ -289,9 +289,12 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
-            exclusive_slots: vec!["club_s_effect"],
+            // ノーマルエフェクトと違い、wiki(クラブ #club_S_effect)は S エフェクトの併用制限を
+            // 書いていない(制限があるのは「上昇項目が同じノーマルエフェクト」のみ)。
+            // ユーザー実測 2026-09-01: 攻撃力+5% と ステ系の S エフェクトは同時に効く
+            exclusive_slots: vec![],
             source_url: CLUB_WIKI_URL,
-            note: "7日。課金箱。ステータス版のクラブSエフェクトとは同時使用不可",
+            note: "7日。課金箱。ステータス系のクラブSエフェクトと同時に使える",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 5.0 }],
         },
@@ -303,7 +306,9 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::UserSelected,
             layer: StatLayer::Fixed,
             value: BuffValue::Fixed(20.0),
-            exclusive_slots: vec!["club_s_effect"],
+            // wiki に併用制限の記載が無く、ユーザー実測 2026-09-01 でも他の S エフェクトと
+            // 同時に効くため排他枠は持たせない
+            exclusive_slots: vec![],
             source_url: CLUB_WIKI_URL,
             note: "STAB/HACK/INT/DEF/MR/DEX/AGIから選択。7日。課金箱",
             default_value: None,
@@ -317,7 +322,8 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::Fixed,
             value: BuffValue::Choice(vec![5.0, 10.0, 15.0, 20.0]),
-            exclusive_slots: vec!["club_s_effect"],
+            // 同上(wiki に記載なし・ユーザー実測 2026-09-01 で併用可)
+            exclusive_slots: vec![],
             source_url: CLUB_WIKI_URL,
             note: "ALL+5/+10/+15/+20。期間と入手方法は商品ごとに異なる",
             default_value: None,
@@ -746,7 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn クラブsエフェクトは効果別で同時使用できない() {
+    fn クラブsエフェクトは効果別に同時使用できる() {
         let catalog = buff_catalog();
         let variants: Vec<_> = [
             "club_s_effect",
@@ -756,7 +762,9 @@ mod tests {
         .into_iter()
         .map(|id| catalog.iter().find(|d| d.id == id).unwrap())
         .collect();
-        assert!(variants.iter().all(|d| d.exclusive_slots == vec!["club_s_effect"]));
+        // wiki(クラブ #club_S_effect)は S エフェクトの併用制限を書いておらず、
+        // ユーザー実測 2026-09-01 でも複数同時に効く。排他枠は持たせない
+        assert!(variants.iter().all(|d| d.exclusive_slots.is_empty()));
 
         let attack = variants[0];
         assert_eq!(attack.purposes, &[BuffPurpose::Damage]);
