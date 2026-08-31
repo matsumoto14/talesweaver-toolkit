@@ -240,11 +240,12 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             origin: BuffOrigin::Item,
             target: BuffTarget::AllStats,
             layer: StatLayer::Fixed,
-            value: BuffValue::UserInput { min: 0.0, max: 33.0 },
+            value: BuffValue::UserInput { min: 0.0, max: 34.0 },
             exclusive_slots: vec!["trust_potion"],
             source_url: WIKI_URL,
-            note: "最大+33、人により異なる。信頼の薬と排他。無印の信頼の薬は最大+28",
-            default_value: Some(33.0),
+            // 上限はユーザーの実測(2026-09-01)。wiki は +33 と書いているが実際に +34 が出る
+            note: "最大+34、人により異なる。信頼の薬と排他。無印の信頼の薬は最大+28",
+            default_value: Some(34.0),
             damage_effects: &[],
         },
         BuffDefinition {
