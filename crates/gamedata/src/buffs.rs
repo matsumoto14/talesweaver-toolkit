@@ -15,8 +15,8 @@ use crate::Source;
 /// バフカタログの出典。
 pub const BUFF_CATALOG_SOURCE: Source = Source {
     page: "ステータス#jc16a054",
-    retrieved_on: "2026-08-29",
-    note: "常用バフ35件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照",
+    retrieved_on: "2026-08-31",
+    note: "常用バフ44件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照",
 };
 
 /// 常用バフのカタログ。
@@ -30,7 +30,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.30),
-            exclusive_slots: vec!["percent_slot_1", "percent_slot_2"],
+            exclusive_slots: vec!["percent_slot_1", "percent_slot_2", "x1_group_a"],
             source_url: WIKI_URL,
             note: "①+②",
             default_value: None,
@@ -44,7 +44,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.30),
-            exclusive_slots: vec!["percent_slot_1", "percent_slot_2"],
+            exclusive_slots: vec!["percent_slot_1", "percent_slot_2", "x1_group_a", "x1_group_b"],
             source_url: WIKI_URL,
             note: "①+②",
             default_value: None,
@@ -72,7 +72,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.10),
-            exclusive_slots: vec!["percent_slot_2"],
+            exclusive_slots: vec!["percent_slot_2", "x1_group_a"],
             source_url: WIKI_URL,
             note: "②",
             default_value: None,
@@ -156,6 +156,70 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             damage_effects: &[],
         },
         BuffDefinition {
+            id: "growth_support_potion",
+            name: "成長支援ポーション(イソレット/ノクターン/アナイス)",
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::Fixed(0.50),
+            exclusive_slots: vec![
+                "percent_slot_1",
+                "percent_slot_2",
+                "blessing",
+                "blessing_potion_a",
+                "blessing_potion_b",
+                "x1_group_a",
+                "x1_group_b",
+            ],
+            source_url: WIKI_URL,
+            note: "①+②。退魔師の恵み・祝福のポーション・バフスクロールと重複不可。[X1] +20% も持つ",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
+        },
+        BuffDefinition {
+            id: "blessing_potion",
+            name: "祝福のポーション / ＜ログ・ホライズン＞のカレーライス",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::Fixed,
+            value: BuffValue::Fixed(20.0),
+            exclusive_slots: vec!["blessing_potion_a", "blessing_potion_b"],
+            source_url: WIKI_URL,
+            note: "イザベルの秘法(固定)・特選秘薬(固定)の両方と同時使用不可",
+            default_value: None,
+            damage_effects: &[],
+        },
+        BuffDefinition {
+            id: "demon_slayer_blessing",
+            name: "退魔師の恵み / 祝福の聖水 / 河童神の涙",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::MultiplierA,
+            value: BuffValue::Fixed(1.1),
+            exclusive_slots: vec!["blessing"],
+            source_url: WIKI_URL,
+            note: "イザベルの秘法(比率)と同枠",
+            default_value: None,
+            damage_effects: &[],
+        },
+        BuffDefinition {
+            id: "karill_buff_scroll",
+            name: "カリル家のバフスクロール",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::Fixed(0.10),
+            exclusive_slots: vec![],
+            source_url: WIKI_URL,
+            note: "分類不明(割合)。バフスクロールと重複可能",
+            default_value: None,
+            damage_effects: &[],
+        },
+        BuffDefinition {
             id: "event_buff",
             name: "イベントバフ",
             purposes: &[BuffPurpose::Stats],
@@ -179,7 +243,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             value: BuffValue::UserInput { min: 0.0, max: 33.0 },
             exclusive_slots: vec!["trust_potion"],
             source_url: WIKI_URL,
-            note: "最大+33、人により異なる。信頼の薬と排他",
+            note: "最大+33、人により異なる。信頼の薬と排他。無印の信頼の薬は最大+28",
             default_value: Some(33.0),
             damage_effects: &[],
         },
@@ -194,7 +258,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             value: BuffValue::UserInput { min: 0.0, max: 999.0 },
             exclusive_slots: vec![],
             source_url: WIKI_URL,
-            note: "手入力(1枠)",
+            note: "手入力(1枠)。ウガンポの葉っぱ・トールのしっぽ焼き(+50)・四味仙霊芝草(+30)等も本項で表す",
             default_value: Some(50.0),
             damage_effects: &[],
         },
@@ -282,7 +346,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
-            exclusive_slots: Vec::new(),
+            exclusive_slots: vec!["x1_group_c"],
             source_url: WIKI_URL,
             note: "[X1] 上限 +50%。クリティカル率 +5% は未収録",
             default_value: None,
@@ -297,24 +361,24 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
-            exclusive_slots: Vec::new(),
+            exclusive_slots: vec!["x1_group_d"],
             source_url: WIKI_URL,
-            note: "[X1]。橙色の薬・宝玉<赤眼の魔王> 等と同枠",
+            note: "[X1]。橙色の薬・16周年ピクニックのり巻きお弁当・ラッキービースト-I型 車掌タイプ・マルクスのクナイ・デスガイニーの葉・宝玉<赤眼の魔王>・朧塚商店街のクリームパン・<シルバーソード>のクリームシチュー等と同枠",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
         BuffDefinition {
             id: "moonlight_potion",
-            name: "月光のポーション",
+            name: "月光・怪力のポーション",
             purposes: &[BuffPurpose::Damage],
             origin: BuffOrigin::Item,
             // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
-            exclusive_slots: Vec::new(),
+            exclusive_slots: vec!["x1_group_b"],
             source_url: WIKI_URL,
-            note: "[X1]。怪力のポーションと同枠",
+            note: "[X1]。月光のポーションと怪力のポーションは同値同枠なのでまとめている",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
@@ -327,9 +391,9 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
-            exclusive_slots: Vec::new(),
+            exclusive_slots: vec!["x1_group_d"],
             source_url: WIKI_URL,
-            note: "[X1]",
+            note: "[X1]。イザベルの特選秘薬(ダメージ)等と同枠(【D】)",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
         },
@@ -342,11 +406,41 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             target: BuffTarget::AllStats,
             layer: StatLayer::PercentOfBase,
             value: BuffValue::RecordOnly,
-            exclusive_slots: Vec::new(),
+            exclusive_slots: vec!["x1_group_e"],
             source_url: WIKI_URL,
             note: "[X1]",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
+        },
+        BuffDefinition {
+            id: "sakuraeda_hitokata",
+            name: "桜枝のヒトカタ",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec!["x1_group_c", "x1_group_e"],
+            source_url: WIKI_URL,
+            note: "[X1]。被ダメージ減少 [S1] +10% は未収録",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "oborozuka_cream_bread",
+            name: "朧塚商店街のクリームパン / ロデリック商会特製マヨネーズ",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec!["x1_group_b", "x1_group_c", "x1_group_d"],
+            source_url: WIKI_URL,
+            note: "[X1]。朧塚商店街のクリームパンとロデリック商会特製マヨネーズは同値同枠なのでまとめている",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
         },
         BuffDefinition {
             id: "awakening_elixir",
@@ -390,6 +484,51 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             exclusive_slots: Vec::new(),
             source_url: WIKI_URL,
             note: "[X2]",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+        },
+        BuffDefinition {
+            id: "club_shop_buff_type_p",
+            name: "クラブ商店バフTypeP",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Club,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: CLUB_WIKI_URL,
+            note: "[X2] クラブダンジョン掲示板",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+        },
+        BuffDefinition {
+            id: "wednesday_attack_c_rank",
+            name: "攻撃力増加(Cランク)",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Minigame,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2] 水曜日の異変(規則正しいゼリッピ)",
+            default_value: None,
+            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+        },
+        BuffDefinition {
+            id: "twin_dango",
+            name: "双子のお団子 / 攻撃力・防御力10%上昇",
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: Vec::new(),
+            source_url: WIKI_URL,
+            note: "[X2]。被ダメージ減少 [S2] +10% は未収録",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
         },
@@ -556,8 +695,8 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn 常用バフは35件() {
-        assert_eq!(buff_catalog().len(), 35);
+    fn 常用バフは44件() {
+        assert_eq!(buff_catalog().len(), 44);
         assert!(!buff_catalog().iter().any(|d| d.id == "unleash"));
         assert!(!buff_catalog().iter().any(|d| d.id == "soul_link_status"));
     }
@@ -589,7 +728,7 @@ mod tests {
             .filter(|d| !d.damage_effects.is_empty())
             .map(|d| d.id)
             .collect();
-        assert_eq!(with_damage.len(), 24);
+        assert_eq!(with_damage.len(), 30);
         // ステと与ダメージの両方に効くもの
         for id in [
             "guardian_potion",
@@ -730,7 +869,58 @@ mod tests {
             .unwrap();
         assert_eq!(
             illumination.exclusive_slots,
-            vec!["percent_slot_1", "percent_slot_2"]
+            vec!["percent_slot_1", "percent_slot_2", "x1_group_a"]
         );
+    }
+
+    #[test]
+    fn クラブ商店バフtypepは攻撃ダメージ一般に効く() {
+        let catalog = buff_catalog();
+        let def = catalog
+            .iter()
+            .find(|d| d.id == "club_shop_buff_type_p")
+            .unwrap();
+        assert_eq!(
+            def.damage_effects,
+            &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }]
+        );
+    }
+
+    #[test]
+    fn 成長支援ポーションは能力値割合とx1の両方に効きイザベルの秘法比率と排他() {
+        let catalog = buff_catalog();
+        let def = catalog
+            .iter()
+            .find(|d| d.id == "growth_support_potion")
+            .unwrap();
+        assert_eq!(def.layer, StatLayer::PercentOfBase);
+        assert!(matches!(def.value, BuffValue::Fixed(v) if (v - 0.50).abs() < 1e-12));
+        assert_eq!(
+            def.damage_effects,
+            &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }]
+        );
+        let ratio = catalog.iter().find(|d| d.id == "isabelle_ratio").unwrap();
+        let shared: Vec<_> = def
+            .exclusive_slots
+            .iter()
+            .filter(|slot| ratio.exclusive_slots.contains(slot))
+            .collect();
+        assert!(!shared.is_empty(), "isabelle_ratio と排他枠を共有していない");
+    }
+
+    #[test]
+    fn x1の枠がぶつかるバフは同じ排他枠を共有する() {
+        let catalog = buff_catalog();
+        let isabel_damage = catalog.iter().find(|d| d.id == "isabel_damage").unwrap();
+        let sakuraeda = catalog
+            .iter()
+            .find(|d| d.id == "sakuraeda_hitokata")
+            .unwrap();
+        let shared: Vec<_> = isabel_damage
+            .exclusive_slots
+            .iter()
+            .filter(|slot| sakuraeda.exclusive_slots.contains(slot))
+            .collect();
+        assert!(!shared.is_empty(), "isabel_damage と sakuraeda_hitokata が枠を共有していない");
     }
 }

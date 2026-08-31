@@ -50,6 +50,15 @@ ICONS: dict[str, tuple[str, str]] = {
     "berserker_rune": ("ルーンマスター", "狂戦士のルーン.png"),
     "fever": ("ステータス", "フィーバー3段階.png"),
     "deep_rune_attack": ("ルーンマスター", "深化ルーン攻撃.png"),
+    "growth_support_potion": ("ステータス", "リノベーション成長バフ.png"),
+    "blessing_potion": ("ステータス", "祝福のポーション.png"),
+    "demon_slayer_blessing": ("ステータス", "退魔師の恵み.png"),
+    "karill_buff_scroll": ("ステータス", "カリル家のバフスクロール.png"),
+    "sakuraeda_hitokata": ("ステータス", "桜枝のヒトカタ.png"),
+    "oborozuka_cream_bread": ("ステータス", "朧塚商店街のクリームパン.png"),
+    "club_shop_buff_type_p": ("ステータス", "バフスクロール.png"),
+    "wednesday_attack_c_rank": ("ステータス", "AF攻撃.png"),
+    "twin_dango": ("ステータス", "双子のお団子.png"),
 }
 
 
