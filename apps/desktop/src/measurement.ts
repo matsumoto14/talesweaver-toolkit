@@ -8,10 +8,14 @@
 // その場合ツール側で計算値は出せないが、**攻撃側の条件は敵に依らず出せる**ので、
 // 攻撃力(A)・最終能力値・スキルと実測を送れば、こちらで逆算できる。
 //
+// **1 点では足りない**。敵側は 防御力 C(引き算)・カット率 V(掛け算)・被害減少 M(引き算)で
+// 効き方が違い、`y = (x − C) × K − M` の直線になる。傾き K と切片を出すには
+// **攻撃力を変えた 2 点以上**が要る(docs/enemy-verification.md)。だから 1 通に複数点を入れる。
+//
 // 送信経路は問い合わせと同じ中継サーバー(services/inquiry-worker → GitHub Issue)。
 // 条件は **1 行の JSON** で診断情報に入れる。中継側が本文の ``` を潰すので本文には置けず、
 // 診断情報だけが Issue でコードブロックに収まるため(services/inquiry-worker の clean / renderIssueBody)。
-import type { AttackPowerBreakdown, DamageResult, EffectiveStats, Skill } from "./api/types";
+import type { DamageResult, EffectiveStats, Skill } from "./api/types";
 import { fmtInt } from "./format";
 import type { InquiryDraft } from "./inquiry";
 
@@ -25,17 +29,13 @@ export interface MeasurementConditions {
   content: { id: string; name: string; enemyId: string } | null;
   /** 一覧に無い敵。収録済みのときは null */
   unlisted: { name: string; place: string } | null;
-  /** コンボで挟んでいる通常攻撃(コンボしていないなら null) */
-  normalAttack: Skill | null;
-  /** ツールの計算。敵が未収録だと出せないので null */
-  result: DamageResult | null;
-  /** 攻撃力(A)。敵に依らないので未収録でも出せる */
-  attack: AttackPowerBreakdown | null;
-  /** 最終能力値。逆算の入力になる */
-  stats: EffectiveStats | null;
 }
 
-export interface MeasurementEntry {
+/**
+ * 1 点ぶんの測定。**攻撃力と最終能力値も点ごとに持つ** — 装備を替えて攻撃力を変えるのが
+ * 2 点測定のやり方なので、条件側に置くと点ごとの違いが消える。
+ */
+export interface MeasurementSample {
   /** ゲーム内で出た 1 発のダメージ */
   damage: number;
   /** クリティカルだったか */
@@ -44,6 +44,12 @@ export interface MeasurementEntry {
   hits: number;
   /** 気づいたこと(強打が乗った、上限に当たっていそう、など) */
   note: string;
+  /** そのときの攻撃力(A)。逆算の x 軸 */
+  attack: number | null;
+  /** そのときの最終能力値 */
+  stats: EffectiveStats | null;
+  /** そのときのツールの計算値(敵が未収録なら null) */
+  expected: number | null;
 }
 
 /** 計算値のうち、実測と突き合わせる側の値。敵が未収録なら null */
@@ -58,101 +64,90 @@ export const damageGap = (measured: number, expected: number | null): number | n
 export const targetLabel = (conditions: MeasurementConditions): string =>
   conditions.content?.name ?? conditions.unlisted?.name ?? "対象";
 
+/**
+ * 防御力とカット率を分けて逆算できるか。
+ * **攻撃力が違う点が 2 つ以上**必要(同じ攻撃力を何度測っても直線は引けない)。
+ */
+export const canSeparate = (samples: MeasurementSample[]): boolean =>
+  new Set(samples.map((s) => s.attack).filter((a): a is number => a !== null)).size >= 2;
+
 /** 中継サーバーに送る下書き。送信前にそのまま全文が表示される(問い合わせと同じ作法) */
 export function measurementDraft(
   conditions: MeasurementConditions,
-  entry: MeasurementEntry,
+  samples: MeasurementSample[],
 ): InquiryDraft {
-  const expected = expectedDamage(conditions.result, entry.critical);
-  const gap = damageGap(entry.damage, expected);
   const label = targetLabel(conditions);
+  const listed = conditions.content !== null;
   const lines = [
-    `${label} を ${conditions.skill.name} で殴った実測です。`,
+    `${label} を ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`,
     "",
-    `- 実測: ${fmtInt(entry.damage)}(${entry.critical ? "クリティカル" : "非クリティカル"}・${fmtInt(entry.hits)} 発中の最大)`,
+    listed ? "| 攻撃力 | 実測 | 計算 | 差 | 発数 |" : "| 攻撃力 | 実測 | 発数 |",
+    listed ? "|---:|---:|---:|---:|---:|" : "|---:|---:|---:|",
   ];
-  if (expected === null) {
-    lines.push(
-      "- このツールの計算: **出せません**(この敵はまだ収録していません)",
-      `- 攻撃力(A): ${conditions.attack ? fmtInt(conditions.attack.value) : "—"}`,
-    );
-    if (conditions.unlisted?.place.trim()) {
-      lines.push(`- 出た場所: ${conditions.unlisted.place.trim()}`);
+  for (const sample of samples) {
+    const attack = sample.attack !== null ? fmtInt(sample.attack) : "—";
+    const damage = `${fmtInt(sample.damage)}${sample.critical ? "(クリ)" : ""}`;
+    if (listed) {
+      const gap = damageGap(sample.damage, sample.expected);
+      lines.push(
+        `| ${attack} | ${damage} | ${sample.expected !== null ? fmtInt(Math.trunc(sample.expected)) : "—"} `
+        + `| ${gap === null ? "—" : `${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(1)}%`} | ${fmtInt(sample.hits)} |`,
+      );
+    } else {
+      lines.push(`| ${attack} | ${damage} | ${fmtInt(sample.hits)} |`);
     }
-  } else {
-    lines.push(
-      `- このツールの計算: ${fmtInt(Math.trunc(expected))}`,
-      `- 差: ${gap === null ? "—" : `${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(1)}%`}`,
-    );
   }
-  if (entry.note.trim()) lines.push("", `気づいたこと: ${entry.note.trim()}`);
+  if (!listed) {
+    lines.push("", "この敵はまだ収録していないので、ツールの計算値はありません。");
+    if (conditions.unlisted?.place.trim()) lines.push(`出た場所: ${conditions.unlisted.place.trim()}`);
+  }
   lines.push(
     "",
-    "計算に使った条件は下の「アプリが自動で付ける情報」に入っています(集計用の JSON)。",
+    canSeparate(samples)
+      ? "攻撃力の違う点が 2 つ以上あるので、防御力とカット率を分けて逆算できます。"
+      : "攻撃力が同じ点だけなので、防御力とカット率は分けられません(装備を替えてもう 1 点あると分けられます)。",
   );
+  const notes = samples.map((s) => s.note.trim()).filter(Boolean);
+  if (notes.length > 0) lines.push("", `気づいたこと: ${notes.join(" / ")}`);
+  lines.push("", "条件は下の「アプリが自動で付ける情報」に入っています(集計用の JSON)。");
 
   return {
     kind: "data",
-    title: `実測 ${label} / ${conditions.skill.name}`,
+    title: `実測 ${label} / ${conditions.skill.name}(${samples.length} 点)`,
     body: lines.join("\n"),
-    diagnostics: JSON.stringify(measurementPayload(conditions, entry)),
+    diagnostics: JSON.stringify(measurementPayload(conditions, samples)),
   };
 }
 
 /** 集計する側が読む形。項目が増えても壊れないよう `version` を持つ */
-function measurementPayload(conditions: MeasurementConditions, entry: MeasurementEntry) {
-  const { result, attack, stats } = conditions;
+function measurementPayload(conditions: MeasurementConditions, samples: MeasurementSample[]) {
   return {
     kind: "measurement",
-    version: 2,
+    version: 3,
     character: {
       id: conditions.gameCharacterId,
       awakening: conditions.awakeningStage,
       eternal: conditions.eternalLevel,
-      stats,
     },
     skill: {
       id: conditions.skill.id,
       combo_type: conditions.comboSkillType,
       dependency: conditions.skill.dependency,
-      multiplier: result?.effective_skill_multiplier ?? conditions.skill.multiplier,
-      hits: result?.hit_count ?? conditions.skill.hit_count,
+      multiplier: conditions.skill.multiplier,
+      hits: conditions.skill.hit_count,
       element: conditions.skill.element,
     },
     target: conditions.content
       ? { listed: true, content: conditions.content.id, enemy: conditions.content.enemyId }
       : { listed: false, name: conditions.unlisted?.name ?? "", place: conditions.unlisted?.place ?? "" },
-    combo: conditions.normalAttack
-      ? {
-          normal_attack: conditions.normalAttack.id,
-          interval: conditions.normalAttack.combo_interval,
-          cycle_seconds: result?.combo?.seconds ?? null,
-        }
-      : null,
-    // 攻撃力は敵に依らないので、未収録の敵でも入る(逆算の x 軸になる)
-    attack: attack
-      ? {
-          value: attack.value,
-          stat_attack: attack.stat_attack,
-          equipment_attack: attack.equipment_attack,
-          enhance_rate: attack.enhance_rate,
-        }
-      : null,
-    calculated: result
-      ? {
-          per_hit_max: result.per_hit.max,
-          per_hit_critical: result.per_hit.critical,
-          total_max: result.total.max,
-          total_critical: result.total.critical,
-          // 上限に当たっていると実測との突き合わせが線形にならない(docs/enemy-verification.md)
-          capped_loss: result.capped_loss,
-          damage_cap: result.damage_cap,
-        }
-      : null,
-    measured: {
-      damage: entry.damage,
-      critical: entry.critical,
-      hits: entry.hits,
-    },
+    samples: samples.map((sample) => ({
+      damage: sample.damage,
+      critical: sample.critical,
+      hits: sample.hits,
+      attack: sample.attack,
+      stats: sample.stats,
+      expected: sample.expected,
+      note: sample.note.trim() || null,
+    })),
   };
 }

@@ -10,7 +10,9 @@
   import { errorMessage, listSkills, previewDamage, previewEffectiveStats } from "../../api/commands";
   import type { AttackPowerBreakdown, DamageResult, EffectiveStats, Skill } from "../../api/types";
   import { fmtInt } from "../../format";
-  import { damageGap, expectedDamage, measurementDraft } from "../../measurement";
+  import {
+    canSeparate, damageGap, expectedDamage, measurementDraft, type MeasurementSample,
+  } from "../../measurement";
   import { app, flatContents, payloadOf, selectedCharacter } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import CheckChip from "../../ui/CheckChip.svelte";
@@ -101,22 +103,48 @@
     });
   });
 
-  // --- 実測 -----------------------------------------------------------------
+  // --- 実測(点を溜めてから送る)---------------------------------------------
+  // 1 点では防御力とカット率を分けられない。**装備を替えて攻撃力を変えた 2 点以上**が要る
+  // (docs/enemy-verification.md)ので、ここで溜めて 1 通で送る。
   let measuredDamage = $state<number | null>(null);
   let measuredCritical = $state(false);
   let measuredHits = $state(10);
   let measuredNote = $state("");
+  let samples = $state<MeasurementSample[]>([]);
   const expected = $derived(expectedDamage(result, measuredCritical));
   const gap = $derived(measuredDamage !== null ? damageGap(measuredDamage, expected) : null);
   const targetReady = $derived(
     targetKind === "listed" ? content !== null : unlistedName.trim().length > 0,
   );
-  const canSend = $derived(
-    measuredDamage !== null && measuredDamage > 0 && skill !== null && character !== null && targetReady,
-  );
+  const canAdd = $derived(measuredDamage !== null && measuredDamage > 0 && skill !== null && targetReady);
+  const canSend = $derived(samples.length > 0 && skill !== null && character !== null && targetReady);
+  const separable = $derived(canSeparate(samples));
+
+  /** いまの入力を 1 点として記録し、入力欄は次の点のために空にする */
+  function addSample() {
+    if (measuredDamage === null) return;
+    samples = [
+      ...samples,
+      {
+        damage: measuredDamage,
+        critical: measuredCritical,
+        hits: measuredHits,
+        note: measuredNote,
+        attack: attack?.value ?? null,
+        stats,
+        expected,
+      },
+    ];
+    measuredDamage = null;
+    measuredNote = "";
+  }
+
+  function removeSample(index: number) {
+    samples = samples.filter((_, i) => i !== index);
+  }
 
   function send() {
-    if (!skill || !character || measuredDamage === null) return;
+    if (!skill || !character || samples.length === 0) return;
     app.inquiryPrefill = measurementDraft(
       {
         gameCharacterId: character.game_character_id,
@@ -130,12 +158,8 @@
         unlisted: targetKind === "unlisted"
           ? { name: unlistedName.trim(), place: unlistedPlace.trim() }
           : null,
-        normalAttack: null,
-        result: targetKind === "listed" ? result : null,
-        attack,
-        stats,
       },
-      { damage: measuredDamage, critical: measuredCritical, hits: measuredHits, note: measuredNote },
+      samples,
     );
   }
 </script>
@@ -249,7 +273,49 @@
         </label>
 
         <div class="send">
-          <button type="button" class="btn primary" disabled={!canSend} onclick={send}>この実測を送る</button>
+          <button type="button" class="btn" disabled={!canAdd} onclick={addSample}>この 1 点を記録する</button>
+          <span class="dim">記録したら、装備を替えて攻撃力を変え、もう 1 点測ってください。</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="area-head">
+          <span class="area-name">記録した点</span>
+          <span class="area-rule"></span>
+          <span class="count num">{samples.length}</span>
+        </div>
+        {#if samples.length === 0}
+          <p class="note dim">
+            まだ 1 点もありません。<b>攻撃力を変えた 2 点以上</b>あると、防御力とカット率を分けて
+            逆算できます(1 点だけでも送れますが、分けられません)。
+          </p>
+        {:else}
+          <div class="samples">
+            {#each samples as sample, index (index)}
+              <div class="sample-row">
+                <span class="tag">{index + 1}</span>
+                <span class="dim">攻撃力</span>
+                <span class="num">{sample.attack !== null ? fmtInt(sample.attack) : "—"}</span>
+                <span class="dim">実測</span>
+                <span class="num">{fmtInt(sample.damage)}</span>
+                {#if sample.critical}<span class="tag crit">クリ</span>{/if}
+                <span class="dim">{fmtInt(sample.hits)} 発中</span>
+                {#if sample.note}<span class="dim sample-note">{sample.note}</span>{/if}
+                <button type="button" class="btn danger sample-del" onclick={() => removeSample(index)}>外す</button>
+              </div>
+            {/each}
+          </div>
+          <p class="note dim" class:ready={separable}>
+            {separable
+              ? "攻撃力の違う点が 2 つ以上あります。防御力とカット率を分けて逆算できます。"
+              : "攻撃力が同じ点だけです。装備を替えてもう 1 点足すと、防御力とカット率を分けられます。"}
+          </p>
+        {/if}
+
+        <div class="send">
+          <button type="button" class="btn primary" disabled={!canSend} onclick={send}>
+            {samples.length} 点まとめて送る
+          </button>
           <span class="dim">送信前に全文を確認できます。</span>
         </div>
       </div>
@@ -300,5 +366,24 @@
   .compare .num.warn { color: var(--warm); }
 
   .send { display: flex; align-items: center; gap: 10px; font-size: 9.5px; flex-wrap: wrap; }
+
+  /* 記録した点。行は増えるだけで、押した場所より上は動かない(§00 03) */
+  .count { font-size: 10.5px; font-weight: 700; color: var(--fg-sub); }
+  .samples { display: flex; flex-direction: column; gap: 5px; }
+  .sample-row {
+    display: flex; align-items: baseline; gap: 8px; padding: 5px 10px; border-radius: var(--r-window);
+    background: var(--bg-field); border: 1px solid var(--border-soft); font-size: 10px;
+  }
+  .sample-row .num { font-size: 11.5px; font-weight: 700; }
+  .sample-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sample-del { margin-left: auto; flex: none; font-size: 9px; padding: 1px 8px; }
+  .tag {
+    flex: none; padding: 1px 7px; border-radius: var(--r-pill);
+    background: var(--surface-inset); border: 1px solid var(--border-soft);
+    font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
+  }
+  .tag.crit { background: var(--state-edge-bg); border-color: var(--state-edge-bd); color: var(--state-edge-fg); }
+  /* 2 点そろったら「分けられる」と分かるようにする(§00 05) */
+  .note.ready { border-style: solid; border-color: var(--state-met-bd); background: var(--state-met-bg); }
   .foot { margin: 0; font-size: 10px; line-height: 1.7; }
 </style>
