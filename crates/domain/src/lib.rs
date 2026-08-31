@@ -110,13 +110,15 @@ pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{
     apply_character_skills, apply_masteries, apply_pins, apply_temporary_adjustments,
     apply_unleash, buff_target_stat_gains, build_modifiers, contribution_source_effects,
+    group_source_effects,
     preview_effective_stats, stat_limits,
     summarize_buff_selection, Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice,
     BuffDamageEffect, BuffDamageSummary, BuffDefinition, BuffOrigin, BuffPurpose, BuffSelection, BuffTarget,
     BuffTargetStatGain,
     BuffValue, CommonSkillPreview, CriticalRateBonusPreview, Crown, MonsterCards, PartAttackContribution,
     PetSkillTier, PetSkillTierBonus, PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution,
-    StatLayer, StatLimits, StatPreview, StatSourceError, StatSourceEffect, StatSources, ThesisCoreRegionPreview,
+    StatGroupEffect, StatLayer, StatLimits, StatPreview, StatSourceError, StatSourceEffect,
+    StatSourceGroup, StatSources, ThesisCoreRegionPreview,
     UltimateSkillPreview,
 };
 pub use stats::{

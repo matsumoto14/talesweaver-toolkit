@@ -280,6 +280,33 @@ pub enum StatLayer {
     FinalFixed,
 }
 
+/// 補正の出どころの区分。**ゲーム内の能力値と突き合わせるときの切り口**で、
+/// 「今日 ON にしたバフ」「装備を替えたら動く分」「ふだん動かない分」を分けて見せるためのもの。
+/// 層(`StatLayer`)が計算の順序を表すのに対し、こちらは人が確認する単位を表す。
+///
+/// 画面が補正源名を文字列で振り分けると、名前を変えた瞬間に区分が壊れる。
+/// 区分は寄与を作る側(ここ)が付けて、そのままフロントまで運ぶ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatSourceGroup {
+    /// 選択中の常用バフ(`BuffSelection`)。外せばすぐ消える分
+    Buff,
+    /// 装備から能力値に効くもの(シエナのオーラ)。装備を替えると動く分
+    Equipment,
+    /// それ以外(ペット・ルーン・カード・クラウン・聖物・キャラスキル・マスタリー・
+    /// アンリーシュ・一時調整)。ふだん動かない分
+    Other,
+}
+
+impl StatSourceGroup {
+    /// 表示順(バフ → 装備 → そのほか)。UI は必ずこの順で列を並べる
+    pub const ALL: [StatSourceGroup; 3] = [
+        StatSourceGroup::Buff,
+        StatSourceGroup::Equipment,
+        StatSourceGroup::Other,
+    ];
+}
+
 /// バフの対象ステ。
 ///
 /// カタログ(`BuffDefinition`)は Rust 側で構築して Tauri コマンドの戻り値として
@@ -575,6 +602,7 @@ impl StatSources {
 }
 
 /// ステ増加を層に応じて足す(マスタリー・キャラスキル共通)。
+/// 呼び出し元はどちらも恒常補正なので、区分は `Other` で固定する。
 fn add_stat_rate(
     modifiers: &mut StatModifierSet,
     contributions: &mut Vec<StatContribution>,
@@ -593,6 +621,7 @@ fn add_stat_rate(
     }
     contributions.push(StatContribution {
         source,
+        group: StatSourceGroup::Other,
         kind,
         layer,
         value: rate,
@@ -711,6 +740,8 @@ pub fn summarize_buff_selection(
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatContribution {
     pub source: String,
+    /// 出どころの区分(バフ / 装備 / そのほか)。寄与を作るところで付ける
+    pub group: StatSourceGroup,
     pub kind: StatKind,
     pub layer: StatLayer,
     pub value: f64,
@@ -792,6 +823,7 @@ pub fn build_modifiers(
             modifiers.get_mut(kind).fixed += bonus;
             contributions.push(StatContribution {
                 source: format!("ペット Sスキル({tier:?})"),
+                group: StatSourceGroup::Other,
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
@@ -807,6 +839,7 @@ pub fn build_modifiers(
             modifiers.get_mut(kind).fixed += bonus;
             contributions.push(StatContribution {
                 source: "ルーンスキル".to_string(),
+                group: StatSourceGroup::Other,
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
@@ -822,6 +855,7 @@ pub fn build_modifiers(
             modifiers.get_mut(kind).fixed += bonus;
             contributions.push(StatContribution {
                 source: "モンスターカード".to_string(),
+                group: StatSourceGroup::Other,
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
@@ -837,6 +871,7 @@ pub fn build_modifiers(
             modifiers.get_mut(kind).final_fixed += bonus;
             contributions.push(StatContribution {
                 source: "クラウン".to_string(),
+                group: StatSourceGroup::Other,
                 kind,
                 layer: StatLayer::FinalFixed,
                 value: bonus as f64,
@@ -852,6 +887,7 @@ pub fn build_modifiers(
             modifiers.get_mut(kind).final_fixed += bonus;
             contributions.push(StatContribution {
                 source: "神鳥の聖物".to_string(),
+                group: StatSourceGroup::Other,
                 kind,
                 layer: StatLayer::FinalFixed,
                 value: bonus as f64,
@@ -953,6 +989,7 @@ pub fn build_modifiers(
             }
             contributions.push(StatContribution {
                 source: def.name.to_string(),
+                group: StatSourceGroup::Buff,
                 kind,
                 layer: def.layer,
                 value,
@@ -978,6 +1015,7 @@ pub fn apply_temporary_adjustments(
             modifiers.get_mut(kind).fixed += adjustment.add;
             contributions.push(StatContribution {
                 source: "一時調整".to_string(),
+                group: StatSourceGroup::Other,
                 kind,
                 layer: StatLayer::Fixed,
                 value: adjustment.add as f64,
@@ -1083,6 +1121,10 @@ pub struct StatPreview {
     /// 補正源 1 件ぶんの帰属(「この要因が無かったら最終能力値がいくつ動くか」)。
     /// `contributions[].effect`(層のステップ幅)とは別物 — 詳細は `contribution_source_effects`。
     pub source_effects: Vec<StatSourceEffect>,
+    /// `source_effects` を ステ × 区分(バフ / 装備 / そのほか)でまとめたもの。
+    /// ゲーム内の能力値と突き合わせるときに「どこから来た上昇か」を出す。
+    /// 常に 7 ステ × 3 区分ぶん返る(正は `group_source_effects`)
+    pub group_effects: Vec<StatGroupEffect>,
     /// 主軸スキル未選択なら `None`
     pub attack: Option<AttackPreview>,
     /// 共通スキル(wiki: Skill/共通・Skill/極限)の効き先サマリ。
@@ -1214,6 +1256,7 @@ pub fn apply_siena_stats(
             modifiers.get_mut(kind).final_fixed += value;
             contributions.push(StatContribution {
                 source: "シエナのオーラ".to_string(),
+                group: StatSourceGroup::Equipment,
                 kind,
                 layer: StatLayer::FinalFixed,
                 value: value as f64,
@@ -1239,6 +1282,7 @@ pub fn apply_unleash(
             modifiers.get_mut(kind).multiplier_b += rate;
             contributions.push(StatContribution {
                 source: "アンリーシュ".to_string(),
+                group: StatSourceGroup::Other,
                 kind,
                 layer: StatLayer::MultiplierB,
                 value: rate,
@@ -1314,9 +1358,49 @@ pub fn fill_contribution_effects(
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatSourceEffect {
     pub source: String,
+    /// 出どころの区分。元の `StatContribution` からそのまま運ぶ
+    pub group: StatSourceGroup,
     pub kind: StatKind,
+    /// この要因が乗る層。ゲーム内の表示と突き合わせるとき、値が合わない原因は
+    /// 「どの層の 1 件が抜けているか」なので、帰属だけでなく層も一緒に運ぶ
+    pub layer: StatLayer,
+    /// 層への入力値(固定値なら加算値、倍率A なら係数そのもの)。`effect` と違い
+    /// wiki やゲーム内の表記(+7 / ×1.10)にそのまま対応する
+    pub value: f64,
     /// この要因の `effect`(上限を跨いだ分もそのまま織り込んだ値)
     pub effect: i64,
+}
+
+/// ステ × 区分の帰属合計。`StatSourceEffect` を区分でまとめたもので、
+/// **`素ステ + Σ(そのステの全区分) = 最終能力値`** が上限を跨いでも厳密に成り立つ
+/// (`contribution_source_effects` の性質をそのまま引き継ぐ)。
+/// フロントで足し算をしない(ADR 001)ため、まとめはここで済ませて返す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatGroupEffect {
+    pub kind: StatKind,
+    pub group: StatSourceGroup,
+    pub effect: i64,
+}
+
+/// `contribution_source_effects` の結果を ステ × 区分 でまとめる。
+/// 値が 0 の組も必ず 1 行返す(7 ステ × 3 区分 = 21 行、`StatKind::ALL` × `StatSourceGroup::ALL` の順)。
+/// 行が出たり消えたりすると列が増減して画面が動くため(§00 03)、常に同じ形で返す。
+pub fn group_source_effects(effects: &[StatSourceEffect]) -> Vec<StatGroupEffect> {
+    let mut out = Vec::with_capacity(StatKind::ALL.len() * StatSourceGroup::ALL.len());
+    for kind in StatKind::ALL {
+        for group in StatSourceGroup::ALL {
+            out.push(StatGroupEffect {
+                kind,
+                group,
+                effect: effects
+                    .iter()
+                    .filter(|e| e.kind == kind && e.group == group)
+                    .map(|e| e.effect)
+                    .sum(),
+            });
+        }
+    }
+    out
 }
 
 /// `fill_contribution_effects` と同じ「層順のステップ幅」を、**`cap` を織り込んだ形**で返す
@@ -1391,7 +1475,10 @@ pub fn contribution_source_effects(
                 let total = raw_total(percent_n, fixed, mult_a_n, mult_b, final_fixed).min(cap);
                 out.push(StatSourceEffect {
                     source: c.source.clone(),
+                    group: c.group,
                     kind,
+                    layer: c.layer,
+                    value: c.value,
                     effect: total - prev_total,
                 });
                 prev_total = total;
@@ -1718,18 +1805,13 @@ pub fn preview_effective_stats(
             character_skills,
             stat_cap,
         )?;
-        let buff_names: HashSet<&str> = buffs
-            .choices
-            .iter()
-            .filter_map(|c| catalog.iter().find(|d| d.id == c.buff_id))
-            .map(|d| d.name)
-            .collect();
         let mut amplification = BuffStatAmplification::default();
         for kind in StatKind::ALL {
             let total_diff = stats.get(kind) - baseline_stats.get(kind);
+            // バフ行かどうかは区分で判る(名前一致にすると、同名の補正源が増えた時に壊れる)
             let buff_rows_total: i64 = source_effects
                 .iter()
-                .filter(|e| e.kind == kind && buff_names.contains(e.source.as_str()))
+                .filter(|e| e.kind == kind && e.group == StatSourceGroup::Buff)
                 .map(|e| e.effect)
                 .sum();
             amplification.set(kind, total_diff - buff_rows_total);
@@ -1743,6 +1825,7 @@ pub fn preview_effective_stats(
         stats,
         traces,
         contributions,
+        group_effects: group_source_effects(&source_effects),
         source_effects,
         attack,
         common_skill,
@@ -2057,8 +2140,19 @@ mod tests {
     const NO_CAP: i64 = i64::MAX;
 
     fn c(source: &str, kind: StatKind, layer: StatLayer, value: f64) -> StatContribution {
+        cg(source, StatSourceGroup::Other, kind, layer, value)
+    }
+
+    fn cg(
+        source: &str,
+        group: StatSourceGroup,
+        kind: StatKind,
+        layer: StatLayer,
+        value: f64,
+    ) -> StatContribution {
         StatContribution {
             source: source.to_string(),
+            group,
             kind,
             layer,
             value,
@@ -2178,6 +2272,65 @@ mod tests {
         let total: i64 = effects.iter().map(|x| x.effect).sum();
         assert!(trace.capped_loss > 0);
         assert_eq!(i64::from(trace.base) + total, trace.effective);
+    }
+
+    /// 区分の帰属は「常に 7 ステ × 3 区分」で返り、区分ごとの合計は元の帰属と一致する。
+    /// 画面は列を固定で並べるので、値が 0 の組も行が消えてはいけない(§00 03)。
+    #[test]
+    fn 区分ごとの帰属は全ての組を返し合計が一致する() {
+        let kind = StatKind::Hack;
+        let effects = vec![
+            StatSourceEffect {
+                source: "クラブ効果".to_string(),
+                group: StatSourceGroup::Buff,
+                kind,
+                layer: StatLayer::Fixed,
+                value: 7.0,
+                effect: 7,
+            },
+            StatSourceEffect {
+                source: "シエナのオーラ".to_string(),
+                group: StatSourceGroup::Equipment,
+                kind,
+                layer: StatLayer::FinalFixed,
+                value: 30.0,
+                effect: 30,
+            },
+            StatSourceEffect {
+                source: "ペット Sスキル".to_string(),
+                group: StatSourceGroup::Other,
+                kind,
+                layer: StatLayer::Fixed,
+                value: 50.0,
+                effect: 50,
+            },
+            StatSourceEffect {
+                source: "クラウン".to_string(),
+                group: StatSourceGroup::Other,
+                kind,
+                layer: StatLayer::FinalFixed,
+                value: 100.0,
+                effect: 100,
+            },
+        ];
+        let groups = group_source_effects(&effects);
+        assert_eq!(groups.len(), StatKind::ALL.len() * 3);
+        let get = |k: StatKind, g: StatSourceGroup| {
+            groups
+                .iter()
+                .find(|x| x.kind == k && x.group == g)
+                .unwrap()
+                .effect
+        };
+        assert_eq!(get(kind, StatSourceGroup::Buff), 7);
+        assert_eq!(get(kind, StatSourceGroup::Equipment), 30);
+        assert_eq!(get(kind, StatSourceGroup::Other), 150);
+        // 寄与が 1 件も無いステも 0 の行で返る
+        assert_eq!(get(StatKind::Int, StatSourceGroup::Buff), 0);
+        assert_eq!(
+            groups.iter().map(|g| g.effect).sum::<i64>(),
+            effects.iter().map(|e| e.effect).sum::<i64>()
+        );
     }
 
     /// バフの固定値がマスタリーの倍率B に増幅された分を `buff_stat_amplification` が拾うこと。
@@ -2383,6 +2536,20 @@ mod tests {
                 buff_rows_total + preview.buff_stat_amplification.get(kind),
                 total_diff,
                 "{kind:?} で Σ(source_effects) + 増幅 != 増分"
+            );
+
+            // 区分の合計は最終能力値と一致する(ゲーム内の表示と突き合わせる前提の表示なので、
+            // ここがズレると画面が嘘をつく)
+            let group_total: i64 = preview
+                .group_effects
+                .iter()
+                .filter(|g| g.kind == kind)
+                .map(|g| g.effect)
+                .sum();
+            assert_eq!(
+                i64::from(base.get(kind)) + group_total,
+                preview.stats.get(kind),
+                "{kind:?} で 素ステ + Σ(区分) != 最終能力値"
             );
         }
     }

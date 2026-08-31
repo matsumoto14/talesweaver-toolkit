@@ -1,7 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
   CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier, SienaAuras,
-  RandomOptionRank, SkillDependency, StatKind, StatLayer, UltimateSkill,
+  RandomOptionRank, SkillDependency, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
 } from "./api/types";
 import { limits } from "./limits.svelte";
 
@@ -9,6 +9,17 @@ export const STAT_KINDS: StatKind[] = ["stab", "hack", "int", "def", "mr", "dex"
 export const STAT_LABELS: Record<StatKind, string> = {
   stab: "STAB", hack: "HACK", int: "INT", def: "DEF", mr: "MR", dex: "DEX", agi: "AGI",
 };
+
+/** 補正の出どころの区分。ゲーム内の能力値と突き合わせるときに、外せば消える分(バフ)・
+ *  装備を替えると動く分・ふだん動かない分に分けて読むためのラベル */
+export const STAT_SOURCE_GROUP_LABELS: Record<StatSourceGroup, string> = {
+  buff: "バフ",
+  equipment: "装備",
+  other: "そのほか",
+};
+
+/** 表示順。Rust の StatSourceGroup::ALL と同じ並び */
+export const STAT_SOURCE_GROUPS: StatSourceGroup[] = ["buff", "equipment", "other"];
 
 export const STAT_LAYER_LABELS: Record<StatLayer, string> = {
   percent_of_base: "割合増加",

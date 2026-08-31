@@ -458,8 +458,15 @@ export interface ElementPreview {
 // 属性ごとの値。crates/domain/src/element.rs の ElementValues。
 export type ElementValues = Record<Element, number>;
 
+// crates/domain/src/stat_sources.rs の StatSourceGroup。補正の出どころの区分
+// (ゲーム内の能力値と突き合わせるときの切り口)。振り分けは Rust 側が付ける — 画面で
+// 補正源名から判定しない
+export type StatSourceGroup = "buff" | "equipment" | "other";
+
 export interface StatContribution {
   source: string;
+  /** 出どころの区分(バフ / 装備 / そのほか) */
+  group: StatSourceGroup;
   kind: StatKind;
   layer: StatLayer;
   value: number;
@@ -473,7 +480,22 @@ export interface StatContribution {
 // 層順ステップ幅を、上限(cap)込みで返す(Σ が必ず最終能力値 − 素ステに一致する)。
 export interface StatSourceEffect {
   source: string;
+  group: StatSourceGroup;
   kind: StatKind;
+  /** この要因が乗る層(固定値 / 倍率A / …)。ゲーム内と合わないときは「どの層の 1 件が
+   *  抜けているか」が原因なので、帰属と一緒に運ぶ */
+  layer: StatLayer;
+  /** 層への入力値(+7 / ×1.10 のような、wiki・ゲーム内の表記に対応する値) */
+  value: number;
+  effect: number;
+}
+
+// crates/domain/src/stat_sources.rs の StatGroupEffect。source_effects を ステ × 区分 で
+// まとめたもの。素ステ + Σ(そのステの全区分) = 最終能力値 が常に厳密に成り立つ。
+// 常に 7 ステ × 3 区分ぶん返る(0 の組も行が消えない)
+export interface StatGroupEffect {
+  kind: StatKind;
+  group: StatSourceGroup;
   effect: number;
 }
 
@@ -1124,6 +1146,8 @@ export interface StatPreview {
   traces: StatTrace[];
   contributions: StatContribution[];
   source_effects: StatSourceEffect[];
+  /** source_effects を ステ × 区分でまとめたもの(常に 7 ステ × 3 区分) */
+  group_effects: StatGroupEffect[];
   /** 主軸スキル未選択なら null */
   attack: AttackPreview | null;
   /** 共通スキル(Skill/共通・Skill/極限)の効き先サマリ */
