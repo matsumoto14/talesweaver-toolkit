@@ -991,7 +991,13 @@
             <!-- 目標はふだん自動で決まる。ただし「クリアできる」と「周回したい」は別なので、
                  ここは自動値を上書きする例外操作(ux-guidelines 原則 4)。候補は重なって出るので
                  押した場所も右の数値も動かない(§00 03) -->
-            <div class="hero-goal-pick" use:flash={() => heroGoal?.content.id ?? ""}>
+            <div
+              class="hero-goal-pick" class:manual={manualGoal !== null}
+              title={manualGoal
+                ? "自動判定ではなく、自分で選んだ目標です(保存されます)。先頭の「自動: …」を選ぶと自動に戻ります"
+                : "自動で選ばれている目標です。押すと自分の目標に差し替えられます"}
+              use:flash={() => heroGoal?.content.id ?? ""}
+            >
               <Picker
                 options={goalOptions}
                 note="自動で選ばれる目標を、自分の目標に差し替える"
@@ -1001,9 +1007,6 @@
                 }
               />
             </div>
-            {#if manualGoal}
-              <span class="hero-goal-manual" title="自動判定ではなく、自分で選んだ目標です(保存されます)。先頭の「自動: …」を選ぶと自動に戻ります">自分で選択中</span>
-            {/if}
             {#if goalStale}
               <span class="coverage" title="選んでいた目標が今のデータにありません。自動で選んだ目標を出しています">選んだ目標が見つかりません</span>
             {/if}
@@ -1043,7 +1046,12 @@
               {/key}
             {/if}
             {#if heroGoal}
-              <button type="button" class="cta" onclick={tryHeroGoalInCalc}>計算タブで詰める ›</button>
+              <!-- この行は目標名 → 火力 → 到達バッジの 1 本の視線で読ませる。文字の CTA を末尾に置くと
+                   その幅ぶん量バーとスキル名が痩せるので、掘り下げの入口は一覧行と同じ「›」に寄せる -->
+              <button
+                type="button" class="cta chev-only" title="計算タブで詰める"
+                aria-label="計算タブで詰める" onclick={tryHeroGoalInCalc}
+              >›</button>
             {/if}
           {/if}
         </div>
@@ -1520,6 +1528,7 @@
     background: var(--bg-field); border: 1px solid var(--border-soft); font-size: 9.5px; font-weight: 700; color: var(--accent); white-space: nowrap;
   }
   .cta:hover { border-color: var(--accent); }
+  .cta.chev-only { padding: 4px 9px; font-size: 11px; }
 
   /* ===== キャラの窓ヒーロー ============================================= */
   .hero {
@@ -1563,19 +1572,22 @@
   /* エリア名は候補の中でだけ出す。トリガに置くと目標名を押しのけ、右のメーターまで痩せる
      (この行は目標名 → 火力 → 到達バッジの 1 本の視線で読ませたい。§00 01) */
   .hero-goal-pick :global(.picker-trigger .picker-meta) { display: none; }
-  /* 自動ではなく自分で選んでいる印。**保存される**値なので水色(--accent)。
-     自動どおりのときは出さない(§00 02) */
-  .hero-goal-manual {
-    flex: none; padding: 0 6px; border-radius: var(--r-pill);
-    background: var(--bg-field); border: 1px solid var(--accent); color: var(--accent);
-    font-size: 8.5px; font-weight: 700; white-space: nowrap;
+  /* 自動ではなく自分で選んでいる印。ピッカーの文字自体が「自動: …」かコンテンツ名かで
+     どちらかを言っているので、隣に「自分で選択中」の札は足さない(§00 02。札のぶん量バーが痩せる)。
+     **保存される**値であることは選択中の面を水色(--accent)で縁取って示す */
+  .hero-goal-pick.manual :global(.picker-trigger) {
+    border-color: var(--accent); box-shadow: 0 0 0 2px rgba(66, 109, 214, 0.16);
   }
   .hero-goal-note { min-width: 0; flex: 1; font-size: var(--t-label); }
   .hero-div { width: 1px; align-self: stretch; background: var(--border-soft); }
-  .hero-goal-skill { min-width: 0; max-width: 100px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* 幅の取り合いに負けて 2px の線にならないよう、量バーにも基準幅を持たせる */
-  .hero-meter { flex: 1 1 90px; height: 12px; }
-  .hero-spot-wrap { flex-shrink: 0; white-space: nowrap; }
+  /* スキル名は中身ぶんだけ(長い名前は 100px で省略)。ここを縮ませると
+     アイコンだけが残って何のスキルか読めなくなる(§06 アイコン単独表示は禁止) */
+  .hero-goal-skill { flex: none; max-width: 100px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 量バーは「目安に対してどれだけ出ているか」を一目で見る唯一の要素。行の幅が足りなくなったら
+     先に縮むのは目標名・スキル名のほうで、バーは縮ませない(shrink 0 + 基準幅) */
+  .hero-meter { flex: 1 0 96px; height: 12px; }
+  /* 桁が増えても右のバッジ・バーの位置が動かないよう、数値の場所は先に確保する(§00 03) */
+  .hero-spot-wrap { flex: none; min-width: 132px; text-align: right; white-space: nowrap; }
   .hero-spot { font-size: 27px; line-height: 1; font-weight: 700; color: #16223A; text-shadow: 0 1px 0 #fff; }
 
   .hero-advice { display: flex; flex-direction: column; gap: 5px; border-top: 1px dashed var(--border-soft); padding-top: 9px; }
