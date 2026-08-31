@@ -40,6 +40,7 @@
   import { reportError } from "../../toast.svelte";
   import { critChanceStage } from "../../ui/critChance";
   import Icon from "../../ui/Icon.svelte";
+  import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
@@ -175,11 +176,51 @@
    * 「どのスキルでどのくらい出るか」であり、それが出せない目標を主役に据えない。
    * 火力目標のある未クリアが 1 つも無ければ frontier(最初の未クリア)へ落とす。
    */
-  const heroGoal = $derived(
+  const autoGoal = $derived(
     rows.find((r) => r.ev && !r.ev.clear && r.content.need_per_hit !== null && r.ev.damage) ??
       rows.find((r) => r.content.id === frontierId) ??
       null,
   );
+  /**
+   * ユーザーが自分で据えた目標(character.goal_content_id)。「クリアできる」と
+   * 「周回したい・詰めたい」は別なので、自動判定を上書きできるようにしてある。
+   * 未設定なら null で、自動判定がそのまま主役になる(自動はやめない)。
+   * 敵データを持たないコンテンツは火力も命中Pも出せないので、選択肢にも据え先にもしない。
+   */
+  const manualGoal = $derived.by(() => {
+    const id = character?.goal_content_id ?? null;
+    if (id === null) return null;
+    return rows.find((r) => r.content.id === id && r.content.enemy_id !== null) ?? null;
+  });
+  /** 保存された目標が今のデータに無い(消えた・敵データが落ちた)。その旨を出して自動へ落とす */
+  const goalStale = $derived(rows.length > 0 && character?.goal_content_id != null && manualGoal === null);
+  const heroGoal = $derived(manualGoal ?? autoGoal);
+  /**
+   * 目標の候補。先頭は「自動」に戻す行で、自動なら**どこが目標になるか**まで出す
+   * (§00 05: 戻した先を頭の中で当てさせない)。以降は敵データのあるコンテンツだけ
+   * (計算タブの対象ピッカーと同じ絞り込み。選べない行を一覧に残さない)。
+   */
+  const goalOptions = $derived<PickerOption[]>([
+    {
+      value: "",
+      name: `自動: ${autoGoal ? (autoGoal.content.series?.name ?? autoGoal.content.name) : "目標なし(全クリア可)"}`,
+    },
+    ...rows
+      .filter((r) => r.content.enemy_id !== null)
+      .map((r) => ({ value: r.content.id, name: r.content.name, meta: r.areaName })),
+  ]);
+  /**
+   * 「次の目標」を保存する。null = 自動に戻す。保存経路は「今日の強化」と同じ直更新
+   * (キャラ全体の上書き保存をキャラ単位のキューに通す)。
+   */
+  function commitGoal(c: RegisteredCharacter, contentId: string | null) {
+    commitFieldUpdate(
+      c, `${c.id}:goal_content_id`,
+      (cc) => cc.goal_content_id,
+      (cc, v) => { cc.goal_content_id = v; },
+      contentId,
+    );
+  }
 
   // --- 段数違いの系列(レリックの聖域 10〜19段)は 1 行 + 難易度ステッパーに畳む ---
   // 10 行並ぶと一覧のノイズになるだけで、実際に見たいのは「いまどの段まで行けるか」。
@@ -486,7 +527,12 @@
    * いずれも equipment/stat_sources を持つので、この形だけを要求すれば 3 者に共通で使える
    * (試し変更 app.sim もここを通じて最新に保つ。バグB対応)。
    */
-  type FieldSaveTarget = { equipment: RegisteredCharacter["equipment"]; stat_sources: RegisteredCharacter["stat_sources"] };
+  type FieldSaveTarget = {
+    equipment: RegisteredCharacter["equipment"];
+    stat_sources: RegisteredCharacter["stat_sources"];
+    /** ホームの「次の目標」。装備・補正源と同じ直更新の経路で保存する */
+    goal_content_id: RegisteredCharacter["goal_content_id"];
+  };
 
   interface FieldSaveState<T> { timer: ReturnType<typeof setTimeout> | null; baseline: T }
   const fieldSaveState: Record<string, FieldSaveState<unknown>> = {};
@@ -939,11 +985,29 @@
           <span class="tag">次の目標</span>
           {#if !app.evaluations[character.id]}
             <span class="dim">到達判定を取得できていません。</span>
-          {:else if !heroGoal}
-            <span class="hero-goal-name hero-goal-name-full">なし — 全 {fmtInt(totalCount)} コンテンツ クリア可</span>
           {:else}
-            <span class="hero-goal-name">{heroGoal.content.series?.name ?? heroGoal.content.name}</span>
-            {#if heroGoal.content.need_per_hit === null || !heroSpot}
+            <!-- 目標はふだん自動で決まる。ただし「クリアできる」と「周回したい」は別なので、
+                 ここは自動値を上書きする例外操作(ux-guidelines 原則 4)。候補は重なって出るので
+                 押した場所も右の数値も動かない(§00 03) -->
+            <div class="hero-goal-pick" use:flash={() => heroGoal?.content.id ?? ""}>
+              <Picker
+                options={goalOptions}
+                note="自動で選ばれる目標を、自分の目標に差し替える"
+                bind:value={
+                  () => character?.goal_content_id ?? "",
+                  (v) => { if (character) commitGoal(character, v === "" ? null : v); }
+                }
+              />
+            </div>
+            {#if manualGoal}
+              <span class="hero-goal-manual" title="自動判定ではなく、自分で選んだ目標です(保存されます)。先頭の「自動: …」を選ぶと自動に戻ります">自分で選択中</span>
+            {/if}
+            {#if goalStale}
+              <span class="coverage" title="選んでいた目標が今のデータにありません。自動で選んだ目標を出しています">選んだ目標が見つかりません</span>
+            {/if}
+            {#if !heroGoal}
+              <span class="hero-goal-note dim">全 {fmtInt(totalCount)} コンテンツ クリア可 — 目標を選ぶとここで詰められます</span>
+            {:else if heroGoal.content.need_per_hit === null || !heroSpot}
               <span class="hero-goal-note dim">{noteOf(heroGoal).text}</span>
             {:else}
               <span class="hero-div"></span>
@@ -975,7 +1039,9 @@
                 </span>
               {/key}
             {/if}
-            <button type="button" class="cta" onclick={tryHeroGoalInCalc}>計算タブで詰める ›</button>
+            {#if heroGoal}
+              <button type="button" class="cta" onclick={tryHeroGoalInCalc}>計算タブで詰める ›</button>
+            {/if}
           {/if}
         </div>
 
@@ -1485,9 +1551,18 @@
     display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: var(--r-panel);
     background: var(--bg-panel); border: 1px solid var(--border-strong); min-width: 0;
   }
-  .hero-goal-name { min-width: 0; flex: none; max-width: 170px; font-size: 12px; font-weight: 800; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* 「次の目標なし」は他に並ぶ要素が無いので、170px の幅制限を外して全文を見せる(§00 01 折り返し対策) */
-  .hero-goal-name-full { flex: 1; max-width: none; }
+  /* 目標の選択。自動値を上書きする例外操作なので、白い面(編集できる面)で出す。
+     幅は固定 — 目標名が長短しても右のメーター・数値の位置が動かない(§00 03) */
+  .hero-goal-pick { flex: none; width: 210px; min-width: 0; }
+  /* 候補はコンテンツ名が長いのでトリガより広く出す。重なるので周りの行は押さない */
+  .hero-goal-pick :global(.picker-pop) { right: auto; min-width: 340px; }
+  /* 自動ではなく自分で選んでいる印。**保存される**値なので水色(--accent)。
+     自動どおりのときは出さない(§00 02) */
+  .hero-goal-manual {
+    flex: none; padding: 0 6px; border-radius: var(--r-pill);
+    background: var(--bg-field); border: 1px solid var(--accent); color: var(--accent);
+    font-size: 8.5px; font-weight: 700; white-space: nowrap;
+  }
   .hero-goal-note { min-width: 0; flex: 1; font-size: var(--t-label); }
   .hero-div { width: 1px; align-self: stretch; background: var(--border-soft); }
   .hero-goal-skill { min-width: 0; max-width: 100px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
