@@ -6,7 +6,9 @@
   import type {
     BuffChoice, BuffDamageEffect, BuffDefinition, BuffOrigin, BuffPurpose, BuffSet, BuffTarget,
     BuffTargetStatGain,
-    DamageCategory, CategoryTrace, DefenseProfile, EffectiveStats, StatKind, StatSourceEffect,
+    BaseStats,
+    DamageCategory, CategoryTrace, DefenseProfile, EffectiveStats, StatGroupEffect, StatKind,
+    StatSourceEffect, StatSourceGroup,
   } from "../../api/types";
   import {
     BUFF_PURPOSES, isBlocked, isChoiceValue, isFixedValue, isMultiTarget, isPercentLayer, isRecordOnly,
@@ -15,7 +17,9 @@
   } from "../../buffs";
   import { fmtInt, formatLayerValue, topRows, topRowsText, type TopRows } from "../../format";
   import { singleEffectLabel } from "../../characterSkills";
-  import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
+  import {
+    STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS, STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
+  } from "../../labels";
   import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportUndo } from "../../toast.svelte";
   import { bump, flash, swap } from "../../ui/motion.svelte";
@@ -74,6 +78,11 @@
    *  ドメイン(summarize_buff_selection)がカテゴリ上限適用後の値をバフへ配賦した結果を
    *  そのまま返すので、フロントで単独計算を組み立て直さない(Σ per-buff == カテゴリ合計)。 */
   let buffDamageEffects = $state<BuffDamageEffect[]>([]);
+  /** 選択中キャラの素ステ(キャラの登録値)。バフを乗せた着地点を「素 → 最終」で読むための起点。 */
+  let baseStats = $state<BaseStats | null>(null);
+  /** このバフセットを適用したときの上昇分を、出どころ(バフ / 装備 / そのほか)で割ったもの。
+   *  区分は Rust(group_source_effects)が付ける — 画面で補正源名から振り分けない(キャラタブと同じ土台)。 */
+  let groupEffects = $state<StatGroupEffect[]>([]);
   /** 「対象ステを選ぶ」バフの、このキャラでの効き(ドメインが返す最終能力値の増分)。
    *  バフ id → ステごとの gain。並べ替えはこの値を見てフロントで行う。 */
   let targetStatGains = $state<Record<string, BuffTargetStatGain[]>>({});
@@ -111,6 +120,7 @@
       if (!choices) {
         damageSummary = []; statAfter = null; defenseBefore = null; defenseAfter = null;
         buffSourceEffects = []; buffDamageEffects = []; buffStatAmplification = ZERO_STATS;
+        baseStats = null; groupEffects = [];
         summaryLoading = false;
         return;
       }
@@ -121,6 +131,8 @@
         let afterDefense: DefenseProfile | null = null;
         let afterSourceEffects: StatSourceEffect[] = [];
         let afterAmplification: EffectiveStats = ZERO_STATS;
+        let afterBaseStats: BaseStats | null = null;
+        let afterGroupEffects: StatGroupEffect[] = [];
         if (character) {
           const draft = payloadOf(character);
           const [buffPreview, baseDefense, buffDefense] = await Promise.all([
@@ -130,6 +142,8 @@
           afterStats = buffPreview.stats;
           afterSourceEffects = buffPreview.source_effects;
           afterAmplification = buffPreview.buff_stat_amplification;
+          afterBaseStats = draft.base_stats;
+          afterGroupEffects = buffPreview.group_effects;
           beforeDefense = baseDefense; afterDefense = buffDefense;
         }
         if (seq !== summarySeq) return;
@@ -137,6 +151,8 @@
         defenseBefore = beforeDefense; defenseAfter = afterDefense;
         buffSourceEffects = afterSourceEffects;
         buffStatAmplification = afterAmplification;
+        baseStats = afterBaseStats;
+        groupEffects = afterGroupEffects;
         buffDamageEffects = buff_effects;
       } catch (e) {
         if (seq === summarySeq) reportError(errorMessage(e));
@@ -478,6 +494,10 @@
   const statBuffTotal = (kind: StatKind) => buffSourceEffects
     .filter((c) => c.kind === kind && activeBuffNames.has(c.source))
     .reduce((sum, c) => sum + c.effect, 0);
+  /** 区分ごとの上昇分。Rust が付けた区分をそのまま引くだけで、画面では足し算も振り分けもしない
+   *  (キャラタブ「上昇の出どころ」と同じ読み方をバフタブでもできるようにする) */
+  const groupEffect = (kind: StatKind, group: StatSourceGroup) =>
+    groupEffects.find((e) => e.kind === kind && e.group === group)?.effect ?? null;
   /** ステ別増幅のどれか 1 つでも動いていれば、見出しに但し書きを一度だけ添える(§00 05) */
   const hasAmplification = $derived(STAT_KINDS.some((kind) => buffStatAmplification[kind] !== 0));
 
@@ -825,18 +845,43 @@
           <strong>ステータス</strong>
           {#if hasAmplification}<small class="amp-caption">( )は他の補正と重なって増えた分</small>{/if}
         </div>
-        {#if statAfter}
-          <div class="summary-grid stats-grid">
-            {#each STAT_KINDS as kind}
-              {@const delta = statBuffTotal(kind)}
-              {@const amp = buffStatAmplification[kind]}
-              {@const total = delta + amp}
-              <span>{STAT_LABELS[kind]}</span>
-              <span class:positive={total > 0} class="num" use:bump={() => total}
-              >{formatDelta(delta)}{#if amp !== 0}<span class="amp-value"> ({formatDelta(amp)})</span>{/if}</span>
-            {/each}
-          </div>
-        {:else}<p>キャラを選ぶと、実際に何点伸びるか表示します。</p>{/if}
+        {#if statAfter && baseStats}
+          <!-- ゲーム内の数字と突き合わせるとき、要るのは「バフでいくつ伸びたか」だけでなく
+               「結局いくつになるか」。差分(バフ列)は残したまま、素 → 最終 の着地点まで
+               1 つの行で読めるようにする。区分(バフ / 装備 / そのほか)は Rust が付けた
+               group_effects をそのまま引く — 画面では足し算も振り分けもしない(ADR 001)。
+               キャラタブ「上昇の出どころ」と列も語彙も同じにして、2 画面で読み替えさせない -->
+          <table class="grid ro stat-table">
+            <thead>
+              <tr>
+                <th>ステ</th>
+                <th class="n">素</th>
+                {#each STAT_SOURCE_GROUPS as group (group)}<th class="n">{STAT_SOURCE_GROUP_LABELS[group]}</th>{/each}
+                <th class="n">最終</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each STAT_KINDS as kind (kind)}
+                {@const delta = statBuffTotal(kind)}
+                {@const amp = buffStatAmplification[kind]}
+                {@const total = delta + amp}
+                <tr>
+                  <td>{STAT_LABELS[kind]}</td>
+                  <td class="n muted">{fmtInt(baseStats[kind])}</td>
+                  <!-- バフ列だけは従来どおり「差分(重なって増えた分)」の形を保つ -->
+                  <td class="n" class:positive={total > 0} use:bump={() => total}
+                  >{formatDelta(delta)}{#if amp !== 0}<span class="amp-value"> ({formatDelta(amp)})</span>{/if}</td>
+                  {#each ["equipment", "other"] as const as group (group)}
+                    {@const effect = groupEffect(kind, group)}
+                    <!-- 0 の区分も行から消さない。消えると次に見たとき同じ場所を探し直すことになる -->
+                    <td class="n" class:zero={effect === 0} use:bump={() => effect}>{effect === null ? "—" : formatDelta(effect)}</td>
+                  {/each}
+                  <td class="n strong" use:bump={() => statAfter?.[kind] ?? null}>{fmtInt(statAfter[kind])}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {:else}<p>キャラを選ぶと、いまの能力値とバフを足した着地点を表示します。</p>{/if}
       </div>
       <div class="summary-block">
         <strong>攻撃ダメージ</strong>
@@ -991,6 +1036,16 @@
   .summary-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
   .summary-head > strong { font-size: 10px; }
   .amp-caption { color: var(--fg-muted); font-size: 8.5px; }
+  /* 290px の列に 6 列を収める表。数値は tabular-nums(app.css の td.n)なので、桁が
+     増えても列幅は動かない(§00 03)。文字を詰めるのではなく、出す列を素・区分・最終に
+     絞ることで収める */
+  .stat-table { font-size: 9px; }
+  .stat-table th, .stat-table td { padding: 2px 3px; }
+  .stat-table th:first-child, .stat-table td:first-child { padding-left: 0; }
+  .stat-table th:last-child, .stat-table td:last-child { padding-right: 0; }
+  .stat-table .muted { color: var(--fg-muted); }
+  .stat-table .zero { color: var(--fg-muted); }
+  .stat-table .strong { font-weight: 700; }
   .summary-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(64px, auto); gap: 3px 8px; font-size: 9px; }
   .summary-grid > span:nth-child(even) { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
   .amp-value { color: var(--fg-muted); font-weight: 400; }
