@@ -1,8 +1,8 @@
 //! 「次に変えるなら / おすすめ強化」候補の列挙・試算後の並び順(docs/claude/goals 2026-08-29)。
 //!
 //! 候補の列挙(どんな変更が候補になるか)と、試算結果の並び順(「届かせるなら」に正直に)を
-//! ここに置く。実際のダメージ試算(preview_damage 相当)は呼び出し側(src-tauri。
-//! `NewCharacter`/gamedata カタログを知るレイヤー)が行い、結果だけ `rank_candidates` に渡す。
+//! ここに置く。実際のダメージ試算(preview_damage 相当)は呼び出し側(`commands` crate。
+//! gamedata カタログを知るレイヤー)が行い、結果だけ `rank_candidates` に渡す。
 //! 候補が gamedata カタログ固有の選定(武器の上位品探し)を要るときだけ、その 1 候補は
 //! 呼び出し側で組み立てる(`domain` は gamedata に依存できない。`EquipmentCatalogEntry` と
 //! 同じ依存方向)。

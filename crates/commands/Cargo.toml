@@ -1,0 +1,9 @@
+[package]
+name = "commands"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+domain = { path = "../domain" }
+gamedata = { path = "../gamedata" }

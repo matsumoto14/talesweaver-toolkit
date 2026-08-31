@@ -24,4 +24,6 @@ serde_json = { workspace = true }
 domain = { path = "../../../crates/domain" }
 gamedata = { path = "../../../crates/gamedata" }
 storage = { path = "../../../crates/storage" }
+# 保存に触らないコマンドの中身(Web 版と共通)
+commands = { path = "../../../crates/commands" }
 base64 = "0.22"
