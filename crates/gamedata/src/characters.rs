@@ -7,7 +7,7 @@ use domain::{
 use serde::Serialize;
 
 use crate::{
-    equipment_catalog::{ArmorClass, WristType},
+    equipment_catalog::{ArmorClass, WeaponClass, WristType},
     Source,
 };
 
@@ -15,6 +15,8 @@ use crate::{
 pub struct GameCharacter {
     pub id: &'static str,
     pub name: &'static str,
+    /// Tale Wiki「Item/武器」武器一覧表の装備可能キャラ列(取得 2026-09-01)。
+    pub weapon_classes: &'static [WeaponClass],
     /// Tale Wiki の各防具カテゴリに記載された装備可能種。
     pub armor_classes: &'static [ArmorClass],
     /// Tale Wiki の各サブアームカテゴリに記載された装備可能種。
@@ -28,6 +30,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "lucian",
         name: "ルシアン",
+        weapon_classes: &[WeaponClass::Rapier, WeaponClass::LongSword, WeaponClass::Katana],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
         wrist_types: &[WristType::Shield],
         wrist_bonus: None,
@@ -35,6 +38,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "boris",
         name: "ボリス",
+        weapon_classes: &[WeaponClass::Katana, WeaponClass::GreatSword, WeaponClass::Tachi],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Knuckle],
         wrist_bonus: Some(WristBonusRule::ThrustToMagicAttack),
@@ -42,6 +46,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "ispin",
         name: "イスピン",
+        weapon_classes: &[WeaponClass::Rapier, WeaponClass::LongSword, WeaponClass::Katana],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
         wrist_types: &[WristType::Shield],
         wrist_bonus: None,
@@ -49,6 +54,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "maximin",
         name: "マキシミン",
+        weapon_classes: &[WeaponClass::Katana, WeaponClass::GreatSword, WeaponClass::Tachi],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Shield, WristType::Knuckle],
         wrist_bonus: Some(WristBonusRule::ThrustToMagicAttack),
@@ -56,6 +62,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "tichiel",
         name: "ティチエル",
+        weapon_classes: &[WeaponClass::MagicWand, WeaponClass::HolyStaff, WeaponClass::WarStaff],
         armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
         wrist_types: &[WristType::Bracelet],
         wrist_bonus: None,
@@ -63,6 +70,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "nayatorei",
         name: "ナヤトレイ",
+        weapon_classes: &[WeaponClass::Dagger, WeaponClass::ShortSword, WeaponClass::Axe],
         armor_classes: &[ArmorClass::Light, ArmorClass::Suit],
         wrist_types: &[WristType::Band],
         wrist_bonus: Some(WristBonusRule::BandAgilityByDependency),
@@ -70,6 +78,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "siberin",
         name: "シベリン",
+        weapon_classes: &[WeaponClass::Spear, WeaponClass::Rod],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy],
         wrist_types: &[WristType::Knuckle],
         wrist_bonus: None,
@@ -77,6 +86,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "mira",
         name: "ミラ",
+        weapon_classes: &[WeaponClass::Whip, WeaponClass::Nunchaku],
         armor_classes: &[ArmorClass::Light, ArmorClass::Suit],
         wrist_types: &[WristType::Band],
         wrist_bonus: Some(WristBonusRule::BandAgilityToSlash),
@@ -84,6 +94,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "joshua",
         name: "ジョシュア",
+        weapon_classes: &[WeaponClass::SmallSword, WeaponClass::Wand],
         armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
         wrist_types: &[WristType::Spellbook, WristType::CrystalBall],
         wrist_bonus: None,
@@ -91,6 +102,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "chloe",
         name: "クロエ",
+        weapon_classes: &[WeaponClass::MagicWand],
         armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
         wrist_types: &[WristType::Bracelet],
         wrist_bonus: None,
@@ -98,6 +110,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "ranjie",
         name: "ランジエ",
+        weapon_classes: &[WeaponClass::PhysicalGun, WeaponClass::MagicGun],
         armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
         wrist_types: &[WristType::PhysicalMagazine, WristType::MagicMagazine],
         wrist_bonus: None,
@@ -105,6 +118,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "isaac",
         name: "イサック",
+        weapon_classes: &[WeaponClass::Claw, WeaponClass::Kara],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Suit],
         wrist_types: &[WristType::Knuckle, WristType::Band],
         wrist_bonus: Some(WristBonusRule::BandAgilityByDependency),
@@ -112,6 +126,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "anais",
         name: "アナイス",
+        weapon_classes: &[WeaponClass::Scepter, WeaponClass::Handbell],
         armor_classes: &[ArmorClass::Light, ArmorClass::Robe],
         wrist_types: &[WristType::Bracelet],
         wrist_bonus: None,
@@ -119,6 +134,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "isolet",
         name: "イソレット",
+        weapon_classes: &[WeaponClass::DualBladePhysical, WeaponClass::DualBladeMagic],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::DualBladePhysical, WristType::DualBladeMagic],
         wrist_bonus: None,
@@ -126,6 +142,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "benya",
         name: "ベンヤ",
+        weapon_classes: &[WeaponClass::Scythe, WeaponClass::Hammer],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Suit],
         wrist_types: &[WristType::Knuckle, WristType::Band, WristType::CrystalBall],
         wrist_bonus: Some(WristBonusRule::BandAgilityByStatComparison),
@@ -133,6 +150,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "roamini",
         name: "ロアミニ",
+        weapon_classes: &[WeaponClass::Totem],
         armor_classes: &[ArmorClass::Light, ArmorClass::Suit, ArmorClass::Robe],
         wrist_types: &[WristType::Band, WristType::Bracelet],
         wrist_bonus: Some(WristBonusRule::BandAgilityToMagicAttack),
@@ -140,6 +158,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "nocturne",
         name: "ノクターン",
+        weapon_classes: &[WeaponClass::HandLauncher],
         armor_classes: &[ArmorClass::Light, ArmorClass::Magic],
         wrist_types: &[WristType::PhysicalMagazine],
         wrist_bonus: None,
@@ -147,6 +166,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "leeche",
         name: "リーチェ",
+        weapon_classes: &[WeaponClass::ArmingSword],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Pendulum],
         wrist_bonus: None,
@@ -154,6 +174,7 @@ const CHARACTERS: &[GameCharacter] = &[
     GameCharacter {
         id: "yefnen",
         name: "イェフネン",
+        weapon_classes: &[WeaponClass::SwordShape],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Knuckle],
         wrist_bonus: None,
@@ -376,6 +397,28 @@ mod tests {
         assert_eq!(
             isolet.wrist_types,
             &[WristType::DualBladePhysical, WristType::DualBladeMagic]
+        );
+    }
+
+    #[test]
+    fn 武器の装備可能種はwikiの武器一覧表どおり() {
+        assert!(characters().iter().all(|c| !c.weapon_classes.is_empty()));
+        assert_eq!(
+            find_character("isolet").unwrap().weapon_classes,
+            &[WeaponClass::DualBladePhysical, WeaponClass::DualBladeMagic]
+        );
+        assert_eq!(
+            find_character("anais").unwrap().weapon_classes,
+            &[WeaponClass::Scepter, WeaponClass::Handbell]
+        );
+        assert_eq!(
+            find_character("lucian").unwrap().weapon_classes,
+            &[WeaponClass::Rapier, WeaponClass::LongSword, WeaponClass::Katana]
+        );
+        // 戦杖はティチエル専用(クロエは魔杖のみ)。
+        assert_eq!(
+            find_character("chloe").unwrap().weapon_classes,
+            &[WeaponClass::MagicWand]
         );
     }
 

@@ -26,6 +26,7 @@ export interface Awakening {
 export interface GameCharacter {
   id: string;
   name: string;
+  weapon_classes: WeaponClass[];
   armor_classes: ArmorClass[];
   wrist_types: WristType[];
 }

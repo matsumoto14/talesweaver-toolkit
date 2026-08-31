@@ -189,6 +189,11 @@
     const classes = weaponClassesForSkill(mainSkill?.id);
     if (classes.length > 0) return `${mainSkill!.name} → ${classes.map(weaponClassLabel).join("・")}`;
     const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
+    if (selectedGameCharacter !== null) {
+      return systems.length > 0 && mainSkill
+        ? `${selectedGameCharacter.name}・${mainSkill.name}向け`
+        : `${selectedGameCharacter.name}が装備可能`;
+    }
     return systems.length > 0 && mainSkill ? `${mainSkill.name}の依存能力に合う武器` : null;
   });
   const selectedGameCharacter = $derived(
@@ -227,11 +232,19 @@
     let candidates = itemQuery.trim() === "" ? catalogFor : catalogFor.filter((i) => i.name.includes(itemQuery.trim()));
     let matched: EquipmentItem[] = [];
     if (openPart === "weapon") {
+      // キャラの装備可能武器種で先に絞り、その中を主軸スキルでさらに狭める。
+      const usable = selectedGameCharacter === null
+        ? candidates
+        : candidates.filter(
+            (i) => i.weapon_class !== null && selectedGameCharacter!.weapon_classes.includes(i.weapon_class),
+          );
       const classes = weaponClassesForSkill(mainSkill?.id);
       const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
       matched = classes.length > 0
-        ? candidates.filter((i) => i.weapon_class !== null && classes.includes(i.weapon_class))
-        : candidates.filter((i) => i.weapon_system !== null && systems.includes(i.weapon_system));
+        ? usable.filter((i) => i.weapon_class !== null && classes.includes(i.weapon_class))
+        : systems.length > 0
+          ? usable.filter((i) => i.weapon_system !== null && systems.includes(i.weapon_system))
+          : usable;
     } else if (openPart === "armor" && selectedGameCharacter !== null) {
       matched = candidates.filter((item) =>
         item.armor_class !== null && selectedGameCharacter!.armor_classes.includes(item.armor_class),
