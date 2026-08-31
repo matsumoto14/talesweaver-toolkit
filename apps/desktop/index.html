@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- ブラウザ版でタブに出る。デスクトップ版はウィンドウのアイコン(src-tauri/icons)を使うので
+         これまで無くても困らなかったが、ブラウザ版は白いタブになる。同じ .ico を public/ に置く -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#8EB9FC" />
+    <meta name="description" content="TalesWeaver プレイヤー向けのダメージ計算・強化提案ツール(非公式)" />
     <title>TW Context</title>
   </head>
   <body>
