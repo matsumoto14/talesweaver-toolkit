@@ -40,9 +40,9 @@
   import { reportError } from "../../toast.svelte";
   import { critChanceStage } from "../../ui/critChance";
   import Icon from "../../ui/Icon.svelte";
-  import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, flash } from "../../ui/motion.svelte";
+  import { bump, flash, swap } from "../../ui/motion.svelte";
+  import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
 
@@ -171,7 +171,7 @@
   // フロンティア(最初の未クリア)
   const frontierId = $derived(rows.find((r) => r.ev && !r.ev.clear)?.content.id ?? null);
   /**
-   * ヒーローの「次の目標」= 火力目標(必要 /hit)のある最初の未クリア。
+   * 自動で選ぶ「次の目標」= 火力目標(必要 /hit)のある最初の未クリア。
    * 入場条件だけのコンテンツ(敵データなし)が先にあっても飛ばす — スポットライトの答えは
    * 「どのスキルでどのくらい出るか」であり、それが出せない目標を主役に据えない。
    * 火力目標のある未クリアが 1 つも無ければ frontier(最初の未クリア)へ落とす。
@@ -203,7 +203,7 @@
   const goalOptions = $derived<PickerOption[]>([
     {
       value: "",
-      name: `自動: ${autoGoal ? (autoGoal.content.series?.name ?? autoGoal.content.name) : "目標なし(全クリア可)"}`,
+      name: `自動: ${autoGoal ? (autoGoal.content.series?.name ?? autoGoal.content.name) : "目標なし"}`,
     },
     ...rows
       .filter((r) => r.content.enemy_id !== null)
@@ -943,7 +943,9 @@
                 </span>
               {/each}
             </div>
-            <div class="hero-panel">
+            <!-- 目標を選び直すとスポットライトのスキルが変わり、見る装備値の 2 本(突き/斬り/魔攻…)も
+                 入れ替わる。中身が入れ替わった面は短く動かす(§10 型 3b。数値の跳ねでは表せない) -->
+            <div class="hero-panel" use:swap={() => heroEquipRows.map((r) => r.key).join(",")}>
               <span class="hero-panel-title">装備・命中</span>
               {#each heroEquipRows as row, i (row.key)}
                 <span class="hero-row" class:first={i === 0}>
@@ -1031,7 +1033,8 @@
                 <span class="num hero-spot" use:bump={() => heroSpot?.perHit ?? null} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)">
                   {fmtInt(heroSpot.perHit)}
                 </span>
-                <span class="num dim"> / {fmtInt(heroGoal.content.need_per_hit)}</span>
+                <!-- 目標を選び直すと必要値も変わる。変わったものは全部動かす(§00 04) -->
+                <span class="num dim" use:bump={() => heroGoal?.content.need_per_hit ?? null}> / {fmtInt(heroGoal.content.need_per_hit)}</span>
               </span>
               {#key heroSpotState}
                 <span class="badge" style={badgeStyle(BADGE[heroSpotState])} use:flash={() => String(heroSpotState)}>
@@ -1553,9 +1556,13 @@
   }
   /* 目標の選択。自動値を上書きする例外操作なので、白い面(編集できる面)で出す。
      幅は固定 — 目標名が長短しても右のメーター・数値の位置が動かない(§00 03) */
-  .hero-goal-pick { flex: none; width: 210px; min-width: 0; }
+  /* 目標名が長いときはピッカーのほうを縮めて、量バーを残す(バーは一目で分かる唯一の要素) */
+  .hero-goal-pick { flex: 0 1 190px; min-width: 118px; }
   /* 候補はコンテンツ名が長いのでトリガより広く出す。重なるので周りの行は押さない */
   .hero-goal-pick :global(.picker-pop) { right: auto; min-width: 340px; }
+  /* エリア名は候補の中でだけ出す。トリガに置くと目標名を押しのけ、右のメーターまで痩せる
+     (この行は目標名 → 火力 → 到達バッジの 1 本の視線で読ませたい。§00 01) */
+  .hero-goal-pick :global(.picker-trigger .picker-meta) { display: none; }
   /* 自動ではなく自分で選んでいる印。**保存される**値なので水色(--accent)。
      自動どおりのときは出さない(§00 02) */
   .hero-goal-manual {
@@ -1566,7 +1573,8 @@
   .hero-goal-note { min-width: 0; flex: 1; font-size: var(--t-label); }
   .hero-div { width: 1px; align-self: stretch; background: var(--border-soft); }
   .hero-goal-skill { min-width: 0; max-width: 100px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hero-meter { flex: 1; height: 12px; }
+  /* 幅の取り合いに負けて 2px の線にならないよう、量バーにも基準幅を持たせる */
+  .hero-meter { flex: 1 1 90px; height: 12px; }
   .hero-spot-wrap { flex-shrink: 0; white-space: nowrap; }
   .hero-spot { font-size: 27px; line-height: 1; font-weight: 700; color: #16223A; text-shadow: 0 1px 0 #fff; }
 
