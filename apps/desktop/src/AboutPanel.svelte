@@ -6,12 +6,18 @@
   import { onMount } from "svelte";
   import authorPortrait from "./assets/author-xkanba.png";
   import { errorMessage, getAppInfo } from "./api/commands";
+  import { exportAll, importAll, parseTransferFile, suggestedFileName } from "./api/transfer";
   import type { AppInfo } from "./api/types";
+  import { IS_DESKTOP } from "./platform";
   import { reportError } from "./toast.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
   let info = $state<AppInfo | null>(null);
+  /** 書き出し / 読み込みの途中。押した瞬間から結果が出るまで、押した場所に出す */
+  let transfer = $state<{ busy: boolean; message: string; imported: boolean }>({
+    busy: false, message: "", imported: false,
+  });
 
   onMount(() => {
     getAppInfo()
@@ -22,6 +28,45 @@
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key === "Escape") onClose();
   };
+
+  /** 全部を JSON 1 ファイルにして保存する。預け先はユーザーが選ぶ(保存先を勝手に決めない) */
+  async function exportData() {
+    transfer = { busy: true, message: "書き出しています…", imported: false };
+    try {
+      const json = JSON.stringify(await exportAll(), null, 2);
+      const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = suggestedFileName();
+      link.click();
+      URL.revokeObjectURL(url);
+      transfer = { busy: false, message: `${suggestedFileName()} を書き出しました`, imported: false };
+    } catch (error) {
+      transfer = { busy: false, message: "", imported: false };
+      reportError(errorMessage(error));
+    }
+  }
+
+  /** 読み込みは「足す」。いま入っているものは消さない(消す判断をこちらでしない) */
+  async function importData(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    // 同じファイルをもう一度選べるようにする(選び直しても change が来ない)
+    input.value = "";
+    if (!file) return;
+    transfer = { busy: true, message: "読み込んでいます…", imported: false };
+    try {
+      const result = await importAll(parseTransferFile(JSON.parse(await file.text())));
+      transfer = {
+        busy: false,
+        message: `キャラ ${result.characters} 件・バフセット ${result.buffSets} 件を読み込みました`,
+        imported: true,
+      };
+    } catch (error) {
+      transfer = { busy: false, message: "", imported: false };
+      reportError(errorMessage(error));
+    }
+  }
 
   async function openExternal(event: MouseEvent, url: string) {
     event.preventDefault();
@@ -68,8 +113,36 @@
         <div class="path inset">{info?.databasePath ?? "—"}</div>
         <p class="muted">
           問い合わせを送る場合も、送信内容は別画面で事前に全文表示されます。
-          アップデートのたびに、このファイルのバックアップを直近 3 世代まで自動で保存します。
+          <!-- 自動バックアップはデスクトップ版だけの話。ブラウザ版で言うと嘘になる -->
+          {#if IS_DESKTOP}
+            アップデートのたびに、このファイルのバックアップを直近 3 世代まで自動で保存します。
+          {:else}
+            ブラウザのサイトデータを消すと一緒に消えるので、大事なものは「データの持ち出し」で書き出しておいてください。
+          {/if}
         </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">データの持ち出し</div>
+        <p>
+          登録キャラ・バフセット・画像・計算の記録を、JSON 1 ファイルにまとめて書き出せます。
+          読み込むと、いま入っているものを消さずに足します。
+        </p>
+        <div class="transfer">
+          <button type="button" class="btn" onclick={exportData} disabled={transfer.busy}>書き出す</button>
+          <label class="btn">
+            読み込む
+            <input type="file" accept="application/json,.json" onchange={importData} disabled={transfer.busy} />
+          </label>
+        </div>
+        {#if transfer.message}
+          <p class="muted transfer-message">
+            {transfer.message}
+            {#if transfer.imported}
+              <button type="button" class="btn" onclick={() => window.location.reload()}>画面に出す</button>
+            {/if}
+          </p>
+        {/if}
       </div>
 
       <div class="card">
@@ -165,6 +238,12 @@
     font-variant-numeric: tabular-nums;
     word-break: break-all;
   }
+
+  /* ファイル選択は見た目をボタンに合わせる(入力欄の素の見た目を出さない) */
+  .transfer { display: flex; gap: 8px; align-items: center; }
+  .transfer label.btn { cursor: pointer; }
+  .transfer input[type="file"] { display: none; }
+  .transfer-message { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 
   .source-link {
     color: var(--accent); font-weight: var(--w-strong);
