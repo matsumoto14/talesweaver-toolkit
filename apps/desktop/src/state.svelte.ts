@@ -245,6 +245,42 @@ export function selectCharacter(id: number | null): void {
   syncCalcBuffs(selectedCharacter());
 }
 
+/**
+ * 画面の居場所(タブ・選択キャラ・計算の対象)を覚える。
+ *
+ * **ブラウザ版は更新のたびにページごと読み直す**ので、これが無いと毎回ホームに落ちて
+ * 選び直しになる(デスクトップ版も再起動のたびに同じことが起きていた)。
+ * 覚えるのは「どこを見ていたか」だけで、キャラの中身は保存層が持つ。
+ */
+const SESSION_KEY = "tw-session";
+const TABS: Tab[] = ["home", "calc", "buffs", "chars", "measure", "news"];
+
+/** 起動時に 1 回。存在しないキャラ・コンテンツを指していないかは `loadAll` が直す */
+export function restoreSession(): void {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw === null) return;
+    const saved = JSON.parse(raw) as { tab?: string; selectedId?: number | null; calcTargetId?: string | null };
+    if (typeof saved.tab === "string" && TABS.includes(saved.tab as Tab)) app.tab = saved.tab as Tab;
+    if (typeof saved.selectedId === "number") app.selectedId = saved.selectedId;
+    if (typeof saved.calcTargetId === "string") app.calcTargetId = saved.calcTargetId;
+  } catch {
+    // 壊れた値・private モードは無視(居場所を覚えられないだけ)
+  }
+}
+
+/** 変わるたびに呼ばれる($effect から)。読んだ値がそのまま依存になる */
+export function rememberSession(): void {
+  try {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ tab: app.tab, selectedId: app.selectedId, calcTargetId: app.calcTargetId }),
+    );
+  } catch {
+    // 無視(private モード等)
+  }
+}
+
 export async function loadAll(): Promise<void> {
   try {
     const [
@@ -280,7 +316,11 @@ export async function loadAll(): Promise<void> {
     app.characterSkills = characterSkills;
     app.siena = siena;
     app.masteries = masteries;
-    if (app.selectedId === null && characters.length > 0) app.selectedId = characters[0].id;
+    // 覚えていたキャラが消えている(削除・別ブラウザ・読み込みで入れ替え)なら先頭に落とす
+    if (!characters.some((c) => c.id === app.selectedId)) app.selectedId = characters[0]?.id ?? null;
+    if (app.calcTargetId !== null && !areas.some((a) => a.contents.some((c) => c.id === app.calcTargetId))) {
+      app.calcTargetId = null;
+    }
     syncCalcBuffs(selectedCharacter());
     await Promise.all(characters.map(refreshEvaluation));
   } catch (e) {

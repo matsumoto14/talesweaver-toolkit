@@ -13,7 +13,9 @@
   import HomePage from "./pages/home/HomePage.svelte";
   import MeasurePage from "./pages/measure/MeasurePage.svelte";
   import NewsPage from "./pages/news/NewsPage.svelte";
-  import { app, focusErrorTarget, loadAll, simIsDirty, type Tab } from "./state.svelte";
+  import {
+    app, focusErrorTarget, loadAll, rememberSession, restoreSession, simIsDirty, type Tab,
+  } from "./state.svelte";
   import { dismissError, reportError, reportNotice, runUndo, toast } from "./toast.svelte";
   import { checkForUpdate, updater } from "./update.svelte";
   import { persisted } from "./ui/persistedState.svelte";
@@ -45,6 +47,10 @@
 
   let aboutOpen = $state(false);
   let inquiryOpen = $state(false);
+
+  // 見ていた場所を覚えて戻す。読み込みより先に入れておくと、開いた瞬間から前の場所になる
+  restoreSession();
+  $effect(() => rememberSession());
 
   onMount(() => {
     void loadAll();
