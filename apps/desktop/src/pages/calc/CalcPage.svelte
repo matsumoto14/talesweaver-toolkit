@@ -1178,7 +1178,7 @@
     app.calcBuffs = { choices: toggleBuffStat(app.calcBuffs.choices, def, stat, next) };
   }
   // --- 極限スキル(試し変更)。2 枠のうち何を選ぶかだけをこの画面で切り替える -----------
-  // 超・ハイパーリミットの Lv はキャラタブ(共通スキル)の設定が正。ここでは触らない。
+  // スーパーリミット・ハイパーリミットの Lv はキャラタブ(共通スキル)の設定が正。ここでは触らない。
   const ultimatePickedCount = $derived(
     payload?.common_skills.ultimate.slots.filter((s) => s !== null).length ?? 0,
   );
@@ -1762,7 +1762,7 @@
                     <span class:up={deltaPct > 0} class:down={deltaPct < 0} use:bump={() => deltaPct}>
                       {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
                     </span>
-                    ・ 登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}
+                    ・ キャラ登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}
                   </span>
                 {/if}
               </button>
@@ -2109,12 +2109,17 @@
         <div class="sim-bar" class:active={simDirty}>
           <div class="sim-line">
             <span class="sim-dot" class:active={simDirty}></span>
-            <span class="sim-title">{simDirty ? "試し変更中" : "登録どおり"}</span>
+            <span class="sim-title">{simDirty ? "装備・スキルを試し変更中" : "装備・スキルはキャラ登録どおり"}</span>
             <!-- 差分の枠も常に確保する。出た瞬間に行が 1px 伸びて下がずれる(§09 規則 4) -->
             <span class="num sim-delta" class:on={simDirty} class:up={deltaPct > 0} class:down={deltaPct < 0}
             >{simDirty ? (deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`) : ""}</span>
           </div>
-          <!-- 文言は状態で変えない。「登録どおり」は 2 行・「試し変更中」は 1 行に折り返して
+          <!-- 主語をタイトルに置く。「登録どおり」だけだと、何が登録どおりなのか分からず
+               初見で止まる(ユーザー指摘 2026-08-31)。主語は「材料」ではなく**装備・スキル** —
+               この帯が見ているのは KNOBS(パワーW / ストロングW / エンチャント / 極限スキル)
+               だけで、同じペインにあるバフは別枠(app.calcBuffs)。「材料は登録どおり」と書くと、
+               バフを足した状態でも登録どおりだと言ってしまう。
+               文言は状態で変えない。「登録どおり」は 2 行・「試し変更中」は 1 行に折り返して
                いたため、切り替えた瞬間に 1 行ぶん縮んで**下の材料が丸ごと上へ吸い上げられた**
                (実機で押した MAX ボタン自身が 11px 逃げた。§00 03 / §09 規則 1)。
                高さを確保する手も試したが、1 行の状態で下に空きが出て §00 02 を崩す。
@@ -2182,7 +2187,7 @@
           {#if ultimateFull}
             <p class="eq-note dim badge-in">{ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。</p>
           {/if}
-          <p class="eq-note dim">超・ハイパーリミットの Lv は<b>キャラ</b>タブ(共通スキル)の設定を使います。</p>
+          <p class="eq-note dim">スーパーリミット・ハイパーリミットの Lv は<b>キャラ</b>タブ(共通スキル)の設定を使います。</p>
           {/if}
         </div>
 
@@ -2557,9 +2562,14 @@
   .sim-line { display: flex; align-items: center; gap: 8px; }
   .sim-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: #9FB4D0; }
   .sim-dot.active { background: var(--sim); }
-  .sim-title { font-size: var(--t-label); font-weight: 700; color: var(--fg-sub); }
+  /* 折り返させない。状態で文字数が違うので、折り返すと 1 行ぶん高さが変わって
+     下の材料(装備・バフ)が吸い上げられる(§00 03 / §09 規則 1) */
+  .sim-title {
+    min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: var(--t-label); font-weight: 700; color: var(--fg-sub);
+  }
   .sim-bar.active .sim-title { color: var(--sim-fg); }
-  .sim-delta { min-width: 34px; text-align: right; font-size: 11px; font-weight: 700; color: transparent; }
+  .sim-delta { flex-shrink: 0; min-width: 34px; text-align: right; font-size: 11px; font-weight: 700; color: transparent; }
   .sim-delta.on { color: var(--fg-dim); }
   .sim-delta.on.up { color: var(--good); }
   .sim-delta.on.down { color: var(--danger); }
