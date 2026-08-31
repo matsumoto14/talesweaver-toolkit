@@ -33,10 +33,18 @@ export const updater = $state({
 
 let pending: Update | null = null;
 
-/** 起動時に 1 回だけ見に行く。落ちても黙って「最新」にする(通信は本質ではない) */
-export async function checkForUpdate(): Promise<void> {
-  if (updater.status !== "idle") return;
+/**
+ * 新しい版があるか見に行く。起動時に 1 回と、お知らせタブの「更新を確認」から。
+ * 落ちても黙って「最新」にする(通信は本質ではない)。
+ *
+ * `manual` は手動の確認。起動時に圏外で「最新」になっていても、押せばもう一度見に行ける。
+ * 落としている / 当て終わった状態のときは、押しても取り消さない。
+ */
+export async function checkForUpdate(manual = false): Promise<void> {
+  const retryable = updater.status === "current" || updater.status === "failed";
+  if (updater.status !== "idle" && !(manual && retryable)) return;
   updater.status = "checking";
+  updater.error = "";
   try {
     const update = await check();
     if (!update) {

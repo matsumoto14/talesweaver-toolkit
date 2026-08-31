@@ -7,7 +7,7 @@
   import { fmtInt, fmtMonthDay } from "../../format";
   import { BUNDLED_NEWS, CHANGE_LABELS, fetchNews, type News } from "../../news";
   import { reportError } from "../../toast.svelte";
-  import { installUpdate, restartApp, updater } from "../../update.svelte";
+  import { checkForUpdate, installUpdate, restartApp, updater } from "../../update.svelte";
   import { bump } from "../../ui/motion.svelte";
 
   let news = $state<News>(BUNDLED_NEWS);
@@ -72,7 +72,17 @@
       <div class="area-head">
         <span class="area-name">更新内容</span>
         <span class="area-rule"></span>
+        <!-- 起動時に圏外だった人がここからもう一度見に行ける。押した先は上の更新カード -->
+        <button
+          type="button" class="btn quiet" disabled={updater.status === "checking"}
+          onclick={() => void checkForUpdate(true)}
+        >
+          {updater.status === "checking" ? "確認しています…" : "更新を確認"}
+        </button>
       </div>
+      {#if updater.status === "current"}
+        <p class="up-to-date dim">いまの版が最新です。</p>
+      {/if}
       {#each news.releases as note, index (note.version)}
         <details class="fold rn-fold" open={index === 0}>
           <summary>
@@ -182,6 +192,9 @@
   .update-head .btn { flex: none; }
   .update .meter > .fill { background: var(--state-edge-bar); }
   .update-body { margin: 0; font-size: 10.5px; color: var(--fg-sub); line-height: 1.6; white-space: pre-wrap; }
+
+  .area-head .btn { flex: none; font-size: 9.5px; padding: 2px 9px; }
+  .up-to-date { margin: 0; font-size: 10px; }
 
   .foot { margin: 0; font-size: 10px; line-height: 1.7; }
 </style>
