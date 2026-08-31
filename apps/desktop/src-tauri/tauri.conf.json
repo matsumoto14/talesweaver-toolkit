@@ -31,6 +31,11 @@
     "shortDescription": "TalesWeaver プレイヤー向けのダメージ計算・強化提案ツール(非公式)",
     "longDescription": "登録したキャラクターを軸に、ダメージ計算・強化提案・コンテンツ入場ロードマップを提供する非公式ツール。ゲームの開発元・運営元とは関係がありません。",
     "licenseFile": "../../../LICENSE",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
