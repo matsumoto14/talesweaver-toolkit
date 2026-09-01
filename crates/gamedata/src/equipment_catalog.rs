@@ -2302,11 +2302,17 @@ fn slot_ability(
     .map(|(kind, min, max)| EquipmentAbilityAdditionalDef { kind, min, max });
     let (additional_slots, additional_effects, additional_options) = match slot {
         PartSlot::Armor => {
-            let mut options = vec![
-                option(DamageResistance, 11, 11),
-                option(HpRecovery, 8, 18),
-                option(MpRecovery, 8, 18),
-            ];
+            // 機敏だけダメージ耐性を持たない(wiki 新装着アビリティの機敏の行に無い。
+            // ランダムOP の耐性と取り違えていた。ユーザー確認 2026-09-01)
+            let mut options = if family == EquipmentAbilityFamily::Evasion {
+                vec![option(HpRecovery, 8, 18), option(MpRecovery, 8, 18)]
+            } else {
+                vec![
+                    option(DamageResistance, 11, 11),
+                    option(HpRecovery, 8, 18),
+                    option(MpRecovery, 8, 18),
+                ]
+            };
             match family {
                 EquipmentAbilityFamily::Vitality | EquipmentAbilityFamily::ArmorPolish => {
                     options.push(option(PhysicalDamageReduction, 150, 150));
@@ -3730,6 +3736,10 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ));
     }
 
+    // 足の R/L/E は wiki「装備システム/アビリティ」側の値(移動速度 +1〜+3)。
+    // 新装着アビリティ側の敏捷(古代精霊 +5 〜 夜星 +12)とは別体系で、**実際に使われるのは
+    // 新装着側**(R/L/E は性能が低く基本使わない。ユーザー確認 2026-09-01)。
+    // 消さずに残すのは、付いている装備を持っている人が表現できなくなるため(既定では畳んだ側に出る)
     for (id, name, summary) in [
         ("r-agility-leg", "R-敏捷", "移動速度 +1・回避率 +1%"),
         ("l-agility-leg", "L-敏捷", "移動速度 +2・回避率 +2%"),
