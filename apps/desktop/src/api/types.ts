@@ -1349,6 +1349,9 @@ export interface GrowthRoom {
   detail: string | null;
   /** 見積りが [仮] か(シエナのように上振れするもの) */
   provisional: boolean;
+  /** この材料を積んだら命中率(%)が何動くか。攻撃側の材料は正、防御側の材料は負。
+   * 命中率は下限 15 / 上限 100 で挟まれるため、材料を積んでも 0 のことがある(正直に出る) */
+  hit_rate_gain: number;
 }
 
 // crates/domain/src/defense.rs の VersusAccuracy(preview_versus の戻り値)。
@@ -1384,10 +1387,14 @@ export interface VersusAccuracy {
   accuracy_growth: GrowthRoom[];
   /** 全部積んだときの命中P */
   accuracy_max: number;
+  /** 全部積んだときの命中率(結果への効き。% はここから読む。自前で導出しない) */
+  accuracy_max_hit_rate: HitRate;
   /** 防御側の回避P 伸びしろ */
   evasion_growth: GrowthRoom[];
   /** 全部積んだときの回避P */
   evasion_max: number;
+  /** 防御側が全部積んだときの命中率(攻撃側から見た数字。下がる方向) */
+  evasion_max_hit_rate: HitRate;
 }
 
 export interface FormulaStep {

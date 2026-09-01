@@ -457,6 +457,11 @@ pub struct GrowthRoom {
     pub detail: Option<String>,
     /// 見積りが `[仮]` か(シエナのように上振れするもの)
     pub provisional: bool,
+    /// この材料を積んだら命中率(%)が何動くか。攻撃側の材料は正、防御側の材料は負
+    /// (回避Pが増えるほど攻撃側の命中率は下がる)。命中率は下限 15 / 上限 100 で
+    /// 挟まれるため、命中P(または回避P)が増えても `0` のままのことがある
+    /// (ダメージ計算タブの「表記 ±0%」と同じで、正直に出る)
+    pub hit_rate_gain: i64,
 }
 
 /// 装備の部位ごとに、シエナのオーラの空き段階へ `kind`(命中率 / 回避率)を最大値まで
@@ -510,6 +515,10 @@ fn accuracy_growth(
     enchant_caps: &[(PartSlot, EquipmentValues)],
     buff_catalog: &crate::stat_sources::BuffCatalog,
     buff_selection: &crate::stat_sources::BuffSelection,
+    defender_evasion_point: i64,
+    min_hit_rate: i64,
+    min_evasion_rate: i64,
+    current_hit_rate: i64,
 ) -> (Vec<GrowthRoom>, i64) {
     // `extra_bonus` は命中P増加バフの伸びしろ(§下記)を足し込むための追加枠。
     // 通常の材料(ステ・エンチャント・シエナ・的中剣)は 0 を渡す(いまの bonus のまま)。
@@ -531,6 +540,11 @@ fn accuracy_growth(
         let probe = AccuracyBoost::PrecisionSword(1);
         recompute(dex, eq_accuracy, extra_bonus, probe) - probe.shift()
     };
+    // その材料を積んだ命中Pで命中率をもう一度通し、いまとの差を取る(結果への効き)。
+    let hit_rate_gain = |new_accuracy_point: i64| {
+        hit_rate(new_accuracy_point, defender_evasion_point, min_hit_rate, min_evasion_rate).value
+            - current_hit_rate
+    };
 
     let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.accuracy);
     let siena_gain = siena_room(equipment, SienaValueKind::Accuracy);
@@ -547,6 +561,7 @@ fn accuracy_growth(
                 gain,
                 detail: Some(format!("{} → {stat_cap}", stats.dex)),
                 provisional: false,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -559,6 +574,7 @@ fn accuracy_growth(
                 gain,
                 detail: Some(format!("+{enchant_gain}")),
                 provisional: false,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -571,6 +587,7 @@ fn accuracy_growth(
                 gain,
                 detail: Some(format!("+{siena_gain}")),
                 provisional: true,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -583,6 +600,7 @@ fn accuracy_growth(
                 gain,
                 detail: Some(format!("命中P割合 ×{PRECISION_SWORD_ACCURACY_RATE}")),
                 provisional: false,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -595,6 +613,7 @@ fn accuracy_growth(
                 gain,
                 detail: Some(format!("+{buff_gain}")),
                 provisional: false,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -623,6 +642,10 @@ fn evasion_growth(
     stat_cap: i64,
     equipment: &Equipment,
     enchant_caps: &[(PartSlot, EquipmentValues)],
+    attacker_accuracy_point: i64,
+    min_hit_rate: i64,
+    min_evasion_rate: i64,
+    current_hit_rate: i64,
 ) -> (Vec<GrowthRoom>, i64) {
     let recompute = |agi: i64, evasion: i64| {
         evasion_point(
@@ -635,6 +658,11 @@ fn evasion_growth(
             type_bonus,
             random_option,
         )
+    };
+    // 防御側の材料を積んだ回避Pで命中率をもう一度通す(攻撃側の命中率は下がる方向)。
+    let hit_rate_gain = |new_evasion_point: i64| {
+        hit_rate(attacker_accuracy_point, new_evasion_point, min_hit_rate, min_evasion_rate).value
+            - current_hit_rate
     };
 
     let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.evasion);
@@ -650,6 +678,7 @@ fn evasion_growth(
                 gain,
                 detail: Some(format!("{} → {stat_cap}", stats.agi)),
                 provisional: false,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -662,6 +691,7 @@ fn evasion_growth(
                 gain,
                 detail: Some(format!("+{enchant_gain}")),
                 provisional: false,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -674,6 +704,7 @@ fn evasion_growth(
                 gain,
                 detail: Some(format!("+{siena_gain}")),
                 provisional: true,
+                hit_rate_gain: hit_rate_gain(current + gain),
             });
         }
     }
@@ -727,10 +758,14 @@ pub struct VersusAccuracy {
     pub accuracy_growth: Vec<GrowthRoom>,
     /// 攻撃側の命中Pの伸びしろを全部積んだときの命中P
     pub accuracy_max: i64,
+    /// 攻撃側の命中Pの伸びしろを全部積んだときの命中率(結果への効き。フロントで % を導出させない)
+    pub accuracy_max_hit_rate: HitRate,
     /// 防御側の回避Pの伸びしろ(材料ごと。gain 降順。伸びしろ無しの材料は入らない)
     pub evasion_growth: Vec<GrowthRoom>,
     /// 防御側の回避Pの伸びしろを全部積んだときの回避P
     pub evasion_max: i64,
+    /// 防御側の回避Pの伸びしろを全部積んだときの命中率(攻撃側から見た数字。下がる方向)
+    pub evasion_max_hit_rate: HitRate,
 }
 
 /// 対人計算の攻撃側ぶん。防御側と取り違えないよう型で分ける
@@ -817,6 +852,10 @@ pub fn versus_accuracy(
         attacker.enchant_caps,
         attacker.accuracy_buff_catalog,
         attacker.accuracy_buff_selection,
+        defender_evasion_point,
+        attacker.min_hit_rate.unwrap_or(0),
+        defender.min_evasion_rate.unwrap_or(0),
+        hit.value,
     );
     let defender_type_bonus = attack_type_bonus(defender.stats, attack_type);
     let (evasion_growth, evasion_max) = evasion_growth(
@@ -829,6 +868,22 @@ pub fn versus_accuracy(
         defender.stat_cap,
         defender.equipment,
         defender.enchant_caps,
+        attacker_accuracy_point,
+        attacker.min_hit_rate.unwrap_or(0),
+        defender.min_evasion_rate.unwrap_or(0),
+        hit.value,
+    );
+    let accuracy_max_hit_rate = hit_rate(
+        accuracy_max,
+        defender_evasion_point,
+        attacker.min_hit_rate.unwrap_or(0),
+        defender.min_evasion_rate.unwrap_or(0),
+    );
+    let evasion_max_hit_rate = hit_rate(
+        attacker_accuracy_point,
+        evasion_max,
+        attacker.min_hit_rate.unwrap_or(0),
+        defender.min_evasion_rate.unwrap_or(0),
     );
     VersusAccuracy {
         attack_type,
@@ -850,8 +905,10 @@ pub fn versus_accuracy(
         min_rates_recorded: attacker.min_hit_rate.is_some() && defender.min_evasion_rate.is_some(),
         accuracy_growth,
         accuracy_max,
+        accuracy_max_hit_rate,
         evasion_growth,
         evasion_max,
+        evasion_max_hit_rate,
     }
 }
 
@@ -1503,5 +1560,189 @@ mod tests {
         ) - probe.shift();
         assert_eq!(v.accuracy_max, recomputed);
         assert!(v.accuracy_max > v.accuracy_point);
+    }
+
+    #[test]
+    fn 命中率が上限に張り付いていたら攻撃側の材料のhit_rate_gainは0() {
+        let attacker = EffectiveStats {
+            dex: 200,
+            ..Default::default()
+        };
+        // 防御側は evasion_point = 15(AGI 0)。命中率は既に上限(100)で張り付く。
+        let defender_stats = EffectiveStats::default();
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let v = versus_accuracy(
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: 300, // DEX をさらに積める
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi,
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
+            AttackType::Physical,
+        );
+        assert!(v.hit_rate.capped);
+        assert_eq!(v.hit_rate.value, v.hit_rate.max);
+        let stat_room = v
+            .accuracy_growth
+            .iter()
+            .find(|g| g.source == GrowthSource::Stat)
+            .expect("DEX の伸びしろが出るはず");
+        assert_eq!(stat_room.hit_rate_gain, 0);
+    }
+
+    #[test]
+    fn 命中率が下限に張り付いていたら閾値を超えるまでhit_rate_gainは0() {
+        let attacker = EffectiveStats::default(); // DEX 0
+        let mut equipment = Equipment::default();
+        equipment.parts.weapon = crate::equipment::EquipmentPartList::from(crate::equipment::EquipmentPart {
+            item_id: Some("w1".to_string()),
+            enchant: EquipmentValues::default(),
+            ..Default::default()
+        });
+        // エンチャント枠の伸びしろを大きく取り、命中率下限(15)を超えて動く材料にする。
+        let enchant_caps = [(
+            PartSlot::Weapon,
+            EquipmentValues {
+                accuracy: 300,
+                ..Default::default()
+            },
+        )];
+        // 防御側 AGI 163 → evasion_point.physical = floor(15 + 163*1.2) = 210。
+        // 攻撃側の命中P(現在)は 0+0+15=15、raw = 15-210 = -195 で下限 15 に張り付く。
+        let defender_stats = EffectiveStats {
+            agi: 163,
+            ..Default::default()
+        };
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        assert_eq!(defender.evasion_point.physical, 210);
+        let v = versus_accuracy(
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &equipment,
+                enchant_caps: &enchant_caps,
+                stat_cap: 5, // DEX を少しだけ積める(下限を超えない)
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi,
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
+            AttackType::Physical,
+        );
+        assert_eq!(v.hit_rate.value, v.hit_rate.min);
+
+        // 少し積んだだけ(DEX +5)では下限のまま動かない。
+        let stat_room = v
+            .accuracy_growth
+            .iter()
+            .find(|g| g.source == GrowthSource::Stat)
+            .expect("DEX の伸びしろが出るはず");
+        assert_eq!(stat_room.hit_rate_gain, 0);
+
+        // 閾値を超える量(エンチャント枠 +300)を積むと動く。
+        let enchant_room = v
+            .accuracy_growth
+            .iter()
+            .find(|g| g.source == GrowthSource::Enchant)
+            .expect("エンチャントの伸びしろが出るはず");
+        assert!(enchant_room.hit_rate_gain > 0);
+    }
+
+    #[test]
+    fn 防御側の材料はhit_rate_gainが負になる() {
+        // 攻撃側の命中P = 65(DEX 50 + オフセット 15)、防御側 evasion_point(現在) = 15(AGI 0)。
+        // raw = 65 - 15 = 50 で上限・下限のどちらにも当たらない(挟まれない領域)。
+        let attacker = EffectiveStats {
+            dex: 50,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats::default();
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let v = versus_accuracy(
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: attacker.dex, // 攻撃側は動かさない
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: 10, // AGI を 0 → 10 まで積める
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
+            AttackType::Physical,
+        );
+        assert!(!v.hit_rate.capped);
+        assert_eq!(v.hit_rate.value, 50);
+        let stat_room = v
+            .evasion_growth
+            .iter()
+            .find(|g| g.source == GrowthSource::Stat)
+            .expect("AGI の伸びしろが出るはず");
+        assert!(stat_room.hit_rate_gain < 0);
+        // AGI 10 → evasion_point = floor(15 + 10*1.2) = 27、raw = 65-27 = 38 → hit_rate 38(挟まれない)
+        assert_eq!(stat_room.hit_rate_gain, -12);
     }
 }

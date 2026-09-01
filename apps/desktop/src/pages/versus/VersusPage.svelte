@@ -195,6 +195,14 @@
   // 命中P・回避Pで独立に開閉できる(押した行はその場に留まり、下に生えるだけ)
   let growthOpenAcc = $state(false);
   let growthOpenEva = $state(false);
+
+  // ダメージ計算タブと同じ言い方(「結果への効きを %」)にそろえる。命中P・回避Pの素の増分は
+  // 下限・上限で頭打ちのことがあるので、動かない材料は空白や「—」にせず ±0% と正直に出す。
+  function formatHitRateGain(gain: number): string {
+    if (gain > 0) return `+${gain}%`;
+    if (gain < 0) return `${gain}%`;
+    return "±0%";
+  }
 </script>
 
 {#snippet numCell(value: number | null)}
@@ -213,13 +221,23 @@
   {/if}
 {/snippet}
 
-{#snippet growthSummaryCell(result: VersusAccuracy | null, growthCount: number, max: number | null, point: number | null)}
-  {#if result === null || max === null || point === null}
+{#snippet growthSummaryCell(
+  result: VersusAccuracy | null,
+  growthCount: number,
+  max: number | null,
+  point: number | null,
+  maxHitRate: number | null,
+)}
+  {#if result === null || max === null || point === null || maxHitRate === null}
     <span class="unk">?</span>
   {:else if growthCount === 0}
     <span class="growth-none dim">伸びしろなし</span>
   {:else}
-    <span class="growth-total num" use:bump={() => max - point}>あと +{max - point}</span>
+    {@const hitGain = maxHitRate - result.hit_rate.value}
+    <span class="growth-total">
+      <span class="growth-total-hitrate num" use:bump={() => hitGain}>命中率 {formatHitRateGain(hitGain)}</span>
+      <span class="growth-total-raw dim">あと +<span class="num">{max - point}</span></span>
+    </span>
   {/if}
 {/snippet}
 
@@ -228,12 +246,14 @@
     <span class="growth-none dim">—</span>
   {:else}
     <span class="growth-item">
+      <span class="growth-hitrate num" use:bump={() => item.hit_rate_gain}>{formatHitRateGain(item.hit_rate_gain)}</span>
+      {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
+      <!-- 素の伸びしろと換算後は行を分ける。1 行に並べると列幅(140px)に入らず、
+           途中で折り返して「1,178 → → 命中 +1514 / 2300 P」と読む順が壊れる(実機で検出) -->
       {#if item.detail}<span class="growth-detail dim">{item.detail}</span>{/if}
-      <span class="growth-convert">
-        <span class="growth-arrow dim">→</span>
-        <span class="growth-unit dim">{unit}</span>
-        <span class="num" use:bump={() => item.gain}>+{item.gain}</span>
-        {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
+      <span class="growth-convert dim">
+        <span class="growth-unit">{unit}</span>
+        <span class="num">+{item.gain}</span>
       </span>
     </span>
   {/if}
@@ -250,6 +270,8 @@
   maxB: number | null,
   pointA: number | null,
   pointB: number | null,
+  maxHitRateA: number | null,
+  maxHitRateB: number | null,
   open: boolean,
   onToggle: () => void,
 )}
@@ -267,8 +289,8 @@
       {label}
       {#if hasAny}<span class="growth-chevron" class:open>▸</span>{/if}
     </div>
-    <div class="cell val">{@render growthSummaryCell(resultA, growthA.length, maxA, pointA)}</div>
-    <div class="cell val">{@render growthSummaryCell(resultB, growthB.length, maxB, pointB)}</div>
+    <div class="cell val">{@render growthSummaryCell(resultA, growthA.length, maxA, pointA, maxHitRateA)}</div>
+    <div class="cell val">{@render growthSummaryCell(resultB, growthB.length, maxB, pointB, maxHitRateB)}</div>
   </button>
   {#if open}
     {#each rows as row (row.source)}
@@ -462,6 +484,7 @@
                 rAB?.accuracy_growth ?? [], rBA?.accuracy_growth ?? [],
                 rAB?.accuracy_max ?? null, rBA?.accuracy_max ?? null,
                 rAB?.accuracy_point ?? null, rBA?.accuracy_point ?? null,
+                rAB?.accuracy_max_hit_rate.value ?? null, rBA?.accuracy_max_hit_rate.value ?? null,
                 growthOpenAcc, () => (growthOpenAcc = !growthOpenAcc),
               )}
             </div>
@@ -501,6 +524,7 @@
                 rBA?.evasion_growth ?? [], rAB?.evasion_growth ?? [],
                 rBA?.evasion_max ?? null, rAB?.evasion_max ?? null,
                 rBA?.evasion_point ?? null, rAB?.evasion_point ?? null,
+                rBA?.evasion_max_hit_rate.value ?? null, rAB?.evasion_max_hit_rate.value ?? null,
                 growthOpenEva, () => (growthOpenEva = !growthOpenEva),
               )}
             </div>
@@ -557,7 +581,12 @@
      ── 開いたときだけその下に材料の内訳(さらに一段字下げ)が生える(押した行は動かない)。
      値は文字列(「あと +N」「伸びしろなし」・内訳)を含むので折り返しを許す */
   .growth-total-row .cell.label { font-weight: 800; color: var(--fg-head); }
-  .growth-total-row .cell.val :global(.growth-total) { font-weight: 800; color: var(--fg-head); }
+  /* 主役は「結果への効き(命中率 %)」。素の増分(あと +N)は脇へ小さく残す
+     (ダメ計タブの「MAX で +N%」と同じ言い方にそろえる。ユーザー指示) */
+  .growth-total { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .growth-total-hitrate { font-weight: 800; color: var(--fg-head); }
+  .growth-total-raw { font-size: 9px; }
+  .growth-total-raw :global(.num) { font-size: 9px; }
   /* button の既定見た目を消し、行としての見た目だけ残す */
   button.growth-total-row {
     background: none; border: none; margin: 0; padding: 0; font: inherit; color: inherit;
@@ -574,8 +603,15 @@
   .growth-item-row .cell.label { padding-left: 40px; white-space: normal; }
   .growth-total-row .cell.val, .growth-item-row .cell.val { white-space: normal; overflow: visible; text-overflow: clip; }
   .growth-item { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  /* 材料 1 件の主役も「命中率 ±N%」。素の増分(装備補正 +705 → 命中P +951)は
+     その脇に小さく残す(ダメ計タブの「もし〜だったら」候補と同じ言い方) */
+  .growth-hitrate { font-weight: 800; color: var(--fg-head); }
   .growth-detail { font-size: 9px; }
-  .growth-convert { display: inline-flex; align-items: baseline; gap: 3px; }
+  /* 内訳は 1 行ずつ折り返さない。途中で折り返すと「1,178 → → 命中 +1514 / 2300 P」のように
+     読む順が壊れる(実機で検出)。入り切らない幅なら列側を広げる */
+  .growth-detail, .growth-convert { white-space: nowrap; }
+  .growth-convert { display: inline-flex; align-items: baseline; gap: 3px; font-size: 9px; }
+  .growth-convert :global(.num) { font-size: 9px; }
   .growth-arrow { font-size: 9px; }
   .growth-unit { font-size: 9px; }
   .growth-provisional {
