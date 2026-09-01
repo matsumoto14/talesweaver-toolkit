@@ -24,6 +24,8 @@ CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用�
 | gui-smoke | Tauri 実機の起動スクリプト・Playwright テンプレート・撮影規約。smoke-tester にプリロード |
 | finish-goal | goal 完了時のチェックリスト(テスト・決定記録・status・スクリーンショット) |
 | design-review | §00 の 5 原則で画面を点検する適合ループ(機械監査 + 実機監査 + ユーザー判断) |
+| release | 版を出す手順(bump → CHANGELOG → news.json → タグ → CI 確認)とお知らせだけの更新 |
+| db-migration | 保存の形を変えるときの 3 か所(SQLite / IndexedDB / 書き出し JSON)と ADR-008 の規約・テストの型 |
 
 ## 3 段階の判断基準
 
