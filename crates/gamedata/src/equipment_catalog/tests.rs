@@ -827,10 +827,9 @@ fn 新装着アビリティは4系列とも同じ種類ぞろえを持つ() {
     assert_eq!(loss("loss-evasion-armor").values.evasion, 13);
     assert_eq!(loss("loss-shield-polish").values.physical_defense, 22);
     assert_eq!(loss("loss-critical-hand").values.critical, 12);
-    // 「命中 +13」は装備の命中補正ではなく的中剣 Lv(wiki 計算式まとめ #AccuracyPoint の
-    // 赤字注記。取得 2026-09-01)。values.accuracy は 0 で precision_sword_level に入る。
-    assert_eq!(loss("loss-accuracy-hand").values.accuracy, 0);
-    assert_eq!(loss("loss-accuracy-hand").precision_sword_level, Some(13));
+    // 「命中 +13」は単純な装備命中率補正(wiki 装備システム/アビリティ)。的中剣は
+    // キャラスキル「極・的中剣」であって装着アビリティではない(2026-09-01 訂正)
+    assert_eq!(loss("loss-accuracy-hand").values.accuracy, 13);
     // 最大HP は装備補正 9 値に無いので記録のみ。
     let vitality = loss("loss-vitality-armor");
     assert!(vitality.record_only);

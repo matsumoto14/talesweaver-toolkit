@@ -36,7 +36,7 @@
   const delaySkills = $derived(
     ownCharacterSkills.filter((d) =>
       [...d.effects, ...d.mastery_overrides.flatMap((o) => o.effects)].some(
-        (e) => e !== "record_only" && "actual_delay" in e,
+        (e) => typeof e !== "string" && "actual_delay" in e,
       ),
     ),
   );

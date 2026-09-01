@@ -193,6 +193,21 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         source_url: WIKI,
         note: "持続2分・CT10分。M3 の三択で値が変わる。被ダメージ +5% は未配線",
     },
+    // マキシミン専用「極・的中剣」(wiki Skill/マキシミン #HitSword。取得 2026-09-01)。
+    // 命中Pにかかる倍率が SLv に比例して増える(Lv*5%。QA・持続14〜20分・Master=Lv7)。
+    // アビリティの的中剣(装備システム/アビリティ)とは別物 — 装備側は単純な装備命中率補正
+    // (`EquipmentValues.accuracy`)であり、こちらはスキルの命中P割合増加(SLv 制)。
+    // SLv は `CharacterSkills::skill_levels` に持つ(既存の on/off のみのキャラスキルと違う軸)。
+    CharacterSkillDef {
+        id: "maximin_hit_sword",
+        game_character_id: "maximin",
+        name: "極・的中剣",
+        audience: SkillAudience::SelfOnly,
+        effects: &[SkillEffect::AccuracyRateBoost],
+        mastery_overrides: &[],
+        source_url: WIKI,
+        note: "命中Pにかかる倍率が SLv×5%増加(Master=Lv7で+35%)。ペット集中(Lv1相当)が優先",
+    },
     // --- マスタリーを取ってはじめて効果が出るスキル ---
     // ロアミニの M3【ア・プチ】【パウアトゥン】は「スキルを選択」= そのスキルが使えるようになる。
     CharacterSkillDef {
@@ -1158,6 +1173,7 @@ mod tests {
     fn on(ids: &[&str]) -> CharacterSkills {
         CharacterSkills {
             skill_ids: ids.iter().map(|s| s.to_string()).collect(),
+            skill_levels: Default::default(),
         }
     }
     fn picked(ids: &[&str]) -> Masteries {
@@ -1168,8 +1184,8 @@ mod tests {
 
     /// 収録件数。カタログを入れ替えたら数を更新する(黙って増減させない)。
     #[test]
-    fn 収録は71件() {
-        assert_eq!(CHARACTER_SKILLS.len(), 71);
+    fn 収録は72件() {
+        assert_eq!(CHARACTER_SKILLS.len(), 72);
     }
 
     /// 上限はカテゴリ側(`DamageCategory::cap`)が見るので、ここでは

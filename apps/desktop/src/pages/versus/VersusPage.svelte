@@ -172,7 +172,9 @@
     if (boost === "concentration") {
       return `ペット集中 ・ 命中P ×${limits.concentration_accuracy_rate}`;
     }
-    return `的中剣 Lv${boost.precision_sword} ・ 命中P ×${limits.precision_sword_accuracy_rate}`;
+    const level = boost.precision_sword;
+    const rate = (1 + limits.precision_sword_accuracy_rate_per_level * level).toFixed(2);
+    return `極・的中剣 Lv${level} ・ 命中P ×${rate}`;
   }
 
   // --- 命中P・回避Pの伸びしろ(accuracy_growth / evasion_growth) --------------------
@@ -359,11 +361,24 @@
         <span class="num" use:bump={() => result?.evasion_point ?? null}>{result.evasion_point}</span>
         <span class="op">=</span>
         <span class="num" use:bump={() => result?.hit_rate.raw ?? null}>{result.hit_rate.raw}</span>)
-        ・ 下限 <span class="num">{result.hit_rate.min}</span> 〜 上限 <span class="num">{result.hit_rate.max}</span>
-        {#if !result.min_rates_recorded}<span class="unk">下限根拠 ?</span>{/if}
+        ・ 下限 <span class="num" use:bump={() => result?.hit_rate.min ?? null}>{result.hit_rate.min}</span>
+        <span class="rate-basis dim">(15
+          <span class="op">+</span>
+          {#if result.min_hit_rate_recorded}
+            <span class="num">{result.min_hit_rate}</span>
+          {:else}
+            <span class="unk" title="対人の最小命中率補正はプレイヤー側の供給源表が wiki に無いため未収録(0 決め打ち)">命中補正 ?</span>
+          {/if}
+          <span class="op">−</span>
+          {#if result.min_evasion_rate_recorded}
+            <span class="num">{result.min_evasion_rate}</span>
+          {:else}
+            <span class="unk">回避補正 ?</span>
+          {/if}
+          )</span>
+        ・ 上限 <span class="num">{result.hit_rate.max}</span>
         {#if boost}
           ・ {boost}
-          {#if !result.accuracy_boost_shift_recorded}<span class="unk">命中P変動 ?</span>{/if}
         {/if}
       </span>
     {/if}
@@ -612,7 +627,6 @@
   .growth-detail, .growth-convert { white-space: nowrap; }
   .growth-convert { display: inline-flex; align-items: baseline; gap: 3px; font-size: 9px; }
   .growth-convert :global(.num) { font-size: 9px; }
-  .growth-arrow { font-size: 9px; }
   .growth-unit { font-size: 9px; }
   .growth-provisional {
     font-size: 9px; font-weight: 800; border-radius: var(--r-pill); padding: 1px 5px; border: 1px solid;
@@ -651,4 +665,5 @@
 
   .rate-why { font-size: 10.5px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px; }
   .rate-why .op { color: var(--fg-dim); }
+  .rate-basis { display: inline-flex; align-items: baseline; gap: 3px; }
 </style>

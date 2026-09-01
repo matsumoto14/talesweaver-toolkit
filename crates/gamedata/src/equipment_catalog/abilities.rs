@@ -103,7 +103,6 @@ fn new_ability(
         effect_summary,
         values,
         damage_effects: &[],
-        precision_sword_level: None,
     }
 }
 
@@ -135,7 +134,6 @@ fn fixed_ability(
         effect_summary,
         values,
         damage_effects: &[],
-        precision_sword_level: None,
     }
 }
 
@@ -319,7 +317,7 @@ fn slot_ability(
         ),
         _ => (0, "", vec![]),
     };
-    let mut def = EquipmentAbilityDef {
+    EquipmentAbilityDef {
         id,
         name,
         family,
@@ -334,17 +332,7 @@ fn slot_ability(
         effect_summary,
         values,
         damage_effects,
-        precision_sword_level: None,
-    };
-    // 的中剣系(family Accuracy)の固定値は装備命中率補正ではなく的中剣 Lv(wiki 計算式まとめ
-    // #AccuracyPoint の赤字注記。取得 2026-09-01)。value_option の可変枠(神秘鉱・不死)は
-    // 本体値が 0 なのでここでは動かず、実測 Lv は呼び出し側(commands)が
-    // `part.ability_values` から解決する。
-    if def.family == EquipmentAbilityFamily::Accuracy && def.values.accuracy != 0 {
-        def.precision_sword_level = Some(def.values.accuracy as u8);
-        def.values.accuracy = 0;
     }
-    def
 }
 
 fn fixed_slot_ability(

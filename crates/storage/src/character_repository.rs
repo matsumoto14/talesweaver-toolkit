@@ -1818,7 +1818,6 @@ mod tests {
                     ..Default::default()
                 },
                 damage_effects: &[],
-                precision_sword_level: None,
             },
             EquipmentAbilityDef {
                 id: "pointed-blade-e",
@@ -1838,7 +1837,6 @@ mod tests {
                     ..Default::default()
                 },
                 damage_effects: &[],
-                precision_sword_level: None,
             },
             EquipmentAbilityDef {
                 id: "night-star-pointed-blade",
@@ -1858,7 +1856,6 @@ mod tests {
                     ..Default::default()
                 },
                 damage_effects: &[],
-                precision_sword_level: None,
             },
         ];
         let mut c = new_character("メイン");
@@ -2113,7 +2110,6 @@ mod tests {
             effect_summary: "突き +2",
             values: domain::EquipmentValues::default(),
             damage_effects: &[],
-            precision_sword_level: None,
         }
     }
 
@@ -2267,6 +2263,7 @@ mod tests {
         let mut c = new_character("x"); // ボリス
         c.stat_sources.character_skills = domain::CharacterSkills {
             skill_ids: vec!["mira_spurt".to_string()],
+            skill_levels: Default::default(),
         };
         assert!(matches!(
             repo.create(&c, &[], &[], &[], &[], &[], &catalog),
@@ -2275,6 +2272,7 @@ mod tests {
 
         c.stat_sources.character_skills = domain::CharacterSkills {
             skill_ids: vec!["boris_sword_priest".to_string()],
+            skill_levels: Default::default(),
         };
         let created = repo.create(&c, &[], &[], &[], &[], &[], &catalog).unwrap();
         let loaded = repo.get(created.id).unwrap();

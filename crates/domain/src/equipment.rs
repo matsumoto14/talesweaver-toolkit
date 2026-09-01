@@ -767,11 +767,6 @@ pub struct EquipmentAbilityDef {
     /// **追加効果**(wiki: アビリティ表の「追加効果」列)。R- 以上の段に付く
     /// 「ダメージ増加 +n%」は装備攻撃力ではなく与ダメージ式のカテゴリX3 に入る
     pub damage_effects: &'static [SkillEffect],
-    /// 的中剣(系)の Lv 1〜7(wiki 計算式まとめ `#AccuracyPoint`: 表記の「命中率補正 +n」は
-    /// 装備の命中補正ではなく的中剣 Lv)。`family` が `Accuracy` のアビリティだけが持つ。
-    /// 固定値の段はここに Lv が入り `values.accuracy` は 0。神秘鉱・不死の可変枠(value_option)は
-    /// Lv が実測(選択値)なのでここは `None` のまま、呼び出し側が `ability_values` から解決する。
-    pub precision_sword_level: Option<u8>,
 }
 
 /// キャラの装備補正一式(部位別装備 12 スロット + 称号 + テシスコア)。
@@ -1628,15 +1623,6 @@ fn part_ability_values(
         }
     }
     for value in &part.ability_values {
-        // 的中剣(family Accuracy)の本体値(神秘鉱・不死の可変枠)は的中剣 Lv であって
-        // 装備の命中率補正ではない(wiki 計算式まとめ `#AccuracyPoint`)。EquipmentValues には
-        // 入れず、Lv の解決は呼び出し側(commands の `resolve_accuracy_boost` 相当)に任せる
-        let is_precision_sword = abilities
-            .iter()
-            .any(|a| a.id == value.ability_id && a.family == EquipmentAbilityFamily::Accuracy);
-        if is_precision_sword {
-            continue;
-        }
         add_ability_value(&mut total, value);
     }
     for addition in &part.ability_additions {
@@ -2059,7 +2045,6 @@ mod tests {
                 ..Default::default()
             },
             damage_effects: &[],
-            precision_sword_level: None,
         }];
         let base = eq.base_totals(&abilities, &[]);
         assert_eq!(

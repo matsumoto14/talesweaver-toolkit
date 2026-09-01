@@ -68,6 +68,11 @@ pub enum RandomOptionEffect {
     AccuracyAndEvasionPoint,
     /// 中ディレイ減少値(wiki: ステータス「中ディレイ倍率B」)への加算
     ActualDelayReduction,
+    /// 最小回避率補正への加算(wiki `#HitRateCap`「最小回避率補正に該当するもの」)。
+    /// 対人の命中率下限を上げる。「固定回避」も「最大回避率」も wiki 注記どおり同一の扱いにする
+    /// (取得 2026-09-01: 「命中率下限に対する影響はどちらも同一だが、他に別の効果が
+    /// 含まれているかは不明」)
+    MinEvasionRate,
     /// 計算には反映しない(発動条件付き・被ダメージ側・未実装の概念)。理由はカタログの `note`
     RecordOnly,
 }
@@ -193,6 +198,8 @@ pub struct RandomOptionTotals {
     pub evasion_point: i64,
     /// 中ディレイ減少値への加算。Σ% の小数表現
     pub actual_delay_reduction: f64,
+    /// 最小回避率補正への加算(wiki `#HitRateCap`)。% 表記の整数
+    pub min_evasion_rate: i64,
     /// 計算に反映しなかった枠の数(UI が「記録するだけ」と出すのに使う)
     pub record_only_count: usize,
 }
@@ -228,6 +235,7 @@ impl RandomOptionTotals {
             RandomOptionEffect::ActualDelayReduction => {
                 self.actual_delay_reduction += value / 100.0;
             }
+            RandomOptionEffect::MinEvasionRate => self.min_evasion_rate += value as i64,
             RandomOptionEffect::RecordOnly => self.record_only_count += 1,
         }
     }
@@ -403,6 +411,19 @@ mod tests {
         );
         assert_eq!(totals.added_damage_rate_for(SkillDependency::Int), 0.0);
         assert_eq!(totals.added_damage_rate_for(SkillDependency::HackInt), 0.0);
+    }
+
+    #[test]
+    fn min_evasion_rate_accumulates() {
+        let d = def(RandomOptionEffect::MinEvasionRate);
+        let slot = RandomOptionSlot {
+            option_id: "test".into(),
+            rank: RandomOptionRank::Special,
+            value: None,
+        };
+        let mut totals = RandomOptionTotals::default();
+        totals.add(&d, &slot);
+        assert_eq!(totals.min_evasion_rate, 25);
     }
 
     #[test]

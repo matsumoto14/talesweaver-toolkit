@@ -114,7 +114,10 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   monster_cards: { ...(src.monster_cards ?? {}) } as StatSources["monster_cards"],
   sacred_relic: { ...src.sacred_relic },
   elements: { ...src.elements },
-  character_skills: { skill_ids: [...(src.character_skills?.skill_ids ?? [])] },
+  character_skills: {
+    skill_ids: [...(src.character_skills?.skill_ids ?? [])],
+    skill_levels: { ...(src.character_skills?.skill_levels ?? {}) },
+  },
   masteries: { picked: [...(src.masteries?.picked ?? [])] },
   critical_rate: { ...src.critical_rate },
   soul_link: { ...src.soul_link },

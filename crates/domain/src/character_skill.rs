@@ -70,6 +70,15 @@ pub enum SkillEffect {
         /// この効き先自体にフラグとして持たせる
         disabled_with_precision_sword: bool,
     },
+    /// 最小回避率補正への加算(wiki `#HitRateCap`: 対人の命中率下限を上げる。
+    /// テイルズウィーバーのエネルギーの「最小回避率 +10%」)。値は % 表記の整数
+    MinEvasionRate { value: i64 },
+    /// 命中P割合増加(的中剣系)。wiki Skill/マキシミン `#HitSword`(取得 2026-09-01):
+    /// マキシミン専用スキル「極・的中剣」は SLv 1〜7 を持ち、命中Pに掛かる倍率が
+    /// `Lv×5%` で増える(`AccuracyBoost::PrecisionSword` の `rate()` が計算する)。
+    /// このマーカー自体は値を持たない — 実際の Lv は `CharacterSkills::skill_levels` から
+    /// 引く(既存の `AccuracyPoint`(固定値の加算)とは別物)
+    AccuracyRateBoost,
     /// **記録するだけ**。wiki に効果はあるが、まだ配線していない
     /// (被ダメージ・移動速度・確率発動・条件付き・減衰する値)
     RecordOnly,
@@ -97,6 +106,8 @@ impl SkillEffect {
                 }
             }
             SkillEffect::AccuracyPoint { value, .. } => format!("命中P +{value}"),
+            SkillEffect::MinEvasionRate { value } => format!("最小回避率補正 +{value}%"),
+            SkillEffect::AccuracyRateBoost => "命中P割合増加(SLvに比例)".to_string(),
             SkillEffect::RecordOnly => "記録のみ".to_string(),
         }
     }
@@ -162,6 +173,12 @@ pub struct CharacterSkills {
     /// `CharacterSkillDef::id`。重複は `validate` で弾く
     #[serde(default)]
     pub skill_ids: Vec<String>,
+    /// SLv を持つスキル(いまは `SkillEffect::AccuracyRateBoost` の「極・的中剣」だけ)の
+    /// `CharacterSkillDef::id` → SLv。他のキャラスキルは on/off のみで Lv を持たないので、
+    /// ここに無いキー(または `skill_ids` に無い id)は既定 Lv(`level_of` を見よ)。
+    /// 追加フィールド(既存 JSON は無くても `#[serde(default)]` で読める。storage migration 不要)
+    #[serde(default)]
+    pub skill_levels: std::collections::BTreeMap<String, u8>,
 }
 
 impl CharacterSkills {
@@ -176,6 +193,31 @@ impl CharacterSkills {
             .filter_map(|id| catalog.iter().find(|d| d.id == id.as_str()))
             .map(|def| (def, def.effects(masteries)))
             .collect()
+    }
+
+    /// 「極・的中剣」(`SkillEffect::AccuracyRateBoost` を持つ ON 中のスキル)の SLv。
+    /// 複数あれば高い方を採用する(通常は 1 つだけ)。ON にしていなければ `None`。
+    ///
+    /// **既定 Lv**: `skill_levels` に明示の Lv が無いときは、他のキャラスキルと同じ
+    /// 「ON = 満額の効果」に合わせて Lv7(Master)を返す `[仮]`。Lv1〜6 の段階選択 UI は
+    /// まだ無い(ステッパーの追加は本 goal の対象外。§報告)
+    pub fn accuracy_rate_boost_level(
+        &self,
+        catalog: &CharacterSkillCatalog,
+        masteries: &Masteries,
+    ) -> Option<u8> {
+        self.resolved(catalog, masteries)
+            .into_iter()
+            .filter(|(_, effects)| {
+                effects.iter().any(|e| matches!(e, SkillEffect::AccuracyRateBoost))
+            })
+            .map(|(def, _)| {
+                self.skill_levels
+                    .get(def.id)
+                    .copied()
+                    .unwrap_or(crate::defense::PRECISION_SWORD_MAX_LEVEL)
+            })
+            .max()
     }
 
     /// 中ディレイ減少の供給源(Σ% の小数表現)。
@@ -420,6 +462,7 @@ mod tests {
     fn on(ids: &[&str]) -> CharacterSkills {
         CharacterSkills {
             skill_ids: ids.iter().map(|s| s.to_string()).collect(),
+            skill_levels: Default::default(),
         }
     }
 

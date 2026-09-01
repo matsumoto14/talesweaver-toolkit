@@ -279,7 +279,7 @@
     if (!item) return null;
     const labels: string[] = item.damage_effects
       .map((e) => {
-        if (e === "record_only" || !("damage" in e)) return null;
+        if (typeof e === "string" || !("damage" in e)) return null;
         const sign = e.damage.percent < 0 ? "−" : "+";
         const head = short ? "与ダメ" : damageCategoryLabel(e.damage.category);
         return `${head} ${sign}${Math.abs(e.damage.percent)}%`;

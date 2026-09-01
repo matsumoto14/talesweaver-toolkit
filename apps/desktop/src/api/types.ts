@@ -348,6 +348,10 @@ export type SkillEffect =
   | { damage: { category: DamageCategory; percent: number } }
   /** 命中P増加(wiki 計算式まとめ #AccuracyPoint)。値はそのまま命中Pへ加算する固定値 */
   | { accuracy_point: { value: number; disabled_with_precision_sword: boolean } }
+  /** 最小回避率補正への加算(wiki #HitRateCap)。値は % 表記の整数 */
+  | { min_evasion_rate: { value: number } }
+  /** 命中P割合増加(的中剣系。SLv に比例。値自体は持たず CharacterSkills.skill_levels から引く) */
+  | "accuracy_rate_boost"
   /** 記録するだけ(防御側・確率発動・条件付きで未配線) */
   | "record_only";
 
@@ -395,6 +399,9 @@ export interface CharacterSkillDef {
 export interface CharacterSkills {
   /** ON にしている CharacterSkillDef の id */
   skill_ids: string[];
+  /** SLv を持つスキル(いまは「極・的中剣」だけ)の id → SLv。無いキーは既定 Lv
+   * (`CharacterSkills::accuracy_rate_boost_level` を見よ) */
+  skill_levels: Record<string, number>;
 }
 
 // resolve_character_skill_effects の戻り値要素。マスタリーによる効果差し替えを解決済みの効果。
@@ -647,6 +654,7 @@ export type RandomOptionEffect =
   | "evasion_point"
   | "accuracy_and_evasion_point"
   | "actual_delay_reduction"
+  | "min_evasion_rate"
   | "record_only";
 
 // ランクごとの効果値レンジ。crates/domain/src/random_option.rs の RandomOptionTier。
@@ -703,6 +711,8 @@ export interface RandomOptionTotals {
   accuracy_point: number;
   evasion_point: number;
   actual_delay_reduction: number;
+  /** 最小回避率補正への加算(wiki #HitRateCap)。% 表記の整数 */
+  min_evasion_rate: number;
   /** 計算に反映しなかった枠の数 */
   record_only_count: number;
 }
@@ -1369,8 +1379,6 @@ export interface VersusAccuracy {
   /** 命中P増加の合計(射手のルーン等)。今回は常に 0(未入力) */
   accuracy_bonus: number;
   accuracy_boost: AccuracyBoost;
-  /** false なら accuracy_boost の命中P変動(的中剣の上位段)は未収録 */
-  accuracy_boost_shift_recorded: boolean;
   /** 攻撃側の命中P(最終) */
   accuracy_point: number;
   defender_agi: number;
@@ -1381,8 +1389,14 @@ export interface VersusAccuracy {
   /** 防御側の回避P(採用したもの。最終) */
   evasion_point: number;
   hit_rate: HitRate;
-  /** false のとき、最小命中率補正・最小回避率補正は未収録(0 決め打ち) */
-  min_rates_recorded: boolean;
+  /** 攻撃側の最小命中率補正(供給源が無いためいまは常に 0) */
+  min_hit_rate: number;
+  /** false のとき min_hit_rate は未収録(0 決め打ち)。プレイヤー側の供給源表が wiki に無い */
+  min_hit_rate_recorded: boolean;
+  /** 対象の最小回避率補正(対人の上限 10% でクランプ済み) */
+  min_evasion_rate: number;
+  /** false のとき min_evasion_rate は未収録(0 決め打ち) */
+  min_evasion_rate_recorded: boolean;
   /** 攻撃側の命中P 伸びしろ(gain 降順、0 の材料は入っていない) */
   accuracy_growth: GrowthRoom[];
   /** 全部積んだときの命中P */
@@ -1623,9 +1637,12 @@ export interface StatLimits {
   ultimate_rune_bonus_max: number;
   /** 致命打のクリティカル率増加 */
   deadly_blow_bonus_max: number;
-  /** ペット集中 / 的中剣の命中P割合増加(1.05 / 1.35)。画面の「×1.35」表記はここから引く */
+  /** ペット集中(1.05)/ 的中剣(SLv 1あたり)の命中P割合増加。画面の倍率表記はここから引く */
   concentration_accuracy_rate: number;
-  precision_sword_accuracy_rate: number;
+  /** 的中剣 SLv 1 あたりの命中P割合増加(0.05)。表示は `1 + rate * Lv` */
+  precision_sword_accuracy_rate_per_level: number;
+  /** 的中剣 SLv の上限(7) */
+  precision_sword_max_level: number;
   /** パワーウェポンの装備攻撃力強化倍率。Σ% の小数表現 */
   power_weapon_rate: number;
   /** ストロングウェポン 1Lv あたりの装備攻撃力強化倍率。Σ% の小数表現 */

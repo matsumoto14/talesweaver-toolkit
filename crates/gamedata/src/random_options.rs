@@ -5,8 +5,10 @@
 //! **収録範囲は火力・命中・回避に関係する OP だけ**。wiki の一覧は HP/MP/移動速度/経験値/変身/
 //! 効果音まで含む数百件だが、それらは計算にも記録にも使いようが無いので入れない。
 //! 発動条件付き(後方から・ボス限定など)は条件を満たす前提で計算する。依存種別が明記された
-//! 命中時 OP は選択スキルとの一致も判定する。まだ実装していない概念(最小回避率補正・
-//! 被ダメージ側)に効く OP は `RandomOptionEffect::RecordOnly` で入れて「記録するだけ」と出す。
+//! 命中時 OP は選択スキルとの一致も判定する。まだ実装していない概念(被ダメージ側)に効く
+//! OP は `RandomOptionEffect::RecordOnly` で入れて「記録するだけ」と出す。「固定回避が増加」
+//! 「最大回避率が増加」は最小回避率補正(wiki `#HitRateCap`)として `MinEvasionRate` に入れる
+//! (取得 2026-09-01。wiki 注記どおり両者を同一視する)。
 //!
 //! 部位名の対応(wiki の節名 → `PartSlot`):
 //! - 「サブアーム」= 盾(`Shield`)
@@ -39,7 +41,7 @@ pub const RANDOM_OPTION_SOURCE: Source = Source {
 use RandomOptionEffect::{
     AccuracyAndEvasionPoint, AccuracyPoint, ActualDelayReduction, AddedDamageRate,
     AttackDamageRate, DependencyDamageRate, EvasionPoint, MagicAddedDamageRate, MagicDamageAmplify,
-    PhysicalAddedDamageRate, PhysicalDamageAmplify, RecordOnly,
+    MinEvasionRate, PhysicalAddedDamageRate, PhysicalDamageAmplify, RecordOnly,
 };
 use RandomOptionRank::{Normal, Rare, STrue, Special, Valuable};
 
@@ -396,9 +398,9 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             "固定回避が増加",
             PartSlot::Shield,
             8,
-            RecordOnly,
+            MinEvasionRate,
             SHIELD_FIXED_EVASION_TIERS,
-            "バンド Lv275〜。最小回避率補正だが通常回避「率」を出していないので記録のみ",
+            "バンド Lv275〜。最小回避率補正(wiki #HitRateCap)。通常回避「率」は出していない",
         ),
         // --- 盾+(カフス。wiki の節名は「サブアーム(SHOW)」)-----------------
         def(
@@ -425,9 +427,9 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             "固定回避が増加",
             PartSlot::Armor,
             3,
-            RecordOnly,
+            MinEvasionRate,
             ARMOR_FIXED_EVASION_TIERS,
-            "スーツ Lv275〜。最小回避率補正だが通常回避「率」を出していないので記録のみ",
+            "スーツ Lv275〜。最小回避率補正(wiki #HitRateCap)。通常回避「率」は出していない",
         ),
         // --- 手 ---------------------------------------------------------
         def(
@@ -462,9 +464,11 @@ fn random_option_defs() -> Vec<RandomOptionDef> {
             "最大回避率が増加",
             PartSlot::Hand,
             10,
-            RecordOnly,
+            MinEvasionRate,
             HAND_MAX_EVASION_RATE_TIERS,
-            "Lv275〜。通常回避「率」を出していないので記録のみ",
+            "Lv275〜。最小回避率補正(wiki #HitRateCap)。通常回避「率」は出していない。\
+             wiki 注記「命中率下限に対する影響は固定回避と同一だが、他に別の効果が\
+             含まれているかは不明」(取得 2026-09-01)",
         ),
         // --- レリック(右)------------------------------------------------
         def(

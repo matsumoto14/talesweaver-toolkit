@@ -240,6 +240,7 @@ export const randomOptionValueLabel = (slot: RandomOptionSlot, def: RandomOption
       return `+${value}`;
     case "actual_delay_reduction":
       return `−${value}%`;
+    case "min_evasion_rate":
     default:
       return `+${value}%`;
   }
@@ -261,6 +262,7 @@ export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
     case "evasion_point": return "回避P";
     case "accuracy_and_evasion_point": return "命中P・回避P";
     case "actual_delay_reduction": return "中ディレイ減少";
+    case "min_evasion_rate": return "最小回避率補正";
     case "record_only": return "記録するだけ(計算に入りません)";
   }
 };

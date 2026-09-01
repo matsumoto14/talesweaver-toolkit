@@ -490,6 +490,7 @@ mod tests {
         if apply_skill {
             let skills = CharacterSkills {
                 skill_ids: vec!["test_possession_swordsman".into()],
+                skill_levels: Default::default(),
             };
             let masteries = Masteries {
                 picked: vec!["test_m2_3".into()],

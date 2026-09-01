@@ -91,7 +91,7 @@
   const selected = $derived(app.buffSets.find((set) => set.id === selectedId) ?? app.buffSets[0] ?? null);
   const activePurposeMeta = $derived(PURPOSES.find((purpose) => purpose.id === activePurpose) ?? PURPOSES[0]);
   const damageCategories = (def: BuffDefinition): DamageCategory[] =>
-    def.damage_effects.flatMap((effect) => effect !== "record_only" && "damage" in effect ? [effect.damage.category] : []);
+    def.damage_effects.flatMap((effect) => typeof effect !== "string" && "damage" in effect ? [effect.damage.category] : []);
   const matchesDamageGroup = (def: BuffDefinition, group: DamageGroup) => {
     const categories = damageCategories(def);
     if (group === "general") return categories.includes("attack_damage_general");

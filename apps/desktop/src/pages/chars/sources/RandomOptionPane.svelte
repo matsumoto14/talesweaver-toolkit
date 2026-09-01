@@ -63,6 +63,9 @@
     if (t.actual_delay_reduction !== 0) {
       rows.push({ label: "中ディレイ", value: `−${pct(t.actual_delay_reduction)}%` });
     }
+    if (t.min_evasion_rate !== 0) {
+      rows.push({ label: "最小回避率補正", value: `+${t.min_evasion_rate}%` });
+    }
     return rows;
   });
 

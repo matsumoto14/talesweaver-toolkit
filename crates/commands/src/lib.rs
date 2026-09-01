@@ -508,17 +508,22 @@ pub fn preview_versus(
             .defense_rates(defender.equipment.siena_defense_rate()),
     );
 
+    let buff_catalog = gamedata::buff_catalog();
     let correction = gamedata::accuracy_correction(skill.dependency);
-    let accuracy_boost =
-        resolve_accuracy_boost(&attacker.equipment, &gamedata::equipment_abilities());
+    let accuracy_boost = resolve_accuracy_boost(&attacker.stat_sources);
     let accuracy_random_option = attacker
         .equipment
         .random_option_totals(&gamedata::random_option_catalog())
         .accuracy_point;
-    let evasion_random_option = defender
+    let defender_random_options = defender
         .equipment
-        .random_option_totals(&gamedata::random_option_catalog())
-        .evasion_point;
+        .random_option_totals(&gamedata::random_option_catalog());
+    let evasion_random_option = defender_random_options.evasion_point;
+    // 対象の最小回避率補正(wiki #HitRateCap)。ランダムオプション(固定回避・最大回避率)+
+    // バフ(テイルズウィーバーのエネルギー)の合計。対人上限 10 のクランプは domain(`hit_rate`)
+    // 側が行うのでここでは足し込むだけ
+    let min_evasion_rate = defender_random_options.min_evasion_rate
+        + domain::stat_sources::buff_min_evasion_rate_total(&defender_buffs, &buff_catalog);
     let attack_type = domain::AttackType::for_dependency(skill.dependency);
 
     // 伸びしろ(§伸びしろの定義)の材料解決。エンチャント枠の実測上限はカタログ品だけ
@@ -534,10 +539,10 @@ pub fn preview_versus(
     };
     let attacker_enchant_caps = resolve_enchant_caps(&attacker.equipment);
     let defender_enchant_caps = resolve_enchant_caps(&defender.equipment);
-    let buff_catalog = gamedata::buff_catalog();
 
     Ok(domain::versus_accuracy(
         &domain::VersusAttacker {
+            can_learn_precision_sword: can_learn_precision_sword(&attacker.game_character_id),
             stats: &attacker_preview.stats,
             correction: &correction,
             equipment: &attacker.equipment,
@@ -555,6 +560,8 @@ pub fn preview_versus(
             accuracy_random_option,
             accuracy_buff_catalog: &buff_catalog,
             accuracy_buff_selection: &attacker_buffs,
+            // 最小命中率補正: プレイヤー側の供給源表が wiki に無い(載っているのはマップ側の
+            // 値だけ)ため未収録。`VersusAccuracy::min_hit_rate_recorded` が `false` になる
             min_hit_rate: None,
         },
         &domain::VersusDefender {
@@ -564,7 +571,7 @@ pub fn preview_versus(
             enchant_caps: &defender_enchant_caps,
             stat_cap: gamedata::awakening_caps(defender.awakening).max_stat,
             evasion_random_option,
-            min_evasion_rate: None,
+            min_evasion_rate: Some(min_evasion_rate),
         },
         attack_type,
     ))
@@ -729,38 +736,29 @@ pub struct StatPreviewPayload {
     pub part_enhance: Vec<PartEnhancePreview>,
 }
 
-/// 装着中アビリティから的中剣の `AccuracyBoost` を解決する(wiki 計算式まとめ
-/// `#AccuracyPoint`)。表記の「命中率補正 +n」は装備の命中補正ではなく的中剣 Lv
-/// (`EquipmentAbilityDef::precision_sword_level`。神秘鉱・不死の可変枠は本体値が Lv)。
-/// **複数装着されていたら最も Lv の高いもの 1 つ**を採用する。ペット集中は今回は
-/// 入力を持たないので `AccuracyBoost::Concentration` にはならない(型だけ用意)。
-fn resolve_accuracy_boost(
-    equipment: &domain::Equipment,
-    abilities: &[EquipmentAbilityDef],
-) -> domain::AccuracyBoost {
-    let max_level = equipment
-        .iter_selected()
-        .flat_map(|(slot, part)| {
-            part.abilities.iter().filter_map(move |ability_id| {
-                let def = abilities
-                    .iter()
-                    .find(|a| a.id == ability_id.as_str() && a.slot == slot)?;
-                if def.family != domain::EquipmentAbilityFamily::Accuracy {
-                    return None;
-                }
-                def.precision_sword_level.or_else(|| {
-                    part.ability_values
-                        .iter()
-                        .find(|v| v.ability_id == def.id)
-                        .map(|v| v.value as u8)
-                })
-            })
-        })
-        .max();
-    match max_level {
-        Some(level) => domain::AccuracyBoost::PrecisionSword(level),
-        None => domain::AccuracyBoost::None,
-    }
+/// `AccuracyBoost` をキャラスキルから解決する(wiki Skill/マキシミン `#HitSword`)。
+/// 「極・的中剣」は装着アビリティではなくキャラスキル(SLv 制)なので、装備ではなく
+/// `stat_sources.character_skills` を見る。ペット集中は今回まだ入力を持たないので
+/// `AccuracyBoost::Concentration` にはならない(`AccuracyBoost::resolve` の型だけ用意)。
+/// そのキャラが「極・的中剣」を覚えられるか。伸びしろの材料に「Lv7 まで」を出してよいかの
+/// 判定にだけ使う ── 極・的中剣はマキシミン専用なので、ほかのキャラに出すのは誤り
+/// (実機でイサックの伸びしろに出ていた)。カタログを引くので commands の役目
+fn can_learn_precision_sword(game_character_id: &str) -> bool {
+    gamedata::character_skill_catalog().iter().any(|def| {
+        def.game_character_id == game_character_id
+            && def
+                .effects
+                .iter()
+                .any(|e| matches!(e, domain::SkillEffect::AccuracyRateBoost))
+    })
+}
+
+fn resolve_accuracy_boost(stat_sources: &domain::StatSources) -> domain::AccuracyBoost {
+    let level = stat_sources.character_skills.accuracy_rate_boost_level(
+        gamedata::character_skill_catalog(),
+        &stat_sources.masteries,
+    );
+    domain::AccuracyBoost::resolve(false, level)
 }
 
 /// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を gamedata から解決する。
@@ -841,7 +839,7 @@ fn build_damage_material(
     let added_damage = stat_sources
         .soul_link
         .weapon_added_damage(weapon_added_damage);
-    let accuracy_boost = resolve_accuracy_boost(equipment, &gamedata::equipment_abilities());
+    let accuracy_boost = resolve_accuracy_boost(stat_sources);
     Ok(DamageMaterial {
         base_stats: base_stats.clone(),
         stat_modifiers,
@@ -1488,22 +1486,34 @@ mod tests {
     };
 
     #[test]
-    fn 的中剣は装着中の最も高いlvを採用する() {
-        let mut equipment = Equipment::default();
-        // N-的中剣(Lv4)と E-的中剣(Lv7)を同時に持たせ、Lv7 が勝つことを見る
-        // (同一系統の排他はカタログ検証の役目で、この関数はカタログを検証しない)
-        equipment.parts.hand.abilities =
-            vec!["n-accuracy-hand".to_string(), "e-accuracy-hand".to_string()];
+    fn 極的中剣を選んでいればboostはprecision_sword() {
+        // Lv を明示していなければ既定 Lv7(Master)扱い(`CharacterSkills::accuracy_rate_boost_level`)
+        let mut stat_sources = StatSources::default();
+        stat_sources.character_skills.skill_ids = vec!["maximin_hit_sword".to_string()];
         assert_eq!(
-            resolve_accuracy_boost(&equipment, &gamedata::equipment_abilities()),
+            resolve_accuracy_boost(&stat_sources),
             AccuracyBoost::PrecisionSword(7)
         );
     }
 
     #[test]
-    fn 的中剣が装着されていなければboostはnone() {
+    fn 極的中剣のslvを明示すればそのlvが使われる() {
+        let mut stat_sources = StatSources::default();
+        stat_sources.character_skills.skill_ids = vec!["maximin_hit_sword".to_string()];
+        stat_sources
+            .character_skills
+            .skill_levels
+            .insert("maximin_hit_sword".to_string(), 3);
         assert_eq!(
-            resolve_accuracy_boost(&Equipment::default(), &gamedata::equipment_abilities()),
+            resolve_accuracy_boost(&stat_sources),
+            AccuracyBoost::PrecisionSword(3)
+        );
+    }
+
+    #[test]
+    fn 極的中剣を選んでいなければboostはnone() {
+        assert_eq!(
+            resolve_accuracy_boost(&StatSources::default()),
             AccuracyBoost::None
         );
     }

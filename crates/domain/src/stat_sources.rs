@@ -722,6 +722,21 @@ pub fn buff_accuracy_point_total(
     )
 }
 
+/// 選んでいるバフの、最小回避率補正の合計(wiki 計算式まとめ `#HitRateCap`:
+/// テイルズウィーバーのエネルギー「最小回避率 +10%」)。
+pub fn buff_min_evasion_rate_total(buffs: &BuffSelection, catalog: &BuffCatalog) -> i64 {
+    buffs
+        .choices
+        .iter()
+        .filter_map(|c| catalog.iter().find(|d| d.id == c.buff_id))
+        .flat_map(|d| d.damage_effects.iter())
+        .filter_map(|e| match e {
+            SkillEffect::MinEvasionRate { value } => Some(*value),
+            _ => None,
+        })
+        .sum()
+}
+
 /// まだ選んでいない命中P増加バフぶんの伸びしろ(§伸びしろの定義)。
 pub fn buff_accuracy_point_room(
     buffs: &BuffSelection,
@@ -1975,10 +1990,14 @@ pub struct StatLimits {
     /// 致命打のクリティカル率増加(wiki `#CriticalChance`)
     pub deadly_blow_bonus_max: f64,
     /// パワーウェポンの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
-    /// ペット集中 / 的中剣の命中P割合増加(wiki 計算式まとめ #AccuracyPoint)。
-    /// 画面が「×1.05」「×1.35」と出すのに使う ── 定数をフロントに写経しない
+    /// ペット集中 / 的中剣(SLv 1あたり)の命中P割合増加(wiki 計算式まとめ #AccuracyPoint、
+    /// Skill/マキシミン #HitSword)。画面が「×1.05」「×(1+Lv*5%)」と出すのに使う
+    /// ── 定数をフロントに写経しない
     pub concentration_accuracy_rate: f64,
-    pub precision_sword_accuracy_rate: f64,
+    /// 的中剣 SLv 1 あたりの命中P割合増加(0.05 = 5%)。表示は `1 + rate * Lv`
+    pub precision_sword_accuracy_rate_per_level: f64,
+    /// 的中剣 SLv の上限(7)
+    pub precision_sword_max_level: u8,
     pub power_weapon_rate: f64,
     /// ストロングウェポン 1Lv あたりの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
     pub strong_weapon_rate_per_level: f64,
@@ -2118,7 +2137,8 @@ pub fn stat_limits() -> StatLimits {
         ultimate_rune_bonus_max: CriticalRateSourceId::UltimateRune.max_value(),
         deadly_blow_bonus_max: CriticalRateSourceId::DeadlyBlow.max_value(),
         concentration_accuracy_rate: crate::defense::CONCENTRATION_ACCURACY_RATE,
-        precision_sword_accuracy_rate: crate::defense::PRECISION_SWORD_ACCURACY_RATE,
+        precision_sword_accuracy_rate_per_level: crate::defense::PRECISION_SWORD_ACCURACY_RATE_PER_LEVEL,
+        precision_sword_max_level: crate::defense::PRECISION_SWORD_MAX_LEVEL,
         power_weapon_rate: crate::common_skill::POWER_WEAPON_RATE,
         strong_weapon_rate_per_level: crate::common_skill::STRONG_WEAPON_RATE_PER_LEVEL,
         coat_armor_physical_rate: crate::common_skill::COAT_ARMOR_PHYSICAL_RATE,

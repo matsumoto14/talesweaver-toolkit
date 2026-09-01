@@ -211,10 +211,15 @@ impl AccuracyCorrection {
 /// 「初期の命中解析が間違えてため、現状まで引きずっている。特に的中剣の計算式が一番影響を
 /// 受けていた」)。gamedata は wiki の表記どおり持ち、計算時にここで戻す。
 pub const SKILL_ACCURACY_OFFSET: i64 = 15;
-/// ペット集中の命中P割合増加(wiki `#AccuracyPoint`: +5%)。
+/// ペット集中の命中P割合増加(wiki `#AccuracyPoint`: +5%。的中剣 Lv1 相当)。
 pub const CONCENTRATION_ACCURACY_RATE: f64 = 1.05;
-/// 的中剣の命中P割合増加(同: +35%)。**表記の「命中率補正 +n」は装備の命中補正ではなく Lv**。
-pub const PRECISION_SWORD_ACCURACY_RATE: f64 = 1.35;
+/// 「極・的中剣」(マキシミン専用キャラスキル)の SLv 上限(wiki Skill/マキシミン
+/// `#HitSword`。取得 2026-09-01: `|Master＝Lv7|`)。
+pub const PRECISION_SWORD_MAX_LEVEL: u8 = 7;
+/// 「極・的中剣」の SLv 1 あたりの命中P割合増加(同: `Lv*5%`。Lv7 で ×1.35 相当)。
+/// **的中剣は「スキル」であり装着アビリティの命中率補正とは別物**(装備側は
+/// `EquipmentValues.accuracy` にそのまま加算される単純な命中率補正)
+pub const PRECISION_SWORD_ACCURACY_RATE_PER_LEVEL: f64 = 0.05;
 /// 的中剣 Lv1〜7 の命中P変動(wiki `#AccuracyPoint` の表。Lv1 の行は集中と共通)。
 pub const PRECISION_SWORD_SHIFT: [i64; 7] = [3, 2, 1, 1, 0, -1, -2];
 /// 感電・雷電の命中P割合減少(同: −30%)。
@@ -222,23 +227,46 @@ pub const SHOCK_ACCURACY_RATE: f64 = 0.70;
 
 /// 命中P割合増加の枠(wiki `#AccuracyPoint`)。**集中と的中剣はいずれか 1 つだけ**適用され、
 /// 優先度は 集中 > 的中剣(2024/7/4 以降も変化なし)。どちらも割合とは別に固定の命中P変動を持つ。
+///
+/// **的中剣はキャラスキル「極・的中剣」(マキシミン専用)であって装着アビリティではない**
+/// (wiki Skill/マキシミン `#HitSword`。取得 2026-09-01)。装着アビリティ側の「命中率補正 +n」
+/// は単純な装備命中率補正で、`EquipmentValues.accuracy` に入る別物 — 混同しないこと。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccuracyBoost {
     #[default]
     None,
-    /// ペット集中。×1.05 ・ 命中P +3
+    /// ペット集中。×1.05 ・ 命中P +3(的中剣 Lv1 相当。wiki `PET`: 「集中が優先されて
+    /// 的中剣が無効」)
     Concentration,
-    /// 的中剣 Lv1〜7。×1.35 ・ 命中P変動は Lv ごと
+    /// 「極・的中剣」の SLv(1〜`PRECISION_SWORD_MAX_LEVEL`)。×`(1 + Lv*5%)` ・
+    /// 命中P変動は Lv ごと(`PRECISION_SWORD_SHIFT`)
     PrecisionSword(u8),
 }
 
 impl AccuracyBoost {
+    /// 集中(ペット)と的中剣(スキル SLv)の優先度を解決する(集中 > 的中剣。wiki `PET`)。
+    /// `precision_sword_level` は `None` または 1〜7(呼び出し側で上限にクランプ済みでなくてよい)
+    pub fn resolve(concentration: bool, precision_sword_level: Option<u8>) -> AccuracyBoost {
+        if concentration {
+            return AccuracyBoost::Concentration;
+        }
+        match precision_sword_level {
+            Some(level) if level >= 1 => {
+                AccuracyBoost::PrecisionSword(level.min(PRECISION_SWORD_MAX_LEVEL))
+            }
+            _ => AccuracyBoost::None,
+        }
+    }
+
     pub fn rate(self) -> f64 {
         match self {
             AccuracyBoost::None => 1.0,
             AccuracyBoost::Concentration => CONCENTRATION_ACCURACY_RATE,
-            AccuracyBoost::PrecisionSword(_) => PRECISION_SWORD_ACCURACY_RATE,
+            AccuracyBoost::PrecisionSword(level) => {
+                1.0 + level.min(PRECISION_SWORD_MAX_LEVEL) as f64
+                    * PRECISION_SWORD_ACCURACY_RATE_PER_LEVEL
+            }
         }
     }
 
@@ -246,29 +274,13 @@ impl AccuracyBoost {
     /// 大きすぎる。原因不明)」として割合増加の節に表だけ載せており、掛け算の内か外かは
     /// 書いていない。±3 なので影響は小さいが、**外(割合を掛けたあと)**として扱う `[仮]`。
     ///
-    /// **表は Lv1〜7 までしか無い**。新装着アビリティの上位段(古代精霊 +9 / 深淵 +11 /
-    /// 喪失 +13 / 夜星 +16。wiki `Item/合成/装着アビリティシステム/新装着アビリティ`)は
-    /// 変動値が未記載なので、表の末尾(−2)へ丸めずに **0** として扱う `[仮]` —
-    /// 表に無い値を埋めない(未収録を勝手に外挿しない)。
+    /// SLv は 1〜7 に収まる(`PRECISION_SWORD_MAX_LEVEL`)ので、表(Lv1〜7)は必ず埋まる。
     pub fn shift(self) -> i64 {
         match self {
             AccuracyBoost::None => 0,
             AccuracyBoost::Concentration => PRECISION_SWORD_SHIFT[0],
             AccuracyBoost::PrecisionSword(level) => PRECISION_SWORD_SHIFT
-                .get(usize::from(level.max(1)) - 1)
-                .copied()
-                .unwrap_or(0),
-        }
-    }
-
-    /// 命中P変動が wiki の表に載っている段か。載っていない上位段は `shift()` が 0 を返す
-    /// ため、画面で「0」と「未収録」を区別するのに使う
-    pub fn shift_is_recorded(self) -> bool {
-        match self {
-            AccuracyBoost::None | AccuracyBoost::Concentration => true,
-            AccuracyBoost::PrecisionSword(level) => {
-                usize::from(level.max(1)) <= PRECISION_SWORD_SHIFT.len()
-            }
+                [usize::from(level.clamp(1, PRECISION_SWORD_MAX_LEVEL)) - 1],
         }
     }
 }
@@ -508,6 +520,9 @@ fn accuracy_growth(
     skill_accuracy: i64,
     bonus: i64,
     boost: AccuracyBoost,
+    // そのキャラが「極・的中剣」を覚えられるか(マキシミン専用)。覚えられないキャラに
+    // 「Lv7 まで」を伸びしろとして出さないためだけに要る
+    can_learn_precision_sword: bool,
     random_option: i64,
     current: i64,
     stat_cap: i64,
@@ -534,11 +549,16 @@ fn accuracy_growth(
             random_option,
         )
     };
-    // 的中剣は割合(×1.35)だけを見る。命中P変動(段ごとの `shift`)は未装着では
-    // 段が決まらないので混ぜない — `PrecisionSword(1)` を通してから、その段の shift を差し引く。
-    let precision_sword_rate_only = |dex: i64, eq_accuracy: i64, extra_bonus: i64| {
-        let probe = AccuracyBoost::PrecisionSword(1);
-        recompute(dex, eq_accuracy, extra_bonus, probe) - probe.shift()
+    // 的中剣(スキル)を Lv7 まで積んだ場合の目標 boost。未習得(None)なら Lv0 → Lv7、
+    // 習得済みで Lv7 未満ならそこから Lv7 までが伸びしろ。集中(Lv1 相当)が有効なときは
+    // 的中剣より優先されて効果が出ないので材料にしない(`None` を返す)
+    // **そのキャラが覚えられるスキルでなければ材料にしない**。極・的中剣はマキシミン専用
+    // なので、イサックの伸びしろに「極・的中剣を Lv7 まで」が出ていた(実機で検出)
+    let precision_sword_growth_target = match boost {
+        _ if !can_learn_precision_sword => None,
+        AccuracyBoost::None => Some(0u8),
+        AccuracyBoost::PrecisionSword(level) if level < PRECISION_SWORD_MAX_LEVEL => Some(level),
+        _ => None,
     };
     // その材料を積んだ命中Pで命中率をもう一度通し、いまとの差を取る(結果への効き)。
     let hit_rate_gain = |new_accuracy_point: i64| {
@@ -591,14 +611,19 @@ fn accuracy_growth(
             });
         }
     }
-    if matches!(boost, AccuracyBoost::None) {
-        let gain = precision_sword_rate_only(stats.dex, equipment_accuracy, 0) - current;
+    if let Some(current_level) = precision_sword_growth_target {
+        let target = AccuracyBoost::PrecisionSword(PRECISION_SWORD_MAX_LEVEL);
+        let gain = recompute(stats.dex, equipment_accuracy, 0, target) - current;
         if gain > 0 {
             out.push(GrowthRoom {
                 source: GrowthSource::PrecisionSword,
-                label: "的中剣を装着".to_string(),
+                label: if current_level == 0 {
+                    "極・的中剣を Lv7 まで".to_string()
+                } else {
+                    format!("極・的中剣を Lv{current_level} → Lv7 まで")
+                },
                 gain,
-                detail: Some(format!("命中P割合 ×{PRECISION_SWORD_ACCURACY_RATE}")),
+                detail: Some(format!("命中P割合 ×{:.2}", target.rate())),
                 provisional: false,
                 hit_rate_gain: hit_rate_gain(current + gain),
             });
@@ -621,11 +646,12 @@ fn accuracy_growth(
 
     let max_dex = stats.dex.max(stat_cap);
     let max_equipment_accuracy = equipment_accuracy + enchant_gain + siena_gain;
-    let max = if matches!(boost, AccuracyBoost::None) {
-        precision_sword_rate_only(max_dex, max_equipment_accuracy, buff_gain)
+    let max_boost = if precision_sword_growth_target.is_some() {
+        AccuracyBoost::PrecisionSword(PRECISION_SWORD_MAX_LEVEL)
     } else {
-        recompute(max_dex, max_equipment_accuracy, buff_gain, boost)
+        boost
     };
+    let max = recompute(max_dex, max_equipment_accuracy, buff_gain, max_boost);
     (out, max)
 }
 
@@ -735,9 +761,6 @@ pub struct VersusAccuracy {
     /// 命中P増加の合計(射手のルーン等)
     pub accuracy_bonus: i64,
     pub accuracy_boost: AccuracyBoost,
-    /// `accuracy_boost` の命中P変動が wiki の表に載っている段か
-    /// (`AccuracyBoost::shift_is_recorded`)。`false` なら画面は `?` を出す
-    pub accuracy_boost_shift_recorded: bool,
     /// 攻撃側の命中P(最終)
     pub accuracy_point: i64,
     /// 防御側 AGI
@@ -751,9 +774,15 @@ pub struct VersusAccuracy {
     /// 防御側の回避P(採用したもの。最終)
     pub evasion_point: i64,
     pub hit_rate: HitRate,
-    /// 最小命中率補正・最小回避率補正の供給源をまだ持たず、0 決め打ちで計算していることの
-    /// 目印。`false` のとき、画面は `hit_rate` の下限・上限の内訳に `?` を出す
-    pub min_rates_recorded: bool,
+    /// 攻撃側の最小命中率補正(供給源が無いためいまは常に 0)
+    pub min_hit_rate: i64,
+    /// `min_hit_rate` に供給源があるか。`false` のとき、画面は下限の命中側だけ `?` を出す
+    /// (プレイヤー側の供給源表が wiki に無い)
+    pub min_hit_rate_recorded: bool,
+    /// 対象の最小回避率補正(対人の上限 `PVP_MIN_EVASION_CAP` でクランプ済み)
+    pub min_evasion_rate: i64,
+    /// `min_evasion_rate` に供給源があるか(`VersusDefender::min_evasion_rate` が `Some`)
+    pub min_evasion_rate_recorded: bool,
     /// 攻撃側の命中Pの伸びしろ(材料ごと。gain 降順。伸びしろ無しの材料は入らない)
     pub accuracy_growth: Vec<GrowthRoom>,
     /// 攻撃側の命中Pの伸びしろを全部積んだときの命中P
@@ -784,13 +813,17 @@ pub struct VersusAttacker<'a> {
     /// 命中P増加の合計(射手のルーン等。呼び出し側が `buff_accuracy_point_total` で集計する)
     pub accuracy_bonus: i64,
     pub accuracy_boost: AccuracyBoost,
+    /// このキャラが「極・的中剣」(マキシミン専用)を覚えられるか。伸びしろの材料に
+    /// 「Lv7 まで」を出してよいかの判定にだけ使う ── 覚えられないキャラに出さない
+    pub can_learn_precision_sword: bool,
     pub accuracy_random_option: i64,
     /// 命中P増加バフの伸びしろ材料の解決に要る(`buff_accuracy_point_room`)。
     /// `accuracy_bonus` 自体は呼び出し側が集計済みの値を渡すので、ここは伸びしろ専用
     pub accuracy_buff_catalog: &'a crate::stat_sources::BuffCatalog,
     pub accuracy_buff_selection: &'a crate::stat_sources::BuffSelection,
-    /// まだ供給源が無い(狩り場情報一覧のような表が PvP 側に無い)ため `None` を渡す。
-    /// `Some` を渡せるようになったら `VersusAccuracy::min_rates_recorded` が自動で `true` になる
+    /// 攻撃側の最小命中率補正(wiki `#HitRateCap`)。プレイヤー側の供給源表が wiki に無い
+    /// (載っているのはマップ側の値だけ)ため、いまは常に `None` を渡す。`Some` を渡せるように
+    /// なったら `VersusAccuracy::min_hit_rate_recorded` が自動で `true` になる
     pub min_hit_rate: Option<i64>,
 }
 
@@ -806,7 +839,9 @@ pub struct VersusDefender<'a> {
     /// `defense_profile` が既に足し込んだ `profile.evasion_point` を伸びしろ計算でも
     /// そのまま再現するために要る(`RandomOptionTotals::evasion_point` と同じ値)。
     pub evasion_random_option: i64,
-    /// まだ供給源が無いため `None` を渡す(`VersusAttacker::min_hit_rate` と同じ事情)
+    /// 対象の最小回避率補正(wiki `#HitRateCap`「最小回避率補正に該当するもの」)。
+    /// ランダムオプション(固定回避・最大回避率)+ バフ(テイルズウィーバーのエネルギー)の合計。
+    /// 呼び出し側(`commands`)が集計して渡す
     pub min_evasion_rate: Option<i64>,
 }
 
@@ -845,6 +880,7 @@ pub fn versus_accuracy(
         attacker.skill_accuracy,
         attacker.accuracy_bonus,
         attacker.accuracy_boost,
+        attacker.can_learn_precision_sword,
         attacker.accuracy_random_option,
         attacker_accuracy_point,
         attacker.stat_cap,
@@ -894,7 +930,6 @@ pub fn versus_accuracy(
         correction_penalty: floor_int(attacker.correction.penalty_value(attacker.stats)),
         accuracy_bonus: attacker.accuracy_bonus,
         accuracy_boost: attacker.accuracy_boost,
-        accuracy_boost_shift_recorded: attacker.accuracy_boost.shift_is_recorded(),
         accuracy_point: attacker_accuracy_point,
         defender_agi: defender.stats.agi,
         equipment_evasion: defender.profile.equipment_evasion,
@@ -902,7 +937,10 @@ pub fn versus_accuracy(
         attack_type_bonus: defender_type_bonus,
         evasion_point: defender_evasion_point,
         hit_rate: hit,
-        min_rates_recorded: attacker.min_hit_rate.is_some() && defender.min_evasion_rate.is_some(),
+        min_hit_rate: attacker.min_hit_rate.unwrap_or(0),
+        min_hit_rate_recorded: attacker.min_hit_rate.is_some(),
+        min_evasion_rate: defender.min_evasion_rate.unwrap_or(0).min(PVP_MIN_EVASION_CAP),
+        min_evasion_rate_recorded: defender.min_evasion_rate.is_some(),
         accuracy_growth,
         accuracy_max,
         accuracy_max_hit_rate,
@@ -1155,7 +1193,7 @@ mod tests {
     }
 
     #[test]
-    fn 的中剣は135倍にlvごとの命中p変動が乗る() {
+    fn 的中剣はslvごとにlv掛ける5パーセントの倍率とlvごとの命中p変動が乗る() {
         let s = EffectiveStats {
             dex: 100,
             ..Default::default()
@@ -1172,8 +1210,8 @@ mod tests {
             false,
             0,
         );
-        // Lv5 の命中P変動は 0(PRECISION_SWORD_SHIFT[4])
-        assert_eq!(lv5, floor_int(inner * PRECISION_SWORD_ACCURACY_RATE));
+        // Lv5 の命中P変動は 0(PRECISION_SWORD_SHIFT[4])。倍率は 1 + 5*5% = 1.25
+        assert_eq!(lv5, floor_int(inner * 1.25));
         let lv7 = accuracy_point(
             &s,
             &neutral_correction(),
@@ -1184,8 +1222,39 @@ mod tests {
             false,
             0,
         );
-        // Lv7 の命中P変動は −2(PRECISION_SWORD_SHIFT[6])
-        assert_eq!(lv7, floor_int(inner * PRECISION_SWORD_ACCURACY_RATE) - 2);
+        // Lv7 の命中P変動は −2(PRECISION_SWORD_SHIFT[6])。倍率は 1 + 7*5% = 1.35
+        assert_eq!(lv7, floor_int(inner * 1.35) - 2);
+    }
+
+    /// SLv ごとの倍率が 5%/10%/…/35% になること(wiki Skill/マキシミン #HitSword:
+    /// `Lv*5%`)。
+    #[test]
+    fn 的中剣のslvごとの倍率は5パーセント刻み() {
+        for level in 1..=7u8 {
+            let expected = 1.0 + level as f64 * 0.05;
+            assert!(
+                (AccuracyBoost::PrecisionSword(level).rate() - expected).abs() < 1e-12,
+                "Lv{level}"
+            );
+        }
+        assert_eq!(AccuracyBoost::PrecisionSword(1).rate(), 1.05);
+        assert_eq!(AccuracyBoost::PrecisionSword(7).rate(), 1.35);
+    }
+
+    /// 集中と的中剣が両方あるとき、集中(Lv1相当)が優先される(wiki `PET`:
+    /// 「集中が優先されて的中剣が無効」)。
+    #[test]
+    fn 集中と的中剣が両方あるとき集中が勝つ() {
+        assert_eq!(
+            AccuracyBoost::resolve(true, Some(7)),
+            AccuracyBoost::Concentration
+        );
+        assert_eq!(
+            AccuracyBoost::resolve(false, Some(7)),
+            AccuracyBoost::PrecisionSword(7)
+        );
+        assert_eq!(AccuracyBoost::resolve(false, None), AccuracyBoost::None);
+        assert_eq!(AccuracyBoost::resolve(false, Some(0)), AccuracyBoost::None);
     }
 
     #[test]
@@ -1263,24 +1332,23 @@ mod tests {
         // 対人: 対象の最小回避率補正20は上限10で頭打ちされる → min = 15 − 10 = 5
         let pvp = hit_rate(50, 0, 0, 20);
         assert_eq!(pvp.min, HIT_RATE_MIN_BASE - PVP_MIN_EVASION_CAP);
+        // 上限は常に 85 + 下限で連動する
+        assert_eq!(pvp.max, HIT_RATE_PLAYER_SPAN + pvp.min);
+
+        // 最小回避率補正が上限10ちょうどでも同じ(頭打ちの境界)
+        let at_cap = hit_rate(50, 0, 0, PVP_MIN_EVASION_CAP);
+        assert_eq!(at_cap.min, pvp.min);
+
+        // 最小回避率補正9(上限未満)ならそのまま反映される → min = 15 − 9 = 6
+        let below_cap = hit_rate(50, 0, 0, 9);
+        assert_eq!(below_cap.min, HIT_RATE_MIN_BASE - 9);
+
+        // 最小命中率補正は攻撃側。下限を押し上げ、上限も連動する
+        let with_min_hit = hit_rate(50, 0, 8, 0);
+        assert_eq!(with_min_hit.min, HIT_RATE_MIN_BASE + 8);
+        assert_eq!(with_min_hit.max, HIT_RATE_PLAYER_SPAN + with_min_hit.min);
     }
 
-    #[test]
-    fn 的中剣の上位段は命中p変動を表の末尾へ丸めない() {
-        // wiki の変動表は Lv1〜7 まで。新装着アビリティの 古代精霊 +9 / 深淵 +11 /
-        // 喪失 +13 / 夜星 +16 は未記載なので 0 として扱い、-2 に丸めない
-        assert_eq!(AccuracyBoost::PrecisionSword(7).shift(), -2);
-        assert!(AccuracyBoost::PrecisionSword(7).shift_is_recorded());
-        for level in [9, 11, 13, 16] {
-            assert_eq!(AccuracyBoost::PrecisionSword(level).shift(), 0);
-            assert!(!AccuracyBoost::PrecisionSword(level).shift_is_recorded());
-        }
-        // 割合のほうは段によらず +35%
-        assert_eq!(
-            AccuracyBoost::PrecisionSword(16).rate(),
-            PRECISION_SWORD_ACCURACY_RATE
-        );
-    }
 
     #[test]
     fn 攻撃タイプは依存種別を物理魔法の2分類に振り分ける() {
@@ -1322,6 +1390,7 @@ mod tests {
         );
         let v = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &Equipment::default(),
@@ -1353,8 +1422,66 @@ mod tests {
             v.hit_rate,
             hit_rate(v.accuracy_point, v.evasion_point, 0, 0)
         );
-        assert!(!v.min_rates_recorded);
+        assert!(!v.min_hit_rate_recorded);
+        assert!(!v.min_evasion_rate_recorded);
         assert_eq!(v.defender_agi, 100);
+    }
+
+    #[test]
+    fn versus_accuracyは防御側の最小回避率補正だけ収録済みとして下限を下げる() {
+        let attacker = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats {
+            def: 200,
+            mr: 150,
+            agi: 100,
+            ..Default::default()
+        };
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let v = versus_accuracy(
+            &VersusAttacker {
+                can_learn_precision_sword: true,
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: crate::stats::BASE_STAT_MAX as i64,
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: crate::stats::BASE_STAT_MAX as i64,
+                evasion_random_option: 0,
+                // 対人上限(10)を超えて積んでいる(鎧 + 手 + バフの合計を想定)
+                min_evasion_rate: Some(23),
+            },
+            AttackType::Physical,
+        );
+        // 命中側は未収録、回避側は収録済み
+        assert!(!v.min_hit_rate_recorded);
+        assert!(v.min_evasion_rate_recorded);
+        // 対人上限 10 で頭打ちされた値が乗る(23 積んでも 10 のまま)
+        assert_eq!(v.min_evasion_rate, PVP_MIN_EVASION_CAP);
+        assert_eq!(v.hit_rate.min, HIT_RATE_MIN_BASE - PVP_MIN_EVASION_CAP);
+        assert_eq!(v.hit_rate.max, HIT_RATE_PLAYER_SPAN + v.hit_rate.min);
     }
 
     #[test]
@@ -1376,6 +1503,7 @@ mod tests {
         );
         let v = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &Equipment::default(),
@@ -1406,7 +1534,7 @@ mod tests {
     }
 
     #[test]
-    fn 的中剣を装着していないキャラだけprecision_swordの伸びしろが出る() {
+    fn 的中剣がlv7未満のキャラだけprecision_swordの伸びしろが出る() {
         let attacker = EffectiveStats {
             dex: 100,
             ..Default::default()
@@ -1421,6 +1549,7 @@ mod tests {
         );
         let without = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &Equipment::default(),
@@ -1451,8 +1580,10 @@ mod tests {
             .iter()
             .any(|g| g.source == GrowthSource::PrecisionSword));
 
-        let with = versus_accuracy(
+        // Lv5(Lv7 未満)は「残り Lv ぶん」の伸びしろが出る
+        let partial = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &Equipment::default(),
@@ -1478,7 +1609,41 @@ mod tests {
             },
             AttackType::Physical,
         );
-        assert!(!with
+        assert!(partial
+            .accuracy_growth
+            .iter()
+            .any(|g| g.source == GrowthSource::PrecisionSword));
+
+        // Lv7(上限)まで積んだキャラはもう伸びしろが無い
+        let maxed = versus_accuracy(
+            &VersusAttacker {
+                can_learn_precision_sword: true,
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: attacker.dex,
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::PrecisionSword(7),
+                accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi,
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
+            AttackType::Physical,
+        );
+        assert!(!maxed
             .accuracy_growth
             .iter()
             .any(|g| g.source == GrowthSource::PrecisionSword));
@@ -1517,6 +1682,7 @@ mod tests {
         let stat_cap = 250;
         let v = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &equipment,
@@ -1542,9 +1708,9 @@ mod tests {
             },
             AttackType::Physical,
         );
-        // 全材料を積み直した命中P(ステ上限 + エンチャント上限 + 的中剣)と突き合わせる
+        // 全材料を積み直した命中P(ステ上限 + エンチャント上限 + 的中剣 Lv7)と突き合わせる
         let boosted_accuracy = 10 + (enchant_caps[0].1.accuracy - 10);
-        let probe = AccuracyBoost::PrecisionSword(1);
+        let target = AccuracyBoost::PrecisionSword(PRECISION_SWORD_MAX_LEVEL);
         let recomputed = accuracy_point(
             &EffectiveStats {
                 dex: stat_cap,
@@ -1554,10 +1720,10 @@ mod tests {
             boosted_accuracy,
             0,
             0,
-            probe,
+            target,
             false,
             0,
-        ) - probe.shift();
+        );
         assert_eq!(v.accuracy_max, recomputed);
         assert!(v.accuracy_max > v.accuracy_point);
     }
@@ -1579,6 +1745,7 @@ mod tests {
         );
         let v = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &Equipment::default(),
@@ -1647,6 +1814,7 @@ mod tests {
         assert_eq!(defender.evasion_point.physical, 210);
         let v = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &equipment,
@@ -1709,6 +1877,7 @@ mod tests {
         );
         let v = versus_accuracy(
             &VersusAttacker {
+                can_learn_precision_sword: true,
                 stats: &attacker,
                 correction: &neutral_correction(),
                 equipment: &Equipment::default(),
@@ -1744,5 +1913,55 @@ mod tests {
         assert!(stat_room.hit_rate_gain < 0);
         // AGI 10 → evasion_point = floor(15 + 10*1.2) = 27、raw = 65-27 = 38 → hit_rate 38(挟まれない)
         assert_eq!(stat_room.hit_rate_gain, -12);
+    }
+
+    #[test]
+    fn 極的中剣を覚えられないキャラには伸びしろの材料を出さない() {
+        // 極・的中剣はマキシミン専用。ほかのキャラの伸びしろに「Lv7 まで」が出ていた(実機で検出)
+        let stats = EffectiveStats { dex: 500, ..Default::default() };
+        let defender_stats = EffectiveStats { agi: 100, ..Default::default() };
+        let equipment = Equipment::default();
+        let correction = neutral_correction();
+        let buffs = crate::stat_sources::BuffSelection::default();
+        let profile = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            AwakeningCaps { max_damage: 0, max_defense: 9_999, max_stat: 2_200 },
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let attacker = |can_learn: bool| VersusAttacker {
+            can_learn_precision_sword: can_learn,
+            stats: &stats,
+            correction: &correction,
+            equipment: &equipment,
+            enchant_caps: &[],
+            stat_cap: 2_200,
+            equipment_accuracy: 0,
+            skill_accuracy: 0,
+            accuracy_bonus: 0,
+            accuracy_boost: AccuracyBoost::None,
+            accuracy_random_option: 0,
+            accuracy_buff_catalog: &[],
+            accuracy_buff_selection: &buffs,
+            min_hit_rate: None,
+        };
+        let defender = VersusDefender {
+            stats: &defender_stats,
+            profile: &profile,
+            equipment: &equipment,
+            enchant_caps: &[],
+            stat_cap: 2_200,
+            evasion_random_option: 0,
+            min_evasion_rate: None,
+        };
+        let has = |can_learn: bool| {
+            versus_accuracy(&attacker(can_learn), &defender, AttackType::Physical)
+                .accuracy_growth
+                .iter()
+                .any(|r| r.source == GrowthSource::PrecisionSword)
+        };
+        assert!(has(true), "覚えられるキャラには出る");
+        assert!(!has(false), "覚えられないキャラには出さない");
     }
 }

@@ -345,13 +345,16 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             value: BuffValue::Fixed(1.1),
             exclusive_slots: vec![],
             source_url: WIKI_URL,
-            note: "最小回避率+10%は未収録(供給源の器が無い)",
+            note: "",
             default_value: None,
             damage_effects: &[
                 SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 },
                 // 計算式まとめ #AccuracyPoint「命中P増加」表: +5。的中剣の効果中は無効になる
                 // (集中とは共存可能。取得 2026-09-01)
                 SkillEffect::AccuracyPoint { value: 5, disabled_with_precision_sword: true },
+                // 計算式まとめ #HitRateCap「最小回避率補正に該当するもの」: 最小回避率 +10%
+                // (取得 2026-09-01)。的中剣との排他は wiki に記載が無いので付けない
+                SkillEffect::MinEvasionRate { value: 10 },
             ],
         },
         BuffDefinition {
