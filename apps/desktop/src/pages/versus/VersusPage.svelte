@@ -31,9 +31,11 @@
   );
   const defender = $derived(app.characters.find((c) => c.id === defenderId) ?? null);
 
-  const characterOptions = (excludeId: number | null) =>
+  // **相手側のキャラも候補から外さない**。外すと「防御側に入っているキャラを攻撃側にしたい」
+  // ときに、先に防御側を変えないと選べず、行き止まりになる(ユーザー指摘 2026-09-01)。
+  // 同じキャラを選んだら 2 人を入れ替える(pickAttacker / pickDefender)
+  const characterOptions = () =>
     app.characters
-      .filter((c) => c.id !== excludeId)
       .map((c) => ({
         value: String(c.id),
         name: c.name,
@@ -77,10 +79,17 @@
     })),
   );
 
+  /** 攻撃側を選ぶ。防御側に入っているキャラを選んだら 2 人を入れ替える */
   function pickAttacker(id: number | null) {
+    const before = attackerId;
+    if (id !== null && id === defenderId) defenderOverride = before;
     attackerOverride = id;
-    // 攻撃側と防御側が同じキャラになったら、防御側は選び直しへ戻す
-    if (id !== null && id === defenderId) defenderOverride = null;
+  }
+  /** 防御側を選ぶ。攻撃側に入っているキャラを選んだら 2 人を入れ替える */
+  function pickDefender(id: number | null) {
+    const before = defenderId;
+    if (id !== null && id === attackerId) attackerOverride = before;
+    defenderOverride = id;
   }
 
   // --- 命中率(preview_versus) -------------------------------------------
@@ -147,7 +156,7 @@
                 () => (attackerId !== null ? String(attackerId) : ""),
                 (v) => pickAttacker(v === "" ? null : Number(v))
               }
-              options={characterOptions(defenderId)}
+              options={characterOptions()}
               placeholder="キャラを選択してください"
             />
             {#if attacker}
@@ -171,9 +180,9 @@
               label="防御側キャラ"
               bind:value={
                 () => (defenderId !== null ? String(defenderId) : ""),
-                (v) => (defenderOverride = v === "" ? null : Number(v))
+                (v) => pickDefender(v === "" ? null : Number(v))
               }
-              options={characterOptions(attackerId)}
+              options={characterOptions()}
               placeholder="キャラを選択してください"
             />
           </div>
