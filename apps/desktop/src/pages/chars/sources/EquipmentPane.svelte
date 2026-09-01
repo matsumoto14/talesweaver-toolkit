@@ -541,6 +541,10 @@
       同じ種類名を共有する(夜星の耐魔力 と E-耐魔力)ので、経路も鍵に入れて混ぜない。 */
   const abilityLadderKey = (ability: EquipmentAbilityDef, tier: { prefix: string; scheme: string }): string =>
     `${ability.slot}-${ability.category}-${tier.scheme}-${ability.name.slice(tier.prefix.length)}`;
+  /** 「同じ種類」の鍵。名前ではなく family で見る — 経路によって表記が揺れる
+      (「夜星の魔法耐性(鎧)」と「E-魔法耐性・鎧」は同じ種類だが名前が一致しない)。 */
+  const abilityKindKey = (ability: EquipmentAbilityDef): string =>
+    `${ability.slot}-${ability.category}-${ability.family}`;
   /** 候補を「既定で見せる」と「畳む」に分ける。等級が付かない候補((上)系・神秘鉱など)は
       ラダーを成さないので畳まない。選んであるものは畳んだ側にあっても必ず見せる —
       隠れると、なぜその値になっているのかが分からなくなる。 */
@@ -561,12 +565,25 @@
       const sorted = [...new Set(list)].sort((x, y) => y - x);
       cutoff.set(key, sorted[Math.min(ABILITY_TIER_TOP_COUNT, sorted.length) - 1]);
     }
+    // **武器以外は アイテム方式(古代精霊 < 深淵 < 喪失 < 夜星)しか使われない**
+    // (SEED を払う N/R/L/E は性能が低い。ユーザー確認 2026-09-01)。その種類にアイテム方式が
+    // あるなら、既定はそれだけを出し、N/R/L/E も (上)系も畳んだ先へ回す。武器は両方使うので
+    // 今までどおり。アイテム方式が無い種類(頭の G- など)は畳むと既定が空になるので、そのまま出す。
+    const kindsWithItemLadder = new Set<string>();
+    for (const ability of candidates) {
+      if (abilityTier(ability.name)?.scheme === "line") kindsWithItemLadder.add(abilityKindKey(ability));
+    }
     const shown: EquipmentAbilityDef[] = [];
     const folded: EquipmentAbilityDef[] = [];
     for (const ability of candidates) {
       const tier = abilityTier(ability.name);
       const isTop = tier !== null && tier.rank >= (cutoff.get(abilityLadderKey(ability, tier)) ?? 0);
-      if (tier === null || isTop || selectedIds.includes(ability.id)) shown.push(ability);
+      const outranked = tier?.scheme !== "line"
+        && ability.slot !== "weapon"
+        && kindsWithItemLadder.has(abilityKindKey(ability));
+      if (selectedIds.includes(ability.id)) shown.push(ability);
+      else if (outranked) folded.push(ability);
+      else if (tier === null || isTop) shown.push(ability);
       else folded.push(ability);
     }
     return { shown, folded };
