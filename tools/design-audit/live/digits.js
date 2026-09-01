@@ -59,22 +59,31 @@ const { chromium } = require("playwright-core");
   report("鎖 1 発 → 合計 → 1 秒あたり", beforeChain, await xs(".chain .node"), t1 + "\n      → " + (await chainText()));
   await resetSim();
 
-  // --- エンチャントの伸びしろ。入力の桁が変わったとき、**押す場所**(値のセル・MAX)が動かないか。
-  // 右端の「MAX で +x%」自体は文言ごと変わる欄なので、その x を測っても意味がない
+  // --- エンチャントの伸びしろ。**押す場所**(値のセル・MAX)が動かないかを 2 通りで測る。
+  // 右端の「MAX で +x%」は文言ごと変わる欄なので、その x を測っても意味がない
   await openCard("エンチャントの伸びしろ");
   const field = card("エンチャントの伸びしろ").locator(".enchant-stat").first();
   if (await field.count()) {
     const pressables = () => xs(".enchant-stat .cell, .enchant-stat .max");
-    const original = (await field.locator(".cell .read").first().innerText()).replace(/,/g, "");
-    const before = await pressables();
-    // 数値欄は「表示が既定・編集は例外」。まず読み取り表示を押して編集に入る(§07)
+    /** 編集を閉じる。focusout を実際に起こす必要があるので本当にフォーカスを移す */
+    const leaveEdit = async () => {
+      await page.locator(".chain .node.gate").click();
+      await wait(700);
+    };
+
+    // (1) 読み取り ⇄ 編集。number 入力は UA 既定の固有幅を持つので、button と寸法が
+    //     ずれると「押して編集に入っただけ」で隣が動く(§09 規則 1)
+    const readState = await pressables();
     await field.locator(".cell .read").first().click();
-    await wait(500);
-    const input = field.locator("input").first();
-    await input.fill("0");
-    await input.dispatchEvent("blur");
-    await wait(1500);
-    report("エンチャント欄の押す場所(値のセル・MAX)", before, await pressables(), `入力 ${original} → 0`);
+    await wait(600);
+    report("読み取り → 編集(値は変えない)", readState, await pressables(), "押して編集に入っただけ");
+
+    // (2) 桁を変える。編集を閉じてから測り、(1) と混ざらないようにする
+    const original = await field.locator("input").first().inputValue();
+    await field.locator("input").first().fill("0");
+    await field.locator("input").first().dispatchEvent("blur");
+    await leaveEdit();
+    report("桁が減ったあと", readState, await pressables(), `入力 ${original} → 0`);
   } else {
     console.log("  [エンチャント欄] 伸びしろのある部位が無いので未実行");
   }

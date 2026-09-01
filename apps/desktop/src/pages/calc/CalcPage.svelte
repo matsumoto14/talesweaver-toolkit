@@ -1942,9 +1942,12 @@
                   </span>
                 {/if}
               </button>
-              {#key badgeState}
-                <span class="badge badge-in gatebadge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
-              {/key}
+              <!-- バッジは文言で幅が 39〜106px 変わる。枠を取り切って、右のノードを動かさない -->
+              <span class="gatebadge-slot">
+                {#key badgeState}
+                  <span class="badge badge-in gatebadge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
+                {/key}
+              </span>
               <span class="op num">×<span use:bump={() => result?.hit_count ?? null}>{result?.hit_count ?? 1}</span> 段</span>
               <button
                 type="button" class="node mid"
@@ -2809,9 +2812,17 @@
   .chain .node.gate .nv { min-width: 120px; }
   .chain .node.mid .nv { font-size: 15px; min-width: 68px; }
   .chain .node.rate .nv { font-size: 19px; min-width: 68px; }
+  /* 押せるノードは桁・状態で動かない。実測(tools/design-audit/live/digits.js)では
+     1 発 180〜220px・バッジ 39〜106px・合計 75〜83px と揺れ、右のノードが最大 29px 逃げていた
+     (§09 規則 4)。幅を取り切り、中身が短いときは空けておく。値の上限
+     (与ダメージ 29,500,000 / 合計 10 桁)が入る幅にしてあるので、桁が溢れて切れることはない */
+  .chain .node.gate { width: 248px; }
+  .chain .node.mid { width: 124px; }
+  .chain .gatebadge-slot { flex: none; width: 112px; display: flex; align-items: flex-end; }
+  .chain .op { min-width: 48px; text-align: center; }
   .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
   .chain .op { font-size: 12px; color: var(--fg-dim); padding-bottom: 3px; white-space: nowrap; }
-  .chain .gatebadge { align-self: flex-end; margin-bottom: 3px; }
+  .chain .gatebadge { margin-bottom: 3px; }
   /* 押すと内訳が鎖の直下に開く。hover は塗りだけで、余白を足して隣を動かさない(§00 03) */
   .chain button.node { text-align: left; border-radius: var(--r-inset); }
   .chain button.node:hover { background: var(--bg-active); box-shadow: 0 0 0 4px var(--bg-active); }

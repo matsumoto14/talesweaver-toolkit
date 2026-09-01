@@ -691,8 +691,11 @@ details.fold .fold-body { margin-top: 10px; }
   font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
   min-width: 46px; margin-right: 5px; flex: none; white-space: nowrap;
 }
+/* basis を 0 にして、**入っている数字の桁でセル幅が決まらない**ようにする。
+   auto のままだと 24 → 0 のように桁が減っただけで幅が変わり、隣の MAX が動く
+   (§09 規則 4。実機の tools/design-audit/live/digits.js が検出した) */
 .stepper .cell {
-  position: relative; flex: 1 1 auto; min-width: 74px; overflow: hidden;
+  position: relative; flex: 1 1 0; min-width: 74px; overflow: hidden;
   display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
   padding: 4px 7px 5px; border-radius: var(--r-panel);
   background: var(--bg-field); border: 1px solid var(--cell-bd);
@@ -721,7 +724,12 @@ details.fold .fold-body { margin-top: 10px; }
 /* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1) */
 .stepper .val::-webkit-inner-spin-button,
 .stepper .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
-.stepper input.val { appearance: textfield; }
+/* number 入力は UA 既定の固有幅を持ち、同じ数字でも読み取りの button より広い。
+   セルは中身で幅が決まるので、押して編集に入った瞬間にセルが 74 → 81px に膨らんで
+   隣の MAX が 7px 逃げていた(§09 規則 1「押した場所は動かない」。上のコメントは
+   「読取と編集でセルの寸法は同じ」と書いていたが、実機では同じではなかった)。
+   field-sizing: content で入力欄も中身ぶんの幅にし、button と一致させる */
+.stepper input.val { appearance: textfield; field-sizing: content; }
 .stepper .cap { flex: none; font-size: 8px; color: var(--cell-cap); font-variant-numeric: tabular-nums; }
 /* format の結果(「+200」など)。0 のときも場所を空けておく — 出たり消えたりすると
    その行だけ入力欄の幅が変わる(§09 規則 4) */
