@@ -520,11 +520,16 @@
   // --- 等級ラダー ------------------------------------------------------------
   // カテゴリー4 には入手経路の違う 2 本のラダーがある。装備システム UI で SEED を
   // 払う N- / R- / L- / E-(頭だけ G-)と、アイテム方式の 古代精霊 < 深淵 < 喪失 < 夜星。
-  // どちらも名称そのものが等級を表す。全部並べると鎧だけで 40 件を超え、探す前に
-  // 読む量が増えるので、既定は各ラダーの上位 2 段だけ出し、残りは畳んだ先で選ばせる
-  // (ux-guidelines 原則 2「削るのではなく構造化する」)。上位 2 段にするのは、
-  // 最上位(夜星 / E-)は入手が重く、実際に着けている人が多いのは 1 つ下(喪失 / L-)だから。
+  // どちらも名称そのものが等級を表す。
+  //
+  // **アイテム方式がある部位のカテゴリー4 は、既定では 喪失 / 夜星 だけ出す**
+  // (古代精霊・深淵と N/R/L/E は実際には使われない。ユーザー決定 2026-09-01)。
+  // 消しはせず畳んだ先に置いて、選ぼうと思えば選べるままにする。
+  // アイテム方式が無いところ(頭の月石・盾+の神秘鉱・レリック・兜)は今までどおり
+  // 上位 2 段だけ出して残りを畳む(ux-guidelines 原則 2「削るのではなく構造化する」)。
   const ABILITY_TIER_TOP_COUNT = 2;
+  /** アイテム方式で候補に残す下限の rank(= 喪失)。 */
+  const ABILITY_ITEM_LADDER_MIN_RANK = 2;
   const ABILITY_TIERS: { prefix: string; scheme: string; rank: number }[] = [
     { prefix: "N-", scheme: "letter", rank: 0 },
     { prefix: "R-", scheme: "letter", rank: 1 },
@@ -541,10 +546,9 @@
       同じ種類名を共有する(夜星の耐魔力 と E-耐魔力)ので、経路も鍵に入れて混ぜない。 */
   const abilityLadderKey = (ability: EquipmentAbilityDef, tier: { prefix: string; scheme: string }): string =>
     `${ability.slot}-${ability.category}-${tier.scheme}-${ability.name.slice(tier.prefix.length)}`;
-  /** 「同じ種類」の鍵。名前ではなく family で見る — 経路によって表記が揺れる
-      (「夜星の魔法耐性(鎧)」と「E-魔法耐性・鎧」は同じ種類だが名前が一致しない)。 */
-  const abilityKindKey = (ability: EquipmentAbilityDef): string =>
-    `${ability.slot}-${ability.category}-${ability.family}`;
+  /** アイテム方式があるかを見る単位(部位 × カテゴリー)。 */
+  const abilityLadderScope = (ability: EquipmentAbilityDef): string =>
+    `${ability.slot}-${ability.category}`;
   /** 候補を「既定で見せる」と「畳む」に分ける。等級が付かない候補((上)系・神秘鉱など)は
       ラダーを成さないので畳まない。選んであるものは畳んだ側にあっても必ず見せる —
       隠れると、なぜその値になっているのかが分からなくなる。 */
@@ -565,25 +569,21 @@
       const sorted = [...new Set(list)].sort((x, y) => y - x);
       cutoff.set(key, sorted[Math.min(ABILITY_TIER_TOP_COUNT, sorted.length) - 1]);
     }
-    // **武器以外は アイテム方式(古代精霊 < 深淵 < 喪失 < 夜星)しか使われない**
-    // (SEED を払う N/R/L/E は性能が低い。ユーザー確認 2026-09-01)。その種類にアイテム方式が
-    // あるなら、既定はそれだけを出し、N/R/L/E も (上)系も畳んだ先へ回す。武器は両方使うので
-    // 今までどおり。アイテム方式が無い種類(頭の G- など)は畳むと既定が空になるので、そのまま出す。
-    const kindsWithItemLadder = new Set<string>();
-    for (const ability of candidates) {
-      if (abilityTier(ability.name)?.scheme === "line") kindsWithItemLadder.add(abilityKindKey(ability));
-    }
+    // アイテム方式(古代精霊 < 深淵 < 喪失 < 夜星)がある「部位 × カテゴリー」。
+    // ここでは 喪失 / 夜星 だけが既定表示で、同じ枠の N/R/L/E も下位系列もまとめて畳む。
+    const itemLadderScopes = new Set(
+      candidates
+        .filter((ability) => abilityTier(ability.name)?.scheme === "line")
+        .map(abilityLadderScope),
+    );
     const shown: EquipmentAbilityDef[] = [];
     const folded: EquipmentAbilityDef[] = [];
     for (const ability of candidates) {
       const tier = abilityTier(ability.name);
-      const isTop = tier !== null && tier.rank >= (cutoff.get(abilityLadderKey(ability, tier)) ?? 0);
-      const outranked = tier?.scheme !== "line"
-        && ability.slot !== "weapon"
-        && kindsWithItemLadder.has(abilityKindKey(ability));
-      if (selectedIds.includes(ability.id)) shown.push(ability);
-      else if (outranked) folded.push(ability);
-      else if (tier === null || isTop) shown.push(ability);
+      const isTop = itemLadderScopes.has(abilityLadderScope(ability))
+        ? tier?.scheme === "line" && tier.rank >= ABILITY_ITEM_LADDER_MIN_RANK
+        : tier === null || tier.rank >= (cutoff.get(abilityLadderKey(ability, tier)) ?? 0);
+      if (selectedIds.includes(ability.id) || isTop) shown.push(ability);
       else folded.push(ability);
     }
     return { shown, folded };
@@ -830,7 +830,7 @@
     aria-expanded={openLowerGrades[key] === true}
     onclick={() => (openLowerGrades[key] = !openLowerGrades[key])}
   >
-    {openLowerGrades[key] ? "下位等級を畳む ︿" : "下位等級も出す ﹀"}
+    {openLowerGrades[key] ? "ほかの等級を畳む ︿" : "ほかの等級も出す ﹀"}
     <span class="num dim">{hiddenCount}</span>
   </button>
 {/snippet}
