@@ -6,7 +6,8 @@
   //
   // **アイコン単独表示は禁止**(名前と併記する)。例外はキャラレールを畳んだときだけで、
   // そのときは呼び出し側が title を付ける。
-  export type IconKind = "character" | "mob" | "skill" | "buff" | "mastery" | "equipment";
+  export type IconKind =
+    | "character" | "mob" | "skill" | "buff" | "mastery" | "equipment" | "content";
   /** 20 = 行内・チップ / 28 = 一覧行 / 40 = 選択カード / 64 = キャラ詳細 */
   export type IconSize = 20 | 28 | 40 | 64;
 
@@ -17,6 +18,7 @@
     buff: "buffs",
     mastery: "masteries",
     equipment: "equipment",
+    content: "contents",
   };
 
   /// 枠の見た目。マスタリーはスキルの一種なのでスキルの枠を使う(段は色で区別しない)
@@ -27,6 +29,8 @@
     buff: "buff",
     mastery: "skill",
     equipment: "equipment",
+    // コンテンツの絵はそのコンテンツのボス。新しい枠色を足さず Mob の枠に載せる
+    content: "mob",
   };
 
   // Vite の glob import。実画像が 1 枚も無ければ空オブジェクトになるだけで、ビルドは通る。
