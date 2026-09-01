@@ -465,7 +465,8 @@ pub struct GrowthRoom {
     pub label: String,
     /// 命中P(または回避P)がいくつ増えるか
     pub gain: i64,
-    /// 「1178 → 2200」のような内訳。出せないときは `None`
+    /// 「1178 → 2200」のように、その材料の**いま → 上限まで積んだら**を矢印で出す内訳。
+    /// 材料ごとに言い方を変えない(ステだけ矢印で他は「+825」だと読む側が揃え直す)。出せないときは `None`
     pub detail: Option<String>,
     /// 見積りが `[仮]` か(シエナのように上振れするもの)
     pub provisional: bool,
@@ -592,7 +593,7 @@ fn accuracy_growth(
                 source: GrowthSource::Enchant,
                 label: format!("エンチャント枠の{}を上限まで", EquipmentValues::ACCURACY_LABEL),
                 gain,
-                detail: Some(format!("+{enchant_gain}")),
+                detail: Some(format!("{equipment_accuracy} → {}", equipment_accuracy + enchant_gain)),
                 provisional: false,
                 hit_rate_gain: hit_rate_gain(current + gain),
             });
@@ -605,7 +606,7 @@ fn accuracy_growth(
                 source: GrowthSource::Siena,
                 label: "シエナの空きスロットに命中率を上限まで".to_string(),
                 gain,
-                detail: Some(format!("+{siena_gain}")),
+                detail: Some(format!("{equipment_accuracy} → {}", equipment_accuracy + siena_gain)),
                 provisional: true,
                 hit_rate_gain: hit_rate_gain(current + gain),
             });
@@ -623,7 +624,7 @@ fn accuracy_growth(
                     format!("極・的中剣を Lv{current_level} → Lv7 まで")
                 },
                 gain,
-                detail: Some(format!("命中P割合 ×{:.2}", target.rate())),
+                detail: Some(format!("命中P割合 ×{:.2} → ×{:.2}", boost.rate(), target.rate())),
                 provisional: false,
                 hit_rate_gain: hit_rate_gain(current + gain),
             });
@@ -632,11 +633,12 @@ fn accuracy_growth(
     if buff_gain > 0 {
         let gain = recompute(stats.dex, equipment_accuracy, buff_gain, boost) - current;
         if gain > 0 {
+            let buff_now = crate::stat_sources::buff_accuracy_point_total(buff_selection, buff_catalog, boost);
             out.push(GrowthRoom {
                 source: GrowthSource::AccuracyBuff,
                 label: "命中P増加バフを乗せる".to_string(),
                 gain,
-                detail: Some(format!("+{buff_gain}")),
+                detail: Some(format!("{buff_now} → {}", buff_now + buff_gain)),
                 provisional: false,
                 hit_rate_gain: hit_rate_gain(current + gain),
             });
@@ -715,7 +717,7 @@ fn evasion_growth(
                 source: GrowthSource::Enchant,
                 label: format!("エンチャント枠の{}を上限まで", EquipmentValues::EVASION_LABEL),
                 gain,
-                detail: Some(format!("+{enchant_gain}")),
+                detail: Some(format!("{equipment_evasion} → {}", equipment_evasion + enchant_gain)),
                 provisional: false,
                 hit_rate_gain: hit_rate_gain(current + gain),
             });
@@ -728,7 +730,7 @@ fn evasion_growth(
                 source: GrowthSource::Siena,
                 label: "シエナの空きスロットに回避率を上限まで".to_string(),
                 gain,
-                detail: Some(format!("+{siena_gain}")),
+                detail: Some(format!("{equipment_evasion} → {}", equipment_evasion + siena_gain)),
                 provisional: true,
                 hit_rate_gain: hit_rate_gain(current + gain),
             });

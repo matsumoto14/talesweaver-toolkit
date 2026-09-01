@@ -193,6 +193,8 @@
     });
   }
 
+  // 伸びしろの素の増分は合計行・内訳とも「いま → 上限まで積んだら」の矢印で出す
+  // (ユーザー指摘 2026-09-02。「あと +N」「+825」「×1.35」と行ごとに言い方が割れていた)。
   // 伸びしろは既定で畳む。開いたら材料ごとの内訳を出す(ユーザー指摘 2026-09-01)。
   // 命中P・回避Pで独立に開閉できる(押した行はその場に留まり、下に生えるだけ)
   let growthOpenAcc = $state(false);
@@ -249,7 +251,7 @@
     {@const hitGain = maxHitRate - result.hit_rate.value}
     <span class="growth-total">
       <span class="growth-total-hitrate num" use:bump={() => hitGain}>{rateWord} {formatHitRateGain(hitGain)}</span>
-      <span class="growth-total-raw dim">あと +<span class="num" use:bump={() => max - point}>{max - point}</span></span>
+      <span class="growth-total-raw dim"><span class="num" use:bump={() => point}>{point}</span> → <span class="num" use:bump={() => max}>{max}</span></span>
     </span>
   {/if}
 {/snippet}
