@@ -17,7 +17,7 @@ use crate::common_skill::CommonSkills;
 use crate::content::{evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation};
 use crate::critical_rate::CriticalRateSources;
 use crate::damage::{DamageContribution, DamageInput};
-use crate::defense::AccuracyCorrection;
+use crate::defense::{AccuracyBoost, AccuracyCorrection};
 use crate::enemy::Enemy;
 use crate::equipment::{
     sum_equipment_value_sources, wrist_base_bonus, Equipment, EquipmentCoefficients,
@@ -49,6 +49,12 @@ pub struct DamageMaterial {
     pub stat_contributions: Vec<StatContribution>,
     pub equipment: Equipment,
     pub common_skills: CommonSkills,
+    /// 命中P増加(射手のルーン等)の合計。中立値は 0
+    pub accuracy_bonus: i64,
+    /// 命中P割合増加の枠(集中・的中剣)。装着中アビリティから呼び出し側が解決する
+    pub accuracy_boost: AccuracyBoost,
+    /// 感電・雷電中か
+    pub accuracy_shocked: bool,
     pub random_options: RandomOptionTotals,
     pub weapon_added_damage: i64,
     pub awakening_rate: f64,
@@ -87,6 +93,9 @@ impl DamageMaterial {
             equipment_enhanced_sources,
             coefficients.equipment,
             coefficients.accuracy,
+            self.accuracy_bonus,
+            self.accuracy_boost,
+            self.accuracy_shocked,
             self.random_options,
             title_damage_rate,
             title_added_damage_rate,
@@ -372,7 +381,7 @@ mod tests {
     use super::*;
     use crate::character_skill::{CharacterSkillDef, CharacterSkills, SkillAudience, SkillEffect};
     use crate::critical_rate::CriticalRateSources;
-    use crate::defense::AccuracyCorrection;
+    use crate::defense::{AccuracyBoost, AccuracyCorrection};
     use crate::element::Element;
     use crate::mastery::Masteries;
     use crate::skill::{SkillDependency, SkillTarget};
@@ -507,6 +516,9 @@ mod tests {
             stat_contributions: contributions,
             equipment: Equipment::default(),
             common_skills: CommonSkills::default(),
+            accuracy_bonus: 0,
+            accuracy_boost: AccuracyBoost::None,
+            accuracy_shocked: false,
             random_options: RandomOptionTotals::default(),
             weapon_added_damage: 0,
             awakening_rate: 1.0,

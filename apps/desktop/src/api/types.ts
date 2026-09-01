@@ -1310,6 +1310,60 @@ export interface EvasionPoints {
   composite: number;
 }
 
+// crates/domain/src/defense.rs の AttackType。突き合わせる回避Pの種類(物理/魔法の2分類)。
+export type AttackType = "physical" | "magic";
+
+// crates/domain/src/defense.rs の AccuracyBoost。命中P割合増加の枠(集中・的中剣)。
+export type AccuracyBoost =
+  | "none"
+  | "concentration"
+  | { precision_sword: number };
+
+// crates/domain/src/defense.rs の HitRate(wiki#HitRate / #HitRateCap)。
+export interface HitRate {
+  /** 挟む前の 命中P − 回避P */
+  raw: number;
+  /** 下限 */
+  min: number;
+  /** 上限(プレイヤーが行う攻撃は 85 + 下限) */
+  max: number;
+  /** 下限・上限で挟んだ命中率 % */
+  value: number;
+  /** 上限に張り付いている(= 必中)。判定は domain 側で済ませてある */
+  capped: boolean;
+}
+
+// crates/domain/src/defense.rs の VersusAccuracy(preview_versus の戻り値)。
+export interface VersusAccuracy {
+  attack_type: AttackType;
+  attacker_dex: number;
+  /** 攻撃側の装備命中率補正(基本 + 強化) */
+  equipment_accuracy: number;
+  /** 攻撃側のスキル命中(wiki 表記のまま) */
+  skill_accuracy: number;
+  /** 依存ボーナス(切り捨て後)。無い依存は 0 */
+  correction_bonus: number;
+  /** 依存ペナルティ(切り捨て後) */
+  correction_penalty: number;
+  /** 命中P増加の合計(射手のルーン等)。今回は常に 0(未入力) */
+  accuracy_bonus: number;
+  accuracy_boost: AccuracyBoost;
+  /** false なら accuracy_boost の命中P変動(的中剣の上位段)は未収録 */
+  accuracy_boost_shift_recorded: boolean;
+  /** 攻撃側の命中P(最終) */
+  accuracy_point: number;
+  defender_agi: number;
+  equipment_evasion: number;
+  equipment_agility: number;
+  /** 攻撃タイプに応じた回避P増加(採用した攻撃タイプの分だけ) */
+  attack_type_bonus: number;
+  /** 防御側の回避P(採用したもの。最終) */
+  evasion_point: number;
+  hit_rate: HitRate;
+  /** false のとき、最小命中率補正・最小回避率補正は未収録(0 決め打ち) */
+  min_rates_recorded: boolean;
+}
+
 export interface FormulaStep {
   name: string;
   expression: string;

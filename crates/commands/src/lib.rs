@@ -439,6 +439,102 @@ pub fn preview_defense(
     ))
 }
 
+/// 対人の命中率(wiki `#AccuracyPoint` / `#EvasionPoint` / `#HitRate`)。保存前のキャラデータで
+/// 出す。攻撃側はスキルの命中Pまで、防御側は `preview_defense` と同じ防御プロファイルまで
+/// それぞれ組み立て、突き合わせは `domain::versus_accuracy` に任せる(計算式は domain 側)。
+pub fn preview_versus(
+    attacker: NewCharacter,
+    attacker_buffs: BuffSelection,
+    skill_id: String,
+    defender: NewCharacter,
+    defender_buffs: BuffSelection,
+) -> CommandResult<domain::VersusAccuracy> {
+    validate_character_draft(&attacker, &attacker_buffs)?;
+    validate_character_draft(&defender, &defender_buffs)?;
+    let skill = find_skill(&skill_id)?;
+    let skill_accuracy = skill
+        .accuracy
+        .ok_or_else(|| CommandError::from(format!("スキル '{skill_id}' の命中は未収録です")))?;
+
+    let attacker_preview = domain::preview_effective_stats(
+        &attacker.base_stats,
+        &attacker.stat_sources,
+        &attacker_buffs,
+        &attacker.equipment,
+        &attacker.common_skills,
+        &gamedata::buff_catalog(),
+        gamedata::mastery_catalog(),
+        gamedata::character_skill_catalog(),
+        &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
+        &gamedata::random_option_catalog(),
+        None,
+        gamedata::awakening_caps(attacker.awakening).max_stat,
+    )
+    .map_err(|e| e.to_string())?;
+    let attacker_equipment_totals = attacker_preview
+        .equipment_base_total
+        .add(attacker.equipment.enhanced_totals(None));
+
+    let defender_preview = domain::preview_effective_stats(
+        &defender.base_stats,
+        &defender.stat_sources,
+        &defender_buffs,
+        &defender.equipment,
+        &defender.common_skills,
+        &gamedata::buff_catalog(),
+        gamedata::mastery_catalog(),
+        gamedata::character_skill_catalog(),
+        &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
+        &gamedata::random_option_catalog(),
+        None,
+        gamedata::awakening_caps(defender.awakening).max_stat,
+    )
+    .map_err(|e| e.to_string())?;
+    let defender_equipment_totals = defender_preview
+        .equipment_base_total
+        .add(defender.equipment.enhanced_totals(None));
+    let defender_profile = domain::defense_profile(
+        &defender_preview.stats,
+        &defender_equipment_totals,
+        gamedata::awakening_caps(defender.awakening),
+        &defender
+            .equipment
+            .random_option_totals(&gamedata::random_option_catalog()),
+        // 対人は共通スキル + シエナのオーラどおりの倍率(preview_defense と同じ理由でコンテンツを取らない)
+        defender
+            .common_skills
+            .defense_rates(defender.equipment.siena_defense_rate()),
+    );
+
+    let correction = gamedata::accuracy_correction(skill.dependency);
+    let accuracy_boost =
+        resolve_accuracy_boost(&attacker.equipment, &gamedata::equipment_abilities());
+    let accuracy_random_option = attacker
+        .equipment
+        .random_option_totals(&gamedata::random_option_catalog())
+        .accuracy_point;
+    let attack_type = domain::AttackType::for_dependency(skill.dependency);
+
+    Ok(domain::versus_accuracy(
+        &attacker_preview.stats,
+        &correction,
+        attacker_equipment_totals.accuracy,
+        skill_accuracy,
+        // 命中P増加(射手のルーン等)・最小命中率補正・最小回避率補正は今回まだ入力を持たない
+        // ([仮] 中立値。build_damage_material の accuracy_bonus と同じ扱い)
+        0,
+        accuracy_boost,
+        accuracy_random_option,
+        attack_type,
+        &defender_preview.stats,
+        &defender_profile,
+        None,
+        None,
+    ))
+}
+
 /// スキル依存種別(`SkillDependency`)ごとに、エンチャントで見るべき装備値 2 種
 /// (`domain::enchant_dependency_keys` = 装備攻撃力係数が非 0 の 2 種)。
 /// フロントで「依存種別 → ステ 2 本」のルール表を持たないための静的テーブル
@@ -598,6 +694,40 @@ pub struct StatPreviewPayload {
     pub part_enhance: Vec<PartEnhancePreview>,
 }
 
+/// 装着中アビリティから的中剣の `AccuracyBoost` を解決する(wiki 計算式まとめ
+/// `#AccuracyPoint`)。表記の「命中率補正 +n」は装備の命中補正ではなく的中剣 Lv
+/// (`EquipmentAbilityDef::precision_sword_level`。神秘鉱・不死の可変枠は本体値が Lv)。
+/// **複数装着されていたら最も Lv の高いもの 1 つ**を採用する。ペット集中は今回は
+/// 入力を持たないので `AccuracyBoost::Concentration` にはならない(型だけ用意)。
+fn resolve_accuracy_boost(
+    equipment: &domain::Equipment,
+    abilities: &[EquipmentAbilityDef],
+) -> domain::AccuracyBoost {
+    let max_level = equipment
+        .iter_selected()
+        .flat_map(|(slot, part)| {
+            part.abilities.iter().filter_map(move |ability_id| {
+                let def = abilities
+                    .iter()
+                    .find(|a| a.id == ability_id.as_str() && a.slot == slot)?;
+                if def.family != domain::EquipmentAbilityFamily::Accuracy {
+                    return None;
+                }
+                def.precision_sword_level.or_else(|| {
+                    part.ability_values
+                        .iter()
+                        .find(|v| v.ability_id == def.id)
+                        .map(|v| v.value as u8)
+                })
+            })
+        })
+        .max();
+    match max_level {
+        Some(level) => domain::AccuracyBoost::PrecisionSword(level),
+        None => domain::AccuracyBoost::None,
+    }
+}
+
 /// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を gamedata から解決する。
 fn dependency_coefficients(dependency: domain::SkillDependency) -> DependencyCoefficients {
     DependencyCoefficients {
@@ -682,6 +812,11 @@ fn build_damage_material(
         stat_contributions,
         equipment: equipment.clone(),
         common_skills,
+        // 命中P増加(射手のルーン等)・感電は今回まだ入力を持たない([仮] 中立値。
+        // goal 「命中Pの計算を wiki どおりに直す」の残タスク)
+        accuracy_bonus: 0,
+        accuracy_boost: resolve_accuracy_boost(equipment, &gamedata::equipment_abilities()),
+        accuracy_shocked: false,
         random_options: equipment.random_option_totals(&gamedata::random_option_catalog()),
         weapon_added_damage: added_damage,
         awakening_rate: gamedata::awakening_rate(awakening),
@@ -1304,13 +1439,35 @@ fn enchant_id_slot_key(
 #[cfg(test)]
 mod tests {
     use super::{
-        armor_added_hp, build_damage_input, resolve_combo_skill_type, weapon_added_damage,
+        armor_added_hp, build_damage_input, resolve_accuracy_boost, resolve_combo_skill_type,
+        weapon_added_damage,
     };
     use domain::{
-        BaseStats, BuffSelection, ComboSkillType, CommonSkills, DamageCategory, EnhanceGrade,
-        Equipment, EquipmentEnhanceType, EquipmentPart, EquipmentValues, SoulLinkStatus,
-        StatSources,
+        AccuracyBoost, BaseStats, BuffSelection, ComboSkillType, CommonSkills, DamageCategory,
+        EnhanceGrade, Equipment, EquipmentEnhanceType, EquipmentPart, EquipmentValues,
+        SoulLinkStatus, StatSources,
     };
+
+    #[test]
+    fn 的中剣は装着中の最も高いlvを採用する() {
+        let mut equipment = Equipment::default();
+        // N-的中剣(Lv4)と E-的中剣(Lv7)を同時に持たせ、Lv7 が勝つことを見る
+        // (同一系統の排他はカタログ検証の役目で、この関数はカタログを検証しない)
+        equipment.parts.hand.abilities =
+            vec!["n-accuracy-hand".to_string(), "e-accuracy-hand".to_string()];
+        assert_eq!(
+            resolve_accuracy_boost(&equipment, &gamedata::equipment_abilities()),
+            AccuracyBoost::PrecisionSword(7)
+        );
+    }
+
+    #[test]
+    fn 的中剣が装着されていなければboostはnone() {
+        assert_eq!(
+            resolve_accuracy_boost(&Equipment::default(), &gamedata::equipment_abilities()),
+            AccuracyBoost::None
+        );
+    }
 
     #[test]
     fn api境界は未対応スキルへのコンボタイプ指定を拒否する() {

@@ -1818,6 +1818,7 @@ mod tests {
                     ..Default::default()
                 },
                 damage_effects: &[],
+                precision_sword_level: None,
             },
             EquipmentAbilityDef {
                 id: "pointed-blade-e",
@@ -1837,6 +1838,7 @@ mod tests {
                     ..Default::default()
                 },
                 damage_effects: &[],
+                precision_sword_level: None,
             },
             EquipmentAbilityDef {
                 id: "night-star-pointed-blade",
@@ -1856,6 +1858,7 @@ mod tests {
                     ..Default::default()
                 },
                 damage_effects: &[],
+                precision_sword_level: None,
             },
         ];
         let mut c = new_character("メイン");
@@ -2110,6 +2113,7 @@ mod tests {
             effect_summary: "突き +2",
             values: domain::EquipmentValues::default(),
             damage_effects: &[],
+            precision_sword_level: None,
         }
     }
 

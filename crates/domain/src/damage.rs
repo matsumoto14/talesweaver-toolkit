@@ -14,7 +14,7 @@ use crate::attack_power::{
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::common_skill::{CommonSkills, RateContribution};
 use crate::critical_rate::{critical_rate, CriticalRate, CriticalRateSources};
-use crate::defense::{accuracy_point, AccuracyCorrection};
+use crate::defense::{accuracy_point, AccuracyBoost, AccuracyCorrection};
 use crate::enemy::Enemy;
 use crate::equipment::{
     equipment_attack_parts, equipment_values_attack, sum_equipment_value_sources, Equipment,
@@ -73,6 +73,16 @@ pub struct DamageInput {
     pub equipment_coefficients: EquipmentCoefficients,
     /// 命中P補正の係数(wiki: 計算式まとめ の依存表)。スキル依存種別ごとに gamedata が持つ
     pub accuracy_correction: AccuracyCorrection,
+    /// 命中P増加(wiki `#AccuracyPoint`)の合計。射手のルーン・ハードウエポン・遊び用チンキ剤・
+    /// 手袋命中率+3%(コラボ手袋)等の Σ。中立値は 0
+    #[serde(default)]
+    pub accuracy_bonus: i64,
+    /// 命中P割合増加の枠(集中・的中剣)。中立値は `AccuracyBoost::None`
+    #[serde(default)]
+    pub accuracy_boost: AccuracyBoost,
+    /// 感電・雷電中か(命中P割合減少 ×0.70)。中立値は `false`
+    #[serde(default)]
+    pub accuracy_shocked: bool,
     /// ランダムオプションの集計(`Equipment::random_option_totals`。カタログの解決は呼び出し側)。
     /// カテゴリP(依存別)・カテゴリX5(攻撃ダメージ(特殊))・命中P への加算に使う
     pub random_options: RandomOptionTotals,
@@ -130,6 +140,9 @@ impl DamageInput {
         equipment_enhanced_sources: Vec<EquipmentValueSource>,
         equipment_coefficients: EquipmentCoefficients,
         accuracy_correction: AccuracyCorrection,
+        accuracy_bonus: i64,
+        accuracy_boost: AccuracyBoost,
+        accuracy_shocked: bool,
         random_options: RandomOptionTotals,
         title_attack_damage_rate: f64,
         title_added_damage_rate: f64,
@@ -158,6 +171,9 @@ impl DamageInput {
             equipment_enhanced_sources,
             equipment_coefficients,
             accuracy_correction,
+            accuracy_bonus,
+            accuracy_boost,
+            accuracy_shocked,
             random_options,
             title_attack_damage_rate,
             title_added_damage_rate,
@@ -870,6 +886,9 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             &input.accuracy_correction,
             equipment_base_totals.accuracy + equipment_enhanced_totals.accuracy,
             skill_accuracy,
+            input.accuracy_bonus,
+            input.accuracy_boost,
+            input.accuracy_shocked,
             input.random_options.accuracy_point,
         )
     });
@@ -1164,6 +1183,9 @@ mod tests {
                 penalty_secondary: Some(StatKind::Hack),
                 penalty_divisor: 200.0,
             },
+            accuracy_bonus: 0,
+            accuracy_boost: AccuracyBoost::None,
+            accuracy_shocked: false,
             random_options: RandomOptionTotals::default(),
             weapon_added_damage: 0,
             // テストは上限に当たらない値を既定にする(上限の挙動は専用テストで見る)
@@ -1301,8 +1323,9 @@ mod tests {
                 ..Default::default()
             },
         );
-        // DEX 100 + 装備 50 + スキル命中 92 − [(STAB500 + HACK500)/200] = 242 − 5 = 237
-        assert_eq!(calculate_damage(&i).accuracy_point, Some(237));
+        // DEX 100 + 装備 50 + (スキル命中 92 + オフセット15) − [(STAB500 + HACK500)/200]
+        // = 257 − 5 = 252
+        assert_eq!(calculate_damage(&i).accuracy_point, Some(252));
     }
 
     #[test]

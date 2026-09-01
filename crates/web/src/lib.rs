@@ -131,6 +131,16 @@ struct PreviewDefenseArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct PreviewVersusArgs {
+    attacker: domain::NewCharacter,
+    attacker_buffs: domain::BuffSelection,
+    skill_id: String,
+    defender: domain::NewCharacter,
+    defender_buffs: domain::BuffSelection,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PreviewDamageArgs {
     character: domain::NewCharacter,
     buffs: domain::BuffSelection,
@@ -240,6 +250,16 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "preview_defense" => {
             let a: PreviewDefenseArgs = args_of(command, args)?;
             done(commands::preview_defense(a.character, a.buffs))
+        }
+        "preview_versus" => {
+            let a: PreviewVersusArgs = args_of(command, args)?;
+            done(commands::preview_versus(
+                a.attacker,
+                a.attacker_buffs,
+                a.skill_id,
+                a.defender,
+                a.defender_buffs,
+            ))
         }
         "preview_damage" => {
             let a: PreviewDamageArgs = args_of(command, args)?;

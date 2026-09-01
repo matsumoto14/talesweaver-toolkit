@@ -13,6 +13,7 @@
   import HomePage from "./pages/home/HomePage.svelte";
   import MeasurePage from "./pages/measure/MeasurePage.svelte";
   import NewsPage from "./pages/news/NewsPage.svelte";
+  import VersusPage from "./pages/versus/VersusPage.svelte";
   import {
     app, focusErrorTarget, loadAll, rememberSession, restoreSession, simIsDirty, type Tab,
   } from "./state.svelte";
@@ -26,6 +27,7 @@
     { id: "calc", label: "ダメージ計算" },
     { id: "buffs", label: "バフ" },
     { id: "chars", label: "キャラ" },
+    { id: "versus", label: "対人" },
     { id: "measure", label: "実測" },
     { id: "news", label: "お知らせ" },
   ];
@@ -158,6 +160,8 @@
             <CalcPage />
           {:else if app.tab === "buffs"}
             <BuffsPage />
+          {:else if app.tab === "versus"}
+            <VersusPage />
           {:else if app.tab === "measure"}
             <MeasurePage />
           {:else if app.tab === "news"}

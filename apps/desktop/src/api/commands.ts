@@ -5,7 +5,7 @@ import type {
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
-  TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation,
+  TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation, VersusAccuracy,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -81,6 +81,14 @@ export const getNewCharacterStatSources = () =>
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
   invoke<DefenseProfile>("preview_defense", { character, buffs });
+/** 対人の命中率(wiki#AccuracyPoint / #EvasionPoint / #HitRate)。保存前のキャラデータで出す */
+export const previewVersus = (
+  attacker: NewCharacter, attackerBuffs: BuffSelection, skillId: string,
+  defender: NewCharacter, defenderBuffs: BuffSelection,
+) =>
+  invoke<VersusAccuracy>("preview_versus", {
+    attacker, attackerBuffs, skillId, defender, defenderBuffs,
+  });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
 /** ランダムオプションのカタログ(wiki: ランダムオプション) */

@@ -16,6 +16,7 @@ use crate::common_skill::DefenseRates;
 use crate::equipment::EquipmentValues;
 use crate::random_option::RandomOptionTotals;
 use crate::rounding::floor_int;
+use crate::skill::SkillDependency;
 use crate::stats::{EffectiveStats, StatKind};
 
 /// カット率 J の分母定数(wiki カテゴリJ: `r = 1 − a/(a+80)`)。
@@ -57,6 +58,57 @@ pub struct EvasionPoints {
     pub magic: i64,
     /// 複合。回避P増加 `(DEF+MR) / 7`
     pub composite: i64,
+}
+
+impl EvasionPoints {
+    /// 突き合わせる攻撃タイプに応じた回避Pを 1 つ選ぶ(対人の命中率判定)。
+    pub fn for_attack_type(&self, attack_type: AttackType) -> i64 {
+        match attack_type {
+            AttackType::Physical => self.physical,
+            AttackType::Magic => self.magic,
+        }
+    }
+}
+
+/// 命中判定で突き合わせる回避Pの種類(wiki `#EvasionPoint`「攻撃タイプに応じた回避P増加」)。
+///
+/// wiki は 物理/魔法/複合 の 3 分類だが、スキル依存種別(`SkillDependency`)から複合を
+/// 判定する規則が wiki に無い。`RandomOptionTotals::damage_amplify_for` が依存種別を
+/// 物理/魔法へ振り分けているのと同じ規則にそろえ、ここでは 2 分類とする `[仮]`
+/// (突き / 斬り / 突き斬り = 物理、知力 / 魔防 / 斬り知力 = 魔法。複合は未対応)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttackType {
+    Physical,
+    Magic,
+}
+
+impl AttackType {
+    /// スキル依存種別から攻撃タイプを判定する。
+    pub fn for_dependency(dependency: SkillDependency) -> Self {
+        match dependency {
+            SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
+                AttackType::Physical
+            }
+            SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
+                AttackType::Magic
+            }
+        }
+    }
+}
+
+/// 攻撃タイプに応じた回避P増加(wiki `#EvasionPoint`)。物理 `(DEF*2 + [(STAB+HACK)/100]) / 7`、
+/// 魔法 `(MR*2) / 7`。`evasion_point` に渡す `type_bonus` と同じ式(表示用の内訳に使う)。
+pub fn attack_type_bonus(stats: &EffectiveStats, attack_type: AttackType) -> f64 {
+    match attack_type {
+        AttackType::Physical => {
+            (stats.def as f64 * 2.0
+                + floor_int((stats.stab + stats.hack) as f64 / EVASION_PHYSICAL_ATTACK_DIVISOR)
+                    as f64)
+                / EVASION_TYPE_DIVISOR
+        }
+        AttackType::Magic => stats.mr as f64 * 2.0 / EVASION_TYPE_DIVISOR,
+    }
 }
 
 /// 防御側の戦闘能力値一式。割合(カット率・回避)は小数表現(50% → 0.5)。
@@ -154,24 +206,142 @@ impl AccuracyCorrection {
     }
 }
 
+/// wiki のスキル命中は実測から 15 引いた値が載っている(wiki `#AccuracyPoint` の赤字注記:
+/// 「初期の命中解析が間違えてため、現状まで引きずっている。特に的中剣の計算式が一番影響を
+/// 受けていた」)。gamedata は wiki の表記どおり持ち、計算時にここで戻す。
+pub const SKILL_ACCURACY_OFFSET: i64 = 15;
+/// ペット集中の命中P割合増加(wiki `#AccuracyPoint`: +5%)。
+pub const CONCENTRATION_ACCURACY_RATE: f64 = 1.05;
+/// 的中剣の命中P割合増加(同: +35%)。**表記の「命中率補正 +n」は装備の命中補正ではなく Lv**。
+pub const PRECISION_SWORD_ACCURACY_RATE: f64 = 1.35;
+/// 的中剣 Lv1〜7 の命中P変動(wiki `#AccuracyPoint` の表。Lv1 の行は集中と共通)。
+pub const PRECISION_SWORD_SHIFT: [i64; 7] = [3, 2, 1, 1, 0, -1, -2];
+/// 感電・雷電の命中P割合減少(同: −30%)。
+pub const SHOCK_ACCURACY_RATE: f64 = 0.70;
+
+/// 命中P割合増加の枠(wiki `#AccuracyPoint`)。**集中と的中剣はいずれか 1 つだけ**適用され、
+/// 優先度は 集中 > 的中剣(2024/7/4 以降も変化なし)。どちらも割合とは別に固定の命中P変動を持つ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccuracyBoost {
+    #[default]
+    None,
+    /// ペット集中。×1.05 ・ 命中P +3
+    Concentration,
+    /// 的中剣 Lv1〜7。×1.35 ・ 命中P変動は Lv ごと
+    PrecisionSword(u8),
+}
+
+impl AccuracyBoost {
+    pub fn rate(self) -> f64 {
+        match self {
+            AccuracyBoost::None => 1.0,
+            AccuracyBoost::Concentration => CONCENTRATION_ACCURACY_RATE,
+            AccuracyBoost::PrecisionSword(_) => PRECISION_SWORD_ACCURACY_RATE,
+        }
+    }
+
+    /// 割合とは別に乗る固定の命中P変動。wiki は「追加で命中Pが変動する模様(誤差にしては
+    /// 大きすぎる。原因不明)」として割合増加の節に表だけ載せており、掛け算の内か外かは
+    /// 書いていない。±3 なので影響は小さいが、**外(割合を掛けたあと)**として扱う `[仮]`。
+    ///
+    /// **表は Lv1〜7 までしか無い**。新装着アビリティの上位段(古代精霊 +9 / 深淵 +11 /
+    /// 喪失 +13 / 夜星 +16。wiki `Item/合成/装着アビリティシステム/新装着アビリティ`)は
+    /// 変動値が未記載なので、表の末尾(−2)へ丸めずに **0** として扱う `[仮]` —
+    /// 表に無い値を埋めない(未収録を勝手に外挿しない)。
+    pub fn shift(self) -> i64 {
+        match self {
+            AccuracyBoost::None => 0,
+            AccuracyBoost::Concentration => PRECISION_SWORD_SHIFT[0],
+            AccuracyBoost::PrecisionSword(level) => PRECISION_SWORD_SHIFT
+                .get(usize::from(level.max(1)) - 1)
+                .copied()
+                .unwrap_or(0),
+        }
+    }
+
+    /// 命中P変動が wiki の表に載っている段か。載っていない上位段は `shift()` が 0 を返す
+    /// ため、画面で「0」と「未収録」を区別するのに使う
+    pub fn shift_is_recorded(self) -> bool {
+        match self {
+            AccuracyBoost::None | AccuracyBoost::Concentration => true,
+            AccuracyBoost::PrecisionSword(level) => {
+                usize::from(level.max(1)) <= PRECISION_SWORD_SHIFT.len()
+            }
+        }
+    }
+}
+
 /// 命中P(wiki `#AccuracyPoint`)。
 ///
-/// `命中P = [(DEX + 装備命中率補正 + スキル命中 + 依存ボーナス − 依存ペナルティ + 命中P増加)
-///          × 命中P割合増加 × 命中P割合減少 + ランダムOP]`
+/// `命中P = [(DEX + 装備命中率補正 + (スキル命中 + 15) + 依存ボーナス − 依存ペナルティ
+///          + 命中P増加) × 命中P割合増加 × 命中P割合減少 + ランダムOP]`
 ///
-/// 命中P増加(射手のルーン等のバフ)・割合増加(集中/的中剣)・割合減少(感電/雷電)は
-/// カタログに無いので中立値。スキル命中は wiki 表記 +15 済みの値を渡す。
-/// `random_option` は式の末項(割合増加の計算後に加算)。
+/// `skill_accuracy` は wiki 表記のまま渡す(`SKILL_ACCURACY_OFFSET` はここで足す)。
+/// `bonus` は命中P増加の合計(射手のルーン +20・ハードウエポン +15・遊び用チンキ剤 +20 等)。
+/// `shocked` は感電/雷電(割合減少)。`random_option` は式の末項で、割合を掛けたあとに足す。
 pub fn accuracy_point(
     stats: &EffectiveStats,
     correction: &AccuracyCorrection,
     equipment_accuracy: i64,
     skill_accuracy: i64,
+    bonus: i64,
+    boost: AccuracyBoost,
+    shocked: bool,
     random_option: i64,
 ) -> i64 {
-    stats.dex + equipment_accuracy + skill_accuracy + floor_int(correction.bonus_value(stats))
+    let inner = stats.dex
+        + equipment_accuracy
+        + skill_accuracy
+        + SKILL_ACCURACY_OFFSET
+        + floor_int(correction.bonus_value(stats))
         - floor_int(correction.penalty_value(stats))
-        + random_option
+        + bonus;
+    let rate = boost.rate() * if shocked { SHOCK_ACCURACY_RATE } else { 1.0 };
+    floor_int(inner as f64 * rate) + boost.shift() + random_option
+}
+
+/// 命中率の下限の定数項(wiki `#HitRateCap`: `命中率下限 = 15 + 最小命中率補正 − 最小回避率補正`)。
+pub const HIT_RATE_MIN_BASE: i64 = 15;
+/// プレイヤーが行う攻撃の命中率上限は `85 + 命中率下限`(同)。モンスターの攻撃は 100。
+pub const HIT_RATE_PLAYER_SPAN: i64 = 85;
+/// 対人戦における最小回避率の上限(同)。
+pub const PVP_MIN_EVASION_CAP: i64 = 10;
+
+/// 命中率(wiki `#HitRate` / `#HitRateCap`)。`命中P − 対象の回避P` を下限・上限で挟む。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HitRate {
+    /// 挟む前の `命中P − 回避P`
+    pub raw: i64,
+    /// 下限 `15 + 攻撃側の最小命中率補正 − 対象の最小回避率補正`
+    pub min: i64,
+    /// 上限 `85 + 下限`(プレイヤーが行う攻撃)
+    pub max: i64,
+    /// 下限・上限で挟んだ命中率 %
+    pub value: i64,
+    /// 上限に張り付いている = そのぶんは外れない。wiki の「回避Pを 100 上回ると必中」に相当する。
+    /// **判定はここ(domain)で済ませて持たせる** — 画面で `raw >= max` を書き直させない
+    pub capped: bool,
+}
+
+/// 対人の命中率。`min_hit_rate` は攻撃側の最小命中率補正、`min_evasion_rate` は
+/// 対象の最小回避率補正(対人は上限 `PVP_MIN_EVASION_CAP`)。
+pub fn hit_rate(
+    accuracy_point: i64,
+    evasion_point: i64,
+    min_hit_rate: i64,
+    min_evasion_rate: i64,
+) -> HitRate {
+    let raw = accuracy_point - evasion_point;
+    let min = HIT_RATE_MIN_BASE + min_hit_rate - min_evasion_rate.min(PVP_MIN_EVASION_CAP);
+    let max = HIT_RATE_PLAYER_SPAN + min;
+    HitRate {
+        raw,
+        min,
+        max,
+        value: raw.clamp(min, max),
+        capped: raw >= max,
+    }
 }
 
 /// 防御側の戦闘能力値を出す。
@@ -199,9 +369,7 @@ pub fn defense_profile(
         .clamp(COMBO_EVASION_MIN_PERCENT, COMBO_EVASION_MAX_PERCENT);
     let combo_evasion = combo_evasion_percent / 100.0;
 
-    let physical_type_bonus = (def * 2.0
-        + floor_int((stats.stab + stats.hack) as f64 / EVASION_PHYSICAL_ATTACK_DIVISOR) as f64)
-        / EVASION_TYPE_DIVISOR;
+    let physical_type_bonus = attack_type_bonus(stats, AttackType::Physical);
 
     let raw_physical =
         floor_int(def * DEFENSE_STAT_MULTIPLIER + eq_physical * DEFENSE_EQUIPMENT_MULTIPLIER);
@@ -241,7 +409,7 @@ pub fn defense_profile(
             magic: evasion_point(
                 stats,
                 equipment,
-                mr * 2.0 / EVASION_TYPE_DIVISOR,
+                attack_type_bonus(stats, AttackType::Magic),
                 random_options.evasion_point,
             ),
             composite: evasion_point(
@@ -256,6 +424,106 @@ pub fn defense_profile(
         equipment_evasion: equipment.evasion,
         equipment_agility: equipment.agility,
         defense_rates: rates,
+    }
+}
+
+/// 対人の命中率一式(wiki `#AccuracyPoint` / `#EvasionPoint` / `#HitRate`)。
+/// 攻撃側の命中Pの内訳・防御側の採用回避Pの内訳を画面がそのまま出せるように、
+/// 途中式の値も持つ(対人タブの結果面専用)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct VersusAccuracy {
+    /// 突き合わせた攻撃タイプ(攻撃側スキルの依存種別から判定)
+    pub attack_type: AttackType,
+    /// 攻撃側 DEX
+    pub attacker_dex: i64,
+    /// 攻撃側の装備命中率補正(基本 + 強化の合計)
+    pub equipment_accuracy: i64,
+    /// 攻撃側のスキル命中(wiki 表記のまま。`SKILL_ACCURACY_OFFSET` を足す前)
+    pub skill_accuracy: i64,
+    /// 依存ボーナス(切り捨て後)。ボーナスの無い依存は 0
+    pub correction_bonus: i64,
+    /// 依存ペナルティ(切り捨て後)
+    pub correction_penalty: i64,
+    /// 命中P増加の合計(射手のルーン等)
+    pub accuracy_bonus: i64,
+    pub accuracy_boost: AccuracyBoost,
+    /// `accuracy_boost` の命中P変動が wiki の表に載っている段か
+    /// (`AccuracyBoost::shift_is_recorded`)。`false` なら画面は `?` を出す
+    pub accuracy_boost_shift_recorded: bool,
+    /// 攻撃側の命中P(最終)
+    pub accuracy_point: i64,
+    /// 防御側 AGI
+    pub defender_agi: i64,
+    /// 防御側の装備回避率補正
+    pub equipment_evasion: i64,
+    /// 防御側の装備敏捷度補正
+    pub equipment_agility: i64,
+    /// 攻撃タイプに応じた回避P増加(採用した攻撃タイプの分だけ)
+    pub attack_type_bonus: f64,
+    /// 防御側の回避P(採用したもの。最終)
+    pub evasion_point: i64,
+    pub hit_rate: HitRate,
+    /// 最小命中率補正・最小回避率補正の供給源をまだ持たず、0 決め打ちで計算していることの
+    /// 目印。`false` のとき、画面は `hit_rate` の下限・上限の内訳に `?` を出す
+    pub min_rates_recorded: bool,
+}
+
+/// 対人の命中率を組み立てる(`preview_versus` コマンド専用)。
+///
+/// `min_hit_rate` / `min_evasion_rate` はまだ供給源が無い(狩り場情報一覧のような表が
+/// PvP 側に無い)ため、呼び出し側は `None` を渡す。`Some` を渡せるようになったら
+/// `min_rates_recorded` が自動で `true` になる。
+#[allow(clippy::too_many_arguments)]
+pub fn versus_accuracy(
+    attacker_stats: &EffectiveStats,
+    correction: &AccuracyCorrection,
+    equipment_accuracy: i64,
+    skill_accuracy: i64,
+    accuracy_bonus: i64,
+    accuracy_boost: AccuracyBoost,
+    accuracy_random_option: i64,
+    attack_type: AttackType,
+    defender_stats: &EffectiveStats,
+    defender: &DefenseProfile,
+    min_hit_rate: Option<i64>,
+    min_evasion_rate: Option<i64>,
+) -> VersusAccuracy {
+    // 感電・雷電は今回まだ入力を持たない([仮] 中立値。build_damage_material と同じ扱い)。
+    let attacker_accuracy_point = accuracy_point(
+        attacker_stats,
+        correction,
+        equipment_accuracy,
+        skill_accuracy,
+        accuracy_bonus,
+        accuracy_boost,
+        false,
+        accuracy_random_option,
+    );
+    let defender_evasion_point = defender.evasion_point.for_attack_type(attack_type);
+    let hit = hit_rate(
+        attacker_accuracy_point,
+        defender_evasion_point,
+        min_hit_rate.unwrap_or(0),
+        min_evasion_rate.unwrap_or(0),
+    );
+    VersusAccuracy {
+        attack_type,
+        attacker_dex: attacker_stats.dex,
+        equipment_accuracy,
+        skill_accuracy,
+        correction_bonus: floor_int(correction.bonus_value(attacker_stats)),
+        correction_penalty: floor_int(correction.penalty_value(attacker_stats)),
+        accuracy_bonus,
+        accuracy_boost,
+        accuracy_boost_shift_recorded: accuracy_boost.shift_is_recorded(),
+        accuracy_point: attacker_accuracy_point,
+        defender_agi: defender_stats.agi,
+        equipment_evasion: defender.equipment_evasion,
+        equipment_agility: defender.equipment_agility,
+        attack_type_bonus: attack_type_bonus(defender_stats, attack_type),
+        evasion_point: defender_evasion_point,
+        hit_rate: hit,
+        min_rates_recorded: min_hit_rate.is_some() && min_evasion_rate.is_some(),
     }
 }
 
@@ -470,5 +738,224 @@ mod tests {
         );
         // [(250+260)/100] = 5 → 15 + 0 + 5/7 = 15.714.. → 15
         assert_eq!(p.evasion_point.physical, 15);
+    }
+
+    /// 依存ボーナス・依存ペナルティが両方 0 になる中立な `AccuracyCorrection`。
+    fn neutral_correction() -> AccuracyCorrection {
+        AccuracyCorrection {
+            bonus: None,
+            penalty_primary: StatKind::Def,
+            penalty_secondary: None,
+            penalty_divisor: 1.0,
+        }
+    }
+
+    #[test]
+    fn 命中pのスキル依存にはオフセット15が足される() {
+        let s = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let p = accuracy_point(
+            &s,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::None,
+            false,
+            0,
+        );
+        assert_eq!(p, 100 + SKILL_ACCURACY_OFFSET);
+    }
+
+    #[test]
+    fn 的中剣は135倍にlvごとの命中p変動が乗る() {
+        let s = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        // inner = 100 + 15(オフセット) = 115
+        let inner = 115.0;
+        let lv5 = accuracy_point(
+            &s,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::PrecisionSword(5),
+            false,
+            0,
+        );
+        // Lv5 の命中P変動は 0(PRECISION_SWORD_SHIFT[4])
+        assert_eq!(lv5, floor_int(inner * PRECISION_SWORD_ACCURACY_RATE));
+        let lv7 = accuracy_point(
+            &s,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::PrecisionSword(7),
+            false,
+            0,
+        );
+        // Lv7 の命中P変動は −2(PRECISION_SWORD_SHIFT[6])
+        assert_eq!(lv7, floor_int(inner * PRECISION_SWORD_ACCURACY_RATE) - 2);
+    }
+
+    #[test]
+    fn 感電は命中p割合を07倍にする() {
+        let s = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let normal = accuracy_point(
+            &s,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::None,
+            false,
+            0,
+        );
+        let shocked = accuracy_point(
+            &s,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::None,
+            true,
+            0,
+        );
+        assert_eq!(shocked, floor_int(normal as f64 * SHOCK_ACCURACY_RATE));
+    }
+
+    #[test]
+    fn ランダムオプションは割合を掛けたあとに足される() {
+        let s = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let without = accuracy_point(
+            &s,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::PrecisionSword(5),
+            false,
+            0,
+        );
+        let with = accuracy_point(
+            &s,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::PrecisionSword(5),
+            false,
+            20,
+        );
+        assert_eq!(with, without + 20);
+    }
+
+    #[test]
+    fn hit_rateは下限上限で挟み対人回避率補正は10で頭打ち() {
+        // raw が上限を超えると必中(capped)扱いで上限に張り付く
+        let capped = hit_rate(200, 0, 0, 0);
+        assert_eq!(capped.min, HIT_RATE_MIN_BASE);
+        assert_eq!(capped.max, HIT_RATE_MIN_BASE + HIT_RATE_PLAYER_SPAN);
+        assert_eq!(capped.value, capped.max);
+        assert!(capped.capped);
+
+        // raw が下限を下回っても下限で頭打ち
+        let low = hit_rate(-500, 0, 0, 0);
+        assert_eq!(low.value, HIT_RATE_MIN_BASE);
+        assert!(!low.capped);
+
+        // 対人: 対象の最小回避率補正20は上限10で頭打ちされる → min = 15 − 10 = 5
+        let pvp = hit_rate(50, 0, 0, 20);
+        assert_eq!(pvp.min, HIT_RATE_MIN_BASE - PVP_MIN_EVASION_CAP);
+    }
+
+    #[test]
+    fn 的中剣の上位段は命中p変動を表の末尾へ丸めない() {
+        // wiki の変動表は Lv1〜7 まで。新装着アビリティの 古代精霊 +9 / 深淵 +11 /
+        // 喪失 +13 / 夜星 +16 は未記載なので 0 として扱い、-2 に丸めない
+        assert_eq!(AccuracyBoost::PrecisionSword(7).shift(), -2);
+        assert!(AccuracyBoost::PrecisionSword(7).shift_is_recorded());
+        for level in [9, 11, 13, 16] {
+            assert_eq!(AccuracyBoost::PrecisionSword(level).shift(), 0);
+            assert!(!AccuracyBoost::PrecisionSword(level).shift_is_recorded());
+        }
+        // 割合のほうは段によらず +35%
+        assert_eq!(
+            AccuracyBoost::PrecisionSword(16).rate(),
+            PRECISION_SWORD_ACCURACY_RATE
+        );
+    }
+
+    #[test]
+    fn 攻撃タイプは依存種別を物理魔法の2分類に振り分ける() {
+        use crate::skill::SkillDependency;
+        for dep in [
+            SkillDependency::Stab,
+            SkillDependency::Hack,
+            SkillDependency::StabHack,
+        ] {
+            assert_eq!(AttackType::for_dependency(dep), AttackType::Physical);
+        }
+        for dep in [
+            SkillDependency::Int,
+            SkillDependency::Mr,
+            SkillDependency::HackInt,
+        ] {
+            assert_eq!(AttackType::for_dependency(dep), AttackType::Magic);
+        }
+    }
+
+    #[test]
+    fn versus_accuracyは命中pと採用した回避pの差でhit_rateを出す() {
+        let attacker = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats {
+            def: 200,
+            mr: 150,
+            agi: 100,
+            ..Default::default()
+        };
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let v = versus_accuracy(
+            &attacker,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::None,
+            0,
+            AttackType::Physical,
+            &defender_stats,
+            &defender,
+            None,
+            None,
+        );
+        assert_eq!(v.accuracy_point, 100 + SKILL_ACCURACY_OFFSET);
+        assert_eq!(v.evasion_point, defender.evasion_point.physical);
+        assert_eq!(
+            v.hit_rate,
+            hit_rate(v.accuracy_point, v.evasion_point, 0, 0)
+        );
+        assert!(!v.min_rates_recorded);
+        assert_eq!(v.defender_agi, 100);
     }
 }

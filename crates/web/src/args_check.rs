@@ -103,6 +103,7 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         "preview_effective_stats" => arg_fields::<PreviewEffectiveStatsArgs>(),
         "buff_target_stat_gains" => arg_fields::<BuffTargetStatGainsArgs>(),
         "preview_defense" => arg_fields::<PreviewDefenseArgs>(),
+        "preview_versus" => arg_fields::<PreviewVersusArgs>(),
         "preview_damage" => arg_fields::<PreviewDamageArgs>(),
         "evaluate_contents" => arg_fields::<EvaluateContentsArgs>(),
         "list_upgrade_candidates" | "list_enchant_gains" => arg_fields::<CandidateArgs>(),

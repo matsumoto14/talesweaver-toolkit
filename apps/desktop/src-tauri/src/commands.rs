@@ -12,6 +12,7 @@ use commands::{
 use domain::{
     BuffDefinition, BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DamageResult,
     DefenseProfile, Enemy, EquipmentAbilityDef, NewCharacter, RandomOptionDef, Skill,
+    VersusAccuracy,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, RegisteredCharacter};
@@ -392,6 +393,17 @@ pub fn preview_defense(
     buffs: BuffSelection,
 ) -> CommandResult<DefenseProfile> {
     commands::preview_defense(character, buffs)
+}
+
+#[tauri::command]
+pub fn preview_versus(
+    attacker: NewCharacter,
+    attacker_buffs: BuffSelection,
+    skill_id: String,
+    defender: NewCharacter,
+    defender_buffs: BuffSelection,
+) -> CommandResult<VersusAccuracy> {
+    commands::preview_versus(attacker, attacker_buffs, skill_id, defender, defender_buffs)
 }
 
 #[tauri::command]
