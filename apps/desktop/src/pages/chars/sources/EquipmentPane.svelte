@@ -702,6 +702,9 @@
   /** 強化能力値のうち、この部位のエンチャント分(part.enchant そのもの)。計算は Rust 側(preview) */
   const partEnchantValues = (slot: PartSlot) =>
     preview?.part_enchant_values.find((p) => p.slot === slot)?.values ?? zeroValues();
+  /** 装備強化の追加効果(武器 = 追加固定ダメージ / 鎧 = 追加HP)。計算は Rust 側(preview) */
+  const partEnhance = (slot: PartSlot) =>
+    preview?.part_enhance.find((p) => p.slot === slot) ?? null;
   /** 部位詳細を開いたときに、旧データの同カテゴリー重複を1つへ畳む。 */
   function openPartDetail(slot: PartSlot) {
     const part = selectedPartOrNull(slot);
@@ -1427,6 +1430,27 @@
                 : "装備種別を選んでください(追加HPの算出条件に使用します)。"}
             </p>
           {/if}
+        {/if}
+        <!-- 強化 Lv・等級を押した結果がその場で出る面(§00 ④)。ソウルリンク7/8 の倍率も
+             ここで一緒に見せる — 別のペインまで見に行かないと最終値が分からないのを避ける -->
+        {#if partEnhance(slot)}
+          {@const enhance = partEnhance(slot)!}
+          <div class="enhance-readout inset num">
+            <span class="enhance-term">
+              <span class="dim">{slot === "weapon" ? "追加ダメージ" : "追加HP"}</span>
+              <b use:bump={() => enhance.added}>{fmtInt(enhance.added)}</b>
+            </span>
+            <span class="enhance-op" aria-hidden="true">×</span>
+            <span class="enhance-term">
+              <span class="dim">ソウルリンク</span>
+              <b use:bump={() => enhance.soul_link_multiplier}>×{enhance.soul_link_multiplier.toFixed(2)}</b>
+            </span>
+            <span class="enhance-op" aria-hidden="true">=</span>
+            <span class="enhance-term">
+              <span class="dim">合計</span>
+              <strong use:bump={() => enhance.total}>{fmtInt(enhance.total)}</strong>
+            </span>
+          </div>
         {/if}
       </div>
     {/if}

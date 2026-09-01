@@ -1198,6 +1198,19 @@ export interface StatPreview {
   /** 選択中バフが足した固定値/割合増加のうち、倍率A/B を持つ補正源(マスタリー等)に
    *  増幅されて最終能力値へ乗った分(ステ別)。バフ未選択なら全ステ 0 */
   buff_stat_amplification: EffectiveStats;
+  /** 装備強化(武器・鎧)の内訳。強化していない・装備種別未選択の部位は入らない */
+  part_enhance: PartEnhancePreview[];
+}
+
+// crates/commands/src/lib.rs の PartEnhancePreview。装備強化 1 部位ぶんの表示用内訳。
+export interface PartEnhancePreview {
+  slot: PartSlot;
+  /** ソウルリンクを掛ける前の追加効果(武器 = 追加固定ダメージ、鎧 = 追加HP) */
+  added: number;
+  /** ソウルリンク7(武器)/ 8(鎧)の倍率。Lv0 なら 1.0 */
+  soul_link_multiplier: number;
+  /** ソウルリンクまで掛けた最終値 */
+  total: number;
 }
 
 // crates/domain/src/equipment.rs の PartStatTotal。

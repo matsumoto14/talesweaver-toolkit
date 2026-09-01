@@ -352,7 +352,7 @@ pub fn preview_effective_stats(
     common_skills: CommonSkills,
     awakening: domain::Awakening,
     main_skill_id: Option<String>,
-) -> CommandResult<domain::StatPreview> {
+) -> CommandResult<commands::StatPreviewPayload> {
     commands::preview_effective_stats(
         base_stats,
         stat_sources,

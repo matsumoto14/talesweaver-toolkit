@@ -150,6 +150,11 @@ impl SoulLinkStatus {
     pub fn armor_added_hp_rate(self) -> f64 {
         f64::from(self.armor_enhance_level) * SOUL_LINK_ARMOR_ENHANCE_HP_RATE_PER_LEVEL
     }
+    /// 鎧強化の追加 HP にソウルリンク8 を掛けた値。武器(ソウルリンク7)と同じく、
+    /// 5% 刻みを整数比で表して 0 方向へ切り捨てる(`f64` だと 1.15 倍で桁が落ちる)。
+    pub fn armor_added_hp(self, base: i64) -> i64 {
+        base * (20 + i64::from(self.armor_enhance_level)) / 20
+    }
     pub fn preview(self) -> SoulLinkPreview {
         SoulLinkPreview {
             equipment_values: self.equipment_values(),
@@ -192,6 +197,18 @@ mod tests {
         assert!((status.final_damage_rate() - 0.20).abs() < f64::EPSILON);
         assert_eq!(status.weapon_added_damage(100), 300);
         assert!((status.armor_added_hp_rate() - 1.0).abs() < f64::EPSILON);
+        assert_eq!(status.armor_added_hp(100), 200);
+    }
+
+    #[test]
+    fn 鎧強化のソウルリンクは5パーセント刻みで切り捨てる() {
+        let status = SoulLinkStatus {
+            armor_enhance_level: 3,
+            ..Default::default()
+        };
+        // 1.15 倍。f64 だと 1_984_400 × 1.15 が 2_282_059.99… になって 1 落ちる
+        assert_eq!(status.armor_added_hp(1_984_400), 2_282_060);
+        assert_eq!(SoulLinkStatus::default().armor_added_hp(1_984_400), 1_984_400);
     }
 
     #[test]

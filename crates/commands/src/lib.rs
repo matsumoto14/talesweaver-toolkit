@@ -335,9 +335,10 @@ pub fn preview_effective_stats(
     common_skills: CommonSkills,
     awakening: domain::Awakening,
     main_skill_id: Option<String>,
-) -> CommandResult<domain::StatPreview> {
+) -> CommandResult<StatPreviewPayload> {
     let coefficients = attack_coefficients_of(main_skill_id.as_deref())?;
-    domain::preview_effective_stats(
+    let part_enhance = part_enhance_previews(&equipment, stat_sources.soul_link);
+    let base = domain::preview_effective_stats(
         &base_stats,
         &stat_sources,
         &buffs,
@@ -352,7 +353,11 @@ pub fn preview_effective_stats(
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
     )
-    .map_err(|e| e.to_string().into())
+    .map_err(|e| e.to_string())?;
+    Ok(StatPreviewPayload {
+        base,
+        part_enhance,
+    })
 }
 
 /// 「対象ステを選ぶ」バフの、ステごとの実際の効き(最終能力値が何点動くか)。
@@ -480,9 +485,11 @@ pub fn get_new_character_stat_sources() -> domain::StatSources {
 /// - 強化 Lv 0 は 0
 /// - +1〜+11 は確定倍率で式から算出
 /// - +12 以上は選択等級の確率区分上端で算出する
-fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
+/// 強化 Lv・等級から引いた倍率で出した追加固定ダメージ。
+/// 強化していない・装備種別や等級が決まっていないなら `None`。
+fn weapon_enhance(weapon: &EquipmentPart) -> Option<i64> {
     if weapon.enhance_level == 0 {
-        return 0;
+        return None;
     }
     let enhance_type = weapon.enhance_type.or_else(|| {
         weapon
@@ -490,24 +497,24 @@ fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
             .as_deref()
             .and_then(gamedata::equipment_enhance_type)
     });
-    let Some(rates) = enhance_type.and_then(gamedata::enhance_rates_for_type) else {
-        return 0;
+    let rates = enhance_type.and_then(gamedata::enhance_rates_for_type)?;
+    let multiplier = match gamedata::enhance_multiplier(weapon.enhance_level) {
+        Some(multiplier) => multiplier,
+        // +12 以上は等級ごとの確率区分。等級未選択なら倍率が決まらない
+        None => gamedata::enhance_grade_multiplier(weapon.enhance_level, weapon.enhance_grade?)?,
     };
     let values = weapon.base.add(weapon.enchant);
-    if let Some(multiplier) = gamedata::enhance_multiplier(weapon.enhance_level) {
-        return domain::weapon_added_damage(&values, &rates, multiplier);
-    }
-    let Some(grade) = weapon.enhance_grade else {
-        return 0;
-    };
-    let multiplier = gamedata::enhance_grade_multiplier(weapon.enhance_level, grade).unwrap_or(0.0);
-    domain::weapon_added_damage(&weapon.base.add(weapon.enchant), &rates, multiplier)
+    Some(domain::weapon_added_damage(&values, &rates, multiplier))
 }
 
-#[cfg(test)]
-fn armor_added_hp(armor: &EquipmentPart) -> i64 {
+fn weapon_added_damage(weapon: &EquipmentPart) -> i64 {
+    weapon_enhance(weapon).unwrap_or(0)
+}
+
+/// 鎧の強化による追加 HP。武器と違い等級を持たない段があるだけで式は同じ。
+fn armor_enhance(armor: &EquipmentPart) -> Option<i64> {
     if armor.enhance_level == 0 {
-        return 0;
+        return None;
     }
     let enhance_type = armor.enhance_type.or_else(|| {
         armor
@@ -515,19 +522,80 @@ fn armor_added_hp(armor: &EquipmentPart) -> i64 {
             .as_deref()
             .and_then(gamedata::equipment_enhance_type)
     });
-    let Some(class) = enhance_type.and_then(gamedata::armor_class_for_type) else {
-        return 0;
-    };
-    let multiplier =
-        gamedata::armor_enhance_multiplier(armor.enhance_level, armor.enhance_grade).unwrap_or(0.0);
+    let class = enhance_type.and_then(gamedata::armor_class_for_type)?;
+    let multiplier = gamedata::armor_enhance_multiplier(armor.enhance_level, armor.enhance_grade)?;
     let values = armor.base.add(armor.enchant);
     let rates = gamedata::armor_enhance_rates(class);
-    domain::armor_added_hp(
+    Some(domain::armor_added_hp(
         &values,
         rates.physical_defense,
         rates.magic_defense,
         multiplier,
-    )
+    ))
+}
+
+#[cfg(test)]
+fn armor_added_hp(armor: &EquipmentPart) -> i64 {
+    armor_enhance(armor).unwrap_or(0)
+}
+
+/// 装備強化 1 部位ぶんの表示用内訳(キャラタブの「装備強化」カード)。
+///
+/// 追加効果は gamedata の系統別補正式と等級倍率が要るので domain 側では組み立てられない。
+/// `StatLimitsPayload` と同じく、ここで gamedata と domain を合成して返す。
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+pub struct PartEnhancePreview {
+    pub slot: domain::PartSlot,
+    /// ソウルリンクを掛ける前の追加効果(武器 = 追加固定ダメージ、鎧 = 追加 HP)
+    pub added: i64,
+    /// ソウルリンク7(武器)/ 8(鎧)の倍率。Lv0 なら 1.0
+    pub soul_link_multiplier: f64,
+    /// ソウルリンクまで掛けた最終値
+    pub total: i64,
+}
+
+/// 装備強化を持てる部位(武器・鎧)の内訳。強化していない部位は返さない。
+fn part_enhance_previews(
+    equipment: &domain::Equipment,
+    soul_link: domain::SoulLinkStatus,
+) -> Vec<PartEnhancePreview> {
+    let mut previews = Vec::new();
+    if let Some(added) = equipment
+        .parts
+        .get(domain::PartSlot::Weapon)
+        .selected()
+        .and_then(weapon_enhance)
+    {
+        previews.push(PartEnhancePreview {
+            slot: domain::PartSlot::Weapon,
+            added,
+            soul_link_multiplier: soul_link.weapon_added_damage_multiplier(),
+            total: soul_link.weapon_added_damage(added),
+        });
+    }
+    if let Some(added) = equipment
+        .parts
+        .get(domain::PartSlot::Armor)
+        .selected()
+        .and_then(armor_enhance)
+    {
+        previews.push(PartEnhancePreview {
+            slot: domain::PartSlot::Armor,
+            added,
+            soul_link_multiplier: 1.0 + soul_link.armor_added_hp_rate(),
+            total: soul_link.armor_added_hp(added),
+        });
+    }
+    previews
+}
+
+/// `domain::StatPreview` に装備強化の内訳を足したもの。`StatLimitsPayload` と同じ理由で
+/// gamedata が要る値なので domain 側には置けず、ここで合成する。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StatPreviewPayload {
+    #[serde(flatten)]
+    pub base: domain::StatPreview,
+    pub part_enhance: Vec<PartEnhancePreview>,
 }
 
 /// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を gamedata から解決する。
