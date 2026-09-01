@@ -172,7 +172,7 @@ export interface EnchantGain {
 }
 
 /** 選ぶ人の目的。1つのバフが複数に所属できる。 */
-export type BuffPurpose = "stats" | "damage" | "durability";
+export type BuffPurpose = "stats" | "damage" | "durability" | "accuracy";
 /** 効果を得る場所の手掛かり。 */
 export type BuffOrigin = "item" | "event" | "club" | "skill" | "rune" | "soul_link" | "battle_state" | "minigame";
 
@@ -346,6 +346,8 @@ export type SkillEffect =
   | { actual_delay: { percent: number } }
   /** 与ダメージ式のカテゴリへの加算(上限はカテゴリ側が持つ) */
   | { damage: { category: DamageCategory; percent: number } }
+  /** 命中P増加(wiki 計算式まとめ #AccuracyPoint)。値はそのまま命中Pへ加算する固定値 */
+  | { accuracy_point: { value: number; disabled_with_precision_sword: boolean } }
   /** 記録するだけ(防御側・確率発動・条件付きで未配線) */
   | "record_only";
 
@@ -1334,7 +1336,7 @@ export interface HitRate {
 }
 
 // crates/domain/src/defense.rs の GrowthSource。命中P・回避Pの伸びしろの材料の出どころ。
-export type GrowthSource = "stat" | "enchant" | "siena" | "precision_sword";
+export type GrowthSource = "stat" | "enchant" | "siena" | "precision_sword" | "accuracy_buff";
 
 // crates/domain/src/defense.rs の GrowthRoom。命中P・回避P 1 材料ぶんの伸びしろ試算。
 export interface GrowthRoom {
@@ -1614,6 +1616,9 @@ export interface StatLimits {
   ultimate_rune_bonus_max: number;
   /** 致命打のクリティカル率増加 */
   deadly_blow_bonus_max: number;
+  /** ペット集中 / 的中剣の命中P割合増加(1.05 / 1.35)。画面の「×1.35」表記はここから引く */
+  concentration_accuracy_rate: number;
+  precision_sword_accuracy_rate: number;
   /** パワーウェポンの装備攻撃力強化倍率。Σ% の小数表現 */
   power_weapon_rate: number;
   /** ストロングウェポン 1Lv あたりの装備攻撃力強化倍率。Σ% の小数表現 */

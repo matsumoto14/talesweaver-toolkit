@@ -23,6 +23,7 @@
 
 <script lang="ts">
   import Icon, { type IconKind } from "./Icon.svelte";
+  import { positionPopover } from "./popover";
 
   interface Props {
     label?: string;
@@ -60,7 +61,7 @@
   {#if open}
     <!-- 候補は重なって出る。押した場所も下の行も動かない(§09 規則 3) -->
     <button type="button" class="picker-overlay" aria-label="閉じる" onclick={() => (open = false)}></button>
-    <div class="picker-pop pop-in">
+    <div class="picker-pop pop-in" use:positionPopover>
       {#if note}<div class="picker-pop-head">{note}</div>{/if}
       {#each options as o (o.value)}
         <button

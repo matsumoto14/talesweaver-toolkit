@@ -440,6 +440,8 @@ pub enum GrowthSource {
     Siena,
     /// 的中剣(命中Pのみ)
     PrecisionSword,
+    /// まだ選んでいない命中P増加バフを乗せる(命中Pのみ。wiki `#AccuracyPoint`)
+    AccuracyBuff,
 }
 
 /// 伸びしろ 1 件。「いまのキャラのまま、その材料を上限まで積んだら」と「いま」の差
@@ -506,14 +508,18 @@ fn accuracy_growth(
     stat_cap: i64,
     equipment: &Equipment,
     enchant_caps: &[(PartSlot, EquipmentValues)],
+    buff_catalog: &crate::stat_sources::BuffCatalog,
+    buff_selection: &crate::stat_sources::BuffSelection,
 ) -> (Vec<GrowthRoom>, i64) {
-    let recompute = |dex: i64, eq_accuracy: i64, boost: AccuracyBoost| {
+    // `extra_bonus` は命中P増加バフの伸びしろ(§下記)を足し込むための追加枠。
+    // 通常の材料(ステ・エンチャント・シエナ・的中剣)は 0 を渡す(いまの bonus のまま)。
+    let recompute = |dex: i64, eq_accuracy: i64, extra_bonus: i64, boost: AccuracyBoost| {
         accuracy_point(
             &EffectiveStats { dex, ..*stats },
             correction,
             eq_accuracy,
             skill_accuracy,
-            bonus,
+            bonus + extra_bonus,
             boost,
             false,
             random_option,
@@ -521,17 +527,19 @@ fn accuracy_growth(
     };
     // 的中剣は割合(×1.35)だけを見る。命中P変動(段ごとの `shift`)は未装着では
     // 段が決まらないので混ぜない — `PrecisionSword(1)` を通してから、その段の shift を差し引く。
-    let precision_sword_rate_only = |dex: i64, eq_accuracy: i64| {
+    let precision_sword_rate_only = |dex: i64, eq_accuracy: i64, extra_bonus: i64| {
         let probe = AccuracyBoost::PrecisionSword(1);
-        recompute(dex, eq_accuracy, probe) - probe.shift()
+        recompute(dex, eq_accuracy, extra_bonus, probe) - probe.shift()
     };
 
     let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.accuracy);
     let siena_gain = siena_room(equipment, SienaValueKind::Accuracy);
+    // まだ選んでいない命中P増加バフの合計(的中剣装着中は排他なバフを除く)
+    let buff_gain = crate::stat_sources::buff_accuracy_point_room(buff_selection, buff_catalog, boost);
 
     let mut out = Vec::new();
     if stats.dex < stat_cap {
-        let gain = recompute(stat_cap, equipment_accuracy, boost) - current;
+        let gain = recompute(stat_cap, equipment_accuracy, 0, boost) - current;
         if gain > 0 {
             out.push(GrowthRoom {
                 source: GrowthSource::Stat,
@@ -543,7 +551,7 @@ fn accuracy_growth(
         }
     }
     if enchant_gain > 0 {
-        let gain = recompute(stats.dex, equipment_accuracy + enchant_gain, boost) - current;
+        let gain = recompute(stats.dex, equipment_accuracy + enchant_gain, 0, boost) - current;
         if gain > 0 {
             out.push(GrowthRoom {
                 source: GrowthSource::Enchant,
@@ -555,7 +563,7 @@ fn accuracy_growth(
         }
     }
     if siena_gain > 0 {
-        let gain = recompute(stats.dex, equipment_accuracy + siena_gain, boost) - current;
+        let gain = recompute(stats.dex, equipment_accuracy + siena_gain, 0, boost) - current;
         if gain > 0 {
             out.push(GrowthRoom {
                 source: GrowthSource::Siena,
@@ -567,7 +575,7 @@ fn accuracy_growth(
         }
     }
     if matches!(boost, AccuracyBoost::None) {
-        let gain = precision_sword_rate_only(stats.dex, equipment_accuracy) - current;
+        let gain = precision_sword_rate_only(stats.dex, equipment_accuracy, 0) - current;
         if gain > 0 {
             out.push(GrowthRoom {
                 source: GrowthSource::PrecisionSword,
@@ -578,14 +586,26 @@ fn accuracy_growth(
             });
         }
     }
+    if buff_gain > 0 {
+        let gain = recompute(stats.dex, equipment_accuracy, buff_gain, boost) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::AccuracyBuff,
+                label: "命中P増加バフを乗せる".to_string(),
+                gain,
+                detail: Some(format!("+{buff_gain}")),
+                provisional: false,
+            });
+        }
+    }
     out.sort_by(|a, b| b.gain.cmp(&a.gain));
 
     let max_dex = stats.dex.max(stat_cap);
     let max_equipment_accuracy = equipment_accuracy + enchant_gain + siena_gain;
     let max = if matches!(boost, AccuracyBoost::None) {
-        precision_sword_rate_only(max_dex, max_equipment_accuracy)
+        precision_sword_rate_only(max_dex, max_equipment_accuracy, buff_gain)
     } else {
-        recompute(max_dex, max_equipment_accuracy, boost)
+        recompute(max_dex, max_equipment_accuracy, buff_gain, boost)
     };
     (out, max)
 }
@@ -726,10 +746,14 @@ pub struct VersusAttacker<'a> {
     pub equipment_accuracy: i64,
     /// wiki 表記のまま(`SKILL_ACCURACY_OFFSET` は `versus_accuracy` 内で足す)
     pub skill_accuracy: i64,
-    /// 命中P増加の合計(射手のルーン等)
+    /// 命中P増加の合計(射手のルーン等。呼び出し側が `buff_accuracy_point_total` で集計する)
     pub accuracy_bonus: i64,
     pub accuracy_boost: AccuracyBoost,
     pub accuracy_random_option: i64,
+    /// 命中P増加バフの伸びしろ材料の解決に要る(`buff_accuracy_point_room`)。
+    /// `accuracy_bonus` 自体は呼び出し側が集計済みの値を渡すので、ここは伸びしろ専用
+    pub accuracy_buff_catalog: &'a crate::stat_sources::BuffCatalog,
+    pub accuracy_buff_selection: &'a crate::stat_sources::BuffSelection,
     /// まだ供給源が無い(狩り場情報一覧のような表が PvP 側に無い)ため `None` を渡す。
     /// `Some` を渡せるようになったら `VersusAccuracy::min_rates_recorded` が自動で `true` になる
     pub min_hit_rate: Option<i64>,
@@ -791,6 +815,8 @@ pub fn versus_accuracy(
         attacker.stat_cap,
         attacker.equipment,
         attacker.enchant_caps,
+        attacker.accuracy_buff_catalog,
+        attacker.accuracy_buff_selection,
     );
     let defender_type_bonus = attack_type_bonus(defender.stats, attack_type);
     let (evasion_growth, evasion_max) = evasion_growth(
@@ -1249,6 +1275,8 @@ mod tests {
                 accuracy_bonus: 0,
                 accuracy_boost: AccuracyBoost::None,
                 accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
                 min_hit_rate: None,
             },
             &VersusDefender {
@@ -1301,6 +1329,8 @@ mod tests {
                 accuracy_bonus: 0,
                 accuracy_boost: AccuracyBoost::None,
                 accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
                 min_hit_rate: None,
             },
             &VersusDefender {
@@ -1344,6 +1374,8 @@ mod tests {
                 accuracy_bonus: 0,
                 accuracy_boost: AccuracyBoost::None,
                 accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
                 min_hit_rate: None,
             },
             &VersusDefender {
@@ -1374,6 +1406,8 @@ mod tests {
                 accuracy_bonus: 0,
                 accuracy_boost: AccuracyBoost::PrecisionSword(5),
                 accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
                 min_hit_rate: None,
             },
             &VersusDefender {
@@ -1436,6 +1470,8 @@ mod tests {
                 accuracy_bonus: 0,
                 accuracy_boost: AccuracyBoost::None,
                 accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
                 min_hit_rate: None,
             },
             &VersusDefender {

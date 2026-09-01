@@ -9,6 +9,7 @@ export const BUFF_PURPOSES: { id: BuffPurpose; label: string; description: strin
   { id: "stats", label: "ステータスを上げたい", description: "能力値が伸びる効果" },
   { id: "damage", label: "火力を上げたい", description: "攻撃ダメージ効果を持つバフ" },
   { id: "durability", label: "耐久を上げたい", description: "受けるダメージや生存力に関わる効果" },
+  { id: "accuracy", label: "命中を上げたい", description: "命中Pが伸びる効果" },
 ];
 
 /** 「火力」だけは purposes ではなく**攻撃ダメージ効果を持つか**で拾う(カタログの

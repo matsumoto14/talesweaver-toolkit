@@ -61,6 +61,15 @@ pub enum SkillEffect {
         category: DamageCategory,
         percent: f64,
     },
+    /// 命中P増加(wiki 計算式まとめ `#AccuracyPoint`: 射手のルーン・ハードウエポン(エアル)・
+    /// 遊び用チンキ剤・テイルズウィーバーのエネルギー等)。値はそのまま命中Pへ加算する固定値
+    AccuracyPoint {
+        value: i64,
+        /// 的中剣の効果中は無効になるか(wiki 注記: テイルズウィーバーのエネルギーのみ該当)。
+        /// `exclusive_slots` はバフ同士の排他しか表せない(的中剣はバフではなく装備状態)ため、
+        /// この効き先自体にフラグとして持たせる
+        disabled_with_precision_sword: bool,
+    },
     /// **記録するだけ**。wiki に効果はあるが、まだ配線していない
     /// (被ダメージ・移動速度・確率発動・条件付き・減衰する値)
     RecordOnly,
@@ -87,6 +96,7 @@ impl SkillEffect {
                     format!("{} +{percent}", category.label())
                 }
             }
+            SkillEffect::AccuracyPoint { value, .. } => format!("命中P +{value}"),
             SkillEffect::RecordOnly => "記録のみ".to_string(),
         }
     }

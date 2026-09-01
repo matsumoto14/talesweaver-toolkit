@@ -534,6 +534,7 @@ pub fn preview_versus(
     };
     let attacker_enchant_caps = resolve_enchant_caps(&attacker.equipment);
     let defender_enchant_caps = resolve_enchant_caps(&defender.equipment);
+    let buff_catalog = gamedata::buff_catalog();
 
     Ok(domain::versus_accuracy(
         &domain::VersusAttacker {
@@ -544,11 +545,16 @@ pub fn preview_versus(
             stat_cap: gamedata::awakening_caps(attacker.awakening).max_stat,
             equipment_accuracy: attacker_equipment_totals.accuracy,
             skill_accuracy,
-            // 命中P増加(射手のルーン等)・最小命中率補正は今回まだ入力を持たない
-            // ([仮] 中立値。build_damage_material の accuracy_bonus と同じ扱い)
-            accuracy_bonus: 0,
+            // 最小命中率補正は今回まだ入力を持たない([仮] 中立値)
+            accuracy_bonus: domain::stat_sources::buff_accuracy_point_total(
+                &attacker_buffs,
+                &buff_catalog,
+                accuracy_boost,
+            ),
             accuracy_boost,
             accuracy_random_option,
+            accuracy_buff_catalog: &buff_catalog,
+            accuracy_buff_selection: &attacker_buffs,
             min_hit_rate: None,
         },
         &domain::VersusDefender {
@@ -835,16 +841,20 @@ fn build_damage_material(
     let added_damage = stat_sources
         .soul_link
         .weapon_added_damage(weapon_added_damage);
+    let accuracy_boost = resolve_accuracy_boost(equipment, &gamedata::equipment_abilities());
     Ok(DamageMaterial {
         base_stats: base_stats.clone(),
         stat_modifiers,
         stat_contributions,
         equipment: equipment.clone(),
         common_skills,
-        // 命中P増加(射手のルーン等)・感電は今回まだ入力を持たない([仮] 中立値。
-        // goal 「命中Pの計算を wiki どおりに直す」の残タスク)
-        accuracy_bonus: 0,
-        accuracy_boost: resolve_accuracy_boost(equipment, &gamedata::equipment_abilities()),
+        // 感電は今回まだ入力を持たない([仮] 中立値。goal 「命中Pの計算を wiki どおりに直す」の残タスク)
+        accuracy_bonus: domain::stat_sources::buff_accuracy_point_total(
+            buffs,
+            &gamedata::buff_catalog(),
+            accuracy_boost,
+        ),
+        accuracy_boost,
         accuracy_shocked: false,
         random_options: equipment.random_option_totals(&gamedata::random_option_catalog()),
         weapon_added_damage: added_damage,

@@ -5,6 +5,7 @@
   // 計算は Rust 側(preview_versus → domain::versus_accuracy)。ここは組み立てて渡すだけ。
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
   import type { AccuracyBoost, GrowthRoom, GrowthSource, Skill, VersusAccuracy } from "../../api/types";
+  import { limits } from "../../limits.svelte";
   import { app, buffSelectionFor, gameCharacterName, payloadOf } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { badgeStyle } from "../../ui/states";
@@ -165,16 +166,19 @@
       : { label: "命中率", state: "met" as const };
   }
 
+  /** 倍率は domain の定数(limits 経由)。画面に写経しない */
   function boostLabel(boost: AccuracyBoost): string | null {
     if (boost === "none") return null;
-    if (boost === "concentration") return "ペット集中 ・ 命中P ×1.05";
-    return `的中剣 Lv${boost.precision_sword} ・ 命中P ×1.35`;
+    if (boost === "concentration") {
+      return `ペット集中 ・ 命中P ×${limits.concentration_accuracy_rate}`;
+    }
+    return `的中剣 Lv${boost.precision_sword} ・ 命中P ×${limits.precision_sword_accuracy_rate}`;
   }
 
   // --- 命中P・回避Pの伸びしろ(accuracy_growth / evasion_growth) --------------------
   // 材料の出どころ(GrowthSource)を軸に、2 人ぶんを同じ行へ揃える。並び順はこの固定順
   // (Rust 側は gain 降順で返すので、そのままだと側ごとに順番がずれて突き合わせにくい)。
-  const GROWTH_SOURCE_ORDER: GrowthSource[] = ["stat", "enchant", "siena", "precision_sword"];
+  const GROWTH_SOURCE_ORDER: GrowthSource[] = ["stat", "enchant", "siena", "precision_sword", "accuracy_buff"];
 
   interface GrowthRow { source: GrowthSource; label: string; a: GrowthRoom | null; b: GrowthRoom | null }
 
@@ -186,6 +190,11 @@
       return [{ source, label: (ai ?? bi)!.label, a: ai, b: bi }];
     });
   }
+
+  // 伸びしろは既定で畳む。開いたら材料ごとの内訳を出す(ユーザー指摘 2026-09-01)。
+  // 命中P・回避Pで独立に開閉できる(押した行はその場に留まり、下に生えるだけ)
+  let growthOpenAcc = $state(false);
+  let growthOpenEva = $state(false);
 </script>
 
 {#snippet numCell(value: number | null)}
@@ -214,20 +223,25 @@
   {/if}
 {/snippet}
 
-{#snippet growthItemCell(item: GrowthRoom | null)}
+{#snippet growthItemCell(item: GrowthRoom | null, unit: string)}
   {#if item === null}
     <span class="growth-none dim">—</span>
   {:else}
     <span class="growth-item">
-      <span class="num" use:bump={() => item.gain}>+{item.gain}</span>
       {#if item.detail}<span class="growth-detail dim">{item.detail}</span>{/if}
-      {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
+      <span class="growth-convert">
+        <span class="growth-arrow dim">→</span>
+        <span class="growth-unit dim">{unit}</span>
+        <span class="num" use:bump={() => item.gain}>+{item.gain}</span>
+        {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
+      </span>
     </span>
   {/if}
 {/snippet}
 
 {#snippet growthBlock(
   label: string,
+  unit: string,
   resultA: VersusAccuracy | null,
   resultB: VersusAccuracy | null,
   growthA: GrowthRoom[],
@@ -236,20 +250,49 @@
   maxB: number | null,
   pointA: number | null,
   pointB: number | null,
+  open: boolean,
+  onToggle: () => void,
 )}
   {@const rows = mergeGrowth(growthA, growthB)}
-  <div class="grid-row sub growth-total-row">
-    <div class="cell label">{label}</div>
+  {@const hasAny = growthA.length > 0 || growthB.length > 0}
+  <button
+    type="button"
+    class="grid-row sub growth-total-row"
+    class:openable={hasAny}
+    disabled={!hasAny}
+    aria-expanded={open}
+    onclick={onToggle}
+  >
+    <div class="cell label">
+      {label}
+      {#if hasAny}<span class="growth-chevron" class:open>▸</span>{/if}
+    </div>
     <div class="cell val">{@render growthSummaryCell(resultA, growthA.length, maxA, pointA)}</div>
     <div class="cell val">{@render growthSummaryCell(resultB, growthB.length, maxB, pointB)}</div>
-  </div>
-  {#each rows as row (row.source)}
-    <div class="grid-row sub growth-item-row">
-      <div class="cell label">{row.label}</div>
-      <div class="cell val">{@render growthItemCell(row.a)}</div>
-      <div class="cell val">{@render growthItemCell(row.b)}</div>
+  </button>
+  {#if open}
+    {#each rows as row (row.source)}
+      <div class="grid-row sub growth-item-row">
+        <div class="cell label">{row.label}</div>
+        <div class="cell val">{@render growthItemCell(row.a, unit)}</div>
+        <div class="cell val">{@render growthItemCell(row.b, unit)}</div>
+      </div>
+    {/each}
+  {/if}
+{/snippet}
+
+{#snippet sheetHead(a: (typeof app.characters)[number], b: (typeof app.characters)[number])}
+  <div class="grid-row head">
+    <div class="cell label"></div>
+    <div class="cell col">
+      <Icon kind="character" id={a.game_character_id} size={20} label={a.name} source={app.characterIcons[a.id] ?? null} />
+      <span class="col-name">{a.name}</span>
     </div>
-  {/each}
+    <div class="cell col">
+      <Icon kind="character" id={b.game_character_id} size={20} label={b.name} source={app.characterIcons[b.id] ?? null} />
+      <span class="col-name">{b.name}</span>
+    </div>
+  </div>
 {/snippet}
 
 {#snippet hitRateLine(
@@ -370,97 +413,98 @@
       {:else}
         {@const rAB = resultAB.result}
         {@const rBA = resultBA.result}
-        <!-- 突き合わせ表: 閉じたら比べられない画面なので、内訳は最初から全部出す(ユーザー指摘 2026-09-01) -->
-        <div class="sheet">
-          <div class="grid">
-            <div class="grid-row head">
-              <div class="cell label"></div>
-              <div class="cell col">
-                <Icon kind="character" id={charA.game_character_id} size={20} label={charA.name} source={app.characterIcons[charA.id] ?? null} />
-                <span class="col-name">{charA.name}</span>
-              </div>
-              <div class="cell col">
-                <Icon kind="character" id={charB.game_character_id} size={20} label={charB.name} source={app.characterIcons[charB.id] ?? null} />
-                <span class="col-name">{charB.name}</span>
-              </div>
-            </div>
 
-            <!-- 命中Pは各キャラが「攻撃側」になった方向の結果(A→B は A の命中P、B→A は B の命中P) -->
-            <div class="grid-row main">
-              <div class="cell label">命中P</div>
-              <div class="cell val strong">{@render numCell(rAB?.accuracy_point ?? null)}</div>
-              <div class="cell val strong">{@render numCell(rBA?.accuracy_point ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">DEX</div>
-              <div class="cell val">{@render numCell(rAB?.attacker_dex ?? null)}</div>
-              <div class="cell val">{@render numCell(rBA?.attacker_dex ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">装備命中</div>
-              <div class="cell val">{@render numCell(rAB?.equipment_accuracy ?? null)}</div>
-              <div class="cell val">{@render numCell(rBA?.equipment_accuracy ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">スキル命中</div>
-              <div class="cell val">{@render numCell(rAB?.skill_accuracy ?? null)}</div>
-              <div class="cell val">{@render numCell(rBA?.skill_accuracy ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">依存ボーナス / ペナルティ</div>
-              <div class="cell val">{@render textCell(rAB ? `+${rAB.correction_bonus} / −${rAB.correction_penalty}` : null)}</div>
-              <div class="cell val">{@render textCell(rBA ? `+${rBA.correction_bonus} / −${rBA.correction_penalty}` : null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">的中剣</div>
-              <div class="cell val">{@render textCell(rAB ? (boostLabel(rAB.accuracy_boost) ?? "なし") : null)}</div>
-              <div class="cell val">{@render textCell(rBA ? (boostLabel(rBA.accuracy_boost) ?? "なし") : null)}</div>
-            </div>
-            {@render growthBlock(
-              "伸びしろ", rAB, rBA,
-              rAB?.accuracy_growth ?? [], rBA?.accuracy_growth ?? [],
-              rAB?.accuracy_max ?? null, rBA?.accuracy_max ?? null,
-              rAB?.accuracy_point ?? null, rBA?.accuracy_point ?? null,
-            )}
-
-            <!-- 回避Pは各キャラが「防御側」になった方向の結果(A→B は B の回避P、B→A は A の回避P) -->
-            <div class="grid-row main">
-              <div class="cell label">回避P</div>
-              <div class="cell val strong">{@render numCell(rBA?.evasion_point ?? null)}</div>
-              <div class="cell val strong">{@render numCell(rAB?.evasion_point ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">AGI</div>
-              <div class="cell val">{@render numCell(rBA?.defender_agi ?? null)}</div>
-              <div class="cell val">{@render numCell(rAB?.defender_agi ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">装備回避率</div>
-              <div class="cell val">{@render numCell(rBA?.equipment_evasion ?? null)}</div>
-              <div class="cell val">{@render numCell(rAB?.equipment_evasion ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">装備敏捷度</div>
-              <div class="cell val">{@render numCell(rBA?.equipment_agility ?? null)}</div>
-              <div class="cell val">{@render numCell(rAB?.equipment_agility ?? null)}</div>
-            </div>
-            <div class="grid-row sub">
-              <div class="cell label">攻撃タイプ別増加</div>
-              <div class="cell val">{@render textCell(rBA ? rBA.attack_type_bonus.toFixed(1) : null)}</div>
-              <div class="cell val">{@render textCell(rAB ? rAB.attack_type_bonus.toFixed(1) : null)}</div>
-            </div>
-            {@render growthBlock(
-              "伸びしろ", rBA, rAB,
-              rBA?.evasion_growth ?? [], rAB?.evasion_growth ?? [],
-              rBA?.evasion_max ?? null, rAB?.evasion_max ?? null,
-              rBA?.evasion_point ?? null, rAB?.evasion_point ?? null,
-            )}
-          </div>
-        </div>
-
+        <!-- 主役の命中率 2 行を先に見せる。材料の突き合わせはその下(ユーザー指摘 2026-09-01) -->
         <div class="rates">
           {@render hitRateLine("AB", charA, charB, resultAB)}
           {@render hitRateLine("BA", charB, charA, resultBA)}
+        </div>
+
+        <!-- 突き合わせ表: 命中P・回避Pを横に並べて縦を半分にし、余った右側を埋める。
+             伸びしろは既定で畳み、開いたときだけ材料の内訳を出す(ユーザー指摘 2026-09-01) -->
+        <div class="twin">
+          <div class="sheet">
+            <div class="grid">
+              {@render sheetHead(charA, charB)}
+              <!-- 命中Pは各キャラが「攻撃側」になった方向の結果(A→B は A の命中P、B→A は B の命中P) -->
+              <div class="grid-row main">
+                <div class="cell label">命中P</div>
+                <div class="cell val strong">{@render numCell(rAB?.accuracy_point ?? null)}</div>
+                <div class="cell val strong">{@render numCell(rBA?.accuracy_point ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">DEX</div>
+                <div class="cell val">{@render numCell(rAB?.attacker_dex ?? null)}</div>
+                <div class="cell val">{@render numCell(rBA?.attacker_dex ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">装備命中</div>
+                <div class="cell val">{@render numCell(rAB?.equipment_accuracy ?? null)}</div>
+                <div class="cell val">{@render numCell(rBA?.equipment_accuracy ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">スキル命中</div>
+                <div class="cell val">{@render numCell(rAB?.skill_accuracy ?? null)}</div>
+                <div class="cell val">{@render numCell(rBA?.skill_accuracy ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">依存ボーナス / ペナルティ</div>
+                <div class="cell val">{@render textCell(rAB ? `+${rAB.correction_bonus} / −${rAB.correction_penalty}` : null)}</div>
+                <div class="cell val">{@render textCell(rBA ? `+${rBA.correction_bonus} / −${rBA.correction_penalty}` : null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">的中剣</div>
+                <div class="cell val">{@render textCell(rAB ? (boostLabel(rAB.accuracy_boost) ?? "なし") : null)}</div>
+                <div class="cell val">{@render textCell(rBA ? (boostLabel(rBA.accuracy_boost) ?? "なし") : null)}</div>
+              </div>
+              {@render growthBlock(
+                "伸びしろ", "命中P", rAB, rBA,
+                rAB?.accuracy_growth ?? [], rBA?.accuracy_growth ?? [],
+                rAB?.accuracy_max ?? null, rBA?.accuracy_max ?? null,
+                rAB?.accuracy_point ?? null, rBA?.accuracy_point ?? null,
+                growthOpenAcc, () => (growthOpenAcc = !growthOpenAcc),
+              )}
+            </div>
+          </div>
+
+          <div class="sheet">
+            <div class="grid">
+              {@render sheetHead(charA, charB)}
+              <!-- 回避Pは各キャラが「防御側」になった方向の結果(A→B は B の回避P、B→A は A の回避P) -->
+              <div class="grid-row main">
+                <div class="cell label">回避P</div>
+                <div class="cell val strong">{@render numCell(rBA?.evasion_point ?? null)}</div>
+                <div class="cell val strong">{@render numCell(rAB?.evasion_point ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">AGI</div>
+                <div class="cell val">{@render numCell(rBA?.defender_agi ?? null)}</div>
+                <div class="cell val">{@render numCell(rAB?.defender_agi ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">装備回避率</div>
+                <div class="cell val">{@render numCell(rBA?.equipment_evasion ?? null)}</div>
+                <div class="cell val">{@render numCell(rAB?.equipment_evasion ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">装備敏捷度</div>
+                <div class="cell val">{@render numCell(rBA?.equipment_agility ?? null)}</div>
+                <div class="cell val">{@render numCell(rAB?.equipment_agility ?? null)}</div>
+              </div>
+              <div class="grid-row sub">
+                <div class="cell label">攻撃タイプ別増加</div>
+                <div class="cell val">{@render textCell(rBA ? rBA.attack_type_bonus.toFixed(1) : null)}</div>
+                <div class="cell val">{@render textCell(rAB ? rAB.attack_type_bonus.toFixed(1) : null)}</div>
+              </div>
+              {@render growthBlock(
+                "伸びしろ", "回避P", rBA, rAB,
+                rBA?.evasion_growth ?? [], rAB?.evasion_growth ?? [],
+                rBA?.evasion_max ?? null, rAB?.evasion_max ?? null,
+                rBA?.evasion_point ?? null, rAB?.evasion_point ?? null,
+                growthOpenEva, () => (growthOpenEva = !growthOpenEva),
+              )}
+            </div>
+          </div>
         </div>
       {/if}
     {/if}
@@ -469,25 +513,28 @@
 
 <style>
   .versus-page { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--bg-mid); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 980px; }
   .empty { font-size: 12px; }
 
   .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
   .side-body { display: flex; flex-direction: column; gap: 10px; padding: 11px 13px 13px; }
 
-  /* 突き合わせ表: 2 人の材料を閉じずに並べる(§ux 「閉じていると比べられない」)。
+  /* 突き合わせ表: 命中P・回避Pを横に並べて縦を詰め、右の余白を埋める
+     (ユーザー指摘 2026-09-01: 縦に伸びすぎ・右に余白が多い) */
+  .twin { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+
+  /* 2 人の材料を閉じずに並べる(§ux 「閉じていると比べられない」)。
      中身ぶんの幅で左に寄せる ── 幅いっぱいまで伸ばすと数値の並びが間延びして読みにくい */
   .sheet {
-    width: max-content; max-width: 100%; align-self: flex-start;
+    width: max-content; max-width: 100%;
     border: 1px solid var(--border); border-radius: var(--r-window); background: var(--bg-field);
     overflow: hidden;
   }
   .grid { display: flex; flex-direction: column; }
   /* 列幅は「中身が読める」ことを優先する。キャラ名が「マキシ…」で切れると、
-     2 列のどちらがどちらか分からなくなる(§00 05 読めない文字は出さない)。
-     材料の名前も折り返さない幅を取る */
-  .grid-row { display: grid; grid-template-columns: 200px 200px 200px; align-items: baseline; column-gap: 14px; }
-  .cell { padding: 5px 13px; }
+     2 列のどちらがどちらか分からなくなる(§00 05 読めない文字は出さない) */
+  .grid-row { display: grid; grid-template-columns: 150px 140px 140px; align-items: baseline; column-gap: 10px; }
+  .cell { padding: 5px 12px; }
   .cell.label { color: var(--fg-sub); font-size: 10.5px; white-space: nowrap; }
   .cell.val { text-align: right; min-width: 0; }
   .cell.val :global(.num), .cell.val :global(.unk) { font-size: 11px; }
@@ -506,15 +553,31 @@
   .grid-row.sub .cell.label { padding-left: 24px; }
   .grid-row.sub .cell.val :global(.num) { color: var(--fg-sub); }
 
-  /* 伸びしろ: 命中P・回避Pの直下(sub)に「あと +N」の合計を出し、その下に材料(さらに一段
-     字下げ)を並べる。値は文字列(「あと +N」「伸びしろなし」)を含むので折り返しを許す
-     ── 他の sub 行と違い一発の数値だけでは終わらない */
+  /* 伸びしろ: 命中P・回避Pの直下(sub)に「あと +N」の合計行を出す。既定は畳んだまま
+     ── 開いたときだけその下に材料の内訳(さらに一段字下げ)が生える(押した行は動かない)。
+     値は文字列(「あと +N」「伸びしろなし」・内訳)を含むので折り返しを許す */
   .growth-total-row .cell.label { font-weight: 800; color: var(--fg-head); }
   .growth-total-row .cell.val :global(.growth-total) { font-weight: 800; color: var(--fg-head); }
-  .growth-item-row .cell.label { padding-left: 40px; }
+  /* button の既定見た目を消し、行としての見た目だけ残す */
+  button.growth-total-row {
+    background: none; border: none; margin: 0; padding: 0; font: inherit; color: inherit;
+    text-align: inherit; width: 100%; cursor: default;
+  }
+  button.growth-total-row.openable { cursor: pointer; }
+  button.growth-total-row.openable:hover .cell.label { color: var(--accent); }
+  button.growth-total-row.openable:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .growth-chevron {
+    display: inline-block; margin-left: 4px; font-size: 9px; color: var(--fg-dim);
+    transition: transform 0.15s ease;
+  }
+  .growth-chevron.open { transform: rotate(90deg); }
+  .growth-item-row .cell.label { padding-left: 40px; white-space: normal; }
   .growth-total-row .cell.val, .growth-item-row .cell.val { white-space: normal; overflow: visible; text-overflow: clip; }
   .growth-item { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
   .growth-detail { font-size: 9px; }
+  .growth-convert { display: inline-flex; align-items: baseline; gap: 3px; }
+  .growth-arrow { font-size: 9px; }
+  .growth-unit { font-size: 9px; }
   .growth-provisional {
     font-size: 9px; font-weight: 800; border-radius: var(--r-pill); padding: 1px 5px; border: 1px solid;
     margin-left: 4px;

@@ -24,6 +24,7 @@ export function singleEffectLabel(e: SkillEffect): string | null {
     return `${stats} +${e.stat_rate.percent}%`;
   }
   if ("actual_delay" in e) return `中ディレイ −${e.actual_delay.percent}%`;
+  if ("accuracy_point" in e) return `命中P +${e.accuracy_point.value}`;
   const { category, percent } = e.damage;
   const sign = percent < 0 ? "−" : "+";
   return `${damageCategoryLabel(category)} ${sign}${Math.abs(percent)}%`;

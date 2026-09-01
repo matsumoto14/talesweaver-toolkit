@@ -354,6 +354,8 @@ pub enum BuffPurpose {
     Stats,
     Damage,
     Durability,
+    /// 命中Pを伸ばす(wiki 計算式まとめ `#AccuracyPoint` の「命中P増加」)
+    Accuracy,
 }
 
 /// ゲーム内でその効果を得る手掛かり。厳密な入手先ではなく、一覧の補助表示に使う。
@@ -683,6 +685,55 @@ pub fn buff_damage_contributions(
         .flat_map(|d| d.damage_effects.iter().map(move |e| (d.name.to_string(), e)))
         .collect();
     damage_contributions(effects.into_iter())
+}
+
+/// 命中P増加効果(`SkillEffect::AccuracyPoint`)を持つバフだけへ絞り込み、的中剣装着中は
+/// `disabled_with_precision_sword` を持つものを除く(wiki 注記: テイルズウィーバーの
+/// エネルギーは的中剣の効果中は無効になる)。合計(`buff_accuracy_point_total`)と
+/// 伸びしろ(`buff_accuracy_point_room`)の両方が使う内側のフィルタ
+fn accuracy_point_values<'a>(
+    defs: impl Iterator<Item = &'a BuffDefinition>,
+    boost: crate::defense::AccuracyBoost,
+) -> i64 {
+    let precision_sword = matches!(boost, crate::defense::AccuracyBoost::PrecisionSword(_));
+    defs.flat_map(|d| d.damage_effects.iter())
+        .filter_map(|e| match e {
+            SkillEffect::AccuracyPoint {
+                value,
+                disabled_with_precision_sword,
+            } if !(precision_sword && *disabled_with_precision_sword) => Some(*value),
+            _ => None,
+        })
+        .sum()
+}
+
+/// 選んでいるバフの、命中P増加の合計(wiki 計算式まとめ `#AccuracyPoint`)。
+pub fn buff_accuracy_point_total(
+    buffs: &BuffSelection,
+    catalog: &BuffCatalog,
+    boost: crate::defense::AccuracyBoost,
+) -> i64 {
+    accuracy_point_values(
+        buffs
+            .choices
+            .iter()
+            .filter_map(|c| catalog.iter().find(|d| d.id == c.buff_id)),
+        boost,
+    )
+}
+
+/// まだ選んでいない命中P増加バフぶんの伸びしろ(§伸びしろの定義)。
+pub fn buff_accuracy_point_room(
+    buffs: &BuffSelection,
+    catalog: &BuffCatalog,
+    boost: crate::defense::AccuracyBoost,
+) -> i64 {
+    accuracy_point_values(
+        catalog
+            .iter()
+            .filter(|d| !buffs.choices.iter().any(|c| c.buff_id == d.id)),
+        boost,
+    )
 }
 
 /// バフ 1 件ぶんが、カテゴリ上限適用後の集計値へどれだけ配賦されるか。
@@ -1924,6 +1975,10 @@ pub struct StatLimits {
     /// 致命打のクリティカル率増加(wiki `#CriticalChance`)
     pub deadly_blow_bonus_max: f64,
     /// パワーウェポンの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
+    /// ペット集中 / 的中剣の命中P割合増加(wiki 計算式まとめ #AccuracyPoint)。
+    /// 画面が「×1.05」「×1.35」と出すのに使う ── 定数をフロントに写経しない
+    pub concentration_accuracy_rate: f64,
+    pub precision_sword_accuracy_rate: f64,
     pub power_weapon_rate: f64,
     /// ストロングウェポン 1Lv あたりの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
     pub strong_weapon_rate_per_level: f64,
@@ -2062,6 +2117,8 @@ pub fn stat_limits() -> StatLimits {
         architect_lab_per_stage: crate::critical_rate::ARCHITECT_LAB_PER_STAGE,
         ultimate_rune_bonus_max: CriticalRateSourceId::UltimateRune.max_value(),
         deadly_blow_bonus_max: CriticalRateSourceId::DeadlyBlow.max_value(),
+        concentration_accuracy_rate: crate::defense::CONCENTRATION_ACCURACY_RATE,
+        precision_sword_accuracy_rate: crate::defense::PRECISION_SWORD_ACCURACY_RATE,
         power_weapon_rate: crate::common_skill::POWER_WEAPON_RATE,
         strong_weapon_rate_per_level: crate::common_skill::STRONG_WEAPON_RATE_PER_LEVEL,
         coat_armor_physical_rate: crate::common_skill::COAT_ARMOR_PHYSICAL_RATE,
@@ -3797,5 +3854,59 @@ mod tests {
     #[test]
     fn 新規キャラ既定値はソウルリンクを含め未開放() {
         assert_eq!(StatSources::for_new_character(), StatSources::default());
+    }
+
+    /// 命中P増加バフの合計と伸びしろ。的中剣装着中は `disabled_with_precision_sword` を
+    /// 持つバフ(テイルズウィーバーのエネルギー相当)を除外する。
+    #[test]
+    fn 命中p増加バフの合計と的中剣排他() {
+        fn buff(id: &'static str, value: i64, disabled_with_precision_sword: bool) -> BuffDefinition {
+            BuffDefinition {
+                id,
+                name: id,
+                purposes: &[BuffPurpose::Accuracy],
+                origin: BuffOrigin::Skill,
+                target: BuffTarget::AllStats,
+                layer: StatLayer::PercentOfBase,
+                value: BuffValue::RecordOnly,
+                exclusive_slots: Vec::new(),
+                source_url: "",
+                note: "",
+                default_value: None,
+                damage_effects: Box::leak(Box::new([SkillEffect::AccuracyPoint {
+                    value,
+                    disabled_with_precision_sword,
+                }])),
+            }
+        }
+        let catalog = vec![
+            buff("normal_accuracy", 20, false),
+            buff("precision_sword_only", 5, true),
+        ];
+        let none = crate::defense::AccuracyBoost::None;
+        let sword = crate::defense::AccuracyBoost::PrecisionSword(5);
+
+        // 何も選んでいなければ合計 0、伸びしろは両方の値
+        let empty = BuffSelection::default();
+        assert_eq!(buff_accuracy_point_total(&empty, &catalog, none), 0);
+        assert_eq!(buff_accuracy_point_room(&empty, &catalog, none), 25);
+        // 的中剣装着中は排他なバフを伸びしろからも除く
+        assert_eq!(buff_accuracy_point_room(&empty, &catalog, sword), 20);
+
+        // 両方選んでいるとき、的中剣装着中は排他なバフの分だけ合計から落ちる
+        let both = BuffSelection {
+            choices: catalog
+                .iter()
+                .map(|d| BuffChoice {
+                    buff_id: d.id.to_string(),
+                    stat: None,
+                    choice_index: None,
+                    value: None,
+                })
+                .collect(),
+        };
+        assert_eq!(buff_accuracy_point_total(&both, &catalog, none), 25);
+        assert_eq!(buff_accuracy_point_total(&both, &catalog, sword), 20);
+        assert_eq!(buff_accuracy_point_room(&both, &catalog, none), 0);
     }
 }

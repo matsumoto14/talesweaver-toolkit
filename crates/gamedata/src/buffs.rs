@@ -16,7 +16,9 @@ use crate::Source;
 pub const BUFF_CATALOG_SOURCE: Source = Source {
     page: "ステータス#jc16a054",
     retrieved_on: "2026-08-31",
-    note: "常用バフ44件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照",
+    note: "常用バフ44件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照。\
+           命中P増加バフ3件(archer_rune/hard_weapon_earl/play_tincture)は計算式まとめ#AccuracyPoint 由来で\
+           カタログ全体は47件になる(出典は各エントリの source_url を参照)",
 };
 
 /// 常用バフのカタログ。
@@ -336,16 +338,67 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
         BuffDefinition {
             id: "tales_weaver_energy",
             name: "テイルズウィーバーのエネルギー",
-            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage],
+            purposes: &[BuffPurpose::Stats, BuffPurpose::Damage, BuffPurpose::Accuracy],
             origin: BuffOrigin::Skill,
             target: BuffTarget::AllStats,
             layer: StatLayer::MultiplierA,
             value: BuffValue::Fixed(1.1),
             exclusive_slots: vec![],
             source_url: WIKI_URL,
-            note: "",
+            note: "最小回避率+10%は未収録(供給源の器が無い)",
             default_value: None,
-            damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+            damage_effects: &[
+                SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 },
+                // 計算式まとめ #AccuracyPoint「命中P増加」表: +5。的中剣の効果中は無効になる
+                // (集中とは共存可能。取得 2026-09-01)
+                SkillEffect::AccuracyPoint { value: 5, disabled_with_precision_sword: true },
+            ],
+        },
+        BuffDefinition {
+            id: "archer_rune",
+            name: "射手のルーン",
+            purposes: &[BuffPurpose::Accuracy],
+            origin: BuffOrigin::Rune,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec![],
+            source_url: ACCURACY_POINT_WIKI_URL,
+            note: "最大レベル時 命中P+20",
+            default_value: None,
+            damage_effects: &[SkillEffect::AccuracyPoint { value: 20, disabled_with_precision_sword: false }],
+        },
+        BuffDefinition {
+            id: "hard_weapon_earl",
+            name: "ハードウエポン(エアル)",
+            purposes: &[BuffPurpose::Accuracy],
+            origin: BuffOrigin::Skill,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec![],
+            source_url: ACCURACY_POINT_WIKI_URL,
+            note: "命中P+15。character_skills.rs の anais_hard_weapon(アネイスの【ハードウエポン】\
+                   攻撃ダメージ +20%)とは同名の別スキル",
+            default_value: None,
+            damage_effects: &[SkillEffect::AccuracyPoint { value: 15, disabled_with_precision_sword: false }],
+        },
+        BuffDefinition {
+            id: "play_tincture",
+            name: "遊び用チンキ剤",
+            purposes: &[BuffPurpose::Accuracy],
+            origin: BuffOrigin::Skill,
+            target: BuffTarget::AllStats,
+            layer: StatLayer::PercentOfBase,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec![],
+            source_url: ACCURACY_POINT_WIKI_URL,
+            note: "ティシエルの極・遊び用チンキ剤(マスタリー tichiel_m3_3)のスキル命中率+20%。\
+                   ゲーム内表記が命中率+X%で詳細情報が表示されないため命中P+20として扱う(wiki 注記)。\
+                   移動速度+2 は未収録。tichiel_m3_3 はマスタリー所有者(ティシエル)しか選べないため、\
+                   味方バフとして誰でも選べるようここへ収録した([仮] 判断)",
+            default_value: None,
+            damage_effects: &[SkillEffect::AccuracyPoint { value: 20, disabled_with_precision_sword: false }],
         },
         // --- ダメージにだけ効くバフ(ステは上げない。wiki ステータスの [X1]〜[X6] / [L])---
         BuffDefinition {
@@ -697,6 +750,9 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
 }
 
 const WIKI_URL: &str = "https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9#jc16a054";
+/// 計算式まとめ「命中P増加」表(取得 2026-09-01)。命中Pに効くバフの出典
+const ACCURACY_POINT_WIKI_URL: &str =
+    "https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1#AccuracyPoint";
 const ITEM_BUFF_WIKI_URL: &str = "https://talewiki.com/?cmd=read&page=Item%2F%BE%C3%CC%D7%C9%CA%2F%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9%CA%E4%BD%F5";
 const CLUB_WIKI_URL: &str = "https://talewiki.com/?%A5%AF%A5%E9%A5%D6#club_S_effect";
 
@@ -706,8 +762,10 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn 常用バフは44件() {
-        assert_eq!(buff_catalog().len(), 44);
+    fn 常用バフは47件() {
+        // ステータス#jc16a054 の 44 件 + 計算式まとめ#AccuracyPoint の命中P増加バフ 3 件
+        // (archer_rune / hard_weapon_earl / play_tincture。tales_weaver_energy は既存の44件に含む)
+        assert_eq!(buff_catalog().len(), 47);
         assert!(!buff_catalog().iter().any(|d| d.id == "unleash"));
         assert!(!buff_catalog().iter().any(|d| d.id == "soul_link_status"));
     }
@@ -723,20 +781,27 @@ mod tests {
 
     /// ダメージにだけ効くバフは**ステを上げない**(`RecordOnly`)。
     /// 逆に、ステと与ダメージの両方に効くバフもある(守護者のためのポーション等)。
+    /// `damage_effects` はダメージ以外(命中P増加)も持てるので、判定は `SkillEffect::Damage`
+    /// を実際に持つかで見る(非空かどうかでは見ない)。
     #[test]
     fn ダメージへの効き先を持つバフ() {
         let catalog = buff_catalog();
+        let has_damage = |d: &BuffDefinition| {
+            d.damage_effects
+                .iter()
+                .any(|e| matches!(e, SkillEffect::Damage { .. }))
+        };
         for buff in &catalog {
             assert_eq!(
                 buff.purposes.contains(&BuffPurpose::Damage),
-                !buff.damage_effects.is_empty(),
+                has_damage(buff),
                 "{} の火力目的とダメージ効果が一致していない",
                 buff.id,
             );
         }
         let with_damage: Vec<&str> = catalog
             .iter()
-            .filter(|d| !d.damage_effects.is_empty())
+            .filter(|d| has_damage(d))
             .map(|d| d.id)
             .collect();
         assert_eq!(with_damage.len(), 30);
@@ -937,5 +1002,35 @@ mod tests {
             .filter(|slot| sakuraeda.exclusive_slots.contains(slot))
             .collect();
         assert!(!shared.is_empty(), "isabel_damage と sakuraeda_hitokata が枠を共有していない");
+    }
+
+    /// 命中P増加バフ 4 件(計算式まとめ #AccuracyPoint)の値と排他を固定する。
+    /// テイルズウィーバーのエネルギーだけ的中剣と排他(`disabled_with_precision_sword`)、
+    /// 他 3 件は排他無し。
+    #[test]
+    fn 命中p増加バフの値と的中剣排他() {
+        let catalog = buff_catalog();
+        let find = |id: &str| catalog.iter().find(|d| d.id == id).unwrap();
+        let accuracy_effect = |d: &BuffDefinition| {
+            d.damage_effects
+                .iter()
+                .find_map(|e| match e {
+                    SkillEffect::AccuracyPoint {
+                        value,
+                        disabled_with_precision_sword,
+                    } => Some((*value, *disabled_with_precision_sword)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{} に命中P増加効果が無い", d.id))
+        };
+
+        assert_eq!(accuracy_effect(find("archer_rune")), (20, false));
+        assert_eq!(accuracy_effect(find("hard_weapon_earl")), (15, false));
+        assert_eq!(accuracy_effect(find("play_tincture")), (20, false));
+        assert_eq!(accuracy_effect(find("tales_weaver_energy")), (5, true));
+
+        for id in ["archer_rune", "hard_weapon_earl", "play_tincture"] {
+            assert!(find(id).purposes.contains(&BuffPurpose::Accuracy), "{id}");
+        }
     }
 }
