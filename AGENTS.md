@@ -52,7 +52,7 @@ docs/ 直下は人向け。決定記録は docs/adr/(テーマ別 ADR)、エー�
 
 ## 実行ワークフロー
 
-メインセッション(Fable 5)が司令塔・最終判断者。Subagent は必要なときだけ使う。詳細と判断基準は docs/workflow.md。
+メインセッション(Fable 5.1)が司令塔・最終判断者。Subagent は必要なときだけ使う。詳細と判断基準は docs/workflow.md。
 
 **IMPORTANT: Subagent として実行されている場合はこの節を無視し、与えられたタスクを自分で直接遂行する。`Agent` を起動しない。**
 

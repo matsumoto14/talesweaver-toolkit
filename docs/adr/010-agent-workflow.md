@@ -26,3 +26,4 @@
 
 - 2026-08-21 時点で `researcher`/`implementer`/`reviewer` は専用定義が無く general-purpose で代用していたが、同日中に `~/.claude/agents/`(ユーザー単位)へ定義を配置して解消した。
 - 上記の再帰起動・重複レビューの実態を transcript 集計から把握し、2026-08-22 にこの整理をまとめて決定した。
+- 2026-09-02 メインを Fable 5.1(1M context)へ更新した棚卸しで、Subagent の `model` をフル ID からエイリアス `sonnet` に、Context 管理を手動 `/compact` から `autoCompactWindow` に置き換えた。未ドキュメントの `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` は外し、再帰ガードは `disallowedTools: Agent` に一本化。2026-08-28 の「実装は必ず implementer に委譲」はコンテキスト温存が目的だったので取り下げ、Small/Normal/Complex の 3 段階を標準に戻した。

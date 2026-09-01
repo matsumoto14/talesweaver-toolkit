@@ -4,7 +4,7 @@ CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用�
 
 ## Agent 定義
 
-`~/.claude/agents/`(ユーザー単位)に置く。すべて `disallowedTools: Agent`(再委譲禁止)。
+`~/.claude/agents/`(ユーザー単位)に置く。すべて `disallowedTools: Agent`(再委譲禁止)。`model` はエイリアス(`sonnet`)で書き、最新の Sonnet に追従させる。
 
 | Agent | model / effort | 用途 |
 |---|---|---|
@@ -14,7 +14,7 @@ CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用�
 | smoke-tester | Sonnet / medium | Tauri 実機の GUI 操作・撮影(WebView2 CDP + Playwright) |
 | Explore(組み込み) | — | ファイル探索・シンボル検索(機械的な探索は Haiku) |
 
-`~/.claude/settings.json` の `env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH="2"` でネストを 2 段に制限(既定 3)。`/code-review` の内部 fan-out は 2 段で動く。
+再帰ガードは各定義の `disallowedTools: Agent` だけ(`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` は現行 docs に無く、2026-09-02 に settings から外した)。
 
 ## Skills(`.claude/skills/`、必要なときだけ読み込まれる)
 
@@ -23,6 +23,7 @@ CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用�
 | talewiki-fetch | Tale Wiki(EUC-JP)のページソース取得スクリプトと落とし穴(NEC 拡張文字) |
 | gui-smoke | Tauri 実機の起動スクリプト・Playwright テンプレート・撮影規約。smoke-tester にプリロード |
 | finish-goal | goal 完了時のチェックリスト(テスト・決定記録・status・スクリーンショット) |
+| design-review | §00 の 5 原則で画面を点検する適合ループ(機械監査 + 実機監査 + ユーザー判断) |
 
 ## 3 段階の判断基準
 
@@ -48,7 +49,7 @@ CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用�
 ## Context 管理(ユーザー操作の推奨)
 
 - ひとまとまりの作業(goal)を完了して commit したら `/clear`。1 セッションに複数 goal を載せない。
-- context が 150k を超えたら区切りで `/compact`(自動 compact は上限付近でしか動かず、1M context ではほぼ発動しない)。
+- 自動 compact は `~/.claude/settings.json` の `autoCompactWindow`(200k)で発動する。区切りで手動 `/compact` してもよいが必須ではない。
 - 放置したセッションを再開するときは、続きが本当に必要か考え、必要なら最初に `/compact`。
 - `/code-review` は専用セッションで起動する(内部で 17 本前後の Agent が起動する)。
 
