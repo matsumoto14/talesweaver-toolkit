@@ -1333,6 +1333,22 @@ export interface HitRate {
   capped: boolean;
 }
 
+// crates/domain/src/defense.rs の GrowthSource。命中P・回避Pの伸びしろの材料の出どころ。
+export type GrowthSource = "stat" | "enchant" | "siena" | "precision_sword";
+
+// crates/domain/src/defense.rs の GrowthRoom。命中P・回避P 1 材料ぶんの伸びしろ試算。
+export interface GrowthRoom {
+  source: GrowthSource;
+  /** 「DEX を上限まで」など、画面にそのまま出す一言 */
+  label: string;
+  /** 命中P(または回避P)がいくつ増えるか */
+  gain: number;
+  /** 「1,178 → 2,200」のような内訳。無ければ null */
+  detail: string | null;
+  /** 見積りが [仮] か(シエナのように上振れするもの) */
+  provisional: boolean;
+}
+
 // crates/domain/src/defense.rs の VersusAccuracy(preview_versus の戻り値)。
 export interface VersusAccuracy {
   attack_type: AttackType;
@@ -1362,6 +1378,14 @@ export interface VersusAccuracy {
   hit_rate: HitRate;
   /** false のとき、最小命中率補正・最小回避率補正は未収録(0 決め打ち) */
   min_rates_recorded: boolean;
+  /** 攻撃側の命中P 伸びしろ(gain 降順、0 の材料は入っていない) */
+  accuracy_growth: GrowthRoom[];
+  /** 全部積んだときの命中P */
+  accuracy_max: number;
+  /** 防御側の回避P 伸びしろ */
+  evasion_growth: GrowthRoom[];
+  /** 全部積んだときの回避P */
+  evasion_max: number;
 }
 
 export interface FormulaStep {

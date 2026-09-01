@@ -4,7 +4,7 @@
   // であって、役割の入れ替え操作そのものが不要(ユーザー指摘 2026-09-01)。
   // 計算は Rust 側(preview_versus → domain::versus_accuracy)。ここは組み立てて渡すだけ。
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
-  import type { AccuracyBoost, Skill, VersusAccuracy } from "../../api/types";
+  import type { AccuracyBoost, GrowthRoom, GrowthSource, Skill, VersusAccuracy } from "../../api/types";
   import { app, buffSelectionFor, gameCharacterName, payloadOf } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { badgeStyle } from "../../ui/states";
@@ -170,6 +170,22 @@
     if (boost === "concentration") return "ペット集中 ・ 命中P ×1.05";
     return `的中剣 Lv${boost.precision_sword} ・ 命中P ×1.35`;
   }
+
+  // --- 命中P・回避Pの伸びしろ(accuracy_growth / evasion_growth) --------------------
+  // 材料の出どころ(GrowthSource)を軸に、2 人ぶんを同じ行へ揃える。並び順はこの固定順
+  // (Rust 側は gain 降順で返すので、そのままだと側ごとに順番がずれて突き合わせにくい)。
+  const GROWTH_SOURCE_ORDER: GrowthSource[] = ["stat", "enchant", "siena", "precision_sword"];
+
+  interface GrowthRow { source: GrowthSource; label: string; a: GrowthRoom | null; b: GrowthRoom | null }
+
+  function mergeGrowth(a: GrowthRoom[], b: GrowthRoom[]): GrowthRow[] {
+    return GROWTH_SOURCE_ORDER.flatMap((source) => {
+      const ai = a.find((g) => g.source === source) ?? null;
+      const bi = b.find((g) => g.source === source) ?? null;
+      if (!ai && !bi) return [];
+      return [{ source, label: (ai ?? bi)!.label, a: ai, b: bi }];
+    });
+  }
 </script>
 
 {#snippet numCell(value: number | null)}
@@ -186,6 +202,54 @@
   {:else}
     <span class="num" use:flash={() => value}>{value}</span>
   {/if}
+{/snippet}
+
+{#snippet growthSummaryCell(result: VersusAccuracy | null, growthCount: number, max: number | null, point: number | null)}
+  {#if result === null || max === null || point === null}
+    <span class="unk">?</span>
+  {:else if growthCount === 0}
+    <span class="growth-none dim">伸びしろなし</span>
+  {:else}
+    <span class="growth-total num" use:bump={() => max - point}>あと +{max - point}</span>
+  {/if}
+{/snippet}
+
+{#snippet growthItemCell(item: GrowthRoom | null)}
+  {#if item === null}
+    <span class="growth-none dim">—</span>
+  {:else}
+    <span class="growth-item">
+      <span class="num" use:bump={() => item.gain}>+{item.gain}</span>
+      {#if item.detail}<span class="growth-detail dim">{item.detail}</span>{/if}
+      {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet growthBlock(
+  label: string,
+  resultA: VersusAccuracy | null,
+  resultB: VersusAccuracy | null,
+  growthA: GrowthRoom[],
+  growthB: GrowthRoom[],
+  maxA: number | null,
+  maxB: number | null,
+  pointA: number | null,
+  pointB: number | null,
+)}
+  {@const rows = mergeGrowth(growthA, growthB)}
+  <div class="grid-row sub growth-total-row">
+    <div class="cell label">{label}</div>
+    <div class="cell val">{@render growthSummaryCell(resultA, growthA.length, maxA, pointA)}</div>
+    <div class="cell val">{@render growthSummaryCell(resultB, growthB.length, maxB, pointB)}</div>
+  </div>
+  {#each rows as row (row.source)}
+    <div class="grid-row sub growth-item-row">
+      <div class="cell label">{row.label}</div>
+      <div class="cell val">{@render growthItemCell(row.a)}</div>
+      <div class="cell val">{@render growthItemCell(row.b)}</div>
+    </div>
+  {/each}
 {/snippet}
 
 {#snippet hitRateLine(
@@ -352,6 +416,12 @@
               <div class="cell val">{@render textCell(rAB ? (boostLabel(rAB.accuracy_boost) ?? "なし") : null)}</div>
               <div class="cell val">{@render textCell(rBA ? (boostLabel(rBA.accuracy_boost) ?? "なし") : null)}</div>
             </div>
+            {@render growthBlock(
+              "伸びしろ", rAB, rBA,
+              rAB?.accuracy_growth ?? [], rBA?.accuracy_growth ?? [],
+              rAB?.accuracy_max ?? null, rBA?.accuracy_max ?? null,
+              rAB?.accuracy_point ?? null, rBA?.accuracy_point ?? null,
+            )}
 
             <!-- 回避Pは各キャラが「防御側」になった方向の結果(A→B は B の回避P、B→A は A の回避P) -->
             <div class="grid-row main">
@@ -379,6 +449,12 @@
               <div class="cell val">{@render textCell(rBA ? rBA.attack_type_bonus.toFixed(1) : null)}</div>
               <div class="cell val">{@render textCell(rAB ? rAB.attack_type_bonus.toFixed(1) : null)}</div>
             </div>
+            {@render growthBlock(
+              "伸びしろ", rBA, rAB,
+              rBA?.evasion_growth ?? [], rAB?.evasion_growth ?? [],
+              rBA?.evasion_max ?? null, rAB?.evasion_max ?? null,
+              rBA?.evasion_point ?? null, rAB?.evasion_point ?? null,
+            )}
           </div>
         </div>
 
@@ -429,6 +505,21 @@
   .grid-row.main .cell.val :global(.num) { font-size: 15px; font-weight: 800; color: var(--fg-head); }
   .grid-row.sub .cell.label { padding-left: 24px; }
   .grid-row.sub .cell.val :global(.num) { color: var(--fg-sub); }
+
+  /* 伸びしろ: 命中P・回避Pの直下(sub)に「あと +N」の合計を出し、その下に材料(さらに一段
+     字下げ)を並べる。値は文字列(「あと +N」「伸びしろなし」)を含むので折り返しを許す
+     ── 他の sub 行と違い一発の数値だけでは終わらない */
+  .growth-total-row .cell.label { font-weight: 800; color: var(--fg-head); }
+  .growth-total-row .cell.val :global(.growth-total) { font-weight: 800; color: var(--fg-head); }
+  .growth-item-row .cell.label { padding-left: 40px; }
+  .growth-total-row .cell.val, .growth-item-row .cell.val { white-space: normal; overflow: visible; text-overflow: clip; }
+  .growth-item { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .growth-detail { font-size: 9px; }
+  .growth-provisional {
+    font-size: 9px; font-weight: 800; border-radius: var(--r-pill); padding: 1px 5px; border: 1px solid;
+    margin-left: 4px;
+  }
+  .growth-none { font-size: 10.5px; }
 
   /* 未収録(供給源が無いのでまだ 0 決め打ち)。0 や空白ではなく ? + 破線で示す */
   .unk {

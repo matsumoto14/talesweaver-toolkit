@@ -13,9 +13,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::awakening::AwakeningCaps;
 use crate::common_skill::DefenseRates;
-use crate::equipment::EquipmentValues;
+use crate::equipment::{Equipment, EquipmentValues, PartSlot};
 use crate::random_option::RandomOptionTotals;
 use crate::rounding::floor_int;
+use crate::siena::{SienaValueKind, SIENA_STAGE_MAX};
 use crate::skill::SkillDependency;
 use crate::stats::{EffectiveStats, StatKind};
 
@@ -427,10 +428,246 @@ pub fn defense_profile(
     }
 }
 
+/// 命中P・回避Pの伸びしろの材料(§伸びしろの定義)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GrowthSource {
+    /// ステ上限まで(命中P = DEX、回避P = AGI)
+    Stat,
+    /// エンチャント枠の残り(命中率補正 / 回避率補正)
+    Enchant,
+    /// シエナのオーラの空きスロット(命中率 / 回避率)。実際は種類を選べないので上振れの見積り
+    Siena,
+    /// 的中剣(命中Pのみ)
+    PrecisionSword,
+}
+
+/// 伸びしろ 1 件。「いまのキャラのまま、その材料を上限まで積んだら」と「いま」の差
+/// (装備の買い替えは含めない)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GrowthRoom {
+    pub source: GrowthSource,
+    /// 「DEX を上限まで」など、画面にそのまま出す一言
+    pub label: String,
+    /// 命中P(または回避P)がいくつ増えるか
+    pub gain: i64,
+    /// 「1178 → 2200」のような内訳。出せないときは `None`
+    pub detail: Option<String>,
+    /// 見積りが `[仮]` か(シエナのように上振れするもの)
+    pub provisional: bool,
+}
+
+/// 装備の部位ごとに、シエナのオーラの空き段階へ `kind`(命中率 / 回避率)を最大値まで
+/// 積んだ場合の増分。`kind` が出ない部位(命中率・回避率は武器/盾に出ない)は数えない
+/// (`SienaValueKind::allowed_on`)。既にオーラを装着している部位だけが対象
+/// (`iter_selected` は選択中オーラが無い部位を返さない)。
+fn siena_room(equipment: &Equipment, kind: SienaValueKind) -> i64 {
+    let (_, max) = kind.range();
+    equipment
+        .siena
+        .iter_selected()
+        .filter(|&(slot, _)| kind.allowed_on(slot))
+        .map(|(_, aura)| (SIENA_STAGE_MAX - aura.stage()) as i64 * max)
+        .sum()
+}
+
+/// 装備の部位ごとに、エンチャント枠の残り(`EquipmentValues` の 1 フィールド `get`)の合計。
+/// `enchant_caps` は呼び出し側が `resolve_enchant_caps` で解決した、部位ごとの実測上限
+/// (カタログ item が付いている部位だけ渡ってくる)。
+fn enchant_room(
+    equipment: &Equipment,
+    enchant_caps: &[(PartSlot, EquipmentValues)],
+    get: fn(&EquipmentValues) -> i64,
+) -> i64 {
+    enchant_caps
+        .iter()
+        .filter_map(|&(slot, cap)| {
+            let part = equipment.parts.get(slot).selected()?;
+            let room = get(&cap) - get(&part.enchant);
+            (room > 0).then_some(room)
+        })
+        .sum()
+}
+
+/// 攻撃側の命中Pの伸びしろ(gain 降順)。「材料を差し替えて `accuracy_point` をもう一度通す」
+/// (`list_enchant_gains` が `rank_candidates` を再利用しているのと同じ考え方。丸めの
+/// 食い違いを作らない)。`stat_cap` は覚醒段階 + エタの意志 Lv で決まる DEX の上限
+/// (`AwakeningCaps::max_stat`)。
+#[allow(clippy::too_many_arguments)]
+fn accuracy_growth(
+    stats: &EffectiveStats,
+    correction: &AccuracyCorrection,
+    equipment_accuracy: i64,
+    skill_accuracy: i64,
+    bonus: i64,
+    boost: AccuracyBoost,
+    random_option: i64,
+    current: i64,
+    stat_cap: i64,
+    equipment: &Equipment,
+    enchant_caps: &[(PartSlot, EquipmentValues)],
+) -> (Vec<GrowthRoom>, i64) {
+    let recompute = |dex: i64, eq_accuracy: i64, boost: AccuracyBoost| {
+        accuracy_point(
+            &EffectiveStats { dex, ..*stats },
+            correction,
+            eq_accuracy,
+            skill_accuracy,
+            bonus,
+            boost,
+            false,
+            random_option,
+        )
+    };
+    // 的中剣は割合(×1.35)だけを見る。命中P変動(段ごとの `shift`)は未装着では
+    // 段が決まらないので混ぜない — `PrecisionSword(1)` を通してから、その段の shift を差し引く。
+    let precision_sword_rate_only = |dex: i64, eq_accuracy: i64| {
+        let probe = AccuracyBoost::PrecisionSword(1);
+        recompute(dex, eq_accuracy, probe) - probe.shift()
+    };
+
+    let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.accuracy);
+    let siena_gain = siena_room(equipment, SienaValueKind::Accuracy);
+
+    let mut out = Vec::new();
+    if stats.dex < stat_cap {
+        let gain = recompute(stat_cap, equipment_accuracy, boost) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::Stat,
+                label: format!("{} を上限まで", StatKind::Dex.label()),
+                gain,
+                detail: Some(format!("{} → {stat_cap}", stats.dex)),
+                provisional: false,
+            });
+        }
+    }
+    if enchant_gain > 0 {
+        let gain = recompute(stats.dex, equipment_accuracy + enchant_gain, boost) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::Enchant,
+                label: format!("エンチャント枠の{}を上限まで", EquipmentValues::ACCURACY_LABEL),
+                gain,
+                detail: Some(format!("+{enchant_gain}")),
+                provisional: false,
+            });
+        }
+    }
+    if siena_gain > 0 {
+        let gain = recompute(stats.dex, equipment_accuracy + siena_gain, boost) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::Siena,
+                label: "シエナの空きスロットに命中率を上限まで".to_string(),
+                gain,
+                detail: Some(format!("+{siena_gain}")),
+                provisional: true,
+            });
+        }
+    }
+    if matches!(boost, AccuracyBoost::None) {
+        let gain = precision_sword_rate_only(stats.dex, equipment_accuracy) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::PrecisionSword,
+                label: "的中剣を装着".to_string(),
+                gain,
+                detail: Some(format!("命中P割合 ×{PRECISION_SWORD_ACCURACY_RATE}")),
+                provisional: false,
+            });
+        }
+    }
+    out.sort_by(|a, b| b.gain.cmp(&a.gain));
+
+    let max_dex = stats.dex.max(stat_cap);
+    let max_equipment_accuracy = equipment_accuracy + enchant_gain + siena_gain;
+    let max = if matches!(boost, AccuracyBoost::None) {
+        precision_sword_rate_only(max_dex, max_equipment_accuracy)
+    } else {
+        recompute(max_dex, max_equipment_accuracy, boost)
+    };
+    (out, max)
+}
+
+/// 防御側の回避Pの伸びしろ(gain 降順)。`accuracy_growth` と同じ考え方
+/// (材料を差し替えて `evasion_point` をもう一度通す)。`stat_cap` は AGI の上限。
+#[allow(clippy::too_many_arguments)]
+fn evasion_growth(
+    stats: &EffectiveStats,
+    equipment_evasion: i64,
+    equipment_agility: i64,
+    type_bonus: f64,
+    random_option: i64,
+    current: i64,
+    stat_cap: i64,
+    equipment: &Equipment,
+    enchant_caps: &[(PartSlot, EquipmentValues)],
+) -> (Vec<GrowthRoom>, i64) {
+    let recompute = |agi: i64, evasion: i64| {
+        evasion_point(
+            &EffectiveStats { agi, ..*stats },
+            &EquipmentValues {
+                evasion,
+                agility: equipment_agility,
+                ..Default::default()
+            },
+            type_bonus,
+            random_option,
+        )
+    };
+
+    let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.evasion);
+    let siena_gain = siena_room(equipment, SienaValueKind::Evasion);
+
+    let mut out = Vec::new();
+    if stats.agi < stat_cap {
+        let gain = recompute(stat_cap, equipment_evasion) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::Stat,
+                label: format!("{} を上限まで", StatKind::Agi.label()),
+                gain,
+                detail: Some(format!("{} → {stat_cap}", stats.agi)),
+                provisional: false,
+            });
+        }
+    }
+    if enchant_gain > 0 {
+        let gain = recompute(stats.agi, equipment_evasion + enchant_gain) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::Enchant,
+                label: format!("エンチャント枠の{}を上限まで", EquipmentValues::EVASION_LABEL),
+                gain,
+                detail: Some(format!("+{enchant_gain}")),
+                provisional: false,
+            });
+        }
+    }
+    if siena_gain > 0 {
+        let gain = recompute(stats.agi, equipment_evasion + siena_gain) - current;
+        if gain > 0 {
+            out.push(GrowthRoom {
+                source: GrowthSource::Siena,
+                label: "シエナの空きスロットに回避率を上限まで".to_string(),
+                gain,
+                detail: Some(format!("+{siena_gain}")),
+                provisional: true,
+            });
+        }
+    }
+    out.sort_by(|a, b| b.gain.cmp(&a.gain));
+
+    let max_agi = stats.agi.max(stat_cap);
+    let max = recompute(max_agi, equipment_evasion + enchant_gain + siena_gain);
+    (out, max)
+}
+
 /// 対人の命中率一式(wiki `#AccuracyPoint` / `#EvasionPoint` / `#HitRate`)。
 /// 攻撃側の命中Pの内訳・防御側の採用回避Pの内訳を画面がそのまま出せるように、
 /// 途中式の値も持つ(対人タブの結果面専用)。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VersusAccuracy {
     /// 突き合わせた攻撃タイプ(攻撃側スキルの依存種別から判定)
     pub attack_type: AttackType,
@@ -466,6 +703,14 @@ pub struct VersusAccuracy {
     /// 最小命中率補正・最小回避率補正の供給源をまだ持たず、0 決め打ちで計算していることの
     /// 目印。`false` のとき、画面は `hit_rate` の下限・上限の内訳に `?` を出す
     pub min_rates_recorded: bool,
+    /// 攻撃側の命中Pの伸びしろ(材料ごと。gain 降順。伸びしろ無しの材料は入らない)
+    pub accuracy_growth: Vec<GrowthRoom>,
+    /// 攻撃側の命中Pの伸びしろを全部積んだときの命中P
+    pub accuracy_max: i64,
+    /// 防御側の回避Pの伸びしろ(材料ごと。gain 降順。伸びしろ無しの材料は入らない)
+    pub evasion_growth: Vec<GrowthRoom>,
+    /// 防御側の回避Pの伸びしろを全部積んだときの回避P
+    pub evasion_max: i64,
 }
 
 /// 対人の命中率を組み立てる(`preview_versus` コマンド専用)。
@@ -473,6 +718,12 @@ pub struct VersusAccuracy {
 /// `min_hit_rate` / `min_evasion_rate` はまだ供給源が無い(狩り場情報一覧のような表が
 /// PvP 側に無い)ため、呼び出し側は `None` を渡す。`Some` を渡せるようになったら
 /// `min_rates_recorded` が自動で `true` になる。
+///
+/// 伸びしろ(§伸びしろの定義)の材料解決はカタログが要るので呼び出し側(`commands`)の役目:
+/// `attacker_equipment` / `defender_equipment` はそれぞれの装備一式(エンチャント現在値・
+/// シエナのオーラ)、`attacker_enchant_caps` / `defender_enchant_caps` は
+/// `resolve_enchant_caps` で解決した部位ごとの実測上限、`attacker_stat_cap` /
+/// `defender_stat_cap` は `AwakeningCaps::max_stat`(DEX / AGI の上限)。
 #[allow(clippy::too_many_arguments)]
 pub fn versus_accuracy(
     attacker_stats: &EffectiveStats,
@@ -487,6 +738,16 @@ pub fn versus_accuracy(
     defender: &DefenseProfile,
     min_hit_rate: Option<i64>,
     min_evasion_rate: Option<i64>,
+    attacker_equipment: &Equipment,
+    attacker_enchant_caps: &[(PartSlot, EquipmentValues)],
+    attacker_stat_cap: i64,
+    defender_equipment: &Equipment,
+    defender_enchant_caps: &[(PartSlot, EquipmentValues)],
+    defender_stat_cap: i64,
+    // 回避Pのランダムオプション増加(「回避率が X 増加」の合計)。
+    // `defense_profile` が既に足し込んだ `defender.evasion_point` を伸びしろ計算でも
+    // そのまま再現するために要る(`RandomOptionTotals::evasion_point` と同じ値)。
+    defender_evasion_random_option: i64,
 ) -> VersusAccuracy {
     // 感電・雷電は今回まだ入力を持たない([仮] 中立値。build_damage_material と同じ扱い)。
     let attacker_accuracy_point = accuracy_point(
@@ -506,6 +767,31 @@ pub fn versus_accuracy(
         min_hit_rate.unwrap_or(0),
         min_evasion_rate.unwrap_or(0),
     );
+    let (accuracy_growth, accuracy_max) = accuracy_growth(
+        attacker_stats,
+        correction,
+        equipment_accuracy,
+        skill_accuracy,
+        accuracy_bonus,
+        accuracy_boost,
+        accuracy_random_option,
+        attacker_accuracy_point,
+        attacker_stat_cap,
+        attacker_equipment,
+        attacker_enchant_caps,
+    );
+    let defender_type_bonus = attack_type_bonus(defender_stats, attack_type);
+    let (evasion_growth, evasion_max) = evasion_growth(
+        defender_stats,
+        defender.equipment_evasion,
+        defender.equipment_agility,
+        defender_type_bonus,
+        defender_evasion_random_option,
+        defender_evasion_point,
+        defender_stat_cap,
+        defender_equipment,
+        defender_enchant_caps,
+    );
     VersusAccuracy {
         attack_type,
         attacker_dex: attacker_stats.dex,
@@ -520,10 +806,14 @@ pub fn versus_accuracy(
         defender_agi: defender_stats.agi,
         equipment_evasion: defender.equipment_evasion,
         equipment_agility: defender.equipment_agility,
-        attack_type_bonus: attack_type_bonus(defender_stats, attack_type),
+        attack_type_bonus: defender_type_bonus,
         evasion_point: defender_evasion_point,
         hit_rate: hit,
         min_rates_recorded: min_hit_rate.is_some() && min_evasion_rate.is_some(),
+        accuracy_growth,
+        accuracy_max,
+        evasion_growth,
+        evasion_max,
     }
 }
 
@@ -948,6 +1238,13 @@ mod tests {
             &defender,
             None,
             None,
+            &Equipment::default(),
+            &[],
+            crate::stats::BASE_STAT_MAX as i64,
+            &Equipment::default(),
+            &[],
+            crate::stats::BASE_STAT_MAX as i64,
+            0,
         );
         assert_eq!(v.accuracy_point, 100 + SKILL_ACCURACY_OFFSET);
         assert_eq!(v.evasion_point, defender.evasion_point.physical);
@@ -957,5 +1254,186 @@ mod tests {
         );
         assert!(!v.min_rates_recorded);
         assert_eq!(v.defender_agi, 100);
+    }
+
+    #[test]
+    fn ステが上限に張り付いていたらstatの伸びしろが出ない() {
+        let attacker = EffectiveStats {
+            dex: 200,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats {
+            agi: 150,
+            ..Default::default()
+        };
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let v = versus_accuracy(
+            &attacker,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::None,
+            0,
+            AttackType::Physical,
+            &defender_stats,
+            &defender,
+            None,
+            None,
+            &Equipment::default(),
+            &[],
+            attacker.dex, // ステ上限 = 現在値(張り付いている)
+            &Equipment::default(),
+            &[],
+            defender_stats.agi, // 同上(AGI)
+            0,
+        );
+        assert!(!v.accuracy_growth.iter().any(|g| g.source == GrowthSource::Stat));
+        assert!(!v.evasion_growth.iter().any(|g| g.source == GrowthSource::Stat));
+    }
+
+    #[test]
+    fn 的中剣を装着していないキャラだけprecision_swordの伸びしろが出る() {
+        let attacker = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats::default();
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let without = versus_accuracy(
+            &attacker,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::None,
+            0,
+            AttackType::Physical,
+            &defender_stats,
+            &defender,
+            None,
+            None,
+            &Equipment::default(),
+            &[],
+            attacker.dex, // ステ伸びしろは無関係にするため上限=現在値
+            &Equipment::default(),
+            &[],
+            defender_stats.agi,
+            0,
+        );
+        assert!(without
+            .accuracy_growth
+            .iter()
+            .any(|g| g.source == GrowthSource::PrecisionSword));
+
+        let with = versus_accuracy(
+            &attacker,
+            &neutral_correction(),
+            0,
+            0,
+            0,
+            AccuracyBoost::PrecisionSword(5),
+            0,
+            AttackType::Physical,
+            &defender_stats,
+            &defender,
+            None,
+            None,
+            &Equipment::default(),
+            &[],
+            attacker.dex,
+            &Equipment::default(),
+            &[],
+            defender_stats.agi,
+            0,
+        );
+        assert!(!with
+            .accuracy_growth
+            .iter()
+            .any(|g| g.source == GrowthSource::PrecisionSword));
+    }
+
+    #[test]
+    fn accuracy_maxは材料を全部積んで再計算した命中pと一致する() {
+        let attacker = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats::default();
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let mut equipment = Equipment::default();
+        equipment.parts.weapon = crate::equipment::EquipmentPartList::from(crate::equipment::EquipmentPart {
+            item_id: Some("w1".to_string()),
+            enchant: EquipmentValues {
+                accuracy: 10,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let enchant_caps = [(
+            PartSlot::Weapon,
+            EquipmentValues {
+                accuracy: 40,
+                ..Default::default()
+            },
+        )];
+        let stat_cap = 250;
+        let v = versus_accuracy(
+            &attacker,
+            &neutral_correction(),
+            10,
+            0,
+            0,
+            AccuracyBoost::None,
+            0,
+            AttackType::Physical,
+            &defender_stats,
+            &defender,
+            None,
+            None,
+            &equipment,
+            &enchant_caps,
+            stat_cap,
+            &Equipment::default(),
+            &[],
+            crate::stats::BASE_STAT_MAX as i64,
+            0,
+        );
+        // 全材料を積み直した命中P(ステ上限 + エンチャント上限 + 的中剣)と突き合わせる
+        let boosted_accuracy = 10 + (enchant_caps[0].1.accuracy - 10);
+        let probe = AccuracyBoost::PrecisionSword(1);
+        let recomputed = accuracy_point(
+            &EffectiveStats {
+                dex: stat_cap,
+                ..attacker
+            },
+            &neutral_correction(),
+            boosted_accuracy,
+            0,
+            0,
+            probe,
+            false,
+            0,
+        ) - probe.shift();
+        assert_eq!(v.accuracy_max, recomputed);
+        assert!(v.accuracy_max > v.accuracy_point);
     }
 }

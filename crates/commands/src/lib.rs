@@ -515,7 +515,25 @@ pub fn preview_versus(
         .equipment
         .random_option_totals(&gamedata::random_option_catalog())
         .accuracy_point;
+    let evasion_random_option = defender
+        .equipment
+        .random_option_totals(&gamedata::random_option_catalog())
+        .evasion_point;
     let attack_type = domain::AttackType::for_dependency(skill.dependency);
+
+    // 伸びしろ(§伸びしろの定義)の材料解決。エンチャント枠の実測上限はカタログ品だけ
+    // 引ける(`resolve_enchant_caps` と同じ経路。list_enchant_gains も同じパターン)。
+    let equipment_catalog = gamedata::equipment_catalog();
+    let resolve_enchant_caps = |equipment: &domain::Equipment| -> Vec<(domain::PartSlot, domain::EquipmentValues)> {
+        equipment
+            .parts
+            .iter()
+            .into_iter()
+            .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
+            .collect()
+    };
+    let attacker_enchant_caps = resolve_enchant_caps(&attacker.equipment);
+    let defender_enchant_caps = resolve_enchant_caps(&defender.equipment);
 
     Ok(domain::versus_accuracy(
         &attacker_preview.stats,
@@ -532,6 +550,13 @@ pub fn preview_versus(
         &defender_profile,
         None,
         None,
+        &attacker.equipment,
+        &attacker_enchant_caps,
+        gamedata::awakening_caps(attacker.awakening).max_stat,
+        &defender.equipment,
+        &defender_enchant_caps,
+        gamedata::awakening_caps(defender.awakening).max_stat,
+        evasion_random_option,
     ))
 }
 
