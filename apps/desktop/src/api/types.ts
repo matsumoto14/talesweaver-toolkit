@@ -147,8 +147,14 @@ export interface UpgradeCandidate {
   id: string;
   label: string;
   cost: CandidateCost;
+  /** 表記ダメージ(1 段。スキル分のみ)。コンテンツ到達判定はこの値で行う */
   per_hit_primary: number;
+  /** 実際に敵へ入る総量(表記 × 段数 + 武器強化の追加固定 + 割合追加) */
+  total_primary: number;
+  /** 表記ダメージの伸び率 */
   delta_pct: number;
+  /** 総量の伸び率。シャープネスビジョンのように表記が動かない候補はこちらにだけ出る */
+  delta_total_pct: number;
   /** 必要 /hit 以上か。need_per_hit の無いコンテンツでは常に false */
   reaches: boolean;
   applied: NewCharacter;

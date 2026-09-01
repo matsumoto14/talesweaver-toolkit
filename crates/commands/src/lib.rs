@@ -975,7 +975,11 @@ pub struct UpgradeCandidate {
     pub label: String,
     pub cost: domain::CandidateCost,
     pub per_hit_primary: i64,
+    pub total_primary: i64,
+    /// 表記ダメージ(1 段)の伸び率。ユーザーがふだん見ている数字
     pub delta_pct: i32,
+    /// 実際に敵へ入る総量の伸び率。表記が動かない候補(シャープネスビジョン等)はこちらにだけ出る
+    pub delta_total_pct: i32,
     /// 必要 /hit 以上か。`need_per_hit` が無いコンテンツでは常に `false`。
     pub reaches: bool,
     /// この候補を適用したキャラ payload。UI はこれをそのまま whatif の sim に入れる。
@@ -1064,27 +1068,31 @@ pub fn list_upgrade_candidates(
         .transpose()?
         .map(|s| s.dependency);
 
-    let per_hit = |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<i64> {
-        let input = build_damage_input(
-            &character.base_stats,
-            &character.game_character_id,
-            style_dependency,
-            &character.stat_sources,
-            &buffs,
-            equipment,
-            common_skills,
-            character.awakening,
-            skill.clone(),
-            enemy.clone(),
-            &content,
-            combo_count,
-            combo_skill_type,
-            temporary_adjustments.clone(),
-        )?;
-        Ok(domain::calculate_damage(&input).per_hit_primary)
-    };
+    // 表記ダメージ(到達判定の基準)と、実際に敵へ入る総量の 2 本を返す。シャープネスビジョンや
+    // 武器強化のように**表記は動かさず総量だけ増やす**候補があるので、片方だけでは拾えない
+    let damage =
+        |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<(i64, i64)> {
+            let input = build_damage_input(
+                &character.base_stats,
+                &character.game_character_id,
+                style_dependency,
+                &character.stat_sources,
+                &buffs,
+                equipment,
+                common_skills,
+                character.awakening,
+                skill.clone(),
+                enemy.clone(),
+                &content,
+                combo_count,
+                combo_skill_type,
+                temporary_adjustments.clone(),
+            )?;
+            let result = domain::calculate_damage(&input);
+            Ok((result.per_hit_primary, result.total_primary))
+        };
 
-    let base = per_hit(character.equipment.clone(), character.common_skills)?;
+    let (base_per_hit, base_total) = damage(character.equipment.clone(), character.common_skills)?;
 
     let equipment_catalog = gamedata::equipment_catalog();
     let resolved_enhance_type = |slot: domain::PartSlot| -> Option<domain::EquipmentEnhanceType> {
@@ -1123,10 +1131,15 @@ pub fn list_upgrade_candidates(
 
     let mut outcomes = Vec::with_capacity(changes.len());
     for change in &changes {
-        let result = per_hit(change.equipment.clone(), change.common_skills)?;
-        outcomes.push((change.id.clone(), result));
+        let (per_hit_primary, total_primary) =
+            damage(change.equipment.clone(), change.common_skills)?;
+        outcomes.push(domain::CandidateOutcome {
+            id: change.id.clone(),
+            per_hit_primary,
+            total_primary,
+        });
     }
-    let ranked = domain::rank_candidates(outcomes, base, content.need_per_hit);
+    let ranked = domain::rank_candidates(outcomes, base_per_hit, base_total, content.need_per_hit);
 
     let mut by_id: std::collections::HashMap<String, domain::CandidateChange> =
         changes.into_iter().map(|c| (c.id.clone(), c)).collect();
@@ -1142,7 +1155,9 @@ pub fn list_upgrade_candidates(
                 label: change.label,
                 cost: change.cost,
                 per_hit_primary: r.per_hit_primary,
+                total_primary: r.total_primary,
                 delta_pct: r.delta_pct,
+                delta_total_pct: r.delta_total_pct,
                 reaches: r.reaches,
                 applied,
             })
@@ -1185,27 +1200,29 @@ pub fn list_enchant_gains(
         .transpose()?
         .map(|s| s.dependency);
 
-    let per_hit = |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<i64> {
-        let input = build_damage_input(
-            &character.base_stats,
-            &character.game_character_id,
-            style_dependency,
-            &character.stat_sources,
-            &buffs,
-            equipment,
-            common_skills,
-            character.awakening,
-            skill.clone(),
-            enemy.clone(),
-            &content,
-            combo_count,
-            combo_skill_type,
-            temporary_adjustments.clone(),
-        )?;
-        Ok(domain::calculate_damage(&input).per_hit_primary)
-    };
+    let per_hit =
+        |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<(i64, i64)> {
+            let input = build_damage_input(
+                &character.base_stats,
+                &character.game_character_id,
+                style_dependency,
+                &character.stat_sources,
+                &buffs,
+                equipment,
+                common_skills,
+                character.awakening,
+                skill.clone(),
+                enemy.clone(),
+                &content,
+                combo_count,
+                combo_skill_type,
+                temporary_adjustments.clone(),
+            )?;
+            let result = domain::calculate_damage(&input);
+            Ok((result.per_hit_primary, result.total_primary))
+        };
 
-    let base = per_hit(character.equipment.clone(), character.common_skills)?;
+    let (base_per_hit, base_total) = per_hit(character.equipment.clone(), character.common_skills)?;
 
     let equipment_catalog = gamedata::equipment_catalog();
     let enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)> = character
@@ -1227,10 +1244,15 @@ pub fn list_enchant_gains(
 
     let mut outcomes = Vec::with_capacity(changes.len());
     for change in &changes {
-        let result = per_hit(change.equipment.clone(), change.common_skills)?;
-        outcomes.push((change.id.clone(), result));
+        let (per_hit_primary, total_primary) =
+            per_hit(change.equipment.clone(), change.common_skills)?;
+        outcomes.push(domain::CandidateOutcome {
+            id: change.id.clone(),
+            per_hit_primary,
+            total_primary,
+        });
     }
-    let ranked = domain::rank_candidates(outcomes, base, None);
+    let ranked = domain::rank_candidates(outcomes, base_per_hit, base_total, None);
 
     // id は "enchant-{slot:?}-{key}"(小文字化)形式だが、`{:?}` は元の PartSlot の
     // 表記ゆれ(例: ShieldPlus → シリアライズは shield_plus だが Debug は shieldplus)を持つので

@@ -77,7 +77,19 @@ const WATCH = `(() => {
   await page.locator(".combo .check input[type=checkbox]").first().dispatchEvent("click").catch(() => {});
   await wait(700);
 
+  // 「計算の材料」のカードは既定で全部畳んである。中の入力を測るには先に開く
+  const head = (title) =>
+    page.locator(".card-head", { has: page.locator(".card-title", { hasText: new RegExp("^" + title + "$") }) });
+  const card = (title) => page.locator(".card", { has: head(title) });
+  const openCard = async (title) => {
+    if ((await card(title).locator(".basics-rows, .ultimate-chips").count()) === 0) {
+      await head(title).click();
+      await wait(700);
+    }
+  };
+
   // --- 極限スキルを入れ替える(1 発・合計・1 秒あたり・クリ率が同時に変わる)
+  await openCard("極限スキル");
   const ult = page.locator(".ultimate-chip:not([disabled])");
   if (await ult.count()) {
     await probe("計算・極限スキルを外す", async () => {
@@ -88,6 +100,36 @@ const WATCH = `(() => {
     await wait(700);
   } else {
     console.log("  [計算・極限スキル] 押せるチップが無いので未実行");
+  }
+  await head("極限スキル").click();
+  await wait(500);
+
+  // --- 地力(覚醒・エタの意志 / シャープネスビジョン / ソウルリンク)。
+  // どれも「見出しの要約」「カード内の効果値」「1 発・合計・1 秒あたり」が同時に変わる
+  const materialProbes = [
+    {
+      title: "覚醒・エタの意志",
+      pick: () => card("覚醒・エタの意志").locator(".basics-row", { hasText: "節目" }).locator(".seg .step").last(),
+    },
+    {
+      title: "シャープネスビジョン",
+      pick: () => card("シャープネスビジョン").locator(".basics-row", { hasText: "Lv" }).locator(".seg .step").last(),
+    },
+    {
+      title: "ソウルリンク",
+      pick: () =>
+        card("ソウルリンク")
+          .locator(".basics-row", { hasText: "クリダメ" })
+          .locator("button", { hasText: /^MAX$/ }),
+    },
+  ];
+  for (const { title, pick } of materialProbes) {
+    await openCard(title);
+    await probe(`計算・${title}`, async () => {
+      await pick().dispatchEvent("click");
+    });
+    await head(title).click();
+    await wait(500);
   }
 
   await browser.close();

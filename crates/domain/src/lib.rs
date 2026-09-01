@@ -44,7 +44,7 @@ pub use awakening::{Awakening, AwakeningCaps};
 pub use candidate::{
     aura_candidates, enchant_candidates, enchant_dependency_keys, enhance_candidates,
     list_candidate_changes, quick_win_candidates, rank_candidates, CandidateChange, CandidateCost,
-    RankedCandidate,
+    CandidateOutcome, RankedCandidate,
 };
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 pub use character::NewCharacter;

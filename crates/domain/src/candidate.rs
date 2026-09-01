@@ -10,7 +10,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common_skill::{
-    CommonSkills, POWER_WEAPON_RATE, STRONG_WEAPON_LEVEL_MAX, STRONG_WEAPON_RATE_PER_LEVEL,
+    CommonSkills, POWER_WEAPON_RATE, SHARPNESS_VISION, SHARPNESS_VISION_LEVEL_MAX,
+    STRONG_WEAPON_LEVEL_MAX, STRONG_WEAPON_RATE_PER_LEVEL,
 };
 use crate::equipment::{
     Equipment, EquipmentCoefficients, EquipmentEnhanceType, EquipmentRates, EquipmentValues, EnhanceGrade,
@@ -46,7 +47,7 @@ pub struct CandidateChange {
     pub common_skills: CommonSkills,
 }
 
-/// パワーウェポン ON / ストロングウェポン上限。装備には触れない。
+/// パワーウェポン ON / ストロングウェポン上限 / シャープネスビジョン上限。装備には触れない。
 pub fn quick_win_candidates(equipment: &Equipment, common_skills: &CommonSkills) -> Vec<CandidateChange> {
     let mut out = Vec::new();
     if !common_skills.power_weapon {
@@ -70,6 +71,23 @@ pub fn quick_win_candidates(equipment: &Equipment, common_skills: &CommonSkills)
             id: "sw".to_string(),
             label: format!(
                 "ストロングウェポンを Lv{STRONG_WEAPON_LEVEL_MAX} に(装備攻撃力強化 +{}%)",
+                (rate * 100.0).round() as i64
+            ),
+            cost: CandidateCost::QuickWin,
+            equipment: equipment.clone(),
+            common_skills: skills,
+        });
+    }
+    if common_skills.sharpness_vision_level < SHARPNESS_VISION_LEVEL_MAX {
+        let mut skills = *common_skills;
+        skills.sharpness_vision_level = SHARPNESS_VISION_LEVEL_MAX;
+        // 割合追加ダメージ(§5 新-割合)。**表記ダメージ(1 段)は動かず合計ダメージだけ増える**ので、
+        // この候補の効きは `rank_candidates` の合計側(`delta_total_pct`)にしか出ない
+        let rate = SHARPNESS_VISION[SHARPNESS_VISION_LEVEL_MAX as usize - 1];
+        out.push(CandidateChange {
+            id: "sv".to_string(),
+            label: format!(
+                "シャープネスビジョンを Lv{SHARPNESS_VISION_LEVEL_MAX} に(割合追加ダメージ +{}%)",
                 (rate * 100.0).round() as i64
             ),
             cost: CandidateCost::QuickWin,
@@ -280,46 +298,72 @@ pub fn list_candidate_changes(
     out
 }
 
+/// 候補 1 件の試算結果。**2 本立て**で持つ:
+/// - `per_hit_primary`: 表記ダメージ(1 段)。ゲームが出す数字で、コンテンツ到達判定の基準
+/// - `total_primary`: 実際に敵へ入る総量(表記 × 段数 + 武器強化の追加固定 + 割合追加)
+///
+/// シャープネスビジョンや武器強化のように**表記は動かさず総量だけ増やす**ものがあるので、
+/// 片方だけでは「効いているのに 0% と出る」候補が生まれる(docs/damage-formula.md §5)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct CandidateOutcome {
+    pub id: String,
+    pub per_hit_primary: i64,
+    pub total_primary: i64,
+}
+
 /// 試算後の候補 1 件(並び替え済み)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RankedCandidate {
     pub id: String,
     pub per_hit_primary: i64,
+    pub total_primary: i64,
+    /// 表記ダメージ(1 段)の伸び率。ユーザーがふだん見ている数字
     pub delta_pct: i32,
+    /// 実際に敵へ入る総量の伸び率。表記が動かない候補はこちらにだけ出る
+    pub delta_total_pct: i32,
     /// 必要 /hit 以上か。`need_per_hit` が無いコンテンツでは常に `false`。
     pub reaches: bool,
 }
 
-/// 試算結果 `(id, per_hit_primary)` を「届かせるなら」に正直な順へ並べる。
+/// 試算結果を「届かせるなら」に正直な順へ並べる。
 ///
-/// - 現状(`base`)を超えない(`per_hit_primary <= base`)候補は改善しない・悪化するのどちらも除外する。
+/// - **表記も総量も現状を超えない**候補は除外する。表記が動かず総量だけ増えるもの
+///   (シャープネスビジョン・武器強化)は残る。
 /// - `need_per_hit` があるとき: 届く候補のうち増分が最小のものを先頭に固定し、残りは
-///   `per_hit_primary` 降順。届く候補が無ければ全体を `per_hit_primary` 降順にする。
-/// - `need_per_hit` が無いときは `per_hit_primary` 降順のみ。
+///   `per_hit_primary` 降順(同値は `total_primary` 降順)。届く候補が無ければ全体を同じ順に並べる。
+/// - 到達判定と並び順の主キーが表記ダメージなのは、ゲームの表示とコンテンツの必要 /hit が
+///   その値だから。総量は伸び率の 2 本目として添える(ユーザー判断 2026-09-01)。
 pub fn rank_candidates(
-    items: Vec<(String, i64)>,
-    base: i64,
+    items: Vec<CandidateOutcome>,
+    base_per_hit: i64,
+    base_total: i64,
     need_per_hit: Option<i64>,
 ) -> Vec<RankedCandidate> {
+    let pct = |value: i64, base: i64| -> i32 {
+        if base > 0 {
+            (((value as f64 / base as f64) - 1.0) * 100.0).round() as i32
+        } else {
+            0
+        }
+    };
     let mut ranked: Vec<RankedCandidate> = items
         .into_iter()
-        .map(|(id, per_hit_primary)| {
-            let delta_pct = if base > 0 {
-                (((per_hit_primary as f64 / base as f64) - 1.0) * 100.0).round() as i32
-            } else {
-                0
-            };
-            let reaches = need_per_hit.is_some_and(|need| per_hit_primary >= need);
-            RankedCandidate {
-                id,
-                per_hit_primary,
-                delta_pct,
-                reaches,
-            }
+        .map(|o| RankedCandidate {
+            delta_pct: pct(o.per_hit_primary, base_per_hit),
+            delta_total_pct: pct(o.total_primary, base_total),
+            reaches: need_per_hit.is_some_and(|need| o.per_hit_primary >= need),
+            id: o.id,
+            per_hit_primary: o.per_hit_primary,
+            total_primary: o.total_primary,
         })
-        .filter(|r| r.per_hit_primary > base)
+        .filter(|r| r.per_hit_primary > base_per_hit || r.total_primary > base_total)
         .collect();
 
+    let by_damage = |a: &RankedCandidate, b: &RankedCandidate| {
+        b.per_hit_primary
+            .cmp(&a.per_hit_primary)
+            .then(b.total_primary.cmp(&a.total_primary))
+    };
     if let Some(need) = need_per_hit {
         if let Some(pin_idx) = ranked
             .iter()
@@ -329,12 +373,12 @@ pub fn rank_candidates(
             .map(|(i, _)| i)
         {
             let pin = ranked.remove(pin_idx);
-            ranked.sort_by(|a, b| b.per_hit_primary.cmp(&a.per_hit_primary));
+            ranked.sort_by(by_damage);
             ranked.insert(0, pin);
             return ranked;
         }
     }
-    ranked.sort_by(|a, b| b.per_hit_primary.cmp(&a.per_hit_primary));
+    ranked.sort_by(by_damage);
     ranked
 }
 
@@ -353,19 +397,22 @@ mod tests {
     }
 
     #[test]
-    fn quick_winはパワーウェポン未onとswレベル未満のときだけ出る() {
+    fn quick_winはパワーウェポン未onとswレベル未満とsv未上限のときだけ出る() {
         let equipment = Equipment::default();
         let common_skills = CommonSkills::default();
         let candidates = quick_win_candidates(&equipment, &common_skills);
-        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates.len(), 3);
         assert!(candidates.iter().any(|c| c.id == "pw" && c.common_skills.power_weapon));
         assert!(candidates.iter().any(|c| c.id == "sw"
             && c.common_skills.strong_weapon_level == STRONG_WEAPON_LEVEL_MAX
             && c.common_skills.augment_level == STRONG_WEAPON_LEVEL_MAX - 1));
+        assert!(candidates.iter().any(|c| c.id == "sv"
+            && c.common_skills.sharpness_vision_level == SHARPNESS_VISION_LEVEL_MAX));
 
         let maxed = CommonSkills {
             power_weapon: true,
             strong_weapon_level: STRONG_WEAPON_LEVEL_MAX,
+            sharpness_vision_level: SHARPNESS_VISION_LEVEL_MAX,
             ..Default::default()
         };
         assert!(quick_win_candidates(&equipment, &maxed).is_empty());
@@ -633,21 +680,25 @@ mod tests {
         let equipment = Equipment::default();
         let common_skills = CommonSkills::default();
         let changes = list_candidate_changes(&equipment, &common_skills, None, None, &[], &[]);
-        // PW/SW のクイックウィンだけは常に出る
-        assert_eq!(changes.len(), 2);
+        // PW/SW/SV のクイックウィンだけは常に出る
+        assert_eq!(changes.len(), 3);
+    }
+
+    /// 表記と総量が同じ比で動く候補(ふつうの攻撃力候補)。base は per_hit 100 / total 300
+    fn outcome(id: &str, per_hit: i64) -> CandidateOutcome {
+        CandidateOutcome {
+            id: id.to_string(),
+            per_hit_primary: per_hit,
+            total_primary: per_hit * 3,
+        }
     }
 
     #[test]
     fn 並び順は届く最小増分を先頭に残りは降順() {
-        let items = vec![
-            ("a".to_string(), 120),
-            ("b".to_string(), 150),
-            ("c".to_string(), 90),
-            ("d".to_string(), 200),
-        ];
+        let items = vec![outcome("a", 120), outcome("b", 150), outcome("c", 90), outcome("d", 200)];
         // need = 130 -> a(120) は届かない、b(150)/d(200) は届く。最小増分は b。
         // c(90) は base(100) を下回る(悪化)ので除外される。
-        let ranked = rank_candidates(items, 100, Some(130));
+        let ranked = rank_candidates(items, 100, 300, Some(130));
         let ids: Vec<_> = ranked.iter().map(|r| r.id.as_str()).collect();
         // 届く(b, d)のうち増分最小の b が先頭固定。残りは per_hit 降順(d, a)。
         assert_eq!(ids, vec!["b", "d", "a"]);
@@ -655,11 +706,8 @@ mod tests {
 
     #[test]
     fn need無しは降順のみ() {
-        let items = vec![
-            ("a".to_string(), 120),
-            ("b".to_string(), 150),
-        ];
-        let ranked = rank_candidates(items, 100, None);
+        let items = vec![outcome("a", 120), outcome("b", 150)];
+        let ranked = rank_candidates(items, 100, 300, None);
         assert_eq!(ranked[0].id, "b");
         assert_eq!(ranked[1].id, "a");
         assert!(!ranked[0].reaches && !ranked[1].reaches);
@@ -667,9 +715,9 @@ mod tests {
 
     #[test]
     fn 現状比0の候補は除外する() {
-        let items = vec![("a".to_string(), 100), ("b".to_string(), 101)];
-        // base=100: a は delta 0% かつ per_hit<=base なので除外。b は per_hit>base なので残す。
-        let ranked = rank_candidates(items, 100, None);
+        let items = vec![outcome("a", 100), outcome("b", 101)];
+        // base=100: a は表記も総量も現状どまりなので除外。b は両方超えるので残す。
+        let ranked = rank_candidates(items, 100, 300, None);
         assert_eq!(ranked.len(), 1);
         assert_eq!(ranked[0].id, "b");
     }
@@ -677,12 +725,38 @@ mod tests {
     #[test]
     fn 悪化する候補は除外する() {
         let items = vec![
-            ("a".to_string(), 90),  // 悪化(delta 負)
-            ("b".to_string(), 100), // 現状維持
-            ("c".to_string(), 110), // 改善
+            outcome("a", 90),  // 悪化(delta 負)
+            outcome("b", 100), // 現状維持
+            outcome("c", 110), // 改善
         ];
-        let ranked = rank_candidates(items, 100, None);
+        let ranked = rank_candidates(items, 100, 300, None);
         let ids: Vec<_> = ranked.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, vec!["c"]);
+    }
+
+    #[test]
+    fn 表記が動かず総量だけ増える候補も残り伸び率は総量側に出る() {
+        // シャープネスビジョン: per_hit は現状のまま、total だけ +40%
+        let items = vec![CandidateOutcome {
+            id: "sv".to_string(),
+            per_hit_primary: 100,
+            total_primary: 420,
+        }];
+        let ranked = rank_candidates(items, 100, 300, Some(130));
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked[0].delta_pct, 0);
+        assert_eq!(ranked[0].delta_total_pct, 40);
+        // 到達判定は表記ダメージ基準なので、総量が伸びても「届く」にはならない
+        assert!(!ranked[0].reaches);
+    }
+
+    #[test]
+    fn 表記も総量も動かない候補は除外する() {
+        let items = vec![CandidateOutcome {
+            id: "a".to_string(),
+            per_hit_primary: 100,
+            total_primary: 300,
+        }];
+        assert!(rank_candidates(items, 100, 300, None).is_empty());
     }
 }

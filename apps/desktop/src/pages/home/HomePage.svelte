@@ -342,6 +342,8 @@
   // おすすめ強化(list_upgrade_candidates。列挙・並び順は Rust 側。上位 3 件を表示)
   let heroAccuracy = $state<number | null>(null);
   let heroAdvice = $state<UpgradeCandidate[]>([]);
+  /** 伸び率の表示。表記ダメージと合計ダメージの 2 本を同じ書き方で並べる(計算タブと同じ) */
+  const deltaText = (pct: number) => (pct === 0 ? "±0%" : `${pct > 0 ? "+" : ""}${pct}%`);
   /** スポットライトの /hit(previewDamage の結果)。主軸スキル設定済みならそのスキルの値 */
   let heroDamage = $state<{
     skillId: string;
@@ -1076,9 +1078,13 @@
                   <span class="rank num">{i + 1}</span>
                   <span class="cost" style={triadStyle(COST_COLORS[a.cost])}>{COST_LABELS[a.cost]}</span>
                   <span class="hero-advice-label">{a.label}</span>
+                  <!-- 伸び率は表記ダメージと合計ダメージの 2 本。シャープネスビジョンのように
+                       表記が動かず合計だけ伸びる候補があるので、片方だけだと「効いていない」と
+                       読めてしまう(ユーザー判断 2026-09-01) -->
                   <span class="hero-advice-nums">
                     <span class="num" use:bump={() => a.per_hit_primary} title="表記ダメージ(スキル分のみ)">{fmtInt(a.per_hit_primary)}</span>
-                    <span class="num" use:bump={() => a.delta_pct}>{a.delta_pct > 0 ? " +" : " "}{a.delta_pct}%</span>
+                    <span class="num advice-delta" use:bump={() => a.delta_pct} title="表記ダメージの伸び率">{deltaText(a.delta_pct)}</span>
+                    <span class="num advice-total dim" use:bump={() => a.delta_total_pct} title="実際に敵へ入る合計ダメージの伸び率(武器強化の追加固定・割合追加を含む)">合計 {deltaText(a.delta_total_pct)}</span>
                   </span>
                   {#if a.reaches}
                     <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
@@ -1607,7 +1613,9 @@
   .hero-advice-label { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hero-advice-nums { flex-shrink: 0; white-space: nowrap; }
   .hero-advice-nums .num { font-size: 12px; font-weight: 700; color: var(--sim-fg); }
-  .hero-advice-nums .num:last-child { font-size: 9px; }
+  /* 伸び率は本体の数値より小さく。合計側はさらに控えめに置く(主役は表記ダメージ) */
+  .hero-advice-nums .advice-delta, .hero-advice-nums .advice-total { font-size: 9px; margin-left: 5px; }
+  .hero-advice-nums .advice-total { color: var(--fg-dim); }
   .hero-advice-row .chev { flex-shrink: 0; font-size: 9px; }
   .cost { flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
 

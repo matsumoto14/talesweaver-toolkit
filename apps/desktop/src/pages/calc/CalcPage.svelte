@@ -8,8 +8,8 @@
   } from "../../api/commands";
   import type {
     Adjustments, BuffChoice, BuffDefinition, BuffPurpose, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
-    DamageResult, DefenseProfile, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill, StatKind,
-    UltimateSkill, UpgradeCandidate,
+    DamageResult, DefenseProfile, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill,
+    SoulLinkPreview, StatKind, UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
     BUFF_PURPOSES, isBlocked, isChoiceValue, isMultiTarget, isPercentLayer, isUserSelectedTarget,
@@ -20,6 +20,7 @@
     enchantCap, enchantDepKeysFor, enchantRows as enchantRowsOf, ENCHANT_SLOT_LABELS, setEnchantValue,
     type EnchantDepKey,
   } from "../../enchant";
+  import { ETERNAL_MILESTONES } from "../../draft";
   import { selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue, topRowsText } from "../../format";
   import {
@@ -1032,6 +1033,29 @@
       set: (p, v) => (p.common_skills.ultimate.slots = JSON.parse(v)),
     },
     {
+      // 覚醒段階とエタの意志 Lv は 1 つの育ち方(エタは覚醒 5 の先)なので 1 チップで戻す
+      id: "awakening",
+      label: (p) => `覚醒 ${p.awakening.stage} / エタ Lv${p.awakening.eternal_level}`,
+      get: (p) => JSON.stringify(p.awakening),
+      set: (p, v) => (p.awakening = JSON.parse(v)),
+    },
+    {
+      id: "sharpness",
+      label: (p) =>
+        p.common_skills.sharpness_vision_level > 0
+          ? `シャープネス Lv${p.common_skills.sharpness_vision_level}`
+          : "シャープネス 未習得",
+      get: (p) => String(p.common_skills.sharpness_vision_level),
+      set: (p, v) => (p.common_skills.sharpness_vision_level = Number(v)),
+    },
+    {
+      // リンクステータスは 8 種まとめて 1 チップ。この画面で触るのはダメージ式に効く 5〜7 だけ
+      id: "soul_link",
+      label: () => "ソウルリンク",
+      get: (p) => JSON.stringify(p.stat_sources.soul_link),
+      set: (p, v) => (p.stat_sources.soul_link = JSON.parse(v)),
+    },
+    {
       // 「次に変えるなら」の武器更新。基本値まで一緒に替わる 1 操作なので 1 チップで戻す。
       id: "weapon_item",
       label: (p) => {
@@ -1060,12 +1084,6 @@
       label: () => "素ステータス",
       get: (p) => JSON.stringify(p.base_stats),
       set: (p, v) => (p.base_stats = JSON.parse(v)),
-    },
-    {
-      id: "awakening",
-      label: (p) => `覚醒 ${p.awakening.stage} / エタ Lv${p.awakening.eternal_level}`,
-      get: (p) => JSON.stringify(p.awakening),
-      set: (p, v) => (p.awakening = JSON.parse(v)),
     },
     {
       id: "permanent",
@@ -1148,6 +1166,10 @@
     });
     return () => whatIfLatest.cancel();
   });
+  /** 伸び率の表示。**表記ダメージと合計ダメージの 2 本**を並べる — シャープネスビジョンや
+   *  武器強化のように「表記は動かないのに合計は伸びる」ものがあり、片方だけだと
+   *  「効いていない」と読めてしまう(ユーザー判断 2026-09-01)。 */
+  const deltaText = (pct: number) => (pct === 0 ? "±0%" : `${pct > 0 ? "+" : ""}${pct}%`);
   function applyWhatIf(w: UpgradeCandidate) {
     leavingWhatIfId = w.id;
     // editSim と同じ SIM_LIMIT ガード(w.applied は列挙時点の payload + 候補 1 件ぶんの変更)
@@ -1193,8 +1215,9 @@
   /** 「計算の材料」で開いているまとまり。null = 全部畳んである(既定)。
    *  実プレイでは一度に 1 つしか触らないので、開くのも 1 つに絞る — 全部開くと
    *  3512px(表示域の 4.6 画面ぶん)になり、目的のものまでスクロールで探すことになる */
-  let openMaterial = $state<"ultimate" | "enchant" | "buffs" | null>(null);
-  function toggleMaterial(id: "ultimate" | "enchant" | "buffs") {
+  type MaterialGroup = "ultimate" | "awakening" | "sharpness" | "soul_link" | "enchant" | "buffs";
+  let openMaterial = $state<MaterialGroup | null>(null);
+  function toggleMaterial(id: MaterialGroup) {
     openMaterial = openMaterial === id ? null : id;
     if (openMaterial !== "buffs") openBuffPurpose = null;
   }
@@ -1258,12 +1281,15 @@
   let ultimateEffects = $state<{
     critical_damage_rate: number; actual_delay_reduction: number; added_hit_count: number; skill_range_bonus: number;
   } | null>(null);
+  /** ソウルリンクの効いている量(preview_effective_stats の soul_link)。同じ応答から取る */
+  let soulLinkPreview = $state<SoulLinkPreview | null>(null);
   const ultimateLatest = latest({ debounce: 150 });
   $effect(() => {
     const p = payload;
     if (!p) {
       ultimateLatest.cancel();
       ultimateEffects = null;
+      soulLinkPreview = null;
       return;
     }
     const pJson = JSON.stringify(p);
@@ -1291,6 +1317,9 @@
             added_hit_count: a.common_skill.ultimate.added_hit_count,
             skill_range_bonus: b.common_skill.ultimate.skill_range_bonus,
           };
+          // ソウルリンクの効いている量も同じ応答から取る(極限の枠しか差し替えていないので
+          // リンクステータスは payload のまま)。写経せず Rust 側の preview を正にする
+          soulLinkPreview = a.soul_link;
         }
       } catch (e) {
         if (isCurrent()) reportError(errorMessage(e));
@@ -1307,6 +1336,97 @@
     }
     return `範囲 +${Math.round(e.skill_range_bonus)}(火力には効きません)`;
   }
+
+  // --- 地力(試し変更)。装備ではなく育てて上がるもののうち、効きが大きい 3 つ -----------
+  // 覚醒・エタの意志(N と各種上限)/ シャープネスビジョン(§5 新-割合)/ ソウルリンク 5〜7。
+  // どれもキャラタブでしか触れず、「盛ったらどこまで届くか」を計算タブで試せなかった。
+  // 入力形はキャラタブと同じ(節目の段 + 数値)にして、押した瞬間に結果が動くようにする。
+
+  /** エタの意志は覚醒 5 の先にあるもの。Lv を入れた時点で覚醒は 5 で確定する(キャラタブと同じ) */
+  function setSimEternalLevel(level: number) {
+    editSim((p) => {
+      p.awakening.eternal_level = level;
+      if (level > 0) p.awakening.stage = 5;
+    });
+  }
+  /** 節目を超えると上限の増え方が一段上がる地点(draft.ts の ETERNAL_MILESTONES) */
+  const eternalMilestoneOptions = $derived(
+    ETERNAL_MILESTONES.filter((lv) => lv <= limits.eternal_level_max).map((lv) => ({
+      value: String(lv),
+      label: String(lv),
+    })),
+  );
+  // 覚醒段階は 4 と 5 しか使わない(キャラタブと同じ)。それ以外は開いたときだけ出す(§00 02)
+  const stageAllOptions = $derived(
+    Array.from({ length: limits.awakening_stage_max + 1 }, (_, i) => ({
+      value: String(i),
+      label: String(i),
+    })),
+  );
+  const STAGE_MAIN_OPTIONS = [4, 5].map((i) => ({ value: String(i), label: String(i) }));
+  let stageAllOpen = $state(false);
+  const stageIsLow = $derived((payload?.awakening.stage ?? 0) < 4);
+  const stageOptionsNow = $derived(stageAllOpen || stageIsLow ? stageAllOptions : STAGE_MAIN_OPTIONS);
+  /** 覚醒ダメージ(カテゴリN)の倍率。表は gamedata なので写経せず計算結果のカテゴリから引く */
+  const awakeningFactor = $derived(
+    result?.trace.categories.find((c) => c.category === "awakening_damage")?.factor ?? null,
+  );
+  const awakeningHeadNote = $derived(
+    payload ? `覚醒 ${payload.awakening.stage} / エタ Lv${payload.awakening.eternal_level}` : "",
+  );
+
+  /** 正は crates/domain/src/common_skill.rs の SHARPNESS_VISION(limits 経由で引く) */
+  const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
+  const sharpnessLevel = $derived(payload?.common_skills.sharpness_vision_level ?? 0);
+  const sharpnessRatePercent = $derived(
+    sharpnessLevel === 0 ? 0 : (SHARPNESS_RATES[sharpnessLevel - 1] ?? 0),
+  );
+  // 段の名前は Lv だけ、効いている値は行の右に出す。**Lv5 まではほぼ全員が同じ**(そこで
+  // 止まる)なので、ふだんは 5〜10 だけ出す(キャラタブの共通スキルペインと同じ)
+  const sharpnessAllOptions = $derived(
+    Array.from({ length: limits.sharpness_vision_level_max }, (_, i) => ({
+      value: String(i + 1),
+      label: String(i + 1),
+    })),
+  );
+  let sharpnessAllOpen = $state(false);
+  const sharpnessIsLow = $derived(sharpnessLevel > 0 && sharpnessLevel < 5);
+  const sharpnessOptionsNow = $derived(
+    sharpnessAllOpen || sharpnessIsLow ? sharpnessAllOptions : sharpnessAllOptions.slice(4),
+  );
+
+  /** ダメージ式に効くリンクステータス 5〜7 だけ(1〜4 は装備値、8 は追加HPなのでここでは出さない) */
+  const SOUL_LINK_ROWS = [
+    { field: "critical_damage_level", label: "クリダメ", max: limits.soul_link_critical_damage_level_max },
+    { field: "final_damage_level", label: "最終ダメ", max: limits.soul_link_final_damage_level_max },
+    { field: "weapon_enhance_level", label: "武器強化", max: limits.soul_link_weapon_enhance_level_max },
+  ] as const;
+  type SoulLinkDamageField = (typeof SOUL_LINK_ROWS)[number]["field"];
+  /** 効いている量は Rust の preview(soulLinkPreview)から引く。倍率の式をここに写経しない */
+  const soulLinkEffect = (field: SoulLinkDamageField): number | null => {
+    const p = soulLinkPreview;
+    if (!p) return null;
+    if (field === "critical_damage_level") return p.critical_damage_rate;
+    if (field === "final_damage_level") return p.final_damage_rate;
+    return p.weapon_added_damage_multiplier;
+  };
+  const soulLinkEffectText = (field: SoulLinkDamageField): string => {
+    const value = soulLinkEffect(field);
+    if (value === null) return "—";
+    return field === "weapon_enhance_level"
+      ? `×${value.toFixed(1)}`
+      : `+${Number((value * 100).toFixed(1))}%`;
+  };
+  /** 最終ダメージ(カテゴリL)の上限。値は Rust のカテゴリ定義が正なのでトレースから引く */
+  const finalDamageCapPercent = $derived.by(() => {
+    const cap = result?.trace.categories.find((c) => c.category === "final_damage_rate")?.cap?.max;
+    return cap == null ? null : Math.round(cap * 100);
+  });
+  const soulLinkHeadNote = $derived(
+    payload
+      ? `Lv ${SOUL_LINK_ROWS.map((r) => payload.stat_sources.soul_link[r.field]).join("/")}`
+      : "",
+  );
 
   // --- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る ------
   // 考え方はホーム(HomePage.svelte)の enchantRows と同じで、こちらは enchant.ts を共用する。
@@ -1906,7 +2026,8 @@
                 >
                   <span class="dim">→ 一番効くのは</span>
                   <span class="fill-label">{top.label}</span>
-                  <span class="num fill-pct">({top.delta_pct > 0 ? "+" : ""}{top.delta_pct}%)</span>
+                  <span class="num fill-pct" class:flat={top.delta_pct === 0}>表記 {deltaText(top.delta_pct)}</span>
+                  <span class="num fill-total dim">合計 {deltaText(top.delta_total_pct)}</span>
                 </button>
                 {#if whatIf.length > 1}
                   <button
@@ -1925,7 +2046,8 @@
                       onclick={() => applyWhatIf(w)}
                     >
                       <span class="dt-label">{w.label}</span>
-                      <span class="num dt-val">{w.delta_pct > 0 ? "+" : ""}{w.delta_pct}%</span>
+                      <span class="num dt-val">表記 {deltaText(w.delta_pct)}</span>
+                      <span class="num fill-total dim">合計 {deltaText(w.delta_total_pct)}</span>
                     </button>
                   {/each}
                 </div>
@@ -1996,7 +2118,9 @@
               <span class="num strong" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
               <span class="arrow num dim">→</span>
               <span class="dim">倍率</span>
-              <span class="num good strong">{flowMultLabel}</span>
+              <!-- 材料を変えると倍率も変わる。跳ねないと 1 つだけ古い値に見える(§00 04。
+                   実機の tools/design-audit/live/motion.js が検出した) -->
+              <span class="num good strong" use:flash={() => flowMultLabel}>{flowMultLabel}</span>
               <span class="arrow num dim">→</span>
               <span class="num final" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
             </div>
@@ -2270,6 +2394,157 @@
             <p class="eq-note dim badge-in">{ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。</p>
           {/if}
           <p class="eq-note dim">スーパーリミット・ハイパーリミットの Lv は<b>キャラ</b>タブ(共通スキル)の設定を使います。</p>
+          {/if}
+        </div>
+
+        <!-- 覚醒・エタの意志(試し変更)。カテゴリN の倍率と、ダメージ・能力値の上限を動かす -->
+        <div class="card">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "awakening"} onclick={() => toggleMaterial("awakening")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "awakening" ? "▾" : "▸"}</span>
+            <!-- 覚醒・エタの意志の絵は無い。縞のまま置いて、見出しの字下げを他のカードとそろえる -->
+            <Icon kind="skill" id={null} size={20} label="覚醒・エタの意志" />
+            <span class="card-title">覚醒・エタの意志</span>
+            <span class="dim small num" use:flash={() => awakeningHeadNote}>{awakeningHeadNote}</span>
+          </button>
+          {#if openMaterial === "awakening"}
+          <div class="basics-rows">
+            <div class="basics-row">
+              <span class="basics-label">エタ Lv</span>
+              <StatInput
+                label="エタの意志 Lv"
+                hideLabel
+                min={0}
+                max={limits.eternal_level_max}
+                bind:value={
+                  () => payload.awakening.eternal_level,
+                  (v) => setSimEternalLevel(v)
+                }
+              />
+            </div>
+            <div class="basics-row">
+              <span class="basics-label">節目</span>
+              <div class="basics-seg">
+                <StepSelect
+                  label=""
+                  options={eternalMilestoneOptions}
+                  cols={eternalMilestoneOptions.length}
+                  bind:value={
+                    () => String(payload.awakening.eternal_level),
+                    (v) => setSimEternalLevel(Number(v))
+                  }
+                />
+              </div>
+            </div>
+            <div class="basics-row">
+              <span class="basics-label">覚醒段階</span>
+              <div class="basics-seg">
+                <StepSelect
+                  label=""
+                  options={stageOptionsNow}
+                  cols={stageOptionsNow.length}
+                  bind:value={
+                    () => String(payload.awakening.stage),
+                    (v) => editSim((p) => (p.awakening.stage = Number(v)))
+                  }
+                />
+              </div>
+              <!-- 段そのものは消さない。4 / 5 以外を出す切り替えは段の外に置く(§09 規則 4)。
+                   4 未満を選んでいるあいだは全段が出ていて切り替える意味が無いが、**消すと
+                   隣の段の幅が動く**ので、置いたまま押せなくする -->
+              <button
+                type="button" class="chip quiet" class:on={stageAllOpen} disabled={stageIsLow}
+                onclick={() => (stageAllOpen = !stageAllOpen)}
+              >{stageAllOpen || stageIsLow ? "4 / 5 だけ" : "それ以外"}</button>
+            </div>
+          </div>
+          <p class="eq-note dim">
+            覚醒ダメージ <b class="num" use:flash={() => String(awakeningFactor)}>{awakeningFactor !== null ? `×${awakeningFactor.toFixed(2)}` : "—"}</b>
+            ・ ダメージ上限 <b class="num" use:bump={() => result?.damage_cap ?? null}>{result ? fmtInt(result.damage_cap) : "—"}</b>。
+            節目(20 / 40 / 60 / 80 / 90)を超えると上限の伸びが一段上がります。Lv を入れると覚醒は 5 になります。
+          </p>
+          {/if}
+        </div>
+
+        <!-- シャープネスビジョン(試し変更)。§5「新-割合」の割合追加ダメージ -->
+        <div class="card">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "sharpness"} onclick={() => toggleMaterial("sharpness")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "sharpness" ? "▾" : "▸"}</span>
+            <Icon kind="skill" id={null} size={20} label="シャープネスビジョン" />
+            <span class="card-title">シャープネスビジョン</span>
+            <span class="dim small num" use:bump={() => sharpnessRatePercent}
+            >{sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} +${sharpnessRatePercent}%`}</span>
+          </button>
+          {#if openMaterial === "sharpness"}
+          <div class="basics-rows">
+            <!-- 段は 6 個(5〜10)にも 10 個にもなる。補助操作を同じ行に置くと、段が 10 個に
+                 なったときチップが段の上に重なって押せなくなる(実機で検出)。行を分ける -->
+            <div class="basics-row">
+              <span class="basics-label">Lv</span>
+              <div class="basics-seg">
+                <StepSelect
+                  label=""
+                  options={sharpnessOptionsNow}
+                  cols={sharpnessOptionsNow.length}
+                  bind:value={
+                    () => String(sharpnessLevel),
+                    (v) => editSim((p) => (p.common_skills.sharpness_vision_level = Number(v)))
+                  }
+                />
+              </div>
+            </div>
+            <div class="basics-row">
+              <span class="basics-label"></span>
+              <!-- Lv1〜4 を選んでいるあいだは全段が出ていて切り替える意味が無いが、**消すと
+                   隣のチップが動く**ので、置いたまま押せなくする(§09 規則 4) -->
+              <button
+                type="button" class="chip quiet" class:on={sharpnessAllOpen} disabled={sharpnessIsLow}
+                onclick={() => (sharpnessAllOpen = !sharpnessAllOpen)}
+              >{sharpnessAllOpen || sharpnessIsLow ? "5 以上" : "1〜4"}</button>
+              <button
+                type="button" class="chip quiet"
+                disabled={sharpnessLevel === 0}
+                onclick={() => editSim((p) => (p.common_skills.sharpness_vision_level = 0))}
+              >未習得</button>
+            </div>
+          </div>
+          <p class="eq-note dim">
+            割合追加ダメージは<b>合計ダメージ</b>に乗ります(1 発ごとではないので、表記ダメージ = この一発は動きません)。
+          </p>
+          {/if}
+        </div>
+
+        <!-- ソウルリンク(試し変更)。ダメージ式に効くリンクステータス 5〜7 だけ -->
+        <div class="card">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "soul_link"} onclick={() => toggleMaterial("soul_link")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "soul_link" ? "▾" : "▸"}</span>
+            <Icon kind="skill" id={null} size={20} label="ソウルリンク" />
+            <span class="card-title">ソウルリンク</span>
+            <span class="dim small num" use:flash={() => soulLinkHeadNote}>{soulLinkHeadNote}</span>
+          </button>
+          {#if openMaterial === "soul_link"}
+          <div class="basics-rows">
+            {#each SOUL_LINK_ROWS as row (row.field)}
+              <div class="basics-row">
+                <span class="basics-label">{row.label}</span>
+                <StatInput
+                  label="{row.label}リンクステータス Lv"
+                  hideLabel
+                  min={0}
+                  max={row.max}
+                  stepper
+                  bind:value={
+                    () => payload.stat_sources.soul_link[row.field],
+                    (v) => editSim((p) => (p.stat_sources.soul_link[row.field] = v))
+                  }
+                />
+                <span class="basics-val num" use:bump={() => soulLinkEffect(row.field)}>{soulLinkEffectText(row.field)}</span>
+              </div>
+            {/each}
+          </div>
+          <p class="eq-note dim">
+            クリダメはクリティカル時だけ、最終ダメージはカテゴリL の上限{finalDamageCapPercent !== null ? ` +${finalDamageCapPercent}%` : ""}まで。
+            武器強化は追加固定ダメージに掛かるので、<b>合計ダメージ</b>だけが動きます。
+          </p>
           {/if}
         </div>
 
@@ -2563,6 +2838,10 @@
   .fill-btn:hover:not(:disabled) { background: var(--state-temp-bg); }
   .fill-label { min-width: 0; flex-shrink: 1; font-weight: 700; color: var(--sim-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fill-pct { flex-shrink: 0; font-weight: 700; color: var(--good); }
+  /* ±0% は「増えた」ではない。色で増減を言っているので、動かないときは色も外す */
+  .fill-pct.flat { color: var(--fg-dim); }
+  /* 合計ダメージ側の伸び率。桁が変わっても表記側の位置が動かないよう幅を固定する */
+  .fill-total { flex-shrink: 0; min-width: 74px; text-align: right; font-size: 9.5px; font-weight: 700; }
   .fill-more-toggle { flex-shrink: 0; padding: 2px 6px; border-radius: var(--r-inset); font-size: 9px; color: var(--fg-muted); }
   .fill-more-toggle:hover { color: var(--fg); background: var(--bg-active); }
   .fill-list {
@@ -2735,6 +3014,14 @@
   .uc-name { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
   .ultimate-chip.on .uc-name { color: var(--sel-fg); }
   .uc-note { min-width: 0; flex: 1; text-align: right; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* 地力(覚醒・エタ / シャープネスビジョン / ソウルリンク)。ラベル幅と値幅を固定して、
+     桁が増えても入力面が動かないようにする(§09 規則 4) */
+  .basics-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .basics-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .basics-label { flex-shrink: 0; width: 46px; font-size: 9.5px; color: var(--fg-muted); }
+  .basics-seg { min-width: 0; flex: 1; }
+  .basics-val { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 9.5px; font-weight: 700; color: var(--fg-dim); }
 
   /* エンチャントの伸びしろ。部位ごとに 現在/上限/MAX での伸び幅を横並びで見せる */
   .enchant-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
