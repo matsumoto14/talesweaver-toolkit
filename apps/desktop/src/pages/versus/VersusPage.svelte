@@ -157,12 +157,6 @@
   const resultAB = useDirection(() => charA, () => skillIdA, () => charB);
   const resultBA = useDirection(() => charB, () => skillIdB, () => charA);
 
-  // 押した行は動かない(§09 規則 2)。開いた行の直下にだけ内訳が生える
-  let openDetail = $state<"AB" | "BA" | null>(null);
-  function toggleDetail(key: "AB" | "BA") {
-    openDetail = openDetail === key ? null : key;
-  }
-
   // 必中かどうかの判定は domain(HitRate::capped)が持つ。ここで raw >= max を書き直さない
   function hitBadge(result: VersusAccuracy | null) {
     if (result === null) return { label: "?", state: "unknown" as const };
@@ -178,7 +172,23 @@
   }
 </script>
 
-{#snippet directionRow(
+{#snippet numCell(value: number | null)}
+  {#if value === null}
+    <span class="unk">?</span>
+  {:else}
+    <span class="num" use:bump={() => value}>{value}</span>
+  {/if}
+{/snippet}
+
+{#snippet textCell(value: string | null)}
+  {#if value === null}
+    <span class="unk">?</span>
+  {:else}
+    <span class="num" use:flash={() => value}>{value}</span>
+  {/if}
+{/snippet}
+
+{#snippet hitRateLine(
   key: "AB" | "BA",
   attacker: (typeof app.characters)[number] | null,
   defender: (typeof app.characters)[number] | null,
@@ -186,83 +196,47 @@
 )}
   {@const result = dir.result}
   {@const badge = hitBadge(result)}
-  {@const open = openDetail === key}
-  <div class="dir" class:has-result={result !== null}>
-    <button
-      type="button" class="dir-row" aria-expanded={open}
-      disabled={!attacker || !defender}
-      onclick={() => toggleDetail(key)}
-    >
-      <span class="dir-who">
-        {#if attacker}
-          <Icon kind="character" id={attacker.game_character_id} size={20} label={attacker.name} source={app.characterIcons[attacker.id] ?? null} />
-          <span class="dir-name">{attacker.name}</span>
-        {/if}
-        <span class="dir-arrow">→</span>
-        {#if defender}
-          <Icon kind="character" id={defender.game_character_id} size={20} label={defender.name} source={app.characterIcons[defender.id] ?? null} />
-          <span class="dir-name">{defender.name}</span>
-        {/if}
-      </span>
-      <span class="dir-value">
-        {#if dir.error}
-          <span class="dir-note bad">{dir.error}</span>
-        {:else if result === null}
-          <span class="dir-num num dim">?</span>
-        {:else if result.hit_rate.capped}
-          <span class="dir-cap" style={badgeStyle(badge)} use:flash={() => "capped"}>必中</span>
-        {:else}
-          <span class="dir-num num" use:bump={() => result?.hit_rate.value ?? null}>{result.hit_rate.value}</span>
-          <span class="dir-unit">%</span>
-        {/if}
-      </span>
-      <span class="dir-caret dim" aria-hidden="true">{open ? "▾" : "▸"}</span>
-    </button>
+  {@const boost = result ? boostLabel(result.accuracy_boost) : null}
+  <div class="rate-row" class:has-result={result !== null}>
+    <span class="rate-who">
+      {#if attacker}
+        <Icon kind="character" id={attacker.game_character_id} size={20} label={attacker.name} source={app.characterIcons[attacker.id] ?? null} />
+        <span class="rate-name">{attacker.name}</span>
+      {/if}
+      <span class="rate-arrow">→</span>
+      {#if defender}
+        <Icon kind="character" id={defender.game_character_id} size={20} label={defender.name} source={app.characterIcons[defender.id] ?? null} />
+        <span class="rate-name">{defender.name}</span>
+      {/if}
+    </span>
 
-    {#if open && result}
-      {@const boost = boostLabel(result.accuracy_boost)}
-      <div class="dir-detail open-in">
-        <div class="raw-line">
-          命中P <span class="num strong" use:bump={() => result?.accuracy_point ?? null}>{result.accuracy_point}</span>
-          <span class="op">−</span> 回避P <span class="num strong" use:bump={() => result?.evasion_point ?? null}>{result.evasion_point}</span>
-          <span class="op">=</span> <span class="num strong" use:bump={() => result?.hit_rate.raw ?? null}>{result.hit_rate.raw}</span>
-        </div>
+    <span class="rate-value">
+      {#if dir.error}
+        <span class="rate-note bad">{dir.error}</span>
+      {:else if result === null}
+        <span class="rate-num num dim">?</span>
+      {:else if result.hit_rate.capped}
+        <span class="rate-cap" style={badgeStyle(badge)} use:flash={() => "capped"}>必中</span>
+      {:else}
+        <span class="rate-num num" use:bump={() => result?.hit_rate.value ?? null}>{result.hit_rate.value}</span>
+        <span class="rate-unit">%</span>
+      {/if}
+    </span>
 
-        <div class="range-line dim">
-          下限 <span class="num">{result.hit_rate.min}</span>
-          〜 上限 <span class="num">{result.hit_rate.max}</span>
-          <span class="range-detail">
-            (15 + 最小命中率補正 {#if result.min_rates_recorded}<span class="num">0</span>{:else}<span class="unk">?</span>{/if}
-            − 最小回避率補正 {#if result.min_rates_recorded}<span class="num">0</span>{:else}<span class="unk">?</span>{/if})
-          </span>
-        </div>
-
+    {#if result}
+      <span class="rate-why dim">
+        (<span class="num" use:bump={() => result?.accuracy_point ?? null}>{result.accuracy_point}</span>
+        <span class="op">−</span>
+        <span class="num" use:bump={() => result?.evasion_point ?? null}>{result.evasion_point}</span>
+        <span class="op">=</span>
+        <span class="num" use:bump={() => result?.hit_rate.raw ?? null}>{result.hit_rate.raw}</span>)
+        ・ 下限 <span class="num">{result.hit_rate.min}</span> 〜 上限 <span class="num">{result.hit_rate.max}</span>
+        {#if !result.min_rates_recorded}<span class="unk">下限根拠 ?</span>{/if}
         {#if boost}
-          <div class="boost-line">
-            <span>{boost}</span>
-            {#if !result.accuracy_boost_shift_recorded}
-              <span class="unk">命中P変動 ?</span>
-            {/if}
-          </div>
+          ・ {boost}
+          {#if !result.accuracy_boost_shift_recorded}<span class="unk">命中P変動 ?</span>{/if}
         {/if}
-
-        <div class="breakdown">
-          <div class="side">
-            <div class="side-title">攻撃側</div>
-            <div class="row"><span class="label">DEX</span><span class="num">{result.attacker_dex}</span></div>
-            <div class="row"><span class="label">装備命中</span><span class="num">{result.equipment_accuracy}</span></div>
-            <div class="row"><span class="label">スキル命中</span><span class="num">{result.skill_accuracy}</span></div>
-            <div class="row"><span class="label">依存ボーナス / ペナルティ</span><span class="num">+{result.correction_bonus} / −{result.correction_penalty}</span></div>
-          </div>
-          <div class="side">
-            <div class="side-title">防御側({result.attack_type === "physical" ? "物理" : "魔法"}回避P)</div>
-            <div class="row"><span class="label">AGI</span><span class="num">{result.defender_agi}</span></div>
-            <div class="row"><span class="label">装備回避率</span><span class="num">{result.equipment_evasion}</span></div>
-            <div class="row"><span class="label">装備敏捷度</span><span class="num">{result.equipment_agility}</span></div>
-            <div class="row"><span class="label">攻撃タイプ別増加</span><span class="num">{result.attack_type_bonus.toFixed(1)}</span></div>
-          </div>
-        </div>
-      </div>
+      </span>
     {/if}
   </div>
 {/snippet}
@@ -327,14 +301,92 @@
         </SheetCard>
       </div>
 
-      <div class="directions">
-        {#if !charA || !charB}
-          <p class="empty dim">キャラを 2 人とも選んでください。</p>
-        {:else}
-          {@render directionRow("AB", charA, charB, resultAB)}
-          {@render directionRow("BA", charB, charA, resultBA)}
-        {/if}
-      </div>
+      {#if !charA || !charB}
+        <p class="empty dim">キャラを 2 人とも選んでください。</p>
+      {:else}
+        {@const rAB = resultAB.result}
+        {@const rBA = resultBA.result}
+        <!-- 突き合わせ表: 閉じたら比べられない画面なので、内訳は最初から全部出す(ユーザー指摘 2026-09-01) -->
+        <div class="sheet">
+          <div class="grid">
+            <div class="grid-row head">
+              <div class="cell label"></div>
+              <div class="cell col">
+                <Icon kind="character" id={charA.game_character_id} size={20} label={charA.name} source={app.characterIcons[charA.id] ?? null} />
+                <span class="col-name">{charA.name}</span>
+              </div>
+              <div class="cell col">
+                <Icon kind="character" id={charB.game_character_id} size={20} label={charB.name} source={app.characterIcons[charB.id] ?? null} />
+                <span class="col-name">{charB.name}</span>
+              </div>
+            </div>
+
+            <!-- 命中Pは各キャラが「攻撃側」になった方向の結果(A→B は A の命中P、B→A は B の命中P) -->
+            <div class="grid-row main">
+              <div class="cell label">命中P</div>
+              <div class="cell val strong">{@render numCell(rAB?.accuracy_point ?? null)}</div>
+              <div class="cell val strong">{@render numCell(rBA?.accuracy_point ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">DEX</div>
+              <div class="cell val">{@render numCell(rAB?.attacker_dex ?? null)}</div>
+              <div class="cell val">{@render numCell(rBA?.attacker_dex ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">装備命中</div>
+              <div class="cell val">{@render numCell(rAB?.equipment_accuracy ?? null)}</div>
+              <div class="cell val">{@render numCell(rBA?.equipment_accuracy ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">スキル命中</div>
+              <div class="cell val">{@render numCell(rAB?.skill_accuracy ?? null)}</div>
+              <div class="cell val">{@render numCell(rBA?.skill_accuracy ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">依存ボーナス / ペナルティ</div>
+              <div class="cell val">{@render textCell(rAB ? `+${rAB.correction_bonus} / −${rAB.correction_penalty}` : null)}</div>
+              <div class="cell val">{@render textCell(rBA ? `+${rBA.correction_bonus} / −${rBA.correction_penalty}` : null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">的中剣</div>
+              <div class="cell val">{@render textCell(rAB ? (boostLabel(rAB.accuracy_boost) ?? "なし") : null)}</div>
+              <div class="cell val">{@render textCell(rBA ? (boostLabel(rBA.accuracy_boost) ?? "なし") : null)}</div>
+            </div>
+
+            <!-- 回避Pは各キャラが「防御側」になった方向の結果(A→B は B の回避P、B→A は A の回避P) -->
+            <div class="grid-row main">
+              <div class="cell label">回避P</div>
+              <div class="cell val strong">{@render numCell(rBA?.evasion_point ?? null)}</div>
+              <div class="cell val strong">{@render numCell(rAB?.evasion_point ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">AGI</div>
+              <div class="cell val">{@render numCell(rBA?.defender_agi ?? null)}</div>
+              <div class="cell val">{@render numCell(rAB?.defender_agi ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">装備回避率</div>
+              <div class="cell val">{@render numCell(rBA?.equipment_evasion ?? null)}</div>
+              <div class="cell val">{@render numCell(rAB?.equipment_evasion ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">装備敏捷度</div>
+              <div class="cell val">{@render numCell(rBA?.equipment_agility ?? null)}</div>
+              <div class="cell val">{@render numCell(rAB?.equipment_agility ?? null)}</div>
+            </div>
+            <div class="grid-row sub">
+              <div class="cell label">攻撃タイプ別増加</div>
+              <div class="cell val">{@render textCell(rBA ? rBA.attack_type_bonus.toFixed(1) : null)}</div>
+              <div class="cell val">{@render textCell(rAB ? rAB.attack_type_bonus.toFixed(1) : null)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rates">
+          {@render hitRateLine("AB", charA, charB, resultAB)}
+          {@render hitRateLine("BA", charB, charA, resultBA)}
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -347,53 +399,36 @@
   .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
   .side-body { display: flex; flex-direction: column; gap: 10px; padding: 11px 13px 13px; }
 
-  .directions { display: flex; flex-direction: column; gap: 10px; }
-
-  /* 未計算(キャラ/スキル未選択・エラー)は破線 + ? のまま(design-system 原則) */
-  .dir {
-    border: 1px dashed var(--state-unknown-bd); border-radius: var(--r-window);
-    background: var(--state-unknown-bg);
+  /* 突き合わせ表: 2 人の材料を閉じずに並べる(§ux 「閉じていると比べられない」)。
+     中身ぶんの幅で左に寄せる ── 幅いっぱいまで伸ばすと数値の並びが間延びして読みにくい */
+  .sheet {
+    width: max-content; max-width: 100%; align-self: flex-start;
+    border: 1px solid var(--border); border-radius: var(--r-window); background: var(--bg-field);
+    overflow: hidden;
   }
-  .dir.has-result {
-    border: 1px solid var(--border); background: var(--bg-field);
-  }
+  .grid { display: flex; flex-direction: column; }
+  /* 列幅は「中身が読める」ことを優先する。キャラ名が「マキシ…」で切れると、
+     2 列のどちらがどちらか分からなくなる(§00 05 読めない文字は出さない)。
+     材料の名前も折り返さない幅を取る */
+  .grid-row { display: grid; grid-template-columns: 200px 200px 200px; align-items: baseline; column-gap: 14px; }
+  .cell { padding: 5px 13px; }
+  .cell.label { color: var(--fg-sub); font-size: 10.5px; white-space: nowrap; }
+  .cell.val { text-align: right; min-width: 0; }
+  .cell.val :global(.num), .cell.val :global(.unk) { font-size: 11px; }
+  /* 的中剣のように文字で出す値は折り返さない(行の高さが列で食い違うと段がずれる) */
+  .cell.val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  /* 押した行は動かない。中身は横一列のまま、開くと直下に内訳が生える(§09 規則 2) */
-  .dir-row {
-    width: 100%; display: flex; align-items: center; gap: 10px;
-    padding: 10px 13px; background: transparent; border: none; cursor: pointer;
-    font: inherit; color: inherit; text-align: left;
-  }
-  .dir-row:disabled { cursor: default; }
-  .dir-row:not(:disabled):hover { background: var(--bg-active); }
+  .grid-row.head { padding-top: 4px; border-bottom: 1px solid var(--border); background: var(--bg-panel); }
+  .grid-row.head .cell { padding: 8px 13px; }
+  .grid-row.head .cell.col { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  .col-name { font-size: 12px; font-weight: 800; color: var(--fg-head); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-  .dir-who { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; font-size: 12px; font-weight: 700; color: var(--fg-head); }
-  .dir-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dir-arrow { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--fg-dim); margin: 0 2px; }
-
-  /* 主役: 命中率 %。桁が増えても隣が動かないよう幅を固定する(§09 規則 4) */
-  .dir-value { flex-shrink: 0; display: flex; align-items: baseline; gap: 3px; min-width: 68px; justify-content: flex-end; }
-  .dir-num { font-size: 20px; font-weight: 800; color: var(--fg-head); line-height: 1; }
-  .dir-unit { font-size: 11px; font-weight: 700; color: var(--fg-sub); }
-  .dir-cap {
-    font-size: 10.5px; font-weight: 800; border-radius: var(--r-pill); padding: 3px 9px; border: 1px solid;
-  }
-  .dir-note { font-size: 10px; }
-  .dir-note.bad { color: var(--danger); font-weight: 700; }
-  .dir-caret { flex: none; width: 10px; text-align: center; font-size: 9px; }
-
-  .dir-detail { padding: 2px 13px 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-
-  .raw-line { font-size: 12px; color: var(--fg-sub); display: flex; align-items: baseline; gap: 5px; }
-  .raw-line .op { color: var(--fg-dim); }
-  .raw-line .num.strong { font-weight: 800; color: var(--fg-head); min-width: 34px; display: inline-block; text-align: right; }
-
-  .range-line { font-size: 10.5px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; justify-content: center; }
-  .range-detail { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
-
-  .boost-line {
-    font-size: 10.5px; font-weight: 700; color: var(--fg-sub); display: flex; align-items: center; gap: 6px;
-  }
+  /* 主役の行(命中P・回避P)は太字で強めに、直下の内訳(sub)は控えめに */
+  .grid-row.main { background: var(--bg-active); }
+  .grid-row.main .cell.label { font-weight: 800; color: var(--fg-head); font-size: 11.5px; }
+  .grid-row.main .cell.val :global(.num) { font-size: 15px; font-weight: 800; color: var(--fg-head); }
+  .grid-row.sub .cell.label { padding-left: 24px; }
+  .grid-row.sub .cell.val :global(.num) { color: var(--fg-sub); }
 
   /* 未収録(供給源が無いのでまだ 0 決め打ち)。0 や空白ではなく ? + 破線で示す */
   .unk {
@@ -401,13 +436,29 @@
     border-radius: var(--r-pill); color: var(--state-unknown-fg); font-size: 9.5px; font-weight: 700;
   }
 
-  .breakdown { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
-  .side {
-    border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset);
-    padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;
+  /* 主役: 2 方向の命中率。表の下にその根拠を添えて置く */
+  .rates { display: flex; flex-direction: column; gap: 8px; }
+  .rate-row {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 10px;
+    border: 1px dashed var(--state-unknown-bd); border-radius: var(--r-window);
+    background: var(--state-unknown-bg); padding: 10px 13px;
   }
-  .side-title { font-size: 9.5px; font-weight: 800; color: var(--fg-dim); margin-bottom: 2px; }
-  .side .row { display: flex; align-items: baseline; gap: 8px; font-size: 10.5px; }
-  .side .row .label { min-width: 0; flex: 1; color: var(--fg-sub); }
-  .side .row .num { min-width: 40px; text-align: right; font-weight: 700; color: var(--fg-head); }
+  .rate-row.has-result { border: 1px solid var(--border); background: var(--bg-field); }
+
+  .rate-who { display: flex; align-items: center; gap: 6px; min-width: 0; flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--fg-head); }
+  .rate-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rate-arrow { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--fg-dim); margin: 0 2px; }
+
+  /* 桁が増えても隣が動かないよう幅を固定する(§09 規則 4) */
+  .rate-value { flex-shrink: 0; display: flex; align-items: baseline; gap: 3px; min-width: 60px; }
+  .rate-num { font-size: 18px; font-weight: 800; color: var(--fg-head); line-height: 1; }
+  .rate-unit { font-size: 11px; font-weight: 700; color: var(--fg-sub); }
+  .rate-cap {
+    font-size: 10.5px; font-weight: 800; border-radius: var(--r-pill); padding: 3px 9px; border: 1px solid;
+  }
+  .rate-note { font-size: 10px; }
+  .rate-note.bad { color: var(--danger); font-weight: 700; }
+
+  .rate-why { font-size: 10.5px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px; }
+  .rate-why .op { color: var(--fg-dim); }
 </style>

@@ -55,6 +55,25 @@ pub enum SienaValueKind {
     Agi,
 }
 
+/// この種類の値が実際に効く先(wiki の「実際は〜が増加する」注記に基づく分類)。
+/// `SienaValueKind::allowed_on` の部位判定・`apply_to_values` の集計はここから分岐する
+/// (二重分類にしない)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SienaEffect {
+    /// 強化能力値(装備補正)へ加算される(武器/盾の 6 種。複合は内訳どおりに分かれる)。
+    EquipmentValue,
+    /// 装備命中率補正へ数値ぶんの固定値で加算される
+    /// (wiki: 能力値一覧(その他の部位)「実際は装備命中率補正が増加(数値分固定値で増加)」)。
+    EquipmentAccuracy,
+    /// 装備回避率補正へ数値ぶんの固定値で加算される(wiki: 同表「命中率」の隣の行「回避率」)。
+    EquipmentEvasion,
+    /// ステの最終固定値へ加算される(STAB〜AGI)。
+    Stat(StatKind),
+    /// 防御力の最終値へ加算される(物理/魔法ダメージ耐性・クリティカル被撃率減少)。
+    /// 防御側の最終固定値レイヤーが未モデルなので、この効き先は**記録するだけ**。
+    DefenseFinal,
+}
+
 impl SienaValueKind {
     pub const ALL: [SienaValueKind; 18] = [
         SienaValueKind::Thrust,
@@ -121,18 +140,38 @@ impl SienaValueKind {
         }
     }
 
-    /// この種類が出る部位かどうか。武器/盾とその他の部位で一覧が丸ごと違う。
+    /// この種類の効き先(§効き先を型にする)。
+    pub fn effect(self) -> SienaEffect {
+        use SienaValueKind::*;
+        match self {
+            Thrust | Slash | MagicAttack | MagicDefense | PhysicalComposite | MagicSlash => {
+                SienaEffect::EquipmentValue
+            }
+            Accuracy => SienaEffect::EquipmentAccuracy,
+            Evasion => SienaEffect::EquipmentEvasion,
+            PhysicalResist | MagicResist | CriticalTakenReduction => SienaEffect::DefenseFinal,
+            Stab => SienaEffect::Stat(StatKind::Stab),
+            Hack => SienaEffect::Stat(StatKind::Hack),
+            Int => SienaEffect::Stat(StatKind::Int),
+            Def => SienaEffect::Stat(StatKind::Def),
+            Mr => SienaEffect::Stat(StatKind::Mr),
+            Dex => SienaEffect::Stat(StatKind::Dex),
+            Agi => SienaEffect::Stat(StatKind::Agi),
+        }
+    }
+
+    /// この種類が出る部位かどうか。武器/盾の一覧(=強化能力値の 6 種)と、
+    /// その他の部位の一覧(それ以外全部)で丸ごと違う
+    /// (wiki: 能力値一覧(武器/盾)・能力値一覧(その他の部位)は 2 つの独立した表で、
+    /// 後者は兜/鎧/頭/体/手/足の 6 部位に共通 ── 部位ごとの内訳は wiki に無い。
+    /// 取得日 2026-09-01)。
     pub fn allowed_on(self, slot: PartSlot) -> bool {
         self.is_equipment_value() == slot.siena_values_are_equipment()
     }
 
     /// 装備補正(強化能力値)へ入る種類 = 武器/盾の一覧。
     pub fn is_equipment_value(self) -> bool {
-        use SienaValueKind::*;
-        matches!(
-            self,
-            Thrust | Slash | MagicAttack | MagicDefense | PhysicalComposite | MagicSlash
-        )
+        matches!(self.effect(), SienaEffect::EquipmentValue)
     }
 
     /// 値域(wiki 一覧表の「数値」列。確率帯をまたいだ最小〜最大)。
@@ -155,23 +194,20 @@ impl SienaValueKind {
     }
 
     /// 与ダメージ式に入るか。`false` は**記録するだけ**(ランダムOP のグレー枠と同じ扱い)。
+    /// 防御側の最終固定値レイヤーが未モデルな `DefenseFinal` だけが未収録。
     pub fn is_modeled(self) -> bool {
-        use SienaValueKind::*;
-        !matches!(
-            self,
-            PhysicalResist | MagicResist | CriticalTakenReduction | Accuracy | Evasion
-        )
+        !matches!(self.effect(), SienaEffect::DefenseFinal)
     }
 
-    /// 記録のみの理由(画面にそのまま出す)。モデル済みなら空。
+    /// 記録のみの理由・効き先の注記(画面にそのまま出す)。モデル済みで注記不要なら空。
     pub fn note(self) -> &'static str {
         use SienaValueKind::*;
         match self {
             PhysicalResist => "実際は物理防御力の最終値が増加(防御側は未収録)",
             MagicResist => "実際は魔法防御力の最終値が増加(防御側は未収録)",
-            CriticalTakenReduction => "被撃側の値(wiki 未検証)",
-            Accuracy => "実際は装備命中率補正が固定値で増加(命中は未収録)",
-            Evasion => "実際は装備回避率補正が固定値で増加(回避は未収録)",
+            CriticalTakenReduction => "被撃側の値(wiki 未検証・防御側は未収録)",
+            Accuracy => "実際は装備命中率補正が固定値で増加",
+            Evasion => "実際は装備回避率補正が固定値で増加",
             PhysicalComposite => "突き・斬りに分かれて入る",
             MagicSlash => "魔攻・斬りに分かれて入る",
             _ => "",
@@ -180,39 +216,41 @@ impl SienaValueKind {
 
     /// STAB〜AGI の種類ならその `StatKind`。
     fn stat_kind(self) -> Option<StatKind> {
-        use SienaValueKind::*;
-        Some(match self {
-            Stab => StatKind::Stab,
-            Hack => StatKind::Hack,
-            Int => StatKind::Int,
-            Def => StatKind::Def,
-            Mr => StatKind::Mr,
-            Dex => StatKind::Dex,
-            Agi => StatKind::Agi,
-            _ => return None,
-        })
+        match self.effect() {
+            SienaEffect::Stat(kind) => Some(kind),
+            _ => None,
+        }
     }
 
     /// この種類の値 `value` が装備補正のどこに入るか。
-    /// 複合(物理複合・魔法斬り)は wiki の内訳どおりに分かれる(5 = 3 + 2)。
+    /// - `EquipmentValue`(武器/盾の 6 種)は強化能力値へ。複合(物理複合・魔法斬り)は
+    ///   wiki の内訳どおりに分かれる(5 = 3 + 2)
+    /// - `EquipmentAccuracy` / `EquipmentEvasion`(命中率・回避率)は数値そのまま
+    ///   装備命中率補正・装備回避率補正へ固定値加算
+    /// - `Stat` / `DefenseFinal` はここでは扱わない(`stat_kind` / 防御側 未モデル)
     fn apply_to_values(self, value: i64, values: &mut EquipmentValues) {
         use SienaValueKind::*;
         // 複合は「大きいほうが先」。wiki の例 5 → 3 + 2
         let major = (value + 1) / 2;
-        match self {
-            Thrust => values.thrust += value,
-            Slash => values.slash += value,
-            MagicAttack => values.magic_attack += value,
-            MagicDefense => values.magic_defense += value,
-            PhysicalComposite => {
-                values.thrust += major;
-                values.slash += value - major;
-            }
-            MagicSlash => {
-                values.magic_attack += major;
-                values.slash += value - major;
-            }
-            _ => {}
+        match self.effect() {
+            SienaEffect::EquipmentValue => match self {
+                Thrust => values.thrust += value,
+                Slash => values.slash += value,
+                MagicAttack => values.magic_attack += value,
+                MagicDefense => values.magic_defense += value,
+                PhysicalComposite => {
+                    values.thrust += major;
+                    values.slash += value - major;
+                }
+                MagicSlash => {
+                    values.magic_attack += major;
+                    values.slash += value - major;
+                }
+                _ => unreachable!("EquipmentValue effect の種類はここで網羅済み"),
+            },
+            SienaEffect::EquipmentAccuracy => values.accuracy += value,
+            SienaEffect::EquipmentEvasion => values.evasion += value,
+            SienaEffect::Stat(_) | SienaEffect::DefenseFinal => {}
         }
     }
 }
@@ -791,6 +829,46 @@ mod tests {
         assert_eq!(values.thrust, 3);
         assert_eq!(values.magic_attack, 3);
         assert_eq!(values.slash, 4);
+    }
+
+    #[test]
+    fn accuracy_and_evasion_slots_add_to_equipment_values() {
+        // wiki: 能力値一覧(その他の部位)「命中率」「回避率」は
+        // 「実際は装備命中率補正/装備回避率補正が数値分固定値で増加」
+        let aura = SienaAura {
+            slots: vec![slot(SienaValueKind::Accuracy, 6), slot(SienaValueKind::Evasion, 3)],
+            extras: vec![],
+        };
+        let values = aura.values();
+        assert_eq!(values.accuracy, 6);
+        assert_eq!(values.evasion, 3);
+        // 命中率・回避率は強化能力値(突き〜魔法斬り)には乗らない
+        assert_eq!(values.thrust, 0);
+        assert_eq!(values.slash, 0);
+    }
+
+    #[test]
+    fn defense_final_kinds_stay_unmodeled() {
+        // 物理/魔法ダメージ耐性・被Cri減少は防御側未モデルなので、
+        // 装備補正にもステの最終固定値にも入らない(記録するだけ)。
+        let aura = SienaAura {
+            slots: vec![
+                slot(SienaValueKind::PhysicalResist, 2),
+                slot(SienaValueKind::MagicResist, 2),
+                slot(SienaValueKind::CriticalTakenReduction, 1),
+            ],
+            extras: vec![],
+        };
+        assert_eq!(aura.values(), EquipmentValues::default());
+        assert_eq!(aura.stat_bonus(), SienaStatBonus::default());
+        for k in [
+            SienaValueKind::PhysicalResist,
+            SienaValueKind::MagicResist,
+            SienaValueKind::CriticalTakenReduction,
+        ] {
+            assert_eq!(k.effect(), SienaEffect::DefenseFinal);
+            assert!(!k.is_modeled());
+        }
     }
 
     #[test]

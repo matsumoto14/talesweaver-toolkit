@@ -300,8 +300,12 @@ impl PartSlot {
         )
     }
 
-    /// シエナのオーラの能力値が「装備補正(エンチャント扱い)」として付く部位
-    /// (wiki: シエナのオーラ「能力値一覧(武器/盾)」)。その他の部位はステの最終固定値増加になる。
+    /// シエナのオーラの能力値スロットに「能力値一覧(武器/盾)」の 6 種
+    /// (突き/斬り/魔攻/魔防/物理複合/魔法斬り、強化能力値扱い)が出る部位か
+    /// (wiki: シエナのオーラ「能力値一覧(武器/盾)」)。`false` の部位は
+    /// 「能力値一覧(その他の部位)」が出る ── 命中率/回避率は装備命中率・回避率補正、
+    /// STAB〜AGI はステの最終固定値、残り 3 種(物理/魔法ダメージ耐性・被Cri減少)は
+    /// 防御側の最終固定値(未モデル)に分かれる(`SienaValueKind::effect` を見よ)。
     pub fn siena_values_are_equipment(self) -> bool {
         matches!(self, PartSlot::Weapon | PartSlot::Shield)
     }
@@ -1467,15 +1471,17 @@ impl Equipment {
                 });
             }
         }
+        // 武器/盾は強化能力値(突き〜魔法斬り)、その他の部位は命中率・回避率が
+        // 装備命中率補正・装備回避率補正として同じ `EquipmentValues` に乗る
+        // (`SienaValueKind::effect` が部位を問わず振り分ける。ここで部位を見て
+        // 分岐する必要はない)。
         for (slot, aura) in self.siena.iter_selected() {
-            if slot.siena_values_are_equipment() {
-                let values = aura.values();
-                if values != EquipmentValues::default() {
-                    sources.push(EquipmentValueSource {
-                        source: format!("シエナのオーラ({})", slot.label()),
-                        values,
-                    });
-                }
+            let values = aura.values();
+            if values != EquipmentValues::default() {
+                sources.push(EquipmentValueSource {
+                    source: format!("シエナのオーラ({})", slot.label()),
+                    values,
+                });
             }
         }
         if let Some(region) = region {
@@ -2500,6 +2506,44 @@ mod tests {
                 hack: 10,
                 ..Default::default()
             }
+        );
+    }
+
+    #[test]
+    fn シエナのオーラの命中率と回避率は装備命中回避補正に入る() {
+        // wiki: 能力値一覧(その他の部位)「命中率」「回避率」の注記どおり、
+        // 武器/盾以外の部位に出た命中率・回避率は装備命中率補正・装備回避率補正へ
+        // 数値ぶんの固定値として加算される(取得日 2026-09-01)。
+        let mut eq = Equipment::default();
+        set_siena(
+            &mut eq,
+            PartSlot::Helm,
+            SienaAura {
+                slots: vec![
+                    SienaSlot {
+                        kind: SienaValueKind::Accuracy,
+                        value: 6,
+                    },
+                    SienaSlot {
+                        kind: SienaValueKind::Evasion,
+                        value: 3,
+                    },
+                ],
+                extras: Vec::new(),
+            },
+        );
+        assert!(eq.validate().is_ok());
+        let totals = eq.enhanced_totals(None);
+        assert_eq!(totals.accuracy, 6);
+        assert_eq!(totals.evasion, 3);
+        // 強化能力値(突き〜魔法斬り)には乗らない
+        assert_eq!(
+            EquipmentValues {
+                accuracy: 0,
+                evasion: 0,
+                ..totals
+            },
+            EquipmentValues::default()
         );
     }
 
