@@ -102,6 +102,18 @@
         <p>
           ゲーム内の名称・用語、および同梱しているアイコン画像の権利は、それぞれの権利者に帰属します。
         </p>
+        <!-- ネクソンの FAQ「ファンサイトで公式サイトの画像などを使用できますか?」が、
+             ゲームに関連するコンテンツを含むページにこの表記を求めている。文言は変えない -->
+        <p class="copyright">Copyrights (C) NEXON Corporation and NEXON Co., Ltd. All Rights Reserved.</p>
+        <p class="muted">
+          <a
+            class="source-link"
+            href="https://talesweaver.nexon.co.jp/"
+            target="_blank"
+            rel="noreferrer"
+            onclick={(event) => openExternal(event, "https://talesweaver.nexon.co.jp/")}
+          >テイルズウィーバー公式サイト</a>
+        </p>
       </div>
 
       <div class="card">
@@ -228,6 +240,8 @@
   .card p { font-size: var(--t-body); line-height: 1.65; margin: 0 0 6px; }
   .card p:last-child { margin-bottom: 0; }
   .card p.muted { color: var(--fg-muted); }
+  /* 権利表記。読み飛ばされない程度に地の文と揃え、装飾はしない */
+  .card p.copyright { font-size: var(--t-label); color: var(--fg-muted); }
 
   .version { font-size: 19px; font-weight: var(--w-strong); }
   .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }

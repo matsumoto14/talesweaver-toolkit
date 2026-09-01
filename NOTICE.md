@@ -6,6 +6,15 @@ TW Context は、TalesWeaver のプレイヤーが個人的に作っている**�
 ゲームの開発元・運営元とは一切関係がなく、公認・提携・後援を受けていません。
 "TalesWeaver" をはじめとするゲーム内の名称・用語は、それぞれの権利者の商標または登録商標です。
 
+Copyrights (C) NEXON Corporation and NEXON Co., Ltd. All Rights Reserved.
+
+[テイルズウィーバー公式サイト](https://talesweaver.nexon.co.jp/)
+
+この表記は、ネクソンの
+[「ファンサイトで公式サイトの画像などを使用できますか?」](https://support.nexon.co.jp/faq/show/247?category_id=49&site_domain=default)
+に従って掲げています。同 FAQ では、ゲームに関連するコンテンツ(スクリーンショット・イラスト・音楽など)を
+含むページにこの表記を入れることが求められています。
+
 このツールはゲームクライアントに接続せず、ゲームのファイルも読み書きしません。
 プレイヤーが自分で入力したキャラクター情報をもとに計算するだけの、独立したアプリケーションです。
 
@@ -25,7 +34,7 @@ TW Context は、TalesWeaver のプレイヤーが個人的に作っている**�
 
 `apps/desktop/src/assets/icons/` 以下のスキル・マスタリー・装備・キャラクターのアイコンは、
 Tale Wiki の各ページに添付された画像を取り込んだものです。
-**これらの画像の著作権はゲームの権利者に帰属します。**
+**これらの画像の著作権はゲームの権利者に帰属します**(Copyrights (C) NEXON Corporation and NEXON Co., Ltd. All Rights Reserved.)。
 本ツールはゲームの解説・計算補助という目的の範囲で、識別のために表示しています。
 
 取り込み手順は `tools/gamedata/import_*_icons.py` にあり、
