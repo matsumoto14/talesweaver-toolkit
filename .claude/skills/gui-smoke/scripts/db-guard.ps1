@@ -26,7 +26,10 @@ $Db = Join-Path $env:APPDATA 'dev.twcontext.app\tw-context.sqlite'
 $Guard = Join-Path $env:APPDATA 'dev.twcontext.app\tw-context.sqlite.guard'
 
 function Test-AppRunning {
-    $p = Get-Process -Name 'talesweaver-toolkit' -ErrorAction SilentlyContinue
+    # プロセス名は 'desktop'(src-tauri のクレート名がそのままバイナリ名になる)。
+    # 製品名 'talesweaver-toolkit' で見ていたので、このガードは一度も効いていなかった
+    # (起動中に save して WAL の途中を掴む・restore がロックで失敗する、が実際に起きた)
+    $p = Get-Process -Name 'desktop' -ErrorAction SilentlyContinue
     return $null -ne $p
 }
 
