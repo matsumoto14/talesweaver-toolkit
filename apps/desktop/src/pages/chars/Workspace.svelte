@@ -34,7 +34,7 @@
   import { deleteCharacter } from "../../api/commands";
   import { dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload } from "../../draft";
-  import { cloneEquipmentPart, randomOptionCount, sienaPartCount } from "../../equipment";
+  import { cloneEquipmentPart, randomOptionCount, sienaPartCount, withEnchant } from "../../equipment";
   import { fmtInt } from "../../format";
   import {
     EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
@@ -397,8 +397,11 @@
   /** 強化能力値の合計。いまの実力バーの装備ブロックと共有(summaries.ts。計算は Rust 側 preview) */
   const eqEnhancedTotal = $derived(equipmentEnhancedTotal(preview));
   const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
+  /** 装備値の見せ方は「合計 (+エンチャント)」で全画面そろえる(equipment.ts の withEnchant) */
   const equipmentSummary = $derived(
-    `基本合計 ${equipmentAttackKinds.map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(eqBaseTotal[k])}`).join(" / ")}`,
+    equipmentAttackKinds
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${withEnchant(eqBaseTotal[k], eqEnhancedTotal[k])}`)
+      .join(" / "),
   );
   const sienaParts = $derived(sienaPartCount(draft.equipment));
   /** シエナのオーラの攻撃力増加(New1)の合計 %。計算は Rust 側(preview) */
@@ -848,8 +851,10 @@
       装備
       {#each equipmentAttackKinds as k, i (k)}
         {#if i > 0}<span class="sep"> ・ </span>{/if}{EQUIPMENT_STAT_SHORT[k]}
-        <span use:bump={() => eqBaseTotal[k]}>{fmtInt(eqBaseTotal[k])}</span>
-        <span class="enhance" use:bump={() => eqEnhancedTotal[k]}>+{fmtInt(eqEnhancedTotal[k])}</span>
+        <!-- 合計を出し、その横に括弧でエンチャント分(equipment.ts の withEnchant と同じ形。
+             跳ねは値ごとに要るのでここは span を分けたまま組み立てる) -->
+        <span use:bump={() => eqBaseTotal[k] + eqEnhancedTotal[k]}>{fmtInt(eqBaseTotal[k] + eqEnhancedTotal[k])}</span>
+        <span class="enhance" use:bump={() => eqEnhancedTotal[k]}>(+{fmtInt(eqEnhancedTotal[k])})</span>
       {/each}
     </span>
     {#if mainSkill}

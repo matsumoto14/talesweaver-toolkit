@@ -895,7 +895,7 @@
         <span class="part-abi">OP {part!.random_options.length}</span>
       {/if}
     </span>
-    <span class="part-vals num dim">{part ? valuesSummary(part.base) : "—"}</span>
+    <span class="part-vals num dim">{part ? valuesSummary(part.base, part.enchant) : "—"}</span>
     <span class="chev dim">›</span>
   </button>
   {#if list.registered.length > 1}

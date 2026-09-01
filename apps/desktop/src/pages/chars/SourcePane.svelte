@@ -12,7 +12,7 @@
   // sources/pane-shared.css にまとめてグローバル読み込みしている(理由はそのファイル冒頭を参照)。
   import type { CharacterSkillEffectsView, PetSkillTier, Skill, StatKind, StatPreview } from "../../api/types";
   import type { Draft } from "../../draft";
-  import { sacredRelicStageFromValue, sacredRelicValue } from "../../equipment";
+  import { sacredRelicStageFromValue, sacredRelicValue, withEnchant } from "../../equipment";
   import { limits } from "../../limits.svelte";
   import type { SourceId } from "./sourceId";
   import "./sources/pane-shared.css";
@@ -33,7 +33,7 @@
   import { fmtInt } from "../../format";
   import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { bump, flash } from "../../ui/motion.svelte";
-  import { equipmentAttackKindsFor, equipmentEnhancedTotal } from "./summaries";
+  import { equipmentAttackKindsFor, equipmentBaseTotal, equipmentEnhancedTotal } from "./summaries";
 
   /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
   const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
@@ -109,18 +109,19 @@
   }
 
   /**
-   * 装備ペインの見出しに出す要約。**強化合計(エンチャント + シエナのオーラ)**だけを、
-   * 主軸スキルが実際に使う補正について出す(魔法斬りなら 斬り・魔攻)。
-   * 基本値は部位の行が、テシスコアはテシスコアのペインが持つ — ここは装備だけを言う。
+   * 装備ペインの見出しに出す要約。主軸スキルが実際に使う補正について(魔法斬りなら 斬り・魔攻)、
+   * **合計とその横に括弧でエンチャント分**を出す(equipment.ts の `withEnchant`。
+   * ユーザー確定 2026-09-01)。テシスコアはテシスコアのペインが持つ — ここは装備だけを言う。
    */
   const equipmentMainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
   const equipmentHeadNote = $derived.by(() => {
     // 計算前は 0 が並ぶだけなので、値が来るまでは元の説明文を出す(§00「0 で埋めない」)
     if (!preview) return TITLES.equipment.note;
-    const total = equipmentEnhancedTotal(preview);
+    const base = equipmentBaseTotal(preview);
+    const enchant = equipmentEnhancedTotal(preview);
     return (
       equipmentAttackKindsFor(equipmentMainSkill?.dependency ?? null)
-        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(total[k])}`)
+        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${withEnchant(base[k], enchant[k])}`)
         .join(" ・ ") || TITLES.equipment.note
     );
   });

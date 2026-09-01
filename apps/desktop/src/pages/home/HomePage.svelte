@@ -1380,7 +1380,7 @@
                             <p class="relic-hint dim">補正値が上限まで届くと次の段へ進めます</p>
                           {/if}
                         {:else}
-                          <span class="expand-row-vals num dim">{valuesSummary(part!.base)}</span>
+                          <span class="expand-row-vals num dim">{valuesSummary(part!.base, part!.enchant)}</span>
                         {/if}
                       </div>
                     {:else}

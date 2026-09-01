@@ -87,10 +87,23 @@ export const applyEnhanceLevel = (part: EquipmentPart, level: number): Equipment
 export const sumValues = (v: EquipmentValues): number =>
   EQUIPMENT_VALUE_KEYS.reduce((s, k) => s + v[k], 0);
 
-/** 値が大きい上位 2 種の要約(部位行の見出し用)。武器なら「突き122 / 斬り315」、鎧なら「物防270 / 魔防245」。 */
-export const valuesSummary = (v: EquipmentValues): string => {
-  const top = EQUIPMENT_VALUE_KEYS.filter((k) => v[k] > 0).sort((a, b) => v[b] - v[a]).slice(0, 2);
-  return top.length === 0 ? "—" : top.map((k) => `${EQUIPMENT_STAT_SHORT[k]}${v[k]}`).join(" / ");
+/**
+ * 装備値 1 種の見せ方。**合計を出し、その横に括弧でエンチャント分**を添える
+ * (ユーザー確定 2026-09-01「合計をだしてその横にかっこでプラスエンチャント値が正しい表現」)。
+ * 括弧はエンチャントが 0 でも出す — 幅が動かないし、盛れる余地が残っていることが分かる。
+ */
+export const withEnchant = (base: number, enchant: number): string =>
+  `${(base + enchant).toLocaleString()} (+${enchant.toLocaleString()})`;
+
+/** 値が大きい上位 2 種の要約(部位行の見出し用)。武器なら「突き 315 (+120) / 斬り 122 (+0)」。 */
+export const valuesSummary = (base: EquipmentValues, enchant: EquipmentValues): string => {
+  const total = (k: (typeof EQUIPMENT_VALUE_KEYS)[number]) => base[k] + enchant[k];
+  const top = EQUIPMENT_VALUE_KEYS.filter((k) => total(k) > 0)
+    .sort((a, b) => total(b) - total(a))
+    .slice(0, 2);
+  return top.length === 0
+    ? "—"
+    : top.map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${withEnchant(base[k], enchant[k])}`).join(" / ");
 };
 
 /** カタログ候補のレンジ要約。max が大きい上位 2 種を「物防260-280 / 魔防230-260」の形で出す。 */
