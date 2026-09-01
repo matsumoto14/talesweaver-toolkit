@@ -31,8 +31,9 @@
   import StatInput from "../../ui/StatInput.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import { fmtInt } from "../../format";
-  import { PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
-  import { bump } from "../../ui/motion.svelte";
+  import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
+  import { bump, flash } from "../../ui/motion.svelte";
+  import { equipmentAttackKindsFor, equipmentEnhancedTotal } from "./summaries";
 
   /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
   const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
@@ -107,6 +108,23 @@
     );
   }
 
+  /**
+   * 装備ペインの見出しに出す要約。**強化合計(エンチャント + シエナのオーラ)**だけを、
+   * 主軸スキルが実際に使う補正について出す(魔法斬りなら 斬り・魔攻)。
+   * 基本値は部位の行が、テシスコアはテシスコアのペインが持つ — ここは装備だけを言う。
+   */
+  const equipmentMainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+  const equipmentHeadNote = $derived.by(() => {
+    // 計算前は 0 が並ぶだけなので、値が来るまでは元の説明文を出す(§00「0 で埋めない」)
+    if (!preview) return TITLES.equipment.note;
+    const total = equipmentEnhancedTotal(preview);
+    return (
+      equipmentAttackKindsFor(equipmentMainSkill?.dependency ?? null)
+        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(total[k])}`)
+        .join(" ・ ") || TITLES.equipment.note
+    );
+  });
+
   const TITLES: Record<SourceId, { title: string; note: string }> = {
     status: { title: "キャラステータス", note: "素ステ・覚醒・エタの意志・主属性" },
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
@@ -137,7 +155,14 @@
 <div class="pane pane-in">
   <div class="pane-head">
     <span class="pane-title">{TITLES[sourceId].title}</span>
-    <span class="dim">{TITLES[sourceId].note}</span>
+    <!-- 装備だけは固定の説明文ではなく、いまの値を出す。装備は**強化合計(エンチャント)**で
+         概ね認知できる(ユーザー判断 2026-09-01)ので、主軸スキルが使う補正だけを見出しに置き、
+         ペインの中には表を持たない(縦を使わない) -->
+    {#if sourceId === "equipment"}
+      <span class="head-value num" use:flash={() => equipmentHeadNote}>{equipmentHeadNote}</span>
+    {:else}
+      <span class="dim">{TITLES[sourceId].note}</span>
+    {/if}
   </div>
 
   {#if previewError}<p class="preview-error">{previewError}</p>{/if}

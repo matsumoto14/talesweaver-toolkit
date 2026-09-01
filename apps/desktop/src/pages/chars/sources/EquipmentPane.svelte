@@ -17,11 +17,8 @@
   } from "../../../labels";
   import type { EquipmentStatKind } from "../../../labels";
   import { limits } from "../../../limits.svelte";
-  import { app, equipmentFocus, equipmentPartFocus, focusCharacterSource } from "../../../state.svelte";
+  import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
-  import {
-    equipmentAttackKindsFor, equipmentAttackRatePercent, equipmentBaseTotal, thesisCoreBestTotal,
-  } from "../summaries";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Select from "../../../ui/Select.svelte";
@@ -49,32 +46,6 @@
 
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
   const iconId = (itemId: string | null) => equipmentIconId(itemId, app.equipmentCatalog);
-
-  // --- 効いている量(結果。部位一覧ビューの先頭に置く) ------------------------
-  /** 基本能力値の合計。行サブタイトルとも共有(summaries.ts。計算は Rust 側 preview) */
-  const eqBaseTotal = $derived(equipmentBaseTotal(preview));
-  /** 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分)。計算は Rust 側(preview) */
-  const eqEnchantTotal = $derived(preview?.equipment_enhanced_total ?? zeroValues());
-  /** 装備攻撃力強化倍率。行サブタイトルとも共有(summaries.ts) */
-  const enhanceRatePercent = $derived(equipmentAttackRatePercent(preview));
-  /** テシスコアで一番伸びる地域の合計。この表には入らない値なので「どれだけ別にあるか」だけ出す */
-  const coreBestTotal = $derived(thesisCoreBestTotal(preview));
-  const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
-  /**
-   * 先頭の表に出す列。**既定は主軸スキルが実際に使う攻撃補正だけ**にする。
-   * 9 補正を全部並べると表が横いっぱいまで伸び、行の名前と読みたい数字が画面の端と端に
-   * 離れて視線が往復する(§00 01。ユーザー指摘 2026-09-01「みにくさの原因は横に伸び続けるから」)。
-   * 残りは部位詳細と同じ言い方のトグルで足す(§00 02 要らないものを見せない)。
-   */
-  let showAllSummaryStats = $state(false);
-  const visibleEquipmentStatKinds = $derived.by<EquipmentStatKind[]>(() => {
-    if (showAllSummaryStats || !mainSkill) return [...EQUIPMENT_STAT_KINDS];
-    return equipmentAttackKinds;
-  });
-  /** トグルで増える列(見出しに何が出るかを名前で書く。開くまで分からない状態にしない) */
-  const hiddenSummaryStatKinds = $derived(
-    EQUIPMENT_STAT_KINDS.filter((k) => !equipmentAttackKinds.includes(k)),
-  );
 
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
@@ -897,68 +868,6 @@
      その場に残り、別の部位を押せばそのまま横に移れる — 戻るのに「戻る」が要らない -->
 <div class="part-split" class:open={openPart !== null}>
   <div class="part-list">
-  <!-- 効いている量(結果)。ペイン自体が既に「装備」の名前を出しているので見出しは持たない。
-       部位詳細ビューには出さず、部位一覧ビューの先頭にだけ置く -->
-  <table class="eq-table num inset">
-    <thead>
-      <tr>
-        <th></th>
-        {#each visibleEquipmentStatKinds as k (k)}<th class="n">{EQUIPMENT_STAT_SHORT[k]}</th>{/each}
-      </tr>
-    </thead>
-    <tbody>
-      <!-- 行の名前(基本 / 強化)だけでは何が入っているか分からない。散文の注記に逃がすと
-           「どっちに何が入るか」を読み手が組み立てることになるので、行そのものに書く
-           (§00 05 考えさせない / 01 視線を動かさない) -->
-      <tr>
-        <th class="rh">
-          <span class="rh-name">基本</span>
-          <span class="rh-sub">装備 + アビリティ + 称号</span>
-        </th>
-        {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqBaseTotal[k]}>{fmtInt(eqBaseTotal[k])}</td>{/each}
-      </tr>
-      <tr>
-        <th class="rh">
-          <span class="rh-name">強化</span>
-          <span class="rh-sub">エンチャント + シエナのオーラ</span>
-        </th>
-        {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqEnchantTotal[k]}>{fmtInt(eqEnchantTotal[k])}</td>{/each}
-      </tr>
-      <!-- テシスコアは地域ごとに別のセットを組むので、この表では 1 つの数に決まらない。
-           「入りません」と文章で言わず、値の無い行として置く(破線 + `?`。0 や空白で埋めない) -->
-      <tr class="eq-core">
-        <th class="rh">
-          <span class="rh-name">テシスコア</span>
-          <span class="rh-sub">地域ごとに別のセット</span>
-        </th>
-        {#each visibleEquipmentStatKinds as k (k)}<td class="n"><span class="q">?</span></td>{/each}
-      </tr>
-    </tbody>
-  </table>
-  <!-- 列を増やす操作は表の外(下)に置く。表の中に置くと列の幅が変わって数字がずれる -->
-  {#if mainSkill && hiddenSummaryStatKinds.length > 0}
-    <button
-      type="button"
-      class="eq-more-toggle"
-      aria-expanded={showAllSummaryStats}
-      onclick={() => (showAllSummaryStats = !showAllSummaryStats)}
-    >
-      <span>{hiddenSummaryStatKinds.map((k) => EQUIPMENT_STAT_SHORT[k]).join(" / ")}</span>
-      <span class="toggle-state">{showAllSummaryStats ? "畳む ︿" : "も出す ﹀"}</span>
-    </button>
-  {/if}
-  <!-- 表に無い値がどれだけあるかは、文章ではなく数で出す。押すとテシスコアのペインへ移る -->
-  <button type="button" class="eq-core-link" onclick={() => focusCharacterSource("thesis")}>
-    <span class="dim">地域を選ぶダメージ計算タブでだけ強化側へ合流します。一番良い地域で</span>
-    <span class="num strong" use:bump={() => coreBestTotal}>合計 {fmtInt(coreBestTotal)}</span>
-    <span class="chev dim">›</span>
-  </button>
-  <!-- 注記も幅いっぱいまで伸ばさない。1 行が長いほど次の行の頭を探すことになる -->
-  <p class="dim tiny eq-note">
-    基本と強化を分けているのは、与ダメージの<b>攻撃力(A)</b>で別々の係数が掛かるからです。
-    共通スキルの強化倍率 +{enhanceRatePercent}% は、そのあと<b>両方の合計</b>に掛かります。
-    {#if mainSkill}攻撃補正は「{mainSkill.name}」に使う値だけ表示しています。{/if}
-  </p>
 {#each PART_SLOTS as slot (slot)}
   {@const part = selectedPartOrNull(slot)}
   {@const list = draft.equipment.parts[slot]}
