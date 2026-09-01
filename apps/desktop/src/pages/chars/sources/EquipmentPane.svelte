@@ -458,7 +458,8 @@
     part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId);
   }
   const abilityFitsWeapon = (family: EquipmentAbilityFamily, system: WeaponSystem | null): boolean => {
-    if (family === "weapon_delay" || system === null) return true;
+    // 武器ディレイと失われた魂(最大HP)は攻撃系統に紐づかないので、どの武器でも選べる。
+    if (family === "weapon_delay" || family === "vitality" || system === null) return true;
     if (system === "stab") return family === "pointed_blade";
     if (system === "hack") return family === "sharp_blade";
     if (system === "stab_hack") return family === "pointed_blade" || family === "sharp_blade";
@@ -515,6 +516,63 @@
   }
   const nonWeaponAbilityCandidates = (slot: PartSlot): EquipmentAbilityDef[] =>
     app.equipmentAbilities.filter((ability) => ability.slot === slot);
+
+  // --- 等級ラダー ------------------------------------------------------------
+  // カテゴリー4 には入手経路の違う 2 本のラダーがある。装備システム UI で SEED を
+  // 払う N- / R- / L- / E-(頭だけ G-)と、アイテム方式の 古代精霊 < 深淵 < 喪失 < 夜星。
+  // どちらも名称そのものが等級を表す。全部並べると鎧だけで 40 件を超え、探す前に
+  // 読む量が増えるので、既定は各ラダーの上位 2 段だけ出し、残りは畳んだ先で選ばせる
+  // (ux-guidelines 原則 2「削るのではなく構造化する」)。上位 2 段にするのは、
+  // 最上位(夜星 / E-)は入手が重く、実際に着けている人が多いのは 1 つ下(喪失 / L-)だから。
+  const ABILITY_TIER_TOP_COUNT = 2;
+  const ABILITY_TIERS: { prefix: string; scheme: string; rank: number }[] = [
+    { prefix: "N-", scheme: "letter", rank: 0 },
+    { prefix: "R-", scheme: "letter", rank: 1 },
+    { prefix: "L-", scheme: "letter", rank: 2 },
+    { prefix: "E-", scheme: "letter", rank: 3 },
+    { prefix: "G-", scheme: "letter", rank: 3 },
+    { prefix: "古代精霊の", scheme: "line", rank: 0 },
+    { prefix: "深淵の", scheme: "line", rank: 1 },
+    { prefix: "喪失の", scheme: "line", rank: 2 },
+    { prefix: "夜星の", scheme: "line", rank: 3 },
+  ];
+  const abilityTier = (name: string) => ABILITY_TIERS.find((tier) => name.startsWith(tier.prefix)) ?? null;
+  /** 等級を外した残り(「鎧研磨」「火の月石」)がラダーの identity。2 本のラダーは
+      同じ種類名を共有する(夜星の耐魔力 と E-耐魔力)ので、経路も鍵に入れて混ぜない。 */
+  const abilityLadderKey = (ability: EquipmentAbilityDef, tier: { prefix: string; scheme: string }): string =>
+    `${ability.slot}-${ability.category}-${tier.scheme}-${ability.name.slice(tier.prefix.length)}`;
+  /** 候補を「既定で見せる」と「畳む」に分ける。等級が付かない候補((上)系・神秘鉱など)は
+      ラダーを成さないので畳まない。選んであるものは畳んだ側にあっても必ず見せる —
+      隠れると、なぜその値になっているのかが分からなくなる。 */
+  function splitAbilityGrades(
+    candidates: EquipmentAbilityDef[],
+    selectedIds: string[],
+  ): { shown: EquipmentAbilityDef[]; folded: EquipmentAbilityDef[] } {
+    const ranks = new Map<string, number[]>();
+    for (const ability of candidates) {
+      const tier = abilityTier(ability.name);
+      if (tier === null) continue;
+      const key = abilityLadderKey(ability, tier);
+      ranks.set(key, [...(ranks.get(key) ?? []), tier.rank]);
+    }
+    /** そのラダーで「上位 N 段」に入る下限の rank。段数が少ないラダーは全部見せる。 */
+    const cutoff = new Map<string, number>();
+    for (const [key, list] of ranks) {
+      const sorted = [...new Set(list)].sort((x, y) => y - x);
+      cutoff.set(key, sorted[Math.min(ABILITY_TIER_TOP_COUNT, sorted.length) - 1]);
+    }
+    const shown: EquipmentAbilityDef[] = [];
+    const folded: EquipmentAbilityDef[] = [];
+    for (const ability of candidates) {
+      const tier = abilityTier(ability.name);
+      const isTop = tier !== null && tier.rank >= (cutoff.get(abilityLadderKey(ability, tier)) ?? 0);
+      if (tier === null || isTop || selectedIds.includes(ability.id)) shown.push(ability);
+      else folded.push(ability);
+    }
+    return { shown, folded };
+  }
+  /** 下位等級を開いている候補リスト。部位(武器はカテゴリ行)ごとに覚える。 */
+  let openLowerGrades = $state<Record<string, boolean>>({});
   function toggleNonWeaponAbility(slot: PartSlot, ability: EquipmentAbilityDef) {
     const part = selectedPart(slot);
     if (part.abilities.includes(ability.id)) {
@@ -715,6 +773,50 @@
 </script>
 
 <svelte:window onkeydown={closeEquipmentOnEscape} />
+
+{#snippet abilityChoiceChip(slot: PartSlot, category: number, ability: EquipmentAbilityDef, selectedAbilityId: string, fresh: boolean)}
+  <button
+    type="button"
+    class:on={selectedAbilityId === ability.id}
+    class:record-only={ability.record_only}
+    class:swap-in={fresh}
+    class="chip ability-choice"
+    aria-pressed={selectedAbilityId === ability.id}
+    onclick={() => setAbilityForCategory(slot, category, ability.id)}
+  >
+    <span>{ability.name}</span>
+    <span class="ability-choice-effect num">{ability.effect_summary}</span>
+  </button>
+{/snippet}
+
+{#snippet nonWeaponAbilityChip(slot: PartSlot, ability: EquipmentAbilityDef, selectedIds: string[], full: boolean, fresh: boolean)}
+  {@const selected = selectedIds.includes(ability.id)}
+  <button
+    type="button"
+    class:on={selected}
+    class:record-only={ability.record_only}
+    class:swap-in={fresh}
+    class="chip ability-choice"
+    aria-pressed={selected}
+    disabled={!selected && full}
+    onclick={() => toggleNonWeaponAbility(slot, ability)}
+  >
+    <span>{ability.name}</span>
+    <span class="ability-choice-effect num">{ability.effect_summary}</span>
+  </button>
+{/snippet}
+
+{#snippet lowerGradeToggle(key: string, hiddenCount: number)}
+  <button
+    type="button"
+    class="chip add lower-grade-toggle"
+    aria-expanded={openLowerGrades[key] === true}
+    onclick={() => (openLowerGrades[key] = !openLowerGrades[key])}
+  >
+    {openLowerGrades[key] ? "下位等級を畳む ︿" : "下位等級も出す ﹀"}
+    <span class="num dim">{hiddenCount}</span>
+  </button>
+{/snippet}
 
 {#snippet partSwitchList(slot: PartSlot, registeredList: EquipmentPart[], selectedId: number | null)}
   {#each registeredList as registered, index (registered.id)}
@@ -1069,6 +1171,11 @@
           ] as row (row.category)}
             {@const selectedAbilityId = abilityIdForCategory(slot, row.category)}
             {@const selectedAbility = abilityDef(selectedAbilityId)}
+            {@const grades = splitAbilityGrades(
+              abilityCandidates(slot, row.category),
+              selectedAbilityId === "" ? [] : [selectedAbilityId],
+            )}
+            {@const gradeKey = `weapon-${row.category}`}
             <div
               class="ability-fixed-row"
               data-ability-id={selectedAbilityId}
@@ -1086,19 +1193,19 @@
                   aria-pressed={selectedAbilityId === ""}
                   onclick={() => setAbilityForCategory(slot, row.category, "")}
                 >装着しない</button>
-                {#each abilityCandidates(slot, row.category) as ability (ability.id)}
-                  <button
-                    type="button"
-                    class:on={selectedAbilityId === ability.id}
-                    class:record-only={ability.record_only}
-                    class="chip ability-choice"
-                    aria-pressed={selectedAbilityId === ability.id}
-                    onclick={() => setAbilityForCategory(slot, row.category, ability.id)}
-                  >
-                    <span>{ability.name}</span>
-                    <span class="ability-choice-effect num">{ability.effect_summary}</span>
-                  </button>
+                {#each grades.shown as ability (ability.id)}
+                  {@render abilityChoiceChip(slot, row.category, ability, selectedAbilityId, false)}
                 {/each}
+                <!-- 畳みボタンは候補の後ろに置き、開いた分はさらに後ろへ足す。
+                     押した場所(§00 03)が動かないのはこの順のときだけ -->
+                {#if grades.folded.length > 0}
+                  {@render lowerGradeToggle(gradeKey, grades.folded.length)}
+                  {#if openLowerGrades[gradeKey]}
+                    {#each grades.folded as ability (ability.id)}
+                      {@render abilityChoiceChip(slot, row.category, ability, selectedAbilityId, true)}
+                    {/each}
+                  {/if}
+                {/if}
               </div>
             </div>
 
@@ -1148,22 +1255,22 @@
           <p class="hint dim">
             {currentAbilitySlotCount(slot)}枠まで装着できます。範囲値とランダム追加は選択後に実測値を合わせます。
           </p>
+          {@const grades = splitAbilityGrades(nonWeaponAbilityCandidates(slot), part.abilities)}
+          {@const full = part.abilities.length >= currentAbilitySlotCount(slot)}
           <div class="ability-choice-list non-weapon-ability-list" aria-label="{PART_SLOT_LABELS[slot]}アビリティの候補">
-            {#each nonWeaponAbilityCandidates(slot) as ability (ability.id)}
-              {@const selected = part.abilities.includes(ability.id)}
-              <button
-                type="button"
-                class:on={selected}
-                class:record-only={ability.record_only}
-                class="chip ability-choice"
-                aria-pressed={selected}
-                disabled={!selected && part.abilities.length >= currentAbilitySlotCount(slot)}
-                onclick={() => toggleNonWeaponAbility(slot, ability)}
-              >
-                <span>{ability.name}</span>
-                <span class="ability-choice-effect num">{ability.effect_summary}</span>
-              </button>
+            {#each grades.shown as ability (ability.id)}
+              {@render nonWeaponAbilityChip(slot, ability, part.abilities, full, false)}
             {/each}
+            <!-- 畳みボタンは候補の後ろに置き、開いた分はさらに後ろへ足す。
+                 押した場所(§00 03)が動かないのはこの順のときだけ -->
+            {#if grades.folded.length > 0}
+              {@render lowerGradeToggle(slot, grades.folded.length)}
+              {#if openLowerGrades[slot]}
+                {#each grades.folded as ability (ability.id)}
+                  {@render nonWeaponAbilityChip(slot, ability, part.abilities, full, true)}
+                {/each}
+              {/if}
+            {/if}
           </div>
           {#each part.abilities as abilityId (abilityId)}
             {@const ability = abilityDef(abilityId)}
@@ -1227,7 +1334,7 @@
             {/if}
           {/each}
           {#if nonWeaponAbilityCandidates(slot).some((ability) => ability.record_only)}
-            <span class="additional-note dim">破線の候補は効果を保存しますが、現在の計算項目にない値は合計へ加えません。</span>
+            <span class="additional-note dim">破線の候補は効果を保存しますが、現在の計算項目にない値は合計へ加えません。防御率・回避率の追加効果も同じく記録だけです。</span>
           {/if}
         {/if}
 
