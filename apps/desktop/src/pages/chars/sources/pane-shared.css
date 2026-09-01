@@ -29,6 +29,23 @@
   .eq-table thead th { font-size: 9px; font-weight: 700; color: var(--fg-muted); background: none; position: static; }
   .eq-table .rh { text-align: left; font-size: 10px; color: var(--fg-muted); font-weight: 700; }
   .eq-table .n { text-align: right; }
+  /* 行の名前と「何が入るか」を 2 段で置く。名前だけでは読み手が注記と突き合わせる必要がある */
+  .eq-table .rh-name { display: block; }
+  .eq-table .rh-sub { display: block; font-size: 8.5px; font-weight: 400; color: var(--fg-dim); white-space: nowrap; }
+  /* 値がこの表では決まらない行(テシスコア = 地域ごと)。0 や空白で埋めず破線 + `?` にする */
+  .eq-table .eq-core .q {
+    display: inline-block; min-width: 20px; padding: 0 5px; border-radius: var(--r-pill);
+    border: 1px dashed var(--border-strong); color: var(--fg-dim); font-size: 9px; font-weight: 700;
+  }
+  /* 表に入らない分がどれだけあるかを数で出し、押すとテシスコアのペインへ移る */
+  .eq-core-link {
+    margin-top: 5px; display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%;
+    padding: 3px 6px; border-radius: var(--r-inset); background: none; border: 0;
+    text-align: left; font: inherit; font-size: 9.5px;
+  }
+  .eq-core-link:hover { background: var(--bg-active); }
+  .eq-core-link .strong { font-size: 11px; font-weight: 700; color: var(--fg-sub); }
+  .eq-core-link .chev { font-size: 9px; }
   /* エタの意志。値の欄と節目を横に並べる(どちらも同じことを決める場所なので) */
   .eternal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .eternal-row > :global(.stat-input), .eternal-row > :global(.stepper) { flex: 0 0 150px; }

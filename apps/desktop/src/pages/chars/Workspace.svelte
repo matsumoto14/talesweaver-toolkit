@@ -57,6 +57,7 @@
     equipmentEnhancedTotal,
     randomOptionRecordOnlyCount,
     sharpnessRatePercent as sharpnessRatePercentOf,
+    thesisCoreBestTotal,
     unleashSummary as unleashSummaryOf,
   } from "./summaries";
 
@@ -406,7 +407,7 @@
   const sienaStats = $derived(preview?.siena_stat_total ?? 0);
   // テシスコアの合計(コア効果の最大)は行サブタイトルにだけ出す。セット効果・地域別の内訳は
   // ThesisCorePane 側(結果の置き場所)。計算は Rust 側(preview.thesis_cores)
-  const coreBestTotal = $derived(Math.max(0, ...(preview?.thesis_cores.map((r) => r.total_bonus) ?? [])));
+  const coreBestTotal = $derived(thesisCoreBestTotal(preview));
   const roCount = $derived(randomOptionCount(draft.equipment));
   /** ランダムOP のうち記録するだけの枠数。行サブタイトルと RandomOptionPane の両方が使うので
    *  summaries.ts の共有関数(計算は Rust 側 preview) */

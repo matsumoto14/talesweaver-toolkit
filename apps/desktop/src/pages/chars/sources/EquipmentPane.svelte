@@ -17,9 +17,11 @@
   } from "../../../labels";
   import type { EquipmentStatKind } from "../../../labels";
   import { limits } from "../../../limits.svelte";
-  import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
+  import { app, equipmentFocus, equipmentPartFocus, focusCharacterSource } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
-  import { equipmentAttackKindsFor, equipmentAttackRatePercent, equipmentBaseTotal } from "../summaries";
+  import {
+    equipmentAttackKindsFor, equipmentAttackRatePercent, equipmentBaseTotal, thesisCoreBestTotal,
+  } from "../summaries";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Select from "../../../ui/Select.svelte";
@@ -55,6 +57,8 @@
   const eqEnchantTotal = $derived(preview?.equipment_enhanced_total ?? zeroValues());
   /** 装備攻撃力強化倍率。行サブタイトルとも共有(summaries.ts) */
   const enhanceRatePercent = $derived(equipmentAttackRatePercent(preview));
+  /** テシスコアで一番伸びる地域の合計。この表には入らない値なので「どれだけ別にあるか」だけ出す */
+  const coreBestTotal = $derived(thesisCoreBestTotal(preview));
   const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
   /** wiki の装備攻撃力係数が 0 でない補正を先頭に、耐久系は主軸未選択でも常に出す */
   const visibleEquipmentStatKinds = $derived.by<EquipmentStatKind[]>(() => {
@@ -896,22 +900,44 @@
       </tr>
     </thead>
     <tbody>
+      <!-- 行の名前(基本 / 強化)だけでは何が入っているか分からない。散文の注記に逃がすと
+           「どっちに何が入るか」を読み手が組み立てることになるので、行そのものに書く
+           (§00 05 考えさせない / 01 視線を動かさない) -->
       <tr>
-        <th class="rh">基本</th>
+        <th class="rh">
+          <span class="rh-name">基本</span>
+          <span class="rh-sub">装備 + アビリティ + 称号</span>
+        </th>
         {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqBaseTotal[k]}>{fmtInt(eqBaseTotal[k])}</td>{/each}
       </tr>
       <tr>
-        <th class="rh">強化</th>
+        <th class="rh">
+          <span class="rh-name">強化</span>
+          <span class="rh-sub">エンチャント + シエナのオーラ</span>
+        </th>
         {#each visibleEquipmentStatKinds as k (k)}<td class="n" use:bump={() => eqEnchantTotal[k]}>{fmtInt(eqEnchantTotal[k])}</td>{/each}
+      </tr>
+      <!-- テシスコアは地域ごとに別のセットを組むので、この表では 1 つの数に決まらない。
+           「入りません」と文章で言わず、値の無い行として置く(破線 + `?`。0 や空白で埋めない) -->
+      <tr class="eq-core">
+        <th class="rh">
+          <span class="rh-name">テシスコア</span>
+          <span class="rh-sub">地域ごとに別のセット</span>
+        </th>
+        {#each visibleEquipmentStatKinds as k (k)}<td class="n"><span class="q">?</span></td>{/each}
       </tr>
     </tbody>
   </table>
+  <!-- 表に無い値がどれだけあるかは、文章ではなく数で出す。押すとテシスコアのペインへ移る -->
+  <button type="button" class="eq-core-link" onclick={() => focusCharacterSource("thesis")}>
+    <span class="dim">地域を選ぶダメージ計算タブでだけ強化側へ合流します。一番良い地域で</span>
+    <span class="num strong" use:bump={() => coreBestTotal}>合計 {fmtInt(coreBestTotal)}</span>
+    <span class="chev dim">›</span>
+  </button>
   <p class="dim tiny">
+    基本と強化を分けているのは、与ダメージの<b>攻撃力(A)</b>で別々の係数が掛かるからです。
+    共通スキルの強化倍率 +{enhanceRatePercent}% は、そのあと<b>両方の合計</b>に掛かります。
     {#if mainSkill}攻撃補正は「{mainSkill.name}」に使う値だけ表示しています。{/if}
-    強化倍率 +{enhanceRatePercent}%(共通スキル)。基本には武器アビリティと称号の分も、
-    強化にはシエナのオーラ(武器/盾)の分も入っています。
-    強化のうちテシスコアの分だけこの表に入りません
-    (対象地域を選ぶダメージ計算タブでのみ強化能力値へ合流します)。
   </p>
 {#each PART_SLOTS as slot (slot)}
   {@const part = selectedPartOrNull(slot)}
