@@ -10,6 +10,7 @@
 | バフ | `buffs/` | `<id>.png` | `gamedata::buff_catalog()` の `BuffDefinition::id` |
 | マスタリー | `masteries/` | `<id>.png` | `gamedata::mastery_catalog()` の `MasteryDef::id`(例 `boris_m1_issen.png`)。枠はスキルと同じ |
 | 装備 | `equipment/` | `<id>.png` | `gamedata::equipment_catalog()` の `EquipmentItem::id` |
+| コンテンツ | `contents/` | `<id>.png` | `gamedata::content_areas()` の `Content::id`(例 `clamor.png`) |
 
 置くだけで反映される(Vite の glob import)。**無い id は破線 + `?`** で表示され、
 console に 1 行だけ warn が出る。サイズは `Icon.svelte` 側で固定なのでレイアウトは崩れない。
@@ -40,3 +41,10 @@ wiki の画像は `?plugin=ref&page=<ページ名(EUC-JP の URL エンコード
 2026-08-31に極限スキル3件(`scope_eye` / `full_throttle` / `wide_focus`)を Tale Wiki の
 `Skill/ゲージスキル` ページの添付から同梱した(`?plugin=ref` 経由)。極限は `Skill/極限` ページに
 表があるが、画像の実体は `Skill/ゲージスキル` に添付されている。
+
+2026-09-01にコンテンツ画像19枚を `contents/` に同梱した。出典は wiki ではなく**ゲーム内
+「Content information → コンテンツクリア状況」のスクリーンショット**で、あの一覧は
+1 行 = 1 コンテンツ・行頭に専用の絵が付く(wiki の「ミニゲーム/*」にはマップとドロップ品しか
+無く、コンテンツ単位の絵が無い)。行の名前とツールのコンテンツを 1 対 1 で言い切れない行は
+入れず、残り40件は `?` のままにしてある。切り出しは
+`tools/gamedata/import_content_images.py`、元のスクショは `tools/gamedata/screenshots/`。
