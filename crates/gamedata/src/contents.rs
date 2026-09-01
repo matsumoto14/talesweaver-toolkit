@@ -712,4 +712,32 @@ mod tests {
         // 喪失の島称号はアフェティリア等には広げない。
         assert_eq!(game_region_of("aphetiria_ex"), None);
     }
+
+    /// 同梱しているコンテンツ画像。ファイル名は content id と一致し、UI は id から機械的に
+    /// 解決する(規格シート 06)。取り込み元がゲーム画面のスクリーンショットで、行と
+    /// コンテンツの対応を人が確かめている以上、枚数と宛先は勝手に増減してはいけない。
+    /// 再取込は `tools/gamedata/import_content_images.py`。
+    #[test]
+    fn コンテンツ画像は19件で全て既知のコンテンツに対応する() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/assets/icons/contents");
+        let mut ids: Vec<String> = std::fs::read_dir(&dir)
+            .expect("コンテンツ画像のディレクトリが無い")
+            .map(|entry| {
+                entry
+                    .expect("ディレクトリを読めない")
+                    .path()
+                    .file_stem()
+                    .expect("拡張子だけのファイル")
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        ids.sort();
+        assert_eq!(ids.len(), 19, "同梱枚数が変わった: {ids:?}");
+
+        let known: Vec<String> = all_contents().into_iter().map(|c| c.id).collect();
+        let orphans: Vec<&String> = ids.iter().filter(|id| !known.contains(id)).collect();
+        assert!(orphans.is_empty(), "対応するコンテンツが無い画像: {orphans:?}");
+    }
 }

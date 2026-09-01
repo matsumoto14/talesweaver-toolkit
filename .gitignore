@@ -8,3 +8,5 @@ __pycache__/
 apps/desktop/dist-web/
 crates/web/pkg/
 .wrangler/
+# 作業用の置き場(スクショの受け渡しなど)。残すものは tools/ 配下へ移す
+tmp/
