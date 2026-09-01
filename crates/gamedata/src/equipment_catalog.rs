@@ -36,7 +36,7 @@ pub const ENHANCE_SOURCE: Source = Source {
 pub const EQUIPMENT_ABILITY_SOURCE: Source = Source {
     page: "装備システム/アビリティ",
     retrieved_on: "2026-09-01",
-    note: "武器3スロット。カテゴリー1/3は旧装着アビリティ。カテゴリー4は装備システムUIのN-/R-/L-/E-系と、新装着アビリティページのアイテム方式(夜星など)の2経路。ランダム追加効果は自動適用しない",
+    note: "武器3スロット。カテゴリー1/3は旧装着アビリティ。カテゴリー4は2経路あり、装備システムUIのN-/R-/L-/E-系(装備システム/アビリティ)と、アイテム方式の古代精霊/深淵/喪失/夜星の4系列(Item/合成/装着アビリティシステム/新装着アビリティ)。ランダム追加効果は自動適用しない",
 };
 
 /// 武器種(wiki: 装備システム/装備強化「系統」表の該当武器)。
@@ -2550,6 +2550,43 @@ fn ui_category4(
     def
 }
 
+/// 追加アビリティ1件。系列ごとに値域が違うので、書き下すときの手数を減らす。
+fn add_opt(
+    kind: EquipmentAbilityAdditionalKind,
+    min: i32,
+    max: i32,
+) -> EquipmentAbilityAdditionalDef {
+    EquipmentAbilityAdditionalDef { kind, min, max }
+}
+
+/// 新装着アビリティの系列もの。`slot_ability` は最上位(夜星)の値域を既定に持つので、
+/// 下位系列は追加アビリティの候補だけを差し替える。
+fn line_ability(
+    id: &'static str,
+    name: &'static str,
+    slot: PartSlot,
+    family: EquipmentAbilityFamily,
+    group: &'static str,
+    values: EquipmentValues,
+    effect_summary: &'static str,
+    record_only: bool,
+    additional_options: Vec<EquipmentAbilityAdditionalDef>,
+) -> EquipmentAbilityDef {
+    let mut def = slot_ability(
+        id,
+        name,
+        slot,
+        family,
+        group,
+        values,
+        effect_summary,
+        record_only,
+        &[],
+    );
+    def.additional_options = additional_options;
+    def
+}
+
 /// 追加効果を持たない段(N- など)。同じタプル配列に並べるための空スライス。
 const NO_EFFECTS: &[SkillEffect] = &[];
 
@@ -2598,6 +2635,7 @@ fn a(thrust: i64, slash: i64, magic_attack: i64, magic_defense: i64) -> Equipmen
 /// カテゴリー1と4は同じ攻撃系統でも併用できる（例: 下級斬り + 夜星の鋭い刃）。
 /// カテゴリー4の追加アビリティはランダムなので自動適用しない。
 pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
+    use EquipmentAbilityAdditionalKind::*;
     let mut out = Vec::new();
 
     // カテゴリー1: 旧アビリティ。2026年追加の「下級〜」も同カテゴリー。
@@ -3710,6 +3748,513 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ));
     }
 
+    // 新装着アビリティの下位3系列(古代精霊 LV.300 / 深淵 LV.310 / 喪失 LV.310)。
+    // これまで最上位の夜星しか収録しておらず、実際に多くのキャラが着けている喪失系が
+    // 一覧に出なかった。系列は 古代精霊 < 深淵 < 喪失 < 夜星 の順で、入手地域は
+    // 順に リンゴの島 / アークロン要塞 / エクリプス / ゆがんだ村。
+    // 追加アビリティ2枠の値域も系列ごとに違うので、`slot_ability` の夜星既定を上書きする。
+    // 出典: Item/合成/装着アビリティシステム/新装着アビリティ(取得 2026-09-01)。
+    for (id, name, family, values, summary, record_only, options) in [
+        (
+            "ancient-vitality-armor",
+            "古代精霊の生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +8,000",
+            true,
+            vec![
+                add_opt(DamageResistance, 8, 8),
+                add_opt(PhysicalDamageReduction, 80, 80),
+                add_opt(PhysicalDefense, 6, 10),
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+            ],
+        ),
+        (
+            "abyss-vitality-armor",
+            "深淵の生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +10,000",
+            true,
+            vec![
+                add_opt(DamageResistance, 9, 9),
+                add_opt(PhysicalDamageReduction, 100, 100),
+                add_opt(PhysicalDefense, 8, 12),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "loss-vitality-armor",
+            "喪失の生命力",
+            EquipmentAbilityFamily::Vitality,
+            EquipmentValues::default(),
+            "最大HP +12,000",
+            true,
+            vec![
+                add_opt(DamageResistance, 10, 10),
+                add_opt(PhysicalDamageReduction, 100, 100),
+                add_opt(PhysicalDefense, 8, 14),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "ancient-mana-armor",
+            "古代精霊のマナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +3,000",
+            true,
+            vec![
+                add_opt(DamageResistance, 8, 8),
+                add_opt(MagicDamageReduction, 80, 80),
+                add_opt(MagicDefense, 4, 8),
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+            ],
+        ),
+        (
+            "abyss-mana-armor",
+            "深淵のマナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +5,000",
+            true,
+            vec![
+                add_opt(DamageResistance, 9, 9),
+                add_opt(MagicDamageReduction, 100, 100),
+                add_opt(MagicDefense, 6, 10),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "loss-mana-armor",
+            "喪失のマナ",
+            EquipmentAbilityFamily::Mana,
+            EquipmentValues::default(),
+            "最大MP +7,000",
+            true,
+            vec![
+                add_opt(DamageResistance, 10, 10),
+                add_opt(MagicDamageReduction, 100, 100),
+                add_opt(MagicDefense, 6, 12),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "ancient-armor-polish",
+            "古代精霊の鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            pd(35),
+            "物防 +35",
+            false,
+            vec![
+                add_opt(DamageResistance, 8, 8),
+                add_opt(PhysicalDamageReduction, 80, 80),
+                add_opt(PhysicalDefense, 6, 10),
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+            ],
+        ),
+        (
+            "abyss-armor-polish",
+            "深淵の鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            pd(40),
+            "物防 +40",
+            false,
+            vec![
+                add_opt(DamageResistance, 9, 9),
+                add_opt(PhysicalDamageReduction, 100, 100),
+                add_opt(PhysicalDefense, 8, 12),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "loss-armor-polish",
+            "喪失の鎧研磨",
+            EquipmentAbilityFamily::ArmorPolish,
+            pd(45),
+            "物防 +45",
+            false,
+            vec![
+                add_opt(DamageResistance, 10, 10),
+                add_opt(PhysicalDamageReduction, 100, 100),
+                add_opt(PhysicalDefense, 8, 14),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "ancient-magic-resistance-armor",
+            "古代精霊の魔法耐性(鎧)",
+            EquipmentAbilityFamily::MagicResistance,
+            md(35),
+            "魔防 +35",
+            false,
+            vec![
+                add_opt(DamageResistance, 8, 8),
+                add_opt(MagicDamageReduction, 80, 80),
+                add_opt(MagicDefense, 4, 8),
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+            ],
+        ),
+        (
+            "abyss-magic-resistance-armor",
+            "深淵の魔法耐性(鎧)",
+            EquipmentAbilityFamily::MagicResistance,
+            md(40),
+            "魔防 +40",
+            false,
+            vec![
+                add_opt(DamageResistance, 9, 9),
+                add_opt(MagicDamageReduction, 100, 100),
+                add_opt(MagicDefense, 6, 10),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "loss-magic-resistance-armor",
+            "喪失の魔法耐性(鎧)",
+            EquipmentAbilityFamily::MagicResistance,
+            md(45),
+            "魔防 +45",
+            false,
+            vec![
+                add_opt(DamageResistance, 10, 10),
+                add_opt(MagicDamageReduction, 100, 100),
+                add_opt(MagicDefense, 6, 12),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "ancient-evasion-armor",
+            "古代精霊の機敏",
+            EquipmentAbilityFamily::Evasion,
+            ev(9),
+            "回避 +9",
+            false,
+            vec![
+                add_opt(EvasionRate, 6, 12),
+                add_opt(PhysicalDamageReduction, 50, 50),
+                add_opt(MagicDamageReduction, 50, 50),
+                add_opt(SpRecovery, 4, 14),
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+            ],
+        ),
+        (
+            "abyss-evasion-armor",
+            "深淵の機敏",
+            EquipmentAbilityFamily::Evasion,
+            ev(11),
+            "回避 +11",
+            false,
+            vec![
+                add_opt(EvasionRate, 8, 14),
+                add_opt(PhysicalDamageReduction, 70, 70),
+                add_opt(MagicDamageReduction, 70, 70),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+        (
+            "loss-evasion-armor",
+            "喪失の機敏",
+            EquipmentAbilityFamily::Evasion,
+            ev(13),
+            "回避 +13",
+            false,
+            vec![
+                add_opt(EvasionRate, 8, 16),
+                add_opt(PhysicalDamageReduction, 70, 70),
+                add_opt(MagicDamageReduction, 70, 70),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+            ],
+        ),
+    ] {
+        out.push(line_ability(
+            id,
+            name,
+            PartSlot::Armor,
+            family,
+            "armor-ability",
+            values,
+            summary,
+            record_only,
+            options,
+        ));
+    }
+
+    for (id, name, family, values, summary, options) in [
+        (
+            "ancient-shield-polish",
+            "古代精霊の盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            pd(18),
+            "物防 +18",
+            vec![
+                add_opt(DamageResistance, 7, 7),
+                add_opt(PhysicalDamageReduction, 50, 50),
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+                add_opt(SpRecovery, 4, 14),
+                add_opt(EvasionRate, 6, 12),
+            ],
+        ),
+        (
+            "abyss-shield-polish",
+            "深淵の盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            pd(20),
+            "物防 +20",
+            vec![
+                add_opt(DamageResistance, 8, 8),
+                add_opt(PhysicalDamageReduction, 70, 70),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(EvasionRate, 8, 14),
+            ],
+        ),
+        (
+            "loss-shield-polish",
+            "喪失の盾研磨",
+            EquipmentAbilityFamily::ShieldPolish,
+            pd(22),
+            "物防 +22",
+            vec![
+                add_opt(DamageResistance, 9, 9),
+                add_opt(PhysicalDamageReduction, 70, 70),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(EvasionRate, 8, 16),
+            ],
+        ),
+        (
+            "ancient-magic-resistance-shield",
+            "古代精霊の魔法耐性(盾)",
+            EquipmentAbilityFamily::MagicResistance,
+            md(9),
+            "魔防 +9",
+            vec![
+                add_opt(DamageResistance, 7, 7),
+                add_opt(MagicDamageReduction, 50, 50),
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+                add_opt(SpRecovery, 4, 14),
+                add_opt(EvasionRate, 6, 12),
+            ],
+        ),
+        (
+            "abyss-magic-resistance-shield",
+            "深淵の魔法耐性(盾)",
+            EquipmentAbilityFamily::MagicResistance,
+            md(11),
+            "魔防 +11",
+            vec![
+                add_opt(DamageResistance, 8, 8),
+                add_opt(MagicDamageReduction, 70, 70),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(EvasionRate, 8, 14),
+            ],
+        ),
+        (
+            "loss-magic-resistance-shield",
+            "喪失の魔法耐性(盾)",
+            EquipmentAbilityFamily::MagicResistance,
+            md(13),
+            "魔防 +13",
+            vec![
+                add_opt(DamageResistance, 9, 9),
+                add_opt(MagicDamageReduction, 70, 70),
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(EvasionRate, 8, 16),
+            ],
+        ),
+    ] {
+        out.push(line_ability(
+            id,
+            name,
+            PartSlot::Shield,
+            family,
+            "shield-ability",
+            values,
+            summary,
+            false,
+            options,
+        ));
+    }
+
+    for (id, name, family, values, summary, options) in [
+        (
+            "ancient-critical-hand",
+            "古代精霊の致命打",
+            EquipmentAbilityFamily::Critical,
+            cr(8),
+            "クリティカル +8",
+            vec![
+                add_opt(FixedDamage, 5000, 5000),
+                add_opt(DamageRate, 6, 6),
+                add_opt(Thrust, 4, 8),
+                add_opt(Slash, 4, 8),
+                add_opt(MagicAttack, 4, 8),
+                add_opt(MagicDefense, 4, 8),
+            ],
+        ),
+        (
+            "abyss-critical-hand",
+            "深淵の致命打",
+            EquipmentAbilityFamily::Critical,
+            cr(10),
+            "クリティカル +10",
+            vec![
+                add_opt(FixedDamage, 6000, 6000),
+                add_opt(DamageRate, 7, 7),
+                add_opt(Thrust, 6, 10),
+                add_opt(Slash, 6, 10),
+                add_opt(MagicAttack, 6, 10),
+                add_opt(MagicDefense, 6, 10),
+            ],
+        ),
+        (
+            "loss-critical-hand",
+            "喪失の致命打",
+            EquipmentAbilityFamily::Critical,
+            cr(12),
+            "クリティカル +12",
+            vec![
+                add_opt(FixedDamage, 7000, 7000),
+                add_opt(DamageRate, 8, 8),
+                add_opt(Thrust, 6, 12),
+                add_opt(Slash, 6, 12),
+                add_opt(MagicAttack, 6, 12),
+                add_opt(MagicDefense, 6, 12),
+            ],
+        ),
+        (
+            "ancient-accuracy-hand",
+            "古代精霊の的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            ac(9),
+            "命中 +9",
+            vec![
+                add_opt(FixedDamage, 5000, 5000),
+                add_opt(DamageRate, 6, 6),
+                add_opt(Thrust, 4, 8),
+                add_opt(Slash, 4, 8),
+                add_opt(MagicAttack, 4, 8),
+                add_opt(MagicDefense, 4, 8),
+            ],
+        ),
+        (
+            "abyss-accuracy-hand",
+            "深淵の的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            ac(11),
+            "命中 +11",
+            vec![
+                add_opt(FixedDamage, 6000, 6000),
+                add_opt(DamageRate, 7, 7),
+                add_opt(Thrust, 6, 10),
+                add_opt(Slash, 6, 10),
+                add_opt(MagicAttack, 6, 10),
+                add_opt(MagicDefense, 6, 10),
+            ],
+        ),
+        (
+            "loss-accuracy-hand",
+            "喪失の的中剣",
+            EquipmentAbilityFamily::Accuracy,
+            ac(13),
+            "命中 +13",
+            vec![
+                add_opt(FixedDamage, 7000, 7000),
+                add_opt(DamageRate, 8, 8),
+                add_opt(Thrust, 6, 12),
+                add_opt(Slash, 6, 12),
+                add_opt(MagicAttack, 6, 12),
+                add_opt(MagicDefense, 6, 12),
+            ],
+        ),
+    ] {
+        out.push(line_ability(
+            id,
+            name,
+            PartSlot::Hand,
+            family,
+            "hand-ability",
+            values,
+            summary,
+            false,
+            options,
+        ));
+    }
+
+    for (id, name, summary, options) in [
+        (
+            "ancient-agility-leg",
+            "古代精霊の敏捷",
+            "移動速度 +5",
+            vec![
+                add_opt(HpRecovery, 4, 14),
+                add_opt(MpRecovery, 4, 14),
+                add_opt(SpRecovery, 4, 14),
+                add_opt(EvasionRate, 4, 8),
+            ],
+        ),
+        (
+            "abyss-agility-leg",
+            "深淵の敏捷",
+            "移動速度 +7",
+            vec![
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(EvasionRate, 6, 10),
+            ],
+        ),
+        (
+            "loss-agility-leg",
+            "喪失の敏捷",
+            "移動速度 +9",
+            vec![
+                add_opt(HpRecovery, 6, 16),
+                add_opt(MpRecovery, 6, 16),
+                add_opt(SpRecovery, 6, 16),
+                add_opt(EvasionRate, 6, 12),
+            ],
+        ),
+    ] {
+        out.push(line_ability(
+            id,
+            name,
+            PartSlot::Leg,
+            EquipmentAbilityFamily::Agility,
+            "leg-ability",
+            EquipmentValues::default(),
+            summary,
+            true,
+            options,
+        ));
+    }
+
     out
 }
 
@@ -4502,6 +5047,43 @@ mod tests {
             assert!(def.record_only, "{id}");
             assert_eq!(def.values, EquipmentValues::default(), "{id}");
         }
+    }
+
+    /// 新装着アビリティは 古代精霊 / 深淵 / 喪失 / 夜星 の4系列。どの系列も同じ
+    /// 種類ぞろえで、部位ごとの内訳が揃っていないと「喪失だけ無い」が再発する。
+    #[test]
+    fn 新装着アビリティは4系列とも同じ種類ぞろえを持つ() {
+        let abilities = equipment_abilities();
+        for prefix in ["古代精霊の", "深淵の", "喪失の", "夜星の"] {
+            let members: Vec<_> = abilities
+                .iter()
+                .filter(|a| a.name.starts_with(prefix))
+                .collect();
+            let count = |slot: PartSlot| members.iter().filter(|a| a.slot == slot).count();
+            assert_eq!(count(PartSlot::Weapon), 4, "{prefix}武器");
+            assert_eq!(count(PartSlot::Armor), 5, "{prefix}鎧");
+            assert_eq!(count(PartSlot::Shield), 2, "{prefix}盾");
+            assert_eq!(count(PartSlot::Hand), 2, "{prefix}手");
+            assert_eq!(count(PartSlot::Leg), 1, "{prefix}足");
+            assert_eq!(members.len(), 14, "{prefix}合計");
+            // 追加アビリティ2枠は系列ごとに値域が違う。夜星の値域を使い回していないこと。
+            for def in &members {
+                assert_eq!(def.additional_slots, 2, "{}", def.id);
+                assert!(!def.additional_options.is_empty(), "{}", def.id);
+            }
+        }
+        // 喪失の鎧まわりは wiki の表どおり(ユーザーがゲーム内画面で確認した並び)。
+        let loss = |id: &str| abilities.iter().find(|a| a.id == id).unwrap();
+        assert_eq!(loss("loss-armor-polish").values.physical_defense, 45);
+        assert_eq!(loss("loss-magic-resistance-armor").values.magic_defense, 45);
+        assert_eq!(loss("loss-evasion-armor").values.evasion, 13);
+        assert_eq!(loss("loss-shield-polish").values.physical_defense, 22);
+        assert_eq!(loss("loss-critical-hand").values.critical, 12);
+        assert_eq!(loss("loss-accuracy-hand").values.accuracy, 13);
+        // 最大HP は装備補正 9 値に無いので記録のみ。
+        let vitality = loss("loss-vitality-armor");
+        assert!(vitality.record_only);
+        assert_eq!(vitality.effect_summary, "最大HP +12,000");
     }
 
     #[test]
