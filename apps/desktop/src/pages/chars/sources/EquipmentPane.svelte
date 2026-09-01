@@ -60,14 +60,21 @@
   /** テシスコアで一番伸びる地域の合計。この表には入らない値なので「どれだけ別にあるか」だけ出す */
   const coreBestTotal = $derived(thesisCoreBestTotal(preview));
   const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
-  /** wiki の装備攻撃力係数が 0 でない補正を先頭に、耐久系は主軸未選択でも常に出す */
+  /**
+   * 先頭の表に出す列。**既定は主軸スキルが実際に使う攻撃補正だけ**にする。
+   * 9 補正を全部並べると表が横いっぱいまで伸び、行の名前と読みたい数字が画面の端と端に
+   * 離れて視線が往復する(§00 01。ユーザー指摘 2026-09-01「みにくさの原因は横に伸び続けるから」)。
+   * 残りは部位詳細と同じ言い方のトグルで足す(§00 02 要らないものを見せない)。
+   */
+  let showAllSummaryStats = $state(false);
   const visibleEquipmentStatKinds = $derived.by<EquipmentStatKind[]>(() => {
-    if (!mainSkill) return [...EQUIPMENT_STAT_KINDS];
-    const relevant = new Set<EquipmentStatKind>(equipmentAttackKinds);
-    return EQUIPMENT_STAT_KINDS.filter((k) =>
-      relevant.has(k) || !(["thrust", "slash", "magic_attack"] as EquipmentStatKind[]).includes(k),
-    );
+    if (showAllSummaryStats || !mainSkill) return [...EQUIPMENT_STAT_KINDS];
+    return equipmentAttackKinds;
   });
+  /** トグルで増える列(見出しに何が出るかを名前で書く。開くまで分からない状態にしない) */
+  const hiddenSummaryStatKinds = $derived(
+    EQUIPMENT_STAT_KINDS.filter((k) => !equipmentAttackKinds.includes(k)),
+  );
 
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
@@ -928,13 +935,26 @@
       </tr>
     </tbody>
   </table>
+  <!-- 列を増やす操作は表の外(下)に置く。表の中に置くと列の幅が変わって数字がずれる -->
+  {#if mainSkill && hiddenSummaryStatKinds.length > 0}
+    <button
+      type="button"
+      class="eq-more-toggle"
+      aria-expanded={showAllSummaryStats}
+      onclick={() => (showAllSummaryStats = !showAllSummaryStats)}
+    >
+      <span>{hiddenSummaryStatKinds.map((k) => EQUIPMENT_STAT_SHORT[k]).join(" / ")}</span>
+      <span class="toggle-state">{showAllSummaryStats ? "畳む ︿" : "も出す ﹀"}</span>
+    </button>
+  {/if}
   <!-- 表に無い値がどれだけあるかは、文章ではなく数で出す。押すとテシスコアのペインへ移る -->
   <button type="button" class="eq-core-link" onclick={() => focusCharacterSource("thesis")}>
     <span class="dim">地域を選ぶダメージ計算タブでだけ強化側へ合流します。一番良い地域で</span>
     <span class="num strong" use:bump={() => coreBestTotal}>合計 {fmtInt(coreBestTotal)}</span>
     <span class="chev dim">›</span>
   </button>
-  <p class="dim tiny">
+  <!-- 注記も幅いっぱいまで伸ばさない。1 行が長いほど次の行の頭を探すことになる -->
+  <p class="dim tiny eq-note">
     基本と強化を分けているのは、与ダメージの<b>攻撃力(A)</b>で別々の係数が掛かるからです。
     共通スキルの強化倍率 +{enhanceRatePercent}% は、そのあと<b>両方の合計</b>に掛かります。
     {#if mainSkill}攻撃補正は「{mainSkill.name}」に使う値だけ表示しています。{/if}

@@ -1162,6 +1162,9 @@ pub struct StatPreview {
     pub siena_attack_rate: f64,
     /// テシスコアのセット効果の全地域合計(`thesis_cores` の `set_bonus` を合算したもの)。
     pub thesis_core_set_bonus_total: CoreSetBonus,
+    /// 一番伸びている地域の `total_bonus`。地域ごとに別のセットなので合算はできない。
+    /// 正は `ThesisCores::best_total_bonus`
+    pub thesis_core_best_total: i64,
     /// ON にしているキャラスキルぶんの中ディレイ減少の供給源(Σ% の小数表現)。
     /// 正は `CharacterSkills::actual_delay_contributions`。上限(70%)を掛ける前の内訳
     pub character_skill_actual_delay: Vec<ActualDelayContribution>,
@@ -1842,6 +1845,7 @@ pub fn preview_effective_stats(
         siena_stat_total,
         siena_attack_rate: equipment.siena_attack_rate(),
         thesis_core_set_bonus_total,
+        thesis_core_best_total: equipment.thesis_cores.best_total_bonus(),
         character_skill_actual_delay: sources
             .character_skills
             .actual_delay_contributions(character_skills, &sources.masteries),

@@ -28,10 +28,11 @@ export function equipmentEnhancedTotal(preview: StatPreview | null): EquipmentVa
 
 /**
  * テシスコアで一番伸びる地域の合計。**地域ごとに別々のセットを組む**ので合算はできず、
- * 「いま一番良い地域でいくつか」だけが意味を持つ。計算は Rust 側(preview.thesis_cores)
+ * 「いま一番良い地域でいくつか」だけが意味を持つ。どの地域が一番かはドメインの問いなので
+ * 計算は Rust 側(`ThesisCores::best_total_bonus`)。ここは読むだけ
  */
 export function thesisCoreBestTotal(preview: StatPreview | null): number {
-  return Math.max(0, ...(preview?.thesis_cores.map((r) => r.total_bonus) ?? []));
+  return preview?.thesis_core_best_total ?? 0;
 }
 
 /** 装備攻撃力強化倍率(パワーウェポン + ストロングウェポン)。計算は Rust 側 */

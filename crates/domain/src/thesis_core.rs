@@ -388,6 +388,16 @@ impl ThesisCores {
         total
     }
 
+    /// 一番伸びている地域の `total_bonus`。**地域ごとに別のセットを組む**ので合算はできず、
+    /// 「いま一番良い地域でいくつか」だけが装備の実力として意味を持つ。
+    pub fn best_total_bonus(&self) -> i64 {
+        CoreRegion::ALL
+            .into_iter()
+            .map(|region| self.get(region).total_bonus())
+            .max()
+            .unwrap_or(0)
+    }
+
     /// 入場条件「コア N」の判定値。**そのコンテンツの地域のコアだけを数える**
     /// (ユーザー確認 2026-08-24)。地域が決まらないコンテンツは 0。
     /// コア要求があるのに地域が無いデータは gamedata のテストで弾く。

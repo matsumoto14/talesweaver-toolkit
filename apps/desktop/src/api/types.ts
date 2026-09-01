@@ -1175,6 +1175,8 @@ export interface StatPreview {
   part_ability_values: PartEquipmentValues[];
   /** シエナのオーラの能力値スロットの装備補正(部位別。武器/盾以外は常に 0) */
   siena_part_values: PartEquipmentValues[];
+  /** 一番伸びている地域のコア合計。地域ごとに別のセットなので合算はできない(Rust が出す) */
+  thesis_core_best_total: number;
   /** テシスコアの地域別プレビュー(CoreRegion 4 件) */
   thesis_cores: ThesisCoreRegionPreview[];
   /** 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分。地域なし = テシスコアを含まない) */
