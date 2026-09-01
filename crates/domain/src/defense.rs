@@ -713,103 +713,115 @@ pub struct VersusAccuracy {
     pub evasion_max: i64,
 }
 
+/// 対人計算の攻撃側ぶん。防御側と取り違えないよう型で分ける
+/// (`versus_accuracy` の引数を構造体化。攻撃側と防御側を位置引数の並びで
+/// 見分けさせない)。
+pub struct VersusAttacker<'a> {
+    pub stats: &'a EffectiveStats,
+    pub correction: &'a AccuracyCorrection,
+    pub equipment: &'a Equipment,
+    pub enchant_caps: &'a [(PartSlot, EquipmentValues)],
+    /// `AwakeningCaps::max_stat`(DEX の上限)
+    pub stat_cap: i64,
+    pub equipment_accuracy: i64,
+    /// wiki 表記のまま(`SKILL_ACCURACY_OFFSET` は `versus_accuracy` 内で足す)
+    pub skill_accuracy: i64,
+    /// 命中P増加の合計(射手のルーン等)
+    pub accuracy_bonus: i64,
+    pub accuracy_boost: AccuracyBoost,
+    pub accuracy_random_option: i64,
+    /// まだ供給源が無い(狩り場情報一覧のような表が PvP 側に無い)ため `None` を渡す。
+    /// `Some` を渡せるようになったら `VersusAccuracy::min_rates_recorded` が自動で `true` になる
+    pub min_hit_rate: Option<i64>,
+}
+
+/// 対人計算の防御側ぶん
+pub struct VersusDefender<'a> {
+    pub stats: &'a EffectiveStats,
+    pub profile: &'a DefenseProfile,
+    pub equipment: &'a Equipment,
+    pub enchant_caps: &'a [(PartSlot, EquipmentValues)],
+    /// `AwakeningCaps::max_stat`(AGI の上限)
+    pub stat_cap: i64,
+    /// 回避Pのランダムオプション増加(「回避率が X 増加」の合計)。
+    /// `defense_profile` が既に足し込んだ `profile.evasion_point` を伸びしろ計算でも
+    /// そのまま再現するために要る(`RandomOptionTotals::evasion_point` と同じ値)。
+    pub evasion_random_option: i64,
+    /// まだ供給源が無いため `None` を渡す(`VersusAttacker::min_hit_rate` と同じ事情)
+    pub min_evasion_rate: Option<i64>,
+}
+
 /// 対人の命中率を組み立てる(`preview_versus` コマンド専用)。
 ///
-/// `min_hit_rate` / `min_evasion_rate` はまだ供給源が無い(狩り場情報一覧のような表が
-/// PvP 側に無い)ため、呼び出し側は `None` を渡す。`Some` を渡せるようになったら
-/// `min_rates_recorded` が自動で `true` になる。
-///
 /// 伸びしろ(§伸びしろの定義)の材料解決はカタログが要るので呼び出し側(`commands`)の役目:
-/// `attacker_equipment` / `defender_equipment` はそれぞれの装備一式(エンチャント現在値・
-/// シエナのオーラ)、`attacker_enchant_caps` / `defender_enchant_caps` は
-/// `resolve_enchant_caps` で解決した部位ごとの実測上限、`attacker_stat_cap` /
-/// `defender_stat_cap` は `AwakeningCaps::max_stat`(DEX / AGI の上限)。
-#[allow(clippy::too_many_arguments)]
+/// `equipment` はそれぞれの装備一式(エンチャント現在値・シエナのオーラ)、`enchant_caps` は
+/// `resolve_enchant_caps` で解決した部位ごとの実測上限。
 pub fn versus_accuracy(
-    attacker_stats: &EffectiveStats,
-    correction: &AccuracyCorrection,
-    equipment_accuracy: i64,
-    skill_accuracy: i64,
-    accuracy_bonus: i64,
-    accuracy_boost: AccuracyBoost,
-    accuracy_random_option: i64,
+    attacker: &VersusAttacker,
+    defender: &VersusDefender,
     attack_type: AttackType,
-    defender_stats: &EffectiveStats,
-    defender: &DefenseProfile,
-    min_hit_rate: Option<i64>,
-    min_evasion_rate: Option<i64>,
-    attacker_equipment: &Equipment,
-    attacker_enchant_caps: &[(PartSlot, EquipmentValues)],
-    attacker_stat_cap: i64,
-    defender_equipment: &Equipment,
-    defender_enchant_caps: &[(PartSlot, EquipmentValues)],
-    defender_stat_cap: i64,
-    // 回避Pのランダムオプション増加(「回避率が X 増加」の合計)。
-    // `defense_profile` が既に足し込んだ `defender.evasion_point` を伸びしろ計算でも
-    // そのまま再現するために要る(`RandomOptionTotals::evasion_point` と同じ値)。
-    defender_evasion_random_option: i64,
 ) -> VersusAccuracy {
     // 感電・雷電は今回まだ入力を持たない([仮] 中立値。build_damage_material と同じ扱い)。
     let attacker_accuracy_point = accuracy_point(
-        attacker_stats,
-        correction,
-        equipment_accuracy,
-        skill_accuracy,
-        accuracy_bonus,
-        accuracy_boost,
+        attacker.stats,
+        attacker.correction,
+        attacker.equipment_accuracy,
+        attacker.skill_accuracy,
+        attacker.accuracy_bonus,
+        attacker.accuracy_boost,
         false,
-        accuracy_random_option,
+        attacker.accuracy_random_option,
     );
-    let defender_evasion_point = defender.evasion_point.for_attack_type(attack_type);
+    let defender_evasion_point = defender.profile.evasion_point.for_attack_type(attack_type);
     let hit = hit_rate(
         attacker_accuracy_point,
         defender_evasion_point,
-        min_hit_rate.unwrap_or(0),
-        min_evasion_rate.unwrap_or(0),
+        attacker.min_hit_rate.unwrap_or(0),
+        defender.min_evasion_rate.unwrap_or(0),
     );
     let (accuracy_growth, accuracy_max) = accuracy_growth(
-        attacker_stats,
-        correction,
-        equipment_accuracy,
-        skill_accuracy,
-        accuracy_bonus,
-        accuracy_boost,
-        accuracy_random_option,
+        attacker.stats,
+        attacker.correction,
+        attacker.equipment_accuracy,
+        attacker.skill_accuracy,
+        attacker.accuracy_bonus,
+        attacker.accuracy_boost,
+        attacker.accuracy_random_option,
         attacker_accuracy_point,
-        attacker_stat_cap,
-        attacker_equipment,
-        attacker_enchant_caps,
+        attacker.stat_cap,
+        attacker.equipment,
+        attacker.enchant_caps,
     );
-    let defender_type_bonus = attack_type_bonus(defender_stats, attack_type);
+    let defender_type_bonus = attack_type_bonus(defender.stats, attack_type);
     let (evasion_growth, evasion_max) = evasion_growth(
-        defender_stats,
-        defender.equipment_evasion,
-        defender.equipment_agility,
+        defender.stats,
+        defender.profile.equipment_evasion,
+        defender.profile.equipment_agility,
         defender_type_bonus,
-        defender_evasion_random_option,
+        defender.evasion_random_option,
         defender_evasion_point,
-        defender_stat_cap,
-        defender_equipment,
-        defender_enchant_caps,
+        defender.stat_cap,
+        defender.equipment,
+        defender.enchant_caps,
     );
     VersusAccuracy {
         attack_type,
-        attacker_dex: attacker_stats.dex,
-        equipment_accuracy,
-        skill_accuracy,
-        correction_bonus: floor_int(correction.bonus_value(attacker_stats)),
-        correction_penalty: floor_int(correction.penalty_value(attacker_stats)),
-        accuracy_bonus,
-        accuracy_boost,
-        accuracy_boost_shift_recorded: accuracy_boost.shift_is_recorded(),
+        attacker_dex: attacker.stats.dex,
+        equipment_accuracy: attacker.equipment_accuracy,
+        skill_accuracy: attacker.skill_accuracy,
+        correction_bonus: floor_int(attacker.correction.bonus_value(attacker.stats)),
+        correction_penalty: floor_int(attacker.correction.penalty_value(attacker.stats)),
+        accuracy_bonus: attacker.accuracy_bonus,
+        accuracy_boost: attacker.accuracy_boost,
+        accuracy_boost_shift_recorded: attacker.accuracy_boost.shift_is_recorded(),
         accuracy_point: attacker_accuracy_point,
-        defender_agi: defender_stats.agi,
-        equipment_evasion: defender.equipment_evasion,
-        equipment_agility: defender.equipment_agility,
+        defender_agi: defender.stats.agi,
+        equipment_evasion: defender.profile.equipment_evasion,
+        equipment_agility: defender.profile.equipment_agility,
         attack_type_bonus: defender_type_bonus,
         evasion_point: defender_evasion_point,
         hit_rate: hit,
-        min_rates_recorded: min_hit_rate.is_some() && min_evasion_rate.is_some(),
+        min_rates_recorded: attacker.min_hit_rate.is_some() && defender.min_evasion_rate.is_some(),
         accuracy_growth,
         accuracy_max,
         evasion_growth,
@@ -1226,25 +1238,29 @@ mod tests {
             DefenseRates::NEUTRAL,
         );
         let v = versus_accuracy(
-            &attacker,
-            &neutral_correction(),
-            0,
-            0,
-            0,
-            AccuracyBoost::None,
-            0,
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: crate::stats::BASE_STAT_MAX as i64,
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: crate::stats::BASE_STAT_MAX as i64,
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
             AttackType::Physical,
-            &defender_stats,
-            &defender,
-            None,
-            None,
-            &Equipment::default(),
-            &[],
-            crate::stats::BASE_STAT_MAX as i64,
-            &Equipment::default(),
-            &[],
-            crate::stats::BASE_STAT_MAX as i64,
-            0,
         );
         assert_eq!(v.accuracy_point, 100 + SKILL_ACCURACY_OFFSET);
         assert_eq!(v.evasion_point, defender.evasion_point.physical);
@@ -1274,25 +1290,29 @@ mod tests {
             DefenseRates::NEUTRAL,
         );
         let v = versus_accuracy(
-            &attacker,
-            &neutral_correction(),
-            0,
-            0,
-            0,
-            AccuracyBoost::None,
-            0,
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: attacker.dex, // ステ上限 = 現在値(張り付いている)
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi, // 同上(AGI)
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
             AttackType::Physical,
-            &defender_stats,
-            &defender,
-            None,
-            None,
-            &Equipment::default(),
-            &[],
-            attacker.dex, // ステ上限 = 現在値(張り付いている)
-            &Equipment::default(),
-            &[],
-            defender_stats.agi, // 同上(AGI)
-            0,
         );
         assert!(!v.accuracy_growth.iter().any(|g| g.source == GrowthSource::Stat));
         assert!(!v.evasion_growth.iter().any(|g| g.source == GrowthSource::Stat));
@@ -1313,25 +1333,29 @@ mod tests {
             DefenseRates::NEUTRAL,
         );
         let without = versus_accuracy(
-            &attacker,
-            &neutral_correction(),
-            0,
-            0,
-            0,
-            AccuracyBoost::None,
-            0,
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: attacker.dex, // ステ伸びしろは無関係にするため上限=現在値
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi,
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
             AttackType::Physical,
-            &defender_stats,
-            &defender,
-            None,
-            None,
-            &Equipment::default(),
-            &[],
-            attacker.dex, // ステ伸びしろは無関係にするため上限=現在値
-            &Equipment::default(),
-            &[],
-            defender_stats.agi,
-            0,
         );
         assert!(without
             .accuracy_growth
@@ -1339,25 +1363,29 @@ mod tests {
             .any(|g| g.source == GrowthSource::PrecisionSword));
 
         let with = versus_accuracy(
-            &attacker,
-            &neutral_correction(),
-            0,
-            0,
-            0,
-            AccuracyBoost::PrecisionSword(5),
-            0,
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: attacker.dex,
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::PrecisionSword(5),
+                accuracy_random_option: 0,
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi,
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
             AttackType::Physical,
-            &defender_stats,
-            &defender,
-            None,
-            None,
-            &Equipment::default(),
-            &[],
-            attacker.dex,
-            &Equipment::default(),
-            &[],
-            defender_stats.agi,
-            0,
         );
         assert!(!with
             .accuracy_growth
@@ -1397,25 +1425,29 @@ mod tests {
         )];
         let stat_cap = 250;
         let v = versus_accuracy(
-            &attacker,
-            &neutral_correction(),
-            10,
-            0,
-            0,
-            AccuracyBoost::None,
-            0,
+            &VersusAttacker {
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &equipment,
+                enchant_caps: &enchant_caps,
+                stat_cap,
+                equipment_accuracy: 10,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::None,
+                accuracy_random_option: 0,
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: crate::stats::BASE_STAT_MAX as i64,
+                evasion_random_option: 0,
+                min_evasion_rate: None,
+            },
             AttackType::Physical,
-            &defender_stats,
-            &defender,
-            None,
-            None,
-            &equipment,
-            &enchant_caps,
-            stat_cap,
-            &Equipment::default(),
-            &[],
-            crate::stats::BASE_STAT_MAX as i64,
-            0,
         );
         // 全材料を積み直した命中P(ステ上限 + エンチャント上限 + 的中剣)と突き合わせる
         let boosted_accuracy = 10 + (enchant_caps[0].1.accuracy - 10);

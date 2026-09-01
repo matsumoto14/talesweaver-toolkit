@@ -536,27 +536,31 @@ pub fn preview_versus(
     let defender_enchant_caps = resolve_enchant_caps(&defender.equipment);
 
     Ok(domain::versus_accuracy(
-        &attacker_preview.stats,
-        &correction,
-        attacker_equipment_totals.accuracy,
-        skill_accuracy,
-        // 命中P増加(射手のルーン等)・最小命中率補正・最小回避率補正は今回まだ入力を持たない
-        // ([仮] 中立値。build_damage_material の accuracy_bonus と同じ扱い)
-        0,
-        accuracy_boost,
-        accuracy_random_option,
+        &domain::VersusAttacker {
+            stats: &attacker_preview.stats,
+            correction: &correction,
+            equipment: &attacker.equipment,
+            enchant_caps: &attacker_enchant_caps,
+            stat_cap: gamedata::awakening_caps(attacker.awakening).max_stat,
+            equipment_accuracy: attacker_equipment_totals.accuracy,
+            skill_accuracy,
+            // 命中P増加(射手のルーン等)・最小命中率補正は今回まだ入力を持たない
+            // ([仮] 中立値。build_damage_material の accuracy_bonus と同じ扱い)
+            accuracy_bonus: 0,
+            accuracy_boost,
+            accuracy_random_option,
+            min_hit_rate: None,
+        },
+        &domain::VersusDefender {
+            stats: &defender_preview.stats,
+            profile: &defender_profile,
+            equipment: &defender.equipment,
+            enchant_caps: &defender_enchant_caps,
+            stat_cap: gamedata::awakening_caps(defender.awakening).max_stat,
+            evasion_random_option,
+            min_evasion_rate: None,
+        },
         attack_type,
-        &defender_preview.stats,
-        &defender_profile,
-        None,
-        None,
-        &attacker.equipment,
-        &attacker_enchant_caps,
-        gamedata::awakening_caps(attacker.awakening).max_stat,
-        &defender.equipment,
-        &defender_enchant_caps,
-        gamedata::awakening_caps(defender.awakening).max_stat,
-        evasion_random_option,
     ))
 }
 
