@@ -527,6 +527,9 @@
   // 消しはせず畳んだ先に置いて、選ぼうと思えば選べるままにする。
   // アイテム方式が無いところ(頭の月石・盾+の神秘鉱・レリック・兜)は今までどおり
   // 上位 2 段だけ出して残りを畳む(ux-guidelines 原則 2「削るのではなく構造化する」)。
+  //
+  // 旧アビリティの (上)/(中)/(下) も同じ扱い。武器カテゴリ1 では「下級斬り(+12)」と
+  // 並ぶのに (上) で +4 しかなく、選ばれることがないので既定からは外す。
   const ABILITY_TIER_TOP_COUNT = 2;
   /** アイテム方式で候補に残す下限の rank(= 喪失)。 */
   const ABILITY_ITEM_LADDER_MIN_RANK = 2;
@@ -540,6 +543,9 @@
     { prefix: "深淵の", scheme: "line", rank: 1 },
     { prefix: "喪失の", scheme: "line", rank: 2 },
     { prefix: "夜星の", scheme: "line", rank: 3 },
+    { prefix: "(下)", scheme: "paren", rank: 0 },
+    { prefix: "(中)", scheme: "paren", rank: 1 },
+    { prefix: "(上)", scheme: "paren", rank: 2 },
   ];
   const abilityTier = (name: string) => ABILITY_TIERS.find((tier) => name.startsWith(tier.prefix)) ?? null;
   /** 等級を外した残り(「鎧研磨」「火の月石」)がラダーの identity。2 本のラダーは
@@ -576,14 +582,30 @@
         .filter((ability) => abilityTier(ability.name)?.scheme === "line")
         .map(abilityLadderScope),
     );
+    // 等級の付かない候補(武器カテゴリ1 の「下級斬り」など)がある枠。そこに並ぶ
+    // (上)/(中)/(下) はそれより弱い旧段なので畳む(ユーザー決定 2026-09-01)。
+    const plainScopes = new Set(
+      candidates
+        .filter((ability) => abilityTier(ability.name) === null)
+        .map(abilityLadderScope),
+    );
+    /** その候補を既定で見せるか。ラダーの種類ごとに基準が違う。 */
+    const showsByDefault = (ability: EquipmentAbilityDef): boolean => {
+      const scope = abilityLadderScope(ability);
+      const tier = abilityTier(ability.name);
+      if (itemLadderScopes.has(scope)) {
+        return tier?.scheme === "line" && tier.rank >= ABILITY_ITEM_LADDER_MIN_RANK;
+      }
+      // 等級が付かない候補(「下級斬り」「神秘鉱の…」)はラダーを成さないので常に出す
+      if (tier === null) return true;
+      // (上)系しか無い枠(鎧カテゴリ2)は畳むと既定が空になるので、そのまま出す
+      if (tier.scheme === "paren" && plainScopes.has(scope)) return false;
+      return tier.rank >= (cutoff.get(abilityLadderKey(ability, tier)) ?? 0);
+    };
     const shown: EquipmentAbilityDef[] = [];
     const folded: EquipmentAbilityDef[] = [];
     for (const ability of candidates) {
-      const tier = abilityTier(ability.name);
-      const isTop = itemLadderScopes.has(abilityLadderScope(ability))
-        ? tier?.scheme === "line" && tier.rank >= ABILITY_ITEM_LADDER_MIN_RANK
-        : tier === null || tier.rank >= (cutoff.get(abilityLadderKey(ability, tier)) ?? 0);
-      if (selectedIds.includes(ability.id) || isTop) shown.push(ability);
+      if (selectedIds.includes(ability.id) || showsByDefault(ability)) shown.push(ability);
       else folded.push(ability);
     }
     return { shown, folded };
