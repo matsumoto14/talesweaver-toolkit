@@ -134,6 +134,19 @@ const CHECK = `(() => {
     }
   }
 
+  // 対人タブ。伸びしろを開いた状態は材料名の折り返しが出やすいので、閉じた状態と両方測る
+  // (この画面は 2026-09-02 まで一度も巡回されておらず、白い結果面・跳ねない数値・3 行に折れた
+  // 見出しを人のレビューで初めて拾った)
+  await page.locator("nav.tabs button", { hasText: "対人" }).click({ force: true });
+  await wait(1800);
+  await check("対人");
+  const growth = page.locator("button.growth-total-row.openable");
+  if (await growth.count()) {
+    for (let i = 0; i < (await growth.count()); i++) await growth.nth(i).dispatchEvent("click");
+    await wait(900);
+    await check("対人・伸びしろを開く");
+  }
+
   await page.locator("nav.tabs button", { hasText: "キャラ" }).click({ force: true });
   await wait(1500);
   const panes = await page.locator(".src-name").allInnerTexts();

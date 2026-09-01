@@ -200,6 +200,16 @@
 
   // ダメージ計算タブと同じ言い方(「結果への効きを %」)にそろえる。命中P・回避Pの素の増分は
   // 下限・上限で頭打ちのことがあるので、動かない材料は空白や「—」にせず ±0% と正直に出す。
+  /**
+   * 材料名は列幅(150px)に入り切らないことがある。CJK は任意の文字間で折り返せるので、
+   * 何もしないと「エンチャント枠の命 / 中率補正を上限まで」と語の途中で切れる(実機で検出)。
+   * 助詞の直後にだけ折り返し位置(U+200B)を置き、CSS 側で `word-break: keep-all` にして
+   * そこ以外では切らない。幅を広げて解くと、開閉で列が動く(§09 規則 1)
+   */
+  function softBreaks(label: string): string {
+    return label.replace(/([のをに])(?=\S)/g, "$1\u200b");
+  }
+
   function formatHitRateGain(gain: number): string {
     if (gain > 0) return `+${gain}%`;
     if (gain < 0) return `${gain}%`;
@@ -224,6 +234,7 @@
 {/snippet}
 
 {#snippet growthSummaryCell(
+  rateWord: string,
   result: VersusAccuracy | null,
   growthCount: number,
   max: number | null,
@@ -237,8 +248,8 @@
   {:else}
     {@const hitGain = maxHitRate - result.hit_rate.value}
     <span class="growth-total">
-      <span class="growth-total-hitrate num" use:bump={() => hitGain}>命中率 {formatHitRateGain(hitGain)}</span>
-      <span class="growth-total-raw dim">あと +<span class="num">{max - point}</span></span>
+      <span class="growth-total-hitrate num" use:bump={() => hitGain}>{rateWord} {formatHitRateGain(hitGain)}</span>
+      <span class="growth-total-raw dim">あと +<span class="num" use:bump={() => max - point}>{max - point}</span></span>
     </span>
   {/if}
 {/snippet}
@@ -252,10 +263,10 @@
       {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
       <!-- 素の伸びしろと換算後は行を分ける。1 行に並べると列幅(140px)に入らず、
            途中で折り返して「1,178 → → 命中 +1514 / 2300 P」と読む順が壊れる(実機で検出) -->
-      {#if item.detail}<span class="growth-detail dim">{item.detail}</span>{/if}
+      {#if item.detail}<span class="growth-detail dim" use:flash={() => item.detail ?? ""}>{item.detail}</span>{/if}
       <span class="growth-convert dim">
         <span class="growth-unit">{unit}</span>
-        <span class="num">+{item.gain}</span>
+        <span class="num" use:bump={() => item.gain}>+{item.gain}</span>
       </span>
     </span>
   {/if}
@@ -264,6 +275,7 @@
 {#snippet growthBlock(
   label: string,
   unit: string,
+  rateWord: string,
   resultA: VersusAccuracy | null,
   resultB: VersusAccuracy | null,
   growthA: GrowthRoom[],
@@ -291,13 +303,13 @@
       {label}
       {#if hasAny}<span class="growth-chevron" class:open>▸</span>{/if}
     </div>
-    <div class="cell val">{@render growthSummaryCell(resultA, growthA.length, maxA, pointA, maxHitRateA)}</div>
-    <div class="cell val">{@render growthSummaryCell(resultB, growthB.length, maxB, pointB, maxHitRateB)}</div>
+    <div class="cell val">{@render growthSummaryCell(rateWord, resultA, growthA.length, maxA, pointA, maxHitRateA)}</div>
+    <div class="cell val">{@render growthSummaryCell(rateWord, resultB, growthB.length, maxB, pointB, maxHitRateB)}</div>
   </button>
   {#if open}
     {#each rows as row (row.source)}
       <div class="grid-row sub growth-item-row">
-        <div class="cell label">{row.label}</div>
+        <div class="cell label">{softBreaks(row.label)}</div>
         <div class="cell val">{@render growthItemCell(row.a, unit)}</div>
         <div class="cell val">{@render growthItemCell(row.b, unit)}</div>
       </div>
@@ -341,13 +353,15 @@
       {/if}
     </span>
 
-    <span class="rate-value">
+    <!-- 数値 ⇄ 必中 は要素が入れ替わる(mount では bump も flash も発火しない)ので、
+         入れ物のほうを「どちらの形か」で flash させる -->
+    <span class="rate-value" use:flash={() => (result === null ? "none" : result.hit_rate.capped ? "capped" : "rate")}>
       {#if dir.error}
         <span class="rate-note bad">{dir.error}</span>
       {:else if result === null}
         <span class="rate-num num dim">?</span>
       {:else if result.hit_rate.capped}
-        <span class="rate-cap" style={badgeStyle(badge)} use:flash={() => "capped"}>必中</span>
+        <span class="rate-cap" style={badgeStyle(badge)}>必中</span>
       {:else}
         <span class="rate-num num" use:bump={() => result?.hit_rate.value ?? null}>{result.hit_rate.value}</span>
         <span class="rate-unit">%</span>
@@ -485,7 +499,7 @@
                 <div class="cell val">{@render numCell(rBA?.skill_accuracy ?? null)}</div>
               </div>
               <div class="grid-row sub">
-                <div class="cell label">依存ボーナス / ペナルティ</div>
+                <div class="cell label">依存補正</div>
                 <div class="cell val">{@render textCell(rAB ? `+${rAB.correction_bonus} / −${rAB.correction_penalty}` : null)}</div>
                 <div class="cell val">{@render textCell(rBA ? `+${rBA.correction_bonus} / −${rBA.correction_penalty}` : null)}</div>
               </div>
@@ -495,7 +509,7 @@
                 <div class="cell val">{@render textCell(rBA ? (boostLabel(rBA.accuracy_boost) ?? "なし") : null)}</div>
               </div>
               {@render growthBlock(
-                "伸びしろ", "命中P", rAB, rBA,
+                "伸びしろ", "命中P", "命中率", rAB, rBA,
                 rAB?.accuracy_growth ?? [], rBA?.accuracy_growth ?? [],
                 rAB?.accuracy_max ?? null, rBA?.accuracy_max ?? null,
                 rAB?.accuracy_point ?? null, rBA?.accuracy_point ?? null,
@@ -535,7 +549,7 @@
                 <div class="cell val">{@render textCell(rAB ? rAB.attack_type_bonus.toFixed(1) : null)}</div>
               </div>
               {@render growthBlock(
-                "伸びしろ", "回避P", rBA, rAB,
+                "伸びしろ", "回避P", "被命中率", rBA, rAB,
                 rBA?.evasion_growth ?? [], rAB?.evasion_growth ?? [],
                 rBA?.evasion_max ?? null, rAB?.evasion_max ?? null,
                 rBA?.evasion_point ?? null, rAB?.evasion_point ?? null,
@@ -552,7 +566,8 @@
 
 <style>
   .versus-page { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--bg-mid); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 980px; }
+  /* 幅は 2 表(名前の長い列を含めて最大 612px)が横に並ぶぶんまで。1280 幅のウィンドウで縦スクロールなしに収める */
+  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 1160px; }
   .empty { font-size: 12px; }
 
   .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
@@ -566,13 +581,17 @@
      中身ぶんの幅で左に寄せる ── 幅いっぱいまで伸ばすと数値の並びが間延びして読みにくい */
   .sheet {
     width: max-content; max-width: 100%;
-    border: 1px solid var(--border); border-radius: var(--r-window); background: var(--bg-field);
+    border: 1px solid var(--border-soft); border-radius: var(--r-window); background: var(--surface-inset);
     overflow: hidden;
   }
-  .grid { display: flex; flex-direction: column; }
+  /* 列幅は 1 つの grid で決め、行は subgrid で受ける。キャラ名の列は名前が入る幅まで伸ばす
+     (140px 固定だと「マキシミン(全 / 身セイクリッ / ド)」と 3 行に折れていた。実機で検出)。
+     上限は名前側(.col-name の max-width)で切る。minmax の上限を px で書くと max-content 幅の面では
+     列が上限いっぱいまで広がる(実機で 2 表とも 220px になり縦に積まれた) */
+  .grid { display: grid; grid-template-columns: 150px minmax(140px, max-content) minmax(140px, max-content); column-gap: 10px; }
   /* 列幅は「中身が読める」ことを優先する。キャラ名が「マキシ…」で切れると、
      2 列のどちらがどちらか分からなくなる(§00 05 読めない文字は出さない) */
-  .grid-row { display: grid; grid-template-columns: 150px 140px 140px; align-items: baseline; column-gap: 10px; }
+  .grid-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: baseline; }
   .cell { padding: 5px 12px; }
   .cell.label { color: var(--fg-sub); font-size: 10.5px; white-space: nowrap; }
   .cell.val { text-align: right; min-width: 0; }
@@ -583,7 +602,7 @@
   .grid-row.head { padding-top: 4px; border-bottom: 1px solid var(--border); background: var(--bg-panel); }
   .grid-row.head .cell { padding: 8px 13px; }
   .grid-row.head .cell.col { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
-  .col-name { font-size: 12px; font-weight: 800; color: var(--fg-head); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .col-name { font-size: 12px; font-weight: 800; color: var(--fg-head); min-width: 0; max-width: 168px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* 主役の行(命中P・回避P)は太字で強めに、直下の内訳(sub)は控えめに */
   .grid-row.main { background: var(--bg-active); }
@@ -615,7 +634,7 @@
     transition: transform 0.15s ease;
   }
   .growth-chevron.open { transform: rotate(90deg); }
-  .growth-item-row .cell.label { padding-left: 40px; white-space: normal; }
+  .growth-item-row .cell.label { padding-left: 32px; white-space: normal; word-break: keep-all; }
   .growth-total-row .cell.val, .growth-item-row .cell.val { white-space: normal; overflow: visible; text-overflow: clip; }
   .growth-item { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
   /* 材料 1 件の主役も「命中率 ±N%」。素の増分(装備補正 +705 → 命中P +951)は
@@ -647,7 +666,8 @@
     border: 1px dashed var(--state-unknown-bd); border-radius: var(--r-window);
     background: var(--state-unknown-bg); padding: 10px 13px;
   }
-  .rate-row.has-result { border: 1px solid var(--border); background: var(--bg-field); }
+  /* 結果は読み取り専用なのでインセット面(§01)。白は編集できる面に予約 */
+  .rate-row.has-result { border: 1px solid var(--border-soft); background: var(--surface-inset); }
 
   .rate-who { display: flex; align-items: center; gap: 6px; min-width: 0; flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--fg-head); }
   .rate-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -655,7 +675,7 @@
 
   /* 桁が増えても隣が動かないよう幅を固定する(§09 規則 4) */
   .rate-value { flex-shrink: 0; display: flex; align-items: baseline; gap: 3px; min-width: 60px; }
-  .rate-num { font-size: 18px; font-weight: 800; color: var(--fg-head); line-height: 1; }
+  .rate-num { font-size: 19px; font-weight: 800; color: var(--fg-head); line-height: 1; }
   .rate-unit { font-size: 11px; font-weight: 700; color: var(--fg-sub); }
   .rate-cap {
     font-size: 10.5px; font-weight: 800; border-radius: var(--r-pill); padding: 3px 9px; border: 1px solid;

@@ -132,5 +132,22 @@ const WATCH = `(() => {
     await wait(500);
   }
 
-  await browser.close();
+    // --- 対人タブ: 使用スキルを入れ替える(命中率・命中P・スキル命中・伸びしろが同時に変わる)。
+  // 2 人の選択もスキルも保存されないので probe に使える。「あと +N」が跳ねていなかったのを
+  // 人のレビューで拾った(2026-09-02)ので、以後はここで機械が見る
+  await page.locator("nav.tabs button", { hasText: "対人" }).click({ force: true });
+  await wait(1800);
+  const skillPicker = page.locator(".picker", { has: page.locator(".label", { hasText: "使用スキル" }) }).first();
+  if (await skillPicker.count()) {
+    await probe("対人・使用スキルを入れ替える", async () => {
+      await skillPicker.locator("button.picker-trigger").dispatchEvent("click");
+      await wait(500);
+      const rows = page.locator(".picker-pop .picker-row:not(.on)");
+      if (await rows.count()) await rows.first().dispatchEvent("click");
+    });
+  } else {
+    console.log("  ⚠ [対人・使用スキル] Picker が見つからないので未実行");
+  }
+
+await browser.close();
 })().catch((e) => { console.error("FAILED", e.message); process.exit(1); });

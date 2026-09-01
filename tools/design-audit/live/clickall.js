@@ -22,6 +22,11 @@ const TARGETS = {
     // 到達一覧の行はエリアを開かないと DOM に無い。openSel で最初のエリア行を先に押してから測る
     ["到達一覧の行", ".row", null, "button.mini-row"],
   ],
+  対人: [
+    // どちらも保存を伴わない(2 人の選択・伸びしろの開閉は画面内の状態だけ)
+    ["伸びしろの行", "button.growth-total-row.openable"],
+    ["キャラ / スキルの Picker", "button.picker-trigger"],
+  ],
   キャラ: [
     ["補正源の行", ".src-line"],
     ["段階選択", ".seg .step", "キャラステータス"],

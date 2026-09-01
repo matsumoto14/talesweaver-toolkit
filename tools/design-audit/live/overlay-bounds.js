@@ -46,6 +46,19 @@ const CASES = [
     },
     overlay: ".pop.gold",
   },
+  {
+    tab: "対人",
+    label: "対人『使用スキル』Picker の候補",
+    // 一番下の Picker(キャラ 2 の使用スキル)が下端に近く画面外に出やすい。開くだけで選ばない
+    open: async (page) => {
+      const t = page.locator("button.picker-trigger");
+      const n = await t.count();
+      if (n === 0) return false;
+      await t.nth(n - 1).click();
+      return true;
+    },
+    overlay: ".picker-pop",
+  },
 ];
 
 (async () => {
@@ -59,6 +72,10 @@ const CASES = [
 
   const results = [];
   for (const c of CASES) {
+    // 前の CASE が開いた重なりものを閉じずに次へ行くと、タブのクリックが重なりものに吸われて
+    // 遷移せず「対象なし」になる(対人の CASE がそれで素通りしていた)。1 件ごとに読み直す
+    await page.reload({ waitUntil: "load" });
+    await wait(2400);
     await page.locator("nav.tabs button", { hasText: c.tab }).click({ force: true });
     await wait(1200);
     const opened = await c.open(page);
