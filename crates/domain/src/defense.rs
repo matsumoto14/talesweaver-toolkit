@@ -381,16 +381,36 @@ pub struct HitRate {
     pub capped: bool,
 }
 
-/// 対人の命中率。`min_hit_rate` は攻撃側の最小命中率補正、`min_evasion_rate` は
-/// 対象の最小回避率補正(対人は上限 `PVP_MIN_EVASION_CAP`)。
-pub fn hit_rate(
-    accuracy_point: i64,
-    evasion_point: i64,
-    min_hit_rate: i64,
-    min_evasion_rate: i64,
-) -> HitRate {
+/// 命中率の下限を動かす補正(wiki `#HitRateCap`)。攻撃側の最小命中率補正と、対象の最小回避率
+/// 補正(対人は上限 `PVP_MIN_EVASION_CAP`)。**未収録は `None`** で、計算上は 0 として扱うが
+/// 「未収録」であることは `VersusAccuracy::*_recorded` まで運ぶ(0 と見せかけない)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HitRateFloors {
+    pub min_hit_rate: Option<i64>,
+    pub min_evasion_rate: Option<i64>,
+}
+
+impl HitRateFloors {
+    pub const NONE: HitRateFloors = HitRateFloors {
+        min_hit_rate: None,
+        min_evasion_rate: None,
+    };
+
+    /// 攻撃側の最小命中率補正(未収録は 0)。
+    pub fn min_hit_rate_value(self) -> i64 {
+        self.min_hit_rate.unwrap_or(0)
+    }
+
+    /// 対象の最小回避率補正(未収録は 0。対人上限でクランプ)。
+    pub fn min_evasion_rate_value(self) -> i64 {
+        self.min_evasion_rate.unwrap_or(0).min(PVP_MIN_EVASION_CAP)
+    }
+}
+
+/// 対人の命中率。
+pub fn hit_rate(accuracy_point: i64, evasion_point: i64, floors: HitRateFloors) -> HitRate {
     let raw = accuracy_point - evasion_point;
-    let min = HIT_RATE_MIN_BASE + min_hit_rate - min_evasion_rate.min(PVP_MIN_EVASION_CAP);
+    let min = HIT_RATE_MIN_BASE + floors.min_hit_rate_value() - floors.min_evasion_rate_value();
     let max = HIT_RATE_PLAYER_SPAN + min;
     HitRate {
         raw,
@@ -557,29 +577,29 @@ fn enchant_room(
 /// (`list_enchant_gains` が `rank_candidates` を再利用しているのと同じ考え方。丸めの
 /// 食い違いを作らない)。`stat_cap` は覚醒段階 + エタの意志 Lv で決まる DEX の上限
 /// (`AwakeningCaps::max_stat`)。
-#[allow(clippy::too_many_arguments)]
 fn accuracy_growth(
-    stats: &EffectiveStats,
-    correction: &AccuracyCorrection,
-    equipment_accuracy: i64,
-    skill_accuracy: i64,
-    bonus: i64,
-    boost: AccuracyBoost,
-    // そのキャラが覚えられる命中P割合増加スキル(極・的中剣はマキシミン専用)。覚えられない
-    // キャラに「Lv7 まで」を伸びしろとして出さないためだけに要る
-    learnable_accuracy_skill: Option<&CharacterSkillDef>,
-    random_option: i64,
-    current: i64,
-    stat_cap: i64,
-    equipment: &Equipment,
-    enchant_caps: &[(PartSlot, EquipmentValues)],
-    buff_catalog: &crate::stat_sources::BuffCatalog,
-    buff_selection: &crate::stat_sources::BuffSelection,
+    attacker: &VersusAttacker,
     defender_evasion_point: i64,
-    min_hit_rate: i64,
-    min_evasion_rate: i64,
+    floors: HitRateFloors,
+    current: i64,
     current_hit_rate: i64,
 ) -> (Vec<GrowthRoom>, i64) {
+    let VersusAttacker {
+        stats,
+        correction,
+        equipment_accuracy,
+        skill_accuracy,
+        accuracy_bonus: bonus,
+        accuracy_boost: boost,
+        learnable_accuracy_skill,
+        accuracy_random_option: random_option,
+        stat_cap,
+        equipment,
+        enchant_caps,
+        accuracy_buff_catalog: buff_catalog,
+        accuracy_buff_selection: buff_selection,
+        ..
+    } = *attacker;
     // `extra_bonus` は命中P増加バフの伸びしろ(§下記)を足し込むための追加枠。
     // 通常の材料(ステ・エンチャント・シエナ・的中剣)は 0 を渡す(いまの bonus のまま)。
     let recompute = |dex: i64, eq_accuracy: i64, extra_bonus: i64, boost: AccuracyBoost| {
@@ -609,8 +629,7 @@ fn accuracy_growth(
     });
     // その材料を積んだ命中Pで命中率をもう一度通し、いまとの差を取る(結果への効き)。
     let hit_rate_gain = |new_accuracy_point: i64| {
-        hit_rate(new_accuracy_point, defender_evasion_point, min_hit_rate, min_evasion_rate).value
-            - current_hit_rate
+        hit_rate(new_accuracy_point, defender_evasion_point, floors).value - current_hit_rate
     };
 
     let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.accuracy);
@@ -703,22 +722,25 @@ fn accuracy_growth(
 
 /// 防御側の回避Pの伸びしろ(gain 降順)。`accuracy_growth` と同じ考え方
 /// (材料を差し替えて `evasion_point` をもう一度通す)。`stat_cap` は AGI の上限。
-#[allow(clippy::too_many_arguments)]
 fn evasion_growth(
-    stats: &EffectiveStats,
-    equipment_evasion: i64,
-    equipment_agility: i64,
+    defender: &VersusDefender,
     type_bonus: f64,
-    random_option: i64,
-    current: i64,
-    stat_cap: i64,
-    equipment: &Equipment,
-    enchant_caps: &[(PartSlot, EquipmentValues)],
     attacker_accuracy_point: i64,
-    min_hit_rate: i64,
-    min_evasion_rate: i64,
+    floors: HitRateFloors,
+    current: i64,
     current_hit_rate: i64,
 ) -> (Vec<GrowthRoom>, i64) {
+    let VersusDefender {
+        stats,
+        profile,
+        equipment,
+        enchant_caps,
+        stat_cap,
+        evasion_random_option: random_option,
+        ..
+    } = *defender;
+    let equipment_evasion = profile.equipment_evasion;
+    let equipment_agility = profile.equipment_agility;
     let recompute = |agi: i64, evasion: i64| {
         evasion_point(
             &EffectiveStats { agi, ..*stats },
@@ -733,8 +755,7 @@ fn evasion_growth(
     };
     // 防御側の材料を積んだ回避Pで命中率をもう一度通す(攻撃側の命中率は下がる方向)。
     let hit_rate_gain = |new_evasion_point: i64| {
-        hit_rate(attacker_accuracy_point, new_evasion_point, min_hit_rate, min_evasion_rate).value
-            - current_hit_rate
+        hit_rate(attacker_accuracy_point, new_evasion_point, floors).value - current_hit_rate
     };
 
     let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.evasion);
@@ -913,60 +934,29 @@ pub fn versus_accuracy(
         attacker.accuracy_random_option,
     );
     let defender_evasion_point = defender.profile.evasion_point.for_attack_type(attack_type);
-    let hit = hit_rate(
-        attacker_accuracy_point,
-        defender_evasion_point,
-        attacker.min_hit_rate.unwrap_or(0),
-        defender.min_evasion_rate.unwrap_or(0),
-    );
+    let floors = HitRateFloors {
+        min_hit_rate: attacker.min_hit_rate,
+        min_evasion_rate: defender.min_evasion_rate,
+    };
+    let hit = hit_rate(attacker_accuracy_point, defender_evasion_point, floors);
     let (accuracy_growth, accuracy_max) = accuracy_growth(
-        attacker.stats,
-        attacker.correction,
-        attacker.equipment_accuracy,
-        attacker.skill_accuracy,
-        attacker.accuracy_bonus,
-        attacker.accuracy_boost,
-        attacker.learnable_accuracy_skill,
-        attacker.accuracy_random_option,
-        attacker_accuracy_point,
-        attacker.stat_cap,
-        attacker.equipment,
-        attacker.enchant_caps,
-        attacker.accuracy_buff_catalog,
-        attacker.accuracy_buff_selection,
+        attacker,
         defender_evasion_point,
-        attacker.min_hit_rate.unwrap_or(0),
-        defender.min_evasion_rate.unwrap_or(0),
+        floors,
+        attacker_accuracy_point,
         hit.value,
     );
     let defender_type_bonus = attack_type_bonus(defender.stats, attack_type);
     let (evasion_growth, evasion_max) = evasion_growth(
-        defender.stats,
-        defender.profile.equipment_evasion,
-        defender.profile.equipment_agility,
+        defender,
         defender_type_bonus,
-        defender.evasion_random_option,
-        defender_evasion_point,
-        defender.stat_cap,
-        defender.equipment,
-        defender.enchant_caps,
         attacker_accuracy_point,
-        attacker.min_hit_rate.unwrap_or(0),
-        defender.min_evasion_rate.unwrap_or(0),
+        floors,
+        defender_evasion_point,
         hit.value,
     );
-    let accuracy_max_hit_rate = hit_rate(
-        accuracy_max,
-        defender_evasion_point,
-        attacker.min_hit_rate.unwrap_or(0),
-        defender.min_evasion_rate.unwrap_or(0),
-    );
-    let evasion_max_hit_rate = hit_rate(
-        attacker_accuracy_point,
-        evasion_max,
-        attacker.min_hit_rate.unwrap_or(0),
-        defender.min_evasion_rate.unwrap_or(0),
-    );
+    let accuracy_max_hit_rate = hit_rate(accuracy_max, defender_evasion_point, floors);
+    let evasion_max_hit_rate = hit_rate(attacker_accuracy_point, evasion_max, floors);
     VersusAccuracy {
         attack_type,
         attacker_dex: attacker.stats.dex,
@@ -983,10 +973,10 @@ pub fn versus_accuracy(
         attack_type_bonus: defender_type_bonus,
         evasion_point: defender_evasion_point,
         hit_rate: hit,
-        min_hit_rate: attacker.min_hit_rate.unwrap_or(0),
-        min_hit_rate_recorded: attacker.min_hit_rate.is_some(),
-        min_evasion_rate: defender.min_evasion_rate.unwrap_or(0).min(PVP_MIN_EVASION_CAP),
-        min_evasion_rate_recorded: defender.min_evasion_rate.is_some(),
+        min_hit_rate: floors.min_hit_rate_value(),
+        min_hit_rate_recorded: floors.min_hit_rate.is_some(),
+        min_evasion_rate: floors.min_evasion_rate_value(),
+        min_evasion_rate_recorded: floors.min_evasion_rate.is_some(),
         accuracy_growth,
         accuracy_max,
         accuracy_max_hit_rate,
@@ -999,6 +989,13 @@ pub fn versus_accuracy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn floors(min_hit_rate: i64, min_evasion_rate: i64) -> HitRateFloors {
+        HitRateFloors {
+            min_hit_rate: Some(min_hit_rate),
+            min_evasion_rate: Some(min_evasion_rate),
+        }
+    }
 
     /// wiki Skill/マキシミン `#HitSword`: Lv×5%、命中P変動の表(Lv1〜7)
     const HIT_SWORD_SHIFT: [i64; 7] = [3, 2, 1, 1, 0, -1, -2];
@@ -1392,33 +1389,33 @@ mod tests {
     #[test]
     fn hit_rateは下限上限で挟み対人回避率補正は10で頭打ち() {
         // raw が上限を超えると必中(capped)扱いで上限に張り付く
-        let capped = hit_rate(200, 0, 0, 0);
+        let capped = hit_rate(200, 0, HitRateFloors::NONE);
         assert_eq!(capped.min, HIT_RATE_MIN_BASE);
         assert_eq!(capped.max, HIT_RATE_MIN_BASE + HIT_RATE_PLAYER_SPAN);
         assert_eq!(capped.value, capped.max);
         assert!(capped.capped);
 
         // raw が下限を下回っても下限で頭打ち
-        let low = hit_rate(-500, 0, 0, 0);
+        let low = hit_rate(-500, 0, HitRateFloors::NONE);
         assert_eq!(low.value, HIT_RATE_MIN_BASE);
         assert!(!low.capped);
 
         // 対人: 対象の最小回避率補正20は上限10で頭打ちされる → min = 15 − 10 = 5
-        let pvp = hit_rate(50, 0, 0, 20);
+        let pvp = hit_rate(50, 0, floors(0, 20));
         assert_eq!(pvp.min, HIT_RATE_MIN_BASE - PVP_MIN_EVASION_CAP);
         // 上限は常に 85 + 下限で連動する
         assert_eq!(pvp.max, HIT_RATE_PLAYER_SPAN + pvp.min);
 
         // 最小回避率補正が上限10ちょうどでも同じ(頭打ちの境界)
-        let at_cap = hit_rate(50, 0, 0, PVP_MIN_EVASION_CAP);
+        let at_cap = hit_rate(50, 0, floors(0, PVP_MIN_EVASION_CAP));
         assert_eq!(at_cap.min, pvp.min);
 
         // 最小回避率補正9(上限未満)ならそのまま反映される → min = 15 − 9 = 6
-        let below_cap = hit_rate(50, 0, 0, 9);
+        let below_cap = hit_rate(50, 0, floors(0, 9));
         assert_eq!(below_cap.min, HIT_RATE_MIN_BASE - 9);
 
         // 最小命中率補正は攻撃側。下限を押し上げ、上限も連動する
-        let with_min_hit = hit_rate(50, 0, 8, 0);
+        let with_min_hit = hit_rate(50, 0, floors(8, 0));
         assert_eq!(with_min_hit.min, HIT_RATE_MIN_BASE + 8);
         assert_eq!(with_min_hit.max, HIT_RATE_PLAYER_SPAN + with_min_hit.min);
     }
@@ -1494,7 +1491,7 @@ mod tests {
         assert_eq!(v.evasion_point, defender.evasion_point.physical);
         assert_eq!(
             v.hit_rate,
-            hit_rate(v.accuracy_point, v.evasion_point, 0, 0)
+            hit_rate(v.accuracy_point, v.evasion_point, HitRateFloors::NONE)
         );
         assert!(!v.min_hit_rate_recorded);
         assert!(!v.min_evasion_rate_recorded);
