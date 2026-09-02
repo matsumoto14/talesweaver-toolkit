@@ -689,7 +689,7 @@ pub fn preview_versus(
 
     Ok(domain::versus_accuracy(
         &domain::VersusAttacker {
-            can_learn_precision_sword: can_learn_precision_sword(&attacker.game_character_id),
+            learnable_accuracy_skill: learnable_accuracy_skill(&attacker.game_character_id),
             stats: &attacker_preview.stats,
             correction: &correction,
             equipment: &attacker.equipment,
@@ -914,29 +914,27 @@ pub struct StatPreviewPayload {
     pub part_enhance: Vec<PartEnhancePreview>,
 }
 
-/// `AccuracyBoost` をキャラスキルから解決する(wiki Skill/マキシミン `#HitSword`)。
-/// 「極・的中剣」は装着アビリティではなくキャラスキル(SLv 制)なので、装備ではなく
-/// `stat_sources.character_skills` を見る。ペット集中は今回まだ入力を持たないので
-/// `AccuracyBoost::Concentration` にはならない(`AccuracyBoost::resolve` の型だけ用意)。
-/// そのキャラが「極・的中剣」を覚えられるか。伸びしろの材料に「Lv7 まで」を出してよいかの
-/// 判定にだけ使う ── 極・的中剣はマキシミン専用なので、ほかのキャラに出すのは誤り
-/// (実機でイサックの伸びしろに出ていた)。カタログを引くので commands の役目
-fn can_learn_precision_sword(game_character_id: &str) -> bool {
-    gamedata::character_skill_catalog().iter().any(|def| {
-        def.game_character_id == game_character_id
+/// そのキャラが覚えられる命中P割合増加スキル(`SkillEffect::AccuracyRate`。極・的中剣は
+/// マキシミン専用)。伸びしろの材料に「Lv7 まで」を出してよいかの判定にだけ使う
+/// (覚えられないキャラに出すのは誤り。実機でイサックの伸びしろに出ていた)
+fn learnable_accuracy_skill(game_character_id: &str) -> Option<&'static domain::CharacterSkillDef> {
+    gamedata::character_skill_catalog().iter().find(|def| {
+        def.applies_to(game_character_id)
             && def
                 .effects
                 .iter()
-                .any(|e| matches!(e, domain::SkillEffect::AccuracyRateBoost))
+                .any(|e| matches!(e, domain::SkillEffect::AccuracyRate { .. }))
     })
 }
 
+/// `AccuracyBoost` をキャラスキルから解決する。ペット集中は今回まだ入力を持たないので
+/// `Concentration` にはならない(`AccuracyBoost::resolve` の型だけ用意)。
 fn resolve_accuracy_boost(stat_sources: &domain::StatSources) -> domain::AccuracyBoost {
-    let level = stat_sources.character_skills.accuracy_rate_boost_level(
+    let skill = stat_sources.character_skills.accuracy_boost(
         gamedata::character_skill_catalog(),
         &stat_sources.masteries,
     );
-    domain::AccuracyBoost::resolve(false, level)
+    domain::AccuracyBoost::resolve(false, skill)
 }
 
 /// 能力値補正に要るカタログ一式。バフカタログだけ所有値なので呼び出し側が持つ。
@@ -1653,20 +1651,23 @@ mod tests {
         weapon_added_damage,
     };
     use domain::{
-        AccuracyBoost, BaseStats, BuffSelection, ComboSkillType, CommonSkills, DamageCategory,
+        AccuracyBoost, AccuracyBoostSource, BaseStats, BuffSelection, ComboSkillType, CommonSkills,
+        DamageCategory,
         EnhanceGrade, Equipment, EquipmentEnhanceType, EquipmentPart, EquipmentValues,
         SoulLinkStatus, StatSources,
     };
 
     #[test]
     fn 極的中剣を選んでいればboostはprecision_sword() {
-        // Lv を明示していなければ既定 Lv7(Master)扱い(`CharacterSkills::accuracy_rate_boost_level`)
+        // Lv を明示していなければ既定 Lv7(Master)扱い(`CharacterSkills::level_of`)
         let mut stat_sources = StatSources::default();
         stat_sources.character_skills.skill_ids = vec!["maximin_hit_sword".to_string()];
-        assert_eq!(
-            resolve_accuracy_boost(&stat_sources),
-            AccuracyBoost::PrecisionSword(7)
-        );
+        let boost = resolve_accuracy_boost(&stat_sources);
+        assert!((boost.rate - 1.35).abs() < 1e-12);
+        assert!(matches!(
+            boost.source,
+            AccuracyBoostSource::Skill { level: 7, .. }
+        ));
     }
 
     #[test]
@@ -1677,17 +1678,17 @@ mod tests {
             .character_skills
             .skill_levels
             .insert("maximin_hit_sword".to_string(), 3);
-        assert_eq!(
-            resolve_accuracy_boost(&stat_sources),
-            AccuracyBoost::PrecisionSword(3)
-        );
+        assert!(matches!(
+            resolve_accuracy_boost(&stat_sources).source,
+            AccuracyBoostSource::Skill { level: 3, .. }
+        ));
     }
 
     #[test]
     fn 極的中剣を選んでいなければboostはnone() {
         assert_eq!(
             resolve_accuracy_boost(&StatSources::default()),
-            AccuracyBoost::None
+            AccuracyBoost::NONE
         );
     }
 

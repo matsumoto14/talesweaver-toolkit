@@ -65,20 +65,22 @@ pub enum SkillEffect {
     /// 遊び用チンキ剤・テイルズウィーバーのエネルギー等)。値はそのまま命中Pへ加算する固定値
     AccuracyPoint {
         value: i64,
-        /// 的中剣の効果中は無効になるか(wiki 注記: テイルズウィーバーのエネルギーのみ該当)。
-        /// `exclusive_slots` はバフ同士の排他しか表せない(的中剣はバフではなく装備状態)ため、
-        /// この効き先自体にフラグとして持たせる
-        disabled_with_precision_sword: bool,
+        /// この効果を無効にするキャラスキルの id(wiki 注記: テイルズウィーバーのエネルギーは
+        /// 「極・的中剣」の効果中は無効)。`exclusive_slots` はバフ同士の排他しか表せないので、
+        /// 効き先自体に持たせる
+        exclusive_with: &'static [&'static str],
     },
     /// 最小回避率補正への加算(wiki `#HitRateCap`: 対人の命中率下限を上げる。
     /// テイルズウィーバーのエネルギーの「最小回避率 +10%」)。値は % 表記の整数
     MinEvasionRate { value: i64 },
-    /// 命中P割合増加(的中剣系)。wiki Skill/マキシミン `#HitSword`(取得 2026-09-01):
-    /// マキシミン専用スキル「極・的中剣」は SLv 1〜7 を持ち、命中Pに掛かる倍率が
-    /// `Lv×5%` で増える(`AccuracyBoost::PrecisionSword` の `rate()` が計算する)。
-    /// このマーカー自体は値を持たない — 実際の Lv は `CharacterSkills::skill_levels` から
-    /// 引く(既存の `AccuracyPoint`(固定値の加算)とは別物)
-    AccuracyRateBoost,
+    /// 命中P割合増加(wiki 計算式まとめ `#AccuracyPoint`「命中P割合増加」の的中剣枠)。
+    /// SLv に比例して倍率が増える(`1 + per_level × Lv`)。割合とは別に SLv ごとの固定の
+    /// 命中P変動 `shift[Lv-1]` を持つ(wiki の表)。SLv は `CharacterSkills::skill_levels` から
+    /// 引き、上限は `CharacterSkillDef::max_level`(既存の `AccuracyPoint`(固定値の加算)とは別物)
+    AccuracyRate {
+        per_level: f64,
+        shift: &'static [i64],
+    },
     /// **記録するだけ**。wiki に効果はあるが、まだ配線していない
     /// (被ダメージ・移動速度・確率発動・条件付き・減衰する値)
     RecordOnly,
@@ -107,7 +109,9 @@ impl SkillEffect {
             }
             SkillEffect::AccuracyPoint { value, .. } => format!("命中P +{value}"),
             SkillEffect::MinEvasionRate { value } => format!("最小回避率補正 +{value}%"),
-            SkillEffect::AccuracyRateBoost => "命中P割合増加(SLvに比例)".to_string(),
+            SkillEffect::AccuracyRate { per_level, .. } => {
+                format!("命中P割合増加(SLv×{}%)", per_level * 100.0)
+            }
             SkillEffect::RecordOnly => "記録のみ".to_string(),
         }
     }
@@ -140,6 +144,9 @@ pub struct CharacterSkillDef {
     pub game_character_id: &'static str,
     pub name: &'static str,
     pub audience: SkillAudience,
+    /// SLv の上限。on/off だけのスキルは 1。SLv を持つスキル(極・的中剣 = 7)は
+    /// `CharacterSkills::skill_levels` で段階を選べる
+    pub max_level: u8,
     /// マスタリー未取得のときの効果。空 = マスタリーを取ってはじめて効果が出る
     pub effects: &'static [SkillEffect],
     /// マスタリーを取ると効果が差し替わる。上から順に見て最初に一致したものを使う
@@ -180,9 +187,8 @@ pub struct CharacterSkills {
     /// `CharacterSkillDef::id`。重複は `validate` で弾く
     #[serde(default)]
     pub skill_ids: Vec<String>,
-    /// SLv を持つスキル(いまは `SkillEffect::AccuracyRateBoost` の「極・的中剣」だけ)の
-    /// `CharacterSkillDef::id` → SLv。他のキャラスキルは on/off のみで Lv を持たないので、
-    /// ここに無いキー(または `skill_ids` に無い id)は既定 Lv(`level_of` を見よ)。
+    /// SLv を持つスキル(`CharacterSkillDef::max_level > 1`)の `CharacterSkillDef::id` → SLv。
+    /// ここに無い id は既定 Lv = 上限(`level_of`)。
     /// 追加フィールド(既存 JSON は無くても `#[serde(default)]` で読める。storage migration 不要)
     #[serde(default)]
     pub skill_levels: std::collections::BTreeMap<String, u8>,
@@ -202,29 +208,26 @@ impl CharacterSkills {
             .collect()
     }
 
-    /// 「極・的中剣」(`SkillEffect::AccuracyRateBoost` を持つ ON 中のスキル)の SLv。
-    /// 複数あれば高い方を採用する(通常は 1 つだけ)。ON にしていなければ `None`。
-    ///
-    /// **既定 Lv**: `skill_levels` に明示の Lv が無いときは、他のキャラスキルと同じ
-    /// 「ON = 満額の効果」に合わせて Lv7(Master)を返す `[仮]`。Lv1〜6 の段階選択 UI は
-    /// まだ無い(ステッパーの追加は本 goal の対象外。§報告)
-    pub fn accuracy_rate_boost_level(
+    /// スキルの SLv。明示が無ければ上限(「ON = 満額の効果」。他のキャラスキルと同じ)。
+    pub fn level_of(&self, def: &CharacterSkillDef) -> u8 {
+        self.skill_levels
+            .get(def.id)
+            .copied()
+            .unwrap_or(def.max_level)
+            .clamp(1, def.max_level.max(1))
+    }
+
+    /// ON 中のスキルのうち命中P割合増加(`SkillEffect::AccuracyRate`)を持つものを、SLv まで
+    /// 解決した `AccuracyBoost` にする。複数あれば倍率の高い方(通常は 1 つだけ)。無ければ None
+    pub fn accuracy_boost(
         &self,
         catalog: &CharacterSkillCatalog,
         masteries: &Masteries,
-    ) -> Option<u8> {
+    ) -> Option<crate::defense::AccuracyBoost> {
         self.resolved(catalog, masteries)
             .into_iter()
-            .filter(|(_, effects)| {
-                effects.iter().any(|e| matches!(e, SkillEffect::AccuracyRateBoost))
-            })
-            .map(|(def, _)| {
-                self.skill_levels
-                    .get(def.id)
-                    .copied()
-                    .unwrap_or(crate::defense::PRECISION_SWORD_MAX_LEVEL)
-            })
-            .max()
+            .filter_map(|(def, _)| crate::defense::AccuracyBoost::from_skill(def, self.level_of(def)))
+            .max_by(|a, b| a.rate.total_cmp(&b.rate))
     }
 
     /// 中ディレイ減少の供給源(Σ% の小数表現)。
@@ -418,6 +421,7 @@ mod tests {
             game_character_id: "mira",
             name: "極・スパート",
             audience: SkillAudience::SelfOnly,
+            max_level: 1,
             effects: &[SkillEffect::RecordOnly],
             mastery_overrides: &[MasteryOverride {
                 mastery_id: "mira_m4_2",
@@ -431,6 +435,7 @@ mod tests {
             game_character_id: "maximin",
             name: "極・呪われた魔剣",
             audience: SkillAudience::SelfOnly,
+            max_level: 1,
             effects: CURSED_BASE,
             mastery_overrides: &[MasteryOverride {
                 mastery_id: "maximin_m3_3",
@@ -444,6 +449,7 @@ mod tests {
             game_character_id: "ispin",
             name: "極・エンカレッジ",
             audience: SkillAudience::Ally,
+            max_level: 1,
             effects: AGI_UP,
             mastery_overrides: &[],
             source_url: "",
@@ -455,6 +461,7 @@ mod tests {
             game_character_id: "joshua",
             name: "憑依【剣闘士】",
             audience: SkillAudience::SelfOnly,
+            max_level: 1,
             effects: &[],
             mastery_overrides: &[MasteryOverride {
                 mastery_id: "joshua_m2_3",

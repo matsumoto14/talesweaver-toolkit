@@ -349,7 +349,7 @@ export type SkillEffect =
   /** 与ダメージ式のカテゴリへの加算(上限はカテゴリ側が持つ) */
   | { damage: { category: DamageCategory; percent: number } }
   /** 命中P増加(wiki 計算式まとめ #AccuracyPoint)。値はそのまま命中Pへ加算する固定値 */
-  | { accuracy_point: { value: number; disabled_with_precision_sword: boolean } }
+  | { accuracy_point: { value: number; exclusive_with: string[] } }
   /** 最小回避率補正への加算(wiki #HitRateCap)。値は % 表記の整数 */
   | { min_evasion_rate: { value: number } }
   /** 命中P割合増加(的中剣系。SLv に比例。値自体は持たず CharacterSkills.skill_levels から引く) */
@@ -402,7 +402,7 @@ export interface CharacterSkills {
   /** ON にしている CharacterSkillDef の id */
   skill_ids: string[];
   /** SLv を持つスキル(いまは「極・的中剣」だけ)の id → SLv。無いキーは既定 Lv
-   * (`CharacterSkills::accuracy_rate_boost_level` を見よ) */
+   * (`CharacterSkills::level_of` を見よ) */
   skill_levels: Record<string, number>;
 }
 
@@ -1391,11 +1391,18 @@ export interface EvasionPoints {
 // crates/domain/src/defense.rs の AttackType。突き合わせる回避Pの種類(物理/魔法の2分類)。
 export type AttackType = "physical" | "magic";
 
-// crates/domain/src/defense.rs の AccuracyBoost。命中P割合増加の枠(集中・的中剣)。
-export type AccuracyBoost =
+// crates/domain/src/defense.rs の AccuracyBoost。命中P割合増加の枠(集中・的中剣)を解決した値。
+export type AccuracyBoostSource =
   | "none"
   | "concentration"
-  | { precision_sword: number };
+  | { skill: { id: string; name: string; level: number; max_level: number } };
+export interface AccuracyBoost {
+  /** 命中Pに掛かる倍率(中立 1.0) */
+  rate: number;
+  /** 割合とは別に乗る固定の命中P変動 */
+  shift: number;
+  source: AccuracyBoostSource;
+}
 
 // crates/domain/src/defense.rs の HitRate(wiki#HitRate / #HitRateCap)。
 export interface HitRate {
@@ -1412,7 +1419,7 @@ export interface HitRate {
 }
 
 // crates/domain/src/defense.rs の GrowthSource。命中P・回避Pの伸びしろの材料の出どころ。
-export type GrowthSource = "stat" | "enchant" | "siena" | "precision_sword" | "accuracy_buff";
+export type GrowthSource = "stat" | "enchant" | "siena" | "accuracy_skill" | "accuracy_buff";
 
 // crates/domain/src/defense.rs の GrowthRoom。命中P・回避P 1 材料ぶんの伸びしろ試算。
 export interface GrowthRoom {
@@ -1722,12 +1729,6 @@ export interface StatLimits {
   ultimate_rune_bonus_max: number;
   /** 致命打のクリティカル率増加 */
   deadly_blow_bonus_max: number;
-  /** ペット集中(1.05)/ 的中剣(SLv 1あたり)の命中P割合増加。画面の倍率表記はここから引く */
-  concentration_accuracy_rate: number;
-  /** 的中剣 SLv 1 あたりの命中P割合増加(0.05)。表示は `1 + rate * Lv` */
-  precision_sword_accuracy_rate_per_level: number;
-  /** 的中剣 SLv の上限(7) */
-  precision_sword_max_level: number;
   /** パワーウェポンの装備攻撃力強化倍率。Σ% の小数表現 */
   power_weapon_rate: number;
   /** ストロングウェポン 1Lv あたりの装備攻撃力強化倍率。Σ% の小数表現 */

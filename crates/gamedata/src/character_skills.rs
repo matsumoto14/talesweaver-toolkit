@@ -87,6 +87,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "boris",
         name: "剣の司祭",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: DELAY_5,
         mastery_overrides: &[],
         source_url: WIKI,
@@ -97,6 +98,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "ispin",
         name: "ライバルリー",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: DELAY_5,
         mastery_overrides: &[],
         source_url: WIKI,
@@ -107,6 +109,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "maximin",
         name: "ドタバタペア",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         // wiki は中ディレイ倍率B と [X4] の両方に載っている。効き先が 2 つある例
         effects: &[
             SkillEffect::ActualDelay { percent: 5.0 },
@@ -124,6 +127,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "chloe",
         name: "ライバルリー",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: DELAY_5,
         mastery_overrides: &[],
         source_url: WIKI,
@@ -134,6 +138,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "anais",
         name: "ロキ特化",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: DELAY_5,
         mastery_overrides: &[],
         source_url: WIKI,
@@ -144,6 +149,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isolet",
         name: "コロナゲイル",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: DELAY_5,
         mastery_overrides: &[],
         source_url: WIKI,
@@ -159,6 +165,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "mira",
         name: "極・スパート",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: SPURT_AGI,
         mastery_overrides: &[MasteryOverride {
             mastery_id: "mira_m4_2",
@@ -175,6 +182,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "maximin",
         name: "極・呪われた魔剣",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: CURSED_SWORD_5,
         mastery_overrides: &[
             MasteryOverride {
@@ -203,7 +211,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "maximin",
         name: "極・的中剣",
         audience: SkillAudience::SelfOnly,
-        effects: &[SkillEffect::AccuracyRateBoost],
+        // wiki: `|Master＝Lv7|`
+        max_level: 7,
+        // wiki: `Lv*5%`(Lv7 で ×1.35)。命中P変動は `#AccuracyPoint` の表(Lv1 の行は集中と共通)
+        effects: &[SkillEffect::AccuracyRate {
+            per_level: 0.05,
+            shift: &[3, 2, 1, 1, 0, -1, -2],
+        }],
         mastery_overrides: &[],
         source_url: WIKI,
         note: "命中Pにかかる倍率が SLv×5%増加(Master=Lv7で+35%)。ペット集中(Lv1相当)が優先",
@@ -215,6 +229,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "roamini",
         name: "極・ア・プチ",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "roamini_m3_3",
@@ -238,6 +253,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "roamini",
         name: "極・パウアトゥン",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "roamini_m3_2",
@@ -257,6 +273,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "joshua",
         name: "憑依【剣闘士】",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "joshua_m2_3",
@@ -274,6 +291,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "joshua",
         name: "憑依【魔法師】",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "joshua_m2_3",
@@ -295,6 +313,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "lucian",
         name: "ラグランジュ神速剣",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "lucian_m2_2",
@@ -311,6 +330,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "lucian",
         name: "極・連撃 / 極・無双乱舞 / 極・旋風斬",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "lucian_m3_3",
@@ -327,6 +347,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "lucian",
         name: "鉄壁",
         audience: SkillAudience::Ally,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 5.0,
@@ -340,6 +361,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "boris",
         name: "冬を乗り越える者",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 6.0,
@@ -353,6 +375,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "boris",
         name: "ジンネマン家の生き残り",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "boris_m2_2",
@@ -369,6 +392,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "boris",
         name: "スノーガード<騎士道>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "boris_m3_3",
@@ -385,6 +409,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "boris",
         name: "護衛武士",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -398,6 +423,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "mira",
         name: "キャプテン",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -411,6 +437,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "mira",
         name: "ハイジャンプ",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "mira_m2_3",
@@ -427,6 +454,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "ispin",
         name: "鍛造<プロモーション>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 3.0,
@@ -440,6 +468,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "ispin",
         name: "鍛造",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "ispin_m3_3",
@@ -456,6 +485,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "ispin",
         name: "ノン・ルトゥール",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 4.0,
@@ -469,6 +499,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "maximin",
         name: "少年家長",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -482,6 +513,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "tichiel",
         name: "勉強用チンキ剤",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 10.0,
@@ -495,6 +527,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "tichiel",
         name: "赤い目の名薬",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 20.0,
@@ -508,6 +541,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "tichiel",
         name: "赤い目の名薬(ペナルティ)",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: -20.0,
@@ -521,6 +555,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "nayatorei",
         name: "苗族",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -534,6 +569,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "siberin",
         name: "バーサーク",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[
             MasteryOverride {
@@ -563,6 +599,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "joshua",
         name: "霊媒<幽霊>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "joshua_m2_2",
@@ -579,6 +616,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "joshua",
         name: "糸と針",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -592,6 +630,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "joshua",
         name: "ソウルバースト",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "joshua_m4_3",
@@ -608,6 +647,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "chloe",
         name: "マナウォール",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[
             MasteryOverride {
@@ -633,6 +673,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "chloe",
         name: "魔法研究者<渡空>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -646,6 +687,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "ranjie",
         name: "アップライジング",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 10.0,
@@ -659,6 +701,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isaac",
         name: "ダルクロイツの武術家<招式>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 5.0,
@@ -672,6 +715,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isaac",
         name: "娘持ちの父親",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -685,6 +729,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "anais",
         name: "生き別れの弟",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -698,6 +743,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "anais",
         name: "共にいられる喜び",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 3.0,
@@ -711,6 +757,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "anais",
         name: "くまさんアングリー",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[],
         source_url: WIKI,
@@ -721,6 +768,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "anais",
         name: "ルシベアバリア",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 3.0,
@@ -734,6 +782,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "anais",
         name: "ファイヤーオーラ",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 5.0,
@@ -747,6 +796,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "anais",
         name: "ハードウエポン",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 20.0,
@@ -760,6 +810,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isolet",
         name: "ゾーンバースト<武威>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -773,6 +824,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isolet",
         name: "光の歌",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 5.0,
@@ -792,6 +844,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isolet",
         name: "高貴な孤独",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 3.0,
@@ -805,6 +858,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isolet",
         name: "ボリス",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -818,6 +872,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "極・トランススピリット",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "benya_m4_1",
@@ -834,6 +889,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "極・アルトリスティックスピリット",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "benya_m4_2",
@@ -850,6 +906,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "極・アルトリスティックスピリット(味方)",
         audience: SkillAudience::Ally,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 5.0,
@@ -863,6 +920,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "極・ハーモニックスピリット",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "benya_m4_3",
@@ -879,6 +937,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "グレイスターブローチ",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -892,6 +951,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "roamini",
         name: "カース・ペンジュラム",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 15.0,
@@ -911,6 +971,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "roamini",
         name: "苗族",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -924,6 +985,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "nocturne",
         name: "コスモス<調和>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -937,6 +999,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "nocturne",
         name: "テイルズウィーバー守護者",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -950,6 +1013,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "nocturne",
         name: "エレクトリックバースト",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 3.0,
@@ -963,6 +1027,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "leeche",
         name: "友達",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 2.0,
@@ -976,6 +1041,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "leeche",
         name: "極・攻撃の熱気",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "leeche_m4_2",
@@ -992,6 +1058,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "leeche",
         name: "極・攻撃の熱気(味方)",
         audience: SkillAudience::Ally,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::AttackDamageSkill,
             percent: 5.0,
@@ -1006,6 +1073,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "isaac",
         name: "エネルギーフィールド",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "isaac_m2_2",
@@ -1022,6 +1090,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "roamini",
         name: "カース・エンド",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "roamini_m2_2",
@@ -1038,6 +1107,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "yefnen",
         name: "鋭い欠片<フラグ>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "yefnen_m3_2",
@@ -1054,6 +1124,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "yefnen",
         name: "べたつく欠片<フラグ>",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[MasteryOverride {
             mastery_id: "yefnen_m3_3",
@@ -1070,6 +1141,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "yefnen",
         name: "速剣",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::SkillMultiplierRate,
             percent: -10.0,
@@ -1084,6 +1156,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "ダークブレッシング",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::Damage {
             category: DamageCategory::FinalDamageRate,
             percent: 100.0,
@@ -1098,6 +1171,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "benya",
         name: "極・ソウルゲート",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[SkillEffect::StatRate {
             stats: AGI,
             percent: 5.0,
@@ -1112,6 +1186,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "ispin",
         name: "極・エンカレッジ",
         audience: SkillAudience::Ally,
+        max_level: 1,
         effects: &[SkillEffect::StatRate {
             stats: ALL_STATS,
             percent: 10.0,
@@ -1126,6 +1201,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "siberin",
         name: "魅力発散",
         audience: SkillAudience::Ally,
+        max_level: 1,
         effects: &[SkillEffect::StatRate {
             stats: ALL_STATS,
             percent: 1.0,
@@ -1140,6 +1216,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         game_character_id: "tichiel",
         name: "魔法の先生",
         audience: SkillAudience::Ally,
+        max_level: 1,
         effects: &[SkillEffect::StatRate {
             stats: INT,
             percent: 10.0,

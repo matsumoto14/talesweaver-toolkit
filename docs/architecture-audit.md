@@ -30,7 +30,7 @@ Rust から値・上限・候補を返す形にして TS 側を消す。
 | 19 | `EquipmentPane.svelte:781-785` / `StatusPane.svelte:102` / `CommonSkillPane.svelte:125` | `ENHANCE_LEVEL_MAX`、`limits.awakening_stage_max`、`limits.sharpness_vision_level_max` | 強化 Lv 候補 `[0,10..15]`・覚醒 6 段・シャープネス 10 段の直書き |
 | 20 | `CalcPage.svelte:393-413` | `damage.rs:397-460` | 「なぜこの数字?」の帯が Rust の段名文字列を Set で持ち `reached / running` で倍率を再導出。段に `kind: factor \| running` を返せば消える |
 | 21 | `CalcPage.svelte:1300-1302` | — | 極限の効果値のため `scope_eye/full_throttle` / `wide_focus` を強制セットして preview を 2 回叩く。効果表を返す API に |
-| 22 | `VersusPage.svelte:170-178`、`Workspace.svelte:477`、`equipment.ts:21-30`、`measurement.ts:350-366` | `defense.rs:268`、`critical_rate.rs:24`、— | `1 + rate × level` の再計算、"ペット会心 ×1.1" 文字列、「†改・セイクリッド は通常版と同じ画像」の名前規則(gamedata の icon id 属性に)、逆算可否 |
+| 22 | `Workspace.svelte:477`、`equipment.ts:21-30`、`measurement.ts:350-366` | — | "ペット会心 ×1.1" 文字列、「†改・セイクリッド は通常版と同じ画像」の名前規則(gamedata の icon id 属性に)、逆算可否。対人の `1 + rate × level` は B3 で解消済み |
 
 確認して問題なし: `state.svelte.ts`、`api/transfer.ts`、`api/browserStore.ts`、`candidates.ts`、`format.ts`、`limits.svelte.ts`、`TracePanel.svelte`、`MeasurePage.svelte`、`ui/critChance.ts`、ActualDelay / CriticalRate / SoulLink の各ペイン。
 
@@ -38,13 +38,11 @@ Rust から値・上限・候補を返す形にして TS 側を消す。
 
 | # | 場所 | 症状 | 簡単な形 |
 |---|---|---|---|
-| 3 | `defense.rs:213-286`、`character_skill.rs:60-70, 179-221`、`commands/lib.rs:746-762` | 極・的中剣を名指しで分岐: 専用 enum `AccuracyBoost`、`PRECISION_SWORD_*` 定数 4 つ、`disabled_with_precision_sword` フラグ、1 スキルのためだけの `skill_levels` Map、既定 Lv7 の `unwrap_or`、伸びしろの文言を文字列で組む。「個別バフをコードで分岐しない」に最も反する | カタログ側に `SkillEffect::AccuracyRate { per_level, shift, max_level }` と汎用 `exclusive_with` を持たせ、`AccuracyBoost` は解決済み値だけに。SLv は `CharacterSkills` の一般機能に |
 | 4 | `equipment.rs:360-414`(SienaStatBonus)、`stats.rs`(BaseStats / EffectiveStats)、`element.rs` | ステ別 7 フィールド構造体の手書き `get/get_mut`。stat_sources.rs 側の 6 型は `PerStat<T>`(stats.rs)にした(済み) | 残りも `PerStat<T>` に寄せる。`BaseStats` / `EffectiveStats` はテストの構造体リテラルが多いので値のまま可 |
 | 5 | `equipment.rs:98-166, 1634-1650, 1690-1759`、`thesis_core.rs:260-277`、`siena.rs:231-255`、`candidate.rs:152-188`、`commands/lib.rs:1450-1474` | 装備補正 9 値のフィールド対応表が 7 通り。文字列キー `"thrust"` が domain → commands → TS まで走る | `EquipmentValueKind` を 9 種にし `EquipmentValues::get/get_mut(kind)` を 1 か所。候補 id は `(PartSlot, EquipmentValueKind)` |
 | 6 | `commands/lib.rs:1223-1338` と `:1355-1446` | `list_upgrade_candidates` と `list_enchant_gains` がほぼ同文。`preview_effective_stats` の 13 引数呼び出しを 4 回複写(`:341, 405, 459, 479`)。`preview_defense` / `preview_versus` は 2 値のためにフルプレビュー | `stat_preview_of(...)` と `enchant_outcomes(...)` を切り出す |
 | 8 | `stat_sources.rs:1929-2080, 2097-2213` | `StatLimits` が 150 項目 × 2 リスト。ラベル・部位ルール(`equipment.rs:336-355` は `PartSlot` メソッドの写し)は上限ではなくカタログ | ラベル・部位ルールは `list_*` 系へ。`StatLimits` は数値上限だけ |
 | 9 | `defense.rs:516-537, 661-675, 873-943` | `AccuracyGrowth` 18 引数 / `evasion_growth` 13 引数。`min_hit_rate.unwrap_or(0)` を 6 回書き、未収録を 0 に潰したうえで `_recorded: bool` を別に返す | `VersusAttacker` / `VersusDefender` をそのまま渡す。`Recorded(i64) \| Unrecorded` の enum |
-| 10 | `defense.rs:89-98`、`random_option.rs:249-269` | 物理/魔法の依存分類が 3 か所 | `SkillDependency::attack_type()` |
 | 11 | `stat_sources.rs:1051, 1054, 1406, 1539, 1542`、`random_option.rs:230-244`、`candidate.rs:58, 74, 91, 344`、`skill.rs:166` | 裸の `as i64` / `.round() as` / `.floor() as` | `trunc_int` / `round_int` に寄せる。バフ固定値層は最初から `i64` |
 | 12 | `content_evaluation.rs:284-320, 203-222`、`commands/lib.rs:648-650, 836` | 同文フォールバック 2 つ(後者は `commands/lib.rs:1060` で事前検証済みで到達不能)、`ALL` から作った配列への `unwrap_or_default`、`weapon_added_damage().unwrap_or(0)` が未収録を 0 に見せる | 到達不能分は削除。未収録は `Option` のまま結果へ |
 | 13 | `commands/lib.rs:632-637, 657-662, 1272-1276`、`character_repository.rs:504-508` | `enhance_type.or_else(item_id → catalog)` の解決が 4 回 | `EquipmentPart::enhance_type_resolved(catalog)` を domain に 1 つ |
@@ -64,6 +62,6 @@ Rust から値・上限・候補を返す形にして TS 側を消す。
 1. B1(補正パイプライン一本化 → `build_stat_modifiers`)と B2(`DamageInput` → `DamageMaterial` + `DamageTarget`)は済み。フロント写経を Rust に移す受け皿になる。
 2. **A1**(Rust に無い規則)を domain / gamedata に新設し、コマンドで配る。到達 4 段・装備可否・エンチャントプランは `ContentEvaluation` と装備検証の拡張で収まる。
 3. **A2**(写経)は Rust から値・上限・候補を返して TS を削除。A2-11 のバフ既定値の食い違いはここで解消。
-4. **B3 / B4 / B8**(的中剣のデータ化、`PerStat`、`StatLimits` 分割)は独立して進められる。
+4. **B8**(`StatLimits` 分割)は独立して進められる。B3(的中剣のデータ化)と B4(`PerStat`)は済み。
 5. 残り(B5〜B7、B9〜B20)は触った箇所から順に。
-6. **B21**(伸びしろの材料を源ごとに列挙する API)は B3 / B4 の後。対人タブの「次にできること」([versus-next-actions.md](versus-next-actions.md))の受け皿で、A1-2 / A1-16(アビリティ枠の規則)を Rust に移した結果を使う。
+6. **B21**(伸びしろの材料を源ごとに列挙する API)。対人タブの「次にできること」([versus-next-actions.md](versus-next-actions.md))の受け皿で、A1-2 / A1-16(アビリティ枠の規則)を Rust に移した結果を使う。

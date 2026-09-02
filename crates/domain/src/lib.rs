@@ -79,9 +79,10 @@ pub use damage::{
 };
 pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,
+    AccuracyBoostSource,
     AccuracyCorrection, AttackType, DefenseProfile, EvasionPoints, GrowthRoom, GrowthSource,
     HitRate, VersusAccuracy, VersusAttacker, VersusDefender, HIT_RATE_MIN_BASE,
-    HIT_RATE_PLAYER_SPAN, PRECISION_SWORD_SHIFT, PVP_MIN_EVASION_CAP, SKILL_ACCURACY_OFFSET,
+    HIT_RATE_PLAYER_SPAN, PVP_MIN_EVASION_CAP, SKILL_ACCURACY_OFFSET,
 };
 pub use element::{
     Element, ElementPreview, ElementSourceDef, ElementSourceId, ElementSources, ElementValues,

@@ -558,21 +558,21 @@ pub fn buff_damage_contributions(
     damage_contributions(effects.into_iter())
 }
 
-/// 命中P増加効果(`SkillEffect::AccuracyPoint`)を持つバフだけへ絞り込み、的中剣装着中は
-/// `disabled_with_precision_sword` を持つものを除く(wiki 注記: テイルズウィーバーの
-/// エネルギーは的中剣の効果中は無効になる)。合計(`buff_accuracy_point_total`)と
-/// 伸びしろ(`buff_accuracy_point_room`)の両方が使う内側のフィルタ
+/// 命中P増加効果(`SkillEffect::AccuracyPoint`)を持つバフだけへ絞り込み、いま効いている
+/// 命中P割合増加スキル(的中剣)と排他(`exclusive_with`)のものを除く(wiki 注記:
+/// テイルズウィーバーのエネルギーは的中剣の効果中は無効になる)。合計
+/// (`buff_accuracy_point_total`)と伸びしろ(`buff_accuracy_point_room`)の両方が使う内側のフィルタ
 fn accuracy_point_values<'a>(
     defs: impl Iterator<Item = &'a BuffDefinition>,
     boost: crate::defense::AccuracyBoost,
 ) -> i64 {
-    let precision_sword = matches!(boost, crate::defense::AccuracyBoost::PrecisionSword(_));
+    let active_skill = boost.skill_id();
     defs.flat_map(|d| d.damage_effects.iter())
         .filter_map(|e| match e {
             SkillEffect::AccuracyPoint {
                 value,
-                disabled_with_precision_sword,
-            } if !(precision_sword && *disabled_with_precision_sword) => Some(*value),
+                exclusive_with,
+            } if !active_skill.is_some_and(|id| exclusive_with.contains(&id)) => Some(*value),
             _ => None,
         })
         .sum()
@@ -1735,15 +1735,6 @@ pub struct StatLimits {
     pub ultimate_rune_bonus_max: f64,
     /// 致命打のクリティカル率増加(wiki `#CriticalChance`)
     pub deadly_blow_bonus_max: f64,
-    /// パワーウェポンの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
-    /// ペット集中 / 的中剣(SLv 1あたり)の命中P割合増加(wiki 計算式まとめ #AccuracyPoint、
-    /// Skill/マキシミン #HitSword)。画面が「×1.05」「×(1+Lv*5%)」と出すのに使う
-    /// ── 定数をフロントに写経しない
-    pub concentration_accuracy_rate: f64,
-    /// 的中剣 SLv 1 あたりの命中P割合増加(0.05 = 5%)。表示は `1 + rate * Lv`
-    pub precision_sword_accuracy_rate_per_level: f64,
-    /// 的中剣 SLv の上限(7)
-    pub precision_sword_max_level: u8,
     pub power_weapon_rate: f64,
     /// ストロングウェポン 1Lv あたりの装備攻撃力強化倍率(wiki: Skill/共通)。Σ% の小数表現
     pub strong_weapon_rate_per_level: f64,
@@ -1883,9 +1874,6 @@ pub fn stat_limits() -> StatLimits {
         architect_lab_per_stage: crate::critical_rate::ARCHITECT_LAB_PER_STAGE,
         ultimate_rune_bonus_max: CriticalRateSourceId::UltimateRune.max_value(),
         deadly_blow_bonus_max: CriticalRateSourceId::DeadlyBlow.max_value(),
-        concentration_accuracy_rate: crate::defense::CONCENTRATION_ACCURACY_RATE,
-        precision_sword_accuracy_rate_per_level: crate::defense::PRECISION_SWORD_ACCURACY_RATE_PER_LEVEL,
-        precision_sword_max_level: crate::defense::PRECISION_SWORD_MAX_LEVEL,
         power_weapon_rate: crate::common_skill::POWER_WEAPON_RATE,
         strong_weapon_rate_per_level: crate::common_skill::STRONG_WEAPON_RATE_PER_LEVEL,
         coat_armor_physical_rate: crate::common_skill::COAT_ARMOR_PHYSICAL_RATE,
@@ -3690,7 +3678,7 @@ mod tests {
         assert_eq!(StatSources::for_new_character(), StatSources::default());
     }
 
-    /// 命中P増加バフの合計と伸びしろ。的中剣装着中は `disabled_with_precision_sword` を
+    /// 命中P増加バフの合計と伸びしろ。的中剣の効果中は `exclusive_with` に的中剣を持つものを
     /// 持つバフ(テイルズウィーバーのエネルギー相当)を除外する。
     #[test]
     fn 命中p増加バフの合計と的中剣排他() {
@@ -3709,7 +3697,11 @@ mod tests {
                 default_value: None,
                 damage_effects: Box::leak(Box::new([SkillEffect::AccuracyPoint {
                     value,
-                    disabled_with_precision_sword,
+                    exclusive_with: if disabled_with_precision_sword {
+                        &["maximin_hit_sword"]
+                    } else {
+                        &[]
+                    },
                 }])),
             }
         }
@@ -3717,8 +3709,15 @@ mod tests {
             buff("normal_accuracy", 20, false),
             buff("precision_sword_only", 5, true),
         ];
-        let none = crate::defense::AccuracyBoost::None;
-        let sword = crate::defense::AccuracyBoost::PrecisionSword(5);
+        let none = crate::defense::AccuracyBoost::NONE;
+        let sword = crate::defense::AccuracyBoost::from_rate_skill(
+            "maximin_hit_sword",
+            "極・的中剣",
+            0.05,
+            &[3, 2, 1, 1, 0],
+            5,
+            7,
+        );
 
         // 何も選んでいなければ合計 0、伸びしろは両方の値
         let empty = BuffSelection::default();

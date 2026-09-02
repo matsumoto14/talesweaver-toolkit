@@ -166,21 +166,18 @@
       : { label: "命中率", state: "met" as const };
   }
 
-  /** 倍率は domain の定数(limits 経由)。画面に写経しない */
+  /** 倍率・スキル名・Lv は Rust が解決した値をそのまま出す(画面で計算しない) */
   function boostLabel(boost: AccuracyBoost): string | null {
-    if (boost === "none") return null;
-    if (boost === "concentration") {
-      return `ペット集中 ・ 命中P ×${limits.concentration_accuracy_rate}`;
-    }
-    const level = boost.precision_sword;
-    const rate = (1 + limits.precision_sword_accuracy_rate_per_level * level).toFixed(2);
-    return `極・的中剣 Lv${level} ・ 命中P ×${rate}`;
+    const source = boost.source;
+    if (source === "none") return null;
+    if (source === "concentration") return `ペット集中 ・ 命中P ×${boost.rate.toFixed(2)}`;
+    return `${source.skill.name} Lv${source.skill.level} ・ 命中P ×${boost.rate.toFixed(2)}`;
   }
 
   // --- 命中P・回避Pの伸びしろ(accuracy_growth / evasion_growth) --------------------
   // 材料の出どころ(GrowthSource)を軸に、2 人ぶんを同じ行へ揃える。並び順はこの固定順
   // (Rust 側は gain 降順で返すので、そのままだと側ごとに順番がずれて突き合わせにくい)。
-  const GROWTH_SOURCE_ORDER: GrowthSource[] = ["stat", "enchant", "siena", "precision_sword", "accuracy_buff"];
+  const GROWTH_SOURCE_ORDER: GrowthSource[] = ["stat", "enchant", "siena", "accuracy_skill", "accuracy_buff"];
 
   interface GrowthRow { source: GrowthSource; label: string; a: GrowthRoom | null; b: GrowthRoom | null }
 

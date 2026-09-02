@@ -133,7 +133,7 @@ pub struct DamageMaterial {
     /// 命中P増加(wiki `#AccuracyPoint`)の合計。射手のルーン・ハードウエポン・遊び用チンキ剤・
     /// 手袋命中率+3%(コラボ手袋)等の Σ。中立値は 0
     pub accuracy_bonus: i64,
-    /// 命中P割合増加の枠(集中・的中剣)。中立値は `AccuracyBoost::None`
+    /// 命中P割合増加の枠(集中・的中剣)。中立値は `AccuracyBoost::NONE`
     pub accuracy_boost: AccuracyBoost,
     /// 感電・雷電中か(命中P割合減少 ×0.70)。中立値は `false`
     pub accuracy_shocked: bool,
@@ -1177,7 +1177,7 @@ mod tests {
             siena_actual_delay_reduction: 0.0,
             core_set_bonus: CoreSetBonus::default(),
             accuracy_bonus: 0,
-            accuracy_boost: AccuracyBoost::None,
+            accuracy_boost: AccuracyBoost::NONE,
             accuracy_shocked: false,
             random_options: RandomOptionTotals::default(),
             weapon_added_damage: 0,

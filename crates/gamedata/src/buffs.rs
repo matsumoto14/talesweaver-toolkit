@@ -351,7 +351,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
                 SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 },
                 // 計算式まとめ #AccuracyPoint「命中P増加」表: +5。的中剣の効果中は無効になる
                 // (集中とは共存可能。取得 2026-09-01)
-                SkillEffect::AccuracyPoint { value: 5, disabled_with_precision_sword: true },
+                SkillEffect::AccuracyPoint { value: 5, exclusive_with: &["maximin_hit_sword"] },
                 // 計算式まとめ #HitRateCap「最小回避率補正に該当するもの」: 最小回避率 +10%
                 // (取得 2026-09-01)。的中剣との排他は wiki に記載が無いので付けない
                 SkillEffect::MinEvasionRate { value: 10 },
@@ -369,7 +369,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             source_url: ACCURACY_POINT_WIKI_URL,
             note: "最大レベル時 命中P+20",
             default_value: None,
-            damage_effects: &[SkillEffect::AccuracyPoint { value: 20, disabled_with_precision_sword: false }],
+            damage_effects: &[SkillEffect::AccuracyPoint { value: 20, exclusive_with: &[] }],
         },
         BuffDefinition {
             id: "hard_weapon_earl",
@@ -384,7 +384,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "命中P+15。character_skills.rs の anais_hard_weapon(アネイスの【ハードウエポン】\
                    攻撃ダメージ +20%)とは同名の別スキル",
             default_value: None,
-            damage_effects: &[SkillEffect::AccuracyPoint { value: 15, disabled_with_precision_sword: false }],
+            damage_effects: &[SkillEffect::AccuracyPoint { value: 15, exclusive_with: &[] }],
         },
         BuffDefinition {
             id: "play_tincture",
@@ -401,7 +401,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
                    移動速度+2 は未収録。tichiel_m3_3 はマスタリー所有者(ティシエル)しか選べないため、\
                    味方バフとして誰でも選べるようここへ収録した([仮] 判断)",
             default_value: None,
-            damage_effects: &[SkillEffect::AccuracyPoint { value: 20, disabled_with_precision_sword: false }],
+            damage_effects: &[SkillEffect::AccuracyPoint { value: 20, exclusive_with: &[] }],
         },
         // --- ダメージにだけ効くバフ(ステは上げない。wiki ステータスの [X1]〜[X6] / [L])---
         BuffDefinition {
@@ -1008,7 +1008,7 @@ mod tests {
     }
 
     /// 命中P増加バフ 4 件(計算式まとめ #AccuracyPoint)の値と排他を固定する。
-    /// テイルズウィーバーのエネルギーだけ的中剣と排他(`disabled_with_precision_sword`)、
+    /// テイルズウィーバーのエネルギーだけ的中剣と排他(`exclusive_with`)、
     /// 他 3 件は排他無し。
     #[test]
     fn 命中p増加バフの値と的中剣排他() {
@@ -1020,8 +1020,8 @@ mod tests {
                 .find_map(|e| match e {
                     SkillEffect::AccuracyPoint {
                         value,
-                        disabled_with_precision_sword,
-                    } => Some((*value, *disabled_with_precision_sword)),
+                        exclusive_with,
+                    } => Some((*value, exclusive_with.contains(&"maximin_hit_sword"))),
                     _ => None,
                 })
                 .unwrap_or_else(|| panic!("{} に命中P増加効果が無い", d.id))

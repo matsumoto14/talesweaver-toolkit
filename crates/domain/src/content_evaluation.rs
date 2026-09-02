@@ -314,6 +314,7 @@ mod tests {
         game_character_id: "test_char",
         name: "憑依【剣闘士】",
         audience: SkillAudience::SelfOnly,
+        max_level: 1,
         effects: &[],
         mastery_overrides: &[crate::character_skill::MasteryOverride {
             mastery_id: "test_m2_3",
@@ -435,7 +436,7 @@ mod tests {
             siena_actual_delay_reduction: 0.0,
             core_set_bonus: CoreSetBonus::default(),
             accuracy_bonus: 0,
-            accuracy_boost: AccuracyBoost::None,
+            accuracy_boost: AccuracyBoost::NONE,
             accuracy_shocked: false,
             random_options: RandomOptionTotals::default(),
             weapon_added_damage: 0,
