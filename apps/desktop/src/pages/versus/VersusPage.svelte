@@ -353,6 +353,11 @@
     {@const hitGain = maxHitRate - result.hit_rate.value}
     <span class="growth-total">
       <span class="growth-total-hitrate num" use:bump={() => hitGain}>{rateWord} {formatHitRateGain(hitGain)}</span>
+      {#if hitGain === 0}
+        <!-- 必中か下限に張り付いていると全部積んでも命中率は動かない。素の増分だけ並ぶと
+             「何をしても変わらない」と読めるので、頭打ちだと一言添える(§00 05) -->
+        <span class="growth-capped dim">いま積んでも動かない(必中か下限)</span>
+      {/if}
       <span class="growth-total-raw dim"><span class="num" use:bump={() => point}>{point}</span> → <span class="num" use:bump={() => max}>{max}</span></span>
     </span>
   {/if}
@@ -798,6 +803,7 @@
     font-size: 9px; font-weight: 800; border-radius: var(--r-pill); padding: 1px 5px; border: 1px solid;
     margin-left: 4px;
   }
+  .growth-capped { font-size: 9px; }
   .growth-none { font-size: 10.5px; }
   /* 最終手段(エンチャント・シエナ)は末尾に薄く。並びは Rust が決めているので、
      ここでやるのは「目立たせない」ことだけ(§00 02) */
@@ -814,7 +820,8 @@
   .sword-chip.on { border-color: var(--accent); background: var(--bg-active); color: var(--fg-head); }
   .sword-chip:hover { border-color: var(--accent); }
   .sword-chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-  .sword-state { margin-left: 4px; font-size: 9px; letter-spacing: .06em; }
+  /* ON / OFF で幅が 5px 変わり押した場所が動く(実機で検出)。3 文字ぶんを取り切る */
+  .sword-state { display: inline-block; min-width: 3ch; text-align: center; margin-left: 4px; font-size: 9px; letter-spacing: .06em; }
 
   /* 未収録(供給源が無いのでまだ 0 決め打ち)。0 や空白ではなく ? + 破線で示す */
   .unk {
