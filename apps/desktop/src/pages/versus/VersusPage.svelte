@@ -4,8 +4,14 @@
   // であって、役割の入れ替え操作そのものが不要(ユーザー指摘 2026-09-01)。
   // 計算は Rust 側(preview_versus → domain::versus_accuracy)。ここは組み立てて渡すだけ。
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
-  import type { AccuracyBoost, GrowthRoom, GrowthSource, Skill, VersusAccuracy } from "../../api/types";
-  import { limits } from "../../limits.svelte";
+  import type {
+    AccuracyBoost, GrowthAction, GrowthGroup, GrowthRoom, Skill, StatFixedSource, StatKind,
+    VersusAccuracy,
+  } from "../../api/types";
+  import {
+    EQUIPMENT_STAT_LABELS, PART_SLOT_LABELS, PET_SKILL_TIER_LABELS,
+    RANDOM_OPTION_RANK_LABELS, STAT_LABELS,
+  } from "../../labels";
   import { app, buffSelectionFor, gameCharacterName, payloadOf } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { badgeStyle } from "../../ui/states";
@@ -113,6 +119,28 @@
     }));
   }
 
+  // --- 的中剣(極・的中剣)の つけ外し -------------------------------------------
+  // 伸びしろの行ではなく **ON / OFF のチップ**(ユーザー決定 2026-09-02)。対人タブ内だけの
+  // 状態で、キャラには保存しない ── `character_skills.skill_ids` を足し引きして
+  // `preview_versus` を叩き直すだけ。既定 ON、SLv は上限(Rust の `level_of` の既定)。
+  const swordOn = $state<Record<number, boolean>>({});
+  // 覚えられるスキルの id は結果(accuracy_skill_available)で分かる。分かった時点で
+  // payload に乗り、もう一度だけ問い合わせが走って落ち着く
+  const swordSkillId = $state<Record<number, string>>({});
+  const swordIsOn = (id: number | null) => (id === null ? true : (swordOn[id] ?? true));
+
+  /** 攻撃側の payload に的中剣の ON / OFF を反映する(保存はしない) */
+  function attackerPayloadOf(c: (typeof app.characters)[number]) {
+    const payload = payloadOf(c);
+    const id = swordSkillId[c.id];
+    if (!id) return payload;
+    const skills = payload.stat_sources.character_skills;
+    const has = skills.skill_ids.includes(id);
+    if (swordIsOn(c.id) && !has) skills.skill_ids = [...skills.skill_ids, id];
+    if (!swordIsOn(c.id) && has) skills.skill_ids = skills.skill_ids.filter((x) => x !== id);
+    return payload;
+  }
+
   // --- 命中率(preview_versus)。A→B と B→A を 2 回呼ぶだけ(引数の順を入れ替える) ------
   function useDirection(
     attackerOf: () => (typeof app.characters)[number] | null,
@@ -132,14 +160,22 @@
         error = null;
         return;
       }
+      // 依存(的中剣の ON / OFF・判明したスキル id)は effect の本体で同期に読む。
+      // await のあとで読むと変更を追えず、チップを押しても再計算されない
+      const attackerPayload = attackerPayloadOf(a);
+      const attackerBuffs = buffSelectionFor(a);
+      const defenderPayload = payloadOf(d);
+      const defenderBuffs = buffSelectionFor(d);
       requestLatest.run(async (isCurrent) => {
         try {
           const r = await previewVersus(
-            payloadOf(a), buffSelectionFor(a), sid, payloadOf(d), buffSelectionFor(d),
+            attackerPayload, attackerBuffs, sid, defenderPayload, defenderBuffs,
           );
           if (isCurrent()) {
             result = r;
             error = null;
+            const learnable = r.accuracy_skill_available;
+            if (learnable && swordSkillId[a.id] !== learnable.id) swordSkillId[a.id] = learnable.id;
           }
         } catch (e) {
           if (isCurrent()) {
@@ -174,20 +210,89 @@
     return `${source.skill.name} Lv${source.skill.level} ・ 命中P ×${boost.rate.toFixed(2)}`;
   }
 
-  // --- 命中P・回避Pの伸びしろ(accuracy_growth / evasion_growth) --------------------
-  // 材料の出どころ(GrowthSource)を軸に、2 人ぶんを同じ行へ揃える。並び順はこの固定順
-  // (Rust 側は gain 降順で返すので、そのままだと側ごとに順番がずれて突き合わせにくい)。
-  const GROWTH_SOURCE_ORDER: GrowthSource[] = ["stat", "enchant", "siena", "accuracy_skill", "accuracy_buff"];
+  // --- 「次にできること」(accuracy_growth / evasion_growth) ------------------------
+  // 行は材料の名前ではなく **行動**(付ける・替える・上げる・乗せる)。文言はここで組む
+  // ── Rust は id・名前・部位・段階だけを返す(ユーザー決定 2026-09-02)。
 
-  interface GrowthRow { source: GrowthSource; label: string; a: GrowthRoom | null; b: GrowthRoom | null }
+  /** ステの固定上昇源。ペットだけ「どの段階まで」が行動の中身になる */
+  function statFixedLabel(stat: StatKind, source: StatFixedSource): string {
+    const s = STAT_LABELS[stat];
+    if (typeof source !== "string") {
+      return `ペット S スキル(${s})を ${PET_SKILL_TIER_LABELS[source.pet_skill.target]} に`;
+    }
+    switch (source) {
+      case "rune": return `ルーンスキル(${s})を上限まで`;
+      case "crown": return `クラウン(${s})を上限まで`;
+      case "monster_card": return `モンスターカード(${s})を上限まで`;
+      case "sacred_relic": return `神鳥の聖物(${s})を上限まで`;
+    }
+  }
+
+  function actionLabel(action: GrowthAction): string {
+    if ("buff" in action) return `${action.buff.name}を使う`;
+    if ("stat_buff" in action) {
+      return `${action.stat_buff.name}を使う(${STAT_LABELS[action.stat_buff.stat]})`;
+    }
+    if ("ability_attach" in action) {
+      const a = action.ability_attach;
+      return `${PART_SLOT_LABELS[a.slot]}の空き枠に「${a.ability_name}」を付ける`;
+    }
+    if ("ability_replace" in action) {
+      const a = action.ability_replace;
+      return `${PART_SLOT_LABELS[a.slot]}の「${a.from_ability_name}」を「${a.ability_name}」に替える`;
+    }
+    if ("random_option_attach" in action) {
+      const a = action.random_option_attach;
+      return `${PART_SLOT_LABELS[a.slot]}の空き枠に「${a.option_name}」を ${RANDOM_OPTION_RANK_LABELS[a.rank]} で付ける`;
+    }
+    if ("random_option_rank_up" in action) {
+      const a = action.random_option_rank_up;
+      return `${PART_SLOT_LABELS[a.slot]}の「${a.option_name}」を ${RANDOM_OPTION_RANK_LABELS[a.rank]} に上げる`;
+    }
+    if ("stat_fixed" in action) return statFixedLabel(action.stat_fixed.stat, action.stat_fixed.source);
+    if ("enchant" in action) {
+      return `エンチャント枠の${EQUIPMENT_STAT_LABELS[action.enchant.stat]}を上限まで`;
+    }
+    return `シエナの空き段階に${EQUIPMENT_STAT_LABELS[action.siena.stat]}を積む`;
+  }
+
+  /** 同じ行動かを見る鍵。2 人が同じ手を持つときだけ 1 行にまとめる */
+  const actionKey = (action: GrowthAction) => JSON.stringify(action);
+
+  // 2 人ぶんを 1 つの表に並べる。Rust が返す並び(GrowthGroup = 費用の安い順)をそのまま使い、
+  // 2 本のリストを区分ごとに突き合わせる。**この定数は Rust の GrowthGroup の宣言順の写し**で、
+  // 並べ替えの指図ではない(2 列を交互に差し込むために順位が要るだけ)。
+  const GROWTH_GROUP_ORDER: GrowthGroup[] =
+    ["buff", "equipment_ability", "random_option", "stat_fixed", "enchant", "siena"];
+
+  interface GrowthRow { key: string; group: GrowthGroup; label: string; a: GrowthRoom | null; b: GrowthRoom | null }
 
   function mergeGrowth(a: GrowthRoom[], b: GrowthRoom[]): GrowthRow[] {
-    return GROWTH_SOURCE_ORDER.flatMap((source) => {
-      const ai = a.find((g) => g.source === source) ?? null;
-      const bi = b.find((g) => g.source === source) ?? null;
-      if (!ai && !bi) return [];
-      return [{ source, label: (ai ?? bi)!.label, a: ai, b: bi }];
-    });
+    const rows: GrowthRow[] = [];
+    const index = new Map<string, GrowthRow>();
+    const put = (room: GrowthRoom, side: "a" | "b") => {
+      const key = actionKey(room.action);
+      const existing = index.get(key);
+      if (existing) {
+        existing[side] = room;
+        return;
+      }
+      const row: GrowthRow = {
+        key, group: room.group, label: actionLabel(room.action), a: null, b: null,
+      };
+      row[side] = room;
+      index.set(key, row);
+      rows.push(row);
+    };
+    a.forEach((room) => put(room, "a"));
+    b.forEach((room) => put(room, "b"));
+    // 区分の順は Rust と同じ。同じ区分の中は Rust が返した順(gain 降順)のまま
+    return rows
+      .map((row, i) => ({ row, i }))
+      .sort((x, y) =>
+        GROWTH_GROUP_ORDER.indexOf(x.row.group) - GROWTH_GROUP_ORDER.indexOf(y.row.group)
+        || x.i - y.i)
+      .map((e) => e.row);
   }
 
   // 伸びしろの素の増分は合計行・内訳とも「いま → 上限まで積んだら」の矢印で出す
@@ -243,7 +348,7 @@
   {#if result === null || max === null || point === null || maxHitRate === null}
     <span class="unk">?</span>
   {:else if growthCount === 0}
-    <span class="growth-none dim">伸びしろなし</span>
+    <span class="growth-none dim">いま打てる手なし</span>
   {:else}
     {@const hitGain = maxHitRate - result.hit_rate.value}
     <span class="growth-total">
@@ -255,14 +360,17 @@
 
 {#snippet growthItemCell(item: GrowthRoom | null, unit: string)}
   {#if item === null}
+    <!-- そのキャラには打てない手。相手側だけの行なので空欄にする -->
     <span class="growth-none dim">—</span>
   {:else}
     <span class="growth-item">
       <span class="growth-hitrate num" use:bump={() => item.hit_rate_gain}>{formatHitRateGain(item.hit_rate_gain)}</span>
       {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
-      <!-- 素の伸びしろと換算後は行を分ける。1 行に並べると列幅(140px)に入らず、
-           途中で折り返して「1,178 → → 命中 +1514 / 2300 P」と読む順が壊れる(実機で検出) -->
-      {#if item.detail}<span class="growth-detail dim" use:flash={() => item.detail ?? ""}>{item.detail}</span>{/if}
+      <!-- 材料の「いま → 打ったら」と、命中P/回避Pへの効きは行を分ける。1 行に並べると
+           列幅(140px)に入らず、途中で折り返して読む順が壊れる(実機で検出) -->
+      <span class="growth-detail dim" use:flash={() => `${item.current}→${item.target}`}>
+        <span class="num">{item.current}</span> → <span class="num">{item.target}</span>
+      </span>
       <span class="growth-convert dim">
         <span class="growth-unit">{unit}</span>
         <span class="num" use:bump={() => item.gain}>+{item.gain}</span>
@@ -306,13 +414,40 @@
     <div class="cell val">{@render growthSummaryCell(rateWord, resultB, growthB.length, maxB, pointB, maxHitRateB)}</div>
   </button>
   {#if open}
-    {#each rows as row (row.source)}
-      <div class="grid-row sub growth-item-row">
+    {#each rows as row (row.key)}
+      <!-- エンチャント枠(と見積りのシエナ)は費用が高い最終手段。末尾に薄く置く -->
+      <div class="grid-row sub growth-item-row" class:last-resort={row.group === "enchant" || row.group === "siena"}>
         <div class="cell label">{softBreaks(row.label)}</div>
         <div class="cell val">{@render growthItemCell(row.a, unit)}</div>
         <div class="cell val">{@render growthItemCell(row.b, unit)}</div>
       </div>
     {/each}
+  {/if}
+{/snippet}
+
+{#snippet swordCell(
+  character: (typeof app.characters)[number] | null,
+  result: VersusAccuracy | null,
+)}
+  {@const skill = result?.accuracy_skill_available ?? null}
+  {#if skill === null || character === null}
+    <span class="growth-none dim">—</span>
+  {:else}
+    {@const on = swordIsOn(character.id)}
+    <!-- チップは押した瞬間に切り替わる(§00 03/04)。数値は結果が返ったら動く -->
+    <button
+      type="button"
+      class="sword-chip"
+      class:on
+      aria-pressed={on}
+      onclick={() => (swordOn[character.id] = !on)}
+      title="対人タブの中だけの切り替えです(キャラには保存しません)"
+    >
+      <span use:flash={() => (on ? "on" : "off")}>
+        {skill.name} Lv{skill.max_level}
+        <span class="sword-state">{on ? "ON" : "OFF"}</span>
+      </span>
+    </button>
   {/if}
 {/snippet}
 
@@ -340,16 +475,19 @@
   {@const badge = hitBadge(result)}
   {@const boost = result ? boostLabel(result.accuracy_boost) : null}
   <div class="rate-row" class:has-result={result !== null}>
+    <!-- 矢印だと「どちらが殴る側か」を読者が補うことになる。助詞で主語・目的語を決める
+         (ユーザー指摘 2026-09-02) -->
     <span class="rate-who">
       {#if attacker}
         <Icon kind="character" id={attacker.game_character_id} size={20} label={attacker.name} source={app.characterIcons[attacker.id] ?? null} />
         <span class="rate-name">{attacker.name}</span>
       {/if}
-      <span class="rate-arrow">→</span>
+      <span class="rate-particle">が</span>
       {#if defender}
         <Icon kind="character" id={defender.game_character_id} size={20} label={defender.name} source={app.characterIcons[defender.id] ?? null} />
         <span class="rate-name">{defender.name}</span>
       {/if}
+      <span class="rate-particle">に当てる</span>
     </span>
 
     <!-- 数値 ⇄ 必中 は要素が入れ替わる(mount では bump も flash も発火しない)ので、
@@ -369,11 +507,11 @@
 
     {#if result}
       <span class="rate-why dim">
-        (<span class="num" use:bump={() => result?.accuracy_point ?? null}>{result.accuracy_point}</span>
+        命中P <span class="num" use:bump={() => result?.accuracy_point ?? null}>{result.accuracy_point}</span>
         <span class="op">−</span>
-        <span class="num" use:bump={() => result?.evasion_point ?? null}>{result.evasion_point}</span>
+        相手の回避P <span class="num" use:bump={() => result?.evasion_point ?? null}>{result.evasion_point}</span>
         <span class="op">=</span>
-        <span class="num" use:bump={() => result?.hit_rate.raw ?? null}>{result.hit_rate.raw}</span>)
+        <span class="num" use:bump={() => result?.hit_rate.raw ?? null}>{result.hit_rate.raw}</span>
         ・ 下限 <span class="num" use:bump={() => result?.hit_rate.min ?? null}>{result.hit_rate.min}</span>
         <span class="rate-basis dim">(15
           <span class="op">+</span>
@@ -401,11 +539,11 @@
 <div class="versus-page">
   <div class="scroll">
     {#if app.characters.length < 2}
-      <p class="empty dim">対人にはキャラが 2 人以上必要です。キャラタブで登録してください。</p>
+      <p class="empty dim">2 人そろうと、どちらがどれだけ当てられるかを出せます。キャラタブで登録してください。</p>
     {:else}
       <div class="sides">
         <!-- 2 人は対等。帯の色を変えると役割の違いに読める(§02 金は「行ける?」の意味を持つ) -->
-        <SheetCard tone="blue" title="キャラ 1" note="命中Pに使うスキルも選ぶ">
+        <SheetCard tone="blue" title="キャラ 1" note="攻めるときに使うスキルも選ぶ">
           <div class="side-body">
             <Picker
               label="キャラ"
@@ -431,7 +569,7 @@
           </div>
         </SheetCard>
 
-        <SheetCard tone="blue" title="キャラ 2" note="命中Pに使うスキルも選ぶ">
+        <SheetCard tone="blue" title="キャラ 2" note="攻めるときに使うスキルも選ぶ">
           <div class="side-body">
             <Picker
               label="キャラ"
@@ -459,7 +597,7 @@
       </div>
 
       {#if !charA || !charB}
-        <p class="empty dim">キャラを 2 人とも選んでください。</p>
+        <p class="empty dim">上の 2 枚でキャラを選ぶと、当たり方が出ます。</p>
       {:else}
         {@const rAB = resultAB.result}
         {@const rBA = resultBA.result}
@@ -488,27 +626,37 @@
                 <div class="cell val">{@render numCell(rBA?.attacker_dex ?? null)}</div>
               </div>
               <div class="grid-row sub">
-                <div class="cell label">装備命中</div>
+                <div class="cell label">装備の命中補正</div>
                 <div class="cell val">{@render numCell(rAB?.equipment_accuracy ?? null)}</div>
                 <div class="cell val">{@render numCell(rBA?.equipment_accuracy ?? null)}</div>
               </div>
               <div class="grid-row sub">
-                <div class="cell label">スキル命中</div>
+                <div class="cell label">スキルの命中</div>
                 <div class="cell val">{@render numCell(rAB?.skill_accuracy ?? null)}</div>
                 <div class="cell val">{@render numCell(rBA?.skill_accuracy ?? null)}</div>
               </div>
               <div class="grid-row sub">
-                <div class="cell label">依存補正</div>
+                <div class="cell label">依存の補正</div>
                 <div class="cell val">{@render textCell(rAB ? `+${rAB.correction_bonus} / −${rAB.correction_penalty}` : null)}</div>
                 <div class="cell val">{@render textCell(rBA ? `+${rBA.correction_bonus} / −${rBA.correction_penalty}` : null)}</div>
               </div>
-              <div class="grid-row sub">
-                <div class="cell label">的中剣</div>
-                <div class="cell val">{@render textCell(rAB ? (boostLabel(rAB.accuracy_boost) ?? "なし") : null)}</div>
-                <div class="cell val">{@render textCell(rBA ? (boostLabel(rBA.accuracy_boost) ?? "なし") : null)}</div>
-              </div>
+              <!-- 的中剣は伸びしろではなく **つけ外し**。覚えられるキャラにだけチップを出す
+                   (§00 02 要らないものを見せない。両方とも覚えられなければ行ごと出さない) -->
+              {#if rAB?.accuracy_skill_available || rBA?.accuracy_skill_available}
+                <div class="grid-row sub">
+                  <div class="cell label">的中剣</div>
+                  <div class="cell val">{@render swordCell(charA, rAB)}</div>
+                  <div class="cell val">{@render swordCell(charB, rBA)}</div>
+                </div>
+              {:else if rAB || rBA}
+                <div class="grid-row sub">
+                  <div class="cell label">命中P割合</div>
+                  <div class="cell val">{@render textCell(rAB ? (boostLabel(rAB.accuracy_boost) ?? "なし") : null)}</div>
+                  <div class="cell val">{@render textCell(rBA ? (boostLabel(rBA.accuracy_boost) ?? "なし") : null)}</div>
+                </div>
+              {/if}
               {@render growthBlock(
-                "伸びしろ", "命中P", "命中率", rAB, rBA,
+                "次にできること", "命中P", "命中率", rAB, rBA,
                 rAB?.accuracy_growth ?? [], rBA?.accuracy_growth ?? [],
                 rAB?.accuracy_max ?? null, rBA?.accuracy_max ?? null,
                 rAB?.accuracy_point ?? null, rBA?.accuracy_point ?? null,
@@ -533,22 +681,22 @@
                 <div class="cell val">{@render numCell(rAB?.defender_agi ?? null)}</div>
               </div>
               <div class="grid-row sub">
-                <div class="cell label">装備回避率</div>
+                <div class="cell label">装備の回避補正</div>
                 <div class="cell val">{@render numCell(rBA?.equipment_evasion ?? null)}</div>
                 <div class="cell val">{@render numCell(rAB?.equipment_evasion ?? null)}</div>
               </div>
               <div class="grid-row sub">
-                <div class="cell label">装備敏捷度</div>
+                <div class="cell label">装備の敏捷補正</div>
                 <div class="cell val">{@render numCell(rBA?.equipment_agility ?? null)}</div>
                 <div class="cell val">{@render numCell(rAB?.equipment_agility ?? null)}</div>
               </div>
               <div class="grid-row sub">
-                <div class="cell label">攻撃タイプ別増加</div>
+                <div class="cell label">攻撃タイプの補正</div>
                 <div class="cell val">{@render textCell(rBA ? rBA.attack_type_bonus.toFixed(1) : null)}</div>
                 <div class="cell val">{@render textCell(rAB ? rAB.attack_type_bonus.toFixed(1) : null)}</div>
               </div>
               {@render growthBlock(
-                "伸びしろ", "回避P", "被命中率", rBA, rAB,
+                "次にできること", "回避P", "当てられる率", rBA, rAB,
                 rBA?.evasion_growth ?? [], rAB?.evasion_growth ?? [],
                 rBA?.evasion_max ?? null, rAB?.evasion_max ?? null,
                 rBA?.evasion_point ?? null, rAB?.evasion_point ?? null,
@@ -651,6 +799,22 @@
     margin-left: 4px;
   }
   .growth-none { font-size: 10.5px; }
+  /* 最終手段(エンチャント・シエナ)は末尾に薄く。並びは Rust が決めているので、
+     ここでやるのは「目立たせない」ことだけ(§00 02) */
+  .growth-item-row.last-resort .cell.label { color: var(--fg-dim); }
+  .growth-item-row.last-resort .growth-hitrate { font-weight: 700; color: var(--fg-sub); }
+
+  /* 的中剣の ON / OFF。押した場所は動かない(幅・高さは状態で変えない) */
+  .sword-chip {
+    font: inherit; font-size: 10px; font-weight: 700; cursor: pointer;
+    border: 1px solid var(--border); border-radius: var(--r-pill);
+    background: var(--surface-inset); color: var(--fg-dim);
+    padding: 2px 9px; white-space: nowrap;
+  }
+  .sword-chip.on { border-color: var(--accent); background: var(--bg-active); color: var(--fg-head); }
+  .sword-chip:hover { border-color: var(--accent); }
+  .sword-chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+  .sword-state { margin-left: 4px; font-size: 9px; letter-spacing: .06em; }
 
   /* 未収録(供給源が無いのでまだ 0 決め打ち)。0 や空白ではなく ? + 破線で示す */
   .unk {
@@ -670,7 +834,7 @@
 
   .rate-who { display: flex; align-items: center; gap: 6px; min-width: 0; flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--fg-head); }
   .rate-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .rate-arrow { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--fg-dim); margin: 0 2px; }
+  .rate-particle { flex-shrink: 0; font-size: 11px; font-weight: 500; color: var(--fg-sub); margin: 0 1px; }
 
   /* 桁が増えても隣が動かないよう幅を固定する(§09 規則 4) */
   .rate-value { flex-shrink: 0; display: flex; align-items: baseline; gap: 3px; min-width: 60px; }

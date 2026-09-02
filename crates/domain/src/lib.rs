@@ -83,7 +83,8 @@ pub use damage::{
 pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,
     AccuracyBoostSource,
-    AccuracyCorrection, AttackType, DefenseProfile, EvasionPoints, GrowthRoom, GrowthSource,
+    AccuracyCorrection, AccuracySkillOption, AttackType, DefenseProfile, EvasionPoints,
+    GrowthAction, GrowthGroup, GrowthRoom,
     HitRate, VersusAccuracy, VersusAttacker, VersusDefender, HIT_RATE_MIN_BASE,
     HIT_RATE_PLAYER_SPAN, PVP_MIN_EVASION_CAP, SKILL_ACCURACY_OFFSET,
 };
@@ -98,7 +99,8 @@ pub use equipment_class::{
     ItemFit, WeaponClass, WeaponSystem, WristType,
 };
 pub use equipment::{
-    ability_candidates, armor_added_hp, equipment_attack_parts, equipment_attack_power,
+    ability_candidates, ability_value_rooms, armor_added_hp, equipment_attack_parts,
+    equipment_attack_power, AbilityRoom, AbilityRoomAction,
     equipment_values_attack,
     relic_state, relic_step, sum_equipment_value_sources, weapon_added_damage, wrist_base_bonus,
     AbilityCandidate, AbilityGrade, AbilityGradeScheme,
@@ -117,7 +119,8 @@ pub use measurement::{
     can_separate_defense_and_cut_rate, MEASUREMENT_SEPARABLE_MIN_ATTACKS,
 };
 pub use random_option::{
-    addable_random_options, DependencyRates, RandomOptionDef, RandomOptionEffect,
+    addable_random_options, random_option_rooms, RandomOptionRoom, RandomOptionRoomAction,
+    DependencyRates, RandomOptionDef, RandomOptionEffect,
     RandomOptionError, RandomOptionRank,
     RandomOptionSlot, RandomOptionTier, RandomOptionTotals, RANDOM_OPTION_VALUE_MAX,
 };
@@ -149,6 +152,7 @@ pub use stat_sources::{
     sacred_relic_stage_from_value, sacred_relic_value, MONSTER_CARD_VALUE_MAX, RUNE_LEVEL_MAX,
     SACRED_RELIC_STAGE_MAX, SACRED_RELIC_VALUE_PER_STAGE,
     blocked_buffs, BlockedBuff, BuffDamageGroup,
+    accuracy_buff_rooms, stat_buff_rooms, stat_fixed_rooms, BuffRoom, StatFixedRoom, StatFixedSource,
 };
 pub use stats::{
     effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PerStat, StatKind,

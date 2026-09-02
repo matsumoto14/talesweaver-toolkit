@@ -1468,23 +1468,86 @@ export interface HitRate {
   capped: boolean;
 }
 
-// crates/domain/src/defense.rs の GrowthSource。命中P・回避Pの伸びしろの材料の出どころ。
-export type GrowthSource = "stat" | "enchant" | "siena" | "accuracy_skill" | "accuracy_buff";
+// crates/domain/src/stat_sources.rs の StatFixedSource。ステの固定上昇源。
+export type StatFixedSource =
+  | { pet_skill: { target: PetSkillTier } }
+  | "rune"
+  | "crown"
+  | "monster_card"
+  | "sacred_relic";
 
-// crates/domain/src/defense.rs の GrowthRoom。命中P・回避P 1 材料ぶんの伸びしろ試算。
+// crates/domain/src/defense.rs の GrowthGroup。伸びしろの区分(**費用の安い順**で固定)。
+export type GrowthGroup =
+  | "buff"
+  | "equipment_ability"
+  | "random_option"
+  | "stat_fixed"
+  | "enchant"
+  | "siena";
+
+// crates/domain/src/defense.rs の GrowthAction。「次に何をするか」。
+// Rust は文言を持たない ── 画面が id・名前・部位・段階から行の言葉を組む。
+export type GrowthAction =
+  | { buff: { buff_id: string; name: string } }
+  | { stat_buff: { buff_id: string; name: string; stat: StatKind } }
+  | { ability_attach: { slot: PartSlot; ability_id: string; ability_name: string } }
+  | {
+      ability_replace: {
+        slot: PartSlot;
+        from_ability_id: string;
+        from_ability_name: string;
+        ability_id: string;
+        ability_name: string;
+      };
+    }
+  | {
+      random_option_attach: {
+        slot: PartSlot;
+        option_id: string;
+        option_name: string;
+        rank: RandomOptionRank;
+      };
+    }
+  | {
+      random_option_rank_up: {
+        slot: PartSlot;
+        option_id: string;
+        option_name: string;
+        from_rank: RandomOptionRank;
+        rank: RandomOptionRank;
+      };
+    }
+  | { stat_fixed: { stat: StatKind; source: StatFixedSource } }
+  | { enchant: { stat: EquipmentStatKind } }
+  | { siena: { stat: EquipmentStatKind } };
+
+// crates/domain/src/defense.rs の GrowthRoom。伸びしろ 1 手ぶん。
 export interface GrowthRoom {
-  source: GrowthSource;
-  /** 「DEX を上限まで」など、画面にそのまま出す一言 */
-  label: string;
+  /** 費用の安い順の区分。並びは Rust が返した順のまま出す(画面で並べ替えない) */
+  group: GrowthGroup;
+  /** 何をするか */
+  action: GrowthAction;
+  /** その材料のいまの値 */
+  current: number;
+  /** その材料を積み切ったときの値 */
+  target: number;
   /** 命中P(または回避P)がいくつ増えるか */
   gain: number;
-  /** 「1,178 → 2,200」のような内訳。無ければ null */
-  detail: string | null;
-  /** 見積りが [仮] か(シエナのように上振れするもの) */
-  provisional: boolean;
   /** この材料を積んだら命中率(%)が何動くか。攻撃側の材料は正、防御側の材料は負。
    * 命中率は下限 15 / 上限 100 で挟まれるため、材料を積んでも 0 のことがある(正直に出る) */
   hit_rate_gain: number;
+  /** 見積りが [仮] か(シエナのように上振れするもの) */
+  provisional: boolean;
+}
+
+// crates/domain/src/defense.rs の AccuracySkillOption。命中P割合増加スキル(極・的中剣)。
+// 伸びしろではなく **つけ外し** なので、覚えられるキャラだけ ON / OFF チップを出す。
+export interface AccuracySkillOption {
+  id: string;
+  name: string;
+  max_level: number;
+  /** いま効果が乗っているか */
+  active: boolean;
 }
 
 // crates/domain/src/defense.rs の VersusAccuracy(preview_versus の戻り値)。
@@ -1520,7 +1583,7 @@ export interface VersusAccuracy {
   min_evasion_rate: number;
   /** false のとき min_evasion_rate は未収録(0 決め打ち) */
   min_evasion_rate_recorded: boolean;
-  /** 攻撃側の命中P 伸びしろ(gain 降順、0 の材料は入っていない) */
+  /** 攻撃側の命中P 伸びしろ(費用の安い順。効かない手は入っていない) */
   accuracy_growth: GrowthRoom[];
   /** 全部積んだときの命中P */
   accuracy_max: number;
@@ -1532,6 +1595,8 @@ export interface VersusAccuracy {
   evasion_max: number;
   /** 防御側が全部積んだときの命中率(攻撃側から見た数字。下がる方向) */
   evasion_max_hit_rate: HitRate;
+  /** 攻撃側が覚えられる命中P割合増加スキル(極・的中剣)。覚えられないキャラは null */
+  accuracy_skill_available: AccuracySkillOption | null;
 }
 
 /** 与ダメージ式の段の種別(Rust `FormulaStepKind`) */

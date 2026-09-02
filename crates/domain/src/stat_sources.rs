@@ -694,18 +694,153 @@ pub fn buff_min_evasion_rate_total(buffs: &BuffSelection, catalog: &BuffCatalog)
         .sum()
 }
 
-/// まだ選んでいない命中P増加バフぶんの伸びしろ(§伸びしろの定義)。
-pub fn buff_accuracy_point_room(
+/// 伸びしろの材料 1 件(バフ)。**文言は持たない** — 画面が id・名前と値から行を組む。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuffRoom {
+    pub buff_id: String,
+    pub name: String,
+    /// このバフを乗せたときの増分(命中P増加バフなら命中P、ステ増加バフなら最終能力値)
+    pub value: i64,
+}
+
+/// まだ選んでいない命中P増加バフを 1 件ずつ列挙する(§伸びしろの定義)。
+///
+/// 除くもの: 既に選んでいるバフ / 排他枠を選択中のバフに取られていて選べないバフ
+/// (`blocked_buffs` と同じ規則) / いま効いている命中P割合増加スキル(的中剣)と
+/// `exclusive_with` で無効になるバフ。
+pub fn accuracy_buff_rooms(
     buffs: &BuffSelection,
     catalog: &BuffCatalog,
     boost: crate::defense::AccuracyBoost,
-) -> i64 {
-    accuracy_point_values(
-        catalog
-            .iter()
-            .filter(|d| !buffs.choices.iter().any(|c| c.buff_id == d.id)),
-        boost,
-    )
+) -> Vec<BuffRoom> {
+    let blocked = blocked_buffs(buffs, catalog);
+    catalog
+        .iter()
+        .filter(|d| !buffs.choices.iter().any(|c| c.buff_id == d.id))
+        .filter(|d| !blocked.iter().any(|b| b.buff_id == d.id))
+        .filter_map(|d| {
+            let value = accuracy_point_values(std::iter::once(d), boost);
+            (value > 0).then(|| BuffRoom {
+                buff_id: d.id.to_string(),
+                name: d.name.to_string(),
+                value,
+            })
+        })
+        .collect()
+}
+
+/// まだ選んでいないステ増加バフのうち、`kind` に効くものを 1 件ずつ列挙する。
+///
+/// 効きは `buff_target_stat_gains` と同じ「外した状態 → 足した状態」の再計算で、値は
+/// **最終能力値の増分**(上限で頭打ちなら 0 = 行にしない)。対象ステを選ぶバフは `kind` に
+/// 振った場合で測る。排他枠が埋まっていて足せないバフは列挙しない。
+#[allow(clippy::too_many_arguments)]
+pub fn stat_buff_rooms(
+    base: &BaseStats,
+    sources: &StatSources,
+    buffs: &BuffSelection,
+    equipment: &Equipment,
+    common: &CommonSkills,
+    catalogs: StatCatalogs<'_>,
+    kind: StatKind,
+    stat_cap: i64,
+) -> Result<Vec<BuffRoom>, StatSourceError> {
+    let blocked = blocked_buffs(buffs, catalogs.buffs);
+    let candidates: Vec<&BuffDefinition> = catalogs.buffs
+        .iter()
+        .filter(|d| !buffs.choices.iter().any(|c| c.buff_id == d.id))
+        .filter(|d| !blocked.iter().any(|b| b.buff_id == d.id))
+        .filter(|d| !matches!(d.value, BuffValue::RecordOnly))
+        .filter(|d| match d.target {
+            BuffTarget::AllStats | BuffTarget::UserSelected | BuffTarget::UserSelectedMulti => true,
+            BuffTarget::Stat(k) => k == kind,
+            BuffTarget::Stats(list) => list.contains(&kind),
+        })
+        .collect();
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (baseline, ..) =
+        effective_stats_with(base, sources, buffs, equipment, common, catalogs, stat_cap)?;
+
+    let mut out = Vec::new();
+    for def in candidates {
+        let mut trial = buffs.clone();
+        trial.choices.push(def.default_choice(Some(kind)));
+        let after = match effective_stats_with(
+            base, sources, &trial, equipment, common, catalogs, stat_cap,
+        ) {
+            Ok((stats, ..)) => stats,
+            // 排他枠が埋まっていて足せない(`blocked_buffs` が拾い切れない組み合わせ)
+            Err(StatSourceError::ExclusiveSlotConflict { .. }) => continue,
+            Err(e) => return Err(e),
+        };
+        let value = after.get(kind) - baseline.get(kind);
+        if value > 0 {
+            out.push(BuffRoom {
+                buff_id: def.id.to_string(),
+                name: def.name.to_string(),
+                value,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// ステの固定上昇源(伸びしろの列挙用)。値だけを持ち、段階名などの文言は画面が組む。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatFixedSource {
+    /// ペット S スキル。`target` は積み切ったときの段階(真Lv4)
+    PetSkill { target: PetSkillTier },
+    /// ルーンスキル(+1/Lv、Lv20 上限)
+    Rune,
+    Crown,
+    MonsterCard,
+    /// 神鳥の聖物(段階 → 最終固定値)
+    SacredRelic,
+}
+
+/// ステの固定上昇源 1 件ぶんの「いま → 上限」。**上限に達している源は返さない**。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatFixedRoom {
+    pub source: StatFixedSource,
+    pub current: i64,
+    pub max: i64,
+}
+
+/// `kind` の固定上昇源(ペット S / ルーン / クラウン / モンスターカード / 神鳥の聖物)を、
+/// まだ上限に達していないものだけ列挙する。並びはこの 5 つの固定順。
+pub fn stat_fixed_rooms(sources: &StatSources, kind: StatKind) -> Vec<StatFixedRoom> {
+    let pet_max = PetSkillTier::TrueLv4;
+    let rows = [
+        StatFixedRoom {
+            source: StatFixedSource::PetSkill { target: pet_max },
+            current: sources.pet_skills.get(kind).map_or(0, |t| t.bonus()),
+            max: pet_max.bonus(),
+        },
+        StatFixedRoom {
+            source: StatFixedSource::Rune,
+            current: i64::from(sources.rune_levels.get(kind)),
+            max: i64::from(RUNE_LEVEL_MAX),
+        },
+        StatFixedRoom {
+            source: StatFixedSource::Crown,
+            current: i64::from(sources.crown.get(kind)),
+            max: i64::from(sources.crown.max_value(kind)),
+        },
+        StatFixedRoom {
+            source: StatFixedSource::MonsterCard,
+            current: i64::from(sources.monster_cards.get(kind)),
+            max: i64::from(MONSTER_CARD_VALUE_MAX),
+        },
+        StatFixedRoom {
+            source: StatFixedSource::SacredRelic,
+            current: sacred_relic_value(sources.sacred_relic.get(kind)),
+            max: sacred_relic_value(SACRED_RELIC_STAGE_MAX),
+        },
+    ];
+    rows.into_iter().filter(|r| r.current < r.max).collect()
 }
 
 /// バフ 1 件ぶんが、カテゴリ上限適用後の集計値へどれだけ配賦されるか。
@@ -3777,12 +3912,28 @@ mod tests {
             7,
         );
 
-        // 何も選んでいなければ合計 0、伸びしろは両方の値
+        let room_ids = |buffs: &BuffSelection, boost| -> Vec<(String, i64)> {
+            accuracy_buff_rooms(buffs, &catalog, boost)
+                .into_iter()
+                .map(|r| (r.buff_id, r.value))
+                .collect()
+        };
+
+        // 何も選んでいなければ合計 0、伸びしろは 1 件ずつ列挙される
         let empty = BuffSelection::default();
         assert_eq!(buff_accuracy_point_total(&empty, &catalog, none), 0);
-        assert_eq!(buff_accuracy_point_room(&empty, &catalog, none), 25);
+        assert_eq!(
+            room_ids(&empty, none),
+            vec![
+                ("normal_accuracy".to_string(), 20),
+                ("precision_sword_only".to_string(), 5),
+            ]
+        );
         // 的中剣装着中は排他なバフを伸びしろからも除く
-        assert_eq!(buff_accuracy_point_room(&empty, &catalog, sword), 20);
+        assert_eq!(
+            room_ids(&empty, sword),
+            vec![("normal_accuracy".to_string(), 20)]
+        );
 
         // 両方選んでいるとき、的中剣装着中は排他なバフの分だけ合計から落ちる
         let both = BuffSelection {
@@ -3798,6 +3949,82 @@ mod tests {
         };
         assert_eq!(buff_accuracy_point_total(&both, &catalog, none), 25);
         assert_eq!(buff_accuracy_point_total(&both, &catalog, sword), 20);
-        assert_eq!(buff_accuracy_point_room(&both, &catalog, none), 0);
+        // 選び切っていれば伸びしろは無い
+        assert!(accuracy_buff_rooms(&both, &catalog, none).is_empty());
+    }
+
+    /// 排他枠を選択中のバフに取られているバフは、命中P増加を持っていても伸びしろにしない
+    /// (`blocked_buffs` と同じ規則)。
+    #[test]
+    fn 命中p増加バフの伸びしろは排他枠で塞がれたバフを外す() {
+        fn buff(id: &'static str, value: i64, slot: Option<&'static str>) -> BuffDefinition {
+            BuffDefinition {
+                id,
+                name: id,
+                purposes: &[BuffPurpose::Accuracy],
+                origin: BuffOrigin::Item,
+                target: BuffTarget::AllStats,
+                layer: StatLayer::PercentOfBase,
+                value: BuffValue::RecordOnly,
+                exclusive_slots: slot.into_iter().collect(),
+                source_url: "",
+                note: "",
+                default_value: None,
+                damage_effects: Box::leak(Box::new([SkillEffect::AccuracyPoint {
+                    value,
+                    exclusive_with: &[],
+                }])),
+            }
+        }
+        let catalog = vec![
+            buff("tonic_a", 20, Some("tonic")),
+            buff("tonic_b", 30, Some("tonic")),
+            buff("free", 10, None),
+        ];
+        let none = crate::defense::AccuracyBoost::NONE;
+        let selected = BuffSelection {
+            choices: vec![BuffChoice {
+                buff_id: "tonic_a".to_string(),
+                stat: None,
+                choice_index: None,
+                value: None,
+            }],
+        };
+        let ids: Vec<String> = accuracy_buff_rooms(&selected, &catalog, none)
+            .into_iter()
+            .map(|r| r.buff_id)
+            .collect();
+        assert_eq!(ids, vec!["free".to_string()]);
+    }
+
+    /// 固定上昇源の列挙。**上限に達している源は返さない**。
+    #[test]
+    fn 固定上昇源の伸びしろは上限未満の源だけ返す() {
+        let mut sources = StatSources::default();
+        // ペットは上限(真Lv4)、ルーンも上限。クラウン・カード・聖物は途中
+        *sources.pet_skills.get_mut(StatKind::Dex) = Some(PetSkillTier::TrueLv4);
+        *sources.rune_levels.get_mut(StatKind::Dex) = RUNE_LEVEL_MAX;
+        sources.crown.dex = 40;
+        sources.monster_cards.dex = MONSTER_CARD_VALUE_MAX;
+        *sources.sacred_relic.get_mut(StatKind::Dex) = 10;
+
+        let rooms = stat_fixed_rooms(&sources, StatKind::Dex);
+        let sources_of: Vec<StatFixedSource> = rooms.iter().map(|r| r.source).collect();
+        assert_eq!(
+            sources_of,
+            vec![StatFixedSource::Crown, StatFixedSource::SacredRelic]
+        );
+        assert_eq!(rooms[0].current, 40);
+        assert_eq!(rooms[0].max, i64::from(Crown::BASE_MAX_VALUE));
+        assert_eq!(rooms[1].current, 100);
+        assert_eq!(rooms[1].max, 400);
+
+        // 選択報酬に指定したステはクラウンの上限が 300 に伸びる
+        sources.crown.selected_stat = Some(StatKind::Dex);
+        let rooms = stat_fixed_rooms(&sources, StatKind::Dex);
+        assert_eq!(rooms[0].max, i64::from(Crown::SELECTED_MAX_VALUE));
+
+        // 何も積んでいなければ 5 源すべてが伸びしろになる
+        assert_eq!(stat_fixed_rooms(&StatSources::default(), StatKind::Agi).len(), 5);
     }
 }

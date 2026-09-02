@@ -843,6 +843,39 @@ pub fn preview_versus(
     let attacker_enchant_caps = resolve_enchant_caps(&attacker.equipment);
     let defender_enchant_caps = resolve_enchant_caps(&defender.equipment);
 
+    // 伸びしろの列挙に要るカタログ。装着アビリティ・ランダム OP は domain が持てない
+    // (gamedata 依存)ので、ここで解決して `VersusAttacker` / `VersusDefender` に渡す。
+    let abilities = gamedata::equipment_abilities();
+    let random_option_catalog = gamedata::random_option_catalog();
+    let weapon_system_of = |equipment: &domain::Equipment| {
+        equipment
+            .parts
+            .weapon
+            .selected()
+            .and_then(|part| part.weapon_system(&equipment_catalog))
+    };
+    // ステ増加バフの伸びしろは全カタログを通した再計算が要る(`stat_buff_rooms`)。
+    let stat_buff_rooms_of = |character: &NewCharacter,
+                              buffs: &BuffSelection,
+                              kind: domain::StatKind|
+     -> CommandResult<Vec<domain::BuffRoom>> {
+        domain::stat_sources::stat_buff_rooms(
+            &character.base_stats,
+            &character.stat_sources,
+            buffs,
+            &character.equipment,
+            &character.common_skills,
+            stat_catalogs(&buff_catalog),
+            kind,
+            gamedata::awakening_caps(character.awakening).max_stat,
+        )
+        .map_err(|e| e.to_string().into())
+    };
+    let attacker_stat_buff_rooms =
+        stat_buff_rooms_of(&attacker, &attacker_buffs, domain::StatKind::Dex)?;
+    let defender_stat_buff_rooms =
+        stat_buff_rooms_of(&defender, &defender_buffs, domain::StatKind::Agi)?;
+
     Ok(domain::versus_accuracy(
         &domain::VersusAttacker {
             learnable_accuracy_skill: learnable_accuracy_skill(&attacker.game_character_id),
@@ -863,6 +896,11 @@ pub fn preview_versus(
             accuracy_random_option,
             accuracy_buff_catalog: &buff_catalog,
             accuracy_buff_selection: &attacker_buffs,
+            stat_sources: &attacker.stat_sources,
+            abilities: &abilities,
+            random_option_catalog: &random_option_catalog,
+            weapon_system: weapon_system_of(&attacker.equipment),
+            stat_buff_rooms: &attacker_stat_buff_rooms,
             // 最小命中率補正: プレイヤー側の供給源表が wiki に無い(載っているのはマップ側の
             // 値だけ)ため未収録。`VersusAccuracy::min_hit_rate_recorded` が `false` になる
             min_hit_rate: None,
@@ -874,6 +912,11 @@ pub fn preview_versus(
             enchant_caps: &defender_enchant_caps,
             stat_cap: gamedata::awakening_caps(defender.awakening).max_stat,
             evasion_random_option,
+            stat_sources: &defender.stat_sources,
+            abilities: &abilities,
+            random_option_catalog: &random_option_catalog,
+            weapon_system: weapon_system_of(&defender.equipment),
+            stat_buff_rooms: &defender_stat_buff_rooms,
             min_evasion_rate: Some(min_evasion_rate),
         },
         attack_type,

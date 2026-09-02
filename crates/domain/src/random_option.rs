@@ -181,6 +181,110 @@ pub fn addable_random_options<'a>(
         .collect()
 }
 
+/// ランダムオプションで命中P / 回避Pを伸ばす手(伸びしろの列挙用)。値だけを持つ。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RandomOptionRoomAction {
+    /// 空き枠に付ける(既定ランク = Special)
+    Attach {
+        option_id: String,
+        option_name: String,
+        rank: RandomOptionRank,
+    },
+    /// 装着済みのランクを上げる(S・真まで)
+    RankUp {
+        option_id: String,
+        option_name: String,
+        from_rank: RandomOptionRank,
+        rank: RandomOptionRank,
+    },
+}
+
+/// ランダムオプション 1 手ぶんの「いま → 付けたら / 上げたら」。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RandomOptionRoom {
+    pub slot: crate::equipment::PartSlot,
+    pub action: RandomOptionRoomAction,
+    pub current: i64,
+    pub target: i64,
+}
+
+/// 空き枠に付けるときの既定ランク(wiki: Special は転移で狙える上限。S・真は転移不可)。
+pub const RANDOM_OPTION_ATTACH_RANK: RandomOptionRank = RandomOptionRank::Special;
+
+/// この部位で `effects` のどれかに効くランダムオプションの伸びしろを列挙する。
+///
+/// - 空き枠(`PartSlot::random_option_slots` − 装着数)があるなら、`addable_random_options`
+///   の候補のうち Special で付けたときの値がいちばん大きいものを 1 つ
+/// - 装着済みは S・真へのランク上げ(既に S・真、または S・真の段が無い OP は出さない)
+///
+/// 値は既定値(レンジ上限)。`RandomOptionTotals` と同じ `trunc_int` で整数にする。
+pub fn random_option_rooms(
+    part: &crate::equipment::EquipmentPart,
+    slot: crate::equipment::PartSlot,
+    defs: &[RandomOptionDef],
+    effects: &[RandomOptionEffect],
+) -> Vec<RandomOptionRoom> {
+    let hits = |effect: RandomOptionEffect| effects.contains(&effect);
+    let mut out = Vec::new();
+
+    for option in &part.random_options {
+        let Some(def) = defs.iter().find(|d| d.id == option.option_id.as_str()) else {
+            continue;
+        };
+        if !hits(def.effect) || option.rank == RandomOptionRank::STrue {
+            continue;
+        }
+        if def.tier(RandomOptionRank::STrue).is_none() {
+            continue;
+        }
+        let current = trunc_int(option.value(def));
+        let target = trunc_int(def.default_value(RandomOptionRank::STrue));
+        if target <= current {
+            continue;
+        }
+        out.push(RandomOptionRoom {
+            slot,
+            action: RandomOptionRoomAction::RankUp {
+                option_id: def.id.to_string(),
+                option_name: def.name.to_string(),
+                from_rank: option.rank,
+                rank: RandomOptionRank::STrue,
+            },
+            current,
+            target,
+        });
+    }
+
+    let free = slot
+        .random_option_slots()
+        .unwrap_or(0)
+        .saturating_sub(part.random_options.len());
+    if free > 0 {
+        let best = addable_random_options(part, defs, slot)
+            .into_iter()
+            .filter(|d| hits(d.effect))
+            .filter(|d| d.tier(RANDOM_OPTION_ATTACH_RANK).is_some())
+            .max_by_key(|d| trunc_int(d.default_value(RANDOM_OPTION_ATTACH_RANK)));
+        if let Some(def) = best {
+            let target = trunc_int(def.default_value(RANDOM_OPTION_ATTACH_RANK));
+            if target > 0 {
+                out.push(RandomOptionRoom {
+                    slot,
+                    action: RandomOptionRoomAction::Attach {
+                        option_id: def.id.to_string(),
+                        option_name: def.name.to_string(),
+                        rank: RANDOM_OPTION_ATTACH_RANK,
+                    },
+                    current: 0,
+                    target,
+                });
+            }
+        }
+    }
+    out
+}
+
 /// キャラが実際に付けている 1 枠。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RandomOptionSlot {
@@ -370,6 +474,80 @@ mod tests {
             common: false,
             short: "テスト",
         }
+    }
+
+    /// ランク上げは S・真まで。S・真の段が無い OP は上げ先が無いので出さない。
+    #[test]
+    fn ランダムopの伸びしろは空き枠への装着とs真へのランク上げ() {
+        const FULL_TIERS: &[RandomOptionTier] = &[
+            RandomOptionTier {
+                rank: RandomOptionRank::Special,
+                min: 10.0,
+                max: 25.0,
+            },
+            RandomOptionTier {
+                rank: RandomOptionRank::STrue,
+                min: 26.0,
+                max: 40.0,
+            },
+        ];
+        let mut accuracy = def(RandomOptionEffect::AccuracyPoint);
+        accuracy.id = "acc";
+        accuracy.slot = PartSlot::Hand;
+        accuracy.tiers = FULL_TIERS;
+        let mut evasion = def(RandomOptionEffect::EvasionPoint);
+        evasion.id = "eva";
+        evasion.slot = PartSlot::Hand;
+        evasion.category = 16;
+        let defs = vec![accuracy, evasion];
+        let effects = [RandomOptionEffect::AccuracyPoint];
+
+        // 空き枠だけ: Special で付ける手が 1 つ出る(効き先が違う OP は出さない)
+        let empty = crate::equipment::EquipmentPart {
+            item_id: Some("glove".to_string()),
+            ..Default::default()
+        };
+        let rooms = random_option_rooms(&empty, PartSlot::Hand, &defs, &effects);
+        assert_eq!(rooms.len(), 1);
+        assert_eq!((rooms[0].current, rooms[0].target), (0, 25));
+        assert!(matches!(
+            &rooms[0].action,
+            RandomOptionRoomAction::Attach { option_id, rank, .. }
+                if option_id == "acc" && *rank == RandomOptionRank::Special
+        ));
+
+        // Special 装着済み: S・真へのランク上げが出る
+        let attached = crate::equipment::EquipmentPart {
+            item_id: Some("glove".to_string()),
+            random_options: vec![RandomOptionSlot {
+                option_id: "acc".into(),
+                rank: RandomOptionRank::Special,
+                value: None,
+            }],
+            ..Default::default()
+        };
+        let rooms = random_option_rooms(&attached, PartSlot::Hand, &defs, &effects);
+        assert!(matches!(
+            &rooms[0].action,
+            RandomOptionRoomAction::RankUp { from_rank, rank, .. }
+                if *from_rank == RandomOptionRank::Special && *rank == RandomOptionRank::STrue
+        ));
+        assert_eq!((rooms[0].current, rooms[0].target), (25, 40));
+
+        // 既に S・真なら上げ先が無い(空き枠ぶんの装着だけ残る)
+        let maxed = crate::equipment::EquipmentPart {
+            item_id: Some("glove".to_string()),
+            random_options: vec![RandomOptionSlot {
+                option_id: "acc".into(),
+                rank: RandomOptionRank::STrue,
+                value: None,
+            }],
+            ..Default::default()
+        };
+        let rooms = random_option_rooms(&maxed, PartSlot::Hand, &defs, &effects);
+        assert!(rooms
+            .iter()
+            .all(|r| !matches!(r.action, RandomOptionRoomAction::RankUp { .. })));
     }
 
     #[test]

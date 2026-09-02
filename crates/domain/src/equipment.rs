@@ -2378,6 +2378,143 @@ const ABILITY_TIER_TOP_COUNT: usize = 2;
 /// アイテム方式(古代精霊 < 深淵 < 喪失 < 夜星)で既定に残す下限の段(= 喪失)。
 const ABILITY_ITEM_LADDER_MIN_RANK: u8 = 2;
 
+/// 装着アビリティで `kind`(装備補正 9 値の 1 つ)を伸ばす手(伸びしろの列挙用)。
+/// 値だけを持ち、文言は画面が組む。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AbilityRoomAction {
+    /// 空き枠に付ける
+    Attach {
+        ability_id: String,
+        ability_name: String,
+    },
+    /// 装着済みを同じ系統(`exclusive_group`)の上位に替える
+    Replace {
+        from_ability_id: String,
+        from_ability_name: String,
+        ability_id: String,
+        ability_name: String,
+    },
+}
+
+/// アビリティ 1 手ぶんの「いま → 替えたら」。`current` は替える前のそのアビリティの
+/// `kind` の値(空き枠なら 0)、`target` は替えたあとの値。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AbilityRoom {
+    pub slot: PartSlot,
+    pub action: AbilityRoomAction,
+    pub current: i64,
+    pub target: i64,
+}
+
+/// 装着アビリティ本体の可変値(`value_option`)が `kind` に効くか。
+fn additional_kind_stat(kind: EquipmentAbilityAdditionalKind) -> Option<EquipmentStatKind> {
+    Some(match kind {
+        EquipmentAbilityAdditionalKind::Thrust => EquipmentStatKind::Thrust,
+        EquipmentAbilityAdditionalKind::Slash => EquipmentStatKind::Slash,
+        EquipmentAbilityAdditionalKind::MagicAttack => EquipmentStatKind::MagicAttack,
+        EquipmentAbilityAdditionalKind::MagicDefense => EquipmentStatKind::MagicDefense,
+        EquipmentAbilityAdditionalKind::Accuracy => EquipmentStatKind::Accuracy,
+        EquipmentAbilityAdditionalKind::PhysicalDefense => EquipmentStatKind::PhysicalDefense,
+        EquipmentAbilityAdditionalKind::Critical => EquipmentStatKind::Critical,
+        EquipmentAbilityAdditionalKind::Evasion => EquipmentStatKind::Evasion,
+        _ => return None,
+    })
+}
+
+/// アビリティ 1 件が `kind` に足す値(固定の `values` + 本体の可変値の上端)。
+fn ability_stat_value(def: &EquipmentAbilityDef, kind: EquipmentStatKind) -> i64 {
+    let option = def
+        .value_option
+        .as_ref()
+        .filter(|o| additional_kind_stat(o.kind) == Some(kind))
+        .map_or(0, |o| i64::from(o.max));
+    def.values.get(kind) + option
+}
+
+/// 装着アビリティで `kind` を伸ばす手を列挙する(空き枠への装着 + 同系統上位への差し替え)。
+///
+/// - 空き枠(`PartSlot::ability_slots` − 装着数)には、その部位で付けられる候補のうち
+///   `kind` がいちばん大きいものを 1 つだけ出す(既に同じ `exclusive_group` /
+///   同じカテゴリーが埋まっている候補は除く)
+/// - 装着済みには、同じラダー(`ladder` + カテゴリー)で `kind` が大きい候補への差し替えを出す
+/// - 武器は系統適合(`WeaponSystem::accepts_ability`)を守る。`weapon_system` は
+///   呼び出し側が `EquipmentPart::weapon_system` で解決して渡す
+pub fn ability_value_rooms(
+    equipment: &Equipment,
+    abilities: &[EquipmentAbilityDef],
+    kind: EquipmentStatKind,
+    weapon_system: Option<WeaponSystem>,
+) -> Vec<AbilityRoom> {
+    let mut out = Vec::new();
+    for (slot, part) in equipment.iter_selected() {
+        if !slot.allows_abilities() {
+            continue;
+        }
+        let fits = |def: &EquipmentAbilityDef| {
+            def.slot == slot
+                && (slot != PartSlot::Weapon
+                    || weapon_system.is_none_or(|system| system.accepts_ability(def.family)))
+        };
+        let attached: Vec<&EquipmentAbilityDef> = part
+            .abilities
+            .iter()
+            .filter_map(|id| abilities.iter().find(|a| a.id == id.as_str() && a.slot == slot))
+            .collect();
+
+        // 差し替え: 同じラダー(カテゴリー × 等級を外した種類名)の上位へ
+        for current in &attached {
+            let now = ability_stat_value(current, kind);
+            let best = abilities
+                .iter()
+                .filter(|d| fits(d))
+                .filter(|d| d.category == current.category && d.ladder == current.ladder)
+                .filter(|d| d.id != current.id)
+                .max_by_key(|d| ability_stat_value(d, kind));
+            let Some(best) = best else { continue };
+            let target = ability_stat_value(best, kind);
+            if target <= now {
+                continue;
+            }
+            out.push(AbilityRoom {
+                slot,
+                action: AbilityRoomAction::Replace {
+                    from_ability_id: current.id.to_string(),
+                    from_ability_name: current.name.to_string(),
+                    ability_id: best.id.to_string(),
+                    ability_name: best.name.to_string(),
+                },
+                current: now,
+                target,
+            });
+        }
+
+        // 装着: 空き枠があるときだけ。既に同じ系統・同じカテゴリーが埋まっている候補は除く
+        if part.abilities.len() >= slot.ability_slots() {
+            continue;
+        }
+        let best = abilities
+            .iter()
+            .filter(|d| fits(d))
+            .filter(|d| !attached.iter().any(|a| a.exclusive_group == d.exclusive_group))
+            .filter(|d| !attached.iter().any(|a| a.category == d.category))
+            .filter(|d| ability_stat_value(d, kind) > 0)
+            .max_by_key(|d| ability_stat_value(d, kind));
+        if let Some(best) = best {
+            out.push(AbilityRoom {
+                slot,
+                action: AbilityRoomAction::Attach {
+                    ability_id: best.id.to_string(),
+                    ability_name: best.name.to_string(),
+                },
+                current: 0,
+                target: ability_stat_value(best, kind),
+            });
+        }
+    }
+    out
+}
+
 /// この部位(武器はカテゴリー枠)に装着できるアビリティを、画面に出す順で返す。
 ///
 /// - カテゴリーを指定したとき(武器の 3 枠)は効果の大きい順に並べ替える。指定しないとき
@@ -3664,6 +3801,56 @@ mod tests {
             ladder: name.to_string(),
             priority: 0,
         }
+    }
+
+    /// `ability_value_rooms`: 空き枠には最大値の候補を 1 つ、装着済みには同じラダーの
+    /// 上位への差し替えだけを出す(下位への差し替えは出さない)。
+    #[test]
+    fn アビリティの伸びしろは空き枠への装着と同ラダー上位への差し替えだけ出す() {
+        let with_accuracy = |mut def: EquipmentAbilityDef, accuracy: i64, ladder: &str| {
+            def.values.accuracy = accuracy;
+            def.ladder = ladder.to_string();
+            def
+        };
+        let defs = vec![
+            with_accuracy(ability("low", "上級の命中", PartSlot::Hand, 1, "hand-acc"), 3, "命中"),
+            with_accuracy(ability("mid", "喪失の命中", PartSlot::Hand, 1, "hand-acc"), 9, "命中"),
+            with_accuracy(ability("high", "夜星の命中", PartSlot::Hand, 1, "hand-acc"), 16, "命中"),
+            // 別ラダー(別カテゴリー)。差し替え先にはならないが空き枠には入る
+            with_accuracy(ability("other", "夜星の回避", PartSlot::Hand, 2, "hand-eva"), 4, "回避"),
+        ];
+
+        // 手は 2 枠。1 つ装着済み(上級)なら「夜星に替える」と「空き枠に別カテゴリー」が出る
+        let mut equipment = Equipment::default();
+        equipment.parts.hand = EquipmentPartList::from(EquipmentPart {
+            item_id: Some("glove".to_string()),
+            abilities: vec!["low".to_string()],
+            ..Default::default()
+        });
+        let rooms = ability_value_rooms(&equipment, &defs, EquipmentStatKind::Accuracy, None);
+        assert_eq!(rooms.len(), 2);
+        assert_eq!(rooms[0].slot, PartSlot::Hand);
+        assert_eq!(rooms[0].current, 3);
+        assert_eq!(rooms[0].target, 16);
+        assert!(matches!(
+            &rooms[0].action,
+            AbilityRoomAction::Replace { from_ability_id, ability_id, .. }
+                if from_ability_id == "low" && ability_id == "high"
+        ));
+        // 空き枠は同じ系統・同じカテゴリーを避けて別カテゴリーの最大値
+        assert!(matches!(
+            &rooms[1].action,
+            AbilityRoomAction::Attach { ability_id, .. } if ability_id == "other"
+        ));
+
+        // 既に最上位なら差し替えは出ない
+        equipment.parts.hand = EquipmentPartList::from(EquipmentPart {
+            item_id: Some("glove".to_string()),
+            abilities: vec!["high".to_string(), "other".to_string()],
+            ..Default::default()
+        });
+        let rooms = ability_value_rooms(&equipment, &defs, EquipmentStatKind::Accuracy, None);
+        assert!(rooms.is_empty(), "枠が埋まり上位も無ければ伸びしろ無し");
     }
 
     #[test]

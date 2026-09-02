@@ -182,3 +182,18 @@ New1/New2, V1/V2, E1/E2, X の各サブカテゴリ含む)を表現する形を�
   足していてスキル倍率が 4.62 → 14.62 になり、火力が 3 倍以上に膨らんでいた。wiki ステータス #E2 の
   供給源表と、旧リポ twtoolkit の Excel v4.00 実装(`skillTerm = skillMultiplier + helmetAbility / 100`)の
   両方で裏取り
+- 2026-09-02: 命中P・回避Pの伸びしろを、**源ごとの列挙 API**の上に組み直した
+  (architecture-audit B21)。`stat_sources::stat_fixed_rooms`(ペット S / ルーン / クラウン /
+  モンスターカード / 神鳥の聖物の「いま → 上限」。上限到達は返さない)、
+  `accuracy_buff_rooms`(未選択の命中P増加バフ。排他枠と的中剣の `exclusive_with` を見る)、
+  `stat_buff_rooms`(未選択のステ増加バフの、そのステへの実効き)、
+  `equipment::ability_value_rooms`(空き枠への装着 + 同ラダー上位への差し替え)、
+  `random_option::random_option_rooms`(空き枠に Special で装着 + S・真へのランク上げ)。
+  `accuracy_growth` / `evasion_growth` はこれらを呼んで**材料ごとに `accuracy_point` /
+  `evasion_point` を引き直すだけ**にした(丸めの食い違いを作らない。`list_enchant_gains` が
+  `rank_candidates` を再利用しているのと同じ考え方)。
+  それまでは「ステ上限との差 1 本」で、`StatSources` の 6 源に分解できていなかった。
+  ステの固定上昇は**覚醒 / エタの意志の上限に達していないぶんだけ効く**ものとして、
+  源ごとの残りを `stat_cap − 現在値` で頭打ちにしてから積む(固定値層は倍率の前に乗るので、
+  この見積りは下振れ側に寄る `[仮]`)。回避P側も同じ 6 区分でそろえた
+
