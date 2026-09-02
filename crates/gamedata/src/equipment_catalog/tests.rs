@@ -44,13 +44,13 @@ fn wrist(
     enchant_agility: i64,
 ) -> Equipment {
     let mut equipment = Equipment::default();
-    equipment.parts.shield.item_id = Some(item_id.to_string());
-    equipment.parts.shield.base = EquipmentValues {
+    equipment.parts.shield.selected_or_register().item_id = Some(item_id.to_string());
+    equipment.parts.shield.selected_or_register().base = EquipmentValues {
         thrust,
         agility,
         ..Default::default()
     };
-    equipment.parts.shield.enchant = EquipmentValues {
+    equipment.parts.shield.selected_or_register().enchant = EquipmentValues {
         thrust: enchant_thrust,
         agility: enchant_agility,
         ..Default::default()
@@ -349,11 +349,11 @@ fn item_damage_contributionsは装備中のアイテムだけを見る() {
     let mut equipment = Equipment::default();
     assert!(item_damage_contributions(&equipment, SkillDependency::Hack).is_empty());
 
-    equipment.parts.hand.item_id = Some("gorilla-armcover".to_string());
-    equipment.parts.body.item_id = Some("archangel-wing".to_string());
-    equipment.parts.effect.item_id = Some("beast-unicorn".to_string());
+    equipment.parts.hand.selected_or_register().item_id = Some("gorilla-armcover".to_string());
+    equipment.parts.body.selected_or_register().item_id = Some("archangel-wing".to_string());
+    equipment.parts.effect.selected_or_register().item_id = Some("beast-unicorn".to_string());
     // カタログに無い id は無視する(保存時に storage が弾いている)
-    equipment.parts.helm.item_id = Some("unknown".to_string());
+    equipment.parts.helm.selected_or_register().item_id = Some("unknown".to_string());
 
     let mut got = pairs(&item_damage_contributions(
         &equipment,
@@ -373,7 +373,7 @@ fn item_damage_contributionsは装備中のアイテムだけを見る() {
 #[test]
 fn afの依存別効果は一致するスキルだけに入る() {
     let mut equipment = Equipment::default();
-    equipment.parts.artifact.item_id = Some("eclipse-hack-def".to_string());
+    equipment.parts.artifact.selected_or_register().item_id = Some("eclipse-hack-def".to_string());
     assert_eq!(
         pairs(&item_damage_contributions(
             &equipment,
@@ -416,7 +416,7 @@ fn afの主要3段は各6依存の通常版とディフェンシオを持つ() {
 #[test]
 fn エクリプス魔斬ディフェンシオは魔斬スキルへ与ダメ30パーセント() {
     let mut equipment = Equipment::default();
-    equipment.parts.artifact.item_id = Some("eclipse-hack-int-def".to_string());
+    equipment.parts.artifact.selected_or_register().item_id = Some("eclipse-hack-int-def".to_string());
     assert_eq!(
         pairs(&item_damage_contributions(
             &equipment,
@@ -455,7 +455,7 @@ fn afの耐久効果は攻撃効果と分離して主要3段へ入る() {
     );
 
     let mut equipment = Equipment::default();
-    equipment.parts.artifact.item_id = Some("ethereal-hack-int-def".to_string());
+    equipment.parts.artifact.selected_or_register().item_id = Some("ethereal-hack-int-def".to_string());
     assert_eq!(
         pairs(&item_damage_contributions(
             &equipment,

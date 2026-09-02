@@ -50,7 +50,7 @@ pub use candidate::{
     CandidateOutcome, RankedCandidate,
 };
 pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
-pub use character::NewCharacter;
+pub use character::{CharacterCatalogs, NewCharacter};
 pub use character_skill::{
     damage_contributions, CharacterSkillCatalog, CharacterSkillDef, CharacterSkillError,
     CharacterSkills, MasteryOverride, SkillAudience, SkillEffect,

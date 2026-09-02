@@ -1,9 +1,7 @@
 //! 与ダメージ計算の入力のうち、複数の gamedata カタログをまたいで集計する値。
 //!
-//! commands.rs から「storage/gamedata から読む → domain を呼ぶ → 返す」の
-//! 薄いアダプタへ切り出した(docs/claude/goals 2026-08-25 ドメイン設計是正 第4弾)。
-//! ここに置く関数はいずれも I/O をせず、gamedata のカタログを解決して domain の
-//! 計算関数(メソッド含む)を呼ぶだけ。
+//! gamedata のカタログを解決して domain の計算関数(メソッド含む)を呼ぶだけの接着層。
+//! カタログ解決は commands の役目なので gamedata ではなくここに置く(docs/architecture.md)。
 
 /// 与ダメージ式のカテゴリへの寄与
 /// (キャラスキル + マスタリー + バフ + 装備アビリティ + 装備アイテムの装着時効果)。
@@ -16,17 +14,17 @@ pub fn damage_contributions_of(
 ) -> Vec<domain::DamageContribution> {
     let mut out = sources
         .character_skills
-        .damage_contributions(crate::character_skill_catalog(), &sources.masteries);
-    out.extend(equipment.ability_damage_contributions(&crate::equipment_abilities()));
-    out.extend(crate::item_damage_contributions(equipment, dependency));
+        .damage_contributions(gamedata::character_skill_catalog(), &sources.masteries);
+    out.extend(equipment.ability_damage_contributions(&gamedata::equipment_abilities()));
+    out.extend(gamedata::item_damage_contributions(equipment, dependency));
     out.extend(
         sources
             .masteries
-            .damage_contributions(crate::mastery_catalog()),
+            .damage_contributions(gamedata::mastery_catalog()),
     );
     out.extend(domain::stat_sources::buff_damage_contributions(
         buffs,
-        &crate::buff_catalog(),
+        &gamedata::buff_catalog(),
     ));
     out.extend(sources.soul_link.damage_contributions());
     out
@@ -38,8 +36,8 @@ pub fn actual_delay_contributions(
     skills: &domain::CharacterSkills,
     masteries: &domain::Masteries,
 ) -> Vec<domain::ActualDelayContribution> {
-    let mut out = skills.actual_delay_contributions(crate::character_skill_catalog(), masteries);
-    let catalog = crate::mastery_catalog();
+    let mut out = skills.actual_delay_contributions(gamedata::character_skill_catalog(), masteries);
+    let catalog = gamedata::mastery_catalog();
     for id in &masteries.picked {
         if let Some(def) = catalog.iter().find(|d| d.id == id.as_str()) {
             if let domain::SkillEffect::ActualDelay { percent } = def.effect {
@@ -61,11 +59,11 @@ pub fn element_preview(
     stat_sources: &domain::StatSources,
 ) -> domain::ElementPreview {
     domain::ElementPreview::new(
-        crate::element_base(game_character_id),
+        gamedata::element_base(game_character_id),
         equipment.element_values(stat_sources.elements.selected()),
         stat_sources
             .elements
-            .values(crate::element_source_catalog()),
+            .values(gamedata::element_source_catalog()),
     )
 }
 

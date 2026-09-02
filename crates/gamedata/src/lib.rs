@@ -8,7 +8,6 @@ pub mod buffs;
 pub mod character_skills;
 pub mod characters;
 pub mod contents;
-pub mod damage_inputs;
 pub mod elements;
 pub mod enemies;
 pub mod equipment_catalog;
@@ -29,9 +28,6 @@ pub use characters::{
     GameCharacter,
 };
 pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};
-pub use damage_inputs::{
-    actual_delay_contributions, damage_contributions_of, element_preview, element_value_for,
-};
 pub use elements::{
     element_base, element_source_catalog, ELEMENT_BASE_SOURCE, ELEMENT_SOURCE_CATALOG_SOURCE,
 };

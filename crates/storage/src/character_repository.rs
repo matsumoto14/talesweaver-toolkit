@@ -345,18 +345,7 @@ fn migrate_equipment_to_registered_lists(conn: &Connection) -> Result<()> {
                 None
             }
         };
-        [
-            EnhanceGrade::Lowest,
-            EnhanceGrade::Low,
-            EnhanceGrade::Middle,
-            EnhanceGrade::High,
-            EnhanceGrade::Highest,
-        ]
-        .into_iter()
-        .filter_map(|grade| candidate(grade).map(|value| (grade, (value - actual).abs())))
-        .min_by_key(|(_, distance)| *distance)
-        .map(|(grade, _)| grade)
-        .unwrap_or(EnhanceGrade::Highest)
+        EnhanceGrade::closest_to(actual, candidate)
     }
     fn values_are_zero(value: Option<&serde_json::Value>) -> bool {
         value
@@ -813,7 +802,7 @@ impl CharacterRepository {
     pub fn create(
         &self,
         new: &NewCharacter,
-        catalog: &BuffCatalog,
+        _catalog: &BuffCatalog,
         equipment_catalog: &[EquipmentItem],
         equipment_abilities: &[EquipmentAbilityDef],
         random_options: &[RandomOptionDef],
@@ -822,7 +811,6 @@ impl CharacterRepository {
     ) -> Result<RegisteredCharacter> {
         validate(
             new,
-            catalog,
             equipment_catalog,
             equipment_abilities,
             random_options,
@@ -864,7 +852,7 @@ impl CharacterRepository {
         &self,
         id: i64,
         update: &NewCharacter,
-        catalog: &BuffCatalog,
+        _catalog: &BuffCatalog,
         equipment_catalog: &[EquipmentItem],
         equipment_abilities: &[EquipmentAbilityDef],
         random_options: &[RandomOptionDef],
@@ -873,7 +861,6 @@ impl CharacterRepository {
     ) -> Result<RegisteredCharacter> {
         validate(
             update,
-            catalog,
             equipment_catalog,
             equipment_abilities,
             random_options,
@@ -955,54 +942,20 @@ impl CharacterRepository {
 /// 登録リクエストの検証(値域・バフ整合性・装備カタログ整合性)。保存前プレビュー(preview_damage 等)からも使う。
 pub fn validate(
     new: &NewCharacter,
-    _catalog: &BuffCatalog,
     equipment_catalog: &[EquipmentItem],
     equipment_abilities: &[EquipmentAbilityDef],
     random_options: &[RandomOptionDef],
     titles: &[TitleDef],
     character_skills: &CharacterSkillCatalog,
 ) -> Result<()> {
-    if new.name.trim().is_empty() {
-        return Err(StorageError::InvalidValue("名前が空です".into()));
-    }
-    new.base_stats
-        .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
-    if new.awakening.stage > Awakening::MAX_STAGE {
-        return Err(StorageError::InvalidValue(
-            format!("覚醒段階は 0〜{} です", Awakening::MAX_STAGE).into(),
-        ));
-    }
-    if new.awakening.eternal_level > Awakening::MAX_ETERNAL_LEVEL {
-        return Err(StorageError::InvalidValue(
-            format!("エタの意志 Lv は 0〜{} です", Awakening::MAX_ETERNAL_LEVEL).into(),
-        ));
-    }
-    new.stat_sources
-        .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
-    new.stat_sources
-        .character_skills
-        .validate(character_skills, &new.game_character_id)
-        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
-    new.equipment
-        .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
-    new.common_skills
-        .validate()
-        .map_err(|e| StorageError::InvalidValue(e.to_string().into()))?;
-    new.equipment
-        .validate_against_catalog(equipment_catalog, equipment_abilities, random_options)
-        .map_err(StorageError::InvalidValue)?;
-    // 称号は装備部位ではないので部位ループの外で見る(1 枠・カタログ参照のみ)
-    if let Some(id) = &new.equipment.title {
-        if !titles.iter().any(|t| t.id == id.as_str()) {
-            return Err(StorageError::InvalidValue(
-                format!("未知の称号 '{id}' です").into(),
-            ));
-        }
-    }
-    Ok(())
+    new.validate(&domain::CharacterCatalogs {
+        equipment: equipment_catalog,
+        abilities: equipment_abilities,
+        random_options,
+        titles,
+        character_skills,
+    })
+    .map_err(StorageError::InvalidValue)
 }
 
 fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
@@ -1885,7 +1838,7 @@ mod tests {
         assert!(err.to_string().contains("系統"), "{err}");
 
         // 同じ突き系統でもカテゴリーが違えば通る
-        c.equipment.parts.weapon.abilities =
+        c.equipment.parts.weapon.selected_or_register().abilities =
             vec!["pointed-blade-e".into(), "night-star-pointed-blade".into()];
         repo.create(&c, &[], &[], &abilities, &[], &[], &[])
             .unwrap();
@@ -2041,7 +1994,7 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
 
         let mut over_value = new_character("x");
-        over_value.equipment.parts.weapon.base = EquipmentValues {
+        over_value.equipment.parts.weapon.selected_or_register().base = EquipmentValues {
             thrust: 10000,
             ..Default::default()
         };
@@ -2327,7 +2280,7 @@ mod tests {
     fn 未知のランダムオプションidは拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.shield.random_options = vec![ro_slot("nope")];
+        c.equipment.parts.shield.selected_or_register().random_options = vec![ro_slot("nope")];
         assert!(matches!(
             repo.create(&c, &[], &[], &[], &test_random_options(), &[], &[]),
             Err(StorageError::InvalidValue(_))
@@ -2338,7 +2291,7 @@ mod tests {
     fn ランダムオプションは部位が一致しないと拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.weapon.random_options = vec![ro_slot("ro-a")];
+        c.equipment.parts.weapon.selected_or_register().random_options = vec![ro_slot("ro-a")];
         assert!(matches!(
             repo.create(&c, &[], &[], &[], &test_random_options(), &[], &[]),
             Err(StorageError::InvalidValue(_))
@@ -2351,7 +2304,7 @@ mod tests {
         let mut c = new_character("x");
         let mut slot = ro_slot("ro-a");
         slot.rank = domain::RandomOptionRank::STrue;
-        c.equipment.parts.shield.random_options = vec![slot];
+        c.equipment.parts.shield.selected_or_register().random_options = vec![slot];
         assert!(matches!(
             repo.create(&c, &[], &[], &[], &test_random_options(), &[], &[]),
             Err(StorageError::InvalidValue(_))
@@ -2363,14 +2316,14 @@ mod tests {
     fn 同じカテゴリーのランダムオプションは1部位に1つまで() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.shield.random_options = vec![ro_slot("ro-a"), ro_slot("ro-b")];
+        c.equipment.parts.shield.selected_or_register().random_options = vec![ro_slot("ro-a"), ro_slot("ro-b")];
         assert!(matches!(
             repo.create(&c, &[], &[], &[], &test_random_options(), &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
 
         let mut ok = new_character("y");
-        ok.equipment.parts.shield.random_options = vec![ro_slot("ro-a"), ro_slot("ro-free")];
+        ok.equipment.parts.shield.selected_or_register().random_options = vec![ro_slot("ro-a"), ro_slot("ro-free")];
         assert!(repo
             .create(&ok, &[], &[], &[], &test_random_options(), &[], &[])
             .is_ok());
@@ -2380,7 +2333,7 @@ mod tests {
     fn ランダムオプションは部位別装備のjsonで往復する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.shield.random_options = vec![domain::RandomOptionSlot {
+        c.equipment.parts.shield.selected_or_register().random_options = vec![domain::RandomOptionSlot {
             option_id: "ro-a".to_string(),
             rank: domain::RandomOptionRank::Rare,
             value: Some(7.5),
@@ -2399,7 +2352,7 @@ mod tests {
     fn 未知の装備アイテムidは拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.weapon.item_id = Some("nope".to_string());
+        c.equipment.parts.weapon.selected_or_register().item_id = Some("nope".to_string());
         assert!(matches!(
             repo.create(&c, &[], &[test_equipment_item()], &[], &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
@@ -2411,7 +2364,7 @@ mod tests {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
         // test_equipment_item は Weapon 用だが helm 部位に指定する。
-        c.equipment.parts.helm.item_id = Some("test-weapon".to_string());
+        c.equipment.parts.helm.selected_or_register().item_id = Some("test-weapon".to_string());
         assert!(matches!(
             repo.create(&c, &[], &[test_equipment_item()], &[], &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
@@ -2422,12 +2375,12 @@ mod tests {
     fn エンチャントが装備固有の固定枠を超えたら拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
-        c.equipment.parts.weapon.base = domain::EquipmentValues {
+        c.equipment.parts.weapon.selected_or_register().item_id = Some("test-weapon".to_string());
+        c.equipment.parts.weapon.selected_or_register().base = domain::EquipmentValues {
             thrust: 100,
             ..Default::default()
         };
-        c.equipment.parts.weapon.enchant = domain::EquipmentValues {
+        c.equipment.parts.weapon.selected_or_register().enchant = domain::EquipmentValues {
             thrust: 51,
             ..Default::default()
         };
@@ -2437,12 +2390,12 @@ mod tests {
         ));
 
         let mut ok = new_character("x");
-        ok.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
-        ok.equipment.parts.weapon.base = domain::EquipmentValues {
+        ok.equipment.parts.weapon.selected_or_register().item_id = Some("test-weapon".to_string());
+        ok.equipment.parts.weapon.selected_or_register().base = domain::EquipmentValues {
             thrust: 100,
             ..Default::default()
         };
-        ok.equipment.parts.weapon.enchant = domain::EquipmentValues {
+        ok.equipment.parts.weapon.selected_or_register().enchant = domain::EquipmentValues {
             thrust: 50,
             ..Default::default()
         };
@@ -2470,8 +2423,8 @@ mod tests {
         item.values_min.thrust = 30;
 
         let mut under = new_character("under");
-        under.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
-        under.equipment.parts.weapon.base = domain::EquipmentValues {
+        under.equipment.parts.weapon.selected_or_register().item_id = Some("test-weapon".to_string());
+        under.equipment.parts.weapon.selected_or_register().base = domain::EquipmentValues {
             thrust: 29,
             ..Default::default()
         };
@@ -2481,8 +2434,8 @@ mod tests {
         ));
 
         let mut over = new_character("over");
-        over.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
-        over.equipment.parts.weapon.base = domain::EquipmentValues {
+        over.equipment.parts.weapon.selected_or_register().item_id = Some("test-weapon".to_string());
+        over.equipment.parts.weapon.selected_or_register().base = domain::EquipmentValues {
             thrust: 201,
             ..Default::default()
         };
@@ -2492,8 +2445,8 @@ mod tests {
         ));
 
         let mut at_cap = new_character("at-cap");
-        at_cap.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
-        at_cap.equipment.parts.weapon.base = domain::EquipmentValues {
+        at_cap.equipment.parts.weapon.selected_or_register().item_id = Some("test-weapon".to_string());
+        at_cap.equipment.parts.weapon.selected_or_register().base = domain::EquipmentValues {
             thrust: 200,
             ..Default::default()
         };
@@ -2506,14 +2459,14 @@ mod tests {
     fn 未知の装備アビリティidは拒否する() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.weapon.abilities = vec!["nope".to_string()];
+        c.equipment.parts.weapon.selected_or_register().abilities = vec!["nope".to_string()];
         assert!(matches!(
             repo.create(&c, &[], &[], &[test_equipment_ability()], &[], &[], &[]),
             Err(StorageError::InvalidValue(_))
         ));
 
         let mut ok = new_character("x");
-        ok.equipment.parts.weapon.abilities = vec!["test-ability".to_string()];
+        ok.equipment.parts.weapon.selected_or_register().abilities = vec!["test-ability".to_string()];
         assert!(repo
             .create(&ok, &[], &[], &[test_equipment_ability()], &[], &[], &[])
             .is_ok());
@@ -2692,14 +2645,14 @@ mod tests {
     fn 装備アビリティ本体値の孤児は部位とアビリティidを指す() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.weapon.item_id = Some("test-weapon".to_string());
-        c.equipment.parts.weapon.base = domain::EquipmentValues {
+        c.equipment.parts.weapon.selected_or_register().item_id = Some("test-weapon".to_string());
+        c.equipment.parts.weapon.selected_or_register().base = domain::EquipmentValues {
             thrust: 100,
             slash: 100,
             ..Default::default()
         };
         // abilities には無いのに本体値だけ残っている(検証を足す前に保存された旧データ)。
-        c.equipment.parts.weapon.ability_values = vec![domain::EquipmentAbilityAdditional {
+        c.equipment.parts.weapon.selected_or_register().ability_values = vec![domain::EquipmentAbilityAdditional {
             ability_id: "test-ability".to_string(),
             kind: domain::EquipmentAbilityAdditionalKind::Thrust,
             value: 1,
@@ -2731,7 +2684,7 @@ mod tests {
     fn ランダムオプションの検証エラーは部位とオプションidを指す() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
-        c.equipment.parts.shield.random_options = vec![domain::RandomOptionSlot {
+        c.equipment.parts.shield.selected_or_register().random_options = vec![domain::RandomOptionSlot {
             option_id: "nope".to_string(),
             rank: domain::RandomOptionRank::Rare,
             value: None,

@@ -503,10 +503,6 @@ pub struct StatSources {
 impl StatSources {
     /// 新規登録するキャラクターの恒常補正源。
     /// ソウルリンクを含め、未開放・未習得の中立値で始める。
-    pub fn for_new_character() -> Self {
-        Self::default()
-    }
-
     /// ルーンスキル(0..=20)/クラウン(0..=300)/聖物(0..=40段階)の値域を検証する。
     /// ペットは enum で構造的に制約済みなので対象外。
     pub fn validate(&self) -> Result<(), StatSourceError> {
@@ -1633,7 +1629,7 @@ pub fn preview_effective_stats(
             // 差分は「その装備を外した状態を丸ごと計算し直した A」との差にする。
             let mut part_contributions = Vec::with_capacity(12);
             for (slot, _) in equipment.parts.iter() {
-                let without = equipment.without_part(slot);
+                let without = equipment.without_selected_part(slot);
                 let (stats_without, _, _) = effective_stats_with(
                     base,
                     sources,
@@ -3055,7 +3051,7 @@ mod tests {
         let attack = preview.attack.unwrap();
 
         for (slot, _) in equipment.parts.iter() {
-            let without = equipment.without_part(slot);
+            let without = equipment.without_selected_part(slot);
             let preview_without = preview_effective_stats(
                 &base,
                 &sources,
@@ -3837,7 +3833,7 @@ mod tests {
 
     #[test]
     fn 新規キャラ既定値はソウルリンクを含め未開放() {
-        assert_eq!(StatSources::for_new_character(), StatSources::default());
+        assert_eq!(StatSources::default(), StatSources::default());
     }
 
     /// 命中P増加バフの合計と伸びしろ。的中剣の効果中は `exclusive_with` に的中剣を持つものを

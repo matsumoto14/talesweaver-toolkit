@@ -10,7 +10,7 @@ use commands::{
     EquipmentAbilityView, EquipmentCandidates, StatLimitsPayload, TitleView, UpgradeCandidate,
 };
 use domain::{
-    BuffDefinition, BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DamageResult,
+    BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DamageResult,
     DefenseProfile, Enemy, NewCharacter, Skill, VersusAccuracy,
 };
 use gamedata::{EquipmentItem, GameCharacter};

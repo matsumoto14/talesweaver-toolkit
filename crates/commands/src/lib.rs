@@ -14,6 +14,8 @@ use domain::{
 };
 use gamedata::{EquipmentItem, GameCharacter};
 
+mod damage_inputs;
+
 pub type CommandResult<T> = Result<T, CommandError>;
 
 /// フロントに返すエラー。文言だけでなく「どこの話か」(装備の部位・アビリティ)も運ぶ。
@@ -68,49 +70,33 @@ fn find_enemy(enemy_id: &str) -> CommandResult<Enemy> {
 /// domain の検証(`Equipment::validate_against_catalog` を含む)を直接呼ぶ
 /// (保存層の validate は登録・更新の保存直前チェック用)。
 fn validate_character_draft(character: &NewCharacter, buffs: &BuffSelection) -> CommandResult<()> {
-    if character.name.trim().is_empty() {
-        return Err("名前が空です".into());
-    }
-    character.base_stats.validate().map_err(|e| e.to_string())?;
-    character.awakening.validate().map_err(|e| e.to_string())?;
-    character
-        .stat_sources
-        .validate()
-        .map_err(|e| e.to_string())?;
-    character
-        .stat_sources
-        .character_skills
-        .validate(
-            gamedata::character_skill_catalog(),
-            &character.game_character_id,
-        )
-        .map_err(|e| e.to_string())?;
+    let equipment_catalog = gamedata::equipment_catalog();
+    let abilities = gamedata::equipment_abilities();
+    let random_options = gamedata::random_option_catalog();
+    let titles = gamedata::title_catalog();
+    character.validate(&domain::CharacterCatalogs {
+        equipment: &equipment_catalog,
+        abilities: &abilities,
+        random_options: &random_options,
+        titles: &titles,
+        character_skills: gamedata::character_skill_catalog(),
+    })?;
+    // バフはキャラに保存しないので、キャラ本体の検証(domain)とは別にここで見る
     domain::stat_sources::build_modifiers(
         &character.stat_sources,
         buffs,
         &gamedata::buff_catalog(),
     )
     .map_err(|e| e.to_string())?;
-    character.equipment.validate().map_err(|e| e.to_string())?;
-    character
-        .common_skills
-        .validate()
-        .map_err(|e| e.to_string())?;
-    character.equipment.validate_against_catalog(
-        &gamedata::equipment_catalog(),
-        &gamedata::equipment_abilities(),
-        &gamedata::random_option_catalog(),
-    )?;
-    // 称号は装備部位ではないので部位ループの外で見る(1 枠・カタログ参照のみ)
-    if let Some(id) = &character.equipment.title {
-        if !gamedata::title_catalog()
-            .iter()
-            .any(|t| t.id == id.as_str())
-        {
-            return Err(format!("未知の称号 '{id}' です").into());
-        }
-    }
     Ok(())
+}
+
+/// 計算対象のコンテンツと敵を引く(敵データが無いコンテンツはダメージ計算の対象にできない)。
+fn find_content_with_enemy(content_id: &str) -> CommandResult<(Content, Enemy)> {
+    let content = find_content(content_id)?;
+    let enemy_id = content.enemy_id.as_deref().unwrap_or_default();
+    let enemy = find_enemy(enemy_id)?;
+    Ok((content, enemy))
 }
 
 /// 計算対象のコンテンツを引く。敵データが無いコンテンツはダメージ計算の対象にできない。
@@ -210,7 +196,7 @@ pub fn equipment_element_values(
 /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
 pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
     validate_character_draft(&character, &BuffSelection::default())?;
-    Ok(gamedata::element_preview(
+    Ok(damage_inputs::element_preview(
         &character.game_character_id,
         &character.equipment,
         &character.stat_sources,
@@ -723,20 +709,7 @@ pub fn preview_effective_stats(
 ) -> CommandResult<StatPreviewPayload> {
     let coefficients = attack_coefficients_of(main_skill_id.as_deref())?;
     let part_enhance = part_enhance_previews(&equipment, stat_sources.soul_link);
-    let base = domain::preview_effective_stats(
-        &base_stats,
-        &stat_sources,
-        &buffs,
-        &equipment,
-        &common_skills,
-        stat_catalogs(&gamedata::buff_catalog()),
-        &gamedata::equipment_abilities(),
-        &gamedata::title_catalog(),
-        &gamedata::random_option_catalog(),
-        coefficients,
-        gamedata::awakening_caps(awakening).max_stat,
-    )
-    .map_err(|e| e.to_string())?;
+    let base = stat_preview_of(&base_stats, &stat_sources, &buffs, &equipment, &common_skills, awakening, coefficients)?;
     Ok(StatPreviewPayload {
         base,
         part_enhance,
@@ -783,20 +756,7 @@ pub fn preview_defense(
     buffs: BuffSelection,
 ) -> CommandResult<DefenseProfile> {
     validate_character_draft(&character, &buffs)?;
-    let preview = domain::preview_effective_stats(
-        &character.base_stats,
-        &character.stat_sources,
-        &buffs,
-        &character.equipment,
-        &character.common_skills,
-        stat_catalogs(&gamedata::buff_catalog()),
-        &gamedata::equipment_abilities(),
-        &gamedata::title_catalog(),
-        &gamedata::random_option_catalog(),
-        None,
-        gamedata::awakening_caps(character.awakening).max_stat,
-    )
-    .map_err(|e| e.to_string())?;
+    let preview = stat_preview_of(&character.base_stats, &character.stat_sources, &buffs, &character.equipment, &character.common_skills, character.awakening, None)?;
     // preview と同じ基本能力値(装備 + アビリティ + 称号 + ソウルリンク)を使う。
     // ソウルリンクはエンチャントではなく基本能力値へ直接加算する。
     let equipment_totals = preview
@@ -835,38 +795,12 @@ pub fn preview_versus(
         .accuracy
         .ok_or_else(|| CommandError::from(format!("スキル '{skill_id}' の命中は未収録です")))?;
 
-    let attacker_preview = domain::preview_effective_stats(
-        &attacker.base_stats,
-        &attacker.stat_sources,
-        &attacker_buffs,
-        &attacker.equipment,
-        &attacker.common_skills,
-        stat_catalogs(&gamedata::buff_catalog()),
-        &gamedata::equipment_abilities(),
-        &gamedata::title_catalog(),
-        &gamedata::random_option_catalog(),
-        None,
-        gamedata::awakening_caps(attacker.awakening).max_stat,
-    )
-    .map_err(|e| e.to_string())?;
+    let attacker_preview = stat_preview_of(&attacker.base_stats, &attacker.stat_sources, &attacker_buffs, &attacker.equipment, &attacker.common_skills, attacker.awakening, None)?;
     let attacker_equipment_totals = attacker_preview
         .equipment_base_total
         .add(attacker.equipment.enhanced_totals(None));
 
-    let defender_preview = domain::preview_effective_stats(
-        &defender.base_stats,
-        &defender.stat_sources,
-        &defender_buffs,
-        &defender.equipment,
-        &defender.common_skills,
-        stat_catalogs(&gamedata::buff_catalog()),
-        &gamedata::equipment_abilities(),
-        &gamedata::title_catalog(),
-        &gamedata::random_option_catalog(),
-        None,
-        gamedata::awakening_caps(defender.awakening).max_stat,
-    )
-    .map_err(|e| e.to_string())?;
+    let defender_preview = stat_preview_of(&defender.base_stats, &defender.stat_sources, &defender_buffs, &defender.equipment, &defender.common_skills, defender.awakening, None)?;
     let defender_equipment_totals = defender_preview
         .equipment_base_total
         .add(defender.equipment.enhanced_totals(None));
@@ -989,7 +923,7 @@ pub fn get_stat_limits() -> StatLimitsPayload {
 }
 
 pub fn get_new_character_stat_sources() -> domain::StatSources {
-    domain::StatSources::for_new_character()
+    domain::StatSources::default()
 }
 
 /// 新規登録キャラの共通スキルの実用既定(`CommonSkills::practical_default`)。
@@ -1009,12 +943,7 @@ fn weapon_enhance(weapon: &EquipmentPart) -> Option<i64> {
     if weapon.enhance_level == 0 {
         return None;
     }
-    let enhance_type = weapon.enhance_type.or_else(|| {
-        weapon
-            .item_id
-            .as_deref()
-            .and_then(gamedata::equipment_enhance_type)
-    });
+    let enhance_type = weapon.resolved_enhance_type(gamedata::equipment_enhance_type);
     let rates = enhance_type.and_then(gamedata::enhance_rates_for_type)?;
     let multiplier = match gamedata::enhance_multiplier(weapon.enhance_level) {
         Some(multiplier) => multiplier,
@@ -1034,12 +963,7 @@ fn armor_enhance(armor: &EquipmentPart) -> Option<i64> {
     if armor.enhance_level == 0 {
         return None;
     }
-    let enhance_type = armor.enhance_type.or_else(|| {
-        armor
-            .item_id
-            .as_deref()
-            .and_then(gamedata::equipment_enhance_type)
-    });
+    let enhance_type = armor.resolved_enhance_type(gamedata::equipment_enhance_type);
     let class = enhance_type.and_then(gamedata::armor_class_for_type)?;
     let multiplier = gamedata::armor_enhance_multiplier(armor.enhance_level, armor.enhance_grade)?;
     let values = armor.base.add(armor.enchant);
@@ -1165,6 +1089,33 @@ fn resolve_accuracy_boost(stat_sources: &domain::StatSources) -> domain::Accurac
     domain::AccuracyBoost::resolve(false, skill)
 }
 
+/// 能力値プレビュー(`domain::preview_effective_stats`)をカタログ込みで呼ぶ。
+/// キャラ画面・防御・対人が同じ経路を通る
+fn stat_preview_of(
+    base_stats: &domain::BaseStats,
+    stat_sources: &domain::StatSources,
+    buffs: &BuffSelection,
+    equipment: &domain::Equipment,
+    common_skills: &CommonSkills,
+    awakening: domain::Awakening,
+    coefficients: Option<AttackPowerCoefficients>,
+) -> CommandResult<domain::StatPreview> {
+    domain::preview_effective_stats(
+        base_stats,
+        stat_sources,
+        buffs,
+        equipment,
+        common_skills,
+        stat_catalogs(&gamedata::buff_catalog()),
+        &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
+        &gamedata::random_option_catalog(),
+        coefficients,
+        gamedata::awakening_caps(awakening).max_stat,
+    )
+    .map_err(|e| e.to_string().into())
+}
+
 /// 能力値補正に要るカタログ一式。バフカタログだけ所有値なので呼び出し側が持つ。
 fn stat_catalogs(buff_catalog: &[domain::BuffDefinition]) -> domain::StatCatalogs<'_> {
     domain::StatCatalogs {
@@ -1252,7 +1203,7 @@ fn build_damage_material(
         awakening_rate: gamedata::awakening_rate(awakening),
         damage_cap: gamedata::awakening_caps(awakening).max_damage,
         stat_cap: gamedata::awakening_caps(awakening).max_stat,
-        actual_delay_skills: gamedata::actual_delay_contributions(
+        actual_delay_skills: damage_inputs::actual_delay_contributions(
             &stat_sources.character_skills,
             &stat_sources.masteries,
         ),
@@ -1319,9 +1270,9 @@ fn build_damage_input(
         content.enemy_id.as_deref(),
     );
     let damage_contributions =
-        gamedata::damage_contributions_of(stat_sources, buffs, &equipment, skill.dependency);
+        damage_inputs::damage_contributions_of(stat_sources, buffs, &equipment, skill.dependency);
     let element_value =
-        gamedata::element_value_for(game_character_id, &equipment, stat_sources, &skill);
+        damage_inputs::element_value_for(game_character_id, &equipment, stat_sources, &skill);
     let coefficients = dependency_coefficients(skill.dependency);
     Ok((
         material,
@@ -1383,8 +1334,7 @@ pub fn damage_for_character(
         .map(find_skill)
         .transpose()?
         .map(|skill| skill.dependency);
-    let content = find_content(content_id)?;
-    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
+    let (content, enemy) = find_content_with_enemy(content_id)?;
     let (material, target) = build_damage_input(
         base_stats,
         game_character_id,
@@ -1504,13 +1454,13 @@ pub fn evaluate_contents(
         .map(|skill| SkillEvaluationInput {
             skill: skill.clone(),
             coefficients: dependency_coefficients(skill.dependency),
-            damage_contributions: gamedata::damage_contributions_of(
+            damage_contributions: damage_inputs::damage_contributions_of(
                 &character.stat_sources,
                 &buffs,
                 &character.equipment,
                 skill.dependency,
             ),
-            element_value: gamedata::element_value_for(
+            element_value: damage_inputs::element_value_for(
                 &character.game_character_id,
                 &character.equipment,
                 &character.stat_sources,
@@ -1616,6 +1566,115 @@ fn weapon_update_changes(
         .collect()
 }
 
+/// 「候補を試算する」コマンド(list_upgrade_candidates / list_enchant_gains)が共有する、
+/// キャラ・スキル・コンテンツから決まる材料。
+struct CandidateContext {
+    content: Content,
+    enemy: Enemy,
+    skill: Skill,
+    style_dependency: Option<domain::SkillDependency>,
+    equipment_catalog: Vec<EquipmentItem>,
+    /// 部位ごとのエンチャント実測上限(カタログ品が付いている部位だけ)
+    enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)>,
+    /// エンチャント候補にするステ。このコンテンツで実際に振る主軸スキルの依存ステだけに絞る
+    /// (突き/斬り/魔攻/魔防の 4 種全部を出すと、主軸に効かない提案が混ざる)
+    enchant_allowed_keys: Vec<&'static str>,
+}
+
+fn candidate_context(
+    character: &NewCharacter,
+    buffs: &BuffSelection,
+    skill_id: &str,
+    content_id: &str,
+) -> CommandResult<CandidateContext> {
+    validate_character_draft(character, buffs)?;
+    let (content, enemy) = find_content_with_enemy(content_id)?;
+    let skill = find_skill(skill_id)?;
+    let style_dependency = character
+        .main_skill_id
+        .as_deref()
+        .map(find_skill)
+        .transpose()?
+        .map(|s| s.dependency);
+    let equipment_catalog = gamedata::equipment_catalog();
+    let enchant_caps = character
+        .equipment
+        .parts
+        .iter()
+        .into_iter()
+        .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
+        .collect();
+    let enchant_allowed_keys =
+        domain::enchant_dependency_keys(&gamedata::equipment_coefficients(skill.dependency));
+    Ok(CandidateContext {
+        content,
+        enemy,
+        skill,
+        style_dependency,
+        equipment_catalog,
+        enchant_caps,
+        enchant_allowed_keys,
+    })
+}
+
+/// 候補 1 件を「その装備・共通スキルで撃ったら」で試算する。
+struct CandidateTrial<'a> {
+    ctx: &'a CandidateContext,
+    character: &'a NewCharacter,
+    buffs: &'a BuffSelection,
+    combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
+    temporary_adjustments: Option<&'a domain::Adjustments>,
+}
+
+impl CandidateTrial<'_> {
+    /// 表記ダメージ(到達判定の基準)と、実際に敵へ入る総量の 2 本。シャープネスビジョンや
+    /// 武器強化のように**表記は動かさず総量だけ増やす**候補があるので、片方だけでは拾えない
+    fn damage(
+        &self,
+        equipment: domain::Equipment,
+        common_skills: CommonSkills,
+    ) -> CommandResult<(i64, i64)> {
+        let c = self.character;
+        let (material, target) = build_damage_input(
+            &c.base_stats,
+            &c.game_character_id,
+            self.ctx.style_dependency,
+            &c.stat_sources,
+            self.buffs,
+            equipment,
+            common_skills,
+            c.awakening,
+            self.ctx.skill.clone(),
+            self.ctx.enemy.clone(),
+            &self.ctx.content,
+            self.combo_count,
+            self.combo_skill_type,
+            self.temporary_adjustments.cloned(),
+        )?;
+        let result = domain::calculate_damage(&material, &target);
+        Ok((result.per_hit_primary, result.total_primary))
+    }
+
+    fn outcomes(
+        &self,
+        changes: &[domain::CandidateChange],
+    ) -> CommandResult<Vec<domain::CandidateOutcome>> {
+        changes
+            .iter()
+            .map(|change| {
+                let (per_hit_primary, total_primary) =
+                    self.damage(change.equipment.clone(), change.common_skills)?;
+                Ok(domain::CandidateOutcome {
+                    id: change.id.clone(),
+                    per_hit_primary,
+                    total_primary,
+                })
+            })
+            .collect()
+    }
+}
+
 pub fn list_upgrade_candidates(
     character: NewCharacter,
     buffs: BuffSelection,
@@ -1625,89 +1684,42 @@ pub fn list_upgrade_candidates(
     combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<Vec<UpgradeCandidate>> {
-    validate_character_draft(&character, &buffs)?;
-    let content = find_content(&content_id)?;
-    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
-    let skill = find_skill(&skill_id)?;
-    let style_dependency = character
-        .main_skill_id
-        .as_deref()
-        .map(find_skill)
-        .transpose()?
-        .map(|s| s.dependency);
-
-    // 表記ダメージ(到達判定の基準)と、実際に敵へ入る総量の 2 本を返す。シャープネスビジョンや
-    // 武器強化のように**表記は動かさず総量だけ増やす**候補があるので、片方だけでは拾えない
-    let damage =
-        |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<(i64, i64)> {
-            let (material, target) = build_damage_input(
-                &character.base_stats,
-                &character.game_character_id,
-                style_dependency,
-                &character.stat_sources,
-                &buffs,
-                equipment,
-                common_skills,
-                character.awakening,
-                skill.clone(),
-                enemy.clone(),
-                &content,
-                combo_count,
-                combo_skill_type,
-                temporary_adjustments.clone(),
-            )?;
-            let result = domain::calculate_damage(&material, &target);
-            Ok((result.per_hit_primary, result.total_primary))
-        };
-
-    let (base_per_hit, base_total) = damage(character.equipment.clone(), character.common_skills)?;
-
-    let equipment_catalog = gamedata::equipment_catalog();
-    let resolved_enhance_type = |slot: domain::PartSlot| -> Option<domain::EquipmentEnhanceType> {
-        let part = character.equipment.parts.get(slot).selected()?;
-        part.enhance_type.or_else(|| {
-            part.item_id
-                .as_deref()
-                .and_then(gamedata::equipment_enhance_type)
-        })
+    let ctx = candidate_context(&character, &buffs, &skill_id, &content_id)?;
+    let trial = CandidateTrial {
+        ctx: &ctx,
+        character: &character,
+        buffs: &buffs,
+        combo_count,
+        combo_skill_type,
+        temporary_adjustments: temporary_adjustments.as_ref(),
     };
-    let enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)> = character
-        .equipment
-        .parts
-        .iter()
-        .into_iter()
-        .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
-        .collect();
-    // エンチャント候補はこのコンテンツで実際に振る主軸スキル(skill_id)の依存ステだけに絞る
-    // (突き/斬り/魔攻/魔防の 4 種全部を出すと、主軸に効かない提案が混ざる)。
-    let enchant_allowed_keys =
-        domain::enchant_dependency_keys(&gamedata::equipment_coefficients(skill.dependency));
+    let (base_per_hit, base_total) =
+        trial.damage(character.equipment.clone(), character.common_skills)?;
 
+    let resolved_enhance_type = |slot: domain::PartSlot| -> Option<domain::EquipmentEnhanceType> {
+        character
+            .equipment
+            .parts
+            .get(slot)
+            .selected()?
+            .resolved_enhance_type(gamedata::equipment_enhance_type)
+    };
     let mut changes = domain::list_candidate_changes(
         &character.equipment,
         &character.common_skills,
         resolved_enhance_type(domain::PartSlot::Weapon),
         resolved_enhance_type(domain::PartSlot::Armor),
-        &enchant_caps,
-        &enchant_allowed_keys,
+        &ctx.enchant_caps,
+        &ctx.enchant_allowed_keys,
     );
     changes.extend(weapon_update_changes(
         &character.equipment,
         character.common_skills,
-        &equipment_catalog,
+        &ctx.equipment_catalog,
     ));
-
-    let mut outcomes = Vec::with_capacity(changes.len());
-    for change in &changes {
-        let (per_hit_primary, total_primary) =
-            damage(change.equipment.clone(), change.common_skills)?;
-        outcomes.push(domain::CandidateOutcome {
-            id: change.id.clone(),
-            per_hit_primary,
-            total_primary,
-        });
-    }
-    let ranked = domain::rank_candidates(outcomes, base_per_hit, base_total, content.need_per_hit);
+    let outcomes = trial.outcomes(&changes)?;
+    let ranked =
+        domain::rank_candidates(outcomes, base_per_hit, base_total, ctx.content.need_per_hit);
 
     let mut by_id: std::collections::HashMap<String, domain::CandidateChange> =
         changes.into_iter().map(|c| (c.id.clone(), c)).collect();
@@ -1757,69 +1769,25 @@ pub fn list_enchant_gains(
     combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<Vec<EnchantGain>> {
-    validate_character_draft(&character, &buffs)?;
-    let content = find_content(&content_id)?;
-    let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
-    let skill = find_skill(&skill_id)?;
-    let style_dependency = character
-        .main_skill_id
-        .as_deref()
-        .map(find_skill)
-        .transpose()?
-        .map(|s| s.dependency);
-
-    let per_hit =
-        |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<(i64, i64)> {
-            let (material, target) = build_damage_input(
-                &character.base_stats,
-                &character.game_character_id,
-                style_dependency,
-                &character.stat_sources,
-                &buffs,
-                equipment,
-                common_skills,
-                character.awakening,
-                skill.clone(),
-                enemy.clone(),
-                &content,
-                combo_count,
-                combo_skill_type,
-                temporary_adjustments.clone(),
-            )?;
-            let result = domain::calculate_damage(&material, &target);
-            Ok((result.per_hit_primary, result.total_primary))
-        };
-
-    let (base_per_hit, base_total) = per_hit(character.equipment.clone(), character.common_skills)?;
-
-    let equipment_catalog = gamedata::equipment_catalog();
-    let enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)> = character
-        .equipment
-        .parts
-        .iter()
-        .into_iter()
-        .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
-        .collect();
-    let enchant_allowed_keys =
-        domain::enchant_dependency_keys(&gamedata::equipment_coefficients(skill.dependency));
+    let ctx = candidate_context(&character, &buffs, &skill_id, &content_id)?;
+    let trial = CandidateTrial {
+        ctx: &ctx,
+        character: &character,
+        buffs: &buffs,
+        combo_count,
+        combo_skill_type,
+        temporary_adjustments: temporary_adjustments.as_ref(),
+    };
+    let (base_per_hit, base_total) =
+        trial.damage(character.equipment.clone(), character.common_skills)?;
 
     let changes = domain::enchant_candidates(
         &character.equipment,
         &character.common_skills,
-        &enchant_caps,
-        &enchant_allowed_keys,
+        &ctx.enchant_caps,
+        &ctx.enchant_allowed_keys,
     );
-
-    let mut outcomes = Vec::with_capacity(changes.len());
-    for change in &changes {
-        let (per_hit_primary, total_primary) =
-            per_hit(change.equipment.clone(), change.common_skills)?;
-        outcomes.push(domain::CandidateOutcome {
-            id: change.id.clone(),
-            per_hit_primary,
-            total_primary,
-        });
-    }
+    let outcomes = trial.outcomes(&changes)?;
     let ranked = domain::rank_candidates(outcomes, base_per_hit, base_total, None);
 
     // id は "enchant-{slot:?}-{key}"(小文字化)形式だが、`{:?}` は元の PartSlot の

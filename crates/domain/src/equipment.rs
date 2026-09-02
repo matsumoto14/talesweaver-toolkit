@@ -10,7 +10,7 @@ use crate::damage::DamageContribution;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::element::{Element, ElementValues};
+use crate::element::{Element, ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX};
 use crate::equipment_class::{WeaponClass, WeaponSystem};
 use crate::random_option::{
     RandomOptionDef, RandomOptionError, RandomOptionSlot, RandomOptionTotals,
@@ -104,6 +104,26 @@ pub enum EnhanceGrade {
 }
 
 impl EnhanceGrade {
+    pub const ALL: [EnhanceGrade; 5] = [
+        EnhanceGrade::Lowest,
+        EnhanceGrade::Low,
+        EnhanceGrade::Middle,
+        EnhanceGrade::High,
+        EnhanceGrade::Highest,
+    ];
+
+    /// 追加固定ダメージ / 追加 HP の実測値に最も近い等級(旧データの等級復元用)。
+    /// `predict` はその等級で強化したときの値(倍率表に無い段は `None`)。どの等級も
+    /// 予測できなければ「最上」
+    pub fn closest_to(actual: i64, predict: impl Fn(EnhanceGrade) -> Option<i64>) -> EnhanceGrade {
+        EnhanceGrade::ALL
+            .into_iter()
+            .filter_map(|grade| predict(grade).map(|value| (grade, (value - actual).abs())))
+            .min_by_key(|(_, distance)| *distance)
+            .map(|(grade, _)| grade)
+            .unwrap_or(EnhanceGrade::Highest)
+    }
+
     pub fn percentile(self) -> f64 {
         match self {
             Self::Lowest => 0.10,
@@ -550,6 +570,16 @@ impl EquipmentPart {
                 .map(|i| i.enchant_caps()),
             None => self.enchant_caps,
         }
+    }
+
+    /// 装備強化の補正式。ユーザーが選んだ `enhance_type` を優先し、無ければカタログ品の値
+    /// (`lookup` は item id → 補正式。gamedata の `equipment_enhance_type`)。どちらも無ければ None
+    pub fn resolved_enhance_type(
+        &self,
+        lookup: impl Fn(&str) -> Option<EquipmentEnhanceType>,
+    ) -> Option<EquipmentEnhanceType> {
+        self.enhance_type
+            .or_else(|| self.item_id.as_deref().and_then(lookup))
     }
 
     /// この部位の武器系統。カタログ品はカタログの武器種から、カタログ外は
@@ -1127,8 +1157,15 @@ impl std::ops::Deref for EquipmentPartList {
             .expect("EquipmentPartList selected_id invariant")
     }
 }
-impl std::ops::DerefMut for EquipmentPartList {
-    fn deref_mut(&mut self) -> &mut Self::Target {
+
+impl EquipmentPartList {
+    pub fn selected(&self) -> Option<&EquipmentPart> {
+        self.selected_id
+            .and_then(|id| self.registered.iter().find(|p| p.id == id))
+    }
+    /// 選択中の部位。未選択なら中立値の部位を 1 つ登録して選択する(**保存データが増える**
+    /// 操作なので、読み取りのつもりで使わない。書き込みの経路だけが明示的に呼ぶ)
+    pub fn selected_or_register(&mut self) -> &mut EquipmentPart {
         if self.selected().is_none() {
             let id = self.registered.iter().map(|p| p.id).max().unwrap_or(0) + 1;
             let mut part = EquipmentPart::default();
@@ -1139,13 +1176,7 @@ impl std::ops::DerefMut for EquipmentPartList {
         self.selected_mut()
             .expect("EquipmentPartList selected_id invariant")
     }
-}
 
-impl EquipmentPartList {
-    pub fn selected(&self) -> Option<&EquipmentPart> {
-        self.selected_id
-            .and_then(|id| self.registered.iter().find(|p| p.id == id))
-    }
     pub fn selected_mut(&mut self) -> Option<&mut EquipmentPart> {
         let id = self.selected_id?;
         self.registered.iter_mut().find(|p| p.id == id)
@@ -1849,7 +1880,7 @@ impl Equipment {
                     && (part.item_id.is_some()
                         || part.custom_name.as_deref().is_some_and(|n| !n.is_empty()))
             }) {
-                *total.get_mut(element) += 9;
+                *total.get_mut(element) += EQUIPMENT_ELEMENT_VALUE_MAX;
             }
         }
         total
@@ -1869,10 +1900,6 @@ impl Equipment {
         let mut copy = self.clone();
         copy.parts.get_mut(slot).selected_id = None;
         copy
-    }
-
-    pub fn without_part(&self, slot: PartSlot) -> Equipment {
-        self.without_selected_part(slot)
     }
 
     pub fn iter_selected(&self) -> impl Iterator<Item = (PartSlot, &EquipmentPart)> {
@@ -2557,8 +2584,8 @@ mod tests {
                 ..Default::default()
             },
         );
-        eq.parts.weapon.abilities = vec!["sharp-blade-e".to_string()];
-        eq.parts.armor.base = EquipmentValues {
+        eq.parts.weapon.selected_or_register().abilities = vec!["sharp-blade-e".to_string()];
+        eq.parts.armor.selected_or_register().base = EquipmentValues {
             magic_defense: 50,
             ..Default::default()
         };
@@ -2631,8 +2658,8 @@ mod tests {
     #[test]
     fn カフスのアビリティ実測値は装備基本値へ入る() {
         let mut eq = Equipment::default();
-        eq.parts.shield_plus.abilities = vec!["mystic-mine-sharp-blade".into()];
-        eq.parts.shield_plus.ability_values = vec![EquipmentAbilityAdditional {
+        eq.parts.shield_plus.selected_or_register().abilities = vec!["mystic-mine-sharp-blade".into()];
+        eq.parts.shield_plus.selected_or_register().ability_values = vec![EquipmentAbilityAdditional {
             ability_id: "mystic-mine-sharp-blade".into(),
             kind: EquipmentAbilityAdditionalKind::Slash,
             value: 13,
@@ -2644,7 +2671,7 @@ mod tests {
     fn 新装着アビリティのランダム追加は補正値_w_x3へ入る() {
         use EquipmentAbilityAdditionalKind::*;
         let mut eq = equipment_with(EquipmentValues::default(), EquipmentValues::default());
-        eq.parts.weapon.ability_additions = vec![
+        eq.parts.weapon.selected_or_register().ability_additions = vec![
             EquipmentAbilityAdditional {
                 ability_id: "night-star-sharp-blade".into(),
                 kind: Slash,
@@ -2660,7 +2687,7 @@ mod tests {
         assert_eq!(base.slash, 18);
         assert_eq!(base.accuracy, 16);
 
-        eq.parts.weapon.ability_additions = vec![
+        eq.parts.weapon.selected_or_register().ability_additions = vec![
             EquipmentAbilityAdditional {
                 ability_id: "night-star-sharp-blade".into(),
                 kind: FixedDamage,
@@ -2684,9 +2711,9 @@ mod tests {
     #[test]
     fn 武器アビリティは3枠まで() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.abilities = vec!["a".into(), "b".into(), "c".into()];
+        eq.parts.weapon.selected_or_register().abilities = vec!["a".into(), "b".into(), "c".into()];
         assert!(eq.validate().is_ok());
-        eq.parts.weapon.abilities.push("d".into());
+        eq.parts.weapon.selected_or_register().abilities.push("d".into());
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::TooManyAbilities {
@@ -2699,21 +2726,21 @@ mod tests {
     #[test]
     fn 値域違反は拒否する() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.base.thrust = EQUIPMENT_VALUE_MAX + 1;
+        eq.parts.weapon.selected_or_register().base.thrust = EQUIPMENT_VALUE_MAX + 1;
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::ValueOutOfRange { .. })
         ));
 
         let mut eq = Equipment::default();
-        eq.parts.weapon.enchant.magic_defense = -1;
+        eq.parts.weapon.selected_or_register().enchant.magic_defense = -1;
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::ValueOutOfRange { .. })
         ));
 
         let mut eq = Equipment::default();
-        eq.parts.weapon.base.thrust = EQUIPMENT_VALUE_MAX;
+        eq.parts.weapon.selected_or_register().base.thrust = EQUIPMENT_VALUE_MAX;
         assert!(eq.validate().is_ok());
     }
 
@@ -2752,7 +2779,7 @@ mod tests {
             |v: &mut EquipmentValues, x| v.agility = x,
         ] {
             let mut eq = Equipment::default();
-            setter(&mut eq.parts.weapon.base, over);
+            setter(&mut eq.parts.weapon.selected_or_register().base, over);
             assert!(matches!(
                 eq.validate(),
                 Err(EquipmentError::ValueOutOfRange { .. })
@@ -2763,8 +2790,8 @@ mod tests {
     #[test]
     fn 選択属性は実装備の対象部位へ9ずつ自動反映される() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.item_id = Some("weapon".into());
-        eq.parts.armor.custom_name = Some("custom armor".into());
+        eq.parts.weapon.selected_or_register().item_id = Some("weapon".into());
+        eq.parts.armor.selected_or_register().custom_name = Some("custom armor".into());
         assert!(eq.validate().is_ok());
         let values = eq.element_values(Some(Element::Water));
         assert_eq!(values.get(Element::Water), 18);
@@ -2775,7 +2802,7 @@ mod tests {
     #[test]
     fn 無属性と未装備には属性強化を反映しない() {
         let mut eq = Equipment::default();
-        eq.parts.shield_plus.item_id = Some("cuffs".into());
+        eq.parts.shield_plus.selected_or_register().item_id = Some("cuffs".into());
         assert_eq!(
             eq.element_values(Some(Element::Neutral)),
             ElementValues::default()
@@ -2789,7 +2816,7 @@ mod tests {
     #[test]
     fn 武器以外の強化レベルは拒否する() {
         let mut eq = Equipment::default();
-        eq.parts.helm.enhance_level = 1;
+        eq.parts.helm.selected_or_register().enhance_level = 1;
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::EnhanceNotAllowed {
@@ -2798,18 +2825,18 @@ mod tests {
         ));
 
         let mut eq = Equipment::default();
-        eq.parts.weapon.enhance_level = ENHANCE_LEVEL_MAX;
-        eq.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
-        eq.parts.weapon.enhance_grade = Some(EnhanceGrade::Highest);
+        eq.parts.weapon.selected_or_register().enhance_level = ENHANCE_LEVEL_MAX;
+        eq.parts.weapon.selected_or_register().enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        eq.parts.weapon.selected_or_register().enhance_grade = Some(EnhanceGrade::Highest);
         assert!(eq.validate().is_ok());
         let mut eq2 = Equipment::default();
-        eq2.parts.armor.enhance_level = ENHANCE_LEVEL_MAX;
-        eq2.parts.armor.enhance_type = Some(EquipmentEnhanceType::ArmorLight);
-        eq2.parts.armor.enhance_grade = Some(EnhanceGrade::Highest);
+        eq2.parts.armor.selected_or_register().enhance_level = ENHANCE_LEVEL_MAX;
+        eq2.parts.armor.selected_or_register().enhance_type = Some(EquipmentEnhanceType::ArmorLight);
+        eq2.parts.armor.selected_or_register().enhance_grade = Some(EnhanceGrade::Highest);
         assert!(eq2.validate().is_ok());
 
         let mut over = Equipment::default();
-        over.parts.weapon.enhance_level = ENHANCE_LEVEL_MAX + 1;
+        over.parts.weapon.selected_or_register().enhance_level = ENHANCE_LEVEL_MAX + 1;
         assert!(matches!(
             over.validate(),
             Err(EquipmentError::EnhanceLevelOutOfRange { .. })
@@ -2819,9 +2846,9 @@ mod tests {
     #[test]
     fn 強化等級は12以上だけ許可する() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.enhance_level = 11;
-        eq.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
-        eq.parts.weapon.enhance_grade = Some(EnhanceGrade::Highest);
+        eq.parts.weapon.selected_or_register().enhance_level = 11;
+        eq.parts.weapon.selected_or_register().enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        eq.parts.weapon.selected_or_register().enhance_grade = Some(EnhanceGrade::Highest);
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::EnhanceAddedDamageNotAllowed {
@@ -2831,17 +2858,17 @@ mod tests {
         ));
 
         let mut ok = Equipment::default();
-        ok.parts.weapon.enhance_level = 12;
-        ok.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
-        ok.parts.weapon.enhance_grade = Some(EnhanceGrade::Highest);
+        ok.parts.weapon.selected_or_register().enhance_level = 12;
+        ok.parts.weapon.selected_or_register().enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        ok.parts.weapon.selected_or_register().enhance_grade = Some(EnhanceGrade::Highest);
         assert!(ok.validate().is_ok());
     }
 
     #[test]
     fn 強化12以上は等級必須() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.enhance_level = 12;
-        eq.parts.weapon.enhance_type = Some(EquipmentEnhanceType::WeaponHack);
+        eq.parts.weapon.selected_or_register().enhance_level = 12;
+        eq.parts.weapon.selected_or_register().enhance_type = Some(EquipmentEnhanceType::WeaponHack);
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::EnhanceGradeRequired {
@@ -2854,15 +2881,15 @@ mod tests {
     #[test]
     fn 強化する装備は部位に合う種別が必須() {
         let mut missing = Equipment::default();
-        missing.parts.weapon.enhance_level = 10;
+        missing.parts.weapon.selected_or_register().enhance_level = 10;
         assert!(matches!(
             missing.validate(),
             Err(EquipmentError::EnhanceTypeRequired { .. })
         ));
 
         let mut mismatch = Equipment::default();
-        mismatch.parts.weapon.enhance_level = 10;
-        mismatch.parts.weapon.enhance_type = Some(EquipmentEnhanceType::ArmorMagic);
+        mismatch.parts.weapon.selected_or_register().enhance_level = 10;
+        mismatch.parts.weapon.selected_or_register().enhance_type = Some(EquipmentEnhanceType::ArmorMagic);
         assert!(matches!(
             mismatch.validate(),
             Err(EquipmentError::EnhanceTypeNotAllowed { .. })
@@ -2871,8 +2898,8 @@ mod tests {
 
     #[test]
     fn 対象外部位のアビリティは拒否し兜は許可する() {
-        let mut eq = Equipment::default();
-        eq.parts.body.abilities = vec!["unknown".to_string()];
+        let eq = Equipment::default();
+        eq.parts.body.selected_or_register().abilities = vec!["unknown".to_string()];
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::AbilitiesNotAllowed {
@@ -2881,7 +2908,7 @@ mod tests {
         ));
 
         let mut ok = Equipment::default();
-        ok.parts.helm.abilities = vec!["helm-e-skill-attack".to_string()];
+        ok.parts.helm.selected_or_register().abilities = vec!["helm-e-skill-attack".to_string()];
         assert!(ok.validate().is_ok());
     }
 
@@ -2984,7 +3011,7 @@ mod tests {
     #[test]
     fn シエナのオーラの能力値は武器と盾だけ強化能力値に入る() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.enchant = EquipmentValues {
+        eq.parts.weapon.selected_or_register().enchant = EquipmentValues {
             thrust: 10,
             ..Default::default()
         };
@@ -3258,7 +3285,7 @@ mod tests {
         use crate::thesis_core::{CoreSet, CoreType, ThesisCore, CORE_SLOT_COUNT};
 
         let mut eq = Equipment::default();
-        eq.parts.weapon.enchant = EquipmentValues {
+        eq.parts.weapon.selected_or_register().enchant = EquipmentValues {
             slash: 100,
             ..Default::default()
         };
@@ -3327,8 +3354,8 @@ mod tests {
         use crate::skill::SkillDependency;
 
         let mut eq = Equipment::default();
-        eq.parts.shield.random_options = vec![ro("shield-dep")];
-        eq.parts.hand.random_options = vec![ro("hand-acc")];
+        eq.parts.shield.selected_or_register().random_options = vec![ro("shield-dep")];
+        eq.parts.hand.selected_or_register().random_options = vec![ro("hand-acc")];
         assert!(eq.validate().is_ok());
 
         let totals = eq.random_option_totals(&ro_defs());
@@ -3343,7 +3370,7 @@ mod tests {
     #[test]
     fn カタログに無いランダムオプションidは集計されない() {
         let mut eq = Equipment::default();
-        eq.parts.shield.random_options = vec![ro("nope")];
+        eq.parts.shield.selected_or_register().random_options = vec![ro("nope")];
         assert_eq!(
             eq.random_option_totals(&ro_defs()),
             RandomOptionTotals::default()
@@ -3355,7 +3382,7 @@ mod tests {
     fn 効果とafはランダムオプションを持てない() {
         for slot in [PartSlot::Effect, PartSlot::Artifact] {
             let mut eq = Equipment::default();
-            eq.parts.get_mut(slot).random_options = vec![ro("shield-dep")];
+            eq.parts.get_mut(slot).selected_or_register().random_options = vec![ro("shield-dep")];
             assert!(matches!(
                 eq.validate(),
                 Err(EquipmentError::RandomOption(
@@ -3370,7 +3397,7 @@ mod tests {
         let mut eq = Equipment::default();
         let mut option = ro("shield-dep");
         option.value = Some(RANDOM_OPTION_VALUE_MAX + 1.0);
-        eq.parts.shield.random_options = vec![option];
+        eq.parts.shield.selected_or_register().random_options = vec![option];
         assert!(matches!(
             eq.validate(),
             Err(EquipmentError::RandomOption(
@@ -3405,7 +3432,7 @@ mod tests {
     #[test]
     fn 称号は基本能力値に合流する() {
         let mut eq = Equipment::default();
-        eq.parts.weapon.base = EquipmentValues {
+        eq.parts.weapon.selected_or_register().base = EquipmentValues {
             thrust: 100,
             ..Default::default()
         };
