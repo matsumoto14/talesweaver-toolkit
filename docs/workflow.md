@@ -51,7 +51,7 @@ CLAUDE.md「実行ワークフロー」の詳細と、ユーザー側の運用�
 ## Context 管理(ユーザー操作の推奨)
 
 - ひとまとまりの作業(goal)を完了して commit したら `/clear`。1 セッションに複数 goal を載せない。
-- 自動 compact は `~/.claude/settings.json` の `autoCompactWindow`(200k)で発動する。区切りで手動 `/compact` してもよいが必須ではない。
+- モデルは `fable`(200k)。`fable[1m]` は 200k 超の入力が割増になり、`autoCompactWindow` 設定も効かず 768k まで肥大した実績があるので使わない(2026-09-02)。auto compact は 200k の上限で発動する。
 - 放置したセッションを再開するときは、続きが本当に必要か考え、必要なら最初に `/compact`。
 - `/code-review` は専用セッションで起動する(内部で 17 本前後の Agent が起動する)。
 
