@@ -2591,7 +2591,7 @@ mod tests {
 
         let mut over_rune = new_character("x");
         over_rune.stat_sources.rune_levels = RuneLevels {
-            hack: RuneLevels::MAX_LEVEL + 1,
+            hack: domain::RUNE_LEVEL_MAX + 1,
             ..Default::default()
         };
         assert!(matches!(
@@ -2601,7 +2601,7 @@ mod tests {
 
         let mut over_relic = new_character("x");
         over_relic.stat_sources.sacred_relic = SacredRelic {
-            int: SacredRelic::MAX_STAGE + 1,
+            int: domain::SACRED_RELIC_STAGE_MAX + 1,
             ..Default::default()
         };
         assert!(matches!(

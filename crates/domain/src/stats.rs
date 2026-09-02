@@ -43,6 +43,74 @@ impl StatKind {
     }
 }
 
+/// ステごとの値 1 組(`StatKind` で添字する)。ペット S スキル・ルーン・カード・聖物・
+/// 一時調整など「7 ステそれぞれに 1 値」を持つものはすべてこの 1 型で表す。
+/// JSON は `{stab, hack, int, def, mr, dex, agi}` のオブジェクト(保存データ・画面の
+/// `Record<StatKind, T>` と同じ形)なので、フィールド名はそのまま公開する。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub struct PerStat<T> {
+    pub stab: T,
+    pub hack: T,
+    pub int: T,
+    pub def: T,
+    pub mr: T,
+    pub dex: T,
+    pub agi: T,
+}
+
+impl<T> PerStat<T> {
+    pub fn from_fn(mut f: impl FnMut(StatKind) -> T) -> Self {
+        PerStat {
+            stab: f(StatKind::Stab),
+            hack: f(StatKind::Hack),
+            int: f(StatKind::Int),
+            def: f(StatKind::Def),
+            mr: f(StatKind::Mr),
+            dex: f(StatKind::Dex),
+            agi: f(StatKind::Agi),
+        }
+    }
+
+    pub fn get_ref(&self, kind: StatKind) -> &T {
+        match kind {
+            StatKind::Stab => &self.stab,
+            StatKind::Hack => &self.hack,
+            StatKind::Int => &self.int,
+            StatKind::Def => &self.def,
+            StatKind::Mr => &self.mr,
+            StatKind::Dex => &self.dex,
+            StatKind::Agi => &self.agi,
+        }
+    }
+
+    pub fn get_mut(&mut self, kind: StatKind) -> &mut T {
+        match kind {
+            StatKind::Stab => &mut self.stab,
+            StatKind::Hack => &mut self.hack,
+            StatKind::Int => &mut self.int,
+            StatKind::Def => &mut self.def,
+            StatKind::Mr => &mut self.mr,
+            StatKind::Dex => &mut self.dex,
+            StatKind::Agi => &mut self.agi,
+        }
+    }
+
+    pub fn set(&mut self, kind: StatKind, value: T) {
+        *self.get_mut(kind) = value;
+    }
+
+    /// `StatKind::ALL` の順に (ステ, 値) を返す。
+    pub fn iter(&self) -> impl Iterator<Item = (StatKind, &T)> {
+        StatKind::ALL.into_iter().map(move |kind| (kind, self.get_ref(kind)))
+    }
+}
+
+impl<T: Copy> PerStat<T> {
+    pub fn get(&self, kind: StatKind) -> T {
+        *self.get_ref(kind)
+    }
+}
+
 /// 素ステ(振り分け分)の上限。wiki に明記なし。レベル上限でもある(docs/claude/goals/2026-08-21-character-stat-sources.md)。下限は 1。
 pub const BASE_STAT_MAX: u32 = 310;
 

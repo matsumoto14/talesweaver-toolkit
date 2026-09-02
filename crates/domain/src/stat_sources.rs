@@ -36,7 +36,7 @@ use crate::soul_link::{
     SOUL_LINK_FINAL_DAMAGE_LEVEL_MAX, SOUL_LINK_WEAPON_ENHANCE_LEVEL_MAX,
 };
 use crate::stats::{
-    effective_stats, BaseStats, BaseStatsError, EffectiveStats, StatKind, StatModifierSet,
+    effective_stats, BaseStats, BaseStatsError, EffectiveStats, PerStat, StatKind, StatModifierSet,
     StatTrace, BASE_STAT_MAX, MULTIPLIER_B_MIN,
 };
 use crate::thesis_core::{
@@ -96,59 +96,12 @@ fn pet_skill_tier_bonuses() -> Vec<PetSkillTierBonus> {
 }
 
 /// ペット S スキル。ステごとに 1 つ(上位段階を選ぶと置き換わる。加算にはならない)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct PetSkills {
-    pub stab: Option<PetSkillTier>,
-    pub hack: Option<PetSkillTier>,
-    pub int: Option<PetSkillTier>,
-    pub def: Option<PetSkillTier>,
-    pub mr: Option<PetSkillTier>,
-    pub dex: Option<PetSkillTier>,
-    pub agi: Option<PetSkillTier>,
-}
-
-impl PetSkills {
-    pub fn get(&self, kind: StatKind) -> Option<PetSkillTier> {
-        match kind {
-            StatKind::Stab => self.stab,
-            StatKind::Hack => self.hack,
-            StatKind::Int => self.int,
-            StatKind::Def => self.def,
-            StatKind::Mr => self.mr,
-            StatKind::Dex => self.dex,
-            StatKind::Agi => self.agi,
-        }
-    }
-}
+pub type PetSkills = PerStat<Option<PetSkillTier>>;
 
 /// ルーンスキル(閃光/斬撃/英知/才気/石壁/魔壁/瞬発、wiki: ルーンマスター#skill_atk)。
 /// +1/Lv、Lv20 上限。「装備可能ステには影響しない」固定値層。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct RuneLevels {
-    pub stab: u8,
-    pub hack: u8,
-    pub int: u8,
-    pub def: u8,
-    pub mr: u8,
-    pub dex: u8,
-    pub agi: u8,
-}
-
-impl RuneLevels {
-    pub const MAX_LEVEL: u8 = 20;
-
-    pub fn get(&self, kind: StatKind) -> u8 {
-        match kind {
-            StatKind::Stab => self.stab,
-            StatKind::Hack => self.hack,
-            StatKind::Int => self.int,
-            StatKind::Def => self.def,
-            StatKind::Mr => self.mr,
-            StatKind::Dex => self.dex,
-            StatKind::Agi => self.agi,
-        }
-    }
-}
+pub type RuneLevels = PerStat<u8>;
+pub const RUNE_LEVEL_MAX: u8 = 20;
 
 /// クラウン(wiki: クラウン)。週次ランク報酬+名声強化で、シーズンごとに戻る。
 /// 名声強化は +10 刻みで、選択報酬に指定した 1 ステだけ上限が 100 から 300 に伸びる。
@@ -194,74 +147,26 @@ impl Crown {
 
 /// モンスターカード(wiki: ステータス「固定値増加/減少」の「カード装着」/ モンスターブック)。
 /// 装着したカードのステータスがそのまま乗る。ステごと 0..=70、**固定値層**(倍率A の前)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct MonsterCards {
-    pub stab: u32,
-    pub hack: u32,
-    pub int: u32,
-    pub def: u32,
-    pub mr: u32,
-    pub dex: u32,
-    pub agi: u32,
-}
-
-impl MonsterCards {
-    /// wiki ステータス「モンスターカード / カード装着 / +0〜70」。
-    pub const MAX_VALUE: u32 = 70;
-
-    pub fn get(&self, kind: StatKind) -> u32 {
-        match kind {
-            StatKind::Stab => self.stab,
-            StatKind::Hack => self.hack,
-            StatKind::Int => self.int,
-            StatKind::Def => self.def,
-            StatKind::Mr => self.mr,
-            StatKind::Dex => self.dex,
-            StatKind::Agi => self.agi,
-        }
-    }
-}
+pub type MonsterCards = PerStat<u32>;
+/// wiki ステータス「モンスターカード / カード装着 / +0〜70」。
+pub const MONSTER_CARD_VALUE_MAX: u32 = 70;
 
 /// 神鳥の聖物(wiki: 神鳥の聖物)。ステごと 0..=40 段階、+10 刻みで最終固定値に乗る。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct SacredRelic {
-    pub stab: u8,
-    pub hack: u8,
-    pub int: u8,
-    pub def: u8,
-    pub mr: u8,
-    pub dex: u8,
-    pub agi: u8,
+pub type SacredRelic = PerStat<u8>;
+pub const SACRED_RELIC_STAGE_MAX: u8 = 40;
+/// 1 段階あたりの最終固定値。UI は `StatLimits::sacred_relic_value_per_stage` を参照する
+pub const SACRED_RELIC_VALUE_PER_STAGE: i64 = 10;
+
+/// 段階を最終固定値(0..=+400)に変換する。
+pub fn sacred_relic_value(stage: u8) -> i64 {
+    i64::from(stage) * SACRED_RELIC_VALUE_PER_STAGE
 }
 
-impl SacredRelic {
-    pub const MAX_STAGE: u8 = 40;
-    /// 1 段階あたりの最終固定値。UI は `StatLimits::sacred_relic_value_per_stage` を参照する
-    pub const VALUE_PER_STAGE: i64 = 10;
-
-    pub fn get(&self, kind: StatKind) -> u8 {
-        match kind {
-            StatKind::Stab => self.stab,
-            StatKind::Hack => self.hack,
-            StatKind::Int => self.int,
-            StatKind::Def => self.def,
-            StatKind::Mr => self.mr,
-            StatKind::Dex => self.dex,
-            StatKind::Agi => self.agi,
-        }
-    }
-
-    /// 段階を最終固定値(0..=+400)に変換する。
-    pub fn value(&self, kind: StatKind) -> i64 {
-        i64::from(self.get(kind)) * Self::VALUE_PER_STAGE
-    }
-
-    /// 最終固定値から段階へ逆算する(UI の「実際に増える値」入力用)。範囲外は clamp し、
-    /// 1 段階に満たない端数は切り捨てる(他の domain 換算と同じ floor 規約)。
-    pub fn stage_from_value(value: i64) -> u8 {
-        let max_value = i64::from(Self::MAX_STAGE) * Self::VALUE_PER_STAGE;
-        (value.clamp(0, max_value) / Self::VALUE_PER_STAGE) as u8
-    }
+/// 最終固定値から段階へ逆算する(UI の「実際に増える値」入力用)。範囲外は clamp し、
+/// 1 段階に満たない端数は切り捨てる(他の domain 換算と同じ floor 規約)。
+pub fn sacred_relic_stage_from_value(value: i64) -> u8 {
+    let max_value = i64::from(SACRED_RELIC_STAGE_MAX) * SACRED_RELIC_VALUE_PER_STAGE;
+    (value.clamp(0, max_value) / SACRED_RELIC_VALUE_PER_STAGE) as u8
 }
 
 /// 能力値計算の 5 レイヤー(wiki §2)。gamedata の `BuffDefinition::layer` と共有する。
@@ -438,42 +343,10 @@ pub struct StatAdjustment {
     pub pin: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct Adjustments {
-    pub stab: StatAdjustment,
-    pub hack: StatAdjustment,
-    pub int: StatAdjustment,
-    pub def: StatAdjustment,
-    pub mr: StatAdjustment,
-    pub dex: StatAdjustment,
-    pub agi: StatAdjustment,
-}
+/// ステごとの自由な調整(検証・未収録バフ用)。計算リクエストにのみ乗り、キャラには保存しない。
+pub type Adjustments = PerStat<StatAdjustment>;
 
-impl Adjustments {
-    pub fn get(&self, kind: StatKind) -> StatAdjustment {
-        match kind {
-            StatKind::Stab => self.stab,
-            StatKind::Hack => self.hack,
-            StatKind::Int => self.int,
-            StatKind::Def => self.def,
-            StatKind::Mr => self.mr,
-            StatKind::Dex => self.dex,
-            StatKind::Agi => self.agi,
-        }
-    }
-
-    pub fn get_mut(&mut self, kind: StatKind) -> &mut StatAdjustment {
-        match kind {
-            StatKind::Stab => &mut self.stab,
-            StatKind::Hack => &mut self.hack,
-            StatKind::Int => &mut self.int,
-            StatKind::Def => &mut self.def,
-            StatKind::Mr => &mut self.mr,
-            StatKind::Dex => &mut self.dex,
-            StatKind::Agi => &mut self.agi,
-        }
-    }
-
+impl PerStat<StatAdjustment> {
     /// `add` は `ADJUSTMENT_ADD_MIN..=ADJUSTMENT_ADD_MAX`、`pin`(指定時)は
     /// `ADJUSTMENT_PIN_MIN..=ADJUSTMENT_PIN_MAX` の範囲であることを検証する。
     pub fn validate(&self) -> Result<(), StatSourceError> {
@@ -549,12 +422,12 @@ impl StatSources {
     pub fn validate(&self) -> Result<(), StatSourceError> {
         for kind in StatKind::ALL {
             let rune = self.rune_levels.get(kind);
-            if rune > RuneLevels::MAX_LEVEL {
+            if rune > RUNE_LEVEL_MAX {
                 return Err(StatSourceError::OutOfRange {
                     source_name: "ルーンスキル",
                     kind,
                     value: u32::from(rune),
-                    max: u32::from(RuneLevels::MAX_LEVEL),
+                    max: u32::from(RUNE_LEVEL_MAX),
                 });
             }
 
@@ -578,22 +451,22 @@ impl StatSources {
             }
 
             let card = self.monster_cards.get(kind);
-            if card > MonsterCards::MAX_VALUE {
+            if card > MONSTER_CARD_VALUE_MAX {
                 return Err(StatSourceError::OutOfRange {
                     source_name: "モンスターカード",
                     kind,
                     value: card,
-                    max: MonsterCards::MAX_VALUE,
+                    max: MONSTER_CARD_VALUE_MAX,
                 });
             }
 
             let relic = self.sacred_relic.get(kind);
-            if relic > SacredRelic::MAX_STAGE {
+            if relic > SACRED_RELIC_STAGE_MAX {
                 return Err(StatSourceError::OutOfRange {
                     source_name: "神鳥の聖物",
                     kind,
                     value: u32::from(relic),
-                    max: u32::from(SacredRelic::MAX_STAGE),
+                    max: u32::from(SACRED_RELIC_STAGE_MAX),
                 });
             }
         }
@@ -891,61 +764,44 @@ pub fn build_modifiers(
         }
     }
 
-    for kind in StatKind::ALL {
-        let level = sources.rune_levels.get(kind);
-        if level > 0 {
-            let bonus = i64::from(level);
-            modifiers.get_mut(kind).fixed += bonus;
+    // 段階のない固定値の補正源(値そのまま)。(名前, 層, ステ別の値)
+    let flat_sources: [(&str, StatLayer, PerStat<i64>); 4] = [
+        (
+            "ルーンスキル",
+            StatLayer::Fixed,
+            PerStat::from_fn(|k| i64::from(sources.rune_levels.get(k))),
+        ),
+        (
+            "モンスターカード",
+            StatLayer::Fixed,
+            PerStat::from_fn(|k| i64::from(sources.monster_cards.get(k))),
+        ),
+        (
+            "クラウン",
+            StatLayer::FinalFixed,
+            PerStat::from_fn(|k| i64::from(sources.crown.get(k))),
+        ),
+        (
+            "神鳥の聖物",
+            StatLayer::FinalFixed,
+            PerStat::from_fn(|k| sacred_relic_value(sources.sacred_relic.get(k))),
+        ),
+    ];
+    for (source, layer, values) in flat_sources {
+        for (kind, &bonus) in values.iter() {
+            if bonus <= 0 {
+                continue;
+            }
+            match layer {
+                StatLayer::Fixed => modifiers.get_mut(kind).fixed += bonus,
+                StatLayer::FinalFixed => modifiers.get_mut(kind).final_fixed += bonus,
+                _ => unreachable!("固定値の補正源は Fixed / FinalFixed だけ"),
+            }
             contributions.push(StatContribution {
-                source: "ルーンスキル".to_string(),
+                source: source.to_string(),
                 group: StatSourceGroup::Other,
                 kind,
-                layer: StatLayer::Fixed,
-                value: bonus as f64,
-            });
-        }
-    }
-
-    for kind in StatKind::ALL {
-        let value = sources.monster_cards.get(kind);
-        if value > 0 {
-            let bonus = i64::from(value);
-            modifiers.get_mut(kind).fixed += bonus;
-            contributions.push(StatContribution {
-                source: "モンスターカード".to_string(),
-                group: StatSourceGroup::Other,
-                kind,
-                layer: StatLayer::Fixed,
-                value: bonus as f64,
-            });
-        }
-    }
-
-    for kind in StatKind::ALL {
-        let value = sources.crown.get(kind);
-        if value > 0 {
-            let bonus = i64::from(value);
-            modifiers.get_mut(kind).final_fixed += bonus;
-            contributions.push(StatContribution {
-                source: "クラウン".to_string(),
-                group: StatSourceGroup::Other,
-                kind,
-                layer: StatLayer::FinalFixed,
-                value: bonus as f64,
-            });
-        }
-    }
-
-    for kind in StatKind::ALL {
-        let stage = sources.sacred_relic.get(kind);
-        if stage > 0 {
-            let bonus = sources.sacred_relic.value(kind);
-            modifiers.get_mut(kind).final_fixed += bonus;
-            contributions.push(StatContribution {
-                source: "神鳥の聖物".to_string(),
-                group: StatSourceGroup::Other,
-                kind,
-                layer: StatLayer::FinalFixed,
+                layer,
                 value: bonus as f64,
             });
         }
@@ -1126,43 +982,8 @@ pub struct AttackPreview {
 }
 
 /// 選択中バフが足した固定値/割合増加が、倍率A/B を持つ補正源(マスタリー等)に増幅されて
-/// 最終能力値へ乗った分(ステ別)。`EffectiveStats` と同じ「ステごとの値」の持ち方。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct BuffStatAmplification {
-    pub stab: i64,
-    pub hack: i64,
-    pub int: i64,
-    pub def: i64,
-    pub mr: i64,
-    pub dex: i64,
-    pub agi: i64,
-}
-
-impl BuffStatAmplification {
-    pub fn get(&self, kind: StatKind) -> i64 {
-        match kind {
-            StatKind::Stab => self.stab,
-            StatKind::Hack => self.hack,
-            StatKind::Int => self.int,
-            StatKind::Def => self.def,
-            StatKind::Mr => self.mr,
-            StatKind::Dex => self.dex,
-            StatKind::Agi => self.agi,
-        }
-    }
-
-    fn set(&mut self, kind: StatKind, value: i64) {
-        match kind {
-            StatKind::Stab => self.stab = value,
-            StatKind::Hack => self.hack = value,
-            StatKind::Int => self.int = value,
-            StatKind::Def => self.def = value,
-            StatKind::Mr => self.mr = value,
-            StatKind::Dex => self.dex = value,
-            StatKind::Agi => self.agi = value,
-        }
-    }
-}
+/// 最終能力値へ乗った分(ステ別)。
+pub type BuffStatAmplification = PerStat<i64>;
 
 /// `preview_effective_stats` の結果(最終能力値・トレース・寄与内訳・攻撃力)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1748,7 +1569,7 @@ pub fn preview_effective_stats(
     };
     let sacred_relic_total: i64 = StatKind::ALL
         .iter()
-        .map(|&k| sources.sacred_relic.value(k))
+        .map(|&k| sacred_relic_value(sources.sacred_relic.get(k)))
         .sum();
     let equipment_base_total = equipment
         .base_totals(abilities, titles)
@@ -2022,12 +1843,12 @@ pub struct EquipmentStatLabel {
 pub fn stat_limits() -> StatLimits {
     StatLimits {
         base_stat_max: BASE_STAT_MAX,
-        rune_level_max: RuneLevels::MAX_LEVEL,
+        rune_level_max: RUNE_LEVEL_MAX,
         crown_base_max: Crown::BASE_MAX_VALUE,
         crown_selected_max: Crown::SELECTED_MAX_VALUE,
         crown_step: Crown::STEP,
-        monster_card_max: MonsterCards::MAX_VALUE,
-        sacred_relic_stage_max: SacredRelic::MAX_STAGE,
+        monster_card_max: MONSTER_CARD_VALUE_MAX,
+        sacred_relic_stage_max: SACRED_RELIC_STAGE_MAX,
         soul_link_equipment_level_max: SOUL_LINK_EQUIPMENT_LEVEL_MAX,
         soul_link_critical_damage_level_max: SOUL_LINK_CRITICAL_DAMAGE_LEVEL_MAX,
         soul_link_final_damage_level_max: SOUL_LINK_FINAL_DAMAGE_LEVEL_MAX,
@@ -2076,7 +1897,7 @@ pub fn stat_limits() -> StatLimits {
         sharpness_vision_rates: crate::common_skill::SHARPNESS_VISION.to_vec(),
         unleash_rates: crate::common_skill::UNLEASH.to_vec(),
         pet_skill_tier_bonus: pet_skill_tier_bonuses(),
-        sacred_relic_value_per_stage: SacredRelic::VALUE_PER_STAGE,
+        sacred_relic_value_per_stage: SACRED_RELIC_VALUE_PER_STAGE,
         core_power_bonus_table: POWER_BONUS.iter().map(|row| row.to_vec()).collect(),
         core_support_bonus_table: SUPPORT_BONUS.iter().map(|row| row.to_vec()).collect(),
         part_slot_rules: PartSlot::ALL
@@ -3292,13 +3113,13 @@ mod tests {
     fn ルーンスキルは0から20の範囲外を拒否する() {
         let mut sources = StatSources {
             rune_levels: RuneLevels {
-                stab: RuneLevels::MAX_LEVEL,
+                stab: RUNE_LEVEL_MAX,
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(sources.validate().is_ok());
-        sources.rune_levels.stab = RuneLevels::MAX_LEVEL + 1;
+        sources.rune_levels.stab = RUNE_LEVEL_MAX + 1;
         let err = sources.validate().unwrap_err();
         assert!(matches!(
             err,
@@ -3370,13 +3191,13 @@ mod tests {
     fn 聖物は0から40段階の範囲外を拒否する() {
         let mut sources = StatSources {
             sacred_relic: SacredRelic {
-                mr: SacredRelic::MAX_STAGE,
+                mr: SACRED_RELIC_STAGE_MAX,
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(sources.validate().is_ok());
-        sources.sacred_relic.mr = SacredRelic::MAX_STAGE + 1;
+        sources.sacred_relic.mr = SACRED_RELIC_STAGE_MAX + 1;
         let err = sources.validate().unwrap_err();
         assert!(matches!(
             err,
@@ -3748,11 +3569,11 @@ mod tests {
     fn stat_limitsは対応する定数と一致する() {
         let limits = stat_limits();
         assert_eq!(limits.base_stat_max, BASE_STAT_MAX);
-        assert_eq!(limits.rune_level_max, RuneLevels::MAX_LEVEL);
+        assert_eq!(limits.rune_level_max, RUNE_LEVEL_MAX);
         assert_eq!(limits.crown_base_max, Crown::BASE_MAX_VALUE);
         assert_eq!(limits.crown_selected_max, Crown::SELECTED_MAX_VALUE);
         assert_eq!(limits.crown_step, Crown::STEP);
-        assert_eq!(limits.sacred_relic_stage_max, SacredRelic::MAX_STAGE);
+        assert_eq!(limits.sacred_relic_stage_max, SACRED_RELIC_STAGE_MAX);
         assert_eq!(
             limits.soul_link_equipment_level_max,
             SOUL_LINK_EQUIPMENT_LEVEL_MAX
@@ -3850,18 +3671,18 @@ mod tests {
 
     #[test]
     fn 聖物の実値は段階へ切り捨てで逆算する() {
-        assert_eq!(SacredRelic::stage_from_value(0), 0);
-        assert_eq!(SacredRelic::stage_from_value(10), 1);
+        assert_eq!(sacred_relic_stage_from_value(0), 0);
+        assert_eq!(sacred_relic_stage_from_value(10), 1);
         // 1 段階(10)に満たない端数は切り捨てる(四捨五入しない)
-        assert_eq!(SacredRelic::stage_from_value(15), 1);
-        assert_eq!(SacredRelic::stage_from_value(19), 1);
+        assert_eq!(sacred_relic_stage_from_value(15), 1);
+        assert_eq!(sacred_relic_stage_from_value(19), 1);
         // 上限を超える値は最大段階に clamp する
         assert_eq!(
-            SacredRelic::stage_from_value(10_000),
-            SacredRelic::MAX_STAGE
+            sacred_relic_stage_from_value(10_000),
+            SACRED_RELIC_STAGE_MAX
         );
         // 負値は 0 に clamp する
-        assert_eq!(SacredRelic::stage_from_value(-5), 0);
+        assert_eq!(sacred_relic_stage_from_value(-5), 0);
     }
 
     #[test]

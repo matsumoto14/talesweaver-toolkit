@@ -127,9 +127,11 @@ pub use stat_sources::{
     StatSourceEffect,
     StatSourceGroup, StatSources, ThesisCoreRegionPreview,
     UltimateSkillPreview,
+    sacred_relic_stage_from_value, sacred_relic_value, MONSTER_CARD_VALUE_MAX, RUNE_LEVEL_MAX,
+    SACRED_RELIC_STAGE_MAX, SACRED_RELIC_VALUE_PER_STAGE,
 };
 pub use stats::{
-    effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, StatKind,
+    effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PerStat, StatKind,
     StatModifierSet, StatModifiers, StatTrace, BASE_STAT_MAX,
 };
 pub use thesis_core::{
