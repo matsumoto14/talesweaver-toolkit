@@ -17,7 +17,7 @@ use crate::critical_rate::{critical_rate, CriticalRate, CriticalRateSources};
 use crate::defense::{accuracy_point, AccuracyBoost, AccuracyCorrection};
 use crate::enemy::Enemy;
 use crate::equipment::{
-    equipment_attack_parts, equipment_values_attack, sum_equipment_value_sources, Equipment,
+    equipment_attack_parts, equipment_values_attack, sum_equipment_value_sources,
     EquipmentAttackPart, EquipmentCoefficients, EquipmentValueSource, EquipmentValues,
 };
 use crate::random_option::RandomOptionTotals;
@@ -28,6 +28,7 @@ use crate::stat_sources::{
     StatSourceEffect,
 };
 use crate::stats::{effective_stats, BaseStats, StatModifierSet, StatTrace};
+use crate::thesis_core::CoreSetBonus;
 
 /// 与ダメージ式のカテゴリ集計 1 行ぶんの寄与(トレース表示用)。「なぜこの数字?」パネルの
 /// カテゴリ材料行の掘り下げ(供給源一覧)に使う。`source` はスキル名・マスタリー名・
@@ -48,18 +49,73 @@ pub const ELEMENT_BONUS_PERCENT_PER_POINT: f64 = 0.625;
 /// 対モンスターの与ダメージ下限。
 const MIN_DAMAGE_TO_MONSTER: i64 = 1;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DamageInput {
+/// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数(wiki: カテゴリA・
+/// 計算式まとめ)。実データは gamedata が持つので、呼び出し側が解決して渡す。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct DependencyCoefficients {
+    pub attack: AttackCoefficients,
+    pub equipment: EquipmentCoefficients,
+    pub accuracy: AccuracyCorrection,
+}
+
+/// キャラ由来の材料(スキル・敵・コンテンツ・コンボによらない)。計算タブの単発計算と
+/// ホームの全コンテンツ評価が同じインスタンスを使う(1 リクエストにつき 1 回組み立てる)。
+#[derive(Debug, Clone)]
+pub struct DamageMaterial {
     pub base_stats: BaseStats,
     pub stat_modifiers: StatModifierSet,
     /// `stat_modifiers` の寄与内訳(ペット/ルーン/クラウン/聖物/バフ/調整値)。トレース表示用
     pub stat_contributions: Vec<StatContribution>,
-    pub coefficients: AttackCoefficients,
-    /// 装備補正。シエナのオーラの攻撃力増加(New1)とテシスコアのセット効果(K/L)に使う
-    pub equipment: Equipment,
     /// 共通スキル(wiki: Skill/共通)。装備攻撃力強化倍率(カテゴリA の内訳)と
     /// シャープネスビジョンの割合追加ダメージ(§5 新-割合)に使う
     pub common_skills: CommonSkills,
+    /// 計算リクエストの一時調整の固定(pin)。加算は `stat_modifiers` に合流済み
+    pub temporary_pins: Option<Adjustments>,
+    /// シエナのオーラの効き(装備から解決済み。`Equipment` 本体はここに持たない)
+    pub siena_attack_rate: f64,
+    pub siena_critical_rate: f64,
+    pub siena_actual_delay_reduction: f64,
+    /// テシスコアのセット効果(全地域共通)
+    pub core_set_bonus: CoreSetBonus,
+    /// 命中P増加(wiki `#AccuracyPoint`)の合計。射手のルーン・ハードウエポン・遊び用チンキ剤・
+    /// 手袋命中率+3%(コラボ手袋)等の Σ。中立値は 0
+    pub accuracy_bonus: i64,
+    /// 命中P割合増加の枠(集中・的中剣)。中立値は `AccuracyBoost::None`
+    pub accuracy_boost: AccuracyBoost,
+    /// 感電・雷電中か(命中P割合減少 ×0.70)。中立値は `false`
+    pub accuracy_shocked: bool,
+    /// ランダムオプションの集計(`Equipment::random_option_totals`。カタログの解決は呼び出し側)。
+    /// カテゴリP(依存別)・カテゴリX5(攻撃ダメージ(特殊))・命中P への加算に使う
+    pub random_options: RandomOptionTotals,
+    /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
+    /// 与ダメージ式の外(A〜Y のいずれにも入らない)。無強化なら 0
+    pub weapon_added_damage: i64,
+    /// 覚醒倍率(wiki: カテゴリN)。1.0 = 補正なし
+    pub awakening_rate: f64,
+    /// 与ダメージの上限(wiki: Quest/覚醒クエスト「ダメージ上限は多段スキルでも1段ごとに適用」)。
+    /// 覚醒段階とエタの意志 Lv で決まる(表は gamedata)
+    pub damage_cap: i64,
+    /// 最終能力値の上限(wiki: Quest/覚醒クエスト「各能力の上限値」/ エタの意志)。
+    /// 同じく覚醒段階とエタの意志 Lv で決まる(表は gamedata)
+    pub stat_cap: i64,
+    /// キャラスキル・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
+    /// カタログの解決は呼び出し側(`CharacterSkills::actual_delay_contributions`)。共通の供給源
+    /// (フルスロットル / ランダムオプション / シエナのオーラ)は `calculate_damage` が自分で集める
+    pub actual_delay_skills: Vec<ActualDelayContribution>,
+    /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)。ペット会心・極のルーン等
+    pub critical_rate_sources: CriticalRateSources,
+    /// 実測のスキル回数表(60 秒あたり)。DPS はここから出す(格子の外だけ式)。実データは gamedata
+    pub skill_uses: SkillUsesTable,
+}
+
+/// 何を(スキル)何に(敵・コンテンツ)どう撃つか(コンボ)。スキル・コンテンツごとに変わる側。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DamageTarget {
+    pub skill: Skill,
+    pub enemy: Enemy,
+    pub combo_count: u32,
+    /// スキル依存種別で決まる係数一式(攻撃力・装備攻撃力・命中P)
+    pub coefficients: DependencyCoefficients,
     /// 装備の基本能力値の供給源内訳(`Equipment::base_sources`。部位実測値・部位アビリティ・
     /// 称号・手首補正。呼び出し側が gamedata の武器アビリティカタログを使って集計して渡す。
     /// domain は gamedata に依存できないため)。合計は `equipment_base_totals()` を使う
@@ -69,23 +125,6 @@ pub struct DamageInput {
     /// オーラ・対象コンテンツの地域のテシスコア。地域の解決は呼び出し側が行う)。合計は
     /// `equipment_enhanced_totals()` を使う
     pub equipment_enhanced_sources: Vec<EquipmentValueSource>,
-    /// 装備攻撃力の係数(wiki: カテゴリA の内訳)。スキル依存種別ごとに gamedata が持つ
-    pub equipment_coefficients: EquipmentCoefficients,
-    /// 命中P補正の係数(wiki: 計算式まとめ の依存表)。スキル依存種別ごとに gamedata が持つ
-    pub accuracy_correction: AccuracyCorrection,
-    /// 命中P増加(wiki `#AccuracyPoint`)の合計。射手のルーン・ハードウエポン・遊び用チンキ剤・
-    /// 手袋命中率+3%(コラボ手袋)等の Σ。中立値は 0
-    #[serde(default)]
-    pub accuracy_bonus: i64,
-    /// 命中P割合増加の枠(集中・的中剣)。中立値は `AccuracyBoost::None`
-    #[serde(default)]
-    pub accuracy_boost: AccuracyBoost,
-    /// 感電・雷電中か(命中P割合減少 ×0.70)。中立値は `false`
-    #[serde(default)]
-    pub accuracy_shocked: bool,
-    /// ランダムオプションの集計(`Equipment::random_option_totals`。カタログの解決は呼び出し側)。
-    /// カテゴリP(依存別)・カテゴリX5(攻撃ダメージ(特殊))・命中P への加算に使う
-    pub random_options: RandomOptionTotals,
     /// 称号の無条件「ダメージ n% 増加」(`title_attack_damage_rate`。カタログの解決は呼び出し側)。
     /// **カテゴリX3 攻撃ダメージ(基本発動)**(上限 +80%)
     pub title_attack_damage_rate: f64,
@@ -96,103 +135,12 @@ pub struct DamageInput {
     /// E1/E2 スキル倍率増加 …)ので、値だけでなく**どのカテゴリか**を持つ。`source` は
     /// トレースの「カテゴリ供給源内訳」にそのまま使う
     pub damage_contributions: Vec<DamageContribution>,
-    /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
-    /// 与ダメージ式の外(A〜Y のいずれにも入らない)。無強化なら 0
-    pub weapon_added_damage: i64,
-    pub skill: Skill,
-    pub enemy: Enemy,
-    /// 覚醒倍率(wiki: カテゴリN)。1.0 = 補正なし
-    pub awakening_rate: f64,
-    /// 与ダメージの上限(wiki: Quest/覚醒クエスト「ダメージ上限は多段スキルでも1段ごとに適用」)。
-    /// 覚醒段階とエタの意志 Lv で決まる(表は gamedata)
-    pub damage_cap: i64,
-    /// 最終能力値の上限(wiki: Quest/覚醒クエスト「各能力の上限値」/ エタの意志)。
-    /// 同じく覚醒段階とエタの意志 Lv で決まる(表は gamedata)
-    pub stat_cap: i64,
-    pub combo_count: u32,
     /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
     /// スキルの属性が未取込(`Skill::element` が `None`)なら 0
     pub element_value: i64,
-    /// 計算リクエストの一時調整(キャラには保存しない)。能力値の固定(pin)を含む
-    pub temporary_pins: Option<Adjustments>,
-    /// クリティカル率の供給源(wiki: 計算式まとめ `#CriticalChance`)。ペット会心・極のルーン等
-    pub critical_rate_sources: CriticalRateSources,
-    /// 実測のスキル回数表(60 秒あたり)。DPS はここから出す(格子の外だけ式)。実データは gamedata
-    pub skill_uses: SkillUsesTable,
-    /// キャラスキル・マスタリーによる中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。
-    /// カタログの解決は呼び出し側(`CharacterSkills::actual_delay_contributions`)。共通の供給源
-    /// (フルスロットル / ランダムオプション / シエナのオーラ)は `calculate_damage` が自分で集める
-    pub actual_delay_skills: Vec<ActualDelayContribution>,
 }
 
-impl DamageInput {
-    /// 計算に必要な要素を組み立てる。
-    /// ステータス補正(`stat_modifiers`/`stat_contributions`)・装備(`equipment`/`equipment_coefficients`)は
-    /// 呼び出し側(コマンド)が組み立てて渡す(中立値の決め打ちはしない)。
-    pub fn new(
-        base_stats: BaseStats,
-        stat_modifiers: StatModifierSet,
-        stat_contributions: Vec<StatContribution>,
-        coefficients: AttackCoefficients,
-        equipment: Equipment,
-        common_skills: CommonSkills,
-        equipment_base_sources: Vec<EquipmentValueSource>,
-        equipment_enhanced_sources: Vec<EquipmentValueSource>,
-        equipment_coefficients: EquipmentCoefficients,
-        accuracy_correction: AccuracyCorrection,
-        accuracy_bonus: i64,
-        accuracy_boost: AccuracyBoost,
-        accuracy_shocked: bool,
-        random_options: RandomOptionTotals,
-        title_attack_damage_rate: f64,
-        title_added_damage_rate: f64,
-        damage_contributions: Vec<DamageContribution>,
-        weapon_added_damage: i64,
-        awakening_rate: f64,
-        damage_cap: i64,
-        stat_cap: i64,
-        skill: Skill,
-        enemy: Enemy,
-        combo_count: u32,
-        element_value: i64,
-        temporary_pins: Option<Adjustments>,
-        actual_delay_skills: Vec<ActualDelayContribution>,
-        critical_rate_sources: CriticalRateSources,
-        skill_uses: SkillUsesTable,
-    ) -> Self {
-        Self {
-            base_stats,
-            stat_modifiers,
-            stat_contributions,
-            coefficients,
-            equipment,
-            common_skills,
-            equipment_base_sources,
-            equipment_enhanced_sources,
-            equipment_coefficients,
-            accuracy_correction,
-            accuracy_bonus,
-            accuracy_boost,
-            accuracy_shocked,
-            random_options,
-            title_attack_damage_rate,
-            title_added_damage_rate,
-            damage_contributions,
-            weapon_added_damage,
-            skill,
-            enemy,
-            awakening_rate,
-            damage_cap,
-            stat_cap,
-            combo_count,
-            element_value,
-            temporary_pins,
-            actual_delay_skills,
-            critical_rate_sources,
-            skill_uses,
-        }
-    }
-
+impl DamageTarget {
     /// 装備の基本能力値の合計(`equipment_base_sources` の Σ。計算を二重に書かない)。
     pub fn equipment_base_totals(&self) -> EquipmentValues {
         sum_equipment_value_sources(&self.equipment_base_sources)
@@ -581,11 +529,15 @@ fn add_traced(
 ///
 /// 中ディレイが出せない(wiki の「動作」列が秒で読めない)スキル・通常攻撃では、
 /// サイクルを作れないので `calculate_damage` と同じ結果を返す。
-pub fn calculate_damage_with_combo(input: &DamageInput, normal_attack: &Skill) -> DamageResult {
-    let mut result = calculate_damage(input);
-    let mut normal_input = input.clone();
-    normal_input.skill = normal_attack.clone();
-    let normal = calculate_damage(&normal_input);
+pub fn calculate_damage_with_combo(
+    material: &DamageMaterial,
+    target: &DamageTarget,
+    normal_attack: &Skill,
+) -> DamageResult {
+    let mut result = calculate_damage(material, target);
+    let mut normal_target = target.clone();
+    normal_target.skill = normal_attack.clone();
+    let normal = calculate_damage(material, &normal_target);
 
     let (Some(skill_delay), Some(normal_delay)) =
         (result.actual_delay.as_ref(), normal.actual_delay.as_ref())
@@ -626,27 +578,30 @@ pub fn calculate_damage_with_combo(input: &DamageInput, normal_attack: &Skill) -
     result
 }
 
-pub fn calculate_damage(input: &DamageInput) -> DamageResult {
+pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> DamageResult {
     use DamageCategory::*;
 
     // ① 能力値計算
-    let (mut stats, mut stat_traces) =
-        effective_stats(&input.base_stats, &input.stat_modifiers, input.stat_cap);
-    apply_pins(&mut stats, &mut stat_traces, input.temporary_pins.as_ref());
+    let (mut stats, mut stat_traces) = effective_stats(
+        &material.base_stats,
+        &material.stat_modifiers,
+        material.stat_cap,
+    );
+    apply_pins(&mut stats, &mut stat_traces, material.temporary_pins.as_ref());
 
     // ② カテゴリ集計
-    let attack_parts = stat_attack_parts(&stats, &input.coefficients);
-    let stat_attack = stat_attack_power(&stats, &input.coefficients);
-    let equipment_base_totals = input.equipment_base_totals();
-    let equipment_enhanced_totals = input.equipment_enhanced_totals();
+    let attack_parts = stat_attack_parts(&stats, &target.coefficients.attack);
+    let stat_attack = stat_attack_power(&stats, &target.coefficients.attack);
+    let equipment_base_totals = target.equipment_base_totals();
+    let equipment_enhanced_totals = target.equipment_enhanced_totals();
     let attack = attack_power_breakdown(
         stat_attack,
-        equipment_values_attack(&equipment_base_totals, &input.equipment_coefficients.base),
+        equipment_values_attack(&equipment_base_totals, &target.coefficients.equipment.base),
         equipment_values_attack(
             &equipment_enhanced_totals,
-            &input.equipment_coefficients.enhanced,
+            &target.coefficients.equipment.enhanced,
         ),
-        input.common_skills.equipment_attack_rate(),
+        material.common_skills.equipment_attack_rate(),
     );
     let mut totals = CategoryTotals::neutral();
     let mut category_contributions: Vec<DamageContribution> = Vec::new();
@@ -656,23 +611,23 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         &mut category_contributions,
         TargetDefense,
         "敵の防御力",
-        input.enemy.defense as f64,
+        target.enemy.defense as f64,
     );
     add_traced(
         &mut totals,
         &mut category_contributions,
         SkillMultiplier,
         "スキル倍率",
-        input.skill.multiplier,
+        target.skill.multiplier,
     );
     add_traced(
         &mut totals,
         &mut category_contributions,
         CriticalMultiplier,
         "スキルのクリティカル倍率",
-        input.skill.critical_multiplier,
+        target.skill.critical_multiplier,
     );
-    if input.combo_count >= COMBO_BONUS_THRESHOLD {
+    if target.combo_count >= COMBO_BONUS_THRESHOLD {
         add_traced(
             &mut totals,
             &mut category_contributions,
@@ -686,28 +641,28 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         &mut category_contributions,
         ElementBonus,
         "属性差ボーナス",
-        element_bonus_rate(input.element_value, input.enemy.element_threshold),
+        element_bonus_rate(target.element_value, target.enemy.element_threshold),
     );
     add_traced(
         &mut totals,
         &mut category_contributions,
         DamageReduction,
         "敵の被害減少",
-        input.enemy.damage_reduction as f64,
+        target.enemy.damage_reduction as f64,
     );
     add_traced(
         &mut totals,
         &mut category_contributions,
         AwakeningDamage,
         "覚醒",
-        input.awakening_rate - 1.0,
+        material.awakening_rate - 1.0,
     );
     add_traced(
         &mut totals,
         &mut category_contributions,
         CutRateA,
         "敵のカット率A",
-        input.enemy.cut_rate_a - 1.0,
+        target.enemy.cut_rate_a - 1.0,
     );
     // シエナのオーラの追加オプション「攻撃力増加」(wiki: New1。実際は与ダメージ割合増加)
     add_traced(
@@ -715,10 +670,10 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         &mut category_contributions,
         SienaAuraAttackRate,
         "シエナのオーラ【攻撃力増加】",
-        input.equipment.siena_attack_rate(),
+        material.siena_attack_rate,
     );
     // テシスコアのセット効果(wiki: コアセット効果。全地域で発動するので対象コンテンツの地域を問わない)
-    let core_set_bonus = input.equipment.thesis_cores.set_bonus();
+    let core_set_bonus = material.core_set_bonus;
     add_traced(
         &mut totals,
         &mut category_contributions,
@@ -740,19 +695,19 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         &mut category_contributions,
         DependencyDamageRate,
         "ランダムOP【依存別攻撃力増加】",
-        input
+        material
             .random_options
             .dependency_damage_rate
-            .get(input.skill.dependency),
+            .get(target.skill.dependency),
     );
     add_traced(
         &mut totals,
         &mut category_contributions,
         DamageAmplify,
         "ランダムOP【ダメージ増幅】",
-        input
+        material
             .random_options
-            .damage_amplify_for(input.skill.dependency),
+            .damage_amplify_for(target.skill.dependency),
     );
     // カテゴリX は X1〜X6 の合計で、**上限が子ごとに違う**(X3 +80% / X4 +65% / X5 未記載)。
     // 親の `AttackDamageRate` は子の合計として読み出されるので、ここでは子に足す
@@ -761,17 +716,17 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         &mut category_contributions,
         AttackDamageBasicTrigger,
         "称号【ダメージ増加】",
-        input.title_attack_damage_rate,
+        target.title_attack_damage_rate,
     );
     add_traced(
         &mut totals,
         &mut category_contributions,
         AttackDamageSpecial,
         "ランダムOP【攻撃ダメージ増加(特殊)】",
-        input.random_options.attack_damage_rate,
+        material.random_options.attack_damage_rate,
     );
     // キャラスキル・マスタリー・バフ・装備アビリティ・装備アイテム。効き先はカテゴリごとに違う
-    for c in &input.damage_contributions {
+    for c in &target.damage_contributions {
         add_traced(
             &mut totals,
             &mut category_contributions,
@@ -786,7 +741,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         &mut category_contributions,
         CriticalDamageRate,
         "極限【スコープアイ】",
-        input.common_skills.ultimate.critical_damage_rate(),
+        material.common_skills.ultimate.critical_damage_rate(),
     );
 
     let mut totals_min = totals.clone();
@@ -819,12 +774,12 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // ④ 段数
     // 極限スキル「フルスロットル」(wiki: Skill/極限)。ハイパーリミット Lv4 以降で
     // **単体チャネリングスキル**の段数が +1〜+3 される。他のスキルには乗らない
-    let added_hits = if input.skill.single_target_channeling {
-        input.common_skills.ultimate.added_hit_count()
+    let added_hits = if target.skill.single_target_channeling {
+        material.common_skills.ultimate.added_hit_count()
     } else {
         0
     };
-    let hit_count = input.skill.hit_count + added_hits;
+    let hit_count = target.skill.hit_count + added_hits;
     let hits = i64::from(hit_count);
 
     // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)。
@@ -832,7 +787,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // ダメージ上限がある。『追加ダメージ』には上限がない」)。武器強化の追加固定ダメージは
     // 式の外・上限の対象外なので、上限はここで先に掛ける。
     // 捨てられた分は 0 と区別できるように別で持つ(UI が「上限で捨てた分」を出す)。
-    let cap = |value: i64| value.min(input.damage_cap);
+    let cap = |value: i64| value.min(material.damage_cap);
     let (capped_min, capped_max, capped_critical) = (cap(min), cap(max), cap(critical));
     let capped_loss = DamageTriple {
         min: min - capped_min,
@@ -842,9 +797,9 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     if capped_loss.max > 0 {
         let step = FormulaStep {
             name: "ダメージ上限".to_string(),
-            expression: format!("MIN(生値, {}) ※1 段ごとに適用", input.damage_cap),
-            value: input.damage_cap as f64,
-            reached: input.damage_cap as f64,
+            expression: format!("MIN(生値, {}) ※1 段ごとに適用", material.damage_cap),
+            value: material.damage_cap as f64,
+            reached: material.damage_cap as f64,
             categories: Vec::new(),
         };
         steps_min.push(step.clone());
@@ -858,7 +813,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // (wiki: 装備システム/装備強化のヒット分割仕様)。ゲームは表記ダメージ(与ダメージ)と
     // この追加ダメージを別々に表示するため、`per_hit` には足し込まない。
     let weapon_added_per_hit = if hit_count > 0 {
-        input.weapon_added_damage / hits
+        material.weapon_added_damage / hits
     } else {
         0
     };
@@ -867,7 +822,7 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             name: "武器強化(追加固定ダメージ)".to_string(),
             expression: format!(
                 "INT({} / {hits}) = {weapon_added_per_hit} ※上限なし・式の外",
-                input.weapon_added_damage
+                material.weapon_added_damage
             ),
             value: weapon_added_per_hit as f64,
             reached: weapon_added_per_hit as f64,
@@ -880,16 +835,16 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
 
     // 命中P(wiki: 計算式まとめ #AccuracyPoint)。与ダメージ式には入らないが、必中に必要な
     // 命中P(狩り場情報一覧)と見比べられるように結果に載せる。
-    let accuracy = input.skill.accuracy.map(|skill_accuracy| {
+    let accuracy = target.skill.accuracy.map(|skill_accuracy| {
         accuracy_point(
             &stats,
-            &input.accuracy_correction,
+            &target.coefficients.accuracy,
             equipment_base_totals.accuracy + equipment_enhanced_totals.accuracy,
             skill_accuracy,
-            input.accuracy_bonus,
-            input.accuracy_boost,
-            input.accuracy_shocked,
-            input.random_options.accuracy_point,
+            material.accuracy_bonus,
+            material.accuracy_boost,
+            material.accuracy_shocked,
+            material.random_options.accuracy_point,
         )
     });
 
@@ -897,12 +852,12 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // 掛かるので、1 段ごとではなく段数を掛けたあとの合計に乗せる。
     // 供給源はシャープネスビジョン、武器のランダムOP、対象条件に一致した称号。
     // OP 側は発動条件を満たしている前提で入れる。
-    let random_option_added_rate = input
+    let random_option_added_rate = material
         .random_options
-        .added_damage_rate_for(input.skill.dependency);
-    let added_rate = input.common_skills.sharpness_vision_rate()
+        .added_damage_rate_for(target.skill.dependency);
+    let added_rate = material.common_skills.sharpness_vision_rate()
         + random_option_added_rate
-        + input.title_added_damage_rate;
+        + target.title_added_damage_rate;
     let sum = DamageTriple {
         min: min * hits,
         max: max * hits,
@@ -925,9 +880,9 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             expression: format!(
                 "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}% + 称号 {:.0}%",
                 added_rate * 100.0,
-                input.common_skills.sharpness_vision_rate() * 100.0,
+                material.common_skills.sharpness_vision_rate() * 100.0,
                 random_option_added_rate * 100.0,
-                input.title_added_damage_rate * 100.0
+                target.title_added_damage_rate * 100.0
             ),
             value: added_rate,
             reached: added_rate,
@@ -943,17 +898,17 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // 対象のAGI・クリティカル被撃率(狩り場情報一覧)は `?` の行が多く、被撃率は −250〜−930% と
     // 支配的なので、**両方そろっている敵でだけ**出す。スキルの Cri値が未記載でも出さない。
     let critical_chance = match (
-        input.enemy.agi,
-        input.enemy.critical_taken_rate,
-        input.skill.critical_rate,
+        target.enemy.agi,
+        target.enemy.critical_taken_rate,
+        target.skill.critical_rate,
     ) {
         (Some(target_agi), Some(taken_rate), Some(skill_critical_rate)) => Some(critical_rate(
             equipment_base_totals.critical + equipment_enhanced_totals.critical,
             stats.agi,
             target_agi,
             skill_critical_rate as f64,
-            &input.critical_rate_sources,
-            input.equipment.siena_critical_rate(),
+            &material.critical_rate_sources,
+            material.siena_critical_rate,
             taken_rate,
         )),
         _ => None,
@@ -962,36 +917,36 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
     // 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。減少値の供給源は
     // 極限スキル「フルスロットル」/ カフス(盾+)のランダムオプション / シエナのオーラ /
     // キャラのパッシブ(呼び出し側がカタログを引いて渡す)。
-    let delay = input.skill.base_actual_delay.map(|base| {
+    let delay = target.skill.base_actual_delay.map(|base| {
         let mut contributions = Vec::new();
-        let full_throttle = input.common_skills.ultimate.actual_delay_reduction();
+        let full_throttle = material.common_skills.ultimate.actual_delay_reduction();
         if full_throttle != 0.0 {
             contributions.push(ActualDelayContribution {
                 source: "フルスロットル".into(),
                 rate: full_throttle,
             });
         }
-        let random_option = input.random_options.actual_delay_reduction;
+        let random_option = material.random_options.actual_delay_reduction;
         if random_option != 0.0 {
             contributions.push(ActualDelayContribution {
                 source: "ランダムオプション(カフス)".into(),
                 rate: random_option,
             });
         }
-        let siena = input.equipment.siena_actual_delay_reduction();
+        let siena = material.siena_actual_delay_reduction;
         if siena != 0.0 {
             contributions.push(ActualDelayContribution {
                 source: "シエナのオーラ".into(),
                 rate: siena,
             });
         }
-        contributions.extend(input.actual_delay_skills.iter().cloned());
+        contributions.extend(material.actual_delay_skills.iter().cloned());
         actual_delay(
             base,
-            input.skill.actual_delay_fixed,
+            target.skill.actual_delay_fixed,
             contributions,
-            input.combo_count,
-            &input.skill_uses,
+            target.combo_count,
+            &material.skill_uses,
         )
     });
     let total = DamageTriple {
@@ -1028,9 +983,9 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
         per_hit_primary: per_hit.primary(critical_chance_ratio),
         total_primary: total.primary(critical_chance_ratio),
         hit_count,
-        effective_skill_multiplier: input.skill.multiplier,
-        effective_base_actual_delay: input.skill.base_actual_delay,
-        damage_cap: input.damage_cap,
+        effective_skill_multiplier: target.skill.multiplier,
+        effective_base_actual_delay: target.skill.base_actual_delay,
+        damage_cap: material.damage_cap,
         capped_loss,
         added_damage_rate: added_rate,
         added_damage: added,
@@ -1046,29 +1001,29 @@ pub fn calculate_damage(input: &DamageInput) -> DamageResult {
             stats: stat_traces,
             attack,
             stat_contributions: {
-                let mut contributions = input.stat_contributions.clone();
+                let mut contributions = material.stat_contributions.clone();
                 fill_contribution_effects(
                     &mut contributions,
-                    &input.base_stats,
-                    &input.stat_modifiers,
+                    &material.base_stats,
+                    &material.stat_modifiers,
                 );
                 contributions
             },
             stat_source_effects: contribution_source_effects(
-                &input.stat_contributions,
-                &input.base_stats,
-                &input.stat_modifiers,
-                input.stat_cap,
+                &material.stat_contributions,
+                &material.base_stats,
+                &material.stat_modifiers,
+                material.stat_cap,
             ),
             stat_attack_parts: attack_parts,
             categories: totals_max.trace(),
             category_contributions,
             equipment_attack_parts: equipment_attack_parts(
-                &input.equipment_base_sources,
-                &input.equipment_enhanced_sources,
-                &input.equipment_coefficients,
+                &target.equipment_base_sources,
+                &target.equipment_enhanced_sources,
+                &target.coefficients.equipment,
             ),
-            equipment_enhance_sources: input.common_skills.equipment_attack_rate_sources(),
+            equipment_enhance_sources: material.common_skills.equipment_attack_rate_sources(),
             steps_min,
             steps_max,
             steps_critical,
@@ -1125,7 +1080,7 @@ fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaSte
 mod tests {
     use super::*;
     use crate::category::CategoryKind;
-    use crate::equipment::PartSlot;
+    use crate::equipment::{Equipment, PartSlot};
     use crate::siena::{
         RegisteredSienaAura, SienaAura, SienaExtraKind, SienaExtraSlot, SienaSlot, SienaValueKind,
     };
@@ -1151,8 +1106,8 @@ mod tests {
     }
     use crate::stats::StatKind;
 
-    fn input() -> DamageInput {
-        DamageInput {
+    fn material() -> DamageMaterial {
+        DamageMaterial {
             base_stats: BaseStats {
                 stab: 500,
                 hack: 500,
@@ -1164,33 +1119,53 @@ mod tests {
             },
             stat_modifiers: StatModifierSet::default(),
             stat_contributions: Vec::new(),
-            coefficients: AttackCoefficients {
-                primary: (StatKind::Stab, 1.8),
-                secondary: (StatKind::Hack, 1.8),
-            },
-            equipment: Equipment::default(),
             common_skills: CommonSkills::default(),
-            equipment_base_sources: Vec::new(),
-            equipment_enhanced_sources: Vec::new(),
-            title_attack_damage_rate: 0.0,
-            title_added_damage_rate: 0.0,
-            damage_contributions: Vec::new(),
-            equipment_coefficients: EquipmentCoefficients::default(),
-            // STAB+HACK 依存(ボーナスなし、ペナルティ (STAB+HACK)/200)
-            accuracy_correction: AccuracyCorrection {
-                bonus: None,
-                penalty_primary: StatKind::Stab,
-                penalty_secondary: Some(StatKind::Hack),
-                penalty_divisor: 200.0,
-            },
+            temporary_pins: None,
+            siena_attack_rate: 0.0,
+            siena_critical_rate: 0.0,
+            siena_actual_delay_reduction: 0.0,
+            core_set_bonus: CoreSetBonus::default(),
             accuracy_bonus: 0,
             accuracy_boost: AccuracyBoost::None,
             accuracy_shocked: false,
             random_options: RandomOptionTotals::default(),
             weapon_added_damage: 0,
+            awakening_rate: 1.0,
             // テストは上限に当たらない値を既定にする(上限の挙動は専用テストで見る)
             damage_cap: i64::MAX,
             stat_cap: i64::MAX,
+            actual_delay_skills: Vec::new(),
+            critical_rate_sources: CriticalRateSources::default(),
+            // 実測表の挙動は actual_delay.rs のテストで見る。ここは式にフォールバックさせる
+            skill_uses: SkillUsesTable {
+                reduction_percents: Vec::new(),
+                base_delays: Vec::new(),
+                uses: Vec::new(),
+            },
+        }
+    }
+
+    fn target() -> DamageTarget {
+        DamageTarget {
+            coefficients: DependencyCoefficients {
+                attack: AttackCoefficients {
+                    primary: (StatKind::Stab, 1.8),
+                    secondary: (StatKind::Hack, 1.8),
+                },
+                equipment: EquipmentCoefficients::default(),
+                // STAB+HACK 依存(ボーナスなし、ペナルティ (STAB+HACK)/200)
+                accuracy: AccuracyCorrection {
+                    bonus: None,
+                    penalty_primary: StatKind::Stab,
+                    penalty_secondary: Some(StatKind::Hack),
+                    penalty_divisor: 200.0,
+                },
+            },
+            equipment_base_sources: Vec::new(),
+            equipment_enhanced_sources: Vec::new(),
+            title_attack_damage_rate: 0.0,
+            title_added_damage_rate: 0.0,
+            damage_contributions: Vec::new(),
             skill: Skill {
                 id: "s".into(),
                 name: "テスト斬り".into(),
@@ -1225,32 +1200,22 @@ mod tests {
                 agi: None,
                 critical_taken_rate: None,
             },
-            awakening_rate: 1.0,
             combo_count: 0,
             element_value: 0,
-            temporary_pins: None,
-            actual_delay_skills: Vec::new(),
-            critical_rate_sources: CriticalRateSources::default(),
-            // 実測表の挙動は actual_delay.rs のテストで見る。ここは式にフォールバックさせる
-            skill_uses: SkillUsesTable {
-                reduction_percents: Vec::new(),
-                base_delays: Vec::new(),
-                uses: Vec::new(),
-            },
         }
     }
 
     /// テスト用: 装備基本能力値を単一の供給源として設定する(内訳の中身は見ないテストが使う)。
-    fn set_equipment_base(i: &mut DamageInput, values: EquipmentValues) {
-        i.equipment_base_sources = vec![EquipmentValueSource {
+    fn set_equipment_base(t: &mut DamageTarget, values: EquipmentValues) {
+        t.equipment_base_sources = vec![EquipmentValueSource {
             source: "テスト".into(),
             values,
         }];
     }
 
     /// テスト用: 装備強化能力値を単一の供給源として設定する。
-    fn set_equipment_enhanced(i: &mut DamageInput, values: EquipmentValues) {
-        i.equipment_enhanced_sources = vec![EquipmentValueSource {
+    fn set_equipment_enhanced(t: &mut DamageTarget, values: EquipmentValues) {
+        t.equipment_enhanced_sources = vec![EquipmentValueSource {
             source: "テスト".into(),
             values,
         }];
@@ -1264,7 +1229,7 @@ mod tests {
     //   crit: 918.3834 × {2.0 × 1.0} = 1836.7668 → 1836
     #[test]
     fn トレースのステ攻撃力内訳は依存ステだけで合計がステ攻撃力になる() {
-        let result = calculate_damage(&input());
+        let result = calculate_damage(&material(), &target());
         let parts = &result.trace.stat_attack_parts;
         // 依存 StabHack の 2 ステだけ(全 7 ステは並べない)
         assert_eq!(parts.len(), 2);
@@ -1285,7 +1250,7 @@ mod tests {
     fn 式の各段は消費したカテゴリを申告する() {
         // UI は「この段の材料」を step.categories から引く。式に現れるカテゴリが
         // どの段にも申告されていないと、その材料が画面から消える。
-        let r = calculate_damage(&input());
+        let r = calculate_damage(&material(), &target());
         let declared: Vec<DamageCategory> = r
             .trace
             .steps_max
@@ -1308,16 +1273,17 @@ mod tests {
 
     #[test]
     fn 命中pはdexと装備命中とスキル命中から依存ペナルティを引く() {
-        let mut i = input();
+        let m = material();
+        let mut tg = target();
         set_equipment_base(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 accuracy: 30,
                 ..Default::default()
             },
         );
         set_equipment_enhanced(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 accuracy: 20,
                 ..Default::default()
@@ -1325,23 +1291,24 @@ mod tests {
         );
         // DEX 100 + 装備 50 + (スキル命中 92 + オフセット15) − [(STAB500 + HACK500)/200]
         // = 257 − 5 = 252
-        assert_eq!(calculate_damage(&i).accuracy_point, Some(252));
+        assert_eq!(calculate_damage(&m, &tg).accuracy_point, Some(252));
     }
 
     #[test]
     fn ダメージ上限は1段ごとに適用され捨てられた分を残す() {
-        let mut i = input();
-        i.skill.hit_count = 3;
-        let uncapped = calculate_damage(&i);
+        let mut m = material();
+        let mut tg = target();
+        tg.skill.hit_count = 3;
+        let uncapped = calculate_damage(&m, &tg);
         assert!(uncapped.capped_loss.max == 0);
 
-        i.damage_cap = uncapped.per_hit.max - 100;
-        let capped = calculate_damage(&i);
-        assert_eq!(capped.per_hit.max, i.damage_cap);
+        m.damage_cap = uncapped.per_hit.max - 100;
+        let capped = calculate_damage(&m, &tg);
+        assert_eq!(capped.per_hit.max, m.damage_cap);
         assert_eq!(capped.capped_loss.max, 100);
         // 上限は 1 段ごとなので合計は 上限 × 段数
-        assert_eq!(capped.total.max, i.damage_cap * 3);
-        assert_eq!(capped.damage_cap, i.damage_cap);
+        assert_eq!(capped.total.max, m.damage_cap * 3);
+        assert_eq!(capped.damage_cap, m.damage_cap);
         assert!(capped
             .trace
             .steps_max
@@ -1353,27 +1320,28 @@ mod tests {
     // 上限を超えて合計に残る(docs/damage-formula.md §3/§5)。
     #[test]
     fn ダメージ上限は与ダメージにだけ効き武器強化の追加固定は上限を超えて合計に残る() {
-        let mut i = input();
-        i.skill.hit_count = 3;
-        i.weapon_added_damage = 900; // INT(900/3) = 300
-        let uncapped = calculate_damage(&i);
+        let mut m = material();
+        let mut tg = target();
+        tg.skill.hit_count = 3;
+        m.weapon_added_damage = 900; // INT(900/3) = 300
+        let uncapped = calculate_damage(&m, &tg);
         assert_eq!(uncapped.weapon_added_per_hit, 300);
         assert!(uncapped.capped_loss.max == 0);
 
         // 上限をスキル分の per_hit ぎりぎりに設定する。武器強化を含めた値より小さい。
-        i.damage_cap = uncapped.per_hit.max - 100;
-        let capped = calculate_damage(&i);
-        assert_eq!(capped.per_hit.max, i.damage_cap);
+        m.damage_cap = uncapped.per_hit.max - 100;
+        let capped = calculate_damage(&m, &tg);
+        assert_eq!(capped.per_hit.max, m.damage_cap);
         assert_eq!(capped.capped_loss.max, 100);
         // 武器強化の追加固定は上限の影響を受けず 300 のまま
         assert_eq!(capped.weapon_added_per_hit, 300);
         // 合計 = (上限 + 武器強化300) × 3段
-        assert_eq!(capped.total.max, (i.damage_cap + 300) * 3);
+        assert_eq!(capped.total.max, (m.damage_cap + 300) * 3);
     }
 
     #[test]
     fn 攻撃力_乱数_防御力_スキル倍率_cri倍率() {
-        let r = calculate_damage(&input());
+        let r = calculate_damage(&material(), &target());
         assert_eq!(
             r.per_hit,
             DamageTriple {
@@ -1393,9 +1361,10 @@ mod tests {
 
     #[test]
     fn 段数を掛けた合計() {
-        let mut i = input();
-        i.skill.hit_count = 11;
-        let r = calculate_damage(&i);
+        let m = material();
+        let mut tg = target();
+        tg.skill.hit_count = 11;
+        let r = calculate_damage(&m, &tg);
         assert_eq!(
             r.per_hit,
             DamageTriple {
@@ -1420,11 +1389,12 @@ mod tests {
     //   crit: 1836.7668 × 1.15 = 2112.28182 → 2112
     #[test]
     fn コンボボーナス() {
-        let mut i = input();
-        i.combo_count = 2;
-        assert_eq!(calculate_damage(&i).per_hit.min, 802);
-        i.combo_count = 3;
-        let r = calculate_damage(&i);
+        let m = material();
+        let mut tg = target();
+        tg.combo_count = 2;
+        assert_eq!(calculate_damage(&m, &tg).per_hit.min, 802);
+        tg.combo_count = 3;
+        let r = calculate_damage(&m, &tg);
         assert_eq!(
             r.per_hit,
             DamageTriple {
@@ -1438,9 +1408,10 @@ mod tests {
     // 覚醒倍率 1.2: max 918.3834 × 1.2 = 1102.06 → 1102
     #[test]
     fn 覚醒ダメージ() {
-        let mut i = input();
-        i.awakening_rate = 1.2;
-        let r = calculate_damage(&i);
+        let mut m = material();
+        let tg = target();
+        m.awakening_rate = 1.2;
+        let r = calculate_damage(&m, &tg);
         assert_eq!(r.per_hit.max, 1102);
         let n = r.trace.categories.iter().find(|c| c.symbol == "N").unwrap();
         assert!((n.value - 0.2).abs() < 1e-12);
@@ -1450,41 +1421,44 @@ mod tests {
     // 属性値 1000 でも上限 +50% で同じ。属性値 0 は負 → 下限 0%
     #[test]
     fn 属性差ボーナス() {
-        let mut i = input();
-        i.element_value = 170;
-        assert_eq!(calculate_damage(&i).per_hit.min, 1204);
-        i.element_value = 1000;
-        assert_eq!(calculate_damage(&i).per_hit.min, 1204);
+        let m = material();
+        let mut tg = target();
+        tg.element_value = 170;
+        assert_eq!(calculate_damage(&m, &tg).per_hit.min, 1204);
+        tg.element_value = 1000;
+        assert_eq!(calculate_damage(&m, &tg).per_hit.min, 1204);
         // 属性値 100 − 90 = 10 → 6.25 → floor 6 → 1.06: 802.89 × 1.06 = 851.0634 → 851
-        i.element_value = 100;
-        assert_eq!(calculate_damage(&i).per_hit.min, 851);
-        i.element_value = 0;
-        assert_eq!(calculate_damage(&i).per_hit.min, 802);
+        tg.element_value = 100;
+        assert_eq!(calculate_damage(&m, &tg).per_hit.min, 851);
+        tg.element_value = 0;
+        assert_eq!(calculate_damage(&m, &tg).per_hit.min, 802);
     }
 
     // 被害減少 −100、カット率A 0.5:
     //   min: 802.89 × 0.5 − 100 = 301.445 → 301
     #[test]
     fn 被害減少とカット率a() {
-        let mut i = input();
-        i.enemy.damage_reduction = -100;
-        i.enemy.cut_rate_a = 0.5;
-        assert_eq!(calculate_damage(&i).per_hit.min, 301);
+        let m = material();
+        let mut tg = target();
+        tg.enemy.damage_reduction = -100;
+        tg.enemy.cut_rate_a = 0.5;
+        assert_eq!(calculate_damage(&m, &tg).per_hit.min, 301);
     }
 
     // temporary_pins で STAB を 2000 に固定すると、ステ由来攻撃力の計算に反映されて結果が変わる。
     // trace.stats の STAB 行には pinned_from に元の 500 が残る。
     #[test]
     fn 一時調整のpinで能力値を固定すると攻撃力計算に反映されpinned_fromが記録される() {
-        let mut i = input();
-        i.temporary_pins = Some(Adjustments {
+        let mut m = material();
+        let tg = target();
+        m.temporary_pins = Some(Adjustments {
             stab: StatAdjustment {
                 add: 0,
                 pin: Some(2000),
             },
             ..Default::default()
         });
-        let r = calculate_damage(&i);
+        let r = calculate_damage(&m, &tg);
         assert_ne!(r.per_hit.min, 802);
         let stab_trace = r
             .trace
@@ -1498,9 +1472,10 @@ mod tests {
 
     #[test]
     fn 防御力が攻撃力を上回ると対モンスター下限の1() {
-        let mut i = input();
-        i.enemy.defense = 5000;
-        let r = calculate_damage(&i);
+        let m = material();
+        let mut tg = target();
+        tg.enemy.defense = 5000;
+        let r = calculate_damage(&m, &tg);
         assert_eq!(
             r.per_hit,
             DamageTriple {
@@ -1534,9 +1509,10 @@ mod tests {
 
     #[test]
     fn ソウルリンクgはクリティカルだけに効きlは45パーセントで止まる() {
-        let base = calculate_damage(&input());
-        let mut i = input();
-        i.damage_contributions = vec![
+        let base = calculate_damage(&material(), &target());
+        let m = material();
+        let mut tg = target();
+        tg.damage_contributions = vec![
             DamageContribution {
                 source: "ソウルリンク".into(),
                 category: DamageCategory::CriticalDamageRate,
@@ -1553,7 +1529,7 @@ mod tests {
                 value: 0.40,
             },
         ];
-        let result = calculate_damage(&i);
+        let result = calculate_damage(&m, &tg);
         // G は非クリティカルへ入らない。L は非クリ・クリの両方へ同じように効く。
         assert_eq!(result.per_hit.max, (base.per_hit.max as f64 * 1.45) as i64);
         assert!(result.per_hit.critical > (base.per_hit.critical as f64 * 1.45) as i64);
@@ -1667,7 +1643,7 @@ mod tests {
 
     #[test]
     fn トレースに全カテゴリが出る() {
-        let r = calculate_damage(&input());
+        let r = calculate_damage(&material(), &target());
         let symbols: Vec<&str> = r
             .trace
             .categories
@@ -1697,8 +1673,9 @@ mod tests {
     // 基本 400 はネオテシス武器(wiki 装備強化: 蒼穹 410〜888)相当で現実的な値)。
     #[test]
     fn 装備補正があると中盤の敵に対しても下限1にならない() {
-        let mut i = input();
-        i.base_stats = BaseStats {
+        let mut m = material();
+        let mut tg = target();
+        m.base_stats = BaseStats {
             stab: 310,
             hack: 310,
             int: 1,
@@ -1707,12 +1684,12 @@ mod tests {
             dex: 100,
             agi: 1,
         };
-        i.common_skills = CommonSkills {
+        m.common_skills = CommonSkills {
             strong_weapon_level: 6,
             ..Default::default()
         };
         set_equipment_base(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 thrust: 400,
                 slash: 400,
@@ -1720,14 +1697,14 @@ mod tests {
             },
         );
         set_equipment_enhanced(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 thrust: 200,
                 slash: 200,
                 ..Default::default()
             },
         );
-        i.equipment_coefficients = EquipmentCoefficients {
+        tg.coefficients.equipment = EquipmentCoefficients {
             base: crate::equipment::EquipmentRates {
                 thrust: 14.5,
                 slash: 14.5,
@@ -1742,7 +1719,7 @@ mod tests {
             },
         };
         // 兄弟の鍛冶場相当の敵(旧リポ由来。crates/gamedata/src/enemies.rs と同じ値)。
-        i.enemy = Enemy {
+        tg.enemy = Enemy {
             id: "brothers_forge".into(),
             name: "兄弟の鍛冶場".into(),
             defense: 7050,
@@ -1752,7 +1729,7 @@ mod tests {
             critical_taken_rate: None,
             element_threshold: 120,
         };
-        let r = calculate_damage(&i);
+        let r = calculate_damage(&m, &tg);
         assert!(
             r.per_hit.min > 1,
             "装備ありなら下限1を超えるはず: {:?}",
@@ -1760,11 +1737,10 @@ mod tests {
         );
 
         // 回帰確認: 装備 default なら従来どおり下限1のまま。
-        let mut without_equipment = i.clone();
-        without_equipment.equipment = Equipment::default();
+        let mut without_equipment = tg.clone();
         without_equipment.equipment_base_sources = Vec::new();
         without_equipment.equipment_enhanced_sources = Vec::new();
-        let r2 = calculate_damage(&without_equipment);
+        let r2 = calculate_damage(&m, &without_equipment);
         assert_eq!(
             r2.per_hit,
             DamageTriple {
@@ -1779,11 +1755,12 @@ mod tests {
     // per_hit(表記ダメージ)には足し込まず、`weapon_added_per_hit` に別で持つ。
     #[test]
     fn 武器強化の追加固定ダメージはhit数で分割してweapon_added_per_hitとtotalに加算される() {
-        let mut i = input();
-        i.skill.hit_count = 9;
-        i.weapon_added_damage = 2488;
-        let base = calculate_damage(&input());
-        let r = calculate_damage(&i);
+        let mut m = material();
+        let mut tg = target();
+        tg.skill.hit_count = 9;
+        m.weapon_added_damage = 2488;
+        let base = calculate_damage(&material(), &target());
+        let r = calculate_damage(&m, &tg);
         // INT(2488 / 9) = 276
         assert_eq!(r.per_hit, base.per_hit);
         assert_eq!(r.weapon_added_per_hit, 276);
@@ -1798,15 +1775,16 @@ mod tests {
 
     #[test]
     fn ソウルリンク武器強化倍率の後にhit分割する() {
-        let mut i = input();
-        i.skill.hit_count = 9;
-        i.weapon_added_damage = crate::SoulLinkStatus {
+        let mut m = material();
+        let mut tg = target();
+        tg.skill.hit_count = 9;
+        m.weapon_added_damage = crate::SoulLinkStatus {
             weapon_enhance_level: 10,
             ..Default::default()
         }
         .weapon_added_damage(2488);
-        let base = calculate_damage(&input());
-        let result = calculate_damage(&i);
+        let base = calculate_damage(&material(), &target());
+        let result = calculate_damage(&m, &tg);
         // Lv10で 2倍した 4,976 を9段へ分割し、1段あたり552。per_hit は変わらない。
         assert_eq!(result.per_hit.max, base.per_hit.max);
         assert_eq!(result.weapon_added_per_hit, 552);
@@ -1815,7 +1793,7 @@ mod tests {
 
     #[test]
     fn weapon_added_damageが0ならトレース段は増えず挙動は現行と変わらない() {
-        let r = calculate_damage(&input());
+        let r = calculate_damage(&material(), &target());
         assert_eq!(r.trace.steps_min.len(), 14);
         assert_ne!(
             r.trace.steps_min.last().unwrap().name,
@@ -1826,26 +1804,28 @@ mod tests {
     /// マスタリーの「攻撃ダメージ +n%」も同じカテゴリX(称号・ランダムOP と合算)。
     #[test]
     fn マスタリーの攻撃ダメージ増加はXに乗る() {
-        let mut i = input();
-        i.damage_contributions = vec![DamageContribution {
+        let m = material();
+        let mut tg = target();
+        tg.damage_contributions = vec![DamageContribution {
             source: "テスト".into(),
             category: DamageCategory::AttackDamageSkill,
             value: 0.05,
         }];
-        let r = calculate_damage(&i);
+        let r = calculate_damage(&m, &tg);
         let x = r.trace.categories.iter().find(|c| c.symbol == "X").unwrap();
         assert!((x.value - 0.05).abs() < 1e-12);
-        assert!(r.per_hit.max > calculate_damage(&input()).per_hit.max);
+        assert!(r.per_hit.max > calculate_damage(&material(), &target()).per_hit.max);
     }
 
     /// 称号の無条件「ダメージ n% 増加」は wiki: ステータス `#z4747f51` の
     /// [X3] 攻撃ダメージ(基本発動)なので、カテゴリX に合流する。
     #[test]
     fn 称号のダメージ増加はXに乗る() {
-        let mut i = input();
-        i.random_options.attack_damage_rate = 0.30;
-        i.title_attack_damage_rate = 0.20;
-        let r = calculate_damage(&i);
+        let mut m = material();
+        let mut tg = target();
+        m.random_options.attack_damage_rate = 0.30;
+        tg.title_attack_damage_rate = 0.20;
+        let r = calculate_damage(&m, &tg);
         let x = r.trace.categories.iter().find(|c| c.symbol == "X").unwrap();
         // ランダムOP 30% + 称号 20% = Σ +50%
         assert!((x.value - 0.50).abs() < 1e-12);
@@ -1854,11 +1834,12 @@ mod tests {
 
     #[test]
     fn 条件付き称号はper_hitを変えず合計に割合追加ダメージを加える() {
-        let base = calculate_damage(&input());
-        let mut i = input();
-        i.skill.hit_count = 3;
-        i.title_added_damage_rate = 0.20;
-        let result = calculate_damage(&i);
+        let base = calculate_damage(&material(), &target());
+        let m = material();
+        let mut tg = target();
+        tg.skill.hit_count = 3;
+        tg.title_added_damage_rate = 0.20;
+        let result = calculate_damage(&m, &tg);
 
         assert_eq!(result.per_hit, base.per_hit);
         assert_eq!(result.added_damage_rate, 0.20);
@@ -1878,13 +1859,13 @@ mod tests {
 
     #[test]
     fn 命中時ランダムOPは依存種別に合うカテゴリTだけ乗り追加ダメージには入らない() {
-        let mut physical = input();
-        physical.random_options.added_damage_rate = 0.10;
-        physical.random_options.physical_added_damage_rate = 0.14;
-        physical.random_options.magic_added_damage_rate = 0.15;
-        physical.random_options.physical_damage_amplify = 0.10;
-        physical.random_options.magic_damage_amplify = 0.20;
-        let physical_result = calculate_damage(&physical);
+        let mut m = material();
+        m.random_options.added_damage_rate = 0.10;
+        m.random_options.physical_added_damage_rate = 0.14;
+        m.random_options.magic_added_damage_rate = 0.15;
+        m.random_options.physical_damage_amplify = 0.10;
+        m.random_options.magic_damage_amplify = 0.20;
+        let physical_result = calculate_damage(&m, &target());
         assert!((physical_result.added_damage_rate - 0.24).abs() < 1e-12);
         let physical_t = physical_result
             .trace
@@ -1895,9 +1876,9 @@ mod tests {
         assert!((physical_t.value - 0.10).abs() < 1e-12);
         assert!((physical_t.factor - 1.10).abs() < 1e-12);
 
-        let mut magic = physical;
+        let mut magic = target();
         magic.skill.dependency = SkillDependency::HackInt;
-        let magic_result = calculate_damage(&magic);
+        let magic_result = calculate_damage(&m, &magic);
         assert!((magic_result.added_damage_rate - 0.25).abs() < 1e-12);
         let magic_t = magic_result
             .trace
@@ -1910,20 +1891,22 @@ mod tests {
 
     #[test]
     fn シエナのオーラの攻撃力増加はNew1に乗る() {
-        let base = calculate_damage(&input()).per_hit.max;
+        let base = calculate_damage(&material(), &target()).per_hit.max;
 
-        let mut i = input();
+        let mut equipment = Equipment::default();
         set_siena(
-            &mut i.equipment,
+            &mut equipment,
             PartSlot::Weapon,
             siena_extra(SienaValueKind::Thrust, SienaExtraKind::AttackRate, 10.0),
         );
         set_siena(
-            &mut i.equipment,
+            &mut equipment,
             PartSlot::Armor,
             siena_extra(SienaValueKind::Stab, SienaExtraKind::AttackRate, 5.0),
         );
-        let boosted = calculate_damage(&i);
+        let mut m = material();
+        m.siena_attack_rate = equipment.siena_attack_rate();
+        let boosted = calculate_damage(&m, &target());
 
         // New1 は Σ% = +15% として集計される
         let new1 = boosted
@@ -1942,15 +1925,17 @@ mod tests {
         use crate::thesis_core::{CoreRegion, CoreSet, CoreType, ThesisCore, CORE_SLOT_COUNT};
 
         // 進化0 強化4 が 6 個 → 最終ダメージ(固定値)+800
-        let mut i = input();
-        *i.equipment.thesis_cores.get_mut(CoreRegion::Abyss) = CoreSet {
+        let mut equipment = Equipment::default();
+        *equipment.thesis_cores.get_mut(CoreRegion::Abyss) = CoreSet {
             slots: [Some(ThesisCore {
                 core_type: CoreType::Slash,
                 evolution: 0,
                 enhancement: 4,
             }); CORE_SLOT_COUNT],
         };
-        let fixed = calculate_damage(&i);
+        let mut m = material();
+        m.core_set_bonus = equipment.thesis_cores.set_bonus();
+        let fixed = calculate_damage(&m, &target());
         let k = fixed
             .trace
             .categories
@@ -1960,15 +1945,17 @@ mod tests {
         assert_eq!(k.value, 800.0);
 
         // 進化4 強化4 が 6 個 → 最終ダメージ +5%(K は 0 に戻る)
-        let mut i = input();
-        *i.equipment.thesis_cores.get_mut(CoreRegion::Eclipse) = CoreSet {
+        let mut equipment = Equipment::default();
+        *equipment.thesis_cores.get_mut(CoreRegion::Eclipse) = CoreSet {
             slots: [Some(ThesisCore {
                 core_type: CoreType::Slash,
                 evolution: 4,
                 enhancement: 4,
             }); CORE_SLOT_COUNT],
         };
-        let rate = calculate_damage(&i);
+        let mut m = material();
+        m.core_set_bonus = equipment.thesis_cores.set_bonus();
+        let rate = calculate_damage(&m, &target());
         let l = rate
             .trace
             .categories
@@ -1985,7 +1972,7 @@ mod tests {
                 .value,
             0.0
         );
-        assert!(rate.per_hit.max > calculate_damage(&input()).per_hit.max);
+        assert!(rate.per_hit.max > calculate_damage(&material(), &target()).per_hit.max);
     }
 
     // wiki: K は上限 1000。進化1 強化4 の 6 セット(+1,400)はキャップに当たる
@@ -1993,15 +1980,17 @@ mod tests {
     fn テシスコアの最終ダメージ固定値は上限1000でキャップされる() {
         use crate::thesis_core::{CoreRegion, CoreSet, CoreType, ThesisCore, CORE_SLOT_COUNT};
 
-        let mut i = input();
-        *i.equipment.thesis_cores.get_mut(CoreRegion::Mercurial) = CoreSet {
+        let mut equipment = Equipment::default();
+        *equipment.thesis_cores.get_mut(CoreRegion::Mercurial) = CoreSet {
             slots: [Some(ThesisCore {
                 core_type: CoreType::Thrust,
                 evolution: 1,
                 enhancement: 4,
             }); CORE_SLOT_COUNT],
         };
-        let result = calculate_damage(&i);
+        let mut m = material();
+        m.core_set_bonus = equipment.thesis_cores.set_bonus();
+        let result = calculate_damage(&m, &target());
         let k = result
             .trace
             .categories
@@ -2019,13 +2008,14 @@ mod tests {
         use crate::random_option::DependencyRates;
 
         // スキルは STAB+HACK 依存。一致する枠だけがカテゴリP に入る
-        let mut i = input();
-        i.random_options.dependency_damage_rate = DependencyRates {
+        let mut m = material();
+        let tg = target();
+        m.random_options.dependency_damage_rate = DependencyRates {
             stab_hack: 0.10,
             stab: 0.25,
             ..Default::default()
         };
-        let result = calculate_damage(&i);
+        let result = calculate_damage(&m, &tg);
         let p = result
             .trace
             .categories
@@ -2033,7 +2023,7 @@ mod tests {
             .find(|c| c.symbol == "P")
             .unwrap();
         assert!((p.value - 0.10).abs() < 1e-12);
-        assert!(result.per_hit.max > calculate_damage(&input()).per_hit.max);
+        assert!(result.per_hit.max > calculate_damage(&material(), &target()).per_hit.max);
     }
 
     // wiki §4: カテゴリP は上限 +73%
@@ -2041,12 +2031,13 @@ mod tests {
     fn ランダムオプションの依存別攻撃力増加は上限73パーセントで頭打ち() {
         use crate::random_option::DependencyRates;
 
-        let mut i = input();
-        i.random_options.dependency_damage_rate = DependencyRates {
+        let mut m = material();
+        let tg = target();
+        m.random_options.dependency_damage_rate = DependencyRates {
             stab_hack: 1.00,
             ..Default::default()
         };
-        let result = calculate_damage(&i);
+        let result = calculate_damage(&m, &tg);
         let p = result
             .trace
             .categories
@@ -2059,9 +2050,10 @@ mod tests {
 
     #[test]
     fn ランダムオプションの攻撃ダメージ増加はカテゴリXに入る() {
-        let mut i = input();
-        i.random_options.attack_damage_rate = 0.30;
-        let result = calculate_damage(&i);
+        let mut m = material();
+        let tg = target();
+        m.random_options.attack_damage_rate = 0.30;
+        let result = calculate_damage(&m, &tg);
         let x = result
             .trace
             .categories
@@ -2073,70 +2065,73 @@ mod tests {
 
     #[test]
     fn ランダムオプションの命中率増加は命中Pに足される() {
-        let mut i = input();
-        i.random_options.accuracy_point = 20;
-        let base = calculate_damage(&input()).accuracy_point.unwrap();
-        assert_eq!(calculate_damage(&i).accuracy_point.unwrap(), base + 20);
+        let mut m = material();
+        let tg = target();
+        m.random_options.accuracy_point = 20;
+        let base = calculate_damage(&material(), &target()).accuracy_point.unwrap();
+        assert_eq!(calculate_damage(&m, &tg).accuracy_point.unwrap(), base + 20);
     }
 
     // --- クリティカル率(wiki: 計算式まとめ `#CriticalChance`)-----------------
 
     #[test]
     fn クリティカル率は敵のagiと被撃率が両方そろったときだけ出す() {
-        let mut i = input();
-        i.base_stats.agi = 300;
+        let mut m = material();
+        let mut tg = target();
+        m.base_stats.agi = 300;
         set_equipment_base(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 critical: 200,
                 ..Default::default()
             },
         );
-        i.skill.critical_rate = Some(13);
+        tg.skill.critical_rate = Some(13);
 
         // どちらも未記載(wiki が `?`)なら出さない
-        assert!(calculate_damage(&i).critical_rate.is_none());
+        assert!(calculate_damage(&m, &tg).critical_rate.is_none());
 
         // AGI だけでも出さない(被撃率は −250〜−930% と支配的で、無いと桁違いに外れる)
-        i.enemy.agi = Some(1420);
-        assert!(calculate_damage(&i).critical_rate.is_none());
+        tg.enemy.agi = Some(1420);
+        assert!(calculate_damage(&m, &tg).critical_rate.is_none());
 
-        i.enemy.critical_taken_rate = Some(-350.0);
-        let r = calculate_damage(&i).critical_rate.unwrap();
+        tg.enemy.critical_taken_rate = Some(-350.0);
+        let r = calculate_damage(&m, &tg).critical_rate.unwrap();
         assert_eq!(r.equipment_critical, 200);
         assert_eq!(r.agi, 300);
         assert_eq!(r.target_agi, 1420);
         assert!((r.target_taken_rate - -350.0).abs() < 1e-12);
 
         // スキルの Cri値が wiki 未記載なら出せない
-        i.skill.critical_rate = None;
-        assert!(calculate_damage(&i).critical_rate.is_none());
+        tg.skill.critical_rate = None;
+        assert!(calculate_damage(&m, &tg).critical_rate.is_none());
     }
 
     #[test]
     fn クリティカル率増加は結果を押し上げる() {
         use crate::critical_rate::CriticalRateSources;
 
-        let mut i = input();
-        i.base_stats.agi = 300;
+        let mut m = material();
+        let mut tg = target();
+        m.base_stats.agi = 300;
         set_equipment_base(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 critical: 200,
                 ..Default::default()
             },
         );
-        i.enemy.agi = Some(1420);
-        i.enemy.critical_taken_rate = Some(-100.0);
-        let base = calculate_damage(&i).critical_rate.unwrap();
+        tg.enemy.agi = Some(1420);
+        tg.enemy.critical_taken_rate = Some(-100.0);
+        let base = calculate_damage(&m, &tg).critical_rate.unwrap();
 
-        i.critical_rate_sources = CriticalRateSources {
+        m.critical_rate_sources = CriticalRateSources {
             pet: true,
             ultimate_rune: true,
             architect_lab_stage: 0,
             deadly_blow: false,
         };
-        let boosted = calculate_damage(&i).critical_rate.unwrap();
+        let boosted = calculate_damage(&m, &tg).critical_rate.unwrap();
         assert!((boosted.bonus - 20.0).abs() < 1e-12);
         assert!(boosted.raw > base.raw);
     }
@@ -2144,7 +2139,7 @@ mod tests {
     // クリ率が wiki 未記載(critical_rate が None)ならクリティカル確定扱い(ユーザー判断 2026-08-29)。
     #[test]
     fn クリ率が未記載ならクリティカル確定扱いで期待値はクリdpsと一致する() {
-        let result = calculate_damage(&input());
+        let result = calculate_damage(&material(), &target());
         assert!(result.critical_rate.is_none());
         assert_eq!(result.critical_chance, 1.0);
         assert_eq!(result.expected_dps, result.dps.map(|d| d.critical));
@@ -2153,19 +2148,20 @@ mod tests {
     // クリ率 40% なら期待値は非クリdpsとクリdpsの線形補間になる。
     #[test]
     fn クリ率がある場合の期待dpsは線形補間になる() {
-        let mut i = input();
-        i.base_stats.agi = 300;
+        let mut m = material();
+        let mut tg = target();
+        m.base_stats.agi = 300;
         set_equipment_base(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 critical: 200,
                 ..Default::default()
             },
         );
-        i.enemy.agi = Some(1420);
-        i.enemy.critical_taken_rate = Some(0.0);
-        i.skill.critical_rate = Some(13);
-        let result = calculate_damage(&i);
+        tg.enemy.agi = Some(1420);
+        tg.enemy.critical_taken_rate = Some(0.0);
+        tg.skill.critical_rate = Some(13);
+        let result = calculate_damage(&m, &tg);
         let p = result.critical_rate.unwrap().value / 100.0;
         // 意図的にクリ率が 0% でも 100% でもないケースになっている前提
         assert!(p > 0.0 && p < 1.0);
@@ -2178,12 +2174,13 @@ mod tests {
     // wiki Quest/覚醒クエスト「各能力の上限値」/ エタの意志: 最終能力値の上限
     #[test]
     fn 最終能力値の上限は攻撃力に効きトレースに捨てた分が出る() {
-        let mut i = input();
-        let uncapped = calculate_damage(&i);
+        let mut m = material();
+        let tg = target();
+        let uncapped = calculate_damage(&m, &tg);
         assert!(uncapped.trace.stats.iter().all(|t| t.capped_loss == 0));
 
-        i.stat_cap = 400;
-        let capped = calculate_damage(&i);
+        m.stat_cap = 400;
+        let capped = calculate_damage(&m, &tg);
         let stab = capped
             .trace
             .stats
@@ -2204,24 +2201,27 @@ mod tests {
         use crate::actual_delay::ActualDelayContribution;
         use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
 
-        let mut i = input();
-        i.common_skills.ultimate = UltimateSkills {
+        let mut m = material();
+        let tg = target();
+        m.common_skills.ultimate = UltimateSkills {
             slots: [Some(UltimateSkill::FullThrottle), None],
             super_limit: true,
             hyper_limit_level: 6,
         };
-        i.random_options.actual_delay_reduction = 0.03;
+        m.random_options.actual_delay_reduction = 0.03;
+        let mut equipment = Equipment::default();
         set_siena(
-            &mut i.equipment,
+            &mut equipment,
             PartSlot::Shield,
             siena_extra(SienaValueKind::Thrust, SienaExtraKind::ActualDelay, 2.0),
         );
-        i.actual_delay_skills = vec![ActualDelayContribution {
+        m.siena_actual_delay_reduction = equipment.siena_actual_delay_reduction();
+        m.actual_delay_skills = vec![ActualDelayContribution {
             source: "剣の司祭".into(),
             rate: 0.05,
         }];
 
-        let delay = calculate_damage(&i).actual_delay.unwrap();
+        let delay = calculate_damage(&m, &tg).actual_delay.unwrap();
         assert_eq!(delay.contributions.len(), 4);
         // フルスロットル 45% + RO 3% + シエナ 2% + パッシブ 5% = 55%
         assert!((delay.reduction - 0.55).abs() < 1e-12);
@@ -2230,7 +2230,7 @@ mod tests {
 
     #[test]
     fn dpsは合計ダメージを中ディレイで割る() {
-        let result = calculate_damage(&input());
+        let result = calculate_damage(&material(), &target());
         let delay = result.actual_delay.unwrap();
         let dps = result.dps.unwrap();
         assert!((dps.max - result.total.max as f64 / delay.value).abs() < 1e-9);
@@ -2241,7 +2241,7 @@ mod tests {
 
     /// テスト用の通常攻撃。基本中ディレイ 0.6s、CI は引数で変える
     fn normal_attack(combo_interval: Option<f64>) -> Skill {
-        let mut skill = input().skill;
+        let mut skill = target().skill;
         skill.id = "n".into();
         skill.name = "†極・突き".into();
         skill.normal_attack = true;
@@ -2252,9 +2252,10 @@ mod tests {
 
     #[test]
     fn コンボのdpsは通常攻撃を挟んだ1サイクルで割る() {
-        let i = input();
+        let m = material();
+        let tg = target();
         let normal = normal_attack(Some(0.32));
-        let result = calculate_damage_with_combo(&i, &normal);
+        let result = calculate_damage_with_combo(&m, &tg, &normal);
         let combo = result.combo.clone().expect("コンボ");
 
         // 通常攻撃 1 発ぶんのダメージが乗り、時間は 通常攻撃の中ディレイ + max(スキル, CI)
@@ -2262,19 +2263,20 @@ mod tests {
         let expected = (result.total.max + combo.normal_attack_total.max) as f64 / combo.seconds;
         assert!((result.dps.unwrap().max - expected).abs() < 1e-9);
         // 1 発ぶんの数字はコンボなしと変わらない
-        assert_eq!(result.total, calculate_damage(&i).total);
+        assert_eq!(result.total, calculate_damage(&m, &tg).total);
     }
 
     #[test]
     fn コンボインターバルが長いとスキルの中ディレイの下限になる() {
-        let mut i = input();
+        let mut m = material();
+        let tg = target();
         // 中ディレイ 1.4s → 減少 80%(上限 70%)で 0.42s まで下がる
-        i.actual_delay_skills = vec![crate::actual_delay::ActualDelayContribution {
+        m.actual_delay_skills = vec![crate::actual_delay::ActualDelayContribution {
             source: "テスト".into(),
             rate: 0.7,
         }];
-        let short = calculate_damage_with_combo(&i, &normal_attack(Some(0.3)));
-        let long = calculate_damage_with_combo(&i, &normal_attack(Some(0.55)));
+        let short = calculate_damage_with_combo(&m, &tg, &normal_attack(Some(0.3)));
+        let long = calculate_damage_with_combo(&m, &tg, &normal_attack(Some(0.55)));
 
         assert!(!short.combo.clone().unwrap().interval_binding);
         let long_combo = long.combo.clone().unwrap();
@@ -2286,7 +2288,7 @@ mod tests {
 
     #[test]
     fn コンボの回数は1分をサイクルで割った値() {
-        let result = calculate_damage_with_combo(&input(), &normal_attack(Some(0.32)));
+        let result = calculate_damage_with_combo(&material(), &target(), &normal_attack(Some(0.32)));
         let combo = result.combo.unwrap();
         assert!((combo.uses_per_minute - 60.0 / combo.seconds).abs() < 1e-12);
         assert!((combo.skill_gap - combo.skill_delay.max(0.32)).abs() < 1e-12);
@@ -2294,8 +2296,9 @@ mod tests {
 
     #[test]
     fn コンボインターバルが未収録なら下限なしで出す() {
-        let i = input();
-        let result = calculate_damage_with_combo(&i, &normal_attack(None));
+        let m = material();
+        let tg = target();
+        let result = calculate_damage_with_combo(&m, &tg, &normal_attack(None));
         let combo = result.combo.unwrap();
         assert_eq!(combo.interval, None);
         assert!(!combo.interval_binding);
@@ -2304,20 +2307,22 @@ mod tests {
 
     #[test]
     fn 動作が取れない通常攻撃ではコンボのサイクルを作らない() {
-        let i = input();
+        let m = material();
+        let tg = target();
         let mut normal = normal_attack(Some(0.32));
         normal.base_actual_delay = None;
-        let result = calculate_damage_with_combo(&i, &normal);
+        let result = calculate_damage_with_combo(&m, &tg, &normal);
         assert!(result.combo.is_none());
         // DPS はスキル単体のまま
-        assert_eq!(result.dps, calculate_damage(&i).dps);
+        assert_eq!(result.dps, calculate_damage(&m, &tg).dps);
     }
 
     #[test]
     fn 動作が取れないスキルは中ディレイもdpsも出さない() {
-        let mut i = input();
-        i.skill.base_actual_delay = None;
-        let result = calculate_damage(&i);
+        let m = material();
+        let mut tg = target();
+        tg.skill.base_actual_delay = None;
+        let result = calculate_damage(&m, &tg);
         assert!(result.actual_delay.is_none());
         assert!(result.dps.is_none());
     }
@@ -2328,14 +2333,15 @@ mod tests {
     fn スコープアイはクリティカル時だけダメージを増やす() {
         use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
 
-        let mut i = input();
-        i.common_skills.ultimate = UltimateSkills {
+        let mut m = material();
+        let tg = target();
+        m.common_skills.ultimate = UltimateSkills {
             slots: [Some(UltimateSkill::ScopeEye), None],
             super_limit: true,
             hyper_limit_level: 6,
         };
-        let base = calculate_damage(&input());
-        let with_scope = calculate_damage(&i);
+        let base = calculate_damage(&material(), &target());
+        let with_scope = calculate_damage(&m, &tg);
         // 非クリティカルは {F × G} ごと 1.0 なので変わらない
         assert_eq!(with_scope.per_hit.max, base.per_hit.max);
         // クリティカルは G +40% ぶん増える
@@ -2360,17 +2366,19 @@ mod tests {
         };
 
         // 単体チャネリングではないスキル(テスト既定)は段数が変わらない
-        let mut plain = input();
-        plain.common_skills.ultimate = ultimate;
-        assert_eq!(calculate_damage(&plain).hit_count, input().skill.hit_count);
+        let mut with_ultimate = material();
+        with_ultimate.common_skills.ultimate = ultimate;
+        assert_eq!(
+            calculate_damage(&with_ultimate, &target()).hit_count,
+            target().skill.hit_count
+        );
 
         // 単体チャネリングなら +3
-        let mut channeling = input();
+        let mut channeling = target();
         channeling.skill.hit_count = 10;
         channeling.skill.single_target_channeling = true;
-        let without = calculate_damage(&channeling);
-        channeling.common_skills.ultimate = ultimate;
-        let with_throttle = calculate_damage(&channeling);
+        let without = calculate_damage(&material(), &channeling);
+        let with_throttle = calculate_damage(&with_ultimate, &channeling);
         assert_eq!(without.hit_count, 10);
         assert_eq!(with_throttle.hit_count, 13);
         assert_eq!(with_throttle.total.max, with_throttle.per_hit.max * 13);
@@ -2380,30 +2388,33 @@ mod tests {
     fn ワイドフォーカスは与ダメージを変えない() {
         use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
 
-        let mut i = input();
-        i.skill.single_target_channeling = true;
-        i.common_skills.ultimate = UltimateSkills {
+        let mut m = material();
+        let mut tg = target();
+        tg.skill.single_target_channeling = true;
+        m.common_skills.ultimate = UltimateSkills {
             slots: [Some(UltimateSkill::WideFocus), None],
             super_limit: true,
             hyper_limit_level: 6,
         };
-        let mut base = input();
-        base.skill.single_target_channeling = true;
-        assert_eq!(calculate_damage(&i).total, calculate_damage(&base).total);
+        assert_eq!(
+            calculate_damage(&m, &tg).total,
+            calculate_damage(&material(), &tg).total
+        );
     }
 
     /// カテゴリ供給源内訳(トレースの掘り下げ用)は、非 0 の供給源だけを積み、
     /// 同じカテゴリの合計はカテゴリ集計値(キャップ適用前の生値)と一致する。
     #[test]
     fn カテゴリ供給源内訳の合計はカテゴリの生値と一致する() {
-        let mut i = input();
-        i.enemy.damage_reduction = -100;
-        i.damage_contributions = vec![DamageContribution {
+        let m = material();
+        let mut tg = target();
+        tg.enemy.damage_reduction = -100;
+        tg.damage_contributions = vec![DamageContribution {
             source: "テストスキル".into(),
             category: DamageCategory::AttackDamageSkill,
             value: 0.05,
         }];
-        let r = calculate_damage(&i);
+        let r = calculate_damage(&m, &tg);
 
         let m: f64 = r
             .trace
@@ -2429,9 +2440,10 @@ mod tests {
     /// 装備攻撃力の内訳(層 × 装備値種別)の合計は装備攻撃力(基本+強化)と一致する。
     #[test]
     fn 装備攻撃力の内訳の合計は装備攻撃力と一致する() {
-        let mut i = input();
+        let m = material();
+        let mut tg = target();
         set_equipment_base(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 thrust: 400,
                 slash: 400,
@@ -2439,14 +2451,14 @@ mod tests {
             },
         );
         set_equipment_enhanced(
-            &mut i,
+            &mut tg,
             EquipmentValues {
                 thrust: 200,
                 slash: 200,
                 ..Default::default()
             },
         );
-        i.equipment_coefficients = EquipmentCoefficients {
+        tg.coefficients.equipment = EquipmentCoefficients {
             base: crate::equipment::EquipmentRates {
                 thrust: 14.5,
                 slash: 14.5,
@@ -2460,7 +2472,7 @@ mod tests {
                 magic_defense: 0.0,
             },
         };
-        let r = calculate_damage(&i);
+        let r = calculate_damage(&m, &tg);
         let sum: f64 = r
             .trace
             .equipment_attack_parts
@@ -2491,13 +2503,14 @@ mod tests {
     /// 装備攻撃力強化倍率の供給源(パワーウェポン/ストロングウェポン)の合計は強化倍率と一致する。
     #[test]
     fn 装備攻撃力強化倍率の供給源の合計は強化倍率と一致する() {
-        let mut i = input();
-        i.common_skills = CommonSkills {
+        let mut m = material();
+        let tg = target();
+        m.common_skills = CommonSkills {
             power_weapon: true,
             strong_weapon_level: 3,
             ..Default::default()
         };
-        let r = calculate_damage(&i);
+        let r = calculate_damage(&m, &tg);
         let sum: f64 = r
             .trace
             .equipment_enhance_sources

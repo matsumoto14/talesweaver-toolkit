@@ -62,7 +62,7 @@ pub use content::{
     ContentSeries, GameRegion, RequirementCheck,
 };
 pub use content_evaluation::{
-    evaluate_contents_for_character, DamageMaterial, DependencyCoefficients, SkillEvaluationInput,
+    evaluate_contents_for_character, SkillEvaluationInput,
     WristBonusMaterial,
 };
 pub use critical_rate::{
@@ -71,7 +71,8 @@ pub use critical_rate::{
 };
 pub use damage::{
     calculate_damage, calculate_damage_with_combo, evaluate, ComboCycle, DamageContribution,
-    DamageInput, DamageResult, DamageTrace, DamageTriple, DpsTriple, FormulaStep,
+    DamageMaterial, DamageResult, DamageTarget, DamageTrace, DamageTriple, DependencyCoefficients,
+    DpsTriple, FormulaStep,
 };
 pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,
@@ -112,7 +113,8 @@ pub use skill::{
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{
     apply_character_skills, apply_masteries, apply_pins, apply_temporary_adjustments,
-    apply_unleash, buff_target_stat_gains, build_modifiers, contribution_source_effects,
+    apply_unleash, buff_target_stat_gains, build_modifiers, build_stat_modifiers,
+    contribution_source_effects,
     group_source_effects,
     preview_effective_stats, stat_limits,
     summarize_buff_selection, Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice,
@@ -120,7 +122,8 @@ pub use stat_sources::{
     BuffTargetStatGain,
     BuffValue, CommonSkillPreview, CriticalRateBonusPreview, Crown, MonsterCards, PartAttackContribution,
     PetSkillTier, PetSkillTierBonus, PetSkills, RuneLevels, SacredRelic, StatAdjustment, StatContribution,
-    StatGroupEffect, StatLayer, StatLimits, StatPreview, StatSourceError, StatSourceEffect,
+    StatCatalogs, StatGroupEffect, StatLayer, StatLimits, StatPreview, StatSourceError,
+    StatSourceEffect,
     StatSourceGroup, StatSources, ThesisCoreRegionPreview,
     UltimateSkillPreview,
 };

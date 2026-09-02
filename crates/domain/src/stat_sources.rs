@@ -631,8 +631,7 @@ fn add_stat_rate(
     });
 }
 
-/// マスタリーのステ増加を適用する。カタログが要るので `build_modifiers` からは
-/// 呼べない(`apply_siena_stats` と同じ位置づけ)。
+/// マスタリーのステ増加を適用する(`build_stat_modifiers` の 1 段)。
 pub fn apply_masteries(
     modifiers: &mut StatModifierSet,
     contributions: &mut Vec<StatContribution>,
@@ -1067,9 +1066,8 @@ pub fn build_modifiers(
     Ok((modifiers, contributions))
 }
 
-/// 計算リクエストにのみ乗る一時調整(キャラには保存しない)の加算(`add`)を `StatModifierSet` に合流させる。
-/// `build_modifiers` が返した `modifiers`/`contributions` に対して呼び出し側(コマンド)が追加で適用する。
-/// `pin` はここでは扱わない(呼び出し側が `apply_pins` に渡して適用する)。
+/// 計算リクエストにのみ乗る一時調整(キャラには保存しない)の加算(`add`)を `StatModifierSet` に合流させる
+/// (`build_stat_modifiers` の最終段)。`pin` はここでは扱わない(呼び出し側が `apply_pins` に渡して適用する)。
 pub fn apply_temporary_adjustments(
     modifiers: &mut StatModifierSet,
     contributions: &mut Vec<StatContribution>,
@@ -1311,8 +1309,8 @@ pub struct CriticalRateBonusPreview {
 /// シエナのオーラのステ加算(wiki: 能力値一覧(その他の部位)・追加オプション「全ステータス増加」)を
 /// `StatModifierSet` の最終固定値層に合流させる。
 ///
-/// シエナのオーラは装備部位に属する(`EquipmentPart::siena`)ので `StatSources` からは組み立てられない。
-/// `build_modifiers` を呼んだ側が続けて呼ぶ(ダメージ計算・能力値プレビューの両方)。
+/// シエナのオーラは装備部位に属する(`EquipmentPart::siena`)ので `StatSources` からは組み立てられない
+/// (`build_stat_modifiers` の 1 段)。
 pub fn apply_siena_stats(
     modifiers: &mut StatModifierSet,
     contributions: &mut Vec<StatContribution>,
@@ -1338,8 +1336,7 @@ pub fn apply_siena_stats(
 /// 共通スキル「アンリーシュ(能力解放)」のステ加算(wiki: ステータス「能力値倍率B」)を
 /// `StatModifierSet` の能力値倍率B 層に合流させる。
 ///
-/// アンリーシュは共通スキルなので `StatSources` からは組み立てられない。`build_modifiers` を
-/// 呼んだ側が続けて呼ぶ(`apply_siena_stats` と同じ位置づけ)。
+/// アンリーシュは共通スキルなので `StatSources` からは組み立てられない(`build_stat_modifiers` の 1 段)。
 pub fn apply_unleash(
     modifiers: &mut StatModifierSet,
     contributions: &mut Vec<StatContribution>,
@@ -1362,8 +1359,8 @@ pub fn apply_unleash(
 }
 
 /// 寄与内訳の `effect`(その要因の層が最終能力値まで何ポイント積み上がったか、層のステップ幅)を埋める。
-/// 補正が出そろってからでないと層の重なり方が決まらないので、`build_modifiers` と
-/// `apply_*` をすべて呼び終えたあとに 1 回だけ呼ぶ。
+/// 補正が出そろってからでないと層の重なり方が決まらないので、`build_stat_modifiers` の
+/// あとに 1 回だけ呼ぶ。
 ///
 /// 層ごとの出し方(wiki §2 の計算順にそのまま乗せる):
 /// - 割合増加: `[素ステ × %]`(バフごと切捨て。`effective_stat` と同じ)
@@ -1557,19 +1554,61 @@ pub fn contribution_source_effects(
     out
 }
 
+/// 能力値補正に要るカタログ一式(バフ・マスタリー・キャラスキル)。
+#[derive(Debug, Clone, Copy)]
+pub struct StatCatalogs<'a> {
+    pub buffs: &'a BuffCatalog,
+    pub masteries: &'a MasteryCatalog,
+    pub character_skills: &'a CharacterSkillCatalog,
+}
+
+/// 能力値補正セットを組み立てる唯一の経路。段の順序(補正源とバフ → シエナのオーラ →
+/// マスタリー → キャラスキル → アンリーシュ → 一時調整)はここだけが知る。
+/// 能力値プレビューとダメージ計算の両方がここを通る(片方だけ段が増えて黙ってズレないように)。
+///
+/// `temporary` は計算リクエストにのみ乗る一時調整(キャラには保存しない)。`pin` はここでは
+/// 扱わない(最終能力値が出たあとに `apply_pins`)。
+pub fn build_stat_modifiers(
+    sources: &StatSources,
+    buffs: &BuffSelection,
+    equipment: &Equipment,
+    common: &CommonSkills,
+    catalogs: StatCatalogs<'_>,
+    temporary: Option<&Adjustments>,
+) -> Result<(StatModifierSet, Vec<StatContribution>), StatSourceError> {
+    let (mut modifiers, mut contributions) = build_modifiers(sources, buffs, catalogs.buffs)?;
+    apply_siena_stats(&mut modifiers, &mut contributions, equipment);
+    apply_masteries(
+        &mut modifiers,
+        &mut contributions,
+        &sources.masteries,
+        catalogs.masteries,
+    );
+    apply_character_skills(
+        &mut modifiers,
+        &mut contributions,
+        &sources.character_skills,
+        &sources.masteries,
+        catalogs.character_skills,
+    );
+    apply_unleash(&mut modifiers, &mut contributions, common);
+    if let Some(temporary) = temporary {
+        temporary.validate()?;
+        apply_temporary_adjustments(&mut modifiers, &mut contributions, temporary);
+    }
+    Ok((modifiers, contributions))
+}
+
 /// `BaseStats` + `StatSources` + 装備(シエナのオーラ)から最終能力値を組み立てる(pin 込み)。
 /// 装備が最終能力値に効く経路(シエナのオーラのステ加算)を含むので、部位ごとの寄与を出すときは
 /// 装備を差し替えてここから丸ごと引き直す。
-#[allow(clippy::too_many_arguments)]
 fn effective_stats_with(
     base: &BaseStats,
     sources: &StatSources,
     buffs: &BuffSelection,
     equipment: &Equipment,
     common: &CommonSkills,
-    catalog: &BuffCatalog,
-    masteries: &MasteryCatalog,
-    character_skills: &CharacterSkillCatalog,
+    catalogs: StatCatalogs<'_>,
     stat_cap: i64,
 ) -> Result<
     (
@@ -1580,22 +1619,8 @@ fn effective_stats_with(
     ),
     StatSourceError,
 > {
-    let (mut modifiers, mut contributions) = build_modifiers(sources, buffs, catalog)?;
-    apply_siena_stats(&mut modifiers, &mut contributions, equipment);
-    apply_masteries(
-        &mut modifiers,
-        &mut contributions,
-        &sources.masteries,
-        masteries,
-    );
-    apply_character_skills(
-        &mut modifiers,
-        &mut contributions,
-        &sources.character_skills,
-        &sources.masteries,
-        character_skills,
-    );
-    apply_unleash(&mut modifiers, &mut contributions, common);
+    let (modifiers, mut contributions) =
+        build_stat_modifiers(sources, buffs, equipment, common, catalogs, None)?;
     fill_contribution_effects(&mut contributions, base, &modifiers);
     let source_effects = contribution_source_effects(&contributions, base, &modifiers, stat_cap);
     let (stats, traces) = effective_stats(base, &modifiers, stat_cap);
@@ -1657,9 +1682,7 @@ pub fn buff_target_stat_gains(
     buffs: &BuffSelection,
     equipment: &Equipment,
     common: &CommonSkills,
-    catalog: &BuffCatalog,
-    masteries: &MasteryCatalog,
-    character_skills: &CharacterSkillCatalog,
+    catalogs: StatCatalogs<'_>,
     def: &BuffDefinition,
     stat_cap: i64,
 ) -> Result<Vec<BuffTargetStatGain>, StatSourceError> {
@@ -1671,9 +1694,7 @@ pub fn buff_target_stat_gains(
         &without,
         equipment,
         common,
-        catalog,
-        masteries,
-        character_skills,
+        catalogs,
         stat_cap,
     )?;
 
@@ -1700,9 +1721,7 @@ pub fn buff_target_stat_gains(
             &trial,
             equipment,
             common,
-            catalog,
-            masteries,
-            character_skills,
+            catalogs,
             stat_cap,
         ) {
             Ok((stats, ..)) => stats,
@@ -1733,9 +1752,7 @@ pub fn preview_effective_stats(
     buffs: &BuffSelection,
     equipment: &Equipment,
     common: &CommonSkills,
-    catalog: &BuffCatalog,
-    masteries: &MasteryCatalog,
-    character_skills: &CharacterSkillCatalog,
+    catalogs: StatCatalogs<'_>,
     abilities: &[EquipmentAbilityDef],
     titles: &[TitleDef],
     random_options: &[RandomOptionDef],
@@ -1751,9 +1768,7 @@ pub fn preview_effective_stats(
         buffs,
         equipment,
         common,
-        catalog,
-        masteries,
-        character_skills,
+        catalogs,
         stat_cap,
     )?;
     let attack = match coefficients {
@@ -1780,9 +1795,7 @@ pub fn preview_effective_stats(
                     buffs,
                     &without,
                     common,
-                    catalog,
-                    masteries,
-                    character_skills,
+                    catalogs,
                     stat_cap,
                 )?;
                 let a_without = attack_power_of(
@@ -1869,9 +1882,7 @@ pub fn preview_effective_stats(
             &BuffSelection::default(),
             equipment,
             common,
-            catalog,
-            masteries,
-            character_skills,
+            catalogs,
             stat_cap,
         )?;
         let mut amplification = BuffStatAmplification::default();
@@ -1914,8 +1925,8 @@ pub fn preview_effective_stats(
         thesis_core_best_total: equipment.thesis_cores.best_total_bonus(),
         character_skill_actual_delay: sources
             .character_skills
-            .actual_delay_contributions(character_skills, &sources.masteries),
-        mastery_actual_delay: sources.masteries.actual_delay_reduction(masteries),
+            .actual_delay_contributions(catalogs.character_skills, &sources.masteries),
+        mastery_actual_delay: sources.masteries.actual_delay_reduction(catalogs.masteries),
         siena_defense_rate: equipment.siena_defense_rate(),
         siena_actual_delay_rate: equipment.siena_actual_delay_reduction(),
         siena_critical_rate: equipment.siena_critical_rate(),
@@ -2465,9 +2476,11 @@ mod tests {
             &buffs,
             &Equipment::default(),
             &CommonSkills::default(),
-            &catalog,
-            MASTERY_CATALOG,
-            &[],
+            StatCatalogs {
+                buffs: &catalog,
+                masteries: MASTERY_CATALOG,
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -2484,9 +2497,11 @@ mod tests {
             &BuffSelection::default(),
             &Equipment::default(),
             &CommonSkills::default(),
-            &catalog,
-            MASTERY_CATALOG,
-            &[],
+            StatCatalogs {
+                buffs: &catalog,
+                masteries: MASTERY_CATALOG,
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -2571,9 +2586,11 @@ mod tests {
             &buffs,
             &Equipment::default(),
             &CommonSkills::default(),
-            &catalog,
-            MASTERY_CATALOG,
-            &[],
+            StatCatalogs {
+                buffs: &catalog,
+                masteries: MASTERY_CATALOG,
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -2587,9 +2604,11 @@ mod tests {
             &BuffSelection::default(),
             &Equipment::default(),
             &CommonSkills::default(),
-            &catalog,
-            MASTERY_CATALOG,
-            &[],
+            StatCatalogs {
+                buffs: &catalog,
+                masteries: MASTERY_CATALOG,
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -3001,9 +3020,11 @@ mod tests {
             &BuffSelection::default(),
             &test_equipment(),
             &test_common_skills(),
-            &test_catalog(),
-            &[],
-            &[],
+            StatCatalogs {
+                buffs: &test_catalog(),
+                masteries: &[],
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -3032,9 +3053,11 @@ mod tests {
             &BuffSelection::default(),
             &equipment,
             &test_common_skills(),
-            &test_catalog(),
-            &[],
-            &[],
+            StatCatalogs {
+                buffs: &test_catalog(),
+                masteries: &[],
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -3087,9 +3110,11 @@ mod tests {
             &BuffSelection::default(),
             &Equipment::default(),
             &CommonSkills::default(),
-            &test_catalog(),
-            &[],
-            &[],
+            StatCatalogs {
+                buffs: &test_catalog(),
+                masteries: &[],
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -3133,9 +3158,11 @@ mod tests {
             &BuffSelection::default(),
             &equipment,
             &test_common_skills(),
-            &test_catalog(),
-            &[],
-            &[],
+            StatCatalogs {
+                buffs: &test_catalog(),
+                masteries: &[],
+                character_skills: &[],
+            },
             &[],
             &[],
             &[],
@@ -3153,9 +3180,11 @@ mod tests {
                 &BuffSelection::default(),
                 &without,
                 &test_common_skills(),
-                &test_catalog(),
-                &[],
-                &[],
+                StatCatalogs {
+                    buffs: &test_catalog(),
+                    masteries: &[],
+                    character_skills: &[],
+                },
                 &[],
                 &[],
                 &[],
@@ -3548,9 +3577,11 @@ mod tests {
             &BuffSelection::default(),
             &Equipment::default(),
             &CommonSkills::default(),
-            &catalog,
-            &[],
-            &[],
+            StatCatalogs {
+                buffs: &catalog,
+                masteries: &[],
+                character_skills: &[],
+            },
             def,
             cap,
         )
@@ -3595,9 +3626,11 @@ mod tests {
             &buffs,
             &Equipment::default(),
             &CommonSkills::default(),
-            &catalog,
-            &[],
-            &[],
+            StatCatalogs {
+                buffs: &catalog,
+                masteries: &[],
+                character_skills: &[],
+            },
             def,
             NO_CAP,
         )
@@ -3623,9 +3656,11 @@ mod tests {
             &buffs,
             &Equipment::default(),
             &CommonSkills::default(),
-            &catalog,
-            &[],
-            &[],
+            StatCatalogs {
+                buffs: &catalog,
+                masteries: &[],
+                character_skills: &[],
+            },
             def,
             NO_CAP,
         )
@@ -3674,6 +3709,53 @@ mod tests {
             assert_eq!(modifiers.get(kind).fixed, 0);
             assert_eq!(modifiers.get(kind).final_fixed, 0);
         }
+    }
+
+    // --- 4.6. build_stat_modifiers(補正パイプラインの唯一の経路) ---
+
+    #[test]
+    fn build_stat_modifiersは一時調整を最終段で積み範囲外なら弾く() {
+        let catalogs = StatCatalogs {
+            buffs: &test_catalog(),
+            masteries: &[],
+            character_skills: &[],
+        };
+        let temporary = Adjustments {
+            mr: StatAdjustment { add: 12, pin: None },
+            ..Default::default()
+        };
+        let (modifiers, contributions) = build_stat_modifiers(
+            &StatSources::default(),
+            &BuffSelection::default(),
+            &Equipment::default(),
+            &CommonSkills::default(),
+            catalogs,
+            Some(&temporary),
+        )
+        .unwrap();
+        assert_eq!(modifiers.get(StatKind::Mr).fixed, 12);
+        assert!(contributions.iter().any(|c| c.source == "一時調整"));
+
+        let out_of_range = Adjustments {
+            mr: StatAdjustment {
+                add: ADJUSTMENT_ADD_MAX + 1,
+                pin: None,
+            },
+            ..Default::default()
+        };
+        let err = build_stat_modifiers(
+            &StatSources::default(),
+            &BuffSelection::default(),
+            &Equipment::default(),
+            &CommonSkills::default(),
+            catalogs,
+            Some(&out_of_range),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, StatSourceError::AdjustmentOutOfRange { .. }),
+            "{err:?}"
+        );
     }
 
     // --- 5. 通し値テスト(goal 指定) ---

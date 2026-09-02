@@ -95,7 +95,7 @@
 ### apps/desktop — Tauri シェル
 
 - コマンドは「storage/gamedata から読む → domain を呼ぶ → 結果を返す」だけの薄いアダプタ。ロジックを書かない
-  - 未実装要素の中立値(属性など)もコマンドに書かない。`DamageInput::new` のように domain 側へ集約し、実装時にそこを引数へ昇格させる
+  - 未実装要素の中立値(属性など)もコマンドに書かない。`DamageMaterial` のように domain 側へ集約し、実装時にそこを引数へ昇格させる
 - UI は表示と入力のみ。計算・判定は必ず Rust 側
 
 フロントエンドの階層(`apps/desktop/src/`):

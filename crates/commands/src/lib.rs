@@ -7,7 +7,7 @@
 
 use domain::{
     evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
-    CommonSkills, Content, ContentArea, ContentEvaluation, DamageInput, DamageMaterial,
+    CommonSkills, Content, ContentArea, ContentEvaluation, DamageMaterial, DamageTarget,
     DamageResult, DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef,
     EquipmentPart, NewCharacter, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef,
     WristBonusMaterial,
@@ -344,9 +344,7 @@ pub fn preview_effective_stats(
         &buffs,
         &equipment,
         &common_skills,
-        &gamedata::buff_catalog(),
-        gamedata::mastery_catalog(),
-        gamedata::character_skill_catalog(),
+        stat_catalogs(&gamedata::buff_catalog()),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
         &gamedata::random_option_catalog(),
@@ -384,9 +382,7 @@ pub fn buff_target_stat_gains(
         &buffs,
         &equipment,
         &common_skills,
-        &catalog,
-        gamedata::mastery_catalog(),
-        gamedata::character_skill_catalog(),
+        stat_catalogs(&catalog),
         def,
         gamedata::awakening_caps(awakening).max_stat,
     )
@@ -408,9 +404,7 @@ pub fn preview_defense(
         &buffs,
         &character.equipment,
         &character.common_skills,
-        &gamedata::buff_catalog(),
-        gamedata::mastery_catalog(),
-        gamedata::character_skill_catalog(),
+        stat_catalogs(&gamedata::buff_catalog()),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
         &gamedata::random_option_catalog(),
@@ -462,9 +456,7 @@ pub fn preview_versus(
         &attacker_buffs,
         &attacker.equipment,
         &attacker.common_skills,
-        &gamedata::buff_catalog(),
-        gamedata::mastery_catalog(),
-        gamedata::character_skill_catalog(),
+        stat_catalogs(&gamedata::buff_catalog()),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
         &gamedata::random_option_catalog(),
@@ -482,9 +474,7 @@ pub fn preview_versus(
         &defender_buffs,
         &defender.equipment,
         &defender.common_skills,
-        &gamedata::buff_catalog(),
-        gamedata::mastery_catalog(),
-        gamedata::character_skill_catalog(),
+        stat_catalogs(&gamedata::buff_catalog()),
         &gamedata::equipment_abilities(),
         &gamedata::title_catalog(),
         &gamedata::random_option_catalog(),
@@ -761,6 +751,15 @@ fn resolve_accuracy_boost(stat_sources: &domain::StatSources) -> domain::Accurac
     domain::AccuracyBoost::resolve(false, level)
 }
 
+/// 能力値補正に要るカタログ一式。バフカタログだけ所有値なので呼び出し側が持つ。
+fn stat_catalogs(buff_catalog: &[domain::BuffDefinition]) -> domain::StatCatalogs<'_> {
+    domain::StatCatalogs {
+        buffs: buff_catalog,
+        masteries: gamedata::mastery_catalog(),
+        character_skills: gamedata::character_skill_catalog(),
+    }
+}
+
 /// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を gamedata から解決する。
 fn dependency_coefficients(dependency: domain::SkillDependency) -> DependencyCoefficients {
     DependencyCoefficients {
@@ -794,40 +793,16 @@ fn build_damage_material(
     awakening: domain::Awakening,
     temporary_adjustments: Option<&domain::Adjustments>,
 ) -> CommandResult<DamageMaterial> {
-    let (mut stat_modifiers, mut stat_contributions) =
-        domain::stat_sources::build_modifiers(stat_sources, buffs, &gamedata::buff_catalog())
-            .map_err(|e| e.to_string())?;
-    domain::stat_sources::apply_siena_stats(
-        &mut stat_modifiers,
-        &mut stat_contributions,
+    let buff_catalog = gamedata::buff_catalog();
+    let (stat_modifiers, stat_contributions) = domain::build_stat_modifiers(
+        stat_sources,
+        buffs,
         equipment,
-    );
-    domain::stat_sources::apply_masteries(
-        &mut stat_modifiers,
-        &mut stat_contributions,
-        &stat_sources.masteries,
-        gamedata::mastery_catalog(),
-    );
-    domain::stat_sources::apply_character_skills(
-        &mut stat_modifiers,
-        &mut stat_contributions,
-        &stat_sources.character_skills,
-        &stat_sources.masteries,
-        gamedata::character_skill_catalog(),
-    );
-    domain::stat_sources::apply_unleash(
-        &mut stat_modifiers,
-        &mut stat_contributions,
         &common_skills,
-    );
-    if let Some(temp) = temporary_adjustments {
-        temp.validate().map_err(|e| e.to_string())?;
-        domain::stat_sources::apply_temporary_adjustments(
-            &mut stat_modifiers,
-            &mut stat_contributions,
-            temp,
-        );
-    }
+        stat_catalogs(&buff_catalog),
+        temporary_adjustments,
+    )
+    .map_err(|e| e.to_string())?;
     let weapon_added_damage = equipment
         .parts
         .weapon
@@ -844,12 +819,16 @@ fn build_damage_material(
         base_stats: base_stats.clone(),
         stat_modifiers,
         stat_contributions,
-        equipment: equipment.clone(),
         common_skills,
+        temporary_pins: temporary_adjustments.cloned(),
+        siena_attack_rate: equipment.siena_attack_rate(),
+        siena_critical_rate: equipment.siena_critical_rate(),
+        siena_actual_delay_reduction: equipment.siena_actual_delay_reduction(),
+        core_set_bonus: equipment.thesis_cores.set_bonus(),
         // 感電は今回まだ入力を持たない([仮] 中立値。goal 「命中Pの計算を wiki どおりに直す」の残タスク)
         accuracy_bonus: domain::stat_sources::buff_accuracy_point_total(
             buffs,
-            &gamedata::buff_catalog(),
+            &buff_catalog,
             accuracy_boost,
         ),
         accuracy_boost,
@@ -868,7 +847,8 @@ fn build_damage_material(
     })
 }
 
-/// ダメージ計算の入力を組み立てる(calculate_damage / preview_damage 共通)。
+/// ダメージ計算の入力(キャラ由来の材料 + 何を何に撃つか)を組み立てる
+/// (calculate_damage / preview_damage 共通)。
 #[allow(clippy::too_many_arguments)]
 fn build_damage_input(
     base_stats: &domain::BaseStats,
@@ -885,7 +865,7 @@ fn build_damage_input(
     combo_count: u32,
     combo_skill_type: Option<domain::ComboSkillType>,
     temporary_adjustments: Option<domain::Adjustments>,
-) -> CommandResult<DamageInput> {
+) -> CommandResult<(DamageMaterial, DamageTarget)> {
     let material = build_damage_material(
         base_stats,
         stat_sources,
@@ -929,18 +909,20 @@ fn build_damage_input(
     let element_value =
         gamedata::element_value_for(game_character_id, &equipment, stat_sources, &skill);
     let coefficients = dependency_coefficients(skill.dependency);
-    Ok(material.build_input(
-        skill,
-        enemy,
-        combo_count,
-        temporary_adjustments,
-        coefficients,
-        equipment_base_sources,
-        equipment_enhanced_sources,
-        title_damage_rate,
-        title_added_damage_rate,
-        damage_contributions,
-        element_value,
+    Ok((
+        material,
+        DamageTarget {
+            skill,
+            enemy,
+            combo_count,
+            coefficients,
+            equipment_base_sources,
+            equipment_enhanced_sources,
+            title_attack_damage_rate: title_damage_rate,
+            title_added_damage_rate,
+            damage_contributions,
+            element_value,
+        },
     ))
 }
 
@@ -949,15 +931,16 @@ fn build_damage_input(
 /// 通常攻撃を挟まないとコンボボーナスは成立しないので、コンボ扱いなのに通常攻撃が
 /// 渡ってこないとき(そのキャラの通常攻撃が未収録)は、倍率だけ乗った単体計算になる。
 fn damage_with_optional_combo(
-    input: &domain::DamageInput,
+    material: &DamageMaterial,
+    target: &DamageTarget,
     combo_count: u32,
     normal_attack_id: Option<&str>,
 ) -> CommandResult<DamageResult> {
     let Some(id) = normal_attack_id.filter(|_| combo_count > 0) else {
-        return Ok(domain::calculate_damage(input));
+        return Ok(domain::calculate_damage(material, target));
     };
     let normal = find_skill(id)?;
-    Ok(domain::calculate_damage_with_combo(input, &normal))
+    Ok(domain::calculate_damage_with_combo(material, target, &normal))
 }
 
 /// 登録済みキャラ・draft のどちらでも通る、与ダメージ計算の本体。
@@ -987,7 +970,7 @@ pub fn damage_for_character(
         .map(|skill| skill.dependency);
     let content = find_content(content_id)?;
     let enemy = find_enemy(content.enemy_id.as_deref().unwrap_or_default())?;
-    let input = build_damage_input(
+    let (material, target) = build_damage_input(
         base_stats,
         game_character_id,
         style_dependency,
@@ -1003,7 +986,7 @@ pub fn damage_for_character(
         combo_skill_type,
         temporary_adjustments,
     )?;
-    damage_with_optional_combo(&input, combo_count, normal_attack_id)
+    damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)
 }
 
 /// 保存前のキャラデータ(編集中 draft・試し変更)でダメージ計算する。DB には書き込まない。
@@ -1127,6 +1110,7 @@ pub fn evaluate_contents(
     };
     Ok(evaluate_contents_for_character(
         &material,
+        &character.equipment,
         &gamedata::content_areas(),
         &enemies,
         &skill_inputs,
@@ -1244,7 +1228,7 @@ pub fn list_upgrade_candidates(
     // 武器強化のように**表記は動かさず総量だけ増やす**候補があるので、片方だけでは拾えない
     let damage =
         |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<(i64, i64)> {
-            let input = build_damage_input(
+            let (material, target) = build_damage_input(
                 &character.base_stats,
                 &character.game_character_id,
                 style_dependency,
@@ -1260,7 +1244,7 @@ pub fn list_upgrade_candidates(
                 combo_skill_type,
                 temporary_adjustments.clone(),
             )?;
-            let result = domain::calculate_damage(&input);
+            let result = domain::calculate_damage(&material, &target);
             Ok((result.per_hit_primary, result.total_primary))
         };
 
@@ -1374,7 +1358,7 @@ pub fn list_enchant_gains(
 
     let per_hit =
         |equipment: domain::Equipment, common_skills: CommonSkills| -> CommandResult<(i64, i64)> {
-            let input = build_damage_input(
+            let (material, target) = build_damage_input(
                 &character.base_stats,
                 &character.game_character_id,
                 style_dependency,
@@ -1390,7 +1374,7 @@ pub fn list_enchant_gains(
                 combo_skill_type,
                 temporary_adjustments.clone(),
             )?;
-            let result = domain::calculate_damage(&input);
+            let result = domain::calculate_damage(&material, &target);
             Ok((result.per_hit_primary, result.total_primary))
         };
 
@@ -1641,7 +1625,7 @@ mod tests {
             .flat_map(|area| area.contents)
             .find(|content| content.id == "ringo")
             .unwrap();
-        let input = build_damage_input(
+        let (material, target) = build_damage_input(
             &BaseStats {
                 stab: 100,
                 hack: 100,
@@ -1667,7 +1651,7 @@ mod tests {
         )
         .unwrap();
 
-        let soul_sources: Vec<_> = input
+        let soul_sources: Vec<_> = target
             .equipment_base_sources
             .iter()
             .filter(|source| source.source == "ソウルリンク")
@@ -1683,7 +1667,7 @@ mod tests {
                 ..Default::default()
             }
         );
-        let soul_damage: Vec<_> = input
+        let soul_damage: Vec<_> = target
             .damage_contributions
             .iter()
             .filter(|source| source.source == "ソウルリンク")
@@ -1698,7 +1682,7 @@ mod tests {
                 && (source.value - 0.04).abs() < f64::EPSILON
         }));
         // 武器+10の丸め済み60,508へリンクLv4の+40%を掛けて切り捨てる。
-        assert_eq!(input.weapon_added_damage, 84_711);
+        assert_eq!(material.weapon_added_damage, 84_711);
     }
 
 

@@ -1,120 +1,26 @@
 //! 「全コンテンツ×スキル」の評価(ホームの到達一覧・キャラレールのクリア数)を domain 側で
-//! まとめる。単発計算(`DamageInput::new` を直接呼ぶ計算タブ)と共通の材料
-//! (`DamageMaterial`)を経由することで、両者の数値がズレない構造にする。
+//! まとめる。単発計算(計算タブ)と同じキャラ由来の材料(`DamageMaterial`)を
+//! 経由することで、両者の数値がズレない構造にする。
 //!
 //! gamedata のカタログ解決(スキル依存種別ごとの係数・装備アイテムの装着時効果・
 //! 属性値の供給源など)は呼び出し側(commands.rs)が行い、ここへは解決済みの値
 //! (`SkillEvaluationInput` 1 件 = 1 スキルぶん)として渡す。domain はそれを使って
 //! コンテンツ×スキルのループと最大火力スキルの選定だけを行う。
 
-use serde::{Deserialize, Serialize};
-
-use crate::actual_delay::{ActualDelayContribution, SkillUsesTable};
-use crate::attack_power::AttackCoefficients;
 use crate::awakening::Awakening;
-use crate::calculate_damage;
-use crate::common_skill::CommonSkills;
 use crate::content::{evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation};
-use crate::critical_rate::CriticalRateSources;
-use crate::damage::{DamageContribution, DamageInput};
-use crate::defense::{AccuracyBoost, AccuracyCorrection};
+use crate::damage::{
+    calculate_damage, DamageContribution, DamageMaterial, DamageTarget, DependencyCoefficients,
+};
 use crate::enemy::Enemy;
 use crate::equipment::{
-    sum_equipment_value_sources, wrist_base_bonus, Equipment, EquipmentCoefficients,
-    EquipmentValueSource, EquipmentValues, WristBonusRule,
+    sum_equipment_value_sources, wrist_base_bonus, Equipment, EquipmentValueSource,
+    EquipmentValues, WristBonusRule,
 };
-use crate::random_option::RandomOptionTotals;
 use crate::skill::{Skill, SkillDependency};
-use crate::stat_sources::{Adjustments, StatContribution};
-use crate::stats::{BaseStats, StatModifierSet};
+use crate::stats::BaseStats;
 use crate::thesis_core::CoreRegion;
 use crate::title::{title_added_damage_rate, title_attack_damage_rate, TitleDef};
-
-/// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数(wiki: カテゴリA・
-/// 計算式まとめ)。実データは gamedata が持つので、呼び出し側が解決して渡す。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct DependencyCoefficients {
-    pub attack: AttackCoefficients,
-    pub equipment: EquipmentCoefficients,
-    pub accuracy: AccuracyCorrection,
-}
-
-/// 与ダメージ計算のうち、スキル・敵・コンテンツによらない共通材料。
-/// 計算タブの単発計算とホームの全コンテンツ評価が同じインスタンスの組み立て方
-/// (呼び出し側で 1 回だけ構築)を通ることで、両者の数値がズレない。
-#[derive(Debug, Clone)]
-pub struct DamageMaterial {
-    pub base_stats: BaseStats,
-    pub stat_modifiers: StatModifierSet,
-    pub stat_contributions: Vec<StatContribution>,
-    pub equipment: Equipment,
-    pub common_skills: CommonSkills,
-    /// 命中P増加(射手のルーン等)の合計。中立値は 0
-    pub accuracy_bonus: i64,
-    /// 命中P割合増加の枠(集中・的中剣)。装着中アビリティから呼び出し側が解決する
-    pub accuracy_boost: AccuracyBoost,
-    /// 感電・雷電中か
-    pub accuracy_shocked: bool,
-    pub random_options: RandomOptionTotals,
-    pub weapon_added_damage: i64,
-    pub awakening_rate: f64,
-    pub damage_cap: i64,
-    pub stat_cap: i64,
-    pub actual_delay_skills: Vec<ActualDelayContribution>,
-    pub critical_rate_sources: CriticalRateSources,
-    pub skill_uses: SkillUsesTable,
-}
-
-impl DamageMaterial {
-    /// スキル・敵ごとに変わる残りの値を渡して `DamageInput` を組み立てる。
-    #[allow(clippy::too_many_arguments)]
-    pub fn build_input(
-        &self,
-        skill: Skill,
-        enemy: Enemy,
-        combo_count: u32,
-        temporary_pins: Option<Adjustments>,
-        coefficients: DependencyCoefficients,
-        equipment_base_sources: Vec<EquipmentValueSource>,
-        equipment_enhanced_sources: Vec<EquipmentValueSource>,
-        title_damage_rate: f64,
-        title_added_damage_rate: f64,
-        damage_contributions: Vec<DamageContribution>,
-        element_value: i64,
-    ) -> DamageInput {
-        DamageInput::new(
-            self.base_stats.clone(),
-            self.stat_modifiers.clone(),
-            self.stat_contributions.clone(),
-            coefficients.attack,
-            self.equipment.clone(),
-            self.common_skills,
-            equipment_base_sources,
-            equipment_enhanced_sources,
-            coefficients.equipment,
-            coefficients.accuracy,
-            self.accuracy_bonus,
-            self.accuracy_boost,
-            self.accuracy_shocked,
-            self.random_options,
-            title_damage_rate,
-            title_added_damage_rate,
-            damage_contributions,
-            self.weapon_added_damage,
-            self.awakening_rate,
-            self.damage_cap,
-            self.stat_cap,
-            skill,
-            enemy,
-            combo_count,
-            element_value,
-            temporary_pins,
-            self.actual_delay_skills.clone(),
-            self.critical_rate_sources,
-            self.skill_uses.clone(),
-        )
-    }
-}
 
 /// 「全コンテンツ×スキル」評価ループの中で、スキル固有だがコンテンツには依存しない
 /// 入力(依存種別の係数・カテゴリ寄与・属性値)。腕装備パッシブ込みの装備基本能力値は
@@ -189,6 +95,7 @@ impl WristBonusMaterial {
 #[allow(clippy::too_many_arguments)]
 pub fn evaluate_contents_for_character(
     material: &DamageMaterial,
+    equipment: &Equipment,
     content_areas: &[ContentArea],
     enemies: &[Enemy],
     skills: &[SkillEvaluationInput],
@@ -211,7 +118,7 @@ pub fn evaluate_contents_for_character(
     let enhanced_by_region: Vec<(Option<CoreRegion>, Vec<EquipmentValueSource>)> =
         std::iter::once(None)
             .chain(CoreRegion::ALL.into_iter().map(Some))
-            .map(|region| (region, material.equipment.enhanced_sources(region)))
+            .map(|region| (region, equipment.enhanced_sources(region)))
             .collect();
     let enhanced_for = |region: Option<CoreRegion>| {
         enhanced_by_region
@@ -221,7 +128,7 @@ pub fn evaluate_contents_for_character(
             .unwrap_or_default()
     };
 
-    let title = material.equipment.title.as_deref();
+    let title = equipment.title.as_deref();
 
     let mut evaluations = Vec::new();
     for area in content_areas {
@@ -229,6 +136,7 @@ pub fn evaluate_contents_for_character(
             evaluations.push(evaluate_one_content(
                 content,
                 material,
+                equipment,
                 enemies,
                 skills,
                 &equipment_base_sources_raw,
@@ -264,6 +172,7 @@ fn entry_equipment_totals(
 fn evaluate_one_content(
     content: &Content,
     material: &DamageMaterial,
+    equipment: &Equipment,
     enemies: &[Enemy],
     skills: &[SkillEvaluationInput],
     equipment_base_sources_raw: &[EquipmentValueSource],
@@ -274,10 +183,7 @@ fn evaluate_one_content(
     awakening: Awakening,
     fixed_dependency: Option<SkillDependency>,
 ) -> ContentEvaluation {
-    let thesis_core_total = material
-        .equipment
-        .thesis_cores
-        .total_bonus(content.core_region);
+    let thesis_core_total = equipment.thesis_cores.total_bonus(content.core_region);
 
     // 敵データが無いコンテンツ(入場条件のみ判定)は火力計算をしない。装備条件の
     // 比較先はキャラの代表スキル(一覧の先頭)の依存種別で決める。
@@ -331,20 +237,19 @@ fn evaluate_one_content(
     let mut best: Option<BestSkillDamage> = None;
     let mut best_dependency: Option<SkillDependency> = None;
     for entry in skills {
-        let input = material.build_input(
-            entry.skill.clone(),
-            enemy.clone(),
-            0,
-            None,
-            entry.coefficients,
-            equipment_base_sources_for(entry.skill.dependency),
-            equipment_enhanced_sources.clone(),
-            title_damage_rate,
+        let target = DamageTarget {
+            skill: entry.skill.clone(),
+            enemy: enemy.clone(),
+            combo_count: 0,
+            coefficients: entry.coefficients,
+            equipment_base_sources: equipment_base_sources_for(entry.skill.dependency),
+            equipment_enhanced_sources: equipment_enhanced_sources.clone(),
+            title_attack_damage_rate: title_damage_rate,
             title_added_damage_rate,
-            entry.damage_contributions.clone(),
-            entry.element_value,
-        );
-        let result = calculate_damage(&input);
+            damage_contributions: entry.damage_contributions.clone(),
+            element_value: entry.element_value,
+        };
+        let result = calculate_damage(material, &target);
         if best
             .as_ref()
             .is_none_or(|b| result.per_hit_primary > b.per_hit_primary)
@@ -379,14 +284,20 @@ fn evaluate_one_content(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::actual_delay::SkillUsesTable;
+    use crate::attack_power::AttackCoefficients;
     use crate::character_skill::{CharacterSkillDef, CharacterSkills, SkillAudience, SkillEffect};
+    use crate::common_skill::CommonSkills;
     use crate::critical_rate::CriticalRateSources;
     use crate::defense::{AccuracyBoost, AccuracyCorrection};
     use crate::element::Element;
+    use crate::equipment::EquipmentCoefficients;
     use crate::mastery::Masteries;
+    use crate::random_option::RandomOptionTotals;
     use crate::skill::{SkillDependency, SkillTarget};
     use crate::stat_sources::{build_modifiers, StatSources};
-    use crate::stats::{BaseStats, StatKind};
+    use crate::stats::StatKind;
+    use crate::thesis_core::CoreSetBonus;
 
     const STAB_DEF: &[StatKind] = &[StatKind::Stab, StatKind::Def];
     const ELITE_SWORDSMAN: &[SkillEffect] = &[SkillEffect::StatRate {
@@ -515,8 +426,12 @@ mod tests {
             },
             stat_modifiers: modifiers,
             stat_contributions: contributions,
-            equipment: Equipment::default(),
             common_skills: CommonSkills::default(),
+            temporary_pins: None,
+            siena_attack_rate: 0.0,
+            siena_critical_rate: 0.0,
+            siena_actual_delay_reduction: 0.0,
+            core_set_bonus: CoreSetBonus::default(),
             accuracy_bonus: 0,
             accuracy_boost: AccuracyBoost::None,
             accuracy_shocked: false,
@@ -545,6 +460,7 @@ mod tests {
         }];
         evaluate_contents_for_character(
             &material,
+            &Equipment::default(),
             &content_area(),
             &[enemy()],
             &skills,
