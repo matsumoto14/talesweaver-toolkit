@@ -756,14 +756,10 @@ pub fn preview_defense(
     buffs: BuffSelection,
 ) -> CommandResult<DefenseProfile> {
     validate_character_draft(&character, &buffs)?;
-    let preview = stat_preview_of(&character.base_stats, &character.stat_sources, &buffs, &character.equipment, &character.common_skills, character.awakening, None)?;
-    // preview と同じ基本能力値(装備 + アビリティ + 称号 + ソウルリンク)を使う。
-    // ソウルリンクはエンチャントではなく基本能力値へ直接加算する。
-    let equipment_totals = preview
-        .equipment_base_total
-        .add(character.equipment.enhanced_totals(None));
+    let (stats, base_total) = combat_stats_of(&character, &buffs)?;
+    let equipment_totals = base_total.add(character.equipment.enhanced_totals(None));
     Ok(domain::defense_profile(
-        &preview.stats,
+        &stats,
         &equipment_totals,
         gamedata::awakening_caps(character.awakening),
         &character
@@ -795,17 +791,15 @@ pub fn preview_versus(
         .accuracy
         .ok_or_else(|| CommandError::from(format!("スキル '{skill_id}' の命中は未収録です")))?;
 
-    let attacker_preview = stat_preview_of(&attacker.base_stats, &attacker.stat_sources, &attacker_buffs, &attacker.equipment, &attacker.common_skills, attacker.awakening, None)?;
-    let attacker_equipment_totals = attacker_preview
-        .equipment_base_total
-        .add(attacker.equipment.enhanced_totals(None));
+    let (attacker_stats, attacker_base_total) = combat_stats_of(&attacker, &attacker_buffs)?;
+    let attacker_equipment_totals =
+        attacker_base_total.add(attacker.equipment.enhanced_totals(None));
 
-    let defender_preview = stat_preview_of(&defender.base_stats, &defender.stat_sources, &defender_buffs, &defender.equipment, &defender.common_skills, defender.awakening, None)?;
-    let defender_equipment_totals = defender_preview
-        .equipment_base_total
-        .add(defender.equipment.enhanced_totals(None));
+    let (defender_stats, defender_base_total) = combat_stats_of(&defender, &defender_buffs)?;
+    let defender_equipment_totals =
+        defender_base_total.add(defender.equipment.enhanced_totals(None));
     let defender_profile = domain::defense_profile(
-        &defender_preview.stats,
+        &defender_stats,
         &defender_equipment_totals,
         gamedata::awakening_caps(defender.awakening),
         &defender
@@ -852,7 +846,7 @@ pub fn preview_versus(
     Ok(domain::versus_accuracy(
         &domain::VersusAttacker {
             learnable_accuracy_skill: learnable_accuracy_skill(&attacker.game_character_id),
-            stats: &attacker_preview.stats,
+            stats: &attacker_stats,
             correction: &correction,
             equipment: &attacker.equipment,
             enchant_caps: &attacker_enchant_caps,
@@ -874,7 +868,7 @@ pub fn preview_versus(
             min_hit_rate: None,
         },
         &domain::VersusDefender {
-            stats: &defender_preview.stats,
+            stats: &defender_stats,
             profile: &defender_profile,
             equipment: &defender.equipment,
             enchant_caps: &defender_enchant_caps,
@@ -1084,6 +1078,33 @@ fn resolve_accuracy_boost(stat_sources: &domain::StatSources) -> domain::Accurac
         &stat_sources.masteries,
     );
     domain::AccuracyBoost::resolve(false, skill)
+}
+
+/// 防御・対人が要る 2 値(最終能力値と装備の基本能力値の合計)だけを出す。部位ごとの寄与まで
+/// 組み立てるフルプレビュー(`stat_preview_of`)は通さない
+fn combat_stats_of(
+    character: &NewCharacter,
+    buffs: &BuffSelection,
+) -> CommandResult<(domain::EffectiveStats, domain::EquipmentValues)> {
+    let abilities = gamedata::equipment_abilities();
+    let titles = gamedata::title_catalog();
+    let stats = domain::effective_stats_of(
+        &character.base_stats,
+        &character.stat_sources,
+        buffs,
+        &character.equipment,
+        &character.common_skills,
+        stat_catalogs(&gamedata::buff_catalog()),
+        gamedata::awakening_caps(character.awakening).max_stat,
+    )
+    .map_err(|e| e.to_string())?;
+    let base_total = domain::equipment_base_total(
+        &character.equipment,
+        character.stat_sources.soul_link,
+        &abilities,
+        &titles,
+    );
+    Ok((stats, base_total))
 }
 
 /// 能力値プレビュー(`domain::preview_effective_stats`)をカタログ込みで呼ぶ。

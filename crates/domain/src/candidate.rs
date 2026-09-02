@@ -17,6 +17,7 @@ use crate::equipment::{
     EquipmentStatKind, Equipment, EquipmentCoefficients, EquipmentEnhanceType, EquipmentValues, EnhanceGrade,
     PartSlot, ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN,
 };
+use crate::rounding::round_int;
 use crate::siena::SIENA_STAGE_MAX;
 
 /// 手間タグ。UI の表示専用(判定・計算には使わない)。新種別を足すときは既存と同格の
@@ -55,7 +56,7 @@ pub fn quick_win_candidates(equipment: &Equipment, common_skills: &CommonSkills)
         skills.power_weapon = true;
         out.push(CandidateChange {
             id: "pw".to_string(),
-            label: format!("パワーウェポンを ON に(装備攻撃力強化 +{}%)", (POWER_WEAPON_RATE * 100.0).round() as i64),
+            label: format!("パワーウェポンを ON に(装備攻撃力強化 +{}%)", round_int(POWER_WEAPON_RATE * 100.0)),
             cost: CandidateCost::QuickWin,
             equipment: equipment.clone(),
             common_skills: skills,
@@ -71,7 +72,7 @@ pub fn quick_win_candidates(equipment: &Equipment, common_skills: &CommonSkills)
             id: "sw".to_string(),
             label: format!(
                 "ストロングウェポンを Lv{STRONG_WEAPON_LEVEL_MAX} に(装備攻撃力強化 +{}%)",
-                (rate * 100.0).round() as i64
+                round_int(rate * 100.0)
             ),
             cost: CandidateCost::QuickWin,
             equipment: equipment.clone(),
@@ -88,7 +89,7 @@ pub fn quick_win_candidates(equipment: &Equipment, common_skills: &CommonSkills)
             id: "sv".to_string(),
             label: format!(
                 "シャープネスビジョンを Lv{SHARPNESS_VISION_LEVEL_MAX} に(割合追加ダメージ +{}%)",
-                (rate * 100.0).round() as i64
+                round_int(rate * 100.0)
             ),
             cost: CandidateCost::QuickWin,
             equipment: equipment.clone(),
@@ -322,7 +323,7 @@ pub fn rank_candidates(
 ) -> Vec<RankedCandidate> {
     let pct = |value: i64, base: i64| -> i32 {
         if base > 0 {
-            (((value as f64 / base as f64) - 1.0) * 100.0).round() as i32
+            round_int(((value as f64 / base as f64) - 1.0) * 100.0) as i32
         } else {
             0
         }
@@ -366,6 +367,7 @@ pub fn rank_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::equipment::EquipmentRates;
     use crate::equipment::{EquipmentPart, EquipmentPartList};
     use crate::siena::{RegisteredSienaAura, SienaAura, SienaAuraList, SienaSlot, SienaValueKind};
 

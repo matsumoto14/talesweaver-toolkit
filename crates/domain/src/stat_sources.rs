@@ -1582,6 +1582,36 @@ pub fn buff_target_stat_gains(
     Ok(gains)
 }
 
+/// 装備の基本能力値の合計(部位 + アビリティ + 称号 + ソウルリンク)。ソウルリンクは
+/// エンチャントではなく基本能力値へ直接加算する。キャラ画面・防御・対人が同じ式を使う
+pub fn equipment_base_total(
+    equipment: &Equipment,
+    soul_link: SoulLinkStatus,
+    abilities: &[EquipmentAbilityDef],
+    titles: &[TitleDef],
+) -> EquipmentValues {
+    equipment
+        .base_totals(abilities, titles)
+        .add(soul_link.equipment_values())
+}
+
+/// 最終能力値だけを出す(部位ごとの寄与・補正源内訳を組み立てない軽い経路。防御・対人が使う)。
+pub fn effective_stats_of(
+    base: &BaseStats,
+    sources: &StatSources,
+    buffs: &BuffSelection,
+    equipment: &Equipment,
+    common: &CommonSkills,
+    catalogs: StatCatalogs<'_>,
+    stat_cap: i64,
+) -> Result<EffectiveStats, StatSourceError> {
+    base.validate()?;
+    sources.validate()?;
+    equipment.validate()?;
+    let (stats, _, _) = effective_stats_with(base, sources, buffs, equipment, common, catalogs, stat_cap)?;
+    Ok(stats)
+}
+
 /// `BaseStats` + `StatSources` + 装備から最終能力値と(主軸スキルがあれば)攻撃力を組み立てる。
 /// キャラ編集画面で「設定を触ると即時に再計算する」ために使う(保存はしない)。
 ///
@@ -1673,9 +1703,7 @@ pub fn preview_effective_stats(
         .iter()
         .map(|&k| sacred_relic_value(sources.sacred_relic.get(k)))
         .sum();
-    let equipment_base_total = equipment
-        .base_totals(abilities, titles)
-        .add(sources.soul_link.equipment_values());
+    let equipment_base_total = equipment_base_total(equipment, sources.soul_link, abilities, titles);
     let part_ability_values = equipment.ability_values_by_part(abilities);
     let siena_part_values = equipment
         .siena

@@ -17,6 +17,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::defense::AttackType;
+use crate::rounding::trunc_int;
 use crate::skill::SkillDependency;
 
 /// ランダムオプションのランク(wiki 一覧表の列)。上ほど効果値が大きい。
@@ -285,16 +286,16 @@ impl RandomOptionTotals {
             RandomOptionEffect::MagicDamageAmplify => {
                 self.magic_damage_amplify += value / 100.0;
             }
-            RandomOptionEffect::AccuracyPoint => self.accuracy_point += value as i64,
-            RandomOptionEffect::EvasionPoint => self.evasion_point += value as i64,
+            RandomOptionEffect::AccuracyPoint => self.accuracy_point += trunc_int(value),
+            RandomOptionEffect::EvasionPoint => self.evasion_point += trunc_int(value),
             RandomOptionEffect::AccuracyAndEvasionPoint => {
-                self.accuracy_point += value as i64;
-                self.evasion_point += value as i64;
+                self.accuracy_point += trunc_int(value);
+                self.evasion_point += trunc_int(value);
             }
             RandomOptionEffect::ActualDelayReduction => {
                 self.actual_delay_reduction += value / 100.0;
             }
-            RandomOptionEffect::MinEvasionRate => self.min_evasion_rate += value as i64,
+            RandomOptionEffect::MinEvasionRate => self.min_evasion_rate += trunc_int(value),
             RandomOptionEffect::RecordOnly => self.record_only_count += 1,
         }
     }

@@ -17,7 +17,7 @@ use crate::random_option::{
     RANDOM_OPTION_VALUE_MAX,
 };
 use crate::siena::{SienaAuras, SienaError};
-use crate::stats::StatKind;
+use crate::stats::PerStat;
 use crate::thesis_core::{CoreRegion, ThesisCoreError, ThesisCores};
 use crate::title::{title_values, TitleDef};
 use crate::validation::{ValidationError, ValidationLocation};
@@ -473,64 +473,8 @@ pub struct PartSlotRule {
     pub allows_element: bool,
 }
 
-/// シエナのオーラによるステ加算(wiki: 能力値一覧(その他の部位)の STAB〜AGI と、
-/// 追加オプション「全ステータス増加」。どちらも最終固定値増加)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct SienaStatBonus {
-    #[serde(default)]
-    pub stab: i64,
-    #[serde(default)]
-    pub hack: i64,
-    #[serde(default)]
-    pub int: i64,
-    #[serde(default)]
-    pub def: i64,
-    #[serde(default)]
-    pub mr: i64,
-    #[serde(default)]
-    pub dex: i64,
-    #[serde(default)]
-    pub agi: i64,
-}
-
-impl SienaStatBonus {
-    pub fn get(&self, kind: StatKind) -> i64 {
-        match kind {
-            StatKind::Stab => self.stab,
-            StatKind::Hack => self.hack,
-            StatKind::Int => self.int,
-            StatKind::Def => self.def,
-            StatKind::Mr => self.mr,
-            StatKind::Dex => self.dex,
-            StatKind::Agi => self.agi,
-        }
-    }
-
-    pub fn get_mut(&mut self, kind: StatKind) -> &mut i64 {
-        match kind {
-            StatKind::Stab => &mut self.stab,
-            StatKind::Hack => &mut self.hack,
-            StatKind::Int => &mut self.int,
-            StatKind::Def => &mut self.def,
-            StatKind::Mr => &mut self.mr,
-            StatKind::Dex => &mut self.dex,
-            StatKind::Agi => &mut self.agi,
-        }
-    }
-
-    fn add(self, other: SienaStatBonus) -> SienaStatBonus {
-        let mut total = self;
-        for kind in StatKind::ALL {
-            *total.get_mut(kind) += other.get(kind);
-        }
-        total
-    }
-
-    /// 7 ステの合計(表示用。部位ごと・全部位合計のどちらにも使う)。
-    pub fn total(&self) -> i64 {
-        StatKind::ALL.iter().map(|&k| self.get(k)).sum()
-    }
-}
+/// シエナのオーラによるステ加算(能力値スロット + 全ステータス増加)。最終固定値層に乗る。
+pub type SienaStatBonus = PerStat<i64>;
 
 /// 装備部位 1 つ。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -2541,6 +2485,7 @@ pub fn ability_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stats::StatKind;
     use crate::siena::{
         RegisteredSienaAura, SienaAura, SienaAuraList, SienaExtraKind, SienaExtraSlot, SienaSlot,
         SienaValueKind, SIENA_STAGE_MAX,

@@ -26,13 +26,13 @@ TS に残るのは表示ラベルと、返ってきた集合での絞り込み�
 
 | # | 場所 | 症状 | 簡単な形 |
 |---|---|---|---|
-| 4 | `equipment.rs:360-414`(SienaStatBonus)、`stats.rs`(BaseStats / EffectiveStats)、`element.rs` | ステ別 7 フィールド構造体の手書き `get/get_mut`。stat_sources.rs 側の 6 型は `PerStat<T>`(stats.rs)にした(済み) | 残りも `PerStat<T>` に寄せる。`BaseStats` / `EffectiveStats` はテストの構造体リテラルが多いので値のまま可 |
-| 6 | `commands/lib.rs` `preview_defense` / `preview_versus` | 2 値のためにフルプレビュー(`list_upgrade_candidates` / `list_enchant_gains` の同文と `preview_effective_stats` の 4 回複写は `CandidateContext` / `stat_preview_of` で解消済み) | 必要な値だけ出す軽い domain 関数に |
 | 8 | `stat_sources.rs:1929-2080, 2097-2213` | `StatLimits` が 150 項目 × 2 リスト。ラベル・部位ルール(`equipment.rs:336-355` は `PartSlot` メソッドの写し)は上限ではなくカタログ | ラベル・部位ルールは `list_*` 系へ。`StatLimits` は数値上限だけ |
-| 11 | `random_option.rs:230-244`、`candidate.rs:58, 74, 91, 344`、`skill.rs:166` | 裸の `as i64` / `.round() as` / `.floor() as`(stat_sources.rs 側は `trunc_int` に寄せた) | `trunc_int` / `round_int` に寄せる |
-| 17 | `gamedata/src/buffs.rs:290-293`、`stat_sources.rs:1005` | `RecordOnly` バフにダミーの `target/layer`、マスタリー分離後の注記残骸 | 型で分ける・注記削除 |
-| 18 | `skill.rs:130-175`、`damage.rs:1031-1032` | `power` / `power_per_second` を保存して再計算、`effective_*` は入力の写し | 片方を消す |
 | 21 | `defense.rs:517-744 accuracy_growth / evasion_growth`、`stat_sources.rs:741 buff_accuracy_point_room` | 伸びしろの材料が「合成後の `stat_cap` との差 1 本」「未選択バフの単純合計(排他枠を見ない)」「エンチャント枠」だけで、**源ごと**(ペット S・ルーン・クラウン・カード・聖物 / DEX 増加バフ / 装備アビリティの命中の空き枠・上限未満 / ランダム OP の命中P の空き枠・ランク上げ)には分解できない。文言(label / detail)も domain が文字列で組む | 「源 → 現在値 → 上限 → 積んだ後の値」を返す列挙 API を `stat_sources` / `equipment` / `random_option` に置き、`GrowthRoom` はそれを費用順に並べるだけにする。文言は画面側([versus-next-actions.md](versus-next-actions.md)) |
+
+見送り(理由つき):
+- B17 `RecordOnly` バフのダミー `target/layer`: 型で分けると `BuffDefinition` を読む画面(バフタブ)の分岐が全部変わる。5 件のためにその範囲を動かす価値が無い。注記だけ直した
+- B18 `Skill::power` / `power_per_second` の保存: 画面の並び・表示が使う派生値で、TS に再計算させないために持たせている(A1-10 の並びも Rust 側)。`effective_*` はコンボ変種を解決したあとの値で入力の写しではない
+- B4 のうち `BaseStats` / `EffectiveStats` / `ElementValues`: 構造体リテラルが多く(テスト 60 か所)、値のままのほうが読みやすい
 
 問題なし: `category.rs`(enum + kind/cap/label の表でデータ駆動)、`rounding.rs`、`stats.rs::effective_stat`、`attack_power.rs`、`actual_delay.rs`、`critical_rate.rs`、`common_skill.rs`、`ultimate_skill.rs`、`soul_link.rs`、`title.rs`、`thesis_core.rs`、`siena.rs`(`SienaEffect` で効き先を 1 か所に集約)、`candidate.rs::rank_candidates`、`content.rs::ContentRequirement::check`。domain / commands にキャラ名・バフ id の文字列比較は的中剣以外 0 件。
 

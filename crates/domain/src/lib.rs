@@ -134,7 +134,7 @@ pub use stat_sources::{
     apply_unleash, buff_target_stat_gains, build_modifiers, build_stat_modifiers,
     contribution_source_effects,
     group_source_effects,
-    preview_effective_stats, stat_limits,
+    effective_stats_of, equipment_base_total, preview_effective_stats, stat_limits,
     summarize_buff_selection, Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice,
     BuffDamageEffect, BuffDamageSummary, BuffDefinition, BuffOrigin, BuffPurpose, BuffSelection, BuffTarget,
     BuffTargetStatGain,

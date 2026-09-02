@@ -111,6 +111,18 @@ impl<T: Copy> PerStat<T> {
     }
 }
 
+impl PerStat<i64> {
+    /// ステごとに足し合わせる。
+    pub fn add(self, other: PerStat<i64>) -> PerStat<i64> {
+        PerStat::from_fn(|kind| self.get(kind) + other.get(kind))
+    }
+
+    /// 7 ステの合計(表示用)。
+    pub fn total(&self) -> i64 {
+        StatKind::ALL.iter().map(|&k| self.get(k)).sum()
+    }
+}
+
 /// 素ステ(振り分け分)の上限。wiki に明記なし。レベル上限でもある(docs/claude/goals/2026-08-21-character-stat-sources.md)。下限は 1。
 pub const BASE_STAT_MAX: u32 = 310;
 
