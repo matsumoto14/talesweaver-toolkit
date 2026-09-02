@@ -11,77 +11,10 @@ pub const ENHANCE_SOURCE: Source = Source {
     note: "武器系統ごとの補正式・倍率表。+12以上はレンジ内ランダム(MR)",
 };
 
-/// 武器種(wiki: 装備システム/装備強化「系統」表の該当武器)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WeaponClass {
-    // STAB系
-    Rapier,
-    Dagger,
-    Spear,
-    SmallSword,
-    PhysicalGun,
-    Claw,
-    HandLauncher,
-    // STAB+HACK系
-    LongSword,
-    Tachi,
-    WarStaff,
-    ShortSword,
-    Rod,
-    Nunchaku,
-    // HACK系
-    Katana,
-    Axe,
-    Whip,
-    Kara,
-    DualBladePhysical,
-    Scythe,
-    ArmingSword,
-    SwordShape,
-    // INT系
-    MagicWand,
-    Wand,
-    MagicGun,
-    Scepter,
-    Totem,
-    // INT+HACK系
-    GreatSword,
-    // MR系
-    HolyStaff,
-    Handbell,
-    DualBladeMagic,
-    Hammer,
-}
-
-/// 武器系統(wiki: 装備システム/装備強化「系統」列)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WeaponSystem {
-    Stab,
-    StabHack,
-    Hack,
-    Int,
-    IntHack,
-    Mr,
-}
-pub fn weapon_system(class: WeaponClass) -> WeaponSystem {
-    use WeaponClass::*;
-    use WeaponSystem::*;
-    match class {
-        Rapier | Dagger | Spear | SmallSword | PhysicalGun | Claw | HandLauncher => Stab,
-        LongSword | Tachi | WarStaff | ShortSword | Rod | Nunchaku => StabHack,
-        Katana | Axe | Whip | Kara | DualBladePhysical | Scythe | ArmingSword | SwordShape => Hack,
-        MagicWand | Wand | MagicGun | Scepter | Totem => Int,
-        GreatSword => IntHack,
-        HolyStaff | Handbell | DualBladeMagic | Hammer => Mr,
-    }
-}
-
 /// 武器系統ごとの強化補正式の係数(wiki: 装備システム/装備強化)。
 /// 装着アビリティによる補正は含めない(補正は Item の実測 base 値のみで算出する)。
 pub fn enhance_rates(class: WeaponClass) -> EnhanceRates {
-    match weapon_system(class) {
+    match class.system() {
         // 突き攻撃力 x 6.67 + 斬り攻撃力 x 1.00
         WeaponSystem::Stab => EnhanceRates {
             thrust: 6.67,
@@ -208,16 +141,6 @@ pub fn armor_enhance_multiplier(level: u8, grade: Option<EnhanceGrade>) -> Optio
     enhance_multiplier(level)
         .or_else(|| grade.and_then(|g| enhance_grade_multiplier(level, g)))
         .map(|v| v / 2.0)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ArmorClass {
-    Light,
-    Heavy,
-    Magic,
-    Suit,
-    Robe,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

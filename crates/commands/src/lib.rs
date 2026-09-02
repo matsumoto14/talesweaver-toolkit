@@ -185,8 +185,161 @@ pub fn list_equipment_catalog() -> Vec<EquipmentItem> {
     gamedata::equipment_catalog()
 }
 
-pub fn list_equipment_abilities() -> Vec<EquipmentAbilityDef> {
+/// 装備アビリティ 1 件と、それを受け付ける武器系統。画面は「含まれるか」だけで候補を絞る
+/// (系統適合の規則は `WeaponSystem::accepts_ability` が唯一の正)。武器以外の部位は空。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EquipmentAbilityView {
+    #[serde(flatten)]
+    pub def: EquipmentAbilityDef,
+    pub weapon_systems: Vec<domain::WeaponSystem>,
+}
+
+pub fn list_equipment_abilities() -> Vec<EquipmentAbilityView> {
     gamedata::equipment_abilities()
+        .into_iter()
+        .map(|def| EquipmentAbilityView {
+            weapon_systems: if def.slot == domain::PartSlot::Weapon {
+                domain::WeaponSystem::ALL
+                    .into_iter()
+                    .filter(|system| system.accepts_ability(def.family))
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            def,
+        })
+        .collect()
+}
+
+/// 装備候補 1 件(カタログ品 + このキャラ・主軸スキルから見た適合度)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EquipmentCandidate {
+    #[serde(flatten)]
+    pub item: EquipmentItem,
+    pub fit: domain::ItemFit,
+}
+
+/// 部位の装備候補。`criterion` は何で絞ったか(帯の文言は画面が組む)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EquipmentCandidates {
+    pub items: Vec<EquipmentCandidate>,
+    pub criterion: Option<domain::FitCriterion>,
+}
+
+/// 部位の装備候補を、キャラの装備可能区分と主軸スキルで評価して並べて返す。
+///
+/// 並びは「値の大きい順(基本能力値上限 → エンチャント枠)→ 名前」。適合度での並べ替えは
+/// しない(画面が推奨だけを出すか全部出すかを決める)。
+pub fn list_equipment_candidates(
+    game_character_id: Option<String>,
+    main_skill_id: Option<String>,
+    slot: domain::PartSlot,
+) -> EquipmentCandidates {
+    let character = game_character_id
+        .as_deref()
+        .and_then(gamedata::find_character);
+    let main_skill = main_skill_id.as_deref().and_then(gamedata::find_skill);
+    let rule = domain::EquipmentFitRule::new(
+        slot,
+        character.map(|c| domain::CharacterEquipmentClasses {
+            weapon_classes: c.weapon_classes,
+            armor_classes: c.armor_classes,
+            wrist_types: c.wrist_types,
+        }),
+        main_skill.as_ref(),
+    );
+    let sum = |v: domain::EquipmentValues| -> i64 { v.fields().into_iter().map(|(_, x)| x).sum() };
+    let mut items: Vec<EquipmentItem> = gamedata::equipment_catalog()
+        .into_iter()
+        .filter(|item| item.slot == slot)
+        .collect();
+    items.sort_by(|a, b| {
+        sum(b.values_max)
+            .cmp(&sum(a.values_max))
+            .then_with(|| sum(b.enchant_caps).cmp(&sum(a.enchant_caps)))
+            .then_with(|| a.name.cmp(b.name))
+    });
+    EquipmentCandidates {
+        items: items
+            .into_iter()
+            .map(|item| EquipmentCandidate {
+                fit: rule.fit(&domain::ItemClassification {
+                    weapon_class: item.weapon_class,
+                    armor_class: item.armor_class,
+                    wrist_type: item.wrist_type,
+                    recommended_dependency: item.recommended_dependency,
+                }),
+                item,
+            })
+            .collect(),
+        criterion: rule.criterion().cloned(),
+    }
+}
+
+/// この部位の武器系統(カタログ品の武器種 → カスタム装備の装備強化補正式の順に解決)。
+/// 系統不明(カスタム武器で補正式も未選択)は `None`。
+pub fn part_weapon_system(part: EquipmentPart) -> Option<domain::WeaponSystem> {
+    part.weapon_system(&gamedata::equipment_catalog())
+}
+
+/// エンチャント案内 1 行(部位 × 装備補正)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EnchantPlanRow {
+    pub slot: domain::PartSlot,
+    pub stat: domain::EquipmentStatKind,
+    pub plan: domain::EnchantPlan,
+}
+
+/// 選択中の装備について、エンチャントを案内する補正と上限までのプランを返す。
+/// カタログ外(カスタム)装備は案内しない(上限がカタログにないため)。
+pub fn list_enchant_plans(character: NewCharacter) -> Vec<EnchantPlanRow> {
+    let catalog = gamedata::equipment_catalog();
+    let main_dependency = character
+        .main_skill_id
+        .as_deref()
+        .and_then(gamedata::find_skill)
+        .map(|skill| skill.dependency);
+    let mut rows = Vec::new();
+    for (slot, parts) in character.equipment.parts.iter_lists() {
+        let Some(part) = parts.selected() else {
+            continue;
+        };
+        let Some(item) = part
+            .item_id
+            .as_deref()
+            .and_then(|id| catalog.iter().find(|i| i.id == id))
+        else {
+            continue;
+        };
+        let plan_item = domain::EnchantPlanItem {
+            slot,
+            weapon_class: item.weapon_class,
+            weapon_system: item.weapon_system(),
+            recommended_dependency: item.recommended_dependency,
+            enchant_caps: item.enchant_caps,
+        };
+        for stat in domain::enchant_plan_stats(&plan_item, main_dependency) {
+            rows.push(EnchantPlanRow {
+                slot,
+                stat,
+                plan: domain::enchant_plan(item.enchant_caps.get(stat) - part.enchant.get(stat)),
+            });
+        }
+    }
+    rows
+}
+
+/// レリックの育成状況(段・上限・補正値の残り・段を動かせるか)。
+pub fn relic_state(part: EquipmentPart) -> Option<domain::RelicState> {
+    domain::relic_state(&part, &gamedata::equipment_catalog())
+}
+
+/// レリックの段を 1 つ動かした部位。動かせないときは `None`。
+pub fn relic_step(
+    part: EquipmentPart,
+    direction: domain::RelicDirection,
+) -> Option<EquipmentPart> {
+    domain::relic_step(&part, &gamedata::equipment_catalog(), direction)
 }
 
 /// ランダムオプションのカタログ(wiki: ランダムオプション)。
@@ -518,7 +671,7 @@ pub fn preview_versus(
     // 側が行うのでここでは足し込むだけ
     let min_evasion_rate = defender_random_options.min_evasion_rate
         + domain::stat_sources::buff_min_evasion_rate_total(&defender_buffs, &buff_catalog);
-    let attack_type = domain::AttackType::for_dependency(skill.dependency);
+    let attack_type = skill.dependency.attack_type();
 
     // 伸びしろ(§伸びしろの定義)の材料解決。エンチャント枠の実測上限はカタログ品だけ
     // 引ける(`resolve_enchant_caps` と同じ経路。list_enchant_gains も同じパターン)。
@@ -669,6 +822,32 @@ fn armor_enhance(armor: &EquipmentPart) -> Option<i64> {
         rates.magic_defense,
         multiplier,
     ))
+}
+
+#[cfg(test)]
+mod flatten_tests {
+    use super::*;
+
+    /// `#[serde(flatten)]` はカタログの手書き `Serialize` を通せないと実行時に落ちる。
+    /// 画面はこの形をそのまま読むので、直列化できることをここで押さえる。
+    #[test]
+    fn 装備候補とアビリティ候補は平坦化して直列化できる() {
+        let candidates = list_equipment_candidates(
+            Some("boris".to_string()),
+            Some("boris_continuous".to_string()),
+            domain::PartSlot::Weapon,
+        );
+        let json = serde_json::to_value(&candidates).expect("装備候補を直列化できる");
+        let first = &json["items"][0];
+        assert!(first["id"].is_string());
+        assert!(first["fit"].is_string());
+        assert_eq!(json["criterion"]["kind"], "weapon_classes");
+
+        let abilities = list_equipment_abilities();
+        let json = serde_json::to_value(&abilities).expect("アビリティ候補を直列化できる");
+        assert!(json[0]["id"].is_string());
+        assert!(json[0]["weapon_systems"].is_array());
+    }
 }
 
 #[cfg(test)]

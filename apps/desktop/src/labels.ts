@@ -1,6 +1,6 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
-  CoreRegion, CoreType, Element, EquipmentAbilityFamily, PartSlot, PetSkillTier, SienaAuras,
+  CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentStatKind, PartSlot, PetSkillTier, SienaAuras,
   RandomOptionRank, SkillDependency, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
 } from "./api/types";
 import { limits } from "./limits.svelte";
@@ -38,11 +38,11 @@ export const PET_SKILL_TIER_LABELS: Record<PetSkillTier, string> = {
 };
 
 // 装備補正 9 種(crates/domain/src/equipment.rs の EquipmentValues)の表示名・並び順(wiki Item ページの列順)。
-export const EQUIPMENT_STAT_KINDS = [
+export const EQUIPMENT_STAT_KINDS: readonly EquipmentStatKind[] = [
   "thrust", "slash", "physical_defense", "magic_attack", "magic_defense",
   "accuracy", "critical", "evasion", "agility",
 ] as const;
-export type EquipmentStatKind = (typeof EQUIPMENT_STAT_KINDS)[number];
+export type { EquipmentStatKind };
 // 唯一の正は Rust の EquipmentValues::fields()(StatLimits.equipment_stat_labels 経由)。
 // CoreType(テシスコア)の表示名も同じテーブルを引く(装備補正とテシスコアで敏捷度補正の表記が食い違っていた事故の再発防止)。
 export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = Object.fromEntries(

@@ -17,8 +17,10 @@ pub mod critical_rate;
 pub mod damage;
 pub mod defense;
 pub mod element;
+pub mod enchant;
 pub mod enemy;
 pub mod equipment;
+pub mod equipment_class;
 pub mod mastery;
 pub mod random_option;
 pub mod rounding;
@@ -85,10 +87,16 @@ pub use element::{
     Element, ElementPreview, ElementSourceDef, ElementSourceId, ElementSources, ElementValues,
     EQUIPMENT_ELEMENT_VALUE_MAX,
 };
+pub use enchant::{enchant_plan, enchant_plan_stats, EnchantPlan, EnchantPlanItem, PRIMARY_ENCHANT_STATS};
 pub use enemy::Enemy;
+pub use equipment_class::{
+    ArmorClass, CharacterEquipmentClasses, EquipmentFitRule, FitCriterion, ItemClassification,
+    ItemFit, WeaponClass, WeaponSystem, WristType,
+};
 pub use equipment::{
     armor_added_hp, equipment_attack_parts, equipment_attack_power, equipment_values_attack,
-    sum_equipment_value_sources, weapon_added_damage, wrist_base_bonus, EnhanceGrade,
+    relic_state, relic_step, sum_equipment_value_sources, weapon_added_damage, wrist_base_bonus,
+    EnhanceGrade, RelicDirection, RelicInfo, RelicKind, RelicState, EquipmentStatKind,
     EnhanceRates, Equipment, EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef,
     EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily,
     EquipmentAttackLayer, EquipmentAttackPart, EquipmentAttackSource, EquipmentCatalogEntry,

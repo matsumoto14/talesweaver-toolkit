@@ -7,3 +7,6 @@ edition = "2021"
 serde = { workspace = true }
 domain = { path = "../domain" }
 gamedata = { path = "../gamedata" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -1,13 +1,16 @@
 <script lang="ts">
   // 「equipment」補正源のペイン。部位一覧 ⇄ 部位詳細のドリルダウン(§09 規則 2)。
   import type {
-    EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily, EquipmentItem, EquipmentPart, PartSlot,
-    Skill, SkillDependency, StatPreview, WeaponClass, WeaponSystem, WristType,
+    EnchantPlan, EnchantPlanRow, EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentCandidates,
+    EquipmentItem, EquipmentPart, PartSlot, Skill, StatPreview, WeaponClass, WeaponSystem,
   } from "../../../api/types";
+  import { listEnchantPlans, listEquipmentCandidates, partWeaponSystem } from "../../../api/commands";
+  import { draftToPayload } from "../../../draft";
+  import { latest } from "../../../ui/latest.svelte";
   import { damageCategoryLabel } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import {
-    applyCatalogItem, applyEnhanceLevel, equipmentIconId, neutralEquipmentPart, rangeSummary, sumValues, valuesSummary, zeroValues,
+    applyCatalogItem, applyEnhanceLevel, equipmentIconId, neutralEquipmentPart, rangeSummary, valuesSummary, zeroValues,
   } from "../../../equipment";
   import { fmtInt } from "../../../format";
   import {
@@ -137,113 +140,66 @@
     itemPickerOpen = false;
   };
   const openPartLabel = $derived(openPart ? PART_SLOT_LABELS[openPart] : "");
-  const catalogFor = $derived(
-    openPart
-      ? app.equipmentCatalog
-          .filter((i) => i.slot === openPart)
-          .sort((a, b) =>
-            sumValues(b.values_max) - sumValues(a.values_max)
-            || sumValues(b.enchant_caps) - sumValues(a.enchant_caps)
-            || a.name.localeCompare(b.name, "ja"))
-      : [],
-  );
-  const weaponSystemsFor = (dependency: SkillDependency | null): WeaponSystem[] => {
-    if (dependency === "stab") return ["stab", "stab_hack"];
-    if (dependency === "hack") return ["hack", "stab_hack", "int_hack"];
-    if (dependency === "int") return ["int", "int_hack"];
-    if (dependency === "mr") return ["mr"];
-    if (dependency === "stab_hack") return ["stab_hack"];
-    if (dependency === "hack_int") return ["int_hack"];
-    return [];
-  };
-  /** 依存能力だけでは刀/太刀/大剣を区別できないスキルの実用武器。 */
-  const weaponClassesForSkill = (skillId: string | undefined): WeaponClass[] => {
-    if (skillId === "boris_continuous") return ["katana"];
-    if (skillId === "boris_blur_sword") return ["tachi"];
-    if (skillId === "boris_ice_attack_sword") return ["great_sword"];
-    return [];
-  };
-  const weaponClassLabel = (weaponClass: WeaponClass): string => {
-    const labels: Partial<Record<WeaponClass, string>> = { katana: "刀", tachi: "太刀", great_sword: "大剣" };
-    return labels[weaponClass] ?? weaponClass;
-  };
-  const weaponFilterLabel = $derived.by(() => {
-    const classes = weaponClassesForSkill(mainSkill?.id);
-    if (classes.length > 0) return `${mainSkill!.name} → ${classes.map(weaponClassLabel).join("・")}`;
-    const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
-    if (selectedGameCharacter !== null) {
-      return systems.length > 0 && mainSkill
-        ? `${selectedGameCharacter.name}・${mainSkill.name}向け`
-        : `${selectedGameCharacter.name}が装備可能`;
+  // 候補の絞り込み規則(依存能力 → 武器系統、スキル → 実用武器種、キャラの装備可能区分、
+  // サブアームの物理 / 魔法)は Rust(domain::EquipmentFitRule)が持つ。ここは返ってきた
+  // 適合度で分けて、帯の文言を組むだけにする。
+  let equipmentCandidates = $state<EquipmentCandidates>({ items: [], criterion: null });
+  const candidatesLatest = latest();
+  $effect(() => {
+    const slot = openPart;
+    const gameCharacterId = draft.gameCharacterId;
+    const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
+    if (slot === null) {
+      equipmentCandidates = { items: [], criterion: null };
+      return;
     }
-    return systems.length > 0 && mainSkill ? `${mainSkill.name}の依存能力に合う武器` : null;
+    candidatesLatest.run((isCurrent) =>
+      listEquipmentCandidates(gameCharacterId, mainSkillId, slot)
+        .then((result) => { if (isCurrent()) equipmentCandidates = result; })
+        .catch(() => { if (isCurrent()) equipmentCandidates = { items: [], criterion: null }; }),
+    );
+    return () => candidatesLatest.cancel();
   });
   const selectedGameCharacter = $derived(
     app.gameCharacters.find((character) => character.id === draft.gameCharacterId) ?? null,
   );
-  /** 同じキャラで物理・魔法の専用サブアームが分かれる場合だけ、主軸スキルでも狭める。 */
-  const wristTypesForSelection = (types: WristType[], dependency: SkillDependency | null): WristType[] => {
-    if (dependency === null) return types;
-    if (types.includes("physical_magazine") && types.includes("magic_magazine")) {
-      return dependency === "int" || dependency === "mr" || dependency === "hack_int"
-        ? ["magic_magazine"]
-        : ["physical_magazine"];
-    }
-    if (types.includes("dual_blade_physical") && types.includes("dual_blade_magic")) {
-      return dependency === "int" || dependency === "mr" || dependency === "hack_int"
-        ? ["dual_blade_magic"]
-        : ["dual_blade_physical"];
-    }
-    if (types.includes("spellbook") && types.includes("crystal_ball")) {
-      return dependency === "int" || dependency === "mr" || dependency === "hack_int"
-        ? ["spellbook"]
-        : ["crystal_ball"];
-    }
-    return types;
+  const weaponClassLabel = (weaponClass: WeaponClass): string => {
+    const labels: Partial<Record<WeaponClass, string>> = { katana: "刀", tachi: "太刀", great_sword: "大剣" };
+    return labels[weaponClass] ?? weaponClass;
   };
+  /** 何で絞ったかの帯。文言は画面のもの(Rust は絞り込みの構造だけを返す)。 */
   const equipmentFilterLabel = $derived.by(() => {
-    if (openPart === "weapon") return weaponFilterLabel;
-    if (openPart === "artifact" && mainSkill) return `${mainSkill.name}の依存能力に合うAF`;
-    if (openPart !== "armor" && openPart !== "shield") return null;
-    if (selectedGameCharacter === null) return null;
-    return openPart === "shield" && mainSkill
-      ? `${selectedGameCharacter.name}・${mainSkill.name}向け`
-      : `${selectedGameCharacter.name}が装備可能`;
+    const criterion = equipmentCandidates.criterion;
+    if (criterion === null) return null;
+    const characterName = selectedGameCharacter?.name ?? null;
+    const skillName = mainSkill?.name ?? null;
+    switch (criterion.kind) {
+      case "weapon_classes":
+        return skillName === null
+          ? null
+          : `${skillName} → ${criterion.classes.map(weaponClassLabel).join("・")}`;
+      case "weapon_systems":
+        if (characterName !== null && skillName !== null) return `${characterName}・${skillName}向け`;
+        return skillName === null ? null : `${skillName}の依存能力に合う武器`;
+      case "wrist_types":
+        if (characterName === null) return null;
+        return skillName === null ? `${characterName}が装備可能` : `${characterName}・${skillName}向け`;
+      case "character_usable":
+        return characterName === null ? null : `${characterName}が装備可能`;
+      case "dependency":
+        return skillName === null ? null : `${skillName}の依存能力に合うAF`;
+    }
   });
   const filteredCatalog = $derived.by(() => {
-    let candidates = itemQuery.trim() === "" ? catalogFor : catalogFor.filter((i) => i.name.includes(itemQuery.trim()));
-    let matched: EquipmentItem[] = [];
-    if (openPart === "weapon") {
-      // キャラの装備可能武器種で先に絞り、その中を主軸スキルでさらに狭める。
-      const usable = selectedGameCharacter === null
-        ? candidates
-        : candidates.filter(
-            (i) => i.weapon_class !== null && selectedGameCharacter!.weapon_classes.includes(i.weapon_class),
-          );
-      const classes = weaponClassesForSkill(mainSkill?.id);
-      const systems = weaponSystemsFor(mainSkill?.dependency ?? null);
-      matched = classes.length > 0
-        ? usable.filter((i) => i.weapon_class !== null && classes.includes(i.weapon_class))
-        : systems.length > 0
-          ? usable.filter((i) => i.weapon_system !== null && systems.includes(i.weapon_system))
-          : usable;
-    } else if (openPart === "armor" && selectedGameCharacter !== null) {
-      matched = candidates.filter((item) =>
-        item.armor_class !== null && selectedGameCharacter!.armor_classes.includes(item.armor_class),
-      );
-    } else if (openPart === "shield" && selectedGameCharacter !== null) {
-      const wristTypes = wristTypesForSelection(
-        selectedGameCharacter.wrist_types,
-        mainSkill?.dependency ?? null,
-      );
-      matched = candidates.filter((item) => item.wrist_type !== null && wristTypes.includes(item.wrist_type));
-    } else if (openPart === "artifact" && mainSkill !== null) {
-      matched = candidates.filter((item) => item.recommended_dependency === mainSkill!.dependency);
-    } else {
-      return candidates;
-    }
+    const query = itemQuery.trim();
+    const candidates = query === ""
+      ? equipmentCandidates.items
+      : equipmentCandidates.items.filter((i) => i.name.includes(query));
+    const matched = candidates.filter((i) => i.fit === "recommended");
     if (matched.length === 0) return candidates;
-    return showAllEquipmentCandidates ? [...matched, ...candidates.filter((i) => !matched.includes(i))] : matched;
+    return showAllEquipmentCandidates
+      ? [...matched, ...candidates.filter((i) => i.fit !== "recommended")]
+      : matched;
   });
   const equippedItem = (slot: PartSlot): EquipmentItem | null => {
     const itemId = selectedPartOrNull(slot)?.item_id;
@@ -258,15 +214,11 @@
     value: String(i + 1),
     label: `+${i + 1}`,
   }));
-  const relicKindFor = (slot: PartSlot): string => {
-    const id = equippedItem(slot)?.id ?? "";
-    if (id.startsWith("godbird-")) return "godbird";
-    if (id.startsWith("lunaria-")) return "lunaria";
-    return "";
-  };
+  // レリックの系列・段はカタログの属性(gamedata: EquipmentItem::relic)。id 文字列は解析しない。
+  const relicKindFor = (slot: PartSlot): string => equippedItem(slot)?.relic?.kind ?? "";
   const relicLevelFor = (slot: PartSlot): string => {
-    const match = equippedItem(slot)?.id.match(/-plus(\d+)$/);
-    return match?.[1] ?? "";
+    const level = equippedItem(slot)?.relic?.level;
+    return level === undefined ? "" : String(level);
   };
   /** 部位ごとの枠数ルール(domain: PartSlot::ability_slots / random_option_slots)。 */
   const partSlotRule = (slot: PartSlot) => limits.part_slot_rules.find((r) => r.slot === slot) ?? null;
@@ -312,8 +264,8 @@
     itemPickerOpen = keepPickerOpen;
   }
   function pickRelic(slot: PartSlot, kind: string, level: string) {
-    const partName = slot === "relic_pendant" ? "pendant" : "bracelet";
-    const item = app.equipmentCatalog.find((candidate) => candidate.id === `${kind}-${partName}-plus${level}`);
+    const item = app.equipmentCatalog.find((candidate) =>
+      candidate.slot === slot && candidate.relic?.kind === kind && candidate.relic.level === Number(level));
     if (item) pickCatalogItem(slot, item, true);
   }
   function pickRelicKind(slot: PartSlot, kind: string) {
@@ -337,67 +289,29 @@
     itemQuery = "";
   }
 
-  /** 上限までのエンチャント案。+17を基本に、端数18/19を避けつつ1回減らせる最小個数だけ+20を使う。 */
-  function enchantCompletionPlan(remainingValue: number) {
-    const remaining = Math.max(0, Math.trunc(remainingValue));
-    if (remaining === 0) return { remaining, twentyCount: 0, seventeenCount: 0, remainder: 0, count: 0 };
-    const baseCount = Math.ceil(remaining / 17);
-    const reducedCount = baseCount - 1;
-    // まず「+17だけ」より1回少ない組み合わせを探す。+20の個数を外側から増やすことで、
-    // 見つかったものが+20を最小限にした案になる。同数なら+17が多い案を優先する。
-    for (let twentyCount = 0; twentyCount <= reducedCount; twentyCount += 1) {
-      for (let seventeenCount = reducedCount - twentyCount; seventeenCount >= 0; seventeenCount -= 1) {
-        const remainderSlots = reducedCount - twentyCount - seventeenCount;
-        if (remainderSlots > 1) continue;
-        const remainder = remaining - twentyCount * 20 - seventeenCount * 17;
-        if ((remainderSlots === 0 && remainder === 0)
-          || (remainderSlots === 1 && remainder >= 1 && remainder <= 16)) {
-          return { remaining, twentyCount, seventeenCount, remainder, count: reducedCount };
-        }
-      }
-    }
-    const seventeenCount = Math.floor(remaining / 17);
-    const remainder = remaining % 17;
-    return { remaining, twentyCount: 0, seventeenCount, remainder, count: seventeenCount + (remainder > 0 ? 1 : 0) };
-  }
-  function enchantCompletionLabel(plan: ReturnType<typeof enchantCompletionPlan>): string {
+  // 上限までのエンチャント案(巻物の組み合わせ・案内する補正の選び方)は Rust
+  // (domain::enchant_plan / enchant_plan_stats)が持つ。ここは返ってきた行を出すだけ。
+  let enchantPlans = $state<EnchantPlanRow[]>([]);
+  const enchantPlansLatest = latest({ debounce: 120 });
+  $effect(() => {
+    const character = draftToPayload(draft);
+    enchantPlansLatest.run((isCurrent) =>
+      listEnchantPlans(character)
+        .then((rows) => { if (isCurrent()) enchantPlans = rows; })
+        .catch(() => { if (isCurrent()) enchantPlans = []; }),
+    );
+    return () => enchantPlansLatest.cancel();
+  });
+  const enchantPlanStatsFor = (slot: PartSlot): EquipmentStatKind[] =>
+    enchantPlans.filter((row) => row.slot === slot).map((row) => row.stat);
+  const enchantPlanFor = (slot: PartSlot, stat: EquipmentStatKind): EnchantPlan | null =>
+    enchantPlans.find((row) => row.slot === slot && row.stat === stat)?.plan ?? null;
+  function enchantCompletionLabel(plan: EnchantPlan): string {
     const parts: string[] = [];
-    if (plan.twentyCount > 0) parts.push(`20 × ${plan.twentyCount}`);
-    if (plan.seventeenCount > 0) parts.push(`17 × ${plan.seventeenCount}`);
+    if (plan.twenty_count > 0) parts.push(`20 × ${plan.twenty_count}`);
+    if (plan.seventeen_count > 0) parts.push(`17 × ${plan.seventeen_count}`);
     if (plan.remainder > 0) parts.push(`端数 ${plan.remainder}`);
     return parts.length === 0 ? "" : `+${parts.join(" + ")}`;
-  }
-  function enchantPlanStatsFor(item: EquipmentItem | null): EquipmentStatKind[] {
-    if (item === null || !ENCHANT_PLAN_SLOTS.has(item.slot)) return [];
-    if (item?.weapon_class === "katana") return ["thrust", "slash"];
-    // 武器以外は選んだ装備の専用系統(AF等)を優先し、汎用品は主軸スキルの係数へ合わせる。
-    const dependency = item.weapon_system ?? item.recommended_dependency ?? mainSkill?.dependency ?? null;
-    const dependencyStats: EquipmentStatKind[] = dependency === "stab" ? ["thrust"]
-      : dependency === "hack" ? ["slash"]
-      : dependency === "stab_hack" ? ["thrust", "slash"]
-      : dependency === "int" ? ["magic_attack"]
-      : dependency === "mr" ? ["magic_defense"]
-      : dependency === "int_hack" ? ["slash", "magic_attack"]
-      : dependency === "hack_int" ? ["slash", "magic_attack"]
-      : [];
-    const supportedDependencyStats = dependencyStats.filter((kind) => item.enchant_caps[kind] > 0);
-    if (supportedDependencyStats.length > 0) return supportedDependencyStats;
-
-    // 鎧・盾は攻撃補正を持たない品がある。火力係数が当たらない場合は、その部位で
-    // 実際に伸ばせる耐久の主要補正へ案内する(物防・魔防・回避は詳細を開いた行に表示)。
-    if (item.slot === "armor" || item.slot === "shield") {
-      return (["physical_defense", "magic_defense", "evasion"] as EquipmentStatKind[])
-        .filter((kind) => item.enchant_caps[kind] > 0);
-    }
-
-    // 主軸スキル未選択でも案内自体を消さない。効果は最大枠の系統、その他の汎用品は
-    // エンチャント可能なSHIMを候補にする。
-    const supportedPrimary = PRIMARY_EQUIPMENT_STATS.filter((kind) => item.enchant_caps[kind] > 0);
-    if (item.slot === "effect" && supportedPrimary.length > 0) {
-      const maxCap = Math.max(...supportedPrimary.map((kind) => item.enchant_caps[kind]));
-      return supportedPrimary.filter((kind) => item.enchant_caps[kind] === maxCap);
-    }
-    return supportedPrimary;
   }
 
   /** その部位の攻撃力(A)への寄与(外すと減る量)。主軸スキル未選択なら null */
@@ -439,35 +353,37 @@
     part.ability_values = (part.ability_values ?? []).filter((v) => v.ability_id !== abilityId);
     part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId);
   }
-  const abilityFitsWeapon = (family: EquipmentAbilityFamily, system: WeaponSystem | null): boolean => {
-    // 武器ディレイと失われた魂(最大HP)は攻撃系統に紐づかないので、どの武器でも選べる。
-    if (family === "weapon_delay" || family === "vitality" || system === null) return true;
-    if (system === "stab") return family === "pointed_blade";
-    if (system === "hack") return family === "sharp_blade";
-    if (system === "stab_hack") return family === "pointed_blade" || family === "sharp_blade";
-    if (system === "int") return family === "intelligence";
-    if (system === "int_hack") return family === "sharp_blade" || family === "intelligence";
-    return family === "magic_resistance";
-  };
-  const abilityWeaponSystem = (slot: PartSlot): WeaponSystem | null => {
-    const catalogSystem = equippedItem(slot)?.weapon_system;
-    if (catalogSystem) return catalogSystem;
-    switch (selectedPartOrNull(slot)?.enhance_type) {
-      case "weapon_stab": return "stab";
-      case "weapon_stab_hack": return "stab_hack";
-      case "weapon_hack": return "hack";
-      case "weapon_int": return "int";
-      case "weapon_int_hack": return "int_hack";
-      case "weapon_mr": return "mr";
-      default: return null;
+  // 武器の系統(カタログ品の武器種 / カスタムの装備強化補正式)の解決も、系統ごとに
+  // 装着できるアビリティ系統の表も Rust(domain::WeaponSystem)が持つ。ここは
+  // 「返ってきた系統が、そのアビリティを受け付ける系統一覧に含まれるか」だけを見る。
+  let openPartWeaponSystem = $state<WeaponSystem | null>(null);
+  const weaponSystemLatest = latest();
+  $effect(() => {
+    const slot = openPart;
+    const part = slot === null ? null : selectedPartOrNull(slot);
+    if (slot === null || part === null) {
+      openPartWeaponSystem = null;
+      return;
     }
-  };
+    // 系統を決めるのはこの 2 つだけ。ここだけを読んで、他の編集で問い合わせ直さない
+    const payload: EquipmentPart = {
+      ...neutralEquipmentPart(), item_id: part.item_id, enhance_type: part.enhance_type,
+    };
+    weaponSystemLatest.run((isCurrent) =>
+      partWeaponSystem(payload)
+        .then((system) => { if (isCurrent()) openPartWeaponSystem = system; })
+        .catch(() => { if (isCurrent()) openPartWeaponSystem = null; }),
+    );
+    return () => weaponSystemLatest.cancel();
+  });
+  const abilityFitsWeapon = (ability: EquipmentAbilityDef, system: WeaponSystem | null): boolean =>
+    system === null || ability.weapon_systems.includes(system);
   /** 収録候補を武器系統で絞る。カスタム武器で系統不明なら、選べなくしないため全系統を出す。 */
   const abilityCandidates = (slot: PartSlot, category: number) => {
-    const system = abilityWeaponSystem(slot);
+    const system = openPartWeaponSystem;
     const candidates = app.equipmentAbilities.filter((ability) => ability.slot === slot
       && ability.category === category
-      && (slot !== "weapon" || abilityFitsWeapon(ability.family, system)));
+      && (slot !== "weapon" || abilityFitsWeapon(ability, system)));
     const preferred = [
       "storm-blade", "gale-blade", "soft-wind-blade", "breeze-blade", "silence-blade",
     ];
@@ -492,7 +408,8 @@
       (addition) => !previousIds.includes(addition.ability_id),
     );
     const def = abilityDef(id);
-    if (def?.slot === slot && def.category === category && (slot !== "weapon" || abilityFitsWeapon(def.family, abilityWeaponSystem(slot)))) {
+    if (def?.slot === slot && def.category === category
+      && (slot !== "weapon" || abilityFitsWeapon(def, openPartWeaponSystem))) {
       part.abilities = [...part.abilities, id];
     }
   }
@@ -1049,7 +966,7 @@
       </div>
     </div>
     {:else}
-    {@const enchantPlanStats = enchantPlanStatsFor(item)}
+    {@const enchantPlanStats = enchantPlanStatsFor(slot)}
     <div class="card enchant-card">
       <div class="card-title inline">
         <span>エンチャント</span>
@@ -1091,7 +1008,7 @@
           {@const cap = item ? item.enchant_caps[k] : (part.enchant_caps?.[k] ?? null)}
           {@const abilityValue = partAbilityValues(slot)[k]}
           {@const displayTotal = part.base[k] + partEnchantValues(slot)[k] + abilityValue}
-          {@const completionPlan = cap !== null ? enchantCompletionPlan(cap - part.enchant[k]) : null}
+          {@const completionPlan = enchantPlanFor(slot, k)}
           <div
             class="value-pair"
             class:plan-stat={enchantPlanStats.includes(k)}
@@ -1121,7 +1038,7 @@
               <div
                 class="enchant-plan"
                 class:complete={completionPlan.remaining === 0}
-                use:flash={() => `${completionPlan.remaining}:${completionPlan.twentyCount}:${completionPlan.seventeenCount}:${completionPlan.remainder}`}
+                use:flash={() => `${completionPlan.remaining}:${completionPlan.twenty_count}:${completionPlan.seventeen_count}:${completionPlan.remainder}`}
               >
                 <span class="plan-remaining"><small>上限まであと</small><b class="num">{completionPlan.remaining}</b></span>
                 {#if completionPlan.remaining > 0}

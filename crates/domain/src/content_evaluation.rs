@@ -332,6 +332,7 @@ mod tests {
             hit_count: 1,
             critical_multiplier: 2.0,
             element: Element::Water,
+            weapon_classes: Vec::new(),
             target: Some(SkillTarget::Single),
             accuracy: Some(92),
             critical_rate: Some(7),

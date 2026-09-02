@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::defense::AttackType;
 use crate::element::Element;
+use crate::equipment::EquipmentStatKind;
+use crate::equipment_class::WeaponClass;
 
 /// スキルの依存種別。ステ由来攻撃力の係数(`AttackCoefficients`)を選ぶキー。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -25,6 +28,34 @@ impl SkillDependency {
         SkillDependency::StabHack,
         SkillDependency::HackInt,
     ];
+
+    /// 物理攻撃か魔法攻撃か。回避P・命中時ランダムOP・サブアームの専用対など、
+    /// 「物理 / 魔法のどちらか」で分かれる規則はすべてここを見る。
+    pub fn attack_type(self) -> AttackType {
+        match self {
+            SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
+                AttackType::Physical
+            }
+            SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
+                AttackType::Magic
+            }
+        }
+    }
+
+    /// このスキルでエンチャントして意味のある装備補正(画面のエンチャント案内の対象)。
+    /// 装備攻撃力係数が非 0 のステすべてではなく、**実際に伸ばす主要なステ**を返す
+    /// (突き依存に斬りを、魔攻依存に魔防を案内しない)。
+    pub fn enchant_stats(self) -> &'static [EquipmentStatKind] {
+        use EquipmentStatKind::*;
+        match self {
+            SkillDependency::Stab => &[Thrust],
+            SkillDependency::Hack => &[Slash],
+            SkillDependency::StabHack => &[Thrust, Slash],
+            SkillDependency::Int => &[MagicAttack],
+            SkillDependency::Mr => &[MagicDefense],
+            SkillDependency::HackInt => &[Slash, MagicAttack],
+        }
+    }
 }
 
 /// 対象指定(wiki スキル性能一覧の「対象指定」列)。
@@ -88,6 +119,10 @@ pub struct Skill {
     pub critical_multiplier: f64,
     /// スキルの属性(wiki: 各キャラのスキルページ「スキル性能一覧」の属性列)
     pub element: Element,
+    /// このスキルの実用武器種。依存能力だけでは刀 / 太刀 / 大剣を区別できないスキルにだけ入る
+    /// (空 = 依存能力の系統で絞る)
+    #[serde(default)]
+    pub weapon_classes: Vec<WeaponClass>,
     /// 単体 / 範囲(wiki: 同じ表の対象指定列)。`None` = wiki の行と突き合わせできなかった
     /// (未収録として `?` で出す。0 や「単体」で埋めない)
     #[serde(default)]
@@ -155,6 +190,33 @@ impl Skill {
         multiplier * f64::from(hit_count.max(1))
     }
 
+    /// テスト用の最小スキル(倍率・段数などは判定に関係しない既定値)。
+    #[cfg(test)]
+    pub(crate) fn for_test(id: &str, dependency: SkillDependency) -> Skill {
+        Skill {
+            id: id.to_string(),
+            name: id.to_string(),
+            dependency,
+            multiplier: 1.0,
+            hit_count: 1,
+            critical_multiplier: 1.0,
+            element: Element::Neutral,
+            weapon_classes: Vec::new(),
+            target: None,
+            accuracy: None,
+            critical_rate: None,
+            level: 1,
+            single_target_channeling: false,
+            base_actual_delay: None,
+            actual_delay_fixed: false,
+            normal_attack: false,
+            combo_interval: None,
+            combo_variants: Vec::new(),
+            power: 1.0,
+            power_per_second: None,
+        }
+    }
+
     /// 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。基本中ディレイが未収録 / 0 以下なら比較不能
     pub fn compute_power_per_second(power: f64, base_actual_delay: Option<f64>) -> Option<f64> {
         base_actual_delay
@@ -208,6 +270,7 @@ mod tests {
             hit_count: 11,
             critical_multiplier: 2.5,
             element: Element::Neutral,
+            weapon_classes: Vec::new(),
             target: Some(SkillTarget::Single),
             accuracy: Some(100),
             critical_rate: Some(5),

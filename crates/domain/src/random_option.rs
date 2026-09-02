@@ -16,6 +16,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::defense::AttackType;
 use crate::skill::SkillDependency;
 
 /// ランダムオプションのランク(wiki 一覧表の列)。上ほど効果値が大きい。
@@ -243,25 +244,17 @@ impl RandomOptionTotals {
     /// 選択スキルに実際に乗る割合追加ダメージ。物理・魔法の命中時 OP は依存種別で排他。
     pub fn added_damage_rate_for(&self, dependency: SkillDependency) -> f64 {
         self.added_damage_rate
-            + match dependency {
-                SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
-                    self.physical_added_damage_rate
-                }
-                SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
-                    self.magic_added_damage_rate
-                }
+            + match dependency.attack_type() {
+                AttackType::Physical => self.physical_added_damage_rate,
+                AttackType::Magic => self.magic_added_damage_rate,
             }
     }
 
     /// 選択スキルに実際に乗るカテゴリT「ダメージ増幅」。物理・魔法の命中時 OP は依存種別で排他。
     pub fn damage_amplify_for(&self, dependency: SkillDependency) -> f64 {
-        match dependency {
-            SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
-                self.physical_damage_amplify
-            }
-            SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
-                self.magic_damage_amplify
-            }
+        match dependency.attack_type() {
+            AttackType::Physical => self.physical_damage_amplify,
+            AttackType::Magic => self.magic_damage_amplify,
         }
     }
 }

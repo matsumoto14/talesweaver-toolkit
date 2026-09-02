@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::element::{Element, ElementValues};
+use crate::equipment_class::{WeaponClass, WeaponSystem};
 use crate::random_option::{
     RandomOptionDef, RandomOptionError, RandomOptionSlot, RandomOptionTotals,
     RANDOM_OPTION_VALUE_MAX,
@@ -44,6 +45,36 @@ pub struct EquipmentValues {
     pub evasion: i64,
     #[serde(default)]
     pub agility: i64,
+}
+
+/// 装備補正 9 値の種別。`EquipmentValues` のどのフィールドかを値で指す。
+/// (装備攻撃力に効く 4 種だけを指す `EquipmentValueKind` とは別。こちらは 9 値すべて)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EquipmentStatKind {
+    Thrust,
+    Slash,
+    PhysicalDefense,
+    MagicAttack,
+    MagicDefense,
+    Accuracy,
+    Critical,
+    Evasion,
+    Agility,
+}
+
+impl EquipmentStatKind {
+    pub const ALL: [EquipmentStatKind; 9] = [
+        EquipmentStatKind::Thrust,
+        EquipmentStatKind::Slash,
+        EquipmentStatKind::PhysicalDefense,
+        EquipmentStatKind::MagicAttack,
+        EquipmentStatKind::MagicDefense,
+        EquipmentStatKind::Accuracy,
+        EquipmentStatKind::Critical,
+        EquipmentStatKind::Evasion,
+        EquipmentStatKind::Agility,
+    ];
 }
 
 /// 装備補正 9 値の値域上限(wiki は装備ごとの「上限」行しか持たず、全装備共通の上限は
@@ -121,6 +152,21 @@ impl EquipmentValues {
         ("evasion", Self::EVASION_LABEL),
         ("agility", Self::AGILITY_LABEL),
     ];
+
+    /// 種別で 1 値を取り出す。
+    pub fn get(&self, kind: EquipmentStatKind) -> i64 {
+        match kind {
+            EquipmentStatKind::Thrust => self.thrust,
+            EquipmentStatKind::Slash => self.slash,
+            EquipmentStatKind::PhysicalDefense => self.physical_defense,
+            EquipmentStatKind::MagicAttack => self.magic_attack,
+            EquipmentStatKind::MagicDefense => self.magic_defense,
+            EquipmentStatKind::Accuracy => self.accuracy,
+            EquipmentStatKind::Critical => self.critical,
+            EquipmentStatKind::Evasion => self.evasion,
+            EquipmentStatKind::Agility => self.agility,
+        }
+    }
 
     fn validate(&self) -> Result<(), EquipmentError> {
         for (field, value) in self.fields() {
@@ -226,6 +272,15 @@ impl PartSlot {
     /// この部位が装備強化(+1〜+15)を持てるか(wiki: 装備システム/装備強化。武器・鎧のみ)。
     pub fn allows_enhance(self) -> bool {
         matches!(self, PartSlot::Weapon | PartSlot::Armor)
+    }
+
+    /// この部位が通常のエンチャント枠(装備システム/エンチャント)を持つか。
+    /// 成長装備の盾＋とレリックは補正値を育てる別の入力モデルで、エンチャントを持たない。
+    pub fn allows_enchant_plan(self) -> bool {
+        !matches!(
+            self,
+            PartSlot::ShieldPlus | PartSlot::RelicPendant | PartSlot::RelicBracelet
+        )
     }
 
     /// この部位が装着アビリティを持てるか(wiki: 装備システム/アビリティ)。
@@ -477,6 +532,25 @@ impl EquipmentPart {
                 .map(|i| i.enchant_caps()),
             None => self.enchant_caps,
         }
+    }
+
+    /// この部位の武器系統。カタログ品はカタログの武器種から、カタログ外は
+    /// ユーザーが選んだ装備強化の補正式(`enhance_type`)から決まる。どちらも無ければ
+    /// 系統不明(`None`)で、装着アビリティの系統絞り込みをしない。
+    pub fn weapon_system<C: EquipmentCatalogEntry>(&self, catalog: &[C]) -> Option<WeaponSystem> {
+        let entry = self
+            .item_id
+            .as_ref()
+            .and_then(|id| catalog.iter().find(|i| i.id() == id.as_str()));
+        if let Some(entry) = entry {
+            if let Some(class) = entry.weapon_class() {
+                return Some(class.system());
+            }
+            if let Some(system) = entry.enhance_type().and_then(WeaponSystem::from_enhance_type) {
+                return Some(system);
+            }
+        }
+        self.enhance_type.and_then(WeaponSystem::from_enhance_type)
     }
 
     /// ランダムオプションの部位制約と値域。カタログ整合性(未知 id・カテゴリー重複)は
@@ -971,8 +1045,15 @@ pub trait EquipmentCatalogEntry {
     fn ability_slots(&self) -> usize;
     fn random_option_slots(&self) -> Option<usize>;
     fn values_min(&self) -> EquipmentValues;
+    fn values_max(&self) -> EquipmentValues;
     fn growth_caps(&self) -> Option<EquipmentValues>;
     fn enchant_caps(&self) -> EquipmentValues;
+    /// 武器なら武器種。装着アビリティの系統適合を見るのに使う
+    fn weapon_class(&self) -> Option<WeaponClass>;
+    /// 装備強化の補正式。武器は `weapon_class` から決まるので、それ以外(鎧など)だけ
+    fn enhance_type(&self) -> Option<EquipmentEnhanceType>;
+    /// レリックなら種別と段。育成順序(段上げの可否)を見るのに使う
+    fn relic(&self) -> Option<RelicInfo>;
 }
 
 impl Equipment {
@@ -1111,6 +1192,10 @@ impl Equipment {
                     }
                 }
                 // アビリティはカテゴリーごとに1つまで。同じ攻撃系統でもカテゴリー1と4は併用できる。
+                // 武器は系統に合う効果系統しか装着できない(系統不明のカスタム武器は通す)。
+                let weapon_system = (slot == PartSlot::Weapon)
+                    .then(|| part.weapon_system(equipment_catalog))
+                    .flatten();
                 let mut groups = std::collections::HashSet::new();
                 for ability_id in &part.abilities {
                     let def = equipment_abilities
@@ -1127,6 +1212,17 @@ impl Equipment {
                             format!("装備アビリティ '{}' は {:?} 用です", def.name, def.slot),
                             at_ability(ability_id),
                         ));
+                    }
+                    if let Some(system) = weapon_system {
+                        if !system.accepts_ability(def.family) {
+                            return Err(ValidationError::at(
+                                format!(
+                                    "装備アビリティ '{}' はこの武器の系統({:?})には装着できません",
+                                    def.name, system
+                                ),
+                                at_ability(ability_id),
+                            ));
+                        }
                     }
                     if !groups.insert(def.exclusive_group) {
                         return Err(ValidationError::at(
@@ -1934,6 +2030,146 @@ pub fn wrist_base_bonus(
         WristBonusRule::ThrustToMagicAttack => unreachable!("above早期returnで処理済み"),
     }
     values
+}
+
+/// レリックの系列(wiki: Item/アクセサリ/レリック)。神鳥とルナリアは別系列で、
+/// 段上げは同じ系列の中だけを進む。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelicKind {
+    Godbird,
+    Lunaria,
+}
+
+/// カタログ 1 件がどの系列の第何段か。id の文字列を解析させないため、カタログが属性で持つ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelicInfo {
+    pub kind: RelicKind,
+    pub level: u8,
+}
+
+/// レリックの育成状況。段上げは「いまの段の補正値が上限まで育ってから」というゲーム内の順序を持つ。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RelicState {
+    pub kind: RelicKind,
+    pub level: u8,
+    /// 同じ系列でカタログに存在する最大段
+    pub max_level: u8,
+    /// いまの段の補正値が上限まで育っているか
+    pub growth_done: bool,
+    /// いまの段の上限までに残っている補正値の合計
+    pub growth_remaining: i64,
+    pub can_up: bool,
+    pub can_down: bool,
+}
+
+/// 段の上げ下げ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelicDirection {
+    Up,
+    Down,
+}
+
+fn relic_entry<'a, C: EquipmentCatalogEntry>(
+    part: &EquipmentPart,
+    catalog: &'a [C],
+) -> Option<(&'a C, RelicInfo)> {
+    let item_id = part.item_id.as_ref()?;
+    let entry = catalog.iter().find(|i| i.id() == item_id.as_str())?;
+    let info = entry.relic()?;
+    Some((entry, info))
+}
+
+/// いまの段で補正値を上げられる装備値(カタログの `growth_caps` がそのまま今の段の上限)。
+fn relic_growth_kinds<C: EquipmentCatalogEntry>(entry: &C) -> Vec<(EquipmentStatKind, i64)> {
+    let Some(caps) = entry.growth_caps() else {
+        return Vec::new();
+    };
+    EquipmentStatKind::ALL
+        .into_iter()
+        .filter_map(|kind| {
+            let cap = caps.get(kind);
+            (cap > 0).then_some((kind, cap))
+        })
+        .collect()
+}
+
+/// レリックの育成状況。レリック以外・未装備・カタログ外は `None`。
+pub fn relic_state<C: EquipmentCatalogEntry>(
+    part: &EquipmentPart,
+    catalog: &[C],
+) -> Option<RelicState> {
+    let (entry, info) = relic_entry(part, catalog)?;
+    let max_level = catalog
+        .iter()
+        .filter(|i| i.slot() == entry.slot() && i.relic().is_some_and(|r| r.kind == info.kind))
+        .filter_map(|i| i.relic().map(|r| r.level))
+        .max()
+        .unwrap_or(info.level);
+    let growth_remaining: i64 = relic_growth_kinds(entry)
+        .into_iter()
+        .map(|(kind, cap)| (cap - part.base.get(kind)).max(0))
+        .sum();
+    let growth_done = growth_remaining == 0;
+    Some(RelicState {
+        kind: info.kind,
+        level: info.level,
+        max_level,
+        growth_done,
+        growth_remaining,
+        can_up: info.level < max_level && growth_done,
+        can_down: info.level > 1,
+        })
+}
+
+/// レリックの段を 1 つ動かした部位を返す。動かせないとき(系列の端・補正値が未完成・
+/// 次の段がカタログに無い)は `None`。
+///
+/// 段を上げた直後の補正値は「まだ育っていない」= その段の下限(= 直前段階の完成値。wiki 注記)。
+/// 段を下げる方向は「その段は育成済みだった」扱いのまま上限に置く。
+pub fn relic_step<C: EquipmentCatalogEntry>(
+    part: &EquipmentPart,
+    catalog: &[C],
+    direction: RelicDirection,
+) -> Option<EquipmentPart> {
+    let state = relic_state(part, catalog)?;
+    let (entry, info) = relic_entry(part, catalog)?;
+    let up = direction == RelicDirection::Up;
+    if up && !state.can_up {
+        return None;
+    }
+    if !up && !state.can_down {
+        return None;
+    }
+    let next_level = if up { info.level + 1 } else { info.level - 1 };
+    let next_entry = catalog.iter().find(|i| {
+        i.slot() == entry.slot()
+            && i.relic() == Some(RelicInfo {
+                kind: info.kind,
+                level: next_level,
+            })
+    })?;
+    let mut next = part.clone();
+    next.item_id = Some(next_entry.id().to_string());
+    next.custom_name = None;
+    next.base = if up {
+        next_entry.values_min()
+    } else {
+        next_entry.values_max()
+    };
+    next.enchant = next.enchant.clamp_to(next_entry.enchant_caps());
+    // カタログ品はカタログの enchant_caps が正(`resolve_enchant_caps`)。
+    next.enchant_caps = None;
+    next.enhance_type = next_entry.enhance_type();
+    next.abilities.truncate(next_entry.ability_slots());
+    next.ability_values
+        .retain(|value| next.abilities.contains(&value.ability_id));
+    next.ability_additions
+        .retain(|addition| next.abilities.contains(&addition.ability_id));
+    next.random_options
+        .truncate(next_entry.random_option_slots().unwrap_or(0));
+    Some(next)
 }
 
 #[cfg(test)]
@@ -3015,6 +3251,119 @@ mod tests {
         );
     }
 
+    // --- レリックの段の遷移 ------------------------------------------------------------
+
+    struct MockRelic {
+        id: &'static str,
+        level: u8,
+        values_min: EquipmentValues,
+        values_max: EquipmentValues,
+    }
+    impl EquipmentCatalogEntry for MockRelic {
+        fn id(&self) -> &str {
+            self.id
+        }
+        fn slot(&self) -> PartSlot {
+            PartSlot::RelicPendant
+        }
+        fn ability_slots(&self) -> usize {
+            0
+        }
+        fn random_option_slots(&self) -> Option<usize> {
+            None
+        }
+        fn values_min(&self) -> EquipmentValues {
+            self.values_min
+        }
+        fn values_max(&self) -> EquipmentValues {
+            self.values_max
+        }
+        fn growth_caps(&self) -> Option<EquipmentValues> {
+            Some(self.values_max)
+        }
+        fn enchant_caps(&self) -> EquipmentValues {
+            EquipmentValues::default()
+        }
+        fn weapon_class(&self) -> Option<WeaponClass> {
+            None
+        }
+        fn enhance_type(&self) -> Option<EquipmentEnhanceType> {
+            None
+        }
+        fn relic(&self) -> Option<RelicInfo> {
+            Some(RelicInfo {
+                kind: RelicKind::Godbird,
+                level: self.level,
+            })
+        }
+    }
+
+    fn relic_catalog() -> Vec<MockRelic> {
+        let values = |thrust: i64| EquipmentValues {
+            thrust,
+            ..Default::default()
+        };
+        vec![
+            MockRelic {
+                id: "relic-1",
+                level: 1,
+                values_min: values(0),
+                values_max: values(30),
+            },
+            MockRelic {
+                id: "relic-2",
+                level: 2,
+                values_min: values(30),
+                values_max: values(50),
+            },
+        ]
+    }
+
+    fn relic_part(item_id: &str, thrust: i64) -> EquipmentPart {
+        EquipmentPart {
+            item_id: Some(item_id.to_string()),
+            base: EquipmentValues {
+                thrust,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn 補正値が上限に届くまで段を上げられない() {
+        let catalog = relic_catalog();
+        let part = relic_part("relic-1", 20);
+        let state = relic_state(&part, &catalog).unwrap();
+        assert_eq!(state.level, 1);
+        assert_eq!(state.max_level, 2);
+        assert_eq!(state.growth_remaining, 10);
+        assert!(!state.growth_done);
+        assert!(!state.can_up);
+        assert!(!state.can_down);
+        assert!(relic_step(&part, &catalog, RelicDirection::Up).is_none());
+    }
+
+    #[test]
+    fn 段を上げた直後の補正値はその段の下限に戻る() {
+        let catalog = relic_catalog();
+        let part = relic_part("relic-1", 30);
+        let state = relic_state(&part, &catalog).unwrap();
+        assert!(state.growth_done && state.can_up);
+        let next = relic_step(&part, &catalog, RelicDirection::Up).unwrap();
+        assert_eq!(next.item_id.as_deref(), Some("relic-2"));
+        assert_eq!(next.base.thrust, 30);
+    }
+
+    #[test]
+    fn 段を下げると育成済みの上限に戻る() {
+        let catalog = relic_catalog();
+        let part = relic_part("relic-2", 40);
+        let next = relic_step(&part, &catalog, RelicDirection::Down).unwrap();
+        assert_eq!(next.item_id.as_deref(), Some("relic-1"));
+        assert_eq!(next.base.thrust, 30);
+    }
+
     // --- resolve_enchant_caps: カタログ → パート実測 → 未収録(None)の解決順 --------------
 
     struct MockCatalogEntry {
@@ -3037,11 +3386,23 @@ mod tests {
         fn values_min(&self) -> EquipmentValues {
             EquipmentValues::default()
         }
+        fn values_max(&self) -> EquipmentValues {
+            EquipmentValues::default()
+        }
         fn growth_caps(&self) -> Option<EquipmentValues> {
             None
         }
         fn enchant_caps(&self) -> EquipmentValues {
             self.enchant_caps
+        }
+        fn weapon_class(&self) -> Option<WeaponClass> {
+            None
+        }
+        fn enhance_type(&self) -> Option<EquipmentEnhanceType> {
+            None
+        }
+        fn relic(&self) -> Option<RelicInfo> {
+            None
         }
     }
 

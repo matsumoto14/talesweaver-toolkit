@@ -11,7 +11,7 @@
 //!   未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)。詳細は
 //!   docs/claude/decisions.md「2026-08-25 全キャラのスキル取込」
 
-use domain::{ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency};
+use domain::{ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency, WeaponClass};
 
 use crate::skill_targets::SKILL_TARGETS;
 
@@ -30,6 +30,17 @@ const SINGLE_TARGET_CHANNELING: [&str; 7] = [
     "siberin_twin_dragon_strike", // 極・双龍撃
     "siberin_red_dragon_strike",  // 極・紅龍連撃
     "isaac_demise_furious",       // 極・滅神乱舞
+];
+
+/// 依存能力だけでは実用武器を絞れないスキルの武器種。
+///
+/// ボリスは刀(HACK)・太刀(STAB+HACK)・大剣(INT+HACK)を装備でき、いずれも斬り依存の
+/// スキルを撃てるが、各スキルは特定の武器でしか実用にならない(wiki: Skill/ボリス)。
+/// ここに載っていないスキルは依存能力の系統(`WeaponSystem::for_dependency`)で絞る。
+const SKILL_WEAPON_CLASSES: &[(&str, &[WeaponClass])] = &[
+    ("boris_continuous", &[WeaponClass::Katana]),
+    ("boris_blur_sword", &[WeaponClass::Tachi]),
+    ("boris_ice_attack_sword", &[WeaponClass::GreatSword]),
 ];
 
 /// 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列(取得 2026-08-25)。
@@ -835,6 +846,11 @@ impl SkillRecord {
             hit_count: self.hit_count,
             critical_multiplier: self.critical_multiplier,
             element: self.element,
+            weapon_classes: SKILL_WEAPON_CLASSES
+                .iter()
+                .find(|(id, _)| *id == self.skill_id().as_str())
+                .map(|(_, classes)| classes.to_vec())
+                .unwrap_or_default(),
             target: SKILL_TARGETS
                 .iter()
                 .find(|(id, _)| *id == self.skill_id().as_str())

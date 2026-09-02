@@ -1,11 +1,13 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "./invoke";
 import type {
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentAbilityDef, EquipmentItem, GameCharacter, StartupNotice,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentItem, GameCharacter, StartupNotice,
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
   TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation, VersusAccuracy,
+  EquipmentAbilityView, EquipmentCandidates, EnchantPlanRow, EquipmentPart, PartSlot,
+  RelicDirection, RelicState, WeaponSystem,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -95,7 +97,23 @@ export const previewVersus = (
     attacker, attackerBuffs, skillId, defender, defenderBuffs,
   });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
-export const listEquipmentAbilities = () => invoke<EquipmentAbilityDef[]>("list_equipment_abilities");
+export const listEquipmentAbilities = () => invoke<EquipmentAbilityView[]>("list_equipment_abilities");
+/** 部位の装備候補。キャラの装備可能区分と主軸スキルで適合度を付け、値の大きい順に並べて返す */
+export const listEquipmentCandidates = (
+  gameCharacterId: string | null, mainSkillId: string | null, slot: PartSlot,
+) => invoke<EquipmentCandidates>("list_equipment_candidates", { gameCharacterId, mainSkillId, slot });
+/** 部位の武器系統(カタログ品の武器種 → カスタムの装備強化補正式の順で Rust が解決する) */
+export const partWeaponSystem = (part: EquipmentPart) =>
+  invoke<WeaponSystem | null>("part_weapon_system", { part });
+/** 選択中の装備の、上限まで埋めるエンチャント案(案内する補正の選び方も Rust 側) */
+export const listEnchantPlans = (character: NewCharacter) =>
+  invoke<EnchantPlanRow[]>("list_enchant_plans", { character });
+/** レリックの育成状況(段・上限・補正値の残り・段を動かせるか) */
+export const relicState = (part: EquipmentPart) =>
+  invoke<RelicState | null>("relic_state", { part });
+/** レリックの段を 1 つ動かした部位。動かせないときは null */
+export const relicStep = (part: EquipmentPart, direction: RelicDirection) =>
+  invoke<EquipmentPart | null>("relic_step", { part, direction });
 /** ランダムオプションのカタログ(wiki: ランダムオプション) */
 export const listRandomOptions = () => invoke<RandomOptionDef[]>("list_random_options");
 /** マスタリーのカタログ(wiki: 各キャラの Skill ページ。段ごとに 1 つ選ぶ) */

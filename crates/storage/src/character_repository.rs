@@ -2090,6 +2090,7 @@ mod tests {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            relic: None,
             source: gamedata::EQUIPMENT_CATALOG_SOURCE,
         }
     }

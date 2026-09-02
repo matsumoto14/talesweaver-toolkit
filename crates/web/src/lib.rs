@@ -180,6 +180,28 @@ struct CandidateArgs {
     temporary_adjustments: Option<domain::Adjustments>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListEquipmentCandidatesArgs {
+    game_character_id: Option<String>,
+    main_skill_id: Option<String>,
+    slot: domain::PartSlot,
+}
+
+/// `part_weapon_system` / `relic_state` は編集中の部位 1 つだけを取る。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PartArgs {
+    part: domain::EquipmentPart,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RelicStepArgs {
+    part: domain::EquipmentPart,
+    direction: domain::RelicDirection,
+}
+
 /// Tauri の `invoke` と同じ形。`command` で分岐して `commands` crate を呼ぶ。
 #[wasm_bindgen]
 pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
@@ -285,6 +307,30 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
                 a.normal_attack_id,
                 a.temporary_adjustments,
             ))
+        }
+        "list_equipment_candidates" => {
+            let a: ListEquipmentCandidatesArgs = args_of(command, args)?;
+            ok(commands::list_equipment_candidates(
+                a.game_character_id,
+                a.main_skill_id,
+                a.slot,
+            ))
+        }
+        "part_weapon_system" => {
+            let a: PartArgs = args_of(command, args)?;
+            ok(commands::part_weapon_system(a.part))
+        }
+        "list_enchant_plans" => {
+            let a: CharacterArgs = args_of(command, args)?;
+            ok(commands::list_enchant_plans(a.character))
+        }
+        "relic_state" => {
+            let a: PartArgs = args_of(command, args)?;
+            ok(commands::relic_state(a.part))
+        }
+        "relic_step" => {
+            let a: RelicStepArgs = args_of(command, args)?;
+            ok(commands::relic_step(a.part, a.direction))
         }
         "evaluate_contents" => {
             let a: EvaluateContentsArgs = args_of(command, args)?;

@@ -41,9 +41,8 @@ pub use equipment_catalog::{
     character_wrist_base_bonus, character_wrist_bonus_material, enhance_grade_multiplier,
     enhance_multiplier, enhance_multiplier_range, enhance_rates, enhance_rates_for_type,
     equipment_abilities, equipment_catalog, equipment_enhance_type, find_equipment_item,
-    item_damage_contributions, weapon_system, ArmorClass, ArmorEnhanceRates, EquipmentItem,
-    WeaponClass, WeaponSystem, WristType, ENHANCE_SOURCE, EQUIPMENT_ABILITY_SOURCE,
-    EQUIPMENT_CATALOG_SOURCE,
+    item_damage_contributions, ArmorClass, ArmorEnhanceRates, EquipmentItem, WeaponClass,
+    WeaponSystem, WristType, ENHANCE_SOURCE, EQUIPMENT_ABILITY_SOURCE, EQUIPMENT_CATALOG_SOURCE,
 };
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};

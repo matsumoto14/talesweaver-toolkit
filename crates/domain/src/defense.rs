@@ -17,7 +17,6 @@ use crate::equipment::{Equipment, EquipmentValues, PartSlot};
 use crate::random_option::RandomOptionTotals;
 use crate::rounding::floor_int;
 use crate::siena::{SienaValueKind, SIENA_STAGE_MAX};
-use crate::skill::SkillDependency;
 use crate::stats::{EffectiveStats, StatKind};
 
 /// カット率 J の分母定数(wiki カテゴリJ: `r = 1 − a/(a+80)`)。
@@ -82,20 +81,6 @@ impl EvasionPoints {
 pub enum AttackType {
     Physical,
     Magic,
-}
-
-impl AttackType {
-    /// スキル依存種別から攻撃タイプを判定する。
-    pub fn for_dependency(dependency: SkillDependency) -> Self {
-        match dependency {
-            SkillDependency::Stab | SkillDependency::Hack | SkillDependency::StabHack => {
-                AttackType::Physical
-            }
-            SkillDependency::Int | SkillDependency::Mr | SkillDependency::HackInt => {
-                AttackType::Magic
-            }
-        }
-    }
 }
 
 /// 攻撃タイプに応じた回避P増加(wiki `#EvasionPoint`)。物理 `(DEF*2 + [(STAB+HACK)/100]) / 7`、
@@ -1360,14 +1345,14 @@ mod tests {
             SkillDependency::Hack,
             SkillDependency::StabHack,
         ] {
-            assert_eq!(AttackType::for_dependency(dep), AttackType::Physical);
+            assert_eq!(dep.attack_type(), AttackType::Physical);
         }
         for dep in [
             SkillDependency::Int,
             SkillDependency::Mr,
             SkillDependency::HackInt,
         ] {
-            assert_eq!(AttackType::for_dependency(dep), AttackType::Magic);
+            assert_eq!(dep.attack_type(), AttackType::Magic);
         }
     }
 

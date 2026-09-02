@@ -10,6 +10,9 @@ use domain::{
     EquipmentAbilityFamily, EquipmentEnhanceType, EquipmentValues, PartSlot, SkillDependency,
     SkillEffect,
 };
+/// 装備の分類は domain のドメイン語彙(`domain::equipment_class`)。カタログはそれを
+/// 各アイテムに付けるだけで、判定は domain 側が持つ。
+pub use domain::{ArmorClass, RelicInfo, RelicKind, WeaponClass, WeaponSystem, WristType};
 
 use crate::Source;
 

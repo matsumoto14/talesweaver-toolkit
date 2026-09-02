@@ -54,6 +54,8 @@ export interface Skill {
   critical_multiplier: number;
   /** スキルの属性 */
   element: Element;
+  /** このスキルの実用武器種(依存能力だけでは絞れないスキルにだけ入る。空 = 系統で絞る) */
+  weapon_classes: WeaponClass[];
   /** 単体 / 範囲(wiki スキル性能一覧の対象指定)。null = wiki と突き合わせできなかった */
   target: SkillTarget | null;
   /** スキル命中(wiki 表記 +15 済みの実値)。null = wiki 未記載 */
@@ -980,6 +982,8 @@ export interface EquipmentItem {
   enhance_type: EquipmentEnhanceType | null;
   /** 鎧のみ非 null(`armor_class_for_type(enhance_type)`)。キャラの装備可能クラスとの突き合わせに使う。 */
   armor_class: ArmorClass | null;
+  /** レリックのみ非 null。系列と段(id の文字列は解析しない) */
+  relic: RelicInfo | null;
   /** 装着時効果(wiki: Item ページ備考の「装着時 …」)。与ダメージ式のカテゴリに入る */
   damage_effects: SkillEffect[];
   /** 被ダメージ側へ効く耐久効果。与ダメージ計算とは分離する。 */
@@ -1014,8 +1018,70 @@ export interface EquipmentAbilityAdditionalDef {
 }
 
 // 武器アビリティ定義。crates/domain/src/equipment.rs の EquipmentAbilityDef。
+/** 装備補正 9 種のキー(crates/domain/src/equipment.rs の EquipmentStatKind)。 */
+export type EquipmentStatKind =
+  | "thrust" | "slash" | "physical_defense" | "magic_attack" | "magic_defense"
+  | "accuracy" | "critical" | "evasion" | "agility";
+
+export type RelicKind = "godbird" | "lunaria";
+
+export interface RelicInfo {
+  kind: RelicKind;
+  level: number;
+}
+
+/** レリックの育成状況(domain: relic_state)。段上げは補正値が上限まで育ってから。 */
+export interface RelicState {
+  kind: RelicKind;
+  level: number;
+  max_level: number;
+  growth_done: boolean;
+  growth_remaining: number;
+  can_up: boolean;
+  can_down: boolean;
+}
+
+export type RelicDirection = "up" | "down";
+
+/** 候補の適合度(domain: ItemFit)。 */
+export type ItemFit = "recommended" | "usable" | "other";
+
+/** 何で絞ったか(domain: FitCriterion)。帯の文言はこれを見て画面が組む。 */
+export type FitCriterion =
+  | { kind: "weapon_classes"; classes: WeaponClass[] }
+  | { kind: "weapon_systems"; systems: WeaponSystem[] }
+  | { kind: "wrist_types"; types: WristType[] }
+  | { kind: "character_usable" }
+  | { kind: "dependency"; dependency: SkillDependency };
+
+export interface EquipmentCandidate extends EquipmentItem {
+  fit: ItemFit;
+}
+
+export interface EquipmentCandidates {
+  items: EquipmentCandidate[];
+  criterion: FitCriterion | null;
+}
+
+/** 上限まで埋めるエンチャント案(domain: enchant_plan)。 */
+export interface EnchantPlan {
+  remaining: number;
+  twenty_count: number;
+  seventeen_count: number;
+  remainder: number;
+  count: number;
+}
+
+export interface EnchantPlanRow {
+  slot: PartSlot;
+  stat: EquipmentStatKind;
+  plan: EnchantPlan;
+}
+
 export interface EquipmentAbilityDef {
   slot: PartSlot;
+  /** このアビリティを受け付ける武器系統(武器以外の部位は空)。画面は「含まれるか」だけを見る */
+  weapon_systems: WeaponSystem[];
   value_option: EquipmentAbilityAdditionalDef | null;
   exclusive_group: string;
   additional_slots: number;
@@ -1033,6 +1099,9 @@ export interface EquipmentAbilityDef {
   /** 追加効果(R- 以上に付く「ダメージ増加 +n%」。カテゴリX3) */
   damage_effects: SkillEffect[];
 }
+
+/** `list_equipment_abilities` の戻り(定義 + 受け付ける武器系統)。 */
+export type EquipmentAbilityView = EquipmentAbilityDef;
 
 export interface RegisteredCharacter {
   id: number;

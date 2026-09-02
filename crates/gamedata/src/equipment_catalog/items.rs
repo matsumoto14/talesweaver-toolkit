@@ -16,25 +16,6 @@ pub const EQUIPMENT_CATALOG_SOURCE: Source = Source {
     note: "各ページで最後のインファーナルより後。数値未確定行は除外",
 };
 
-/// 腕装備の区分(wiki: `Item/防具/腕/*`)。
-/// キャラパッシブは「盾部位全般」と「バンドだけ」を区別するため、表示名ではなく
-/// カタログの分類として持つ。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WristType {
-    Shield,
-    Spellbook,
-    Knuckle,
-    Band,
-    Bracelet,
-    Pendulum,
-    CrystalBall,
-    DualBladePhysical,
-    PhysicalMagazine,
-    MagicMagazine,
-    DualBladeMagic,
-}
-
 pub(super) fn wrist_type_from_page(page: &str) -> Option<WristType> {
     let category = page
         .strip_prefix("Item/防具/腕/")
@@ -59,14 +40,7 @@ pub(super) fn wrist_type_from_page(page: &str) -> Option<WristType> {
 pub fn equipment_enhance_type(item_id: &str) -> Option<EquipmentEnhanceType> {
     let item = find_equipment_item(item_id)?;
     if let Some(class) = item.weapon_class {
-        return Some(match weapon_system(class) {
-            WeaponSystem::Stab => EquipmentEnhanceType::WeaponStab,
-            WeaponSystem::StabHack => EquipmentEnhanceType::WeaponStabHack,
-            WeaponSystem::Hack => EquipmentEnhanceType::WeaponHack,
-            WeaponSystem::Int => EquipmentEnhanceType::WeaponInt,
-            WeaponSystem::IntHack => EquipmentEnhanceType::WeaponIntHack,
-            WeaponSystem::Mr => EquipmentEnhanceType::WeaponMr,
-        });
+        return Some(class.system().enhance_type());
     }
     item.enhance_type
 }
@@ -134,7 +108,26 @@ pub struct EquipmentItem {
     pub recommended_dependency: Option<SkillDependency>,
     /// `damage_effects` がこの依存のスキルにだけ効く場合の条件。
     pub damage_dependency: Option<SkillDependency>,
+    /// レリックなら系列と段。育成順序(段上げの可否)の判定に使う
+    pub relic: Option<RelicInfo>,
     pub source: Source,
+}
+
+impl EquipmentItem {
+    /// 武器系統。武器種から決まり、武器種を持たない収録品は装備強化の補正式から引く。
+    pub fn weapon_system(&self) -> Option<WeaponSystem> {
+        self.weapon_class.map(WeaponClass::system).or_else(|| {
+            self.enhance_type
+                .and_then(WeaponSystem::from_enhance_type)
+        })
+    }
+
+    /// 装備強化の補正式。武器は武器種から決まるので、それを優先する。
+    pub fn resolved_enhance_type(&self) -> Option<EquipmentEnhanceType> {
+        self.weapon_class
+            .map(|class| class.system().enhance_type())
+            .or(self.enhance_type)
+    }
 }
 
 /// `Equipment::validate_against_catalog`(domain)がカタログを検証できるようにする実装。
@@ -156,11 +149,23 @@ impl domain::EquipmentCatalogEntry for EquipmentItem {
     fn values_min(&self) -> EquipmentValues {
         self.values_min
     }
+    fn values_max(&self) -> EquipmentValues {
+        self.values_max
+    }
     fn growth_caps(&self) -> Option<EquipmentValues> {
         self.growth_caps
     }
     fn enchant_caps(&self) -> EquipmentValues {
         self.enchant_caps
+    }
+    fn weapon_class(&self) -> Option<WeaponClass> {
+        self.weapon_class
+    }
+    fn enhance_type(&self) -> Option<EquipmentEnhanceType> {
+        self.resolved_enhance_type()
+    }
+    fn relic(&self) -> Option<RelicInfo> {
+        self.relic
     }
 }
 
@@ -249,6 +254,7 @@ impl WikiEquipmentItem {
             survival_effects: self.survival_effects,
             recommended_dependency: self.recommended_dependency,
             damage_dependency: self.damage_dependency,
+            relic: None,
             source: self.source,
         }
     }
@@ -270,7 +276,7 @@ pub(super) const SURVIVAL_DEFENSE_RATE_30: &[EquipmentSurvivalEffect] =
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("EquipmentItem", 20)?;
+        let mut s = serializer.serialize_struct("EquipmentItem", 21)?;
         s.serialize_field("id", self.id)?;
         s.serialize_field("slot", &self.slot)?;
         s.serialize_field("name", self.name)?;
@@ -283,21 +289,9 @@ impl serde::Serialize for EquipmentItem {
         s.serialize_field("enchant_caps", &self.enchant_caps)?;
         s.serialize_field("wrist_type", &self.wrist_type)?;
         s.serialize_field("weapon_class", &self.weapon_class)?;
-        s.serialize_field("weapon_system", &self.weapon_class.map(weapon_system))?;
-        s.serialize_field(
-            "enhance_type",
-            &self
-                .weapon_class
-                .map(|class| match weapon_system(class) {
-                    WeaponSystem::Stab => EquipmentEnhanceType::WeaponStab,
-                    WeaponSystem::StabHack => EquipmentEnhanceType::WeaponStabHack,
-                    WeaponSystem::Hack => EquipmentEnhanceType::WeaponHack,
-                    WeaponSystem::Int => EquipmentEnhanceType::WeaponInt,
-                    WeaponSystem::IntHack => EquipmentEnhanceType::WeaponIntHack,
-                    WeaponSystem::Mr => EquipmentEnhanceType::WeaponMr,
-                })
-                .or(self.enhance_type),
-        )?;
+        s.serialize_field("weapon_system", &self.weapon_system())?;
+        s.serialize_field("enhance_type", &self.resolved_enhance_type())?;
+        s.serialize_field("relic", &self.relic)?;
         s.serialize_field("armor_class", &self.armor_class)?;
         s.serialize_field("damage_effects", &self.damage_effects)?;
         s.serialize_field("survival_effects", &self.survival_effects)?;
@@ -558,6 +552,7 @@ fn artifact_item(
 }
 
 /// 神鳥・ルナリアレリック。各段階は直前段階の完成値から始まり、表の値まで成長する。
+#[allow(clippy::too_many_arguments)]
 fn relic_item(
     id: &'static str,
     name: &'static str,
@@ -566,15 +561,17 @@ fn relic_item(
     min_sub: i64,
     max_main: i64,
     max_sub: i64,
-) -> WikiEquipmentItem {
+    kind: RelicKind,
+    level: u8,
+) -> (WikiEquipmentItem, RelicInfo) {
     let values = |main: i64, sub: i64| match slot {
         PartSlot::RelicPendant => v(main, main, 0, main, 0, sub, sub, 0, 0),
         PartSlot::RelicBracelet => v(0, 0, main, 0, main, 0, 0, sub, sub),
         _ => unreachable!("レリック以外の部位が指定されました"),
     };
     // 神鳥レリックはアビリティ・付加オプション枠を持たない(ルナリアレリックは持つ)。
-    let no_ability_or_random_option_slots = id.starts_with("godbird-");
-    WikiEquipmentItem {
+    let no_ability_or_random_option_slots = kind == RelicKind::Godbird;
+    let item = WikiEquipmentItem {
         id,
         slot,
         name,
@@ -594,7 +591,8 @@ fn relic_item(
             retrieved_on: "2026-08-28",
             note: "直前段階の全補正MAXから開始し、表示段階のMAXまでランダム成長。エンチャント不可",
         },
-    }
+    };
+    (item, RelicInfo { kind, level })
 }
 
 /// 「装着時攻撃力が3%増加」= カテゴリX5。5 種の違いは特化する 1 値(20)だけで、
@@ -1681,48 +1679,6 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             SURVIVAL_MITIGATION_40, Some(SkillDependency::HackInt), Some(SkillDependency::HackInt),
             "ゆがんだ村。補正上限は魔力ディフェンシオと同系列規則。魔斬依存+35%"),
 
-        // ── レリック: 直前段階の完成値から、選択段階の上限までランダム成長 ──
-        relic_item("godbird-pendant-plus1", "†神鳥のペンダント(+1)", PartSlot::RelicPendant, 0, 0, 30, 25),
-        relic_item("godbird-pendant-plus2", "†神鳥のペンダント(+2)", PartSlot::RelicPendant, 30, 25, 50, 45),
-        relic_item("godbird-pendant-plus3", "†神鳥のペンダント(+3)", PartSlot::RelicPendant, 50, 45, 55, 50),
-        relic_item("godbird-pendant-plus4", "†神鳥のペンダント(+4)", PartSlot::RelicPendant, 55, 50, 60, 60),
-        relic_item("godbird-pendant-plus5", "†神鳥のペンダント(+5)", PartSlot::RelicPendant, 60, 60, 65, 65),
-        relic_item("godbird-pendant-plus6", "†神鳥のペンダント(+6)", PartSlot::RelicPendant, 65, 65, 70, 70),
-        relic_item("godbird-pendant-plus7", "†神鳥のペンダント(+7)", PartSlot::RelicPendant, 70, 70, 75, 75),
-        relic_item("godbird-pendant-plus8", "†神鳥のペンダント(+8)", PartSlot::RelicPendant, 75, 75, 80, 80),
-        relic_item("godbird-pendant-plus9", "†神鳥のペンダント(+9)", PartSlot::RelicPendant, 80, 80, 90, 90),
-        relic_item("godbird-pendant-plus10", "†神鳥のペンダント(+10)", PartSlot::RelicPendant, 90, 90, 100, 100),
-        relic_item("lunaria-pendant-plus1", "†ルナリアペンダント(+1)", PartSlot::RelicPendant, 100, 100, 110, 110),
-        relic_item("lunaria-pendant-plus2", "†ルナリアペンダント(+2)", PartSlot::RelicPendant, 110, 110, 120, 120),
-        relic_item("lunaria-pendant-plus3", "†ルナリアペンダント(+3)", PartSlot::RelicPendant, 120, 120, 130, 130),
-        relic_item("lunaria-pendant-plus4", "†ルナリアペンダント(+4)", PartSlot::RelicPendant, 130, 130, 140, 140),
-        relic_item("lunaria-pendant-plus5", "†ルナリアペンダント(+5)", PartSlot::RelicPendant, 140, 140, 150, 150),
-        relic_item("lunaria-pendant-plus6", "†ルナリアペンダント(+6)", PartSlot::RelicPendant, 150, 150, 160, 160),
-        relic_item("lunaria-pendant-plus7", "†ルナリアペンダント(+7)", PartSlot::RelicPendant, 160, 160, 170, 170),
-        relic_item("lunaria-pendant-plus8", "†ルナリアペンダント(+8)", PartSlot::RelicPendant, 170, 170, 180, 180),
-        relic_item("lunaria-pendant-plus9", "†ルナリアペンダント(+9)", PartSlot::RelicPendant, 180, 180, 190, 190),
-        relic_item("lunaria-pendant-plus10", "†ルナリアペンダント(+10)", PartSlot::RelicPendant, 190, 190, 200, 200),
-
-        relic_item("godbird-bracelet-plus1", "†神鳥のブレスレット(+1)", PartSlot::RelicBracelet, 0, 0, 30, 25),
-        relic_item("godbird-bracelet-plus2", "†神鳥のブレスレット(+2)", PartSlot::RelicBracelet, 30, 25, 50, 45),
-        relic_item("godbird-bracelet-plus3", "†神鳥のブレスレット(+3)", PartSlot::RelicBracelet, 50, 45, 55, 50),
-        relic_item("godbird-bracelet-plus4", "†神鳥のブレスレット(+4)", PartSlot::RelicBracelet, 55, 50, 60, 60),
-        relic_item("godbird-bracelet-plus5", "†神鳥のブレスレット(+5)", PartSlot::RelicBracelet, 60, 60, 65, 65),
-        relic_item("godbird-bracelet-plus6", "†神鳥のブレスレット(+6)", PartSlot::RelicBracelet, 65, 65, 70, 70),
-        relic_item("godbird-bracelet-plus7", "†神鳥のブレスレット(+7)", PartSlot::RelicBracelet, 70, 70, 75, 75),
-        relic_item("godbird-bracelet-plus8", "†神鳥のブレスレット(+8)", PartSlot::RelicBracelet, 75, 75, 80, 80),
-        relic_item("godbird-bracelet-plus9", "†神鳥のブレスレット(+9)", PartSlot::RelicBracelet, 80, 80, 90, 90),
-        relic_item("godbird-bracelet-plus10", "†神鳥のブレスレット(+10)", PartSlot::RelicBracelet, 90, 90, 100, 100),
-        relic_item("lunaria-bracelet-plus1", "†ルナリアブレスレット(+1)", PartSlot::RelicBracelet, 100, 100, 110, 110),
-        relic_item("lunaria-bracelet-plus2", "†ルナリアブレスレット(+2)", PartSlot::RelicBracelet, 110, 110, 120, 120),
-        relic_item("lunaria-bracelet-plus3", "†ルナリアブレスレット(+3)", PartSlot::RelicBracelet, 120, 120, 130, 130),
-        relic_item("lunaria-bracelet-plus4", "†ルナリアブレスレット(+4)", PartSlot::RelicBracelet, 130, 130, 140, 140),
-        relic_item("lunaria-bracelet-plus5", "†ルナリアブレスレット(+5)", PartSlot::RelicBracelet, 140, 140, 150, 150),
-        relic_item("lunaria-bracelet-plus6", "†ルナリアブレスレット(+6)", PartSlot::RelicBracelet, 150, 150, 160, 160),
-        relic_item("lunaria-bracelet-plus7", "†ルナリアブレスレット(+7)", PartSlot::RelicBracelet, 160, 160, 170, 170),
-        relic_item("lunaria-bracelet-plus8", "†ルナリアブレスレット(+8)", PartSlot::RelicBracelet, 170, 170, 180, 180),
-        relic_item("lunaria-bracelet-plus9", "†ルナリアブレスレット(+9)", PartSlot::RelicBracelet, 180, 180, 190, 190),
-        relic_item("lunaria-bracelet-plus10", "†ルナリアブレスレット(+10)", PartSlot::RelicBracelet, 190, 190, 200, 200),
     ];
 
     // 盾+ は通常の候補を並べず、ユーザー指定の成長カフスだけを扱う。
@@ -1762,11 +1718,70 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             catalog.push(item);
         }
     }
-    catalog
+    let mut items: Vec<EquipmentItem> = catalog
         .into_iter()
         .map(WikiEquipmentItem::into_item)
-        .collect()
+        .collect();
+    items.extend(relic_items());
+    items
 }
+
+/// レリックは段(`RelicInfo`)を属性で持つ。段の上げ下げ(`domain::relic_step`)は
+/// id の文字列ではなくこの属性を見る。
+fn relic_items() -> Vec<EquipmentItem> {
+    vec![
+        // ── レリック: 直前段階の完成値から、選択段階の上限までランダム成長 ──
+        relic_item("godbird-pendant-plus1", "†神鳥のペンダント(+1)", PartSlot::RelicPendant, 0, 0, 30, 25, RelicKind::Godbird, 1),
+        relic_item("godbird-pendant-plus2", "†神鳥のペンダント(+2)", PartSlot::RelicPendant, 30, 25, 50, 45, RelicKind::Godbird, 2),
+        relic_item("godbird-pendant-plus3", "†神鳥のペンダント(+3)", PartSlot::RelicPendant, 50, 45, 55, 50, RelicKind::Godbird, 3),
+        relic_item("godbird-pendant-plus4", "†神鳥のペンダント(+4)", PartSlot::RelicPendant, 55, 50, 60, 60, RelicKind::Godbird, 4),
+        relic_item("godbird-pendant-plus5", "†神鳥のペンダント(+5)", PartSlot::RelicPendant, 60, 60, 65, 65, RelicKind::Godbird, 5),
+        relic_item("godbird-pendant-plus6", "†神鳥のペンダント(+6)", PartSlot::RelicPendant, 65, 65, 70, 70, RelicKind::Godbird, 6),
+        relic_item("godbird-pendant-plus7", "†神鳥のペンダント(+7)", PartSlot::RelicPendant, 70, 70, 75, 75, RelicKind::Godbird, 7),
+        relic_item("godbird-pendant-plus8", "†神鳥のペンダント(+8)", PartSlot::RelicPendant, 75, 75, 80, 80, RelicKind::Godbird, 8),
+        relic_item("godbird-pendant-plus9", "†神鳥のペンダント(+9)", PartSlot::RelicPendant, 80, 80, 90, 90, RelicKind::Godbird, 9),
+        relic_item("godbird-pendant-plus10", "†神鳥のペンダント(+10)", PartSlot::RelicPendant, 90, 90, 100, 100, RelicKind::Godbird, 10),
+        relic_item("lunaria-pendant-plus1", "†ルナリアペンダント(+1)", PartSlot::RelicPendant, 100, 100, 110, 110, RelicKind::Lunaria, 1),
+        relic_item("lunaria-pendant-plus2", "†ルナリアペンダント(+2)", PartSlot::RelicPendant, 110, 110, 120, 120, RelicKind::Lunaria, 2),
+        relic_item("lunaria-pendant-plus3", "†ルナリアペンダント(+3)", PartSlot::RelicPendant, 120, 120, 130, 130, RelicKind::Lunaria, 3),
+        relic_item("lunaria-pendant-plus4", "†ルナリアペンダント(+4)", PartSlot::RelicPendant, 130, 130, 140, 140, RelicKind::Lunaria, 4),
+        relic_item("lunaria-pendant-plus5", "†ルナリアペンダント(+5)", PartSlot::RelicPendant, 140, 140, 150, 150, RelicKind::Lunaria, 5),
+        relic_item("lunaria-pendant-plus6", "†ルナリアペンダント(+6)", PartSlot::RelicPendant, 150, 150, 160, 160, RelicKind::Lunaria, 6),
+        relic_item("lunaria-pendant-plus7", "†ルナリアペンダント(+7)", PartSlot::RelicPendant, 160, 160, 170, 170, RelicKind::Lunaria, 7),
+        relic_item("lunaria-pendant-plus8", "†ルナリアペンダント(+8)", PartSlot::RelicPendant, 170, 170, 180, 180, RelicKind::Lunaria, 8),
+        relic_item("lunaria-pendant-plus9", "†ルナリアペンダント(+9)", PartSlot::RelicPendant, 180, 180, 190, 190, RelicKind::Lunaria, 9),
+        relic_item("lunaria-pendant-plus10", "†ルナリアペンダント(+10)", PartSlot::RelicPendant, 190, 190, 200, 200, RelicKind::Lunaria, 10),
+
+        relic_item("godbird-bracelet-plus1", "†神鳥のブレスレット(+1)", PartSlot::RelicBracelet, 0, 0, 30, 25, RelicKind::Godbird, 1),
+        relic_item("godbird-bracelet-plus2", "†神鳥のブレスレット(+2)", PartSlot::RelicBracelet, 30, 25, 50, 45, RelicKind::Godbird, 2),
+        relic_item("godbird-bracelet-plus3", "†神鳥のブレスレット(+3)", PartSlot::RelicBracelet, 50, 45, 55, 50, RelicKind::Godbird, 3),
+        relic_item("godbird-bracelet-plus4", "†神鳥のブレスレット(+4)", PartSlot::RelicBracelet, 55, 50, 60, 60, RelicKind::Godbird, 4),
+        relic_item("godbird-bracelet-plus5", "†神鳥のブレスレット(+5)", PartSlot::RelicBracelet, 60, 60, 65, 65, RelicKind::Godbird, 5),
+        relic_item("godbird-bracelet-plus6", "†神鳥のブレスレット(+6)", PartSlot::RelicBracelet, 65, 65, 70, 70, RelicKind::Godbird, 6),
+        relic_item("godbird-bracelet-plus7", "†神鳥のブレスレット(+7)", PartSlot::RelicBracelet, 70, 70, 75, 75, RelicKind::Godbird, 7),
+        relic_item("godbird-bracelet-plus8", "†神鳥のブレスレット(+8)", PartSlot::RelicBracelet, 75, 75, 80, 80, RelicKind::Godbird, 8),
+        relic_item("godbird-bracelet-plus9", "†神鳥のブレスレット(+9)", PartSlot::RelicBracelet, 80, 80, 90, 90, RelicKind::Godbird, 9),
+        relic_item("godbird-bracelet-plus10", "†神鳥のブレスレット(+10)", PartSlot::RelicBracelet, 90, 90, 100, 100, RelicKind::Godbird, 10),
+        relic_item("lunaria-bracelet-plus1", "†ルナリアブレスレット(+1)", PartSlot::RelicBracelet, 100, 100, 110, 110, RelicKind::Lunaria, 1),
+        relic_item("lunaria-bracelet-plus2", "†ルナリアブレスレット(+2)", PartSlot::RelicBracelet, 110, 110, 120, 120, RelicKind::Lunaria, 2),
+        relic_item("lunaria-bracelet-plus3", "†ルナリアブレスレット(+3)", PartSlot::RelicBracelet, 120, 120, 130, 130, RelicKind::Lunaria, 3),
+        relic_item("lunaria-bracelet-plus4", "†ルナリアブレスレット(+4)", PartSlot::RelicBracelet, 130, 130, 140, 140, RelicKind::Lunaria, 4),
+        relic_item("lunaria-bracelet-plus5", "†ルナリアブレスレット(+5)", PartSlot::RelicBracelet, 140, 140, 150, 150, RelicKind::Lunaria, 5),
+        relic_item("lunaria-bracelet-plus6", "†ルナリアブレスレット(+6)", PartSlot::RelicBracelet, 150, 150, 160, 160, RelicKind::Lunaria, 6),
+        relic_item("lunaria-bracelet-plus7", "†ルナリアブレスレット(+7)", PartSlot::RelicBracelet, 160, 160, 170, 170, RelicKind::Lunaria, 7),
+        relic_item("lunaria-bracelet-plus8", "†ルナリアブレスレット(+8)", PartSlot::RelicBracelet, 170, 170, 180, 180, RelicKind::Lunaria, 8),
+        relic_item("lunaria-bracelet-plus9", "†ルナリアブレスレット(+9)", PartSlot::RelicBracelet, 180, 180, 190, 190, RelicKind::Lunaria, 9),
+        relic_item("lunaria-bracelet-plus10", "†ルナリアブレスレット(+10)", PartSlot::RelicBracelet, 190, 190, 200, 200, RelicKind::Lunaria, 10),
+    ]
+    .into_iter()
+    .map(|(item, relic)| {
+        let mut item = item.into_item();
+        item.relic = Some(relic);
+        item
+    })
+    .collect()
+}
+
 
 pub fn find_equipment_item(id: &str) -> Option<EquipmentItem> {
     cached_equipment_catalog()

@@ -12,12 +12,13 @@
   // この画面は表示と選択のみ。
   import {
     errorMessage, getDamageSnapshot, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
-    previewEffectiveStats, setDamageSnapshot,
+    previewEffectiveStats, relicState, relicStep, setDamageSnapshot,
   } from "../../api/commands";
   import type {
     ReachTier,
     Content, ContentEvaluation, DefenseProfile, EquipmentItem, EquipmentPart, PartSlot,
-    RegisteredCharacter, SkillDependency, StatKind, StatPreview, UpgradeCandidate,
+    RegisteredCharacter, RelicDirection, RelicKind, RelicState, SkillDependency, StatKind, StatPreview,
+    UpgradeCandidate,
   } from "../../api/types";
   import { COST_COLORS, COST_LABELS } from "../../candidates";
   import {
@@ -25,7 +26,7 @@
     type EnchantDepKey,
   } from "../../enchant";
   import {
-    applyCatalogItem, equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
+    equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
     valuesSummary,
   } from "../../equipment";
   import { fmtInt, fmtMonthDay } from "../../format";
@@ -782,59 +783,40 @@
     return { remain, parts: shortParts.size };
   });
 
-  // --- 4. レリック左右。カタログの次段(+レベル)へ差し替える(EquipmentPane.pickRelicLevel と
-  //    同じ結果になるよう equipment.ts の applyCatalogItem を共有する)。神鳥は 1→10、ルナリアは
-  //    別系列で 1→10(kind の外へは踏み出さない。相手 kind への切り替えはキャラタブで行う)。
-  //    各段には補正値の範囲があり(gamedata: relic_item は growth_caps = values_max)、実際の値は
-  //    直前段階のMAXから始まり表示段階のMAXまで育つ(wiki)。+レベルで次の段へ進めるのは、
-  //    いまの段の補正値を上限まで上げてから、というゲーム内の順序をそのまま表現する。
+  // --- 4. レリック左右。段の遷移(次段への差し替え・補正値の戻し方・+Lv の解禁条件)は
+  //    Rust(domain::relic_state / relic_step)が持つ。神鳥・ルナリアは別系列で、kind の
+  //    外へは踏み出さない(相手 kind への切り替えはキャラタブで行う)。
   const RELIC_ROWS = [
     { slot: "relic_pendant", side: "左" },
     { slot: "relic_bracelet", side: "右" },
   ] as const;
-  const RELIC_KIND_LABELS = { godbird: "神鳥", lunaria: "ルナリア" } as const;
-  const relicPartName = (slot: "relic_pendant" | "relic_bracelet") =>
-    slot === "relic_pendant" ? "pendant" : "bracelet";
-  const relicKindOf = (itemId: string): "godbird" | "lunaria" | null =>
-    itemId.startsWith("godbird-") ? "godbird" : itemId.startsWith("lunaria-") ? "lunaria" : null;
-  const relicLevelOf = (itemId: string): number | null => {
-    const m = itemId.match(/-plus(\d+)$/);
-    return m ? Number(m[1]) : null;
-  };
-  const relicItemFor = (slot: "relic_pendant" | "relic_bracelet", kind: string, level: number): EquipmentItem | null =>
-    app.equipmentCatalog.find((it) => it.id === `${kind}-${relicPartName(slot)}-plus${level}`) ?? null;
-  /** 同 kind(神鳥/ルナリア)でカタログに存在する最大 Lv。この kind の系列の外へは踏み出さない。 */
-  const relicMaxLevel = (slot: "relic_pendant" | "relic_bracelet", kind: string): number => {
-    const prefix = `${kind}-${relicPartName(slot)}-plus`;
-    return app.equipmentCatalog.reduce((max, it) => {
-      if (!it.id.startsWith(prefix)) return max;
-      const lv = Number(it.id.slice(prefix.length));
-      return Number.isFinite(lv) ? Math.max(max, lv) : max;
-    }, 0);
-  };
+  const RELIC_KIND_LABELS: Record<RelicKind, string> = { godbird: "神鳥", lunaria: "ルナリア" };
   /** いまの段で補正値を上げられるステ(カタログの growth_caps がそのまま今の段の上限)。 */
   function relicGrowthKeys(item: EquipmentItem | null): EquipmentStatKind[] {
     return item?.growth_caps ? EQUIPMENT_STAT_KINDS.filter((k) => item.growth_caps![k] > 0) : [];
   }
-  /** 補正値がいまの段の上限まで埋まっているか。埋まっていなければ次の段には進めない
-   *  (ゲーム内の育成順序: 補正値が育ち切ってから+レベル)。育成対象ステが無ければ常に true。 */
-  function relicGrowthComplete(part: EquipmentPart, item: EquipmentItem | null): boolean {
-    const keys = relicGrowthKeys(item);
-    return keys.length === 0 || keys.every((k) => part.base[k] >= item!.growth_caps![k]);
-  }
-  interface RelicState {
-    value: number; max: number; kind: "godbird" | "lunaria";
-    canDown: boolean; canUp: boolean; growthDone: boolean;
-  }
-  function relicState(slot: "relic_pendant" | "relic_bracelet", part: EquipmentPart | null): RelicState | null {
-    if (!part || part.item_id === null) return null;
-    const kind = relicKindOf(part.item_id);
-    const level = relicLevelOf(part.item_id);
-    if (!kind || level === null) return null;
-    const max = relicMaxLevel(slot, kind);
-    const growthDone = relicGrowthComplete(part, itemOf(part));
-    return { value: level, max, kind, canDown: level > 1, canUp: level < max && growthDone, growthDone };
-  }
+  // 段の遷移(上限到達で +Lv 解禁 / 段上げ後は values_min に戻す)は Rust
+  // (domain::relic_state / relic_step)が持つ。ここは返ってきた状態を出し、
+  // ボタンで返ってきた部位を保存するだけにする。
+  let relicStates = $state<Record<string, RelicState | null>>({});
+  const relicStatesLatest = latest();
+  $effect(() => {
+    const parts = RELIC_ROWS.map((r) => ({
+      slot: r.slot,
+      part: partOf(r.slot),
+    }));
+    const payload = JSON.parse(JSON.stringify(parts)) as { slot: PartSlot; part: EquipmentPart | null }[];
+    relicStatesLatest.run(async (isCurrent) => {
+      const resolved: Record<string, RelicState | null> = {};
+      for (const entry of payload) {
+        resolved[entry.slot] = entry.part === null ? null : await relicState(entry.part).catch(() => null);
+      }
+      if (isCurrent()) relicStates = resolved;
+    });
+    return () => relicStatesLatest.cancel();
+  });
+  const relicStateOf = (slot: "relic_pendant" | "relic_bracelet"): RelicState | null =>
+    relicStates[slot] ?? null;
   function commitRelicLevel(c: RegisteredCharacter, slot: "relic_pendant" | "relic_bracelet", nextPart: EquipmentPart) {
     commitFieldUpdate(
       c, `${c.id}:${slot}`,
@@ -866,37 +848,20 @@
       value,
     );
   }
-  function stepRelicLevel(slot: "relic_pendant" | "relic_bracelet", dir: number) {
+  async function stepRelicLevel(slot: "relic_pendant" | "relic_bracelet", direction: RelicDirection) {
     const c = character;
     const part = partOf(slot);
-    if (!c || !part || part.item_id === null) return;
-    const kind = relicKindOf(part.item_id);
-    const level = relicLevelOf(part.item_id);
-    if (!kind || level === null) return;
-    if (dir > 0 && !relicGrowthComplete(part, itemOf(part))) return; // 補正値が上限に届くまで進めない
-    const item = relicItemFor(slot, kind, level + dir);
-    if (!item) return;
-    const next = applyCatalogItem(part, item);
-    // レリックは直前段階のMAXから育って表示段階のMAXに到達する(wiki 注記)。applyCatalogItem は
-    // 通常装備と同じく base を values_max(=この段の完成値)にするが、レリックを「段を上げた」
-    // 直後は正しくは「まだ育っていない」状態(補正値 = この段の下限 = 直前段階の完成値)。
-    // 段を下げる(dir<0)方向は「その段は育成済みだった」扱いのまま(values_max)でよい。
-    const base = dir > 0 ? { ...item.values_min } : next.base;
-    commitRelicLevel(c, slot, { ...next, base });
+    if (!c || !part) return;
+    const next = await relicStep(JSON.parse(JSON.stringify(part)) as EquipmentPart, direction);
+    if (next) commitRelicLevel(c, slot, next);
   }
   /** 片側の残り(補正値がまだ上限に届いていなければそちら優先。届いていれば次の段への Lv 差)。
    *  null = その側は未装備。 */
   function relicSideRemaining(slot: "relic_pendant" | "relic_bracelet"): { text: string; done: boolean } | null {
-    const part = partOf(slot);
-    const rs = relicState(slot, part);
+    const rs = relicStateOf(slot);
     if (!rs) return null;
-    const item = itemOf(part);
-    const growthKeys = relicGrowthKeys(item);
-    if (growthKeys.length > 0 && !rs.growthDone) {
-      const remain = growthKeys.reduce((sum, k) => sum + Math.max(0, item!.growth_caps![k] - part!.base[k]), 0);
-      return { text: `補正値あと${fmtInt(remain)}`, done: false };
-    }
-    if (rs.canUp) return { text: `Lvあと${fmtInt(rs.max - rs.value)}`, done: false };
+    if (!rs.growth_done) return { text: `補正値あと${fmtInt(rs.growth_remaining)}`, done: false };
+    if (rs.can_up) return { text: `Lvあと${fmtInt(rs.max_level - rs.level)}`, done: false };
     return { text: "上限", done: true };
   }
   const relicSides = $derived(RELIC_ROWS.map((r) => ({ side: r.side, info: relicSideRemaining(r.slot) })));
@@ -1348,7 +1313,7 @@
               <div class="expand-rows">
                 {#each RELIC_ROWS as r (r.slot)}
                   {@const part = partOf(r.slot)}
-                  {@const rs = relicState(r.slot, part)}
+                  {@const rs = relicStateOf(r.slot)}
                   {@const item = itemOf(part)}
                   {@const growthKeys = relicGrowthKeys(item)}
                   <div class="expand-row relic-row">
@@ -1358,12 +1323,12 @@
                         <div class="relic-row-head">
                           <span class="badge" style={badgeStyle({ label: RELIC_KIND_LABELS[rs.kind], state: "unknown" })}>{RELIC_KIND_LABELS[rs.kind]}</span>
                           <div class="today-stepper">
-                            <button type="button" class="dst" aria-label="レリック{r.side}を下げる" disabled={!rs.canDown} onclick={() => stepRelicLevel(r.slot, -1)}>−</button>
+                            <button type="button" class="dst" aria-label="レリック{r.side}を下げる" disabled={!rs.can_down} onclick={() => stepRelicLevel(r.slot, "down")}>−</button>
                             <span class="today-stepper-val">
-                              <span class="num" use:bump={() => rs!.value}>Lv{rs.value}</span>
-                              <span class="num dim">/ {rs.max}</span>
+                              <span class="num" use:bump={() => rs!.level}>Lv{rs.level}</span>
+                              <span class="num dim">/ {rs.max_level}</span>
                             </span>
-                            <button type="button" class="dst" aria-label="レリック{r.side}を上げる" disabled={!rs.canUp} onclick={() => stepRelicLevel(r.slot, 1)}>+</button>
+                            <button type="button" class="dst" aria-label="レリック{r.side}を上げる" disabled={!rs.can_up} onclick={() => stepRelicLevel(r.slot, "up")}>+</button>
                           </div>
                         </div>
                         {#if growthKeys.length > 0}
@@ -1382,7 +1347,7 @@
                               </div>
                             {/each}
                           </div>
-                          {#if !rs.growthDone}
+                          {#if !rs.growth_done}
                             <p class="relic-hint dim">補正値が上限まで届くと次の段へ進めます</p>
                           {/if}
                         {:else}

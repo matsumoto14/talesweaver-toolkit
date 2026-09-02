@@ -8,16 +8,10 @@ docs/architecture.md の「UI は表示と入力のみ。計算・判定は必�
 
 ## A. フロントに残っているドメインロジック
 
-### A1. Rust に対応物がなく、フロントだけが規則を持っているもの(最優先)
+### A1. Rust に対応物がなく、フロントだけが規則を持っているもの
 
-ドメインに規則が存在しないので、写経の削除ではなく **domain / gamedata への新設**が要る。
-
-| # | 場所 | 中身 | 受け皿 |
-|---|---|---|---|
-| 1 | `pages/chars/sources/EquipmentPane.svelte:150-247` | 依存種別→武器系統、`boris_*` スキル→武器種、キャラの weapon/armor/wrist クラスによる装備可否と候補絞り込み | gamedata にクラス表はある(`characters.rs`)が判定関数がない。`Character` × `EquipmentItem` の可否を domain に置き、`list_equipment_items` が絞って返す |
-| 2 | `EquipmentPane.svelte:442-466` | 武器アビリティの系統適合表(`abilityFitsWeapon`)と enhance_type→系統(`abilityWeaponSystem`) | Rust の検証は `equipment.rs:1131` の `exclusive_group` 重複のみで、系統不一致は通る。装備検証に加え、候補列挙も Rust から |
-| 3 | `EquipmentPane.svelte:341-370` | エンチャント完了プラン(+17 / +20 巻物の最小回数探索)。`enchantPlanStatsFor` は依存種別→ステ表を再写経 | domain に `enchant_plan(remaining) -> Plan`。ステ表は `candidate.rs::enchant_dependency_keys` を返す |
-| 6 | `HomePage.svelte:792-880` / `EquipmentPane.svelte:261-270` | レリック育成順序: item id 文字列 `godbird-pendant-plus{n}` の解析、上限到達で +Lv 解禁、段上げ後は `values_min` に戻す | Rust は `equipment.rs:1044` で下限検証のみ。レリック段の遷移を domain に |
+10 件すべて済み(2026-09-02)。装備可否 / アビリティ適合 / エンチャントプラン / レリック段 / レバー /
+到達 4 段 / 称号属性 / 共通スキル既定 / 覚醒正規化 / スキル並びは domain・gamedata に置き、コマンドで配る。
 
 ### A2. Rust に同じ計算があり、TS が写経しているもの(二重化)
 

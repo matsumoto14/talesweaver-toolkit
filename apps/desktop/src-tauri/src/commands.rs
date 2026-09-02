@@ -6,13 +6,12 @@
 
 use base64::Engine;
 use commands::{
-    CharacterSkillEffectsView, CommandError, CommandResult, EnchantGain, StatLimitsPayload,
-    TitleView, UpgradeCandidate,
+    CharacterSkillEffectsView, CommandError, CommandResult, EnchantGain, EnchantPlanRow,
+    EquipmentAbilityView, EquipmentCandidates, StatLimitsPayload, TitleView, UpgradeCandidate,
 };
 use domain::{
     BuffDefinition, BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DamageResult,
-    DefenseProfile, Enemy, EquipmentAbilityDef, NewCharacter, RandomOptionDef, Skill,
-    VersusAccuracy,
+    DefenseProfile, Enemy, NewCharacter, RandomOptionDef, Skill, VersusAccuracy,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, RegisteredCharacter};
@@ -133,8 +132,40 @@ pub fn list_equipment_catalog() -> Vec<EquipmentItem> {
 }
 
 #[tauri::command]
-pub fn list_equipment_abilities() -> Vec<EquipmentAbilityDef> {
+pub fn list_equipment_abilities() -> Vec<EquipmentAbilityView> {
     commands::list_equipment_abilities()
+}
+
+#[tauri::command]
+pub fn list_equipment_candidates(
+    game_character_id: Option<String>,
+    main_skill_id: Option<String>,
+    slot: domain::PartSlot,
+) -> EquipmentCandidates {
+    commands::list_equipment_candidates(game_character_id, main_skill_id, slot)
+}
+
+#[tauri::command]
+pub fn part_weapon_system(part: domain::EquipmentPart) -> Option<domain::WeaponSystem> {
+    commands::part_weapon_system(part)
+}
+
+#[tauri::command]
+pub fn list_enchant_plans(character: NewCharacter) -> Vec<EnchantPlanRow> {
+    commands::list_enchant_plans(character)
+}
+
+#[tauri::command]
+pub fn relic_state(part: domain::EquipmentPart) -> Option<domain::RelicState> {
+    commands::relic_state(part)
+}
+
+#[tauri::command]
+pub fn relic_step(
+    part: domain::EquipmentPart,
+    direction: domain::RelicDirection,
+) -> Option<domain::EquipmentPart> {
+    commands::relic_step(part, direction)
 }
 
 #[tauri::command]

@@ -514,6 +514,7 @@ dependencies = [
  "domain",
  "gamedata",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
