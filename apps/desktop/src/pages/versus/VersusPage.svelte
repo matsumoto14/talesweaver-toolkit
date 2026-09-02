@@ -5,7 +5,7 @@
   // 計算は Rust 側(preview_versus → domain::versus_accuracy)。ここは組み立てて渡すだけ。
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
   import type {
-    AccuracyBoost, GrowthAction, GrowthGroup, GrowthRoom, Skill, StatFixedSource, StatKind,
+    AccuracyBoost, GrowthAction, GrowthGroup, GrowthGroupRooms, GrowthRoom, Skill, StatFixedSource, StatKind,
     VersusAccuracy,
   } from "../../api/types";
   import {
@@ -261,13 +261,39 @@
 
   // 2 人ぶんを 1 つの表に並べる。Rust が返す並び(GrowthGroup = 費用の安い順)をそのまま使い、
   // 2 本のリストを区分ごとに突き合わせる。**この定数は Rust の GrowthGroup の宣言順の写し**で、
-  // 並べ替えの指図ではない(2 列を交互に差し込むために順位が要るだけ)。
+  // 並べ替えの指図ではない(2 列を 1 本に差し込むために順位が要るだけ)。
   const GROWTH_GROUP_ORDER: GrowthGroup[] =
     ["buff", "equipment_ability", "random_option", "stat_fixed", "enchant", "siena"];
 
-  interface GrowthRow { key: string; group: GrowthGroup; label: string; a: GrowthRoom | null; b: GrowthRoom | null }
+  /** 区分の題。手の行は行動(〜を付ける)なので、区分は材料の呼び名で短く */
+  function growthGroupLabel(group: GrowthGroup, stat: StatKind): string {
+    switch (group) {
+      case "buff": return "バフ";
+      case "equipment_ability": return "装備アビリティ";
+      case "random_option": return "ランダム OP";
+      case "stat_fixed": return `${STAT_LABELS[stat]} の固定上昇`;
+      case "enchant": return "エンチャント枠";
+      case "siena": return "シエナのオーラ";
+    }
+  }
 
-  function mergeGrowth(a: GrowthRoom[], b: GrowthRoom[]): GrowthRow[] {
+  interface GrowthGroupRow { group: GrowthGroup; a: GrowthGroupRooms | null; b: GrowthGroupRooms | null }
+  interface GrowthRow { key: string; label: string; a: GrowthRoom | null; b: GrowthRoom | null }
+
+  /** 区分の段。どちらかにある区分だけ、Rust の順で */
+  function mergeGroups(a: GrowthGroupRooms[], b: GrowthGroupRooms[]): GrowthGroupRow[] {
+    return GROWTH_GROUP_ORDER.flatMap((group) => {
+      const row = {
+        group,
+        a: a.find((g) => g.group === group) ?? null,
+        b: b.find((g) => g.group === group) ?? null,
+      };
+      return row.a || row.b ? [row] : [];
+    });
+  }
+
+  /** 手の段。2 人が同じ手を持つときだけ 1 行にまとめる。順は Rust が返したまま(gain 降順) */
+  function mergeRooms(a: GrowthRoom[], b: GrowthRoom[]): GrowthRow[] {
     const rows: GrowthRow[] = [];
     const index = new Map<string, GrowthRow>();
     const put = (room: GrowthRoom, side: "a" | "b") => {
@@ -277,30 +303,28 @@
         existing[side] = room;
         return;
       }
-      const row: GrowthRow = {
-        key, group: room.group, label: actionLabel(room.action), a: null, b: null,
-      };
+      const row: GrowthRow = { key, label: actionLabel(room.action), a: null, b: null };
       row[side] = room;
       index.set(key, row);
       rows.push(row);
     };
     a.forEach((room) => put(room, "a"));
     b.forEach((room) => put(room, "b"));
-    // 区分の順は Rust と同じ。同じ区分の中は Rust が返した順(gain 降順)のまま
-    return rows
-      .map((row, i) => ({ row, i }))
-      .sort((x, y) =>
-        GROWTH_GROUP_ORDER.indexOf(x.row.group) - GROWTH_GROUP_ORDER.indexOf(y.row.group)
-        || x.i - y.i)
-      .map((e) => e.row);
+    return rows;
   }
 
   // 伸びしろの素の増分は合計行・内訳とも「いま → 上限まで積んだら」の矢印で出す
   // (ユーザー指摘 2026-09-02。「あと +N」「+825」「×1.35」と行ごとに言い方が割れていた)。
-  // 伸びしろは既定で畳む。開いたら材料ごとの内訳を出す(ユーザー指摘 2026-09-01)。
-  // 命中P・回避Pで独立に開閉できる(押した行はその場に留まり、下に生えるだけ)
+  // 伸びしろは既定で畳む。開いたら区分(バフ / 装備アビリティ / …)が並び、区分を開くと
+  // 手が並ぶ ── **3 段**。手を一度に全部出すと多すぎて読めない(ユーザー指摘 2026-09-02)。
+  // 命中P・回避Pで独立に開閉でき、区分もそれぞれ独立(押した行はその場に留まり、下に生えるだけ)
   let growthOpenAcc = $state(false);
   let growthOpenEva = $state(false);
+  /** 開いている区分。鍵は `${ブロック}:${区分}`(命中P と 回避P で別) */
+  let growthOpenGroups = $state<Record<string, boolean>>({});
+  const toggleGrowthGroup = (key: string) => {
+    growthOpenGroups[key] = !growthOpenGroups[key];
+  };
 
   // ダメージ計算タブと同じ言い方(「結果への効きを %」)にそろえる。命中P・回避Pの素の増分は
   // 下限・上限で頭打ちのことがあるので、動かない材料は空白や「—」にせず ±0% と正直に出す。
@@ -384,14 +408,33 @@
   {/if}
 {/snippet}
 
+{#snippet growthGroupCell(item: GrowthGroupRooms | null, unit: string)}
+  {#if item === null}
+    <span class="growth-none dim">—</span>
+  {:else}
+    <!-- 区分の行も主役は「区分の手を全部打ったら命中率が何 % 動くか」。脇に手の数と素の増分 -->
+    <span class="growth-item">
+      <span class="growth-hitrate num" use:bump={() => item.hit_rate_gain}>{formatHitRateGain(item.hit_rate_gain)}</span>
+      {#if item.provisional}<span class="growth-provisional" style={badgeStyle({ label: "仮", state: "temp" })}>仮</span>{/if}
+      <span class="growth-convert dim">
+        <span class="num" use:bump={() => item.rooms.length}>{item.rooms.length}</span><span class="growth-unit">手</span>
+        <span class="growth-unit">・ {unit}</span>
+        <span class="num" use:bump={() => item.gain}>+{item.gain}</span>
+      </span>
+    </span>
+  {/if}
+{/snippet}
+
 {#snippet growthBlock(
   label: string,
   unit: string,
+  stat: StatKind,
   rateWord: string,
+  groupKey: string,
   resultA: VersusAccuracy | null,
   resultB: VersusAccuracy | null,
-  growthA: GrowthRoom[],
-  growthB: GrowthRoom[],
+  growthA: GrowthGroupRooms[],
+  growthB: GrowthGroupRooms[],
   maxA: number | null,
   maxB: number | null,
   pointA: number | null,
@@ -401,8 +444,8 @@
   open: boolean,
   onToggle: () => void,
 )}
-  {@const rows = mergeGrowth(growthA, growthB)}
-  {@const hasAny = growthA.length > 0 || growthB.length > 0}
+  {@const groups = mergeGroups(growthA, growthB)}
+  {@const hasAny = groups.length > 0}
   <button
     type="button"
     class="grid-row sub growth-total-row"
@@ -419,13 +462,34 @@
     <div class="cell val">{@render growthSummaryCell(rateWord, resultB, growthB.length, maxB, pointB, maxHitRateB)}</div>
   </button>
   {#if open}
-    {#each rows as row (row.key)}
-      <!-- エンチャント枠(と見積りのシエナ)は費用が高い最終手段。末尾に薄く置く -->
-      <div class="grid-row sub growth-item-row" class:last-resort={row.group === "enchant" || row.group === "siena"}>
-        <div class="cell label">{softBreaks(row.label)}</div>
-        <div class="cell val">{@render growthItemCell(row.a, unit)}</div>
-        <div class="cell val">{@render growthItemCell(row.b, unit)}</div>
-      </div>
+    {#each groups as row (row.group)}
+      {@const key = `${groupKey}:${row.group}`}
+      {@const groupOpen = growthOpenGroups[key] ?? false}
+      {@const lastResort = row.group === "enchant" || row.group === "siena"}
+      <!-- 区分の段。エンチャント枠(と見積りのシエナ)は費用が高い最終手段。末尾に薄く置く -->
+      <button
+        type="button"
+        class="grid-row sub growth-group-row openable"
+        class:last-resort={lastResort}
+        aria-expanded={groupOpen}
+        onclick={() => toggleGrowthGroup(key)}
+      >
+        <div class="cell label">
+          {growthGroupLabel(row.group, stat)}
+          <span class="growth-chevron" class:open={groupOpen}>▸</span>
+        </div>
+        <div class="cell val">{@render growthGroupCell(row.a, unit)}</div>
+        <div class="cell val">{@render growthGroupCell(row.b, unit)}</div>
+      </button>
+      {#if groupOpen}
+        {#each mergeRooms(row.a?.rooms ?? [], row.b?.rooms ?? []) as item (item.key)}
+          <div class="grid-row sub growth-item-row" class:last-resort={lastResort}>
+            <div class="cell label">{softBreaks(item.label)}</div>
+            <div class="cell val">{@render growthItemCell(item.a, unit)}</div>
+            <div class="cell val">{@render growthItemCell(item.b, unit)}</div>
+          </div>
+        {/each}
+      {/if}
     {/each}
   {/if}
 {/snippet}
@@ -661,7 +725,7 @@
                 </div>
               {/if}
               {@render growthBlock(
-                "次にできること", "命中P", "命中率", rAB, rBA,
+                "次にできること", "命中P", "dex", "命中率", "acc", rAB, rBA,
                 rAB?.accuracy_growth ?? [], rBA?.accuracy_growth ?? [],
                 rAB?.accuracy_max ?? null, rBA?.accuracy_max ?? null,
                 rAB?.accuracy_point ?? null, rBA?.accuracy_point ?? null,
@@ -701,7 +765,7 @@
                 <div class="cell val">{@render textCell(rAB ? rAB.attack_type_bonus.toFixed(1) : null)}</div>
               </div>
               {@render growthBlock(
-                "次にできること", "回避P", "当てられる率", rBA, rAB,
+                "次にできること", "回避P", "agi", "当てられる率", "eva", rBA, rAB,
                 rBA?.evasion_growth ?? [], rAB?.evasion_growth ?? [],
                 rBA?.evasion_max ?? null, rAB?.evasion_max ?? null,
                 rBA?.evasion_point ?? null, rAB?.evasion_point ?? null,
@@ -773,21 +837,28 @@
   .growth-total-hitrate { font-weight: 800; color: var(--fg-head); }
   .growth-total-raw { font-size: 9px; }
   .growth-total-raw :global(.num) { font-size: 9px; }
-  /* button の既定見た目を消し、行としての見た目だけ残す */
-  button.growth-total-row {
+  /* button の既定見た目を消し、行としての見た目だけ残す(合計行・区分行とも) */
+  button.growth-total-row, button.growth-group-row {
     background: none; border: none; margin: 0; padding: 0; font: inherit; color: inherit;
     text-align: inherit; width: 100%; cursor: default;
   }
-  button.growth-total-row.openable { cursor: pointer; }
-  button.growth-total-row.openable:hover .cell.label { color: var(--accent); }
-  button.growth-total-row.openable:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  button.growth-total-row.openable, button.growth-group-row.openable { cursor: pointer; }
+  button.growth-total-row.openable:hover .cell.label,
+  button.growth-group-row.openable:hover .cell.label { color: var(--accent); }
+  button.growth-total-row.openable:focus-visible,
+  button.growth-group-row.openable:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
   .growth-chevron {
     display: inline-block; margin-left: 4px; font-size: 9px; color: var(--fg-dim);
     transition: transform 0.15s ease;
   }
   .growth-chevron.open { transform: rotate(90deg); }
-  .growth-item-row .cell.label { padding-left: 32px; white-space: normal; word-break: keep-all; }
-  .growth-total-row .cell.val, .growth-item-row .cell.val { white-space: normal; overflow: visible; text-overflow: clip; }
+  /* 3 段の字下げ: 合計 24px(sub)→ 区分 32px → 手 40px。区分の題は材料の呼び名で、
+     手の行動(〜を付ける)より一段強く */
+  .growth-group-row .cell.label { padding-left: 32px; font-weight: 700; }
+  .growth-item-row .cell.label { padding-left: 40px; white-space: normal; word-break: keep-all; }
+  .growth-total-row .cell.val, .growth-group-row .cell.val, .growth-item-row .cell.val {
+    white-space: normal; overflow: visible; text-overflow: clip;
+  }
   .growth-item { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
   /* 材料 1 件の主役も「命中率 ±N%」。素の増分(装備補正 +705 → 命中P +951)は
      その脇に小さく残す(ダメ計タブの「もし〜だったら」候補と同じ言い方) */
@@ -807,8 +878,10 @@
   .growth-none { font-size: 10.5px; }
   /* 最終手段(エンチャント・シエナ)は末尾に薄く。並びは Rust が決めているので、
      ここでやるのは「目立たせない」ことだけ(§00 02) */
-  .growth-item-row.last-resort .cell.label { color: var(--fg-dim); }
-  .growth-item-row.last-resort .growth-hitrate { font-weight: 700; color: var(--fg-sub); }
+  .growth-group-row.last-resort .cell.label, .growth-item-row.last-resort .cell.label { color: var(--fg-dim); }
+  .growth-group-row.last-resort .growth-hitrate, .growth-item-row.last-resort .growth-hitrate {
+    font-weight: 700; color: var(--fg-sub);
+  }
 
   /* 的中剣の ON / OFF。押した場所は動かない(幅・高さは状態で変えない) */
   .sword-chip {

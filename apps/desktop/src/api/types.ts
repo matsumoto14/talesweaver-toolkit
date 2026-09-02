@@ -1540,6 +1540,20 @@ export interface GrowthRoom {
   provisional: boolean;
 }
 
+// crates/domain/src/defense.rs の GrowthGroupRooms。伸びしろの区分 1 つぶん。
+// 画面は「次にできること」→ 区分 → 手 の 3 段で開く。
+export interface GrowthGroupRooms {
+  group: GrowthGroup;
+  /** 区分の手を全部打ったときの命中P(または回避P)の増分 */
+  gain: number;
+  /** 区分の手を全部打ったときの命中率(%)の動き。手ごとの合計ではなく Rust の再計算 */
+  hit_rate_gain: number;
+  /** [仮] の手が混じるか */
+  provisional: boolean;
+  /** 手(gain 降順)。空の区分は来ない */
+  rooms: GrowthRoom[];
+}
+
 // crates/domain/src/defense.rs の AccuracySkillOption。命中P割合増加スキル(極・的中剣)。
 // 伸びしろではなく **つけ外し** なので、覚えられるキャラだけ ON / OFF チップを出す。
 export interface AccuracySkillOption {
@@ -1583,14 +1597,14 @@ export interface VersusAccuracy {
   min_evasion_rate: number;
   /** false のとき min_evasion_rate は未収録(0 決め打ち) */
   min_evasion_rate_recorded: boolean;
-  /** 攻撃側の命中P 伸びしろ(費用の安い順。効かない手は入っていない) */
-  accuracy_growth: GrowthRoom[];
+  /** 攻撃側の命中P 伸びしろ(区分ごと。費用の安い順。効かない手・空の区分は入っていない) */
+  accuracy_growth: GrowthGroupRooms[];
   /** 全部積んだときの命中P */
   accuracy_max: number;
   /** 全部積んだときの命中率(結果への効き。% はここから読む。自前で導出しない) */
   accuracy_max_hit_rate: HitRate;
-  /** 防御側の回避P 伸びしろ */
-  evasion_growth: GrowthRoom[];
+  /** 防御側の回避P 伸びしろ(区分ごと) */
+  evasion_growth: GrowthGroupRooms[];
   /** 全部積んだときの回避P */
   evasion_max: number;
   /** 防御側が全部積んだときの命中率(攻撃側から見た数字。下がる方向) */
