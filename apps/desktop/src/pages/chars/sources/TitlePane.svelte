@@ -17,15 +17,9 @@
 
   let titleQuery = $state("");
   const selectedTitle = $derived(app.titles.find((t) => t.id === draft.equipment.title) ?? null);
-  /** 普段使う称号。無条件ダメージ +20%以上と、地域称号のうち実用される最上位 2 件。 */
-  const titleIsCommon = (t: TitleDef): boolean =>
-    t.attack_damage_percent >= 20 || t.id === "eclipse" || t.id === "shinchou_no_negura";
-  /** 依存違いの一部だけに追加効果が書かれている場合も、同名の変種はまとめて常設する。 */
-  const commonTitleBases = $derived(
-    new Set(app.titles.filter(titleIsCommon).map((t) => t.name.split(" - ")[0])),
-  );
-  const commonTitles = $derived(app.titles.filter((t) => commonTitleBases.has(t.name.split(" - ")[0])));
-  const otherTitles = $derived(app.titles.filter((t) => !commonTitleBases.has(t.name.split(" - ")[0])));
+  /** 普段使う称号(常設)。どれが普段使いかは gamedata の `common` */
+  const commonTitles = $derived(app.titles.filter((t) => t.common));
+  const otherTitles = $derived(app.titles.filter((t) => !t.common));
   const queriedOtherTitles = $derived.by(() => {
     const q = titleQuery.trim();
     if (q === "") return otherTitles;
@@ -42,7 +36,7 @@
   const titleMatchesSkill = (t: TitleDef): boolean =>
     !filterActive ||
     t.attack_damage_percent > 0 ||
-    t.note.includes("追加ダメージ") ||
+    t.conditional_added_damage !== null ||
     skillKinds.some((k) => t.values[k] > 0);
   const filteredCommonTitles = $derived(commonTitles.filter(titleMatchesSkill));
   const filteredOtherTitles = $derived(queriedOtherTitles.filter(titleMatchesSkill));

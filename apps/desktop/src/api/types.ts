@@ -788,6 +788,8 @@ export interface TitleDef {
   conditional_added_damage: ConditionalAddedDamage | null;
   /** 入手方法・備考 */
   note: string;
+  /** 称号ピッカーで常設する「普段使う」称号(規則は gamedata) */
+  common: boolean;
   /** 装備の基本能力値への加算 9 値の合計(表示用。計算は Rust 側 `TitleDef::equipment_value_total`) */
   equipment_value_total: number;
 }
@@ -1514,6 +1516,8 @@ export interface DamageResult {
    * コンテンツ到達判定はこの値を使う
    */
   per_hit_primary: number;
+  /** 対象コンテンツの目安に対する到達段(Rust の ReachTier)。目安なしは null */
+  reach: ReachTier | null;
   /** 主役の合計ダメージ */
   total_primary: number;
   hit_count: number;
@@ -1614,6 +1618,8 @@ export interface StatLimits {
   awakening_stage_max: number;
   /** エタの意志 Lv の上限 */
   eternal_level_max: number;
+  /** エタの意志 Lv > 0 のときに確定する覚醒段階 */
+  eternal_awakening_stage: number;
   /** ランダムオプションの効果値の上限 `[仮]` */
   random_option_value_max: number;
   protect_armor_level_max: number;
@@ -1804,12 +1810,17 @@ export interface BestSkillDamage {
   total_primary: number;
 }
 
+/** 火力の到達段(crates/domain/src/content.rs の ReachTier)。境目は Rust 側 */
+export type ReachTier = "comfortable" | "reached" | "close" | "short";
+
 export interface ContentEvaluation {
   content_id: string;
   /** スキル未収録キャラ・敵データなしコンテンツは null */
   damage: BestSkillDamage | null;
   checks: RequirementCheck[];
   entry_ok: boolean;
+  /** 火力の到達段。目安なし・ダメージ不明は null */
+  reach: ReachTier | null;
   /** 敵データなし(目安なし)は火力不問で true */
   reaches_need: boolean;
   clear: boolean;

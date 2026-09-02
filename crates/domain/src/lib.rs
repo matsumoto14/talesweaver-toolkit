@@ -40,7 +40,7 @@ pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,
 };
-pub use awakening::{Awakening, AwakeningCaps};
+pub use awakening::{Awakening, AwakeningCaps, AwakeningError};
 pub use candidate::{
     aura_candidates, enchant_candidates, enchant_dependency_keys, enhance_candidates,
     list_candidate_changes, quick_win_candidates, rank_candidates, CandidateChange, CandidateCost,
@@ -57,7 +57,7 @@ pub use common_skill::{
     AUGMENT_LEVEL_MAX, KAI_PROTECT_ARMOR_LEVEL_MAX, PROTECT_ARMOR_LEVEL_MAX, REINFORCE_LEVEL_MAX,
     SHARPNESS_VISION_LEVEL_MAX, STRONG_WEAPON_LEVEL_MAX, UNLEASH_LEVEL_MAX, UNLEASH_SLOTS,
 };
-pub use content::{
+pub use content::{ReachTier, 
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation, ContentRequirement,
     ContentSeries, GameRegion, RequirementCheck,
 };

@@ -15,6 +15,7 @@
     previewEffectiveStats, setDamageSnapshot,
   } from "../../api/commands";
   import type {
+    ReachTier,
     Content, ContentEvaluation, DefenseProfile, EquipmentItem, EquipmentPart, PartSlot,
     RegisteredCharacter, SkillDependency, StatKind, StatPreview, UpgradeCandidate,
   } from "../../api/types";
@@ -43,7 +44,7 @@
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash, swap } from "../../ui/motion.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
-  import { badgeStyle, REACH_BADGES, STATE, triadStyle, type Badge } from "../../ui/states";
+  import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
 
   const character = $derived(selectedCharacter());
@@ -95,10 +96,9 @@
   function rowState(r: Row): number {
     if (!r.ev) return 6;
     if (r.content.need_per_hit === null) return r.ev.entry_ok ? 7 : 8;
-    if (!r.ev.damage) return 6;
-    const ratio = r.ev.damage.per_hit_primary / r.content.need_per_hit;
+    if (!r.ev.damage || r.ev.reach === null) return 6;
     if (!r.ev.entry_ok) return r.ev.reaches_need ? 5 : 4;
-    return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
+    return REACH_STATE[r.ev.reach];
   }
 
   /**
@@ -348,6 +348,8 @@
   let heroDamage = $state<{
     skillId: string;
     perHit: number;
+    /** 目安に対する到達段(Rust 側の判定) */
+    reach: ReachTier | null;
     /** クリティカル率(0..1)。critRate が null(wiki 未記載)なら確定扱いの 1.0 */
     critChance: number;
     /** wiki スキル性能一覧の Cri値。null = 未記載 */
@@ -361,17 +363,20 @@
    */
   const heroSpot = $derived(
     heroGoal?.ev?.damage
-      ? (heroDamage ?? { skillId: heroGoal.ev.damage.skill_id, perHit: heroGoal.ev.damage.per_hit_primary })
+      ? (heroDamage ?? {
+          skillId: heroGoal.ev.damage.skill_id,
+          perHit: heroGoal.ev.damage.per_hit_primary,
+          reach: heroGoal.ev.reach,
+        })
       : null,
   );
   /** スポットライトの到達状態(rowState と同じ段。判定値は heroSpot の /hit) */
   const heroSpotState = $derived.by(() => {
     const g = heroGoal;
     const s = heroSpot;
-    if (!g?.ev || g.content.need_per_hit === null || !s) return 6;
-    const ratio = s.perHit / g.content.need_per_hit;
-    if (!g.ev.entry_ok) return ratio >= 1 ? 5 : 4;
-    return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
+    if (!g?.ev || g.content.need_per_hit === null || !s || s.reach === null) return 6;
+    if (!g.ev.entry_ok) return reachOk(s.reach) ? 5 : 4;
+    return REACH_STATE[s.reach];
   });
   const heroSpotPct = $derived(
     heroGoal?.content.need_per_hit && heroSpot
@@ -422,6 +427,7 @@
           heroDamage = {
             skillId,
             perHit: current.per_hit_primary,
+            reach: current.reach,
             critChance: current.critical_chance,
             critRate: current.critical_rate?.value ?? null,
           };

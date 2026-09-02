@@ -45,7 +45,7 @@
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
   import { critChanceStage } from "../../ui/critChance";
-  import { badgeStyle, REACH_BADGES, STATE, type Badge } from "../../ui/states";
+  import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
 
@@ -322,10 +322,13 @@
   // 出さない(ダメージ 120ms・評価 200ms のデバウンス差で毎回この窓が開く。PR レビュー指摘)
   const entryKnown = $derived(!hasReqs || targetEval !== null);
   const entryOk = $derived(!hasReqs || (targetEval?.entry_ok ?? false));
+  /** 目安に対する到達段(Rust 側の判定。目安なしは null) */
+  const reach = $derived(result?.reach ?? null);
+  const reached = $derived(reachOk(reach));
   const badgeState = $derived.by(() => {
-    if (perHit === null || !entryKnown) return 6;
-    if (hasReqs && !entryOk) return ratio >= 1 ? 5 : 4;
-    return ratio >= 1.3 ? 0 : ratio >= 1 ? 1 : ratio >= 0.8 ? 2 : 3;
+    if (perHit === null || !entryKnown || reach === null) return 6;
+    if (hasReqs && !entryOk) return reached ? 5 : 4;
+    return REACH_STATE[reach];
   });
   // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)。先頭 6 件は共通(ui/states.ts)
   const BADGE: Badge[] = [...REACH_BADGES, { label: "判定中", state: "unknown" }];
@@ -1346,7 +1349,7 @@
   function setSimEternalLevel(level: number) {
     editSim((p) => {
       p.awakening.eternal_level = level;
-      if (level > 0) p.awakening.stage = 5;
+      if (level > 0) p.awakening.stage = limits.eternal_awakening_stage;
     });
   }
   /** 節目を超えると上限の増え方が一段上がる地点(draft.ts の ETERNAL_MILESTONES) */
@@ -2001,12 +2004,12 @@
             {#if isDetailOpen("dps") && dpsDetail}{@render detailBox(dpsDetail)}{/if}
             <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
             <div class="hero-sentence">
-              <span class="sentence" class:ok={ratio >= 1} class:ng={ratio < 1}>
+              <span class="sentence" class:ok={reached} class:ng={!reached}>
                 {#if perHit === null}
                   計算中…
                 {:else if noPierce}
                   防御力を抜けていません(攻撃力 {atkA !== null ? fmtInt(atkA) : "—"} ≤ 防御力 {defenseValue !== null ? fmtInt(defenseValue) : "—"})
-                {:else if ratio >= 1}
+                {:else if reached}
                   <!-- 桁が離れた倍率をそのまま出すと意味を成さない(ユーザー指摘)。一定倍率を
                        超えたら倍率を出さず「大きく超えている」とだけ伝える -->
                   {ratio >= 10 ? "目安を大きく超えています。" : `目安の ${ratio.toFixed(2)} 倍。火力は足りています。`}
@@ -2018,7 +2021,7 @@
             </div>
             <!-- 足りない分をどう埋める? を 1 行に(旧: 紫のパネル)。候補が無い・すでに目安に
                  届いているときは行ごと消す(§00 02) -->
-            {#if perHit !== null && ratio < 1 && whatIf.length > 0}
+            {#if perHit !== null && !reached && whatIf.length > 0}
               {@const top = whatIf[0]}
               <div class="fill-line">
                 <button

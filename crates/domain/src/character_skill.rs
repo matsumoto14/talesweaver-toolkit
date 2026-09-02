@@ -167,6 +167,13 @@ impl CharacterSkillDef {
 /// カタログ。呼び出しは `&CharacterSkillCatalog` = `&[CharacterSkillDef]`。
 pub type CharacterSkillCatalog = [CharacterSkillDef];
 
+impl CharacterSkillDef {
+    /// そのキャラが ON にできるスキルか(自分のスキル、または味方から受けるスキル)。
+    pub fn applies_to(&self, game_character_id: &str) -> bool {
+        self.audience == SkillAudience::Ally || self.game_character_id == game_character_id
+    }
+}
+
 /// ON にしているキャラスキル。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CharacterSkills {
@@ -278,6 +285,15 @@ impl CharacterSkills {
         out
     }
 
+    /// キャラ種を変えたときに残ってはいけない id(旧キャラ専用のスキル・カタログに無い id)を落とす。
+    pub fn retain_applicable(&mut self, catalog: &CharacterSkillCatalog, game_character_id: &str) {
+        self.skill_ids.retain(|id| {
+            catalog
+                .iter()
+                .any(|d| d.id == id.as_str() && d.applies_to(game_character_id))
+        });
+    }
+
     /// カタログ参照・キャラ一致・重複を検証する。味方スキルは誰でも ON にできる。
     pub fn validate(
         &self,
@@ -290,8 +306,7 @@ impl CharacterSkills {
                 .iter()
                 .find(|d| d.id == id.as_str())
                 .ok_or_else(|| CharacterSkillError::Unknown { id: id.clone() })?;
-            if def.audience == SkillAudience::SelfOnly && def.game_character_id != game_character_id
-            {
+            if !def.applies_to(game_character_id) {
                 return Err(CharacterSkillError::ForeignCharacter {
                     id: id.clone(),
                     game_character_id: game_character_id.to_string(),

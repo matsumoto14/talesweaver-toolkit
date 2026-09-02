@@ -172,6 +172,45 @@ pub struct BestSkillDamage {
     pub total_primary: i64,
 }
 
+/// 火力の到達段。目安(`Content::need_per_hit`)に対する 1 ヒット主役値の比で決める。
+/// 段の境目はホームの一覧・スポットライト・計算タブの到達バッジで共通
+/// (「余裕 / 通る / ぎりぎり / 届かない」)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReachTier {
+    /// 目安の 1.3 倍以上
+    Comfortable,
+    /// 目安以上
+    Reached,
+    /// 目安の 0.8 倍以上
+    Close,
+    Short,
+}
+
+impl ReachTier {
+    /// 目安が 0 以下(火力不問)なら `Reached`。
+    pub fn of(per_hit: i64, need: i64) -> Self {
+        if need <= 0 {
+            return ReachTier::Reached;
+        }
+        // 比は整数のまま比べる(1.3 倍 = 13/10、0.8 倍 = 8/10)
+        if per_hit * 10 >= need * 13 {
+            ReachTier::Comfortable
+        } else if per_hit >= need {
+            ReachTier::Reached
+        } else if per_hit * 10 >= need * 8 {
+            ReachTier::Close
+        } else {
+            ReachTier::Short
+        }
+    }
+
+    /// 目安に届いているか(`Comfortable` / `Reached`)。
+    pub fn reaches(self) -> bool {
+        matches!(self, ReachTier::Comfortable | ReachTier::Reached)
+    }
+}
+
 /// コンテンツ 1 件の判定結果。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContentEvaluation {
@@ -180,6 +219,8 @@ pub struct ContentEvaluation {
     pub damage: Option<BestSkillDamage>,
     pub checks: Vec<RequirementCheck>,
     pub entry_ok: bool,
+    /// 火力の到達段。目安なし・ダメージ不明は None
+    pub reach: Option<ReachTier>,
     /// 火力が目安に届いているか。敵データなし(need 無し)は火力不問で true、
     /// ダメージ不明(スキル未収録)は false
     pub reaches_need: bool,
@@ -207,15 +248,19 @@ pub fn evaluate_content(
         .filter(|c| c.required > 0)
         .collect();
     let entry_ok = checks.iter().all(|c| c.ok);
+    let reach = content
+        .need_per_hit
+        .and_then(|need| damage.as_ref().map(|d| ReachTier::of(d.per_hit_primary, need)));
     let reaches_need = match content.need_per_hit {
         None => true,
-        Some(need) => damage.as_ref().is_some_and(|d| d.per_hit_primary >= need),
+        Some(_) => reach.is_some_and(ReachTier::reaches),
     };
     ContentEvaluation {
         content_id: content.id.clone(),
         damage,
         checks,
         entry_ok,
+        reach,
         reaches_need,
         clear: entry_ok && reaches_need,
     }
@@ -224,6 +269,19 @@ pub fn evaluate_content(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 到達段は目安との比で4段に分かれる() {
+        assert_eq!(ReachTier::of(130, 100), ReachTier::Comfortable);
+        assert_eq!(ReachTier::of(129, 100), ReachTier::Reached);
+        assert_eq!(ReachTier::of(100, 100), ReachTier::Reached);
+        assert_eq!(ReachTier::of(99, 100), ReachTier::Close);
+        assert_eq!(ReachTier::of(80, 100), ReachTier::Close);
+        assert_eq!(ReachTier::of(79, 100), ReachTier::Short);
+        assert_eq!(ReachTier::of(0, 0), ReachTier::Reached);
+        assert!(ReachTier::Reached.reaches());
+        assert!(!ReachTier::Close.reaches());
+    }
 
     fn equipment(
         thrust: i64,

@@ -240,6 +240,7 @@ fn evaluate_one_content(
         let target = DamageTarget {
             skill: entry.skill.clone(),
             enemy: enemy.clone(),
+            need_per_hit: content.need_per_hit,
             combo_count: 0,
             coefficients: entry.coefficients,
             equipment_base_sources: equipment_base_sources_for(entry.skill.dependency),

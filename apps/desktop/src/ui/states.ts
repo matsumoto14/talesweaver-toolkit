@@ -1,3 +1,4 @@
+import type { ReachTier } from "../api/types";
 // 状態の 6 系統(design-system §03)。到達判定のバッジ・量バーはここから選ぶ。
 // 色の実値は app.css の --state-* が持つ。ここは CSS 変数参照だけを配って、
 // 画面ごとのラベル(「余裕」「通る」「入場OK」…)は各画面が付ける。
@@ -60,3 +61,7 @@ export const REACH_BADGES: Badge[] = [
   { label: "条件・火力とも未達", state: "unknown" },
   { label: "条件だけ未達", state: "temp" },
 ];
+/** 到達段(Rust の ReachTier)→ REACH_BADGES の添字。段の境目は Rust 側 */
+export const REACH_STATE: Record<ReachTier, number> = { comfortable: 0, reached: 1, close: 2, short: 3 };
+/** 目安に届いている段か */
+export const reachOk = (tier: ReachTier | null): boolean => tier === "comfortable" || tier === "reached";

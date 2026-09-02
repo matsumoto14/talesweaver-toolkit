@@ -58,6 +58,9 @@ pub struct TitleDef {
     pub conditional_added_damage: Option<ConditionalAddedDamage>,
     /// 入手方法・備考。
     pub note: &'static str,
+    /// 称号ピッカーで常設する「普段使う」称号(無条件ダメージ +20% の課金箱シリーズと、
+    /// 実用される地域称号)。それ以外は検索で出す
+    pub common: bool,
 }
 
 impl TitleDef {
@@ -116,6 +119,7 @@ mod tests {
 
     fn defs() -> Vec<TitleDef> {
         vec![TitleDef {
+            common: false,
             id: "eclipse",
             name: "エクリプス",
             kind: TitleKind::Special,

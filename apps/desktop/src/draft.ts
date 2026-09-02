@@ -63,15 +63,6 @@ export const defaultEquipment = (): Equipment => ({
   title: null,
 });
 
-/** ストロングウェポンの既定 Lv(上限。wiki Skill/共通: Lv6 = +18%) */
-const DEFAULT_STRONG_WEAPON_LEVEL = 6;
-const DEFAULT_PROTECT_ARMOR_LEVEL = 6;
-const DEFAULT_KAI_PROTECT_ARMOR_LEVEL = 5;
-const DEFAULT_AUGMENT_LEVEL = 5;
-const DEFAULT_REINFORCE_LEVEL = 5;
-const DEFAULT_HYPER_LIMIT_LEVEL = 6;
-const DEFAULT_SHARPNESS_VISION_LEVEL = 5;
-
 export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
   ...src,
   // v6 以前に保存したキャラには unleash / reinforce_level が無い(serde default で 0)
@@ -81,30 +72,6 @@ export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({
   ],
   reinforce_level: src.reinforce_level ?? 0,
   ultimate: { ...src.ultimate, slots: [...src.ultimate.slots] },
-});
-
-/**
- * 新規登録キャラの共通スキルの初期値。パワーウェポン ON・ストロングウェポン Lv6(合計 +20%)を
- * 既定にする(2026-08-24 決定2: 値は人によって変わるが、取っていないユーザーはほぼいない)。
- * ストロングウェポン Lv6 にはオーグメント Lv5 が要る(wiki Skill/共通)ので合わせて入れる。
- * **保存済みキャラの値は書き換えない**ので、ここを使うのは新規登録だけにすること。
- */
-export const defaultCommonSkills = (): CommonSkills => ({
-  // 共通スキルは「ほぼ全員が取り切っている」前提で最大を入れる。ここを 0 にすると
-  // 全員が毎回同じ値を入れ直すことになる(ux-guidelines「初期値は実用値」)。
-  // 人によって違うのはオーグメント・極限スキル 2 枠・シャープネスビジョンだけ
-  power_weapon: true,
-  strong_weapon_level: DEFAULT_STRONG_WEAPON_LEVEL,
-  coat_armor: true,
-  protect_armor_level: DEFAULT_PROTECT_ARMOR_LEVEL,
-  kai_protect_armor_level: DEFAULT_KAI_PROTECT_ARMOR_LEVEL,
-  // Lv5 までは自然に上がる(ここで止まる人が多い)。Lv6 以降は習得スクロールが要るので人による
-  sharpness_vision_level: DEFAULT_SHARPNESS_VISION_LEVEL,
-  augment_level: DEFAULT_AUGMENT_LEVEL,
-  unleash: [{ stat: null, level: 0 }, { stat: null, level: 0 }],
-  // アンリーシュ Lv10 の前提。ステを選べば Lv は上限で入る
-  reinforce_level: DEFAULT_REINFORCE_LEVEL,
-  ultimate: { slots: [null, null], super_limit: true, hyper_limit_level: DEFAULT_HYPER_LIMIT_LEVEL },
 });
 
 export const cloneStatSources = (src: StatSources): StatSources => ({

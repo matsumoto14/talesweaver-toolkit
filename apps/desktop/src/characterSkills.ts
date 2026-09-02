@@ -49,37 +49,23 @@ export const resolvedEffectsOf = (id: string, resolved: CharacterSkillEffectsVie
 // 火力の目安(power / power_per_second)は gamedata 側で確定済みの値をそのまま使う
 // (正は crates/domain/src/skill.rs の Skill::compute_power / compute_power_per_second)。
 
-/**
- * 主軸候補の順。対ボスで使う単体スキルを先にし、
- * その中を中ディレイ込みの継続火力順にする。依存種別では絞らない。
- * 斬り・物理複合・魔剣など、別ビルドの入口を候補から消さないため。
- * 中ディレイ不明のものは既知のものより後ろで、1 回ぶんの火力順にする。
- */
-export function compareMainSkills(a: Skill, b: Skill): number {
-  if (a.target === "single" && b.target !== "single") return -1;
-  if (a.target !== "single" && b.target === "single") return 1;
-  if (a.power_per_second !== null && b.power_per_second !== null) return b.power_per_second - a.power_per_second;
-  if (a.power_per_second !== null) return -1;
-  if (b.power_per_second !== null) return 1;
-  return b.power - a.power;
-}
-
 /** 名前だけでは選べない。単 / 範・段数・属性を名前の隣に出す */
 export const skillMeta = (s: Skill): string =>
   `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ` +
   `${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]} ・ ` +
   `中 ${s.base_actual_delay === null ? "?" : `${s.base_actual_delay}s`}`;
 
-/** 単体優先・中ディレイ込みの継続火力順の選択肢。空欄の文言は呼び出し側の文脈で変える。 */
+/**
+ * 主軸スキルの選択肢。並びは list_skills(Rust `Skill::main_skill_order`: 単体優先 →
+ * 中ディレイ込みの継続火力順)のまま。空欄の文言は呼び出し側の文脈で変える。
+ */
 export function mainSkillOptions(
   skills: Skill[],
   emptyLabel: string,
 ): PickerOption[] {
   return [
     { value: "", name: emptyLabel, iconId: null },
-    ...[...skills]
-      .sort(compareMainSkills)
-      .map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
+    ...skills.map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
   ];
 }
 
@@ -95,15 +81,3 @@ export const ownSkills = (catalog: CharacterSkillDef[], gameCharacterId: string)
 export const allySkills = (catalog: CharacterSkillDef[]) =>
   catalog.filter((d) => d.audience === "ally");
 
-/** キャラ種を変えたときに残ってはいけない id(旧キャラ専用のスキル)を落とす */
-export function dropForeignSkills(
-  skillIds: string[],
-  catalog: CharacterSkillDef[],
-  gameCharacterId: string,
-): string[] {
-  return skillIds.filter((id) => {
-    const def = catalog.find((d) => d.id === id);
-    if (!def) return false;
-    return def.audience === "ally" || def.game_character_id === gameCharacterId;
-  });
-}

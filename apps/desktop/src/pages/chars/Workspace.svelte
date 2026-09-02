@@ -25,6 +25,7 @@
   import { flip } from "svelte/animate";
   import { cubicOut } from "svelte/easing";
   import {
+    retainCharacterSkills,
     errorLocation, errorMessage, previewEffectiveStats, resolveCharacterSkillEffects,
   } from "../../api/commands";
   import type {
@@ -32,7 +33,6 @@
     RegisteredCharacter, StatPreview, StatSources,
   } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
-  import { dropForeignSkills } from "../../characterSkills";
   import { buildDraft, draftToPayload } from "../../draft";
   import { cloneEquipmentPart, randomOptionCount, sienaPartCount, withEnchant } from "../../equipment";
   import { fmtInt } from "../../format";
@@ -169,11 +169,12 @@
     const currentId = draft.gameCharacterId;
     if (currentId === lastGameCharacterId || app.characterSkills.length === 0) return;
     lastGameCharacterId = currentId;
-    draft.statSources.character_skills.skill_ids = dropForeignSkills(
-      draft.statSources.character_skills.skill_ids,
-      app.characterSkills,
-      currentId,
-    );
+    const ids = draft.statSources.character_skills.skill_ids;
+    void retainCharacterSkills(ids, currentId).then((kept) => {
+      // 応答までにキャラ種がまた変わっていたら、その変更側の応答に任せる
+      if (draft.gameCharacterId !== currentId) return;
+      if (kept.length !== ids.length) draft.statSources.character_skills.skill_ids = kept;
+    });
   });
 
   // 主軸スキル(攻撃力の依存種別を決める)。選択肢はキャラ種のスキル一覧。

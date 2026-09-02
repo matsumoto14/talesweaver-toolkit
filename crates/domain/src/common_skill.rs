@@ -137,6 +137,34 @@ pub struct CommonSkills {
 }
 
 impl CommonSkills {
+    /// 新規登録キャラの実用既定。共通スキルは「ほぼ全員が取り切っている」前提で上限を入れる
+    /// (2026-08-24 決定2: ここを 0 にすると全員が毎回同じ値を入れ直すことになる)。
+    /// 人によって違うのはオーグメント・極限スキル 2 枠・シャープネスビジョンだけ。
+    /// ストロングウェポン Lv6 にはオーグメント Lv5 が要る(wiki Skill/共通)ので合わせて入れる。
+    /// **保存済みキャラの値は書き換えない**(新規登録だけが使う)。
+    pub fn practical_default() -> Self {
+        CommonSkills {
+            power_weapon: true,
+            strong_weapon_level: STRONG_WEAPON_LEVEL_MAX,
+            coat_armor: true,
+            protect_armor_level: PROTECT_ARMOR_LEVEL_MAX,
+            kai_protect_armor_level: KAI_PROTECT_ARMOR_LEVEL_MAX,
+            // Lv5 までは自然に上がる(ここで止まる人が多い)。Lv6 以降は習得スクロールが要るので人による
+            sharpness_vision_level: 5,
+            augment_level: AUGMENT_LEVEL_MAX,
+            unleash: [UnleashSlot::default(); UNLEASH_SLOTS],
+            // アンリーシュ Lv10 の前提。ステを選べば Lv は上限で入る
+            reinforce_level: REINFORCE_LEVEL_MAX,
+            ultimate: UltimateSkills {
+                slots: [None; crate::ultimate_skill::ULTIMATE_SKILL_SLOTS],
+                super_limit: true,
+                hyper_limit_level: crate::ultimate_skill::HYPER_LIMIT_LEVEL_MAX,
+            },
+        }
+    }
+}
+
+impl CommonSkills {
     /// 装備攻撃力強化倍率(wiki: カテゴリA の内訳)。パワーウェポン + ストロングウェポン Lv×3%。
     pub fn equipment_attack_rate(&self) -> f64 {
         self.equipment_attack_rate_sources()

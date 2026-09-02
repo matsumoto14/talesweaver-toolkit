@@ -72,16 +72,7 @@ fn validate_character_draft(character: &NewCharacter, buffs: &BuffSelection) -> 
         return Err("名前が空です".into());
     }
     character.base_stats.validate().map_err(|e| e.to_string())?;
-    if character.awakening.stage > domain::Awakening::MAX_STAGE {
-        return Err(format!("覚醒段階は 0〜{} です", domain::Awakening::MAX_STAGE).into());
-    }
-    if character.awakening.eternal_level > domain::Awakening::MAX_ETERNAL_LEVEL {
-        return Err(format!(
-            "エタの意志 Lv は 0〜{} です",
-            domain::Awakening::MAX_ETERNAL_LEVEL
-        )
-        .into());
-    }
+    character.awakening.validate().map_err(|e| e.to_string())?;
     character
         .stat_sources
         .validate()
@@ -139,8 +130,11 @@ pub fn list_game_characters() -> Vec<GameCharacter> {
     gamedata::characters().to_vec()
 }
 
+/// キャラ種のスキル一覧。主軸候補の順(単体優先 → 継続火力順。`Skill::main_skill_order`)で返す。
 pub fn list_skills(game_character_id: String) -> Vec<Skill> {
-    gamedata::skills_for(&game_character_id)
+    let mut skills = gamedata::skills_for(&game_character_id);
+    skills.sort_by(Skill::main_skill_order);
+    skills
 }
 
 pub fn list_enemies() -> Vec<Enemy> {
@@ -216,6 +210,16 @@ pub fn list_siena_kinds() -> domain::SienaCatalog {
 /// UI 側で `game_character_id` と `audience` を見て行う(味方スキルは誰でも ON にできる)。
 pub fn list_character_skills() -> Vec<domain::CharacterSkillDef> {
     gamedata::character_skill_catalog().to_vec()
+}
+
+/// キャラ種を変えたときに残してよいキャラスキル id だけを返す(旧キャラ専用・未知の id を落とす)。
+pub fn retain_character_skills(skill_ids: Vec<String>, game_character_id: String) -> Vec<String> {
+    let mut skills = domain::CharacterSkills {
+        skill_ids,
+        ..Default::default()
+    };
+    skills.retain_applicable(gamedata::character_skill_catalog(), &game_character_id);
+    skills.skill_ids
 }
 
 /// キャラスキル 1 件ぶんの、取っているマスタリーを踏まえた実際の効果。
@@ -607,6 +611,11 @@ pub fn get_new_character_stat_sources() -> domain::StatSources {
     domain::StatSources::for_new_character()
 }
 
+/// 新規登録キャラの共通スキルの実用既定(`CommonSkills::practical_default`)。
+pub fn get_new_character_common_skills() -> CommonSkills {
+    CommonSkills::practical_default()
+}
+
 /// 武器の装備強化による追加固定ダメージ(wiki: 装備システム/装備強化、docs/damage-formula.md §5)。
 ///
 /// `item_id` → カタログの `weapon_class` → 系統ごとの補正式、の順で解決する。
@@ -914,6 +923,7 @@ fn build_damage_input(
         DamageTarget {
             skill,
             enemy,
+            need_per_hit: content.need_per_hit,
             combo_count,
             coefficients,
             equipment_base_sources,

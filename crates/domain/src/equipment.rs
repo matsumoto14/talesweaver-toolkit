@@ -2845,6 +2845,7 @@ mod tests {
     fn title_defs() -> Vec<crate::title::TitleDef> {
         use crate::title::{TitleDef, TitleKind};
         vec![TitleDef {
+            common: false,
             id: "eclipse",
             name: "エクリプス",
             kind: TitleKind::Special,

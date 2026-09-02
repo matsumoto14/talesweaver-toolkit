@@ -18,12 +18,7 @@ docs/architecture.md の「UI は表示と入力のみ。計算・判定は必�
 | 2 | `EquipmentPane.svelte:442-466` | 武器アビリティの系統適合表(`abilityFitsWeapon`)と enhance_type→系統(`abilityWeaponSystem`) | Rust の検証は `equipment.rs:1131` の `exclusive_group` 重複のみで、系統不一致は通る。装備検証に加え、候補列挙も Rust から |
 | 3 | `EquipmentPane.svelte:341-370` | エンチャント完了プラン(+17 / +20 巻物の最小回数探索)。`enchantPlanStatsFor` は依存種別→ステ表を再写経 | domain に `enchant_plan(remaining) -> Plan`。ステ表は `candidate.rs::enchant_dependency_keys` を返す |
 | 4 | `pages/calc/CalcPage.svelte:446-479` | 「一番効いている / 次に伸ばす」: 除外カテゴリ id の集合(`NOT_EFFORT`)と `1/factor` の伸び式 | `DamageResult` に lever(カテゴリ・factor・+1% 換算)を持たせる |
-| 5 | `HomePage.svelte:101, 374` / `CalcPage.svelte:328` | 到達判定の 4 段(ratio ≥ 1.3 / 1 / 0.8)を 3 か所で再実装 | `content.rs:210 reaches_need` は真偽のみ。`ContentEvaluation` に段を持たせる |
 | 6 | `HomePage.svelte:792-880` / `EquipmentPane.svelte:261-270` | レリック育成順序: item id 文字列 `godbird-pendant-plus{n}` の解析、上限到達で +Lv 解禁、段上げ後は `values_min` に戻す | Rust は `equipment.rs:1044` で下限検証のみ。レリック段の遷移を domain に |
-| 7 | `TitlePane.svelte:21-46` | 称号の「よく使う」(id 名指し・`attack_damage_percent >= 20`)と「スキルに合う」(`note.includes("追加ダメージ")`) | gamedata の `TitleDef` に属性(common / 追加効果の有無)を持たせる |
-| 8 | `draft.ts:67-108` | 新規キャラの共通スキル実用既定(ストロング Lv6・オーグメント Lv5 …)と「Lv6 にはオーグメント Lv5 が要る」依存 | `CommonSkills::default` は全 0。実用既定を domain(または gamedata)に |
-| 9 | `StatusPane.svelte:97` / `CalcPage.svelte:1346` | エタ Lv > 0 → 覚醒 5 確定の規則が 2 か所 | Rust に検証も正規化もない(`awakening.rs` はフィールドのみ)。domain の検証 / 正規化に |
-| 10 | `characterSkills.ts:58-65, 93-109` | 主軸候補の並べ替え(単体優先→継続→1 発)と、キャラ種変更時の他キャラ専用スキル除去 | `list_skills` が並べて返す。ForeignCharacter 判定は `character_skill.rs:293` にある |
 
 ### A2. Rust に同じ計算があり、TS が写経しているもの(二重化)
 

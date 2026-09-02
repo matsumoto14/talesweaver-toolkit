@@ -13,6 +13,7 @@ use crate::attack_power::{
 };
 use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
 use crate::common_skill::{CommonSkills, RateContribution};
+use crate::content::ReachTier;
 use crate::critical_rate::{critical_rate, CriticalRate, CriticalRateSources};
 use crate::defense::{accuracy_point, AccuracyBoost, AccuracyCorrection};
 use crate::enemy::Enemy;
@@ -113,6 +114,8 @@ pub struct DamageMaterial {
 pub struct DamageTarget {
     pub skill: Skill,
     pub enemy: Enemy,
+    /// 対象コンテンツの目安ダメージ(1 ヒット)。敵データなし・目安なしは None
+    pub need_per_hit: Option<i64>,
     pub combo_count: u32,
     /// スキル依存種別で決まる係数一式(攻撃力・装備攻撃力・命中P)
     pub coefficients: DependencyCoefficients,
@@ -230,6 +233,8 @@ pub struct DamageResult {
     /// (スキル分のみ・武器強化の追加固定ダメージを含まない)。計算タブ・ホームが表示に使う値で、
     /// コンテンツ到達判定もこの値で判定する(ユーザー判断 2026-08-29 / 2026-08-30)
     pub per_hit_primary: i64,
+    /// 目安(`DamageTarget::need_per_hit`)に対する到達段。目安なしは None
+    pub reach: Option<ReachTier>,
     /// 主役の合計ダメージ(`total.primary(critical_chance)`)
     pub total_primary: i64,
     pub hit_count: u32,
@@ -981,6 +986,9 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         weapon_added_total,
         weapon_added_per_hit,
         per_hit_primary: per_hit.primary(critical_chance_ratio),
+        reach: target
+            .need_per_hit
+            .map(|need| ReachTier::of(per_hit.primary(critical_chance_ratio), need)),
         total_primary: total.primary(critical_chance_ratio),
         hit_count,
         effective_skill_multiplier: target.skill.multiplier,
@@ -1200,6 +1208,7 @@ mod tests {
                 agi: None,
                 critical_taken_rate: None,
             },
+            need_per_hit: None,
             combo_count: 0,
             element_value: 0,
         }

@@ -68,6 +68,7 @@ const fn t(
         attack_damage_percent: 0.0,
         conditional_added_damage: None,
         note,
+        common: false,
     }
 }
 
@@ -93,6 +94,8 @@ const fn td(
         attack_damage_percent,
         conditional_added_damage: None,
         note,
+        // 無条件 +20% は普段使いの最上位(ピッカーで常設)。+10% は検索で出す
+        common: attack_damage_percent >= 20.0,
     }
 }
 
@@ -106,9 +109,9 @@ const fn td(
 /// 名誉の証(トーデン兄妹)の 突き50 + 斬り50 + …(9 値合計 205)より効く。
 pub fn title_catalog() -> Vec<TitleDef> {
     let mut catalog = vec![
-        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::LostIsland) }), ..t("eclipse", "エクリプス", Special, "喪失の島", None,
+        TitleDef { common: true, conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::LostIsland) }), ..t("eclipse", "エクリプス", Special, "喪失の島", None,
           v(40, 40, 40, 40, 40, 40, 40, 40, 40), "移動速度+5 / 喪失の島関連マップで追加ダメージ+20%") },
-        TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::ShinchouNest) }), ..t("shinchou_no_negura", "神鳥の塒", Special, "神鳥の塒", None,
+        TitleDef { common: true, conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::ShinchouNest) }), ..t("shinchou_no_negura", "神鳥の塒", Special, "神鳥の塒", None,
           v(30, 30, 30, 30, 30, 30, 30, 30, 30), "移動速度+5 / 神鳥の塒関連マップで追加ダメージ+20%") },
         TitleDef { conditional_added_damage: Some(ConditionalAddedDamage { percent: 20.0, condition: AddedDamageCondition::Region(GameRegion::ArklonUnderground) }), ..t("arklon_death_knight", "死の騎士", Special, "アークロン要塞", None,
           v(20, 20, 20, 20, 20, 20, 20, 20, 20), "移動速度+5 / アークロン地下要塞関連マップでの追加ダメージ+20%") },

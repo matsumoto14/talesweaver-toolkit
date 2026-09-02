@@ -1972,6 +1972,8 @@ pub struct StatLimits {
     pub awakening_stage_max: u8,
     /// エタの意志 Lv の上限(wiki: エタの意志「エタの成長」)
     pub eternal_level_max: u8,
+    /// エタの意志 Lv > 0 のときに確定する覚醒段階
+    pub eternal_awakening_stage: u8,
     /// ランダムオプションの効果値の上限 `[仮]`
     pub random_option_value_max: f64,
     /// プロテクトアーマーの Lv 上限(wiki: Skill/共通)
@@ -2133,6 +2135,7 @@ pub fn stat_limits() -> StatLimits {
         element_value_max: crate::element::ELEMENT_VALUE_MAX,
         awakening_stage_max: crate::awakening::Awakening::MAX_STAGE,
         eternal_level_max: crate::awakening::Awakening::MAX_ETERNAL_LEVEL,
+        eternal_awakening_stage: crate::awakening::Awakening::ETERNAL_STAGE,
         random_option_value_max: crate::random_option::RANDOM_OPTION_VALUE_MAX,
         protect_armor_level_max: crate::common_skill::PROTECT_ARMOR_LEVEL_MAX,
         kai_protect_armor_level_max: crate::common_skill::KAI_PROTECT_ARMOR_LEVEL_MAX,

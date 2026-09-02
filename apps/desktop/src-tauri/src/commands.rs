@@ -416,6 +416,16 @@ pub fn get_new_character_stat_sources() -> domain::StatSources {
     commands::get_new_character_stat_sources()
 }
 
+#[tauri::command]
+pub fn get_new_character_common_skills() -> domain::CommonSkills {
+    commands::get_new_character_common_skills()
+}
+
+#[tauri::command]
+pub fn retain_character_skills(skill_ids: Vec<String>, game_character_id: String) -> Vec<String> {
+    commands::retain_character_skills(skill_ids, game_character_id)
+}
+
 /// 登録済みキャラでダメージ計算する。DB からキャラを引くのはここだけで、
 /// 引いたあとの計算は `commands` crate(Web 版と共通)に任せる。
 #[tauri::command]

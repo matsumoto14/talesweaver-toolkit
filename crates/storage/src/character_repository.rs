@@ -2215,6 +2215,7 @@ mod tests {
 
     fn test_titles() -> Vec<domain::TitleDef> {
         vec![domain::TitleDef {
+            common: false,
             id: "test-title",
             name: "テスト称号",
             kind: domain::TitleKind::Special,

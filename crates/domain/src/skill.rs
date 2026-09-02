@@ -131,6 +131,26 @@ pub struct Skill {
 
 impl Skill {
     /// 1 回ぶんの火力の目安(倍率 × 段数)。0 段のスキルは無いので段数は最低 1 扱い。
+    /// 主軸候補の順。対ボスで使う単体スキルを先にし、その中を中ディレイ込みの継続火力順
+    /// (`power_per_second`)にする。依存種別では絞らない(斬り・物理複合・魔剣など、
+    /// 別ビルドの入口を候補から消さないため)。中ディレイ不明のものは既知のものより後ろで、
+    /// 1 回ぶんの火力(`power`)順。
+    pub fn main_skill_order(a: &Skill, b: &Skill) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        let single = |s: &Skill| s.target == Some(SkillTarget::Single);
+        match (single(a), single(b)) {
+            (true, false) => return Ordering::Less,
+            (false, true) => return Ordering::Greater,
+            _ => {}
+        }
+        match (a.power_per_second, b.power_per_second) {
+            (Some(x), Some(y)) => y.partial_cmp(&x).unwrap_or(Ordering::Equal),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => b.power.partial_cmp(&a.power).unwrap_or(Ordering::Equal),
+        }
+    }
+
     pub fn compute_power(multiplier: f64, hit_count: u32) -> f64 {
         multiplier * f64::from(hit_count.max(1))
     }

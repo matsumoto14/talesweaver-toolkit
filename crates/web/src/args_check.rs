@@ -92,9 +92,11 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         | "list_character_skills"
         | "list_titles"
         | "get_stat_limits"
-        | "get_new_character_stat_sources" => BTreeSet::new(),
+        | "get_new_character_stat_sources"
+        | "get_new_character_common_skills" => BTreeSet::new(),
 
         "list_skills" => arg_fields::<ListSkillsArgs>(),
+        "retain_character_skills" => arg_fields::<RetainCharacterSkillsArgs>(),
         "summarize_buff_selection" => arg_fields::<BuffsArgs>(),
         "equipment_element_values" => arg_fields::<EquipmentElementValuesArgs>(),
         "preview_elements" | "validate_character" => arg_fields::<CharacterArgs>(),

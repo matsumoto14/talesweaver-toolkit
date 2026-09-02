@@ -78,6 +78,11 @@ export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
 /** Rust domain が定める新規キャラ用の未開放・未習得状態。 */
 export const getNewCharacterStatSources = () =>
   invoke<StatSources>("get_new_character_stat_sources");
+export const getNewCharacterCommonSkills = () =>
+  invoke<CommonSkills>("get_new_character_common_skills");
+/** キャラ種を変えたときに残してよいキャラスキル id(旧キャラ専用・未知の id を落とす。規則は Rust 側) */
+export const retainCharacterSkills = (skillIds: string[], gameCharacterId: string) =>
+  invoke<string[]>("retain_character_skills", { skillIds, gameCharacterId });
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
   invoke<DefenseProfile>("preview_defense", { character, buffs });

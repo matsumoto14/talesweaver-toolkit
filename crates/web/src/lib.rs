@@ -66,6 +66,13 @@ struct ListSkillsArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RetainCharacterSkillsArgs {
+    skill_ids: Vec<String>,
+    game_character_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BuffsArgs {
     buffs: domain::BuffSelection,
 }
@@ -192,6 +199,11 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "list_titles" => ok(commands::list_titles()),
         "get_stat_limits" => ok(commands::get_stat_limits()),
         "get_new_character_stat_sources" => ok(commands::get_new_character_stat_sources()),
+        "get_new_character_common_skills" => ok(commands::get_new_character_common_skills()),
+        "retain_character_skills" => {
+            let a: RetainCharacterSkillsArgs = args_of(command, args)?;
+            ok(commands::retain_character_skills(a.skill_ids, a.game_character_id))
+        }
 
         // --- 引数を取る計算系 ---
         "list_skills" => {

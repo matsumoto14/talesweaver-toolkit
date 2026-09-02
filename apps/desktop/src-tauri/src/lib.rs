@@ -81,6 +81,8 @@ pub fn run() {
             commands::preview_versus,
             commands::get_stat_limits,
             commands::get_new_character_stat_sources,
+            commands::get_new_character_common_skills,
+            commands::retain_character_skills,
             commands::list_characters,
             commands::create_character,
             commands::update_character,

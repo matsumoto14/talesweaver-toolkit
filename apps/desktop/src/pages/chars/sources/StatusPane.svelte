@@ -5,7 +5,7 @@
     Element, ElementPreview, Skill, StatKind, StatPreview, StatSourceGroup,
   } from "../../../api/types";
   import { errorMessage, previewElements, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
-  import { compareMainSkills, mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
+  import { mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
   import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
   import { fmtInt, formatLayerValue } from "../../../format";
   import {
@@ -96,7 +96,7 @@
   /** エタの意志は覚醒 5 の先にあるものなので、触った時点で覚醒は 5 で確定する */
   function setEternalLevel(level: string) {
     draft.eternalLevel = level;
-    if (Number(level) > 0) draft.stage = "5";
+    if (Number(level) > 0) draft.stage = String(limits.eternal_awakening_stage);
   }
   // 覚醒段階は 4 と 5 しか使わない(このツールの対象)。それ以外は開いたときだけ出す
   const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: String(i) }));
@@ -108,7 +108,8 @@
   /** 中ディレイ込みの継続火力順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す。 */
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
   const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(攻撃力を出さない)"));
-  const topSkills = $derived([...skills].sort(compareMainSkills).slice(0, 3));
+  // 並びは list_skills(Rust)が主軸候補順で返す
+  const topSkills = $derived(skills.slice(0, 3));
   /** 候補にない主軸を選んでいるとき、または自分で開いたときだけ全部出す */
   let skillListOpen = $state(false);
   const skillPickedOutside = $derived(

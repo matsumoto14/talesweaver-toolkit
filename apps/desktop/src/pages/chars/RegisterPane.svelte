@@ -1,10 +1,12 @@
 <script lang="ts">
   // キャラ登録(v4): 呼び名 + 19 職のアイコン選択だけ。詳細は登録後にワークスペースで育てる
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
-  import { createCharacter, errorMessage, getNewCharacterStatSources } from "../../api/commands";
-  import { dropForeignSkills, mainSkillOptions as buildMainSkillOptions } from "../../characterSkills";
+  import {
+    createCharacter, errorMessage, getNewCharacterCommonSkills, getNewCharacterStatSources, retainCharacterSkills,
+  } from "../../api/commands";
+  import { mainSkillOptions as buildMainSkillOptions } from "../../characterSkills";
   import type { NewCharacter } from "../../api/types";
-  import { DEFAULT_AWAKENING_STAGE, defaultCommonSkills, defaultEquipment } from "../../draft";
+  import { DEFAULT_AWAKENING_STAGE, defaultEquipment } from "../../draft";
   import { STAT_KINDS } from "../../labels";
   import {
     app, loadSkills, payloadOf, selectCharacter, selectedCharacter, skillsByCharacter, upsertCharacter,
@@ -29,7 +31,7 @@
   /**
    * コピーで引き継げるコピー元の主軸スキル。キャラ種が違うコピーでは、コピー元の主軸が
    * 選択中のキャラ種に無いことがある(スキルはキャラ種ごと)。その場合は引き継がない —
-   * 持ち込んでも依存種別を引けない幽霊 id になるだけなので(キャラスキルの dropForeignSkills と同じ考え方)。
+   * 持ち込んでも依存種別を引けない幽霊 id になるだけなので(キャラスキルの retainCharacterSkills と同じ考え方)。
    */
   const inheritedMainSkill = $derived(
     source?.main_skill_id && skills.some((s) => s.id === source.main_skill_id) ? source.main_skill_id : null,
@@ -69,9 +71,8 @@
         };
         if (source.game_character_id !== gameCharacterId) {
           // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルを落とす(幽霊スキル対策)
-          payload.stat_sources.character_skills.skill_ids = dropForeignSkills(
+          payload.stat_sources.character_skills.skill_ids = await retainCharacterSkills(
             payload.stat_sources.character_skills.skill_ids,
-            app.characterSkills,
             gameCharacterId,
           );
         }
@@ -86,7 +87,7 @@
           stat_sources: await getNewCharacterStatSources(),
           default_buff_set_id: null,
           equipment: defaultEquipment(),
-          common_skills: defaultCommonSkills(),
+          common_skills: await getNewCharacterCommonSkills(),
           main_skill_id: mainSkillId === "" ? null : mainSkillId,
           // 「次の目標」は登録時には決めない。ホームが自動で選び、要るときだけ上書きする
           goal_content_id: null,
