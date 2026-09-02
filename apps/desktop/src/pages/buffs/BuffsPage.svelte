@@ -4,6 +4,7 @@
     previewEffectiveStats, setDefaultBuffSet, summarizeBuffSelection, updateBuffSet,
   } from "../../api/commands";
   import type {
+    BlockedBuff, BuffDamageGroup,
     BuffChoice, BuffDamageEffect, BuffDefinition, BuffOrigin, BuffPurpose, BuffSet, BuffTarget,
     BuffTargetStatGain,
     BaseStats,
@@ -11,7 +12,7 @@
     StatSourceEffect, StatSourceGroup,
   } from "../../api/types";
   import {
-    BUFF_PURPOSES, isBlocked, isChoiceValue, isFixedValue, isMultiTarget, isPercentLayer, isRecordOnly,
+    BUFF_PURPOSES, isChoiceValue, isFixedValue, isMultiTarget, isPercentLayer, isRecordOnly,
     matchesPurpose,
     isUserSelectedTarget, pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
@@ -35,8 +36,7 @@
     item: "アイテム", event: "イベント", club: "クラブ", skill: "スキル",
     rune: "ルーン", soul_link: "ソウルリンク", battle_state: "戦闘中", minigame: "ミニゲーム",
   };
-  type DamageGroup = "general" | "isabel" | "japan" | "other";
-  const DAMAGE_GROUPS: { id: DamageGroup; label: string }[] = [
+  const DAMAGE_GROUPS: { id: BuffDamageGroup; label: string }[] = [
     { id: "general", label: "一般" },
     { id: "isabel", label: "イザベル" },
     { id: "japan", label: "日本独自" },
@@ -59,7 +59,7 @@
    *  (§00 03: 押した場所は動かさない = 場所を固定した使い捨ての重なりもの) */
   let openEditorId = $state<string | null>(null);
   let activePurpose = $state<BuffPurpose>("stats");
-  let activeDamageGroup = $state<DamageGroup>("general");
+  let activeDamageGroup = $state<BuffDamageGroup>("general");
   let damageSummary = $state<CategoryTrace[]>([]);
   let statAfter = $state<EffectiveStats | null>(null);
   let defenseBefore = $state<DefenseProfile | null>(null);
@@ -90,17 +90,8 @@
   let summarySeq = 0;
   const selected = $derived(app.buffSets.find((set) => set.id === selectedId) ?? app.buffSets[0] ?? null);
   const activePurposeMeta = $derived(PURPOSES.find((purpose) => purpose.id === activePurpose) ?? PURPOSES[0]);
-  const damageCategories = (def: BuffDefinition): DamageCategory[] =>
-    def.damage_effects.flatMap((effect) => typeof effect !== "string" && "damage" in effect ? [effect.damage.category] : []);
-  const matchesDamageGroup = (def: BuffDefinition, group: DamageGroup) => {
-    const categories = damageCategories(def);
-    if (group === "general") return categories.includes("attack_damage_general");
-    if (group === "isabel") return categories.includes("attack_damage_isabel");
-    if (group === "japan") return categories.includes("attack_damage_japan");
-    return categories.some((category) => ![
-      "attack_damage_general", "attack_damage_isabel", "attack_damage_japan",
-    ].includes(category));
-  };
+  /** グループ分けは Rust(`BuffDefinition::damage_groups`) */
+  const matchesDamageGroup = (def: BuffDefinition, group: BuffDamageGroup) => def.damage_groups.includes(group);
   const activeDefinitions = $derived(app.catalog.filter((def) =>
     matchesPurpose(def, activePurpose) && (activePurpose !== "damage" || matchesDamageGroup(def, activeDamageGroup))
   ));
@@ -120,12 +111,13 @@
       if (!choices) {
         damageSummary = []; statAfter = null; defenseBefore = null; defenseAfter = null;
         buffSourceEffects = []; buffDamageEffects = []; buffStatAmplification = ZERO_STATS;
-        baseStats = null; groupEffects = [];
+        baseStats = null; groupEffects = []; blockedBuffs = [];
         summaryLoading = false;
         return;
       }
       try {
-        const { categories, buff_effects } = await summarizeBuffSelection(choices);
+        const { categories, buff_effects, blocked_buffs } = await summarizeBuffSelection(choices);
+        blockedBuffs = blocked_buffs;
         let afterStats: EffectiveStats | null = null;
         let beforeDefense: DefenseProfile | null = null;
         let afterDefense: DefenseProfile | null = null;
@@ -433,14 +425,11 @@
   /** 選べない理由(同じ重複枠を占めている、いまセットに入っているバフの名前)。
    *  title を hover しなくても画面(チップ本体)から読めるように、ここを唯一の
    *  文面の出どころにして buffTooltip とチップの両方から使う。 */
+  /** 排他枠の衝突は Rust(`blocked_buffs`)が判定し、summarize の応答で受け取る */
+  let blockedBuffs = $state<BlockedBuff[]>([]);
+  const blockedEntry = (def: BuffDefinition) => blockedBuffs.find((b) => b.buff_id === def.id) ?? null;
   function blockingBuffNames(def: BuffDefinition): string {
-    if (!selected || def.exclusive_slots.length === 0) return "";
-    const slots = new Set(def.exclusive_slots);
-    return selected.choices.choices
-      .map((choice) => app.catalog.find((d) => d.id === choice.buff_id))
-      .filter((d): d is BuffDefinition => d !== undefined && d.exclusive_slots.some((s) => slots.has(s)))
-      .map((d) => d.name)
-      .join(" / ");
+    return blockedEntry(def)?.blocking.join(" / ") ?? "";
   }
   function blockReason(def: BuffDefinition): string {
     const names = blockingBuffNames(def);
@@ -465,14 +454,14 @@
   // ためにここへ書いておく。
   const purposeSelectedCount = (purpose: BuffPurpose) =>
     app.catalog.filter((def) => matchesPurpose(def, purpose) && on(def)).length;
-  const damageGroupSelectedCount = (group: DamageGroup) =>
+  const damageGroupSelectedCount = (group: BuffDamageGroup) =>
     app.catalog.filter((def) => matchesPurpose(def, "damage") && matchesDamageGroup(def, group) && on(def)).length;
 
   function choosePurpose(purpose: BuffPurpose) {
     activePurpose = purpose;
   }
 
-  function chooseDamageGroup(group: DamageGroup) {
+  function chooseDamageGroup(group: BuffDamageGroup) {
     activeDamageGroup = group;
   }
 
@@ -645,7 +634,7 @@
           {/if}
           <div class="chips">
             {#each activeDefinitions as def (def.id)}
-              {@const blocked = !on(def) && isBlocked(selected.choices.choices, app.catalog, def)}
+              {@const blocked = !on(def) && blockedEntry(def) !== null}
               {@const isOn = on(def)}
               {@const hasEditor = needsInput(def)}
               {@const top = isOn ? statTop(def) : null}

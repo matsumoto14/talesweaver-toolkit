@@ -39,50 +39,9 @@ export const isMultiTarget = (t: BuffTarget): boolean => t === "user_selected_mu
 export const isPercentLayer = (layer: StatLayer): boolean =>
   layer === "percent_of_base" || layer === "multiplier_b";
 
-/** `excludingBuffId` 以外の選択が占有している排他枠の集合 */
-export function usedExclusiveSlots(
-  choices: BuffChoice[],
-  catalog: BuffDefinition[],
-  excludingBuffId: string,
-): Set<string> {
-  const slots = new Set<string>();
-  for (const c of choices) {
-    if (c.buff_id === excludingBuffId) continue;
-    const d = catalog.find((x) => x.id === c.buff_id);
-    if (d) for (const s of d.exclusive_slots) slots.add(s);
-  }
-  return slots;
-}
-
-/** 他の選択と排他枠が衝突して選べない状態か */
-export function isBlocked(
-  choices: BuffChoice[],
-  catalog: BuffDefinition[],
-  def: BuffDefinition,
-): boolean {
-  if (def.exclusive_slots.length === 0) return false;
-  const used = usedExclusiveSlots(choices, catalog, def.id);
-  return def.exclusive_slots.some((s) => used.has(s));
-}
-
-/** バフを ON にしたときの初期選択(「初期値は実用値」の原則) */
-export function defaultChoice(def: BuffDefinition, stat: StatKind = STAT_KINDS[0]): BuffChoice {
-  const choice: BuffChoice = { buff_id: def.id, stat: null, choice_index: null, value: null };
-  if (isUserSelectedTarget(def.target)) choice.stat = stat;
-  if (isChoiceValue(def.value)) choice.choice_index = 0;
-  if (userInputRange(def.value)) choice.value = def.default_value ?? 0;
-  return choice;
-}
-
-/** 保存済み選択から、このバフの実際の効果値を解決する。記録のみ・不完全値は null。 */
-export function resolvedBuffValue(choice: BuffChoice, def: BuffDefinition): number | null {
-  if (isFixedValue(def.value)) return def.value.fixed;
-  if (isChoiceValue(def.value)) {
-    const index = choice.choice_index;
-    return index !== null && Number.isInteger(index) ? (def.value.choice[index] ?? null) : null;
-  }
-  if (userInputRange(def.value)) return choice.value;
-  return null;
+/** ON にしたときの初期選択は Rust(`BuffDefinition::default_choice`)。対象ステだけ画面が選ぶ */
+function initialChoice(def: BuffDefinition, stat?: StatKind): BuffChoice {
+  return { ...def.default_choice, stat: isUserSelectedTarget(def.target) ? (stat ?? STAT_KINDS[0]) : null };
 }
 
 /** バフの ON/OFF を反映した新しい選択配列を返す(元の配列は変更しない) */
@@ -92,7 +51,7 @@ export function toggleBuff(
   checked: boolean,
   stat?: StatKind,
 ): BuffChoice[] {
-  if (checked) return [...choices, defaultChoice(def, stat)];
+  if (checked) return [...choices, initialChoice(def, stat)];
   return choices.filter((c) => c.buff_id !== def.id);
 }
 
@@ -107,7 +66,7 @@ export function toggleBuffStat(
 ): BuffChoice[] {
   const rest = choices.filter((c) => c.buff_id !== def.id);
   const mine = choices.filter((c) => c.buff_id === def.id && c.stat !== stat);
-  if (checked) mine.push(defaultChoice(def, stat));
+  if (checked) mine.push(initialChoice(def, stat));
   mine.sort((a, b) => STAT_KINDS.indexOf(a.stat!) - STAT_KINDS.indexOf(b.stat!));
   return [...rest, ...mine];
 }

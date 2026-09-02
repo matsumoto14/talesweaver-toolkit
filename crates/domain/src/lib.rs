@@ -74,7 +74,7 @@ pub use critical_rate::{
 pub use damage::{
     calculate_damage, calculate_damage_with_combo, evaluate, ComboCycle, DamageContribution,
     damage_levers, DamageLevers, DamageMaterial, DamageResult, DamageTarget, DamageTrace, DamageTriple,
-    DependencyCoefficients, LeverCandidate,
+    DependencyCoefficients, FormulaStepKind, LeverCandidate,
     DpsTriple, FormulaStep,
 };
 pub use defense::{
@@ -138,6 +138,7 @@ pub use stat_sources::{
     UltimateSkillPreview,
     sacred_relic_stage_from_value, sacred_relic_value, MONSTER_CARD_VALUE_MAX, RUNE_LEVEL_MAX,
     SACRED_RELIC_STAGE_MAX, SACRED_RELIC_VALUE_PER_STAGE,
+    blocked_buffs, BlockedBuff, BuffDamageGroup,
 };
 pub use stats::{
     effective_stat, effective_stats, BaseStats, BaseStatsError, EffectiveStats, PerStat, StatKind,

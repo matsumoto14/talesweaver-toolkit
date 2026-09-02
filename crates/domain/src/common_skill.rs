@@ -33,6 +33,9 @@ pub const UNLEASH_LEVEL_MAX: u8 = 10;
 pub const REINFORCE_LEVEL_MAX: u8 = 5;
 /// レインフォース無しで取れるアンリーシュの Lv(wiki: Lv6 以降が LvUp 必要 = Lv5 までは不要)。
 pub const UNLEASH_FREE_LEVEL_MAX: u8 = 5;
+/// オーグメント Lv に足すと、それで解放されるストロングウェポン / プロテクトアーマー /
+/// ハイパーリミットの Lv 上限になる(wiki: Lv2 以降はオーグメントの LvUp が必要)
+pub const AUGMENT_GATE_OFFSET: u8 = 1;
 /// アンリーシュの枠数(wiki Skill/共通: 2 つまで使用可能)。
 pub const UNLEASH_SLOTS: usize = 2;
 
@@ -235,7 +238,7 @@ impl CommonSkills {
     /// オーグメントで解放されている Lv 上限(wiki: Lv2 以降はオーグメントの LvUp が必要)。
     /// オーグメント Lv0 なら 1(= アイテムだけで上げられる Lv1)、Lv5 なら 6。
     pub fn augment_gated_level_max(&self) -> u8 {
-        self.augment_level + 1
+        self.augment_level + AUGMENT_GATE_OFFSET
     }
 
     /// レインフォースで解放されているアンリーシュの Lv 上限

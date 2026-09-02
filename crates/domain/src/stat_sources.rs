@@ -44,6 +44,7 @@ use crate::thesis_core::{
     CORE_SLOT_COUNT, POWER_BONUS, SUPPORT_BONUS,
 };
 use crate::title::TitleDef;
+use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
 
 /// ペット S スキルの段階(wiki: PET)。上位段階ほど値が大きい。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -305,6 +306,95 @@ pub struct BuffDefinition {
 
 /// バフカタログ。呼び出しは `&BuffCatalog` = `&[BuffDefinition]`。
 pub type BuffCatalog = [BuffDefinition];
+
+/// 火力バフを画面で分けるグループ。攻撃ダメージ(X)の副カテゴリ(X2 一般 / X1 イザベル /
+/// X6 日本独自)に対応し、それ以外のカテゴリに効くものは「その他」。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BuffDamageGroup {
+    General,
+    Isabel,
+    Japan,
+    Other,
+}
+
+impl BuffDefinition {
+    /// ON にしたときの初期選択(ux-guidelines「初期値は実用値」)。段階選択は先頭、手入力は
+    /// 既定値(無ければ上限)。対象ステを選ぶバフは `stat` をそのまま入れる
+    pub fn default_choice(&self, stat: Option<StatKind>) -> BuffChoice {
+        BuffChoice {
+            buff_id: self.id.to_string(),
+            stat: match self.target {
+                BuffTarget::UserSelected | BuffTarget::UserSelectedMulti => stat,
+                _ => None,
+            },
+            choice_index: match &self.value {
+                BuffValue::Choice(_) => Some(0),
+                _ => None,
+            },
+            value: match &self.value {
+                BuffValue::UserInput { min, max } => {
+                    Some(self.default_value.unwrap_or(*max).clamp(*min, *max))
+                }
+                _ => None,
+            },
+        }
+    }
+
+    /// このバフが属する火力グループ(複数のカテゴリに効くバフは複数)。
+    pub fn damage_groups(&self) -> Vec<BuffDamageGroup> {
+        let mut out = Vec::new();
+        for effect in self.damage_effects {
+            let SkillEffect::Damage { category, .. } = effect else {
+                continue;
+            };
+            let group = match category {
+                DamageCategory::AttackDamageGeneral => BuffDamageGroup::General,
+                DamageCategory::AttackDamageIsabel => BuffDamageGroup::Isabel,
+                DamageCategory::AttackDamageJapan => BuffDamageGroup::Japan,
+                _ => BuffDamageGroup::Other,
+            };
+            if !out.contains(&group) {
+                out.push(group);
+            }
+        }
+        out
+    }
+}
+
+/// まだ選んでいないバフのうち、選択中のバフと排他枠を取り合って選べないもの。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BlockedBuff {
+    pub buff_id: String,
+    /// 枠を塞いでいる選択中のバフ名
+    pub blocking: Vec<String>,
+}
+
+/// 排他枠(`exclusive_slots`)の衝突で選べないバフを列挙する(`build_modifiers` が弾く規則と同じ)。
+pub fn blocked_buffs(buffs: &BuffSelection, catalog: &BuffCatalog) -> Vec<BlockedBuff> {
+    let selected: Vec<&BuffDefinition> = buffs
+        .choices
+        .iter()
+        .filter_map(|c| catalog.iter().find(|d| d.id == c.buff_id))
+        .collect();
+    catalog
+        .iter()
+        .filter(|d| !d.exclusive_slots.is_empty() && !selected.iter().any(|s| s.id == d.id))
+        .filter_map(|d| {
+            let mut blocking: Vec<String> = Vec::new();
+            for s in &selected {
+                let shares = s.exclusive_slots.iter().any(|slot| d.exclusive_slots.contains(slot));
+                if shares && !blocking.iter().any(|name| name == s.name) {
+                    blocking.push(s.name.to_string());
+                }
+            }
+            (!blocking.is_empty()).then(|| BlockedBuff {
+                buff_id: d.id.to_string(),
+                blocking,
+            })
+        })
+        .collect()
+}
 
 /// カタログ ID での 1 選択。対象ステ・選択肢インデックス・手入力値をすべて持てる形にし、
 /// `BuffTarget`/`BuffValue` のどの組み合わせも汎用的に解決できるようにする。
@@ -638,6 +728,8 @@ pub struct BuffDamageEffect {
 pub struct BuffDamageSummary {
     pub categories: Vec<crate::category::CategoryTrace>,
     pub buff_effects: Vec<BuffDamageEffect>,
+    /// 排他枠の衝突で選べないバフ(画面が「〜と選べません」を出す)
+    pub blocked_buffs: Vec<BlockedBuff>,
 }
 
 /// バフセットだけが与ダメージカテゴリへ足す量。通常のダメージ計算と同じ
@@ -668,6 +760,7 @@ pub fn summarize_buff_selection(
         .filter(|row| row.category != DamageCategory::AttackDamageRate && row.raw != 0.0)
         .collect();
     Ok(BuffDamageSummary {
+        blocked_buffs: blocked_buffs(buffs, catalog),
         categories,
         buff_effects,
     })
@@ -1101,6 +1194,37 @@ pub struct UltimateSkillPreview {
     pub skill_range_bonus: f64,
 }
 
+impl UltimateSkillPreview {
+    /// いま選んでいる枠の効果。
+    pub fn of(ultimate: &UltimateSkills) -> Self {
+        UltimateSkillPreview {
+            critical_damage_rate: ultimate.critical_damage_rate(),
+            actual_delay_reduction: ultimate.actual_delay_reduction(),
+            added_hit_count: ultimate.added_hit_count(),
+            skill_range_bonus: ultimate.skill_range_bonus(),
+        }
+    }
+
+    /// 3 種すべてを付けたとしたときの効果(スーパー / ハイパーリミットはいまの値)。
+    /// 計算タブのチップに「付けたらいくつ効くか」を併記するために使う
+    pub fn potential(ultimate: &UltimateSkills) -> Self {
+        let combat = UltimateSkills {
+            slots: [Some(UltimateSkill::ScopeEye), Some(UltimateSkill::FullThrottle)],
+            ..*ultimate
+        };
+        let range = UltimateSkills {
+            slots: [Some(UltimateSkill::WideFocus), None],
+            ..*ultimate
+        };
+        UltimateSkillPreview {
+            critical_damage_rate: combat.critical_damage_rate(),
+            actual_delay_reduction: combat.actual_delay_reduction(),
+            added_hit_count: combat.added_hit_count(),
+            skill_range_bonus: range.skill_range_bonus(),
+        }
+    }
+}
+
 /// クリティカル率増加(wiki `#CriticalChance`)の合計。正は `critical_rate::CriticalRateSources`
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CriticalRateBonusPreview {
@@ -1435,20 +1559,7 @@ pub fn buff_target_stat_gains(
     let mut gains = Vec::with_capacity(StatKind::ALL.len());
     for kind in StatKind::ALL {
         let mut trial = without.clone();
-        trial.choices.push(BuffChoice {
-            buff_id: def.id.to_string(),
-            stat: Some(kind),
-            choice_index: match &def.value {
-                BuffValue::Choice(_) => Some(0),
-                _ => None,
-            },
-            value: match &def.value {
-                BuffValue::UserInput { min, max } => {
-                    Some(def.default_value.unwrap_or(*max).clamp(*min, *max))
-                }
-                _ => None,
-            },
-        });
+        trial.choices.push(def.default_choice(Some(kind)));
         let after = match effective_stats_with(
             base,
             sources,
@@ -1555,12 +1666,7 @@ pub fn preview_effective_stats(
     let common_skill = CommonSkillPreview {
         defense_rates: common.defense_rates(equipment.siena_defense_rate()),
         equipment_attack_rate: common.equipment_attack_rate(),
-        ultimate: UltimateSkillPreview {
-            critical_damage_rate: common.ultimate.critical_damage_rate(),
-            actual_delay_reduction: common.ultimate.actual_delay_reduction(),
-            added_hit_count: common.ultimate.added_hit_count(),
-            skill_range_bonus: common.ultimate.skill_range_bonus(),
-        },
+        ultimate: UltimateSkillPreview::of(&common.ultimate),
     };
     let critical_rate_bonus = CriticalRateBonusPreview {
         raw: sources.critical_rate.raw_bonus(),
@@ -1778,6 +1884,10 @@ pub struct StatLimits {
     pub actual_delay_min: f64,
     /// レインフォース無しで取れるアンリーシュの Lv(wiki: Skill/共通)
     pub unleash_free_level_max: u8,
+    /// オーグメント Lv + この値 = ストロングウェポン / プロテクトアーマー / ハイパーリミットの上限
+    pub augment_gate_offset: u8,
+    /// 装備強化 Lv の選択肢(0 = 強化なし、実用は +10 以上。+12 以上は等級つき)
+    pub enhance_level_candidates: Vec<u8>,
     /// +12 以上で追加固定ダメージがレンジ振り(MR)になる境界(wiki: 装備システム/装備強化)
     pub enhance_grade_min_level: u8,
     /// 属性差 1 あたりの属性差ボーナス(wiki: カテゴリI)。Σ% の小数表現
@@ -1923,6 +2033,8 @@ pub fn stat_limits() -> StatLimits {
         actual_delay_reduction_max: crate::actual_delay::ACTUAL_DELAY_REDUCTION_MAX,
         actual_delay_min: crate::actual_delay::ACTUAL_DELAY_MIN,
         unleash_free_level_max: crate::common_skill::UNLEASH_FREE_LEVEL_MAX,
+        augment_gate_offset: crate::common_skill::AUGMENT_GATE_OFFSET,
+        enhance_level_candidates: crate::equipment::ENHANCE_LEVEL_CANDIDATES.to_vec(),
         enhance_grade_min_level: crate::equipment::ENHANCE_LEVEL_RANDOM_RANGE_MIN,
         element_bonus_percent_per_point: crate::damage::ELEMENT_BONUS_PERCENT_PER_POINT,
         element_bonus_max: DamageCategory::ElementBonus

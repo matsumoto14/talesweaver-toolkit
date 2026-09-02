@@ -97,7 +97,8 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
 
         "list_skills" => arg_fields::<ListSkillsArgs>(),
         "retain_character_skills" => arg_fields::<RetainCharacterSkillsArgs>(),
-        "summarize_buff_selection" => arg_fields::<BuffsArgs>(),
+        "preview_potential_effects" => arg_fields::<PreviewPotentialEffectsArgs>(),
+        "summarize_buff_selection" | "list_blocked_buffs" => arg_fields::<BuffsArgs>(),
         "equipment_element_values" => arg_fields::<EquipmentElementValuesArgs>(),
         "preview_elements" | "validate_character" | "list_enchant_plans" => {
             arg_fields::<CharacterArgs>()

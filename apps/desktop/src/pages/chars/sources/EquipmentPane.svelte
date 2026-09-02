@@ -696,7 +696,7 @@
     { value: "armor_suit", label: "スーツ" }, { value: "armor_robe", label: "ローブ" },
   ];
   const enhanceLevelOptions = $derived(
-    [0, 10, 11, 12, 13, 14, 15].map((lv) => ({
+    limits.enhance_level_candidates.map((lv) => ({
       value: String(lv), label: lv === 0 ? "強化なし" : `+${lv}`,
     })),
   );

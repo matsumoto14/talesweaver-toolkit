@@ -19,17 +19,12 @@ Rust から値・上限・候補を返す形にして TS 側を消す。
 
 | # | TS | Rust | 備考 |
 |---|---|---|---|
-| 11 | `buffs.ts:43-86`、`BuffsPage.svelte:95-103, 436-448` | `stat_sources.rs:995-1027, 1686-1694` | 排他枠の衝突・ON 時の初期選択・値解決。**既定値が食い違う**: Rust は `default_value.unwrap_or(max)` を clamp、TS は `default_value ?? 0`。ダメージ系グループの id(`attack_damage_general/isabel/japan`)も TS 直書き |
 | 12 | `equipment.ts:273-291`、`RandomOptionPane.svelte:105-119` | `random_option.rs:244-266`、`equipment.rs:1313` | ランダム OP の物理/魔法発動条件、同カテゴリ 1 部位 1 つ |
 | 13 | `equipment.ts:140-225`、`HomePage.svelte:633-661` | `stat_sources.rs:255-265`、`siena.rs:476-487`、`random_option.rs:137` | 神鳥の聖物 段階↔値、シエナ段階→枠数、OP 既定値。コメントで「ミラー」と自認 |
 | 14 | `equipment.ts:54-84` | `commands/lib.rs:1205`、`candidate.rs:134` | カタログ品適用(base=max、enchant clamp、枠切り詰め)、強化 Lv ≥ 12 で等級「最上」。ability / random_option 枠の切り詰めは TS にしかない |
-| 15 | `CommonSkillPane.svelte:39-90` | `common_skill.rs:210, 216` | 前提スキルのゲート(reinforce + unleash、augment + 1)。limits で上限を返せば済む |
 | 16 | `EquipmentPane.svelte:597-730` | `equipment.rs:1131` | アビリティ枠の置換・枠超過・武器の hp/mp 回復除外(Rust 側なし) |
 | 17 | `EquipmentPane.svelte:466-482, 518-590` | なし | `preferred = ["storm-blade", …]` の id 直書き、`ABILITY_TIERS` を名前の接頭辞(N-/R-/L-/E-/G-、古代精霊 < 深淵 < 喪失 < 夜星)から解析。等級は gamedata の属性にする |
 | 18 | `labels.ts:8, 41-44, 64, 85-89, 118-120, 129, 140, 154, 163-170`、`enchant.ts:127` | `thesis_core.rs:22, 131`、`element.rs:38`、`equipment.rs:721`、`random_option.rs:34`、`StatKind::ALL` | enum の並び・分類(コア攻撃/補助種別、属性、アビリティ系統、OP ランク、依存種別、エンチャント 8 部位)のリテラル複製。`part_slot_rules` のように limits 経由のものと二重基準 |
-| 19 | `EquipmentPane.svelte:781-785` / `StatusPane.svelte:102` / `CommonSkillPane.svelte:125` | `ENHANCE_LEVEL_MAX`、`limits.awakening_stage_max`、`limits.sharpness_vision_level_max` | 強化 Lv 候補 `[0,10..15]`・覚醒 6 段・シャープネス 10 段の直書き |
-| 20 | `CalcPage.svelte:393-413` | `damage.rs:397-460` | 「なぜこの数字?」の帯が Rust の段名文字列を Set で持ち `reached / running` で倍率を再導出。段に `kind: factor \| running` を返せば消える |
-| 21 | `CalcPage.svelte:1300-1302` | — | 極限の効果値のため `scope_eye/full_throttle` / `wide_focus` を強制セットして preview を 2 回叩く。効果表を返す API に |
 | 22 | `Workspace.svelte:477`、`equipment.ts:21-30`、`measurement.ts:350-366` | — | "ペット会心 ×1.1" 文字列、「†改・セイクリッド は通常版と同じ画像」の名前規則(gamedata の icon id 属性に)、逆算可否。対人の `1 + rate × level` は B3 で解消済み |
 
 確認して問題なし: `state.svelte.ts`、`api/transfer.ts`、`api/browserStore.ts`、`candidates.ts`、`format.ts`、`limits.svelte.ts`、`TracePanel.svelte`、`MeasurePage.svelte`、`ui/critChance.ts`、ActualDelay / CriticalRate / SoulLink の各ペイン。

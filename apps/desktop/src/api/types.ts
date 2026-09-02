@@ -178,10 +178,17 @@ export type BuffPurpose = "stats" | "damage" | "durability" | "accuracy";
 /** 効果を得る場所の手掛かり。 */
 export type BuffOrigin = "item" | "event" | "club" | "skill" | "rune" | "soul_link" | "battle_state" | "minigame";
 
+/** 火力バフのグループ(Rust `BuffDamageGroup`。X2 一般 / X1 イザベル / X6 日本独自 / その他) */
+export type BuffDamageGroup = "general" | "isabel" | "japan" | "other";
+
 export interface BuffDefinition {
   id: string;
   name: string;
   purposes: BuffPurpose[];
+  /** ON にしたときの初期選択(Rust `BuffDefinition::default_choice`。対象ステは画面が入れる) */
+  default_choice: BuffChoice;
+  /** 属する火力グループ(複数に効くバフは複数) */
+  damage_groups: BuffDamageGroup[];
   origin: BuffOrigin;
   target: BuffTarget;
   layer: StatLayer;
@@ -1171,9 +1178,16 @@ export interface BuffDamageEffect {
 }
 
 // crates/domain/src/stat_sources.rs の BuffDamageSummary(summarize_buff_selection の戻り値)。
+/** 排他枠の衝突で選べないバフ(Rust `BlockedBuff`) */
+export interface BlockedBuff {
+  buff_id: string;
+  /** 枠を塞いでいる選択中のバフ名 */
+  blocking: string[];
+}
 export interface BuffDamageSummary {
   categories: CategoryTrace[];
   buff_effects: BuffDamageEffect[];
+  blocked_buffs: BlockedBuff[];
 }
 
 export interface StatTrace {
@@ -1484,8 +1498,11 @@ export interface VersusAccuracy {
   evasion_max_hit_rate: HitRate;
 }
 
+/** 与ダメージ式の段の種別(Rust `FormulaStepKind`) */
+export type FormulaStepKind = "base" | "factor" | "running" | "outside";
 export interface FormulaStep {
   name: string;
+  kind: FormulaStepKind;
   expression: string;
   value: number;
   /** この段を終えた時点の到達値(式の途中積)。式の外の段は value と同じ */
@@ -1772,6 +1789,10 @@ export interface StatLimits {
   actual_delay_min: number;
   /** レインフォース無しで取れるアンリーシュの Lv */
   unleash_free_level_max: number;
+  /** オーグメント Lv + この値 = ストロングウェポン / プロテクトアーマー / ハイパーリミットの上限 */
+  augment_gate_offset: number;
+  /** 装備強化 Lv の選択肢(0 = 強化なし) */
+  enhance_level_candidates: number[];
   /** +12 以上で追加固定ダメージがレンジ振り(MR)になる境界 */
   enhance_grade_min_level: number;
   /** 属性差 1 あたりの属性差ボーナス。Σ% の小数表現 */
@@ -1904,4 +1925,10 @@ export interface ContentEvaluation {
   /** 敵データなし(目安なし)は火力不問で true */
   reaches_need: boolean;
   clear: boolean;
+}
+
+/** 極限スキル 3 種すべての効果とソウルリンクの効いている量(preview_potential_effects) */
+export interface PotentialEffects {
+  ultimate: UltimateSkillPreview;
+  soul_link: SoulLinkPreview;
 }

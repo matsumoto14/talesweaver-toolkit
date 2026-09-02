@@ -141,8 +141,48 @@ pub fn list_enemies() -> Vec<Enemy> {
     gamedata::enemies()
 }
 
-pub fn list_buff_catalog() -> Vec<BuffDefinition> {
+/// バフカタログ 1 件 + 画面が要る派生値(ON 時の初期選択・火力グループ)。派生の規則は domain。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BuffView {
+    #[serde(flatten)]
+    pub def: BuffDefinition,
+    /// ON にしたときの初期選択(対象ステは画面が入れる)
+    pub default_choice: domain::BuffChoice,
+    pub damage_groups: Vec<domain::BuffDamageGroup>,
+}
+
+pub fn list_buff_catalog() -> Vec<BuffView> {
     gamedata::buff_catalog()
+        .into_iter()
+        .map(|def| BuffView {
+            default_choice: def.default_choice(None),
+            damage_groups: def.damage_groups(),
+            def,
+        })
+        .collect()
+}
+
+/// 「付けたらいくつ効くか」の材料: 極限スキル 3 種すべての効果(いまのスーパー / ハイパー
+/// リミット前提)と、ソウルリンクの効いている量。計算タブの地力の試し変更が使う
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PotentialEffects {
+    pub ultimate: domain::UltimateSkillPreview,
+    pub soul_link: domain::SoulLinkPreview,
+}
+
+pub fn preview_potential_effects(
+    stat_sources: domain::StatSources,
+    common_skills: CommonSkills,
+) -> PotentialEffects {
+    PotentialEffects {
+        ultimate: domain::UltimateSkillPreview::potential(&common_skills.ultimate),
+        soul_link: stat_sources.soul_link.preview(),
+    }
+}
+
+/// 排他枠の衝突で選べないバフ(計算タブのバフチップ用。バフタブは summarize の応答に同じものが入る)。
+pub fn list_blocked_buffs(buffs: BuffSelection) -> Vec<domain::BlockedBuff> {
+    domain::blocked_buffs(&buffs, &gamedata::buff_catalog())
 }
 
 /// バフセット単体の与ダメージカテゴリ合計 + バフ別配賦。ゲームUIと同じカテゴリ名・上限を使う。

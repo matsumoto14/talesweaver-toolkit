@@ -1,6 +1,8 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "./invoke";
 import type {
+  BlockedBuff,
+  PotentialEffects,
   Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentItem, GameCharacter, StartupNotice,
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
@@ -16,6 +18,8 @@ export const listEnemies = () => invoke<Enemy[]>("list_enemies");
 export const listBuffCatalog = () => invoke<BuffDefinition[]>("list_buff_catalog");
 export const summarizeBuffSelection = (buffs: BuffSelection) =>
   invoke<BuffDamageSummary>("summarize_buff_selection", { buffs });
+/** 排他枠の衝突で選べないバフ(規則は Rust `blocked_buffs`) */
+export const listBlockedBuffs = (buffs: BuffSelection) => invoke<BlockedBuff[]>("list_blocked_buffs", { buffs });
 export const listBuffSets = () => invoke<BuffSet[]>("list_buff_sets");
 export const createBuffSet = (name: string, choices: BuffSelection) => invoke<BuffSet>("create_buff_set", { name, choices });
 export const updateBuffSet = (id: number, name: string, choices: BuffSelection) => invoke<BuffSet>("update_buff_set", { id, name, choices });
@@ -65,6 +69,9 @@ export const setDamageSnapshot = (characterId: number, skillId: string, contentI
  * 保存しない試算。draft の base_stats/stat_sources/equipment から最終能力値と寄与内訳を得る。
  * `mainSkillId`(主軸スキル)を渡すとその依存種別で攻撃力(A)も返る。null なら攻撃力は出ない。
  */
+/** 極限スキル 3 種すべての効果とソウルリンクの効いている量(計算タブの地力の試し変更用) */
+export const previewPotentialEffects = (statSources: StatSources, commonSkills: CommonSkills) =>
+  invoke<PotentialEffects>("preview_potential_effects", { statSources, commonSkills });
 export const previewEffectiveStats = (
   baseStats: BaseStats, statSources: StatSources, equipment: Equipment, commonSkills: CommonSkills,
   awakening: Awakening, mainSkillId: string | null, buffs: BuffSelection = { choices: [] },

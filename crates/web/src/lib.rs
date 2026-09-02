@@ -66,6 +66,13 @@ struct ListSkillsArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct PreviewPotentialEffectsArgs {
+    stat_sources: domain::StatSources,
+    common_skills: domain::CommonSkills,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RetainCharacterSkillsArgs {
     skill_ids: Vec<String>,
     game_character_id: String,
@@ -222,6 +229,14 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "get_stat_limits" => ok(commands::get_stat_limits()),
         "get_new_character_stat_sources" => ok(commands::get_new_character_stat_sources()),
         "get_new_character_common_skills" => ok(commands::get_new_character_common_skills()),
+        "preview_potential_effects" => {
+            let a: PreviewPotentialEffectsArgs = args_of(command, args)?;
+            ok(commands::preview_potential_effects(a.stat_sources, a.common_skills))
+        }
+        "list_blocked_buffs" => {
+            let a: BuffsArgs = args_of(command, args)?;
+            ok(commands::list_blocked_buffs(a.buffs))
+        }
         "retain_character_skills" => {
             let a: RetainCharacterSkillsArgs = args_of(command, args)?;
             ok(commands::retain_character_skills(a.skill_ids, a.game_character_id))

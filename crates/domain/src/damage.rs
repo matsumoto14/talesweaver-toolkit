@@ -208,9 +208,26 @@ impl DamageTarget {
 }
 
 /// 式の 1 段。
+/// 与ダメージ式の段の種別。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FormulaStepKind {
+    /// 式の起点(攻撃力 − 防御力)。`value` は抜けた分そのもの
+    Base,
+    /// `value` が倍率の段(スキル倍率・クリティカル・コンボ等)
+    Factor,
+    /// `value` が到達値で返る段(最終ダメージ以降)
+    Running,
+    /// 式の外(攻撃力の内訳・武器強化・ダメージ上限・割合追加ダメージ)と仕上げ(切り捨て・下限)。
+    /// 式の流れの表には出さない
+    Outside,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FormulaStep {
     pub name: String,
+    /// 段の種別(画面が「倍率の段」と「到達値で返る段」を見分けるため)
+    pub kind: FormulaStepKind,
     pub expression: String,
     pub value: f64,
     /// この段を終えた時点の到達値(式の途中積)。倍率だけを返す段でも、ここまでの積を
@@ -381,13 +398,15 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     use DamageCategory::*;
     let g = |c: DamageCategory| totals.get(c);
     let mut steps = Vec::with_capacity(10);
-    let mut step = |name: &str,
+    let mut step = |kind: FormulaStepKind,
+                    name: &str,
                     expression: String,
                     value: f64,
                     reached: f64,
                     categories: Vec<DamageCategory>| {
         steps.push(FormulaStep {
             name: name.to_string(),
+            kind,
             expression,
             value,
             reached,
@@ -397,6 +416,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     };
 
     let base = step(
+        FormulaStepKind::Base,
         "攻撃力−防御力",
         format!(
             "A {} + B {} − C {}",
@@ -409,6 +429,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
         vec![AttackPower, AttackRandom, TargetDefense],
     );
     let skill = step(
+        FormulaStepKind::Factor,
         "スキル倍率",
         format!(
             "{{D {} × E1 {} + E2 {}}}",
@@ -422,6 +443,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     );
     let crit = if critical {
         step(
+            FormulaStepKind::Factor,
             "クリティカル",
             format!(
                 "{{F {} × G {}}}",
@@ -438,6 +460,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
         // 「クリティカルダメージ増加」(スコープアイ / 致命のルーン / ソウルリンク / 称号 /
         // プシーキーの刻印)で、非クリティカルの一撃には乗らない(取得 2026-08-25)。
         step(
+            FormulaStepKind::Factor,
             "クリティカル",
             "非クリティカル({F × G} = 1.0)".to_string(),
             1.0,
@@ -446,6 +469,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
         )
     };
     let bonus = step(
+        FormulaStepKind::Factor,
         "コンボ・属性・カット率・オーラ",
         format!(
             "H {} × I {} × J {} × New1 {}",
@@ -460,6 +484,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     );
     let product = base * skill * crit * bonus;
     let inner = step(
+        FormulaStepKind::Running,
         "最終ダメージ固定値(下限)",
         format!("MAX({product:.4} + K {k}, K {k})", k = g(FinalDamageFixed)),
         (product + g(FinalDamageFixed)).max(g(FinalDamageFixed)),
@@ -467,6 +492,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
         vec![FinalDamageFixed],
     );
     let mid = step(
+        FormulaStepKind::Running,
         "最終ダメージ・カット率A・被害減少",
         format!(
             "{inner:.4} × L {} × V1 {} + M {}",
@@ -490,6 +516,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
         * g(DamageMitigation)
         * g(CutRateB);
     let outer = step(
+        FormulaStepKind::Running,
         "各種ダメージ増減",
         format!(
             "{mid:.4} × Old {} × N {} × O {} × P {} × (1−Q) {} × R {} × (1−S) {} × T {} × (1−U) {} × (1−New2) {} × V2 {} + W {}",
@@ -524,6 +551,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
         ],
     );
     let final_value = step(
+        FormulaStepKind::Running,
         "攻撃ダメージ・PVP補正",
         format!(
             "{outer:.4} × X {} × Y {}",
@@ -536,6 +564,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     );
     let floored = floor_int(final_value);
     step(
+        FormulaStepKind::Outside,
         "切捨て",
         format!("[{final_value:.4}]"),
         floored as f64,
@@ -544,6 +573,7 @@ pub fn evaluate(totals: &CategoryTotals, critical: bool) -> (i64, Vec<FormulaSte
     );
     let damage = floored.max(MIN_DAMAGE_TO_MONSTER);
     step(
+        FormulaStepKind::Outside,
         "対モンスター下限",
         format!("MAX({floored}, {MIN_DAMAGE_TO_MONSTER})"),
         damage as f64,
@@ -852,6 +882,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
     if capped_loss.max > 0 {
         let step = FormulaStep {
             name: "ダメージ上限".to_string(),
+            kind: FormulaStepKind::Outside,
             expression: format!("MIN(生値, {}) ※1 段ごとに適用", material.damage_cap),
             value: material.damage_cap as f64,
             reached: material.damage_cap as f64,
@@ -875,6 +906,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
     if weapon_added_per_hit != 0 {
         let step = FormulaStep {
             name: "武器強化(追加固定ダメージ)".to_string(),
+            kind: FormulaStepKind::Outside,
             expression: format!(
                 "INT({} / {hits}) = {weapon_added_per_hit} ※上限なし・式の外",
                 material.weapon_added_damage
@@ -932,6 +964,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
     if added.max != 0 {
         let step = FormulaStep {
             name: "割合追加ダメージ(合計に乗る)".to_string(),
+            kind: FormulaStepKind::Outside,
             expression: format!(
                 "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}% + 称号 {:.0}%",
                 added_rate * 100.0,
@@ -1093,6 +1126,7 @@ fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaSte
     vec![
         FormulaStep {
             name: "ステ攻撃力".to_string(),
+            kind: FormulaStepKind::Outside,
             expression: format!("{stat_attack:.4}"),
             value: stat_attack,
             reached: stat_attack,
@@ -1100,6 +1134,7 @@ fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaSte
         },
         FormulaStep {
             name: "装備攻撃力".to_string(),
+            kind: FormulaStepKind::Outside,
             expression: format!(
                 "基本 {:.4} + 強化 {:.4}",
                 attack.equipment_base_attack, attack.equipment_enhanced_attack
@@ -1110,6 +1145,7 @@ fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaSte
         },
         FormulaStep {
             name: "装備攻撃力強化倍率".to_string(),
+            kind: FormulaStepKind::Outside,
             expression: format!("{enhance_rate:.4}"),
             value: enhance_rate,
             reached: enhance_rate,
@@ -1117,6 +1153,7 @@ fn attack_power_breakdown_steps(attack: &AttackPowerBreakdown) -> Vec<FormulaSte
         },
         FormulaStep {
             name: "攻撃力(A)".to_string(),
+            kind: FormulaStepKind::Outside,
             expression: format!(
                 "[{stat_attack:.4} + {equipment_attack:.4}] + [{equipment_attack:.4}/25 × {enhance_rate:.4}] × 25"
             ),

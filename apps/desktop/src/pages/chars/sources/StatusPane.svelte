@@ -99,7 +99,7 @@
     if (Number(level) > 0) draft.stage = String(limits.eternal_awakening_stage);
   }
   // 覚醒段階は 4 と 5 しか使わない(このツールの対象)。それ以外は開いたときだけ出す
-  const stageOptions = Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: String(i) }));
+  const stageOptions = Array.from({ length: limits.awakening_stage_max + 1 }, (_, i) => ({ value: String(i), label: String(i) }));
   const stageMainOptions = [4, 5].map((i) => ({ value: String(i), label: String(i) }));
   let stageAllOpen = $state(false);
   const stageIsLow = $derived(Number(draft.stage) < 4);

@@ -94,13 +94,26 @@ pub fn list_enemies() -> Vec<Enemy> {
 }
 
 #[tauri::command]
-pub fn list_buff_catalog() -> Vec<BuffDefinition> {
+pub fn list_buff_catalog() -> Vec<commands::BuffView> {
     commands::list_buff_catalog()
+}
+
+#[tauri::command]
+pub fn preview_potential_effects(
+    stat_sources: domain::StatSources,
+    common_skills: domain::CommonSkills,
+) -> commands::PotentialEffects {
+    commands::preview_potential_effects(stat_sources, common_skills)
 }
 
 #[tauri::command]
 pub fn summarize_buff_selection(buffs: BuffSelection) -> CommandResult<domain::BuffDamageSummary> {
     commands::summarize_buff_selection(buffs)
+}
+
+#[tauri::command]
+pub fn list_blocked_buffs(buffs: BuffSelection) -> Vec<domain::BlockedBuff> {
+    commands::list_blocked_buffs(buffs)
 }
 
 #[tauri::command]

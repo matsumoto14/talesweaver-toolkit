@@ -74,7 +74,7 @@
 
   // オーグメントはストロングウェポン / プロテクトアーマー / ハイパーリミットの Lv2 以降の前提スキル。
   // 上限を超える Lv は保存時に Rust 側が弾くので、選択肢の側で先に絞る。
-  const augmentGate = $derived(draft.commonSkills.augment_level + 1);
+  const augmentGate = $derived(draft.commonSkills.augment_level + limits.augment_gate_offset);
   /**
    * オーグメント Lv を下げたら、それに縛られる Lv(ストロングウェポン / プロテクトアーマー /
    * ハイパーリミット)も一緒に下げる。放置すると選択肢に無い値が残り、保存だけが失敗する。
@@ -82,7 +82,7 @@
   function setAugmentLevel(level: number) {
     const c = draft.commonSkills;
     c.augment_level = level;
-    const max = level + 1;
+    const max = level + limits.augment_gate_offset;
     c.strong_weapon_level = Math.min(c.strong_weapon_level, max);
     c.protect_armor_level = Math.min(c.protect_armor_level, max);
     c.ultimate.hyper_limit_level = Math.min(c.ultimate.hyper_limit_level, max);
@@ -122,7 +122,7 @@
   const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
   // 段の名前は Lv だけ、効いている値は行の右に出す(段に「Lv6(+28%)」と書くと折り返す)。
   // **Lv5 まではほぼ全員が同じ**(そこで止まる)なので、ふだんは 5〜10 だけ出す
-  const sharpnessVisionOptions = Array.from({ length: 10 }, (_, i) => ({
+  const sharpnessVisionOptions = Array.from({ length: limits.sharpness_vision_level_max }, (_, i) => ({
     value: String(i + 1),
     label: String(i + 1),
   }));

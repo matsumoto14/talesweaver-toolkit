@@ -4,15 +4,17 @@
   import { untrack } from "svelte";
   import {
     errorMessage, evaluateContents, listEnchantGains, listSkills, listUpgradeCandidates, previewDamage,
-    previewDefense, previewEffectiveStats,
+    listBlockedBuffs, previewDefense, previewPotentialEffects,
   } from "../../api/commands";
   import type {
+    BlockedBuff, BuffSelection,
+    StatSources, CommonSkills,
     Adjustments, BuffChoice, BuffDefinition, BuffPurpose, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
     DamageResult, DefenseProfile, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill,
     SoulLinkPreview, StatKind, UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
-    BUFF_PURPOSES, isBlocked, isChoiceValue, isMultiTarget, isPercentLayer, isUserSelectedTarget,
+    BUFF_PURPOSES, isChoiceValue, isMultiTarget, isPercentLayer, isUserSelectedTarget,
     matchesPurpose,
     pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
@@ -393,13 +395,6 @@
     "各種ダメージ増減": "var(--flow-6)",
     "攻撃ダメージ・PVP補正": "var(--flow-7)",
   };
-  const FACTOR_STEPS = new Set(["スキル倍率", "クリティカル", "コンボ・属性・カット率・オーラ"]);
-  const RUNNING_STEPS = new Set([
-    "最終ダメージ固定値(下限)",
-    "最終ダメージ・カット率A・被害減少",
-    "各種ダメージ増減",
-    "攻撃ダメージ・PVP補正",
-  ]);
   const flowRows = $derived.by<FlowRow[]>(() => {
     if (pierced === null) return [];
     let running = pierced;
@@ -407,10 +402,12 @@
       { k: "抜けた分(素通り)", add: pierced, mult: "—", factor: 1, c: "var(--fg-dim)", to: pierced, step: "攻撃力−防御力" },
     ];
     for (const s of steps) {
-      if (!FACTOR_STEPS.has(s.name) && !RUNNING_STEPS.has(s.name)) continue;
-      // 到達値は Rust の FormulaStep.reached。倍率列は倍率の段はその値、到達値で返る段は前段との比(表示用)
-      const factor = FACTOR_STEPS.has(s.name) ? s.value : running > 0 ? s.reached / running : 1;
-      const mult = FACTOR_STEPS.has(s.name) || running > 0 ? `×${factor.toFixed(2)}` : "—";
+      if (s.kind !== "factor" && s.kind !== "running") continue;
+      // 段の種別は Rust の FormulaStep.kind。到達値は FormulaStep.reached。
+      // 倍率列は倍率の段はその値、到達値で返る段は前段との比(表示用)
+      const isFactor = s.kind === "factor";
+      const factor = isFactor ? s.value : running > 0 ? s.reached / running : 1;
+      const mult = isFactor || running > 0 ? `×${factor.toFixed(2)}` : "—";
       rows.push({ k: s.name, add: s.reached - running, mult, factor, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)", to: s.reached, step: s.name });
       running = s.reached;
     }
@@ -1263,14 +1260,25 @@
       if (empty !== -1) slots[empty] = skillId;
     });
   }
-  /** チップに併記する効果値。写経しない — Rust 側 preview_effective_stats(common_skill.ultimate)
-   *  から引く。2 回の呼び出しで 3 種すべての効果値を取れる(枠は 2 つしかないので)。 */
+  /** チップに併記する効果値。写経しない — Rust 側 preview_potential_effects(3 種すべてを
+   *  付けたとしたときの効果)から引く。 */
   let ultimateEffects = $state<{
     critical_damage_rate: number; actual_delay_reduction: number; added_hit_count: number; skill_range_bonus: number;
   } | null>(null);
   /** ソウルリンクの効いている量(preview_effective_stats の soul_link)。同じ応答から取る */
   let soulLinkPreview = $state<SoulLinkPreview | null>(null);
   const ultimateLatest = latest({ debounce: 150 });
+  /** 排他枠の衝突で選べないバフ。判定は Rust(`blocked_buffs`)、ここは応答を持つだけ */
+  let calcBlockedBuffs = $state<BlockedBuff[]>([]);
+  const blockedLatest = latest({ debounce: 0 });
+  $effect(() => {
+    const buffs = JSON.parse(JSON.stringify(app.calcBuffs)) as BuffSelection;
+    blockedLatest.run(async (isCurrent) => {
+      const blocked = await listBlockedBuffs(buffs);
+      if (isCurrent()) calcBlockedBuffs = blocked;
+    });
+    return () => blockedLatest.cancel();
+  });
   $effect(() => {
     const p = payload;
     if (!p) {
@@ -1279,34 +1287,15 @@
       soulLinkPreview = null;
       return;
     }
-    const pJson = JSON.stringify(p);
-    const buffs = JSON.parse(JSON.stringify(app.calcBuffs));
+    const statSources = JSON.parse(JSON.stringify(p.stat_sources)) as StatSources;
+    const commonSkills = JSON.parse(JSON.stringify(p.common_skills)) as CommonSkills;
     ultimateLatest.run(async (isCurrent) => {
       try {
-        const withCombat = JSON.parse(pJson) as NewCharacter;
-        withCombat.common_skills.ultimate.slots = ["scope_eye", "full_throttle"];
-        const withRange = JSON.parse(pJson) as NewCharacter;
-        withRange.common_skills.ultimate.slots = ["wide_focus", null];
-        const [a, b] = await Promise.all([
-          previewEffectiveStats(
-            withCombat.base_stats, withCombat.stat_sources, withCombat.equipment, withCombat.common_skills,
-            withCombat.awakening, withCombat.main_skill_id, buffs,
-          ),
-          previewEffectiveStats(
-            withRange.base_stats, withRange.stat_sources, withRange.equipment, withRange.common_skills,
-            withRange.awakening, withRange.main_skill_id, buffs,
-          ),
-        ]);
+        const potential = await previewPotentialEffects(statSources, commonSkills);
         if (isCurrent()) {
-          ultimateEffects = {
-            critical_damage_rate: a.common_skill.ultimate.critical_damage_rate,
-            actual_delay_reduction: a.common_skill.ultimate.actual_delay_reduction,
-            added_hit_count: a.common_skill.ultimate.added_hit_count,
-            skill_range_bonus: b.common_skill.ultimate.skill_range_bonus,
-          };
-          // ソウルリンクの効いている量も同じ応答から取る(極限の枠しか差し替えていないので
-          // リンクステータスは payload のまま)。写経せず Rust 側の preview を正にする
-          soulLinkPreview = a.soul_link;
+          ultimateEffects = potential.ultimate;
+          // ソウルリンクの効いている量も同じ応答から取る。写経せず Rust 側の preview を正にする
+          soulLinkPreview = potential.soul_link;
         }
       } catch (e) {
         if (isCurrent()) reportError(errorMessage(e));
@@ -1615,7 +1604,7 @@
 
   {#snippet buffChip(def: BuffDefinition)}
                 {@const state = buffState(def)}
-                {@const blocked = state === "off" && isBlocked(app.calcBuffs.choices, app.catalog, def)}
+                {@const blocked = state === "off" && calcBlockedBuffs.some((b) => b.buff_id === def.id)}
                 {@const detail = state !== "off" && hasDetail(def)}
                 <!-- 「設定」を独立した的にするため、チップ本体はネイティブ button ではなく
                      role="button" の div にする(button の中に button は入れられない)。

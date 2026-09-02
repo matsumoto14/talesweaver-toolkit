@@ -88,6 +88,9 @@ pub const ENHANCE_LEVEL_MAX: u8 = 15;
 pub const WEAPON_ABILITY_SLOTS: usize = 3;
 /// +12 以上で追加固定ダメージがレンジ振り(MR)になる境界(wiki: +11 覚醒までは確定値)。
 pub const ENHANCE_LEVEL_RANDOM_RANGE_MIN: u8 = 12;
+/// 画面で選べる強化 Lv。0 = 強化なし。+10 未満は実用しないので出さず、+10〜+15 を並べる
+/// (+12 以上は等級 `EnhanceGrade` つき)
+pub const ENHANCE_LEVEL_CANDIDATES: [u8; 7] = [0, 10, 11, 12, 13, 14, 15];
 /// +12〜+15 の追加固定ダメージ等級。各等級は wiki の確率区分
 /// (10/30/70/95/100%)の上端を使う。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
