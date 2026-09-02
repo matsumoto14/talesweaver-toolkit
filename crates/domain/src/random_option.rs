@@ -83,6 +83,25 @@ impl RandomOptionEffect {
     pub fn is_applied(self) -> bool {
         !matches!(self, RandomOptionEffect::RecordOnly)
     }
+
+    /// 選択スキルの依存種別で発動するか。物理 / 魔法の命中時 OP だけが依存種別で排他になる
+    /// (`added_damage_rate_for` / `damage_amplify_for` と同じ規則)。条件を持たない OP と
+    /// スキル未選択のときは発動する扱いにして候補から落とさない。
+    pub fn triggers_for(self, dependency: Option<SkillDependency>) -> bool {
+        let Some(dependency) = dependency else {
+            return true;
+        };
+        match self {
+            RandomOptionEffect::PhysicalAddedDamageRate
+            | RandomOptionEffect::PhysicalDamageAmplify => {
+                dependency.attack_type() == AttackType::Physical
+            }
+            RandomOptionEffect::MagicAddedDamageRate | RandomOptionEffect::MagicDamageAmplify => {
+                dependency.attack_type() == AttackType::Magic
+            }
+            _ => true,
+        }
+    }
 }
 
 /// ランクごとの効果値レンジ(wiki 一覧表のセル `X=1〜2` 等)。
@@ -119,6 +138,46 @@ impl RandomOptionDef {
     pub fn tier(&self, rank: RandomOptionRank) -> Option<RandomOptionTier> {
         self.tiers.iter().copied().find(|t| t.rank == rank)
     }
+
+    /// 実測の上書きが無いときの効果値。オプション変化石で振り直せるのでレンジ上限を想定値にする
+    /// (決定記録「2026-08-25 装備強化のレンジ倍率」と同じ扱い)。
+    pub fn default_value(&self, rank: RandomOptionRank) -> f64 {
+        self.tier(rank).map_or(0.0, |t| t.max)
+    }
+
+    /// 付けたときの既定ランク(一覧のいちばん上位。手持ちがそれ未満なら下げてもらう)。
+    pub fn default_rank(&self) -> Option<RandomOptionRank> {
+        self.tiers.last().map(|t| t.rank)
+    }
+}
+
+/// この部位にまだ足せるランダムオプション(未選択 かつ 同じカテゴリーが空いているもの)。
+///
+/// wiki「ランダムオプション」転移の説明どおり、**同じカテゴリー番号は 1 部位に 1 つまで**
+/// (カテゴリー 0 は制約なし)。`Equipment::validate_against_catalog` と同じ規則で、
+/// 画面は返ってきた候補を並べるだけにする。
+pub fn addable_random_options<'a>(
+    part: &crate::equipment::EquipmentPart,
+    defs: &'a [RandomOptionDef],
+    slot: crate::equipment::PartSlot,
+) -> Vec<&'a RandomOptionDef> {
+    let taken_ids: Vec<&str> = part
+        .random_options
+        .iter()
+        .map(|o| o.option_id.as_str())
+        .collect();
+    let taken_categories: Vec<u8> = part
+        .random_options
+        .iter()
+        .filter_map(|o| defs.iter().find(|d| d.id == o.option_id.as_str()))
+        .map(|d| d.category)
+        .filter(|c| *c != 0)
+        .collect();
+    defs.iter()
+        .filter(|d| d.slot == slot)
+        .filter(|d| !taken_ids.contains(&d.id))
+        .filter(|d| !taken_categories.contains(&d.category))
+        .collect()
 }
 
 /// キャラが実際に付けている 1 枠。
@@ -134,10 +193,9 @@ pub struct RandomOptionSlot {
 }
 
 impl RandomOptionSlot {
-    /// この枠の効果値。上書きが無ければレンジ上限。
+    /// この枠の効果値。上書きが無ければ既定値(レンジ上限)。
     pub fn value(&self, def: &RandomOptionDef) -> f64 {
-        self.value
-            .unwrap_or_else(|| def.tier(self.rank).map_or(0.0, |t| t.max))
+        self.value.unwrap_or_else(|| def.default_value(self.rank))
     }
 }
 

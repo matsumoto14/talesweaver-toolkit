@@ -1,17 +1,26 @@
 <script lang="ts">
   // 「equipment」補正源のペイン。部位一覧 ⇄ 部位詳細のドリルダウン(§09 規則 2)。
   import type {
-    EnchantPlan, EnchantPlanRow, EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentCandidates,
-    EquipmentItem, EquipmentPart, PartSlot, Skill, StatPreview, WeaponClass, WeaponSystem,
+    EnchantPlan, EnchantPlanRow, EquipmentAbilityAdditionalKind, EquipmentAbilityCandidate,
+    EquipmentAbilityDef, EquipmentCandidates,
+    EquipmentItem, EquipmentPart, PartSlot, Skill, StatPreview, WeaponClass,
   } from "../../../api/types";
-  import { listEnchantPlans, listEquipmentCandidates, partWeaponSystem } from "../../../api/commands";
+  import {
+    applyCatalogItem as applyCatalogItemCommand,
+    listEnchantPlans, listEquipmentAbilityCandidates, listEquipmentCandidates,
+    setAbilityForCategory as setAbilityForCategoryCommand,
+    setEnhanceLevel as setEnhanceLevelCommand,
+    toggleAbility as toggleAbilityCommand,
+  } from "../../../api/commands";
   import { draftToPayload } from "../../../draft";
   import { latest } from "../../../ui/latest.svelte";
   import { damageCategoryLabel } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import {
-    applyCatalogItem, applyEnhanceLevel, equipmentIconId, neutralEquipmentPart, rangeSummary, valuesSummary, zeroValues,
+    cloneEquipmentPart, equipmentIconId, neutralEquipmentPart, rangeSummary, valuesSummary, zeroValues,
   } from "../../../equipment";
+  import { reportError } from "../../../toast.svelte";
+  import { errorMessage } from "../../../api/commands";
   import { fmtInt } from "../../../format";
   import {
     ABILITY_ALLOWED_SLOTS, ELEMENT_ALLOWED_SLOTS, ENHANCE_ALLOWED_SLOTS,
@@ -255,13 +264,21 @@
     return custom ? `${custom} [仮]` : "未装備";
   };
 
-  // カタログ品を当てる規則は equipment.ts の applyCatalogItem 1 本だけに置く。
-  // こことホーム(レリック段数ステッパー)で同じ規則を二重に書くと、片方だけ直す事故が起きる。
+  /** 部位に返ってきた結果を当てる。Rust から返る部位はそのまま保存できる形になっている。 */
+  async function applyPart(slot: PartSlot, next: Promise<EquipmentPart | null>) {
+    try {
+      const part = await next;
+      if (part) Object.assign(selectedPart(slot), part);
+    } catch (e) {
+      reportError(errorMessage(e));
+    }
+  }
+  // カタログ品を当てる規則(基本能力値・エンチャント・枠数の切り詰め)は Rust の
+  // EquipmentPart::apply_catalog_item 1 本だけ。レリックの段送りも同じ関数を通る。
   function pickCatalogItem(slot: PartSlot, item: EquipmentItem, keepPickerOpen = false) {
-    const part = selectedPart(slot);
-    Object.assign(part, applyCatalogItem(part, item));
     itemQuery = "";
     itemPickerOpen = keepPickerOpen;
+    void applyPart(slot, applyCatalogItemCommand(cloneEquipmentPart(selectedPart(slot)), item.id));
   }
   function pickRelic(slot: PartSlot, kind: string, level: string) {
     const item = app.equipmentCatalog.find((candidate) =>
@@ -353,197 +370,74 @@
     part.ability_values = (part.ability_values ?? []).filter((v) => v.ability_id !== abilityId);
     part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId);
   }
-  // 武器の系統(カタログ品の武器種 / カスタムの装備強化補正式)の解決も、系統ごとに
-  // 装着できるアビリティ系統の表も Rust(domain::WeaponSystem)が持つ。ここは
-  // 「返ってきた系統が、そのアビリティを受け付ける系統一覧に含まれるか」だけを見る。
-  let openPartWeaponSystem = $state<WeaponSystem | null>(null);
-  const weaponSystemLatest = latest();
+  // 武器の系統の解決・系統ごとの装着可否・候補の並び・等級での畳み方は、すべて Rust
+  // (domain::ability_candidates)が持つ。ここは返ってきた順に並べ、`default_shown` で
+  // 既定表示と「ほかの等級」に分けるだけ。
+  interface AbilityGroup { shown: EquipmentAbilityCandidate[]; folded: EquipmentAbilityCandidate[] }
+  const EMPTY_ABILITY_GROUP: AbilityGroup = { shown: [], folded: [] };
+  /** 武器の 3 枠(ゲーム内と同じ順)。 */
+  const WEAPON_ABILITY_ROWS = [
+    { category: 1, label: "基本補正", note: "従来アビリティ" },
+    { category: 4, label: "新装着", note: "追加効果2枠" },
+    { category: 3, label: "武器ディレイ", note: "任意・計算対象外" },
+  ];
+  let abilityGroups = $state<Record<string, AbilityGroup>>({});
+  const abilityCandidatesLatest = latest();
   $effect(() => {
     const slot = openPart;
     const part = slot === null ? null : selectedPartOrNull(slot);
-    if (slot === null || part === null) {
-      openPartWeaponSystem = null;
+    if (slot === null || part === null || !ABILITY_ALLOWED_SLOTS.includes(slot)) {
+      abilityGroups = {};
       return;
     }
-    // 系統を決めるのはこの 2 つだけ。ここだけを読んで、他の編集で問い合わせ直さない
+    // 候補を決めるのはこの 3 つだけ(武器系統 = item_id / enhance_type、選択中 = abilities)。
+    // ここだけを読んで、エンチャント等の編集で問い合わせ直さない
     const payload: EquipmentPart = {
-      ...neutralEquipmentPart(), item_id: part.item_id, enhance_type: part.enhance_type,
+      ...neutralEquipmentPart(),
+      item_id: part.item_id,
+      enhance_type: part.enhance_type,
+      abilities: [...part.abilities],
     };
-    weaponSystemLatest.run((isCurrent) =>
-      partWeaponSystem(payload)
-        .then((system) => { if (isCurrent()) openPartWeaponSystem = system; })
-        .catch(() => { if (isCurrent()) openPartWeaponSystem = null; }),
-    );
-    return () => weaponSystemLatest.cancel();
+    const keys: { key: string; category: number | null }[] = slot === "weapon"
+      ? WEAPON_ABILITY_ROWS.map((row) => ({ key: `weapon-${row.category}`, category: row.category }))
+      : [{ key: slot, category: null }];
+    abilityCandidatesLatest.run(async (isCurrent) => {
+      try {
+        const rows = await Promise.all(
+          keys.map((k) => listEquipmentAbilityCandidates(payload, slot, k.category)),
+        );
+        if (!isCurrent()) return;
+        abilityGroups = Object.fromEntries(keys.map((k, index) => [k.key, {
+          shown: rows[index].filter((a) => a.default_shown),
+          folded: rows[index].filter((a) => !a.default_shown),
+        }]));
+      } catch {
+        if (isCurrent()) abilityGroups = {};
+      }
+    });
+    return () => abilityCandidatesLatest.cancel();
   });
-  const abilityFitsWeapon = (ability: EquipmentAbilityDef, system: WeaponSystem | null): boolean =>
-    system === null || ability.weapon_systems.includes(system);
-  /** 収録候補を武器系統で絞る。カスタム武器で系統不明なら、選べなくしないため全系統を出す。 */
-  const abilityCandidates = (slot: PartSlot, category: number) => {
-    const system = openPartWeaponSystem;
-    const candidates = app.equipmentAbilities.filter((ability) => ability.slot === slot
-      && ability.category === category
-      && (slot !== "weapon" || abilityFitsWeapon(ability, system)));
-    const preferred = [
-      "storm-blade", "gale-blade", "soft-wind-blade", "breeze-blade", "silence-blade",
-    ];
-    const score = (ability: EquipmentAbilityDef) => Math.max(
-      ability.values.thrust, ability.values.slash, ability.values.magic_attack, ability.values.magic_defense,
-    );
-    return candidates.sort((a, b) => category === 3
-      ? preferred.indexOf(a.id) - preferred.indexOf(b.id)
-      : score(b) - score(a));
-  };
+  const abilityGroup = (key: string): AbilityGroup => abilityGroups[key] ?? EMPTY_ABILITY_GROUP;
   const abilityIdForCategory = (slot: PartSlot, category: number): string =>
     selectedPart(slot).abilities.find((id) => abilityDef(id)?.category === category) ?? "";
   function setAbilityForCategory(slot: PartSlot, category: number, id: string) {
-    const part = selectedPart(slot);
     if (abilityIdForCategory(slot, category) === id) return;
-    const previousIds = part.abilities.filter((current) => abilityDef(current)?.category === category);
-    part.abilities = part.abilities.filter((current) => abilityDef(current)?.category !== category);
-    part.ability_values = (part.ability_values ?? []).filter(
-      (value) => !previousIds.includes(value.ability_id),
-    );
-    part.ability_additions = (part.ability_additions ?? []).filter(
-      (addition) => !previousIds.includes(addition.ability_id),
-    );
-    const def = abilityDef(id);
-    if (def?.slot === slot && def.category === category
-      && (slot !== "weapon" || abilityFitsWeapon(def, openPartWeaponSystem))) {
-      part.abilities = [...part.abilities, id];
-    }
+    void applyPart(slot, setAbilityForCategoryCommand(
+      cloneEquipmentPart(selectedPart(slot)), slot, category, id === "" ? null : id,
+    ));
   }
-  const nonWeaponAbilityCandidates = (slot: PartSlot): EquipmentAbilityDef[] =>
+  /** この部位に収録されているアビリティ(「記録のみ」の注記を出すかの判定にだけ使う)。 */
+  const slotAbilities = (slot: PartSlot): EquipmentAbilityDef[] =>
     app.equipmentAbilities.filter((ability) => ability.slot === slot);
 
-  // --- 等級ラダー ------------------------------------------------------------
-  // カテゴリー4 には入手経路の違う 2 本のラダーがある。装備システム UI で SEED を
-  // 払う N- / R- / L- / E-(頭だけ G-)と、アイテム方式の 古代精霊 < 深淵 < 喪失 < 夜星。
-  // どちらも名称そのものが等級を表す。
-  //
-  // **アイテム方式がある部位のカテゴリー4 は、既定では 喪失 / 夜星 だけ出す**
-  // (古代精霊・深淵と N/R/L/E は実際には使われない。ユーザー決定 2026-09-01)。
-  // 消しはせず畳んだ先に置いて、選ぼうと思えば選べるままにする。
-  // アイテム方式が無いところ(頭の月石・盾+の神秘鉱・レリック・兜)は今までどおり
-  // 上位 2 段だけ出して残りを畳む(ux-guidelines 原則 2「削るのではなく構造化する」)。
-  //
-  // 旧アビリティの (上)/(中)/(下) も同じ扱い。武器カテゴリ1 では「下級斬り(+12)」と
-  // 並ぶのに (上) で +4 しかなく、選ばれることがないので既定からは外す。
-  const ABILITY_TIER_TOP_COUNT = 2;
-  /** アイテム方式で候補に残す下限の rank(= 喪失)。 */
-  const ABILITY_ITEM_LADDER_MIN_RANK = 2;
-  const ABILITY_TIERS: { prefix: string; scheme: string; rank: number }[] = [
-    { prefix: "N-", scheme: "letter", rank: 0 },
-    { prefix: "R-", scheme: "letter", rank: 1 },
-    { prefix: "L-", scheme: "letter", rank: 2 },
-    { prefix: "E-", scheme: "letter", rank: 3 },
-    { prefix: "G-", scheme: "letter", rank: 3 },
-    { prefix: "古代精霊の", scheme: "line", rank: 0 },
-    { prefix: "深淵の", scheme: "line", rank: 1 },
-    { prefix: "喪失の", scheme: "line", rank: 2 },
-    { prefix: "夜星の", scheme: "line", rank: 3 },
-    { prefix: "(下)", scheme: "paren", rank: 0 },
-    { prefix: "(中)", scheme: "paren", rank: 1 },
-    { prefix: "(上)", scheme: "paren", rank: 2 },
-  ];
-  const abilityTier = (name: string) => ABILITY_TIERS.find((tier) => name.startsWith(tier.prefix)) ?? null;
-  /** 等級を外した残り(「鎧研磨」「火の月石」)がラダーの identity。2 本のラダーは
-      同じ種類名を共有する(夜星の耐魔力 と E-耐魔力)ので、経路も鍵に入れて混ぜない。 */
-  const abilityLadderKey = (ability: EquipmentAbilityDef, tier: { prefix: string; scheme: string }): string =>
-    `${ability.slot}-${ability.category}-${tier.scheme}-${ability.name.slice(tier.prefix.length)}`;
-  /** アイテム方式があるかを見る単位(部位 × カテゴリー)。 */
-  const abilityLadderScope = (ability: EquipmentAbilityDef): string =>
-    `${ability.slot}-${ability.category}`;
-  /** 候補を「既定で見せる」と「畳む」に分ける。等級が付かない候補((上)系・神秘鉱など)は
-      ラダーを成さないので畳まない。選んであるものは畳んだ側にあっても必ず見せる —
-      隠れると、なぜその値になっているのかが分からなくなる。 */
-  function splitAbilityGrades(
-    candidates: EquipmentAbilityDef[],
-    selectedIds: string[],
-  ): { shown: EquipmentAbilityDef[]; folded: EquipmentAbilityDef[] } {
-    const ranks = new Map<string, number[]>();
-    for (const ability of candidates) {
-      const tier = abilityTier(ability.name);
-      if (tier === null) continue;
-      const key = abilityLadderKey(ability, tier);
-      ranks.set(key, [...(ranks.get(key) ?? []), tier.rank]);
-    }
-    /** そのラダーで「上位 N 段」に入る下限の rank。段数が少ないラダーは全部見せる。 */
-    const cutoff = new Map<string, number>();
-    for (const [key, list] of ranks) {
-      const sorted = [...new Set(list)].sort((x, y) => y - x);
-      cutoff.set(key, sorted[Math.min(ABILITY_TIER_TOP_COUNT, sorted.length) - 1]);
-    }
-    // アイテム方式(古代精霊 < 深淵 < 喪失 < 夜星)がある「部位 × カテゴリー」。
-    // ここでは 喪失 / 夜星 だけが既定表示で、同じ枠の N/R/L/E も下位系列もまとめて畳む。
-    const itemLadderScopes = new Set(
-      candidates
-        .filter((ability) => abilityTier(ability.name)?.scheme === "line")
-        .map(abilityLadderScope),
-    );
-    // 等級の付かない候補(武器カテゴリ1 の「下級斬り」など)がある枠。そこに並ぶ
-    // (上)/(中)/(下) はそれより弱い旧段なので畳む(ユーザー決定 2026-09-01)。
-    const plainScopes = new Set(
-      candidates
-        .filter((ability) => abilityTier(ability.name) === null)
-        .map(abilityLadderScope),
-    );
-    /** その候補を既定で見せるか。ラダーの種類ごとに基準が違う。 */
-    const showsByDefault = (ability: EquipmentAbilityDef): boolean => {
-      const scope = abilityLadderScope(ability);
-      const tier = abilityTier(ability.name);
-      if (itemLadderScopes.has(scope)) {
-        return tier?.scheme === "line" && tier.rank >= ABILITY_ITEM_LADDER_MIN_RANK;
-      }
-      // 等級が付かない候補(「下級斬り」「神秘鉱の…」)はラダーを成さないので常に出す
-      if (tier === null) return true;
-      // (上)系しか無い枠(鎧カテゴリ2)は畳むと既定が空になるので、そのまま出す
-      if (tier.scheme === "paren" && plainScopes.has(scope)) return false;
-      return tier.rank >= (cutoff.get(abilityLadderKey(ability, tier)) ?? 0);
-    };
-    const shown: EquipmentAbilityDef[] = [];
-    const folded: EquipmentAbilityDef[] = [];
-    for (const ability of candidates) {
-      if (selectedIds.includes(ability.id) || showsByDefault(ability)) shown.push(ability);
-      else folded.push(ability);
-    }
-    return { shown, folded };
-  }
   /** 下位等級を開いている候補リスト。部位(武器はカテゴリ行)ごとに覚える。 */
   let openLowerGrades = $state<Record<string, boolean>>({});
+  /** 付け外し(同系統の置換・枠が埋まっているときの入れ替え・本体値の既定)は Rust の
+      EquipmentPart::toggle_ability が持つ。ここは結果を当てるだけ。 */
   function toggleNonWeaponAbility(slot: PartSlot, ability: EquipmentAbilityDef) {
-    const part = selectedPart(slot);
-    if (part.abilities.includes(ability.id)) {
-      part.abilities = part.abilities.filter((id) => id !== ability.id);
-      part.ability_values = (part.ability_values ?? []).filter((a) => a.ability_id !== ability.id);
-      part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== ability.id);
-      return;
-    }
-    const replacedIds = part.abilities.filter((id) => abilityDef(id)?.exclusive_group === ability.exclusive_group);
-    if (replacedIds.length > 0) {
-      part.abilities = part.abilities.filter((id) => !replacedIds.includes(id));
-      part.ability_values = (part.ability_values ?? []).filter((value) => !replacedIds.includes(value.ability_id));
-      part.ability_additions = (part.ability_additions ?? []).filter((addition) => !replacedIds.includes(addition.ability_id));
-    }
-    const max = currentAbilitySlotCount(slot);
-    if (part.abilities.length >= max) {
-      if (max === 1) {
-        part.abilities = [];
-        part.ability_values = [];
-        part.ability_additions = [];
-      }
-      else return;
-    }
-    part.abilities = [...part.abilities, ability.id];
-    // 孤児の本体値が残っていれば作り直さない(作ると本体値が重複して保存できなくなる)
-    const hasValue = (part.ability_values ?? []).some((v) => v.ability_id === ability.id);
-    if (ability.value_option && !hasValue) {
-      part.ability_values = [...(part.ability_values ?? []), {
-        ability_id: ability.id,
-        kind: ability.value_option.kind,
-        value: ability.value_option.max,
-      }];
-    }
+    void applyPart(slot, toggleAbilityCommand(
+      cloneEquipmentPart(selectedPart(slot)), slot, ability.id,
+    ));
   }
   const additionalKindLabel = (kind: EquipmentAbilityAdditionalKind): string => ({
     fixed_damage: "ダメージ増加", damage_rate: "ダメージ増加率",
@@ -573,10 +467,11 @@
     const current = additionalAt(slot, abilityId, index);
     if (current) current.value = value;
   }
+  /** まだ付いていない追加候補。どの部位でどの種類が出るかは Rust(カタログ)が絞って返す。 */
   const addableAdditionalOptions = (slot: PartSlot, abilityId: string) => {
     const used = new Set(additionsFor(slot, abilityId).map((addition) => addition.kind));
     return (abilityDef(abilityId)?.additional_options ?? []).filter(
-      (option) => (slot !== "weapon" || (option.kind !== "hp_recovery" && option.kind !== "mp_recovery")) && !used.has(option.kind),
+      (option) => !used.has(option.kind),
     );
   };
   function addAdditional(slot: PartSlot, abilityId: string, kind: EquipmentAbilityAdditionalKind) {
@@ -585,7 +480,7 @@
     const max = abilityDef(abilityId)?.additional_slots ?? 0;
     if (current.length >= max || current.some((addition) => addition.kind === kind)) return;
     const option = abilityDef(abilityId)?.additional_options.find((candidate) => candidate.kind === kind);
-    if (!option || (slot === "weapon" && (option.kind === "hp_recovery" || option.kind === "mp_recovery"))) return;
+    if (!option) return;
     current.push({ ability_id: abilityId, kind: option.kind, value: option.max });
     part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId).concat(current.slice(0, max));
   }
@@ -705,11 +600,9 @@
     { value: "middle", label: "中" }, { value: "high", label: "上" },
     { value: "highest", label: "最上" },
   ];
+  // 強化 Lv と等級の不変条件(+12 以上は等級必須)は Rust の EquipmentPart::set_enhance_level。
   function setEnhanceLevel(slot: PartSlot, level: number) {
-    const part = selectedPart(slot);
-    const next = applyEnhanceLevel(part, level);
-    part.enhance_level = next.enhance_level;
-    part.enhance_grade = next.enhance_grade;
+    void applyPart(slot, setEnhanceLevelCommand(cloneEquipmentPart(selectedPart(slot)), level));
   }
 </script>
 
@@ -1078,18 +971,11 @@
         <p class="hint dim">ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。</p>
 
         <div class="ability-fixed-list">
-          {#each [
-            { category: 1, label: "基本補正", note: "従来アビリティ" },
-            { category: 4, label: "新装着", note: "追加効果2枠" },
-            { category: 3, label: "武器ディレイ", note: "任意・計算対象外" },
-          ] as row (row.category)}
+          {#each WEAPON_ABILITY_ROWS as row (row.category)}
             {@const selectedAbilityId = abilityIdForCategory(slot, row.category)}
             {@const selectedAbility = abilityDef(selectedAbilityId)}
-            {@const grades = splitAbilityGrades(
-              abilityCandidates(slot, row.category),
-              selectedAbilityId === "" ? [] : [selectedAbilityId],
-            )}
             {@const gradeKey = `weapon-${row.category}`}
+            {@const grades = abilityGroup(gradeKey)}
             <div
               class="ability-fixed-row"
               data-ability-id={selectedAbilityId}
@@ -1169,7 +1055,7 @@
           <p class="hint dim">
             {currentAbilitySlotCount(slot)}枠まで装着できます。範囲値とランダム追加は選択後に実測値を合わせます。
           </p>
-          {@const grades = splitAbilityGrades(nonWeaponAbilityCandidates(slot), part.abilities)}
+          {@const grades = abilityGroup(slot)}
           {@const full = part.abilities.length >= currentAbilitySlotCount(slot)}
           <div class="ability-choice-list non-weapon-ability-list" aria-label="{PART_SLOT_LABELS[slot]}アビリティの候補">
             {#each grades.shown as ability (ability.id)}
@@ -1247,7 +1133,7 @@
               </div>
             {/if}
           {/each}
-          {#if nonWeaponAbilityCandidates(slot).some((ability) => ability.record_only)}
+          {#if slotAbilities(slot).some((ability) => ability.record_only)}
             <span class="additional-note dim">破線の候補は効果を保存しますが、現在の計算項目にない値は合計へ加えません。防御率・回避率の追加効果も同じく記録だけです。</span>
           {/if}
         {/if}

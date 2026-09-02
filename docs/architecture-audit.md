@@ -15,17 +15,10 @@ docs/architecture.md の「UI は表示と入力のみ。計算・判定は必�
 
 ### A2. Rust に同じ計算があり、TS が写経しているもの(二重化)
 
-Rust から値・上限・候補を返す形にして TS 側を消す。
-
-| # | TS | Rust | 備考 |
-|---|---|---|---|
-| 12 | `equipment.ts:273-291`、`RandomOptionPane.svelte:105-119` | `random_option.rs:244-266`、`equipment.rs:1313` | ランダム OP の物理/魔法発動条件、同カテゴリ 1 部位 1 つ |
-| 13 | `equipment.ts:140-225`、`HomePage.svelte:633-661` | `stat_sources.rs:255-265`、`siena.rs:476-487`、`random_option.rs:137` | 神鳥の聖物 段階↔値、シエナ段階→枠数、OP 既定値。コメントで「ミラー」と自認 |
-| 14 | `equipment.ts:54-84` | `commands/lib.rs:1205`、`candidate.rs:134` | カタログ品適用(base=max、enchant clamp、枠切り詰め)、強化 Lv ≥ 12 で等級「最上」。ability / random_option 枠の切り詰めは TS にしかない |
-| 16 | `EquipmentPane.svelte:597-730` | `equipment.rs:1131` | アビリティ枠の置換・枠超過・武器の hp/mp 回復除外(Rust 側なし) |
-| 17 | `EquipmentPane.svelte:466-482, 518-590` | なし | `preferred = ["storm-blade", …]` の id 直書き、`ABILITY_TIERS` を名前の接頭辞(N-/R-/L-/E-/G-、古代精霊 < 深淵 < 喪失 < 夜星)から解析。等級は gamedata の属性にする |
-| 18 | `labels.ts:8, 41-44, 64, 85-89, 118-120, 129, 140, 154, 163-170`、`enchant.ts:127` | `thesis_core.rs:22, 131`、`element.rs:38`、`equipment.rs:721`、`random_option.rs:34`、`StatKind::ALL` | enum の並び・分類(コア攻撃/補助種別、属性、アビリティ系統、OP ランク、依存種別、エンチャント 8 部位)のリテラル複製。`part_slot_rules` のように limits 経由のものと二重基準 |
-| 22 | `Workspace.svelte:477`、`equipment.ts:21-30`、`measurement.ts:350-366` | — | "ペット会心 ×1.1" 文字列、「†改・セイクリッド は通常版と同じ画像」の名前規則(gamedata の icon id 属性に)、逆算可否。対人の `1 + rate × level` は B3 で解消済み |
+7 件すべて済み(2026-09-02)。ランダム OP の候補列挙 / 神鳥の聖物と シエナの段階表 / カタログ品の適用と
+強化 Lv の等級 / アビリティ枠の置換・枠超過 / アビリティの並びと等級 / enum の並びと分類 /
+装備画像の id と実測の逆算可否は domain・gamedata に置き、コマンドか `StatLimits` で配る。
+TS に残るのは表示ラベルと、返ってきた集合での絞り込みだけ。
 
 確認して問題なし: `state.svelte.ts`、`api/transfer.ts`、`api/browserStore.ts`、`candidates.ts`、`format.ts`、`limits.svelte.ts`、`TracePanel.svelte`、`MeasurePage.svelte`、`ui/critChance.ts`、ActualDelay / CriticalRate / SoulLink の各ペイン。
 
@@ -55,7 +48,7 @@ Rust から値・上限・候補を返す形にして TS 側を消す。
 
 1. B1(補正パイプライン一本化 → `build_stat_modifiers`)と B2(`DamageInput` → `DamageMaterial` + `DamageTarget`)は済み。フロント写経を Rust に移す受け皿になる。
 2. **A1**(Rust に無い規則)を domain / gamedata に新設し、コマンドで配る。到達 4 段・装備可否・エンチャントプランは `ContentEvaluation` と装備検証の拡張で収まる。
-3. **A2**(写経)は Rust から値・上限・候補を返して TS を削除。A2-11 のバフ既定値の食い違いはここで解消。
+3. **A2**(写経)も済み。Rust から値・上限・候補を返して TS を削除した。
 4. **B8**(`StatLimits` 分割)は独立して進められる。B3(的中剣のデータ化)と B4(`PerStat`)は済み。
 5. 残り(B5〜B7、B9〜B20)は触った箇所から順に。
 6. **B21**(伸びしろの材料を源ごとに列挙する API)。対人タブの「次にできること」([versus-next-actions.md](versus-next-actions.md))の受け皿で、A1-2 / A1-16(アビリティ枠の規則)を Rust に移した結果を使う。

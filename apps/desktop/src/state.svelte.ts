@@ -72,7 +72,9 @@ export const app = $state({
   randomOptions: [] as RandomOptionDef[],
   /** シエナのオーラで選べる能力値・追加オプション(wiki: 装備システム/シエナのオーラ) */
   // extra_unlock_stages は固定 3 要素のタプル型。loadAll() 完了までは選択不可なので値そのものに意味は無い
-  siena: { values: [], extras: [], extra_unlock_stages: [0, 0, 0], stage_max: 0 } as SienaCatalog,
+  siena: {
+    values: [], extras: [], extra_unlock_stages: [0, 0, 0], extra_capacity_by_stage: [], stage_max: 0,
+  } as SienaCatalog,
   /** 称号のカタログ(主要称号のみ) */
   titles: [] as TitleDef[],
   /** 中ディレイ減少スキル(wiki: ステータス「中ディレイ倍率B」)。キャラ固有のパッシブのみ */

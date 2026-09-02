@@ -72,6 +72,9 @@ pub enum EquipmentSurvivalEffect {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EquipmentItem {
     pub id: &'static str,
+    /// 装備画像に使う id。**†改・セイクリッドはゲーム内で通常版と同じ画像**なので、
+    /// 対応する通常版の id を指す(対応行が無ければ自分の id)。画面は名前の規則を持たない
+    pub icon_id: &'static str,
     pub slot: PartSlot,
     pub name: &'static str,
     /// 基本能力値のレンジ下限(wiki: Item ページの MR レンジ)
@@ -210,6 +213,7 @@ impl WikiEquipmentItem {
         };
         EquipmentItem {
             id: self.id,
+            icon_id: self.id,
             slot: self.slot,
             name: self.name,
             values_min: self.values_min,
@@ -276,8 +280,9 @@ pub(super) const SURVIVAL_DEFENSE_RATE_30: &[EquipmentSurvivalEffect] =
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("EquipmentItem", 21)?;
+        let mut s = serializer.serialize_struct("EquipmentItem", 22)?;
         s.serialize_field("id", self.id)?;
+        s.serialize_field("icon_id", self.icon_id)?;
         s.serialize_field("slot", &self.slot)?;
         s.serialize_field("name", self.name)?;
         s.serialize_field("values_min", &self.values_min)?;
@@ -1723,7 +1728,26 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
         .map(WikiEquipmentItem::into_item)
         .collect();
     items.extend(relic_items());
+    assign_icon_ids(&mut items);
     items
+}
+
+/// †改・セイクリッド系はゲーム内で通常版(†セイクリッド…)と同じ画像を使う。
+/// 対応する通常版が収録されていれば、その id を画像用の id にする。
+fn assign_icon_ids(items: &mut [EquipmentItem]) {
+    let normal_ids: Vec<(&'static str, &'static str)> =
+        items.iter().map(|item| (item.name, item.id)).collect();
+    for item in items.iter_mut() {
+        let Some(rest) = item.name.strip_prefix("†改・") else {
+            continue;
+        };
+        if let Some((_, id)) = normal_ids
+            .iter()
+            .find(|(name, _)| name.strip_prefix('†') == Some(rest))
+        {
+            item.icon_id = id;
+        }
+    }
 }
 
 /// レリックは段(`RelicInfo`)を属性で持つ。段の上げ下げ(`domain::relic_step`)は

@@ -234,21 +234,115 @@ pub struct EquipmentAbilityView {
     pub weapon_systems: Vec<domain::WeaponSystem>,
 }
 
+/// その部位で選べない追加候補(武器の HP/MP 自然回復力)を落とす。規則は
+/// `EquipmentAbilityAdditionalKind::allowed_on` が唯一の正で、画面は返った候補を並べるだけ。
+fn ability_view(mut def: EquipmentAbilityDef) -> EquipmentAbilityView {
+    let slot = def.slot;
+    def.additional_options
+        .retain(|option| option.kind.allowed_on(slot));
+    EquipmentAbilityView {
+        weapon_systems: if slot == domain::PartSlot::Weapon {
+            domain::WeaponSystem::ALL
+                .into_iter()
+                .filter(|system| system.accepts_ability(def.family))
+                .collect()
+        } else {
+            Vec::new()
+        },
+        def,
+    }
+}
+
 pub fn list_equipment_abilities() -> Vec<EquipmentAbilityView> {
     gamedata::equipment_abilities()
         .into_iter()
-        .map(|def| EquipmentAbilityView {
-            weapon_systems: if def.slot == domain::PartSlot::Weapon {
-                domain::WeaponSystem::ALL
-                    .into_iter()
-                    .filter(|system| system.accepts_ability(def.family))
-                    .collect()
-            } else {
-                Vec::new()
-            },
-            def,
-        })
+        .map(ability_view)
         .collect()
+}
+
+/// 装着アビリティの候補 1 件。`default_shown` が false のものは「ほかの等級」として畳む。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EquipmentAbilityCandidate {
+    #[serde(flatten)]
+    pub ability: EquipmentAbilityView,
+    pub default_shown: bool,
+}
+
+/// この部位(武器はカテゴリー枠)に装着できるアビリティを、画面に出す順で返す。
+/// 並び・等級での畳み方・武器系統の適合はすべて domain(`ability_candidates`)が決める。
+pub fn list_equipment_ability_candidates(
+    part: EquipmentPart,
+    slot: domain::PartSlot,
+    category: Option<u8>,
+) -> Vec<EquipmentAbilityCandidate> {
+    let weapon_system = part.weapon_system(&gamedata::equipment_catalog());
+    domain::ability_candidates(
+        &gamedata::equipment_abilities(),
+        slot,
+        category,
+        weapon_system,
+        &part.abilities,
+    )
+    .into_iter()
+    .map(|candidate| EquipmentAbilityCandidate {
+        ability: ability_view(candidate.def),
+        default_shown: candidate.default_shown,
+    })
+    .collect()
+}
+
+/// カタログ品をこの部位に当てた結果を返す(未知の id は `None`)。規則は domain の
+/// `EquipmentPart::apply_catalog_item` 1 本だけ。
+pub fn apply_catalog_item(part: EquipmentPart, item_id: String) -> Option<EquipmentPart> {
+    let catalog = gamedata::equipment_catalog();
+    let entry = catalog.iter().find(|i| i.id == item_id)?;
+    let mut next = part;
+    next.apply_catalog_item(entry);
+    Some(next)
+}
+
+/// 装備強化 Lv を等級ごと書き換えた部位を返す(+12 以上は等級必須)。
+pub fn set_enhance_level(part: EquipmentPart, level: u8) -> EquipmentPart {
+    let mut next = part;
+    next.set_enhance_level(level);
+    next
+}
+
+/// 武器の 1 カテゴリー枠のアビリティを入れ替えた部位を返す(`None` = 装着しない)。
+pub fn set_ability_for_category(
+    part: EquipmentPart,
+    slot: domain::PartSlot,
+    category: u8,
+    ability_id: Option<String>,
+) -> EquipmentPart {
+    let weapon_system = part.weapon_system(&gamedata::equipment_catalog());
+    let mut next = part;
+    next.set_ability_for_category(
+        &gamedata::equipment_abilities(),
+        slot,
+        category,
+        ability_id.as_deref(),
+        weapon_system,
+    );
+    next
+}
+
+/// 武器以外の部位でアビリティを付け外しした結果を返す。枠数はカタログ品が正、
+/// カタログ外は部位の既定枠数。
+pub fn toggle_ability(
+    part: EquipmentPart,
+    slot: domain::PartSlot,
+    ability_id: String,
+) -> EquipmentPart {
+    let catalog = gamedata::equipment_catalog();
+    let ability_slots = part
+        .item_id
+        .as_deref()
+        .and_then(|id| catalog.iter().find(|i| i.id == id))
+        .map_or_else(|| slot.ability_slots(), |item| item.ability_slots);
+    let mut next = part;
+    next.toggle_ability(&gamedata::equipment_abilities(), &ability_id, ability_slots);
+    next
 }
 
 /// 装備候補 1 件(カタログ品 + このキャラ・主軸スキルから見た適合度)。
@@ -382,9 +476,103 @@ pub fn relic_step(
     domain::relic_step(&part, &gamedata::equipment_catalog(), direction)
 }
 
+/// ランダムオプション 1 件と、実測の上書きが無いときの既定(ランク・効果値)。
+/// 「どのランクが既定か」「上書きが無いときいくつか」の規則は domain が持つ。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RandomOptionView {
+    #[serde(flatten)]
+    pub def: RandomOptionDef,
+    /// 付けたときの既定ランク(一覧のいちばん上位)
+    pub default_rank: Option<domain::RandomOptionRank>,
+    /// ランクごとの既定の効果値
+    pub default_values: Vec<RandomOptionDefaultValue>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RandomOptionDefaultValue {
+    pub rank: domain::RandomOptionRank,
+    pub value: f64,
+}
+
+fn random_option_view(def: RandomOptionDef) -> RandomOptionView {
+    RandomOptionView {
+        default_rank: def.default_rank(),
+        default_values: def
+            .tiers
+            .iter()
+            .map(|tier| RandomOptionDefaultValue {
+                rank: tier.rank,
+                value: def.default_value(tier.rank),
+            })
+            .collect(),
+        def,
+    }
+}
+
 /// ランダムオプションのカタログ(wiki: ランダムオプション)。
-pub fn list_random_options() -> Vec<RandomOptionDef> {
+pub fn list_random_options() -> Vec<RandomOptionView> {
     gamedata::random_option_catalog()
+        .into_iter()
+        .map(random_option_view)
+        .collect()
+}
+
+/// この部位にまだ足せるランダムオプション 1 件。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RandomOptionCandidate {
+    #[serde(flatten)]
+    pub option: RandomOptionView,
+    /// チップで先に出す候補(よく付けるもので、主軸スキルの依存種別で発動するもの)
+    pub common_choice: bool,
+}
+
+/// この部位に足せるランダムオプションを、画面に出す順で返す。
+///
+/// 同じカテゴリーは 1 部位に 1 つまで(`addable_random_options`)、主軸スキルの依存種別で
+/// 発動するか(`RandomOptionEffect::triggers_for`)はどちらも domain の規則。
+/// 並びは「よく付けるもののうち主軸の依存に合うもの → 残りのよく付けるもの →
+/// そのほか(カタログ順)」(ユーザー確認 2026-08-26)。
+pub fn list_random_option_candidates(
+    part: EquipmentPart,
+    slot: domain::PartSlot,
+    main_skill_id: Option<String>,
+) -> Vec<RandomOptionCandidate> {
+    let defs = gamedata::random_option_catalog();
+    let dependency = main_skill_id
+        .as_deref()
+        .and_then(gamedata::find_skill)
+        .map(|skill| skill.dependency);
+    let addable = domain::addable_random_options(&part, &defs, slot);
+    let triggers = |def: &RandomOptionDef| def.effect.triggers_for(dependency);
+    let order = |def: &RandomOptionDef| match def.effect {
+        domain::RandomOptionEffect::DependencyDamageRate(d) if Some(d) == dependency => 0,
+        domain::RandomOptionEffect::DependencyDamageRate(_) => 1,
+        _ => 2,
+    };
+    let mut common: Vec<&RandomOptionDef> = addable
+        .iter()
+        .copied()
+        .filter(|def| def.common && triggers(def))
+        .collect();
+    common.sort_by_key(|def| order(def));
+    let others = addable
+        .iter()
+        .copied()
+        .filter(|def| !def.common || !triggers(def));
+    common
+        .into_iter()
+        .map(|def| (def, true))
+        .chain(others.map(|def| (def, false)))
+        .map(|(def, common_choice)| RandomOptionCandidate {
+            option: random_option_view(def.clone()),
+            common_choice,
+        })
+        .collect()
+}
+
+/// 実測から敵の防御力とカット率を分けて逆算できるか(要る点の数は domain)。
+pub fn can_separate_measurement(attacks: Vec<Option<i64>>) -> bool {
+    domain::can_separate_defense_and_cut_rate(&attacks)
 }
 
 /// マスタリーのカタログ(wiki: 各キャラの Skill ページ、スキル表の `P (M1)`〜`(M4)`)。
@@ -1416,10 +1604,7 @@ fn weapon_update_changes(
                 .parts
                 .get_mut(domain::PartSlot::Weapon)
                 .selected_mut()?;
-            part.item_id = Some(upgrade.id.to_string());
-            part.custom_name = None;
-            part.base = upgrade.values_max;
-            part.enchant = part.enchant.clamp_to(upgrade.enchant_caps);
+            part.apply_catalog_item(upgrade);
             Some(domain::CandidateChange {
                 id: format!("weapon-upgrade-{}", upgrade.id),
                 label: format!("武器を{}に更新", upgrade.name),

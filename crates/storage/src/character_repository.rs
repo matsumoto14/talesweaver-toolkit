@@ -1812,6 +1812,9 @@ mod tests {
                 additional_effects: "",
                 additional_options: vec![],
                 record_only: false,
+                grade: None,
+                ladder: String::new(),
+                priority: 0,
                 effect_summary: "突き +2",
                 values: domain::EquipmentValues {
                     thrust: 2,
@@ -1831,6 +1834,9 @@ mod tests {
                 additional_effects: "",
                 additional_options: vec![],
                 record_only: false,
+                grade: None,
+                ladder: String::new(),
+                priority: 0,
                 effect_summary: "突き +9",
                 values: domain::EquipmentValues {
                     thrust: 9,
@@ -1850,6 +1856,9 @@ mod tests {
                 additional_effects: "",
                 additional_options: vec![],
                 record_only: false,
+                grade: None,
+                ladder: String::new(),
+                priority: 0,
                 effect_summary: "突き +20",
                 values: domain::EquipmentValues {
                     thrust: 20,
@@ -2061,6 +2070,7 @@ mod tests {
     fn test_equipment_item() -> EquipmentItem {
         EquipmentItem {
             id: "test-weapon",
+            icon_id: "test-weapon",
             slot: domain::PartSlot::Weapon,
             name: "テスト武器",
             values_min: domain::EquipmentValues::default(),
@@ -2108,6 +2118,9 @@ mod tests {
             additional_effects: "",
             additional_options: vec![],
             record_only: false,
+            grade: None,
+            ladder: String::new(),
+            priority: 0,
             effect_summary: "突き +2",
             values: domain::EquipmentValues::default(),
             damage_effects: &[],

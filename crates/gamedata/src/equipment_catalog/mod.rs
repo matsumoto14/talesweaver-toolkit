@@ -5,6 +5,7 @@
 //! docs/claude/goals/2026-08-24-equipment-parts.md「インファーナルより上位の全装備カタログ」節参照。
 
 use domain::{
+    AbilityGrade, AbilityGradeScheme,
     BaseStats, DamageCategory, EnhanceGrade, EnhanceRates, Equipment,
     EquipmentAbilityAdditionalDef, EquipmentAbilityAdditionalKind, EquipmentAbilityDef,
     EquipmentAbilityFamily, EquipmentEnhanceType, EquipmentValues, PartSlot, SkillDependency,

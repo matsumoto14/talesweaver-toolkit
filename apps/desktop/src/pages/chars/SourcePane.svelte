@@ -290,10 +290,8 @@
           stepper
           presets={[{ value: 200, label: "200" }]}
           bind:value={
-            () => sacredRelicValue(draft.statSources.sacred_relic[k], limits.sacred_relic_value_per_stage),
-            (v) => (draft.statSources.sacred_relic[k] = sacredRelicStageFromValue(
-              v, limits.sacred_relic_stage_max, limits.sacred_relic_value_per_stage,
-            ))
+            () => sacredRelicValue(draft.statSources.sacred_relic[k]),
+            (v) => (draft.statSources.sacred_relic[k] = sacredRelicStageFromValue(v))
           }
         />
       {/snippet}
@@ -302,7 +300,7 @@
   {:else if sourceId === "siena"}
     <SienaPane {draft} {preview} />
   {:else if sourceId === "randomOption"}
-    <RandomOptionPane {draft} {preview} {skills} {onOpenSource} />
+    <RandomOptionPane {draft} {preview} {onOpenSource} />
   {:else if sourceId === "title"}
     <TitlePane {draft} {skills} />
   {:else if sourceId === "commonSkill"}

@@ -277,6 +277,19 @@ impl PartSlot {
         matches!(self, PartSlot::Weapon | PartSlot::Armor)
     }
 
+    /// この部位がエンチャント欄を持つか(wiki: 装備システム/エンチャント。体・効果・AF・
+    /// レリックは対象外の 8 部位)。案内(`allows_enchant_plan`)より広く、盾＋を含む。
+    pub fn allows_enchant(self) -> bool {
+        !matches!(
+            self,
+            PartSlot::Body
+                | PartSlot::Effect
+                | PartSlot::Artifact
+                | PartSlot::RelicPendant
+                | PartSlot::RelicBracelet
+        )
+    }
+
     /// この部位が通常のエンチャント枠(装備システム/エンチャント)を持つか。
     /// 成長装備の盾＋とレリックは補正値を育てる別の入力モデルで、エンチャントを持たない。
     pub fn allows_enchant_plan(self) -> bool {
@@ -400,6 +413,8 @@ pub struct PartSlotRule {
     pub allows_ability: bool,
     /// この部位が装備強化(+1〜+15)を持てるか
     pub allows_enhance: bool,
+    /// この部位がエンチャント欄を持つか
+    pub allows_enchant: bool,
     /// この部位がシエナのオーラを発現できるか
     pub allows_siena: bool,
     /// シエナのオーラの能力値がこの部位では「装備補正」として付くか
@@ -554,6 +569,146 @@ impl EquipmentPart {
             }
         }
         self.enhance_type.and_then(WeaponSystem::from_enhance_type)
+    }
+
+    /// カタログ品をこの部位に当てる(基本能力値はレンジ上限、エンチャントは新しい枠まで、
+    /// アビリティ・ランダムオプションは新しい枠数まで切り詰め)。カタログを選んだとき・
+    /// レリックの段を動かしたとき・武器を上位品に置き換えたときで同じ規則を使う。
+    pub fn apply_catalog_item<C: EquipmentCatalogEntry>(&mut self, entry: &C) {
+        self.item_id = Some(entry.id().to_string());
+        self.custom_name = None;
+        self.base = entry.values_max();
+        self.enchant = self.enchant.clamp_to(entry.enchant_caps());
+        // カタログ品はカタログの enchant_caps が正(`resolve_enchant_caps`)。カスタム時代の
+        // 実測上限を残すとカスタムへ戻したときに古い値が復活する。
+        self.enchant_caps = None;
+        self.enhance_type = entry.enhance_type();
+        self.abilities.truncate(entry.ability_slots());
+        self.ability_values
+            .retain(|value| self.abilities.contains(&value.ability_id));
+        self.ability_additions
+            .retain(|addition| self.abilities.contains(&addition.ability_id));
+        self.random_options
+            .truncate(entry.random_option_slots().unwrap_or(0));
+    }
+
+    /// 装備強化 Lv を、等級の不変条件(`validate`)を保ったまま書き換える。
+    /// +12 以上は等級必須(未設定なら上端の「最上」)、+11 以下は等級を持てない。
+    pub fn set_enhance_level(&mut self, level: u8) {
+        self.enhance_level = level;
+        self.enhance_grade = if level >= ENHANCE_LEVEL_RANDOM_RANGE_MIN {
+            Some(self.enhance_grade.unwrap_or(EnhanceGrade::Highest))
+        } else {
+            None
+        };
+    }
+
+    /// アビリティに紐づく本体値・追加値を落とす。
+    fn drop_ability_extras(&mut self, ability_ids: &[String]) {
+        self.ability_values
+            .retain(|value| !ability_ids.contains(&value.ability_id));
+        self.ability_additions
+            .retain(|addition| !ability_ids.contains(&addition.ability_id));
+    }
+
+    /// 本体に可変値があるアビリティの既定値(上端)を入れる。既にあれば作り直さない
+    /// (作ると本体値が重複して保存できなくなる)。
+    fn ensure_ability_value(&mut self, def: &EquipmentAbilityDef) {
+        let Some(option) = def.value_option.as_ref() else {
+            return;
+        };
+        if self.ability_values.iter().any(|v| v.ability_id == def.id) {
+            return;
+        }
+        self.ability_values.push(EquipmentAbilityAdditional {
+            ability_id: def.id.to_string(),
+            kind: option.kind,
+            value: option.max,
+        });
+    }
+
+    /// 武器の 1 カテゴリー枠にアビリティを入れ替える(`None` = 装着しない)。
+    /// 同じカテゴリーの前のアビリティは本体値・追加値ごと外す。
+    pub fn set_ability_for_category(
+        &mut self,
+        defs: &[EquipmentAbilityDef],
+        slot: PartSlot,
+        category: u8,
+        ability_id: Option<&str>,
+        weapon_system: Option<WeaponSystem>,
+    ) {
+        let def_of = |id: &str| defs.iter().find(|d| d.id == id);
+        let current: Option<String> = self
+            .abilities
+            .iter()
+            .find(|id| def_of(id).is_some_and(|d| d.category == category))
+            .cloned();
+        if current.as_deref() == ability_id {
+            return;
+        }
+        let previous: Vec<String> = self
+            .abilities
+            .iter()
+            .filter(|id| def_of(id).is_some_and(|d| d.category == category))
+            .cloned()
+            .collect();
+        self.abilities.retain(|id| !previous.contains(id));
+        self.drop_ability_extras(&previous);
+        let Some(def) = ability_id.and_then(def_of) else {
+            return;
+        };
+        if def.slot != slot || def.category != category {
+            return;
+        }
+        if slot == PartSlot::Weapon
+            && weapon_system.is_some_and(|system| !system.accepts_ability(def.family))
+        {
+            return;
+        }
+        self.abilities.push(def.id.to_string());
+        self.ensure_ability_value(def);
+    }
+
+    /// 武器以外の部位でアビリティを付け外しする。同じ系統(`exclusive_group`)を選んだら
+    /// 前のものを外し、枠が埋まっている 1 枠部位は入れ替える(2 枠以上は何もしない)。
+    pub fn toggle_ability(
+        &mut self,
+        defs: &[EquipmentAbilityDef],
+        ability_id: &str,
+        ability_slots: usize,
+    ) {
+        let Some(def) = defs.iter().find(|d| d.id == ability_id) else {
+            return;
+        };
+        if self.abilities.iter().any(|id| id == ability_id) {
+            let dropped = vec![ability_id.to_string()];
+            self.abilities.retain(|id| id != ability_id);
+            self.drop_ability_extras(&dropped);
+            return;
+        }
+        let replaced: Vec<String> = self
+            .abilities
+            .iter()
+            .filter(|id| {
+                defs.iter()
+                    .find(|d| d.id == id.as_str())
+                    .is_some_and(|d| d.exclusive_group == def.exclusive_group)
+            })
+            .cloned()
+            .collect();
+        if !replaced.is_empty() {
+            self.abilities.retain(|id| !replaced.contains(id));
+            self.drop_ability_extras(&replaced);
+        }
+        if self.abilities.len() >= ability_slots {
+            if ability_slots != 1 {
+                return;
+            }
+            let dropped = std::mem::take(&mut self.abilities);
+            self.drop_ability_extras(&dropped);
+        }
+        self.abilities.push(def.id.to_string());
+        self.ensure_ability_value(def);
     }
 
     /// ランダムオプションの部位制約と値域。カタログ整合性(未知 id・カテゴリー重複)は
@@ -780,6 +935,19 @@ pub enum EquipmentAbilityAdditionalKind {
     DarkElement,
 }
 
+impl EquipmentAbilityAdditionalKind {
+    /// この追加候補をその部位で選べるか。HP / MP 自然回復力は武器には付かない
+    /// (wiki: 装備システム/新装着アビリティ。武器の追加候補表に無い)。
+    pub fn allowed_on(self, slot: PartSlot) -> bool {
+        !(slot == PartSlot::Weapon
+            && matches!(
+                self,
+                EquipmentAbilityAdditionalKind::HpRecovery
+                    | EquipmentAbilityAdditionalKind::MpRecovery
+            ))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquipmentAbilityAdditional {
     pub ability_id: String,
@@ -814,6 +982,25 @@ impl EquipmentAbilityFamily {
     ];
 }
 
+/// 等級ラダーの系統。カテゴリー4 には入手経路の違うラダーが並ぶので、同じ段数でも混ぜない。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AbilityGradeScheme {
+    /// 装備システム UI で SEED を払う N- / R- / L- / E-(頭だけ G-)
+    Letter,
+    /// アイテム方式の 古代精霊 < 深淵 < 喪失 < 夜星
+    Line,
+    /// 旧アビリティの (下) < (中) < (上)
+    Paren,
+}
+
+/// アビリティ名が表す等級。段は 0 が最下位。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbilityGrade {
+    pub scheme: AbilityGradeScheme,
+    pub rank: u8,
+}
+
 /// 武器アビリティ定義(gamedata がカタログを持つ。domain の `BuffDefinition` と同じ依存方向)。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EquipmentAbilityDef {
@@ -844,6 +1031,12 @@ pub struct EquipmentAbilityDef {
     /// **追加効果**(wiki: アビリティ表の「追加効果」列)。R- 以上の段に付く
     /// 「ダメージ増加 +n%」は装備攻撃力ではなく与ダメージ式のカテゴリX3 に入る
     pub damage_effects: &'static [SkillEffect],
+    /// 名前が表す等級(gamedata が名前から解決する)。等級を持たない候補は `None`
+    pub grade: Option<AbilityGrade>,
+    /// 等級を外した種類名(「鎧研磨」「火の月石」)。同じラダーかを見る鍵
+    pub ladder: String,
+    /// 候補の並び(小さいほど先。同値は装備補正の大きい順)
+    pub priority: u8,
 }
 
 /// キャラの装備補正一式(部位別装備 12 スロット + 称号 + テシスコア)。
@@ -2154,25 +2347,129 @@ pub fn relic_step<C: EquipmentCatalogEntry>(
             })
     })?;
     let mut next = part.clone();
-    next.item_id = Some(next_entry.id().to_string());
-    next.custom_name = None;
-    next.base = if up {
-        next_entry.values_min()
-    } else {
-        next_entry.values_max()
-    };
-    next.enchant = next.enchant.clamp_to(next_entry.enchant_caps());
-    // カタログ品はカタログの enchant_caps が正(`resolve_enchant_caps`)。
-    next.enchant_caps = None;
-    next.enhance_type = next_entry.enhance_type();
-    next.abilities.truncate(next_entry.ability_slots());
-    next.ability_values
-        .retain(|value| next.abilities.contains(&value.ability_id));
-    next.ability_additions
-        .retain(|addition| next.abilities.contains(&addition.ability_id));
-    next.random_options
-        .truncate(next_entry.random_option_slots().unwrap_or(0));
+    next.apply_catalog_item(next_entry);
+    // 段を上げた直後の補正値はその段の下限に戻る(下げたときは育成済みの上限)。
+    if up {
+        next.base = next_entry.values_min();
+    }
     Some(next)
+}
+
+/// 装着アビリティの候補 1 件と、既定で見せるか。`false` は「ほかの等級」として畳んだ先に置く。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AbilityCandidate {
+    #[serde(flatten)]
+    pub def: EquipmentAbilityDef,
+    pub default_shown: bool,
+}
+
+/// ラダーの上から何段を既定で見せるか。
+const ABILITY_TIER_TOP_COUNT: usize = 2;
+/// アイテム方式(古代精霊 < 深淵 < 喪失 < 夜星)で既定に残す下限の段(= 喪失)。
+const ABILITY_ITEM_LADDER_MIN_RANK: u8 = 2;
+
+/// この部位(武器はカテゴリー枠)に装着できるアビリティを、画面に出す順で返す。
+///
+/// - カテゴリーを指定したとき(武器の 3 枠)は効果の大きい順に並べ替える。指定しないとき
+///   (部位ごとの一覧)はカタログの並びのまま
+/// - `default_shown = false` は下位等級。**アイテム方式(古代精霊 < 深淵 < 喪失 < 夜星)がある
+///   枠は 喪失 / 夜星 だけ**、それ以外のラダーは上位 2 段だけを既定にする
+///   (ユーザー決定 2026-09-01)。等級が付かない候補はラダーを成さないので常に見せる
+/// - 選んであるものは畳んだ側にあっても必ず見せる(隠れると値の理由が分からなくなる)
+pub fn ability_candidates(
+    defs: &[EquipmentAbilityDef],
+    slot: PartSlot,
+    category: Option<u8>,
+    weapon_system: Option<WeaponSystem>,
+    selected: &[String],
+) -> Vec<AbilityCandidate> {
+    let mut candidates: Vec<&EquipmentAbilityDef> = defs
+        .iter()
+        .filter(|a| a.slot == slot)
+        .filter(|a| category.is_none_or(|c| a.category == c))
+        .filter(|a| {
+            slot != PartSlot::Weapon
+                || weapon_system.is_none_or(|system| system.accepts_ability(a.family))
+        })
+        .collect();
+    let score = |a: &EquipmentAbilityDef| {
+        a.values
+            .thrust
+            .max(a.values.slash)
+            .max(a.values.magic_attack)
+            .max(a.values.magic_defense)
+    };
+    if category.is_some() {
+        candidates.sort_by(|a, b| a.priority.cmp(&b.priority).then_with(|| score(b).cmp(&score(a))));
+    }
+
+    // 等級ラダーごとの段の集合。ラダーは「カテゴリー × 経路 × 等級を外した種類名」で数える
+    // (夜星の耐魔力 と E-耐魔力 は同じ種類名でも別のラダー)。
+    let mut ranks: std::collections::HashMap<(u8, AbilityGradeScheme, &str), Vec<u8>> =
+        std::collections::HashMap::new();
+    for a in &candidates {
+        if let Some(grade) = a.grade {
+            ranks
+                .entry((a.category, grade.scheme, a.ladder.as_str()))
+                .or_default()
+                .push(grade.rank);
+        }
+    }
+    let cutoff: std::collections::HashMap<(u8, AbilityGradeScheme, &str), u8> = ranks
+        .into_iter()
+        .map(|(key, mut list)| {
+            list.sort_unstable_by(|x, y| y.cmp(x));
+            list.dedup();
+            let index = ABILITY_TIER_TOP_COUNT.min(list.len()) - 1;
+            (key, list[index])
+        })
+        .collect();
+    // アイテム方式のラダーがあるカテゴリー枠。ここでは 喪失 / 夜星 だけが既定表示で、
+    // 同じ枠の N/R/L/E も下位系列もまとめて畳む。
+    let item_ladder_scopes: std::collections::HashSet<u8> = candidates
+        .iter()
+        .filter(|a| a.grade.is_some_and(|g| g.scheme == AbilityGradeScheme::Line))
+        .map(|a| a.category)
+        .collect();
+    // 等級の付かない候補(武器カテゴリ1 の「下級斬り」など)がある枠。そこに並ぶ
+    // (下)/(中)/(上) はそれより弱い旧段なので畳む(ユーザー決定 2026-09-01)。
+    let plain_scopes: std::collections::HashSet<u8> = candidates
+        .iter()
+        .filter(|a| a.grade.is_none())
+        .map(|a| a.category)
+        .collect();
+
+    candidates
+        .into_iter()
+        .map(|a| {
+            let shows_by_default = if item_ladder_scopes.contains(&a.category) {
+                a.grade.is_some_and(|g| {
+                    g.scheme == AbilityGradeScheme::Line && g.rank >= ABILITY_ITEM_LADDER_MIN_RANK
+                })
+            } else {
+                match a.grade {
+                    None => true,
+                    Some(g)
+                        if g.scheme == AbilityGradeScheme::Paren
+                            && plain_scopes.contains(&a.category) =>
+                    {
+                        false
+                    }
+                    Some(g) => {
+                        g.rank
+                            >= cutoff
+                                .get(&(a.category, g.scheme, a.ladder.as_str()))
+                                .copied()
+                                .unwrap_or(0)
+                    }
+                }
+            };
+            AbilityCandidate {
+                default_shown: shows_by_default || selected.iter().any(|id| id == a.id),
+                def: a.clone(),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -2278,6 +2575,9 @@ mod tests {
             additional_effects: "",
             additional_options: vec![],
             record_only: false,
+            grade: None,
+            ladder: String::new(),
+            priority: 0,
             effect_summary: "斬り +9",
             values: EquipmentValues {
                 slash: 9,
@@ -3331,6 +3631,113 @@ mod tests {
             },
             ..Default::default()
         }
+    }
+
+    fn ability(id: &'static str, name: &'static str, slot: PartSlot, category: u8, group: &'static str) -> EquipmentAbilityDef {
+        EquipmentAbilityDef {
+            id,
+            name,
+            family: EquipmentAbilityFamily::PointedBlade,
+            category,
+            slot,
+            value_option: None,
+            exclusive_group: group,
+            additional_slots: 0,
+            additional_effects: "",
+            additional_options: vec![],
+            record_only: false,
+            effect_summary: "",
+            values: EquipmentValues::default(),
+            damage_effects: &[],
+            grade: None,
+            ladder: name.to_string(),
+            priority: 0,
+        }
+    }
+
+    #[test]
+    fn 強化レベル12以上で等級が付き11以下で外れる() {
+        let mut part = EquipmentPart::default();
+        part.set_enhance_level(12);
+        assert_eq!(part.enhance_grade, Some(EnhanceGrade::Highest));
+        part.enhance_grade = Some(EnhanceGrade::Middle);
+        part.set_enhance_level(13);
+        assert_eq!(part.enhance_grade, Some(EnhanceGrade::Middle));
+        part.set_enhance_level(11);
+        assert_eq!(part.enhance_grade, None);
+    }
+
+    #[test]
+    fn 同じ系統のアビリティを選ぶと前のものが外れる() {
+        let defs = vec![
+            ability("a", "鎧研磨A", PartSlot::Armor, 4, "armor"),
+            ability("b", "鎧研磨B", PartSlot::Armor, 4, "armor"),
+        ];
+        let mut part = EquipmentPart::default();
+        part.toggle_ability(&defs, "a", 2);
+        part.toggle_ability(&defs, "b", 2);
+        assert_eq!(part.abilities, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn 枠が1つの部位は押したものに入れ替わる() {
+        let defs = vec![
+            ability("a", "月石A", PartSlot::Head, 4, "head-a"),
+            ability("b", "月石B", PartSlot::Head, 4, "head-b"),
+        ];
+        let mut part = EquipmentPart::default();
+        part.toggle_ability(&defs, "a", 1);
+        part.toggle_ability(&defs, "b", 1);
+        assert_eq!(part.abilities, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn 武器のカテゴリー枠は指定したカテゴリーだけ入れ替える() {
+        let defs = vec![
+            ability("c1", "下級突き", PartSlot::Weapon, 1, "weapon-category-1"),
+            ability("c4a", "E-尖った刃", PartSlot::Weapon, 4, "weapon-category-4"),
+            ability("c4b", "夜星の尖った刃", PartSlot::Weapon, 4, "weapon-category-4"),
+        ];
+        let mut part = EquipmentPart::default();
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 1, Some("c1"), None);
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, Some("c4a"), None);
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, Some("c4b"), None);
+        assert_eq!(part.abilities, vec!["c1".to_string(), "c4b".to_string()]);
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, None, None);
+        assert_eq!(part.abilities, vec!["c1".to_string()]);
+    }
+
+    #[test]
+    fn 候補はアイテム方式のある枠では喪失と夜星だけを既定にする() {
+        let mut defs = Vec::new();
+        for (id, name, rank) in [
+            ("ancient", "古代精霊の尖った刃", 0u8),
+            ("abyss", "深淵の尖った刃", 1),
+            ("loss", "喪失の尖った刃", 2),
+            ("night", "夜星の尖った刃", 3),
+        ] {
+            let mut def = ability(id, name, PartSlot::Weapon, 4, "weapon-category-4");
+            def.grade = Some(AbilityGrade {
+                scheme: AbilityGradeScheme::Line,
+                rank,
+            });
+            def.ladder = "尖った刃".to_string();
+            defs.push(def);
+        }
+        let shown: Vec<&str> = ability_candidates(&defs, PartSlot::Weapon, Some(4), None, &[])
+            .iter()
+            .filter(|c| c.default_shown)
+            .map(|c| c.def.id)
+            .collect();
+        assert_eq!(shown, vec!["loss", "night"]);
+        // 選んであるものは畳んだ側でも必ず見せる
+        let selected = vec!["ancient".to_string()];
+        let shown: Vec<&str> = ability_candidates(&defs, PartSlot::Weapon, Some(4), None, &selected)
+            .iter()
+            .filter(|c| c.default_shown)
+            .map(|c| c.def.id)
+            .collect();
+        assert_eq!(shown, vec!["ancient", "loss", "night"]);
     }
 
     #[test]

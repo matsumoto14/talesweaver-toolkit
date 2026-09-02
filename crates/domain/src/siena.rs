@@ -404,6 +404,9 @@ pub struct SienaCatalog {
     pub extras: Vec<SienaExtraKindDef>,
     /// 追加オプションが 1 個ずつ解放される段階
     pub extra_unlock_stages: [usize; 3],
+    /// 段階 → いま使える追加オプションの枠数(添字が段階。0..=stage_max)。
+    /// 画面はこの表を引くだけで、解放段階の判定を写経しない
+    pub extra_capacity_by_stage: Vec<usize>,
     pub stage_max: usize,
 }
 
@@ -440,6 +443,14 @@ pub fn siena_catalog() -> SienaCatalog {
             })
             .collect(),
         extra_unlock_stages: SIENA_EXTRA_UNLOCK_STAGES,
+        extra_capacity_by_stage: (0..=SIENA_STAGE_MAX)
+            .map(|stage| {
+                SIENA_EXTRA_UNLOCK_STAGES
+                    .iter()
+                    .filter(|unlock| stage >= **unlock)
+                    .count()
+            })
+            .collect(),
         stage_max: SIENA_STAGE_MAX,
     }
 }

@@ -1867,6 +1867,32 @@ pub struct StatLimits {
     pub core_support_bonus_table: Vec<Vec<i64>>,
     /// 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん
     pub part_slot_rules: Vec<PartSlotRule>,
+    // --- enum の並びと分類。画面は配列リテラルを持たず、ここを読んで並べる ---
+    /// ステの並び(`StatKind::ALL`)
+    pub stat_kinds: Vec<StatKind>,
+    /// 補正の出どころの並び(`StatSourceGroup::ALL`)
+    pub stat_source_groups: Vec<StatSourceGroup>,
+    /// 属性の並び(`Element::ALL`)
+    pub elements: Vec<crate::element::Element>,
+    /// 装備に付与できる属性(`Element::can_enchant_equipment`)
+    pub equipment_elements: Vec<crate::element::Element>,
+    /// 装着アビリティの系統の並び(`EquipmentAbilityFamily::ALL`)
+    pub ability_families: Vec<crate::equipment::EquipmentAbilityFamily>,
+    /// ランダムオプションのランクの並び(`RandomOptionRank::ALL`。左ほど下位)
+    pub random_option_ranks: Vec<crate::random_option::RandomOptionRank>,
+    /// スキル依存種別の並び(`SkillDependency::ALL`)
+    pub skill_dependencies: Vec<crate::skill::SkillDependency>,
+    /// 極限スキルの並び(`UltimateSkill::ALL`)
+    pub ultimate_skills: Vec<crate::ultimate_skill::UltimateSkill>,
+    /// テシスコアの地域の並び(`CoreRegion::ALL`)
+    pub core_regions: Vec<crate::thesis_core::CoreRegion>,
+    /// テシスコアの火力タイプ(`CoreType::is_power`)。強化能力値に入る
+    pub core_power_types: Vec<crate::thesis_core::CoreType>,
+    /// テシスコアの補助タイプ。記録と入場条件の合計にだけ効く
+    pub core_support_types: Vec<crate::thesis_core::CoreType>,
+    /// 神鳥の聖物の段階 → 最終固定値(添字が段階。0..=`sacred_relic_stage_max`)。
+    /// 画面はこの表を引くだけで、段階↔値の換算式を写経しない
+    pub sacred_relic_stage_values: Vec<i64>,
     /// 与ダメージ式カテゴリ(`DamageCategory`)の日本語名。36 カテゴリぶん、`DamageCategory::ALL` の順
     pub damage_category_labels: Vec<DamageCategoryLabel>,
     /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentValues::FIELD_LABELS` の順。
@@ -2006,12 +2032,36 @@ pub fn stat_limits() -> StatLimits {
                 ability_slots: slot.ability_slots(),
                 allows_ability: slot.allows_abilities(),
                 allows_enhance: slot.allows_enhance(),
+                allows_enchant: slot.allows_enchant(),
                 allows_siena: slot.allows_siena(),
                 siena_counts_as_equipment: slot.siena_values_are_equipment(),
                 allows_random_option: slot.allows_random_option(),
                 random_option_slots: slot.random_option_slots(),
                 allows_element: slot.allows_element(),
             })
+            .collect(),
+        stat_kinds: StatKind::ALL.to_vec(),
+        stat_source_groups: StatSourceGroup::ALL.to_vec(),
+        elements: crate::element::Element::ALL.to_vec(),
+        equipment_elements: crate::element::Element::ALL
+            .into_iter()
+            .filter(|e| e.can_enchant_equipment())
+            .collect(),
+        ability_families: crate::equipment::EquipmentAbilityFamily::ALL.to_vec(),
+        random_option_ranks: crate::random_option::RandomOptionRank::ALL.to_vec(),
+        skill_dependencies: crate::skill::SkillDependency::ALL.to_vec(),
+        ultimate_skills: crate::ultimate_skill::UltimateSkill::ALL.to_vec(),
+        core_regions: crate::thesis_core::CoreRegion::ALL.to_vec(),
+        core_power_types: crate::thesis_core::CoreType::ALL
+            .into_iter()
+            .filter(|t| t.is_power())
+            .collect(),
+        core_support_types: crate::thesis_core::CoreType::ALL
+            .into_iter()
+            .filter(|t| !t.is_power())
+            .collect(),
+        sacred_relic_stage_values: (0..=SACRED_RELIC_STAGE_MAX)
+            .map(sacred_relic_value)
             .collect(),
         damage_category_labels: DamageCategory::ALL
             .into_iter()

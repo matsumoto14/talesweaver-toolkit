@@ -67,16 +67,14 @@ export const targetLabel = (conditions: MeasurementConditions): string =>
   conditions.content?.name ?? conditions.unlisted?.name ?? "対象";
 
 /**
- * 防御力とカット率を分けて逆算できるか。
- * **攻撃力が違う点が 2 つ以上**必要(同じ攻撃力を何度測っても直線は引けない)。
+ * 中継サーバーに送る下書き。送信前にそのまま全文が表示される(問い合わせと同じ作法)。
+ * `separable`(防御力とカット率を分けて逆算できるか)の判定は Rust
+ * (`can_separate_measurement`)が持つ — ここは返ってきた結果を文言にするだけ。
  */
-export const canSeparate = (samples: MeasurementSample[]): boolean =>
-  new Set(samples.map((s) => s.attack).filter((a): a is number => a !== null)).size >= 2;
-
-/** 中継サーバーに送る下書き。送信前にそのまま全文が表示される(問い合わせと同じ作法) */
 export function measurementDraft(
   conditions: MeasurementConditions,
   samples: MeasurementSample[],
+  separable: boolean,
 ): InquiryDraft {
   const label = targetLabel(conditions);
   const listed = conditions.content !== null;
@@ -106,7 +104,7 @@ export function measurementDraft(
   }
   lines.push(
     "",
-    canSeparate(samples)
+    separable
       ? "攻撃力の違う点が 2 つ以上あるので、防御力とカット率を分けて逆算できます。"
       : "攻撃力が同じ点だけなので、防御力とカット率は分けられません(装備を替えてもう 1 点あると分けられます)。",
   );

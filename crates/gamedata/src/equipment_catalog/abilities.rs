@@ -103,6 +103,9 @@ fn new_ability(
         effect_summary,
         values,
         damage_effects: &[],
+        grade: None,
+        ladder: String::new(),
+        priority: 0,
     }
 }
 
@@ -134,6 +137,9 @@ fn fixed_ability(
         effect_summary,
         values,
         damage_effects: &[],
+        grade: None,
+        ladder: String::new(),
+        priority: 0,
     }
 }
 
@@ -332,6 +338,9 @@ fn slot_ability(
         effect_summary,
         values,
         damage_effects,
+        grade: None,
+        ladder: String::new(),
+        priority: 0,
     }
 }
 
@@ -2138,5 +2147,59 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ));
     }
 
+    assign_grades(&mut out);
     out
+}
+
+/// 名前が表す等級ラダー。同じ種類名でも経路(SEED の N-/R-/L-/E- と、アイテム方式の
+/// 古代精霊 < 深淵 < 喪失 < 夜星、旧アビリティの (下) < (中) < (上))を混ぜない。
+const ABILITY_GRADE_PREFIXES: [(&str, AbilityGradeScheme, u8); 12] = [
+    ("N-", AbilityGradeScheme::Letter, 0),
+    ("R-", AbilityGradeScheme::Letter, 1),
+    ("L-", AbilityGradeScheme::Letter, 2),
+    ("E-", AbilityGradeScheme::Letter, 3),
+    ("G-", AbilityGradeScheme::Letter, 3),
+    ("古代精霊の", AbilityGradeScheme::Line, 0),
+    ("深淵の", AbilityGradeScheme::Line, 1),
+    ("喪失の", AbilityGradeScheme::Line, 2),
+    ("夜星の", AbilityGradeScheme::Line, 3),
+    ("(下)", AbilityGradeScheme::Paren, 0),
+    ("(中)", AbilityGradeScheme::Paren, 1),
+    ("(上)", AbilityGradeScheme::Paren, 2),
+];
+
+/// 武器ディレイ(カテゴリー3)を出す順。効果の良い順で、値が装備補正に乗らないので
+/// `values` からは決められない。
+const WEAPON_DELAY_ORDER: [&str; 5] = [
+    "storm-blade",
+    "gale-blade",
+    "soft-wind-blade",
+    "breeze-blade",
+    "silence-blade",
+];
+
+/// 名前から等級・ラダー・並び順を埋める。等級は名称そのものが表すので、カタログ側で
+/// 1 回だけ解決して属性に持たせる(画面が接頭辞を解析しない)。
+fn assign_grades(defs: &mut [EquipmentAbilityDef]) {
+    for def in defs.iter_mut() {
+        match ABILITY_GRADE_PREFIXES
+            .iter()
+            .find(|(prefix, _, _)| def.name.starts_with(prefix))
+        {
+            Some((prefix, scheme, rank)) => {
+                def.grade = Some(AbilityGrade {
+                    scheme: *scheme,
+                    rank: *rank,
+                });
+                def.ladder = def.name[prefix.len()..].to_string();
+            }
+            None => {
+                def.grade = None;
+                def.ladder = def.name.to_string();
+            }
+        }
+        if let Some(index) = WEAPON_DELAY_ORDER.iter().position(|id| *id == def.id) {
+            def.priority = index as u8;
+        }
+    }
 }

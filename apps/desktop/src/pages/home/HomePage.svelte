@@ -639,14 +639,10 @@
   //    (254-266行)と完全に揃える: 実値 = 段階 × value_per_stage、1 押し = 1 段階。 ---
   const SACRED_RELIC_MAX_VALUE = limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage;
   function sacredRelicValueOf(c: RegisteredCharacter, k: StatKind): number {
-    return sacredRelicValue(c.stat_sources.sacred_relic[k] ?? 0, limits.sacred_relic_value_per_stage);
+    return sacredRelicValue(c.stat_sources.sacred_relic[k] ?? 0);
   }
   function commitSacredRelic(c: RegisteredCharacter, k: StatKind, value: number) {
-    const stage = sacredRelicStageFromValue(
-      value,
-      limits.sacred_relic_stage_max,
-      limits.sacred_relic_value_per_stage,
-    );
+    const stage = sacredRelicStageFromValue(value);
     commitFieldUpdate(
       c, `${c.id}:sacred_relic:${k}`,
       (cc) => cc.stat_sources.sacred_relic[k],

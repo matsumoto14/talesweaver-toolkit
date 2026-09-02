@@ -14,8 +14,9 @@ export function enchantDepKeysFor(dependency: SkillDependency): EnchantDepKey[] 
   return row ? [...row.keys] : [];
 }
 
-/** エンチャント枠を持ちうる部位(レリック・効果・AF・体は対象外)。 */
-export const ENCHANT_SLOTS: PartSlot[] = ["weapon", "armor", "helm", "shield", "shield_plus", "head", "hand", "leg"];
+/** エンチャント枠を持ちうる部位(レリック・効果・AF・体は対象外。判定は PartSlot::allows_enchant)。 */
+export const ENCHANT_SLOTS: PartSlot[] =
+  limits.part_slot_rules.filter((r) => r.allows_enchant).map((r) => r.slot);
 export const ENCHANT_SLOT_LABELS: Record<string, string> = {
   weapon: "武器", armor: "鎧", helm: "兜", shield: "盾", shield_plus: "カフス", head: "頭", hand: "手", leg: "足",
 };

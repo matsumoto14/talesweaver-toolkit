@@ -1,16 +1,20 @@
 <script lang="ts">
   // 「randomOption」補正源のペイン。装備と同じ部位ドリルダウン(§09 規則 2)。
-  import type { PartSlot, RandomOptionDef, RandomOptionRank, Skill, StatPreview } from "../../../api/types";
+  import type {
+    EquipmentPart, PartSlot, RandomOptionCandidate, RandomOptionDef, RandomOptionRank, StatPreview,
+  } from "../../../api/types";
+  import { listRandomOptionCandidates } from "../../../api/commands";
   import type { Draft } from "../../../draft";
   import {
     neutralEquipmentPart,
-    randomOptionEffectLabel, randomOptionIsApplied, randomOptionMatchesDependency,
+    randomOptionEffectLabel, randomOptionIsApplied,
     randomOptionValue, randomOptionValueLabel,
   } from "../../../equipment";
   import {
     PART_SLOT_LABELS, RANDOM_OPTION_ALLOWED_SLOTS, RANDOM_OPTION_RANKS, RANDOM_OPTION_RANK_LABELS,
     SKILL_DEPENDENCIES, SKILL_DEPENDENCY_LABELS,
   } from "../../../labels";
+  import { latest } from "../../../ui/latest.svelte";
   import { limits } from "../../../limits.svelte";
   import { app, equipmentFocus } from "../../../state.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
@@ -24,10 +28,9 @@
   interface Props {
     draft: Draft;
     preview: StatPreview | null;
-    skills: Skill[];
     onOpenSource: (id: SourceId) => void;
   }
-  let { draft, preview, skills, onOpenSource }: Props = $props();
+  let { draft, preview, onOpenSource }: Props = $props();
 
   /** ランダムOP のうち記録するだけの枠数。行サブタイトルとも共有(summaries.ts) */
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(preview));
@@ -69,8 +72,6 @@
     return rows;
   });
 
-  const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
-
   const selectedPartOrNull = (slot: PartSlot) => {
     const list = draft.equipment.parts[slot];
     return list.registered.find((p) => p.id === list.selected_id) ?? null;
@@ -96,26 +97,10 @@
     equippedItem(slot)?.random_option_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (partSlotRule(slot)?.random_option_slots ?? 0));
 
   // --- ランダムオプション -------------------------------------------------
-  // 効果値の上限は wiki の一覧表のレンジそのもの。枠数は wiki に記載が無く、代わりに
-  // 「同じカテゴリーは 1 部位に 1 つまで(カテゴリー 0 は除く)」で縛る(転移の説明)。
+  // 効果値の上限は wiki の一覧表のレンジそのもの。足せる OP(同じカテゴリーは 1 部位に 1 つまで)と
+  // 主軸スキルで発動するかの判定は Rust(list_random_option_candidates)。ここは並べるだけ。
   const randomOptionDef = (id: string): RandomOptionDef | undefined =>
     app.randomOptions.find((d) => d.id === id);
-
-  /** その部位に足せる OP(未選択 かつ カテゴリーが空いているもの) */
-  function addableRandomOptions(slot: PartSlot) {
-    const part = selectedPart(slot);
-    const takenIds = new Set(part.random_options.map((o) => o.option_id));
-    const takenCategories = new Set(
-      part.random_options.map((o) => randomOptionDef(o.option_id)?.category).filter((c) => c !== undefined && c !== 0),
-    );
-    // 段階選択に並べるので、プレースホルダは入れない。押せない選択肢を混ぜると
-    // 「選ばれているのに何も起きない」項目になる(§00 意味のないものを置かない)
-    return [
-      ...app.randomOptions
-        .filter((d) => d.slot === slot && !takenIds.has(d.id) && !takenCategories.has(d.category))
-        .map((d) => ({ value: d.id, label: d.name })),
-    ];
-  }
 
   /** ランダムOP のドリルダウン。装備と同じく、押した部位は残して右にペインを足す(§09 規則 2) */
   let openRandomPart = $state<PartSlot | null>(null);
@@ -145,52 +130,51 @@
       void revealFocused(optionId);
     });
   });
-  const NEUTRAL_RO = "なし";
-  /** その部位に足せる OP のうち、実際によく付けるもの(gamedata の common) */
-  const addableDefs = (slot: PartSlot): RandomOptionDef[] =>
-    addableRandomOptions(slot)
-      .map((o) => randomOptionDef(o.value))
-      .filter((d): d is RandomOptionDef => d !== undefined);
   /**
-   * よく使う OP。**主軸スキルの依存に合う「◯◯攻撃力が増加」を先頭**に出す —
-   * ここで実際に選ばれるのはほぼそれで、攻撃ダメージ増加はその次(ユーザー確認 2026-08-26)
+   * 開いている部位に足せる OP。並び(主軸スキルの依存に合う「◯◯攻撃力が増加」が先頭)も、
+   * チップで先に出すか奥に置くか(`common_choice`)も Rust が決める(ユーザー確認 2026-08-26)。
    */
-  const commonAddable = (slot: PartSlot) => {
-    const dependency = mainSkill?.dependency ?? null;
-    const rank = (d: RandomOptionDef) => {
-      const effect = d.effect;
-      if (typeof effect === "object") {
-        return effect.dependency_damage_rate === dependency ? 0 : 1;
-      }
-      return 2;
+  let candidates = $state<RandomOptionCandidate[]>([]);
+  const candidatesLatest = latest();
+  $effect(() => {
+    const slot = openRandomPart;
+    if (slot === null) {
+      candidates = [];
+      return;
+    }
+    // 候補を決めるのは付いている OP だけ。ここだけを読んで、ほかの編集で問い合わせ直さない
+    const current = selectedPartOrNull(slot);
+    const payload: EquipmentPart = {
+      ...neutralEquipmentPart(),
+      random_options: (current?.random_options ?? []).map((o) => ({ ...o })),
     };
-    return addableDefs(slot)
-      .filter((d) => d.common && randomOptionMatchesDependency(d.effect, dependency))
-      .sort((a, b) => rank(a) - rank(b));
-  };
-  // 主軸に合わない「よく使う OP」は消さず、ほかの OP から到達可能にする。
-  const otherAddable = (slot: PartSlot) => {
-    const dependency = mainSkill?.dependency ?? null;
-    return addableDefs(slot).filter(
-      (d) => !d.common || !randomOptionMatchesDependency(d.effect, dependency),
+    const mainSkillId = draft.mainSkillId;
+    candidatesLatest.run((isCurrent) =>
+      listRandomOptionCandidates(payload, slot, mainSkillId)
+        .then((rows) => { if (isCurrent()) candidates = rows; })
+        .catch(() => { if (isCurrent()) candidates = []; }),
     );
-  };
-  const otherPickerOptions = (slot: PartSlot): PickerOption[] =>
-    otherAddable(slot).map((d) => ({
+    return () => candidatesLatest.cancel();
+  });
+  const commonAddable = $derived(candidates.filter((c) => c.common_choice));
+  // 主軸に合わない「よく使う OP」は消さず、ほかの OP から到達可能にする。
+  const otherAddable = $derived(candidates.filter((c) => !c.common_choice));
+  const otherPickerOptions = $derived<PickerOption[]>(
+    otherAddable.map((d) => ({
       value: d.id,
       name: d.name,
       meta: `カテゴリー${d.category} ・ ${randomOptionEffectLabel(d.effect)}`,
       iconId: undefined,
-    }));
+    })),
+  );
   function addRandomOption(slot: PartSlot, id: string) {
     if (id === "") return;
     const def = randomOptionDef(id);
-    if (!def || def.tiers.length === 0) return;
-    // 既定は一覧のいちばん上位のランク(手持ちがそれ未満なら下げてもらう)
-    const rank = def.tiers[def.tiers.length - 1].rank;
+    // 既定ランクは Rust が決める(一覧のいちばん上位。手持ちがそれ未満なら下げてもらう)
+    if (!def || def.default_rank === null) return;
     selectedPart(slot).random_options = [
       ...selectedPart(slot).random_options,
-      { option_id: id, rank, value: null },
+      { option_id: id, rank: def.default_rank, value: null },
     ];
   }
   function removeRandomOption(slot: PartSlot, index: number) {
@@ -353,19 +337,19 @@
               枠 {(selectedPartOrNull(slot)?.random_options.length ?? 0) + 1}
               <span class="dim">/ {randomOptionSlots(slot)}</span>
             </span>
-            {#if commonAddable(slot).length > 0}
+            {#if commonAddable.length > 0}
               <div class="ro-common">
-                {#each commonAddable(slot) as o (o.id)}
+                {#each commonAddable as o (o.id)}
                   <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.id)}>
                     ＋ {o.name}
                   </button>
                 {/each}
               </div>
             {/if}
-            {#if otherAddable(slot).length > 0}
+            {#if otherAddable.length > 0}
               <div class="ro-add">
                 <Picker
-                  options={otherPickerOptions(slot)}
+                  options={otherPickerOptions}
                   note="ほかの OP(同じカテゴリーは 1 つまで)"
                   placeholder="ほかの OP から選ぶ"
                   bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}

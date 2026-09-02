@@ -639,6 +639,8 @@ export interface SienaCatalog {
   extras: SienaExtraKindDef[];
   /** 追加オプションが 1 個ずつ解放される段階 */
   extra_unlock_stages: [number, number, number];
+  /** 段階 → いま使える追加オプションの枠数(添字が段階) */
+  extra_capacity_by_stage: number[];
   stage_max: number;
 }
 
@@ -683,6 +685,16 @@ export interface RandomOptionDef {
   note: string;
   /** 実際によく付ける OP。画面はこれをチップで先に出す */
   common: boolean;
+  /** 付けたときの既定ランク(一覧のいちばん上位)。ランクが無い OP は null */
+  default_rank: RandomOptionRank | null;
+  /** ランクごとの既定の効果値(実測の上書きが無いときの値) */
+  default_values: { rank: RandomOptionRank; value: number }[];
+}
+
+/** `list_random_option_candidates` の戻り。この部位にまだ足せる OP。 */
+export interface RandomOptionCandidate extends RandomOptionDef {
+  /** チップで先に出す候補(よく付けるもので、主軸スキルの依存で発動するもの) */
+  common_choice: boolean;
 }
 
 // キャラが付けている 1 枠。crates/domain/src/random_option.rs の RandomOptionSlot。
@@ -945,6 +957,8 @@ export interface PartSlotRule {
   ability_slots: number;
   allows_ability: boolean;
   allows_enhance: boolean;
+  /** この部位がエンチャント欄を持つか */
+  allows_enchant: boolean;
   allows_siena: boolean;
   siena_counts_as_equipment: boolean;
   allows_random_option: boolean;
@@ -963,6 +977,8 @@ export type EquipmentSurvivalEffect =
 // 装備カタログの 1 アイテム。crates/gamedata/src/equipment_catalog.rs の EquipmentItem。
 export interface EquipmentItem {
   id: string;
+  /** 装備画像に使う id。†改・セイクリッドは通常版と同じ画像なのでその id を指す */
+  icon_id: string;
   slot: PartSlot;
   name: string;
   /** 基本能力値のレンジ下限(wiki: Item ページの MR レンジ) */
@@ -1105,10 +1121,30 @@ export interface EquipmentAbilityDef {
   values: EquipmentValues;
   /** 追加効果(R- 以上に付く「ダメージ増加 +n%」。カテゴリX3) */
   damage_effects: SkillEffect[];
+  /** 名前が表す等級。等級を持たない候補は null */
+  grade: AbilityGrade | null;
+  /** 等級を外した種類名(「鎧研磨」)。同じラダーかを見る鍵 */
+  ladder: string;
+  /** 候補の並び(小さいほど先) */
+  priority: number;
+}
+
+/** 等級ラダーの経路。同じ段数でも経路が違えば別のラダー。 */
+export type AbilityGradeScheme = "letter" | "line" | "paren";
+export interface AbilityGrade {
+  scheme: AbilityGradeScheme;
+  /** 0 が最下位 */
+  rank: number;
 }
 
 /** `list_equipment_abilities` の戻り(定義 + 受け付ける武器系統)。 */
 export type EquipmentAbilityView = EquipmentAbilityDef;
+
+/** `list_equipment_ability_candidates` の戻り。並びと畳み方は Rust が決める。 */
+export interface EquipmentAbilityCandidate extends EquipmentAbilityView {
+  /** false は「ほかの等級」として畳んだ先に置く */
+  default_shown: boolean;
+}
 
 export interface RegisteredCharacter {
   id: number;
@@ -1773,6 +1809,31 @@ export interface StatLimits {
   core_support_bonus_table: number[][];
   /** 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん */
   part_slot_rules: PartSlotRule[];
+  // --- enum の並びと分類。画面は配列リテラルを持たず、ここを読んで並べる ---
+  /** ステの並び */
+  stat_kinds: StatKind[];
+  /** 補正の出どころの並び */
+  stat_source_groups: StatSourceGroup[];
+  /** 属性の並び */
+  elements: Element[];
+  /** 装備に付与できる属性 */
+  equipment_elements: Element[];
+  /** 装着アビリティの系統の並び */
+  ability_families: EquipmentAbilityFamily[];
+  /** ランダムオプションのランクの並び(左ほど下位) */
+  random_option_ranks: RandomOptionRank[];
+  /** スキル依存種別の並び */
+  skill_dependencies: SkillDependency[];
+  /** 極限スキルの並び */
+  ultimate_skills: UltimateSkill[];
+  /** テシスコアの地域の並び */
+  core_regions: CoreRegion[];
+  /** テシスコアの火力タイプ(強化能力値に入る) */
+  core_power_types: CoreType[];
+  /** テシスコアの補助タイプ */
+  core_support_types: CoreType[];
+  /** 神鳥の聖物の段階 → 最終固定値(添字が段階) */
+  sacred_relic_stage_values: number[];
   /** 与ダメージ式カテゴリの日本語名。36 カテゴリぶん、DamageCategory::ALL の順 */
   damage_category_labels: DamageCategoryLabel[];
   /** 装備補正 9 値の表示名。EquipmentValues::FIELD_LABELS の順(CoreType の表示名も同じ) */

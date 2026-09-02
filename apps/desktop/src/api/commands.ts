@@ -8,7 +8,8 @@ import type {
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
   StatPreview, StatSources,
   TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation, VersusAccuracy,
-  EquipmentAbilityView, EquipmentCandidates, EnchantPlanRow, EquipmentPart, PartSlot,
+  EquipmentAbilityView, EquipmentAbilityCandidate, EquipmentCandidates, EnchantPlanRow,
+  EquipmentPart, PartSlot, RandomOptionCandidate,
   RelicDirection, RelicState, WeaponSystem,
 } from "./types";
 
@@ -121,8 +122,35 @@ export const relicState = (part: EquipmentPart) =>
 /** レリックの段を 1 つ動かした部位。動かせないときは null */
 export const relicStep = (part: EquipmentPart, direction: RelicDirection) =>
   invoke<EquipmentPart | null>("relic_step", { part, direction });
+/**
+ * この部位(武器はカテゴリー枠)に装着できるアビリティ。並び・武器系統の適合・
+ * 「ほかの等級」として畳むかは Rust が決める。画面は返った順に並べるだけ。
+ */
+export const listEquipmentAbilityCandidates = (
+  part: EquipmentPart, slot: PartSlot, category: number | null,
+) => invoke<EquipmentAbilityCandidate[]>("list_equipment_ability_candidates", { part, slot, category });
+/** カタログ品を当てた部位(基本能力値・エンチャント・枠数の切り詰めは Rust)。未知の id は null */
+export const applyCatalogItem = (part: EquipmentPart, itemId: string) =>
+  invoke<EquipmentPart | null>("apply_catalog_item", { part, itemId });
+/** 装備強化 Lv を等級ごと書き換えた部位(+12 以上は等級必須) */
+export const setEnhanceLevel = (part: EquipmentPart, level: number) =>
+  invoke<EquipmentPart>("set_enhance_level", { part, level });
+/** 武器の 1 カテゴリー枠のアビリティを入れ替えた部位(null = 装着しない) */
+export const setAbilityForCategory = (
+  part: EquipmentPart, slot: PartSlot, category: number, abilityId: string | null,
+) => invoke<EquipmentPart>("set_ability_for_category", { part, slot, category, abilityId });
+/** 武器以外の部位でアビリティを付け外しした部位(置換・枠超過の規則は Rust) */
+export const toggleAbility = (part: EquipmentPart, slot: PartSlot, abilityId: string) =>
+  invoke<EquipmentPart>("toggle_ability", { part, slot, abilityId });
 /** ランダムオプションのカタログ(wiki: ランダムオプション) */
 export const listRandomOptions = () => invoke<RandomOptionDef[]>("list_random_options");
+/** この部位にまだ足せるランダムOP。同カテゴリー 1 つまでと発動条件の判定は Rust */
+export const listRandomOptionCandidates = (
+  part: EquipmentPart, slot: PartSlot, mainSkillId: string | null,
+) => invoke<RandomOptionCandidate[]>("list_random_option_candidates", { part, slot, mainSkillId });
+/** 実測から敵の防御力とカット率を分けて逆算できるか(要る点の数は Rust) */
+export const canSeparateMeasurement = (attacks: (number | null)[]) =>
+  invoke<boolean>("can_separate_measurement", { attacks });
 /** マスタリーのカタログ(wiki: 各キャラの Skill ページ。段ごとに 1 つ選ぶ) */
 export const listMasteries = () => invoke<MasteryDef[]>("list_masteries");
 /** シエナのオーラで選べる能力値・追加オプションのカタログ(wiki: 装備システム/シエナのオーラ) */

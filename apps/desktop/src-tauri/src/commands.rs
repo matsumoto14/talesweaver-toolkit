@@ -11,7 +11,7 @@ use commands::{
 };
 use domain::{
     BuffDefinition, BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DamageResult,
-    DefenseProfile, Enemy, NewCharacter, RandomOptionDef, Skill, VersusAccuracy,
+    DefenseProfile, Enemy, NewCharacter, Skill, VersusAccuracy,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, RegisteredCharacter};
@@ -182,8 +182,63 @@ pub fn relic_step(
 }
 
 #[tauri::command]
-pub fn list_random_options() -> Vec<RandomOptionDef> {
+pub fn list_equipment_ability_candidates(
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    category: Option<u8>,
+) -> Vec<commands::EquipmentAbilityCandidate> {
+    commands::list_equipment_ability_candidates(part, slot, category)
+}
+
+#[tauri::command]
+pub fn apply_catalog_item(
+    part: domain::EquipmentPart,
+    item_id: String,
+) -> Option<domain::EquipmentPart> {
+    commands::apply_catalog_item(part, item_id)
+}
+
+#[tauri::command]
+pub fn set_enhance_level(part: domain::EquipmentPart, level: u8) -> domain::EquipmentPart {
+    commands::set_enhance_level(part, level)
+}
+
+#[tauri::command]
+pub fn set_ability_for_category(
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    category: u8,
+    ability_id: Option<String>,
+) -> domain::EquipmentPart {
+    commands::set_ability_for_category(part, slot, category, ability_id)
+}
+
+#[tauri::command]
+pub fn toggle_ability(
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    ability_id: String,
+) -> domain::EquipmentPart {
+    commands::toggle_ability(part, slot, ability_id)
+}
+
+#[tauri::command]
+pub fn list_random_options() -> Vec<commands::RandomOptionView> {
     commands::list_random_options()
+}
+
+#[tauri::command]
+pub fn list_random_option_candidates(
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    main_skill_id: Option<String>,
+) -> Vec<commands::RandomOptionCandidate> {
+    commands::list_random_option_candidates(part, slot, main_skill_id)
+}
+
+#[tauri::command]
+pub fn can_separate_measurement(attacks: Vec<Option<i64>>) -> bool {
+    commands::can_separate_measurement(attacks)
 }
 
 #[tauri::command]

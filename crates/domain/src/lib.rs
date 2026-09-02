@@ -22,6 +22,7 @@ pub mod enemy;
 pub mod equipment;
 pub mod equipment_class;
 pub mod mastery;
+pub mod measurement;
 pub mod random_option;
 pub mod rounding;
 pub mod siena;
@@ -95,8 +96,10 @@ pub use equipment_class::{
     ItemFit, WeaponClass, WeaponSystem, WristType,
 };
 pub use equipment::{
-    armor_added_hp, equipment_attack_parts, equipment_attack_power, equipment_values_attack,
+    ability_candidates, armor_added_hp, equipment_attack_parts, equipment_attack_power,
+    equipment_values_attack,
     relic_state, relic_step, sum_equipment_value_sources, weapon_added_damage, wrist_base_bonus,
+    AbilityCandidate, AbilityGrade, AbilityGradeScheme,
     EnhanceGrade, RelicDirection, RelicInfo, RelicKind, RelicState, EquipmentStatKind,
     EnhanceRates, Equipment, EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef,
     EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily,
@@ -107,8 +110,12 @@ pub use equipment::{
     ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, WEAPON_ABILITY_SLOTS,
 };
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};
+pub use measurement::{
+    can_separate_defense_and_cut_rate, MEASUREMENT_SEPARABLE_MIN_ATTACKS,
+};
 pub use random_option::{
-    DependencyRates, RandomOptionDef, RandomOptionEffect, RandomOptionError, RandomOptionRank,
+    addable_random_options, DependencyRates, RandomOptionDef, RandomOptionEffect,
+    RandomOptionError, RandomOptionRank,
     RandomOptionSlot, RandomOptionTier, RandomOptionTotals, RANDOM_OPTION_VALUE_MAX,
 };
 pub use rounding::{floor_int, round_int, trunc2, trunc_int};

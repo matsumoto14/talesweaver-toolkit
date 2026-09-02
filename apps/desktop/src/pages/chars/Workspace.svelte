@@ -39,6 +39,7 @@
   import {
     EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
+  import { limits } from "../../limits.svelte";
   import { app, characterSourceFocus, enqueueCharacterSave, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportNotice } from "../../toast.svelte";
   import { persisted } from "../../ui/persistedState.svelte";
@@ -475,7 +476,7 @@
   const criticalRateSummary = $derived.by(() => {
     const c = draft.statSources.critical_rate;
     const parts: string[] = [];
-    if (c.pet) parts.push("ペット会心 ×1.1");
+    if (c.pet) parts.push(`ペット会心 ×${limits.pet_critical_rate}`);
     const bonus = preview?.critical_rate_bonus.value ?? 0;
     if (bonus > 0) parts.push(`増加 +${Math.round(bonus)}%`);
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");

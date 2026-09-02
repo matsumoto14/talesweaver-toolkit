@@ -209,6 +209,60 @@ struct RelicStepArgs {
     direction: domain::RelicDirection,
 }
 
+/// 装着アビリティの候補。`category` は武器の 3 枠を絞るときだけ渡す。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AbilityCandidatesArgs {
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    category: Option<u8>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplyCatalogItemArgs {
+    part: domain::EquipmentPart,
+    item_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetEnhanceLevelArgs {
+    part: domain::EquipmentPart,
+    level: u8,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetAbilityForCategoryArgs {
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    category: u8,
+    ability_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ToggleAbilityArgs {
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    ability_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RandomOptionCandidatesArgs {
+    part: domain::EquipmentPart,
+    slot: domain::PartSlot,
+    main_skill_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanSeparateMeasurementArgs {
+    attacks: Vec<Option<i64>>,
+}
+
 /// Tauri の `invoke` と同じ形。`command` で分岐して `commands` crate を呼ぶ。
 #[wasm_bindgen]
 pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
@@ -346,6 +400,45 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "relic_step" => {
             let a: RelicStepArgs = args_of(command, args)?;
             ok(commands::relic_step(a.part, a.direction))
+        }
+        "list_equipment_ability_candidates" => {
+            let a: AbilityCandidatesArgs = args_of(command, args)?;
+            ok(commands::list_equipment_ability_candidates(
+                a.part, a.slot, a.category,
+            ))
+        }
+        "apply_catalog_item" => {
+            let a: ApplyCatalogItemArgs = args_of(command, args)?;
+            ok(commands::apply_catalog_item(a.part, a.item_id))
+        }
+        "set_enhance_level" => {
+            let a: SetEnhanceLevelArgs = args_of(command, args)?;
+            ok(commands::set_enhance_level(a.part, a.level))
+        }
+        "set_ability_for_category" => {
+            let a: SetAbilityForCategoryArgs = args_of(command, args)?;
+            ok(commands::set_ability_for_category(
+                a.part,
+                a.slot,
+                a.category,
+                a.ability_id,
+            ))
+        }
+        "toggle_ability" => {
+            let a: ToggleAbilityArgs = args_of(command, args)?;
+            ok(commands::toggle_ability(a.part, a.slot, a.ability_id))
+        }
+        "list_random_option_candidates" => {
+            let a: RandomOptionCandidatesArgs = args_of(command, args)?;
+            ok(commands::list_random_option_candidates(
+                a.part,
+                a.slot,
+                a.main_skill_id,
+            ))
+        }
+        "can_separate_measurement" => {
+            let a: CanSeparateMeasurementArgs = args_of(command, args)?;
+            ok(commands::can_separate_measurement(a.attacks))
         }
         "evaluate_contents" => {
             let a: EvaluateContentsArgs = args_of(command, args)?;

@@ -4,7 +4,7 @@
 import type {
   CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList, EquipmentValues,
   RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
-  SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, SkillDependency, ThesisCores,
+  SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores,
 } from "./api/types";
 import {
   CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS,
@@ -15,73 +15,19 @@ import { limits } from "./limits.svelte";
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
 
 /**
- * 装備画像に使う ID。改・セイクリッドはゲーム内で通常版と同じ画像なので、
- * 対応する通常版の ID を返す。対応行が未収録なら自分の ID のまま `?` を表示する。
+ * 装備画像に使う ID。どの画像を使うかは gamedata の `icon_id` が持つ(†改・セイクリッドが
+ * 通常版と同じ画像、など)。未収録なら自分の ID のまま `?` を表示する。
  */
 export const equipmentIconId = (
   itemId: string | null,
   catalog: EquipmentItem[],
 ): string | null => {
   if (itemId === null) return null;
-  const item = catalog.find((candidate) => candidate.id === itemId);
-  if (!item?.name.startsWith("†改・セイクリッド")) return itemId;
-  const normalName = item.name.replace("†改・", "†");
-  return catalog.find((candidate) => candidate.name === normalName)?.id ?? itemId;
+  return catalog.find((candidate) => candidate.id === itemId)?.icon_id ?? itemId;
 };
 
 export const zeroValues = (): EquipmentValues =>
   Object.fromEntries(EQUIPMENT_VALUE_KEYS.map((k) => [k, 0])) as unknown as EquipmentValues;
-
-/** カタログのレンジ(min/max)の中央値(floor)。カタログ選択時の基本能力値の既定セットに使う。 */
-export const midpointValues = (min: EquipmentValues, max: EquipmentValues): EquipmentValues =>
-  Object.fromEntries(
-    EQUIPMENT_VALUE_KEYS.map((k) => [k, Math.floor((min[k] + max[k]) / 2)]),
-  ) as unknown as EquipmentValues;
-
-/** 値を指定された上限まで clamp する。 */
-export const clampToCaps = (values: EquipmentValues, caps: EquipmentValues): EquipmentValues =>
-  Object.fromEntries(
-    EQUIPMENT_VALUE_KEYS.map((k) => [k, Math.min(values[k], caps[k])]),
-  ) as unknown as EquipmentValues;
-
-/**
- * カタログ品を部位へ適用した結果を返す(EquipmentPane の pickCatalogItem と同じ規則。
- * ホームの「今日の強化」レリック段数ステッパーがこの結果と一致させるために共有する)。
- * item_id / base(= values_max) / enchant(enchant_caps でクランプ) / enhance_type を差し替え、
- * アビリティ枠・ランダムオプション枠を新しい装備の枠数に切り詰める(枠外のアビリティの
- * 実測値・追加値も一緒に落とす)。
- */
-export const applyCatalogItem = (part: EquipmentPart, item: EquipmentItem): EquipmentPart => {
-  const abilities = part.abilities.slice(0, item.ability_slots);
-  const droppedAbilityIds = part.abilities.filter((id) => !abilities.includes(id));
-  return {
-    ...part,
-    item_id: item.id,
-    custom_name: null,
-    base: { ...item.values_max },
-    enchant: clampToCaps(part.enchant, item.enchant_caps),
-    enhance_type: item.enhance_type,
-    // カタログ品はカタログの enchant_caps が正(resolve_enchant_caps)。カスタム時代の
-    // 実測上限を残すとカスタムへ戻したときに古い値が復活するので消す。
-    enchant_caps: null,
-    abilities,
-    ability_values: part.ability_values.filter((v) => !droppedAbilityIds.includes(v.ability_id)),
-    ability_additions: part.ability_additions.filter((a) => !droppedAbilityIds.includes(a.ability_id)),
-    random_options: part.random_options.slice(0, item.random_option_slots ?? 0),
-  };
-};
-
-/**
- * 強化 Lv とその等級(enhance_grade)を、Rust 側の検証(crates/domain/src/equipment.rs)が
- * 要求する不変条件を保ったまま一緒に書き換える: Lv >= 12 は enhance_grade 必須(未設定なら
- * 「最上」を既定にする)、Lv < 12 は enhance_grade 禁止(null に戻す)。EquipmentPane の直接編集と
- * ホーム「今日の強化」のステッパー双方から使う(2 箇所に同じ規則を書かないため)。
- */
-export const applyEnhanceLevel = (part: EquipmentPart, level: number): EquipmentPart => ({
-  ...part,
-  enhance_level: level,
-  enhance_grade: level >= limits.enhance_grade_min_level ? (part.enhance_grade ?? "highest") : null,
-});
 
 /** 9 値の合計(候補の「上位品」判定など、大小比較の目安にのみ使う)。 */
 export const sumValues = (v: EquipmentValues): number =>
@@ -139,9 +85,9 @@ export const selectedSienaAura = (list: SienaAuraList): SienaAura | null =>
 /** 増幅段階 = 能力値スロットの数(wiki: 段階ごとに 1 個解放)。 */
 export const sienaStage = (siena: SienaAura): number => siena.slots.length;
 
-/** いま解放されている追加オプションの枠数(段階 3/7/10 で 1/2/3)。 */
-export const sienaExtraCapacity = (siena: SienaAura, unlockStages: readonly number[]): number =>
-  unlockStages.filter((stage) => sienaStage(siena) >= stage).length;
+/** いま解放されている追加オプションの枠数。段階 → 枠数の表は Rust(SienaCatalog)が配る。 */
+export const sienaExtraCapacity = (siena: SienaAura, capacityByStage: readonly number[]): number =>
+  capacityByStage[sienaStage(siena)] ?? 0;
 
 /** 追加オプションの合計 %(同じ種類は 1 部位 1 個なので実質その値)。 */
 export const sienaExtraValue = (siena: SienaAura, kind: SienaExtraKind): number =>
@@ -203,26 +149,23 @@ export const selectedEquipmentPartOrNeutral = (list: EquipmentPartList): Equipme
   selectedEquipmentPart(list) ?? neutralEquipmentPart();
 
 // --- 神鳥の聖物 -------------------------------------------------------------
-// 段階↔実際の値の換算。正は crates/domain/src/stat_sources.rs の SacredRelic::value /
-// stage_from_value(段階 × 1段あたりの値、逆算は端数切り捨て)。
-// ステッパー1押しごとに押した瞬間へ反映する楽観更新(§00 04)のため IPC を挟めず、ここで同じ式をミラーする。
+// 段階 ↔ 実際に増える値は Rust の表(StatLimits.sacred_relic_stage_values)を引くだけ。
+// ステッパー1押しごとに押した瞬間へ反映する楽観更新(§00 04)のため IPC は挟まない。
 
 /** 段階 → 実際に増える値。 */
-export const sacredRelicValue = (stage: number, valuePerStage: number): number => stage * valuePerStage;
+export const sacredRelicValue = (stage: number): number =>
+  limits.sacred_relic_stage_values[stage] ?? 0;
 
-/** 実際の値 → 段階(端数切り捨て・範囲外は clamp)。 */
-export const sacredRelicStageFromValue = (
-  value: number,
-  stageMax: number,
-  valuePerStage: number,
-): number => Math.max(0, Math.min(stageMax, Math.floor(value / valuePerStage)));
+/** 実際に増える値 → 段階。表のうちその値までに届いている段の数(範囲外は端で止まる)。 */
+export const sacredRelicStageFromValue = (value: number): number =>
+  Math.max(0, limits.sacred_relic_stage_values.filter((v) => v <= value).length - 1);
 
 // --- ランダムオプション ---------------------------------------------------
 // 判定・集計は Rust 側(crates/domain/src/random_option.rs)。ここは表示・編集用。
 
-/** この枠の効果値。上書きが無ければレンジ上限(Rust の RandomOptionSlot::value と同じ規則)。 */
+/** この枠の効果値。上書きが無ければ Rust が配る既定値(`RandomOptionSlot::value` と同じ)。 */
 export const randomOptionValue = (slot: RandomOptionSlot, def: RandomOptionDef): number =>
-  slot.value ?? (def.tiers.find((t) => t.rank === slot.rank)?.max ?? 0);
+  slot.value ?? (def.default_values.find((d) => d.rank === slot.rank)?.value ?? 0);
 
 /**
  * 一覧のバッジに出す値。効き先で単位が違う —
@@ -268,27 +211,6 @@ export const randomOptionEffectLabel = (effect: RandomOptionEffect): string => {
 };
 
 export const randomOptionIsApplied = (effect: RandomOptionEffect): boolean => effect !== "record_only";
-
-/** 選択スキルの依存種別で発動できる OP か。条件を持たない OP とスキル未選択時は候補に残す。 */
-export const randomOptionMatchesDependency = (
-  effect: RandomOptionEffect,
-  dependency: SkillDependency | null,
-): boolean => {
-  if (dependency === null) return true;
-  if (effect === "physical_added_damage_rate") {
-    return dependency === "stab" || dependency === "hack" || dependency === "stab_hack";
-  }
-  if (effect === "magic_added_damage_rate") {
-    return dependency === "int" || dependency === "mr" || dependency === "hack_int";
-  }
-  if (effect === "physical_damage_amplify") {
-    return dependency === "stab" || dependency === "hack" || dependency === "stab_hack";
-  }
-  if (effect === "magic_damage_amplify") {
-    return dependency === "int" || dependency === "mr" || dependency === "hack_int";
-  }
-  return true;
-};
 
 /** 全部位のランダムOP の枠数(補正源リストのサマリ用)。 */
 export const randomOptionCount = (equipment: Equipment): number =>

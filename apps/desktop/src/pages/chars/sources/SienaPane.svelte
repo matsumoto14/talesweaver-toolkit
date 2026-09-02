@@ -57,7 +57,7 @@
   const sienaValueDef = (kind: SienaValueKind) => app.siena.values.find((d) => d.kind === kind);
   const sienaExtraDef = (kind: SienaExtraKind) => app.siena.extras.find((d) => d.kind === kind);
   const sienaCapacity = (slot: SienaPartSlot) =>
-    sienaExtraCapacity(sienaForDisplay(slot), app.siena.extra_unlock_stages);
+    sienaExtraCapacity(sienaForDisplay(slot), app.siena.extra_capacity_by_stage);
   /** まだ付いていない追加オプション(wiki: 同じ種類は同じ装備の別スロットには出ない) */
   const sienaAddableExtras = (slot: SienaPartSlot) => {
     const used = new Set(sienaForDisplay(slot).extras.map((e) => e.kind));
@@ -80,7 +80,7 @@
     if (!siena) return;
     siena.slots.splice(index, 1);
     // 段階が下がって枠が閉じたら、はみ出た追加オプションも落とす(値だけ残る幽霊状態を作らない)
-    const capacity = sienaExtraCapacity(siena, app.siena.extra_unlock_stages);
+    const capacity = sienaExtraCapacity(siena, app.siena.extra_capacity_by_stage);
     if (siena.extras.length > capacity) siena.extras.length = capacity;
   }
   function addSienaExtra(slot: SienaPartSlot, kind: SienaExtraKind) {

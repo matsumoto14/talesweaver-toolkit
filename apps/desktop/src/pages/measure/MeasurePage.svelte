@@ -7,11 +7,11 @@
   //
   // 逆算そのものはここでやらない。集めた実測を突き合わせて gamedata を直す
   // (手順は docs/enemy-verification.md)。
-  import { errorMessage, listSkills, previewDamage, previewEffectiveStats } from "../../api/commands";
+  import { canSeparateMeasurement, errorMessage, listSkills, previewDamage, previewEffectiveStats } from "../../api/commands";
   import type { AttackPowerBreakdown, DamageResult, EffectiveStats, Skill } from "../../api/types";
   import { fmtInt } from "../../format";
   import {
-    canSeparate, damageGap, expectedDamage, measurementDraft, type MeasurementSample,
+    damageGap, expectedDamage, measurementDraft, type MeasurementSample,
   } from "../../measurement";
   import { app, flatContents, payloadOf, selectedCharacter } from "../../state.svelte";
   import type { NewCharacter } from "../../api/types";
@@ -148,7 +148,18 @@
   );
   const canAdd = $derived(measuredDamage !== null && measuredDamage > 0 && skill !== null && targetReady);
   const canSend = $derived(samples.length > 0 && skill !== null && character !== null && targetReady);
-  const separable = $derived(canSeparate(samples));
+  // 防御力とカット率を分けて逆算できるか。判定は Rust(can_separate_measurement)。
+  let separable = $state(false);
+  const separableLatest = latest();
+  $effect(() => {
+    const attacks = samples.map((s) => s.attack);
+    separableLatest.run((isCurrent) =>
+      canSeparateMeasurement(attacks)
+        .then((value) => { if (isCurrent()) separable = value; })
+        .catch(() => { if (isCurrent()) separable = false; }),
+    );
+    return () => separableLatest.cancel();
+  });
 
   /** いまの入力を 1 点として記録し、入力欄は次の点のために空にする */
   function addSample() {
@@ -191,6 +202,7 @@
           : null,
       },
       samples,
+      separable,
     );
   }
 </script>
