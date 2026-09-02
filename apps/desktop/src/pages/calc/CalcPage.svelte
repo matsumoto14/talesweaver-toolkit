@@ -439,33 +439,16 @@
     return c.kind === "rate" ? `${fmtNum(loss * 100)}%` : fmtNum(loss);
   };
   const cappedCategories = $derived(activeCategories.filter((c) => catLoss(c) > 1e-9));
-  /**
-   * 「一番効いている」は**プレイヤーが積み上げられるカテゴリ**の中から倍率で選ぶ。
-   * - 段(スキル倍率・クリティカル)で比べると、スキル固有の値(D/F)が常勝して努力の範疇外になる
-   * - 足した実数で比べると後段ほど大きな値に掛かり、最後の段が構造的に常勝する
-   * (ユーザー指摘 2026-08-29)。代入(A〜D/F)・敵側(C/M/V1/Q/R/S/U/New2/V2)・PVP(Y)・
-   * 子を持つ親(X)は候補から外す
-   */
-  const NOT_EFFORT = new Set<string>([
-    "target_defense", "damage_reduction", "cut_rate_a", "damage_absorb", "taken_damage_rate",
-    "taken_damage_reduction", "damage_resistance", "damage_mitigation", "cut_rate_b",
-    "attack_damage_legacy", "attack_damage_rate", "pvp_correction",
-  ]);
-  const topLever = $derived(
-    activeCategories
-      .filter((c) => !NOT_EFFORT.has(c.category) && c.factor > 1)
-      .sort((a, b) => b.factor - a.factor)[0] ?? null,
-  );
-  /**
-   * 「ここを伸ばすのが効率いい」= 割合カテゴリに +1% 足したときの最終ダメージの伸び。
-   * 同一カテゴリ内は加算なので伸びは `1 / factor`(いま積んでいる量が少ないほど大きい)。
-   * 上限に達したカテゴリは伸びないので外す。候補はすでに積んでいる(供給源がある)ものだけ
-   * (中立のカテゴリは全部 ×1.00 で並ぶので順位が付けられない)
-   */
+  // 「一番効いている / 次に伸ばす」の規則は Rust 側(`damage_levers` / `DamageCategory::is_effort`)。
+  // ここは結果をカテゴリ行に引き当てて出すだけ
+  const categoryById = (id: DamageCategory | null) =>
+    id === null ? null : (activeCategories.find((c) => c.category === id) ?? null);
+  const topLever = $derived(categoryById(result?.levers.top ?? null));
   const bestLevers = $derived(
-    activeCategories
-      .filter((c) => c.kind === "rate" && !NOT_EFFORT.has(c.category) && !catAtCap(c) && c.factor > 0)
-      .sort((a, b) => a.factor - b.factor),
+    (result?.levers.candidates ?? []).flatMap((lc) => {
+      const c = categoryById(lc.category);
+      return c ? [{ ...c, gain: lc.gain_percent, headroom: lc.headroom }] : [];
+    }),
   );
   const bestLever = $derived(bestLevers[0] ?? null);
   /** 次の候補(2 位以降)。押した行の下に開く */
@@ -473,11 +456,12 @@
   let nextLeversOpen = $state(false);
   /** 積み上げの助言(いま効いている / 次に伸ばす)を開いているか。ふだんは畳む */
   let leverOpen = $state(false);
-  /** +1% 足したときの最終ダメージの伸び(%) */
-  const leverGain = (c: CategoryTrace) => 1 / c.factor;
+  type Lever = (typeof bestLevers)[number];
+  /** +1% 足したときの最終ダメージの伸び(%)(Rust `LeverCandidate::gain_percent`) */
+  const leverGain = (c: Lever) => c.gain;
   const bestLeverGain = $derived(bestLever ? leverGain(bestLever) : 0);
-  const fmtHeadroom = (c: CategoryTrace) =>
-    c.cap && c.cap.max !== null ? `上限まで あと ${fmtNum((c.cap.max - c.value) * 100)}%` : "上限なし";
+  const fmtHeadroom = (c: Lever) =>
+    c.headroom !== null ? `上限まで あと ${fmtNum(c.headroom * 100)}%` : "上限なし";
   /** topLever が乗っている段(帯の行を太字にするため) */
   const topLeverStep = $derived(
     topLever ? (steps.find((s) => s.categories.includes(topLever.category as DamageCategory))?.name ?? null) : null,

@@ -219,6 +219,35 @@ impl DamageCategory {
         }
     }
 
+    /// プレイヤーが積み上げられるカテゴリか(「一番効いている / 次に伸ばす」の候補)。
+    /// 代入(A〜D / F)・敵側(C / M / V1 / Q / R / S / U / New2 / V2)・PVP(Y)・
+    /// 子を持つ親(X)・旧仕様(Old)は候補にしない。
+    /// 段(D / F)で比べるとスキル固有の値が常勝して努力の範疇外になり、足した実数で比べると
+    /// 後段ほど大きな値に掛かって最後の段が構造的に常勝する(ユーザー指摘 2026-08-29)ので、
+    /// 候補の中を倍率(`factor`)で比べる。
+    pub fn is_effort(self) -> bool {
+        use DamageCategory::*;
+        !matches!(
+            self,
+            AttackPower
+                | AttackRandom
+                | SkillMultiplier
+                | CriticalMultiplier
+                | TargetDefense
+                | DamageReduction
+                | CutRateA
+                | DamageAbsorb
+                | TakenDamageRate
+                | TakenDamageReduction
+                | DamageResistance
+                | DamageMitigation
+                | CutRateB
+                | AttackDamageLegacy
+                | AttackDamageRate
+                | PvpCorrection
+        )
+    }
+
     /// 供給源の値が **% 表記**かどうか(集計へ入れるときに 1/100 する)。
     ///
     /// 割合カテゴリのほか、E2「スキル倍率増加(固定値)」も含める。wiki ステータスの E2 供給源は

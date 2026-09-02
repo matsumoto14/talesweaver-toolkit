@@ -71,7 +71,8 @@ pub use critical_rate::{
 };
 pub use damage::{
     calculate_damage, calculate_damage_with_combo, evaluate, ComboCycle, DamageContribution,
-    DamageMaterial, DamageResult, DamageTarget, DamageTrace, DamageTriple, DependencyCoefficients,
+    damage_levers, DamageLevers, DamageMaterial, DamageResult, DamageTarget, DamageTrace, DamageTriple,
+    DependencyCoefficients, LeverCandidate,
     DpsTriple, FormulaStep,
 };
 pub use defense::{

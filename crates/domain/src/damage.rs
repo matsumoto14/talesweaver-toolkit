@@ -11,7 +11,7 @@ use crate::attack_power::{
     attack_power_breakdown, random_part_max, stat_attack_parts, stat_attack_power,
     AttackCoefficients, AttackPowerBreakdown, StatAttackPart,
 };
-use crate::category::{CategoryTotals, CategoryTrace, DamageCategory};
+use crate::category::{CategoryKind, CategoryTotals, CategoryTrace, DamageCategory};
 use crate::common_skill::{CommonSkills, RateContribution};
 use crate::content::ReachTier;
 use crate::critical_rate::{critical_rate, CriticalRate, CriticalRateSources};
@@ -39,6 +39,58 @@ pub struct DamageContribution {
     pub source: String,
     pub category: DamageCategory,
     pub value: f64,
+}
+
+/// 「次に伸ばす」候補 1 件。割合カテゴリに +1% 足したときの最終ダメージの伸び。
+/// 同一カテゴリ内は加算なので伸びは `1 / factor`(いま積んでいる量が少ないほど大きい)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LeverCandidate {
+    pub category: DamageCategory,
+    /// +1% 足したときの最終ダメージの伸び(%)
+    pub gain_percent: f64,
+    /// 上限まであと(Σ% の小数表現)。上限なしは None
+    pub headroom: Option<f64>,
+}
+
+/// 積み上げの助言(いま一番効いている / 次に伸ばす)。候補は `DamageCategory::is_effort` の
+/// カテゴリだけ。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DamageLevers {
+    /// いま一番効いている積み上げ(倍率が最大の努力カテゴリ。積んでいないときは None)
+    pub top: Option<DamageCategory>,
+    /// 次に伸ばす候補。伸びの大きい順。上限に達したもの・まだ積んでいないもの(中立 ×1.00 は
+    /// 全部並んで順位が付かない)は含めない
+    pub candidates: Vec<LeverCandidate>,
+}
+
+/// `DamageTrace::categories` から積み上げの助言を出す。
+pub fn damage_levers(categories: &[CategoryTrace]) -> DamageLevers {
+    let active = |c: &&CategoryTrace| {
+        c.kind != CategoryKind::Assigned && c.value != 0.0 && c.category.is_effort()
+    };
+    let top = categories
+        .iter()
+        .filter(active)
+        .filter(|c| c.factor > 1.0)
+        .max_by(|a, b| a.factor.total_cmp(&b.factor))
+        .map(|c| c.category);
+    let at_cap = |c: &CategoryTrace| {
+        c.cap
+            .and_then(|cap| cap.max)
+            .is_some_and(|max| c.value >= max - 1e-9)
+    };
+    let mut candidates: Vec<LeverCandidate> = categories
+        .iter()
+        .filter(active)
+        .filter(|c| c.kind == CategoryKind::Rate && !at_cap(c) && c.factor > 0.0)
+        .map(|c| LeverCandidate {
+            category: c.category,
+            gain_percent: 1.0 / c.factor,
+            headroom: c.cap.and_then(|cap| cap.max).map(|max| max - c.value),
+        })
+        .collect();
+    candidates.sort_by(|a, b| b.gain_percent.total_cmp(&a.gain_percent));
+    DamageLevers { top, candidates }
 }
 
 /// 3 コンボ以上で付くコンボボーナス(wiki: カテゴリH)。
@@ -274,6 +326,8 @@ pub struct DamageResult {
     /// これが入っているとき `dps` はサイクルで割った値になっている
     #[serde(default)]
     pub combo: Option<ComboCycle>,
+    /// 積み上げの助言(いま一番効いている / 次に伸ばす)
+    pub levers: DamageLevers,
     pub trace: DamageTrace,
 }
 
@@ -979,6 +1033,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         .map(|d| d.max * (1.0 - critical_chance_ratio) + d.critical * critical_chance_ratio);
 
     let per_hit = DamageTriple { min, max, critical };
+    let categories = totals_max.trace();
     DamageResult {
         per_hit,
         total,
@@ -1005,6 +1060,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         expected_dps,
         // コンボは calculate_damage_with_combo で後から入れる(1 発の計算には要らない)
         combo: None,
+        levers: damage_levers(&categories),
         trace: DamageTrace {
             stats: stat_traces,
             attack,
@@ -1024,7 +1080,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
                 material.stat_cap,
             ),
             stat_attack_parts: attack_parts,
-            categories: totals_max.trace(),
+            categories,
             category_contributions,
             equipment_attack_parts: equipment_attack_parts(
                 &target.equipment_base_sources,
@@ -2244,6 +2300,33 @@ mod tests {
         let dps = result.dps.unwrap();
         assert!((dps.max - result.total.max as f64 / delay.value).abs() < 1e-9);
         assert!((dps.critical - result.total.critical as f64 / delay.value).abs() < 1e-9);
+    }
+
+    // --- 積み上げの助言(いま一番効いている / 次に伸ばす)----------------------
+
+    #[test]
+    fn 助言は努力カテゴリだけを倍率で並べ上限到達と未積みを外す() {
+        let mut m = material();
+        m.random_options.attack_damage_rate = 0.10; // X5(上限未記載)
+        let mut tg = target();
+        tg.title_attack_damage_rate = 0.80; // X3 は上限 +80% に到達
+        tg.damage_contributions = vec![DamageContribution {
+            source: "テスト".into(),
+            category: DamageCategory::FinalDamageRate, // L +5%
+            value: 0.05,
+        }];
+        let r = calculate_damage(&m, &tg);
+        // 一番効いているのは X3(×1.80)。敵の防御力(C)や覚醒(N=1.0)は候補にならない
+        assert_eq!(r.levers.top, Some(DamageCategory::AttackDamageBasicTrigger));
+        let ids: Vec<_> = r.levers.candidates.iter().map(|c| c.category).collect();
+        // 上限到達の X3 は外れ、積んでいる L(×1.05)が X5(×1.10)より上
+        assert_eq!(
+            ids,
+            vec![DamageCategory::FinalDamageRate, DamageCategory::AttackDamageSpecial]
+        );
+        assert_eq!(r.levers.candidates[1].headroom, None);
+        assert!((r.levers.candidates[0].gain_percent - 1.0 / 1.05).abs() < 1e-12);
+        assert!((r.levers.candidates[0].headroom.unwrap() - 0.40).abs() < 1e-12);
     }
 
     // --- コンボ(間に通常攻撃を挟む)-------------------------------------

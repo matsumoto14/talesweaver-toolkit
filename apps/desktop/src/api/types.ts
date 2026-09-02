@@ -1471,6 +1471,21 @@ export interface DamageTriple {
   critical: number;
 }
 
+/** 「次に伸ばす」候補 1 件(Rust `LeverCandidate`) */
+export interface LeverCandidate {
+  category: DamageCategory;
+  /** +1% 足したときの最終ダメージの伸び(%) */
+  gain_percent: number;
+  /** 上限まであと(Σ% の小数表現)。上限なしは null */
+  headroom: number | null;
+}
+/** 積み上げの助言(Rust `DamageLevers`) */
+export interface DamageLevers {
+  top: DamageCategory | null;
+  /** 伸びの大きい順 */
+  candidates: LeverCandidate[];
+}
+
 export interface DamageTrace {
   stats: StatTrace[];
   /** 攻撃力(A)の内訳 */
@@ -1550,6 +1565,8 @@ export interface DamageResult {
   expected_dps: number | null;
   /** コンボ(間に通常攻撃を挟む)の 1 サイクル。入っているとき dps はサイクルで割った値 */
   combo: ComboCycle | null;
+  /** 積み上げの助言(いま一番効いている / 次に伸ばす)。候補の規則は Rust `DamageCategory::is_effort` */
+  levers: DamageLevers;
   trace: DamageTrace;
 }
 

@@ -17,7 +17,6 @@ docs/architecture.md の「UI は表示と入力のみ。計算・判定は必�
 | 1 | `pages/chars/sources/EquipmentPane.svelte:150-247` | 依存種別→武器系統、`boris_*` スキル→武器種、キャラの weapon/armor/wrist クラスによる装備可否と候補絞り込み | gamedata にクラス表はある(`characters.rs`)が判定関数がない。`Character` × `EquipmentItem` の可否を domain に置き、`list_equipment_items` が絞って返す |
 | 2 | `EquipmentPane.svelte:442-466` | 武器アビリティの系統適合表(`abilityFitsWeapon`)と enhance_type→系統(`abilityWeaponSystem`) | Rust の検証は `equipment.rs:1131` の `exclusive_group` 重複のみで、系統不一致は通る。装備検証に加え、候補列挙も Rust から |
 | 3 | `EquipmentPane.svelte:341-370` | エンチャント完了プラン(+17 / +20 巻物の最小回数探索)。`enchantPlanStatsFor` は依存種別→ステ表を再写経 | domain に `enchant_plan(remaining) -> Plan`。ステ表は `candidate.rs::enchant_dependency_keys` を返す |
-| 4 | `pages/calc/CalcPage.svelte:446-479` | 「一番効いている / 次に伸ばす」: 除外カテゴリ id の集合(`NOT_EFFORT`)と `1/factor` の伸び式 | `DamageResult` に lever(カテゴリ・factor・+1% 換算)を持たせる |
 | 6 | `HomePage.svelte:792-880` / `EquipmentPane.svelte:261-270` | レリック育成順序: item id 文字列 `godbird-pendant-plus{n}` の解析、上限到達で +Lv 解禁、段上げ後は `values_min` に戻す | Rust は `equipment.rs:1044` で下限検証のみ。レリック段の遷移を domain に |
 
 ### A2. Rust に同じ計算があり、TS が写経しているもの(二重化)
