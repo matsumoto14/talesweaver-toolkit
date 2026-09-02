@@ -554,8 +554,8 @@
   }
   /**
    * ステ 1 つに効かせている要因の一覧(素ステ + 補正源 + 上限で捨てた分)。
-   * 実数(何ポイント動かしたか)は Rust の `StatContribution.effect`。UI で再計算しない。
-   * 素ステ + Σ実数 − 捨てた分 = 最終能力値。
+   * 実数(何ポイント動かしたか)は Rust の `StatSourceEffect.effect`(上限込み)。UI で再計算しない。
+   * 素ステ + Σ実数 = 最終能力値。
    */
   function statFactorMats(kind: StatKind): Mat[] {
     const st = result?.trace.stats.find((s) => s.kind === kind);
@@ -563,7 +563,7 @@
     const mats: Mat[] = [
       { label: "素ステ(振り分け)", value: fmtInt(st.base), n: st.base },
     ];
-    for (const c of result?.trace.stat_contributions ?? []) {
+    for (const c of result?.trace.stat_source_effects ?? []) {
       if (c.kind !== kind) continue;
       mats.push({
         label: c.source,

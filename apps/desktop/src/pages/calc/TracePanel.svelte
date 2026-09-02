@@ -1,6 +1,6 @@
 <script lang="ts">
   // 詳細トレース(能力値・カテゴリ・式の各段)。「なぜこの数字？」の最深部。
-  import type { CategoryTrace, DamageTrace, StatContribution, StatTrace } from "../../api/types";
+  import type { CategoryTrace, DamageTrace, StatSourceEffect, StatTrace } from "../../api/types";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import { bump } from "../../ui/motion.svelte";
@@ -36,8 +36,8 @@
     c.kind === "rate" ? `${c.value >= 0 ? "+" : ""}${fmtNum(c.value * 100)}%` : fmtNum(c.value);
 
   /** ステ補正源の寄与内訳。STAT_KINDS の順、同じステ内は元の配列順を保つ */
-  const contributions = $derived<StatContribution[]>(
-    STAT_KINDS.flatMap((k) => trace.stat_contributions.filter((c) => c.kind === k)),
+  const contributions = $derived<StatSourceEffect[]>(
+    STAT_KINDS.flatMap((k) => trace.stat_source_effects.filter((c) => c.kind === k)),
   );
 
   /** カテゴリ供給源内訳。カテゴリの並び(trace.categories = 式に現れる順)ごとにまとめる */

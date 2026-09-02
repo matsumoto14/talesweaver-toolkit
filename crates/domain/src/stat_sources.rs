@@ -627,7 +627,6 @@ fn add_stat_rate(
         kind,
         layer,
         value: rate,
-        effect: 0,
     });
 }
 
@@ -810,10 +809,6 @@ pub struct StatContribution {
     pub kind: StatKind,
     pub layer: StatLayer,
     pub value: f64,
-    /// この要因がそのステの最終能力値を何ポイント動かしたか(実数)。
-    /// 組み立ての時点では層ごとの重なり方が決まらないので 0 で置き、
-    /// 補正が出そろったところで `fill_contribution_effects` が埋める
-    pub effect: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
@@ -892,7 +887,6 @@ pub fn build_modifiers(
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
-                effect: 0,
             });
         }
     }
@@ -908,7 +902,6 @@ pub fn build_modifiers(
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
-                effect: 0,
             });
         }
     }
@@ -924,7 +917,6 @@ pub fn build_modifiers(
                 kind,
                 layer: StatLayer::Fixed,
                 value: bonus as f64,
-                effect: 0,
             });
         }
     }
@@ -940,7 +932,6 @@ pub fn build_modifiers(
                 kind,
                 layer: StatLayer::FinalFixed,
                 value: bonus as f64,
-                effect: 0,
             });
         }
     }
@@ -956,7 +947,6 @@ pub fn build_modifiers(
                 kind,
                 layer: StatLayer::FinalFixed,
                 value: bonus as f64,
-                effect: 0,
             });
         }
     }
@@ -1058,7 +1048,6 @@ pub fn build_modifiers(
                 kind,
                 layer: def.layer,
                 value,
-                effect: 0,
             });
         }
     }
@@ -1083,7 +1072,6 @@ pub fn apply_temporary_adjustments(
                 kind,
                 layer: StatLayer::Fixed,
                 value: adjustment.add as f64,
-                effect: 0,
             });
         }
     }
@@ -1181,9 +1169,7 @@ impl BuffStatAmplification {
 pub struct StatPreview {
     pub stats: EffectiveStats,
     pub traces: Vec<StatTrace>,
-    pub contributions: Vec<StatContribution>,
-    /// 補正源 1 件ぶんの帰属(「この要因が無かったら最終能力値がいくつ動くか」)。
-    /// `contributions[].effect`(層のステップ幅)とは別物 — 詳細は `contribution_source_effects`。
+    /// 補正源 1 件ぶんの帰属(層順のステップ幅を上限込みで。詳細は `contribution_source_effects`)
     pub source_effects: Vec<StatSourceEffect>,
     /// `source_effects` を ステ × 区分(バフ / 装備 / そのほか)でまとめたもの。
     /// ゲーム内の能力値と突き合わせるときに「どこから来た上昇か」を出す。
@@ -1327,7 +1313,6 @@ pub fn apply_siena_stats(
                 kind,
                 layer: StatLayer::FinalFixed,
                 value: value as f64,
-                effect: 0,
             });
         }
     }
@@ -1352,70 +1337,7 @@ pub fn apply_unleash(
                 kind,
                 layer: StatLayer::MultiplierB,
                 value: rate,
-                effect: 0,
             });
-        }
-    }
-}
-
-/// 寄与内訳の `effect`(その要因の層が最終能力値まで何ポイント積み上がったか、層のステップ幅)を埋める。
-/// 補正が出そろってからでないと層の重なり方が決まらないので、`build_stat_modifiers` の
-/// あとに 1 回だけ呼ぶ。
-///
-/// 層ごとの出し方(wiki §2 の計算順にそのまま乗せる):
-/// - 割合増加: `[素ステ × %]`(バフごと切捨て。`effective_stat` と同じ)
-/// - 固定値 / 最終固定値: 値そのまま
-/// - 倍率A / 倍率B: その倍率を掛ける前と後の差(前から順に積む)
-///
-/// これにより `素ステ + Σeffect − 上限で捨てた分 = 最終能力値` が成り立つ(上限を跨いだ場合は
-/// `capped_loss` を別途差し引く必要がある。上限込みで Σ をそのまま最終値に一致させたいときは
-/// `contribution_source_effects` を使う)。
-///
-/// **注意**: この `effect` は「層の計算順(割合増加 → 固定値 → 倍率A → 倍率B → 最終固定値)で
-/// 見たときのステップ幅」であって、「この補正源が無かったら最終能力値がいくつ動くか」ではない。
-/// 倍率A/B を持つ補正源(マスタリー等)は、自分より先に積まれた割合増加/固定値の補正源(バフ等)を
-/// 増幅した分を自分の `effect` に乗せて受け取る。割合増加/固定値層の補正源の `source` だけを
-/// フィルタして合計しても、その補正源が実際に最終能力値へ与えている影響(後続の倍率で増幅された
-/// 分を含む)には一致しない — その影響を含めた合計を知りたいなら、対象の補正源を除いた状態で
-/// この関数の呼び出し元(`preview_effective_stats` 等)をもう一度呼んで差分を取る(before/after)。
-pub fn fill_contribution_effects(
-    contributions: &mut [StatContribution],
-    base: &BaseStats,
-    modifiers: &StatModifierSet,
-) {
-    for kind in StatKind::ALL {
-        let m = modifiers.get(kind);
-        let base_value = base.get(kind);
-        let percent_total: i64 = m
-            .percent_of_base
-            .iter()
-            .map(|rate| floor_int(f64::from(base_value) * rate))
-            .sum();
-        let before_multiplier = (i64::from(base_value) + percent_total + m.fixed) as f64;
-        let basic = floor_int(before_multiplier * m.multiplier_a.iter().product::<f64>()) as f64;
-
-        let mut multiplier_a_index = 0usize;
-        let mut multiplier_a_product = 1.0f64;
-        let mut multiplier_b_total = 0.0f64;
-        for c in contributions.iter_mut().filter(|c| c.kind == kind) {
-            c.effect = match c.layer {
-                StatLayer::PercentOfBase => floor_int(f64::from(base_value) * c.value),
-                StatLayer::Fixed | StatLayer::FinalFixed => c.value as i64,
-                StatLayer::MultiplierA => {
-                    let Some(&factor) = m.multiplier_a.get(multiplier_a_index) else {
-                        continue;
-                    };
-                    multiplier_a_index += 1;
-                    let before = floor_int(before_multiplier * multiplier_a_product);
-                    multiplier_a_product *= factor;
-                    floor_int(before_multiplier * multiplier_a_product) - before
-                }
-                StatLayer::MultiplierB => {
-                    let before = floor_int(basic * multiplier_b_total.max(MULTIPLIER_B_MIN));
-                    multiplier_b_total += c.value;
-                    floor_int(basic * multiplier_b_total.max(MULTIPLIER_B_MIN)) - before
-                }
-            };
         }
     }
 }
@@ -1469,8 +1391,8 @@ pub fn group_source_effects(effects: &[StatSourceEffect]) -> Vec<StatGroupEffect
     out
 }
 
-/// `fill_contribution_effects` と同じ「層順のステップ幅」を、**`cap` を織り込んだ形**で返す
-/// (`fill_contribution_effects` は生値ベースで、上限を跨いだときは呼び出し側が `capped_loss` を
+/// 補正源 1 件ぶんの帰属。「層順のステップ幅」を **`cap` を織り込んだ形**で返す
+/// (生値ベースだと上限を跨いだときに呼び出し側が `capped_loss` を
 /// 別途差し引く必要があった)。
 ///
 /// 定義(累積再構築): `contributions` を層順(割合増加 → 固定値 → 倍率A → 倍率B → 最終固定値)に
@@ -1480,7 +1402,7 @@ pub fn group_source_effects(effects: &[StatSourceEffect]) -> Vec<StatGroupEffect
 /// 上限を跨いでも常に厳密に成り立つ**(単独計算/leave-one-out は floor と乗算のせいで一致しないため
 /// 採らない)。
 ///
-/// **注意**: `fill_contribution_effects` と同様、これは層順で見たときのステップ幅であり、
+/// **注意**: これは層順で見たときのステップ幅であり、
 /// 「この補正源が無かったら最終能力値がいくつ動くか(倍率A/B による増幅込みの実質的な影響)」
 /// ではない(倍率A/B の補正源が、先に積んだ補正源を増幅した分を自分の `effect` に乗せて受け取る。
 /// その影響を含めた値が要るときは呼び出し元で before/after を取る)。
@@ -1610,21 +1532,12 @@ fn effective_stats_with(
     common: &CommonSkills,
     catalogs: StatCatalogs<'_>,
     stat_cap: i64,
-) -> Result<
-    (
-        EffectiveStats,
-        Vec<StatTrace>,
-        Vec<StatContribution>,
-        Vec<StatSourceEffect>,
-    ),
-    StatSourceError,
-> {
-    let (modifiers, mut contributions) =
+) -> Result<(EffectiveStats, Vec<StatTrace>, Vec<StatSourceEffect>), StatSourceError> {
+    let (modifiers, contributions) =
         build_stat_modifiers(sources, buffs, equipment, common, catalogs, None)?;
-    fill_contribution_effects(&mut contributions, base, &modifiers);
     let source_effects = contribution_source_effects(&contributions, base, &modifiers, stat_cap);
     let (stats, traces) = effective_stats(base, &modifiers, stat_cap);
-    Ok((stats, traces, contributions, source_effects))
+    Ok((stats, traces, source_effects))
 }
 
 /// 最終能力値と装備から攻撃力(A)を内訳付きで出す。ダメージ計算(`calculate_damage`)と
@@ -1762,7 +1675,7 @@ pub fn preview_effective_stats(
     base.validate()?;
     sources.validate()?;
     equipment.validate()?;
-    let (stats, traces, contributions, source_effects) = effective_stats_with(
+    let (stats, traces, source_effects) = effective_stats_with(
         base,
         sources,
         buffs,
@@ -1789,7 +1702,7 @@ pub fn preview_effective_stats(
             let mut part_contributions = Vec::with_capacity(12);
             for (slot, _) in equipment.parts.iter() {
                 let without = equipment.without_part(slot);
-                let (stats_without, _, _, _) = effective_stats_with(
+                let (stats_without, _, _) = effective_stats_with(
                     base,
                     sources,
                     buffs,
@@ -1876,7 +1789,7 @@ pub fn preview_effective_stats(
     let buff_stat_amplification: BuffStatAmplification = if buffs.choices.is_empty() {
         BuffStatAmplification::default()
     } else {
-        let (baseline_stats, _, _, _) = effective_stats_with(
+        let (baseline_stats, _, _) = effective_stats_with(
             base,
             sources,
             &BuffSelection::default(),
@@ -1904,7 +1817,6 @@ pub fn preview_effective_stats(
     Ok(StatPreview {
         stats,
         traces,
-        contributions,
         group_effects: group_source_effects(&source_effects),
         source_effects,
         attack,
@@ -2251,7 +2163,6 @@ mod tests {
             kind,
             layer,
             value,
-            effect: 0,
         }
     }
 
@@ -2277,7 +2188,7 @@ mod tests {
             m.multiplier_b = 0.2 + 0.05;
             m.final_fixed = 330;
         }
-        let mut contributions = vec![
+        let contributions = vec![
             c("割合1", kind, StatLayer::PercentOfBase, 0.1),
             c("割合2", kind, StatLayer::PercentOfBase, 0.05),
             c("ペット", kind, StatLayer::Fixed, 60.0),
@@ -2289,25 +2200,22 @@ mod tests {
             c("クラウン", kind, StatLayer::FinalFixed, 300.0),
             c("聖物", kind, StatLayer::FinalFixed, 30.0),
         ];
-        fill_contribution_effects(&mut contributions, &base, &modifiers);
-
         // 上限に当たらない場合
         let (_, trace) = effective_stat(kind, base.get(kind), modifiers.get(kind), NO_CAP);
-        let total: i64 = contributions.iter().map(|x| x.effect).sum();
+        let effects = contribution_source_effects(&contributions, &base, &modifiers, NO_CAP);
+        let total: i64 = effects.iter().map(|x| x.effect).sum();
         assert_eq!(trace.capped_loss, 0);
         assert_eq!(i64::from(trace.base) + total, trace.effective);
 
-        // 上限で頭打ちなら、捨てた分を引くと一致する
+        // 上限で頭打ちなら、上限込みの帰属の合計がそのまま最終能力値に一致する
         let (_, trace) = effective_stat(kind, base.get(kind), modifiers.get(kind), 800);
+        let effects = contribution_source_effects(&contributions, &base, &modifiers, 800);
+        let total: i64 = effects.iter().map(|x| x.effect).sum();
         assert!(trace.capped_loss > 0);
-        assert_eq!(
-            i64::from(trace.base) + total - trace.capped_loss,
-            trace.effective
-        );
+        assert_eq!(i64::from(trace.base) + total, trace.effective);
     }
 
-    /// `contribution_source_effects` は `fill_contribution_effects` と同じ層順ステップ幅を
-    /// `cap` 込みで返す。割合増加・固定値・倍率A・倍率Bを同時に持つケースで、上限に当たっても
+    /// `contribution_source_effects` は層順ステップ幅を `cap` 込みで返す。割合増加・固定値・倍率A・倍率Bを同時に持つケースで、上限に当たっても
     /// 厳密に `Σ per-source == 最終 − 素ステ` が成り立つことを確認する。
     #[test]
     fn 補正源ごとの帰属の合計は最終能力値と一致する() {

@@ -486,14 +486,10 @@ export interface StatContribution {
   kind: StatKind;
   layer: StatLayer;
   value: number;
-  /** 層の計算順で見たときのステップ幅(倍率A/B を持つ補正源は、先に積んだ他の補正源を増幅した
-   *  分も自分の effect に乗る)。「この補正源が無かったら最終能力値がいくつ動くか」を知りたいときは
-   *  StatSourceEffect(source_effects / stat_source_effects)を使う */
-  effect: number;
 }
 
-// crates/domain/src/stat_sources.rs の StatSourceEffect。fill_contribution_effects と同じ
-// 層順ステップ幅を、上限(cap)込みで返す(Σ が必ず最終能力値 − 素ステに一致する)。
+// crates/domain/src/stat_sources.rs の StatSourceEffect。層順ステップ幅を上限(cap)込みで
+// 返す(Σ が必ず最終能力値 − 素ステに一致する)。
 export interface StatSourceEffect {
   source: string;
   group: StatSourceGroup;
@@ -1169,7 +1165,6 @@ export interface AttackPreview {
 export interface StatPreview {
   stats: EffectiveStats;
   traces: StatTrace[];
-  contributions: StatContribution[];
   source_effects: StatSourceEffect[];
   /** source_effects を ステ × 区分でまとめたもの(常に 7 ステ × 3 区分) */
   group_effects: StatGroupEffect[];
@@ -1490,8 +1485,6 @@ export interface DamageTrace {
   stats: StatTrace[];
   /** 攻撃力(A)の内訳 */
   attack: AttackPowerBreakdown;
-  /** ステ補正源(ペット/ルーン/クラウン/聖物/バフ/調整値)の寄与内訳 */
-  stat_contributions: StatContribution[];
   /** 補正源 1 件ぶんの帰属(cap 込みで Σ が最終能力値 − 素ステに一致する) */
   stat_source_effects: StatSourceEffect[];
   /** ステ攻撃力に効いている依存ステごとの内訳(合計 = ステ攻撃力) */
