@@ -14,7 +14,7 @@ use crate::common_skill::{
     STRONG_WEAPON_LEVEL_MAX, STRONG_WEAPON_RATE_PER_LEVEL,
 };
 use crate::equipment::{
-    Equipment, EquipmentCoefficients, EquipmentEnhanceType, EquipmentRates, EquipmentValues, EnhanceGrade,
+    EquipmentStatKind, Equipment, EquipmentCoefficients, EquipmentEnhanceType, EquipmentValues, EnhanceGrade,
     PartSlot, ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN,
 };
 use crate::siena::SIENA_STAGE_MAX;
@@ -148,42 +148,22 @@ pub fn enhance_candidates(
 }
 
 /// エンチャントの候補にする 4 種(与ダメージ式に入る値だけ。命中/Cri補正/回避/敏捷は
-/// この一覧の目的の外なので出さない)。`(serde キー, 表示名, getter, setter)`。
-const ENCHANT_CANDIDATE_FIELDS: [(
-    &str,
-    &str,
-    fn(&EquipmentValues) -> i64,
-    fn(&mut EquipmentValues, i64),
-); 4] = [
-    ("thrust", EquipmentValues::THRUST_LABEL, |v| v.thrust, |v, x| v.thrust = x),
-    ("slash", EquipmentValues::SLASH_LABEL, |v| v.slash, |v, x| v.slash = x),
-    ("magic_attack", EquipmentValues::MAGIC_ATTACK_LABEL, |v| v.magic_attack, |v, x| {
-        v.magic_attack = x
-    }),
-    ("magic_defense", EquipmentValues::MAGIC_DEFENSE_LABEL, |v| v.magic_defense, |v, x| {
-        v.magic_defense = x
-    }),
+/// この一覧の目的の外なので出さない)。
+pub const ENCHANT_CANDIDATE_STATS: [EquipmentStatKind; 4] = [
+    EquipmentStatKind::Thrust,
+    EquipmentStatKind::Slash,
+    EquipmentStatKind::MagicAttack,
+    EquipmentStatKind::MagicDefense,
 ];
 
-/// スキル依存種別(`SkillDependency`)が実際に装備攻撃力へ効かせる装備値 2 種(装備攻撃力係数が
-/// 基本/強化のどちらかで非 0 のもの)。エンチャント候補をこの 2 種に絞るのに使う
-/// (命中/Cri/回避/敏捷はこの一覧の目的の外なので、そもそも `ENCHANT_CANDIDATE_FIELDS` に無い)。
+/// スキル依存種別(`SkillDependency`)が実際に装備攻撃力へ効かせる装備値(装備攻撃力係数が
+/// 基本/強化のどちらかで非 0 のもの)。エンチャント候補をこれに絞るのに使う。
 /// ゲームのルール表(依存種別 → 見るステ)を UI 側に持たせず、装備攻撃力係数(gamedata)という
 /// 既存の唯一の正から引く。
-pub fn enchant_dependency_keys(coefficients: &EquipmentCoefficients) -> Vec<&'static str> {
-    ENCHANT_CANDIDATE_FIELDS
-        .iter()
-        .filter(|&&(key, _, _, _)| {
-            let rate = |r: &EquipmentRates| match key {
-                "thrust" => r.thrust,
-                "slash" => r.slash,
-                "magic_attack" => r.magic_attack,
-                "magic_defense" => r.magic_defense,
-                _ => 0.0,
-            };
-            rate(&coefficients.base) != 0.0 || rate(&coefficients.enhanced) != 0.0
-        })
-        .map(|&(key, _, _, _)| key)
+pub fn enchant_dependency_keys(coefficients: &EquipmentCoefficients) -> Vec<EquipmentStatKind> {
+    ENCHANT_CANDIDATE_STATS
+        .into_iter()
+        .filter(|&kind| coefficients.base.get(kind) != 0.0 || coefficients.enhanced.get(kind) != 0.0)
         .collect()
 }
 
@@ -196,19 +176,19 @@ pub fn enchant_candidates(
     equipment: &Equipment,
     common_skills: &CommonSkills,
     caps: &[(PartSlot, EquipmentValues)],
-    allowed_keys: &[&str],
+    allowed_keys: &[EquipmentStatKind],
 ) -> Vec<CandidateChange> {
     let mut out = Vec::new();
     for &(slot, cap) in caps {
         let Some(part) = equipment.parts.get(slot).selected() else {
             continue;
         };
-        for &(key, label, get, set) in &ENCHANT_CANDIDATE_FIELDS {
-            if !allowed_keys.is_empty() && !allowed_keys.contains(&key) {
+        for kind in ENCHANT_CANDIDATE_STATS {
+            if !allowed_keys.is_empty() && !allowed_keys.contains(&kind) {
                 continue;
             }
-            let current = get(&part.enchant);
-            let max = get(&cap);
+            let current = part.enchant.get(kind);
+            let max = cap.get(kind);
             if current >= max {
                 continue;
             }
@@ -218,12 +198,13 @@ pub fn enchant_candidates(
                 .get_mut(slot)
                 .selected_mut()
                 .expect("selected part exists (checked above)");
-            set(&mut mut_part.enchant, max);
+            *mut_part.enchant.get_mut(kind) = max;
             out.push(CandidateChange {
-                id: format!("enchant-{slot:?}-{key}").to_lowercase(),
+                id: format!("enchant-{slot:?}-{}", kind.key()).to_lowercase(),
                 label: format!(
-                    "{}のエンチャント {label} +{}({current} → {max} 上限)",
+                    "{}のエンチャント {} +{}({current} → {max} 上限)",
                     slot.label(),
+                    kind.label(),
                     max - current,
                 ),
                 cost: CandidateCost::Enchant,
@@ -279,7 +260,7 @@ pub fn list_candidate_changes(
     weapon_enhance_type: Option<EquipmentEnhanceType>,
     armor_enhance_type: Option<EquipmentEnhanceType>,
     enchant_caps: &[(PartSlot, EquipmentValues)],
-    enchant_allowed_keys: &[&str],
+    enchant_allowed_keys: &[EquipmentStatKind],
 ) -> Vec<CandidateChange> {
     let mut out = quick_win_candidates(equipment, common_skills);
     out.extend(enhance_candidates(
@@ -512,7 +493,10 @@ mod tests {
             },
         };
         let keys = enchant_dependency_keys(&coefficients);
-        assert_eq!(keys, vec!["slash", "magic_attack"]);
+        assert_eq!(
+            keys,
+            vec![EquipmentStatKind::Slash, EquipmentStatKind::MagicAttack]
+        );
     }
 
     #[test]
@@ -537,7 +521,7 @@ mod tests {
             },
         )];
         // 斬りだけに絞ると、突き・魔攻の候補は出ない
-        let candidates = enchant_candidates(&equipment, &common_skills, &caps, &["slash"]);
+        let candidates = enchant_candidates(&equipment, &common_skills, &caps, &[EquipmentStatKind::Slash]);
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].id, "enchant-weapon-slash");
     }

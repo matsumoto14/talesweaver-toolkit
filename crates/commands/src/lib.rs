@@ -893,7 +893,7 @@ pub fn preview_versus(
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EnchantDependencyKeys {
     pub dependency: domain::SkillDependency,
-    pub keys: Vec<String>,
+    pub keys: Vec<domain::EquipmentStatKind>,
 }
 
 /// `domain::StatLimits` に `enchant_dependency_keys` を足したもの。gamedata(装備攻撃力係数)を
@@ -910,10 +910,7 @@ pub fn get_stat_limits() -> StatLimitsPayload {
         .into_iter()
         .map(|dependency| EnchantDependencyKeys {
             dependency,
-            keys: domain::enchant_dependency_keys(&gamedata::equipment_coefficients(dependency))
-                .into_iter()
-                .map(str::to_string)
-                .collect(),
+            keys: domain::enchant_dependency_keys(&gamedata::equipment_coefficients(dependency)),
         })
         .collect();
     StatLimitsPayload {
@@ -1578,7 +1575,7 @@ struct CandidateContext {
     enchant_caps: Vec<(domain::PartSlot, domain::EquipmentValues)>,
     /// エンチャント候補にするステ。このコンテンツで実際に振る主軸スキルの依存ステだけに絞る
     /// (突き/斬り/魔攻/魔防の 4 種全部を出すと、主軸に効かない提案が混ざる)
-    enchant_allowed_keys: Vec<&'static str>,
+    enchant_allowed_keys: Vec<domain::EquipmentStatKind>,
 }
 
 fn candidate_context(
@@ -1750,8 +1747,8 @@ pub fn list_upgrade_candidates(
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EnchantGain {
     pub slot: domain::PartSlot,
-    /// `EquipmentValues` のフィールド名("thrust"/"slash"/"magic_attack"/"magic_defense")
-    pub key: String,
+    /// 積むステ(`EquipmentStatKind`。JSON は `EquipmentValues` のフィールド名と同じ)
+    pub key: domain::EquipmentStatKind,
     /// 「MAX まで積むと base に対して何 % 伸びるか」(`rank_candidates` と同じ丸め)
     pub delta_pct: i32,
 }
@@ -1814,13 +1811,7 @@ pub fn list_enchant_gains(
 fn enchant_id_slot_key(
     before: &domain::Equipment,
     change: &domain::CandidateChange,
-) -> Option<(domain::PartSlot, String)> {
-    const KEYS: [(&str, fn(&domain::EquipmentValues) -> i64); 4] = [
-        ("thrust", |v| v.thrust),
-        ("slash", |v| v.slash),
-        ("magic_attack", |v| v.magic_attack),
-        ("magic_defense", |v| v.magic_defense),
-    ];
+) -> Option<(domain::PartSlot, domain::EquipmentStatKind)> {
     for slot in domain::PartSlot::ALL {
         let Some(before_part) = before.parts.get(slot).selected() else {
             continue;
@@ -1828,9 +1819,9 @@ fn enchant_id_slot_key(
         let Some(after_part) = change.equipment.parts.get(slot).selected() else {
             continue;
         };
-        for (key, get) in KEYS {
-            if get(&after_part.enchant) != get(&before_part.enchant) {
-                return Some((slot, key.to_string()));
+        for kind in domain::ENCHANT_CANDIDATE_STATS {
+            if after_part.enchant.get(kind) != before_part.enchant.get(kind) {
+                return Some((slot, kind));
             }
         }
     }

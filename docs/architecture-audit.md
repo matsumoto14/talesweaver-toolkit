@@ -27,7 +27,6 @@ TS に残るのは表示ラベルと、返ってきた集合での絞り込み�
 | # | 場所 | 症状 | 簡単な形 |
 |---|---|---|---|
 | 4 | `equipment.rs:360-414`(SienaStatBonus)、`stats.rs`(BaseStats / EffectiveStats)、`element.rs` | ステ別 7 フィールド構造体の手書き `get/get_mut`。stat_sources.rs 側の 6 型は `PerStat<T>`(stats.rs)にした(済み) | 残りも `PerStat<T>` に寄せる。`BaseStats` / `EffectiveStats` はテストの構造体リテラルが多いので値のまま可 |
-| 5 | `equipment.rs:98-166, 1634-1650, 1690-1759`、`thesis_core.rs:260-277`、`siena.rs:231-255`、`candidate.rs:152-188`、`commands/lib.rs:1450-1474` | 装備補正 9 値のフィールド対応表が 7 通り。文字列キー `"thrust"` が domain → commands → TS まで走る | `EquipmentValueKind` を 9 種にし `EquipmentValues::get/get_mut(kind)` を 1 か所。候補 id は `(PartSlot, EquipmentValueKind)` |
 | 6 | `commands/lib.rs` `preview_defense` / `preview_versus` | 2 値のためにフルプレビュー(`list_upgrade_candidates` / `list_enchant_gains` の同文と `preview_effective_stats` の 4 回複写は `CandidateContext` / `stat_preview_of` で解消済み) | 必要な値だけ出す軽い domain 関数に |
 | 8 | `stat_sources.rs:1929-2080, 2097-2213` | `StatLimits` が 150 項目 × 2 リスト。ラベル・部位ルール(`equipment.rs:336-355` は `PartSlot` メソッドの写し)は上限ではなくカタログ | ラベル・部位ルールは `list_*` 系へ。`StatLimits` は数値上限だけ |
 | 11 | `random_option.rs:230-244`、`candidate.rs:58, 74, 91, 344`、`skill.rs:166` | 裸の `as i64` / `.round() as` / `.floor() as`(stat_sources.rs 側は `trunc_int` に寄せた) | `trunc_int` / `round_int` に寄せる |

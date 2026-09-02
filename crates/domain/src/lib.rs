@@ -46,6 +46,7 @@ pub use attack_power::{
 pub use awakening::{Awakening, AwakeningCaps, AwakeningError};
 pub use candidate::{
     aura_candidates, enchant_candidates, enchant_dependency_keys, enhance_candidates,
+    ENCHANT_CANDIDATE_STATS,
     list_candidate_changes, quick_win_candidates, rank_candidates, CandidateChange, CandidateCost,
     CandidateOutcome, RankedCandidate,
 };

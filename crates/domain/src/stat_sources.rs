@@ -24,7 +24,7 @@ use crate::damage::DamageContribution;
 use crate::element::ElementSources;
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
-    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, PartStatTotal,
+    EquipmentStatKind, EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, PartStatTotal,
     ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
 };
 use crate::mastery::{Masteries, MasteryCatalog};
@@ -1891,7 +1891,7 @@ pub struct StatLimits {
     pub sacred_relic_stage_values: Vec<i64>,
     /// 与ダメージ式カテゴリ(`DamageCategory`)の日本語名。36 カテゴリぶん、`DamageCategory::ALL` の順
     pub damage_category_labels: Vec<DamageCategoryLabel>,
-    /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentValues::FIELD_LABELS` の順。
+    /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentStatKind::ALL` の順。
     /// `CoreType`(テシスコア)の表示名もここと同じ(8 種が重なる。critical は含まない)
     pub equipment_stat_labels: Vec<EquipmentStatLabel>,
     /// コンボボーナスが付くコンボ数(wiki: カテゴリH)
@@ -1956,7 +1956,7 @@ pub struct DamageCategoryLabel {
 }
 
 /// 装備補正 1 値の表示名(`stat_limits` 経由で UI に配る)。`kind` は serde のフィールド名
-/// (`EquipmentValues::FIELD_LABELS` のキー)と一致する。
+/// (`EquipmentStatKind::key`)と一致する。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EquipmentStatLabel {
     pub kind: String,
@@ -2066,11 +2066,11 @@ pub fn stat_limits() -> StatLimits {
                 label: category.label().to_string(),
             })
             .collect(),
-        equipment_stat_labels: EquipmentValues::FIELD_LABELS
+        equipment_stat_labels: EquipmentStatKind::ALL
             .into_iter()
-            .map(|(kind, label)| EquipmentStatLabel {
-                kind: kind.to_string(),
-                label: label.to_string(),
+            .map(|kind| EquipmentStatLabel {
+                kind: kind.key().to_string(),
+                label: kind.label().to_string(),
             })
             .collect(),
         combo_bonus_threshold: crate::damage::COMBO_BONUS_THRESHOLD,

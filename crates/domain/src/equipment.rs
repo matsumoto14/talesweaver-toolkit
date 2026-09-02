@@ -75,6 +75,36 @@ impl EquipmentStatKind {
         EquipmentStatKind::Evasion,
         EquipmentStatKind::Agility,
     ];
+
+    /// 表示名(装備補正とテシスコアで表記が食い違わないよう、唯一の正)。
+    pub fn label(self) -> &'static str {
+        match self {
+            EquipmentStatKind::Thrust => EquipmentValues::THRUST_LABEL,
+            EquipmentStatKind::Slash => EquipmentValues::SLASH_LABEL,
+            EquipmentStatKind::PhysicalDefense => EquipmentValues::PHYSICAL_DEFENSE_LABEL,
+            EquipmentStatKind::MagicAttack => EquipmentValues::MAGIC_ATTACK_LABEL,
+            EquipmentStatKind::MagicDefense => EquipmentValues::MAGIC_DEFENSE_LABEL,
+            EquipmentStatKind::Accuracy => EquipmentValues::ACCURACY_LABEL,
+            EquipmentStatKind::Critical => EquipmentValues::CRITICAL_LABEL,
+            EquipmentStatKind::Evasion => EquipmentValues::EVASION_LABEL,
+            EquipmentStatKind::Agility => EquipmentValues::AGILITY_LABEL,
+        }
+    }
+
+    /// serde のフィールド名(画面が `EquipmentValues` を引くキーと同じ)。
+    pub fn key(self) -> &'static str {
+        match self {
+            EquipmentStatKind::Thrust => "thrust",
+            EquipmentStatKind::Slash => "slash",
+            EquipmentStatKind::PhysicalDefense => "physical_defense",
+            EquipmentStatKind::MagicAttack => "magic_attack",
+            EquipmentStatKind::MagicDefense => "magic_defense",
+            EquipmentStatKind::Accuracy => "accuracy",
+            EquipmentStatKind::Critical => "critical",
+            EquipmentStatKind::Evasion => "evasion",
+            EquipmentStatKind::Agility => "agility",
+        }
+    }
 }
 
 /// 装備補正 9 値の値域上限(wiki は装備ごとの「上限」行しか持たず、全装備共通の上限は
@@ -148,46 +178,42 @@ impl EquipmentValues {
     pub const EVASION_LABEL: &'static str = "回避率補正";
     pub const AGILITY_LABEL: &'static str = "敏捷度補正";
 
-    /// (表示名, 値)の 9 組。検証・UI ラベル・合計表示の唯一の並び順にする。
+    /// (表示名, 値)の 9 組(`EquipmentStatKind::ALL` の順)。検証・UI ラベル・合計表示の唯一の並び順。
     pub fn fields(&self) -> [(&'static str, i64); 9] {
-        [
-            (Self::THRUST_LABEL, self.thrust),
-            (Self::SLASH_LABEL, self.slash),
-            (Self::PHYSICAL_DEFENSE_LABEL, self.physical_defense),
-            (Self::MAGIC_ATTACK_LABEL, self.magic_attack),
-            (Self::MAGIC_DEFENSE_LABEL, self.magic_defense),
-            (Self::ACCURACY_LABEL, self.accuracy),
-            (Self::CRITICAL_LABEL, self.critical),
-            (Self::EVASION_LABEL, self.evasion),
-            (Self::AGILITY_LABEL, self.agility),
-        ]
+        EquipmentStatKind::ALL.map(|kind| (kind.label(), self.get(kind)))
     }
-
-    /// (serde フィールド名, 表示名)の 9 組。`StatLimits::equipment_stat_labels` の元。
-    pub const FIELD_LABELS: [(&'static str, &'static str); 9] = [
-        ("thrust", Self::THRUST_LABEL),
-        ("slash", Self::SLASH_LABEL),
-        ("physical_defense", Self::PHYSICAL_DEFENSE_LABEL),
-        ("magic_attack", Self::MAGIC_ATTACK_LABEL),
-        ("magic_defense", Self::MAGIC_DEFENSE_LABEL),
-        ("accuracy", Self::ACCURACY_LABEL),
-        ("critical", Self::CRITICAL_LABEL),
-        ("evasion", Self::EVASION_LABEL),
-        ("agility", Self::AGILITY_LABEL),
-    ];
 
     /// 種別で 1 値を取り出す。
     pub fn get(&self, kind: EquipmentStatKind) -> i64 {
+        *self.get_ref(kind)
+    }
+
+    fn get_ref(&self, kind: EquipmentStatKind) -> &i64 {
         match kind {
-            EquipmentStatKind::Thrust => self.thrust,
-            EquipmentStatKind::Slash => self.slash,
-            EquipmentStatKind::PhysicalDefense => self.physical_defense,
-            EquipmentStatKind::MagicAttack => self.magic_attack,
-            EquipmentStatKind::MagicDefense => self.magic_defense,
-            EquipmentStatKind::Accuracy => self.accuracy,
-            EquipmentStatKind::Critical => self.critical,
-            EquipmentStatKind::Evasion => self.evasion,
-            EquipmentStatKind::Agility => self.agility,
+            EquipmentStatKind::Thrust => &self.thrust,
+            EquipmentStatKind::Slash => &self.slash,
+            EquipmentStatKind::PhysicalDefense => &self.physical_defense,
+            EquipmentStatKind::MagicAttack => &self.magic_attack,
+            EquipmentStatKind::MagicDefense => &self.magic_defense,
+            EquipmentStatKind::Accuracy => &self.accuracy,
+            EquipmentStatKind::Critical => &self.critical,
+            EquipmentStatKind::Evasion => &self.evasion,
+            EquipmentStatKind::Agility => &self.agility,
+        }
+    }
+
+    /// 種別で 1 値を書き換える(装備補正 9 値のフィールド対応はここと `get_ref` だけが知る)。
+    pub fn get_mut(&mut self, kind: EquipmentStatKind) -> &mut i64 {
+        match kind {
+            EquipmentStatKind::Thrust => &mut self.thrust,
+            EquipmentStatKind::Slash => &mut self.slash,
+            EquipmentStatKind::PhysicalDefense => &mut self.physical_defense,
+            EquipmentStatKind::MagicAttack => &mut self.magic_attack,
+            EquipmentStatKind::MagicDefense => &mut self.magic_defense,
+            EquipmentStatKind::Accuracy => &mut self.accuracy,
+            EquipmentStatKind::Critical => &mut self.critical,
+            EquipmentStatKind::Evasion => &mut self.evasion,
+            EquipmentStatKind::Agility => &mut self.agility,
         }
     }
 
@@ -1977,6 +2003,19 @@ pub struct EquipmentRates {
     pub magic_defense: f64,
 }
 
+impl EquipmentRates {
+    /// 装備補正の種別ごとの係数。装備攻撃力に効かない 5 種は 0。
+    pub fn get(&self, kind: EquipmentStatKind) -> f64 {
+        match kind {
+            EquipmentStatKind::Thrust => self.thrust,
+            EquipmentStatKind::Slash => self.slash,
+            EquipmentStatKind::MagicAttack => self.magic_attack,
+            EquipmentStatKind::MagicDefense => self.magic_defense,
+            _ => 0.0,
+        }
+    }
+}
+
 /// 装備攻撃力の係数(基本能力値用/強化能力値用)。スキル依存種別ごとに gamedata が持つ。
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct EquipmentCoefficients {
@@ -2898,7 +2937,7 @@ mod tests {
 
     #[test]
     fn 対象外部位のアビリティは拒否し兜は許可する() {
-        let eq = Equipment::default();
+        let mut eq = Equipment::default();
         eq.parts.body.selected_or_register().abilities = vec!["unknown".to_string()];
         assert!(matches!(
             eq.validate(),

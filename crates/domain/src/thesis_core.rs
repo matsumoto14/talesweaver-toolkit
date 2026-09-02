@@ -16,7 +16,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::equipment::EquipmentValues;
+use crate::equipment::{EquipmentStatKind, EquipmentValues};
 
 /// 装着位置の数(wiki: テシスコア効果「装着位置」1〜6)。
 pub const CORE_SLOT_COUNT: usize = 6;
@@ -101,6 +101,20 @@ pub enum CoreType {
 }
 
 impl CoreType {
+    /// 装備補正 9 値のどこに入るか(クリティカル補正だけ対応するコアが無い)。
+    pub fn stat_kind(self) -> EquipmentStatKind {
+        match self {
+            CoreType::Thrust => EquipmentStatKind::Thrust,
+            CoreType::Slash => EquipmentStatKind::Slash,
+            CoreType::MagicAttack => EquipmentStatKind::MagicAttack,
+            CoreType::MagicDefense => EquipmentStatKind::MagicDefense,
+            CoreType::PhysicalDefense => EquipmentStatKind::PhysicalDefense,
+            CoreType::Evasion => EquipmentStatKind::Evasion,
+            CoreType::Agility => EquipmentStatKind::Agility,
+            CoreType::Accuracy => EquipmentStatKind::Accuracy,
+        }
+    }
+
     pub const ALL: [CoreType; 8] = [
         CoreType::Thrust,
         CoreType::Slash,
@@ -260,18 +274,8 @@ impl CoreSet {
     pub fn equipment_values(&self) -> EquipmentValues {
         let mut values = EquipmentValues::default();
         for core in self.slots.iter().flatten() {
-            let bonus = core.bonus();
-            match core.core_type {
-                CoreType::Thrust => values.thrust += bonus,
-                CoreType::Slash => values.slash += bonus,
-                CoreType::MagicAttack => values.magic_attack += bonus,
-                CoreType::MagicDefense => values.magic_defense += bonus,
-                // 補助タイプ。与ダメージ式の係数は 0 なので攻撃力には効かず、防御側・回避Pに効く
-                CoreType::PhysicalDefense => values.physical_defense += bonus,
-                CoreType::Evasion => values.evasion += bonus,
-                CoreType::Agility => values.agility += bonus,
-                CoreType::Accuracy => values.accuracy += bonus,
-            }
+            // 補助タイプは与ダメージ式の係数が 0 なので攻撃力には効かず、防御側・回避Pに効く
+            *values.get_mut(core.core_type.stat_kind()) += core.bonus();
         }
         values
     }
