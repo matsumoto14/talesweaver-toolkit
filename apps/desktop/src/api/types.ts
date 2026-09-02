@@ -1466,6 +1466,12 @@ export interface HitRate {
   value: number;
   /** 上限に張り付いている(= 必中)。判定は domain 側で済ませてある */
   capped: boolean;
+  /** 下限に張り付いている(raw <= min)。少し積んでも率は動かない */
+  floored: boolean;
+  /** 必中まであと何 P か(max − raw)。0 以下なら必中で、絶対値が相手の回避P に対する余裕 */
+  to_cap: number;
+  /** 下限を抜けるのに要る命中P(min − raw + 1)。floored のときだけ意味を持つ */
+  to_leave_floor: number;
 }
 
 // crates/domain/src/stat_sources.rs の StatFixedSource。ステの固定上昇源。
@@ -1477,13 +1483,8 @@ export type StatFixedSource =
   | "sacred_relic";
 
 // crates/domain/src/defense.rs の GrowthGroup。伸びしろの区分(**費用の安い順**で固定)。
-export type GrowthGroup =
-  | "buff"
-  | "equipment_ability"
-  | "random_option"
-  | "stat_fixed"
-  | "enchant"
-  | "siena";
+// 4 区分(ステータスを伸ばす / バフを使う / 装備補正を上げる / エンチャントする)。
+export type GrowthGroup = "stat" | "buff" | "equipment" | "enchant";
 
 // crates/domain/src/defense.rs の GrowthAction。「次に何をするか」。
 // Rust は文言を持たない ── 画面が id・名前・部位・段階から行の言葉を組む。
@@ -1518,7 +1519,7 @@ export type GrowthAction =
       };
     }
   | { stat_fixed: { stat: StatKind; source: StatFixedSource } }
-  | { enchant: { stat: EquipmentStatKind } }
+  | { enchant: { slot: PartSlot; stat: EquipmentStatKind } }
   | { siena: { stat: EquipmentStatKind } };
 
 // crates/domain/src/defense.rs の GrowthRoom。伸びしろ 1 手ぶん。
@@ -1603,14 +1604,21 @@ export interface VersusAccuracy {
   accuracy_max: number;
   /** 全部積んだときの命中率(結果への効き。% はここから読む。自前で導出しない) */
   accuracy_max_hit_rate: HitRate;
+  /** 全部積んだら命中率が何%動くか(試す前の値が基準。画面で引き算しない) */
+  accuracy_max_hit_rate_gain: number;
   /** 防御側の回避P 伸びしろ(区分ごと) */
   evasion_growth: GrowthGroupRooms[];
   /** 全部積んだときの回避P */
   evasion_max: number;
   /** 防御側が全部積んだときの命中率(攻撃側から見た数字。下がる方向) */
   evasion_max_hit_rate: HitRate;
+  /** 防御側が全部積んだら命中率が何%動くか(試す前の値が基準。画面で引き算しない) */
+  evasion_max_hit_rate_gain: number;
   /** 攻撃側が覚えられる命中P割合増加スキル(極・的中剣)。覚えられないキャラは null */
   accuracy_skill_available: AccuracySkillOption | null;
+  /** 試し(attacker_tries / defender_tries)を反映する前の値。両方とも空なら null。
+   * 頭の「元の率 → いまの率」・状態行の「命中P before → now」はこれと現在値を並べて出す */
+  before_tries: { accuracy_point: number; evasion_point: number; hit_rate: HitRate } | null;
 }
 
 /** 与ダメージ式の段の種別(Rust `FormulaStepKind`) */

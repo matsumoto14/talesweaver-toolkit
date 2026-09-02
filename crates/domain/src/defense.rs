@@ -385,6 +385,13 @@ pub struct HitRate {
     /// 上限に張り付いている = そのぶんは外れない。wiki の「回避Pを 100 上回ると必中」に相当する。
     /// **判定はここ(domain)で済ませて持たせる** — 画面で `raw >= max` を書き直させない
     pub capped: bool,
+    /// 下限に張り付いている(`raw <= min`)。命中P を少し積んでも率は動かない
+    pub floored: bool,
+    /// 必中(上限)まであと何 P か(`max − raw`)。0 以下なら必中で、その絶対値が
+    /// 「相手の回避P があとどれだけ上がっても必中のままか」の余裕。画面で引き算しない
+    pub to_cap: i64,
+    /// 下限を抜けるのに要る命中P(`min − raw + 1`)。下限に張り付いているときだけ意味を持つ
+    pub to_leave_floor: i64,
 }
 
 /// 命中率の下限を動かす補正(wiki `#HitRateCap`)。攻撃側の最小命中率補正と、対象の最小回避率
@@ -424,6 +431,9 @@ pub fn hit_rate(accuracy_point: i64, evasion_point: i64, floors: HitRateFloors) 
         max,
         value: raw.clamp(min, max),
         capped: raw >= max,
+        floored: raw <= min,
+        to_cap: max - raw,
+        to_leave_floor: min - raw + 1,
     }
 }
 
@@ -510,23 +520,20 @@ pub fn defense_profile(
     }
 }
 
-/// 伸びしろの材料の区分。**費用の安い順で固定**(ユーザー決定 2026-09-02)。
-/// gain 降順で並べるとエンチャント(いちばん高い)が先頭に来て「次にできること」にならない。
+/// 伸びしろの材料の区分。ユーザーの言葉に合わせた 4 区分(ユーザー決定 2026-09-02)。
+/// 宣言順 = 画面の並び。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GrowthGroup {
-    /// 常用バフを乗せる(命中P増加・ステ増加)
+    /// ステータスを伸ばす(ステの固定上昇源 = ペット S / ルーン / クラウン / カード / 聖物、
+    /// DEX / AGI 増加バフ)
+    Stat,
+    /// 命中バフ / 回避バフを使う(命中P増加バフ)
     Buff,
-    /// 装着アビリティ(空き枠に付ける / 上位に替える)
-    EquipmentAbility,
-    /// ランダムオプション(空き枠に付ける / ランクを上げる)
-    RandomOption,
-    /// ステの固定上昇源(ペット S / ルーン / クラウン / カード / 聖物)
-    StatFixed,
-    /// エンチャント枠(費用が高い。末尾)
+    /// 装備の命中補正 / 回避補正を上げる(装着アビリティ・ランダムオプション・シエナのオーラ)
+    Equipment,
+    /// エンチャントする(費用が高い。末尾)
     Enchant,
-    /// シエナのオーラの空きスロット([仮] 見積り)
-    Siena,
 }
 
 /// 伸びしろ 1 件で「何をするか」。**文言は持たない** — 画面が id・名前・部位・段階から組む。
@@ -576,7 +583,7 @@ pub enum GrowthAction {
         source: StatFixedSource,
     },
     /// エンチャント枠を上限まで(部位をまたいだ合計)
-    Enchant { stat: EquipmentStatKind },
+    Enchant { slot: PartSlot, stat: EquipmentStatKind },
     /// シエナのオーラの空き段階を上限まで
     Siena { stat: EquipmentStatKind },
 }
@@ -648,19 +655,20 @@ fn siena_room(equipment: &Equipment, kind: SienaValueKind) -> i64 {
 /// 装備の部位ごとに、エンチャント枠の残り(`EquipmentValues` の 1 フィールド `get`)の合計。
 /// `enchant_caps` は呼び出し側が `resolve_enchant_caps` で解決した、部位ごとの実測上限
 /// (カタログ item が付いている部位だけ渡ってくる)。
-fn enchant_room(
+fn enchant_rooms(
     equipment: &Equipment,
     enchant_caps: &[(PartSlot, EquipmentValues)],
     get: fn(&EquipmentValues) -> i64,
-) -> i64 {
+) -> Vec<(PartSlot, i64, i64)> {
     enchant_caps
         .iter()
         .filter_map(|&(slot, cap)| {
             let part = equipment.parts.get(slot).selected()?;
-            let room = get(&cap) - get(&part.enchant);
-            (room > 0).then_some(room)
+            let current = get(&part.enchant);
+            let max = get(&cap);
+            (max > current).then_some((slot, current, max))
         })
-        .sum()
+        .collect()
 }
 
 /// 命中Pに効くランダムオプションの効き先(命中P専用 + 命中/回避の両方に効くもの)。
@@ -827,10 +835,66 @@ fn accuracy_growth(
     let mut equipment_accuracy_total = equipment_accuracy;
     let mut random_option_total = 0;
 
-    // 1. バフ(いちばん安い)── 命中P増加バフ → DEX 増加バフ
+    // 1. ステータスを伸ばす ── DEX 増加バフ → DEX の固定上昇源
+    let mut rows = Vec::new();
+    let mut stat_dex = 0;
+    for room in stat_buff_rooms {
+        let target = stats.dex + room.value;
+        dex_total += room.value;
+        stat_dex += room.value;
+        let point = recompute(target, equipment_accuracy, 0, 0);
+        rows.extend(mk(
+            GrowthGroup::Stat,
+            GrowthAction::StatBuff {
+                buff_id: room.buff_id.clone(),
+                name: room.name.clone(),
+                stat: StatKind::Dex,
+            },
+            stats.dex,
+            target,
+            point,
+            false,
+        ));
+    }
+    // DEX の固定上昇源。覚醒 / エタの意志の上限に達していないぶんだけ効く
+    for room in crate::stat_sources::stat_fixed_rooms(stat_sources, StatKind::Dex) {
+        let effective = (room.max - room.current).min((stat_cap - stats.dex).max(0));
+        if effective <= 0 {
+            continue;
+        }
+        dex_total += effective;
+        stat_dex += effective;
+        let point = recompute(stats.dex + effective, equipment_accuracy, 0, 0);
+        rows.extend(mk(
+            GrowthGroup::Stat,
+            GrowthAction::StatFixed {
+                stat: StatKind::Dex,
+                source: room.source,
+            },
+            room.current,
+            room.max,
+            point,
+            false,
+        ));
+    }
+    // 源を合わせるとステ上限を超えることがある(源ごとの行は上限までで見ている)
+    push_group(
+        &mut out,
+        GrowthGroup::Stat,
+        rows,
+        recompute(
+            (stats.dex + stat_dex).min(stat_cap.max(stats.dex)),
+            equipment_accuracy,
+            0,
+            0,
+        ),
+        current,
+        &hit_rate_gain,
+    );
+
+    // 2. 命中バフを使う ── 命中P増加バフ
     let mut rows = Vec::new();
     let mut buff_bonus = 0;
-    let mut buff_dex = 0;
     for room in crate::stat_sources::accuracy_buff_rooms(buff_selection, buff_catalog, boost) {
         extra_bonus_total += room.value;
         buff_bonus += room.value;
@@ -847,34 +911,17 @@ fn accuracy_growth(
             false,
         ));
     }
-    for room in stat_buff_rooms {
-        let target = stats.dex + room.value;
-        dex_total += room.value;
-        buff_dex += room.value;
-        let point = recompute(target, equipment_accuracy, 0, 0);
-        rows.extend(mk(
-            GrowthGroup::Buff,
-            GrowthAction::StatBuff {
-                buff_id: room.buff_id.clone(),
-                name: room.name.clone(),
-                stat: StatKind::Dex,
-            },
-            stats.dex,
-            target,
-            point,
-            false,
-        ));
-    }
     push_group(
         &mut out,
         GrowthGroup::Buff,
         rows,
-        recompute(stats.dex + buff_dex, equipment_accuracy, buff_bonus, 0),
+        recompute(stats.dex, equipment_accuracy, buff_bonus, 0),
         current,
         &hit_rate_gain,
     );
 
-    // 2. 装着アビリティの命中率補正(空き枠 → 上位への差し替え)
+    // 3. 装備の命中補正を上げる ── 装着アビリティ(空き枠 → 上位への差し替え)
+    //    → ランダムオプション(空き枠 → S・真へのランク上げ)→ シエナのオーラ([仮])
     let mut rows = Vec::new();
     let mut ability_delta = 0;
     for room in crate::equipment::ability_value_rooms(
@@ -888,7 +935,7 @@ fn accuracy_growth(
         ability_delta += delta;
         let point = recompute(stats.dex, equipment_accuracy + delta, 0, 0);
         rows.extend(mk(
-            GrowthGroup::EquipmentAbility,
+            GrowthGroup::Equipment,
             ability_action(room.slot, room.action),
             room.current,
             room.target,
@@ -896,17 +943,6 @@ fn accuracy_growth(
             false,
         ));
     }
-    push_group(
-        &mut out,
-        GrowthGroup::EquipmentAbility,
-        rows,
-        recompute(stats.dex, equipment_accuracy + ability_delta, 0, 0),
-        current,
-        &hit_rate_gain,
-    );
-
-    // 3. ランダムオプションの命中P(空き枠 → S・真へのランク上げ)
-    let mut rows = Vec::new();
     let mut option_delta = 0;
     for (slot, part) in equipment.iter_selected() {
         for room in crate::random_option::random_option_rooms(
@@ -920,7 +956,7 @@ fn accuracy_growth(
             option_delta += delta;
             let point = recompute(stats.dex, equipment_accuracy, 0, delta);
             rows.extend(mk(
-                GrowthGroup::RandomOption,
+                GrowthGroup::Equipment,
                 random_option_action(room.slot, room.action),
                 room.current,
                 room.target,
@@ -929,85 +965,12 @@ fn accuracy_growth(
             ));
         }
     }
-    push_group(
-        &mut out,
-        GrowthGroup::RandomOption,
-        rows,
-        recompute(stats.dex, equipment_accuracy, 0, option_delta),
-        current,
-        &hit_rate_gain,
-    );
-
-    // 4. DEX の固定上昇源。覚醒 / エタの意志の上限に達していないぶんだけ効く
-    let mut rows = Vec::new();
-    let mut fixed_dex = 0;
-    for room in crate::stat_sources::stat_fixed_rooms(stat_sources, StatKind::Dex) {
-        let effective = (room.max - room.current).min((stat_cap - stats.dex).max(0));
-        if effective <= 0 {
-            continue;
-        }
-        dex_total += effective;
-        fixed_dex += effective;
-        let point = recompute(stats.dex + effective, equipment_accuracy, 0, 0);
-        rows.extend(mk(
-            GrowthGroup::StatFixed,
-            GrowthAction::StatFixed {
-                stat: StatKind::Dex,
-                source: room.source,
-            },
-            room.current,
-            room.max,
-            point,
-            false,
-        ));
-    }
-    // 源を合わせるとステ上限を超えることがある(源ごとの行は上限までで見ている)
-    push_group(
-        &mut out,
-        GrowthGroup::StatFixed,
-        rows,
-        recompute(
-            (stats.dex + fixed_dex).min(stat_cap.max(stats.dex)),
-            equipment_accuracy,
-            0,
-            0,
-        ),
-        current,
-        &hit_rate_gain,
-    );
-
-    // 5. エンチャント枠(最終手段)
-    let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.accuracy);
-    if enchant_gain > 0 {
-        equipment_accuracy_total += enchant_gain;
-        let point = recompute(stats.dex, equipment_accuracy + enchant_gain, 0, 0);
-        let rows = mk(
-            GrowthGroup::Enchant,
-            GrowthAction::Enchant {
-                stat: EquipmentStatKind::Accuracy,
-            },
-            equipment_accuracy,
-            equipment_accuracy + enchant_gain,
-            point,
-            false,
-        );
-        push_group(
-            &mut out,
-            GrowthGroup::Enchant,
-            rows.into_iter().collect(),
-            point,
-            current,
-            &hit_rate_gain,
-        );
-    }
-
-    // 6. シエナのオーラの空きスロット([仮])
     let siena_gain = siena_room(equipment, SienaValueKind::Accuracy);
     if siena_gain > 0 {
         equipment_accuracy_total += siena_gain;
         let point = recompute(stats.dex, equipment_accuracy + siena_gain, 0, 0);
-        let rows = mk(
-            GrowthGroup::Siena,
+        rows.extend(mk(
+            GrowthGroup::Equipment,
             GrowthAction::Siena {
                 stat: EquipmentStatKind::Accuracy,
             },
@@ -1015,12 +978,49 @@ fn accuracy_growth(
             equipment_accuracy + siena_gain,
             point,
             true,
-        );
+        ));
+    }
+    push_group(
+        &mut out,
+        GrowthGroup::Equipment,
+        rows,
+        recompute(
+            stats.dex,
+            equipment_accuracy + ability_delta + siena_gain.max(0),
+            0,
+            option_delta,
+        ),
+        current,
+        &hit_rate_gain,
+    );
+
+    // 4. エンチャントする(費用が高い。最終手段)。部位ごとに 1 手(どの部位を打つかが分かるように)
+    let enchant = enchant_rooms(equipment, enchant_caps, |v| v.accuracy);
+    if !enchant.is_empty() {
+        let mut rows = Vec::new();
+        let mut enchant_gain = 0;
+        for &(slot, cur, max) in &enchant {
+            let delta = max - cur;
+            enchant_gain += delta;
+            let point = recompute(stats.dex, equipment_accuracy + delta, 0, 0);
+            rows.extend(mk(
+                GrowthGroup::Enchant,
+                GrowthAction::Enchant {
+                    slot,
+                    stat: EquipmentStatKind::Accuracy,
+                },
+                cur,
+                max,
+                point,
+                false,
+            ));
+        }
+        equipment_accuracy_total += enchant_gain;
         push_group(
             &mut out,
-            GrowthGroup::Siena,
-            rows.into_iter().collect(),
-            point,
+            GrowthGroup::Enchant,
+            rows,
+            recompute(stats.dex, equipment_accuracy + enchant_gain, 0, 0),
             current,
             &hit_rate_gain,
         );
@@ -1100,16 +1100,16 @@ fn evasion_growth(
     let mut equipment_evasion_total = equipment_evasion;
     let mut random_option_total = 0;
 
-    // 1. AGI 増加バフ(回避P増加バフはカタログに無い)
+    // 1. ステータスを伸ばす ── AGI 増加バフ → AGI の固定上昇源
     let mut rows = Vec::new();
-    let mut buff_agi = 0;
+    let mut stat_agi = 0;
     for room in stat_buff_rooms {
         let target = stats.agi + room.value;
         agi_total += room.value;
-        buff_agi += room.value;
+        stat_agi += room.value;
         let point = recompute(target, equipment_evasion, 0);
         rows.extend(mk(
-            GrowthGroup::Buff,
+            GrowthGroup::Stat,
             GrowthAction::StatBuff {
                 buff_id: room.buff_id.clone(),
                 name: room.name.clone(),
@@ -1121,16 +1121,43 @@ fn evasion_growth(
             false,
         ));
     }
+    for room in crate::stat_sources::stat_fixed_rooms(stat_sources, StatKind::Agi) {
+        let effective = (room.max - room.current).min((stat_cap - stats.agi).max(0));
+        if effective <= 0 {
+            continue;
+        }
+        agi_total += effective;
+        stat_agi += effective;
+        let point = recompute(stats.agi + effective, equipment_evasion, 0);
+        rows.extend(mk(
+            GrowthGroup::Stat,
+            GrowthAction::StatFixed {
+                stat: StatKind::Agi,
+                source: room.source,
+            },
+            room.current,
+            room.max,
+            point,
+            false,
+        ));
+    }
     push_group(
         &mut out,
-        GrowthGroup::Buff,
+        GrowthGroup::Stat,
         rows,
-        recompute(stats.agi + buff_agi, equipment_evasion, 0),
+        recompute(
+            (stats.agi + stat_agi).min(stat_cap.max(stats.agi)),
+            equipment_evasion,
+            0,
+        ),
         current,
         &hit_rate_gain,
     );
 
-    // 2. 装着アビリティの回避率補正
+    // 2. 回避バフを使う(回避P増加バフはいまカタログに無いので、この区分は常に出ない。
+    //    `push_group` は空の材料を出さない)
+
+    // 3. 装備の回避補正を上げる ── 装着アビリティ → ランダムオプション → シエナのオーラ([仮])
     let mut rows = Vec::new();
     let mut ability_delta = 0;
     for room in crate::equipment::ability_value_rooms(
@@ -1144,7 +1171,7 @@ fn evasion_growth(
         ability_delta += delta;
         let point = recompute(stats.agi, equipment_evasion + delta, 0);
         rows.extend(mk(
-            GrowthGroup::EquipmentAbility,
+            GrowthGroup::Equipment,
             ability_action(room.slot, room.action),
             room.current,
             room.target,
@@ -1152,17 +1179,6 @@ fn evasion_growth(
             false,
         ));
     }
-    push_group(
-        &mut out,
-        GrowthGroup::EquipmentAbility,
-        rows,
-        recompute(stats.agi, equipment_evasion + ability_delta, 0),
-        current,
-        &hit_rate_gain,
-    );
-
-    // 3. ランダムオプションの回避P
-    let mut rows = Vec::new();
     let mut option_delta = 0;
     for (slot, part) in equipment.iter_selected() {
         for room in crate::random_option::random_option_rooms(
@@ -1176,7 +1192,7 @@ fn evasion_growth(
             option_delta += delta;
             let point = recompute(stats.agi, equipment_evasion, delta);
             rows.extend(mk(
-                GrowthGroup::RandomOption,
+                GrowthGroup::Equipment,
                 random_option_action(room.slot, room.action),
                 room.current,
                 room.target,
@@ -1185,83 +1201,12 @@ fn evasion_growth(
             ));
         }
     }
-    push_group(
-        &mut out,
-        GrowthGroup::RandomOption,
-        rows,
-        recompute(stats.agi, equipment_evasion, option_delta),
-        current,
-        &hit_rate_gain,
-    );
-
-    // 4. AGI の固定上昇源
-    let mut rows = Vec::new();
-    let mut fixed_agi = 0;
-    for room in crate::stat_sources::stat_fixed_rooms(stat_sources, StatKind::Agi) {
-        let effective = (room.max - room.current).min((stat_cap - stats.agi).max(0));
-        if effective <= 0 {
-            continue;
-        }
-        agi_total += effective;
-        fixed_agi += effective;
-        let point = recompute(stats.agi + effective, equipment_evasion, 0);
-        rows.extend(mk(
-            GrowthGroup::StatFixed,
-            GrowthAction::StatFixed {
-                stat: StatKind::Agi,
-                source: room.source,
-            },
-            room.current,
-            room.max,
-            point,
-            false,
-        ));
-    }
-    push_group(
-        &mut out,
-        GrowthGroup::StatFixed,
-        rows,
-        recompute(
-            (stats.agi + fixed_agi).min(stat_cap.max(stats.agi)),
-            equipment_evasion,
-            0,
-        ),
-        current,
-        &hit_rate_gain,
-    );
-
-    // 5. エンチャント枠
-    let enchant_gain = enchant_room(equipment, enchant_caps, |v| v.evasion);
-    if enchant_gain > 0 {
-        equipment_evasion_total += enchant_gain;
-        let point = recompute(stats.agi, equipment_evasion + enchant_gain, 0);
-        let rows = mk(
-            GrowthGroup::Enchant,
-            GrowthAction::Enchant {
-                stat: EquipmentStatKind::Evasion,
-            },
-            equipment_evasion,
-            equipment_evasion + enchant_gain,
-            point,
-            false,
-        );
-        push_group(
-            &mut out,
-            GrowthGroup::Enchant,
-            rows.into_iter().collect(),
-            point,
-            current,
-            &hit_rate_gain,
-        );
-    }
-
-    // 6. シエナのオーラ([仮])
     let siena_gain = siena_room(equipment, SienaValueKind::Evasion);
     if siena_gain > 0 {
         equipment_evasion_total += siena_gain;
         let point = recompute(stats.agi, equipment_evasion + siena_gain, 0);
-        let rows = mk(
-            GrowthGroup::Siena,
+        rows.extend(mk(
+            GrowthGroup::Equipment,
             GrowthAction::Siena {
                 stat: EquipmentStatKind::Evasion,
             },
@@ -1269,12 +1214,48 @@ fn evasion_growth(
             equipment_evasion + siena_gain,
             point,
             true,
-        );
+        ));
+    }
+    push_group(
+        &mut out,
+        GrowthGroup::Equipment,
+        rows,
+        recompute(
+            stats.agi,
+            equipment_evasion + ability_delta + siena_gain.max(0),
+            option_delta,
+        ),
+        current,
+        &hit_rate_gain,
+    );
+
+    // 4. エンチャントする(部位ごとに 1 手)
+    let enchant = enchant_rooms(equipment, enchant_caps, |v| v.evasion);
+    if !enchant.is_empty() {
+        let mut rows = Vec::new();
+        let mut enchant_gain = 0;
+        for &(slot, cur, max) in &enchant {
+            let delta = max - cur;
+            enchant_gain += delta;
+            let point = recompute(stats.agi, equipment_evasion + delta, 0);
+            rows.extend(mk(
+                GrowthGroup::Enchant,
+                GrowthAction::Enchant {
+                    slot,
+                    stat: EquipmentStatKind::Evasion,
+                },
+                cur,
+                max,
+                point,
+                false,
+            ));
+        }
+        equipment_evasion_total += enchant_gain;
         push_group(
             &mut out,
-            GrowthGroup::Siena,
-            rows.into_iter().collect(),
-            point,
+            GrowthGroup::Enchant,
+            rows,
+            recompute(stats.agi, equipment_evasion + enchant_gain, 0),
             current,
             &hit_rate_gain,
         );
@@ -1336,15 +1317,34 @@ pub struct VersusAccuracy {
     pub accuracy_max: i64,
     /// 攻撃側の命中Pの伸びしろを全部積んだときの命中率(結果への効き。フロントで % を導出させない)
     pub accuracy_max_hit_rate: HitRate,
+    /// 攻撃側の命中Pの伸びしろを全部やったら命中率(%)が何動くか
+    /// (`accuracy_max_hit_rate.value − hit_rate.value`。フロントで引き算させない)
+    pub accuracy_max_hit_rate_gain: i64,
     /// 防御側の回避Pの伸びしろ(区分ごと。費用の安い順。効かない手・空の区分は入らない)
     pub evasion_growth: Vec<GrowthGroupRooms>,
     /// 防御側の回避Pの伸びしろを全部積んだときの回避P
     pub evasion_max: i64,
     /// 防御側の回避Pの伸びしろを全部積んだときの命中率(攻撃側から見た数字。下がる方向)
     pub evasion_max_hit_rate: HitRate,
+    /// 防御側の回避Pの伸びしろを全部やったら命中率(%)が何動くか
+    /// (`evasion_max_hit_rate.value − hit_rate.value`。攻撃側の命中率なので下がる方向が正の値)
+    pub evasion_max_hit_rate_gain: i64,
     /// 攻撃側が覚えられる命中P割合増加スキル(極・的中剣)。**覚えられるキャラだけ**
     /// 画面が ON / OFF チップを出す。`None` なら出さない
     pub accuracy_skill_available: Option<AccuracySkillOption>,
+    /// 伸びしろの手を試す前(base)の値。攻撃側 / 防御側どちらの `tries` も空なら `None`
+    /// (「押した場所は動かない」── ON にした手が伸びしろ一覧から消えないよう、伸びしろ
+    /// 6 フィールドは常にこの base 側の値で固定する。呼び出し側(`preview_versus`)が
+    /// base と tried の 2 回の計算結果を合成して埋める)
+    pub before_tries: Option<VersusBeforeTries>,
+}
+
+/// `VersusAccuracy::before_tries`。試した手を当てる前の命中P・回避P・命中率。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct VersusBeforeTries {
+    pub accuracy_point: i64,
+    pub evasion_point: i64,
+    pub hit_rate: HitRate,
 }
 
 /// 対人計算の攻撃側ぶん。防御側と取り違えないよう型で分ける
@@ -1486,9 +1486,11 @@ pub fn versus_accuracy(
         accuracy_growth,
         accuracy_max,
         accuracy_max_hit_rate,
+        accuracy_max_hit_rate_gain: accuracy_max_hit_rate.value - hit.value,
         evasion_growth,
         evasion_max,
         evasion_max_hit_rate,
+        evasion_max_hit_rate_gain: evasion_max_hit_rate.value - hit.value,
         accuracy_skill_available: attacker.learnable_accuracy_skill.map(|def| {
             AccuracySkillOption {
                 id: def.id,
@@ -1497,6 +1499,7 @@ pub fn versus_accuracy(
                 active: attacker.accuracy_boost.skill_id() == Some(def.id),
             }
         }),
+        before_tries: None,
     }
 }
 
@@ -1919,6 +1922,17 @@ mod tests {
         assert_eq!(capped.max, HIT_RATE_MIN_BASE + HIT_RATE_PLAYER_SPAN);
         assert_eq!(capped.value, capped.max);
         assert!(capped.capped);
+        assert!(!capped.floored);
+        // 上限を 100 超えている = 相手の回避P があと 100 上がっても必中のまま
+        assert_eq!(capped.to_cap, -100);
+        // 下限に張り付く。下限を抜けるには min − raw + 1
+        let floored = hit_rate(10, 0, HitRateFloors::NONE);
+        assert!(floored.floored);
+        assert_eq!(floored.to_leave_floor, HIT_RATE_MIN_BASE - 10 + 1);
+        // 挟まれない領域は必中まで max − raw
+        let mid = hit_rate(60, 0, HitRateFloors::NONE);
+        assert!(!mid.capped && !mid.floored);
+        assert_eq!(mid.to_cap, HIT_RATE_MIN_BASE + HIT_RATE_PLAYER_SPAN - 60);
 
         // raw が下限を下回っても下限で頭打ち
         let low = hit_rate(-500, 0, HitRateFloors::NONE);
@@ -2155,8 +2169,8 @@ mod tests {
             },
             AttackType::Physical,
         );
-        assert!(!rooms(&v.accuracy_growth).any(|g| g.group == GrowthGroup::StatFixed));
-        assert!(!rooms(&v.evasion_growth).any(|g| g.group == GrowthGroup::StatFixed));
+        assert!(!rooms(&v.accuracy_growth).any(|g| g.group == GrowthGroup::Stat));
+        assert!(!rooms(&v.evasion_growth).any(|g| g.group == GrowthGroup::Stat));
     }
 
     #[test]
@@ -2401,7 +2415,7 @@ mod tests {
         );
         assert_eq!(v.accuracy_max, recomputed);
         assert!(v.accuracy_max > v.accuracy_point);
-        // 行は費用の安い順(バフ → アビリティ → ランダム OP → 固定上昇 → エンチャント → シエナ)
+        // 行は GrowthGroup の宣言順(ステータス → バフ → 装備 → エンチャント)
         let groups: Vec<GrowthGroup> = v.accuracy_growth.iter().map(|g| g.group).collect();
         let mut sorted = groups.clone();
         sorted.sort();
@@ -2413,7 +2427,7 @@ mod tests {
         let fixed = v
             .accuracy_growth
             .iter()
-            .find(|g| g.group == GrowthGroup::StatFixed)
+            .find(|g| g.group == GrowthGroup::Stat)
             .expect("DEX の固定上昇の区分が出るはず");
         let fixed_recomputed = accuracy_point(
             &EffectiveStats {
@@ -2437,6 +2451,155 @@ mod tests {
         assert_eq!(enchant.rooms.len(), 1);
         assert_eq!(enchant.gain, enchant.rooms[0].gain);
         assert_eq!(enchant.hit_rate_gain, enchant.rooms[0].hit_rate_gain);
+    }
+
+    #[test]
+    fn statbuffはstat区分に入る() {
+        let attacker = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats::default();
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let dex_buff = BuffRoom {
+            buff_id: "dex_up".to_string(),
+            name: "DEX 増加バフ".to_string(),
+            value: 20,
+        };
+        let v = versus_accuracy(
+            &VersusAttacker {
+                learnable_accuracy_skill: None,
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: attacker.dex + 100,
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::NONE,
+                accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
+                stat_sources: test_sources(),
+                abilities: &[],
+                random_option_catalog: &[],
+                weapon_system: None,
+                stat_buff_rooms: std::slice::from_ref(&dex_buff),
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi,
+                evasion_random_option: 0,
+                stat_sources: test_sources(),
+                abilities: &[],
+                random_option_catalog: &[],
+                weapon_system: None,
+                stat_buff_rooms: &[],
+                min_evasion_rate: None,
+            },
+            AttackType::Physical,
+        );
+        let group = v
+            .accuracy_growth
+            .iter()
+            .find(|g| {
+                g.rooms
+                    .iter()
+                    .any(|r| matches!(r.action, GrowthAction::StatBuff { .. }))
+            })
+            .expect("DEX 増加バフの手を含む区分が出るはず");
+        assert_eq!(group.group, GrowthGroup::Stat, "StatBuff は Stat 区分に入る");
+    }
+
+    #[test]
+    fn siena_はequipment区分に入る() {
+        use crate::siena::{RegisteredSienaAura, SienaAura, SienaAuraList};
+
+        let attacker = EffectiveStats {
+            dex: 100,
+            ..Default::default()
+        };
+        let defender_stats = EffectiveStats::default();
+        let defender = defense_profile(
+            &defender_stats,
+            &EquipmentValues::default(),
+            no_caps(),
+            &RandomOptionTotals::default(),
+            DefenseRates::NEUTRAL,
+        );
+        let mut equipment = Equipment::default();
+        // 命中率のスロットは武器 / 盾には出ない(`allowed_on`)。手に空のオーラを付ける
+        equipment.siena.hand = SienaAuraList {
+            registered: vec![RegisteredSienaAura {
+                id: 1,
+                label: String::new(),
+                aura: SienaAura {
+                    slots: vec![],
+                    extras: vec![],
+                },
+            }],
+            selected_id: Some(1),
+        };
+        let v = versus_accuracy(
+            &VersusAttacker {
+                learnable_accuracy_skill: None,
+                stats: &attacker,
+                correction: &neutral_correction(),
+                equipment: &equipment,
+                enchant_caps: &[],
+                stat_cap: attacker.dex, // ステ伸びしろは無関係にする
+                equipment_accuracy: 0,
+                skill_accuracy: 0,
+                accuracy_bonus: 0,
+                accuracy_boost: AccuracyBoost::NONE,
+                accuracy_random_option: 0,
+                accuracy_buff_catalog: &[],
+                accuracy_buff_selection: &crate::stat_sources::BuffSelection::default(),
+                stat_sources: test_sources(),
+                abilities: &[],
+                random_option_catalog: &[],
+                weapon_system: None,
+                stat_buff_rooms: &[],
+                min_hit_rate: None,
+            },
+            &VersusDefender {
+                stats: &defender_stats,
+                profile: &defender,
+                equipment: &Equipment::default(),
+                enchant_caps: &[],
+                stat_cap: defender_stats.agi,
+                evasion_random_option: 0,
+                stat_sources: test_sources(),
+                abilities: &[],
+                random_option_catalog: &[],
+                weapon_system: None,
+                stat_buff_rooms: &[],
+                min_evasion_rate: None,
+            },
+            AttackType::Physical,
+        );
+        let group = v
+            .accuracy_growth
+            .iter()
+            .find(|g| {
+                g.rooms
+                    .iter()
+                    .any(|r| matches!(r.action, GrowthAction::Siena { .. }))
+            })
+            .expect("シエナの手を含む区分が出るはず");
+        assert_eq!(group.group, GrowthGroup::Equipment, "Siena は Equipment 区分に入る");
+        assert!(group.provisional, "シエナが混ざる区分は provisional");
     }
 
     #[test]
@@ -2495,7 +2658,7 @@ mod tests {
         assert!(v.hit_rate.capped);
         assert_eq!(v.hit_rate.value, v.hit_rate.max);
         let stat_room = rooms(&v.accuracy_growth)
-            .find(|g| g.group == GrowthGroup::StatFixed)
+            .find(|g| g.group == GrowthGroup::Stat)
             .expect("DEX の伸びしろが出るはず");
         assert_eq!(stat_room.hit_rate_gain, 0);
     }
@@ -2573,7 +2736,7 @@ mod tests {
 
         // 少し積んだだけ(DEX +5)では下限のまま動かない。
         let stat_room = rooms(&v.accuracy_growth)
-            .find(|g| g.group == GrowthGroup::StatFixed)
+            .find(|g| g.group == GrowthGroup::Stat)
             .expect("DEX の伸びしろが出るはず");
         assert_eq!(stat_room.hit_rate_gain, 0);
 
@@ -2641,7 +2804,7 @@ mod tests {
         assert!(!v.hit_rate.capped);
         assert_eq!(v.hit_rate.value, 50);
         let stat_room = rooms(&v.evasion_growth)
-            .find(|g| g.group == GrowthGroup::StatFixed)
+            .find(|g| g.group == GrowthGroup::Stat)
             .expect("AGI の伸びしろが出るはず");
         assert!(stat_room.hit_rate_gain < 0);
         // AGI 10 → evasion_point = floor(15 + 10*1.2) = 27、raw = 65-27 = 38 → hit_rate 38(挟まれない)

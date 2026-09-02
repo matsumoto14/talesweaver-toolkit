@@ -777,12 +777,21 @@ pub fn preview_defense(
 /// 対人の命中率(wiki `#AccuracyPoint` / `#EvasionPoint` / `#HitRate`)。保存前のキャラデータで
 /// 出す。攻撃側はスキルの命中Pまで、防御側は `preview_defense` と同じ防御プロファイルまで
 /// それぞれ組み立て、突き合わせは `domain::versus_accuracy` に任せる(計算式は domain 側)。
+///
+/// `attacker_tries` / `defender_tries` は「次にできること」(`GrowthAction`)のうち画面で
+/// ON にした手。**押した場所は動かない**ので、伸びしろ 6 フィールド(`accuracy_growth` /
+/// `accuracy_max` / `accuracy_max_hit_rate` / `evasion_growth` / `evasion_max` /
+/// `evasion_max_hit_rate`)は試す前(base)の材料で固定し、率と内訳(`accuracy_point` /
+/// `evasion_point` / `hit_rate` とその内訳)は試した後(tried)の材料で出す
+/// (`VersusAccuracy::before_tries` に試す前の値を残す)。
 pub fn preview_versus(
     attacker: NewCharacter,
     attacker_buffs: BuffSelection,
     skill_id: String,
     defender: NewCharacter,
     defender_buffs: BuffSelection,
+    attacker_tries: Vec<domain::GrowthAction>,
+    defender_tries: Vec<domain::GrowthAction>,
 ) -> CommandResult<domain::VersusAccuracy> {
     validate_character_draft(&attacker, &attacker_buffs)?;
     validate_character_draft(&defender, &defender_buffs)?;
@@ -791,47 +800,15 @@ pub fn preview_versus(
         .accuracy
         .ok_or_else(|| CommandError::from(format!("スキル '{skill_id}' の命中は未収録です")))?;
 
-    let (attacker_stats, attacker_base_total) = combat_stats_of(&attacker, &attacker_buffs)?;
-    let attacker_equipment_totals =
-        attacker_base_total.add(attacker.equipment.enhanced_totals(None));
-
-    let (defender_stats, defender_base_total) = combat_stats_of(&defender, &defender_buffs)?;
-    let defender_equipment_totals =
-        defender_base_total.add(defender.equipment.enhanced_totals(None));
-    let defender_profile = domain::defense_profile(
-        &defender_stats,
-        &defender_equipment_totals,
-        gamedata::awakening_caps(defender.awakening),
-        &defender
-            .equipment
-            .random_option_totals(&gamedata::random_option_catalog()),
-        // 対人は共通スキル + シエナのオーラどおりの倍率(preview_defense と同じ理由でコンテンツを取らない)
-        defender
-            .common_skills
-            .defense_rates(defender.equipment.siena_defense_rate()),
-    );
-
     let buff_catalog = gamedata::buff_catalog();
     let correction = gamedata::accuracy_correction(skill.dependency);
-    let accuracy_boost = resolve_accuracy_boost(&attacker.stat_sources);
-    let accuracy_random_option = attacker
-        .equipment
-        .random_option_totals(&gamedata::random_option_catalog())
-        .accuracy_point;
-    let defender_random_options = defender
-        .equipment
-        .random_option_totals(&gamedata::random_option_catalog());
-    let evasion_random_option = defender_random_options.evasion_point;
-    // 対象の最小回避率補正(wiki #HitRateCap)。ランダムオプション(固定回避・最大回避率)+
-    // バフ(テイルズウィーバーのエネルギー)の合計。対人上限 10 のクランプは domain(`hit_rate`)
-    // 側が行うのでここでは足し込むだけ
-    let min_evasion_rate = defender_random_options.min_evasion_rate
-        + domain::stat_sources::buff_min_evasion_rate_total(&defender_buffs, &buff_catalog);
     let attack_type = skill.dependency.attack_type();
 
-    // 伸びしろ(§伸びしろの定義)の材料解決。エンチャント枠の実測上限はカタログ品だけ
-    // 引ける(`resolve_enchant_caps` と同じ経路。list_enchant_gains も同じパターン)。
+    // 伸びしろ(§伸びしろの定義)の材料解決に要るカタログ。装着アビリティ・ランダム OP・
+    // 装備品は domain が持てない(gamedata 依存)ので、ここで解決して渡す。
     let equipment_catalog = gamedata::equipment_catalog();
+    let abilities = gamedata::equipment_abilities();
+    let random_option_catalog = gamedata::random_option_catalog();
     let resolve_enchant_caps = |equipment: &domain::Equipment| -> Vec<(domain::PartSlot, domain::EquipmentValues)> {
         equipment
             .parts
@@ -840,13 +817,6 @@ pub fn preview_versus(
             .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
             .collect()
     };
-    let attacker_enchant_caps = resolve_enchant_caps(&attacker.equipment);
-    let defender_enchant_caps = resolve_enchant_caps(&defender.equipment);
-
-    // 伸びしろの列挙に要るカタログ。装着アビリティ・ランダム OP は domain が持てない
-    // (gamedata 依存)ので、ここで解決して `VersusAttacker` / `VersusDefender` に渡す。
-    let abilities = gamedata::equipment_abilities();
-    let random_option_catalog = gamedata::random_option_catalog();
     let weapon_system_of = |equipment: &domain::Equipment| {
         equipment
             .parts
@@ -871,56 +841,170 @@ pub fn preview_versus(
         )
         .map_err(|e| e.to_string().into())
     };
-    let attacker_stat_buff_rooms =
-        stat_buff_rooms_of(&attacker, &attacker_buffs, domain::StatKind::Dex)?;
-    let defender_stat_buff_rooms =
-        stat_buff_rooms_of(&defender, &defender_buffs, domain::StatKind::Agi)?;
 
-    Ok(domain::versus_accuracy(
-        &domain::VersusAttacker {
-            learnable_accuracy_skill: learnable_accuracy_skill(&attacker.game_character_id),
-            stats: &attacker_stats,
-            correction: &correction,
-            equipment: &attacker.equipment,
-            enchant_caps: &attacker_enchant_caps,
-            stat_cap: gamedata::awakening_caps(attacker.awakening).max_stat,
-            equipment_accuracy: attacker_equipment_totals.accuracy,
-            skill_accuracy,
-            // 最小命中率補正は今回まだ入力を持たない([仮] 中立値)
-            accuracy_bonus: domain::stat_sources::buff_accuracy_point_total(
-                &attacker_buffs,
-                &buff_catalog,
+    // 攻撃側 / 防御側の材料一式から `versus_accuracy` を 1 回組み立てる。
+    // `attacker` / `defender` はここでは試した後(tried)・試す前(base)を差し替えて渡す。
+    let run = |attacker: &NewCharacter,
+               attacker_buffs: &BuffSelection,
+               defender: &NewCharacter,
+               defender_buffs: &BuffSelection|
+     -> CommandResult<domain::VersusAccuracy> {
+        let (attacker_stats, attacker_base_total) = combat_stats_of(attacker, attacker_buffs)?;
+        let attacker_equipment_totals =
+            attacker_base_total.add(attacker.equipment.enhanced_totals(None));
+
+        let (defender_stats, defender_base_total) = combat_stats_of(defender, defender_buffs)?;
+        let defender_equipment_totals =
+            defender_base_total.add(defender.equipment.enhanced_totals(None));
+        let defender_profile = domain::defense_profile(
+            &defender_stats,
+            &defender_equipment_totals,
+            gamedata::awakening_caps(defender.awakening),
+            &defender
+                .equipment
+                .random_option_totals(&random_option_catalog),
+            // 対人は共通スキル + シエナのオーラどおりの倍率(preview_defense と同じ理由でコンテンツを取らない)
+            defender
+                .common_skills
+                .defense_rates(defender.equipment.siena_defense_rate()),
+        );
+
+        let accuracy_boost = resolve_accuracy_boost(&attacker.stat_sources);
+        let accuracy_random_option = attacker
+            .equipment
+            .random_option_totals(&random_option_catalog)
+            .accuracy_point;
+        let defender_random_options = defender.equipment.random_option_totals(&random_option_catalog);
+        let evasion_random_option = defender_random_options.evasion_point;
+        // 対象の最小回避率補正(wiki #HitRateCap)。ランダムオプション(固定回避・最大回避率)+
+        // バフ(テイルズウィーバーのエネルギー)の合計。対人上限 10 のクランプは domain(`hit_rate`)
+        // 側が行うのでここでは足し込むだけ
+        let min_evasion_rate = defender_random_options.min_evasion_rate
+            + domain::stat_sources::buff_min_evasion_rate_total(defender_buffs, &buff_catalog);
+
+        let attacker_enchant_caps = resolve_enchant_caps(&attacker.equipment);
+        let defender_enchant_caps = resolve_enchant_caps(&defender.equipment);
+        let attacker_stat_buff_rooms =
+            stat_buff_rooms_of(attacker, attacker_buffs, domain::StatKind::Dex)?;
+        let defender_stat_buff_rooms =
+            stat_buff_rooms_of(defender, defender_buffs, domain::StatKind::Agi)?;
+
+        Ok(domain::versus_accuracy(
+            &domain::VersusAttacker {
+                learnable_accuracy_skill: learnable_accuracy_skill(&attacker.game_character_id),
+                stats: &attacker_stats,
+                correction: &correction,
+                equipment: &attacker.equipment,
+                enchant_caps: &attacker_enchant_caps,
+                stat_cap: gamedata::awakening_caps(attacker.awakening).max_stat,
+                equipment_accuracy: attacker_equipment_totals.accuracy,
+                skill_accuracy,
+                // 最小命中率補正は今回まだ入力を持たない([仮] 中立値)
+                accuracy_bonus: domain::stat_sources::buff_accuracy_point_total(
+                    attacker_buffs,
+                    &buff_catalog,
+                    accuracy_boost,
+                ),
                 accuracy_boost,
-            ),
-            accuracy_boost,
-            accuracy_random_option,
-            accuracy_buff_catalog: &buff_catalog,
-            accuracy_buff_selection: &attacker_buffs,
-            stat_sources: &attacker.stat_sources,
-            abilities: &abilities,
-            random_option_catalog: &random_option_catalog,
-            weapon_system: weapon_system_of(&attacker.equipment),
-            stat_buff_rooms: &attacker_stat_buff_rooms,
-            // 最小命中率補正: プレイヤー側の供給源表が wiki に無い(載っているのはマップ側の
-            // 値だけ)ため未収録。`VersusAccuracy::min_hit_rate_recorded` が `false` になる
-            min_hit_rate: None,
-        },
-        &domain::VersusDefender {
-            stats: &defender_stats,
-            profile: &defender_profile,
-            equipment: &defender.equipment,
-            enchant_caps: &defender_enchant_caps,
-            stat_cap: gamedata::awakening_caps(defender.awakening).max_stat,
-            evasion_random_option,
-            stat_sources: &defender.stat_sources,
-            abilities: &abilities,
-            random_option_catalog: &random_option_catalog,
-            weapon_system: weapon_system_of(&defender.equipment),
-            stat_buff_rooms: &defender_stat_buff_rooms,
-            min_evasion_rate: Some(min_evasion_rate),
-        },
-        attack_type,
-    ))
+                accuracy_random_option,
+                accuracy_buff_catalog: &buff_catalog,
+                accuracy_buff_selection: attacker_buffs,
+                stat_sources: &attacker.stat_sources,
+                abilities: &abilities,
+                random_option_catalog: &random_option_catalog,
+                weapon_system: weapon_system_of(&attacker.equipment),
+                stat_buff_rooms: &attacker_stat_buff_rooms,
+                // 最小命中率補正: プレイヤー側の供給源表が wiki に無い(載っているのはマップ側の
+                // 値だけ)ため未収録。`VersusAccuracy::min_hit_rate_recorded` が `false` になる
+                min_hit_rate: None,
+            },
+            &domain::VersusDefender {
+                stats: &defender_stats,
+                profile: &defender_profile,
+                equipment: &defender.equipment,
+                enchant_caps: &defender_enchant_caps,
+                stat_cap: gamedata::awakening_caps(defender.awakening).max_stat,
+                evasion_random_option,
+                stat_sources: &defender.stat_sources,
+                abilities: &abilities,
+                random_option_catalog: &random_option_catalog,
+                weapon_system: weapon_system_of(&defender.equipment),
+                stat_buff_rooms: &defender_stat_buff_rooms,
+                min_evasion_rate: Some(min_evasion_rate),
+            },
+            attack_type,
+        ))
+    };
+
+    if attacker_tries.is_empty() && defender_tries.is_empty() {
+        return run(&attacker, &attacker_buffs, &defender, &defender_buffs);
+    }
+
+    // 試す前(base)。伸びしろ 6 フィールドと `before_tries` の元にする。
+    let base = run(&attacker, &attacker_buffs, &defender, &defender_buffs)?;
+
+    // 試した後(tried)。攻撃側の手は攻撃側の材料に、防御側の手は防御側の材料に、順に当てる
+    // (的中剣チップは呼び出し側が `character_skills.skill_ids` に反映して送ってくるので、
+    // tries はその上に当たる)。
+    let mut tried_attacker = attacker.clone();
+    let mut tried_attacker_buffs = attacker_buffs.clone();
+    let attacker_ctx = domain::GrowthApplyContext {
+        buff_catalog: &buff_catalog,
+        abilities: &abilities,
+        enchant_caps: &resolve_enchant_caps(&attacker.equipment),
+        weapon_system: weapon_system_of(&attacker.equipment),
+    };
+    for action in &attacker_tries {
+        domain::apply_growth_action(
+            &mut tried_attacker.stat_sources,
+            &mut tried_attacker.equipment,
+            &mut tried_attacker_buffs,
+            action,
+            &attacker_ctx,
+        );
+    }
+
+    let mut tried_defender = defender.clone();
+    let mut tried_defender_buffs = defender_buffs.clone();
+    let defender_ctx = domain::GrowthApplyContext {
+        buff_catalog: &buff_catalog,
+        abilities: &abilities,
+        enchant_caps: &resolve_enchant_caps(&defender.equipment),
+        weapon_system: weapon_system_of(&defender.equipment),
+    };
+    for action in &defender_tries {
+        domain::apply_growth_action(
+            &mut tried_defender.stat_sources,
+            &mut tried_defender.equipment,
+            &mut tried_defender_buffs,
+            action,
+            &defender_ctx,
+        );
+    }
+
+    let tried = run(
+        &tried_attacker,
+        &tried_attacker_buffs,
+        &tried_defender,
+        &tried_defender_buffs,
+    )?;
+
+    Ok(domain::VersusAccuracy {
+        accuracy_growth: base.accuracy_growth,
+        accuracy_max: base.accuracy_max,
+        accuracy_max_hit_rate: base.accuracy_max_hit_rate,
+        accuracy_max_hit_rate_gain: base.accuracy_max_hit_rate_gain,
+        evasion_growth: base.evasion_growth,
+        evasion_max: base.evasion_max,
+        evasion_max_hit_rate: base.evasion_max_hit_rate,
+        evasion_max_hit_rate_gain: base.evasion_max_hit_rate_gain,
+        before_tries: Some(domain::VersusBeforeTries {
+            accuracy_point: base.accuracy_point,
+            evasion_point: base.evasion_point,
+            hit_rate: base.hit_rate,
+        }),
+        ..tried
+    })
 }
 
 /// スキル依存種別(`SkillDependency`)ごとに、エンチャントで見るべき装備値 2 種
@@ -1901,14 +1985,15 @@ fn enchant_id_slot_key(
 #[cfg(test)]
 mod tests {
     use super::{
-        armor_added_hp, build_damage_input, resolve_accuracy_boost, resolve_combo_skill_type,
-        weapon_added_damage,
+        armor_added_hp, build_damage_input, preview_versus, resolve_accuracy_boost,
+        resolve_combo_skill_type, weapon_added_damage,
     };
     use domain::{
-        AccuracyBoost, AccuracyBoostSource, BaseStats, BuffSelection, ComboSkillType, CommonSkills,
-        DamageCategory,
+        AccuracyBoost, AccuracyBoostSource, Awakening, BaseStats, BuffSelection, ComboSkillType,
+        CommonSkills, DamageCategory,
         EnhanceGrade, Equipment, EquipmentEnhanceType, EquipmentPart, EquipmentValues,
-        SoulLinkStatus, StatSources,
+        GrowthAction, NewCharacter, PetSkillTier, SoulLinkStatus, StatFixedSource, StatKind,
+        StatSources,
     };
 
     #[test]
@@ -1953,6 +2038,130 @@ mod tests {
             resolve_combo_skill_type(skill, &Equipment::default(), Some(ComboSkillType::General))
                 .unwrap_err();
         assert!(error.message.contains("対応していません"));
+    }
+
+    #[test]
+    fn preview_versusはtriesを当てた後の値と当てる前の伸びしろを返す() {
+        let attacker = NewCharacter {
+            name: "atk".to_string(),
+            game_character_id: "lucian".to_string(),
+            base_stats: BaseStats {
+                stab: 1,
+                hack: 1,
+                int: 1,
+                def: 1,
+                mr: 1,
+                dex: 100,
+                agi: 1,
+            },
+            awakening: Awakening::default(),
+            stat_sources: StatSources::default(),
+            equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
+            main_skill_id: None,
+            goal_content_id: None,
+            default_buff_set_id: None,
+        };
+        let defender = NewCharacter {
+            name: "def".to_string(),
+            base_stats: BaseStats {
+                stab: 1,
+                hack: 1,
+                int: 1,
+                def: 1,
+                mr: 1,
+                dex: 1,
+                agi: 100,
+            },
+            ..attacker.clone()
+        };
+        let buffs = BuffSelection::default();
+
+        let without_tries = preview_versus(
+            attacker.clone(),
+            buffs.clone(),
+            "lucian_butt".to_string(),
+            defender.clone(),
+            buffs.clone(),
+            vec![],
+            vec![],
+        )
+        .unwrap();
+        assert!(without_tries.before_tries.is_none());
+
+        // DEX の固定上昇(ペット S)を攻撃側だけ試す
+        let attacker_tries = vec![GrowthAction::StatFixed {
+            stat: StatKind::Dex,
+            source: StatFixedSource::PetSkill {
+                target: PetSkillTier::TrueLv4,
+            },
+        }];
+        let (attacker_for_both, defender_for_both, buffs_for_both, attacker_tries_for_both) =
+            (attacker.clone(), defender.clone(), buffs.clone(), attacker_tries.clone());
+        let with_tries = preview_versus(
+            attacker,
+            buffs.clone(),
+            "lucian_butt".to_string(),
+            defender,
+            buffs,
+            attacker_tries,
+            vec![],
+        )
+        .unwrap();
+
+        // 伸びしろ 6 フィールドは試す前(base)のまま(押した場所は動かない)
+        assert_eq!(with_tries.accuracy_growth, without_tries.accuracy_growth);
+        assert_eq!(with_tries.accuracy_max, without_tries.accuracy_max);
+        assert_eq!(
+            with_tries.accuracy_max_hit_rate,
+            without_tries.accuracy_max_hit_rate
+        );
+        assert_eq!(
+            with_tries.accuracy_max_hit_rate_gain,
+            without_tries.accuracy_max_hit_rate_gain,
+            "accuracy_max_hit_rate_gain も base 由来(押した場所は動かない)"
+        );
+        assert_eq!(with_tries.evasion_growth, without_tries.evasion_growth);
+        assert_eq!(with_tries.evasion_max, without_tries.evasion_max);
+        assert_eq!(
+            with_tries.evasion_max_hit_rate,
+            without_tries.evasion_max_hit_rate
+        );
+
+        // before_tries は試す前(base)の値
+        let before = with_tries.before_tries.expect("tries が空でないので Some");
+        assert_eq!(before.accuracy_point, without_tries.accuracy_point);
+        assert_eq!(before.evasion_point, without_tries.evasion_point);
+        assert_eq!(before.hit_rate, without_tries.hit_rate);
+
+        // accuracy_point は試した後(DEX が伸びた分)。防御側は試していないので回避Pは動かない
+        assert!(with_tries.accuracy_point > without_tries.accuracy_point);
+        assert_eq!(with_tries.evasion_point, without_tries.evasion_point);
+
+        // 防御側の手(AGI の固定上昇)は防御側の材料に当たり、回避Pだけが動く
+        let defender_tries = vec![GrowthAction::StatFixed {
+            stat: StatKind::Agi,
+            source: StatFixedSource::PetSkill {
+                target: PetSkillTier::TrueLv4,
+            },
+        }];
+        let both = preview_versus(
+            attacker_for_both,
+            buffs_for_both.clone(),
+            "lucian_butt".to_string(),
+            defender_for_both,
+            buffs_for_both,
+            attacker_tries_for_both,
+            defender_tries,
+        )
+        .unwrap();
+        assert_eq!(both.accuracy_point, with_tries.accuracy_point);
+        assert!(both.evasion_point > without_tries.evasion_point);
+        assert_eq!(both.evasion_growth, without_tries.evasion_growth);
+        assert_eq!(
+            both.before_tries.expect("Some").evasion_point,
+            without_tries.evasion_point
+        );
     }
 
     // 刀(HACK系: 斬×6.67 + 突×1.00)・突100/斬300 → INT(300×6.67+100) = 2101

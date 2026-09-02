@@ -137,9 +137,13 @@ const WATCH = `(() => {
   // 人のレビューで拾った(2026-09-02)ので、以後はここで機械が見る
   await page.locator("nav.tabs button", { hasText: "対人" }).click({ force: true });
   await wait(1800);
-  const skillPicker = page.locator(".picker", { has: page.locator(".label", { hasText: "使用スキル" }) }).first();
+  // 方向ごとに 1 列の作り(2026-09-02)。スキルの Picker は命中P ブロックの「スキルの命中」行にある
+  const skillPicker = page
+    .locator(".stat-row.with-picker", { has: page.locator(".stat-label", { hasText: "スキルの命中" }) })
+    .locator(".picker")
+    .first();
   if (await skillPicker.count()) {
-    await probe("対人・使用スキルを入れ替える", async () => {
+    await probe("対人・スキルの命中を入れ替える", async () => {
       await skillPicker.locator("button.picker-trigger").dispatchEvent("click");
       await wait(500);
       const rows = page.locator(".picker-pop .picker-row:not(.on)");

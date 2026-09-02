@@ -151,6 +151,8 @@ struct PreviewVersusArgs {
     skill_id: String,
     defender: domain::NewCharacter,
     defender_buffs: domain::BuffSelection,
+    attacker_tries: Vec<domain::GrowthAction>,
+    defender_tries: Vec<domain::GrowthAction>,
 }
 
 #[derive(Deserialize)]
@@ -363,6 +365,8 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
                 a.skill_id,
                 a.defender,
                 a.defender_buffs,
+                a.attacker_tries,
+                a.defender_tries,
             ))
         }
         "preview_damage" => {

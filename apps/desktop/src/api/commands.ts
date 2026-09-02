@@ -7,7 +7,7 @@ import type {
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, GameTables, StatLimits,
   StatPreview, StatSources,
-  TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation, VersusAccuracy,
+  TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation, VersusAccuracy, GrowthAction,
   EquipmentAbilityView, EquipmentAbilityCandidate, EquipmentCandidates, EnchantPlanRow,
   EquipmentPart, PartSlot, RandomOptionCandidate,
   RelicDirection, RelicState, WeaponSystem,
@@ -98,13 +98,16 @@ export const retainCharacterSkills = (skillIds: string[], gameCharacterId: strin
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
   invoke<DefenseProfile>("preview_defense", { character, buffs });
-/** 対人の命中率(wiki#AccuracyPoint / #EvasionPoint / #HitRate)。保存前のキャラデータで出す */
+/** 対人の命中率(wiki#AccuracyPoint / #EvasionPoint / #HitRate)。保存前のキャラデータで出す。
+ * attackerTries / defenderTries = 「試す」でON にした伸びしろの手(GrowthRoom.action をそのまま送る)。
+ * 空なら試し無し ── before_tries は null で返る */
 export const previewVersus = (
   attacker: NewCharacter, attackerBuffs: BuffSelection, skillId: string,
   defender: NewCharacter, defenderBuffs: BuffSelection,
+  attackerTries: GrowthAction[], defenderTries: GrowthAction[],
 ) =>
   invoke<VersusAccuracy>("preview_versus", {
-    attacker, attackerBuffs, skillId, defender, defenderBuffs,
+    attacker, attackerBuffs, skillId, defender, defenderBuffs, attackerTries, defenderTries,
   });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityView[]>("list_equipment_abilities");

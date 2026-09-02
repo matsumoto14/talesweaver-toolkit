@@ -22,6 +22,7 @@ pub mod enemy;
 pub mod equipment;
 pub mod equipment_class;
 pub mod game_tables;
+pub mod growth_apply;
 pub mod mastery;
 pub mod measurement;
 pub mod random_option;
@@ -84,8 +85,8 @@ pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,
     AccuracyBoostSource,
     AccuracyCorrection, AccuracySkillOption, AttackType, DefenseProfile, EvasionPoints,
-    GrowthAction, GrowthGroup, GrowthRoom,
-    HitRate, VersusAccuracy, VersusAttacker, VersusDefender, HIT_RATE_MIN_BASE,
+    GrowthAction, GrowthGroup, GrowthGroupRooms, GrowthRoom,
+    HitRate, VersusAccuracy, VersusAttacker, VersusBeforeTries, VersusDefender, HIT_RATE_MIN_BASE,
     HIT_RATE_PLAYER_SPAN, PVP_MIN_EVASION_CAP, SKILL_ACCURACY_OFFSET,
 };
 pub use element::{
@@ -114,6 +115,7 @@ pub use equipment::{
     ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, WEAPON_ABILITY_SLOTS,
 };
 pub use game_tables::{game_tables, DamageCategoryLabel, EquipmentStatLabel, GameTables};
+pub use growth_apply::{apply_growth_action, GrowthApplyContext};
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};
 pub use measurement::{
     can_separate_defense_and_cut_rate, MEASUREMENT_SEPARABLE_MIN_ATTACKS,
