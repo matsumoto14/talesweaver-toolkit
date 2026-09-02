@@ -120,12 +120,13 @@ pub fn evaluate_contents_for_character(
             .chain(CoreRegion::ALL.into_iter().map(Some))
             .map(|region| (region, equipment.enhanced_sources(region)))
             .collect();
+    // 全地域(None 込み)ぶん組み立て済みなので必ず見つかる
     let enhanced_for = |region: Option<CoreRegion>| {
         enhanced_by_region
             .iter()
             .find(|(r, _)| *r == region)
             .map(|(_, v)| v.clone())
-            .unwrap_or_default()
+            .expect("地域ごとの強化能力値は全地域ぶん組み立て済み")
     };
 
     let title = equipment.title.as_deref();
@@ -187,27 +188,13 @@ fn evaluate_one_content(
 
     // 敵データが無いコンテンツ(入場条件のみ判定)は火力計算をしない。装備条件の
     // 比較先はキャラの代表スキル(一覧の先頭)の依存種別で決める。
-    let Some(enemy_id) = content.enemy_id.as_deref() else {
-        let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.skill.dependency));
-        let equipment_entry_totals = entry_equipment_totals(
-            dependency,
-            equipment_base_sources_raw,
-            equipment_base_sources_for,
-            enhanced_for,
-        );
-        return evaluate_content(
-            content,
-            None,
-            &equipment_entry_totals,
-            awakening,
-            dependency,
-            thesis_core_total,
-        );
-    };
-
-    let Some(enemy) = enemies.iter().find(|e| e.id == enemy_id) else {
-        // データ整合性上、通常は発生しない(コンテンツの enemy_id は敵カタログに必ず
-        // 存在する。gamedata のテストで担保)。万一のズレでも panic せず未判定として返す。
+    // (コンテンツの enemy_id が敵カタログに無いのは gamedata のテストで弾いているので
+    // 通常は起きないが、万一のズレでも panic せず同じ「未判定」で返す)
+    let enemy = content
+        .enemy_id
+        .as_deref()
+        .and_then(|enemy_id| enemies.iter().find(|e| e.id == enemy_id));
+    let Some(enemy) = enemy else {
         let dependency = fixed_dependency.or_else(|| skills.first().map(|s| s.skill.dependency));
         let equipment_entry_totals = entry_equipment_totals(
             dependency,

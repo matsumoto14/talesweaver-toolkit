@@ -29,7 +29,7 @@ use crate::equipment::{
 };
 use crate::mastery::{Masteries, MasteryCatalog};
 use crate::random_option::{RandomOptionDef, RandomOptionTotals};
-use crate::rounding::floor_int;
+use crate::rounding::{floor_int, trunc_int};
 use crate::soul_link::{
     SoulLinkError, SoulLinkPreview, SoulLinkStatus, SOUL_LINK_ARMOR_ENHANCE_LEVEL_MAX,
     SOUL_LINK_CRITICAL_DAMAGE_LEVEL_MAX, SOUL_LINK_EQUIPMENT_LEVEL_MAX,
@@ -986,10 +986,10 @@ pub fn build_modifiers(
             let m = modifiers.get_mut(kind);
             match def.layer {
                 StatLayer::PercentOfBase => m.percent_of_base.push(value),
-                StatLayer::Fixed => m.fixed += value as i64,
+                StatLayer::Fixed => m.fixed += trunc_int(value),
                 StatLayer::MultiplierA => m.multiplier_a.push(value),
                 StatLayer::MultiplierB => m.multiplier_b += value,
-                StatLayer::FinalFixed => m.final_fixed += value as i64,
+                StatLayer::FinalFixed => m.final_fixed += trunc_int(value),
             }
             contributions.push(StatContribution {
                 source: def.name.to_string(),
@@ -1400,10 +1400,10 @@ pub fn contribution_source_effects(
             {
                 match layer {
                     StatLayer::PercentOfBase => percent_n += 1,
-                    StatLayer::Fixed => fixed += c.value as i64,
+                    StatLayer::Fixed => fixed += trunc_int(c.value),
                     StatLayer::MultiplierA => mult_a_n += 1,
                     StatLayer::MultiplierB => mult_b += c.value,
-                    StatLayer::FinalFixed => final_fixed += c.value as i64,
+                    StatLayer::FinalFixed => final_fixed += trunc_int(c.value),
                 }
                 let total = raw_total(percent_n, fixed, mult_a_n, mult_b, final_fixed).min(cap);
                 out.push(StatSourceEffect {
