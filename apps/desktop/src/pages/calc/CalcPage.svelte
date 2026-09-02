@@ -1945,7 +1945,7 @@
                         >{stage.label} {result.critical_rate.value.toFixed(1)}%</span>
                       {/key}
                     {/if}
-                    {#if !critMode}・ クリなら ×{skill ? fmtNum(skill.critical_multiplier) : "—"} {fmtInt(result.total.critical)}{/if}
+                    {#if !critMode}<span>クリなら ×{skill ? fmtNum(skill.critical_multiplier) : "—"} {fmtInt(result.total.critical)}</span>{/if}
                   {/if}
                 </span>
               </button>
@@ -2798,6 +2798,9 @@
   .chain .gatebadge-slot { flex: none; width: 112px; display: flex; align-items: flex-end; }
   .chain .op { min-width: 48px; text-align: center; }
   .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
+  /* 合計ノードの副行はバッジ(18px)+ 併記の 2 段。幅 124px に横並びで入れると隣に重なる
+     (実機で検出)。高さは 2 段ぶん取り切り、クリ基準の切り替えで行が動かないようにする(§09 規則 1) */
+  .chain .node.mid .nsub { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 32px; }
   .chain .op { font-size: 12px; color: var(--fg-dim); padding-bottom: 3px; white-space: nowrap; }
   .chain .gatebadge { margin-bottom: 3px; }
   /* 押すと内訳が鎖の直下に開く。hover は塗りだけで、余白を足して隣を動かさない(§00 03) */
