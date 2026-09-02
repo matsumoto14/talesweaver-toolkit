@@ -883,23 +883,29 @@ pub fn preview_versus(
 /// スキル依存種別(`SkillDependency`)ごとに、エンチャントで見るべき装備値 2 種
 /// (`domain::enchant_dependency_keys` = 装備攻撃力係数が非 0 の 2 種)。
 /// フロントで「依存種別 → ステ 2 本」のルール表を持たないための静的テーブル
-/// (StatLimits と同じく起動時に 1 回だけ取得する)。
+/// (`GameTables` と同じく起動時に 1 回だけ取得する)。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EnchantDependencyKeys {
     pub dependency: domain::SkillDependency,
     pub keys: Vec<domain::EquipmentStatKind>,
 }
 
-/// `domain::StatLimits` に `enchant_dependency_keys` を足したもの。gamedata(装備攻撃力係数)を
+/// 数値の上限・刻み・既定値・係数だけ(並び・ラベル・段階表は `get_game_tables`)。
+pub fn get_stat_limits() -> domain::StatLimits {
+    domain::stat_sources::stat_limits()
+}
+
+/// `domain::GameTables` に `enchant_dependency_keys` を足したもの。gamedata(装備攻撃力係数)が
 /// 要る値なので domain 側には置けず(domain は gamedata に依存できない)、ここで合成する。
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct StatLimitsPayload {
+pub struct GameTablesPayload {
     #[serde(flatten)]
-    pub base: domain::StatLimits,
+    pub base: domain::GameTables,
     pub enchant_dependency_keys: Vec<EnchantDependencyKeys>,
 }
 
-pub fn get_stat_limits() -> StatLimitsPayload {
+/// 並び・ラベル・部位ルール・段階表のカタログ(起動時に 1 回だけ取得する)。
+pub fn get_game_tables() -> GameTablesPayload {
     let enchant_dependency_keys = domain::SkillDependency::ALL
         .into_iter()
         .map(|dependency| EnchantDependencyKeys {
@@ -907,8 +913,8 @@ pub fn get_stat_limits() -> StatLimitsPayload {
             keys: domain::enchant_dependency_keys(&gamedata::equipment_coefficients(dependency)),
         })
         .collect();
-    StatLimitsPayload {
-        base: domain::stat_sources::stat_limits(),
+    GameTablesPayload {
+        base: domain::game_tables(),
         enchant_dependency_keys,
     }
 }
@@ -1001,7 +1007,7 @@ fn armor_added_hp(armor: &EquipmentPart) -> i64 {
 /// 装備強化 1 部位ぶんの表示用内訳(キャラタブの「装備強化」カード)。
 ///
 /// 追加効果は gamedata の系統別補正式と等級倍率が要るので domain 側では組み立てられない。
-/// `StatLimitsPayload` と同じく、ここで gamedata と domain を合成して返す。
+/// `GameTablesPayload` と同じく、ここで gamedata と domain を合成して返す。
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 pub struct PartEnhancePreview {
     pub slot: domain::PartSlot,
@@ -1048,7 +1054,7 @@ fn part_enhance_previews(
     previews
 }
 
-/// `domain::StatPreview` に装備強化の内訳を足したもの。`StatLimitsPayload` と同じ理由で
+/// `domain::StatPreview` に装備強化の内訳を足したもの。`GameTablesPayload` と同じ理由で
 /// gamedata が要る値なので domain 側には置けず、ここで合成する。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct StatPreviewPayload {

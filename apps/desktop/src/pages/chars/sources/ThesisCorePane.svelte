@@ -6,6 +6,7 @@
   import { fmtInt } from "../../../format";
   import { CORE_POWER_TYPES, CORE_REGIONS, CORE_REGION_LABELS, CORE_SLOT_COUNT, CORE_SUPPORT_TYPES, CORE_TYPE_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
+  import { tables } from "../../../tables.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
   import { badgeStyle } from "../../../ui/states";
   import StepSelect from "../../../ui/StepSelect.svelte";
@@ -73,7 +74,7 @@
   );
   /** コア 1 個の補正値(表示用)。テーブル自体は Rust 側のデータ(limits.core_*_bonus_table)。 */
   const coreBonus = (type: CoreType, evolution: number, enhancement: number): number => {
-    const table = CORE_POWER_TYPES.includes(type) ? limits.core_power_bonus_table : limits.core_support_bonus_table;
+    const table = CORE_POWER_TYPES.includes(type) ? tables.core_power_bonus_table : tables.core_support_bonus_table;
     return table[evolution]?.[enhancement] ?? 0;
   };
   // 入場条件「コア N」の説明文で使う例(火力: 進化1強化4 / 進化4強化4、補助: 進化4強化4)。数値は limits の表から引く

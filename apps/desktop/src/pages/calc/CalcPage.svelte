@@ -30,6 +30,7 @@
     STAT_LAYER_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
+  import { tables } from "../../tables.svelte";
   import {
     app, enqueueCharacterSave, flatContents, focusCharacterSource, payloadOf, selectedCharacter, simIsDirty,
     upsertCharacter,
@@ -1352,7 +1353,7 @@
   );
 
   /** 正は crates/domain/src/common_skill.rs の SHARPNESS_VISION(limits 経由で引く) */
-  const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
+  const SHARPNESS_RATES = $derived(tables.sharpness_vision_rates.map((r) => Math.round(r * 100)));
   const sharpnessLevel = $derived(payload?.common_skills.sharpness_vision_level ?? 0);
   const sharpnessRatePercent = $derived(
     sharpnessLevel === 0 ? 0 : (SHARPNESS_RATES[sharpnessLevel - 1] ?? 0),

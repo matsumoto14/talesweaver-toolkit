@@ -1720,7 +1720,8 @@ export interface DpsTriple {
   critical: number;
 }
 
-// crates/domain/src/stat_sources.rs の StatLimits。get_stat_limits コマンドの戻り値。
+// crates/domain/src/stat_sources.rs の StatLimits(数値の上限・刻み・既定値・係数だけ)。
+// get_stat_limits コマンドの戻り値。並び・ラベル・段階表は GameTables を見る。
 export interface StatLimits {
   base_stat_max: number;
   rune_level_max: number;
@@ -1789,55 +1790,8 @@ export interface StatLimits {
   /** コートアーマーの装備防御力倍率(物理 / 魔法)。Σ% の小数表現 */
   coat_armor_physical_rate: number;
   coat_armor_magic_rate: number;
-  /** プロテクトアーマー Lv1〜6 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。index 0 = Lv1 */
-  protect_armor_physical_rates: number[];
-  protect_armor_magic_rates: number[];
-  /** 改・プロテクトアーマー Lv1〜5 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。index 0 = Lv1 */
-  kai_protect_armor_physical_rates: number[];
-  kai_protect_armor_magic_rates: number[];
-  /** シャープネスビジョン Lv1〜10 の割合追加ダメージ。Σ% の小数表現。index 0 = Lv1 */
-  sharpness_vision_rates: number[];
-  /** アンリーシュ Lv1〜10 の能力値倍率B。Σ% の小数表現。index 0 = Lv1 */
-  unleash_rates: number[];
-  /** ペット S スキルの段階ごとの固定値ボーナス */
-  pet_skill_tier_bonus: PetSkillTierBonus[];
   /** 神鳥の聖物 1 段階あたりの最終固定値 */
   sacred_relic_value_per_stage: number;
-  /** テシスコア・火力タイプの補正値テーブル(wiki: 進化強化表「火力」列)。添字は [進化段階][強化段階] */
-  core_power_bonus_table: number[][];
-  /** テシスコア・補助タイプの補正値テーブル(wiki: 進化強化表「補助」列) */
-  core_support_bonus_table: number[][];
-  /** 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん */
-  part_slot_rules: PartSlotRule[];
-  // --- enum の並びと分類。画面は配列リテラルを持たず、ここを読んで並べる ---
-  /** ステの並び */
-  stat_kinds: StatKind[];
-  /** 補正の出どころの並び */
-  stat_source_groups: StatSourceGroup[];
-  /** 属性の並び */
-  elements: Element[];
-  /** 装備に付与できる属性 */
-  equipment_elements: Element[];
-  /** 装着アビリティの系統の並び */
-  ability_families: EquipmentAbilityFamily[];
-  /** ランダムオプションのランクの並び(左ほど下位) */
-  random_option_ranks: RandomOptionRank[];
-  /** スキル依存種別の並び */
-  skill_dependencies: SkillDependency[];
-  /** 極限スキルの並び */
-  ultimate_skills: UltimateSkill[];
-  /** テシスコアの地域の並び */
-  core_regions: CoreRegion[];
-  /** テシスコアの火力タイプ(強化能力値に入る) */
-  core_power_types: CoreType[];
-  /** テシスコアの補助タイプ */
-  core_support_types: CoreType[];
-  /** 神鳥の聖物の段階 → 最終固定値(添字が段階) */
-  sacred_relic_stage_values: number[];
-  /** 与ダメージ式カテゴリの日本語名。36 カテゴリぶん、DamageCategory::ALL の順 */
-  damage_category_labels: DamageCategoryLabel[];
-  /** 装備補正 9 値の表示名。EquipmentValues::FIELD_LABELS の順(CoreType の表示名も同じ) */
-  equipment_stat_labels: EquipmentStatLabel[];
   /** コンボボーナスが付くコンボ数 */
   combo_bonus_threshold: number;
   /** 中ディレイのコンボボーナスが付くコンボ数 */
@@ -1852,8 +1806,6 @@ export interface StatLimits {
   unleash_free_level_max: number;
   /** オーグメント Lv + この値 = ストロングウェポン / プロテクトアーマー / ハイパーリミットの上限 */
   augment_gate_offset: number;
-  /** 装備強化 Lv の選択肢(0 = 強化なし) */
-  enhance_level_candidates: number[];
   /** +12 以上で追加固定ダメージがレンジ振り(MR)になる境界 */
   enhance_grade_min_level: number;
   /** 属性差 1 あたりの属性差ボーナス。Σ% の小数表現 */
@@ -1890,18 +1842,74 @@ export interface StatLimits {
   critical_rate_min: number;
   /** クリティカル率の上限 */
   critical_rate_max: number;
-  /** スキル依存種別ごとの、エンチャントで見るべき装備値 2 種(src-tauri の EnchantDependencyKeys)。
+}
+
+// crates/domain/src/game_tables.rs の GameTables + commands の enchant_dependency_keys。
+// get_game_tables コマンドの戻り値。並び・ラベル・部位ルール・段階表のカタログ。
+export interface GameTables {
+  /** 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん */
+  part_slot_rules: PartSlotRule[];
+  // --- enum の並びと分類。画面は配列リテラルを持たず、ここを読んで並べる ---
+  /** ステの並び */
+  stat_kinds: StatKind[];
+  /** 補正の出どころの並び */
+  stat_source_groups: StatSourceGroup[];
+  /** 属性の並び */
+  elements: Element[];
+  /** 装備に付与できる属性 */
+  equipment_elements: Element[];
+  /** 装着アビリティの系統の並び */
+  ability_families: EquipmentAbilityFamily[];
+  /** ランダムオプションのランクの並び(左ほど下位) */
+  random_option_ranks: RandomOptionRank[];
+  /** スキル依存種別の並び */
+  skill_dependencies: SkillDependency[];
+  /** 極限スキルの並び */
+  ultimate_skills: UltimateSkill[];
+  /** テシスコアの地域の並び */
+  core_regions: CoreRegion[];
+  /** テシスコアの火力タイプ(強化能力値に入る) */
+  core_power_types: CoreType[];
+  /** テシスコアの補助タイプ */
+  core_support_types: CoreType[];
+  /** 装備強化 Lv の選択肢(0 = 強化なし) */
+  enhance_level_candidates: number[];
+  // --- 段階(Lv)→ 値の表 ---
+  /** プロテクトアーマー Lv1〜6 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。index 0 = Lv1 */
+  protect_armor_physical_rates: number[];
+  protect_armor_magic_rates: number[];
+  /** 改・プロテクトアーマー Lv1〜5 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。index 0 = Lv1 */
+  kai_protect_armor_physical_rates: number[];
+  kai_protect_armor_magic_rates: number[];
+  /** シャープネスビジョン Lv1〜10 の割合追加ダメージ。Σ% の小数表現。index 0 = Lv1 */
+  sharpness_vision_rates: number[];
+  /** アンリーシュ Lv1〜10 の能力値倍率B。Σ% の小数表現。index 0 = Lv1 */
+  unleash_rates: number[];
+  /** ペット S スキルの段階ごとの固定値ボーナス */
+  pet_skill_tier_bonus: PetSkillTierBonus[];
+  /** 神鳥の聖物の段階 → 最終固定値(添字が段階) */
+  sacred_relic_stage_values: number[];
+  /** テシスコア・火力タイプの補正値テーブル(wiki: 進化強化表「火力」列)。添字は [進化段階][強化段階] */
+  core_power_bonus_table: number[][];
+  /** テシスコア・補助タイプの補正値テーブル(wiki: 進化強化表「補助」列) */
+  core_support_bonus_table: number[][];
+  // --- 表示名 ---
+  /** 与ダメージ式カテゴリの日本語名。36 カテゴリぶん、DamageCategory::ALL の順 */
+  damage_category_labels: DamageCategoryLabel[];
+  /** 装備補正 9 値の表示名。EquipmentStatKind::ALL の順(CoreType の表示名も同じ) */
+  equipment_stat_labels: EquipmentStatLabel[];
+  /** スキル依存種別ごとの、エンチャントで見るべき装備値 2 種(commands の EnchantDependencyKeys)。
    *  「依存種別 → ステ 2 本」のルール表をフロントに持たない(装備攻撃力係数から Rust 側が引く) */
   enchant_dependency_keys: { dependency: SkillDependency; keys: EnchantDepKey[] }[];
 }
 
-// crates/domain/src/stat_sources.rs の DamageCategoryLabel。
+// crates/domain/src/game_tables.rs の DamageCategoryLabel。
 export interface DamageCategoryLabel {
   category: DamageCategory;
   label: string;
 }
 
-// crates/domain/src/stat_sources.rs の EquipmentStatLabel。kind は EquipmentStatKind と同じ文字列。
+// crates/domain/src/game_tables.rs の EquipmentStatLabel。kind は EquipmentStatKind と同じ文字列。
 export interface EquipmentStatLabel {
   kind: string;
   label: string;

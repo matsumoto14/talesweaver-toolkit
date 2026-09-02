@@ -30,7 +30,7 @@ const SET_BONUS_ENHANCEMENT: u8 = CORE_ENHANCEMENT_MAX;
 const SET_BONUS_MIN_COUNT: usize = 3;
 
 /// 火力タイプの補正値(wiki: 進化強化表の「火力」列)。添字は [進化段階][強化段階]。
-/// UI がリテラルで持たず参照するための公開テーブル(`StatLimits::core_power_bonus_table`)。
+/// UI がリテラルで持たず参照するための公開テーブル(`GameTables::core_power_bonus_table`)。
 pub const POWER_BONUS: [[i64; 5]; 5] = [
     [1, 2, 3, 4, 5],
     [6, 7, 8, 9, 10],
@@ -41,7 +41,7 @@ pub const POWER_BONUS: [[i64; 5]; 5] = [
 
 /// 補助タイプの補正値(wiki: 進化強化表の「補助」列)。進化3 までは火力と同じで、
 /// 進化4 の強化1 以降だけ分かれる(火力 50/60/70/80 に対して 45/50/55/60)。
-/// UI がリテラルで持たず参照するための公開テーブル(`StatLimits::core_support_bonus_table`)。
+/// UI がリテラルで持たず参照するための公開テーブル(`GameTables::core_support_bonus_table`)。
 pub const SUPPORT_BONUS: [[i64; 5]; 5] = [
     [1, 2, 3, 4, 5],
     [6, 7, 8, 9, 10],

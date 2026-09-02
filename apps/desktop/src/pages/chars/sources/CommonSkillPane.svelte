@@ -4,6 +4,7 @@
   import type { Draft } from "../../../draft";
   import { STAT_KINDS, STAT_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_EFFECTS, ULTIMATE_SKILL_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
+  import { tables } from "../../../tables.svelte";
   import { flash } from "../../../ui/motion.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import SkillLevelField from "./SkillLevelField.svelte";
@@ -34,8 +35,8 @@
   );
 
   // アンリーシュ(能力解放)。効き先は能力値倍率B。Lv6 以降はレインフォース(Lv5 まで)が前提。
-  // 正は crates/domain/src/common_skill.rs の UNLEASH。limits.unleash_rates(Σ% の小数表現)経由で引く
-  const UNLEASH_RATES = $derived(limits.unleash_rates.map((r) => Math.round(r * 100)));
+  // 正は crates/domain/src/common_skill.rs の UNLEASH。tables.unleash_rates(Σ% の小数表現)経由で引く
+  const UNLEASH_RATES = $derived(tables.unleash_rates.map((r) => Math.round(r * 100)));
   const reinforceGate = $derived(draft.commonSkills.reinforce_level + limits.unleash_free_level_max);
   /** レインフォース Lv を下げたら、それに縛られるアンリーシュの Lv も一緒に下げる */
   function setReinforceLevel(level: number) {
@@ -104,8 +105,8 @@
   // 正は crates/domain/src/common_skill.rs の STRONG_WEAPON_RATE_PER_LEVEL
   const STRONG_WEAPON_RATE_PER_LEVEL = $derived(Math.round(limits.strong_weapon_rate_per_level * 100));
   // 正は crates/domain/src/common_skill.rs の PROTECT_ARMOR_PHYSICAL / _MAGIC
-  const PROTECT_ARMOR_RATES = $derived(limits.protect_armor_physical_rates.map((r) => Math.round(r * 100)));
-  const PROTECT_ARMOR_MAGIC = $derived(limits.protect_armor_magic_rates.map((r) => Math.round(r * 100)));
+  const PROTECT_ARMOR_RATES = $derived(tables.protect_armor_physical_rates.map((r) => Math.round(r * 100)));
+  const PROTECT_ARMOR_MAGIC = $derived(tables.protect_armor_magic_rates.map((r) => Math.round(r * 100)));
   // 畳んだ中の段も上と同じ形にする。名前は Lv の数字だけ、効いている値は行の右
   const levelChoices = (max: number) =>
     Array.from({ length: max }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }));
@@ -116,10 +117,10 @@
   const reinforceLevels = $derived(levelChoices(limits.reinforce_level_max));
   const unleashLevelChoices = $derived(levelChoices(limits.unleash_level_max));
   // 正は crates/domain/src/common_skill.rs の KAI_PROTECT_ARMOR_PHYSICAL / _MAGIC
-  const KAI_PROTECT_ARMOR_RATES = $derived(limits.kai_protect_armor_physical_rates.map((r) => Math.round(r * 100)));
-  const KAI_PROTECT_ARMOR_MAGIC = $derived(limits.kai_protect_armor_magic_rates.map((r) => Math.round(r * 100)));
+  const KAI_PROTECT_ARMOR_RATES = $derived(tables.kai_protect_armor_physical_rates.map((r) => Math.round(r * 100)));
+  const KAI_PROTECT_ARMOR_MAGIC = $derived(tables.kai_protect_armor_magic_rates.map((r) => Math.round(r * 100)));
   // 正は crates/domain/src/common_skill.rs の SHARPNESS_VISION
-  const SHARPNESS_RATES = $derived(limits.sharpness_vision_rates.map((r) => Math.round(r * 100)));
+  const SHARPNESS_RATES = $derived(tables.sharpness_vision_rates.map((r) => Math.round(r * 100)));
   // 段の名前は Lv だけ、効いている値は行の右に出す(段に「Lv6(+28%)」と書くと折り返す)。
   // **Lv5 まではほぼ全員が同じ**(そこで止まる)なので、ふだんは 5〜10 だけ出す
   const sharpnessVisionOptions = Array.from({ length: limits.sharpness_vision_level_max }, (_, i) => ({

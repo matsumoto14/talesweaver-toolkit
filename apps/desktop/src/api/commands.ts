@@ -5,7 +5,7 @@ import type {
   PotentialEffects,
   Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentItem, GameCharacter, StartupNotice,
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
-  ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, StatLimits,
+  ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, GameTables, StatLimits,
   StatPreview, StatSources,
   TitleDef, UpgradeCandidate, EnchantGain, ValidationLocation, VersusAccuracy,
   EquipmentAbilityView, EquipmentAbilityCandidate, EquipmentCandidates, EnchantPlanRow,
@@ -85,6 +85,8 @@ export const calculateDamage = (
   normalAttackId: string | null = null,
 ) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
+/** 並び・ラベル・部位ルール・段階表のカタログ(起動時に 1 回) */
+export const getGameTables = () => invoke<GameTables>("get_game_tables");
 /** Rust domain が定める新規キャラ用の未開放・未習得状態。 */
 export const getNewCharacterStatSources = () =>
   invoke<StatSources>("get_new_character_stat_sources");

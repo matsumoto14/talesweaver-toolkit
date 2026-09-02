@@ -3,20 +3,20 @@
 // 引く。ここは「どの部位を並べるか」「表示ラベル」など純粋な表示都合だけを持つ
 // (ADR 001: ゲーム由来の係数・上限をフロントに置かない / 値域上限にフォールバックを持たない)。
 import type { Equipment, EquipmentItem, EquipmentPart, PartSlot, SkillDependency } from "./api/types";
-import { limits } from "./limits.svelte";
+import { tables } from "./tables.svelte";
 
 export type EnchantDepKey = "thrust" | "slash" | "magic_attack" | "magic_defense";
 
 /** スキルの依存種別 → エンチャントで見るステ 2 本。ドメイン(装備攻撃力係数)から起動時に
  *  引いた静的テーブル(StatLimits.enchant_dependency_keys)を読むだけ — ルール表を写経しない。 */
 export function enchantDepKeysFor(dependency: SkillDependency): EnchantDepKey[] {
-  const row = limits.enchant_dependency_keys?.find((r) => r.dependency === dependency);
+  const row = tables.enchant_dependency_keys?.find((r) => r.dependency === dependency);
   return row ? [...row.keys] : [];
 }
 
 /** エンチャント枠を持ちうる部位(レリック・効果・AF・体は対象外。判定は PartSlot::allows_enchant)。 */
 export const ENCHANT_SLOTS: PartSlot[] =
-  limits.part_slot_rules.filter((r) => r.allows_enchant).map((r) => r.slot);
+  tables.part_slot_rules.filter((r) => r.allows_enchant).map((r) => r.slot);
 export const ENCHANT_SLOT_LABELS: Record<string, string> = {
   weapon: "武器", armor: "鎧", helm: "兜", shield: "盾", shield_plus: "カフス", head: "頭", hand: "手", leg: "足",
 };

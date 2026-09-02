@@ -22,7 +22,7 @@
 - **値域の検証(`BaseStats::validate()`、`StatSources::validate()`)は domain 側に実装し、storage 側はそれを呼ぶだけにする**。値域はゲーム仕様(ドメイン規則)であり storage 固有の制約ではないため
 - **gamedata は当面 JSON ではなく Rust のリテラル(const/関数)で持つ**。シードが十数件の間はローダとスキーマ検証を作るより型で持つ方が単純で、スクレイパー導入時に JSON + ローダへ移す
 - **ゲーム由来の係数・上限・集計はフロントに置かない**。wiki の値は domain / gamedata が唯一の正で、フロントは `StatLimits` / `StatPreview` などで受け取った値を表示・整形するだけにする。同じ量をフロントで足し直さない(表示のための比率・差分・単位換算は除く)
-- **値域上限(`get_stat_limits`)にフォールバック値を持たない**。取得を終えてから画面を組み立てる(`main.ts` が `loadStatLimits()` を待って `App.svelte` を動的 import する)。`labels.ts` のようにモジュール評価時に上限を読むものがあるため、待ちの位置はマウント前になる
+- **値域上限(`get_stat_limits`)とカタログ(`get_game_tables`)にフォールバック値を持たない**。取得を終えてから画面を組み立てる(`main.ts` が `loadStatLimits()` / `loadGameTables()` を待って `App.svelte` を動的 import する)。`labels.ts` のようにモジュール評価時に上限を読むものがあるため、待ちの位置はマウント前になる
 
 ## 却下した選択肢
 

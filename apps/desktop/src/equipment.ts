@@ -10,7 +10,7 @@ import {
   CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS,
   EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS,
 } from "./labels";
-import { limits } from "./limits.svelte";
+import { tables } from "./tables.svelte";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
 
@@ -154,11 +154,11 @@ export const selectedEquipmentPartOrNeutral = (list: EquipmentPartList): Equipme
 
 /** 段階 → 実際に増える値。 */
 export const sacredRelicValue = (stage: number): number =>
-  limits.sacred_relic_stage_values[stage] ?? 0;
+  tables.sacred_relic_stage_values[stage] ?? 0;
 
 /** 実際に増える値 → 段階。表のうちその値までに届いている段の数(範囲外は端で止まる)。 */
 export const sacredRelicStageFromValue = (value: number): number =>
-  Math.max(0, limits.sacred_relic_stage_values.filter((v) => v <= value).length - 1);
+  Math.max(0, tables.sacred_relic_stage_values.filter((v) => v <= value).length - 1);
 
 // --- ランダムオプション ---------------------------------------------------
 // 判定・集計は Rust 側(crates/domain/src/random_option.rs)。ここは表示・編集用。

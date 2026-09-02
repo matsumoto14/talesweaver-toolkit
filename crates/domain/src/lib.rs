@@ -21,6 +21,7 @@ pub mod enchant;
 pub mod enemy;
 pub mod equipment;
 pub mod equipment_class;
+pub mod game_tables;
 pub mod mastery;
 pub mod measurement;
 pub mod random_option;
@@ -110,6 +111,7 @@ pub use equipment::{
     EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus, WristBonusRule,
     ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, WEAPON_ABILITY_SLOTS,
 };
+pub use game_tables::{game_tables, DamageCategoryLabel, EquipmentStatLabel, GameTables};
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};
 pub use measurement::{
     can_separate_defense_and_cut_rate, MEASUREMENT_SEPARABLE_MIN_ATTACKS,

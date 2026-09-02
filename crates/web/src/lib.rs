@@ -281,6 +281,7 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "list_character_skills" => ok(commands::list_character_skills()),
         "list_titles" => ok(commands::list_titles()),
         "get_stat_limits" => ok(commands::get_stat_limits()),
+        "get_game_tables" => ok(commands::get_game_tables()),
         "get_new_character_stat_sources" => ok(commands::get_new_character_stat_sources()),
         "get_new_character_common_skills" => ok(commands::get_new_character_common_skills()),
         "preview_potential_effects" => {

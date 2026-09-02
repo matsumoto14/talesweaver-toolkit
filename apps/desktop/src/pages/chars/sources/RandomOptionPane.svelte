@@ -16,6 +16,7 @@
   } from "../../../labels";
   import { latest } from "../../../ui/latest.svelte";
   import { limits } from "../../../limits.svelte";
+  import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus } from "../../../state.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
@@ -87,7 +88,7 @@
     }
     return part;
   };
-  const partSlotRule = (slot: PartSlot) => limits.part_slot_rules.find((r) => r.slot === slot) ?? null;
+  const partSlotRule = (slot: PartSlot) => tables.part_slot_rules.find((r) => r.slot === slot) ?? null;
   const equippedItem = (slot: PartSlot) => {
     const itemId = selectedPartOrNull(slot)?.item_id;
     return itemId ? (app.equipmentCatalog.find((i) => i.id === itemId) ?? null) : null;

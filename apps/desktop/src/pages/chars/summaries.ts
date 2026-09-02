@@ -3,7 +3,7 @@
 // (draft を書き換える副作用は持たない)。ロジックを 2 か所にコピーしないための置き場所。
 import type { EquipmentStatKind } from "../../labels";
 import { STAT_LABELS } from "../../labels";
-import { limits } from "../../limits.svelte";
+import { tables } from "../../tables.svelte";
 import type { EquipmentValues, SkillDependency, StatPreview } from "../../api/types";
 import type { Draft } from "../../draft";
 import { zeroValues } from "../../equipment";
@@ -51,12 +51,12 @@ export function defenseRatePercent(preview: StatPreview | null): { physical: num
 export function sharpnessRatePercent(draft: Draft): number {
   const level = draft.commonSkills.sharpness_vision_level;
   if (level === 0) return 0;
-  return Math.round(limits.sharpness_vision_rates[level - 1] * 100);
+  return Math.round(tables.sharpness_vision_rates[level - 1] * 100);
 }
 
 /** アンリーシュ(能力解放)の効き先要約。正は crates/domain/src/common_skill.rs の UNLEASH */
 export function unleashSummary(draft: Draft): string {
-  const rates = limits.unleash_rates.map((r) => Math.round(r * 100));
+  const rates = tables.unleash_rates.map((r) => Math.round(r * 100));
   return (
     (draft.commonSkills.unleash ?? [])
       .filter((u) => u.stat !== null && u.level > 0)

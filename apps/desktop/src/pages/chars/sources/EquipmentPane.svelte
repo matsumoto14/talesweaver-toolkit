@@ -29,6 +29,7 @@
   } from "../../../labels";
   import type { EquipmentStatKind } from "../../../labels";
   import { limits } from "../../../limits.svelte";
+  import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
@@ -230,7 +231,7 @@
     return level === undefined ? "" : String(level);
   };
   /** 部位ごとの枠数ルール(domain: PartSlot::ability_slots / random_option_slots)。 */
-  const partSlotRule = (slot: PartSlot) => limits.part_slot_rules.find((r) => r.slot === slot) ?? null;
+  const partSlotRule = (slot: PartSlot) => tables.part_slot_rules.find((r) => r.slot === slot) ?? null;
   const currentAbilitySlotCount = (slot: PartSlot) =>
     equippedItem(slot)?.ability_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (partSlotRule(slot)?.ability_slots ?? 0));
   /** 攻撃・耐久の装着時効果の要約。効果なしは null。装備補正値と違って部位の数値には出ないので、
@@ -591,7 +592,7 @@
     { value: "armor_suit", label: "スーツ" }, { value: "armor_robe", label: "ローブ" },
   ];
   const enhanceLevelOptions = $derived(
-    limits.enhance_level_candidates.map((lv) => ({
+    tables.enhance_level_candidates.map((lv) => ({
       value: String(lv), label: lv === 0 ? "強化なし" : `+${lv}`,
     })),
   );

@@ -92,6 +92,7 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         | "list_character_skills"
         | "list_titles"
         | "get_stat_limits"
+        | "get_game_tables"
         | "get_new_character_stat_sources"
         | "get_new_character_common_skills" => BTreeSet::new(),
 

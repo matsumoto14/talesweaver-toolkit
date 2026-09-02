@@ -7,13 +7,13 @@ import type {
   CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect,
 } from "./api/types";
 import { ELEMENT_LABELS, STAT_LABELS } from "./labels";
-import { limits } from "./limits.svelte";
+import { tables } from "./tables.svelte";
 import type { PickerOption } from "./ui/Picker.svelte";
 
 /** 与ダメージ式のカテゴリの日本語名。唯一の正は Rust の DamageCategory::label
  * (StatLimits.damage_category_labels 経由。crates/domain/src/category.rs)。 */
 export const damageCategoryLabel = (c: DamageCategory): string =>
-  limits.damage_category_labels.find((d) => d.category === c)?.label ?? c;
+  tables.damage_category_labels.find((d) => d.category === c)?.label ?? c;
 
 /** 単一の効果を 1 行の要約文字列にする。record_only は null(呼び出し側が既定文言を出す)。
  * キャラスキル(複数効果を並べる effectLabel)とマスタリー(1 択なのでこれをそのまま使う)で共通 */

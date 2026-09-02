@@ -102,12 +102,13 @@
 
 ```
 main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・キャラレール)。v4 デザイン準拠。
-                       main.ts は値域上限(get_stat_limits)を取り切ってから App を動的 import する
-                       (labels.ts などがモジュール評価時に上限を読むため。フォールバック値は持たない)
+                       main.ts は値域上限(get_stat_limits)とカタログ(get_game_tables)を取り切って
+                       から App を動的 import する(labels.ts などがモジュール評価時に読むため。
+                       フォールバック値は持たない)
 CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線。表示順は端末内設定として保持)
 state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・カスタム画像data URL・選択・コンテンツ判定・試し変更 sim)
 api/types.ts           コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
-api/commands.ts        invoke ラッパー。画面からコマンドを呼ぶ唯一の入口(44 本)
+api/commands.ts        invoke ラッパー。画面からコマンドを呼ぶ唯一の入口(62 本)
 api/invoke.ts          呼び出しの実体。デスクトップは Tauri、ブラウザは invoke.wasm.ts に
                        vite の alias で差し替わる(画面はどちらか知らない)
 api/browserStore.ts    ブラウザ版の保存(IndexedDB)/ api/transfer.ts データの書き出し・読み込み
@@ -118,7 +119,8 @@ buffs.ts               バフ選択の共通ロジック(純関数)
 candidates.ts          強化候補の列挙(効果の計算は Rust 側 preview_damage)
 draft.ts               キャラ編集ドラフトの型と組み立て
 format.ts, labels.ts   数値整形・表示名
-limits.svelte.ts       domain の値域上限(`get_stat_limits`)の共有状態
+limits.svelte.ts       domain の値域上限・係数(`get_stat_limits`)の共有状態
+tables.svelte.ts       domain の並び・ラベル・部位ルール・段階表(`get_game_tables`)の共有状態
 toast.svelte.ts        エラー帯の共有状態
 ```
 

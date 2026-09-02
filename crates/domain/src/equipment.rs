@@ -448,7 +448,7 @@ impl PartSlot {
 }
 
 /// 部位ごとの枠数・可否ルール(ドラフト非依存の定数。UI がリテラルで持たず参照する。
-/// `StatLimits::part_slot_rules` に載る。各フィールドは `PartSlot` の同名メソッドの写し)。
+/// `GameTables::part_slot_rules` に載る。各フィールドは `PartSlot` の同名メソッドの写し)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PartSlotRule {
     pub slot: PartSlot,

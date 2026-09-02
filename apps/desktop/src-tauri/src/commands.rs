@@ -7,7 +7,7 @@
 use base64::Engine;
 use commands::{
     CharacterSkillEffectsView, CommandError, CommandResult, EnchantGain, EnchantPlanRow,
-    EquipmentAbilityView, EquipmentCandidates, StatLimitsPayload, TitleView, UpgradeCandidate,
+    EquipmentAbilityView, EquipmentCandidates, GameTablesPayload, TitleView, UpgradeCandidate,
 };
 use domain::{
     BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DamageResult,
@@ -506,8 +506,13 @@ pub fn preview_versus(
 }
 
 #[tauri::command]
-pub fn get_stat_limits() -> StatLimitsPayload {
+pub fn get_stat_limits() -> domain::StatLimits {
     commands::get_stat_limits()
+}
+
+#[tauri::command]
+pub fn get_game_tables() -> GameTablesPayload {
+    commands::get_game_tables()
 }
 
 #[tauri::command]

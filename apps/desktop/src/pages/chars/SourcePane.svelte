@@ -14,6 +14,7 @@
   import type { Draft } from "../../draft";
   import { sacredRelicStageFromValue, sacredRelicValue, withEnchant } from "../../equipment";
   import { limits } from "../../limits.svelte";
+  import { tables } from "../../tables.svelte";
   import type { SourceId } from "./sourceId";
   import "./sources/pane-shared.css";
   import ActualDelayPane from "./sources/ActualDelayPane.svelte";
@@ -55,12 +56,12 @@
 
   // --- ペット S スキル ------------------------------------------------------
   // 段の名前だけだと「それでいくつ増えるのか」を毎回引くことになるので、値を段に書く
-  // (正は crates/domain/src/stat_sources.rs の PetSkillTier::bonus。limits.pet_skill_tier_bonus 経由で引く)
+  // (正は crates/domain/src/stat_sources.rs の PetSkillTier::bonus。tables.pet_skill_tier_bonus 経由で引く)
   const petSkillBonusOf = (tier: PetSkillTier) =>
-    limits.pet_skill_tier_bonus.find((b) => b.tier === tier)?.bonus ?? 0;
+    tables.pet_skill_tier_bonus.find((b) => b.tier === tier)?.bonus ?? 0;
   const petSkillOptions = $derived([
     { value: "", label: "なし" },
-    ...limits.pet_skill_tier_bonus.map((b) => ({
+    ...tables.pet_skill_tier_bonus.map((b) => ({
       value: b.tier,
       label: `${PET_SKILL_TIER_LABELS[b.tier]} +${b.bonus}`,
     })),

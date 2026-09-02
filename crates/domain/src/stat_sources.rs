@@ -24,8 +24,8 @@ use crate::damage::DamageContribution;
 use crate::element::ElementSources;
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
-    EquipmentStatKind, EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, PartStatTotal,
-    ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
+    EquipmentValues, PartEquipmentValues, PartSlot, PartStatTotal, ENHANCE_LEVEL_MAX,
+    EQUIPMENT_VALUE_MAX,
 };
 use crate::mastery::{Masteries, MasteryCatalog};
 use crate::random_option::{RandomOptionDef, RandomOptionTotals};
@@ -41,7 +41,7 @@ use crate::stats::{
 };
 use crate::thesis_core::{
     CoreRegion, CoreSetBonus, CoreSetGroup, CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX,
-    CORE_SLOT_COUNT, POWER_BONUS, SUPPORT_BONUS,
+    CORE_SLOT_COUNT,
 };
 use crate::title::TitleDef;
 use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
@@ -79,14 +79,14 @@ impl PetSkillTier {
     }
 }
 
-/// 段階ごとの固定値ボーナス(UI の選択肢ラベル用。`StatLimits::pet_skill_tier_bonus`)。
+/// 段階ごとの固定値ボーナス(UI の選択肢ラベル用。`GameTables::pet_skill_tier_bonus`)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PetSkillTierBonus {
     pub tier: PetSkillTier,
     pub bonus: i64,
 }
 
-fn pet_skill_tier_bonuses() -> Vec<PetSkillTierBonus> {
+pub(crate) fn pet_skill_tier_bonuses() -> Vec<PetSkillTierBonus> {
     PetSkillTier::ALL
         .iter()
         .map(|&tier| PetSkillTierBonus {
@@ -1798,7 +1798,8 @@ pub fn preview_effective_stats(
     })
 }
 
-/// UI がリテラルで持たず参照するための値域上限一覧(起動時に 1 回取得する想定)。
+/// UI がリテラルで持たず参照するための値域一覧(上限・下限・刻み・係数だけ。起動時に 1 回取得する想定)。
+/// 並び・ラベル・段階表は `crate::game_tables::GameTables` に置く。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatLimits {
     pub base_stat_max: u32,
@@ -1871,57 +1872,8 @@ pub struct StatLimits {
     /// コートアーマーの装備防御力倍率(物理 / 魔法。wiki: Skill/共通)。Σ% の小数表現
     pub coat_armor_physical_rate: f64,
     pub coat_armor_magic_rate: f64,
-    /// プロテクトアーマー Lv1〜6 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現。選択肢の注記に使う
-    pub protect_armor_physical_rates: Vec<f64>,
-    pub protect_armor_magic_rates: Vec<f64>,
-    /// 改・プロテクトアーマー Lv1〜5 の装備防御力倍率(物理 / 魔法)。Σ% の小数表現
-    pub kai_protect_armor_physical_rates: Vec<f64>,
-    pub kai_protect_armor_magic_rates: Vec<f64>,
-    /// シャープネスビジョン Lv1〜10 の割合追加ダメージ。Σ% の小数表現
-    pub sharpness_vision_rates: Vec<f64>,
-    /// アンリーシュ Lv1〜10 の能力値倍率B。Σ% の小数表現
-    pub unleash_rates: Vec<f64>,
-    /// ペット S スキルの段階ごとの固定値ボーナス(wiki: PET)
-    pub pet_skill_tier_bonus: Vec<PetSkillTierBonus>,
     /// 神鳥の聖物 1 段階あたりの最終固定値(wiki: 神鳥の聖物)
     pub sacred_relic_value_per_stage: i64,
-    /// テシスコア・火力タイプの補正値テーブル(wiki: 進化強化表「火力」列)。添字は [進化段階][強化段階]
-    pub core_power_bonus_table: Vec<Vec<i64>>,
-    /// テシスコア・補助タイプの補正値テーブル(wiki: 進化強化表「補助」列)
-    pub core_support_bonus_table: Vec<Vec<i64>>,
-    /// 部位ごとの枠数ルール(装着アビリティ・ランダムオプション)。13 部位ぶん
-    pub part_slot_rules: Vec<PartSlotRule>,
-    // --- enum の並びと分類。画面は配列リテラルを持たず、ここを読んで並べる ---
-    /// ステの並び(`StatKind::ALL`)
-    pub stat_kinds: Vec<StatKind>,
-    /// 補正の出どころの並び(`StatSourceGroup::ALL`)
-    pub stat_source_groups: Vec<StatSourceGroup>,
-    /// 属性の並び(`Element::ALL`)
-    pub elements: Vec<crate::element::Element>,
-    /// 装備に付与できる属性(`Element::can_enchant_equipment`)
-    pub equipment_elements: Vec<crate::element::Element>,
-    /// 装着アビリティの系統の並び(`EquipmentAbilityFamily::ALL`)
-    pub ability_families: Vec<crate::equipment::EquipmentAbilityFamily>,
-    /// ランダムオプションのランクの並び(`RandomOptionRank::ALL`。左ほど下位)
-    pub random_option_ranks: Vec<crate::random_option::RandomOptionRank>,
-    /// スキル依存種別の並び(`SkillDependency::ALL`)
-    pub skill_dependencies: Vec<crate::skill::SkillDependency>,
-    /// 極限スキルの並び(`UltimateSkill::ALL`)
-    pub ultimate_skills: Vec<crate::ultimate_skill::UltimateSkill>,
-    /// テシスコアの地域の並び(`CoreRegion::ALL`)
-    pub core_regions: Vec<crate::thesis_core::CoreRegion>,
-    /// テシスコアの火力タイプ(`CoreType::is_power`)。強化能力値に入る
-    pub core_power_types: Vec<crate::thesis_core::CoreType>,
-    /// テシスコアの補助タイプ。記録と入場条件の合計にだけ効く
-    pub core_support_types: Vec<crate::thesis_core::CoreType>,
-    /// 神鳥の聖物の段階 → 最終固定値(添字が段階。0..=`sacred_relic_stage_max`)。
-    /// 画面はこの表を引くだけで、段階↔値の換算式を写経しない
-    pub sacred_relic_stage_values: Vec<i64>,
-    /// 与ダメージ式カテゴリ(`DamageCategory`)の日本語名。36 カテゴリぶん、`DamageCategory::ALL` の順
-    pub damage_category_labels: Vec<DamageCategoryLabel>,
-    /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentStatKind::ALL` の順。
-    /// `CoreType`(テシスコア)の表示名もここと同じ(8 種が重なる。critical は含まない)
-    pub equipment_stat_labels: Vec<EquipmentStatLabel>,
     /// コンボボーナスが付くコンボ数(wiki: カテゴリH)
     pub combo_bonus_threshold: u32,
     /// 中ディレイのコンボボーナスが付くコンボ数(wiki `#ActualDelay`)
@@ -1936,8 +1888,6 @@ pub struct StatLimits {
     pub unleash_free_level_max: u8,
     /// オーグメント Lv + この値 = ストロングウェポン / プロテクトアーマー / ハイパーリミットの上限
     pub augment_gate_offset: u8,
-    /// 装備強化 Lv の選択肢(0 = 強化なし、実用は +10 以上。+12 以上は等級つき)
-    pub enhance_level_candidates: Vec<u8>,
     /// +12 以上で追加固定ダメージがレンジ振り(MR)になる境界(wiki: 装備システム/装備強化)
     pub enhance_grade_min_level: u8,
     /// 属性差 1 あたりの属性差ボーナス(wiki: カテゴリI)。Σ% の小数表現
@@ -1974,21 +1924,6 @@ pub struct StatLimits {
     pub critical_rate_min: f64,
     /// クリティカル率の上限
     pub critical_rate_max: f64,
-}
-
-/// `DamageCategory` 1 件の表示名(`stat_limits` 経由で UI に配る)。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DamageCategoryLabel {
-    pub category: DamageCategory,
-    pub label: String,
-}
-
-/// 装備補正 1 値の表示名(`stat_limits` 経由で UI に配る)。`kind` は serde のフィールド名
-/// (`EquipmentStatKind::key`)と一致する。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EquipmentStatLabel {
-    pub kind: String,
-    pub label: String,
 }
 
 pub fn stat_limits() -> StatLimits {
@@ -2038,69 +1973,7 @@ pub fn stat_limits() -> StatLimits {
         strong_weapon_rate_per_level: crate::common_skill::STRONG_WEAPON_RATE_PER_LEVEL,
         coat_armor_physical_rate: crate::common_skill::COAT_ARMOR_PHYSICAL_RATE,
         coat_armor_magic_rate: crate::common_skill::COAT_ARMOR_MAGIC_RATE,
-        protect_armor_physical_rates: crate::common_skill::PROTECT_ARMOR_PHYSICAL.to_vec(),
-        protect_armor_magic_rates: crate::common_skill::PROTECT_ARMOR_MAGIC.to_vec(),
-        kai_protect_armor_physical_rates: crate::common_skill::KAI_PROTECT_ARMOR_PHYSICAL.to_vec(),
-        kai_protect_armor_magic_rates: crate::common_skill::KAI_PROTECT_ARMOR_MAGIC.to_vec(),
-        sharpness_vision_rates: crate::common_skill::SHARPNESS_VISION.to_vec(),
-        unleash_rates: crate::common_skill::UNLEASH.to_vec(),
-        pet_skill_tier_bonus: pet_skill_tier_bonuses(),
         sacred_relic_value_per_stage: SACRED_RELIC_VALUE_PER_STAGE,
-        core_power_bonus_table: POWER_BONUS.iter().map(|row| row.to_vec()).collect(),
-        core_support_bonus_table: SUPPORT_BONUS.iter().map(|row| row.to_vec()).collect(),
-        part_slot_rules: PartSlot::ALL
-            .into_iter()
-            .map(|slot| PartSlotRule {
-                slot,
-                label: slot.label().to_string(),
-                ability_slots: slot.ability_slots(),
-                allows_ability: slot.allows_abilities(),
-                allows_enhance: slot.allows_enhance(),
-                allows_enchant: slot.allows_enchant(),
-                allows_siena: slot.allows_siena(),
-                siena_counts_as_equipment: slot.siena_values_are_equipment(),
-                allows_random_option: slot.allows_random_option(),
-                random_option_slots: slot.random_option_slots(),
-                allows_element: slot.allows_element(),
-            })
-            .collect(),
-        stat_kinds: StatKind::ALL.to_vec(),
-        stat_source_groups: StatSourceGroup::ALL.to_vec(),
-        elements: crate::element::Element::ALL.to_vec(),
-        equipment_elements: crate::element::Element::ALL
-            .into_iter()
-            .filter(|e| e.can_enchant_equipment())
-            .collect(),
-        ability_families: crate::equipment::EquipmentAbilityFamily::ALL.to_vec(),
-        random_option_ranks: crate::random_option::RandomOptionRank::ALL.to_vec(),
-        skill_dependencies: crate::skill::SkillDependency::ALL.to_vec(),
-        ultimate_skills: crate::ultimate_skill::UltimateSkill::ALL.to_vec(),
-        core_regions: crate::thesis_core::CoreRegion::ALL.to_vec(),
-        core_power_types: crate::thesis_core::CoreType::ALL
-            .into_iter()
-            .filter(|t| t.is_power())
-            .collect(),
-        core_support_types: crate::thesis_core::CoreType::ALL
-            .into_iter()
-            .filter(|t| !t.is_power())
-            .collect(),
-        sacred_relic_stage_values: (0..=SACRED_RELIC_STAGE_MAX)
-            .map(sacred_relic_value)
-            .collect(),
-        damage_category_labels: DamageCategory::ALL
-            .into_iter()
-            .map(|category| DamageCategoryLabel {
-                category,
-                label: category.label().to_string(),
-            })
-            .collect(),
-        equipment_stat_labels: EquipmentStatKind::ALL
-            .into_iter()
-            .map(|kind| EquipmentStatLabel {
-                kind: kind.key().to_string(),
-                label: kind.label().to_string(),
-            })
-            .collect(),
         combo_bonus_threshold: crate::damage::COMBO_BONUS_THRESHOLD,
         combo_delay_threshold: crate::actual_delay::COMBO_DELAY_THRESHOLD,
         combo_bonus_rate: crate::damage::COMBO_BONUS_RATE,
@@ -2108,7 +1981,6 @@ pub fn stat_limits() -> StatLimits {
         actual_delay_min: crate::actual_delay::ACTUAL_DELAY_MIN,
         unleash_free_level_max: crate::common_skill::UNLEASH_FREE_LEVEL_MAX,
         augment_gate_offset: crate::common_skill::AUGMENT_GATE_OFFSET,
-        enhance_level_candidates: crate::equipment::ENHANCE_LEVEL_CANDIDATES.to_vec(),
         enhance_grade_min_level: crate::equipment::ENHANCE_LEVEL_RANDOM_RANGE_MIN,
         element_bonus_percent_per_point: crate::damage::ELEMENT_BONUS_PERCENT_PER_POINT,
         element_bonus_max: DamageCategory::ElementBonus
