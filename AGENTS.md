@@ -1,7 +1,7 @@
 # TW Context
 
 TalesWeaver(MMORPG)プレイヤー向けデスクトップツール。Tauri(Rust)+ SQLite(rusqlite)+ TypeScript/Svelte。
-機能と全体構成は docs/architecture.md、進捗は docs/status.md。
+機能と全体構成は docs/architecture.md、進捗は docs/status.md、構造の負債は docs/architecture-audit.md。
 docs/ 直下は人向け。決定記録は docs/adr/(テーマ別 ADR)、エージェント運用は docs/workflow.md。
 
 ## アーキテクチャ(構造ファースト)
