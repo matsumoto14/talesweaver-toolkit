@@ -1002,6 +1002,8 @@ export interface EquipmentItem {
   enhance_type: EquipmentEnhanceType | null;
   /** 鎧のみ非 null(`armor_class_for_type(enhance_type)`)。キャラの装備可能クラスとの突き合わせに使う。 */
   armor_class: ArmorClass | null;
+  /** このアイテムを装備できるキャラ id の一覧(クライアント展開データ由来)。null = 制限なし。 */
+  usable_by: string[] | null;
   /** レリックのみ非 null。系列と段(id の文字列は解析しない) */
   relic: RelicInfo | null;
   /** 装着時効果(wiki: Item ページ備考の「装着時 …」)。与ダメージ式のカテゴリに入る */

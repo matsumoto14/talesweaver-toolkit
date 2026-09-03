@@ -950,3 +950,30 @@ fn テネブリスとセイクリッドはクライアントdbから収録する
     let scimitar = catalog.iter().find(|item| item.name == "†改・セイクリッドシミター").unwrap();
     assert_eq!(scimitar.values_min.slash, 550);
 }
+
+/// `c11_CharMask` から装備可能キャラを取り込む(`tools/gamedata/import_client_db.py` 参照)。
+/// bit 0 = 全キャラ、bit k(k>=1)= `dm_00000_0298.csv` の行 k-1 のキャラ。
+#[test]
+fn 装備可能キャラのビットは表の行に対応する() {
+    let catalog = equipment_catalog();
+    let sword = catalog.iter().find(|item| item.name == "†アクィルスソード").unwrap();
+    assert_eq!(sword.usable_by, Some(&["lucian", "ispin"][..]));
+    let robe = catalog.iter().find(|item| item.name == "†アクィルスローブ").unwrap();
+    assert_eq!(robe.usable_by, Some(&["tichiel", "anais", "chloe", "roamini"][..]));
+    let mail = catalog.iter().find(|item| item.name == "†アクィルスメイル").unwrap();
+    assert_eq!(
+        mail.usable_by,
+        Some(
+            &[
+                "lucian", "boris", "maximin", "siberin", "isaac", "ispin", "benya", "isolet",
+                "leeche", "yefnen",
+            ][..]
+        )
+    );
+    // client DB に同名行が無い行(wiki 抽出のみ)は None のまま(装備可否は武器種/鎧区分/腕種で判定)。
+    let wiki_only = catalog
+        .iter()
+        .find(|item| item.name == "†アノマラド共和国のアーマー")
+        .unwrap();
+    assert_eq!(wiki_only.usable_by, None);
+}

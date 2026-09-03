@@ -22,6 +22,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -43,6 +44,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -64,6 +66,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -85,6 +88,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -106,6 +110,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -127,6 +132,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -148,6 +154,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -169,6 +176,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -190,6 +198,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/体",
                 retrieved_on: "2026-08-27",
@@ -211,6 +220,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -232,6 +242,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -253,6 +264,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -274,6 +286,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -295,6 +308,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -316,6 +330,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -337,6 +352,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -358,6 +374,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/手",
                 retrieved_on: "2026-08-27",
@@ -379,6 +396,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -400,6 +418,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -421,6 +440,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -442,6 +462,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -463,6 +484,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -484,6 +506,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -505,6 +528,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -526,6 +550,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/足",
                 retrieved_on: "2026-08-27",
@@ -547,6 +572,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -568,6 +594,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -589,6 +616,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -610,6 +638,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -631,6 +660,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -652,6 +682,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -673,6 +704,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -694,6 +726,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/アクセサリ/顔",
                 retrieved_on: "2026-08-27",
@@ -715,6 +748,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -736,6 +770,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -757,6 +792,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -778,6 +814,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -799,6 +836,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -820,6 +858,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -841,6 +880,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -862,6 +902,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -883,6 +924,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -904,6 +946,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -925,6 +968,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -946,6 +990,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/アーミングソード",
                 retrieved_on: "2026-08-27",
@@ -967,6 +1012,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -988,6 +1034,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1009,6 +1056,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1030,6 +1078,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1051,6 +1100,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1072,6 +1122,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1093,6 +1144,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1114,6 +1166,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1135,6 +1188,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1156,6 +1210,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1177,6 +1232,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/カーラ",
                 retrieved_on: "2026-08-27",
@@ -1198,6 +1254,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1219,6 +1276,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1240,6 +1298,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1261,6 +1320,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1282,6 +1342,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1303,6 +1364,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1324,6 +1386,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1345,6 +1408,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1366,6 +1430,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1387,6 +1452,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1408,6 +1474,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1429,6 +1496,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/クロー",
                 retrieved_on: "2026-08-27",
@@ -1450,6 +1518,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1471,6 +1540,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1492,6 +1562,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1513,6 +1584,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1534,6 +1606,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1555,6 +1628,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1576,6 +1650,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1597,6 +1672,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1618,6 +1694,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1639,6 +1716,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1660,6 +1738,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1681,6 +1760,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1702,6 +1782,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/サイズ",
                 retrieved_on: "2026-08-27",
@@ -1723,6 +1804,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1744,6 +1826,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1765,6 +1848,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1786,6 +1870,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1807,6 +1892,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1828,6 +1914,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1849,6 +1936,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1870,6 +1958,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1891,6 +1980,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1912,6 +2002,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1933,6 +2024,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1954,6 +2046,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/スモールソード",
                 retrieved_on: "2026-08-27",
@@ -1975,6 +2068,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -1996,6 +2090,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2017,6 +2112,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2038,6 +2134,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2059,6 +2156,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2080,6 +2178,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2101,6 +2200,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2122,6 +2222,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2143,6 +2244,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2164,6 +2266,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2185,6 +2288,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/セプター",
                 retrieved_on: "2026-08-27",
@@ -2206,6 +2310,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2227,6 +2332,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2248,6 +2354,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2269,6 +2376,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2290,6 +2398,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2311,6 +2420,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2332,6 +2442,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2353,6 +2464,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2374,6 +2486,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2395,6 +2508,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2416,6 +2530,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2437,6 +2552,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ソードシェイプ",
                 retrieved_on: "2026-08-27",
@@ -2458,6 +2574,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2479,6 +2596,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2500,6 +2618,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2521,6 +2640,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2542,6 +2662,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2563,6 +2684,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2584,6 +2706,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2605,6 +2728,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2626,6 +2750,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2647,6 +2772,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2668,6 +2794,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2689,6 +2816,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/トーテム",
                 retrieved_on: "2026-08-27",
@@ -2710,6 +2838,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2731,6 +2860,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2752,6 +2882,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2773,6 +2904,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2794,6 +2926,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2815,6 +2948,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2836,6 +2970,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2857,6 +2992,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2878,6 +3014,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2899,6 +3036,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2920,6 +3058,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2941,6 +3080,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2962,6 +3102,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -2983,6 +3124,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドベル",
                 retrieved_on: "2026-08-27",
@@ -3004,6 +3146,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3025,6 +3168,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3046,6 +3190,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3067,6 +3212,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3088,6 +3234,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3109,6 +3256,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3130,6 +3278,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3151,6 +3300,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3172,6 +3322,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3193,6 +3344,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3214,6 +3366,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3235,6 +3388,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3256,6 +3410,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンドランチャー",
                 retrieved_on: "2026-08-27",
@@ -3277,6 +3432,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3298,6 +3454,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3319,6 +3476,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3340,6 +3498,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3361,6 +3520,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3382,6 +3542,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3403,6 +3564,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3424,6 +3586,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3445,6 +3608,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3466,6 +3630,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3487,6 +3652,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3508,6 +3674,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3529,6 +3696,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ハンマー",
                 retrieved_on: "2026-08-27",
@@ -3550,6 +3718,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3571,6 +3740,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3592,6 +3762,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3613,6 +3784,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3634,6 +3806,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3655,6 +3828,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3676,6 +3850,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3697,6 +3872,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3718,6 +3894,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3739,6 +3916,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3760,6 +3938,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/ワンド",
                 retrieved_on: "2026-08-27",
@@ -3781,6 +3960,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3802,6 +3982,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3823,6 +4004,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3844,6 +4026,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3865,6 +4048,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3886,6 +4070,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3907,6 +4092,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3928,6 +4114,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3949,6 +4136,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3970,6 +4158,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -3991,6 +4180,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -4012,6 +4202,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -4033,6 +4224,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/刀",
                 retrieved_on: "2026-08-27",
@@ -4054,6 +4246,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4075,6 +4268,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4096,6 +4290,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4117,6 +4312,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4138,6 +4334,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4159,6 +4356,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4180,6 +4378,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4201,6 +4400,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4222,6 +4422,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4243,6 +4444,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4264,6 +4466,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4285,6 +4488,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4306,6 +4510,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/大剣",
                 retrieved_on: "2026-08-27",
@@ -4327,6 +4532,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "韓国コミュニティ装備整理シート/大剣",
                 retrieved_on: "2026-08-27",
@@ -4348,6 +4554,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "韓国コミュニティ装備整理シート/大剣",
                 retrieved_on: "2026-08-27",
@@ -4369,6 +4576,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4390,6 +4598,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4411,6 +4620,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4432,6 +4642,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4453,6 +4664,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4474,6 +4686,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4495,6 +4708,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4516,6 +4730,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4537,6 +4752,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4558,6 +4774,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4579,6 +4796,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4600,6 +4818,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4621,6 +4840,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/太刀",
                 retrieved_on: "2026-08-27",
@@ -4642,6 +4862,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4663,6 +4884,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4684,6 +4906,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4705,6 +4928,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4726,6 +4950,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4747,6 +4972,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4768,6 +4994,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4789,6 +5016,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4810,6 +5038,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4831,6 +5060,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4852,6 +5082,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/戦杖",
                 retrieved_on: "2026-08-27",
@@ -4873,6 +5104,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -4894,6 +5126,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -4915,6 +5148,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -4936,6 +5170,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -4957,6 +5192,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -4978,6 +5214,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -4999,6 +5236,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -5020,6 +5258,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -5041,6 +5280,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -5062,6 +5302,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -5083,6 +5324,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -5104,6 +5346,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/斧",
                 retrieved_on: "2026-08-27",
@@ -5125,6 +5368,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5146,6 +5390,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5167,6 +5412,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5188,6 +5434,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5209,6 +5456,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5230,6 +5478,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5251,6 +5500,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5272,6 +5522,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5293,6 +5544,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5314,6 +5566,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5335,6 +5588,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/棒",
                 retrieved_on: "2026-08-27",
@@ -5356,6 +5610,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5377,6 +5632,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5398,6 +5654,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5419,6 +5676,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5440,6 +5698,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5461,6 +5720,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5482,6 +5742,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5503,6 +5764,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5524,6 +5786,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5545,6 +5808,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5566,6 +5830,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5587,6 +5852,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5608,6 +5874,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/槍",
                 retrieved_on: "2026-08-27",
@@ -5629,6 +5896,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5650,6 +5918,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5671,6 +5940,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5692,6 +5962,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5713,6 +5984,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5734,6 +6006,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5755,6 +6028,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5776,6 +6050,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5797,6 +6072,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5818,6 +6094,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5839,6 +6116,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5860,6 +6138,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5881,6 +6160,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -5902,6 +6182,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -5923,6 +6204,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -5944,6 +6226,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -5965,6 +6248,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -5986,6 +6270,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6007,6 +6292,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6028,6 +6314,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6049,6 +6336,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6070,6 +6358,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6091,6 +6380,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6112,6 +6402,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6133,6 +6424,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/物理銃",
                 retrieved_on: "2026-08-27",
@@ -6154,6 +6446,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6175,6 +6468,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6196,6 +6490,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6217,6 +6512,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6238,6 +6534,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6259,6 +6556,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6280,6 +6578,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6301,6 +6600,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6322,6 +6622,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6343,6 +6644,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6364,6 +6666,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6385,6 +6688,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6406,6 +6710,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6427,6 +6732,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短刀",
                 retrieved_on: "2026-08-27",
@@ -6448,6 +6754,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6469,6 +6776,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6490,6 +6798,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6511,6 +6820,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6532,6 +6842,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6553,6 +6864,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6574,6 +6886,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6595,6 +6908,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6616,6 +6930,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6637,6 +6952,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6658,6 +6974,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/短剣",
                 retrieved_on: "2026-08-27",
@@ -6679,6 +6996,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6700,6 +7018,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6721,6 +7040,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6742,6 +7062,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6763,6 +7084,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6784,6 +7106,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6805,6 +7128,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6826,6 +7150,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6847,6 +7172,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6868,6 +7194,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6889,6 +7216,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6910,6 +7238,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6931,6 +7260,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/細剣",
                 retrieved_on: "2026-08-27",
@@ -6952,6 +7282,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -6973,6 +7304,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -6994,6 +7326,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7015,6 +7348,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7036,6 +7370,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7057,6 +7392,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7078,6 +7414,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7099,6 +7436,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7120,6 +7458,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7141,6 +7480,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7162,6 +7502,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7183,6 +7524,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7204,6 +7546,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7225,6 +7568,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/聖杖",
                 retrieved_on: "2026-08-27",
@@ -7246,6 +7590,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7267,6 +7612,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7288,6 +7634,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7309,6 +7656,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7330,6 +7678,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7351,6 +7700,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7372,6 +7722,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7393,6 +7744,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7414,6 +7766,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7435,6 +7788,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7456,6 +7810,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/連接棍",
                 retrieved_on: "2026-08-27",
@@ -7477,6 +7832,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7498,6 +7854,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7519,6 +7876,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7540,6 +7898,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7561,6 +7920,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7582,6 +7942,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7603,6 +7964,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7624,6 +7986,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7645,6 +8008,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7666,6 +8030,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7687,6 +8052,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7708,6 +8074,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7729,6 +8096,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/長剣",
                 retrieved_on: "2026-08-27",
@@ -7750,6 +8118,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7771,6 +8140,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7792,6 +8162,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7813,6 +8184,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7834,6 +8206,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7855,6 +8228,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7876,6 +8250,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7897,6 +8272,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7918,6 +8294,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7939,6 +8316,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7960,6 +8338,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -7981,6 +8360,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/鞭",
                 retrieved_on: "2026-08-27",
@@ -8002,6 +8382,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8023,6 +8404,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8044,6 +8426,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8065,6 +8448,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8086,6 +8470,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8107,6 +8492,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8128,6 +8514,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8149,6 +8536,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8170,6 +8558,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8191,6 +8580,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8212,6 +8602,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8233,6 +8624,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8254,6 +8646,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8275,6 +8668,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8296,6 +8690,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔杖",
                 retrieved_on: "2026-08-27",
@@ -8317,6 +8712,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8338,6 +8734,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8359,6 +8756,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8380,6 +8778,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8401,6 +8800,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8422,6 +8822,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8443,6 +8844,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8465,6 +8867,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8486,6 +8889,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8507,6 +8911,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8528,6 +8933,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8549,6 +8955,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8570,6 +8977,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -8591,6 +8999,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8612,6 +9021,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8633,6 +9043,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8654,6 +9065,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8675,6 +9087,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8696,6 +9109,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8717,6 +9131,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8738,6 +9153,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8759,6 +9175,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8780,6 +9197,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8801,6 +9219,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8822,6 +9241,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8843,6 +9263,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/武器/魔法銃",
                 retrieved_on: "2026-08-27",
@@ -8864,6 +9285,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -8885,6 +9307,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -8906,6 +9329,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -8927,6 +9351,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -8948,6 +9373,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -8969,6 +9395,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -8990,6 +9417,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -9011,6 +9439,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/兜",
                 retrieved_on: "2026-08-27",
@@ -9032,6 +9461,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9053,6 +9483,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9074,6 +9505,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9095,6 +9527,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9116,6 +9549,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9137,6 +9571,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9158,6 +9593,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9179,6 +9615,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9200,6 +9637,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9221,6 +9659,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/シールド",
                 retrieved_on: "2026-08-27",
@@ -9242,6 +9681,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/スペルブック",
                 retrieved_on: "2026-08-27",
@@ -9263,6 +9703,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/スペルブック",
                 retrieved_on: "2026-08-27",
@@ -9284,6 +9725,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/スペルブック",
                 retrieved_on: "2026-08-27",
@@ -9305,6 +9747,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/スペルブック",
                 retrieved_on: "2026-08-27",
@@ -9326,6 +9769,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/スペルブック",
                 retrieved_on: "2026-08-27",
@@ -9347,6 +9791,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/スペルブック",
                 retrieved_on: "2026-08-27",
@@ -9368,6 +9813,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9389,6 +9835,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9410,6 +9857,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9431,6 +9879,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9452,6 +9901,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9473,6 +9923,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9494,6 +9945,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9515,6 +9967,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ナックル",
                 retrieved_on: "2026-08-27",
@@ -9536,6 +9989,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/バンド",
                 retrieved_on: "2026-08-27",
@@ -9557,6 +10011,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/バンド",
                 retrieved_on: "2026-08-27",
@@ -9578,6 +10033,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/バンド",
                 retrieved_on: "2026-08-27",
@@ -9599,6 +10055,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/バンド",
                 retrieved_on: "2026-08-27",
@@ -9620,6 +10077,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/バンド",
                 retrieved_on: "2026-08-27",
@@ -9641,6 +10099,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/バンド",
                 retrieved_on: "2026-08-27",
@@ -9662,6 +10121,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/バンド",
                 retrieved_on: "2026-08-27",
@@ -9683,6 +10143,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9704,6 +10165,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9725,6 +10187,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9746,6 +10209,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9767,6 +10231,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9788,6 +10253,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9809,6 +10275,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9830,6 +10297,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ブレスレット（護符）",
                 retrieved_on: "2026-08-27",
@@ -9851,6 +10319,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ペンデュラム",
                 retrieved_on: "2026-08-27",
@@ -9872,6 +10341,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ペンデュラム",
                 retrieved_on: "2026-08-27",
@@ -9893,6 +10363,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ペンデュラム",
                 retrieved_on: "2026-08-27",
@@ -9914,6 +10385,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ペンデュラム",
                 retrieved_on: "2026-08-27",
@@ -9935,6 +10407,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ペンデュラム",
                 retrieved_on: "2026-08-27",
@@ -9956,6 +10429,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/ペンデュラム",
                 retrieved_on: "2026-08-27",
@@ -9977,6 +10451,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/水晶玉",
                 retrieved_on: "2026-08-27",
@@ -9998,6 +10473,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/水晶玉",
                 retrieved_on: "2026-08-27",
@@ -10019,6 +10495,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/水晶玉",
                 retrieved_on: "2026-08-27",
@@ -10040,6 +10517,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/水晶玉",
                 retrieved_on: "2026-08-27",
@@ -10061,6 +10539,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/水晶玉",
                 retrieved_on: "2026-08-27",
@@ -10082,6 +10561,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/水晶玉",
                 retrieved_on: "2026-08-27",
@@ -10103,6 +10583,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10124,6 +10605,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10145,6 +10627,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10166,6 +10649,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10187,6 +10671,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10208,6 +10693,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10229,6 +10715,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10250,6 +10737,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10271,6 +10759,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10292,6 +10781,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10313,6 +10803,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10334,6 +10825,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10355,6 +10847,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理双剣",
                 retrieved_on: "2026-08-27",
@@ -10376,6 +10869,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理弾倉",
                 retrieved_on: "2026-08-27",
@@ -10397,6 +10891,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理弾倉",
                 retrieved_on: "2026-08-27",
@@ -10418,6 +10913,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理弾倉",
                 retrieved_on: "2026-08-27",
@@ -10439,6 +10935,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理弾倉",
                 retrieved_on: "2026-08-27",
@@ -10460,6 +10957,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理弾倉",
                 retrieved_on: "2026-08-27",
@@ -10481,6 +10979,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/物理弾倉",
                 retrieved_on: "2026-08-27",
@@ -10502,6 +11001,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10523,6 +11023,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10544,6 +11045,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10565,6 +11067,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10586,6 +11089,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10607,6 +11111,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10628,6 +11133,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10649,6 +11155,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔力弾倉",
                 retrieved_on: "2026-08-27",
@@ -10670,6 +11177,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10691,6 +11199,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10712,6 +11221,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10733,6 +11243,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10754,6 +11265,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10775,6 +11287,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10796,6 +11309,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10818,6 +11332,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10839,6 +11354,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10860,6 +11376,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10881,6 +11398,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10902,6 +11420,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10923,6 +11442,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/腕/魔法双剣",
                 retrieved_on: "2026-08-27",
@@ -10944,6 +11464,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -10965,6 +11486,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -10986,6 +11508,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11007,6 +11530,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11028,6 +11552,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11049,6 +11574,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11070,6 +11596,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11091,6 +11618,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11112,6 +11640,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11133,6 +11662,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11154,6 +11684,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/マジックアーマー",
                 retrieved_on: "2026-08-27",
@@ -11175,6 +11706,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11196,6 +11728,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11217,6 +11750,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11238,6 +11772,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11259,6 +11794,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11280,6 +11816,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11301,6 +11838,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11322,6 +11860,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11343,6 +11882,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11364,6 +11904,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11385,6 +11926,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11406,6 +11948,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11427,6 +11970,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11448,6 +11992,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11469,6 +12014,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11490,6 +12036,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11511,6 +12058,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/ローブ",
                 retrieved_on: "2026-08-27",
@@ -11532,6 +12080,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11553,6 +12102,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11574,6 +12124,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11595,6 +12146,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11616,6 +12168,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11637,6 +12190,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11658,6 +12212,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11679,6 +12234,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11700,6 +12256,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11721,6 +12278,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11742,6 +12300,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11763,6 +12322,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11784,6 +12344,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11805,6 +12366,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/服",
                 retrieved_on: "2026-08-27",
@@ -11826,6 +12388,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11847,6 +12410,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11868,6 +12432,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11889,6 +12454,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11910,6 +12476,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11931,6 +12498,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11952,6 +12520,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11973,6 +12542,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -11994,6 +12564,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12015,6 +12586,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12036,6 +12608,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12057,6 +12630,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12078,6 +12652,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12099,6 +12674,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12120,6 +12696,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12141,6 +12718,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12162,6 +12740,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/軽鎧",
                 retrieved_on: "2026-08-27",
@@ -12183,6 +12762,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12204,6 +12784,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12225,6 +12806,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12246,6 +12828,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12267,6 +12850,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12288,6 +12872,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12309,6 +12894,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12330,6 +12916,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12351,6 +12938,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12372,6 +12960,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12393,6 +12982,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12414,6 +13004,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12435,6 +13026,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12456,6 +13048,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12477,6 +13070,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12498,6 +13092,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",
@@ -12519,6 +13114,7 @@ pub(super) fn wiki_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source {
                 page: "Item/防具/鎧/重鎧",
                 retrieved_on: "2026-08-27",

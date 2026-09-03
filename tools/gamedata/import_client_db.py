@@ -24,7 +24,11 @@
   「エンチャント総上限の追加情報なし」を表す(下記 SENTINEL 節)。
 - `c53_Req1Type_* .. c60_Req4Val_*` : 装備条件 4 組。Type==1 が Lv 条件で Val がそのレベル。Lv 条件は
   どの組にも入りうる(セイクリッド以降は Req1 が Type 10(エタの意志 Lv 21 / 30)で Lv 310 は Req2)。
-- `c11_CharMask_*`, `c5_Icon_*` : 今回未使用(装備可能キャラのビット・アイコン資産)。
+- `c11_CharMask_*`      : 装備可能キャラのビット列。**bit 0 = 全キャラ装備可**。**bit k(k>=1)
+  = 表 `dm_00000_0298.csv` の行 k-1 のキャラ**(行順は `CHAR_IDS_BY_ROW` 参照、19 番目
+  以降の「追加05〜」は未実装枠なので無視)。bit 0 が立つ、または `CHAR_IDS_BY_ROW` の 19 人が
+  全員立つ場合は「制限なし」= `None` とし、それ以外は該当キャラの id 一覧を `usable_by` に出す。
+- `c5_Icon_*`            : 今回未使用(アイコン資産)。
 
 ## 9 値の三つ組と番兵(SENTINEL)
 [min, max, cap] の `cap` は「エンチャント込みの総上限」のはずだが、実データでは
@@ -113,6 +117,27 @@ EQUIP_SLOT_TO_PART_SLOT = {
     "1": "Helm", "2": "Weapon", "3": "Armor", "4": "Shield",
     "5": "Head", "6": "Hand", "7": "Body", "8": "Leg", "18": "Artifact",
 }
+# `dm_00000_0298.csv` の行順(= `c11_CharMask` の bit k-1)→ `GameCharacter::id`(crates/gamedata/
+# src/characters.rs)。19 番目以降(「追加05〜」)は未実装キャラなので対応を持たない。
+CHAR_IDS_BY_ROW = [
+    "lucian", "boris", "maximin", "siberin", "joshua", "ranjie", "isaac", "mira",
+    "tichiel", "ispin", "nayatorei", "anais", "chloe", "benya", "isolet", "roamini",
+    "nocturne", "leeche", "yefnen",
+]
+
+
+def usable_by_from_mask(mask: int) -> tuple[str, ...] | None:
+    """CharMask → 装備可能キャラの id 一覧。制限なし(全キャラ)は None。"""
+    if mask & 1:
+        return None
+    ids = tuple(
+        CHAR_IDS_BY_ROW[k - 1]
+        for k in range(1, len(CHAR_IDS_BY_ROW) + 1)
+        if mask & (1 << k)
+    )
+    if len(ids) == len(CHAR_IDS_BY_ROW):
+        return None
+    return ids
 
 
 def default_assets_dir() -> Path:
@@ -131,6 +156,7 @@ class Row:
     values: dict  # stat -> (min, max, cap)
     req1_type: str
     req1_val: str
+    usable_by: tuple[str, ...] | None
     source_file: str
 
 
@@ -175,6 +201,7 @@ def load_equipment_rows(assets: Path) -> list[Row]:
             for n, t, v in ((1, 53, 54), (2, 55, 56), (3, 57, 58), (4, 59, 60))
         ]
         stat_cols = {key: col_index(header, prefix) for prefix, key in STAT_COLUMNS}
+        char_mask_col = col_index(header, "c11_CharMask")
         if None in (template_col, item_id_col, name_col, equip_type_col, equip_slot_col):
             continue
         for row in data:
@@ -198,6 +225,12 @@ def load_equipment_rows(assets: Path) -> list[Row]:
             for type_col, val_col in req_cols:
                 if type_col is not None and val_col is not None and row[type_col] == "1":
                     level = row[val_col]
+            usable_by = None
+            if char_mask_col is not None:
+                try:
+                    usable_by = usable_by_from_mask(int(row[char_mask_col]))
+                except (ValueError, IndexError):
+                    usable_by = None
             rows.append(Row(
                 item_id=row[item_id_col],
                 name=row[name_col],
@@ -206,6 +239,7 @@ def load_equipment_rows(assets: Path) -> list[Row]:
                 values=values,
                 req1_type="1" if level != "0" else "0",
                 req1_val=level,
+                usable_by=usable_by,
                 source_file=path.name,
             ))
     return rows
@@ -376,6 +410,7 @@ def main() -> None:
             "weapon_class": weapon_class,
             "wrist_type": wrist_type,
             "enhance_type": enhance_type,
+            "usable_by": r.usable_by,
             "source_file": r.source_file,
             "item_id": r.item_id,
             "reason": reasons[r.item_id],
@@ -413,6 +448,11 @@ def write_rust(entries: list[dict]) -> None:
     for e in entries:
         weapon_class = f"Some(WeaponClass::{e['weapon_class']})" if e["weapon_class"] else "None"
         enhance_type = f"Some(EquipmentEnhanceType::{e['enhance_type']})" if e["enhance_type"] else "None"
+        if e["usable_by"] is None:
+            usable_by = "None"
+        else:
+            ids = ", ".join(f'"{cid}"' for cid in e["usable_by"])
+            usable_by = f"Some(&[{ids}])"
         note = f"収録理由: {'既存カタログと同名' if e['reason'] == 'name_match' else 'Lv280以上'}。EquipType {e['source_file']}"
         name_escaped = e["name"].replace("\\", "\\\\").replace('"', '\\"')
         lines.append("        WikiEquipmentItem {")
@@ -425,6 +465,7 @@ def write_rust(entries: list[dict]) -> None:
         lines.append(f"            enchant_total_caps: v({e['vcap']}),")
         lines.append(f"            weapon_class: {weapon_class},")
         lines.append(f"            enhance_type: {enhance_type},")
+        lines.append(f"            usable_by: {usable_by},")
         lines.append("            damage_effects: &[],")
         lines.append("            no_ability_or_random_option_slots: false,")
         lines.append("            survival_effects: &[],")

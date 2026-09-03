@@ -362,6 +362,7 @@ pub fn list_equipment_candidates(
     let rule = domain::EquipmentFitRule::new(
         slot,
         character.map(|c| domain::CharacterEquipmentClasses {
+            id: c.id,
             weapon_classes: c.weapon_classes,
             armor_classes: c.armor_classes,
             wrist_types: c.wrist_types,
@@ -388,6 +389,7 @@ pub fn list_equipment_candidates(
                     armor_class: item.armor_class,
                     wrist_type: item.wrist_type,
                     recommended_dependency: item.recommended_dependency,
+                    usable_by: item.usable_by,
                 }),
                 item,
             })
