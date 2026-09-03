@@ -167,7 +167,7 @@ pub use thesis_core::{
 };
 pub use title::{
     title_added_damage_rate, title_attack_damage_rate, title_values, AddedDamageCondition,
-    ConditionalAddedDamage, TitleDef, TitleError, TitleKind,
+    ConditionalAddedDamage, TitleDef, TitleError,
 };
 pub use ultimate_skill::{
     UltimateSkill, UltimateSkillError, UltimateSkills, HYPER_LIMIT_LEVEL_MAX, ULTIMATE_SKILL_SLOTS,

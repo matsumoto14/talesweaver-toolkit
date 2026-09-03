@@ -3530,12 +3530,11 @@ mod tests {
     // --- 称号 -----------------------------------------------------------
 
     fn title_defs() -> Vec<crate::title::TitleDef> {
-        use crate::title::{TitleDef, TitleKind};
+        use crate::title::TitleDef;
         vec![TitleDef {
             common: false,
             id: "eclipse",
             name: "エクリプス",
-            kind: TitleKind::Special,
             group: "喪失の島",
             level: None,
             values: EquipmentValues {

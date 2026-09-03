@@ -28,22 +28,11 @@ pub struct ConditionalAddedDamage {
     pub condition: AddedDamageCondition,
 }
 
-/// 称号の区分(wiki のページ分け)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TitleKind {
-    Normal,
-    Special,
-    /// wiki「称号/event」。課金箱シリーズと名誉の証。**無条件のダメージ増加を持つのはここだけ**
-    Event,
-}
-
 /// 称号定義(gamedata がカタログを持つ。`EquipmentAbilityDef` と同じ依存方向)。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct TitleDef {
     pub id: &'static str,
     pub name: &'static str,
-    pub kind: TitleKind,
     /// wiki の見出し(グループボーナスの単位。ボーナス自体は未実装)
     pub group: &'static str,
     /// 習得 Lv。wiki が `-` の行は `None`
@@ -122,7 +111,6 @@ mod tests {
             common: false,
             id: "eclipse",
             name: "エクリプス",
-            kind: TitleKind::Special,
             group: "喪失の島",
             level: None,
             values: EquipmentValues {
