@@ -59,10 +59,11 @@ fn wrist(
 }
 
 #[test]
-fn 上位装備カタログは780件_idは重複しない() {
+fn 上位装備カタログは1297件_idは重複しない() {
     let catalog = equipment_catalog();
-    // 既存の手検証済み行を優先し、2026-08-27 の全 Item ページ抽出を名前で重複排除。
-    assert_eq!(catalog.len(), 780);
+    // 既存の手検証済み行(装着時効果つき)を優先し、次に client DB(9値の生成元)、
+    // 最後に client DB に同名が無い wiki 抽出/韓国コミュニティ資料ぶんを名前で重複排除して積む。
+    assert_eq!(catalog.len(), 1297);
     let ids: HashSet<&str> = catalog.iter().map(|i| i.id).collect();
     assert_eq!(ids.len(), catalog.len());
 }
@@ -914,4 +915,38 @@ fn 強化等級はwiki確率区分の上端を四捨五入する() {
         .unwrap()),
         [350.0, 370.0, 410.0, 435.0, 440.0]
     );
+}
+
+/// 手書き行に同名があっても 9 値は client DB を正にする(wiki 抽出は Cri と敏捷の列を取り違えていた)。
+#[test]
+fn 同名の手書き行でも9値はクライアントdbの値になる() {
+    let catalog = equipment_catalog();
+    let scimitar = catalog
+        .iter()
+        .find(|item| item.name == "†アビスシミター")
+        .unwrap();
+    assert_eq!(scimitar.values_min.critical, 27);
+    assert_eq!(scimitar.values_min.evasion, 30);
+    let trident = catalog
+        .iter()
+        .find(|item| item.name == "†エルマの三叉槍")
+        .unwrap();
+    // 総上限 Cri 50 / 敏捷 100 → エンチャント枠 = 総上限 − レンジ上限
+    assert_eq!(trident.enchant_caps.critical, 50 - trident.values_max.critical);
+    assert_eq!(trident.enchant_caps.agility, 100 - trident.values_max.agility);
+}
+
+/// dm_00001 パッケージにあるセイクリッド・改・テネブリスもクライアント値で収録する。
+#[test]
+fn テネブリスとセイクリッドはクライアントdbから収録する() {
+    let catalog = equipment_catalog();
+    let tenebris = catalog.iter().filter(|item| item.name.starts_with("†テネブリス")).count();
+    assert_eq!(tenebris, 38);
+    let sword = catalog.iter().find(|item| item.name == "†テネブリスソード").unwrap();
+    assert_eq!(sword.values_min.thrust, 530);
+    assert_eq!(sword.values_max.thrust, 580);
+    assert_eq!(sword.enchant_caps.thrust, 890 - 580);
+    // 韓国資料は改・セイクリッドシミターの斬り下限を 560 としていたが、クライアントは 550
+    let scimitar = catalog.iter().find(|item| item.name == "†改・セイクリッドシミター").unwrap();
+    assert_eq!(scimitar.values_min.slash, 550);
 }
