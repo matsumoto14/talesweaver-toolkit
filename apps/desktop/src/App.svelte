@@ -20,6 +20,7 @@
   import { dismissError, reportError, reportNotice, runUndo, toast } from "./toast.svelte";
   import { checkForUpdate, updater } from "./update.svelte";
   import { persisted } from "./ui/persistedState.svelte";
+  import { isLockedTab } from "./unlock.svelte";
   import Splitter from "./ui/Splitter.svelte";
 
   const TABS: { id: Tab; label: string }[] = [
@@ -31,6 +32,12 @@
     { id: "measure", label: "実測" },
     { id: "news", label: "お知らせ" },
   ];
+
+  // ロック中のタブは並べない(unlock.svelte.ts)。開いたまま施錠されたらホームへ
+  const visibleTabs = $derived(TABS.filter((t) => !isLockedTab(t.id)));
+  $effect(() => {
+    if (isLockedTab(app.tab)) app.tab = "home";
+  });
 
   const DEFAULT_RAIL_WIDTH = 280;
   const railWidth = persisted("tw-v4-rail", { width: DEFAULT_RAIL_WIDTH });
@@ -73,7 +80,7 @@
       <img src={brandLogo} alt="TW Context" />
     </div>
     <nav class="tabs">
-      {#each TABS as t (t.id)}
+      {#each visibleTabs as t (t.id)}
         <button type="button" class="tab" class:on={app.tab === t.id} onclick={() => (app.tab = t.id)}>
           {t.label}
           {#if t.id === "news" && updateWaiting}<span class="tab-dot" aria-label="新しい版があります"></span>{/if}
