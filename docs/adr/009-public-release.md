@@ -75,6 +75,12 @@ DB バックアップなど、公開前にしか変えられない項目を先�
   `Access-Control-Allow-Origin` を返さず、WebView から取ると CORS で必ず失敗するため
   (実機で確認済み)。配布先に CORS 設定を要求しないほうを選んだ。許可先は capabilities の
   `http:default` で `https://dl.tw-context.dev/*` だけに縛る(CSP は触らない)
+- **一部機能をロックし、解除は情報パネルのバージョン表記を続けて 7 回押すジェスチャーにする**
+  (2026-09-03)。対象は対人タブとテネブリス装備(候補一覧に出さない)。合言葉・署名鍵・サーバーは持たない。
+  数値も画像も配布物に入っているので秘匿ではなく「見せない・使わせない」だけで、その前提で
+  ユーザーがジェスチャーを選んだ。解除状態は localStorage(`tw-v4-unlocked`)にだけ残し、
+  キャラデータの書き出しには含めない。判定は `apps/desktop/src/unlock.svelte.ts` の 2 関数
+  (`isLockedTab` / `isLockedEquipment`)に集め、カタログや domain はロックの概念を持たない
 
 ## 却下した選択肢
 

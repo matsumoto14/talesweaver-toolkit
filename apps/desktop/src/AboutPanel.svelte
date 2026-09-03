@@ -9,7 +9,8 @@
   import { exportAll, importAll, parseTransferFile, suggestedFileName } from "./api/transfer";
   import type { AppInfo } from "./api/types";
   import { IS_DESKTOP } from "./platform";
-  import { reportError } from "./toast.svelte";
+  import { reportError, reportNotice } from "./toast.svelte";
+  import { setUnlocked, unlock, UNLOCK_TAP_WINDOW_MS, UNLOCK_TAPS } from "./unlock.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -24,6 +25,19 @@
       .then((v) => (info = v))
       .catch((e) => reportError(errorMessage(e)));
   });
+
+  // バージョン表記を続けて押すとロックを切り替える(unlock.svelte.ts)。見た目は変えない
+  let taps = 0;
+  let lastTapAt = 0;
+  function tapVersion() {
+    const now = Date.now();
+    taps = now - lastTapAt > UNLOCK_TAP_WINDOW_MS ? 1 : taps + 1;
+    lastTapAt = now;
+    if (taps < UNLOCK_TAPS) return;
+    taps = 0;
+    setUnlocked(!unlock.on);
+    reportNotice(unlock.on ? "追加機能を有効にしました" : "追加機能を無効にしました");
+  }
 
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key === "Escape") onClose();
@@ -90,7 +104,9 @@
     <div class="panel-body">
       <div class="card">
         <div class="card-title">バージョン</div>
-        <div class="version num">{info?.version ?? "—"}</div>
+        <!-- 続けて押すとロックを切り替える。入口は見せない(見た目・キーボード操作は元のまま) -->
+        <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+        <div class="version num" onclick={tapVersion}>{info?.version ?? "—"}</div>
       </div>
 
       <div class="card warn">
@@ -243,7 +259,8 @@
   /* 権利表記。読み飛ばされない程度に地の文と揃え、装飾はしない */
   .card p.copyright { font-size: var(--t-label); color: var(--fg-muted); }
 
-  .version { font-size: 19px; font-weight: var(--w-strong); }
+  /* 続けて押しても文字が選択されないように(ロック切替の入口) */
+  .version { font-size: 19px; font-weight: var(--w-strong); user-select: none; }
   .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
   .path {
