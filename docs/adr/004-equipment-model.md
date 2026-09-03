@@ -42,6 +42,35 @@
     - **アイコンも同じ出典から同梱する**: `tools/gamedata/import_client_icons.py` が `client.rs` の各行の ItemId で `tw_assets/item_icons/` を引き、`assets/icons/equipment/<id>.png` へ複製する(1,171 件、wiki 由来 313 件は上書き)。`import_client_db.py` の後に実行する。
     - **再生成手順**: `python tools/gamedata/import_client_db.py`(既定で `%TW_ASSETS%` または `C:\github\private\tw_assets` を読む)→ `crates/gamedata/src/equipment_catalog/client.rs` を再生成 → `cargo test --workspace`。
 
+18. **称号カタログの生成元も表 0264(`tw_assets/db/dm_00000_0264.csv`、`TitleTemplate`)へ切り替える**(2026-09-03)。
+    列対応・9 値の並び・突き合わせ正規化・収録基準の詳細は `tools/gamedata/import_client_titles.py` 冒頭のコメント参照。要点:
+    - **列は装備と違い三つ組ではなく単値**(`c13_Thrust`〜`c21_Agility` の 9 列がそのまま整数 1 個)。
+    - **区分(wiki のページ分け normal / special / event)は持たない**(ユーザー決定 2026-09-03)。クライアントに
+      対応する列が無く、計算にも表示にも使っていなかったので `TitleKind` を domain から削除した。
+      収録基準は「9 値合計 15 以上」または「無条件ダメージ増加を持つ」の 2 つだけになる。
+    - **既存 120 件は id で 9 値だけ上書きする**(装備のような「同名なら丸ごと差し替え」ではなく、
+      称号は `titles_client::CLIENT_TITLE_VALUE_OVERRIDES`(id → `EquipmentValues`)を
+      `titles::title_catalog()` が id で引いて上書きする形にした。kind/group/level/note/common/
+      conditional_added_damage という手書きメタデータを持つ列が装備よりずっと多く、名前一致に頼ると
+      巻き添えで消えるリスクがあるため)。
+    - **名前の突き合わせは正規化が要る**: 全角/半角の丸括弧・数字、ローマ数字(全角 Ⅰ〜Ⅹ と半角
+      I/II/III… がクライアント内でも混在)、および「名誉の証(◯◯)」(既存カタログの命名)↔
+      client の中身だけの表示名(「◯◯」)。この正規化で既存 120 件は**全件**が client に対応行を持つ
+      (不一致 0 件。ピリオドの有無だけ違う「D.D.D」↔「D.D.D.」も正規化で吸収)。
+    - **突き合わせ 120 件中 116 件完全一致・4 件差分**、いずれも client を正とした: 憑依した(Cri と
+      敏捷を取り違え。既存装備データと同型の wiki 誤り)、名誉の証(狂乱の魔術師)(物防/魔攻/魔防が
+      1 列ずつずれていた)、名誉の証(トーデン兄妹)・名誉の証(皇帝位継承候補の姫君)(Cri が
+      15→10)。
+    - **収録基準を (a) 既存と同名 (b) 9 値合計 15 以上 (c) 備考に「ダメージ」を含む の OR に拡張**した
+      結果、120 件 → 364 件(新規 244 件)に増える。9 値の列(num:B)は符号付き 1 バイトで、マスター系称号の「敏捷 −1」が 255 で入っているため 128 以上は負値として読む。新規行には「LIMIT BREAK」「公式サポーター」
+      「夜明けの◯◯」「清らかな月兎」「悪夢の主を撃破した者」等、既存カタログに無い無条件ダメージ
+      増加称号が含まれる(合計 16 件、`attack_damage_percent > 0` の総数が 48 → 64 に増える)。新規の条件付きダメージ(地域/敵限定)は 0 件で、既出の 4 地域
+      (LostIsland/ShinchouNest/ArklonUnderground/Praba)・6 敵条件(shirairon/silvan/serion/
+      sereana/luminous/deep_apostle)以外は出現しなかったため、敵カタログの新規追加は不要だった。
+      構造化できない効果(「被ダメージ10%減少」の金色の魔王 等)は `note` の文のまま残す。
+    - **再生成手順**: `python tools/gamedata/import_client_titles.py` → `crates/gamedata/src/titles_client.rs`
+      を再生成 → `cargo test --workspace`。
+
 ## 却下した選択肢
 
 - モックの「等級(最下〜最上)」をドメインに採用する → wiki に等級概念が無く、実体は MR(レンジ内の振り直し)。部位の基本値をカタログ既定値から上書きできる形に一本化した(2026-08-24)。

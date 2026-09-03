@@ -2185,7 +2185,6 @@ mod tests {
             common: false,
             id: "test-title",
             name: "テスト称号",
-            kind: domain::TitleKind::Special,
             group: "テスト",
             level: None,
             values: domain::EquipmentValues {

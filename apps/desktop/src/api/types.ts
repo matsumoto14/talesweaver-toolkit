@@ -785,14 +785,11 @@ export interface DefenseRates {
   magic: number;
 }
 
-// 称号の区分。crates/domain/src/title.rs の TitleKind。
-export type TitleKind = "normal" | "special" | "event";
 
 // 称号定義(gamedata のカタログ)。crates/domain/src/title.rs の TitleDef。
 export interface TitleDef {
   id: string;
   name: string;
-  kind: TitleKind;
   /** wiki の見出し(グループボーナスの単位。ボーナス自体は未実装) */
   group: string;
   /** 習得 Lv。wiki が `-` の行は null */
