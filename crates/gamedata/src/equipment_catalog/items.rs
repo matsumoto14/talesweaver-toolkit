@@ -6,6 +6,8 @@ use super::*;
 
 #[path = "generated.rs"]
 mod generated;
+#[path = "client.rs"]
+mod client;
 #[path = "sacred_kr.rs"]
 mod sacred_kr;
 
@@ -1710,7 +1712,29 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
         },
     });
 
-    // 既存の手検証済みデータ(装着時効果を含む)を優先し、同名の自動抽出行は足さない。
+    // 装着時効果・耐久効果・推奨依存を持つ行(wiki からしか取れないメタデータ)を先に確保する。
+    // 9 値はこの後で client の値に置き換えるので、ここでは行の存在とメタデータだけが目的。
+    let has_curated_metadata = |item: &WikiEquipmentItem| {
+        !item.damage_effects.is_empty()
+            || !item.survival_effects.is_empty()
+            || item.recommended_dependency.is_some()
+            || item.damage_dependency.is_some()
+    };
+    for item in generated::wiki_equipment_catalog() {
+        if has_curated_metadata(&item) && !catalog.iter().any(|existing| existing.name == item.name) {
+            catalog.push(item);
+        }
+    }
+    // クライアント展開データ(`client.rs`)が 9 値の生成元。id は既存カタログの同名行から引き継ぐ
+    // (`tools/gamedata/import_client_db.py` 参照)。
+    let client_items = client::client_equipment_catalog();
+    for item in &client_items {
+        if !catalog.iter().any(|existing| existing.name == item.name) {
+            catalog.push(*item);
+        }
+    }
+    // client DB に同名のアイテムが無い wiki 行(宝玉や凛々の明星のように「武器種 × 付与」を
+    // wiki が 1 行ずつ名付けたもの、クライアントから消えた旧イベント装備)は wiki 抽出ぶんで持つ。
     for item in generated::wiki_equipment_catalog() {
         if !catalog.iter().any(|existing| existing.name == item.name) {
             catalog.push(item);
@@ -1723,11 +1747,33 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             catalog.push(item);
         }
     }
+    // 手書き・wiki・韓国資料の行も、client に同名があれば 9 値(レンジと上限)は client を正にする。
+    // wiki 抽出には Cri と敏捷の列を取り違えた行があった(†アビスシミター・†エルマの三叉槍・†聖剣)。
+    // 成長装備(`growth_cap` 持ち)は値の意味が違うので触らない。
+    for item in catalog.iter_mut() {
+        if item.growth_cap.is_some() {
+            continue;
+        }
+        if let Some(from_client) = client_items.iter().find(|c| c.name == item.name) {
+            item.values_min = from_client.values_min;
+            item.values_max = from_client.values_max;
+            item.enchant_total_caps = from_client.enchant_total_caps;
+        }
+    }
     let mut items: Vec<EquipmentItem> = catalog
         .into_iter()
         .map(WikiEquipmentItem::into_item)
         .collect();
     items.extend(relic_items());
+    // 腕装備(サブアーム)の分類は本来ページ文字列(`wrist_type_from_page`)から決まるが、
+    // client DB 由来の行はページを持たないので、EquipType 名から機械的に決めた分類で補う。
+    for item in items.iter_mut() {
+        if item.wrist_type.is_none() {
+            if let Some(wrist_type) = client::client_wrist_type(item.id) {
+                item.wrist_type = Some(wrist_type);
+            }
+        }
+    }
     assign_icon_ids(&mut items);
     items
 }
