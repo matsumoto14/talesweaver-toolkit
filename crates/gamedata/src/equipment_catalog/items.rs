@@ -103,6 +103,10 @@ pub struct EquipmentItem {
     /// 鎧のみ `Some`(`armor_class_for_type(enhance_type)`)。UI がキャラの装備可能クラスと
     /// 突き合わせるための鎧分類(wiki: 装備システム/防具区分)。
     pub armor_class: Option<ArmorClass>,
+    /// このアイテムを装備できる `GameCharacter::id` の一覧(クライアント展開データの
+    /// `c11_CharMask` 由来)。`None` = 制限なし(全キャラ、または元データに情報がない)で、
+    /// その場合は `domain::EquipmentFitRule` が武器種/鎧区分/腕種の従来ルールに落ちる。
+    pub usable_by: Option<&'static [&'static str]>,
     /// **装着時効果**(wiki: Item ページ備考の「装着時 …」)。装備補正値ではなく
     /// 与ダメージ式のカテゴリ(X5 / X6 / Old / O)に入る。
     /// **「一定確率で」のものも発動前提で入れる**(ユーザー確定 2026-08-27: ほぼ発動する)
@@ -195,6 +199,8 @@ struct WikiEquipmentItem {
     damage_dependency: Option<SkillDependency>,
     /// 神鳥レリックはアビリティ・付加オプション枠を持たない(ルナリアと違う特例)。
     no_ability_or_random_option_slots: bool,
+    /// `EquipmentItem::usable_by` と同じ(クライアント展開データ由来。それ以外の出典は `None`)。
+    usable_by: Option<&'static [&'static str]>,
     source: Source,
 }
 
@@ -256,6 +262,7 @@ impl WikiEquipmentItem {
             weapon_class: self.weapon_class,
             enhance_type: self.enhance_type,
             armor_class: self.enhance_type.and_then(armor_class_for_type),
+            usable_by: self.usable_by,
             damage_effects: self.damage_effects,
             survival_effects: self.survival_effects,
             recommended_dependency: self.recommended_dependency,
@@ -282,7 +289,7 @@ pub(super) const SURVIVAL_DEFENSE_RATE_30: &[EquipmentSurvivalEffect] =
 impl serde::Serialize for EquipmentItem {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("EquipmentItem", 22)?;
+        let mut s = serializer.serialize_struct("EquipmentItem", 23)?;
         s.serialize_field("id", self.id)?;
         s.serialize_field("icon_id", self.icon_id)?;
         s.serialize_field("slot", &self.slot)?;
@@ -300,6 +307,7 @@ impl serde::Serialize for EquipmentItem {
         s.serialize_field("enhance_type", &self.resolved_enhance_type())?;
         s.serialize_field("relic", &self.relic)?;
         s.serialize_field("armor_class", &self.armor_class)?;
+        s.serialize_field("usable_by", &self.usable_by)?;
         s.serialize_field("damage_effects", &self.damage_effects)?;
         s.serialize_field("survival_effects", &self.survival_effects)?;
         s.serialize_field("recommended_dependency", &self.recommended_dependency)?;
@@ -475,6 +483,7 @@ fn effect_item(
         survival_effects: &[],
         recommended_dependency: None,
         damage_dependency: None,
+        usable_by: None,
         source: ITEM_SOURCE_DAMAGE_EFFECT,
     }
 }
@@ -523,6 +532,7 @@ fn defensio_artifact(
         survival_effects,
         recommended_dependency,
         damage_dependency,
+        usable_by: None,
         source: Source {
             page: "Item/アクセサリー用装備/アーティファクト",
             retrieved_on: "2026-08-27",
@@ -593,6 +603,7 @@ fn relic_item(
         survival_effects: &[],
         recommended_dependency: None,
         damage_dependency: None,
+        usable_by: None,
         source: Source {
             page: "Item/アクセサリ/レリック/神鳥のレリック・ルナリアレリック",
             retrieved_on: "2026-08-28",
@@ -652,6 +663,7 @@ fn effect_trigger_3_ranged(
         survival_effects: &[],
         recommended_dependency: None,
         damage_dependency: None,
+        usable_by: None,
         source: ITEM_SOURCE_DAMAGE_EFFECT,
     }
 }
@@ -687,6 +699,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_KATANA,
         },
         WikiEquipmentItem {
@@ -704,6 +717,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_KATANA,
         },
         WikiEquipmentItem {
@@ -721,6 +735,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_TACHI,
         },
         WikiEquipmentItem {
@@ -738,6 +753,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_TACHI,
         },
         WikiEquipmentItem {
@@ -755,6 +771,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_GREAT_SWORD,
         },
         WikiEquipmentItem {
@@ -772,6 +789,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_GREAT_SWORD,
         },
         WikiEquipmentItem {
@@ -789,6 +807,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_HELM,
         },
         WikiEquipmentItem {
@@ -806,6 +825,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_HELM,
         },
         WikiEquipmentItem {
@@ -823,6 +843,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ARMOR,
         },
         WikiEquipmentItem {
@@ -840,6 +861,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ARMOR,
         },
         WikiEquipmentItem {
@@ -857,6 +879,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_SHIELD,
         },
         WikiEquipmentItem {
@@ -874,6 +897,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_SHIELD,
         },
         WikiEquipmentItem {
@@ -891,6 +915,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -908,6 +933,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -925,6 +951,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -942,6 +969,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -959,6 +987,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -976,6 +1005,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -993,6 +1023,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1010,6 +1041,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_ACCESSORY,
         },
         WikiEquipmentItem {
@@ -1027,6 +1059,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_SHIELD_PLUS,
         },
         WikiEquipmentItem {
@@ -1044,6 +1077,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_NOTE_SHIELD_PLUS,
         },
         // ── 装着時効果つき(与ダメージ式のカテゴリに入る)──────────────────────
@@ -1063,6 +1097,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_KATANA,
         },
         WikiEquipmentItem {
@@ -1080,6 +1115,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_TACHI,
         },
         // カテゴリO 物理/魔法ダメージ増加
@@ -1098,6 +1134,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_ROBE,
         },
         // カテゴリOld 攻撃ダメージII(要塞占領報酬。2 種は補正値まで同じ)
@@ -1116,6 +1153,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_BODY,
         },
         WikiEquipmentItem {
@@ -1133,6 +1171,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_BODY,
         },
         // カテゴリX6: 手装備。けものフレンズコラボは +5%、ダンジョン飯コラボは +3%
@@ -1151,6 +1190,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         WikiEquipmentItem {
@@ -1168,6 +1208,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         WikiEquipmentItem {
@@ -1185,6 +1226,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         WikiEquipmentItem {
@@ -1202,6 +1244,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: ITEM_SOURCE_DAMAGE_HAND,
         },
         // カテゴリX5 攻撃ダメージ(特殊): エフェクト(装着時攻撃力 +3%)
@@ -1366,6 +1409,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_30,
             recommended_dependency: Some(SkillDependency::Stab),
             damage_dependency: Some(SkillDependency::Stab),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。突き依存+30%は同系列規則から補完" },
         },
         WikiEquipmentItem {
@@ -1379,6 +1423,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_30,
             recommended_dependency: Some(SkillDependency::Hack),
             damage_dependency: Some(SkillDependency::Hack),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。斬り攻撃ダメージ+30%" },
         },
         WikiEquipmentItem {
@@ -1391,6 +1436,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_MITIGATION_10,
             recommended_dependency: Some(SkillDependency::Int),
             damage_dependency: Some(SkillDependency::Int),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。魔法攻撃ダメージ+30%" },
         },
         WikiEquipmentItem {
@@ -1404,6 +1450,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_30,
             recommended_dependency: Some(SkillDependency::Mr),
             damage_dependency: Some(SkillDependency::Mr),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "喪失の島。MR系攻撃ダメージ+30%" },
         },
         WikiEquipmentItem {
@@ -1416,6 +1463,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_20,
             recommended_dependency: Some(SkillDependency::Stab),
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1428,6 +1476,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_20,
             recommended_dependency: Some(SkillDependency::Hack),
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1440,6 +1489,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_20,
             recommended_dependency: Some(SkillDependency::Int),
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ダンジョン飯タイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1452,6 +1502,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_20,
             recommended_dependency: Some(SkillDependency::Mr),
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "メイドラゴンタイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1464,6 +1515,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_20,
             recommended_dependency: Some(SkillDependency::StabHack),
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "ログ・ホライズンタイアップ。一定確率でダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1476,6 +1528,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_MITIGATION_10,
             recommended_dependency: Some(SkillDependency::HackInt),
             damage_dependency: Some(SkillDependency::HackInt),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法斬り攻撃ダメージ+20%" },
         },
         WikiEquipmentItem {
@@ -1490,6 +1543,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_30,
             recommended_dependency: Some(SkillDependency::StabHack),
             damage_dependency: Some(SkillDependency::StabHack),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。物理複合攻撃ダメージ+20%、ディフェンシオ。上限の欠落セルは同補正のリストア/スピーディーと一致" },
         },
         WikiEquipmentItem {
@@ -1503,6 +1557,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_30,
             recommended_dependency: Some(SkillDependency::Int),
             damage_dependency: Some(SkillDependency::Int),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法攻撃ダメージ+20%、ディフェンシオ" },
         },
         WikiEquipmentItem {
@@ -1516,6 +1571,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             survival_effects: SURVIVAL_DEFENSE_RATE_30,
             recommended_dependency: Some(SkillDependency::HackInt),
             damage_dependency: Some(SkillDependency::HackInt),
+            usable_by: None,
             source: Source { page: "Item/アクセサリー用装備/アーティファクト", retrieved_on: "2026-08-27", note: "アークロン要塞。魔法斬り攻撃ダメージ+20%、ディフェンシオ" },
         },
 
@@ -1705,6 +1761,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
         survival_effects: &[],
         recommended_dependency: None,
         damage_dependency: None,
+        usable_by: None,
         source: Source {
             page: "Item/防具/腕/盾＋",
             retrieved_on: "2026-08-27",
@@ -1758,6 +1815,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             item.values_min = from_client.values_min;
             item.values_max = from_client.values_max;
             item.enchant_total_caps = from_client.enchant_total_caps;
+            item.usable_by = from_client.usable_by;
         }
     }
     let mut items: Vec<EquipmentItem> = catalog

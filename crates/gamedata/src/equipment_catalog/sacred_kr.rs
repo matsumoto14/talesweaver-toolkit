@@ -15,6 +15,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/세검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -27,6 +28,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/세검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -39,6 +41,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/장검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -51,6 +54,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/장검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -63,6 +67,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/평도", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -75,6 +80,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/평도", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -87,6 +93,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/대검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -99,6 +106,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/대검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -111,6 +119,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/태도", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -123,6 +132,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/태도", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -135,6 +145,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/스태프", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -147,6 +158,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/스태프", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -159,6 +171,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/로드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -171,6 +184,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/로드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合。韓国表の旧値を同系統差分で訂正" },
         },
         WikiEquipmentItem {
@@ -183,6 +197,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/메이스", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -195,6 +210,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/메이스", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合。斬り上限の転記誤りを840へ訂正" },
         },
         WikiEquipmentItem {
@@ -207,6 +223,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/단검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -219,6 +236,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/단검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -231,6 +249,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/단도", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -243,6 +262,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/단도", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -255,6 +275,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/도끼", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -267,6 +288,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/도끼", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -279,6 +301,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/창", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -291,6 +314,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/창", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -303,6 +327,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/봉", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -315,6 +340,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/봉", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -327,6 +353,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/채찍", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -339,6 +366,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/채찍", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -351,6 +379,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/플레일", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -363,6 +392,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/플레일", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -375,6 +405,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/스몰소드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -387,6 +418,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/스몰소드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -399,6 +431,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/완드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -411,6 +444,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/완드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -423,6 +457,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리총", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -435,6 +470,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리총", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -447,6 +483,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법총", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -459,6 +496,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법총", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -471,6 +509,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/클로", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -483,6 +522,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/클로", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -495,6 +535,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/카라", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -507,6 +548,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/카라", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -519,6 +561,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/셉터", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -531,6 +574,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/셉터", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -543,6 +587,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/핸드벨", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -555,6 +600,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/핸드벨", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -567,6 +613,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -579,6 +626,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -591,6 +639,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -603,6 +652,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법검", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -615,6 +665,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/사이드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -627,6 +678,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/사이드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -639,6 +691,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/해머", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -651,6 +704,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/해머", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -663,6 +717,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/토템", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -675,6 +730,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/토템", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -687,6 +743,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/핸드런처", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -699,6 +756,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/핸드런처", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -711,6 +769,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/아밍소드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -723,6 +782,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/아밍소드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -735,6 +795,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/소드셰이프", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -747,6 +808,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/소드셰이프", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -759,6 +821,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/로브", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -771,6 +834,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/로브", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -783,6 +847,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/아머", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -795,6 +860,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/아머", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -807,6 +873,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/메일", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -819,6 +886,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/메일", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合。物防上限は日本 Tale Wiki の800を採用" },
         },
         WikiEquipmentItem {
@@ -831,6 +899,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법갑옷", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -843,6 +912,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법갑옷", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -855,6 +925,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/슈츠", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -867,6 +938,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/슈츠", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -879,6 +951,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/방패", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -891,6 +964,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/방패", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -903,6 +977,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/리스트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -915,6 +990,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/리스트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -927,6 +1003,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/밴드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -939,6 +1016,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/밴드", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -951,6 +1029,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/암릿", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -963,6 +1042,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/암릿", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -975,6 +1055,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/수정구", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -987,6 +1068,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/수정구", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -999,6 +1081,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/스펠북", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1011,6 +1094,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/스펠북", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1023,6 +1107,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리탄창", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1035,6 +1120,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리탄창", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1047,6 +1133,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법탄창", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1059,6 +1146,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법탄창", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1071,6 +1159,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리검(sub)", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1083,6 +1172,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/물리검(sub)", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1095,6 +1185,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법검(sub)", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1107,6 +1198,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/마법검(sub)", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1119,6 +1211,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/펜듈럼", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1131,6 +1224,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/펜듈럼", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1143,6 +1237,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1155,6 +1250,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1167,6 +1263,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1179,6 +1276,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1191,6 +1289,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1203,6 +1302,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/改-세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1215,6 +1315,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/改-세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1227,6 +1328,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/改-세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1239,6 +1341,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/改-세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
         WikiEquipmentItem {
@@ -1251,6 +1354,7 @@ pub(super) fn sacred_equipment_catalog() -> Vec<WikiEquipmentItem> {
             survival_effects: &[],
             recommended_dependency: None,
             damage_dependency: None,
+            usable_by: None,
             source: Source { page: "韓国コミュニティ装備整理シート/改-세크리드 장비 세트", retrieved_on: "2026-08-27", note: "通常/改を含む全104件を抽出。日本 Tale Wiki の名称と照合" },
         },
     ]

@@ -258,11 +258,16 @@ pub struct ItemClassification {
     pub armor_class: Option<ArmorClass>,
     pub wrist_type: Option<WristType>,
     pub recommended_dependency: Option<SkillDependency>,
+    /// このアイテムを装備できる `GameCharacter::id` の一覧(実データがある行だけ `Some`)。
+    /// `Some` のときはこれだけで装備可否を判定し、`None` のときだけ武器種/鎧区分/腕種の
+    /// 従来ルールに落ちる(`EquipmentFitRule::fit` 参照)。
+    pub usable_by: Option<&'static [&'static str]>,
 }
 
 /// キャラが装備できる区分(gamedata の `GameCharacter` から詰める)。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CharacterEquipmentClasses<'a> {
+    pub id: &'a str,
     pub weapon_classes: &'a [WeaponClass],
     pub armor_classes: &'a [ArmorClass],
     pub wrist_types: &'a [WristType],
@@ -272,6 +277,7 @@ pub struct CharacterEquipmentClasses<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EquipmentFitRule {
     slot: PartSlot,
+    character_id: Option<String>,
     weapon_classes: Option<Vec<WeaponClass>>,
     armor_classes: Option<Vec<ArmorClass>>,
     wrist_types: Option<Vec<WristType>>,
@@ -311,6 +317,7 @@ impl EquipmentFitRule {
         };
         Self {
             slot,
+            character_id: character.map(|c| c.id.to_string()),
             weapon_classes: character.map(|c| c.weapon_classes.to_vec()),
             armor_classes: character.map(|c| c.armor_classes.to_vec()),
             wrist_types: character.map(|c| c.wrist_types.to_vec()),
@@ -325,20 +332,29 @@ impl EquipmentFitRule {
 
     /// この部位の候補 1 件の適合度。
     pub fn fit(&self, item: &ItemClassification) -> ItemFit {
-        let usable = match self.slot {
-            PartSlot::Weapon => match &self.weapon_classes {
-                Some(classes) => item.weapon_class.is_some_and(|c| classes.contains(&c)),
-                None => true,
+        // このアイテムに装備可能キャラの実データがあれば、それだけで判定する(クライアント
+        // 展開データの `c11_CharMask` 由来。武器種/鎧区分/腕種の区分ルールより具体的で正確)。
+        // 実データが無い行(`None`)だけ、従来どおり区分ルールに落ちる。
+        let usable = match item.usable_by {
+            Some(allowed) => self
+                .character_id
+                .as_deref()
+                .is_none_or(|id| allowed.iter().any(|&a| a == id)),
+            None => match self.slot {
+                PartSlot::Weapon => match &self.weapon_classes {
+                    Some(classes) => item.weapon_class.is_some_and(|c| classes.contains(&c)),
+                    None => true,
+                },
+                PartSlot::Armor => match &self.armor_classes {
+                    Some(classes) => item.armor_class.is_some_and(|c| classes.contains(&c)),
+                    None => true,
+                },
+                PartSlot::Shield => match &self.wrist_types {
+                    Some(types) => item.wrist_type.is_some_and(|t| types.contains(&t)),
+                    None => true,
+                },
+                _ => true,
             },
-            PartSlot::Armor => match &self.armor_classes {
-                Some(classes) => item.armor_class.is_some_and(|c| classes.contains(&c)),
-                None => true,
-            },
-            PartSlot::Shield => match &self.wrist_types {
-                Some(types) => item.wrist_type.is_some_and(|t| types.contains(&t)),
-                None => true,
-            },
-            _ => true,
         };
         if !usable {
             return ItemFit::Other;
@@ -389,6 +405,7 @@ mod tests {
     }
 
     const BORIS: CharacterEquipmentClasses<'static> = CharacterEquipmentClasses {
+        id: "boris",
         weapon_classes: &[WeaponClass::Katana, WeaponClass::GreatSword, WeaponClass::Tachi],
         armor_classes: &[ArmorClass::Light, ArmorClass::Heavy, ArmorClass::Magic],
         wrist_types: &[WristType::Knuckle],
@@ -429,6 +446,36 @@ mod tests {
         let rule = EquipmentFitRule::new(PartSlot::Weapon, None, None);
         assert_eq!(rule.criterion(), None);
         assert_eq!(rule.fit(&weapon(WeaponClass::Rapier)), ItemFit::Usable);
+    }
+
+    #[test]
+    fn 装備可能キャラの実データがあればそれだけで判定し区分ルールには落ちない() {
+        // ボリスは区分上は Katana を装備できるが、この行の usable_by には入っていない。
+        let item = ItemClassification {
+            weapon_class: Some(WeaponClass::Katana),
+            usable_by: Some(&["lucian", "ispin"]),
+            ..Default::default()
+        };
+        let rule = EquipmentFitRule::new(PartSlot::Weapon, Some(BORIS), None);
+        assert_eq!(rule.fit(&item), ItemFit::Other);
+
+        let lucian = CharacterEquipmentClasses {
+            id: "lucian",
+            ..BORIS
+        };
+        let rule = EquipmentFitRule::new(PartSlot::Weapon, Some(lucian), None);
+        assert_eq!(rule.fit(&item), ItemFit::Recommended);
+    }
+
+    #[test]
+    fn 装備可能キャラの実データが無い行は従来の区分ルールに落ちる() {
+        let item = ItemClassification {
+            weapon_class: Some(WeaponClass::Katana),
+            usable_by: None,
+            ..Default::default()
+        };
+        let rule = EquipmentFitRule::new(PartSlot::Weapon, Some(BORIS), None);
+        assert_eq!(rule.fit(&item), ItemFit::Recommended);
     }
 
     #[test]

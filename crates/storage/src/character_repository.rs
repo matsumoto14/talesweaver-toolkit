@@ -2049,6 +2049,7 @@ mod tests {
             weapon_class: None,
             enhance_type: None,
             armor_class: None,
+            usable_by: None,
             damage_effects: &[],
             survival_effects: &[],
             recommended_dependency: None,
