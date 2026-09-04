@@ -51,7 +51,6 @@ CI は **タグの版と tauri.conf.json の版が違うと止まる**。だか�
 8. **CI を見届ける**。`gh run watch` か Actions で release.yml の完了を確認し、下書き Release に
    `*-setup.exe` と `*.sig` があるか、R2 の `dl.tw-context.dev/v0.2.0/` と `latest/latest.json` が
    新しい版を指しているかを見る。**Release の公開はユーザーがする**(内容を見てから押す運用)。
-9. `docs/status.md` に「vX.Y.Z を出した」を 1 行。
 
 ## お知らせだけ直す(版は出さない)
 

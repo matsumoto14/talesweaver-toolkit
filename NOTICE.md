@@ -25,7 +25,7 @@ Copyrights (C) NEXON Corporation and NEXON Co., Ltd. All Rights Reserved.
 スキル倍率・敵ステータス・装備補正値・コンテンツ入場条件などは、
 コミュニティ運営の [Tale Wiki](https://talewiki.com/) を一次ソースとして取り込んでいます。
 各データの取得元ページと取得日は、`crates/gamedata/` の各モジュール先頭と
-[docs/claude/decisions.md](docs/claude/decisions.md) に記録しています。
+[docs/adr/](docs/adr/) に記録しています。
 
 一部の数値は wiki に記載がなく、コミュニティの実測値・プレイヤー提供の計測結果に依っています。
 該当箇所はアプリ内で `[仮]` と表示しています。
