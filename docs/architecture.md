@@ -1,13 +1,13 @@
 # アーキテクチャ
 
-方針: **構造ファースト**。ゲームのドメインモデルを中心に置き、5つの機能(ダメージ計算・キャラ管理・強化提案・ロードマップ・やりたいこと索引)はすべて同じモデルの消費者として実装する。
+方針: **構造ファースト**。ゲームのドメインモデルを中心に置き、機能(キャラ管理・ダメージ計算・ホームの案内・対人・実測)はすべて同じモデルの消費者として実装する。
 
 ## 全体像
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ apps/desktop/src … フロントエンド(TS)。表示と入力のみ      │
-│   api/commands.ts = コマンド呼び出しの唯一の境界(44 本)    │
+│   api/commands.ts = コマンド呼び出しの唯一の境界            │
 └──────────────┬───────────────────────────┬───────────────┘
 ┌──────────────┴───────────┐  ┌────────────┴───────────────┐
 │ デスクトップ版(Tauri)   │  │ ブラウザ版(WASM)         │
@@ -25,8 +25,9 @@
 └──────────────────────────┘  └───────┬────────┘
                                       ↑ 生成
                               ┌───────┴────────┐
-                              │ tools/scraper ※ │
-                              │ talewiki 取込み  │
+                              │ tools/gamedata  │
+                              │ wiki / クライアン│
+                              │ ト資料の取込み   │
                               └────────────────┘
 ```
 
@@ -60,9 +61,9 @@
 
 ### crates/gamedata — 静的データ(wiki 由来)
 
-- スキル・敵・バフカタログ・係数・覚醒倍率などの型定義とローダ。アプリに同梱し、ユーザーは編集しない
-- 各データに出典(wiki ページ・取得日)とゲームバージョンをメタデータとして持たせる
-- 旧リポの JSON(docs/legacy-twtoolkit.md ⭐)を初期シードにするが、スキーマはドメイン語彙で定義し直し、wiki の現行値で検証してから採用する
+- スキル・敵・バフカタログ・係数・覚醒倍率・装備・称号などの型定義とローダ。アプリに同梱し、ユーザーは編集しない
+- 出典は Tale Wiki(スキル・敵・バフ・コンテンツ等)と、装備・称号の 9 値およびアイコンはゲームクライアントの展開データ(docs/adr/004-equipment-model.md)。各データに出典(ページ・取得日)を持たせる
+- wiki に無く実測に頼る値は `[仮]` を付ける(docs/adr/002-damage-formula-sources.md)
 
 ### crates/storage — ユーザーデータ(SQLite)
 
@@ -109,7 +110,7 @@ main.ts, App.svelte    エントリと画面枠(上部タブ・エラー帯・�
 CharacterRail.svelte   左のキャラレール(全タブ共通の「どのキャラの話か」+ クリア数 + 登録導線。表示順は端末内設定として保持)
 state.svelte.ts        共有状態(タブ・カタログ・登録キャラ・カスタム画像data URL・選択・コンテンツ判定・試し変更 sim)
 api/types.ts           コマンドの入出力型。Rust の serde 構造体の写し(手動同期)
-api/commands.ts        invoke ラッパー。画面からコマンドを呼ぶ唯一の入口(62 本)
+api/commands.ts        invoke ラッパー。画面からコマンドを呼ぶ唯一の入口
 api/invoke.ts          呼び出しの実体。デスクトップは Tauri、ブラウザは invoke.wasm.ts に
                        vite の alias で差し替わる(画面はどちらか知らない)
 api/browserStore.ts    ブラウザ版の保存(IndexedDB)/ api/transfer.ts データの書き出し・読み込み
@@ -130,16 +131,16 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 
 - **ビジュアル**はデザインモック「TW Toolkit Prototype v4」(claude.ai/design)準拠のライトテーマ。トークンは `app.css`、フォント(M PLUS Rounded 1c / M PLUS 1 Code)は `@fontsource` で同梱
 - **数値入力**は `ui/StatInput.svelte` の 1 種類のみ(従来どおり)。範囲上限は `limits.svelte.ts` から取る
-- **`pages/home/`**: `HomePage.svelte` — 到達一覧(エリア → コンテンツ、目安バー・バッジ・入場条件ノート)、お気に入り(localStorage)、「次に変えるなら」(候補を `preview_damage` で再計算し、押すと計算タブの試し変更に入る)
+- **`pages/home/`**: `HomePage.svelte` — ブリーフィング型 1 カラム。今日の期限・影響、今日の強化(5 項目タイル。候補を `preview_damage` で再計算し、直更新で保存)、到達一覧(エリア → コンテンツ、目安バー・バッジ・入場条件ノート。畳み)
 - **`pages/calc/`**: `CalcPage.svelte` — 対象プレート(◀▶ + エリア別一覧)、スキル選択、1発(最大)+ 合計/クリティカル、もし〜だったら、なぜこの数字?(攻撃力の内訳 / 防御を抜く / 倍率で伸ばす。トレースの式から組み立て)/ `TracePanel.svelte` — 詳細トレース。右カラム「計算の材料」= 試し変更(sim)・装備・バフ・調整・コンボ・入場条件
 - **`pages/buffs/`**: セット一覧 → 静的カタログからの選択 → 効果・排他枠要約。独自バフ定義は作らない
 - **`pages/chars/`**: `CharsPage.svelte`(外枠)/ `RegisterPane.svelte`(名前 + 19 職アイコンのみの最小登録・コピー登録)/ `Workspace.svelte`(draft 管理・`preview_effective_stats` の即時プレビュー・保存・いまの実力シート)/ `SourcePane.svelte`(補正源ドリルダウンの編集ペイン)。登録後のStatusPaneだけで任意画像を選び、レール・ホーム・現在キャラへ共通反映する
 - **`pages/versus/`**: `VersusPage.svelte` — **方向ごとに 1 列**(A が B に当てる / B が A に当てる)。頭の「[A] が [B] に当てる」がキャラの Picker、率 → 式 → 命中P ブロック(内訳・使用スキルの Picker・的中剣チップ・「全部やると」・4 区分の手のチップ)→ 回避P ブロック。ブロックは開閉(2 列で共有)。手のチップを押すと payload に当てて `preview_versus` を叩き直す(対人タブ内の状態、保存しない)
 
-### tools/scraper — talewiki 取り込み(※未実装)
+### tools/gamedata — 静的データの取り込み(Python)
 
-- EUC-JP PukiWiki の取得(`cmd=source`)→ パース → gamedata の生成。手法は docs/damage-formula.md 取得メモと旧リポの scrapeSkills.js を参照
-- 生成物との差分検出(wiki 更新の検知)をここで行う
+- `import_*.py` が Tale Wiki(EUC-JP PukiWiki、`cmd=source`)やクライアント展開データを読み、`crates/gamedata` の Rust リテラルとアイコン画像を生成する。1 本 1 出典で、再実行できる
+- wiki 全件の取込パイプライン(差分検出つき)への統合は docs/adr/013-wiki-import.md
 
 ### services/inquiry-worker — 問い合わせの中継(アプリ外)
 
@@ -147,8 +148,8 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 - **アプリ本体からは独立している**。ここが落ちても計算・保存は動く(問い合わせが送れないだけ)
 - アプリに秘密を持たせないための中継。GitHub App の秘密鍵は Worker のシークレットにあり、
   アプリ側は認証を持たない。代わりに proof-of-work + IP ハッシュのレート制限で匿名投稿を守る
-- 唯一の外部通信先。エンドポイントは `apps/desktop/src/inquiry.ts` と
-  `tauri.conf.json` の `connect-src` の **2 か所**に書くので、変えるときは両方直す
+- ユーザーの操作で送信する唯一の外部通信先(ほかは `dl.tw-context.dev` からの更新確認・お知らせの読み取りだけ)。
+  エンドポイントは `apps/desktop/src/inquiry.ts` と `tauri.conf.json` の `connect-src` の **2 か所**に書くので、変えるときは両方直す
 
 ### site/ — 紹介ページ(アプリ外)
 
@@ -160,12 +161,14 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 ## 依存の向き
 
 ```
-apps/desktop → storage, gamedata, domain
-storage      → domain(型のため)
-gamedata     → domain(型のため)
-domain       → (何にも依存しない)
-tools/scraper→ gamedata(スキーマ共有)
-services/    → (どのクレートにも依存しない。HTTP でだけ繋がる)
+apps/desktop(src-tauri) → storage, commands, gamedata, domain
+crates/web              → commands, gamedata, domain
+commands                → gamedata, domain
+storage                 → domain(型のため)
+gamedata                → domain(型のため)
+domain                  → (何にも依存しない)
+tools/gamedata          → (Python。生成物を gamedata と assets に書くだけ)
+services/               → (どのクレートにも依存しない。HTTP でだけ繋がる)
 ```
 
 domain が最内層。逆流(domain → storage 等)は禁止。
@@ -178,11 +181,11 @@ domain が最内層。逆流(domain → storage 等)は禁止。
 ## 機能がモデルを共有する構図(キャラデータが軸)
 
 - **ダメージ計算** = `damage(character, skill, enemy, buff_set) -> DamageResult(トレース付き)`
-- **強化提案** = 候補変更(装備・強化・ステ振り)を character に適用して damage を再評価し、差分をランキング
-- **ロードマップ** = content の入場条件と character の現状を突き合わせて不足を列挙
-- **索引** = 「やりたいこと」→ 必要な機能・コンテンツ・強化への逆引き(gamedata 上のグラフ)
+- **強化の候補**(ホーム「今日の強化」、対人「次にできること」)= 候補変更を character に適用して damage / 命中率を再評価し、差分を並べる
+- **到達判定**(ホーム)= content の入場条件と character の現状を突き合わせて不足を列挙
+- **実測** = ゲーム内の実測ダメージと計算結果の差を出し、敵側の値を逆算する材料にする(docs/enemy-verification.md)
 
-強化提案とロードマップが「計算機能の再利用」で書けるのは、キャラモデルを軸にした構造の直接の利点。
+強化の候補と到達判定が「計算機能の再利用」で書けるのは、キャラモデルを軸にした構造の直接の利点。
 
 ## 検証戦略
 

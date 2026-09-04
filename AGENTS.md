@@ -1,8 +1,8 @@
 # TW Context
 
 TalesWeaver(MMORPG)プレイヤー向けデスクトップツール。Tauri(Rust)+ SQLite(rusqlite)+ TypeScript/Svelte。
-機能と全体構成は docs/architecture.md、進捗は docs/status.md、構造の負債は docs/architecture-audit.md。
-docs/ 直下は人向け。決定記録は docs/adr/(テーマ別 ADR)、エージェント運用は docs/workflow.md。
+機能と全体構成は docs/architecture.md。進捗は `git log` と CHANGELOG.md。
+docs/ 直下は人向け(利用者・貢献者が読む)。決定記録は docs/adr/(テーマ別 ADR)。エージェント向けの運用はこのファイルと `.claude/skills/` だけ。
 
 ## アーキテクチャ(構造ファースト)
 
@@ -29,7 +29,7 @@ docs/ 直下は人向け。決定記録は docs/adr/(テーマ別 ADR)、エー�
 ## 情報ソース
 
 - ゲーム仕様の一次ソースは [Tale Wiki](https://talewiki.com/)(EUC-JP の PukiWiki)。取得方法は docs/damage-formula.md 末尾。
-- 旧リポ `C:\github\private\twtoolkit` に流用可能な静的データがある(棚卸し: docs/legacy-twtoolkit.md)。数値は古い可能性があるため wiki を正とする。
+- 旧リポ `C:\github\private\twtoolkit`(非公開)に Excel 計算器由来の静的データ(スキル・敵・バフ JSON)がある。数値は古い可能性があるため wiki を正とする。
 
 ## ビルド・テスト
 
@@ -52,7 +52,7 @@ docs/ 直下は人向け。決定記録は docs/adr/(テーマ別 ADR)、エー�
 
 ## 実行ワークフロー
 
-メインセッション(Fable 5.1)が司令塔・最終判断者。Subagent は必要なときだけ使う。詳細と判断基準は docs/workflow.md。
+メインセッション(Fable 5.1)が司令塔・最終判断者。Subagent は必要なときだけ使う。背景は docs/adr/010-agent-workflow.md。
 
 **IMPORTANT: Subagent として実行されている場合はこの節を無視し、与えられたタスクを自分で直接遂行する。`Agent` を起動しない。**
 
@@ -64,3 +64,29 @@ docs/ 直下は人向け。決定記録は docs/adr/(テーマ別 ADR)、エー�
 
 - 同一変更に `reviewer` と `/code-review` を重ねない。追加レビューは観点が異なる場合(security / migration / architecture)のみ。
 - Subagent への依頼は目的・受け入れ条件・対象ファイル・制約のみ。返答は結論・根拠・変更ファイル・テスト要約・残存リスクのみ(ログ・diff 全文は返さない)。
+
+### Subagent と Skills
+
+Agent 定義は `~/.claude/agents/`(ユーザー単位)。すべて `disallowedTools: Agent`(再委譲禁止)。
+
+| Agent | model / effort | 用途 |
+|---|---|---|
+| researcher | Sonnet / high | Complex 変更の実装前調査。ファイル変更不可 |
+| implementer | Sonnet / medium | 承認済みスコープの実装と関連テスト |
+| reviewer | Sonnet / high | Complex 変更の独立レビュー。ファイル変更不可 |
+| smoke-tester | Sonnet / medium | Tauri 実機の GUI 操作・撮影(WebView2 CDP + Playwright) |
+| Explore(組み込み) | — | ファイル探索・シンボル検索 |
+
+Skills は `.claude/skills/`(talewiki-fetch / gui-smoke / finish-goal / design-review / release / db-migration)。各 SKILL.md の description が使いどころ。
+
+依頼の作法:
+
+- implementer: 司令塔が wiki 等で裏取り済みの値は「確認済み(出典・値)」と依頼文に書く。`[仮]` かどうかを implementer に判断させない
+- reviewer: 司令塔がテスト・build を確認済みなら「再実行不要」と明記し、読解に専念させる
+- smoke-tester: 入力値は domain テストと同じ値を依頼文に書く。値を変えると期待結果が一致せず再実行になる
+
+### Context 管理(ユーザー操作の推奨)
+
+- ひとまとまりの作業(goal)を完了して commit したら `/clear`。1 セッションに複数 goal を載せない
+- モデルは `fable`(200k)。`fable[1m]` は使わない(200k 超が割増になり `autoCompactWindow` も効かない)
+- `/code-review` は専用セッションで起動する(内部で 17 本前後の Agent が起動する)

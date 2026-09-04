@@ -183,7 +183,7 @@ New1/New2, V1/V2, E1/E2, X の各サブカテゴリ含む)を表現する形を�
   供給源表と、旧リポ twtoolkit の Excel v4.00 実装(`skillTerm = skillMultiplier + helmetAbility / 100`)の
   両方で裏取り
 - 2026-09-02: 命中P・回避Pの伸びしろを、**源ごとの列挙 API**の上に組み直した
-  (architecture-audit B21)。`stat_sources::stat_fixed_rooms`(ペット S / ルーン / クラウン /
+  (2026-09-02 の構造監査で決定)。`stat_sources::stat_fixed_rooms`(ペット S / ルーン / クラウン /
   モンスターカード / 神鳥の聖物の「いま → 上限」。上限到達は返さない)、
   `accuracy_buff_rooms`(未選択の命中P増加バフ。排他枠と的中剣の `exclusive_with` を見る)、
   `stat_buff_rooms`(未選択のステ増加バフの、そのステへの実効き)、

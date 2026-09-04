@@ -1,6 +1,6 @@
 //! 伸びしろの手(`GrowthAction`)を素材(`StatSources` / `Equipment` / `BuffSelection`)に
 //! 当てる。「対人タブでその手を試したら」を再現するための書き込み専用の関数群
-//! (対人の伸びしろ機能。docs/versus-next-actions.md)。
+//! (対人の伸びしろ機能。決定は docs/adr/007-input-ux.md と 002-damage-formula-sources.md)。
 //!
 //! `EffectiveStats` などの計算済み値ではなく、計算前の素材を書き換える。呼び出し側
 //! (`commands::preview_versus`)が書き換え後の素材で計算パイプラインを再度通す。

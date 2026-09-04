@@ -1,6 +1,6 @@
 # 変更履歴
 
-このツールを使う人向けの変更点です。開発の詳細な進捗は [docs/status.md](docs/status.md) にあります。
+このツールを使う人向けの変更点です。設計上の決定は [docs/adr/](docs/adr/) にあります。
 
 書き方は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、
 バージョンは [セマンティック バージョニング](https://semver.org/lang/ja/) に従います。
