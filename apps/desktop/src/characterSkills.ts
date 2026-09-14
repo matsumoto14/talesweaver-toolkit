@@ -19,7 +19,6 @@ export const damageCategoryLabel = (c: DamageCategory): string =>
  * キャラスキル(複数効果を並べる effectLabel)とマスタリー(1 択なのでこれをそのまま使う)で共通 */
 export function singleEffectLabel(e: SkillEffect): string | null {
   if (e === "record_only") return null;
-  if (e === "accuracy_rate_boost") return "命中P割合増加(SLvに比例)";
   if ("stat_rate" in e) {
     const stats = e.stat_rate.stats.map((k) => STAT_LABELS[k]).join(" / ");
     return `${stats} +${e.stat_rate.percent}%`;
@@ -27,6 +26,8 @@ export function singleEffectLabel(e: SkillEffect): string | null {
   if ("actual_delay" in e) return `中ディレイ −${e.actual_delay.percent}%`;
   if ("accuracy_point" in e) return `命中P +${e.accuracy_point.value}`;
   if ("min_evasion_rate" in e) return `最小回避率補正 +${e.min_evasion_rate.value}%`;
+  // Rust の SkillEffect::label と同じ文言
+  if ("accuracy_rate" in e) return `命中P割合増加(SLv×${e.accuracy_rate.per_level * 100}%)`;
   const { category, percent } = e.damage;
   const sign = percent < 0 ? "−" : "+";
   return `${damageCategoryLabel(category)} ${sign}${Math.abs(percent)}%`;
