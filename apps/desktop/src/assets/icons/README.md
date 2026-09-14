@@ -5,7 +5,7 @@
 | 系統 | ディレクトリ | ファイル名 | id の出どころ |
 |---|---|---|---|
 | キャラ | `characters/` | `<id>.png` | `gamedata::characters()` の `GameCharacter::id`(例 `boris.png`) |
-| Mob | `mobs/` | `<id>.png` | `gamedata::enemies()` の `Enemy::id` |
+| Mob | `mobs/` | `<id>.png` | `gamedata::enemies()` の `Enemy::id`。コンテンツの絵(`contents/`)が無いとき `Icon` の `fallback` でそのコンテンツの `enemy_id` を引く |
 | スキル | `skills/` | `<id>.png` | `gamedata::skills_for()` の `Skill::id`(例 `boris_continuous.png`) |
 | バフ | `buffs/` | `<id>.png` | `gamedata::buff_catalog()` の `BuffDefinition::id` |
 | マスタリー | `masteries/` | `<id>.png` | `gamedata::mastery_catalog()` の `MasteryDef::id`(例 `boris_m1_issen.png`)。枠はスキルと同じ |
@@ -61,3 +61,11 @@ wiki ではなく**ゲーム内インベントリのスクリーンショット*
 `tw_assets/item_icons/<ItemId>_<名前>.png` から同梱した。wiki・韓国資料由来の 313 件は同じ id で上書き(絵は同じゲーム内画像。
 ピクセル差があったのは 5 件で、クライアント側を正とする)。client に無い wiki 独自行(宝玉付与の名付け・旧装備)と
 レリックは引き続き `?`。再取込は `tools/gamedata/import_client_icons.py`(`import_client_db.py` の後に実行)。
+
+2026-09-03に敵カタログ全 42 件の立ち絵をクライアント展開データから `mobs/` に同梱した(d2a を読んで
+正面向きで最も大きいコマを `tw_assets/sprites/` から取り、透明で正方形に詰める。`item_icons/monsters/` の
+PNG は最初の方向の最初のコマで、後ろ向きや出現エフェクトになるので使わない)。敵カタログは
+「コンテンツ名 + 難易度」で持っているため名前照合では取れず、`enemies.rs` の `client_image` に手で書いた。
+名前で対応が取れる 14 件以外(コンテンツ名だけの敵、2D スプライトが無いオーディン・キシニク)は、同じ
+コンテンツに出る雰囲気の近いモンスターをユーザー判断で当てている(2026-09-04)。再取込は
+`tools/gamedata/import_enemy_icons.py`(tw_tool_v2 の d2a パーサを借りる)。

@@ -1777,6 +1777,7 @@
             <button type="button" class="step" onclick={() => stepTarget(-1)}>◀</button>
             <button type="button" class="target-trigger" class:open={targetOpen} onclick={() => (targetOpen = !targetOpen)}>
               <span class="t-line1">
+                <Icon kind="content" id={target.content.id} fallback={{ kind: "mob", id: target.content.enemy_id }} size={28} label={target.content.name} />
                 <span class="t-name">{target.content.name}</span>
                 <span class="t-chev" class:rot={targetOpen}>▼</span>
                 <span class="t-index num dim">{targetIndex + 1} / {contents.length}</span>
@@ -1808,6 +1809,8 @@
                     }}
                   >
                     <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
+                    <!-- コンテンツの絵が無ければそのコンテンツの敵の絵。サイズ固定なので行の高さは動かない -->
+                    <Icon kind="content" id={c.id} fallback={{ kind: "mob", id: c.enemy_id }} size={20} label={c.name} />
                     {#if cov !== null}<span class="coverage">{cov}</span>{/if}
                     <span class="pop-name">{c.name}</span>
                     <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_primary) : "—"}</span>
@@ -2689,7 +2692,7 @@
   .step:hover { background: var(--bg-active); }
   .target-trigger { min-width: 0; flex: 1; padding: 3px 8px; border-radius: var(--r-panel); border: 1px solid transparent; text-align: left; }
   .target-trigger:hover, .target-trigger.open { background: var(--bg-rail); border-color: #9FB4D0; }
-  .t-line1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .t-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .t-chev { flex-shrink: 0; font-size: 8.5px; color: var(--fg-muted); transition: transform 0.18s; }
   .t-chev.rot { transform: rotate(180deg); }

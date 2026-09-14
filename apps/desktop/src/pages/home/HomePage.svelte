@@ -1421,7 +1421,7 @@
                         <div class="row-main">
                           <!-- コンテンツの絵(ゲーム内のコンテンツ一覧と同じ絵)。行頭の枠は
                                サイズ固定なので、未収録のコンテンツが混ざっても行の高さは動かない -->
-                          <Icon kind="content" id={r.content.id} size={28} label={r.content.name} />
+                          <Icon kind="content" id={r.content.id} fallback={{ kind: "mob", id: r.content.enemy_id }} size={28} label={r.content.name} />
                           <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
                           {#if cov !== null}<span class="coverage">{cov}</span>{/if}
                           {#if r.content.series}

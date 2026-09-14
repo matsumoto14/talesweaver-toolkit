@@ -43,9 +43,18 @@
   // 同じ id で何度も warn しない(一覧の再描画ごとに出すとログが埋まる)
   const warned = new Set<string>();
 
-  export function iconUrl(kind: IconKind, id: string): string | null {
-    const path = `../assets/icons/${DIRS[kind]}/${id}.png`;
-    const url = FILES[path] ?? null;
+  /** 別系統の id で代用する指定。コンテンツの絵が無いときにそのコンテンツの敵(`mobs/`)を出す用 */
+  export interface IconFallback {
+    kind: IconKind;
+    id: string | null;
+  }
+
+  function lookup(kind: IconKind, id: string): string | null {
+    return FILES[`../assets/icons/${DIRS[kind]}/${id}.png`] ?? null;
+  }
+
+  export function iconUrl(kind: IconKind, id: string, fallback: IconFallback | null = null): string | null {
+    const url = lookup(kind, id) ?? (fallback?.id != null ? lookup(fallback.kind, fallback.id) : null);
     if (url === null) {
       const key = `${kind}/${id}`;
       if (!warned.has(key)) {
@@ -55,6 +64,7 @@
     }
     return url;
   }
+
 </script>
 
 <script lang="ts">
@@ -67,10 +77,12 @@
     label: string;
     /** 登録キャラだけが渡す任意画像。候補一覧などは未指定のまま静的アイコンを使う。 */
     source?: string | null;
+    /** 本来の id で解決できないときに代わりに引く系統と id */
+    fallback?: IconFallback | null;
   }
-  let { kind, id, size = 28, label, source = null }: Props = $props();
+  let { kind, id, size = 28, label, source = null, fallback = null }: Props = $props();
 
-  const url = $derived(source ?? (id === null ? null : iconUrl(kind, id)));
+  const url = $derived(source ?? (id === null ? null : iconUrl(kind, id, fallback)));
   const custom = $derived(source !== null);
   const missing = $derived(id !== null && url === null);
 </script>
