@@ -5,6 +5,7 @@
 
 pub mod actual_delay;
 pub mod attack_power;
+pub mod avatar_enhance;
 pub mod awakening;
 pub mod candidate;
 pub mod category;
@@ -41,6 +42,7 @@ pub use actual_delay::{
     actual_delay, ActualDelay, ActualDelayContribution, SkillUsesTable, ACTUAL_DELAY_MIN,
     ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
 };
+pub use avatar_enhance::{AvatarEnhanceError, AvatarEnhancements, AvatarPart, AVATAR_ENHANCE_MAX};
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,

@@ -1242,8 +1242,8 @@ pub struct StatPreview {
     pub siena_part_values: Vec<PartEquipmentValues>,
     /// テシスコアの地域別プレビュー(`CoreRegion::ALL` の順)。正は `crates/domain/src/thesis_core.rs`
     pub thesis_cores: Vec<ThesisCoreRegionPreview>,
-    /// 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分。地域なし = テシスコアを含まない)。
-    /// 正は `Equipment::enhanced_totals`
+    /// 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分 + アバター強化。
+    /// 地域なし = テシスコアを含まない)。正は `Equipment::enhanced_totals`
     pub equipment_enhanced_total: EquipmentValues,
     /// 強化能力値のうち `part.enchant` だけを部位別に割ったもの(表示用の内訳)。
     /// 正は `Equipment::enchant_values_by_part`
@@ -1963,6 +1963,8 @@ pub struct StatLimits {
     pub core_slot_count: usize,
     pub core_evolution_max: u8,
     pub core_enhancement_max: u8,
+    /// アバター強化 1 個あたりの値の上限(wiki: 現行アバター強化剤は +10 / +12)
+    pub avatar_enhance_max: i64,
     /// 装備 1 部位に付与できる属性値の上限(wiki: 装備システム/属性強化)
     pub equipment_element_value_max: i64,
     /// キャラの属性値の上限(wiki: 属性システム)
@@ -2085,6 +2087,7 @@ pub fn stat_limits() -> StatLimits {
         core_slot_count: CORE_SLOT_COUNT,
         core_evolution_max: CORE_EVOLUTION_MAX,
         core_enhancement_max: CORE_ENHANCEMENT_MAX,
+        avatar_enhance_max: crate::avatar_enhance::AVATAR_ENHANCE_MAX,
         equipment_element_value_max: crate::element::EQUIPMENT_ELEMENT_VALUE_MAX,
         element_value_max: crate::element::ELEMENT_VALUE_MAX,
         awakening_stage_max: crate::awakening::Awakening::MAX_STAGE,

@@ -1,7 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
-  CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentStatKind, PartSlot, PetSkillTier, SienaAuras,
-  RandomOptionRank, SkillDependency, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
+  AvatarPart, CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentStatKind, PartSlot, PetSkillTier,
+  SienaAuras, RandomOptionRank, SkillDependency, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
 } from "./api/types";
 import { limits } from "./limits.svelte";
 import { tables } from "./tables.svelte";
@@ -49,6 +49,12 @@ export type { EquipmentStatKind };
 export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = Object.fromEntries(
   tables.equipment_stat_labels.map((e) => [e.kind, e.label]),
 ) as Record<EquipmentStatKind, string>;
+/** 装備で日常的にエンチャントする 4 補正。ゲーム内の呼び方どおり S/H/I/M を先に並べる。
+ * 残り 5 補正(物防 / 命中 / Cri / 回避 / 敏捷)は既定で畳み、必要なときだけ開く(装備・アバター強化で共通)。 */
+export const PRIMARY_EQUIPMENT_STATS: EquipmentStatKind[] = ["thrust", "slash", "magic_attack", "magic_defense"];
+export const OTHER_EQUIPMENT_STATS: EquipmentStatKind[] = EQUIPMENT_STAT_KINDS.filter(
+  (kind) => !PRIMARY_EQUIPMENT_STATS.includes(kind),
+);
 // 表・部位行など幅の狭いところ用の短縮名。
 export const EQUIPMENT_STAT_SHORT: Record<EquipmentStatKind, string> = {
   thrust: "突き", slash: "斬り", physical_defense: "物防", magic_attack: "魔攻", magic_defense: "魔防",
@@ -143,6 +149,12 @@ export const ULTIMATE_SKILL_EFFECTS: Record<UltimateSkill, string> = {
   scope_eye: "クリティカルダメージ増加(非クリには乗りません)",
   full_throttle: "中ディレイ減少 + 単体チャネリングスキルの段数",
   wide_focus: "スキル範囲(火力には効きません)",
+};
+
+// アバターの部位(crates/domain/src/avatar_enhance.rs の AvatarPart)。順序は Rust の AvatarPart::ALL。
+export const AVATAR_PARTS: AvatarPart[] = ["helm", "head", "body", "legs", "effect"];
+export const AVATAR_PART_LABELS: Record<AvatarPart, string> = {
+  helm: "兜", head: "頭", body: "体", legs: "脚", effect: "エフェクト",
 };
 
 // テシスコアの地域(crates/domain/src/thesis_core.rs の CoreRegion)。順序は Rust の CoreRegion::ALL。

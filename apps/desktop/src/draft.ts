@@ -8,7 +8,7 @@ import type {
   RegisteredCharacter,
   StatSources,
 } from "./api/types";
-import { cloneEquipmentPart, cloneSienaAuras, cloneThesisCores, neutralEquipmentPart, neutralSienaAuras, neutralThesisCores } from "./equipment";
+import { cloneAvatarEnhancements, cloneEquipmentPart, cloneSienaAuras, cloneThesisCores, neutralAvatarEnhancements, neutralEquipmentPart, neutralSienaAuras, neutralThesisCores } from "./equipment";
 import { PART_SLOTS, STAT_KINDS } from "./labels";
 
 /**
@@ -52,6 +52,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   ) as unknown as EquipmentParts,
   siena: cloneSienaAuras(src.siena),
   thesis_cores: cloneThesisCores(src.thesis_cores),
+  avatar: cloneAvatarEnhancements(src.avatar),
   title: src.title ?? null,
 });
 
@@ -60,6 +61,7 @@ export const defaultEquipment = (): Equipment => ({
   parts: Object.fromEntries(PART_SLOTS.map((slot) => [slot, { registered: [], selected_id: null } satisfies EquipmentPartList])) as unknown as EquipmentParts,
   siena: neutralSienaAuras(),
   thesis_cores: neutralThesisCores(),
+  avatar: neutralAvatarEnhancements(),
   title: null,
 });
 

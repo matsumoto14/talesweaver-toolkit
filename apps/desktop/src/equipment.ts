@@ -2,12 +2,12 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList, EquipmentValues,
+  AvatarEnhancements, CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList, EquipmentValues,
   RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
   SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores,
 } from "./api/types";
 import {
-  CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS,
+  AVATAR_PARTS, CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS,
   EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS,
 } from "./labels";
 import { tables } from "./tables.svelte";
@@ -107,6 +107,19 @@ export const neutralThesisCores = (): ThesisCores =>
 
 export const cloneThesisCores = (src: ThesisCores): ThesisCores =>
   Object.fromEntries(CORE_REGIONS.map((r) => [r, cloneCoreSet(src[r])])) as unknown as ThesisCores;
+
+export const neutralAvatarEnhancements = (): AvatarEnhancements =>
+  Object.fromEntries(AVATAR_PARTS.map((p) => [p, zeroValues()])) as unknown as AvatarEnhancements;
+
+export const cloneAvatarEnhancements = (src: AvatarEnhancements): AvatarEnhancements =>
+  Object.fromEntries(AVATAR_PARTS.map((p) => [p, { ...src[p] }])) as unknown as AvatarEnhancements;
+
+/** 部位ごとの合計(能力値ごとの Σ、非 0 だけ)。ペイン見出しと Workspace の行サブタイトルで共有する。 */
+export const avatarEnhanceTotals = (src: AvatarEnhancements): EquipmentValues =>
+  AVATAR_PARTS.reduce((sum, p) => {
+    for (const k of EQUIPMENT_STAT_KINDS) sum[k] += src[p][k];
+    return sum;
+  }, zeroValues());
 
 export const neutralEquipmentPart = (): EquipmentPart => ({
   id: 0,

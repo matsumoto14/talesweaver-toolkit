@@ -2,8 +2,10 @@
 //!
 //! 装備は部位別(12 スロット)で持つ(docs/claude/goals/2026-08-24-equipment-parts.md)。
 //! 「基本能力値」= 部位ごとの実測補正値 + 武器アビリティの加算。
-//! 「強化能力値」= 部位ごとのエンチャント値 + シエナのオーラの能力値(武器/盾)+ テシスコア。
+//! 「強化能力値」= 部位ごとのエンチャント値 + シエナのオーラの能力値(武器/盾)+ テシスコア
+//! + アバター強化。
 
+use crate::avatar_enhance::{AvatarEnhanceError, AvatarEnhancements};
 use crate::category::DamageCategory;
 use crate::character_skill::{damage_contributions, SkillEffect};
 use crate::damage::DamageContribution;
@@ -858,6 +860,8 @@ pub enum EquipmentError {
     RandomOption(#[from] RandomOptionError),
     #[error(transparent)]
     Siena(#[from] SienaError),
+    #[error(transparent)]
+    Avatar(#[from] AvatarEnhanceError),
 }
 
 /// 装備強化の追加効果補正式。武器は固定ダメージ、鎧は追加HPを算出する。
@@ -1053,6 +1057,10 @@ pub struct Equipment {
     /// テシスコア(地域ごとに 6 枠)。火力タイプの補正は強化能力値へ合流する
     #[serde(default)]
     pub thesis_cores: ThesisCores,
+    /// アバター強化(兜・頭・体・脚・エフェクトの 5 部位)。強化能力値へ合流する
+    /// (wiki: 計算式まとめ「強化能力値」。期限は持たない)
+    #[serde(default)]
+    pub avatar: AvatarEnhancements,
     /// 表示中の称号(`TitleDef::id`)。**1 枠だけ**で、補正は基本能力値へ合流する
     /// (wiki: 称号システム。所持ぶんの累積ではない)。`None` = 未装備
     #[serde(default)]
@@ -1260,6 +1268,7 @@ impl Equipment {
         }
         self.siena.validate()?;
         self.thesis_cores.validate()?;
+        self.avatar.validate()?;
         Ok(())
     }
 
@@ -1739,7 +1748,8 @@ impl Equipment {
         contributions
     }
 
-    /// 強化能力値の合計(Σ part.enchant + Σ シエナのオーラの能力値(武器/盾)+ テシスコア)。
+    /// 強化能力値の合計(Σ part.enchant + Σ シエナのオーラの能力値(武器/盾)+ テシスコア
+    /// + アバター強化)。
     ///
     /// `region` はダメージ計算の対象コンテンツのテシスコア地域。テシスコアの能力値増加は
     /// 対象ダンジョン内でのみ有効なので、`None`(コアが効かないコンテンツ)なら加算しない。
@@ -1748,7 +1758,8 @@ impl Equipment {
     }
 
     /// 強化能力値の供給源内訳(部位のエンチャント → シエナのオーラ(武器/盾)→ テシスコア
-    /// の順)。全 0 の供給源は入れない。`enhanced_totals` はこの Σ(計算を二重に書かない)。
+    /// → アバター強化の順)。全 0 の供給源は入れない。`enhanced_totals` はこの Σ
+    /// (計算を二重に書かない)。
     pub fn enhanced_sources(&self, region: Option<CoreRegion>) -> Vec<EquipmentValueSource> {
         let mut sources = Vec::new();
         for (slot, part) in self.iter_selected() {
@@ -1780,6 +1791,13 @@ impl Equipment {
                     values,
                 });
             }
+        }
+        let avatar_values = self.avatar.equipment_values();
+        if avatar_values != EquipmentValues::default() {
+            sources.push(EquipmentValueSource {
+                source: "アバター強化".to_string(),
+                values: avatar_values,
+            });
         }
         sources
     }
@@ -4093,5 +4111,46 @@ mod tests {
         let catalog: [MockCatalogEntry; 0] = [];
         let result = equipment.validate_against_catalog(&catalog, &[], &[]);
         assert!(result.is_err(), "実測上限超過を検出できていない: {result:?}");
+    }
+
+    #[test]
+    fn アバター強化は強化能力値の供給源に合流する() {
+        use crate::avatar_enhance::AvatarPart;
+
+        let mut eq = Equipment::default();
+        // 中立なら供給源に出ない
+        assert!(eq
+            .enhanced_sources(None)
+            .iter()
+            .all(|s| s.source != "アバター強化"));
+
+        // 部位ごとの重ね合わせ(兜 突き12 + 頭 突き12 = 24)
+        eq.avatar.get_mut(AvatarPart::Helm).thrust = 12;
+        eq.avatar.get_mut(AvatarPart::Head).thrust = 12;
+        eq.avatar.get_mut(AvatarPart::Body).accuracy = 10;
+
+        let sources = eq.enhanced_sources(None);
+        let avatar_source = sources
+            .iter()
+            .find(|s| s.source == "アバター強化")
+            .expect("アバター強化の供給源が無い");
+        assert_eq!(avatar_source.values.thrust, 24);
+        assert_eq!(avatar_source.values.accuracy, 10);
+
+        let totals = eq.enhanced_totals(None);
+        assert_eq!(totals.thrust, 24);
+        assert_eq!(totals.accuracy, 10);
+    }
+
+    #[test]
+    fn アバター強化の値域違反は装備の検証で拒否する() {
+        use crate::avatar_enhance::{AvatarEnhanceError, AvatarPart};
+
+        let mut eq = Equipment::default();
+        eq.avatar.get_mut(AvatarPart::Legs).critical = 13;
+        assert!(matches!(
+            eq.validate(),
+            Err(EquipmentError::Avatar(AvatarEnhanceError::ValueOutOfRange { .. }))
+        ));
     }
 }
