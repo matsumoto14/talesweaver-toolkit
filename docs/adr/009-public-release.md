@@ -81,6 +81,18 @@ DB バックアップなど、公開前にしか変えられない項目を先�
   ユーザーがジェスチャーを選んだ。解除状態は localStorage(`tw-v4-unlocked`)にだけ残し、
   キャラデータの書き出しには含めない。判定は `apps/desktop/src/unlock.svelte.ts` の 2 関数
   (`isLockedTab` / `isLockedEquipment`)に集め、カタログや domain はロックの概念を持たない
+- **テネブリスの数値だけは配布物・リポジトリから外し、解除時に R2 から取得してローカル保存する**
+  (2026-09-14)。画像(`apps/desktop/src/assets/icons/equipment/client-10604xx.png`)は同梱のまま
+  据え置く(「秘匿ではなく見せない・使わせない」の対象は数値だけで、アイコンは元から変えない)。
+  取得元は `https://dl.tw-context.dev/data/tenebris.json`。解除操作(バージョン表記 7 連打で
+  ON)のたびに取り直し、`gamedata::install_downloaded_equipment` が検証してから実行中の
+  装備カタログへ合流させ、Tauri 側が `app_data_dir/tenebris.json` へ保存して次回起動でも
+  再インストールする。**取得に失敗したときのフォールバックは作らない**(テネブリスが未収録の
+  ままになる以上のことはしない。起動やロック解除自体は止めない)。ただしテネブリスを装備させた
+  登録キャラは、未取得の環境では `validate_against_catalog` が「未知の装備アイテム」を返すので
+  保存・計算プレビューが通らない(一覧表示は通る)。解除して取り直せば戻る。JSON は
+  `tools/gamedata/import_client_db.py` が client.rs から除外して手元(git 管理外)へ書き出し、
+  R2 へは手元から `aws s3 cp` で上げる(お知らせと違い CI には乗せない。頻繁に変わるデータではない)
 
 ## 却下した選択肢
 

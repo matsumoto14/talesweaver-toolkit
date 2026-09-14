@@ -1,6 +1,21 @@
 """クライアント展開データ(dm_NNNNN_NNNN.csv)から装備カタログを取り込み、
 `crates/gamedata/src/equipment_catalog/client.rs` を生成する。
 
+†テネブリス(2026-09-14 決定)は配布物・リポジトリから外す(docs/adr/009-public-release.md)。
+`client.rs` には書かず、代わりに `tools/gamedata/out/tenebris.json`(git 管理外。.gitignore 参照)
+へ書き出す。R2 へ上げるのは手元から(CI には乗せない。ENDPOINT の `<ACCOUNT_ID>` は実値に置換):
+
+    aws s3 cp tools/gamedata/out/tenebris.json s3://tw-context/data/tenebris.json \\
+        --endpoint-url https://<ACCOUNT_ID>.r2.cloudflarestorage.com \\
+        --content-type "application/json; charset=utf-8" \\
+        --only-show-errors
+
+R2 は AWS CLI v2 の既定チェックサムに対応しないので、上げる前に一度だけ環境変数を要求時のみに絞る
+(`.github/workflows/news.yml` と同じ):
+
+    export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+    export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+
 出典: `tw_assets/README.md`(リポジトリ外置き場)。`db/dm_00000_NNNN.csv` は UTF-8 BOM 付き、
 1 行目=列名(`c<番号>_<名前>_<hash>` / `c<番号>_<hash>`)、2 行目=`#type`、3 行目以降データ。
 `dm_*_9xxx` は `0xxx` の複製(ItemId +90,000,000)なので読まない。パッケージは dm_00000 と dm_00001 の 2 つ。
@@ -74,6 +89,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_DIR = ROOT / "crates/gamedata/src/equipment_catalog"
 OUT_PATH = CATALOG_DIR / "client.rs"
+# git 管理外(.gitignore の tools/gamedata/out/)。R2 へ上げる手元置き場。
+TENEBRIS_OUT_PATH = ROOT / "tools/gamedata/out/tenebris.json"
+TENEBRIS_RETRIEVED_ON = "2026-09-03"
+TENEBRIS_NAME_PREFIX = "†テネブリス"
 
 STAT_COLUMNS = [
     ("c42_Thrust", "thrust"),
@@ -416,10 +435,14 @@ def main() -> None:
             "reason": reasons[r.item_id],
         })
 
-    write_rust(entries)
+    tenebris_entries = [e for e in entries if e["name"].startswith(TENEBRIS_NAME_PREFIX)]
+    other_entries = [e for e in entries if not e["name"].startswith(TENEBRIS_NAME_PREFIX)]
+
+    write_rust(other_entries)
+    write_tenebris_json(tenebris_entries)
 
     print(f"抽出行(対象部位・EquippableItemTemplate): {len(rows)} 件(uniq item_id 抽出は行っていない、部位フィルタ後 {len(candidates)} 件)", file=sys.stderr)
-    print(f"収録件数: {len(entries)} 件", file=sys.stderr)
+    print(f"収録件数: {len(entries)} 件(うちテネブリス {len(tenebris_entries)} 件は client.rs に書かず tenebris.json へ)", file=sys.stderr)
     print(f"既存カタログと同名で突き合わせ対象: {match_total} 件 / 完全一致: {match_exact} 件 / 不一致: {len(mismatches)} 件", file=sys.stderr)
     for m in mismatches[:10]:
         print(f"  不一致: {m}", file=sys.stderr)
@@ -493,6 +516,47 @@ def write_rust(entries: list[dict]) -> None:
     lines.append("}")
     lines.append("")
     OUT_PATH.write_text("\n".join(lines), encoding="utf-8")
+
+
+def pascal_to_snake(name: str) -> str:
+    """Rust enum バリアント名(PascalCase)→ serde `rename_all = "snake_case"` と同じ形。"""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
+def write_tenebris_json(entries: list[dict]) -> None:
+    """†テネブリス(client.rs から除外ぶん)を、解除時に R2 から取得する形で書き出す。
+    スキーマは `crates/gamedata/src/equipment_catalog/downloaded.rs` の DTO と対で決めている。
+    """
+    stat_keys = [key for _p, key in STAT_COLUMNS]
+
+    def values(triple_csv: str) -> dict:
+        parts = [int(x) for x in triple_csv.split(", ")]
+        return dict(zip(stat_keys, parts))
+
+    items = []
+    for e in entries:
+        items.append({
+            "id": e["id"],
+            "slot": pascal_to_snake(e["slot"]),
+            "name": e["name"],
+            "values_min": values(e["vmin"]),
+            "values_max": values(e["vmax"]),
+            "enchant_total_caps": values(e["vcap"]),
+            "weapon_class": pascal_to_snake(e["weapon_class"]) if e["weapon_class"] else None,
+            "wrist_type": pascal_to_snake(e["wrist_type"]) if e["wrist_type"] else None,
+            "usable_by": e["usable_by"],
+            "source": {
+                "page": f'client DB {e["source_file"]} ItemId {e["item_id"]}',
+                "retrieved_on": TENEBRIS_RETRIEVED_ON,
+                "note": f"収録理由: {'既存カタログと同名' if e['reason'] == 'name_match' else 'Lv280以上'}。EquipType {e['source_file']}",
+            },
+        })
+
+    TENEBRIS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"retrieved_on": TENEBRIS_RETRIEVED_ON, "items": items}
+    TENEBRIS_OUT_PATH.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":

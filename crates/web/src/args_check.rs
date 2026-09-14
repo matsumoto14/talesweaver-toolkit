@@ -123,6 +123,7 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         "preview_damage" => arg_fields::<PreviewDamageArgs>(),
         "evaluate_contents" => arg_fields::<EvaluateContentsArgs>(),
         "list_upgrade_candidates" | "list_enchant_gains" => arg_fields::<CandidateArgs>(),
+        "install_downloaded_equipment" => arg_fields::<InstallDownloadedEquipmentArgs>(),
 
         _ => return None,
     };

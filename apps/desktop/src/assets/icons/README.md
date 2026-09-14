@@ -57,7 +57,7 @@ wiki ではなく**ゲーム内インベントリのスクリーンショット*
 `tools/gamedata/import_ability_icons.py`、元のスクショは `tools/gamedata/screenshots/`。
 古代精霊系・深淵系はスクショが無いので `?` のまま。
 
-2026-09-03に装備 1,171 件(`equipment_catalog/client.rs` の全行。テネブリス・セイクリッドを含む)のアイコンをクライアント展開データ
+2026-09-03に装備 1,171 件(`equipment_catalog/client.rs` の全行。テネブリス・セイクリッドを含む。テネブリスの数値は 2026-09-14 に client.rs から外して R2 取得制にしたが、アイコンは同梱のまま据え置く)のアイコンをクライアント展開データ
 `tw_assets/item_icons/<ItemId>_<名前>.png` から同梱した。wiki・韓国資料由来の 313 件は同じ id で上書き(絵は同じゲーム内画像。
 ピクセル差があったのは 5 件で、クライアント側を正とする)。client に無い wiki 独自行(宝玉付与の名付け・旧装備)と
 レリックは引き続き `?`。再取込は `tools/gamedata/import_client_icons.py`(`import_client_db.py` の後に実行)。

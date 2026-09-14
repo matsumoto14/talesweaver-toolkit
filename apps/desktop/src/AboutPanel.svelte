@@ -10,7 +10,9 @@
   import type { AppInfo } from "./api/types";
   import { IS_DESKTOP } from "./platform";
   import { reportError, reportNotice } from "./toast.svelte";
-  import { setUnlocked, unlock, UNLOCK_TAP_WINDOW_MS, UNLOCK_TAPS } from "./unlock.svelte";
+  import {
+    fetchLockedEquipment, setUnlocked, unlock, UNLOCK_TAP_WINDOW_MS, UNLOCK_TAPS,
+  } from "./unlock.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -29,14 +31,25 @@
   // バージョン表記を続けて押すとロックを切り替える(unlock.svelte.ts)。見た目は変えない
   let taps = 0;
   let lastTapAt = 0;
-  function tapVersion() {
+  async function tapVersion() {
     const now = Date.now();
     taps = now - lastTapAt > UNLOCK_TAP_WINDOW_MS ? 1 : taps + 1;
     lastTapAt = now;
     if (taps < UNLOCK_TAPS) return;
     taps = 0;
-    setUnlocked(!unlock.on);
-    reportNotice(unlock.on ? "追加機能を有効にしました" : "追加機能を無効にしました");
+    const turningOn = !unlock.on;
+    setUnlocked(turningOn);
+    if (!turningOn) {
+      reportNotice("追加機能を無効にしました");
+      return;
+    }
+    // OFF → ON のときだけ取りに行く(ローカルに残っているぶんは消さない)
+    try {
+      const count = await fetchLockedEquipment();
+      reportNotice(`追加機能を有効にしました(テネブリス装備 ${count} 件を取得)`);
+    } catch (error) {
+      reportError(`テネブリス装備を取得できませんでした: ${errorMessage(error)}`);
+    }
   }
 
   const closeOnEscape = (event: KeyboardEvent) => {

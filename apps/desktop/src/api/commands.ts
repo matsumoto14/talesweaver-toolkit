@@ -110,6 +110,9 @@ export const previewVersus = (
     attacker, attackerBuffs, skillId, defender, defenderBuffs, attackerTries, defenderTries,
   });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
+/** 「追加機能の解除」で R2 から取得した装備(テネブリスなど)を合流させる。呼び出しは unlock.svelte.ts */
+export const installDownloadedEquipment = (json: string) =>
+  invoke<number>("install_downloaded_equipment", { json });
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityView[]>("list_equipment_abilities");
 /** 部位の装備候補。キャラの装備可能区分と主軸スキルで適合度を付け、値の大きい順に並べて返す */
 export const listEquipmentCandidates = (

@@ -13,3 +13,6 @@ tmp/
 
 # Subagent の worktree
 .claude/worktrees/
+
+# †テネブリスの数値(配布物・git から外し、解除時に R2 から取得する。tools/gamedata/import_client_db.py)
+tools/gamedata/out/
