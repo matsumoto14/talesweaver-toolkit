@@ -8,7 +8,7 @@ import type {
   RegisteredCharacter,
   StatSources,
 } from "./api/types";
-import { cloneAvatarEnhancements, cloneEquipmentPart, cloneSienaAuras, cloneThesisCores, neutralAvatarEnhancements, neutralEquipmentPart, neutralSienaAuras, neutralThesisCores } from "./equipment";
+import { cloneAvatarEnhancements, cloneEquipmentPart, cloneEquipmentPolishes, cloneSienaAuras, cloneThesisCores, neutralAvatarEnhancements, neutralEquipmentPart, neutralEquipmentPolishes, neutralSienaAuras, neutralThesisCores } from "./equipment";
 import { PART_SLOTS, STAT_KINDS } from "./labels";
 
 /**
@@ -53,6 +53,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   siena: cloneSienaAuras(src.siena),
   thesis_cores: cloneThesisCores(src.thesis_cores),
   avatar: cloneAvatarEnhancements(src.avatar),
+  polish: cloneEquipmentPolishes(src.polish),
   title: src.title ?? null,
 });
 
@@ -62,6 +63,7 @@ export const defaultEquipment = (): Equipment => ({
   siena: neutralSienaAuras(),
   thesis_cores: neutralThesisCores(),
   avatar: neutralAvatarEnhancements(),
+  polish: neutralEquipmentPolishes(),
   title: null,
 });
 

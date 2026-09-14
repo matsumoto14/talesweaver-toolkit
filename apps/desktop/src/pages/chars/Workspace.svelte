@@ -57,6 +57,7 @@
     equipmentAttackRatePercent,
     equipmentBaseTotal,
     equipmentEnhancedTotal,
+    polishSummary,
     randomOptionRecordOnlyCount,
     sharpnessRatePercent as sharpnessRatePercentOf,
     thesisCoreBestTotal,
@@ -417,6 +418,9 @@
   // アバター強化の要約(能力値ごとの Σ、非 0 だけ)。Workspace 行サブタイトルとペイン見出しが
   // 同じ関数を呼ぶ(summaries.ts)
   const avatarSummary = $derived(avatarEnhanceSummary(draft));
+  // 研磨の要約(記録した部位・種類・対象だけ。実際の加算値はバフ「装備研磨」の ON/OFF に依存
+  // するのでここには出さない)。Workspace 行サブタイトルと PolishPane が同じ関数を呼ぶ(summaries.ts)
+  const polishSummaryText = $derived(polishSummary(draft));
   const roCount = $derived(randomOptionCount(draft.equipment));
   /** ランダムOP のうち記録するだけの枠数。行サブタイトルと RandomOptionPane の両方が使うので
    *  summaries.ts の共有関数(計算は Rust 側 preview) */
@@ -544,6 +548,11 @@
       name: "アバター強化",
       sub: avatarSummary === "未使用" ? NEUTRAL : avatarSummary,
     },
+    {
+      id: "polish",
+      name: "研磨",
+      sub: polishSummaryText === "未使用" ? NEUTRAL : polishSummaryText,
+    },
     { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
     { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
     {
@@ -566,7 +575,7 @@
   //
   // ★ はホームタブのコンテンツと同じ操作なので、覚えることが増えない。
   const DEFAULT_ORDER: SourceId[] = [
-    "status", "skills", "equipment", "soulLink", "commonSkill", "thesis", "avatar", "siena", "relic",
+    "status", "skills", "equipment", "soulLink", "commonSkill", "thesis", "avatar", "polish", "siena", "relic",
     "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
     "title", "randomOption",
   ];

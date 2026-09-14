@@ -183,4 +183,28 @@ mod tests {
         assert_eq!(modifiers.get(StatKind::Stab).fixed, 20);
         assert_eq!(modifiers.get(StatKind::Hack).fixed, 20);
     }
+
+    /// バフ「装備研磨」(`RecordOnly`。ステには乗らず ON/OFF だけを持つ)を含むバフセットが
+    /// 保存できる(2026-09-15 追加)。
+    #[test]
+    fn 装備研磨バフを含むバフセットを保存できる() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let catalog = gamedata::buff_catalog();
+        let choices = domain::BuffSelection {
+            choices: vec![domain::BuffChoice {
+                buff_id: "equipment_polish".to_string(),
+                stat: None,
+                choice_index: None,
+                value: None,
+            }],
+        };
+        let saved = repo
+            .create_buff_set("研磨テスト", &choices, &catalog)
+            .unwrap();
+        assert!(saved
+            .choices
+            .choices
+            .iter()
+            .any(|c| c.buff_id == "equipment_polish"));
+    }
 }

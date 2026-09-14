@@ -22,6 +22,7 @@ pub mod enchant;
 pub mod enemy;
 pub mod equipment;
 pub mod equipment_class;
+pub mod equipment_polish;
 pub mod game_tables;
 pub mod growth_apply;
 pub mod mastery;
@@ -101,6 +102,7 @@ pub use equipment_class::{
     ArmorClass, CharacterEquipmentClasses, EquipmentFitRule, FitCriterion, ItemClassification,
     ItemFit, WeaponClass, WeaponSystem, WristType,
 };
+pub use equipment_polish::{EquipmentPolish, EquipmentPolishError, EquipmentPolishes, PolishKind};
 pub use equipment::{
     ability_candidates, ability_value_rooms, armor_added_hp, equipment_attack_parts,
     equipment_attack_power, AbilityRoom, AbilityRoomAction,
@@ -143,7 +145,8 @@ pub use stat_sources::{
     apply_unleash, buff_target_stat_gains, build_modifiers, build_stat_modifiers,
     contribution_source_effects,
     group_source_effects,
-    effective_stats_of, equipment_base_total, preview_effective_stats, stat_limits,
+    effective_stats_of, equipment_base_total, equipment_polish_active, preview_effective_stats, stat_limits,
+    EQUIPMENT_POLISH_BUFF_ID,
     summarize_buff_selection, Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice,
     BuffDamageEffect, BuffDamageSummary, BuffDefinition, BuffOrigin, BuffPurpose, BuffSelection, BuffTarget,
     BuffTargetStatGain,

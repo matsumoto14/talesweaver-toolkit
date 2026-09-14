@@ -829,6 +829,21 @@ export interface AvatarEnhancements {
   effect: EquipmentValues;
 }
 
+// 装備研磨の種類。crates/domain/src/equipment_polish.rs の PolishKind。
+export type PolishKind = "sparkle" | "artisan" | "holy";
+
+// 装備 1 部位ぶんの研磨記録。crates/domain/src/equipment_polish.rs の EquipmentPolish。
+export interface EquipmentPolish {
+  slot: PartSlot;
+  kind: PolishKind;
+  stat: EquipmentStatKind;
+}
+
+// キャラの装備研磨一覧(1 部位に同時1つ)。crates/domain/src/equipment_polish.rs の EquipmentPolishes。
+export interface EquipmentPolishes {
+  entries: EquipmentPolish[];
+}
+
 // テシスコアの地域。crates/domain/src/thesis_core.rs の CoreRegion(snake_case)。
 export type CoreRegion = "mercurial" | "abyss" | "eclipse" | "rubicona";
 
@@ -936,6 +951,8 @@ export interface Equipment {
   thesis_cores: ThesisCores;
   /** アバター強化(兜・頭・体・脚・エフェクトの5部位)。強化能力値へ合流 */
   avatar: AvatarEnhancements;
+  /** 装備研磨(部位ごとに能力値1つを上げる消耗品)。基本能力値へ合流 */
+  polish: EquipmentPolishes;
   /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
   title: string | null;
 }
@@ -1316,6 +1333,10 @@ export interface StatPreview {
   equipment_base_total: EquipmentValues;
   /** 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳) */
   part_ability_values: PartEquipmentValues[];
+  /** 基本能力値のうち装備研磨由来の分だけを部位別に割ったもの(表示用の内訳)。バフ「装備研磨」が OFF なら全部位 0 */
+  part_polish_values: PartEquipmentValues[];
+  /** バフ「装備研磨」がこのプレビューのバフ選択(いつものバフ)で ON か */
+  equipment_polish_active: boolean;
   /** シエナのオーラの能力値スロットの装備補正(部位別。武器/盾以外は常に 0) */
   siena_part_values: PartEquipmentValues[];
   /** 一番伸びている地域のコア合計。地域ごとに別のセットなので合算はできない(Rust が出す) */

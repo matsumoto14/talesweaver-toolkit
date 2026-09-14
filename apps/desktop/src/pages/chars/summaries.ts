@@ -2,7 +2,7 @@
 // 両方から呼ぶ純関数。preview(計算結果)/ draft(編集中の値)を受け取り、表示用の値だけを返す
 // (draft を書き換える副作用は持たない)。ロジックを 2 か所にコピーしないための置き場所。
 import type { EquipmentStatKind } from "../../labels";
-import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_LABELS } from "../../labels";
+import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, POLISH_KIND_LABELS, STAT_LABELS } from "../../labels";
 import { tables } from "../../tables.svelte";
 import type { EquipmentValues, SkillDependency, StatPreview } from "../../api/types";
 import type { Draft } from "../../draft";
@@ -69,6 +69,19 @@ export function unleashSummary(draft: Draft): string {
 /** ランダムOP のうち、発動条件付きで記録するだけの枠数。計算は Rust 側(preview) */
 export function randomOptionRecordOnlyCount(preview: StatPreview | null): number {
   return preview?.random_option_totals.record_only_count ?? 0;
+}
+
+/**
+ * 装備研磨の記録一覧の要約。例「武器 職人 突き ・ 鎧 聖なる 物防」。
+ * ペイン見出しと Workspace の行サブタイトルの両方がこの関数を呼ぶ(2 か所にロジックを置かない)。
+ * 実際の加算値(効いている量)はバフ「装備研磨」の ON/OFF に依存するので、ここでは種類・対象だけ出す。
+ */
+export function polishSummary(draft: Draft): string {
+  return (
+    draft.equipment.polish.entries
+      .map((entry) => `${PART_SLOT_LABELS[entry.slot]} ${POLISH_KIND_LABELS[entry.kind]} ${EQUIPMENT_STAT_SHORT[entry.stat]}`)
+      .join(" ・ ") || "未使用"
+  );
 }
 
 /**

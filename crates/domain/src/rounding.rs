@@ -32,6 +32,11 @@ pub fn trunc2(value: f64) -> f64 {
     (value * 100.0 + EPSILON).floor() / 100.0
 }
 
+/// 小数点以下切上げ(装備研磨の % 計算など「端数を切り上げる」式に使う)。
+pub fn ceil_int(value: f64) -> i64 {
+    (value - EPSILON).ceil() as i64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,5 +105,19 @@ mod tests {
         // 3.4999999999999996 は本来 3.5 の丸め誤差 → 4 に繰り上がる
         assert_eq!(round_int(3.4999999999999996), 4);
         assert_eq!(round_int(-3.4999999999999996), -4);
+    }
+
+    #[test]
+    fn ceil_int_は小数点以下を切上げる() {
+        assert_eq!(ceil_int(3.0), 3);
+        assert_eq!(ceil_int(3.001), 4);
+        assert_eq!(ceil_int(0.0), 0);
+        assert_eq!(ceil_int(0.99), 1);
+    }
+
+    #[test]
+    fn ceil_int_は浮動小数誤差を吸収する() {
+        // 33 * 0.03 = 0.9900000000000001 のような誤差で 2 に繰り上がらない
+        assert_eq!(ceil_int(33.0 * 0.03), 1);
     }
 }
