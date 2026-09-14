@@ -23,9 +23,7 @@
   import { errorMessage } from "../../../api/commands";
   import { fmtInt } from "../../../format";
   import {
-    ABILITY_ALLOWED_SLOTS, ELEMENT_ALLOWED_SLOTS, ENHANCE_ALLOWED_SLOTS,
-    EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT,
-    PART_SLOT_LABELS, PART_SLOTS, RANDOM_OPTION_ALLOWED_SLOTS,
+    ABILITY_ALLOWED_SLOTS, ELEMENT_ALLOWED_SLOTS, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, OTHER_EQUIPMENT_STATS, PART_SLOTS, PART_SLOT_LABELS, PRIMARY_EQUIPMENT_STATS, RANDOM_OPTION_ALLOWED_SLOTS,
   } from "../../../labels";
   import type { EquipmentStatKind } from "../../../labels";
   import { limits } from "../../../limits.svelte";
@@ -48,11 +46,6 @@
   }
   let { draft, preview, skills }: Props = $props();
 
-  /** 装備で日常的にエンチャントする4補正。ゲーム内の呼び方どおり S/H/I/M を先に並べる。 */
-  const PRIMARY_EQUIPMENT_STATS: EquipmentStatKind[] = ["thrust", "slash", "magic_attack", "magic_defense"];
-  const OTHER_EQUIPMENT_STATS: EquipmentStatKind[] = EQUIPMENT_STAT_KINDS.filter(
-    (kind) => !PRIMARY_EQUIPMENT_STATS.includes(kind),
-  );
   /** 通常エンチャントを持つ全部位。成長装備の盾+とレリックは別の入力モデル。 */
   const ENCHANT_PLAN_SLOTS = new Set<PartSlot>([
     "weapon", "armor", "helm", "shield", "head", "body", "hand", "leg", "effect", "artifact",

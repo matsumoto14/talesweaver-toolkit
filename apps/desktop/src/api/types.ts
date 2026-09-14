@@ -816,6 +816,19 @@ export interface ConditionalAddedDamage {
   condition: AddedDamageCondition;
 }
 
+// アバターの部位(兜/頭/体/脚/エフェクト)。crates/domain/src/avatar_enhance.rs の AvatarPart。
+export type AvatarPart = "helm" | "head" | "body" | "legs" | "effect";
+
+// アバター5部位の強化値一式。部位ごとに装備補正9値を重ねられる。
+// crates/domain/src/avatar_enhance.rs の AvatarEnhancements。
+export interface AvatarEnhancements {
+  helm: EquipmentValues;
+  head: EquipmentValues;
+  body: EquipmentValues;
+  legs: EquipmentValues;
+  effect: EquipmentValues;
+}
+
 // テシスコアの地域。crates/domain/src/thesis_core.rs の CoreRegion(snake_case)。
 export type CoreRegion = "mercurial" | "abyss" | "eclipse" | "rubicona";
 
@@ -921,6 +934,8 @@ export interface Equipment {
   siena: SienaAuras;
   /** テシスコア(地域ごとに 6 枠) */
   thesis_cores: ThesisCores;
+  /** アバター強化(兜・頭・体・脚・エフェクトの5部位)。強化能力値へ合流 */
+  avatar: AvatarEnhancements;
   /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
   title: string | null;
 }
@@ -1837,6 +1852,8 @@ export interface StatLimits {
   core_slot_count: number;
   core_evolution_max: number;
   core_enhancement_max: number;
+  /** アバター強化 1 個あたりの値の上限(wiki: 現行アバター強化剤は +10 / +12) */
+  avatar_enhance_max: number;
   /** 装備 1 部位に付与できる属性値の上限 */
   equipment_element_value_max: number;
   /** キャラの属性値の上限 */

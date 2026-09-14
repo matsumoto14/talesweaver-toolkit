@@ -2,11 +2,12 @@
 // 両方から呼ぶ純関数。preview(計算結果)/ draft(編集中の値)を受け取り、表示用の値だけを返す
 // (draft を書き換える副作用は持たない)。ロジックを 2 か所にコピーしないための置き場所。
 import type { EquipmentStatKind } from "../../labels";
-import { STAT_LABELS } from "../../labels";
+import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, STAT_LABELS } from "../../labels";
 import { tables } from "../../tables.svelte";
 import type { EquipmentValues, SkillDependency, StatPreview } from "../../api/types";
 import type { Draft } from "../../draft";
-import { zeroValues } from "../../equipment";
+import { avatarEnhanceTotals, zeroValues } from "../../equipment";
+import { fmtInt } from "../../format";
 
 /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの依存種別から絞る。 */
 export function equipmentAttackKindsFor(dependency: SkillDependency | null): EquipmentStatKind[] {
@@ -68,4 +69,17 @@ export function unleashSummary(draft: Draft): string {
 /** ランダムOP のうち、発動条件付きで記録するだけの枠数。計算は Rust 側(preview) */
 export function randomOptionRecordOnlyCount(preview: StatPreview | null): number {
   return preview?.random_option_totals.record_only_count ?? 0;
+}
+
+/**
+ * アバター強化の「効いている量」要約(能力値ごとの Σ、非 0 だけ)。例「突き +60 ・ 命中 +24」。
+ * ペイン見出しと Workspace の行サブタイトルの両方がこの関数を呼ぶ(2 か所にロジックを置かない)。
+ */
+export function avatarEnhanceSummary(draft: Draft): string {
+  const totals = avatarEnhanceTotals(draft.equipment.avatar);
+  return (
+    EQUIPMENT_STAT_KINDS.filter((k) => totals[k] > 0)
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(totals[k])}`)
+      .join(" ・ ") || "未使用"
+  );
 }

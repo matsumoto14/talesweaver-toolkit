@@ -51,6 +51,7 @@
   // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
   import "./sources/pane-shared.css";
   import {
+    avatarEnhanceSummary,
     defenseRatePercent as defenseRatePercentOf,
     equipmentAttackKindsFor,
     equipmentAttackRatePercent,
@@ -413,6 +414,9 @@
   // テシスコアの合計(コア効果の最大)は行サブタイトルにだけ出す。セット効果・地域別の内訳は
   // ThesisCorePane 側(結果の置き場所)。計算は Rust 側(preview.thesis_cores)
   const coreBestTotal = $derived(thesisCoreBestTotal(preview));
+  // アバター強化の要約(能力値ごとの Σ、非 0 だけ)。Workspace 行サブタイトルとペイン見出しが
+  // 同じ関数を呼ぶ(summaries.ts)
+  const avatarSummary = $derived(avatarEnhanceSummary(draft));
   const roCount = $derived(randomOptionCount(draft.equipment));
   /** ランダムOP のうち記録するだけの枠数。行サブタイトルと RandomOptionPane の両方が使うので
    *  summaries.ts の共有関数(計算は Rust 側 preview) */
@@ -535,6 +539,11 @@
       name: "テシスコア",
       sub: coreBestTotal > 0 ? `最大 合計 ${fmtInt(coreBestTotal)}` : NEUTRAL,
     },
+    {
+      id: "avatar",
+      name: "アバター強化",
+      sub: avatarSummary === "未使用" ? NEUTRAL : avatarSummary,
+    },
     { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
     { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
     {
@@ -557,7 +566,7 @@
   //
   // ★ はホームタブのコンテンツと同じ操作なので、覚えることが増えない。
   const DEFAULT_ORDER: SourceId[] = [
-    "status", "skills", "equipment", "soulLink", "commonSkill", "thesis", "siena", "relic",
+    "status", "skills", "equipment", "soulLink", "commonSkill", "thesis", "avatar", "siena", "relic",
     "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
     "title", "randomOption",
   ];
