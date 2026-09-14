@@ -359,8 +359,9 @@ export type SkillEffect =
   | { accuracy_point: { value: number; exclusive_with: string[] } }
   /** 最小回避率補正への加算(wiki #HitRateCap)。値は % 表記の整数 */
   | { min_evasion_rate: { value: number } }
-  /** 命中P割合増加(的中剣系。SLv に比例。値自体は持たず CharacterSkills.skill_levels から引く) */
-  | "accuracy_rate_boost"
+  /** 命中P割合増加(的中剣系)。倍率は `1 + per_level × SLv`、SLv ごとの固定変動が shift[SLv-1]。
+   * SLv は CharacterSkills.skill_levels から引く */
+  | { accuracy_rate: { per_level: number; shift: number[] } }
   /** 記録するだけ(防御側・確率発動・条件付きで未配線) */
   | "record_only";
 
