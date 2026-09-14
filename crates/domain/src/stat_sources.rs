@@ -1237,6 +1237,13 @@ pub struct StatPreview {
     /// 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳)。
     /// 正は `Equipment::ability_values_by_part`
     pub part_ability_values: Vec<PartEquipmentValues>,
+    /// 基本能力値のうち装備研磨由来の分だけを部位別に割ったもの(表示用の内訳)。
+    /// バフ「装備研磨」が OFF なら全部位 0。正は `Equipment::polish_values_by_part`
+    pub part_polish_values: Vec<PartEquipmentValues>,
+    /// バフ「装備研磨」(`EQUIPMENT_POLISH_BUFF_ID`)がこのプレビューの `buffs` で ON か。
+    /// 画面が「記録はあるが効いていない」を言うための正(`part_polish_values` の非 0 判定は
+    /// 記録が無い・未装備のとき ON/OFF を区別できない)
+    pub equipment_polish_active: bool,
     /// シエナのオーラの能力値スロットの装備補正(部位別。武器/盾以外は常に 0)。
     /// 正は `SienaAura::values`
     pub siena_part_values: Vec<PartEquipmentValues>,
@@ -1616,9 +1623,24 @@ fn effective_stats_with(
     Ok((stats, traces, source_effects))
 }
 
+/// バフカタログ上のバフ id(装備研磨)。`buffs.choices` にこの id があるかだけを見る
+/// (`equipment_polish_active`)。バフ本体は `BuffValue::RecordOnly` でステには乗らず、
+/// 記録(`Equipment::polish`)を効かせる/効かせないの ON/OFF だけを持つ。
+pub const EQUIPMENT_POLISH_BUFF_ID: &str = "equipment_polish";
+
+/// バフ「装備研磨」が ON か。ON のときだけ `Equipment::polish` の記録を基本能力値に合流させる
+/// (`Equipment::base_sources` / `base_totals` の `polish_active` 引数に渡す)。
+pub fn equipment_polish_active(buffs: &BuffSelection) -> bool {
+    buffs
+        .choices
+        .iter()
+        .any(|c| c.buff_id == EQUIPMENT_POLISH_BUFF_ID)
+}
+
 /// 最終能力値と装備から攻撃力(A)を内訳付きで出す。ダメージ計算(`calculate_damage`)と
 /// 同じ `attack_power_breakdown` を通す(計算を二重に書かない)。
 /// テシスコアは地域依存なのでキャラ画面では地域なし(`enhanced_totals(None)`)で出す。
+#[allow(clippy::too_many_arguments)]
 fn attack_power_of(
     stats: &EffectiveStats,
     equipment: &Equipment,
@@ -1626,13 +1648,14 @@ fn attack_power_of(
     common: &CommonSkills,
     abilities: &[EquipmentAbilityDef],
     titles: &[TitleDef],
+    polish_active: bool,
     coefficients: &AttackPowerCoefficients,
 ) -> AttackPowerBreakdown {
     attack_power_breakdown(
         stat_attack_power(stats, &coefficients.stat),
         equipment_values_attack(
             &equipment
-                .base_totals(abilities, titles)
+                .base_totals(abilities, titles, polish_active)
                 .add(soul_link.equipment_values()),
             &coefficients.equipment.base,
         ),
@@ -1724,9 +1747,10 @@ pub fn equipment_base_total(
     soul_link: SoulLinkStatus,
     abilities: &[EquipmentAbilityDef],
     titles: &[TitleDef],
+    polish_active: bool,
 ) -> EquipmentValues {
     equipment
-        .base_totals(abilities, titles)
+        .base_totals(abilities, titles, polish_active)
         .add(soul_link.equipment_values())
 }
 
@@ -1768,6 +1792,7 @@ pub fn preview_effective_stats(
     base.validate()?;
     sources.validate()?;
     equipment.validate()?;
+    let polish_active = equipment_polish_active(buffs);
     let (stats, traces, source_effects) = effective_stats_with(
         base,
         sources,
@@ -1788,6 +1813,7 @@ pub fn preview_effective_stats(
                     common,
                     abilities,
                     titles,
+                    polish_active,
                     &coefficients,
                 );
             // 部位を外すとシエナのオーラのステ加算も消える = 最終能力値まで動く。
@@ -1811,6 +1837,7 @@ pub fn preview_effective_stats(
                     common,
                     abilities,
                     titles,
+                    polish_active,
                     &coefficients,
                 );
                 part_contributions.push(PartAttackContribution {
@@ -1838,8 +1865,10 @@ pub fn preview_effective_stats(
         .iter()
         .map(|&k| sacred_relic_value(sources.sacred_relic.get(k)))
         .sum();
-    let equipment_base_total = equipment_base_total(equipment, sources.soul_link, abilities, titles);
+    let equipment_base_total =
+        equipment_base_total(equipment, sources.soul_link, abilities, titles, polish_active);
     let part_ability_values = equipment.ability_values_by_part(abilities);
+    let part_polish_values = equipment.polish_values_by_part(polish_active);
     let siena_part_values = equipment
         .siena
         .iter_selected()
@@ -1912,6 +1941,8 @@ pub fn preview_effective_stats(
         soul_link: sources.soul_link.preview(),
         equipment_base_total,
         part_ability_values,
+        part_polish_values,
+        equipment_polish_active: polish_active,
         siena_part_values,
         thesis_cores,
         equipment_enhanced_total: equipment.enhanced_totals(None),
@@ -4029,5 +4060,19 @@ mod tests {
 
         // 何も積んでいなければ 5 源すべてが伸びしろになる
         assert_eq!(stat_fixed_rooms(&StatSources::default(), StatKind::Agi).len(), 5);
+    }
+
+    #[test]
+    fn equipment_polish_activeはバフ選択のidだけを見る() {
+        let mut buffs = BuffSelection::default();
+        assert!(!equipment_polish_active(&buffs));
+
+        buffs.choices.push(BuffChoice {
+            buff_id: EQUIPMENT_POLISH_BUFF_ID.to_string(),
+            stat: None,
+            choice_index: None,
+            value: None,
+        });
+        assert!(equipment_polish_active(&buffs));
     }
 }

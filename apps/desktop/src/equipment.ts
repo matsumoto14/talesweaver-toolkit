@@ -2,14 +2,16 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  AvatarEnhancements, CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList, EquipmentValues,
+  AvatarEnhancements, CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList,
+  EquipmentPolishes, EquipmentValues,
   RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
   SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores,
 } from "./api/types";
 import {
-  AVATAR_PARTS, CORE_REGIONS, CORE_SLOT_COUNT, EQUIPMENT_STAT_KINDS,
+  AVATAR_PARTS, CORE_REGIONS, CORE_SLOT_COUNT, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS,
   EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS,
 } from "./labels";
+import type { PartSlot, PolishKind } from "./api/types";
 import { tables } from "./tables.svelte";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
@@ -120,6 +122,27 @@ export const avatarEnhanceTotals = (src: AvatarEnhancements): EquipmentValues =>
     for (const k of EQUIPMENT_STAT_KINDS) sum[k] += src[p][k];
     return sum;
   }, zeroValues());
+
+export const neutralEquipmentPolishes = (): EquipmentPolishes => ({ entries: [] });
+
+export const cloneEquipmentPolishes = (src: EquipmentPolishes): EquipmentPolishes => ({
+  entries: src.entries.map((e) => ({ ...e })),
+});
+
+/** 部位が「研磨剤」(武器・鎧)か「ワックス」(それ以外)か。Rust の PartSlot::allows_enhance と同じ判定。 */
+export const polishProductLabel = (slot: PartSlot): "研磨剤" | "ワックス" =>
+  ENHANCE_ALLOWED_SLOTS.includes(slot) ? "研磨剤" : "ワックス";
+
+/**
+ * `base` 1 値に研磨をかけた加算量。正は crates/domain/src/equipment_polish.rs の
+ * `PolishKind::amount`(切り上げ・聖なるの武器/鎧+4・それ以外+2)。表示のプレビューにのみ使い、
+ * 計算・保存は Rust 側が正。
+ */
+export const polishAmount = (kind: PolishKind, slot: PartSlot, base: number): number => {
+  if (kind === "holy") return ENHANCE_ALLOWED_SLOTS.includes(slot) ? 4 : 2;
+  const rate = kind === "sparkle" ? 0.03 : 0.05;
+  return Math.ceil(base * rate - 1e-9);
+};
 
 export const neutralEquipmentPart = (): EquipmentPart => ({
   id: 0,

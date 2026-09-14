@@ -19,6 +19,7 @@
   import "./sources/pane-shared.css";
   import ActualDelayPane from "./sources/ActualDelayPane.svelte";
   import AvatarPane from "./sources/AvatarPane.svelte";
+  import PolishPane from "./sources/PolishPane.svelte";
   import CharacterSkillPane from "./sources/CharacterSkillPane.svelte";
   import CommonSkillPane from "./sources/CommonSkillPane.svelte";
   import CriticalRatePane from "./sources/CriticalRatePane.svelte";
@@ -149,6 +150,7 @@
     commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
     avatar: { title: "アバター強化", note: "兜・頭・体・脚・エフェクトの5部位に強化剤で付与" },
+    polish: { title: "研磨", note: "部位ごとに能力値1つを研磨剤/ワックスで上げる" },
     skills: { title: "キャラスキル", note: "マスタリー(段ごとに 1 つ)と、自分・味方のスキル" },
     actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
     criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 +${limits.critical_rate_bonus_max}%)` },
@@ -312,6 +314,8 @@
     <ThesisCorePane {draft} {preview} />
   {:else if sourceId === "avatar"}
     <AvatarPane {draft} />
+  {:else if sourceId === "polish"}
+    <PolishPane {draft} {preview} dependency={equipmentMainSkill?.dependency ?? null} />
   {:else if sourceId === "actualDelay"}
     <ActualDelayPane {draft} {preview} {resolvedSkillEffects} {onOpenSource} />
   {:else if sourceId === "criticalRate"}

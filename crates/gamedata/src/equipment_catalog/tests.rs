@@ -143,7 +143,7 @@ fn ボリスとマキシミンは腕の突き基本とエンチャントを魔�
         );
         assert_eq!(bonus.magic_attack, 135, "{character}");
         assert_eq!(bonus.thrust, 0, "元の突き値を移動せず派生値だけ返す");
-        let base = equipment.base_totals(&[], &[]).add(bonus);
+        let base = equipment.base_totals(&[], &[], false).add(bonus);
         let enhanced = equipment.enhanced_totals(None);
         assert_eq!(base.magic_attack, 135, "変換結果は基本能力値へ入る");
         assert_eq!(

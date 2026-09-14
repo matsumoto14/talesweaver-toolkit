@@ -18,4 +18,5 @@ export type SourceId =
   | "criticalRate"
   | "thesis"
   | "avatar"
+  | "polish"
   | "skills";

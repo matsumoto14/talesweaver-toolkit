@@ -1238,6 +1238,7 @@ fn combat_stats_of(
         character.stat_sources.soul_link,
         &abilities,
         &titles,
+        domain::equipment_polish_active(buffs),
     );
     Ok((stats, base_total))
 }
@@ -1395,8 +1396,11 @@ fn build_damage_input(
     )?;
     let skill = resolve_combo_skill_type(skill, &equipment, combo_skill_type)?;
     let equipment_catalog = gamedata::equipment_catalog();
-    let mut equipment_base_sources =
-        equipment.base_sources(&gamedata::equipment_abilities(), &gamedata::title_catalog());
+    let mut equipment_base_sources = equipment.base_sources(
+        &gamedata::equipment_abilities(),
+        &gamedata::title_catalog(),
+        domain::equipment_polish_active(buffs),
+    );
     if let Some(source) = stat_sources.soul_link.equipment_source() {
         equipment_base_sources.push(source);
     }
@@ -1580,9 +1584,11 @@ pub fn evaluate_contents(
         character.awakening,
         None,
     )?;
-    let mut equipment_base_sources_raw = character
-        .equipment
-        .base_sources(&equipment_abilities, &titles);
+    let mut equipment_base_sources_raw = character.equipment.base_sources(
+        &equipment_abilities,
+        &titles,
+        domain::equipment_polish_active(&buffs),
+    );
     if let Some(source) = character.stat_sources.soul_link.equipment_source() {
         equipment_base_sources_raw.push(source);
     }

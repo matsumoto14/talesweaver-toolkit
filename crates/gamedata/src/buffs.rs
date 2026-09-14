@@ -17,8 +17,9 @@ pub const BUFF_CATALOG_SOURCE: Source = Source {
     page: "ステータス#jc16a054",
     retrieved_on: "2026-08-31",
     note: "常用バフ44件。計算カテゴリと数値は本ページ、個別アイテムと入手手段は Item/消耗品/ステータス補助・クラブを参照。\
-           命中P増加バフ3件(archer_rune/hard_weapon_earl/play_tincture)は計算式まとめ#AccuracyPoint 由来で\
-           カタログ全体は47件になる(出典は各エントリの source_url を参照)",
+           命中P増加バフ3件(archer_rune/hard_weapon_earl/play_tincture)は計算式まとめ#AccuracyPoint 由来、\
+           装備研磨(equipment_polish)はクライアント DB 由来で\
+           カタログ全体は48件になる(出典は各エントリの source_url を参照)",
 };
 
 /// 常用バフのカタログ。
@@ -749,6 +750,24 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 15.0 }],
         },
+        BuffDefinition {
+            id: "equipment_polish",
+            name: "装備研磨",
+            purposes: &[BuffPurpose::Stats],
+            origin: BuffOrigin::Item,
+            // ステには効かないので対象・層は使わない(`RecordOnly` で加算されない)。
+            // 実際の効き先はキャラタブ「研磨」で部位ごとに記録した装備研磨(基本能力値へ合流)
+            target: BuffTarget::AllStats,
+            layer: StatLayer::Fixed,
+            value: BuffValue::RecordOnly,
+            exclusive_slots: vec![],
+            source_url: EQUIPMENT_POLISH_WIKI_URL,
+            note: "キャラタブ「研磨」で記録した研磨剤/ワックスを効かせる。値はクライアント DB\
+                   (dm_00000_0425/0481): ピカピカ 3% / 職人 5%(素の補正比・切り上げ)、\
+                   聖なる +4(武器・鎧)/ +2(それ以外)。wiki の 7% / +10 は旧値なので使わない",
+            default_value: None,
+            damage_effects: &[],
+        },
     ]
 }
 
@@ -758,6 +777,8 @@ const ACCURACY_POINT_WIKI_URL: &str =
     "https://talewiki.com/?%B7%D7%BB%BB%BC%B0%A4%DE%A4%C8%A4%E1#AccuracyPoint";
 const ITEM_BUFF_WIKI_URL: &str = "https://talewiki.com/?cmd=read&page=Item%2F%BE%C3%CC%D7%C9%CA%2F%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9%CA%E4%BD%F5";
 const CLUB_WIKI_URL: &str = "https://talewiki.com/?%A5%AF%A5%E9%A5%D6#club_S_effect";
+/// wiki ステータスページ「その他のバフ」節相当(値は旧く、正はクライアント DB)。
+const EQUIPMENT_POLISH_WIKI_URL: &str = "https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9#battle";
 
 #[cfg(test)]
 mod tests {
@@ -765,10 +786,11 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn 常用バフは47件() {
+    fn 常用バフは48件() {
         // ステータス#jc16a054 の 44 件 + 計算式まとめ#AccuracyPoint の命中P増加バフ 3 件
         // (archer_rune / hard_weapon_earl / play_tincture。tales_weaver_energy は既存の44件に含む)
-        assert_eq!(buff_catalog().len(), 47);
+        // + 装備研磨(equipment_polish、2026-09-15 追加)
+        assert_eq!(buff_catalog().len(), 48);
         assert!(!buff_catalog().iter().any(|d| d.id == "unleash"));
         assert!(!buff_catalog().iter().any(|d| d.id == "soul_link_status"));
     }

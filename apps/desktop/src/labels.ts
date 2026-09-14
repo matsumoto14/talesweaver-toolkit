@@ -1,7 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
   AvatarPart, CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentStatKind, PartSlot, PetSkillTier,
-  SienaAuras, RandomOptionRank, SkillDependency, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
+  PolishKind, SienaAuras, RandomOptionRank, SkillDependency, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
 } from "./api/types";
 import { limits } from "./limits.svelte";
 import { tables } from "./tables.svelte";
@@ -156,6 +156,16 @@ export const AVATAR_PARTS: AvatarPart[] = ["helm", "head", "body", "legs", "effe
 export const AVATAR_PART_LABELS: Record<AvatarPart, string> = {
   helm: "兜", head: "頭", body: "体", legs: "脚", effect: "エフェクト",
 };
+
+// 装備研磨(crates/domain/src/equipment_polish.rs の PolishKind)。研磨対象の部位はレリック
+// (段階成長の別モデル)を除いた PART_SLOTS。「研磨剤」/「ワックス」の呼び分け(equipment.ts の
+// polishProductLabel)は部位から決まる(武器・鎧 = 研磨剤、それ以外 = ワックス)。
+export const POLISH_KIND_LABELS: Record<PolishKind, string> = {
+  sparkle: "ピカピカ", artisan: "職人", holy: "聖なる",
+};
+export const POLISH_ALLOWED_SLOTS: PartSlot[] = PART_SLOTS.filter(
+  (slot) => slot !== "relic_pendant" && slot !== "relic_bracelet",
+);
 
 // テシスコアの地域(crates/domain/src/thesis_core.rs の CoreRegion)。順序は Rust の CoreRegion::ALL。
 export const CORE_REGIONS: CoreRegion[] = [...tables.core_regions];

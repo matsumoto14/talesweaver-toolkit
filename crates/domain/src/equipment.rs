@@ -6,6 +6,7 @@
 //! + アバター強化。
 
 use crate::avatar_enhance::{AvatarEnhanceError, AvatarEnhancements};
+use crate::equipment_polish::{EquipmentPolishError, EquipmentPolishes};
 use crate::category::DamageCategory;
 use crate::character_skill::{damage_contributions, SkillEffect};
 use crate::damage::DamageContribution;
@@ -862,6 +863,8 @@ pub enum EquipmentError {
     Siena(#[from] SienaError),
     #[error(transparent)]
     Avatar(#[from] AvatarEnhanceError),
+    #[error(transparent)]
+    Polish(#[from] EquipmentPolishError),
 }
 
 /// 装備強化の追加効果補正式。武器は固定ダメージ、鎧は追加HPを算出する。
@@ -1061,6 +1064,10 @@ pub struct Equipment {
     /// (wiki: 計算式まとめ「強化能力値」。期限は持たない)
     #[serde(default)]
     pub avatar: AvatarEnhancements,
+    /// 装備研磨(部位ごとに能力値 1 つを上げる消耗品)。基本能力値へ合流する
+    /// (`docs/adr/005-siena-thesis-core.md` 2026-09-15 追記。期限は持たない)
+    #[serde(default)]
+    pub polish: EquipmentPolishes,
     /// 表示中の称号(`TitleDef::id`)。**1 枠だけ**で、補正は基本能力値へ合流する
     /// (wiki: 称号システム。所持ぶんの累積ではない)。`None` = 未装備
     #[serde(default)]
@@ -1269,6 +1276,7 @@ impl Equipment {
         self.siena.validate()?;
         self.thesis_cores.validate()?;
         self.avatar.validate()?;
+        self.polish.validate()?;
         Ok(())
     }
 
@@ -1633,16 +1641,21 @@ impl Equipment {
         &self,
         abilities: &[EquipmentAbilityDef],
         titles: &[TitleDef],
+        polish_active: bool,
     ) -> EquipmentValues {
-        sum_equipment_value_sources(&self.base_sources(abilities, titles))
+        sum_equipment_value_sources(&self.base_sources(abilities, titles, polish_active))
     }
 
-    /// 基本能力値の供給源内訳(部位の実測値 → 部位アビリティ → 称号の順)。
+    /// 基本能力値の供給源内訳(部位の実測値 → 部位ごとの研磨 → 部位アビリティ → 称号の順)。
     /// 全 0 の供給源は入れない。`base_totals` はこの Σ(計算を二重に書かない)。
+    ///
+    /// `polish_active` はバフ「装備研磨」(`equipment_polish_active`)の ON/OFF。記録
+    /// (`self.polish`)があっても OFF なら供給源に出さない(バフを切ったら効かない)。
     pub fn base_sources(
         &self,
         abilities: &[EquipmentAbilityDef],
         titles: &[TitleDef],
+        polish_active: bool,
     ) -> Vec<EquipmentValueSource> {
         let mut sources = Vec::new();
         for (slot, part) in self.iter_selected() {
@@ -1651,6 +1664,17 @@ impl Equipment {
                     source: format!("{}(基本値)", slot.label()),
                     values: part.base,
                 });
+            }
+        }
+        if polish_active {
+            for (slot, part) in self.iter_selected() {
+                let bonus = self.polish.bonus(slot, part.base);
+                if bonus != EquipmentValues::default() {
+                    sources.push(EquipmentValueSource {
+                        source: format!("{} 研磨", slot.label()),
+                        values: bonus,
+                    });
+                }
             }
         }
         for (slot, part) in self.iter_selected() {
@@ -1697,6 +1721,21 @@ impl Equipment {
             .map(|(slot, part)| PartEquipmentValues {
                 slot,
                 values: part.enchant,
+            })
+            .collect()
+    }
+
+    /// 部位別の研磨の加算値(表示用の内訳。`base_sources` の研磨行を部位ごとに割ったもの)。
+    /// `polish_active` が OFF なら全部位 0。
+    pub fn polish_values_by_part(&self, polish_active: bool) -> Vec<PartEquipmentValues> {
+        self.iter_selected()
+            .map(|(slot, part)| PartEquipmentValues {
+                slot,
+                values: if polish_active {
+                    self.polish.bonus(slot, part.base)
+                } else {
+                    EquipmentValues::default()
+                },
             })
             .collect()
     }
@@ -2692,7 +2731,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let base = eq.base_totals(&[], &[]);
+        let base = eq.base_totals(&[], &[], false);
         let enhanced = eq.enhanced_totals(None);
         // 150*14.5*2 + 60*28.75*2 = 4350 + 3450 = 7800
         assert!((equipment_attack_power(&base, &enhanced, &coefficients()) - 7800.0).abs() < 1e-9);
@@ -2701,7 +2740,7 @@ mod tests {
     #[test]
     fn 装備なしなら装備攻撃力は0() {
         let eq = Equipment::default();
-        let base = eq.base_totals(&[], &[]);
+        let base = eq.base_totals(&[], &[], false);
         let enhanced = eq.enhanced_totals(None);
         assert_eq!(
             equipment_attack_power(&base, &enhanced, &coefficients()),
@@ -2751,7 +2790,7 @@ mod tests {
             },
             damage_effects: &[],
         }];
-        let base = eq.base_totals(&abilities, &[]);
+        let base = eq.base_totals(&abilities, &[], false);
         assert_eq!(
             base,
             EquipmentValues {
@@ -2771,6 +2810,62 @@ mod tests {
                 ..Default::default()
             }
         );
+    }
+
+    #[test]
+    fn base_sourcesはpolish_activeがfalseなら研磨を出さない() {
+        let mut eq = equipment_with(
+            EquipmentValues {
+                thrust: 100,
+                ..Default::default()
+            },
+            EquipmentValues::default(),
+        );
+        eq.polish.entries.push(crate::equipment_polish::EquipmentPolish {
+            slot: PartSlot::Weapon,
+            kind: crate::equipment_polish::PolishKind::Artisan,
+            stat: EquipmentStatKind::Thrust,
+        });
+
+        let sources_off = eq.base_sources(&[], &[], false);
+        assert!(!sources_off.iter().any(|s| s.source == "武器 研磨"));
+        assert_eq!(eq.base_totals(&[], &[], false).thrust, 100);
+
+        let sources_on = eq.base_sources(&[], &[], true);
+        assert!(sources_on.iter().any(|s| s.source == "武器 研磨"));
+        // 100 の 5% = 5
+        assert_eq!(eq.base_totals(&[], &[], true).thrust, 105);
+    }
+
+    #[test]
+    fn equipment_attack_partsの基本値内訳に研磨行が出る() {
+        let mut eq = equipment_with(
+            EquipmentValues {
+                thrust: 100,
+                ..Default::default()
+            },
+            EquipmentValues::default(),
+        );
+        eq.polish.entries.push(crate::equipment_polish::EquipmentPolish {
+            slot: PartSlot::Weapon,
+            kind: crate::equipment_polish::PolishKind::Artisan,
+            stat: EquipmentStatKind::Thrust,
+        });
+
+        let base_sources = eq.base_sources(&[], &[], true);
+        let enhanced_sources = eq.enhanced_sources(None);
+        let parts = equipment_attack_parts(&base_sources, &enhanced_sources, &coefficients());
+
+        let thrust_base = parts
+            .iter()
+            .find(|p| p.layer == EquipmentAttackLayer::Base && p.value == EquipmentValueKind::Thrust)
+            .expect("突きの基本値層が無い");
+        let polish_row = thrust_base
+            .sources
+            .iter()
+            .find(|s| s.source == "武器 研磨")
+            .expect("研磨の内訳行が無い");
+        assert_eq!(polish_row.amount, 5);
     }
 
     #[test]
@@ -2803,7 +2898,7 @@ mod tests {
             kind: EquipmentAbilityAdditionalKind::Slash,
             value: 13,
         }];
-        assert_eq!(eq.base_totals(&[], &[]).slash, 13);
+        assert_eq!(eq.base_totals(&[], &[], false).slash, 13);
     }
 
     #[test]
@@ -2822,7 +2917,7 @@ mod tests {
                 value: 16,
             },
         ];
-        let base = eq.base_totals(&[], &[]);
+        let base = eq.base_totals(&[], &[], false);
         assert_eq!(base.slash, 18);
         assert_eq!(base.accuracy, 16);
 
@@ -3188,7 +3283,7 @@ mod tests {
                 ..Default::default()
             }
         );
-        assert_eq!(eq.base_totals(&[], &[]), EquipmentValues::default());
+        assert_eq!(eq.base_totals(&[], &[], false), EquipmentValues::default());
         assert_eq!(
             eq.siena_stat_bonus(),
             SienaStatBonus {
@@ -3574,11 +3669,11 @@ mod tests {
             thrust: 100,
             ..Default::default()
         };
-        assert_eq!(eq.base_totals(&[], &title_defs()).thrust, 100);
+        assert_eq!(eq.base_totals(&[], &title_defs(), false).thrust, 100);
 
         eq.title = Some("eclipse".to_string());
-        assert_eq!(eq.base_totals(&[], &title_defs()).thrust, 140);
-        assert_eq!(eq.base_totals(&[], &title_defs()).slash, 40);
+        assert_eq!(eq.base_totals(&[], &title_defs(), false).thrust, 140);
+        assert_eq!(eq.base_totals(&[], &title_defs(), false).slash, 40);
         // 強化能力値には入らない(称号にエンチャントは無い)
         assert_eq!(eq.enhanced_totals(None), EquipmentValues::default());
     }
@@ -3588,7 +3683,7 @@ mod tests {
         let mut eq = Equipment::default();
         eq.title = Some("nope".to_string());
         assert_eq!(
-            eq.base_totals(&[], &title_defs()),
+            eq.base_totals(&[], &title_defs(), false),
             EquipmentValues::default()
         );
     }
