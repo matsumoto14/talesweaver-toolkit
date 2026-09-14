@@ -144,6 +144,28 @@ pub fn list_equipment_catalog() -> Vec<EquipmentItem> {
     commands::list_equipment_catalog()
 }
 
+/// 「追加機能の解除」(情報パネルのバージョン表記 7 連打)で R2 から取得した装備(テネブリスなど。
+/// 配布物・git には含めない。docs/adr/009-public-release.md)を、実行中のカタログへ合流させ、
+/// 次回起動時にも再インストールできるようローカルへ保存する。先に保存してから合流させ、
+/// 検証に失敗したら保存したファイルを消す(合流だけ成功して保存が失敗する状態を作らない。
+/// `Err` を返したときはメモリもディスクも変わっていない)。
+#[tauri::command]
+pub fn install_downloaded_equipment(app: tauri::AppHandle, json: String) -> CommandResult<usize> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("保存先を特定できません: {e}"))?;
+    let path = data_dir.join(crate::TENEBRIS_FILE_NAME);
+    std::fs::write(&path, &json).map_err(|e| format!("テネブリス装備を保存できません: {e}"))?;
+    match gamedata::install_downloaded_equipment(&json) {
+        Ok(count) => Ok(count),
+        Err(e) => {
+            let _ = std::fs::remove_file(&path);
+            Err(e.into())
+        }
+    }
+}
+
 #[tauri::command]
 pub fn list_equipment_abilities() -> Vec<EquipmentAbilityView> {
     commands::list_equipment_abilities()

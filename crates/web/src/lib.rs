@@ -265,6 +265,12 @@ struct CanSeparateMeasurementArgs {
     attacks: Vec<Option<i64>>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallDownloadedEquipmentArgs {
+    json: String,
+}
+
 /// Tauri の `invoke` と同じ形。`command` で分岐して `commands` crate を呼ぶ。
 #[wasm_bindgen]
 pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
@@ -324,6 +330,15 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "validate_buff_set" => {
             let a: ValidateBuffSetArgs = args_of(command, args)?;
             done(commands::validate_buff_set(a.name, a.choices))
+        }
+        // ブラウザ版は永続化しない(この WASM インスタンスが生きている間だけ合流する。
+        // デスクトップ版はローカルファイルへ保存し次回起動でも読み直す。commands.rs 参照)。
+        "install_downloaded_equipment" => {
+            let a: InstallDownloadedEquipmentArgs = args_of(command, args)?;
+            match gamedata::install_downloaded_equipment(&a.json) {
+                Ok(count) => ok(count),
+                Err(message) => Err(to_error(CommandError { message, location: None })),
+            }
         }
         "resolve_character_skill_effects" => {
             let a: MasteriesArgs = args_of(command, args)?;

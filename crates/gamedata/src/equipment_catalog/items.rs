@@ -10,6 +10,10 @@ mod generated;
 mod client;
 #[path = "sacred_kr.rs"]
 mod sacred_kr;
+#[path = "downloaded.rs"]
+mod downloaded;
+
+pub use downloaded::install_downloaded_equipment;
 
 /// 装備カタログの出典。
 pub const EQUIPMENT_CATALOG_SOURCE: Source = Source {
@@ -677,9 +681,37 @@ pub fn equipment_catalog() -> Vec<EquipmentItem> {
     cached_equipment_catalog().to_vec()
 }
 
-fn cached_equipment_catalog() -> &'static [EquipmentItem] {
-    static CACHE: std::sync::OnceLock<Vec<EquipmentItem>> = std::sync::OnceLock::new();
-    CACHE.get_or_init(build_equipment_catalog)
+/// `install_downloaded_equipment` が合流させたあとは作り直す必要があるので、`OnceLock` ではなく
+/// `RwLock<Option<Arc<_>>>` で持つ(`invalidate_equipment_catalog_cache` が空にする)。
+/// `Arc` なので `find_equipment_item` のような検索は複製せずに読める。
+static EQUIPMENT_CATALOG_CACHE: std::sync::RwLock<Option<std::sync::Arc<[EquipmentItem]>>> =
+    std::sync::RwLock::new(None);
+
+fn cached_equipment_catalog() -> std::sync::Arc<[EquipmentItem]> {
+    if let Some(existing) = EQUIPMENT_CATALOG_CACHE
+        .read()
+        .expect("装備カタログキャッシュの読み取りロックが失敗")
+        .as_ref()
+    {
+        return std::sync::Arc::clone(existing);
+    }
+    let mut guard = EQUIPMENT_CATALOG_CACHE
+        .write()
+        .expect("装備カタログキャッシュの書き込みロックが失敗");
+    if let Some(existing) = guard.as_ref() {
+        return std::sync::Arc::clone(existing);
+    }
+    let built: std::sync::Arc<[EquipmentItem]> = build_equipment_catalog().into();
+    *guard = Some(std::sync::Arc::clone(&built));
+    built
+}
+
+/// `install_downloaded_equipment` から呼ぶ。次回 `equipment_catalog()` / `find_equipment_item()` の
+/// 呼び出しでカタログを作り直す。
+fn invalidate_equipment_catalog_cache() {
+    *EQUIPMENT_CATALOG_CACHE
+        .write()
+        .expect("装備カタログキャッシュの書き込みロックが失敗") = None;
 }
 
 fn build_equipment_catalog() -> Vec<EquipmentItem> {
@@ -1790,6 +1822,14 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             catalog.push(*item);
         }
     }
+    // 「追加機能の解除」で R2 から取得しインストールした装備(テネブリスなど。配布物・git には
+    // 含めない。docs/adr/009-public-release.md)。9 値は取得元(client DB 相当)がすでに正しい値を
+    // 持つので、client_items のような上書きループには参加させない。
+    for entry in downloaded::downloaded_equipment_catalog() {
+        if !catalog.iter().any(|existing| existing.name == entry.item.name) {
+            catalog.push(entry.item);
+        }
+    }
     // client DB に同名のアイテムが無い wiki 行(宝玉や凛々の明星のように「武器種 × 付与」を
     // wiki が 1 行ずつ名付けたもの、クライアントから消えた旧イベント装備)は wiki 抽出ぶんで持つ。
     for item in generated::wiki_equipment_catalog() {
@@ -1827,7 +1867,9 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
     // client DB 由来の行はページを持たないので、EquipType 名から機械的に決めた分類で補う。
     for item in items.iter_mut() {
         if item.wrist_type.is_none() {
-            if let Some(wrist_type) = client::client_wrist_type(item.id) {
+            if let Some(wrist_type) = client::client_wrist_type(item.id)
+                .or_else(|| downloaded::downloaded_wrist_type(item.id))
+            {
                 item.wrist_type = Some(wrist_type);
             }
         }

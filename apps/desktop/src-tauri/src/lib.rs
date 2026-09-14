@@ -26,6 +26,9 @@ pub struct AppInfo {
 
 /// 登録キャラの保存先ファイル名。情報パネルにも同じ値を出すので、ここだけに置く。
 pub const DATABASE_FILE_NAME: &str = "tw-context.sqlite";
+/// 「追加機能の解除」で R2 から取得した装備(テネブリスなど)のローカル保存先ファイル名。
+/// 配布物には含めない(docs/adr/009-public-release.md)。
+pub const TENEBRIS_FILE_NAME: &str = "tenebris.json";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,6 +50,14 @@ pub fn run() {
                 repo: Mutex::new(outcome.repo),
                 startup_notice: outcome.notice,
             });
+            // 前回「追加機能の解除」で取得したテネブリスがあれば、この起動でもカタログへ合流させる。
+            // 壊れたファイルで起動を止めない(フォールバック値は作らない。未収録のまま起動するだけ)。
+            let tenebris_path = data_dir.join(TENEBRIS_FILE_NAME);
+            if let Ok(json) = fs::read_to_string(&tenebris_path) {
+                if let Err(e) = gamedata::install_downloaded_equipment(&json) {
+                    eprintln!("テネブリス装備の再インストールに失敗: {e}");
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -69,6 +80,7 @@ pub fn run() {
             commands::preview_elements,
             commands::list_contents,
             commands::list_equipment_catalog,
+            commands::install_downloaded_equipment,
             commands::list_equipment_abilities,
             commands::list_equipment_candidates,
             commands::part_weapon_system,
