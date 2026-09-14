@@ -16,3 +16,6 @@ tmp/
 
 # †テネブリスの数値(配布物・git から外し、解除時に R2 から取得する。tools/gamedata/import_client_db.py)
 tools/gamedata/out/
+
+# 利用者数の目安を出す手元スクリプト(Cloudflare のアカウント ID を持つので公開しない)
+tools/release/usage.py
