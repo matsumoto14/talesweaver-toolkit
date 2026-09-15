@@ -67,6 +67,7 @@ const fn t(
         level,
         values,
         attack_damage_percent: 0.0,
+        added_damage_percent: 0.0,
         conditional_added_damage: None,
         note,
         common: false,
@@ -91,6 +92,7 @@ const fn td(
         level,
         values,
         attack_damage_percent,
+        added_damage_percent: 0.0,
         conditional_added_damage: None,
         note,
         // 無条件 +20% は普段使いの最上位(ピッカーで常設)。+10% は検索で出す
@@ -455,15 +457,16 @@ mod tests {
         }
     }
 
-    /// 無条件のダメージ増加を持つ称号の件数。wiki 由来 48 + クライアント新規 16(LIMIT BREAK 6・
-    /// 公式サポーター 4・夜明け 4・清らかな月兎・悪夢の主を撃破した者。2026-09-03)。
+    /// 無条件のダメージ増加(カテゴリX)を持つ称号の件数。wiki 由来 48 + クライアント新規 6
+    /// (LIMIT BREAK 6。2026-09-03)。クライアント備考「追加ダメージ+N%」の 10 件(公式サポーター 4・
+    /// 夜明け 4・清らかな月兎・悪夢の主を撃破した者)は 2026-09-15 に合計へ乗る割合追加ダメージへ移した。
     #[test]
-    fn ダメージ増加を持つ称号は64件() {
-        let n = title_catalog()
-            .iter()
-            .filter(|t| t.attack_damage_percent > 0.0)
-            .count();
-        assert_eq!(n, 64);
+    fn ダメージ増加を持つ称号は54件_追加ダメージは10件() {
+        let catalog = title_catalog();
+        assert_eq!(catalog.iter().filter(|t| t.attack_damage_percent > 0.0).count(), 54);
+        assert_eq!(catalog.iter().filter(|t| t.added_damage_percent > 0.0).count(), 10);
+        let dawn = catalog.iter().find(|t| t.name == "夜明けの君主").unwrap();
+        assert_eq!((dawn.attack_damage_percent, dawn.added_damage_percent), (0.0, 15.0));
     }
 
     /// ユーザー指定の必須称号(2026-08-26)。課金箱シリーズは 1 種 4 変種。

@@ -43,6 +43,9 @@ pub struct TitleDef {
     /// **[X3] 攻撃ダメージ(基本発動)(上限 +80%)** に称号の「ダメージ増加」が載っている)。
     /// 課金箱シリーズ(明鏡止水〜緋馬の怪火)と一部の名誉の証が持つ。単位は %
     pub attack_damage_percent: f64,
+    /// 無条件の割合追加ダメージ(クライアント備考「追加ダメージ+N%」)。シャープネスビジョンと同じ
+    /// 「合計に乗る」段に入る(`damage.rs` §5)。「ダメージ N% 増加」(カテゴリX)とは別物。単位は %
+    pub added_damage_percent: f64,
     /// 特定の地域または敵でだけ発動する割合追加ダメージ。
     pub conditional_added_damage: Option<ConditionalAddedDamage>,
     /// 入手方法・備考。
@@ -76,25 +79,29 @@ pub fn title_attack_damage_rate(title: Option<&str>, titles: &[TitleDef]) -> f64
     find(title, titles).map_or(0.0, |t| t.attack_damage_percent / 100.0)
 }
 
-/// 選択中の称号が対象地域または敵に一致するとき、割合追加ダメージを小数で返す。
+/// 選択中の称号の割合追加ダメージを小数で返す。無条件ぶんは常に、条件付きぶんは
+/// 対象地域または敵に一致するときだけ足す。
 pub fn title_added_damage_rate(
     title: Option<&str>,
     titles: &[TitleDef],
     game_region: Option<GameRegion>,
     enemy_id: Option<&str>,
 ) -> f64 {
-    let Some(effect) = find(title, titles).and_then(|t| t.conditional_added_damage) else {
+    let Some(def) = find(title, titles) else {
         return 0.0;
     };
-    let matches = match effect.condition {
-        AddedDamageCondition::Region(region) => game_region == Some(region),
-        AddedDamageCondition::Enemy(id) => enemy_id == Some(id),
-    };
-    if matches {
-        effect.percent / 100.0
-    } else {
-        0.0
-    }
+    let conditional = def.conditional_added_damage.map_or(0.0, |effect| {
+        let matches = match effect.condition {
+            AddedDamageCondition::Region(region) => game_region == Some(region),
+            AddedDamageCondition::Enemy(id) => enemy_id == Some(id),
+        };
+        if matches {
+            effect.percent
+        } else {
+            0.0
+        }
+    });
+    (def.added_damage_percent + conditional) / 100.0
 }
 
 fn find<'a>(title: Option<&str>, titles: &'a [TitleDef]) -> Option<&'a TitleDef> {
@@ -125,6 +132,7 @@ mod tests {
                 agility: 40,
             },
             attack_damage_percent: 0.0,
+            added_damage_percent: 0.0,
             conditional_added_damage: Some(ConditionalAddedDamage {
                 percent: 20.0,
                 condition: AddedDamageCondition::Region(GameRegion::LostIsland),
@@ -160,5 +168,16 @@ mod tests {
             title_added_damage_rate(Some("eclipse"), &defs(), Some(GameRegion::Praba), None),
             0.0
         );
+    }
+
+    /// クライアント備考「追加ダメージ+15%」(夜明けの君主)は地域・敵を問わず合計に乗る段へ入る
+    #[test]
+    fn 無条件の追加ダメージは地域に関わらず返す() {
+        let mut d = defs();
+        d[0].conditional_added_damage = None;
+        d[0].added_damage_percent = 15.0;
+        assert_eq!(title_added_damage_rate(Some("eclipse"), &d, None, None), 0.15);
+        assert_eq!(title_added_damage_rate(Some("eclipse"), &d, Some(GameRegion::Praba), None), 0.15);
+        assert_eq!(title_attack_damage_rate(Some("eclipse"), &d), 0.0);
     }
 }

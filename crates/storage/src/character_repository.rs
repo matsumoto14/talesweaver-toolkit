@@ -2228,6 +2228,7 @@ mod tests {
                 ..Default::default()
             },
             attack_damage_percent: 0.0,
+            added_damage_percent: 0.0,
             conditional_added_damage: None,
             note: "",
         }]

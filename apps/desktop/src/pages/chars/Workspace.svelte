@@ -475,7 +475,11 @@
   const titleSummary = $derived.by(() => {
     const t = app.titles.find((x) => x.id === draft.equipment.title);
     if (!t) return NEUTRAL;
-    const headline = t.attack_damage_percent > 0 ? `ダメ +${t.attack_damage_percent}%` : `合計 +${fmtInt(t.equipment_value_total)}`;
+    const headline = t.attack_damage_percent > 0
+      ? `ダメ +${t.attack_damage_percent}%`
+      : t.added_damage_percent > 0
+        ? `追加ダメ +${t.added_damage_percent}%`
+        : `合計 +${fmtInt(t.equipment_value_total)}`;
     return `${t.name}(${headline})`;
   });
 

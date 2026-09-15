@@ -56,6 +56,7 @@
   const titleMatchesSkill = (t: TitleDef): boolean =>
     !filterActive ||
     t.attack_damage_percent > 0 ||
+    t.added_damage_percent > 0 ||
     t.conditional_added_damage !== null ||
     skillKinds.some((k) => t.values[k] > 0);
   const filteredCommonTitles = $derived(commonTitles.filter(titleMatchesSkill));
@@ -97,7 +98,9 @@
 {#snippet dmgBadge(t: TitleDef, impliedDmg: number | null)}
   {#if t.attack_damage_percent > 0 && t.attack_damage_percent !== impliedDmg}
     <span class="title-dmg num">ダメ +{t.attack_damage_percent}%</span>
-  {:else if t.note.includes("追加ダメージ")}
+  {:else if t.added_damage_percent > 0}
+    <span class="title-dmg num">追加ダメ +{t.added_damage_percent}%</span>
+  {:else if t.conditional_added_damage !== null}
     <span class="title-extra">条件付き追加ダメ</span>
   {/if}
 {/snippet}
@@ -172,7 +175,9 @@
     {/if}
     {#if selectedTitle?.attack_damage_percent}
       <span class="title-dmg num">ダメージ +{selectedTitle.attack_damage_percent}%</span>
-    {:else if selectedTitle?.note.includes("追加ダメージ")}
+    {:else if selectedTitle?.added_damage_percent}
+      <span class="title-dmg num">追加ダメージ +{selectedTitle.added_damage_percent}%</span>
+    {:else if selectedTitle?.conditional_added_damage}
       <span class="title-extra">条件付き追加ダメージ</span>
     {/if}
     {#if selectedTitle}
@@ -254,6 +259,11 @@
     {#if selectedTitle.attack_damage_percent > 0}
       <p class="hint dim">
         ダメージ増加は<b>カテゴリX(攻撃ダメージ)</b>の X3 基本発動に入ります(wiki: ステータス。X3 は上限 +80%)。
+      </p>
+    {/if}
+    {#if selectedTitle.added_damage_percent > 0}
+      <p class="hint dim">
+        追加ダメージは<b>合計ダメージに乗る割合追加ダメージ</b>(シャープネスビジョンと同じ段)に入ります。
       </p>
     {/if}
     {#if filled.length > 0}

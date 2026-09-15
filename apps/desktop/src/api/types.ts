@@ -799,6 +799,8 @@ export interface TitleDef {
   values: EquipmentValues;
   /** 無条件の「ダメージ n% 増加」。カテゴリX(攻撃ダメージ)の X3 基本発動に入る。単位は % */
   attack_damage_percent: number;
+  /** 無条件の割合追加ダメージ(合計に乗る。シャープネスビジョンと同じ段)。単位は % */
+  added_damage_percent: number;
   /** 特定地域または敵でだけ発動する割合追加ダメージ */
   conditional_added_damage: ConditionalAddedDamage | null;
   /** 入手方法・備考 */

@@ -1300,6 +1300,7 @@
   const titleNote = (t: TitleDef): string => {
     const vals = EQUIPMENT_STAT_KINDS.filter((k) => t.values[k] !== 0).map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(t.values[k])}`);
     if (t.attack_damage_percent > 0) vals.push(`ダメ +${t.attack_damage_percent}%`);
+    if (t.added_damage_percent > 0) vals.push(`追加ダメ +${t.added_damage_percent}%`);
     return vals.join(" ") || "—";
   };
   function selectTitle(id: string | null) {
