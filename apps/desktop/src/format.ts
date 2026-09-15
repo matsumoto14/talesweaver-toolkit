@@ -18,9 +18,11 @@ const formatter = (digits: Digits): Intl.NumberFormat => {
   return f;
 };
 
-/** 桁区切りつきの数。`unit` は値の直後に付ける(1.50s / 12.5%) */
-export const fmtNum = (n: number, digits: Digits = { max: 4 }, unit = ""): string =>
-  `${formatter(digits).format(n)}${unit}`;
+/** 桁区切りつきの数。`unit` は値の直後に付ける(1.50s / 12.5%)。丸めて 0 になる負の値は「-0」にしない */
+export const fmtNum = (n: number, digits: Digits = { max: 4 }, unit = ""): string => {
+  const body = formatter(digits).format(n);
+  return `${/^-0(?:\.0+)?$/.test(body) ? body.slice(1) : body}${unit}`;
+};
 
 /** 整数(件数・能力値・ダメージ)。小数が渡ったときは 3 桁まで出す(丸めない) */
 export const fmtInt = (n: number): string => fmtNum(n, { max: 3 });
@@ -28,9 +30,11 @@ export const fmtInt = (n: number): string => fmtNum(n, { max: 3 });
 /** 割合(0–1)を % で。既に % 単位の値は fmtNum(v, digits, "%") */
 export const fmtPct = (rate: number, digits: Digits = 0): string => fmtNum(rate * 100, digits, "%");
 
-/** 符号つき(増減・補正値)。0 は「+0」 */
-export const fmtSigned = (n: number, digits: Digits = 0, unit = ""): string =>
-  `${n >= 0 ? "+" : ""}${fmtNum(n, digits, unit)}`;
+/** 符号つき(増減・補正値)。丸めた結果が 0 なら「+0」(-0.4 を「-0」にしない) */
+export const fmtSigned = (n: number, digits: Digits = 0, unit = ""): string => {
+  const body = fmtNum(n, digits, unit);
+  return body.startsWith("-") ? body : `+${body}`;
+};
 
 /** 符号つきの割合(0–1)。「+12%」「-3.5%」 */
 export const fmtSignedPct = (rate: number, digits: Digits = 0): string => fmtSigned(rate * 100, digits, "%");
