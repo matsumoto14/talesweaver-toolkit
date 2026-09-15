@@ -872,6 +872,8 @@
   .catalog { display: flex; flex-direction: column; }
   .bar { height: 32px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; background: var(--head-bar); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
   .create-row, .set-tools { display: flex; gap: 7px; padding: 10px; border-bottom: 1px solid var(--border-soft); }
+  /* 入力面に入っても隣のボタンを潰さない(§00 03 押した場所は動かない) */
+  .create-row .btn, .set-tools .btn { flex: none; }
   .set-tools { position: relative; }
   .set-list { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
   .set-list > button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 9px; border: 1px solid transparent; border-radius: var(--r-inset); text-align: left; }
