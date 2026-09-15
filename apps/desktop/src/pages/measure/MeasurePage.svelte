@@ -297,7 +297,7 @@
                0 = 未入力(点として溜められない)。上限は無い(max <= min で縛らない) -->
           <div class="field">
             <span class="label">実測ダメージ(1 発)</span>
-            <StatInput label="実測ダメージ(1 発)" hideLabel min={0} max={0} gauge={false} reason="実測値 · 一時" bind:value={measuredDamage} />
+            <StatInput label="実測ダメージ(1 発)" hideLabel min={0} max={0} gauge={false} reason="実測値 · 一時" digits={8} bind:value={measuredDamage} />
           </div>
           <!-- 何発は 1 押しに意味がある(1 発ずつ数えた値)のでステッパー(形態 4) -->
           <div class="field">

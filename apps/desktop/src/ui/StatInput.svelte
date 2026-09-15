@@ -59,10 +59,21 @@
      * シミュレーション用の一時値と、外部データで取れない値(実測)だけに使う。
      */
     reason?: string;
+    /**
+     * 入る値の最大桁数。上限のある欄は上限の桁でセル幅が決まるが、上限を持たない
+     * 自由入力(形態 5)は桁の情報が無いので、ここで与える。省略すると 74px の既定幅で、
+     * 7 桁以上が右端で切れる(実測ダメージで起きた。§09 規則 4「あとから幅が変わらない」)。
+     */
+    digits?: number;
   }
   let {
-    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], increments = [], gauge = true, stepper = false, readAsText = false, reason,
+    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], increments = [], gauge = true, stepper = false, readAsText = false, reason, digits,
   }: Props = $props();
+
+  /** 桁区切りのカンマを含めた文字数(セル幅の根拠) */
+  const chars = $derived(digits === undefined ? null : digits + Math.floor((digits - 1) / 3));
+  /** 形態 5 の 0 は「まだ入れていない」なので、0 と読ませず空表示にする(押せば 0 が選択された編集に入る) */
+  const blank = $derived(reason !== undefined && value === 0);
 
   let text = $state(String(value));
   let lastSyncedValue = value;
@@ -184,7 +195,7 @@
   <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
        上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
        読取(button)と編集(input)でセルの寸法は同じ。押しても値が動かない(§09 規則 1) -->
-  <div class="cell" class:editing class:bare={!showCap}>
+  <div class="cell" class:editing class:bare={!showCap} class:sized={chars !== null} style:--chars={chars}>
     {#if showCap && pct !== null}<span class="fill" style:width="{pct}%"></span>{/if}
     {#if editing}
       <input
@@ -209,10 +220,11 @@
       <button
         type="button"
         class="num val read"
+        class:blank
         aria-label="{label} を編集"
         use:bump={() => value}
         onclick={() => (editing = true)}
-      >{value.toLocaleString("ja-JP")}</button>
+      >{blank ? "—" : value.toLocaleString("ja-JP")}</button>
     {/if}
     {#if showCap}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
   </div>
