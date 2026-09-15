@@ -44,6 +44,9 @@
   const shown = $derived(value === "" && auto !== undefined ? auto : value);
 
   function commit() {
+    // 自動値のまま離れたら空に戻す。実値にしてしまうと「キャラ名を使用」の注記が消え、
+    // 上書きしたのか自動のままなのかが読めなくなる
+    if (auto !== undefined && value.trim() === auto) value = "";
     onCommit?.(value);
   }
   function keydown(e: KeyboardEvent) {
@@ -124,8 +127,8 @@
   .lens { flex: none; color: var(--fg-dim); font-size: 12px; }
   /* 件数・文字数は右端の固定幅。桁が増えても欄の幅が変わらない */
   .cnt { margin-left: auto; flex: none; min-width: 34px; text-align: right; font-size: 8.5px; color: var(--fg-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  /* 自由記述は同じ枠を縦に伸ばすだけ。文字数は右下 */
-  .multi { height: auto; align-items: stretch; padding: 6px 9px; position: relative; }
-  .multi textarea { padding-bottom: 12px; }
-  .multi .cnt { position: absolute; right: 9px; bottom: 5px; }
+  /* 自由記述は同じ枠を縦に伸ばすだけ。文字数は右下 — textarea の下の行に置く。
+     枠の中に重ねると、行数が rows を超えたときスクロールバーの下に潜る */
+  .multi { height: auto; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px 9px 4px; }
+  .multi .cnt { margin-left: 0; align-self: flex-end; }
 </style>

@@ -238,7 +238,7 @@
     {@render titleRows(commonTitleGroups, 20)}
   </div>
   <details class="fold">
-    <summary>その他の称号から選ぶ({otherTitles.length} 件)</summary>
+    <summary>その他の称号から選ぶ({filteredOtherTitles.length} 件)</summary>
     <div class="fold-body">
       <TextField label="称号名・グループで探す" search count={filteredOtherTitles.length} bind:value={titleQuery} />
       {#if otherTitleGroups.length > 0}

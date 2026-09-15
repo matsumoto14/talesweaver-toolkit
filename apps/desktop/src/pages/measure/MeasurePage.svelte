@@ -412,8 +412,15 @@
   .field .label { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-muted); }
   .field.wide { width: 100%; }
   .field.short .num-field { width: 72px; }
-  /* 上限のない自由入力(§07 形態 5)。スピナーは他の数値欄に無いので消してそろえる */
-  .num-field { width: 148px; appearance: textfield; }
+  /* 上限のない自由入力(§07 形態 5)。枠は文字欄(ui/TextField)と同じ 28px / r-panel にそろえ、
+     スピナーは他の数値欄に無いので消す */
+  .num-field {
+    width: 148px; height: 28px; padding: 0 9px; box-sizing: border-box; appearance: textfield;
+    border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); color: var(--fg);
+    font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12px; outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .num-field:focus { border-color: var(--accent); }
   .num-field::-webkit-outer-spin-button,
   .num-field::-webkit-inner-spin-button { appearance: none; margin: 0; }
   .note {
