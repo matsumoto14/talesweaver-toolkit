@@ -615,6 +615,8 @@
     aria-pressed={selectedAbilityId === ability.id}
     onclick={() => setAbilityForCategory(slot, category, ability.id)}
   >
+    <!-- ゲーム内のアイテムの絵(月石・研磨…)。無い id は破線 + ? で幅は変わらない -->
+    <Icon kind="equipment" id={ability.id} size={20} label={ability.name} />
     <span>{ability.name}</span>
     <span class="ability-choice-effect num">{ability.effect_summary}</span>
   </button>
@@ -632,7 +634,9 @@
       tone="saved"
       disabled={!selected && full}
       onToggle={() => toggleNonWeaponAbility(slot, ability)}
-    />
+    >
+      {#snippet icon()}<Icon kind="equipment" id={ability.id} size={20} label={ability.name} />{/snippet}
+    </ToggleRow>
   </div>
 {/snippet}
 
