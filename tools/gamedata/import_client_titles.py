@@ -58,8 +58,11 @@ client 側に対応行を持つ**(不一致 0 件)。
   (shirairon/silvan/serion/sereana/luminous/deep_apostle。新規称号にはこれ以外の
   敵条件が出現しなかったため、新しい敵カタログは追加していない)に一致するときだけ設定。
   それ以外(「経験値獲得量+150%」「被ダメージ10%減少」等、器に無い効果)は note の文に残すのみ。
-- attack_damage_percent: 備考が「ダメージN%増加」「攻撃ダメージ(基本発動)N%増加」
-  「追加ダメージ+N%」等、地域・敵の指定が無い無条件表現のときに設定。
+- attack_damage_percent: 備考が「ダメージN%増加」「攻撃ダメージ(基本発動)N%増加」「与ダメージ N%増加」
+  の無条件表現のときに設定(カテゴリX)。
+- added_damage_percent: 備考が地域・敵の指定の無い「追加ダメージ+N%」のときに設定
+  (合計に乗る割合追加ダメージ。シャープネスビジョンと同じ段。2026-09-15 修正: それまでは
+  attack_damage_percent に入れていて、夜明けの君主の +15% が追加ダメージに現れなかった)。
 - note: 備考(`</n>` は " / " に変換)をそのまま。
 
 使い方:
@@ -230,12 +233,14 @@ def load_existing_catalog() -> dict[str, tuple[str, tuple[int, ...]]]:
     return out
 
 
-def parse_remark(remark: str) -> tuple[float, str | None, str | None, str]:
-    """備考 → (attack_damage_percent, region_variant, enemy_id, note)。
-    region_variant は GameRegion のバリアント名文字列。"""
+def parse_remark(remark: str) -> tuple[float, float, float, str | None, str | None, str]:
+    """備考 → (attack_damage_percent, added_damage_percent, conditional_percent, region_variant, enemy_id, note)。
+    region_variant は GameRegion のバリアント名文字列。conditional_percent は地域・敵条件付きの追加ダメージ %。"""
     note = remark.replace("</n>", " / ")
     segments = remark.split("</n>")
     attack_damage_percent = 0.0
+    added_damage_percent = 0.0
+    conditional_percent = 0.0
     region_variant = None
     enemy_id = None
     for seg in segments:
@@ -253,12 +258,17 @@ def parse_remark(remark: str) -> tuple[float, str | None, str | None, str]:
         pct_match = re.search(r"(\d+(?:\.\d+)?)[%％]", seg)
         if region_match and pct_match:
             region_variant = region_match
+            conditional_percent = float(pct_match.group(1))
         elif enemy_match and pct_match:
             enemy_id = enemy_match
+            conditional_percent = float(pct_match.group(1))
+        elif pct_match and "追加ダメージ" in seg and "被ダメージ" not in seg and "減少" not in seg:
+            # 無条件の割合追加ダメージ(「追加ダメージ+N%」)。合計に乗る段
+            added_damage_percent = float(pct_match.group(1))
         elif pct_match and ("ダメージ" in seg) and "被ダメージ" not in seg and "減少" not in seg:
-            # 無条件のダメージ増加(「ダメージN%増加」「攻撃ダメージ(基本発動)N%増加」「追加ダメージ+N%」「与ダメージ N%増加」)
+            # 無条件のダメージ増加(「ダメージN%増加」「攻撃ダメージ(基本発動)N%増加」「与ダメージ N%増加」)
             attack_damage_percent = float(pct_match.group(1))
-    return attack_damage_percent, region_variant, enemy_id, note
+    return attack_damage_percent, added_damage_percent, conditional_percent, region_variant, enemy_id, note
 
 
 SUFFIX_RE = re.compile(r"^(.+?)\s*[-－]\s*(.+)$")
@@ -369,7 +379,7 @@ def main() -> None:
             continue
         used_ids.add(item_id)
 
-        attack_damage_percent, region_variant, enemy_id, note = parse_remark(r.remark)
+        attack_damage_percent, added_damage_percent, conditional_percent, region_variant, enemy_id, note = parse_remark(r.remark)
         conditional = None
         if region_variant:
             conditional = ("Region", f"GameRegion::{region_variant}")
@@ -377,7 +387,7 @@ def main() -> None:
         elif enemy_id:
             conditional = ("Enemy", f'"{enemy_id}"')
             structured += 1
-        elif "ダメージ" in r.remark and attack_damage_percent == 0.0:
+        elif "ダメージ" in r.remark and attack_damage_percent == 0.0 and added_damage_percent == 0.0:
             unstructured += 1
 
         common = attack_damage_percent >= 20.0
@@ -391,6 +401,8 @@ def main() -> None:
             "level": level,
             "values": r.values,
             "attack_damage_percent": attack_damage_percent,
+            "added_damage_percent": added_damage_percent,
+            "conditional_percent": conditional_percent,
             "conditional": conditional,
             "note": note,
             "common": common,
@@ -464,7 +476,7 @@ def write_rust(overrides: list[tuple[str, tuple[int, ...]]], new_entries: list[d
         else:
             kind_, val = e["conditional"]
             cond = (
-                f"Some(ConditionalAddedDamage {{ percent: {e['attack_damage_percent'] if e['attack_damage_percent'] else 10.0}, "
+                f"Some(ConditionalAddedDamage {{ percent: {e['conditional_percent']}, "
                 f"condition: AddedDamageCondition::{kind_}({val}) }})"
             )
         lines.append("        TitleDef {")
@@ -474,6 +486,7 @@ def write_rust(overrides: list[tuple[str, tuple[int, ...]]], new_entries: list[d
         lines.append(f"            level: {level},")
         lines.append(f"            values: v({vstr}),")
         lines.append(f"            attack_damage_percent: {e['attack_damage_percent']},")
+        lines.append(f"            added_damage_percent: {e['added_damage_percent']},")
         lines.append(f"            conditional_added_damage: {cond},")
         lines.append(f'            note: "{note}",')
         lines.append(f"            common: {'true' if e['common'] else 'false'},")
