@@ -27,7 +27,7 @@
      カード見出しは持たない — ペイン自体が既にその補正源の名前を出しているため、中身だけを置く。
      Workspace.svelte(攻撃力カード)とここで共有する */
   .result-value { margin-top: 4px; }
-  .result-value .strong { font-size: 19px; font-weight: 700; }
+  .result-value .strong { font-size: var(--t-heading); font-weight: 700; }
   .eq-summary { margin-top: 6px; padding: 7px 9px; display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11px; }
   /* エタの意志。値の欄と節目を横に並べる(どちらも同じことを決める場所なので) */
   .eternal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

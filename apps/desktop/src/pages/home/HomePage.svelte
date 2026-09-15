@@ -1502,7 +1502,8 @@
   .hero-meter { flex: 1 0 96px; height: 12px; }
   /* 桁が増えても右のバッジ・バーの位置が動かないよう、数値の場所は先に確保する(§00 03) */
   .hero-spot-wrap { flex: none; min-width: 132px; text-align: right; white-space: nowrap; }
-  .hero-spot { font-size: 27px; line-height: 1; font-weight: 700; color: #16223A; text-shadow: 0 1px 0 #fff; }
+  /* 画面の主役の数字は役割トークン(§08 数値の 3 段)。ページごとの寸法を持たない */
+  .hero-spot { font-size: var(--t-result); line-height: 1; font-weight: 700; color: var(--fg-head); text-shadow: 0 1px 0 #fff; }
 
   .hero-advice { display: flex; flex-direction: column; gap: 5px; border-top: 1px dashed var(--border-soft); padding-top: 9px; }
   .hero-advice-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }

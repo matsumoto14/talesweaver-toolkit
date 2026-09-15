@@ -273,7 +273,7 @@
   .card p.copyright { font-size: var(--t-label); color: var(--fg-muted); }
 
   /* 続けて押しても文字が選択されないように(ロック切替の入口) */
-  .version { font-size: 19px; font-weight: var(--w-strong); user-select: none; }
+  .version { font-size: var(--t-heading); font-weight: var(--w-strong); user-select: none; }
   .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
   .path {

@@ -774,7 +774,8 @@
   /* 桁が増えても隣が動かないよう幅を固定する(§09 規則 4) */
   .dir-value { flex-shrink: 0; display: flex; align-items: baseline; gap: 3px; min-width: 76px; justify-content: flex-end; }
   /* 列の主役。1 列に 1 つ(44px の主役は画面に 1 つだけの規格なので、2 列の主役は 1 段落とす) */
-  .rate-num { font-size: 28px; font-weight: 800; color: var(--fg-head); line-height: 1; }
+  /* 画面の主役の数字は役割トークン(§08 数値の 3 段)。ページごとの寸法を持たない */
+  .rate-num { font-size: var(--t-result); font-weight: var(--w-strong); color: var(--fg-head); line-height: 1; }
   .rate-unit { font-size: 12px; font-weight: 700; color: var(--fg-sub); }
   .rate-cap { font-size: 13px; font-weight: 800; border-radius: var(--r-pill); padding: 5px 12px; border: 1px solid; }
   .rate-floor { font-size: 9.5px; font-weight: 800; border-radius: var(--r-pill); padding: 2px 7px; border: 1px solid; margin-left: 4px; }

@@ -919,7 +919,8 @@
      (上に開く / 収まる高さでスクロール)ので、下の行は動かない */
   .per-stat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .summary { background: var(--bg-raised); }
-  .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; font-size: 27px; font-weight: 700; }
+  /* ON 件数 = この画面の主役の数字(§08 数値の 3 段) */
+  .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; font-size: var(--t-result); font-weight: 700; }
   .count-value { min-width: 2ch; text-align: right; }
   .count small { margin-left: 6px; font-family: var(--font); font-size: 10px; font-weight: 500; }
 
