@@ -925,7 +925,7 @@
               {/if}
               <div class="equation-enchant">
                 <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap ?? 0} strictMax={cap !== null} increments={[12, 14, 17, 20]} bind:value={part.enchant[k]} />
-                {#if cap === null}<span class="coverage" title="この補正のエンチャント上限が未収録です。上のエンチャント上限で入力してください">?</span>{/if}
+                {#if cap === null}<span class="badge unknown" title="この補正のエンチャント上限が未収録です。上のエンチャント上限で入力してください">?</span>{/if}
               </div>
               <div class="equation-base">
                 <StatInput label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正" hideLabel min={0} max={item?.growth_cap ?? limits.equipment_value_max} gauge={false} readAsText={item !== null} bind:value={part.base[k]} />

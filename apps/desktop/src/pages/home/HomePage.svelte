@@ -929,7 +929,7 @@
                   <span class="num hero-row-value" use:bump={() => heroAccuracy}>{fmtInt(heroAccuracy)}</span>
                 {:else}
                   <span class="hero-row-value-wrap">
-                    <span class="coverage" title="命中Pを算出できません: {heroAccuracyReason}">{heroAccuracyReason}</span>
+                    <span class="badge unknown" title="命中Pを算出できません: {heroAccuracyReason}">{heroAccuracyReason}</span>
                   </span>
                 {/if}
               </span>
@@ -969,7 +969,7 @@
               />
             </div>
             {#if goalStale}
-              <span class="coverage" title="選んでいた目標が今のデータにありません。自動で選んだ目標を出しています">選んだ目標が見つかりません</span>
+              <span class="badge unknown" title="選んでいた目標が今のデータにありません。自動で選んだ目標を出しています">選んだ目標が見つかりません</span>
             {/if}
             {#if !heroGoal}
               <span class="hero-goal-note dim">全 {fmtInt(totalCount)} コンテンツ クリア可 — 目標を選ぶとここで詰められます</span>
@@ -1240,7 +1240,7 @@
                       <span class="expand-row-label">{ENCHANT_SLOT_LABELS[row.slot]}</span>
                       {#if row.capUnknown}
                         <button type="button" class="expand-nav" onclick={() => focusCharacterSource("equipment", row.slot)}>
-                          <span class="coverage" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
+                          <span class="badge unknown" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
                           <span class="chev dim">›</span>
                         </button>
                       {:else}
@@ -1389,7 +1389,7 @@
                                サイズ固定なので、未収録のコンテンツが混ざっても行の高さは動かない -->
                           <Icon kind="content" id={r.content.id} fallback={{ kind: "mob", id: r.content.enemy_id }} size={28} label={r.content.name} />
                           <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
-                          {#if cov !== null}<span class="coverage">{cov}</span>{/if}
+                          {#if cov !== null}<span class="badge unknown">{cov}</span>{/if}
                           {#if r.content.series}
                             {@const series = r.content.series}
                             {@const list = seriesRowsOf(series.id)}
@@ -1665,7 +1665,7 @@
   .row-bar .badge { margin-left: auto; }
 
   .row-note { margin-top: 5px; display: flex; align-items: center; gap: 7px; min-width: 0; }
-  /* .coverage は app.css(§14 決定 5)。行内の歯抜けはこの 1 つが引き受ける */
+  /* 欠けは app.css の badge.unknown(§14 決定 5)。行内の歯抜けはこの 1 つが引き受ける */
   .entry-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; }
   .note-text { flex: 1; min-width: 0; font-size: var(--t-label); color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .note-text.unmet { color: var(--danger); font-weight: 700; }

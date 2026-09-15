@@ -384,7 +384,7 @@
 
 {#snippet numCell(value: number | null, sim: boolean = false)}
   {#if value === null}
-    <span class="unk">?</span>
+    <span class="badge unknown">?</span>
   {:else}
     <span class="num" class:sim-value={sim} use:bump={() => value}>{value}</span>
   {/if}
@@ -392,7 +392,7 @@
 
 {#snippet textCell(value: string | null)}
   {#if value === null}
-    <span class="unk">?</span>
+    <span class="badge unknown">?</span>
   {:else}
     <span class="num" use:flash={() => value}>{value}</span>
   {/if}
@@ -404,7 +404,7 @@
 )}
   {@const skill = result?.accuracy_skill_available ?? null}
   {#if skill === null}
-    <span class="unk">?</span>
+    <span class="badge unknown">?</span>
   {:else}
     {@const on = swordIsOn(character.id)}
     <!-- 行チップは押した瞬間に切り替わる(§00 03/04)。この画面だけの切り替えなので tone="temp" -->
@@ -452,7 +452,7 @@
   <div class="try-section">
     <div class="try-head">
       {#if max === null || point === null || maxHitRateGain === null}
-        <span class="unk">?</span>
+        <span class="badge unknown">?</span>
       {:else}
         <span class="try-head-summary" use:flash={() => (maxHitRateGain === 0 ? "stuck" : "moves")}>
           {#if maxHitRateGain === 0}
@@ -522,7 +522,7 @@
           disabled={app.buffSets.length === 0}
         />
       {:else}
-        <span class="unk">?</span>
+        <span class="badge unknown">?</span>
       {/if}
     </div>
   </div>
@@ -579,7 +579,7 @@
                 disabled={skills.list.length === 0}
               />
             {:else}
-              <span class="unk">?</span>
+              <span class="badge unknown">?</span>
             {/if}
           </div>
         </div>
@@ -791,12 +791,6 @@
     padding: 12px 14px 14px; border-radius: var(--r-window);
   }
 
-  /* 未収録(供給源が無いのでまだ 0 決め打ち)。0 や空白ではなく ? + 破線で示す */
-  .unk {
-    display: inline-block; padding: 0 5px; border: 1px dashed var(--state-unknown-bd);
-    border-radius: var(--r-pill); color: var(--state-unknown-fg); font-size: 9.5px; font-weight: 700;
-  }
-
   /* 試しで動いた値(命中P・DEX・回避P・AGI・率)はラベンダー(§03「保存されない」予約色) */
   :global(.sim-value) { color: var(--sim-fg) !important; }
 
@@ -852,7 +846,7 @@
   .stat-row.with-picker :global(.picker-trigger) { padding: 2px 8px; }
   .stat-label { display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--fg-sub); white-space: nowrap; }
   .stat-val { text-align: right; min-width: 0; }
-  .stat-val :global(.num), .stat-val :global(.unk) { font-size: 11px; }
+  .stat-val :global(.num) { font-size: 11px; }
   .stat-row.main .stat-label { font-size: 11.5px; font-weight: 800; color: var(--fg-head); min-width: 0; }
   /* 畳んだときの要約(スキル名・的中剣 / AGI)。頭の行の高さは変えない */
   .stat-summary { margin-left: 6px; font-size: 10px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

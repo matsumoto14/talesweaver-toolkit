@@ -184,12 +184,6 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   margin-left: auto; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* 収録度(§14 決定 5)。破線 = 「まだ無い」の記号。一覧の行頭に 1 つだけ出す */
-.coverage {
-  flex-shrink: 0; padding: 1px 7px; border-radius: var(--r-pill);
-  border: 1px dashed var(--border); background: var(--bg-rail);
-  font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
-}
 
 /* 固定(pin)された能力値の注記チップ。表の値の隣に添える */
 .pin-badge {
@@ -229,6 +223,13 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   font-size: 11.5px; font-weight: 500;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent); }
+/* 未収録・未登録・判定不能(§08「状態はバッジ 1 種類ずつ」)。破線 = 「まだ無い」の記号で、0 や空白で
+   埋めない。一覧では行頭に 1 つだけ出す(§14 決定 5「収録度」)。完全に分かっている行には出さない */
+.badge.unknown {
+  padding: 1px 7px; border-style: dashed; font-size: 8.5px;
+  background: var(--state-unknown-bg); border-color: var(--state-unknown-bd); color: var(--state-unknown-fg);
+}
+
 /* 主要なボタンは inset のハイライトを 1 本入れる(§08) */
 .btn.primary {
   background: var(--sel);

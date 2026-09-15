@@ -1972,7 +1972,7 @@
                     <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
                     <!-- コンテンツの絵が無ければそのコンテンツの敵の絵。サイズ固定なので行の高さは動かない -->
                     <Icon kind="content" id={c.id} fallback={{ kind: "mob", id: c.enemy_id }} size={20} label={c.name} />
-                    {#if cov !== null}<span class="coverage">{cov}</span>{/if}
+                    {#if cov !== null}<span class="badge unknown">{cov}</span>{/if}
                     <span class="pop-name">{c.name}</span>
                     <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_primary) : "—"}</span>
                   </button>
@@ -2709,7 +2709,7 @@
           </button>
           {#if openMaterial === "equipment"}
           {#if switchableSlots.length === 0}
-            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("equipment")}>
+            <button type="button" class="source-jump" onclick={() => focusCharacterSource("equipment")}>
               <span class="dim small">2 件以上登録した部位がありません。登録はキャラタブの装備ペイン</span>
               <span class="chev dim">›</span>
             </button>
@@ -2757,8 +2757,8 @@
                 <div class="enchant-row">
                   <span class="enchant-row-label">{ENCHANT_SLOT_LABELS[row.slot]}</span>
                   {#if row.capUnknown}
-                    <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("equipment", row.slot)}>
-                      <span class="coverage" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
+                    <button type="button" class="source-jump" onclick={() => focusCharacterSource("equipment", row.slot)}>
+                      <span class="badge unknown" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
                       <span class="chev dim">›</span>
                     </button>
                   {:else}
@@ -2810,8 +2810,8 @@
             onToggle={() => { if (polishDef) toggleBuffChip(polishDef); }}
           />
           {#if polishRows.length === 0}
-            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("polish")}>
-              <span class="coverage">未登録</span>
+            <button type="button" class="source-jump" onclick={() => focusCharacterSource("polish")}>
+              <span class="badge unknown">未登録</span>
               <span class="dim small">登録はキャラタブの研磨ペイン</span>
               <span class="chev dim">›</span>
             </button>
@@ -2844,8 +2844,8 @@
           </button>
           {#if openMaterial === "title"}
           {#if titleChoices.length === 0}
-            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("title")}>
-              <span class="coverage">未登録</span>
+            <button type="button" class="source-jump" onclick={() => focusCharacterSource("title")}>
+              <span class="badge unknown">未登録</span>
               <span class="dim small">所持称号はキャラタブの称号ペインで登録</span>
               <span class="chev dim">›</span>
             </button>
@@ -2860,7 +2860,7 @@
                 bind:value={() => currentTitle?.id ?? "", (v) => selectTitle(v === "" ? null : v)}
               />
             </div>
-            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("title")}>
+            <button type="button" class="source-jump" onclick={() => focusCharacterSource("title")}>
               <span class="dim small">所持称号の追加・変更はキャラタブの称号ペインで</span>
               <span class="chev dim">›</span>
             </button>
@@ -2949,7 +2949,8 @@
                 />
               </div>
             {:else}
-              <p class="combo-note dim missing">
+              <p class="combo-note dim">
+                <span class="badge unknown">未収録</span>
                 このキャラの通常攻撃は未収録なので、挟む通常攻撃ぶんの時間とダメージを出せません。
               </p>
             {/if}
@@ -3013,8 +3014,6 @@
   .pop-row:hover { background: #F1F7FE; }
   .pop-row.on { background: var(--sel-card); }
   .pop-row .dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; }
-  /* .coverage は app.css(§14 決定 5)。この画面だけ詰めた padding にする */
-  .coverage { padding: 0 6px; }
   .pop-name { min-width: 0; flex: 1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pop-row.on .pop-name { font-weight: 700; }
   .pop-row .strong { font-weight: 700; }
@@ -3050,10 +3049,6 @@
      押した場所より下にしか増えない(§00 03) */
   .combo-normal { margin-top: 8px; }
   .combo-note { margin: 6px 0 0; font-size: 10px; line-height: 1.6; }
-  /* 未収録は破線 + 理由(0 や空欄で埋めない) */
-  .combo-note.missing {
-    padding: 5px 9px; border: 1px dashed var(--border); border-radius: var(--r-panel); background: var(--bg-rail);
-  }
   @media (max-width: 720px) {
     .combo-type-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   }
@@ -3324,8 +3319,8 @@
   .enchant-stat-label { flex-shrink: 0; width: 30px; font-size: 9.5px; color: var(--fg-muted); }
   .enchant-gain { flex-shrink: 0; min-width: 84px; text-align: right; font-size: 9.5px; color: var(--fg-dim); }
   .enchant-gain.up { color: var(--good); font-weight: 700; }
-  /* 上限が未収録(カタログ外で実測上限も未入力)の行。押すとキャラタブの装備編集へ */
-  .enchant-cap-unknown {
+  /* 未登録・上限未入力の行。押すとキャラタブの該当ペインへ飛ぶ(欠けは badge.unknown で言う) */
+  .source-jump {
     display: flex; align-items: center; gap: 8px; padding: 2px 0; background: none; border: none;
     cursor: pointer; text-align: left; width: 100%;
   }
