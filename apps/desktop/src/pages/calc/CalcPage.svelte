@@ -360,7 +360,7 @@
       return {
         ...x,
         pct: fmtNum(Math.max(1.5, (x.v / total) * 100), 2, "%"),
-        share: `${Math.round((x.v / total) * 100)}%`,
+        share: fmtPct(x.v / total),
         // 最後の段は必ず A に着地させる(切捨ての端数で足し算が合わなくなるのを防ぐ)
         to: i === raw.length - 1 ? atk.value : running,
       };
@@ -443,11 +443,11 @@
   const catAtCap = (c: (typeof activeCategories)[number]) =>
     !!c.cap && c.cap.max !== null && c.value >= c.cap.max - 1e-9;
   const fmtCatValue = (c: (typeof activeCategories)[number]) =>
-    c.kind === "rate" ? `${c.value >= 0 ? "+" : ""}${fmtNum(c.value * 100)}%` : fmtNum(c.value);
+    c.kind === "rate" ? fmtSignedPct(c.value, { max: 4 }) : fmtNum(c.value);
   /** 上限で捨てられた分(生の合算値 − 上限適用後)。0 なら捨てていない */
   const catLoss = (c: (typeof activeCategories)[number]) => c.raw - c.value;
   const fmtCatRaw = (c: (typeof activeCategories)[number]) =>
-    c.kind === "rate" ? `${c.raw >= 0 ? "+" : ""}${fmtNum(c.raw * 100)}%` : fmtNum(c.raw);
+    c.kind === "rate" ? fmtSignedPct(c.raw, { max: 4 }) : fmtNum(c.raw);
   const fmtCatLoss = (c: (typeof activeCategories)[number]) => {
     const loss = catLoss(c);
     return c.kind === "rate" ? fmtSignedPct(-loss, { max: 4 }) : fmtSigned(-loss, { max: 4 });
@@ -556,7 +556,7 @@
       : all.filter((x) => x.category === c);
   };
   const fmtContributionValue = (kind: CategoryTrace["kind"], v: number) =>
-    kind === "rate" ? `${v >= 0 ? "+" : ""}${fmtNum(v * 100)}%` : fmtNum(v);
+    kind === "rate" ? fmtSignedPct(v, { max: 4 }) : fmtNum(v);
   const catMat = (c: CategoryTrace): Mat => {
     // A 攻撃力は ① と同じ構成(ステ攻撃力 / 装備攻撃力 / 強化倍率)で開く。供給源 1 行では読めない
     if (c.category === "attack_power" && atkRows.length > 0) {
@@ -1258,7 +1258,7 @@
   /** 伸び率の表示。**表記ダメージと合計ダメージの 2 本**を並べる — シャープネスビジョンや
    *  武器強化のように「表記は動かないのに合計は伸びる」ものがあり、片方だけだと
    *  「効いていない」と読めてしまう(ユーザー判断 2026-09-01)。 */
-  const deltaText = (pct: number) => (pct === 0 ? "±0%" : `${pct > 0 ? "+" : ""}${pct}%`);
+  const deltaText = (pct: number) => (pct === 0 ? "±0%" : fmtSigned(pct, { max: 2 }, "%"));
   function applyWhatIf(w: UpgradeCandidate) {
     leavingWhatIfId = w.id;
     // editSim と同じ SIM_LIMIT ガード(w.applied は列挙時点の payload + 候補 1 件ぶんの変更)
@@ -1704,14 +1704,14 @@
   function buffContributionText(def: BuffDefinition): string {
     const statRows = (result?.trace.stat_source_effects ?? [])
       .filter((c) => c.source === def.name && c.effect !== 0)
-      .map((c) => ({ label: `${STAT_LABELS[c.kind]} ${c.effect > 0 ? "+" : ""}${fmtInt(c.effect)}`, value: c.effect }));
+      .map((c) => ({ label: `${STAT_LABELS[c.kind]} ${fmtSigned(c.effect, { max: 3 })}`, value: c.effect }));
     const parts: string[] = [];
     if (statRows.length > 0) parts.push(topRowsText(statRows));
     for (const c of result?.trace.category_contributions ?? []) {
       if (c.source === def.name && c.value !== 0) {
         const cat = result?.trace.categories.find((x) => x.category === c.category);
         const label = cat ? `${cat.symbol}` : c.category;
-        parts.push(`${label} ${c.value > 0 ? "+" : ""}${fmtNum(c.value * 100)}%`);
+        parts.push(`${label} ${fmtSignedPct(c.value, { max: 4 })}`);
       }
     }
     return parts.join(" ・ ");
@@ -2389,7 +2389,7 @@
                     <span class="num br-mult dim">{f.mult}</span>
                     <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{fmtSigned(f.add)}</span><!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
                     <span use:delta={{ get: () => Math.round(f.add) }} class:follow={changedFlowKeys.includes(`flow:${f.k}`)} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(`flow:${f.k}`); }}></span>
-                    <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
+                    <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{fmtPct(Math.abs(f.add) / flowTotal)}</span>
                   </button>
                   {@render detailBox(register(`flow:${f.k}`, stepDetail(f.step, f.mult, f.add, f.to)), isDetailOpen(`flow:${f.k}`))}
                 {/each}
@@ -2468,7 +2468,7 @@
             <span class="sim-title">{simDirty ? "装備・スキルを試し変更中" : "装備・スキルはキャラ登録どおり"}</span>
             <!-- 差分の枠も常に確保する。出た瞬間に行が 1px 伸びて下がずれる(§09 規則 4) -->
             <span class="num sim-delta" class:on={simDirty} class:up={deltaPct > 0} class:down={deltaPct < 0}
-            >{simDirty ? (deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`) : ""}</span>
+            >{simDirty ? deltaText(deltaPct) : ""}</span>
           </div>
           <!-- 主語をタイトルに置く。「登録どおり」だけだと、何が登録どおりなのか分からず
                初見で止まる(ユーザー指摘 2026-08-31)。主語は「材料」ではなく**装備・スキル** —

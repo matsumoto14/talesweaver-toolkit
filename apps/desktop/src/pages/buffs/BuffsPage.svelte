@@ -507,7 +507,7 @@
   function statRows(def: BuffDefinition): { label: string; value: number }[] {
     return buffSourceEffects
       .filter((c) => c.source === def.name && c.effect !== 0)
-      .map((c) => ({ label: `${STAT_LABELS[c.kind]} ${c.effect >= 0 ? "+" : ""}${fmtInt(c.effect)}`, value: c.effect }));
+      .map((c) => ({ label: `${STAT_LABELS[c.kind]} ${fmtSigned(c.effect, { max: 3 })}`, value: c.effect }));
   }
   /** ステ増分行を上位 2 件 + ほか n(の件数)に絞ったもの。「ほか n」は別枠のボタンとして
    *  出すので topRowsText(1 行テキスト化)ではなく構造化された topRows を使う。 */

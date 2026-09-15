@@ -181,7 +181,7 @@
   });
 
   const traceFor = (k: StatKind) => preview?.traces.find((t) => t.kind === k) ?? null;
-  const signed = (n: number) => `${n >= 0 ? "+" : ""}${fmtInt(n)}`;
+  const signed = (n: number) => fmtSigned(n, { max: 3 });
 
   // ゲーム内の能力値と突き合わせるとき、合わない原因は「登録内容の抜け」であって計算ではない。
   // どこから来た上昇かが見えないと、抜けているのがバフなのか装備なのかを人が当てるしかない。

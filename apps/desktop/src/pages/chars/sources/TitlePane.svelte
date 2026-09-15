@@ -2,7 +2,7 @@
   // 「title」補正源のペイン。装備枠 1 つ、表示中の 1 件だけが効く(wiki: 称号システム)。
   import type { Skill, TitleDef } from "../../../api/types";
   import type { Draft } from "../../../draft";
-  import { fmtInt, fmtSigned } from "../../../format";
+  import { fmtSigned } from "../../../format";
   import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT } from "../../../labels";
   import { app } from "../../../state.svelte";
   import { flash } from "../../../ui/motion.svelte";
@@ -85,7 +85,7 @@
   const commonTitleGroups = $derived(groupTitles(filteredCommonTitles));
   const otherTitleGroups = $derived(groupTitles(filteredOtherTitles));
 
-  const signed = (n: number) => `${n >= 0 ? "+" : ""}${fmtInt(n)}`;
+  const signed = (n: number) => fmtSigned(n, { max: 3 });
 </script>
 
 <!-- 称号候補。依存違いだけの変種は 1 行にまとめ、**選択中の行だけ**変種ボタンを出す

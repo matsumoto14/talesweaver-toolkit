@@ -55,6 +55,9 @@ RULES = {
     "R9": ("枠のある操作部品に border-radius が無い", "§04"),
     "R10": ("font-size が実寸スケールの外", "§05"),
     "R11": ("format.ts の外で toLocaleString / toFixed を直呼び", "§08"),
+    "R12": ("ui/ の外に生の input / select / textarea", "§07"),
+    "R13": ("fmtSigned / fmtPct を通らない符号付き・% の数値", "§08"),
+    "R14": ("ページ側で面・未収録・主役数字を独自に作る", "§01 / §05 / §08"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
@@ -64,6 +67,27 @@ FONT_SCALE = {44, 40, 27, 19, 17, 15, 14, 13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5,
 # R11: 桁区切り・小数桁は format.ts だけが決める(§08「数値の 3 段」)。画面側の直呼びは違反
 FORMAT_TS = SRC / "format.ts"
 RAW_FORMAT_CALL = re.compile(r"\.(toLocaleString|toFixed)\s*\(")
+
+# R12: 入力は ui/ の 5 形態(StatInput / TextField / Picker / StepSelect / ToggleRow)だけが生の要素を持つ(§07)。
+# file / checkbox / radio / range は 5 形態の外(ファイル選択・ON/OFF)なので見ない
+UI_DIR = SRC / "ui"
+RAW_INPUT = re.compile(r"<(input|select|textarea)\b([^>]*)>", re.S)
+INPUT_TYPE = re.compile(r'type\s*=\s*"([^"]*)"')
+RAW_INPUT_TYPES = {"text", "number", "search"}
+
+# R13: 符号と % は format.ts が付ける(§08)。手書きの符号(`+${…}` / 三項の "+")と Math.round(x * 100)}% は違反。
+# 強化段のラベル(装備 +7 / Lv)は段の名前であって符号ではないので除く
+RAW_PCT = re.compile(r"Math\.round\([^\n]*?\*\s*100\)\}%")
+RAW_SIGN = re.compile(r"[+−]\$\{([^}]*)\}")
+RAW_SIGN_TERNARY = re.compile(r"""\?\s*["']\+["']\s*:\s*["']["']\s*\}\$\{""")
+STEP_LABEL = re.compile(r"enhance|level|\blv\b|\+ 1\b|\.join\(")
+
+# R14: 面は app.css の .inset、未収録は .badge.unknown、18px 超の数字は役割トークン(§01 / §05 / §08)。
+# ページ側(ui/ と app.css 以外)で塗り直したり作り直したりしない
+SURFACE_INSET = re.compile(r"var\(--surface-inset\)")
+UNKNOWN_NAMES = {"unknown", "unk", "missing", "unrecorded"}
+DASHED_BORDER = re.compile(r"(?:^|[;\s])border(?:-style)?\s*:\s*[^;{}]*\bdashed\b")
+MAX_BODY_FONT_PX = 18
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
 CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
@@ -207,6 +231,65 @@ def check_raw_format(path: Path, text: str, out: list[Finding]) -> None:
     for i, line in enumerate(text.split("\n"), 1):
         for m in RAW_FORMAT_CALL.finditer(line):
             out.append(Finding("R11", path, i, m.group(1), "format.ts の fmtInt / fmtNum / fmtPct / fmtSigned / fmtRate に寄せる"))
+
+
+def is_page_side(path: Path) -> bool:
+    """ページ側 = ui/ と app.css の外。共有部品と土台は規格の実装そのものなので対象外。"""
+    return path != APP_CSS and UI_DIR not in path.parents
+
+
+def check_raw_inputs(path: Path, text: str, out: list[Finding]) -> None:
+    """R12。ui/ の外の .svelte にある生の入力要素。"""
+    if path.suffix != ".svelte" or not is_page_side(path):
+        return
+    for m in RAW_INPUT.finditer(text):
+        tag, attrs = m.group(1), m.group(2)
+        if tag == "input":
+            t = INPUT_TYPE.search(attrs)
+            kind = t.group(1) if t else "text"
+            if kind not in RAW_INPUT_TYPES:
+                continue
+            value = f"<input type={kind}>"
+        else:
+            value = f"<{tag}>"
+        out.append(Finding("R12", path, 1 + text.count("\n", 0, m.start()), value,
+                           "ui/ の StatInput / TextField / Picker / StepSelect / ToggleRow に寄せる"))
+
+
+def check_raw_sign(path: Path, text: str, out: list[Finding]) -> None:
+    """R13。.svelte で符号や % を手で組み立てている箇所。"""
+    if path.suffix != ".svelte":
+        return
+    for i, line in enumerate(text.split("\n"), 1):
+        if RAW_PCT.search(line):
+            out.append(Finding("R13", path, i, "Math.round(x * 100)}%", "fmtPct(rate) に寄せる"))
+        if RAW_SIGN_TERNARY.search(line):
+            out.append(Finding("R13", path, i, '${x >= 0 ? "+" : ""}${…}', "fmtSigned / fmtSignedPct に寄せる"))
+        for m in RAW_SIGN.finditer(line):
+            if STEP_LABEL.search(m.group(1)):
+                continue  # 強化段のラベル
+            out.append(Finding("R13", path, i, m.group(0), "fmtSigned / fmtSignedPct に寄せる"))
+
+
+def check_page_surfaces(chunk: Chunk, out: list[Finding]) -> None:
+    """R14。ページ側の CSS で面・未収録・主役数字を独自に作っている箇所。"""
+    if not is_page_side(chunk.path):
+        return
+    for m in SURFACE_INSET.finditer(chunk.text):
+        out.append(Finding("R14", chunk.path, chunk.line_of(m.start()), "var(--surface-inset)",
+                           "塗り直さず app.css の .inset を付ける"))
+    for m in FONT_SIZE.finditer(chunk.text):
+        if float(m.group(1)) > MAX_BODY_FONT_PX:
+            out.append(Finding("R14", chunk.path, chunk.line_of(m.start(1)), f"{m.group(1)}px",
+                               "18px 超は --t-result / --t-result-inline / --t-heading だけ"))
+    if chunk.kind != "css":
+        return
+    for sel, body, offset in rule_blocks(chunk):
+        names = sel_names(sel)
+        if "badge" in names or not (names & UNKNOWN_NAMES) or not DASHED_BORDER.search(body):
+            continue
+        out.append(Finding("R14", chunk.path, chunk.line_of(offset), sel,
+                           "未収録は .badge.unknown で出す(独自の破線 class を作らない)"))
 
 
 def check_radius(chunk: Chunk, out: list[Finding]) -> None:
@@ -359,7 +442,10 @@ def collect() -> list[Finding]:
         text = path.read_text(encoding="utf-8")
         check_colors(path, text, tokens, out)
         check_raw_format(path, text, out)
+        check_raw_inputs(path, text, out)
+        check_raw_sign(path, text, out)
         for chunk in css_chunks(path, text):
+            check_page_surfaces(chunk, out)
             check_radius(chunk, out)
             check_tabular(chunk, out)
             check_icon_size(chunk, out)

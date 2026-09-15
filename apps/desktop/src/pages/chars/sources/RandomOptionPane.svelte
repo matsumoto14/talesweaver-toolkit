@@ -50,7 +50,7 @@
     };
     const addPoint = (label: string, v: number) => {
       if (v === 0) return;
-      rows.push({ label, value: `${v > 0 ? "+" : ""}${v}` });
+      rows.push({ label, value: fmtSigned(v, { max: 3 }) });
     };
     for (const dep of SKILL_DEPENDENCIES) {
       addPercent(`与ダメージ増加(${SKILL_DEPENDENCY_LABELS[dep]})`, t.dependency_damage_rate[dep]);

@@ -345,7 +345,7 @@
   let heroAccuracy = $state<number | null>(null);
   let heroAdvice = $state<UpgradeCandidate[]>([]);
   /** 伸び率の表示。表記ダメージと合計ダメージの 2 本を同じ書き方で並べる(計算タブと同じ) */
-  const deltaText = (pct: number) => (pct === 0 ? "±0%" : `${pct > 0 ? "+" : ""}${pct}%`);
+  const deltaText = (pct: number) => (pct === 0 ? "±0%" : fmtSigned(pct, { max: 2 }, "%"));
   /** スポットライトの /hit(previewDamage の結果)。主軸スキル設定済みならそのスキルの値 */
   let heroDamage = $state<{
     skillId: string;

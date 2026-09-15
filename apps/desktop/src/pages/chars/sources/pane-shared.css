@@ -83,10 +83,6 @@
   .grow > .base { background: var(--flow-base); }
   .grow > .add { background: var(--accent); }
   .fixed-value { font-size: 11px; font-weight: 500; }
-  /* マスタリー待ちで値が決まらないものは破線で出す(0 や空白で埋めない。§03) */
-  .fixed-value.unknown {
-    padding: 0 4px; border: 1px dashed var(--border); border-radius: var(--r-inset); opacity: 0.6;
-  }
 
   /* 装備ドリルダウン: 部位一覧 */
   /* 装備のドリルダウン(§09 規則 2)。掘るたびに右へペインが増え、前の階層は消えない。
@@ -393,8 +389,6 @@
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .skill-chip .skill-name { font-weight: 700; }
   .skill-chip.on .skill-meta { background: rgba(255, 255, 255, 0.7); color: var(--sel-fg); }
-  /* 未収録は破線 + ? で、空白や「単体」で埋めない(§00) */
-  .skill-chip .skill-meta.unknown { background: none; border: 1px dashed var(--border); }
   .skill-all { margin-top: 7px; max-width: 320px; }
   .element-auto { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .element-picked {

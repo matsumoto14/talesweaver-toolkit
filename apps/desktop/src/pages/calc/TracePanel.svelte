@@ -1,7 +1,7 @@
 <script lang="ts">
   // 詳細トレース(能力値・カテゴリ・式の各段)。「なぜこの数字？」の最深部。
   import type { CategoryTrace, DamageContribution, DamageTrace, StatSourceEffect, StatTrace } from "../../api/types";
-  import { fmtInt, fmtNum, formatLayerValue } from "../../format";
+  import { fmtInt, fmtNum, fmtSignedPct, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import { bump } from "../../ui/motion.svelte";
   import { PresenceMemo } from "../../ui/presence";
@@ -34,7 +34,7 @@
     return `${f(c.cap.min)} … ${f(c.cap.max)}`;
   };
   const fmtValue = (c: CategoryTrace) =>
-    c.kind === "rate" ? `${c.value >= 0 ? "+" : ""}${fmtNum(c.value * 100)}%` : fmtNum(c.value);
+    c.kind === "rate" ? fmtSignedPct(c.value, { max: 4 }) : fmtNum(c.value);
 
   /** ステ補正源の寄与内訳。STAT_KINDS の順、同じステ内は元の配列順を保つ */
   // 行の出入り(称号の入れ替えなど)は出典でキーにして、抜けた行を次の変化まで残す(ui/presence.ts)
@@ -61,7 +61,7 @@
     ),
   );
   const fmtContributionValue = (kind: CategoryTrace["kind"], v: number) =>
-    kind === "rate" ? `${v >= 0 ? "+" : ""}${fmtNum(v * 100)}%` : fmtNum(v);
+    kind === "rate" ? fmtSignedPct(v, { max: 4 }) : fmtNum(v);
 </script>
 
 <details class="trace">
