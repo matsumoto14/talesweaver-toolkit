@@ -578,6 +578,48 @@ li::marker { color: var(--fg-dim); }
 .chip.add { background: var(--card-soft2); border-style: dashed; border-color: var(--edge); color: var(--accent); }
 .chip.sim { border-color: var(--sim); color: var(--sim-fg); }
 .chip .dotb { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(160deg,#EDECF7,#D9D7EC); border: 1px solid var(--sim); }
+.chip.why { border-style: dashed; border-color: var(--sim); color: var(--sim-fg); background: var(--s5-bg); font-size: 9.5px; padding: 2px 8px; }
+
+/* 行チップ(§07 形態 3 の行版) — 行全体が押せる面。印は置かず、面の色だけで言う */
+.togrow {
+  display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 9px 0 10px;
+  border-radius: var(--r-panel); border: 1px solid var(--edge-soft); background: #fff;
+  font-size: 12px; cursor: pointer; transition: border-color .15s ease;
+}
+.togrow + .togrow { margin-top: 3px; }
+.togrow:hover { border-color: var(--accent); }
+.togrow .nm { font-weight: 500; color: var(--fg-sub); }
+.togrow .cond { margin-left: auto; font-size: 9.5px; color: var(--fg-muted); min-width: 70px; text-align: right; }
+.togrow .val { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; min-width: 52px; text-align: right; color: #A9B4C4; }
+.togrow .nm + .val { margin-left: auto; }
+.togrow.on { background: linear-gradient(180deg,#CCF7FF,#90D7FF); border-color:#687287; box-shadow: inset 0 1px 0 #fff; }
+.togrow.on .nm { font-weight: 700; color:#123047; }
+.togrow.on .cond { color:#123047; opacity: .75; }
+.togrow.on .val { color:#123047; }
+.togrow.temp.on { background: var(--s5-bg); border-color: var(--sim); box-shadow: none; }
+.togrow.temp.on .nm, .togrow.temp.on .val { color: var(--sim-fg); }
+
+/* 文字欄 — 28px / r-panel。既定は読み取り、触れたら入力面 */
+.tfield {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; min-width: 180px;
+  border-radius: var(--r-panel); border: 1px solid var(--frame); background: #fff; font-size: 12px;
+}
+.tfield.read { background: transparent; border-color: transparent; color: var(--fg-sub); }
+.tfield .auto { margin-left: auto; font-size: 9px; color: var(--fg-dim); }
+.tfield .lens { color: var(--fg-dim); font-size: 11px; }
+.tfield .cnt { margin-left: auto; font-family: var(--num); font-size: 8.5px; color: var(--fg-dim); }
+.tfield.multi { height: 56px; align-items: flex-start; padding-top: 6px; }
+
+/* ReadRow — 読み取り面(インセット)の ラベル + 値 */
+.readrows { background: var(--inset); border: 1px solid var(--edge-soft); border-radius: var(--r-inset); padding: 8px 10px; }
+.readrow { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
+.readrow .k { font-size: 10.5px; font-weight: 700; color: var(--fg-muted); min-width: 64px; }
+.readrow .v { margin-left: auto; font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; min-width: 64px; text-align: right; }
+.readrow .v.up { color: var(--s1-fg); }
+.readrow .v.unk { color: var(--fg-muted); border-bottom: 1px dashed var(--s4-bd); }
+.badge.unk { background: var(--s4-bg); border-color: var(--s4-bd); color: var(--s4-fg); border-style: dashed; }
+.fig { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--fg); line-height: 1; }
+.figl { font-size: 10.5px; font-weight: 700; color: var(--fg-muted); letter-spacing: .04em; }
 
 .pop {
   width: 258px; border-radius: var(--r-panel); background:#fff;
@@ -1812,7 +1854,12 @@ td code { background: var(--card-soft2); }
             <span class="demo">
               <span class="chip" style="background:linear-gradient(180deg,#CCF7FF,#90D7FF);border-color:#687287;color:#123047;font-weight:700">改・信頼の薬 <b class="num" style="font-size:9px">+12%</b></span>
               <span class="chip">イルミネ祭り <b class="num" style="font-size:9px;color:var(--fg-dim)">+8%</b></span>
-              <span class="cap">値はチップの中に書く。<br>選ぶ = 値が確定する</span>
+              <span class="cap">値はチップの中に書く。<br>選ぶ = 値が確定する。印は置かない — 面の色だけ</span>
+              <span style="display:flex;flex-direction:column;min-width:250px">
+                <span class="togrow on"><span class="nm">ペット S スキル</span><span class="cond">常時</span><span class="val">+5%</span></span>
+                <span class="togrow"><span class="nm">究極ルーン</span><span class="cond">装着時</span><span class="val">+3%</span></span>
+              </span>
+              <span class="cap">名前 + 条件 + 値を持つなら<b style="color:var(--fg-sub)">行チップ</b>。<br>行全体が押せる面。値は右端固定幅</span>
             </span>
           </div>
 
@@ -1820,7 +1867,7 @@ td code { background: var(--card-soft2); }
             <span class="lv">4</span>
             <span class="nm"><b>ステッパー</b><span>連続値だが上限があり、刻みが決まっているとき</span></span>
             <span class="demo">
-              <span class="cap" style="max-width:34ch">＋ / − と MAX で動かす。<br><b style="color:var(--fg-sub)">上限は値の隣に常設</b>し、届いたらバー・枠・MAX が金になる。<br>下の実演がこの形。</span>
+              <span class="cap" style="max-width:34ch">＋ / − と MAX で動かす。<br><b style="color:var(--fg-sub)">上限は値の隣に常設</b>し、届いたらバー・枠・MAX が金になる。<br><b style="color:var(--fg-sub)">セル底のバー</b>が「上限に対していまどこか」を言う。スライダーは置かない。<br>セルを押せば手入力に入る(どのモードでも)。下の実演がこの形。</span>
             </span>
           </div>
 
@@ -1829,8 +1876,8 @@ td code { background: var(--card-soft2); }
             <span class="nm"><b>自由入力</b><span>例外。ここまで降りたら理由を書く</span></span>
             <span class="demo">
               <span class="fld-edit num" style="min-width:96px">2,000</span>
-              <span class="chip add">調整値</span>
-              <span class="cap">シミュレーション用の一時値と、<br>外部データで取れない値だけ</span>
+              <span class="chip why">調整値 · 一時</span>
+              <span class="cap">シミュレーション用の一時値と、<br>外部データで取れない値だけ。<br>青枠 + 破線チップで<b style="color:var(--fg-sub)">理由を書く</b></span>
             </span>
           </div>
 
@@ -1900,6 +1947,59 @@ td code { background: var(--card-soft2); }
           <span class="cap">自由入力 — 白 + 青枠 + 破線チップ</span>
         </div>
         <p class="cap">自由入力を禁止はしない。禁止すると未収録データと検証に対応できなくなる。<b style="color:var(--fg-sub)">「例外として許す」位置づけを見た目で表す</b>のが正しい落とし所。</p>
+
+        <div class="sec">行チップ<span class="r">オン / オフはこれ 1 つ。チェックボックスは使わない</span></div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><b>補正源の行</b><span class="r">名前 + 発動条件 + 値</span></div>
+            <div class="togrow on"><span class="nm">ペット S スキル</span><span class="cond">常時</span><span class="val">+5%</span></div>
+            <div class="togrow"><span class="nm">究極ルーン</span><span class="cond">装着時</span><span class="val">+3%</span></div>
+            <div class="togrow"><span class="nm">デッドリーブロウ</span><span class="cond">Lv 5 以上</span><span class="val">+4%</span></div>
+            <div class="togrow temp on" style="margin-top:8px"><span class="nm">クリティカル発生</span><span class="val">×1.5</span></div>
+            <p class="cap" style="margin-top:9px">オン = 水色 + 上端 1px ハイライト(保存される)/ 一時 = ラベンダー / オフ = 白(押せる面)。</p>
+          </div>
+          <div class="card soft">
+            <div class="card-h"><b>ここで守っていること</b></div>
+            <ul style="font-size:11px">
+              <li><strong>印(チェック)は置かない。</strong>形態 3 のチップと同じで、オン / オフは面の色だけで言う。押せる行であることは、オフを白に置くことと hover の青枠で担保する</li>
+              <li><strong>オフでも値は消さない。</strong>選べば何が乗るかを読ませる。色だけ薄く落とす</li>
+              <li><strong>値は右端の固定幅。</strong>30 行並んでも縦に読める。条件は値の手前</li>
+              <li><strong>行の中に別の操作(Lv の段など)を持つ行は、押せる面を名前側だけに限る。</strong>行全体を押せる面にすると、段を押した瞬間にオフになる</li>
+              <li>部品は <code>tone: "saved" | "temp"</code> の 2 値だけ持つ</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="sec">1 つ選ぶ<span class="r">順序があれば段、なければチップ + Picker。ドロップダウンは使わない</span></div>
+        <div class="spec col" style="gap:9px">
+          <div class="field-row"><span class="k">順序あり</span>
+            <span class="seg" role="group" aria-label="強化段階"><button type="button">なし</button><button type="button">強化</button><button type="button" class="on" aria-pressed="true">真1</button><button type="button">真2</button><button type="button">真3</button></span>
+            <span class="cap">段階選択(形態 2)</span>
+          </div>
+          <div class="field-row"><span class="k">順序なし・少数</span>
+            <span class="chip" style="background:linear-gradient(180deg,#CCF7FF,#90D7FF);border-color:#687287;color:#123047;font-weight:700">ボス用 <b class="num" style="font-size:9px">+18%</b></span>
+            <span class="chip">狩り用 <b class="num" style="font-size:9px;color:var(--fg-dim)">+9%</b></span>
+            <span class="chip" style="padding:3px 9px;font-size:9.5px;background:none;color:var(--fg-dim)">なし</span>
+            <span class="cap">≤ 5 件ならチップだけ。Picker は出さない</span>
+          </div>
+          <div class="field-row"><span class="k">順序なし・多数</span>
+            <span class="chip" style="background:linear-gradient(180deg,#CCF7FF,#90D7FF);border-color:#687287;color:#123047;font-weight:700">攻撃力増加 <b class="num" style="font-size:9px">+5%</b></span>
+            <span class="chip">命中増加 <b class="num" style="font-size:9px;color:var(--fg-dim)">+30</b></span>
+            <span class="chip">クリ率増加 <b class="num" style="font-size:9px;color:var(--fg-dim)">+3%</b></span>
+            <span class="fld-sel" style="padding:3px 9px"><span style="font-size:10.5px;color:var(--fg-dim)">ほか 9 件</span> <span class="cv">▾</span></span>
+            <span class="cap">よく使うものはチップで手前に固定、残りは Picker</span>
+          </div>
+        </div>
+        <p class="cap">「よく使う」は<b style="color:var(--fg-sub)">固定で、ドメイン知識で決める</b>(gamedata 側に「先頭に出す」印を持つ)。使用履歴で並べない — 選んだ瞬間にチップが入れ替わり、§00 ③「押した場所は動かない」に反する。Picker の候補行には<b style="color:var(--fg-sub)">選ぶのに要る値を必ず出す</b>。値の無い候補は並べる根拠が無く、素の <code>&lt;select&gt;</code> と同じ画面になる。</p>
+
+        <div class="sec">文字欄<span class="r">5 形態の外。既定は読み取り、触れたら入力面</span></div>
+        <div class="spec col" style="gap:9px">
+          <div class="field-row"><span class="k">呼び名(自動値)</span><span class="tfield read">ボリス<span class="auto">キャラ名を使用</span></span></div>
+          <div class="field-row"><span class="k">ラベル</span><span class="tfield">ボス用<span class="cnt">6/40</span></span></div>
+          <div class="field-row"><span class="k">検索</span><span class="tfield"><span class="lens">⌕</span>装備名で探す<span class="cnt">1,204 件</span></span></div>
+          <div class="field-row"><span class="k">自由記述</span><span class="tfield multi" style="min-width:280px">3 ヒット目だけ当たらなかった<span class="cnt">14/200</span></span></div>
+        </div>
+        <p class="cap">高さ 28px / 角丸 r-panel で全ページ同一。<b style="color:var(--fg-sub)">placeholder に頼らない</b> — 呼び名はキャラ名を自動値として埋め、§08 フィールドと同じ「表示が既定・編集は例外」の関係にする。<b style="color:var(--fg-sub)">検索欄は件数を常設</b>する(「範囲は入力欄が知っている」の文字版)。自由記述は同じ枠を縦に伸ばすだけ。</p>
       </div>
     </section>
 
@@ -1938,7 +2038,8 @@ td code { background: var(--card-soft2); }
         <div class="spec col" style="gap:9px">
           <div class="field-row"><span class="k">既定(読取)</span><span class="fld-read num">2,000</span><a href="#parts" style="font-size:10.5px">編集</a></div>
           <div class="field-row"><span class="k">編集中</span><span class="fld-edit num">2,000</span><span class="cap">1 – 9,999</span></div>
-          <div class="field-row"><span class="k">選択</span><span class="fld-sel">トゥタトゥール <span class="cv">▾</span></span></div>
+          <div class="field-row"><span class="k">Picker</span><span class="fld-sel">トゥタトゥール <span class="cv">▾</span></span><span class="cap">1 件 1 行の候補面。§07「1 つ選ぶ」</span></div>
+          <div class="field-row"><span class="k">文字欄</span><span class="tfield">ボス用<span class="cnt">6/40</span></span><span class="cap">§07「文字欄」</span></div>
           <div class="field-row"><span class="k">段階選択</span>
             <span class="seg" role="group" aria-label="覚醒段階">
               <button type="button">強化</button><button type="button">真1</button><button type="button">真2</button><button type="button">真3</button><button type="button" class="on" aria-pressed="true">真4</button>
@@ -1997,6 +2098,28 @@ td code { background: var(--card-soft2); }
             <div class="pop-r"><span class="dt" style="background:#B0574A"></span><span class="nm">アルカディウス</span><span class="vl num">1,880</span><span class="badge b3" style="font-size:8.5px">届かない</span></div>
           </div>
           <p class="cap" style="max-width:30ch">最大高 240〜262px でスクロールし、グループ見出しは sticky。背後に全画面の透明オーバーレイを敷いて外側クリックで閉じる。スキル一覧だけ枠が金 <code>#A9821F</code>。</p>
+        </div>
+
+        <div class="sec">数値の 3 段<span class="r">18px を超える数値は役割トークンだけ</span></div>
+        <div class="spec" style="gap:22px;align-items:flex-end">
+          <span style="display:flex;flex-direction:column;gap:4px"><span class="figl">最終ダメージ</span><span class="fig" style="font-size:44px">128,400</span><span class="cap">--t-result 44px · 画面の主役</span></span>
+          <span style="display:flex;flex-direction:column;gap:4px"><span class="figl">A 攻撃力</span><span class="fig" style="font-size:19px">2,462</span><span class="cap">--t-heading 19px · カード群の親</span></span>
+          <span style="display:flex;flex-direction:column;gap:4px"><span class="figl">命中P</span><span class="fig" style="font-size:12.5px">1,240</span><span class="cap">--t-body 12.5px · 行</span></span>
+        </div>
+        <p class="cap">主役の数字はページごとに寸法を持たない(ホーム 27px・対人 28px は 44px に寄せて実機で判断する)。桁区切り・小数桁は <code>format.ts</code>(int / pct / signed / rate)だけが決め、画面側で <code>toLocaleString</code> / <code>toFixed</code> を呼ばない。</p>
+
+        <div class="sec">ReadRow<span class="r">読み取り面は インセット + ラベル + 右端固定幅の値</span></div>
+        <div class="spec" style="align-items:flex-start">
+          <div class="readrows" style="min-width:220px">
+            <div class="readrow"><span class="k">攻撃力</span><span class="v">2,462</span></div>
+            <div class="readrow"><span class="k">命中P</span><span class="v up">1,240 <span style="font-size:9px">↑12</span></span></div>
+            <div class="readrow"><span class="k">回避P</span><span class="v unk">?</span></div>
+            <div class="readrow"><span class="k">追加固定</span><span class="v">+180</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px">
+            <span><span class="badge unk">未収録 ?</span> <span class="badge b5">一時</span></span>
+            <p class="cap" style="max-width:34ch">状態はバッジ 1 種類ずつ。未収録は破線 + <code>?</code> で、<code>0</code> や空白にしない。ページごとに <code>--surface-inset</code> を塗り直さず、<code>.inset</code> を使う。</p>
+          </div>
         </div>
 
         <div class="sec">スプリッター<span class="r">当たり判定 9px / 線は 1px</span></div>
@@ -2451,45 +2574,13 @@ td code { background: var(--card-soft2); }
         <span class="note">決めたものはここから消し、規格の節へ実物として移す</span>
       </div>
       <div class="win-body">
-        <p class="lede">規格だけでは答えが出ない場面のうち、<strong>まだ答えを決めていない</strong>もの。決まったら該当の節へ実物として移し、ここからは消す。<b>2026-08-25</b> に置いた 6 件(鎖 / 効いていない分の棚卸し / 補正源の並び / 相手依存の値 / 欠けの表現 / 試し変更の上限)はすべて着地したので、それぞれ §02・§03・§06・§09 へ移した。</p>
+        <p class="lede">規格だけでは答えが出ない場面のうち、<strong>まだ答えを決めていない</strong>もの。決まったら該当の節へ実物として移し、ここからは消す。<b>2026-08-25</b> に置いた 6 件(鎖 / 効いていない分の棚卸し / 補正源の並び / 相手依存の値 / 欠けの表現 / 試し変更の上限)はすべて着地したので、それぞれ §02・§03・§06・§09 へ移した。<b>2026-09-15</b> に保留 A(スライダー)/ B(オン・オフの割れ)/ E(ドロップダウン)を決め、§07「行チップ」「1 つ選ぶ」「文字欄」と §08「数値の 3 段」「ReadRow」へ移した。</p>
 
 
 
         <div class="sec">判断を保留しているもの<span class="r">決めるまで違反として数えない</span></div>
         <p>適合ループの実機監査で出たが、<strong>規格と実装のどちらが正しいかこの場では決められなかった</strong>もの。
           決めたら該当の節を直し、ここからは消す。</p>
-        <div class="dec">
-          <div class="dec-h"><span class="n2">A</span><b>数値入力のスライダーは 5 形態のどれなのか</b><span class="soonbadge">保留</span></div>
-          <p><code>StatInput</code> は「数値欄 + スライダー + MAX」で出来ている。<strong>スライダーは §07 の 5 形態のどれでもない。</strong>
-            形態 4(ステッパー)に寄せて <b>− / +</b> にするか、スライダーを 6 つ目の形態として規格に足すか。
-            実機では「上限に対していまどのあたりか」を掴むのにスライダーが効いていて、単純に消すと情報が減る。</p>
-          <p class="why"><b>決めるのに要るもの</b> v4 にスライダーがあるかどうか(あれば規格の書き落とし、無ければ実装の逸脱)。</p>
-          <span class="where">効くところ: キャラタブ 調整 / 装備エンチャント</span>
-        </div>
-        <div class="dec">
-          <div class="dec-h"><span class="n2">B</span><b>オン / オフの選択がチェックボックスとチップに割れている</b><span class="soonbadge">保留</span></div>
-          <p>計算タブのバフは<b>チップ</b>(形態 3)、キャラタブのクリティカル率・中ディレイ・ペット S スキルは<b>チェックボックス</b>。
-            §07 は「上から順に試す」なのでチップに寄せるのが筋だが、補正源ペインの行は<b>名前 + 値 + 発動条件</b>を並べていて、
-            チップにすると値と条件が読めなくなる可能性がある。</p>
-          <p class="why"><b>決めるのに要るもの</b> チップの中に「値」まで入れて 30 行並べたときに読めるか、の実物確認。</p>
-          <span class="where">効くところ: キャラタブ 各補正源ペイン / 計算タブ バフ</span>
-        </div>
-        <div class="dec">
-          <div class="dec-h"><span class="n2">E</span><b>ドロップダウンは 5 形態のどこにも無い</b><span class="soonbadge">保留</span></div>
-          <p>順序のある有限選択は<b>段階選択</b>(形態 2)にした。<b>並べきれない多数(スキル 20 種など)は
-            2026-08-26 に<code>ui/Picker.svelte</code>(1 件 1 行・重なって出る候補の面)へ移した</b> —
-            素の <code>&lt;select&gt;</code> では「名前のほかに選ぶのに要る値(単 / 範・段数・属性)」と
-            アイコンを出せないため。残っているのは 2 種類で、
-            どちらも 5 形態に当てるものが無い:</p>
-          <p><b>1. 順序のない有限選択</b> — 属性 / 対象ステ / アビリティ / キャラ。「段階」ではないので
-            並べても順序の意味が出ない。チップ列にすると 7〜12 個が横に並び、1 つしか選べないのに
-            複数選べるように見える。<br />
-            <b>2. 段階として並べられない長さ</b> — エタの意志 Lv(0〜100)。101 個は段階ではない。
-            形態 4(ステッパー)が近いが、それは保留 A(スライダーの位置づけ)と絡む。</p>
-          <p class="why"><b>決めるのに要るもの</b> v4 にこの 2 種類の入力があるか。無ければ
-            「6 つ目の形態」として足すか、別の見せ方(検索付きのポップオーバー等)を決める。</p>
-          <span class="where">効くところ: キャラタブ 属性 / 装備アビリティ / キャラステータス</span>
-        </div>
         <div class="dec">
           <div class="dec-h"><span class="n2">F</span><b>装備ペインの「下の帯」を作るか、フッターに寄せるか</b><span class="soonbadge">保留</span></div>
           <p>§12 は装備を決める画面の下に <b>突き 合計 / 斬り 合計 / 追加固定 / A 攻撃力</b> の 4 数値の帯を置き、
