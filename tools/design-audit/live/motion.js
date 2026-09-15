@@ -71,10 +71,10 @@ const WATCH = `(() => {
   // **同じ対象のまま材料を変える**操作で測る。どちらも試し変更(sim)なので保存されない —
   // キャラタブの入力は自動保存で実データを壊すため、probe は計算タブの sim だけで組む
   await probe("計算・コンボ条件を切り替える", async () => {
-    await page.locator(".combo .check input[type=checkbox]").first().dispatchEvent("click");
+    await page.locator(".combo .togrow .face").first().dispatchEvent("click");
   });
   // 戻す
-  await page.locator(".combo .check input[type=checkbox]").first().dispatchEvent("click").catch(() => {});
+  await page.locator(".combo .togrow .face").first().dispatchEvent("click").catch(() => {});
   await wait(700);
 
   // 「計算の材料」のカードは既定で全部畳んである。中の入力を測るには先に開く
@@ -82,7 +82,7 @@ const WATCH = `(() => {
     page.locator(".card-head", { has: page.locator(".card-title", { hasText: new RegExp("^" + title + "$") }) });
   const card = (title) => page.locator(".card", { has: head(title) });
   const openCard = async (title) => {
-    if ((await card(title).locator(".basics-rows, .ultimate-chips").count()) === 0) {
+    if ((await card(title).locator(".basics-rows, .ultimate-chips, .togrow").count()) === 0) {
       await head(title).click();
       await wait(700);
     }
@@ -90,7 +90,7 @@ const WATCH = `(() => {
 
   // --- 極限スキルを入れ替える(1 発・合計・1 秒あたり・クリ率が同時に変わる)
   await openCard("極限スキル");
-  const ult = page.locator(".ultimate-chip:not([disabled])");
+  const ult = page.locator(".ultimate-chips .togrow .face:not([disabled])");
   if (await ult.count()) {
     await probe("計算・極限スキルを外す", async () => {
       await ult.first().dispatchEvent("click");

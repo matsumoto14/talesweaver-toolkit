@@ -10,7 +10,7 @@ const { chromium } = require("playwright-core");
 
 /** 押せるものの探し方。role=button の div もキャラ一覧の行なので拾う */
 const CLICKABLE =
-  'button:not([disabled]), [role="button"], label.check, .src-line, .row';
+  'button:not([disabled]), [role="button"], .togrow .face, .src-line, .row';
 
 /**
  * **押してはいけないもの。**保存・削除・登録は DB を変える。

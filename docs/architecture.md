@@ -115,7 +115,7 @@ api/invoke.ts          呼び出しの実体。デスクトップは Tauri、ブ
                        vite の alias で差し替わる(画面はどちらか知らない)
 api/browserStore.ts    ブラウザ版の保存(IndexedDB)/ api/transfer.ts データの書き出し・読み込み
 web/                   ブラウザ版での Tauri プラグイン相当(外部リンク・HTTP・更新・プロセス)
-ui/                    画面によらない汎用部品(Select, StatInput, AdjustmentEditor, Splitter, persistedState)
+ui/                    画面によらない汎用部品(Select, StatInput, ToggleRow, Splitter, persistedState)
 pages/<機能>/          機能ごとの画面と、その画面専用の部品
 buffs.ts               バフ選択の共通ロジック(純関数)
 candidates.ts          強化候補の列挙(効果の計算は Rust 側 preview_damage)

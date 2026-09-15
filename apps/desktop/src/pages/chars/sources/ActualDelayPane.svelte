@@ -8,7 +8,7 @@
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
-  import { flash } from "../../../ui/motion.svelte";
+  import ToggleRow from "../../../ui/ToggleRow.svelte";
   import type { SourceId } from "../sourceId";
   import ExternalSourceList, { type ExternalSource } from "./ExternalSourceList.svelte";
 
@@ -78,22 +78,20 @@
     (マスタリーは段ごとに 1 つで中ディレイ以外にも効くので、キャラスキルの欄にまとめてあります)。
     中ディレイと 1 秒あたりの火力は計算タブに出ます。
   </p>
-  <div class="buff-list">
+  <div class="toggle-list">
     {#if delaySkills.length === 0}
       <p class="empty dim">このキャラには中ディレイ減少のスキルがありません(wiki の表に記載なし)。</p>
     {/if}
     {#each delaySkills as def (def.id)}
       {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
-      <label class="check">
-        <input
-          type="checkbox"
-          checked={skillChecked(def.id)}
-          onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
-        />
-        <span>{def.name}</span>
-        <span class="fixed-value dim num" use:flash={() => label ?? ""}>{label ?? "マスタリー未取得"}</span>
-        {#if def.note}<span class="dim note">{def.note}</span>{/if}
-      </label>
+      <ToggleRow
+        name={def.name}
+        cond={def.note || undefined}
+        value={label ?? "マスタリー未取得"}
+        title={def.note || undefined}
+        on={skillChecked(def.id)}
+        onToggle={() => toggleCharSkill(def.id, !skillChecked(def.id))}
+      />
     {/each}
   </div>
   {#if delaySkillPercent > 0}

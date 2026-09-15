@@ -6,8 +6,8 @@
   } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import { app } from "../../../state.svelte";
-  import { flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
+  import ToggleRow from "../../../ui/ToggleRow.svelte";
 
   interface Props {
     draft: Draft;
@@ -99,65 +99,48 @@
     スキルの効果は<b>取っているマスタリーで変わります</b>(wiki の各カテゴリ表がその形)。
     上のマスタリーを選び直すと、ここの値も一緒に動きます。
   </p>
-  <!-- 自分のスキルはバフのチップではなく、マスタリーと同じ「アイコン + 名前 + 効果」の
-       スキルカードで出す。選択状態は面の色だけにせず、固定幅の状態バッジでも言い切る。 -->
-  <div class="character-skill-grid">
+  <!-- 自分のスキルは行チップ(ToggleRow)。ゲーム内と同じスキルアイコンを名前の左に置き、
+       効果はマスタリー込みの実数を右端に出す。適用中かどうかは面の色だけで言う(§07) -->
+  <div class="toggle-list">
     {#if ownCharacterSkills.length === 0}
       <p class="empty dim">このキャラのスキルデータは未収録です。</p>
     {/if}
     {#each ownCharacterSkills as def (def.id)}
       {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       {@const checked = skillChecked(def.id)}
-      <label class="character-skill-card" class:on={checked} title={def.note}>
-        <input
-          type="checkbox"
-          checked={checked}
-          onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
-        />
-        <Icon kind="skill" id={def.id} size={28} label={def.name} />
-        <span class="character-skill-text">
-          <span class="character-skill-head">
-            <span class="character-skill-name">{def.name}</span>
-            <span
-              class="character-skill-state"
-              class:on={checked}
-              use:flash={() => checked ? "適用中" : "未適用"}
-            >{checked ? "適用中" : "未適用"}</span>
-          </span>
-          <span
-            class="character-skill-effect num"
-            class:unknown={label === null}
-            use:flash={() => label ?? ""}
-          >{label ?? "マスタリー未取得"}</span>
-          {#if def.note}<span class="character-skill-note dim">{def.note}</span>{/if}
-        </span>
-      </label>
+      <ToggleRow
+        name={def.name}
+        cond={def.note || undefined}
+        value={label ?? "マスタリー未取得"}
+        title={def.note || undefined}
+        on={checked}
+        onToggle={() => toggleCharSkill(def.id, !checked)}
+      >
+        {#snippet icon()}<Icon kind="skill" id={def.id} size={20} label={def.name} />{/snippet}
+      </ToggleRow>
     {/each}
   </div>
   <div class="card-title space">味方から受けるスキル</div>
-  <div class="buff-list">
+  <div class="toggle-list">
     {#if allyCharacterSkills.length === 0}
       <p class="empty dim">味方から受けるスキルデータは未収録です。</p>
     {/if}
     {#each allyCharacterSkills as def (def.id)}
       {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       {@const sourceCharacter = app.gameCharacters.find((c) => c.id === def.game_character_id)}
-      <label class="check">
-        <input
-          type="checkbox"
-          checked={skillChecked(def.id)}
-          onchange={(e) => toggleCharSkill(def.id, e.currentTarget.checked)}
-        />
-        <Icon
-          kind="character"
-          id={def.game_character_id}
-          size={20}
-          label={sourceCharacter?.name ?? def.game_character_id}
-        />
-        <span>{def.name}</span>
-        <span class="fixed-value dim">{label ?? "—"}</span>
-        {#if def.note}<span class="dim note">{def.note}</span>{/if}
-      </label>
+      {@const checked = skillChecked(def.id)}
+      <ToggleRow
+        name={def.name}
+        cond={def.note || undefined}
+        value={label ?? "—"}
+        title={def.note || undefined}
+        on={checked}
+        onToggle={() => toggleCharSkill(def.id, !checked)}
+      >
+        {#snippet icon()}
+          <Icon kind="character" id={def.game_character_id} size={20} label={sourceCharacter?.name ?? def.game_character_id} />
+        {/snippet}
+      </ToggleRow>
     {/each}
   </div>
 </div>

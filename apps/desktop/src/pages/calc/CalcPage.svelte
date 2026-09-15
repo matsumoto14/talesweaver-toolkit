@@ -37,13 +37,13 @@
     upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
-  import CheckChip from "../../ui/CheckChip.svelte";
   import Icon from "../../ui/Icon.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import Select from "../../ui/Select.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import StepToggle from "../../ui/StepToggle.svelte";
+  import ToggleRow from "../../ui/ToggleRow.svelte";
   import { positionPopover } from "../../ui/popover";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
@@ -1288,7 +1288,6 @@
     if (!buffOn(def)) return "off";
     return saved ? "always" : "extra";
   };
-  const BUFF_STATE_LABEL = { always: "常", extra: "追", off: "" } as const;
   const alwaysBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "always").length);
   const extraBuffCount = $derived(consumableBuffs.filter((d) => buffState(d) === "extra").length);
   function chooseCalcBuffSet(value: string) {
@@ -1780,62 +1779,45 @@
                 {@const state = buffState(def)}
                 {@const blocked = state === "off" && calcBlockedBuffs.some((b) => b.buff_id === def.id)}
                 {@const detail = state !== "off" && hasDetail(def)}
-                <!-- 「設定」を独立した的にするため、チップ本体はネイティブ button ではなく
-                     role="button" の div にする(button の中に button は入れられない)。
-                     値の調整は**チップに重ねて**開く(§09 規則 3)— 下に積むと、ON にした数だけ
-                     ペインが伸びる(実測: 詳細 11 件で 1330px)。 -->
-                <div
-                  class="buff-chip"
-                  class:on={state !== "off"}
-                  class:extra={state === "extra"}
-                  class:disabled={blocked}
-                  role="button"
-                  tabindex={blocked ? -1 : 0}
-                  aria-disabled={blocked}
-                  aria-pressed={state !== "off"}
+                <!-- ON にしたチップの実際の寄与(供給源ごとの実数。写経しない)。
+                     値の調整(設定・ポップオーバー)は押せる面の外(extra)に置く —
+                     押した名前の上に段を差し込まない(§00 03) -->
+                <ToggleRow
+                  name={def.name}
+                  value={state !== "off" ? buffContributionText(def) : undefined}
+                  on={state !== "off"}
+                  tone={state === "extra" ? "temp" : "saved"}
+                  disabled={blocked}
                   title={blocked ? "同枠の他バフと排他です" : def.note || undefined}
-                  onclick={() => { if (!blocked) toggleBuffChip(def); }}
-                  onkeydown={(e) => {
-                    if ((e.key === "Enter" || e.key === " ") && !blocked) { e.preventDefault(); toggleBuffChip(def); }
-                  }}
+                  onToggle={() => { if (!blocked) toggleBuffChip(def); }}
                 >
-                  <!-- アイコンは行内サイズ(20)。名前は必ず併記する(§08: アイコン単独表示は禁止)。
-                       未収録の id は破線 + ? になり、その場でも幅は変わらない -->
-                  <Icon kind="buff" id={def.id} size={20} label={def.name} />
-                  <span class="buff-chip-copy">
-                    <span>{def.name}</span>
-                    <!-- ON にしたチップの実際の寄与(供給源ごとの実数)。写経しない -->
-                    {#if state !== "off"}
-                      {@const note = buffContributionText(def)}
-                      {#if note}<span class="buff-chip-note dim" use:flash={() => note}>{note}</span>{/if}
-                    {/if}
-                  </span>
-                  {#if detail}
-                    <button
-                      type="button"
-                      class="chip-config"
-                      onclick={(e) => { e.stopPropagation(); openBuffEditor(def); }}
-                      aria-expanded={buffEditorId === def.id}
-                      aria-label={`${def.name} の設定`}
-                    >設定</button>
-                  {/if}
-                  <!-- 状態バッジの枠は常に確保する。付いた瞬間にチップが伸びると、
-                       隣のチップが折り返して並びが動く(§09 規則 4) -->
-                  <span class="chip-state" class:on={state !== "off"}
-                  >{state !== "off" ? BUFF_STATE_LABEL[state] : ""}</span>
-                  {#if detail && buffEditorId === def.id}
-                    {@const choice = buffChoiceOf(def.id)}
-                    {#if choice}
-                      <div
-                        class="popover buff-editor"
-                        role="dialog"
-                        tabindex="-1"
+                  {#snippet icon()}
+                    <!-- 未収録の id は破線 + ? になり、その場でも幅は変わらない -->
+                    <Icon kind="buff" id={def.id} size={20} label={def.name} />
+                  {/snippet}
+                  {#snippet extra()}
+                    {#if detail}
+                      <button
+                        type="button"
+                        class="chip-config"
+                        onclick={(e) => { e.stopPropagation(); openBuffEditor(def); }}
+                        aria-expanded={buffEditorId === def.id}
                         aria-label={`${def.name} の設定`}
-                        use:positionPopover
-                        onclick={(e) => e.stopPropagation()}
-                        onkeydown={(e) => e.stopPropagation()}
-                      >
-                        {#if isMultiTarget(def.target)}
+                      >設定</button>
+                    {/if}
+                    {#if detail && buffEditorId === def.id}
+                      {@const choice = buffChoiceOf(def.id)}
+                      {#if choice}
+                        <div
+                          class="popover buff-editor"
+                          role="dialog"
+                          tabindex="-1"
+                          aria-label={`${def.name} の設定`}
+                          use:positionPopover
+                          onclick={(e) => e.stopPropagation()}
+                          onkeydown={(e) => e.stopPropagation()}
+                        >
+                          {#if isMultiTarget(def.target)}
                           <!-- クラブエフェクトはステごとに 1 つずつ併用できる。ここでは対象ステの
                                出し入れだけを試せるようにし、値はバフタブ側の設定を引き継ぐ -->
                           <StepToggle
@@ -1893,11 +1875,12 @@
                             />
                           {/if}
                         {/if}
-                        <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); buffEditorId = null; }}>閉じる</button>
-                      </div>
+                          <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); buffEditorId = null; }}>閉じる</button>
+                        </div>
+                      {/if}
                     {/if}
-                  {/if}
-                </div>
+                  {/snippet}
+                </ToggleRow>
   {/snippet}
 
 <svelte:window
@@ -2540,16 +2523,17 @@
           <div class="ultimate-chips">
             {#each ULTIMATE_SKILLS as u (u)}
               {@const on = payload.common_skills.ultimate.slots.includes(u)}
-              <button
-                type="button" class="ultimate-chip" class:on
+              <ToggleRow
+                name={ULTIMATE_SKILL_LABELS[u]}
+                value={ultimateChipNote(u)}
+                {on}
+                tone="temp"
                 disabled={!on && ultimateFull}
                 title={!on && ultimateFull ? `${ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。` : undefined}
-                onclick={() => toggleUltimate(u)}
+                onToggle={() => toggleUltimate(u)}
               >
-                <Icon kind="skill" id={u} size={20} label={ULTIMATE_SKILL_LABELS[u]} />
-                <span class="uc-name">{ULTIMATE_SKILL_LABELS[u]}</span>
-                <span class="uc-note dim" use:flash={() => ultimateChipNote(u)}>{ultimateChipNote(u)}</span>
-              </button>
+                {#snippet icon()}<Icon kind="skill" id={u} size={20} label={ULTIMATE_SKILL_LABELS[u]} />{/snippet}
+              </ToggleRow>
             {/each}
           </div>
           {#if ultimateFull}
@@ -2816,15 +2800,13 @@
             <span class="dim small num" use:flash={() => polishHeadNote}>{polishHeadNote}</span>
           </button>
           {#if openMaterial === "polish"}
-          <div class="basics-rows">
-            <div class="basics-row">
-              <span class="basics-label">効かせる</span>
-              <button
-                type="button" class="chip" class:on={polishOn} disabled={polishDef === null}
-                onclick={() => { if (polishDef) toggleBuffChip(polishDef); }}
-              >{polishOn ? "ON" : "OFF"}</button>
-            </div>
-          </div>
+          <ToggleRow
+            name="研磨を効かせる"
+            on={polishOn}
+            tone="temp"
+            disabled={polishDef === null}
+            onToggle={() => { if (polishDef) toggleBuffChip(polishDef); }}
+          />
           {#if polishRows.length === 0}
             <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("polish")}>
               <span class="coverage">未登録</span>
@@ -2941,9 +2923,13 @@
              ユーザーが決めるのは「コンボするかどうか」なので、コンボ数は出さない。
              代わりに**成立条件**(間に通常攻撃を挟む)を ON のときだけ添える(§00 05 考えさせない) -->
         <div class="combo">
-          <CheckChip checked={combo} onCheckedChange={(v) => (combo = v)}>
-            <span>コンボする</span>
-          </CheckChip>
+          <ToggleRow
+            name="コンボする"
+            value={`+${Math.round(limits.combo_bonus_rate * 100)}%`}
+            on={combo}
+            tone="temp"
+            onToggle={() => (combo = !combo)}
+          />
           <p class="combo-note dim">
             ダメージ +{Math.round(limits.combo_bonus_rate * 100)}% ・ 中ディレイ半分。
             <b>スキル → 通常攻撃 → スキル</b>のように、間に通常攻撃を挟むと成立します。
@@ -3390,9 +3376,6 @@
      (実測)。横に並ぶ利点が出ないうえ、名前の頭が縦に揃わず探しにくい。**1 列の行**にして、
      頭を揃える。丸(--r-pill)は「小さな状態の印」に使う形なので、行にはインセットの角丸 */
   .buff-chips {
-    /* 1 行 = アイコン 20 と、名前 + 寄与の 2 行(13 + 1 + 12)のうち高いほう + 余白と枠線 */
-    --buff-text-h: 26px;
-    --buff-row-h: calc(var(--buff-text-h) + 8px + 2px);
     margin-top: 5px; margin-bottom: 3px; display: flex; flex-direction: column; gap: 3px;
   }
   .enchant-dep { margin: 6px 0 0; font-size: 9px; }
@@ -3418,39 +3401,6 @@
   .bg-count { flex: none; min-width: 5ch; text-align: right; font-size: 9px; font-weight: 500; }
   .calc-buff-set { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--fg-muted); }
   .calc-buff-set select { min-width: 160px; height: 28px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--bg-field); color: var(--fg); }
-  .buff-chip {
-    /* 重なりもの(.buff-editor)の位置の基準。チップ自身は動かさない */
-    position: relative;
-    /* 行の高さは中身より先に決める(§09 規則 4)。ON になると寄与の行が増えるが、
-       枠は 2 行ぶん取ってあるので下の行は動かない */
-    width: 100%; height: var(--buff-row-h); display: flex; align-items: center; gap: 7px;
-    padding: 4px 8px; border-radius: var(--r-inset);
-    background: var(--bg-field); border: 1px solid var(--border-soft);
-    font-size: 10px; font-weight: 500; color: var(--fg-muted); text-align: left; cursor: pointer;
-  }
-  .buff-chip:hover:not(.disabled) { border-color: var(--accent); }
-  .buff-chip-copy { flex: 1; min-width: 0; height: var(--buff-text-h); display: flex; flex-direction: column; justify-content: center; gap: 1px; overflow: hidden; }
-  .buff-chip-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* ON にしたチップの実際の寄与。写経しない(previewDamage のトレースから引く) */
-  .buff-chip-note { font-size: 8.5px; font-weight: 700; }
-  .buff-chip.on {
-    background: var(--sel);
-    border-color: var(--sel-bd); color: var(--sel-fg); font-weight: 700;
-  }
-  /* 追加枠は「保存されない」ので、その専用色(--sim)にそろえる */
-  .buff-chip.on.extra {
-    background: linear-gradient(180deg, #fff, var(--state-temp-bg));
-    border-color: var(--sim); color: var(--sim-fg);
-  }
-  .buff-chip .chip-state {
-    display: inline-block; min-width: 15px; text-align: center;
-    margin-left: 5px; padding: 0 5px; border-radius: var(--r-pill);
-    background: transparent; border: 1px solid transparent;
-    font-size: 8.5px; font-weight: 700; color: transparent;
-  }
-  .buff-chip .chip-state.on {
-    background: rgba(255, 255, 255, 0.75); border-color: currentColor; color: inherit;
-  }
   .buff-legend { margin: 7px 0 0; font-size: 9px; line-height: 1.7; }
   .buff-legend .lg {
     display: inline-block; padding: 0 5px; border-radius: var(--r-pill);
@@ -3461,14 +3411,13 @@
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
   /* 値の調整。チップに重ねて出すので、ON にした数だけペインが伸びることがない */
   .buff-editor { top: calc(100% + 4px); left: 0; min-width: 210px; gap: 7px; }
-  /* チップ本体(押すと ON/OFF)とは別の的。縦の区切りで「ここだけ別」と分かるようにする */
+  /* 行の押せる面(.face)とは別の的。extra に置くので行そのものは押しても動かない */
   .chip-config {
-    flex: none; margin-left: 6px; padding: 0 0 0 6px;
-    border: 0; border-left: 1px solid currentColor; background: none;
-    color: inherit; font: inherit; font-size: 8.5px; text-decoration: underline;
+    flex: none; margin: 0 2px 0 0; padding: 0 0 0 6px;
+    border: 0; border-left: 1px solid var(--border-soft); background: none;
+    color: var(--fg-muted); font: inherit; font-size: 8.5px; text-decoration: underline;
     text-underline-offset: 2px; cursor: pointer; opacity: .8;
   }
-  .chip-config:hover { opacity: 1; }
-  .buff-chip.disabled { opacity: .45; cursor: default; }
+  .chip-config:hover { opacity: 1; color: var(--accent); }
 
 </style>

@@ -10,6 +10,7 @@
   import { app } from "./state.svelte";
   import { reportError } from "./toast.svelte";
   import StepSelect from "./ui/StepSelect.svelte";
+  import ToggleRow from "./ui/ToggleRow.svelte";
 
   let { onClose, prefill = null }: { onClose: () => void; prefill?: InquiryDraft | null } = $props();
 
@@ -112,10 +113,12 @@
             <textarea bind:value={body} maxlength="4000" rows="5" placeholder="どう操作すると起きるか、本当はどうなるはずかを書いてください"></textarea>
           </label>
 
-          <label class="diag-toggle">
-            <input type="checkbox" bind:checked={includeDiagnostics} />
-            バージョンなどの情報を一緒に送る
-          </label>
+          <ToggleRow
+            name="バージョンなどの情報を一緒に送る"
+            tone="temp"
+            on={includeDiagnostics}
+            onToggle={() => (includeDiagnostics = !includeDiagnostics)}
+          />
 
           <div class="preview-label">送られる内容</div>
           <div class="preview inset">{preview(draft, includeDiagnostics)}</div>
@@ -170,10 +173,6 @@
   .line textarea { resize: vertical; line-height: 1.6; }
   .line input:focus, .line textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-  .diag-toggle {
-    display: flex; align-items: center; gap: 6px;
-    font-size: var(--t-label); color: var(--fg-muted);
-  }
   .preview-label { font-size: var(--t-label); color: var(--fg-muted); }
   .preview {
     padding: 8px 10px; max-height: 170px; overflow-y: auto;

@@ -9,6 +9,7 @@
   import { fmtInt } from "../../../format";
   import { bump } from "../../../ui/motion.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
+  import ToggleRow from "../../../ui/ToggleRow.svelte";
   import type { SourceId } from "../sourceId";
   import ExternalSourceList, { type ExternalSource } from "./ExternalSourceList.svelte";
 
@@ -86,23 +87,26 @@
     対象のAGI とクリティカル被撃率は wiki 狩り場情報一覧に値がある敵だけに入っているので、
     計算タブでは<b>その敵を選んだときだけ</b>クリティカル率が出ます。
   </p>
-  <div class="buff-list">
-    <label class="check">
-      <input type="checkbox" bind:checked={draft.statSources.critical_rate.pet} />
-      <span>ペット会心</span>
-      <span class="fixed-value dim">×{limits.pet_critical_rate}</span>
-    </label>
-    <label class="check">
-      <input type="checkbox" bind:checked={draft.statSources.critical_rate.ultimate_rune} />
-      <span>極のルーン</span>
-      <span class="fixed-value dim">+{limits.ultimate_rune_bonus_max}%</span>
-      <span class="dim note">最大レベル時</span>
-    </label>
-    <label class="check">
-      <input type="checkbox" bind:checked={draft.statSources.critical_rate.deadly_blow} />
-      <span>致命打</span>
-      <span class="fixed-value dim">+{limits.deadly_blow_bonus_max}%</span>
-    </label>
+  <div class="toggle-list">
+    <ToggleRow
+      name="ペット会心"
+      value={`×${limits.pet_critical_rate}`}
+      on={draft.statSources.critical_rate.pet}
+      onToggle={() => (draft.statSources.critical_rate.pet = !draft.statSources.critical_rate.pet)}
+    />
+    <ToggleRow
+      name="極のルーン"
+      cond="最大レベル時"
+      value={`+${limits.ultimate_rune_bonus_max}%`}
+      on={draft.statSources.critical_rate.ultimate_rune}
+      onToggle={() => (draft.statSources.critical_rate.ultimate_rune = !draft.statSources.critical_rate.ultimate_rune)}
+    />
+    <ToggleRow
+      name="致命打"
+      value={`+${limits.deadly_blow_bonus_max}%`}
+      on={draft.statSources.critical_rate.deadly_blow}
+      onToggle={() => (draft.statSources.critical_rate.deadly_blow = !draft.statSources.critical_rate.deadly_blow)}
+    />
   </div>
   <!-- 設計者の研究室だけは段階制(wiki: B グループは最大 10 段階・1 段階 +3)。
        オン/オフだと 1〜9 段階の人が入力できない。チェックの列は割らずに下へ置く -->

@@ -30,8 +30,10 @@ const log = (...a) => console.log(...a);
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }, v);
-  // チェックボックス(buff-check): <label class="buff-check">名称 <input type=checkbox>
-  const checkbox = (scope, text) => scope.locator(".buff-check", { hasText: text }).locator("input[type=checkbox]");
+  // 行チップ(ui/ToggleRow): <div class="togrow [on]"><button class="face">名称 … 値</button></div>
+  // toggle(scope, text) で押す。オンかどうかは .togrow.on で見る
+  const toggleRow = (scope, text) => scope.locator(".togrow", { hasText: text });
+  const toggle = (scope, text) => toggleRow(scope, text).locator(".face").click();
 
   // ---- キャラ管理画面
   // 一覧からキャラを選ぶ(表示名の完全一致)
@@ -90,7 +92,7 @@ const log = (...a) => console.log(...a);
   const eq = await openGroup("装備");
   await setNum(statInput(statsBlock(eq, 0), "突き攻撃力"), 400);
   await setNum(statInput(statsBlock(eq, 1), "突き攻撃力"), 200);
-  await checkbox(eq, "パワーウェポン").check();
+  await toggle(eq, "パワーウェポン");
   await selectByLabel(eq, "ストロングウェポン").selectOption({ label: "Lv6(+18%)" });
   log("未保存 badge after save:", await saveCharacter());
   await shot("99-smoke-example.png");

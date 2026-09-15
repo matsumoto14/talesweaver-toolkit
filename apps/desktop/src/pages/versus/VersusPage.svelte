@@ -23,6 +23,7 @@
   import { latest } from "../../ui/latest.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
+  import ToggleRow from "../../ui/ToggleRow.svelte";
 
   type CharacterRef = (typeof app.characters)[number];
 
@@ -345,13 +346,6 @@
     }
   }
 
-  // 材料名は列幅に入り切らないことがある。CJK は任意の文字間で折り返せるので、何もしないと
-  // 語の途中で切れる。助詞の直後にだけ折り返し位置(U+200B)を置き、CSS 側で
-  // `word-break: keep-all` にしてそこ以外では切らない(既存の実装踏襲)
-  function softBreaks(label: string): string {
-    return label.replace(/([のをに])(?=\S)/g, "$1​");
-  }
-
   /** 命中P / 回避P ブロックの開閉。svelte/transition の slide は height を動かすが、
    *  .stat-body は flex の子(flex: 1)なので height が無視されて動かない(実機で検出)。
    *  max-height なら flex でも効く。動いている間だけ親ブロックの flex を止め、下の段(回避P の頭)が
@@ -413,20 +407,14 @@
     <span class="unk">?</span>
   {:else}
     {@const on = swordIsOn(character.id)}
-    <!-- チップは押した瞬間に切り替わる(§00 03/04)。数値は結果が返ったら動く -->
-    <button
-      type="button"
-      class="sword-chip"
-      class:on
-      aria-pressed={on}
-      onclick={() => (swordOn[character.id] = !on)}
+    <!-- 行チップは押した瞬間に切り替わる(§00 03/04)。この画面だけの切り替えなので tone="temp" -->
+    <ToggleRow
+      name={`${skill.name} Lv${skill.max_level}`}
+      on={on}
+      tone="temp"
       title="対人タブの中だけの切り替えです(キャラには保存しません)"
-    >
-      <span use:flash={() => (on ? "on" : "off")}>
-        {skill.name} Lv{skill.max_level}
-        <span class="sword-state">{on ? "ON" : "OFF"}</span>
-      </span>
-    </button>
+      onToggle={() => (swordOn[character.id] = !on)}
+    />
   {/if}
 {/snippet}
 
@@ -434,26 +422,18 @@
   {@const on = charId !== null && isTried(charId, kind, room.action)}
   {@const label = actionLabel(room.action)}
   {@const buffId = buffIdOf(room.action)}
-  <!-- 計算タブの .buff-chip と同じ見え方(枠・色・状態バッジ)。チェックボックスは使わない -->
-  <div
-    class="try-chip"
-    class:on
-    role="button"
-    tabindex="0"
-    aria-pressed={on}
-    onclick={() => charId !== null && toggleTry(charId, kind, room)}
-    onkeydown={(e) => {
-      if ((e.key === "Enter" || e.key === " ") && charId !== null) { e.preventDefault(); toggleTry(charId, kind, room); }
-    }}
-  >
-    {#if buffId}<Icon kind="buff" id={buffId} size={20} label={label} />{/if}
-    <span class="try-chip-copy">
-      <span>{softBreaks(label)}</span>
-      {#if on}<span class="try-chip-note dim">{room.current} → {room.target}</span>{/if}
-    </span>
-    <span class="try-chip-gain num">{formatPointGain(room.gain)}</span>
-    <span class="try-chip-state" class:on>{on ? "反映中" : ""}</span>
-  </div>
+  {#snippet buffIcon()}<Icon kind="buff" id={buffId!} size={20} label={label} />{/snippet}
+  <!-- 行チップ(§07)。この画面だけの試しなので tone="temp" -->
+  <ToggleRow
+    name={label}
+    cond={on ? `${room.current} → ${room.target}` : undefined}
+    value={formatPointGain(room.gain)}
+    on={on}
+    tone="temp"
+    disabled={charId === null}
+    onToggle={() => charId !== null && toggleTry(charId, kind, room)}
+    icon={buffId ? buffIcon : undefined}
+  />
 {/snippet}
 
 {#snippet growthList(
@@ -885,18 +865,6 @@
   .stat-caret.open { transform: rotate(90deg); }
   .stat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-  /* 的中剣の ON / OFF。押した場所は動かない(幅・高さは状態で変えない) */
-  .sword-chip {
-    font: inherit; font-size: 10px; font-weight: 700; cursor: pointer;
-    border: 1px solid var(--border); border-radius: var(--r-pill);
-    background: var(--bg-field); color: var(--fg-dim);
-    padding: 2px 9px; white-space: nowrap;
-  }
-  .sword-chip.on { border-color: var(--accent); background: var(--bg-active); color: var(--fg-head); }
-  .sword-chip:hover { border-color: var(--accent); }
-  .sword-chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-  .sword-state { display: inline-block; min-width: 3ch; text-align: center; margin-left: 4px; font-size: 9px; letter-spacing: .06em; }
-
   /* 「全部やると」〜「手の面」の段 ------------------------------------------------- */
   .try-section { display: flex; flex-direction: column; gap: 3px; flex: 1; min-height: 0; }
   .try-head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 20px; box-sizing: border-box; }
@@ -934,35 +902,11 @@
   }
   .try-group-gain { letter-spacing: 0; font-weight: 800; }
   /* 何を積んでも率が動かないとき。手は薄く(押せる)、反映中の手だけ元の濃さ */
-  .try-list.stuck .try-chip:not(.on) { opacity: 0.55; }
+  .try-list.stuck .try-chips :global(.togrow:not(.on)) { opacity: 0.55; }
   /* 最終手段(エンチャント)は末尾に薄く。並びは Rust が決めているので、
      ここでやるのは「目立たせない」ことだけ(§00 02) */
   .try-group-label.last-resort { color: var(--fg-off); }
 
-  /* 区分ごとにチップが折り返して並ぶ。計算タブの .buff-chip と同じ配色・状態バッジ */
-  .try-chips { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 2px; }
-  .try-chip {
-    display: flex; align-items: center; gap: 6px; max-width: 100%;
-    padding: 3px 7px; border-radius: var(--r-inset);
-    background: var(--bg-field); border: 1px solid var(--border-soft);
-    font-size: 10px; font-weight: 500; color: var(--fg-muted); cursor: pointer;
-  }
-  .try-chip:hover { border-color: var(--sim); }
-  .try-chip-copy { min-width: 0; max-width: 190px; display: flex; flex-direction: column; justify-content: center; gap: 1px; overflow: hidden; }
-  .try-chip-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .try-chip-note { font-size: 8.5px; font-weight: 700; }
-  .try-chip.on {
-    background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); font-weight: 700;
-  }
-  .try-chip-gain { flex: none; font-size: 10px; font-weight: 800; }
-  /* 状態バッジの枠は常に確保する。付いた瞬間にチップが伸びると隣のチップの折り返しが動く(§09 規則 4) */
-  .try-chip-state {
-    flex: none; display: inline-block; min-width: 30px; text-align: center;
-    padding: 0 5px; border-radius: var(--r-pill);
-    background: transparent; border: 1px solid transparent;
-    font-size: 8.5px; font-weight: 700; color: transparent;
-  }
-  .try-chip-state.on {
-    background: rgba(255, 255, 255, 0.75); border-color: currentColor; color: inherit;
-  }
+  /* 区分ごとに行チップが縦に並ぶ(行は行として積む) */
+  .try-chips { display: flex; flex-direction: column; gap: 3px; padding-bottom: 2px; }
 </style>

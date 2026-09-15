@@ -19,7 +19,7 @@ description: Tauri デスクトップアプリを実機起動し、WebView2 の�
    powershell -File .claude/skills/gui-smoke/scripts/start-app.ps1
    ```
    9222 が開くまで待って戻る。既に起動済みならそのまま使う(二重起動しない)。
-2. **スクリプト作成**: `scripts/smoke-template.js` をスクラッチパッドに **1 ファイルだけ**コピーし、確認項目を書く。ヘルパー(`nav` / `openCharacter` / `openGroup` / `statInput` / `selectByLabel` / `checkbox` / `saveCharacter` / `calculate` / `openTrace` / `textAfter` など)は実機で動作確認済みなので、**DOM 探索(`innerHTML` / `bodyText.slice` の出力)から始めない**。ヘルパーで届かない要素があるときだけ、その要素の周辺に限定して `page.content()` を確認する。スクリプトは `Edit` で差分修正し、毎回 heredoc で書き直さない。
+2. **スクリプト作成**: `scripts/smoke-template.js` をスクラッチパッドに **1 ファイルだけ**コピーし、確認項目を書く。ヘルパー(`nav` / `openCharacter` / `openGroup` / `statInput` / `selectByLabel` / `toggle` / `saveCharacter` / `calculate` / `openTrace` / `textAfter` など)は実機で動作確認済みなので、**DOM 探索(`innerHTML` / `bodyText.slice` の出力)から始めない**。ヘルパーで届かない要素があるときだけ、その要素の周辺に限定して `page.content()` を確認する。スクリプトは `Edit` で差分修正し、毎回 heredoc で書き直さない。
 3. **実行**: Playwright は本リポに入っていないので旧リポの node_modules を使う:
    ```
    NODE_PATH=/c/github/private/twtoolkit/node_modules node <script>.js

@@ -16,11 +16,11 @@
   import { app, flatContents, payloadOf, selectedCharacter } from "../../state.svelte";
   import type { NewCharacter } from "../../api/types";
   import { reportError } from "../../toast.svelte";
-  import CheckChip from "../../ui/CheckChip.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump } from "../../ui/motion.svelte";
   import Picker from "../../ui/Picker.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
+  import ToggleRow from "../../ui/ToggleRow.svelte";
 
   const character = $derived(selectedCharacter());
   const savedPayload = $derived(character ? payloadOf(character) : null);
@@ -314,9 +314,12 @@
               }}
             />
           </label>
-          <CheckChip checked={measuredCritical} onCheckedChange={(v) => (measuredCritical = v)}>
-            <span>クリティカルだった</span>
-          </CheckChip>
+          <ToggleRow
+            name="クリティカルだった"
+            on={measuredCritical}
+            tone="temp"
+            onToggle={() => (measuredCritical = !measuredCritical)}
+          />
         </div>
 
         {#if targetKind === "listed"}

@@ -42,11 +42,11 @@ const CHECK = `(() => {
   });
 
   // チップ
-  document.querySelectorAll("label.check").forEach((el) => {
+  document.querySelectorAll(".togrow").forEach((el) => {
     rows.push({
       kind: "チップ",
       label: txt(el),
-      value: el.querySelector("input")?.checked ? "オン" : "オフ",
+      value: el.classList.contains("on") ? "オン" : "オフ",
       cap: "",
       hint: "",
       near: "",

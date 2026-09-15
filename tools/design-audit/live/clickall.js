@@ -7,8 +7,8 @@ const TARGETS = {
   ダメージ計算: [
     ["攻撃 / 防御タブ", "button.side-tab"],
     ["対象の ◀▶", "button.step"],
-    ["極限スキルのチップ", "button.ultimate-chip:not([disabled])"],
-    ["バフチップ", ".buff-chip:not([disabled])"],
+    ["極限スキルのチップ", ".ultimate-chips .togrow .face:not([disabled])"],
+    ["バフチップ", ".buff-chips .togrow .face:not([disabled])"],
     ["候補(足りない分)", "button.fill-btn"],
     // エンチャントの伸びしろ(試し変更。保存を伴わない = ダメージ計算タブの他項目と同じ扱い)。
     // MAX を押すとその行が一覧から消え、繰り上がった別の行を誤操作させた実害があった箇所
@@ -32,7 +32,7 @@ const TARGETS = {
     ["段階選択", ".seg .step", "キャラステータス"],
     ["数値の編集(行の位置)", ".stepper", "キャラステータス"],
     ["部位の行", "button.part-row", "装備"],
-    ["チップ(オン/オフ)", "label.check", "クリティカル率"],
+    ["行チップ(オン/オフ)", ".togrow .face", "クリティカル率"],
   ],
 };
 
