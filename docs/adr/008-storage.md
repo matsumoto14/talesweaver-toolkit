@@ -47,6 +47,16 @@ IndexedDB の版も上げ、`onupgradeneeded` で既存行に中立値を足す�
 同じ正規化を通す**(読み込み `transfer.ts` が旧い書き出しをそのまま渡してくるため)。
 `SCHEMA_VERSION` は 2 → 3。
 
+### v14: 所持称号一覧(owned_titles)を追加(2026-09-15)
+
+キャラ画面・計算タブで表示中の称号(`equipment.title`、1 枠)だけでなく「持っている称号」から選べるように、
+`equipment.owned_titles: Vec<String>`(`TitleDef::id` の並び)を追加した。既存行は `owned_titles` キーが
+無ければ、`title` が設定済みなら `[title]`、未設定なら `[]` を補う(表示中は通常所持の中の 1 件、という
+新しい不変条件に既存データを合わせる)。SQLite は `#[serde(default)]` でも読めるが、db-migration skill の
+方針どおり IndexedDB 側の食い違いを避けるため SQLite 側も `SCHEMA_VERSION` を 13 → 14 に上げ、
+`migrate_owned_titles` で同じ埋め直しを行う。IndexedDB(`browserStore.ts`)も `SCHEMA_VERSION` を 3 → 4 にし、
+`onupgradeneeded` と `withEquipmentDefaults` に同じ規則を足した。
+
 ### v1 → v8 の変遷
 
 1. **v1**: `characters` 1 テーブル(id, name, game_character_id, 7 ステ, awakening_stage, eta_level)。

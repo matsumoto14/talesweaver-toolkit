@@ -52,7 +52,6 @@
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
-  import { equipmentAttackKindsFor } from "../chars/summaries";
 
   const DEFAULT_RIGHT_WIDTH = 380;
 
@@ -1286,16 +1285,16 @@
   }
 
   // --- 称号(試し変更)。1 枠だけ・補正は基本能力値へ合流(キャラタブの称号ペインと同じ)。
-  //     ここに並べるのは「よく使う称号」(gamedata の common)を主軸スキルの依存種別で絞ったもの。
-  //     それ以外はキャラタブで選ぶ(検索付きの全一覧はあちらにある)
+  //     ここに並べるのは**所持している称号**(equipment.owned_titles)。持っていない称号は
+  //     キャラタブの称号ペインで所持に入れてから選ぶ(検索付きの全一覧はあちらにある)
   const currentTitle = $derived(payload ? app.titles.find((t) => t.id === payload.equipment.title) ?? null : null);
   const titleChoices = $derived.by(() => {
-    const kinds = equipmentAttackKindsFor(mainSkill?.dependency ?? null);
-    const common = app.titles.filter(
-      (t) => t.common && (t.attack_damage_percent > 0 || t.conditional_added_damage !== null || kinds.some((k) => t.values[k] > 0)),
-    );
-    // 装着中の称号が絞り込みの外でも、外す先として行に残す
-    return currentTitle && !common.some((t) => t.id === currentTitle.id) ? [currentTitle, ...common] : common;
+    if (!payload) return [];
+    const owned = payload.equipment.owned_titles
+      .map((id) => app.titles.find((t) => t.id === id))
+      .filter((t): t is TitleDef => t !== undefined);
+    // 装着中の称号が所持の外でも、外す先として行に残す
+    return currentTitle && !owned.some((t) => t.id === currentTitle.id) ? [currentTitle, ...owned] : owned;
   });
   const titleHeadNote = $derived(currentTitle?.name ?? "なし");
   const titleNote = (t: TitleDef): string => {
@@ -2762,7 +2761,7 @@
         </div>
 
 
-        <!-- 称号(試し変更)。よく使う称号を主軸スキルの依存種別で絞って並べる。全一覧はキャラタブ -->
+        <!-- 称号(試し変更)。所持している称号(キャラタブの称号ペインで登録)を並べる -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "title"} onclick={() => toggleMaterial("title")}>
             <span class="bg-caret" aria-hidden="true">{openMaterial === "title" ? "▾" : "▸"}</span>
@@ -2772,21 +2771,29 @@
             <span class="dim small title-head-note" use:flash={() => titleHeadNote}>{titleHeadNote}</span>
           </button>
           {#if openMaterial === "title"}
-          <div class="ultimate-chips">
-            <button type="button" class="ultimate-chip" class:on={currentTitle === null} onclick={() => selectTitle(null)}>
-              <span class="uc-name">なし</span>
+          {#if titleChoices.length === 0}
+            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("title")}>
+              <span class="coverage">未登録</span>
+              <span class="dim small">所持称号はキャラタブの称号ペインで登録</span>
+              <span class="chev dim">›</span>
             </button>
-            {#each titleChoices as t (t.id)}
-              <button type="button" class="ultimate-chip" class:on={currentTitle?.id === t.id} title={t.note || undefined} onclick={() => selectTitle(t.id)}>
-                <span class="uc-name title-name">{t.name}</span>
-                <span class="uc-note dim num">{titleNote(t)}</span>
+          {:else}
+            <div class="ultimate-chips">
+              <button type="button" class="ultimate-chip" class:on={currentTitle === null} onclick={() => selectTitle(null)}>
+                <span class="uc-name">なし</span>
               </button>
-            {/each}
-          </div>
-          <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("title")}>
-            <span class="dim small">ほかの称号はキャラタブの称号ペインで選ぶ</span>
-            <span class="chev dim">›</span>
-          </button>
+              {#each titleChoices as t (t.id)}
+                <button type="button" class="ultimate-chip" class:on={currentTitle?.id === t.id} title={t.note || undefined} onclick={() => selectTitle(t.id)}>
+                  <span class="uc-name title-name">{t.name}</span>
+                  <span class="uc-note dim num">{titleNote(t)}</span>
+                </button>
+              {/each}
+            </div>
+            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("title")}>
+              <span class="dim small">所持称号の追加・変更はキャラタブの称号ペインで</span>
+              <span class="chev dim">›</span>
+            </button>
+          {/if}
           <p class="eq-note dim">称号は<b>基本能力値</b>に合流します。条件付き効果は記録するだけで計算に入りません。</p>
           {/if}
         </div>
