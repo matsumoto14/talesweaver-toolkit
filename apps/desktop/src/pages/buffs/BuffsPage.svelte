@@ -23,13 +23,14 @@
   } from "../../labels";
   import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportUndo } from "../../toast.svelte";
-  import { bump, flash, swap } from "../../ui/motion.svelte";
+  import { bump, swap } from "../../ui/motion.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import StepToggle from "../../ui/StepToggle.svelte";
   import Spinner from "../../ui/Spinner.svelte";
   import { positionPopover } from "../../ui/popover";
   import Icon from "../../ui/Icon.svelte";
+  import ToggleRow from "../../ui/ToggleRow.svelte";
 
   const PURPOSES = BUFF_PURPOSES;
   const ORIGIN_LABELS: Record<BuffOrigin, string> = {
@@ -639,90 +640,46 @@
               {@const hasEditor = needsInput(def)}
               {@const top = isOn ? statTop(def) : null}
               {@const dmg = isOn ? damageText(def) : null}
-              {@const openHere = openInfoId === def.id || openEditorId === def.id}
-              <!-- チップの大きさは ON/OFF で変えない。値の調整も増分の内訳も**重ねて**出す
-                   (§09 規則 3: 重なるものはレイアウトを押さない / 閉じたときに何も動かない)。
-                   チップ自体も動かさない — ON/OFF が変わったことは中の状態バッジが弾んで伝える
-                   (§10 型 5「行そのものは動かさない」) -->
-              <div class="buff-option" class:on={isOn} class:info-open={openHere}>
-                <span class="buff-icon"><Icon kind="buff" id={def.id} size={28} label={def.name} /></span>
-                <!-- 「ほか n」「設定」を独立したボタンにするため、チップ本体はネイティブ button
-                     ではなく role="button" の div にする(button の中に button は入れられない)。
-                     クリック・キー操作の意味は button と同じに保つ。 -->
-                <div
-                  class="buff-toggle"
-                  class:disabled={blocked || saving}
-                  role="button"
-                  tabindex={blocked || saving ? -1 : 0}
-                  aria-disabled={blocked || saving}
-                  aria-pressed={isOn}
-                  onclick={() => { if (!blocked && !saving) toggle(def); }}
-                  onkeydown={(e) => {
-                    if ((e.key === "Enter" || e.key === " ") && !blocked && !saving) { e.preventDefault(); toggle(def); }
-                  }}
-                  title={buffTooltip(def, blocked)}
-                  aria-label={`${def.name}。${effectLine(def)}`}
-                >
-                  <span class="chip-copy">
-                    <span class="chip-head">
-                      <strong>{def.name}</strong>
-                      <!-- ON / 選べない の状態バッジ。枠は 3 状態すべてで常に確保し(空のときは
-                           透明)、ここだけ見れば ON・OFF・選択不可の判別が付くようにする
-                           (§00 05・03: バッジが出た瞬間に幅が変わって隣が動くのを防ぐ) -->
-                      <span
-                        class="chip-state"
-                        class:on={isOn}
-                        class:blocked
-                        use:flash={() => (isOn ? "on" : blocked ? "blocked" : "off")}
-                      >{isOn ? "選択中" : blocked ? "選択不可" : ""}</span>
-                    </span>
-                    {#if isOn && top}
-                      <!-- ON: このキャラで実際に何点伸びたかを行ごとに出す(§00 05)。ステ増分と
-                           ダメージ効果は別行 — 1 行に連結すると長い名前のダメージ効果で溢れる
-                           (5周目 実機指摘)。行の右端に開く的を 1 つだけ置く:
-                           値の調整が要るバフは「設定」(調整と内訳を兼ねる)、
-                           それ以外で割愛した増分があるときだけ「ほか n」。
-                           2 つ並べると 288px に収まらないうえ、押し分けを迫ることになる。 -->
-                      <span class="chip-effect" use:flash={() => effectLine(def)}>
-                        {#if top.shown.length > 0}
-                          <small class="chip-effect-row">
-                            <span class="chip-effect-values">{top.shown.join(" / ")}</span>
-                            {#if hasEditor}
-                              <!-- トグル面の中央に押し分けの要る的を置かない — 行の右端に、縦の区切りで
-                                   「ここだけ別の的」と分かるようにする(実機で誤タップ報告あり)。 -->
-                              <button
-                                type="button"
-                                class="rest-link"
-                                onclick={(e) => { e.stopPropagation(); openEditor(def); }}
-                                aria-expanded={openEditorId === def.id}
-                              >設定</button>
-                            {:else if top.restCount > 0}
-                              <button
-                                type="button"
-                                class="rest-link"
-                                onclick={(e) => { e.stopPropagation(); openInfoId = openInfoId === def.id ? null : def.id; openEditorId = null; }}
-                                aria-expanded={openInfoId === def.id}
-                              >ほか {top.restCount}</button>
-                            {/if}
-                          </small>
-                        {/if}
-                        {#if dmg}<small>{dmg}</small>{/if}
-                        {#if top.shown.length === 0 && !dmg}<small>{effectSummary(def)}</small>{/if}
-                      </span>
-                    {:else if blocked}
-                      <!-- 選べない理由をここに出す(title 無しで読めるように)。同じ
-                           chip-effect の枠を使い、OFF 単独のときの説明文と入れ替える形にして
-                           新しい行を増やさない(チップの高さを崩さない) -->
-                      <span class="chip-effect"><small class="block-reason" use:flash={() => blockReason(def)}>{blockReason(def)}</small></span>
-                    {:else}
-                      <span class="chip-effect"><small use:flash={() => effectLine(def)}>{effectLine(def)}</small></span>
-                    {/if}
-                    <span class="origin-badge">{ORIGIN_LABELS[def.origin]}</span>
-                  </span>
+              {@const restRows = statRows(def)}
+              <!-- 行の値はオンでも消さない(§07 行チップ)。オンはこのキャラの実効果、
+                   選べないバフは理由、オフはカタログの説明文。長ければ ToggleRow の
+                   .val が省略記号で切る。 -->
+              {@const rowValue = isOn
+                ? [...(top?.shown ?? []), ...(dmg ? [dmg] : [])].join(" / ") || effectSummary(def)
+                : blocked ? blockReason(def) : effectLine(def)}
+              <ToggleRow
+                name={def.name}
+                value={rowValue}
+                cond={ORIGIN_LABELS[def.origin]}
+                on={isOn}
+                tone="saved"
+                disabled={blocked || saving}
+                title={buffTooltip(def, blocked)}
+                onToggle={() => toggle(def)}
+              >
+                {#snippet icon()}<Icon kind="buff" id={def.id} size={20} label={def.name} />{/snippet}
+                {#snippet extra()}
+                  <!-- 押せる面は名前側(.face)だけ。「設定」「ほか n」は別の的として名前の外に置く
+                       (§09 規則 3: 押した場所は動かない)。値の調整が要るバフは「設定」
+                       (調整と内訳を兼ねる)、それ以外で割愛した増分があるときだけ「ほか n」。 -->
+                  {#if isOn && hasEditor}
+                    <button
+                      type="button"
+                      class="rest-link"
+                      onclick={(e) => { e.stopPropagation(); openEditor(def); }}
+                      aria-expanded={openEditorId === def.id}
+                    >設定</button>
+                  {:else if isOn && top && top.restCount > 0}
+                    <button
+                      type="button"
+                      class="rest-link"
+                      onclick={(e) => { e.stopPropagation(); openInfoId = openInfoId === def.id ? null : def.id; openEditorId = null; }}
+                      aria-expanded={openInfoId === def.id}
+                    >ほか {top.restCount}</button>
+                  {/if}
                   {#if isOn && top && openInfoId === def.id}
-                    {@const restRows = statRows(def)}
-                    <!-- 「ほか n」の中身。押した場所(チップ)の直下に出し、レイアウトは押さない
-                         (絶対配置なので下のチップを動かさない)。 -->
+                    <!-- 「ほか n」の中身。押した場所(行)の直下に出し、レイアウトは押さない
+                         (絶対配置なので下の行を動かさない)。 -->
                     <div
                       class="popover rest-popover"
                       role="dialog"
@@ -739,8 +696,7 @@
                     </div>
                   {/if}
                   {#if isOn && hasEditor && openEditorId === def.id}
-                    {@const restRows = statRows(def)}
-                    <!-- 値の調整。**チップに重ねて**出すのでレイアウトを押さない(§09 規則 3)。
+                    <!-- 値の調整。**行に重ねて**出すのでレイアウトを押さない(§09 規則 3)。
                          適用ボタンは無く、触った瞬間に確定する(§07)。割愛した増分の内訳も
                          ここに入れて、押す的を 1 つに保つ。 -->
                     <div
@@ -799,7 +755,7 @@
                         {/if}
                       </div>
                       {#if top && restRows.length > top.shown.length}
-                        <!-- チップに出し切れなかった増分。「ほか n」を別の的にせず、ここに畳む -->
+                        <!-- 行に出し切れなかった増分。「ほか n」を別の的にせず、ここに畳む -->
                         <div class="editor-rows">
                           {#each restRows as row (row.label)}
                             <div class="num">{row.label}</div>
@@ -809,8 +765,8 @@
                       <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); openEditorId = null; }}>閉じる</button>
                     </div>
                   {/if}
-                </div>
-              </div>
+                {/snippet}
+              </ToggleRow>
             {/each}
           </div>
         </section>
@@ -933,87 +889,32 @@
   .damage-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
   .guide-link { flex: none; padding: 2px 4px; color: var(--fg-muted); font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }
   .guide-link:hover { color: var(--accent-hover); }
-  /* チップ 1 枚の高さは**中身より先に**ここで決める(§09 規則 4)。中身の積み上げに任せると、
-     効果が 1 行のバフと 2 行のバフ、バッジが出るチップと出ないチップで数 px ずつ食い違い、
-     ON/OFF のたびに下がずれる。高さは「何が入るか」から式で置く — 数字を実測に合わせて
-     いじると、行が 1 本増えたときに同じことを繰り返す。 */
+  /* バフ 1 件 = ToggleRow 1 行。縦 1 列で積む(幅が広いほうが値まで読める) */
   .chips {
-    /* 効果は最大 2 行(ステ増分 + ダメージ効果)。1 行 13px + 行間 2px */
-    --chip-effect-h: 28px;
-    /* 名前の行 + 効果 + 種類バッジ(margin 込み) + トグルの上下余白と枠線 */
-    --chip-h: calc(16px + var(--chip-effect-h) + 19px + 14px);
-    flex: 1; min-height: 0; padding: 7px; display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    grid-auto-rows: var(--chip-h); gap: 6px;
+    flex: 1; min-height: 0; padding: 7px; display: flex; flex-direction: column; gap: 3px;
     border-top: 1px solid var(--border-soft);
-    align-content: start; overflow-y: auto; scrollbar-gutter: stable;
+    overflow-y: auto; scrollbar-gutter: stable;
   }
-  .buff-option { position: relative; min-width: 0; height: 100%; border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); overflow: hidden; }
-  .buff-option.on { border-color: var(--sel-bd); background: var(--sel-card); box-shadow: inset 0 0 0 1px var(--sel-bd); }
-  /* 重なりものはチップの外(下)へはみ出すので、開いている間だけ overflow:hidden を外す。
-     チップ一覧そのもの(.chips)のスクロール枠を越える分は ui/popover.ts が fixed に
-     置き換えて逃がす(§00 03: 押した場所は動かさない = 隣のチップは押し出さない)。 */
-  .buff-option.info-open { overflow: visible; z-index: 7; }
-  .buff-icon { position: absolute; z-index: 1; top: 16px; left: 7px; width: 28px; height: 28px; transition: top .2s ease; }
-  .buff-toggle { position: relative; width: 100%; height: 100%; padding: 6px 7px 6px 48px; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--fg); text-align: left; cursor: pointer; }
-  .buff-toggle.disabled { opacity: .45; cursor: default; }
-  /* ステ増分・ダメージ効果の行を積む場所。**2 行ぶんの高さを常に取る** — ON にした瞬間に
-     ダメージ効果の行が増えて 9px 伸びると、下のチップが動く(§09 規則 4: サイズはデータが
-     来る前に決まっている)。OFF・1 行・2 行のどれでも同じ高さで、中身だけ変わる。 */
-  /* 効果の行。枠は先に決まっていて、中身が 0 行でも 2 行でもここが伸び縮みしない */
-  .chip-effect { flex: none; height: var(--chip-effect-h); display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; }
-  /* ステ増分の値と「ほか n」を同じ行の左右に離す。値はトグル本体の一部(押すと ON/OFF)、
-     「ほか n」は別の的(押すとポップオーバー)なので、中央で押し分けさせない — 右端に寄せ、
-     縦の区切り線で「ここだけ別」と分かるようにする(実機で中央を押して誤爆した報告あり)。 */
-  .chip-effect-row { display: flex; align-items: baseline; gap: 6px; }
-  .chip-effect-values { flex: 1; min-width: 0; }
-  /* 「ほか n」= 割愛した増分の中身を辿るボタン。チップ本体のトグルとは別の押せる要素だと
-     分かるよう下線を付け、チップの色そのものは変えない(§00 03 と衝突させない)。
-     margin-left: auto で行の右端に固定し、border-left の区切りと左パディングで
-     独立した的として十分な広さを確保する(高さ・幅はチップ側を変えない)。 */
+  /* 「ほか n」= 割愛した増分の中身を辿るボタン。行本体のトグル(.face)とは別の押せる要素だと
+     分かるよう下線を付け、行の色そのものは変えない(§00 03 と衝突させない)。 */
   .rest-link {
-    flex-shrink: 0; align-self: stretch; display: inline-flex; align-items: center;
-    margin-left: auto; padding: 0 0 0 8px; border: 0; border-left: 1px solid var(--border-soft);
-    background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px;
+    flex-shrink: 0; padding: 0 2px; border: 0; background: none;
+    color: var(--accent); font: inherit; font-size: 10px; text-decoration: underline; text-underline-offset: 2px;
     white-space: nowrap; cursor: pointer;
   }
   .rest-link:hover { color: var(--accent-hover); }
-  /* チップの直下・チップ幅に合わせて出す(面そのものは app.css の .popover) */
-  .rest-popover { top: calc(100% + 4px); left: 7px; right: 7px; }
-  /* 値の調整。「ほか n」と同じ重なりもの(.rest-popover)に乗せる — 幅はチップに合わせ、
+  /* 行の直下・行幅に合わせて出す(面そのものは app.css の .popover)。左右は ToggleRow の
+     パディング(0 9px 0 10px)に合わせる */
+  .rest-popover { top: calc(100% + 4px); left: 10px; right: 9px; }
+  /* 値の調整。「ほか n」と同じ重なりもの(.rest-popover)に乗せる — 幅は行に合わせ、
      中身だけ差し替える。レイアウトは押さないので、開いても閉じても何も動かない */
   .editor-popover { gap: 7px; }
   .editor-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; padding-top: 6px; border-top: 1px solid var(--border-soft); }
   .choice-editor { padding: 7px; display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--bg-field); box-shadow: inset 0 1px #fff; }
-  /* 選んだステごとの値。**1 ステ 1 行**で積む — 2 列に畳むとチップ幅(272px)では
-     ラベル・数値欄・MAX が重なって読めなかった(実機報告)。行が増えて伸びた分は
-     ui/popover.ts が置き直す(上に開く / 収まる高さでスクロール)ので、下のチップは動かない */
+  /* 選んだステごとの値。**1 ステ 1 行**で積む — 2 列に畳むと狭い幅ではラベル・数値欄・MAX が
+     重なって読めなかった(実機報告)。行が増えて伸びた分は ui/popover.ts が置き直す
+     (上に開く / 収まる高さでスクロール)ので、下の行は動かない */
   .per-stat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .chip-copy { min-width: 0; flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: center; }
-  .chip-copy strong, .chip-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chip-head { flex: none; height: 16px; display: flex; align-items: center; gap: 6px; }
-  .chip-head strong { min-width: 0; flex: 1; }
-  /* ON / 選べない のバッジ。3 状態(ON・OFF・選べない)のどれでも同じ場所を占めるよう、
-     OFF のときも要素自体は出したまま透明にする(枠だけ確保) — CalcPage の「常/追」バッジ
-     (chip-state)と同じ手当て。ON は「セットに保存される」の水色(--sel、他の ON チップと
-     同系色)、選べないは新しい色を作らず §03 の状態 6 系統の unknown(対象外・判定不能)を使う。 */
-  .chip-state {
-    /* 高さは chip-head(16px 固定)が決める。文字が入るかどうかで動かない */
-    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-    min-width: 46px; height: 100%; padding: 0 6px; border-radius: var(--r-pill);
-    border: 1px solid transparent; background: transparent; color: transparent;
-    font-size: 8.5px; font-weight: 700; text-align: center; white-space: nowrap;
-  }
-  .chip-state.on { background: var(--sel); border-color: var(--sel-bd); color: var(--sel-fg); }
-  .chip-state.blocked { background: var(--state-unknown-bg); border-color: var(--state-unknown-bd); color: var(--state-unknown-fg); }
-  /* チップ本体の要約行(.chip-effect 内)だけは、省略記号で切らず自然に折り返す — 幅で
-     症状を消すのではなく、行を分けて出す量そのものを収める(5周目 実機指摘)。 */
-  .chip-effect small { overflow: visible; text-overflow: clip; white-space: normal; }
-  .block-reason { color: var(--state-unknown-fg) !important; }
-  .chip-copy strong { font-size: 10px; }
-  .chips small { color: var(--fg-muted); font-size: 9px; }
-  /* 効果値とは別行の操作ヒント。同じ行に混ぜない(§00 05 考えさせない) */
-  .origin-badge { flex: none; align-self: flex-start; margin-top: 3px; padding: 1px 6px; border: 1px solid var(--border-soft); border-radius: var(--r-pill); background: var(--surface-inset); color: var(--fg-muted); font-size: 8.5px; line-height: 1.4; white-space: nowrap; }
   .summary { background: var(--bg-raised); }
   .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--surface-inset); box-shadow: inset 0 1px #fff; font-size: 27px; font-weight: 700; }
   .count-value { min-width: 2ch; text-align: right; }

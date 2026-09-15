@@ -51,7 +51,7 @@ const CHECK = `(() => {
     n: s.children.length,
     label: (s.closest(".step-select")?.querySelector(".label")?.textContent || "").trim() || name(s).slice(0, 24),
   }));
-  const chips = [...document.querySelectorAll(".chip, .buff-chip")].filter((c) => !hidden(c)).length;
+  const chips = [...document.querySelectorAll(".chip, .togrow")].filter((c) => !hidden(c)).length;
   out.A3.push({ segTotal: segs.reduce((a, s) => a + s.n, 0), chips, top: segs.sort((a, b) => b.n - a.n).slice(0, 5) });
 
   // A4 はみ出し・省略

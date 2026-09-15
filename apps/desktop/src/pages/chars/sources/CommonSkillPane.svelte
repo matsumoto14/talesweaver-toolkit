@@ -7,6 +7,7 @@
   import { tables } from "../../../tables.svelte";
   import { flash } from "../../../ui/motion.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
+  import ToggleRow from "../../../ui/ToggleRow.svelte";
   import SkillLevelField from "./SkillLevelField.svelte";
   import {
     defenseRatePercent as defenseRatePercentOf,
@@ -210,26 +211,17 @@
       <div class="ultimate-row">
         {#each ULTIMATE_SKILLS as u (u)}
           {@const on = draft.commonSkills.ultimate.slots.includes(u)}
-          <button
-            type="button"
-            class="chip"
-            class:on
+          <ToggleRow
+            name={ULTIMATE_SKILL_LABELS[u]}
+            cond={ULTIMATE_SKILL_EFFECTS[u]}
+            title={ULTIMATE_SKILL_EFFECTS[u]}
+            {on}
             disabled={!on && ultimatePickedCount >= 2}
-            onclick={() => toggleUltimate(u)}
-          >{ULTIMATE_SKILL_LABELS[u]}</button>
+            onToggle={() => toggleUltimate(u)}
+          />
         {/each}
       </div>
       <span class="v num">{ultimatePickedCount} / 2</span>
-    </div>
-    <!-- 選んだ数で行数が変わると、下にあるものが上下する。**2 件ぶんの場所を先に取る**
-         (§09 規則 4「あとから寸法が変わらない」) -->
-    <div class="ultimate-notes">
-      {#each [0, 1] as i (i)}
-        {@const picked = draft.commonSkills.ultimate.slots[i]}
-        <p class="hint dim skill-note">
-          {#if picked !== null}{ULTIMATE_SKILL_LABELS[picked]}: {ULTIMATE_SKILL_EFFECTS[picked]}{/if}
-        </p>
-      {/each}
     </div>
   </div>
   <p class="hint dim">
@@ -325,16 +317,14 @@
     <div class="fold-body skill-fields">
       <div class="skill-field">
         <span class="k">パワーウェポン</span>
-        <span class="chip-row">
-          <button
-            type="button"
-            class="chip"
-            class:on={draft.commonSkills.power_weapon}
-            onclick={() => (draft.commonSkills.power_weapon = !draft.commonSkills.power_weapon)}
-          >取っている</button>
+        <span class="toggle-cell">
+          <ToggleRow
+            name="取っている"
+            value={draft.commonSkills.power_weapon ? `+${Math.round(limits.power_weapon_rate * 100)}%` : "—"}
+            on={draft.commonSkills.power_weapon}
+            onToggle={() => (draft.commonSkills.power_weapon = !draft.commonSkills.power_weapon)}
+          />
         </span>
-        <span class="skill-actions"></span>
-        <span class="v num">{draft.commonSkills.power_weapon ? `+${Math.round(limits.power_weapon_rate * 100)}%` : "—"}</span>
       </div>
       <SkillLevelField
         label="ストロングウェポン"
@@ -353,19 +343,15 @@
       />
       <div class="skill-field">
         <span class="k">コートアーマー</span>
-        <span class="chip-row">
-          <button
-            type="button"
-            class="chip"
-            class:on={draft.commonSkills.coat_armor}
-            onclick={() => (draft.commonSkills.coat_armor = !draft.commonSkills.coat_armor)}
-          >取っている</button>
-        </span>
-        <span class="skill-actions"></span>
-        <span class="v num">
-          {draft.commonSkills.coat_armor
-            ? `物${Math.round(limits.coat_armor_physical_rate * 100)} / 魔${Math.round(limits.coat_armor_magic_rate * 100)}%`
-            : "—"}
+        <span class="toggle-cell">
+          <ToggleRow
+            name="取っている"
+            value={draft.commonSkills.coat_armor
+              ? `物${Math.round(limits.coat_armor_physical_rate * 100)} / 魔${Math.round(limits.coat_armor_magic_rate * 100)}%`
+              : "—"}
+            on={draft.commonSkills.coat_armor}
+            onToggle={() => (draft.commonSkills.coat_armor = !draft.commonSkills.coat_armor)}
+          />
         </span>
       </div>
       <SkillLevelField
@@ -403,16 +389,14 @@
       />
       <div class="skill-field">
         <span class="k">スーパーリミット</span>
-        <span class="chip-row">
-          <button
-            type="button"
-            class="chip"
-            class:on={draft.commonSkills.ultimate.super_limit}
-            onclick={() => (draft.commonSkills.ultimate.super_limit = !draft.commonSkills.ultimate.super_limit)}
-          >取っている</button>
+        <span class="toggle-cell">
+          <ToggleRow
+            name="取っている"
+            value={draft.commonSkills.ultimate.super_limit ? "極限に加算" : "—"}
+            on={draft.commonSkills.ultimate.super_limit}
+            onToggle={() => (draft.commonSkills.ultimate.super_limit = !draft.commonSkills.ultimate.super_limit)}
+          />
         </span>
-        <span class="skill-actions"></span>
-        <span class="v num">{draft.commonSkills.ultimate.super_limit ? "極限に加算" : "—"}</span>
       </div>
       <SkillLevelField
         label="ハイパーリミット"

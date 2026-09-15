@@ -1,6 +1,6 @@
 /*
  * SourcePane とその子ペイン(pages/chars/sources/*.svelte)が共有するスタイル。
- * クラスの大半が複数のペインコンポーネントをまたいで使われており(.stat-row / .check /
+ * クラスの大半が複数のペインコンポーネントをまたいで使われており(.stat-row / .toggle-list /
  * .part-row / .siena-row / .ro-row / .card-title.inline など)、Svelte のスコープ付き
  * <style> は定義した1コンポーネントの DOM にしかクラスを紐付けないため、ペインごとに
  * <style> を分割すると見た目が壊れる。そのため元の SourcePane.svelte の <style> を
@@ -70,9 +70,8 @@
   table.grid.group-tbl td.zero { color: var(--fg-off); }
   .empty { margin: 6px 0 0; padding: 4px 0; font-size: 11px; }
 
-  /* .check チップは app.css(ui/CheckChip.svelte のスタイル)。ここは横並びの置き場だけ */
   /* チップは横に並べる(1 行 1 個だと 30 行の一覧になる) */
-  .buff-list { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .toggle-list { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
   .note { font-size: 10px; }
   /* 「満」は上限に届いた印。金 = 上限(§03 予約色)。枠は常に確保して行をずらさない */
   .cap-badge {
@@ -393,7 +392,6 @@
      操作が無い行でも列は残すので、どの行も同じ位置で並ぶ */
   .skill-field { display: grid; grid-template-columns: 100px minmax(0, 1fr) 104px 100px; gap: 8px; align-items: center; }
   .skill-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; white-space: nowrap; }
-  .chip-row { display: flex; align-items: center; gap: 6px; }
   .skill-field .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
   .skill-field .v { white-space: nowrap; }
   .skill-field .v { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--fg-sub); }
@@ -404,12 +402,11 @@
   }
   .skill-field .clear:hover:not(:disabled) { background: var(--state-short-bg); color: var(--danger); }
   .skill-field .clear:disabled { color: var(--border-soft); }
-  .skill-note { margin: 0 0 0 113px; }
   /* 3 つのチップは段 1 つぶんの幅に収まらないので、操作の列まで使う */
-  .ultimate-row { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 6px; }
+  .ultimate-row { grid-column: 2 / 4; display: flex; flex-direction: column; gap: 3px; }
+  /* 「取っている」の行チップ。段 / 操作 / 値の 3 列ぶんを 1 行で使う */
+  .toggle-cell { grid-column: 2 / 5; display: flex; flex-direction: column; }
   /* 2 件ぶんの高さを先に取る。選んだ数で下が上下しない */
-  .ultimate-notes { min-height: 30px; }
-  .ultimate-notes .skill-note { min-height: 15px; }
 
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .skill-chip .skill-name { font-weight: 700; }

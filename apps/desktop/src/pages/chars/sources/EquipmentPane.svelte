@@ -35,6 +35,7 @@
   import Select from "../../../ui/Select.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
+  import ToggleRow from "../../../ui/ToggleRow.svelte";
   import { slide } from "svelte/transition";
   import { tick, untrack } from "svelte";
   import { isLockedEquipment } from "../../../unlock.svelte";
@@ -621,19 +622,18 @@
 
 {#snippet nonWeaponAbilityChip(slot: PartSlot, ability: EquipmentAbilityDef, selectedIds: string[], full: boolean, fresh: boolean)}
   {@const selected = selectedIds.includes(ability.id)}
-  <button
-    type="button"
-    class:on={selected}
-    class:record-only={ability.record_only}
-    class:swap-in={fresh}
-    class="chip ability-choice"
-    aria-pressed={selected}
-    disabled={!selected && full}
-    onclick={() => toggleNonWeaponAbility(slot, ability)}
-  >
-    <span>{ability.name}</span>
-    <span class="ability-choice-effect num">{ability.effect_summary}</span>
-  </button>
+  <!-- 複数選択の防具アビリティは行チップ(§07)。キャラに保存されるので tone="saved" -->
+  <div class:swap-in={fresh}>
+    <ToggleRow
+      name={ability.name}
+      value={ability.effect_summary}
+      cond={ability.record_only ? "記録のみ(計算に入らない)" : undefined}
+      on={selected}
+      tone="saved"
+      disabled={!selected && full}
+      onToggle={() => toggleNonWeaponAbility(slot, ability)}
+    />
+  </div>
 {/snippet}
 
 {#snippet lowerGradeToggle(key: string, hiddenCount: number)}

@@ -23,7 +23,7 @@ const CHECK = `(() => {
   return {
     selects,
     steps: document.querySelectorAll(".seg").length,
-    chips: document.querySelectorAll("label.check, .buff-chip").length,
+    chips: document.querySelectorAll(".togrow").length,
     free: [...document.querySelectorAll("input[type=text], textarea")].map(label),
     // 編集は例外操作なので、ふだんは読み取り表示になっているか
     readonlyBoxes: document.querySelectorAll(".value-box.read").length,
