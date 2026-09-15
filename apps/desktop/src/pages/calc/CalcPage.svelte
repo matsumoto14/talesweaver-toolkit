@@ -2617,7 +2617,8 @@
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "polish"} onclick={() => toggleMaterial("polish")}>
             <span class="bg-caret" aria-hidden="true">{openMaterial === "polish" ? "▾" : "▸"}</span>
-            <Icon kind="equipment" id={null} size={20} label="研磨" />
+            <!-- 職人の装備研磨剤(クライアント資産 item 1044778)。バフ「装備研磨」と同じ絵 -->
+            <Icon kind="buff" id="equipment_polish" size={20} label="研磨" />
             <span class="card-title">研磨</span>
             <span class="dim small num" use:flash={() => polishHeadNote}>{polishHeadNote}</span>
           </button>
