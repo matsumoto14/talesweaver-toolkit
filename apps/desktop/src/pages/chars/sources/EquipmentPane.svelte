@@ -627,7 +627,7 @@
     <ToggleRow
       name={ability.name}
       value={ability.effect_summary}
-      cond={ability.record_only ? "記録のみ(計算に入らない)" : undefined}
+      cond={ability.record_only ? "記録のみ" : undefined}
       on={selected}
       tone="saved"
       disabled={!selected && full}
