@@ -1,9 +1,10 @@
 <script lang="ts">
   // 詳細トレース(能力値・カテゴリ・式の各段)。「なぜこの数字？」の最深部。
-  import type { CategoryTrace, DamageTrace, StatSourceEffect, StatTrace } from "../../api/types";
+  import type { CategoryTrace, DamageContribution, DamageTrace, StatSourceEffect, StatTrace } from "../../api/types";
   import { fmtInt, fmtNum, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import { bump } from "../../ui/motion.svelte";
+  import { PresenceMemo } from "../../ui/presence";
 
   let { trace }: { trace: DamageTrace } = $props();
 
@@ -36,16 +37,27 @@
     c.kind === "rate" ? `${c.value >= 0 ? "+" : ""}${fmtNum(c.value * 100)}%` : fmtNum(c.value);
 
   /** ステ補正源の寄与内訳。STAT_KINDS の順、同じステ内は元の配列順を保つ */
-  const contributions = $derived<StatSourceEffect[]>(
-    STAT_KINDS.flatMap((k) => trace.stat_source_effects.filter((c) => c.kind === k)),
+  // 行の出入り(称号の入れ替えなど)は出典でキーにして、抜けた行を次の変化まで残す(ui/presence.ts)
+  const statPresence = new PresenceMemo<StatSourceEffect>();
+  const contributions = $derived(
+    statPresence.mark(
+      "stat",
+      STAT_KINDS.flatMap((k) => trace.stat_source_effects.filter((c) => c.kind === k)),
+      (c) => `${c.kind}:${c.layer}:${c.source}`,
+    ),
   );
 
   /** カテゴリ供給源内訳。カテゴリの並び(trace.categories = 式に現れる順)ごとにまとめる */
+  const categoryPresence = new PresenceMemo<DamageContribution & Pick<CategoryTrace, "symbol" | "label" | "kind">>();
   const categoryContributions = $derived(
-    trace.categories.flatMap((c) =>
-      trace.category_contributions
-        .filter((x) => x.category === c.category)
-        .map((x) => ({ ...x, symbol: c.symbol, label: c.label, kind: c.kind })),
+    categoryPresence.mark(
+      "category",
+      trace.categories.flatMap((c) =>
+        trace.category_contributions
+          .filter((x) => x.category === c.category)
+          .map((x) => ({ ...x, symbol: c.symbol, label: c.label, kind: c.kind })),
+      ),
+      (x) => `${x.category}:${x.source}`,
     ),
   );
   const fmtContributionValue = (kind: CategoryTrace["kind"], v: number) =>
@@ -107,12 +119,12 @@
       <table class="grid ro">
         <thead><tr><th>ステ</th><th>出典</th><th>層</th><th class="n">値</th></tr></thead>
         <tbody>
-          {#each contributions as c, i (i)}
-            <tr>
+          {#each contributions as { item: c, state, key } (key)}
+            <tr class:gone={state === "gone"}>
               <td>{STAT_LABELS[c.kind]}</td>
-              <td class="muted">{c.source}</td>
+              <td class="muted">{c.source}{#if state !== "same"}<span class="swap" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
               <td class="muted">{STAT_LAYER_LABELS[c.layer]}</td>
-              <td class="n">{formatLayerValue(c.layer, c.value)}</td>
+              <td class="n" use:bump={() => c.value}>{formatLayerValue(c.layer, c.value)}</td>
             </tr>
           {/each}
         </tbody>
@@ -149,11 +161,11 @@
       <table class="grid ro">
         <thead><tr><th>記号</th><th>カテゴリ</th><th>出典</th><th class="n">値</th></tr></thead>
         <tbody>
-          {#each categoryContributions as c, i (i)}
-            <tr>
+          {#each categoryContributions as { item: c, state, key } (key)}
+            <tr class:gone={state === "gone"}>
               <td class="sym">{c.symbol}</td>
               <td>{c.label}</td>
-              <td class="muted">{c.source}</td>
+              <td class="muted">{c.source}{#if state !== "same"}<span class="swap" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
               <td class="n" use:bump={() => c.value}>{fmtContributionValue(c.kind, c.value)}</td>
             </tr>
           {/each}
@@ -210,6 +222,11 @@
   /* .pin-badge は app.css */
   td.expr { white-space: normal; color: var(--fg-muted); font-size: 11px; min-width: 260px; }
   tr.active td { background: var(--bg-active); }
+  /* 抜けた供給源は次に集合が変わるまで取り消し線で残す。入った / 抜けた の印は差分と同じ色 */
+  tr.gone td { text-decoration: line-through; color: var(--fg-dim); }
+  .swap { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; animation: tw-badge-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .swap.up { color: var(--good); }
+  .swap.down { color: var(--warm); }
   tr.active td.sym { color: var(--warm); }
   .tabs { display: flex; border: 1px solid var(--border); border-radius: var(--r-inset); overflow: hidden; letter-spacing: 0; }
   .tabs button { padding: 3px 10px; background: var(--bg-field); color: var(--fg-muted); font-size: 11px; }
