@@ -73,7 +73,9 @@ CREATE TABLE IF NOT EXISTS characters (
 /// v12 で登録キャラごとの表示画像 `character_icons` が加わった。
 /// (ホームの影響カード用。docs/claude/goals 参照)。
 /// v13 で `goal_content_id`(ホームの「次の目標」をユーザーが選んだときの保存先)が加わった。
-const SCHEMA_VERSION: i64 = 13;
+/// v14 で `equipment.owned_titles`(所持称号一覧)が加わった。既存行は `title`(表示中)が
+/// あれば `[title]`、無ければ `[]` を補う(2026-09-15)。
+const SCHEMA_VERSION: i64 = 14;
 
 const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, goal_content_id, default_buff_set_id, updated_at";
 
@@ -523,6 +525,38 @@ fn migrate_equipment_registration_metadata(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// v14: `equipment.title`(表示中の称号)しか持たなかった既存行に、所持称号一覧
+/// `equipment.owned_titles` を補う。`owned_titles` キーが無い行だけを対象にし、
+/// `title` があれば `[title]`、無ければ `[]` を入れる(表示中は通常所持の中の 1 件)。
+fn migrate_owned_titles(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, equipment FROM characters")?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    let tx = conn.unchecked_transaction()?;
+    for (id, json) in rows {
+        let mut value: serde_json::Value = serde_json::from_str(&json)?;
+        let Some(map) = value.as_object_mut() else {
+            continue;
+        };
+        if map.contains_key("owned_titles") {
+            continue;
+        }
+        let owned = match map.get("title").and_then(|v| v.as_str()) {
+            Some(title) => serde_json::json!([title]),
+            None => serde_json::json!([]),
+        };
+        map.insert("owned_titles".to_string(), owned);
+        tx.execute(
+            "UPDATE characters SET equipment = ?1 WHERE id = ?2",
+            params![serde_json::to_string(&value)?, id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 /// v5 以前の `equipment` 列にあったパワーウェポン / ストロングウェポンを
 /// `common_skills` 列へ移す(wiki: どちらも Skill/共通 の共通スキルで、装備ではない)。
 ///
@@ -794,6 +828,7 @@ impl CharacterRepository {
         migrate_unleash_from_buff_sets(&conn)?;
         migrate_damage_snapshots(&conn)?;
         crate::character_icon_repository::migrate_character_icons(&conn)?;
+        migrate_owned_titles(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -2702,6 +2737,67 @@ mod tests {
                 ability_id: None,
                 random_option_id: Some("nope".to_string()),
             })
+        );
+    }
+
+    /// v13 の `equipment` 列(`owned_titles` キーが無い)を、表示中の称号(`title`)から
+    /// 所持一覧を補って読む。`title` が無い行は `[]` になる。2 回開いても変わらない。
+    #[test]
+    fn v14移行は表示中の称号から所持称号一覧を補う() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let with_title = repo.create(&new_character("称号あり"), &[], &[], &[], &[], &[], &[]).unwrap();
+        let without_title = repo.create(&new_character("称号なし"), &[], &[], &[], &[], &[], &[]).unwrap();
+
+        // v13 相当に戻す: owned_titles キーを equipment JSON から取り除く。
+        for (id, title) in [(with_title.id, Some("eclipse")), (without_title.id, None)] {
+            let mut equipment: serde_json::Value = serde_json::from_str(
+                &repo
+                    .conn
+                    .query_row("SELECT equipment FROM characters WHERE id = ?1", [id], |row| {
+                        row.get::<_, String>(0)
+                    })
+                    .unwrap(),
+            )
+            .unwrap();
+            let map = equipment.as_object_mut().unwrap();
+            map.remove("owned_titles");
+            if let Some(title) = title {
+                map.insert("title".to_string(), serde_json::json!(title));
+            } else {
+                map.remove("title");
+            }
+            repo.conn
+                .execute(
+                    "UPDATE characters SET equipment = ?1 WHERE id = ?2",
+                    params![serde_json::to_string(&equipment).unwrap(), id],
+                )
+                .unwrap();
+        }
+        repo.conn.pragma_update(None, "user_version", 13i64).unwrap();
+
+        let conn = repo.conn;
+        let migrated = CharacterRepository::from_connection(conn).unwrap();
+        assert_eq!(
+            migrated
+                .conn
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
+        assert_eq!(
+            migrated.get(with_title.id).unwrap().equipment.owned_titles,
+            vec!["eclipse".to_string()]
+        );
+        assert_eq!(
+            migrated.get(without_title.id).unwrap().equipment.owned_titles,
+            Vec::<String>::new()
+        );
+
+        // 2 回目は owned_titles キーが既にあるので触らない(冪等)。
+        migrate_owned_titles(&migrated.conn).unwrap();
+        assert_eq!(
+            migrated.get(with_title.id).unwrap().equipment.owned_titles,
+            vec!["eclipse".to_string()]
         );
     }
 }

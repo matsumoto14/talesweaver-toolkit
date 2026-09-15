@@ -955,6 +955,8 @@ export interface Equipment {
   polish: EquipmentPolishes;
   /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
   title: string | null;
+  /** 所持している称号(TitleDef.id の並び)。表示中(title)は通常この中の1件 */
+  owned_titles: string[];
 }
 
 // gamedata の出典。crates/gamedata/src/lib.rs の Source。

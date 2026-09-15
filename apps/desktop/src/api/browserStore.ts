@@ -22,8 +22,10 @@ const DB_NAME = "tw-context";
  * v3 で装備に `avatar`(アバター強化)と `polish`(装備研磨)が加わった。SQLite 側は
  * `#[serde(default)]` で読めるが、IndexedDB は素の JSON を返すので既存行に中立値を足す
  * (無いと `cloneEquipment` が undefined を読んでキャラタブが開けない。2026-09-15)。
+ * v4 で装備に `owned_titles`(所持称号一覧)が加わった(SQLite 側の v14 と同じ移行)。
+ * 既存行は `title`(表示中)があれば `[title]`、無ければ `[]` を補う。
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -37,18 +39,25 @@ const NEUTRAL_AVATAR = () => ({
 const NEUTRAL_POLISH = () => ({ entries: [] });
 
 /**
- * 装備に v3 の欄が無ければ中立値を足す。読み込み(transfer.ts)で旧い書き出しを受けたときも
+ * 装備に v3/v4 の欄が無ければ中立値を足す。読み込み(transfer.ts)で旧い書き出しを受けたときも
  * ここを通るので、保存する行は常に今の形になる(SQLite 側は serde default が同じことをする)。
  */
 function withEquipmentDefaults(character: NewCharacter): NewCharacter {
   const equipment = character.equipment as Partial<NewCharacter["equipment"]>;
-  if (equipment.avatar !== undefined && equipment.polish !== undefined) return character;
+  if (
+    equipment.avatar !== undefined &&
+    equipment.polish !== undefined &&
+    equipment.owned_titles !== undefined
+  ) {
+    return character;
+  }
   return {
     ...character,
     equipment: {
       ...character.equipment,
       avatar: equipment.avatar ?? NEUTRAL_AVATAR(),
       polish: equipment.polish ?? NEUTRAL_POLISH(),
+      owned_titles: equipment.owned_titles ?? (equipment.title ? [equipment.title] : []),
     },
   };
 }
@@ -113,7 +122,9 @@ function open(): Promise<IDBDatabase> {
         };
       }
       // v3: 既存キャラの装備に avatar / polish の中立値を足す(SQLite の serde default と同じ意味)
-      if (event.oldVersion > 0 && event.oldVersion < 3) {
+      // v4: 既存キャラの装備に owned_titles(所持称号一覧)を足す。まとめて 1 カーソルで処理する
+      // (withEquipmentDefaults が両方の欠落を見て埋めるので、v3 到達済みの行も v4 で再度通る)。
+      if (event.oldVersion > 0 && event.oldVersion < 4) {
         const characters = request.transaction!.objectStore(CHARACTERS);
         const cursorRequest = characters.openCursor();
         cursorRequest.onsuccess = () => {

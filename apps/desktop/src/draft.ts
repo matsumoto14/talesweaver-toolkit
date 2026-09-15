@@ -55,6 +55,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   avatar: cloneAvatarEnhancements(src.avatar),
   polish: cloneEquipmentPolishes(src.polish),
   title: src.title ?? null,
+  owned_titles: [...src.owned_titles],
 });
 
 /** 新規登録キャラの装備の初期値(全部位 未装備)。 */
@@ -65,6 +66,7 @@ export const defaultEquipment = (): Equipment => ({
   avatar: neutralAvatarEnhancements(),
   polish: neutralEquipmentPolishes(),
   title: null,
+  owned_titles: [],
 });
 
 export const cloneCommonSkills = (src: CommonSkills): CommonSkills => ({

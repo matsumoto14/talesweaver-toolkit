@@ -17,6 +17,23 @@
 
   let titleQuery = $state("");
   const selectedTitle = $derived(app.titles.find((t) => t.id === draft.equipment.title) ?? null);
+  /** 所持している称号(キャラタブで登録した一覧)。カタログに無い id(旧データ)は出さない */
+  const ownedTitles = $derived(
+    draft.equipment.owned_titles
+      .map((id) => app.titles.find((t) => t.id === id))
+      .filter((t): t is TitleDef => t !== undefined),
+  );
+  const ownedIds = $derived(new Set(ownedTitles.map((t) => t.id)));
+  /** 所持に入れて表示中にする(既に所持なら表示中にするだけ)。 */
+  function addOwnedAndSelect(id: string) {
+    if (!ownedIds.has(id)) draft.equipment.owned_titles = [...draft.equipment.owned_titles, id];
+    draft.equipment.title = id;
+  }
+  /** 所持から外す。表示中だったら表示中も外す。 */
+  function removeOwned(id: string) {
+    draft.equipment.owned_titles = draft.equipment.owned_titles.filter((t) => t !== id);
+    if (draft.equipment.title === id) draft.equipment.title = null;
+  }
   /** 普段使う称号(常設)。どれが普段使いかは gamedata の `common` */
   const commonTitles = $derived(app.titles.filter((t) => t.common));
   const otherTitles = $derived(app.titles.filter((t) => !t.common));
@@ -81,6 +98,9 @@
     <span class="title-extra">条件付き追加ダメ</span>
   {/if}
 {/snippet}
+{#snippet ownedBadge(owned: boolean)}
+  {#if owned}<span class="ro-badge title-owned-badge badge-in">所持</span>{/if}
+{/snippet}
 {#snippet titleRows(groups: { base: string; items: TitleDef[] }[], impliedDmg: number | null)}
   {#each groups as g (g.base)}
     {#if g.items.length === 1}
@@ -89,29 +109,31 @@
         type="button"
         class="item-row"
         class:on={draft.equipment.title === t.id}
-        onclick={() => (draft.equipment.title = t.id)}
+        onclick={() => addOwnedAndSelect(t.id)}
       >
         <span class="item-name">{t.name}</span>
         <span class="item-vals num dim">合計 {signed(t.equipment_value_total)}</span>
         {@render dmgBadge(t, impliedDmg)}
+        {@render ownedBadge(ownedIds.has(t.id))}
       </button>
     {:else}
       {@const picked = g.items.find((t) => t.id === draft.equipment.title) ?? null}
-      <!-- 未選択のあいだは行そのものが「まず既定の変種を選ぶ」ボタン。押すとその行が選択中になり、
-           変種チップはここに(その場に)出る(§00 03「押した場所は動かない」) -->
+      <!-- 未選択のあいだは行そのものが「まず既定の変種を所持に入れて選ぶ」ボタン。押すとその行が
+           選択中になり、変種チップはここに(その場に)出る(§00 03「押した場所は動かない」) -->
       <div
         class="item-row group"
         class:on={picked !== null}
         role="button"
         tabindex="0"
-        onclick={() => { if (picked === null) draft.equipment.title = g.items[0].id; }}
+        onclick={() => { if (picked === null) addOwnedAndSelect(g.items[0].id); }}
         onkeydown={(e) => {
           if (picked !== null || (e.key !== "Enter" && e.key !== " ")) return;
           e.preventDefault();
-          draft.equipment.title = g.items[0].id;
+          addOwnedAndSelect(g.items[0].id);
         }}
       >
         <span class="item-name">{g.base}</span>
+        {@render ownedBadge(g.items.some((t) => ownedIds.has(t.id)))}
         {#if picked === null}
           <span class="item-vals num dim">合計 {signed(g.items[0].equipment_value_total)}</span>
           {@render dmgBadge(g.items[0], impliedDmg)}
@@ -123,7 +145,7 @@
                 class="chip"
                 class:on={draft.equipment.title === t.id}
                 title="{t.name} — {titleSummary(t)}"
-                onclick={(e) => { e.stopPropagation(); draft.equipment.title = t.id; }}
+                onclick={(e) => { e.stopPropagation(); addOwnedAndSelect(t.id); }}
               >{t.name.slice(g.base.length + 3)}</button>
             {/each}
           </span>
@@ -155,7 +177,27 @@
   </div>
 </div>
 <div class="card">
-  <p class="hint dim">普段使う候補だけを先に出しています。それ以外は下の「その他」から選べます。</p>
+  <div class="card-title">所持</div>
+  {#if ownedTitles.length === 0}
+    <p class="hint dim">下の一覧から選ぶと所持に入ります。</p>
+  {:else}
+    <div class="item-list owned-title-list">
+      {#each ownedTitles as t (t.id)}
+        <div class="item-row badge-in" class:on={draft.equipment.title === t.id}>
+          <button type="button" class="item-row-main" onclick={() => (draft.equipment.title = t.id)}>
+            <span class="item-name">{t.name}</span>
+            {#if titleSummary(t) !== ""}
+              <span class="item-vals num dim">{titleSummary(t)}</span>
+            {/if}
+          </button>
+          <button type="button" class="chip quiet" onclick={() => removeOwned(t.id)} title="所持から外す(表示中なら表示も解除)">所持から外す</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+</div>
+<div class="card">
+  <p class="hint dim">普段使う候補だけを先に出しています。それ以外は下の「その他」から選べます。行を選ぶと所持に入り、表示中になります。</p>
   <details class="fold">
     <summary>称号の補正の入り方</summary>
     <div class="fold-body">
@@ -232,4 +274,14 @@
 <style>
   /* 絞り込みの状態行。件数が読めることが目的なので値は num、操作は隣のチップ 1 つだけ */
   .title-filter { margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 9.5px; }
+
+  /* 所持一覧。行を押すと表示中になり、右端の「外す」は所持解除(押した場所は動かない) */
+  .owned-title-list { grid-template-columns: 1fr; }
+  .owned-title-list .item-row { padding-right: 5px; }
+  .item-row-main {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
+    background: none; border: none; padding: 0; text-align: left; cursor: pointer;
+  }
+  /* 候補一覧の「所持」バッジ。カタログの状態バッジと同じ段(中立の枠色、記録だけの色は使わない) */
+  .title-owned-badge { flex-shrink: 0; }
 </style>

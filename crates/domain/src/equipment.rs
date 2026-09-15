@@ -1072,6 +1072,9 @@ pub struct Equipment {
     /// (wiki: 称号システム。所持ぶんの累積ではない)。`None` = 未装備
     #[serde(default)]
     pub title: Option<String>,
+    /// 所持している称号(`TitleDef::id` の並び)。表示中(`title`)は通常この中の 1 件。
+    #[serde(default)]
+    pub owned_titles: Vec<String>,
 }
 
 /// 12 部位。named field で持つ(`parts.weapon` 等)。
