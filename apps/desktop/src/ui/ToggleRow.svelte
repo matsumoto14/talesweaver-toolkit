@@ -34,9 +34,10 @@
 <div class="togrow" class:on class:temp={tone === "temp"} class:disabled>
   <button type="button" class="face" {disabled} {title} aria-pressed={on} onclick={onToggle}>
     {#if icon}<span class="ico">{@render icon()}</span>{/if}
-    <span class="nm">{name}</span>
-    {#if cond !== undefined}<span class="cond">{cond}</span>{/if}
-    {#if value !== undefined}<span class="val num" use:flash={() => value ?? ""}>{value}</span>{/if}
+    <!-- 省略記号で切れた文字は、その上にカーソルを置くと全文が読める(狭い器では名前も値も切れる) -->
+    <span class="nm" title={name}>{name}</span>
+    {#if cond !== undefined}<span class="cond" title={cond}>{cond}</span>{/if}
+    {#if value !== undefined}<span class="val num" title={value} use:flash={() => value ?? ""}>{value}</span>{/if}
   </button>
   {#if extra}{@render extra()}{/if}
 </div>
