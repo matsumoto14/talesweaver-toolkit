@@ -4,7 +4,7 @@
     EquipmentPart, PartSlot, RandomOptionCandidate, RandomOptionDef, RandomOptionRank, StatPreview,
   } from "../../../api/types";
   import { listRandomOptionCandidates } from "../../../api/commands";
-  import { fmtPct, fmtSignedPct } from "../../../format";
+  import { fmtSigned, fmtSignedPct } from "../../../format";
   import type { Draft } from "../../../draft";
   import {
     neutralEquipmentPart,
@@ -64,10 +64,10 @@
     addPoint("命中P", t.accuracy_point);
     addPoint("回避P", t.evasion_point);
     if (t.actual_delay_reduction !== 0) {
-      rows.push({ label: "中ディレイ", value: `−${fmtPct(t.actual_delay_reduction, { max: 2 })}` });
+      rows.push({ label: "中ディレイ", value: fmtSignedPct(-t.actual_delay_reduction, { max: 2 }) });
     }
     if (t.min_evasion_rate !== 0) {
-      rows.push({ label: "最小回避率補正", value: `+${t.min_evasion_rate}%` });
+      rows.push({ label: "最小回避率補正", value: fmtSigned(t.min_evasion_rate, { max: 2 }, "%") });
     }
     return rows;
   });

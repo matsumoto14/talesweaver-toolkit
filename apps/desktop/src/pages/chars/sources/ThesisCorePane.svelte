@@ -3,7 +3,7 @@
   import type { CoreRegion, CoreType, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import { zeroValues } from "../../../equipment";
-  import { fmtInt } from "../../../format";
+  import { fmtInt, fmtSigned, fmtSignedPct } from "../../../format";
   import { CORE_POWER_TYPES, CORE_REGIONS, CORE_REGION_LABELS, CORE_SLOT_COUNT, CORE_SUPPORT_TYPES, CORE_TYPE_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
@@ -23,8 +23,8 @@
   const coreSetTotalLabel = $derived.by(() => {
     const { final_damage_fixed: fixed, final_damage_rate: rate } = preview?.thesis_core_set_bonus_total ?? { final_damage_fixed: 0, final_damage_rate: 0 };
     const parts: string[] = [];
-    if (rate > 0) parts.push(`+${Math.round(rate * 100)}%`);
-    if (fixed > 0) parts.push(`+${fmtInt(fixed)}`);
+    if (rate > 0) parts.push(fmtSignedPct(rate));
+    if (fixed > 0) parts.push(fmtSigned(fixed));
     return parts.length === 0 ? "未発動" : parts.join(" と ");
   });
 
@@ -109,8 +109,8 @@
     const e = coreSetOf(region);
     if (!e || e.set_groups.length === 0) return "";
     const parts: string[] = [];
-    if (e.set_bonus.final_damage_rate > 0) parts.push(`+${Math.round(e.set_bonus.final_damage_rate * 100)}%`);
-    if (e.set_bonus.final_damage_fixed > 0) parts.push(`+${fmtInt(e.set_bonus.final_damage_fixed)}`);
+    if (e.set_bonus.final_damage_rate > 0) parts.push(fmtSignedPct(e.set_bonus.final_damage_rate));
+    if (e.set_bonus.final_damage_fixed > 0) parts.push(fmtSigned(e.set_bonus.final_damage_fixed));
     return parts.join(" ");
   };
   const coreSupport = $derived(coreRegionPreview(coreRegion)?.values ?? zeroValues());
@@ -122,7 +122,7 @@
       ["命中", coreSupport.accuracy],
     ]
       .filter(([, v]) => (v as number) > 0)
-      .map(([label, v]) => `${label} +${fmtInt(v as number)}`)
+      .map(([label, v]) => `${label} ${fmtSigned(v as number)}`)
       .join(" ・ "),
   );
 </script>
@@ -282,7 +282,7 @@
                       onclick={() => { setCoreStagePair(index, p.ev, p.en); openCoreStage = null; }}
                     >
                       <b class="num">{p.ev}-{p.en}</b>
-                      <span class="cell-bonus num">+{fmtInt(coreBonus(core.core_type, p.ev, p.en))}</span>
+                      <span class="cell-bonus num">{fmtSigned(coreBonus(core.core_type, p.ev, p.en))}</span>
                     </button>
                   {/each}
                 {/each}
@@ -295,7 +295,7 @@
           class:support={core !== null && !CORE_POWER_TYPES.includes(core.core_type)}
           use:bump={() => (core ? coreBonus(core.core_type, core.evolution, core.enhancement) : null)}
         >
-          {core ? `+${fmtInt(coreBonus(core.core_type, core.evolution, core.enhancement))}` : "—"}
+          {core ? fmtSigned(coreBonus(core.core_type, core.evolution, core.enhancement)) : "—"}
         </span>
       </div>
     {/each}

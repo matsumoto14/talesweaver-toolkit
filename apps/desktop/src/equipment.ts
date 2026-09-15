@@ -212,17 +212,17 @@ export const randomOptionValue = (slot: RandomOptionSlot, def: RandomOptionDef):
 export const randomOptionValueLabel = (slot: RandomOptionSlot, def: RandomOptionDef): string => {
   const value = randomOptionValue(slot, def);
   const effect = def.effect;
-  if (typeof effect === "object") return `+${value}%`;
+  if (typeof effect === "object") return fmtSigned(value, { max: 2 }, "%");
   switch (effect) {
     case "accuracy_point":
     case "evasion_point":
     case "accuracy_and_evasion_point":
-      return `+${value}`;
+      return fmtSigned(value);
     case "actual_delay_reduction":
-      return `−${value}%`;
+      return fmtSigned(-value, { max: 2 }, "%");
     case "min_evasion_rate":
     default:
-      return `+${value}%`;
+      return fmtSigned(value, { max: 2 }, "%");
   }
 };
 

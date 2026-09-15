@@ -29,7 +29,7 @@
     equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
     valuesSummary,
   } from "../../equipment";
-  import { fmtInt, fmtMonthDay, fmtNum, fmtRate } from "../../format";
+  import { fmtInt, fmtMonthDay, fmtNum, fmtRate, fmtSigned } from "../../format";
   import {
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, SIENA_ALLOWED_SLOTS, STAT_KINDS, STAT_LABELS,
   } from "../../labels";
@@ -912,7 +912,7 @@
                 <span class="hero-row" class:first={i === 0}>
                   <span class="hero-row-label">{row.label}</span>
                   <span class="hero-row-value-wrap">
-                    <span class="num hero-sub">{fmtInt(row.base)} +{fmtInt(row.enhanced)}</span>
+                    <span class="num hero-sub">{fmtInt(row.base)} {fmtSigned(row.enhanced)}</span>
                     <span class="num hero-row-value" use:bump={() => row.total}>{fmtInt(row.total)}</span>
                   </span>
                 </span>

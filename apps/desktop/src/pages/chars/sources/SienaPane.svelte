@@ -6,7 +6,7 @@
     neutralSienaAura, selectedSienaAura, selectedSienaAuraRegistration,
     sienaExtraCapacity, sienaExtraValue, sienaStage, zeroValues,
   } from "../../../equipment";
-  import { fmtInt } from "../../../format";
+  import { fmtInt, fmtNum, fmtSigned } from "../../../format";
   import {
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS,
     SIENA_ALLOWED_SLOTS, SIENA_EQUIPMENT_VALUE_SLOTS,
@@ -113,9 +113,9 @@
     }
     // 正は SienaAura::stat_bonus().total()(preview.siena_part_stat_totals。部位別の内訳)
     const statTotal = preview?.siena_part_stat_totals.find((p) => p.slot === slot)?.value ?? 0;
-    if (statTotal > 0) parts.push(`ステ +${fmtInt(statTotal)}`);
+    if (statTotal > 0) parts.push(`ステ ${fmtSigned(statTotal)}`);
     const attack = sienaExtraValue(siena, "attack_rate");
-    if (attack > 0) parts.push(`攻撃力 +${attack}%`);
+    if (attack > 0) parts.push(`攻撃力 ${fmtSigned(attack, { max: 2 }, "%")}`);
     return parts.length > 0 ? parts.join(" ・ ") : "—";
   };
   /** 行に出すバッジ。段階 10 だと 13 個になるので上位だけ出し、残りは「+N」で畳む(§00 01) */
@@ -126,15 +126,15 @@
     siena.slots.forEach((s, i) => {
       const def = sienaValueDef(s.kind);
       if (def) rows.push({
-        key: `v${i}`, text: `${def.short}${s.value}${def.unit}`,
-        title: `${def.label} +${s.value}${def.unit}`, modeled: def.is_modeled,
+        key: `v${i}`, text: `${def.short}${fmtNum(s.value, { max: 2 }, def.unit)}`,
+        title: `${def.label} ${fmtSigned(s.value, { max: 2 }, def.unit)}`, modeled: def.is_modeled,
       });
     });
     siena.extras.forEach((e, i) => {
       const def = sienaExtraDef(e.kind);
       if (def) rows.push({
-        key: `e${i}`, text: `${def.short}${e.value}${def.unit}`,
-        title: `${def.label} +${e.value}${def.unit}`, modeled: def.is_modeled,
+        key: `e${i}`, text: `${def.short}${fmtNum(e.value, { max: 2 }, def.unit)}`,
+        title: `${def.label} ${fmtSigned(e.value, { max: 2 }, def.unit)}`, modeled: def.is_modeled,
       });
     });
     return rows;

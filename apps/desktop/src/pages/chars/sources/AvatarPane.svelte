@@ -9,7 +9,7 @@
   import type { AvatarPart, EquipmentStatKind } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import { avatarEnhanceTotals } from "../../../equipment";
-  import { fmtInt } from "../../../format";
+  import { fmtSigned } from "../../../format";
   import {
     AVATAR_PARTS, AVATAR_PART_LABELS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT,
     OTHER_EQUIPMENT_STATS, PRIMARY_EQUIPMENT_STATS,
@@ -37,7 +37,7 @@
     const values = draft.equipment.avatar[part];
     return (
       EQUIPMENT_STAT_KINDS.filter((k) => values[k] > 0)
-        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(values[k])}`)
+        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(values[k])}`)
         .join(" ・ ") || "未使用"
     );
   }
@@ -58,7 +58,7 @@
     const values = [0, ...CHOICES];
     if (!values.includes(current)) values.push(current);
     values.sort((a, b) => a - b);
-    return values.map((v) => ({ value: String(v), label: v === 0 ? "—" : `+${v}` }));
+    return values.map((v) => ({ value: String(v), label: v === 0 ? "—" : fmtSigned(v) }));
   }
   function setCell(part: AvatarPart, kind: EquipmentStatKind, v: string) {
     draft.equipment.avatar[part][kind] = Number(v);
@@ -116,7 +116,7 @@
                 }
               />
               <span class="stat-total num" class:dim={totals[kind] === 0} use:bump={() => totals[kind]}>
-                {totals[kind] === 0 ? "" : `5部位計 +${fmtInt(totals[kind])}`}
+                {totals[kind] === 0 ? "" : `5部位計 ${fmtSigned(totals[kind])}`}
               </span>
             </div>
           {/each}

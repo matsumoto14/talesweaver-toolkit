@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { SoulLinkStatus, StatPreview } from "../../../api/types";
-  import { fmtRate, fmtSignedPct } from "../../../format";
+  import { fmtRate, fmtSigned, fmtSignedPct } from "../../../format";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
   import { bump } from "../../../ui/motion.svelte";
@@ -20,7 +20,7 @@
     value: () => string;
     motion: () => number | undefined;
   };
-  const signed = (value: number | undefined) => value === undefined ? "—" : `+${value}`;
+  const signed = (value: number | undefined) => value === undefined ? "—" : fmtSigned(value);
   const percent = (value: number | undefined) =>
     value === undefined ? "—" : fmtSignedPct(value, { max: 1 });
 

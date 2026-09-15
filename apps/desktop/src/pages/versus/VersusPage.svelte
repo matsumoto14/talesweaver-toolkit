@@ -9,7 +9,7 @@
   // 頭のキャラ選択カード(.sides)は廃止。「[A] が [B] に当てる」の頭そのものが選ぶ場になる
   // (ユーザー指摘 2026-09-02)。
   import { SvelteMap } from "svelte/reactivity";
-  import { fmtNum, fmtRate } from "../../format";
+  import { fmtNum, fmtRate, fmtSigned } from "../../format";
   import { cubicOut } from "svelte/easing";
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
   import type {
@@ -374,15 +374,11 @@
   }
 
   function formatHitRateGain(gain: number): string {
-    if (gain > 0) return `+${gain}%`;
-    if (gain < 0) return `${gain}%`;
-    return "±0%";
+    return gain === 0 ? "±0%" : fmtSigned(gain, { max: 2 }, "%");
   }
 
   function formatPointGain(gain: number): string {
-    if (gain > 0) return `+${gain}`;
-    if (gain < 0) return `${gain}`;
-    return "±0";
+    return gain === 0 ? "±0" : fmtSigned(gain, { max: 2 });
   }
 </script>
 
@@ -590,7 +586,7 @@
         {@render buffSetRow(attacker)}
         <div class="stat-row">
           <div class="stat-label">依存の補正</div>
-          <div class="stat-val">{@render textCell(result ? `+${result.correction_bonus} / −${result.correction_penalty}` : null)}</div>
+          <div class="stat-val">{@render textCell(result ? `${fmtSigned(result.correction_bonus)} / ${fmtSigned(-result.correction_penalty)}` : null)}</div>
         </div>
         <!-- 的中剣の行チップは 28px なので、Picker の段と同じ高さにする(21px の段だとはみ出す) -->
         <div class="stat-row" class:with-picker={result?.accuracy_skill_available && attacker !== null}>

@@ -33,7 +33,7 @@
   import TitlePane from "./sources/TitlePane.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
-  import { fmtInt } from "../../format";
+  import { fmtSigned } from "../../format";
   import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import { bump, flash } from "../../ui/motion.svelte";
   import { equipmentAttackKindsFor, equipmentBaseTotal, equipmentEnhancedTotal } from "./summaries";
@@ -65,7 +65,7 @@
     { value: "", label: "なし" },
     ...tables.pet_skill_tier_bonus.map((b) => ({
       value: b.tier,
-      label: `${PET_SKILL_TIER_LABELS[b.tier]} +${b.bonus}`,
+      label: `${PET_SKILL_TIER_LABELS[b.tier]} ${fmtSigned(b.bonus)}`,
     })),
   ]);
   const petSkillValue = (k: StatKind) => draft.statSources.pet_skills[k] ?? "";
@@ -153,7 +153,7 @@
     polish: { title: "研磨", note: "部位ごとに能力値1つを研磨剤/ワックスで上げる" },
     skills: { title: "キャラスキル", note: "マスタリー(段ごとに 1 つ)と、自分・味方のスキル" },
     actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
-    criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 +${limits.critical_rate_bonus_max}%)` },
+    criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 ${fmtSigned(limits.critical_rate_bonus_max, { max: 2 }, "%")})` },
   };
 </script>
 
@@ -190,7 +190,7 @@
           bind:value={() => petSkillValue(k), (v) => setPetSkillValue(k, v)}
         />
         <span class="v num" use:bump={() => petSkillBonus(k)}>
-          {petSkillBonus(k) > 0 ? `+${fmtInt(petSkillBonus(k))}` : "—"}
+          {petSkillBonus(k) > 0 ? fmtSigned(petSkillBonus(k)) : "—"}
         </span>
       {/snippet}
       <StatRows kinds={STAT_KINDS} row={petRow} />
@@ -250,7 +250,7 @@
             onclick={() => setCrownPreset(limits.crown_selected_max)}
           >MAX</button>
         </div>
-        <span class="hint dim">選んだ能力値だけ上限 +{limits.crown_selected_max}。もう一度押すと外せます。</span>
+        <span class="hint dim">選んだ能力値だけ上限 {fmtSigned(limits.crown_selected_max)}。もう一度押すと外せます。</span>
       </div>
       {#snippet crownRow(k: StatKind)}
         <StatInput

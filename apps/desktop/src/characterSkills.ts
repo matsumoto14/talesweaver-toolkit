@@ -6,6 +6,7 @@
 import type {
   CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect,
 } from "./api/types";
+import { fmtPct, fmtSigned } from "./format";
 import { ELEMENT_LABELS, STAT_LABELS } from "./labels";
 import { tables } from "./tables.svelte";
 import type { PickerOption } from "./ui/Picker.svelte";
@@ -21,16 +22,15 @@ export function singleEffectLabel(e: SkillEffect): string | null {
   if (e === "record_only") return null;
   if ("stat_rate" in e) {
     const stats = e.stat_rate.stats.map((k) => STAT_LABELS[k]).join(" / ");
-    return `${stats} +${e.stat_rate.percent}%`;
+    return `${stats} ${fmtSigned(e.stat_rate.percent, { max: 2 }, "%")}`;
   }
-  if ("actual_delay" in e) return `中ディレイ −${e.actual_delay.percent}%`;
-  if ("accuracy_point" in e) return `命中P +${e.accuracy_point.value}`;
-  if ("min_evasion_rate" in e) return `最小回避率補正 +${e.min_evasion_rate.value}%`;
+  if ("actual_delay" in e) return `中ディレイ ${fmtSigned(-e.actual_delay.percent, { max: 2 }, "%")}`;
+  if ("accuracy_point" in e) return `命中P ${fmtSigned(e.accuracy_point.value)}`;
+  if ("min_evasion_rate" in e) return `最小回避率補正 ${fmtSigned(e.min_evasion_rate.value, { max: 2 }, "%")}`;
   // Rust の SkillEffect::label と同じ文言
-  if ("accuracy_rate" in e) return `命中P割合増加(SLv×${e.accuracy_rate.per_level * 100}%)`;
+  if ("accuracy_rate" in e) return `命中P割合増加(SLv×${fmtPct(e.accuracy_rate.per_level, { max: 2 })})`;
   const { category, percent } = e.damage;
-  const sign = percent < 0 ? "−" : "+";
-  return `${damageCategoryLabel(category)} ${sign}${Math.abs(percent)}%`;
+  return `${damageCategoryLabel(category)} ${fmtSigned(percent, { max: 2 }, "%")}`;
 }
 
 /** 効き先の要約(1 行)。`effects` はマスタリー解決済み(resolve_character_skill_effects の結果)。

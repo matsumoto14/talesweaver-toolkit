@@ -450,7 +450,7 @@
     c.kind === "rate" ? `${c.raw >= 0 ? "+" : ""}${fmtNum(c.raw * 100)}%` : fmtNum(c.raw);
   const fmtCatLoss = (c: (typeof activeCategories)[number]) => {
     const loss = catLoss(c);
-    return c.kind === "rate" ? `${fmtNum(loss * 100)}%` : fmtNum(loss);
+    return c.kind === "rate" ? fmtSignedPct(-loss, { max: 4 }) : fmtSigned(-loss, { max: 4 });
   };
   const cappedCategories = $derived(activeCategories.filter((c) => catLoss(c) > 1e-9));
   // 「一番効いている / 次に伸ばす」の規則は Rust 側(`damage_levers` / `DamageCategory::is_effort`)。
@@ -584,7 +584,7 @@
       value: fmtCatValue(c),
       n,
       unit: c.kind === "rate" ? "%" : undefined,
-      sub: catLoss(c) > 1e-9 ? `上限で −${fmtCatLoss(c)}` : undefined,
+      sub: catLoss(c) > 1e-9 ? `上限で ${fmtCatLoss(c)}` : undefined,
       note: swapNote(names("gone"), names("added")),
       key: contributions.length > 0 ? `cat:${c.category}` : undefined,
       subs:
@@ -628,7 +628,7 @@
       if (c.kind !== kind) continue;
       mats.push({
         label: c.source,
-        value: `${c.effect < 0 ? "−" : "+"}${fmtInt(Math.abs(c.effect))}`,
+        value: fmtSigned(c.effect, { max: 3 }),
         sub: `${STAT_LAYER_LABELS[c.layer]} ${formatLayerValue(c.layer, c.value)}`,
         n: c.effect,
       });
@@ -636,7 +636,7 @@
     if (st.capped_loss > 0) {
       mats.push({
         label: "上限で捨てた分",
-        value: `−${fmtInt(st.capped_loss)}`,
+        value: fmtSigned(-st.capped_loss, { max: 3 }),
         sub: `上限 ${fmtInt(st.stat_cap)}`,
         n: -st.capped_loss,
       });
@@ -689,15 +689,15 @@
       for (const s of result?.trace.equipment_enhance_sources ?? []) {
         mats.push({
           label: s.source,
-          mult: `+${fmtNum(s.value * 100)}%`,
-          value: `+${fmtNum(s.value * 100)}%`,
+          mult: fmtSignedPct(s.value, { max: 4 }),
+          value: fmtSignedPct(s.value, { max: 4 }),
           n: s.value * 100,
           unit: "%",
         });
       }
     }
     return {
-      mult: a.k === "装備攻撃力強化倍率" && atk ? `+${fmtNum(atk.enhance_rate * 100)}%` : "—",
+      mult: a.k === "装備攻撃力強化倍率" && atk ? fmtSignedPct(atk.enhance_rate, { max: 4 }) : "—",
       delta: a.v,
       to: a.to,
       mats,
@@ -712,7 +712,7 @@
     const mats: Mat[] = flowRows.map((f) => ({
       label: f.k,
       mult: f.mult === "—" ? undefined : f.mult,
-      value: `${f.add < 0 ? "−" : "+"}${fmtInt(Math.round(Math.abs(f.add)))}`,
+      value: fmtSigned(f.add),
       sub: `ここまで ${fmtInt(Math.round(f.to))}`,
       n: Math.round(f.add),
     }));
@@ -721,7 +721,7 @@
         label: "ダメージ上限(1 段ごと)",
         value: fmtInt(r.damage_cap),
         n: r.damage_cap,
-        sub: `上限で −${fmtInt(r.capped_loss.max)}`,
+        sub: `上限で ${fmtSigned(-r.capped_loss.max, { max: 3 })}`,
       });
     }
     return {
@@ -761,7 +761,7 @@
     if (added !== 0) {
       mats.push({
         label: "割合追加ダメージ(合計に乗る)",
-        mult: `+${fmtNum(r.added_damage_rate * 100)}%`,
+        mult: fmtSignedPct(r.added_damage_rate, { max: 4 }),
         value: fmtInt(added),
         n: added,
         sub: "シャープネスビジョン・ランダムOP・称号",
@@ -800,10 +800,10 @@
       },
     ];
     for (const c of d.contributions) {
-      mats.push({ label: `↳ ${c.source}`, value: `−${fmtPct(c.rate)}`, n: -Math.round(c.rate * 100), unit: "%" });
+      mats.push({ label: `↳ ${c.source}`, value: fmtSignedPct(-c.rate), n: -Math.round(c.rate * 100), unit: "%" });
     }
     mats.push({
-      label: `中ディレイ減少(上限 ${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
+      label: `中ディレイ減少(上限 ${fmtPct(limits.actual_delay_reduction_max)})`,
       value: fmtPct(d.reduction),
       n: Math.round(d.reduction * 100), unit: "%",
       sub: d.reduction_raw > d.reduction ? `選択中は ${fmtPct(d.reduction_raw)}` : undefined,
@@ -953,7 +953,7 @@
     if (ad !== null) {
       if (ad.reduction_raw > ad.reduction + 1e-9) {
         out.push({
-          k: `中ディレイ減少の上限(${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
+          k: `中ディレイ減少の上限(${fmtPct(limits.actual_delay_reduction_max)})`,
           raw: fmtPct(ad.reduction_raw),
           val: fmtPct(ad.reduction),
           loss: fmtPct(ad.reduction_raw - ad.reduction),
@@ -1380,8 +1380,8 @@
   const titleHeadNote = $derived(currentTitle?.name ?? "なし");
   const titleNote = (t: TitleDef): string => {
     const vals = EQUIPMENT_STAT_KINDS.filter((k) => t.values[k] !== 0).map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(t.values[k])}`);
-    if (t.attack_damage_percent > 0) vals.push(`ダメ +${t.attack_damage_percent}%`);
-    if (t.added_damage_percent > 0) vals.push(`追加ダメ +${t.added_damage_percent}%`);
+    if (t.attack_damage_percent > 0) vals.push(`ダメ ${fmtSigned(t.attack_damage_percent, { max: 2 }, "%")}`);
+    if (t.added_damage_percent > 0) vals.push(`追加ダメ ${fmtSigned(t.added_damage_percent, { max: 2 }, "%")}`);
     return vals.join(" ") || "—";
   };
   function selectTitle(id: string | null) {
@@ -1407,7 +1407,7 @@
   const polishTotalsLabel = $derived.by(() => {
     const sum = new Map<EquipmentStatKind, number>();
     for (const row of polishRows) sum.set(row.entry.stat, (sum.get(row.entry.stat) ?? 0) + row.amount);
-    return [...sum.entries()].map(([k, v]) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(v)}`).join(" ・ ");
+    return [...sum.entries()].map(([k, v]) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(v)}`).join(" ・ ");
   });
   const polishHeadNote = $derived(
     polishRows.length === 0 ? "未登録" : `${polishOn ? "ON" : "OFF"} ・ ${polishTotalsLabel}`,
@@ -1478,11 +1478,11 @@
   function ultimateChipNote(skillId: UltimateSkill): string {
     const e = ultimateEffects;
     if (!e) return "";
-    if (skillId === "scope_eye") return `クリダメ +${Math.round(e.critical_damage_rate * 100)}%`;
+    if (skillId === "scope_eye") return `クリダメ ${fmtSignedPct(e.critical_damage_rate)}`;
     if (skillId === "full_throttle") {
-      return `中ディレイ −${Math.round(e.actual_delay_reduction * 100)}% ・段数 +${e.added_hit_count}`;
+      return `中ディレイ ${fmtSignedPct(-e.actual_delay_reduction)} ・段数 ${fmtSigned(e.added_hit_count)}`;
     }
-    return `範囲 +${Math.round(e.skill_range_bonus)}(火力には効きません)`;
+    return `範囲 ${fmtSigned(e.skill_range_bonus)}(火力には効きません)`;
   }
 
   // --- 地力(試し変更)。装備ではなく育てて上がるもののうち、効きが大きい 3 つ -----------
@@ -1730,7 +1730,7 @@
       <span class="num dt-hv">{d.mult}</span>
       <span class="dt-hk dim">実数</span>
       <span class="num dt-hv" class:bad={(d.delta ?? 0) < 0} use:bump={() => (d.delta === null ? null : Math.round(d.delta))}
-      >{d.delta === null ? "—" : `${d.delta < 0 ? "−" : "+"}${fmtInt(Math.round(Math.abs(d.delta)))}`}</span><span use:delta={{ get: () => (d.delta === null ? null : Math.round(d.delta)) }}></span>
+      >{d.delta === null ? "—" : fmtSigned(d.delta)}</span><span use:delta={{ get: () => (d.delta === null ? null : Math.round(d.delta)) }}></span>
       <span class="dt-hk dim">結果</span>
       <span class="num dt-hv big" use:bump={() => d.to}
       >{d.to === null ? "—" : fmtInt(Math.round(d.to))}</span><span use:delta={{ get: () => d.to }}></span>
@@ -2153,7 +2153,7 @@
                        超えたら倍率を出さず「大きく超えている」とだけ伝える -->
                   {ratio >= 10 ? "目安を大きく超えています。" : `目安の ${fmtNum(ratio, 2)} 倍。火力は足りています。`}
                 {:else}
-                  目安まで あと {fmtInt(need - perHit)}(+{Math.max(1, Math.round((need / Math.max(perHit, 1) - 1) * 100))}% 必要)
+                  目安まで あと {fmtInt(need - perHit)}({fmtSignedPct(Math.max(0.01, need / Math.max(perHit, 1) - 1))} 必要)
                 {/if}
               </span>
               <span class="num dim">目安 {fmtInt(need)}</span>
@@ -2221,7 +2221,7 @@
                 {:else}
                   1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
                   {#if d.uses_measured}
-                    (<b>実測表</b>: 総減少 {fmtPct(d.reduction)} × 基本 {fmtNum(d.base, 1, "s")})
+                    (<b>実測表</b>: 総減少 {fmtPct(d.reduction)} × 基本 {fmtNum(d.base, 2, "s")})
                   {:else}
                     (実測表の範囲外なので 60 ÷ 中ディレイ の式で算出)
                   {/if}
@@ -2387,7 +2387,7 @@
                     <span class="swatch" style="background: {f.c};"></span>
                     <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
-                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span><!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{fmtSigned(f.add)}</span><!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
                     <span use:delta={{ get: () => Math.round(f.add) }} class:follow={changedFlowKeys.includes(`flow:${f.k}`)} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(`flow:${f.k}`); }}></span>
                     <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
                   </button>
@@ -2622,7 +2622,7 @@
             <Icon kind="skill" id="sharpness_vision" size={20} label="シャープネスビジョン" />
             <span class="card-title">シャープネスビジョン</span>
             <span class="dim small num" use:bump={() => sharpnessRatePercent}
-            >{sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} +${sharpnessRatePercent}%`}</span>
+            >{sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} ${fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}`}</span>
           </button>
           {#if openMaterial === "sharpness"}
           <div class="basics-rows">
@@ -2692,7 +2692,7 @@
             {/each}
           </div>
           <p class="eq-note dim">
-            クリダメはクリティカル時だけ、最終ダメージはカテゴリL の上限{finalDamageCapPercent !== null ? ` +${finalDamageCapPercent}%` : ""}まで。
+            クリダメはクリティカル時だけ、最終ダメージはカテゴリL の上限{finalDamageCapPercent !== null ? ` ${fmtSigned(finalDamageCapPercent, { max: 2 }, "%")}` : ""}まで。
             武器強化は追加固定ダメージに掛かるので、<b>合計ダメージ</b>だけが動きます。
           </p>
           {/if}
@@ -2779,7 +2779,7 @@
                           }
                         />
                         <span class="num enchant-gain" class:up={(gain ?? 0) > 0} use:bump={() => gain ?? null}
-                        >{gain !== undefined ? `MAX で +${gain}%` : ""}</span>
+                        >{gain !== undefined ? `MAX で ${fmtSigned(gain, { max: 2 }, "%")}` : ""}</span>
                       </div>
                     {/each}
                   </div>
@@ -2821,7 +2821,7 @@
                 <button type="button" class="polish-row" class:off={!polishOn} onclick={() => focusCharacterSource("polish")}>
                   <span class="enchant-row-label">{PART_SLOT_LABELS[row.slot]}</span>
                   <span class="polish-row-kind dim">{POLISH_KIND_LABELS[row.entry.kind]} {EQUIPMENT_STAT_SHORT[row.entry.stat]}</span>
-                  <span class="num polish-row-amount" use:bump={() => row.amount}>+{fmtInt(row.amount)}</span>
+                  <span class="num polish-row-amount" use:bump={() => row.amount}>{fmtSigned(row.amount)}</span>
                   <span class="chev dim">›</span>
                 </button>
               {/each}
@@ -2926,13 +2926,13 @@
         <div class="combo">
           <ToggleRow
             name="コンボする"
-            value={`+${Math.round(limits.combo_bonus_rate * 100)}%`}
+            value={fmtSignedPct(limits.combo_bonus_rate)}
             on={combo}
             tone="temp"
             onToggle={() => (combo = !combo)}
           />
           <p class="combo-note dim">
-            ダメージ +{Math.round(limits.combo_bonus_rate * 100)}% ・ 中ディレイ半分。
+            ダメージ {fmtSignedPct(limits.combo_bonus_rate)} ・ 中ディレイ半分。
             <b>スキル → 通常攻撃 → スキル</b>のように、間に通常攻撃を挟むと成立します。
           </p>
           {#if combo}

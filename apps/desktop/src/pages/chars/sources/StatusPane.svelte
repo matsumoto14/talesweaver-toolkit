@@ -7,7 +7,7 @@
   import { errorMessage, previewElements, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
   import { mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
   import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
-  import { fmtInt, formatLayerValue } from "../../../format";
+  import { fmtInt, fmtSigned, fmtSignedPct, formatLayerValue } from "../../../format";
   import {
     ELEMENT_LABELS, ELEMENTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
     STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
@@ -322,7 +322,7 @@
           tone={(v) => (v === "" ? undefined : `elem-${v}`)}
           bind:value={() => mainElement, chooseMainElement}
         />
-        <p class="hint dim">ペット・カード・ルーン・アビリティの +{elementSourceTotal} をまとめて乗せます。</p>
+        <p class="hint dim">ペット・カード・ルーン・アビリティの {fmtSigned(elementSourceTotal)} をまとめて乗せます。</p>
       {/if}
     </div>
   </div>
@@ -335,8 +335,8 @@
       {:else}
         まだどの属性も乗っていません
       {/each}
-      。与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに +{limits.element_bonus_percent_per_point}%、
-      +{Math.round(limits.element_bonus_max / (limits.element_bonus_percent_per_point / 100))} で上限 +{Math.round(limits.element_bonus_max * 100)}%(敵は 120 / 125 が多い)。
+      。与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに {fmtSigned(limits.element_bonus_percent_per_point, { max: 2 }, "%")}、
+      {fmtSigned(limits.element_bonus_max / (limits.element_bonus_percent_per_point / 100))} で上限 {fmtSignedPct(limits.element_bonus_max)}(敵は 120 / 125 が多い)。
     </p>
   {/if}
   <p class="hint dim">

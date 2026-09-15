@@ -3,6 +3,7 @@
   import type { StatKind, StatPreview, UltimateSkill } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import { STAT_KINDS, STAT_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_EFFECTS, ULTIMATE_SKILL_LABELS } from "../../../labels";
+  import { fmtPct, fmtSigned, fmtSignedPct } from "../../../format";
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import { flash } from "../../../ui/motion.svelte";
@@ -70,7 +71,7 @@
   const unleashLevelOptions = $derived(
     Array.from({ length: Math.min(limits.unleash_level_max, reinforceGate) + 1 }, (_, lv) => ({
       value: String(lv),
-      label: lv === 0 ? "未習得" : `Lv${lv}(+${UNLEASH_RATES[lv - 1]}%)`,
+      label: lv === 0 ? "未習得" : `Lv${lv}(${fmtSigned(UNLEASH_RATES[lv - 1], { max: 2 }, "%")})`,
     })),
   );
 
@@ -167,14 +168,14 @@
     const effects = preview?.common_skill.ultimate;
     const out: string[] = [];
     if (u.slots.includes("scope_eye")) {
-      out.push(`クリティカルダメージ +${Math.round((effects?.critical_damage_rate ?? 0) * 100)}%`);
+      out.push(`クリティカルダメージ ${fmtSignedPct(effects?.critical_damage_rate ?? 0)}`);
     }
     if (u.slots.includes("full_throttle")) {
-      out.push(`中ディレイ −${fullThrottlePercent}%`);
-      out.push(`単体チャネリング段数 +${effects?.added_hit_count ?? 0}`);
+      out.push(`中ディレイ ${fmtSigned(-fullThrottlePercent, { max: 2 }, "%")}`);
+      out.push(`単体チャネリング段数 ${fmtSigned(effects?.added_hit_count ?? 0)}`);
     }
     if (u.slots.includes("wide_focus")) {
-      out.push(`スキル範囲 +${effects?.skill_range_bonus ?? 0}`);
+      out.push(`スキル範囲 ${fmtSigned(effects?.skill_range_bonus ?? 0)}`);
     }
     return out;
   });
@@ -183,9 +184,9 @@
 
 <!-- 効いている量(結果)。ペイン自体が既に「共通スキル」の名前を出しているので見出しは持たない -->
 <div class="eq-summary num inset">
-  <span><span class="dim">装備攻撃力強化</span> +{enhanceRatePercent}%</span>
+  <span><span class="dim">装備攻撃力強化</span> {fmtSigned(enhanceRatePercent, { max: 2 }, "%")}</span>
   <span><span class="dim">装備防御力</span> 物 {defenseRatePercent.physical}% / 魔 {defenseRatePercent.magic}%</span>
-  <span><span class="dim">割合追加ダメージ</span> +{sharpnessRatePercent}%</span>
+  <span><span class="dim">割合追加ダメージ</span> {fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}</span>
   <span><span class="dim">アンリーシュ</span> {unleashSummary}</span>
 </div>
 <p class="dim tiny">オーグメント Lv{draft.commonSkills.augment_level} ・ 極限 {ultimatePicked}</p>
@@ -256,7 +257,7 @@
           >未使用</button>
         </span>
         <span class="v num" use:flash={() => (slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`)}>
-          {slot.stat === null ? "—" : `+${UNLEASH_RATES[slot.level - 1]}%`}
+          {slot.stat === null ? "—" : fmtSigned(UNLEASH_RATES[slot.level - 1], { max: 2 }, "%")}
         </span>
       </div>
     {/each}
@@ -264,7 +265,7 @@
   <p class="hint dim">
     選んだステが<b>能力値倍率B</b>で増えます(<b>バフ込みの基本能力値 × 倍率</b>なので、
     バフを盛るほど効きます)。<b>2 ステまで</b>で、同じステは 2 枠に入れられません。
-    Lv は取れる上限(いまは <b>Lv{unleashCap}</b> = +{UNLEASH_RATES[unleashCap - 1]}%)で入ります。
+    Lv は取れる上限(いまは <b>Lv{unleashCap}</b> = {fmtSigned(UNLEASH_RATES[unleashCap - 1], { max: 2 }, "%")})で入ります。
   </p>
 </div>
 
@@ -283,7 +284,7 @@
       onClear={() => (draft.commonSkills.sharpness_vision_level = 0)}
       valueText={draft.commonSkills.sharpness_vision_level === 0
         ? "—"
-        : `+${SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1]}%`}
+        : fmtSigned(SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1], { max: 2 }, "%")}
       valueMotion="bump"
       valueKey={draft.commonSkills.sharpness_vision_level === 0
         ? null
@@ -320,7 +321,7 @@
         <span class="toggle-cell">
           <ToggleRow
             name="取っている"
-            value={draft.commonSkills.power_weapon ? `+${Math.round(limits.power_weapon_rate * 100)}%` : "—"}
+            value={draft.commonSkills.power_weapon ? fmtSignedPct(limits.power_weapon_rate) : "—"}
             on={draft.commonSkills.power_weapon}
             onToggle={() => (draft.commonSkills.power_weapon = !draft.commonSkills.power_weapon)}
           />
@@ -337,7 +338,7 @@
         clearLabel="未習得"
         clearDisabled={draft.commonSkills.strong_weapon_level === 0}
         onClear={() => (draft.commonSkills.strong_weapon_level = 0)}
-        valueText={draft.commonSkills.strong_weapon_level === 0 ? "—" : `+${draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}%`}
+        valueText={draft.commonSkills.strong_weapon_level === 0 ? "—" : fmtSigned(draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL, { max: 2 }, "%")}
         valueMotion="bump"
         valueKey={draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}
       />
@@ -347,7 +348,7 @@
           <ToggleRow
             name="取っている"
             value={draft.commonSkills.coat_armor
-              ? `物${Math.round(limits.coat_armor_physical_rate * 100)} / 魔${Math.round(limits.coat_armor_magic_rate * 100)}%`
+              ? `物${fmtPct(limits.coat_armor_physical_rate)} / 魔${fmtPct(limits.coat_armor_magic_rate)}`
               : "—"}
             on={draft.commonSkills.coat_armor}
             onToggle={() => (draft.commonSkills.coat_armor = !draft.commonSkills.coat_armor)}
@@ -436,13 +437,13 @@
               bind:value={() => String(slot.level), (v) => (slot.level = Number(v))}
             />
             <span class="skill-actions"></span>
-            <span class="v num">{STAT_LABELS[slot.stat]} +{UNLEASH_RATES[slot.level - 1]}%</span>
+            <span class="v num">{STAT_LABELS[slot.stat]} {fmtSigned(UNLEASH_RATES[slot.level - 1], { max: 2 }, "%")}</span>
           </div>
         {/if}
       {/each}
       <p class="hint dim">
         オーグメントで解放されていない段は押せません。
-        {#if sienaDefenseRate > 0}装備防御力にはシエナのオーラの +{sienaDefenseRate}% を含みます。{/if}
+        {#if sienaDefenseRate > 0}装備防御力にはシエナのオーラの {fmtSigned(sienaDefenseRate, { max: 2 }, "%")} を含みます。{/if}
         <b>リンゴの島・ベリネンルミでは装備防御力は常に 100%</b>(wiki 計算式まとめ §防御力)。
       </p>
     </div>

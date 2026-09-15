@@ -7,7 +7,7 @@ import { tables } from "../../tables.svelte";
 import type { EquipmentValues, SkillDependency, StatPreview } from "../../api/types";
 import type { Draft } from "../../draft";
 import { avatarEnhanceTotals, zeroValues } from "../../equipment";
-import { fmtInt } from "../../format";
+import { fmtSigned, fmtSignedPct } from "../../format";
 
 /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの依存種別から絞る。 */
 export function equipmentAttackKindsFor(dependency: SkillDependency | null): EquipmentStatKind[] {
@@ -57,11 +57,10 @@ export function sharpnessRatePercent(draft: Draft): number {
 
 /** アンリーシュ(能力解放)の効き先要約。正は crates/domain/src/common_skill.rs の UNLEASH */
 export function unleashSummary(draft: Draft): string {
-  const rates = tables.unleash_rates.map((r) => Math.round(r * 100));
   return (
     (draft.commonSkills.unleash ?? [])
       .filter((u) => u.stat !== null && u.level > 0)
-      .map((u) => `${STAT_LABELS[u.stat!]} +${rates[u.level - 1]}%`)
+      .map((u) => `${STAT_LABELS[u.stat!]} ${fmtSignedPct(tables.unleash_rates[u.level - 1])}`)
       .join(" / ") || "未使用"
   );
 }
@@ -92,7 +91,7 @@ export function avatarEnhanceSummary(draft: Draft): string {
   const totals = avatarEnhanceTotals(draft.equipment.avatar);
   return (
     EQUIPMENT_STAT_KINDS.filter((k) => totals[k] > 0)
-      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(totals[k])}`)
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(totals[k])}`)
       .join(" ・ ") || "未使用"
   );
 }

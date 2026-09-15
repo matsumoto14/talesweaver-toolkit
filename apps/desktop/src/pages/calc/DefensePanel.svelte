@@ -2,7 +2,7 @@
   // 防御側パネル(規格シート 5c)。攻撃タブと同列で「自分がどれだけ耐えるか」を出す。
   // 計算は Rust 側(crates/domain/src/defense.rs)。ここは表示だけ。
   import type { DefenseProfile } from "../../api/types";
-  import { fmtInt, fmtNum } from "../../format";
+  import { fmtInt, fmtNum, fmtPct } from "../../format";
   import { limits } from "../../limits.svelte";
   import { bump, delta } from "../../ui/motion.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
@@ -60,9 +60,9 @@
         </div>
         <div class="row">
           <span class="rl">装備防御力倍率</span>
-          <span class="num rv" use:bump={() => profile.defense_rates.physical * 100}>物 {fmtInt(profile.defense_rates.physical * 100)}%</span><span use:delta={{ get: () => profile.defense_rates.physical * 100, unit: "%" }}></span>
+          <span class="num rv" use:bump={() => profile.defense_rates.physical * 100}>物 {fmtPct(profile.defense_rates.physical, { max: 2 })}</span><span use:delta={{ get: () => profile.defense_rates.physical * 100, unit: "%" }}></span>
           <span class="rn dim">
-            魔 {fmtInt(profile.defense_rates.magic * 100)}%。共通スキル(コートアーマー / プロテクトアーマー)+
+            魔 {fmtPct(profile.defense_rates.magic, { max: 2 })}。共通スキル(コートアーマー / プロテクトアーマー)+
             シエナのオーラの防御力増加。<b>リンゴの島・ベリネンルミでは常に 100%</b>
           </span>
         </div>

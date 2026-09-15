@@ -9,7 +9,7 @@
   import type { EquipmentPolish, EquipmentStatKind, PartSlot, PolishKind, SkillDependency, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import { polishAmount, polishProductLabel, selectedEquipmentPart, selectedEquipmentPartOrNeutral, zeroValues } from "../../../equipment";
-  import { fmtInt } from "../../../format";
+  import { fmtSigned } from "../../../format";
   import {
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, OTHER_EQUIPMENT_STATS, PART_SLOT_LABELS,
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, PRIMARY_EQUIPMENT_STATS,
@@ -46,7 +46,7 @@
   });
   const totalsLabel = $derived(
     EQUIPMENT_STAT_KINDS.filter((k) => totals[k] > 0)
-      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(totals[k])}`)
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(totals[k])}`)
       .join(" ・ ") || "未使用",
   );
   /** いまバフ「装備研磨」が ON か(いつものバフでの判定。正は Rust 側 `equipment_polish_active`) */
@@ -66,7 +66,7 @@
       { value: "", name: "なし", meta: "記録しない" },
       ...POLISH_KINDS.map((kind) => ({
         value: kind, name: POLISH_KIND_LABELS[kind],
-        meta: `${rate(kind)}${EQUIPMENT_STAT_SHORT[stat]} +${fmtInt(amountFor(slot, kind, stat))}`,
+        meta: `${rate(kind)}${EQUIPMENT_STAT_SHORT[stat]} ${fmtSigned(amountFor(slot, kind, stat))}`,
       })),
     ];
   };
@@ -74,7 +74,7 @@
   const statOptions = (slot: PartSlot, entry: EquipmentPolish): PickerOption[] =>
     [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS].map((stat) => ({
       value: stat, name: EQUIPMENT_STAT_SHORT[stat],
-      meta: `+${fmtInt(amountFor(slot, entry.kind, stat))}`,
+      meta: fmtSigned(amountFor(slot, entry.kind, stat)),
       pinned: PRIMARY_EQUIPMENT_STATS.includes(stat),
     }));
 
@@ -86,8 +86,8 @@
     const statLabel = EQUIPMENT_STAT_SHORT[entry.stat];
     const percent = entry.kind === "sparkle" ? "+3%" : entry.kind === "artisan" ? "+5%" : null;
     return percent
-      ? `${kindLabel} ${statLabel} ${percent} → +${fmtInt(amount)}`
-      : `${kindLabel} ${statLabel} → +${fmtInt(amount)}`;
+      ? `${kindLabel} ${statLabel} ${percent} → ${fmtSigned(amount)}`
+      : `${kindLabel} ${statLabel} → ${fmtSigned(amount)}`;
   }
 
   let openSlot = $state<PartSlot | null>(null);

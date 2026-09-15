@@ -239,18 +239,17 @@
     const labels: string[] = item.damage_effects
       .map((e) => {
         if (typeof e === "string" || !("damage" in e)) return null;
-        const sign = e.damage.percent < 0 ? "−" : "+";
         const head = short ? "与ダメ" : damageCategoryLabel(e.damage.category);
-        return `${head} ${sign}${Math.abs(e.damage.percent)}%`;
+        return `${head} ${fmtSigned(e.damage.percent, { max: 2 }, "%")}`;
       })
       .filter((x): x is string => x !== null);
     for (const effect of item.survival_effects) {
       if ("damage_mitigation" in effect) {
-        labels.push(`緩和 +${effect.damage_mitigation.percent}%`);
+        labels.push(`緩和 ${fmtSigned(effect.damage_mitigation.percent, { max: 2 }, "%")}`);
       } else if ("defense_rate" in effect) {
-        labels.push(`防御 +${effect.defense_rate.percent}%`);
+        labels.push(`防御 ${fmtSigned(effect.defense_rate.percent, { max: 2 }, "%")}`);
       } else if ("defense_fixed" in effect) {
-        labels.push(`防御 +${effect.defense_fixed.value}`);
+        labels.push(`防御 ${fmtSigned(effect.defense_fixed.value)}`);
       }
     }
     return labels.length === 0 ? null : labels.join(" ・ ");
@@ -467,8 +466,9 @@
   const additionsFor = (slot: PartSlot, abilityId: string) =>
     (selectedPart(slot).ability_additions ?? []).filter((a) => a.ability_id === abilityId);
   const additionalRangeLabel = (option: { kind: EquipmentAbilityAdditionalKind; min: number; max: number }): string => {
-    const sign = option.kind === "physical_damage_reduction" || option.kind === "magic_damage_reduction" ? "−" : "+";
-    return option.min === option.max ? `${sign}${fmtInt(option.max)}` : `${sign}${option.min}〜${option.max}`;
+    // 減少側は負の値として渡し、符号は書式関数に任せる(「−」を直書きしない)
+    const signed = (v: number) => fmtSigned(option.kind === "physical_damage_reduction" || option.kind === "magic_damage_reduction" ? -v : v);
+    return option.min === option.max ? signed(option.max) : `${signed(option.min)}〜${fmtInt(option.max)}`;
   };
   const additionalAt = (slot: PartSlot, abilityId: string, index: number) => additionsFor(slot, abilityId)[index] ?? null;
   function setAdditionalValue(slot: PartSlot, abilityId: string, index: number, value: number) {
@@ -507,13 +507,13 @@
     ] as const;
     const pieces = stats.flatMap(([label, kind]) => {
       const value = partAbilityValues(slot)[kind];
-      return value === 0 ? [] : [`${label} +${value}`];
+      return value === 0 ? [] : [`${label} ${fmtSigned(value)}`];
     });
     const additions = part.ability_additions ?? [];
     const fixed = additions.filter((a) => a.kind === "fixed_damage").reduce((sum, a) => sum + a.value, 0);
     const rate = additions.filter((a) => a.kind === "damage_rate").reduce((sum, a) => sum + a.value, 0);
     if (fixed !== 0) pieces.push(`固定 ${fmtSigned(fixed)}`);
-    if (rate !== 0) pieces.push(`ダメージ +${rate}%`);
+    if (rate !== 0) pieces.push(`ダメージ ${fmtSigned(rate, { max: 2 }, "%")}`);
     if (pieces.length === 0) {
       const modeled = part.abilities.map(abilityDef).filter((def) => def && !def.record_only).map((def) => def!.effect_summary);
       return modeled.length > 0 ? modeled.join(" / ") : (part.abilities.length > 0 ? "記録のみ" : "未装着");

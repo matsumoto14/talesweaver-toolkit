@@ -6,7 +6,7 @@
   import type { Skill, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
-  import { fmtInt, fmtRate } from "../../../format";
+  import { fmtInt, fmtRate, fmtSigned } from "../../../format";
   import { bump } from "../../../ui/motion.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
@@ -46,7 +46,7 @@
       id: "equipment",
       name: "装備クリティカル補正",
       value: equipmentCriticalTotal,
-      format: (v) => `+${fmtInt(v)}`,
+      format: (v) => fmtSigned(v),
       note: "(装備クリティカル補正 + 1) × 2 の項",
     },
     {
@@ -60,7 +60,7 @@
       id: "status",
       name: "主軸スキルの Cri値",
       value: mainSkill?.critical_rate ?? 0,
-      format: (v) => `+${v}%`,
+      format: (v) => fmtSigned(v, { max: 2 }, "%"),
       note: mainSkill
         ? mainSkill.critical_rate === null
           ? `${mainSkill.name} は wiki 未記載`
@@ -97,13 +97,13 @@
     <ToggleRow
       name="極のルーン"
       cond="最大レベル時"
-      value={`+${limits.ultimate_rune_bonus_max}%`}
+      value={fmtSigned(limits.ultimate_rune_bonus_max, { max: 2 }, "%")}
       on={draft.statSources.critical_rate.ultimate_rune}
       onToggle={() => (draft.statSources.critical_rate.ultimate_rune = !draft.statSources.critical_rate.ultimate_rune)}
     />
     <ToggleRow
       name="致命打"
-      value={`+${limits.deadly_blow_bonus_max}%`}
+      value={fmtSigned(limits.deadly_blow_bonus_max, { max: 2 }, "%")}
       on={draft.statSources.critical_rate.deadly_blow}
       onToggle={() => (draft.statSources.critical_rate.deadly_blow = !draft.statSources.critical_rate.deadly_blow)}
     />
@@ -113,7 +113,7 @@
   <div class="lab-field">
     <span class="lab-label">
       設計者の研究室
-      <span class="lab-note">B グループの研究段階(0 = 未研究)・ 1 段階 +{limits.architect_lab_per_stage}%</span>
+      <span class="lab-note">B グループの研究段階(0 = 未研究)・ 1 段階 {fmtSigned(limits.architect_lab_per_stage, { max: 2 }, "%")}</span>
     </span>
     <StepSelect
       label=""
@@ -126,12 +126,12 @@
       }
     />
     <span class="lab-value num" use:bump={() => architectLabBonus}>
-      {architectLabBonus > 0 ? `+${architectLabBonus}%` : "—"}
+      {architectLabBonus > 0 ? fmtSigned(architectLabBonus, { max: 2 }, "%") : "—"}
     </span>
   </div>
   <p class="hint dim">
-    クリティカル率増加の合計: <b>+{Math.min(limits.critical_rate_bonus_max, criticalRateBonus)}%</b>
-    {#if criticalRateBonus > limits.critical_rate_bonus_max}(上限 +{limits.critical_rate_bonus_max}% で頭打ち){/if}
+    クリティカル率増加の合計: <b>{fmtSigned(Math.min(limits.critical_rate_bonus_max, criticalRateBonus), { max: 2 }, "%")}</b>
+    {#if criticalRateBonus > limits.critical_rate_bonus_max}(上限 {fmtSigned(limits.critical_rate_bonus_max, { max: 2 }, "%")} で頭打ち){/if}
     <br />
     値が不定の「バフ」、被撃率B(対人)、最終クリティカル率増加は未収録です。
   </p>

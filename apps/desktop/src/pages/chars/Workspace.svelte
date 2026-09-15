@@ -36,7 +36,7 @@
   import { buildDraft, draftToPayload } from "../../draft";
   import { cloneEquipmentPart, randomOptionCount, sienaPartCount, withEnchant } from "../../equipment";
   import { buffSetOptions } from "../../buffs";
-  import { fmtInt, fmtPct, fmtRate, fmtSignedPct } from "../../format";
+  import { fmtInt, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
   import {
     EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
@@ -387,10 +387,10 @@
       shows(finalRate) ? `最終${fmtSignedPct(finalRate, { max: 1 })}` : null,
       shows(critRate) ? `クリ${fmtSignedPct(critRate, { max: 1 })}` : null,
       weapon > 1 ? `武器${fmtRate(weapon, 1)}` : null,
-      v.thrust > 0 ? `突+${v.thrust}` : null,
-      v.slash > 0 ? `斬+${v.slash}` : null,
-      v.magic_attack > 0 ? `魔攻+${v.magic_attack}` : null,
-      v.magic_defense > 0 ? `魔防+${v.magic_defense}` : null,
+      v.thrust > 0 ? `突${fmtSigned(v.thrust)}` : null,
+      v.slash > 0 ? `斬${fmtSigned(v.slash)}` : null,
+      v.magic_attack > 0 ? `魔攻${fmtSigned(v.magic_attack)}` : null,
+      v.magic_defense > 0 ? `魔防${fmtSigned(v.magic_defense)}` : null,
     ].filter((x): x is string => x !== null);
     return candidates.length > 0 ? candidates.slice(0, 2).join(" ・ ") : NEUTRAL;
   });
@@ -439,7 +439,7 @@
     // 供給源別の内訳(preview.character_skill_actual_delay)は Rust 側で解決済み。ここは合計するだけ
     const rate = (preview?.character_skill_actual_delay ?? []).reduce((sum, c) => sum + c.rate, 0);
     if (rate === 0) return `${ids.length} 件`;
-    return `${ids.length} 件 ・ 合計 −${fmtPct(rate, { max: 2 })}`;
+    return `${ids.length} 件 ・ 合計 ${fmtSignedPct(-rate, { max: 2 })}`;
   });
 
   // 共通スキルの効き先(結果側の表示用)。入力は補正源、計算は Rust 側(preview / limits)を参照する。
@@ -452,10 +452,10 @@
   const commonSkillSummary = $derived.by(() => {
     const c = draft.commonSkills;
     const parts: string[] = [];
-    if (enhanceRatePercent > 0) parts.push(`装備攻撃力 +${enhanceRatePercent}%`);
-    if (defenseRatePercent.physical > 0) parts.push(`装備防御力 物+${defenseRatePercent.physical}%`);
+    if (enhanceRatePercent > 0) parts.push(`装備攻撃力 ${fmtSigned(enhanceRatePercent, { max: 2 }, "%")}`);
+    if (defenseRatePercent.physical > 0) parts.push(`装備防御力 物${fmtSigned(defenseRatePercent.physical, { max: 2 }, "%")}`);
     if (c.sharpness_vision_level > 0) {
-      parts.push(`追加ダメージ +${sharpnessRatePercent}%`);
+      parts.push(`追加ダメージ ${fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}`);
     }
     const ultimate = c.ultimate.slots.filter((u) => u !== null);
     if (ultimate.length > 0) {
@@ -479,10 +479,10 @@
     const t = app.titles.find((x) => x.id === draft.equipment.title);
     if (!t) return NEUTRAL;
     const headline = t.attack_damage_percent > 0
-      ? `ダメ +${t.attack_damage_percent}%`
+      ? `ダメ ${fmtSigned(t.attack_damage_percent, { max: 2 }, "%")}`
       : t.added_damage_percent > 0
-        ? `追加ダメ +${t.added_damage_percent}%`
-        : `合計 +${fmtInt(t.equipment_value_total)}`;
+        ? `追加ダメ ${fmtSigned(t.added_damage_percent, { max: 2 }, "%")}`
+        : `合計 ${fmtSigned(t.equipment_value_total)}`;
     return `${t.name}(${headline})`;
   });
 
@@ -493,7 +493,7 @@
     const parts: string[] = [];
     if (c.pet) parts.push(`ペット会心 ×${limits.pet_critical_rate}`);
     const bonus = preview?.critical_rate_bonus.value ?? 0;
-    if (bonus > 0) parts.push(`増加 +${Math.round(bonus)}%`);
+    if (bonus > 0) parts.push(`増加 ${fmtSigned(bonus, 0, "%")}`);
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 
@@ -540,8 +540,8 @@
         sienaParts > 0
           ? [
               `${sienaParts} 部位`,
-              ...(sienaRate > 0 ? [`攻撃力 +${sienaRate}%`] : []),
-              ...(sienaStats > 0 ? [`ステ +${fmtInt(sienaStats)}`] : []),
+              ...(sienaRate > 0 ? [`攻撃力 ${fmtSigned(sienaRate, { max: 2 }, "%")}`] : []),
+              ...(sienaStats > 0 ? [`ステ ${fmtSigned(sienaStats)}`] : []),
             ].join(" ・ ")
           : NEUTRAL,
     },
@@ -560,18 +560,18 @@
       name: "研磨",
       sub: polishSummaryText === "未使用" ? NEUTRAL : polishSummaryText,
     },
-    { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 +${fmtInt(relicTotal)}` : NEUTRAL },
-    { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 +${fmtInt(crownTotal)}` : NEUTRAL },
+    { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 ${fmtSigned(relicTotal)}` : NEUTRAL },
+    { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 ${fmtSigned(crownTotal)}` : NEUTRAL },
     {
       id: "monsterCard",
       name: "モンスターカード",
-      sub: monsterCardTotal > 0 ? `合計 +${fmtInt(monsterCardTotal)}` : NEUTRAL,
+      sub: monsterCardTotal > 0 ? `合計 ${fmtSigned(monsterCardTotal)}` : NEUTRAL,
     },
     { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
     { id: "actualDelay", name: "中ディレイ減少", sub: delaySummary },
     { id: "criticalRate", name: "クリティカル率", sub: criticalRateSummary },
     { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
-    { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 +${fmtInt(runeTotal)}` : NEUTRAL },
+    { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 ${fmtSigned(runeTotal)}` : NEUTRAL },
   ]);
   // 補正源の並びはプレイヤーが決める(design-system §14 決定 3)。
   //
@@ -880,7 +880,7 @@
         <!-- 合計を出し、その横に括弧でエンチャント分(equipment.ts の withEnchant と同じ形。
              跳ねは値ごとに要るのでここは span を分けたまま組み立てる) -->
         <span use:bump={() => eqBaseTotal[k] + eqEnhancedTotal[k]}>{fmtInt(eqBaseTotal[k] + eqEnhancedTotal[k])}</span>
-        <span class="enhance" use:bump={() => eqEnhancedTotal[k]}>(+{fmtInt(eqEnhancedTotal[k])})</span>
+        <span class="enhance" use:bump={() => eqEnhancedTotal[k]}>({fmtSigned(eqEnhancedTotal[k])})</span>
       {/each}
     </span>
     {#if mainSkill}

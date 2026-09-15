@@ -4,7 +4,7 @@
   // 合算・上限適用は Rust 側(preview_effective_stats)で解決済みなので、ここは preview の値を
   // 表示用に % へ整形するだけ(供給源別の内訳は crates/domain/src/stat_sources.rs の StatPreview)。
   import type { CharacterSkillEffectsView, StatPreview } from "../../../api/types";
-  import { fmtNum, fmtPct } from "../../../format";
+  import { fmtNum, fmtPct, fmtSigned } from "../../../format";
   import { effectLabel, ownSkills, resolvedEffectsOf, toggleCharacterSkill } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
@@ -53,21 +53,21 @@
 
   /** 中ディレイ減少に、この補正源の外から入ってくる分 */
   const delayFromOthers = $derived<ExternalSource[]>([
-    { id: "commonSkill", name: "フルスロットル(共通スキル)", value: fullThrottlePercent, format: (v) => `−${v}%` },
+    { id: "commonSkill", name: "フルスロットル(共通スキル)", value: fullThrottlePercent, format: (v) => fmtSigned(-v, { max: 2 }, "%") },
     {
       id: "skills",
       name: "マスタリー(キャラスキル)",
       value: masteryDelayPercent,
-      format: (v) => `−${v}%`,
+      format: (v) => fmtSigned(-v, { max: 2 }, "%"),
       note: "段ごとに 1 つ。中ディレイ以外に効く選択肢もある",
     },
     {
       id: "randomOption",
       name: "ランダムOP(カフス)",
       value: pct(preview?.random_option_totals.actual_delay_reduction ?? 0),
-      format: (v) => `−${v}%`,
+      format: (v) => fmtSigned(-v, { max: 2 }, "%"),
     },
-    { id: "siena", name: "シエナのオーラ", value: pct(preview?.siena_actual_delay_rate ?? 0), format: (v) => `−${v}%` },
+    { id: "siena", name: "シエナのオーラ", value: pct(preview?.siena_actual_delay_rate ?? 0), format: (v) => fmtSigned(-v, { max: 2 }, "%") },
   ]);
 </script>
 
@@ -96,7 +96,7 @@
     {/each}
   </div>
   {#if delaySkillPercent > 0}
-    <p class="hint dim">このキャラのスキルぶん: <b>−{delaySkillPercent}%</b></p>
+    <p class="hint dim">このキャラのスキルぶん: <b>{fmtSigned(-delaySkillPercent, { max: 2 }, "%")}</b></p>
   {/if}
 </div>
 <ExternalSourceList rows={delayFromOthers} title="ほかの補正源から入る分" {onOpenSource} />
