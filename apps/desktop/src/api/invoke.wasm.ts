@@ -14,8 +14,30 @@ import { version as appVersion } from "../../package.json";
 import * as store from "./browserStore";
 import type { BuffSelection, NewCharacter } from "./types";
 
+/**
+ * 「追加機能の解除」で取得したテネブリス装備(unlock.svelte.ts)。デスクトップ版は Rust 側が
+ * app_data_dir/tenebris.json に保存して起動時に読み直すが、ブラウザ版は WASM が生きている間しか
+ * 持てないので、同じ役目をここで localStorage に持たせる(解除状態と同じくこのブラウザにだけ残る)。
+ * 無いと、テネブリスを装備したキャラがリロード後に「未知の装備アイテム」で保存・計算できなくなる。
+ */
+const DOWNLOADED_EQUIPMENT_KEY = "tw-v4-tenebris";
+
 // 初期化は 1 回だけ。最初に呼ばれた invoke がこれを待つ(呼び出し側に初期化を意識させない)。
-const ready = init();
+// 初期化の中で、前回取得したテネブリスをカタログへ戻す(壊れていれば捨てて未収録のまま進む)。
+const ready = init().then(() => {
+  let json: string | null = null;
+  try {
+    json = localStorage.getItem(DOWNLOADED_EQUIPMENT_KEY);
+  } catch {
+    return;
+  }
+  if (json === null) return;
+  try {
+    callWasm("install_downloaded_equipment", { json });
+  } catch {
+    localStorage.removeItem(DOWNLOADED_EQUIPMENT_KEY);
+  }
+});
 
 type Args = Record<string, unknown>;
 
@@ -69,6 +91,17 @@ const stored: Record<string, (args: Args) => Promise<unknown>> = {
   set_character_icon: (a) =>
     store.setCharacterIcon(a.characterId as number, Uint8Array.from(a.source as number[])),
   reset_character_icon: (a) => store.resetCharacterIcon(a.characterId as number),
+
+  /** 検証・合流は WASM。通ったぶんだけ localStorage に残し、次回の初期化で読み直す */
+  install_downloaded_equipment: async (a) => {
+    const count = await wasm<number>("install_downloaded_equipment", { json: a.json });
+    try {
+      localStorage.setItem(DOWNLOADED_EQUIPMENT_KEY, a.json as string);
+    } catch {
+      // private モード等で残せなければ、この起動中だけ有効
+    }
+    return count;
+  },
 
   get_damage_snapshot: (a) => store.getDamageSnapshot(a.characterId as number),
   set_damage_snapshot: (a) =>
