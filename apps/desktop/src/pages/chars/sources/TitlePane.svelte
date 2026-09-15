@@ -29,6 +29,9 @@
     if (!ownedIds.has(id)) draft.equipment.owned_titles = [...draft.equipment.owned_titles, id];
     draft.equipment.title = id;
   }
+  /** 変種チップを開いている行(titleBase)。行を押しただけでは所持に入れず、変種を選んでから入れる
+   *  (既定の変種が勝手に入ると、突きを外して斬りを入れ直す手間になる。ユーザー指摘 2026-09-15) */
+  let openGroup = $state<string | null>(null);
   /** 所持から外す。表示中だったら表示中も外す。 */
   function removeOwned(id: string) {
     draft.equipment.owned_titles = draft.equipment.owned_titles.filter((t) => t !== id);
@@ -118,23 +121,24 @@
       </button>
     {:else}
       {@const picked = g.items.find((t) => t.id === draft.equipment.title) ?? null}
-      <!-- 未選択のあいだは行そのものが「まず既定の変種を所持に入れて選ぶ」ボタン。押すとその行が
-           選択中になり、変種チップはここに(その場に)出る(§00 03「押した場所は動かない」) -->
+      {@const expanded = picked !== null || openGroup === g.base}
+      <!-- 未選択のあいだは行そのものが「変種チップを開く」ボタン。押すと変種チップがここに
+           (その場に)出て、変種を押したときに所持に入り表示中になる(§00 03「押した場所は動かない」) -->
       <div
         class="item-row group"
         class:on={picked !== null}
         role="button"
         tabindex="0"
-        onclick={() => { if (picked === null) addOwnedAndSelect(g.items[0].id); }}
+        onclick={() => { if (picked === null) openGroup = openGroup === g.base ? null : g.base; }}
         onkeydown={(e) => {
           if (picked !== null || (e.key !== "Enter" && e.key !== " ")) return;
           e.preventDefault();
-          addOwnedAndSelect(g.items[0].id);
+          openGroup = openGroup === g.base ? null : g.base;
         }}
       >
         <span class="item-name">{g.base}</span>
         {@render ownedBadge(g.items.some((t) => ownedIds.has(t.id)))}
-        {#if picked === null}
+        {#if !expanded}
           <span class="item-vals num dim">合計 {signed(g.items[0].equipment_value_total)}</span>
           {@render dmgBadge(g.items[0], impliedDmg)}
         {:else}
