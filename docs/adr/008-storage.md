@@ -37,6 +37,16 @@ JSON 列として持たせる構成で始まり、機能追加のたびに列追
     (**起動不能にしない**)
   - 復元・退避の発生は起動時通知として画面に出す
 
+### IndexedDB v3: 装備の欄追加はブラウザ側で埋める(2026-09-15)
+
+SQLite の `equipment` JSON 列に `#[serde(default)]` で欄を足す(アバター強化 `avatar`、
+装備研磨 `polish`)と、デスクトップ版は Rust が読む時点で中立値が入るが、ブラウザ版の
+IndexedDB(`api/browserStore.ts`)は素の JSON を返すので既存キャラに欄が無く、画面の複製
+(`cloneEquipment`)が `undefined` を読んでキャラタブが開けなくなった。**JSON 列に欄を足すときは
+IndexedDB の版も上げ、`onupgradeneeded` で既存行に中立値を足す。あわせて create / update でも
+同じ正規化を通す**(読み込み `transfer.ts` が旧い書き出しをそのまま渡してくるため)。
+`SCHEMA_VERSION` は 2 → 3。
+
 ### v1 → v8 の変遷
 
 1. **v1**: `characters` 1 テーブル(id, name, game_character_id, 7 ステ, awakening_stage, eta_level)。

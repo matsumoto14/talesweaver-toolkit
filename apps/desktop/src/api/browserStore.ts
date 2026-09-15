@@ -19,8 +19,39 @@ const DB_NAME = "tw-context";
  * スキーマ版。ストアを足す・作り直すときに上げ、`onupgradeneeded` で移行する。
  * v2 でキャラに `goal_content_id`(ホームの「次の目標」)が加わった
  * (SQLite 側の v13 と同じ移行。既存キャラは未設定 = 自動判定のまま)。
+ * v3 で装備に `avatar`(アバター強化)と `polish`(装備研磨)が加わった。SQLite 側は
+ * `#[serde(default)]` で読めるが、IndexedDB は素の JSON を返すので既存行に中立値を足す
+ * (無いと `cloneEquipment` が undefined を読んでキャラタブが開けない。2026-09-15)。
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+
+/** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
+const ZERO_EQUIPMENT_VALUES = {
+  thrust: 0, slash: 0, physical_defense: 0, magic_attack: 0, magic_defense: 0,
+  accuracy: 0, critical: 0, evasion: 0, agility: 0,
+};
+const NEUTRAL_AVATAR = () => ({
+  helm: { ...ZERO_EQUIPMENT_VALUES }, head: { ...ZERO_EQUIPMENT_VALUES }, body: { ...ZERO_EQUIPMENT_VALUES },
+  legs: { ...ZERO_EQUIPMENT_VALUES }, effect: { ...ZERO_EQUIPMENT_VALUES },
+});
+const NEUTRAL_POLISH = () => ({ entries: [] });
+
+/**
+ * 装備に v3 の欄が無ければ中立値を足す。読み込み(transfer.ts)で旧い書き出しを受けたときも
+ * ここを通るので、保存する行は常に今の形になる(SQLite 側は serde default が同じことをする)。
+ */
+function withEquipmentDefaults(character: NewCharacter): NewCharacter {
+  const equipment = character.equipment as Partial<NewCharacter["equipment"]>;
+  if (equipment.avatar !== undefined && equipment.polish !== undefined) return character;
+  return {
+    ...character,
+    equipment: {
+      ...character.equipment,
+      avatar: equipment.avatar ?? NEUTRAL_AVATAR(),
+      polish: equipment.polish ?? NEUTRAL_POLISH(),
+    },
+  };
+}
 
 const CHARACTERS = "characters";
 const BUFF_SETS = "buff_sets";
@@ -81,6 +112,19 @@ function open(): Promise<IDBDatabase> {
           cursor.continue();
         };
       }
+      // v3: 既存キャラの装備に avatar / polish の中立値を足す(SQLite の serde default と同じ意味)
+      if (event.oldVersion > 0 && event.oldVersion < 3) {
+        const characters = request.transaction!.objectStore(CHARACTERS);
+        const cursorRequest = characters.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const row = cursor.value as RegisteredCharacter;
+          const filled = withEquipmentDefaults(row);
+          if (filled !== row) cursor.update({ ...row, equipment: filled.equipment });
+          cursor.continue();
+        };
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
@@ -129,7 +173,7 @@ export const getCharacter = (id: number) =>
 export const createCharacter = (character: NewCharacter) =>
   transact([CHARACTERS, COUNTERS], "readwrite", async (tx) => {
     const id = await nextId(tx, CHARACTERS);
-    const saved: RegisteredCharacter = { ...character, id, updated_at: nowIso() };
+    const saved: RegisteredCharacter = { ...withEquipmentDefaults(character), id, updated_at: nowIso() };
     await wrap(tx.objectStore(CHARACTERS).add(saved));
     return saved;
   });
@@ -139,7 +183,7 @@ export const updateCharacter = (id: number, character: NewCharacter) =>
     const store = tx.objectStore(CHARACTERS);
     const existing = await wrap(store.get(id) as IDBRequest<RegisteredCharacter | undefined>);
     if (!existing) throw characterNotFound(id);
-    const saved: RegisteredCharacter = { ...character, id, updated_at: nowIso() };
+    const saved: RegisteredCharacter = { ...withEquipmentDefaults(character), id, updated_at: nowIso() };
     await wrap(store.put(saved));
     return saved;
   });
