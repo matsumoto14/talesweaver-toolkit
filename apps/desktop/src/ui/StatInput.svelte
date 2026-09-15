@@ -17,6 +17,7 @@
   // text を同期する(lastSyncedValue で比較。Number("") === 0 になる罠を避けるため
   // value との比較ではなく専用変数で判定する)。
   import { bump } from "./motion.svelte";
+  import { fmtInt } from "../format";
 
   interface Props {
     label: string;
@@ -224,9 +225,9 @@
         aria-label="{label} を編集"
         use:bump={() => value}
         onclick={() => (editing = true)}
-      >{blank ? "—" : value.toLocaleString("ja-JP")}</button>
+      >{blank ? "—" : fmtInt(value)}</button>
     {/if}
-    {#if showCap}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
+    {#if showCap}<span class="cap num">/{fmtInt(max)}</span>{/if}
   </div>
   <!-- 形態 5 の理由チップ(§07「ここまで降りたら理由を書く」)。値の隣に常設し、出たり消えたりしない -->
   {#if reason !== undefined}<span class="chip why">{reason}</span>{/if}

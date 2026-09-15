@@ -9,6 +9,7 @@
   // 頭のキャラ選択カード(.sides)は廃止。「[A] が [B] に当てる」の頭そのものが選ぶ場になる
   // (ユーザー指摘 2026-09-02)。
   import { SvelteMap } from "svelte/reactivity";
+  import { fmtNum, fmtRate } from "../../format";
   import { cubicOut } from "svelte/easing";
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
   import type {
@@ -287,8 +288,8 @@
   function boostLabel(boost: AccuracyBoost): string | null {
     const source = boost.source;
     if (source === "none") return null;
-    if (source === "concentration") return `ペット集中 ・ 命中P ×${boost.rate.toFixed(2)}`;
-    return `${source.skill.name} Lv${source.skill.level} ・ 命中P ×${boost.rate.toFixed(2)}`;
+    if (source === "concentration") return `ペット集中 ・ 命中P ${fmtRate(boost.rate)}`;
+    return `${source.skill.name} Lv${source.skill.level} ・ 命中P ${fmtRate(boost.rate)}`;
   }
 
   // --- 「次にできること」(accuracy_growth / evasion_growth) ------------------------
@@ -654,7 +655,7 @@
         {@render buffSetRow(defender)}
         <div class="stat-row">
           <div class="stat-label">攻撃タイプの補正</div>
-          <div class="stat-val">{@render textCell(result ? result.attack_type_bonus.toFixed(1) : null)}</div>
+          <div class="stat-val">{@render textCell(result ? fmtNum(result.attack_type_bonus, 1) : null)}</div>
         </div>
 
         {@render growthList(

@@ -36,7 +36,7 @@
   import { buildDraft, draftToPayload } from "../../draft";
   import { cloneEquipmentPart, randomOptionCount, sienaPartCount, withEnchant } from "../../equipment";
   import { buffSetOptions } from "../../buffs";
-  import { fmtInt } from "../../format";
+  import { fmtInt, fmtPct, fmtRate, fmtSignedPct } from "../../format";
   import {
     EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
@@ -378,13 +378,15 @@
   const soulLinkSummary = $derived.by(() => {
     if (!preview) return "計算中";
     const v = preview.soul_link.equipment_values;
-    const finalPct = Number((preview.soul_link.final_damage_rate * 100).toFixed(1));
-    const critPct = Number((preview.soul_link.critical_damage_rate * 100).toFixed(1));
+    const finalRate = preview.soul_link.final_damage_rate;
+    const critRate = preview.soul_link.critical_damage_rate;
     const weapon = preview.soul_link.weapon_added_damage_multiplier;
+    // 小数 1 桁に丸めて 0 になる値は出さない(0.04% を「+0%」と見せない)
+    const shows = (rate: number) => Math.round(rate * 1000) > 0;
     const candidates = [
-      finalPct > 0 ? `最終+${finalPct}%` : null,
-      critPct > 0 ? `クリ+${critPct}%` : null,
-      weapon > 1 ? `武器×${weapon.toFixed(1)}` : null,
+      shows(finalRate) ? `最終${fmtSignedPct(finalRate, { max: 1 })}` : null,
+      shows(critRate) ? `クリ${fmtSignedPct(critRate, { max: 1 })}` : null,
+      weapon > 1 ? `武器${fmtRate(weapon, 1)}` : null,
       v.thrust > 0 ? `突+${v.thrust}` : null,
       v.slash > 0 ? `斬+${v.slash}` : null,
       v.magic_attack > 0 ? `魔攻+${v.magic_attack}` : null,
@@ -427,7 +429,6 @@
   /** ランダムOP のうち記録するだけの枠数。行サブタイトルと RandomOptionPane の両方が使うので
    *  summaries.ts の共有関数(計算は Rust 側 preview) */
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(preview));
-  const pct = (v: number) => Number((v * 100).toFixed(2));
   const NEUTRAL = "未設定(中立値で計算)";
 
   // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラスキルのぶんだけ。
@@ -436,9 +437,9 @@
     const ids = draft.statSources.character_skills.skill_ids;
     if (ids.length === 0) return NEUTRAL;
     // 供給源別の内訳(preview.character_skill_actual_delay)は Rust 側で解決済み。ここは合計するだけ
-    const percent = pct((preview?.character_skill_actual_delay ?? []).reduce((sum, c) => sum + c.rate, 0));
-    if (percent === 0) return `${ids.length} 件`;
-    return `${ids.length} 件 ・ 合計 −${percent}%`;
+    const rate = (preview?.character_skill_actual_delay ?? []).reduce((sum, c) => sum + c.rate, 0);
+    if (rate === 0) return `${ids.length} 件`;
+    return `${ids.length} 件 ・ 合計 −${fmtPct(rate, { max: 2 })}`;
   });
 
   // 共通スキルの効き先(結果側の表示用)。入力は補正源、計算は Rust 側(preview / limits)を参照する。

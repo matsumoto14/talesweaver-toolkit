@@ -16,7 +16,7 @@
 // 条件は **1 行の JSON** で診断情報に入れる。中継側が本文の ``` を潰すので本文には置けず、
 // 診断情報だけが Issue でコードブロックに収まるため(services/inquiry-worker の clean / renderIssueBody)。
 import type { DamageResult, EffectiveStats, Skill } from "./api/types";
-import { fmtInt } from "./format";
+import { fmtInt, fmtSignedPct } from "./format";
 import type { InquiryDraft } from "./inquiry";
 
 export interface MeasurementConditions {
@@ -92,7 +92,7 @@ export function measurementDraft(
       const gap = damageGap(sample.damage, sample.expected);
       lines.push(
         `| ${weapon} | ${attack} | ${damage} | ${sample.expected !== null ? fmtInt(Math.trunc(sample.expected)) : "—"} `
-        + `| ${gap === null ? "—" : `${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(1)}%`} | ${fmtInt(sample.hits)} |`,
+        + `| ${gap === null ? "—" : fmtSignedPct(gap, 1)} | ${fmtInt(sample.hits)} |`,
       );
     } else {
       lines.push(`| ${weapon} | ${attack} | ${damage} | ${fmtInt(sample.hits)} |`);

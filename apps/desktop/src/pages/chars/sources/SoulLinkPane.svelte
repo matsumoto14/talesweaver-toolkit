@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SoulLinkStatus, StatPreview } from "../../../api/types";
+  import { fmtRate, fmtSignedPct } from "../../../format";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
   import { bump } from "../../../ui/motion.svelte";
@@ -21,7 +22,7 @@
   };
   const signed = (value: number | undefined) => value === undefined ? "—" : `+${value}`;
   const percent = (value: number | undefined) =>
-    value === undefined ? "—" : `+${Number((value * 100).toFixed(1))}%`;
+    value === undefined ? "—" : fmtSignedPct(value, { max: 1 });
 
   const EQUIPMENT_ROWS: Row[] = [
     { field: "thrust_level", label: "突き", max: limits.soul_link_equipment_level_max, value: () => signed(preview?.soul_link.equipment_values.thrust), motion: () => preview?.soul_link.equipment_values.thrust },
@@ -48,7 +49,7 @@
       field: "weapon_enhance_level",
       label: "武器強化",
       max: limits.soul_link_weapon_enhance_level_max,
-      value: () => preview ? `×${preview.soul_link.weapon_added_damage_multiplier.toFixed(1)}` : "—",
+      value: () => preview ? fmtRate(preview.soul_link.weapon_added_damage_multiplier, 1) : "—",
       motion: () => preview?.soul_link.weapon_added_damage_multiplier,
     },
   ];

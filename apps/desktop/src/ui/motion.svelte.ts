@@ -5,6 +5,8 @@
 // prefers-reduced-motion のときは app.css 側で全アニメーションが実質 0 になり、
 // 色・バッジ・数値そのもので既に伝わっている状態が残る。
 
+import { fmtNum } from "../format";
+
 /**
  * 数値が変わったことを認知させる。変わった要素**だけ**を跳ねさせ、
  * 増減を色で 0.3s だけ伝えてから元に戻す(色を残すと状態色 §03 と意味が混ざる。
@@ -55,7 +57,7 @@ export interface DeltaSpec {
 function formatDelta(prev: number, next: number, spec: DeltaSpec): string {
   const d = next - prev;
   const digits = spec.digits ?? (Number.isInteger(prev) && Number.isInteger(next) ? 0 : 2);
-  const body = Math.abs(d).toLocaleString("ja-JP", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  const body = fmtNum(Math.abs(d), { max: digits });
   return `${d > 0 ? "↑" : "↓"}${body}${spec.unit ?? ""}`;
 }
 

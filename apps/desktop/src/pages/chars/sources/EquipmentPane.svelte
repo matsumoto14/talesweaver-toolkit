@@ -21,7 +21,7 @@
   } from "../../../equipment";
   import { reportError } from "../../../toast.svelte";
   import { errorMessage } from "../../../api/commands";
-  import { fmtInt } from "../../../format";
+  import { fmtInt, fmtRate, fmtSigned } from "../../../format";
   import {
     ABILITY_ALLOWED_SLOTS, ELEMENT_ALLOWED_SLOTS, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, OTHER_EQUIPMENT_STATS, PART_SLOTS, PART_SLOT_LABELS, PRIMARY_EQUIPMENT_STATS, RANDOM_OPTION_ALLOWED_SLOTS,
   } from "../../../labels";
@@ -468,7 +468,7 @@
     (selectedPart(slot).ability_additions ?? []).filter((a) => a.ability_id === abilityId);
   const additionalRangeLabel = (option: { kind: EquipmentAbilityAdditionalKind; min: number; max: number }): string => {
     const sign = option.kind === "physical_damage_reduction" || option.kind === "magic_damage_reduction" ? "−" : "+";
-    return option.min === option.max ? `${sign}${option.max.toLocaleString()}` : `${sign}${option.min}〜${option.max}`;
+    return option.min === option.max ? `${sign}${fmtInt(option.max)}` : `${sign}${option.min}〜${option.max}`;
   };
   const additionalAt = (slot: PartSlot, abilityId: string, index: number) => additionsFor(slot, abilityId)[index] ?? null;
   function setAdditionalValue(slot: PartSlot, abilityId: string, index: number, value: number) {
@@ -512,7 +512,7 @@
     const additions = part.ability_additions ?? [];
     const fixed = additions.filter((a) => a.kind === "fixed_damage").reduce((sum, a) => sum + a.value, 0);
     const rate = additions.filter((a) => a.kind === "damage_rate").reduce((sum, a) => sum + a.value, 0);
-    if (fixed !== 0) pieces.push(`固定 +${fixed.toLocaleString()}`);
+    if (fixed !== 0) pieces.push(`固定 ${fmtSigned(fixed)}`);
     if (rate !== 0) pieces.push(`ダメージ +${rate}%`);
     if (pieces.length === 0) {
       const modeled = part.abilities.map(abilityDef).filter((def) => def && !def.record_only).map((def) => def!.effect_summary);
@@ -1213,7 +1213,7 @@
             <span class="enhance-op" aria-hidden="true">×</span>
             <span class="enhance-term">
               <span class="dim">ソウルリンク</span>
-              <b use:bump={() => enhance.soul_link_multiplier}>×{enhance.soul_link_multiplier.toFixed(2)}</b>
+              <b use:bump={() => enhance.soul_link_multiplier}>{fmtRate(enhance.soul_link_multiplier)}</b>
             </span>
             <span class="enhance-op" aria-hidden="true">=</span>
             <span class="enhance-term">

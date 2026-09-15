@@ -4,6 +4,7 @@
   // 合算・上限適用は Rust 側(preview_effective_stats)で解決済みなので、ここは preview の値を
   // 表示用に % へ整形するだけ(供給源別の内訳は crates/domain/src/stat_sources.rs の StatPreview)。
   import type { CharacterSkillEffectsView, StatPreview } from "../../../api/types";
+  import { fmtNum, fmtPct } from "../../../format";
   import { effectLabel, ownSkills, resolvedEffectsOf, toggleCharacterSkill } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
@@ -73,7 +74,7 @@
 <div class="card">
   <p class="hint dim">
     wiki「ステータス」の<b>中ディレイ倍率B</b>。中ディレイは
-    <b>基本中ディレイ × (1 − 減少値) ×(コンボするなら 0.5)</b>で、下限 {limits.actual_delay_min.toFixed(1)}s・減少値の上限 {Math.round(limits.actual_delay_reduction_max * 100)}%。
+    <b>基本中ディレイ × (1 − 減少値) ×(コンボするなら 0.5)</b>で、下限 {fmtNum(limits.actual_delay_min, 1, "s")}・減少値の上限 {fmtPct(limits.actual_delay_reduction_max)}。
     ここで選ぶのは<b>このキャラのスキル</b>だけです
     (マスタリーは段ごとに 1 つで中ディレイ以外にも効くので、キャラスキルの欄にまとめてあります)。
     中ディレイと 1 秒あたりの火力は計算タブに出ます。

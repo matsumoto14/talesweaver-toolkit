@@ -2106,7 +2106,7 @@ td code { background: var(--card-soft2); }
           <span style="display:flex;flex-direction:column;gap:4px"><span class="figl">A 攻撃力</span><span class="fig" style="font-size:19px">2,462</span><span class="cap">--t-heading 19px · カード群の親</span></span>
           <span style="display:flex;flex-direction:column;gap:4px"><span class="figl">命中P</span><span class="fig" style="font-size:12.5px">1,240</span><span class="cap">--t-body 12.5px · 行</span></span>
         </div>
-        <p class="cap">主役の数字はページごとに寸法を持たない(ホーム 27px・対人 28px は 44px に寄せて実機で判断する)。桁区切り・小数桁は <code>format.ts</code>(int / pct / signed / rate)だけが決め、画面側で <code>toLocaleString</code> / <code>toFixed</code> を呼ばない。</p>
+        <p class="cap">主役の数字はページごとに寸法を持たない(ホーム 27px・対人 28px は 44px に寄せて実機で判断する)。桁区切り・小数桁・符号・単位は <code>format.ts</code>(fmtInt / fmtNum / fmtPct / fmtSigned / fmtSignedPct / fmtRate)だけが決め、画面側で <code>toLocaleString</code> / <code>toFixed</code> を呼ばない(機械監査 R11)。</p>
 
         <div class="sec">ReadRow<span class="r">読み取り面は インセット + ラベル + 右端固定幅の値</span></div>
         <div class="spec" style="align-items:flex-start">

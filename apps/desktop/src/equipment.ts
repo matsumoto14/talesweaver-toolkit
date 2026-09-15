@@ -12,6 +12,7 @@ import {
   EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS,
 } from "./labels";
 import type { PartSlot, PolishKind } from "./api/types";
+import { fmtInt, fmtSigned } from "./format";
 import { tables } from "./tables.svelte";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
@@ -41,7 +42,7 @@ export const sumValues = (v: EquipmentValues): number =>
  * 括弧はエンチャントが 0 でも出す — 幅が動かないし、盛れる余地が残っていることが分かる。
  */
 export const withEnchant = (base: number, enchant: number): string =>
-  `${(base + enchant).toLocaleString()} (+${enchant.toLocaleString()})`;
+  `${fmtInt(base + enchant)} (${fmtSigned(enchant)})`;
 
 /** 値が大きい上位 2 種の要約(部位行の見出し用)。武器なら「突き 315 (+120) / 斬り 122 (+0)」。 */
 export const valuesSummary = (base: EquipmentValues, enchant: EquipmentValues): string => {
