@@ -312,6 +312,16 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 .bump-up { animation: tw-bump-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .bump-down { animation: tw-bump-down 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
+/* 1b. いくつ変わったか — 差分枠。跳ねと色は 0.3s で戻るので、同時に 10 か所が動くと
+      「動いた」は分かっても「いくつ」は読めない。前回値との差を緑 ↑ / 赤 ↓ で出し、
+      その数値が次に変わるまで残す(消さない・浮かせない。ユーザー指示 2026-09-15。動きは出るときだけ)。
+      数値とは別の空 span に付け、空でも枠を取る(出た瞬間に隣が動かない。§09 規則 4)。
+      使う側: ui/motion.svelte.ts の delta */
+.delta { display: inline-block; min-width: 6ch; white-space: nowrap; font-weight: 700; text-align: left; }
+.delta.up { color: var(--good); }
+.delta.down { color: var(--warm); }
+.delta-in { animation: tw-badge-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
 /* 2. 量が変わった — バーの幅。数値と同時に動かす(.meter > .fill の transition) */
 
 /* 3. 場所が増えた — 左端から生えてくる。元からある場所は動かさない(§09 規則 2) */

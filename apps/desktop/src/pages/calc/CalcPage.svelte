@@ -47,7 +47,7 @@
   import { positionPopover } from "../../ui/popover";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, flash } from "../../ui/motion.svelte";
+  import { bump, delta, flash } from "../../ui/motion.svelte";
   import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
@@ -401,7 +401,7 @@
     if (pierced === null) return [];
     let running = pierced;
     const rows: FlowRow[] = [
-      { k: "抜けた分(素通り)", add: pierced, mult: "—", factor: 1, c: "var(--fg-dim)", to: pierced, step: "攻撃力−防御力" },
+      { k: "防御を抜けた攻撃力(素通り)", add: pierced, mult: "—", factor: 1, c: "var(--fg-dim)", to: pierced, step: "攻撃力−防御力" },
     ];
     for (const s of steps) {
       if (s.kind !== "factor" && s.kind !== "running") continue;
@@ -474,8 +474,10 @@
     mult?: string;
     value: string;
     sub?: string;
-    /** `value` の数値。変わったら動かす(§00 04)ためだけに使う */
+    /** `value` の数値(表示単位。% 表示なら 100 倍した値)。変わったら動かす + いくつ変わったかを出す(§00 04)ためだけに使う */
     n?: number;
+    /** 差分タグに付ける単位("%" など)。`n` が `value` と同じ単位のときだけ */
+    unit?: string;
     /** 押すと直下に `subs` が開く行。省略なら開かない行 */
     key?: string;
     subs?: Mat[];
@@ -513,6 +515,7 @@
       return {
         label: `${c.symbol} ${c.label}`,
         value: fmtCatValue(c),
+        n: c.value,
         key: "cat:attack_power",
         subs: atkRows.map((a) => ({
           label: a.k,
@@ -527,6 +530,8 @@
       label: `${c.symbol} ${c.label}`,
       mult: c.kind === "rate" ? `×${fmtNum(c.factor)}` : undefined,
       value: fmtCatValue(c),
+      n: c.kind === "rate" ? c.value * 100 : c.value,
+      unit: c.kind === "rate" ? "%" : undefined,
       sub: catLoss(c) > 1e-9 ? `上限で −${fmtCatLoss(c)}` : undefined,
       key: contributions.length > 0 ? `cat:${c.category}` : undefined,
       subs:
@@ -534,7 +539,8 @@
           ? contributions.map((x) => ({
               label: x.source,
               value: fmtContributionValue(c.kind, x.value),
-              n: x.value,
+              n: c.kind === "rate" ? x.value * 100 : x.value,
+              unit: c.kind === "rate" ? "%" : undefined,
             }))
           : undefined,
     };
@@ -629,7 +635,8 @@
           label: s.source,
           mult: `+${fmtNum(s.value * 100)}%`,
           value: `+${fmtNum(s.value * 100)}%`,
-          n: s.value,
+          n: s.value * 100,
+          unit: "%",
         });
       }
     }
@@ -650,12 +657,14 @@
       label: f.k,
       mult: f.mult === "—" ? undefined : f.mult,
       value: `${f.add < 0 ? "−" : "+"}${fmtInt(Math.round(Math.abs(f.add)))}`,
-      sub: `到達 ${fmtInt(Math.round(f.to))}`,
+      sub: `ここまで ${fmtInt(Math.round(f.to))}`,
+      n: Math.round(f.add),
     }));
     if (r.capped_loss.max > 0) {
       mats.push({
         label: "ダメージ上限(1 段ごと)",
         value: fmtInt(r.damage_cap),
+        n: r.damage_cap,
         sub: `上限で −${fmtInt(r.capped_loss.max)}`,
       });
     }
@@ -679,6 +688,7 @@
         label: `1 発(表記ダメージ) ${fmtInt(perHit)} × ${r.hit_count} 段`,
         mult: `×${r.hit_count}`,
         value: fmtInt(skillTotal),
+        n: skillTotal,
       },
     ];
     if (r.weapon_added_per_hit !== 0) {
@@ -686,6 +696,7 @@
         label: `武器強化(追加固定) ${fmtInt(r.weapon_added_per_hit)} × ${r.hit_count} 段`,
         mult: `×${r.hit_count}`,
         value: fmtInt(r.weapon_added_total),
+        n: r.weapon_added_total,
         sub: "上限なし・表記ダメージとは別枠",
       });
     }
@@ -694,6 +705,7 @@
         label: "割合追加ダメージ(合計に乗る)",
         mult: `+${fmtNum(r.added_damage_rate * 100)}%`,
         value: fmtInt(added),
+        n: added,
         sub: "シャープネスビジョン・ランダムOP・称号",
       });
     }
@@ -702,9 +714,10 @@
         label: "クリティカルなら",
         mult: skill ? `×${fmtNum(skill.critical_multiplier)}` : undefined,
         value: fmtInt(r.total.critical),
+        n: r.total.critical,
       });
     }
-    mats.push({ label: "乱数が最小のとき", value: fmtInt(r.total.min) });
+    mats.push({ label: "乱数が最小のとき", value: fmtInt(r.total.min), n: r.total.min });
     return {
       mult: `×${r.hit_count} 段`,
       delta: totalValue - perHit,
@@ -720,19 +733,21 @@
     const d = r?.actual_delay ?? null;
     if (r === null || d === null || r.dps === null || dpsValue === null || totalValue === null) return null;
     const mats: Mat[] = [
-      { label: "合計ダメージ", value: fmtInt(totalValue) },
+      { label: "合計ダメージ", value: fmtInt(totalValue), n: totalValue },
       {
         label: "基本中ディレイ",
         value: `${d.base.toFixed(2)}s`,
+        n: d.base, unit: "s",
         sub: d.fixed ? "固定(減少が効かない)" : undefined,
       },
     ];
     for (const c of d.contributions) {
-      mats.push({ label: `↳ ${c.source}`, value: `−${(c.rate * 100).toFixed(0)}%` });
+      mats.push({ label: `↳ ${c.source}`, value: `−${(c.rate * 100).toFixed(0)}%`, n: -Math.round(c.rate * 100), unit: "%" });
     }
     mats.push({
       label: `中ディレイ減少(上限 ${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
       value: `${(d.reduction * 100).toFixed(0)}%`,
+      n: Math.round(d.reduction * 100), unit: "%",
       sub: d.reduction_raw > d.reduction ? `選択中は ${(d.reduction_raw * 100).toFixed(0)}%` : undefined,
     });
     if (d.combo_rate < 1) {
@@ -741,6 +756,7 @@
     mats.push({
       label: "中ディレイ",
       value: `${d.value.toFixed(2)}s`,
+      n: d.value, unit: "s",
       sub: d.floored ? `下限 ${limits.actual_delay_min.toFixed(1)}s で頭打ち` : undefined,
     });
     const cycle = r.combo;
@@ -750,11 +766,13 @@
         label: `通常攻撃(${cycle.normal_attack_name})`,
         // 合計ダメージ(total_primary)と同じ側を出す。ここだけ非クリだと足し算が合わなく見える
         value: fmtInt(pick(cycle.normal_attack_total) ?? 0),
+        n: pick(cycle.normal_attack_total) ?? 0,
         sub: `中ディレイ ${cycle.normal_delay.toFixed(2)}s`,
       });
       mats.push({
         label: "コンボインターバル",
         value: cycle.interval !== null ? `${cycle.interval.toFixed(2)}s` : "?",
+        n: cycle.interval ?? undefined, unit: "s",
         sub: cycle.interval === null
           ? "wiki 未収録。スキルの中ディレイをそのまま使っています"
           : cycle.interval_binding
@@ -764,12 +782,14 @@
       mats.push({
         label: "1 サイクル",
         value: `${cycle.seconds.toFixed(2)}s`,
+        n: cycle.seconds, unit: "s",
         sub: `通常攻撃 ${cycle.normal_delay.toFixed(2)}s + ${cycle.skill_gap.toFixed(2)}s`,
       });
     } else {
       mats.push({
         label: "スキル回数",
         value: `${Math.round(d.uses_per_minute)} 回/分`,
+        n: Math.round(d.uses_per_minute),
         sub: d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ",
       });
     }
@@ -777,6 +797,7 @@
       mats.push({
         label: "期待値(クリ率で按分)",
         value: fmtInt(Math.round(r.expected_dps)),
+        n: Math.round(r.expected_dps),
         sub: `合計(非クリ) × ${((1 - r.critical_chance) * 100).toFixed(1)}% + 合計(クリ) × ${(r.critical_chance * 100).toFixed(1)}%`,
       });
     }
@@ -1646,11 +1667,11 @@
       <span class="dt-hk dim">倍率</span>
       <span class="num dt-hv">{d.mult}</span>
       <span class="dt-hk dim">実数</span>
-      <span class="num dt-hv" class:bad={(d.delta ?? 0) < 0}
-      >{d.delta === null ? "—" : `${d.delta < 0 ? "−" : "+"}${fmtInt(Math.round(Math.abs(d.delta)))}`}</span>
-      <span class="dt-hk dim">到達値</span>
+      <span class="num dt-hv" class:bad={(d.delta ?? 0) < 0} use:bump={() => (d.delta === null ? null : Math.round(d.delta))}
+      >{d.delta === null ? "—" : `${d.delta < 0 ? "−" : "+"}${fmtInt(Math.round(Math.abs(d.delta)))}`}</span><span use:delta={{ get: () => (d.delta === null ? null : Math.round(d.delta)) }}></span>
+      <span class="dt-hk dim">結果</span>
       <span class="num dt-hv big" use:bump={() => d.to}
-      >{d.to === null ? "—" : fmtInt(Math.round(d.to))}</span>
+      >{d.to === null ? "—" : fmtInt(Math.round(d.to))}</span><span use:delta={{ get: () => d.to }}></span>
     </div>
     {#each d.mats as m, i (i)}
       {#if m.key}
@@ -1662,7 +1683,7 @@
         >
           <span class="dt-label">{m.label}</span>
           <span class="num dt-mult dim">{m.mult ?? ""}</span>
-          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span>
+          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span><span use:delta={{ get: () => m.n ?? null, unit: m.unit }}></span>
           <span class="num dt-sub dim">{m.sub ?? ""}</span>
         </button>
         {#if isDetailOpen(key)}
@@ -1671,7 +1692,7 @@
               <div class="dt-row">
                 <span class="dt-label">{sm.label}</span>
                 <span class="num dt-mult dim">{sm.mult ?? ""}</span>
-                <span class="num dt-val" class:bad={(sm.n ?? 0) < 0} use:bump={() => sm.n ?? null}>{sm.value}</span>
+                <span class="num dt-val" class:bad={(sm.n ?? 0) < 0} use:bump={() => sm.n ?? null}>{sm.value}</span><span use:delta={{ get: () => sm.n ?? null, unit: sm.unit }}></span>
                 <span class="num dt-sub dim">{sm.sub ?? ""}</span>
               </div>
             {/each}
@@ -1681,7 +1702,7 @@
         <div class="dt-row">
           <span class="dt-label">{m.label}</span>
           <span class="num dt-mult dim">{m.mult ?? ""}</span>
-          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span>
+          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span><span use:delta={{ get: () => m.n ?? null, unit: m.unit }}></span>
           <span class="num dt-sub dim">{m.sub ?? ""}</span>
         </div>
       {/if}
@@ -2001,64 +2022,64 @@
                 type="button" class="node gate"
                 aria-expanded={isDetailOpen("perHit")} onclick={() => toggleDetail("perHit")}
               >
-                <span class="nl">1 発</span>
+                <span class="nl">表記ダメージ(1 発)</span>
                 <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
-                {#if simDirty}
-                  <span class="nsub num">
-                    <span class:up={deltaPct > 0} class:down={deltaPct < 0} use:bump={() => deltaPct}>
-                      {deltaPct === 0 ? "±0%" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
-                    </span>
-                    ・ キャラ登録どおりなら {savedPerHit !== null ? fmtInt(savedPerHit) : "—"}
-                  </span>
-                {/if}
+                <!-- 差分(前回の値からいくつ動いたか)。数値の行には置かない — 44px の数値の横は
+                     枠(248px)に入らず、右の節に被る(実機 2026-09-15)。空でも行を取り、出た瞬間に下が動かない -->
+                <span class="nsub num"><span use:delta={{ get: () => perHit }}></span></span>
               </button>
-              <!-- バッジは文言で幅が 39〜106px 変わる。枠を取り切って、右のノードを動かさない -->
-              <span class="gatebadge-slot">
-                {#key badgeState}
-                  <span class="badge badge-in gatebadge" style={badgeStyle(BADGE[badgeState])}>{BADGE[badgeState].label}</span>
-                {/key}
-              </span>
-              <span class="op num">×<span use:bump={() => result?.hit_count ?? null}>{result?.hit_count ?? 1}</span> 段</span>
               <button
                 type="button" class="node mid"
                 aria-expanded={isDetailOpen("total")} onclick={() => toggleDetail("total")}
               >
-                <span class="nl">合計</span>
+                <span class="nl">合計ダメージ <span class="num">(×<span use:bump={() => result?.hit_count ?? null}>{result?.hit_count ?? 1}</span> 段)</span></span>
                 <span class="num nv" use:bump={() => totalValue}>{totalValue !== null ? fmtInt(totalValue) : "—"}</span>
+                <!-- クリ率はバッジではなく文で(バッジは要らない — ユーザー判断 2026-09-15)。
+                     副行は 3 節とも 1 行にそろえ、数値の縦位置を合わせる -->
+                <!-- 副行は縦に積む(差分 → クリ率。「クリなら」は内訳にあるので出さない — ユーザー判断 2026-09-15)。数値の横に並べると節が横に伸びて
+                     鎖が折り返す(ユーザー指摘 2026-09-15)。数値の縦位置は .nv の行高で合わせる -->
                 <span class="nsub num">
-                  {#if result}
-                    {#if result.critical_rate === null}
-                      {#key "unrecorded"}
-                        <span class="badge crit-badge" style={badgeStyle({ label: "", state: "unknown" })}>クリ率 未記載 → 確定扱い</span>
-                      {/key}
-                    {:else}
-                      {@const stage = critChanceStage(result.critical_chance * 100)}
-                      {#key stage.label}
-                        <span class="badge crit-badge" style={badgeStyle({ label: "", state: stage.state })}
-                        >{stage.label} {result.critical_rate.value.toFixed(1)}%</span>
-                      {/key}
+                  <span class="nsub-line"><span use:delta={{ get: () => totalValue }}></span></span>
+                  <span class="nsub-line">
+                    {#if result}
+                      {#if result.critical_rate === null}
+                        <span>クリ率 未記載 → 確定扱い</span>
+                      {:else}
+                        <!-- クリが出ないときは「出ない」を言わず、率だけ(ユーザー判断 2026-09-15) -->
+                        <!-- 0% は赤(届かない)、100% 未満は黄(ぎりぎり)の状態色。100% は地の色(ユーザー判断 2026-09-15) -->
+                        <span
+                          class:crit-none={result.critical_chance <= 0}
+                          class:crit-partial={result.critical_chance > 0 && result.critical_chance < 1}
+                          use:flash={() => critChanceStage(result!.critical_chance * 100).label}
+                        >クリ率 {result.critical_rate.value.toFixed(1)}%{critMode ? ` ・ ${critChanceStage(result.critical_chance * 100).label}` : ""}</span>
+                      {/if}
                     {/if}
-                    {#if !critMode}<span>クリなら ×{skill ? fmtNum(skill.critical_multiplier) : "—"} {fmtInt(result.total.critical)}</span>{/if}
-                  {/if}
+                  </span>
                 </span>
               </button>
-              <span class="op num">÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}</span>s</span>
               <button
                 type="button" class="node rate"
                 aria-expanded={isDetailOpen("dps")} onclick={() => toggleDetail("dps")}
               >
-                <span class="nl">1 秒あたり</span>
+                <span class="nl">DPS <span class="num">(÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}</span>s)</span></span>
                 <span class="num nv" use:bump={() => dpsValue}>{dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"}</span>
                 <span class="nsub dim">
-                  <!-- コンボ中は「スキルを何回撃てるか」= 1 分 ÷ サイクル。
-                       スキルの中ディレイだけで数えると、通常攻撃を挟むぶんを落として速く見える -->
-                  {#if result?.combo}
-                    {Math.round(result.combo.uses_per_minute)} 回/分 ・
-                  {:else if result?.actual_delay}
-                    {Math.round(result.actual_delay.uses_per_minute)} 回/分 ・
-                  {/if}{critMode ? "クリ確定" : "非クリ"}
+                  <span class="nsub-line"><span class="num" use:delta={{ get: () => (dpsValue === null ? null : Math.round(dpsValue)) }}></span></span>
+                  <span class="nsub-line">
+                    <!-- コンボ中は「スキルを何回撃てるか」= 1 分 ÷ サイクル。
+                         スキルの中ディレイだけで数えると、通常攻撃を挟むぶんを落として速く見える -->
+                    <span>
+                      {#if result?.combo}
+                        {Math.round(result.combo.uses_per_minute)} 回/分 ・
+                      {:else if result?.actual_delay}
+                        {Math.round(result.actual_delay.uses_per_minute)} 回/分 ・
+                      {/if}{critMode ? "クリ確定" : "非クリ"}
+                    </span>
+                  </span>
                   {#if result && result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
-                    ・ 期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {(result.critical_chance * 100).toFixed(1)}%)
+                    <span class="nsub-line">
+                      期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {(result.critical_chance * 100).toFixed(1)}%)
+                    </span>
                   {/if}
                 </span>
               </button>
@@ -2187,15 +2208,15 @@
           </button>
           <div class="panel-body">
             <div class="flow-line">
-              <span class="dim">抜けた分</span>
-              <span class="num strong" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
+              <span class="dim">防御を抜けた攻撃力</span>
+              <span class="num strong" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span><span use:delta={{ get: () => (pierced === null ? null : Math.max(0, Math.trunc(pierced))) }}></span>
               <span class="arrow num dim">→</span>
               <span class="dim">倍率</span>
               <!-- 材料を変えると倍率も変わる。跳ねないと 1 つだけ古い値に見える(§00 04。
                    実機の tools/design-audit/live/motion.js が検出した) -->
               <span class="num good strong" use:flash={() => flowMultLabel}>{flowMultLabel}</span>
               <span class="arrow num dim">→</span>
-              <span class="num final" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
+              <span class="num final" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span><span use:delta={{ get: () => perHit }}></span>
             </div>
             <!-- 積み上げの助言はトグル(ユーザー指示 2026-08-31)。ふだんは畳んでおき、押したときだけ
                  下に開く。押すボタンは上の行に居座るので、開いても押した場所は動かない(§00 03)。
@@ -2215,7 +2236,7 @@
               <div class="lever-note open-in">
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
                 {#if bestLever}
-                  <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>+{bestLeverGain.toFixed(2)}%</span> 伸びます({fmtHeadroom(bestLever)})。
+                  <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>+{bestLeverGain.toFixed(2)}%</span><span use:delta={{ get: () => bestLeverGain, unit: "%", digits: 2 }}></span> 伸びます({fmtHeadroom(bestLever)})。
                   {#if nextLevers.length > 0}
                     <button type="button" class="chip quiet" class:on={nextLeversOpen} aria-expanded={nextLeversOpen} onclick={() => (nextLeversOpen = !nextLeversOpen)}>
                       次の候補 {nextLevers.length}
@@ -2229,7 +2250,7 @@
                       <div class="dt-row">
                         <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
                         <span class="num dt-mult dim">{fmtCatValue(c)}</span>
-                        <span class="num dt-val" use:bump={() => leverGain(c)}>+{leverGain(c).toFixed(2)}%</span>
+                        <span class="num dt-val" use:bump={() => leverGain(c)}>+{leverGain(c).toFixed(2)}%</span><span use:delta={{ get: () => leverGain(c), unit: "%", digits: 2 }}></span>
                         <span class="num dt-sub dim">{fmtHeadroom(c)}</span>
                       </div>
                     {/each}
@@ -2248,7 +2269,7 @@
               <div class="stage">
                 <span class="stage-no" style="background: var(--flow-1);">1</span>
                 <span class="stage-title">攻撃力をつくる</span>
-                <span class="num strong stage-val" use:bump={() => atkA}>{atkA !== null ? fmtInt(atkA) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => atkA}>{atkA !== null ? fmtInt(atkA) : "—"}</span><span use:delta={{ get: () => atkA }}></span>
               </div>
               <div class="band">
                 {#each atkRows as a (a.k)}
@@ -2264,7 +2285,7 @@
                     <span class="swatch" style="background: {a.c};"></span>
                     <span class="br-label">{a.k}</span>
                     <span class="br-note dim">{a.note}</span>
-                    <span class="num br-val" use:bump={() => Math.round(a.v)}>{fmtInt(Math.round(a.v))}</span>
+                    <span class="num br-val" use:bump={() => Math.round(a.v)}>{fmtInt(Math.round(a.v))}</span><span use:delta={{ get: () => Math.round(a.v) }}></span>
                     <span class="num br-share dim" use:bump={() => parseFloat(a.share)}>{a.share}</span>
                   </button>
                   {#if isDetailOpen(`atk:${a.k}`)}{@render detailBox(atkDetail(a))}{/if}
@@ -2275,7 +2296,7 @@
               <div class="stage">
                 <span class="stage-no" style="background: var(--danger);">2</span>
                 <span class="stage-title">相手の防御力を抜く</span>
-                <span class="num strong stage-val" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span><span use:delta={{ get: () => (pierced === null ? null : Math.max(0, Math.trunc(pierced))) }}></span>
               </div>
               <div class="band">
                 <div style="width: {(100 - defShare).toFixed(2)}%; background: var(--flow-pierce);"></div>
@@ -2294,7 +2315,7 @@
                 <span class="stage-no" style="background: var(--flow-3);">3</span>
                 <span class="stage-title">倍率で伸ばす</span>
                 <span class="stage-note dim">帯の幅＝足した分(赤字は減る倍率)</span>
-                <span class="num strong stage-val" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
+                <span class="num strong stage-val" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span><span use:delta={{ get: () => perHit }}></span>
               </div>
               <div class="band">
                 {#each flowRows.filter((r) => r.add > 0) as f (f.k)}
@@ -2310,7 +2331,7 @@
                     <span class="swatch" style="background: {f.c};"></span>
                     <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
-                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(Math.abs(f.add))}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span>
+                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span><span use:delta={{ get: () => Math.round(f.add) }}></span>
                     <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
                   </button>
                   {#if isDetailOpen(`flow:${f.k}`)}{@render detailBox(stepDetail(f.step, f.mult, f.add, f.to))}{/if}
@@ -2532,7 +2553,7 @@
           </div>
           <p class="eq-note dim">
             覚醒ダメージ <b class="num" use:flash={() => String(awakeningFactor)}>{awakeningFactor !== null ? `×${awakeningFactor.toFixed(2)}` : "—"}</b>
-            ・ ダメージ上限 <b class="num" use:bump={() => result?.damage_cap ?? null}>{result ? fmtInt(result.damage_cap) : "—"}</b>。
+            ・ ダメージ上限 <b class="num" use:bump={() => result?.damage_cap ?? null}>{result ? fmtInt(result.damage_cap) : "—"}</b><span use:delta={{ get: () => result?.damage_cap ?? null }}></span>。
             節目(20 / 40 / 60 / 80 / 90)を超えると上限の伸びが一段上がります。Lv を入れると覚醒は 5 になります。
           </p>
           {/if}
@@ -2988,8 +3009,6 @@
 
   .hero { padding: 11px 13px 12px; }
   .hero-num { font-size: var(--t-result); line-height: 1; font-weight: var(--w-strong); }
-  .chain .nsub .up { color: var(--good); font-weight: 700; }
-  .chain .nsub .down { color: var(--danger); font-weight: 700; }
   .meter.big { margin-top: 10px; height: 12px; border-radius: var(--r-inset); }
   .hero-sentence { margin-top: 7px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .sentence { min-width: 0; flex: 1; font-size: 11px; font-weight: 700; text-wrap: pretty; }
@@ -2998,9 +3017,21 @@
   .hero-sentence .num { flex-shrink: 0; font-size: 9.5px; }
   /* 鎖(§14 決定 1)。44px の主役数値は増やさない — 金の帯 = 答えは 1 つ(§02)を
      壊さず、鎖が右に伸びるだけ。狭いときは折り返す(桁で隣が動かないよう各段に min-width) */
-  .chain { display: flex; align-items: flex-end; gap: 10px 11px; flex-wrap: wrap; }
-  .chain .node { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .chain .nl { font-size: 9px; letter-spacing: 0.06em; color: var(--fg-muted); white-space: nowrap; }
+  /* 節の高さは 3 つとも同じ(stretch)。タイトル行は天井に固定し、数値と副行は底に寄せる
+     (= 下ぞろえ。タイトルの位置は固定 — ユーザー判断 2026-09-15) */
+  /* 押せる範囲(節)は 3 つとも同じ高さ(stretch)。内側の余白 4px / 6px を節に持たせ、
+     hover の塗りが節の形そのものになるようにする。左端は余白ぶん外に出して、上の行と文字位置をそろえる */
+  .chain { display: flex; align-items: stretch; gap: 4px; flex-wrap: wrap; margin: 0 -6px; }
+  /* 枠は付けない(付けると窮屈 — ユーザー判断 2026-09-15)。見出しはタイトル行として太字で主張させる。
+     余白: タイトル行 → 数値 6px、数値 → 差分 4px、差分 → 補足 4px(8 / 4 / 4 の一段階トーンダウン。
+     5 / 2 だと差分と補足が密着して 1 塊に読める — レビュー 2026-09-15) */
+  .chain .node { display: flex; flex-direction: column; gap: 0; min-width: 0; padding: 4px 6px 5px; }
+  .chain .nl {
+    line-height: 14px; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap;
+  }
+  .chain .nl .num { font-weight: 600; color: var(--fg-muted); }
+  .chain .nv { margin-top: auto; padding-top: 6px; }
+  .chain .nsub { margin-top: 4px; gap: 4px; }
   .chain .nv { font-weight: 700; color: var(--fg); white-space: nowrap; }
   .chain .node.gate .nv { min-width: 120px; }
   .chain .node.mid .nv { font-size: 15px; min-width: 68px; }
@@ -3009,19 +3040,17 @@
      1 発 180〜220px・バッジ 39〜106px・合計 75〜83px と揺れ、右のノードが最大 29px 逃げていた
      (§09 規則 4)。幅を取り切り、中身が短いときは空けておく。値の上限
      (与ダメージ 29,500,000 / 合計 10 桁)が入る幅にしてあるので、桁が溢れて切れることはない */
-  .chain .node.gate { width: 248px; }
-  .chain .node.mid { width: 124px; }
-  .chain .gatebadge-slot { flex: none; width: 112px; display: flex; align-items: flex-end; }
-  .chain .op { min-width: 48px; text-align: center; }
-  .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
-  /* 合計ノードの副行はバッジ(18px)+ 併記の 2 段。幅 124px に横並びで入れると隣に重なる
-     (実機で検出)。高さは 2 段ぶん取り切り、クリ基準の切り替えで行が動かないようにする(§09 規則 1) */
-  .chain .node.mid .nsub { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 32px; }
-  .chain .op { font-size: 12px; color: var(--fg-dim); padding-bottom: 3px; white-space: nowrap; }
-  .chain .gatebadge { margin-bottom: 3px; }
+  .chain .node.gate { width: 260px; }
+  .chain .node.mid { min-width: 136px; }
+  .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; display: flex; flex-direction: column; }
+  .chain .nsub-line { display: flex; align-items: baseline; gap: 5px; min-height: 14px; }
+  .chain .crit-none { color: var(--state-short-fg); font-weight: 700; }
+  .chain .crit-partial { color: var(--state-edge-fg); font-weight: 700; }
+  /* 差分(いくつ変わったか)は数値の真下。9px だと 44px の数値の下で読めないので 11px */
+  .chain .nsub :global(.delta) { font-size: 11px; line-height: 14px; }
   /* 押すと内訳が鎖の直下に開く。hover は塗りだけで、余白を足して隣を動かさない(§00 03) */
   .chain button.node { text-align: left; border-radius: var(--r-inset); }
-  .chain button.node:hover { background: var(--bg-active); box-shadow: 0 0 0 4px var(--bg-active); }
+  .chain button.node:hover { background: var(--bg-active); }
   .chain button.node:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
@@ -3082,6 +3111,10 @@
   .stage-title { font-size: 11px; font-weight: 700; white-space: nowrap; }
   .stage-note { min-width: 0; flex: 1; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stage-val { margin-left: auto; font-size: 15px; font-weight: 700; }
+  /* 段の数値と行の数値の右端をそろえる: 数値(64)+ 差分(64)+ 割合(32)の 3 列を段にも持たせる。
+     差分枠の幅を固定しないと、文言の幅ぶん数値が左右にずれる(ユーザー指摘 2026-09-15) */
+  .stage :global(.delta), .band-row :global(.delta) { flex-shrink: 0; width: 64px; font-size: 10px; }
+  .stage::after { content: ""; flex-shrink: 0; width: 32px; }
   .band { margin-top: 7px; display: flex; height: 11px; border-radius: var(--r-inset); overflow: hidden; border: 1px solid var(--border-soft); background: #EDF2F9; }
   .band > div { flex-shrink: 0; transition: width 0.5s ease; }
   .band-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
@@ -3117,6 +3150,9 @@
   .dt-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 10px; font-weight: 700; color: var(--fg-sub); }
   .dt-sub { flex-shrink: 0; width: 112px; text-align: right; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dt-val.bad { color: var(--danger); }
+  /* 差分枠は実数と同じ書体サイズ・同じ幅の列にして、行ごとに 到達 の位置がずれないようにする */
+  .dt-row :global(.delta), .dt-head :global(.delta) { flex-shrink: 0; min-width: 64px; font-size: 10px; }
+  .dt-head :global(.delta) { font-size: 11px; }
   /* ステの行は押すと要因が直下に開く。行の位置・高さは変わらない */
   button.dt-row-btn {
     width: 100%; text-align: left; padding: 1px 3px; margin: 0 -3px;
