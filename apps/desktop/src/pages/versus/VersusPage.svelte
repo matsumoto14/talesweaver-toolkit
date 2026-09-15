@@ -23,6 +23,7 @@
   import { latest } from "../../ui/latest.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
+  import { buffSetOptions as buildBuffSetOptions } from "../../buffs";
   import ToggleRow from "../../ui/ToggleRow.svelte";
 
   type CharacterRef = (typeof app.characters)[number];
@@ -47,14 +48,16 @@
   // **相手側のキャラも候補から外さない**。外すと「2 人目に入っているキャラを 1 人目にしたい」
   // ときに、先に 2 人目を変えないと選べず、行き止まりになる(ユーザー指摘 2026-09-01)。
   // 同じキャラを選んだら 2 人を入れ替える(pickCharA / pickCharB)
-  const characterOptions = (): PickerOption[] =>
-    app.characters.map((c) => ({
+  const characterOptions = (): PickerOption[] => [
+    { value: "", name: "未選択", meta: "キャラを選ぶ" },
+    ...app.characters.map((c) => ({
       value: String(c.id),
       name: c.name,
       meta: gameCharacterName(c.game_character_id),
       iconId: c.game_character_id,
       iconKind: "character" as const,
-    }));
+    })),
+  ];
 
   /** 1 人目を選ぶ。2 人目に入っているキャラを選んだら 2 人を入れ替える */
   function pickCharA(id: number | null) {
@@ -72,17 +75,17 @@
   // --- 使うバフセット(計算タブの「使うセット」と同じ) -------------------------------
   // 既定 = キャラのいつものバフ。対人タブ内だけの切り替えで、キャラには保存しない。
   // 同じキャラは 2 列に(攻撃側・防御側として)出るが、状態は 1 つなので両列で揃う
-  const buffSetOverride = $state<Record<number, number>>({});
+  const buffSetOverride = $state<Record<number, number | null>>({});
   function buffSetIdOf(c: CharacterRef): number | null {
     const o = buffSetOverride[c.id];
+    if (o === null) return null;
     return app.buffSets.some((set) => set.id === o) ? o : c.default_buff_set_id;
   }
   function buffSelectionOf(c: CharacterRef): BuffSelection {
     const set = app.buffSets.find((set) => set.id === buffSetIdOf(c));
     return JSON.parse(JSON.stringify(set?.choices ?? { choices: [] })) as BuffSelection;
   }
-  const buffSetOptions = (): PickerOption[] =>
-    app.buffSets.map((set) => ({ value: String(set.id), name: set.name }));
+  const buffSetOptions = () => buildBuffSetOptions(app.buffSets, "バフを使わない");
 
   // --- 使用スキル(キャラタブの主軸スキルが正。CalcPage と同じ組み方) -------------
   // 両方向の命中Pにそれぞれの攻撃スキルが要るので、1 人目・2 人目それぞれに要る。
@@ -516,10 +519,9 @@
         <Picker
           bind:value={
             () => { const id = buffSetIdOf(character); return id === null ? "" : String(id); },
-            (v) => { if (v !== "") buffSetOverride[character.id] = Number(v); }
+            (v) => (buffSetOverride[character.id] = v === "" ? null : Number(v))
           }
           options={buffSetOptions()}
-          placeholder="バフなし"
           disabled={app.buffSets.length === 0}
         />
       {:else}
@@ -576,7 +578,7 @@
                   (v) => (skills.override = v)
                 }
                 options={skillOptionsOf(skills)}
-                placeholder="スキルを選択してください"
+                menu
                 disabled={skills.list.length === 0}
               />
             {:else}
@@ -693,7 +695,7 @@
               (v) => pickAttacker(v === "" ? null : Number(v))
             }
             options={characterOptions()}
-            placeholder="キャラを選択"
+            menu
           />
         </span>
         <span class="dir-particle">が</span>
@@ -704,7 +706,7 @@
               (v) => pickDefender(v === "" ? null : Number(v))
             }
             options={characterOptions()}
-            placeholder="キャラを選択"
+            menu
           />
         </span>
         <span class="dir-particle">に当てる</span>

@@ -165,7 +165,6 @@
       value: d.id,
       name: d.name,
       meta: `カテゴリー${d.category} ・ ${randomOptionEffectLabel(d.effect)}`,
-      iconId: undefined,
     })),
   );
   function addRandomOption(slot: PartSlot, id: string) {
@@ -352,7 +351,7 @@
                 <Picker
                   options={otherPickerOptions}
                   note="ほかの OP(同じカテゴリーは 1 つまで)"
-                  placeholder="ほかの OP から選ぶ"
+                  menu
                   bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
                 />
               </div>

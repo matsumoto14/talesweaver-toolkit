@@ -154,7 +154,7 @@
                 class:on={draft.equipment.title === t.id}
                 title="{t.name} — {titleSummary(t)}"
                 onclick={(e) => { e.stopPropagation(); addOwnedAndSelect(t.id); }}
-              >{t.name.slice(g.base.length + 3)}</button>
+              >{t.name.slice(g.base.length + 3)} <span class="title-variant-val num">{signed(t.equipment_value_total)}</span></button>
             {/each}
           </span>
         {/if}

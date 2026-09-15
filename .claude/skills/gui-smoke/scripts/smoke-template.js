@@ -20,8 +20,21 @@ const log = (...a) => console.log(...a);
   const byLabel = (scope, label) => scope.locator(".label", { hasText: new RegExp("^" + label + "$") });
   // サイドバー(nav)。ボタンはラベル文字で選ぶ(title 属性は折りたたみ時しか付かない)
   const nav = async (label) => { await page.locator("nav button", { hasText: label }).click(); await wait(); };
-  // ui/Select.svelte: <label class="select"><span class="label">…</span><select>
-  const selectByLabel = (scope, label) => scope.locator("label.select", { has: byLabel(scope, label) }).locator("select");
+  // ui/StepSelect.svelte(順序のある 1 つ選ぶ): <div class="step-select"><span class="label">…</span><div class="seg"><button class="step">
+  const stepByLabel = async (scope, label, text) => {
+    await scope.locator(".step-select", { has: byLabel(scope, label) }).locator(".seg .step", { hasText: text }).click(); await wait();
+  };
+  // ui/Picker.svelte(1 つ選ぶ): <div class="picker"><span class="label">…</span><div class="picker-line">
+  //   固定チップ <button class="picker-chip">名前 値</button> … 候補面の口 <button class="picker-trigger">
+  // 候補面は <button class="picker-row">名前 値</button>。pick(scope, label, name) で名前の候補を選ぶ
+  const picker = (scope, label) => scope.locator(".picker", { has: byLabel(scope, label) });
+  const pick = async (scope, label, name) => {
+    const p = picker(scope, label);
+    const chip = p.locator(".picker-chip", { hasText: name });
+    if (await chip.count()) { await chip.first().click(); await wait(); return; }
+    await p.locator(".picker-trigger").click(); await wait(200);
+    await page.locator(".picker-row", { hasText: name }).first().click(); await wait();
+  };
   // ui/StatInput.svelte: <div class="stat-input"><span class="label">…</span><input class="num-field">
   const statInput = (scope, label) => scope.locator(".stat-input", { has: byLabel(scope, label) }).locator(".num-field");
   const setNum = async (loc, v) => { await loc.fill(String(v)); await loc.dispatchEvent("blur"); };
@@ -72,9 +85,9 @@ const log = (...a) => console.log(...a);
   // ---- ダメージ計算画面
   // キャラ option のラベルは「表示名 (キャラ種)」
   const calculate = async ({ character, skill, enemy }) => {
-    await selectByLabel(page, "キャラ").selectOption({ label: character }); await wait();
-    await selectByLabel(page, "スキル").selectOption({ label: skill }); await wait();
-    await selectByLabel(page, "対象").selectOption({ label: enemy }); await wait(800);
+    await pick(page, "キャラ", character);
+    await pick(page, "スキル", skill);
+    await pick(page, "対象", enemy); await wait(800);
   };
   // トレース(<details class="trace">)を開く
   const openTrace = async () => {
@@ -95,7 +108,7 @@ const log = (...a) => console.log(...a);
   await setNum(statInput(statsBlock(eq, 0), "突き攻撃力"), 400);
   await setNum(statInput(statsBlock(eq, 1), "突き攻撃力"), 200);
   await toggle(eq, "パワーウェポン");
-  await selectByLabel(eq, "ストロングウェポン").selectOption({ label: "Lv6(+18%)" });
+  await stepByLabel(eq, "ストロングウェポン", "Lv6(+18%)");
   log("未保存 badge after save:", await saveCharacter());
   await shot("99-smoke-example.png");
 

@@ -9,6 +9,7 @@
   // (手順は docs/enemy-verification.md)。
   import { canSeparateMeasurement, errorMessage, listSkills, previewDamage, previewEffectiveStats } from "../../api/commands";
   import type { AttackPowerBreakdown, DamageResult, EffectiveStats, Skill } from "../../api/types";
+  import { skillMeta } from "../../characterSkills";
   import { fmtInt } from "../../format";
   import {
     damageGap, expectedDamage, measurementDraft, type MeasurementSample,
@@ -229,7 +230,7 @@
               () => content?.content.id ?? "",
               (v) => (pickedContentId = v)
             }
-            options={contents.map((x) => ({ value: x.content.id, name: x.content.name }))}
+            options={contents.map((x) => ({ value: x.content.id, name: x.content.name, meta: x.areaName }))}
           />
         {:else}
           <div class="fields">
@@ -257,7 +258,7 @@
             () => skill?.id ?? "",
             (v) => (pickedSkillId = v)
           }
-          options={skills.map((s) => ({ value: s.id, name: s.name }))}
+          options={skills.map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const }))}
         />
         {#if weapons.length > 0}
           <!-- 攻撃力を変える一番かんたんな手段。押した瞬間に攻撃力が変わる(保存はされない)。

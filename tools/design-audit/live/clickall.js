@@ -7,14 +7,18 @@ const TARGETS = {
   ダメージ計算: [
     ["攻撃 / 防御タブ", "button.side-tab"],
     ["対象の ◀▶", "button.step"],
-    ["極限スキルのチップ", ".ultimate-chips .togrow .face:not([disabled])"],
-    ["バフチップ", ".buff-chips .togrow .face:not([disabled])"],
+    // 材料カードは既定で畳んであるので、openSel(4 つ目)で見出しを押して開いてから測る
+    ["極限スキルのチップ", ".ultimate-chips .togrow .face:not([disabled])", null, ".card-head:has(.card-title:text-is('極限スキル'))"],
+    ["バフチップ", ".buff-chips .togrow .face:not([disabled])", null, ".card-head:has(.card-title:text-is('バフ'))"],
     ["候補(足りない分)", "button.fill-btn"],
     // エンチャントの伸びしろ(試し変更。保存を伴わない = ダメージ計算タブの他項目と同じ扱い)。
     // MAX を押すとその行が一覧から消え、繰り上がった別の行を誤操作させた実害があった箇所
     // (修正済み)。同じ index の要素を押す前後で位置を比べる既存の仕組みで、行が消えて
     // 繰り上がれば座標がずれ、最後の行が消えれば after が null になるので拾える
-    ["エンチャント MAX", ".enchant-rows button.max"],
+    ["エンチャント MAX", ".enchant-rows button.max", null, ".card-head:has(.card-title:text-is('エンチャントの伸びしろ'))"],
+    // 「1 つ選ぶ」(Picker)。固定チップと候補面の口。押しても行は動かない(候補は重なって出る)
+    ["使うセット(Picker)", ".calc-buff-set .picker-line > button", null, ".card-head:has(.card-title:text-is('バフ'))"],
+    ["称号(Picker)", ".title-picker .picker-line > button", null, ".card-head:has(.card-title:text-is('称号'))"],
   ],
   ホーム: [
     ["今日の強化タイル", "button.today-tile"],
@@ -33,6 +37,7 @@ const TARGETS = {
     ["数値の編集(行の位置)", ".stepper", "キャラステータス"],
     ["部位の行", "button.part-row", "装備"],
     ["行チップ(オン/オフ)", ".togrow .face", "クリティカル率"],
+    ["主軸スキルの Picker", ".picker-line > button", "キャラステータス"],
   ],
 };
 
