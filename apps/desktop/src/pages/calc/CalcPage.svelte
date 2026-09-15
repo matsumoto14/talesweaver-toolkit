@@ -748,9 +748,11 @@
       },
     ];
     if (r.weapon_added_per_hit !== 0) {
+      // 段ごとの分割は内部の丸めの都合で、使う側は「1 スキルに 1 回乗る固定値」と捉えている。
+      // 段数や 1 段あたりの値は見せず、スキルに乗る総額だけ出す
       mats.push({
-        label: `武器強化(追加固定) ${fmtInt(r.weapon_added_per_hit)} × ${r.hit_count} 段`,
-        mult: `×${r.hit_count}`,
+        label: "武器強化(追加固定)",
+        mult: "+",
         value: fmtInt(r.weapon_added_total),
         n: r.weapon_added_total,
         sub: "上限なし・表記ダメージとは別枠",
@@ -2561,8 +2563,7 @@
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "awakening"} onclick={() => toggleMaterial("awakening")}>
             <span class="bg-caret" aria-hidden="true">{openMaterial === "awakening" ? "▾" : "▸"}</span>
-            <!-- 覚醒・エタの意志の絵は無い。縞のまま置いて、見出しの字下げを他のカードとそろえる -->
-            <Icon kind="skill" id={null} size={20} label="覚醒・エタの意志" />
+            <Icon kind="skill" id="awakening" size={20} label="覚醒・エタの意志" />
             <span class="card-title">覚醒・エタの意志</span>
             <span class="dim small num" use:flash={() => awakeningHeadNote}>{awakeningHeadNote}</span>
           </button>
@@ -2629,7 +2630,7 @@
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "sharpness"} onclick={() => toggleMaterial("sharpness")}>
             <span class="bg-caret" aria-hidden="true">{openMaterial === "sharpness" ? "▾" : "▸"}</span>
-            <Icon kind="skill" id={null} size={20} label="シャープネスビジョン" />
+            <Icon kind="skill" id="sharpness_vision" size={20} label="シャープネスビジョン" />
             <span class="card-title">シャープネスビジョン</span>
             <span class="dim small num" use:bump={() => sharpnessRatePercent}
             >{sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} +${sharpnessRatePercent}%`}</span>
@@ -2677,7 +2678,7 @@
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "soul_link"} onclick={() => toggleMaterial("soul_link")}>
             <span class="bg-caret" aria-hidden="true">{openMaterial === "soul_link" ? "▾" : "▸"}</span>
-            <Icon kind="skill" id={null} size={20} label="ソウルリンク" />
+            <Icon kind="skill" id="soul_link" size={20} label="ソウルリンク" />
             <span class="card-title">ソウルリンク</span>
             <span class="dim small num" use:flash={() => soulLinkHeadNote}>{soulLinkHeadNote}</span>
           </button>
@@ -2853,8 +2854,7 @@
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "title"} onclick={() => toggleMaterial("title")}>
             <span class="bg-caret" aria-hidden="true">{openMaterial === "title" ? "▾" : "▸"}</span>
-            <!-- 称号の絵は無い。縞のまま置いて、見出しの字下げを他のカードとそろえる -->
-            <Icon kind="equipment" id={null} size={20} label="称号" />
+            <Icon kind="title" id="title" size={20} label="称号" />
             <span class="card-title">称号</span>
             <span class="dim small title-head-note" use:flash={() => titleHeadNote}>{titleHeadNote}</span>
           </button>
