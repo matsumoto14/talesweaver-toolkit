@@ -7,7 +7,8 @@
 
 /**
  * 数値が変わったことを認知させる。変わった要素**だけ**を跳ねさせ、
- * 増減を色で 0.3s だけ伝えてから元に戻す(色を残すと状態色 §03 と意味が混ざる)。
+ * 増減を色で 0.3s だけ伝えてから元に戻す(色を残すと状態色 §03 と意味が混ざる。
+ * 本体の色を残す案は試して「わかりづらい」と却下 — 2026-09-15。差分は delta 側が持つ)。
  *
  * Svelte 5 の action は引数が変わっても再実行されないので、**値そのものではなく
  * getter を渡す**(`use:bump={() => perHit}`)。中の `$effect` がそれを読む。
@@ -30,6 +31,54 @@ export function bump(node: HTMLElement, get: () => number | null) {
   $effect(() => {
     node.addEventListener("animationend", clear);
     return () => node.removeEventListener("animationend", clear);
+  });
+}
+
+/**
+ * **いくつ変わったか**を出す差分枠(§10 型 1b)。跳ねと色は 0.3s で戻るので、同時に
+ * 10 か所が動くと「動いた」は分かっても「いくつ」は読み切れない — 前回値との差を
+ * 緑 ↑1,234 / 赤 ↓3.2% で出し、消さずにその数値が次に変わるまで残す(書き換えるだけ)。
+ *
+ * 付ける先は数値そのものではなく**差分専用の空 span**。数値の中に差し込むと、出た瞬間・
+ * 桁が変わった瞬間に隣を押してがたつく(実機 2026-09-15)。枠は最初から場所を取り、
+ * 幅は増える方向にしか変えない(§09 規則 4)。浮かせて重ねる案は却下(ユーザー判断)。
+ * `get` は表示単位で渡す(15% と出すなら 0.15 ではなく 15 を渡して unit "%")。
+ */
+export interface DeltaSpec {
+  get: () => number | null;
+  /** 差分の後ろに付ける単位("%" / "s" など)。省略なら無し */
+  unit?: string;
+  /** 小数桁。省略なら前回値・今回値が両方整数のとき 0、それ以外 2(末尾の 0 は落とす) */
+  digits?: number;
+}
+
+function formatDelta(prev: number, next: number, spec: DeltaSpec): string {
+  const d = next - prev;
+  const digits = spec.digits ?? (Number.isInteger(prev) && Number.isInteger(next) ? 0 : 2);
+  const body = Math.abs(d).toLocaleString("ja-JP", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  return `${d > 0 ? "↑" : "↓"}${body}${spec.unit ?? ""}`;
+}
+
+export function delta(node: HTMLElement, spec: DeltaSpec) {
+  node.classList.add("delta", "num");
+  node.setAttribute("aria-hidden", "true");
+  let prev = spec.get();
+  // CSS 側の min-width(列の幅)より広くなったときだけ inline で広げる。常に inline で上書きすると
+  // 列幅(64px)が文言の幅(50px)に縮んで、右の列が行ごとにずれる(実機 2026-09-15)
+  const base = parseFloat(getComputedStyle(node).minWidth) || 0;
+  let width = base;
+  $effect(() => {
+    const next = spec.get();
+    if (next === null || prev === null || next === prev) {
+      prev = next;
+      return;
+    }
+    node.textContent = formatDelta(prev, next, spec);
+    node.classList.remove("delta-in", "up", "down");
+    width = Math.max(width, node.offsetWidth); // reflow を兼ねる(再スタート用)
+    if (width > base) node.style.minWidth = `${width}px`;
+    node.classList.add("delta-in", next > prev ? "up" : "down");
+    prev = next;
   });
 }
 
