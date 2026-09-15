@@ -528,7 +528,11 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 .ability-choice.on .ability-choice-effect { color: var(--sel-fg); }
 .ability-choice-none { color: var(--fg-muted); }
 /* 防具アビリティ(複数選択)は行チップ(ToggleRow)なので縦 1 列(§07) */
-.non-weapon-ability-list { flex-wrap: nowrap; flex-direction: column; gap: 3px; }
+/* --- 行チップの置き場(ui/ToggleRow / §07 行チップ) ------------------------------
+   広い器では 1 列に伸ばさない — 名前と値が離れて目が往復する(§00 01)。
+   1 列 約 280px で列に流し、狭い器では自然に 1 列になる */
+.toggle-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 3px; }
+.non-weapon-ability-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 3px; }
 .ability-additional-panel {
   margin: 0 7px 4px 159px; padding: 8px 10px; display: grid; gap: 6px;
   border: 1px solid var(--border-soft); border-left: 2px solid var(--accent); border-radius: var(--r-inset);

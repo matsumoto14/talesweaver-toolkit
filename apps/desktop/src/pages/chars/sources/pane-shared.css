@@ -71,7 +71,7 @@
   .empty { margin: 6px 0 0; padding: 4px 0; font-size: 11px; }
 
   /* チップは横に並べる(1 行 1 個だと 30 行の一覧になる) */
-  .toggle-list { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .toggle-list { margin-top: 8px; }
   .note { font-size: 10px; }
   /* 「満」は上限に届いた印。金 = 上限(§03 予約色)。枠は常に確保して行をずらさない */
   .cap-badge {
@@ -405,7 +405,7 @@
   /* 3 つのチップは段 1 つぶんの幅に収まらないので、操作の列まで使う */
   .ultimate-row { grid-column: 2 / 4; display: flex; flex-direction: column; gap: 3px; }
   /* 「取っている」の行チップ。段 / 操作 / 値の 3 列ぶんを 1 行で使う */
-  .toggle-cell { grid-column: 2 / 5; display: flex; flex-direction: column; }
+  .toggle-cell { grid-column: 2 / 3; display: flex; flex-direction: column; max-width: 320px; }
   /* 2 件ぶんの高さを先に取る。選んだ数で下が上下しない */
 
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

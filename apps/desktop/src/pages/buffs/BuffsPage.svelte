@@ -891,8 +891,8 @@
   .guide-link:hover { color: var(--accent-hover); }
   /* バフ 1 件 = ToggleRow 1 行。縦 1 列で積む(幅が広いほうが値まで読める) */
   .chips {
-    flex: 1; min-height: 0; padding: 7px; display: flex; flex-direction: column; gap: 3px;
-    border-top: 1px solid var(--border-soft);
+    flex: 1; min-height: 0; padding: 7px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 3px;
+    align-content: start; border-top: 1px solid var(--border-soft);
     overflow-y: auto; scrollbar-gutter: stable;
   }
   /* 「ほか n」= 割愛した増分の中身を辿るボタン。行本体のトグル(.face)とは別の押せる要素だと
