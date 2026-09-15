@@ -38,11 +38,13 @@ const log = (...a) => console.log(...a);
   // ---- キャラ管理画面
   // 一覧からキャラを選ぶ(表示名の完全一致)
   const openCharacter = async (name) => { await page.locator(".list td.name > span", { hasText: new RegExp("^" + name + "$") }).first().click(); await wait(400); };
-  // 登録フォーム(名前 + キャラ種のみ)
+  // 登録フォーム(呼び名 + キャラのアイコン選択)。呼び名は ui/TextField の読み取り面
+  // (<button aria-label="呼び名 を編集">)が既定で、押すと <input aria-label="呼び名"> になる
   const registerCharacter = async (name, gameCharacterLabel) => {
-    await page.locator("input[placeholder='表示名']").fill(name);
-    await selectByLabel(page, "キャラ").selectOption({ label: gameCharacterLabel });
-    await page.locator("button.btn.primary", { hasText: "登録" }).click();
+    await page.locator("button[aria-label='呼び名 を編集']").click();
+    await page.locator("input[aria-label='呼び名']").fill(name);
+    await page.locator("button.pick", { hasText: gameCharacterLabel }).click();
+    await page.locator("button.btn.primary", { hasText: "未装備で登録" }).click();
     await wait(500);
   };
   // 設定列のアコーディオン(恒常補正 / 装備 / 常用バフ / キャラスキル / 調整)。開いた .group を返す

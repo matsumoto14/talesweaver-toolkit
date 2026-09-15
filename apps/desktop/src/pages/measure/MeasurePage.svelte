@@ -21,6 +21,7 @@
   import Picker from "../../ui/Picker.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
+  import TextField from "../../ui/TextField.svelte";
 
   const character = $derived(selectedCharacter());
   const savedPayload = $derived(character ? payloadOf(character) : null);
@@ -234,13 +235,11 @@
           <div class="fields">
             <label class="field">
               <span class="label">敵の名前</span>
-              <input class="text-field" type="text" maxlength="60" bind:value={unlistedName}
-                placeholder="ゲーム内の表記どおりに" />
+              <TextField label="敵の名前(ゲーム内の表記どおりに)" bind:value={unlistedName} max={60} />
             </label>
             <label class="field">
               <span class="label">出た場所(任意)</span>
-              <input class="text-field" type="text" maxlength="60" bind:value={unlistedPlace}
-                placeholder="マップ名・コンテンツ名" />
+              <TextField label="出た場所(マップ名・コンテンツ名)" bind:value={unlistedPlace} max={60} />
             </label>
           </div>
           <p class="note dim">
@@ -336,8 +335,7 @@
 
         <label class="field wide">
           <span class="label">気づいたこと(任意)</span>
-          <input class="text-field" type="text" maxlength="200" bind:value={measuredNote}
-            placeholder="強打が乗ったかも / 上限に当たっていそう など" />
+          <TextField label="気づいたこと" bind:value={measuredNote} max={200} />
         </label>
 
         <div class="send">
@@ -418,10 +416,6 @@
   .num-field { width: 148px; appearance: textfield; }
   .num-field::-webkit-outer-spin-button,
   .num-field::-webkit-inner-spin-button { appearance: none; margin: 0; }
-  .text-field {
-    width: 100%; min-width: 220px; padding: 4px 8px; border-radius: var(--r-panel);
-    background: #fff; border: 1px solid var(--border); font-size: 11px; color: var(--fg);
-  }
   .note {
     margin: 0; padding: 5px 9px; font-size: 10px; line-height: 1.6;
     border: 1px dashed var(--border); border-radius: var(--r-panel); background: var(--bg-rail);

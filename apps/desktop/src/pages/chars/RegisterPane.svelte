@@ -14,6 +14,7 @@
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Picker from "../../ui/Picker.svelte";
+  import TextField from "../../ui/TextField.svelte";
 
   let name = $state("");
   let gameCharacterId = $state("boris");
@@ -112,7 +113,7 @@
     <div class="card-title big">キャラを登録</div>
     <div class="row">
       <span class="label">名前</span>
-      <input type="text" bind:value={name} maxlength="32" placeholder="呼び名(空ならキャラの名前)" />
+      <TextField label="呼び名" bind:value={name} max={32} auto={selectedGame?.name ?? ""} autoNote="キャラ名を使用" />
     </div>
     <div class="row">
       <span class="label">キャラ</span>
@@ -163,11 +164,6 @@
   .card-title.big { font-size: 12px; color: var(--fg-head); }
   .row { margin-top: 9px; display: flex; align-items: center; gap: 8px; min-width: 0; }
   .label { width: 60px; flex-shrink: 0; font-size: var(--t-label); color: var(--fg-muted); }
-  input[type="text"] {
-    min-width: 0; flex: 1; padding: 6px 9px; border-radius: var(--r-panel);
-    border: 1px solid var(--accent); background: var(--bg-panel); font-size: 12px; color: var(--fg);
-  }
-  input[type="text"]:focus { outline: none; border-color: var(--accent-hover); }
   .picked { font-size: 11.5px; font-weight: 700; }
   .hint { margin-left: auto; font-size: 9.5px; }
 

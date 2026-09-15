@@ -36,6 +36,7 @@
   import StepSelect from "../../../ui/StepSelect.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
+  import TextField from "../../../ui/TextField.svelte";
   import { slide } from "svelte/transition";
   import { tick, untrack } from "svelte";
   import { isLockedEquipment } from "../../../unlock.svelte";
@@ -749,7 +750,7 @@
     <div class="card registration-name-card">
       <label class="text custom-name">
         <span class="label">登録名 <span class="dim">同じ装備を複数持つときの見分け方</span></span>
-        <input type="text" bind:value={part.label} maxlength="40" placeholder="例: ボス用" />
+        <TextField label="登録名" bind:value={part.label} max={40} />
       </label>
     </div>
 
@@ -789,7 +790,7 @@
             </div>
           {:else}
           <div class="picker-tools">
-            <input class="item-search" type="text" placeholder="装備名で探す" bind:value={itemQuery} />
+            <TextField label="装備名で探す" search count={filteredCatalog.length} bind:value={itemQuery} />
             {#if equipmentFilterLabel !== null}
               <span class="equipment-filter badge">{equipmentFilterLabel}</span>
               <button type="button" class="chip quiet" onclick={() => (showAllEquipmentCandidates = !showAllEquipmentCandidates)}>
@@ -823,7 +824,7 @@
           {#if part.item_id === null && part.custom_name !== null}
             <label class="text custom-name">
               <span class="label">装備名 <span class="dim">[仮] カタログ外</span></span>
-              <input type="text" bind:value={part.custom_name} maxlength="40" placeholder="装備名" />
+              <TextField label="装備名" bind:value={part.custom_name} max={40} />
             </label>
           {/if}
         </div>

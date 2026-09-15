@@ -6,6 +6,7 @@
   import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT } from "../../../labels";
   import { app } from "../../../state.svelte";
   import { flash } from "../../../ui/motion.svelte";
+  import TextField from "../../../ui/TextField.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
 
   interface Props {
@@ -239,7 +240,7 @@
   <details class="fold">
     <summary>その他の称号から選ぶ({otherTitles.length} 件)</summary>
     <div class="fold-body">
-      <input class="item-search" type="text" placeholder="称号名・グループで探す" bind:value={titleQuery} />
+      <TextField label="称号名・グループで探す" search count={filteredOtherTitles.length} bind:value={titleQuery} />
       {#if otherTitleGroups.length > 0}
         <div class="item-list title-list effectful">
           {@render titleRows(otherTitleGroups, null)}
