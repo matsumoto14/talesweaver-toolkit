@@ -4,7 +4,7 @@
   import type { DefenseProfile } from "../../api/types";
   import { fmtInt, fmtNum, fmtPct } from "../../format";
   import { limits } from "../../limits.svelte";
-  import { bump, delta } from "../../ui/motion.svelte";
+  import ReadRow from "../../ui/ReadRow.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
 
   interface Props {
@@ -38,39 +38,22 @@
           (複合は (DEF+MR)×{limits.composite_defense_stat_multiplier} + 装備×{limits.composite_defense_equipment_multiplier})
         </span>
       </div>
-      <div class="rows">
-        <div class="row inset">
-          <span class="rl">物理防御力</span>
-          <span class="num rv" use:bump={() => profile.physical_defense}>{fmtInt(profile.physical_defense)}</span><span use:delta={{ get: () => profile.physical_defense }}></span>
-          <span class="rn dim">
-            DEF×{limits.defense_stat_multiplier} + 装備物防 {fmtInt(profile.equipment_physical_defense)}×{fmtNum(profile.defense_rates.physical)}×{limits.defense_equipment_multiplier}
-          </span>
-        </div>
-        <div class="row inset">
-          <span class="rl">魔法防御力</span>
-          <span class="num rv" use:bump={() => profile.magic_defense}>{fmtInt(profile.magic_defense)}</span><span use:delta={{ get: () => profile.magic_defense }}></span>
-          <span class="rn dim">
-            MR×{limits.defense_stat_multiplier} + 装備魔防 {fmtInt(profile.equipment_magic_defense)}×{fmtNum(profile.defense_rates.magic)}×{limits.defense_equipment_multiplier}
-          </span>
-        </div>
-        <div class="row inset">
-          <span class="rl">複合防御力</span>
-          <span class="num rv" use:bump={() => profile.composite_defense}>{fmtInt(profile.composite_defense)}</span><span use:delta={{ get: () => profile.composite_defense }}></span>
-          <span class="rn dim">(DEF+MR)×{limits.composite_defense_stat_multiplier} + 装備×{limits.composite_defense_equipment_multiplier}</span>
-        </div>
-        <div class="row inset">
-          <span class="rl">装備防御力倍率</span>
-          <span class="num rv" use:bump={() => profile.defense_rates.physical * 100}>物 {fmtPct(profile.defense_rates.physical, { max: 2 })}</span><span use:delta={{ get: () => profile.defense_rates.physical * 100, unit: "%" }}></span>
-          <span class="rn dim">
-            魔 {fmtPct(profile.defense_rates.magic, { max: 2 })}。共通スキル(コートアーマー / プロテクトアーマー)+
-            シエナのオーラの防御力増加。<b>リンゴの島・ベリネンルミでは常に 100%</b>
-          </span>
-        </div>
-        <div class="row inset">
-          <span class="rl">防御力の上限</span>
-          <span class="num rv" use:bump={() => profile.defense_cap}>{fmtInt(profile.defense_cap)}</span><span use:delta={{ get: () => profile.defense_cap }}></span>
-          <span class="rn dim">覚醒段階 + エタの意志 Lv で開放(wiki: Quest/覚醒クエスト・エタの意志)</span>
-        </div>
+      <div class="rows readrows inset">
+        <ReadRow label="物理防御力" value={fmtInt(profile.physical_defense)} motion={() => profile.physical_defense} delta={{}}>
+          {#snippet note()}DEF×{limits.defense_stat_multiplier} + 装備物防 {fmtInt(profile.equipment_physical_defense)}×{fmtNum(profile.defense_rates.physical)}×{limits.defense_equipment_multiplier}{/snippet}
+        </ReadRow>
+        <ReadRow label="魔法防御力" value={fmtInt(profile.magic_defense)} motion={() => profile.magic_defense} delta={{}}>
+          {#snippet note()}MR×{limits.defense_stat_multiplier} + 装備魔防 {fmtInt(profile.equipment_magic_defense)}×{fmtNum(profile.defense_rates.magic)}×{limits.defense_equipment_multiplier}{/snippet}
+        </ReadRow>
+        <ReadRow label="複合防御力" value={fmtInt(profile.composite_defense)} motion={() => profile.composite_defense} delta={{}}>
+          {#snippet note()}(DEF+MR)×{limits.composite_defense_stat_multiplier} + 装備×{limits.composite_defense_equipment_multiplier}{/snippet}
+        </ReadRow>
+        <ReadRow label="装備防御力倍率" value={`物 ${fmtPct(profile.defense_rates.physical, { max: 2 })}`} motion={() => profile.defense_rates.physical * 100} delta={{ unit: "%" }}>
+          {#snippet note()}魔 {fmtPct(profile.defense_rates.magic, { max: 2 })}。共通スキル(コートアーマー / プロテクトアーマー)+ シエナのオーラの防御力増加。<b>リンゴの島・ベリネンルミでは常に 100%</b>{/snippet}
+        </ReadRow>
+        <ReadRow label="防御力の上限" value={fmtInt(profile.defense_cap)} motion={() => profile.defense_cap} delta={{}}>
+          {#snippet note()}覚醒段階 + エタの意志 Lv で開放(wiki: Quest/覚醒クエスト・エタの意志){/snippet}
+        </ReadRow>
       </div>
       {#if capLoss > 0}
         <p class="note dim">
@@ -88,22 +71,16 @@
           r = 1 − a / (a + {limits.cut_rate_denominator})、a = {limits.cut_rate_a_base} + [(防御ステ + 装備防御 − 1) / {limits.cut_rate_divisor}]
         </span>
       </div>
-      <div class="rows">
-        <div class="row inset">
-          <span class="rl">物理</span>
-          <span class="num rv" use:bump={() => Math.round(profile.physical_cut_rate * 1000) / 10}>{pct(profile.physical_cut_rate)}</span><span use:delta={{ get: () => Math.round(profile.physical_cut_rate * 1000) / 10, unit: "%", digits: 1 }}></span>
-          <span class="rn dim">DEF + 装備物防 から</span>
-        </div>
-        <div class="row inset">
-          <span class="rl">魔法</span>
-          <span class="num rv" use:bump={() => Math.round(profile.magic_cut_rate * 1000) / 10}>{pct(profile.magic_cut_rate)}</span><span use:delta={{ get: () => Math.round(profile.magic_cut_rate * 1000) / 10, unit: "%", digits: 1 }}></span>
-          <span class="rn dim">MR + 装備魔防 から</span>
-        </div>
-        <div class="row inset">
-          <span class="rl">複合</span>
-          <span class="num rv" use:bump={() => Math.round(profile.composite_cut_rate * 1000) / 10}>{pct(profile.composite_cut_rate)}</span><span use:delta={{ get: () => Math.round(profile.composite_cut_rate * 1000) / 10, unit: "%", digits: 1 }}></span>
-          <span class="rn dim">DEF + 装備物防 + MR + 装備魔防 から(除数 {limits.cut_rate_composite_divisor})</span>
-        </div>
+      <div class="rows readrows inset">
+        <ReadRow label="物理" value={pct(profile.physical_cut_rate)} motion={() => Math.round(profile.physical_cut_rate * 1000) / 10} delta={{ unit: "%", digits: 1 }}>
+          {#snippet note()}DEF + 装備物防 から{/snippet}
+        </ReadRow>
+        <ReadRow label="魔法" value={pct(profile.magic_cut_rate)} motion={() => Math.round(profile.magic_cut_rate * 1000) / 10} delta={{ unit: "%", digits: 1 }}>
+          {#snippet note()}MR + 装備魔防 から{/snippet}
+        </ReadRow>
+        <ReadRow label="複合" value={pct(profile.composite_cut_rate)} motion={() => Math.round(profile.composite_cut_rate * 1000) / 10} delta={{ unit: "%", digits: 1 }}>
+          {#snippet note()}DEF + 装備物防 + MR + 装備魔防 から(除数 {limits.cut_rate_composite_divisor}){/snippet}
+        </ReadRow>
       </div>
       <p class="note dim">防御力には上限があり、上限に届いたあとの軽減はこのカット率が担います。</p>
     </div>
@@ -115,29 +92,19 @@
           回避P = [{limits.evasion_point_base} + (AGI + 装備回避率)×{limits.evasion_point_agi_rate} + 装備敏捷度/{limits.evasion_type_divisor} + 攻撃タイプ別増加]
         </span>
       </div>
-      <div class="rows">
-        <div class="row inset">
-          <span class="rl">回避P(物理)</span>
-          <span class="num rv" use:bump={() => profile.evasion_point.physical}>{fmtInt(profile.evasion_point.physical)}</span><span use:delta={{ get: () => profile.evasion_point.physical }}></span>
-          <span class="rn dim">+ (DEF×2 + [(突き+斬り)/{limits.evasion_physical_attack_divisor}]) / {limits.evasion_type_divisor}</span>
-        </div>
-        <div class="row inset">
-          <span class="rl">回避P(魔法)</span>
-          <span class="num rv" use:bump={() => profile.evasion_point.magic}>{fmtInt(profile.evasion_point.magic)}</span><span use:delta={{ get: () => profile.evasion_point.magic }}></span>
-          <span class="rn dim">+ MR×2 / {limits.evasion_type_divisor}</span>
-        </div>
-        <div class="row inset">
-          <span class="rl">回避P(複合)</span>
-          <span class="num rv" use:bump={() => profile.evasion_point.composite}>{fmtInt(profile.evasion_point.composite)}</span><span use:delta={{ get: () => profile.evasion_point.composite }}></span>
-          <span class="rn dim">
-            + (DEF+MR) / {limits.evasion_type_divisor}。装備回避率 {fmtInt(profile.equipment_evasion)}×{limits.evasion_point_agi_rate} + 装備敏捷度 {fmtInt(profile.equipment_agility)}/{limits.evasion_type_divisor} を含む
-          </span>
-        </div>
-        <div class="row inset">
-          <span class="rl">特殊回避(コンボ)</span>
-          <span class="num rv" use:bump={() => Math.round(profile.combo_evasion * 1000) / 10}>{pct(profile.combo_evasion)}</span><span use:delta={{ get: () => Math.round(profile.combo_evasion * 1000) / 10, unit: "%", digits: 1 }}></span>
-          <span class="rn dim">(10 + MR/15 + AGI/7.5)%、下限 20% / 上限 63%</span>
-        </div>
+      <div class="rows readrows inset">
+        <ReadRow label="回避P(物理)" value={fmtInt(profile.evasion_point.physical)} motion={() => profile.evasion_point.physical} delta={{}}>
+          {#snippet note()}+ (DEF×2 + [(突き+斬り)/{limits.evasion_physical_attack_divisor}]) / {limits.evasion_type_divisor}{/snippet}
+        </ReadRow>
+        <ReadRow label="回避P(魔法)" value={fmtInt(profile.evasion_point.magic)} motion={() => profile.evasion_point.magic} delta={{}}>
+          {#snippet note()}+ MR×2 / {limits.evasion_type_divisor}{/snippet}
+        </ReadRow>
+        <ReadRow label="回避P(複合)" value={fmtInt(profile.evasion_point.composite)} motion={() => profile.evasion_point.composite} delta={{}}>
+          {#snippet note()}+ (DEF+MR) / {limits.evasion_type_divisor}。装備回避率 {fmtInt(profile.equipment_evasion)}×{limits.evasion_point_agi_rate} + 装備敏捷度 {fmtInt(profile.equipment_agility)}/{limits.evasion_type_divisor} を含む{/snippet}
+        </ReadRow>
+        <ReadRow label="特殊回避(コンボ)" value={pct(profile.combo_evasion)} motion={() => Math.round(profile.combo_evasion * 1000) / 10} delta={{ unit: "%", digits: 1 }}>
+          {#snippet note()}(10 + MR/15 + AGI/7.5)%、下限 20% / 上限 63%{/snippet}
+        </ReadRow>
       </div>
       <p class="note dim">
         通常回避「率」は敵の命中Pが要り、その入力(wiki 狩り場情報一覧「上限回避P」)が全行未記載なので出しません。
@@ -158,12 +125,6 @@
   .block-title { font-size: 11px; font-weight: 700; color: var(--fg-head); white-space: nowrap; }
   .formula { font-size: 9px; line-height: 1.5; }
 
-  .rows { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
-  .row {
-    display: flex; align-items: baseline; gap: 10px; padding: 5px 9px;
-  }
-  .rl { flex-shrink: 0; width: 120px; font-size: 10px; color: var(--fg-muted); }
-  .rv { flex-shrink: 0; width: 84px; text-align: right; font-size: 13px; font-weight: 700; }
-  .rn { min-width: 0; font-size: 9px; line-height: 1.5; }
+  .rows { margin-top: 7px; }
   .note { margin: 7px 0 0; font-size: 9px; line-height: 1.6; }
 </style>

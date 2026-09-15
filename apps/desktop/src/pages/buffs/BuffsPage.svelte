@@ -24,6 +24,7 @@
   import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportUndo } from "../../toast.svelte";
   import { bump, swap } from "../../ui/motion.svelte";
+  import ReadRow from "../../ui/ReadRow.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import StepToggle from "../../ui/StepToggle.svelte";
@@ -832,10 +833,10 @@
       <div class="summary-block inset">
         <strong>攻撃ダメージ</strong>
         {#if damageSummary.length > 0}
-          <div class="damage-list">
+          <div class="readrows">
             {#each damageSummary as row (row.category)}
-              <div><span>{row.label}</span><span class="num positive" use:bump={() => row.value}>{fmtSignedPct(row.value)}</span></div>
-              {#if row.raw > row.value}<small>上限で {fmtPct(row.raw - row.value)} は未反映</small>{/if}
+              <ReadRow label={row.label} value={fmtSignedPct(row.value)} motion={() => row.value} tone="up" />
+              {#if row.raw > row.value}<small class="capped">上限で {fmtPct(row.raw - row.value)} は未反映</small>{/if}
             {/each}
           </div>
         {:else}<p>選択中のバフによる攻撃ダメージ増加はありません。</p>{/if}
@@ -847,13 +848,13 @@
           {@const magic = defenseAfter.magic_defense - defenseBefore.magic_defense}
           {@const composite = defenseAfter.composite_defense - defenseBefore.composite_defense}
           {@const evasion = (defenseAfter.combo_evasion - defenseBefore.combo_evasion) * 100}
-          <div class="summary-grid">
+          <div class="readrows">
             <!-- 変わったのは数値なので、動かすのは数値だけ(§10 型 1)。ブロックごと
                  badge-in で膨らませると、どの行が動いたのか読めなくなる -->
-            <span>物理防御力</span><span class="num" use:bump={() => physical}>{fmtSigned(physical)}</span>
-            <span>魔法防御力</span><span class="num" use:bump={() => magic}>{fmtSigned(magic)}</span>
-            <span>複合防御力</span><span class="num" use:bump={() => composite}>{fmtSigned(composite)}</span>
-            <span>コンボ回避</span><span class="num" use:bump={() => evasion}>{fmtSigned(evasion, 1, "%")}</span>
+            <ReadRow label="物理防御力" value={fmtSigned(physical)} motion={() => physical} />
+            <ReadRow label="魔法防御力" value={fmtSigned(magic)} motion={() => magic} />
+            <ReadRow label="複合防御力" value={fmtSigned(composite)} motion={() => composite} />
+            <ReadRow label="コンボ回避" value={fmtSigned(evasion, 1, "%")} motion={() => evasion} />
           </div>
         {:else}<p>キャラを選ぶと、防御力などの変化を表示します。</p>{/if}
         {#if selected.choices.choices.some((choice) => choice.buff_id === "boiled_mimic")}
@@ -938,14 +939,9 @@
   .stat-table .muted { color: var(--fg-muted); }
   .stat-table .zero { color: var(--fg-muted); }
   .stat-table .strong { font-weight: 700; }
-  .summary-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(64px, auto); gap: 3px 8px; font-size: 9px; }
-  .summary-grid > span:nth-child(even) { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
   .amp-value { color: var(--fg-muted); font-weight: 400; }
   .positive { color: var(--good); font-weight: 700; }
-  .damage-list { display: flex; flex-direction: column; gap: 4px; }
-  .damage-list div { display: flex; align-items: baseline; gap: 8px; font-size: 9px; }
-  .damage-list div > span:last-child { margin-left: auto; min-width: 54px; text-align: right; }
-  .damage-list small { color: var(--danger); font-size: 8.5px; text-align: right; }
+  .capped { display: block; color: var(--danger); font-size: 8.5px; text-align: right; }
   .unmodeled { margin-top: 7px; padding: 5px 6px; border: 1px dashed var(--border); border-radius: var(--r-inset); color: var(--fg-muted); font-size: 8.5px; }
   .danger { color: var(--danger); }
   .delete-set { width: 58px; flex: none; }

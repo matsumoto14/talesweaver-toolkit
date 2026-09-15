@@ -267,6 +267,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   background: var(--surface-inset); border-radius: var(--r-inset);
   border: 1px solid var(--border-soft);
 }
+/* ReadRow(ui/ReadRow.svelte)の器。インセット面に ラベル + 値 の行を縦に並べる(§08) */
+.readrows { display: flex; flex-direction: column; padding: 5px 10px; min-width: 0; }
+
 /* 読み取りの小さな値札(番号・版・部位の補正)。インセット色で「読むだけ」を言う。幅・余白は呼び出し側 */
 .meta-pill {
   flex: none; padding: 1px 7px; border-radius: var(--r-pill);

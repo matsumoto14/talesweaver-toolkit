@@ -44,6 +44,7 @@
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash, swap } from "../../ui/motion.svelte";
+  import ReadRow from "../../ui/ReadRow.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
@@ -893,52 +894,36 @@
             </span>
           </div>
           <div class="hero-panels">
-            <div class="hero-panel">
+            <div class="hero-panel readrows inset">
               <span class="hero-panel-title">ステータス</span>
-              {#each STAT_KINDS as k, i (k)}
-                <span class="hero-row" class:first={i === 0}>
-                  <span class="hero-row-label">{STAT_LABELS[k]}</span>
-                  <span class="num hero-row-value" use:bump={() => heroStats?.stats[k] ?? null}>
-                    {heroStats ? fmtInt(heroStats.stats[k]) : "—"}
-                  </span>
-                </span>
+              {#each STAT_KINDS as k (k)}
+                <ReadRow label={STAT_LABELS[k]} value={heroStats ? fmtInt(heroStats.stats[k]) : "—"} motion={() => heroStats?.stats[k] ?? null} />
               {/each}
             </div>
             <!-- 目標を選び直すとスポットライトのスキルが変わり、見る装備値の 2 本(突き/斬り/魔攻…)も
                  入れ替わる。中身が入れ替わった面は短く動かす(§10 型 3b。数値の跳ねでは表せない) -->
-            <div class="hero-panel" use:swap={() => heroEquipRows.map((r) => r.key).join(",")}>
+            <div class="hero-panel readrows inset" use:swap={() => heroEquipRows.map((r) => r.key).join(",")}>
               <span class="hero-panel-title">装備・命中</span>
-              {#each heroEquipRows as row, i (row.key)}
-                <span class="hero-row" class:first={i === 0}>
-                  <span class="hero-row-label">{row.label}</span>
-                  <span class="hero-row-value-wrap">
-                    <span class="num hero-sub">{fmtInt(row.base)} {fmtSigned(row.enhanced)}</span>
-                    <span class="num hero-row-value" use:bump={() => row.total}>{fmtInt(row.total)}</span>
-                  </span>
-                </span>
+              {#each heroEquipRows as row (row.key)}
+                <ReadRow label={row.label} value={fmtInt(row.total)} motion={() => row.total}>
+                  {#snippet sub()}{fmtInt(row.base)} {fmtSigned(row.enhanced)}{/snippet}
+                </ReadRow>
               {/each}
               {#if heroEquipRows.length === 0}
-                <span class="hero-row first">
-                  <span class="hero-row-label">装備</span>
-                  <span class="num hero-row-value">—</span>
-                </span>
+                <ReadRow label="装備" value="—" />
               {/if}
-              <span class="hero-row">
-                <span class="hero-row-label">命中P</span>
-                {#if heroAccuracy !== null}
-                  <span class="num hero-row-value" use:bump={() => heroAccuracy}>{fmtInt(heroAccuracy)}</span>
-                {:else}
-                  <span class="hero-row-value-wrap">
-                    <span class="badge unknown" title="命中Pを算出できません: {heroAccuracyReason}">{heroAccuracyReason}</span>
-                  </span>
-                {/if}
-              </span>
-              <span class="hero-row">
-                <span class="hero-row-label">回避P</span>
-                <span class="num hero-row-value" use:bump={() => heroDefense?.evasion_point.physical ?? null}>
-                  {heroDefense ? fmtInt(heroDefense.evasion_point.physical) : "—"}
-                </span>
-              </span>
+              {#if heroAccuracy !== null}
+                <ReadRow label="命中P" value={fmtInt(heroAccuracy)} motion={() => heroAccuracy} />
+              {:else}
+                <ReadRow label="命中P">
+                  <span class="badge unknown" title="命中Pを算出できません: {heroAccuracyReason}">{heroAccuracyReason}</span>
+                </ReadRow>
+              {/if}
+              <ReadRow
+                label="回避P"
+                value={heroDefense ? fmtInt(heroDefense.evasion_point.physical) : "—"}
+                motion={() => heroDefense?.evasion_point.physical ?? null}
+              />
             </div>
           </div>
         </div>
@@ -1484,17 +1469,9 @@
   .hero-id-class { font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; text-align: center; }
   .hero-id-class .strong { font-weight: 700; color: var(--fg); }
   .hero-panels { min-width: 0; flex: 1; display: flex; align-items: stretch; gap: 6px; }
-  .hero-panel {
-    flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 7px 0 8px;
-    border-radius: var(--r-panel); background: var(--bg-panel); border: 1px solid var(--border-soft);
-  }
-  .hero-panel-title { padding: 0 11px 4px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
-  .hero-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 11px; border-top: 1px dashed var(--border-soft); min-width: 0; }
-  .hero-row.first { border-top: none; }
-  .hero-row-label { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-muted); white-space: nowrap; }
-  .hero-row-value { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--fg); white-space: nowrap; }
-  .hero-row-value-wrap { margin-left: auto; display: flex; align-items: baseline; gap: 6px; }
-  .hero-sub { font-size: 8.5px; color: var(--fg-dim); white-space: nowrap; }
+  /* 読み取り面(ReadRow の器)。見出しだけこの面の上に置く */
+  .hero-panel { flex: 1; min-width: 0; padding-top: 7px; }
+  .hero-panel-title { padding: 0 0 4px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
 
   .hero-goal {
     display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: var(--r-panel);

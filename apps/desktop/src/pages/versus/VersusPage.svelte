@@ -9,7 +9,7 @@
   // 頭のキャラ選択カード(.sides)は廃止。「[A] が [B] に当てる」の頭そのものが選ぶ場になる
   // (ユーザー指摘 2026-09-02)。
   import { SvelteMap } from "svelte/reactivity";
-  import { fmtNum, fmtRate, fmtSigned } from "../../format";
+  import { fmtInt, fmtNum, fmtRate, fmtSigned } from "../../format";
   import { cubicOut } from "svelte/easing";
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
   import type {
@@ -24,6 +24,7 @@
   import { latest } from "../../ui/latest.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
+  import ReadRow from "../../ui/ReadRow.svelte";
   import { buffSetOptions as buildBuffSetOptions } from "../../buffs";
   import ToggleRow from "../../ui/ToggleRow.svelte";
 
@@ -390,14 +391,6 @@
   {/if}
 {/snippet}
 
-{#snippet textCell(value: string | null)}
-  {#if value === null}
-    <span class="badge unknown">?</span>
-  {:else}
-    <span class="num" use:flash={() => value}>{value}</span>
-  {/if}
-{/snippet}
-
 {#snippet swordCell(
   character: CharacterRef,
   result: VersusAccuracy | null,
@@ -509,23 +502,20 @@
 {#snippet buffSetRow(character: CharacterRef | null)}
   <!-- 使うバフセット。計算タブの「使うセット」と同じ役。命中P(DEX・命中P増加)にも
        回避P(AGI)にも効くので、材料の行として両ブロックに置く(同じキャラなら同じ状態) -->
-  <div class="stat-row with-picker">
-    <div class="stat-label">バフセット</div>
-    <div class="stat-val">
-      {#if character}
-        <Picker
-          bind:value={
-            () => { const id = buffSetIdOf(character); return id === null ? "" : String(id); },
-            (v) => (buffSetOverride[character.id] = v === "" ? null : Number(v))
-          }
-          options={buffSetOptions()}
-          disabled={app.buffSets.length === 0}
-        />
-      {:else}
-        <span class="badge unknown">?</span>
-      {/if}
-    </div>
-  </div>
+  <ReadRow label="バフセット">
+    {#if character}
+      <Picker
+        bind:value={
+          () => { const id = buffSetIdOf(character); return id === null ? "" : String(id); },
+          (v) => (buffSetOverride[character.id] = v === "" ? null : Number(v))
+        }
+        options={buffSetOptions()}
+        disabled={app.buffSets.length === 0}
+      />
+    {:else}
+      <span class="badge unknown">?</span>
+    {/if}
+  </ReadRow>
 {/snippet}
 
 {#snippet accBlock(
@@ -557,48 +547,30 @@
     {#if accBlockOpen}
       <!-- 開閉は高さが変わるので動かす(§00 04)。2 列で同時に開閉するので同時に動く -->
       <div class="stat-body" transition:collapse>
-        <div class="stat-row">
-          <div class="stat-label">DEX</div>
-          <div class="stat-val">{@render numCell(result?.attacker_dex ?? null, accCount > 0)}</div>
-        </div>
-        <div class="stat-row">
-          <div class="stat-label">装備の命中補正</div>
-          <div class="stat-val">{@render numCell(result?.equipment_accuracy ?? null)}</div>
-        </div>
-        <div class="stat-row with-picker">
-          <div class="stat-label">スキルの命中</div>
-          <div class="stat-val">
-            {#if attacker}
-              <Picker
-                bind:value={
-                  () => skillId,
-                  (v) => (skills.override = v)
-                }
-                options={skillOptionsOf(skills)}
-                menu
-                disabled={skills.list.length === 0}
-              />
-            {:else}
-              <span class="badge unknown">?</span>
-            {/if}
-          </div>
-        </div>
+        <ReadRow label="DEX" value={result ? fmtInt(result.attacker_dex) : null} motion={() => result?.attacker_dex ?? null} tone={accCount > 0 ? "sim" : null} />
+        <ReadRow label="装備の命中補正" value={result ? fmtInt(result.equipment_accuracy) : null} motion={() => result?.equipment_accuracy ?? null} />
+        <ReadRow label="スキルの命中">
+          {#if attacker}
+            <Picker
+              bind:value={
+                () => skillId,
+                (v) => (skills.override = v)
+              }
+              options={skillOptionsOf(skills)}
+              menu
+              disabled={skills.list.length === 0}
+            />
+          {:else}
+            <span class="badge unknown">?</span>
+          {/if}
+        </ReadRow>
         {@render buffSetRow(attacker)}
-        <div class="stat-row">
-          <div class="stat-label">依存の補正</div>
-          <div class="stat-val">{@render textCell(result ? `${fmtSigned(result.correction_bonus)} / ${fmtSigned(-result.correction_penalty)}` : null)}</div>
-        </div>
-        <!-- 的中剣の行チップは 28px なので、Picker の段と同じ高さにする(21px の段だとはみ出す) -->
-        <div class="stat-row" class:with-picker={result?.accuracy_skill_available && attacker !== null}>
-          <div class="stat-label">{result?.accuracy_skill_available ? "的中剣" : "命中P割合"}</div>
-          <div class="stat-val">
-            {#if result?.accuracy_skill_available && attacker}
-              {@render swordCell(attacker, result)}
-            {:else}
-              {@render textCell(result ? (boostLabel(result.accuracy_boost) ?? "なし") : null)}
-            {/if}
-          </div>
-        </div>
+        <ReadRow label="依存の補正" value={result ? `${fmtSigned(result.correction_bonus)} / ${fmtSigned(-result.correction_penalty)}` : null} />
+        {#if result?.accuracy_skill_available && attacker}
+          <ReadRow label="的中剣">{@render swordCell(attacker, result)}</ReadRow>
+        {:else}
+          <ReadRow label="命中P割合" value={result ? (boostLabel(result.accuracy_boost) ?? "なし") : null} />
+        {/if}
 
         <!-- 「全部やると」は試す前(before_tries)を基準に引く。伸びしろ側(max)は試す前の
              payload から固定されているので、試した後の値と混ぜると差が嘘になる -->
@@ -636,23 +608,11 @@
     </button>
     {#if evaBlockOpen}
       <div class="stat-body" transition:collapse>
-        <div class="stat-row">
-          <div class="stat-label">AGI</div>
-          <div class="stat-val">{@render numCell(result?.defender_agi ?? null, evaCount > 0)}</div>
-        </div>
-        <div class="stat-row">
-          <div class="stat-label">装備の回避補正</div>
-          <div class="stat-val">{@render numCell(result?.equipment_evasion ?? null)}</div>
-        </div>
-        <div class="stat-row">
-          <div class="stat-label">装備の敏捷補正</div>
-          <div class="stat-val">{@render numCell(result?.equipment_agility ?? null)}</div>
-        </div>
+        <ReadRow label="AGI" value={result ? fmtInt(result.defender_agi) : null} motion={() => result?.defender_agi ?? null} tone={evaCount > 0 ? "sim" : null} />
+        <ReadRow label="装備の回避補正" value={result ? fmtInt(result.equipment_evasion) : null} motion={() => result?.equipment_evasion ?? null} />
+        <ReadRow label="装備の敏捷補正" value={result ? fmtInt(result.equipment_agility) : null} motion={() => result?.equipment_agility ?? null} />
         {@render buffSetRow(defender)}
-        <div class="stat-row">
-          <div class="stat-label">攻撃タイプの補正</div>
-          <div class="stat-val">{@render textCell(result ? fmtNum(result.attack_type_bonus, 1) : null)}</div>
-        </div>
+        <ReadRow label="攻撃タイプの補正" value={result ? fmtNum(result.attack_type_bonus, 1) : null} />
 
         {@render growthList(
           defender?.id ?? null, "eva", "当てられる率", "回避P",
@@ -840,10 +800,9 @@
   .stat-block:has(.stat-body) .stat-row.main { border-bottom: 1px solid var(--border-soft); margin-bottom: 3px; }
   .stat-block:has(.stat-body) { flex: 1 1 auto; min-height: 0; }
   /* 行の高さは固定。的中剣チップの行だけ高くなると 2 列の命中P / 回避P の段がずれる(実機で 3px 検出) */
+  /* 頭の行(押すと開閉)。中の行は ui/ReadRow */
   .stat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px; height: 21px; box-sizing: border-box; }
-  /* スキルの Picker が入る行は 21px に収まらない。両列とも同じ行なので段はずれない */
-  .stat-row.with-picker { height: 30px; }
-  .stat-row.with-picker :global(.picker-trigger) { padding: 2px 8px; }
+  .stat-body :global(.picker-trigger) { padding: 2px 8px; }
   .stat-label { display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--fg-sub); white-space: nowrap; }
   .stat-val { text-align: right; min-width: 0; }
   .stat-val :global(.num) { font-size: 11px; }

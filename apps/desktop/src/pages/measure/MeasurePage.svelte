@@ -18,7 +18,7 @@
   import type { NewCharacter } from "../../api/types";
   import { reportError } from "../../toast.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump } from "../../ui/motion.svelte";
+  import ReadRow from "../../ui/ReadRow.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import Picker from "../../ui/Picker.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
@@ -283,10 +283,10 @@
             キャラに登録した装備(<b>{weaponLabel(savedWeaponId)}</b>)は変わりません。
           </p>
         {/if}
-        <div class="attack-row inset">
-          <span class="dim">攻撃力(A)</span>
-          <span class="num" use:bump={() => attack?.value ?? null}>{attack ? fmtInt(attack.value) : "—"}</span>
-          <span class="dim">最終能力値も一緒に送られます(逆算の入力になります)</span>
+        <div class="readrows inset">
+          <ReadRow label="攻撃力(A)" value={attack ? fmtInt(attack.value) : "—"} motion={() => attack?.value ?? null}>
+            {#snippet note()}最終能力値も一緒に送られます(逆算の入力になります){/snippet}
+          </ReadRow>
         </div>
       </div>
 
@@ -313,14 +313,19 @@
         </div>
 
         {#if targetKind === "listed"}
-          <div class="compare inset">
+          <div class="readrows inset">
             <!-- どちら側と比べているかを必ず書く(計算タブの「1 発」はクリ率 > 0 ならクリ側) -->
-            <span class="dim">このツールの計算({measuredCritical ? "クリティカル" : "非クリ最大"})</span>
-            <span class="num">{expected !== null ? fmtInt(Math.trunc(expected)) : "—"}</span>
-            <span class="dim">差</span>
-            <span class="num" class:warn={gap !== null && Math.abs(gap) >= 0.05} use:bump={() => gap}>
-              {gap === null ? "—" : fmtSignedPct(gap, 1)}
-            </span>
+            <ReadRow
+              label={`このツールの計算(${measuredCritical ? "クリティカル" : "非クリ最大"})`}
+              value={expected !== null ? fmtInt(Math.trunc(expected)) : "—"}
+              motion={() => expected}
+            />
+            <ReadRow
+              label="差"
+              value={gap === null ? "—" : fmtSignedPct(gap, 1)}
+              motion={() => gap}
+              tone={gap !== null && Math.abs(gap) >= 0.05 ? "down" : null}
+            />
           </div>
         {/if}
 
@@ -407,11 +412,6 @@
     border: 1px dashed var(--border); border-radius: var(--r-panel); background: var(--bg-rail);
   }
 
-  .attack-row, .compare {
-    display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: var(--r-window); font-size: 10px;
-  }
-  .attack-row .num, .compare .num { font-size: 12.5px; font-weight: 700; }
-  .compare .num.warn { color: var(--warm); }
 
   .send { display: flex; align-items: center; gap: 10px; font-size: 9.5px; flex-wrap: wrap; }
 
