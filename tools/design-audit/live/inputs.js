@@ -32,6 +32,13 @@ const CHECK = `(() => {
       .filter((c) => !(c.querySelector(".picker-chip-meta")?.textContent || "").trim())
       .map((c) => (c.textContent || "").trim().slice(0, 16)),
     free: [...document.querySelectorAll("input[type=text], textarea")].map(label),
+    // 数値の自由入力(StatInput の形態 5)。理由チップ(.chip.why)が付いているものだけ許す。
+    // 生 input[type=number] は段階 4 で 0 件にしたので、1 件でも残っていれば NG
+    freeNum: [...document.querySelectorAll(".stepper.free")].map((s) => ({
+      name: (s.querySelector(".val")?.getAttribute("aria-label") || "").replace(/ を編集$/, "").slice(0, 20) || "(名前なし)",
+      why: (s.querySelector(".chip.why")?.textContent || "").trim(),
+    })),
+    rawNumber: [...document.querySelectorAll("input[type=number]:not(.stepper .val)")].map(label),
     // 編集は例外操作なので、ふだんは読み取り表示になっているか
     readonlyBoxes: document.querySelectorAll(".value-box.read").length,
     openInputs: document.querySelectorAll("input.value-box").length,
@@ -58,12 +65,18 @@ const CHECK = `(() => {
         ` / 読取表示 ${r.readonlyBoxes}(編集中 ${r.openInputs}) / <select> ${r.selects.length}件 / 自由入力 ${r.free.length}件`,
     );
     if (r.free.length) console.log(`      自由入力: ${r.free.join(", ")}`);
+    if (r.freeNum.length) {
+      console.log(`      数値の自由入力: ${r.freeNum.map((x) => `${x.name}[${x.why || "理由なし"}]`).join(", ")}`);
+    }
+    const noWhy = r.freeNum.filter((x) => !x.why);
+    if (noWhy.length) seen.push(`[${where}] 理由チップの無い数値自由入力: ${noWhy.map((x) => x.name).join(", ")}`);
+    if (r.rawNumber.length) seen.push(`[${where}] 生 input[type=number] が残っている: ${r.rawNumber.join(", ")}`);
   };
 
   await page.reload({ waitUntil: "load" });
   await wait(2600);
 
-  for (const tab of ["ホーム", "ダメージ計算"]) {
+  for (const tab of ["ホーム", "ダメージ計算", "実測"]) {
     await page.locator("nav.tabs button", { hasText: tab }).click({ force: true });
     await wait(1700);
     await check(tab);
@@ -105,7 +118,7 @@ const CHECK = `(() => {
   }
 
   console.log("");
-  if (seen.length === 0) console.log("§07: <select> 0 件・値の無い Picker チップ 0 件");
+  if (seen.length === 0) console.log("§07: <select> 0 件・値の無い Picker チップ 0 件・理由なしの数値自由入力 0 件・生 number 0 件");
   else seen.forEach((s) => console.log("NG " + s));
   await browser.close();
 })().catch((e) => { console.error("FAILED", e.message); process.exit(1); });

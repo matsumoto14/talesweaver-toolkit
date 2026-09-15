@@ -513,15 +513,6 @@
     openTile = openTile === t ? null : t;
   }
 
-  // エンチャントは間違って盛ってしまっても直せるように、値を押すとその場でテキスト編集にする
-  // (StatInput の read↔editing パターンと同じ考え方。増分チップはやり直しの手段を持たないため)。
-  let editingEnchant = $state<string | null>(null);
-  function commitEnchantText(slot: PartSlot, k: EnchantDepKey, cap: number, raw: string) {
-    const n = Math.round(Number(raw));
-    const clamped = Number.isFinite(n) ? Math.max(0, Math.min(cap, n)) : 0;
-    commitEnchant(character!, slot, k, clamped);
-    editingEnchant = null;
-  }
 
   function partOf(slot: PartSlot): EquipmentPart | null {
     if (!character) return null;
@@ -712,7 +703,7 @@
   //    装備済み部位だけ(枠 0 の部位・未装備・カタログ外の品は出さない)。
   //    ルール表・上限のフォールバックは enchant.ts(ドメイン経由の 1 本)に寄せている。 ---
   /** キャラタブと同じ 4 種 + MAX(ユーザー要望: 増分の種類を絞りすぎないでほしい)。 */
-  const ENCHANT_INCREMENTS = [12, 14, 17, 20] as const;
+  const ENCHANT_INCREMENTS = [12, 14, 17, 20];
   const enchantDepKeys = $derived.by(() => {
     const skillId = character?.main_skill_id ?? null;
     const dep = (skillId ? skillDeps[skillId] : null) ?? "stab_hack";
@@ -1258,44 +1249,18 @@
                           {@const cap = enchantCap(row.part, k)}
                           {#if cap !== null && cap > 0}
                             {@const cur = partOf(row.slot)?.enchant[k] ?? 0}
+                            <!-- キャラタブの装備ペインと同じ StatInput(上限まで盛る値なので gauge)。
+                                 間違って盛ったときはセルを押して手入力で戻す -->
                             <div class="enchant-stat">
                               <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
-                              <span class="enchant-stat-val">
-                                {#if editingEnchant === `${row.slot}:${k}`}
-                                  <input
-                                    class="enchant-stat-input num" type="number" min="0" max={cap} value={cur}
-                                    onblur={(e) => commitEnchantText(row.slot, k, cap, e.currentTarget.value)}
-                                    onkeydown={(e) => {
-                                      if (e.key === "Enter") e.currentTarget.blur();
-                                      if (e.key === "Escape") editingEnchant = null;
-                                    }}
-                                    {@attach (node) => { node.focus(); node.select(); }}
-                                  />
-                                {:else}
-                                  <button
-                                    type="button" class="num enchant-stat-num" use:bump={() => cur}
-                                    aria-label="{EQUIPMENT_STAT_SHORT[k]}のエンチャントを編集"
-                                    onclick={() => (editingEnchant = `${row.slot}:${k}`)}
-                                  >{fmtInt(cur)}</button>
-                                {/if}
-                                <span class="num dim">/{fmtInt(cap)}</span>
-                              </span>
-                              <span class="enchant-stat-chips">
-                                {#each ENCHANT_INCREMENTS as amt (amt)}
-                                  <button
-                                    type="button" class="chip-add" disabled={cur >= cap}
-                                    onclick={() => commitEnchant(character, row.slot, k, Math.min(cap, cur + amt))}
-                                  >+{amt}</button>
-                                {/each}
-                                <button
-                                  type="button" class="chip-add chip-max" disabled={cur >= cap}
-                                  onclick={() => commitEnchant(character, row.slot, k, cap)}
-                                >MAX</button>
-                                <button
-                                  type="button" class="chip-add chip-zero" disabled={cur <= 0}
-                                  onclick={() => commitEnchant(character, row.slot, k, 0)}
-                                >0</button>
-                              </span>
+                              <StatInput
+                                label="{EQUIPMENT_STAT_SHORT[k]}のエンチャント" hideLabel
+                                min={0} max={cap} strictMax increments={ENCHANT_INCREMENTS}
+                                bind:value={
+                                  () => cur,
+                                  (v) => commitEnchant(character, row.slot, k, v)
+                                }
+                              />
                             </div>
                           {/if}
                         {/each}
@@ -1638,28 +1603,9 @@
   .expand-row-label { flex: none; width: 56px; font-size: 10px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .enchant-row { align-items: flex-start; }
   .enchant-row-cols { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-  /* エンチャント行: 短縮ステ名 + 値/上限 + 増分チップ2種(押した場所は動かない・幅は詰める) */
+  /* エンチャント行: 短縮ステ名 + StatInput(レリックの補正値と同じ並び) */
   .enchant-stat { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .enchant-stat-label { flex: none; width: 26px; font-size: 9px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; }
-  .enchant-stat-val { flex: none; min-width: 62px; display: flex; align-items: baseline; gap: 2px; }
-  .enchant-stat-val .num { font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--fg-head); }
-  .enchant-stat-val .num.dim { font-size: 9px; font-weight: 700; }
-  /* 押すとテキスト編集にできる(戻す手段が増分チップだけだと足りないため。§07 形態5の例外運用) */
-  .enchant-stat-num { padding: 0; background: none; border: none; cursor: text; }
-  .enchant-stat-num:hover { text-decoration: underline dotted; }
-  .enchant-stat-input {
-    width: 44px; padding: 1px 3px; border-radius: var(--r-inset); background: var(--bg-field);
-    border: 1px solid var(--accent); font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums;
-  }
-  .enchant-stat-chips { flex: none; display: flex; flex-wrap: wrap; gap: 3px; max-width: 190px; }
-  .chip-add {
-    flex: none; padding: 2px 7px; border-radius: var(--r-inset); background: var(--state-goal-bg);
-    border: 1px solid var(--cell-bd); color: var(--accent-hover); font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums;
-  }
-  .chip-add:hover:not(:disabled) { border-color: var(--accent); }
-  .chip-add:disabled { color: var(--border); background: none; }
-  .chip-max { border-style: dashed; }
-  .chip-zero { color: var(--fg-muted); } /* 一発で0へ戻す取り消しチップ */
   .expand-row-vals { flex: none; max-width: 130px; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .expand-nav { display: flex; align-items: center; gap: 8px; padding: 2px 0; text-align: left; }
   .expand-nav-text { flex: 1; min-width: 0; font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

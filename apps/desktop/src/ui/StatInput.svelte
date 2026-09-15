@@ -16,6 +16,8 @@
   // onblur で最終確定・範囲内にクランプする。外部から value が変わったときだけ $effect で
   // text を同期する(lastSyncedValue で比較。Number("") === 0 になる罠を避けるため
   // value との比較ではなく専用変数で判定する)。
+  import { bump } from "./motion.svelte";
+
   interface Props {
     label: string;
     /** 列の左側ですでに同じ名前を表示しているとき、見えるラベルだけ省く。aria-label は維持する。 */
@@ -51,9 +53,15 @@
     stepper?: boolean;
     /** 自動値を通常はプレーンな読み取りテキストで見せ、触れたときだけ入力面にする。 */
     readAsText?: boolean;
+    /**
+     * 自由入力(§07 形態 5)。上限を持たない値は「ここまで降りたら理由を書く」ので、
+     * 理由を渡すと青枠 + 破線チップの見た目になり、上限を語る部分(バー・/上限・MAX)は出ない。
+     * シミュレーション用の一時値と、外部データで取れない値(実測)だけに使う。
+     */
+    reason?: string;
   }
   let {
-    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], increments = [], gauge = true, stepper = false, readAsText = false,
+    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], increments = [], gauge = true, stepper = false, readAsText = false, reason,
   }: Props = $props();
 
   let text = $state(String(value));
@@ -134,7 +142,7 @@
    * `max <= min` は動かせる幅が無い = 上限の情報が無いということなので、上限を語らない。
    * ただし**手入力は残す** — gamedata が未収録・誤っているときの逃げ道が無くなる。
    */
-  const showCap = $derived(gauge && max > min);
+  const showCap = $derived(gauge && !reason && max > min);
   /**
    * 上限に対する進捗。負の範囲(調整の加算 -3,000〜3,000)は「上限に対してどこまで」が
    * 成り立たないのでバーを出さない
@@ -158,6 +166,7 @@
   class="stepper"
   class:full
   class:read-as-text={readAsText}
+  class:free={reason !== undefined}
   onfocusout={(e) => {
     // 編集の中で入力欄 → MAX と移る間は閉じない。relatedTarget は再描画のタイミングで
     // null になることがあるので、次のフレームで「いまフォーカスがこの部品の外にあるか」を見る
@@ -201,11 +210,14 @@
         type="button"
         class="num val read"
         aria-label="{label} を編集"
+        use:bump={() => value}
         onclick={() => (editing = true)}
       >{value.toLocaleString("ja-JP")}</button>
     {/if}
     {#if showCap}<span class="cap num">/{max.toLocaleString("ja-JP")}</span>{/if}
   </div>
+  <!-- 形態 5 の理由チップ(§07「ここまで降りたら理由を書く」)。値の隣に常設し、出たり消えたりしない -->
+  {#if reason !== undefined}<span class="chip why">{reason}</span>{/if}
   {#if stepper}
     <button type="button" class="step" onclick={() => nudge(1)} disabled={value >= max} aria-label="{label} を 1 増やす">＋</button>
   {/if}

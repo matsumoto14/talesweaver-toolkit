@@ -744,3 +744,10 @@ details.fold .fold-body { margin-top: 10px; }
 .stepper.full .val { color: var(--state-edge-fg); }
 .stepper.full .max { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
 .stepper .hint { flex: none; margin-left: 5px; font-size: 11px; white-space: nowrap; }
+/* 自由入力(§07 形態 5)。上限を持たない値は「白 + 青枠 + 破線チップ」で例外だと分かるようにする。
+   枠は読取・編集どちらでも青のまま(自動値と見分ける印なので、編集中だけ青にしない) */
+.stepper.free .cell { border-color: var(--accent); }
+.stepper .chip.why {
+  flex: none; padding: 2px 8px; font-size: 9.5px; font-weight: 700; white-space: nowrap;
+  border: 1px dashed var(--sim); color: var(--sim-fg); background: var(--state-temp-bg);
+}
