@@ -40,7 +40,6 @@
     payloadOf, refreshEvaluation, selectedCharacter, totalContents, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
-  import { critChanceStage } from "../../ui/critChance";
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, flash, swap } from "../../ui/motion.svelte";
@@ -966,15 +965,15 @@
                 kind="skill" id={heroSpot.skillId} size={28}
                 label={skillNames[heroSpot.skillId] ?? heroSpot.skillId}
               />
-              <span class="hero-goal-skill">{skillNames[heroSpot.skillId] ?? heroSpot.skillId}</span>
-              {#if heroDamage}
-                {@const stage = critChanceStage(heroDamage.critChance * 100)}
-                {#key stage.label}
-                  <span class="badge" style={badgeStyle({ label: "", state: heroDamage.critRate === null ? "unknown" : stage.state })} use:flash={() => stage.label}>
-                    {heroDamage.critRate === null ? "クリ 確定扱い" : `クリ${stage.label} ${fmtNum(heroDamage.critRate, 1, "%")}`}
+              <span class="hero-goal-skill">
+                {skillNames[heroSpot.skillId] ?? heroSpot.skillId}
+                <!-- 「この数字はクリ側か」の但し書きだけ小さく添える。バッジで主役の隣に置かない(ユーザー 2026-09-16) -->
+                {#if heroDamage}
+                  <span class="hero-goal-crit num dim" use:flash={() => heroDamage?.critRate === null ? "確定" : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}>
+                    {heroDamage.critRate === null ? "クリ確定扱い" : `クリ ${fmtNum(heroDamage.critRate, 1, "%")}`}
                   </span>
-                {/key}
-              {/if}
+                {/if}
+              </span>
               <span class="meter hero-meter">
                 <span class="fill" style="width: {heroSpotPct}; background: {STATE[BADGE[heroSpotState].state].bar};"></span>
               </span>
@@ -985,11 +984,8 @@
                 <!-- 目標を選び直すと必要値も変わる。変わったものは全部動かす(§00 04) -->
                 <span class="num dim" use:bump={() => heroGoal?.content.need_per_hit ?? null}> / {fmtInt(heroGoal.content.need_per_hit)}</span>
               </span>
-              {#key heroSpotState}
-                <span class="badge" style={badgeStyle(BADGE[heroSpotState])} use:flash={() => String(heroSpotState)}>
-                  {BADGE[heroSpotState].label}
-                </span>
-              {/key}
+              <!-- 到達の判定はバーの色と「/ 目安」で読める。バッジは重複なので置かない(ユーザー 2026-09-16)。
+                   言葉の判定は「どこまでいける?」一覧のバッジが担う -->
             {/if}
             {#if heroGoal}
               <!-- この行は目標名 → 火力 → 到達バッジの 1 本の視線で読ませる。文字の CTA を末尾に置くと
@@ -1496,16 +1492,16 @@
   .hero-div { width: 1px; align-self: stretch; background: var(--border-soft); }
   /* スキル名は中身ぶんだけ(長い名前は 100px で省略)。ここを縮ませると
      アイコンだけが残って何のスキルか読めなくなる(§06 アイコン単独表示は禁止) */
-  .hero-goal-skill { flex: none; max-width: 100px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-goal-skill { flex: none; max-width: 120px; display: flex; flex-direction: column; gap: 1px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-goal-crit { font-size: 8.5px; font-weight: 500; }
   /* 量バーは「目安に対してどれだけ出ているか」を一目で見る唯一の要素。行の幅が足りなくなったら
      先に縮むのは目標名・スキル名のほうで、バーは縮ませない(shrink 0 + 基準幅) */
   .hero-meter { flex: 1 0 96px; height: 12px; }
   /* 桁が増えても右のバッジ・バーの位置が動かないよう、数値の場所は先に確保する(§00 03) */
   .hero-spot-wrap { flex: none; min-width: 132px; text-align: right; white-space: nowrap; }
-  /* 主役の数字は役割トークンだけ(§08 数値の 3 段)。この数字は「次の目標」の行に他の操作と同居するので、
-     行の高さを持つ --t-heading。--t-result(44px)だと行が溢れて右端の「›」が押し出される(実機 2026-09-16、
-     attention.js A4)。寸法の最終判断はユーザー(段階 6 の候補比較) */
-  .hero-spot { font-size: var(--t-heading); line-height: 1; font-weight: 700; color: var(--fg-head); text-shadow: 0 1px 0 #fff; }
+  /* 主役だが他の操作と同じ行に載る数字 → --t-result-inline(§08)。--t-result(44px)だと行が溢れて
+     右端の「›」が押し出される(実機 2026-09-16、attention.js A4) */
+  .hero-spot { font-size: var(--t-result-inline); line-height: 1; font-weight: 700; color: var(--fg-head); text-shadow: 0 1px 0 #fff; }
 
   .hero-advice { display: flex; flex-direction: column; gap: 5px; border-top: 1px dashed var(--border-soft); padding-top: 9px; }
   .hero-advice-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
