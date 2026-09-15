@@ -20,7 +20,15 @@ AGENTS.md では **Complex** 扱い(データ整合性)。researcher に出す�
 | 書き出し / 読み込み JSON | `FORMAT_VERSION`(api/transfer.ts) | 形が変わったら上げる。旧形式は読ませず理由付きで拒否(後方互換なし) |
 
 デスクトップとブラウザで**同じ移行を同じ意味で**入れる(IndexedDB 側は「既存行に `null` を足す」が
-SQLite の `ALTER TABLE ... DEFAULT` に相当)。ブラウザ版はサイトデータ削除で消えるので、
+SQLite の `ALTER TABLE ... DEFAULT` に相当)。
+
+**JSON 列(`equipment` / `stat_sources` 等)の struct に `#[serde(default)]` で欄を足すだけの変更も例外ではない。**
+SQLite 側は Rust が読む時点で中立値が入るので `SCHEMA_VERSION` も `migrate_*` も要らないが、IndexedDB は
+素の JSON を返すので既存キャラに欄が無く、画面の複製(`draft.ts` の `cloneEquipment`)が `undefined` を読んで
+キャラタブが開けなくなる(2026-09-15、アバター強化・装備研磨で実際に起きた)。やること:
+`browserStore.ts` の `SCHEMA_VERSION` を上げ、`onupgradeneeded` で既存行に中立値を足し、
+create / update の正規化(`withEquipmentDefaults`)にも同じ欄を足す(読み込み `transfer.ts` が旧い書き出しを
+そのまま渡してくるため)。ブラウザ版はサイトデータ削除で消えるので、
 書き出し JSON が実質のバックアップ。形を変えたら書き出し → 読み込みが往復することを確かめる。
 
 ## 規約(ADR-008)
@@ -55,7 +63,7 @@ SQLite の `ALTER TABLE ... DEFAULT` に相当)。ブラウザ版はサイトデ
 
 ## 記録
 
-- `SCHEMA_VERSION` の doc コメントに vN で何が変わったかを 1 行足す
+- `SCHEMA_VERSION` の doc コメントに vN で何が変わったかを 1 行足す(SQLite と IndexedDB それぞれ)
 - `docs/adr/008-storage.md`: 「決定」に vN の節(何を・なぜ・旧値の扱い)、「v1 → v8 の変遷」の続きに 1 行
 - 実 DB で確かめる: `gui-smoke` の `db-guard.ps1 -Action save` で退避してから新ビルドで開き、
   `%APPDATA%\dev.twcontext.app\` に `.bak.<版>` ができて既存キャラが読めることを見る。終わったら restore
