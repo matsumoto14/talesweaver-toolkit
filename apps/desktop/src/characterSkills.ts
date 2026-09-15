@@ -56,17 +56,26 @@ export const skillMeta = (s: Skill): string =>
   `${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]} ・ ` +
   `中 ${s.base_actual_delay === null ? "?" : `${s.base_actual_delay}s`}`;
 
+/** 主軸に選ばれるのはほぼ火力上位。この件数をチップで手前に固定し、それ以外は候補面に送る */
+export const MAIN_SKILL_PINNED = 3;
+
 /**
  * 主軸スキルの選択肢。並びは list_skills(Rust `Skill::main_skill_order`: 単体優先 →
- * 中ディレイ込みの継続火力順)のまま。空欄の文言は呼び出し側の文脈で変える。
+ * 中ディレイ込みの継続火力順)のまま。先頭 MAIN_SKILL_PINNED 件を「よく使う」として固定する
+ * (§07「1 つ選ぶ」: ドメイン知識で固定、使用履歴で並べない)。
+ * 空欄は候補の 1 行(value = "")で、文言は呼び出し側の文脈で変える。
  */
 export function mainSkillOptions(
   skills: Skill[],
   emptyLabel: string,
+  emptyMeta: string,
 ): PickerOption[] {
   return [
-    { value: "", name: emptyLabel, iconId: null },
-    ...skills.map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const })),
+    { value: "", name: emptyLabel, meta: emptyMeta, iconId: null },
+    ...skills.map((s, i) => ({
+      value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const,
+      pinned: i < MAIN_SKILL_PINNED,
+    })),
   ];
 }
 

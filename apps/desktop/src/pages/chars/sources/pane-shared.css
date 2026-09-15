@@ -164,6 +164,9 @@
   /* 名前が消えると「どの称号か」が分からなくなる。変種チップより名前を先に確保する(§00 05) */
   .title-list .item-name { flex: 1; min-width: 5.5em; }
   .title-variants { margin-left: auto; display: flex; flex-wrap: nowrap; gap: 5px; flex-shrink: 0; }
+  /* 変種チップにも選ぶのに要る値(装備基本能力値の合計)を出す(§07「1 つ選ぶ」) */
+  .title-variant-val { font-size: 9px; color: var(--fg-muted); }
+  .title-variants .chip.on .title-variant-val { color: var(--sel-fg); }
 
   /* マスタリーの 1 段。段名 + 3 択のカード。どの段も 3 択なので列を固定してそろえる */
   .mastery-row {

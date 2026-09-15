@@ -2,8 +2,9 @@
 //
 //   1 自動(表示だけ) / 2 段階選択 / 3 チップ / 4 ステッパー / 5 自由入力
 //
-// 素の <select> は 5 形態のどれでもない。並べられる数の選択肢がドロップダウンに
-// 入っていたら、それは段階選択に降ろせていないということ。
+// 素の <select> は 5 形態のどれでもない(段階 3 で 0 件にした)。1 つ残っていても NG。
+// 「1 つ選ぶ」は Picker(固定チップ + 候補面)。チップに値(meta)が無ければ、それは
+// 素の select と同じ画面なので NG。
 // 自由入力(text / number)は「ここまで降りたら理由を書く」なので、件数を見せる。
 const { chromium } = require("playwright-core");
 
@@ -24,6 +25,12 @@ const CHECK = `(() => {
     selects,
     steps: document.querySelectorAll(".seg").length,
     chips: document.querySelectorAll(".togrow").length,
+    pickers: document.querySelectorAll(".picker").length,
+    pickerChips: document.querySelectorAll(".picker-chip").length,
+    // 値の無い候補チップ(§07「1 つ選ぶ」: 候補には選ぶのに要る値を必ず出す)
+    pickerChipsNoMeta: [...document.querySelectorAll(".picker-chip")]
+      .filter((c) => !(c.querySelector(".picker-chip-meta")?.textContent || "").trim())
+      .map((c) => (c.textContent || "").trim().slice(0, 16)),
     free: [...document.querySelectorAll("input[type=text], textarea")].map(label),
     // 編集は例外操作なので、ふだんは読み取り表示になっているか
     readonlyBoxes: document.querySelectorAll(".value-box.read").length,
@@ -39,15 +46,16 @@ const CHECK = `(() => {
   const seen = [];
   const check = async (where) => {
     const r = await page.evaluate(CHECK);
-    // 並べられる数(<= 12)の選択肢がドロップダウンに入っていたら段階選択に降ろせる
-    const shouldBeSteps = r.selects.filter((s) => s.n <= 12);
-    if (shouldBeSteps.length) {
-      seen.push(`[${where}] 段階選択に降ろせる <select>: ${shouldBeSteps.map((s) => `${s.name}(${s.n})`).join(", ")}`);
+    // <select> は 1 件でも NG(順序があれば段、なければ Picker)
+    if (r.selects.length) {
+      seen.push(`[${where}] <select> が残っている: ${r.selects.map((s) => `${s.name}(${s.n})`).join(", ")}`);
     }
-    const many = r.selects.filter((s) => s.n > 12);
+    if (r.pickerChipsNoMeta.length) {
+      seen.push(`[${where}] 値の無い Picker チップ: ${r.pickerChipsNoMeta.join(", ")}`);
+    }
     console.log(
-      `  [${where}] 段階選択 ${r.steps} / チップ ${r.chips} / 読取表示 ${r.readonlyBoxes}(編集中 ${r.openInputs})` +
-        ` / <select> ${r.selects.length}件(うち多数 ${many.length}) / 自由入力 ${r.free.length}件`,
+      `  [${where}] 段階選択 ${r.steps} / 行チップ ${r.chips} / Picker ${r.pickers}(固定チップ ${r.pickerChips})` +
+        ` / 読取表示 ${r.readonlyBoxes}(編集中 ${r.openInputs}) / <select> ${r.selects.length}件 / 自由入力 ${r.free.length}件`,
     );
     if (r.free.length) console.log(`      自由入力: ${r.free.join(", ")}`);
   };
@@ -97,7 +105,7 @@ const CHECK = `(() => {
   }
 
   console.log("");
-  if (seen.length === 0) console.log("§07: 並べられる選択肢のドロップダウンは 0 件");
+  if (seen.length === 0) console.log("§07: <select> 0 件・値の無い Picker チップ 0 件");
   else seen.forEach((s) => console.log("NG " + s));
   await browser.close();
 })().catch((e) => { console.error("FAILED", e.message); process.exit(1); });

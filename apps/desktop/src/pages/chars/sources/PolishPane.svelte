@@ -14,7 +14,8 @@
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, OTHER_EQUIPMENT_STATS, PART_SLOT_LABELS,
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, PRIMARY_EQUIPMENT_STATS,
   } from "../../../labels";
-  import { bump, flash } from "../../../ui/motion.svelte";
+  import { flash } from "../../../ui/motion.svelte";
+  import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
 
   interface Props {
@@ -52,11 +53,30 @@
   const polishActive = $derived(preview?.equipment_polish_active ?? false);
 
   // --- 部位の行 -----------------------------------------------------------
-  function kindChipLabel(kind: PolishKind, slot: PartSlot): string {
-    if (kind === "sparkle") return "ピカピカ 3%";
-    if (kind === "artisan") return "職人 5%";
-    return `聖なる +${polishAmount("holy", slot, 0)}`;
-  }
+  /** 種類を選んだときに乗る先の能力値。まだ記録が無ければ、選んだ瞬間に自動で埋まる値と同じ */
+  const targetStatOf = (slot: PartSlot): EquipmentStatKind =>
+    entryOf(slot)?.stat ?? equipmentAttackKindsFor(dependency)[0] ?? "thrust";
+  const amountFor = (slot: PartSlot, kind: PolishKind, stat: EquipmentStatKind): number =>
+    polishAmount(kind, slot, selectedEquipmentPartOrNeutral(draft.equipment.parts[slot]).base[stat]);
+  /** 種類の候補(§07「1 つ選ぶ」)。「なし」も候補の 1 行。値は「その種類を選ぶと乗る量」 */
+  const kindOptions = (slot: PartSlot): PickerOption[] => {
+    const stat = targetStatOf(slot);
+    const rate = (kind: PolishKind) => kind === "sparkle" ? "3% ・ " : kind === "artisan" ? "5% ・ " : "";
+    return [
+      { value: "", name: "なし", meta: "記録しない" },
+      ...POLISH_KINDS.map((kind) => ({
+        value: kind, name: POLISH_KIND_LABELS[kind],
+        meta: `${rate(kind)}${EQUIPMENT_STAT_SHORT[stat]} +${fmtInt(amountFor(slot, kind, stat))}`,
+      })),
+    ];
+  };
+  /** 乗せる能力値の候補。主要 4 補正はチップで手前に固定、物防・命中などは候補面(§07「1 つ選ぶ」) */
+  const statOptions = (slot: PartSlot, entry: EquipmentPolish): PickerOption[] =>
+    [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS].map((stat) => ({
+      value: stat, name: EQUIPMENT_STAT_SHORT[stat],
+      meta: `+${fmtInt(amountFor(slot, entry.kind, stat))}`,
+      pinned: PRIMARY_EQUIPMENT_STATS.includes(stat),
+    }));
 
   function partRowSummary(slot: PartSlot): string {
     const entry = entryOf(slot);
@@ -71,13 +91,9 @@
   }
 
   let openSlot = $state<PartSlot | null>(null);
-  let showOtherStats = $state(false);
   function openPartRow(slot: PartSlot) {
     openSlot = openSlot === slot ? null : slot;
-    const entry = entryOf(slot);
-    showOtherStats = entry !== undefined && OTHER_EQUIPMENT_STATS.includes(entry.stat);
   }
-  const visibleStats = $derived(showOtherStats ? [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS] : PRIMARY_EQUIPMENT_STATS);
 
   /** 種類チップを押した瞬間に反映する(「適用」ボタンは挟まない)。「なし」で記録を外す。
    *  初めて種類を選んだときは、対象能力値を主軸スキルの依存から自動で埋める。 */
@@ -146,55 +162,24 @@
       </button>
       {#if openSlot === slot}
         <div class="avatar-editor" aria-label={`${PART_SLOT_LABELS[slot]}の研磨`}>
-          <div class="polish-kind-row" role="radiogroup" aria-label={`${PART_SLOT_LABELS[slot]}の${polishProductLabel(slot)}`}>
+          <div class="polish-kind-row" aria-label={`${PART_SLOT_LABELS[slot]}の${polishProductLabel(slot)}`}>
             <span class="dim tiny">{polishProductLabel(slot)}</span>
-            <button
-              type="button"
-              class="chip"
-              class:on={entry === undefined}
-              role="radio"
-              aria-checked={entry === undefined}
-              onclick={() => selectKind(slot, null)}
-            >なし</button>
-            {#each POLISH_KINDS as kind (kind)}
-              <button
-                type="button"
-                class="chip"
-                class:on={entry?.kind === kind}
-                role="radio"
-                aria-checked={entry?.kind === kind}
-                onclick={() => selectKind(slot, kind)}
-              >{kindChipLabel(kind, slot)}</button>
-            {/each}
+            <Picker
+              options={kindOptions(slot)}
+              bind:value={() => entry?.kind ?? "", (v) => selectKind(slot, v === "" ? null : v as PolishKind)}
+            />
           </div>
           {#if !equipped}
             <p class="hint dim">この部位は未装備です。加算値は装備してから決まります(いまは 0)。</p>
           {/if}
           {#if entry}
-            {#each visibleStats as kind (kind)}
-              <div class="polish-stat-row" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(kind)}>
-                <button
-                  type="button"
-                  class="chip"
-                  class:on={entry.stat === kind}
-                  role="radio"
-                  aria-checked={entry.stat === kind}
-                  onclick={() => selectStat(slot, kind)}
-                >{EQUIPMENT_STAT_SHORT[kind]}</button>
-                {#if entry.stat === kind}
-                  <span class="stat-total num" use:bump={() => amountOf(entry)}>+{fmtInt(amountOf(entry))}</span>
-                {/if}
-              </div>
-            {/each}
-            <button
-              type="button"
-              class="enchant-more-toggle"
-              aria-expanded={showOtherStats}
-              onclick={() => (showOtherStats = !showOtherStats)}
-            >
-              <span><b>物防・命中など5補正</b><small>物防 / 命中 / Cri / 回避 / 敏捷</small></span>
-              <span class="toggle-state">{showOtherStats ? "閉じる ︿" : "開く ﹀"}</span>
-            </button>
+            <div class="polish-stat-row">
+              <span class="dim tiny">乗せる先</span>
+              <Picker
+                options={statOptions(slot, entry)}
+                bind:value={() => entry.stat, (v) => selectStat(slot, v as EquipmentStatKind)}
+              />
+            </div>
           {/if}
         </div>
       {/if}
@@ -209,8 +194,7 @@
     border-left: 2px solid var(--accent); background: var(--surface-inset); border-radius: 0 var(--r-inset) var(--r-inset) 0;
     display: flex; flex-direction: column; gap: 6px;
   }
-  .polish-kind-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .polish-stat-row { display: flex; align-items: center; gap: 10px; }
-  .polish-stat-row.secondary-stat .chip { color: var(--fg-sub); font-weight: 500; }
-  .stat-total { min-width: 52px; font-size: 9.5px; color: var(--accent-hover); }
+  .polish-kind-row, .polish-stat-row { display: flex; align-items: flex-start; gap: 6px; }
+  .polish-kind-row > .tiny, .polish-stat-row > .tiny { flex-shrink: 0; min-width: 56px; padding-top: 7px; }
+  .polish-kind-row :global(.picker), .polish-stat-row :global(.picker) { min-width: 0; flex: 1; }
 </style>

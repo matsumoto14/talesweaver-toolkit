@@ -35,6 +35,7 @@
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload } from "../../draft";
   import { cloneEquipmentPart, randomOptionCount, sienaPartCount, withEnchant } from "../../equipment";
+  import { buffSetOptions } from "../../buffs";
   import { fmtInt } from "../../format";
   import {
     EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
@@ -45,6 +46,7 @@
   import { persisted } from "../../ui/persistedState.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { adjustDropIndex, dropHalfIndex } from "../../ui/reorder.svelte";
+  import Picker from "../../ui/Picker.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
   import { bump, flash } from "../../ui/motion.svelte";
@@ -729,19 +731,18 @@
   <div class="toolbar">
     <span class="char-name">{draft.name || "(名前未設定)"}</span>
     <span class="spacer"></span>
-    <label class="buff-default">
+    <div class="buff-default">
       <span>いつものバフ</span>
-      <!-- バフセットはユーザーが増やしていくもので上限が無い。§07 形態 2(段階選択)は
-           「選択肢が有限で並べても横に溢れない」ときのもの(ui/StepSelect.svelte 冒頭コメント)。
-           いまは 2 件でも、セットが増えるたびに段が横に溢れて折り返すのでは意味が変わってしまう
-           ので、件数に関わらず select で固定する(機械監査「選択肢2は§07形態2に降ろせる」への回答) -->
-      <select bind:value={draft.defaultBuffSetId}>
-        <option value={null}>なし</option>
-        {#each app.buffSets as set (set.id)}
-          <option value={set.id}>{set.name}</option>
-        {/each}
-      </select>
-    </label>
+      <!-- バフセットは順序が無いので Picker(§07「1 つ選ぶ」)。件数が少ないうちはチップだけ、
+           増えたら候補面に送られる。段階選択にしないのは、セットが増えるたびに段が横に溢れるから -->
+      <Picker
+        options={buffSetOptions(app.buffSets, "バフを使わない")}
+        bind:value={
+          () => (draft.defaultBuffSetId === null ? "" : String(draft.defaultBuffSetId)),
+          (v) => (draft.defaultBuffSetId = v === "" ? null : Number(v))
+        }
+      />
+    </div>
     <!-- debounce 待ち(dirty かつ未送信)も「保存中…」に含める。まだ書き込んでいないあいだ
          「保存済み」と出すのは嘘になる — この表示の役目は保存を信用させることなので譲れない。
          ただし保存できない状態(名前未入力・キャラ種未選択)のときは「保存中…」ではなく理由を
@@ -901,7 +902,6 @@
 
 <style>
   .buff-default { display: flex; align-items: center; gap: 7px; color: var(--fg-muted); font-size: 10px; }
-  .buff-default select { min-width: 150px; height: 28px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--bg-field); color: var(--fg); }
   .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
   .toolbar {

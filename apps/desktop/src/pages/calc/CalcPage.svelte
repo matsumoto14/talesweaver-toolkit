@@ -14,7 +14,7 @@
     SoulLinkPreview, StatKind, UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
-    BUFF_PURPOSES, isChoiceValue, isMultiTarget, isPercentLayer, isUserSelectedTarget,
+    BUFF_PURPOSES, buffSetOptions, isChoiceValue, isMultiTarget, isPercentLayer, isUserSelectedTarget,
     matchesPurpose,
     pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
@@ -39,7 +39,7 @@
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
   import DefensePanel from "./DefensePanel.svelte";
-  import Select from "../../ui/Select.svelte";
+  import Picker from "../../ui/Picker.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import StepToggle from "../../ui/StepToggle.svelte";
@@ -1352,6 +1352,9 @@
     part.label
       || app.equipmentCatalog.find((i) => i.id === part.item_id)?.name
       || (part.custom_name ? `${part.custom_name} [仮]` : `装備 ${part.id}`);
+  /** 切り替え候補の「選ぶのに要る値」: 強化 Lv とアビリティ数(同名の 2 本を見分ける手がかり) */
+  const partSwitchMeta = (part: EquipmentPart): string =>
+    `${part.enhance_level > 0 ? `+${part.enhance_level}` : "強化なし"} ・ アビ ${part.abilities.length}`;
   const switchableSlots = $derived(
     payload ? PART_SLOTS.filter((slot) => payload.equipment.parts[slot].registered.length > 1) : [],
   );
@@ -1839,9 +1842,11 @@
                         {/if}
                         {#if isChoiceValue(def.value)}
                           {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
-                          <Select
+                          <!-- 値の候補は小さい順に並ぶ(順序あり)ので段(§07「1 つ選ぶ」) -->
+                          <StepSelect
                             label="値"
                             {options}
+                            full
                             bind:value={
                               () => String(choice.choice_index ?? 0),
                               (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
@@ -2714,17 +2719,14 @@
                 {@const list = payload.equipment.parts[slot]}
                 <div class="switch-row">
                   <span class="enchant-row-label">{PART_SLOT_LABELS[slot]}</span>
-                  <div class="switch-chips">
-                    {#each list.registered as part (part.id)}
-                      <button
-                        type="button" class="chip switch-chip" class:on={part.id === list.selected_id}
-                        title={partDisplayName(part)}
-                        onclick={() => selectEquipmentPart(slot, part.id)}
-                      >
-                        <Icon kind="equipment" id={equipmentIconId(part.item_id, app.equipmentCatalog)} size={20} label={partDisplayName(part)} />
-                        <span class="switch-chip-name">{partDisplayName(part)}</span>
-                      </button>
-                    {/each}
+                  <div class="switch-picker">
+                    <Picker
+                      options={list.registered.map((part) => ({
+                        value: String(part.id), name: partDisplayName(part), meta: partSwitchMeta(part),
+                        iconId: equipmentIconId(part.item_id, app.equipmentCatalog), iconKind: "equipment" as const,
+                      }))}
+                      bind:value={() => String(list.selected_id ?? ""), (v) => selectEquipmentPart(slot, Number(v))}
+                    />
                   </div>
                 </div>
               {/each}
@@ -2848,16 +2850,15 @@
               <span class="chev dim">›</span>
             </button>
           {:else}
-            <div class="ultimate-chips">
-              <button type="button" class="ultimate-chip" class:on={currentTitle === null} onclick={() => selectTitle(null)}>
-                <span class="uc-name">なし</span>
-              </button>
-              {#each titleChoices as t (t.id)}
-                <button type="button" class="ultimate-chip" class:on={currentTitle?.id === t.id} title={t.note || undefined} onclick={() => selectTitle(t.id)}>
-                  <span class="uc-name title-name">{t.name}</span>
-                  <span class="uc-note dim num">{titleNote(t)}</span>
-                </button>
-              {/each}
+            <!-- 所持称号から 1 つ選ぶ(§07「1 つ選ぶ」)。「なし」も候補の 1 行 -->
+            <div class="title-picker">
+              <Picker
+                options={[
+                  { value: "", name: "なし", meta: "称号を付けない" },
+                  ...titleChoices.map((t) => ({ value: t.id, name: t.name, meta: titleNote(t) })),
+                ]}
+                bind:value={() => currentTitle?.id ?? "", (v) => selectTitle(v === "" ? null : v)}
+              />
             </div>
             <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("title")}>
               <span class="dim small">所持称号の追加・変更はキャラタブの称号ペインで</span>
@@ -2877,13 +2878,13 @@
             <span class="dim small num" use:bump={() => alwaysBuffCount + extraBuffCount}>{alwaysBuffCount + extraBuffCount} 件</span>
           </button>
           {#if openMaterial === "buffs"}
-          <label class="calc-buff-set">
+          <div class="calc-buff-set">
             <span>使うセット</span>
-            <select value={app.calcBuffSetId ?? ""} onchange={(e) => chooseCalcBuffSet(e.currentTarget.value)}>
-              <option value="">なし</option>
-              {#each app.buffSets as set (set.id)}<option value={set.id}>{set.name}</option>{/each}
-            </select>
-          </label>
+            <Picker
+              options={buffSetOptions(app.buffSets, "追加だけで計算")}
+              bind:value={() => (app.calcBuffSetId === null ? "" : String(app.calcBuffSetId)), chooseCalcBuffSet}
+            />
+          </div>
           <p class="buff-legend dim">
             <span class="lg always">常</span> セット内({alwaysBuffCount} 件)
             ／ <span class="lg extra">追</span> 追加 = この計算だけ({extraBuffCount} 件・保存されません)
@@ -3302,18 +3303,8 @@
 
   .eq-note { margin: 8px 0 0; font-size: 9.5px; line-height: 1.6; }
 
-  /* 極限スキル(2 枠の選択チップ)。§07 形態 3: 押して入れる / 押して外す */
+  /* 極限スキル(2 枠の行チップ)。§07 行チップ: 押して入れる / 押して外す */
   .ultimate-chips { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-  .ultimate-chip {
-    width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-    border-radius: var(--r-panel); background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
-  }
-  .ultimate-chip:hover:not(:disabled) { border-color: var(--accent); }
-  .ultimate-chip:disabled { opacity: 0.5; }
-  .ultimate-chip.on { background: var(--sel); border-color: var(--sel-bd); box-shadow: inset 0 0 0 1px var(--sel-bd); }
-  .uc-name { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
-  .ultimate-chip.on .uc-name { color: var(--sel-fg); }
-  .uc-note { min-width: 0; flex: 1; text-align: right; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* 地力(覚醒・エタ / シャープネスビジョン / ソウルリンク)。ラベル幅と値幅を固定して、
      桁が増えても入力面が動かないようにする(§09 規則 4) */
@@ -3323,16 +3314,14 @@
   .basics-seg { min-width: 0; flex: 1; }
   .basics-val { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 9.5px; font-weight: 700; color: var(--fg-dim); }
 
-  /* 装備の切り替え。部位ごとに登録済み装備をチップで並べる(§07 形態 3)。
-     名前が長くても行は折り返さず、チップ内で省略する(幅が動かない) */
+  /* 装備の切り替え。部位ごとに登録済み装備から 1 つ選ぶ(§07「1 つ選ぶ」= Picker。
+     少なければチップ、増えたら候補面)。名前はチップ内で省略する(幅が動かない) */
   .switch-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .switch-row { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
   .switch-row .enchant-row-label { flex-shrink: 0; width: 46px; padding-top: 5px; }
-  .switch-chips { min-width: 0; flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
-  .switch-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 8px 2px 3px; }
-  .switch-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .switch-picker { min-width: 0; flex: 1; }
   .title-head-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .title-name { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title-picker { margin-top: 8px; }
 
   /* エンチャントの伸びしろ。部位ごとに 現在/上限/MAX での伸び幅を横並びで見せる */
   .enchant-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -3399,8 +3388,9 @@
   .bg-caret { flex: none; width: 10px; text-align: center; font-size: 9px; }
   .bg-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bg-count { flex: none; min-width: 5ch; text-align: right; font-size: 9px; font-weight: 500; }
-  .calc-buff-set { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--fg-muted); }
-  .calc-buff-set select { min-width: 160px; height: 28px; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--bg-field); color: var(--fg); }
+  .calc-buff-set { margin-top: 8px; display: flex; align-items: flex-start; gap: 8px; font-size: 10px; color: var(--fg-muted); }
+  .calc-buff-set > span { flex-shrink: 0; padding-top: 6px; }
+  .calc-buff-set :global(.picker) { min-width: 0; flex: 1; }
   .buff-legend { margin: 7px 0 0; font-size: 9px; line-height: 1.7; }
   .buff-legend .lg {
     display: inline-block; padding: 0 5px; border-radius: var(--r-pill);

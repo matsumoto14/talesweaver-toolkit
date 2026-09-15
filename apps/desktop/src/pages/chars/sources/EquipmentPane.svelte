@@ -32,7 +32,7 @@
   import { bump, flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
-  import Select from "../../../ui/Select.svelte";
+  import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
@@ -416,6 +416,16 @@
     return () => abilityCandidatesLatest.cancel();
   });
   const abilityGroup = (key: string): AbilityGroup => abilityGroups[key] ?? EMPTY_ABILITY_GROUP;
+  /** 武器アビリティ 1 カテゴリの候補列。shown(上位等級)を固定チップ、folded(下位等級)を候補面に */
+  const weaponAbilityOptions = (grades: AbilityGroup): PickerOption[] => [
+    { value: "", name: "装着しない", meta: "空き枠", pinned: true },
+    ...[...grades.shown, ...grades.folded].map((ability, i) => ({
+      value: ability.id, name: ability.name, meta: ability.effect_summary,
+      iconId: ability.id, iconKind: "equipment" as const,
+      pinned: i < grades.shown.length,
+      tone: ability.record_only ? "record-only" : undefined,
+    })),
+  ];
   const abilityIdForCategory = (slot: PartSlot, category: number): string =>
     selectedPart(slot).abilities.find((id) => abilityDef(id)?.category === category) ?? "";
   function setAbilityForCategory(slot: PartSlot, category: number, id: string) {
@@ -577,16 +587,25 @@
   const randomOptionSlots = (slot: PartSlot) =>
     equippedItem(slot)?.random_option_slots ?? (selectedPartOrNull(slot)?.item_id ? 0 : (partSlotRule(slot)?.random_option_slots ?? 0));
 
-  const weaponEnhanceTypeOptions = [
-    { value: "", label: "種別を選択" },
-    { value: "weapon_stab", label: "突き系" }, { value: "weapon_stab_hack", label: "物理複合系" },
-    { value: "weapon_hack", label: "斬り系" }, { value: "weapon_int", label: "魔法系" },
-    { value: "weapon_int_hack", label: "魔剣系" }, { value: "weapon_mr", label: "魔法防御系" },
+  // 装備種別は順序が無いので Picker(§07「1 つ選ぶ」)。候補行の値は選ぶのに要るもの —
+  // 武器はその系統の該当武器、鎧は強化補正の式(wiki「装備システム/装備強化」系統表、2026-09-15 取得。
+  // 系統の分類の正は crates/domain/src/equipment_class.rs の WeaponClass::system)
+  const weaponEnhanceTypeOptions: PickerOption[] = [
+    { value: "", name: "未選択", meta: "追加固定ダメージを出さない" },
+    { value: "weapon_stab", name: "突き系", meta: "細剣・短剣・槍・スモールソード・物理銃・クロー・ハンドランチャー" },
+    { value: "weapon_stab_hack", name: "物理複合系", meta: "長剣・太刀・戦杖・短刀・棒・連接棍" },
+    { value: "weapon_hack", name: "斬り系", meta: "刀・斧・鞭・カーラ・物理双剣・サイズ・アーミングソード" },
+    { value: "weapon_int", name: "魔法系", meta: "魔杖・ワンド・魔法銃・セプター・トーテム" },
+    { value: "weapon_int_hack", name: "魔剣系", meta: "大剣" },
+    { value: "weapon_mr", name: "魔法防御系", meta: "聖杖・ハンドベル・魔法双剣・ハンマー" },
   ];
-  const armorEnhanceTypeOptions = [
-    { value: "", label: "種別を選択" }, { value: "armor_light", label: "軽鎧" },
-    { value: "armor_heavy", label: "重鎧" }, { value: "armor_magic", label: "魔鎧" },
-    { value: "armor_suit", label: "スーツ" }, { value: "armor_robe", label: "ローブ" },
+  const armorEnhanceTypeOptions: PickerOption[] = [
+    { value: "", name: "未選択", meta: "追加HPを出さない" },
+    { value: "armor_light", name: "軽鎧", meta: "物防 ×3.90 + 魔防 ×4.00" },
+    { value: "armor_heavy", name: "重鎧", meta: "物防 ×3.10 + 魔防 ×3.80" },
+    { value: "armor_magic", name: "マジックアーマー", meta: "物防 ×3.80 + 魔防 ×4.00" },
+    { value: "armor_suit", name: "スーツ", meta: "物防 ×7.80" },
+    { value: "armor_robe", name: "ローブ", meta: "物防 ×4.00 + 魔防 ×3.80" },
   ];
   const enhanceLevelOptions = $derived(
     tables.enhance_level_candidates.map((lv) => ({
@@ -606,22 +625,6 @@
 
 <svelte:window onkeydown={closeEquipmentOnEscape} />
 
-{#snippet abilityChoiceChip(slot: PartSlot, category: number, ability: EquipmentAbilityDef, selectedAbilityId: string, fresh: boolean)}
-  <button
-    type="button"
-    class:on={selectedAbilityId === ability.id}
-    class:record-only={ability.record_only}
-    class:swap-in={fresh}
-    class="chip ability-choice"
-    aria-pressed={selectedAbilityId === ability.id}
-    onclick={() => setAbilityForCategory(slot, category, ability.id)}
-  >
-    <!-- ゲーム内のアイテムの絵(月石・研磨…)。無い id は破線 + ? で幅は変わらない -->
-    <Icon kind="equipment" id={ability.id} size={20} label={ability.name} />
-    <span>{ability.name}</span>
-    <span class="ability-choice-effect num">{ability.effect_summary}</span>
-  </button>
-{/snippet}
 
 {#snippet nonWeaponAbilityChip(slot: PartSlot, ability: EquipmentAbilityDef, selectedIds: string[], full: boolean, fresh: boolean)}
   {@const selected = selectedIds.includes(ability.id)}
@@ -986,27 +989,13 @@
                 <b>{row.label}</b>
                 <span>{row.note} ・ カテゴリ{row.category}</span>
               </div>
+              <!-- カテゴリごとに 1 つ選ぶ(§07「1 つ選ぶ」)。上位等級と「装着しない」はチップで手前に固定、
+                   下位等級は候補面へ。候補行の値は効果の要約、絵はゲーム内のアイテム(月石・研磨…) -->
               <div class="ability-choice-list" aria-label="{row.label}の候補">
-                <button
-                  type="button"
-                  class:on={selectedAbilityId === ""}
-                  class="chip ability-choice-none"
-                  aria-pressed={selectedAbilityId === ""}
-                  onclick={() => setAbilityForCategory(slot, row.category, "")}
-                >装着しない</button>
-                {#each grades.shown as ability (ability.id)}
-                  {@render abilityChoiceChip(slot, row.category, ability, selectedAbilityId, false)}
-                {/each}
-                <!-- 畳みボタンは候補の後ろに置き、開いた分はさらに後ろへ足す。
-                     押した場所(§00 03)が動かないのはこの順のときだけ -->
-                {#if grades.folded.length > 0}
-                  {@render lowerGradeToggle(gradeKey, grades.folded.length)}
-                  {#if openLowerGrades[gradeKey]}
-                    {#each grades.folded as ability (ability.id)}
-                      {@render abilityChoiceChip(slot, row.category, ability, selectedAbilityId, true)}
-                    {/each}
-                  {/if}
-                {/if}
+                <Picker
+                  options={weaponAbilityOptions(grades)}
+                  bind:value={() => selectedAbilityId, (v) => setAbilityForCategory(slot, row.category, v)}
+                />
               </div>
             </div>
 
@@ -1169,7 +1158,7 @@
       <div class="card">
         <div class="card-title">装備強化</div>
         {#if part.item_id === null && part.custom_name !== null}
-          <Select
+          <Picker
             label="装備種別"
             options={slot === "weapon" ? weaponEnhanceTypeOptions : armorEnhanceTypeOptions}
             bind:value={() => part.enhance_type ?? "", (v) => (part.enhance_type = v === "" ? null : v as typeof part.enhance_type)}

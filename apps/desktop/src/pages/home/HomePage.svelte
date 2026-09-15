@@ -205,6 +205,7 @@
     {
       value: "",
       name: `自動: ${autoGoal ? (autoGoal.content.series?.name ?? autoGoal.content.name) : "目標なし"}`,
+      meta: autoGoal ? autoGoal.areaName : "到達できる先がない",
     },
     ...rows
       .filter((r) => r.content.enemy_id !== null)

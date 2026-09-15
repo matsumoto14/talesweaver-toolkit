@@ -108,14 +108,8 @@
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
   /** 中ディレイ込みの継続火力順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す。 */
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
-  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択(攻撃力を出さない)"));
-  // 並びは list_skills(Rust)が主軸候補順で返す
-  const topSkills = $derived(skills.slice(0, 3));
-  /** 候補にない主軸を選んでいるとき、または自分で開いたときだけ全部出す */
-  let skillListOpen = $state(false);
-  const skillPickedOutside = $derived(
-    draft.mainSkillId !== "" && !topSkills.some((s) => s.id === draft.mainSkillId),
-  );
+  // 並びは list_skills(Rust)が主軸候補順で返し、先頭 3 件がチップに固定される
+  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択", "攻撃力を出さない"));
 
   // 属性は主軸スキルで決まる。無属性のスキルのときだけ、乗せる属性を選ばせる
   // (アンプルで属性を足す運用が多い)
@@ -290,53 +284,15 @@
         {/if}
       </div>
     </div>
-    <!-- 主軸に選ばれるのはほぼ火力上位。3 つを候補に出し、それ以外は開いたときだけ -->
+    <!-- 主軸に選ばれるのはほぼ火力上位。上位 3 つをチップで手前に固定し、残りは候補面
+         (§07「1 つ選ぶ」)。スキルは名前だけでは選べないので 単 / 範・段数・属性・中ディレイを併記 -->
     <div class="wide">
       <span class="label">主軸スキル</span>
-      <div class="skill-row">
-        {#each topSkills as sk (sk.id)}
-          <!-- スキルは名前だけでは選べない。単 / 範・段数・属性を名前の隣に出す。
-               対象指定が wiki と突き合わせできていないものは `?`(0 や「単体」で埋めない) -->
-          <button
-            type="button"
-            class="chip skill-chip"
-            class:on={draft.mainSkillId === sk.id}
-            onclick={() => (draft.mainSkillId = sk.id)}
-          >
-            <Icon kind="skill" id={sk.id} size={20} label={sk.name} />
-            <span class="skill-name">{sk.name}</span>
-            <span class="skill-meta num" class:unknown={sk.target === null}>
-              {sk.target === null ? "?" : sk.target === "single" ? "単" : "範"}
-            </span>
-            <span class="skill-meta num">{sk.hit_count} 段</span>
-            <span class="skill-meta num elem-{sk.element}">{ELEMENT_LABELS[sk.element]}</span>
-            <span
-              class="skill-meta num"
-              use:flash={() => sk.base_actual_delay === null ? "?" : `${sk.base_actual_delay}s`}
-            >中 {sk.base_actual_delay === null ? "?" : `${sk.base_actual_delay}s`}</span>
-          </button>
-        {/each}
-        {#if skills.length > topSkills.length}
-          <button
-            type="button"
-            class="chip quiet"
-            class:on={skillListOpen || skillPickedOutside}
-            onclick={() => (skillListOpen = !skillListOpen)}
-          >ほかのスキル</button>
-        {/if}
-      </div>
-      {#if skillListOpen || skillPickedOutside}
-        <!-- open-in は overflow: hidden なので、重ねて出す候補が切れる。
-             ここは面が現れるだけなので swap-in(§10 型 3b) -->
-        <div class="skill-all swap-in">
-          <Picker
-            options={mainSkillOptions}
-            note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)"
-            placeholder="スキルを選ぶ"
-            bind:value={draft.mainSkillId}
-          />
-        </div>
-      {/if}
+      <Picker
+        options={mainSkillOptions}
+        note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)"
+        bind:value={draft.mainSkillId}
+      />
     </div>
     <!-- 属性はふつう主軸スキルで決まる。無属性のときだけ「何を乗せるか」を選ばせる -->
     <div class="wide">

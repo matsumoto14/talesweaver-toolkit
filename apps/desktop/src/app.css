@@ -466,10 +466,21 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
   background: var(--sel); color: var(--sel-fg);
 }
 
-/* --- 多数から 1 つ選ぶ(ui/Picker.svelte)-----------------------------------------
-   素の <select> の代わり。**1 件 1 行**で、名前のほかに選ぶのに要る値とアイコンを持てる。
-   候補は重なって出るので、押した場所も周りの行も動かない(§09 規則 3)  */
+/* --- 順序の無いものから 1 つ選ぶ(ui/Picker.svelte、§07「1 つ選ぶ」)-------------------
+   素の <select> の代わり。よく使う候補は**チップで手前に固定**し、残りは候補面(**1 件 1 行**、
+   名前のほかに選ぶのに要る値とアイコンを持つ)。候補は重なって出るので、押した場所も周りの行も
+   動かない(§09 規則 3)  */
+.picker-line { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+/* 固定チップ。値は名前の隣の小さなピル */
+.picker-chip.with-icon { padding-left: 4px; }
+.picker-chip-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-chip-meta {
+  padding: 0 5px; border-radius: var(--r-pill);
+  background: var(--surface-inset); font-size: 9px; color: var(--fg-muted); white-space: nowrap;
+}
+.picker-chip.on .picker-chip-meta { background: rgba(255, 255, 255, 0.7); color: var(--sel-fg); }
 .picker-trigger {
+  flex: 1 1 150px; min-width: 0;
   display: flex; align-items: center; gap: 7px;
   padding: 7px 10px; border-radius: var(--r-panel);
   background: var(--bg-field); border: 1px solid var(--border);
@@ -477,6 +488,11 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 }
 .picker-trigger:hover:not(:disabled), .picker-trigger.open { border-color: var(--accent); }
 .picker-trigger:disabled { color: var(--fg-dim); }
+/* チップの隣に置く口。「ほか n 件」は小さく薄く、面の中の 1 件を選んでいるときだけ選択色になる */
+.picker-trigger.compact { flex: 0 1 auto; padding: 4px 9px; border-radius: var(--r-pill); font-size: 11px; }
+.picker-trigger.muted .picker-name { color: var(--fg-dim); font-size: 10.5px; }
+.picker-trigger.compact:not(.muted) { border-color: var(--sel-bd); background: var(--sel); color: var(--sel-fg); font-weight: 700; }
+.picker-trigger.compact:not(.muted) .picker-meta { background: rgba(255, 255, 255, 0.7); color: var(--sel-fg); }
 .picker-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-meta {
   flex: none; padding: 0 5px; border-radius: var(--r-pill);
@@ -523,10 +539,7 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 .ability-fixed-label b { font-size: 11px; color: var(--fg-sub); }
 .ability-fixed-label span { font-size: 8.5px; color: var(--fg-dim); white-space: nowrap; }
 .ability-choice-list { display: flex; flex-wrap: wrap; gap: 5px; padding: 3px 0; }
-.ability-choice { padding-right: 8px; }
-.ability-choice-effect { font-size: 9px; color: var(--fg-muted); }
-.ability-choice.on .ability-choice-effect { color: var(--sel-fg); }
-.ability-choice-none { color: var(--fg-muted); }
+.ability-choice-list > .picker { flex: 1; min-width: 0; }
 /* 防具アビリティ(複数選択)は行チップ(ToggleRow)なので縦 1 列(§07) */
 /* --- 行チップの置き場(ui/ToggleRow / §07 行チップ) ------------------------------
    広い器では 1 列に伸ばさない — 名前と値が離れて目が往復する(§00 01)。

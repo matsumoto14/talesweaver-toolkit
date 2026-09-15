@@ -1,8 +1,16 @@
 // バフ選択の共通ロジック。バフカタログは消費アイテム・イベントの常用バフ専用で、
 // キャラのパッシブ・自己バフ・味方バフは characterSkills(api/types の CharacterSkillDef)。
 // 旧 CharacterSettings.svelte のヘルパーを純関数として切り出したもの。
-import type { BuffChoice, BuffDefinition, BuffPurpose, BuffTarget, BuffValue, StatKind, StatLayer } from "./api/types";
+import type { BuffChoice, BuffDefinition, BuffPurpose, BuffSet, BuffTarget, BuffValue, StatKind, StatLayer } from "./api/types";
 import { STAT_KINDS } from "./labels";
+import type { PickerOption } from "./ui/Picker.svelte";
+
+/** バフセットを 1 つ選ぶ候補(§07「1 つ選ぶ」)。「なし」も候補の 1 行(value = "")。
+ *  選ぶのに要る値は ON にしているバフの数。件数が少なければ Picker がチップだけで出す */
+export const buffSetOptions = (sets: BuffSet[], noneMeta: string): PickerOption[] => [
+  { value: "", name: "なし", meta: noneMeta },
+  ...sets.map((set) => ({ value: String(set.id), name: set.name, meta: `${set.choices.choices.length} 件` })),
+];
 
 /** バフを分ける「目的」。バフタブの目的タブと計算タブのグループで同じ切り口を使う */
 export const BUFF_PURPOSES: { id: BuffPurpose; label: string; description: string }[] = [
