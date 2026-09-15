@@ -321,6 +321,9 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 .delta.up { color: var(--good); }
 .delta.down { color: var(--warm); }
 .delta-in { animation: tw-badge-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1); }
+/* 緑を辿る: 下に変わった行がある差分は押せる(押すと変わった行だけ順に開く) */
+.delta.follow { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.delta.follow:hover { filter: brightness(0.75); }
 
 /* 2. 量が変わった — バーの幅。数値と同時に動かす(.meter > .fill の transition) */
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   // ダメージ計算: v4 の縦フロー「相手を選ぶ → この一発 → もし〜だったら → なぜこの数字？」。
   // 右カラムは「計算の材料」(試し変更・バフ・入場条件)。計算はすべて Rust 側(preview_damage)。
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import {
     errorMessage, evaluateContents, listEnchantGains, listSkills, listUpgradeCandidates, previewDamage,
     listBlockedBuffs, previewDefense, previewPotentialEffects,
@@ -10,7 +10,7 @@
     BlockedBuff, BuffSelection,
     StatSources, CommonSkills,
     Adjustments, BuffChoice, BuffDefinition, BuffPurpose, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
-    DamageResult, DefenseProfile, EquipmentPart, EquipmentStatKind, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill, TitleDef,
+    DamageContribution, DamageResult, DefenseProfile, EquipmentPart, EquipmentStatKind, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill, TitleDef,
     SoulLinkPreview, StatKind, UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
@@ -48,6 +48,7 @@
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, delta, flash } from "../../ui/motion.svelte";
+  import { ChangeMemo, PresenceMemo, swapNote, type Presence } from "../../ui/presence";
   import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
@@ -420,6 +421,20 @@
     pierced !== null && pierced > 0 && perHit !== null ? `×${(perHit / pierced).toFixed(1)}` : "—",
   );
   let flowOpen = $state(false);
+  /** 直近の計算で変わった段(鎖の ↑ から辿る先)。副作用で親 → 子 を控える。
+   *  段の「足した分」は前段が変われば全部変わる(結果)ので、段自身の倍率で判定する(原因)。
+   *  倍率を持たない先頭の段(素通り)だけは値で判定する */
+  const changedFlowKeys = $derived.by(() => {
+    const own = (f: FlowRow) => (f.mult === "—" ? Math.round(f.add) : Math.round(f.factor * 10000));
+    const keys = flowRows.filter((f) => changes.touch(`flow:${f.k}`, own(f), result)).map((f) => `flow:${f.k}`);
+    changedChildren.set("perHit", keys);
+    return keys;
+  });
+  const changedAtkKeys = $derived.by(() => {
+    const keys = atkRows.filter((a) => changes.touch(`atk:${a.k}`, Math.round(a.v), result)).map((a) => `atk:${a.k}`);
+    changedChildren.set("atkA", keys);
+    return keys;
+  });
 
   // 倍率の材料(非中立カテゴリ)
   const activeCategories = $derived(
@@ -481,6 +496,30 @@
     /** 押すと直下に `subs` が開く行。省略なら開かない行 */
     key?: string;
     subs?: Mat[];
+    /** 供給源の行の出入り。抜けた行は次に集合が変わるまで残す(ui/presence.ts) */
+    state?: Presence;
+    /** 供給源の行の一意キー(`{#each}` 用) */
+    id?: string;
+    /** 直近の計算で値か供給源が変わった行。↑ を押して辿る先(ui/presence.ts ChangeMemo) */
+    changed?: boolean;
+    /** 直近で入れ替わった供給源(「称号【A】 → 称号【B】」)。閉じたままでもどこに効いたか分かる */
+    note?: string;
+  }
+  /** 供給源の行の出入りをカテゴリごとに覚える(reactive にしない) */
+  const contributionPresence = new PresenceMemo<DamageContribution>();
+  // --- 緑を辿る: ↑↓ を押すと、その下で変わった行だけを順に開く(ユーザー要望 2026-09-15)。
+  //     何が変わったかは描画時に ChangeMemo で判定し、親キー → 変わった子キー を控えておく
+  const changes = new ChangeMemo();
+  const changedChildren = new Map<string, string[]>();
+  const register = (parentKey: string, d: Detail): Detail => {
+    changedChildren.set(parentKey, d.mats.filter((m) => m.changed && m.key).map((m) => m.key!));
+    return d;
+  };
+  async function followChange(key: string) {
+    if (key === "perHit" || key === "atkA") flowOpen = true;
+    else if (!isDetailOpen(key)) openDetails = [...openDetails, key];
+    await tick(); // 開いて描画されてから、その中で控えた「変わった子」を読む
+    for (const child of changedChildren.get(key) ?? []) await followChange(child);
   }
   interface Detail {
     /** この段の倍率(×n) */
@@ -504,9 +543,18 @@
   const stepOf = (name: string): FormulaStep | null => steps.find((s) => s.name === name) ?? null;
   const categoryOf = (c: DamageCategory): CategoryTrace | null =>
     result?.trace.categories.find((x) => x.category === c) ?? null;
-  /** カテゴリに実際に値を足した供給源(トレースの category_contributions から)。 */
-  const catContributions = (c: string) =>
-    (result?.trace.category_contributions ?? []).filter((x) => x.category === c);
+  /** カテゴリX 攻撃ダメージは子(X1〜X6)の合計で、供給源は子に積まれる(domain category.rs ATTACK_DAMAGE_CHILDREN) */
+  const ATTACK_DAMAGE_CHILDREN: DamageCategory[] = [
+    "attack_damage_isabel", "attack_damage_general", "attack_damage_basic_trigger",
+    "attack_damage_skill", "attack_damage_special", "attack_damage_japan",
+  ];
+  /** カテゴリに実際に値を足した供給源(トレースの category_contributions から)。X は子の供給源をまとめて返す */
+  const catContributions = (c: string) => {
+    const all = result?.trace.category_contributions ?? [];
+    return c === "attack_damage_rate"
+      ? all.filter((x) => ATTACK_DAMAGE_CHILDREN.includes(x.category))
+      : all.filter((x) => x.category === c);
+  };
   const fmtContributionValue = (kind: CategoryTrace["kind"], v: number) =>
     kind === "rate" ? `${v >= 0 ? "+" : ""}${fmtNum(v * 100)}%` : fmtNum(v);
   const catMat = (c: CategoryTrace): Mat => {
@@ -516,6 +564,7 @@
         label: `${c.symbol} ${c.label}`,
         value: fmtCatValue(c),
         n: c.value,
+        changed: changes.touch("cat:attack_power", c.value, result),
         key: "cat:attack_power",
         subs: atkRows.map((a) => ({
           label: a.k,
@@ -525,22 +574,29 @@
         })),
       };
     }
-    const contributions = catContributions(c.category);
+    const contributions = contributionPresence.mark(c.category, catContributions(c.category), (x) => x.source);
+    const names = (st: Presence) => contributions.filter((x) => x.state === st).map((x) => x.item.source);
+    const n = c.kind === "rate" ? c.value * 100 : c.value;
     return {
+      changed: changes.touch(`cat:${c.category}`, n, result) || contributions.some((x) => x.state !== "same"),
       label: `${c.symbol} ${c.label}`,
       mult: c.kind === "rate" ? `×${fmtNum(c.factor)}` : undefined,
       value: fmtCatValue(c),
-      n: c.kind === "rate" ? c.value * 100 : c.value,
+      n,
       unit: c.kind === "rate" ? "%" : undefined,
       sub: catLoss(c) > 1e-9 ? `上限で −${fmtCatLoss(c)}` : undefined,
+      note: swapNote(names("gone"), names("added")),
       key: contributions.length > 0 ? `cat:${c.category}` : undefined,
       subs:
         contributions.length > 0
-          ? contributions.map((x) => ({
+          ? contributions.map(({ item: x, state, key }) => ({
+              id: key,
               label: x.source,
               value: fmtContributionValue(c.kind, x.value),
               n: c.kind === "rate" ? x.value * 100 : x.value,
               unit: c.kind === "rate" ? "%" : undefined,
+              sub: x.category === c.category ? undefined : categoryOf(x.category)?.label,
+              state,
             }))
           : undefined,
     };
@@ -1661,8 +1717,10 @@
 
 <!-- 押した数値の内訳。押した行の直下にだけ開く(§00 03)。
      列は band-row と同じ段にそろえ、面はインセット = 読み取り専用(§02)。 -->
-{#snippet detailBox(d: Detail)}
-  <div class="detail open-in">
+<!-- 閉じていても DOM に置いたまま隠す(hidden)。{#if} で外すと、閉じている間に称号などを切り替えた
+     ↑↓・追加/削除 が、開いたときには消えている(差分は要素が前回値を覚えている。§00 04) -->
+{#snippet detailBox(d: Detail, open: boolean)}
+  <div class="detail" class:open-in={open} hidden={!open}>
     <div class="dt-head">
       <span class="dt-hk dim">倍率</span>
       <span class="num dt-hv">{d.mult}</span>
@@ -1681,23 +1739,25 @@
           type="button" class="dt-row dt-row-btn"
           aria-expanded={isDetailOpen(key)} onclick={() => toggleDetail(key)}
         >
-          <span class="dt-label">{m.label}</span>
+          <span class="dt-label">{m.label}{#if m.note}<span class="dt-swap dim" use:flash={() => m.note ?? ""}>{m.note}</span>{/if}</span>
           <span class="num dt-mult dim">{m.mult ?? ""}</span>
-          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span><span use:delta={{ get: () => m.n ?? null, unit: m.unit }}></span>
+          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <span use:delta={{ get: () => m.n ?? null, unit: m.unit }} class:follow={!!m.changed} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(key); }}></span>
           <span class="num dt-sub dim">{m.sub ?? ""}</span>
         </button>
-        {#if isDetailOpen(key)}
-          <div class="dt-subs open-in">
-            {#each m.subs ?? [] as sm, j (j)}
-              <div class="dt-row">
+        {@const subsOpen = isDetailOpen(key)}
+          <div class="dt-subs" class:open-in={subsOpen} hidden={!subsOpen}>
+            <!-- 出典名でキーにする。入れ替わった出典は「抜けた行(取り消し線)+ 入った行」で残る -->
+            {#each m.subs ?? [] as sm, j (sm.id ?? j)}
+              <div class="dt-row" class:gone={sm.state === "gone"}>
                 <span class="dt-label">{sm.label}</span>
                 <span class="num dt-mult dim">{sm.mult ?? ""}</span>
-                <span class="num dt-val" class:bad={(sm.n ?? 0) < 0} use:bump={() => sm.n ?? null}>{sm.value}</span><span use:delta={{ get: () => sm.n ?? null, unit: sm.unit }}></span>
+                <span class="num dt-val" class:bad={(sm.n ?? 0) < 0} use:bump={() => sm.n ?? null}>{sm.value}</span>{#if sm.state === "gone"}<span class="delta num down delta-in">削除</span>{:else if sm.state === "added"}<span class="delta num up delta-in">追加</span>{:else}<span use:delta={{ get: () => sm.n ?? null, unit: sm.unit }}></span>{/if}
                 <span class="num dt-sub dim">{sm.sub ?? ""}</span>
               </div>
             {/each}
           </div>
-        {/if}
       {:else}
         <div class="dt-row">
           <span class="dt-label">{m.label}</span>
@@ -2026,7 +2086,8 @@
                 <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
                 <!-- 差分(前回の値からいくつ動いたか)。数値の行には置かない — 44px の数値の横は
                      枠(248px)に入らず、右の節に被る(実機 2026-09-15)。空でも行を取り、出た瞬間に下が動かない -->
-                <span class="nsub num"><span use:delta={{ get: () => perHit }}></span></span>
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                <span class="nsub num"><span use:delta={{ get: () => perHit }} class:follow={changedFlowKeys.length > 0} title="変わったところを開く" onclick={() => followChange("perHit")}></span></span>
               </button>
               <button
                 type="button" class="node mid"
@@ -2087,9 +2148,9 @@
                    ノードごと出さない(§00 02。0 や「—」で埋めると画面が嘘をつく) -->
             </div>
             <!-- 鎖の各数値の内訳。押した節は動かず、鎖の直下に増える(§00 03) -->
-            {#if isDetailOpen("perHit") && perHitDetail}{@render detailBox(perHitDetail)}{/if}
-            {#if isDetailOpen("total") && totalDetail}{@render detailBox(totalDetail)}{/if}
-            {#if isDetailOpen("dps") && dpsDetail}{@render detailBox(dpsDetail)}{/if}
+            {#if perHitDetail}{@render detailBox(perHitDetail, isDetailOpen("perHit"))}{/if}
+            {#if totalDetail}{@render detailBox(totalDetail, isDetailOpen("total"))}{/if}
+            {#if dpsDetail}{@render detailBox(dpsDetail, isDetailOpen("dps"))}{/if}
             <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
             <div class="hero-sentence">
               <span class="sentence" class:ok={reached} class:ng={!reached}>
@@ -2263,13 +2324,16 @@
               <div class="lever-note">倍率はまだ何もかかっていません。</div>
             {/if}
 
-            {#if flowOpen}
-              <div class="open-in">
+            <!-- 閉じていても描画して隠す。閉じている間の変更でも材料の前回値が残り、開いたとき・↑ を辿るときに
+                 「何が変わったか」が出せる(detailBox と同じ理由) -->
+              <div class="flow-body" class:open-in={flowOpen} hidden={!flowOpen}>
               <!-- ① 攻撃力をつくる -->
               <div class="stage">
                 <span class="stage-no" style="background: var(--flow-1);">1</span>
                 <span class="stage-title">攻撃力をつくる</span>
-                <span class="num strong stage-val" use:bump={() => atkA}>{atkA !== null ? fmtInt(atkA) : "—"}</span><span use:delta={{ get: () => atkA }}></span>
+                <span class="num strong stage-val" use:bump={() => atkA}>{atkA !== null ? fmtInt(atkA) : "—"}</span>
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                <span use:delta={{ get: () => atkA }} class:follow={changedAtkKeys.length > 0} title="変わったところを開く" onclick={() => followChange("atkA")}></span>
               </div>
               <div class="band">
                 {#each atkRows as a (a.k)}
@@ -2288,7 +2352,7 @@
                     <span class="num br-val" use:bump={() => Math.round(a.v)}>{fmtInt(Math.round(a.v))}</span><span use:delta={{ get: () => Math.round(a.v) }}></span>
                     <span class="num br-share dim" use:bump={() => parseFloat(a.share)}>{a.share}</span>
                   </button>
-                  {#if isDetailOpen(`atk:${a.k}`)}{@render detailBox(atkDetail(a))}{/if}
+                  {@render detailBox(register(`atk:${a.k}`, atkDetail(a)), isDetailOpen(`atk:${a.k}`))}
                 {/each}
               </div>
 
@@ -2315,7 +2379,9 @@
                 <span class="stage-no" style="background: var(--flow-3);">3</span>
                 <span class="stage-title">倍率で伸ばす</span>
                 <span class="stage-note dim">帯の幅＝足した分(赤字は減る倍率)</span>
-                <span class="num strong stage-val" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span><span use:delta={{ get: () => perHit }}></span>
+                <span class="num strong stage-val" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                <span use:delta={{ get: () => perHit }} class:follow={changedFlowKeys.length > 0} title="変わったところを開く" onclick={() => followChange("perHit")}></span>
               </div>
               <div class="band">
                 {#each flowRows.filter((r) => r.add > 0) as f (f.k)}
@@ -2331,10 +2397,11 @@
                     <span class="swatch" style="background: {f.c};"></span>
                     <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
-                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span><span use:delta={{ get: () => Math.round(f.add) }}></span>
+                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{f.add < 0 ? "−" : "+"}{fmtInt(Math.round(Math.abs(f.add)))}</span><!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                    <span use:delta={{ get: () => Math.round(f.add) }} class:follow={changedFlowKeys.includes(`flow:${f.k}`)} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(`flow:${f.k}`); }}></span>
                     <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{Math.round((Math.abs(f.add) / flowTotal) * 100)}%</span>
                   </button>
-                  {#if isDetailOpen(`flow:${f.k}`)}{@render detailBox(stepDetail(f.step, f.mult, f.add, f.to))}{/if}
+                  {@render detailBox(register(`flow:${f.k}`, stepDetail(f.step, f.mult, f.add, f.to)), isDetailOpen(`flow:${f.k}`))}
                 {/each}
               </div>
 
@@ -2398,7 +2465,6 @@
                 <TracePanel trace={result.trace} />
               {/if}
               </div>
-            {/if}
           </div>
         </div>
       {/if}
@@ -3134,6 +3200,7 @@
   button.band-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   /* 押した数値の内訳。読み取り専用なのでインセット面、列は band-row と同じ段にそろえる */
+  .detail[hidden], .dt-subs[hidden], .flow-body[hidden] { display: none; }
   .detail {
     margin: 6px 0 2px; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px;
     border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
@@ -3150,6 +3217,10 @@
   .dt-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 10px; font-weight: 700; color: var(--fg-sub); }
   .dt-sub { flex-shrink: 0; width: 112px; text-align: right; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dt-val.bad { color: var(--danger); }
+  /* 入れ替わった供給源はラベルの隣に残す(次の変化で書き換わる) */
+  .dt-swap { margin-left: 8px; font-size: 9px; }
+  /* 抜けた供給源の行。次に集合が変わるまで取り消し線で残す(消すと「どこが変わったか」が消える) */
+  .dt-row.gone .dt-label, .dt-row.gone .dt-val { text-decoration: line-through; color: var(--fg-dim); }
   /* 差分枠は実数と同じ書体サイズ・同じ幅の列にして、行ごとに 到達 の位置がずれないようにする */
   .dt-row :global(.delta), .dt-head :global(.delta) { flex-shrink: 0; min-width: 64px; font-size: 10px; }
   .dt-head :global(.delta) { font-size: 11px; }
