@@ -607,7 +607,7 @@
         </div>
         <!-- 面の入れ替えは型 3b(swap-in = 上から短く入る)。型 5 の badge-in(flash)を
              ここに使うと、面ぜんたいが中心から膨らんで他タブの切り替えと動きが揃わない -->
-        <section class="buff-group" use:swap={() => `${activePurpose}:${activeDamageGroup}`}>
+        <section class="buff-group inset" use:swap={() => `${activePurpose}:${activeDamageGroup}`}>
           <div class="group-summary">
             <span class="group-copy"><strong>{activePurposeMeta.label}</strong><small>{activePurposeMeta.description}</small></span>
             {#if activePurpose === "stats"}
@@ -783,10 +783,10 @@
       <!-- 跳ねるのは**変わった数字だけ**(§10 型 1)。カードに use:bump を付けると
            scale(1.07) が面ごと掛かり、カードの幅が 264 → 282px に膨らんで戻る。
            数字側は 2 桁ぶんの幅を先に取ってあるので、桁が増えても「件 ON」は動かない -->
-      <div class="count">
+      <div class="count inset">
         <span class="count-value num" use:bump={() => selected.choices.choices.length}>{selected.choices.choices.length}</span><small>件 ON</small>
       </div>
-      <div class="summary-block">
+      <div class="summary-block inset">
         <div class="summary-head">
           <strong>ステータス</strong>
           {#if hasAmplification}<small class="amp-caption">( )は他の補正と重なって増えた分</small>{/if}
@@ -829,7 +829,7 @@
           </table>
         {:else}<p>キャラを選ぶと、いまの能力値とバフを足した着地点を表示します。</p>{/if}
       </div>
-      <div class="summary-block">
+      <div class="summary-block inset">
         <strong>攻撃ダメージ</strong>
         {#if damageSummary.length > 0}
           <div class="damage-list">
@@ -840,7 +840,7 @@
           </div>
         {:else}<p>選択中のバフによる攻撃ダメージ増加はありません。</p>{/if}
       </div>
-      <div class="summary-block">
+      <div class="summary-block inset">
         <strong>耐久</strong>
         {#if defenseBefore && defenseAfter}
           {@const physical = defenseAfter.physical_defense - defenseBefore.physical_defense}
@@ -882,7 +882,7 @@
   .category-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
   .category-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
   .category-tab > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .buff-group { flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border-soft); border-radius: var(--r-panel); background: var(--surface-inset); box-shadow: inset 0 1px #fff; overflow: hidden; }
+  .buff-group { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: var(--r-panel); overflow: hidden; }
   .group-summary { min-height: 41px; padding: 6px 9px; display: flex; align-items: center; gap: 10px; }
   .group-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .group-summary small { color: var(--fg-muted); font-size: 9px; }
@@ -918,11 +918,11 @@
      (上に開く / 収まる高さでスクロール)ので、下の行は動かない */
   .per-stat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .summary { background: var(--bg-raised); }
-  .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; border: 1px solid var(--border); border-radius: var(--r-inset); background: var(--surface-inset); box-shadow: inset 0 1px #fff; font-size: 27px; font-weight: 700; }
+  .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; font-size: 27px; font-weight: 700; }
   .count-value { min-width: 2ch; text-align: right; }
   .count small { margin-left: 6px; font-family: var(--font); font-size: 10px; font-weight: 500; }
 
-  .summary-block { margin: 0 12px 8px; padding: 9px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset); box-shadow: inset 0 1px #fff; }
+  .summary-block { margin: 0 12px 8px; padding: 9px; }
   .summary-block > strong { display: block; margin-bottom: 6px; font-size: 10px; }
   .summary-block p { margin: 0; color: var(--fg-muted); font-size: 9px; }
   .summary-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }

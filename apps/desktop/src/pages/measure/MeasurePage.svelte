@@ -283,7 +283,7 @@
             キャラに登録した装備(<b>{weaponLabel(savedWeaponId)}</b>)は変わりません。
           </p>
         {/if}
-        <div class="attack-row">
+        <div class="attack-row inset">
           <span class="dim">攻撃力(A)</span>
           <span class="num" use:bump={() => attack?.value ?? null}>{attack ? fmtInt(attack.value) : "—"}</span>
           <span class="dim">最終能力値も一緒に送られます(逆算の入力になります)</span>
@@ -313,7 +313,7 @@
         </div>
 
         {#if targetKind === "listed"}
-          <div class="compare">
+          <div class="compare inset">
             <!-- どちら側と比べているかを必ず書く(計算タブの「1 発」はクリ率 > 0 ならクリ側) -->
             <span class="dim">このツールの計算({measuredCritical ? "クリティカル" : "非クリ最大"})</span>
             <span class="num">{expected !== null ? fmtInt(Math.trunc(expected)) : "—"}</span>
@@ -350,12 +350,12 @@
           <div class="samples">
             {#each samples as sample, index (index)}
               <div class="sample-row">
-                <span class="tag">{index + 1}</span>
+                <span class="meta-pill">{index + 1}</span>
                 <span class="dim">攻撃力</span>
                 <span class="num">{sample.attack !== null ? fmtInt(sample.attack) : "—"}</span>
                 <span class="dim">実測</span>
                 <span class="num">{fmtInt(sample.damage)}</span>
-                {#if sample.critical}<span class="tag crit">クリ</span>{/if}
+                {#if sample.critical}<span class="meta-pill crit">クリ</span>{/if}
                 <span class="dim">{fmtInt(sample.hits)} 発中</span>
                 {#if sample.weapon}<span class="dim sample-note">{sample.weapon}</span>{/if}
                 {#if sample.note}<span class="dim sample-note">{sample.note}</span>{/if}
@@ -408,8 +408,7 @@
   }
 
   .attack-row, .compare {
-    display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: var(--r-window);
-    background: var(--surface-inset); border: 1px solid var(--border-soft); font-size: 10px;
+    display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: var(--r-window); font-size: 10px;
   }
   .attack-row .num, .compare .num { font-size: 12.5px; font-weight: 700; }
   .compare .num.warn { color: var(--warm); }
@@ -426,12 +425,8 @@
   .sample-row .num { font-size: 11.5px; font-weight: 700; }
   .sample-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sample-del { margin-left: auto; flex: none; font-size: 9px; padding: 1px 8px; }
-  .tag {
-    flex: none; padding: 1px 7px; border-radius: var(--r-pill);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
-    font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
-  }
-  .tag.crit { background: var(--state-edge-bg); border-color: var(--state-edge-bd); color: var(--state-edge-fg); }
+
+  .crit { background: var(--state-edge-bg); border-color: var(--state-edge-bd); color: var(--state-edge-fg); }
   /* 2 点そろったら「分けられる」と分かるようにする(§00 05) */
   .note.ready { border-style: solid; border-color: var(--state-met-bd); background: var(--state-met-bg); }
   .foot { margin: 0; font-size: 10px; line-height: 1.7; }

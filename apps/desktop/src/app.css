@@ -259,10 +259,18 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .section-label .rule { flex-grow: 1; height: 1px; background: var(--border-soft); }
 .section-label .note { color: var(--accent); letter-spacing: 0; }
 
-/* インセット面(窓の3層目)。表・読み取り専用の数値をここに載せて、編集できる面(白)と区別する */
+/* インセット面(窓の3層目)。表・読み取り専用の数値をここに載せて、編集できる面(白)と区別する。
+   ページ側で --surface-inset を塗り直さず、この class を付ける(§01 / §08 ReadRow)。角丸・枠線を
+   変えたい面(窓丸の列・左に印の付く編集面)は、この class に加えて自分の角丸だけを上書きする */
 .inset {
   background: var(--surface-inset); border-radius: var(--r-inset);
   border: 1px solid var(--border-soft);
+}
+/* 読み取りの小さな値札(番号・版・部位の補正)。インセット色で「読むだけ」を言う。幅・余白は呼び出し側 */
+.meta-pill {
+  flex: none; padding: 1px 7px; border-radius: var(--r-pill);
+  background: var(--surface-inset); border: 1px solid var(--border-soft);
+  font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
 }
 
 table.grid { border-collapse: collapse; width: 100%; font-size: 11.5px; }

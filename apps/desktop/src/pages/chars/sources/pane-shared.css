@@ -78,7 +78,6 @@
   /* 素ステ → 最終。灰が素ステ、青が補正で乗った分(§11) */
   .grow {
     display: flex; width: 100%; min-width: 74px; height: 7px; overflow: hidden;
-    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-soft);
   }
   .grow > i { display: block; transition: width 0.38s cubic-bezier(0.4, 0, 0.2, 1); }
   .grow > .base { background: var(--flow-base); }
@@ -137,11 +136,6 @@
   }
   .values-cols { display: flex; flex-wrap: wrap; gap: 10px 16px; }
   .values-col { flex: 1 1 260px; min-width: 0; }
-  .part-elem {
-    flex-shrink: 0; padding: 1px 6px; font-size: 9px; font-weight: 700;
-    color: var(--fg-muted); background: var(--surface-inset);
-    border: 1px solid var(--border); border-radius: var(--r-pill);
-  }
   .part-abi {
     flex-shrink: 0; font-size: 8.5px; font-weight: 700; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: var(--r-pill); padding: 0 6px;
@@ -225,11 +219,7 @@
 
   /* 称号のダメージ増加。読み取り専用の値なのでインセット(白 = 編集できる面と区別する。§01/§02)。
      補正値と効き方が違うので値の要約とも分けて出す */
-  .title-dmg {
-    flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
-    color: var(--fg-sub); background: var(--surface-inset);
-    border: 1px solid var(--border-soft); border-radius: var(--r-pill);
-  }
+  .title-dmg { padding: 0 6px; font-size: 9px; color: var(--fg-sub); }
   .title-extra {
     flex-shrink: 0; padding: 0 6px; font-size: 9px; font-weight: 700;
     color: var(--state-edge-fg); background: var(--state-edge-bg);
@@ -402,10 +392,6 @@
 
   .skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .skill-chip .skill-name { font-weight: 700; }
-  .skill-chip .skill-meta {
-    padding: 0 5px; border-radius: var(--r-pill);
-    background: var(--surface-inset); font-size: 9px; color: var(--fg-muted);
-  }
   .skill-chip.on .skill-meta { background: rgba(255, 255, 255, 0.7); color: var(--sel-fg); }
   /* 未収録は破線 + ? で、空白や「単体」で埋めない(§00) */
   .skill-chip .skill-meta.unknown { background: none; border: 1px dashed var(--border); }
@@ -429,7 +415,7 @@
   .part-switches button.drop-after::after { right: -4px; }
   .registration-grip { color: var(--fg-off); font-size: 10px; line-height: 1; }
   .part-switches button:hover .registration-grip, .part-switches button.dragging .registration-grip { color: var(--accent); }
-  .registration-order { margin: 7px 4px 3px; padding: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset); }
+  .registration-order { margin: 7px 4px 3px; padding: 7px; }
   .delete-registration { width: 174px; color: var(--danger); border-color: var(--state-short-bd); }
   .delete-registration.confirm { background: var(--state-short-bg); font-weight: 700; }
   .editing-registration { background: var(--state-temp-bg); border-color: var(--state-temp-bd); color: var(--state-temp-fg); }
@@ -444,7 +430,6 @@
   .enchant-plan {
     min-width: 0; min-height: 30px; padding: 3px 7px; display: grid;
     grid-template-columns: 75px minmax(0, 1fr) 34px; align-items: center; gap: 7px;
-    border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--surface-inset);
   }
   .plan-remaining { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
   .plan-remaining small { color: var(--fg-muted); font-size: 8.5px; }
@@ -474,7 +459,7 @@
   .value-total { width: 102px; display: grid; grid-template-columns: 38px 62px; gap: 2px; align-items: baseline; white-space: nowrap; color: var(--accent-hover); }
   .total-main { width: 38px; font-size: 13px; text-align: right; }
   .enchant-part { width: 62px; color: var(--fg-muted); font-size: 9px; font-weight: 500; text-align: left; }
-  .ability-part { width: 52px; padding: 1px 4px; border-radius: var(--r-pill); background: var(--surface-inset); color: var(--accent-hover); font-size: 8.5px; font-weight: 700; text-align: center; white-space: nowrap; }
+  .ability-part { width: 52px; padding: 1px 4px; border: 0; color: var(--accent-hover); text-align: center; }
   .ability-spacer { width: 52px; }
   .enchant-card { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .enchant-card .hint { margin: 4px 0 0; }

@@ -731,7 +731,7 @@
       <button type="button" class="btn close-equipment" onclick={() => (openPart = null)}>閉じる <span aria-hidden="true">×</span></button>
     </div>
     {#if draft.equipment.parts[slot].registered.length > 1}
-      <div class="part-switches registration-order" aria-label="装備登録の並び順">
+      <div class="part-switches registration-order inset" aria-label="装備登録の並び順">
         {@render partSwitchList(slot, draft.equipment.parts[slot].registered, draft.equipment.parts[slot].selected_id)}
       </div>
     {/if}
@@ -919,7 +919,7 @@
                 <span class="enchant-part" use:bump={() => part.enchant[k]}>（＋{part.enchant[k]}）</span>
               </strong>
               {#if abilityValue !== 0}
-                <span class="ability-part">アビ{abilityValue}</span>
+                <span class="ability-part meta-pill">アビ{abilityValue}</span>
               {:else}
                 <span class="ability-spacer" aria-hidden="true"></span>
               {/if}
@@ -933,7 +933,7 @@
             </div>
             {#if completionPlan !== null && enchantPlanStats.includes(k)}
               <div
-                class="enchant-plan"
+                class="enchant-plan inset"
                 class:complete={completionPlan.remaining === 0}
                 use:flash={() => `${completionPlan.remaining}:${completionPlan.twenty_count}:${completionPlan.seventeen_count}:${completionPlan.remainder}`}
               >

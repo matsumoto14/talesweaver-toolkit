@@ -98,9 +98,9 @@
 
 {#snippet dmgBadge(t: TitleDef, impliedDmg: number | null)}
   {#if t.attack_damage_percent > 0 && t.attack_damage_percent !== impliedDmg}
-    <span class="title-dmg num">ダメ {fmtSigned(t.attack_damage_percent, { max: 2 }, "%")}</span>
+    <span class="title-dmg meta-pill num">ダメ {fmtSigned(t.attack_damage_percent, { max: 2 }, "%")}</span>
   {:else if t.added_damage_percent > 0}
-    <span class="title-dmg num">追加ダメ {fmtSigned(t.added_damage_percent, { max: 2 }, "%")}</span>
+    <span class="title-dmg meta-pill num">追加ダメ {fmtSigned(t.added_damage_percent, { max: 2 }, "%")}</span>
   {:else if t.conditional_added_damage !== null}
     <span class="title-extra">条件付き追加ダメ</span>
   {/if}
@@ -175,9 +175,9 @@
       <span class="item-vals num dim" title={titleSummary(selectedTitle)}>{titleSummary(selectedTitle)}</span>
     {/if}
     {#if selectedTitle?.attack_damage_percent}
-      <span class="title-dmg num">ダメージ {fmtSigned(selectedTitle.attack_damage_percent, { max: 2 }, "%")}</span>
+      <span class="title-dmg meta-pill num">ダメージ {fmtSigned(selectedTitle.attack_damage_percent, { max: 2 }, "%")}</span>
     {:else if selectedTitle?.added_damage_percent}
-      <span class="title-dmg num">追加ダメージ {fmtSigned(selectedTitle.added_damage_percent, { max: 2 }, "%")}</span>
+      <span class="title-dmg meta-pill num">追加ダメージ {fmtSigned(selectedTitle.added_damage_percent, { max: 2 }, "%")}</span>
     {:else if selectedTitle?.conditional_added_damage}
       <span class="title-extra">条件付き追加ダメージ</span>
     {/if}

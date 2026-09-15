@@ -23,7 +23,7 @@
 
 {#snippet backlogRow(label: string, title: string | undefined, text: string)}
   <div class="rn-row">
-    <span class="tag">{label}</span>
+    <span class="tag meta-pill">{label}</span>
     {#if title}<b class="rn-title">{title}</b>{/if}
     <span class="rn-text">{text}</span>
   </div>
@@ -86,7 +86,7 @@
       {#each news.releases as note, index (note.version)}
         <details class="fold rn-fold" open={index === 0}>
           <summary>
-            <span class="rn-version">v{note.version}</span>
+            <span class="rn-version meta-pill">v{note.version}</span>
             <span class="rn-date num">{fmtMonthDay(note.date)}</span>
             {#if note.headline}<span class="rn-headline">{note.headline}</span>{/if}
             <span class="rn-count">{fmtInt(note.changes.length)} 件</span>
@@ -147,11 +147,7 @@
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
-  .tag {
-    flex: none; width: 52px; text-align: center; padding: 1px 0; border-radius: var(--r-pill);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
-    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
-  }
+  .tag { width: 52px; text-align: center; padding: 1px 0; }
 
   .rn-fold:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
   .rn-list { display: flex; flex-direction: column; gap: 6px; }
@@ -162,11 +158,7 @@
   .rn-row .tag { margin-top: 1px; }
   .rn-title { flex: none; font-size: 11px; font-weight: 700; color: var(--fg); line-height: 1.5; }
   .rn-text { min-width: 0; flex: 1; font-size: 11px; color: var(--fg-sub); line-height: 1.5; }
-  .rn-version {
-    flex: none; padding: 1px 8px; border-radius: var(--r-pill);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
-    font-size: 9px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
-  }
+  .rn-version { padding: 1px 8px; font-size: 9px; }
   .rn-date { flex: none; font-size: 9.5px; color: var(--fg-dim); }
   .rn-headline { min-width: 0; font-size: 10px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rn-count { flex: none; margin-left: auto; font-size: 9.5px; color: var(--fg-dim); }

@@ -1724,7 +1724,7 @@
 <!-- 閉じていても DOM に置いたまま隠す(hidden)。{#if} で外すと、閉じている間に称号などを切り替えた
      ↑↓・追加/削除 が、開いたときには消えている(差分は要素が前回値を覚えている。§00 04) -->
 {#snippet detailBox(d: Detail, open: boolean)}
-  <div class="detail" class:open-in={open} hidden={!open}>
+  <div class="detail inset" class:open-in={open} hidden={!open}>
     <div class="dt-head">
       <span class="dt-hk dim">倍率</span>
       <span class="num dt-hv">{d.mult}</span>
@@ -2041,7 +2041,7 @@
           {/if}
 
           {#if skill && skill.combo_variants.length > 0}
-            <div class="combo-type-row">
+            <div class="combo-type-row inset">
               <StepSelect
                 label="コンボタイプ"
                 options={COMBO_SKILL_TYPE_OPTIONS}
@@ -2182,7 +2182,7 @@
                 {/if}
               </div>
               {#if fillMoreOpen && whatIf.length > 1}
-                <div class="fill-list open-in">
+                <div class="fill-list inset open-in">
                   {#each whatIf.slice(1) as w (w.id)}
                     <button
                       type="button" class="fill-more-row"
@@ -2296,7 +2296,7 @@
                 {/if}
                 {#if bestLever && nextLeversOpen && nextLevers.length > 0}
                   <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段 -->
-                  <div class="lever-list open-in">
+                  <div class="lever-list inset open-in">
                     {#each nextLevers as c, i (c.category)}
                       <div class="dt-row">
                         <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
@@ -2406,7 +2406,7 @@
                 {:else}
                   <div class="lost">
                     {#each lostRows as r (r.k)}
-                      <div class="lost-row">
+                      <div class="lost-row inset">
                         <span class="lost-label">{r.k}</span>
                         <span class="num lost-raw" use:flash={() => r.raw}>{r.raw}</span>
                         <span class="lost-arrow dim">→ 上限</span>
@@ -2900,7 +2900,7 @@
             {#if defs.length > 0}
               <button
                 type="button"
-                class="buff-group-head"
+                class="buff-group-head inset"
                 class:open={openBuffPurpose === purpose.id}
                 aria-expanded={openBuffPurpose === purpose.id}
                 onclick={() => (openBuffPurpose = openBuffPurpose === purpose.id ? null : purpose.id)}
@@ -3044,8 +3044,6 @@
   .combo-type-row {
     margin: 8px 11px 0; padding: 8px 10px;
     display: grid; grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); align-items: end; gap: 10px;
-    background: var(--surface-inset); border: 1px solid var(--border-strong); border-radius: var(--r-inset);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   }
   .combo-type-note { min-width: 0; padding-bottom: 3px; font-size: 9px; line-height: 1.45; }
   /* コンボの成立条件と、挟む通常攻撃の段。ON のときだけ出るので、
@@ -3135,7 +3133,6 @@
   .fill-more-toggle:hover { color: var(--fg); background: var(--bg-active); }
   .fill-list {
     margin-top: 4px; padding: 5px 7px; display: flex; flex-direction: column; gap: 2px;
-    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
   }
   .fill-more-row { width: 100%; display: flex; align-items: center; gap: 8px; padding: 2px 3px; border-radius: var(--r-inset); text-align: left; }
   .fill-more-row:hover:not(:disabled) { background: var(--bg-active); }
@@ -3147,8 +3144,6 @@
   .lever-note .chip { margin-left: 6px; vertical-align: middle; }
   .lever-list {
     margin-top: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px;
-    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
   }
   .lever-toggle { margin-top: 9px; }
   /* トグルの直下に開くので、上マージンは詰める(帯が二重に空かない) */
@@ -3190,8 +3185,6 @@
   .detail[hidden], .dt-subs[hidden], .flow-body[hidden] { display: none; }
   .detail {
     margin: 6px 0 2px; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px;
-    border-radius: var(--r-inset); background: var(--surface-inset); border: 1px solid var(--border-strong);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
   }
   .dt-head { display: flex; align-items: baseline; gap: 6px 7px; flex-wrap: wrap; }
   .dt-hk { font-size: 9px; letter-spacing: 0.06em; }
@@ -3242,8 +3235,7 @@
   .lost { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
   .lost-row {
     display: flex; align-items: center; gap: 8px; min-width: 0;
-    padding: 4px 9px; border-radius: var(--r-inset);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
+    padding: 4px 9px;
   }
   .lost-label { min-width: 0; flex: 1; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lost-raw { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; color: var(--fg-muted); text-decoration: line-through; }
@@ -3377,9 +3369,7 @@
   /* 目的グループの見出し。押しても見出し自身は動かず、中身がその下に生えるだけ */
   .buff-group-head {
     width: 100%; margin-top: 5px; padding: 5px 8px;
-    display: flex; align-items: center; gap: 7px;
-    border: 1px solid var(--border-soft); border-radius: var(--r-inset);
-    background: var(--surface-inset); color: var(--fg-sub);
+    display: flex; align-items: center; gap: 7px; color: var(--fg-sub);
     font-size: 10px; font-weight: 700; text-align: left; cursor: pointer;
   }
   .buff-group-head:hover { border-color: var(--accent); }

@@ -100,7 +100,7 @@
         <span class="chev dim">›</span>
       </button>
       {#if openPart === part}
-        <div class="avatar-editor" aria-label={`${AVATAR_PART_LABELS[part]}のアバター強化`}>
+        <div class="avatar-editor inset" aria-label={`${AVATAR_PART_LABELS[part]}のアバター強化`}>
           {#each visibleStats as kind (kind)}
             {@const options = cellOptions(part, kind)}
             <div class="avatar-stat-row" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(kind)}>
@@ -140,7 +140,7 @@
   /* 開いた部位の編集面。行の直下に足す(押した行は動かない。§00 03) */
   .avatar-editor {
     margin: -2px 0 4px 18px; padding: 6px 8px 2px;
-    border-left: 2px solid var(--accent); background: var(--surface-inset); border-radius: 0 var(--r-inset) var(--r-inset) 0;
+    border-left: 2px solid var(--accent); border-radius: 0 var(--r-inset) var(--r-inset) 0;
     display: flex; flex-direction: column; gap: 5px;
   }
   .avatar-stat-row { display: grid; grid-template-columns: 34px max-content 1fr; align-items: center; gap: 10px; }

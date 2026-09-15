@@ -161,7 +161,7 @@
         <span class="chev dim">›</span>
       </button>
       {#if openSlot === slot}
-        <div class="avatar-editor" aria-label={`${PART_SLOT_LABELS[slot]}の研磨`}>
+        <div class="avatar-editor inset" aria-label={`${PART_SLOT_LABELS[slot]}の研磨`}>
           <div class="polish-kind-row" aria-label={`${PART_SLOT_LABELS[slot]}の${polishProductLabel(slot)}`}>
             <span class="dim tiny">{polishProductLabel(slot)}</span>
             <Picker
@@ -191,7 +191,7 @@
   .part-list { margin-top: 9px; }
   .avatar-editor {
     margin: -2px 0 4px 18px; padding: 6px 8px 2px;
-    border-left: 2px solid var(--accent); background: var(--surface-inset); border-radius: 0 var(--r-inset) var(--r-inset) 0;
+    border-left: 2px solid var(--accent); border-radius: 0 var(--r-inset) var(--r-inset) 0;
     display: flex; flex-direction: column; gap: 6px;
   }
   .polish-kind-row, .polish-stat-row { display: flex; align-items: flex-start; gap: 6px; }

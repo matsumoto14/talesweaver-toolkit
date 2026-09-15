@@ -945,7 +945,7 @@
 
         <!-- 次の目標スポットライト(全幅 — 右列に入れるとメーターが潰れる) -->
         <div class="hero-goal">
-          <span class="tag">次の目標</span>
+          <span class="tag meta-pill">次の目標</span>
           {#if !app.evaluations[character.id]}
             <span class="dim">到達判定を取得できていません。</span>
           {:else}
@@ -1065,7 +1065,7 @@
             <span class="area-rule"></span>
           </div>
           <div class="brief-card" use:flash={() => String(card.perHit)}>
-            <span class="tag">影響</span>
+            <span class="tag meta-pill">影響</span>
             <Icon
               kind="skill" id={card.skillId} size={28}
               label={skillNames[card.skillId] ?? card.skillId}
@@ -1459,11 +1459,7 @@
   .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
 
   /* 帯ラベル・行動チップ。影響カードのカード種別に使う */
-  .tag {
-    flex: none; width: 52px; text-align: center; padding: 1px 0; border-radius: var(--r-pill);
-    background: var(--surface-inset); border: 1px solid var(--border-soft);
-    font-size: 8.5px; font-weight: 700; color: var(--fg-muted); white-space: nowrap;
-  }
+  .tag { width: 52px; text-align: center; padding: 1px 0; }
   .cta {
     flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: var(--r-pill);
     background: var(--bg-field); border: 1px solid var(--border-soft); font-size: 9.5px; font-weight: 700; color: var(--accent); white-space: nowrap;

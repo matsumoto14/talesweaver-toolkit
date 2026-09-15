@@ -680,7 +680,7 @@
   {@const accCount = attacker ? triedCountFor(attacker.id, "acc") : 0}
   {@const evaCount = defender ? triedCountFor(defender.id, "eva") : 0}
   {@const totalTried = accCount + evaCount}
-  <div class="direction">
+  <div class="direction inset">
     <!-- 頭がそのまま選択の場。上の別カードは廃止(ユーザー指摘 2026-09-02)。
          助詞で主語・目的語を決める ── 矢印だと「どちらが殴る側か」を読者が補うことになる -->
     <div class="dir-head">
@@ -789,7 +789,6 @@
   .direction {
     flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px;
     padding: 12px 14px 14px; border-radius: var(--r-window);
-    border: 1px solid var(--border-soft); background: var(--surface-inset);
   }
 
   /* 未収録(供給源が無いのでまだ 0 決め打ち)。0 や空白ではなく ? + 破線で示す */

@@ -389,7 +389,7 @@
                  灰が素ステ(振り分け)、青が補正で乗った分。長さは最終能力値の上限に対する割合 -->
             <td class="ro">
               <span
-                class="grow"
+                class="grow inset"
                 title={cap > 0 ? `上限 ${fmtInt(cap)}(覚醒段階 + エタの意志 Lv)` : "上限は計算中"}
               >
                 <i class="base" style="width: {basePct}%"></i>
