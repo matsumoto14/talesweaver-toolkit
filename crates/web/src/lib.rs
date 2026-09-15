@@ -331,8 +331,9 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
             let a: ValidateBuffSetArgs = args_of(command, args)?;
             done(commands::validate_buff_set(a.name, a.choices))
         }
-        // ブラウザ版は永続化しない(この WASM インスタンスが生きている間だけ合流する。
-        // デスクトップ版はローカルファイルへ保存し次回起動でも読み直す。commands.rs 参照)。
+        // 合流はこの WASM インスタンスの中だけ。ブラウザでの保存と起動時の読み直しは
+        // apps/desktop/src/api/invoke.wasm.ts(localStorage)が持つ(デスクトップ版は
+        // commands.rs がローカルファイルに保存する)。
         "install_downloaded_equipment" => {
             let a: InstallDownloadedEquipmentArgs = args_of(command, args)?;
             match gamedata::install_downloaded_equipment(&a.json) {
