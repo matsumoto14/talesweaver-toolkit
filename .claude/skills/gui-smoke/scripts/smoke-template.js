@@ -18,8 +18,9 @@ const log = (...a) => console.log(...a);
   const wait = (ms = 300) => page.waitForTimeout(ms);
   const toastText = async () => (await page.locator(".toast").count()) ? await page.locator(".toast").innerText() : null;
   const byLabel = (scope, label) => scope.locator(".label", { hasText: new RegExp("^" + label + "$") });
-  // サイドバー(nav)。ボタンはラベル文字で選ぶ(title 属性は折りたたみ時しか付かない)
-  const nav = async (label) => { await page.locator("nav button", { hasText: label }).click(); await wait(); };
+  // 上部タブ(App.svelte <nav class="tabs">)。ラベルは ホーム / ダメージ計算 / バフ / キャラ / 対人 / 実測 / お知らせ
+  // (対人はロック解除後だけ出る)。折りたたみ時の title 属性は無いのでラベル文字で選ぶ
+  const nav = async (label) => { await page.locator("nav.tabs button", { hasText: label }).click(); await wait(); };
   // ui/StepSelect.svelte(順序のある 1 つ選ぶ): <div class="step-select"><span class="label">…</span><div class="seg"><button class="step">
   const stepByLabel = async (scope, label, text) => {
     await scope.locator(".step-select", { has: byLabel(scope, label) }).locator(".seg .step", { hasText: text }).click(); await wait();
@@ -48,9 +49,15 @@ const log = (...a) => console.log(...a);
   const toggleRow = (scope, text) => scope.locator(".togrow", { hasText: text });
   const toggle = (scope, text) => toggleRow(scope, text).locator(".face").click();
 
-  // ---- キャラ管理画面
-  // 一覧からキャラを選ぶ(表示名の完全一致)
-  const openCharacter = async (name) => { await page.locator(".list td.name > span", { hasText: new RegExp("^" + name + "$") }).first().click(); await wait(400); };
+  // ---- キャラ画面
+  // 左レール(CharacterRail.svelte)からキャラを選ぶ(表示名の完全一致)。
+  // 行は <div class="list"><button class="char" title="名前(キャラ種) …"><span class="name">名前</span>
+  const openCharacter = async (name) => {
+    await page.locator(".list button.char", { has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) }).first().click();
+    await wait(400);
+  };
+  // レールに並んでいる表示名の一覧(検証に使うキャラを決めるとき)
+  const characterNames = () => page.locator(".list button.char .name").allInnerTexts();
   // 登録フォーム(呼び名 + キャラのアイコン選択)。呼び名は ui/TextField の読み取り面
   // (<button aria-label="呼び名 を編集">)が既定で、押すと <input aria-label="呼び名"> になる
   const registerCharacter = async (name, gameCharacterLabel) => {
@@ -75,10 +82,10 @@ const log = (...a) => console.log(...a);
     await wait(500);
     return page.locator(".badge", { hasText: "未保存" }).count();
   };
-  // 一覧は <section class="list"><table class="grid"><tr><td class="name"><span>表示名</span>…
+  // 削除はキャラ画面(Workspace)の詳細側にある。選んでから押す
   const deleteCharacter = async (name) => {
-    const row = page.locator(".list table.grid tr", { has: page.locator("td.name > span", { hasText: new RegExp("^" + name + "$") }) });
-    await row.locator("button.btn.danger", { hasText: "削除" }).click();
+    await openCharacter(name);
+    await page.locator("button.btn.danger", { hasText: "削除" }).click();
     await wait(400);
   };
 
@@ -102,7 +109,7 @@ const log = (...a) => console.log(...a);
   };
 
   // ---- 確認項目(例: 装備を入れて保存 → ダメージ計算)
-  await nav("キャラ管理");
+  await nav("キャラ");
   await openCharacter("検証ボリス");
   const eq = await openGroup("装備");
   await setNum(statInput(statsBlock(eq, 0), "突き攻撃力"), 400);

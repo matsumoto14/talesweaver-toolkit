@@ -269,6 +269,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 /* ReadRow(ui/ReadRow.svelte)の器。インセット面に ラベル + 値 の行を縦に並べる(§08) */
 .readrows { display: flex; flex-direction: column; padding: 5px 10px; min-width: 0; }
+/* 既に面(.summary-block など)の中に置く行は、面の余白に重ねない */
+.readrows:not(.inset) { padding: 0; }
 
 /* 読み取りの小さな値札(番号・版・部位の補正)。インセット色で「読むだけ」を言う。幅・余白は呼び出し側 */
 .meta-pill {

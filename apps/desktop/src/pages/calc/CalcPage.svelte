@@ -3081,8 +3081,8 @@
   .chain .nv { font-weight: 700; color: var(--fg); white-space: nowrap; }
   .chain .node.gate .nv { min-width: 120px; }
   .chain .node.mid .nv { font-size: 15px; min-width: 68px; }
-  /* この一発 = 画面の主役の数字(§08 数値の 3 段)。寸法は役割トークンだけ */
-  .chain .node.rate .nv { font-size: var(--t-result); min-width: 68px; }
+  /* DPS は主役(1 発 = --t-result)の隣の見出し数字。--t-result だと 1 発と並んで大きすぎる(ユーザー 2026-09-16) */
+  .chain .node.rate .nv { font-size: var(--t-heading); min-width: 68px; }
   /* 押せるノードは桁・状態で動かない。実測(tools/design-audit/live/digits.js)では
      1 発 180〜220px・バッジ 39〜106px・合計 75〜83px と揺れ、右のノードが最大 29px 逃げていた
      (§09 規則 4)。幅を取り切り、中身が短いときは空けておく。値の上限

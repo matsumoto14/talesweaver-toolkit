@@ -137,9 +137,10 @@ const WATCH = `(() => {
   // 人のレビューで拾った(2026-09-02)ので、以後はここで機械が見る
   await page.locator("nav.tabs button", { hasText: "対人" }).click({ force: true });
   await wait(1800);
-  // 方向ごとに 1 列の作り(2026-09-02)。スキルの Picker は命中P ブロックの「スキルの命中」行にある
+  // 方向ごとに 1 列の作り(2026-09-02)。スキルの Picker は命中P ブロックの「スキルの命中」行
+  // (ui/ReadRow: <div class="readrow"><span class="k">スキルの命中</span> … <div class="picker">)にある(2026-09-16)
   const skillPicker = page
-    .locator(".stat-row.with-picker", { has: page.locator(".stat-label", { hasText: "スキルの命中" }) })
+    .locator(".readrow", { has: page.locator(".k", { hasText: "スキルの命中" }) })
     .locator(".picker")
     .first();
   if (await skillPicker.count()) {
