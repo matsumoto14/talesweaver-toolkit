@@ -10,7 +10,7 @@
     BlockedBuff, BuffSelection,
     StatSources, CommonSkills,
     Adjustments, BuffChoice, BuffDefinition, BuffPurpose, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
-    DamageResult, DefenseProfile, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill,
+    DamageResult, DefenseProfile, EquipmentStatKind, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill,
     SoulLinkPreview, StatKind, UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
@@ -23,10 +23,11 @@
     type EnchantDepKey,
   } from "../../enchant";
   import { ETERNAL_MILESTONES } from "../../draft";
-  import { selectedEquipmentPartOrNeutral } from "../../equipment";
+  import { polishAmount, selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue, topRowsText } from "../../format";
   import {
-    ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, STAT_LABELS,
+    ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, PART_SLOTS,
+    POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, STAT_KINDS, STAT_LABELS,
     STAT_LAYER_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
@@ -1200,7 +1201,7 @@
   /** 「計算の材料」で開いているまとまり。null = 全部畳んである(既定)。
    *  実プレイでは一度に 1 つしか触らないので、開くのも 1 つに絞る — 全部開くと
    *  3512px(表示域の 4.6 画面ぶん)になり、目的のものまでスクロールで探すことになる */
-  type MaterialGroup = "ultimate" | "awakening" | "sharpness" | "soul_link" | "enchant" | "buffs";
+  type MaterialGroup = "ultimate" | "awakening" | "sharpness" | "soul_link" | "enchant" | "polish" | "buffs";
   let openMaterial = $state<MaterialGroup | null>(null);
   function toggleMaterial(id: MaterialGroup) {
     openMaterial = openMaterial === id ? null : id;
@@ -1241,6 +1242,31 @@
   function toggleBuffStatChip(def: BuffDefinition, stat: StatKind, next: boolean) {
     app.calcBuffs = { choices: toggleBuffStat(app.calcBuffs.choices, def, stat, next) };
   }
+
+  // --- 研磨(試し変更)。記録はキャラタブの研磨ペイン、効かせるかはバフ「装備研磨」と同じ
+  //     スイッチ(calcBuffs の equipment_polish)。装備に付けたものなので、探す先はバフ一覧では
+  //     なく材料列(シャープネス・エンチャントと同じ段)。ここは表示の顔で、正は Rust 側
+  //     (`equipment_polish_active` / `Equipment::base_sources`)。加算量のプレビューは
+  //     PolishPane と同じ polishAmount(表示のみ)で出す
+  const polishDef = $derived(app.catalog.find((def) => def.id === "equipment_polish") ?? null);
+  const polishOn = $derived(polishDef !== null && buffOn(polishDef));
+  const polishRows = $derived.by(() => {
+    if (!payload) return [];
+    return POLISH_ALLOWED_SLOTS.flatMap((slot) => {
+      const entry = payload.equipment.polish.entries.find((e) => e.slot === slot);
+      if (!entry) return [];
+      const part = selectedEquipmentPartOrNeutral(payload.equipment.parts[slot]);
+      return [{ slot, entry, amount: polishAmount(entry.kind, slot, part.base[entry.stat]) }];
+    });
+  });
+  const polishTotalsLabel = $derived.by(() => {
+    const sum = new Map<EquipmentStatKind, number>();
+    for (const row of polishRows) sum.set(row.entry.stat, (sum.get(row.entry.stat) ?? 0) + row.amount);
+    return [...sum.entries()].map(([k, v]) => `${EQUIPMENT_STAT_SHORT[k]} +${fmtInt(v)}`).join(" ・ ");
+  });
+  const polishHeadNote = $derived(
+    polishRows.length === 0 ? "未登録" : `${polishOn ? "ON" : "OFF"} ・ ${polishTotalsLabel}`,
+  );
   // --- 極限スキル(試し変更)。2 枠のうち何を選ぶかだけをこの画面で切り替える -----------
   // スーパーリミット・ハイパーリミットの Lv はキャラタブ(共通スキル)の設定が正。ここでは触らない。
   const ultimatePickedCount = $derived(
@@ -2586,6 +2612,49 @@
           {/if}
         </div>
 
+        <!-- 研磨(試し変更)。記録はキャラタブの研磨ペインで、ここでは効かせるかだけ切り替える。
+             スイッチの実体はバフ「装備研磨」(calcBuffs。保存は「試し変更を保存」で)だが、装備の話なので顔はここ -->
+        <div class="card">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "polish"} onclick={() => toggleMaterial("polish")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "polish" ? "▾" : "▸"}</span>
+            <Icon kind="equipment" id={null} size={20} label="研磨" />
+            <span class="card-title">研磨</span>
+            <span class="dim small num" use:flash={() => polishHeadNote}>{polishHeadNote}</span>
+          </button>
+          {#if openMaterial === "polish"}
+          <div class="basics-rows">
+            <div class="basics-row">
+              <span class="basics-label">効かせる</span>
+              <button
+                type="button" class="chip" class:on={polishOn} disabled={polishDef === null}
+                onclick={() => { if (polishDef) toggleBuffChip(polishDef); }}
+              >{polishOn ? "ON" : "OFF"}</button>
+            </div>
+          </div>
+          {#if polishRows.length === 0}
+            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("polish")}>
+              <span class="coverage">未登録</span>
+              <span class="dim small">登録はキャラタブの研磨ペイン</span>
+              <span class="chev dim">›</span>
+            </button>
+          {:else}
+            <div class="polish-rows">
+              {#each polishRows as row (row.slot)}
+                <button type="button" class="polish-row" class:off={!polishOn} onclick={() => focusCharacterSource("polish")}>
+                  <span class="enchant-row-label">{PART_SLOT_LABELS[row.slot]}</span>
+                  <span class="polish-row-kind dim">{POLISH_KIND_LABELS[row.entry.kind]} {EQUIPMENT_STAT_SHORT[row.entry.stat]}</span>
+                  <span class="num polish-row-amount" use:bump={() => row.amount}>+{fmtInt(row.amount)}</span>
+                  <span class="chev dim">›</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+          <p class="eq-note dim">
+            研磨は<b>基本能力値</b>に合流します。記録の追加・変更はキャラタブの研磨ペイン。ON/OFF はバフ「装備研磨」と同じで、この計算だけの試し変更です(残すなら「試し変更を保存」)。
+          </p>
+          {/if}
+        </div>
+
         <!-- バフ -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "buffs"} onclick={() => toggleMaterial("buffs")}>
@@ -3031,6 +3100,15 @@
     display: flex; align-items: center; gap: 8px; padding: 2px 0; background: none; border: none;
     cursor: pointer; text-align: left; width: 100%;
   }
+  .polish-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .polish-row {
+    display: flex; align-items: center; gap: 8px; padding: 2px 0; background: none; border: none;
+    cursor: pointer; text-align: left; width: 100%; min-width: 0;
+  }
+  .polish-row .enchant-row-label { flex-shrink: 0; width: 46px; }
+  .polish-row-kind { min-width: 0; flex: 1; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .polish-row-amount { flex-shrink: 0; min-width: 40px; text-align: right; font-size: 10px; font-weight: 700; }
+  .polish-row.off .polish-row-amount { color: var(--fg-muted); text-decoration: line-through; }
 
   .side-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
   .side-tab {
