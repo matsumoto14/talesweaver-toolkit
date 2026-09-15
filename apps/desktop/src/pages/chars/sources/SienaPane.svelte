@@ -16,6 +16,7 @@
   import { bump, flash } from "../../../ui/motion.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
+  import TextField from "../../../ui/TextField.svelte";
 
   interface Props {
     draft: Draft;
@@ -222,7 +223,7 @@
         <div class="card registration-name-card">
           <label class="text custom-name">
             <span class="label">登録名 <span class="dim">同じ部位のオーラを見分ける名前</span></span>
-            <input type="text" bind:value={registration.label} maxlength="40" placeholder="例: 火力用" />
+            <TextField label="登録名" bind:value={registration.label} max={40} />
           </label>
           <button type="button" class="chip quiet siena-delete" onclick={() => removeSelectedSienaRegistration(slot)}>この登録を削除</button>
         </div>

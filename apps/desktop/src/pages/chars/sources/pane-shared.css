@@ -47,11 +47,6 @@
   /* 段が多くて折り返す欄は 1 行を占める。折り返した段は一度の視線で読めない(§00 01) */
   .fields > .wide { grid-column: 1 / -1; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  input[type="text"] {
-    padding: 8px 10px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg);
-  }
-  input[type="text"]:focus { outline: none; border-color: var(--accent); }
 
   /* .tbl は app.css(このペインだけ margin-top を持つ) */
   .tbl { margin-top: 8px; }
@@ -327,11 +322,6 @@
   .contrib-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .contrib-value { font-size: 15px; font-weight: 700; }
   .contrib-note { font-size: 9px; line-height: 1.5; }
-  .item-search {
-    margin-top: 8px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border); color: var(--fg); font-size: 11px;
-  }
-  .item-search:focus { outline: none; border-color: var(--accent); }
   /* 変種をまとめた行は 2 段ぶんの高さがあるので、220px だと 3 行しか入らず
      チップが毎回途中で切れる。ペインの下は空いているので伸ばす */
   .item-list { margin-top: 5px; max-height: 300px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px; }
@@ -357,7 +347,6 @@
   .contrib-inline { flex-shrink: 0; color: var(--fg-sub); font-size: 10px; }
   .equipment-picker { margin-top: 6px; padding: 6px; border-radius: var(--r-inset); }
   .picker-tools { display: flex; align-items: center; gap: 6px; }
-  .picker-tools .item-search { flex: 1; }
   .relic-selector { display: grid; gap: 14px; max-width: 480px; }
   .relic-picker-actions { display: flex; gap: 8px; padding-top: 2px; }
 

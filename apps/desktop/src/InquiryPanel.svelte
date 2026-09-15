@@ -11,6 +11,7 @@
   import { reportError } from "./toast.svelte";
   import StepSelect from "./ui/StepSelect.svelte";
   import ToggleRow from "./ui/ToggleRow.svelte";
+  import TextField from "./ui/TextField.svelte";
 
   let { onClose, prefill = null }: { onClose: () => void; prefill?: InquiryDraft | null } = $props();
 
@@ -105,12 +106,12 @@
 
           <label class="line">
             <span class="line-label">件名</span>
-            <input type="text" bind:value={title} maxlength="120" placeholder="例) 極・連撃のダメージが 0 になる" />
+            <TextField label="件名" bind:value={title} max={120} />
           </label>
 
           <label class="line">
             <span class="line-label">内容</span>
-            <textarea bind:value={body} maxlength="4000" rows="5" placeholder="どう操作すると起きるか、本当はどうなるはずかを書いてください"></textarea>
+            <TextField label="内容" bind:value={body} max={4000} multi rows={5} />
           </label>
 
           <ToggleRow
@@ -165,13 +166,6 @@
   }
   .line { display: flex; flex-direction: column; gap: 3px; }
   .line-label { font-size: var(--t-label); color: var(--fg-muted); }
-  .line input, .line textarea {
-    width: 100%; padding: 6px 8px;
-    background: var(--bg-field); border: 1px solid var(--border); border-radius: var(--r-inset);
-    font-family: inherit; font-size: var(--t-body); color: var(--fg);
-  }
-  .line textarea { resize: vertical; line-height: 1.6; }
-  .line input:focus, .line textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
   .preview-label { font-size: var(--t-label); color: var(--fg-muted); }
   .preview {

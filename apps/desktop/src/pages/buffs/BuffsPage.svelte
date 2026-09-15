@@ -31,6 +31,7 @@
   import { positionPopover } from "../../ui/popover";
   import Icon from "../../ui/Icon.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
+  import TextField from "../../ui/TextField.svelte";
 
   const PURPOSES = BUFF_PURPOSES;
   const ORIGIN_LABELS: Record<BuffOrigin, string> = {
@@ -48,6 +49,8 @@
 
   let selectedId = $state<number | null>(null);
   let newName = $state("");
+  /** 新しいセットの自動の名前。空欄で考えさせない(ux-guidelines「初期値は常に埋まっている」) */
+  const autoSetName = $derived(`セット ${app.buffSets.length + 1}`);
   let saving = $state(false);
   let persisting = false;
   let pendingPersist: BuffSet | null = null;
@@ -235,10 +238,10 @@
   }
 
   async function create() {
-    if (!newName.trim() || saving) return;
+    if (saving) return;
     saving = true;
     try {
-      replaceSet(await createBuffSet(newName, { choices: [] }));
+      replaceSet(await createBuffSet(newName.trim() || autoSetName, { choices: [] }));
       newName = "";
     } catch (e) { reportError(errorMessage(e)); }
     finally { saving = false; }
@@ -550,8 +553,8 @@
   <aside class="sets">
     <div class="bar">バフセット <span use:bump={() => app.buffSets.length}>{app.buffSets.length}</span></div>
     <div class="create-row">
-      <input bind:value={newName} disabled={saving} placeholder="セット名" aria-label="新しいバフセット名" onkeydown={(e) => e.key === "Enter" && create()} />
-      <button class="btn primary" disabled={!newName.trim() || saving} onclick={create}>作成</button>
+      <TextField label="新しいバフセット名" bind:value={newName} max={40} auto={autoSetName} autoNote="自動の名前" disabled={saving} onEnter={create} />
+      <button class="btn primary" disabled={saving} onclick={create}>作成</button>
     </div>
     <div class="set-list">
       {#each app.buffSets as set (set.id)}
@@ -583,7 +586,7 @@
     <div class="bar">セットに入れるバフ</div>
     {#if selected}
       <div class="set-tools">
-        <input value={selected.name} disabled={saving} aria-label="バフセット名" onchange={(e) => persist({ ...selected, name: e.currentTarget.value })} />
+        <TextField label="バフセット名" value={selected.name} max={40} disabled={saving} onCommit={(name) => { if (selected && name.trim() && name !== selected.name) persist({ ...selected, name }); }} />
         <button class="btn" onclick={duplicate}>複製</button>
         <button class="btn danger delete-set" disabled={saving} onclick={requestRemove}>削除</button>
       </div>
@@ -870,7 +873,6 @@
   .bar { height: 32px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; background: var(--head-bar); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
   .create-row, .set-tools { display: flex; gap: 7px; padding: 10px; border-bottom: 1px solid var(--border-soft); }
   .set-tools { position: relative; }
-  input { min-width: 0; height: 30px; flex: 1; border: 1px solid var(--border); border-radius: var(--r-inset); padding: 0 9px; background: var(--bg-field); color: var(--fg); }
   .set-list { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
   .set-list > button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 9px; border: 1px solid transparent; border-radius: var(--r-inset); text-align: left; }
   .set-list > button.on { background: var(--sel-card); border-color: var(--sel-bd); }

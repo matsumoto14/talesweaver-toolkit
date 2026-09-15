@@ -21,6 +21,7 @@
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
+  import TextField from "../../../ui/TextField.svelte";
 
   interface Props {
     characterId: number;
@@ -206,7 +207,7 @@
   <div class="fields">
     <label class="text">
       <span class="label">名前</span>
-      <input type="text" bind:value={draft.name} maxlength="32" placeholder="表示名" />
+      <TextField label="名前" bind:value={draft.name} max={32} auto={gameCharacterName} autoNote="キャラ名を使用" />
     </label>
     <!-- キャラは登録のときに決めて、ふだんは変えない。いまのキャラだけ出して、
          変えるときに顔を並べる(§00 02)。名前はアイコンに必ず併記する -->
