@@ -130,14 +130,15 @@
         </button>
       {/each}
     </div>
+    <!-- 候補チップが横に並ぶので、ラベルと注記を上の行に置き、Picker は幅いっぱいの 1 行にする -->
     <div class="row skill-row">
       <span class="label">主軸スキル</span>
-      <span class="skill-select">
-        <Picker options={mainSkillOptions} note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)" bind:value={mainSkillId} />
-      </span>
       <span class="hint dim">
         {skills.length === 0 ? "このキャラのスキルは未収録" : "攻撃力の依存種別を決めます。あとで変更できます"}
       </span>
+    </div>
+    <div class="skill-select">
+      <Picker options={mainSkillOptions} note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)" bind:value={mainSkillId} />
     </div>
     <div class="actions">
       <button type="button" class="btn primary" disabled={saving} onclick={() => register(false)}>
@@ -179,7 +180,7 @@
   .pick.on .pick-name { color: var(--fg); font-weight: 700; }
 
   .skill-row { margin-top: 11px; }
-  .skill-select { min-width: 0; flex: 1; }
+  .skill-select { margin: 6px 0 0 68px; min-width: 0; }
   .actions { margin-top: 11px; display: flex; gap: 7px; }
   .actions .btn { flex: 1; }
   .actions .btn.cancel { flex: 0 0 auto; }
