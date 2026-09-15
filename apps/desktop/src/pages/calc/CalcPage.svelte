@@ -10,7 +10,7 @@
     BlockedBuff, BuffSelection,
     StatSources, CommonSkills,
     Adjustments, BuffChoice, BuffDefinition, BuffPurpose, CategoryTrace, ComboSkillType, ContentEvaluation, DamageCategory,
-    DamageResult, DefenseProfile, EquipmentStatKind, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill,
+    DamageResult, DefenseProfile, EquipmentPart, EquipmentStatKind, EquipmentValues, FormulaStep, NewCharacter, PartSlot, Skill, TitleDef,
     SoulLinkPreview, StatKind, UltimateSkill, UpgradeCandidate,
   } from "../../api/types";
   import {
@@ -23,10 +23,10 @@
     type EnchantDepKey,
   } from "../../enchant";
   import { ETERNAL_MILESTONES } from "../../draft";
-  import { polishAmount, selectedEquipmentPartOrNeutral } from "../../equipment";
+  import { equipmentIconId, polishAmount, selectedEquipmentPartOrNeutral } from "../../equipment";
   import { fmtInt, fmtNum, formatLayerValue, topRowsText } from "../../format";
   import {
-    ELEMENT_LABELS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, PART_SLOTS,
+    ELEMENT_LABELS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, PART_SLOTS,
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, STAT_KINDS, STAT_LABELS,
     STAT_LAYER_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
@@ -52,6 +52,7 @@
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
   import StatInput from "../../ui/StatInput.svelte";
   import TracePanel from "./TracePanel.svelte";
+  import { equipmentAttackKindsFor } from "../chars/summaries";
 
   const DEFAULT_RIGHT_WIDTH = 380;
 
@@ -994,17 +995,41 @@
     },
     {
       // 部位・ステをまたぐので 1 チップに束ねる(全部位ぶんをまとめて 1 操作として戻す)
+      // 登録 ID で持つ(装着中の 1 件ではなく)。装着を切り替えても、切り替え先のエンチャントが
+      // 「変えた」ことにならないようにする — 切り替えは equipment_select の 1 チップで戻す
       id: "enchant",
       label: () => "エンチャント",
-      get: (p) => JSON.stringify(PART_SLOTS.map((s) => selectedEquipmentPartOrNeutral(p.equipment.parts[s]).enchant)),
+      get: (p) => JSON.stringify(PART_SLOTS.map((s) => p.equipment.parts[s].registered.map((x) => [x.id, x.enchant]))),
       set: (p, v) => {
-        const values = JSON.parse(v) as EquipmentValues[];
+        const values = JSON.parse(v) as [number, EquipmentValues][][];
         PART_SLOTS.forEach((s, i) => {
-          const list = p.equipment.parts[s];
-          const part = list.registered.find((x) => x.id === list.selected_id);
-          if (part) part.enchant = values[i];
+          for (const [id, enchant] of values[i]) {
+            const part = p.equipment.parts[s].registered.find((x) => x.id === id);
+            if (part) part.enchant = enchant;
+          }
         });
       },
+    },
+    {
+      // 登録済み装備の装着切り替え(部位ごとの selected_id)。全部位まとめて 1 チップで戻す
+      id: "equipment_select",
+      label: (p) => {
+        const changed = savedPayload
+          ? PART_SLOTS.filter((s) => p.equipment.parts[s].selected_id !== savedPayload.equipment.parts[s].selected_id)
+          : [];
+        return `装備切替 ${changed.map((s) => PART_SLOT_LABELS[s]).join("・")}`.trim();
+      },
+      get: (p) => JSON.stringify(PART_SLOTS.map((s) => p.equipment.parts[s].selected_id)),
+      set: (p, v) => {
+        const ids = JSON.parse(v) as (number | null)[];
+        PART_SLOTS.forEach((s, i) => (p.equipment.parts[s].selected_id = ids[i]));
+      },
+    },
+    {
+      id: "title",
+      label: (p) => `称号 ${app.titles.find((t) => t.id === p.equipment.title)?.name ?? "なし"}`,
+      get: (p) => String(p.equipment.title),
+      set: (p, v) => (p.equipment.title = v === "null" ? null : v),
     },
     {
       id: "ultimate",
@@ -1051,16 +1076,16 @@
           ?? "未装着";
         return `武器 ${name}`;
       },
-      get: (p) => {
-        const weapon = weaponOf(p);
-        return JSON.stringify([weapon.item_id, weapon.custom_name, weapon.base]);
-      },
+      // 登録 ID ごとに持つ(装着の切り替えで「武器が変わった」ことにしない。enchant と同じ)
+      get: (p) => JSON.stringify(p.equipment.parts.weapon.registered.map((w) => [w.id, w.item_id, w.custom_name, w.base])),
       set: (p, v) => {
-        const [itemId, customName, base] = JSON.parse(v);
-        const weapon = weaponOf(p);
-        weapon.item_id = itemId;
-        weapon.custom_name = customName;
-        weapon.base = base;
+        for (const [id, itemId, customName, base] of JSON.parse(v) as [number, string | null, string | null, EquipmentValues][]) {
+          const weapon = p.equipment.parts.weapon.registered.find((w) => w.id === id);
+          if (!weapon) continue;
+          weapon.item_id = itemId;
+          weapon.custom_name = customName;
+          weapon.base = base;
+        }
       },
     },
     // 以下は計算タブの編集 UI からは変わらないが、sim が他の経路で差分を持ったときに
@@ -1201,7 +1226,7 @@
   /** 「計算の材料」で開いているまとまり。null = 全部畳んである(既定)。
    *  実プレイでは一度に 1 つしか触らないので、開くのも 1 つに絞る — 全部開くと
    *  3512px(表示域の 4.6 画面ぶん)になり、目的のものまでスクロールで探すことになる */
-  type MaterialGroup = "ultimate" | "awakening" | "sharpness" | "soul_link" | "enchant" | "polish" | "buffs";
+  type MaterialGroup = "ultimate" | "awakening" | "sharpness" | "soul_link" | "equipment" | "enchant" | "polish" | "title" | "buffs";
   let openMaterial = $state<MaterialGroup | null>(null);
   function toggleMaterial(id: MaterialGroup) {
     openMaterial = openMaterial === id ? null : id;
@@ -1241,6 +1266,45 @@
   /** 複数ステ対象バフ(クラブ効果)の、1 ステぶんの ON/OFF。試し変更なので保存はしない */
   function toggleBuffStatChip(def: BuffDefinition, stat: StatKind, next: boolean) {
     app.calcBuffs = { choices: toggleBuffStat(app.calcBuffs.choices, def, stat, next) };
+  }
+
+  // --- 装備の切り替え(試し変更)。登録済みの装備(EquipmentPartList.registered)のうち
+  //     どれを装着するか(selected_id)だけを動かす。登録・編集はキャラタブの装備ペイン。
+  //     2 件以上ある部位だけ出す(1 件の部位は切り替える先がない。§00 02)
+  const partDisplayName = (part: EquipmentPart): string =>
+    part.label
+      || app.equipmentCatalog.find((i) => i.id === part.item_id)?.name
+      || (part.custom_name ? `${part.custom_name} [仮]` : `装備 ${part.id}`);
+  const switchableSlots = $derived(
+    payload ? PART_SLOTS.filter((slot) => payload.equipment.parts[slot].registered.length > 1) : [],
+  );
+  const equipmentHeadNote = $derived(
+    switchableSlots.length === 0 ? "切替なし" : `${switchableSlots.length} 部位で切替可`,
+  );
+  function selectEquipmentPart(slot: PartSlot, id: number) {
+    editSim((p) => (p.equipment.parts[slot].selected_id = id));
+  }
+
+  // --- 称号(試し変更)。1 枠だけ・補正は基本能力値へ合流(キャラタブの称号ペインと同じ)。
+  //     ここに並べるのは「よく使う称号」(gamedata の common)を主軸スキルの依存種別で絞ったもの。
+  //     それ以外はキャラタブで選ぶ(検索付きの全一覧はあちらにある)
+  const currentTitle = $derived(payload ? app.titles.find((t) => t.id === payload.equipment.title) ?? null : null);
+  const titleChoices = $derived.by(() => {
+    const kinds = equipmentAttackKindsFor(mainSkill?.dependency ?? null);
+    const common = app.titles.filter(
+      (t) => t.common && (t.attack_damage_percent > 0 || t.conditional_added_damage !== null || kinds.some((k) => t.values[k] > 0)),
+    );
+    // 装着中の称号が絞り込みの外でも、外す先として行に残す
+    return currentTitle && !common.some((t) => t.id === currentTitle.id) ? [currentTitle, ...common] : common;
+  });
+  const titleHeadNote = $derived(currentTitle?.name ?? "なし");
+  const titleNote = (t: TitleDef): string => {
+    const vals = EQUIPMENT_STAT_KINDS.filter((k) => t.values[k] !== 0).map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(t.values[k])}`);
+    if (t.attack_damage_percent > 0) vals.push(`ダメ +${t.attack_damage_percent}%`);
+    return vals.join(" ") || "—";
+  };
+  function selectTitle(id: string | null) {
+    editSim((p) => (p.equipment.title = id));
   }
 
   // --- 研磨(試し変更)。記録はキャラタブの研磨ペイン、効かせるかはバフ「装備研磨」と同じ
@@ -2557,6 +2621,47 @@
           {/if}
         </div>
 
+        <!-- 装備の切り替え(試し変更)。登録済みの装備から装着するものを選ぶ。登録・編集はキャラタブ -->
+        <div class="card">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "equipment"} onclick={() => toggleMaterial("equipment")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "equipment" ? "▾" : "▸"}</span>
+            <!-- 見出しの顔は装着中の武器(名前と併記) -->
+            <Icon kind="equipment" id={equipmentIconId(weaponOf(payload).item_id, app.equipmentCatalog)} size={20} label="装備の切り替え" />
+            <span class="card-title">装備の切り替え</span>
+            <span class="dim small num" use:flash={() => equipmentHeadNote}>{equipmentHeadNote}</span>
+          </button>
+          {#if openMaterial === "equipment"}
+          {#if switchableSlots.length === 0}
+            <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("equipment")}>
+              <span class="dim small">2 件以上登録した部位がありません。登録はキャラタブの装備ペイン</span>
+              <span class="chev dim">›</span>
+            </button>
+          {:else}
+            <div class="switch-rows">
+              {#each switchableSlots as slot (slot)}
+                {@const list = payload.equipment.parts[slot]}
+                <div class="switch-row">
+                  <span class="enchant-row-label">{PART_SLOT_LABELS[slot]}</span>
+                  <div class="switch-chips">
+                    {#each list.registered as part (part.id)}
+                      <button
+                        type="button" class="chip switch-chip" class:on={part.id === list.selected_id}
+                        title={partDisplayName(part)}
+                        onclick={() => selectEquipmentPart(slot, part.id)}
+                      >
+                        <Icon kind="equipment" id={equipmentIconId(part.item_id, app.equipmentCatalog)} size={20} label={partDisplayName(part)} />
+                        <span class="switch-chip-name">{partDisplayName(part)}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          <p class="eq-note dim">装着中の装備を登録済みの別の 1 件に替えます。登録・編集はキャラタブの装備ペイン。</p>
+          {/if}
+        </div>
+
         <!-- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "enchant"} onclick={() => toggleMaterial("enchant")}>
@@ -2653,6 +2758,36 @@
           <p class="eq-note dim">
             研磨は<b>基本能力値</b>に合流します。記録の追加・変更はキャラタブの研磨ペイン。ON/OFF はバフ「装備研磨」と同じで、この計算だけの試し変更です(残すなら「試し変更を保存」)。
           </p>
+          {/if}
+        </div>
+
+
+        <!-- 称号(試し変更)。よく使う称号を主軸スキルの依存種別で絞って並べる。全一覧はキャラタブ -->
+        <div class="card">
+          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "title"} onclick={() => toggleMaterial("title")}>
+            <span class="bg-caret" aria-hidden="true">{openMaterial === "title" ? "▾" : "▸"}</span>
+            <!-- 称号の絵は無い。縞のまま置いて、見出しの字下げを他のカードとそろえる -->
+            <Icon kind="equipment" id={null} size={20} label="称号" />
+            <span class="card-title">称号</span>
+            <span class="dim small title-head-note" use:flash={() => titleHeadNote}>{titleHeadNote}</span>
+          </button>
+          {#if openMaterial === "title"}
+          <div class="ultimate-chips">
+            <button type="button" class="ultimate-chip" class:on={currentTitle === null} onclick={() => selectTitle(null)}>
+              <span class="uc-name">なし</span>
+            </button>
+            {#each titleChoices as t (t.id)}
+              <button type="button" class="ultimate-chip" class:on={currentTitle?.id === t.id} title={t.note || undefined} onclick={() => selectTitle(t.id)}>
+                <span class="uc-name title-name">{t.name}</span>
+                <span class="uc-note dim num">{titleNote(t)}</span>
+              </button>
+            {/each}
+          </div>
+          <button type="button" class="enchant-cap-unknown" onclick={() => focusCharacterSource("title")}>
+            <span class="dim small">ほかの称号はキャラタブの称号ペインで選ぶ</span>
+            <span class="chev dim">›</span>
+          </button>
+          <p class="eq-note dim">称号は<b>基本能力値</b>に合流します。条件付き効果は記録するだけで計算に入りません。</p>
           {/if}
         </div>
 
@@ -3086,6 +3221,17 @@
   .basics-label { flex-shrink: 0; width: 46px; font-size: 9.5px; color: var(--fg-muted); }
   .basics-seg { min-width: 0; flex: 1; }
   .basics-val { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 9.5px; font-weight: 700; color: var(--fg-dim); }
+
+  /* 装備の切り替え。部位ごとに登録済み装備をチップで並べる(§07 形態 3)。
+     名前が長くても行は折り返さず、チップ内で省略する(幅が動かない) */
+  .switch-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .switch-row { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
+  .switch-row .enchant-row-label { flex-shrink: 0; width: 46px; padding-top: 5px; }
+  .switch-chips { min-width: 0; flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
+  .switch-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 8px 2px 3px; }
+  .switch-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title-head-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title-name { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* エンチャントの伸びしろ。部位ごとに 現在/上限/MAX での伸び幅を横並びで見せる */
   .enchant-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
