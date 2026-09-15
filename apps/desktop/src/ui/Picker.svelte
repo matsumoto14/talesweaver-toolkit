@@ -60,6 +60,8 @@
   const picked = $derived(options.find((o) => o.value === value) ?? null);
   /** 候補面の中の 1 件を選んでいる。チップ側を選んでいるときは面の口は「ほか n 件」になる */
   const pickedInRest = $derived(picked !== null && rest.includes(picked));
+  /** 「未選択」(value = "")を候補面から選んでいる状態は、選択色にしない — 何かを選んだように見えてしまう */
+  const pickedNone = $derived(pickedInRest && picked?.value === "");
 </script>
 
 <div class="picker">
@@ -88,7 +90,7 @@
         class="picker-trigger"
         class:open
         class:compact={chips.length > 0}
-        class:muted={!pickedInRest}
+        class:muted={!pickedInRest || pickedNone}
         {disabled}
         onclick={() => (open = !open)}
       >
