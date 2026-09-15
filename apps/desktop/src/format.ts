@@ -1,16 +1,48 @@
 import type { StatLayer } from "./api/types";
 
-export const fmtInt = (n: number) => n.toLocaleString("ja-JP");
+// 数値書式はここだけが決める(design-system §08「数値の 3 段」)。画面側で toLocaleString / toFixed を
+// 呼ばない(tools/design-audit/run.py R11 が見張る)。桁区切りは ja-JP、小数桁は呼び手が役割で指定する。
+
+/** 小数桁。数値なら固定桁(1.50)、`{ max }` なら上限までで末尾の 0 を落とす(1.5 / 2) */
+export type Digits = number | { max: number };
+
+const formatters = new Map<string, Intl.NumberFormat>();
+const formatter = (digits: Digits): Intl.NumberFormat => {
+  const [min, max] = typeof digits === "number" ? [digits, digits] : [0, digits.max];
+  const key = `${min}/${max}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat("ja-JP", { minimumFractionDigits: min, maximumFractionDigits: max });
+    formatters.set(key, f);
+  }
+  return f;
+};
+
+/** 桁区切りつきの数。`unit` は値の直後に付ける(1.50s / 12.5%) */
+export const fmtNum = (n: number, digits: Digits = { max: 4 }, unit = ""): string =>
+  `${formatter(digits).format(n)}${unit}`;
+
+/** 整数(件数・能力値・ダメージ)。小数が渡ったときは 3 桁まで出す(丸めない) */
+export const fmtInt = (n: number): string => fmtNum(n, { max: 3 });
+
+/** 割合(0–1)を % で。既に % 単位の値は fmtNum(v, digits, "%") */
+export const fmtPct = (rate: number, digits: Digits = 0): string => fmtNum(rate * 100, digits, "%");
+
+/** 符号つき(増減・補正値)。0 は「+0」 */
+export const fmtSigned = (n: number, digits: Digits = 0, unit = ""): string =>
+  `${n >= 0 ? "+" : ""}${fmtNum(n, digits, unit)}`;
+
+/** 符号つきの割合(0–1)。「+12%」「-3.5%」 */
+export const fmtSignedPct = (rate: number, digits: Digits = 0): string => fmtSigned(rate * 100, digits, "%");
+
+/** 倍率。「×1.42」 */
+export const fmtRate = (mult: number, digits: Digits = 2): string => `×${fmtNum(mult, digits)}`;
 
 /** ISO8601(YYYY-MM-DD)を MM-DD に。ホームの「最後の強化」とお知らせの公開日で使う */
 export const fmtMonthDay = (iso: string) => {
   const d = new Date(iso);
   return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-
-/** 小数は最大4桁、整数は桁区切りのみ */
-export const fmtNum = (n: number) =>
-  n.toLocaleString("ja-JP", { maximumFractionDigits: 4 });
 
 /**
  * 補正源のレイヤーに応じた値の整形。CharacterSettings のバフ選択肢表示・TracePanel の
@@ -19,17 +51,13 @@ export const fmtNum = (n: number) =>
 export function formatLayerValue(layer: StatLayer, raw: number): string {
   switch (layer) {
     case "percent_of_base":
-    case "multiplier_b": {
-      const pct = Math.round(raw * 100);
-      return `${pct >= 0 ? "+" : ""}${pct}%`;
-    }
+    case "multiplier_b":
+      return fmtSignedPct(raw);
     case "multiplier_a":
-      return `×${raw.toFixed(2)}`;
+      return fmtRate(raw);
     case "fixed":
-    case "final_fixed": {
-      const v = Math.round(raw);
-      return `${v >= 0 ? "+" : ""}${v}`;
-    }
+    case "final_fixed":
+      return fmtSigned(raw);
   }
 }
 

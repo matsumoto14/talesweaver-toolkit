@@ -16,7 +16,7 @@
     matchesPurpose,
     isUserSelectedTarget, pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
-  import { fmtInt, formatLayerValue, topRows, topRowsText, type TopRows } from "../../format";
+  import { fmtInt, fmtPct, fmtSigned, fmtSignedPct, formatLayerValue, topRows, topRowsText, type TopRows } from "../../format";
   import { singleEffectLabel } from "../../characterSkills";
   import {
     STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS, STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
@@ -516,7 +516,7 @@
     const damageRows = buffDamageEffects.filter((e) => e.buff_name === def.name && e.effect !== 0);
     if (damageRows.length === 0) return null;
     return damageRows
-      .map((e) => `${categoryLabel.get(e.category) ?? e.category} ${e.effect >= 0 ? "+" : ""}${(e.effect * 100).toFixed(0)}%`)
+      .map((e) => `${categoryLabel.get(e.category) ?? e.category} ${fmtSignedPct(e.effect)}`)
       .join(" ・ ");
   }
   /** aria-label や値調整フォーム(.config-effect)向けの 1 行版。こちらは視覚的な幅制約が
@@ -530,8 +530,6 @@
     if (damage) parts.push(damage);
     return parts.length > 0 ? parts.join(" ・ ") : null;
   }
-
-  const formatDelta = (value: number, digits = 0) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
 
   /** チップに出す効果の説明。「クリックして…」の操作ヒントとは別行にする(§00 05)。
    *  ON のチップは静的な定義文ではなく、このキャラで実際に何点(何%)伸びたかを出す
@@ -818,11 +816,11 @@
                   <td class="n muted">{fmtInt(baseStats[kind])}</td>
                   <!-- バフ列だけは従来どおり「差分(重なって増えた分)」の形を保つ -->
                   <td class="n" class:positive={total > 0} use:bump={() => total}
-                  >{formatDelta(delta)}{#if amp !== 0}<span class="amp-value"> ({formatDelta(amp)})</span>{/if}</td>
+                  >{fmtSigned(delta)}{#if amp !== 0}<span class="amp-value"> ({fmtSigned(amp)})</span>{/if}</td>
                   {#each ["equipment", "other"] as const as group (group)}
                     {@const effect = groupEffect(kind, group)}
                     <!-- 0 の区分も行から消さない。消えると次に見たとき同じ場所を探し直すことになる -->
-                    <td class="n" class:zero={effect === 0} use:bump={() => effect}>{effect === null ? "—" : formatDelta(effect)}</td>
+                    <td class="n" class:zero={effect === 0} use:bump={() => effect}>{effect === null ? "—" : fmtSigned(effect)}</td>
                   {/each}
                   <td class="n strong" use:bump={() => statAfter?.[kind] ?? null}>{fmtInt(statAfter[kind])}</td>
                 </tr>
@@ -836,8 +834,8 @@
         {#if damageSummary.length > 0}
           <div class="damage-list">
             {#each damageSummary as row (row.category)}
-              <div><span>{row.label}</span><span class="num positive" use:bump={() => row.value}>+{(row.value * 100).toFixed(0)}%</span></div>
-              {#if row.raw > row.value}<small>上限で {((row.raw - row.value) * 100).toFixed(0)}% は未反映</small>{/if}
+              <div><span>{row.label}</span><span class="num positive" use:bump={() => row.value}>{fmtSignedPct(row.value)}</span></div>
+              {#if row.raw > row.value}<small>上限で {fmtPct(row.raw - row.value)} は未反映</small>{/if}
             {/each}
           </div>
         {:else}<p>選択中のバフによる攻撃ダメージ増加はありません。</p>{/if}
@@ -852,10 +850,10 @@
           <div class="summary-grid">
             <!-- 変わったのは数値なので、動かすのは数値だけ(§10 型 1)。ブロックごと
                  badge-in で膨らませると、どの行が動いたのか読めなくなる -->
-            <span>物理防御力</span><span class="num" use:bump={() => physical}>{formatDelta(physical)}</span>
-            <span>魔法防御力</span><span class="num" use:bump={() => magic}>{formatDelta(magic)}</span>
-            <span>複合防御力</span><span class="num" use:bump={() => composite}>{formatDelta(composite)}</span>
-            <span>コンボ回避</span><span class="num" use:bump={() => evasion}>{formatDelta(evasion, 1)}%</span>
+            <span>物理防御力</span><span class="num" use:bump={() => physical}>{fmtSigned(physical)}</span>
+            <span>魔法防御力</span><span class="num" use:bump={() => magic}>{fmtSigned(magic)}</span>
+            <span>複合防御力</span><span class="num" use:bump={() => composite}>{fmtSigned(composite)}</span>
+            <span>コンボ回避</span><span class="num" use:bump={() => evasion}>{fmtSigned(evasion, 1, "%")}</span>
           </div>
         {:else}<p>キャラを選ぶと、防御力などの変化を表示します。</p>{/if}
         {#if selected.choices.choices.some((choice) => choice.buff_id === "boiled_mimic")}

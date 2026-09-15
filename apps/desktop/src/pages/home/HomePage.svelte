@@ -29,7 +29,7 @@
     equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
     valuesSummary,
   } from "../../equipment";
-  import { fmtInt, fmtMonthDay } from "../../format";
+  import { fmtInt, fmtMonthDay, fmtNum, fmtRate } from "../../format";
   import {
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, SIENA_ALLOWED_SLOTS, STAT_KINDS, STAT_LABELS,
   } from "../../labels";
@@ -132,7 +132,7 @@
     }
     return r.ev?.damage ? r.ev.damage.per_hit_primary / r.content.need_per_hit : 0;
   };
-  const pctOf = (r: Row) => `${Math.min(100, ratioOf(r) * 100).toFixed(1)}%`;
+  const pctOf = (r: Row) => `${Math.min(100, ratioOf(r) * 100)}%`;
 
   /** 未達条件の説明(「エタの意志 Lv あと 5」)。装備条件は比較先がスキル依存なので label をそのまま使う。 */
   const unmetText = (ev: ContentEvaluation) =>
@@ -382,7 +382,7 @@
   });
   const heroSpotPct = $derived(
     heroGoal?.content.need_per_hit && heroSpot
-      ? `${Math.min(100, (heroSpot.perHit / heroGoal.content.need_per_hit) * 100).toFixed(1)}%`
+      ? `${Math.min(100, (heroSpot.perHit / heroGoal.content.need_per_hit) * 100)}%`
       : "0%",
   );
   /** 次の目標の火力が必要値未満か(おすすめ強化を出す条件) */
@@ -986,7 +986,7 @@
                 {@const stage = critChanceStage(heroDamage.critChance * 100)}
                 {#key stage.label}
                   <span class="badge" style={badgeStyle({ label: "", state: heroDamage.critRate === null ? "unknown" : stage.state })} use:flash={() => stage.label}>
-                    {heroDamage.critRate === null ? "クリ 確定扱い" : `クリ${stage.label} ${heroDamage.critRate.toFixed(1)}%`}
+                    {heroDamage.critRate === null ? "クリ 確定扱い" : `クリ${stage.label} ${fmtNum(heroDamage.critRate, 1, "%")}`}
                   </span>
                 {/key}
               {/if}
@@ -1421,7 +1421,7 @@
                           {:else}
                             <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
                             {#if ratioOf(r) >= 1.15}
-                              <span class="over num">×{ratioOf(r).toFixed(1)}</span>
+                              <span class="over num">{fmtRate(ratioOf(r), 1)}</span>
                             {/if}
                           {/if}
                           {#key st}<span class="badge badge-in" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>{/key}

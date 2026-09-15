@@ -54,11 +54,16 @@ RULES = {
     "R8": ("TS / Svelte に色の実値を直書き", "§15"),
     "R9": ("枠のある操作部品に border-radius が無い", "§04"),
     "R10": ("font-size が実寸スケールの外", "§05"),
+    "R11": ("format.ts の外で toLocaleString / toFixed を直呼び", "§08"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
 # 密度は意識的な選択なので「役割トークンに寄せる」のではなく、この集合に収まるかを見る
 FONT_SCALE = {44, 40, 27, 19, 17, 15, 14, 13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5, 8}
+
+# R11: 桁区切り・小数桁は format.ts だけが決める(§08「数値の 3 段」)。画面側の直呼びは違反
+FORMAT_TS = SRC / "format.ts"
+RAW_FORMAT_CALL = re.compile(r"\.(toLocaleString|toFixed)\s*\(")
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
 CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
@@ -193,6 +198,15 @@ def check_colors(path: Path, text: str, tokens: dict[str, str], out: list[Findin
                 out.append(Finding("R1", path, i, m.group(0), f"var({token}) と同値"))
             elif is_script_file and i not in css_lines:
                 out.append(Finding("R8", path, i, m.group(0), "CSS 変数に寄せられないか"))
+
+
+def check_raw_format(path: Path, text: str, out: list[Finding]) -> None:
+    """R11。TS / Svelte で数値書式を直接呼んでいる箇所。format.ts 自身は書式の実装なので除く。"""
+    if path == FORMAT_TS or path.suffix not in (".ts", ".svelte"):
+        return
+    for i, line in enumerate(text.split("\n"), 1):
+        for m in RAW_FORMAT_CALL.finditer(line):
+            out.append(Finding("R11", path, i, m.group(1), "format.ts の fmtInt / fmtNum / fmtPct / fmtSigned / fmtRate に寄せる"))
 
 
 def check_radius(chunk: Chunk, out: list[Finding]) -> None:
@@ -344,6 +358,7 @@ def collect() -> list[Finding]:
     for path in files:
         text = path.read_text(encoding="utf-8")
         check_colors(path, text, tokens, out)
+        check_raw_format(path, text, out)
         for chunk in css_chunks(path, text):
             check_radius(chunk, out)
             check_tabular(chunk, out)

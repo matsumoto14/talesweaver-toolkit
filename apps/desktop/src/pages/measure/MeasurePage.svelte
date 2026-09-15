@@ -10,7 +10,7 @@
   import { canSeparateMeasurement, errorMessage, listSkills, previewDamage, previewEffectiveStats } from "../../api/commands";
   import type { AttackPowerBreakdown, DamageResult, EffectiveStats, Skill } from "../../api/types";
   import { skillMeta } from "../../characterSkills";
-  import { fmtInt } from "../../format";
+  import { fmtInt, fmtSignedPct } from "../../format";
   import {
     damageGap, expectedDamage, measurementDraft, type MeasurementSample,
   } from "../../measurement";
@@ -319,7 +319,7 @@
             <span class="num">{expected !== null ? fmtInt(Math.trunc(expected)) : "—"}</span>
             <span class="dim">差</span>
             <span class="num" class:warn={gap !== null && Math.abs(gap) >= 0.05} use:bump={() => gap}>
-              {gap === null ? "—" : `${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(1)}%`}
+              {gap === null ? "—" : fmtSignedPct(gap, 1)}
             </span>
           </div>
         {/if}

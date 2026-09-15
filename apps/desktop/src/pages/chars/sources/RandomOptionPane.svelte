@@ -4,6 +4,7 @@
     EquipmentPart, PartSlot, RandomOptionCandidate, RandomOptionDef, RandomOptionRank, StatPreview,
   } from "../../../api/types";
   import { listRandomOptionCandidates } from "../../../api/commands";
+  import { fmtPct, fmtSignedPct } from "../../../format";
   import type { Draft } from "../../../draft";
   import {
     neutralEquipmentPart,
@@ -35,7 +36,6 @@
 
   /** ランダムOP のうち記録するだけの枠数。行サブタイトルとも共有(summaries.ts) */
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(preview));
-  const pct = (v: number) => Number((v * 100).toFixed(2));
   /**
    * ランダムOP の効き先ごとの合計(結果の置き場所)。同系統は足して 1 行にする。
    * 集計は Rust 側(preview.random_option_totals)。ここは効き先の日本語ラベルへの対応づけだけ
@@ -46,8 +46,7 @@
     const rows: { label: string; value: string }[] = [];
     const addPercent = (label: string, v: number) => {
       if (v === 0) return;
-      const n = pct(v);
-      rows.push({ label, value: `${n > 0 ? "+" : ""}${n}%` });
+      rows.push({ label, value: fmtSignedPct(v, { max: 2 }) });
     };
     const addPoint = (label: string, v: number) => {
       if (v === 0) return;
@@ -65,7 +64,7 @@
     addPoint("命中P", t.accuracy_point);
     addPoint("回避P", t.evasion_point);
     if (t.actual_delay_reduction !== 0) {
-      rows.push({ label: "中ディレイ", value: `−${pct(t.actual_delay_reduction)}%` });
+      rows.push({ label: "中ディレイ", value: `−${fmtPct(t.actual_delay_reduction, { max: 2 })}` });
     }
     if (t.min_evasion_rate !== 0) {
       rows.push({ label: "最小回避率補正", value: `+${t.min_evasion_rate}%` });

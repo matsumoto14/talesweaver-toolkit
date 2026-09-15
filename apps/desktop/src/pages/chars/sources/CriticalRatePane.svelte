@@ -6,7 +6,7 @@
   import type { Skill, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
-  import { fmtInt } from "../../../format";
+  import { fmtInt, fmtRate } from "../../../format";
   import { bump } from "../../../ui/motion.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
@@ -71,7 +71,7 @@
       id: "siena",
       name: "シエナのオーラのクリティカル確率",
       value: preview?.siena_critical_rate ?? 0,
-      format: (v) => `×${(1 + v).toFixed(2)}`,
+      format: (v) => fmtRate(1 + v),
       note: "AGI 由来の項に乗算。下の合計には入らない",
     },
   ]);

@@ -9,6 +9,7 @@
   // - 自由記述(`multi`): 同じ枠を縦に伸ばすだけ。右下に文字数
   // それ以外(ラベル欄)は入力面が既定で、右端に文字数を出す。
   import { bump } from "./motion.svelte";
+  import { fmtInt } from "../format";
 
   interface Props {
     /** 何の欄か。見えるラベルは呼び出し側が置くので、ここでは aria-label にだけ使う */
@@ -93,7 +94,7 @@
       <input type="text" bind:value maxlength={max} {disabled} aria-label={label} onblur={blur} onkeydown={keydown} />
     {/if}
     {#if search && count !== undefined}
-      <span class="cnt num" use:bump={() => count ?? 0}>{count.toLocaleString("ja-JP")} 件</span>
+      <span class="cnt num" use:bump={() => count ?? 0}>{fmtInt(count)} 件</span>
     {:else if max !== undefined}
       <span class="cnt num" use:bump={() => value.length}>{value.length}/{max}</span>
     {/if}

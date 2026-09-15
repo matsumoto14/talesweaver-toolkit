@@ -24,7 +24,7 @@
   } from "../../enchant";
   import { ETERNAL_MILESTONES } from "../../draft";
   import { equipmentIconId, polishAmount, selectedEquipmentPartOrNeutral } from "../../equipment";
-  import { fmtInt, fmtNum, formatLayerValue, topRowsText } from "../../format";
+  import { fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct, formatLayerValue, topRowsText } from "../../format";
   import {
     ELEMENT_LABELS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, PART_SLOTS,
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, STAT_KINDS, STAT_LABELS,
@@ -204,7 +204,7 @@
     normalAttacks.map((s) => ({
       value: s.id,
       // 「†極・突き」の飾りは段では邪魔なので落とし、CI を添える(未収録は ?)
-      label: `${s.name.replace(/^†[^・]*・/, "")} ${s.combo_interval !== null ? `${s.combo_interval.toFixed(2)}s` : "?"}`,
+      label: `${s.name.replace(/^†[^・]*・/, "")} ${s.combo_interval !== null ? fmtNum(s.combo_interval, 2, "s") : "?"}`,
     })),
   );
   const normalAttackId = $derived(
@@ -359,7 +359,7 @@
       running += x.v;
       return {
         ...x,
-        pct: `${Math.max(1.5, (x.v / total) * 100).toFixed(2)}%`,
+        pct: fmtNum(Math.max(1.5, (x.v / total) * 100), 2, "%"),
         share: `${Math.round((x.v / total) * 100)}%`,
         // 最後の段は必ず A に着地させる(切捨ての端数で足し算が合わなくなるのを防ぐ)
         to: i === raw.length - 1 ? atk.value : running,
@@ -410,7 +410,7 @@
       // 倍率列は倍率の段はその値、到達値で返る段は前段との比(表示用)
       const isFactor = s.kind === "factor";
       const factor = isFactor ? s.value : running > 0 ? s.reached / running : 1;
-      const mult = isFactor || running > 0 ? `×${factor.toFixed(2)}` : "—";
+      const mult = isFactor || running > 0 ? fmtRate(factor) : "—";
       rows.push({ k: s.name, add: s.reached - running, mult, factor, c: FLOW_COLORS[s.name] ?? "var(--fg-dim)", to: s.reached, step: s.name });
       running = s.reached;
     }
@@ -418,7 +418,7 @@
   });
   const flowTotal = $derived(flowRows.reduce((a, r) => a + Math.max(0, r.add), 0) || 1);
   const flowMultLabel = $derived(
-    pierced !== null && pierced > 0 && perHit !== null ? `×${(perHit / pierced).toFixed(1)}` : "—",
+    pierced !== null && pierced > 0 && perHit !== null ? fmtRate(perHit / pierced, 1) : "—",
   );
   let flowOpen = $state(false);
   /** 直近の計算で変わった段(鎖の ↑ から辿る先)。副作用で親 → 子 を控える。
@@ -794,28 +794,28 @@
       { label: "合計ダメージ", value: fmtInt(totalValue), n: totalValue },
       {
         label: "基本中ディレイ",
-        value: `${d.base.toFixed(2)}s`,
+        value: fmtNum(d.base, 2, "s"),
         n: d.base, unit: "s",
         sub: d.fixed ? "固定(減少が効かない)" : undefined,
       },
     ];
     for (const c of d.contributions) {
-      mats.push({ label: `↳ ${c.source}`, value: `−${(c.rate * 100).toFixed(0)}%`, n: -Math.round(c.rate * 100), unit: "%" });
+      mats.push({ label: `↳ ${c.source}`, value: `−${fmtPct(c.rate)}`, n: -Math.round(c.rate * 100), unit: "%" });
     }
     mats.push({
       label: `中ディレイ減少(上限 ${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
-      value: `${(d.reduction * 100).toFixed(0)}%`,
+      value: fmtPct(d.reduction),
       n: Math.round(d.reduction * 100), unit: "%",
-      sub: d.reduction_raw > d.reduction ? `選択中は ${(d.reduction_raw * 100).toFixed(0)}%` : undefined,
+      sub: d.reduction_raw > d.reduction ? `選択中は ${fmtPct(d.reduction_raw)}` : undefined,
     });
     if (d.combo_rate < 1) {
       mats.push({ label: "コンボ(倍率A。間に通常攻撃を挟む)", mult: `×${fmtNum(d.combo_rate)}`, value: "" });
     }
     mats.push({
       label: "中ディレイ",
-      value: `${d.value.toFixed(2)}s`,
+      value: fmtNum(d.value, 2, "s"),
       n: d.value, unit: "s",
-      sub: d.floored ? `下限 ${limits.actual_delay_min.toFixed(1)}s で頭打ち` : undefined,
+      sub: d.floored ? `下限 ${fmtNum(limits.actual_delay_min, 1, "s")} で頭打ち` : undefined,
     });
     const cycle = r.combo;
     if (cycle) {
@@ -825,11 +825,11 @@
         // 合計ダメージ(total_primary)と同じ側を出す。ここだけ非クリだと足し算が合わなく見える
         value: fmtInt(pick(cycle.normal_attack_total) ?? 0),
         n: pick(cycle.normal_attack_total) ?? 0,
-        sub: `中ディレイ ${cycle.normal_delay.toFixed(2)}s`,
+        sub: `中ディレイ ${fmtNum(cycle.normal_delay, 2, "s")}`,
       });
       mats.push({
         label: "コンボインターバル",
-        value: cycle.interval !== null ? `${cycle.interval.toFixed(2)}s` : "?",
+        value: cycle.interval !== null ? fmtNum(cycle.interval, 2, "s") : "?",
         n: cycle.interval ?? undefined, unit: "s",
         sub: cycle.interval === null
           ? "wiki 未収録。スキルの中ディレイをそのまま使っています"
@@ -839,9 +839,9 @@
       });
       mats.push({
         label: "1 サイクル",
-        value: `${cycle.seconds.toFixed(2)}s`,
+        value: fmtNum(cycle.seconds, 2, "s"),
         n: cycle.seconds, unit: "s",
-        sub: `通常攻撃 ${cycle.normal_delay.toFixed(2)}s + ${cycle.skill_gap.toFixed(2)}s`,
+        sub: `通常攻撃 ${fmtNum(cycle.normal_delay, 2, "s")} + ${fmtNum(cycle.skill_gap, 2, "s")}`,
       });
     } else {
       mats.push({
@@ -856,11 +856,11 @@
         label: "期待値(クリ率で按分)",
         value: fmtInt(Math.round(r.expected_dps)),
         n: Math.round(r.expected_dps),
-        sub: `合計(非クリ) × ${((1 - r.critical_chance) * 100).toFixed(1)}% + 合計(クリ) × ${(r.critical_chance * 100).toFixed(1)}%`,
+        sub: `合計(非クリ) × ${fmtPct(1 - r.critical_chance, 1)} + 合計(クリ) × ${fmtPct(r.critical_chance, 1)}`,
       });
     }
     return {
-      mult: `÷ ${(cycle?.seconds ?? d.value).toFixed(2)}s`,
+      mult: `÷ ${fmtNum(cycle?.seconds ?? d.value, 2, "s")}`,
       delta: null,
       to: Math.round(dpsValue),
       mats,
@@ -954,19 +954,19 @@
       if (ad.reduction_raw > ad.reduction + 1e-9) {
         out.push({
           k: `中ディレイ減少の上限(${Math.round(limits.actual_delay_reduction_max * 100)}%)`,
-          raw: `${(ad.reduction_raw * 100).toFixed(0)}%`,
-          val: `${(ad.reduction * 100).toFixed(0)}%`,
-          loss: `${((ad.reduction_raw - ad.reduction) * 100).toFixed(0)}%`,
+          raw: fmtPct(ad.reduction_raw),
+          val: fmtPct(ad.reduction),
+          loss: fmtPct(ad.reduction_raw - ad.reduction),
           kept: ad.reduction_raw > 0 ? ad.reduction / ad.reduction_raw : 1,
         });
       }
       if (ad.floored) {
         const want = ad.raw;
         out.push({
-          k: `中ディレイの下限(${limits.actual_delay_min.toFixed(1)}s)`,
-          raw: `${want.toFixed(2)}s`,
-          val: `${ad.value.toFixed(2)}s`,
-          loss: `${(ad.value - want).toFixed(2)}s ぶん遅い`,
+          k: `中ディレイの下限(${fmtNum(limits.actual_delay_min, 1, "s")})`,
+          raw: fmtNum(want, 2, "s"),
+          val: fmtNum(ad.value, 2, "s"),
+          loss: `${fmtNum(ad.value - want, 2, "s")} ぶん遅い`,
           kept: ad.value > 0 ? want / ad.value : 1,
         });
       }
@@ -1562,8 +1562,8 @@
     const value = soulLinkEffect(field);
     if (value === null) return "—";
     return field === "weapon_enhance_level"
-      ? `×${value.toFixed(1)}`
-      : `+${Number((value * 100).toFixed(1))}%`;
+      ? fmtRate(value, 1)
+      : fmtSignedPct(value, { max: 1 });
   };
   /** 最終ダメージ(カテゴリL)の上限。値は Rust のカテゴリ定義が正なのでトレースから引く */
   const finalDamageCapPercent = $derived.by(() => {
@@ -2102,7 +2102,7 @@
                           class:crit-none={result.critical_chance <= 0}
                           class:crit-partial={result.critical_chance > 0 && result.critical_chance < 1}
                           use:flash={() => critChanceStage(result!.critical_chance * 100).label}
-                        >クリ率 {result.critical_rate.value.toFixed(1)}%{critMode ? ` ・ ${critChanceStage(result.critical_chance * 100).label}` : ""}</span>
+                        >クリ率 {fmtNum(result.critical_rate.value, 1, "%")}{critMode ? ` ・ ${critChanceStage(result.critical_chance * 100).label}` : ""}</span>
                       {/if}
                     {/if}
                   </span>
@@ -2112,7 +2112,7 @@
                 type="button" class="node rate"
                 aria-expanded={isDetailOpen("dps")} onclick={() => toggleDetail("dps")}
               >
-                <span class="nl">DPS <span class="num">(÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? result.actual_delay.value.toFixed(2) : "—"}</span>s)</span></span>
+                <span class="nl">DPS <span class="num">(÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? fmtNum(result.actual_delay.value, 2, "s") : "—"}</span>)</span></span>
                 <span class="num nv" use:bump={() => dpsValue}>{dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"}</span>
                 <span class="nsub dim">
                   <span class="nsub-line"><span class="num" use:delta={{ get: () => (dpsValue === null ? null : Math.round(dpsValue)) }}></span></span>
@@ -2129,7 +2129,7 @@
                   </span>
                   {#if result && result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
                     <span class="nsub-line">
-                      期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {(result.critical_chance * 100).toFixed(1)}%)
+                      期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {fmtPct(result.critical_chance, 1)})
                     </span>
                   {/if}
                 </span>
@@ -2141,7 +2141,7 @@
             {#if perHitDetail}{@render detailBox(perHitDetail, isDetailOpen("perHit"))}{/if}
             {#if totalDetail}{@render detailBox(totalDetail, isDetailOpen("total"))}{/if}
             {#if dpsDetail}{@render detailBox(dpsDetail, isDetailOpen("dps"))}{/if}
-            <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100).toFixed(1)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
+            <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
             <div class="hero-sentence">
               <span class="sentence" class:ok={reached} class:ng={!reached}>
                 {#if perHit === null}
@@ -2151,7 +2151,7 @@
                 {:else if reached}
                   <!-- 桁が離れた倍率をそのまま出すと意味を成さない(ユーザー指摘)。一定倍率を
                        超えたら倍率を出さず「大きく超えている」とだけ伝える -->
-                  {ratio >= 10 ? "目安を大きく超えています。" : `目安の ${ratio.toFixed(2)} 倍。火力は足りています。`}
+                  {ratio >= 10 ? "目安を大きく超えています。" : `目安の ${fmtNum(ratio, 2)} 倍。火力は足りています。`}
                 {:else}
                   目安まで あと {fmtInt(need - perHit)}(+{Math.max(1, Math.round((need / Math.max(perHit, 1) - 1) * 100))}% 必要)
                 {/if}
@@ -2201,27 +2201,27 @@
             {#if result?.actual_delay}
               {@const d = result.actual_delay}
               <div class="delay-note dim">
-                中ディレイ {d.base.toFixed(2)}s
+                中ディレイ {fmtNum(d.base, 2, "s")}
                 {#if d.fixed}
                   ×(固定・減少が効かない)
                 {:else if d.reduction > 0}
-                  × (1 − {(d.reduction * 100).toFixed(0)}%){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 {Math.round(limits.actual_delay_reduction_max * 100)}%({(d.reduction_raw * 100).toFixed(0)}% ぶん選択中)</span>{/if}
+                  × (1 − {fmtPct(d.reduction)}){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 {fmtPct(limits.actual_delay_reduction_max)}({fmtPct(d.reduction_raw)} ぶん選択中)</span>{/if}
                 {/if}
                 {#if d.combo_rate < 1}× {fmtNum(d.combo_rate)}(コンボ){/if}
-                = {d.value.toFixed(2)}s{#if d.floored}<span class="warn"> ※下限 {limits.actual_delay_min.toFixed(1)}s</span>{/if}
+                = {fmtNum(d.value, 2, "s")}{#if d.floored}<span class="warn"> ※下限 {fmtNum(limits.actual_delay_min, 1, "s")}</span>{/if}
                 {#if d.contributions.length > 0}
-                  ／ 減少源: {d.contributions.map((c) => `${c.source} ${(c.rate * 100).toFixed(0)}%`).join(" ・ ")}
+                  ／ 減少源: {d.contributions.map((c) => `${c.source} ${fmtPct(c.rate)}`).join(" ・ ")}
                 {/if}
                 <br />
                 {#if result?.combo}
                   {@const c = result.combo}
-                  1 サイクル = 通常攻撃 {c.normal_delay.toFixed(2)}s + max(スキル {c.skill_delay.toFixed(2)}s,
-                  CI {c.interval !== null ? `${c.interval.toFixed(2)}s` : "?"}) = {c.seconds.toFixed(2)}s
+                  1 サイクル = 通常攻撃 {fmtNum(c.normal_delay, 2, "s")} + max(スキル {fmtNum(c.skill_delay, 2, "s")},
+                  CI {c.interval !== null ? fmtNum(c.interval, 2, "s") : "?"}) = {fmtNum(c.seconds, 2, "s")}
                   ／ 1 秒あたり = (スキル + {c.normal_attack_name})の合計 ÷ 1 サイクル
                 {:else}
                   1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
                   {#if d.uses_measured}
-                    (<b>実測表</b>: 総減少 {(d.reduction * 100).toFixed(0)}% × 基本 {d.base.toFixed(1)}s)
+                    (<b>実測表</b>: 総減少 {fmtPct(d.reduction)} × 基本 {fmtNum(d.base, 1, "s")})
                   {:else}
                     (実測表の範囲外なので 60 ÷ 中ディレイ の式で算出)
                   {/if}
@@ -2232,11 +2232,11 @@
               {@const c = result.critical_rate}
               <div class="delay-note dim">
                 クリティカル率 (装備クリ補正 {fmtInt(c.equipment_critical)} + 1) × 2 × (AGI {fmtInt(c.agi)} / (AGI + 対象AGI {fmtInt(c.target_agi)}))
-                {#if c.siena_rate > 0}× シエナのオーラ {(1 + c.siena_rate).toFixed(2)}{/if}
-                = {c.from_agi.toFixed(1)}%
+                {#if c.siena_rate > 0}× シエナのオーラ {fmtNum(1 + c.siena_rate, 2)}{/if}
+                = {fmtNum(c.from_agi, 1, "%")}
                 ＋ スキル Cri値 {fmtInt(c.skill)}%{#if c.bonus > 0} ＋ 増加 {fmtInt(c.bonus)}%{/if}
                 − 対象のクリティカル被撃率 {fmtInt(-c.target_taken_rate)}%
-                = <b>{c.value.toFixed(1)}%</b>{#if c.raw < 0}<span class="warn"> ※下限 0%</span>{:else if c.raw > 100}<span class="warn"> ※上限 100%</span>{/if}
+                = <b>{fmtNum(c.value, 1, "%")}</b>{#if c.raw < 0}<span class="warn"> ※下限 0%</span>{:else if c.raw > 100}<span class="warn"> ※上限 100%</span>{/if}
               </div>
             {:else if result && skill}
               <div class="delay-note dim">
@@ -2287,7 +2287,7 @@
               <div class="lever-note open-in">
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
                 {#if bestLever}
-                  <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>+{bestLeverGain.toFixed(2)}%</span><span use:delta={{ get: () => bestLeverGain, unit: "%", digits: 2 }}></span> 伸びます({fmtHeadroom(bestLever)})。
+                  <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>{fmtSigned(bestLeverGain, 2, "%")}</span><span use:delta={{ get: () => bestLeverGain, unit: "%", digits: 2 }}></span> 伸びます({fmtHeadroom(bestLever)})。
                   {#if nextLevers.length > 0}
                     <button type="button" class="chip quiet" class:on={nextLeversOpen} aria-expanded={nextLeversOpen} onclick={() => (nextLeversOpen = !nextLeversOpen)}>
                       次の候補 {nextLevers.length}
@@ -2301,7 +2301,7 @@
                       <div class="dt-row">
                         <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
                         <span class="num dt-mult dim">{fmtCatValue(c)}</span>
-                        <span class="num dt-val" use:bump={() => leverGain(c)}>+{leverGain(c).toFixed(2)}%</span><span use:delta={{ get: () => leverGain(c), unit: "%", digits: 2 }}></span>
+                        <span class="num dt-val" use:bump={() => leverGain(c)}>{fmtSigned(leverGain(c), 2, "%")}</span><span use:delta={{ get: () => leverGain(c), unit: "%", digits: 2 }}></span>
                         <span class="num dt-sub dim">{fmtHeadroom(c)}</span>
                       </div>
                     {/each}
@@ -2353,8 +2353,8 @@
                 <span class="num strong stage-val" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span><span use:delta={{ get: () => (pierced === null ? null : Math.max(0, Math.trunc(pierced))) }}></span>
               </div>
               <div class="band">
-                <div style="width: {(100 - defShare).toFixed(2)}%; background: var(--flow-pierce);"></div>
-                <div style="width: {defShare.toFixed(2)}%; background: var(--hatch-lost);"></div>
+                <div style="width: {100 - defShare}%; background: var(--flow-pierce);"></div>
+                <div style="width: {defShare}%; background: var(--hatch-lost);"></div>
               </div>
               <div class="pierce-note num">
                 <span>攻撃力 {atkA !== null ? fmtInt(atkA) : "—"}</span>
@@ -2375,7 +2375,7 @@
               </div>
               <div class="band">
                 {#each flowRows.filter((r) => r.add > 0) as f (f.k)}
-                  <div style="width: {((Math.max(0, f.add) / flowTotal) * 100).toFixed(2)}%; background: {f.c};"></div>
+                  <div style="width: {(Math.max(0, f.add) / flowTotal) * 100}%; background: {f.c};"></div>
                 {/each}
               </div>
               <div class="band-rows">
@@ -2412,8 +2412,8 @@
                         <span class="lost-arrow dim">→ 上限</span>
                         <span class="num lost-val" use:flash={() => r.val}>{r.val}</span>
                         <span class="lost-bar" aria-hidden="true">
-                          <i style="width: {(r.kept * 100).toFixed(1)}%"></i>
-                          <i class="cut" style="width: {(100 - r.kept * 100).toFixed(1)}%"></i>
+                          <i style="width: {r.kept * 100}%"></i>
+                          <i class="cut" style="width: {100 - r.kept * 100}%"></i>
                         </span>
                         <span class="num lost-loss" use:flash={() => r.loss}>{r.loss} は無効</span>
                       </div>
@@ -2608,7 +2608,7 @@
             </div>
           </div>
           <p class="eq-note dim">
-            覚醒ダメージ <b class="num" use:flash={() => String(awakeningFactor)}>{awakeningFactor !== null ? `×${awakeningFactor.toFixed(2)}` : "—"}</b>
+            覚醒ダメージ <b class="num" use:flash={() => String(awakeningFactor)}>{awakeningFactor !== null ? fmtRate(awakeningFactor) : "—"}</b>
             ・ ダメージ上限 <b class="num" use:bump={() => result?.damage_cap ?? null}>{result ? fmtInt(result.damage_cap) : "—"}</b><span use:delta={{ get: () => result?.damage_cap ?? null }}></span>。
             節目(20 / 40 / 60 / 80 / 90)を超えると上限の伸びが一段上がります。Lv を入れると覚醒は 5 になります。
           </p>

@@ -392,8 +392,8 @@
                 class="grow"
                 title={cap > 0 ? `上限 ${fmtInt(cap)}(覚醒段階 + エタの意志 Lv)` : "上限は計算中"}
               >
-                <i class="base" style="width: {basePct.toFixed(1)}%"></i>
-                <i class="add" style="width: {addPct.toFixed(1)}%"></i>
+                <i class="base" style="width: {basePct}%"></i>
+                <i class="add" style="width: {addPct}%"></i>
               </span>
             </td>
             <td class="n final ro">
