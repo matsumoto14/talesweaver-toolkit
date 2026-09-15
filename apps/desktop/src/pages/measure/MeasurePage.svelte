@@ -19,6 +19,7 @@
   import { reportError } from "../../toast.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump } from "../../ui/motion.svelte";
+  import StatInput from "../../ui/StatInput.svelte";
   import Picker from "../../ui/Picker.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
@@ -138,17 +139,17 @@
   // --- 実測(点を溜めてから送る)---------------------------------------------
   // 1 点では防御力とカット率を分けられない。**装備を替えて攻撃力を変えた 2 点以上**が要る
   // (docs/enemy-verification.md)ので、ここで溜めて 1 通で送る。
-  let measuredDamage = $state<number | null>(null);
+  let measuredDamage = $state(0); // 0 = 未入力
   let measuredCritical = $state(false);
   let measuredHits = $state(10);
   let measuredNote = $state("");
   let samples = $state<MeasurementSample[]>([]);
   const expected = $derived(expectedDamage(result, measuredCritical));
-  const gap = $derived(measuredDamage !== null ? damageGap(measuredDamage, expected) : null);
+  const gap = $derived(measuredDamage > 0 ? damageGap(measuredDamage, expected) : null);
   const targetReady = $derived(
     targetKind === "listed" ? content !== null : unlistedName.trim().length > 0,
   );
-  const canAdd = $derived(measuredDamage !== null && measuredDamage > 0 && skill !== null && targetReady);
+  const canAdd = $derived(measuredDamage > 0 && skill !== null && targetReady);
   const canSend = $derived(samples.length > 0 && skill !== null && character !== null && targetReady);
   // 防御力とカット率を分けて逆算できるか。判定は Rust(can_separate_measurement)。
   let separable = $state(false);
@@ -165,7 +166,7 @@
 
   /** いまの入力を 1 点として記録し、入力欄は次の点のために空にする */
   function addSample() {
-    if (measuredDamage === null) return;
+    if (measuredDamage <= 0) return;
     samples = [
       ...samples,
       {
@@ -179,7 +180,7 @@
         weapon: weaponLabel(weaponId),
       },
     ];
-    measuredDamage = null;
+    measuredDamage = 0;
     measuredNote = "";
   }
 
@@ -292,28 +293,17 @@
       <div class="section">
         <div class="area-head"><span class="area-name">出たダメージ</span><span class="area-rule"></span></div>
         <div class="fields">
-          <label class="field">
+          <!-- 実測値は外部データで取れない値なので自由入力(§07 形態 5)。理由チップで例外だと示す。
+               0 = 未入力(点として溜められない)。上限は無い(max <= min で縛らない) -->
+          <div class="field">
             <span class="label">実測ダメージ(1 発)</span>
-            <input
-              class="num-field" type="number" min="1" inputmode="numeric"
-              value={measuredDamage ?? ""}
-              oninput={(e) => {
-                const v = Number(e.currentTarget.value);
-                measuredDamage = Number.isFinite(v) && v > 0 ? Math.trunc(v) : null;
-              }}
-            />
-          </label>
-          <label class="field short">
+            <StatInput label="実測ダメージ(1 発)" hideLabel min={0} max={0} gauge={false} reason="実測値 · 一時" bind:value={measuredDamage} />
+          </div>
+          <!-- 何発は 1 押しに意味がある(1 発ずつ数えた値)のでステッパー(形態 4) -->
+          <div class="field">
             <span class="label">何発中の最大</span>
-            <input
-              class="num-field" type="number" min="1" inputmode="numeric"
-              value={measuredHits}
-              oninput={(e) => {
-                const v = Number(e.currentTarget.value);
-                measuredHits = Number.isFinite(v) && v > 0 ? Math.trunc(v) : 1;
-              }}
-            />
-          </label>
+            <StatInput label="何発中の最大" hideLabel min={1} max={999} gauge={false} stepper bind:value={measuredHits} />
+          </div>
           <ToggleRow
             name="クリティカルだった"
             on={measuredCritical}
@@ -412,18 +402,6 @@
   .field { display: flex; flex-direction: column; gap: 3px; }
   .field .label { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-muted); }
   .field.wide { width: 100%; }
-  .field.short .num-field { width: 72px; }
-  /* 上限のない自由入力(§07 形態 5)。枠は文字欄(ui/TextField)と同じ 28px / r-panel にそろえ、
-     スピナーは他の数値欄に無いので消す */
-  .num-field {
-    width: 148px; height: 28px; padding: 0 9px; box-sizing: border-box; appearance: textfield;
-    border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--bg-field); color: var(--fg);
-    font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12px; outline: none;
-    transition: border-color 0.15s ease;
-  }
-  .num-field:focus { border-color: var(--accent); }
-  .num-field::-webkit-outer-spin-button,
-  .num-field::-webkit-inner-spin-button { appearance: none; margin: 0; }
   .note {
     margin: 0; padding: 5px 9px; font-size: 10px; line-height: 1.6;
     border: 1px dashed var(--border); border-radius: var(--r-panel); background: var(--bg-rail);
