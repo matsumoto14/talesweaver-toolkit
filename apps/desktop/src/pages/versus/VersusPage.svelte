@@ -589,7 +589,8 @@
           <div class="stat-label">依存の補正</div>
           <div class="stat-val">{@render textCell(result ? `+${result.correction_bonus} / −${result.correction_penalty}` : null)}</div>
         </div>
-        <div class="stat-row">
+        <!-- 的中剣の行チップは 28px なので、Picker の段と同じ高さにする(21px の段だとはみ出す) -->
+        <div class="stat-row" class:with-picker={result?.accuracy_skill_available && attacker !== null}>
           <div class="stat-label">{result?.accuracy_skill_available ? "的中剣" : "命中P割合"}</div>
           <div class="stat-val">
             {#if result?.accuracy_skill_available && attacker}
