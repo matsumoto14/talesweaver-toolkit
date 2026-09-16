@@ -16,6 +16,14 @@ import { fmtNum } from "../format";
  * getter を渡す**(`use:bump={() => perHit}`)。中の `$effect` がそれを読む。
  * 連打されても途中から再スタートできるよう、クラスを外して reflow を挟んでから付け直す。
  */
+/**
+ * Svelte の animate / transition に渡す時間(ms)。動きを消す設定(prefers-reduced-motion)のときは 0。
+ * CSS のアニメーションは app.css が一括で殺しているが、Svelte の animate / transition は JS なので
+ * ここで見る必要がある(§10「動きを消しても変化が分かること」)。
+ */
+export const motionDuration = (ms: number) =>
+  typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms;
+
 export function bump(node: HTMLElement, get: () => number | null) {
   const clear = () => node.classList.remove("bump-up", "bump-down");
   let prev = get();

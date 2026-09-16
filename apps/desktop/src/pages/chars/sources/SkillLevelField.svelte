@@ -14,6 +14,8 @@
     disabledValues?: string[];
     value: string;
     onChange: (v: string) => void;
+    /** ラベルの左に置くスキルの絵(§08: 名前と併記) */
+    icon?: Snippet;
     /** 見え方を変える・段を絞るなどの追加アクション(「5 以上 / 1〜4」など)。clear より前に出す */
     extraAction?: Snippet;
     clearLabel?: string;
@@ -26,13 +28,13 @@
   }
   let {
     label, options, cols, cell, disabledValues = [], value, onChange,
-    extraAction, clearLabel, clearDisabled = false, onClear,
+    icon, extraAction, clearLabel, clearDisabled = false, onClear,
     valueText, valueMotion, valueKey,
   }: Props = $props();
 </script>
 
 <div class="skill-field">
-  <span class="k">{label}</span>
+  <span class="k">{#if icon}{@render icon()}{/if}{label}</span>
   <StepSelect
     label=""
     {options}

@@ -7,7 +7,7 @@
   // **アイコン単独表示は禁止**(名前と併記する)。例外はキャラレールを畳んだときだけで、
   // そのときは呼び出し側が title を付ける。
   export type IconKind =
-    | "character" | "mob" | "skill" | "buff" | "mastery" | "equipment" | "content" | "title";
+    | "character" | "mob" | "skill" | "buff" | "mastery" | "equipment" | "content" | "title" | "source";
   /** 20 = 行内・チップ / 28 = 一覧行 / 40 = 選択カード / 64 = キャラ詳細 */
   export type IconSize = 20 | 28 | 40 | 64;
 
@@ -20,6 +20,7 @@
     equipment: "equipment",
     content: "contents",
     title: "titles",
+    source: "sources",
   };
 
   /// 枠の見た目。マスタリーはスキルの一種なのでスキルの枠を使う(段は色で区別しない)
@@ -34,6 +35,8 @@
     content: "mob",
     // 称号の絵は「称号を授けるアイテム」(名誉の証)。装備と同じ枠に載せる
     title: "equipment",
+    // 補正源の代表(その補正源を象徴するアイテムの絵。tools/gamedata/import_source_icons.py)。装備の枠に載せる
+    source: "equipment",
   };
 
   // Vite の glob import。実画像が 1 枚も無ければ空オブジェクトになるだけで、ビルドは通る。

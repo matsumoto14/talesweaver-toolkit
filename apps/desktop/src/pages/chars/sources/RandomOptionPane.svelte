@@ -19,11 +19,12 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus } from "../../../state.svelte";
+  import { slide } from "svelte/transition";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import type { SourceId } from "../sourceId";
-  import { flash } from "../../../ui/motion.svelte";
+  import { flash, motionDuration } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
   import { randomOptionRecordOnlyCount } from "../summaries";
 
@@ -102,7 +103,7 @@
   const randomOptionDef = (id: string): RandomOptionDef | undefined =>
     app.randomOptions.find((d) => d.id === id);
 
-  /** ランダムOP のドリルダウン。装備と同じく、押した部位は残して右にペインを足す(§09 規則 2) */
+  /** 開いている部位。中身はその部位の行の直下に開く */
   let openRandomPart = $state<PartSlot | null>(null);
 
   // --- エラー帯からの「ここを開く」 -------------------------------------
@@ -286,8 +287,10 @@
     グレーの枠は<b>記録するだけ</b>(発動条件付き・未実装の概念)で計算には入りません。
   </p>
 </div>
-<!-- 装備と同じドリルダウン。押した部位はその場に残り、右にペインが増える(§09 規則 2) -->
-<div class="part-split" class:open={openRandomPart !== null}>
+<!-- 部位を押すと**その行のすぐ下**に中身が開く(アコーディオン)。中身は枠 2 つ分の短い編集なので
+     装備のような重ね窓にせず、押した行はその場に残す(§09 規則 3)。閉じるのは行をもう一度押す
+     (閉じるボタンは置かない — ユーザー判断 2026-09-16) -->
+<div class="part-split">
   <div class="part-list">
     {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
       {#if app.randomOptions.some((d) => d.slot === slot) && randomOptionSlots(slot) > 0}
@@ -296,7 +299,7 @@
           type="button"
           class="part-row"
           class:on={openRandomPart === slot}
-          onclick={() => (openRandomPart = slot)}
+          onclick={() => (openRandomPart = openRandomPart === slot ? null : slot)}
         >
           <span class="part-main">
             <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
@@ -316,50 +319,48 @@
             {/each}
             {#if count === 0}<span class="dim">なし</span>{/if}
           </span>
-          <span class="chev dim">›</span>
+          <span class="chev dim">{openRandomPart === slot ? "▾" : "›"}</span>
         </button>
+        {#if openRandomPart === slot}
+        <div class="part-detail ro-inline" bind:this={detailEl} transition:slide={{ duration: motionDuration(220) }}>
+          <!-- 見出しは持たない。すぐ上の行が部位名を出している(§00 ②) -->
+          <div class="card">
+            {@render randomOptionEditor(slot)}
+            <!-- 枠は 1 装備 2 つ。**1 つ目を決めたら 2 つ目の候補を出す** —
+                 候補を 2 枠ぶん並べても、実際に選べるのは順番に 1 つずつ(§00 02) -->
+            {#if selectedPartOrNull(slot) !== null && (selectedPartOrNull(slot)?.random_options.length ?? 0) < randomOptionSlots(slot)}
+              <div class="ro-next swap-in">
+                <span class="ro-next-label">
+                  枠 {(selectedPartOrNull(slot)?.random_options.length ?? 0) + 1}
+                  <span class="dim">/ {randomOptionSlots(slot)}</span>
+                </span>
+                {#if commonAddable.length > 0}
+                  <div class="ro-common">
+                    {#each commonAddable as o (o.id)}
+                      <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.id)}>
+                        ＋ {o.name}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+                {#if otherAddable.length > 0}
+                  <div class="ro-add">
+                    <Picker
+                      options={otherPickerOptions}
+                      note="ほかの OP(同じカテゴリーは 1 つまで)"
+                      menu
+                      bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
+                    />
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <p class="hint dim">枠は {randomOptionSlots(slot)} つまで。変えるときは外してから足します。</p>
+            {/if}
+          </div>
+        </div>
+        {/if}
       {/if}
     {/each}
   </div>
-  {#if openRandomPart !== null}
-    {@const slot = openRandomPart}
-    <div class="part-detail pane-in" bind:this={detailEl}>
-      <button type="button" class="close-detail" onclick={() => (openRandomPart = null)}>✕ この部位を閉じる</button>
-      <div class="card">
-        <div class="card-title">{PART_SLOT_LABELS[slot]}</div>
-        {@render randomOptionEditor(slot)}
-        <!-- 枠は 1 装備 2 つ。**1 つ目を決めたら 2 つ目の候補を出す** —
-             候補を 2 枠ぶん並べても、実際に選べるのは順番に 1 つずつ(§00 02) -->
-        {#if selectedPartOrNull(slot) !== null && (selectedPartOrNull(slot)?.random_options.length ?? 0) < randomOptionSlots(slot)}
-          <div class="ro-next swap-in">
-            <span class="ro-next-label">
-              枠 {(selectedPartOrNull(slot)?.random_options.length ?? 0) + 1}
-              <span class="dim">/ {randomOptionSlots(slot)}</span>
-            </span>
-            {#if commonAddable.length > 0}
-              <div class="ro-common">
-                {#each commonAddable as o (o.id)}
-                  <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.id)}>
-                    ＋ {o.name}
-                  </button>
-                {/each}
-              </div>
-            {/if}
-            {#if otherAddable.length > 0}
-              <div class="ro-add">
-                <Picker
-                  options={otherPickerOptions}
-                  note="ほかの OP(同じカテゴリーは 1 つまで)"
-                  menu
-                  bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
-                />
-              </div>
-            {/if}
-          </div>
-        {:else}
-          <p class="hint dim">枠は {randomOptionSlots(slot)} つまで。変えるときは外してから足します。</p>
-        {/if}
-      </div>
-    </div>
-  {/if}
 </div>

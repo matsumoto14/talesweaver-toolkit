@@ -7,6 +7,7 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import { flash } from "../../../ui/motion.svelte";
+  import Icon from "../../../ui/Icon.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import SkillLevelField from "./SkillLevelField.svelte";
@@ -206,7 +207,9 @@
       clearLabel="未習得"
       clearDisabled={draft.commonSkills.augment_level === 0}
       onClear={() => setAugmentLevel(0)}
-    />
+    >
+      {#snippet icon()}<Icon kind="skill" id="common_augment" size={20} label="オーグメント" />{/snippet}
+    </SkillLevelField>
     <div class="skill-field">
       <span class="k">極限スキル</span>
       <div class="ultimate-row">
@@ -219,7 +222,9 @@
             {on}
             disabled={!on && ultimatePickedCount >= 2}
             onToggle={() => toggleUltimate(u)}
-          />
+          >
+            {#snippet icon()}<Icon kind="skill" id={u} size={20} label={ULTIMATE_SKILL_LABELS[u]} />{/snippet}
+          </ToggleRow>
         {/each}
       </div>
       <span class="v num">{ultimatePickedCount} / 2</span>
@@ -240,7 +245,7 @@
   <div class="skill-fields">
     {#each draft.commonSkills.unleash as slot, i (i)}
       <div class="skill-field">
-        <span class="k">枠 {i + 1}</span>
+        <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />枠 {i + 1}</span>
         <StepSelect
           label=""
           options={unleashStatOptions}
@@ -290,6 +295,7 @@
         ? null
         : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1]}
     >
+      {#snippet icon()}<Icon kind="skill" id="common_sharpness_vision" size={20} label="シャープネスビジョン" />{/snippet}
       {#snippet extraAction()}
         {#if !sharpnessIsLow}
           <button
@@ -317,7 +323,7 @@
     <!-- 開いた先も上と同じ形。ラベル / 段 / 操作 / 効いている値の 4 列でそろえる -->
     <div class="fold-body skill-fields">
       <div class="skill-field">
-        <span class="k">パワーウェポン</span>
+        <span class="k"><Icon kind="skill" id="common_power_weapon" size={20} label="パワーウェポン" />パワーウェポン</span>
         <span class="toggle-cell">
           <ToggleRow
             name="取っている"
@@ -341,9 +347,11 @@
         valueText={draft.commonSkills.strong_weapon_level === 0 ? "—" : fmtSigned(draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL, { max: 2 }, "%")}
         valueMotion="bump"
         valueKey={draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}
-      />
+      >
+        {#snippet icon()}<Icon kind="skill" id="common_strong_weapon" size={20} label="ストロングウェポン" />{/snippet}
+      </SkillLevelField>
       <div class="skill-field">
-        <span class="k">コートアーマー</span>
+        <span class="k"><Icon kind="skill" id="common_coat_armor" size={20} label="コートアーマー" />コートアーマー</span>
         <span class="toggle-cell">
           <ToggleRow
             name="取っている"
@@ -371,7 +379,9 @@
           : `物${PROTECT_ARMOR_RATES[draft.commonSkills.protect_armor_level - 1]} / 魔${PROTECT_ARMOR_MAGIC[draft.commonSkills.protect_armor_level - 1]}%`}
         valueMotion="bump"
         valueKey={draft.commonSkills.protect_armor_level}
-      />
+      >
+        {#snippet icon()}<Icon kind="skill" id="common_protect_armor" size={20} label="プロテクトアーマー" />{/snippet}
+      </SkillLevelField>
       <SkillLevelField
         label="改・プロテクト"
         options={kaiProtectArmorLevels}
@@ -387,9 +397,11 @@
           : `物${KAI_PROTECT_ARMOR_RATES[draft.commonSkills.kai_protect_armor_level - 1]} / 魔${KAI_PROTECT_ARMOR_MAGIC[draft.commonSkills.kai_protect_armor_level - 1]}%`}
         valueMotion="bump"
         valueKey={draft.commonSkills.kai_protect_armor_level}
-      />
+      >
+        {#snippet icon()}<Icon kind="skill" id="common_kai_protect_armor" size={20} label="改・プロテクト" />{/snippet}
+      </SkillLevelField>
       <div class="skill-field">
-        <span class="k">スーパーリミット</span>
+        <span class="k"><Icon kind="skill" id="common_super_limit" size={20} label="スーパーリミット" />スーパーリミット</span>
         <span class="toggle-cell">
           <ToggleRow
             name="取っている"
@@ -411,7 +423,9 @@
         clearDisabled={draft.commonSkills.ultimate.hyper_limit_level === 0}
         onClear={() => (draft.commonSkills.ultimate.hyper_limit_level = 0)}
         valueText={draft.commonSkills.ultimate.hyper_limit_level === 0 ? "—" : `Lv${draft.commonSkills.ultimate.hyper_limit_level}`}
-      />
+      >
+        {#snippet icon()}<Icon kind="skill" id="common_hyper_limit" size={20} label="ハイパーリミット" />{/snippet}
+      </SkillLevelField>
       <SkillLevelField
         label="レインフォース"
         options={reinforceLevels}
@@ -423,11 +437,13 @@
         clearDisabled={draft.commonSkills.reinforce_level === 0}
         onClear={() => setReinforceLevel(0)}
         valueText={`Lv${unleashCap} まで`}
-      />
+      >
+        {#snippet icon()}<Icon kind="skill" id="common_reinforce" size={20} label="レインフォース" />{/snippet}
+      </SkillLevelField>
       {#each draft.commonSkills.unleash as slot, i (i)}
         {#if slot.stat !== null}
           <div class="skill-field">
-            <span class="k">解放 {i + 1} の Lv</span>
+            <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />解放 {i + 1} の Lv</span>
             <StepSelect
               label=""
               options={unleashLevelChoices}

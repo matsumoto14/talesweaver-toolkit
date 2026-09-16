@@ -54,22 +54,29 @@
   }
   .togrow:has(.face:hover:not(:disabled)) { border-color: var(--accent); }
   .togrow:has(.face:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
+  /* overflow: hidden — 中身の最小幅(名前 40% + 条件 70px + 値 52px)が面より大きくなっても、
+     面の外(extra に置いた「設定」「ほか n」の的)に文字を描かない。的が隠れる方が読めないより悪い */
   .face {
-    flex: 1; min-width: 0; min-height: 26px; display: flex; align-items: center; gap: 8px;
+    flex: 1; min-width: 0; min-height: 26px; display: flex; align-items: center; gap: 8px; overflow: hidden;
     margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit;
     text-align: left; cursor: pointer;
   }
   .face:disabled { cursor: default; opacity: 0.5; }
   .ico { flex: none; display: inline-flex; align-items: center; }
-  /* 名前は先に幅を取る。値が長いときは値側を省略し、名前を数文字に潰さない(実機: 極限スキル) */
-  .nm { flex: 1 1 auto; min-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-  /* 条件は 1 行に収める。長い注記は title で読ませ、行の高さは変えない */
+  /* 名前は先に幅を取る。値が長いときは値側を省略し、名前を数文字に潰さない(実機: 極限スキル)。
+     最小幅の合計(名前 28% + 条件 48px + 値 72px + アイコン 20px + 隙間 24px)は、バフタブの 2 列並び
+     (1 列 290px、面 232px、右に「ほか n」の的が付く)でも面に収まる予算にしてある(2026-09-16 実機) */
+  .nm { flex: 1 1 auto; min-width: 28%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  /* 条件は 1 行に収める。長い注記は title で読ませ、行の高さは変えない。48px = 9.5px で 5 文字(ミニゲーム) */
   .cond {
-    margin-left: auto; flex: 0 1 auto; max-width: 45%; min-width: 70px; text-align: right;
+    margin-left: auto; flex: 0 1 auto; max-width: 45%; min-width: 48px; text-align: right;
     font-size: 9.5px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* 値の最小幅 72px = 「基本発動 +10%」(4 文字 + 符号付き %)が欠けない幅。名前と値が取り合った
+     とき「最終 +1…」と数字が欠けるより、名前が 1〜2 文字短く省略される方が読める(実機
+     2026-09-16 バフタブ「その他」)。長い値は max-width で止まり、そこから先は省略記号 */
   .val {
-    flex: 0 1 auto; margin-left: auto; min-width: 52px; max-width: 60%; text-align: right;
+    flex: 0 1 auto; margin-left: auto; min-width: 72px; max-width: 60%; text-align: right;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-variant-numeric: tabular-nums; font-weight: 700; color: var(--fg-off);
   }

@@ -15,6 +15,7 @@
   import { sacredRelicStageFromValue, sacredRelicValue, withEnchant } from "../../equipment";
   import { limits } from "../../limits.svelte";
   import { tables } from "../../tables.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import type { SourceId } from "./sourceId";
   import "./sources/pane-shared.css";
   import ActualDelayPane from "./sources/ActualDelayPane.svelte";
@@ -160,6 +161,7 @@
 {#key sourceId}
 <div class="pane pane-in">
   <div class="pane-head">
+    <Icon kind="source" id={sourceId} size={28} label={TITLES[sourceId].title} />
     <span class="pane-title">{TITLES[sourceId].title}</span>
     <!-- 装備だけは固定の説明文ではなく、いまの値を出す。装備は**強化合計(エンチャント)**で
          概ね認知できる(ユーザー判断 2026-09-01)ので、主軸スキルが使う補正だけを見出しに置き、

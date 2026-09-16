@@ -46,10 +46,11 @@
   import { persisted } from "../../ui/persistedState.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { adjustDropIndex, dropHalfIndex } from "../../ui/reorder.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import Picker from "../../ui/Picker.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
-  import { bump, flash } from "../../ui/motion.svelte";
+  import { bump, flash, motionDuration } from "../../ui/motion.svelte";
   // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
   import "./sources/pane-shared.css";
   import {
@@ -628,14 +629,6 @@
     mark(id);
   }
   /**
-   * 動きを消す設定(prefers-reduced-motion)のときは 0 にする。
-   * CSS のアニメーションは app.css が一括で殺しているが、Svelte の animate は JS なので
-   * ここで見る必要がある(§10「動きを消しても変化が分かること」)。
-   */
-  const motionDuration = (ms: number) =>
-    typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms;
-
-  /**
    * 群をまたいで動いた行。同じ群の中の並べ替えは `animate:flip` が滑らせるが、
    * 群をまたぐと別の `{#each}` になるので繋がらない。着地を弾ませて、
    * どれが動いたのかを目で追えるようにする(§10 型 5「状態が変わった」)。
@@ -821,6 +814,7 @@
                   title={list.key === "fav" ? "お気に入りから外す" : "お気に入りに入れる"}
                   onclick={(e) => { e.stopPropagation(); toggleFavorite(s.id); }}
                 >★</button>
+                <Icon kind="source" id={s.id} size={28} label={s.name} />
                 <span class="src-main">
                   <span class="src-name">{s.name}</span>
                   <span class="src-sub num" use:flash={() => s.sub}>{s.sub}</span>

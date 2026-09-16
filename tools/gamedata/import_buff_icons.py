@@ -59,6 +59,8 @@ ICONS: dict[str, tuple[str, str]] = {
     "club_shop_buff_type_p": ("ステータス", "バフスクロール.png"),
     "wednesday_attack_c_rank": ("ステータス", "AF攻撃.png"),
     "twin_dango": ("ステータス", "双子のお団子.png"),
+    # 「ステータス」表には無いが Skill/共通 の共通スキル表に添付がある
+    "tales_weaver_energy": ("Skill/共通", "テイルズウィーバーのエネルギー.png"),
 }
 
 

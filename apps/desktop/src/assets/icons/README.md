@@ -11,6 +11,8 @@
 | マスタリー | `masteries/` | `<id>.png` | `gamedata::mastery_catalog()` の `MasteryDef::id`(例 `boris_m1_issen.png`)。枠はスキルと同じ |
 | 装備 | `equipment/` | `<id>.png` | `gamedata::equipment_catalog()` の `EquipmentItem::id` |
 | コンテンツ | `contents/` | `<id>.png` | `gamedata::content_areas()` の `Content::id`(例 `clamor.png`) |
+| 称号 | `titles/` | `title.png` | 称号は個別の絵を持たないので「名誉の証」1 枚を全称号で使う。枠は装備 |
+| 補正源 | `sources/` | `<SourceId>.png` | `pages/chars/sourceId.ts` の `SourceId`(例 `thesis.png`)。その補正源を象徴するアイテムの絵。対応表は `tools/gamedata/import_source_icons.py` だけが持つ。枠は装備 |
 
 置くだけで反映される(Vite の glob import)。**無い id は破線 + `?`** で表示され、
 console に 1 行だけ warn が出る。サイズは `Icon.svelte` 側で固定なのでレイアウトは崩れない。
@@ -88,3 +90,16 @@ PNG は最初の方向の最初のコマで、後ろ向きや出現エフェク�
 既存の夜星・喪失系 28 件はスクショ由来のまま据え置き。クライアントに同名アイテムが無い 38 件
 (旧武器アビリティ「(下)尖った刃」「疾風の刃」、N/R/L-耐魔法・失われた魂、深淵の魔法耐性 など)は `?` のまま。
 再取込は `tools/gamedata/import_client_ability_icons.py`。
+
+2026-09-16にレリック 40 件(神鳥・ルナリアのペンダント / ブレスレット +1〜+10)をクライアント展開データと
+名前で照合し、全件を `equipment/` に取り込んだ。ライジングホリックカフス(ゲーム内名は †ライゾシンボリックカフス)も
+同じ手順で取り込み、上の「`?` のまま」から外れた。AF 32 件(ディフェンシオ含む)も同じスクリプトで
+クライアントの絵に揃え、wiki に添付が無かった 7 件(エクリプス物理 / 魔斬・エーテリアルチューブ 5 種)が埋まった。
+再取込は `tools/gamedata/import_manual_item_icons.py` を使う。
+同日、補正源 18 種の代表アイコンを `sources/` に同梱した(`tools/gamedata/import_source_icons.py`)。
+同日、wiki に絵が無いバフ 5 件(略奪パン・茹でミミック・古代レリックの聖域ミニゲームバフ・遊び用チンキ剤・
+ハードウエポン(エアル))をクライアント item の絵と同梱済みのスキル絵で埋めた(`tools/gamedata/import_client_buff_icons.py`)。
+テイルズウィーバーのエネルギーは wiki Skill/共通 の添付(`import_buff_icons.py`)。クラブ効果・射手のルーンは
+本物の絵が無く、別の物で代用せず `?` のまま(ユーザー判断)。
+同日、共通スキル 11 件(`skills/common_<名前>.png`)と極限スキル 3 件(`skills/<UltimateSkill id>.png`)を
+wiki Skill/共通・Skill/ゲージスキル から取り込んだ(`tools/gamedata/import_common_skill_icons.py`)。

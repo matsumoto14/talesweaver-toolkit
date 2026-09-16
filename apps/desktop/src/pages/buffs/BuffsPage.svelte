@@ -17,7 +17,7 @@
     isUserSelectedTarget, pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
   import { fmtInt, fmtPct, fmtSigned, fmtSignedPct, formatLayerValue, topRows, topRowsText, type TopRows } from "../../format";
-  import { singleEffectLabel } from "../../characterSkills";
+  import { damageCategoryLabel, singleEffectLabel } from "../../characterSkills";
   import {
     STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS, STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
   } from "../../labels";
@@ -500,8 +500,8 @@
    *  生値を手で再計算しない(写経しない)。攻撃ダメージ層にしか出ない分は
    *  buffDamageEffects(ドメインがカテゴリ上限適用後の値をバフへ配賦した結果)を足す。
    *  どちらも無ければ null(キャラ未選択、または本当に記録のみの層)。
-   *  全ステに乗るバフは 7 件そのまま並べると欠けるので、効きの大きい上位 2 件 + ほか n に絞る
-   *  (計算タブの buffContributionText と同じ topRowsText を使い、二重管理にしない)。 */
+   *  全ステに乗るバフは 7 件そのまま並べると欠けるので、効きの大きい 1 件 + ほか n に絞る
+   *  (計算タブの buffContributionText と同じ topRows を使い、二重管理にしない)。 */
   /** ON バフ 1 件のステ増分行(ラベル・値のペア)。「ほか n」の中身を辿るポップオーバーと
    *  チップの要約行の両方がここから作る(値の出どころを 1 本にする)。 */
   function statRows(def: BuffDefinition): { label: string; value: number }[] {
@@ -509,15 +509,48 @@
       .filter((c) => c.source === def.name && c.effect !== 0)
       .map((c) => ({ label: `${STAT_LABELS[c.kind]} ${fmtSigned(c.effect, { max: 3 })}`, value: c.effect }));
   }
-  /** ステ増分行を上位 2 件 + ほか n(の件数)に絞ったもの。「ほか n」は別枠のボタンとして
-   *  出すので topRowsText(1 行テキスト化)ではなく構造化された topRows を使う。 */
-  const statTop = (def: BuffDefinition): TopRows => topRows(statRows(def), 2);
+  /** ステ増分行を最大の 1 件 + ほか n(の件数)に絞ったもの。「ほか n」は別枠のボタンとして
+   *  出すので topRowsText(1 行テキスト化)ではなく構造化された topRows を使う。
+   *  行は 2 列並びで 1 列 290px ほどしか無く、2 件 + ダメージ効果を載せると値が「ほか n」の
+   *  上に被った(実機 2026-09-16)。行に載せるのは最大の 1 件だけで、残りは「ほか n」の中身に回す。 */
+  const statTop = (def: BuffDefinition): TopRows => topRows(statRows(def), 1);
+  /** ON の行に出す 1 件。見出しの目的に合う方を先に出す — 火力タブではダメージ効果、
+   *  それ以外では最大のステ増分。無ければもう片方、どちらも無ければカタログの説明。 */
+  function rowLead(def: BuffDefinition, top: TopRows, dmg: string | null): string {
+    const lead = activePurpose === "damage" ? dmg ?? top.shown[0] : top.shown[0] ?? dmg;
+    return lead ?? effectSummary(def);
+  }
+  /** 「ほか n」の中身 = 行に出さなかった残り。火力タブでダメージ効果を行に出したときは
+   *  ステ増分の全件、それ以外は残りのステ増分 + ダメージ効果。 */
+  function restLines(top: TopRows, dmg: string | null): string[] {
+    if (activePurpose === "damage" && dmg) return [...top.shown, ...top.restRows.map((r) => r.label)];
+    const lines = top.restRows.map((r) => r.label);
+    if (dmg && top.shown.length > 0) lines.push(dmg);
+    return lines;
+  }
+  /** 火力グループの見出し(一般 / イザベル / 日本独自)が指すカテゴリ。Rust `damage_groups` と同じ対応。
+   *  そのグループを開いているときは行でカテゴリ名を繰り返さず % だけ出す(見出しで分かっている、
+   *  ユーザー指摘 2026-09-16)。「その他」は複数カテゴリの寄せ集めなので名前を残す。 */
+  const GROUP_CATEGORY: Partial<Record<BuffDamageGroup, DamageCategory>> = {
+    general: "attack_damage_general", isabel: "attack_damage_isabel", japan: "attack_damage_japan",
+  };
+  const inActiveGroup = (category: string) =>
+    activePurpose === "damage" && GROUP_CATEGORY[activeDamageGroup] === category;
+  /** 火力タブの行に載せるカテゴリ名。「攻撃ダメージ(基本発動) +10%」は 1 列 290px の行で % が
+   *  切れる(実機 2026-09-16)ので、火力タブでは「攻撃ダメージ」「ダメージ」を落として
+   *  「基本発動 +10%」「最終 +15%」にする。全文は title(buffTooltip)で読める。 */
+  function damageRowLabel(label: string): string {
+    if (activePurpose !== "damage") return label;
+    return label.replace(/^攻撃ダメージ\((.+)\)$/, "$1").replace(/ダメージ$/, "");
+  }
   /** ON バフ 1 件のダメージ効果行。攻撃ダメージ効果は多くても 1〜2 件なので、そのまま並べる。 */
   function damageText(def: BuffDefinition): string | null {
     const damageRows = buffDamageEffects.filter((e) => e.buff_name === def.name && e.effect !== 0);
     if (damageRows.length === 0) return null;
     return damageRows
-      .map((e) => `${categoryLabel.get(e.category) ?? e.category} ${fmtSignedPct(e.effect)}`)
+      .map((e) => inActiveGroup(e.category)
+        ? fmtSignedPct(e.effect)
+        : `${damageRowLabel(categoryLabel.get(e.category) ?? e.category)} ${fmtSignedPct(e.effect)}`)
       .join(" ・ ");
   }
   /** aria-label や値調整フォーム(.config-effect)向けの 1 行版。こちらは視覚的な幅制約が
@@ -537,7 +570,13 @@
    *  (ユーザー合意: ON にしたチップに増分を出す)。OFF のチップは従来どおりカタログの説明 */
   function effectLine(def: BuffDefinition): string {
     if (on(def)) return statDeltaText(def) ?? effectSummary(def);
-    const damage = def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null);
+    const damage = def.damage_effects
+      .map((e) => typeof e === "object" && "damage" in e
+        ? inActiveGroup(e.damage.category)
+          ? fmtSigned(e.damage.percent, { max: 2 }, "%")
+          : `${damageRowLabel(damageCategoryLabel(e.damage.category))} ${fmtSigned(e.damage.percent, { max: 2 }, "%")}`
+        : singleEffectLabel(e))
+      .filter((label): label is string => label !== null);
     if (activePurpose === "damage" && damage.length > 0) return damage.join(" ・ ");
     return effectSummary(def);
   }
@@ -642,12 +681,12 @@
               {@const hasEditor = needsInput(def)}
               {@const top = isOn ? statTop(def) : null}
               {@const dmg = isOn ? damageText(def) : null}
-              {@const restRows = statRows(def)}
-              <!-- 行の値はオンでも消さない(§07 行チップ)。オンはこのキャラの実効果、
-                   選べないバフは理由、オフはカタログの説明文。長ければ ToggleRow の
-                   .val が省略記号で切る。 -->
-              {@const rowValue = isOn
-                ? [...(top?.shown ?? []), ...(dmg ? [dmg] : [])].join(" / ") || effectSummary(def)
+              {@const rest = top ? restLines(top, dmg) : []}
+              <!-- 行の値はオンでも消さない(§07 行チップ)。オンはこのキャラの実効果(最大の
+                   ステ増分 1 件。無ければダメージ効果)、選べないバフは理由、オフはカタログの
+                   説明文。長ければ ToggleRow の .val が省略記号で切る。 -->
+              {@const rowValue = isOn && top
+                ? rowLead(def, top, dmg)
                 : blocked ? blockReason(def) : effectLine(def)}
               <ToggleRow
                 name={def.name}
@@ -671,13 +710,13 @@
                       onclick={(e) => { e.stopPropagation(); openEditor(def); }}
                       aria-expanded={openEditorId === def.id}
                     >設定</button>
-                  {:else if isOn && top && top.restCount > 0}
+                  {:else if isOn && rest.length > 0}
                     <button
                       type="button"
                       class="rest-link"
                       onclick={(e) => { e.stopPropagation(); openInfoId = openInfoId === def.id ? null : def.id; openEditorId = null; }}
                       aria-expanded={openInfoId === def.id}
-                    >ほか {top.restCount}</button>
+                    >ほか {rest.length}</button>
                   {/if}
                   {#if isOn && top && openInfoId === def.id}
                     <!-- 「ほか n」の中身。押した場所(行)の直下に出し、レイアウトは押さない
@@ -691,8 +730,8 @@
                       onclick={(e) => e.stopPropagation()}
                       onkeydown={(e) => e.stopPropagation()}
                     >
-                      {#each restRows as row (row.label)}
-                        <div class="num">{row.label}</div>
+                      {#each rest as line (line)}
+                        <div class="num">{line}</div>
                       {/each}
                       <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); openInfoId = null; }}>閉じる</button>
                     </div>
@@ -756,11 +795,11 @@
                           {/if}
                         {/if}
                       </div>
-                      {#if top && restRows.length > top.shown.length}
+                      {#if rest.length > 0}
                         <!-- 行に出し切れなかった増分。「ほか n」を別の的にせず、ここに畳む -->
                         <div class="editor-rows">
-                          {#each restRows as row (row.label)}
-                            <div class="num">{row.label}</div>
+                          {#each rest as line (line)}
+                            <div class="num">{line}</div>
                           {/each}
                         </div>
                       {/if}
