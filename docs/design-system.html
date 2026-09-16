@@ -2233,6 +2233,46 @@ td code { background: var(--card-soft2); }
         <p class="lede">この画面は情報が多い。<strong>数字が静かに書き換わったら、まず気づかれない。</strong>動きの仕事はひとつだけ — いま何が変わったかを、探させずに伝えること。</p>
         <p>だから装飾のアニメーションを置かない。置くと、本当の変化がその中に埋もれる。</p>
 
+        <div class="sec">目的から探す<span class="r">「これを作った。ユーザーに何を気づかせたいか」から引く</span></div>
+        <p>書き手の入口は <code>--dur-*</code> でも <code>use:pulse</code> でもない。<strong>これを作った、ユーザーに何を気づかせたいか</strong>から探す。下の表は目的から手段への入口で、実際の動き方(何 ms でどう動くか)はそれぞれの詳細節にある — <b>入口は引くための表、詳細節は「その型はどう動くべきか」の説明</b>という役割分担。</p>
+        <div class="changes">
+          <div class="change">
+            <span class="w">押したことを返したい</span>
+            <span class="how"><code>--dur-tap</code>。<b>部品は要らない</b> — 押せる面の地・枠・文字色は <code>app.css</code> の既定がこの速さで変える</span>
+            <span class="spec-n">↓「操作の応答」</span>
+          </div>
+          <div class="change">
+            <span class="w">変わったことに気づかせたい</span>
+            <span class="how">何が変わった? で選ぶ — 数値 <code>use:bump</code> / いくつ <code>use:delta</code> / 量 バーの幅 / 状態 <code>use:pulse</code> / 要約 <code>use:flash</code> / 面の中身 <code>use:swap</code></span>
+            <span class="spec-n">↓「変化の型と、その伝え方」</span>
+          </div>
+          <div class="change">
+            <span class="w">出した・増やした</span>
+            <span class="how">開閉 3 方式 / <code>.pane-in</code>(場所が増えた)/ <code>.pop-in</code>(一時的に重なった)</span>
+            <span class="spec-n">↓「開閉の 3 方式」<br>↓「変化の型と、その伝え方」</span>
+          </div>
+          <div class="change">
+            <span class="w">減らした・消した</span>
+            <span class="how">→ 下の型「行が減った・消えた」</span>
+            <span class="spec-n">↓「変化の型と、その伝え方」内</span>
+          </div>
+          <div class="change">
+            <span class="w">並べ替えた</span>
+            <span class="how">FLIP <code>--dur-move</code></span>
+            <span class="spec-n">↓「変化の型と、その伝え方」内「並びが変わった」</span>
+          </div>
+          <div class="change">
+            <span class="w">画面内に入れたい</span>
+            <span class="how"><code>reveal()</code></span>
+            <span class="spec-n">↓「動きの部品」</span>
+          </div>
+          <div class="change">
+            <span class="w">どれにも当てはまらない</span>
+            <span class="how">→ 「新しい動きが必要になったら」の手順を踏む</span>
+            <span class="spec-n">↓「新しい動きが必要になったら」</span>
+          </div>
+        </div>
+
         <div class="sec">変化の型と、その伝え方<span class="r">型ごとに手段を固定する</span></div>
         <div class="changes">
           <div class="change">
@@ -2288,6 +2328,14 @@ td code { background: var(--card-soft2); }
             <span class="w">候補が移った</span>
             <span class="how">出発点は短く退出し、<b>移動先を同時に弾ませる。</b>消えただけに見せず、どこへ移ったかを 2 箇所の動きで結ぶ</span>
             <span class="spec-n">out: translateX(8px) + opacity<br>--dur-pop (.17s) ease-in<br>to: badge-in --dur-badge</span>
+          </div>
+          <div class="change">
+            <span class="w">行が減った・消えた</span>
+            <span class="how">目的は §09 規則 5 — 削除やフィルタで消すときも、<b>いま操作した行だけは残す(または消えることを動きで見せる)。</b>「操作したら対象が消えた」を作らない。
+              手段はいまある道具の範囲でしか書けない: <code>.whatif-leaving</code>(候補を試し変更へ移すときの退出。<code>app.css</code>)と、
+              <code>svelte/transition</code> の <code>out</code>(<code>transition:slide</code> の閉じ方向)。<b>削除・フィルタでの退場はこの型を持たない</b> —
+              いまは削除してもフィルタで外れても行は瞬時に消える。専用の action(<code>use:leave</code> のようなもの)は<b>まだ無い</b></span>
+            <span class="spec-n">§09 規則 5 参照<br>.whatif-leaving: --dur-pop ease-in(CalcPage 2 箇所)<br>transition:slide out(EquipmentPane / RandomOptionPane 各 1 箇所)<br>削除・フィルタの退場: 未実装</span>
           </div>
         </div>
 
@@ -2389,6 +2437,20 @@ td code { background: var(--card-soft2); }
           <li><strong>キャレットは回す。<code>▸</code> / <code>▾</code> の文字差し替えを使わない。</strong>
             差し替えは動きが出ないので、開いたのか閉じたのかが一瞬わからない(§00 ④)</li>
         </ul>
+
+        <div class="sec">新しい動きが必要になったら<span class="r">画面側で勝手に作らない</span></div>
+        <p>上の「目的から探す」のどれにも当てはまらない動きが要るときの手順。</p>
+        <ol>
+          <li><strong>まず既存の型に寄せられないか見る。</strong>「変化の型と、その伝え方」の 10 種と「操作の応答」に、
+            見た目が違うだけで仕事は同じものが無いか確かめる</li>
+          <li><strong>寄せられないなら、この文書(規格)ごと型を足す。</strong>画面側だけで新しい動きを作らない — 1 画面のためのアニメーションは、
+            他の画面から見れば「同じことをしているのに動きが違う」不整合になる</li>
+          <li><strong>時間は必ず <code>--dur-*</code> の段から取る。</strong>段に無い時間が要るなら、その段も規格ごと足す
+            (<code>app.css</code> の <code>:root --dur-*</code> と <code>ui/motion.svelte.ts</code> の <code>DUR</code> の両方に、値を一致させて追加する)</li>
+          <li><strong>足したら、動きを消す設定(<code>prefers-reduced-motion</code>)で本当に消えるかを実機で確かめる。</strong>
+            書いてあるかではなく効いているかを見る — <code>::details-content</code> や <code>scrollIntoView</code> のように、
+            全称セレクタや CSS の設定では拾えない経路が実際にある</li>
+        </ol>
 
         <div class="sec">機械監査 R15〜R19<span class="r">通っても「安全」ではない</span></div>
         <p><strong>「この規則を通ったから安全」ではない。</strong>どれも文字列の一致で候補を出すだけなので、
