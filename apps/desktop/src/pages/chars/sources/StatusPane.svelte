@@ -17,7 +17,7 @@
   import { reportError } from "../../../toast.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
-  import { bump, flash, pulse } from "../../../ui/motion.svelte";
+  import { bump, disclosurePane, flash, pulse } from "../../../ui/motion.svelte";
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
@@ -220,12 +220,13 @@
         {#if app.characterIcons[characterId]}
           <button type="button" class="chip quiet" disabled={iconSaving} onclick={resetIcon}>標準に戻す</button>
         {/if}
-        <button type="button" class="chip quiet" class:on={charPickOpen} onclick={() => (charPickOpen = !charPickOpen)}>
+        <button type="button" class="chip quiet" class:on={charPickOpen} aria-expanded={charPickOpen} onclick={() => (charPickOpen = !charPickOpen)}>
           {charPickOpen ? "閉じる" : "変更"}
         </button>
       </div>
       {#if charPickOpen}
-        <div class="pick-grid open-in">
+        <!-- 選べるキャラは多いので {#if} でマウント/アンマウントのまま。面は disclosurePane -->
+        <div class="pick-grid" use:disclosurePane={() => charPickOpen}>
           {#each app.gameCharacters as c (c.id)}
             <button
               type="button"

@@ -203,6 +203,34 @@ export function flash(node: HTMLElement, get: () => string) {
  * 動いているあいだだけ親の flex を止める。止めないと、縮んだぶんを親が取り続けて
  * 最後に下の段が跳ぶ。時間は `DUR.open` 固定 — 開閉の速さを画面ごとに変えない。
  */
+/**
+ * **開閉するブロック**(§10 型 6)の部品。中身の面(`.open-in` + `hidden`)とキャレット
+ * (`.caret.rot`)を action 2 つに分ける — 3 箇所とも「面・キャレット・トリガ」が別要素で、
+ * かつ markup が snippet 経由(detailBox)だったりキャレットが無かったりで揃っていないため、
+ * 1 つのコンポーネントに押し込むと無理が出る(段階 2 の判断)。トリガの `aria-expanded` は
+ * 単なる真偽値の属性束縛なので action にせず、呼び出し側にそのまま書く。
+ *
+ * 閉じるときは `hidden` で即座に消す(いまの挙動を維持)。§10 型 6 の
+ * `collapse`(下)は `{#if}` で外れる要素の**退場**を動かす transition だが、この 3 箇所は
+ * 「閉じていても DOM に残して前回値を覚えさせる」ために `{#if}` を使わず `hidden` を
+ * 出し入れしている(detailBox のコメント参照)。`hidden` は transition を発火させられない
+ * ので、閉じにも動きを付けるには表示したまま高さを畳んでから隠す実装が要り、3 箇所とも
+ * そこまでの需要(指摘・実機での違和感)が無いため見送る — 崩すなら理由が要る側は開くほう。
+ */
+export function disclosurePane(node: HTMLElement, get: () => boolean) {
+  $effect(() => {
+    const open = get();
+    node.classList.toggle("open-in", open);
+    node.hidden = !open;
+  });
+}
+
+export function disclosureCaret(node: HTMLElement, get: () => boolean) {
+  $effect(() => {
+    node.classList.toggle("rot", get());
+  });
+}
+
 export function collapse(node: HTMLElement) {
   const duration = motionDuration(DUR.open);
   const block = node.parentElement as HTMLElement | null;

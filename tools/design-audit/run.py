@@ -60,6 +60,7 @@ RULES = {
     "R14": ("ページ側で面・未収録・主役数字を独自に作る", "§01 / §05 / §08"),
     "R15": ("--dur-* / DUR を通らない生の時間", "§10"),
     "R16": ("動きのクラスを JS で手で付け外し", "§10"),
+    "R17": ("開閉ブロックを手書き(disclosurePane / disclosureCaret を使わず)", "§10"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
@@ -110,6 +111,27 @@ JS_DURATION = re.compile(r"duration:\s*(\d+)")
 MOTION_TOGGLE_CLASSES = ("badge-in", "open-in", "swap-in", "pane-in", "pop-in", "delta-in", "bump-up", "bump-down")
 MOTION_CLASS_NAME = re.compile(r"\b(?:" + "|".join(MOTION_TOGGLE_CLASSES) + r")\b")
 JS_CLASS_TOGGLE = re.compile(r"classList\.(?:add|remove)\(|class:[\w-]+|setTimeout\(")
+
+# R17: 「開閉するブロック」の中身の面は ui/motion.svelte.ts の disclosurePane がやること
+# (段階 2)。動的束縛 `class:open-in={...}` に加えて、`{#if 条件}` でマウント/アンマウント
+# する形の直後に静的な `class="... open-in ..."`(`class:` ではない)を置くやり方も同じ
+# 手書き(段階 2 のレビューで判明 — 動的束縛だけを見ていると、常に開いている面の入場と
+# 区別がつかず、候補一覧のような「押すと {#if} で出し入れする」6 箇所を素通りしていた)。
+# 常に開いている面の入場に使う固定の `class="... open-in"`(`{#if}` を伴わないもの)は
+# 開閉ではないので、いまも対象外。
+#
+# キャレットの `class:rot={...}` は検出対象に含めない。回すキャレットは disclosurePane と
+# 対のもの以外に、ポップオーバー(Picker / CalcPage の targetOpen・skillOpen。開閉は
+# `.pop-in` + 重ねる面が別方式)や `transition:collapse` の折りたたみ(VersusPage。
+# `{#if}` の出入りを Svelte transition が動かす、別方式)でも正しく使われている。
+# `class:rot=` 単独で拾うと、それらの正しい使い方まで毎回候補に出て R17 が恒久的に
+# 0 件にならない(段階 2 で確認 — 対象は disclosurePane と組む class:open-in だけ)。
+DISCLOSURE_HANDWRITTEN = re.compile(r"class:open-in\s*=")
+# {#if}(コメントを 1 個だけ挟んでもよい)の直後に静的な class="... open-in ..." が来る形
+IF_STATIC_OPEN_IN = re.compile(
+    r"\{#if\b[^}]*\}(?:\s*<!--.*?-->)?\s*<[a-zA-Z][^>]*\bclass=\"[^\"]*\bopen-in\b[^\"]*\"",
+    re.S,
+)
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
 CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
@@ -472,6 +494,26 @@ def check_manual_motion_class(path: Path, text: str, out: list[Finding]) -> None
                                "ui/motion.svelte.ts の action(bump / flash / swap / pulse / delta)に寄せる"))
 
 
+def check_manual_disclosure(path: Path, text: str, out: list[Finding]) -> None:
+    """R17。開閉ブロックを disclosurePane / disclosureCaret を使わず手書きしている箇所。
+
+    ui/motion.svelte.ts 自身は実装なので対象外。動的束縛(class:open-in=)は行単位、
+    「{#if} の直後に静的な class="... open-in"」はテンプレート全体を見る(2 行にまたがる
+    ことがあるため)。
+    """
+    if path.suffix != ".svelte":
+        return
+    for i, line in enumerate(text.split("\n"), 1):
+        m = DISCLOSURE_HANDWRITTEN.search(line)
+        if m:
+            out.append(Finding("R17", path, i, m.group(0),
+                               "ui/motion.svelte.ts の disclosurePane / disclosureCaret を使う"))
+    for m in IF_STATIC_OPEN_IN.finditer(text):
+        line = 1 + text.count("\n", 0, m.start())
+        out.append(Finding("R17", path, line, "{#if} + 静的 open-in",
+                           "ui/motion.svelte.ts の disclosurePane を使う"))
+
+
 def check_duration_scale(out: list[Finding]) -> None:
     """R15(段そのもの)。app.css の --dur-* と motion.svelte.ts の DUR が食い違っていないか。"""
     css: dict[str, int] = {}
@@ -523,6 +565,7 @@ def collect() -> list[Finding]:
         check_raw_sign(path, text, out)
         check_duration_js(path, text, out)
         check_manual_motion_class(path, text, out)
+        check_manual_disclosure(path, text, out)
         for chunk in css_chunks(path, text):
             check_page_surfaces(chunk, out)
             check_radius(chunk, out)

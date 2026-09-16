@@ -43,7 +43,7 @@
   import { reportError } from "../../toast.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, flash, swap } from "../../ui/motion.svelte";
+  import { bump, disclosurePane, flash, swap } from "../../ui/motion.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
@@ -1367,7 +1367,7 @@
               {@const shown = areaDisplayRows(area.id)}
               {@const okCount = shown.filter((r) => r.ev?.clear).length}
               <div class="area">
-                <button type="button" class="mini-row" onclick={() => toggleArea(area.id)}>
+                <button type="button" class="mini-row" aria-expanded={open} onclick={() => toggleArea(area.id)}>
                   <span class="name">{area.name}</span>
                   <span class="meter">
                     <span
@@ -1379,7 +1379,10 @@
                   <span class="chev dim">{open ? "▴" : "▾"}</span>
                 </button>
                 {#if open}
-                  <div class="rows open-in">
+                  <!-- 一覧は重いので {#if} でマウント/アンマウントのまま(常時マウントの hidden
+                       方式にはしない)。面の .open-in / hidden は disclosurePane に寄せ、
+                       「open-in」の文字列をこの 1 か所以外に書かない -->
+                  <div class="rows" use:disclosurePane={() => open}>
                     {#each shown as r (r.content.series?.id ?? r.content.id)}
                       {@const st = rowState(r)}
                       {@const cov = coverage(r)}

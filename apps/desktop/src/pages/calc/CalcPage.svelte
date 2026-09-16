@@ -47,7 +47,7 @@
   import { positionPopover } from "../../ui/popover";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, delta, flash } from "../../ui/motion.svelte";
+  import { bump, delta, disclosureCaret, disclosurePane, flash } from "../../ui/motion.svelte";
   import { ChangeMemo, PresenceMemo, swapNote, type Presence } from "../../ui/presence";
   import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
@@ -1727,7 +1727,7 @@
 <!-- 閉じていても DOM に置いたまま隠す(hidden)。{#if} で外すと、閉じている間に称号などを切り替えた
      ↑↓・追加/削除 が、開いたときには消えている(差分は要素が前回値を覚えている。§00 04) -->
 {#snippet detailBox(d: Detail, open: boolean)}
-  <div class="detail inset" class:open-in={open} hidden={!open}>
+  <div class="detail inset" use:disclosurePane={() => open}>
     <div class="dt-head">
       <span class="dt-hk dim">倍率</span>
       <span class="num dt-hv">{d.mult}</span>
@@ -1754,7 +1754,7 @@
           <span class="num dt-sub dim">{m.sub ?? ""}</span>
         </button>
         {@const subsOpen = isDetailOpen(key)}
-          <div class="dt-subs" class:open-in={subsOpen} hidden={!subsOpen}>
+          <div class="dt-subs" use:disclosurePane={() => subsOpen}>
             <!-- 出典名でキーにする。入れ替わった出典は「抜けた行(取り消し線)+ 入った行」で残る -->
             {#each m.subs ?? [] as sm, j (sm.id ?? j)}
               <div class="dt-row" class:gone={sm.state === "gone"}>
@@ -2206,7 +2206,8 @@
                 {/if}
               </div>
               {#if fillMoreOpen && whatIf.length > 1}
-                <div class="fill-list inset open-in">
+                <!-- 候補一覧は重いので {#if} のまま。面は disclosurePane に寄せる -->
+                <div class="fill-list inset" use:disclosurePane={() => fillMoreOpen && whatIf.length > 1}>
                   {#each whatIf.slice(1) as w (w.id)}
                     <button
                       type="button" class="fill-more-row"
@@ -2276,10 +2277,10 @@
 
         <!-- なぜこの数字? -->
         <div class="panel">
-          <button type="button" class="panel-head blue" onclick={() => (flowOpen = !flowOpen)}>
+          <button type="button" class="panel-head blue" aria-expanded={flowOpen} onclick={() => (flowOpen = !flowOpen)}>
             <span class="panel-title dark">なぜこの数字？</span>
             <span class="panel-note dark">{flowOpen ? "閉じる" : "内訳をひらく"}</span>
-            <span class="caret t-chev" class:rot={flowOpen}>▼</span>
+            <span class="caret t-chev" use:disclosureCaret={() => flowOpen}>▼</span>
           </button>
           <div class="panel-body">
             <div class="flow-line">
@@ -2308,7 +2309,8 @@
                 </button>
               </div>
               {#if leverOpen}
-              <div class="lever-note open-in">
+              <!-- 面は disclosurePane に寄せる。{#if} のマウント/アンマウントは変えない -->
+              <div class="lever-note" use:disclosurePane={() => leverOpen}>
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
                 {#if bestLever}
                   <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>{fmtSigned(bestLeverGain, 2, "%")}</span><span use:delta={{ get: () => bestLeverGain, unit: "%", digits: 2 }}></span> 伸びます({fmtHeadroom(bestLever)})。
@@ -2319,8 +2321,9 @@
                   {/if}
                 {/if}
                 {#if bestLever && nextLeversOpen && nextLevers.length > 0}
-                  <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段 -->
-                  <div class="lever-list inset open-in">
+                  <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段。
+                       候補一覧なので {#if} のまま、面だけ disclosurePane に寄せる -->
+                  <div class="lever-list inset" use:disclosurePane={() => !!bestLever && nextLeversOpen && nextLevers.length > 0}>
                     {#each nextLevers as c, i (c.category)}
                       <div class="dt-row">
                         <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
@@ -2340,7 +2343,7 @@
 
             <!-- 閉じていても描画して隠す。閉じている間の変更でも材料の前回値が残り、開いたとき・↑ を辿るときに
                  「何が変わったか」が出せる(detailBox と同じ理由) -->
-              <div class="flow-body" class:open-in={flowOpen} hidden={!flowOpen}>
+              <div class="flow-body" use:disclosurePane={() => flowOpen}>
               <!-- ① 攻撃力をつくる -->
               <div class="stage">
                 <span class="stage-no" style="background: var(--flow-1);">1</span>
@@ -3201,7 +3204,10 @@
   button.band-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   /* 押した数値の内訳。読み取り専用なのでインセット面、列は band-row と同じ段にそろえる */
-  .detail[hidden], .dt-subs[hidden], .flow-body[hidden] { display: none; }
+  /* hidden は disclosurePane(ui/motion.svelte.ts)が JS で付け外すので、テンプレートの
+     静的解析からは「使われている属性」に見えず、素の [hidden] だと未使用扱いになる(実測)。
+     :global で属性側の判定だけ外す */
+  .detail:global([hidden]), .dt-subs:global([hidden]), .flow-body:global([hidden]) { display: none; }
   .detail {
     margin: 6px 0 2px; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px;
   }

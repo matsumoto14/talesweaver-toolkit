@@ -7,7 +7,7 @@
   import { CORE_POWER_TYPES, CORE_REGIONS, CORE_REGION_LABELS, CORE_SLOT_COUNT, CORE_SUPPORT_TYPES, CORE_TYPE_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
-  import { bump, flash } from "../../../ui/motion.svelte";
+  import { bump, disclosurePane, flash } from "../../../ui/motion.svelte";
   import { badgeStyle } from "../../../ui/states";
   import StepSelect from "../../../ui/StepSelect.svelte";
 
@@ -206,6 +206,7 @@
       type="button"
       class="chip quiet"
       class:on={coreShowSupport || coreSupportInUse}
+      aria-expanded={coreShowSupport || coreSupportInUse}
       onclick={toggleCoreSupport}
     >{coreShowSupport || coreSupportInUse ? "補助タイプを閉じる" : "補助タイプも出す"}</button>
   </div>
@@ -235,8 +236,8 @@
             bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
           />
           {#if coreShowSupport || coreSupportInUse}
-            <!-- 段が増えるのは「開いた」なので下に伸ばす(§10 型 6) -->
-            <div class="open-in">
+            <!-- 段が増えるのは「開いた」なので下に伸ばす(§10 型 6)。面は disclosurePane -->
+            <div use:disclosurePane={() => coreShowSupport || coreSupportInUse}>
               <StepSelect
                 label=""
                 options={coreSupportOptions}
