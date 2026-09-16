@@ -2275,7 +2275,7 @@ td code { background: var(--card-soft2); }
           <div class="change">
             <span class="w">開いた / 閉じた</span>
             <span class="how"><b>下方向にだけ伸びる。</b>上に伸ばすと、上にあるものが全部ずれる</span>
-            <span class="spec-n">max-height + opacity<br>--dur-open (.22s) / --ease-out<br>.open-in または use:collapse</span>
+            <span class="spec-n">max-height + opacity<br>--dur-open (.22s) / --ease-out<br>&lt;details&gt;(既定) / use:disclosurePane / use:collapse</span>
           </div>
           <div class="change">
             <span class="w">並びが変わった</span>
@@ -2303,9 +2303,11 @@ td code { background: var(--card-soft2); }
             書き足すとその画面だけ速さがずれる(機械監査 R15)。<code>transform</code> / <code>width</code> を動かすものだけが自分で宣言してよく、時間は <code>--dur-*</code> から取る</li>
           <li><strong>開閉のキャレットは「回す」で統一する。</strong><code>.caret</code> に <code>.rot</code> を足し引きするだけ。
             <b>▸ ▾ の差し替えは動きが出ない</b>ので使わない — 開いたのか閉じたのかが一瞬わからない(§00 ④)</li>
-          <li><strong>開閉は 1 段(<code>--dur-open</code> .22s)。</strong>常に描かれている面はクラス <code>.open-in</code>、
-            出し入れされる面は <code>use:collapse</code>(<code>ui/motion.svelte.ts</code>)。
-            <code>svelte/transition</code> の <code>slide</code> は height を動かすので <code>flex</code> の子では効かない — <code>collapse</code> は max-height で動かす</li>
+          <li><strong>開閉は 1 段(<code>--dur-open</code> .22s)、実装は 3 方式ある。</strong>既定は
+            <code>&lt;details&gt;</code>(<code>::details-content</code> の block-size を <code>app.css</code> が動かす)。
+            <code>{#if}</code> / <code>hidden</code> で中身を出し入れする場面は <code>use:disclosurePane</code> +
+            <code>use:disclosureCaret</code>、<code>svelte/transition</code> の <code>slide</code> は height を動かすので
+            <code>flex</code> の子では効かない場面は <code>use:collapse</code>(max-height で動かす)。選び方は次の「動きの部品」</li>
         </ul>
 
         <div class="sec">時間の段<span class="r">出どころは 2 つだけ、値は一致</span></div>
@@ -2328,6 +2330,48 @@ td code { background: var(--card-soft2); }
           <b style="color:var(--fg-sub)">終わりのない回転</b>(<code>Spinner</code> の .7s infinite — これは「変化を見せる動き」ではなく、
           これから変わる値があることだけを伝える印)。</p>
 
+        <div class="sec">動きの部品<span class="r">クラスを手で当てない</span></div>
+        <p><strong>動きは <code>ui/motion.svelte.ts</code> の部品を通す。画面側がクラスを手で当てない。</strong>
+          書き手が毎回「部品を使うか、CSS クラスを直接付け外すか」を選べる状態だと、時間が二重に持たれてずれる
+          (<code>Workspace</code> の一時マークが 400ms、動き自体は 260ms だった実例が部品化のきっかけ)。</p>
+        <div class="changes">
+          <div class="change"><span class="w">use:bump</span><span class="how">数値が変わった(型 1)。増減の色を <code>--dur-bump</code> だけ乗せて戻す</span><span class="spec-n">値ではなく getter を渡す</span></div>
+          <div class="change"><span class="w">use:delta</span><span class="how">いくつ変わった(型 1b)。差分専用の空 span に付け、次に変わるまで消さない</span><span class="spec-n">{ get, unit?, digits? }</span></div>
+          <div class="change"><span class="w">use:swap</span><span class="how">面が入れ替わった(型 3b)。入ってくる面だけ動かす</span><span class="spec-n">文字列の getter</span></div>
+          <div class="change"><span class="w">use:pulse<br>use:flash</span><span class="how">状態が変わった(型 5)。<code>pulse</code> は値そのものを持たない印(★ の切替など)、<code>flash</code> は文字列の要約が変わったとき</span><span class="spec-n">どちらも null は「いまはこの要素の番ではない」として無視</span></div>
+          <div class="change"><span class="w">use:disclosurePane<br>use:disclosureCaret</span><span class="how">開いた / 閉じた(型 6)。<code>{#if}</code> を使わず <code>hidden</code> で出し入れし、閉じていても前回値を DOM に残す場面(9 箇所)</span><span class="spec-n">面とキャレットは別要素なので action を 2 つに分ける</span></div>
+          <div class="change"><span class="w">use:collapse</span><span class="how">開いた / 閉じた(型 6)。<code>{#if}</code> で中身ごと外れる退場を動かす。<code>slide</code> が効かない <code>flex</code> の子で使う(2 箇所)</span><span class="spec-n">max-height。動いている間だけ親の flex を止める</span></div>
+          <div class="change"><span class="w">reveal()</span><span class="how">画面内に入れる(型番号なし)。<code>scrollIntoView</code> の <code>behavior</code> をここで決める</span><span class="spec-n">action ではなく関数。呼び出し側が 1 回だけ呼ぶ</span></div>
+        </div>
+        <p class="cap">量が変わった(型 2・バーの幅)、場所が増えた / 一時的に重なった(型 3・4・<code>.pane-in</code> / <code>.pop-in</code>)は、
+          <code>{#if}</code> でマウントされる瞬間に静的なクラスが 1 回だけ付く入場そのものか、素の CSS transition で
+          値を後から付け外す必要が無いので専用の action を持たない。<b>action が要るのは、同じ要素へ何度も出し入れする型だけ。</b></p>
+
+        <div class="sec">開閉の 3 方式<span class="r">どれを使うかは中身の重さと a11y で決まる</span></div>
+        <p><strong>&lt;details&gt; + ::details-content が既定(10 箇所)。</strong>
+          キーボード操作とページ内検索での自動展開をブラウザが標準で持っている。中身の面・キャレット・トリガが
+          <code>&lt;summary&gt;</code> / <code>&lt;details&gt;</code> の親子構造に収まるなら、まずこれを使う。</p>
+        <p><strong>use:disclosurePane(9 箇所)。</strong>面・キャレット・トリガが別要素で、
+          markup が snippet 経由だったり <code>&lt;details&gt;</code> の構造に載らなかったりする場面で使う。
+          <code>{#if}</code> を使わず <code>hidden</code> を出し入れするので、閉じていても中身が DOM に残り、
+          前回値を覚えたまま次に開ける。</p>
+        <p><strong>use:collapse(2 箇所)。</strong><code>svelte/transition</code> の <code>slide</code> は
+          height を動かすため <code>flex: 1</code> の子では効かない場面で使う(<code>VersusPage</code>)。
+          <code>{#if}</code> で中身ごと外れる退場そのものを動かす、他の 2 方式とは違う形。</p>
+        <div class="card soft" style="margin-top:2px">
+          <div class="card-h"><b>実測して撤回した実装</b><span class="r">同じ回り道をしないための記録</span></div>
+          <p style="font-size:11px"><code>grid-template-rows: 0fr ⇄ 1fr</code> で <code>&lt;details&gt;</code> の本文を包む形は、
+            ブラウザが本文を <code>::details-content</code> という UA 生成ボックスに持たせているため<strong>実機で 1 ミリも動かなかった</strong>
+            (grid の行サイズの transition がその境界を越えられない)。効くのは
+            <code>::details-content</code> 自体の <code>block-size</code>(横書き固定のこのアプリでは <code>height</code> と同義)を
+            動かす形だけで、包む要素は要らない。</p>
+        </div>
+        <p class="cap"><b style="color:var(--fg-sub)">動きを消す設定(prefers-reduced-motion)で消えない経路が 2 つ見つかった。</b>
+          <code>::details-content</code> は名前付き擬似要素なので <code>*, *::before, *::after</code> では拾えず、個別に指定が要る。
+          <code>scrollIntoView({ behavior: "smooth" })</code> は CSS の <code>scroll-behavior</code> と違って動きを消す設定を見ない
+          (<code>reveal()</code> がここを判定して <code>"auto"</code> に落とす)。<strong>新しい動きを足したら、動きを消す設定で本当に消えるかを実機で確かめる</strong> —
+          書いてあるかではなく、効いているかを見る。</p>
+
         <div class="sec">動きの規則</div>
         <ul>
           <li><strong>変わった要素だけ動かす。画面全体を動かさない。</strong>ページ遷移風の演出は、何が変わったかを消してしまう</li>
@@ -2340,7 +2384,23 @@ td code { background: var(--card-soft2); }
           <li><strong>0.5 秒を超える動きを置かない。</strong>待たせるための動きは 1 つも要らない</li>
           <li><strong>連打されても壊れない。</strong>アニメーションは途中から再スタートできること(このページの実演もそう作ってある)</li>
           <li><strong>動きを消しても変化が分かること。</strong>色・バッジ・数値そのもので既に伝わっていて、動きはその上乗せ — という順序を守る</li>
+          <li><strong>開閉は開く側だけでなく、閉じる側も動かす。</strong><code>&lt;details&gt;</code> 方式(<code>::details-content</code>)は
+            開閉どちらも段に乗るが、<code>.open-in</code> は開く側だけの入場なので、それ単独では閉じる側が瞬時になる</li>
+          <li><strong>キャレットは回す。<code>▸</code> / <code>▾</code> の文字差し替えを使わない。</strong>
+            差し替えは動きが出ないので、開いたのか閉じたのかが一瞬わからない(§00 ④)</li>
         </ul>
+
+        <div class="sec">機械監査 R15〜R19<span class="r">通っても「安全」ではない</span></div>
+        <p><strong>「この規則を通ったから安全」ではない。</strong>どれも文字列の一致で候補を出すだけなので、
+          正当な書き換えを誤って拾うこともあれば、形を変えられて素通りすることもある。
+          出てきた候補は goal の「分類」にかけ、0 件を過信しない。</p>
+        <div class="changes">
+          <div class="change"><span class="w">R15</span><span class="how">--dur-* / DUR を通らない生の時間の直書き</span><span class="spec-n">app.css と motion.svelte.ts の値そのものを突き合わせる。名前を変えて増やした段は追随しない</span></div>
+          <div class="change"><span class="w">R16</span><span class="how">動きのクラスを JS で手で付け外し</span><span class="spec-n">クラス名と classList.add/remove・class:・setTimeout が別行に離れていると拾えない</span></div>
+          <div class="change"><span class="w">R17</span><span class="how">開閉ブロックを disclosurePane / disclosureCaret を使わず手書き</span><span class="spec-n">class:open-in の動的束縛と、{#if} 直後の静的 open-in だけを見る。常に開いている面の入場(固定の open-in)は対象外</span></div>
+          <div class="change"><span class="w">R18</span><span class="how">&lt;details&gt; が開閉するのに動きが無い</span><span class="spec-n">app.css の details::details-content が実際に効く形か 1 か所だけを見る。クラスの有無では判定しない(grid 版で 0 件を誤って返した反省)</span></div>
+          <div class="change"><span class="w">R19</span><span class="how">scrollIntoView の behavior: "smooth" を直書き</span><span class="spec-n">"smooth" というリテラルそのものを見る。変数を挟むと(<code>const b = "smooth"</code>)拾えない</span></div>
+        </div>
 
         <div class="motion-grid">
           <div class="motion">
