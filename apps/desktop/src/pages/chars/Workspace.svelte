@@ -50,7 +50,7 @@
   import Picker from "../../ui/Picker.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
-  import { bump, DUR, flash, motionDuration, pulse } from "../../ui/motion.svelte";
+  import { bump, DUR, flash, motionDuration, pulse, reveal } from "../../ui/motion.svelte";
   // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
   import "./sources/pane-shared.css";
   import {
@@ -642,10 +642,17 @@
   function mark(id: string) {
     movedMark = { id };
   }
-  /** 行を追いかける。自分で起こした移動(ドラッグ・未設定ジャンプ)だけで使う(§09 規則 5) */
+  /**
+   * 行を追いかける。自分で起こした移動(ドラッグ・未設定ジャンプ)だけで使う(§09 規則 5)。
+   *
+   * `reveal` は素通しせず `instant` を渡して瞬時のまま揃える(見た目は変えない) —
+   * ここは「動きで何が変わったかを伝える」場面ではなく、直後の `movedMark` による
+   * 弾み(pulse)がその役目を持つ。スクロールまで滑らせると、着地の弾みが
+   * まだ動いている画面の上で起き、どこが変わったのかがかえって追いにくくなる。
+   */
   function follow(id: string) {
     requestAnimationFrame(() => {
-      document.querySelector(`[data-source-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+      reveal(document.querySelector(`[data-source-id="${id}"]`), "nearest", { instant: true });
     });
     movedMark = { id };
   }

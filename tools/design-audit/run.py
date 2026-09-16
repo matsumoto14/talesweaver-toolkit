@@ -62,6 +62,7 @@ RULES = {
     "R16": ("動きのクラスを JS で手で付け外し", "§10"),
     "R17": ("開閉ブロックを手書き(disclosurePane / disclosureCaret を使わず)", "§10"),
     "R18": ("<details> が開閉するのに動きが無い", "§00 / §10"),
+    "R19": ("scrollIntoView の behavior: \"smooth\" を直書き", "§10"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
@@ -154,6 +155,25 @@ DETAILS_TRANSITION = re.compile(
     r"|var\(--dur-open\)[^;{}]*(?:\bblock-size\b|\bheight\b))",
     re.S,
 )
+
+# R19: `scrollIntoView({ behavior: "smooth" })` は CSS の scroll-behavior と違って
+# prefers-reduced-motion を見ない。app.css の `scroll-behavior: auto !important` は
+# CSS 発火のスクロール(アンカー移動など)にしか効かず、JS からのこの呼び出しは
+# 素通りして滑り続ける(段階 3 で見つかった穴)。ui/motion.svelte.ts の `reveal` が
+# 動きを消す設定を見て "auto" に落とすので、直書きの "smooth" は必ずそちらへ寄せる。
+#
+# R18 の反省(クラス名の有無だけを見て「書いてあれば通す」形にすると、実際には効いて
+# いない実装にも 0 件を返した)を踏まえ、ここは**現物のリテラルそのもの**を検出する —
+# 「reveal を通したか」という体裁ではなく、"smooth" が生で渡っているかどうかは
+# 静的に確定できる事実なので、代理指標を挟まずに直接それを見る。
+# ただし CSS 側の `scroll-behavior: smooth` は対象外 — そちらは全称セレクタ `*` に付いた
+# `scroll-behavior: auto !important`(prefers-reduced-motion)で実際に無効化されるので、
+# JS の behavior: "smooth" とは違って穴になっていない。
+#
+# 拾えない形が 1 つある: 変数を挟むと(`const b = "smooth"; el.scrollIntoView({ behavior: b })`)
+# リテラルが `behavior:` と同じ行に出ないので見逃す。いまそう書いている箇所は無いが、
+# 「この規則を通ったから安全」ではなく「生の直書きは必ず止まる」までの規則だと理解すること。
+SMOOTH_SCROLL = re.compile(r"""behavior\s*:\s*["']smooth["']""")
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
 CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
@@ -536,6 +556,19 @@ def check_manual_disclosure(path: Path, text: str, out: list[Finding]) -> None:
                            "ui/motion.svelte.ts の disclosurePane を使う"))
 
 
+def check_smooth_scroll(path: Path, text: str, out: list[Finding]) -> None:
+    """R19。scrollIntoView の behavior: "smooth" を直書きしている箇所。
+
+    ui/motion.svelte.ts 自身は reveal の実装なので対象外。
+    """
+    if path.suffix not in (".svelte", ".ts") or path == MOTION_TS:
+        return
+    for i, line in enumerate(text.split("\n"), 1):
+        if SMOOTH_SCROLL.search(line):
+            out.append(Finding("R19", path, i, 'behavior: "smooth"',
+                               "ui/motion.svelte.ts の reveal を通す(動きを消す設定で落ちないため)"))
+
+
 def check_details_motion(out: list[Finding]) -> None:
     """R18(app.css そのもの)。<details> の本文を動かす仕組みが app.css で生きているか。
 
@@ -607,6 +640,7 @@ def collect() -> list[Finding]:
         check_duration_js(path, text, out)
         check_manual_motion_class(path, text, out)
         check_manual_disclosure(path, text, out)
+        check_smooth_scroll(path, text, out)
         for chunk in css_chunks(path, text):
             check_page_surfaces(chunk, out)
             check_radius(chunk, out)

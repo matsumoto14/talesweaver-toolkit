@@ -24,7 +24,7 @@
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import type { SourceId } from "../sourceId";
-  import { DUR, flash, motionDuration } from "../../../ui/motion.svelte";
+  import { DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
   import { randomOptionRecordOnlyCount } from "../summaries";
 
@@ -114,8 +114,7 @@
   const focusToken = (optionId: string) => (focusedOptionId === optionId ? String(focusSeq) : "");
   async function revealFocused(optionId: string) {
     await tick();
-    detailEl?.querySelector(`[data-option-id="${CSS.escape(optionId)}"]`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    reveal(detailEl?.querySelector(`[data-option-id="${CSS.escape(optionId)}"]`), "center");
   }
   $effect(() => {
     const request = equipmentFocus.request;

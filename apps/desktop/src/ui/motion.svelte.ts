@@ -40,8 +40,30 @@ export const DUR = {
  * CSS のアニメーションは app.css が一括で殺しているが、Svelte の animate / transition は JS なので
  * ここで見る必要がある(§10「動きを消しても変化が分かること」)。
  */
-export const motionDuration = (ms: number) =>
-  typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms;
+const reducedMotion = () =>
+  typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+export const motionDuration = (ms: number) => (reducedMotion() ? 0 : ms);
+
+/**
+ * 要素を画面内に入れる(§10「動きを消しても変化が分かること」)。`scrollIntoView` の
+ * `behavior: "smooth"` は CSS の `scroll-behavior` と違って動きを消す設定を見ないので、
+ * ここで揃えてから渡す(app.css の `scroll-behavior: auto !important` は CSS 発火の
+ * スクロールにしか効かず、JS から呼ぶこの経路は素通りする)。
+ *
+ * action ではなくただの関数にしたのは、呼び出し側が全て `$effect` の中や
+ * `await tick()` のあとで「この 1 回だけ動かす」ために直接呼んでいて、
+ * 要素の生存期間に合わせて付け外す状態を持たないため。
+ *
+ * `block` は呼び出し側が選ぶ("center" は遠くの行を光らせて呼ぶ用、"nearest" は
+ * 追従用)。`instant` を渡すと、動きを消す設定に関わらず瞬時に動かす — 自分の操作を
+ * 追いかけるだけで、動きそのもので何かを伝える必要がない場面向け(Workspace の
+ * `follow()` 参照)。
+ */
+export function reveal(el: Element | null | undefined, block: ScrollLogicalPosition, opts?: { instant?: boolean }) {
+  if (!el) return;
+  el.scrollIntoView({ block, behavior: opts?.instant || reducedMotion() ? "auto" : "smooth" });
+}
 
 export function bump(node: HTMLElement, get: () => number | null) {
   const clear = () => node.classList.remove("bump-up", "bump-down");

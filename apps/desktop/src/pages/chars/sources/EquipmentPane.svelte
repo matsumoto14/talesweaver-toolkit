@@ -29,7 +29,7 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
-  import { bump, DUR, flash, motionDuration } from "../../../ui/motion.svelte";
+  import { bump, DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
@@ -558,7 +558,7 @@
     await tick();
     if (abilityId === null) return;
     const row = detailEl?.querySelector(`[data-ability-id="${CSS.escape(abilityId)}"]`);
-    row?.scrollIntoView({ block: "center", behavior: "smooth" });
+    reveal(row, "center");
   }
   $effect(() => {
     const request = equipmentFocus.request;
