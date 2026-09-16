@@ -9,6 +9,7 @@
   import { exportAll, importAll, parseTransferFile, suggestedFileName } from "./api/transfer";
   import type { AppInfo } from "./api/types";
   import { IS_DESKTOP } from "./platform";
+  import Modal from "./ui/Modal.svelte";
   import { reportError, reportNotice } from "./toast.svelte";
   import {
     fetchLockedEquipment, setUnlocked, unlock, UNLOCK_TAP_WINDOW_MS, UNLOCK_TAPS,
@@ -51,10 +52,6 @@
       reportError(`テネブリス装備を取得できませんでした: ${errorMessage(error)}`);
     }
   }
-
-  const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key === "Escape") onClose();
-  };
 
   /** 全部を JSON 1 ファイルにして保存する。預け先はユーザーが選ぶ(保存先を勝手に決めない) */
   async function exportData() {
@@ -105,10 +102,8 @@
   }
 </script>
 
-<svelte:window onkeydown={closeOnEscape} />
-
-<div class="modal-overlay about-overlay" role="presentation">
-  <div class="panel modal-surface pane-in" role="dialog" aria-modal="true" aria-label="このアプリについて">
+<Modal label="このアプリについて" {onClose}>
+  <div class="panel modal-surface pane-in">
     <div class="panel-header">
       <b>このアプリについて</b>
       <button type="button" class="btn" onclick={onClose}>閉じる <span aria-hidden="true">×</span></button>
@@ -239,13 +234,9 @@
       </div>
     </div>
   </div>
-</div>
+</Modal>
 
 <style>
-  .about-overlay {
-    z-index: 90; padding: 3vh max(14px, 6vw);
-    display: flex; justify-content: center; align-items: flex-start;
-  }
   .panel { width: min(560px, 100%); max-height: 94vh; display: flex; flex-direction: column; }
 
   .panel-header {

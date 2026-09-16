@@ -90,7 +90,6 @@
   .part-split { min-width: 0; }
   .part-list { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
   /* シエナは一覧の上に説明カードがあるので、まとめて 1 列にする */
-  .equipment-overlay { z-index: 90; padding: 3vh max(14px, 6vw); display: flex; justify-content: center; align-items: flex-start; }
   .part-detail { width: min(980px, 100%); max-height: 94vh; overflow: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 5px; }
   .part-detail > .card { padding: 7px 9px; }
   .equipment-item-content { display: flex; flex-direction: column; gap: 5px; }

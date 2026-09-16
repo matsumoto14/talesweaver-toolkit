@@ -267,11 +267,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .btn.danger { color: var(--danger); }
 .btn.danger:hover:not(:disabled) { border-color: var(--danger); }
 
-/* 操作中の内容を背面から明確に分離するモーダル面。閉じる操作は面内の明示ボタンだけに置く。 */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(27, 35, 49, 0.62);
-}
+/* 操作中の内容を背面から明確に分離するモーダル面。暗幕と閉じ方は ui/Modal.svelte が持つ。 */
 .modal-surface {
   background: var(--bg-rail);
   border: 1px solid var(--border-strong);

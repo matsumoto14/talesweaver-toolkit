@@ -30,6 +30,7 @@
   import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
   import { bump, DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
+  import Modal from "../../../ui/Modal.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
@@ -72,10 +73,6 @@
   const selectedPartOrNull = (slot: PartSlot) => {
     const list = draft.equipment.parts[slot];
     return list.registered.find((p) => p.id === list.selected_id) ?? null;
-  };
-  const closeEquipmentOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    if (openPart !== null) openPart = null;
   };
   const selectedPart = (slot: PartSlot) => {
     const list = draft.equipment.parts[slot];
@@ -623,7 +620,6 @@
   }
 </script>
 
-<svelte:window onkeydown={closeEquipmentOnEscape} />
 
 
 {#snippet nonWeaponAbilityChip(slot: PartSlot, ability: EquipmentAbilityDef, selectedIds: string[], full: boolean, fresh: boolean)}
@@ -724,8 +720,8 @@
     {@const part = selectedPartOrNull(slot)}
     {@const item = equippedItem(slot)}
     {@const contribution = partContribution(slot)}
-    <div class="equipment-overlay modal-overlay" role="presentation">
-    <div class="part-detail modal-surface pane-in" bind:this={detailEl} role="dialog" aria-modal="true" aria-label={`${openPartLabel}の装備登録`}>
+    <Modal label={`${openPartLabel}の装備登録`} onClose={() => (openPart = null)}>
+    <div class="part-detail modal-surface pane-in" bind:this={detailEl}>
     <div class="part-detail-header">
       <b>{openPartLabel}の装備登録</b>
       <button type="button" class="btn close-equipment" onclick={() => (openPart = null)}>閉じる <span aria-hidden="true">×</span></button>
@@ -1237,6 +1233,6 @@
 
     {/if}
     </div>
-    </div>
+    </Modal>
   {/if}
 </div>

@@ -9,6 +9,7 @@
   } from "./inquiry";
   import { app } from "./state.svelte";
   import { reportError } from "./toast.svelte";
+  import Modal from "./ui/Modal.svelte";
   import StepSelect from "./ui/StepSelect.svelte";
   import ToggleRow from "./ui/ToggleRow.svelte";
   import TextField from "./ui/TextField.svelte";
@@ -33,10 +34,6 @@
       .then((value) => (info = value))
       .catch((error) => reportError(errorMessage(error)));
   });
-
-  const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !sending) onClose();
-  };
 
   /** 調査に効くのに本人が書けない情報だけを集める。個人を特定するものは入れない。 */
   const diagnostics = $derived.by(() => {
@@ -81,10 +78,8 @@
   }
 </script>
 
-<svelte:window onkeydown={closeOnEscape} />
-
-<div class="modal-overlay inquiry-overlay" role="presentation">
-  <div class="panel modal-surface pane-in" role="dialog" aria-modal="true" aria-label="問い合わせ">
+<Modal label="問い合わせ" closeDisabled={sending} {onClose}>
+  <div class="panel modal-surface pane-in">
     <div class="panel-header">
       <b>問い合わせ</b>
       <button type="button" class="btn" onclick={onClose} disabled={sending}>閉じる <span aria-hidden="true">×</span></button>
@@ -132,13 +127,9 @@
       </div>
     </div>
   </div>
-</div>
+</Modal>
 
 <style>
-  .inquiry-overlay {
-    z-index: 90; padding: 3vh max(14px, 6vw);
-    display: flex; justify-content: center; align-items: flex-start;
-  }
   .panel { width: min(560px, 100%); max-height: 94vh; display: flex; flex-direction: column; }
 
   .panel-header {

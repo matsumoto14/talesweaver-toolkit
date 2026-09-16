@@ -14,6 +14,7 @@
   import type { SienaPartSlot } from "../../../labels";
   import { app } from "../../../state.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
+  import Modal from "../../../ui/Modal.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import TextField from "../../../ui/TextField.svelte";
@@ -31,10 +32,6 @@
   const sienaList = (slot: SienaPartSlot): SienaAuraList => draft.equipment.siena[slot];
   const sienaRegistration = (slot: SienaPartSlot) => selectedSienaAuraRegistration(sienaList(slot));
   const sienaForDisplay = (slot: SienaPartSlot) => selectedSienaAura(sienaList(slot)) ?? neutralSienaAura();
-  const closeSienaOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    if (openSienaPart !== null) openSienaPart = null;
-  };
   const createSienaRegistration = (slot: SienaPartSlot) => {
     const list = sienaList(slot);
     const id = Math.max(0, ...list.registered.map((entry) => entry.id)) + 1;
@@ -141,7 +138,6 @@
   };
 </script>
 
-<svelte:window onkeydown={closeSienaOnEscape} />
 
 <div class="card">
   <p class="hint dim">
@@ -198,8 +194,8 @@
   {@const siena = sienaForDisplay(slot)}
   {@const stage = sienaStage(siena)}
   {@const capacity = sienaCapacity(slot)}
-  <div class="equipment-overlay modal-overlay" role="presentation">
-    <div class="part-detail modal-surface pane-in" role="dialog" aria-modal="true" aria-label={`${PART_SLOT_LABELS[slot]}のシエナのオーラ`}>
+  <Modal label={`${PART_SLOT_LABELS[slot]}のシエナのオーラ`} onClose={() => (openSienaPart = null)}>
+    <div class="part-detail modal-surface pane-in">
       <div class="part-detail-header">
         <b>{PART_SLOT_LABELS[slot]}のシエナのオーラ</b>
         <button type="button" class="btn close-equipment" onclick={() => (openSienaPart = null)}>閉じる <span aria-hidden="true">×</span></button>
@@ -334,5 +330,5 @@
         </div>
       {/if}
     </div>
-  </div>
+  </Modal>
 {/if}
