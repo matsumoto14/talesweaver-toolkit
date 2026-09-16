@@ -15,6 +15,7 @@
   import { app } from "../../../state.svelte";
   import Chip from "../../../ui/Chip.svelte";
   import Modal from "../../../ui/Modal.svelte";
+  import Drill from "../../../ui/Drill.svelte";
   import Num from "../../../ui/Num.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import Choose from "../../../ui/Choose.svelte";
@@ -157,7 +158,8 @@
     {@const siena = sienaForDisplay(slot)}
     {@const stage = sienaStage(siena)}
     {@const badges = sienaBadges(slot)}
-    <button type="button" class="part-row" class:on={openSienaPart === slot} onclick={() => (openSienaPart = slot)}>
+    <Drill open={openSienaPart === slot} onOpen={() => (openSienaPart = slot)}>
+    {#snippet line()}
       <span class="siena-mark" class:off={current === null} aria-hidden="true">◆</span>
       <span class="part-main">
         <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
@@ -176,8 +178,8 @@
       <Num class="part-vals dim" value={`${list.selected_id}:${sienaSummary(slot)}`}
         >{#snippet children()}{sienaSummary(slot)}{/snippet}</Num
       >
-      <span class="chev dim">›</span>
-    </button>
+    {/snippet}
+    </Drill>
     {#if list.registered.length > 0}
       <div class="part-switches siena-quick-switches" aria-label={`${PART_SLOT_LABELS[slot]}のオーラ切替`}>
         <button type="button" class:on={list.selected_id === null} onclick={() => (list.selected_id = null)}>未装着</button>
@@ -197,12 +199,8 @@
   {@const siena = sienaForDisplay(slot)}
   {@const stage = sienaStage(siena)}
   {@const capacity = sienaCapacity(slot)}
-  <Modal label={`${PART_SLOT_LABELS[slot]}のシエナのオーラ`} onClose={() => (openSienaPart = null)}>
-    <div class="part-detail modal-surface pane-in">
-      <div class="part-detail-header">
-        <b>{PART_SLOT_LABELS[slot]}のシエナのオーラ</b>
-        <button type="button" class="btn close-equipment" onclick={() => (openSienaPart = null)}>閉じる <span aria-hidden="true">×</span></button>
-      </div>
+  <Modal label={`${PART_SLOT_LABELS[slot]}のシエナのオーラ`} class="part-detail" onClose={() => (openSienaPart = null)}>
+    <div class="part-detail-body">
       <div class="part-actions siena-registration-actions">
         <div class="part-switches" aria-label="装着するオーラ">
           <button type="button" class:on={list.selected_id === null} onclick={() => (list.selected_id = null)}>未装着</button>

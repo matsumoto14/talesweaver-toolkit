@@ -17,6 +17,7 @@
   import { limits } from "../../../limits.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Num from "../../../ui/Num.svelte";
+  import Drill from "../../../ui/Drill.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import { avatarEnhanceSummary } from "../summaries";
 
@@ -115,15 +116,19 @@
   <div class="part-list">
     {#each AVATAR_PARTS as part (part)}
       {@const summary = partSummary(part)}
-      <button type="button" class="part-row" class:on={openPart === part} onclick={() => openPartRow(part)}>
+      <Drill
+        open={openPart === part}
+        onOpen={() => openPartRow(part)}
+        detailClass="avatar-editor inset"
+        detailLabel={`${AVATAR_PART_LABELS[part]}のアバター強化`}
+      >
+        {#snippet line()}
         <span class="part-main">
           <span class="part-name">{AVATAR_PART_LABELS[part]}</span>
           <Num class={"part-item " + (summary === "未使用" ? "dim" : "")} value={summary} />
         </span>
-        <span class="chev dim">›</span>
-      </button>
-      {#if openPart === part}
-        <div class="avatar-editor inset" aria-label={`${AVATAR_PART_LABELS[part]}のアバター強化`}>
+        {/snippet}
+        {#snippet detail()}
           {#each PRIMARY_EQUIPMENT_STATS as kind (kind)}
             {@render statRow(part, kind)}
           {/each}
@@ -138,20 +143,14 @@
               {@render statRow(part, kind)}
             {/each}
           </Disclosure>
-        </div>
-      {/if}
+        {/snippet}
+      </Drill>
     {/each}
   </div>
 </div>
 
 <style>
   .part-list { margin-top: 9px; }
-  /* 開いた部位の編集面。行の直下に足す(押した行は動かない。§00 03) */
-  .avatar-editor {
-    margin: -2px 0 4px 18px; padding: 6px 8px 2px;
-    border-left: 2px solid var(--accent); border-radius: 0 var(--r-inset) var(--r-inset) 0;
-    display: flex; flex-direction: column; gap: 5px;
-  }
   .avatar-stat-row { display: grid; grid-template-columns: 34px max-content 1fr; align-items: center; gap: 10px; }
   .avatar-stat-row b { font-size: 11px; }
   .avatar-stat-row.secondary-stat b { color: var(--fg-sub); font-weight: 500; }

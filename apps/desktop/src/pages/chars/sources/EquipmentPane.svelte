@@ -33,6 +33,7 @@
   import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
   import { DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
   import Modal from "../../../ui/Modal.svelte";
+  import Drill from "../../../ui/Drill.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import Num from "../../../ui/Num.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
@@ -670,7 +671,8 @@
   {@const list = draft.equipment.parts[slot]}
   {@const canEnhance = ENHANCE_ALLOWED_SLOTS.includes(slot)}
   {@const damageLabel = itemDamageLabel(equippedItem(slot), true)}
-  <button type="button" class="part-row" class:on={openPart === slot} onclick={() => openPartDetail(slot)}>
+  <Drill open={openPart === slot} onOpen={() => openPartDetail(slot)}>
+  {#snippet line()}
     <Icon kind="equipment" id={iconId(part?.item_id ?? null)} size={28} label={partDisplayName(slot)} />
     <span class="part-main">
       <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
@@ -693,8 +695,8 @@
       {/if}
     </span>
     <span class="part-vals num dim">{part ? valuesSummary(part.base, part.enchant) : "—"}</span>
-    <span class="chev dim">›</span>
-  </button>
+  {/snippet}
+  </Drill>
   {#if list.registered.length > 1}
     <div class="part-switches">
       {@render partSwitchList(slot, list.registered, list.selected_id)}
@@ -707,12 +709,8 @@
     {@const part = selectedPartOrNull(slot)}
     {@const item = equippedItem(slot)}
     {@const contribution = partContribution(slot)}
-    <Modal label={`${openPartLabel}の装備登録`} onClose={() => (openPart = null)}>
-    <div class="part-detail modal-surface pane-in" bind:this={detailEl}>
-    <div class="part-detail-header">
-      <b>{openPartLabel}の装備登録</b>
-      <button type="button" class="btn close-equipment" onclick={() => (openPart = null)}>閉じる <span aria-hidden="true">×</span></button>
-    </div>
+    <Modal label={`${openPartLabel}の装備登録`} class="part-detail" onClose={() => (openPart = null)}>
+    <div class="part-detail-body" bind:this={detailEl}>
     {#if draft.equipment.parts[slot].registered.length > 1}
       <div class="part-switches registration-order inset" aria-label="装備登録の並び順">
         {@render partSwitchList(slot, draft.equipment.parts[slot].registered, draft.equipment.parts[slot].selected_id)}

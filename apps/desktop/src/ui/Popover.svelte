@@ -23,12 +23,14 @@
     /** 面の幅など、その画面での見た目 */
     panelClass?: string;
     disabled?: boolean;
+    /** 開いた / 閉じたを呼ぶ側にも知らせる。開いたときにだけ走らせたい計算がある面だけ */
+    onToggle?: (open: boolean) => void;
     /** トリガの中身。開いているかどうかを受け取る(キャレットの向き) */
     trigger: Snippet<[boolean]>;
     /** 面の中身。閉じる操作を受け取る(選んだ瞬間に閉じる・明示の「閉じる」) */
     children: Snippet<[() => void]>;
   }
-  let { label, triggerClass = "", triggerLabel, panelClass = "", disabled = false, trigger, children }: Props = $props();
+  let { label, triggerClass = "", triggerLabel, panelClass = "", disabled = false, onToggle, trigger, children }: Props = $props();
 
   const uid = $props.id();
   const id = `pop-${uid}`;
@@ -55,5 +57,5 @@
   role="dialog"
   aria-label={label}
   style="position-anchor: --{id};"
-  ontoggle={(event) => (open = event.newState === "open")}
+  ontoggle={(event) => { open = event.newState === "open"; onToggle?.(open); }}
 >{@render children(close)}</div>

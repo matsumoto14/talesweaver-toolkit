@@ -16,6 +16,7 @@
   } from "../../../labels";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Num from "../../../ui/Num.svelte";
+  import Drill from "../../../ui/Drill.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
 
@@ -153,15 +154,19 @@
       {@const summary = partRowSummary(slot)}
       {@const entry = entryOf(slot)}
       {@const equipped = isEquipped(slot)}
-      <button type="button" class="part-row" class:on={openSlot === slot} onclick={() => openPartRow(slot)}>
+      <Drill
+        open={openSlot === slot}
+        onOpen={() => openPartRow(slot)}
+        detailClass="avatar-editor inset"
+        detailLabel={`${PART_SLOT_LABELS[slot]}の研磨`}
+      >
+        {#snippet line()}
         <span class="part-main">
           <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
           <Num class={"part-item " + (summary === "未使用" || summary === "装備なし" ? "dim" : "")} value={summary} />
         </span>
-        <span class="chev dim">›</span>
-      </button>
-      {#if openSlot === slot}
-        <div class="avatar-editor inset" aria-label={`${PART_SLOT_LABELS[slot]}の研磨`}>
+        {/snippet}
+        {#snippet detail()}
           <div class="polish-kind-row" aria-label={`${PART_SLOT_LABELS[slot]}の${polishProductLabel(slot)}`}>
             <span class="dim tiny">{polishProductLabel(slot)}</span>
             <Picker
@@ -181,19 +186,14 @@
               />
             </div>
           {/if}
-        </div>
-      {/if}
+        {/snippet}
+      </Drill>
     {/each}
   </div>
 </div>
 
 <style>
   .part-list { margin-top: 9px; }
-  .avatar-editor {
-    margin: -2px 0 4px 18px; padding: 6px 8px 2px;
-    border-left: 2px solid var(--accent); border-radius: 0 var(--r-inset) var(--r-inset) 0;
-    display: flex; flex-direction: column; gap: 6px;
-  }
   .polish-kind-row, .polish-stat-row { display: flex; align-items: flex-start; gap: 6px; }
   .polish-kind-row > .tiny, .polish-stat-row > .tiny { flex-shrink: 0; min-width: 56px; padding-top: 7px; }
   .polish-kind-row :global(.picker), .polish-stat-row :global(.picker) { min-width: 0; flex: 1; }

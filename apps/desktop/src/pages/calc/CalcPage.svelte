@@ -88,7 +88,6 @@
     Math.max(0, contents.findIndex((x) => x.content.id === app.calcTargetId)),
   );
   const target = $derived(contents[targetIndex] ?? null);
-  let targetOpen = $state(false);
   function stepTarget(dir: number) {
     if (contents.length === 0) return;
     app.calcTargetId = contents[(targetIndex + dir + contents.length) % contents.length].content.id;
@@ -1931,11 +1930,12 @@
           <!-- 対象プレート -->
           <div class="target-row">
             <button type="button" class="step" onclick={() => stepTarget(-1)}>◀</button>
-            <button type="button" class="target-trigger" class:open={targetOpen} onclick={() => (targetOpen = !targetOpen)}>
+            <Popover label="計算する対象" triggerClass="target-trigger" panelClass="target-pop">
+              {#snippet trigger(open)}
               <span class="t-line1">
                 <Icon kind="content" id={target.content.id} fallback={{ kind: "mob", id: target.content.enemy_id }} size={28} label={target.content.name} />
                 <span class="t-name">{target.content.name}</span>
-                <span class="caret" class:rot={targetOpen}>▼</span>
+                <span class="caret" class:rot={open}>▼</span>
                 <span class="t-index num dim">{targetIndex + 1} / {contents.length}</span>
               </span>
               <span class="t-line2">
@@ -1943,12 +1943,8 @@
                 <span class="t-def num">防御 {defenseValue !== null ? fmtInt(defenseValue) : "—"}</span>
                 <span class="t-need num">目安 {fmtDuration(closeSeconds)}以内</span>
               </span>
-            </button>
-            <button type="button" class="step" onclick={() => stepTarget(1)}>▶</button>
-          </div>
-          {#if targetOpen}
-            <button type="button" class="overlay" aria-label="閉じる" onclick={() => (targetOpen = false)}></button>
-            <div class="pop pop-in">
+              {/snippet}
+              {#snippet children(close)}
               {#each targetAreas as area (area.id)}
                 <div class="pop-head"><span class="pop-diamond"></span><span>{area.name}</span><span class="num dim">{area.contents.length} 件</span></div>
                 {#each area.contents as c (c.id)}
@@ -1961,7 +1957,7 @@
                     class:on={c.id === target.content.id}
                     onclick={() => {
                       app.calcTargetId = c.id;
-                      targetOpen = false;
+                      close();
                     }}
                   >
                     <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
@@ -1973,19 +1969,28 @@
                   </button>
                 {/each}
               {/each}
-            </div>
-          {/if}
+              {/snippet}
+            </Popover>
+            <button type="button" class="step" onclick={() => stepTarget(1)}>▶</button>
+          </div>
 
           <!-- スキル行 -->
           <div class="skill-row">
             {#if skills.length === 0}
               <span class="dim">このキャラのスキルデータは未収録です(仮スキルはありません)。</span>
             {:else}
-              <button type="button" class="skill-trigger" onclick={() => (skillOpen = !skillOpen)}>
+              <Popover
+                label="計算するスキル"
+                triggerClass="skill-trigger"
+                panelClass="skill-pop"
+                disabled={skills.length <= 1}
+                onToggle={(open) => (skillOpen = open)}
+              >
+                {#snippet trigger(open)}
                 <span class="sk-line1">
                   <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill?.name ?? "スキル"} />
                   <span class="sk-name">{skill?.name ?? ""}</span>
-                  {#if skills.length > 1}<span class="caret" class:rot={skillOpen}>▼</span>{/if}
+                  {#if skills.length > 1}<span class="caret" class:rot={open}>▼</span>{/if}
                   <!-- 主軸(キャラタブ)と違うスキルで計算している例外状態。保存されないので
                        ラベンダー(--sim)。行の高さは変えない -->
                   {#if skillOverridden}
@@ -2000,7 +2005,28 @@
                   {#if skill}・ {ELEMENT_LABELS[skill.element]}属性{/if}
                   {#if result?.accuracy_point != null}・ 命中P {fmtInt(result.accuracy_point)}{/if}
                 </span>
-              </button>
+                {/snippet}
+                {#snippet children(close)}
+                <div class="pop-head gold"><span>スキル {skills.length} 種 ／ この対象への合計ダメージ順</span></div>
+                {#each pickerSkills as s (s.id)}
+                  {@const d = skillTotals[s.id]}
+                  <button
+                    type="button"
+                    class="pop-row"
+                    class:on={s.id === skillId}
+                    onclick={() => {
+                      skillOverride = s.id;
+                      close();
+                    }}
+                  >
+                    <Icon kind="skill" id={s.id} size={20} label={s.name} />
+                    <span class="pop-name">{s.name}</span>
+                    <span class="num dim">×{fmtNum(s.multiplier)} / {s.hit_count}段</span>
+                    <span class="num strong">{d ? fmtInt(d.total) : "…"}</span>
+                  </button>
+                {/each}
+                {/snippet}
+              </Popover>
               <!-- 1 クリックで主軸に戻す。ボタン in ボタンにできないので行の中の兄弟に置く -->
               {#if skillOverridden}
                 <button
@@ -2011,29 +2037,6 @@
               {/if}
             {/if}
           </div>
-          {#if skillOpen && skills.length > 1}
-            <button type="button" class="overlay" aria-label="閉じる" onclick={() => (skillOpen = false)}></button>
-            <div class="pop gold pop-in">
-              <div class="pop-head gold"><span>スキル {skills.length} 種 ／ この対象への合計ダメージ順</span></div>
-              {#each pickerSkills as s (s.id)}
-                {@const d = skillTotals[s.id]}
-                <button
-                  type="button"
-                  class="pop-row"
-                  class:on={s.id === skillId}
-                  onclick={() => {
-                    skillOverride = s.id;
-                    skillOpen = false;
-                  }}
-                >
-                  <Icon kind="skill" id={s.id} size={20} label={s.name} />
-                  <span class="pop-name">{s.name}</span>
-                  <span class="num dim">×{fmtNum(s.multiplier)} / {s.hit_count}段</span>
-                  <span class="num strong">{d ? fmtInt(d.total) : "…"}</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
 
           {#if skill && skill.combo_variants.length > 0}
             <div class="combo-type-row inset">
@@ -2072,11 +2075,15 @@
                      枠(248px)に入らず、右の節に被る(実機 2026-09-15)。空でも行を取り、出た瞬間に下が動かない -->
                 <Num class="hero-num nv" motion={() => perHit} value={perHit !== null ? fmtInt(perHit) : "—"} />
                 <span class="nsub num">
-                  <Num
-                    motion={() => perHit} delta={{}}
-                    deltaClass={changedFlowKeys.length > 0 ? "follow" : ""}
-                    onDelta={() => followChange("perHit")}
-                  />
+                  <!-- 副行は空でも .nsub-line で行を取る。取らないと、差分枠が出た瞬間に節が 11px 伸び、
+                       鎖は下ぞろえなので 44px の主役数字がその分だけ持ち上がる(実機 2026-09-17、§00 ③) -->
+                  <span class="nsub-line">
+                    <Num
+                      motion={() => perHit} delta={{}}
+                      deltaClass={changedFlowKeys.length > 0 ? "follow" : ""}
+                      onDelta={() => followChange("perHit")}
+                    />
+                  </span>
                 </span>
               </button>
               <button
@@ -3022,8 +3029,9 @@
     font-size: 9px; font-weight: 700; color: var(--fg-sub);
   }
   .step:hover { background: var(--bg-active); }
-  .target-trigger { min-width: 0; flex: 1; padding: 3px 8px; border-radius: var(--r-panel); border: 1px solid transparent; text-align: left; }
-  .target-trigger:hover, .target-trigger.open { background: var(--bg-rail); border-color: #9FB4D0; }
+  /* トリガは ui/Popover.svelte が描くので、祖先経由でスコープ付き CSS を届かせる */
+  .target-row :global(.target-trigger) { min-width: 0; flex: 1; padding: 3px 8px; border-radius: var(--r-panel); border: 1px solid transparent; text-align: left; }
+  .target-row :global(.target-trigger:hover), .target-row :global(.target-trigger[aria-expanded="true"]) { background: var(--bg-rail); border-color: #9FB4D0; }
   .t-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .t-index { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
@@ -3032,14 +3040,13 @@
   .t-def { flex-shrink: 0; font-size: 8.5px; color: var(--danger); }
   .t-need { flex-shrink: 0; font-size: 8.5px; color: var(--fg-sub); }
 
-  .overlay { position: fixed; inset: 0; z-index: 40; cursor: default; }
-  .pop {
-    position: absolute; left: 10px; right: 10px; top: 88px; z-index: 41;
-    max-height: 262px; overflow-y: auto; overscroll-behavior: contain;
-    border-radius: var(--r-window); background: var(--bg-field); border: 1px solid var(--sel-bd);
-    box-shadow: 0 10px 24px rgba(30, 44, 74, 0.3), inset 0 0 0 1px #fff;
+  /* 対象・スキルの候補面。重なり方と閉じ方は ui/Popover.svelte ＋ app.css の .popover が持つので、
+     ここは行を端まで使うための余白なしと幅・高さだけ。トップレイヤに乗るので祖先が無く、:global で書く */
+  :global(.target-pop), :global(.skill-pop) {
+    gap: 0; padding: 0; max-height: 262px; border-radius: var(--r-window);
+    min-width: anchor-size(width); font-size: var(--t-body);
   }
-  .pop.gold { border-color: #A9821F; box-shadow: 0 10px 24px rgba(74, 60, 18, 0.28), inset 0 0 0 1px #fff; }
+  :global(.skill-pop) { border-color: #A9821F; }
   .pop-head {
     position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 7px;
     padding: 6px 13px 6px 11px;
@@ -3061,11 +3068,14 @@
   .pop-row .strong { font-weight: 700; }
 
   .skill-row { position: relative; z-index: 2; padding: 8px 11px 0; display: flex; align-items: center; gap: 7px; }
-  .skill-trigger {
+  /* トリガは ui/Popover.svelte が描く。スキルが 1 つのときは開かない(disabled)が、
+     行としては同じ面なので薄くしない */
+  .skill-row :global(.skill-trigger) {
     min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 1px;
     padding: 5px 9px; border-radius: var(--r-panel); background: #F4F9FE; border: 1px solid #D6E2F0; text-align: left;
   }
-  .skill-trigger:hover { background: var(--bg-rail); }
+  .skill-row :global(.skill-trigger:hover:not(:disabled)) { background: var(--bg-rail); }
+  .skill-row :global(.skill-trigger:disabled) { opacity: 1; cursor: default; }
   .sk-line1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .sk-name { min-width: 0; flex: 1; font-size: 11.5px; font-weight: 700; color: #3E2B26; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sk-meta { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

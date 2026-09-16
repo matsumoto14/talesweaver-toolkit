@@ -78,13 +78,7 @@
   }
 </script>
 
-<Modal label="問い合わせ" closeDisabled={sending} {onClose}>
-  <div class="panel modal-surface pane-in">
-    <div class="panel-header">
-      <b>問い合わせ</b>
-      <button type="button" class="btn" onclick={onClose} disabled={sending}>閉じる <span aria-hidden="true">×</span></button>
-    </div>
-
+<Modal label="問い合わせ" class="modal-narrow" closeDisabled={sending} {onClose}>
     <div class="panel-body">
       <div class="card inquiry">
         {#if sent}
@@ -126,19 +120,9 @@
         {/if}
       </div>
     </div>
-  </div>
 </Modal>
 
 <style>
-  .panel { width: min(560px, 100%); max-height: 94vh; display: flex; flex-direction: column; }
-
-  .panel-header {
-    flex-shrink: 0; display: flex; align-items: center; gap: 12px;
-    padding: 11px 14px; border-bottom: 1px solid var(--border-soft);
-  }
-  .panel-header b { font-size: var(--t-heading); }
-  .panel-header .btn { margin-left: auto; }
-
   .panel-body { overflow-y: auto; padding: 12px 14px 16px; }
   .card {
     background: var(--bg-panel); border: 1px solid var(--border-soft);

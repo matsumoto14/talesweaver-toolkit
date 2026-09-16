@@ -19,13 +19,13 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus } from "../../../state.svelte";
-  import { slide } from "svelte/transition";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import Chip from "../../../ui/Chip.svelte";
+  import Drill from "../../../ui/Drill.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import type { SourceId } from "../sourceId";
-  import { DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
+  import { flash, reveal } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
   import Num from "../../../ui/Num.svelte";
   import { randomOptionRecordOnlyCount } from "../summaries";
@@ -294,12 +294,12 @@
     {#each RANDOM_OPTION_ALLOWED_SLOTS as slot (slot)}
       {#if app.randomOptions.some((d) => d.slot === slot) && randomOptionSlots(slot) > 0}
         {@const count = selectedPartOrNull(slot)?.random_options.length ?? 0}
-        <button
-          type="button"
-          class="part-row"
-          class:on={openRandomPart === slot}
-          onclick={() => (openRandomPart = openRandomPart === slot ? null : slot)}
+        <Drill
+          open={openRandomPart === slot}
+          onOpen={() => (openRandomPart = openRandomPart === slot ? null : slot)}
+          detailClass="part-detail-body ro-inline"
         >
+          {#snippet line()}
           <span class="part-main">
             <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
           </span>
@@ -318,14 +318,10 @@
             {/each}
             {#if count === 0}<span class="dim">なし</span>{/if}
           </span>
-          <!-- 印は他の部位行(装備・アバター)と同じ進行方向の 1 つだけ。開閉で文字を差し替えると
-               動きが出ず、開いたのかが一瞬わからない(§10) -->
-          <span class="chev dim">›</span>
-        </button>
-        {#if openRandomPart === slot}
-        <div class="part-detail ro-inline" bind:this={detailEl} transition:slide={{ duration: motionDuration(DUR.open) }}>
+          {/snippet}
+          {#snippet detail()}
           <!-- 見出しは持たない。すぐ上の行が部位名を出している(§00 ②) -->
-          <div class="card">
+          <div class="card" bind:this={detailEl}>
             {@render randomOptionEditor(slot)}
             <!-- 枠は 1 装備 2 つ。**1 つ目を決めたら 2 つ目の候補を出す** —
                  候補を 2 枠ぶん並べても、実際に選べるのは順番に 1 つずつ(§00 02) -->
@@ -359,8 +355,8 @@
               <p class="hint dim">枠は {randomOptionSlots(slot)} つまで。変えるときは外してから足します。</p>
             {/if}
           </div>
-        </div>
-        {/if}
+          {/snippet}
+        </Drill>
       {/if}
     {/each}
   </div>

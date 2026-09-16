@@ -267,13 +267,19 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .btn.danger { color: var(--danger); }
 .btn.danger:hover:not(:disabled) { border-color: var(--danger); }
 
-/* 操作中の内容を背面から明確に分離するモーダル面。暗幕と閉じ方は ui/Modal.svelte が持つ。 */
+/* 操作中の内容を背面から明確に分離するモーダル面。暗幕・見出し・閉じ方は ui/Modal.svelte が持つ。
+   高さは画面の 94% で止め、見出しは天井に残して中身の枠だけがスクロールする(§00 ③)。 */
 .modal-surface {
+  max-height: 94vh; display: flex; flex-direction: column;
   background: var(--bg-rail);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-window);
   box-shadow: 0 20px 54px rgba(18, 27, 42, 0.38), inset 0 1px 0 #fff;
 }
+
+/* モーダルの幅。ui/Modal.svelte の class に渡す(ADR-015 段階 6)。面は部品が描くので、
+   呼ぶ側のスコープ付き <style> には置けない。980px の部位詳細は .part-detail(pane-shared.css) */
+.modal-narrow { width: min(560px, 100%); }
 
 .section-label {
   display: flex; align-items: center; gap: 8px;

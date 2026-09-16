@@ -90,21 +90,21 @@
   .part-split { min-width: 0; }
   .part-list { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
   /* シエナは一覧の上に説明カードがあるので、まとめて 1 列にする */
-  .part-detail { width: min(980px, 100%); max-height: 94vh; overflow: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 5px; }
-  .part-detail > .card { padding: 7px 9px; }
+  /* モーダルに出す詳細面の幅。高さ・見出し・閉じるは ui/Modal.svelte が持つ */
+  .part-detail { width: min(980px, 100%); }
+  /* 詳細の中身。モーダルの中でも行の直下(.ro-inline)でも同じ縦並び */
+  .part-detail-body { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .part-detail-body > .card { padding: 7px 9px; }
   .equipment-item-content { display: flex; flex-direction: column; gap: 5px; }
   .equipment-item-content > .card { padding: 7px 9px; }
-  .part-detail-header { position: sticky; top: 0; z-index: 4; min-height: 42px; margin: 0 -8px; padding: 6px 9px 6px 12px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-rail); border-bottom: 1px solid var(--border-strong); box-shadow: 0 4px 9px rgba(18, 27, 42, .09); }
-  .part-detail-header > b { font-size: 12px; color: var(--fg-sub); }
-  .close-equipment { min-width: 88px; justify-content: center; border-color: var(--border-strong); background: var(--bg-field); font-weight: 700; }
-  .close-equipment span { font-size: 15px; line-height: 1; }
-  .part-row {
-    display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: var(--r-panel);
-    background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
+  /* 行そのもの(.part-row / 印)は ui/Drill.svelte が持つ */
+  /* 行の直下に開く編集面(アバター・研磨)。面は ui/Drill.svelte が描くので、
+     ペイン側のスコープ付き <style> には置けない(素の CSS = グローバルなここに置く) */
+  .avatar-editor {
+    margin: -2px 0 4px 18px; padding: 6px 8px 2px;
+    border-left: 2px solid var(--accent); border-radius: 0 var(--r-inset) var(--r-inset) 0;
+    display: flex; flex-direction: column; gap: 5px;
   }
-  .part-row:hover { border-color: var(--accent); }
-  /* いま開いている部位。押した行がその場に残っていることを面で示す */
-  .part-row.on { background: var(--bg-active); border-color: var(--accent); }
   /* ランダムOP: 行の直下に開く中身。行と同じ幅で、行に続いていると分かるよう少し内側に寄せる */
   .ro-inline { width: auto; max-height: none; margin: -2px 0 4px; padding: 4px 8px 8px 22px; }
   .part-main { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 7px; }
@@ -119,7 +119,6 @@
   .part-plus.on { background: var(--state-short-bg); border-color: var(--mob); color: #7A4B45; }
   .part-plus.wide { min-width: 46px; }
   .part-vals { flex-shrink: 0; font-size: 9.5px; }
-  .chev { flex-shrink: 0; font-size: 11px; }
 
   /* 装備ドリルダウン: 部位詳細。一覧が消えないので「戻る」は要らない — 閉じるだけ */
   .close-detail { align-self: flex-start; padding: 2px 2px; font-size: var(--t-label); color: var(--fg-muted); }

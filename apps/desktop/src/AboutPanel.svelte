@@ -102,13 +102,7 @@
   }
 </script>
 
-<Modal label="このアプリについて" {onClose}>
-  <div class="panel modal-surface pane-in">
-    <div class="panel-header">
-      <b>このアプリについて</b>
-      <button type="button" class="btn" onclick={onClose}>閉じる <span aria-hidden="true">×</span></button>
-    </div>
-
+<Modal label="このアプリについて" class="modal-narrow" {onClose}>
     <div class="panel-body">
       <div class="card">
         <div class="card-title">バージョン</div>
@@ -233,19 +227,9 @@
         <p>ソースコードと文書は MIT License。同梱しているゲーム由来の画像・数値データは対象外です。</p>
       </div>
     </div>
-  </div>
 </Modal>
 
 <style>
-  .panel { width: min(560px, 100%); max-height: 94vh; display: flex; flex-direction: column; }
-
-  .panel-header {
-    flex-shrink: 0; display: flex; align-items: center; gap: 12px;
-    padding: 11px 14px; border-bottom: 1px solid var(--border-soft);
-  }
-  .panel-header b { font-size: var(--t-heading); }
-  .panel-header .btn { margin-left: auto; }
-
   .panel-body { overflow-y: auto; padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 
   .card {
