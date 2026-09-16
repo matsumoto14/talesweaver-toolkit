@@ -21,6 +21,7 @@
   import { checkForUpdate, updater } from "./update.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import { isLockedTab } from "./unlock.svelte";
+  import Choose from "./ui/Choose.svelte";
   import Splitter from "./ui/Splitter.svelte";
 
   const TABS: { id: Tab; label: string }[] = [
@@ -79,14 +80,16 @@
     <div class="brand">
       <img src={brandLogo} alt="TW Context" />
     </div>
-    <nav class="tabs">
-      {#each visibleTabs as t (t.id)}
-        <button type="button" class="tab" class:on={app.tab === t.id} onclick={() => (app.tab = t.id)}>
-          {t.label}
-          {#if t.id === "news" && updateWaiting}<span class="tab-dot" aria-label="新しい版があります"></span>{/if}
-        </button>
-      {/each}
-    </nav>
+    <Choose
+      class="tabs"
+      options={visibleTabs.map((t) => ({ value: t.id, label: t.label }))}
+      bind:value={() => app.tab, (v) => (app.tab = v as Tab)}
+    >
+      {#snippet item(o)}
+        {o.label}
+        {#if o.value === "news" && updateWaiting}<span class="tab-dot" aria-label="新しい版があります"></span>{/if}
+      {/snippet}
+    </Choose>
     {#if simIsDirty()}
       <div class="sim-note">
         <span class="dot"></span>
@@ -194,10 +197,10 @@
   .brand { display: flex; align-items: center; flex-shrink: 0; }
   .brand img { width: auto; height: 48px; display: block; object-fit: contain; }
 
-  /* 見た目は app.css の `.tabs` / `.tab`(§08)。ここには置き場所だけ */
-  .tabs { margin-left: 8px; align-self: flex-end; }
+  /* 見た目は app.css の `.tabs`(§08)。中身は ui/Choose.svelte なので、ここには置き場所だけ */
+  .topbar :global(.tabs) { margin-left: 8px; align-self: flex-end; }
   /* 更新が待っている印。タブの幅を動かさないよう、文字の右に 6px だけ足す(§00 03) */
-  .tab-dot {
+  .topbar :global(.tab-dot) {
     display: inline-block; margin-left: 6px; width: 6px; height: 6px; border-radius: 50%;
     background: var(--gold); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
   }

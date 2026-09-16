@@ -6,10 +6,11 @@
   import { fmtPct, fmtSigned, fmtSignedPct } from "../../../format";
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
+  import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import Num from "../../../ui/Num.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import SkillLevelField from "./SkillLevelField.svelte";
   import {
@@ -247,7 +248,7 @@
     {#each draft.commonSkills.unleash as slot, i (i)}
       <div class="skill-field">
         <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />枠 {i + 1}</span>
-        <StepSelect
+        <Choose
           label=""
           options={unleashStatOptions}
           cols={unleashStatOptions.length}
@@ -299,12 +300,10 @@
       {#snippet icon()}<Icon kind="skill" id="common_sharpness_vision" size={20} label="シャープネスビジョン" />{/snippet}
       {#snippet extraAction()}
         {#if !sharpnessIsLow}
-          <button
-            type="button"
-            class="chip quiet"
-            class:on={sharpnessAllOpen}
-            onclick={() => (sharpnessAllOpen = !sharpnessAllOpen)}
-          >{sharpnessAllOpen ? "5 以上" : "1〜4"}</button>
+          <Chip class="quiet"
+ on={sharpnessAllOpen}
+ onToggle={() => (sharpnessAllOpen = !sharpnessAllOpen)}
+          >{sharpnessAllOpen ? "5 以上" : "1〜4"}</Chip>
         {/if}
       {/snippet}
     </SkillLevelField>
@@ -445,7 +444,7 @@
         {#if slot.stat !== null}
           <div class="skill-field">
             <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />解放 {i + 1} の Lv</span>
-            <StepSelect
+            <Choose
               label=""
               options={unleashLevelChoices}
               cols={unleashLevelChoices.length}

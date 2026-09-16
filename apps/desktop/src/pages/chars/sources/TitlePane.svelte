@@ -5,6 +5,7 @@
   import { fmtSigned } from "../../../format";
   import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT } from "../../../labels";
   import { app } from "../../../state.svelte";
+  import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import { flash } from "../../../ui/motion.svelte";
   import Num from "../../../ui/Num.svelte";
@@ -135,7 +136,11 @@
         class:on={picked !== null}
         role="button"
         tabindex="0"
-        onclick={() => { if (picked === null) openGroup = openGroup === g.base ? null : g.base; }}
+        onclick={(e) => {
+          // 変種チップは行の中にあるので、押されたのがチップなら行の開閉に取らない
+          if (picked !== null || (e.target as HTMLElement).closest(".title-variants")) return;
+          openGroup = openGroup === g.base ? null : g.base;
+        }}
         onkeydown={(e) => {
           if (picked !== null || (e.key !== "Enter" && e.key !== " ")) return;
           e.preventDefault();
@@ -150,13 +155,11 @@
         {:else}
           <span class="title-variants">
             {#each g.items as t (t.id)}
-              <button
-                type="button"
-                class="chip"
-                class:on={draft.equipment.title === t.id}
+              <Chip
+                on={draft.equipment.title === t.id}
                 title="{t.name} — {titleSummary(t)}"
-                onclick={(e) => { e.stopPropagation(); addOwnedAndSelect(t.id); }}
-              >{t.name.slice(g.base.length + 3)} <span class="title-variant-val num">{signed(t.equipment_value_total)}</span></button>
+                onToggle={() => addOwnedAndSelect(t.id)}
+              >{t.name.slice(g.base.length + 3)} <span class="title-variant-val num">{signed(t.equipment_value_total)}</span></Chip>
             {/each}
           </span>
         {/if}
@@ -184,7 +187,7 @@
       <span class="title-extra">条件付き追加ダメージ</span>
     {/if}
     {#if selectedTitle}
-      <button type="button" class="chip quiet" onclick={() => (draft.equipment.title = null)}>外す</button>
+      <Chip class="quiet" onclick={() => (draft.equipment.title = null)}>外す</Chip>
     {/if}
   </div>
 </div>
@@ -202,7 +205,7 @@
               <span class="item-vals num dim">{titleSummary(t)}</span>
             {/if}
           </button>
-          <button type="button" class="chip quiet" onclick={() => removeOwned(t.id)} title="所持から外す(表示中なら表示も解除)">所持から外す</button>
+          <Chip class="quiet" onclick={() => removeOwned(t.id)} title="所持から外す(表示中なら表示も解除)">所持から外す</Chip>
         </div>
       {/each}
     </div>
@@ -232,9 +235,9 @@
           ? `${mainSkill.name}向けに ${filteredCommonTitles.length} / ${commonTitles.length} 件`
           : `すべて表示中(${commonTitles.length} 件)`}{/snippet}</Num
       >
-      <button type="button" class="chip quiet" class:on={showAllTitles} onclick={() => (showAllTitles = !showAllTitles)}>
+      <Chip class="quiet" on={showAllTitles} onToggle={() => (showAllTitles = !showAllTitles)}>
         {showAllTitles ? "絞り込みに戻す" : "すべて表示"}
-      </button>
+      </Chip>
     </div>
   {/if}
   <div class="item-list title-list effectful">

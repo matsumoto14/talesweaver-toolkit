@@ -230,7 +230,7 @@
     {#if showCap}<span class="cap num">/{fmtInt(max)}</span>{/if}
   </div>
   <!-- 形態 5 の理由チップ(§07「ここまで降りたら理由を書く」)。値の隣に常設し、出たり消えたりしない -->
-  {#if reason !== undefined}<span class="chip why">{reason}</span>{/if}
+  {#if reason !== undefined}<span class="why">{reason}</span>{/if}
   {#if stepper}
     <button type="button" class="step" onclick={() => nudge(1)} disabled={value >= max} aria-label="{label} を 1 増やす">＋</button>
   {/if}

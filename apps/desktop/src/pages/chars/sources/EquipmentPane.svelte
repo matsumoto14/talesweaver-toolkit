@@ -13,6 +13,7 @@
     toggleAbility as toggleAbilityCommand,
   } from "../../../api/commands";
   import { draftToPayload } from "../../../draft";
+  import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import { latest } from "../../../ui/latest.svelte";
   import { damageCategoryLabel } from "../../../characterSkills";
@@ -36,7 +37,7 @@
   import Num from "../../../ui/Num.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import TextField from "../../../ui/TextField.svelte";
@@ -756,13 +757,13 @@
         <div class="equipment-picker pane-in">
           {#if isRelicSlot(slot)}
             <div class="relic-selector">
-              <StepSelect
+              <Choose
                 label="種別"
                 options={relicKindOptions}
                 full
                 bind:value={() => relicKindFor(slot), (value) => pickRelicKind(slot, value)}
               />
-              <StepSelect
+              <Choose
                 label="強化段階"
                 options={relicLevelOptions}
                 cols={5}
@@ -770,8 +771,8 @@
                 bind:value={() => relicLevelFor(slot), (value) => pickRelicLevel(slot, value)}
               />
               <div class="relic-picker-actions">
-                <button type="button" class="chip quiet" onclick={() => pickUnequipped(slot)}>未装備</button>
-                <button type="button" class="chip quiet" onclick={() => pickCustom(slot)}>カタログ外</button>
+                <Chip class="quiet" onclick={() => pickUnequipped(slot)}>未装備</Chip>
+                <Chip class="quiet" onclick={() => pickCustom(slot)}>カタログ外</Chip>
               </div>
             </div>
           {:else}
@@ -779,9 +780,9 @@
             <TextField label="装備名で探す" search count={filteredCatalog.length} bind:value={itemQuery} />
             {#if equipmentFilterLabel !== null}
               <span class="equipment-filter badge">{equipmentFilterLabel}</span>
-              <button type="button" class="chip quiet" onclick={() => (showAllEquipmentCandidates = !showAllEquipmentCandidates)}>
+              <Chip class="quiet" onclick={() => (showAllEquipmentCandidates = !showAllEquipmentCandidates)}>
                 {showAllEquipmentCandidates ? "候補だけ見る" : "すべて見る"}
-              </button>
+              </Chip>
             {/if}
           </div>
           <div class="item-list" class:effectful={slot === "artifact"}>
@@ -994,12 +995,12 @@
                 {#if additionsFor("weapon", selectedAbility.id).length < 2}
                   <div class="ro-add-row ability-additional-candidates">
                     {#each addableAdditionalOptions("weapon", selectedAbility.id) as option (option.kind)}
-                      <button type="button" class="chip add" onclick={() => addAdditional("weapon", selectedAbility.id, option.kind)}>
+                      <Chip class="add" onclick={() => addAdditional("weapon", selectedAbility.id, option.kind)}>
                         ＋ {additionalKindLabel(option.kind)}
                         <span class="num dim">
                           {additionalRangeLabel(option)}
                         </span>
-                      </button>
+                      </Chip>
                     {/each}
                   </div>
                 {/if}
@@ -1088,10 +1089,10 @@
                 {#if additionsFor(slot, ability.id).length < ability.additional_slots}
                   <div class="ro-add-row ability-additional-candidates">
                     {#each addableAdditionalOptions(slot, ability.id) as option (option.kind)}
-                      <button type="button" class="chip add" onclick={() => addAdditional(slot, ability.id, option.kind)}>
+                      <Chip class="add" onclick={() => addAdditional(slot, ability.id, option.kind)}>
                         ＋ {additionalKindLabel(option.kind)}
                         <span class="num dim">{additionalRangeLabel(option)}</span>
-                      </button>
+                      </Chip>
                     {/each}
                   </div>
                 {/if}
@@ -1127,12 +1128,11 @@
           >
             <span class="ro-name">{orphan?.name ?? orphanId}</span>
             <span class="orphan-note">本体一覧に無い値が残っています</span>
-            <button
-              type="button"
-              class="chip add"
+            <Chip
+              class="add"
               disabled={orphan === null || part.abilities.length >= currentAbilitySlotCount(slot)}
               onclick={() => restoreOrphanAbility(slot, orphanId)}
-            >アビリティに戻す</button>
+            >アビリティに戻す</Chip>
             <button type="button" class="clear" onclick={() => dropOrphanAbility(slot, orphanId)}>値を捨てる</button>
           </div>
         {/each}
@@ -1156,7 +1156,7 @@
             {slot === "weapon" ? "追加固定ダメージの補正式に使います。" : "追加HPの算出条件として保存します。"}
           </p>
         {/if}
-        <StepSelect
+        <Choose
           label="強化 Lv"
           options={enhanceLevelOptions}
           bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
@@ -1169,7 +1169,7 @@
           </p>
         {/if}
         {#if part.enhance_level >= 12}
-          <StepSelect
+          <Choose
             label="等級"
             options={enhanceGradeOptions}
             bind:value={() => part.enhance_grade ?? "highest", (v) => (part.enhance_grade = v as typeof part.enhance_grade)}

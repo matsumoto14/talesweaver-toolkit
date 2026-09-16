@@ -17,7 +17,7 @@
   import { limits } from "../../../limits.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Num from "../../../ui/Num.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
   import { avatarEnhanceSummary } from "../summaries";
 
   interface Props {
@@ -94,7 +94,7 @@
   {@const options = cellOptions(part, kind)}
   <div class="avatar-stat-row" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(kind)}>
     <b>{EQUIPMENT_STAT_SHORT[kind]}</b>
-    <StepSelect
+    <Choose
       label=""
       {options}
       cols={options.length}

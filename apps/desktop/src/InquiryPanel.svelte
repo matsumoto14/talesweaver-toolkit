@@ -10,7 +10,7 @@
   import { app } from "./state.svelte";
   import { reportError } from "./toast.svelte";
   import Modal from "./ui/Modal.svelte";
-  import StepSelect from "./ui/StepSelect.svelte";
+  import Choose from "./ui/Choose.svelte";
   import ToggleRow from "./ui/ToggleRow.svelte";
   import TextField from "./ui/TextField.svelte";
 
@@ -97,7 +97,7 @@
             送った内容は<b>公開のページに載ります</b>。本名・メールアドレス・ゲーム内 ID は書かないでください。
           </p>
 
-          <StepSelect bind:value={kind} options={INQUIRY_KINDS} full />
+          <Choose bind:value={kind} options={INQUIRY_KINDS} full />
 
           <label class="line">
             <span class="line-label">件名</span>

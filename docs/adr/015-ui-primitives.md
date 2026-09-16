@@ -116,6 +116,75 @@ R16 は「動きのクラス名を画面側が書いていないか」を見る�
 - **計算タブの鎖で、差分枠が出た瞬間に主役数字が 11px 上がる。**`.chain .nsub` は差分が空のとき高さ 0 で、出ると 11px になる。鎖が縦中央ぞろえなので、その分だけ 44px の数値が持ち上がる。コード上のコメントは「空でも行を取り、出た瞬間に下が動かない」と言っているが、実機では**上が動いている**(§00 ③)。段階 4 の前から同じ構造なので今回は触らない。
 - `class="num"` の手書き 106 行(値ではなく書体ユーティリティとしての使用)。値かどうかの線引きは上に書いたが、`.num` という名前が「値」と紛らわしいので、書体ユーティリティ側の名前を見直すかは別段階で決める。
 
+### 段階 5: 選ぶ部品 `<Choose>` + `<Chip>` と、Picker の中身(2026-09-17)
+
+#### 借りるか — **借りない。標準がもう持っていたから**
+
+ADR-015 の調達順(標準 → 借りる → 自前)で「借りる」を実際に判断したのはこの段階が初めて。**実機(WebView2 = Chromium 153)で標準の到達点を測ってから決めた**:
+
+| 機能 | 実測 |
+|---|---|
+| `appearance: base-select`(口と `::picker(select)` の両方) | 使える |
+| `<selectedcontent>`(`HTMLSelectedContentElement`) | 使える。**選んだ行の `<img>`(アイコン)ごと複製する** |
+| `<select>` 直下の author `<button>` | 使える |
+| `<option>` に `display: flex` | 効く(アイコン + 名前 + 値の行が組める) |
+| `<select>` 直下の非 `<option>` 要素(`note` の 1 行) | 候補面の中に描かれる |
+| `hidden` + `disabled` な `<option>` を `select.value` にする | **できる**。候補面には並ばず(高さ 0)、口の文字だけを持つ |
+| `appearance: base`(checkbox / radio) | **使えない** → input は隠して `<label>` に着せる従来手 |
+
+借りる候補は 3 つとも実データを取った(npm、2026-09-17):
+
+| 候補 | 版 | 実行時依存 | unpacked |
+|---|---|---|---|
+| `bits-ui` | 2.19.2 | runed / esm-env / tabbable / svelte-toolbelt / **@floating-ui/dom + core** | 2.02 MB |
+| `melt`(Melt UI next) | 0.44.0 | **@floating-ui/dom** / dequal / focus-trap / **jest-axe** / runed | 387 KB |
+| `@zag-js/combobox` + `@zag-js/svelte` | 1.44.0 | core / types / utils / **popper** / anatomy / dom-query / collection / dismissable / live-region / focus-visible | 186 KB |
+
+- 消える自前コードは **Picker のキーボード ~150 行だけ**。`appearance: base-select` を使えばその 150 行も**最初から書かずに済む**ので、借りて消える行は実質 0。
+- 増えるものは大きい。**3 つとも自前の位置決め(floating-ui / zag の popper)と自前の light-dismiss を抱えている** — 段階 2 でちょうどそれ(`ui/popover.ts` 84 行)を捨てて `popover` 属性 + CSS Anchor Positioning に置き換えたばかりなので、借りると**捨てた 84 行を依存として買い戻す**ことになる。`melt` は実行時依存に `jest-axe` が入っていて 1.0 前。
+- **指標の上でも動かない。**借りても呼ぶ側が決める数は変わらない(どちらの場合も決めるのは `ui/` の中)。借りる / 借りないは「自前が軽いか」ではなく、**標準より下に降りる理由があるか**で決まる。今回は無かった。
+- ただし `@melt-ui/svelte` / `bits-ui` 相当が要る場面はいずれ来る(日付選択・仮想化された長い一覧など)。そのときは**この表をもう一度取り直す**。「一度借りないと決めた」を理由に自前で組まない。
+
+#### `<Chip>` と `<Choose>`
+
+- `ui/Chip.svelte` を新設。**アプリ中の小さな的はこれ 1 つ**(置き換え 35 箇所 / 11 ファイル)。何になるかは `on` が渡っているかで決まる —— 渡さなければ `<button>`(押すと何かが起きる)、渡せば `<input type=checkbox>` + `<label>`(なっている)、`name` も渡れば `<input type=radio>`(並んだ中の 1 つ。`Choose` だけが渡す)。**見た目の選択肢ではなく、状態があるかどうかで決まる** — 段階 4 の `<Num motion>` と同じ線。
+- `ui/Choose.svelte` を新設。**段(`.seg`)・粒(`.chiprow`)・タブ(`.tabs`)はこれ 1 つ**。中身は `Chip`(`ReadRow` を `Num` の上に載せ直したのと同じ形)。`StepSelect`(29 箇所)/ `StepToggle`(2 箇所)を吸収して**両方削除**し、手書きタブ(App.svelte / BuffsPage ×2 / CalcPage)も載せた。
+- **チップとタブを別の部品にしない。**BuffsPage の「タブ」は置き換え前から `class="chip category-tab"` と書かれていた — 実装がすでに「同じもの」だと言っていた。分けると呼ぶ側に「チップならこっち、タブならこっち」を毎回決めさせる。
+- **1 つ選ぶか、いくつか選ぶかも決めさせない。**`value`(1 つ)を渡せば radio 群、`values`(いくつか)を渡せば checkbox 群。持っているものが決める。
+- **キーボードは 1 行も書いていない。**同じ `name` の radio が、矢印キーでの移動・Tab ストップが群れで 1 つになること・読み上げの「n 個中 m 個目」を既定で持つ。置き換え前は `role="radio"` / `aria-pressed` の自作ボタンで、**矢印キーはどこにも無かった**。
+- 呼ぶ側に残した props は `Chip` が 8(`on` / `name` / `value` / `class` / `disabled` / `title` / `onToggle` / `onclick`)、`Choose` が 13。**段階 1〜4 より多い。増えたのは 2 つの部品(`StepSelect` + `StepToggle`)を畳んだからで、`full` / `cols` / `cell` / `tone` / `disabledValues` / `titleFor` / `max` は畳む前からある「その画面の事実」をそのまま持ってきたもの**。作法の選択肢は 1 つも増えていない。`item`(段の中身を自分で描く)だけが新規で、件数の `<Num>` を添えるバフタブのために要った。
+
+#### Picker の中身を customizable `<select>` にした
+
+- 口(`<button><selectedcontent></selectedcontent></button>`)も候補面(`::picker(select)`)も `<select>` の中。**矢印キー・タイプアヘッド・Enter・Escape とフォーカスの戻り・トップレイヤー・口への位置合わせ**をブラウザが持つ。
+- **チップ側を選んでいるときの「ほか n 件」は `hidden` + `disabled` な `<option>` 1 枚で表した。**候補面には並ばず(高さ 0)、`select.value` にはできるので `<selectedcontent>` がその文字を出す。置き換え前の口の出し分けがそのまま残り、見た目は変わっていない。
+- **UA が足す `▼` は使わない。**`.picker-select::picker-icon { display: none }`(`::picker-icon` は `<button>` ではなく `<select>` に付く。実機で 1 度間違えて、口の枠の外に ▼ が出た)。キャレットは `app.css` の `.caret` 1 つのまま(§10)。
+- 消えたもの: `ui/Popover.svelte` への依存(Picker だけ外れた。他 3 箇所は据え置き)、`.picker-overlay` 相当の出し分け、`.picker-trigger` の `aria-expanded` セレクタ。
+
+#### 実機で確かめたこと(WebView2 = Chromium 153、2026-09-17)
+
+**キーボードだけで一周した。**マウスは最初にタブを 1 回押すだけ。
+
+- **上部タブ**: `Tab` 1 回で群れに入る → `ArrowRight` で ホーム → ダメージ計算 → バフ、`ArrowLeft` で戻る。**押すたびに表示中の面も変わる**(radio の既定どおり自動で選ばれる)。
+- **段(`.seg`)**: `role="radiogroup"`、`ArrowRight` / `ArrowLeft` で「一覧から選ぶ」↔「一覧に無い敵」を往復。**`Tab` を 1 回押すと群れの外へ出る**(Tab ストップが群れで 1 つ)。群れの矩形は 86,144 676x29 のまま 1px も動かない(§09 規則 1)。
+- **Picker**: `ArrowDown` で候補面が開きフォーカスが `<option>` に入る → `Enter` で決まり(`ringo` → `abyss_hell`、口の文字も変わる)フォーカスが `<select>` に戻る → 再度 `ArrowDown` で開き `Escape` で閉じてフォーカスが戻る。**口の矩形は開いても閉じても 86,202 662x34 のまま**。候補面は口の左端に揃って下に開き(x=87 / y=241、口は y=202 高さ 34)、幅は `anchor-size(width)` で口に揃う。
+- **単独のチップ**: `Space` で ON / OFF が入れ替わる(`4 / 5 だけ` ↔ `それ以外`)。
+- **動きを消す設定**: `prefers-reduced-motion: reduce` で `::picker(select)` の `animation-duration` が `0.17s` → `1e-05s`。**最初は消えていなかった** — `::picker(select)` は `*::before, *::after` では拾えない名前付き擬似要素で、段階 3 の `::details-content` とまったく同じ穴だった。`app.css` の reduce ブロックに明示して足した。§10 の「新しい動きを足したら実機で本当に消えるか確かめる」がそのまま効いた 2 例目。
+
+#### 数字
+
+- 画面側の手書き `<button class="chip">` **35 → 0**。`role="tab"` の直書き **7 → 0**。画面側の `role="radio"` / `role="radiogroup"` の直書きも **0**(素の radio になったので書く必要が無い)。
+- 部品 **6 → 6**(`StepSelect` / `StepToggle` を削除し、`Choose` / `Chip` を新設)。
+- 機械監査 **16 本のまま**(増やさない。減らせる規則は今回は無かった)。候補は 1 件で、段階 4 から変わらず `ui/Spinner.svelte` の 0.7s。
+- `aria-expanded` の直書き **5 → 4**。テシスコアの「補助タイプも出す」が checkbox になり、`checked` が同じことを言うようになったので外した。
+
+#### 段階 5 で拾わずに次へ送ったもの
+
+- `apps/desktop/scripts/shoot.js` の `require`。タブの selector(`nav.tabs button` → `.tabs label.chip`)だけは今回の変更の後始末として直したが、**`.cjs` への置き換えは段階 6 のまま**(このセッションでは一時コピーを作って撮った)。
+- `ui/Disclosure.svelte` に `summaryClass="chip quiet"` を渡している箇所。トリガが `<summary>` なので `Chip` には載らない(段階 3 の「部品に載らないものは素で書く」と同じ)。
+- `.chip-diff` / `.chip-x`(計算タブの差分チップ)。名前は chip だが押して選ぶものではなく、印 + 取り消しボタン。
+- `ui/StatInput.svelte` の「理由チップ」は押せないので `.chip` を外して `.why` にした。**残りの `class="num"` 106 行**(段階 4 から)と同じく、名前が実体とずれているものの棚卸しは別段階。
+
 ## 却下した選択肢
 
 - **(段階 3)`aria-expanded` を `<summary>` にも書いて揃える案** — `<summary>` は暗黙のロールで開閉状態を持っているので、書くと二重になる。標準が持っているものを手で足さない。
@@ -128,6 +197,15 @@ R16 は「動きのクラス名を画面側が書いていないか」を見る�
 - **`<Num>` に「数値書体を付けるか」の props を足す案** — 文と数のどちらも受けられるようにするには 1 つ増える。数が渡っているか(`motion`)で決める案も試したが、`use:flash` だけの数値(倍率・カテゴリ値)で書体が落ちるので使えない。**`<Num>` は数の器と割り切り、文は入れない**ほうを採った。呼ぶ側の決定は増えない(「数か文か」は出すものそのものの性質)。
 - **面・行が変わったことを見せる `use:flash` も部品に畳む案** — Svelte では既存の要素を後から包めないので、部品にすると DOM が 1 枚増えるか、呼ぶ側に「行ならこれ、面ならこれ」を毎回決めさせることになる。段階 4 の勝負どころ(部品を 2 つにしない)を自分から崩す。面の印は action のまま残し、畳むなら「面が変わった」を 1 つの action にする別の話として扱う。
 - **`class="num"` の手書きを全部 `<Num>` にする案** — 106 行のうち多くは値ではなく、数値書体を文字送りのために当てている場所(矢印・式・チップのラベル)。値でないものを `<Num>` に入れると、変わってもいない文字が光る。
+
+### 却下(段階 5)
+
+- **ヘッドレス部品を借りる案(bits-ui / melt / zag)** — 上の表のとおり。3 つとも floating-ui / popper を抱えていて、段階 2 で捨てた自前の位置決めを依存として買い戻すことになる。消える自前コードは `appearance: base-select` を使えば**そもそも書かない** 150 行だけ。
+- **`Choose` に `look: "seg" | "chip" | "tab"` を持たせる案** — 3 つから選ばせた時点で「決める数 0」が崩れる。見た目は `class` で渡す(段階 2 の `triggerClass` / 段階 3 の `class` / 段階 4 の `class` と同じ線)。app.css が `.seg` / `.chiprow` / `.tabs` を既に持っているので、呼ぶ側が新しい語彙を作ることもない。
+- **チップ(選ぶ)とチップ(する)を 1 つの props で区別しない案** — 「押すと何かが起きる的」と「なっている的」は DOM からして別物(`<button>` と `<input>`)で、どちらかは**出すものの性質**で決まる。`on` を渡すかどうかで分けたのは、段階 4 で `<Num>` が `motion` の有無で跳ねと光りを分けたのと同じ。
+- **タブを `role="tablist"` / `role="tab"` / `aria-controls` で組み直す案** — 揃えるには矢印キーと `aria-selected` を自分で書くことになる。素の radio 群は同じ操作感を**書かずに**持つので、標準に寄せるほうを採った。面との結び付き(`aria-controls`)は失うが、置き換え前も 7 箇所中どこにも無かった。
+- **`Choose` の `label` を「読み上げ名だけ」にもできるようにする案** — props が 1 つ増える。`label` は今までどおり見える見出し兼読み上げ名にし、見出しを出したくない 2 箇所(バフタブの 2 つの切り替え)は `aria-label` を持たないままにした。置き換え前の `role="tablist" aria-label` は失うが、段は 1 つずつが本物の radio なので中身は読み上げられる。
+- **`.chiprow` を `.chips` という名前にする案** — `BuffsPage` と `CalcPage` が**別の意味の `.chips`**(行チップ = `ToggleRow` の一覧 / 差分チップの帯)をスコープ付きで既に持っている。グローバルに同じ名前を足すと、後から片方を `:global` にした瞬間に壊れる。
 
 ### 却下(段階 1・2)
 

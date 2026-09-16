@@ -7,10 +7,11 @@
   import { CORE_POWER_TYPES, CORE_REGIONS, CORE_REGION_LABELS, CORE_SLOT_COUNT, CORE_SUPPORT_TYPES, CORE_TYPE_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
+  import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Num from "../../../ui/Num.svelte";
   import { badgeStyle } from "../../../ui/states";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
 
   interface Props {
     draft: Draft;
@@ -204,13 +205,11 @@
     {CORE_REGION_LABELS[coreRegion]} の 6 枠
     <!-- 「補助も出す」は段の見え方を変える操作なので、段より先に目に入る位置に置く。
          控えめなチップ 1 つ(§07 形態 3)。下に置くと、段を見たあとで見え方が変わって読み直しになる -->
-    <button
-      type="button"
-      class="chip quiet"
-      class:on={coreShowSupport || coreSupportInUse}
-      aria-expanded={coreShowSupport || coreSupportInUse}
-      onclick={toggleCoreSupport}
-    >{coreShowSupport || coreSupportInUse ? "補助タイプを閉じる" : "補助タイプも出す"}</button>
+    <Chip
+      class="quiet"
+      on={coreShowSupport || coreSupportInUse}
+      onToggle={toggleCoreSupport}
+    >{coreShowSupport || coreSupportInUse ? "補助タイプを閉じる" : "補助タイプも出す"}</Chip>
   </div>
   <!-- この画面で知りたいのは「いくつになったか」と「セット効果が出ているか」の 2 つ。
        小さな注記ではなく、段より先に読める場所に出す -->
@@ -231,7 +230,7 @@
         <!-- 6 枠が同じ列で並ぶように列を固定する。行ごとに幅が違うと端を探し直す(§00 01)。
              補助タイプは別の段にする — 1 つの段に 9 個入れると列が余って空きセルが出る -->
         <span class="core-types">
-          <StepSelect
+          <Choose
             label=""
             options={corePowerOptions}
             cols={4}
@@ -242,7 +241,7 @@
                  載らない — <details> は 1 トリガ 1 面。段が増えるのは「開いた」なので下に伸ばす
                  (§10 型 6 の .open-in)。閉じるときは {#if} で即座に消える(従来どおり) -->
             <div class="open-in">
-              <StepSelect
+              <Choose
                 label=""
                 options={coreSupportOptions}
                 cols={4}

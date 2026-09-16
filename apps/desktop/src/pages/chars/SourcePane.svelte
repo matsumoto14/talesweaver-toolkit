@@ -15,6 +15,7 @@
   import { sacredRelicStageFromValue, sacredRelicValue, withEnchant } from "../../equipment";
   import { limits } from "../../limits.svelte";
   import { tables } from "../../tables.svelte";
+  import Chip from "../../ui/Chip.svelte";
   import Icon from "../../ui/Icon.svelte";
   import type { SourceId } from "./sourceId";
   import "./sources/pane-shared.css";
@@ -33,7 +34,7 @@
   import ThesisCorePane from "./sources/ThesisCorePane.svelte";
   import TitlePane from "./sources/TitlePane.svelte";
   import StatInput from "../../ui/StatInput.svelte";
-  import StepSelect from "../../ui/StepSelect.svelte";
+  import Choose from "../../ui/Choose.svelte";
   import { fmtSigned } from "../../format";
   import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import Num from "../../ui/Num.svelte";
@@ -98,6 +99,13 @@
     }
     draft.statSources.crown.selected_stat = next;
   }
+  /** よく使う値。上限が 280 と同じときは 1 つにまとめる(同じ的を 2 つ並べない) */
+  const crownPresetOptions = $derived(
+    [...new Set([260, 280, limits.crown_selected_max])].map((v) => ({
+      value: String(v),
+      label: v === limits.crown_selected_max ? "MAX" : String(v),
+    })),
+  );
   function setCrownPreset(value: number) {
     const kind = draft.statSources.crown.selected_stat;
     if (kind === null) return;
@@ -185,7 +193,7 @@
     <div class="card">
       <!-- 8 ステが同じ形で並ぶので 1 ステ 1 行。段は列を固定して行をまたいで揃える(§00 01) -->
       {#snippet petRow(k: StatKind)}
-        <StepSelect
+        <Choose
           label=""
           options={petSkillOptions}
           cols={petSkillOptions.length}
@@ -213,42 +221,27 @@
     <div class="card">
       <div class="crown-choice">
         <span class="crown-choice-label">選択報酬</span>
-        <div class="crown-choice-stats" role="radiogroup" aria-label="クラウンの選択報酬">
-          {#each PAIRED_STAT_KINDS as k (k)}
-            <button
-              type="button"
-              class="chip"
-              class:on={draft.statSources.crown.selected_stat === k}
-              role="radio"
-              aria-checked={draft.statSources.crown.selected_stat === k}
-              onclick={() => toggleCrownSelectedStat(k)}
-            >{STAT_LABELS[k]}</button>
-          {/each}
-        </div>
+        <!-- 選んだ 1 つを押すと外せる(値は checkbox 群。radio は押し直しで外せない) -->
+        <Choose
+          class="chiprow crown-choice-stats"
+          options={PAIRED_STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }))}
+          values={draft.statSources.crown.selected_stat === null ? [] : [draft.statSources.crown.selected_stat]}
+          onToggle={(v) => toggleCrownSelectedStat(v as StatKind)}
+        />
         <div class="crown-presets" aria-label="選択報酬のよく使う値">
-          <button
-            type="button"
-            class="chip num"
+          <Chip
+            class="num"
             disabled={draft.statSources.crown.selected_stat === null ||
               crownSelectedValue() === limits.crown_selected_max}
             onclick={() => addCrownSelected(20)}
-          >+20</button>
-          {#each [260, 280] as value (value)}
-            <button
-              type="button"
-              class="chip num"
-              class:on={crownSelectedValue() === value}
-              disabled={draft.statSources.crown.selected_stat === null}
-              onclick={() => setCrownPreset(value)}
-            >{value}</button>
-          {/each}
-          <button
-            type="button"
-            class="chip num"
-            class:on={crownSelectedValue() === limits.crown_selected_max}
+          >+20</Chip>
+          <Choose
+            class="chiprow"
+            options={crownPresetOptions}
             disabled={draft.statSources.crown.selected_stat === null}
-            onclick={() => setCrownPreset(limits.crown_selected_max)}
-          >MAX</button>
+            tone={() => "num"}
+            bind:value={() => String(crownSelectedValue() ?? ""), (v) => setCrownPreset(Number(v))}
+          />
         </div>
         <span class="hint dim">選んだ能力値だけ上限 {fmtSigned(limits.crown_selected_max)}。もう一度押すと外せます。</span>
       </div>

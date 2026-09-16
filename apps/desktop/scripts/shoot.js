@@ -27,8 +27,8 @@ const out = outDir.replace(/[\/]*$/, "/");
     await shot("current");
   } else {
     for (const [i, label] of tabs.entries()) {
-      // 上部タブ(App.svelte <nav class="tabs">)。ラベル文字で選ぶ
-      await page.locator("nav.tabs button", { hasText: label }).click();
+      // 上部タブ(App.svelte の <Choose class="tabs">)。ラベル文字で選ぶ
+      await page.locator(".tabs label.chip", { hasText: label }).click();
       await page.waitForTimeout(400);
       await shot(`${String(i + 1).padStart(2, "0")}-${label}`);
     }

@@ -1990,6 +1990,7 @@ td code { background: var(--card-soft2); }
             <span class="cap">よく使うものはチップで手前に固定、残りは Picker</span>
           </div>
         </div>
+        <p class="quote"><b>作るときは部品を通す。</b>段・チップ・タブは <code>ui/Choose.svelte</code>(段を描くのは <code>ui/Chip.svelte</code>)、順序の無いものから 1 つ選ぶのは <code>ui/Picker.svelte</code>。<strong>チップとタブを別の部品にしない</strong> — どちらも「並んだ中から選ぶ」で、違うのは見た目(<code>class</code> に <code>seg</code> / <code>chiprow</code> / <code>tabs</code>)と、それが何を切り替えるかだけ。分けた瞬間に「チップならこっち、タブならこっち」を毎回決めることになる。<b>1 つ選ぶか、いくつか選ぶかも決めない</b> — <code>value</code> を渡せば radio 群、<code>values</code> を渡せば checkbox 群になる(ADR-015 段階 5)。<strong>キーボードは 1 行も書かない</strong>:同じ <code>name</code> の radio は矢印キーでの移動・群れで 1 つだけの Tab ストップ・読み上げを既定で持ち、<code>Picker</code> の候補面は customizable <code>&lt;select&gt;</code>(<code>appearance: base-select</code> + <code>&lt;selectedcontent&gt;</code>)なので矢印・タイプアヘッド・Enter・Escape とフォーカスの戻りもブラウザが持つ。押せる的を <code>&lt;button class="chip"&gt;</code> で手書きしない。</p>
         <p class="cap">「よく使う」は<b style="color:var(--fg-sub)">固定で、ドメイン知識で決める</b>(gamedata 側に「先頭に出す」印を持つ)。使用履歴で並べない — 選んだ瞬間にチップが入れ替わり、§00 ③「押した場所は動かない」に反する。Picker の候補行には<b style="color:var(--fg-sub)">選ぶのに要る値を必ず出す</b>。値の無い候補は並べる根拠が無く、素の <code>&lt;select&gt;</code> と同じ画面になる。</p>
 
         <div class="sec">文字欄<span class="r">5 形態の外。既定は読み取り、触れたら入力面</span></div>
@@ -2867,6 +2868,8 @@ td code { background: var(--card-soft2); }
               <tr><td>色・角丸・タイポのトークン</td><td><code>apps/desktop/src/app.css</code> の <code>:root</code></td></tr>
               <tr><td>共通部品 <code>.card</code> <code>.badge</code> <code>.btn</code> <code>.inset</code> <code>.meter</code> <code>table.grid</code> <code>.head-bar</code></td><td><code>app.css</code></td></tr>
               <tr><td>上限のある入力(形態 4)<code>.stepper</code></td><td><code>app.css</code>(見た目)/ <code>src/ui/StatInput.svelte</code>(振る舞い)。色は <code>--cell-*</code></td></tr>
+              <tr><td>段・チップ・タブ(形態 2 / 3・§08)<code>.seg</code> <code>.chiprow</code> <code>.tabs</code> <code>.chip</code></td><td><code>app.css</code>(見た目)/ <code>src/ui/Choose.svelte</code>(並んだ選択肢)+ <code>src/ui/Chip.svelte</code>(的 1 つ)。キーボードは素の radio / checkbox が持つ</td></tr>
+              <tr><td>1 つ選ぶ・順序なし(§07)</td><td><code>src/ui/Picker.svelte</code>。候補面は customizable <code>&lt;select&gt;</code>(<code>appearance: base-select</code>)</td></tr>
               <tr><td>アイコン 4 系統 × 4 サイズ</td><td><code>src/ui/Icon.svelte</code></td></tr>
               <tr><td>スプリッター</td><td><code>src/ui/Splitter.svelte</code></td></tr>
               <tr><td>状態の 6 系統</td><td><code>app.css</code> の <code>--state-*</code> / 参照は <code>src/ui/states.ts</code>(<code>STATE</code> と <code>badgeStyle</code>)。画面側はラベルと系統の対応だけを持つ</td></tr>

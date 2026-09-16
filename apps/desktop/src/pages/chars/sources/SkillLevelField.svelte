@@ -3,7 +3,7 @@
   // 1 行(`.skill-field`)。段階制のスキルはこの形にほぼそろう(チップのオン/オフ切り替えは対象外)。
   import type { Snippet } from "svelte";
   import Num from "../../../ui/Num.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
 
   interface Option { value: string; label: string }
   interface Props {
@@ -35,7 +35,7 @@
 
 <div class="skill-field">
   <span class="k">{#if icon}{@render icon()}{/if}{label}</span>
-  <StepSelect
+  <Choose
     label=""
     {options}
     cols={cols ?? options.length}

@@ -21,7 +21,7 @@
   import ReadRow from "../../ui/ReadRow.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import Picker from "../../ui/Picker.svelte";
-  import StepSelect from "../../ui/StepSelect.svelte";
+  import Choose from "../../ui/Choose.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
   import TextField from "../../ui/TextField.svelte";
 
@@ -223,7 +223,7 @@
 
       <div class="section">
         <div class="area-head"><span class="area-name">対象</span><span class="area-rule"></span></div>
-        <StepSelect options={TARGET_KINDS} bind:value={targetKind} full />
+        <Choose options={TARGET_KINDS} bind:value={targetKind} full />
         {#if targetKind === "listed"}
           <Picker
             label="対象"
@@ -264,7 +264,7 @@
         {#if weapons.length > 0}
           <!-- 攻撃力を変える一番かんたんな手段。押した瞬間に攻撃力が変わる(保存はされない)。
                登録が 1 件でも「外す」で 2 点目を作れる -->
-          <StepSelect
+          <Choose
             label="測るときの武器"
             options={weaponOptions}
             cols={2}

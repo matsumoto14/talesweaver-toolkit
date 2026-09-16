@@ -27,8 +27,7 @@
   import Num from "../../ui/Num.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import StatInput from "../../ui/StatInput.svelte";
-  import StepSelect from "../../ui/StepSelect.svelte";
-  import StepToggle from "../../ui/StepToggle.svelte";
+  import Choose from "../../ui/Choose.svelte";
   import Spinner from "../../ui/Spinner.svelte";
   import Popover from "../../ui/Popover.svelte";
   import Icon from "../../ui/Icon.svelte";
@@ -603,22 +602,18 @@
         <button class="btn danger delete-set" disabled={saving} onclick={requestRemove}>削除</button>
       </div>
       <div class="groups">
-        <div class="category-switch" role="tablist" aria-label="伸ばしたい効果">
-          {#each PURPOSES as purpose (purpose.id)}
-            {@const definitions = app.catalog.filter((def) => matchesPurpose(def, purpose.id))}
-            {@const picked = purposeSelectedCount(purpose.id)}
-            <button
-              class="chip category-tab"
-              class:on={activePurpose === purpose.id}
-              role="tab"
-              aria-selected={activePurpose === purpose.id}
-              onclick={() => choosePurpose(purpose.id)}
-            >
-              <span>{purpose.label}</span>
-              <Num class="group-count" motion={() => picked} value={`${picked}/${definitions.length}`} />
-            </button>
-          {/each}
-        </div>
+        <Choose
+          class="chiprow category-switch"
+          options={PURPOSES.map((p) => ({ value: p.id, label: p.label }))}
+          bind:value={() => activePurpose, (v) => choosePurpose(v as BuffPurpose)}
+        >
+          {#snippet item(o)}
+            {@const picked = purposeSelectedCount(o.value as BuffPurpose)}
+            {@const total = app.catalog.filter((def) => matchesPurpose(def, o.value as BuffPurpose)).length}
+            <span>{o.label}</span>
+            <Num class="group-count" motion={() => picked} value={`${picked}/${total}`} />
+          {/snippet}
+        </Choose>
         <!-- 面の入れ替えは型 3b(swap-in = 上から短く入る)。型 5 の badge-in(flash)を
              ここに使うと、面ぜんたいが中心から膨らんで他タブの切り替えと動きが揃わない -->
         <section class="buff-group inset" use:swap={() => `${activePurpose}:${activeDamageGroup}`}>
@@ -631,22 +626,18 @@
             {/if}
           </div>
           {#if activePurpose === "damage"}
-            <div class="damage-switch" role="tablist" aria-label="攻撃ダメージの種類">
-              {#each DAMAGE_GROUPS as group (group.id)}
-                {@const definitions = app.catalog.filter((def) => matchesPurpose(def, "damage") && matchesDamageGroup(def, group.id))}
-                {@const picked = damageGroupSelectedCount(group.id)}
-                <button
-                  class="chip damage-tab"
-                  class:on={activeDamageGroup === group.id}
-                  role="tab"
-                  aria-selected={activeDamageGroup === group.id}
-                  onclick={() => chooseDamageGroup(group.id)}
-                >
-                  <span>{group.label}</span>
-                  <Num class="group-count" motion={() => picked} value={`${picked}/${definitions.length}`} />
-                </button>
-              {/each}
-            </div>
+            <Choose
+              class="chiprow damage-switch"
+              options={DAMAGE_GROUPS.map((g) => ({ value: g.id, label: g.label }))}
+              bind:value={() => activeDamageGroup, (v) => chooseDamageGroup(v as BuffDamageGroup)}
+            >
+              {#snippet item(o)}
+                {@const picked = damageGroupSelectedCount(o.value as BuffDamageGroup)}
+                {@const total = app.catalog.filter((def) => matchesPurpose(def, "damage") && matchesDamageGroup(def, o.value as BuffDamageGroup)).length}
+                <span>{o.label}</span>
+                <Num class="group-count" motion={() => picked} value={`${picked}/${total}`} />
+              {/snippet}
+            </Choose>
           {/if}
           <div class="chips">
             {#each activeDefinitions as def (def.id)}
@@ -694,7 +685,7 @@
                              (wiki: クラブ)。段の並びと押せる段はドメインの「効き」から決める -->
                         {@const picked = chosenStats(def)}
                         {@const range = userInputRange(def.value)}
-                        <StepToggle
+                        <Choose
                           label="対象ステ"
                           options={statOptionsFor(def)}
                           cols={STAT_KINDS.length}
@@ -721,11 +712,11 @@
                         {/if}
                       {:else}
                         {#if isUserSelectedTarget(def.target)}
-                          <StepSelect label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
+                          <Choose label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
                         {/if}
                         {#if isChoiceValue(def.value)}
                           {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
-                          <StepSelect label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
+                          <Choose label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
                         {/if}
                         {#if userInputRange(def.value)}
                           {@const range = userInputRange(def.value)!}
@@ -870,17 +861,18 @@
   .set-list small { margin-left: auto; min-width: 2ch; text-align: right; }
   .set-list p, .empty { margin: 12px; color: var(--fg-muted); font-size: 11px; }
   .groups { flex: 1; min-height: 0; padding: 8px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; }
-  .category-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-  .category-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
-  .category-tab > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :global(.category-switch) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  :global(.category-switch > .chip), :global(.damage-switch > .chip) {
+    min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset);
+  }
+  :global(.category-switch > .chip > span:first-of-type) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .buff-group { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: var(--r-panel); overflow: hidden; }
   .group-summary { min-height: 41px; padding: 6px 9px; display: flex; align-items: center; gap: 10px; }
   .group-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .group-summary small { color: var(--fg-muted); font-size: 9px; }
   /* .group-count / .count-value は Num.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
-  .chip :global(.group-count) { margin-left: auto; min-width: 5ch; color: inherit; text-align: right; font-size: 9px; }
-  .damage-switch { padding: 0 7px 7px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
-  .damage-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
+  :global(.chip .group-count) { margin-left: auto; min-width: 5ch; color: inherit; text-align: right; font-size: 9px; }
+  :global(.damage-switch) { padding: 0 7px 7px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
   .guide-link { flex: none; padding: 2px 4px; color: var(--fg-muted); font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }
   .guide-link:hover { color: var(--accent-hover); }
   /* バフ 1 件 = ToggleRow 1 行。縦 1 列で積む(幅が広いほうが値まで読める) */
@@ -950,6 +942,6 @@
   .delete-confirm small { color: var(--fg-muted); }
   .confirm-actions { display: flex; gap: 7px; }
   .confirm-actions .btn { flex: 1; justify-content: center; }
-  @media (max-width: 1100px) { .category-switch { grid-template-columns: 1fr; } }
+  @media (max-width: 1100px) { :global(.category-switch) { grid-template-columns: 1fr; } }
   @media (max-width: 950px) { .buff-page { grid-template-columns: 220px minmax(320px, 1fr); } .summary { grid-column: 1 / -1; } }
 </style>

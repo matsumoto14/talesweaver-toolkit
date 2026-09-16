@@ -13,10 +13,11 @@
   } from "../../../labels";
   import type { SienaPartSlot } from "../../../labels";
   import { app } from "../../../state.svelte";
+  import Chip from "../../../ui/Chip.svelte";
   import Modal from "../../../ui/Modal.svelte";
   import Num from "../../../ui/Num.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
   import TextField from "../../../ui/TextField.svelte";
 
   interface Props {
@@ -223,7 +224,7 @@
             <span class="label">登録名 <span class="dim">同じ部位のオーラを見分ける名前</span></span>
             <TextField label="登録名" bind:value={registration.label} max={40} />
           </label>
-          <button type="button" class="chip quiet siena-delete" onclick={() => removeSelectedSienaRegistration(slot)}>この登録を削除</button>
+          <Chip class="quiet siena-delete" onclick={() => removeSelectedSienaRegistration(slot)}>この登録を削除</Chip>
         </div>
         <div class="card">
           <div class="card-title inline">
@@ -235,13 +236,11 @@
         {#if stage < app.siena.stage_max}
           <div class="ro-add-row">
             {#each sienaValueDefs(slot) as def (def.kind)}
-              <button
-                type="button"
-                class="chip add"
-                class:record-only={!def.is_modeled}
+              <Chip
+                class="add {def.is_modeled ? '' : 'record-only'}"
                 title={def.note}
                 onclick={() => addSienaSlot(slot, def.kind)}
-              >＋ {def.label}</button>
+              >＋ {def.label}</Chip>
             {/each}
           </div>
         {:else}
@@ -280,13 +279,11 @@
           {#if siena.extras.length < capacity}
             <div class="ro-add-row">
               {#each sienaAddableExtras(slot) as def (def.kind)}
-                <button
-                  type="button"
-                  class="chip add"
-                  class:record-only={!def.is_modeled}
+                <Chip
+                  class="add {def.is_modeled ? '' : 'record-only'}"
                   title={def.note}
                   onclick={() => addSienaExtra(slot, def.kind)}
-                >＋ {def.label}</button>
+                >＋ {def.label}</Chip>
               {/each}
             </div>
           {:else}
@@ -316,7 +313,7 @@
                   />
                 {:else}
                   <!-- 飛び飛びの値(中ディレイ 0.5 / 1 / 2%)はステッパーだと無い値を作れてしまう -->
-                  <StepSelect
+                  <Choose
                     label=""
                     options={def.choices.map((c) => ({ value: String(c), label: `${c}${def.unit}` }))}
                     bind:value={() => String(e.value), (v) => (e.value = Number(v))}

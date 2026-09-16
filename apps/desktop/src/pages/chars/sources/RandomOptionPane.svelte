@@ -21,8 +21,9 @@
   import { app, equipmentFocus } from "../../../state.svelte";
   import { slide } from "svelte/transition";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
+  import Chip from "../../../ui/Chip.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
   import type { SourceId } from "../sourceId";
   import { DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
@@ -214,7 +215,7 @@
   {#if part === null}
     <div class="empty-note">
       <span>先にこの部位の装備を登録してください。</span>
-      <button type="button" class="chip" onclick={() => onOpenSource("equipment")}>装備へ ›</button>
+      <Chip onclick={() => onOpenSource("equipment")}>装備へ ›</Chip>
     </div>
   {:else}
   {#each part.random_options as option, index (option.option_id)}
@@ -232,7 +233,7 @@
         <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>外す</button>
         <!-- ランクは言葉なので幅は中身なり。ふだんは Special / S・真 だけ -->
         <span class="ro-rank">
-          <StepSelect
+          <Choose
             label=""
             options={rankOptionsNow(def, option.rank)}
             bind:value={
@@ -241,12 +242,10 @@
             }
           />
           {#if hasLowerRanks(def) && MAIN_RANKS.includes(option.rank)}
-            <button
-              type="button"
-              class="chip quiet"
-              class:on={rankAllOpen}
-              onclick={() => (rankAllOpen = !rankAllOpen)}
-            >{rankAllOpen ? "上位だけ" : "下位も"}</button>
+            <Chip class="quiet"
+ on={rankAllOpen}
+ onToggle={() => (rankAllOpen = !rankAllOpen)}
+            >{rankAllOpen ? "上位だけ" : "下位も"}</Chip>
           {/if}
         </span>
         <StatInput
@@ -339,9 +338,9 @@
                 {#if commonAddable.length > 0}
                   <div class="ro-common">
                     {#each commonAddable as o (o.id)}
-                      <button type="button" class="chip add" onclick={() => addRandomOption(slot, o.id)}>
+                      <Chip class="add" onclick={() => addRandomOption(slot, o.id)}>
                         ＋ {o.name}
-                      </button>
+                      </Chip>
                     {/each}
                   </div>
                 {/if}

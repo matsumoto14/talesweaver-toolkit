@@ -8,7 +8,7 @@
   import { limits } from "../../../limits.svelte";
   import { fmtInt, fmtRate, fmtSigned } from "../../../format";
   import Num from "../../../ui/Num.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import type { SourceId } from "../sourceId";
   import ExternalSourceList, { type ExternalSource } from "./ExternalSourceList.svelte";
@@ -115,7 +115,7 @@
       設計者の研究室
       <span class="lab-note">B グループの研究段階(0 = 未研究)・ 1 段階 {fmtSigned(limits.architect_lab_per_stage, { max: 2 }, "%")}</span>
     </span>
-    <StepSelect
+    <Choose
       label=""
       options={architectLabOptions}
       cols={architectLabOptions.length}

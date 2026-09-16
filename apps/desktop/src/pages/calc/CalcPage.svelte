@@ -37,14 +37,14 @@
     upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Chip from "../../ui/Chip.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Num from "../../ui/Num.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import Picker from "../../ui/Picker.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
-  import StepSelect from "../../ui/StepSelect.svelte";
-  import StepToggle from "../../ui/StepToggle.svelte";
+  import Choose from "../../ui/Choose.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
   import Popover from "../../ui/Popover.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
@@ -1827,7 +1827,7 @@
                         {#if isMultiTarget(def.target)}
                         <!-- クラブエフェクトはステごとに 1 つずつ併用できる。ここでは対象ステの
                              出し入れだけを試せるようにし、値はバフタブ側の設定を引き継ぐ -->
-                        <StepToggle
+                        <Choose
                           label="対象ステ"
                           options={statOptions}
                           max={STAT_KINDS.length}
@@ -1835,7 +1835,7 @@
                           onToggle={(v, next) => toggleBuffStatChip(def, v as StatKind, next)}
                         />
                       {:else if isUserSelectedTarget(def.target)}
-                        <StepSelect
+                        <Choose
                           label="対象ステ"
                           options={statOptions}
                           bind:value={
@@ -1847,7 +1847,7 @@
                       {#if isChoiceValue(def.value)}
                         {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
                         <!-- 値の候補は小さい順に並ぶ(順序あり)ので段(§07「1 つ選ぶ」) -->
-                        <StepSelect
+                        <Choose
                           label="値"
                           {options}
                           full
@@ -1913,16 +1913,11 @@
         <p class="empty dim">コンテンツデータがありません。</p>
       {:else}
         <!-- 攻撃 / 防御(同列タブ) -->
-        <div class="side-tabs" role="tablist">
-          <button
-            type="button" class="side-tab" class:on={side === "attack"}
-            role="tab" aria-selected={side === "attack"} onclick={() => (side = "attack")}
-          >攻撃</button>
-          <button
-            type="button" class="side-tab" class:on={side === "defense"}
-            role="tab" aria-selected={side === "defense"} onclick={() => (side = "defense")}
-          >防御</button>
-        </div>
+        <Choose
+          class="chiprow side-tabs"
+          options={[{ value: "attack", label: "攻撃" }, { value: "defense", label: "防御" }]}
+          bind:value={() => side, (v) => (side = v as "attack" | "defense")}
+        />
       {/if}
       {#if !character || !target}
         <!-- 上のブロックで案内済み -->
@@ -2042,7 +2037,7 @@
 
           {#if skill && skill.combo_variants.length > 0}
             <div class="combo-type-row inset">
-              <StepSelect
+              <Choose
                 label="コンボタイプ"
                 options={COMBO_SKILL_TYPE_OPTIONS}
                 full
@@ -2621,7 +2616,7 @@
             <div class="basics-row">
               <span class="basics-label">節目</span>
               <div class="basics-seg">
-                <StepSelect
+                <Choose
                   label=""
                   options={eternalMilestoneOptions}
                   cols={eternalMilestoneOptions.length}
@@ -2635,7 +2630,7 @@
             <div class="basics-row">
               <span class="basics-label">覚醒段階</span>
               <div class="basics-seg">
-                <StepSelect
+                <Choose
                   label=""
                   options={stageOptionsNow}
                   cols={stageOptionsNow.length}
@@ -2648,10 +2643,9 @@
               <!-- 段そのものは消さない。4 / 5 以外を出す切り替えは段の外に置く(§09 規則 4)。
                    4 未満を選んでいるあいだは全段が出ていて切り替える意味が無いが、**消すと
                    隣の段の幅が動く**ので、置いたまま押せなくする -->
-              <button
-                type="button" class="chip quiet" class:on={stageAllOpen} disabled={stageIsLow}
-                onclick={() => (stageAllOpen = !stageAllOpen)}
-              >{stageAllOpen || stageIsLow ? "4 / 5 だけ" : "それ以外"}</button>
+              <Chip class="quiet" on={stageAllOpen} disabled={stageIsLow}
+ onToggle={() => (stageAllOpen = !stageAllOpen)}
+              >{stageAllOpen || stageIsLow ? "4 / 5 だけ" : "それ以外"}</Chip>
             </div>
           </div>
           <p class="eq-note dim">
@@ -2681,7 +2675,7 @@
             <div class="basics-row">
               <span class="basics-label">Lv</span>
               <div class="basics-seg">
-                <StepSelect
+                <Choose
                   label=""
                   options={sharpnessOptionsNow}
                   cols={sharpnessOptionsNow.length}
@@ -2696,15 +2690,13 @@
               <span class="basics-label"></span>
               <!-- Lv1〜4 を選んでいるあいだは全段が出ていて切り替える意味が無いが、**消すと
                    隣のチップが動く**ので、置いたまま押せなくする(§09 規則 4) -->
-              <button
-                type="button" class="chip quiet" class:on={sharpnessAllOpen} disabled={sharpnessIsLow}
-                onclick={() => (sharpnessAllOpen = !sharpnessAllOpen)}
-              >{sharpnessAllOpen || sharpnessIsLow ? "5 以上" : "1〜4"}</button>
-              <button
-                type="button" class="chip quiet"
-                disabled={sharpnessLevel === 0}
-                onclick={() => editSim((p) => (p.common_skills.sharpness_vision_level = 0))}
-              >未習得</button>
+              <Chip class="quiet" on={sharpnessAllOpen} disabled={sharpnessIsLow}
+ onToggle={() => (sharpnessAllOpen = !sharpnessAllOpen)}
+              >{sharpnessAllOpen || sharpnessIsLow ? "5 以上" : "1〜4"}</Chip>
+              <Chip class="quiet"
+ disabled={sharpnessLevel === 0}
+ onclick={() => editSim((p) => (p.common_skills.sharpness_vision_level = 0))}
+              >未習得</Chip>
             </div>
           </div>
           <p class="eq-note dim">
@@ -2990,7 +2982,7 @@
           {#if combo}
             {#if normalAttackOptions.length > 0}
               <div class="combo-normal">
-                <StepSelect
+                <Choose
                   label="挟む通常攻撃"
                   options={normalAttackOptions}
                   cols={2}
@@ -3196,7 +3188,7 @@
   .flow-line :global(.strong) { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
   .flow-line :global(.good.strong) { color: var(--flow-3); }
   .flow-line :global(.final) { font-size: 15px; font-weight: 700; color: var(--fg); }
-  .lever-note .chip { margin-left: 6px; vertical-align: middle; }
+  .lever-note :global(.chip) { margin-left: 6px; vertical-align: middle; }
   .lever-list {
     margin-top: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px;
   }
@@ -3411,14 +3403,15 @@
   .polish-row :global(.polish-row-amount) { flex-shrink: 0; min-width: 40px; text-align: right; font-size: 10px; font-weight: 700; }
   .polish-row.off :global(.polish-row-amount) { color: var(--fg-muted); text-decoration: line-through; }
 
-  .side-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
-  .side-tab {
+  /* 攻撃 / 防御。粒の並び(`.chips`)の上に、この画面だけの大きさと地を重ねる */
+  :global(.side-tabs) { gap: 6px; margin-bottom: 9px; }
+  :global(.side-tabs > .chip) {
     padding: 6px 18px; border-radius: var(--r-panel);
     background: linear-gradient(180deg, #fff, #E9F1FB); border: 1px solid var(--border-strong);
     font-size: 11.5px; font-weight: 700; color: #2B3C57;
   }
-  .side-tab:hover:not(.on) { border-color: var(--accent); }
-  .side-tab.on {
+  :global(.side-tabs > .chip.on) {
+    border-radius: var(--r-panel);
     background: var(--sel-card); border-color: var(--accent); color: var(--sel-fg);
     box-shadow: inset 0 1px 0 #fff;
   }

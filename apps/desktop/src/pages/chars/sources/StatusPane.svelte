@@ -15,6 +15,7 @@
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
   import { reportError } from "../../../toast.svelte";
+  import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
@@ -22,7 +23,7 @@
   import Num from "../../../ui/Num.svelte";
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
-  import StepSelect from "../../../ui/StepSelect.svelte";
+  import Choose from "../../../ui/Choose.svelte";
   import TextField from "../../../ui/TextField.svelte";
 
   interface Props {
@@ -43,6 +44,8 @@
   /** キャラは登録時に決めるもの。ふだんは畳んでおく */
   let charPickOpen = $state(false);
   let iconSaving = $state(false);
+  /** 画像を選ぶ素の入力。見た目は Chip なので、ここは押されたとき開くだけ */
+  let iconInput = $state<HTMLInputElement | null>(null);
   /** アイコンが変わったことを弾ませて見せるための印。値は見ず参照の不一致だけ使うので、
    *  変更のたびに新しいオブジェクトを積む(`use:pulse` 参照) */
   let iconChangeMark = $state<object | null>(null);
@@ -210,17 +213,20 @@
           <Icon kind="character" id={draft.gameCharacterId} size={40} label={gameCharacterName} source={app.characterIcons[characterId] ?? null} />
         </span>
         <span class="char-name">{gameCharacterName}</span>
-        <label class="chip quiet icon-pick" aria-disabled={iconSaving}>
+        <!-- ファイルを選ぶ口。的は Chip 1 つで、素の file 入力は隠して押したときに開く -->
+        <Chip class="quiet" disabled={iconSaving} onclick={() => iconInput?.click()}>
           {iconSaving ? "画像を処理中…" : app.characterIcons[characterId] ? "画像を変更" : "画像を選ぶ"}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            disabled={iconSaving}
-            onchange={chooseIcon}
-          />
-        </label>
+        </Chip>
+        <input
+          bind:this={iconInput}
+          class="icon-pick-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={iconSaving}
+          onchange={chooseIcon}
+        />
         {#if app.characterIcons[characterId]}
-          <button type="button" class="chip quiet" disabled={iconSaving} onclick={resetIcon}>標準に戻す</button>
+          <Chip class="quiet" disabled={iconSaving} onclick={resetIcon}>標準に戻す</Chip>
         {/if}
         <Disclosure class="char-pick" summaryClass="chip quiet" bind:open={charPickOpen}>
           {#snippet summary(open)}{open ? "閉じる" : "変更"}{/snippet}
@@ -255,7 +261,7 @@
             (v) => setEternalLevel(String(v))
           }
         />
-        <StepSelect
+        <Choose
           label=""
           options={eternalMilestoneOptions}
           cols={eternalMilestoneOptions.length}
@@ -268,16 +274,16 @@
     <div class="stage-field wide">
       <span class="label">覚醒段階</span>
       <div class="stage-row">
-        <StepSelect
+        <Choose
           label=""
           options={stageAllOpen || stageIsLow ? stageOptions : stageMainOptions}
           cols={stageAllOpen || stageIsLow ? stageOptions.length : stageMainOptions.length}
           bind:value={draft.stage}
         />
         {#if !stageIsLow}
-          <button type="button" class="chip quiet" class:on={stageAllOpen} onclick={() => (stageAllOpen = !stageAllOpen)}>
+          <Chip class="quiet" on={stageAllOpen} onToggle={() => (stageAllOpen = !stageAllOpen)}>
             {stageAllOpen ? "4 / 5 だけ" : "それ以外"}
-          </button>
+          </Chip>
         {/if}
       </div>
     </div>
@@ -305,13 +311,13 @@
               ? `— 主軸スキル「${mainSkill?.name}」で決まります`
               : "— アンプルなどで乗せる属性"}
           </span>
-          <button type="button" class="chip quiet" onclick={() => (elementPickOpen = true)}>変更</button>
+          <Chip class="quiet" onclick={() => (elementPickOpen = true)}>変更</Chip>
         </p>
       {:else}
         {#if skillElement === "neutral"}
           <p class="hint dim">主軸スキルが無属性なので、アンプルなどで乗せる属性を選びます。</p>
         {/if}
-        <StepSelect
+        <Choose
           label=""
           options={elementOptions}
           cols={elementOptions.length}
@@ -347,12 +353,10 @@
 </div>
 
 <style>
-  .icon-pick { position: relative; cursor: pointer; }
-  .icon-pick[aria-disabled="true"] { opacity: .58; cursor: wait; }
-  /* 見た目としては消すが、サイズはアイコン段の外(1px)で固定しない — label 全体を覆って
-     clip-path で視覚的にだけ隠す(クリックはラベルのテキスト側が受ける想定なので
-     pointer-events は無効のまま) */
-  .icon-pick input { position: absolute; inset: 0; clip-path: inset(100%); pointer-events: none; }
+
+  /* 素の file 入力は見た目だけ消す。`display: none` にするとブラウザによっては
+     `.click()` が効かないので、1px にして clip-path で隠す */
+  .icon-pick-input { position: absolute; opacity: 0; pointer-events: none; }
   /* アイコン変更は §10 型 5「状態が変わった」そのものなので、独自の keyframes は持たず
      app.css 共通の .badge-in(弾む)に乗る。動きを消す設定のときだけ、弾みの代わりに
      枠線で「変わった」を残す(色・弾みが両方消えると何も伝わらなくなる) */
