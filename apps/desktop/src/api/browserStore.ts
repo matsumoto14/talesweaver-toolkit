@@ -24,8 +24,10 @@ const DB_NAME = "tw-context";
  * (無いと `cloneEquipment` が undefined を読んでキャラタブが開けない。2026-09-15)。
  * v4 で装備に `owned_titles`(所持称号一覧)が加わった(SQLite 側の v14 と同じ移行)。
  * 既存行は `title`(表示中)があれば `[title]`、無ければ `[]` を補う。
+ * v5 でレリックの聖域 20段の content id が `relic_sanctuary_kisinik` から `relic_sanctuary_20`
+ * に変わった(SQLite 側の v15 と同じ移行)。保存済みの「次の目標」を書き換える。
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -118,6 +120,21 @@ function open(): Promise<IDBDatabase> {
           if (!cursor) return;
           const row = cursor.value as Partial<RegisteredCharacter>;
           if (row.goal_content_id === undefined) cursor.update({ ...row, goal_content_id: null });
+          cursor.continue();
+        };
+      }
+      // v5: レリックの聖域 20段の content id を直す。旧 id のままだと「次の目標」が解決できない
+      // (SQLite 側の migrate_goal_relic_20 と同じ扱いに揃える)。
+      if (event.oldVersion > 0 && event.oldVersion < 5) {
+        const characters = request.transaction!.objectStore(CHARACTERS);
+        const cursorRequest = characters.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const row = cursor.value as RegisteredCharacter;
+          if (row.goal_content_id === "relic_sanctuary_kisinik") {
+            cursor.update({ ...row, goal_content_id: "relic_sanctuary_20" });
+          }
           cursor.continue();
         };
       }

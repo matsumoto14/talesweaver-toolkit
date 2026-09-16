@@ -96,7 +96,7 @@ pub fn game_region_of(content_id: &str) -> Option<GameRegion> {
 /// 段数違いの系列(一覧では 1 行 + 難易度ステッパーに畳む)。
 ///
 /// id の接頭辞 + 末尾の数値で機械的に決める。系列を手で並べた表にすると、段を足したときに
-/// 2 箇所直すことになる。現在の系列は「レリックの聖域 10段〜19段」のみ。
+/// 2 箇所直すことになる。現在の系列は「レリックの聖域 10段〜20段」のみ。
 const SERIES: &[(&str, &str)] = &[("relic_sanctuary_", "レリックの聖域")];
 
 fn series_of(id: &str) -> Option<ContentSeries> {
@@ -345,7 +345,7 @@ const AREAS: &[(&str, &str, &[Def])] = &[
     ]),
     // ================= 古代レリックの聖域 =================
     // 1 コンテンツ 20 段(wiki「ミニゲーム/古代レリックの聖域」難易度表: 1〜10 段のボスが神鳥、
-    // 11〜20 段がキシニク)。10〜19 段は系列として 1 行に畳む
+    // 11〜20 段がキシニク)。10〜20 段は系列として 1 行 + 難易度ステッパーに畳む
     ("ancient_relic_sanctuary", "古代レリックの聖域", &[
         Def { id: "relic_sanctuary_shinchou", name: "古代レリックの聖域(神鳥)", enemy_id: None,
               requirements: &[stage(3), equip(1_250, 1_450, 2_000)],
@@ -370,7 +370,7 @@ const AREAS: &[(&str, &str, &[Def])] = &[
               requirements: &[], entry_note: None, team_note: None },
         Def { id: "relic_sanctuary_19", name: "レリックの聖域 19段", enemy_id: Some("relic_sanctuary_19"),
               requirements: &[], entry_note: None, team_note: None },
-        Def { id: "relic_sanctuary_kisinik", name: "古代レリックの聖域(キシニク)", enemy_id: Some("relic_sanctuary_20"),
+        Def { id: "relic_sanctuary_20", name: "レリックの聖域 20段", enemy_id: Some("relic_sanctuary_20"),
               requirements: &[STAGE5, eternal(10), equip(1_700, 1_900, 2_900)],
               entry_note: UPPER_NOTE, team_note: None },
     ]),
@@ -409,9 +409,9 @@ mod tests {
             .collect()
     }
 
-    /// 系列は id の接頭辞 + 末尾の数値で決まる。数値でない末尾(神鳥・キシニク)は系列に入れない。
+    /// 系列は id の接頭辞 + 末尾の数値で決まる。数値でない末尾(神鳥)は系列に入れない。
     #[test]
-    fn レリックの聖域は10段から19段の系列になる() {
+    fn レリックの聖域は10段から20段の系列になる() {
         let series: Vec<_> = all_contents()
             .into_iter()
             .filter_map(|c| c.series.map(|s| (s.id, s.step)))
@@ -419,12 +419,12 @@ mod tests {
         assert!(series.iter().all(|(id, _)| id == "relic_sanctuary"));
         let mut steps: Vec<u32> = series.iter().map(|(_, step)| *step).collect();
         steps.sort_unstable();
-        assert_eq!(steps, (10..=19).collect::<Vec<_>>());
+        assert_eq!(steps, (10..=20).collect::<Vec<_>>());
 
         // 末尾が数値でないものは系列に入らない(1 行に畳むと別コンテンツが混ざる)
         let standalone = all_contents()
             .into_iter()
-            .find(|c| c.id == "relic_sanctuary_kisinik")
+            .find(|c| c.id == "relic_sanctuary_shinchou")
             .unwrap();
         assert_eq!(standalone.series, None);
     }
@@ -475,7 +475,7 @@ mod tests {
                 "relic_sanctuary_10", "relic_sanctuary_11", "relic_sanctuary_12",
                 "relic_sanctuary_13", "relic_sanctuary_14", "relic_sanctuary_15",
                 "relic_sanctuary_16", "relic_sanctuary_17", "relic_sanctuary_18",
-                "relic_sanctuary_19", "relic_sanctuary_kisinik",
+                "relic_sanctuary_19", "relic_sanctuary_20",
             ]),
             // 左メニューに出ない参加型レイドだけが残る(所属確定分は各エリアへ移した)。
             ("other", &["tutatur", "chimera"]),
@@ -707,9 +707,10 @@ mod tests {
     /// 同梱しているコンテンツ画像。ファイル名は content id と一致し、UI は id から機械的に
     /// 解決する(規格シート 06)。取り込み元がゲーム画面のスクリーンショットで、行と
     /// コンテンツの対応を人が確かめている以上、枚数と宛先は勝手に増減してはいけない。
-    /// 再取込は `tools/gamedata/import_content_images.py`。
+    /// 再取込は `tools/gamedata/import_content_images.py`(ゲーム内一覧のメダル 19 件)と
+    /// `tools/gamedata/import_manual_icons.py`(一覧に出ない面の手当て 16 件)。
     #[test]
-    fn コンテンツ画像は19件で全て既知のコンテンツに対応する() {
+    fn コンテンツ画像は35件で全て既知のコンテンツに対応する() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../apps/desktop/src/assets/icons/contents");
         let mut ids: Vec<String> = std::fs::read_dir(&dir)
@@ -725,7 +726,7 @@ mod tests {
             })
             .collect();
         ids.sort();
-        assert_eq!(ids.len(), 19, "同梱枚数が変わった: {ids:?}");
+        assert_eq!(ids.len(), 35, "同梱枚数が変わった: {ids:?}");
 
         let known: Vec<String> = all_contents().into_iter().map(|c| c.id).collect();
         let orphans: Vec<&String> = ids.iter().filter(|id| !known.contains(id)).collect();

@@ -215,10 +215,22 @@
       value: "",
       name: `自動: ${autoGoal ? (autoGoal.content.series?.name ?? autoGoal.content.name) : "目標なし"}`,
       meta: autoGoal ? autoGoal.areaName : "到達できる先がない",
+      // 自動の行も**行き先の絵**を出す。候補面が一覧と同じ見え方になり、どこを指しているか
+      // 名前を読まずに分かる(一覧の行と同じ `content` → `mob` の解決)
+      iconKind: "content" as const,
+      iconId: autoGoal?.content.id ?? null,
+      iconFallback: { kind: "mob" as const, id: autoGoal?.content.enemy_id ?? null },
     },
     ...rows
       .filter((r) => r.content.enemy_id !== null)
-      .map((r) => ({ value: r.content.id, name: r.content.name, meta: r.areaName })),
+      .map((r) => ({
+        value: r.content.id,
+        name: r.content.name,
+        meta: r.areaName,
+        iconKind: "content" as const,
+        iconId: r.content.id,
+        iconFallback: { kind: "mob" as const, id: r.content.enemy_id },
+      })),
   ]);
   /**
    * 「次の目標」を保存する。null = 自動に戻す。保存経路は「今日の強化」と同じ直更新
@@ -1093,6 +1105,7 @@
         <div class="today-grid">
           <button type="button" class="today-tile" class:open={openTile === "sacredRelic"} onclick={() => toggleTile("sacredRelic")}>
             <div class="today-tile-head">
+              <Icon kind="source" id="relic" size={20} label="神鳥の聖物" />
               <span class="today-tile-name">神鳥の聖物</span>
               {#if !sacredRelicSet}
                 <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
@@ -1106,6 +1119,7 @@
           </button>
           <button type="button" class="today-tile" class:open={openTile === "cuffs"} onclick={() => toggleTile("cuffs")}>
             <div class="today-tile-head">
+              <Icon kind="equipment" id="rising-holic-cuffs" size={20} label="カフス" />
               <span class="today-tile-name">カフス</span>
               {#if !cuffsSummary}
                 <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? "未設定", state: "edge" })}>{cuffsUnsetLabel ?? "未設定"}</span>
@@ -1119,6 +1133,7 @@
           </button>
           <button type="button" class="today-tile" class:open={openTile === "enchant"} onclick={() => toggleTile("enchant")}>
             <div class="today-tile-head">
+              <Icon kind="source" id="enchant" size={20} label="エンチャント" />
               <span class="today-tile-name">エンチャント</span>
               {#if !enchantSummary}
                 <span class="badge" style={badgeStyle({ label: "対象なし", state: "edge" })}>対象なし</span>
@@ -1134,6 +1149,7 @@
           </button>
           <button type="button" class="today-tile" class:open={openTile === "equipRelic"} onclick={() => toggleTile("equipRelic")}>
             <div class="today-tile-head">
+              <Icon kind="equipment" id="godbird-pendant-plus1" size={20} label="レリック" />
               <span class="today-tile-name">レリック</span>
               {#if relicEquippedSides.length === 0}
                 <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
@@ -1152,6 +1168,7 @@
             title="キャラタブへ移動して編集します"
           >
             <div class="today-tile-head">
+              <Icon kind="source" id="siena" size={20} label="シエナのオーラ" />
               <span class="today-tile-name">シエナのオーラ</span>
               {#if !sienaSummary}
                 <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>

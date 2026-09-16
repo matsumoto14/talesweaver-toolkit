@@ -57,6 +57,18 @@ IndexedDB の版も上げ、`onupgradeneeded` で既存行に中立値を足す�
 `migrate_owned_titles` で同じ埋め直しを行う。IndexedDB(`browserStore.ts`)も `SCHEMA_VERSION` を 3 → 4 にし、
 `onupgradeneeded` と `withEquipmentDefaults` に同じ規則を足した。
 
+### v15: レリックの聖域 20段の content id を系列名に揃える(2026-09-16)
+
+一覧の系列畳み込み(`contents.rs` の `SERIES`)は「接頭辞 + 末尾の数値」で決めるので、20段だけ
+id が `relic_sanctuary_kisinik` だったために 10〜19段の系列に入らず別行で出ていた。id を
+`relic_sanctuary_20`(表示名「レリックの聖域 20段」)に直して系列を 10〜20段にした。
+
+`goal_content_id`(ホームの「次の目標」)は content id をそのまま保存しているため、旧 id のままだと
+目標が解決できなくなる。`migrate_goal_relic_20` が該当行だけを書き換える(他の値には触らないので
+何度走らせても同じ)。SQLite は `SCHEMA_VERSION` 14 → 15、IndexedDB(`browserStore.ts`)も 4 → 5 で
+同じ書き換えを `onupgradeneeded` に入れた。書き出し JSON は形が変わらないので `FORMAT_VERSION` は
+据え置き(旧い書き出しを読み込むと 20段の目標だけ未解決になるが、選び直せば済む)。
+
 ### v1 → v8 の変遷
 
 1. **v1**: `characters` 1 テーブル(id, name, game_character_id, 7 ステ, awakening_stage, eta_level)。

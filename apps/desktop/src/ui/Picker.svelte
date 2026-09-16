@@ -20,6 +20,8 @@
     /** アイコンの id(gamedata の id)。無ければアイコンを出さない */
     iconId?: string | null;
     iconKind?: IconKind;
+    /** 本来の系統で解決できないときの代わり(コンテンツの絵が無いときの敵など) */
+    iconFallback?: IconFallback | null;
     /** 手前にチップで固定する(よく使う候補)。件数が CHIPS_ONLY_MAX 以下なら全部チップになる */
     pinned?: boolean;
     /** 段に足すクラス(`record-only` など) */
@@ -30,7 +32,7 @@
 </script>
 
 <script lang="ts">
-  import Icon, { type IconKind } from "./Icon.svelte";
+  import Icon, { type IconFallback, type IconKind } from "./Icon.svelte";
   import { positionPopover } from "./popover";
 
   interface Props {
@@ -78,7 +80,7 @@
         onclick={() => (value = o.value)}
       >
         {#if o.iconId !== undefined}
-          <Icon kind={o.iconKind ?? "skill"} id={o.iconId} size={20} label={o.name} />
+          <Icon kind={o.iconKind ?? "skill"} id={o.iconId} fallback={o.iconFallback ?? null} size={20} label={o.name} />
         {/if}
         <span class="picker-chip-name">{o.name}</span>
         <span class="picker-chip-meta num">{o.meta}</span>
@@ -96,7 +98,7 @@
       >
         {#if pickedInRest && picked}
           {#if picked.iconId !== undefined}
-            <Icon kind={picked.iconKind ?? "skill"} id={picked.iconId} size={20} label={picked.name} />
+            <Icon kind={picked.iconKind ?? "skill"} id={picked.iconId} fallback={picked.iconFallback ?? null} size={20} label={picked.name} />
           {/if}
           <span class="picker-name">{picked.name}</span>
           <span class="picker-meta num">{picked.meta}</span>
@@ -120,7 +122,7 @@
           onclick={() => { value = o.value; open = false; }}
         >
           {#if o.iconId !== undefined}
-            <Icon kind={o.iconKind ?? "skill"} id={o.iconId} size={20} label={o.name} />
+            <Icon kind={o.iconKind ?? "skill"} id={o.iconId} fallback={o.iconFallback ?? null} size={20} label={o.name} />
           {/if}
           <span class="picker-name">{o.name}</span>
           <span class="picker-meta num">{o.meta}</span>

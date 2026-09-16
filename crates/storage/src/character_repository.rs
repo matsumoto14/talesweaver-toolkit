@@ -75,7 +75,9 @@ CREATE TABLE IF NOT EXISTS characters (
 /// v13 で `goal_content_id`(ホームの「次の目標」をユーザーが選んだときの保存先)が加わった。
 /// v14 で `equipment.owned_titles`(所持称号一覧)が加わった。既存行は `title`(表示中)が
 /// あれば `[title]`、無ければ `[]` を補う(2026-09-15)。
-const SCHEMA_VERSION: i64 = 14;
+/// v15 でレリックの聖域 20段の content id が `relic_sanctuary_kisinik` から `relic_sanctuary_20`
+/// に変わった(10〜19段と同じ系列に畳むため)。保存済みの「次の目標」を書き換える(2026-09-16)。
+const SCHEMA_VERSION: i64 = 15;
 
 const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, goal_content_id, default_buff_set_id, updated_at";
 
@@ -306,6 +308,19 @@ fn migrate_relic_to_pendant(conn: &Connection) -> Result<()> {
             params![migrated, id],
         )?;
     }
+    Ok(())
+}
+
+/// v15: レリックの聖域 20段の content id を `relic_sanctuary_kisinik` → `relic_sanctuary_20` に直す。
+///
+/// 20段だけ id の末尾が数値でなく、一覧の系列(10〜19段)に畳まれずに別行で出ていた。
+/// `goal_content_id` は gamedata の content id をそのまま保存しているので、旧 id のままだと
+/// 「次の目標」が解決できなくなる。該当する行だけを書き換えるので何度走らせても同じ。
+fn migrate_goal_relic_20(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "UPDATE characters SET goal_content_id = 'relic_sanctuary_20'          WHERE goal_content_id = 'relic_sanctuary_kisinik'",
+        [],
+    )?;
     Ok(())
 }
 
@@ -823,6 +838,7 @@ impl CharacterRepository {
         migrate_weapon_skills_to_common(&conn)?;
         migrate_removed_buffs(&conn)?;
         migrate_character_skills(&conn)?;
+        migrate_goal_relic_20(&conn)?;
         // v9 は旧バフに混在していたキャラスキルを分離した後の choices を抽出する。
         migrate_buff_sets(&conn)?;
         migrate_unleash_from_buff_sets(&conn)?;
@@ -1901,6 +1917,43 @@ mod tests {
             .update(created.id, &cleared, &[], &[], &[], &[], &[], &[])
             .unwrap();
         assert_eq!(updated.main_skill_id, None);
+    }
+
+    /// v15: 20段の content id を系列に入る名前へ直す。旧 id を保存していたキャラの
+    /// 「次の目標」が消えないこと、他の値には触らないこと、2 回開いても同じこと。
+    #[test]
+    fn v15で旧レリック20段の目標idが書き換わる() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut old = new_character("旧目標");
+        old.goal_content_id = Some("relic_sanctuary_kisinik".to_string());
+        let old = repo.create(&old, &[], &[], &[], &[], &[], &[]).unwrap();
+        let mut other = new_character("別目標");
+        other.goal_content_id = Some("relic_sanctuary_15".to_string());
+        let other = repo.create(&other, &[], &[], &[], &[], &[], &[]).unwrap();
+        // create 済みの行を旧 id へ戻してから、起動時と同じ移行を走らせる
+        repo.conn
+            .execute(
+                "UPDATE characters SET goal_content_id = 'relic_sanctuary_kisinik' WHERE id = ?1",
+                params![old.id],
+            )
+            .unwrap();
+
+        migrate_goal_relic_20(&repo.conn).unwrap();
+        assert_eq!(
+            repo.get(old.id).unwrap().goal_content_id.as_deref(),
+            Some("relic_sanctuary_20")
+        );
+        assert_eq!(
+            repo.get(other.id).unwrap().goal_content_id.as_deref(),
+            Some("relic_sanctuary_15")
+        );
+
+        // 冪等: 2 回目は何も変わらない
+        migrate_goal_relic_20(&repo.conn).unwrap();
+        assert_eq!(
+            repo.get(old.id).unwrap().goal_content_id.as_deref(),
+            Some("relic_sanctuary_20")
+        );
     }
 
     #[test]

@@ -61,18 +61,18 @@ const ENEMIES: &[EnemyRecord] = &[
     EnemyRecord { id: "ringo_boss", name: "リンゴボス", defense: 8700, damage_reduction: 0, cut_rate_a: 0.52, element_threshold: 120, agi: None, critical_taken_rate: None, hp: Some(700_000_000), client_image: Some("monster_2104333") },
     // ---- アークロン要塞 / アビス ----
     // 旧リポ。wiki 狩り場情報一覧に対応行なし(スフォルツェンド -91% とは別個体)
-    EnemyRecord { id: "arklon_underground", name: "アークロン地下要塞", defense: 4350, damage_reduction: 0, cut_rate_a: 0.18, element_threshold: 120, agi: None, critical_taken_rate: None, hp: Some(300_000_000), client_image: Some("monster_2104368") },
+    EnemyRecord { id: "arklon_underground", name: "アークロン地下要塞", defense: 4350, damage_reduction: 0, cut_rate_a: 0.18, element_threshold: 120, agi: None, critical_taken_rate: None, hp: Some(300_000_000), client_image: Some("monster_2104367") },
     // wiki 裏取り済み: 防1500+8100=9600(ソロ)、カット率 -75% → 0.25、属性 120
-    EnemyRecord { id: "abyss_hell", name: "アビスヘル", defense: 9600, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120, agi: Some(1270), critical_taken_rate: None, hp: Some(2_170_000_000), client_image: Some("monster_2107409") },
+    EnemyRecord { id: "abyss_hell", name: "アビスヘル", defense: 9600, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120, agi: Some(1270), critical_taken_rate: None, hp: Some(2_170_000_000), client_image: Some("monster_2107405") },
     // wiki 裏取り済み: 防1500+8700=10200、カット率 -75% → 0.25
-    EnemyRecord { id: "abyss_core_master", name: "アビスコアマスター", defense: 10200, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120, agi: Some(1290), critical_taken_rate: None, hp: Some(2_300_000_000), client_image: Some("monster_2107409") },
+    EnemyRecord { id: "abyss_core_master", name: "アビスコアマスター", defense: 10200, damage_reduction: 0, cut_rate_a: 0.25, element_threshold: 120, agi: Some(1290), critical_taken_rate: None, hp: Some(2_300_000_000), client_image: Some("monster_2107404") },
     // ---- レイドボス ----
     // 旧リポ。wiki 狩り場情報一覧に対応行なし。属性閾値 90 は旧リポ知見(threshold=90 はトゥタトゥールのみ)
-    EnemyRecord { id: "tutatur", name: "トゥタトゥール", defense: 990, damage_reduction: 0, cut_rate_a: 1.0, element_threshold: 90, agi: None, critical_taken_rate: None, hp: Some(380_000_000), client_image: Some("monster_2107482") },
+    EnemyRecord { id: "tutatur", name: "トゥタトゥール", defense: 990, damage_reduction: 0, cut_rate_a: 1.0, element_threshold: 90, agi: None, critical_taken_rate: None, hp: Some(380_000_000), client_image: Some("monster_2100003") },
     // 旧リポ。wiki 狩り場情報一覧に対応行なし
     EnemyRecord { id: "clamor", name: "クラモール", defense: 16500, damage_reduction: 0, cut_rate_a: 0.18, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(1_520_000_000), client_image: Some("monster_2108282") },
     // 旧リポ。武器ダメージ無効(weaponTerm=0)の特殊挙動は未モデル `[仮]`
-    EnemyRecord { id: "chimera", name: "キマイラ", defense: 57900, damage_reduction: 0, cut_rate_a: 0.4225, element_threshold: 120, agi: None, critical_taken_rate: None, hp: Some(300_000_000_000), client_image: Some("monster_2102938") },
+    EnemyRecord { id: "chimera", name: "キマイラ", defense: 57900, damage_reduction: 0, cut_rate_a: 0.4225, element_threshold: 120, agi: None, critical_taken_rate: None, hp: Some(300_000_000_000), client_image: Some("monster_2107410") },
     // ---- シオカンヘイム ----
     // wiki 裏取り済み: 防1050+6000=7050、カット率 -59.5% → 0.405、属性 120、被害減少 有
     EnemyRecord { id: "brothers_forge", name: "兄弟の鍛冶場", defense: 7050, damage_reduction: -5850, cut_rate_a: 0.405, element_threshold: 120, agi: Some(1552), critical_taken_rate: None, hp: Some(24_500_000), client_image: Some("monster_2103441") },
@@ -94,34 +94,34 @@ const ENEMIES: &[EnemyRecord] = &[
     EnemyRecord { id: "valley_soldier", name: "異界の峡谷 兵士", defense: 73500, damage_reduction: 0, cut_rate_a: 0.42, element_threshold: 125, agi: Some(2150), critical_taken_rate: None, hp: Some(300_000_000), client_image: Some("monster_2107831") },
     EnemyRecord { id: "valley_captain", name: "異界の峡谷 部隊長", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2200), critical_taken_rate: Some(-550.0), hp: Some(7_200_000_000), client_image: Some("monster_2108495") },
     // 実測表 備考: 決戦1=ロカゴス・チェリア / 決戦2=ティロロス・ゴイティア / 決戦3=召喚の石像
-    EnemyRecord { id: "last_battle_1", name: "最後の決戦1", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(5_200_000_000), client_image: Some("monster_2107839") },
+    EnemyRecord { id: "last_battle_1", name: "最後の決戦1", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(5_200_000_000), client_image: Some("monster_2107818") },
     // 実測表のカット率 70% を採用(旧リポは 0.315。3 ソース中唯一の差分)
-    EnemyRecord { id: "last_battle_2", name: "最後の決戦2", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.30, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(7_800_000_000), client_image: Some("monster_2107842") },
-    EnemyRecord { id: "last_battle_3", name: "最後の決戦3", defense: 106500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2200), critical_taken_rate: Some(-550.0), hp: Some(6_000_000_000), client_image: Some("monster_2107974") },
+    EnemyRecord { id: "last_battle_2", name: "最後の決戦2", defense: 82500, damage_reduction: -4550, cut_rate_a: 0.30, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(7_800_000_000), client_image: Some("monster_2107819") },
+    EnemyRecord { id: "last_battle_3", name: "最後の決戦3", defense: 106500, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2200), critical_taken_rate: Some(-550.0), hp: Some(6_000_000_000), client_image: Some("monster_2107842") },
     // ---- アフェティリア ----
     // 旧リポ。wiki「アフェティリアNボス」のカット率 -51%(ソロ) → 0.49 と一致
     EnemyRecord { id: "aphetiria_n", name: "アフェティリア(N)", defense: 43200, damage_reduction: -4550, cut_rate_a: 0.49, element_threshold: 125, agi: Some(1850), critical_taken_rate: Some(-450.0), hp: Some(5_100_000_000), client_image: Some("monster_2107825") },
     // wiki カット率一致: セリニアコス(H) -65% → 0.35 / ゴイティア(H) -68.5% → 0.315 / キシニク(H) -72% → 0.28
     EnemyRecord { id: "selinacos_h", name: "セリニアコス(H)", defense: 61200, damage_reduction: -4550, cut_rate_a: 0.35, element_threshold: 125, agi: Some(2040), critical_taken_rate: Some(-475.0), hp: Some(15_300_000_000), client_image: Some("monster_2107823") },
     EnemyRecord { id: "goitia_h", name: "ゴイティア(H)", defense: 62700, damage_reduction: -4550, cut_rate_a: 0.315, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(20_400_000_000), client_image: Some("monster_2107819") },
-    EnemyRecord { id: "kisinik_h", name: "キシニク(H)", defense: 65700, damage_reduction: -4550, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2100), critical_taken_rate: Some(-535.0), hp: Some(25_500_000_000), client_image: Some("monster_2107822") },
+    EnemyRecord { id: "kisinik_h", name: "キシニク(H)", defense: 65700, damage_reduction: -4550, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2100), critical_taken_rate: Some(-535.0), hp: Some(25_500_000_000), client_image: None },
     // 旧リポ(EX)。wiki 狩り場情報一覧はアフェティリア EX の防御値未記載
     EnemyRecord { id: "selinacos_ex", name: "セリニアコス(EX)", defense: 118200, damage_reduction: -5850, cut_rate_a: 0.35, element_threshold: 125, agi: Some(2200), critical_taken_rate: None, hp: Some(4_080_000_000), client_image: Some("monster_2107823") },
     EnemyRecord { id: "goitia_ex", name: "ゴイティア(EX)", defense: 118200, damage_reduction: -5850, cut_rate_a: 0.315, element_threshold: 125, agi: Some(2200), critical_taken_rate: None, hp: Some(4_080_000_000), client_image: Some("monster_2107819") },
-    EnemyRecord { id: "kisinik_ex", name: "キシニク(EX)", defense: 119550, damage_reduction: -5850, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2200), critical_taken_rate: None, hp: Some(4_080_000_000), client_image: Some("monster_2107822") },
+    EnemyRecord { id: "kisinik_ex", name: "キシニク(EX)", defense: 119550, damage_reduction: -5850, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2200), critical_taken_rate: None, hp: Some(4_080_000_000), client_image: None },
     // ---- 古代レリックの聖域 ----
     // 実測表(防 = 1500+固定防御。4 つのミニゲームクリア時のステータス)。20 段は旧リポとも一致
-    EnemyRecord { id: "relic_sanctuary_10", name: "レリックの聖域10", defense: 38640, damage_reduction: 0, cut_rate_a: 0.49, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(3_600_000_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_11", name: "レリックの聖域11", defense: 59700, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(10_000_000_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_12", name: "レリックの聖域12", defense: 62280, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(11_000_000_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_13", name: "レリックの聖域13", defense: 64110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(13_310_000_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_14", name: "レリックの聖域14", defense: 77790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(13_310_000_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_15", name: "レリックの聖域15", defense: 78450, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(14_641_000_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_16", name: "レリックの聖域16", defense: 79110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(16_105_100_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_17", name: "レリックの聖域17", defense: 101790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(11_273_570_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_18", name: "レリックの聖域18", defense: 103620, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(10_146_213_000), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_19", name: "レリックの聖域19", defense: 105540, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(9_131_591_700), client_image: Some("monster_2105545") },
-    EnemyRecord { id: "relic_sanctuary_20", name: "レリックの聖域20", defense: 108360, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2350), critical_taken_rate: Some(-550.0), hp: Some(8_128_432_520), client_image: Some("monster_2107822") },
+    EnemyRecord { id: "relic_sanctuary_10", name: "レリックの聖域10", defense: 38640, damage_reduction: 0, cut_rate_a: 0.49, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(3_600_000_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_11", name: "レリックの聖域11", defense: 59700, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(10_000_000_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_12", name: "レリックの聖域12", defense: 62280, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(11_000_000_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_13", name: "レリックの聖域13", defense: 64110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(13_310_000_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_14", name: "レリックの聖域14", defense: 77790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(13_310_000_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_15", name: "レリックの聖域15", defense: 78450, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(14_641_000_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_16", name: "レリックの聖域16", defense: 79110, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(16_105_100_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_17", name: "レリックの聖域17", defense: 101790, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(11_273_570_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_18", name: "レリックの聖域18", defense: 103620, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(10_146_213_000), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_19", name: "レリックの聖域19", defense: 105540, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: None, critical_taken_rate: None, hp: Some(9_131_591_700), client_image: None },
+    EnemyRecord { id: "relic_sanctuary_20", name: "レリックの聖域20", defense: 108360, damage_reduction: 0, cut_rate_a: 0.28, element_threshold: 125, agi: Some(2350), critical_taken_rate: Some(-550.0), hp: Some(8_128_432_520), client_image: None },
     // ---- ゆがんだ村 ----
     // 実測表「一部修正」版: N = 防1950+105000=106950・固定減少 3250・カット率 67.5%
     //                      H = 防1950+130200(レイティア)/130800(設計者)・固定減少 2925・カット率 70.75%
