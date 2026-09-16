@@ -7,7 +7,8 @@
   import { CORE_POWER_TYPES, CORE_REGIONS, CORE_REGION_LABELS, CORE_SLOT_COUNT, CORE_SUPPORT_TYPES, CORE_TYPE_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
-  import { bump, disclosurePane, flash } from "../../../ui/motion.svelte";
+  import Disclosure from "../../../ui/Disclosure.svelte";
+  import { bump, flash } from "../../../ui/motion.svelte";
   import { badgeStyle } from "../../../ui/states";
   import StepSelect from "../../../ui/StepSelect.svelte";
 
@@ -173,8 +174,8 @@
   </div>
   <div class="tab-rule"></div>
   <!-- 説明は毎回読むものではない。畳んで、入力の場所を押し下げないようにする(§00 02) -->
-  <details class="fold">
-    <summary>この画面の読み方(wiki テシスコア)</summary>
+  <Disclosure class="fold">
+    {#snippet summary()}この画面の読み方(wiki テシスコア){/snippet}
     <div class="fold-body">
       <p class="hint dim">
         コアの能力値増加は対象ダンジョン内でのみ有効なので、計算対象のコンテンツに
@@ -194,7 +195,8 @@
         コアセット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
       </p>
     </div>
-  </details>
+
+  </Disclosure>
 </div>
 {#key coreRegion}
 <div class="card swap-in">
@@ -236,8 +238,10 @@
             bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
           />
           {#if coreShowSupport || coreSupportInUse}
-            <!-- 段が増えるのは「開いた」なので下に伸ばす(§10 型 6)。面は disclosurePane -->
-            <div use:disclosurePane={() => coreShowSupport || coreSupportInUse}>
+            <!-- ここはトリガ 1 つが 6 行ぶんの段を同時に出す場所なので <details>(ui/Disclosure)には
+                 載らない — <details> は 1 トリガ 1 面。段が増えるのは「開いた」なので下に伸ばす
+                 (§10 型 6 の .open-in)。閉じるときは {#if} で即座に消える(従来どおり) -->
+            <div class="open-in">
               <StepSelect
                 label=""
                 options={coreSupportOptions}

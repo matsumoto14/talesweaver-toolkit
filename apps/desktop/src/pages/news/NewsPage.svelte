@@ -8,6 +8,7 @@
   import { BUNDLED_NEWS, CHANGE_LABELS, fetchNews, type News } from "../../news";
   import { reportError } from "../../toast.svelte";
   import { checkForUpdate, installUpdate, restartApp, updater } from "../../update.svelte";
+  import Disclosure from "../../ui/Disclosure.svelte";
   import { bump } from "../../ui/motion.svelte";
 
   let news = $state<News>(BUNDLED_NEWS);
@@ -84,19 +85,20 @@
         <p class="up-to-date dim">いまの版が最新です。</p>
       {/if}
       {#each news.releases as note, index (note.version)}
-        <details class="fold rn-fold" open={index === 0}>
-          <summary>
+        <Disclosure class="fold rn-fold" open={index === 0}>
+          {#snippet summary()}
             <span class="rn-version meta-pill">v{note.version}</span>
             <span class="rn-date num">{fmtMonthDay(note.date)}</span>
             {#if note.headline}<span class="rn-headline">{note.headline}</span>{/if}
             <span class="rn-count">{fmtInt(note.changes.length)} 件</span>
-          </summary>
+          {/snippet}
           <div class="fold-body rn-list">
             {#each note.changes as change (change.text)}
               {@render backlogRow(CHANGE_LABELS[change.kind], change.title, change.text)}
             {/each}
           </div>
-        </details>
+
+        </Disclosure>
       {/each}
     </div>
 
@@ -149,7 +151,7 @@
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
   .tag { width: 52px; text-align: center; padding: 1px 0; }
 
-  .rn-fold:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+  :global(details.rn-fold:first-of-type) { margin-top: 0; padding-top: 0; border-top: none; }
   .rn-list { display: flex; flex-direction: column; gap: 6px; }
   .rn-row {
     display: flex; align-items: flex-start; gap: 9px; padding: 7px 12px; border-radius: var(--r-window);

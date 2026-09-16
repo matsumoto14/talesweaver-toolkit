@@ -5,6 +5,7 @@
   import { fmtSigned } from "../../../format";
   import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT } from "../../../labels";
   import { app } from "../../../state.svelte";
+  import Disclosure from "../../../ui/Disclosure.svelte";
   import { flash } from "../../../ui/motion.svelte";
   import TextField from "../../../ui/TextField.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
@@ -208,8 +209,8 @@
 </div>
 <div class="card">
   <p class="hint dim">普段使う候補だけを先に出しています。それ以外は下の「その他」から選べます。行を選ぶと所持に入り、表示中になります。</p>
-  <details class="fold">
-    <summary>称号の補正の入り方</summary>
+  <Disclosure class="fold">
+    {#snippet summary()}称号の補正の入り方{/snippet}
     <div class="fold-body">
       <p class="hint dim">
         wiki「称号システム」。補正値は<b>装備の基本能力値</b>に乗り、<b>ダメージ n% 増加</b>はカテゴリX(攻撃ダメージ)に入ります。
@@ -217,7 +218,8 @@
         条件付き効果とグループボーナスは記録だけで、計算には入りません。
       </p>
     </div>
-  </details>
+
+  </Disclosure>
   <div class="card-title space">
     よく使う称号 <span class="normal dim">ダメ +20%以上 / エクリプス / 神鳥の塒</span>
   </div>
@@ -237,8 +239,8 @@
   <div class="item-list title-list effectful">
     {@render titleRows(commonTitleGroups, 20)}
   </div>
-  <details class="fold">
-    <summary>その他の称号から選ぶ({filteredOtherTitles.length} 件)</summary>
+  <Disclosure class="fold">
+    {#snippet summary()}その他の称号から選ぶ({filteredOtherTitles.length} 件){/snippet}
     <div class="fold-body">
       <TextField label="称号名・グループで探す" search count={filteredOtherTitles.length} bind:value={titleQuery} />
       {#if otherTitleGroups.length > 0}
@@ -249,7 +251,8 @@
         <p class="hint dim">該当する称号はありません。</p>
       {/if}
     </div>
-  </details>
+
+  </Disclosure>
 </div>
 {#if selectedTitle}
   {@const filled = EQUIPMENT_STAT_KINDS.filter((k) => selectedTitle.values[k] !== 0)}

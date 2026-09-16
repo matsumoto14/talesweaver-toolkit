@@ -6,6 +6,7 @@
   import { fmtPct, fmtSigned, fmtSignedPct } from "../../../format";
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
+  import Disclosure from "../../../ui/Disclosure.svelte";
   import { flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
@@ -318,8 +319,8 @@
   <div class="card-title inline">
     ほぼ全員が同じ設定 <span class="dim normal">取り切っている前提で入れてあります</span>
   </div>
-  <details class="fold">
-    <summary>取っていない・Lv が違うときだけ開く(8 項目)</summary>
+  <Disclosure class="fold">
+    {#snippet summary()}取っていない・Lv が違うときだけ開く(8 項目){/snippet}
     <!-- 開いた先も上と同じ形。ラベル / 段 / 操作 / 効いている値の 4 列でそろえる -->
     <div class="fold-body skill-fields">
       <div class="skill-field">
@@ -463,5 +464,6 @@
         <b>リンゴの島・ベリネンルミでは装備防御力は常に 100%</b>(wiki 計算式まとめ §防御力)。
       </p>
     </div>
-  </details>
+
+  </Disclosure>
 </div>

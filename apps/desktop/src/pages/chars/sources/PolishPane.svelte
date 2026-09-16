@@ -14,6 +14,7 @@
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, OTHER_EQUIPMENT_STATS, PART_SLOT_LABELS,
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, PRIMARY_EQUIPMENT_STATS,
   } from "../../../labels";
+  import Disclosure from "../../../ui/Disclosure.svelte";
   import { flash } from "../../../ui/motion.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
@@ -133,8 +134,8 @@
 </div>
 
 <div class="card">
-  <details class="fold">
-    <summary>この画面の読み方</summary>
+  <Disclosure class="fold">
+    {#snippet summary()}この画面の読み方{/snippet}
     <div class="fold-body">
       <p class="hint dim">
         装備研磨は消耗品で、選んだ装備の能力値 1 つを上げます。種類は 3 つ:
@@ -144,7 +145,8 @@
       </p>
       <p class="hint dim">「研磨剤」(武器・鎧)/「ワックス」(それ以外)の呼び名は部位から決まります。</p>
     </div>
-  </details>
+
+  </Disclosure>
 
   <div class="part-list">
     {#each POLISH_ALLOWED_SLOTS as slot (slot)}

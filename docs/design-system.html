@@ -2249,8 +2249,8 @@ td code { background: var(--card-soft2); }
           </div>
           <div class="change">
             <span class="w">出した・増やした</span>
-            <span class="how">開閉 3 方式 / <code>.pane-in</code>(場所が増えた)/ <code>.pop-in</code>(一時的に重なった)</span>
-            <span class="spec-n">↓「開閉の 3 方式」<br>↓「変化の型と、その伝え方」</span>
+            <span class="how"><code>&lt;Disclosure&gt;</code>(開いた / 閉じた)/ <code>.pane-in</code>(場所が増えた)/ <code>.pop-in</code>(一時的に重なった)</span>
+            <span class="spec-n">↓「開閉は &lt;Disclosure&gt; 1 つ」<br>↓「変化の型と、その伝え方」</span>
           </div>
           <div class="change">
             <span class="w">減らした・消した</span>
@@ -2316,7 +2316,7 @@ td code { background: var(--card-soft2); }
           <div class="change">
             <span class="w">開いた / 閉じた</span>
             <span class="how"><b>下方向にだけ伸びる。</b>上に伸ばすと、上にあるものが全部ずれる</span>
-            <span class="spec-n">max-height + opacity<br>--dur-open (.22s) / --ease-out<br>&lt;details&gt;(既定) / use:disclosurePane / use:collapse</span>
+            <span class="spec-n">::details-content の block-size<br>--dur-open (.22s) / --ease-out<br>ui/Disclosure.svelte(&lt;details&gt;)</span>
           </div>
           <div class="change">
             <span class="w">並びが変わった</span>
@@ -2349,21 +2349,24 @@ td code { background: var(--card-soft2); }
             同じ「押せる面」なのに画面によって .15s だったり .18s だったり、そもそも動かなかったりすると、<b>速さが意味を持たなくなる</b></li>
           <li><strong>押せるものの transition を部品側に書かない。</strong><code>app.css</code> が
             <code>button, summary, a, label.check, [role="button"], [role="tab"]</code> に <code>--t-tap</code> の既定を与える。
-            書き足すとその画面だけ速さがずれる(機械監査 R15)。<code>transform</code> / <code>width</code> を動かすものだけが自分で宣言してよく、時間は <code>--dur-*</code> から取る</li>
-          <li><strong>開閉のキャレットは「回す」で統一する。</strong><code>.caret</code> に <code>.rot</code> を足し引きするだけ。
+            書き足すとその画面だけ速さがずれる。<code>transform</code> / <code>width</code> を動かすものだけが自分で宣言してよく、時間は <code>--dur-*</code> から取る</li>
+          <li><strong>開閉のキャレットは「回す」で統一する。</strong>置くのは
+            <code>ui/Disclosure.svelte</code>(開閉する面)と <code>ui/Popover.svelte</code> のトリガ(重なるもの)だけで、
+            字寸・幅・向きは <code>app.css</code> の <code>.caret</code> が持つ。画面ごとに
+            <code>.t-chev</code> / <code>.bg-caret</code> / <code>.stat-caret</code> を作らない。
             <b>▸ ▾ の差し替えは動きが出ない</b>ので使わない — 開いたのか閉じたのかが一瞬わからない(§00 ④)</li>
-          <li><strong>開閉は 1 段(<code>--dur-open</code> .22s)、実装は 3 方式ある。</strong>既定は
-            <code>&lt;details&gt;</code>(<code>::details-content</code> の block-size を <code>app.css</code> が動かす)。
-            <code>{#if}</code> / <code>hidden</code> で中身を出し入れする場面は <code>use:disclosurePane</code> +
-            <code>use:disclosureCaret</code>、<code>svelte/transition</code> の <code>slide</code> は height を動かすので
-            <code>flex</code> の子では効かない場面は <code>use:collapse</code>(max-height で動かす)。選び方は次の「動きの部品」</li>
+          <li><strong>開閉は 1 段(<code>--dur-open</code> .22s)、実装は <code>ui/Disclosure.svelte</code> 1 つ。</strong>
+            土台は <code>&lt;details&gt;</code> で、<code>::details-content</code> の block-size を <code>app.css</code> が動かす。
+            <b>flex 列の子でも開き・閉じの両方が動く</b>ことは実機で確かめてある(2026-09-17: 18→218px を 220ms)。
+            詳しくは下の「開閉は &lt;Disclosure&gt; 1 つ」</li>
         </ul>
 
         <div class="sec">時間の段<span class="r">出どころは 2 つだけ、値は一致</span></div>
         <p>動きの時間は<strong>役割で 9 段</strong>に固定する。<b>画面ごとに数字を決めない。</b>
           出どころは <code>app.css</code> の <code>:root --dur-*</code>(CSS 用)と
           <code>ui/motion.svelte.ts</code> の <code>DUR</code>(Svelte の transition / animate 用)の 2 つだけで、
-          <strong>値は必ず一致させる</strong> — 機械監査 R15 が突き合わせ、生の <code>0.18s</code> / <code>220</code> の直書きも拾う。</p>
+          <strong>値は必ず一致させる</strong> — 生の <code>0.18s</code> / <code>220</code> を画面側に直接書かない。
+          (2026-09-17 に R15 を捨てたので、ここを機械が見張ってはいない。値を足すときは両方に足す)</p>
         <div class="changes">
           <div class="change"><span class="w">--dur-tap .15s</span><span class="how">触った応答 — hover / focus の地・枠・文字色、キャレットの回転</span><span class="spec-n">--ease-tap</span></div>
           <div class="change"><span class="w">--dur-pop .17s</span><span class="how">一時的に重なった(型 4)・候補の退出</span><span class="spec-n">--ease-pop</span></div>
@@ -2388,25 +2391,32 @@ td code { background: var(--card-soft2); }
           <div class="change"><span class="w">use:delta</span><span class="how">いくつ変わった(型 1b)。差分専用の空 span に付け、次に変わるまで消さない</span><span class="spec-n">{ get, unit?, digits? }</span></div>
           <div class="change"><span class="w">use:swap</span><span class="how">面が入れ替わった(型 3b)。入ってくる面だけ動かす</span><span class="spec-n">文字列の getter</span></div>
           <div class="change"><span class="w">use:pulse<br>use:flash</span><span class="how">状態が変わった(型 5)。<code>pulse</code> は値そのものを持たない印(★ の切替など)、<code>flash</code> は文字列の要約が変わったとき</span><span class="spec-n">どちらも null は「いまはこの要素の番ではない」として無視</span></div>
-          <div class="change"><span class="w">use:disclosurePane<br>use:disclosureCaret</span><span class="how">開いた / 閉じた(型 6)。<code>{#if}</code> を使わず <code>hidden</code> で出し入れし、閉じていても前回値を DOM に残す場面(9 箇所)</span><span class="spec-n">面とキャレットは別要素なので action を 2 つに分ける</span></div>
-          <div class="change"><span class="w">use:collapse</span><span class="how">開いた / 閉じた(型 6)。<code>{#if}</code> で中身ごと外れる退場を動かす。<code>slide</code> が効かない <code>flex</code> の子で使う(2 箇所)</span><span class="spec-n">max-height。動いている間だけ親の flex を止める</span></div>
+          <div class="change"><span class="w">&lt;Disclosure&gt;</span><span class="how">開いた / 閉じた(型 6)。action ではなく<b>部品</b> — トリガも面もキャレットも中に入っている(36 箇所)</span><span class="spec-n">ui/Disclosure.svelte。動きは app.css の details::details-content</span></div>
           <div class="change"><span class="w">reveal()</span><span class="how">画面内に入れる(型番号なし)。<code>scrollIntoView</code> の <code>behavior</code> をここで決める</span><span class="spec-n">action ではなく関数。呼び出し側が 1 回だけ呼ぶ</span></div>
         </div>
         <p class="cap">量が変わった(型 2・バーの幅)、場所が増えた / 一時的に重なった(型 3・4・<code>.pane-in</code> / <code>.pop-in</code>)は、
           <code>{#if}</code> でマウントされる瞬間に静的なクラスが 1 回だけ付く入場そのものか、素の CSS transition で
           値を後から付け外す必要が無いので専用の action を持たない。<b>action が要るのは、同じ要素へ何度も出し入れする型だけ。</b></p>
 
-        <div class="sec">開閉の 3 方式<span class="r">どれを使うかは中身の重さと a11y で決まる</span></div>
-        <p><strong>&lt;details&gt; + ::details-content が既定(10 箇所)。</strong>
-          キーボード操作とページ内検索での自動展開をブラウザが標準で持っている。中身の面・キャレット・トリガが
-          <code>&lt;summary&gt;</code> / <code>&lt;details&gt;</code> の親子構造に収まるなら、まずこれを使う。</p>
-        <p><strong>use:disclosurePane(9 箇所)。</strong>面・キャレット・トリガが別要素で、
-          markup が snippet 経由だったり <code>&lt;details&gt;</code> の構造に載らなかったりする場面で使う。
-          <code>{#if}</code> を使わず <code>hidden</code> を出し入れするので、閉じていても中身が DOM に残り、
-          前回値を覚えたまま次に開ける。</p>
-        <p><strong>use:collapse(2 箇所)。</strong><code>svelte/transition</code> の <code>slide</code> は
-          height を動かすため <code>flex: 1</code> の子では効かない場面で使う(<code>VersusPage</code>)。
-          <code>{#if}</code> で中身ごと外れる退場そのものを動かす、他の 2 方式とは違う形。</p>
+        <div class="sec">開閉は <code>&lt;Disclosure&gt;</code> 1 つ<span class="r">方式を選ばせない</span></div>
+        <p><strong>押すと開く面は <code>ui/Disclosure.svelte</code> だけで作る(36 箇所)。</strong>
+          土台は <code>&lt;details&gt;</code>。キーボード操作・ページ内検索での自動展開・開閉の状態・
+          読み上げの開閉状態はブラウザが持つので、<b><code>aria-expanded</code> は書かない</b>
+          (<code>&lt;summary&gt;</code> の暗黙のロールが既に持っていて、手で書くと二重になる)。
+          キャレットもトリガの先頭に部品が 1 つだけ置いて回すので、向きも位置も画面側では決めない。
+          同じ <code>group</code> を渡した面は 1 つしか開かない(<code>&lt;details name&gt;</code>)。</p>
+        <p>呼ぶ側に残っているのは <code>class</code>(面の見た目)/ <code>summaryClass</code>(トリガの見た目)/
+          <code>group</code>(排他のまとまり)/ <code>open</code>(初期値・外から開かせる)の 4 つで、
+          どれも<b>その画面固有の事実</b>であって作法の選択肢ではない(<code>ui/Popover.svelte</code> と同じ線引き)。
+          旧 <code>use:disclosurePane</code> / <code>use:disclosureCaret</code> / <code>use:collapse</code> は無くなった。</p>
+        <p><strong>トリガと面が別の入れ物にいる 2 箇所だけは例外。</strong>計算タブの鎖の節(横並びの 3 つ)から
+          その下の全幅の内訳を開く形と、「なぜこの数字?」の帯から本体を開く形は、<code>&lt;summary&gt;</code> の直後に
+          面が来ないので <code>&lt;details&gt;</code> に載らない。ここは面に
+          <code>class="… open-in"</code> + <code>hidden={!open}</code> を直接書く(§10 型 6 のクラスそのもの。
+          <code>hidden</code> で消えた面は次に出すときアニメーションが最初から走る)。
+          テシスコアの「補助タイプも出す」も、トリガ 1 つが 6 行ぶんの段を同時に出すので同じ形にしてある。</p>
+        <p><code>&lt;details&gt;</code> は閉じても中身を DOM から外さない(<code>::details-content</code> が隠すだけ)。
+          だから計算タブの内訳は、閉じているあいだに変わった値も前回値として覚えたまま次に開ける。</p>
         <div class="card soft" style="margin-top:2px">
           <div class="card-h"><b>実測して撤回した実装</b><span class="r">同じ回り道をしないための記録</span></div>
           <p style="font-size:11px"><code>grid-template-rows: 0fr ⇄ 1fr</code> で <code>&lt;details&gt;</code> の本文を包む形は、
@@ -2453,14 +2463,15 @@ td code { background: var(--card-soft2); }
             全称セレクタや CSS の設定では拾えない経路が実際にある</li>
         </ol>
 
-        <div class="sec">機械監査 R15〜R19<span class="r">通っても「安全」ではない</span></div>
+        <div class="sec">機械監査 R16・R18・R19<span class="r">通っても「安全」ではない</span></div>
         <p><strong>「この規則を通ったから安全」ではない。</strong>どれも文字列の一致で候補を出すだけなので、
           正当な書き換えを誤って拾うこともあれば、形を変えられて素通りすることもある。
           出てきた候補は goal の「分類」にかけ、0 件を過信しない。</p>
+        <p><strong>2026-09-17 に R15・R17・R20 を捨てた(20 → 17 本)。</strong>3 本とも「開閉を画面側でどう書くか」を
+          縛るための規則で、<code>ui/Disclosure.svelte</code> が開閉を丸ごと持った時点で、縛る対象そのものが無くなった。
+          規則が要る状態は、まだ画面側に決めさせている信号として扱う(docs/adr/015)。</p>
         <div class="changes">
-          <div class="change"><span class="w">R15</span><span class="how">--dur-* / DUR を通らない生の時間の直書き</span><span class="spec-n">app.css と motion.svelte.ts の値そのものを突き合わせる。名前を変えて増やした段は追随しない</span></div>
           <div class="change"><span class="w">R16</span><span class="how">動きのクラスを JS で手で付け外し</span><span class="spec-n">クラス名と classList.add/remove・class:・setTimeout が別行に離れていると拾えない</span></div>
-          <div class="change"><span class="w">R17</span><span class="how">開閉ブロックを disclosurePane / disclosureCaret を使わず手書き</span><span class="spec-n">class:open-in の動的束縛と、{#if} 直後の静的 open-in だけを見る。常に開いている面の入場(固定の open-in)は対象外</span></div>
           <div class="change"><span class="w">R18</span><span class="how">&lt;details&gt; が開閉するのに動きが無い</span><span class="spec-n">app.css の details::details-content が実際に効く形か 1 か所だけを見る。クラスの有無では判定しない(grid 版で 0 件を誤って返した反省)</span></div>
           <div class="change"><span class="w">R19</span><span class="how">scrollIntoView の behavior: "smooth" を直書き</span><span class="spec-n">"smooth" というリテラルそのものを見る。変数を挟むと(<code>const b = "smooth"</code>)拾えない</span></div>
         </div>

@@ -481,8 +481,14 @@ details[open]::details-content { block-size: auto; }
 button, summary, a, label.check, [role="button"], [role="tab"] { transition: var(--t-tap); }
 
 /* 開閉のキャレット。**回す**で統一する(▸▾ の差し替えは動きが出ないので使わない)。
-   画面ごとに .t-chev / .stat-caret を作らず、この 1 つに .rot を足し引きする */
-.caret { display: inline-block; flex: none; transition: transform var(--dur-tap) var(--ease-tap); }
+   字寸・幅もここだけが持つ — 画面ごとに .t-chev / .bg-caret / .stat-caret を作らない。
+   置くのは ui/Disclosure.svelte(開閉する面)と ui/Popover.svelte のトリガ(重なるもの)だけで、
+   回す向きもそれぞれの部品が持つ。`.rot` は Popover のトリガ側が使う */
+.caret {
+  display: inline-block; flex: none;
+  width: 10px; text-align: center; font-size: 9px; color: var(--fg-dim);
+  transition: transform var(--dur-tap) var(--ease-tap);
+}
 .caret.rot { transform: rotate(180deg); }
 
 /* 動きを消しても変化が分かること。ここで消えて意味が伝わらなくなるなら、
@@ -583,7 +589,6 @@ button, summary, a, label.check, [role="button"], [role="tab"] { transition: var
   flex: none; padding: 0 5px; border-radius: var(--r-pill);
   background: var(--surface-inset); font-size: 9px; color: var(--fg-muted); white-space: nowrap;
 }
-.picker-chev { font-size: 8px; color: var(--fg-dim); }
 /* 候補面。`.popover` の上に乗せて、1 件 1 行の一覧向けに詰め物と文字を上書きする。
    幅はトリガに揃える(anchor-size) — 口と候補の左右がずれると視線が動く(§00 ①) */
 .picker-pop {
@@ -666,17 +671,11 @@ button, summary, a, label.check, [role="button"], [role="tab"] { transition: var
    ほぼ全員が同じ値で、ふだん触らないものはここに入れる。**要約は畳んだ状態でも出す** —
    隠すのは操作であって、いまいくつなのかという情報ではない  */
 details.fold { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-soft); }
+/* キャレット・list-style・開閉の状態は ui/Disclosure.svelte が持つ。ここは行の見た目だけ */
 details.fold > summary {
-  display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 6px;
   font-size: 10.5px; color: var(--fg-muted);
 }
-details.fold > summary::-webkit-details-marker { display: none; }
-/* 開閉のキャレットは「回す」で統一(下の .caret と同じ流儀・§10)。文字差し替えは動きが出ない */
-details.fold > summary::before {
-  content: "▼"; display: inline-block; font-size: 8.5px; color: var(--fg-dim);
-  transition: transform var(--dur-tap) var(--ease-tap);
-}
-details.fold[open] > summary::before { transform: rotate(180deg); }
 details.fold > summary:hover { color: var(--fg); }
 details.fold .fold-body { margin-top: 10px; }
 

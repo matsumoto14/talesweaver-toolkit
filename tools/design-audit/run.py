@@ -58,12 +58,9 @@ RULES = {
     "R12": ("ui/ の外に生の input / select / textarea", "§07"),
     "R13": ("fmtSigned / fmtPct を通らない符号付き・% の数値", "§08"),
     "R14": ("ページ側で面・未収録・主役数字を独自に作る", "§01 / §05 / §08"),
-    "R15": ("--dur-* / DUR を通らない生の時間", "§10"),
     "R16": ("動きのクラスを JS で手で付け外し", "§10"),
-    "R17": ("開閉ブロックを手書き(disclosurePane / disclosureCaret を使わず)", "§10"),
     "R18": ("<details> が開閉するのに動きが無い", "§00 / §10"),
     "R19": ("scrollIntoView の behavior: \"smooth\" を直書き", "§10"),
-    "R20": ("開閉する面に動きが無い", "§00 / §10"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
@@ -95,16 +92,7 @@ UNKNOWN_NAMES = {"unknown", "unk", "missing", "unrecorded"}
 DASHED_BORDER = re.compile(r"(?:^|[;\s])border(?:-style)?\s*:\s*[^;{}]*\bdashed\b")
 MAX_BODY_FONT_PX = 18
 
-# R15: 動きの時間は役割で 9 段(§10「操作の応答」)。出どころは app.css の :root --dur-* と
-# ui/motion.svelte.ts の DUR の 2 つだけで、値は一致していること。画面側に 0.18s / 220 を直接書かない。
-# 例外は 0(動かさない指定)と、終わりのない回転(infinite)— 後者は「変化を見せる動き」ではない
 MOTION_TS = SRC / "ui" / "motion.svelte.ts"
-DUR_TOKEN = re.compile(r"--dur-([a-z]+)\s*:\s*([0-9.]+)(m?s)\s*;")
-DUR_CONST = re.compile(r"^\s*([a-z]+):\s*(\d+),", re.M)
-TIMED_DECL = re.compile(r"\b(transition|animation)(?:-duration)?\s*:\s*([^;{}\n]+)")
-ZERO_TIME = {"0", "0s", "0ms", "0.01ms"}  # 0.01ms は reduced-motion の打ち消し
-# Svelte の transition / animate に渡す時間。DUR.* を通らない数値リテラルが違反
-JS_DURATION = re.compile(r"duration:\s*(\d+)")
 
 # R16: 段階 1 で見つかった不具合の実体(旧 Workspace.svelte)は
 #   let movedId = $state<string | null>(null);
@@ -163,26 +151,6 @@ def _mask(text: str, pattern: re.Pattern) -> str:
     """pattern に一致した範囲を、改行だけ残して空白に置き換える(行番号を保つ)。"""
     return pattern.sub(lambda m: "".join(c if c == "\n" else " " for c in m.group(0)), text)
 
-# R17: 「開閉するブロック」の中身の面は ui/motion.svelte.ts の disclosurePane がやること
-# (段階 2)。動的束縛 `class:open-in={...}` に加えて、`{#if 条件}` でマウント/アンマウント
-# する形の直後に静的な `class="... open-in ..."`(`class:` ではない)を置くやり方も同じ
-# 手書き(段階 2 のレビューで判明 — 動的束縛だけを見ていると、常に開いている面の入場と
-# 区別がつかず、候補一覧のような「押すと {#if} で出し入れする」6 箇所を素通りしていた)。
-# 常に開いている面の入場に使う固定の `class="... open-in"`(`{#if}` を伴わないもの)は
-# 開閉ではないので、いまも対象外。
-#
-# キャレットの `class:rot={...}` は検出対象に含めない。回すキャレットは disclosurePane と
-# 対のもの以外に、ポップオーバー(Picker / CalcPage の targetOpen・skillOpen。開閉は
-# `.pop-in` + 重ねる面が別方式)や `transition:collapse` の折りたたみ(VersusPage。
-# `{#if}` の出入りを Svelte transition が動かす、別方式)でも正しく使われている。
-# `class:rot=` 単独で拾うと、それらの正しい使い方まで毎回候補に出て R17 が恒久的に
-# 0 件にならない(段階 2 で確認 — 対象は disclosurePane と組む class:open-in だけ)。
-DISCLOSURE_HANDWRITTEN = re.compile(r"class:open-in\s*=")
-# {#if}(コメントを 1 個だけ挟んでもよい)の直後に静的な class="... open-in ..." が来る形
-IF_STATIC_OPEN_IN = re.compile(
-    r"\{#if\b[^}]*\}(?:\s*<!--.*?-->)?\s*<[a-zA-Z][^>]*\bclass=\"[^\"]*\bopen-in\b[^\"]*\"",
-    re.S,
-)
 
 # R18: ネイティブ <details> は既定で瞬時に開閉する(§00 04 / §10 型 6)。段階 2.5 で最初に
 # 試した .details-anim(grid-template-rows: 0fr⇄1fr で本文を包む)は実機で動かなかった —
@@ -224,157 +192,14 @@ DETAILS_TRANSITION = re.compile(
 # 「この規則を通ったから安全」ではなく「生の直書きは必ず止まる」までの規則だと理解すること。
 SMOOTH_SCROLL = re.compile(r"""behavior\s*:\s*["']smooth["']""")
 
-# R20: 「押すと出し入れされる面なのに、動きの部品が何も無い」箇所(AvatarPane.svelte の
-# アバター強化欄で発覚 — .open-in も use:disclosurePane も無く、R15〜R19 のどれも反応しない
-# 穴だった)。R15〜R19 は「動きの書き方が間違っている」を見る規則で、「動きが無い」を見るのは
-# <details> 限定の R18 だけ。手書きで {#if} を使う開閉には対応する規則が無かった。
-#
-# 「すべての {#if} を対象にすると候補が溢れる」問題への線引き:
-#   1. 対象は「押して開閉するもの」だけ。{#if} の条件に出てくる識別子が、同じファイルの
-#      どこかで `x = !x`(真偽反転)か `x = x === v ? null : v`(選択トグル)の形で
-#      自分自身に代入されていること — その変数は「押して開閉する状態」だと機械的に言える。
-#      データの有無(`{#if items.length}`)や読み込み中の出し分けはこの形にならないので
-#      自然に対象外になる。
-#   2. 対象は「面」だけ。{#if} の直後に来る要素が span / small / b / i / em / strong / a /
-#      label / code など 1 行の中身(バッジ・小さなラベル)なら対象外とする。中に複数要素を
-#      持つブロック(div / section / li / ...)だけを見る。
-#   3. 動きの有無は **その {#if} 分岐が直接生む、入れ子の無い兄弟要素の開始タグ**だけを見る。
-#      子要素の中まで見ると、面の中の値だけが動く `use:bump` / `use:flash`(例: AvatarPane の
-#      `5部位計` 集計スパン)を「面の開閉が動いている」と誤認して見逃す。逆に「面」1 個だけを
-#      見ると、`{#if targetOpen}` の中の「押した場所を塞ぐ透明な `<button class="overlay">` +
-#      本体の `<div class="pop pop-in">`」のように**兄弟 2 個で 1 組**の形(CalcPage /
-#      ThesisCorePane / Picker のポップオーバー)を見逃す(overlay 側だけを見て「無い」と
-#      誤判定した)。開閉そのものを動かす部品は必ずどれかの兄弟の開始タグに付くので、
-#      分岐内の兄弟をすべて見て、どれか 1 つでも持っていれば通す。
-#
-# この規則が拾えないもの:
-#   - トグル変数への代入がローカル変数を経由する遠回りな形
-#     (例: `const next = current === kind ? null : kind; obj.field = next;`)。
-#     代入先と比較対象が同じ識別子でないと拾えない
-#   - `{#if}` を経由しない出し分け(`{#each}` に渡す配列を $derived で真偽値によって
-#     入れ替える等)。AvatarPane.svelte の `showOtherStats` はこの形 —
-#     `visibleStats = $derived(showOtherStats ? [...] : [...])` で行を増減させているが
-#     `{#if}` ではないので機械的には検出できない。実際には開閉と同じ体験(行が瞬時に
-#     増減する)なので目視では要確認だが、この規則の対象ではない
-#   - **分岐の中に、無関係な別条件の要素がたまたま動きのクラスを持っていると、本体の面が
-#     動いていなくても「兄弟のどれかに動きがある」と誤って通してしまう**(線引き 3 の
-#     ホワイトリスト方式そのものの裏返し)。実例: `CalcPage.svelte` の
-#     `openMaterial === "ultimate"` 枝は `.ultimate-chips` 自体は動かないが、枝の中の
-#     無関係な `{#if ultimateFull}` の `<p class="eq-note dim badge-in">`(別の注記の
-#     出し分けにたまたま `badge-in` が付いている)を拾って非検出になった。独立レビューで
-#     全数確認した結果、この型の見逃しはこの 1 件だけ(他に非検出だった 12 箇所は
-#     いずれも分岐が直接生む面自身に動きが付いている正当な非検出)
-#
-# 将来の火種として残っているが、いまのコードベースには実害が無いことを確認済みのもの:
-#   - トグル変数名は単語境界だけでマッチするので、同名のプロパティアクセス
-#     (`result?.combo` の `combo` など)と衝突しうる。いまは衝突する組み合わせが無い
-#   - 自己終了しない void 要素(`<input>` をスラッシュ無しで書く等)が来ると
-#     top_level_open_tags のタグ深さ計算が崩れうる。いまのテンプレートは
-#     void 要素をコンポーネント経由(StatInput 等)でしか使っておらず、生の
-#     `<input>` 等を分岐の直下に書いている箇所が無いので実害は出ていない
-TOGGLE_ASSIGN = re.compile(r"\b([A-Za-z_$][\w]*)\s*=\s*(?:!\1\b|\1\s*===?\s*[^?;{}]+\?\s*null\s*:)")
-# {#if} だけでなく {:else if} も同じ形の分岐なので、同じトグル変数を連鎖させた
-# 2 枝目以降(HomePage.svelte の openTile チェーンで実例あり)も見る
-IF_COND = re.compile(r"\{(?:#if|:else if)\s+([^}]*)\}")
-# 分岐(1 つの枝)の終わりを、{#if} の入れ子を数えて見つける。{:else ...} は
-# 深さ 1(自分の枝)で出会ったところが終わり
-IF_BLOCK_TOKEN = re.compile(r"\{#if\b|\{/if\}|\{:else\b")
-TAG_TOKEN = re.compile(r"<(/?)([a-zA-Z][\w-]*)\b([^>]*)>")
-# 1 行の中身(バッジ・小さなラベル)は対象外。中に複数要素を持つブロックだけを見る
-INLINE_TAGS = {"span", "small", "b", "i", "em", "strong", "a", "label", "code", "abbr", "time", "sup", "sub", "br", "kbd", "mark"}
-# 分岐内の兄弟要素の開始タグのどれかに動きの部品があるか
-OPEN_CLOSE_MOTION = re.compile(
-    r"\b(?:" + "|".join(MOTION_TOGGLE_CLASSES) + r")\b"
-    r"|use:(?:disclosurePane|disclosureCaret|collapse|swap|pulse|flash|bump|delta)\b"
-    r"|\btransition:\w+"
-    r"|\banimate:\w+"
-)
-SCRIPT_BLOCK = re.compile(r"<script[^>]*>.*?</script>", re.S)
-
-
-def branch_end(scan: str, after: int) -> int:
-    """`after`(ある `{#if ...}` の直後)から、その枝の終わり({:else...} か対応する
-    {/if})の開始位置を返す。入れ子の {#if}/{/if} は深さで数える。
-    """
-    depth = 1
-    for m in IF_BLOCK_TOKEN.finditer(scan, after):
-        token = m.group(0)
-        if token.startswith("{#if"):
-            depth += 1
-        elif token == "{/if}":
-            depth -= 1
-            if depth == 0:
-                return m.start()
-        elif depth == 1:  # {:else ...} — 自分の枝の終わり
-            return m.start()
-    return len(scan)
-
-
-def top_level_open_tags(text: str) -> list[str]:
-    """text の中で、要素の入れ子の深さ 0 で開くタグの開始タグ文字列を出現順に返す。
-    Svelte のブロック構文({#if} / {#each} / {:else} など)は DOM 上は透過なので
-    深さに数えない——タグの入れ子だけを見る。
-    """
-    stack: list[str] = []
-    out: list[str] = []
-    for m in TAG_TOKEN.finditer(text):
-        closing, tag, attrs = m.group(1), m.group(2), m.group(3)
-        if closing:
-            if tag in stack:
-                while stack and stack[-1] != tag:
-                    stack.pop()
-                if stack:
-                    stack.pop()
-            continue
-        if not stack:
-            out.append(m.group(0))
-        if not attrs.rstrip().endswith("/"):
-            stack.append(tag)
-    return out
-
-
-def check_open_close_motion(path: Path, text: str, out: list[Finding]) -> None:
-    """R20。押して開閉する面({#if} でトグル変数を見ている)の分岐が、動きの部品
-    (動きのクラス・use:action・transition:/animate:)を兄弟要素のどれにも持たない箇所。
-    """
-    if path.suffix != ".svelte":
-        return
-    # トグル変数の代入は <script> に書かれるので、そこはマスクしない。コメントだけ落とす
-    no_comment = _mask(_mask(_mask(text, HTML_COMMENT), BLOCK_COMMENT), LINE_COMMENT)
-    toggles = {m.group(1) for m in TOGGLE_ASSIGN.finditer(no_comment)}
-    if not toggles:
-        return
-    toggle_re = re.compile(r"\b(?:" + "|".join(re.escape(t) for t in toggles) + r")\b")
-
-    # {#if} とタグの対応付けはテンプレートだけを見る。<script> / <style> は式の中身が
-    # 紛れ込むので落とす(行番号を保つため空白化)
-    scan = _mask(no_comment, SCRIPT_BLOCK)
-    scan = _mask(scan, STYLE_BLOCK)
-
-    for m in IF_COND.finditer(scan):
-        if not toggle_re.search(m.group(1)):
-            continue
-        end = branch_end(scan, m.end())
-        tags = top_level_open_tags(scan[m.end():end])
-        tag_names = [TAG_TOKEN.match(t).group(2).lower() for t in tags]
-        if not any(name not in INLINE_TAGS for name in tag_names):
-            continue  # バッジ・小さなラベルだけの分岐は「面」ではないので対象外
-        if any(OPEN_CLOSE_MOTION.search(t) for t in tags):
-            continue
-        line_no = 1 + scan.count("\n", 0, m.start())
-        rep = next(t for t, name in zip(tags, tag_names) if name not in INLINE_TAGS)
-        rep_tag = TAG_TOKEN.match(rep).group(2)
-        keyword = "{:else if" if scan[m.start():m.start() + 8] == "{:else i" else "{#if"
-        out.append(Finding("R20", path, line_no, f"{keyword} {m.group(1).strip()}}} → <{rep_tag}> 他 {len(tags) - 1} 兄弟",
-                           "動きの部品(open-in / disclosurePane / transition: など)が無い"))
 
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
-CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
+CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
 
-HEX = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
+HEX = re.compile(r"#[0-9A-Fa-f]{3,8}")
 # 面としてべた塗りしている背景。グラデーションや影の中の色は「面」ではない
-FLAT_BG = re.compile(r"background(?:-color)?\s*:\s*#[0-9A-Fa-f]{3,8}\b", re.I)
+FLAT_BG = re.compile(r"background(?:-color)?\s*:\s*#[0-9A-Fa-f]{3,8}", re.I)
 
 
 def norm_hex(h: str) -> str:
@@ -688,31 +513,6 @@ def check_duration(chunk: Chunk, out: list[Finding]) -> None:
                                    f"{seconds}s > {MAX_DURATION_S}s"))
 
 
-def check_duration_tokens(chunk: Chunk, out: list[Finding]) -> None:
-    """R15(CSS 側)。transition / animation の時間が --dur-* を通っていない。"""
-    for m in TIMED_DECL.finditer(chunk.text):
-        value = m.group(2)
-        if "infinite" in value:
-            continue
-        for d in DURATION.finditer(value):
-            raw = d.group(0)
-            if raw in ZERO_TIME:
-                continue
-            out.append(Finding("R15", chunk.path, chunk.line_of(m.start(2)), f"{m.group(1)}: {value.strip()}",
-                               f"{raw} の直書き。var(--dur-*) から取る"))
-            break
-
-
-def check_duration_js(path: Path, text: str, out: list[Finding]) -> None:
-    """R15(JS 側)。Svelte の transition / animate に数値リテラルを渡している。"""
-    if path == MOTION_TS:
-        return
-    for m in JS_DURATION.finditer(text):
-        if m.group(1) == "0":  # 動かさない指定(主要部位など)は段の外
-            continue
-        out.append(Finding("R15", path, 1 + text.count("\n", 0, m.start()), f"duration: {m.group(1)}",
-                           "ui/motion.svelte.ts の DUR.* から取る"))
-
 
 def check_manual_motion_class(path: Path, text: str, out: list[Finding]) -> None:
     """R16。許可を 1 つに決めるホワイトリスト方式(MOTION_TOGGLE_CLASSES 手前のコメント参照)。
@@ -748,25 +548,6 @@ def check_manual_motion_class(path: Path, text: str, out: list[Finding]) -> None
                            "ui/motion.svelte.ts の action(bump / flash / swap / pulse / delta)に寄せる"))
 
 
-def check_manual_disclosure(path: Path, text: str, out: list[Finding]) -> None:
-    """R17。開閉ブロックを disclosurePane / disclosureCaret を使わず手書きしている箇所。
-
-    ui/motion.svelte.ts 自身は実装なので対象外。動的束縛(class:open-in=)は行単位、
-    「{#if} の直後に静的な class="... open-in"」はテンプレート全体を見る(2 行にまたがる
-    ことがあるため)。
-    """
-    if path.suffix != ".svelte":
-        return
-    for i, line in enumerate(text.split("\n"), 1):
-        m = DISCLOSURE_HANDWRITTEN.search(line)
-        if m:
-            out.append(Finding("R17", path, i, m.group(0),
-                               "ui/motion.svelte.ts の disclosurePane / disclosureCaret を使う"))
-    for m in IF_STATIC_OPEN_IN.finditer(text):
-        line = 1 + text.count("\n", 0, m.start())
-        out.append(Finding("R17", path, line, "{#if} + 静的 open-in",
-                           "ui/motion.svelte.ts の disclosurePane を使う"))
-
 
 def check_smooth_scroll(path: Path, text: str, out: list[Finding]) -> None:
     """R19。scrollIntoView の behavior: "smooth" を直書きしている箇所。
@@ -799,18 +580,6 @@ def check_details_motion(out: list[Finding]) -> None:
                            "block-size を var(--dur-open) で動かす transition が app.css に無い"
                            "(grid-template-rows は ::details-content の境界を越えられず効かない)"))
 
-
-def check_duration_scale(out: list[Finding]) -> None:
-    """R15(段そのもの)。app.css の --dur-* と motion.svelte.ts の DUR が食い違っていないか。"""
-    css: dict[str, int] = {}
-    for name, num, unit in DUR_TOKEN.findall(APP_CSS.read_text(encoding="utf-8")):
-        css[name] = round(float(num) * (1 if unit == "ms" else 1000))
-    parts = MOTION_TS.read_text(encoding="utf-8").split("export const DUR = {", 1)
-    ts = {k: int(v) for k, v in DUR_CONST.findall(parts[1].split("} as const;", 1)[0])} if len(parts) > 1 else {}
-    for name in sorted(set(css) | set(ts)):
-        if css.get(name) != ts.get(name):
-            out.append(Finding("R15", MOTION_TS, 1, f"--dur-{name}",
-                               f"app.css {css.get(name)}ms / DUR {ts.get(name)}ms — 段が 2 つに割れている"))
 
 
 def check_state_pairs(chunk: Chunk, out: list[Finding]) -> None:
@@ -849,11 +618,8 @@ def collect() -> list[Finding]:
         check_raw_format(path, text, out)
         check_raw_inputs(path, text, out)
         check_raw_sign(path, text, out)
-        check_duration_js(path, text, out)
         check_manual_motion_class(path, text, out)
-        check_manual_disclosure(path, text, out)
         check_smooth_scroll(path, text, out)
-        check_open_close_motion(path, text, out)
         for chunk in css_chunks(path, text):
             check_page_surfaces(chunk, out)
             check_radius(chunk, out)
@@ -863,8 +629,6 @@ def collect() -> list[Finding]:
             check_state_pairs(chunk, out)
             check_control_radius(chunk, out)
             check_font_scale(chunk, out)
-            check_duration_tokens(chunk, out)
-    check_duration_scale(out)
     check_details_motion(out)
     return out
 

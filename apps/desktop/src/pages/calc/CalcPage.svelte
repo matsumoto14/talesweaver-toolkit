@@ -37,6 +37,7 @@
     upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import Picker from "../../ui/Picker.svelte";
@@ -47,7 +48,7 @@
   import Popover from "../../ui/Popover.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, delta, disclosureCaret, disclosurePane, flash } from "../../ui/motion.svelte";
+  import { bump, delta, flash } from "../../ui/motion.svelte";
   import { ChangeMemo, PresenceMemo, swapNote, type Presence } from "../../ui/presence";
   import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
@@ -540,6 +541,11 @@
   /** 開いている内訳。行ごとに独立させる(1 つ開いても他は閉じない ＝ 押した行が動かない) */
   let openDetails = $state<string[]>([]);
   const isDetailOpen = (key: string) => openDetails.includes(key);
+  /** ui/Disclosure の bind:open 用。開閉そのものは <details> が持ち、ここは覚えるだけ */
+  function setDetailOpen(key: string, open: boolean) {
+    if (open === isDetailOpen(key)) return;
+    openDetails = open ? [...openDetails, key] : openDetails.filter((k) => k !== key);
+  }
   function toggleDetail(key: string) {
     openDetails = isDetailOpen(key) ? openDetails.filter((k) => k !== key) : [...openDetails, key];
   }
@@ -1299,17 +1305,10 @@
     const set = app.buffSets.find((item) => item.id === id);
     app.calcBuffs = JSON.parse(JSON.stringify(set?.choices ?? { choices: [] }));
   }
-  /** いま開いている目的グループ。null = 全部畳んである(既定)。同時に開くのは 1 つ */
-  let openBuffPurpose = $state<BuffPurpose | null>(null);
-  /** 「計算の材料」で開いているまとまり。null = 全部畳んである(既定)。
-   *  実プレイでは一度に 1 つしか触らないので、開くのも 1 つに絞る — 全部開くと
-   *  3512px(表示域の 4.6 画面ぶん)になり、目的のものまでスクロールで探すことになる */
-  type MaterialGroup = "ultimate" | "awakening" | "sharpness" | "soul_link" | "equipment" | "enchant" | "polish" | "title" | "buffs";
-  let openMaterial = $state<MaterialGroup | null>(null);
-  function toggleMaterial(id: MaterialGroup) {
-    openMaterial = openMaterial === id ? null : id;
-    if (openMaterial !== "buffs") openBuffPurpose = null;
-  }
+  /* 「計算の材料」と、その中のバフの目的グループは、どちらも同時に 1 つしか開かない。
+     排他は <details name>(ui/Disclosure の group)がブラウザ側で持つので、開いている
+     まとまりを覚える状態は要らない — 全部開くと 3512px(表示域の 4.6 画面ぶん)になり、
+     目的のものまでスクロールで探すことになる */
   function toggleBuffChip(def: BuffDefinition) {
     app.calcBuffs = { choices: toggleBuff(app.calcBuffs.choices, def, !buffOn(def)) };
   }
@@ -1715,7 +1714,14 @@
 <!-- 閉じていても DOM に置いたまま隠す(hidden)。{#if} で外すと、閉じている間に称号などを切り替えた
      ↑↓・追加/削除 が、開いたときには消えている(差分は要素が前回値を覚えている。§00 04) -->
 {#snippet detailBox(d: Detail, open: boolean)}
-  <div class="detail inset" use:disclosurePane={() => open}>
+  <div class="detail inset open-in" hidden={!open}>
+    {@render detailBody(d)}
+  </div>
+{/snippet}
+
+<!-- 内訳の中身だけ。トリガと面が並ぶ場所では <Disclosure> の中に直接置く -->
+{#snippet detailBody(d: Detail)}
+  <div class="detail-body">
     <div class="dt-head">
       <span class="dt-hk dim">倍率</span>
       <span class="num dt-hv">{d.mult}</span>
@@ -1729,20 +1735,21 @@
     {#each d.mats as m, i (i)}
       {#if m.key}
         {@const key = m.key}
-        <!-- 押すと要因の一覧が直下に開く(押した行は動かない) -->
-        <button
-          type="button" class="dt-row dt-row-btn"
-          aria-expanded={isDetailOpen(key)} onclick={() => toggleDetail(key)}
+        <!-- 押すと要因の一覧が直下に開く(押した行は動かない)。段は内訳の grid のままなので
+             <details> は段に溶かす(display: contents) -->
+        <Disclosure
+          class="dt-fold" summaryClass="dt-row dt-row-btn"
+          bind:open={() => isDetailOpen(key), (v) => setDetailOpen(key, v)}
         >
+          {#snippet summary()}
           <span class="dt-label">{m.label}{#if m.note}<span class="dt-swap dim" use:flash={() => m.note ?? ""}>{m.note}</span>{/if}</span>
           <span class="num dt-mult dim">{m.mult ?? ""}</span>
           <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span>
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <span use:delta={{ get: () => m.n ?? null, unit: m.unit }} class:follow={!!m.changed} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(key); }}></span>
           <span class="num dt-sub dim">{m.sub ?? ""}</span>
-        </button>
-        {@const subsOpen = isDetailOpen(key)}
-          <div class="dt-subs" use:disclosurePane={() => subsOpen}>
+          {/snippet}
+          <div class="dt-subs">
             <!-- 出典名でキーにする。入れ替わった出典は「抜けた行(取り消し線)+ 入った行」で残る -->
             {#each m.subs ?? [] as sm, j (sm.id ?? j)}
               <div class="dt-row" class:gone={sm.state === "gone"}>
@@ -1753,6 +1760,7 @@
               </div>
             {/each}
           </div>
+        </Disclosure>
       {:else}
         <div class="dt-row">
           <span class="dt-label">{m.label}</span>
@@ -1788,7 +1796,7 @@
                   {#snippet icon()}
                     <!-- 未収録の id は破線 + ? になり、その場でも幅は変わらない -->
                     <Icon kind="buff" id={def.id} size={20} label={def.name} />
-                  {/snippet}
+          {/snippet}
                   {#snippet extra()}
                     {#if detail}
                       {@const choice = buffChoiceOf(def.id)}
@@ -1866,7 +1874,7 @@
                         </Popover>
                       {/if}
                     {/if}
-                  {/snippet}
+          {/snippet}
                 </ToggleRow>
   {/snippet}
 
@@ -1917,7 +1925,7 @@
               <span class="t-line1">
                 <Icon kind="content" id={target.content.id} fallback={{ kind: "mob", id: target.content.enemy_id }} size={28} label={target.content.name} />
                 <span class="t-name">{target.content.name}</span>
-                <span class="caret t-chev" class:rot={targetOpen}>▼</span>
+                <span class="caret" class:rot={targetOpen}>▼</span>
                 <span class="t-index num dim">{targetIndex + 1} / {contents.length}</span>
               </span>
               <span class="t-line2">
@@ -1967,7 +1975,7 @@
                 <span class="sk-line1">
                   <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill?.name ?? "スキル"} />
                   <span class="sk-name">{skill?.name ?? ""}</span>
-                  {#if skills.length > 1}<span class="caret t-chev" class:rot={skillOpen}>▼</span>{/if}
+                  {#if skills.length > 1}<span class="caret" class:rot={skillOpen}>▼</span>{/if}
                   <!-- 主軸(キャラタブ)と違うスキルで計算している例外状態。保存されないので
                        ラベンダー(--sim)。行の高さは変えない -->
                   {#if skillOverridden}
@@ -2173,15 +2181,13 @@
                   <span class="num fill-total dim">合計 {deltaText(top.delta_total_pct)}</span>
                 </button>
                 {#if whatIf.length > 1}
-                  <button
-                    type="button" class="fill-more-toggle"
-                    aria-expanded={fillMoreOpen} onclick={() => (fillMoreOpen = !fillMoreOpen)}
-                  >{fillMoreOpen ? "▲" : `他 ${whatIf.length - 1} 件 ›`}</button>
-                {/if}
-              </div>
-              {#if fillMoreOpen && whatIf.length > 1}
-                <!-- 候補一覧は重いので {#if} のまま。面は disclosurePane に寄せる -->
-                <div class="fill-list inset" use:disclosurePane={() => fillMoreOpen && whatIf.length > 1}>
+                  <!-- トリガは上の行の中、一覧は行の下。<details> を行に溶かして(display: contents)
+                       両方を .fill-line の直接の子にする -->
+                  <Disclosure class="fill-fold" summaryClass="fill-more-toggle" bind:open={fillMoreOpen}>
+                    {#snippet summary(open)}{open ? "閉じる" : `他 ${whatIf.length - 1} 件`}{/snippet}
+                    {#snippet children(open)}
+                    {#if open}
+                <div class="fill-list inset">
                   {#each whatIf.slice(1) as w (w.id)}
                     <button
                       type="button" class="fill-more-row"
@@ -2195,7 +2201,11 @@
                     </button>
                   {/each}
                 </div>
-              {/if}
+                    {/if}
+                    {/snippet}
+                  </Disclosure>
+                {/if}
+              </div>
             {/if}
             {#if result?.actual_delay}
               {@const d = result.actual_delay}
@@ -2254,7 +2264,7 @@
           <button type="button" class="panel-head blue" aria-expanded={flowOpen} onclick={() => (flowOpen = !flowOpen)}>
             <span class="panel-title dark">なぜこの数字？</span>
             <span class="panel-note dark">{flowOpen ? "閉じる" : "内訳をひらく"}</span>
-            <span class="caret t-chev" use:disclosureCaret={() => flowOpen}>▼</span>
+            <span class="caret" class:rot={flowOpen}>▼</span>
           </button>
           <div class="panel-body">
             <div class="flow-line">
@@ -2277,27 +2287,18 @@
                 攻撃力が相手の防御力に届いていないので、倍率は何もかかりません。まず攻撃力を上げる必要があります。
               </div>
             {:else if topLever}
-              <div class="lever-toggle">
-                <button type="button" class="chip quiet" class:on={leverOpen} aria-expanded={leverOpen} onclick={() => (leverOpen = !leverOpen)}>
-                  {leverOpen ? "閉じる" : "どこが効いてる？"}
-                </button>
-              </div>
-              {#if leverOpen}
-              <!-- 面は disclosurePane に寄せる。{#if} のマウント/アンマウントは変えない -->
-              <div class="lever-note" use:disclosurePane={() => leverOpen}>
+              <Disclosure class="lever-toggle" summaryClass="chip quiet" bind:open={leverOpen}>
+                {#snippet summary(open)}{open ? "閉じる" : "どこが効いてる？"}{/snippet}
+              <div class="lever-note">
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
                 {#if bestLever}
                   <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>{fmtSigned(bestLeverGain, 2, "%")}</span><span use:delta={{ get: () => bestLeverGain, unit: "%", digits: 2 }}></span> 伸びます({fmtHeadroom(bestLever)})。
                   {#if nextLevers.length > 0}
-                    <button type="button" class="chip quiet" class:on={nextLeversOpen} aria-expanded={nextLeversOpen} onclick={() => (nextLeversOpen = !nextLeversOpen)}>
-                      次の候補 {nextLevers.length}
-                    </button>
-                  {/if}
-                {/if}
-                {#if bestLever && nextLeversOpen && nextLevers.length > 0}
-                  <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段。
-                       候補一覧なので {#if} のまま、面だけ disclosurePane に寄せる -->
-                  <div class="lever-list inset" use:disclosurePane={() => !!bestLever && nextLeversOpen && nextLevers.length > 0}>
+                    <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段。
+                         チップは文中に居るので <details> は段に溶かす(display: contents) -->
+                    <Disclosure class="next-levers" summaryClass="chip quiet" bind:open={nextLeversOpen}>
+                      {#snippet summary()}次の候補 {nextLevers.length}{/snippet}
+                  <div class="lever-list inset">
                     {#each nextLevers as c, i (c.category)}
                       <div class="dt-row">
                         <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
@@ -2308,16 +2309,18 @@
                     {/each}
                     <p class="dt-note dim">+1% 足したときの最終ダメージの伸び。いま積んでいる量が少ないカテゴリほど 1% の価値が高い。</p>
                   </div>
+                    </Disclosure>
+                  {/if}
                 {/if}
               </div>
-              {/if}
+              </Disclosure>
             {:else}
               <div class="lever-note">倍率はまだ何もかかっていません。</div>
             {/if}
 
             <!-- 閉じていても描画して隠す。閉じている間の変更でも材料の前回値が残り、開いたとき・↑ を辿るときに
                  「何が変わったか」が出せる(detailBox と同じ理由) -->
-              <div class="flow-body" use:disclosurePane={() => flowOpen}>
+              <div class="flow-body open-in" hidden={!flowOpen}>
               <!-- ① 攻撃力をつくる -->
               <div class="stage">
                 <span class="stage-no" style="background: var(--flow-1);">1</span>
@@ -2333,17 +2336,19 @@
               </div>
               <div class="band-rows">
                 {#each atkRows as a (a.k)}
-                  <button
-                    type="button" class="band-row"
-                    aria-expanded={isDetailOpen(`atk:${a.k}`)} onclick={() => toggleDetail(`atk:${a.k}`)}
+                  <Disclosure
+                    class="band-fold" summaryClass="band-row"
+                    bind:open={() => isDetailOpen(`atk:${a.k}`), (v) => setDetailOpen(`atk:${a.k}`, v)}
                   >
+                    {#snippet summary()}
                     <span class="swatch" style="background: {a.c};"></span>
                     <span class="br-label">{a.k}</span>
                     <span class="br-note dim">{a.note}</span>
                     <span class="num br-val" use:bump={() => Math.round(a.v)}>{fmtInt(Math.round(a.v))}</span><span use:delta={{ get: () => Math.round(a.v) }}></span>
                     <span class="num br-share dim" use:bump={() => parseFloat(a.share)}>{a.share}</span>
-                  </button>
-                  {@render detailBox(register(`atk:${a.k}`, atkDetail(a)), isDetailOpen(`atk:${a.k}`))}
+                    {/snippet}
+                    <div class="detail inset">{@render detailBody(register(`atk:${a.k}`, atkDetail(a)))}</div>
+                  </Disclosure>
                 {/each}
               </div>
 
@@ -2381,18 +2386,20 @@
               </div>
               <div class="band-rows">
                 {#each flowRows as f (f.k)}
-                  <button
-                    type="button" class="band-row"
-                    aria-expanded={isDetailOpen(`flow:${f.k}`)} onclick={() => toggleDetail(`flow:${f.k}`)}
+                  <Disclosure
+                    class="band-fold" summaryClass="band-row"
+                    bind:open={() => isDetailOpen(`flow:${f.k}`), (v) => setDetailOpen(`flow:${f.k}`, v)}
                   >
+                    {#snippet summary()}
                     <span class="swatch" style="background: {f.c};"></span>
                     <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
                     <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{fmtSigned(f.add)}</span><!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
                     <span use:delta={{ get: () => Math.round(f.add) }} class:follow={changedFlowKeys.includes(`flow:${f.k}`)} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(`flow:${f.k}`); }}></span>
                     <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{fmtPct(Math.abs(f.add) / flowTotal)}</span>
-                  </button>
-                  {@render detailBox(register(`flow:${f.k}`, stepDetail(f.step, f.mult, f.add, f.to)), isDetailOpen(`flow:${f.k}`))}
+                    {/snippet}
+                    <div class="detail inset">{@render detailBody(register(`flow:${f.k}`, stepDetail(f.step, f.mult, f.add, f.to)))}</div>
+                  </Disclosure>
                 {/each}
               </div>
 
@@ -2516,16 +2523,16 @@
         </div>
 
         <!-- 極限スキル(試し変更)。3 種から 2 つ選ぶ(§07 形態 3: チップで入れる/外す) -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "ultimate"} onclick={() => toggleMaterial("ultimate")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "ultimate"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <!-- 見出しの顔。中身を代表する 1 つを置く(名前と併記なので §08 の単独表示にあたらない)。
                  画像が未収録なら破線 + ? になるだけで、幅は変わらない -->
             <Icon kind="skill" id="scope_eye" size={20} label="極限スキル" />
             <span class="card-title">極限スキル</span>
             <span class="dim small num" use:bump={() => ultimatePickedCount}>{ultimatePickedCount} / {ultimateSlotCount}</span>
-          </button>
-          {#if openMaterial === "ultimate"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           <div class="ultimate-chips">
             {#each ULTIMATE_SKILLS as u (u)}
               {@const on = payload.common_skills.ultimate.slots.includes(u)}
@@ -2547,17 +2554,18 @@
           {/if}
           <p class="eq-note dim">スーパーリミット・ハイパーリミットの Lv は<b>キャラ</b>タブ(共通スキル)の設定を使います。</p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- 覚醒・エタの意志(試し変更)。カテゴリN の倍率と、ダメージ・能力値の上限を動かす -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "awakening"} onclick={() => toggleMaterial("awakening")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "awakening"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <Icon kind="skill" id="awakening" size={20} label="覚醒・エタの意志" />
             <span class="card-title">覚醒・エタの意志</span>
             <span class="dim small num" use:flash={() => awakeningHeadNote}>{awakeningHeadNote}</span>
-          </button>
-          {#if openMaterial === "awakening"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           <div class="basics-rows">
             <div class="basics-row">
               <span class="basics-label">エタ Lv</span>
@@ -2614,18 +2622,19 @@
             節目(20 / 40 / 60 / 80 / 90)を超えると上限の伸びが一段上がります。Lv を入れると覚醒は 5 になります。
           </p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- シャープネスビジョン(試し変更)。§5「新-割合」の割合追加ダメージ -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "sharpness"} onclick={() => toggleMaterial("sharpness")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "sharpness"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <Icon kind="skill" id="sharpness_vision" size={20} label="シャープネスビジョン" />
             <span class="card-title">シャープネスビジョン</span>
             <span class="dim small num" use:bump={() => sharpnessRatePercent}
             >{sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} ${fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}`}</span>
-          </button>
-          {#if openMaterial === "sharpness"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           <div class="basics-rows">
             <!-- 段は 6 個(5〜10)にも 10 個にもなる。補助操作を同じ行に置くと、段が 10 個に
                  なったときチップが段の上に重なって押せなくなる(実機で検出)。行を分ける -->
@@ -2662,17 +2671,18 @@
             割合追加ダメージは<b>合計ダメージ</b>に乗ります(1 発ごとではないので、表記ダメージ = この一発は動きません)。
           </p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- ソウルリンク(試し変更)。ダメージ式に効くリンクステータス 5〜7 だけ -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "soul_link"} onclick={() => toggleMaterial("soul_link")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "soul_link"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <Icon kind="skill" id="soul_link" size={20} label="ソウルリンク" />
             <span class="card-title">ソウルリンク</span>
             <span class="dim small num" use:flash={() => soulLinkHeadNote}>{soulLinkHeadNote}</span>
-          </button>
-          {#if openMaterial === "soul_link"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           <div class="basics-rows">
             {#each SOUL_LINK_ROWS as row (row.field)}
               <div class="basics-row">
@@ -2697,18 +2707,19 @@
             武器強化は追加固定ダメージに掛かるので、<b>合計ダメージ</b>だけが動きます。
           </p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- 装備の切り替え(試し変更)。登録済みの装備から装着するものを選ぶ。登録・編集はキャラタブ -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "equipment"} onclick={() => toggleMaterial("equipment")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "equipment"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <!-- 見出しの顔は装着中の武器(名前と併記) -->
             <Icon kind="equipment" id={equipmentIconId(weaponOf(payload).item_id, app.equipmentCatalog)} size={20} label="装備の切り替え" />
             <span class="card-title">装備の切り替え</span>
             <span class="dim small num" use:flash={() => equipmentHeadNote}>{equipmentHeadNote}</span>
-          </button>
-          {#if openMaterial === "equipment"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           {#if switchableSlots.length === 0}
             <button type="button" class="source-jump" onclick={() => focusCharacterSource("equipment")}>
               <span class="dim small">2 件以上登録した部位がありません。登録はキャラタブの装備ペイン</span>
@@ -2735,20 +2746,21 @@
           {/if}
           <p class="eq-note dim">装着中の装備を登録済みの別の 1 件に替えます。登録・編集はキャラタブの装備ペイン。</p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "enchant"} onclick={() => toggleMaterial("enchant")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "enchant"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <!-- †エクリプスウィング(体)。エンチャントは装備を伸ばす話なので、その顔として置く -->
             <Icon kind="equipment" id="wiki-af444f9bf21d" size={20} label="エンチャントの伸びしろ" />
             <span class="card-title">エンチャントの伸びしろ</span>
             <!-- 見出しの注記は件数 1 つだけ。アイコンぶん幅が減っていて、主軸を並べると
                  右端の件数が切れる(§00 05: 読めない文字は出さない)。主軸は中に出す -->
             <span class="dim small num" use:bump={() => visibleEnchantRows.length}>{visibleEnchantRows.length} 件</span>
-          </button>
-          {#if openMaterial === "enchant"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
             <p class="enchant-dep dim">主軸: {enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・") || "—"}</p>
           {#if visibleEnchantRows.length === 0}
             <p class="eq-note dim">主軸スキルの依存ステを盛れる部位がないか、すでに上限です。</p>
@@ -2790,19 +2802,20 @@
             </div>
           {/if}
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- 研磨(試し変更)。記録はキャラタブの研磨ペインで、ここでは効かせるかだけ切り替える。
              スイッチの実体はバフ「装備研磨」(calcBuffs。保存は「試し変更を保存」で)だが、装備の話なので顔はここ -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "polish"} onclick={() => toggleMaterial("polish")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "polish"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <!-- 職人の装備研磨剤(クライアント資産 item 1044778)。バフ「装備研磨」と同じ絵 -->
             <Icon kind="buff" id="equipment_polish" size={20} label="研磨" />
             <span class="card-title">研磨</span>
             <span class="dim small num" use:flash={() => polishHeadNote}>{polishHeadNote}</span>
-          </button>
-          {#if openMaterial === "polish"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           <ToggleRow
             name="研磨を効かせる"
             on={polishOn}
@@ -2832,18 +2845,19 @@
             研磨は<b>基本能力値</b>に合流します。記録の追加・変更はキャラタブの研磨ペイン。ON/OFF はバフ「装備研磨」と同じで、この計算だけの試し変更です(残すなら「試し変更を保存」)。
           </p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
 
         <!-- 称号(試し変更)。所持している称号(キャラタブの称号ペインで登録)を並べる -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "title"} onclick={() => toggleMaterial("title")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "title"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <Icon kind="title" id="title" size={20} label="称号" />
             <span class="card-title">称号</span>
             <span class="dim small title-head-note" use:flash={() => titleHeadNote}>{titleHeadNote}</span>
-          </button>
-          {#if openMaterial === "title"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           {#if titleChoices.length === 0}
             <button type="button" class="source-jump" onclick={() => focusCharacterSource("title")}>
               <span class="badge unknown">未登録</span>
@@ -2868,17 +2882,18 @@
           {/if}
           <p class="eq-note dim">称号は<b>基本能力値</b>に合流します。条件付き効果は記録するだけで計算に入りません。</p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- バフ -->
-        <div class="card">
-          <button type="button" class="card-head toggle" aria-expanded={openMaterial === "buffs"} onclick={() => toggleMaterial("buffs")}>
-            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "buffs"}>▼</span>
+        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+          {#snippet summary()}
             <Icon kind="buff" id="illumination_drink" size={20} label="バフ" />
             <span class="card-title">バフ</span>
             <span class="dim small num" use:bump={() => alwaysBuffCount + extraBuffCount}>{alwaysBuffCount + extraBuffCount} 件</span>
-          </button>
-          {#if openMaterial === "buffs"}
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
           <div class="calc-buff-set">
             <span>使うセット</span>
             <Picker
@@ -2899,27 +2914,21 @@
             {@const defs = consumableBuffs.filter((d) => matchesPurpose(d, purpose.id))}
             {@const picked = defs.filter((d) => buffState(d) !== "off").length}
             {#if defs.length > 0}
-              <button
-                type="button"
-                class="buff-group-head inset"
-                class:open={openBuffPurpose === purpose.id}
-                aria-expanded={openBuffPurpose === purpose.id}
-                onclick={() => (openBuffPurpose = openBuffPurpose === purpose.id ? null : purpose.id)}
-              >
-                <span class="caret bg-caret" aria-hidden="true" class:rot={openBuffPurpose === purpose.id}>▼</span>
-                <span class="bg-label">{purpose.label}</span>
-                <span class="bg-count num" use:bump={() => picked}>{picked}/{defs.length}</span>
-              </button>
-              {#if openBuffPurpose === purpose.id}
+              <Disclosure summaryClass="buff-group-head inset" group="buffPurpose">
+                {#snippet summary()}
+                  <span class="bg-label">{purpose.label}</span>
+                  <span class="bg-count num" use:bump={() => picked}>{picked}/{defs.length}</span>
+                {/snippet}
                 <div class="buff-chips">
                   {#each defs as def (def.id)}{@render buffChip(def)}{/each}
                 </div>
-              {/if}
+              </Disclosure>
             {/if}
           {/each}
           <p class="buff-note dim">変更はこの計算だけに反映され、バフセットやキャラには保存されません。</p>
           {/if}
-        </div>
+          {/snippet}
+        </Disclosure>
 
         <!-- コンボ。倍率A のコンボボーナスと中ディレイ半減は「{limits.combo_bonus_threshold} コンボ以上」で付くが、
              ユーザーが決めるのは「コンボするかどうか」なので、コンボ数は出さない。
@@ -2983,7 +2992,6 @@
   .target-trigger:hover, .target-trigger.open { background: var(--bg-rail); border-color: #9FB4D0; }
   .t-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .t-chev { font-size: 8.5px; color: var(--fg-muted); }
   .t-index { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
   .t-line2 { margin-top: 1px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .t-area { min-width: 0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3113,7 +3121,7 @@
   .panel-body { padding: 11px 13px 12px; }
 
   /* 足りない分をどう埋める? を 1 行に(旧: 紫のパネル)。押した場所は動かない(§00 03) */
-  .fill-line { margin-top: 8px; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .fill-line { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
   .fill-btn {
     min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 3px 6px;
     border-radius: var(--r-inset); text-align: left; font-size: 10.5px;
@@ -3125,8 +3133,12 @@
   .fill-pct.flat { color: var(--fg-dim); }
   /* 合計ダメージ側の伸び率。桁が変わっても表記側の位置が動かないよう幅を固定する */
   .fill-total { flex-shrink: 0; min-width: 74px; text-align: right; font-size: 9.5px; font-weight: 700; }
-  .fill-more-toggle { flex-shrink: 0; padding: 2px 6px; border-radius: var(--r-inset); font-size: 9px; color: var(--fg-muted); }
-  .fill-more-toggle:hover { color: var(--fg); background: var(--bg-active); }
+  /* 段に溶かした <details> の本文は ::details-content という箱を 1 枚挟む(display: block)。
+     行の flex item はその箱なので、全幅に落とすのは箱のほう(実測 2026-09-17) */
+  .fill-line :global(details.fill-fold) { display: contents; }
+  .fill-line :global(details.fill-fold::details-content) { flex-basis: 100%; }
+  .fill-line :global(summary.fill-more-toggle) { flex-shrink: 0; display: flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: var(--r-inset); font-size: 9px; color: var(--fg-muted); }
+  .fill-line :global(summary.fill-more-toggle:hover) { color: var(--fg); background: var(--bg-active); }
   .fill-list {
     margin-top: 4px; padding: 5px 7px; display: flex; flex-direction: column; gap: 2px;
   }
@@ -3141,9 +3153,11 @@
   .lever-list {
     margin-top: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px;
   }
-  .lever-toggle { margin-top: 9px; }
+  :global(details.lever-toggle) { margin-top: 9px; }
+  /* 文中のチップなので段に溶かす。一覧は .lever-note の子として並ぶ */
+  .lever-note :global(details.next-levers) { display: contents; }
   /* トグルの直下に開くので、上マージンは詰める(帯が二重に空かない) */
-  .lever-toggle + .lever-note { margin-top: 6px; }
+  :global(details.lever-toggle) .lever-note { margin-top: 6px; }
   .lever-note {
     margin-top: 9px; padding: 8px 10px; border-radius: var(--r-panel);
     background: #F4F9FE; border: 1px solid var(--border-soft);
@@ -3157,12 +3171,12 @@
   .stage-val { margin-left: auto; font-size: 15px; font-weight: 700; }
   /* 段の数値と行の数値の右端をそろえる: 数値(64)+ 差分(64)+ 割合(32)の 3 列を段にも持たせる。
      差分枠の幅を固定しないと、文言の幅ぶん数値が左右にずれる(ユーザー指摘 2026-09-15) */
-  .stage :global(.delta), .band-row :global(.delta) { flex-shrink: 0; width: 64px; font-size: 10px; }
+  .stage :global(.delta), .band-rows :global(summary.band-row .delta) { flex-shrink: 0; width: 64px; font-size: 10px; }
   .stage::after { content: ""; flex-shrink: 0; width: 32px; }
   .band { margin-top: 7px; display: flex; height: 11px; border-radius: var(--r-inset); overflow: hidden; border: 1px solid var(--border-soft); background: #EDF2F9; }
   .band > div { flex-shrink: 0; transition: width var(--dur-bar) var(--ease-in-out); }
   .band-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
-  .band-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .band-rows :global(summary.band-row) { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .swatch { flex-shrink: 0; width: 8px; height: 8px; border-radius: var(--r-inset); }
   .br-label { min-width: 0; flex: 1; font-size: var(--t-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .br-label.strong { font-weight: 700; }
@@ -3173,18 +3187,21 @@
   .br-val.bad { color: var(--danger); }
   .br-share { flex-shrink: 0; width: 32px; text-align: right; font-size: 9.5px; }
   /* 構成行・段フローの行は押すと内訳が直下に開く。行の位置・高さは変わらない */
-  button.band-row { width: 100%; text-align: left; border-radius: var(--r-inset); }
-  button.band-row:hover { background: var(--bg-active); box-shadow: 0 0 0 3px var(--bg-active); }
-  button.band-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .band-rows :global(details.band-fold) { display: contents; }
+  .band-rows :global(summary.band-row) { width: 100%; text-align: left; border-radius: var(--r-inset); }
+  .band-rows :global(summary.band-row:hover) { background: var(--bg-active); box-shadow: 0 0 0 3px var(--bg-active); }
+  .band-rows :global(summary.band-row:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* 押した数値の内訳。読み取り専用なのでインセット面、列は band-row と同じ段にそろえる */
-  /* hidden は disclosurePane(ui/motion.svelte.ts)が JS で付け外すので、テンプレートの
-     静的解析からは「使われている属性」に見えず、素の [hidden] だと未使用扱いになる(実測)。
-     :global で属性側の判定だけ外す */
-  .detail:global([hidden]), .dt-subs:global([hidden]), .flow-body:global([hidden]) { display: none; }
-  .detail {
-    margin: 6px 0 2px; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px;
-  }
+  /* 押した数値の内訳。読み取り専用なのでインセット面、列は band-row と同じ段にそろえる。
+     この 2 つはトリガ(鎖の節 / 帯の見出し)が別の入れ物にいて <details> に載らないので、
+     面だけを §10 型 6 の .open-in + hidden で出し入れする。display を上書きしているので、
+     隠れているあいだは自分で消す */
+  .detail[hidden], .flow-body[hidden] { display: none; }
+  /* 内訳の行の中の開閉(ui/Disclosure)。段は .detail の縦並びのままにする */
+  .detail-body :global(details.dt-fold) { display: contents; }
+  .detail { margin: 6px 0 2px; padding: 7px 9px; }
+  /* 中身は <Disclosure> の子としても使う(トリガと面が並ぶ band-row)ので、段は中身側が持つ */
+  .detail-body { display: flex; flex-direction: column; gap: 4px; }
   .dt-head { display: flex; align-items: baseline; gap: 6px 7px; flex-wrap: wrap; }
   .dt-hk { font-size: 9px; letter-spacing: 0.06em; }
   .dt-hv { min-width: 62px; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
@@ -3204,12 +3221,12 @@
   .dt-row :global(.delta), .dt-head :global(.delta) { flex-shrink: 0; min-width: 64px; font-size: 10px; }
   .dt-head :global(.delta) { font-size: 11px; }
   /* ステの行は押すと要因が直下に開く。行の位置・高さは変わらない */
-  button.dt-row-btn {
+  .detail-body :global(summary.dt-row-btn) {
     width: 100%; text-align: left; padding: 1px 3px; margin: 0 -3px;
     border: 0; background: none; color: inherit; font: inherit; border-radius: var(--r-inset);
   }
-  button.dt-row-btn:hover { background: var(--bg-active); }
-  button.dt-row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .detail :global(summary.dt-row-btn:hover) { background: var(--bg-active); }
+  .detail :global(summary.dt-row-btn:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
   .dt-subs {
     display: flex; flex-direction: column; gap: 3px;
     margin: 2px 0 3px 8px; padding-left: 8px; border-left: 1px solid var(--border-soft);
@@ -3359,22 +3376,21 @@
     margin-top: 5px; margin-bottom: 3px; display: flex; flex-direction: column; gap: 3px;
   }
   .enchant-dep { margin: 6px 0 0; font-size: 9px; }
-  /* カード見出しの開閉。押しても見出し自身は動かず、中身がその下に生えるだけ */
-  .card-head.toggle {
+  /* カード見出しの開閉(ui/Disclosure の <summary>)。押しても見出し自身は動かず、
+     中身がその下に生えるだけ。キャレットは部品が置くので、ここは字寸も向きも持たない */
+  :global(summary.card-head.toggle) {
     width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer;
   }
-  .card-head.toggle:hover .card-title { color: var(--accent); }
+  :global(summary.card-head.toggle:hover .card-title) { color: var(--accent); }
 
   /* 目的グループの見出し。押しても見出し自身は動かず、中身がその下に生えるだけ */
-  .buff-group-head {
+  :global(summary.buff-group-head) {
     width: 100%; margin-top: 5px; padding: 5px 8px;
     display: flex; align-items: center; gap: 7px; color: var(--fg-sub);
     font-size: 10px; font-weight: 700; text-align: left; cursor: pointer;
   }
-  .buff-group-head:hover { border-color: var(--accent); }
-  .buff-group-head.open { background: var(--sel-card); border-color: var(--sel-bd); color: var(--sel-fg); }
-  /* 開閉の印は幅を固定する(§09 規則 1)。回すのは app.css の .caret / .rot、ここは幅と字寸だけ持つ */
-  .bg-caret { width: 10px; text-align: center; font-size: 9px; }
+  :global(summary.buff-group-head:hover) { border-color: var(--accent); }
+  :global(details[open] > summary.buff-group-head) { background: var(--sel-card); border-color: var(--sel-bd); color: var(--sel-fg); }
   .bg-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bg-count { flex: none; min-width: 5ch; text-align: right; font-size: 9px; font-weight: 500; }
   .calc-buff-set { margin-top: 8px; display: flex; align-items: flex-start; gap: 8px; font-size: 10px; color: var(--fg-muted); }

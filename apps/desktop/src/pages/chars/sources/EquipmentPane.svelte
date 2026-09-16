@@ -13,6 +13,7 @@
     toggleAbility as toggleAbilityCommand,
   } from "../../../api/commands";
   import { draftToPayload } from "../../../draft";
+  import Disclosure from "../../../ui/Disclosure.svelte";
   import { latest } from "../../../ui/latest.svelte";
   import { damageCategoryLabel } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
@@ -61,9 +62,6 @@
   let openPart = $state<PartSlot | null>(null);
   let itemQuery = $state("");
   let showOtherEquipmentStats = $state(false);
-  const visibleEquipmentStats = $derived(
-    showOtherEquipmentStats ? [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS] : PRIMARY_EQUIPMENT_STATS,
-  );
   let showAllEquipmentCandidates = $state(false);
   let itemPickerOpen = $state(false);
   let draggedEquipmentRegistration = $state<{ slot: PartSlot; id: number } | null>(null);
@@ -435,7 +433,6 @@
     app.equipmentAbilities.filter((ability) => ability.slot === slot);
 
   /** 下位等級を開いている候補リスト。部位(武器はカテゴリ行)ごとに覚える。 */
-  let openLowerGrades = $state<Record<string, boolean>>({});
   /** 付け外し(同系統の置換・枠が埋まっているときの入れ替え・本体値の既定)は Rust の
       EquipmentPart::toggle_ability が持つ。ここは結果を当てるだけ。 */
   function toggleNonWeaponAbility(slot: PartSlot, ability: EquipmentAbilityDef) {
@@ -638,18 +635,6 @@
       {#snippet icon()}<Icon kind="equipment" id={ability.id} size={20} label={ability.name} />{/snippet}
     </ToggleRow>
   </div>
-{/snippet}
-
-{#snippet lowerGradeToggle(key: string, hiddenCount: number)}
-  <button
-    type="button"
-    class="chip add lower-grade-toggle"
-    aria-expanded={openLowerGrades[key] === true}
-    onclick={() => (openLowerGrades[key] = !openLowerGrades[key])}
-  >
-    {openLowerGrades[key] ? "ほかの等級を畳む ︿" : "ほかの等級も出す ﹀"}
-    <span class="num dim">{hiddenCount}</span>
-  </button>
 {/snippet}
 
 {#snippet partSwitchList(slot: PartSlot, registeredList: EquipmentPart[], selectedId: number | null)}
@@ -897,7 +882,23 @@
         </div>
       {/if}
       <div class="values-paired enchant-first">
-        {#each visibleEquipmentStats as k, index (k)}
+        {#each PRIMARY_EQUIPMENT_STATS as k (k)}
+          {@render equationRow(k)}
+        {/each}
+        <!-- 主要でない 5 補正。トリガは**行より先**に置く(後ろだと開いた瞬間に押した場所が下へ動く・§00 03)。
+             <details> を段に溶かして(display: contents)、行がそのまま values-paired の子になるようにする -->
+        <Disclosure class="equipment-more" summaryClass="enchant-more-toggle" bind:open={showOtherEquipmentStats}>
+          {#snippet summary(open)}
+            <span class="more-label"><b>物防・命中など5補正</b><small>物防 / 命中 / Cri / 回避 / 敏捷</small></span>
+            <span class="toggle-state">{open ? "閉じる" : "開く"}</span>
+          {/snippet}
+          {#each OTHER_EQUIPMENT_STATS as k (k)}
+            {@render equationRow(k)}
+          {/each}
+        </Disclosure>
+      </div>
+      <p class="hint dim">シエナのオーラとテシスコアは各専用欄から自動合流します。</p>
+      {#snippet equationRow(k: EquipmentStatKind)}
           {@const cap = item ? item.enchant_caps[k] : (part.enchant_caps?.[k] ?? null)}
           {@const abilityValue = partAbilityValues(slot)[k]}
           {@const displayTotal = part.base[k] + partEnchantValues(slot)[k] + abilityValue}
@@ -906,7 +907,6 @@
             class="value-pair"
             class:plan-stat={enchantPlanStats.includes(k)}
             class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(k)}
-            transition:slide={{ duration: PRIMARY_EQUIPMENT_STATS.includes(k) ? 0 : motionDuration(DUR.open) }}
           >
             <b>{EQUIPMENT_STAT_SHORT[k]}</b>
             <div class="value-equation">
@@ -944,20 +944,7 @@
               </div>
             {/if}
           </div>
-          {#if index === PRIMARY_EQUIPMENT_STATS.length - 1}
-            <button
-              type="button"
-              class="enchant-more-toggle"
-              aria-expanded={showOtherEquipmentStats}
-              onclick={() => (showOtherEquipmentStats = !showOtherEquipmentStats)}
-            >
-              <span><b>物防・命中など5補正</b><small>物防 / 命中 / Cri / 回避 / 敏捷</small></span>
-              <span class="toggle-state">{showOtherEquipmentStats ? "閉じる ︿" : "開く ﹀"}</span>
-            </button>
-          {/if}
-        {/each}
-      </div>
-      <p class="hint dim">シエナのオーラとテシスコアは各専用欄から自動合流します。</p>
+      {/snippet}
     </div>
     {/if}
 
@@ -1048,14 +1035,18 @@
               {@render nonWeaponAbilityChip(slot, ability, part.abilities, full, false)}
             {/each}
             <!-- 畳みボタンは候補の後ろに置き、開いた分はさらに後ろへ足す。
-                 押した場所(§00 03)が動かないのはこの順のときだけ -->
+                 押した場所(§00 03)が動かないのはこの順のときだけ。
+                 <details> は候補の段に溶かす(display: contents) -->
             {#if grades.folded.length > 0}
-              {@render lowerGradeToggle(slot, grades.folded.length)}
-              {#if openLowerGrades[slot]}
+              <Disclosure class="lower-grades" summaryClass="chip add lower-grade-toggle">
+                {#snippet summary(open)}
+                  {open ? "ほかの等級を畳む" : "ほかの等級も出す"}
+                  <span class="num dim">{grades.folded.length}</span>
+                {/snippet}
                 {#each grades.folded as ability (ability.id)}
                   {@render nonWeaponAbilityChip(slot, ability, part.abilities, full, true)}
                 {/each}
-              {/if}
+              </Disclosure>
             {/if}
           </div>
           {#each part.abilities as abilityId (abilityId)}

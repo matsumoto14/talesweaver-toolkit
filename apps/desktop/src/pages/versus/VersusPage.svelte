@@ -18,8 +18,9 @@
   import { PART_SLOT_LABELS, PET_SKILL_TIER_LABELS, RANDOM_OPTION_RANK_LABELS } from "../../labels";
   import { app, gameCharacterName, payloadOf } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Disclosure from "../../ui/Disclosure.svelte";
   import { badgeStyle } from "../../ui/states";
-  import { bump, collapse, flash } from "../../ui/motion.svelte";
+  import { bump, flash } from "../../ui/motion.svelte";
   import { latest } from "../../ui/latest.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
@@ -501,16 +502,11 @@
   skillId: string,
   skills: { list: Skill[]; override: string | null },
 )}
-  <div class="stat-block">
-    <button
-      type="button"
-      class="stat-row main stat-toggle"
-      aria-expanded={accBlockOpen}
-      onclick={() => (accBlockOpen = !accBlockOpen)}
-    >
+  <Disclosure class="stat-block" summaryClass="stat-row main stat-toggle" bind:open={accBlockOpen}>
+    {#snippet summary(open)}
       <div class="stat-label">
-        <span class="caret stat-caret" class:rot={accBlockOpen}>▼</span>命中P
-        {#if !accBlockOpen && result}
+        命中P
+        {#if !open && result}
           <!-- 畳んでも「何のスキルで・的中剣は」が残る(計算タブの折りたたみカードの右の要約と同じ役) -->
           <span class="stat-summary dim">
             {skills.list.find((s) => s.id === skillId)?.name ?? ""}
@@ -519,10 +515,10 @@
         {/if}
       </div>
       <div class="stat-val">{@render numCell(result?.accuracy_point ?? null, accCount > 0)}</div>
-    </button>
-    {#if accBlockOpen}
-      <!-- 開閉は高さが変わるので動かす(§00 04)。2 列で同時に開閉するので同時に動く -->
-      <div class="stat-body" transition:collapse>
+    {/snippet}
+      <!-- 開閉の動きは <details> の ::details-content(app.css)が持つ。2 列は同じ変数を
+           bind しているので同時に開閉し、同時に動く -->
+      <div class="stat-body">
         <ReadRow label="DEX" value={result ? fmtInt(result.attacker_dex) : null} motion={() => result?.attacker_dex ?? null} tone={accCount > 0 ? "sim" : null} />
         <ReadRow label="装備の命中補正" value={result ? fmtInt(result.equipment_accuracy) : null} motion={() => result?.equipment_accuracy ?? null} />
         <ReadRow label="スキルの命中">
@@ -558,8 +554,7 @@
           accCount, result?.before_tries?.accuracy_point ?? null, result?.accuracy_point ?? null,
         )}
       </div>
-    {/if}
-  </div>
+  </Disclosure>
 {/snippet}
 
 {#snippet evaBlock(
@@ -567,23 +562,17 @@
   result: VersusAccuracy | null,
   evaCount: number,
 )}
-  <div class="stat-block">
-    <button
-      type="button"
-      class="stat-row main stat-toggle"
-      aria-expanded={evaBlockOpen}
-      onclick={() => (evaBlockOpen = !evaBlockOpen)}
-    >
+  <Disclosure class="stat-block" summaryClass="stat-row main stat-toggle" bind:open={evaBlockOpen}>
+    {#snippet summary(open)}
       <div class="stat-label">
-        <span class="caret stat-caret" class:rot={evaBlockOpen}>▼</span>回避P
-        {#if !evaBlockOpen && result}
+        回避P
+        {#if !open && result}
           <span class="stat-summary dim">AGI <span class="num">{result.defender_agi}</span></span>
         {/if}
       </div>
       <div class="stat-val">{@render numCell(result?.evasion_point ?? null, evaCount > 0)}</div>
-    </button>
-    {#if evaBlockOpen}
-      <div class="stat-body" transition:collapse>
+    {/snippet}
+      <div class="stat-body">
         <ReadRow label="AGI" value={result ? fmtInt(result.defender_agi) : null} motion={() => result?.defender_agi ?? null} tone={evaCount > 0 ? "sim" : null} />
         <ReadRow label="装備の回避補正" value={result ? fmtInt(result.equipment_evasion) : null} motion={() => result?.equipment_evasion ?? null} />
         <ReadRow label="装備の敏捷補正" value={result ? fmtInt(result.equipment_agility) : null} motion={() => result?.equipment_agility ?? null} />
@@ -598,8 +587,7 @@
           evaCount, result?.before_tries?.evasion_point ?? null, result?.evasion_point ?? null,
         )}
       </div>
-    {/if}
-  </div>
+  </Disclosure>
 {/snippet}
 
 {#snippet directionColumn(
@@ -770,28 +758,29 @@
   /* 開いているブロックだけが残りの高さを取る。閉じたブロックが flex: 1 のままだと空の余白が残る(実機で検出) */
   /* 命中P / 回避P はそれぞれ 1 枚のカード(app.css の .card と同じ面)。破線 1 本の区切りだと
      手の面の直後に次の頭が来て、どこまでが命中P か読めない(ユーザー指摘 2026-09-02) */
-  .stat-block {
+  /* 面もトリガも ui/Disclosure の <details> / <summary> なので :global で届かせる */
+  .direction :global(details.stat-block) {
     display: flex; flex-direction: column; flex: 0 0 auto;
     padding: 5px 10px 8px; border-radius: var(--r-window);
     background: var(--bg-field); border: 1px solid var(--border-strong);
   }
-  .stat-block:has(.stat-body) .stat-row.main { border-bottom: 1px solid var(--border-soft); margin-bottom: 3px; }
-  .stat-block:has(.stat-body) { flex: 1 1 auto; min-height: 0; }
+  /* 開いているあいだだけ下に罫を引き、列の高さを取る(閉じているときは行 1 本ぶん) */
+  .direction :global(details.stat-block[open] > summary.stat-row) { border-bottom: 1px solid var(--border-soft); margin-bottom: 3px; }
+  .direction :global(details.stat-block[open]) { flex: 1 1 auto; min-height: 0; }
   /* 行の高さは固定。的中剣チップの行だけ高くなると 2 列の命中P / 回避P の段がずれる(実機で 3px 検出) */
   /* 頭の行(押すと開閉)。中の行は ui/ReadRow */
-  .stat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px; height: 21px; box-sizing: border-box; }
+  .direction :global(summary.stat-row) { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px; height: 21px; box-sizing: border-box; }
   .stat-body :global(.picker-trigger) { padding: 2px 8px; }
   .stat-label { display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--fg-sub); white-space: nowrap; }
   .stat-val { text-align: right; min-width: 0; }
   .stat-val :global(.num) { font-size: 11px; }
-  .stat-row.main .stat-label { font-size: 11.5px; font-weight: 800; color: var(--fg-head); min-width: 0; }
+  /* 頭の行だけ大きく。キャレットは Disclosure が行頭に置くので、ラベルが残りを取る(値は右端のまま) */
+  :global(summary.stat-row) .stat-label { flex: 1; font-size: 11.5px; font-weight: 800; color: var(--fg-head); min-width: 0; }
   /* 畳んだときの要約(スキル名・的中剣 / AGI)。頭の行の高さは変えない */
   .stat-summary { margin-left: 6px; font-size: 10px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .stat-row.main .stat-val :global(.num) { font-size: 15px; font-weight: 800; color: var(--fg-head); }
-  /* 頭の行(押すと開閉)。押した行自体は動かない(§00 03) */
-  .stat-toggle { width: 100%; border: 0; background: none; font: inherit; cursor: pointer; }
-  .stat-toggle:hover .stat-label { color: var(--accent); }
-  .stat-caret { width: 9px; font-size: 9px; color: var(--fg-dim); }
+  :global(summary.stat-row) .stat-val :global(.num) { font-size: 15px; font-weight: 800; color: var(--fg-head); }
+  /* 頭の行(押すと開閉)。押した行自体は動かない(§00 03)。キャレットは ui/Disclosure が置く */
+  .direction :global(summary.stat-toggle:hover .stat-label) { color: var(--accent); }
   .stat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
   /* 「全部やると」〜「手の面」の段 ------------------------------------------------- */

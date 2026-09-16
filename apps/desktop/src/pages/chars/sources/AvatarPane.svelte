@@ -15,6 +15,7 @@
     OTHER_EQUIPMENT_STATS, PRIMARY_EQUIPMENT_STATS,
   } from "../../../labels";
   import { limits } from "../../../limits.svelte";
+  import Disclosure from "../../../ui/Disclosure.svelte";
   import { bump, flash } from "../../../ui/motion.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import { avatarEnhanceSummary } from "../summaries";
@@ -50,7 +51,6 @@
     openPart = openPart === part ? null : part;
     showOtherStats = OTHER_EQUIPMENT_STATS.some((k) => draft.equipment.avatar[part][k] > 0);
   }
-  const visibleStats = $derived(showOtherStats ? [...PRIMARY_EQUIPMENT_STATS, ...OTHER_EQUIPMENT_STATS] : PRIMARY_EQUIPMENT_STATS);
 
   /** そのセルの選択肢(なし/+10/+12。既存値がそれ以外なら、その値も選べるよう足す)。 */
   function cellOptions(part: AvatarPart, kind: EquipmentStatKind) {
@@ -72,8 +72,8 @@
 
 <div class="card">
   <!-- 説明は毎回読むものではない。畳んで、入力の場所を押し下げないようにする(§00 02) -->
-  <details class="fold">
-    <summary>この画面の読み方</summary>
+  <Disclosure class="fold">
+    {#snippet summary()}この画面の読み方{/snippet}
     <div class="fold-body">
       <p class="hint dim">
         アバターは兜・頭・体・脚・エフェクトの5部位。各部位にアバター強化剤で装備補正
@@ -87,7 +87,28 @@
         旧品の +1 / +3 などが既に入っている部位はその値のまま選べます。
       </p>
     </div>
-  </details>
+
+  </Disclosure>
+
+{#snippet statRow(part: AvatarPart, kind: EquipmentStatKind)}
+  {@const options = cellOptions(part, kind)}
+  <div class="avatar-stat-row" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(kind)}>
+    <b>{EQUIPMENT_STAT_SHORT[kind]}</b>
+    <StepSelect
+      label=""
+      {options}
+      cols={options.length}
+      cell={34}
+      bind:value={
+        () => String(draft.equipment.avatar[part][kind]),
+        (v) => setCell(part, kind, v)
+      }
+    />
+    <span class="stat-total num" class:dim={totals[kind] === 0} use:bump={() => totals[kind]}>
+      {totals[kind] === 0 ? "" : `5部位計 ${fmtSigned(totals[kind])}`}
+    </span>
+  </div>
+{/snippet}
 
   <div class="part-list">
     {#each AVATAR_PARTS as part (part)}
@@ -101,34 +122,20 @@
       </button>
       {#if openPart === part}
         <div class="avatar-editor inset" aria-label={`${AVATAR_PART_LABELS[part]}のアバター強化`}>
-          {#each visibleStats as kind (kind)}
-            {@const options = cellOptions(part, kind)}
-            <div class="avatar-stat-row" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(kind)}>
-              <b>{EQUIPMENT_STAT_SHORT[kind]}</b>
-              <StepSelect
-                label=""
-                {options}
-                cols={options.length}
-                cell={34}
-                bind:value={
-                  () => String(draft.equipment.avatar[part][kind]),
-                  (v) => setCell(part, kind, v)
-                }
-              />
-              <span class="stat-total num" class:dim={totals[kind] === 0} use:bump={() => totals[kind]}>
-                {totals[kind] === 0 ? "" : `5部位計 ${fmtSigned(totals[kind])}`}
-              </span>
-            </div>
+          {#each PRIMARY_EQUIPMENT_STATS as kind (kind)}
+            {@render statRow(part, kind)}
           {/each}
-          <button
-            type="button"
-            class="enchant-more-toggle"
-            aria-expanded={showOtherStats}
-            onclick={() => (showOtherStats = !showOtherStats)}
-          >
-            <span><b>物防・命中など5補正</b><small>物防 / 命中 / Cri / 回避 / 敏捷</small></span>
-            <span class="toggle-state">{showOtherStats ? "閉じる ︿" : "開く ﹀"}</span>
-          </button>
+          <!-- 主要でない 5 補正は畳んでおく。トリガは**行より先**に置く — 後ろに置くと、
+               開いたときに押した場所そのものが下へ動く(§00 03) -->
+          <Disclosure class="avatar-more" summaryClass="enchant-more-toggle" bind:open={showOtherStats}>
+            {#snippet summary(open)}
+              <span class="more-label"><b>物防・命中など5補正</b><small>物防 / 命中 / Cri / 回避 / 敏捷</small></span>
+              <span class="toggle-state">{open ? "閉じる" : "開く"}</span>
+            {/snippet}
+            {#each OTHER_EQUIPMENT_STATS as kind (kind)}
+              {@render statRow(part, kind)}
+            {/each}
+          </Disclosure>
         </div>
       {/if}
     {/each}

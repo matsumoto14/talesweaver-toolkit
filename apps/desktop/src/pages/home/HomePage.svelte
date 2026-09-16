@@ -41,9 +41,10 @@
     payloadOf, refreshEvaluation, selectedCharacter, totalContents, upsertCharacter,
   } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, disclosurePane, flash, swap } from "../../ui/motion.svelte";
+  import { bump, flash, swap } from "../../ui/motion.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
@@ -286,16 +287,9 @@
     return out;
   }
 
-  // エリアの開閉(既定: 全部畳む。fold 自体も既定で畳む)
-  let openAreas = $state<Record<string, boolean>>({});
+  // エリアの開閉は <details>(ui/Disclosure)が持つ。既定は全部畳む
   function areaRows(areaId: string): Row[] {
     return rows.filter((r) => r.areaId === areaId);
-  }
-  function isAreaOpen(areaId: string): boolean {
-    return openAreas[areaId] ?? false;
-  }
-  function toggleArea(areaId: string) {
-    openAreas[areaId] = !isAreaOpen(areaId);
   }
 
   /** 未収録(収録度バッジが出る)コンテンツ数。fold の畳み要約に使う。 */
@@ -1343,8 +1337,8 @@
       </div>
 
       <!-- ===== どこまでいける?: 畳み既定。エリア 4 行 → 押すと直下に一覧が展開(§09 規則 1) ===== -->
-      <details class="fold reach-fold">
-        <summary>
+      <Disclosure class="fold reach-fold">
+        {#snippet summary()}
           <span class="area-name">どこまでいける?</span>
           <span class="fold-count">
             クリア済み <span class="num" use:bump={() => clearedCount}>{fmtInt(clearedCount)}</span>
@@ -1353,7 +1347,7 @@
           {#if uncoveredCount > 0}
             <span class="fold-note dim">未収録 <span class="num">{fmtInt(uncoveredCount)}</span></span>
           {/if}
-        </summary>
+        {/snippet}
         <div class="fold-body">
           {#if !app.evaluations[character.id]}
             <div class="retry-row">
@@ -1363,26 +1357,24 @@
           {/if}
           <div class="areas">
             {#each areas as area (area.id)}
-              {@const open = isAreaOpen(area.id)}
               {@const shown = areaDisplayRows(area.id)}
               {@const okCount = shown.filter((r) => r.ev?.clear).length}
-              <div class="area">
-                <button type="button" class="mini-row" aria-expanded={open} onclick={() => toggleArea(area.id)}>
-                  <span class="name">{area.name}</span>
-                  <span class="meter">
+              <Disclosure class="area" summaryClass="mini-row">
+                {#snippet summary()}
+                  <span class="mini-row-name">{area.name}</span>
+                  <span class="meter mini-row-meter">
                     <span
                       class="fill"
                       style="width: {shown.length ? (okCount / shown.length) * 100 : 0}%; background: var(--state-met-bar);"
                     ></span>
                   </span>
-                  <span class="num count">{okCount} / {shown.length}</span>
-                  <span class="caret dim" class:rot={open}>▼</span>
-                </button>
+                  <span class="num mini-row-count">{okCount} / {shown.length}</span>
+                {/snippet}
+                {#snippet children(open)}
                 {#if open}
-                  <!-- 一覧は重いので {#if} でマウント/アンマウントのまま(常時マウントの hidden
-                       方式にはしない)。面の .open-in / hidden は disclosurePane に寄せ、
-                       「open-in」の文字列をこの 1 か所以外に書かない -->
-                  <div class="rows" use:disclosurePane={() => open}>
+                  <!-- 一覧は重いので開いたときだけ組み立てる(常時マウントにはしない)。
+                       開閉の動きは <details> の ::details-content が持つ -->
+                  <div class="rows">
                     {#each shown as r (r.content.series?.id ?? r.content.id)}
                       {@const st = rowState(r)}
                       {@const cov = coverage(r)}
@@ -1450,11 +1442,12 @@
                     {/each}
                   </div>
                 {/if}
-              </div>
+                {/snippet}
+              </Disclosure>
             {/each}
           </div>
         </div>
-      </details>
+      </Disclosure>
 
       <p class="foot dim">
         入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
@@ -1636,21 +1629,22 @@
   .tile-more { align-self: flex-start; margin-top: 2px; }
 
   /* ===== どこまでいける?(details.fold は app.css 側の畳み見た目を継承) ===== */
-  .reach-fold summary { display: flex; align-items: center; gap: 9px; }
+  :global(details.reach-fold > summary) { gap: 9px; }
   .fold-count { font-size: 10.5px; font-weight: 700; color: var(--fg-sub); }
   /* 未収録数は見出しの主役(クリア済み)より控えめに(§00 02: いま要らないものは弱める) */
   .fold-note { margin-left: auto; font-size: 9.5px; }
 
   .areas { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
-  .area { display: flex; flex-direction: column; gap: 6px; }
-  .mini-row {
+  /* エリアの畳み(ui/Disclosure)。面とトリガは部品の中にあるので :global で届かせる */
+  .areas :global(details.area) { display: flex; flex-direction: column; gap: 6px; }
+  .areas :global(summary.mini-row) {
     display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: var(--r-window);
     background: var(--bg-field); border: 1px solid var(--border-soft); text-align: left;
   }
-  .mini-row:hover { border-color: var(--accent); }
-  .mini-row .name { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .mini-row .meter { width: 90px; flex: none; }
-  .mini-row .count { flex: none; width: 46px; text-align: right; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); }
+  .areas :global(summary.mini-row:hover) { border-color: var(--accent); }
+  .mini-row-name { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini-row-meter { width: 90px; flex: none; }
+  .mini-row-count { flex: none; width: 46px; text-align: right; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); }
 
   .rows { padding-left: 6px; display: flex; flex-direction: column; gap: 6px; }
   .row {

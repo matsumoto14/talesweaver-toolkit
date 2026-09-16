@@ -318,7 +318,9 @@
             {/each}
             {#if count === 0}<span class="dim">なし</span>{/if}
           </span>
-          <span class="chev dim">{openRandomPart === slot ? "▾" : "›"}</span>
+          <!-- 印は他の部位行(装備・アバター)と同じ進行方向の 1 つだけ。開閉で文字を差し替えると
+               動きが出ず、開いたのかが一瞬わからない(§10) -->
+          <span class="chev dim">›</span>
         </button>
         {#if openRandomPart === slot}
         <div class="part-detail ro-inline" bind:this={detailEl} transition:slide={{ duration: motionDuration(DUR.open) }}>

@@ -15,9 +15,10 @@
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
   import { reportError } from "../../../toast.svelte";
+  import Disclosure from "../../../ui/Disclosure.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
-  import { bump, disclosurePane, flash, pulse } from "../../../ui/motion.svelte";
+  import { bump, flash, pulse } from "../../../ui/motion.svelte";
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
@@ -220,26 +221,24 @@
         {#if app.characterIcons[characterId]}
           <button type="button" class="chip quiet" disabled={iconSaving} onclick={resetIcon}>標準に戻す</button>
         {/if}
-        <button type="button" class="chip quiet" class:on={charPickOpen} aria-expanded={charPickOpen} onclick={() => (charPickOpen = !charPickOpen)}>
-          {charPickOpen ? "閉じる" : "変更"}
-        </button>
+        <Disclosure class="char-pick" summaryClass="chip quiet" bind:open={charPickOpen}>
+          {#snippet summary(open)}{open ? "閉じる" : "変更"}{/snippet}
+          <!-- 顔は多いので行を折り返して全幅に落とす(details は display:contents で行に溶ける) -->
+          <div class="pick-grid">
+            {#each app.gameCharacters as c (c.id)}
+              <button
+                type="button"
+                class="pick"
+                class:on={c.id === draft.gameCharacterId}
+                onclick={() => { setGameCharacterId(c.id); charPickOpen = false; }}
+              >
+                <Icon kind="character" id={c.id} size={40} label={c.name} />
+                <span class="pick-name">{c.name}</span>
+              </button>
+            {/each}
+          </div>
+        </Disclosure>
       </div>
-      {#if charPickOpen}
-        <!-- 選べるキャラは多いので {#if} でマウント/アンマウントのまま。面は disclosurePane -->
-        <div class="pick-grid" use:disclosurePane={() => charPickOpen}>
-          {#each app.gameCharacters as c (c.id)}
-            <button
-              type="button"
-              class="pick"
-              class:on={c.id === draft.gameCharacterId}
-              onclick={() => { setGameCharacterId(c.id); charPickOpen = false; }}
-            >
-              <Icon kind="character" id={c.id} size={40} label={c.name} />
-              <span class="pick-name">{c.name}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
     </div>
     <!-- エタの意志は覚醒 5 の先にあるもの。**選んだ時点で覚醒は 5 で確定する**ので、
          覚醒より先に置く(§00 01 決める順に並べる) -->
@@ -410,8 +409,8 @@
   </div>
   <!-- ゲーム内の数字と合わないときに見る場所。ふだんは畳んでおき(§00 02)、
        開くと「バフ / 装備 / そのほか」で上昇分が割れる。区分の合計は必ず最終能力値に一致する -->
-  <details class="contrib">
-    <summary>上昇の出どころ <span class="dim">バフ / 装備 / そのほか</span></summary>
+  <Disclosure class="contrib">
+    {#snippet summary()}上昇の出どころ <span class="dim">バフ / 装備 / そのほか</span>{/snippet}
     {#if !preview || preview.source_effects.length === 0}
       <p class="empty dim">補正源なし(素ステのみ)</p>
     {:else}
@@ -445,8 +444,8 @@
       </div>
       <p class="note dim">素 + バフ + 装備 + そのほか = 最終(上限で捨てた分も織り込み済み)。倍率をかける補正源は、先に乗った固定値を増やした分も自分の区分で受け取ります。</p>
       <!-- 「どの層の 1 件が抜けているか」までは、ここを開いて 1 件ずつ見る -->
-      <details class="contrib inner">
-        <summary>1 件ずつ見る <span class="dim">{preview.source_effects.length} 件</span></summary>
+      <Disclosure class="contrib inner">
+        {#snippet summary()}1 件ずつ見る <span class="dim">{preview.source_effects.length} 件</span>{/snippet}
         <div class="tbl">
           <table class="grid ro">
             <thead><tr><th>ステ</th><th>区分</th><th>出典</th><th>層</th><th class="n">値</th><th class="n">効果</th></tr></thead>
@@ -464,7 +463,9 @@
             </tbody>
           </table>
         </div>
-      </details>
+
+      </Disclosure>
     {/if}
-  </details>
+
+  </Disclosure>
 </div>

@@ -356,9 +356,14 @@
      ラベルを上に置くと 1 件で 2 行使い、8 件で画面が埋まる(§00 01 / 02) */
   /* キャラの顔で選ぶ場所(登録ペインと同じ形。見た目は app.css の .pick に置いてある) */
   .pick-grid { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 6px; }
-  .char-now { display: flex; align-items: center; gap: 9px; }
+  .char-now { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
   .char-now .char-name { font-size: 13px; font-weight: 700; }
   .char-now .chip { margin-left: 4px; }
+  /* 「変更」のトリガは行の中、顔の一覧は行の下。ui/Disclosure の <details> を行に溶かして
+     (display: contents)両方を .char-now の直接の子にする — 開閉の動きは ::details-content が持つ */
+  details.char-pick { display: contents; }
+  /* 行の flex item になるのは ::details-content の箱のほう。全幅に落とすのはそちらに書く */
+  details.char-pick::details-content { flex-basis: 100%; }
   .stage-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .stage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .stage-row > :global(.chip) { flex: none; }
@@ -442,13 +447,23 @@
   .growth-equipment-values { width: min(100%, 460px); }
   .growth-equipment-values .stat-row { grid-template-columns: 76px minmax(0, 1fr); }
   .growth-equipment-values .stat-row :global(.stepper .cell) { flex: 0 1 104px; }
+  /* 「物防・命中など5補正」と「ほかの等級」は ui/Disclosure。段(grid / flex)に溶かして、
+     トリガも中身も親の直接の子として並ぶようにする。開閉の動きは ::details-content が持つ */
+  details.equipment-more, details.avatar-more, details.lower-grades { display: contents; }
+  /* 段に溶かしても ::details-content の箱は 1 枚残る(display: block)ので、
+     親の段(grid / flex)に合わせて全幅に落とし、中身は親と同じ並べ方にする(実測 2026-09-17) */
+  details.lower-grades::details-content {
+    grid-column: 1 / -1;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 3px;
+  }
   .enchant-more-toggle {
     width: min(100%, 520px); grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
     border: 0; border-top: 1px dashed var(--border-soft); background: none; color: var(--fg-sub);
     display: flex; align-items: center; justify-content: space-between; text-align: left;
   }
   .enchant-more-toggle:hover { color: var(--accent-hover); }
-  .enchant-more-toggle > span:first-child { display: flex; align-items: baseline; gap: 8px; }
+  /* キャレットは ui/Disclosure が行頭に置くので、ラベルの塊が残りを取る */
+  .enchant-more-toggle .more-label { flex: 1; display: flex; align-items: baseline; gap: 8px; }
   .enchant-more-toggle b { font-size: 10px; }
   .enchant-more-toggle small { color: var(--fg-muted); font-size: 9px; }
   .enchant-more-toggle .toggle-state { width: 56px; text-align: right; color: var(--accent-hover); font-size: 9.5px; }

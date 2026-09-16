@@ -3,6 +3,7 @@
   import type { CategoryTrace, DamageContribution, DamageTrace, StatSourceEffect, StatTrace } from "../../api/types";
   import { fmtInt, fmtNum, fmtSignedPct, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
+  import Disclosure from "../../ui/Disclosure.svelte";
   import { bump } from "../../ui/motion.svelte";
   import { PresenceMemo } from "../../ui/presence";
 
@@ -64,13 +65,11 @@
     kind === "rate" ? fmtSignedPct(v, { max: 4 }) : fmtNum(v);
 </script>
 
-<details class="trace">
-  <summary>
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg>
+<Disclosure class="trace">
+  {#snippet summary()}
     <span>詳細トレース</span>
     <span class="dim">能力値 {trace.stats.length} / カテゴリ {trace.categories.length} / 式 {trace.steps_max.length} 段</span>
-  </summary>
-
+  {/snippet}
   <div class="section-label"><span>(a) 能力値計算</span><span class="rule"></span></div>
   <div class="tbl">
     <table class="grid ro">
@@ -197,19 +196,16 @@
       </tbody>
     </table>
   </div>
-</details>
+</Disclosure>
 
 <style>
-  .trace { border-top: 1px dashed var(--border-soft); margin-top: 12px; }
-  summary {
+  /* 面と行は ui/Disclosure.svelte の中にあるので :global で届かせる(この画面だけの見た目) */
+  :global(details.trace) { border-top: 1px dashed var(--border-soft); margin-top: 12px; }
+  :global(details.trace > summary) {
     display: flex; align-items: center; gap: 8px; padding: 11px 2px;
-    font-size: 10px; letter-spacing: 0.14em; color: var(--fg-muted); cursor: pointer; list-style: none;
-    user-select: none;
+    font-size: 10px; letter-spacing: 0.14em; color: var(--fg-muted);
   }
-  summary::-webkit-details-marker { display: none; }
-  summary svg { transition: transform var(--dur-tap) var(--ease-tap); }
-  details[open] summary svg { transform: rotate(90deg); }
-  summary:hover { color: var(--fg); }
+  :global(details.trace > summary:hover) { color: var(--fg); }
   .section-label { padding: 10px 2px 8px; }
   /* .tbl は app.css(この画面だけ margin-bottom を持つ) */
   .tbl { margin: 0 0 8px; }
