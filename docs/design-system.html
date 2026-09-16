@@ -2754,35 +2754,23 @@ td code { background: var(--card-soft2); }
         </div>
 
         <div class="dec">
-          <div class="dec-h"><span class="n2">G</span><b>キャラタブが §09 規則 1 の実機監査から丸ごと外れている</b><span class="soonbadge">保留</span></div>
-          <p><code>clickall.js</code>(押せる要素を総当たりし、押す前後の <code>offsetTop</code> を比べる)は、
-            キャラタブの 16 ペインを毎回 <b>TARGETS から外して</b>走らせている。キャラタブは自動保存なので、
-            監査が押すと開発 DB の実データが書き換わり、あとで実装のバグと区別が付かなくなるため。</p>
+          <div class="dec-h"><span class="n2">G</span><b>キャラタブは §09 規則 1 を一度も通していない</b><span class="soonbadge">保留</span></div>
+          <p>キャラタブの 16 ペインは、押した要素がその場に残るかを確かめたことがない。
+            自動保存なので、押すと開発 DB の実データが書き換わり、あとで実装のバグと
+            区別が付かなくなるため触れずにきた(実機監査があった頃も対象から外していた)。</p>
           <p class="why"><b>なぜ困るか</b> 画面数でいえば大半がこの検査に一度もかかっていない。
             計算タブで見つかった「押すと押した行が消える」「押すと下が流れる」の 2 件は、
             同じ形がキャラタブにあっても誰も気づけない。
-            <b>着手条件</b>: 監査用に使い捨てのキャラを作って選び、終わったら消す仕組みを
-            <code>gui-smoke</code> 側に用意すること。それができるまでこの穴は埋まらない。</p>
-          <span class="where">効くところ: キャラタブ 全 16 ペイン / tools/design-audit/live/clickall.js</span>
-        </div>
-
-        <div class="dec">
-          <div class="dec-h"><span class="n2">H</span><b>監査の「見つからず」が 2 つの意味を持っている</b><span class="soonbadge">保留</span></div>
-          <p><code>clickall.js</code> の ⚠ は「セレクタが古い」と「このキャラ・この状態では要素が出ない」を
-            区別できない。実例: <code>button.fill-btn</code>(目安に届いているキャラでは出ない)、
-            <code>.row</code>(エリアを開かないと無い)。どちらも実装は正しい。</p>
-          <p class="why"><b>なぜ困るか</b> 本当にセレクタが古くなったときに埋もれる。今周は
-            <code>motion.js</code> と <code>attention.js</code> と <code>clickall.js</code> で
-            同じ「静かに測らなくなる」事故が 5 件出ている。
-            <b>着手条件</b>: ターゲット側に「この状態では出なくてよい」を宣言できるようにする。
-            宣言の無いターゲットが見つからなければ、それは古いセレクタとして扱う。</p>
-          <span class="where">効くところ: tools/design-audit/live/clickall.js</span>
+            <b>着手条件</b>: 使い捨てキャラを作って選び、終わったら消す手順を決めること。
+            <code>gui-smoke</code> の <code>db-guard.ps1</code> で前後を丸ごと退避 / 復元すれば、
+            <b>手で押して確かめる</b>だけで埋まる穴でもある。</p>
+          <span class="where">効くところ: キャラタブ 全 16 ペイン(実機で自分で押して確かめる)</span>
         </div>
 
         <div class="dec">
           <div class="dec-h"><span class="n2">I</span><b>バフのチップ群が 31 行に折り返している(A1)</b><span class="soonbadge">保留</span></div>
-          <p><code>attention.js</code> の A1 が、計算タブ右ペインの <code>.buff-chips</code> を 31 行、
-            バフタブの <code>.chips</code> を 10 行として挙げ続けている。A2 / A4 / A5 は全画面 0 件なので、
+          <p>計算タブ右ペインの <code>.buff-chips</code> が 31 行、
+            バフタブの <code>.chips</code> が 10 行に折り返している(2026-09 の実測)。ほかの画面は 0 件なので、
             残っているのはこれだけ。</p>
           <p class="why"><b>どちらが正しいか</b> バフは「セットを組む」ための一覧なので、
             数が多いこと自体は情報として要る(§00 02 の判断は人がする)。ただし計算タブ側は

@@ -18,7 +18,7 @@
 - Subagent 内では CLAUDE.md の実行ワークフローを適用しない(再委譲禁止)。各エージェント定義に `disallowedTools: Agent` を設定し、CLAUDE.md に「この節はメインセッションにのみ適用」と明記した。
 - 変更を Small / Normal / Complex の 3 段階に分類し、researcher → implementer → reviewer のフルワークフローは Complex のみに限定した。
 - `reviewer` と `/code-review` を同一変更に重ねない(観点が異なる場合のみ追加レビューを許容)。
-- 実機 GUI 確認は専任の `smoke-tester`(Sonnet / medium)に固定し、general-purpose には行わせない。
+- 実機 GUI 確認は専任の `smoke-tester`(Sonnet / medium)に固定し、general-purpose には行わせない。**(2026-09-16 取り下げ。ADR-014 — 実機の自動操作をやめたため agent ごと廃止し、確認はメインセッションが自分で行う)**
 - `implementer` は effort medium、`researcher`/`reviewer` は high を維持する(実装は受け入れ条件・対象ファイルが依頼文で与えられるため high の余地が小さい一方、調査・独立レビューは Complex 限定なので品質を優先する)。
 - Context 管理(goal ごとに `/clear`、150k 超で `/compact`、`/code-review` は専用セッション)を運用推奨とした。
 

@@ -25,6 +25,7 @@
     "@sveltejs/vite-plugin-svelte": "^5",
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.4.0",
+    "playwright-core": "^1.55.0",
     "svelte": "^5",
     "svelte-check": "^4",
     "typescript": "^5",

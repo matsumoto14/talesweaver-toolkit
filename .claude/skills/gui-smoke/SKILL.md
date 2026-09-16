@@ -1,11 +1,13 @@
 ---
 name: gui-smoke
-description: Tauri デスクトップアプリを実機起動し、WebView2 のリモートデバッグ(CDP)+ Playwright で画面操作・スモークテスト・スクリーンショット撮影を行う。UI 変更の実機確認、スクリーンショット撮影、画面の回帰確認を頼まれたときに使う。
+description: Tauri デスクトップアプリを実機起動して画面を撮る。UI 変更の実機確認でユーザーに画面を見せたいとき、スクリーンショットを頼まれたときに使う。操作・測定はしない(判断は人がする)。
 ---
 
-# GUI スモークテスト(WebView2 CDP + Playwright)
+# 実機の撮影(WebView2 CDP)
 
-専用ドライバは書かない。WebView2 に `--remote-debugging-port=9222` を付けて `npm run tauri dev` を起動し、Playwright の `chromium.connectOverCDP` で操作する。
+**撮るだけ。**画面を自動で操作したり、座標・高さを測ったりはしない —
+UI が正しいかは**人が見て決める**(docs/adr/014 の決定)。動かして確かめたいことがあるなら、
+このスキルで起動したアプリを**自分の手で触る**。
 
 ## 手順
 
@@ -19,14 +21,15 @@ description: Tauri デスクトップアプリを実機起動し、WebView2 の�
    powershell -File .claude/skills/gui-smoke/scripts/start-app.ps1
    ```
    9222 が開くまで待って戻る。既に起動済みならそのまま使う(二重起動しない)。
-2. **スクリプト作成**: `scripts/smoke-template.js` をスクラッチパッドに **1 ファイルだけ**コピーし、確認項目を書く。ヘルパー(`nav` / `openCharacter` / `openGroup` / `statInput` / `pick` / `stepByLabel` / `toggle` / `saveCharacter` / `calculate` / `openTrace` / `textAfter` など)は実機で動作確認済みなので、**DOM 探索(`innerHTML` / `bodyText.slice` の出力)から始めない**。ヘルパーで届かない要素があるときだけ、その要素の周辺に限定して `page.content()` を確認する。スクリプトは `Edit` で差分修正し、毎回 heredoc で書き直さない。
-3. **実行**: Playwright は本リポに入っていないので旧リポの node_modules を使う:
+2. **撮る**(出力先はセッションの scratchpad。リポには残さない):
    ```
-   NODE_PATH=/c/github/private/twtoolkit/node_modules node <script>.js
+   node apps/desktop/scripts/shoot.js <出力先> [タブ名...]
    ```
-4. **撮影**: スクリーンショットは一時ディレクトリ(セッションの scratchpad など)に `<NN>-<内容>.png` で出す(fullPage、ビューポート 1280×840 が標準)。リポには残さない。
-5. **終了**: 起動したプロセスを止める(`Stop-Process -Name talesweaver-toolkit` または tauri dev のウィンドウを閉じる)。
-6. **開発 DB を復元する**(プロセスを止めた**後**。必ずやる):
+   タブ名を省略すると、いま開いている画面を 1 枚。ビューポート 1280×840・fullPage。
+3. **ユーザーに出す**: 撮った画像は **`SendUserFile` で出す**。パスを書くだけにしない。
+   一緒に「この画面で何を見てほしいか」を 1〜2 点だけ書く(「どうですか」と丸投げしない)。
+4. **終了**: 起動したプロセスを止める(`Stop-Process -Name talesweaver-toolkit` またはウィンドウを閉じる)。
+5. **開発 DB を復元する**(プロセスを止めた**後**。必ずやる):
    ```
    powershell -File .claude/skills/gui-smoke/scripts/db-guard.ps1 -Action restore
    ```
@@ -35,12 +38,12 @@ description: Tauri デスクトップアプリを実機起動し、WebView2 の�
 ## 注意
 
 - パスは **Bash ツールなら `/c/github/...`(`cd C:\...` は使えない)**、PowerShell が必要な操作(`Stop-Process` 等)は `PowerShell` ツールで実行する
-- 入力値は司令塔の依頼文の値をそのまま使う。依頼に無い値を自分で決めない(domain テストと同じ値で実機確認する運用)
-
-- **開発 DB は手順 0 / 6 の `db-guard.ps1` で守る。**「押したら必ず元に戻すこと」を守らせる
-  運用は**すでに失敗している** — 押し間違い・戻し忘れ・戻したつもりの誤検証が実際に起き、
-  ユーザーのバフセットが 13 → 15 → 14 件と変わって元に戻せなくなった(2026-08-30)。
-  人の注意力に頼らず、前後で丸ごと退避 / 復元する。DB を削除しないこと
-- セレクタは DOM 構造(`.group-head` / `label.field` / `nav button` など)に依存する。UI 変更後は先に `page.content()` を短く確認してから書く
+- **開発 DB は手順 0 / 5 の `db-guard.ps1` で守る。手で触るときも必ず通す。**
+  「押したら必ず元に戻すこと」を守らせる運用は**すでに失敗している** — 押し間違い・戻し忘れ・
+  戻したつもりの誤検証が実際に起き、ユーザーのバフセットが 13 → 15 → 14 件と変わって
+  元に戻せなくなった(2026-08-30)。人の注意力に頼らず、前後で丸ごと退避 / 復元する。DB を削除しないこと
+- **キャラタブは自動保存。**登録・編集を伴う確認は使い捨てキャラで行う
 - `tauri dev` は Rust 変更で自動再起動する。再起動後は CDP に再接続が必要
-- 報告はログ全文ではなく「確認項目 → OK/NG、NG の再現手順、スクリーンショットのパス」のみ
+- **自動操作のスクリプトを書き足さない。**「全画面を巡回して測る」類は 2026-09-16 に全部消した
+  (`tools/design-audit/live/` 19 本)。理由は docs/adr/014 — 実害を事前に捕まえられず、
+  残骸と重複だけが増えたため。観点を機械で見たくなったら `tools/design-audit/run.py`(ソースを読む)側に足す

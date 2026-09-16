@@ -18,8 +18,8 @@ docs/ 直下は人向け(利用者・貢献者が読む)。決定記録は docs/
 - design-system の要点(出典はデザインモック TW Toolkit Prototype v4。食い違いは v4 が正):
     - **いつでも意識する 5 つ(§00)= 目的**。①視線を動かさない ②要らないものを見せない ③押した場所は動かない ④変わったら動かす ⑤考えさせない。以下の規格はその手段で、**規格に合っているのに画面が良くないときは 5 つのどれかが崩れている**。見た目の崩れ(折り返し・余白・ずれ)は症状なので、幅や余白で症状だけ消さない
     - **UI を変えたら、出す前に §00 の 5 つで自己チェックする**(毎回)。特に **04 変わったら動かす** は落としやすい —
-  新しく足した数値・要約・バッジに `use:bump` / `use:flash` が付いているか、実機で `tools/design-audit/live/motion.js` と
-  `attention.js` を走らせて確かめる。**新しく作った面が「平たい箱」になっていないか**も見る(面はインセット + ハイライト、
+  新しく足した数値・要約・バッジに動きが付いているか、**実機を起動して自分で押して**確かめる
+  (自動で巡回して測る監査は 2026-09-16 に廃止。docs/adr/014)。**新しく作った面が「平たい箱」になっていないか**も見る(面はインセット + ハイライト、
   値は数値書体、状態はバッジ。色で面全体を塗るのは §02 の帯の枠を食う)
 - **押した場所は動かない**。クリックした要素の上に何も差し込まない。ドリルダウンは置き換えず右にペインを増やす。重なるもの(候補・ポップオーバー)はレイアウトを押さない。数値欄は `min-width` + `tabular-nums` で桁が増えても幅が変わらない
     - **入力は 5 形態の上から順に試す**(自動 → 段階選択 → チップ → ステッパー → 自由入力)。上で表現できないときだけ下に降りる。「適用」ボタンを挟まず、押した瞬間に結果が動く。上限は値の隣に常設する
@@ -41,7 +41,7 @@ docs/ 直下は人向け(利用者・貢献者が読む)。決定記録は docs/
 - テスト: `cargo test --workspace`(リポジトリルート)
 - フロント: `cd apps/desktop && npm run build && npx svelte-check`
 - 開発起動: `cd apps/desktop && npm run tauri dev`
-- GUI の実機確認・撮影は `gui-smoke` skill の手順で行う(Subagent に出すなら `smoke-tester`)
+- GUI の実機確認は起動して自分で触る。撮影は `gui-smoke` skill(撮るだけ。操作・測定はしない)
 - DB: `%APPDATA%\dev.twcontext.app\tw-context.sqlite`
 
 ## 原則
@@ -76,7 +76,6 @@ Agent 定義は `~/.claude/agents/`(ユーザー単位)。すべて `disallowedT
 | researcher | Sonnet / high | Complex 変更の実装前調査。ファイル変更不可 |
 | implementer | Sonnet / medium | 承認済みスコープの実装と関連テスト |
 | reviewer | Sonnet / high | Complex 変更の独立レビュー。ファイル変更不可 |
-| smoke-tester | Sonnet / medium | Tauri 実機の GUI 操作・撮影(WebView2 CDP + Playwright) |
 | Explore(組み込み) | — | ファイル探索・シンボル検索 |
 
 Skills は `.claude/skills/`(talewiki-fetch / gui-smoke / finish-goal / design-review / release / db-migration)。各 SKILL.md の description が使いどころ。
@@ -85,7 +84,6 @@ Skills は `.claude/skills/`(talewiki-fetch / gui-smoke / finish-goal / design-r
 
 - implementer: 司令塔が wiki 等で裏取り済みの値は「確認済み(出典・値)」と依頼文に書く。`[仮]` かどうかを implementer に判断させない
 - reviewer: 司令塔がテスト・build を確認済みなら「再実行不要」と明記し、読解に専念させる
-- smoke-tester: 入力値は domain テストと同じ値を依頼文に書く。値を変えると期待結果が一致せず再実行になる
 
 ### Context 管理(ユーザー操作の推奨)
 
