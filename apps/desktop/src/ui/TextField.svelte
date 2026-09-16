@@ -108,7 +108,7 @@
     flex: 1 1 auto; min-width: 0; height: 28px; padding: 0 9px; margin: 0;
     border-radius: var(--r-panel); border: 1px solid var(--border); background: var(--bg-field);
     font: inherit; font-size: 12px; color: var(--fg); text-align: left;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition: var(--t-tap);
   }
   .tfield:focus-within { border-color: var(--accent); }
   .tfield.disabled { opacity: 0.5; }

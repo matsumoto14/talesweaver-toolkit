@@ -58,6 +58,7 @@ RULES = {
     "R12": ("ui/ の外に生の input / select / textarea", "§07"),
     "R13": ("fmtSigned / fmtPct を通らない符号付き・% の数値", "§08"),
     "R14": ("ページ側で面・未収録・主役数字を独自に作る", "§01 / §05 / §08"),
+    "R15": ("--dur-* / DUR を通らない生の時間", "§10"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
@@ -88,6 +89,17 @@ SURFACE_INSET = re.compile(r"var\(--surface-inset\)")
 UNKNOWN_NAMES = {"unknown", "unk", "missing", "unrecorded"}
 DASHED_BORDER = re.compile(r"(?:^|[;\s])border(?:-style)?\s*:\s*[^;{}]*\bdashed\b")
 MAX_BODY_FONT_PX = 18
+
+# R15: 動きの時間は役割で 9 段(§10「操作の応答」)。出どころは app.css の :root --dur-* と
+# ui/motion.svelte.ts の DUR の 2 つだけで、値は一致していること。画面側に 0.18s / 220 を直接書かない。
+# 例外は 0(動かさない指定)と、終わりのない回転(infinite)— 後者は「変化を見せる動き」ではない
+MOTION_TS = SRC / "ui" / "motion.svelte.ts"
+DUR_TOKEN = re.compile(r"--dur-([a-z]+)\s*:\s*([0-9.]+)(m?s)\s*;")
+DUR_CONST = re.compile(r"^\s*([a-z]+):\s*(\d+),", re.M)
+TIMED_DECL = re.compile(r"\b(transition|animation)(?:-duration)?\s*:\s*([^;{}\n]+)")
+ZERO_TIME = {"0", "0s", "0ms", "0.01ms"}  # 0.01ms は reduced-motion の打ち消し
+# Svelte の transition / animate に渡す時間。DUR.* を通らない数値リテラルが違反
+JS_DURATION = re.compile(r"duration:\s*(\d+)")
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
 CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
@@ -408,6 +420,45 @@ def check_duration(chunk: Chunk, out: list[Finding]) -> None:
                                    f"{seconds}s > {MAX_DURATION_S}s"))
 
 
+def check_duration_tokens(chunk: Chunk, out: list[Finding]) -> None:
+    """R15(CSS 側)。transition / animation の時間が --dur-* を通っていない。"""
+    for m in TIMED_DECL.finditer(chunk.text):
+        value = m.group(2)
+        if "infinite" in value:
+            continue
+        for d in DURATION.finditer(value):
+            raw = d.group(0)
+            if raw in ZERO_TIME:
+                continue
+            out.append(Finding("R15", chunk.path, chunk.line_of(m.start(2)), f"{m.group(1)}: {value.strip()}",
+                               f"{raw} の直書き。var(--dur-*) から取る"))
+            break
+
+
+def check_duration_js(path: Path, text: str, out: list[Finding]) -> None:
+    """R15(JS 側)。Svelte の transition / animate に数値リテラルを渡している。"""
+    if path == MOTION_TS:
+        return
+    for m in JS_DURATION.finditer(text):
+        if m.group(1) == "0":  # 動かさない指定(主要部位など)は段の外
+            continue
+        out.append(Finding("R15", path, 1 + text.count("\n", 0, m.start()), f"duration: {m.group(1)}",
+                           "ui/motion.svelte.ts の DUR.* から取る"))
+
+
+def check_duration_scale(out: list[Finding]) -> None:
+    """R15(段そのもの)。app.css の --dur-* と motion.svelte.ts の DUR が食い違っていないか。"""
+    css: dict[str, int] = {}
+    for name, num, unit in DUR_TOKEN.findall(APP_CSS.read_text(encoding="utf-8")):
+        css[name] = round(float(num) * (1 if unit == "ms" else 1000))
+    parts = MOTION_TS.read_text(encoding="utf-8").split("export const DUR = {", 1)
+    ts = {k: int(v) for k, v in DUR_CONST.findall(parts[1].split("} as const;", 1)[0])} if len(parts) > 1 else {}
+    for name in sorted(set(css) | set(ts)):
+        if css.get(name) != ts.get(name):
+            out.append(Finding("R15", MOTION_TS, 1, f"--dur-{name}",
+                               f"app.css {css.get(name)}ms / DUR {ts.get(name)}ms — 段が 2 つに割れている"))
+
+
 def check_state_pairs(chunk: Chunk, out: list[Finding]) -> None:
     """背景と枠が別々の系統から来ていないか。"""
     def scan(decls: str, line: int) -> None:
@@ -444,6 +495,7 @@ def collect() -> list[Finding]:
         check_raw_format(path, text, out)
         check_raw_inputs(path, text, out)
         check_raw_sign(path, text, out)
+        check_duration_js(path, text, out)
         for chunk in css_chunks(path, text):
             check_page_surfaces(chunk, out)
             check_radius(chunk, out)
@@ -453,6 +505,8 @@ def collect() -> list[Finding]:
             check_state_pairs(chunk, out)
             check_control_radius(chunk, out)
             check_font_scale(chunk, out)
+            check_duration_tokens(chunk, out)
+    check_duration_scale(out)
     return out
 
 

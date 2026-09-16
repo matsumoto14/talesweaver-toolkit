@@ -10,7 +10,6 @@
   // (ユーザー指摘 2026-09-02)。
   import { SvelteMap } from "svelte/reactivity";
   import { fmtInt, fmtNum, fmtRate, fmtSigned } from "../../format";
-  import { cubicOut } from "svelte/easing";
   import { errorMessage, listSkills, previewVersus } from "../../api/commands";
   import type {
     AccuracyBoost, BuffSelection, GrowthAction, GrowthGroup, GrowthGroupRooms, GrowthRoom, HitRate, Skill,
@@ -20,7 +19,7 @@
   import { app, gameCharacterName, payloadOf } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import { badgeStyle } from "../../ui/states";
-  import { bump, flash } from "../../ui/motion.svelte";
+  import { bump, collapse, flash } from "../../ui/motion.svelte";
   import { latest } from "../../ui/latest.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
@@ -351,29 +350,6 @@
     }
   }
 
-  /** 命中P / 回避P ブロックの開閉。svelte/transition の slide は height を動かすが、
-   *  .stat-body は flex の子(flex: 1)なので height が無視されて動かない(実機で検出)。
-   *  max-height なら flex でも効く。動いている間だけ親ブロックの flex を止め、下の段(回避P の頭)が
-   *  中身の縮みに合わせて滑らかに寄るようにする(止めないと空いた分を親が取り続け、最後に跳ぶ) */
-  function collapse(node: HTMLElement, { duration = 220 } = {}) {
-    const block = node.parentElement as HTMLElement;
-    const height = node.getBoundingClientRect().height;
-    block.style.flex = "none";
-    const release = () => (block.style.flex = "");
-    const timer = setTimeout(release, duration + 60);
-    // tick は始まり(intro は t=0 / outro は t=1)にも呼ばれるので、最初の 1 回は終わりと見なさない
-    let started = false;
-    return {
-      duration,
-      easing: cubicOut,
-      css: (t: number) => `max-height: ${t * height}px; overflow: hidden; min-height: 0;`,
-      tick: (t: number) => {
-        if (started && (t === 1 || t === 0)) { clearTimeout(timer); release(); }
-        started = true;
-      },
-    };
-  }
-
   function formatHitRateGain(gain: number): string {
     return gain === 0 ? "±0%" : fmtSigned(gain, { max: 2 }, "%");
   }
@@ -533,7 +509,7 @@
       onclick={() => (accBlockOpen = !accBlockOpen)}
     >
       <div class="stat-label">
-        <span class="stat-caret" class:open={accBlockOpen}>▸</span>命中P
+        <span class="caret stat-caret" class:rot={accBlockOpen}>▼</span>命中P
         {#if !accBlockOpen && result}
           <!-- 畳んでも「何のスキルで・的中剣は」が残る(計算タブの折りたたみカードの右の要約と同じ役) -->
           <span class="stat-summary dim">
@@ -599,7 +575,7 @@
       onclick={() => (evaBlockOpen = !evaBlockOpen)}
     >
       <div class="stat-label">
-        <span class="stat-caret" class:open={evaBlockOpen}>▸</span>回避P
+        <span class="caret stat-caret" class:rot={evaBlockOpen}>▼</span>回避P
         {#if !evaBlockOpen && result}
           <span class="stat-summary dim">AGI <span class="num">{result.defender_agi}</span></span>
         {/if}
@@ -815,8 +791,7 @@
   /* 頭の行(押すと開閉)。押した行自体は動かない(§00 03) */
   .stat-toggle { width: 100%; border: 0; background: none; font: inherit; cursor: pointer; }
   .stat-toggle:hover .stat-label { color: var(--accent); }
-  .stat-caret { display: inline-block; width: 9px; font-size: 9px; color: var(--fg-dim); transition: transform 0.15s ease; }
-  .stat-caret.open { transform: rotate(90deg); }
+  .stat-caret { width: 9px; font-size: 9px; color: var(--fg-dim); }
   .stat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
   /* 「全部やると」〜「手の面」の段 ------------------------------------------------- */

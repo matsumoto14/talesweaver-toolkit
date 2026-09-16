@@ -50,7 +50,7 @@
     padding: 0 9px 0 10px; border-radius: var(--r-panel);
     border: 1px solid var(--border-soft); background: var(--bg-field);
     font-size: 12px; color: var(--fg-sub);
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition: var(--t-tap);
   }
   .togrow:has(.face:hover:not(:disabled)) { border-color: var(--accent); }
   .togrow:has(.face:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }

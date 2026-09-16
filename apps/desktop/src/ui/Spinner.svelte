@@ -22,7 +22,7 @@
   .spinner {
     flex: none; width: 12px; height: 12px; border-radius: 50%;
     border: 2px solid currentColor; border-top-color: transparent;
-    opacity: 0; transition: opacity 120ms linear;
+    opacity: 0; transition: opacity var(--dur-tap) linear;
   }
   .spinner.on { opacity: 0.55; animation: tw-spin 0.7s linear infinite; }
 </style>

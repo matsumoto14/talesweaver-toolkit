@@ -24,7 +24,7 @@
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import type { SourceId } from "../sourceId";
-  import { flash, motionDuration } from "../../../ui/motion.svelte";
+  import { DUR, flash, motionDuration } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
   import { randomOptionRecordOnlyCount } from "../summaries";
 
@@ -322,7 +322,7 @@
           <span class="chev dim">{openRandomPart === slot ? "▾" : "›"}</span>
         </button>
         {#if openRandomPart === slot}
-        <div class="part-detail ro-inline" bind:this={detailEl} transition:slide={{ duration: motionDuration(220) }}>
+        <div class="part-detail ro-inline" bind:this={detailEl} transition:slide={{ duration: motionDuration(DUR.open) }}>
           <!-- 見出しは持たない。すぐ上の行が部位名を出している(§00 ②) -->
           <div class="card">
             {@render randomOptionEditor(slot)}

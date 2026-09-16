@@ -207,7 +207,7 @@
     user-select: none;
   }
   summary::-webkit-details-marker { display: none; }
-  summary svg { transition: transform 0.15s; }
+  summary svg { transition: transform var(--dur-tap) var(--ease-tap); }
   details[open] summary svg { transform: rotate(90deg); }
   summary:hover { color: var(--fg); }
   .section-label { padding: 10px 2px 8px; }
@@ -224,7 +224,7 @@
   tr.active td { background: var(--bg-active); }
   /* 抜けた供給源は次に集合が変わるまで取り消し線で残す。入った / 抜けた の印は差分と同じ色 */
   tr.gone td { text-decoration: line-through; color: var(--fg-dim); }
-  .swap { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; animation: tw-badge-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .swap { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; animation: tw-badge-in var(--dur-badge) var(--ease-spring); }
   .swap.up { color: var(--good); }
   .swap.down { color: var(--warm); }
   tr.active td.sym { color: var(--warm); }

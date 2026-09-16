@@ -29,7 +29,7 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
-  import { bump, flash } from "../../../ui/motion.svelte";
+  import { bump, DUR, flash, motionDuration } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
@@ -910,7 +910,7 @@
             class="value-pair"
             class:plan-stat={enchantPlanStats.includes(k)}
             class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(k)}
-            transition:slide={{ duration: PRIMARY_EQUIPMENT_STATS.includes(k) ? 0 : 220 }}
+            transition:slide={{ duration: PRIMARY_EQUIPMENT_STATS.includes(k) ? 0 : motionDuration(DUR.open) }}
           >
             <b>{EQUIPMENT_STAT_SHORT[k]}</b>
             <div class="value-equation">

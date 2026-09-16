@@ -105,7 +105,7 @@
         {:else}
           <span class="picker-name">{chips.length > 0 ? `ほか ${rest.length} 件` : `${rest.length} 件から選ぶ`}</span>
         {/if}
-        <span class="picker-chev" class:rot={open}>▼</span>
+        <span class="caret picker-chev" class:rot={open}>▼</span>
       </button>
     {/if}
   </div>

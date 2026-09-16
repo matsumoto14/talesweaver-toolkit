@@ -259,7 +259,7 @@
 
   .body {
     flex: 1; min-height: 0; display: grid;
-    transition: grid-template-columns 260ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: grid-template-columns var(--dur-move) var(--ease-in-out);
   }
   main { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-mid); }
   .tabbody { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }

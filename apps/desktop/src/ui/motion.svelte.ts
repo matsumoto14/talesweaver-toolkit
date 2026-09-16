@@ -5,7 +5,26 @@
 // prefers-reduced-motion のときは app.css 側で全アニメーションが実質 0 になり、
 // 色・バッジ・数値そのもので既に伝わっている状態が残る。
 
+import { cubicOut } from "svelte/easing";
+
 import { fmtNum } from "../format";
+
+/**
+ * 動きの時間(ms)。**app.css の --dur-* と同じ段**で、こちらが Svelte の transition / animate 用。
+ * 2 つに分かれているのは CSS 変数が JS から素直に読めないからで、**値は必ず一致させる**
+ * (機械監査 R15 が app.css と突き合わせる)。画面ごとに 220 や 260 を直接書かない。
+ */
+export const DUR = {
+  tap: 150,    /* 触った応答 */
+  pop: 170,    /* 一時的に重なった */
+  swap: 200,   /* 面が入れ替わった */
+  open: 220,   /* 開いた / 閉じた */
+  badge: 260,  /* 状態が変わった */
+  move: 260,   /* 並びが変わった(FLIP) */
+  pane: 280,   /* 場所が増えた */
+  bump: 300,   /* 数値が変わった */
+  bar: 380,    /* 量が変わった */
+} as const;
 
 /**
  * 数値が変わったことを認知させる。変わった要素**だけ**を跳ねさせ、
@@ -137,3 +156,31 @@ export function flash(node: HTMLElement, get: () => string) {
   });
 }
 
+
+/**
+ * **開いた / 閉じた**(§10 型 6)を Svelte の transition で行う共通版。
+ * `svelte/transition` の `slide` は height を動かすので、flex の子(`flex: 1`)では効かない
+ * (実機で検出)。max-height なら flex でも動く。
+ *
+ * 動いているあいだだけ親の flex を止める。止めないと、縮んだぶんを親が取り続けて
+ * 最後に下の段が跳ぶ。時間は `DUR.open` 固定 — 開閉の速さを画面ごとに変えない。
+ */
+export function collapse(node: HTMLElement) {
+  const duration = motionDuration(DUR.open);
+  const block = node.parentElement as HTMLElement | null;
+  const height = node.getBoundingClientRect().height;
+  const release = () => block && (block.style.flex = "");
+  if (block) block.style.flex = "none";
+  const timer = setTimeout(release, duration + 60);
+  // tick は始まり(intro は t=0 / outro は t=1)にも呼ばれるので、最初の 1 回は終わりと見なさない
+  let started = false;
+  return {
+    duration,
+    easing: cubicOut,
+    css: (t: number) => `max-height: ${t * height}px; overflow: hidden; min-height: 0;`,
+    tick: (t: number) => {
+      if (started && (t === 1 || t === 0)) { clearTimeout(timer); release(); }
+      started = true;
+    },
+  };
+}

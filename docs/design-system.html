@@ -2238,58 +2238,95 @@ td code { background: var(--card-soft2); }
           <div class="change">
             <span class="w">数値が変わった</span>
             <span class="how">跳ねる + 増減の色。<b>色は必ず元に戻す</b> — 残すと状態色(§03)と混ざって意味が壊れる</span>
-            <span class="spec-n">scale(1.07)<br>transform .2s cubic-bezier(.34,1.56,.64,1)<br>color .3s ease</span>
+            <span class="spec-n">scale(1.07)<br>--dur-bump (.3s) / --ease-spring</span>
           </div>
           <div class="change">
             <span class="w">いくつ変わった</span>
             <span class="how">差分枠。前回値との差を <b style="color:var(--good)">↑1,234</b> / <b style="color:var(--danger)">↓3.2%</b> で、数値の下の行(鎖)または数値の隣の固定幅の列(内訳・トレース)に出す。数値の中に差し込まず、空でも幅を取る専用の span に付ける(出た瞬間に隣が動かない。浮かせて重ねる案は却下)。跳ねと色は 0.3s で戻るので、同時に 10 か所が動くと「動いた」は分かっても「いくつ」は読めない。<b>消さない</b> — その数値が次に変わるまで残し、変わったら書き換える(ユーザー判断 2026-09-15)。計算タブの結果・トレース・内訳・防御で使う。件数・レベルのような「数える値」には付けない</span>
-            <span class="spec-n">.delta / 出るときだけ badge-in .26s<br>use:delta={{ get, unit?, digits? }}</span>
+            <span class="spec-n">.delta / 出るときだけ badge-in<br>--dur-badge (.26s) / --ease-spring<br>use:delta={{ get, unit?, digits? }}</span>
           </div>
           <div class="change">
             <span class="w">量が変わった</span>
             <span class="how">バーの幅。<b>数値と同時に動かす</b>(片方だけ動くと、もう片方が古い値に見える)</span>
-            <span class="spec-n">width .38〜.5s<br>cubic-bezier(.4,0,.2,1)</span>
+            <span class="spec-n">width --dur-bar (.38s)<br>--ease-in-out</span>
           </div>
           <div class="change">
             <span class="w">場所が増えた</span>
             <span class="how">左端から生えてくる。<b>元からある場所は動かさない</b>(§09 規則 2)</span>
-            <span class="spec-n">translateX(-10px) scaleX(.97)<br>.26〜.32s cubic-bezier(.2,.85,.25,1)<br>transform-origin: left center</span>
+            <span class="spec-n">translateX(-8px) + opacity<br>--dur-pane (.28s) / --ease-out<br>transform-origin: left center</span>
           </div>
           <div class="change">
             <span class="w">面が入れ替わった</span>
             <span class="how">タブで中身を切り替えたとき。<b>入ってくる面だけ</b>短く動かす —
               ぱっと差し替わると「切り替えたのか、元からこうだったのか」が一瞬わからない。
               画面全体を動かす演出にはしない(それは規則 1 に反する)</span>
-            <span class="spec-n">translateY(-5px) + opacity<br>.2s cubic-bezier(.2,.85,.25,1)</span>
+            <span class="spec-n">translateY(-5px) + opacity<br>--dur-swap (.2s) / --ease-out</span>
           </div>
           <div class="change">
             <span class="w">一時的に重なった</span>
             <span class="how">上から降りる。閉じたら跡形もなく消える(レイアウトを押していないので)</span>
-            <span class="spec-n">translateY(-6px) scaleY(.97)<br>.17s cubic-bezier(.34,1.2,.64,1)</span>
+            <span class="spec-n">translateY(-6px) scaleY(.97)<br>--dur-pop (.17s) / --ease-pop</span>
           </div>
           <div class="change">
             <span class="w">状態が変わった</span>
             <span class="how">バッジが弾んで出る。行そのものは動かさない</span>
-            <span class="spec-n">scale(.9) → 等倍<br>.26s cubic-bezier(.34,1.56,.64,1)</span>
+            <span class="spec-n">scale(.9) → 等倍<br>--dur-badge (.26s) / --ease-spring</span>
           </div>
           <div class="change">
             <span class="w">開いた / 閉じた</span>
             <span class="how"><b>下方向にだけ伸びる。</b>上に伸ばすと、上にあるものが全部ずれる</span>
-            <span class="spec-n">max-height .34s<br>+ opacity .24s</span>
+            <span class="spec-n">max-height + opacity<br>--dur-open (.22s) / --ease-out<br>.open-in または use:collapse</span>
           </div>
           <div class="change">
             <span class="w">並びが変わった</span>
             <span class="how"><b>動いた行が新しい場所へ滑る。</b>押しのけられた行も一緒に動く —
               掴んだ行だけ動くと、どこに入ったのかが分からない。群をまたいで移った行は、
               滑りが繋がらないので着地を弾ませる</span>
-            <span class="spec-n">FLIP transform .26s<br>cubic-bezier(.33,1,.68,1)</span>
+            <span class="spec-n">FLIP transform<br>--dur-move (.26s) / cubicOut</span>
           </div>
           <div class="change">
             <span class="w">候補が移った</span>
             <span class="how">出発点は短く退出し、<b>移動先を同時に弾ませる。</b>消えただけに見せず、どこへ移ったかを 2 箇所の動きで結ぶ</span>
-            <span class="spec-n">out: translateX(8px) + opacity<br>.18s ease-in<br>to: badge-in .26s</span>
+            <span class="spec-n">out: translateX(8px) + opacity<br>--dur-pop (.17s) ease-in<br>to: badge-in --dur-badge</span>
           </div>
         </div>
+
+        <div class="sec">操作の応答<span class="r">型 1〜6 とは仕事が違う</span></div>
+        <p>型 1〜6 は<strong>値が変わったことを伝える動き</strong>。それとは別に、<strong>ユーザーの操作そのものへの返事</strong>がある —
+          触った面が色づく、キャレットが回る、ブロックが開く。こちらは「何が変わったか」ではなく「受け取った」を言うためのもので、
+          <strong>速く・短く・全部同じ速さ</strong>であることだけが要件になる。</p>
+        <ul>
+          <li><strong>触った応答は 1 段(<code>--dur-tap</code> .15s)。</strong>押せる面の地・枠・文字色はこの速さだけで変わる。
+            同じ「押せる面」なのに画面によって .15s だったり .18s だったり、そもそも動かなかったりすると、<b>速さが意味を持たなくなる</b></li>
+          <li><strong>押せるものの transition を部品側に書かない。</strong><code>app.css</code> が
+            <code>button, summary, a, label.check, [role="button"], [role="tab"]</code> に <code>--t-tap</code> の既定を与える。
+            書き足すとその画面だけ速さがずれる(機械監査 R15)。<code>transform</code> / <code>width</code> を動かすものだけが自分で宣言してよく、時間は <code>--dur-*</code> から取る</li>
+          <li><strong>開閉のキャレットは「回す」で統一する。</strong><code>.caret</code> に <code>.rot</code> を足し引きするだけ。
+            <b>▸ ▾ の差し替えは動きが出ない</b>ので使わない — 開いたのか閉じたのかが一瞬わからない(§00 ④)</li>
+          <li><strong>開閉は 1 段(<code>--dur-open</code> .22s)。</strong>常に描かれている面はクラス <code>.open-in</code>、
+            出し入れされる面は <code>use:collapse</code>(<code>ui/motion.svelte.ts</code>)。
+            <code>svelte/transition</code> の <code>slide</code> は height を動かすので <code>flex</code> の子では効かない — <code>collapse</code> は max-height で動かす</li>
+        </ul>
+
+        <div class="sec">時間の段<span class="r">出どころは 2 つだけ、値は一致</span></div>
+        <p>動きの時間は<strong>役割で 9 段</strong>に固定する。<b>画面ごとに数字を決めない。</b>
+          出どころは <code>app.css</code> の <code>:root --dur-*</code>(CSS 用)と
+          <code>ui/motion.svelte.ts</code> の <code>DUR</code>(Svelte の transition / animate 用)の 2 つだけで、
+          <strong>値は必ず一致させる</strong> — 機械監査 R15 が突き合わせ、生の <code>0.18s</code> / <code>220</code> の直書きも拾う。</p>
+        <div class="changes">
+          <div class="change"><span class="w">--dur-tap .15s</span><span class="how">触った応答 — hover / focus の地・枠・文字色、キャレットの回転</span><span class="spec-n">--ease-tap</span></div>
+          <div class="change"><span class="w">--dur-pop .17s</span><span class="how">一時的に重なった(型 4)・候補の退出</span><span class="spec-n">--ease-pop</span></div>
+          <div class="change"><span class="w">--dur-swap .2s</span><span class="how">面が入れ替わった(型 3b)</span><span class="spec-n">--ease-out</span></div>
+          <div class="change"><span class="w">--dur-open .22s</span><span class="how">開いた / 閉じた(型 6)</span><span class="spec-n">--ease-out</span></div>
+          <div class="change"><span class="w">--dur-badge .26s</span><span class="how">状態が変わった(型 5)・差分枠(型 1b)</span><span class="spec-n">--ease-spring</span></div>
+          <div class="change"><span class="w">--dur-move .26s</span><span class="how">並びが変わった(FLIP)・レールの開閉のように面そのものが動く</span><span class="spec-n">--ease-in-out / cubicOut</span></div>
+          <div class="change"><span class="w">--dur-pane .28s</span><span class="how">場所が増えた(型 3)</span><span class="spec-n">--ease-out</span></div>
+          <div class="change"><span class="w">--dur-bump .3s</span><span class="how">数値が変わった(型 1)</span><span class="spec-n">--ease-spring</span></div>
+          <div class="change"><span class="w">--dur-bar .38s</span><span class="how">量が変わった(型 2)</span><span class="spec-n">--ease-in-out</span></div>
+        </div>
+        <p class="cap">段の外にあるのは 2 つだけ。<b style="color:var(--fg-sub)">0(動かさない指定)</b>と、
+          <b style="color:var(--fg-sub)">終わりのない回転</b>(<code>Spinner</code> の .7s infinite — これは「変化を見せる動き」ではなく、
+          これから変わる値があることだけを伝える印)。</p>
 
         <div class="sec">動きの規則</div>
         <ul>
@@ -2309,25 +2346,25 @@ td code { background: var(--card-soft2); }
           <div class="motion">
             <span class="t">ペインの出現</span>
             <div class="stage"><div class="mo-box" data-anim="play-pane">部位の中身</div></div>
-            <span class="cap">translateX(-10px) scaleX(.97) → 等倍<br>.26〜.32s / cubic-bezier(.2,.85,.25,1)</span>
+            <span class="cap">translateX(-8px) + opacity → 等倍<br>--dur-pane (.28s) / --ease-out</span>
             <button class="btn" type="button" data-play>再生</button>
           </div>
           <div class="motion">
             <span class="t">ポップオーバー</span>
             <div class="stage"><div class="mo-box" data-anim="play-pop" style="width:140px">対象を選ぶ</div></div>
-            <span class="cap">translateY(-6px) scaleY(.97) → 等倍<br>.17s / cubic-bezier(.34,1.2,.64,1)</span>
+            <span class="cap">translateY(-6px) scaleY(.97) → 等倍<br>--dur-pop (.17s) / --ease-pop</span>
             <button class="btn" type="button" data-play>再生</button>
           </div>
           <div class="motion">
             <span class="t">バッジの出現</span>
             <div class="stage"><span class="mo-badge" data-anim="play-badge">次はここ</span></div>
-            <span class="cap">scale(.9) → 等倍<br>.26s / cubic-bezier(.34,1.56,.64,1)</span>
+            <span class="cap">scale(.9) → 等倍<br>--dur-badge (.26s) / --ease-spring</span>
             <button class="btn" type="button" data-play>再生</button>
           </div>
           <div class="motion">
             <span class="t">バーの伸縮</span>
             <div class="stage"><div class="meter" style="width:150px" data-anim="play-bar"><i class="f1" style="width:76%"></i></div></div>
-            <span class="cap">width / .38〜.5s / cubic-bezier(.4,0,.2,1)</span>
+            <span class="cap">width / --dur-bar (.38s) / --ease-in-out</span>
             <button class="btn" type="button" data-play>再生</button>
           </div>
         </div>
@@ -2341,7 +2378,7 @@ td code { background: var(--card-soft2); }
               <button class="btn" type="button" id="np-down">外す</button>
             </span>
           </div>
-          <p class="cap" style="margin-top:9px">scale(1.07) に一瞬跳ね、<b style="color:var(--good)">増えたら緑</b>・<b style="color:var(--danger)">減ったら赤茶</b>に色を振ってから戻す。transform .2s cubic-bezier(.34,1.56,.64,1) / color .3s ease</p>
+          <p class="cap" style="margin-top:9px">scale(1.07) に一瞬跳ね、<b style="color:var(--good)">増えたら緑</b>・<b style="color:var(--danger)">減ったら赤茶</b>に色を振ってから戻す。--dur-bump (.3s) / --ease-spring</p>
         </div>
 
         <p class="cap"><code>prefers-reduced-motion: reduce</code> のときは全アニメーションを実質 0 にする(このページも同じ)。<b style="color:var(--fg-sub)">そのとき変化が分からなくなるなら、それは動きに頼りすぎている</b>というサイン — 色と数値だけで既に伝わっている状態を先に作る。</p>

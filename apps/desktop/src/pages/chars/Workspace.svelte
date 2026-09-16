@@ -50,7 +50,7 @@
   import Picker from "../../ui/Picker.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
-  import { bump, flash, motionDuration } from "../../ui/motion.svelte";
+  import { bump, DUR, flash, motionDuration } from "../../ui/motion.svelte";
   // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
   import "./sources/pane-shared.css";
   import {
@@ -642,7 +642,7 @@
     movedId = null;
     requestAnimationFrame(() => {
       movedId = id;
-      movedTimer = setTimeout(() => (movedId = null), 400);
+      movedTimer = setTimeout(() => (movedId = null), DUR.badge);
     });
   }
   /** 行を追いかける。自分で起こした移動(ドラッグ・未設定ジャンプ)だけで使う(§09 規則 5) */
@@ -652,7 +652,7 @@
     requestAnimationFrame(() => {
       document.querySelector(`[data-source-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
       movedId = id;
-      movedTimer = setTimeout(() => (movedId = null), 400);
+      movedTimer = setTimeout(() => (movedId = null), DUR.badge);
     });
   }
 
@@ -780,7 +780,7 @@
                    並べ替えたら**動いた行だけ**が新しい場所へ滑る(§10「変わった要素だけ動かす」)。
                    0.5s を超えない — 待たせるための動きは要らない -->
               <div
-                animate:flip={{ duration: motionDuration(260), easing: cubicOut }}
+                animate:flip={{ duration: motionDuration(DUR.move), easing: cubicOut }}
                 class="src src-line"
                 class:badge-in={movedId === s.id}
                 class:on={openSource === s.id}

@@ -17,7 +17,7 @@
   import { reportError } from "../../../toast.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
-  import { bump, flash } from "../../../ui/motion.svelte";
+  import { bump, DUR, flash } from "../../../ui/motion.svelte";
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
@@ -48,7 +48,7 @@
     iconChanged = false;
     requestAnimationFrame(() => {
       iconChanged = true;
-      iconChangedTimer = setTimeout(() => (iconChanged = false), 350);
+      iconChangedTimer = setTimeout(() => (iconChanged = false), DUR.badge);
     });
   }
   async function chooseIcon(event: Event) {
@@ -358,7 +358,7 @@
      pointer-events は無効のまま) */
   .icon-pick input { position: absolute; inset: 0; clip-path: inset(100%); pointer-events: none; }
   .current-icon { display: inline-flex; border-radius: var(--r-window); }
-  .current-icon.icon-changed { animation: icon-change .35s ease-out; }
+  .current-icon.icon-changed { animation: icon-change var(--dur-badge) var(--ease-spring); }
   @keyframes icon-change {
     0% { transform: scale(.9); box-shadow: 0 0 0 3px rgba(66, 109, 214, .24); }
     100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(66, 109, 214, 0); }

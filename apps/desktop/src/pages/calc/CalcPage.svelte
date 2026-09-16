@@ -1943,7 +1943,7 @@
               <span class="t-line1">
                 <Icon kind="content" id={target.content.id} fallback={{ kind: "mob", id: target.content.enemy_id }} size={28} label={target.content.name} />
                 <span class="t-name">{target.content.name}</span>
-                <span class="t-chev" class:rot={targetOpen}>▼</span>
+                <span class="caret t-chev" class:rot={targetOpen}>▼</span>
                 <span class="t-index num dim">{targetIndex + 1} / {contents.length}</span>
               </span>
               <span class="t-line2">
@@ -1993,7 +1993,7 @@
                 <span class="sk-line1">
                   <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill?.name ?? "スキル"} />
                   <span class="sk-name">{skill?.name ?? ""}</span>
-                  {#if skills.length > 1}<span class="t-chev" class:rot={skillOpen}>▼</span>{/if}
+                  {#if skills.length > 1}<span class="caret t-chev" class:rot={skillOpen}>▼</span>{/if}
                   <!-- 主軸(キャラタブ)と違うスキルで計算している例外状態。保存されないので
                        ラベンダー(--sim)。行の高さは変えない -->
                   {#if skillOverridden}
@@ -2279,7 +2279,7 @@
           <button type="button" class="panel-head blue" onclick={() => (flowOpen = !flowOpen)}>
             <span class="panel-title dark">なぜこの数字？</span>
             <span class="panel-note dark">{flowOpen ? "閉じる" : "内訳をひらく"}</span>
-            <span class="t-chev" class:rot={flowOpen}>▼</span>
+            <span class="caret t-chev" class:rot={flowOpen}>▼</span>
           </button>
           <div class="panel-body">
             <div class="flow-line">
@@ -3006,8 +3006,7 @@
   .target-trigger:hover, .target-trigger.open { background: var(--bg-rail); border-color: #9FB4D0; }
   .t-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .t-chev { flex-shrink: 0; font-size: 8.5px; color: var(--fg-muted); transition: transform 0.18s; }
-  .t-chev.rot { transform: rotate(180deg); }
+  .t-chev { font-size: 8.5px; color: var(--fg-muted); }
   .t-index { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
   .t-line2 { margin-top: 1px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .t-area { min-width: 0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3184,7 +3183,7 @@
   .stage :global(.delta), .band-row :global(.delta) { flex-shrink: 0; width: 64px; font-size: 10px; }
   .stage::after { content: ""; flex-shrink: 0; width: 32px; }
   .band { margin-top: 7px; display: flex; height: 11px; border-radius: var(--r-inset); overflow: hidden; border: 1px solid var(--border-soft); background: #EDF2F9; }
-  .band > div { flex-shrink: 0; transition: width 0.5s ease; }
+  .band > div { flex-shrink: 0; transition: width var(--dur-bar) var(--ease-in-out); }
   .band-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
   .band-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .swatch { flex-shrink: 0; width: 8px; height: 8px; border-radius: var(--r-inset); }
