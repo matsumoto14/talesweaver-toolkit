@@ -1,6 +1,8 @@
 <script lang="ts">
   // 左のキャラレール。全タブ共通の「どのキャラの話をしているか」を担う。
+  import { fmtDuration } from "./format";
   import { app, gameCharacterName, selectCharacter, totalContents } from "./state.svelte";
+  import { tables } from "./tables.svelte";
   import Icon from "./ui/Icon.svelte";
   import { bump } from "./ui/motion.svelte";
   import { persisted } from "./ui/persistedState.svelte";
@@ -114,7 +116,7 @@
     {/each}
     <button type="button" class="register" onclick={goRegister}>{collapsed ? "＋" : "＋ キャラを登録"}</button>
     {#if !collapsed}
-      <p class="note-text dim">目安ダメージは wiki に無い値です(コミュニティ知識・実測)。</p>
+      <p class="note-text dim">クリア済みは「ソロで {fmtDuration(tables.reach_seconds.reached)}以内に倒せて入場条件も満たす」コンテンツの数です。</p>
     {/if}
   </div>
 </aside>

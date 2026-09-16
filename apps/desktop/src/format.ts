@@ -44,6 +44,22 @@ export const fmtSignedPct = (rate: number, digits: Digits = 0): string => fmtSig
 /** 倍率。「×1.42」 */
 export const fmtRate = (mult: number, digits: Digits = 2): string => `×${fmtNum(mult, digits)}`;
 
+/** 長さ(秒)を人が読む単位で。上から 2 単位まで(3日 5時間 / 12分 30秒 / 8秒)。
+ *  討伐時間は敵によって 8 秒から数日まで振れるので、単位を固定せず桁に合わせて選ぶ */
+export const fmtDuration = (seconds: number): string => {
+  // 1 秒未満を「0秒」と出すと「時間がかからない」ではなく「測れていない」に読める(§00 05)
+  if (seconds < 1) return "1秒未満";
+  const total = Math.max(0, Math.round(seconds));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (d > 0) return h > 0 ? `${fmtInt(d)}日 ${h}時間` : `${fmtInt(d)}日`;
+  if (h > 0) return m > 0 ? `${h}時間 ${m}分` : `${h}時間`;
+  if (m > 0) return s > 0 ? `${m}分 ${s}秒` : `${m}分`;
+  return `${s}秒`;
+};
+
 /** ISO8601(YYYY-MM-DD)を MM-DD に。ホームの「最後の強化」とお知らせの公開日で使う */
 export const fmtMonthDay = (iso: string) => {
   const d = new Date(iso);

@@ -97,6 +97,8 @@ export interface Enemy {
   agi: number | null;
   /** 対象のクリティカル被撃率A(負値)。null = wiki 未記載 */
   critical_taken_rate: number | null;
+  /** HP(ソロ)。実測表「モンスター能力値リスト」。PT 時の増加は持たない。null = 未収録 */
+  hp: number | null;
 }
 
 // ペット S スキルの段階(wiki: PET)。crates/domain/src/stat_sources.rs の PetSkillTier(snake_case)。
@@ -157,7 +159,7 @@ export interface UpgradeCandidate {
   delta_pct: number;
   /** 総量の伸び率。シャープネスビジョンのように表記が動かない候補はこちらにだけ出る */
   delta_total_pct: number;
-  /** 必要 /hit 以上か。need_per_hit の無いコンテンツでは常に false */
+  /** 討伐時間が 5 分以内(ReachTier の Reached 以上)か。討伐時間が出せない候補では常に false */
   reaches: boolean;
   applied: NewCharacter;
 }
@@ -1780,7 +1782,7 @@ export interface DamageResult {
    * コンテンツ到達判定はこの値を使う
    */
   per_hit_primary: number;
-  /** 対象コンテンツの目安に対する到達段(Rust の ReachTier)。目安なしは null */
+  /** 討伐時間から決まる到達段(Rust の ReachTier)。討伐時間が出せないなら null */
   reach: ReachTier | null;
   /** 主役の合計ダメージ */
   total_primary: number;
@@ -1812,6 +1814,10 @@ export interface DamageResult {
   critical_chance: number;
   /** クリ率を考慮した DPS の期待値(dps.max × (1 − p) + dps.critical × p)。dps が null なら null */
   expected_dps: number | null;
+  /** 敵の HP(ソロ)。討伐時間の分子。null = 未収録 */
+  enemy_hp: number | null;
+  /** 討伐にかかる秒数(敵 HP ÷ expected_dps)。HP 未収録・中ディレイ未収録なら null */
+  defeat_seconds: number | null;
   /** コンボ(間に通常攻撃を挟む)の 1 サイクル。入っているとき dps はサイクルで割った値 */
   combo: ComboCycle | null;
   /** 積み上げの助言(いま一番効いている / 次に伸ばす)。候補の規則は Rust `DamageCategory::is_effort` */
@@ -2027,6 +2033,8 @@ export interface GameTables {
   damage_category_labels: DamageCategoryLabel[];
   /** 装備補正 9 値の表示名。EquipmentStatKind::ALL の順(CoreType の表示名も同じ) */
   equipment_stat_labels: EquipmentStatLabel[];
+  /** 到達段の境目になる討伐時間(秒)。段の境目を画面側に写経しない */
+  reach_seconds: ReachSeconds;
   /** スキル依存種別ごとの、エンチャントで見るべき装備値 2 種(commands の EnchantDependencyKeys)。
    *  「依存種別 → ステ 2 本」のルール表をフロントに持たない(装備攻撃力係数から Rust 側が引く) */
   enchant_dependency_keys: { dependency: SkillDependency; keys: EnchantDepKey[] }[];
@@ -2083,8 +2091,6 @@ export interface Content {
   name: string;
   /** 敵データが無い(入場条件のみ判定する)コンテンツは null */
   enemy_id: string | null;
-  /** 実用的に周回できる 1 ヒット(最大)の目安ダメージ。敵データが無ければ null */
-  need_per_hit: number | null;
   requirements: ContentRequirement[];
   /** このコンテンツで効くテシスコアの地域。対応が取れないコンテンツは null */
   core_region: CoreRegion | null;
@@ -2107,10 +2113,23 @@ export interface BestSkillDamage {
   per_hit_primary: number;
   /** 合計の主役値 = 1 ヒットの主役値 × 段数 */
   total_primary: number;
+  /** 討伐にかかる秒数(敵 HP ÷ 期待 DPS)。敵 HP 未収録・中ディレイ未収録なら null */
+  defeat_seconds: number | null;
 }
 
-/** 火力の到達段(crates/domain/src/content.rs の ReachTier)。境目は Rust 側 */
+/** 火力の到達段(crates/domain/src/content.rs の ReachTier)。境目の秒数は
+ *  GameTables.reach_seconds が配る(画面に写経しない。ユーザー決定 2026-09-16) */
 export type ReachTier = "comfortable" | "reached" | "close" | "short";
+
+/** 到達段の境目になる討伐時間(秒)。crates/domain/src/game_tables.rs の ReachSeconds */
+export interface ReachSeconds {
+  /** 余裕(これ以内) */
+  comfortable: number;
+  /** 通る(これ以内) */
+  reached: number;
+  /** ぎりぎり(これ以内)。これを超えると届かない = 目安そのもの */
+  close: number;
+}
 
 export interface ContentEvaluation {
   content_id: string;
@@ -2118,10 +2137,10 @@ export interface ContentEvaluation {
   damage: BestSkillDamage | null;
   checks: RequirementCheck[];
   entry_ok: boolean;
-  /** 火力の到達段。目安なし・ダメージ不明は null */
+  /** 火力の到達段。敵データなし・討伐時間が出せない(ダメージ不明含む)は null */
   reach: ReachTier | null;
-  /** 敵データなし(目安なし)は火力不問で true */
-  reaches_need: boolean;
+  /** 討伐時間の目安(5 分以内)に届いているか。敵データなし(火力不問)は true */
+  reaches: boolean;
   clear: boolean;
 }
 

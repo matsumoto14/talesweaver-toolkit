@@ -24,7 +24,7 @@
   } from "../../enchant";
   import { ETERNAL_MILESTONES } from "../../draft";
   import { equipmentIconId, polishAmount, selectedEquipmentPartOrNeutral } from "../../equipment";
-  import { fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct, formatLayerValue, topRowsText } from "../../format";
+  import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct, formatLayerValue, topRowsText } from "../../format";
   import {
     ELEMENT_LABELS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, PART_SLOTS,
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, STAT_KINDS, STAT_LABELS,
@@ -320,8 +320,11 @@
       ? Math.round((perHit / savedPerHit - 1) * 100)
       : 0,
   );
-  const need = $derived(target?.content.need_per_hit ?? 0);
-  const ratio = $derived(perHit !== null && need > 0 ? perHit / need : 0);
+  // 討伐時間の目安。段の境目は Rust が配る(tables.reach_seconds)。画面は写経しない
+  const closeSeconds = $derived(tables.reach_seconds.close);
+  const defeatSeconds = $derived(result?.defeat_seconds ?? null);
+  /** メーター比。討伐時間が長いほど伸びる(0 = 一瞬、100% = 目安ぴったり) */
+  const meterRatio = $derived(defeatSeconds !== null ? Math.min(1, defeatSeconds / closeSeconds) : 0);
   const hasReqs = $derived((target?.content.requirements.length ?? 0) > 0);
   // 評価が未取得の間は入場条件を「不明」として扱い、未達コンテンツに「通る/余裕」を
   // 出さない(ダメージ 120ms・評価 200ms のデバウンス差で毎回この窓が開く。PR レビュー指摘)
@@ -1946,7 +1949,7 @@
               <span class="t-line2">
                 <span class="t-area dim">{target.areaName}</span>
                 <span class="t-def num">防御 {defenseValue !== null ? fmtInt(defenseValue) : "—"}</span>
-                <span class="t-need num">目安 {fmtInt(need)}</span>
+                <span class="t-need num">目安 {fmtDuration(closeSeconds)}以内</span>
               </span>
             </button>
             <button type="button" class="step" onclick={() => stepTarget(1)}>▶</button>
@@ -2134,30 +2137,51 @@
                   {/if}
                 </span>
               </button>
-              <!-- 討伐時間は敵 HP が gamedata に未収録(この画面に限らず全体で未実装)なので
-                   ノードごと出さない(§00 02。0 や「—」で埋めると画面が嘘をつく) -->
+              <!-- 討伐時間。敵 HP か中ディレイが未収録なら出せないので、ノードごと出さない
+                   (§00 02。0 や「—」で埋めると画面が嘘をつく)。HP はソロの値 -->
+              {#if result && result.defeat_seconds !== null && result.enemy_hp !== null}
+                <div class="node rate">
+                  <span class="nl">討伐時間 <span class="num">(HP {fmtInt(result.enemy_hp)})</span></span>
+                  <span class="num nv" use:bump={() => result?.defeat_seconds ?? null}>{fmtDuration(result.defeat_seconds)}</span>
+                  <span class="nsub dim">
+                    <!-- クリ確定 / 非クリは隣の DPS 節に出ている(重ねない。§00 02) -->
+                    <span class="nsub-line">ソロ</span>
+                  </span>
+                </div>
+              {/if}
             </div>
             <!-- 鎖の各数値の内訳。押した節は動かず、鎖の直下に増える(§00 03) -->
             {#if perHitDetail}{@render detailBox(perHitDetail, isDetailOpen("perHit"))}{/if}
             {#if totalDetail}{@render detailBox(totalDetail, isDetailOpen("total"))}{/if}
             {#if dpsDetail}{@render detailBox(dpsDetail, isDetailOpen("dps"))}{/if}
-            <div class="meter big"><div class="fill" style="width: {Math.min(100, ratio * 100)}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
-            <div class="hero-sentence">
-              <span class="sentence" class:ok={reached} class:ng={!reached}>
-                {#if perHit === null}
-                  計算中…
-                {:else if noPierce}
-                  防御力を抜けていません(攻撃力 {atkA !== null ? fmtInt(atkA) : "—"} ≤ 防御力 {defenseValue !== null ? fmtInt(defenseValue) : "—"})
-                {:else if reached}
-                  <!-- 桁が離れた倍率をそのまま出すと意味を成さない(ユーザー指摘)。一定倍率を
-                       超えたら倍率を出さず「大きく超えている」とだけ伝える -->
-                  {ratio >= 10 ? "目安を大きく超えています。" : `目安の ${fmtNum(ratio, 2)} 倍。火力は足りています。`}
-                {:else}
-                  目安まで あと {fmtInt(need - perHit)}({fmtSignedPct(Math.max(0.01, need / Math.max(perHit, 1) - 1))} 必要)
-                {/if}
-              </span>
-              <span class="num dim">目安 {fmtInt(need)}</span>
-            </div>
+            <!-- 討伐時間が出せない(敵 HP か中ディレイが未収録)ときはメーターも文言も出さない
+                 (§00 02。0 や「届かない」で埋めると嘘になる)。計算中・防御力を抜けていない
+                 は討伐時間の有無に関わらず伝えるべき事実なので、その 2 つだけは別枠で出す -->
+            {#if perHit === null}
+              <div class="meter big"><div class="fill" style="width: 0%; background: {STATE.unknown.bar};"></div></div>
+              <div class="hero-sentence"><span class="sentence">計算中…</span></div>
+            {:else if noPierce}
+              <div class="meter big"><div class="fill" style="width: 0%; background: {STATE.short.bar};"></div></div>
+              <div class="hero-sentence">
+                <span class="sentence ng">防御力を抜けていません(攻撃力 {atkA !== null ? fmtInt(atkA) : "—"} ≤ 防御力 {defenseValue !== null ? fmtInt(defenseValue) : "—"})</span>
+              </div>
+            {:else if defeatSeconds !== null && reach !== null}
+              <div class="meter big"><div class="fill" style="width: {meterRatio * 100}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
+              <div class="hero-sentence">
+                <span class="sentence" class:ok={reached} class:ng={!reached}>
+                  {#if reach === "comfortable"}
+                    {fmtDuration(tables.reach_seconds.comfortable)}かからずに倒せます。
+                  {:else if reach === "reached"}
+                    {fmtDuration(defeatSeconds)} で倒せます。
+                  {:else if reach === "close"}
+                    {fmtDuration(defeatSeconds)}。{fmtDuration(closeSeconds)}の目安ぎりぎりです。
+                  {:else}
+                    {fmtDuration(defeatSeconds)}。{fmtDuration(closeSeconds)}を超えるので厳しいです。
+                  {/if}
+                </span>
+                <span class="num dim">目安 {fmtDuration(closeSeconds)}以内</span>
+              </div>
+            {/if}
             <!-- 足りない分をどう埋める? を 1 行に(旧: 紫のパネル)。候補が無い・すでに目安に
                  届いているときは行ごと消す(§00 02) -->
             {#if perHit !== null && !reached && whatIf.length > 0}

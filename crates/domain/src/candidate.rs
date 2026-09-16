@@ -291,6 +291,8 @@ pub struct CandidateOutcome {
     pub id: String,
     pub per_hit_primary: i64,
     pub total_primary: i64,
+    /// この候補を適用したときの討伐時間(秒)。敵 HP 未収録・中ディレイ未収録なら None
+    pub defeat_seconds: Option<f64>,
 }
 
 /// 試算後の候補 1 件(並び替え済み)。
@@ -303,7 +305,7 @@ pub struct RankedCandidate {
     pub delta_pct: i32,
     /// 実際に敵へ入る総量の伸び率。表記が動かない候補はこちらにだけ出る
     pub delta_total_pct: i32,
-    /// 必要 /hit 以上か。`need_per_hit` が無いコンテンツでは常に `false`。
+    /// 討伐時間が `REACHED_SECONDS`(5 分)以内か。討伐時間が出せない候補では常に `false`。
     pub reaches: bool,
 }
 
@@ -311,15 +313,16 @@ pub struct RankedCandidate {
 ///
 /// - **表記も総量も現状を超えない**候補は除外する。表記が動かず総量だけ増えるもの
 ///   (シャープネスビジョン・武器強化)は残る。
-/// - `need_per_hit` があるとき: 届く候補のうち増分が最小のものを先頭に固定し、残りは
-///   `per_hit_primary` 降順(同値は `total_primary` 降順)。届く候補が無ければ全体を同じ順に並べる。
-/// - 到達判定と並び順の主キーが表記ダメージなのは、ゲームの表示とコンテンツの必要 /hit が
-///   その値だから。総量は伸び率の 2 本目として添える(ユーザー判断 2026-09-01)。
+/// - 討伐時間が `crate::content::REACHED_SECONDS`(5 分)以内に届く候補のうち、増分
+///   (`per_hit_primary`)が最小のものを先頭に固定し、残りは `per_hit_primary` 降順
+///   (同値は `total_primary` 降順)。届く候補が無ければ全体を同じ順に並べる。
+/// - 並び順の主キーが表記ダメージなのは、ゲームの表示がその値だから。総量は伸び率の
+///   2 本目として添える(ユーザー判断 2026-09-01)。到達判定だけは討伐時間で見る
+///   (ユーザー決定 2026-09-16)。
 pub fn rank_candidates(
     items: Vec<CandidateOutcome>,
     base_per_hit: i64,
     base_total: i64,
-    need_per_hit: Option<i64>,
 ) -> Vec<RankedCandidate> {
     let pct = |value: i64, base: i64| -> i32 {
         if base > 0 {
@@ -333,7 +336,8 @@ pub fn rank_candidates(
         .map(|o| RankedCandidate {
             delta_pct: pct(o.per_hit_primary, base_per_hit),
             delta_total_pct: pct(o.total_primary, base_total),
-            reaches: need_per_hit.is_some_and(|need| o.per_hit_primary >= need),
+            reaches: crate::content::ReachTier::of_defeat_seconds(o.defeat_seconds)
+                .is_some_and(crate::content::ReachTier::reaches),
             id: o.id,
             per_hit_primary: o.per_hit_primary,
             total_primary: o.total_primary,
@@ -346,19 +350,17 @@ pub fn rank_candidates(
             .cmp(&a.per_hit_primary)
             .then(b.total_primary.cmp(&a.total_primary))
     };
-    if let Some(need) = need_per_hit {
-        if let Some(pin_idx) = ranked
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| r.per_hit_primary >= need)
-            .min_by_key(|(_, r)| r.per_hit_primary)
-            .map(|(i, _)| i)
-        {
-            let pin = ranked.remove(pin_idx);
-            ranked.sort_by(by_damage);
-            ranked.insert(0, pin);
-            return ranked;
-        }
+    if let Some(pin_idx) = ranked
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.reaches)
+        .min_by_key(|(_, r)| r.per_hit_primary)
+        .map(|(i, _)| i)
+    {
+        let pin = ranked.remove(pin_idx);
+        ranked.sort_by(by_damage);
+        ranked.insert(0, pin);
+        return ranked;
     }
     ranked.sort_by(by_damage);
     ranked
@@ -670,30 +672,35 @@ mod tests {
         assert_eq!(changes.len(), 3);
     }
 
-    /// 表記と総量が同じ比で動く候補(ふつうの攻撃力候補)。base は per_hit 100 / total 300
-    fn outcome(id: &str, per_hit: i64) -> CandidateOutcome {
+    /// 表記と総量が同じ比で動く候補(ふつうの攻撃力候補)。base は per_hit 100 / total 300。
+    /// `defeat_seconds` を渡さない(None)候補は討伐時間で判定できない扱いになる。
+    fn outcome(id: &str, per_hit: i64, defeat_seconds: Option<f64>) -> CandidateOutcome {
         CandidateOutcome {
             id: id.to_string(),
             per_hit_primary: per_hit,
             total_primary: per_hit * 3,
+            defeat_seconds,
         }
     }
 
     #[test]
     fn 並び順は届く最小増分を先頭に残りは降順() {
-        let items = vec![outcome("a", 120), outcome("b", 150), outcome("c", 90), outcome("d", 200)];
-        // need = 130 -> a(120) は届かない、b(150)/d(200) は届く。最小増分は b。
-        // c(90) は base(100) を下回る(悪化)ので除外される。
-        let ranked = rank_candidates(items, 100, 300, Some(130));
+        let items = vec![
+            outcome("a", 120, Some(crate::content::REACHED_SECONDS + 1.0)), // 届かない
+            outcome("b", 150, Some(crate::content::REACHED_SECONDS)), // 届く
+            outcome("c", 90, Some(crate::content::REACHED_SECONDS)),  // base(100) を下回る(悪化)ので除外される
+            outcome("d", 200, Some(crate::content::COMFORTABLE_SECONDS)), // 届く
+        ];
+        let ranked = rank_candidates(items, 100, 300);
         let ids: Vec<_> = ranked.iter().map(|r| r.id.as_str()).collect();
         // 届く(b, d)のうち増分最小の b が先頭固定。残りは per_hit 降順(d, a)。
         assert_eq!(ids, vec!["b", "d", "a"]);
     }
 
     #[test]
-    fn need無しは降順のみ() {
-        let items = vec![outcome("a", 120), outcome("b", 150)];
-        let ranked = rank_candidates(items, 100, 300, None);
+    fn 討伐時間なしは降順のみ() {
+        let items = vec![outcome("a", 120, None), outcome("b", 150, None)];
+        let ranked = rank_candidates(items, 100, 300);
         assert_eq!(ranked[0].id, "b");
         assert_eq!(ranked[1].id, "a");
         assert!(!ranked[0].reaches && !ranked[1].reaches);
@@ -701,9 +708,9 @@ mod tests {
 
     #[test]
     fn 現状比0の候補は除外する() {
-        let items = vec![outcome("a", 100), outcome("b", 101)];
+        let items = vec![outcome("a", 100, None), outcome("b", 101, None)];
         // base=100: a は表記も総量も現状どまりなので除外。b は両方超えるので残す。
-        let ranked = rank_candidates(items, 100, 300, None);
+        let ranked = rank_candidates(items, 100, 300);
         assert_eq!(ranked.len(), 1);
         assert_eq!(ranked[0].id, "b");
     }
@@ -711,29 +718,30 @@ mod tests {
     #[test]
     fn 悪化する候補は除外する() {
         let items = vec![
-            outcome("a", 90),  // 悪化(delta 負)
-            outcome("b", 100), // 現状維持
-            outcome("c", 110), // 改善
+            outcome("a", 90, None),  // 悪化(delta 負)
+            outcome("b", 100, None), // 現状維持
+            outcome("c", 110, None), // 改善
         ];
-        let ranked = rank_candidates(items, 100, 300, None);
+        let ranked = rank_candidates(items, 100, 300);
         let ids: Vec<_> = ranked.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, vec!["c"]);
     }
 
     #[test]
     fn 表記が動かず総量だけ増える候補も残り伸び率は総量側に出る() {
-        // シャープネスビジョン: per_hit は現状のまま、total だけ +40%
+        // シャープネスビジョン: per_hit は現状のまま、total だけ +40%。到達判定は討伐時間
+        // 基準なので、表記ダメージが動かなくても討伐時間が届く値なら reaches = true になる。
         let items = vec![CandidateOutcome {
             id: "sv".to_string(),
             per_hit_primary: 100,
             total_primary: 420,
+            defeat_seconds: Some(crate::content::REACHED_SECONDS),
         }];
-        let ranked = rank_candidates(items, 100, 300, Some(130));
+        let ranked = rank_candidates(items, 100, 300);
         assert_eq!(ranked.len(), 1);
         assert_eq!(ranked[0].delta_pct, 0);
         assert_eq!(ranked[0].delta_total_pct, 40);
-        // 到達判定は表記ダメージ基準なので、総量が伸びても「届く」にはならない
-        assert!(!ranked[0].reaches);
+        assert!(ranked[0].reaches);
     }
 
     #[test]
@@ -742,7 +750,8 @@ mod tests {
             id: "a".to_string(),
             per_hit_primary: 100,
             total_primary: 300,
+            defeat_seconds: None,
         }];
-        assert!(rank_candidates(items, 100, 300, None).is_empty());
+        assert!(rank_candidates(items, 100, 300).is_empty());
     }
 }

@@ -84,10 +84,29 @@ pub struct GameTables {
     /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentStatKind::ALL` の順。
     /// `CoreType`(テシスコア)の表示名もここと同じ(8 種が重なる。critical は含まない)
     pub equipment_stat_labels: Vec<EquipmentStatLabel>,
+    /// 到達段(`ReachTier`)の境目になる討伐時間(秒)。画面はこの値を読んで
+    /// 「目安 N 分以内」やメーターの満量を出す(段の境目を画面側に写経しない)
+    pub reach_seconds: ReachSeconds,
+}
+
+/// 到達段の境目になる討伐時間(秒)。`crate::content` の定数をそのまま配る。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ReachSeconds {
+    /// 余裕(これ以内)
+    pub comfortable: f64,
+    /// 通る(これ以内)
+    pub reached: f64,
+    /// ぎりぎり(これ以内)。これを超えると届かない = 目安そのもの
+    pub close: f64,
 }
 
 pub fn game_tables() -> GameTables {
     GameTables {
+        reach_seconds: ReachSeconds {
+            comfortable: crate::content::COMFORTABLE_SECONDS,
+            reached: crate::content::REACHED_SECONDS,
+            close: crate::content::CLOSE_SECONDS,
+        },
         part_slot_rules: PartSlot::ALL
             .into_iter()
             .map(|slot| PartSlotRule {

@@ -63,5 +63,5 @@ export const REACH_BADGES: Badge[] = [
 ];
 /** 到達段(Rust の ReachTier)→ REACH_BADGES の添字。段の境目は Rust 側 */
 export const REACH_STATE: Record<ReachTier, number> = { comfortable: 0, reached: 1, close: 2, short: 3 };
-/** 目安に届いている段か */
+/** 討伐時間の目安(5 分以内)に届いている段か */
 export const reachOk = (tier: ReachTier | null): boolean => tier === "comfortable" || tier === "reached";

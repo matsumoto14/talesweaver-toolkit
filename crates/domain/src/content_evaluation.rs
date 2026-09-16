@@ -227,7 +227,6 @@ fn evaluate_one_content(
         let target = DamageTarget {
             skill: entry.skill.clone(),
             enemy: enemy.clone(),
-            need_per_hit: content.need_per_hit,
             combo_count: 0,
             coefficients: entry.coefficients,
             equipment_base_sources: equipment_base_sources_for(entry.skill.dependency),
@@ -246,6 +245,7 @@ fn evaluate_one_content(
                 skill_id: entry.skill.id.clone(),
                 per_hit_primary: result.per_hit_primary,
                 total_primary: result.total_primary,
+                defeat_seconds: result.defeat_seconds,
             });
             // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
             best_dependency = Some(entry.skill.dependency);
@@ -346,6 +346,7 @@ mod tests {
             element_threshold: 90,
             agi: None,
             critical_taken_rate: None,
+            hp: None,
         }
     }
 
@@ -358,7 +359,6 @@ mod tests {
                 name: "テスト".into(),
                 series: None,
                 enemy_id: Some("e".into()),
-                need_per_hit: None,
                 requirements: Vec::new(),
                 core_region: None,
                 game_region: None,

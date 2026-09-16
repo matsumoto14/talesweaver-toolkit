@@ -166,8 +166,6 @@ pub struct DamageMaterial {
 pub struct DamageTarget {
     pub skill: Skill,
     pub enemy: Enemy,
-    /// 対象コンテンツの目安ダメージ(1 ヒット)。敵データなし・目安なしは None
-    pub need_per_hit: Option<i64>,
     pub combo_count: u32,
     /// スキル依存種別で決まる係数一式(攻撃力・装備攻撃力・命中P)
     pub coefficients: DependencyCoefficients,
@@ -298,7 +296,7 @@ pub struct DamageResult {
     /// (スキル分のみ・武器強化の追加固定ダメージを含まない)。計算タブ・ホームが表示に使う値で、
     /// コンテンツ到達判定もこの値で判定する(ユーザー判断 2026-08-29 / 2026-08-30)
     pub per_hit_primary: i64,
-    /// 目安(`DamageTarget::need_per_hit`)に対する到達段。目安なしは None
+    /// 討伐時間(`defeat_seconds`)から決まる到達段。討伐時間が出せないなら None
     pub reach: Option<ReachTier>,
     /// 主役の合計ダメージ(`total.primary(critical_chance)`)
     pub total_primary: i64,
@@ -335,6 +333,12 @@ pub struct DamageResult {
     /// クリ率を考慮した DPS の期待値(`dps.max × (1 − p) + dps.critical × p`)。
     /// `dps` が `None` なら `None`
     pub expected_dps: Option<f64>,
+    /// 敵の HP(ソロ)。討伐時間の分子。画面が「何を割ったか」を出すために返す
+    /// (`effective_skill_multiplier` と同じ、入力の写し)。`None` = 未収録
+    pub enemy_hp: Option<i64>,
+    /// 討伐にかかる秒数(`敵 HP ÷ expected_dps`)。敵 HP 未収録・中ディレイ未収録・
+    /// DPS が 0 以下のいずれかなら `None`。**ソロの HP** で出す(PT の増加は持たない)
+    pub defeat_seconds: Option<f64>,
     /// コンボ(間に通常攻撃を挟む)の 1 サイクル。`calculate_damage_with_combo` でだけ入る。
     /// これが入っているとき `dps` はサイクルで割った値になっている
     #[serde(default)]
@@ -604,6 +608,21 @@ fn add_traced(
     }
 }
 
+/// 討伐時間(秒)。`敵 HP ÷ 期待 DPS`。
+///
+/// 出せないときは `0` ではなく `None` にする(「一瞬で倒せる」と「まだ計算していない」を
+/// 画面で区別できないため)。敵 HP は**ソロ**の値なので、PT の討伐時間はここからは出せない。
+/// キマイラの「武器強化ダメージ無効」は与ダメージ側が未モデル `[仮]` なので、
+/// その分だけ討伐時間が短く出る。
+fn defeat_seconds(hp: Option<i64>, expected_dps: Option<f64>) -> Option<f64> {
+    let hp = hp?;
+    let dps = expected_dps?;
+    if dps <= 0.0 {
+        return None;
+    }
+    Some(hp as f64 / dps)
+}
+
 /// コンボ(間に通常攻撃を挟む)ときのダメージ。1 発ぶんの数字は `calculate_damage` と同じで、
 /// **DPS だけがサイクル基準**になる。
 ///
@@ -649,6 +668,8 @@ pub fn calculate_damage_with_combo(
     });
     let p = result.critical_chance;
     result.expected_dps = result.dps.as_ref().map(|d| d.max * (1.0 - p) + d.critical * p);
+    result.defeat_seconds = defeat_seconds(target.enemy.hp, result.expected_dps);
+    result.reach = ReachTier::of_defeat_seconds(result.defeat_seconds);
     result.combo = Some(ComboCycle {
         normal_attack_name: normal_attack.name.clone(),
         normal_attack_total: normal.total,
@@ -1060,6 +1081,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
     let expected_dps = dps
         .as_ref()
         .map(|d| d.max * (1.0 - critical_chance_ratio) + d.critical * critical_chance_ratio);
+    let defeat_seconds = defeat_seconds(target.enemy.hp, expected_dps);
 
     let per_hit = DamageTriple { min, max, critical };
     let categories = totals_max.trace();
@@ -1070,9 +1092,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         weapon_added_total,
         weapon_added_per_hit,
         per_hit_primary: per_hit.primary(critical_chance_ratio),
-        reach: target
-            .need_per_hit
-            .map(|need| ReachTier::of(per_hit.primary(critical_chance_ratio), need)),
+        reach: ReachTier::of_defeat_seconds(defeat_seconds),
         total_primary: total.primary(critical_chance_ratio),
         hit_count,
         effective_skill_multiplier: target.skill.multiplier,
@@ -1087,6 +1107,8 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         dps,
         critical_chance: critical_chance_ratio,
         expected_dps,
+        enemy_hp: target.enemy.hp,
+        defeat_seconds,
         // コンボは calculate_damage_with_combo で後から入れる(1 発の計算には要らない)
         combo: None,
         levers: damage_levers(&categories),
@@ -1288,8 +1310,8 @@ mod tests {
                 element_threshold: 90,
                 agi: None,
                 critical_taken_rate: None,
+                hp: None,
             },
-            need_per_hit: None,
             combo_count: 0,
             element_value: 0,
         }
@@ -1818,6 +1840,7 @@ mod tests {
             agi: Some(1552),
             critical_taken_rate: None,
             element_threshold: 120,
+            hp: Some(24_500_000),
         };
         let r = calculate_damage(&m, &tg);
         assert!(
@@ -2643,5 +2666,15 @@ mod tests {
             .value;
         assert!((sum - enhance_rate).abs() < 1e-12);
         assert_eq!(r.trace.equipment_enhance_sources.len(), 2);
+    }
+
+    /// 討伐時間は `敵 HP ÷ 期待 DPS`。出せない材料が 1 つでもあれば `None`(0 で埋めない)。
+    #[test]
+    fn 討伐時間はhpと期待dpsから出る() {
+        assert_eq!(defeat_seconds(Some(1_000), Some(100.0)), Some(10.0));
+        // HP 未収録 / DPS 未収録 / DPS 0 はどれも None
+        assert_eq!(defeat_seconds(None, Some(100.0)), None);
+        assert_eq!(defeat_seconds(Some(1_000), None), None);
+        assert_eq!(defeat_seconds(Some(1_000), Some(0.0)), None);
     }
 }

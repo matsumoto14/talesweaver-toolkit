@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  // 「目安火力が変わった」影響カードは、キャラごとにセッション中 1 回だけ判定する
+  // 「火力が変わった」影響カードは、キャラごとにセッション中 1 回だけ判定する
   // (起動中に何度もホームへ戻っても再表示しない)。モジュールスコープなので
   // タブ切替でこのコンポーネントが作り直されても保持される。
   const checkedSnapshotIds = new Set<number>();
@@ -29,12 +29,13 @@
     equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
     valuesSummary,
   } from "../../equipment";
-  import { fmtInt, fmtMonthDay, fmtNum, fmtRate, fmtSigned } from "../../format";
+  import { fmtDuration, fmtInt, fmtMonthDay, fmtNum, fmtSigned } from "../../format";
   import {
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, SIENA_ALLOWED_SLOTS, STAT_KINDS, STAT_LABELS,
   } from "../../labels";
   import type { EquipmentStatKind } from "../../labels";
   import { limits } from "../../limits.svelte";
+  import { tables } from "../../tables.svelte";
   import {
     app, buffSelectionFor, enqueueCharacterSave, evaluationFor, flatContents, focusCharacterSource, gameCharacterName,
     payloadOf, refreshEvaluation, selectedCharacter, totalContents, upsertCharacter,
@@ -93,12 +94,12 @@
   // 行の状態: 0余裕 1通る 2ぎりぎり 3届かない 4条件・火力とも未達 5条件だけ未達 6スキル未収録 7判定中
   //           8 入場OK(火力データなし) 9 入場条件が未達(火力データなし)
   // 「判定未着(!r.ev)」と「本当にスキル未収録(!r.ev.damage)」を混同しない(PR レビュー指摘)。
-  // 敵データが無いコンテンツ(need_per_hit === null)は入場条件だけで状態を決める。
+  // 敵データが無いコンテンツ(enemy_id === null)は入場条件だけで状態を決める。
   function rowState(r: Row): number {
     if (!r.ev) return 6;
-    if (r.content.need_per_hit === null) return r.ev.entry_ok ? 7 : 8;
+    if (r.content.enemy_id === null) return r.ev.entry_ok ? 7 : 8;
     if (!r.ev.damage || r.ev.reach === null) return 6;
-    if (!r.ev.entry_ok) return r.ev.reaches_need ? 5 : 4;
+    if (!r.ev.entry_ok) return r.ev.reaches ? 5 : 4;
     return REACH_STATE[r.ev.reach];
   }
 
@@ -124,13 +125,17 @@
     { label: "条件未達", state: "temp" },
   ];
 
+  // 討伐時間の目安。段の境目は Rust が配る(tables.reach_seconds)。画面は写経しない
+  const closeSeconds = $derived(tables.reach_seconds.close);
   // 火力バーの比率。敵データが無いコンテンツは入場条件の充足度(満たした項目の割合)を出す。
+  // 敵データがあるコンテンツは討伐時間 ÷ 目安(討伐時間が長いほど伸びる。CalcPage と同じ考え方)
   const ratioOf = (r: Row) => {
-    if (r.content.need_per_hit === null) {
+    if (r.content.enemy_id === null) {
       if (!r.ev || r.ev.checks.length === 0) return r.ev?.entry_ok ? 1 : 0;
       return r.ev.checks.filter((c) => c.ok).length / r.ev.checks.length;
     }
-    return r.ev?.damage ? r.ev.damage.per_hit_primary / r.content.need_per_hit : 0;
+    const seconds = r.ev?.damage?.defeat_seconds;
+    return seconds != null ? Math.min(1, seconds / closeSeconds) : 0;
   };
   const pctOf = (r: Row) => `${Math.min(100, ratioOf(r) * 100)}%`;
 
@@ -141,7 +146,7 @@
   function noteOf(r: Row): { text: string; unmet: boolean } {
     if (!r.ev) return { text: "判定中…", unmet: false };
     // 敵データなし: 入場条件だけを説明する(火力の話をしない)
-    if (r.content.need_per_hit === null) {
+    if (r.content.enemy_id === null) {
       if (r.ev.entry_ok) {
         const met = r.ev.checks.map((c) => `${c.label} ${fmtInt(c.required)}`).join(" / ");
         return { text: met ? `入場条件OK(${met})` : "入場条件なし", unmet: false };
@@ -149,16 +154,20 @@
       return { text: `入場まで: ${unmetText(r.ev)}`, unmet: true };
     }
     if (!r.ev.damage) return { text: "このキャラのスキルデータが未収録のため火力を判定できません", unmet: false };
-    const lackPct = Math.max(1, Math.round((1 - ratioOf(r)) * 100));
+    const seconds = r.ev.damage.defeat_seconds;
+    // 討伐時間が出せない(敵 HP か中ディレイが未収録)ときは 0 や「届かない」で埋めず理由を出す
+    const shortfallText = seconds != null
+      ? `討伐 ${fmtDuration(seconds)}(目安 ${fmtDuration(closeSeconds)}以内)`
+      : "討伐時間を判定できません(敵 HP か中ディレイが未収録)";
     if (r.content.requirements.length === 0) {
-      return r.ev.reaches_need
+      return r.ev.reaches
         ? { text: "入場条件なし", unmet: false }
-        : { text: `入場条件なし ／ 火力が あと ${lackPct}%`, unmet: false };
+        : { text: `入場条件なし ／ ${shortfallText}`, unmet: false };
     }
     if (r.ev.entry_ok) {
-      return r.ev.reaches_need
+      return r.ev.reaches
         ? { text: `入場条件OK(${r.ev.checks.map((c) => `${c.label} ${fmtInt(c.required)}`).join(" / ")})`, unmet: false }
-        : { text: `入場条件OK ／ 火力が あと ${lackPct}%`, unmet: false };
+        : { text: `入場条件OK ／ ${shortfallText}`, unmet: false };
     }
     return { text: `入場まで: ${unmetText(r.ev)}`, unmet: true };
   }
@@ -178,7 +187,7 @@
    * 火力目標のある未クリアが 1 つも無ければ frontier(最初の未クリア)へ落とす。
    */
   const autoGoal = $derived(
-    rows.find((r) => r.ev && !r.ev.clear && r.content.need_per_hit !== null && r.ev.damage) ??
+    rows.find((r) => r.ev && !r.ev.clear && r.content.enemy_id !== null && r.ev.damage) ??
       rows.find((r) => r.content.id === frontierId) ??
       null,
   );
@@ -350,7 +359,9 @@
   let heroDamage = $state<{
     skillId: string;
     perHit: number;
-    /** 目安に対する到達段(Rust 側の判定) */
+    /** 討伐にかかる秒数。敵 HP 未収録・中ディレイ未収録なら null */
+    defeatSeconds: number | null;
+    /** 討伐時間から決まる到達段(Rust 側の判定) */
     reach: ReachTier | null;
     /** クリティカル率(0..1)。critRate が null(wiki 未記載)なら確定扱いの 1.0 */
     critChance: number;
@@ -368,27 +379,25 @@
       ? (heroDamage ?? {
           skillId: heroGoal.ev.damage.skill_id,
           perHit: heroGoal.ev.damage.per_hit_primary,
+          defeatSeconds: heroGoal.ev.damage.defeat_seconds,
           reach: heroGoal.ev.reach,
         })
       : null,
   );
-  /** スポットライトの到達状態(rowState と同じ段。判定値は heroSpot の /hit) */
+  /** スポットライトの到達状態(rowState と同じ段。判定値は heroSpot の討伐時間) */
   const heroSpotState = $derived.by(() => {
     const g = heroGoal;
     const s = heroSpot;
-    if (!g?.ev || g.content.need_per_hit === null || !s || s.reach === null) return 6;
+    if (!g?.ev || g.content.enemy_id === null || !s || s.reach === null) return 6;
     if (!g.ev.entry_ok) return reachOk(s.reach) ? 5 : 4;
     return REACH_STATE[s.reach];
   });
+
   const heroSpotPct = $derived(
-    heroGoal?.content.need_per_hit && heroSpot
-      ? `${Math.min(100, (heroSpot.perHit / heroGoal.content.need_per_hit) * 100)}%`
-      : "0%",
+    heroSpot?.defeatSeconds != null ? `${Math.min(100, (heroSpot.defeatSeconds / closeSeconds) * 100)}%` : "0%",
   );
-  /** 次の目標の火力が必要値未満か(おすすめ強化を出す条件) */
-  const heroPowerShort = $derived(
-    heroGoal?.content.need_per_hit != null && heroSpot != null && heroSpot.perHit < heroGoal.content.need_per_hit,
-  );
+  /** 次の目標の火力が討伐時間の目安に届いていないか(おすすめ強化を出す条件) */
+  const heroPowerShort = $derived(heroSpot != null && !reachOk(heroSpot.reach));
   /** 次の目標の入場条件が未達か(条件の行を出す条件) */
   const heroEntryUnmet = $derived(heroGoal?.ev != null && !heroGoal.ev.entry_ok);
   /** 命中Pが出せない理由(design-system: 未収録は空白や「—」ではなく理由を読める形にする)。
@@ -429,6 +438,7 @@
           heroDamage = {
             skillId,
             perHit: current.per_hit_primary,
+            defeatSeconds: current.defeat_seconds,
             reach: current.reach,
             critChance: current.critical_chance,
             critRate: current.critical_rate?.value ?? null,
@@ -473,7 +483,7 @@
     app.tab = "calc";
   }
 
-  // ===== 影響カード: 前回起動からの目安火力の変化(セッション中キャラごと初回のみ) ======
+  // ===== 影響カード: 前回起動からの火力(1 発)の変化(セッション中キャラごと初回のみ) ======
   interface ImpactCard {
     characterId: number;
     skillId: string;
@@ -957,7 +967,7 @@
             {/if}
             {#if !heroGoal}
               <span class="hero-goal-note dim">全 {fmtInt(totalCount)} コンテンツ クリア可 — 目標を選ぶとここで詰められます</span>
-            {:else if heroGoal.content.need_per_hit === null || !heroSpot}
+            {:else if heroGoal.content.enemy_id === null || !heroSpot}
               <span class="hero-goal-note dim">{noteOf(heroGoal).text}</span>
             {:else}
               <span class="hero-div"></span>
@@ -981,10 +991,12 @@
                 <span class="num hero-spot" use:bump={() => heroSpot?.perHit ?? null} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)">
                   {fmtInt(heroSpot.perHit)}
                 </span>
-                <!-- 目標を選び直すと必要値も変わる。変わったものは全部動かす(§00 04) -->
-                <span class="num dim" use:bump={() => heroGoal?.content.need_per_hit ?? null}> / {fmtInt(heroGoal.content.need_per_hit)}</span>
+                <!-- 討伐時間が主役ではなく傍証。出せないときは 0 や「—」で埋めず、そのまま省く(§00 02) -->
+                {#if heroSpot.defeatSeconds !== null}
+                  <span class="num dim" use:bump={() => heroSpot?.defeatSeconds ?? null}> ・ 討伐 {fmtDuration(heroSpot.defeatSeconds)}</span>
+                {/if}
               </span>
-              <!-- 到達の判定はバーの色と「/ 目安」で読める。バッジは重複なので置かない(ユーザー 2026-09-16)。
+              <!-- 到達の判定はバーの色と討伐時間で読める。バッジは重複なので置かない(ユーザー 2026-09-16)。
                    言葉の判定は「どこまでいける?」一覧のバッジが担う -->
             {/if}
             {#if heroGoal}
@@ -1053,7 +1065,7 @@
             />
             <span class="brief-copy">
               <span class="brief-title">
-                目安火力が <span class="num" use:bump={() => card.perHit}>{fmtInt(card.perHit)}</span> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
+                火力が <span class="num" use:bump={() => card.perHit}>{fmtInt(card.perHit)}</span> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
                 <span class="num" style="color: {card.perHit >= card.prevPerHit ? 'var(--good)' : 'var(--danger)'}">
                   {card.perHit >= card.prevPerHit ? "+" : ""}{fmtInt(card.perHit - card.prevPerHit)}
                 </span>
@@ -1397,12 +1409,12 @@
                         </div>
                         <div class="row-bar">
                           <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
-                          {#if r.content.need_per_hit === null}
+                          {#if r.content.enemy_id === null}
                             <span class="need num dim">入場条件のみ</span>
                           {:else}
-                            <span class="need num dim">目安 {fmtInt(r.content.need_per_hit)}</span>
-                            {#if ratioOf(r) >= 1.15}
-                              <span class="over num">{fmtRate(ratioOf(r), 1)}</span>
+                            <span class="need num dim">目安 {fmtDuration(closeSeconds)}以内</span>
+                            {#if r.ev?.reach === "comfortable" && r.ev.damage?.defeat_seconds != null}
+                              <span class="over num">{fmtDuration(r.ev.damage.defeat_seconds)}</span>
                             {/if}
                           {/if}
                           {#key st}<span class="badge badge-in" style={badgeStyle(BADGE[st])}>{BADGE[st].label}</span>{/key}
@@ -1426,7 +1438,8 @@
 
       <p class="foot dim">
         入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
-        目安ダメージは wiki に無い値で、コミュニティ知識・実測が出典です(実測で更新)。
+        火力は「ソロで倒しきるまでの時間」で見ます({fmtDuration(tables.reach_seconds.comfortable)}以内 = 余裕、{fmtDuration(tables.reach_seconds.reached)}以内 = 通る、{fmtDuration(closeSeconds)}以内 = ぎりぎり)。
+        敵の HP はユーザー提供の実測表が出典で、PT 時の HP 増加は入っていません。
       </p>
     {/if}
   </div>

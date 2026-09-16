@@ -1436,7 +1436,6 @@ fn build_damage_input(
         DamageTarget {
             skill,
             enemy,
-            need_per_hit: content.need_per_hit,
             combo_count,
             coefficients,
             equipment_base_sources,
@@ -1660,7 +1659,7 @@ pub struct UpgradeCandidate {
     pub delta_pct: i32,
     /// 実際に敵へ入る総量の伸び率。表記が動かない候補(シャープネスビジョン等)はこちらにだけ出る
     pub delta_total_pct: i32,
-    /// 必要 /hit 以上か。`need_per_hit` が無いコンテンツでは常に `false`。
+    /// 討伐時間が `REACHED_SECONDS`(5 分)以内か。討伐時間が出せない候補では常に `false`。
     pub reaches: bool,
     /// この候補を適用したキャラ payload。UI はこれをそのまま whatif の sim に入れる。
     pub applied: NewCharacter,
@@ -1793,7 +1792,7 @@ impl CandidateTrial<'_> {
         &self,
         equipment: domain::Equipment,
         common_skills: CommonSkills,
-    ) -> CommandResult<(i64, i64)> {
+    ) -> CommandResult<(i64, i64, Option<f64>)> {
         let c = self.character;
         let (material, target) = build_damage_input(
             &c.base_stats,
@@ -1812,7 +1811,7 @@ impl CandidateTrial<'_> {
             self.temporary_adjustments.cloned(),
         )?;
         let result = domain::calculate_damage(&material, &target);
-        Ok((result.per_hit_primary, result.total_primary))
+        Ok((result.per_hit_primary, result.total_primary, result.defeat_seconds))
     }
 
     fn outcomes(
@@ -1822,12 +1821,13 @@ impl CandidateTrial<'_> {
         changes
             .iter()
             .map(|change| {
-                let (per_hit_primary, total_primary) =
+                let (per_hit_primary, total_primary, defeat_seconds) =
                     self.damage(change.equipment.clone(), change.common_skills)?;
                 Ok(domain::CandidateOutcome {
                     id: change.id.clone(),
                     per_hit_primary,
                     total_primary,
+                    defeat_seconds,
                 })
             })
             .collect()
@@ -1852,7 +1852,7 @@ pub fn list_upgrade_candidates(
         combo_skill_type,
         temporary_adjustments: temporary_adjustments.as_ref(),
     };
-    let (base_per_hit, base_total) =
+    let (base_per_hit, base_total, _) =
         trial.damage(character.equipment.clone(), character.common_skills)?;
 
     let resolved_enhance_type = |slot: domain::PartSlot| -> Option<domain::EquipmentEnhanceType> {
@@ -1877,8 +1877,7 @@ pub fn list_upgrade_candidates(
         &ctx.equipment_catalog,
     ));
     let outcomes = trial.outcomes(&changes)?;
-    let ranked =
-        domain::rank_candidates(outcomes, base_per_hit, base_total, ctx.content.need_per_hit);
+    let ranked = domain::rank_candidates(outcomes, base_per_hit, base_total);
 
     let mut by_id: std::collections::HashMap<String, domain::CandidateChange> =
         changes.into_iter().map(|c| (c.id.clone(), c)).collect();
@@ -1937,7 +1936,7 @@ pub fn list_enchant_gains(
         combo_skill_type,
         temporary_adjustments: temporary_adjustments.as_ref(),
     };
-    let (base_per_hit, base_total) =
+    let (base_per_hit, base_total, _) =
         trial.damage(character.equipment.clone(), character.common_skills)?;
 
     let changes = domain::enchant_candidates(
@@ -1947,7 +1946,7 @@ pub fn list_enchant_gains(
         &ctx.enchant_allowed_keys,
     );
     let outcomes = trial.outcomes(&changes)?;
-    let ranked = domain::rank_candidates(outcomes, base_per_hit, base_total, None);
+    let ranked = domain::rank_candidates(outcomes, base_per_hit, base_total);
 
     // id は "enchant-{slot:?}-{key}"(小文字化)形式だが、`{:?}` は元の PartSlot の
     // 表記ゆれ(例: ShieldPlus → シリアライズは shield_plus だが Debug は shieldplus)を持つので

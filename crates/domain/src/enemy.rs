@@ -23,4 +23,9 @@ pub struct Enemy {
     /// `None` = wiki が `?` で未記載。**AGI と両方そろわないとクリティカル率を出さない**
     #[serde(default)]
     pub critical_taken_rate: Option<f64>,
+    /// HP(ソロ)。実測表「モンスター能力値リスト」の HP 列。討伐時間(HP ÷ 期待 DPS)に使う。
+    /// **PT 時の HP 増加(メンバー数比例)は持たない**ので、PT の討伐時間はこの値からは出せない。
+    /// `None` = 未収録
+    #[serde(default)]
+    pub hp: Option<i64>,
 }
