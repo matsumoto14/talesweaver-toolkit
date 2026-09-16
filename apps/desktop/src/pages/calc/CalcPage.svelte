@@ -44,7 +44,7 @@
   import StepSelect from "../../ui/StepSelect.svelte";
   import StepToggle from "../../ui/StepToggle.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
-  import { positionPopover } from "../../ui/popover";
+  import Popover from "../../ui/Popover.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { bump, delta, disclosureCaret, disclosurePane, flash } from "../../ui/motion.svelte";
@@ -1299,8 +1299,6 @@
     const set = app.buffSets.find((item) => item.id === id);
     app.calcBuffs = JSON.parse(JSON.stringify(set?.choices ?? { choices: [] }));
   }
-  /** 値の調整を開いているバフの id。高々 1 件で、重ねて出す(下に積むとペインが伸びる) */
-  let buffEditorId = $state<string | null>(null);
   /** いま開いている目的グループ。null = 全部畳んである(既定)。同時に開くのは 1 つ */
   let openBuffPurpose = $state<BuffPurpose | null>(null);
   /** 「計算の材料」で開いているまとまり。null = 全部畳んである(既定)。
@@ -1312,17 +1310,7 @@
     openMaterial = openMaterial === id ? null : id;
     if (openMaterial !== "buffs") openBuffPurpose = null;
   }
-  function openBuffEditor(def: BuffDefinition) {
-    buffEditorId = buffEditorId === def.id ? null : def.id;
-  }
-  /** 重なりものは外を押したときと Esc で閉じる。トリガ自身と中身は対象外 */
-  function closeBuffEditor(event: MouseEvent) {
-    if ((event.target as HTMLElement | null)?.closest(".popover, .chip-config")) return;
-    buffEditorId = null;
-  }
-
   function toggleBuffChip(def: BuffDefinition) {
-    if (buffEditorId === def.id) buffEditorId = null;
     app.calcBuffs = { choices: toggleBuff(app.calcBuffs.choices, def, !buffOn(def)) };
   }
   // ON のバフのうち、対象ステ・効果量の選択肢・手入力を持つものの詳細編集(試し変更として反映)
@@ -1803,98 +1791,84 @@
                   {/snippet}
                   {#snippet extra()}
                     {#if detail}
-                      <button
-                        type="button"
-                        class="chip-config"
-                        onclick={(e) => { e.stopPropagation(); openBuffEditor(def); }}
-                        aria-expanded={buffEditorId === def.id}
-                        aria-label={`${def.name} の設定`}
-                      >設定</button>
-                    {/if}
-                    {#if detail && buffEditorId === def.id}
                       {@const choice = buffChoiceOf(def.id)}
                       {#if choice}
-                        <div
-                          class="popover buff-editor"
-                          role="dialog"
-                          tabindex="-1"
-                          aria-label={`${def.name} の設定`}
-                          use:positionPopover
-                          onclick={(e) => e.stopPropagation()}
-                          onkeydown={(e) => e.stopPropagation()}
+                        <Popover
+                          label={`${def.name} の設定`}
+                          triggerLabel={`${def.name} の設定`}
+                          triggerClass="chip-config"
+                          panelClass="buff-editor"
                         >
-                          {#if isMultiTarget(def.target)}
-                          <!-- クラブエフェクトはステごとに 1 つずつ併用できる。ここでは対象ステの
-                               出し入れだけを試せるようにし、値はバフタブ側の設定を引き継ぐ -->
-                          <StepToggle
-                            label="対象ステ"
-                            options={statOptions}
-                            max={STAT_KINDS.length}
-                            values={pickedStats(app.calcBuffs.choices, def)}
-                            onToggle={(v, next) => toggleBuffStatChip(def, v as StatKind, next)}
-                          />
-                        {:else if isUserSelectedTarget(def.target)}
-                          <StepSelect
-                            label="対象ステ"
-                            options={statOptions}
-                            bind:value={
-                              () => choice.stat ?? STAT_KINDS[0],
-                              (v) => editBuffChoice(def.id, (c) => (c.stat = v as StatKind))
-                            }
-                          />
-                        {/if}
-                        {#if isChoiceValue(def.value)}
-                          {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
-                          <!-- 値の候補は小さい順に並ぶ(順序あり)ので段(§07「1 つ選ぶ」) -->
-                          <StepSelect
-                            label="値"
-                            {options}
-                            full
-                            bind:value={
-                              () => String(choice.choice_index ?? 0),
-                              (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
-                            }
-                          />
-                        {/if}
-                        {#if userInputRange(def.value)}
-                          {@const range = userInputRange(def.value)!}
-                          {@const scale = isPercentLayer(def.layer) ? 100 : 1}
-                          {#if isMultiTarget(def.target)}
-                            {#each pickedStats(app.calcBuffs.choices, def) as stat (stat)}
-                              <StatInput
-                                label={STAT_LABELS[stat]}
-                                min={range.min * scale}
-                                max={range.max * scale}
-                                bind:value={
-                                  () => (buffChoiceOfStat(def.id, stat)?.value ?? def.default_value ?? range.min) * scale,
-                                  (v) => editBuffChoice(def.id, (c) => (c.value = v / scale), stat)
-                                }
-                              />
-                            {/each}
-                          {:else}
+                          {#snippet trigger()}設定{/snippet}
+                          {#snippet children(close)}
+                        {#if isMultiTarget(def.target)}
+                        <!-- クラブエフェクトはステごとに 1 つずつ併用できる。ここでは対象ステの
+                             出し入れだけを試せるようにし、値はバフタブ側の設定を引き継ぐ -->
+                        <StepToggle
+                          label="対象ステ"
+                          options={statOptions}
+                          max={STAT_KINDS.length}
+                          values={pickedStats(app.calcBuffs.choices, def)}
+                          onToggle={(v, next) => toggleBuffStatChip(def, v as StatKind, next)}
+                        />
+                      {:else if isUserSelectedTarget(def.target)}
+                        <StepSelect
+                          label="対象ステ"
+                          options={statOptions}
+                          bind:value={
+                            () => choice.stat ?? STAT_KINDS[0],
+                            (v) => editBuffChoice(def.id, (c) => (c.stat = v as StatKind))
+                          }
+                        />
+                      {/if}
+                      {#if isChoiceValue(def.value)}
+                        {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
+                        <!-- 値の候補は小さい順に並ぶ(順序あり)ので段(§07「1 つ選ぶ」) -->
+                        <StepSelect
+                          label="値"
+                          {options}
+                          full
+                          bind:value={
+                            () => String(choice.choice_index ?? 0),
+                            (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
+                          }
+                        />
+                      {/if}
+                      {#if userInputRange(def.value)}
+                        {@const range = userInputRange(def.value)!}
+                        {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                        {#if isMultiTarget(def.target)}
+                          {#each pickedStats(app.calcBuffs.choices, def) as stat (stat)}
                             <StatInput
-                              label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
+                              label={STAT_LABELS[stat]}
                               min={range.min * scale}
                               max={range.max * scale}
                               bind:value={
-                                () => (choice.value ?? 0) * scale,
-                                (v) => editBuffChoice(def.id, (c) => (c.value = v / scale))
+                                () => (buffChoiceOfStat(def.id, stat)?.value ?? def.default_value ?? range.min) * scale,
+                                (v) => editBuffChoice(def.id, (c) => (c.value = v / scale), stat)
                               }
                             />
-                          {/if}
+                          {/each}
+                        {:else}
+                          <StatInput
+                            label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
+                            min={range.min * scale}
+                            max={range.max * scale}
+                            bind:value={
+                              () => (choice.value ?? 0) * scale,
+                              (v) => editBuffChoice(def.id, (c) => (c.value = v / scale))
+                            }
+                          />
                         {/if}
-                          <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); buffEditorId = null; }}>閉じる</button>
-                        </div>
+                      {/if}
+                            <button type="button" class="popover-close" onclick={close}>閉じる</button>
+                          {/snippet}
+                        </Popover>
                       {/if}
                     {/if}
                   {/snippet}
                 </ToggleRow>
   {/snippet}
-
-<svelte:window
-  onclick={closeBuffEditor}
-  onkeydown={(e) => { if (e.key === "Escape") buffEditorId = null; }}
-/>
 
 <SplitPage
   midTitle="行ける？"
@@ -3414,15 +3388,16 @@
   .buff-legend .lg.always { background: #CCF7FF; border-color: var(--sel-bd); color: var(--sel-fg); }
   .buff-legend .lg.extra { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
   .buff-note { margin: 8px 0 0; font-size: 9px; line-height: 1.6; }
-  /* 値の調整。チップに重ねて出すので、ON にした数だけペインが伸びることがない */
-  .buff-editor { top: calc(100% + 4px); left: 0; min-width: 210px; gap: 7px; }
+  /* 値の調整。チップに重ねて出すので、ON にした数だけペインが伸びることがない。
+     置き場所は app.css の .popover(「設定」の右端に揃えて下に開く) */
+  :global(.buff-editor) { min-width: 210px; gap: 7px; }
   /* 行の押せる面(.face)とは別の的。extra に置くので行そのものは押しても動かない */
-  .chip-config {
+  :global(.chip-config) {
     flex: none; margin: 0 2px 0 0; padding: 0 0 0 6px;
     border: 0; border-left: 1px solid var(--border-soft); background: none;
     color: var(--fg-muted); font: inherit; font-size: 8.5px; text-decoration: underline;
     text-underline-offset: 2px; cursor: pointer; opacity: .8;
   }
-  .chip-config:hover { opacity: 1; color: var(--accent); }
+  :global(.chip-config:hover) { opacity: 1; color: var(--accent); }
 
 </style>

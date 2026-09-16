@@ -29,7 +29,7 @@
   import StepSelect from "../../ui/StepSelect.svelte";
   import StepToggle from "../../ui/StepToggle.svelte";
   import Spinner from "../../ui/Spinner.svelte";
-  import { positionPopover } from "../../ui/popover";
+  import Popover from "../../ui/Popover.svelte";
   import Icon from "../../ui/Icon.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
   import TextField from "../../ui/TextField.svelte";
@@ -57,12 +57,6 @@
   let pendingPersist: BuffSet | null = null;
   let confirmDeleteId = $state<number | null>(null);
   let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null;
-  /** チップの「ほか n」を開いて中身(割愛したステ増分)を見ている ON バフの id。
-   *  常に高々 1 件(§00 03: 押した場所は動かさない = 場所を固定した使い捨てのポップオーバー)。 */
-  let openInfoId = $state<string | null>(null);
-  /** 値の調整を開いている ON バフの id。「ほか n」と同じく高々 1 件で、同時には開かない
-   *  (§00 03: 押した場所は動かさない = 場所を固定した使い捨ての重なりもの) */
-  let openEditorId = $state<string | null>(null);
   let activePurpose = $state<BuffPurpose>("stats");
   let activeDamageGroup = $state<BuffDamageGroup>("general");
   let damageSummary = $state<CategoryTrace[]>([]);
@@ -218,19 +212,6 @@
     return [...gains].sort((a, b) => b.gain - a.gain)[0].kind;
   };
 
-  function openEditor(def: BuffDefinition) {
-    openInfoId = null;
-    openEditorId = openEditorId === def.id ? null : def.id;
-  }
-  /** 重なりものは、外を押したときと Esc で閉じる。開いたままにすると「まだ開いている」ことを
-   *  覚えておく必要が出る(§00 05)。トリガ自身とポップオーバーの中は対象外 */
-  function closeOverlays(event: MouseEvent) {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest(".rest-popover, .rest-link")) return;
-    openInfoId = null;
-    openEditorId = null;
-  }
-
   function replaceSet(set: BuffSet) {
     const index = app.buffSets.findIndex((item) => item.id === set.id);
     if (index >= 0) app.buffSets[index] = set;
@@ -277,8 +258,6 @@
    *  ON のあいだだけ中身を見せる */
   async function toggle(def: BuffDefinition) {
     if (!selected || saving) return;
-    if (openInfoId === def.id) openInfoId = null;
-    if (openEditorId === def.id) openEditorId = null;
     const next: BuffSet = JSON.parse(JSON.stringify(selected));
     next.choices.choices = toggleBuff(next.choices.choices, def, !next.choices.choices.some((c) => c.buff_id === def.id), bestStatFor(def));
     await persist(next);
@@ -311,7 +290,6 @@
    *  (「外す」と同じ結果になるので、外し方を 2 通り覚えさせない) */
   async function toggleStat(def: BuffDefinition, stat: StatKind, next: boolean) {
     if (!selected || saving) return;
-    if (openInfoId === def.id) openInfoId = null;
     const draft: BuffSet = JSON.parse(JSON.stringify(selected));
     draft.choices.choices = toggleBuffStat(draft.choices.choices, def, stat, next);
     await persist(draft);
@@ -582,11 +560,6 @@
   }
 </script>
 
-<svelte:window
-  onclick={closeOverlays}
-  onkeydown={(e) => { if (e.key === "Escape") { openInfoId = null; openEditorId = null; } }}
-/>
-
 <div class="buff-page">
   <aside class="sets">
     <div class="bar">バフセット <span use:bump={() => app.buffSets.length}>{app.buffSets.length}</span></div>
@@ -704,107 +677,84 @@
                        (§09 規則 3: 押した場所は動かない)。値の調整が要るバフは「設定」
                        (調整と内訳を兼ねる)、それ以外で割愛した増分があるときだけ「ほか n」。 -->
                   {#if isOn && hasEditor}
-                    <button
-                      type="button"
-                      class="rest-link"
-                      onclick={(e) => { e.stopPropagation(); openEditor(def); }}
-                      aria-expanded={openEditorId === def.id}
-                    >設定</button>
-                  {:else if isOn && rest.length > 0}
-                    <button
-                      type="button"
-                      class="rest-link"
-                      onclick={(e) => { e.stopPropagation(); openInfoId = openInfoId === def.id ? null : def.id; openEditorId = null; }}
-                      aria-expanded={openInfoId === def.id}
-                    >ほか {rest.length}</button>
-                  {/if}
-                  {#if isOn && top && openInfoId === def.id}
-                    <!-- 「ほか n」の中身。押した場所(行)の直下に出し、レイアウトは押さない
-                         (絶対配置なので下の行を動かさない)。 -->
-                    <div
-                      class="popover rest-popover"
-                      role="dialog"
-                      tabindex="-1"
-                      aria-label={`${def.name} の全ステ増分`}
-                      use:positionPopover
-                      onclick={(e) => e.stopPropagation()}
-                      onkeydown={(e) => e.stopPropagation()}
-                    >
-                      {#each rest as line (line)}
-                        <div class="num">{line}</div>
-                      {/each}
-                      <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); openInfoId = null; }}>閉じる</button>
-                    </div>
-                  {/if}
-                  {#if isOn && hasEditor && openEditorId === def.id}
-                    <!-- 値の調整。**行に重ねて**出すのでレイアウトを押さない(§09 規則 3)。
+                    <!-- 値の調整。行に重ねて出すのでレイアウトは押さない(§09 規則 3)。
                          適用ボタンは無く、触った瞬間に確定する(§07)。割愛した増分の内訳も
                          ここに入れて、押す的を 1 つに保つ。 -->
-                    <div
-                      class="popover rest-popover editor-popover"
-                      role="dialog"
-                      tabindex="-1"
-                      aria-label={`${def.name} の設定`}
-                      use:positionPopover
-                      onclick={(e) => e.stopPropagation()}
-                      onkeydown={(e) => e.stopPropagation()}
+                    <Popover
+                      label={`${def.name} の設定`}
+                      triggerClass="rest-link"
+                      panelClass="rest-popover editor-popover"
                     >
-                      <div class="choice-editor">
-                        {#if isMultiTarget(def.target)}
-                          <!-- クラブエフェクトはステごとに 1 つずつ、別々の段で併用できる
-                               (wiki: クラブ)。段の並びと押せる段はドメインの「効き」から決める -->
-                          {@const picked = chosenStats(def)}
-                          {@const range = userInputRange(def.value)}
-                          <StepToggle
-                            label="対象ステ"
-                            options={statOptionsFor(def)}
-                            cols={STAT_KINDS.length}
-                            max={STAT_KINDS.length}
-                            values={picked}
-                            disabled={saving}
-                            disabledValues={cappedStats(def)}
-                            titleFor={cappedTitle(def)}
-                            onToggle={(value, next) => toggleStat(def, value as StatKind, next)}
-                          />
-                          {#if range}
-                            {@const scale = isPercentLayer(def.layer) ? 100 : 1}
-                            <div class="per-stat">
-                              {#each picked as stat (stat)}
-                                <StatInput
-                                  label={STAT_LABELS[stat]}
-                                  min={range.min * scale}
-                                  max={range.max * scale}
-                                  bind:value={() => (liveChoice(def, stat)?.value ?? def.default_value ?? range.min) * scale,
-                                    (value) => updateChoice(def, (c) => (c.value = value / scale), stat)}
-                                />
-                              {/each}
-                            </div>
-                          {/if}
-                        {:else}
-                          {#if isUserSelectedTarget(def.target)}
-                            <StepSelect label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
-                          {/if}
-                          {#if isChoiceValue(def.value)}
-                            {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
-                            <StepSelect label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
-                          {/if}
-                          {#if userInputRange(def.value)}
-                            {@const range = userInputRange(def.value)!}
-                            {@const scale = isPercentLayer(def.layer) ? 100 : 1}
-                            <StatInput label={isPercentLayer(def.layer) ? "値 (%)" : "値"} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
-                          {/if}
+                      {#snippet trigger()}設定{/snippet}
+                      {#snippet children(close)}
+                    <div class="choice-editor">
+                      {#if isMultiTarget(def.target)}
+                        <!-- クラブエフェクトはステごとに 1 つずつ、別々の段で併用できる
+                             (wiki: クラブ)。段の並びと押せる段はドメインの「効き」から決める -->
+                        {@const picked = chosenStats(def)}
+                        {@const range = userInputRange(def.value)}
+                        <StepToggle
+                          label="対象ステ"
+                          options={statOptionsFor(def)}
+                          cols={STAT_KINDS.length}
+                          max={STAT_KINDS.length}
+                          values={picked}
+                          disabled={saving}
+                          disabledValues={cappedStats(def)}
+                          titleFor={cappedTitle(def)}
+                          onToggle={(value, next) => toggleStat(def, value as StatKind, next)}
+                        />
+                        {#if range}
+                          {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                          <div class="per-stat">
+                            {#each picked as stat (stat)}
+                              <StatInput
+                                label={STAT_LABELS[stat]}
+                                min={range.min * scale}
+                                max={range.max * scale}
+                                bind:value={() => (liveChoice(def, stat)?.value ?? def.default_value ?? range.min) * scale,
+                                  (value) => updateChoice(def, (c) => (c.value = value / scale), stat)}
+                              />
+                            {/each}
+                          </div>
                         {/if}
-                      </div>
-                      {#if rest.length > 0}
-                        <!-- 行に出し切れなかった増分。「ほか n」を別の的にせず、ここに畳む -->
-                        <div class="editor-rows">
-                          {#each rest as line (line)}
-                            <div class="num">{line}</div>
-                          {/each}
-                        </div>
+                      {:else}
+                        {#if isUserSelectedTarget(def.target)}
+                          <StepSelect label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
+                        {/if}
+                        {#if isChoiceValue(def.value)}
+                          {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
+                          <StepSelect label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
+                        {/if}
+                        {#if userInputRange(def.value)}
+                          {@const range = userInputRange(def.value)!}
+                          {@const scale = isPercentLayer(def.layer) ? 100 : 1}
+                          <StatInput label={isPercentLayer(def.layer) ? "値 (%)" : "値"} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
+                        {/if}
                       {/if}
-                      <button type="button" class="popover-close" onclick={(e) => { e.stopPropagation(); openEditorId = null; }}>閉じる</button>
                     </div>
+                    {#if rest.length > 0}
+                      <!-- 行に出し切れなかった増分。「ほか n」を別の的にせず、ここに畳む -->
+                      <div class="editor-rows">
+                        {#each rest as line (line)}
+                          <div class="num">{line}</div>
+                        {/each}
+                      </div>
+                    {/if}
+                        <button type="button" class="popover-close" onclick={close}>閉じる</button>
+                      {/snippet}
+                    </Popover>
+                  {:else if isOn && rest.length > 0}
+                    <!-- 「ほか n」= 行に出し切れなかったステ増分。押した的の直下に出す -->
+                    <Popover label={`${def.name} の全ステ増分`} triggerClass="rest-link" panelClass="rest-popover">
+                      {#snippet trigger()}ほか {rest.length}{/snippet}
+                      {#snippet children(close)}
+                        {#each rest as line (line)}
+                          <div class="num">{line}</div>
+                        {/each}
+                        <button type="button" class="popover-close" onclick={close}>閉じる</button>
+                      {/snippet}
+                    </Popover>
                   {/if}
                 {/snippet}
               </ToggleRow>
@@ -939,18 +889,18 @@
   }
   /* 「ほか n」= 割愛した増分の中身を辿るボタン。行本体のトグル(.face)とは別の押せる要素だと
      分かるよう下線を付け、行の色そのものは変えない(§00 03 と衝突させない)。 */
-  .rest-link {
+  :global(.rest-link) {
     flex-shrink: 0; padding: 0 2px; border: 0; background: none;
     color: var(--accent); font: inherit; font-size: 10px; text-decoration: underline; text-underline-offset: 2px;
     white-space: nowrap; cursor: pointer;
   }
-  .rest-link:hover { color: var(--accent-hover); }
-  /* 行の直下・行幅に合わせて出す(面そのものは app.css の .popover)。左右は ToggleRow の
-     パディング(0 9px 0 10px)に合わせる */
-  .rest-popover { top: calc(100% + 4px); left: 10px; right: 9px; }
-  /* 値の調整。「ほか n」と同じ重なりもの(.rest-popover)に乗せる — 幅は行に合わせ、
-     中身だけ差し替える。レイアウトは押さないので、開いても閉じても何も動かない */
-  .editor-popover { gap: 7px; }
+  :global(.rest-link:hover) { color: var(--accent-hover); }
+  /* 押した的(「設定」「ほか n」)の右端に揃えて下に開く。置き場所は app.css の .popover。
+     行幅いっぱいには広げず、値の行が読める最小幅だけ確保する */
+  :global(.rest-popover) { min-width: 184px; }
+  /* 値の調整。「ほか n」と同じ重なりもの(.rest-popover)に乗せ、中身だけ差し替える。
+     対象ステの段(STAT_KINDS ぶんの列)が潰れない幅 */
+  :global(.editor-popover) { min-width: 248px; gap: 7px; }
   .editor-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; padding-top: 6px; border-top: 1px solid var(--border-soft); }
   .choice-editor { padding: 7px; display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--bg-field); box-shadow: inset 0 1px #fff; }
   /* 選んだステごとの値。**1 ステ 1 行**で積む — 2 列に畳むと狭い幅ではラベル・数値欄・MAX が

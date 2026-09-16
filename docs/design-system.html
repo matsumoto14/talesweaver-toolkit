@@ -1361,7 +1361,7 @@ td code { background: var(--card-soft2); }
           <article class="tenet good">
             <h3>押した場所は、押したあとも同じ場所にある。</h3>
             <p>クリックした要素の<strong>上に何かを差し込まない。</strong>展開は必ずクリックした要素の下か右。押した瞬間に対象が視界の外へ流れる画面は、それだけで信用を失う — 情報量が多い画面ほど、探し直しのコストが効いてくる。</p>
-            <p class="quote"><b>システムに現れている形</b>ポップオーバーは <code>absolute</code> でトリガの真下に重なり、周りを押し下げない / アイコンはサイズ 4 段固定で「画像 0 枚でもレイアウトが動かない」/ 数値欄は <code>min-width</code> + <code>tabular-nums</code> で桁が増えても幅が変わらない</p>
+            <p class="quote"><b>システムに現れている形</b>ポップオーバーは <code>ui/Popover.svelte</code> がトップレイヤーでトリガの真下に重ね、周りを押し下げない / アイコンはサイズ 4 段固定で「画像 0 枚でもレイアウトが動かない」/ 数値欄は <code>min-width</code> + <code>tabular-nums</code> で桁が増えても幅が変わらない</p>
             <p class="breaks"><b>破ると</b> ユーザーは「押したもの」を毎回探し直す。1 画面に 30 行あるこのツールでは致命的。</p>
           </article>
 
@@ -2189,7 +2189,8 @@ td code { background: var(--card-soft2); }
         </div>
 
         <div class="sec">規則 3 — 重なるものはレイアウトを押さない</div>
-        <p>候補リスト・ポップオーバー・ツールチップは <code>position: absolute</code> でトリガの真下に<strong>重ねる</strong>。周囲を押し下げる形(アコーディオンで下を全部ずらす)にしない。閉じたときに何も動かないことが条件。</p>
+        <p>候補リスト・ポップオーバー・ツールチップはトリガの真下に<strong>重ねる</strong>。周囲を押し下げる形(アコーディオンで下を全部ずらす)にしない。閉じたときに何も動かないことが条件。</p>
+        <p><b>作るときは <code>ui/Popover.svelte</code> を通す。</b>トリガと面の両方をこの部品が持つ。外を押すと閉じる・Escape・重ね順・祖先の <code>overflow</code> に切られない・下に入らなければ上に開く・中身が伸びたら置き直す、は <code>popover</code> 属性と CSS Anchor Positioning が持っている(ADR-015 段階 2)。<strong>画面側で「外を押したら閉じる」を書かない</strong> — <code>&lt;svelte:window onclick&gt;</code> と除外 selector、透明オーバーレイはこの部品を入れた時点でリポから消えた。</p>
 
         <div class="sec">規則 4 — サイズは、データが来る前に決まっている</div>
         <p>「あとから値が入ってレイアウトが変わる」を作らない。<strong>実装が今この状態で成立している</strong>ことが証拠 — アイコン画像は 1 枚も入っていないのに、どの画面も崩れていない。</p>

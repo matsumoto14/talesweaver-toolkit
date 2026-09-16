@@ -33,7 +33,7 @@
 
 <script lang="ts">
   import Icon, { type IconFallback, type IconKind } from "./Icon.svelte";
-  import { positionPopover } from "./popover";
+  import Popover from "./Popover.svelte";
 
   interface Props {
     label?: string;
@@ -52,7 +52,6 @@
     label, value = $bindable(), options, note, disabled = false, menu = false,
   }: Props = $props();
 
-  let open = $state(false);
   const chips = $derived(
     menu ? [] : options.length <= CHIPS_ONLY_MAX ? options : options.filter((o) => o.pinned),
   );
@@ -87,52 +86,47 @@
       </button>
     {/each}
     {#if rest.length > 0}
-      <button
-        type="button"
-        class="picker-trigger"
-        class:open
-        class:compact={chips.length > 0}
-        class:muted={!pickedInRest || pickedNone}
+      <Popover
+        label={label ?? "候補"}
         {disabled}
-        onclick={() => (open = !open)}
+        triggerClass={`picker-trigger${chips.length > 0 ? " compact" : ""}${!pickedInRest || pickedNone ? " muted" : ""}`}
+        panelClass="picker-pop"
       >
-        {#if pickedInRest && picked}
-          {#if picked.iconId !== undefined}
-            <Icon kind={picked.iconKind ?? "skill"} id={picked.iconId} fallback={picked.iconFallback ?? null} size={20} label={picked.name} />
+        {#snippet trigger(open)}
+          {#if pickedInRest && picked}
+            {#if picked.iconId !== undefined}
+              <Icon kind={picked.iconKind ?? "skill"} id={picked.iconId} fallback={picked.iconFallback ?? null} size={20} label={picked.name} />
+            {/if}
+            <span class="picker-name">{picked.name}</span>
+            <span class="picker-meta num">{picked.meta}</span>
+          {:else}
+            <span class="picker-name">{chips.length > 0 ? `ほか ${rest.length} 件` : `${rest.length} 件から選ぶ`}</span>
           {/if}
-          <span class="picker-name">{picked.name}</span>
-          <span class="picker-meta num">{picked.meta}</span>
-        {:else}
-          <span class="picker-name">{chips.length > 0 ? `ほか ${rest.length} 件` : `${rest.length} 件から選ぶ`}</span>
-        {/if}
-        <span class="caret picker-chev" class:rot={open}>▼</span>
-      </button>
+          <span class="caret picker-chev" class:rot={open}>▼</span>
+        {/snippet}
+        {#snippet children(close)}
+          {#if note}<div class="picker-pop-head">{note}</div>{/if}
+          {#each rest as o (o.value)}
+            <button
+              type="button"
+              class="picker-row {o.tone ?? ''}"
+              class:on={o.value === value}
+              onclick={() => { value = o.value; close(); }}
+            >
+              {#if o.iconId !== undefined}
+                <Icon kind={o.iconKind ?? "skill"} id={o.iconId} fallback={o.iconFallback ?? null} size={20} label={o.name} />
+              {/if}
+              <span class="picker-name">{o.name}</span>
+              <span class="picker-meta num">{o.meta}</span>
+            </button>
+          {/each}
+        {/snippet}
+      </Popover>
     {/if}
   </div>
-  {#if open}
-    <!-- 候補は重なって出る。押した場所も下の行も動かない(§09 規則 3) -->
-    <button type="button" class="picker-overlay" aria-label="閉じる" onclick={() => (open = false)}></button>
-    <div class="picker-pop pop-in" use:positionPopover>
-      {#if note}<div class="picker-pop-head">{note}</div>{/if}
-      {#each rest as o (o.value)}
-        <button
-          type="button"
-          class="picker-row {o.tone ?? ''}"
-          class:on={o.value === value}
-          onclick={() => { value = o.value; open = false; }}
-        >
-          {#if o.iconId !== undefined}
-            <Icon kind={o.iconKind ?? "skill"} id={o.iconId} fallback={o.iconFallback ?? null} size={20} label={o.name} />
-          {/if}
-          <span class="picker-name">{o.name}</span>
-          <span class="picker-meta num">{o.meta}</span>
-        </button>
-      {/each}
-    </div>
-  {/if}
 </div>
 
 <style>
-  .picker { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .picker { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
 </style>

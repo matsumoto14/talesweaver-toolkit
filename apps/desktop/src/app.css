@@ -433,17 +433,28 @@ details::details-content {
 details[open]::details-content { block-size: auto; }
 
 /* トリガの直下に重なるもの(§09 規則 3: 周りを押さない / 閉じたら何も動かない)。
-   面だけをここで決め、どこに出すか(left/right/top)は置く場所ごとに指定する。
-   画面外へのフリップは ui/popover.ts の action が .flip-up を付けて行う。 */
-/* 置き場所は ui/popover.ts が決める(開いたあと fixed に置き換えて、スクロールする一覧の
-   枠に切られないようにする)。ここでは CSS で「トリガ直下」の初期位置と見た目だけを持つ */
+   要素は ui/Popover.svelte が `popover` 属性で出す — トップレイヤーに載るので z-index は要らず、
+   スクロールする一覧(バフタブの `.chips` は `overflow-y: auto`)の枠にも切られない。
+   置き場所は CSS Anchor Positioning が決める: トリガの右端に揃えて下に開き、下に入らなければ
+   上へ(flip-block)。中身が伸びても(クラブ効果の対象ステを足すと値の行が増える)ブラウザが
+   置き直すので、伸びたぶんが画面外に出ない。
+   上にも下にも入り切らないときは max-height が画面の高さで止め、中身だけスクロールさせる
+   — 自前の @position-try でこれを書こうとしたが、WebView2(Chromium 153)では
+   position-try-fallbacks の**名前付きの候補が一度も適用されなかった**(キーワードの
+   flip-block は効く)。実測は 2026-09-17、docs/adr/015。 */
 .popover {
-  position: absolute; z-index: 6;
+  inset: auto; margin: 0; margin-block: 4px;
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-block;
+  max-height: calc(100dvh - 16px);
   display: flex; flex-direction: column; gap: 3px; padding: 8px 9px;
   border: 1px solid var(--sel-bd); border-radius: var(--r-inset);
   background: var(--bg-field); box-shadow: var(--shadow-pop);
   color: var(--fg); font-size: 9px; cursor: default;
+  overflow-y: auto; overscroll-behavior: contain;
 }
+/* display を上書きしているので、閉じているあいだは自分で消す(UA の [popover]:not(:popover-open) を打ち消してしまう) */
+.popover:not(:popover-open) { display: none; }
 /* 重なりものを閉じる小さなボタン */
 .popover-close {
   align-self: flex-end; margin-top: 2px; padding: 2px 8px;
@@ -560,7 +571,7 @@ button, summary, a, label.check, [role="button"], [role="tab"] { transition: var
   background: var(--bg-field); border: 1px solid var(--border);
   font-size: 12.5px; color: var(--fg); text-align: left;
 }
-.picker-trigger:hover:not(:disabled), .picker-trigger.open { border-color: var(--accent); }
+.picker-trigger:hover:not(:disabled), .picker-trigger[aria-expanded="true"] { border-color: var(--accent); }
 .picker-trigger:disabled { color: var(--fg-dim); }
 /* チップの隣に置く口。「ほか n 件」は小さく薄く、面の中の 1 件を選んでいるときだけ選択色になる */
 .picker-trigger.compact { flex: 0 1 auto; padding: 4px 9px; border-radius: var(--r-pill); font-size: 11px; }
@@ -573,12 +584,14 @@ button, summary, a, label.check, [role="button"], [role="tab"] { transition: var
   background: var(--surface-inset); font-size: 9px; color: var(--fg-muted); white-space: nowrap;
 }
 .picker-chev { font-size: 8px; color: var(--fg-dim); }
-.picker-overlay { position: fixed; inset: 0; z-index: 40; cursor: default; }
+/* 候補面。`.popover` の上に乗せて、1 件 1 行の一覧向けに詰め物と文字を上書きする。
+   幅はトリガに揃える(anchor-size) — 口と候補の左右がずれると視線が動く(§00 ①) */
 .picker-pop {
-  position: absolute; z-index: 41; top: calc(100% + 4px); left: 0; right: 0;
-  max-height: 280px; overflow-y: auto; overscroll-behavior: contain;
-  border-radius: var(--r-window); background: var(--bg-field);
-  border: 1px solid var(--border-strong);
+  /* 口の左端に揃えて下に開く(「設定」のような小さい的と違い、口そのものが読む起点) */
+  position-area: block-end span-inline-end;
+  min-width: anchor-size(width); max-height: 280px;
+  padding: 0; gap: 0; font-size: 12px;
+  border-radius: var(--r-window); border-color: var(--border-strong);
   box-shadow: var(--shadow-pop), inset 0 0 0 1px #fff;
 }
 .picker-pop-head {
