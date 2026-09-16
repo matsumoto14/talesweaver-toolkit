@@ -8,7 +8,7 @@
   // - 検索(`search`): 左に ⌕、右に件数を常設(「範囲は入力欄が知っている」の文字版)
   // - 自由記述(`multi`): 同じ枠を縦に伸ばすだけ。右下に文字数
   // それ以外(ラベル欄)は入力面が既定で、右端に文字数を出す。
-  import { bump } from "./motion.svelte";
+  import Num from "./Num.svelte";
   import { fmtInt } from "../format";
 
   interface Props {
@@ -78,7 +78,7 @@
 {#if multi}
   <label class="tfield multi" class:disabled>
     <textarea bind:value {rows} maxlength={max} {disabled} aria-label={label} onblur={blur}></textarea>
-    {#if max !== undefined}<span class="cnt num" use:bump={() => value.length}>{value.length}/{max}</span>{/if}
+    {#if max !== undefined}<Num class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />{/if}
   </label>
 {:else if named && !editing}
   <button type="button" class="tfield read" {disabled} aria-label="{label} を編集" onclick={startEdit}>
@@ -94,9 +94,9 @@
       <input type="text" bind:value maxlength={max} {disabled} aria-label={label} onblur={blur} onkeydown={keydown} />
     {/if}
     {#if search && count !== undefined}
-      <span class="cnt num" use:bump={() => count ?? 0}>{fmtInt(count)} 件</span>
+      <Num class="cnt" motion={() => count ?? 0} value={`${fmtInt(count)} 件`} />
     {:else if max !== undefined}
-      <span class="cnt num" use:bump={() => value.length}>{value.length}/{max}</span>
+      <Num class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />
     {/if}
   </label>
 {/if}
@@ -127,9 +127,9 @@
   .auto { margin-left: auto; flex: none; font-size: 9px; color: var(--fg-dim); white-space: nowrap; }
   .lens { flex: none; color: var(--fg-dim); font-size: 12px; }
   /* 件数・文字数は右端の固定幅。桁が増えても欄の幅が変わらない */
-  .cnt { margin-left: auto; flex: none; min-width: 34px; text-align: right; font-size: 8.5px; color: var(--fg-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tfield :global(.cnt) { margin-left: auto; flex: none; min-width: 34px; text-align: right; font-size: 8.5px; color: var(--fg-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* 自由記述は同じ枠を縦に伸ばすだけ。文字数は右下 — textarea の下の行に置く。
      枠の中に重ねると、行数が rows を超えたときスクロールバーの下に潜る */
   .multi { height: auto; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px 9px 4px; }
-  .multi .cnt { margin-left: 0; align-self: flex-end; }
+  .multi :global(.cnt) { margin-left: 0; align-self: flex-end; }
 </style>

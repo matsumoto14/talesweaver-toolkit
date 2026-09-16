@@ -4,7 +4,7 @@
   import { fmtInt, fmtNum, fmtSignedPct, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import Disclosure from "../../ui/Disclosure.svelte";
-  import { bump } from "../../ui/motion.svelte";
+  import Num from "../../ui/Num.svelte";
   import { PresenceMemo } from "../../ui/presence";
 
   let { trace }: { trace: DamageTrace } = $props();
@@ -83,7 +83,7 @@
           <tr>
             <td>{STAT_LABELS[s.kind]}</td>
             <td class="n strong final">
-              <span use:bump={() => s.effective}>{fmtInt(s.effective)}</span>
+              <Num motion={() => s.effective} value={fmtInt(s.effective)} />
               {#if s.pinned_from !== null}
                 <span class="pin-badge" title={pinnedBeforeLabel(s)}>固定</span>
               {/if}
@@ -123,7 +123,7 @@
               <td>{STAT_LABELS[c.kind]}</td>
               <td class="muted">{c.source}{#if state !== "same"}<span class="swap" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
               <td class="muted">{STAT_LAYER_LABELS[c.layer]}</td>
-              <td class="n" use:bump={() => c.value}>{formatLayerValue(c.layer, c.value)}</td>
+              <td class="n"><Num motion={() => c.value} value={formatLayerValue(c.layer, c.value)} /></td>
             </tr>
           {/each}
         </tbody>
@@ -143,8 +143,8 @@
             <td class="sym">{c.symbol}</td>
             <td>{c.label}</td>
             <td class="muted">{KIND_LABEL[c.kind]}</td>
-            <td class="n" use:bump={() => c.value}>{fmtValue(c)}</td>
-            <td class="n strong" use:bump={() => c.factor}>{fmtNum(c.factor)}</td>
+            <td class="n"><Num motion={() => c.value} value={fmtValue(c)} /></td>
+            <td class="n strong"><Num motion={() => c.factor} value={fmtNum(c.factor)} /></td>
             <td class="n muted">{fmtCap(c)}</td>
           </tr>
         {/each}
@@ -165,7 +165,7 @@
               <td class="sym">{c.symbol}</td>
               <td>{c.label}</td>
               <td class="muted">{c.source}{#if state !== "same"}<span class="swap" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
-              <td class="n" use:bump={() => c.value}>{fmtContributionValue(c.kind, c.value)}</td>
+              <td class="n"><Num motion={() => c.value} value={fmtContributionValue(c.kind, c.value)} /></td>
             </tr>
           {/each}
         </tbody>

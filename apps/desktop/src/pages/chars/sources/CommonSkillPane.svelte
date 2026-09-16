@@ -7,8 +7,8 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
-  import { flash } from "../../../ui/motion.svelte";
   import Icon from "../../../ui/Icon.svelte";
+  import Num from "../../../ui/Num.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import SkillLevelField from "./SkillLevelField.svelte";
@@ -233,7 +233,7 @@
   </div>
   <p class="hint dim">
     いまの効果:
-    <b use:flash={() => ultimateEffectsText}>{ultimateEffectsText.length > 0 ? ultimateEffectsText : "—"}</b>
+    <b><Num value={ultimateEffectsText}>{#snippet children()}{ultimateEffectsText.length > 0 ? ultimateEffectsText : "—"}{/snippet}</Num></b>
   </p>
   <p class="hint dim">
     wiki「Skill/共通」「Skill/極限」。<b>オーグメント</b>はストロングウェポン・プロテクトアーマー・
@@ -262,9 +262,9 @@
             onclick={() => setUnleashStat(i, "")}
           >未使用</button>
         </span>
-        <span class="v num" use:flash={() => (slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`)}>
-          {slot.stat === null ? "—" : fmtSigned(UNLEASH_RATES[slot.level - 1], { max: 2 }, "%")}
-        </span>
+        <Num class="v" value={slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`}
+          >{#snippet children()}{slot.stat === null ? "—" : fmtSigned(UNLEASH_RATES[slot.level - 1], { max: 2 }, "%")}{/snippet}</Num
+        >
       </div>
     {/each}
   </div>

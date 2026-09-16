@@ -18,7 +18,8 @@
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
-  import { bump, flash, pulse } from "../../../ui/motion.svelte";
+  import { pulse } from "../../../ui/motion.svelte";
+  import Num from "../../../ui/Num.svelte";
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
@@ -296,10 +297,9 @@
       {#if (elementFromSkill || mainElement !== "") && !elementPickOpen}
         {@const displayedElement = (elementFromSkill && elementOverrideForSkill !== draft.mainSkillId ? skillElement : mainElement) as Element}
         <p class="element-auto">
-          <b
-            class="element-picked elem-{displayedElement}"
-            use:flash={() => displayedElement}
-          >{ELEMENT_LABELS[displayedElement]}</b>
+          <b class="element-picked elem-{displayedElement}"
+            ><Num value={displayedElement}>{#snippet children()}{ELEMENT_LABELS[displayedElement]}{/snippet}</Num></b
+          >
           <span class="dim">
             {elementFromSkill && elementOverrideForSkill !== draft.mainSkillId
               ? `— 主軸スキル「${mainSkill?.name}」で決まります`
@@ -326,7 +326,7 @@
     <p class="hint dim">
       属性値
       {#each ELEMENTS.filter((e) => elementPreview!.total[e] > 0) as e (e)}
-        <b use:bump={() => elementPreview?.total[e] ?? null}>{ELEMENT_LABELS[e]} {fmtInt(elementPreview.total[e])}</b>
+        <b><Num motion={() => elementPreview?.total[e] ?? null} value={`${ELEMENT_LABELS[e]} ${fmtInt(elementPreview.total[e])}`} /></b>
         <span class="dim">(キャラ {fmtInt(elementPreview.base[e])} + 装備 {fmtInt(elementPreview.equipment[e])} + 主属性 {fmtInt(elementPreview.sources[e])})</span>
       {:else}
         まだどの属性も乗っていません
@@ -378,7 +378,7 @@
             <td class="n stat-cell">
               <StatInput label="" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
             </td>
-            <td class="n muted ro" title={groupTitle(k)} use:bump={() => diff}>{diff === null ? "—" : signed(diff)}</td>
+            <td class="n muted ro" title={groupTitle(k)}><Num motion={() => diff} value={diff === null ? "—" : signed(diff)} /></td>
             <!-- 素ステ → 最終を 1 本のバーで(§11)。数字の羅列ではなく「どれだけ伸びたか」を見せる。
                  灰が素ステ(振り分け)、青が補正で乗った分。長さは最終能力値の上限に対する割合 -->
             <td class="ro">
@@ -391,16 +391,15 @@
               </span>
             </td>
             <td class="n final ro">
-              <span class="strong" use:bump={() => preview?.stats[k] ?? null}>{preview ? fmtInt(preview.stats[k]) : "—"}</span>
+              <Num class="strong" motion={() => preview?.stats[k] ?? null} value={preview ? fmtInt(preview.stats[k]) : "—"} />
               <!-- 「満」の枠は常に確保する。出たときに行がずれない(§09 規則 4 / §11) -->
-              <span
-                class="cap-badge"
-                class:on={trace !== null && trace !== undefined && trace.capped_loss > 0}
+              <Num
+                class={`cap-badge${trace !== null && trace !== undefined && trace.capped_loss > 0 ? " on" : ""}`}
                 title={trace && trace.capped_loss > 0
                   ? `上限 ${fmtInt(trace.stat_cap)} で ${fmtInt(trace.capped_loss)} 捨てています。上限は覚醒段階とエタの意志 Lv で上がります`
                   : ""}
-                use:flash={() => (trace !== null && trace !== undefined && trace.capped_loss > 0 ? "cap" : "open")}
-              >{trace && trace.capped_loss > 0 ? "満" : ""}</span>
+                value={trace !== null && trace !== undefined && trace.capped_loss > 0 ? "cap" : "open"}
+              >{#snippet children()}{trace && trace.capped_loss > 0 ? "満" : ""}{/snippet}</Num>
             </td>
           </tr>
         {/each}
@@ -432,10 +431,10 @@
                 {#each STAT_SOURCE_GROUPS as g (g)}
                   {@const e = groupEffect(k, g)}
                   <!-- 0 の区分は薄く出す。行や列が消えると、次に見たとき同じ場所を探し直すことになる -->
-                  <td class="n" class:zero={e === 0} use:bump={() => e}>{e === null ? "—" : signed(e)}</td>
+                  <td class="n" class:zero={e === 0}><Num motion={() => e} value={e === null ? "—" : signed(e)} /></td>
                 {/each}
-                <td class="n strong" use:bump={() => preview?.stats[k] ?? null}>
-                  {preview ? fmtInt(preview.stats[k]) : "—"}
+                <td class="n strong">
+                  <Num motion={() => preview?.stats[k] ?? null} value={preview ? fmtInt(preview.stats[k]) : "—"} />
                 </td>
               </tr>
             {/each}
@@ -457,7 +456,7 @@
                   <td class="muted">{e.source}</td>
                   <td class="muted">{STAT_LAYER_LABELS[e.layer]}</td>
                   <td class="n">{formatLayerValue(e.layer, e.value)}</td>
-                  <td class="n" use:bump={() => e.effect}>{signed(e.effect)}</td>
+                  <td class="n"><Num motion={() => e.effect} value={signed(e.effect)} /></td>
                 </tr>
               {/each}
             </tbody>

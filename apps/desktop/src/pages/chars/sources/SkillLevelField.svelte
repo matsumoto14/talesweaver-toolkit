@@ -2,8 +2,8 @@
   // 共通スキルペインで繰り返される「ラベル / 段階選択 / 外す(・見え方スイッチ) / 効いている値」の
   // 1 行(`.skill-field`)。段階制のスキルはこの形にほぼそろう(チップのオン/オフ切り替えは対象外)。
   import type { Snippet } from "svelte";
+  import Num from "../../../ui/Num.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
-  import { bump, flash } from "../../../ui/motion.svelte";
 
   interface Option { value: string; label: string }
   interface Props {
@@ -52,9 +52,9 @@
   {#if valueText === undefined}
     <span></span>
   {:else if valueMotion === "bump"}
-    <span class="v num" use:bump={() => (valueKey as number | null)}>{valueText}</span>
+    <Num class="v" motion={() => (valueKey as number | null)} value={valueText} />
   {:else if valueMotion === "flash"}
-    <span class="v num" use:flash={() => String(valueKey)}>{valueText}</span>
+    <Num class="v" value={String(valueKey)}>{#snippet children()}{valueText}{/snippet}</Num>
   {:else}
     <span class="v num">{valueText}</span>
   {/if}

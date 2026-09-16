@@ -39,6 +39,7 @@
   import { reportError } from "../../toast.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
+  import Num from "../../ui/Num.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import Picker from "../../ui/Picker.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
@@ -48,7 +49,7 @@
   import Popover from "../../ui/Popover.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, delta, flash } from "../../ui/motion.svelte";
+  import { flash } from "../../ui/motion.svelte";
   import { ChangeMemo, PresenceMemo, swapNote, type Presence } from "../../ui/presence";
   import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
@@ -1726,11 +1727,14 @@
       <span class="dt-hk dim">倍率</span>
       <span class="num dt-hv">{d.mult}</span>
       <span class="dt-hk dim">実数</span>
-      <span class="num dt-hv" class:bad={(d.delta ?? 0) < 0} use:bump={() => (d.delta === null ? null : Math.round(d.delta))}
-      >{d.delta === null ? "—" : fmtSigned(d.delta)}</span><span use:delta={{ get: () => (d.delta === null ? null : Math.round(d.delta)) }}></span>
+      <Num
+        class={`dt-hv ${(d.delta ?? 0) < 0 ? "bad" : ""}`}
+        motion={() => (d.delta === null ? null : Math.round(d.delta))}
+        value={d.delta === null ? "—" : fmtSigned(d.delta)}
+        delta={{}}
+      />
       <span class="dt-hk dim">結果</span>
-      <span class="num dt-hv big" use:bump={() => d.to}
-      >{d.to === null ? "—" : fmtInt(Math.round(d.to))}</span><span use:delta={{ get: () => d.to }}></span>
+      <Num class="dt-hv big" motion={() => d.to} value={d.to === null ? "—" : fmtInt(Math.round(d.to))} delta={{}} />
     </div>
     {#each d.mats as m, i (i)}
       {#if m.key}
@@ -1744,9 +1748,14 @@
           {#snippet summary()}
           <span class="dt-label">{m.label}{#if m.note}<span class="dt-swap dim" use:flash={() => m.note ?? ""}>{m.note}</span>{/if}</span>
           <span class="num dt-mult dim">{m.mult ?? ""}</span>
-          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span>
-          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-          <span use:delta={{ get: () => m.n ?? null, unit: m.unit }} class:follow={!!m.changed} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(key); }}></span>
+          <Num
+            class="dt-val"
+            motion={() => m.n ?? null}
+            value={m.value}
+            delta={{ unit: m.unit }}
+            deltaClass={m.changed ? "follow" : ""}
+            onDelta={(e) => { e.stopPropagation(); followChange(key); }}
+          />
           <span class="num dt-sub dim">{m.sub ?? ""}</span>
           {/snippet}
           <div class="dt-subs">
@@ -1755,7 +1764,13 @@
               <div class="dt-row" class:gone={sm.state === "gone"}>
                 <span class="dt-label">{sm.label}</span>
                 <span class="num dt-mult dim">{sm.mult ?? ""}</span>
-                <span class="num dt-val" class:bad={(sm.n ?? 0) < 0} use:bump={() => sm.n ?? null}>{sm.value}</span>{#if sm.state === "gone"}<span class="delta num down delta-in">削除</span>{:else if sm.state === "added"}<span class="delta num up delta-in">追加</span>{:else}<span use:delta={{ get: () => sm.n ?? null, unit: sm.unit }}></span>{/if}
+                <Num
+                  class={`dt-val ${(sm.n ?? 0) < 0 ? "bad" : ""}`}
+                  motion={() => sm.n ?? null}
+                  value={sm.value}
+                  delta={sm.state === "gone" || sm.state === "added" ? null : { unit: sm.unit }}
+                />
+                {#if sm.state === "gone"}<span class="delta num down delta-in">削除</span>{:else if sm.state === "added"}<span class="delta num up delta-in">追加</span>{/if}
                 <span class="num dt-sub dim">{sm.sub ?? ""}</span>
               </div>
             {/each}
@@ -1765,7 +1780,7 @@
         <div class="dt-row">
           <span class="dt-label">{m.label}</span>
           <span class="num dt-mult dim">{m.mult ?? ""}</span>
-          <span class="num dt-val" use:bump={() => m.n ?? null}>{m.value}</span><span use:delta={{ get: () => m.n ?? null, unit: m.unit }}></span>
+          <Num class="dt-val" motion={() => m.n ?? null} value={m.value} delta={{ unit: m.unit }} />
           <span class="num dt-sub dim">{m.sub ?? ""}</span>
         </div>
       {/if}
@@ -1983,9 +1998,9 @@
                   {/if}
                 </span>
                 <span class="sk-meta num dim">
-                  ×<span use:flash={() => result ? fmtNum(result.effective_skill_multiplier) : "—"}>{result ? fmtNum(result.effective_skill_multiplier) : "—"}</span>
-                  ・ <span use:flash={() => result ? String(result.hit_count) : "—"}>{result?.hit_count ?? "—"}</span>段
-                  ・ 中 <span use:flash={() => result?.effective_base_actual_delay != null ? `${fmtNum(result.effective_base_actual_delay)}s` : "?"}>{result?.effective_base_actual_delay != null ? `${fmtNum(result.effective_base_actual_delay)}s` : "?"}</span>
+                  ×<Num value={result ? fmtNum(result.effective_skill_multiplier) : "—"} />
+                  ・ <Num value={result ? String(result.hit_count) : "—"} />段
+                  ・ 中 <Num value={result?.effective_base_actual_delay != null ? `${fmtNum(result.effective_base_actual_delay)}s` : "?"} />
                   ・ Cri×{skill ? fmtNum(skill.critical_multiplier) : "—"}
                   {#if skill}・ {ELEMENT_LABELS[skill.element]}属性{/if}
                   {#if result?.accuracy_point != null}・ 命中P {fmtInt(result.accuracy_point)}{/if}
@@ -2058,24 +2073,29 @@
                 aria-expanded={isDetailOpen("perHit")} onclick={() => toggleDetail("perHit")}
               >
                 <span class="nl">表記ダメージ(1 発)</span>
-                <span class="hero-num num nv" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
                 <!-- 差分(前回の値からいくつ動いたか)。数値の行には置かない — 44px の数値の横は
                      枠(248px)に入らず、右の節に被る(実機 2026-09-15)。空でも行を取り、出た瞬間に下が動かない -->
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-                <span class="nsub num"><span use:delta={{ get: () => perHit }} class:follow={changedFlowKeys.length > 0} title="変わったところを開く" onclick={() => followChange("perHit")}></span></span>
+                <Num class="hero-num nv" motion={() => perHit} value={perHit !== null ? fmtInt(perHit) : "—"} />
+                <span class="nsub num">
+                  <Num
+                    motion={() => perHit} delta={{}}
+                    deltaClass={changedFlowKeys.length > 0 ? "follow" : ""}
+                    onDelta={() => followChange("perHit")}
+                  />
+                </span>
               </button>
               <button
                 type="button" class="node mid"
                 aria-expanded={isDetailOpen("total")} onclick={() => toggleDetail("total")}
               >
-                <span class="nl">合計ダメージ <span class="num">(×<span use:bump={() => result?.hit_count ?? null}>{result?.hit_count ?? 1}</span> 段)</span></span>
-                <span class="num nv" use:bump={() => totalValue}>{totalValue !== null ? fmtInt(totalValue) : "—"}</span>
+                <span class="nl">合計ダメージ <span class="num">(×<Num motion={() => result?.hit_count ?? null} value={String(result?.hit_count ?? 1)} /> 段)</span></span>
+                <Num class="nv" motion={() => totalValue} value={totalValue !== null ? fmtInt(totalValue) : "—"} />
                 <!-- クリ率はバッジではなく文で(バッジは要らない — ユーザー判断 2026-09-15)。
                      副行は 3 節とも 1 行にそろえ、数値の縦位置を合わせる -->
                 <!-- 副行は縦に積む(差分 → クリ率。「クリなら」は内訳にあるので出さない — ユーザー判断 2026-09-15)。数値の横に並べると節が横に伸びて
                      鎖が折り返す(ユーザー指摘 2026-09-15)。数値の縦位置は .nv の行高で合わせる -->
                 <span class="nsub num">
-                  <span class="nsub-line"><span use:delta={{ get: () => totalValue }}></span></span>
+                  <span class="nsub-line"><Num motion={() => totalValue} delta={{}} /></span>
                   <span class="nsub-line">
                     {#if result}
                       {#if result.critical_rate === null}
@@ -2083,11 +2103,12 @@
                       {:else}
                         <!-- クリが出ないときは「出ない」を言わず、率だけ(ユーザー判断 2026-09-15) -->
                         <!-- 0% は赤(届かない)、100% 未満は黄(ぎりぎり)の状態色。100% は地の色(ユーザー判断 2026-09-15) -->
-                        <span
-                          class:crit-none={result.critical_chance <= 0}
-                          class:crit-partial={result.critical_chance > 0 && result.critical_chance < 1}
-                          use:flash={() => critChanceStage(result!.critical_chance * 100).label}
-                        >クリ率 {fmtNum(result.critical_rate.value, 1, "%")}{critMode ? ` ・ ${critChanceStage(result.critical_chance * 100).label}` : ""}</span>
+                        <Num
+                          class={`${result.critical_chance <= 0 ? "crit-none" : ""} ${result.critical_chance > 0 && result.critical_chance < 1 ? "crit-partial" : ""}`}
+                          value={critChanceStage(result!.critical_chance * 100).label}
+                        >
+                          {#snippet children()}クリ率 {fmtNum(result!.critical_rate!.value, 1, "%")}{critMode ? ` ・ ${critChanceStage(result!.critical_chance * 100).label}` : ""}{/snippet}
+                        </Num>
                       {/if}
                     {/if}
                   </span>
@@ -2097,10 +2118,10 @@
                 type="button" class="node rate"
                 aria-expanded={isDetailOpen("dps")} onclick={() => toggleDetail("dps")}
               >
-                <span class="nl">DPS <span class="num">(÷ <span use:bump={() => result?.actual_delay?.value ?? null}>{result?.actual_delay ? fmtNum(result.actual_delay.value, 2, "s") : "—"}</span>)</span></span>
-                <span class="num nv" use:bump={() => dpsValue}>{dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"}</span>
+                <span class="nl">DPS <span class="num">(÷ <Num motion={() => result?.actual_delay?.value ?? null} value={result?.actual_delay ? fmtNum(result.actual_delay.value, 2, "s") : "—"} />)</span></span>
+                <Num class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"} />
                 <span class="nsub dim">
-                  <span class="nsub-line"><span class="num" use:delta={{ get: () => (dpsValue === null ? null : Math.round(dpsValue)) }}></span></span>
+                  <span class="nsub-line"><Num motion={() => (dpsValue === null ? null : Math.round(dpsValue))} delta={{}} /></span>
                   <span class="nsub-line">
                     <!-- コンボ中は「スキルを何回撃てるか」= 1 分 ÷ サイクル。
                          スキルの中ディレイだけで数えると、通常攻撃を挟むぶんを落として速く見える -->
@@ -2114,7 +2135,7 @@
                   </span>
                   {#if result && result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
                     <span class="nsub-line">
-                      期待値 <span class="num" use:bump={() => result?.expected_dps ?? null}>{fmtInt(Math.round(result.expected_dps))}</span>(クリ率 {fmtPct(result.critical_chance, 1)})
+                      期待値 <Num motion={() => result?.expected_dps ?? null} value={fmtInt(Math.round(result.expected_dps))} />(クリ率 {fmtPct(result.critical_chance, 1)})
                     </span>
                   {/if}
                 </span>
@@ -2124,7 +2145,7 @@
               {#if result && result.defeat_seconds !== null && result.enemy_hp !== null}
                 <div class="node rate">
                   <span class="nl">討伐時間 <span class="num">(HP {fmtInt(result.enemy_hp)})</span></span>
-                  <span class="num nv" use:bump={() => result?.defeat_seconds ?? null}>{fmtDuration(result.defeat_seconds)}</span>
+                  <Num class="nv" motion={() => result?.defeat_seconds ?? null} value={fmtDuration(result.defeat_seconds)} />
                   <span class="nsub dim">
                     <!-- クリ確定 / 非クリは隣の DPS 節に出ている(重ねない。§00 02) -->
                     <span class="nsub-line">ソロ</span>
@@ -2269,14 +2290,19 @@
           <div class="panel-body">
             <div class="flow-line">
               <span class="dim">防御を抜けた攻撃力</span>
-              <span class="num strong" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span><span use:delta={{ get: () => (pierced === null ? null : Math.max(0, Math.trunc(pierced))) }}></span>
+              <Num
+                class="strong"
+                motion={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}
+                value={pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}
+                delta={{}}
+              />
               <span class="arrow num dim">→</span>
               <span class="dim">倍率</span>
               <!-- 材料を変えると倍率も変わる。跳ねないと 1 つだけ古い値に見える(§00 04。
                    実機の tools/design-audit/live/motion.js が検出した) -->
-              <span class="num good strong" use:flash={() => flowMultLabel}>{flowMultLabel}</span>
+              <Num class="good strong" value={flowMultLabel} />
               <span class="arrow num dim">→</span>
-              <span class="num final" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span><span use:delta={{ get: () => perHit }}></span>
+              <Num class="final" motion={() => perHit} value={perHit !== null ? fmtInt(perHit) : "—"} delta={{}} />
             </div>
             <!-- 積み上げの助言はトグル(ユーザー指示 2026-08-31)。ふだんは畳んでおき、押したときだけ
                  下に開く。押すボタンは上の行に居座るので、開いても押した場所は動かない(§00 03)。
@@ -2292,7 +2318,7 @@
               <div class="lever-note">
                 いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
                 {#if bestLever}
-                  <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <span class="num" use:bump={() => bestLeverGain}>{fmtSigned(bestLeverGain, 2, "%")}</span><span use:delta={{ get: () => bestLeverGain, unit: "%", digits: 2 }}></span> 伸びます({fmtHeadroom(bestLever)})。
+                  <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <Num motion={() => bestLeverGain} value={fmtSigned(bestLeverGain, 2, "%")} delta={{ unit: "%", digits: 2 }} /> 伸びます({fmtHeadroom(bestLever)})。
                   {#if nextLevers.length > 0}
                     <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段。
                          チップは文中に居るので <details> は段に溶かす(display: contents) -->
@@ -2303,7 +2329,7 @@
                       <div class="dt-row">
                         <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
                         <span class="num dt-mult dim">{fmtCatValue(c)}</span>
-                        <span class="num dt-val" use:bump={() => leverGain(c)}>{fmtSigned(leverGain(c), 2, "%")}</span><span use:delta={{ get: () => leverGain(c), unit: "%", digits: 2 }}></span>
+                        <Num class="dt-val" motion={() => leverGain(c)} value={fmtSigned(leverGain(c), 2, "%")} delta={{ unit: "%", digits: 2 }} />
                         <span class="num dt-sub dim">{fmtHeadroom(c)}</span>
                       </div>
                     {/each}
@@ -2325,9 +2351,11 @@
               <div class="stage">
                 <span class="stage-no" style="background: var(--flow-1);">1</span>
                 <span class="stage-title">攻撃力をつくる</span>
-                <span class="num strong stage-val" use:bump={() => atkA}>{atkA !== null ? fmtInt(atkA) : "—"}</span>
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-                <span use:delta={{ get: () => atkA }} class:follow={changedAtkKeys.length > 0} title="変わったところを開く" onclick={() => followChange("atkA")}></span>
+                <Num
+                  class="strong stage-val" motion={() => atkA} value={atkA !== null ? fmtInt(atkA) : "—"}
+                  delta={{}} deltaClass={changedAtkKeys.length > 0 ? "follow" : ""}
+                  onDelta={() => followChange("atkA")}
+                />
               </div>
               <div class="band">
                 {#each atkRows as a (a.k)}
@@ -2344,8 +2372,8 @@
                     <span class="swatch" style="background: {a.c};"></span>
                     <span class="br-label">{a.k}</span>
                     <span class="br-note dim">{a.note}</span>
-                    <span class="num br-val" use:bump={() => Math.round(a.v)}>{fmtInt(Math.round(a.v))}</span><span use:delta={{ get: () => Math.round(a.v) }}></span>
-                    <span class="num br-share dim" use:bump={() => parseFloat(a.share)}>{a.share}</span>
+                    <Num class="br-val" motion={() => Math.round(a.v)} value={fmtInt(Math.round(a.v))} delta={{}} />
+                    <Num class="br-share dim" motion={() => parseFloat(a.share)} value={a.share} />
                     {/snippet}
                     <div class="detail inset">{@render detailBody(register(`atk:${a.k}`, atkDetail(a)))}</div>
                   </Disclosure>
@@ -2356,7 +2384,12 @@
               <div class="stage">
                 <span class="stage-no" style="background: var(--danger);">2</span>
                 <span class="stage-title">相手の防御力を抜く</span>
-                <span class="num strong stage-val" use:bump={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}>{pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}</span><span use:delta={{ get: () => (pierced === null ? null : Math.max(0, Math.trunc(pierced))) }}></span>
+                <Num
+                  class="strong stage-val"
+                  motion={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}
+                  value={pierced !== null ? fmtInt(Math.max(0, Math.trunc(pierced))) : "—"}
+                  delta={{}}
+                />
               </div>
               <div class="band">
                 <div style="width: {100 - defShare}%; background: var(--flow-pierce);"></div>
@@ -2375,9 +2408,11 @@
                 <span class="stage-no" style="background: var(--flow-3);">3</span>
                 <span class="stage-title">倍率で伸ばす</span>
                 <span class="stage-note dim">帯の幅＝足した分(赤字は減る倍率)</span>
-                <span class="num strong stage-val" use:bump={() => perHit}>{perHit !== null ? fmtInt(perHit) : "—"}</span>
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-                <span use:delta={{ get: () => perHit }} class:follow={changedFlowKeys.length > 0} title="変わったところを開く" onclick={() => followChange("perHit")}></span>
+                <Num
+                  class="strong stage-val" motion={() => perHit} value={perHit !== null ? fmtInt(perHit) : "—"}
+                  delta={{}} deltaClass={changedFlowKeys.length > 0 ? "follow" : ""}
+                  onDelta={() => followChange("perHit")}
+                />
               </div>
               <div class="band">
                 {#each flowRows.filter((r) => r.add > 0) as f (f.k)}
@@ -2394,9 +2429,12 @@
                     <span class="swatch" style="background: {f.c};"></span>
                     <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{f.k}</span>
                     <span class="num br-mult dim">{f.mult}</span>
-                    <span class="num br-val" class:bad={f.add < 0} use:bump={() => Math.round(f.add)}>{fmtSigned(f.add)}</span><!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-                    <span use:delta={{ get: () => Math.round(f.add) }} class:follow={changedFlowKeys.includes(`flow:${f.k}`)} title="変わったところを開く" onclick={(e) => { e.stopPropagation(); followChange(`flow:${f.k}`); }}></span>
-                    <span class="num br-share dim" use:bump={() => Math.round((Math.abs(f.add) / flowTotal) * 100)}>{fmtPct(Math.abs(f.add) / flowTotal)}</span>
+                    <Num
+                      class={`br-val ${f.add < 0 ? "bad" : ""}`} motion={() => Math.round(f.add)} value={fmtSigned(f.add)}
+                      delta={{}} deltaClass={changedFlowKeys.includes(`flow:${f.k}`) ? "follow" : ""}
+                      onDelta={(e) => { e.stopPropagation(); followChange(`flow:${f.k}`); }}
+                    />
+                    <Num class="br-share dim" motion={() => Math.round((Math.abs(f.add) / flowTotal) * 100)} value={fmtPct(Math.abs(f.add) / flowTotal)} />
                     {/snippet}
                     <div class="detail inset">{@render detailBody(register(`flow:${f.k}`, stepDetail(f.step, f.mult, f.add, f.to)))}</div>
                   </Disclosure>
@@ -2416,14 +2454,14 @@
                     {#each lostRows as r (r.k)}
                       <div class="lost-row inset">
                         <span class="lost-label">{r.k}</span>
-                        <span class="num lost-raw" use:flash={() => r.raw}>{r.raw}</span>
+                        <Num class="lost-raw" value={r.raw} />
                         <span class="lost-arrow dim">→ 上限</span>
-                        <span class="num lost-val" use:flash={() => r.val}>{r.val}</span>
+                        <Num class="lost-val" value={r.val} />
                         <span class="lost-bar" aria-hidden="true">
                           <i style="width: {r.kept * 100}%"></i>
                           <i class="cut" style="width: {100 - r.kept * 100}%"></i>
                         </span>
-                        <span class="num lost-loss" use:flash={() => r.loss}>{r.loss} は無効</span>
+                        <Num class="lost-loss" value={`${r.loss} は無効`} />
                       </div>
                     {/each}
                   </div>
@@ -2441,7 +2479,7 @@
                   {#each activeCategories as c (c.category)}
                     <span class="mat-chip" class:cap={catAtCap(c)} use:flash={() => (catAtCap(c) ? "cap" : "open")}>
                       <span class="dim">{c.label}</span>
-                      <span class="num strong" use:flash={() => fmtCatValue(c)}>{fmtCatValue(c)}</span>
+                      <Num class="strong" value={fmtCatValue(c)} />
                       {#if catAtCap(c)}<span class="full">満</span>{/if}
                     </span>
                   {/each}
@@ -2529,7 +2567,7 @@
                  画像が未収録なら破線 + ? になるだけで、幅は変わらない -->
             <Icon kind="skill" id="scope_eye" size={20} label="極限スキル" />
             <span class="card-title">極限スキル</span>
-            <span class="dim small num" use:bump={() => ultimatePickedCount}>{ultimatePickedCount} / {ultimateSlotCount}</span>
+            <Num class="dim small" motion={() => ultimatePickedCount} value={`${ultimatePickedCount} / ${ultimateSlotCount}`} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2562,7 +2600,7 @@
           {#snippet summary()}
             <Icon kind="skill" id="awakening" size={20} label="覚醒・エタの意志" />
             <span class="card-title">覚醒・エタの意志</span>
-            <span class="dim small num" use:flash={() => awakeningHeadNote}>{awakeningHeadNote}</span>
+            <Num class="dim small" value={awakeningHeadNote} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2617,8 +2655,8 @@
             </div>
           </div>
           <p class="eq-note dim">
-            覚醒ダメージ <b class="num" use:flash={() => String(awakeningFactor)}>{awakeningFactor !== null ? fmtRate(awakeningFactor) : "—"}</b>
-            ・ ダメージ上限 <b class="num" use:bump={() => result?.damage_cap ?? null}>{result ? fmtInt(result.damage_cap) : "—"}</b><span use:delta={{ get: () => result?.damage_cap ?? null }}></span>。
+            覚醒ダメージ <b><Num value={String(awakeningFactor)}>{#snippet children()}{awakeningFactor !== null ? fmtRate(awakeningFactor) : "—"}{/snippet}</Num></b>
+            ・ ダメージ上限 <b><Num motion={() => result?.damage_cap ?? null} value={result ? fmtInt(result.damage_cap) : "—"} delta={{}} /></b>。
             節目(20 / 40 / 60 / 80 / 90)を超えると上限の伸びが一段上がります。Lv を入れると覚醒は 5 になります。
           </p>
           {/if}
@@ -2630,8 +2668,10 @@
           {#snippet summary()}
             <Icon kind="skill" id="sharpness_vision" size={20} label="シャープネスビジョン" />
             <span class="card-title">シャープネスビジョン</span>
-            <span class="dim small num" use:bump={() => sharpnessRatePercent}
-            >{sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} ${fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}`}</span>
+            <Num
+              class="dim small" motion={() => sharpnessRatePercent}
+              value={sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} ${fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}`}
+            />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2679,7 +2719,7 @@
           {#snippet summary()}
             <Icon kind="skill" id="soul_link" size={20} label="ソウルリンク" />
             <span class="card-title">ソウルリンク</span>
-            <span class="dim small num" use:flash={() => soulLinkHeadNote}>{soulLinkHeadNote}</span>
+            <Num class="dim small" value={soulLinkHeadNote} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2698,7 +2738,7 @@
                     (v) => editSim((p) => (p.stat_sources.soul_link[row.field] = v))
                   }
                 />
-                <span class="basics-val num" use:bump={() => soulLinkEffect(row.field)}>{soulLinkEffectText(row.field)}</span>
+                <Num class="basics-val" motion={() => soulLinkEffect(row.field)} value={soulLinkEffectText(row.field)} />
               </div>
             {/each}
           </div>
@@ -2716,7 +2756,7 @@
             <!-- 見出しの顔は装着中の武器(名前と併記) -->
             <Icon kind="equipment" id={equipmentIconId(weaponOf(payload).item_id, app.equipmentCatalog)} size={20} label="装備の切り替え" />
             <span class="card-title">装備の切り替え</span>
-            <span class="dim small num" use:flash={() => equipmentHeadNote}>{equipmentHeadNote}</span>
+            <Num class="dim small" value={equipmentHeadNote} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2757,7 +2797,7 @@
             <span class="card-title">エンチャントの伸びしろ</span>
             <!-- 見出しの注記は件数 1 つだけ。アイコンぶん幅が減っていて、主軸を並べると
                  右端の件数が切れる(§00 05: 読めない文字は出さない)。主軸は中に出す -->
-            <span class="dim small num" use:bump={() => visibleEnchantRows.length}>{visibleEnchantRows.length} 件</span>
+            <Num class="dim small" motion={() => visibleEnchantRows.length} value={`${visibleEnchantRows.length} 件`} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2791,8 +2831,10 @@
                             (v) => editSim((p) => setEnchantValue(p.equipment, row.slot, k, v))
                           }
                         />
-                        <span class="num enchant-gain" class:up={(gain ?? 0) > 0} use:bump={() => gain ?? null}
-                        >{gain !== undefined ? `MAX で ${fmtSigned(gain, { max: 2 }, "%")}` : ""}</span>
+                        <Num
+                          class="enchant-gain" tone={(gain ?? 0) > 0 ? "up" : null} motion={() => gain ?? null}
+                          value={gain !== undefined ? `MAX で ${fmtSigned(gain, { max: 2 }, "%")}` : ""}
+                        />
                       </div>
                     {/each}
                   </div>
@@ -2812,7 +2854,7 @@
             <!-- 職人の装備研磨剤(クライアント資産 item 1044778)。バフ「装備研磨」と同じ絵 -->
             <Icon kind="buff" id="equipment_polish" size={20} label="研磨" />
             <span class="card-title">研磨</span>
-            <span class="dim small num" use:flash={() => polishHeadNote}>{polishHeadNote}</span>
+            <Num class="dim small" value={polishHeadNote} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2835,7 +2877,7 @@
                 <button type="button" class="polish-row" class:off={!polishOn} onclick={() => focusCharacterSource("polish")}>
                   <span class="enchant-row-label">{PART_SLOT_LABELS[row.slot]}</span>
                   <span class="polish-row-kind dim">{POLISH_KIND_LABELS[row.entry.kind]} {EQUIPMENT_STAT_SHORT[row.entry.stat]}</span>
-                  <span class="num polish-row-amount" use:bump={() => row.amount}>{fmtSigned(row.amount)}</span>
+                  <Num class="polish-row-amount" motion={() => row.amount} value={fmtSigned(row.amount)} />
                   <span class="chev dim">›</span>
                 </button>
               {/each}
@@ -2890,7 +2932,7 @@
           {#snippet summary()}
             <Icon kind="buff" id="illumination_drink" size={20} label="バフ" />
             <span class="card-title">バフ</span>
-            <span class="dim small num" use:bump={() => alwaysBuffCount + extraBuffCount}>{alwaysBuffCount + extraBuffCount} 件</span>
+            <Num class="dim small" motion={() => alwaysBuffCount + extraBuffCount} value={`${alwaysBuffCount + extraBuffCount} 件`} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -2917,7 +2959,7 @@
               <Disclosure summaryClass="buff-group-head inset" group="buffPurpose">
                 {#snippet summary()}
                   <span class="bg-label">{purpose.label}</span>
-                  <span class="bg-count num" use:bump={() => picked}>{picked}/{defs.length}</span>
+                  <Num class="bg-count" motion={() => picked} value={`${picked}/${defs.length}`} />
                 {/snippet}
                 <div class="buff-chips">
                   {#each defs as def (def.id)}{@render buffChip(def)}{/each}
@@ -3062,7 +3104,8 @@
   }
 
   .hero { padding: 11px 13px 12px; }
-  .hero-num { font-size: var(--t-result); line-height: 1; font-weight: var(--w-strong); }
+  /* .hero-num は ui/Num.svelte が描く(子コンポーネントの要素なのでスコープ付き CSS が届かない) */
+  .hero :global(.hero-num) { font-size: var(--t-result); line-height: 1; font-weight: var(--w-strong); }
   .meter.big { margin-top: 10px; height: 12px; border-radius: var(--r-inset); }
   .hero-sentence { margin-top: 7px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .sentence { min-width: 0; flex: 1; font-size: 11px; font-weight: 700; text-wrap: pretty; }
@@ -3083,14 +3126,15 @@
   .chain .nl {
     line-height: 14px; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap;
   }
-  .chain .nl .num { font-weight: 600; color: var(--fg-muted); }
-  .chain .nv { margin-top: auto; padding-top: 6px; }
+  /* .num は ui/Num.svelte が描く子要素にも付くので :global で届かせる */
+  .chain .nl :global(.num) { font-weight: 600; color: var(--fg-muted); }
+  .chain :global(.nv) { margin-top: auto; padding-top: 6px; }
   .chain .nsub { margin-top: 4px; gap: 4px; }
-  .chain .nv { font-weight: 700; color: var(--fg); white-space: nowrap; }
-  .chain .node.gate .nv { min-width: 120px; }
-  .chain .node.mid .nv { font-size: 15px; min-width: 68px; }
+  .chain :global(.nv) { font-weight: 700; color: var(--fg); white-space: nowrap; }
+  .chain .node.gate :global(.nv) { min-width: 120px; }
+  .chain .node.mid :global(.nv) { font-size: 15px; min-width: 68px; }
   /* DPS は主役(1 発 = --t-result)の隣の見出し数字。--t-result だと 1 発と並んで大きすぎる(ユーザー 2026-09-16) */
-  .chain .node.rate .nv { font-size: var(--t-heading); min-width: 68px; }
+  .chain .node.rate :global(.nv) { font-size: var(--t-heading); min-width: 68px; }
   /* 押せるノードは桁・状態で動かない。実測(tools/design-audit/live/digits.js)では
      1 発 180〜220px・バッジ 39〜106px・合計 75〜83px と揺れ、右のノードが最大 29px 逃げていた
      (§09 規則 4)。幅を取り切り、中身が短いときは空けておく。値の上限
@@ -3099,9 +3143,11 @@
   .chain .node.mid { min-width: 136px; }
   .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; display: flex; flex-direction: column; }
   .chain .nsub-line { display: flex; align-items: baseline; gap: 5px; min-height: 14px; }
-  .chain .crit-none { color: var(--state-short-fg); font-weight: 700; }
-  .chain .crit-partial { color: var(--state-edge-fg); font-weight: 700; }
-  /* 差分(いくつ変わったか)は数値の真下。9px だと 44px の数値の下で読めないので 11px */
+  /* ui/Num.svelte が描く crit-none / crit-partial は子コンポーネントの要素 */
+  .chain :global(.crit-none) { color: var(--state-short-fg); font-weight: 700; }
+  .chain :global(.crit-partial) { color: var(--state-edge-fg); font-weight: 700; }
+  /* 差分(いくつ変わったか)は数値の真下。9px だと 44px の数値の下で読めないので 11px。
+     差分枠は ui/Num.svelte が描く(スコープ付き CSS が届かないので :global) */
   .chain .nsub :global(.delta) { font-size: 11px; line-height: 14px; }
   /* 押すと内訳が鎖の直下に開く。hover は塗りだけで、余白を足して隣を動かさない(§00 03) */
   .chain button.node { text-align: left; border-radius: var(--r-inset); }
@@ -3146,9 +3192,10 @@
   .fill-more-row:hover:not(:disabled) { background: var(--bg-active); }
 
   .flow-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 9px; }
-  .flow-line .strong { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
-  .flow-line .good.strong { color: var(--flow-3); }
-  .flow-line .final { font-size: 15px; font-weight: 700; color: var(--fg); }
+  /* strong / good.strong / final は ui/Num.svelte が描く子要素なので :global で届かせる */
+  .flow-line :global(.strong) { font-size: 13px; font-weight: 700; color: var(--fg-sub); }
+  .flow-line :global(.good.strong) { color: var(--flow-3); }
+  .flow-line :global(.final) { font-size: 15px; font-weight: 700; color: var(--fg); }
   .lever-note .chip { margin-left: 6px; vertical-align: middle; }
   .lever-list {
     margin-top: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px;
@@ -3168,7 +3215,8 @@
   .stage-no { flex-shrink: 0; width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 9px; line-height: 16px; text-align: center; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 700; }
   .stage-title { font-size: 11px; font-weight: 700; white-space: nowrap; }
   .stage-note { min-width: 0; flex: 1; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .stage-val { margin-left: auto; font-size: 15px; font-weight: 700; }
+  /* .stage-val は ui/Num.svelte が描く */
+  .stage :global(.stage-val) { margin-left: auto; font-size: 15px; font-weight: 700; }
   /* 段の数値と行の数値の右端をそろえる: 数値(64)+ 差分(64)+ 割合(32)の 3 列を段にも持たせる。
      差分枠の幅を固定しないと、文言の幅ぶん数値が左右にずれる(ユーザー指摘 2026-09-15) */
   .stage :global(.delta), .band-rows :global(summary.band-row .delta) { flex-shrink: 0; width: 64px; font-size: 10px; }
@@ -3183,9 +3231,10 @@
   .br-label.bad { color: var(--danger); }
   .br-note { min-width: 0; flex: 1.2; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .br-mult { flex-shrink: 0; width: 48px; text-align: right; font-size: 10px; }
-  .br-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
-  .br-val.bad { color: var(--danger); }
-  .br-share { flex-shrink: 0; width: 32px; text-align: right; font-size: 9.5px; }
+  /* br-val / br-share は ui/Num.svelte が描く子要素 */
+  .band-rows :global(.br-val) { flex-shrink: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
+  .band-rows :global(.br-val.bad) { color: var(--danger); }
+  .band-rows :global(.br-share) { flex-shrink: 0; width: 32px; text-align: right; font-size: 9.5px; }
   /* 構成行・段フローの行は押すと内訳が直下に開く。行の位置・高さは変わらない */
   .band-rows :global(details.band-fold) { display: contents; }
   .band-rows :global(summary.band-row) { width: 100%; text-align: left; border-radius: var(--r-inset); }
@@ -3204,19 +3253,21 @@
   .detail-body { display: flex; flex-direction: column; gap: 4px; }
   .dt-head { display: flex; align-items: baseline; gap: 6px 7px; flex-wrap: wrap; }
   .dt-hk { font-size: 9px; letter-spacing: 0.06em; }
-  .dt-hv { min-width: 62px; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
-  .dt-hv.big { font-size: 13px; color: var(--fg); }
-  .dt-hv.bad { color: var(--danger); }
+  /* dt-hv は ui/Num.svelte が描く子要素 */
+  .dt-head :global(.dt-hv) { min-width: 62px; font-size: 11px; font-weight: 700; color: var(--fg-sub); }
+  .dt-head :global(.dt-hv.big) { font-size: 13px; color: var(--fg); }
+  .dt-head :global(.dt-hv.bad) { color: var(--danger); }
   .dt-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .dt-label { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dt-mult { flex-shrink: 0; width: 48px; text-align: right; font-size: 9.5px; }
-  .dt-val { flex-shrink: 0; width: 64px; text-align: right; font-size: 10px; font-weight: 700; color: var(--fg-sub); }
+  /* dt-val も ui/Num.svelte が描く子要素 */
+  .dt-row :global(.dt-val) { flex-shrink: 0; width: 64px; text-align: right; font-size: 10px; font-weight: 700; color: var(--fg-sub); }
   .dt-sub { flex-shrink: 0; width: 112px; text-align: right; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dt-val.bad { color: var(--danger); }
+  .dt-row :global(.dt-val.bad) { color: var(--danger); }
   /* 入れ替わった供給源はラベルの隣に残す(次の変化で書き換わる) */
   .dt-swap { margin-left: 8px; font-size: 9px; }
   /* 抜けた供給源の行。次に集合が変わるまで取り消し線で残す(消すと「どこが変わったか」が消える) */
-  .dt-row.gone .dt-label, .dt-row.gone .dt-val { text-decoration: line-through; color: var(--fg-dim); }
+  .dt-row.gone .dt-label, .dt-row.gone :global(.dt-val) { text-decoration: line-through; color: var(--fg-dim); }
   /* 差分枠は実数と同じ書体サイズ・同じ幅の列にして、行ごとに 到達 の位置がずれないようにする */
   .dt-row :global(.delta), .dt-head :global(.delta) { flex-shrink: 0; min-width: 64px; font-size: 10px; }
   .dt-head :global(.delta) { font-size: 11px; }
@@ -3254,15 +3305,17 @@
     padding: 4px 9px;
   }
   .lost-label { min-width: 0; flex: 1; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .lost-raw { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; color: var(--fg-muted); text-decoration: line-through; }
+  /* lost-raw / lost-val / lost-loss は ui/Num.svelte が描く子要素 */
+  .lost-row :global(.lost-raw) { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; color: var(--fg-muted); text-decoration: line-through; }
   .lost-arrow { flex-shrink: 0; font-size: 9px; }
-  .lost-val { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; font-weight: 700; }
+  .lost-row :global(.lost-val) { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 10px; font-weight: 700; }
   .lost-bar { flex-shrink: 0; width: 96px; height: 7px; display: flex; border-radius: var(--r-inset); overflow: hidden; border: 1px solid var(--border-soft); }
   .lost-bar > i { display: block; background: var(--flow-1); }
   .lost-bar > i.cut { background: var(--hatch-lost); }
-  .lost-loss { flex-shrink: 0; min-width: 104px; text-align: right; font-size: 10px; color: var(--danger); }
+  .lost-row :global(.lost-loss) { flex-shrink: 0; min-width: 104px; text-align: right; font-size: 10px; color: var(--danger); }
   .lost-none, .lost-note { margin: 4px 0 0; font-size: 10px; line-height: 1.6; }
-  .mat-chip .strong { font-size: 10px; font-weight: 700; }
+  /* .strong は ui/Num.svelte が描く子要素(倍率の材料チップの値) */
+  .mat-chip :global(.strong) { font-size: 10px; font-weight: 700; }
   .mat-chip .full { font-size: 8.5px; font-weight: 700; color: var(--danger); }
 
   /* 右カラム */
@@ -3320,7 +3373,8 @@
   .basics-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .basics-label { flex-shrink: 0; width: 46px; font-size: 9.5px; color: var(--fg-muted); }
   .basics-seg { min-width: 0; flex: 1; }
-  .basics-val { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 9.5px; font-weight: 700; color: var(--fg-dim); }
+  /* .basics-val は ui/Num.svelte が描く子要素 */
+  .basics-row :global(.basics-val) { flex-shrink: 0; min-width: 62px; text-align: right; font-size: 9.5px; font-weight: 700; color: var(--fg-dim); }
 
   /* 装備の切り替え。部位ごとに登録済み装備から 1 つ選ぶ(§07「1 つ選ぶ」= Picker。
      少なければチップ、増えたら候補面)。名前はチップ内で省略する(幅が動かない) */
@@ -3338,8 +3392,9 @@
   .enchant-row-cols { display: flex; flex-direction: column; gap: 5px; }
   .enchant-stat { display: flex; align-items: center; gap: 7px; }
   .enchant-stat-label { flex-shrink: 0; width: 30px; font-size: 9.5px; color: var(--fg-muted); }
-  .enchant-gain { flex-shrink: 0; min-width: 84px; text-align: right; font-size: 9.5px; color: var(--fg-dim); }
-  .enchant-gain.up { color: var(--good); font-weight: 700; }
+  /* .enchant-gain は ui/Num.svelte が描く子要素 */
+  .enchant-stat :global(.enchant-gain) { flex-shrink: 0; min-width: 84px; text-align: right; font-size: 9.5px; color: var(--fg-dim); }
+  .enchant-stat :global(.enchant-gain.up) { color: var(--good); font-weight: 700; }
   /* 未登録・上限未入力の行。押すとキャラタブの該当ペインへ飛ぶ(欠けは badge.unknown で言う) */
   .source-jump {
     display: flex; align-items: center; gap: 8px; padding: 2px 0; background: none; border: none;
@@ -3352,8 +3407,9 @@
   }
   .polish-row .enchant-row-label { flex-shrink: 0; width: 46px; }
   .polish-row-kind { min-width: 0; flex: 1; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .polish-row-amount { flex-shrink: 0; min-width: 40px; text-align: right; font-size: 10px; font-weight: 700; }
-  .polish-row.off .polish-row-amount { color: var(--fg-muted); text-decoration: line-through; }
+  /* .polish-row-amount は ui/Num.svelte が描く子要素 */
+  .polish-row :global(.polish-row-amount) { flex-shrink: 0; min-width: 40px; text-align: right; font-size: 10px; font-weight: 700; }
+  .polish-row.off :global(.polish-row-amount) { color: var(--fg-muted); text-decoration: line-through; }
 
   .side-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
   .side-tab {
@@ -3392,7 +3448,8 @@
   :global(summary.buff-group-head:hover) { border-color: var(--accent); }
   :global(details[open] > summary.buff-group-head) { background: var(--sel-card); border-color: var(--sel-bd); color: var(--sel-fg); }
   .bg-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bg-count { flex: none; min-width: 5ch; text-align: right; font-size: 9px; font-weight: 500; }
+  /* .bg-count は ui/Num.svelte が描く子要素。summary.buff-group-head も ui/Disclosure が描くので両方 :global */
+  :global(summary.buff-group-head .bg-count) { flex: none; min-width: 5ch; text-align: right; font-size: 9px; font-weight: 500; }
   .calc-buff-set { margin-top: 8px; display: flex; align-items: flex-start; gap: 8px; font-size: 10px; color: var(--fg-muted); }
   .calc-buff-set > span { flex-shrink: 0; padding-top: 6px; }
   .calc-buff-set :global(.picker) { min-width: 0; flex: 1; }

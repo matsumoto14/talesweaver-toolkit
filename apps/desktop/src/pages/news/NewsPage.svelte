@@ -9,7 +9,7 @@
   import { reportError } from "../../toast.svelte";
   import { checkForUpdate, installUpdate, restartApp, updater } from "../../update.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
-  import { bump } from "../../ui/motion.svelte";
+  import Num from "../../ui/Num.svelte";
 
   let news = $state<News>(BUNDLED_NEWS);
   let currentVersion = $state("");
@@ -51,9 +51,7 @@
             <button type="button" class="btn primary" onclick={() => void installUpdate()}>更新する</button>
           {:else}
             <b class="update-title">v{updater.version} を{updater.status === "installing" ? "入れています" : "落としています"}</b>
-            <span class="update-note num" use:bump={() => updater.percent}>
-              {updater.percent >= 0 ? `${updater.percent}%` : "…"}
-            </span>
+            <Num class="update-note" motion={() => updater.percent} value={updater.percent >= 0 ? `${updater.percent}%` : "…"} />
           {/if}
         </div>
         {#if updater.status === "downloading" || updater.status === "installing"}
@@ -182,7 +180,7 @@
   .update-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .update-flag { background: var(--state-edge-bg); border-color: var(--state-edge-bd); color: var(--state-edge-fg); }
   .update-title { flex: none; font-size: 12px; font-weight: 800; color: var(--fg-head); }
-  .update-note { min-width: 0; flex: 1; font-size: 10px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .update-head :global(.update-note) { min-width: 0; flex: 1; font-size: 10px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .update-head .btn { flex: none; }
   .update .meter > .fill { background: var(--state-edge-bar); }
   .update-body { margin: 0; font-size: 10.5px; color: var(--fg-sub); line-height: 1.6; white-space: pre-wrap; }

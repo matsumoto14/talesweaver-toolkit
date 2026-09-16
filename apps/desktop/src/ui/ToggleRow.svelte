@@ -9,7 +9,7 @@
   // - 行の中に別の操作(Lv の段・設定・ポップオーバー)を持つ行は `extra` に置く。
   //   押せる面は名前側(`.face`)だけになり、段を押した瞬間にオフになることがない
   import type { Snippet } from "svelte";
-  import { flash } from "./motion.svelte";
+  import Num from "./Num.svelte";
 
   interface Props {
     name: string;
@@ -37,7 +37,7 @@
     <!-- 省略記号で切れた文字は、その上にカーソルを置くと全文が読める(狭い器では名前も値も切れる) -->
     <span class="nm" title={name}>{name}</span>
     {#if cond !== undefined}<span class="cond" title={cond}>{cond}</span>{/if}
-    {#if value !== undefined}<span class="val num" title={value} use:flash={() => value ?? ""}>{value}</span>{/if}
+    {#if value !== undefined}<Num class="val" title={value} value={value ?? ""} />{/if}
   </button>
   {#if extra}{@render extra()}{/if}
 </div>
@@ -75,17 +75,17 @@
   /* 値の最小幅 72px = 「基本発動 +10%」(4 文字 + 符号付き %)が欠けない幅。名前と値が取り合った
      とき「最終 +1…」と数字が欠けるより、名前が 1〜2 文字短く省略される方が読める(実機
      2026-09-16 バフタブ「その他」)。長い値は max-width で止まり、そこから先は省略記号 */
-  .val {
+  .face :global(.val) {
     flex: 0 1 auto; margin-left: auto; min-width: 72px; max-width: 60%; text-align: right;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-variant-numeric: tabular-nums; font-weight: 700; color: var(--fg-off);
   }
-  .cond + .val { margin-left: 0; }
+  .cond + :global(.val) { margin-left: 0; }
   .on { background: var(--sel); border-color: var(--sel-bd); box-shadow: inset 0 1px 0 #fff; }
   .on .nm { font-weight: 700; color: var(--sel-fg); }
   .on .cond { color: var(--sel-fg); opacity: 0.75; }
-  .on .val { color: var(--sel-fg); }
+  .on :global(.val) { color: var(--sel-fg); }
   .on.temp { background: var(--state-temp-bg); border-color: var(--sim); box-shadow: none; }
-  .on.temp .nm, .on.temp .val { color: var(--sim-fg); }
+  .on.temp .nm, .on.temp :global(.val) { color: var(--sim-fg); }
   .on.temp .cond { color: var(--sim-fg); }
 </style>

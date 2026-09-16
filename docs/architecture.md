@@ -115,7 +115,7 @@ api/invoke.ts          呼び出しの実体。デスクトップは Tauri、ブ
                        vite の alias で差し替わる(画面はどちらか知らない)
 api/browserStore.ts    ブラウザ版の保存(IndexedDB)/ api/transfer.ts データの書き出し・読み込み
 web/                   ブラウザ版での Tauri プラグイン相当(外部リンク・HTTP・更新・プロセス)
-ui/                    画面によらない汎用部品(Select, StatInput, ToggleRow, Splitter, persistedState)
+ui/                    画面によらない汎用部品(Num, ReadRow, Modal, Popover, Disclosure, Picker, StatInput, ToggleRow, Splitter, persistedState)
 pages/<機能>/          機能ごとの画面と、その画面専用の部品
 buffs.ts               バフ選択の共通ロジック(純関数)
 candidates.ts          強化候補の列挙(効果の計算は Rust 側 preview_damage)
@@ -131,6 +131,7 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 
 - **ビジュアル**はデザインモック「TW Toolkit Prototype v4」(claude.ai/design)準拠のライトテーマ。トークンは `app.css`、フォント(M PLUS Rounded 1c / M PLUS 1 Code)は `@fontsource` で同梱
 - **数値入力**は `ui/StatInput.svelte` の 1 種類のみ(従来どおり)。範囲上限は `limits.svelte.ts` から取る
+- **値の表示**は `ui/Num.svelte`(行に載るなら `ui/ReadRow.svelte`。中で `Num` を使う)。数値書体・未収録の `?`・変化の跳ね・差分枠を部品が持つので、画面側は `use:bump` / `use:delta` を呼ばない。作法の背景は docs/adr/015
 - **`pages/home/`**: `HomePage.svelte` — ブリーフィング型 1 カラム。今日の期限・影響、今日の強化(5 項目タイル。候補を `preview_damage` で再計算し、直更新で保存)、到達一覧(エリア → コンテンツ、目安バー・バッジ・入場条件ノート。畳み)
 - **`pages/calc/`**: `CalcPage.svelte` — 対象プレート(◀▶ + エリア別一覧)、スキル選択、1発(最大)+ 合計/クリティカル、もし〜だったら、なぜこの数字?(攻撃力の内訳 / 防御を抜く / 倍率で伸ばす。トレースの式から組み立て)/ `TracePanel.svelte` — 詳細トレース。右カラム「計算の材料」= 試し変更(sim)・装備・バフ・調整・コンボ・入場条件
 - **`pages/buffs/`**: セット一覧 → 静的カタログからの選択 → 効果・排他枠要約。独自バフ定義は作らない

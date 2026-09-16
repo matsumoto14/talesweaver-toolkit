@@ -8,7 +8,7 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
-  import { bump, flash } from "../../../ui/motion.svelte";
+  import Num from "../../../ui/Num.svelte";
   import { badgeStyle } from "../../../ui/states";
   import StepSelect from "../../../ui/StepSelect.svelte";
 
@@ -133,13 +133,13 @@
        ペイン自体が既に「テシスコア」の名前を出しているので見出しは持たない -->
   <div class="result-value num">
     <span class="dim tiny">コアセット効果(全地域) 最終ダメージ</span>
-    <span class="strong" use:flash={() => coreSetTotalLabel}>{coreSetTotalLabel}</span>
+    <Num class="strong" value={coreSetTotalLabel} />
   </div>
   <div class="eq-summary num inset">
     {#each coreRegionRows as r (r.region)}
       <span>
         <span class="dim">{CORE_REGION_LABELS[r.region]}</span>
-        <span use:bump={() => r.total_bonus}>{fmtInt(r.total_bonus)}</span>
+        <Num motion={() => r.total_bonus} value={fmtInt(r.total_bonus)} />
         <span
           class="badge"
           style={badgeStyle({ label: "", state: r.set_groups.length === 0 ? "unknown" : "met" })}
@@ -163,9 +163,9 @@
         onclick={() => (coreRegion = region)}
       >
         {CORE_REGION_LABELS[region]}
-        <span class="num dim" use:bump={() => coreRegionTotal(region)}>{fmtInt(coreRegionTotal(region))}</span>
+        <Num class="dim" motion={() => coreRegionTotal(region)} value={fmtInt(coreRegionTotal(region))} />
         {#if (coreSetOf(region)?.set_groups.length ?? 0) > 0}
-          <span class="tab-set num" use:flash={() => coreSetLabelOf(region)}>{coreSetLabelOf(region)}</span>
+          <Num class="tab-set" value={coreSetLabelOf(region)} />
         {:else if coreRegionTotal(region) > 0}
           <span class="tab-set off num">あと {3 - (coreSetOf(region)?.ready ?? 0)}</span>
         {/if}
@@ -266,9 +266,9 @@
             aria-label="進化と強化"
             onclick={() => (openCoreStage = openCoreStage === index ? null : index)}
           >
-            <span use:flash={() => (core ? `${core.evolution}-${core.enhancement}` : "-")}>
-              {core ? `${core.evolution}-${core.enhancement}` : "—"}
-            </span>
+            <Num value={core ? `${core.evolution}-${core.enhancement}` : "-"}
+              >{#snippet children()}{core ? `${core.evolution}-${core.enhancement}` : "—"}{/snippet}</Num
+            >
           </button>
           {#if openCoreStage === index && core}
             <button type="button" class="stage-overlay" aria-label="閉じる" onclick={() => (openCoreStage = null)}></button>
@@ -295,13 +295,11 @@
             </div>
           {/if}
         </span>
-        <span
-          class="core-bonus num"
-          class:support={core !== null && !CORE_POWER_TYPES.includes(core.core_type)}
-          use:bump={() => (core ? coreBonus(core.core_type, core.evolution, core.enhancement) : null)}
-        >
-          {core ? fmtSigned(coreBonus(core.core_type, core.evolution, core.enhancement)) : "—"}
-        </span>
+        <Num
+          class={"core-bonus " + (core !== null && !CORE_POWER_TYPES.includes(core.core_type) ? "support" : "")}
+          motion={() => (core ? coreBonus(core.core_type, core.evolution, core.enhancement) : null)}
+          value={core ? fmtSigned(coreBonus(core.core_type, core.evolution, core.enhancement)) : "—"}
+        />
       </div>
     {/each}
   </div>

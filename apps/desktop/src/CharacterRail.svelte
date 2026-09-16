@@ -4,7 +4,7 @@
   import { app, gameCharacterName, selectCharacter, totalContents } from "./state.svelte";
   import { tables } from "./tables.svelte";
   import Icon from "./ui/Icon.svelte";
-  import { bump } from "./ui/motion.svelte";
+  import Num from "./ui/Num.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import { dropHalfIndex, moveItem } from "./ui/reorder.svelte";
   import Spinner from "./ui/Spinner.svelte";
@@ -106,11 +106,13 @@
             <span class="cls">{gameCharacterName(c.game_character_id)} / 覚醒{c.awakening.stage}</span>
           </span>
           <span class="count">
-            <span class="ok num" use:bump={() => clearCount(c.id)}>{clearCount(c.id)}<span class="total"> / {total}</span></span>
+            <Num class="ok" motion={() => clearCount(c.id)} value={String(clearCount(c.id))}
+              >{#snippet children()}{clearCount(c.id)}<span class="total"> / {total}</span>{/snippet}</Num
+            >
             <span class="cap">クリア可</span>
           </span>
         {:else}
-          <span class="mini num" use:bump={() => clearCount(c.id)}>{clearCount(c.id)}</span>
+          <Num class="mini" motion={() => clearCount(c.id)} value={String(clearCount(c.id))} />
         {/if}
       </button>
     {/each}
@@ -168,10 +170,10 @@
   .char.selected .meta .name { font-weight: 700; }
 
   .count { margin-left: auto; flex-shrink: 0; text-align: right; display: flex; flex-direction: column; }
-  .count .ok { font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .count :global(.ok) { font-size: 13px; font-weight: 700; white-space: nowrap; }
   .count .total { font-size: 9.5px; color: var(--fg-dim); font-weight: 400; }
   .count .cap { font-size: 8.5px; color: var(--fg-muted); white-space: nowrap; }
-  .mini { font-size: 9.5px; font-weight: 700; color: var(--fg-head); }
+  .list :global(.mini) { font-size: 9.5px; font-weight: 700; color: var(--fg-head); }
 
   .register {
     text-align: center; padding: 9px 6px; border-radius: var(--r-panel);

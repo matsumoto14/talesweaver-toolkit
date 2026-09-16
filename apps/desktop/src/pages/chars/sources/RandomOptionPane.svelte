@@ -26,6 +26,7 @@
   import type { SourceId } from "../sourceId";
   import { DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
+  import Num from "../../../ui/Num.svelte";
   import { randomOptionRecordOnlyCount } from "../summaries";
 
   interface Props {
@@ -268,7 +269,7 @@
 {#if roTotals.length > 0 || roRecordOnly > 0}
   <div class="eq-summary num inset">
     {#each roTotals as t (t.label)}
-      <span><span class="dim">{t.label}</span> <span use:flash={() => t.value}>{t.value}</span></span>
+      <span><span class="dim">{t.label}</span> <Num value={t.value} /></span>
     {:else}
       <span class="dim">計算に入る OP はまだありません</span>
     {/each}

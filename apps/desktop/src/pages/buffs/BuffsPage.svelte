@@ -23,7 +23,8 @@
   } from "../../labels";
   import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportUndo } from "../../toast.svelte";
-  import { bump, swap } from "../../ui/motion.svelte";
+  import { swap } from "../../ui/motion.svelte";
+  import Num from "../../ui/Num.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import StepSelect from "../../ui/StepSelect.svelte";
@@ -562,7 +563,7 @@
 
 <div class="buff-page">
   <aside class="sets">
-    <div class="bar">バフセット <span use:bump={() => app.buffSets.length}>{app.buffSets.length}</span></div>
+    <div class="bar">バフセット <Num motion={() => app.buffSets.length} value={String(app.buffSets.length)} /></div>
     <div class="create-row">
       <TextField label="新しいバフセット名" bind:value={newName} max={40} auto={autoSetName} autoNote="自動の名前" disabled={saving} onEnter={create} />
       <button class="btn primary" disabled={saving} onclick={create}>作成</button>
@@ -614,7 +615,7 @@
               onclick={() => choosePurpose(purpose.id)}
             >
               <span>{purpose.label}</span>
-              <span class="group-count num" use:bump={() => picked}>{picked}/{definitions.length}</span>
+              <Num class="group-count" motion={() => picked} value={`${picked}/${definitions.length}`} />
             </button>
           {/each}
         </div>
@@ -642,7 +643,7 @@
                   onclick={() => chooseDamageGroup(group.id)}
                 >
                   <span>{group.label}</span>
-                  <span class="group-count num" use:bump={() => picked}>{picked}/{definitions.length}</span>
+                  <Num class="group-count" motion={() => picked} value={`${picked}/${definitions.length}`} />
                 </button>
               {/each}
             </div>
@@ -770,11 +771,11 @@
   <aside class="summary">
     <div class="bar">現在の効果<Spinner active={summaryLoading} label="バフの効果を集計しています" /></div>
     {#if selected}
-      <!-- 跳ねるのは**変わった数字だけ**(§10 型 1)。カードに use:bump を付けると
+      <!-- 跳ねるのは**変わった数字だけ**(§10 型 1)。カード全体に跳ねを付けると
            scale(1.07) が面ごと掛かり、カードの幅が 264 → 282px に膨らんで戻る。
            数字側は 2 桁ぶんの幅を先に取ってあるので、桁が増えても「件 ON」は動かない -->
       <div class="count inset">
-        <span class="count-value num" use:bump={() => selected.choices.choices.length}>{selected.choices.choices.length}</span><small>件 ON</small>
+        <Num class="count-value" motion={() => selected.choices.choices.length} value={String(selected.choices.choices.length)} /><small>件 ON</small>
       </div>
       <div class="summary-block inset">
         <div class="summary-head">
@@ -805,14 +806,14 @@
                   <td>{STAT_LABELS[kind]}</td>
                   <td class="n muted">{fmtInt(baseStats[kind])}</td>
                   <!-- バフ列だけは従来どおり「差分(重なって増えた分)」の形を保つ -->
-                  <td class="n" class:positive={total > 0} use:bump={() => total}
-                  >{fmtSigned(delta)}{#if amp !== 0}<span class="amp-value"> ({fmtSigned(amp)})</span>{/if}</td>
+                  <td class="n" class:positive={total > 0}
+                  ><Num motion={() => total} value={String(total)}>{#snippet children()}{fmtSigned(delta)}{#if amp !== 0}<span class="amp-value"> ({fmtSigned(amp)})</span>{/if}{/snippet}</Num></td>
                   {#each ["equipment", "other"] as const as group (group)}
                     {@const effect = groupEffect(kind, group)}
                     <!-- 0 の区分も行から消さない。消えると次に見たとき同じ場所を探し直すことになる -->
-                    <td class="n" class:zero={effect === 0} use:bump={() => effect}>{effect === null ? "—" : fmtSigned(effect)}</td>
+                    <td class="n" class:zero={effect === 0}><Num motion={() => effect} value={effect === null ? "—" : fmtSigned(effect)} /></td>
                   {/each}
-                  <td class="n strong" use:bump={() => statAfter?.[kind] ?? null}>{fmtInt(statAfter[kind])}</td>
+                  <td class="n strong"><Num motion={() => statAfter?.[kind] ?? null} value={fmtInt(statAfter[kind])} /></td>
                 </tr>
               {/each}
             </tbody>
@@ -876,7 +877,8 @@
   .group-summary { min-height: 41px; padding: 6px 9px; display: flex; align-items: center; gap: 10px; }
   .group-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .group-summary small { color: var(--fg-muted); font-size: 9px; }
-  .group-count { margin-left: auto; min-width: 5ch; color: inherit; text-align: right; font-size: 9px; }
+  /* .group-count / .count-value は Num.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
+  .chip :global(.group-count) { margin-left: auto; min-width: 5ch; color: inherit; text-align: right; font-size: 9px; }
   .damage-switch { padding: 0 7px 7px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
   .damage-tab { min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset); }
   .guide-link { flex: none; padding: 2px 4px; color: var(--fg-muted); font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }
@@ -910,7 +912,7 @@
   .summary { background: var(--bg-raised); }
   /* ON 件数 = この画面の主役の数字(§08 数値の 3 段) */
   .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; font-size: var(--t-result); font-weight: 700; }
-  .count-value { min-width: 2ch; text-align: right; }
+  .count :global(.count-value) { min-width: 2ch; text-align: right; }
   .count small { margin-left: 6px; font-family: var(--font); font-size: 10px; font-weight: 500; }
 
   .summary-block { margin: 0 12px 8px; padding: 9px; }

@@ -44,7 +44,8 @@
   import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { bump, flash, swap } from "../../ui/motion.svelte";
+  import { flash, swap } from "../../ui/motion.svelte";
+  import Num from "../../ui/Num.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
@@ -985,21 +986,19 @@
                 {skillNames[heroSpot.skillId] ?? heroSpot.skillId}
                 <!-- 「この数字はクリ側か」の但し書きだけ小さく添える。バッジで主役の隣に置かない(ユーザー 2026-09-16) -->
                 {#if heroDamage}
-                  <span class="hero-goal-crit num dim" use:flash={() => heroDamage?.critRate === null ? "確定" : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}>
-                    {heroDamage.critRate === null ? "クリ確定扱い" : `クリ ${fmtNum(heroDamage.critRate, 1, "%")}`}
-                  </span>
+                  <Num class="hero-goal-crit dim" value={heroDamage?.critRate === null ? "確定" : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}
+                    >{#snippet children()}{heroDamage?.critRate === null ? "クリ確定扱い" : `クリ ${fmtNum(heroDamage?.critRate ?? 0, 1, "%")}`}{/snippet}</Num
+                  >
                 {/if}
               </span>
               <span class="meter hero-meter">
                 <span class="fill" style="width: {heroSpotPct}; background: {STATE[BADGE[heroSpotState].state].bar};"></span>
               </span>
               <span class="hero-spot-wrap">
-                <span class="num hero-spot" use:bump={() => heroSpot?.perHit ?? null} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)">
-                  {fmtInt(heroSpot.perHit)}
-                </span>
+                <Num class="hero-spot" motion={() => heroSpot?.perHit ?? null} value={fmtInt(heroSpot.perHit)} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)" />
                 <!-- 討伐時間が主役ではなく傍証。出せないときは 0 や「—」で埋めず、そのまま省く(§00 02) -->
                 {#if heroSpot.defeatSeconds !== null}
-                  <span class="num dim" use:bump={() => heroSpot?.defeatSeconds ?? null}> ・ 討伐 {fmtDuration(heroSpot.defeatSeconds)}</span>
+                  <Num class="dim" motion={() => heroSpot?.defeatSeconds ?? null} value={` ・ 討伐 ${fmtDuration(heroSpot.defeatSeconds)}`} />
                 {/if}
               </span>
               <!-- 到達の判定はバーの色と討伐時間で読める。バッジは重複なので置かない(ユーザー 2026-09-16)。
@@ -1040,9 +1039,9 @@
                        表記が動かず合計だけ伸びる候補があるので、片方だけだと「効いていない」と
                        読めてしまう(ユーザー判断 2026-09-01) -->
                   <span class="hero-advice-nums">
-                    <span class="num" use:bump={() => a.per_hit_primary} title="表記ダメージ(スキル分のみ)">{fmtInt(a.per_hit_primary)}</span>
-                    <span class="num advice-delta" use:bump={() => a.delta_pct} title="表記ダメージの伸び率">{deltaText(a.delta_pct)}</span>
-                    <span class="num advice-total dim" use:bump={() => a.delta_total_pct} title="実際に敵へ入る合計ダメージの伸び率(武器強化の追加固定・割合追加を含む)">合計 {deltaText(a.delta_total_pct)}</span>
+                    <Num motion={() => a.per_hit_primary} value={fmtInt(a.per_hit_primary)} title="表記ダメージ(スキル分のみ)" />
+                    <Num class="advice-delta" motion={() => a.delta_pct} value={deltaText(a.delta_pct)} title="表記ダメージの伸び率" />
+                    <Num class="advice-total dim" motion={() => a.delta_total_pct} value={`合計 ${deltaText(a.delta_total_pct)}`} title="実際に敵へ入る合計ダメージの伸び率(武器強化の追加固定・割合追加を含む)" />
                   </span>
                   {#if a.reaches}
                     <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
@@ -1071,7 +1070,7 @@
             />
             <span class="brief-copy">
               <span class="brief-title">
-                火力が <span class="num" use:bump={() => card.perHit}>{fmtInt(card.perHit)}</span> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
+                火力が <Num motion={() => card.perHit} value={fmtInt(card.perHit)} /> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
                 <span class="num" style="color: {card.perHit >= card.prevPerHit ? 'var(--good)' : 'var(--danger)'}">
                   {card.perHit >= card.prevPerHit ? "+" : ""}{fmtInt(card.perHit - card.prevPerHit)}
                 </span>
@@ -1108,7 +1107,9 @@
               {/if}
             </div>
             {#if sacredRelicSet && sacredRelicRemaining > 0}
-              <span class="today-tile-note num" use:flash={() => String(sacredRelicRemaining)}>残り {fmtInt(sacredRelicRemaining)}</span>
+              <Num class="today-tile-note" value={String(sacredRelicRemaining)}
+                >{#snippet children()}残り {fmtInt(sacredRelicRemaining)}{/snippet}</Num
+              >
             {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "cuffs"} onclick={() => toggleTile("cuffs")}>
@@ -1122,7 +1123,9 @@
               {/if}
             </div>
             {#if cuffsRemaining !== null && cuffsRemaining > 0}
-              <span class="today-tile-note num" use:flash={() => String(cuffsRemaining)}>この段階 残り {fmtInt(cuffsRemaining)}</span>
+              <Num class="today-tile-note" value={String(cuffsRemaining)}
+                >{#snippet children()}この段階 残り {fmtInt(cuffsRemaining)}{/snippet}</Num
+              >
             {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "enchant"} onclick={() => toggleTile("enchant")}>
@@ -1136,9 +1139,9 @@
               {/if}
             </div>
             {#if enchantSummary && enchantRemaining.remain > 0}
-              <span class="today-tile-note num" use:flash={() => String(enchantRemaining.remain)}>
-                {fmtInt(enchantRemaining.parts)}部位 残り {fmtInt(enchantRemaining.remain)}
-              </span>
+              <Num class="today-tile-note" value={String(enchantRemaining.remain)}
+                >{#snippet children()}{fmtInt(enchantRemaining.parts)}部位 残り {fmtInt(enchantRemaining.remain)}{/snippet}</Num
+              >
             {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "equipRelic"} onclick={() => toggleTile("equipRelic")}>
@@ -1152,9 +1155,9 @@
               {/if}
             </div>
             {#if relicEquippedSides.length > 0 && !relicEquippedSides.every((s) => s.info!.done)}
-              <span class="today-tile-note" use:flash={() => relicEquippedSides.map((s) => s.info!.text).join()}>
-                {relicEquippedSides.map((s) => `${s.side} ${s.info!.done ? "上限" : s.info!.text}`).join(" ・ ")}
-              </span>
+              <Num class="today-tile-note" value={relicEquippedSides.map((s) => s.info!.text).join()}
+                >{#snippet children()}{relicEquippedSides.map((s) => `${s.side} ${s.info!.done ? "上限" : s.info!.text}`).join(" ・ ")}{/snippet}</Num
+              >
             {/if}
           </button>
           <button
@@ -1173,7 +1176,9 @@
             </div>
             {#if sienaSummary && sienaSummary.max - sienaSummary.value > 0}
               {@const remain = sienaSummary.max - sienaSummary.value}
-              <span class="today-tile-note num" use:flash={() => String(remain)}>増幅 残り {fmtInt(remain)} 段</span>
+              <Num class="today-tile-note" value={String(remain)}
+                >{#snippet children()}増幅 残り {fmtInt(remain)} 段{/snippet}</Num
+              >
             {/if}
           </button>
         </div>
@@ -1291,7 +1296,7 @@
                           <div class="today-stepper">
                             <button type="button" class="dst" aria-label="レリック{r.side}を下げる" disabled={!rs.can_down} onclick={() => stepRelicLevel(r.slot, "down")}>−</button>
                             <span class="today-stepper-val">
-                              <span class="num" use:bump={() => rs!.level}>Lv{rs.level}</span>
+                              <Num motion={() => rs!.level} value={`Lv${rs.level}`} />
                               <span class="num dim">/ {rs.max_level}</span>
                             </span>
                             <button type="button" class="dst" aria-label="レリック{r.side}を上げる" disabled={!rs.can_up} onclick={() => stepRelicLevel(r.slot, "up")}>+</button>
@@ -1341,7 +1346,7 @@
         {#snippet summary()}
           <span class="area-name">どこまでいける?</span>
           <span class="fold-count">
-            クリア済み <span class="num" use:bump={() => clearedCount}>{fmtInt(clearedCount)}</span>
+            クリア済み <Num motion={() => clearedCount} value={fmtInt(clearedCount)} />
             <span class="dim">/ {fmtInt(totalCount)}</span>
           </span>
           {#if uncoveredCount > 0}
@@ -1416,7 +1421,7 @@
                           {:else}
                             <span class="name">{r.content.name}</span>
                           {/if}
-                          <span class="dmg num" use:bump={() => r.ev?.damage?.per_hit_primary ?? null} title="表記ダメージ(スキル分のみ)">{r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"}</span>
+                          <Num class="dmg" motion={() => r.ev?.damage?.per_hit_primary ?? null} value={r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"} title="表記ダメージ(スキル分のみ)" />
                           <span class="chev dim">›</span>
                         </div>
                         <div class="row-bar">
@@ -1519,7 +1524,8 @@
   /* スキル名は中身ぶんだけ(長い名前は 100px で省略)。ここを縮ませると
      アイコンだけが残って何のスキルか読めなくなる(§06 アイコン単独表示は禁止) */
   .hero-goal-skill { flex: none; max-width: 120px; display: flex; flex-direction: column; gap: 1px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hero-goal-crit { font-size: 8.5px; font-weight: 500; }
+  /* Num が描くので子コンポーネント要素として :global で包む(ADR-015 段階 4) */
+  .hero-goal-skill :global(.hero-goal-crit) { font-size: 8.5px; font-weight: 500; }
   /* 量バーは「目安に対してどれだけ出ているか」を一目で見る唯一の要素。行の幅が足りなくなったら
      先に縮むのは目標名・スキル名のほうで、バーは縮ませない(shrink 0 + 基準幅) */
   .hero-meter { flex: 1 0 96px; height: 12px; }
@@ -1527,7 +1533,7 @@
   .hero-spot-wrap { flex: none; min-width: 132px; text-align: right; white-space: nowrap; }
   /* 主役だが他の操作と同じ行に載る数字 → --t-result-inline(§08)。--t-result(44px)だと行が溢れて
      右端の「›」が押し出される(実機 2026-09-16、attention.js A4) */
-  .hero-spot { font-size: var(--t-result-inline); line-height: 1; font-weight: 700; color: var(--fg-head); text-shadow: 0 1px 0 #fff; }
+  .hero-spot-wrap :global(.hero-spot) { font-size: var(--t-result-inline); line-height: 1; font-weight: 700; color: var(--fg-head); text-shadow: 0 1px 0 #fff; }
 
   .hero-advice { display: flex; flex-direction: column; gap: 5px; border-top: 1px dashed var(--border-soft); padding-top: 9px; }
   .hero-advice-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
@@ -1543,10 +1549,10 @@
   }
   .hero-advice-label { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hero-advice-nums { flex-shrink: 0; white-space: nowrap; }
-  .hero-advice-nums .num { font-size: 12px; font-weight: 700; color: var(--sim-fg); }
+  .hero-advice-nums :global(.num) { font-size: 12px; font-weight: 700; color: var(--sim-fg); }
   /* 伸び率は本体の数値より小さく。合計側はさらに控えめに置く(主役は表記ダメージ) */
-  .hero-advice-nums .advice-delta, .hero-advice-nums .advice-total { font-size: 9px; margin-left: 5px; }
-  .hero-advice-nums .advice-total { color: var(--fg-dim); }
+  .hero-advice-nums :global(.advice-delta), .hero-advice-nums :global(.advice-total) { font-size: 9px; margin-left: 5px; }
+  .hero-advice-nums :global(.advice-total) { color: var(--fg-dim); }
   .hero-advice-row .chev { flex-shrink: 0; font-size: 9px; }
   .cost { flex-shrink: 0; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
 
@@ -1580,7 +1586,7 @@
   .today-tile-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .today-tile-name { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* まだ伸ばせる余地(§00 04: 数値が変われば use:flash で気づかせる) */
-  .today-tile-note { min-width: 0; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .today-tile :global(.today-tile-note) { min-width: 0; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .today-tile-head .chev { flex-shrink: 0; font-size: 9px; }
   /* シエナのオーラだけ展開ではなくキャラタブへ飛ぶ。外部遷移を示す ↗ を常設し、押す前に
      区別できるようにする(押した場所は動かない §00 に対する例外なので明示する) */
@@ -1658,7 +1664,7 @@
   }
   .row-main { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .row-main .name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row-main .dmg { flex-shrink: 0; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .row-main :global(.dmg) { flex-shrink: 0; font-size: 15px; font-weight: 700; white-space: nowrap; }
   .row-main .chev { flex-shrink: 0; font-size: 9px; }
 
   .row-bar { margin-top: 6px; display: flex; align-items: center; gap: 9px; }

@@ -20,9 +20,10 @@
   import { reportError } from "../../toast.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import { badgeStyle } from "../../ui/states";
-  import { bump, flash } from "../../ui/motion.svelte";
+  import { flash } from "../../ui/motion.svelte";
   import { latest } from "../../ui/latest.svelte";
   import Icon from "../../ui/Icon.svelte";
+  import Num from "../../ui/Num.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import { buffSetOptions as buildBuffSetOptions } from "../../buffs";
@@ -364,7 +365,7 @@
   {#if value === null}
     <span class="badge unknown">?</span>
   {:else}
-    <span class="num" class:sim-value={sim} use:bump={() => value}>{value}</span>
+    <Num motion={() => value} value={String(value)} tone={sim ? "sim" : null} />
   {/if}
 {/snippet}
 
@@ -429,9 +430,9 @@
             <!-- 必中か下限に張り付いていると全部積んでも命中率は動かない(§00 05) -->
             全部積んでも{rateWord}は動かない
           {:else}
-            全部やると <span class="num" use:bump={() => maxHitRateGain}>{rateWord} {formatHitRateGain(maxHitRateGain)}</span>
+            全部やると <Num motion={() => maxHitRateGain} value={`${rateWord} ${formatHitRateGain(maxHitRateGain)}`} />
           {/if}
-          ・ <span class="num" use:bump={() => point}>{point}</span> → <span class="num" use:bump={() => max}>{max}</span>
+          ・ <Num motion={() => point} value={String(point)} /> → <Num motion={() => max} value={String(max)} />
         </span>
       {/if}
     </div>
@@ -441,9 +442,9 @@
       {#if triedCount > 0 && beforePoint !== null && nowPoint !== null}
         <span class="try-status-on">
           試し <span class="num">{triedCount}</span>件を反映中 ・ {unit}
-          <span class="num sim-value" use:bump={() => beforePoint}>{beforePoint}</span>
+          <Num tone="sim" motion={() => beforePoint} value={String(beforePoint)} />
           <span class="try-arrow">→</span>
-          <span class="num sim-value" use:bump={() => nowPoint}>{nowPoint}</span>
+          <Num tone="sim" motion={() => nowPoint} value={String(nowPoint)} />
           <button type="button" class="try-clear" onclick={() => charId !== null && clearTries(charId, kind)}>
             全部外す
           </button>
@@ -463,7 +464,7 @@
           <div class="try-group-label" class:last-resort={lastResort}>
             <span>{growthGroupLabel(g.group, kind)}</span>
             <!-- 区分を全部打ったときの率への効き(Rust の再計算値)。+N は命中P、こちらは % -->
-            <span class="try-group-gain num" use:bump={() => g.hit_rate_gain}>{rateWord} {formatHitRateGain(g.hit_rate_gain)}</span>
+            <Num class="try-group-gain" motion={() => g.hit_rate_gain} value={`${rateWord} ${formatHitRateGain(g.hit_rate_gain)}`} />
           </div>
           <div class="try-chips">
             {#each g.rooms as room (actionKey(room.action))}
@@ -634,7 +635,7 @@
       </span>
       <span class="dir-right">
         {#if totalTried > 0}
-          <span class="try-badge" use:bump={() => totalTried}>試し {totalTried}件</span>
+          <Num class="try-badge" motion={() => totalTried} value={`試し ${totalTried}件`} />
         {/if}
         <!-- 数値 ⇄ 必中 は要素が入れ替わるので、入れ物のほうを「どちらの形か」で flash させる -->
         <span class="dir-value" use:flash={() => (result === null ? "none" : result.hit_rate.capped ? "capped" : "rate")}>
@@ -651,7 +652,7 @@
             {#if result.hit_rate.capped}
               <span class="rate-cap" style={badgeStyle(badge)}>必中</span>
             {:else}
-              <span class="rate-num num" use:bump={() => result?.hit_rate.value ?? null}>{result.hit_rate.value}</span>
+              <Num class="rate-num" motion={() => result?.hit_rate.value ?? null} value={String(result.hit_rate.value)} />
               <span class="rate-unit">%</span>
               {#if result.hit_rate.floored}
                 <!-- 下限に張り付いている値は、式を読まなくても分かるようバッジで言う -->
@@ -666,14 +667,15 @@
     {#if result}
       {@const boost = boostLabel(result.accuracy_boost)}
       <!-- 答えの一文(主役の率の次に読む)。余裕 / 不足は domain の値 -->
+      <!-- 答えは数ではなく文。数値書体にすると読みにくいので <Num> に入れず、文の入れ替えとして光らせる -->
       <div class="dir-answer" use:flash={() => answerText(result.hit_rate)}>{answerText(result.hit_rate)}</div>
       <div class="dir-why dim">
-        命中P <span class="num" use:bump={() => result?.accuracy_point ?? null}>{result.accuracy_point}</span>
+        命中P <Num motion={() => result?.accuracy_point ?? null} value={String(result.accuracy_point)} />
         <span class="op">−</span>
-        相手の回避P <span class="num" use:bump={() => result?.evasion_point ?? null}>{result.evasion_point}</span>
+        相手の回避P <Num motion={() => result?.evasion_point ?? null} value={String(result.evasion_point)} />
         <span class="op">=</span>
-        <span class="num" use:bump={() => result?.hit_rate.raw ?? null}>{result.hit_rate.raw}</span>
-        ・ 下限 <span class="num" use:bump={() => result?.hit_rate.min ?? null}>{result.hit_rate.min}</span>
+        <Num motion={() => result?.hit_rate.raw ?? null} value={String(result.hit_rate.raw)} />
+        ・ 下限 <Num motion={() => result?.hit_rate.min ?? null} value={String(result.hit_rate.min)} />
         ・ 上限 <span class="num">{result.hit_rate.max}</span>
         {#if boost}・ {boost}{/if}
       </div>
@@ -729,7 +731,8 @@
   .dir-particle { flex-shrink: 0; font-size: 11px; font-weight: 500; color: var(--fg-sub); margin: 0 1px; }
   .dir-right { flex: none; display: flex; align-items: center; gap: 8px; }
 
-  .try-badge {
+  /* Num が描くので、Svelte のスコープ付き CSS が届かない子コンポーネント要素として :global で包む */
+  .dir-right :global(.try-badge) {
     flex-shrink: 0; padding: 2px 9px; border-radius: var(--r-pill);
     font-size: 9.5px; font-weight: 700; white-space: nowrap;
     background: var(--state-temp-bg); border: 1px solid var(--sim); color: var(--sim-fg);
@@ -740,7 +743,8 @@
   /* 列の主役。1 列に 1 つ(44px の主役は画面に 1 つだけの規格なので、2 列の主役は 1 段落とす) */
   /* 主役だが頭の行(キャラ選択と同じ行)に載る数字 → --t-result-inline(§08)。
      --t-result(44px)だと左右の列で頭の高さが揃わない(実機 2026-09-16) */
-  .rate-num { font-size: var(--t-result-inline); font-weight: var(--w-strong); color: var(--fg-head); line-height: 1; }
+  /* Num が描く分(655行)は子コンポーネント要素なので :global で包む。プレーンな span(645/649行)はそのまま届く */
+  .rate-num, .dir-value :global(.rate-num) { font-size: var(--t-result-inline); font-weight: var(--w-strong); color: var(--fg-head); line-height: 1; }
   .rate-unit { font-size: 12px; font-weight: 700; color: var(--fg-sub); }
   .rate-cap { font-size: 13px; font-weight: 800; border-radius: var(--r-pill); padding: 5px 12px; border: 1px solid; }
   .rate-floor { font-size: 9.5px; font-weight: 800; border-radius: var(--r-pill); padding: 2px 7px; border: 1px solid; margin-left: 4px; }
@@ -818,7 +822,7 @@
     display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
     padding: 6px 1px 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-muted);
   }
-  .try-group-gain { letter-spacing: 0; font-weight: 800; }
+  .try-group-label :global(.try-group-gain) { letter-spacing: 0; font-weight: 800; }
   /* 何を積んでも率が動かないとき。手は薄く(押せる)、反映中の手だけ元の濃さ */
   .try-list.stuck .try-chips :global(.togrow:not(.on)) { opacity: 0.55; }
   /* 最終手段(エンチャント)は末尾に薄く。並びは Rust が決めているので、

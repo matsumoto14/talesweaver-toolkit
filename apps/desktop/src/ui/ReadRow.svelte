@@ -1,16 +1,15 @@
 <script lang="ts">
   // 読み取り面の「ラベル + 値」1 行(design-system §08 ReadRow)。インセット面(.readrows.inset)に
-  // 並べて使う。値は右端の固定幅 + 数値書体で、桁が増えても隣が動かない(§09 規則 4)。
-  // 未収録(value = null)は badge.unknown の「?」で、0 や空白にしない(§00)。
-  // 値が変わったら跳ねる(§10 型 1): 数値なら `motion` の数で bump、文字なら値そのもので flash。
+  // 並べて使う。**行の形(ラベル・値の位置・固定幅)だけを持ち、値そのものは `ui/Num.svelte` に任せる** —
+  // 跳ね・光り・差分枠・未収録の「?」を 2 か所に持たないため(ADR-015 段階 4)。
   import type { Snippet } from "svelte";
-  import { bump, delta as deltaAction, flash } from "./motion.svelte";
+  import Num from "./Num.svelte";
 
   interface Props {
     label: string;
     /** 書式済みの値。null = 未収録 */
     value?: string | null;
-    /** 値の元になる数。渡すと変化時に跳ねる(use:bump)。省略時は文字の変化で flash */
+    /** 値の元になる数。渡すと変化時に跳ねる。省略時は文字の変化で光る */
     motion?: () => number | null;
     /** 値の右に増減(↑12)を出す。unit は差分の単位 */
     delta?: { unit?: string; digits?: number } | null;
@@ -31,14 +30,9 @@
   {#if sub}<span class="sub num dim">{@render sub()}</span>{/if}
   {#if children}
     <span class="slot">{@render children()}</span>
-  {:else if value === null}
-    <span class="v"><span class="badge unknown">?</span></span>
-  {:else if motion}
-    <span class="v num" class:up={tone === "up"} class:down={tone === "down"} class:sim-value={tone === "sim"} use:bump={motion}>{value}</span>
   {:else}
-    <span class="v num" class:up={tone === "up"} class:down={tone === "down"} class:sim-value={tone === "sim"} use:flash={() => value}>{value}</span>
+    <Num {value} {motion} {delta} {tone} class="v" />
   {/if}
-  {#if delta && motion}<span use:deltaAction={{ get: motion, unit: delta.unit, digits: delta.digits }}></span>{/if}
   {#if note}<span class="n dim">{@render note()}</span>{/if}
 </div>
 
@@ -46,11 +40,11 @@
   .readrow { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; min-width: 0; }
   .k { flex: none; min-width: 64px; font-size: var(--t-label); font-weight: 700; color: var(--fg-muted); white-space: nowrap; }
   .sub { flex: none; margin-left: auto; font-size: 8.5px; white-space: nowrap; }
-  .sub + .v, .sub + .slot { margin-left: 0; }
-  .v { flex: none; margin-left: auto; min-width: 64px; text-align: right; font-size: var(--t-body); font-weight: 700; color: var(--fg); white-space: nowrap; }
-  .v.up { color: var(--good); }
-  .v.down { color: var(--danger); }
-  .v.sim-value { color: var(--sim-fg); }
+  .sub + .slot { margin-left: 0; }
+  /* 値は Num.svelte が描くので、行の側は `:global` で位置と幅だけを当てる
+     (Svelte のスコープ付き CSS は子コンポーネントの中の要素に届かない) */
+  .readrow :global(.v) { flex: none; margin-left: auto; min-width: 64px; text-align: right; font-size: var(--t-body); font-weight: 700; color: var(--fg); white-space: nowrap; }
+  .sub + :global(.v) { margin-left: 0; }
   .slot { margin-left: auto; min-width: 0; display: flex; justify-content: flex-end; }
   /* 注記は値の右に続く。値の固定幅は保ったまま、残りの幅を注記が使う */
   .n { flex: 1 1 40%; min-width: 0; font-size: 9px; line-height: 1.5; }

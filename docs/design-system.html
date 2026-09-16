@@ -2108,6 +2108,18 @@ td code { background: var(--card-soft2); }
         </div>
         <p class="cap">主役の数字はページごとに寸法を持たない。ただし<b>他の操作と同じ行に載る主役</b>(ホーム「次の目標」・対人の命中率)は 44px だと行が壊れるので <code>--t-result-inline</code>(27px)を使う(実機で判断 2026-09-16)。主役の隣にバッジを並べない(クリ率は但し書き、到達はバーの色で言う)。桁区切り・小数桁・符号・単位は <code>format.ts</code>(fmtInt / fmtNum / fmtPct / fmtSigned / fmtSignedPct / fmtRate)だけが決め、画面側で <code>toLocaleString</code> / <code>toFixed</code> を呼ばない(機械監査 R11)。</p>
 
+        <div class="sec">値は <code>&lt;Num&gt;</code> 1 つ<span class="r">書体も動きも選ばせない</span></div>
+        <p><strong>画面に値を出すときは <code>ui/Num.svelte</code> を使う(180 箇所)。</strong>
+          数値書体 + <code>tabular-nums</code>(<code>.num</code>)・未収録の破線 <code>?</code>・値が変わったときの跳ね・
+          いくつ変わったかの差分枠は、全部この部品の中にある。呼ぶ側が渡すのは
+          <code>value</code>(書式済みの文字列。<code>null</code> = 未収録)と、
+          <code>motion</code>(値の元になる数)だけ。</p>
+        <p class="cap"><b>「跳ねさせるか」「跳ねか要約か差分か」は選ばない。</b><code>motion</code> に数が渡っていれば
+          増減が言えるので跳ね(<code>use:bump</code>)、渡せない値なら書式済みの文字が変わったときに光る(<code>use:flash</code>)——
+          選択肢ではなく、数があるかどうかで決まる。読み取り行の <code>&lt;ReadRow&gt;</code> もこの部品の上に載っていて、
+          値の作法を 2 か所に持たない。<b><code>&lt;Num&gt;</code> に入れるのは数字を含む値だけ</b> —
+          文(「余裕があります」)・名前(装備名)は数値書体にすると読みにくいので入れない。</p>
+
         <div class="sec">ReadRow<span class="r">読み取り面は インセット + ラベル + 右端固定幅の値</span></div>
         <div class="spec" style="align-items:flex-start">
           <div class="readrows" style="min-width:220px">
@@ -2383,14 +2395,18 @@ td code { background: var(--card-soft2); }
           これから変わる値があることだけを伝える印)。</p>
 
         <div class="sec">動きの部品<span class="r">クラスを手で当てない</span></div>
-        <p><strong>動きは <code>ui/motion.svelte.ts</code> の部品を通す。画面側がクラスを手で当てない。</strong>
+        <p><strong>動きは <code>ui/</code> の部品を通す。画面側がクラスを手で当てない。</strong>
           書き手が毎回「部品を使うか、CSS クラスを直接付け外すか」を選べる状態だと、時間が二重に持たれてずれる
           (<code>Workspace</code> の一時マークが 400ms、動き自体は 260ms だった実例が部品化のきっかけ)。</p>
+        <p><strong>値が変わったときの動きは、画面側では選べない。</strong><code>&lt;Num&gt;</code> と
+          <code>&lt;Disclosure&gt;</code> が中で <code>use:bump</code> / <code>use:delta</code> /
+          <code>use:flash</code> を呼ぶので、画面側が「跳ねさせるか」「跳ねか要約か差分か」を決める場面は無い。
+          下の action を画面側から直接呼ぶのは、値ではなく<b>面・行・文</b>が変わったことを見せるときだけ。</p>
         <div class="changes">
-          <div class="change"><span class="w">use:bump</span><span class="how">数値が変わった(型 1)。増減の色を <code>--dur-bump</code> だけ乗せて戻す</span><span class="spec-n">値ではなく getter を渡す</span></div>
-          <div class="change"><span class="w">use:delta</span><span class="how">いくつ変わった(型 1b)。差分専用の空 span に付け、次に変わるまで消さない</span><span class="spec-n">{ get, unit?, digits? }</span></div>
+          <div class="change"><span class="w">&lt;Num&gt;</span><span class="how">値を出した(型 1・1b・5)。action ではなく<b>部品</b> — 数値書体・未収録の <code>?</code>・跳ね・差分枠が中に入っている(180 箇所)</span><span class="spec-n">ui/Num.svelte。<code>value</code> と <code>motion</code> を渡すだけ</span></div>
+          <div class="change"><span class="w">use:bump<br>use:delta</span><span class="how">数値が変わった / いくつ変わった(型 1・1b)。<b><code>&lt;Num&gt;</code> の中身</b>で、画面側からは呼ばない</span><span class="spec-n">値ではなく getter を渡す</span></div>
           <div class="change"><span class="w">use:swap</span><span class="how">面が入れ替わった(型 3b)。入ってくる面だけ動かす</span><span class="spec-n">文字列の getter</span></div>
-          <div class="change"><span class="w">use:pulse<br>use:flash</span><span class="how">状態が変わった(型 5)。<code>pulse</code> は値そのものを持たない印(★ の切替など)、<code>flash</code> は文字列の要約が変わったとき</span><span class="spec-n">どちらも null は「いまはこの要素の番ではない」として無視</span></div>
+          <div class="change"><span class="w">use:pulse<br>use:flash</span><span class="how">状態が変わった(型 5)。<code>pulse</code> は値そのものを持たない印(★ の切替など)、<code>flash</code> は文字列の要約が変わったとき。<b>値に使うのは <code>&lt;Num&gt;</code> の中だけ</b>で、画面側から呼ぶのは面・行・文が変わったとき(21 箇所)</span><span class="spec-n">どちらも null は「いまはこの要素の番ではない」として無視</span></div>
           <div class="change"><span class="w">&lt;Disclosure&gt;</span><span class="how">開いた / 閉じた(型 6)。action ではなく<b>部品</b> — トリガも面もキャレットも中に入っている(36 箇所)</span><span class="spec-n">ui/Disclosure.svelte。動きは app.css の details::details-content</span></div>
           <div class="change"><span class="w">reveal()</span><span class="how">画面内に入れる(型番号なし)。<code>scrollIntoView</code> の <code>behavior</code> をここで決める</span><span class="spec-n">action ではなく関数。呼び出し側が 1 回だけ呼ぶ</span></div>
         </div>

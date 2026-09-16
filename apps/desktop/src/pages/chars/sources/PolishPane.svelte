@@ -15,7 +15,7 @@
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, PRIMARY_EQUIPMENT_STATS,
   } from "../../../labels";
   import Disclosure from "../../../ui/Disclosure.svelte";
-  import { flash } from "../../../ui/motion.svelte";
+  import Num from "../../../ui/Num.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
 
@@ -121,7 +121,7 @@
 
 <div class="result-value num">
   <span class="dim tiny">研磨 効いている量(基本能力値へ合流)</span>
-  <span class="strong" use:flash={() => totalsLabel}>{totalsLabel}</span>
+  <Num class="strong" value={totalsLabel} />
   {#if preview !== null}
     <p class="hint dim">
       {#if polishActive}
@@ -156,9 +156,7 @@
       <button type="button" class="part-row" class:on={openSlot === slot} onclick={() => openPartRow(slot)}>
         <span class="part-main">
           <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
-          <span class="part-item" class:dim={summary === "未使用" || summary === "装備なし"} use:flash={() => summary}>
-            {summary}
-          </span>
+          <Num class={"part-item " + (summary === "未使用" || summary === "装備なし" ? "dim" : "")} value={summary} />
         </span>
         <span class="chev dim">›</span>
       </button>

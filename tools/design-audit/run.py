@@ -58,7 +58,6 @@ RULES = {
     "R12": ("ui/ の外に生の input / select / textarea", "§07"),
     "R13": ("fmtSigned / fmtPct を通らない符号付き・% の数値", "§08"),
     "R14": ("ページ側で面・未収録・主役数字を独自に作る", "§01 / §05 / §08"),
-    "R16": ("動きのクラスを JS で手で付け外し", "§10"),
     "R18": ("<details> が開閉するのに動きが無い", "§00 / §10"),
     "R19": ("scrollIntoView の behavior: \"smooth\" を直書き", "§10"),
 }
@@ -93,64 +92,6 @@ DASHED_BORDER = re.compile(r"(?:^|[;\s])border(?:-style)?\s*:\s*[^;{}]*\bdashed\
 MAX_BODY_FONT_PX = 18
 
 MOTION_TS = SRC / "ui" / "motion.svelte.ts"
-
-# R16: 段階 1 で見つかった不具合の実体(旧 Workspace.svelte)は
-#   let movedId = $state<string | null>(null);
-#   movedTimer = setTimeout(() => (movedId = null), DUR.badge);   ← タイマーで消す
-#   class:badge-in={movedId === s.id}                             ← 動きのクラスを駆動
-# 「同じ変数が動きのクラスを駆動しながらタイマーで消されている」= 時間を二重に持っていた。
-#
-# 禁止パターンを並べる形は試したが、必ず兄弟の形ですり抜けた(三項 `class={cond ? "…" : …}`、
-# `$derived` で一段挟んだ変数、名前付きコールバックを切り出した setTimeout、classList の
-# 引数をリテラルから条件式にずらす、のすべてで実際にすり抜けを確認)。文字列一致では
-# 「時間を二重に持っていない」ことを証明できないので、R16 は禁止ではなく許可を 1 つに決める:
-#
-#   画面側のコード(ui/motion.svelte.ts 以外)が動きのクラス名を書いてよいのは、
-#   素の静的な `class="… swap-in …"` 属性の中だけ。それ以外(class:束縛・class={式}・
-#   classList・変数経由 等、経由の形は問わない)に動きのクラス名が現れたら候補に出す。
-#
-# `apps/desktop/src/pages/chars/sources/EquipmentPane.svelte:632` の
-# `class:swap-in={fresh}` は既知の 1 件として残す。`fresh` は呼び出し側でリテラル固定
-# (1052 行 false / 1060 行 true)なので実際には無害だが、この規則は静的にしか見ないので
-# 危険な形と区別できない——本ツールは冒頭の docstring どおり「候補を出すだけで判定はしない」。
-# ここを静的な形に書き換えて候補を消すのは、規則のためにコードの形を変える先例になるので
-# しない。R16 が 2 件以上になったら、誰かが新しい動的な形を書いたということ。
-#
-# コメント(HTML の <!-- --> ・JS/CSS の /* */ と //)と <style> ブロックの中は、要素の
-# class を実際には駆動しない(コメントの説明文・CSS セレクタ・keyframes 名としての言及)ので
-# スキャン対象から外す。マスクは改行だけ残して空白に置き換えるので、これで得た行番号は
-# 元のファイルの行番号と一致する。
-#
-# 文字列リテラルの中の `/*` `//` をコメント開始と誤認しない: `import.meta.glob("*/*.png")`
-# (apps/desktop/src/ui/Icon.svelte)の `"*/*.png"` の中の `/*` を開始と見なすと、非貪欲
-# マッチが次に現れる本物の `*/`(JSDoc の終端)まで実行文ごとマスクしてしまい、その区間に
-# 動きのクラス名が入っても静かに検出漏れになる。そこで `/*` `//` の直前が行頭・空白・
-# `; { } ( ,` のときだけコメント開始と見なす(`"*/*.png"` の `/*` は直前が `*` なので除外)。
-#
-# この規則が拾えないもの:
-#   - コメント・<style> の外側で、動きのクラス名を文字列連結やテンプレートリテラルの
-#     部分文字列として組み立てて何かに埋め込むような、きわめて遠回りな書き方
-#   - コメント開始の直前判定に無い文字(`>` など)の直後に書かれたコメント
-MOTION_TOGGLE_CLASSES = ("badge-in", "open-in", "swap-in", "pane-in", "pop-in", "delta-in", "bump-up", "bump-down")
-MOTION_CLASS_NAME = re.compile(r"\b(?:" + "|".join(MOTION_TOGGLE_CLASSES) + r")\b")
-# 素の静的な class="..." / class='...' 属性の値だけを許可領域として拾う。
-# `class:foo=`(コロン)や `class={...}`(波括弧)はこの正規表現に一致しないので許可されない。
-# 許可するのは式(`{...}`)を一切含まない値だけ——`class="row {fresh ? 'swap-in' : ''}"` の
-# ようにクォートの中にマスタッシュ式を書く形は、三項回避がクォートの中に移っただけなので
-# 許可しない(呼び出し側で "{" の有無を見て弾く)。
-STATIC_CLASS_ATTR = re.compile(r"(?<![\w:-])class\s*=\s*(?:\"([^\"]*)\"|'([^']*)')")
-# STYLE_BLOCK は下(ソースの切り出し)で定義しているものを使う — 同じ名前で 2 回定義すると
-# 後勝ちになり、上を直しても効かない(実際に 2 つあった)
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-_COMMENT_START = r"(?:(?<=[\s;{}(,])|^)"
-BLOCK_COMMENT = re.compile(_COMMENT_START + r"/\*.*?\*/", re.DOTALL | re.MULTILINE)
-LINE_COMMENT = re.compile(_COMMENT_START + r"//[^\n]*", re.MULTILINE)
-
-
-def _mask(text: str, pattern: re.Pattern) -> str:
-    """pattern に一致した範囲を、改行だけ残して空白に置き換える(行番号を保つ)。"""
-    return pattern.sub(lambda m: "".join(c if c == "\n" else " " for c in m.group(0)), text)
-
 
 # R18: ネイティブ <details> は既定で瞬時に開閉する(§00 04 / §10 型 6)。段階 2.5 で最初に
 # 試した .details-anim(grid-template-rows: 0fr⇄1fr で本文を包む)は実機で動かなかった —
@@ -514,41 +455,6 @@ def check_duration(chunk: Chunk, out: list[Finding]) -> None:
 
 
 
-def check_manual_motion_class(path: Path, text: str, out: list[Finding]) -> None:
-    """R16。許可を 1 つに決めるホワイトリスト方式(MOTION_TOGGLE_CLASSES 手前のコメント参照)。
-    動きのクラス名の出現位置が、素の静的な class="..." / class='...' 属性の値の中に
-    収まっていなければ候補に出す。コメント・<style> ブロックはあらかじめマスクして
-    スキャン対象から外す(要素の class を実際には駆動しないため)。
-
-    ui/motion.svelte.ts 自身はこのクラスの実装なので対象外。
-    """
-    if path.suffix not in (".svelte", ".ts") or path == MOTION_TS:
-        return
-
-    scan = text
-    if path.suffix == ".svelte":
-        scan = _mask(scan, STYLE_BLOCK)
-    scan = _mask(scan, HTML_COMMENT)
-    scan = _mask(scan, BLOCK_COMMENT)
-    scan = _mask(scan, LINE_COMMENT)
-
-    allowed_spans: list[tuple[int, int]] = []
-    for m in STATIC_CLASS_ATTR.finditer(scan):
-        group = 1 if m.group(1) is not None else 2
-        value = m.group(group)
-        if "{" in value:
-            continue  # マスタッシュ式を含む -> 動的なので許可しない
-        allowed_spans.append((m.start(group), m.end(group)))
-
-    for m in MOTION_CLASS_NAME.finditer(scan):
-        if any(start <= m.start() < end for start, end in allowed_spans):
-            continue
-        line_no = 1 + scan.count("\n", 0, m.start())
-        out.append(Finding("R16", path, line_no, m.group(0),
-                           "ui/motion.svelte.ts の action(bump / flash / swap / pulse / delta)に寄せる"))
-
-
-
 def check_smooth_scroll(path: Path, text: str, out: list[Finding]) -> None:
     """R19。scrollIntoView の behavior: "smooth" を直書きしている箇所。
 
@@ -618,7 +524,6 @@ def collect() -> list[Finding]:
         check_raw_format(path, text, out)
         check_raw_inputs(path, text, out)
         check_raw_sign(path, text, out)
-        check_manual_motion_class(path, text, out)
         check_smooth_scroll(path, text, out)
         for chunk in css_chunks(path, text):
             check_page_surfaces(chunk, out)

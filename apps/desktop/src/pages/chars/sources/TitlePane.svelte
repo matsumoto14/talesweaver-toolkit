@@ -7,6 +7,7 @@
   import { app } from "../../../state.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import { flash } from "../../../ui/motion.svelte";
+  import Num from "../../../ui/Num.svelte";
   import TextField from "../../../ui/TextField.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
 
@@ -226,11 +227,11 @@
   {#if mainSkill}
     <!-- 絞り込みで件数が減ったことを数字で見せる(§00 05 考えさせない) -->
     <div class="title-filter">
-      <span class="dim num" use:flash={() => String(filterActive)}>
-        {filterActive
+      <Num class="dim" value={String(filterActive)}
+        >{#snippet children()}{filterActive
           ? `${mainSkill.name}向けに ${filteredCommonTitles.length} / ${commonTitles.length} 件`
-          : `すべて表示中(${commonTitles.length} 件)`}
-      </span>
+          : `すべて表示中(${commonTitles.length} 件)`}{/snippet}</Num
+      >
       <button type="button" class="chip quiet" class:on={showAllTitles} onclick={() => (showAllTitles = !showAllTitles)}>
         {showAllTitles ? "絞り込みに戻す" : "すべて表示"}
       </button>

@@ -3,7 +3,7 @@
   import { fmtRate, fmtSigned, fmtSignedPct } from "../../../format";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
-  import { bump } from "../../../ui/motion.svelte";
+  import Num from "../../../ui/Num.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
 
   interface Props {
@@ -84,7 +84,7 @@
           stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
-        <span class="v num" use:bump={() => row.motion() ?? null}>{row.value()}</span>
+        <Num class="v" motion={() => row.motion() ?? null} value={row.value()} />
       </div>
     {/each}
   </div>
@@ -107,7 +107,7 @@
           stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
-        <span class="v num" use:bump={() => row.motion() ?? null}>{row.value()}</span>
+        <Num class="v" motion={() => row.motion() ?? null} value={row.value()} />
       </div>
     {/each}
   </div>
@@ -130,7 +130,7 @@
           stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
-        <span class="v num" use:bump={() => row.motion() ?? null}>{row.value()}</span>
+        <Num class="v" motion={() => row.motion() ?? null} value={row.value()} />
       </div>
     {/each}
   </div>
@@ -142,5 +142,5 @@
 <style>
   .soul-note { margin-top: 0; }
   .stat-row .k { min-width: 76px; }
-  .stat-row .v { min-width: 62px; }
+  .stat-row :global(.v) { min-width: 62px; }
 </style>
