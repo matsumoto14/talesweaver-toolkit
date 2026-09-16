@@ -17,7 +17,7 @@
   import { reportError } from "../../../toast.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
-  import { bump, DUR, flash } from "../../../ui/motion.svelte";
+  import { bump, flash, pulse } from "../../../ui/motion.svelte";
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import StepSelect from "../../../ui/StepSelect.svelte";
@@ -41,15 +41,11 @@
   /** キャラは登録時に決めるもの。ふだんは畳んでおく */
   let charPickOpen = $state(false);
   let iconSaving = $state(false);
-  let iconChanged = $state(false);
-  let iconChangedTimer: ReturnType<typeof setTimeout> | undefined;
+  /** アイコンが変わったことを弾ませて見せるための印。値は見ず参照の不一致だけ使うので、
+   *  変更のたびに新しいオブジェクトを積む(`use:pulse` 参照) */
+  let iconChangeMark = $state<object | null>(null);
   function markIconChanged() {
-    clearTimeout(iconChangedTimer);
-    iconChanged = false;
-    requestAnimationFrame(() => {
-      iconChanged = true;
-      iconChangedTimer = setTimeout(() => (iconChanged = false), DUR.badge);
-    });
+    iconChangeMark = {};
   }
   async function chooseIcon(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -208,7 +204,7 @@
     <div class="wide">
       <span class="label">キャラ</span>
       <div class="char-now">
-        <span class="current-icon" class:icon-changed={iconChanged}>
+        <span class="current-icon" use:pulse={() => iconChangeMark}>
           <Icon kind="character" id={draft.gameCharacterId} size={40} label={gameCharacterName} source={app.characterIcons[characterId] ?? null} />
         </span>
         <span class="char-name">{gameCharacterName}</span>
@@ -357,14 +353,12 @@
      clip-path で視覚的にだけ隠す(クリックはラベルのテキスト側が受ける想定なので
      pointer-events は無効のまま) */
   .icon-pick input { position: absolute; inset: 0; clip-path: inset(100%); pointer-events: none; }
+  /* アイコン変更は §10 型 5「状態が変わった」そのものなので、独自の keyframes は持たず
+     app.css 共通の .badge-in(弾む)に乗る。動きを消す設定のときだけ、弾みの代わりに
+     枠線で「変わった」を残す(色・弾みが両方消えると何も伝わらなくなる) */
   .current-icon { display: inline-flex; border-radius: var(--r-window); }
-  .current-icon.icon-changed { animation: icon-change var(--dur-badge) var(--ease-spring); }
-  @keyframes icon-change {
-    0% { transform: scale(.9); box-shadow: 0 0 0 3px rgba(66, 109, 214, .24); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(66, 109, 214, 0); }
-  }
   @media (prefers-reduced-motion: reduce) {
-    .current-icon.icon-changed { animation: none; outline: 2px solid var(--accent); outline-offset: 2px; }
+    .current-icon.badge-in { outline: 2px solid var(--accent); outline-offset: 2px; }
   }
 </style>
 <div class="card">

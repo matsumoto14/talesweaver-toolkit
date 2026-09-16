@@ -59,6 +59,7 @@ RULES = {
     "R13": ("fmtSigned / fmtPct を通らない符号付き・% の数値", "§08"),
     "R14": ("ページ側で面・未収録・主役数字を独自に作る", "§01 / §05 / §08"),
     "R15": ("--dur-* / DUR を通らない生の時間", "§10"),
+    "R16": ("動きのクラスを JS で手で付け外し", "§10"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
@@ -100,6 +101,15 @@ TIMED_DECL = re.compile(r"\b(transition|animation)(?:-duration)?\s*:\s*([^;{}\n]
 ZERO_TIME = {"0", "0s", "0ms", "0.01ms"}  # 0.01ms は reduced-motion の打ち消し
 # Svelte の transition / animate に渡す時間。DUR.* を通らない数値リテラルが違反
 JS_DURATION = re.compile(r"duration:\s*(\d+)")
+
+# R16: 「一時的にクラスを付けて、少ししたら外す」は ui/motion.svelte.ts の action
+# (bump / flash / swap / pulse / delta)がやること。画面側で毎回手で書くと、時間が
+# --dur-* / DUR と二重に持たれてずれる(Workspace が 400ms・アニメーションは 260ms
+# だった実例が動きの部品化のきっかけ)。app.css の動きのクラスが classList.add / remove /
+# class: / setTimeout と同じ行に出てきたら、手書きの疑いが強いので候補に出す
+MOTION_TOGGLE_CLASSES = ("badge-in", "open-in", "swap-in", "pane-in", "pop-in", "delta-in", "bump-up", "bump-down")
+MOTION_CLASS_NAME = re.compile(r"\b(?:" + "|".join(MOTION_TOGGLE_CLASSES) + r")\b")
+JS_CLASS_TOGGLE = re.compile(r"classList\.(?:add|remove)\(|class:[\w-]+|setTimeout\(")
 
 # R9 の対象。押す・打ち込む部品だけを見る(地や区切りまで見ると候補が溢れる)
 CONTROL_SEL = re.compile(r"(?:^|[\s,>])(?:input|button|select|textarea)\b|\.(?:btn|chip|tab|field|check|toggle|max-btn|num-field|pill|badge)(?![\w-])")
@@ -446,6 +456,22 @@ def check_duration_js(path: Path, text: str, out: list[Finding]) -> None:
                            "ui/motion.svelte.ts の DUR.* から取る"))
 
 
+def check_manual_motion_class(path: Path, text: str, out: list[Finding]) -> None:
+    """R16。動きのクラスの付け外しを画面側が手で書いている疑いのある行。
+
+    ui/motion.svelte.ts 自身はこのクラスの実装なので対象外。co-occurrence だけを見る
+    素朴な検出なので、同じ行にクラス名と操作(classList.add/remove・class:・setTimeout)
+    が両方出ているかだけを見て、意味までは判定しない。
+    """
+    if path.suffix not in (".svelte", ".ts") or path == MOTION_TS:
+        return
+    for i, line in enumerate(text.split("\n"), 1):
+        m = MOTION_CLASS_NAME.search(line)
+        if m and JS_CLASS_TOGGLE.search(line):
+            out.append(Finding("R16", path, i, m.group(0),
+                               "ui/motion.svelte.ts の action(bump / flash / swap / pulse / delta)に寄せる"))
+
+
 def check_duration_scale(out: list[Finding]) -> None:
     """R15(段そのもの)。app.css の --dur-* と motion.svelte.ts の DUR が食い違っていないか。"""
     css: dict[str, int] = {}
@@ -496,6 +522,7 @@ def collect() -> list[Finding]:
         check_raw_inputs(path, text, out)
         check_raw_sign(path, text, out)
         check_duration_js(path, text, out)
+        check_manual_motion_class(path, text, out)
         for chunk in css_chunks(path, text):
             check_page_surfaces(chunk, out)
             check_radius(chunk, out)

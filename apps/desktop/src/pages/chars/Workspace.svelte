@@ -50,7 +50,7 @@
   import Picker from "../../ui/Picker.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
-  import { bump, DUR, flash, motionDuration } from "../../ui/motion.svelte";
+  import { bump, DUR, flash, motionDuration, pulse } from "../../ui/motion.svelte";
   // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
   import "./sources/pane-shared.css";
   import {
@@ -633,27 +633,21 @@
    * 群をまたぐと別の `{#each}` になるので繋がらない。着地を弾ませて、
    * どれが動いたのかを目で追えるようにする(§10 型 5「状態が変わった」)。
    */
-  let movedId = $state<string | null>(null);
-  let movedTimer: ReturnType<typeof setTimeout> | undefined;
+  /** 動いた行と、その行だけに `use:pulse` を発火させるための印。値そのものは見ず
+   *  参照の不一致だけで「新しく動いた」を判定するので、同じ id が続けて動いても
+   *  (★ を連打するなど)毎回新しいオブジェクトを積んで弾ませ直す */
+  let movedMark = $state<{ id: string } | null>(null);
 
   /** 着地を弾ませるだけ。画面は動かさない */
   function mark(id: string) {
-    clearTimeout(movedTimer);
-    movedId = null;
-    requestAnimationFrame(() => {
-      movedId = id;
-      movedTimer = setTimeout(() => (movedId = null), DUR.badge);
-    });
+    movedMark = { id };
   }
   /** 行を追いかける。自分で起こした移動(ドラッグ・未設定ジャンプ)だけで使う(§09 規則 5) */
   function follow(id: string) {
-    clearTimeout(movedTimer);
-    movedId = null;
     requestAnimationFrame(() => {
       document.querySelector(`[data-source-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
-      movedId = id;
-      movedTimer = setTimeout(() => (movedId = null), DUR.badge);
     });
+    movedMark = { id };
   }
 
   // --- ドラッグで並べ替え ---------------------------------------------------
@@ -781,8 +775,8 @@
                    0.5s を超えない — 待たせるための動きは要らない -->
               <div
                 animate:flip={{ duration: motionDuration(DUR.move), easing: cubicOut }}
+                use:pulse={() => (movedMark?.id === s.id ? movedMark : null)}
                 class="src src-line"
-                class:badge-in={movedId === s.id}
                 class:on={openSource === s.id}
                 class:dragging={dragId === s.id}
                 class:drop-before={dropAt?.list === list.key && dropAt.index === i}

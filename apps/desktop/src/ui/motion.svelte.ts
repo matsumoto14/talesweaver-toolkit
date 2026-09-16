@@ -139,6 +139,44 @@ export function swap(node: HTMLElement, get: () => string) {
   });
 }
 
+/**
+ * `flash` の値なしバージョン。バッジ側に「変わった中身」を文字列で持たない場面向け
+ * (どの行が動いたかを共有の状態と行の id を突き合わせて渡す、など)。
+ *
+ * `get` は `null` を「いまはこの要素の番ではない」として無視する — `bump` が
+ * 上下を判定できない `null` を無視するのと同じ考え方。`null` 以外に変わったら弾ませる
+ * (`null` に戻るときは弾ませない。戻りは「消えた」であって「変わった」ではない)。
+ * 同じ値を渡しても再発火させたいときは、呼び出し側で毎回新しいオブジェクトを渡せばよい
+ * (`{}` は常に前回と不等)。
+ *
+ * **最初の比較相手は `get()` ではなく番兵にする。**行が群をまたいで動くとき
+ * (お気に入りの ★ を切り替える・別の群へドラッグする)、行は別の `{#each}` に移るので
+ * DOM ノードが作り直される。印を立てるのと再描画は同じ同期処理の中で起きるため、
+ * **新しいノードが生まれた時点で既に自分の番になっている** — ここで `get()` を基準に取ると
+ * 初回から一致していて一度も弾まない(実際に ★ 切替が毎回無音だった)。
+ */
+const FIRST = Symbol("pulse/first");
+
+export function pulse(node: HTMLElement, get: () => unknown) {
+  const clear = () => node.classList.remove("badge-in");
+  let prev: unknown = FIRST;
+  $effect(() => {
+    const next = get();
+    if (next === null || next === prev) {
+      prev = next;
+      return;
+    }
+    prev = next;
+    clear();
+    void node.offsetWidth; // 再スタートさせるための強制 reflow
+    node.classList.add("badge-in");
+  });
+  $effect(() => {
+    node.addEventListener("animationend", clear);
+    return () => node.removeEventListener("animationend", clear);
+  });
+}
+
 export function flash(node: HTMLElement, get: () => string) {
   const clear = () => node.classList.remove("badge-in");
   let prev = get();
