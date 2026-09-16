@@ -61,6 +61,7 @@ RULES = {
     "R15": ("--dur-* / DUR を通らない生の時間", "§10"),
     "R16": ("動きのクラスを JS で手で付け外し", "§10"),
     "R17": ("開閉ブロックを手書き(disclosurePane / disclosureCaret を使わず)", "§10"),
+    "R18": ("<details> が開閉するのに動きが無い", "§00 / §10"),
 }
 
 # §05 の実寸スケール。v4 が使っている実寸で、役割トークン 4 段の外にもある。
@@ -130,6 +131,27 @@ DISCLOSURE_HANDWRITTEN = re.compile(r"class:open-in\s*=")
 # {#if}(コメントを 1 個だけ挟んでもよい)の直後に静的な class="... open-in ..." が来る形
 IF_STATIC_OPEN_IN = re.compile(
     r"\{#if\b[^}]*\}(?:\s*<!--.*?-->)?\s*<[a-zA-Z][^>]*\bclass=\"[^\"]*\bopen-in\b[^\"]*\"",
+    re.S,
+)
+
+# R18: ネイティブ <details> は既定で瞬時に開閉する(§00 04 / §10 型 6)。段階 2.5 で最初に
+# 試した .details-anim(grid-template-rows: 0fr⇄1fr で本文を包む)は実機で動かなかった —
+# ブラウザが本文を ::details-content という UA 生成ボックスに持たせていて、grid の行サイズの
+# transition がその境界を越えられない(実測: 開始サンプルから最終値のまま、途中経過が無い)。
+# 効くのは details::details-content 自体の block-size を動かす形だけで、包む要素は要らず
+# 全 <details> に一律で効くので、この規則は「app.css のその 1 か所が生きているか」だけを見る。
+# クラスの有無で判定すると grid 版のような『付いているのに動かない』実装にも 0 件を出してしまう
+# (段階 2.5 やり直しで判明)ため、実際に効く CSS の形(本文の高さと --dur-open)を見る。
+# **並び順に依存させない** — `transition: block-size var(--dur-open)` も
+# `transition: var(--dur-open) block-size` も CSS として正しいので、
+# 「transition の中に高さのプロパティと --dur-open が両方ある」だけを見る。
+# 高さは block-size / height のどちらでもよい(横書き固定のこのアプリでは同義)
+DETAILS_CONTENT_CLOSED = re.compile(r"details::details-content\s*\{([^}]*)\}", re.S)
+DETAILS_CONTENT_OPEN = re.compile(r"details\[open\]::details-content\s*\{([^}]*)\}", re.S)
+# transition 宣言の中に、高さのプロパティと --dur-open が(順不同で)両方あること
+DETAILS_TRANSITION = re.compile(
+    r"transition\s*:[^;{}]*(?:(?:\bblock-size\b|\bheight\b)[^;{}]*var\(--dur-open\)"
+    r"|var\(--dur-open\)[^;{}]*(?:\bblock-size\b|\bheight\b))",
     re.S,
 )
 
@@ -514,6 +536,25 @@ def check_manual_disclosure(path: Path, text: str, out: list[Finding]) -> None:
                            "ui/motion.svelte.ts の disclosurePane を使う"))
 
 
+def check_details_motion(out: list[Finding]) -> None:
+    """R18(app.css そのもの)。<details> の本文を動かす仕組みが app.css で生きているか。
+
+    全 <details> に一律で効く仕組みなので、ファイルごとではなく app.css を 1 回だけ見る。
+    閉じた側の transition に「本文の高さ(block-size / height)」と `--dur-open` が両方あること、
+    開いた側が高さを auto に戻していることの 2 つを見る。どちらか欠けると、閉じたまま /
+    開いたまま瞬時に切り替わるだけになる。並び順・改行・プロパティ名の選び方には依存させない。
+    """
+    css = APP_CSS.read_text(encoding="utf-8")
+    closed = DETAILS_CONTENT_CLOSED.search(css)
+    opened = DETAILS_CONTENT_OPEN.search(css)
+    closed_ok = bool(closed and DETAILS_TRANSITION.search(closed.group(1)))
+    opened_ok = bool(opened and re.search(r"\b(?:block-size|height)\s*:\s*auto\b", opened.group(1)))
+    if not (closed_ok and opened_ok):
+        out.append(Finding("R18", APP_CSS, 1, "details::details-content",
+                           "block-size を var(--dur-open) で動かす transition が app.css に無い"
+                           "(grid-template-rows は ::details-content の境界を越えられず効かない)"))
+
+
 def check_duration_scale(out: list[Finding]) -> None:
     """R15(段そのもの)。app.css の --dur-* と motion.svelte.ts の DUR が食い違っていないか。"""
     css: dict[str, int] = {}
@@ -577,6 +618,7 @@ def collect() -> list[Finding]:
             check_font_scale(chunk, out)
             check_duration_tokens(chunk, out)
     check_duration_scale(out)
+    check_details_motion(out)
     return out
 
 

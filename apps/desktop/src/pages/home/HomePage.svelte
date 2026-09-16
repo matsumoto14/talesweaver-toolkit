@@ -1376,7 +1376,7 @@
                     ></span>
                   </span>
                   <span class="num count">{okCount} / {shown.length}</span>
-                  <span class="chev dim">{open ? "▴" : "▾"}</span>
+                  <span class="caret dim" class:rot={open}>▼</span>
                 </button>
                 {#if open}
                   <!-- 一覧は重いので {#if} でマウント/アンマウントのまま(常時マウントの hidden

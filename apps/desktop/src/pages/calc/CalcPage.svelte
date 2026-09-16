@@ -2544,7 +2544,7 @@
         <!-- 極限スキル(試し変更)。3 種から 2 つ選ぶ(§07 形態 3: チップで入れる/外す) -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "ultimate"} onclick={() => toggleMaterial("ultimate")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "ultimate" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "ultimate"}>▼</span>
             <!-- 見出しの顔。中身を代表する 1 つを置く(名前と併記なので §08 の単独表示にあたらない)。
                  画像が未収録なら破線 + ? になるだけで、幅は変わらない -->
             <Icon kind="skill" id="scope_eye" size={20} label="極限スキル" />
@@ -2578,7 +2578,7 @@
         <!-- 覚醒・エタの意志(試し変更)。カテゴリN の倍率と、ダメージ・能力値の上限を動かす -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "awakening"} onclick={() => toggleMaterial("awakening")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "awakening" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "awakening"}>▼</span>
             <Icon kind="skill" id="awakening" size={20} label="覚醒・エタの意志" />
             <span class="card-title">覚醒・エタの意志</span>
             <span class="dim small num" use:flash={() => awakeningHeadNote}>{awakeningHeadNote}</span>
@@ -2645,7 +2645,7 @@
         <!-- シャープネスビジョン(試し変更)。§5「新-割合」の割合追加ダメージ -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "sharpness"} onclick={() => toggleMaterial("sharpness")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "sharpness" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "sharpness"}>▼</span>
             <Icon kind="skill" id="sharpness_vision" size={20} label="シャープネスビジョン" />
             <span class="card-title">シャープネスビジョン</span>
             <span class="dim small num" use:bump={() => sharpnessRatePercent}
@@ -2693,7 +2693,7 @@
         <!-- ソウルリンク(試し変更)。ダメージ式に効くリンクステータス 5〜7 だけ -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "soul_link"} onclick={() => toggleMaterial("soul_link")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "soul_link" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "soul_link"}>▼</span>
             <Icon kind="skill" id="soul_link" size={20} label="ソウルリンク" />
             <span class="card-title">ソウルリンク</span>
             <span class="dim small num" use:flash={() => soulLinkHeadNote}>{soulLinkHeadNote}</span>
@@ -2728,7 +2728,7 @@
         <!-- 装備の切り替え(試し変更)。登録済みの装備から装着するものを選ぶ。登録・編集はキャラタブ -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "equipment"} onclick={() => toggleMaterial("equipment")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "equipment" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "equipment"}>▼</span>
             <!-- 見出しの顔は装着中の武器(名前と併記) -->
             <Icon kind="equipment" id={equipmentIconId(weaponOf(payload).item_id, app.equipmentCatalog)} size={20} label="装備の切り替え" />
             <span class="card-title">装備の切り替え</span>
@@ -2766,7 +2766,7 @@
         <!-- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "enchant"} onclick={() => toggleMaterial("enchant")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "enchant" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "enchant"}>▼</span>
             <!-- †エクリプスウィング(体)。エンチャントは装備を伸ばす話なので、その顔として置く -->
             <Icon kind="equipment" id="wiki-af444f9bf21d" size={20} label="エンチャントの伸びしろ" />
             <span class="card-title">エンチャントの伸びしろ</span>
@@ -2822,7 +2822,7 @@
              スイッチの実体はバフ「装備研磨」(calcBuffs。保存は「試し変更を保存」で)だが、装備の話なので顔はここ -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "polish"} onclick={() => toggleMaterial("polish")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "polish" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "polish"}>▼</span>
             <!-- 職人の装備研磨剤(クライアント資産 item 1044778)。バフ「装備研磨」と同じ絵 -->
             <Icon kind="buff" id="equipment_polish" size={20} label="研磨" />
             <span class="card-title">研磨</span>
@@ -2864,7 +2864,7 @@
         <!-- 称号(試し変更)。所持している称号(キャラタブの称号ペインで登録)を並べる -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "title"} onclick={() => toggleMaterial("title")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "title" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "title"}>▼</span>
             <Icon kind="title" id="title" size={20} label="称号" />
             <span class="card-title">称号</span>
             <span class="dim small title-head-note" use:flash={() => titleHeadNote}>{titleHeadNote}</span>
@@ -2899,7 +2899,7 @@
         <!-- バフ -->
         <div class="card">
           <button type="button" class="card-head toggle" aria-expanded={openMaterial === "buffs"} onclick={() => toggleMaterial("buffs")}>
-            <span class="bg-caret" aria-hidden="true">{openMaterial === "buffs" ? "▾" : "▸"}</span>
+            <span class="caret bg-caret" aria-hidden="true" class:rot={openMaterial === "buffs"}>▼</span>
             <Icon kind="buff" id="illumination_drink" size={20} label="バフ" />
             <span class="card-title">バフ</span>
             <span class="dim small num" use:bump={() => alwaysBuffCount + extraBuffCount}>{alwaysBuffCount + extraBuffCount} 件</span>
@@ -2932,7 +2932,7 @@
                 aria-expanded={openBuffPurpose === purpose.id}
                 onclick={() => (openBuffPurpose = openBuffPurpose === purpose.id ? null : purpose.id)}
               >
-                <span class="bg-caret" aria-hidden="true">{openBuffPurpose === purpose.id ? "▾" : "▸"}</span>
+                <span class="caret bg-caret" aria-hidden="true" class:rot={openBuffPurpose === purpose.id}>▼</span>
                 <span class="bg-label">{purpose.label}</span>
                 <span class="bg-count num" use:bump={() => picked}>{picked}/{defs.length}</span>
               </button>
@@ -3399,8 +3399,8 @@
   }
   .buff-group-head:hover { border-color: var(--accent); }
   .buff-group-head.open { background: var(--sel-card); border-color: var(--sel-bd); color: var(--sel-fg); }
-  /* 開閉の印は幅を固定する。▸ と ▾ で幅が変わると隣のラベルが動く(§09 規則 1) */
-  .bg-caret { flex: none; width: 10px; text-align: center; font-size: 9px; }
+  /* 開閉の印は幅を固定する(§09 規則 1)。回すのは app.css の .caret / .rot、ここは幅と字寸だけ持つ */
+  .bg-caret { width: 10px; text-align: center; font-size: 9px; }
   .bg-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bg-count { flex: none; min-width: 5ch; text-align: right; font-size: 9px; font-weight: 500; }
   .calc-buff-set { margin-top: 8px; display: flex; align-items: flex-start; gap: 8px; font-size: 10px; color: var(--fg-muted); }

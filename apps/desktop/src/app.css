@@ -417,6 +417,25 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 }
 .open-in { animation: tw-open var(--dur-open) var(--ease-out); overflow: hidden; transform-origin: top center; }
 
+/* 6b. ネイティブ <details> の本文(§00 04 / §10 型 6)。ブラウザ既定は瞬時に開閉するので、
+   UA が本文を持たせる ::details-content(Chromium)の block-size を動かす。
+   grid-template-rows: 0fr⇄1fr は ::details-content の境界を越えられず動かなかった
+   (段階 2.5 で実機検証・不採用)。この方式は包む要素が要らない — <details> の中身は
+   元の構造のまま。`interpolate-size: allow-keywords` は `block-size: auto` を実測値に
+   補間可能にするための前提。**このプロパティは継承する**ので、:root ではなくここに書いても
+   効く範囲は ::details-content とその子孫(= <details> の本文)で、本文の外までは広がらない。
+   いま本文の中に auto を補間する transition は無いので巻き込みは起きていないが、
+   本文の中に `height: auto` の transition を足すときはここを思い出すこと。
+   閉じる方向も content-visibility を `allow-discrete` で送るので、閉じた瞬間に
+   ::details-content 自体が hidden 相当になり中身が滲み出ない */
+details::details-content {
+  interpolate-size: allow-keywords;
+  block-size: 0; overflow: hidden;
+  transition: block-size var(--dur-open) var(--ease-out),
+              content-visibility var(--dur-open) allow-discrete;
+}
+details[open]::details-content { block-size: auto; }
+
 /* トリガの直下に重なるもの(§09 規則 3: 周りを押さない / 閉じたら何も動かない)。
    面だけをここで決め、どこに出すか(left/right/top)は置く場所ごとに指定する。
    画面外へのフリップは ui/popover.ts の action が .flip-up を付けて行う。 */
@@ -462,7 +481,10 @@ button, summary, a, label.check, [role="button"], [role="tab"] { transition: var
 /* 動きを消しても変化が分かること。ここで消えて意味が伝わらなくなるなら、
    それは動きに頼りすぎているサイン — 色と数値だけで伝わる状態を先に作る */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  /* ::details-content(<details> の本文を持つ UA 生成ボックス)は ::before / ::after とは
+     別の名前付き擬似要素なので `*::before, *::after` では拾えない。段階 2.5 やり直しで
+     実機測定して判明(reduced-motion でも block-size が滑らかに遷移していた)— 明示して足す */
+  *, *::before, *::after, details::details-content {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -640,8 +662,12 @@ details.fold > summary {
   font-size: 10.5px; color: var(--fg-muted);
 }
 details.fold > summary::-webkit-details-marker { display: none; }
-details.fold > summary::before { content: "▸"; font-size: 8.5px; color: var(--fg-dim); }
-details.fold[open] > summary::before { content: "▾"; }
+/* 開閉のキャレットは「回す」で統一(下の .caret と同じ流儀・§10)。文字差し替えは動きが出ない */
+details.fold > summary::before {
+  content: "▼"; display: inline-block; font-size: 8.5px; color: var(--fg-dim);
+  transition: transform var(--dur-tap) var(--ease-tap);
+}
+details.fold[open] > summary::before { transform: rotate(180deg); }
 details.fold > summary:hover { color: var(--fg); }
 details.fold .fold-body { margin-top: 10px; }
 
