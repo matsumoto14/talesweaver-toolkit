@@ -6,10 +6,10 @@
     errorMessage, evaluateContents, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
   } from "../../api/commands";
   import type {
-    Adjustments, ComboSkillType, ContentEvaluation, DamageResult, DefenseProfile, NewCharacter, Skill,
+    Adjustments, CharacterDamageResult, ComboSkillType, ContentEvaluation, DefenseProfile, NewCharacter, Skill,
     UpgradeCandidate,
   } from "../../api/types";
-  import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
+  import { fmtDuration, fmtInt, fmtNum, fmtPct } from "../../format";
   import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { tables } from "../../tables.svelte";
@@ -22,16 +22,15 @@
   import SheetCard from "../../ui/SheetCard.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
   import Value from "../../ui/Value.svelte";
-  import { critChanceStage } from "../../ui/critChance";
   import { latest } from "../../ui/latest.svelte";
   import { changed } from "../../ui/motion.svelte";
   import { REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
+  import DamageChain from "./DamageChain.svelte";
   import DefensePanel from "./DefensePanel.svelte";
-  import DetailRows from "./DetailRows.svelte";
   import MaterialsPane from "./MaterialsPane.svelte";
   import WhyPanel from "./WhyPanel.svelte";
-  import { changedFlowKeys, deltaText, flowRowsOf, pick as pickSide, stepOf, stepsOf, stepValue } from "./damageDetail";
-  import { DetailStore, type Detail, type Mat } from "./detailStore.svelte";
+  import { changedFlowKeys, deltaText, flowRowsOf, pick as pickSide, stepValue, stepsOf } from "./damageDetail";
+  import { DetailStore } from "./detailStore.svelte";
   import { SimStore } from "./simStore.svelte";
 
   const DEFAULT_RIGHT_WIDTH = 380;
@@ -92,8 +91,11 @@
       })
       .catch((e) => reportError(errorMessage(e)));
   });
+  /** 本体が撃てるスキルだけ(熊 = 魔法人形が撃つスキルは主軸に選べない。ADR-016)。
+   *  このタブの主軸ピッカー・一覧計算はここから絞る */
+  const bodySkills = $derived(skills.filter((s) => s.attacker === "player"));
   /** キャラタブで選んだ主軸スキル。この画面のスキルはこれが正 */
-  const mainSkill = $derived(skills.find((s) => s.id === character?.main_skill_id) ?? null);
+  const mainSkill = $derived(bodySkills.find((s) => s.id === character?.main_skill_id) ?? null);
   /**
    * この画面での選び直し(例外操作)。null = 主軸に従う。
    * キャラを替えたとき・キャラタブで主軸を変えたときは主軸に揃え直す(下の $effect)。
@@ -109,12 +111,12 @@
   });
   // 主軸が未設定・未収録のときだけ先頭スキルにフォールバックする
   const skillId = $derived(
-    (skillOverride !== null && skills.some((s) => s.id === skillOverride) ? skillOverride : null)
+    (skillOverride !== null && bodySkills.some((s) => s.id === skillOverride) ? skillOverride : null)
       ?? mainSkill?.id
-      ?? skills[0]?.id
+      ?? bodySkills[0]?.id
       ?? "",
   );
-  const skill = $derived(skills.find((s) => s.id === skillId) ?? null);
+  const skill = $derived(bodySkills.find((s) => s.id === skillId) ?? null);
   let comboSkillType = $state<ComboSkillType>("general");
   const selectedComboSkillType = $derived<ComboSkillType | null>(
     skill && skill.combo_variants.length > 0 ? comboSkillType : null,
@@ -130,16 +132,17 @@
   let skillOpen = $state(false);
   /** ピッカーの並びは合計ダメージの降順(v4 指定)。合計が未取得のものは登録順で末尾 */
   const pickerSkills = $derived(
-    [...skills].sort((a, b) => (skillTotals[b.id]?.total ?? -1) - (skillTotals[a.id]?.total ?? -1)),
+    [...bodySkills].sort((a, b) => (skillTotals[b.id]?.total ?? -1) - (skillTotals[a.id]?.total ?? -1)),
   );
 
-  // スキル一覧の対象別ダメージ(ドロップダウンを開いたときに計算)
+  // スキル一覧の対象別ダメージ(ドロップダウンを開いたときに計算)。熊(魔法人形)が撃つ
+  // スキルは本体では撃てない一覧なので出さない
   let skillTotals = $state<Record<string, { perHit: number; total: number }>>({});
   const skillLatest = latest();
   $effect(() => {
     // 対象・キャラ・試し変更が変わったら古い合計を出さない(PR レビュー指摘)
     skillTotals = {};
-    if (!skillOpen || !payload || !target || skills.length === 0) return;
+    if (!skillOpen || !payload || !target || bodySkills.length === 0) return;
     const p = JSON.parse(JSON.stringify(payload)) as NewCharacter;
     const temp = JSON.parse(JSON.stringify(NEUTRAL_ADJUSTMENTS)) as Adjustments;
     const contentId = target.content.id;
@@ -148,7 +151,7 @@
     const buffs = JSON.parse(JSON.stringify(app.calcBuffs));
     skillLatest.run((isCurrent) =>
       Promise.all(
-        skills.map(async (s) => [
+        bodySkills.map(async (s) => [
           s.id,
           await previewDamage(
             p, s.id, contentId, comboCount, temp,
@@ -160,7 +163,7 @@
         .then((rs) => {
           if (!isCurrent()) return;
           skillTotals = Object.fromEntries(
-            rs.map(([id, r]) => [id, { perHit: r.per_hit_primary, total: r.total_primary }]),
+            rs.map(([id, r]) => [id, { perHit: r.body.per_hit_primary, total: r.body.total_primary }]),
           );
         })
         .catch((e) => reportError(errorMessage(e))),
@@ -210,9 +213,22 @@
   });
 
   // --- 計算(payload と saved の両方) -------------------------------------
-  let result = $state<DamageResult | null>(null);
-  let savedResult = $state<DamageResult | null>(null);
+  // 戻りは本体(body)・熊(summon。無ければ null)・合計(combined)の 3 つ組(ADR-016)。
+  // 画面はほぼ全部 body を読み、熊がいるキャラだけ summon / combined も読む
+  let result = $state<CharacterDamageResult | null>(null);
+  let savedResult = $state<CharacterDamageResult | null>(null);
   let calculating = $state(false);
+  const body = $derived(result?.body ?? null);
+  const summon = $derived(result?.summon ?? null);
+  const combined = $derived(result?.combined ?? null);
+  /** 熊が撃つスキルの表示名(結果 JSON は id しか持たないので skills 一覧から引く) */
+  const summonSkillName = $derived(skills.find((s) => s.id === summon?.skill_id)?.name ?? "");
+  /** 熊の DPS 節に出す間隔の注記。中ディレイ未収録(interval_seconds が null)なら出さない */
+  const summonIntervalNote = $derived(
+    summon?.interval_seconds != null
+      ? `${fmtNum(summon.interval_seconds, 2)}s 間隔(中ディレイ + 0.0705s)・コンボは乗りません`
+      : null,
+  );
   const requestLatest = latest({ debounce: 120 });
   $effect(() => {
     const pJson = payload ? JSON.stringify(payload) : null; // sim のネスト変更も拾う
@@ -288,13 +304,13 @@
   // 主役の値の選び方(クリ発生率 > 0 ならクリティカル、0 なら非クリ最大)は Rust 側
   // (DamageTriple::primary)に一元化済み。ここは per_hit_primary / total_primary を読むだけ。
   // critMode はトレースの段・内訳表示の切替(表示都合)にだけ使う。
-  const critMode = $derived((result?.critical_chance ?? 0) > 0);
+  const critMode = $derived((body?.critical_chance ?? 0) > 0);
   const pick = <T extends { max: number; critical: number }>(t: T | null | undefined): number | null =>
     t ? (critMode ? t.critical : t.max) : null;
-  const perHit = $derived(result?.per_hit_primary ?? null);
-  const savedPerHit = $derived(savedResult?.per_hit_primary ?? null);
-  const totalValue = $derived(result?.total_primary ?? null);
-  const dpsValue = $derived(pickSide(result?.dps, critMode));
+  const perHit = $derived(body?.per_hit_primary ?? null);
+  const savedPerHit = $derived(savedResult?.body.per_hit_primary ?? null);
+  const totalValue = $derived(body?.total_primary ?? null);
+  const dpsValue = $derived(pickSide(body?.dps, critMode));
   const deltaPct = $derived(
     perHit !== null && savedPerHit !== null && savedPerHit > 0
       ? Math.round((perHit / savedPerHit - 1) * 100)
@@ -302,7 +318,10 @@
   );
   // 討伐時間の目安。段の境目は Rust が配る(tables.reach_seconds)。画面は写経しない
   const closeSeconds = $derived(tables.reach_seconds.close);
-  const defeatSeconds = $derived(result?.defeat_seconds ?? null);
+  // 討伐時間・到達段は combined(本体 + 熊)から 1 か所で決める。熊が無いキャラは
+  // combined が body と同じ値になる(Rust combine_damage のフォールバック)ので、
+  // 分岐を画面側に持たない(ADR-016 決定 9・10)
+  const defeatSeconds = $derived(combined?.defeat_seconds ?? null);
   /** メーター比。討伐時間が長いほど伸びる(0 = 一瞬、100% = 目安ぴったり) */
   const meterRatio = $derived(defeatSeconds !== null ? Math.min(1, defeatSeconds / closeSeconds) : 0);
   const hasReqs = $derived((target?.content.requirements.length ?? 0) > 0);
@@ -311,7 +330,7 @@
   const entryKnown = $derived(!hasReqs || targetEval !== null);
   const entryOk = $derived(!hasReqs || (targetEval?.entry_ok ?? false));
   /** 目安に対する到達段(Rust 側の判定。目安なしは null) */
-  const reach = $derived(result?.reach ?? null);
+  const reach = $derived(combined?.reach ?? null);
   const reached = $derived(reachOk(reach));
   const badgeState = $derived.by(() => {
     if (perHit === null || !entryKnown || reach === null) return 6;
@@ -322,193 +341,27 @@
   const BADGE: Badge[] = [...REACH_BADGES, { label: "判定中", state: "unknown" }];
 
   // --- なぜこの数字?(トレースの式から組み立て) ---------------------------
-  // 段の組み立ては calc/damageDetail.ts、面そのものは calc/WhyPanel.svelte。
-  // ここに残すのは、鎖(1 発 / 合計 / DPS)と「行ける?」の文が共有する値だけ。
+  // 段の組み立ては calc/damageDetail.ts、面そのものは calc/WhyPanel.svelte(本体だけ。
+  // ユーザーの強い指示で元デザインを変えない)。鎖の節ごとの内訳(1 発 / 合計 / DPS)は
+  // calc/DamageChain.svelte が本体・熊それぞれの結果から組む(二重実装しない)。
+  // ここに残すのは、「行ける?」の文・メーター・WhyPanel が共有する body 由来の値だけ。
   // 主役がクリティカル前提なら、トレースの段もクリティカル側の到達値で揃える。
-  const steps = $derived(stepsOf(result, critMode));
-  const atkA = $derived(result?.trace.attack?.value ?? null);
+  const steps = $derived(stepsOf(body, critMode));
+  const atkA = $derived(body?.trace.attack?.value ?? null);
   const defenseValue = $derived(
-    result?.trace.categories.find((c) => c.symbol === "C")?.value ?? null,
+    body?.trace.categories.find((c) => c.symbol === "C")?.value ?? null,
   );
   const pierced = $derived(stepValue(steps, "攻撃力−防御力"));
   const noPierce = $derived(pierced !== null && pierced <= 0);
   const flowRows = $derived(flowRowsOf(steps, pierced));
-  const flowMultLabel = $derived(
-    pierced !== null && pierced > 0 && perHit !== null ? fmtRate(perHit / pierced, 1) : "—",
-  );
 
   // --- 数値を開いて詳細を確認する(§00 03: 開くのは押した行の下だけ) ----------
-  // 開いている面・変わった行の控えは鎖と「なぜこの数字?」で共有する(calc/detailStore)。
-  // 値はすべて Rust 由来(DamageTrace / DamageResult)。UI で作るのは 2 値の差分だけ。
+  // 開いている面・変わった行の控えは鎖(本体・熊の両方)と「なぜこの数字?」(本体のみ)で
+  // 共有する(calc/detailStore)。値はすべて Rust 由来(DamageTrace / DamageResult)。
+  // UI で作るのは 2 値の差分だけ。
   const details = new DetailStore();
   /** 鎖の ↑ に下線を出すか(その下に変わった段があるか)。判定は WhyPanel と同じ関数 */
-  const flowChanged = $derived(changedFlowKeys(details, flowRows, result).length > 0);
-
-  /** 鎖「1 発」: 抜けた分から 1 発までの各段(倍率・実数・到達値) */
-  const perHitDetail = $derived.by<Detail | null>(() => {
-    const r = result;
-    if (r === null || perHit === null || pierced === null) return null;
-    const mats: Mat[] = flowRows.map((f) => ({
-      label: f.k,
-      mult: f.mult === "—" ? undefined : f.mult,
-      value: fmtSigned(f.add),
-      sub: `ここまで ${fmtInt(Math.round(f.to))}`,
-      n: Math.round(f.add),
-    }));
-    if (r.capped_loss.max > 0) {
-      mats.push({
-        label: "ダメージ上限(1 段ごと)",
-        value: fmtInt(r.damage_cap),
-        n: r.damage_cap,
-        sub: `上限で ${fmtSigned(-r.capped_loss.max, { max: 3 })}`,
-      });
-    }
-    return {
-      mult: flowMultLabel,
-      delta: perHit - pierced,
-      to: perHit,
-      mats,
-      idle: 0,
-      expr: "ゲームの表記ダメージ(スキル分のみ)。武器強化の追加固定ダメージは含まない(合計の内訳を見る)",
-    };
-  });
-  /** 鎖「合計」: (1 発 × 段数) ＋ (武器強化の追加固定 × 段数) ＋ 割合追加ダメージ。クリ率は段階表示で読む */
-  const totalDetail = $derived.by<Detail | null>(() => {
-    const r = result;
-    if (r === null || perHit === null || totalValue === null) return null;
-    const added = pickSide(r.added_damage, critMode) ?? 0;
-    const skillTotal = pickSide(r.skill_total, critMode) ?? 0;
-    const mats: Mat[] = [
-      {
-        label: `1 発(表記ダメージ) ${fmtInt(perHit)} × ${r.hit_count} 段`,
-        mult: `×${r.hit_count}`,
-        value: fmtInt(skillTotal),
-        n: skillTotal,
-      },
-    ];
-    if (r.weapon_added_per_hit !== 0) {
-      // 段ごとの分割は内部の丸めの都合で、使う側は「1 スキルに 1 回乗る固定値」と捉えている。
-      // 段数や 1 段あたりの値は見せず、スキルに乗る総額だけ出す
-      mats.push({
-        label: "武器強化(追加固定)",
-        mult: "+",
-        value: fmtInt(r.weapon_added_total),
-        n: r.weapon_added_total,
-        sub: "上限なし・表記ダメージとは別枠",
-      });
-    }
-    if (added !== 0) {
-      mats.push({
-        label: "割合追加ダメージ(合計に乗る)",
-        mult: fmtSignedPct(r.added_damage_rate, { max: 4 }),
-        value: fmtInt(added),
-        n: added,
-        sub: "シャープネスビジョン・ランダムOP・称号",
-      });
-    }
-    if (!critMode) {
-      mats.push({
-        label: "クリティカルなら",
-        mult: skill ? `×${fmtNum(skill.critical_multiplier)}` : undefined,
-        value: fmtInt(r.total.critical),
-        n: r.total.critical,
-      });
-    }
-    mats.push({ label: "乱数が最小のとき", value: fmtInt(r.total.min), n: r.total.min });
-    return {
-      mult: `×${r.hit_count} 段`,
-      delta: totalValue - perHit,
-      to: totalValue,
-      mats,
-      idle: 0,
-      expr: stepOf(steps, "割合追加ダメージ(合計に乗る)")?.expression ?? null,
-    };
-  });
-  /** 鎖「1 秒あたり」: 合計 × 回/分 ÷ 60 と、実ディレイの内訳。期待値はクリ率で按分した材料も足す */
-  const dpsDetail = $derived.by<Detail | null>(() => {
-    const r = result;
-    const d = r?.actual_delay ?? null;
-    if (r === null || d === null || r.dps === null || dpsValue === null || totalValue === null) return null;
-    const mats: Mat[] = [
-      { label: "合計ダメージ", value: fmtInt(totalValue), n: totalValue },
-      {
-        label: "基本中ディレイ",
-        value: fmtNum(d.base, 2, "s"),
-        n: d.base, unit: "s",
-        sub: d.fixed ? "固定(減少が効かない)" : undefined,
-      },
-    ];
-    for (const c of d.contributions) {
-      mats.push({ label: `↳ ${c.source}`, value: fmtSignedPct(-c.rate), n: -Math.round(c.rate * 100), unit: "%" });
-    }
-    mats.push({
-      label: `中ディレイ減少(上限 ${fmtPct(limits.actual_delay_reduction_max)})`,
-      value: fmtPct(d.reduction),
-      n: Math.round(d.reduction * 100), unit: "%",
-      sub: d.reduction_raw > d.reduction ? `選択中は ${fmtPct(d.reduction_raw)}` : undefined,
-    });
-    if (d.combo_rate < 1) {
-      mats.push({ label: "コンボ(倍率A。間に通常攻撃を挟む)", mult: `×${fmtNum(d.combo_rate)}`, value: "" });
-    }
-    mats.push({
-      label: "中ディレイ",
-      value: fmtNum(d.value, 2, "s"),
-      n: d.value, unit: "s",
-      sub: d.floored ? `下限 ${fmtNum(limits.actual_delay_min, 1, "s")} で頭打ち` : undefined,
-    });
-    const cycle = r.combo;
-    if (cycle) {
-      // コンボは 1 サイクル(通常攻撃 → スキル)で割る。実測表はコンボなしの計測なので使わない
-      mats.push({
-        label: `通常攻撃(${cycle.normal_attack_name})`,
-        // 合計ダメージ(total_primary)と同じ側を出す。ここだけ非クリだと足し算が合わなく見える
-        value: fmtInt(pickSide(cycle.normal_attack_total, critMode) ?? 0),
-        n: pickSide(cycle.normal_attack_total, critMode) ?? 0,
-        sub: `中ディレイ ${fmtNum(cycle.normal_delay, 2, "s")}`,
-      });
-      mats.push({
-        label: "コンボインターバル",
-        value: cycle.interval !== null ? fmtNum(cycle.interval, 2, "s") : "?",
-        n: cycle.interval ?? undefined, unit: "s",
-        sub: cycle.interval === null
-          ? "wiki 未収録。スキルの中ディレイをそのまま使っています"
-          : cycle.interval_binding
-            ? "スキルの中ディレイより長いので、こちらが下限になります"
-            : "スキルの中ディレイのほうが長いので効きません",
-      });
-      mats.push({
-        label: "1 サイクル",
-        value: fmtNum(cycle.seconds, 2, "s"),
-        n: cycle.seconds, unit: "s",
-        sub: `通常攻撃 ${fmtNum(cycle.normal_delay, 2, "s")} + ${fmtNum(cycle.skill_gap, 2, "s")}`,
-      });
-    } else {
-      mats.push({
-        label: "スキル回数",
-        value: `${Math.round(d.uses_per_minute)} 回/分`,
-        n: Math.round(d.uses_per_minute),
-        sub: d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ",
-      });
-    }
-    if (r.expected_dps !== null && r.critical_chance > 0 && r.critical_chance < 1) {
-      mats.push({
-        label: "期待値(クリ率で按分)",
-        value: fmtInt(Math.round(r.expected_dps)),
-        n: Math.round(r.expected_dps),
-        sub: `合計(非クリ) × ${fmtPct(1 - r.critical_chance, 1)} + 合計(クリ) × ${fmtPct(r.critical_chance, 1)}`,
-      });
-    }
-    return {
-      mult: `÷ ${fmtNum(cycle?.seconds ?? d.value, 2, "s")}`,
-      delta: null,
-      to: Math.round(dpsValue),
-      mats,
-      idle: 0,
-      expr: cycle
-        ? "1 秒あたり = (スキルの合計 + 通常攻撃の合計) ÷ 1 サイクル"
-        : "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60",
-    };
-  });
+  const flowChanged = $derived(changedFlowKeys(details, flowRows, body).length > 0);
 
   // --- 攻撃 / 防御タブ(規格シート 5c) --------------------------------------
   let side = $state<"attack" | "defense">("attack");
@@ -673,21 +526,21 @@
 
           <!-- スキル行 -->
           <div class="skill-row">
-            {#if skills.length === 0}
+            {#if bodySkills.length === 0}
               <span class="dim">このキャラのスキルデータは未収録です(仮スキルはありません)。</span>
             {:else}
               <Popover
                 label="計算するスキル"
                 triggerClass="skill-trigger"
                 panelClass="skill-pop"
-                disabled={skills.length <= 1}
+                disabled={bodySkills.length <= 1}
                 onToggle={(open) => (skillOpen = open)}
               >
                 {#snippet trigger(open)}
                 <span class="sk-line1">
                   <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill?.name ?? "スキル"} />
                   <span class="sk-name">{skill?.name ?? ""}</span>
-                  {#if skills.length > 1}<span class="caret" class:rot={open}>▼</span>{/if}
+                  {#if bodySkills.length > 1}<span class="caret" class:rot={open}>▼</span>{/if}
                   <!-- 主軸(キャラタブ)と違うスキルで計算している例外状態。保存されないので
                        ラベンダー(--sim)。行の高さは変えない -->
                   {#if skillOverridden}
@@ -695,16 +548,16 @@
                   {/if}
                 </span>
                 <span class="sk-meta num dim">
-                  ×<Value value={result ? fmtNum(result.effective_skill_multiplier) : "—"} />
-                  ・ <Value value={result ? String(result.hit_count) : "—"} />段
-                  ・ 中 <Value value={result?.effective_base_actual_delay != null ? `${fmtNum(result.effective_base_actual_delay)}s` : "?"} />
+                  ×<Value value={body ? fmtNum(body.effective_skill_multiplier) : "—"} />
+                  ・ <Value value={body ? String(body.hit_count) : "—"} />段
+                  ・ 中 <Value value={body?.effective_base_actual_delay != null ? `${fmtNum(body.effective_base_actual_delay)}s` : "?"} />
                   ・ Cri×{skill ? fmtNum(skill.critical_multiplier) : "—"}
                   {#if skill}・ {ELEMENT_LABELS[skill.element]}属性{/if}
-                  {#if result?.accuracy_point != null}・ 命中P {fmtInt(result.accuracy_point)}{/if}
+                  {#if body?.accuracy_point != null}・ 命中P {fmtInt(body.accuracy_point)}{/if}
                 </span>
                 {/snippet}
                 {#snippet children(close)}
-                <div class="pop-head gold"><span>スキル {skills.length} 種 ／ この対象への合計ダメージ順</span></div>
+                <div class="pop-head gold"><span>スキル {bodySkills.length} 種 ／ この対象への合計ダメージ順</span></div>
                 {#each pickerSkills as s (s.id)}
                   {@const d = skillTotals[s.id]}
                   <button
@@ -764,111 +617,47 @@
                  ければレートに意味が無いので、軸を切り替えず因果の順に繋ぐ。
                  判定(バッジ)はゲートの位置だけに置き、レートには付けない — 「何秒までなら
                  合格」の基準がゲーム側に存在しないので、付けたら嘘になる。
-                 44px の主役数値は増やさない(金の帯 = 答えは 1 つ。§02)。鎖が右に伸びるだけ。 -->
-            <div class="chain">
-              <button
-                type="button" class="node gate"
-                aria-expanded={details.isOpen("perHit")} onclick={() => details.toggle("perHit")}
-              >
-                <span class="nl">表記ダメージ(1 発)</span>
-                <!-- 差分(前回の値からいくつ動いたか)。数値の行には置かない — 44px の数値の横は
-                     枠(248px)に入らず、右の節に被る(実機 2026-09-15)。空でも行を取り、出た瞬間に下が動かない -->
-                <Value class="hero-num nv" motion={() => perHit} value={perHit !== null ? fmtInt(perHit) : "—"} />
-                <span class="nsub num">
-                  <!-- 副行は空でも .nsub-line で行を取る。取らないと、差分枠が出た瞬間に節が 11px 伸び、
-                       鎖は下ぞろえなので 44px の主役数字がその分だけ持ち上がる(実機 2026-09-17、§00 ③) -->
-                  <span class="nsub-line">
-                    <Value
-                      motion={() => perHit} delta={{}}
-                      deltaClass={flowChanged ? "follow" : ""}
-                      onDelta={() => details.follow("perHit")}
-                    />
-                  </span>
+                 44px の主役数値は増やさない(金の帯 = 答えは 1 つ。§02)。鎖が右に伸びるだけ。
+                 熊(魔法人形)が撃つスキルがあるキャラは、本体の鎖の上に熊の鎖をもう 1 本
+                 足す(ADR-016)。討伐時間は combined(下の「合計」面)で 1 か所に決める
+                 ので、熊がいるときはどちらの鎖にも討伐時間節を出さない(§00 ②)。 -->
+            {#if body}
+              <DamageChain
+                result={body} {skill} store={details} keyPrefix=""
+                attackerLabel="本体" attackerSkillName={skill?.name ?? ""}
+                showDefeat={!summon} heroNumber={true}
+                onPerHitDeltaFollow={() => details.follow("perHit")}
+                {flowChanged}
+              />
+            {/if}
+            {#if summon}
+              <DamageChain
+                result={summon.result} skill={null} store={details} keyPrefix="summon:"
+                attackerLabel="熊" attackerSkillName={summonSkillName}
+                showDefeat={false} heroNumber={false}
+                intervalNote={summonIntervalNote}
+              />
+              <!-- 合計(本体 + 熊)。討伐時間はここだけに出す(§00 ②。ADR-016 決定 5・10) -->
+              <div class="combined-face inset">
+                <span class="combined-label">合計(本体 + 熊)</span>
+                <span class="combined-item">
+                  <span class="ci-label">合計 DPS</span>
+                  <Value
+                    class="ci-value" motion={() => combined?.expected_dps ?? null}
+                    value={combined?.expected_dps != null ? fmtInt(Math.round(combined.expected_dps)) : "—"}
+                    delta={{}}
+                  />
                 </span>
-              </button>
-              <button
-                type="button" class="node mid"
-                aria-expanded={details.isOpen("total")} onclick={() => details.toggle("total")}
-              >
-                <span class="nl">合計ダメージ <span class="num">(×<Value motion={() => result?.hit_count ?? null} value={String(result?.hit_count ?? 1)} /> 段)</span></span>
-                <Value class="nv" motion={() => totalValue} value={totalValue !== null ? fmtInt(totalValue) : "—"} />
-                <!-- クリ率はバッジではなく文で(バッジは要らない — ユーザー判断 2026-09-15)。
-                     副行は 3 節とも 1 行にそろえ、数値の縦位置を合わせる -->
-                <!-- 副行は縦に積む(差分 → クリ率。「クリなら」は内訳にあるので出さない — ユーザー判断 2026-09-15)。数値の横に並べると節が横に伸びて
-                     鎖が折り返す(ユーザー指摘 2026-09-15)。数値の縦位置は .nv の行高で合わせる -->
-                <span class="nsub num">
-                  <span class="nsub-line"><Value motion={() => totalValue} delta={{}} /></span>
-                  <span class="nsub-line">
-                    {#if result}
-                      {#if result.critical_rate === null}
-                        <span>クリ率 未記載 → 確定扱い</span>
-                      {:else}
-                        <!-- クリが出ないときは「出ない」を言わず、率だけ(ユーザー判断 2026-09-15) -->
-                        <!-- 0% は赤(届かない)、100% 未満は黄(ぎりぎり)の状態色。100% は地の色(ユーザー判断 2026-09-15) -->
-                        <Value
-                          class={`${result.critical_chance <= 0 ? "crit-none" : ""} ${result.critical_chance > 0 && result.critical_chance < 1 ? "crit-partial" : ""}`}
-                          value={critChanceStage(result!.critical_chance * 100).label}
-                        >
-                          {#snippet children()}クリ率 {fmtNum(result!.critical_rate!.value, 1, "%")}{critMode ? ` ・ ${critChanceStage(result!.critical_chance * 100).label}` : ""}{/snippet}
-                        </Value>
-                      {/if}
-                    {/if}
-                  </span>
+                <span class="combined-item">
+                  <span class="ci-label">討伐時間</span>
+                  <Value
+                    class="ci-value" motion={() => combined?.defeat_seconds ?? null}
+                    value={combined?.defeat_seconds != null ? fmtDuration(combined.defeat_seconds) : "—"}
+                    delta={{ unit: "秒", digits: 0 }} deltaClass="less-is-better"
+                  />
                 </span>
-              </button>
-              <button
-                type="button" class="node rate"
-                aria-expanded={details.isOpen("dps")} onclick={() => details.toggle("dps")}
-              >
-                <span class="nl">DPS <span class="num">(÷ <Value motion={() => result?.actual_delay?.value ?? null} value={result?.actual_delay ? fmtNum(result.actual_delay.value, 2, "s") : "—"} />)</span></span>
-                <Value class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"} />
-                <span class="nsub dim">
-                  <span class="nsub-line"><Value motion={() => (dpsValue === null ? null : Math.round(dpsValue))} delta={{}} /></span>
-                  <span class="nsub-line">
-                    <!-- コンボ中は「スキルを何回撃てるか」= 1 分 ÷ サイクル。
-                         スキルの中ディレイだけで数えると、通常攻撃を挟むぶんを落として速く見える -->
-                    <span>
-                      {#if result?.combo}
-                        {Math.round(result.combo.uses_per_minute)} 回/分 ・
-                      {:else if result?.actual_delay}
-                        {Math.round(result.actual_delay.uses_per_minute)} 回/分 ・
-                      {/if}{critMode ? "クリ確定" : "非クリ"}
-                    </span>
-                  </span>
-                  {#if result && result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
-                    <span class="nsub-line">
-                      期待値 <Value motion={() => result?.expected_dps ?? null} value={fmtInt(Math.round(result.expected_dps))} />(クリ率 {fmtPct(result.critical_chance, 1)})
-                    </span>
-                  {/if}
-                </span>
-              </button>
-              <!-- 討伐時間。敵 HP か中ディレイが未収録なら出せないので、ノードごと出さない
-                   (§00 02。0 や「—」で埋めると画面が嘘をつく)。HP はソロの値 -->
-              {#if result && result.defeat_seconds !== null && result.enemy_hp !== null}
-                <div class="node rate">
-                  <span class="nl">討伐時間 <Value motion={() => result?.enemy_hp ?? null} value={`(HP ${fmtInt(result.enemy_hp)})`} /></span>
-                  <Value class="nv" motion={() => result?.defeat_seconds ?? null} value={fmtDuration(result.defeat_seconds)} />
-                  <span class="nsub dim">
-                    <!-- 何秒縮んだか。表示は秒に丸めた値なので、差分もその丸めた値から出す
-                         (画面の 27秒 → 26秒 と ↓1秒 が食い違わない)。討伐時間は**短いほど良い**ので
-                         色だけ入れ替える(矢印は数のとおり。§10) -->
-                    <span class="nsub-line">
-                      <Value
-                        motion={() => (result?.defeat_seconds == null ? null : Math.round(result.defeat_seconds))}
-                        delta={{ unit: "秒", digits: 0 }}
-                        deltaClass="less-is-better"
-                      />
-                    </span>
-                    <!-- クリ確定 / 非クリは隣の DPS 節に出ている(重ねない。§00 02) -->
-                    <span class="nsub-line">ソロ</span>
-                  </span>
-                </div>
-              {/if}
-            </div>
-            <!-- 鎖の各数値の内訳。押した節は動かず、鎖の直下に増える(§00 03) -->
-            {#if perHitDetail}<DetailRows boxed d={perHitDetail} store={details} open={details.isOpen("perHit")} />{/if}
-            {#if totalDetail}<DetailRows boxed d={totalDetail} store={details} open={details.isOpen("total")} />{/if}
-            {#if dpsDetail}<DetailRows boxed d={dpsDetail} store={details} open={details.isOpen("dps")} />{/if}
+              </div>
+            {/if}
             <!-- 討伐時間が出せない(敵 HP か中ディレイが未収録)ときはメーターも文言も出さない
                  (§00 02。0 や「届かない」で埋めると嘘になる)。計算中・防御力を抜けていない
                  は討伐時間の有無に関わらず伝えるべき事実なので、その 2 つだけは別枠で出す -->
@@ -940,8 +729,8 @@
                 {/if}
               </div>
             {/if}
-            {#if result?.actual_delay}
-              {@const d = result.actual_delay}
+            {#if body?.actual_delay}
+              {@const d = body.actual_delay}
               <div class="delay-note dim">
                 中ディレイ {fmtNum(d.base, 2, "s")}
                 {#if d.fixed}
@@ -955,8 +744,8 @@
                   ／ 減少源: {d.contributions.map((c) => `${c.source} ${fmtPct(c.rate)}`).join(" ・ ")}
                 {/if}
                 <br />
-                {#if result?.combo}
-                  {@const c = result.combo}
+                {#if body?.combo}
+                  {@const c = body.combo}
                   1 サイクル = 通常攻撃 {fmtNum(c.normal_delay, 2, "s")} + max(スキル {fmtNum(c.skill_delay, 2, "s")},
                   CI {c.interval !== null ? fmtNum(c.interval, 2, "s") : "?"}) = {fmtNum(c.seconds, 2, "s")}
                   ／ 1 秒あたり = (スキル + {c.normal_attack_name})の合計 ÷ 1 サイクル
@@ -970,8 +759,8 @@
                 {/if}
               </div>
             {/if}
-            {#if result?.critical_rate}
-              {@const c = result.critical_rate}
+            {#if body?.critical_rate}
+              {@const c = body.critical_rate}
               <div class="delay-note dim">
                 クリティカル率 (装備クリ補正 {fmtInt(c.equipment_critical)} + 1) × 2 × (AGI {fmtInt(c.agi)} / (AGI + 対象AGI {fmtInt(c.target_agi)}))
                 {#if c.siena_rate > 0}× シエナのオーラ {fmtNum(1 + c.siena_rate, 2)}{/if}
@@ -980,19 +769,19 @@
                 − 対象のクリティカル被撃率 {fmtInt(-c.target_taken_rate)}%
                 = <b>{fmtNum(c.value, 1, "%")}</b>{#if c.raw < 0}<span class="warn"> ※下限 0%</span>{:else if c.raw > 100}<span class="warn"> ※上限 100%</span>{/if}
               </div>
-            {:else if result && skill}
+            {:else if body && skill}
               <div class="delay-note dim">
                 クリティカル率は出せません(この敵の AGI / クリティカル被撃率、またはスキルの Cri値が wiki 未記載)。
               </div>
             {/if}
-            {#if result && result.effective_base_actual_delay === null}
+            {#if body && body.effective_base_actual_delay === null}
               <div class="delay-note dim">このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。</div>
             {/if}
           </div>
         </SheetCard>
 
-        <!-- なぜこの数字? -->
-        <WhyPanel {result} {defense} {perHit} {critMode} store={details} />
+        <!-- なぜこの数字?(本体だけ。元デザインは変えない。熊の掘り下げは鎖の直下 = DamageChain 内) -->
+        <WhyPanel result={body} {defense} {perHit} {critMode} store={details} />
         </div>
       {/if}
   {/snippet}
@@ -1000,7 +789,7 @@
       {#if character && payload}
         <MaterialsPane
           {payload} characterId={character?.id} {skill} {skillId} targetId={target?.content.id ?? null}
-          {result} {deltaPct} {comboCount} comboType={selectedComboSkillType}
+          result={body} {deltaPct} {comboCount} comboType={selectedComboSkillType}
           adjustments={NEUTRAL_ADJUSTMENTS} {sim} {normalAttackId} {normalAttackOptions}
           bind:combo bind:normalAttackOverride
         />
@@ -1105,47 +894,20 @@
   .sentence.ok { color: var(--good); }
   .sentence.ng { color: var(--danger); }
   .hero-sentence .num { flex-shrink: 0; font-size: 9.5px; }
-  /* 鎖(§14 決定 1)。44px の主役数値は増やさない — 金の帯 = 答えは 1 つ(§02)を
-     壊さず、鎖が右に伸びるだけ。狭いときは折り返す(桁で隣が動かないよう各段に min-width) */
-  /* 節の高さは 3 つとも同じ(stretch)。タイトル行は天井に固定し、数値と副行は底に寄せる
-     (= 下ぞろえ。タイトルの位置は固定 — ユーザー判断 2026-09-15) */
-  /* 押せる範囲(節)は 3 つとも同じ高さ(stretch)。内側の余白 4px / 6px を節に持たせ、
-     hover の塗りが節の形そのものになるようにする。左端は余白ぶん外に出して、上の行と文字位置をそろえる */
-  .chain { display: flex; align-items: stretch; gap: 4px; flex-wrap: wrap; margin: 0 -6px; }
-  /* 枠は付けない(付けると窮屈 — ユーザー判断 2026-09-15)。見出しはタイトル行として太字で主張させる。
-     余白: タイトル行 → 数値 6px、数値 → 差分 4px、差分 → 補足 4px(8 / 4 / 4 の一段階トーンダウン。
-     5 / 2 だと差分と補足が密着して 1 塊に読める — レビュー 2026-09-15) */
-  .chain .node { display: flex; flex-direction: column; gap: 0; min-width: 0; padding: 4px 6px 5px; }
-  .chain .nl {
-    line-height: 14px; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap;
+  /* 鎖(.chain 一式)は calc/DamageChain.svelte が持つ(攻撃者ごとに 2 回描くため子コンポーネント化。ADR-016)。
+     2 本目(熊)が続くときの区切りだけはここで足す — DamageChain 単体では
+     「自分の隣に自分と同じ要素があるか」を知らない(:global は実 DOM の隣接関係を見る) */
+  :global(.hero .chain-block + .chain-block) {
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft);
   }
-  /* .num は ui/Value.svelte が描く子要素にも付くので :global で届かせる */
-  .chain .nl :global(.num) { font-weight: 600; color: var(--fg-muted); }
-  .chain :global(.nv) { margin-top: auto; padding-top: 6px; }
-  .chain .nsub { margin-top: 4px; gap: 4px; }
-  .chain :global(.nv) { font-weight: 700; color: var(--fg); white-space: nowrap; }
-  .chain .node.gate :global(.nv) { min-width: 120px; }
-  .chain .node.mid :global(.nv) { font-size: 15px; min-width: 68px; }
-  /* DPS は主役(1 発 = --t-result)の隣の見出し数字。--t-result だと 1 発と並んで大きすぎる(ユーザー 2026-09-16) */
-  .chain .node.rate :global(.nv) { font-size: var(--t-heading); min-width: 68px; }
-  /* 押せるノードは桁・状態で動かない。実測(tools/design-audit/live/digits.js)では
-     1 発 180〜220px・バッジ 39〜106px・合計 75〜83px と揺れ、右のノードが最大 29px 逃げていた
-     (§09 規則 4)。幅を取り切り、中身が短いときは空けておく。値の上限
-     (与ダメージ 29,500,000 / 合計 10 桁)が入る幅にしてあるので、桁が溢れて切れることはない */
-  .chain .node.gate { width: 260px; }
-  .chain .node.mid { min-width: 136px; }
-  .chain .nsub { font-size: 9px; color: var(--fg-dim); white-space: nowrap; display: flex; flex-direction: column; }
-  .chain .nsub-line { display: flex; align-items: baseline; gap: 5px; min-height: 14px; }
-  /* ui/Value.svelte が描く crit-none / crit-partial は子コンポーネントの要素 */
-  .chain :global(.crit-none) { color: var(--state-short-fg); font-weight: 700; }
-  .chain :global(.crit-partial) { color: var(--state-edge-fg); font-weight: 700; }
-  /* 差分(いくつ変わったか)は数値の真下。9px だと 44px の数値の下で読めないので 11px。
-     差分枠は ui/Value.svelte が描く(スコープ付き CSS が届かないので :global) */
-  .chain .nsub :global(.delta) { font-size: 11px; line-height: 14px; }
-  /* 押すと内訳が鎖の直下に開く。hover は塗りだけで、余白を足して隣を動かさない(§00 03) */
-  .chain button.node { text-align: left; border-radius: var(--r-inset); }
-  .chain button.node:hover { background: var(--bg-active); }
-  .chain button.node:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  /* 合計(本体 + 熊)の面。読み取り専用なのでインセット(§design-system: 面はインセット+ハイライト) */
+  .combined-face {
+    margin-top: 6px; padding: 7px 11px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  }
+  .combined-label { flex-shrink: 0; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--fg-head); }
+  .combined-item { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .ci-label { font-size: 9.5px; color: var(--fg-dim); white-space: nowrap; }
+  .combined-face :global(.ci-value) { font-size: var(--t-heading); font-weight: 700; color: var(--fg); white-space: nowrap; }
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
 

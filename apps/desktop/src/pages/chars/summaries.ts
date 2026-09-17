@@ -17,6 +17,15 @@ export function equipmentAttackKindsFor(dependency: SkillDependency | null): Equ
   return ["thrust", "slash", "magic_attack", "magic_defense"];
 }
 
+/**
+ * 熊(魔法人形)の装備攻撃力係数が 0 でない補正(斬り・魔攻・魔防、wiki `STAB(熊)` 行)。
+ * 熊は依存種別を持たない固定係数なので `equipmentAttackKindsFor` のような分岐表を持たず、
+ * Rust 側が起動時に配る `tables.magic_doll_enchant_keys` をそのまま返す(TS に係数を書き写さない)。
+ */
+export function equipmentAttackKindsForMagicDoll(): EquipmentStatKind[] {
+  return tables.magic_doll_enchant_keys;
+}
+
 /** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号 + ソウルリンク)。計算は Rust 側(preview) */
 export function equipmentBaseTotal(preview: StatPreview | null): EquipmentValues {
   return preview?.equipment_base_total ?? zeroValues();

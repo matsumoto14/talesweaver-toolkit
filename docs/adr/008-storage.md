@@ -69,6 +69,13 @@ id が `relic_sanctuary_kisinik` だったために 10〜19段の系列に入ら
 同じ書き換えを `onupgradeneeded` に入れた。書き出し JSON は形が変わらないので `FORMAT_VERSION` は
 据え置き(旧い書き出しを読み込むと 20段の目標だけ未解決になるが、選び直せば済む)。
 
+### v16: 魔法人形の召喚スキルを保存する(2026-09-18)
+
+アナイスの魔法人形(ミカベア / ルシベア)は主軸スキルと別に自分でスキルを撃つ(wiki 計算式まとめ
+`STAB(熊)` 行)。どれを撃たせるかをキャラに保存する `summon_skill_id TEXT`(NULL 可、主軸スキルと同型)
+を追加。既存キャラは未選択のまま読める。SQLite は `SCHEMA_VERSION` 15 → 16、
+IndexedDB(`browserStore.ts`)も 5 → 6 で既存行に `summon_skill_id: null` を埋める。
+
 ### v1 → v8 の変遷
 
 1. **v1**: `characters` 1 テーブル(id, name, game_character_id, 7 ステ, awakening_stage, eta_level)。

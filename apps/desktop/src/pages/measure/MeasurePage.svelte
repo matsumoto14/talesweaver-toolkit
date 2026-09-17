@@ -126,10 +126,11 @@
           : null;
         if (!isCurrent()) return;
         // 収録済みの敵では計算に使った攻撃力をそのまま採る(テシスコアは対象の地域で
-        // 解決されるので、地域なしの preview_effective_stats とは値がずれる)
-        attack = damage?.trace.attack ?? preview.attack?.breakdown ?? null;
+        // 解決されるので、地域なしの preview_effective_stats とは値がずれる)。
+        // 実測は本体スキルの検証用なので body だけ見る(熊は別枠。ADR-016)
+        attack = damage?.body.trace.attack ?? preview.attack?.breakdown ?? null;
         stats = preview.stats;
-        result = damage;
+        result = damage?.body ?? null;
       } catch (error) {
         reportError(errorMessage(error));
       }

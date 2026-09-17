@@ -614,13 +614,56 @@ fn add_traced(
 /// 画面で区別できないため)。敵 HP は**ソロ**の値なので、PT の討伐時間はここからは出せない。
 /// キマイラの「武器強化ダメージ無効」は与ダメージ側が未モデル `[仮]` なので、
 /// その分だけ討伐時間が短く出る。
-fn defeat_seconds(hp: Option<i64>, expected_dps: Option<f64>) -> Option<f64> {
+/// 討伐にかかる秒数(`敵 HP ÷ expected_dps`)。`DamageResult::defeat_seconds` と同じ規則
+/// (dps が 0 以下・HP 未収録なら `None`)。熊(魔法人形)ぶんの合算 DPS からも同じ規則で
+/// 討伐時間を出す必要があるため、commands 層から呼べるよう公開する(二重実装しない)。
+pub fn defeat_seconds(hp: Option<i64>, expected_dps: Option<f64>) -> Option<f64> {
     let hp = hp?;
     let dps = expected_dps?;
     if dps <= 0.0 {
         return None;
     }
     Some(hp as f64 / dps)
+}
+
+/// 熊(魔法人形)の結果に攻撃間隔の式(`summon_uses_per_minute`: 基本中ディレイ × (1 − 減少) + 0.0705s)
+/// を当て、DPS 由来の値(`actual_delay` の中ディレイ・回数 / `dps` / `expected_dps` / `defeat_seconds` /
+/// `reach`)を作り直す。`calculate_damage` が出した本体式の値(実測回数表・下限 0.3s・コンボ倍率)は
+/// 熊には当てはまらないので残さない。戻りは攻撃間隔(秒)。中ディレイ未収録なら何もせず `None`。
+/// 計算タブ(commands)とホーム評価(content_evaluation)の両方がここを通る(二重実装しない)。
+pub fn apply_summon_interval(result: &mut DamageResult, enemy_hp: Option<i64>) -> Option<f64> {
+    let delay = result.actual_delay.as_mut()?;
+    let uses_per_minute = crate::actual_delay::summon_uses_per_minute(delay.base, delay.reduction);
+    let interval = crate::actual_delay::SECONDS_PER_MINUTE / uses_per_minute;
+    delay.combo_rate = 1.0;
+    delay.raw = interval;
+    delay.value = interval;
+    delay.floored = false;
+    delay.uses_per_minute = uses_per_minute;
+    delay.uses_measured = false;
+    let factor = uses_per_minute / crate::actual_delay::SECONDS_PER_MINUTE;
+    let dps = DpsTriple {
+        min: result.total.min as f64 * factor,
+        max: result.total.max as f64 * factor,
+        critical: result.total.critical as f64 * factor,
+    };
+    let p = result.critical_chance;
+    let expected_dps = dps.max * (1.0 - p) + dps.critical * p;
+    let seconds = defeat_seconds(enemy_hp, Some(expected_dps));
+    result.dps = Some(dps);
+    result.expected_dps = Some(expected_dps);
+    result.defeat_seconds = seconds;
+    result.reach = ReachTier::of_defeat_seconds(seconds);
+    Some(interval)
+}
+
+/// 本体 + 熊の期待 DPS(単純和。本体は召喚中も自由に撃てる)。片方が無ければもう片方の値。
+pub fn combine_expected_dps(body: Option<f64>, summon: Option<f64>) -> Option<f64> {
+    match (body, summon) {
+        (Some(a), Some(b)) => Some(a + b),
+        (a, None) => a,
+        (None, b) => b,
+    }
 }
 
 /// コンボ(間に通常攻撃を挟む)ときのダメージ。1 発ぶんの数字は `calculate_damage` と同じで、
@@ -1300,6 +1343,7 @@ mod tests {
                     Skill::compute_power(0.99, 1),
                     Some(1.4),
                 ),
+                attacker: crate::Attacker::Player,
             },
             enemy: Enemy {
                 id: "e".into(),

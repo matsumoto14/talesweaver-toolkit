@@ -46,6 +46,7 @@
   import { persisted } from "../../ui/persistedState.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { adjustDropIndex, dropHalfIndex } from "../../ui/reorder.svelte";
+  import Chip from "../../ui/Chip.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Picker from "../../ui/Picker.svelte";
   import Splitter from "../../ui/Splitter.svelte";
@@ -58,6 +59,7 @@
     avatarEnhanceSummary,
     defenseRatePercent as defenseRatePercentOf,
     equipmentAttackKindsFor,
+    equipmentAttackKindsForMagicDoll,
     equipmentAttackRatePercent,
     equipmentBaseTotal,
     equipmentEnhancedTotal,
@@ -190,28 +192,38 @@
   });
   const skills = $derived(skillsByCharacter[draft.gameCharacterId] ?? []);
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+  /** 熊(魔法人形)が撃つスキル。未選択・アナイス以外は null(欄自体が出ない) */
+  const summonSkill = $derived(skills.find((s) => s.id === draft.summonSkillId) ?? null);
+
+  /** 保存前のキャラデータをプレビュー入力の形に(deep copy)。主軸・熊どちらの攻撃力
+   *  プレビューも同じ材料(能力値・装備・バフ)を使うので、ここで 1 回に集約する。 */
+  function previewMaterial() {
+    return {
+      baseStats: { ...draft.baseStats },
+      statSources: JSON.parse(JSON.stringify(draft.statSources)) as StatSources,
+      // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
+      equipment: JSON.parse(JSON.stringify(draft.equipment)) as Equipment,
+      // 浅いコピーだとネストした値(アンリーシュの枠・極限スキル)の変更を $effect が追跡できず、
+      // 触っても再計算が走らない。装備と同じく deep copy で全プロパティを読む
+      commonSkills: JSON.parse(JSON.stringify(draft.commonSkills)) as CommonSkills,
+      // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
+      awakening: { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) },
+      // いつものバフも**この場で**読む。previewLatest.run は debounce するので、run に渡す
+      // closure の中で読んだ値は $effect の依存に入らない — バフを付け替えても再計算が走らず、
+      // 能力値だけ古いまま残っていた(上の deep copy が同じ理由でここに置かれているのと同じ)
+      buffs: JSON.parse(JSON.stringify(
+        app.buffSets.find((set) => set.id === draft.defaultBuffSetId)?.choices ?? { choices: [] },
+      )) as BuffSelection,
+    };
+  }
 
   // 即時プレビュー(100ms debounce)。エラーはペイン内に控えめに表示(トーストは出さない)。
   let preview = $state<StatPreview | null>(null);
   let previewError = $state<string | null>(null);
   const previewLatest = latest({ debounce: 100 });
   $effect(() => {
-    const baseStats = { ...draft.baseStats };
-    const statSources = JSON.parse(JSON.stringify(draft.statSources)) as StatSources;
-    // シエナのオーラのステ加算が最終能力値に乗るので、装備もプレビューの入力に含める
-    const equipment = JSON.parse(JSON.stringify(draft.equipment)) as Equipment;
-    // 浅いコピーだとネストした値(アンリーシュの枠・極限スキル)の変更を $effect が追跡できず、
-    // 触っても再計算が走らない。装備と同じく deep copy で全プロパティを読む
-    const commonSkills = JSON.parse(JSON.stringify(draft.commonSkills)) as CommonSkills;
-    // 最終能力値の上限は覚醒段階 + エタの意志 Lv で決まるので、覚醒もプレビューの入力に含める
-    const awakening = { stage: Number(draft.stage), eternal_level: Number(draft.eternalLevel) };
+    const { baseStats, statSources, equipment, commonSkills, awakening, buffs } = previewMaterial();
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
-    // いつものバフも**この場で**読む。previewLatest.run は debounce するので、run に渡す
-    // closure の中で読んだ値は $effect の依存に入らない — バフを付け替えても再計算が走らず、
-    // 能力値だけ古いまま残っていた(上の deep copy が同じ理由でここに置かれているのと同じ)
-    const buffs = JSON.parse(JSON.stringify(
-      app.buffSets.find((set) => set.id === draft.defaultBuffSetId)?.choices ?? { choices: [] },
-    )) as BuffSelection;
     previewLatest.run((isCurrent) =>
       previewEffectiveStats(
         baseStats, statSources, equipment, commonSkills, awakening, mainSkillId, buffs,
@@ -227,6 +239,37 @@
         }),
     );
     return () => previewLatest.cancel();
+  });
+
+  /**
+   * 「いまの実力」帯の 熊 / 本体 チップ(保存しない・ローカル state)。既定は**熊**固定。
+   * 本来は火力の大きいほうを既定にしたいが、この帯はダメージ計算(preview_damage)を呼ばず
+   * 攻撃力(A)だけをプレビューするので、どちらが大きいか比較できない。ADR-016 決定 10。
+   */
+  let summonView = $state<"bear" | "body">("bear");
+  /** 熊が撃つスキルの攻撃力(A)プレビュー。未選択なら呼ばない(計算タブと同じく 0 で埋めない) */
+  let summonPreview = $state<StatPreview | null>(null);
+  const summonPreviewLatest = latest({ debounce: 100 });
+  $effect(() => {
+    const summonSkillId = draft.summonSkillId === "" ? null : draft.summonSkillId;
+    if (!summonSkillId) {
+      summonPreviewLatest.cancel();
+      summonPreview = null;
+      return;
+    }
+    const { baseStats, statSources, equipment, commonSkills, awakening, buffs } = previewMaterial();
+    summonPreviewLatest.run((isCurrent) =>
+      previewEffectiveStats(
+        baseStats, statSources, equipment, commonSkills, awakening, summonSkillId, buffs,
+      )
+        .then((p) => {
+          if (isCurrent()) summonPreview = p;
+        })
+        .catch(() => {
+          if (isCurrent()) summonPreview = null;
+        }),
+    );
+    return () => summonPreviewLatest.cancel();
   });
 
   // キャラスキル全件ぶんの、選んでいるマスタリーを踏まえた実際の効果(マスタリー解決は Rust 側)。
@@ -407,6 +450,9 @@
   /** 強化能力値の合計。いまの実力バーの装備ブロックと共有(summaries.ts。計算は Rust 側 preview) */
   const eqEnhancedTotal = $derived(equipmentEnhancedTotal(preview));
   const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
+  /** 熊が選ばれているとき「いまの実力」帯が出す装備列(斬り・魔攻・魔防。熊は依存種別を持たない) */
+  const summonEquipmentAttackKinds = $derived(equipmentAttackKindsForMagicDoll());
+  const showSummonView = $derived(draft.summonSkillId !== "" && summonView === "bear");
   /** 装備値の見せ方は「合計 (+エンチャント)」で全画面そろえる(equipment.ts の withEnchant) */
   const equipmentSummary = $derived(
     equipmentAttackKinds
@@ -870,9 +916,17 @@
 
   <div class="sheet">
     <span class="sheet-title">いまの実力</span>
+    {#if draft.summonSkillId !== ""}
+      <!-- 熊(魔法人形)が撃つスキルがあるキャラだけ出る 2 択(§07 段階選択)。保存しない
+           ローカル state — キャラタブでは「見る側」を切り替えるだけで、モデルは変えない -->
+      <div class="summon-toggle" role="group" aria-label="いまの実力を熊 / 本体のどちらで見るか">
+        <Chip class="quiet" name="summon-view" value="bear" on={summonView === "bear"} onToggle={() => (summonView = "bear")}>熊</Chip>
+        <Chip class="quiet" name="summon-view" value="body" on={summonView === "body"} onToggle={() => (summonView = "body")}>本体</Chip>
+      </div>
+    {/if}
     <span class="sheet-equipment num dim">
       装備
-      {#each equipmentAttackKinds as k, i (k)}
+      {#each (showSummonView ? summonEquipmentAttackKinds : equipmentAttackKinds) as k, i (k)}
         {#if i > 0}<span class="sep"> ・ </span>{/if}{EQUIPMENT_STAT_SHORT[k]}
         <!-- 合計を出し、その横に括弧でエンチャント分(equipment.ts の withEnchant と同じ形。
              跳ねは値ごとに要るのでここは span を分けたまま組み立てる) -->
@@ -880,7 +934,13 @@
         <Value class="enhance" motion={() => eqEnhancedTotal[k]} value={`(${fmtSigned(eqEnhancedTotal[k])})`} />
       {/each}
     </span>
-    {#if mainSkill}
+    {#if showSummonView}
+      <span class="sheet-attack">
+        <span class="attack-label">攻撃力(A)</span>
+        <Value class="strong" motion={() => summonPreview?.attack?.breakdown.value ?? null} value={summonPreview?.attack ? fmtInt(summonPreview.attack.breakdown.value) : "—"} />
+        <span class="dim">{summonSkill?.name ?? ""}</span>
+      </span>
+    {:else if mainSkill}
       <span class="sheet-attack">
         <span class="attack-label">攻撃力(A)</span>
         <Value class="strong" motion={() => preview?.attack?.breakdown.value ?? null} value={preview?.attack ? fmtInt(preview.attack.breakdown.value) : "—"} />
@@ -1000,6 +1060,8 @@
     border-top: 1px solid var(--border-strong); background: var(--bg-mid); padding: 0 16px;
   }
   .sheet-title { flex-shrink: 0; font-size: var(--t-label); font-weight: 700; letter-spacing: 0.06em; color: var(--fg-head); white-space: nowrap; }
+  /* 熊 / 本体(§07 段階選択)。保存しないのでラベル直後・quiet(ラベンダー系。ADR-016) */
+  .summon-toggle { flex-shrink: 0; display: flex; gap: 4px; }
   /* 火力の材料(装備値)。相手ありきのダメージは出さない — このバーの役目は装備↑攻撃力(A)まで */
   /* flex: 1 で伸ばすと装備値と攻撃力が 1216px の両端に離れ、視線が横断する(§00 01)。
      材料 → 結果 は隣り合わせにして左に固め、余白は右のボタンの手前に集める */

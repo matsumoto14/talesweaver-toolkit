@@ -80,7 +80,13 @@ export interface Skill {
   power: number;
   /** 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。null = 基本中ディレイ未収録で比較不能 */
   power_per_second: number | null;
+  /** このスキルを実際に撃つ主体。魔法人形(アナイスのミカベア / ルシベア)が自分で撃つ
+   * スキルだけ `magic_doll`。既定は `player` */
+  attacker: Attacker;
 }
+
+// crates/domain/src/skill.rs の Attacker(snake_case)。
+export type Attacker = "player" | "magic_doll";
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
 export type Element =
@@ -1248,6 +1254,8 @@ export interface RegisteredCharacter {
   equipment: Equipment;
   /** 主軸スキル(攻撃力の依存種別を決める)。未選択は null */
   main_skill_id: string | null;
+  /** 召喚スキル(アナイスの魔法人形に撃たせるスキル)。魔法人形を持たないキャラ・未選択は null */
+  summon_skill_id: string | null;
   /** ホームの「次の目標」に据えるコンテンツ。未設定(null)なら自動で選ぶ */
   goal_content_id: string | null;
   /** 共通スキル(wiki: Skill/共通) */
@@ -1273,6 +1281,8 @@ export interface NewCharacter {
   /** 共通スキル(wiki: Skill/共通) */
   common_skills: CommonSkills;
   main_skill_id: string | null;
+  /** 召喚スキル(アナイスの魔法人形に撃たせるスキル)。魔法人形を持たないキャラ・未選択は null */
+  summon_skill_id: string | null;
   /** ホームの「次の目標」に据えるコンテンツ。未設定(null)なら自動で選ぶ */
   goal_content_id: string | null;
   default_buff_set_id: number | null;
@@ -1880,6 +1890,38 @@ export interface DamageResult {
 }
 
 /**
+ * 熊(魔法人形)ぶんのダメージ計算結果(Rust `SummonDamage`)。`result` は熊固定係数・
+ * コンボ無し(combo_count = 0)で計算した `DamageResult` だが、DPS 由来の値
+ * (actual_delay.uses_per_minute / dps / expected_dps / defeat_seconds / reach)は
+ * 熊の攻撃間隔式で作り直したもの(本体の実測回数表は使わない)。
+ */
+export interface SummonDamage {
+  skill_id: string;
+  result: DamageResult;
+  /** 攻撃間隔(秒)。中ディレイ未収録なら null(0 で埋めない) */
+  interval_seconds: number | null;
+}
+
+/** 本体 + 熊の合計(Rust `CombinedDamage`)。熊を持たない・召喚スキル未選択なら本体単独と同じ */
+export interface CombinedDamage {
+  expected_dps: number | null;
+  defeat_seconds: number | null;
+  /** 合計の討伐時間から決まる到達段。討伐時間が出せないなら null */
+  reach: ReachTier | null;
+}
+
+/**
+ * `calculateDamage` / `previewDamage` の戻り(Rust `CharacterDamageResult`)。
+ * 既存の `DamageResult` はそのまま `body` に入り、熊ぶん(`summon`)と合計(`combined`)が付く。
+ */
+export interface CharacterDamageResult {
+  body: DamageResult;
+  /** キャラに summon_skill_id があるときだけ非 null */
+  summon: SummonDamage | null;
+  combined: CombinedDamage;
+}
+
+/**
  * コンボの 1 サイクル(通常攻撃 → スキル)。
  * サイクル = 通常攻撃の中ディレイ + max(スキルの中ディレイ, コンボインターバル)。
  */
@@ -2092,6 +2134,9 @@ export interface GameTables {
   /** スキル依存種別ごとの、エンチャントで見るべき装備値 2 種(commands の EnchantDependencyKeys)。
    *  「依存種別 → ステ 2 本」のルール表をフロントに持たない(装備攻撃力係数から Rust 側が引く) */
   enchant_dependency_keys: { dependency: SkillDependency; keys: EnchantDepKey[] }[];
+  /** 熊(魔法人形)の装備係数が非 0 の値種(斬り・魔攻・魔防)。熊は依存種別を持たない固定係数
+   *  なので dependency 別ではなく単一のリスト(commands の magic_doll_enchant_keys) */
+  magic_doll_enchant_keys: EnchantDepKey[];
 }
 
 // crates/domain/src/game_tables.rs の DamageCategoryLabel。
@@ -2168,6 +2213,8 @@ export interface BestSkillDamage {
   /** 合計の主役値 = 1 ヒットの主役値 × 段数 */
   total_primary: number;
   /** 討伐にかかる秒数(敵 HP ÷ 期待 DPS)。敵 HP 未収録・中ディレイ未収録なら null */
+  /** 本体だけの期待 DPS(熊は含まない。討伐時間・到達段は熊込み) */
+  expected_dps: number | null;
   defeat_seconds: number | null;
 }
 

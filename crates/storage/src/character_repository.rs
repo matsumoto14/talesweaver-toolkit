@@ -34,6 +34,11 @@ pub struct RegisteredCharacter {
     /// 主軸スキル(gamedata の `Skill::id`)。攻撃力(A)の依存種別を決める。
     /// スキル未収録のキャラがあるので未選択(`None`)を許す
     pub main_skill_id: Option<String>,
+    /// 召喚スキル(gamedata の `Skill::id`)。アナイスの魔法人形(ミカベア / ルシベア)が
+    /// 自分で撃つスキルのうち、どれを撃たせるか(wiki 計算式まとめ `STAB(熊)` 行、
+    /// 2026-09-18 取得)。魔法人形を持たないキャラ・未選択は `None`
+    #[serde(default)]
+    pub summon_skill_id: Option<String>,
     /// ホームの「次の目標」に据えるコンテンツ(gamedata の `Content::id`)。
     /// 未設定(`None`)なら画面が自動で選ぶ。
     pub goal_content_id: Option<String>,
@@ -77,9 +82,11 @@ CREATE TABLE IF NOT EXISTS characters (
 /// あれば `[title]`、無ければ `[]` を補う(2026-09-15)。
 /// v15 でレリックの聖域 20段の content id が `relic_sanctuary_kisinik` から `relic_sanctuary_20`
 /// に変わった(10〜19段と同じ系列に畳むため)。保存済みの「次の目標」を書き換える(2026-09-16)。
-const SCHEMA_VERSION: i64 = 15;
+/// v16 で `summon_skill_id`(アナイスの魔法人形に撃たせるスキル)が加わった。既存キャラは
+/// 未選択(NULL)で読める(2026-09-18)。
+const SCHEMA_VERSION: i64 = 16;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, goal_content_id, default_buff_set_id, updated_at";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, default_buff_set_id, updated_at";
 
 /// v9: キャラ JSON に埋め込まれていた常用バフを独立したセットへ移す。
 /// 1キャラずつ作り、同じ内容でも統合しない。全処理を単一 transaction にする。
@@ -825,6 +832,10 @@ impl CharacterRepository {
         if !existing_columns.contains("goal_content_id") {
             conn.execute_batch("ALTER TABLE characters ADD COLUMN goal_content_id TEXT;")?;
         }
+        // v16: 魔法人形の召喚スキル。既存キャラは未選択(NULL)で読める。
+        if !existing_columns.contains("summon_skill_id") {
+            conn.execute_batch("ALTER TABLE characters ADD COLUMN summon_skill_id TEXT;")?;
+        }
         // v6: 共通スキル。既存キャラは `{}`(全部未習得)で読める。
         if !existing_columns.contains("common_skills") {
             conn.execute_batch(
@@ -873,8 +884,8 @@ impl CharacterRepository {
         let equipment_json = serde_json::to_string(&new.equipment)?;
         let common_skills_json = serde_json::to_string(&new.common_skills)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, goal_content_id, default_buff_set_id, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, default_buff_set_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
             params![
                 new.name,
                 new.game_character_id,
@@ -891,6 +902,7 @@ impl CharacterRepository {
                 equipment_json,
                 common_skills_json,
                 new.main_skill_id,
+                new.summon_skill_id,
                 new.goal_content_id,
                 new.default_buff_set_id,
             ],
@@ -927,10 +939,10 @@ impl CharacterRepository {
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
                 awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
-                common_skills = ?14, main_skill_id = ?15, goal_content_id = ?16,
-                default_buff_set_id = ?17,
+                common_skills = ?14, main_skill_id = ?15, summon_skill_id = ?16, goal_content_id = ?17,
+                default_buff_set_id = ?18,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-             WHERE id = ?18",
+             WHERE id = ?19",
             params![
                 update.name,
                 update.game_character_id,
@@ -947,6 +959,7 @@ impl CharacterRepository {
                 equipment_json,
                 common_skills_json,
                 update.main_skill_id,
+                update.summon_skill_id,
                 update.goal_content_id,
                 update.default_buff_set_id,
                 id,
@@ -1031,6 +1044,7 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         equipment: row.get::<_, EquipmentColumn>("equipment")?.0,
         common_skills: row.get::<_, CommonSkillsColumn>("common_skills")?.0,
         main_skill_id: row.get("main_skill_id")?,
+        summon_skill_id: row.get("summon_skill_id")?,
         goal_content_id: row.get("goal_content_id")?,
         default_buff_set_id: row.get("default_buff_set_id")?,
         updated_at: row.get("updated_at")?,
@@ -1277,6 +1291,7 @@ mod tests {
             equipment: Equipment::default(),
             common_skills: CommonSkills::default(),
             main_skill_id: None,
+            summon_skill_id: None,
             goal_content_id: None,
             default_buff_set_id: None,
         }
@@ -2032,6 +2047,87 @@ mod tests {
             .update(list[0].id, &existing, &[], &[], &[], &[], &[], &[])
             .unwrap();
         assert_eq!(updated.goal_content_id.as_deref(), Some("relic-sanctuary-15"));
+    }
+
+    #[test]
+    fn summon_skill_idは往復し未設定はnullで読める() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("召喚");
+        c.summon_skill_id = Some("anais_mica_even_bear".to_string());
+        let created = repo.create(&c, &[], &[], &[], &[], &[], &[]).unwrap();
+        assert_eq!(
+            created.summon_skill_id.as_deref(),
+            Some("anais_mica_even_bear")
+        );
+        assert_eq!(
+            repo.get(created.id).unwrap().summon_skill_id.as_deref(),
+            Some("anais_mica_even_bear")
+        );
+
+        // 未選択に戻す = None を保存できること。
+        let mut cleared = c.clone();
+        cleared.summon_skill_id = None;
+        let updated = repo
+            .update(created.id, &cleared, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(updated.summon_skill_id, None);
+    }
+
+    /// v15 の DB(`summon_skill_id` 列が無い)を開いても既存キャラは壊れず、召喚スキルは
+    /// 未選択で読める。
+    #[test]
+    fn summon_skill_id列の無いv15dbを開くと既存キャラは未選択で読める() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id)
+            VALUES ('アナイス', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'anais_thrust');
+            PRAGMA user_version = 15;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let list = repo.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "アナイス");
+        // 既存の値は壊れない
+        assert_eq!(list[0].main_skill_id.as_deref(), Some("anais_thrust"));
+        // 召喚スキルは未選択のまま
+        assert_eq!(list[0].summon_skill_id, None);
+
+        // 移行後も create/update が使えること。
+        let mut existing = new_character("アナイス");
+        existing.summon_skill_id = Some("anais_mica_even_bear".to_string());
+        let updated = repo
+            .update(list[0].id, &existing, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(
+            updated.summon_skill_id.as_deref(),
+            Some("anais_mica_even_bear")
+        );
     }
 
     /// v4 の DB(`main_skill_id` 列が無い)を開いても落ちず、既存キャラは主軸スキル未選択で読める。

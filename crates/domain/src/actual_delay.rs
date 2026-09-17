@@ -105,6 +105,18 @@ pub fn actual_delay(
     }
 }
 
+/// 魔法人形(アナイスのミカベア / ルシベア)の攻撃間隔の固定オーバーヘッド(秒)。
+/// wiki 計算式まとめ「熊の攻撃間隔 = 基本中ディレイ × (1 − 中ディレイ減少値) + 0.0705秒」
+/// (2026-09-18 取得)。本体の実測回数表(`SkillUsesTable`)は本体プレイヤーの実測なので
+/// 熊には使わない(常に式で出す)。
+const SUMMON_DELAY_OVERHEAD: f64 = 0.0705;
+
+/// 熊(魔法人形)の 60 秒あたりのスキル回数。コンボボーナスは乗らない(熊はコンボしない)ので
+/// `combo_rate` は考慮しない。`delay_reduction` は上限 70% 適用後の値を渡す。
+pub fn summon_uses_per_minute(base_delay_seconds: f64, delay_reduction: f64) -> f64 {
+    SECONDS_PER_MINUTE / (base_delay_seconds * (1.0 - delay_reduction) + SUMMON_DELAY_OVERHEAD)
+}
+
 /// 実測のスキル回数表(**60 秒あたり**)。行 = 総中ディレイ減少 %、列 = 基本中ディレイ(秒)。
 ///
 /// wiki `#ActualDelay` 自身が「中ディレイ減少値を特定の値まで上げると、スキルの発動頻度が
@@ -184,6 +196,15 @@ mod tests {
             base_delays: vec![0.8, 1.6],
             uses: vec![vec![135.0, 69.0], vec![176.0, 100.0]],
         }
+    }
+
+    // wiki 計算式まとめ: 熊の攻撃間隔 = 基本中ディレイ × (1 − 中ディレイ減少値) + 0.0705秒
+    #[test]
+    fn 熊の攻撃間隔は基本中ディレイに0_0705秒を足した式で出す() {
+        // 減少 0、基本 1s → 60 / 1.0705
+        assert!((summon_uses_per_minute(1.0, 0.0) - 60.0 / 1.0705).abs() < 1e-9);
+        // 減少 0.35、基本 0.8s → 60 / (0.8×0.65 + 0.0705)
+        assert!((summon_uses_per_minute(0.8, 0.35) - 60.0 / (0.8 * 0.65 + 0.0705)).abs() < 1e-9);
     }
 
     // wiki `#ActualDelay`: 中ディレイ = 基本 × (1 − 減少値) × (2 コンボ以上なら 0.5)

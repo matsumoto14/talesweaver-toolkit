@@ -26,6 +26,11 @@ pub struct NewCharacter {
     #[serde(default)]
     pub common_skills: CommonSkills,
     pub main_skill_id: Option<String>,
+    /// 召喚スキル(gamedata の `Skill::id`)。アナイスの魔法人形(ミカベア / ルシベア)が
+    /// 自分で撃つスキルのうち、どれを撃たせるか(wiki 計算式まとめ `STAB(熊)` 行、
+    /// 2026-09-18 取得)。魔法人形を持たないキャラ・未選択は `None`
+    #[serde(default)]
+    pub summon_skill_id: Option<String>,
     /// ホームの「次の目標」に据えるコンテンツ(gamedata の `Content::id`)。
     /// `None` はユーザーが決めていない状態で、そのときは画面が自動で選ぶ。
     /// 「クリアできる」と「周回したい」は別なので、自動判定を置き換える例外操作として持つ。

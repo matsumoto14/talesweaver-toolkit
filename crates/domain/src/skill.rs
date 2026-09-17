@@ -58,6 +58,19 @@ impl SkillDependency {
     }
 }
 
+/// スキルを実際に撃つ主体。攻撃力の係数(`AttackCoefficients`)・装備係数・命中P補正を
+/// どちらの表から引くかを決める(wiki 計算式まとめ `STAB(熊)` 行、2026-09-18 取得)。
+///
+/// アナイスの魔法人形(ミカベア / ルシベア)は自分でスキルを撃ち、本体とは別の係数で
+/// 攻撃力を持つ。破壊精霊は対象外(そのスキルは本体扱いのまま)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Attacker {
+    #[default]
+    Player,
+    MagicDoll,
+}
+
 /// 対象指定(wiki スキル性能一覧の「対象指定」列)。
 ///
 /// 単体は 1 体、範囲は位置指定・方向指定・自分中心・設置などをまとめたもの。
@@ -162,6 +175,10 @@ pub struct Skill {
     pub power: f64,
     /// 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。基本中ディレイ不明なら比較不能
     pub power_per_second: Option<f64>,
+    /// このスキルを実際に撃つ主体(wiki `STAB(熊)` 行、2026-09-18 取得)。既定は `Player`。
+    /// gamedata の副表(`MAGIC_DOLL_SKILLS`)から `to_skill()` が付ける
+    #[serde(default)]
+    pub attacker: Attacker,
 }
 
 impl Skill {
@@ -214,6 +231,7 @@ impl Skill {
             combo_variants: Vec::new(),
             power: 1.0,
             power_per_second: None,
+            attacker: Attacker::Player,
         }
     }
 
@@ -305,6 +323,7 @@ mod tests {
                 Skill::compute_power(5.55, 11),
                 Some(1.4),
             ),
+            attacker: Attacker::Player,
         }
     }
 

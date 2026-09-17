@@ -1,8 +1,8 @@
 //! ゲーム内キャラクター(操作キャラ)と、スキル依存種別ごとのステ由来攻撃力係数。
 
 use domain::{
-    AccuracyCorrection, AttackCoefficients, EquipmentCoefficients, EquipmentRates, SkillDependency,
-    StatKind, WristBonusRule,
+    AccuracyCorrection, Attacker, AttackCoefficients, EquipmentCoefficients, EquipmentRates,
+    SkillDependency, StatKind, WristBonusRule,
 };
 use serde::Serialize;
 
@@ -355,6 +355,63 @@ pub fn equipment_coefficients(dependency: SkillDependency) -> EquipmentCoefficie
     EquipmentCoefficients { base, enhanced }
 }
 
+/// アナイスの魔法人形(ミカベア / ルシベア)の係数(wiki 計算式まとめ `STAB(熊)` 行、
+/// 2026-09-18 取得)。STAB 行の「STAB→INT」「突き→魔攻」の置き換えに相当する固定値で、
+/// `dependency` は無視する(熊は依存種別を持たず、係数は常にこれ)。
+const MAGIC_DOLL_ATTACK_COEFFICIENTS: AttackCoefficients = AttackCoefficients {
+    primary: (StatKind::Int, 2.1),
+    secondary: (StatKind::Hack, 1.08),
+};
+
+const MAGIC_DOLL_EQUIPMENT_COEFFICIENTS: EquipmentCoefficients = EquipmentCoefficients {
+    base: EquipmentRates {
+        thrust: 0.0,
+        slash: 3.75,
+        magic_attack: 23.75,
+        magic_defense: 0.0,
+    },
+    enhanced: EquipmentRates {
+        thrust: 0.0,
+        slash: 0.0,
+        magic_attack: 32.5,
+        magic_defense: 18.75,
+    },
+};
+
+/// 攻撃者ごとのステ由来攻撃力係数。`Player` は `attack_coefficients` に委譲、`MagicDoll` は
+/// `dependency` を無視して熊固定の係数を返す(出典は `MAGIC_DOLL_ATTACK_COEFFICIENTS`)。
+pub fn attack_coefficients_for(attacker: Attacker, dependency: SkillDependency) -> AttackCoefficients {
+    match attacker {
+        Attacker::Player => attack_coefficients(dependency),
+        Attacker::MagicDoll => MAGIC_DOLL_ATTACK_COEFFICIENTS,
+    }
+}
+
+/// 攻撃者ごとの装備攻撃力係数。`Player` は `equipment_coefficients` に委譲。
+pub fn equipment_coefficients_for(
+    attacker: Attacker,
+    dependency: SkillDependency,
+) -> EquipmentCoefficients {
+    match attacker {
+        Attacker::Player => equipment_coefficients(dependency),
+        Attacker::MagicDoll => MAGIC_DOLL_EQUIPMENT_COEFFICIENTS,
+    }
+}
+
+/// 攻撃者ごとの命中P補正。`Player` は `accuracy_correction` に委譲。熊は依存ボーナス
+/// INT×0.1・ペナルティ INT/100(既存 `accuracy_correction(Stab)` の STAB→INT 置き換え)。
+pub fn accuracy_correction_for(attacker: Attacker, dependency: SkillDependency) -> AccuracyCorrection {
+    match attacker {
+        Attacker::Player => accuracy_correction(dependency),
+        Attacker::MagicDoll => AccuracyCorrection {
+            bonus: Some((StatKind::Int, 0.1)),
+            penalty_primary: StatKind::Int,
+            penalty_secondary: None,
+            penalty_divisor: 100.0,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,6 +534,52 @@ mod tests {
         assert_eq!(
             (c.enhanced.magic_attack, c.enhanced.magic_defense),
             (19.25, 32.5)
+        );
+    }
+
+    /// wiki 計算式まとめ `STAB(熊)` 行。`dependency` を渡しても無視され、常に熊固定の係数
+    /// (2026-09-18 取得)。
+    #[test]
+    fn 魔法人形の係数はdependencyを無視して熊固定になる() {
+        use SkillDependency::*;
+        for dependency in [Stab, Hack, Int, Mr, StabHack, HackInt] {
+            let attack = attack_coefficients_for(Attacker::MagicDoll, dependency);
+            assert_eq!(attack.primary, (StatKind::Int, 2.1));
+            assert_eq!(attack.secondary, (StatKind::Hack, 1.08));
+
+            let equip = equipment_coefficients_for(Attacker::MagicDoll, dependency);
+            assert_eq!(
+                (equip.base.thrust, equip.base.slash, equip.base.magic_attack, equip.base.magic_defense),
+                (0.0, 3.75, 23.75, 0.0)
+            );
+            assert_eq!(
+                (equip.enhanced.thrust, equip.enhanced.slash, equip.enhanced.magic_attack, equip.enhanced.magic_defense),
+                (0.0, 0.0, 32.5, 18.75)
+            );
+
+            let accuracy = accuracy_correction_for(Attacker::MagicDoll, dependency);
+            assert_eq!(accuracy.bonus, Some((StatKind::Int, 0.1)));
+            assert_eq!(accuracy.penalty_primary, StatKind::Int);
+            assert_eq!(accuracy.penalty_secondary, None);
+            assert_eq!(accuracy.penalty_divisor, 100.0);
+        }
+    }
+
+    /// `Player` はそのまま既存関数に委譲する。
+    #[test]
+    fn プレイヤーの係数は既存関数と一致する() {
+        let dependency = SkillDependency::Stab;
+        assert_eq!(
+            attack_coefficients_for(Attacker::Player, dependency),
+            attack_coefficients(dependency)
+        );
+        assert_eq!(
+            equipment_coefficients_for(Attacker::Player, dependency),
+            equipment_coefficients(dependency)
+        );
+        assert_eq!(
+            accuracy_correction_for(Attacker::Player, dependency),
+            accuracy_correction(dependency)
         );
     }
 }

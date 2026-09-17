@@ -102,6 +102,8 @@ export async function importAll(file: TransferFile): Promise<ImportResult> {
       equipment: character.equipment,
       common_skills: character.common_skills,
       main_skill_id: character.main_skill_id,
+      // 旧い書き出し(欄が無い)は未選択として読む
+      summon_skill_id: character.summon_skill_id ?? null,
       goal_content_id: character.goal_content_id,
       default_buff_set_id: null,
     };

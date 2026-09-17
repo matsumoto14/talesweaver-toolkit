@@ -3,7 +3,7 @@ import { invoke } from "./invoke";
 import type {
   BlockedBuff,
   PotentialEffects,
-  Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentItem, GameCharacter, StartupNotice,
+  Adjustments, AppInfo, Awakening, BaseStats, BuffDamageSummary, BuffDefinition, BuffSelection, BuffSet, BuffTargetStatGain, CharacterSkillDef, CharacterSkillEffectsView, CharacterIcon, CharacterDamageResult, ComboSkillType, CommonSkills, DamageResult, DamageSnapshot, Element, ElementValues, Enemy, Equipment, EquipmentItem, GameCharacter, StartupNotice,
   Masteries, NewCharacter, RegisteredCharacter, ContentArea, ContentEvaluation, DefenseProfile,
   ElementPreview, ElementSourceDef, MasteryDef, RandomOptionDef, SienaCatalog, Skill, GameTables, StatLimits,
   StatPreview, StatSources,
@@ -84,7 +84,7 @@ export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,
   comboSkillType: ComboSkillType | null = null, buffs: BuffSelection = { choices: [] },
   normalAttackId: string | null = null,
-) => invoke<DamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
+) => invoke<CharacterDamageResult>("calculate_damage", { characterId, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
 export const getStatLimits = () => invoke<StatLimits>("get_stat_limits");
 /** 並び・ラベル・部位ルール・段階表のカタログ(起動時に 1 回) */
 export const getGameTables = () => invoke<GameTables>("get_game_tables");
@@ -210,7 +210,7 @@ export const previewDamage = (
   comboSkillType: ComboSkillType | null = null,
   buffs: BuffSelection = { choices: [] },
   normalAttackId: string | null = null,
-) => invoke<DamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
+) => invoke<CharacterDamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
 /**
  * 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価)。
  * `dependencySkillId` を渡すと、装備条件(スキル依存で比較先が変わる)をそのスキルで判定する。

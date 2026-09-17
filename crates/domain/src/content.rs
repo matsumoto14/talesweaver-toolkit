@@ -169,8 +169,13 @@ pub struct BestSkillDamage {
     /// 合計の主役値 = 1 ヒットの主役値 × 段数
     pub total_primary: i64,
     /// 討伐にかかる秒数(`DamageResult::defeat_seconds`)。敵 HP 未収録・中ディレイ未収録
-    /// のいずれかなら `None`
+    /// のいずれかなら `None`。熊(魔法人形)の入力があるキャラは、本体の期待 DPS に
+    /// 熊の期待 DPS を足して出し直した値(wiki 計算式まとめ `STAB(熊)` 行)
     pub defeat_seconds: Option<f64>,
+    /// このスキルの期待 DPS(`DamageResult::expected_dps`)。熊の入力を合算する前の
+    /// 本体単独の値。`defeat_seconds` は合算後だが、こちらは常に本体単独のまま
+    #[serde(default)]
+    pub expected_dps: Option<f64>,
 }
 
 /// 火力の到達段。討伐時間で決める(ユーザー決定 2026-09-16)。段の境目はホームの一覧・スポットライト・計算タブの
@@ -396,6 +401,7 @@ mod tests {
                 per_hit_primary: 1000,
                 total_primary: 1000,
                 defeat_seconds: Some(defeat_seconds),
+                expected_dps: None,
             })
         };
         let dep = Some(SkillDependency::Stab);
@@ -511,6 +517,7 @@ mod tests {
             per_hit_primary: 1000,
             total_primary: 1000,
             defeat_seconds: None,
+            expected_dps: None,
         });
         let e = evaluate_content(
             &content(true, vec![]),

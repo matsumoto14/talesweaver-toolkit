@@ -108,6 +108,13 @@
   // 並びは list_skills(Rust)が主軸候補順で返し、先頭 3 件がチップに固定される
   const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択", "攻撃力を出さない"));
 
+  // 熊(魔法人形)が撃つスキル。アナイス以外はこのキャラのスキルに magic_doll が
+  // 1 件も無いので欄自体を出さない(§00②「要らないものを見せない」。ADR-016)。
+  const hasMagicDoll = $derived(skills.some((s) => s.attacker === "magic_doll"));
+  const summonSkillOptions = $derived(
+    buildMainSkillOptions(skills, "未選択", "熊の鎖を出しません", "magic_doll"),
+  );
+
   // 属性は主軸スキルで決まる。無属性のスキルのときだけ、乗せる属性を選ばせる
   // (アンプルで属性を足す運用が多い)
   const skillElement = $derived(mainSkill?.element ?? null);
@@ -284,6 +291,19 @@
         bind:value={draft.mainSkillId}
       />
     </div>
+    {#if hasMagicDoll}
+      <!-- アナイス専用: 魔法人形(ミカベア/ルシベア)に自動で撃たせるスキル(ADR-016)。
+           主軸と同じ Picker 形。未選択なら計算タブに熊の鎖は出ない(0 で埋めない) -->
+      <div class="wide">
+        <span class="label">熊が撃つスキル</span>
+        <Picker
+          label="熊が撃つスキル"
+          options={summonSkillOptions}
+          note="魔法人形(ミカベア / ルシベア)が自動で撃つスキル"
+          bind:value={draft.summonSkillId}
+        />
+      </div>
+    {/if}
     <!-- 属性はふつう主軸スキルで決まる。無属性のときだけ「何を乗せるか」を選ばせる -->
     <div class="wide">
       <span class="label">属性</span>

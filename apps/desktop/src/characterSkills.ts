@@ -4,7 +4,7 @@
 // (crates/domain/src/character_skill.rs の effects() / actual_delay_contributions() /
 // damage_contributions() が唯一の正)。
 import type {
-  CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect,
+  Attacker, CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect,
 } from "./api/types";
 import { fmtPct, fmtSigned } from "./format";
 import { ELEMENT_LABELS, STAT_LABELS } from "./labels";
@@ -64,18 +64,24 @@ export const MAIN_SKILL_PINNED = 3;
  * 中ディレイ込みの継続火力順)のまま。先頭 MAIN_SKILL_PINNED 件を「よく使う」として固定する
  * (§07「1 つ選ぶ」: ドメイン知識で固定、使用履歴で並べない)。
  * 空欄は候補の 1 行(value = "")で、文言は呼び出し側の文脈で変える。
+ *
+ * `attacker`(既定 `player`)で候補を絞る。本体の主軸は魔法人形(`magic_doll`)が撃つスキルを
+ * 選べない(ADR-016)ので、召喚欄の Picker は `attacker: "magic_doll"` を渡して呼ぶ。
  */
 export function mainSkillOptions(
   skills: Skill[],
   emptyLabel: string,
   emptyMeta: string,
+  attacker: Attacker = "player",
 ): PickerOption[] {
   return [
     { value: "", name: emptyLabel, meta: emptyMeta, iconId: null },
-    ...skills.map((s, i) => ({
-      value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const,
-      pinned: i < MAIN_SKILL_PINNED,
-    })),
+    ...skills
+      .filter((s) => s.attacker === attacker)
+      .map((s, i) => ({
+        value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const,
+        pinned: i < MAIN_SKILL_PINNED,
+      })),
   ];
 }
 

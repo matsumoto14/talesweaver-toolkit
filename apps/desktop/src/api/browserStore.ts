@@ -26,8 +26,10 @@ const DB_NAME = "tw-context";
  * 既存行は `title`(表示中)があれば `[title]`、無ければ `[]` を補う。
  * v5 でレリックの聖域 20段の content id が `relic_sanctuary_kisinik` から `relic_sanctuary_20`
  * に変わった(SQLite 側の v15 と同じ移行)。保存済みの「次の目標」を書き換える。
+ * v6 でキャラに `summon_skill_id`(魔法人形の召喚スキル)が加わった(SQLite 側の v16 と同じ移行。
+ * 既存キャラは未選択のまま)。
  */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -46,15 +48,19 @@ const NEUTRAL_POLISH = () => ({ entries: [] });
  */
 function withEquipmentDefaults(character: NewCharacter): NewCharacter {
   const equipment = character.equipment as Partial<NewCharacter["equipment"]>;
+  const partial = character as Partial<NewCharacter>;
   if (
     equipment.avatar !== undefined &&
     equipment.polish !== undefined &&
-    equipment.owned_titles !== undefined
+    equipment.owned_titles !== undefined &&
+    partial.summon_skill_id !== undefined
   ) {
     return character;
   }
   return {
     ...character,
+    // v6: 召喚スキル(旧い書き出し JSON には欄が無い)。未収録は未選択(null)扱い
+    summon_skill_id: partial.summon_skill_id ?? null,
     equipment: {
       ...character.equipment,
       avatar: equipment.avatar ?? NEUTRAL_AVATAR(),
@@ -135,6 +141,18 @@ function open(): Promise<IDBDatabase> {
           if (row.goal_content_id === "relic_sanctuary_kisinik") {
             cursor.update({ ...row, goal_content_id: "relic_sanctuary_20" });
           }
+          cursor.continue();
+        };
+      }
+      // v6: 既存キャラに summon_skill_id(魔法人形の召喚スキル)を未選択(null)として足す。
+      if (event.oldVersion > 0 && event.oldVersion < 6) {
+        const characters = request.transaction!.objectStore(CHARACTERS);
+        const cursorRequest = characters.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const row = cursor.value as Partial<RegisteredCharacter>;
+          if (row.summon_skill_id === undefined) cursor.update({ ...row, summon_skill_id: null });
           cursor.continue();
         };
       }

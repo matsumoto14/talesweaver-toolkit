@@ -6,12 +6,13 @@
 
 use base64::Engine;
 use commands::{
-    CharacterSkillEffectsView, CommandError, CommandResult, EnchantGain, EnchantPlanRow,
-    EquipmentAbilityView, EquipmentCandidates, GameTablesPayload, TitleView, UpgradeCandidate,
+    CharacterDamageResult, CharacterSkillEffectsView, CommandError, CommandResult, EnchantGain,
+    EnchantPlanRow, EquipmentAbilityView, EquipmentCandidates, GameTablesPayload, TitleView,
+    UpgradeCandidate,
 };
 use domain::{
-    BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DamageResult,
-    DefenseProfile, Enemy, GrowthAction, NewCharacter, Skill, VersusAccuracy,
+    BuffSelection, CommonSkills, ContentArea, ContentEvaluation, DefenseProfile, Enemy,
+    GrowthAction, NewCharacter, Skill, VersusAccuracy,
 };
 use gamedata::{EquipmentItem, GameCharacter};
 use storage::{BuffSet, CharacterIcon, CharacterRepository, DamageSnapshot, RegisteredCharacter};
@@ -369,6 +370,7 @@ pub fn create_character(
         )));
     }
     commands::validate_main_skill(&character)?;
+    commands::validate_summon_skill(&character)?;
     with_repo(&state, |repo| {
         repo.create(
             &character,
@@ -395,6 +397,7 @@ pub fn update_character(
         )));
     }
     commands::validate_main_skill(&character)?;
+    commands::validate_summon_skill(&character)?;
     with_repo(&state, |repo| {
         repo.update(
             id,
@@ -582,12 +585,13 @@ pub fn calculate_damage(
     normal_attack_id: Option<String>,
     temporary_adjustments: Option<domain::Adjustments>,
     buffs: BuffSelection,
-) -> CommandResult<DamageResult> {
+) -> CommandResult<CharacterDamageResult> {
     let character = with_repo(&state, |repo| repo.get(character_id))?;
     commands::damage_for_character(
         &character.base_stats,
         &character.game_character_id,
         character.main_skill_id.as_deref(),
+        character.summon_skill_id.as_deref(),
         &character.stat_sources,
         &buffs,
         character.equipment,
@@ -613,7 +617,7 @@ pub fn preview_damage(
     combo_skill_type: Option<domain::ComboSkillType>,
     normal_attack_id: Option<String>,
     temporary_adjustments: Option<domain::Adjustments>,
-) -> CommandResult<DamageResult> {
+) -> CommandResult<CharacterDamageResult> {
     commands::preview_damage(
         character,
         buffs,

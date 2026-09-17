@@ -25,8 +25,8 @@ pub use awakening::{awakening_caps, awakening_rate, AWAKENING_SOURCE};
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
 pub use character_skills::{character_skill_catalog, CHARACTER_SKILL_SOURCE};
 pub use characters::{
-    accuracy_correction, attack_coefficients, characters, equipment_coefficients, find_character,
-    GameCharacter,
+    accuracy_correction, accuracy_correction_for, attack_coefficients, attack_coefficients_for,
+    characters, equipment_coefficients, equipment_coefficients_for, find_character, GameCharacter,
 };
 pub use contents::{content_areas, core_region_of, CONTENTS_SOURCE};
 pub use elements::{
@@ -45,7 +45,7 @@ pub use equipment_catalog::{
 pub use inkri::{find_inkri_target, inkri_targets, InkriTarget, INKRI_TARGET_SOURCE};
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};
-pub use skills::{find_skill, skills_for};
+pub use skills::{attacker_of, find_skill, skills_for};
 pub use titles::{title_catalog, TITLE_SOURCE};
 
 /// データの出典。

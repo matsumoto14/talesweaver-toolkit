@@ -391,6 +391,10 @@
         })
       : null,
   );
+  /** 熊(魔法人形)が撃つスキル名。無ければ null(欄自体は熊/本体の連記をやめて今までどおり) */
+  const summonSkillName = $derived(
+    character?.summon_skill_id ? (skillNames[character.summon_skill_id] ?? character.summon_skill_id) : null,
+  );
   /** スポットライトの到達状態(rowState と同じ段。判定値は heroSpot の討伐時間) */
   const heroSpotState = $derived.by(() => {
     const g = heroGoal;
@@ -441,14 +445,16 @@
         const current = await previewDamage(payloadOf(c), skillId, contentId, 0, null, null, buffs);
         const results = await listUpgradeCandidates(payloadOf(c), skillId, contentId, 0, null, null, buffs);
         if (isCurrent()) {
-          heroAccuracy = current.accuracy_point;
+          heroAccuracy = current.body.accuracy_point;
           heroDamage = {
             skillId,
-            perHit: current.per_hit_primary,
-            defeatSeconds: current.defeat_seconds,
-            reach: current.reach,
-            critChance: current.critical_chance,
-            critRate: current.critical_rate?.value ?? null,
+            perHit: current.body.per_hit_primary,
+            // 熊(魔法人形)がいるキャラは合計(本体 + 熊)の討伐時間・到達段で判定する
+            // (片方だけで判断させない。ADR-016 決定 9)
+            defeatSeconds: current.combined.defeat_seconds,
+            reach: current.combined.reach,
+            critChance: current.body.critical_chance,
+            critRate: current.body.critical_rate?.value ?? null,
           };
           heroAdvice = results.slice(0, 3);
         }
@@ -984,7 +990,13 @@
                 label={skillNames[heroSpot.skillId] ?? heroSpot.skillId}
               />
               <span class="hero-goal-skill">
-                {skillNames[heroSpot.skillId] ?? heroSpot.skillId}
+                {#if summonSkillName}
+                  <!-- 見た目の 1 行 = 1 コンテンツは崩さない。同じ欄の中で熊 + 本体を 2 段に(1 段だと 120px で本体名が切れる。実機 2026-09-18)(ADR-016) -->
+                  <span>熊 {summonSkillName}</span>
+                  <span>+ 本体 {skillNames[heroSpot.skillId] ?? heroSpot.skillId}</span>
+                {:else}
+                  {skillNames[heroSpot.skillId] ?? heroSpot.skillId}
+                {/if}
                 <!-- 「この数字はクリ側か」の但し書きだけ小さく添える。バッジで主役の隣に置かない(ユーザー 2026-09-16) -->
                 {#if heroDamage}
                   <Value class="hero-goal-crit dim" value={heroDamage?.critRate === null ? "確定" : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}

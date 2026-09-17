@@ -41,8 +41,8 @@ pub mod ultimate_skill;
 pub mod validation;
 
 pub use actual_delay::{
-    actual_delay, ActualDelay, ActualDelayContribution, SkillUsesTable, ACTUAL_DELAY_MIN,
-    ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
+    actual_delay, summon_uses_per_minute, ActualDelay, ActualDelayContribution, SkillUsesTable,
+    ACTUAL_DELAY_MIN, ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
 };
 pub use avatar_enhance::{AvatarEnhanceError, AvatarEnhancements, AvatarPart, AVATAR_ENHANCE_MAX};
 pub use attack_power::{
@@ -80,9 +80,9 @@ pub use critical_rate::{
     ARCHITECT_LAB_PER_STAGE, ARCHITECT_LAB_STAGE_MAX, CRITICAL_RATE_BONUS_MAX,
 };
 pub use damage::{
-    calculate_damage, calculate_damage_with_combo, evaluate, ComboCycle, DamageContribution,
-    damage_levers, DamageLevers, DamageMaterial, DamageResult, DamageTarget, DamageTrace, DamageTriple,
-    DependencyCoefficients, FormulaStepKind, LeverCandidate,
+    apply_summon_interval, calculate_damage, calculate_damage_with_combo, combine_expected_dps, defeat_seconds, evaluate, ComboCycle,
+    DamageContribution, damage_levers, DamageLevers, DamageMaterial, DamageResult, DamageTarget,
+    DamageTrace, DamageTriple, DependencyCoefficients, FormulaStepKind, LeverCandidate,
     DpsTriple, FormulaStep,
 };
 pub use defense::{
@@ -142,7 +142,8 @@ pub use siena::{
     SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES, SIENA_STAGE_MAX,
 };
 pub use skill::{
-    ComboSkillType, ComboSkillTypeError, ComboSkillVariant, Skill, SkillDependency, SkillTarget,
+    Attacker, ComboSkillType, ComboSkillTypeError, ComboSkillVariant, Skill, SkillDependency,
+    SkillTarget,
 };
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{

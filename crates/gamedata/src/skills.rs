@@ -11,7 +11,9 @@
 //!   未対応の依存(STAB+INT / HACK+MR / INT+STAB+HACK)。詳細は
 //!   docs/claude/decisions.md「2026-08-25 全キャラのスキル取込」
 
-use domain::{ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency, WeaponClass};
+use domain::{
+    Attacker, ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency, WeaponClass,
+};
 
 use crate::skill_targets::SKILL_TARGETS;
 
@@ -827,6 +829,29 @@ const SKILLS: &[SkillRecord] = &[
     s("yefnen", "crash_chisel", "極・クラッシュ・チゼル", SkillDependency::Hack, 4.1, 6, 3.0, Element::Neutral, None, None, 10),
 ];
 
+/// 魔法人形(アナイスのミカベア / ルシベア)が自分で撃つスキル(wiki 計算式まとめ
+/// `STAB(熊)` 行、2026-09-18 取得)。ベアステップ(`anais_mica_bear_step` /
+/// `anais_rucy_bear_step`)は本体が撃つので含めない。破壊精霊は対象外(本体扱いのまま)。
+const MAGIC_DOLL_SKILLS: &[&str] = &[
+    "anais_thrust",
+    "anais_mica_even_bear",
+    "anais_mica_footstep",
+    "anais_judgment_spin",
+    "anais_strike",
+    "anais_rucy_even_bear",
+    "anais_deathmoment",
+    "anais_rucy_footstep",
+];
+
+/// このスキルを実際に撃つ主体。`MAGIC_DOLL_SKILLS` に載っている 8 件だけ `MagicDoll`。
+pub fn attacker_of(skill_id: &str) -> Attacker {
+    if MAGIC_DOLL_SKILLS.contains(&skill_id) {
+        Attacker::MagicDoll
+    } else {
+        Attacker::Player
+    }
+}
+
 impl SkillRecord {
     fn skill_id(&self) -> String {
         format!("{}_{}", self.character_id, self.id)
@@ -893,6 +918,7 @@ impl SkillRecord {
             },
             power,
             power_per_second: Skill::compute_power_per_second(power, base_actual_delay),
+            attacker: attacker_of(&self.skill_id()),
         }
     }
 }
@@ -916,6 +942,20 @@ pub fn find_skill(id: &str) -> Option<Skill> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// wiki `STAB(熊)` 行の対象 8 件だけ `MagicDoll`。ベアステップ 2 件は本体、
+    /// 他キャラの代表 id も `Player`(2026-09-18 取得)。
+    #[test]
+    fn 魔法人形が撃つスキルは8件で他は本体() {
+        assert_eq!(MAGIC_DOLL_SKILLS.len(), 8);
+        for id in MAGIC_DOLL_SKILLS {
+            assert_eq!(attacker_of(id), Attacker::MagicDoll, "{id}");
+            assert!(find_skill(id).is_some(), "{id} がカタログに無い");
+        }
+        assert_eq!(attacker_of("anais_mica_bear_step"), Attacker::Player);
+        assert_eq!(attacker_of("anais_rucy_bear_step"), Attacker::Player);
+        assert_eq!(attacker_of("lucian_butt"), Attacker::Player);
+    }
 
     #[test]
     fn マキシミンの連は3つのコンボタイプを持つ() {

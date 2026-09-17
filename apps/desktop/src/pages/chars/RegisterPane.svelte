@@ -91,6 +91,7 @@
           equipment: defaultEquipment(),
           common_skills: await getNewCharacterCommonSkills(),
           main_skill_id: mainSkillId === "" ? null : mainSkillId,
+          summon_skill_id: null,
           // 「次の目標」は登録時には決めない。ホームが自動で選び、要るときだけ上書きする
           goal_content_id: null,
         };

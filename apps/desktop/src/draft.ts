@@ -37,6 +37,8 @@ export interface Draft {
   commonSkills: CommonSkills;
   /** 主軸スキル(攻撃力の依存種別を決める)。"" = 未選択 */
   mainSkillId: string;
+  /** 召喚スキル(アナイスの魔法人形に撃たせるスキル)。"" = 未選択 */
+  summonSkillId: string;
   /**
    * ホームの「次の目標」。"" = 未設定(自動で選ぶ)。
    * キャラタブでは編集しないが、保存はキャラ全体の上書きなので**必ず持ち回る** —
@@ -106,6 +108,7 @@ export const buildDraft = (c: RegisteredCharacter): Draft => ({
   equipment: cloneEquipment(c.equipment),
   commonSkills: cloneCommonSkills(c.common_skills),
   mainSkillId: c.main_skill_id ?? "",
+  summonSkillId: c.summon_skill_id ?? "",
   goalContentId: c.goal_content_id ?? "",
   defaultBuffSetId: c.default_buff_set_id,
 });
@@ -120,6 +123,7 @@ export const draftToPayload = (draft: Draft): NewCharacter => ({
   equipment: cloneEquipment(draft.equipment),
   common_skills: cloneCommonSkills(draft.commonSkills),
   main_skill_id: draft.mainSkillId === "" ? null : draft.mainSkillId,
+  summon_skill_id: draft.summonSkillId === "" ? null : draft.summonSkillId,
   goal_content_id: draft.goalContentId === "" ? null : draft.goalContentId,
   default_buff_set_id: draft.defaultBuffSetId,
 });

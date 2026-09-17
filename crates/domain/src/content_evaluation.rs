@@ -10,7 +10,8 @@
 use crate::awakening::Awakening;
 use crate::content::{evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation};
 use crate::damage::{
-    calculate_damage, DamageContribution, DamageMaterial, DamageTarget, DependencyCoefficients,
+    apply_summon_interval, calculate_damage, combine_expected_dps, defeat_seconds, DamageContribution, DamageMaterial, DamageTarget,
+    DependencyCoefficients,
 };
 use crate::enemy::Enemy;
 use crate::equipment::{
@@ -27,6 +28,9 @@ use crate::title::{title_added_damage_rate, title_attack_damage_rate, TitleDef};
 /// `WristBonusMaterial` から評価関数が依存種別ごとに導くのでここには含めない。
 /// 呼び出し側(commands.rs)が gamedata のカタログを解決して、キャラのスキル数ぶんだけ
 /// 1 回作る(コンテンツの数だけ繰り返し計算しない)。
+///
+/// 熊(魔法人形)ぶんの入力(`evaluate_contents_for_character` の `summon` 引数)も同じ形
+/// (1 件だけ)なので、この型をそのまま使う(二重実装しない)。
 #[derive(Debug, Clone)]
 pub struct SkillEvaluationInput {
     pub skill: Skill,
@@ -99,6 +103,9 @@ pub fn evaluate_contents_for_character(
     content_areas: &[ContentArea],
     enemies: &[Enemy],
     skills: &[SkillEvaluationInput],
+    // 熊(魔法人形)ぶんの入力。魔法人形を持たない・召喚スキル未選択のキャラは `None`
+    // (本体だけで判定する、従来どおりの動き)
+    summon: Option<&SkillEvaluationInput>,
     equipment_base_sources_raw: Vec<EquipmentValueSource>,
     wrist_bonus: WristBonusMaterial,
     titles: &[TitleDef],
@@ -140,6 +147,7 @@ pub fn evaluate_contents_for_character(
                 equipment,
                 enemies,
                 skills,
+                summon,
                 &equipment_base_sources_raw,
                 &equipment_base_sources_for,
                 &enhanced_for,
@@ -176,6 +184,7 @@ fn evaluate_one_content(
     equipment: &Equipment,
     enemies: &[Enemy],
     skills: &[SkillEvaluationInput],
+    summon: Option<&SkillEvaluationInput>,
     equipment_base_sources_raw: &[EquipmentValueSource],
     equipment_base_sources_for: &impl Fn(SkillDependency) -> Vec<EquipmentValueSource>,
     enhanced_for: &impl Fn(Option<CoreRegion>) -> Vec<EquipmentValueSource>,
@@ -246,10 +255,34 @@ fn evaluate_one_content(
                 per_hit_primary: result.per_hit_primary,
                 total_primary: result.total_primary,
                 defeat_seconds: result.defeat_seconds,
+                expected_dps: result.expected_dps,
             });
             // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
             best_dependency = Some(entry.skill.dependency);
         }
+    }
+
+    // 熊(魔法人形)ぶんの期待 DPS を本体の期待 DPS に足し、討伐時間を出し直す
+    // (wiki 計算式まとめ `STAB(熊)` 行。本体は召喚中も自由に撃てるので単純和)。
+    // 熊にはコンボボーナスが乗らない(combo_count = 0)。実測回数表は本体プレイヤーの実測なので
+    // 熊には使わず、常に `summon_uses_per_minute` の式で 60 秒あたりの回数を出す。
+    if let (Some(summon_input), Some(b)) = (summon, best.as_mut()) {
+        let summon_target = DamageTarget {
+            skill: summon_input.skill.clone(),
+            enemy: enemy.clone(),
+            combo_count: 0,
+            coefficients: summon_input.coefficients,
+            equipment_base_sources: equipment_base_sources_for(summon_input.skill.dependency),
+            equipment_enhanced_sources: equipment_enhanced_sources.clone(),
+            title_attack_damage_rate: title_damage_rate,
+            title_added_damage_rate,
+            damage_contributions: summon_input.damage_contributions.clone(),
+            element_value: summon_input.element_value,
+        };
+        let mut summon_result = calculate_damage(material, &summon_target);
+        apply_summon_interval(&mut summon_result, enemy.hp);
+        let combined = combine_expected_dps(b.expected_dps, summon_result.expected_dps);
+        b.defeat_seconds = defeat_seconds(enemy.hp, combined);
     }
 
     let requirement_dependency = fixed_dependency.or(best_dependency);
@@ -333,6 +366,7 @@ mod tests {
             combo_variants: Vec::new(),
             power: Skill::compute_power(0.99, 1),
             power_per_second: Skill::compute_power_per_second(Skill::compute_power(0.99, 1), Some(1.4)),
+            attacker: crate::Attacker::Player,
         }
     }
 
@@ -454,6 +488,7 @@ mod tests {
             &content_area(),
             &[enemy()],
             &skills,
+            None,
             Vec::new(),
             WristBonusMaterial::default(),
             &[],
@@ -475,6 +510,68 @@ mod tests {
         assert!(
             dmg_with > dmg_without,
             "ステ補正ありのほうが火力が高いはず: without={dmg_without}, with={dmg_with}"
+        );
+    }
+
+    /// 熊(魔法人形)の入力を足すと期待 DPS が本体+熊になり、討伐時間が短くなる
+    /// (wiki 計算式まとめ `STAB(熊)` 行)。入力なしなら既存テストのまま変わらない(回帰)。
+    #[test]
+    fn 熊の入力があると討伐時間が短くなる() {
+        let material = material(false);
+        let skills = vec![SkillEvaluationInput {
+            skill: skill(),
+            coefficients: coefficients(),
+            damage_contributions: Vec::new(),
+            element_value: 0,
+        }];
+        let summon_skill = Skill {
+            id: "bear".into(),
+            base_actual_delay: Some(1.0),
+            attacker: crate::Attacker::MagicDoll,
+            ..skill()
+        };
+        let summon_input = SkillEvaluationInput {
+            skill: summon_skill,
+            coefficients: coefficients(),
+            damage_contributions: Vec::new(),
+            element_value: 0,
+        };
+        let enemy_with_hp = Enemy {
+            hp: Some(100_000),
+            ..enemy()
+        };
+
+        let run = |summon: Option<&SkillEvaluationInput>| {
+            evaluate_contents_for_character(
+                &material,
+                &Equipment::default(),
+                &content_area(),
+                &[enemy_with_hp.clone()],
+                &skills,
+                summon,
+                Vec::new(),
+                WristBonusMaterial::default(),
+                &[],
+                Awakening::default(),
+                None,
+            )
+        };
+
+        let without = run(None);
+        let with = run(Some(&summon_input));
+        let seconds_without = without[0].damage.as_ref().unwrap().defeat_seconds.unwrap();
+        let seconds_with = with[0].damage.as_ref().unwrap().defeat_seconds.unwrap();
+        assert!(
+            seconds_with < seconds_without,
+            "熊ぶんを足すと討伐時間が短くなるはず: without={seconds_without}, with={seconds_with}"
+        );
+
+        // 熊の入力が無いときは、既存(evaluate_contents_for_character に None を渡す)テストと
+        // 同じ結果のまま変わらない(回帰)。
+        let existing = evaluate(false);
+        assert_eq!(
+            existing[0].damage.as_ref().unwrap().per_hit_primary,
+            without[0].damage.as_ref().unwrap().per_hit_primary
         );
     }
 

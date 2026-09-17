@@ -81,6 +81,7 @@ fn validate_character_draft(character: &NewCharacter, buffs: &BuffSelection) -> 
         titles: &titles,
         character_skills: gamedata::character_skill_catalog(),
     })?;
+    validate_summon_skill(character)?;
     // バフはキャラに保存しないので、キャラ本体の検証(domain)とは別にここで見る
     domain::stat_sources::build_modifiers(
         &character.stat_sources,
@@ -676,6 +677,7 @@ pub fn list_titles() -> Vec<TitleView> {
 
 /// 主軸スキル(攻撃力の依存種別を決める)はそのキャラのスキル一覧に含まれている必要がある。
 /// キャラ種を変えたときに前キャラのスキルが残るのを防ぐ。未選択(`None`)は許す。
+/// 熊(魔法人形)が撃つスキルは本体の主軸にはできない(wiki 計算式まとめ `STAB(熊)` 行)。
 pub fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
     let Some(skill_id) = &character.main_skill_id else {
         return Ok(());
@@ -687,6 +689,34 @@ pub fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
         return Err(CommandError::from(format!(
             "主軸スキル '{skill_id}' は '{}' のスキルではありません",
             character.game_character_id
+        )));
+    }
+    if gamedata::attacker_of(skill_id) != domain::Attacker::Player {
+        return Err(CommandError::from(format!(
+            "熊が撃つスキル '{skill_id}' は主軸に選べません"
+        )));
+    }
+    Ok(())
+}
+
+/// 召喚スキル(アナイスの魔法人形に撃たせるスキル)はそのキャラのスキル一覧に含まれ、
+/// かつ熊(魔法人形)が撃つスキルである必要がある。未選択(`None`)は許す。
+pub fn validate_summon_skill(character: &NewCharacter) -> CommandResult<()> {
+    let Some(skill_id) = &character.summon_skill_id else {
+        return Ok(());
+    };
+    if !gamedata::skills_for(&character.game_character_id)
+        .iter()
+        .any(|s| &s.id == skill_id)
+    {
+        return Err(CommandError::from(format!(
+            "召喚スキル '{skill_id}' は '{}' のスキルではありません",
+            character.game_character_id
+        )));
+    }
+    if gamedata::attacker_of(skill_id) != domain::Attacker::MagicDoll {
+        return Err(CommandError::from(format!(
+            "本体が撃つスキル '{skill_id}' は召喚スキルに選べません"
         )));
     }
     Ok(())
@@ -704,6 +734,7 @@ pub fn validate_character(character: NewCharacter) -> CommandResult<()> {
         .into());
     }
     validate_main_skill(&character)?;
+    validate_summon_skill(&character)?;
     // 保存時はバフ選択を伴わないので、バフは既定(何も選んでいない)で見る
     validate_character_draft(&character, &BuffSelection::default()).map_err(|e| CommandError {
         message: format!("不正な値: {}", e.message),
@@ -725,17 +756,36 @@ pub fn validate_buff_set(name: String, choices: BuffSelection) -> CommandResult<
     Ok(())
 }
 
-/// キャラの主軸スキルから攻撃力(A)の係数一式を引く。未選択なら `None`(攻撃力を出さない)。
+/// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を、攻撃者(本体 / 魔法人形)込みで
+/// gamedata から解決する唯一の口。`attack_coefficients_of` / 旧 `dependency_coefficients` は
+/// ここに統合済み(build_damage_input・evaluate_contents の skill_inputs・候補コンテキストは
+/// 全部これ経由)。
+fn coefficients_for(
+    attacker: domain::Attacker,
+    dependency: domain::SkillDependency,
+) -> DependencyCoefficients {
+    DependencyCoefficients {
+        attack: gamedata::attack_coefficients_for(attacker, dependency),
+        equipment: gamedata::equipment_coefficients_for(attacker, dependency),
+        accuracy: gamedata::accuracy_correction_for(attacker, dependency),
+    }
+}
+
+/// 指定スキルから攻撃力(A)の係数一式を引く。未選択なら `None`(攻撃力を出さない)。
+/// 攻撃者はスキル自身の `attacker` から取るので、本体の主軸(`main_skill_id`)・熊の召喚
+/// スキル(`summon_skill_id`)のどちらを渡しても正しい係数が返る(「いまの実力」帯の
+/// 熊 / 本体チップは同じ関数を skill_id だけ替えて呼ぶ。二重実装しない)。
 fn attack_coefficients_of(
-    main_skill_id: Option<&str>,
+    skill_id: Option<&str>,
 ) -> CommandResult<Option<AttackPowerCoefficients>> {
-    let Some(skill_id) = main_skill_id else {
+    let Some(skill_id) = skill_id else {
         return Ok(None);
     };
-    let dependency = find_skill(skill_id)?.dependency;
+    let skill = find_skill(skill_id)?;
+    let c = coefficients_for(skill.attacker, skill.dependency);
     Ok(Some(AttackPowerCoefficients {
-        stat: gamedata::attack_coefficients(dependency),
-        equipment: gamedata::equipment_coefficients(dependency),
+        stat: c.attack,
+        equipment: c.equipment,
     }))
 }
 
@@ -1070,9 +1120,16 @@ pub struct GameTablesPayload {
     #[serde(flatten)]
     pub base: domain::GameTables,
     pub enchant_dependency_keys: Vec<EnchantDependencyKeys>,
+    /// 熊(魔法人形)の装備係数が非 0 の値種(斬り・魔攻・魔防。wiki `STAB(熊)` 行)。
+    /// 熊は依存種別を持たない固定係数なので、`enchant_dependency_keys` のような依存種別ごとの
+    /// 表ではなく単一のリスト。「いまの実力」帯の熊チップが装備列を絞るのに使う
+    /// (TS に係数を書き写さない。docs/adr/016-summon-model.md)。
+    pub magic_doll_enchant_keys: Vec<domain::EquipmentStatKind>,
 }
 
-/// 並び・ラベル・部位ルール・段階表のカタログ(起動時に 1 回だけ取得する)。
+/// 並び・ラベル・部位ルール・段階表のカタログ(起動時に 1 回だけ取得する)。キャラ文脈が無い
+/// グローバル表なので、ここは `Player` 固定のまま(熊は関与しない)。ただし
+/// `magic_doll_enchant_keys` だけは熊の固定係数(dependency に依らない)なので例外的にここへ足す。
 pub fn get_game_tables() -> GameTablesPayload {
     let enchant_dependency_keys = domain::SkillDependency::ALL
         .into_iter()
@@ -1081,9 +1138,16 @@ pub fn get_game_tables() -> GameTablesPayload {
             keys: domain::enchant_dependency_keys(&gamedata::equipment_coefficients(dependency)),
         })
         .collect();
+    // 熊の装備係数は dependency を無視する固定値なので、SkillDependency::ALL のどれを渡しても
+    // 結果は同じ(gamedata::equipment_coefficients_for の実装参照)。
+    let magic_doll_enchant_keys = domain::enchant_dependency_keys(&gamedata::equipment_coefficients_for(
+        domain::Attacker::MagicDoll,
+        domain::SkillDependency::ALL[0],
+    ));
     GameTablesPayload {
         base: domain::game_tables(),
         enchant_dependency_keys,
+        magic_doll_enchant_keys,
     }
 }
 
@@ -1318,15 +1382,6 @@ fn stat_catalogs(buff_catalog: &[domain::BuffDefinition]) -> domain::StatCatalog
     }
 }
 
-/// スキル依存種別ごとに変わらない攻撃力/装備攻撃力/命中Pの係数を gamedata から解決する。
-fn dependency_coefficients(dependency: domain::SkillDependency) -> DependencyCoefficients {
-    DependencyCoefficients {
-        attack: gamedata::attack_coefficients(dependency),
-        equipment: gamedata::equipment_coefficients(dependency),
-        accuracy: gamedata::accuracy_correction(dependency),
-    }
-}
-
 fn resolve_combo_skill_type(
     skill: Skill,
     equipment: &domain::Equipment,
@@ -1469,7 +1524,7 @@ fn build_damage_input(
         damage_inputs::damage_contributions_of(stat_sources, buffs, &equipment, skill.dependency);
     let element_value =
         damage_inputs::element_value_for(game_character_id, &equipment, stat_sources, &skill);
-    let coefficients = dependency_coefficients(skill.dependency);
+    let coefficients = coefficients_for(skill.attacker, skill.dependency);
     Ok((
         material,
         DamageTarget {
@@ -1504,6 +1559,105 @@ fn damage_with_optional_combo(
     Ok(domain::calculate_damage_with_combo(material, target, &normal))
 }
 
+/// 熊(魔法人形)ぶんのダメージ計算結果。`skill` は召喚スキル、`result` は熊固定係数・
+/// コンボ無し(`combo_count = 0`)で計算した `DamageResult` だが、DPS 由来の値
+/// (`actual_delay.uses_per_minute` / `dps` / `expected_dps` / `defeat_seconds` / `reach`)は
+/// 熊の攻撃間隔式(`summon_uses_per_minute`。本体の実測回数表は使わない)で作り直したもの。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SummonDamage {
+    pub skill_id: String,
+    pub result: DamageResult,
+    /// 攻撃間隔(秒)。中ディレイ未収録なら `None`(0 で埋めない)
+    pub interval_seconds: Option<f64>,
+}
+
+/// 本体 + 熊の合計(合計 DPS = 本体 DPS + 熊 DPS の単純和。本体は召喚中も自由に撃てるため)。
+/// 熊を持たないキャラ・召喚スキル未選択なら本体単独の値と同じ。
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub struct CombinedDamage {
+    pub expected_dps: Option<f64>,
+    pub defeat_seconds: Option<f64>,
+    /// 合計の討伐時間から決まる到達段(`domain::ReachTier`)。討伐時間が出せないなら `None`。
+    /// 熊がいるキャラの「行ける?」判定は本体単独の `body.reach` ではなくこちらを見る
+    /// (メーター・討伐時間の文言・ホームのスポットライトが共有する。ADR-016 決定 9・10)
+    pub reach: Option<domain::ReachTier>,
+}
+
+/// `damage_for_character` / `preview_damage` の戻り。既存の `DamageResult` 全フィールドは
+/// `body` にそのまま残し、熊ぶん(`summon`)と合計(`combined`)を足したもの。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CharacterDamageResult {
+    pub body: DamageResult,
+    /// キャラに `summon_skill_id` があるときだけ `Some`
+    pub summon: Option<SummonDamage>,
+    pub combined: CombinedDamage,
+}
+
+/// 熊(魔法人形)のスキル 1 件ぶんを計算する。本体と同じ材料(能力値・装備・バフ)で
+/// `coefficients` だけ `coefficients_for(MagicDoll, ..)`・`combo_count = 0` になる
+/// (`build_damage_input` が `skill.attacker` を見て係数を分岐させるので、ここでは
+/// 熊のスキルを渡すだけでよい)。
+#[allow(clippy::too_many_arguments)]
+fn build_summon_damage(
+    base_stats: &domain::BaseStats,
+    game_character_id: &str,
+    style_dependency: Option<domain::SkillDependency>,
+    stat_sources: &domain::StatSources,
+    buffs: &BuffSelection,
+    equipment: domain::Equipment,
+    common_skills: CommonSkills,
+    awakening: domain::Awakening,
+    summon_skill_id: &str,
+    enemy: Enemy,
+    content: &domain::Content,
+    temporary_adjustments: Option<domain::Adjustments>,
+) -> CommandResult<SummonDamage> {
+    let skill = find_skill(summon_skill_id)?;
+    let (material, target) = build_damage_input(
+        base_stats,
+        game_character_id,
+        style_dependency,
+        stat_sources,
+        buffs,
+        equipment,
+        common_skills,
+        awakening,
+        skill,
+        enemy,
+        content,
+        0,
+        None,
+        temporary_adjustments,
+    )?;
+    let mut result = domain::calculate_damage(&material, &target);
+    // 熊の攻撃間隔は本体の実測回数表を使わず式で出す(domain::apply_summon_interval。
+    // 中ディレイ・回数・DPS・討伐時間をまとめて作り直し、本体式の値を残さない)
+    let interval_seconds = domain::apply_summon_interval(&mut result, target.enemy.hp);
+    Ok(SummonDamage {
+        skill_id: summon_skill_id.to_string(),
+        result,
+        interval_seconds,
+    })
+}
+
+/// 本体 DPS + 熊 DPS の単純和(本体は召喚中も自由に撃てるため)。熊が無ければ本体の値のまま。
+fn combine_damage(body: &DamageResult, summon: Option<&SummonDamage>) -> CombinedDamage {
+    let Some(summon) = summon else {
+        return CombinedDamage {
+            expected_dps: body.expected_dps,
+            defeat_seconds: body.defeat_seconds,
+            reach: body.reach,
+        };
+    };
+    let expected_dps = domain::combine_expected_dps(body.expected_dps, summon.result.expected_dps);
+    let defeat_seconds = domain::defeat_seconds(body.enemy_hp, expected_dps);
+    CombinedDamage {
+        expected_dps,
+        defeat_seconds,
+        reach: domain::ReachTier::of_defeat_seconds(defeat_seconds),
+    }
+}
+
 /// 登録済みキャラ・draft のどちらでも通る、与ダメージ計算の本体。
 ///
 /// desktop の `calculate_damage` は DB からキャラを引いたあとここを呼ぶ。draft 用の
@@ -1513,6 +1667,7 @@ pub fn damage_for_character(
     base_stats: &domain::BaseStats,
     game_character_id: &str,
     main_skill_id: Option<&str>,
+    summon_skill_id: Option<&str>,
     stat_sources: &domain::StatSources,
     buffs: &BuffSelection,
     equipment: domain::Equipment,
@@ -1524,7 +1679,7 @@ pub fn damage_for_character(
     combo_skill_type: Option<domain::ComboSkillType>,
     normal_attack_id: Option<&str>,
     temporary_adjustments: Option<domain::Adjustments>,
-) -> CommandResult<DamageResult> {
+) -> CommandResult<CharacterDamageResult> {
     let style_dependency = main_skill_id
         .map(find_skill)
         .transpose()?
@@ -1536,17 +1691,41 @@ pub fn damage_for_character(
         style_dependency,
         stat_sources,
         buffs,
-        equipment,
+        equipment.clone(),
         common_skills,
         awakening,
         find_skill(skill_id)?,
-        enemy,
+        enemy.clone(),
         &content,
         combo_count,
         combo_skill_type,
-        temporary_adjustments,
+        temporary_adjustments.clone(),
     )?;
-    damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)
+    let body = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
+    let summon = summon_skill_id
+        .map(|id| {
+            build_summon_damage(
+                base_stats,
+                game_character_id,
+                style_dependency,
+                stat_sources,
+                buffs,
+                equipment,
+                common_skills,
+                awakening,
+                id,
+                enemy,
+                &content,
+                temporary_adjustments,
+            )
+        })
+        .transpose()?;
+    let combined = combine_damage(&body, summon.as_ref());
+    Ok(CharacterDamageResult {
+        body,
+        summon,
+        combined,
+    })
 }
 
 /// 保存前のキャラデータ(編集中 draft・試し変更)でダメージ計算する。DB には書き込まない。
@@ -1560,12 +1739,13 @@ pub fn preview_damage(
     combo_skill_type: Option<domain::ComboSkillType>,
     normal_attack_id: Option<String>,
     temporary_adjustments: Option<domain::Adjustments>,
-) -> CommandResult<DamageResult> {
+) -> CommandResult<CharacterDamageResult> {
     validate_character_draft(&character, &buffs)?;
     damage_for_character(
         &character.base_stats,
         &character.game_character_id,
         character.main_skill_id.as_deref(),
+        character.summon_skill_id.as_deref(),
         &character.stat_sources,
         &buffs,
         character.equipment,
@@ -1646,11 +1826,14 @@ pub fn evaluate_contents(
     };
     // スキルごとに変わるがコンテンツには依存しない値(依存種別の係数・カテゴリ寄与・
     // 属性値)は、コンテンツの数だけ繰り返さずキャラのスキル数ぶんだけ 1 回作る。
+    // 熊(魔法人形)が撃つスキルは本体の最良スキル判定には含めない(本体は熊のスキルを
+    // 自分で振れないため)。熊ぶんの期待 DPS は別に集計して後段で合算する
     let skill_inputs: Vec<SkillEvaluationInput> = skills
         .iter()
+        .filter(|skill| skill.attacker == domain::Attacker::Player)
         .map(|skill| SkillEvaluationInput {
             skill: skill.clone(),
-            coefficients: dependency_coefficients(skill.dependency),
+            coefficients: coefficients_for(skill.attacker, skill.dependency),
             damage_contributions: damage_inputs::damage_contributions_of(
                 &character.stat_sources,
                 &buffs,
@@ -1665,6 +1848,28 @@ pub fn evaluate_contents(
             ),
         })
         .collect();
+    // 熊(魔法人形)ぶんの入力(召喚スキル未選択・魔法人形を持たないキャラは None)。
+    let summon_input = character
+        .summon_skill_id
+        .as_deref()
+        .map(find_skill)
+        .transpose()?
+        .map(|skill| SkillEvaluationInput {
+            coefficients: coefficients_for(skill.attacker, skill.dependency),
+            damage_contributions: damage_inputs::damage_contributions_of(
+                &character.stat_sources,
+                &buffs,
+                &character.equipment,
+                skill.dependency,
+            ),
+            element_value: damage_inputs::element_value_for(
+                &character.game_character_id,
+                &character.equipment,
+                &character.stat_sources,
+                &skill,
+            ),
+            skill,
+        });
     // 呼び出し側がスキルを指定したら、装備条件の比較先はそのスキルの依存で固定する。
     let fixed_dependency = match dependency_skill_id {
         None => None,
@@ -1676,6 +1881,7 @@ pub fn evaluate_contents(
         &gamedata::content_areas(),
         &enemies,
         &skill_inputs,
+        summon_input.as_ref(),
         equipment_base_sources_raw,
         wrist_bonus,
         &titles,
@@ -1801,8 +2007,25 @@ fn candidate_context(
         .into_iter()
         .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
         .collect();
-    let enchant_allowed_keys =
-        domain::enchant_dependency_keys(&gamedata::equipment_coefficients(skill.dependency));
+    // 熊(魔法人形)のスキルを直接プレビューしているときも、装備は本体のもの(熊は自分の
+    // 装備を持たない)なので、係数だけ攻撃者で分岐させる
+    let mut enchant_allowed_keys = domain::enchant_dependency_keys(
+        &gamedata::equipment_coefficients_for(skill.attacker, skill.dependency),
+    );
+    // キャラに熊(魔法人形)が撃つスキルがあれば、エンチャント案内は本体 ∪ 熊の和集合にする
+    // (ADR-016 決定 8)。本体は召喚中も自由に撃てるので、熊にしか効かない値種を除外すると
+    // 本体側の伸びしろを見逃す。逆に本体だけに効く値種を除外すると熊側を見逃す。
+    if let Some(summon_skill_id) = character.summon_skill_id.as_deref() {
+        let summon_skill = find_skill(summon_skill_id)?;
+        for key in domain::enchant_dependency_keys(&gamedata::equipment_coefficients_for(
+            summon_skill.attacker,
+            summon_skill.dependency,
+        )) {
+            if !enchant_allowed_keys.contains(&key) {
+                enchant_allowed_keys.push(key);
+            }
+        }
+    }
     Ok(CandidateContext {
         content,
         enemy,
@@ -2077,6 +2300,56 @@ mod tests {
         );
     }
 
+    /// 検証用の最小 `NewCharacter`(アナイス)。
+    fn anais() -> NewCharacter {
+        NewCharacter {
+            name: "アナイス".to_string(),
+            game_character_id: "anais".to_string(),
+            base_stats: BaseStats {
+                stab: 1,
+                hack: 1,
+                int: 100,
+                def: 1,
+                mr: 1,
+                dex: 1,
+                agi: 1,
+            },
+            awakening: Awakening::default(),
+            stat_sources: StatSources::default(),
+            equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
+            main_skill_id: None,
+            summon_skill_id: None,
+            goal_content_id: None,
+            default_buff_set_id: None,
+        }
+    }
+
+    #[test]
+    fn 熊が撃つスキルを主軸に選ぶと拒否される() {
+        let mut c = anais();
+        c.main_skill_id = Some("anais_mica_even_bear".to_string());
+        let error = super::validate_main_skill(&c).unwrap_err();
+        assert!(error.message.contains("主軸に選べません"));
+    }
+
+    #[test]
+    fn 本体が撃つスキルを召喚スキルに選ぶと拒否される() {
+        let mut c = anais();
+        c.summon_skill_id = Some("anais_angry_pixie".to_string());
+        let error = super::validate_summon_skill(&c).unwrap_err();
+        assert!(error.message.contains("召喚スキルに選べません"));
+    }
+
+    #[test]
+    fn 主軸と召喚の正しい組み合わせは通る() {
+        let mut c = anais();
+        c.main_skill_id = Some("anais_angry_pixie".to_string());
+        c.summon_skill_id = Some("anais_mica_even_bear".to_string());
+        assert!(super::validate_main_skill(&c).is_ok());
+        assert!(super::validate_summon_skill(&c).is_ok());
+    }
+
     #[test]
     fn api境界は未対応スキルへのコンボタイプ指定を拒否する() {
         let skill = gamedata::find_skill("maximin_moonlight_sword").unwrap();
@@ -2105,6 +2378,7 @@ mod tests {
             equipment: Equipment::default(),
             common_skills: CommonSkills::default(),
             main_skill_id: None,
+            summon_skill_id: None,
             goal_content_id: None,
             default_buff_set_id: None,
         };
@@ -2384,5 +2658,152 @@ mod tests {
         assert_eq!(material.weapon_added_damage, 84_711);
     }
 
+    /// 熊(魔法人形)のスキルで組み立てると、突き係数 0・魔攻係数 23.75(基本)の熊固定係数になる
+    /// (wiki 計算式まとめ `STAB(熊)` 行)。本体のスキルでは従来どおり依存種別の係数のまま。
+    #[test]
+    fn 熊のスキルは本体と別の係数で組み立たる() {
+        let content = gamedata::content_areas()
+            .into_iter()
+            .flat_map(|area| area.contents)
+            .find(|content| content.id == "ringo")
+            .unwrap();
+        let base_stats = BaseStats {
+            stab: 100,
+            hack: 100,
+            int: 100,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
+        let (_, bear_target) = build_damage_input(
+            &base_stats,
+            "anais",
+            None,
+            &StatSources::default(),
+            &BuffSelection::default(),
+            Equipment::default(),
+            CommonSkills::default(),
+            domain::Awakening::default(),
+            gamedata::find_skill("anais_mica_even_bear").unwrap(),
+            gamedata::find_enemy("ringo_boss").unwrap(),
+            &content,
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(bear_target.coefficients.equipment.base.thrust, 0.0);
+        assert_eq!(bear_target.coefficients.equipment.base.magic_attack, 23.75);
+        assert_eq!(bear_target.coefficients.attack.primary, (StatKind::Int, 2.1));
 
+        let (_, body_target) = build_damage_input(
+            &base_stats,
+            "anais",
+            None,
+            &StatSources::default(),
+            &BuffSelection::default(),
+            Equipment::default(),
+            CommonSkills::default(),
+            domain::Awakening::default(),
+            gamedata::find_skill("anais_angry_pixie").unwrap(),
+            gamedata::find_enemy("ringo_boss").unwrap(),
+            &content,
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        // anais_angry_pixie は Int 依存(本体スキル)。攻撃力係数は従来どおり Int×2.4(熊は 2.1)。
+        assert_eq!(body_target.coefficients.attack.primary, (StatKind::Int, 2.4));
+    }
+
+    /// summon_skill_id があるキャラは summon が Some になり、合計 DPS は本体+熊、
+    /// 討伐時間は本体単独より短くなる(本体は召喚中も自由に撃てるので単純和)。
+    #[test]
+    fn 召喚スキルがあるキャラは本体と熊の合計dpsになる() {
+        let base_stats = BaseStats {
+            stab: 300,
+            hack: 300,
+            int: 300,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
+        let with_summon = super::damage_for_character(
+            &base_stats,
+            "anais",
+            Some("anais_angry_pixie"),
+            Some("anais_mica_even_bear"),
+            &StatSources::default(),
+            &BuffSelection::default(),
+            Equipment::default(),
+            CommonSkills::default(),
+            domain::Awakening::default(),
+            "anais_angry_pixie",
+            "ringo",
+            0,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(with_summon.summon.is_some());
+        let summon_dps = with_summon.summon.as_ref().unwrap().result.expected_dps.unwrap();
+        let body_dps = with_summon.body.expected_dps.unwrap();
+        assert!((with_summon.combined.expected_dps.unwrap() - (body_dps + summon_dps)).abs() < 1e-6);
+        assert!(with_summon.combined.defeat_seconds.unwrap() < with_summon.body.defeat_seconds.unwrap());
+
+        // summon_skill_id が無いキャラ(他キャラ)は summon が None で combined = 本体(回帰)。
+        let without_summon = super::damage_for_character(
+            &BaseStats {
+                stab: 300,
+                hack: 300,
+                int: 1,
+                def: 1,
+                mr: 1,
+                dex: 1,
+                agi: 1,
+            },
+            "boris",
+            None,
+            None,
+            &StatSources::default(),
+            &BuffSelection::default(),
+            Equipment::default(),
+            CommonSkills::default(),
+            domain::Awakening::default(),
+            "boris_horizontal_sword",
+            "ringo",
+            0,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(without_summon.summon.is_none());
+        assert_eq!(without_summon.combined.expected_dps, without_summon.body.expected_dps);
+        assert_eq!(without_summon.combined.defeat_seconds, without_summon.body.defeat_seconds);
+    }
+
+    /// 召喚スキルがあるキャラのエンチャント案内は、本体(anais_angry_pixie。Int 依存 →
+    /// 魔攻・魔防)∪ 熊(斬り・魔攻・魔防)の和集合になる(ADR-016 決定 8)。
+    /// 斬りは熊にしか無い成分なので、和集合になっているかの目印にする。
+    #[test]
+    fn 召喚ありのエンチャント案内は本体と熊の和集合() {
+        let mut c = anais();
+        c.main_skill_id = Some("anais_angry_pixie".to_string());
+        c.summon_skill_id = Some("anais_mica_even_bear".to_string());
+        let ctx = super::candidate_context(&c, &BuffSelection::default(), "anais_angry_pixie", "ringo").unwrap();
+        assert!(ctx.enchant_allowed_keys.contains(&domain::EquipmentStatKind::Slash));
+        assert!(ctx.enchant_allowed_keys.contains(&domain::EquipmentStatKind::MagicAttack));
+        assert!(ctx.enchant_allowed_keys.contains(&domain::EquipmentStatKind::MagicDefense));
+
+        // 召喚スキル未選択なら本体(Int 依存)だけ。斬りは本体側に無い成分なので含まれない(回帰)。
+        let mut without_summon = anais();
+        without_summon.main_skill_id = Some("anais_angry_pixie".to_string());
+        let ctx_without = super::candidate_context(&without_summon, &BuffSelection::default(), "anais_angry_pixie", "ringo").unwrap();
+        assert!(!ctx_without.enchant_allowed_keys.contains(&domain::EquipmentStatKind::Slash));
+    }
 }
