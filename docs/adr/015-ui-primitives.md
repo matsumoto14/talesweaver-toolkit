@@ -639,6 +639,70 @@ Svelte が microtask で button を描いてフォーカスを移すため、**�
 - `open-in` + `hidden` の直書き **2 箇所**(段階 6 から変わらず)。**3 つ目が出たら部品にする**
 - `apps/desktop/scripts/shoot.js` の `require` —— いまは `shoot.cjs` で、このセッションで実行して撮れている。**片付いていた**
 
+### 段階 10: 画面を切る(計算タブ 3,516 行)(2026-09-17)
+
+段階 1〜9 は**部品**(呼ぶ側が決める数を 0 にする)を作る話だった。部品が揃ったあとも
+`pages/calc/CalcPage.svelte` は 3,516 行(script 1,710 / markup 1,339 / style 467、
+`$derived` 93・`$effect` 16)で、依存の向きが頭に入らない。部品の数ではなく**面の数**で切る。
+
+- 切り口は「**入出力が細いところ**」。1 面 = 1 ファイルにし、props は面の輪郭そのものだけにする。
+  `WhyPanel` が受け取るのは `result` / `defense` / `perHit` / `critMode` / `store` の **5 つだけ**で、
+  段・帯・棚卸しは中で `damageDetail.ts` を呼んで組む。
+- **画面をまたぐ状態はクラスに畳む**(`.svelte.ts` のクラスフィールドで `$state` / `$derived` を持つ)。
+    - `detailStore.svelte.ts` — 開いている内訳・「直近で何が変わったか」。鎖(`CalcPage`)と帯(`WhyPanel`)は
+      別の入れ物にいるが、同じ面を開き ↑ で同じ行を辿るので 1 つを共有する。
+    - `simStore.svelte.ts` — 試し変更。`KNOBS`(何を 1 操作として戻すか)と上限 3 件は、
+      右カラムの帯・印と左の「足りない分をどう埋める?」の**両方**が使うため、どちらのファイルにも置けない。
+      `editSim` / `applyWhatIf` / `revertKnob` に散っていた同じ上限チェックが `commit()` 1 つになった。
+- **値の組み立ては純関数へ**(`damageDetail.ts`)。同じ段を 2 つの面が別々に組まないよう、
+  `flowRowsOf` / `attackRows` / `stepDetail` / `lostRowsOf` を両側が読む。
+
+#### 数字
+
+| | 前 | 後 |
+|---|---|---|
+| `CalcPage.svelte` | 3,516 | **1,183** |
+| `MaterialsPane.svelte`(計算の材料) | — | 988 |
+| `damageDetail.ts`(段の組み立て) | — | 427 |
+| `WhyPanel.svelte`(なぜこの数字?) | — | 422 |
+| `BuffCard.svelte`(バフ 35 件) | — | 336 |
+| `simStore.svelte.ts`(試し変更) | — | 252 |
+| `DetailRows.svelte`(内訳 1 行) | — | 154 |
+| `detailStore.svelte.ts`(開いた面) | — | 98 |
+
+1 ファイルあたりの `$derived` は 93 → 最大 45(`CalcPage`)。`cargo test --workspace` 590 /
+`npm run build` / `svelte-check` 0 errors 0 warnings、機械監査 16 本・候補 0 件。
+
+#### 切ったついでに消えた重複
+
+- 内訳の行(ラベル / 倍率 / 実数 / 補足)は鎖・帯・次の候補の **3 箇所**で別々に書かれていた → `DetailRows` 1 つ
+- 「変わった段」の判定式が 2 箇所 → `changedFlowKeys()` 1 つ
+- 研磨カードとバフカードが同じ ON 判定を別々に持っていた → `buffs.ts` の `isBuffOn()`
+- `CalcPage` のローカル `weaponOf` は `KNOBS` を外へ出すと閉じ込められる → `equipment.ts` の `selectedWeapon()`
+- **`.fill-more-row` の `dt-val` は元から当たっていなかった**(`.dt-row` の子孫セレクタなのに `.dt-row` の外)。
+  借りているつもりの空クラスだったので外した
+- `badgeStyle` の import が**分割前から未使用**だった
+
+#### 却下した選択肢
+
+- **「次の候補」の一覧のために `.dt-row` の段を `WhyPanel` にもう一度書く案** — 6 行の CSS で済むが、
+  段階 1〜9 でやってきたことの逆。`DetailRows` に `head: false` / `Mat.prefix` / `Detail.note` を足して
+  **1 定義**に寄せた。呼ぶ側が決めるのは「見出しを出すか」ではなく「この一覧に段があるか」という
+  出すものの性質(段階 4 で `<Value>` が `motion` の有無で跳ねと光りを分けたのと同じ線)。
+- **`WhyPanel` に 13 個の derived(`steps` / `atkRows` / `pierced` / `flowRows` …)を props で渡す案** —
+  面の輪郭ではなく親の都合を渡すことになる。純関数を両側が呼ぶほうを採った。二重計算になるが、
+  `ChangeMemo.touch` は同じ世代なら何度呼んでも同じ答えを返す設計(段階 6)なので判定はぶれない。
+- **`SimStore` を持たず、`payload` / `savedPayload` を毎回引数で渡す案** — 呼ぶ側 5 箇所が
+  「どっちの payload を渡すか」を毎回決めることになる。クラスが `app.sim ?? saved` を 1 箇所で持つ。
+- **`MaterialsPane` をカード 8 枚に割る案** — バフ(35 件・排他・寄与)だけは `result` 1 つで閉じるので
+  切ったが、残り 7 枚は `payload` と `sim` を配り直すだけで props が増える。**面が 1 つなら 1 ファイル**。
+
+#### 段階 10 で拾わずに次へ送ったもの
+
+- `open-in` + `hidden` の直書きは **3 箇所**になった(`DetailRows` / `WhyPanel` の `flow-body` / 計算タブの鎖)。
+  段階 9 で決めた「3 つ目が出たら部品にする」の条件を満たしている
+- `MaterialsPane` 988 行 —— 面としては 1 つだが、カード 7 枚ぶんの `$effect` が同居している
+
 ## 却下した選択肢
 
 - **(段階 3)`aria-expanded` を `<summary>` にも書いて揃える案** — `<summary>` は暗黙のロールで開閉状態を持っているので、書くと二重になる。標準が持っているものを手で足さない。

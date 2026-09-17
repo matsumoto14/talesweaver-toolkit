@@ -52,6 +52,10 @@ function initialChoice(def: BuffDefinition, stat?: StatKind): BuffChoice {
   return { ...def.default_choice, stat: isUserSelectedTarget(def.target) ? (stat ?? STAT_KINDS[0]) : null };
 }
 
+/** その選択にこのバフが入っているか */
+export const isBuffOn = (choices: BuffChoice[], id: string): boolean =>
+  choices.some((c) => c.buff_id === id);
+
 /** バフの ON/OFF を反映した新しい選択配列を返す(元の配列は変更しない) */
 export function toggleBuff(
   choices: BuffChoice[],

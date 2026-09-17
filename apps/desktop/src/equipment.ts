@@ -185,6 +185,10 @@ export const selectedEquipmentPart = (list: EquipmentPartList): EquipmentPart | 
 export const selectedEquipmentPartOrNeutral = (list: EquipmentPartList): EquipmentPart =>
   selectedEquipmentPart(list) ?? neutralEquipmentPart();
 
+/** 装着中の武器(未装着なら中立)。ダメージの依存元なので画面をまたいで参照する */
+export const selectedWeapon = (c: { equipment: Equipment }): EquipmentPart =>
+  selectedEquipmentPartOrNeutral(c.equipment.parts.weapon);
+
 // --- 神鳥の聖物 -------------------------------------------------------------
 // 段階 ↔ 実際に増える値は Rust の表(StatLimits.sacred_relic_stage_values)を引くだけ。
 // ステッパー1押しごとに押した瞬間へ反映する楽観更新(§00 04)のため IPC は挟まない。
