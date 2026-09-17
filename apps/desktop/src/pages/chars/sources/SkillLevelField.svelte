@@ -23,13 +23,13 @@
     onClear?: () => void;
     /** 効いている値。未指定なら空欄(オーグメントのように値欄を持たない行) */
     valueText?: string;
-    valueMotion?: "bump" | "flash";
-    valueKey?: unknown;
+    /** 値の元になる数。渡せば跳ね、渡さなければ文字が変わったときに光る(決めるのは <Num>) */
+    motion?: () => number | null;
   }
   let {
     label, options, cols, cell, disabledValues = [], value, onChange,
     icon, extraAction, clearLabel, clearDisabled = false, onClear,
-    valueText, valueMotion, valueKey,
+    valueText, motion,
   }: Props = $props();
 </script>
 
@@ -51,11 +51,7 @@
   </span>
   {#if valueText === undefined}
     <span></span>
-  {:else if valueMotion === "bump"}
-    <Num class="v" motion={() => (valueKey as number | null)} value={valueText} />
-  {:else if valueMotion === "flash"}
-    <Num class="v" value={String(valueKey)}>{#snippet children()}{valueText}{/snippet}</Num>
   {:else}
-    <span class="v num">{valueText}</span>
+    <Num class="v" {motion} value={valueText} />
   {/if}
 </div>

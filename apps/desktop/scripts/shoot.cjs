@@ -1,13 +1,13 @@
 // 実機の画面を撮る。**撮るだけ** — 操作も測定もしない(判断は人がする)。
 //
 // 使い方: アプリを start-app.ps1 で起動(CDP 9222)してから
-//   node apps/desktop/scripts/shoot.js <出力先> [タブ名...]
+//   node apps/desktop/scripts/shoot.cjs <出力先> [タブ名...]
 // タブ名を省略すると、いま開いている画面を 1 枚撮る。
 const { chromium } = require("playwright-core");
 
 const [, , outDir, ...tabs] = process.argv;
 if (!outDir) {
-  console.error("出力先を指定する: node shoot.js <出力先ディレクトリ> [タブ名...]");
+  console.error("出力先を指定する: node shoot.cjs <出力先ディレクトリ> [タブ名...]");
   process.exit(1);
 }
 const out = outDir.replace(/[\/]*$/, "/");

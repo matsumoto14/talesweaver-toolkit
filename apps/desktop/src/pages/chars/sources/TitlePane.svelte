@@ -7,7 +7,7 @@
   import { app } from "../../../state.svelte";
   import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
-  import { flash } from "../../../ui/motion.svelte";
+  import { changed } from "../../../ui/motion.svelte";
   import Num from "../../../ui/Num.svelte";
   import TextField from "../../../ui/TextField.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
@@ -173,7 +173,7 @@
   <div
     class="contrib-card title-current"
     class:empty={selectedTitle === null}
-    use:flash={() => selectedTitle?.id ?? "none"}
+    use:changed={() => selectedTitle?.id ?? "none"}
   >
     <span class="item-name strong">{selectedTitle?.name ?? "未選択"}</span>
     {#if selectedTitle && titleSummary(selectedTitle) !== ""}

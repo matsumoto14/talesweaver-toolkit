@@ -31,7 +31,7 @@
   import { limits } from "../../../limits.svelte";
   import { tables } from "../../../tables.svelte";
   import { app, equipmentFocus, equipmentPartFocus } from "../../../state.svelte";
-  import { DUR, flash, motionDuration, reveal } from "../../../ui/motion.svelte";
+  import { changed, DUR, motionDuration, reveal } from "../../../ui/motion.svelte";
   import Modal from "../../../ui/Modal.svelte";
   import Drill from "../../../ui/Drill.svelte";
   import Icon from "../../../ui/Icon.svelte";
@@ -549,7 +549,7 @@
   let detailEl = $state<HTMLElement | null>(null);
   let focusedAbilityId = $state<string | null>(null);
   let focusSeq = $state(0);
-  /** 光らせる対象だけ値が変わるトークン。`use:flash` はこれの変化で動く */
+  /** 光らせる対象だけ値が変わるトークン。`use:changed` はこれの変化で動く */
   const focusToken = (abilityId: string) => (focusedAbilityId === abilityId ? String(focusSeq) : "");
   async function revealFocused(abilityId: string | null) {
     await tick();
@@ -742,7 +742,7 @@
       <div class="selected-equipment">
         <Icon kind="equipment" id={iconId(part.item_id)} size={28} label={partDisplayName(slot)} />
         <!-- 値ではなく「選択中の装備」という面。装備名を数値書体にしないので <Num> に入れない -->
-        <span class="selected-equipment-copy" use:flash={() => partDisplayName(slot)}>
+        <span class="selected-equipment-copy" use:changed={() => partDisplayName(slot)}>
           <small class="dim">選択中の装備</small>
           <b>{partDisplayName(slot)}</b>
         </span>
@@ -932,7 +932,7 @@
               <div
                 class="enchant-plan inset"
                 class:complete={completionPlan.remaining === 0}
-                use:flash={() => `${completionPlan.remaining}:${completionPlan.twenty_count}:${completionPlan.seventeen_count}:${completionPlan.remainder}`}
+                use:changed={() => `${completionPlan.remaining}:${completionPlan.twenty_count}:${completionPlan.seventeen_count}:${completionPlan.remainder}`}
               >
                 <span class="plan-remaining"><small>上限まであと</small><b class="num">{completionPlan.remaining}</b></span>
                 {#if completionPlan.remaining > 0}
@@ -967,7 +967,7 @@
             <div
               class="ability-fixed-row"
               data-ability-id={selectedAbilityId}
-              use:flash={() => focusToken(selectedAbilityId)}
+              use:changed={() => focusToken(selectedAbilityId)}
             >
               <div class="ability-fixed-label">
                 <b>{row.label}</b>
@@ -1056,7 +1056,7 @@
               <div
                 class="siena-row ability-value-row swap-in"
                 data-ability-id={ability.id}
-                use:flash={() => focusToken(ability.id)}
+                use:changed={() => focusToken(ability.id)}
               >
                 <span class="ro-name">{ability.name}</span>
                 <StatInput
@@ -1078,7 +1078,7 @@
               <div
                 class="ability-additional-panel non-weapon-additional-panel swap-in"
                 data-ability-id={ability.id}
-                use:flash={() => focusToken(ability.id)}
+                use:changed={() => focusToken(ability.id)}
               >
                 <div class="ability-additional-head">
                   <b>{ability.name}のランダム追加</b>
@@ -1122,7 +1122,7 @@
           <div
             class="siena-row orphan-row swap-in"
             data-ability-id={orphanId}
-            use:flash={() => focusToken(orphanId)}
+            use:changed={() => focusToken(orphanId)}
           >
             <span class="ro-name">{orphan?.name ?? orphanId}</span>
             <span class="orphan-note">本体一覧に無い値が残っています</span>

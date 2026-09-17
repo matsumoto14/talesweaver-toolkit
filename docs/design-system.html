@@ -2116,7 +2116,7 @@ td code { background: var(--card-soft2); }
           <code>value</code>(書式済みの文字列。<code>null</code> = 未収録)と、
           <code>motion</code>(値の元になる数)だけ。</p>
         <p class="cap"><b>「跳ねさせるか」「跳ねか要約か差分か」は選ばない。</b><code>motion</code> に数が渡っていれば
-          増減が言えるので跳ね(<code>use:bump</code>)、渡せない値なら書式済みの文字が変わったときに光る(<code>use:flash</code>)——
+          増減が言えるので跳ね(<code>use:bump</code>)、渡せない値なら書式済みの文字が変わったときに光る(<code>use:changed</code>)——
           選択肢ではなく、数があるかどうかで決まる。読み取り行の <code>&lt;ReadRow&gt;</code> もこの部品の上に載っていて、
           値の作法を 2 か所に持たない。<b><code>&lt;Num&gt;</code> に入れるのは数字を含む値だけ</b> —
           文(「余裕があります」)・名前(装備名)は数値書体にすると読みにくいので入れない。</p>
@@ -2248,7 +2248,7 @@ td code { background: var(--card-soft2); }
         <p>だから装飾のアニメーションを置かない。置くと、本当の変化がその中に埋もれる。</p>
 
         <div class="sec">目的から探す<span class="r">「これを作った。ユーザーに何を気づかせたいか」から引く</span></div>
-        <p>書き手の入口は <code>--dur-*</code> でも <code>use:pulse</code> でもない。<strong>これを作った、ユーザーに何を気づかせたいか</strong>から探す。下の表は目的から手段への入口で、実際の動き方(何 ms でどう動くか)はそれぞれの詳細節にある — <b>入口は引くための表、詳細節は「その型はどう動くべきか」の説明</b>という役割分担。</p>
+        <p>書き手の入口は <code>--dur-*</code> でも <code>use:changed</code> でもない。<strong>これを作った、ユーザーに何を気づかせたいか</strong>から探す。下の表は目的から手段への入口で、実際の動き方(何 ms でどう動くか)はそれぞれの詳細節にある — <b>入口は引くための表、詳細節は「その型はどう動くべきか」の説明</b>という役割分担。</p>
         <div class="changes">
           <div class="change">
             <span class="w">押したことを返したい</span>
@@ -2257,7 +2257,7 @@ td code { background: var(--card-soft2); }
           </div>
           <div class="change">
             <span class="w">変わったことに気づかせたい</span>
-            <span class="how">何が変わった? で選ぶ — 数値 <code>use:bump</code> / いくつ <code>use:delta</code> / 量 バーの幅 / 状態 <code>use:pulse</code> / 要約 <code>use:flash</code> / 面の中身 <code>use:swap</code></span>
+            <span class="how">値なら <code>&lt;Num&gt;</code> が持つ(数値 <code>use:bump</code> / いくつ <code>use:delta</code>)。量はバーの幅。面・行・文が変わったときだけ <code>use:changed</code>(動き方はその要素の入場クラス)</span>
             <span class="spec-n">↓「変化の型と、その伝え方」</span>
           </div>
           <div class="change">
@@ -2395,25 +2395,32 @@ td code { background: var(--card-soft2); }
           <b style="color:var(--fg-sub)">終わりのない回転</b>(<code>Spinner</code> の .7s infinite — これは「変化を見せる動き」ではなく、
           これから変わる値があることだけを伝える印)。</p>
 
-        <div class="sec">動きの部品<span class="r">クラスを手で当てない</span></div>
-        <p><strong>動きは <code>ui/</code> の部品を通す。画面側がクラスを手で当てない。</strong>
-          書き手が毎回「部品を使うか、CSS クラスを直接付け外すか」を選べる状態だと、時間が二重に持たれてずれる
-          (<code>Workspace</code> の一時マークが 400ms、動き自体は 260ms だった実例が部品化のきっかけ)。</p>
+        <div class="sec">動きの部品<span class="r">動き方は入場クラス、いつ動くかは部品</span></div>
+        <p><strong>その要素がどう動くかは、入場クラス 1 か所だけが決める。</strong>
+          <code>.pane-in</code>(型 3)・<code>.swap-in</code>(型 3b)・<code>.pop-in</code>(型 4)・
+          <code>.badge-in</code>(型 5)・<code>.open-in</code>(型 6)は、<code>{#if}</code> や <code>{#each}</code> で
+          要素が生まれた瞬間に 1 回だけ再生される CSS アニメーションで、JS は 1 行も要らない。
+          <b>同じ要素が後から変わったときは、その同じ入場クラスを <code>use:changed</code> がもう一度再生する。</b>
+          「生まれた」と「変わった」で違う動き方をする要素は無いので、動き方の宣言は入場クラスに集まり、
+          部品は<b>いつ再生するか</b>だけを持つ。</p>
         <p><strong>値が変わったときの動きは、画面側では選べない。</strong><code>&lt;Num&gt;</code> と
           <code>&lt;Disclosure&gt;</code> が中で <code>use:bump</code> / <code>use:delta</code> /
-          <code>use:flash</code> を呼ぶので、画面側が「跳ねさせるか」「跳ねか要約か差分か」を決める場面は無い。
-          下の action を画面側から直接呼ぶのは、値ではなく<b>面・行・文</b>が変わったことを見せるときだけ。</p>
+          <code>use:changed</code> を呼ぶので、画面側が「跳ねさせるか」「跳ねか要約か差分か」を決める場面は無い。
+          <code>use:changed</code> を画面側から直接呼ぶのは、値ではなく<b>面・行・文</b>が変わったことを見せるときだけ。</p>
         <div class="changes">
           <div class="change"><span class="w">&lt;Num&gt;</span><span class="how">値を出した(型 1・1b・5)。action ではなく<b>部品</b> — 数値書体・未収録の <code>?</code>・跳ね・差分枠が中に入っている(180 箇所)</span><span class="spec-n">ui/Num.svelte。<code>value</code> と <code>motion</code> を渡すだけ</span></div>
           <div class="change"><span class="w">use:bump<br>use:delta</span><span class="how">数値が変わった / いくつ変わった(型 1・1b)。<b><code>&lt;Num&gt;</code> の中身</b>で、画面側からは呼ばない</span><span class="spec-n">値ではなく getter を渡す</span></div>
-          <div class="change"><span class="w">use:swap</span><span class="how">面が入れ替わった(型 3b)。入ってくる面だけ動かす</span><span class="spec-n">文字列の getter</span></div>
-          <div class="change"><span class="w">use:pulse<br>use:flash</span><span class="how">状態が変わった(型 5)。<code>pulse</code> は値そのものを持たない印(★ の切替など)、<code>flash</code> は文字列の要約が変わったとき。<b>値に使うのは <code>&lt;Num&gt;</code> の中だけ</b>で、画面側から呼ぶのは面・行・文が変わったとき(21 箇所)</span><span class="spec-n">どちらも null は「いまはこの要素の番ではない」として無視</span></div>
+          <div class="change"><span class="w">use:changed</span><span class="how">面・行・文が変わった(型 3b・5)。<b>どう動くかは要素が既に載せている入場クラス</b>(無ければ型 5 の <code>.badge-in</code>)。何を渡すかで「変わった」の意味が決まる — <b>文字列 = いまの中身</b>(生まれた時点では動かさない)、<b>文字列以外 = いま誰の番か</b>(<code>null</code> は「この要素の番ではない」として無視。生まれた時点で自分の番なら動く)</span><span class="spec-n">ui/motion.svelte.ts。値ではなく getter を渡す</span></div>
           <div class="change"><span class="w">&lt;Disclosure&gt;</span><span class="how">開いた / 閉じた(型 6)。action ではなく<b>部品</b> — トリガも面もキャレットも中に入っている(36 箇所)</span><span class="spec-n">ui/Disclosure.svelte。動きは app.css の details::details-content</span></div>
           <div class="change"><span class="w">reveal()</span><span class="how">画面内に入れる(型番号なし)。<code>scrollIntoView</code> の <code>behavior</code> をここで決める</span><span class="spec-n">action ではなく関数。呼び出し側が 1 回だけ呼ぶ</span></div>
         </div>
-        <p class="cap">量が変わった(型 2・バーの幅)、場所が増えた / 一時的に重なった(型 3・4・<code>.pane-in</code> / <code>.pop-in</code>)は、
-          <code>{#if}</code> でマウントされる瞬間に静的なクラスが 1 回だけ付く入場そのものか、素の CSS transition で
-          値を後から付け外す必要が無いので専用の action を持たない。<b>action が要るのは、同じ要素へ何度も出し入れする型だけ。</b></p>
+        <p class="cap">量が変わった(型 2・バーの幅)は素の CSS transition で、入場(型 3・3b・4・5・6)は
+          マウントの瞬間に静的なクラスが 1 回だけ付く。<b>部品が要るのは、同じ要素へ何度も出し入れする型だけ</b> —
+          それが <code>use:changed</code>(と <code>&lt;Num&gt;</code> の中の <code>use:bump</code> / <code>use:delta</code>)1 本。
+          <b>「クラスを画面側で手で当てない」という以前の規則は取り下げた</b>(2026-09-17)。動きが部品に入りきった結果、
+          残った入場クラスは「手で当てた動き」ではなく<b>その要素の動き方の宣言</b>そのもので、
+          部品(<code>use:changed</code>)が読む先になったため。時間が二重に持たれてずれる心配は、
+          入場クラスが <code>--dur-*</code> の 9 段の中にしか無いことで押さえる。</p>
 
         <div class="sec">開閉は <code>&lt;Disclosure&gt;</code> 1 つ<span class="r">方式を選ばせない</span></div>
         <p><strong>押すと開く面は <code>ui/Disclosure.svelte</code> だけで作る(36 箇所)。</strong>

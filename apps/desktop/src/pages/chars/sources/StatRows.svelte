@@ -5,7 +5,7 @@
   import type { StatKind } from "../../../api/types";
   import type { Snippet } from "svelte";
   import { STAT_LABELS } from "../../../labels";
-  import { flash } from "../../../ui/motion.svelte";
+  import { changed } from "../../../ui/motion.svelte";
 
   interface Props {
     kinds: readonly StatKind[];
@@ -18,7 +18,7 @@
 
 <div class="stat-rows" class:two={twoCol}>
   {#each kinds as k (k)}
-    <div class="stat-row" use:flash={() => (flashValue ? String(flashValue(k)) : k)}>
+    <div class="stat-row" use:changed={() => (flashValue ? String(flashValue(k)) : k)}>
       <span class="k">{STAT_LABELS[k]}</span>
       {@render row(k)}
     </div>

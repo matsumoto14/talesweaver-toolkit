@@ -6,7 +6,7 @@
   // 渡せない値(文字・要約)は書式済みの文字が変わったら光る — 選ぶのではなく、数があるかで決まる。
   // `ui/ReadRow.svelte` はこの上に載っている(行に載る値)。行に載らない値がこれを直接使う。
   import type { Snippet } from "svelte";
-  import { bump, delta as deltaAction, flash } from "./motion.svelte";
+  import { bump, changed, delta as deltaAction } from "./motion.svelte";
 
   interface Props {
     /** 書式済みの値(format.ts を通したもの)。null = 未収録 → 「?」を出す。0 や空白にしない(§00)。
@@ -65,7 +65,7 @@
     class:down={tone === "down"}
     class:sim-value={tone === "sim"}
     {title}
-    use:flash={() => text}>{#if children}{@render children()}{:else}{value}{/if}</span>
+    use:changed={() => text}>{#if children}{@render children()}{:else}{value}{/if}</span>
 {/if}
 {#if delta && motion}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->

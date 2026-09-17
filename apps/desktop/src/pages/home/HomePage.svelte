@@ -44,7 +44,7 @@
   import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { flash, swap } from "../../ui/motion.svelte";
+  import { changed } from "../../ui/motion.svelte";
   import Num from "../../ui/Num.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
@@ -918,7 +918,7 @@
             </div>
             <!-- 目標を選び直すとスポットライトのスキルが変わり、見る装備値の 2 本(突き/斬り/魔攻…)も
                  入れ替わる。中身が入れ替わった面は短く動かす(§10 型 3b。数値の跳ねでは表せない) -->
-            <div class="hero-panel readrows inset" use:swap={() => heroEquipRows.map((r) => r.key).join(",")}>
+            <div class="hero-panel readrows inset swap-in" use:changed={() => heroEquipRows.map((r) => r.key).join(",")}>
               <span class="hero-panel-title">装備・命中</span>
               {#each heroEquipRows as row (row.key)}
                 <ReadRow label={row.label} value={fmtInt(row.total)} motion={() => row.total}>
@@ -958,7 +958,7 @@
               title={manualGoal
                 ? "自動判定ではなく、自分で選んだ目標です(保存されます)。先頭の「自動: …」を選ぶと自動に戻ります"
                 : "自動で選ばれている目標です。押すと自分の目標に差し替えられます"}
-              use:flash={() => heroGoal?.content.id ?? ""}
+              use:changed={() => heroGoal?.content.id ?? ""}
             >
               <Picker
                 options={goalOptions}
@@ -1062,7 +1062,7 @@
             <span class="area-name">期限・影響</span>
             <span class="area-rule"></span>
           </div>
-          <div class="brief-card" use:flash={() => String(card.perHit)}>
+          <div class="brief-card" use:changed={() => String(card.perHit)}>
             <span class="tag meta-pill">影響</span>
             <Icon
               kind="skill" id={card.skillId} size={28}
@@ -1192,7 +1192,7 @@
               </div>
               <div class="expand-rows two-col">
                 {#each STAT_KINDS as k (k)}
-                  <div class="expand-row" use:flash={() => String(sacredRelicValueOf(character, k))}>
+                  <div class="expand-row" use:changed={() => String(sacredRelicValueOf(character, k))}>
                     <span class="expand-row-label">{STAT_LABELS[k]}</span>
                     <StatInput
                       label="{STAT_LABELS[k]}の聖物" hideLabel
@@ -1220,7 +1220,7 @@
                 {@const item = cuffsItem}
                 <div class="expand-rows">
                   {#each cuffsGrowthKeys as k (k)}
-                    <div class="expand-row" use:flash={() => String(cuffsPart(character)?.base[k] ?? 0)}>
+                    <div class="expand-row" use:changed={() => String(cuffsPart(character)?.base[k] ?? 0)}>
                       <span class="expand-row-label">{EQUIPMENT_STAT_LABELS[k]}</span>
                       <StatInput
                         label="{EQUIPMENT_STAT_LABELS[k]}の装備補正" hideLabel
@@ -1305,7 +1305,7 @@
                         {#if growthKeys.length > 0}
                           <div class="relic-growth-rows">
                             {#each growthKeys as k (k)}
-                              <div class="enchant-stat" use:flash={() => String(partOf(r.slot)?.base[k] ?? 0)}>
+                              <div class="enchant-stat" use:changed={() => String(partOf(r.slot)?.base[k] ?? 0)}>
                                 <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
                                 <StatInput
                                   label="{EQUIPMENT_STAT_SHORT[k]}の補正値" hideLabel
@@ -1585,7 +1585,7 @@
   .today-tile.open { border-color: var(--accent); background: var(--bg-panel); }
   .today-tile-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .today-tile-name { min-width: 0; flex: 1; font-size: 10.5px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* まだ伸ばせる余地(§00 04: 数値が変われば use:flash で気づかせる) */
+  /* まだ伸ばせる余地(§00 04: 数値が変われば use:changed で気づかせる) */
   .today-tile :global(.today-tile-note) { min-width: 0; font-size: 9.5px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .today-tile-head .chev { flex-shrink: 0; font-size: 9px; }
   /* シエナのオーラだけ展開ではなくキャラタブへ飛ぶ。外部遷移を示す ↗ を常設し、押す前に

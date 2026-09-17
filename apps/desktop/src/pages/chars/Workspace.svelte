@@ -50,7 +50,7 @@
   import Picker from "../../ui/Picker.svelte";
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
-  import { DUR, flash, motionDuration, pulse, reveal } from "../../ui/motion.svelte";
+  import { changed, DUR, motionDuration, reveal } from "../../ui/motion.svelte";
   import Num from "../../ui/Num.svelte";
   // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
   import "./sources/pane-shared.css";
@@ -634,7 +634,7 @@
    * 群をまたぐと別の `{#each}` になるので繋がらない。着地を弾ませて、
    * どれが動いたのかを目で追えるようにする(§10 型 5「状態が変わった」)。
    */
-  /** 動いた行と、その行だけに `use:pulse` を発火させるための印。値そのものは見ず
+  /** 動いた行と、その行だけに `use:changed` を発火させるための印。値そのものは見ず
    *  参照の不一致だけで「新しく動いた」を判定するので、同じ id が続けて動いても
    *  (★ を連打するなど)毎回新しいオブジェクトを積んで弾ませ直す */
   let movedMark = $state<{ id: string } | null>(null);
@@ -648,7 +648,7 @@
    *
    * `reveal` は素通しせず `instant` を渡して瞬時のまま揃える(見た目は変えない) —
    * ここは「動きで何が変わったかを伝える」場面ではなく、直後の `movedMark` による
-   * 弾み(pulse)がその役目を持つ。スクロールまで滑らせると、着地の弾みが
+   * 弾み(badge-in)がその役目を持つ。スクロールまで滑らせると、着地の弾みが
    * まだ動いている画面の上で起き、どこが変わったのかがかえって追いにくくなる。
    */
   function follow(id: string) {
@@ -783,7 +783,7 @@
                    0.5s を超えない — 待たせるための動きは要らない -->
               <div
                 animate:flip={{ duration: motionDuration(DUR.move), easing: cubicOut }}
-                use:pulse={() => (movedMark?.id === s.id ? movedMark : null)}
+                use:changed={() => (movedMark?.id === s.id ? movedMark : null)}
                 class="src src-line"
                 class:on={openSource === s.id}
                 class:dragging={dragId === s.id}
@@ -824,7 +824,7 @@
                 <span
                   class="src-changed"
                   class:show={changedSources.has(s.id)}
-                  use:flash={() => (changedSources.has(s.id) ? "on" : "off")}
+                  use:changed={() => (changedSources.has(s.id) ? "on" : "off")}
                   title={changedSources.has(s.id) ? "この編集で変更(保存済み)" : undefined}
                   aria-hidden="true"
                 ></span>
@@ -975,7 +975,7 @@
   /* .src-sub は Num.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
   .src-main :global(.src-sub) { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* この編集で変更した補正源の印。場所は常に確保し、opacity だけで出し入れする
-     (§09 規則 4「あとから幅が変わらない」)。初回だけ badge-in(use:flash)で光る */
+     (§09 規則 4「あとから幅が変わらない」)。初回だけ badge-in(use:changed)で光る */
   .src-changed {
     flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
     background: var(--accent); opacity: 0;

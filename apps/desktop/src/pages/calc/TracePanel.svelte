@@ -121,7 +121,7 @@
           {#each contributions as { item: c, state, key } (key)}
             <tr class:gone={state === "gone"}>
               <td>{STAT_LABELS[c.kind]}</td>
-              <td class="muted">{c.source}{#if state !== "same"}<span class="swap" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
+              <td class="muted">{c.source}{#if state !== "same"}<span class="swap badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
               <td class="muted">{STAT_LAYER_LABELS[c.layer]}</td>
               <td class="n"><Num motion={() => c.value} value={formatLayerValue(c.layer, c.value)} /></td>
             </tr>
@@ -164,7 +164,7 @@
             <tr class:gone={state === "gone"}>
               <td class="sym">{c.symbol}</td>
               <td>{c.label}</td>
-              <td class="muted">{c.source}{#if state !== "same"}<span class="swap" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
+              <td class="muted">{c.source}{#if state !== "same"}<span class="swap badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
               <td class="n"><Num motion={() => c.value} value={fmtContributionValue(c.kind, c.value)} /></td>
             </tr>
           {/each}
@@ -220,7 +220,8 @@
   tr.active td { background: var(--bg-active); }
   /* 抜けた供給源は次に集合が変わるまで取り消し線で残す。入った / 抜けた の印は差分と同じ色 */
   tr.gone td { text-decoration: line-through; color: var(--fg-dim); }
-  .swap { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; animation: tw-badge-in var(--dur-badge) var(--ease-spring); }
+  /* 動き方は入場クラス badge-in(app.css §10 型 5)が持つ。ここで animation を書き足さない */
+  .swap { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; }
   .swap.up { color: var(--good); }
   .swap.down { color: var(--warm); }
   tr.active td.sym { color: var(--warm); }

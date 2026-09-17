@@ -292,10 +292,10 @@
       valueText={draft.commonSkills.sharpness_vision_level === 0
         ? "—"
         : fmtSigned(SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1], { max: 2 }, "%")}
-      valueMotion="bump"
-      valueKey={draft.commonSkills.sharpness_vision_level === 0
-        ? null
-        : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1]}
+      motion={() =>
+        draft.commonSkills.sharpness_vision_level === 0
+          ? null
+          : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1]}
     >
       {#snippet icon()}<Icon kind="skill" id="common_sharpness_vision" size={20} label="シャープネスビジョン" />{/snippet}
       {#snippet extraAction()}
@@ -345,8 +345,7 @@
         clearDisabled={draft.commonSkills.strong_weapon_level === 0}
         onClear={() => (draft.commonSkills.strong_weapon_level = 0)}
         valueText={draft.commonSkills.strong_weapon_level === 0 ? "—" : fmtSigned(draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL, { max: 2 }, "%")}
-        valueMotion="bump"
-        valueKey={draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}
+        motion={() => draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}
       >
         {#snippet icon()}<Icon kind="skill" id="common_strong_weapon" size={20} label="ストロングウェポン" />{/snippet}
       </SkillLevelField>
@@ -377,8 +376,7 @@
         valueText={draft.commonSkills.protect_armor_level === 0
           ? "—"
           : `物${PROTECT_ARMOR_RATES[draft.commonSkills.protect_armor_level - 1]} / 魔${PROTECT_ARMOR_MAGIC[draft.commonSkills.protect_armor_level - 1]}%`}
-        valueMotion="bump"
-        valueKey={draft.commonSkills.protect_armor_level}
+        motion={() => draft.commonSkills.protect_armor_level}
       >
         {#snippet icon()}<Icon kind="skill" id="common_protect_armor" size={20} label="プロテクトアーマー" />{/snippet}
       </SkillLevelField>
@@ -395,8 +393,7 @@
         valueText={draft.commonSkills.kai_protect_armor_level === 0
           ? "—"
           : `物${KAI_PROTECT_ARMOR_RATES[draft.commonSkills.kai_protect_armor_level - 1]} / 魔${KAI_PROTECT_ARMOR_MAGIC[draft.commonSkills.kai_protect_armor_level - 1]}%`}
-        valueMotion="bump"
-        valueKey={draft.commonSkills.kai_protect_armor_level}
+        motion={() => draft.commonSkills.kai_protect_armor_level}
       >
         {#snippet icon()}<Icon kind="skill" id="common_kai_protect_armor" size={20} label="改・プロテクト" />{/snippet}
       </SkillLevelField>

@@ -23,7 +23,7 @@
   } from "../../labels";
   import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportUndo } from "../../toast.svelte";
-  import { swap } from "../../ui/motion.svelte";
+  import { changed } from "../../ui/motion.svelte";
   import Num from "../../ui/Num.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import StatInput from "../../ui/StatInput.svelte";
@@ -614,9 +614,9 @@
             <Num class="group-count" motion={() => picked} value={`${picked}/${total}`} />
           {/snippet}
         </Choose>
-        <!-- 面の入れ替えは型 3b(swap-in = 上から短く入る)。型 5 の badge-in(flash)を
-             ここに使うと、面ぜんたいが中心から膨らんで他タブの切り替えと動きが揃わない -->
-        <section class="buff-group inset" use:swap={() => `${activePurpose}:${activeDamageGroup}`}>
+        <!-- 入場クラス swap-in(型 3b = 上から短く入る)が動き方を決め、use:changed がそれを
+             再生する。badge-in(型 5)にすると面ぜんたいが中心から膨らんで他タブと揃わない -->
+        <section class="buff-group inset swap-in" use:changed={() => `${activePurpose}:${activeDamageGroup}`}>
           <div class="group-summary">
             <span class="group-copy"><strong>{activePurposeMeta.label}</strong><small>{activePurposeMeta.description}</small></span>
             {#if activePurpose === "stats"}

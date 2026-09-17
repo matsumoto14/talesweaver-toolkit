@@ -25,7 +25,7 @@
   import StatInput from "../../../ui/StatInput.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import type { SourceId } from "../sourceId";
-  import { flash, reveal } from "../../../ui/motion.svelte";
+  import { changed, reveal } from "../../../ui/motion.svelte";
   import { tick, untrack } from "svelte";
   import Num from "../../../ui/Num.svelte";
   import { randomOptionRecordOnlyCount } from "../summaries";
@@ -227,7 +227,7 @@
         class="ro-row"
         class:record-only={!randomOptionIsApplied(def.effect)}
         data-option-id={option.option_id}
-        use:flash={() => focusToken(option.option_id)}
+        use:changed={() => focusToken(option.option_id)}
       >
         <span class="ro-name" title={def.name}>{def.name}</span>
         <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>外す</button>

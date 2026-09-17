@@ -20,7 +20,7 @@
   import { reportError } from "../../toast.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import { badgeStyle } from "../../ui/states";
-  import { flash } from "../../ui/motion.svelte";
+  import { changed } from "../../ui/motion.svelte";
   import { latest } from "../../ui/latest.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Num from "../../ui/Num.svelte";
@@ -425,7 +425,7 @@
       {#if max === null || point === null || maxHitRateGain === null}
         <span class="badge unknown">?</span>
       {:else}
-        <span class="try-head-summary" use:flash={() => (maxHitRateGain === 0 ? "stuck" : "moves")}>
+        <span class="try-head-summary" use:changed={() => (maxHitRateGain === 0 ? "stuck" : "moves")}>
           {#if maxHitRateGain === 0}
             <!-- 必中か下限に張り付いていると全部積んでも命中率は動かない(§00 05) -->
             全部積んでも{rateWord}は動かない
@@ -637,8 +637,8 @@
         {#if totalTried > 0}
           <Num class="try-badge" motion={() => totalTried} value={`試し ${totalTried}件`} />
         {/if}
-        <!-- 数値 ⇄ 必中 は要素が入れ替わるので、入れ物のほうを「どちらの形か」で flash させる -->
-        <span class="dir-value" use:flash={() => (result === null ? "none" : result.hit_rate.capped ? "capped" : "rate")}>
+        <!-- 数値 ⇄ 必中 は要素が入れ替わるので、入れ物のほうを「どちらの形か」で光らせる -->
+        <span class="dir-value" use:changed={() => (result === null ? "none" : result.hit_rate.capped ? "capped" : "rate")}>
           {#if dir.error}
             <span class="rate-note bad">{dir.error}</span>
           {:else if result === null}
@@ -668,7 +668,7 @@
       {@const boost = boostLabel(result.accuracy_boost)}
       <!-- 答えの一文(主役の率の次に読む)。余裕 / 不足は domain の値 -->
       <!-- 答えは数ではなく文。数値書体にすると読みにくいので <Num> に入れず、文の入れ替えとして光らせる -->
-      <div class="dir-answer" use:flash={() => answerText(result.hit_rate)}>{answerText(result.hit_rate)}</div>
+      <div class="dir-answer" use:changed={() => answerText(result.hit_rate)}>{answerText(result.hit_rate)}</div>
       <div class="dir-why dim">
         命中P <Num motion={() => result?.accuracy_point ?? null} value={String(result.accuracy_point)} />
         <span class="op">−</span>

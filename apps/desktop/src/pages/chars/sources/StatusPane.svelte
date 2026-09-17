@@ -19,7 +19,7 @@
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
-  import { pulse } from "../../../ui/motion.svelte";
+  import { changed } from "../../../ui/motion.svelte";
   import Num from "../../../ui/Num.svelte";
   import Picker from "../../../ui/Picker.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
@@ -47,7 +47,7 @@
   /** 画像を選ぶ素の入力。見た目は Chip なので、ここは押されたとき開くだけ */
   let iconInput = $state<HTMLInputElement | null>(null);
   /** アイコンが変わったことを弾ませて見せるための印。値は見ず参照の不一致だけ使うので、
-   *  変更のたびに新しいオブジェクトを積む(`use:pulse` 参照) */
+   *  変更のたびに新しいオブジェクトを積む(`use:changed` 参照) */
   let iconChangeMark = $state<object | null>(null);
   function markIconChanged() {
     iconChangeMark = {};
@@ -209,7 +209,7 @@
     <div class="wide">
       <span class="label">キャラ</span>
       <div class="char-now">
-        <span class="current-icon" use:pulse={() => iconChangeMark}>
+        <span class="current-icon" use:changed={() => iconChangeMark}>
           <Icon kind="character" id={draft.gameCharacterId} size={40} label={gameCharacterName} source={app.characterIcons[characterId] ?? null} />
         </span>
         <span class="char-name">{gameCharacterName}</span>

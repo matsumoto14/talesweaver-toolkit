@@ -49,7 +49,7 @@
   import Popover from "../../ui/Popover.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { flash } from "../../ui/motion.svelte";
+  import { changed } from "../../ui/motion.svelte";
   import { ChangeMemo, PresenceMemo, swapNote, type Presence } from "../../ui/presence";
   import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
@@ -1745,7 +1745,7 @@
           bind:open={() => isDetailOpen(key), (v) => setDetailOpen(key, v)}
         >
           {#snippet summary()}
-          <span class="dt-label">{m.label}{#if m.note}<span class="dt-swap dim" use:flash={() => m.note ?? ""}>{m.note}</span>{/if}</span>
+          <span class="dt-label">{m.label}{#if m.note}<span class="dt-swap dim" use:changed={() => m.note ?? ""}>{m.note}</span>{/if}</span>
           <span class="num dt-mult dim">{m.mult ?? ""}</span>
           <Num
             class="dt-val"
@@ -1994,7 +1994,7 @@
                   <!-- 主軸(キャラタブ)と違うスキルで計算している例外状態。保存されないので
                        ラベンダー(--sim)。行の高さは変えない -->
                   {#if skillOverridden}
-                    <span class="sk-override badge-in" use:flash={() => skillId}>ここで上書き中</span>
+                    <span class="sk-override badge-in" use:changed={() => skillId}>ここで上書き中</span>
                   {/if}
                 </span>
                 <span class="sk-meta num dim">
@@ -2479,7 +2479,7 @@
                 </div>
                 <div class="mat-chips">
                   {#each activeCategories as c (c.category)}
-                    <span class="mat-chip" class:cap={catAtCap(c)} use:flash={() => (catAtCap(c) ? "cap" : "open")}>
+                    <span class="mat-chip" class:cap={catAtCap(c)} use:changed={() => (catAtCap(c) ? "cap" : "open")}>
                       <span class="dim">{c.label}</span>
                       <Num class="strong" value={fmtCatValue(c)} />
                       {#if catAtCap(c)}<span class="full">満</span>{/if}
@@ -2545,7 +2545,7 @@
              溢れたら横にスクロールさせる(行が増えて下をずらさない) -->
         <div class="chips">
           {#each changedKnobs as k (k.id)}
-            <span class="chip-diff badge-in" use:flash={() => k.get(app.sim!)}>
+            <span class="chip-diff badge-in" use:changed={() => k.get(app.sim!)}>
               <span>{k.label(app.sim!)}</span>
               <button type="button" class="chip-x" title="この変更だけ戻す" onclick={() => revertKnob(k)}>✕</button>
             </span>
@@ -2895,7 +2895,7 @@
           {#snippet summary()}
             <Icon kind="title" id="title" size={20} label="称号" />
             <span class="card-title">称号</span>
-            <span class="dim small title-head-note" use:flash={() => titleHeadNote}>{titleHeadNote}</span>
+            <span class="dim small title-head-note" use:changed={() => titleHeadNote}>{titleHeadNote}</span>
           {/snippet}
           {#snippet children(open)}
           {#if open}

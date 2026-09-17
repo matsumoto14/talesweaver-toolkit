@@ -132,81 +132,50 @@ export function delta(node: HTMLElement, spec: DeltaSpec) {
 }
 
 /**
- * 数値ではない**要約が変わった**ことを見せる(§10 型 5「状態が変わった → 弾んで出る」)。
- * 補正源リストの行サマリーのように、右のペインを触ると左の要約も変わるもので使う。
- * 片方だけ動かないと、動かないほうが古い値に見える(§10 規則 2)。
- */
-/**
- * **面の中身が入れ替わった**ことを見せる(§10 型 3b「入ってくる面だけ短く動かす」)。
- * タブで中身を差し替えたのに何も動かないと、切り替えたのか元からこうだったのかが
- * 一瞬わからない。`flash`(型 5)と取り違えると、面ぜんたいが中心から膨らんで
- * 他のタブ切り替えと動きが揃わなくなる — バッジは flash、面は swap。
- */
-export function swap(node: HTMLElement, get: () => string) {
-  const clear = () => node.classList.remove("swap-in");
-  let prev = get();
-  $effect(() => {
-    const next = get();
-    if (next === prev) return;
-    prev = next;
-    clear();
-    void node.offsetWidth;
-    node.classList.add("swap-in");
-  });
-  $effect(() => {
-    node.addEventListener("animationend", clear);
-    return () => node.removeEventListener("animationend", clear);
-  });
-}
-
-/**
- * `flash` の値なしバージョン。バッジ側に「変わった中身」を文字列で持たない場面向け
- * (どの行が動いたかを共有の状態と行の id を突き合わせて渡す、など)。
+ * **面・行・文が変わった**ことを見せる(§10)。値は `<Num>` が持つので、ここに来るのは
+ * 値ではないもの — 要約の文・バッジ・行の着地の印・面の中身の入れ替え。
  *
- * `get` は `null` を「いまはこの要素の番ではない」として無視する — `bump` が
- * 上下を判定できない `null` を無視するのと同じ考え方。`null` 以外に変わったら弾ませる
- * (`null` に戻るときは弾ませない。戻りは「消えた」であって「変わった」ではない)。
- * 同じ値を渡しても再発火させたいときは、呼び出し側で毎回新しいオブジェクトを渡せばよい
- * (`{}` は常に前回と不等)。
+ * **どう動くかは要素が既に載せている入場クラスが決める。**`swap-in` / `pane-in` /
+ * `open-in` / `badge-in` のどれかが `class` にあればそれを**もう一度再生**し、無ければ
+ * 型 5(`badge-in`、弾んで出る)。同じ要素が「生まれたとき」と「変わったとき」で違う動きを
+ * することはないので、動き方の宣言は入場クラス 1 か所に集まる — この action は
+ * 「いつ再生するか」だけを持つ。面(`swap-in`)とバッジ(`badge-in`)の取り違えは、
+ * 入場の見え方を見れば分かる形になった(取り違えると入場のときから間違って見える)。
  *
- * **最初の比較相手は `get()` ではなく番兵にする。**行が群をまたいで動くとき
- * (お気に入りの ★ を切り替える・別の群へドラッグする)、行は別の `{#each}` に移るので
- * DOM ノードが作り直される。印を立てるのと再描画は同じ同期処理の中で起きるため、
- * **新しいノードが生まれた時点で既に自分の番になっている** — ここで `get()` を基準に取ると
- * 初回から一致していて一度も弾まない(実際に ★ 切替が毎回無音だった)。
+ * **何を渡すかで「変わった」の意味が決まる**(`<Num>` が `motion` の有無で跳ねと光りを
+ * 分けるのと同じ。選択肢ではない):
+ *
+ * - **文字列** = いまの中身。書式済みの要約・状態名・id。**生まれた時点では動かさない**
+ *   (生まれたときの中身は「変わった」ではない)。
+ * - **文字列以外**(印のオブジェクト・`null`)= いま誰の番か。`null` は「いまはこの要素の
+ *   番ではない」として無視する(`bump` が上下を判定できない `null` を無視するのと同じ)。
+ *   こちらは**生まれた時点で自分の番なら動く** — 行が群をまたいで動くとき(★ を切り替える・
+ *   別の群へドラッグする)、行は別の `{#each}` に移るので DOM ノードが作り直され、
+ *   新しいノードが生まれた時点で既に自分の番になっているため(`get()` を初回の基準に取ると
+ *   一度も弾まない。実際に ★ 切替が毎回無音だった)。
+ *   同じ印で再発火させたいときは毎回新しいオブジェクトを渡す(`{}` は常に前回と不等)。
+ *
+ * Svelte 5 の action は引数が変わっても再実行されないので、値ではなく getter を渡す。
  */
-const FIRST = Symbol("pulse/first");
+const ENTRY = ["swap-in", "pane-in", "open-in", "badge-in"];
+const FIRST = Symbol("changed/first");
 
-export function pulse(node: HTMLElement, get: () => unknown) {
-  const clear = () => node.classList.remove("badge-in");
+export function changed(node: HTMLElement, get: () => unknown) {
+  const cls = ENTRY.find((c) => node.classList.contains(c)) ?? "badge-in";
+  const clear = () => node.classList.remove(cls);
   let prev: unknown = FIRST;
   $effect(() => {
     const next = get();
-    if (next === null || next === prev) {
+    const first = prev === FIRST;
+    // 文字列は「中身」なので初回は動かさない。印は初回から自分の番なら動く
+    if (next === null || next === prev || (first && typeof next === "string")) {
       prev = next;
       return;
     }
     prev = next;
     clear();
     void node.offsetWidth; // 再スタートさせるための強制 reflow
-    node.classList.add("badge-in");
-  });
-  $effect(() => {
-    node.addEventListener("animationend", clear);
-    return () => node.removeEventListener("animationend", clear);
-  });
-}
-
-export function flash(node: HTMLElement, get: () => string) {
-  const clear = () => node.classList.remove("badge-in");
-  let prev = get();
-  $effect(() => {
-    const next = get();
-    if (next === prev) return;
-    prev = next;
-    clear();
-    void node.offsetWidth;
-    node.classList.add("badge-in");
+    node.classList.add(cls);
   });
   $effect(() => {
     node.addEventListener("animationend", clear);
