@@ -7,7 +7,9 @@
  * 内容そのままここへ移し、SourcePane.svelte から素の CSS として import してグローバル化した。
  * 見た目・DOM は変更していない(構造リファクタリングのみ)。
  */
-  .pane { display: flex; flex-direction: column; gap: 9px; padding-bottom: 10px; }
+  /* 補正源の編集面。幅は --w-face(= 装備登録の面と同じ 980px)で止める。
+     全画面で端まで伸ばすと、ラベルと値・押す場所と結果が視野の両端に離れる(§00 01) */
+  .pane { display: flex; flex-direction: column; gap: 9px; padding-bottom: 10px; max-width: var(--w-face); }
   .pane-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
   .pane-title { font-size: var(--t-label); font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); }
   .pane-head .dim { margin-left: auto; font-size: 9px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -51,6 +53,9 @@
   /* .tbl は app.css(このペインだけ margin-top を持つ) */
   .tbl { margin-top: 8px; }
   table.grid td.stat-cell { min-width: 180px; }
+  /* 余った横はバーの列だけが受け取る(伸びて意味があるのはバーだけ)。
+     ほかの列は中身の幅で止まるので、ステ名・素・補正・最終が離れない(§00 01) */
+  table.grid td.grow-cell { width: 100%; }
   .stat-cell :global(.stepper) { justify-content: flex-end; }
   .final { white-space: nowrap; }
   .strong { font-weight: 700; }
@@ -506,6 +511,9 @@
     display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 9px; align-items: center;
     padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft);
   }
+  /* 1 列で並べる行(ペット S スキル)は、段が伸びなくなったぶん値が右端に取り残される。
+     中身の幅で止めて、段のすぐ隣に値を置く(§00 01)。狭いときは段のほうが縮む */
+  .stat-rows.one .stat-row { grid-template-columns: 42px minmax(0, max-content) max-content; justify-content: start; }
   .stat-row .k { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); }
   .stat-row > :global(.stepper) { min-width: 0; }
   /* 入力欄は数値 2〜4 桁ぶんあれば足りる。行いっぱいに伸ばすと、数字と ＋ / MAX が離れて

@@ -53,16 +53,16 @@
 {:else if motion}
   <span
     class="num {klass}"
-    class:up={tone === "up"}
-    class:down={tone === "down"}
+    class:tone-up={tone === "up"}
+    class:tone-down={tone === "down"}
     class:sim-value={tone === "sim"}
     {title}
     use:bump={motion}>{#if children}{@render children()}{:else}{value}{/if}</span>
 {:else}
   <span
     class="num {klass}"
-    class:up={tone === "up"}
-    class:down={tone === "down"}
+    class:tone-up={tone === "up"}
+    class:tone-down={tone === "down"}
     class:sim-value={tone === "sim"}
     {title}
     use:changed={() => text}>{#if children}{@render children()}{:else}{value}{/if}</span>
@@ -78,8 +78,11 @@
 
 <style>
   /* 呼ぶ側が渡す `class`(その画面の見た目)より必ず強くする。
-     要素名を足して詳細度を 1 段上げておかないと、行側の `.readrow .v { color }` に負ける */
-  span.num.up { color: var(--good); }
-  span.num.down { color: var(--danger); }
+     要素名を足して詳細度を 1 段上げておかないと、行側の `.readrow .v { color }` に負ける。
+     クラス名を `tone-*` にしてあるのは、差分枠(`use:delta` が付ける `num` + `up` / `down`)と
+     ぶつかるため —— 素の `.up` / `.down` だと、この scoped 指定のほうが強くて
+     差分枠の色(§10 の増減)を横取りしていた(実機 2026-09-17) */
+  span.num.tone-up { color: var(--good); }
+  span.num.tone-down { color: var(--danger); }
   span.num.sim-value { color: var(--sim-fg); }
 </style>

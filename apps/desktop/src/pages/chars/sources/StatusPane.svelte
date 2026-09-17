@@ -369,7 +369,7 @@
             <td class="n muted ro" title={groupTitle(k)}><Value motion={() => diff} value={diff === null ? "—" : signed(diff)} /></td>
             <!-- 素ステ → 最終を 1 本のバーで(§11)。数字の羅列ではなく「どれだけ伸びたか」を見せる。
                  灰が素ステ(振り分け)、青が補正で乗った分。長さは最終能力値の上限に対する割合 -->
-            <td class="ro">
+            <td class="ro grow-cell">
               <span
                 class="grow inset"
                 title={cap > 0 ? `上限 ${fmtInt(cap)}(覚醒段階 + エタの意志 Lv)` : "上限は計算中"}

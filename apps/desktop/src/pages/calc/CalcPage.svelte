@@ -849,6 +849,16 @@
                   <span class="nl">討伐時間 <Value motion={() => result?.enemy_hp ?? null} value={`(HP ${fmtInt(result.enemy_hp)})`} /></span>
                   <Value class="nv" motion={() => result?.defeat_seconds ?? null} value={fmtDuration(result.defeat_seconds)} />
                   <span class="nsub dim">
+                    <!-- 何秒縮んだか。表示は秒に丸めた値なので、差分もその丸めた値から出す
+                         (画面の 27秒 → 26秒 と ↓1秒 が食い違わない)。討伐時間は**短いほど良い**ので
+                         色だけ入れ替える(矢印は数のとおり。§10) -->
+                    <span class="nsub-line">
+                      <Value
+                        motion={() => (result?.defeat_seconds == null ? null : Math.round(result.defeat_seconds))}
+                        delta={{ unit: "秒", digits: 0 }}
+                        deltaClass="less-is-better"
+                      />
+                    </span>
                     <!-- クリ確定 / 非クリは隣の DPS 節に出ている(重ねない。§00 02) -->
                     <span class="nsub-line">ソロ</span>
                   </span>

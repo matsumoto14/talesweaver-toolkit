@@ -960,7 +960,7 @@
   .enchant-stat-label { flex-shrink: 0; width: 30px; font-size: 9.5px; color: var(--fg-muted); }
   /* .enchant-gain は ui/Value.svelte が描く子要素 */
   .enchant-stat :global(.enchant-gain) { flex-shrink: 0; min-width: 84px; text-align: right; font-size: 9.5px; color: var(--fg-dim); }
-  .enchant-stat :global(.enchant-gain.up) { color: var(--good); font-weight: 700; }
+  .enchant-stat :global(.enchant-gain.tone-up) { color: var(--good); font-weight: 700; }
   /* 未登録・上限未入力の行。押すとキャラタブの該当ペインへ飛ぶ(欠けは badge.unknown で言う) */
   .source-jump {
     display: flex; align-items: center; gap: 8px; padding: 2px 0; background: none; border: none;

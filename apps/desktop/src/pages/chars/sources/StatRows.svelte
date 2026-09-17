@@ -16,7 +16,7 @@
   let { kinds, twoCol = false, row, flashValue }: Props = $props();
 </script>
 
-<div class="stat-rows" class:two={twoCol}>
+<div class="stat-rows" class:two={twoCol} class:one={!twoCol}>
   {#each kinds as k (k)}
     <div class="stat-row" use:changed={() => (flashValue ? String(flashValue(k)) : k)}>
       <span class="k">{STAT_LABELS[k]}</span>

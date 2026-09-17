@@ -114,6 +114,12 @@
   --t-label: 10.5px; /* ラベル(色は --fg-muted) */
   --w-strong: 700;
 
+  /* 編集する面の幅の上限。全画面(2560px 等)で 1 本の面を端まで伸ばすと、
+     ラベルと値が視野の両端に離れて読めなくなる(§00 01「視線を動かさない」)。
+     値は装備登録の面(.part-detail = 980px)と同じ — 既に使えている幅を規格にする。
+     余った横は空けたままにする(埋めるために要らないものを出さない = §00 02) */
+  --w-face: 980px;
+
   --font: "M PLUS Rounded 1c", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
   --font-num: "M PLUS 1 Code", ui-monospace, SFMono-Regular, monospace;
 
@@ -372,6 +378,10 @@ table.grid.ro td, table.grid td.ro { background: var(--surface-inset); }
 .delta { display: inline-block; min-width: 6ch; white-space: nowrap; font-weight: 700; text-align: left; }
 .delta.up { color: var(--good); }
 .delta.down { color: var(--warm); }
+/* 小さいほど良い値(討伐時間)。矢印は数のとおり出し、色だけ入れ替える —
+   「↓12秒」が赤で出ると、縮んだことが悪い報せに見える(§10「増減の色」) */
+.delta.less-is-better.up { color: var(--warm); }
+.delta.less-is-better.down { color: var(--good); }
 .delta-in { animation: tw-badge-in var(--dur-badge) var(--ease-spring); }
 /* 緑を辿る: 下に変わった行がある差分は押せる(押すと変わった行だけ順に開く) */
 .delta.follow { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
@@ -549,6 +559,10 @@ button, summary, a, label.check, [role="button"], [role="tab"] { transition: var
 .seg.cols {
   display: grid; grid-template-columns: repeat(var(--seg-cols, 5), 1fr);
   width: 100%; gap: 1px; background: var(--border-soft);
+  /* 段は伸ばさない。広い面に置いても 1 段は --seg-cell-max で止まり、
+     余った横は空けたままにする。「4」「5」の 2 段が画面幅に広がると、
+     押す場所が遠いだけで何も伝わらない(§00 01・実機 2026-09-17) */
+  max-width: calc(var(--seg-cols, 5) * var(--seg-cell-max, 96px));
 }
 .seg.cols .chip { border-right: 0; justify-content: center; text-align: center; padding: 5px 4px; }
 /* 段の**大きさ**をそろえる形。行ごとに段の数が違うとき(Lv5 まで / Lv6 まで)、
