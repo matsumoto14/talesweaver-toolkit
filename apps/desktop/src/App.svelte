@@ -81,6 +81,7 @@
       <img src={brandLogo} alt="TW Context" />
     </div>
     <Choose
+      label="画面"
       class="tabs"
       options={visibleTabs.map((t) => ({ value: t.id, label: t.label }))}
       bind:value={() => app.tab, (v) => (app.tab = v as Tab)}

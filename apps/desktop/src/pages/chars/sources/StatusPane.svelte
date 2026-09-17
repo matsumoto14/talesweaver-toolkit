@@ -248,7 +248,7 @@
           }
         />
         <Choose
-          label=""
+          label="エタの意志の節目"
           options={eternalMilestoneOptions}
           cols={eternalMilestoneOptions.length}
           bind:value={() => draft.eternalLevel, setEternalLevel}
@@ -261,7 +261,7 @@
       <span class="label">覚醒段階</span>
       <div class="stage-row">
         <Choose
-          label=""
+          label="覚醒段階"
           options={stageAllOpen || stageIsLow ? stageOptions : stageMainOptions}
           cols={stageAllOpen || stageIsLow ? stageOptions.length : stageMainOptions.length}
           bind:value={draft.stage}
@@ -278,6 +278,7 @@
     <div class="wide">
       <span class="label">主軸スキル</span>
       <Picker
+        label="主軸スキル"
         options={mainSkillOptions}
         note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)"
         bind:value={draft.mainSkillId}
@@ -304,7 +305,7 @@
           <p class="hint dim">主軸スキルが無属性なので、アンプルなどで乗せる属性を選びます。</p>
         {/if}
         <Choose
-          label=""
+          label="乗せる属性"
           options={elementOptions}
           cols={elementOptions.length}
           tone={(v) => (v === "" ? undefined : `elem-${v}`)}

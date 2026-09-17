@@ -483,6 +483,7 @@
   <ReadRow label="バフセット">
     {#if character}
       <Picker
+        label="使うバフセット"
         bind:value={
           () => { const id = buffSetIdOf(character); return id === null ? "" : String(id); },
           (v) => (buffSetOverride[character.id] = v === "" ? null : Number(v))
@@ -525,6 +526,7 @@
         <ReadRow label="スキルの命中">
           {#if attacker}
             <Picker
+              label="命中に使うスキル"
               bind:value={
                 () => skillId,
                 (v) => (skills.override = v)
@@ -612,6 +614,7 @@
       <span class="dir-who">
         <span class="dir-picker">
           <Picker
+            label="殴る側のキャラ"
             bind:value={
               () => (attacker ? String(attacker.id) : ""),
               (v) => pickAttacker(v === "" ? null : Number(v))
@@ -623,6 +626,7 @@
         <span class="dir-particle">が</span>
         <span class="dir-picker">
           <Picker
+            label="受ける側のキャラ"
             bind:value={
               () => (defender ? String(defender.id) : ""),
               (v) => pickDefender(v === "" ? null : Number(v))

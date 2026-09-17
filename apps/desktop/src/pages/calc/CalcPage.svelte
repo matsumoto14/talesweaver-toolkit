@@ -1826,35 +1826,51 @@
                         {#if isMultiTarget(def.target)}
                         <!-- クラブエフェクトはステごとに 1 つずつ併用できる。ここでは対象ステの
                              出し入れだけを試せるようにし、値はバフタブ側の設定を引き継ぐ -->
-                        <Choose
-                          label="対象ステ"
-                          options={statOptions}
-                          max={STAT_KINDS.length}
-                          values={pickedStats(app.calcBuffs.choices, def)}
-                          onToggle={(v, next) => toggleBuffStatChip(def, v as StatKind, next)}
-                        />
+                        <div class="field">
+                          <span class="field-head">
+                            <span class="field-label">対象ステ</span>
+                            <Value
+                              class="field-count"
+                              motion={() => pickedStats(app.calcBuffs.choices, def).length}
+                              value={`${pickedStats(app.calcBuffs.choices, def).length}/${STAT_KINDS.length}`}
+                            />
+                          </span>
+                          <Choose
+                            label="対象ステ"
+                            options={statOptions}
+                            max={STAT_KINDS.length}
+                            values={pickedStats(app.calcBuffs.choices, def)}
+                            onToggle={(v, next) => toggleBuffStatChip(def, v as StatKind, next)}
+                          />
+                        </div>
                       {:else if isUserSelectedTarget(def.target)}
-                        <Choose
-                          label="対象ステ"
-                          options={statOptions}
-                          bind:value={
-                            () => choice.stat ?? STAT_KINDS[0],
-                            (v) => editBuffChoice(def.id, (c) => (c.stat = v as StatKind))
-                          }
-                        />
+                        <div class="field">
+                          <span class="field-label">対象ステ</span>
+                          <Choose
+                            label="対象ステ"
+                            options={statOptions}
+                            bind:value={
+                              () => choice.stat ?? STAT_KINDS[0],
+                              (v) => editBuffChoice(def.id, (c) => (c.stat = v as StatKind))
+                            }
+                          />
+                        </div>
                       {/if}
                       {#if isChoiceValue(def.value)}
                         {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
                         <!-- 値の候補は小さい順に並ぶ(順序あり)ので段(§07「1 つ選ぶ」) -->
-                        <Choose
-                          label="値"
-                          {options}
-                          full
-                          bind:value={
-                            () => String(choice.choice_index ?? 0),
-                            (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
-                          }
-                        />
+                        <div class="field">
+                          <span class="field-label">値</span>
+                          <Choose
+                            label="値"
+                            {options}
+                            full
+                            bind:value={
+                              () => String(choice.choice_index ?? 0),
+                              (v) => editBuffChoice(def.id, (c) => (c.choice_index = Number(v)))
+                            }
+                          />
+                        </div>
                       {/if}
                       {#if userInputRange(def.value)}
                         {@const range = userInputRange(def.value)!}
@@ -1919,6 +1935,7 @@
       {:else}
         <!-- 攻撃 / 防御(同列タブ) -->
         <Choose
+          label="攻撃 / 防御"
           class="chiprow side-tabs"
           options={[{ value: "attack", label: "攻撃" }, { value: "defense", label: "防御" }]}
           bind:value={() => side, (v) => (side = v as "attack" | "defense")}
@@ -2046,15 +2063,18 @@
 
           {#if skill && skill.combo_variants.length > 0}
             <div class="combo-type-row inset">
-              <Choose
-                label="コンボタイプ"
-                options={COMBO_SKILL_TYPE_OPTIONS}
-                full
-                bind:value={
-                  () => comboSkillType,
-                  (v) => (comboSkillType = v as ComboSkillType)
-                }
-              />
+              <div class="field">
+                <span class="field-label">コンボタイプ</span>
+                <Choose
+                  label="コンボタイプ"
+                  options={COMBO_SKILL_TYPE_OPTIONS}
+                  full
+                  bind:value={
+                    () => comboSkillType,
+                    (v) => (comboSkillType = v as ComboSkillType)
+                  }
+                />
+              </div>
               <span class="combo-type-note dim">
                 {comboSkillType === "chain"
                   ? "シエナのオーラの中ディレイ減少に応じて倍率・段数も変わります"
@@ -2629,7 +2649,7 @@
               <span class="basics-label">節目</span>
               <div class="basics-seg">
                 <Choose
-                  label=""
+                  label="エタの意志の節目"
                   options={eternalMilestoneOptions}
                   cols={eternalMilestoneOptions.length}
                   bind:value={
@@ -2643,7 +2663,7 @@
               <span class="basics-label">覚醒段階</span>
               <div class="basics-seg">
                 <Choose
-                  label=""
+                  label="覚醒段階"
                   options={stageOptionsNow}
                   cols={stageOptionsNow.length}
                   bind:value={
@@ -2688,7 +2708,7 @@
               <span class="basics-label">Lv</span>
               <div class="basics-seg">
                 <Choose
-                  label=""
+                  label="シャープネスビジョン Lv"
                   options={sharpnessOptionsNow}
                   cols={sharpnessOptionsNow.length}
                   bind:value={
@@ -2774,6 +2794,7 @@
                   <span class="enchant-row-label">{PART_SLOT_LABELS[slot]}</span>
                   <div class="switch-picker">
                     <Picker
+                      label="{PART_SLOT_LABELS[slot]}に装着する登録"
                       options={list.registered.map((part) => ({
                         value: String(part.id), name: partDisplayName(part), meta: partSwitchMeta(part),
                         iconId: equipmentIconId(part.item_id, app.equipmentCatalog), iconKind: "equipment" as const,
@@ -2909,6 +2930,7 @@
             <!-- 所持称号から 1 つ選ぶ(§07「1 つ選ぶ」)。「なし」も候補の 1 行 -->
             <div class="title-picker">
               <Picker
+                label="付ける称号"
                 options={[
                   { value: "", name: "なし", meta: "称号を付けない" },
                   ...titleChoices.map((t) => ({ value: t.id, name: t.name, meta: titleNote(t) })),
@@ -2938,6 +2960,7 @@
           <div class="calc-buff-set">
             <span>使うセット</span>
             <Picker
+              label="使うバフセット"
               options={buffSetOptions(app.buffSets, "追加だけで計算")}
               bind:value={() => (app.calcBuffSetId === null ? "" : String(app.calcBuffSetId)), chooseCalcBuffSet}
             />
@@ -2989,15 +3012,18 @@
           {#if combo}
             {#if normalAttackOptions.length > 0}
               <div class="combo-normal">
-                <Choose
-                  label="挟む通常攻撃"
-                  options={normalAttackOptions}
-                  cols={2}
-                  bind:value={
-                    () => normalAttackId ?? "",
-                    (v) => (normalAttackOverride = v)
-                  }
-                />
+                <div class="field">
+                  <span class="field-label">挟む通常攻撃</span>
+                  <Choose
+                    label="挟む通常攻撃"
+                    options={normalAttackOptions}
+                    cols={2}
+                    bind:value={
+                      () => normalAttackId ?? "",
+                      (v) => (normalAttackOverride = v)
+                    }
+                  />
+                </div>
               </div>
             {:else}
               <p class="combo-note dim">

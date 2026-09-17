@@ -152,6 +152,14 @@
 
   /** 編集中か。既定は読み取り表示(§08 フィールド) */
   let editing = $state(false);
+  /**
+   * Escape / Enter で編集を閉じたら、**押した読み取り面にフォーカスを戻す**(§00 ③)。
+   * 入力欄が消えるとフォーカスは body に落ち、Tab の続きが画面の先頭に戻ってしまう —
+   * キーボードだけで触っている人には「押した場所」が消える。
+   * 読み取りの button は閉じたあとに作り直されるので、生まれた時に戻す($state ではない —
+   * 画面に出る値ではなく、次の 1 回だけ使う合図)。
+   */
+  let refocus = false;
 </script>
 
 <!-- §08「フィールド — 表示が既定・編集は例外」。初期値は常に埋まっているので、
@@ -187,7 +195,17 @@
         value={text}
         oninput={handleInput}
         onblur={handleBlur}
-        onkeydown={(e) => { if (e.key === "Escape" || e.key === "Enter") editing = false; }}
+        onkeydown={(e) => {
+          if (e.key !== "Escape" && e.key !== "Enter") return;
+          // 既定動作を止めるのは必須。止めないと —— Enter: 閉じた直後に読み取り button へ
+          // フォーカスを戻すので、この keydown の既定動作(フォーカス中のボタンを押す)が
+          // その button に当たり、一瞬で編集に戻る(実機 2026-09-17)。
+          // Escape: この欄が <dialog>(ui/Modal)の中にあると、欄を閉じるつもりの Escape が
+          // モーダルごと閉じてしまう
+          e.preventDefault();
+          refocus = true;
+          editing = false;
+        }}
         {min}
         max={capped ? max : undefined}
         {step}
@@ -208,6 +226,12 @@
         title={autoNote}
         use:bump={() => value}
         onclick={() => (editing = true)}
+        {@attach (node) => {
+          // Escape / Enter で閉じた直後だけ戻す。それ以外(初期表示・値の外部更新)では奪わない
+          if (!refocus) return;
+          refocus = false;
+          node.focus({ preventScroll: true });
+        }}
       >{blank ? "—" : fmtInt(value)}</button>
     {/if}
     {#if capped}<span class="cap num">/{fmtInt(max!)}</span>{/if}

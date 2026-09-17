@@ -223,16 +223,19 @@
 
       <div class="section">
         <div class="area-head"><span class="area-name">対象</span><span class="area-rule"></span></div>
-        <Choose options={TARGET_KINDS} bind:value={targetKind} full />
+        <Choose label="対象の選び方" options={TARGET_KINDS} bind:value={targetKind} full />
         {#if targetKind === "listed"}
-          <Picker
-            label="対象"
-            bind:value={
-              () => content?.content.id ?? "",
-              (v) => (pickedContentId = v)
-            }
-            options={contents.map((x) => ({ value: x.content.id, name: x.content.name, meta: x.areaName }))}
-          />
+          <div class="field">
+            <span class="field-label">対象</span>
+            <Picker
+              label="対象"
+              bind:value={
+                () => content?.content.id ?? "",
+                (v) => (pickedContentId = v)
+              }
+              options={contents.map((x) => ({ value: x.content.id, name: x.content.name, meta: x.areaName }))}
+            />
+          </div>
         {:else}
           <div class="fields">
             <label class="field">
@@ -253,29 +256,35 @@
 
       <div class="section">
         <div class="area-head"><span class="area-name">使ったスキル</span><span class="area-rule"></span></div>
-        <Picker
-          label="スキル"
-          bind:value={
-            () => skill?.id ?? "",
-            (v) => (pickedSkillId = v)
-          }
-          options={skills.map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const }))}
-        />
+        <div class="field">
+          <span class="field-label">スキル</span>
+          <Picker
+            label="スキル"
+            bind:value={
+              () => skill?.id ?? "",
+              (v) => (pickedSkillId = v)
+            }
+            options={skills.map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const }))}
+          />
+        </div>
         {#if weapons.length > 0}
           <!-- 攻撃力を変える一番かんたんな手段。押した瞬間に攻撃力が変わる(保存はされない)。
                登録が 1 件でも「外す」で 2 点目を作れる -->
-          <Choose
-            label="測るときの武器"
-            options={weaponOptions}
-            cols={2}
-            bind:value={
-              () => (weaponId === null ? "none" : String(weaponId)),
-              (v) => {
-                weaponRemoved = v === "none";
-                if (v !== "none") weaponOverride = Number(v);
+          <div class="field">
+            <span class="field-label">測るときの武器</span>
+            <Choose
+              label="測るときの武器"
+              options={weaponOptions}
+              cols={2}
+              bind:value={
+                () => (weaponId === null ? "none" : String(weaponId)),
+                (v) => {
+                  weaponRemoved = v === "none";
+                  if (v !== "none") weaponOverride = Number(v);
+                }
               }
-            }
-          />
+            />
+          </div>
         {/if}
         {#if weaponId !== savedWeaponId}
           <p class="note dim">

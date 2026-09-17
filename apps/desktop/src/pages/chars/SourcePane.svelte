@@ -194,7 +194,7 @@
       <!-- 8 ステが同じ形で並ぶので 1 ステ 1 行。段は列を固定して行をまたいで揃える(§00 01) -->
       {#snippet petRow(k: StatKind)}
         <Choose
-          label=""
+          label="{STAT_LABELS[k]}のペット S スキル"
           options={petSkillOptions}
           cols={petSkillOptions.length}
           bind:value={() => petSkillValue(k), (v) => setPetSkillValue(k, v)}
@@ -220,6 +220,7 @@
         <span class="crown-choice-label">選択報酬</span>
         <!-- 選んだ 1 つを押すと外せる(値は checkbox 群。radio は押し直しで外せない) -->
         <Choose
+          label="選択報酬の能力値"
           class="chiprow crown-choice-stats"
           options={PAIRED_STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }))}
           values={draft.statSources.crown.selected_stat === null ? [] : [draft.statSources.crown.selected_stat]}
@@ -233,6 +234,7 @@
             onclick={() => addCrownSelected(20)}
           >+20</Chip>
           <Choose
+            label="選択報酬のよく使う値"
             class="chiprow"
             options={crownPresetOptions}
             disabled={draft.statSources.crown.selected_stat === null}

@@ -732,6 +732,7 @@
       <!-- バフセットは順序が無いので Picker(§07「1 つ選ぶ」)。件数が少ないうちはチップだけ、
            増えたら候補面に送られる。段階選択にしないのは、セットが増えるたびに段が横に溢れるから -->
       <Picker
+        label="いつものバフ"
         options={buffSetOptions(app.buffSets, "バフを使わない")}
         bind:value={
           () => (draft.defaultBuffSetId === null ? "" : String(draft.defaultBuffSetId)),

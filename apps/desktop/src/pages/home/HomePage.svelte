@@ -961,6 +961,7 @@
               use:changed={() => heroGoal?.content.id ?? ""}
             >
               <Picker
+                label="目標のコンテンツ"
                 options={goalOptions}
                 note="自動で選ばれる目標を、自分の目標に差し替える"
                 bind:value={

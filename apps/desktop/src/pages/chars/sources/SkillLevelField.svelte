@@ -36,7 +36,7 @@
 <div class="skill-field">
   <span class="k">{#if icon}{@render icon()}{/if}{label}</span>
   <Choose
-    label=""
+    {label}
     {options}
     cols={cols ?? options.length}
     {cell}

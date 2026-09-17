@@ -310,7 +310,7 @@
                 {:else}
                   <!-- 飛び飛びの値(中ディレイ 0.5 / 1 / 2%)はステッパーだと無い値を作れてしまう -->
                   <Choose
-                    label=""
+                    label="{def.label}の値"
                     options={def.choices.map((c) => ({ value: String(c), label: `${c}${def.unit}` }))}
                     bind:value={() => String(e.value), (v) => (e.value = Number(v))}
                   />

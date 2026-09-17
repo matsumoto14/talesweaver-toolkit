@@ -11,6 +11,8 @@
   // Tab ストップが群れで 1 つになること・読み上げの「n 個中 m 個目」を既定で持つ。
   // 段は `Chip` が描く(`ReadRow` が `Value` の上に載っているのと同じ形)。
   //
+  // 見た目は入れ物(段・粒・タブ)そのものが app.css に持つので、この部品は <style> を持たない。
+  //
   // 押した瞬間に結果が動く(「適用」を挟まない)。押した段は同じ位置に残る(§09 規則 1)。
   // 押せない段は**消さない** — 消すと段の数が変わって幅が動く(§09 規則 4)。
   export interface ChooseOption {
@@ -26,7 +28,12 @@
   import Chip from "./Chip.svelte";
 
   interface Props {
-    label?: string;
+    /**
+     * この群が何を選ばせるか。**読み上げ用(aria-label)だけ**で、画面には出ない —
+     * 見える見出しは呼ぶ側の行が持つ(`NumberField` / `TextField` / `Picker` と同じ契約。
+     * app.css の `.field` / `.field-label` がその型)。段階 9 で揃えた。
+     */
+    label: string;
     /** 1 つだけ選ぶ。radio 群になる */
     value?: string;
     /** いくつか選ぶ。checkbox 群になる。並びは呼ぶ側が決める(押した順で入れ替わらないように) */
@@ -55,7 +62,11 @@
     disabledValues?: string[];
     /** 段ごとの説明(hover)。押せない段の理由を出すのに使う */
     titleFor?: (value: string) => string | undefined;
-    /** 同時に選べる数の上限(`values` のときだけ)。上限は値の隣に常設する(§07) */
+    /**
+     * 同時に選べる数の上限(`values` のときだけ)。上限に達した段は押せなくなる。
+     * **「n/上限」の表示は呼ぶ側の見出しが持つ**(§07「上限は値の隣に常設する」)——
+     * 見出しを呼ぶ側に渡した以上、その隣に置く数もそこにある。
+     */
     max?: number;
     /** 段の中身を自分で描く(件数の `<Value>` を添えるときなど)。既定はラベルだけ */
     item?: Snippet<[ChooseOption]>;
@@ -70,46 +81,29 @@
   const atMax = $derived(max !== undefined && (values?.length ?? 0) >= max);
 </script>
 
-<div class="choose" class:titled={label !== undefined}>
-  {#if label}
-    <span class="head">
-      <span class="label">{label}</span>
-      {#if max !== undefined}<span class="count num">{values?.length ?? 0}/{max}</span>{/if}
-    </span>
-  {/if}
-  <div
-    class={cls}
-    class:full
-    class:cols={cols !== undefined}
-    class:fixed={cell !== undefined}
-    style={cols === undefined
-      ? undefined
-      : `--seg-cols: ${cols}${cell === undefined ? "" : `; --seg-cell: ${cell}px`}`}
-    role={multiple ? "group" : "radiogroup"}
-    aria-label={label}
-  >
-    {#each options as o (o.value)}
-      {@const on = multiple ? (values ?? []).includes(o.value) : o.value === value}
-      <Chip
-        {on}
-        name={multiple ? undefined : name}
-        value={o.value}
-        class={tone?.(o.value) ?? ""}
-        disabled={disabled || disabledValues.includes(o.value) || (atMax && !on)}
-        title={titleFor?.(o.value)}
-        onToggle={() => (multiple ? onToggle?.(o.value, !on) : (value = o.value))}
-      >
-        {#if item}{@render item(o)}{:else}{o.label}{/if}
-      </Chip>
-    {/each}
-  </div>
+<div
+  class={cls}
+  class:full
+  class:cols={cols !== undefined}
+  class:fixed={cell !== undefined}
+  style={cols === undefined
+    ? undefined
+    : `--seg-cols: ${cols}${cell === undefined ? "" : `; --seg-cell: ${cell}px`}`}
+  role={multiple ? "group" : "radiogroup"}
+  aria-label={label}
+>
+  {#each options as o (o.value)}
+    {@const on = multiple ? (values ?? []).includes(o.value) : o.value === value}
+    <Chip
+      {on}
+      name={multiple ? undefined : name}
+      value={o.value}
+      class={tone?.(o.value) ?? ""}
+      disabled={disabled || disabledValues.includes(o.value) || (atMax && !on)}
+      title={titleFor?.(o.value)}
+      onToggle={() => (multiple ? onToggle?.(o.value, !on) : (value = o.value))}
+    >
+      {#if item}{@render item(o)}{:else}{o.label}{/if}
+    </Chip>
+  {/each}
 </div>
-
-<style>
-  /* 見出しが無いときは器を消して、入れ物(段・粒・タブ)を親の並びに直接落とす */
-  .choose { display: contents; }
-  .choose.titled { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .head { display: flex; align-items: baseline; gap: 8px; }
-  .label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
-  .count { font-size: 10px; color: var(--fg-dim); }
-</style>

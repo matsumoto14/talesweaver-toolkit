@@ -603,6 +603,7 @@
       </div>
       <div class="groups">
         <Choose
+          label="バフの目的"
           class="chiprow category-switch"
           options={PURPOSES.map((p) => ({ value: p.id, label: p.label }))}
           bind:value={() => activePurpose, (v) => choosePurpose(v as BuffPurpose)}
@@ -627,6 +628,7 @@
           </div>
           {#if activePurpose === "damage"}
             <Choose
+              label="ダメージバフの群"
               class="chiprow damage-switch"
               options={DAMAGE_GROUPS.map((g) => ({ value: g.id, label: g.label }))}
               bind:value={() => activeDamageGroup, (v) => chooseDamageGroup(v as BuffDamageGroup)}
@@ -685,17 +687,23 @@
                              (wiki: クラブ)。段の並びと押せる段はドメインの「効き」から決める -->
                         {@const picked = chosenStats(def)}
                         {@const range = userInputRange(def.value)}
-                        <Choose
-                          label="対象ステ"
-                          options={statOptionsFor(def)}
-                          cols={STAT_KINDS.length}
-                          max={STAT_KINDS.length}
-                          values={picked}
-                          disabled={saving}
-                          disabledValues={cappedStats(def)}
-                          titleFor={cappedTitle(def)}
-                          onToggle={(value, next) => toggleStat(def, value as StatKind, next)}
-                        />
+                        <div class="field">
+                          <span class="field-head">
+                            <span class="field-label">対象ステ</span>
+                            <Value class="field-count" motion={() => picked.length} value={`${picked.length}/${STAT_KINDS.length}`} />
+                          </span>
+                          <Choose
+                            label="対象ステ"
+                            options={statOptionsFor(def)}
+                            cols={STAT_KINDS.length}
+                            max={STAT_KINDS.length}
+                            values={picked}
+                            disabled={saving}
+                            disabledValues={cappedStats(def)}
+                            titleFor={cappedTitle(def)}
+                            onToggle={(value, next) => toggleStat(def, value as StatKind, next)}
+                          />
+                        </div>
                         {#if range}
                           {@const scale = isPercentLayer(def.layer) ? 100 : 1}
                           <div class="per-stat">
@@ -715,11 +723,17 @@
                         {/if}
                       {:else}
                         {#if isUserSelectedTarget(def.target)}
-                          <Choose label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
+                          <div class="field">
+                            <span class="field-label">対象ステ</span>
+                            <Choose label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
+                          </div>
                         {/if}
                         {#if isChoiceValue(def.value)}
                           {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
-                          <Choose label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
+                          <div class="field">
+                            <span class="field-label">段階</span>
+                            <Choose label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
+                          </div>
                         {/if}
                         {#if userInputRange(def.value)}
                           {@const range = userInputRange(def.value)!}
@@ -904,8 +918,8 @@
   .editor-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; padding-top: 6px; border-top: 1px solid var(--border-soft); }
   .choice-editor { padding: 7px; display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--border-soft); border-radius: var(--r-inset); background: var(--bg-field); box-shadow: inset 0 1px #fff; }
   /* 選んだステごとの値。**1 ステ 1 行**で積む — 2 列に畳むと狭い幅ではラベル・数値欄・MAX が
-     重なって読めなかった(実機報告)。行が増えて伸びた分は ui/popover.ts が置き直す
-     (上に開く / 収まる高さでスクロール)ので、下の行は動かない */
+     重なって読めなかった(実機報告)。行が増えて伸びた分はブラウザが置き直す
+     (`popover` 属性 + CSS Anchor Positioning の `position-try-fallbacks: flip-block`。app.css の `.popover`)ので、下の行は動かない */
   .per-stat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
   /* 値の行は「名前 + 欄」。名前は行が持つ(部品は読み上げ名だけを持つ・§07) */
   .stat-value-row { display: flex; align-items: center; gap: 3px; min-width: 0; }

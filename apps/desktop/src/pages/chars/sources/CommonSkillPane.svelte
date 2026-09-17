@@ -249,7 +249,7 @@
       <div class="skill-field">
         <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />枠 {i + 1}</span>
         <Choose
-          label=""
+          label="アンリーシュ枠 {i + 1} のステ"
           options={unleashStatOptions}
           cols={unleashStatOptions.length}
           disabledValues={unleashDisabled(i)}
@@ -442,7 +442,7 @@
           <div class="skill-field">
             <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />解放 {i + 1} の Lv</span>
             <Choose
-              label=""
+              label="アンリーシュ解放 {i + 1} の Lv"
               options={unleashLevelChoices}
               cols={unleashLevelChoices.length}
           cell={36}

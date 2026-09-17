@@ -234,7 +234,7 @@
         <!-- ランクは言葉なので幅は中身なり。ふだんは Special / S・真 だけ -->
         <span class="ro-rank">
           <Choose
-            label=""
+            label="{def.name}のランク"
             options={rankOptionsNow(def, option.rank)}
             bind:value={
               () => option.rank,
@@ -342,6 +342,7 @@
                 {#if otherAddable.length > 0}
                   <div class="ro-add">
                     <Picker
+                      label="足すランダム OP"
                       options={otherPickerOptions}
                       note="ほかの OP(同じカテゴリーは 1 つまで)"
                       menu

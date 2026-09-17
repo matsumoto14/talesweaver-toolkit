@@ -231,7 +231,7 @@
              補助タイプは別の段にする — 1 つの段に 9 個入れると列が余って空きセルが出る -->
         <span class="core-types">
           <Choose
-            label=""
+            label="コア枠 {index + 1} のタイプ"
             options={corePowerOptions}
             cols={4}
             bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
@@ -242,7 +242,7 @@
                  (§10 型 6 の .open-in)。閉じるときは {#if} で即座に消える(従来どおり) -->
             <div class="open-in">
               <Choose
-                label=""
+                label="コア枠 {index + 1} の補助タイプ"
                 options={coreSupportOptions}
                 cols={4}
                 bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}

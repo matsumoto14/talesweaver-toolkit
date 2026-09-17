@@ -281,6 +281,15 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
    呼ぶ側のスコープ付き <style> には置けない。980px の部位詳細は .part-detail(pane-shared.css) */
 .modal-narrow { width: min(560px, 100%); }
 
+/* 「見出し + 欄」の縦の型(ADR-015 段階 9)。**入力部品は読み上げ名だけを持ち、
+   見える見出しは呼ぶ側の行が持つ** —— NumberField / TextField / Picker / Choose で同じ契約に
+   したので、その見出しを置く器をここに 1 つだけ置く。上限つきの群は見出しの隣に「n/上限」を
+   出す(§07「上限は値の隣に常設する」)。横に並べる行は各画面の `.line` / `.stat-value-row` */
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field-head { display: flex; align-items: baseline; gap: 8px; }
+.field-label { font-size: 10px; letter-spacing: 0.1em; color: var(--fg-dim); }
+.field-count { font-size: 10px; color: var(--fg-dim); }
+
 .section-label {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px 8px;

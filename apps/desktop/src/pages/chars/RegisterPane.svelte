@@ -138,7 +138,7 @@
       </span>
     </div>
     <div class="skill-select">
-      <Picker options={mainSkillOptions} note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)" bind:value={mainSkillId} />
+      <Picker label="主軸スキル" options={mainSkillOptions} note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)" bind:value={mainSkillId} />
     </div>
     <div class="actions">
       <button type="button" class="btn primary" disabled={saving} onclick={() => register(false)}>

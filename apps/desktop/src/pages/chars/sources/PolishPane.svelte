@@ -170,6 +170,7 @@
           <div class="polish-kind-row" aria-label={`${PART_SLOT_LABELS[slot]}の${polishProductLabel(slot)}`}>
             <span class="dim tiny">{polishProductLabel(slot)}</span>
             <Picker
+              label="{PART_SLOT_LABELS[slot]}の{polishProductLabel(slot)}"
               options={kindOptions(slot)}
               bind:value={() => entry?.kind ?? "", (v) => selectKind(slot, v === "" ? null : v as PolishKind)}
             />
@@ -181,6 +182,7 @@
             <div class="polish-stat-row">
               <span class="dim tiny">乗せる先</span>
               <Picker
+                label="{PART_SLOT_LABELS[slot]}の研磨を乗せる先"
                 options={statOptions(slot, entry)}
                 bind:value={() => entry.stat, (v) => selectStat(slot, v as EquipmentStatKind)}
               />

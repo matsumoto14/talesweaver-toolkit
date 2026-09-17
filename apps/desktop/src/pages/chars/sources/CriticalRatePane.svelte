@@ -116,7 +116,7 @@
       <span class="lab-note">B グループの研究段階(0 = 未研究)・ 1 段階 {fmtSigned(limits.architect_lab_per_stage, { max: 2 }, "%")}</span>
     </span>
     <Choose
-      label=""
+      label="設計者の研究室の研究段階"
       options={architectLabOptions}
       cols={architectLabOptions.length}
       cell={34}

@@ -755,19 +755,25 @@
         <div class="equipment-picker pane-in">
           {#if isRelicSlot(slot)}
             <div class="relic-selector">
-              <Choose
-                label="種別"
-                options={relicKindOptions}
-                full
-                bind:value={() => relicKindFor(slot), (value) => pickRelicKind(slot, value)}
-              />
-              <Choose
-                label="強化段階"
-                options={relicLevelOptions}
-                cols={5}
-                disabled={relicKindFor(slot) === ""}
-                bind:value={() => relicLevelFor(slot), (value) => pickRelicLevel(slot, value)}
-              />
+              <div class="field">
+                <span class="field-label">種別</span>
+                <Choose
+                  label="レリックの種別"
+                  options={relicKindOptions}
+                  full
+                  bind:value={() => relicKindFor(slot), (value) => pickRelicKind(slot, value)}
+                />
+              </div>
+              <div class="field">
+                <span class="field-label">強化段階</span>
+                <Choose
+                  label="レリックの強化段階"
+                  options={relicLevelOptions}
+                  cols={5}
+                  disabled={relicKindFor(slot) === ""}
+                  bind:value={() => relicLevelFor(slot), (value) => pickRelicLevel(slot, value)}
+                />
+              </div>
               <div class="relic-picker-actions">
                 <Chip class="quiet" onclick={() => pickUnequipped(slot)}>未装備</Chip>
                 <Chip class="quiet" onclick={() => pickCustom(slot)}>カタログ外</Chip>
@@ -985,6 +991,7 @@
                    下位等級は候補面へ。候補行の値は効果の要約、絵はゲーム内のアイテム(月石・研磨…) -->
               <div class="ability-choice-list" aria-label="{row.label}の候補">
                 <Picker
+                  label="{row.label}のアビリティ"
                   options={weaponAbilityOptions(grades)}
                   bind:value={() => selectedAbilityId, (v) => setAbilityForCategory(slot, row.category, v)}
                 />
@@ -1147,20 +1154,26 @@
       <div class="card">
         <div class="card-title">装備強化</div>
         {#if part.item_id === null && part.custom_name !== null}
-          <Picker
-            label="装備種別"
-            options={slot === "weapon" ? weaponEnhanceTypeOptions : armorEnhanceTypeOptions}
-            bind:value={() => part.enhance_type ?? "", (v) => (part.enhance_type = v === "" ? null : v as typeof part.enhance_type)}
-          />
+          <div class="field">
+            <span class="field-label">装備種別</span>
+            <Picker
+              label="装備種別"
+              options={slot === "weapon" ? weaponEnhanceTypeOptions : armorEnhanceTypeOptions}
+              bind:value={() => part.enhance_type ?? "", (v) => (part.enhance_type = v === "" ? null : v as typeof part.enhance_type)}
+            />
+          </div>
           <p class="hint dim">
             {slot === "weapon" ? "追加固定ダメージの補正式に使います。" : "追加HPの算出条件として保存します。"}
           </p>
         {/if}
-        <Choose
-          label="強化 Lv"
-          options={enhanceLevelOptions}
-          bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
-        />
+        <div class="field">
+          <span class="field-label">強化 Lv</span>
+          <Choose
+            label="強化 Lv"
+            options={enhanceLevelOptions}
+            bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
+          />
+        </div>
         {#if part.enhance_level > 0 && part.enhance_type === null}
           <p class="preview-error">
             {slot === "weapon"
@@ -1169,11 +1182,14 @@
           </p>
         {/if}
         {#if part.enhance_level >= 12}
-          <Choose
-            label="等級"
-            options={enhanceGradeOptions}
-            bind:value={() => part.enhance_grade ?? "highest", (v) => (part.enhance_grade = v as typeof part.enhance_grade)}
-          />
+          <div class="field">
+            <span class="field-label">等級</span>
+            <Choose
+              label="強化の等級"
+              options={enhanceGradeOptions}
+              bind:value={() => part.enhance_grade ?? "highest", (v) => (part.enhance_grade = v as typeof part.enhance_grade)}
+            />
+          </div>
           <p class="hint dim">等級内の上限値を使用します。倍率の端数は四捨五入します。</p>
         {:else if part.enhance_level > 0}
           {#if part.enhance_type !== null || item}

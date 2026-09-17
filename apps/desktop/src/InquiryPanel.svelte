@@ -91,7 +91,7 @@
             送った内容は<b>公開のページに載ります</b>。本名・メールアドレス・ゲーム内 ID は書かないでください。
           </p>
 
-          <Choose bind:value={kind} options={INQUIRY_KINDS} full />
+          <Choose label="問い合わせの種類" bind:value={kind} options={INQUIRY_KINDS} full />
 
           <label class="line">
             <span class="line-label">件名</span>

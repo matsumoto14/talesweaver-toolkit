@@ -96,7 +96,7 @@
   <div class="avatar-stat-row" class:secondary-stat={!PRIMARY_EQUIPMENT_STATS.includes(kind)}>
     <b>{EQUIPMENT_STAT_SHORT[kind]}</b>
     <Choose
-      label=""
+      label="{AVATAR_PART_LABELS[part]}の{EQUIPMENT_STAT_SHORT[kind]}"
       {options}
       cols={options.length}
       cell={34}
