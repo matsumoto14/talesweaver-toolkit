@@ -1090,10 +1090,13 @@
           <span class="area-name">今日の強化</span>
           <span class="area-rule"></span>
           {#if character.updated_at}
-            <span class="last-enhance dim">
-              最後の強化 <span class="num">{fmtMonthDay(character.updated_at)}</span>
-              ({daysAgo(character.updated_at) === 0 ? "今日" : `${daysAgo(character.updated_at)} 日前`})
-            </span>
+            {@const up = character.updated_at}
+            <!-- どこかを直すとこの日付が今日に変わる。黙って変わると「保存された」が伝わらないので
+                 <Value> を通す(書式済みの文字なので光る。§08「値は <Value> 1 つ」) -->
+            <Value class="last-enhance dim" value={`${fmtMonthDay(up)} / ${daysAgo(up)}`}>
+              {#snippet children()}最後の強化 <span class="num">{fmtMonthDay(up)}</span>
+                ({daysAgo(up) === 0 ? "今日" : `${daysAgo(up)} 日前`}){/snippet}
+            </Value>
           {/if}
         </div>
         <div class="today-grid">
@@ -1185,7 +1188,10 @@
         </div>
 
         {#if openTile}
-          <div class="today-expand">
+          <!-- 開いたら動く(§10 型 6)。タイルを押し替えたときは中身が丸ごと入れ替わるが、
+               **要素はそのまま**なので入場クラスをもう一度再生する(use:changed)。
+               動き方は入場クラス 1 つが決めるので、開くときと押し替えたときで動きは同じ -->
+          <div class="today-expand open-in" use:changed={() => openTile}>
             {#if openTile === "sacredRelic"}
               <div class="expand-head">
                 <span class="expand-title">神鳥の聖物</span>
@@ -1562,7 +1568,8 @@
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
-  .last-enhance { flex: none; font-size: 9px; white-space: nowrap; }
+  /* ui/Value.svelte が描くので :global(子コンポーネントの要素) */
+  :global(.last-enhance) { flex: none; font-size: 9px; white-space: nowrap; }
 
   /* ===== 期限・影響カード ===== */
   .brief-card {

@@ -570,7 +570,11 @@
     <div class="set-list">
       {#each app.buffSets as set (set.id)}
         <button class:on={selected?.id === set.id} disabled={saving} onclick={() => (selectedId = set.id)}>
-          <span>{set.name}</span><small class="num">{set.choices.choices.length}</small>
+          <span>{set.name}</span><Value
+            class="set-count"
+            motion={() => set.choices.choices.length}
+            value={String(set.choices.choices.length)}
+          />
         </button>
       {/each}
       {#if app.buffSets.length === 0}<p>セットを作ると、キャラや計算で使えます。</p>{/if}
@@ -878,7 +882,8 @@
   .set-list { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
   .set-list > button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 9px; border: 1px solid transparent; border-radius: var(--r-inset); text-align: left; }
   .set-list > button.on { background: var(--sel-card); border-color: var(--sel-bd); }
-  .set-list small { margin-left: auto; min-width: 2ch; text-align: right; }
+  /* 件数は ui/Value.svelte が描くので :global(子コンポーネントの要素) */
+  .set-list :global(.set-count) { margin-left: auto; min-width: 2ch; text-align: right; }
   .set-list p, .empty { margin: 12px; color: var(--fg-muted); font-size: 11px; }
   .groups { flex: 1; min-height: 0; padding: 8px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; }
   :global(.category-switch) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }

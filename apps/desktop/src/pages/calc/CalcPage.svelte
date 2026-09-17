@@ -1724,7 +1724,8 @@
   <div class="detail-body">
     <div class="dt-head">
       <span class="dt-hk dim">倍率</span>
-      <span class="num dt-hv">{d.mult}</span>
+      <!-- 倍率は書式済みの文字(「×87.7」「—」)で数が来ないので、変わったら光る(<Value> が決める) -->
+      <Value class="dt-hv" value={d.mult} />
       <span class="dt-hk dim">実数</span>
       <Value
         class={`dt-hv ${(d.delta ?? 0) < 0 ? "bad" : ""}`}
@@ -1746,7 +1747,7 @@
         >
           {#snippet summary()}
           <span class="dt-label">{m.label}{#if m.note}<span class="dt-swap dim" use:changed={() => m.note ?? ""}>{m.note}</span>{/if}</span>
-          <span class="num dt-mult dim">{m.mult ?? ""}</span>
+          <Value class="dt-mult dim" value={m.mult ?? ""} />
           <Value
             class="dt-val"
             motion={() => m.n ?? null}
@@ -1755,14 +1756,14 @@
             deltaClass={m.changed ? "follow" : ""}
             onDelta={(e) => { e.stopPropagation(); followChange(key); }}
           />
-          <span class="num dt-sub dim">{m.sub ?? ""}</span>
+          <Value class="dt-sub dim" value={m.sub ?? ""} />
           {/snippet}
           <div class="dt-subs">
             <!-- 出典名でキーにする。入れ替わった出典は「抜けた行(取り消し線)+ 入った行」で残る -->
             {#each m.subs ?? [] as sm, j (sm.id ?? j)}
               <div class="dt-row" class:gone={sm.state === "gone"}>
                 <span class="dt-label">{sm.label}</span>
-                <span class="num dt-mult dim">{sm.mult ?? ""}</span>
+                <Value class="dt-mult dim" value={sm.mult ?? ""} />
                 <Value
                   class={`dt-val ${(sm.n ?? 0) < 0 ? "bad" : ""}`}
                   motion={() => sm.n ?? null}
@@ -1770,7 +1771,7 @@
                   delta={sm.state === "gone" || sm.state === "added" ? null : { unit: sm.unit }}
                 />
                 {#if sm.state === "gone"}<span class="delta num down delta-in">削除</span>{:else if sm.state === "added"}<span class="delta num up delta-in">追加</span>{/if}
-                <span class="num dt-sub dim">{sm.sub ?? ""}</span>
+                <Value class="dt-sub dim" value={sm.sub ?? ""} />
               </div>
             {/each}
           </div>
@@ -1778,9 +1779,9 @@
       {:else}
         <div class="dt-row">
           <span class="dt-label">{m.label}</span>
-          <span class="num dt-mult dim">{m.mult ?? ""}</span>
+          <Value class="dt-mult dim" value={m.mult ?? ""} />
           <Value class="dt-val" motion={() => m.n ?? null} value={m.value} delta={{ unit: m.unit }} />
-          <span class="num dt-sub dim">{m.sub ?? ""}</span>
+          <Value class="dt-sub dim" value={m.sub ?? ""} />
         </div>
       {/if}
     {/each}
@@ -1947,8 +1948,11 @@
         <!-- 攻撃 / 防御 は面ごと入れ替わる。入ってくる面を短く動かす(§10 型 3b) -->
         <div class="swap-in"><DefensePanel profile={defense} error={defenseError} /></div>
       {:else}
-        <!-- 行ける?カード -->
+        <!-- 攻撃側は「行ける?」カード・なぜこの数字?・トレースで 1 枚の面。**入場クラスは面の
+             いちばん外に 1 つ**掛ける(§00 04「同時に変わるものは全部動かす」)。カードだけに
+             掛けていたときは、防御 → 攻撃 に戻すと 1,500 の文字が無音で出ていた(実機 2026-09-17) -->
         <div class="swap-in">
+        <!-- 行ける?カード -->
         <SheetCard tone="gold" title="行ける？" note={character.name} busy={calculating}>
           <!-- 対象プレート -->
           <div class="target-row">
@@ -1957,14 +1961,14 @@
               {#snippet trigger(open)}
               <span class="t-line1">
                 <Icon kind="content" id={target.content.id} fallback={{ kind: "mob", id: target.content.enemy_id }} size={28} label={target.content.name} />
-                <span class="t-name">{target.content.name}</span>
+                <Value class="t-name" value={target.content.name} />
                 <span class="caret" class:rot={open}>▼</span>
-                <span class="t-index num dim">{targetIndex + 1} / {contents.length}</span>
+                <Value class="t-index dim" motion={() => targetIndex + 1} value={`${targetIndex + 1} / ${contents.length}`} />
               </span>
               <span class="t-line2">
-                <span class="t-area dim">{target.areaName}</span>
-                <span class="t-def num">防御 {defenseValue !== null ? fmtInt(defenseValue) : "—"}</span>
-                <span class="t-need num">目安 {fmtDuration(closeSeconds)}以内</span>
+                <Value class="t-area dim" value={target.areaName} />
+                <Value class="t-def" motion={() => defenseValue} value={defenseValue !== null ? `防御 ${fmtInt(defenseValue)}` : "防御 —"} />
+                <Value class="t-need" motion={() => closeSeconds} value={`目安 ${fmtDuration(closeSeconds)}以内`} />
               </span>
               {/snippet}
               {#snippet children(close)}
@@ -2172,7 +2176,7 @@
                    (§00 02。0 や「—」で埋めると画面が嘘をつく)。HP はソロの値 -->
               {#if result && result.defeat_seconds !== null && result.enemy_hp !== null}
                 <div class="node rate">
-                  <span class="nl">討伐時間 <span class="num">(HP {fmtInt(result.enemy_hp)})</span></span>
+                  <span class="nl">討伐時間 <Value motion={() => result?.enemy_hp ?? null} value={`(HP ${fmtInt(result.enemy_hp)})`} /></span>
                   <Value class="nv" motion={() => result?.defeat_seconds ?? null} value={fmtDuration(result.defeat_seconds)} />
                   <span class="nsub dim">
                     <!-- クリ確定 / 非クリは隣の DPS 節に出ている(重ねない。§00 02) -->
@@ -2306,7 +2310,6 @@
             {/if}
           </div>
         </SheetCard>
-        </div>
 
         <!-- なぜこの数字? -->
         <div class="panel">
@@ -2356,9 +2359,9 @@
                     {#each nextLevers as c, i (c.category)}
                       <div class="dt-row">
                         <span class="dt-label"><span class="dim">{i + 2}.</span> {c.symbol} {c.label}</span>
-                        <span class="num dt-mult dim">{fmtCatValue(c)}</span>
+                        <Value class="dt-mult dim" value={fmtCatValue(c)} />
                         <Value class="dt-val" motion={() => leverGain(c)} value={fmtSigned(leverGain(c), 2, "%")} delta={{ unit: "%", digits: 2 }} />
-                        <span class="num dt-sub dim">{fmtHeadroom(c)}</span>
+                        <Value class="dt-sub dim" value={fmtHeadroom(c)} />
                       </div>
                     {/each}
                     <p class="dt-note dim">+1% 足したときの最終ダメージの伸び。いま積んでいる量が少ないカテゴリほど 1% の価値が高い。</p>
@@ -2530,6 +2533,7 @@
               {/if}
               </div>
           </div>
+        </div>
         </div>
       {/if}
   {/snippet}
@@ -3059,12 +3063,13 @@
   .target-row :global(.target-trigger) { min-width: 0; flex: 1; padding: 3px 8px; border-radius: var(--r-panel); border: 1px solid transparent; text-align: left; }
   .target-row :global(.target-trigger:hover), .target-row :global(.target-trigger[aria-expanded="true"]) { background: var(--bg-rail); border-color: #9FB4D0; }
   .t-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .t-name { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .t-index { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
+  /* 対象プレートの 5 つは ui/Value.svelte が描く(子コンポーネントの要素なので :global) */
+  .target-row :global(.t-name) { min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .target-row :global(.t-index) { flex-shrink: 0; margin-left: auto; font-size: 8.5px; }
   .t-line2 { margin-top: 1px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
-  .t-area { min-width: 0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .t-def { flex-shrink: 0; font-size: 8.5px; color: var(--danger); }
-  .t-need { flex-shrink: 0; font-size: 8.5px; color: var(--fg-sub); }
+  .target-row :global(.t-area) { min-width: 0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .target-row :global(.t-def) { flex-shrink: 0; font-size: 8.5px; color: var(--danger); }
+  .target-row :global(.t-need) { flex-shrink: 0; font-size: 8.5px; color: var(--fg-sub); }
 
   /* 対象・スキルの候補面。重なり方と閉じ方は ui/Popover.svelte ＋ app.css の .popover が持つので、
      ここは行を端まで使うための余白なしと幅・高さだけ。トップレイヤに乗るので祖先が無く、:global で書く */
@@ -3287,10 +3292,10 @@
   .dt-head :global(.dt-hv.bad) { color: var(--danger); }
   .dt-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .dt-label { min-width: 0; flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dt-mult { flex-shrink: 0; width: 48px; text-align: right; font-size: 9.5px; }
+  :global(.dt-mult) { flex-shrink: 0; width: 48px; text-align: right; font-size: 9.5px; }
   /* dt-val も ui/Value.svelte が描く子要素 */
   .dt-row :global(.dt-val) { flex-shrink: 0; width: 64px; text-align: right; font-size: 10px; font-weight: 700; color: var(--fg-sub); }
-  .dt-sub { flex-shrink: 0; width: 112px; text-align: right; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :global(.dt-sub) { flex-shrink: 0; width: 112px; text-align: right; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dt-row :global(.dt-val.bad) { color: var(--danger); }
   /* 入れ替わった供給源はラベルの隣に残す(次の変化で書き換わる) */
   .dt-swap { margin-left: 8px; font-size: 9px; }
