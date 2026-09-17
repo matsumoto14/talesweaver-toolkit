@@ -85,6 +85,7 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         | "list_element_sources"
         | "list_contents"
         | "list_equipment_catalog"
+        | "list_inkri_targets"
         | "list_equipment_abilities"
         | "list_random_options"
         | "list_masteries"
@@ -107,6 +108,7 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         "list_equipment_candidates" => arg_fields::<ListEquipmentCandidatesArgs>(),
         "part_weapon_system" | "relic_state" => arg_fields::<PartArgs>(),
         "relic_step" => arg_fields::<RelicStepArgs>(),
+        "run_inkri_attempts" => arg_fields::<RunInkriAttemptsArgs>(),
         "list_equipment_ability_candidates" => arg_fields::<AbilityCandidatesArgs>(),
         "apply_catalog_item" => arg_fields::<ApplyCatalogItemArgs>(),
         "set_enhance_level" => arg_fields::<SetEnhanceLevelArgs>(),

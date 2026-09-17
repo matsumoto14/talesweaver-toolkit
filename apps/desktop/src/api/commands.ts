@@ -11,6 +11,7 @@ import type {
   EquipmentAbilityView, EquipmentAbilityCandidate, EquipmentCandidates, EnchantPlanRow,
   EquipmentPart, PartSlot, RandomOptionCandidate,
   RelicDirection, RelicState, WeaponSystem,
+  InkriTarget, InkriAttemptRequest, InkriBatchResult,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -110,6 +111,11 @@ export const previewVersus = (
     attacker, attackerBuffs, skillId, defender, defenderBuffs, attackerTries, defenderTries,
   });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
+/** ビアヌのインクリ対象装備一覧(合成回数上限・ビアヌ費用込み) */
+export const listInkriTargets = () => invoke<InkriTarget[]>("list_inkri_targets");
+/** インクリの試行をまとめて実行する(1 回 / N 回 / 成功するまで)。シードが同じなら結果も同じ */
+export const runInkriAttempts = (request: InkriAttemptRequest) =>
+  invoke<InkriBatchResult>("run_inkri_attempts", { request });
 /** 「追加機能の解除」で R2 から取得した装備(テネブリスなど)を合流させる。呼び出しは unlock.svelte.ts */
 export const installDownloadedEquipment = (json: string) =>
   invoke<number>("install_downloaded_equipment", { json });

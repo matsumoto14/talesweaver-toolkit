@@ -206,6 +206,12 @@ struct PartArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RunInkriAttemptsArgs {
+    request: commands::InkriAttemptRequest,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RelicStepArgs {
     part: domain::EquipmentPart,
     direction: domain::RelicDirection,
@@ -282,6 +288,7 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "list_element_sources" => ok(commands::list_element_sources()),
         "list_contents" => ok(commands::list_contents()),
         "list_equipment_catalog" => ok(commands::list_equipment_catalog()),
+        "list_inkri_targets" => ok(commands::list_inkri_targets()),
         "list_equipment_abilities" => ok(commands::list_equipment_abilities()),
         "list_random_options" => ok(commands::list_random_options()),
         "list_masteries" => ok(commands::list_masteries()),
@@ -421,6 +428,10 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "relic_step" => {
             let a: RelicStepArgs = args_of(command, args)?;
             ok(commands::relic_step(a.part, a.direction))
+        }
+        "run_inkri_attempts" => {
+            let a: RunInkriAttemptsArgs = args_of(command, args)?;
+            done(commands::run_inkri_attempts(a.request))
         }
         "list_equipment_ability_candidates" => {
             let a: AbilityCandidatesArgs = args_of(command, args)?;

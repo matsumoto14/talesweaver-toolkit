@@ -9,10 +9,10 @@ use domain::{
     evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
     CommonSkills, Content, ContentArea, ContentEvaluation, DamageMaterial, DamageTarget,
     DamageResult, DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef,
-    EquipmentPart, NewCharacter, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef,
-    WristBonusMaterial,
+    EquipmentInkriState, EquipmentPart, InkriBatchMode, InkriBatchResult, InkriKind, InkriRng,
+    NewCharacter, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
-use gamedata::{EquipmentItem, GameCharacter};
+use gamedata::{EquipmentItem, GameCharacter, InkriTarget};
 
 mod damage_inputs;
 
@@ -209,6 +209,45 @@ pub fn list_contents() -> Vec<ContentArea> {
 
 pub fn list_equipment_catalog() -> Vec<EquipmentItem> {
     gamedata::equipment_catalog()
+}
+
+/// ビアヌのインクリ対象装備一覧(合成回数上限・ビアヌ費用は gamedata が持つ)。
+pub fn list_inkri_targets() -> Vec<InkriTarget> {
+    gamedata::inkri_targets().to_vec()
+}
+
+/// インクリの試行をまとめて実行する。`request.kind` がビアヌのときだけ、対象装備の
+/// ビアヌ費用(SEED、未収録なら `None`)を消費 SEED の計算に使う(他 4 種は費用資料が無い)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct InkriAttemptRequest {
+    /// クライアント DB の ItemId(`InkriTarget::client_item_id`)
+    pub client_item_id: u32,
+    pub state: EquipmentInkriState,
+    pub kind: InkriKind,
+    pub mode: InkriBatchMode,
+    /// 決定的 PRNG のシード(同じ値なら同じ結果になる)
+    pub seed: u64,
+}
+
+pub fn run_inkri_attempts(request: InkriAttemptRequest) -> CommandResult<InkriBatchResult> {
+    let target = gamedata::find_inkri_target(request.client_item_id).ok_or_else(|| {
+        format!(
+            "インクリ対象 '{}' が見つかりません",
+            request.client_item_id
+        )
+    })?;
+    let seed_cost_per_attempt = match request.kind {
+        InkriKind::Vianu => target.bianu_seed_cost,
+        _ => None,
+    };
+    let mut rng = InkriRng::new(request.seed);
+    Ok(domain::run_batch(
+        request.state,
+        request.kind,
+        request.mode,
+        &mut rng,
+        seed_cost_per_attempt,
+    ))
 }
 
 /// 装備アビリティ 1 件と、それを受け付ける武器系統。画面は「含まれるか」だけで候補を絞る

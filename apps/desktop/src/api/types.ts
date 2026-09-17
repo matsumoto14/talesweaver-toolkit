@@ -1056,6 +1056,60 @@ export interface EquipmentItem {
   source: Source;
 }
 
+// crates/gamedata/src/inkri/mod.rs の InkriTarget。ビアヌのインクリ対象装備 1 件。
+export interface InkriTarget {
+  /** クライアント DB の ItemId(アイコンファイル名・保存データ突き合わせのキー) */
+  client_item_id: number;
+  name: string;
+  /** 表示グルーピング用の系列名(例: "アクィルス"、"地神") */
+  series: string;
+  part: PartSlot;
+  /** 合成回数の初期上限 */
+  synth_max: number;
+  /** ビアヌのインクリ費用(SEED)。資料が無い装備は null */
+  bianu_seed_cost: number | null;
+}
+
+// crates/domain/src/inkri.rs の InkriKind。
+export type InkriKind = "lord" | "grace" | "blessing" | "royal" | "vianu";
+
+// crates/domain/src/inkri.rs の EquipmentInkriState。
+export interface EquipmentInkriState {
+  synth_current: number;
+  synth_max: number;
+  inkri_count: number;
+  destroyed: boolean;
+}
+
+// crates/domain/src/inkri.rs の InkriAttemptOutcome。
+export type InkriAttemptOutcome = "success" | "failure_destroyed" | "failure_no_change";
+
+// crates/domain/src/inkri.rs の InkriBatchMode。
+export type InkriBatchMode =
+  | { fixed: { attempts: number } }
+  | { until_success: { max_attempts: number } };
+
+// crates/domain/src/inkri.rs の InkriBatchResult。
+export interface InkriBatchResult {
+  attempts_made: number;
+  successes: number;
+  destroyed: boolean;
+  final_state: EquipmentInkriState;
+  last_outcome: InkriAttemptOutcome | null;
+  /** 消費 SEED(費用が未収録なら null) */
+  consumed_seed: number | null;
+}
+
+// crates/commands/src/lib.rs の InkriAttemptRequest。
+export interface InkriAttemptRequest {
+  client_item_id: number;
+  state: EquipmentInkriState;
+  kind: InkriKind;
+  mode: InkriBatchMode;
+  /** 決定的 PRNG のシード(同じ値なら同じ結果になる) */
+  seed: number;
+}
+
 // 武器アビリティの効果系統。候補を武器系統へ絞るために使う。
 export type EquipmentAbilityFamily =
   | "pointed_blade" | "sharp_blade" | "intelligence" | "magic_resistance" | "weapon_delay"

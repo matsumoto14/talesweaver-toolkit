@@ -49,7 +49,7 @@ import { reportError, type ErrorTarget } from "./toast.svelte";
 import type { InquiryDraft } from "./inquiry";
 import type { SourceId } from "./pages/chars/sourceId";
 
-export type Tab = "home" | "calc" | "buffs" | "chars" | "versus" | "measure" | "news";
+export type Tab = "home" | "calc" | "buffs" | "chars" | "versus" | "measure" | "inkri" | "news";
 
 export const app = $state({
   tab: "home" as Tab,
@@ -255,7 +255,7 @@ export function selectCharacter(id: number | null): void {
  * 覚えるのは「どこを見ていたか」だけで、キャラの中身は保存層が持つ。
  */
 const SESSION_KEY = "tw-session";
-const TABS: Tab[] = ["home", "calc", "buffs", "chars", "versus", "measure", "news"];
+const TABS: Tab[] = ["home", "calc", "buffs", "chars", "versus", "measure", "inkri", "news"];
 
 /** 起動時に 1 回。存在しないキャラ・コンテンツを指していないかは `loadAll` が直す */
 export function restoreSession(): void {

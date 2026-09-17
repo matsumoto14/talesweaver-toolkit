@@ -144,6 +144,18 @@ pub fn list_equipment_catalog() -> Vec<EquipmentItem> {
     commands::list_equipment_catalog()
 }
 
+#[tauri::command]
+pub fn list_inkri_targets() -> Vec<gamedata::InkriTarget> {
+    commands::list_inkri_targets()
+}
+
+#[tauri::command]
+pub fn run_inkri_attempts(
+    request: commands::InkriAttemptRequest,
+) -> CommandResult<domain::InkriBatchResult> {
+    commands::run_inkri_attempts(request)
+}
+
 /// 「追加機能の解除」(情報パネルのバージョン表記 7 連打)で R2 から取得した装備(テネブリスなど。
 /// 配布物・git には含めない。docs/adr/009-public-release.md)を、実行中のカタログへ合流させ、
 /// 次回起動時にも再インストールできるようローカルへ保存する。先に保存してから合流させ、

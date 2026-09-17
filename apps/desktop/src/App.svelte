@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 画面枠: 上部タブ(ホーム/ダメージ計算/バフ/キャラ/実測/お知らせ)+ 左キャラレール + エラー帯。
+  // 画面枠: 上部タブ(ホーム/ダメージ計算/バフ/キャラ/実測/インクリ/お知らせ)+ 左キャラレール + エラー帯。
   // 構成は デザインモック TW Toolkit Prototype v4 に合わせる(規格は docs/design-system.html)。
   import { onMount } from "svelte";
   import brandLogo from "./assets/brand/tw-context-logo.png";
@@ -12,6 +12,8 @@
   import CharsPage from "./pages/chars/CharsPage.svelte";
   import HomePage from "./pages/home/HomePage.svelte";
   import MeasurePage from "./pages/measure/MeasurePage.svelte";
+  import InkriPage from "./pages/inkri/InkriPage.svelte";
+  import inkriTabIcon from "./assets/inkri/ui/app_tab.png";
   import NewsPage from "./pages/news/NewsPage.svelte";
   import VersusPage from "./pages/versus/VersusPage.svelte";
   import {
@@ -31,6 +33,7 @@
     { id: "chars", label: "キャラ" },
     { id: "versus", label: "対人" },
     { id: "measure", label: "実測" },
+    { id: "inkri", label: "インクリ" },
     { id: "news", label: "お知らせ" },
   ];
 
@@ -87,7 +90,12 @@
       bind:value={() => app.tab, (v) => (app.tab = v as Tab)}
     >
       {#snippet item(o)}
-        {o.label}
+        {#if o.value === "inkri"}
+          <!-- インクリは文字ではなくインクリスクロールの絵(ユーザー指定 2026-09-17)。名前は title と読み上げで持つ -->
+          <img class="tab-icon" src={inkriTabIcon} alt={o.label} title={o.label} />
+        {:else}
+          {o.label}
+        {/if}
         {#if o.value === "news" && updateWaiting}<span class="tab-dot" aria-label="新しい版があります"></span>{/if}
       {/snippet}
     </Choose>
@@ -175,6 +183,8 @@
             <VersusPage />
           {:else if app.tab === "measure"}
             <MeasurePage />
+          {:else if app.tab === "inkri"}
+            <InkriPage />
           {:else if app.tab === "news"}
             <NewsPage />
           {:else}
@@ -196,6 +206,7 @@
     display: flex; align-items: center; gap: 14px;
   }
   .brand { display: flex; align-items: center; flex-shrink: 0; }
+  .tab-icon { display: block; width: 23px; height: 24px; margin: -4px 0; image-rendering: pixelated; }
   .brand img { width: auto; height: 48px; display: block; object-fit: contain; }
 
   /* 見た目は app.css の `.tabs`(§08)。中身は ui/Choose.svelte なので、ここには置き場所だけ */

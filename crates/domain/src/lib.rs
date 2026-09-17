@@ -25,6 +25,7 @@ pub mod equipment_class;
 pub mod equipment_polish;
 pub mod game_tables;
 pub mod growth_apply;
+pub mod inkri;
 pub mod mastery;
 pub mod measurement;
 pub mod random_option;
@@ -120,6 +121,10 @@ pub use equipment::{
 };
 pub use game_tables::{game_tables, DamageCategoryLabel, EquipmentStatLabel, GameTables};
 pub use growth_apply::{apply_growth_action, GrowthApplyContext};
+pub use inkri::{
+    attempt, check_can_attempt, min_synth_threshold, run_batch, EquipmentInkriState,
+    InkriAttemptOutcome, InkriBatchMode, InkriBatchResult, InkriBlockReason, InkriKind, InkriRng,
+};
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};
 pub use measurement::{
     can_separate_defense_and_cut_rate, MEASUREMENT_SEPARABLE_MIN_ATTACKS,

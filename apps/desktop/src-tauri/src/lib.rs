@@ -81,6 +81,8 @@ pub fn run() {
             commands::list_contents,
             commands::list_equipment_catalog,
             commands::install_downloaded_equipment,
+            commands::list_inkri_targets,
+            commands::run_inkri_attempts,
             commands::list_equipment_abilities,
             commands::list_equipment_candidates,
             commands::part_weapon_system,
