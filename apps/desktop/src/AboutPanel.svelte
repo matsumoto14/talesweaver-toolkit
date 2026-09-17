@@ -9,6 +9,7 @@
   import { exportAll, importAll, parseTransferFile, suggestedFileName } from "./api/transfer";
   import type { AppInfo } from "./api/types";
   import { IS_DESKTOP } from "./platform";
+  import FilePick from "./ui/FilePick.svelte";
   import Modal from "./ui/Modal.svelte";
   import { reportError, reportNotice } from "./toast.svelte";
   import {
@@ -72,12 +73,7 @@
   }
 
   /** 読み込みは「足す」。いま入っているものは消さない(消す判断をこちらでしない) */
-  async function importData(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    // 同じファイルをもう一度選べるようにする(選び直しても change が来ない)
-    input.value = "";
-    if (!file) return;
+  async function importData(file: File) {
     transfer = { busy: true, message: "読み込んでいます…", imported: false };
     try {
       const result = await importAll(parseTransferFile(JSON.parse(await file.text())));
@@ -160,10 +156,7 @@
         </p>
         <div class="transfer">
           <button type="button" class="btn" onclick={exportData} disabled={transfer.busy}>書き出す</button>
-          <label class="btn">
-            読み込む
-            <input type="file" accept="application/json,.json" onchange={importData} disabled={transfer.busy} />
-          </label>
+          <FilePick class="btn" accept="application/json,.json" disabled={transfer.busy} onPick={importData}>読み込む</FilePick>
         </div>
         {#if transfer.message}
           <p class="muted transfer-message">
@@ -260,8 +253,6 @@
 
   /* ファイル選択は見た目をボタンに合わせる(入力欄の素の見た目を出さない) */
   .transfer { display: flex; gap: 8px; align-items: center; }
-  .transfer label.btn { cursor: pointer; }
-  .transfer input[type="file"] { display: none; }
   .transfer-message { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 
   .source-link {

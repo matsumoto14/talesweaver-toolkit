@@ -100,7 +100,7 @@
 
           <label class="line">
             <span class="line-label">内容</span>
-            <TextField label="内容" bind:value={body} max={4000} multi rows={5} />
+            <TextField label="内容" bind:value={body} max={4000} rows={5} />
           </label>
 
           <ToggleRow

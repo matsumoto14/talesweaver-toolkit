@@ -792,107 +792,105 @@ label.chip { cursor: pointer; }
    規格の実演(.ench / .ctrl / .step / .cell / .fillbar / .maxbtn)がそのまま入る。
    値・上限・進捗・MAX がひとつのセルに同居し、上限に届くとバーと枠と MAX が
    金になる。**見た目はここだけに置く** — 部品の中に写すと、写した先でずれる。
-   振る舞い(確定・クランプ・編集の出し入れ)は src/ui/StatInput.svelte  */
-.stepper { display: flex; align-items: center; gap: 3px; min-width: 0; }
-.stepper > .label {
-  font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
-  min-width: 46px; margin-right: 5px; flex: none; white-space: nowrap;
-}
+   振る舞い(確定・クランプ・編集の出し入れ)は src/ui/NumberField.svelte  */
+/* 器いっぱいに伸ばさない。＋ と − がセルの左右に付くので、伸ばすと 1 つの欄の中で
+   ＋ と − が数百 px 離れる(§00 01 視線を動かさない)。欄は中身ぶんの幅で左に寄せる */
+.numfield { display: flex; align-items: center; gap: 3px; width: fit-content; max-width: 100%; }
 /* basis を 0 にして、**入っている数字の桁でセル幅が決まらない**ようにする。
    auto のままだと 24 → 0 のように桁が減っただけで幅が変わり、隣の MAX が動く
    (§09 規則 4。実機の tools/design-audit/live/digits.js が検出した) */
-.stepper .cell {
+.numfield .cell {
   position: relative; flex: 1 1 0; min-width: 74px; overflow: hidden;
   display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
   padding: 4px 7px 5px; border-radius: var(--r-panel);
   background: var(--bg-field); border: 1px solid var(--cell-bd);
   transition: var(--t-tap);
 }
-.stepper .cell.editing { border-color: var(--accent); }
-.stepper .cell:not(.editing):hover { border-color: var(--accent); }
-/* 上限を語らない形(§07 形態 1)。/上限 と MAX が無いぶん詰める */
-.stepper .cell.bare { flex: none; width: 74px; }
-/* カタログ由来などの自動値。通常時は入力欄に見せず、触れたときだけ同じ寸法の入力面へ変える。 */
-.stepper.read-as-text .cell.bare:not(.editing) { background: transparent; border-color: transparent; }
-.stepper.read-as-text .cell.bare:not(.editing):hover { background: var(--surface-inset); border-color: var(--border-soft); }
-.stepper.read-as-text .cell.bare:not(.editing) .val.read { cursor: text; }
-.stepper .fill {
+.numfield .cell.editing { border-color: var(--accent); }
+.numfield .cell:not(.editing):hover { border-color: var(--accent); }
+/* 上限を持たない形(§07 形態 1 と 5)。/上限 と MAX が無いぶん詰める */
+.numfield .cell.bare { flex: none; width: 74px; }
+/* 出どころのある値(形態 1)。通常時は入力欄に見せず、触れたときだけ同じ寸法の入力面へ変える。 */
+.numfield.auto .cell.bare:not(.editing) { background: transparent; border-color: transparent; }
+.numfield.auto .cell.bare:not(.editing):hover { background: var(--surface-inset); border-color: var(--border-soft); }
+.numfield.auto .cell.bare:not(.editing) .val.read { cursor: text; }
+.numfield .fill {
   position: absolute; left: 0; bottom: 0; height: 2px;
   background: var(--cell-bar); pointer-events: none;
   transition: width var(--dur-bar) var(--ease-in-out);
 }
-.stepper .val {
+.numfield .val {
   min-width: 0; flex: 1 1 auto; text-align: right;
   font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
   color: var(--cell-fg); background: none; border: none; padding: 0;
 }
-.stepper .val:focus { outline: none; }
-.stepper .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.numfield .val:focus { outline: none; }
+.numfield .val.read:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 /* スピナー(▲▼)は押した瞬間に幅を食って値を横にずらす(§09 規則 1) */
-.stepper .val::-webkit-inner-spin-button,
-.stepper .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.numfield .val::-webkit-inner-spin-button,
+.numfield .val::-webkit-outer-spin-button { appearance: none; margin: 0; }
 /* number 入力は UA 既定の固有幅を持ち、同じ数字でも読み取りの button より広い。
    セルは中身で幅が決まるので、押して編集に入った瞬間にセルが 74 → 81px に膨らんで
    隣の MAX が 7px 逃げていた(§09 規則 1「押した場所は動かない」。上のコメントは
    「読取と編集でセルの寸法は同じ」と書いていたが、実機では同じではなかった)。
    field-sizing: content で入力欄も中身ぶんの幅にし、button と一致させる */
-.stepper input.val { appearance: textfield; field-sizing: content; }
-.stepper .cap { flex: none; font-size: 8px; color: var(--cell-cap); font-variant-numeric: tabular-nums; }
+.numfield input.val { appearance: textfield; field-sizing: content; }
+.numfield .cap { flex: none; font-size: 8px; color: var(--cell-cap); font-variant-numeric: tabular-nums; }
 /* format の結果(「+200」など)。0 のときも場所を空けておく — 出たり消えたりすると
    その行だけ入力欄の幅が変わる(§09 規則 4) */
-.stepper .hint.fixed {
+.numfield .hint.fixed {
   flex: none; min-width: 42px; text-align: right; white-space: nowrap;
   font-size: 9.5px; font-variant-numeric: tabular-nums;
 }
 /* よく使う値のボタン。MAX と同じ寸法で、押されていない間は面を持たない */
-.stepper .preset {
+.numfield .preset {
   flex: none; padding: 3px 6px; border-radius: var(--r-inset);
   background: none; border: 1px solid var(--cell-bd); color: var(--cell-cap);
   font-size: 8px; font-weight: 700; white-space: nowrap;
   font-variant-numeric: tabular-nums; transition: var(--t-tap);
 }
-.stepper .preset:hover { border-color: var(--sim); color: var(--sim); }
-.stepper .preset.on { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
-.stepper .increment {
+.numfield .preset:hover { border-color: var(--sim); color: var(--sim); }
+.numfield .preset.on { background: var(--state-temp-bg); border-color: var(--sim); color: var(--sim-fg); }
+.numfield .increment {
   width: 23px; height: 22px; flex: none; padding: 0; text-align: center;
   border-radius: var(--r-inset); background: var(--state-goal-bg);
   border: 1px solid var(--cell-bd); color: var(--accent-hover);
   font-size: 8.5px; font-weight: 700;
 }
-.stepper .increment:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-hover); }
-.stepper .increment:disabled { color: var(--border); background: none; }
-.stepper .step {
+.numfield .increment:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-hover); }
+.numfield .increment:disabled { color: var(--border); background: none; }
+.numfield .step {
   width: 16px; height: 22px; flex: none; padding: 0; line-height: 1;
   background: none; border: none; border-radius: var(--r-inset);
   font-size: 13px; font-weight: 700; color: var(--cell-step);
 }
-.stepper .step:hover:not(:disabled) { background: var(--state-goal-bg); color: var(--accent-hover); }
-.stepper .step:disabled { color: var(--border); }
+.numfield .step:hover:not(:disabled) { background: var(--state-goal-bg); color: var(--accent-hover); }
+.numfield .step:disabled { color: var(--border); }
 /* MAX は常設。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) */
-.stepper .max {
+.numfield .max {
   width: 30px; flex: none; padding: 3px 0; text-align: center;
   border-radius: var(--r-inset); background: var(--state-goal-bg);
   border: 1px solid var(--cell-max-bd); color: var(--accent);
   font-size: 8px; font-weight: 700; transition: var(--t-tap);
 }
-.stepper .max:hover:not(:disabled) { border-color: var(--accent); }
+.numfield .max:hover:not(:disabled) { border-color: var(--accent); }
 /* 上限到達は金のバー・枠・MAX で伝える。入力可能な白い面と未保存の紫は使わない(§03 / §07) */
-.stepper.full .fill { background: var(--cell-full-bar); }
-.stepper.full .cell { background: var(--bg-field); border-color: var(--gold); }
-.stepper.full .val { color: var(--state-edge-fg); }
-.stepper.full .max { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
-.stepper .hint { flex: none; margin-left: 5px; font-size: 11px; white-space: nowrap; }
+.numfield.full .fill { background: var(--cell-full-bar); }
+.numfield.full .cell { background: var(--bg-field); border-color: var(--gold); }
+.numfield.full .val { color: var(--state-edge-fg); }
+.numfield.full .max { background: var(--state-edge-bg); border-color: var(--gold); color: var(--state-edge-fg); }
+.numfield .hint { flex: none; margin-left: 5px; font-size: 11px; white-space: nowrap; }
 /* 自由入力(§07 形態 5)。上限を持たない値は「白 + 青枠 + 破線チップ」で例外だと分かるようにする。
    枠は読取・編集どちらでも青のまま(自動値と見分ける印なので、編集中だけ青にしない) */
-.stepper.free .cell { border-color: var(--accent); }
+.numfield.free .cell { border-color: var(--accent); }
 /* 形態 5 の 0 は「まだ入れていない」。0 と読ませない(§00 ⑤ 考えさせない) */
-.stepper .val.blank { color: var(--fg-muted); }
+.numfield .val.blank { color: var(--fg-muted); }
 /* 桁数(digits)を与えた欄は、その桁が入る幅をはじめから取る(§09 規則 4)。
-   .val の 1ch = 数値書体の 1 桁。カンマ込みの文字数は StatInput が --chars で渡す */
-.stepper .cell.sized { width: auto; flex: none; }
-.stepper .cell.sized .val { flex: none; min-width: calc(var(--chars) * 1ch); }
+   .val の 1ch = 数値書体の 1 桁。カンマ込みの文字数は NumberField が --chars で渡す */
+.numfield .cell.sized { width: auto; flex: none; }
+.numfield .cell.sized .val { flex: none; min-width: calc(var(--chars) * 1ch); }
 /* 押せない印なのでチップではない(`.chip` は押せる的だけ)。見た目だけ揃える */
-.stepper .why {
+.numfield .why {
   flex: none; display: inline-flex; align-items: center;
   padding: 2px 8px; border-radius: var(--r-pill); font-size: 9.5px; font-weight: 700; white-space: nowrap;
   border: 1px dashed var(--sim); color: var(--sim-fg); background: var(--state-temp-bg);

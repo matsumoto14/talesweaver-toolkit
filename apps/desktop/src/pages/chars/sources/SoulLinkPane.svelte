@@ -4,7 +4,7 @@
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
   import Value from "../../../ui/Value.svelte";
-  import StatInput from "../../../ui/StatInput.svelte";
+  import NumberField from "../../../ui/NumberField.svelte";
 
   interface Props {
     draft: Draft;
@@ -76,12 +76,9 @@
     {#each EQUIPMENT_ROWS as row (row.field)}
       <div class="stat-row">
         <span class="k">{row.label}</span>
-        <StatInput
+        <NumberField
           label="{row.label}リンクステータス Lv"
-          hideLabel
-          min={0}
           max={row.max}
-          stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
         <Value class="v" motion={() => row.motion() ?? null} value={row.value()} />
@@ -99,12 +96,9 @@
     {#each DAMAGE_ROWS as row (row.field)}
       <div class="stat-row">
         <span class="k">{row.label}</span>
-        <StatInput
+        <NumberField
           label="{row.label}リンクステータス Lv"
-          hideLabel
-          min={0}
           max={row.max}
-          stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
         <Value class="v" motion={() => row.motion() ?? null} value={row.value()} />
@@ -122,12 +116,9 @@
     {#each HP_ROWS as row (row.field)}
       <div class="stat-row">
         <span class="k">{row.label}</span>
-        <StatInput
+        <NumberField
           label="{row.label}リンクステータス Lv"
-          hideLabel
-          min={0}
           max={row.max}
-          stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
         <Value class="v" motion={() => row.motion() ?? null} value={row.value()} />

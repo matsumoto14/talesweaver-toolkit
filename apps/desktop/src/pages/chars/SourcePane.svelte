@@ -33,7 +33,7 @@
   import StatusPane from "./sources/StatusPane.svelte";
   import ThesisCorePane from "./sources/ThesisCorePane.svelte";
   import TitlePane from "./sources/TitlePane.svelte";
-  import StatInput from "../../ui/StatInput.svelte";
+  import NumberField from "../../ui/NumberField.svelte";
   import Choose from "../../ui/Choose.svelte";
   import { fmtSigned } from "../../format";
   import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
@@ -206,12 +206,9 @@
   {:else if sourceId === "rune"}
     <div class="card">
       {#snippet runeRow(k: StatKind)}
-        <!-- Lv は段階。1 押しに意味があるので ＋ / − を置く(§07 形態 4) -->
-        <StatInput
-          label=""
-          min={0}
+        <NumberField
+          label="{STAT_LABELS[k]}のルーンスキル Lv"
           max={limits.rune_level_max}
-          stepper
           bind:value={draft.statSources.rune_levels[k]}
         />
       {/snippet}
@@ -246,12 +243,10 @@
         <span class="hint dim">選んだ能力値だけ上限 {fmtSigned(limits.crown_selected_max)}。もう一度押すと外せます。</span>
       </div>
       {#snippet crownRow(k: StatKind)}
-        <StatInput
-          label=""
-          min={0}
+        <NumberField
+          label="{STAT_LABELS[k]}の王冠"
           max={crownMax(k)}
           step={limits.crown_step}
-          stepper
           bind:value={draft.statSources.crown[k]}
         />
       {/snippet}
@@ -265,11 +260,9 @@
         <b>固定値層</b>なので、能力値倍率A(テイルズウィーバーのエネルギー等)の影響を受けます。
       </p>
       {#snippet monsterCardRow(k: StatKind)}
-        <StatInput
-          label=""
-          min={0}
+        <NumberField
+          label="{STAT_LABELS[k]}のカード装着"
           max={limits.monster_card_max}
-          stepper
           bind:value={draft.statSources.monster_cards[k]}
         />
       {/snippet}
@@ -280,12 +273,10 @@
       {#snippet relicRow(k: StatKind)}
         <!-- 段階ではなく**実際に増える値**で入れる(1 段階 = +{limits.sacred_relic_value_per_stage} なので
              ＋ を押すとその値ずつ)。多くの人は 200 で止まるので、そこを 1 押しで置く。保存は段階のまま -->
-        <StatInput
-          label=""
-          min={0}
+        <NumberField
+          label="{STAT_LABELS[k]}の神鳥の聖物"
           max={limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage}
           step={limits.sacred_relic_value_per_stage}
-          stepper
           presets={[{ value: 200, label: "200" }]}
           bind:value={
             () => sacredRelicValue(draft.statSources.sacred_relic[k]),

@@ -39,7 +39,7 @@
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import Choose from "../../../ui/Choose.svelte";
-  import StatInput from "../../../ui/StatInput.svelte";
+  import NumberField from "../../../ui/NumberField.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import TextField from "../../../ui/TextField.svelte";
   import { slide } from "svelte/transition";
@@ -775,7 +775,7 @@
             </div>
           {:else}
           <div class="picker-tools">
-            <TextField label="装備名で探す" search count={filteredCatalog.length} bind:value={itemQuery} />
+            <TextField label="装備名で探す" count={filteredCatalog.length} bind:value={itemQuery} />
             {#if equipmentFilterLabel !== null}
               <span class="equipment-filter badge">{equipmentFilterLabel}</span>
               <Chip class="quiet" onclick={() => (showAllEquipmentCandidates = !showAllEquipmentCandidates)}>
@@ -830,13 +830,10 @@
         {#each EQUIPMENT_STAT_KINDS.filter((k) => item.growth_caps![k] > 0) as k (k)}
           <div class="stat-row">
             <span class="k">{EQUIPMENT_STAT_LABELS[k]}</span>
-            <StatInput
+            <NumberField
               label="{EQUIPMENT_STAT_LABELS[k]}の装備補正"
-              hideLabel
               min={item.values_min[k]}
               max={item.growth_caps[k]}
-              strictMax
-              stepper
               presets={item.id === "rising-holic-cuffs" ? [{ value: 140, label: "140" }] : []}
               bind:value={part.base[k]}
             />
@@ -868,9 +865,10 @@
               {#each capStats as k (k)}
                 <div class="stat-row">
                   <span class="k">{EQUIPMENT_STAT_SHORT[k]}</span>
-                  <StatInput
-                    label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント上限" hideLabel gauge={false}
-                    min={0} max={limits.equipment_value_max}
+                  <!-- 上限そのものを入れる欄。これ自身に上限は無いので形態 5(§07) -->
+                  <NumberField
+                    label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント上限"
+                    reason="カタログ外 · 実測"
                     bind:value={
                       () => part.enchant_caps?.[k] ?? 0,
                       (v) => { part.enchant_caps = { ...(part.enchant_caps ?? zeroValues()), [k]: v }; }
@@ -921,11 +919,21 @@
                 <span class="ability-spacer" aria-hidden="true"></span>
               {/if}
               <div class="equation-enchant">
-                <StatInput label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント" hideLabel min={0} max={cap ?? 0} strictMax={cap !== null} increments={[12, 14, 17, 20]} bind:value={part.enchant[k]} />
-                {#if cap === null}<span class="badge unknown" title="この補正のエンチャント上限が未収録です。上のエンチャント上限で入力してください">?</span>{/if}
+                <NumberField
+                  label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント"
+                  max={cap ?? undefined}
+                  reason="上限が未収録"
+                  increments={[12, 14, 17, 20]}
+                  bind:value={part.enchant[k]}
+                />
               </div>
               <div class="equation-base">
-                <StatInput label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正" hideLabel min={0} max={item?.growth_cap ?? limits.equipment_value_max} gauge={false} readAsText={item !== null} bind:value={part.base[k]} />
+                <NumberField
+                  label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正"
+                  autoNote={item === null ? undefined : "カタログの値"}
+                  reason="カタログ外 · 入力"
+                  bind:value={part.base[k]}
+                />
               </div>
             </div>
             {#if completionPlan !== null && enchantPlanStats.includes(k)}
@@ -1007,13 +1015,10 @@
                   {#if additionalDef}
                     <div class="siena-row swap-in">
                       <span class="ro-name">{additionalKindLabel(additional.kind)}</span>
-                      <StatInput
+                      <NumberField
                         label="{additionalKindLabel(additional.kind)}の値"
-                        hideLabel
                         min={additionalDef.min}
                         max={additionalDef.max}
-                        gauge={false}
-                        stepper
                         bind:value={() => additional.value, (value) => setAdditionalValue("weapon", selectedAbility.id, additionalIndex, value)}
                       />
                       <button type="button" class="clear" onclick={() => removeAdditional("weapon", selectedAbility.id, additionalIndex)}>外す</button>
@@ -1059,13 +1064,10 @@
                 use:changed={() => focusToken(ability.id)}
               >
                 <span class="ro-name">{ability.name}</span>
-                <StatInput
+                <NumberField
                   label="{ability.name}の実測値"
-                  hideLabel
                   min={ability.value_option.min}
                   max={ability.value_option.max}
-                  gauge={false}
-                  stepper
                   bind:value={() => abilityRecordedValue(slot, ability.id), (value) => setAbilityRecordedValue(slot, ability.id, value)}
                 />
                 <span class="num dim">/{ability.value_option.max}</span>
@@ -1099,9 +1101,9 @@
                   {#if option}
                     <div class="siena-row swap-in">
                       <span class="ro-name">{additionalKindLabel(additional.kind)}</span>
-                      <StatInput
+                      <NumberField
                         label="{additionalKindLabel(additional.kind)}の実測値"
-                        hideLabel min={option.min} max={option.max} gauge={false} stepper
+                        min={option.min} max={option.max}
                         bind:value={() => additional.value, (value) => setAdditionalValue(slot, ability.id, additionalIndex, value)}
                       />
                       <button type="button" class="clear" onclick={() => removeAdditional(slot, ability.id, additionalIndex)}>外す</button>

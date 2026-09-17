@@ -22,7 +22,7 @@
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import Chip from "../../../ui/Chip.svelte";
   import Drill from "../../../ui/Drill.svelte";
-  import StatInput from "../../../ui/StatInput.svelte";
+  import NumberField from "../../../ui/NumberField.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import type { SourceId } from "../sourceId";
   import { changed, reveal } from "../../../ui/motion.svelte";
@@ -248,14 +248,13 @@
             >{rankAllOpen ? "上位だけ" : "下位も"}</Chip>
           {/if}
         </span>
-        <StatInput
-          label=""
+        <NumberField
+          label="{def.name}の値"
           min={t ? t.min : 0}
           max={t ? t.max : limits.random_option_value_max}
           step={t && Number.isInteger(t.min) && Number.isInteger(t.max) ? 1 : 0.5}
           format={t ? () => `wiki ${t.min}–${t.max}` : undefined}
           bind:value={() => randomOptionValue(option, def), (v) => (option.value = v)}
-          stepper
         />
       </div>
       {#if def.note}<p class="hint dim ro-note">{def.note}</p>{/if}

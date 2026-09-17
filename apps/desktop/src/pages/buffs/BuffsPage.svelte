@@ -26,7 +26,7 @@
   import { changed } from "../../ui/motion.svelte";
   import Value from "../../ui/Value.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
-  import StatInput from "../../ui/StatInput.svelte";
+  import NumberField from "../../ui/NumberField.svelte";
   import Choose from "../../ui/Choose.svelte";
   import Spinner from "../../ui/Spinner.svelte";
   import Popover from "../../ui/Popover.svelte";
@@ -700,13 +700,16 @@
                           {@const scale = isPercentLayer(def.layer) ? 100 : 1}
                           <div class="per-stat">
                             {#each picked as stat (stat)}
-                              <StatInput
-                                label={STAT_LABELS[stat]}
-                                min={range.min * scale}
-                                max={range.max * scale}
-                                bind:value={() => (liveChoice(def, stat)?.value ?? def.default_value ?? range.min) * scale,
-                                  (value) => updateChoice(def, (c) => (c.value = value / scale), stat)}
-                              />
+                              <div class="stat-value-row">
+                                <span class="stat-value-label">{STAT_LABELS[stat]}</span>
+                                <NumberField
+                                  label="{STAT_LABELS[stat]}の値"
+                                  min={range.min * scale}
+                                  max={range.max * scale}
+                                  bind:value={() => (liveChoice(def, stat)?.value ?? def.default_value ?? range.min) * scale,
+                                    (value) => updateChoice(def, (c) => (c.value = value / scale), stat)}
+                                />
+                              </div>
                             {/each}
                           </div>
                         {/if}
@@ -721,7 +724,10 @@
                         {#if userInputRange(def.value)}
                           {@const range = userInputRange(def.value)!}
                           {@const scale = isPercentLayer(def.layer) ? 100 : 1}
-                          <StatInput label={isPercentLayer(def.layer) ? "値 (%)" : "値"} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
+                          <div class="stat-value-row">
+                            <span class="stat-value-label">{isPercentLayer(def.layer) ? "値 (%)" : "値"}</span>
+                            <NumberField label={isPercentLayer(def.layer) ? "値 (%)" : "値"} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
+                          </div>
                         {/if}
                       {/if}
                     </div>
@@ -901,6 +907,12 @@
      重なって読めなかった(実機報告)。行が増えて伸びた分は ui/popover.ts が置き直す
      (上に開く / 収まる高さでスクロール)ので、下の行は動かない */
   .per-stat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  /* 値の行は「名前 + 欄」。名前は行が持つ(部品は読み上げ名だけを持つ・§07) */
+  .stat-value-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .stat-value-label {
+    flex: none; min-width: 46px; margin-right: 5px; white-space: nowrap;
+    font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
+  }
   .summary { background: var(--bg-raised); }
   /* ON 件数 = この画面の主役の数字(§08 数値の 3 段) */
   .count { margin: 12px; padding: 13px; display: flex; align-items: baseline; font-size: var(--t-result); font-weight: 700; }

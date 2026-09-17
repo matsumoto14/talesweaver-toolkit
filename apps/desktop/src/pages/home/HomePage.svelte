@@ -49,7 +49,7 @@
   import ReadRow from "../../ui/ReadRow.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
-  import StatInput from "../../ui/StatInput.svelte";
+  import NumberField from "../../ui/NumberField.svelte";
 
   const character = $derived(selectedCharacter());
   const totalCount = $derived(totalContents());
@@ -1194,9 +1194,9 @@
                 {#each STAT_KINDS as k (k)}
                   <div class="expand-row" use:changed={() => String(sacredRelicValueOf(character, k))}>
                     <span class="expand-row-label">{STAT_LABELS[k]}</span>
-                    <StatInput
-                      label="{STAT_LABELS[k]}の聖物" hideLabel
-                      min={0} max={SACRED_RELIC_MAX_VALUE} step={limits.sacred_relic_value_per_stage} stepper
+                    <NumberField
+                      label="{STAT_LABELS[k]}の聖物"
+                      max={SACRED_RELIC_MAX_VALUE} step={limits.sacred_relic_value_per_stage}
                       bind:value={
                         () => sacredRelicValueOf(character, k),
                         (v) => commitSacredRelic(character, k, v)
@@ -1222,9 +1222,9 @@
                   {#each cuffsGrowthKeys as k (k)}
                     <div class="expand-row" use:changed={() => String(cuffsPart(character)?.base[k] ?? 0)}>
                       <span class="expand-row-label">{EQUIPMENT_STAT_LABELS[k]}</span>
-                      <StatInput
-                        label="{EQUIPMENT_STAT_LABELS[k]}の装備補正" hideLabel
-                        min={item!.values_min[k]} max={item!.growth_caps![k]} strictMax stepper
+                      <NumberField
+                        label="{EQUIPMENT_STAT_LABELS[k]}の装備補正"
+                        min={item!.values_min[k]} max={item!.growth_caps![k]}
                         bind:value={
                           () => cuffsPart(character)?.base[k] ?? 0,
                           (v) => commitCuffsBase(character, k, v)
@@ -1258,13 +1258,13 @@
                           {@const cap = enchantCap(row.part, k)}
                           {#if cap !== null && cap > 0}
                             {@const cur = partOf(row.slot)?.enchant[k] ?? 0}
-                            <!-- キャラタブの装備ペインと同じ StatInput(上限まで盛る値なので gauge)。
-                                 間違って盛ったときはセルを押して手入力で戻す -->
+                            <!-- キャラタブの装備ペインと同じ NumberField。上限を渡しているので
+                                 バー・＋ − ・MAX が付く(§07 形態 4)。間違って盛ったらセルを押して手入力 -->
                             <div class="enchant-stat">
                               <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
-                              <StatInput
-                                label="{EQUIPMENT_STAT_SHORT[k]}のエンチャント" hideLabel
-                                min={0} max={cap} strictMax increments={ENCHANT_INCREMENTS}
+                              <NumberField
+                                label="{EQUIPMENT_STAT_SHORT[k]}のエンチャント"
+                                max={cap} increments={ENCHANT_INCREMENTS}
                                 bind:value={
                                   () => cur,
                                   (v) => commitEnchant(character, row.slot, k, v)
@@ -1307,9 +1307,9 @@
                             {#each growthKeys as k (k)}
                               <div class="enchant-stat" use:changed={() => String(partOf(r.slot)?.base[k] ?? 0)}>
                                 <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
-                                <StatInput
-                                  label="{EQUIPMENT_STAT_SHORT[k]}の補正値" hideLabel
-                                  min={item!.values_min[k]} max={item!.growth_caps![k]} strictMax stepper
+                                <NumberField
+                                  label="{EQUIPMENT_STAT_SHORT[k]}の補正値"
+                                  min={item!.values_min[k]} max={item!.growth_caps![k]}
                                   bind:value={
                                     () => partOf(r.slot)?.base[k] ?? 0,
                                     (v) => commitRelicBase(character, r.slot, k, v)
@@ -1607,7 +1607,7 @@
   .expand-row-label { flex: none; width: 56px; font-size: 10px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .enchant-row { align-items: flex-start; }
   .enchant-row-cols { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-  /* エンチャント行: 短縮ステ名 + StatInput(レリックの補正値と同じ並び) */
+  /* エンチャント行: 短縮ステ名 + NumberField(レリックの補正値と同じ並び) */
   .enchant-stat { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .enchant-stat-label { flex: none; width: 26px; font-size: 9px; font-weight: 700; color: var(--fg-muted); white-space: nowrap; }
   .expand-row-vals { flex: none; max-width: 130px; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1684,7 +1684,7 @@
     font-size: 8.5px; font-weight: 700; color: var(--sim-fg);
   }
 
-  /* 難易度送り。app.css §07 の .stepper(StatInput 専用)と紛らわしいので別名にする */
+  /* 難易度送り。app.css §07 の .numfield(NumberField 専用)と紛らわしいので別名にする */
   .series-stepper {
     flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
     padding: 1px 4px; border-radius: var(--r-pill);

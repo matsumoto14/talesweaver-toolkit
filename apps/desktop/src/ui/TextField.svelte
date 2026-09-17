@@ -2,12 +2,14 @@
   // 文字欄(design-system §07「文字欄」)。アプリ全体の文字入力はこれ 1 つ。
   // 素の input[type=text] / textarea / placeholder は使わない。
   //
-  // 形は 3 つ。どれも高さ 28px / 角丸 r-panel で全ページ同一:
-  // - 呼び名(`auto` あり): 既定は読み取り面に自動値(キャラ名など)を埋め、押すと入力面。
-  //   §08 フィールドと同じ「表示が既定・編集は例外」。placeholder に頼らない
-  // - 検索(`search`): 左に ⌕、右に件数を常設(「範囲は入力欄が知っている」の文字版)
-  // - 自由記述(`multi`): 同じ枠を縦に伸ばすだけ。右下に文字数
-  // それ以外(ラベル欄)は入力面が既定で、右端に文字数を出す。
+  // **形は呼ぶ側が選ばない。渡したものが決める**。どれも高さ 28px / 角丸 r-panel で全ページ同一:
+  // - `auto`(自動値)を渡した … 呼び名。既定は読み取り面に自動値(キャラ名など)を埋め、
+  //   押すと入力面。§08 フィールドと同じ「表示が既定・編集は例外」。placeholder に頼らない
+  // - `count`(件数)を渡した … 検索。左に ⌕、右に件数を常設(「範囲は入力欄が知っている」の文字版)
+  // - `rows`(行数)を渡した … 自由記述。同じ枠を縦に伸ばすだけ。右下に文字数
+  // - どれも渡さない … ラベル欄。入力面が既定で、右端に文字数を出す
+  //
+  // 上限(`max`)は数値欄(NumberField)の /上限 と同じ位置 —— 値のすぐ隣に「n/上限」を常設する。
   import Value from "./Value.svelte";
   import { fmtInt } from "../format";
 
@@ -19,12 +21,9 @@
     auto?: string;
     /** 自動値を使っていることの注記(例: キャラ名を使用) */
     autoNote?: string;
-    /** 検索の形。⌕ と件数を常設する */
-    search?: boolean;
-    /** 検索の件数(search のとき必須) */
+    /** 候補の件数。**渡すと検索の形**(⌕ と件数を常設する) */
     count?: number;
-    /** 自由記述の形(textarea) */
-    multi?: boolean;
+    /** 行数。**渡すと自由記述の形**(textarea) */
     rows?: number;
     /** 文字数の上限。指定すると右端に「n/上限」を出す */
     max?: number;
@@ -35,9 +34,14 @@
     onEnter?: () => void;
   }
   let {
-    label, value = $bindable(), auto, autoNote = "自動値を使用", search = false, count, multi = false, rows = 5, max,
+    label, value = $bindable(), auto, autoNote = "自動値を使用", count, rows, max,
     disabled = false, onCommit, onEnter,
   }: Props = $props();
+
+  /** 自由記述か(行数を持っているか) */
+  const multi = $derived(rows !== undefined);
+  /** 検索か(件数を持っているか) */
+  const search = $derived(count !== undefined);
 
   /** 呼び名の形は読み取りが既定。押したときだけ入力面になる */
   let editing = $state(false);
@@ -93,8 +97,8 @@
     {:else}
       <input type="text" bind:value maxlength={max} {disabled} aria-label={label} onblur={blur} onkeydown={keydown} />
     {/if}
-    {#if search && count !== undefined}
-      <Value class="cnt" motion={() => count ?? 0} value={`${fmtInt(count)} 件`} />
+    {#if search}
+      <Value class="cnt" motion={() => count ?? 0} value={`${fmtInt(count ?? 0)} 件`} />
     {:else if max !== undefined}
       <Value class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />
     {/if}

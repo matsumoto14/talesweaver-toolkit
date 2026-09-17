@@ -49,7 +49,7 @@ RULES = {
     "R3": ("--r-* を使わない border-radius の直書き", "§04"),
     "R4": ("数値書体に tabular-nums が無い", "§05"),
     "R5": ("アイコンサイズが 20 / 28 / 40 / 64 以外", "§06"),
-    "R6": ("0.5s を超える transition / animation", "§10"),
+    "R6": ("0.5s を超える transition / animation(infinite は除く)", "§10"),
     "R7": ("状態 6 系統をまたいだ色の組み合わせ", "§03"),
     "R8": ("TS / Svelte に色の実値を直書き", "§15"),
     "R9": ("枠のある操作部品に border-radius が無い", "§04"),
@@ -70,12 +70,11 @@ FONT_SCALE = {44, 40, 27, 19, 17, 15, 14, 13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5,
 FORMAT_TS = SRC / "format.ts"
 RAW_FORMAT_CALL = re.compile(r"\.(toLocaleString|toFixed)\s*\(")
 
-# R12: 入力は ui/ の 5 形態(StatInput / TextField / Picker / StepSelect / ToggleRow)だけが生の要素を持つ(§07)。
-# file / checkbox / radio / range は 5 形態の外(ファイル選択・ON/OFF)なので見ない
+# R12: 生の入力要素を持つのは ui/ の部品だけ(§07)。checkbox / radio は Chip、file は FilePick が
+# 持つようになったので、段階 8 で**種類による除外をやめた** — 特例が無いほうが規則は短く、破りようが無い
 UI_DIR = SRC / "ui"
 RAW_INPUT = re.compile(r"<(input|select|textarea)\b([^>]*)>", re.S)
 INPUT_TYPE = re.compile(r'type\s*=\s*"([^"]*)"')
-RAW_INPUT_TYPES = {"text", "number", "search"}
 
 # R13: 符号と % は format.ts が付ける(§08)。手書きの符号(`+${…}` / 三項の "+")と Math.round(x * 100)}% は違反。
 # 強化段のラベル(装備 +7 / Lv)は段の名前であって符号ではないので除く
@@ -292,14 +291,11 @@ def check_raw_inputs(path: Path, text: str, out: list[Finding]) -> None:
         tag, attrs = m.group(1), m.group(2)
         if tag == "input":
             t = INPUT_TYPE.search(attrs)
-            kind = t.group(1) if t else "text"
-            if kind not in RAW_INPUT_TYPES:
-                continue
-            value = f"<input type={kind}>"
+            value = f"<input type={t.group(1) if t else 'text'}>"
         else:
             value = f"<{tag}>"
         out.append(Finding("R12", path, 1 + text.count("\n", 0, m.start()), value,
-                           "ui/ の StatInput / TextField / Picker / StepSelect / ToggleRow に寄せる"))
+                           "ui/ の NumberField / TextField / Choose / Chip / Picker / ToggleRow / FilePick に寄せる"))
 
 
 def check_raw_sign(path: Path, text: str, out: list[Finding]) -> None:
@@ -446,7 +442,16 @@ DURATION = re.compile(r"(?<![-\w.])(\d*\.?\d+)(ms|s)(?![-\w])")
 
 
 def check_duration(chunk: Chunk, out: list[Finding]) -> None:
+    """R6。§10 の 9 段(最長 0.5s)を超える時間。
+
+    **終わりのない回転(`infinite`)は 9 段の外**なので見ない。§10 に「終わりのない回転は
+    9 段の外」と既に書いてあるとおり、1 周の速さは「何秒で気づかせるか」ではなく
+    「回っていると読めるか」で決まる。段階 4 から 3 回続けて ui/Spinner.svelte の 0.7s だけが
+    候補に挙がっていたので、規則を足すのではなく**見なくてよいものを見ないようにした**(段階 8)。
+    """
     for m in re.finditer(r"\b(transition|animation)(?:-duration)?\s*:\s*([^;{}\n]+)", chunk.text):
+        if "infinite" in m.group(2):
+            continue
         for d in DURATION.finditer(m.group(2)):
             seconds = float(d.group(1)) / (1000 if d.group(2) == "ms" else 1)
             if seconds > MAX_DURATION_S:

@@ -19,7 +19,7 @@
   import { reportError } from "../../toast.svelte";
   import { latest } from "../../ui/latest.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
-  import StatInput from "../../ui/StatInput.svelte";
+  import NumberField from "../../ui/NumberField.svelte";
   import Picker from "../../ui/Picker.svelte";
   import Choose from "../../ui/Choose.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
@@ -294,15 +294,15 @@
         <div class="area-head"><span class="area-name">出たダメージ</span><span class="area-rule"></span></div>
         <div class="fields">
           <!-- 実測値は外部データで取れない値なので自由入力(§07 形態 5)。理由チップで例外だと示す。
-               0 = 未入力(点として溜められない)。上限は無い(max <= min で縛らない) -->
+               0 = 未入力(点として溜められない)。上限が無いので max は渡さない -->
           <div class="field">
             <span class="label">実測ダメージ(1 発)</span>
-            <StatInput label="実測ダメージ(1 発)" hideLabel min={0} max={0} gauge={false} reason="実測値 · 一時" digits={8} bind:value={measuredDamage} />
+            <NumberField label="実測ダメージ(1 発)" reason="実測値 · 一時" digits={8} bind:value={measuredDamage} />
           </div>
-          <!-- 何発は 1 押しに意味がある(1 発ずつ数えた値)のでステッパー(形態 4) -->
+          <!-- 何発も実測値。上限が無いので形態 5(§07) -->
           <div class="field">
             <span class="label">何発中の最大</span>
-            <StatInput label="何発中の最大" hideLabel min={1} max={999} gauge={false} stepper bind:value={measuredHits} />
+            <NumberField label="何発中の最大" min={1} reason="数えた回数" digits={3} bind:value={measuredHits} />
           </div>
           <ToggleRow
             name="クリティカルだった"

@@ -246,7 +246,7 @@
   <Disclosure class="fold">
     {#snippet summary()}その他の称号から選ぶ({filteredOtherTitles.length} 件){/snippet}
     <div class="fold-body">
-      <TextField label="称号名・グループで探す" search count={filteredOtherTitles.length} bind:value={titleQuery} />
+      <TextField label="称号名・グループで探す" count={filteredOtherTitles.length} bind:value={titleQuery} />
       {#if otherTitleGroups.length > 0}
         <div class="item-list title-list effectful">
           {@render titleRows(otherTitleGroups, null)}

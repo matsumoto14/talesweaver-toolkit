@@ -1,17 +1,24 @@
 <script lang="ts">
-  // 上限のある数値の唯一の入力部品(§07 形態 4)。
+  // 数値をひとつ入れる欄。§07 の 5 形態のうち **1(自動)・4(ステッパー)・5(自由入力)**
+  // をこれ 1 つで持つ。上の 2 形態(段階選択・チップ)は ui/Choose.svelte。
   //
-  //   [ラベル]  [ 値 /上限  ← セル底に進捗バー ]  [MAX]  [注記]
+  //   [ 値 /上限  ← セル底に進捗バー ]  ＋ −  MAX  [注記]
   //
-  // 見た目は app.css の `.stepper`(§07 実演をそのまま写した共通部品)。通常進捗は青、
-  // 上限到達は金で示し、編集可能なセル面は白のまま保つ。
-  // ここには**振る舞いだけ**を置く — 見た目を部品の中に持つと、規格を写し直すたびに
-  // ずれる。実際、最初の実装は面の色も動きも規格と違っていた。
+  // **形態は呼ぶ側が選ばない。渡したものが決める**:
   //
-  // ＋ / − は「1 押しに意味がある」欄だけに置く(stepper)。ステータスの刻みは 1 で
-  // 上限が 310〜3,000 あり、1 ずつ押す操作にならないため。どの欄もセルを押せば手入力に入る。
+  //   max を渡した       → 形態 4。上限を値の隣に常設し、バー・＋ − ・MAX が付く
+  //   max が無い         → 形態 5。青枠 + 破線チップで「例外として許した入力」だと見せる
+  //   autoNote を渡した  → 形態 1。出どころがある値なので、ふだんは読み取りの文字に見せる
   //
-  // 数値欄のテキスト確定ロジックは旧 NumberField.svelte を踏襲:
+  // §07 は形態 4 を「連続値だが上限があり、刻みが決まっているとき。＋ / − と MAX で動かす。
+  // 上限は値の隣に常設し、届いたらバー・枠・MAX が金になる」と **1 つの形**として書いている。
+  // バーだけ・＋ − だけを外す選択肢は規格に無いので、部品にも置かない(段階 8)。
+  // 上限が無い値は「上限を語る部分を消した形態 4」ではなく、形態 5(例外)である。
+  //
+  // 見た目は app.css の `.numfield`(§07 実演をそのまま写した共通部品)。
+  // ここには**振る舞いだけ**を置く — 見た目を部品の中に持つと、規格を写し直すたびにずれる。
+  //
+  // 数値欄のテキスト確定ロジック:
   // text($state) と value(bindable) を分離し、oninput で確定できる間だけ value を書き換え、
   // onblur で最終確定・範囲内にクランプする。外部から value が変わったときだけ $effect で
   // text を同期する(lastSyncedValue で比較。Number("") === 0 になる罠を避けるため
@@ -20,14 +27,15 @@
   import { fmtInt } from "../format";
 
   interface Props {
+    /** 何の欄か。読み上げ用(aria-label)。見えるラベルは呼ぶ側の行が持つ */
     label: string;
-    /** 列の左側ですでに同じ名前を表示しているとき、見えるラベルだけ省く。aria-label は維持する。 */
-    hideLabel?: boolean;
     value: number;
-    min: number;
-    max: number;
-    /** max=0 も実上限として扱い、max が外部変更されたら現在値を直ちにクランプする。 */
-    strictMax?: boolean;
+    min?: number;
+    /**
+     * この値の上限。**渡すと形態 4**(バー・/上限・＋ − ・MAX)になり、外から上限が変わったら
+     * 現在値を直ちにクランプする。上限が無い値・上限が未収録の値には渡さない(形態 5 になる)。
+     */
+    max?: number;
     step?: number;
     format?: (value: number) => string;
     /**
@@ -39,48 +47,47 @@
     /** 現在値へ加算する定型値。エンチャントカード(+12/+14/+17/+20)のような反復入力に使う。 */
     increments?: number[];
     /**
-     * 上限に対する進捗を見せるか(§07 形態 4)。**上限まで盛るもの**だけ true —
-     * エンチャント・ランダムOP・能力値のように「どこまで届いたか」に意味がある値。
-     *
-     * false は §12 の形態 1(自動)。装備の基本値のように、上限が入力ミスを防ぐための
-     * 一律値でしかないものは、進捗を出すと「1,000 まで盛れる」と読めてしまう。
+     * この値の出どころ(「カタログの値」など)。**渡すと形態 1** —
+     * 出どころがある値は入力欄に見せず、読み取りの文字にする。押すと同じ寸法の入力面になり、
+     * 自動値を上書きできる(§07 形態 1「MR による個体差があるので上書きはできる」)。
      */
-    gauge?: boolean;
+    autoNote?: string;
     /**
-     * ＋ / − を置くか(§07 形態 4「刻みが決まっているとき。＋ / − と MAX で動かす」)。
-     * **1 押しに意味がある**もの、つまり段階を数で持っている値だけ true —
-     * 神鳥の聖物(1 段階 = +10)やルーンスキル Lv。能力値の 1 は誤差なので置かない。
-     */
-    stepper?: boolean;
-    /** 自動値を通常はプレーンな読み取りテキストで見せ、触れたときだけ入力面にする。 */
-    readAsText?: boolean;
-    /**
-     * 自由入力(§07 形態 5)。上限を持たない値は「ここまで降りたら理由を書く」ので、
-     * 理由を渡すと青枠 + 破線チップの見た目になり、上限を語る部分(バー・/上限・MAX)は出ない。
-     * シミュレーション用の一時値と、外部データで取れない値(実測)だけに使う。
+     * 形態 5 の理由(§07「ここまで降りたら理由を書く」)。上限が無い欄には必ず理由が出る —
+     * 渡さなかったときは既定の文言になるので、**理由の無い自由入力は作れない**。
      */
     reason?: string;
     /**
      * 入る値の最大桁数。上限のある欄は上限の桁でセル幅が決まるが、上限を持たない
-     * 自由入力(形態 5)は桁の情報が無いので、ここで与える。省略すると 74px の既定幅で、
+     * 形態 5 は桁の情報が無いので、ここで与える。省略すると 74px の既定幅で、
      * 7 桁以上が右端で切れる(実測ダメージで起きた。§09 規則 4「あとから幅が変わらない」)。
      */
     digits?: number;
   }
   let {
-    label, hideLabel = false, value = $bindable(), min, max, strictMax = false, step = 1, format, presets = [], increments = [], gauge = true, stepper = false, readAsText = false, reason, digits,
+    label, value = $bindable(), min = 0, max, step = 1, format, presets = [], increments = [], autoNote, reason, digits,
   }: Props = $props();
 
+  /** 形態 4 か。上限が動かせる幅を持っているときだけ「上限のある値」と言える */
+  const capped = $derived(max !== undefined && max > min);
+  /** 形態 1 か。出どころのある値はふだん読み取りの文字 */
+  const isAuto = $derived(autoNote !== undefined);
+  /**
+   * 形態 5 の理由。出どころがある値(形態 1)には出さない — その値にとっては
+   * 出どころそのものが理由なので、青枠と破線チップを重ねると例外が二重になる。
+   */
+  const why = $derived(capped || isAuto ? null : (reason ?? "上限なし · 手入力"));
   /** 桁区切りのカンマを含めた文字数(セル幅の根拠) */
   const chars = $derived(digits === undefined ? null : digits + Math.floor((digits - 1) / 3));
   /** 形態 5 の 0 は「まだ入れていない」なので、0 と読ませず空表示にする(押せば 0 が選択された編集に入る) */
-  const blank = $derived(reason !== undefined && value === 0);
+  const blank = $derived(why !== null && value === 0);
 
   let text = $state(String(value));
   let lastSyncedValue = value;
 
   $effect(() => {
-    if (strictMax && value > max) value = Math.max(min, max);
+    // 上限が外から変わったら現在値を直ちに寄せる(装備を替えて上限が下がった、など)
+    if (capped && value > max!) value = Math.max(min, max!);
     if (value !== lastSyncedValue) {
       lastSyncedValue = value;
       text = String(value);
@@ -89,9 +96,7 @@
 
   function clamp(n: number): number {
     if (n < min) return min;
-    if (strictMax && n > max) return max;
-    // 上限の情報が無いとき(max <= min)は上限で縛らない。縛ると手入力が min に落ちるだけになる
-    if (max > min && n > max) return max;
+    if (capped && n > max!) return max!;
     return n;
   }
 
@@ -123,24 +128,8 @@
     text = String(v);
   }
 
-  /** ＋ / − で 1 刻み動かす。編集中でも読取のままでも同じように効く */
-  function nudge(dir: 1 | -1) {
-    const next = clamp(value + dir * step);
-    if (next === value) return;
-    value = next;
-    lastSyncedValue = next;
-    text = String(next);
-  }
-
-  function setMax() {
-    if (value === max) return;
-    value = max;
-    lastSyncedValue = max;
-    text = String(max);
-  }
-
-  function addAmount(amount: number) {
-    const next = clamp(value + amount);
+  /** ＋ / − ・MAX ・よく使う値。編集中でも読取のままでも同じように効く */
+  function commit(next: number) {
     if (next === value) return;
     value = next;
     lastSyncedValue = next;
@@ -148,23 +137,17 @@
   }
 
   const hint = $derived(format ? format(value) : null);
-  const full = $derived(value >= max);
-  /**
-   * 上限を語る部分(進捗バー・/上限・MAX)を出すか。
-   * `max <= min` は動かせる幅が無い = 上限の情報が無いということなので、上限を語らない。
-   * ただし**手入力は残す** — gamedata が未収録・誤っているときの逃げ道が無くなる。
-   */
-  const showCap = $derived(gauge && !reason && max > min);
+  const full = $derived(capped && value >= max!);
   /**
    * 上限に対する進捗。負の範囲(調整の加算 -3,000〜3,000)は「上限に対してどこまで」が
    * 成り立たないのでバーを出さない
    */
   const pct = $derived(
-    min < 0 || max <= min
+    !capped || min < 0
       ? null
       : value <= min
         ? 0
-        : Math.min(100, Math.max(3, ((value - min) / (max - min)) * 100)),
+        : Math.min(100, Math.max(3, ((value - min) / (max! - min)) * 100)),
   );
 
   /** 編集中か。既定は読み取り表示(§08 フィールド) */
@@ -175,10 +158,10 @@
      ふだんは読み取り表示。入力欄は**自動値を上書きする例外操作**なので、押して初めて出す。
      編集に入っても「適用」は挟まない — 触った瞬間に結果が動く(§07)。 -->
 <div
-  class="stepper"
+  class="numfield"
   class:full
-  class:read-as-text={readAsText}
-  class:free={reason !== undefined}
+  class:auto={isAuto}
+  class:free={why !== null}
   onfocusout={(e) => {
     // 編集の中で入力欄 → MAX と移る間は閉じない。relatedTarget は再描画のタイミングで
     // null になることがあるので、次のフレームで「いまフォーカスがこの部品の外にあるか」を見る
@@ -189,15 +172,14 @@
     }, 0);
   }}
 >
-  {#if label && !hideLabel}<span class="label">{label}</span>{/if}
-  {#if stepper}
-    <button type="button" class="step" onclick={() => nudge(-1)} disabled={value <= min} aria-label="{label} を 1 減らす">−</button>
+  {#if capped}
+    <button type="button" class="step" onclick={() => commit(clamp(value - step))} disabled={value <= min} aria-label="{label} を減らす">−</button>
   {/if}
   <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
        上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
        読取(button)と編集(input)でセルの寸法は同じ。押しても値が動かない(§09 規則 1) -->
-  <div class="cell" class:editing class:bare={!showCap} class:sized={chars !== null} style:--chars={chars}>
-    {#if showCap && pct !== null}<span class="fill" style:width="{pct}%"></span>{/if}
+  <div class="cell" class:editing class:bare={!capped} class:sized={chars !== null} style:--chars={chars}>
+    {#if pct !== null}<span class="fill" style:width="{pct}%"></span>{/if}
     {#if editing}
       <input
         class="num val"
@@ -207,7 +189,7 @@
         onblur={handleBlur}
         onkeydown={(e) => { if (e.key === "Escape" || e.key === "Enter") editing = false; }}
         {min}
-        max={max > min ? max : undefined}
+        max={capped ? max : undefined}
         {step}
         aria-label={label}
         {@attach (node) => {
@@ -223,16 +205,17 @@
         class="num val read"
         class:blank
         aria-label="{label} を編集"
+        title={autoNote}
         use:bump={() => value}
         onclick={() => (editing = true)}
       >{blank ? "—" : fmtInt(value)}</button>
     {/if}
-    {#if showCap}<span class="cap num">/{fmtInt(max)}</span>{/if}
+    {#if capped}<span class="cap num">/{fmtInt(max!)}</span>{/if}
   </div>
   <!-- 形態 5 の理由チップ(§07「ここまで降りたら理由を書く」)。値の隣に常設し、出たり消えたりしない -->
-  {#if reason !== undefined}<span class="why">{reason}</span>{/if}
-  {#if stepper}
-    <button type="button" class="step" onclick={() => nudge(1)} disabled={value >= max} aria-label="{label} を 1 増やす">＋</button>
+  {#if why !== null}<span class="why">{why}</span>{/if}
+  {#if capped}
+    <button type="button" class="step" onclick={() => commit(clamp(value + step))} disabled={value >= max!} aria-label="{label} を増やす">＋</button>
   {/if}
   <!-- よく使う値。MAX と同じく常設する -->
   {#each presets as p (p.value)}
@@ -240,21 +223,21 @@
       type="button"
       class="preset"
       class:on={value === p.value}
-      onclick={() => { value = Math.min(max, Math.max(min, p.value)); text = String(value); }}
+      onclick={() => commit(clamp(p.value))}
     >{p.label}</button>
   {/each}
   {#each increments as amount (amount)}
     <button
       type="button"
       class="increment num"
-      onclick={() => addAmount(amount)}
+      onclick={() => commit(clamp(value + amount))}
       disabled={full}
       aria-label="{label}に{amount}加算"
     >+{amount}</button>
   {/each}
   <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->
-  {#if showCap}
-    <button type="button" class="max" onclick={setMax} disabled={full}>MAX</button>
+  {#if capped}
+    <button type="button" class="max" onclick={() => commit(max!)} disabled={full}>MAX</button>
   {/if}
   <!-- format を渡された欄は**値が 0 でも場所を確保する**。出たり消えたりすると、
        その行だけ入力欄の幅が変わる(§09 規則 4「あとから幅が変わらない」) -->

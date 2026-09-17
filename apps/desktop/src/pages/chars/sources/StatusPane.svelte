@@ -17,12 +17,13 @@
   import { reportError } from "../../../toast.svelte";
   import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
+  import FilePick from "../../../ui/FilePick.svelte";
   import Icon from "../../../ui/Icon.svelte";
   import { latest } from "../../../ui/latest.svelte";
   import { changed } from "../../../ui/motion.svelte";
   import Value from "../../../ui/Value.svelte";
   import Picker from "../../../ui/Picker.svelte";
-  import StatInput from "../../../ui/StatInput.svelte";
+  import NumberField from "../../../ui/NumberField.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import TextField from "../../../ui/TextField.svelte";
 
@@ -45,18 +46,13 @@
   let charPickOpen = $state(false);
   let iconSaving = $state(false);
   /** 画像を選ぶ素の入力。見た目は Chip なので、ここは押されたとき開くだけ */
-  let iconInput = $state<HTMLInputElement | null>(null);
   /** アイコンが変わったことを弾ませて見せるための印。値は見ず参照の不一致だけ使うので、
    *  変更のたびに新しいオブジェクトを積む(`use:changed` 参照) */
   let iconChangeMark = $state<object | null>(null);
   function markIconChanged() {
     iconChangeMark = {};
   }
-  async function chooseIcon(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
+  async function chooseIcon(file: File) {
     iconSaving = true;
     try {
       const saved = await setCharacterIcon(characterId, new Uint8Array(await file.arrayBuffer()));
@@ -213,18 +209,9 @@
           <Icon kind="character" id={draft.gameCharacterId} size={40} label={gameCharacterName} source={app.characterIcons[characterId] ?? null} />
         </span>
         <span class="char-name">{gameCharacterName}</span>
-        <!-- ファイルを選ぶ口。的は Chip 1 つで、素の file 入力は隠して押したときに開く -->
-        <Chip class="quiet" disabled={iconSaving} onclick={() => iconInput?.click()}>
+        <FilePick class="quiet" accept="image/png,image/jpeg,image/webp" disabled={iconSaving} onPick={chooseIcon}>
           {iconSaving ? "画像を処理中…" : app.characterIcons[characterId] ? "画像を変更" : "画像を選ぶ"}
-        </Chip>
-        <input
-          bind:this={iconInput}
-          class="icon-pick-input"
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          disabled={iconSaving}
-          onchange={chooseIcon}
-        />
+        </FilePick>
         {#if app.characterIcons[characterId]}
           <Chip class="quiet" disabled={iconSaving} onclick={resetIcon}>標準に戻す</Chip>
         {/if}
@@ -252,9 +239,8 @@
     <div class="wide">
       <span class="label">エタの意志 Lv</span>
       <div class="eternal-row">
-        <StatInput
-          label=""
-          min={0}
+        <NumberField
+          label="エタの意志 Lv"
           max={limits.eternal_level_max}
           bind:value={
             () => Number(draft.eternalLevel),
@@ -354,9 +340,6 @@
 
 <style>
 
-  /* 素の file 入力は見た目だけ消す。`display: none` にするとブラウザによっては
-     `.click()` が効かないので、1px にして clip-path で隠す */
-  .icon-pick-input { position: absolute; opacity: 0; pointer-events: none; }
   /* アイコン変更は §10 型 5「状態が変わった」そのものなので、独自の keyframes は持たず
      app.css 共通の .badge-in(弾む)に乗る。動きを消す設定のときだけ、弾みの代わりに
      枠線で「変わった」を残す(色・弾みが両方消えると何も伝わらなくなる) */
@@ -380,7 +363,7 @@
           <tr>
             <td>{STAT_LABELS[k]}</td>
             <td class="n stat-cell">
-              <StatInput label="" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
+              <NumberField label="{STAT_LABELS[k]}の素ステ" min={STAT_MIN} max={limits.base_stat_max} bind:value={draft.baseStats[k]} />
             </td>
             <td class="n muted ro" title={groupTitle(k)}><Value motion={() => diff} value={diff === null ? "—" : signed(diff)} /></td>
             <!-- 素ステ → 最終を 1 本のバーで(§11)。数字の羅列ではなく「どれだけ伸びたか」を見せる。

@@ -17,7 +17,7 @@
   import Modal from "../../../ui/Modal.svelte";
   import Drill from "../../../ui/Drill.svelte";
   import Value from "../../../ui/Value.svelte";
-  import StatInput from "../../../ui/StatInput.svelte";
+  import NumberField from "../../../ui/NumberField.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import TextField from "../../../ui/TextField.svelte";
 
@@ -251,13 +251,12 @@
                  効き先の但し書きは title に入れ、行は増やさない -->
             <div class="siena-row swap-in" class:record-only={!def.is_modeled}>
               <span class="ro-name" title="{def.label}{def.note ? ` — ${def.note}` : ''}">{def.label}</span>
-              <StatInput
-                label=""
+              <NumberField
+                label="{def.label}の値"
                 min={def.min}
                 max={def.max}
                 format={def.min > 1 ? () => `wiki ${def.min}–${def.max}${def.unit}` : undefined}
                 bind:value={() => s.value, (v) => (s.value = v)}
-                stepper
               />
               <button type="button" class="clear" onclick={() => removeSienaSlot(slot, index)}>外す</button>
             </div>
@@ -299,15 +298,14 @@
                   <span class="siena-to">{def.note}</span>
                 </span>
                 {#if sienaChoicesAreRun(def.choices)}
-                  <StatInput
-                    label=""
+                  <NumberField
+                    label="{def.label}の値"
                     min={def.choices[0]}
                     max={def.choices[def.choices.length - 1]}
                     format={def.choices[0] > 1
                       ? () => `wiki ${def.choices[0]}–${def.choices[def.choices.length - 1]}${def.unit}`
                       : undefined}
                     bind:value={() => e.value, (v) => (e.value = v)}
-                    stepper
                   />
                 {:else}
                   <!-- 飛び飛びの値(中ディレイ 0.5 / 1 / 2%)はステッパーだと無い値を作れてしまう -->

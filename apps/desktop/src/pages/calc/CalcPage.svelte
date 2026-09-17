@@ -53,7 +53,7 @@
   import { ChangeMemo, PresenceMemo, swapNote, type Presence } from "../../ui/presence";
   import { critChanceStage } from "../../ui/critChance";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
-  import StatInput from "../../ui/StatInput.svelte";
+  import NumberField from "../../ui/NumberField.svelte";
   import TracePanel from "./TracePanel.svelte";
 
   const DEFAULT_RIGHT_WIDTH = 380;
@@ -1861,26 +1861,32 @@
                         {@const scale = isPercentLayer(def.layer) ? 100 : 1}
                         {#if isMultiTarget(def.target)}
                           {#each pickedStats(app.calcBuffs.choices, def) as stat (stat)}
-                            <StatInput
-                              label={STAT_LABELS[stat]}
+                            <div class="stat-value-row">
+                              <span class="stat-value-label">{STAT_LABELS[stat]}</span>
+                              <NumberField
+                                label="{STAT_LABELS[stat]}の値"
+                                min={range.min * scale}
+                                max={range.max * scale}
+                                bind:value={
+                                  () => (buffChoiceOfStat(def.id, stat)?.value ?? def.default_value ?? range.min) * scale,
+                                  (v) => editBuffChoice(def.id, (c) => (c.value = v / scale), stat)
+                                }
+                              />
+                            </div>
+                          {/each}
+                        {:else}
+                          <div class="stat-value-row">
+                            <span class="stat-value-label">{isPercentLayer(def.layer) ? "値 (%)" : "値"}</span>
+                            <NumberField
+                              label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
                               min={range.min * scale}
                               max={range.max * scale}
                               bind:value={
-                                () => (buffChoiceOfStat(def.id, stat)?.value ?? def.default_value ?? range.min) * scale,
-                                (v) => editBuffChoice(def.id, (c) => (c.value = v / scale), stat)
+                                () => (choice.value ?? 0) * scale,
+                                (v) => editBuffChoice(def.id, (c) => (c.value = v / scale))
                               }
                             />
-                          {/each}
-                        {:else}
-                          <StatInput
-                            label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
-                            min={range.min * scale}
-                            max={range.max * scale}
-                            bind:value={
-                              () => (choice.value ?? 0) * scale,
-                              (v) => editBuffChoice(def.id, (c) => (c.value = v / scale))
-                            }
-                          />
+                          </div>
                         {/if}
                       {/if}
                             <button type="button" class="popover-close" onclick={close}>閉じる</button>
@@ -2610,10 +2616,8 @@
           <div class="basics-rows">
             <div class="basics-row">
               <span class="basics-label">エタ Lv</span>
-              <StatInput
+              <NumberField
                 label="エタの意志 Lv"
-                hideLabel
-                min={0}
                 max={limits.eternal_level_max}
                 bind:value={
                   () => payload.awakening.eternal_level,
@@ -2727,12 +2731,9 @@
             {#each SOUL_LINK_ROWS as row (row.field)}
               <div class="basics-row">
                 <span class="basics-label">{row.label}</span>
-                <StatInput
+                <NumberField
                   label="{row.label}リンクステータス Lv"
-                  hideLabel
-                  min={0}
                   max={row.max}
-                  stepper
                   bind:value={
                     () => payload.stat_sources.soul_link[row.field],
                     (v) => editSim((p) => (p.stat_sources.soul_link[row.field] = v))
@@ -2821,11 +2822,9 @@
                       {@const gain = enchantGains[`${row.slot}:${k}`]}
                       <div class="enchant-stat">
                         <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
-                        <StatInput
-                          label=""
-                          min={0}
+                        <NumberField
+                          label="{EQUIPMENT_STAT_SHORT[k]}のエンチャント"
                           max={cap}
-                          strictMax
                           bind:value={
                             () => row.part.enchant[k],
                             (v) => editSim((p) => setEnchantValue(p.equipment, row.slot, k, v))
@@ -3468,6 +3467,12 @@
   /* 値の調整。チップに重ねて出すので、ON にした数だけペインが伸びることがない。
      置き場所は app.css の .popover(「設定」の右端に揃えて下に開く) */
   :global(.buff-editor) { min-width: 210px; gap: 7px; }
+  /* 値の行は「名前 + 欄」。名前は行が持つ(部品は読み上げ名だけを持つ・§07) */
+  .stat-value-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .stat-value-label {
+    flex: none; min-width: 46px; margin-right: 5px; white-space: nowrap;
+    font-size: 10.5px; font-weight: 700; color: var(--fg-muted);
+  }
   /* 行の押せる面(.face)とは別の的。extra に置くので行そのものは押しても動かない */
   :global(.chip-config) {
     flex: none; margin: 0 2px 0 0; padding: 0 0 0 6px;

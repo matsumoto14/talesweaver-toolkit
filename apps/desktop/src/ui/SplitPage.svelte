@@ -2,7 +2,7 @@
   // 中央 + 右カラムの 2 カラム構成(v4 の「行ける?」/「どこまで通るか」の共通シェル)。
   // HomePage / CalcPage で .layout grid + Splitter + .head-bar + .scroll が重複していたのを部品化。
   // Workspace は左レール込みの 3 カラムで構造が違うため、無理にここへは寄せない。
-  import type { Snippet } from "svelte";
+  import { untrack, type Snippet } from "svelte";
   import { persisted } from "./persistedState.svelte";
   import Splitter from "./Splitter.svelte";
 
@@ -31,7 +31,9 @@
     mid, right,
   }: Props = $props();
 
-  const layoutWidths = persisted(persistKey, { right: defaultRight });
+  // persistKey / defaultRight は面ごとに固定(呼ぶ側が同じ面を別の持ち場に使い回さない)。
+  // props を直に読むと「初回の値しか見ていない」と警告が出るので、初回だけ使うことを untrack で明示する
+  const layoutWidths = untrack(() => persisted(persistKey, { right: defaultRight }));
   const gridTemplateColumns = $derived(
     `minmax(${minMid}px, 1fr) 6px minmax(${minRight}px, ${layoutWidths.value.right ?? defaultRight}px)`,
   );
