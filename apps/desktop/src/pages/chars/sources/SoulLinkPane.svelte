@@ -3,7 +3,7 @@
   import { fmtRate, fmtSigned, fmtSignedPct } from "../../../format";
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
 
   interface Props {
@@ -84,7 +84,7 @@
           stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
-        <Num class="v" motion={() => row.motion() ?? null} value={row.value()} />
+        <Value class="v" motion={() => row.motion() ?? null} value={row.value()} />
       </div>
     {/each}
   </div>
@@ -107,7 +107,7 @@
           stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
-        <Num class="v" motion={() => row.motion() ?? null} value={row.value()} />
+        <Value class="v" motion={() => row.motion() ?? null} value={row.value()} />
       </div>
     {/each}
   </div>
@@ -130,7 +130,7 @@
           stepper
           bind:value={draft.statSources.soul_link[row.field]}
         />
-        <Num class="v" motion={() => row.motion() ?? null} value={row.value()} />
+        <Value class="v" motion={() => row.motion() ?? null} value={row.value()} />
       </div>
     {/each}
   </div>

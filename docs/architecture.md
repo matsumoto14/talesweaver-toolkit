@@ -133,7 +133,7 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 - **数値入力**は `ui/StatInput.svelte` の 1 種類のみ(従来どおり)。範囲上限は `limits.svelte.ts` から取る
 - **並んだ中から選ぶ**(段・チップ・タブ)は `ui/Choose.svelte` 1 つ。段を描くのは `ui/Chip.svelte`。`value` を渡せば radio 群、`values` なら checkbox 群になり、矢印キー・Tab ストップ・読み上げは素の radio / checkbox が持つ。順序の無いものから 1 つ選ぶ `ui/Picker.svelte` は customizable `<select>`(`appearance: base-select`)。画面側に `<button class="chip">` や `role="tab"` を書かない。作法の背景は docs/adr/015
 - **面を出す**: 暗幕の上に出す面は `ui/Modal.svelte` 1 つ(見出し「名前 + 閉じる」も部品が持つ。呼ぶ側は幅だけを `class` で渡す)。トリガの直下に重ねるものは `ui/Popover.svelte`、押すと開く面は `ui/Disclosure.svelte`(`<details>`)、一覧から掘る行は `ui/Drill.svelte`(`›` の印・押した行が残ること・面の入場を持つ。面を渡さなければ行だけ = 面は `Modal` に出ている)。作法の背景は docs/adr/015
-- **値の表示**は `ui/Num.svelte`(行に載るなら `ui/ReadRow.svelte`。中で `Num` を使う)。数値書体・未収録の `?`・変化の跳ね・差分枠を部品が持つので、画面側は `use:bump` / `use:delta` を呼ばない。作法の背景は docs/adr/015
+- **値の表示**は `ui/Value.svelte`(行に載るなら `ui/ReadRow.svelte`。中で `Value` を使う)。数値書体・未収録の `?`・変化の跳ね・差分枠を部品が持つので、画面側は `use:bump` / `use:delta` を呼ばない。作法の背景は docs/adr/015
 - **`pages/home/`**: `HomePage.svelte` — ブリーフィング型 1 カラム。今日の期限・影響、今日の強化(5 項目タイル。候補を `preview_damage` で再計算し、直更新で保存)、到達一覧(エリア → コンテンツ、目安バー・バッジ・入場条件ノート。畳み)
 - **`pages/calc/`**: `CalcPage.svelte` — 対象プレート(◀▶ + エリア別一覧)、スキル選択、1発(最大)+ 合計/クリティカル、もし〜だったら、なぜこの数字?(攻撃力の内訳 / 防御を抜く / 倍率で伸ばす。トレースの式から組み立て)/ `TracePanel.svelte` — 詳細トレース。右カラム「計算の材料」= 試し変更(sim)・装備・バフ・調整・コンボ・入場条件
 - **`pages/buffs/`**: セット一覧 → 静的カタログからの選択 → 効果・排他枠要約。独自バフ定義は作らない

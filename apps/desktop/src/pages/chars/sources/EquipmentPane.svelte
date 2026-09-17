@@ -35,7 +35,7 @@
   import Modal from "../../../ui/Modal.svelte";
   import Drill from "../../../ui/Drill.svelte";
   import Icon from "../../../ui/Icon.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import { dropHalfIndex, moveItem } from "../../../ui/reorder.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import Choose from "../../../ui/Choose.svelte";
@@ -677,7 +677,7 @@
     <span class="part-main">
       <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
       <span class="part-item">{partDisplayName(slot)}</span>
-      <Num class="part-abi" motion={() => list.registered.length} value={`登録 ${list.registered.length}`} />
+      <Value class="part-abi" motion={() => list.registered.length} value={`登録 ${list.registered.length}`} />
       <!-- 強化バッジの枠は常に確保する。出ても行の中身がずれない(§12) -->
       {#if canEnhance}
         <span class="part-plus" class:on={(part?.enhance_level ?? 0) > 0}
@@ -688,7 +688,7 @@
       {/if}
       <!-- 装着時効果は装備補正値の列に出ないので、行にバッジで残す(§00 ②/⑤) -->
       {#if damageLabel !== null}
-        <Num class="part-dmg" value={damageLabel} />
+        <Value class="part-dmg" value={damageLabel} />
       {/if}
       {#if (part?.random_options.length ?? 0) > 0}
         <span class="part-abi">OP {part!.random_options.length}</span>
@@ -741,12 +741,12 @@
     <div class="card equipment-choice-card">
       <div class="selected-equipment">
         <Icon kind="equipment" id={iconId(part.item_id)} size={28} label={partDisplayName(slot)} />
-        <!-- 値ではなく「選択中の装備」という面。装備名を数値書体にしないので <Num> に入れない -->
+        <!-- 値ではなく「選択中の装備」という面。装備名を数値書体にしないので <Value> に入れない -->
         <span class="selected-equipment-copy" use:changed={() => partDisplayName(slot)}>
           <small class="dim">選択中の装備</small>
           <b>{partDisplayName(slot)}</b>
         </span>
-        {#if contribution !== null}<Num class="contrib-inline" value={String(contribution)}>{#snippet children()}寄与 {fmtInt(contribution)}{/snippet}</Num>{/if}
+        {#if contribution !== null}<Value class="contrib-inline" value={String(contribution)}>{#snippet children()}寄与 {fmtInt(contribution)}{/snippet}</Value>{/if}
         <button type="button" class="btn" onclick={() => (itemPickerOpen = !itemPickerOpen)}>
           {itemPickerOpen ? "候補を閉じる" : "装備を変更"}
         </button>
@@ -912,8 +912,8 @@
             <b>{EQUIPMENT_STAT_SHORT[k]}</b>
             <div class="value-equation">
               <strong class="value-total num">
-                <Num class="total-main" motion={() => displayTotal} value={String(displayTotal)} />
-                <Num class="enchant-part" motion={() => part.enchant[k]} value={`（＋${part.enchant[k]}）`} />
+                <Value class="total-main" motion={() => displayTotal} value={String(displayTotal)} />
+                <Value class="enchant-part" motion={() => part.enchant[k]} value={`（＋${part.enchant[k]}）`} />
               </strong>
               {#if abilityValue !== 0}
                 <span class="ability-part meta-pill">アビ{abilityValue}</span>
@@ -953,7 +953,7 @@
       <div class="card ability-card">
         <div class="card-title inline">
           <span>アビリティ</span><span class="badge">{part.abilities.length} / {currentAbilitySlotCount(slot)}</span>
-          <strong class="ability-impact num"><Num value={abilityImpactSummary(slot)} /></strong>
+          <strong class="ability-impact num"><Value value={abilityImpactSummary(slot)} /></strong>
         </div>
         {#if slot === "weapon"}
         <p class="hint dim">ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。</p>
@@ -1195,17 +1195,17 @@
           <div class="enhance-readout inset num">
             <span class="enhance-term">
               <span class="dim">{slot === "weapon" ? "追加ダメージ" : "追加HP"}</span>
-              <b><Num motion={() => enhance.added} value={fmtInt(enhance.added)} /></b>
+              <b><Value motion={() => enhance.added} value={fmtInt(enhance.added)} /></b>
             </span>
             <span class="enhance-op" aria-hidden="true">×</span>
             <span class="enhance-term">
               <span class="dim">ソウルリンク</span>
-              <b><Num motion={() => enhance.soul_link_multiplier} value={fmtRate(enhance.soul_link_multiplier)} /></b>
+              <b><Value motion={() => enhance.soul_link_multiplier} value={fmtRate(enhance.soul_link_multiplier)} /></b>
             </span>
             <span class="enhance-op" aria-hidden="true">=</span>
             <span class="enhance-term">
               <span class="dim">合計</span>
-              <strong><Num motion={() => enhance.total} value={fmtInt(enhance.total)} /></strong>
+              <strong><Value motion={() => enhance.total} value={fmtInt(enhance.total)} /></strong>
             </span>
           </div>
         {/if}

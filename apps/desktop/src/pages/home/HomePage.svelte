@@ -45,7 +45,7 @@
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { changed } from "../../ui/motion.svelte";
-  import Num from "../../ui/Num.svelte";
+  import Value from "../../ui/Value.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
@@ -986,8 +986,8 @@
                 {skillNames[heroSpot.skillId] ?? heroSpot.skillId}
                 <!-- 「この数字はクリ側か」の但し書きだけ小さく添える。バッジで主役の隣に置かない(ユーザー 2026-09-16) -->
                 {#if heroDamage}
-                  <Num class="hero-goal-crit dim" value={heroDamage?.critRate === null ? "確定" : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}
-                    >{#snippet children()}{heroDamage?.critRate === null ? "クリ確定扱い" : `クリ ${fmtNum(heroDamage?.critRate ?? 0, 1, "%")}`}{/snippet}</Num
+                  <Value class="hero-goal-crit dim" value={heroDamage?.critRate === null ? "確定" : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}
+                    >{#snippet children()}{heroDamage?.critRate === null ? "クリ確定扱い" : `クリ ${fmtNum(heroDamage?.critRate ?? 0, 1, "%")}`}{/snippet}</Value
                   >
                 {/if}
               </span>
@@ -995,10 +995,10 @@
                 <span class="fill" style="width: {heroSpotPct}; background: {STATE[BADGE[heroSpotState].state].bar};"></span>
               </span>
               <span class="hero-spot-wrap">
-                <Num class="hero-spot" motion={() => heroSpot?.perHit ?? null} value={fmtInt(heroSpot.perHit)} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)" />
+                <Value class="hero-spot" motion={() => heroSpot?.perHit ?? null} value={fmtInt(heroSpot.perHit)} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)" />
                 <!-- 討伐時間が主役ではなく傍証。出せないときは 0 や「—」で埋めず、そのまま省く(§00 02) -->
                 {#if heroSpot.defeatSeconds !== null}
-                  <Num class="dim" motion={() => heroSpot?.defeatSeconds ?? null} value={` ・ 討伐 ${fmtDuration(heroSpot.defeatSeconds)}`} />
+                  <Value class="dim" motion={() => heroSpot?.defeatSeconds ?? null} value={` ・ 討伐 ${fmtDuration(heroSpot.defeatSeconds)}`} />
                 {/if}
               </span>
               <!-- 到達の判定はバーの色と討伐時間で読める。バッジは重複なので置かない(ユーザー 2026-09-16)。
@@ -1039,9 +1039,9 @@
                        表記が動かず合計だけ伸びる候補があるので、片方だけだと「効いていない」と
                        読めてしまう(ユーザー判断 2026-09-01) -->
                   <span class="hero-advice-nums">
-                    <Num motion={() => a.per_hit_primary} value={fmtInt(a.per_hit_primary)} title="表記ダメージ(スキル分のみ)" />
-                    <Num class="advice-delta" motion={() => a.delta_pct} value={deltaText(a.delta_pct)} title="表記ダメージの伸び率" />
-                    <Num class="advice-total dim" motion={() => a.delta_total_pct} value={`合計 ${deltaText(a.delta_total_pct)}`} title="実際に敵へ入る合計ダメージの伸び率(武器強化の追加固定・割合追加を含む)" />
+                    <Value motion={() => a.per_hit_primary} value={fmtInt(a.per_hit_primary)} title="表記ダメージ(スキル分のみ)" />
+                    <Value class="advice-delta" motion={() => a.delta_pct} value={deltaText(a.delta_pct)} title="表記ダメージの伸び率" />
+                    <Value class="advice-total dim" motion={() => a.delta_total_pct} value={`合計 ${deltaText(a.delta_total_pct)}`} title="実際に敵へ入る合計ダメージの伸び率(武器強化の追加固定・割合追加を含む)" />
                   </span>
                   {#if a.reaches}
                     <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
@@ -1070,7 +1070,7 @@
             />
             <span class="brief-copy">
               <span class="brief-title">
-                火力が <Num motion={() => card.perHit} value={fmtInt(card.perHit)} /> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
+                火力が <Value motion={() => card.perHit} value={fmtInt(card.perHit)} /> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
                 <span class="num" style="color: {card.perHit >= card.prevPerHit ? 'var(--good)' : 'var(--danger)'}">
                   {card.perHit >= card.prevPerHit ? "+" : ""}{fmtInt(card.perHit - card.prevPerHit)}
                 </span>
@@ -1107,8 +1107,8 @@
               {/if}
             </div>
             {#if sacredRelicSet && sacredRelicRemaining > 0}
-              <Num class="today-tile-note" value={String(sacredRelicRemaining)}
-                >{#snippet children()}残り {fmtInt(sacredRelicRemaining)}{/snippet}</Num
+              <Value class="today-tile-note" value={String(sacredRelicRemaining)}
+                >{#snippet children()}残り {fmtInt(sacredRelicRemaining)}{/snippet}</Value
               >
             {/if}
           </button>
@@ -1123,8 +1123,8 @@
               {/if}
             </div>
             {#if cuffsRemaining !== null && cuffsRemaining > 0}
-              <Num class="today-tile-note" value={String(cuffsRemaining)}
-                >{#snippet children()}この段階 残り {fmtInt(cuffsRemaining)}{/snippet}</Num
+              <Value class="today-tile-note" value={String(cuffsRemaining)}
+                >{#snippet children()}この段階 残り {fmtInt(cuffsRemaining)}{/snippet}</Value
               >
             {/if}
           </button>
@@ -1139,8 +1139,8 @@
               {/if}
             </div>
             {#if enchantSummary && enchantRemaining.remain > 0}
-              <Num class="today-tile-note" value={String(enchantRemaining.remain)}
-                >{#snippet children()}{fmtInt(enchantRemaining.parts)}部位 残り {fmtInt(enchantRemaining.remain)}{/snippet}</Num
+              <Value class="today-tile-note" value={String(enchantRemaining.remain)}
+                >{#snippet children()}{fmtInt(enchantRemaining.parts)}部位 残り {fmtInt(enchantRemaining.remain)}{/snippet}</Value
               >
             {/if}
           </button>
@@ -1155,8 +1155,8 @@
               {/if}
             </div>
             {#if relicEquippedSides.length > 0 && !relicEquippedSides.every((s) => s.info!.done)}
-              <Num class="today-tile-note" value={relicEquippedSides.map((s) => s.info!.text).join()}
-                >{#snippet children()}{relicEquippedSides.map((s) => `${s.side} ${s.info!.done ? "上限" : s.info!.text}`).join(" ・ ")}{/snippet}</Num
+              <Value class="today-tile-note" value={relicEquippedSides.map((s) => s.info!.text).join()}
+                >{#snippet children()}{relicEquippedSides.map((s) => `${s.side} ${s.info!.done ? "上限" : s.info!.text}`).join(" ・ ")}{/snippet}</Value
               >
             {/if}
           </button>
@@ -1176,8 +1176,8 @@
             </div>
             {#if sienaSummary && sienaSummary.max - sienaSummary.value > 0}
               {@const remain = sienaSummary.max - sienaSummary.value}
-              <Num class="today-tile-note" value={String(remain)}
-                >{#snippet children()}増幅 残り {fmtInt(remain)} 段{/snippet}</Num
+              <Value class="today-tile-note" value={String(remain)}
+                >{#snippet children()}増幅 残り {fmtInt(remain)} 段{/snippet}</Value
               >
             {/if}
           </button>
@@ -1296,7 +1296,7 @@
                           <div class="today-stepper">
                             <button type="button" class="dst" aria-label="レリック{r.side}を下げる" disabled={!rs.can_down} onclick={() => stepRelicLevel(r.slot, "down")}>−</button>
                             <span class="today-stepper-val">
-                              <Num motion={() => rs!.level} value={`Lv${rs.level}`} />
+                              <Value motion={() => rs!.level} value={`Lv${rs.level}`} />
                               <span class="num dim">/ {rs.max_level}</span>
                             </span>
                             <button type="button" class="dst" aria-label="レリック{r.side}を上げる" disabled={!rs.can_up} onclick={() => stepRelicLevel(r.slot, "up")}>+</button>
@@ -1346,7 +1346,7 @@
         {#snippet summary()}
           <span class="area-name">どこまでいける?</span>
           <span class="fold-count">
-            クリア済み <Num motion={() => clearedCount} value={fmtInt(clearedCount)} />
+            クリア済み <Value motion={() => clearedCount} value={fmtInt(clearedCount)} />
             <span class="dim">/ {fmtInt(totalCount)}</span>
           </span>
           {#if uncoveredCount > 0}
@@ -1421,7 +1421,7 @@
                           {:else}
                             <span class="name">{r.content.name}</span>
                           {/if}
-                          <Num class="dmg" motion={() => r.ev?.damage?.per_hit_primary ?? null} value={r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"} title="表記ダメージ(スキル分のみ)" />
+                          <Value class="dmg" motion={() => r.ev?.damage?.per_hit_primary ?? null} value={r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"} title="表記ダメージ(スキル分のみ)" />
                           <span class="chev dim">›</span>
                         </div>
                         <div class="row-bar">
@@ -1524,7 +1524,7 @@
   /* スキル名は中身ぶんだけ(長い名前は 100px で省略)。ここを縮ませると
      アイコンだけが残って何のスキルか読めなくなる(§06 アイコン単独表示は禁止) */
   .hero-goal-skill { flex: none; max-width: 120px; display: flex; flex-direction: column; gap: 1px; font-size: 10px; font-weight: 700; color: var(--fg-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* Num が描くので子コンポーネント要素として :global で包む(ADR-015 段階 4) */
+  /* Value が描くので子コンポーネント要素として :global で包む(ADR-015 段階 4) */
   .hero-goal-skill :global(.hero-goal-crit) { font-size: 8.5px; font-weight: 500; }
   /* 量バーは「目安に対してどれだけ出ているか」を一目で見る唯一の要素。行の幅が足りなくなったら
      先に縮むのは目標名・スキル名のほうで、バーは縮ませない(shrink 0 + 基準幅) */

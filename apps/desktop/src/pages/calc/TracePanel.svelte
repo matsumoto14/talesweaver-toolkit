@@ -4,7 +4,7 @@
   import { fmtInt, fmtNum, fmtSignedPct, formatLayerValue } from "../../format";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import Disclosure from "../../ui/Disclosure.svelte";
-  import Num from "../../ui/Num.svelte";
+  import Value from "../../ui/Value.svelte";
   import { PresenceMemo } from "../../ui/presence";
 
   let { trace }: { trace: DamageTrace } = $props();
@@ -83,7 +83,7 @@
           <tr>
             <td>{STAT_LABELS[s.kind]}</td>
             <td class="n strong final">
-              <Num motion={() => s.effective} value={fmtInt(s.effective)} />
+              <Value motion={() => s.effective} value={fmtInt(s.effective)} />
               {#if s.pinned_from !== null}
                 <span class="pin-badge" title={pinnedBeforeLabel(s)}>固定</span>
               {/if}
@@ -121,9 +121,9 @@
           {#each contributions as { item: c, state, key } (key)}
             <tr class:gone={state === "gone"}>
               <td>{STAT_LABELS[c.kind]}</td>
-              <td class="muted">{c.source}{#if state !== "same"}<span class="swap badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
+              <td class="muted">{c.source}{#if state !== "same"}<span class="presence badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
               <td class="muted">{STAT_LAYER_LABELS[c.layer]}</td>
-              <td class="n"><Num motion={() => c.value} value={formatLayerValue(c.layer, c.value)} /></td>
+              <td class="n"><Value motion={() => c.value} value={formatLayerValue(c.layer, c.value)} /></td>
             </tr>
           {/each}
         </tbody>
@@ -143,8 +143,8 @@
             <td class="sym">{c.symbol}</td>
             <td>{c.label}</td>
             <td class="muted">{KIND_LABEL[c.kind]}</td>
-            <td class="n"><Num motion={() => c.value} value={fmtValue(c)} /></td>
-            <td class="n strong"><Num motion={() => c.factor} value={fmtNum(c.factor)} /></td>
+            <td class="n"><Value motion={() => c.value} value={fmtValue(c)} /></td>
+            <td class="n strong"><Value motion={() => c.factor} value={fmtNum(c.factor)} /></td>
             <td class="n muted">{fmtCap(c)}</td>
           </tr>
         {/each}
@@ -164,8 +164,8 @@
             <tr class:gone={state === "gone"}>
               <td class="sym">{c.symbol}</td>
               <td>{c.label}</td>
-              <td class="muted">{c.source}{#if state !== "same"}<span class="swap badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
-              <td class="n"><Num motion={() => c.value} value={fmtContributionValue(c.kind, c.value)} /></td>
+              <td class="muted">{c.source}{#if state !== "same"}<span class="presence badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
+              <td class="n"><Value motion={() => c.value} value={fmtContributionValue(c.kind, c.value)} /></td>
             </tr>
           {/each}
         </tbody>
@@ -221,9 +221,9 @@
   /* 抜けた供給源は次に集合が変わるまで取り消し線で残す。入った / 抜けた の印は差分と同じ色 */
   tr.gone td { text-decoration: line-through; color: var(--fg-dim); }
   /* 動き方は入場クラス badge-in(app.css §10 型 5)が持つ。ここで animation を書き足さない */
-  .swap { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; }
-  .swap.up { color: var(--good); }
-  .swap.down { color: var(--warm); }
+  .presence { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 700; }
+  .presence.up { color: var(--good); }
+  .presence.down { color: var(--warm); }
   tr.active td.sym { color: var(--warm); }
   .tabs { display: flex; border: 1px solid var(--border); border-radius: var(--r-inset); overflow: hidden; letter-spacing: 0; }
   .tabs button { padding: 3px 10px; background: var(--bg-field); color: var(--fg-muted); font-size: 11px; }

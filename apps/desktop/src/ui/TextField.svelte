@@ -8,7 +8,7 @@
   // - 検索(`search`): 左に ⌕、右に件数を常設(「範囲は入力欄が知っている」の文字版)
   // - 自由記述(`multi`): 同じ枠を縦に伸ばすだけ。右下に文字数
   // それ以外(ラベル欄)は入力面が既定で、右端に文字数を出す。
-  import Num from "./Num.svelte";
+  import Value from "./Value.svelte";
   import { fmtInt } from "../format";
 
   interface Props {
@@ -78,7 +78,7 @@
 {#if multi}
   <label class="tfield multi" class:disabled>
     <textarea bind:value {rows} maxlength={max} {disabled} aria-label={label} onblur={blur}></textarea>
-    {#if max !== undefined}<Num class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />{/if}
+    {#if max !== undefined}<Value class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />{/if}
   </label>
 {:else if named && !editing}
   <button type="button" class="tfield read" {disabled} aria-label="{label} を編集" onclick={startEdit}>
@@ -94,9 +94,9 @@
       <input type="text" bind:value maxlength={max} {disabled} aria-label={label} onblur={blur} onkeydown={keydown} />
     {/if}
     {#if search && count !== undefined}
-      <Num class="cnt" motion={() => count ?? 0} value={`${fmtInt(count)} 件`} />
+      <Value class="cnt" motion={() => count ?? 0} value={`${fmtInt(count)} 件`} />
     {:else if max !== undefined}
-      <Num class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />
+      <Value class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />
     {/if}
   </label>
 {/if}

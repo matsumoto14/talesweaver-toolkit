@@ -2,7 +2,7 @@
   // 共通スキルペインで繰り返される「ラベル / 段階選択 / 外す(・見え方スイッチ) / 効いている値」の
   // 1 行(`.skill-field`)。段階制のスキルはこの形にほぼそろう(チップのオン/オフ切り替えは対象外)。
   import type { Snippet } from "svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import Choose from "../../../ui/Choose.svelte";
 
   interface Option { value: string; label: string }
@@ -23,7 +23,7 @@
     onClear?: () => void;
     /** 効いている値。未指定なら空欄(オーグメントのように値欄を持たない行) */
     valueText?: string;
-    /** 値の元になる数。渡せば跳ね、渡さなければ文字が変わったときに光る(決めるのは <Num>) */
+    /** 値の元になる数。渡せば跳ね、渡さなければ文字が変わったときに光る(決めるのは <Value>) */
     motion?: () => number | null;
   }
   let {
@@ -52,6 +52,6 @@
   {#if valueText === undefined}
     <span></span>
   {:else}
-    <Num class="v" {motion} value={valueText} />
+    <Value class="v" {motion} value={valueText} />
   {/if}
 </div>

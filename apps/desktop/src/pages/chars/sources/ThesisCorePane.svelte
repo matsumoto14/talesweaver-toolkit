@@ -9,7 +9,7 @@
   import { tables } from "../../../tables.svelte";
   import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import { badgeStyle } from "../../../ui/states";
   import Choose from "../../../ui/Choose.svelte";
 
@@ -134,13 +134,13 @@
        ペイン自体が既に「テシスコア」の名前を出しているので見出しは持たない -->
   <div class="result-value num">
     <span class="dim tiny">コアセット効果(全地域) 最終ダメージ</span>
-    <Num class="strong" value={coreSetTotalLabel} />
+    <Value class="strong" value={coreSetTotalLabel} />
   </div>
   <div class="eq-summary num inset">
     {#each coreRegionRows as r (r.region)}
       <span>
         <span class="dim">{CORE_REGION_LABELS[r.region]}</span>
-        <Num motion={() => r.total_bonus} value={fmtInt(r.total_bonus)} />
+        <Value motion={() => r.total_bonus} value={fmtInt(r.total_bonus)} />
         <span
           class="badge"
           style={badgeStyle({ label: "", state: r.set_groups.length === 0 ? "unknown" : "met" })}
@@ -164,9 +164,9 @@
         onclick={() => (coreRegion = region)}
       >
         {CORE_REGION_LABELS[region]}
-        <Num class="dim" motion={() => coreRegionTotal(region)} value={fmtInt(coreRegionTotal(region))} />
+        <Value class="dim" motion={() => coreRegionTotal(region)} value={fmtInt(coreRegionTotal(region))} />
         {#if (coreSetOf(region)?.set_groups.length ?? 0) > 0}
-          <Num class="tab-set" value={coreSetLabelOf(region)} />
+          <Value class="tab-set" value={coreSetLabelOf(region)} />
         {:else if coreRegionTotal(region) > 0}
           <span class="tab-set off num">あと {3 - (coreSetOf(region)?.ready ?? 0)}</span>
         {/if}
@@ -265,8 +265,8 @@
             aria-label="進化と強化"
             onclick={() => (openCoreStage = openCoreStage === index ? null : index)}
           >
-            <Num value={core ? `${core.evolution}-${core.enhancement}` : "-"}
-              >{#snippet children()}{core ? `${core.evolution}-${core.enhancement}` : "—"}{/snippet}</Num
+            <Value value={core ? `${core.evolution}-${core.enhancement}` : "-"}
+              >{#snippet children()}{core ? `${core.evolution}-${core.enhancement}` : "—"}{/snippet}</Value
             >
           </button>
           {#if openCoreStage === index && core}
@@ -294,7 +294,7 @@
             </div>
           {/if}
         </span>
-        <Num
+        <Value
           class={"core-bonus " + (core !== null && !CORE_POWER_TYPES.includes(core.core_type) ? "support" : "")}
           motion={() => (core ? coreBonus(core.core_type, core.evolution, core.enhancement) : null)}
           value={core ? fmtSigned(coreBonus(core.core_type, core.evolution, core.enhancement)) : "—"}

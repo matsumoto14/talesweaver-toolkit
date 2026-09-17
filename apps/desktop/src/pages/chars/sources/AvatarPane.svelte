@@ -16,7 +16,7 @@
   } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import Drill from "../../../ui/Drill.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import { avatarEnhanceSummary } from "../summaries";
@@ -68,7 +68,7 @@
 
 <div class="result-value num">
   <span class="dim tiny">アバター強化 効いている量(強化能力値へ合流)</span>
-  <Num class="strong" value={totalsLabel} />
+  <Value class="strong" value={totalsLabel} />
 </div>
 
 <div class="card">
@@ -105,7 +105,7 @@
         (v) => setCell(part, kind, v)
       }
     />
-    <Num
+    <Value
       class={"stat-total " + (totals[kind] === 0 ? "dim" : "")}
       motion={() => totals[kind]}
       value={totals[kind] === 0 ? "" : `5部位計 ${fmtSigned(totals[kind])}`}
@@ -125,7 +125,7 @@
         {#snippet line()}
         <span class="part-main">
           <span class="part-name">{AVATAR_PART_LABELS[part]}</span>
-          <Num class={"part-item " + (summary === "未使用" ? "dim" : "")} value={summary} />
+          <Value class={"part-item " + (summary === "未使用" ? "dim" : "")} value={summary} />
         </span>
         {/snippet}
         {#snippet detail()}

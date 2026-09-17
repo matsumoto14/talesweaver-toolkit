@@ -37,7 +37,7 @@
   import Choose from "../../ui/Choose.svelte";
   import { fmtSigned } from "../../format";
   import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
-  import Num from "../../ui/Num.svelte";
+  import Value from "../../ui/Value.svelte";
   import { equipmentAttackKindsFor, equipmentBaseTotal, equipmentEnhancedTotal } from "./summaries";
 
   /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
@@ -175,7 +175,7 @@
          概ね認知できる(ユーザー判断 2026-09-01)ので、主軸スキルが使う補正だけを見出しに置き、
          ペインの中には表を持たない(縦を使わない) -->
     {#if sourceId === "equipment"}
-      <Num class="head-value" value={equipmentHeadNote} />
+      <Value class="head-value" value={equipmentHeadNote} />
     {:else}
       <span class="dim">{TITLES[sourceId].note}</span>
     {/if}
@@ -199,7 +199,7 @@
           cols={petSkillOptions.length}
           bind:value={() => petSkillValue(k), (v) => setPetSkillValue(k, v)}
         />
-        <Num class="v" motion={() => petSkillBonus(k)} value={petSkillBonus(k) > 0 ? fmtSigned(petSkillBonus(k)) : "—"} />
+        <Value class="v" motion={() => petSkillBonus(k)} value={petSkillBonus(k) > 0 ? fmtSigned(petSkillBonus(k)) : "—"} />
       {/snippet}
       <StatRows kinds={STAT_KINDS} row={petRow} />
     </div>

@@ -7,7 +7,7 @@
   import type { Draft } from "../../../draft";
   import { limits } from "../../../limits.svelte";
   import { fmtInt, fmtRate, fmtSigned } from "../../../format";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import type { SourceId } from "../sourceId";
@@ -125,7 +125,7 @@
         (v) => (draft.statSources.critical_rate.architect_lab_stage = Number(v))
       }
     />
-    <Num class="lab-value" motion={() => architectLabBonus} value={architectLabBonus > 0 ? fmtSigned(architectLabBonus, { max: 2 }, "%") : "—"} />
+    <Value class="lab-value" motion={() => architectLabBonus} value={architectLabBonus > 0 ? fmtSigned(architectLabBonus, { max: 2 }, "%") : "—"} />
   </div>
   <p class="hint dim">
     クリティカル率増加の合計: <b>{fmtSigned(Math.min(limits.critical_rate_bonus_max, criticalRateBonus), { max: 2 }, "%")}</b>

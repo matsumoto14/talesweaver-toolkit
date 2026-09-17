@@ -9,7 +9,7 @@
   import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Icon from "../../../ui/Icon.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import SkillLevelField from "./SkillLevelField.svelte";
@@ -234,7 +234,7 @@
   </div>
   <p class="hint dim">
     いまの効果:
-    <b><Num value={ultimateEffectsText}>{#snippet children()}{ultimateEffectsText.length > 0 ? ultimateEffectsText : "—"}{/snippet}</Num></b>
+    <b><Value value={ultimateEffectsText}>{#snippet children()}{ultimateEffectsText.length > 0 ? ultimateEffectsText : "—"}{/snippet}</Value></b>
   </p>
   <p class="hint dim">
     wiki「Skill/共通」「Skill/極限」。<b>オーグメント</b>はストロングウェポン・プロテクトアーマー・
@@ -263,8 +263,8 @@
             onclick={() => setUnleashStat(i, "")}
           >未使用</button>
         </span>
-        <Num class="v" value={slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`}
-          >{#snippet children()}{slot.stat === null ? "—" : fmtSigned(UNLEASH_RATES[slot.level - 1], { max: 2 }, "%")}{/snippet}</Num
+        <Value class="v" value={slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`}
+          >{#snippet children()}{slot.stat === null ? "—" : fmtSigned(UNLEASH_RATES[slot.level - 1], { max: 2 }, "%")}{/snippet}</Value
         >
       </div>
     {/each}

@@ -9,7 +9,7 @@
   // - 行の中に別の操作(Lv の段・設定・ポップオーバー)を持つ行は `extra` に置く。
   //   押せる面は名前側(`.face`)だけになり、段を押した瞬間にオフになることがない
   import type { Snippet } from "svelte";
-  import Num from "./Num.svelte";
+  import Value from "./Value.svelte";
 
   interface Props {
     name: string;
@@ -37,7 +37,7 @@
     <!-- 省略記号で切れた文字は、その上にカーソルを置くと全文が読める(狭い器では名前も値も切れる) -->
     <span class="nm" title={name}>{name}</span>
     {#if cond !== undefined}<span class="cond" title={cond}>{cond}</span>{/if}
-    {#if value !== undefined}<Num class="val" title={value} value={value ?? ""} />{/if}
+    {#if value !== undefined}<Value class="val" title={value} value={value ?? ""} />{/if}
   </button>
   {#if extra}{@render extra()}{/if}
 </div>

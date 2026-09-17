@@ -9,7 +9,7 @@
   import { reportError } from "../../toast.svelte";
   import { checkForUpdate, installUpdate, restartApp, updater } from "../../update.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
-  import Num from "../../ui/Num.svelte";
+  import Value from "../../ui/Value.svelte";
 
   let news = $state<News>(BUNDLED_NEWS);
   let currentVersion = $state("");
@@ -51,7 +51,7 @@
             <button type="button" class="btn primary" onclick={() => void installUpdate()}>更新する</button>
           {:else}
             <b class="update-title">v{updater.version} を{updater.status === "installing" ? "入れています" : "落としています"}</b>
-            <Num class="update-note" motion={() => updater.percent} value={updater.percent >= 0 ? `${updater.percent}%` : "…"} />
+            <Value class="update-note" motion={() => updater.percent} value={updater.percent >= 0 ? `${updater.percent}%` : "…"} />
           {/if}
         </div>
         {#if updater.status === "downloading" || updater.status === "installing"}

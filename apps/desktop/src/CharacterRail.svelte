@@ -4,7 +4,7 @@
   import { app, gameCharacterName, selectCharacter, totalContents } from "./state.svelte";
   import { tables } from "./tables.svelte";
   import Icon from "./ui/Icon.svelte";
-  import Num from "./ui/Num.svelte";
+  import Value from "./ui/Value.svelte";
   import { persisted } from "./ui/persistedState.svelte";
   import { dropHalfIndex, moveItem } from "./ui/reorder.svelte";
   import Spinner from "./ui/Spinner.svelte";
@@ -106,13 +106,13 @@
             <span class="cls">{gameCharacterName(c.game_character_id)} / 覚醒{c.awakening.stage}</span>
           </span>
           <span class="count">
-            <Num class="ok" motion={() => clearCount(c.id)} value={String(clearCount(c.id))}
-              >{#snippet children()}{clearCount(c.id)}<span class="total"> / {total}</span>{/snippet}</Num
+            <Value class="ok" motion={() => clearCount(c.id)} value={String(clearCount(c.id))}
+              >{#snippet children()}{clearCount(c.id)}<span class="total"> / {total}</span>{/snippet}</Value
             >
             <span class="cap">クリア可</span>
           </span>
         {:else}
-          <Num class="mini" motion={() => clearCount(c.id)} value={String(clearCount(c.id))} />
+          <Value class="mini" motion={() => clearCount(c.id)} value={String(clearCount(c.id))} />
         {/if}
       </button>
     {/each}

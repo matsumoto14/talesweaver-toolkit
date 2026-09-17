@@ -16,7 +16,7 @@
   import Chip from "../../../ui/Chip.svelte";
   import Modal from "../../../ui/Modal.svelte";
   import Drill from "../../../ui/Drill.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import StatInput from "../../../ui/StatInput.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import TextField from "../../../ui/TextField.svelte";
@@ -164,7 +164,7 @@
       <span class="part-main">
         <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
         <span class="part-item">{current?.label || (current ? `オーラ ${current.id}` : "未装着")}</span>
-        <Num class="part-abi" motion={() => list.registered.length} value={`登録 ${list.registered.length}`} />
+        <Value class="part-abi" motion={() => list.registered.length} value={`登録 ${list.registered.length}`} />
         <span class="part-plus wide" class:on={stage > 0}>{stage > 0 ? `${stage} 段階` : ""}</span>
       </span>
       <span class="ro-badges">
@@ -175,8 +175,8 @@
           <span class="ro-badge more">+{badges.length - SIENA_BADGE_MAX}</span>
         {/if}
       </span>
-      <Num class="part-vals dim" value={`${list.selected_id}:${sienaSummary(slot)}`}
-        >{#snippet children()}{sienaSummary(slot)}{/snippet}</Num
+      <Value class="part-vals dim" value={`${list.selected_id}:${sienaSummary(slot)}`}
+        >{#snippet children()}{sienaSummary(slot)}{/snippet}</Value
       >
     {/snippet}
     </Drill>
@@ -227,7 +227,7 @@
         <div class="card">
           <div class="card-title inline">
             {PART_SLOT_LABELS[slot]}: 能力値スロット
-            <Num class="dim normal" motion={() => stage} value={`${stage} / ${app.siena.stage_max} 段階`} />
+            <Value class="dim normal" motion={() => stage} value={`${stage} / ${app.siena.stage_max} 段階`} />
         </div>
         <!-- 足す場所は**行より上**。下に置くと、1 個足すたびに押したチップが
              行の高さぶん下へ逃げる(§09 規則 1)。足したものは真下に増える -->
@@ -267,7 +267,7 @@
         <div class="card">
         <div class="card-title inline">
           追加オプション
-          <Num class="dim normal" motion={() => capacity} value={`${siena.extras.length} / ${capacity} 枠`} />
+          <Value class="dim normal" motion={() => capacity} value={`${siena.extras.length} / ${capacity} 枠`} />
         </div>
         {#if capacity === 0}
           <p class="hint dim">

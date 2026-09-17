@@ -24,7 +24,7 @@
   import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportUndo } from "../../toast.svelte";
   import { changed } from "../../ui/motion.svelte";
-  import Num from "../../ui/Num.svelte";
+  import Value from "../../ui/Value.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import StatInput from "../../ui/StatInput.svelte";
   import Choose from "../../ui/Choose.svelte";
@@ -562,7 +562,7 @@
 
 <div class="buff-page">
   <aside class="sets">
-    <div class="bar">バフセット <Num motion={() => app.buffSets.length} value={String(app.buffSets.length)} /></div>
+    <div class="bar">バフセット <Value motion={() => app.buffSets.length} value={String(app.buffSets.length)} /></div>
     <div class="create-row">
       <TextField label="新しいバフセット名" bind:value={newName} max={40} auto={autoSetName} autoNote="自動の名前" disabled={saving} onEnter={create} />
       <button class="btn primary" disabled={saving} onclick={create}>作成</button>
@@ -611,7 +611,7 @@
             {@const picked = purposeSelectedCount(o.value as BuffPurpose)}
             {@const total = app.catalog.filter((def) => matchesPurpose(def, o.value as BuffPurpose)).length}
             <span>{o.label}</span>
-            <Num class="group-count" motion={() => picked} value={`${picked}/${total}`} />
+            <Value class="group-count" motion={() => picked} value={`${picked}/${total}`} />
           {/snippet}
         </Choose>
         <!-- 入場クラス swap-in(型 3b = 上から短く入る)が動き方を決め、use:changed がそれを
@@ -635,7 +635,7 @@
                 {@const picked = damageGroupSelectedCount(o.value as BuffDamageGroup)}
                 {@const total = app.catalog.filter((def) => matchesPurpose(def, "damage") && matchesDamageGroup(def, o.value as BuffDamageGroup)).length}
                 <span>{o.label}</span>
-                <Num class="group-count" motion={() => picked} value={`${picked}/${total}`} />
+                <Value class="group-count" motion={() => picked} value={`${picked}/${total}`} />
               {/snippet}
             </Choose>
           {/if}
@@ -766,7 +766,7 @@
            scale(1.07) が面ごと掛かり、カードの幅が 264 → 282px に膨らんで戻る。
            数字側は 2 桁ぶんの幅を先に取ってあるので、桁が増えても「件 ON」は動かない -->
       <div class="count inset">
-        <Num class="count-value" motion={() => selected.choices.choices.length} value={String(selected.choices.choices.length)} /><small>件 ON</small>
+        <Value class="count-value" motion={() => selected.choices.choices.length} value={String(selected.choices.choices.length)} /><small>件 ON</small>
       </div>
       <div class="summary-block inset">
         <div class="summary-head">
@@ -798,13 +798,13 @@
                   <td class="n muted">{fmtInt(baseStats[kind])}</td>
                   <!-- バフ列だけは従来どおり「差分(重なって増えた分)」の形を保つ -->
                   <td class="n" class:positive={total > 0}
-                  ><Num motion={() => total} value={String(total)}>{#snippet children()}{fmtSigned(delta)}{#if amp !== 0}<span class="amp-value"> ({fmtSigned(amp)})</span>{/if}{/snippet}</Num></td>
+                  ><Value motion={() => total} value={String(total)}>{#snippet children()}{fmtSigned(delta)}{#if amp !== 0}<span class="amp-value"> ({fmtSigned(amp)})</span>{/if}{/snippet}</Value></td>
                   {#each ["equipment", "other"] as const as group (group)}
                     {@const effect = groupEffect(kind, group)}
                     <!-- 0 の区分も行から消さない。消えると次に見たとき同じ場所を探し直すことになる -->
-                    <td class="n" class:zero={effect === 0}><Num motion={() => effect} value={effect === null ? "—" : fmtSigned(effect)} /></td>
+                    <td class="n" class:zero={effect === 0}><Value motion={() => effect} value={effect === null ? "—" : fmtSigned(effect)} /></td>
                   {/each}
-                  <td class="n strong"><Num motion={() => statAfter?.[kind] ?? null} value={fmtInt(statAfter[kind])} /></td>
+                  <td class="n strong"><Value motion={() => statAfter?.[kind] ?? null} value={fmtInt(statAfter[kind])} /></td>
                 </tr>
               {/each}
             </tbody>
@@ -870,7 +870,7 @@
   .group-summary { min-height: 41px; padding: 6px 9px; display: flex; align-items: center; gap: 10px; }
   .group-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
   .group-summary small { color: var(--fg-muted); font-size: 9px; }
-  /* .group-count / .count-value は Num.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
+  /* .group-count / .count-value は Value.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
   :global(.chip .group-count) { margin-left: auto; min-width: 5ch; color: inherit; text-align: right; font-size: 9px; }
   :global(.damage-switch) { padding: 0 7px 7px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
   .guide-link { flex: none; padding: 2px 4px; color: var(--fg-muted); font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }

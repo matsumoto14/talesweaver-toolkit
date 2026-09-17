@@ -51,7 +51,7 @@
   import Splitter from "../../ui/Splitter.svelte";
   import SourcePane, { type SourceId } from "./SourcePane.svelte";
   import { changed, DUR, motionDuration, reveal } from "../../ui/motion.svelte";
-  import Num from "../../ui/Num.svelte";
+  import Value from "../../ui/Value.svelte";
   // .eq-summary / .result-value / .tiny(攻撃力カードで使う)は補正源ペインと共有するグローバル CSS
   import "./sources/pane-shared.css";
   import {
@@ -819,7 +819,7 @@
                 <Icon kind="source" id={s.id} size={28} label={s.name} />
                 <span class="src-main">
                   <span class="src-name">{s.name}</span>
-                  <Num class="src-sub" value={s.sub} />
+                  <Value class="src-sub" value={s.sub} />
                 </span>
                 <span
                   class="src-changed"
@@ -875,14 +875,14 @@
         {#if i > 0}<span class="sep"> ・ </span>{/if}{EQUIPMENT_STAT_SHORT[k]}
         <!-- 合計を出し、その横に括弧でエンチャント分(equipment.ts の withEnchant と同じ形。
              跳ねは値ごとに要るのでここは span を分けたまま組み立てる) -->
-        <Num motion={() => eqBaseTotal[k] + eqEnhancedTotal[k]} value={fmtInt(eqBaseTotal[k] + eqEnhancedTotal[k])} />
-        <Num class="enhance" motion={() => eqEnhancedTotal[k]} value={`(${fmtSigned(eqEnhancedTotal[k])})`} />
+        <Value motion={() => eqBaseTotal[k] + eqEnhancedTotal[k]} value={fmtInt(eqBaseTotal[k] + eqEnhancedTotal[k])} />
+        <Value class="enhance" motion={() => eqEnhancedTotal[k]} value={`(${fmtSigned(eqEnhancedTotal[k])})`} />
       {/each}
     </span>
     {#if mainSkill}
       <span class="sheet-attack">
         <span class="attack-label">攻撃力(A)</span>
-        <Num class="strong" motion={() => preview?.attack?.breakdown.value ?? null} value={preview?.attack ? fmtInt(preview.attack.breakdown.value) : "—"} />
+        <Value class="strong" motion={() => preview?.attack?.breakdown.value ?? null} value={preview?.attack ? fmtInt(preview.attack.breakdown.value) : "—"} />
         <span class="dim">{mainSkill.name}</span>
       </span>
     {:else}
@@ -972,7 +972,7 @@
   .src-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .src-name { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .src.planned .src-name, .src.planned :global(.src-sub) { color: var(--fg-off); }
-  /* .src-sub は Num.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
+  /* .src-sub は Value.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
   .src-main :global(.src-sub) { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* この編集で変更した補正源の印。場所は常に確保し、opacity だけで出し入れする
      (§09 規則 4「あとから幅が変わらない」)。初回だけ badge-in(use:changed)で光る */
@@ -1005,7 +1005,7 @@
   .sheet-equipment {
     min-width: 0; flex: 0 1 auto; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  /* .enhance / .strong は Num.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
+  /* .enhance / .strong は Value.svelte が描くので `:global` で当てる(スコープ付き CSS は子コンポーネントに届かない) */
   .sheet-equipment :global(.enhance) { color: var(--good); }
   /* 主軸スキルの攻撃力(A)。ダメージと取り違えないようラベルを必ず数字の前に置く */
   .sheet-attack { flex-shrink: 0; margin-left: 9px; display: flex; align-items: baseline; gap: 6px; font-size: 9.5px; white-space: nowrap; }

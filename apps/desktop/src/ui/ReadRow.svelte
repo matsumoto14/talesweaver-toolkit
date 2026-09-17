@@ -1,9 +1,9 @@
 <script lang="ts">
   // 読み取り面の「ラベル + 値」1 行(design-system §08 ReadRow)。インセット面(.readrows.inset)に
-  // 並べて使う。**行の形(ラベル・値の位置・固定幅)だけを持ち、値そのものは `ui/Num.svelte` に任せる** —
+  // 並べて使う。**行の形(ラベル・値の位置・固定幅)だけを持ち、値そのものは `ui/Value.svelte` に任せる** —
   // 跳ね・光り・差分枠・未収録の「?」を 2 か所に持たないため(ADR-015 段階 4)。
   import type { Snippet } from "svelte";
-  import Num from "./Num.svelte";
+  import Value from "./Value.svelte";
 
   interface Props {
     label: string;
@@ -31,7 +31,7 @@
   {#if children}
     <span class="slot">{@render children()}</span>
   {:else}
-    <Num {value} {motion} {delta} {tone} class="v" />
+    <Value {value} {motion} {delta} {tone} class="v" />
   {/if}
   {#if note}<span class="n dim">{@render note()}</span>{/if}
 </div>
@@ -41,7 +41,7 @@
   .k { flex: none; min-width: 64px; font-size: var(--t-label); font-weight: 700; color: var(--fg-muted); white-space: nowrap; }
   .sub { flex: none; margin-left: auto; font-size: 8.5px; white-space: nowrap; }
   .sub + .slot { margin-left: 0; }
-  /* 値は Num.svelte が描くので、行の側は `:global` で位置と幅だけを当てる
+  /* 値は Value.svelte が描くので、行の側は `:global` で位置と幅だけを当てる
      (Svelte のスコープ付き CSS は子コンポーネントの中の要素に届かない) */
   .readrow :global(.v) { flex: none; margin-left: auto; min-width: 64px; text-align: right; font-size: var(--t-body); font-weight: 700; color: var(--fg); white-space: nowrap; }
   .sub + :global(.v) { margin-left: 0; }

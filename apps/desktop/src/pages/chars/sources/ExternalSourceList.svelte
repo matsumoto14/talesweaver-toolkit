@@ -15,7 +15,7 @@
   // **0 の行も出す** — ここは「この値がどこから来るか」の地図でもあるので、
   // 入っていない供給源を消すと存在に気づけない。0 の行は薄くする。押すとその補正源へ移る
   import Chip from "../../../ui/Chip.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
 
   interface Props {
     rows: ExternalSource[];
@@ -35,7 +35,7 @@
           {#if r.note}<span class="ext-note">{r.note}</span>{/if}
         </span>
         <!-- 0 は「−0%」「×1.00」ではなく — で出す(入っていないことを値の形で言わない) -->
-        <Num class="ext-value" motion={() => r.value} value={r.value === 0 ? "—" : r.format(r.value)} />
+        <Value class="ext-value" motion={() => r.value} value={r.value === 0 ? "—" : r.format(r.value)} />
         <Chip class="quiet" onclick={() => onOpenSource(r.id)}>開く ›</Chip>
       </div>
     {/each}

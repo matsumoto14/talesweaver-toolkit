@@ -8,7 +8,7 @@
   import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
   import { changed } from "../../../ui/motion.svelte";
-  import Num from "../../../ui/Num.svelte";
+  import Value from "../../../ui/Value.svelte";
   import TextField from "../../../ui/TextField.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
 
@@ -230,10 +230,10 @@
   {#if mainSkill}
     <!-- 絞り込みで件数が減ったことを数字で見せる(§00 05 考えさせない) -->
     <div class="title-filter">
-      <Num class="dim" value={String(filterActive)}
+      <Value class="dim" value={String(filterActive)}
         >{#snippet children()}{filterActive
           ? `${mainSkill.name}向けに ${filteredCommonTitles.length} / ${commonTitles.length} 件`
-          : `すべて表示中(${commonTitles.length} 件)`}{/snippet}</Num
+          : `すべて表示中(${commonTitles.length} 件)`}{/snippet}</Value
       >
       <Chip class="quiet" on={showAllTitles} onToggle={() => (showAllTitles = !showAllTitles)}>
         {showAllTitles ? "絞り込みに戻す" : "すべて表示"}
