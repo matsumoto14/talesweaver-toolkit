@@ -54,10 +54,10 @@
     const set = app.buffSets.find((item) => item.id === id);
     app.calcBuffs = JSON.parse(JSON.stringify(set?.choices ?? { choices: [] }));
   }
-  /* 「計算の材料」と、その中のバフの目的グループは、どちらも同時に 1 つしか開かない。
-     排他は <details name>(ui/Disclosure の group)がブラウザ側で持つので、開いている
-     まとまりを覚える状態は要らない — 全部開くと 3512px(表示域の 4.6 画面ぶん)になり、
-     目的のものまでスクロールで探すことになる */
+  /* 「計算の材料」のカードもバフの目的グループも、排他にしない(2026-09-17)。
+     1 つしか開かない形だと、押した見出しの上にあるまとまりが閉じて押した場所が上へ飛ぶ
+     (§00 03「押した場所は動かない」に反する)。全部開くと縦に長くなるが、
+     開くのはユーザーが選んだぶんだけなので、閉じ忘れは自分で畳める */
   function toggleBuffChip(def: BuffDefinition) {
     app.calcBuffs = { choices: toggleBuff(app.calcBuffs.choices, def, !buffOn(def)) };
   }
@@ -242,7 +242,7 @@
   {/snippet}
 
         <!-- バフ -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <Icon kind="buff" id="illumination_drink" size={20} label="バフ" />
             <span class="card-title">バフ</span>
@@ -271,7 +271,7 @@
             {@const defs = consumableBuffs.filter((d) => matchesPurpose(d, purpose.id))}
             {@const picked = defs.filter((d) => buffState(d) !== "off").length}
             {#if defs.length > 0}
-              <Disclosure summaryClass="buff-group-head inset" group="buffPurpose">
+              <Disclosure summaryClass="buff-group-head inset">
                 {#snippet summary()}
                   <span class="bg-label">{purpose.label}</span>
                   <Value class="bg-count" motion={() => picked} value={`${picked}/${defs.length}`} />

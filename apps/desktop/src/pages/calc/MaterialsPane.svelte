@@ -474,7 +474,7 @@
         </div>
 
         <!-- 極限スキル(試し変更)。3 種から 2 つ選ぶ(§07 形態 3: チップで入れる/外す) -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <!-- 見出しの顔。中身を代表する 1 つを置く(名前と併記なので §08 の単独表示にあたらない)。
                  画像が未収録なら破線 + ? になるだけで、幅は変わらない -->
@@ -509,7 +509,7 @@
         </Disclosure>
 
         <!-- 覚醒・エタの意志(試し変更)。カテゴリN の倍率と、ダメージ・能力値の上限を動かす -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <Icon kind="skill" id="awakening" size={20} label="覚醒・エタの意志" />
             <span class="card-title">覚醒・エタの意志</span>
@@ -574,7 +574,7 @@
         </Disclosure>
 
         <!-- シャープネスビジョン(試し変更)。§5「新-割合」の割合追加ダメージ -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <Icon kind="skill" id="sharpness_vision" size={20} label="シャープネスビジョン" />
             <span class="card-title">シャープネスビジョン</span>
@@ -623,7 +623,7 @@
         </Disclosure>
 
         <!-- ソウルリンク(試し変更)。ダメージ式に効くリンクステータス 5〜7 だけ -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <Icon kind="skill" id="soul_link" size={20} label="ソウルリンク" />
             <span class="card-title">ソウルリンク</span>
@@ -656,7 +656,7 @@
         </Disclosure>
 
         <!-- 装備の切り替え(試し変更)。登録済みの装備から装着するものを選ぶ。登録・編集はキャラタブ -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <!-- 見出しの顔は装着中の武器(名前と併記) -->
             <Icon kind="equipment" id={equipmentIconId(selectedWeapon(payload).item_id, app.equipmentCatalog)} size={20} label="装備の切り替え" />
@@ -696,7 +696,7 @@
         </Disclosure>
 
         <!-- エンチャントの伸びしろ(試し変更)。選択中スキルの依存ステだけを部位横断で見る -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <!-- †エクリプスウィング(体)。エンチャントは装備を伸ばす話なので、その顔として置く -->
             <Icon kind="equipment" id="wiki-af444f9bf21d" size={20} label="エンチャントの伸びしろ" />
@@ -753,7 +753,7 @@
 
         <!-- 研磨(試し変更)。記録はキャラタブの研磨ペインで、ここでは効かせるかだけ切り替える。
              スイッチの実体はバフ「装備研磨」(calcBuffs。保存は「試し変更を保存」で)だが、装備の話なので顔はここ -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <!-- 職人の装備研磨剤(クライアント資産 item 1044778)。バフ「装備研磨」と同じ絵 -->
             <Icon kind="buff" id="equipment_polish" size={20} label="研磨" />
@@ -796,7 +796,7 @@
 
 
         <!-- 称号(試し変更)。所持している称号(キャラタブの称号ペインで登録)を並べる -->
-        <Disclosure class="card" summaryClass="card-head toggle" group="material">
+        <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <Icon kind="title" id="title" size={20} label="称号" />
             <span class="card-title">称号</span>

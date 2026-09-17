@@ -3,8 +3,8 @@
    * 開閉するブロック(design-system §10 型 6「開いた / 閉じた」)。土台は `<details>`。
    *
    * 呼ぶ側が決めるのは「トリガに何を出すか」「中に何を出すか」だけ。
-   * **キーボード操作 / ページ内検索での自動展開 / 開閉の状態 / 排他(同じ `group` は 1 つだけ開く)/
-   * 読み上げの開閉状態**はブラウザが持つ。`aria-expanded` は書かない —
+   * **キーボード操作 / ページ内検索での自動展開 / 開閉の状態 / 読み上げの開閉状態**は
+   * ブラウザが持つ。`aria-expanded` は書かない —
    * `<summary>` の暗黙のロールが既に持っていて、手で書くと二重になる。
    *
    * 動きは app.css の `details::details-content`(`block-size` の補間)が持つ。
@@ -25,8 +25,6 @@
     class?: string;
     /** トリガの見た目(`chip quiet` など)。Popover の `triggerClass` と同じ役 */
     summaryClass?: string;
-    /** 同じ文字列を渡した面は 1 つしか開かない(`<details name>`)。排他が要る面だけ */
-    group?: string;
     /** 開いているか。初期値を与える / 外から開かせる面だけ渡す(`bind:open` 可) */
     open?: boolean;
     /** トリガの中身。キャレットは部品が置くので書かない */
@@ -34,10 +32,10 @@
     /** 面の中身 */
     children: Snippet<[boolean]>;
   }
-  let { class: klass = "", summaryClass = "", group, open = $bindable(false), summary, children }: Props = $props();
+  let { class: klass = "", summaryClass = "", open = $bindable(false), summary, children }: Props = $props();
 </script>
 
-<details class={klass} name={group} bind:open>
+<details class={klass} bind:open>
   <summary class={summaryClass}><span class="caret" aria-hidden="true">▼</span>{@render summary(open)}</summary>
   {@render children(open)}
 </details>

@@ -596,7 +596,6 @@
   minMid={320}
   minRight={280}
   splitterLabel="計算シートと材料の境界"
-  midScrollStyle="scrollbar-gutter: stable;"
   rightScrollStyle="padding: 11px;"
 >
   {#snippet mid()}

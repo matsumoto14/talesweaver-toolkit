@@ -17,8 +17,6 @@
     minMid: number;
     minRight: number;
     splitterLabel: string;
-    /** 中央 .scroll への追加 style(scrollbar-gutter など、ページごとの微差の吸収) */
-    midScrollStyle?: string;
     /** 右 .scroll.pad への追加 style(padding / gap のページごとの微差の吸収) */
     rightScrollStyle?: string;
     mid: Snippet;
@@ -27,7 +25,7 @@
   let {
     midTitle, midNote = "", rightTitle, rightNote = "",
     persistKey, defaultRight, minMid, minRight, splitterLabel,
-    midScrollStyle = "", rightScrollStyle = "",
+    rightScrollStyle = "",
     mid, right,
   }: Props = $props();
 
@@ -45,7 +43,7 @@
       <span class="title">{midTitle}</span>
       <span class="note">{midNote}</span>
     </div>
-    <div class="scroll" style={midScrollStyle}>
+    <div class="scroll">
       {@render mid()}
     </div>
   </section>
@@ -74,6 +72,8 @@
   section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   section.mid { background: var(--bg-mid); }
   section.right { background: var(--bg-rail); border-left: 1px solid var(--border-strong); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 13px 16px 18px; }
+  /* スクロールバーが出ても中身の幅を変えない(出た瞬間に枠が細って折り返しが動く =
+     §00 03「押した場所は動かない」に反する)。両カラムとも溝を常に空けておく */
+  .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 13px 16px 18px; }
   .scroll.pad { display: flex; flex-direction: column; padding: 12px; gap: 9px; }
 </style>
