@@ -4,7 +4,6 @@
   // 「閉じる ×」か Escape だけで閉じる(§00 押した場所は動かない)。
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { onMount } from "svelte";
-  import authorPortrait from "./assets/author-xkanba.png";
   import { errorMessage, getAppInfo } from "./api/commands";
   import { exportAll, importAll, parseTransferFile, suggestedFileName } from "./api/transfer";
   import type { AppInfo } from "./api/types";
@@ -194,25 +193,17 @@
       </div>
 
       <div class="card">
-        <div class="card-title">作者について</div>
-        <div class="author">
-          <img class="author-portrait" src={authorPortrait} alt="作者 xかんばのゲーム内キャラクター" />
-          <div class="author-detail">
-            <b class="author-name">xかんば</b>
-            <span class="author-server">エルフィンタサーバーで活動しています</span>
-            <p>
-              このツールのご意見・ご感想のほか、ツールやアプリケーション開発のご相談があれば、
-              ゲーム内の「xかんば」または X の DM へお気軽にどうぞ。
-            </p>
-            <a
-              class="source-link"
-              href="https://x.com/tw_xkanba?s=11"
-              target="_blank"
-              rel="noreferrer"
-              onclick={(event) => openExternal(event, "https://x.com/tw_xkanba?s=11")}
-            >@tw_xkanba（X）</a>
-          </div>
-        </div>
+        <div class="card-title">作者</div>
+        <p class="muted">
+          xかんば（エルフィンタサーバー）・
+          <a
+            class="source-link"
+            href="https://x.com/tw_xkanba?s=11"
+            target="_blank"
+            rel="noreferrer"
+            onclick={(event) => openExternal(event, "https://x.com/tw_xkanba?s=11")}
+          >@tw_xkanba（X）</a>
+        </p>
       </div>
 
       <div class="card">
@@ -260,15 +251,4 @@
     text-decoration: underline; text-underline-offset: 2px;
   }
   .source-link:hover { color: var(--accent-hover); }
-
-  .author { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: start; }
-  .author-portrait {
-    width: 64px; height: 64px; object-fit: cover; object-position: center 34%;
-    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-inset);
-    box-shadow: inset 0 1px rgba(255, 255, 255, 0.75);
-  }
-  .author-detail { min-width: 0; }
-  .author-name { display: block; font-size: 13px; color: var(--fg); }
-  .author-server { display: block; margin: 1px 0 6px; font-size: var(--t-label); color: var(--fg-muted); }
-  .author-detail p { margin-bottom: 5px; }
 </style>
