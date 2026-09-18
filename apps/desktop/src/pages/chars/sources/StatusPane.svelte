@@ -80,6 +80,9 @@
     if (id === draft.gameCharacterId) return;
     draft.gameCharacterId = id;
     draft.mainSkillId = "";
+    // 召喚スキルも捨てる。前キャラのスキル id が残ると validate_summon_skill が
+    // 「そのキャラのスキルではありません」で弾き、自動保存が止まる(レビュー指摘 2026-09-18)
+    draft.summonSkillId = "";
   }
 
   // エタの意志 Lv は 0〜100 の**数値**。101 個を並べても段階にならないので、
@@ -108,12 +111,38 @@
   // 並びは list_skills(Rust)が主軸候補順で返し、先頭 3 件がチップに固定される
   const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択", "攻撃力を出さない"));
 
-  // 熊(魔法人形)が撃つスキル。アナイス以外はこのキャラのスキルに magic_doll が
-  // 1 件も無いので欄自体を出さない(§00②「要らないものを見せない」。ADR-016)。
-  const hasMagicDoll = $derived(skills.some((s) => s.attacker === "magic_doll"));
+  // 召喚獣(熊・破壊精霊)が撃つスキル。アナイス以外はこのキャラのスキルに本体以外の
+  // 攻撃者が 1 件も無いので欄自体を出さない(§00②「要らないものを見せない」。ADR-016)。
+  const hasSummon = $derived(skills.some((s) => s.attacker !== "player"));
+  /** 主軸(ベアステップ・陣)が決めた召喚獣の型。共通スキル等では決まらず null
+   * (2026-09-18 追記。Skill::summon_form が唯一の正、対応表は TS に書き写さない) */
+  const summonForm = $derived(mainSkill?.summon_form ?? null);
   const summonSkillOptions = $derived(
-    buildMainSkillOptions(skills, "未選択", "熊の鎖を出しません", "magic_doll"),
+    buildMainSkillOptions(skills, "未選択", "召喚獣の鎖を出しません", "summon", summonForm),
   );
+  /** 主軸を変えたら、召喚スキルが新しい型の候補に無ければその型で一番火力の出るスキルへ
+   * 差し替える。候補に入っていれば(=同じ型を保ったままの変更)手で選んだものを尊重する。
+   * 主軸が型を決めないときは触らない(入力は「自動」が最上位。欄は上書きの例外操作 —
+   * ux-guidelines)。ユーザー判断 2026-09-18
+   *
+   * 候補の**並び**は主軸と同じ「単体優先 → 継続火力順」(Rust の main_skill_order)だが、
+   * 自動で入れる 1 件は並びの先頭ではなく継続火力(power_per_second)が最大のものにする。
+   * 召喚獣は自分で撃ち続けるので単体/範囲の区別より DPS が効く — 先頭を採ると
+   * ミカベアで †極・突き(単体の基本攻撃)が入ってしまい、熊連より弱い既定になる(実機確認)。 */
+  let lastMainSkillId = untrack(() => draft.mainSkillId);
+  $effect(() => {
+    const id = draft.mainSkillId;
+    if (id === lastMainSkillId) return;
+    lastMainSkillId = id;
+    if (summonForm === null) return;
+    const candidateIds = summonSkillOptions.filter((o) => o.value !== "").map((o) => o.value);
+    if (candidateIds.includes(draft.summonSkillId)) return;
+    const rate = (s: Skill) => s.power_per_second ?? s.power;
+    const best = skills
+      .filter((s) => candidateIds.includes(s.id))
+      .reduce<Skill | null>((top, s) => (top === null || rate(s) > rate(top) ? s : top), null);
+    draft.summonSkillId = best?.id ?? "";
+  });
 
   // 属性は主軸スキルで決まる。無属性のスキルのときだけ、乗せる属性を選ばせる
   // (アンプルで属性を足す運用が多い)
@@ -291,15 +320,16 @@
         bind:value={draft.mainSkillId}
       />
     </div>
-    {#if hasMagicDoll}
-      <!-- アナイス専用: 魔法人形(ミカベア/ルシベア)に自動で撃たせるスキル(ADR-016)。
-           主軸と同じ Picker 形。未選択なら計算タブに熊の鎖は出ない(0 で埋めない) -->
+    {#if hasSummon}
+      <!-- アナイス専用: 魔法人形(ミカベア/ルシベア)または破壊精霊(アンフェル/グレシス/
+           イグニー)に自動で撃たせるスキル(ADR-016)。主軸と同じ Picker 形。
+           未選択なら計算タブに召喚獣の鎖は出ない(0 で埋めない) -->
       <div class="wide">
-        <span class="label">熊が撃つスキル</span>
+        <span class="label">召喚獣が撃つスキル</span>
         <Picker
-          label="熊が撃つスキル"
+          label="召喚獣が撃つスキル"
           options={summonSkillOptions}
-          note="魔法人形(ミカベア / ルシベア)が自動で撃つスキル"
+          note="魔法人形(ミカベア / ルシベア)・破壊精霊(アンフェル / グレシス / イグニー)が自動で撃つスキル"
           bind:value={draft.summonSkillId}
         />
       </div>

@@ -12,6 +12,7 @@ import type {
   EquipmentPart, PartSlot, RandomOptionCandidate,
   RelicDirection, RelicState, WeaponSystem,
   InkriTarget, InkriAttemptRequest, InkriBatchResult, InkriKind, EtaScrollPrice,
+  NormalizedSkillSelection,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -96,6 +97,11 @@ export const getNewCharacterCommonSkills = () =>
 /** キャラ種を変えたときに残してよいキャラスキル id(旧キャラ専用・未知の id を落とす。規則は Rust 側) */
 export const retainCharacterSkills = (skillIds: string[], gameCharacterId: string) =>
   invoke<string[]>("retain_character_skills", { skillIds, gameCharacterId });
+/** 主軸に召喚スキルが紛れていたら召喚欄へ移す(書き出し JSON の読み込みが呼ぶ。2026-09-18 追記。
+ * 判定・移す先の決定は Rust 側(gamedata::normalize_summon_skill_selection)が持つ唯一の正で、
+ * スキル id の一覧を TS に書き写さない) */
+export const normalizeSummonSkillSelection = (mainSkillId: string | null, summonSkillId: string | null) =>
+  invoke<NormalizedSkillSelection>("normalize_summon_skill_selection", { mainSkillId, summonSkillId });
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
   invoke<DefenseProfile>("preview_defense", { character, buffs });

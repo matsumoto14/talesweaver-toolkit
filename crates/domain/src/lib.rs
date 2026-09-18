@@ -144,7 +144,7 @@ pub use siena::{
 };
 pub use skill::{
     Attacker, ComboSkillType, ComboSkillTypeError, ComboSkillVariant, Skill, SkillDependency,
-    SkillTarget,
+    SkillTarget, SummonForm,
 };
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{

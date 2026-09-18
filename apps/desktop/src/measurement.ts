@@ -79,10 +79,13 @@ export function measurementDraft(
   const label = targetLabel(conditions);
   const listed = conditions.content !== null;
   const doll = conditions.skill.attacker === "magic_doll";
+  const spirit = conditions.skill.attacker === "destruction_spirit";
   const lines = [
     doll
       ? `${label} を熊(魔法人形)の ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`
-      : `${label} を ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`,
+      : spirit
+        ? `${label} を精霊(破壊精霊)の ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`
+        : `${label} を ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`,
     "",
     listed ? "| 武器 | 攻撃力 | 実測 | 計算 | 差 | 発数 |" : "| 武器 | 攻撃力 | 実測 | 発数 |",
     listed ? "|---|---:|---:|---:|---:|---:|" : "|---|---:|---:|---:|",
@@ -142,7 +145,9 @@ function measurementPayload(conditions: MeasurementConditions, samples: Measurem
     },
     skill: {
       id: conditions.skill.id,
-      /** 誰が撃ったか(player / magic_doll)。熊は係数行が別なので集計側で分ける(version 4 で追加) */
+      /** 誰が撃ったか(player / magic_doll / destruction_spirit)。熊は係数行が別なので集計側で
+       *  分ける(version 4 で追加)。精霊は本体と同じ INT 行だが、誰が撃ったかは残す
+       *  (2026-09-18 追記。version は上げない — 値が増えるだけ) */
       attacker: conditions.skill.attacker,
       combo_type: conditions.comboSkillType,
       dependency: conditions.skill.dependency,

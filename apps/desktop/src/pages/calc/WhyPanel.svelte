@@ -27,12 +27,18 @@
     critMode: boolean;
     store: DetailStore;
     /** 誰の数字を掘り下げているか。熊(magic_doll)のときは ① の掘り下げに「係数 STAB(熊)」の行が
-     *  1 行増える(ADR-016 突き合わせ)。面の形は変えない */
+     *  1 行増える(ADR-016 突き合わせ)。精霊(destruction_spirit)は本体と同じ行なので増えない。
+     *  面の形は変えない */
     attacker: Attacker;
-    /** 熊がいるキャラだけ見出しに 本体 / 熊 の 2 択を置く(ユーザー要望 2026-09-18)。押すと親が attacker を替える */
+    /** キャラが持つ召喚獣の attacker(熊 = magic_doll / 精霊 = destruction_spirit)。召喚獣が
+     *  いないキャラは null(2 択自体を出さない) */
+    summonAttacker?: Attacker | null;
+    /** 召喚獣がいるキャラだけ見出しに 本体 / 熊(または精霊)の 2 択を置く(ユーザー要望
+     *  2026-09-18)。押すと親が attacker を替える */
     onAttacker?: (attacker: Attacker) => void;
   }
-  let { result, defense, perHit, critMode, store, attacker, onAttacker }: Props = $props();
+  let { result, defense, perHit, critMode, store, attacker, summonAttacker = null, onAttacker }: Props = $props();
+  const summonAttackerLabel = $derived(summonAttacker === "destruction_spirit" ? "精霊" : "熊");
 
   const steps = $derived(stepsOf(result, critMode));
   const atkRows = $derived(attackRows(result?.trace.attack ?? null));
@@ -109,18 +115,18 @@
 </script>
 
 <div class="panel">
-  <!-- 見出しは全体が開閉のボタン。本体 / 熊 の 2 択(§07 段階選択)はボタンの中に入れられない
-       (button の入れ子は不正)ので、同じ帯の上に隣として重ねる。熊がいないキャラでは何も置かない -->
+  <!-- 見出しは全体が開閉のボタン。本体 / 召喚獣 の 2 択(§07 段階選択)はボタンの中に入れられない
+       (button の入れ子は不正)ので、同じ帯の上に隣として重ねる。召喚獣がいないキャラでは何も置かない -->
   <div class="panel-head-wrap">
     <button type="button" class="panel-head blue" aria-expanded={store.flowOpen} onclick={() => (store.flowOpen = !store.flowOpen)}>
       <span class="panel-title dark">なぜこの数字？</span>
       <span class="panel-note dark">{store.flowOpen ? "閉じる" : "内訳をひらく"}</span>
       <span class="caret" class:rot={store.flowOpen}>▼</span>
     </button>
-    {#if onAttacker}
-      <div class="who-switch" role="group" aria-label="なぜこの数字? を本体 / 熊のどちらで見るか">
+    {#if onAttacker && summonAttacker}
+      <div class="who-switch" role="group" aria-label="なぜこの数字? を本体 / {summonAttackerLabel}のどちらで見るか">
         <Chip class="quiet" name="why-attacker" value="player" on={attacker === "player"} onToggle={() => onAttacker?.("player")}>本体</Chip>
-        <Chip class="quiet" name="why-attacker" value="magic_doll" on={attacker === "magic_doll"} onToggle={() => onAttacker?.("magic_doll")}>熊</Chip>
+        <Chip class="quiet" name="why-attacker" value={summonAttacker} on={attacker === summonAttacker} onToggle={() => onAttacker?.(summonAttacker)}>{summonAttackerLabel}</Chip>
       </div>
     {/if}
   </div>

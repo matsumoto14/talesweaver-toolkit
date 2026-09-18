@@ -49,7 +49,7 @@
 ### crates/domain — ドメインモデルと計算(核)
 
 - **モデル**: `Character`(素ステ・装備・スキル構成・覚醒/エタ・バフセット)、`Equipment`(部位別 12 スロット + 部位別シエナ登録 + 称号 + テシスコア + アバター強化 + 装備研磨。装備部位はアイテム参照/カスタム・基本能力値・エンチャント・強化 Lv・武器アビリティ・**ランダムオプション**を持つ。シエナのオーラは抽出・注入できるため装備登録と独立した部位別登録一覧 + 装着中IDで持ち、装着中だけを装備攻撃力等へ集計。アバター強化は兜/頭/体/脚/エフェクトの5部位に固定値を付与でき、強化能力値へ合流する。装備研磨は部位ごとに能力値1つを基本能力値側で上げる消耗品の記録で、バフ「装備研磨」の ON/OFF で実際に合流させるかを切り替える)、`SoulLinkStatus`(リンクステータス 1〜10 の Lv。キャラ単位・条件達成済み前提。1〜7を基本能力/戦闘計算へ接続し、8〜10は記録)、`CommonSkills`(共通スキル。装備攻撃力強化倍率・装備防御力倍率・割合追加ダメージ)、`Skill`、`Buff`、`Enemy`、`Content`(入場条件)
-- **攻撃者(`Attacker`)**: スキルを実際に撃つ主体(`Player` / `MagicDoll`)。アナイスの魔法人形(ミカベア/ルシベア)は本体と別の係数(wiki `STAB(熊)` 行)で自分のスキルを撃つ。`Skill::attacker` に持たせ、係数は攻撃者 + 依存種別の 1 関数(`gamedata::*_for`/`commands::coefficients_for`)から引く(攻撃者ごとに関数を分けない)
+- **攻撃者(`Attacker`)**: スキルを実際に撃つ主体(`Player` / `MagicDoll` / `DestructionSpirit`)。アナイスの魔法人形(ミカベア/ルシベア)は本体と別の係数(wiki `STAB(熊)` 行)で、破壊精霊(アンフェル/グレシス/イグニー)は本体と同じ INT 依存の係数(wiki に専用行が無いため `Player` の行へ委譲)で、それぞれ自分のスキルを撃つ。`Skill::attacker` に持たせ、係数は攻撃者 + 依存種別の 1 関数(`gamedata::*_for`/`commands::coefficients_for`)から引く(攻撃者ごとに関数を分けない)。主軸スキルが「どの人形/精霊で戦うか」の型(`Skill::summon_form`)を決め、召喚欄はその型の候補だけに絞って自動で差し替える(docs/adr/016)
 - **計算**: 能力値計算 → カテゴリ集計 → 与ダメージ式 → 段数・追加ダメージ の4段パイプライン(docs/damage-formula.md §13)
 - **装備の所有形**: 各部位は登録リストと選択中IDを持つ。保存検証は登録全件、計算は選択中だけ。属性強化はキャラの選択属性を対象の実装備へ +9 自動反映する
 - **機能サービス**: ダメージ計算・強化提案・ロードマップ判定・索引。すべて `Character` を入力に取る純関数群
@@ -67,7 +67,7 @@
 - 出典は Tale Wiki(スキル・敵・バフ・コンテンツ等)と、装備・称号の 9 値およびアイコンはゲームクライアントの展開データ(docs/adr/004-equipment-model.md)。各データに出典(ページ・取得日)を持たせる
 - wiki に無く実測に頼る値は `[仮]` を付ける(docs/adr/002-damage-formula-sources.md)
 - `inkri`: ビアヌのインクリ対象装備カタログ(部位はクライアント DB、ビアヌ費用・エタインクリ費用は wiki の表)。生成は `tools/gamedata/import_inkri_targets.py`
-- `skills::attacker_of` は魔法人形が撃つスキル(副表 `MAGIC_DOLL_SKILLS`)を判定し、`Skill::attacker` に付ける。`characters::attack_coefficients_for` 等は攻撃者ごとの係数を返す唯一の口(`Player` は既存の依存種別別関数に委譲)
+- `skills::attacker_of` は魔法人形(副表 `MAGIC_DOLL_SKILLS`)・破壊精霊(副表 `DESTRUCTION_SPIRIT_SKILLS`)が撃つスキルを判定し、`Skill::attacker` に付ける。`skills::summon_form_of`(副表 `SUMMON_FORMS`)は主軸スキル・召喚スキルが属する召喚獣の型(ミカベア/ルシベア/アンフェル/グレシス/イグニー)を `Skill::summon_form` に付ける。`characters::attack_coefficients_for` 等は攻撃者ごとの係数を返す唯一の口(`Player` と `DestructionSpirit` は既存の依存種別別関数に委譲)
 
 ### crates/storage — ユーザーデータ(SQLite)
 

@@ -24,19 +24,28 @@ const DOWNLOADED_EQUIPMENT_KEY = "tw-v4-tenebris";
 
 // 初期化は 1 回だけ。最初に呼ばれた invoke がこれを待つ(呼び出し側に初期化を意識させない)。
 // 初期化の中で、前回取得したテネブリスをカタログへ戻す(壊れていれば捨てて未収録のまま進む)。
-const ready = init().then(() => {
+const ready = init().then(async () => {
   let json: string | null = null;
   try {
     json = localStorage.getItem(DOWNLOADED_EQUIPMENT_KEY);
   } catch {
-    return;
+    json = null;
   }
-  if (json === null) return;
-  try {
-    callWasm("install_downloaded_equipment", { json });
-  } catch {
-    localStorage.removeItem(DOWNLOADED_EQUIPMENT_KEY);
+  if (json !== null) {
+    try {
+      callWasm("install_downloaded_equipment", { json });
+    } catch {
+      localStorage.removeItem(DOWNLOADED_EQUIPMENT_KEY);
+    }
   }
+  // v7: 主軸に召喚スキルが紛れている行を召喚欄へ移す(browserStore.ts の
+  // normalizeSummonSkillSelections 参照)。判定・移す先の決定は Rust(WASM)側の
+  // normalize_summon_skill_selection に委ね、ここは呼ぶだけ(2026-09-18 追記)。
+  await store.normalizeSummonSkillSelections((mainSkillId, summonSkillId) =>
+    callWasm("normalize_summon_skill_selection", { mainSkillId, summonSkillId }) as {
+      main_skill_id: string | null;
+      summon_skill_id: string | null;
+    });
 });
 
 type Args = Record<string, unknown>;
@@ -132,6 +141,11 @@ const stored: Record<string, (args: Args) => Promise<unknown>> = {
 };
 
 export async function invoke<T>(command: string, args: Args = {}): Promise<T> {
+  // 保存先を読むコマンドも初期化(`ready`)を待つ。IndexedDB は WASM の読み込みより速いので、
+  // 待たないと v7 の正規化(主軸に紛れた召喚スキルを召喚欄へ移す)が終わる前に
+  // `list_characters` が未正規化のキャラを返し、その状態で編集すると自動保存が検証エラーで
+  // 止まる(移行が防ぐはずの壊れ方が起動 1 回ぶん再発する。レビュー指摘 2026-09-18)。
+  await ready;
   const handler = stored[command];
   if (handler) return handler(args) as Promise<T>;
   return wasm<T>(command, args);

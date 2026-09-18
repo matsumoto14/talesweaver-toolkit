@@ -581,6 +581,15 @@ pub fn retain_character_skills(skill_ids: Vec<String>, game_character_id: String
     commands::retain_character_skills(skill_ids, game_character_id)
 }
 
+/// 主軸に召喚スキルが紛れていたら召喚欄へ移す(書き出し JSON の読み込みが呼ぶ。2026-09-18 追記)。
+#[tauri::command]
+pub fn normalize_summon_skill_selection(
+    main_skill_id: Option<String>,
+    summon_skill_id: Option<String>,
+) -> commands::NormalizedSkillSelection {
+    commands::normalize_summon_skill_selection(main_skill_id, summon_skill_id)
+}
+
 /// 登録済みキャラでダメージ計算する。DB からキャラを引くのはここだけで、
 /// 引いたあとの計算は `commands` crate(Web 版と共通)に任せる。
 #[tauri::command]

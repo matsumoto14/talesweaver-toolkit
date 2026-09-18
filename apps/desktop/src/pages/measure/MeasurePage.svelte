@@ -127,9 +127,10 @@
         if (!isCurrent()) return;
         // 収録済みの敵では計算に使った攻撃力をそのまま採る(テシスコアは対象の地域で
         // 解決されるので、地域なしの preview_effective_stats とは値がずれる)。
-        // 選んだスキルを本体の枠(body)で計算する。熊のスキル(極・熊連など)を選んでも、係数は
-        // Rust がスキル自身の攻撃者から引く(coefficients_for)ので 1 発の値は熊のもの。
-        // 熊の鎖(summon)は見ない — 実測するのは「選んだスキルの 1 発」だけ(ADR-016 突き合わせ)
+        // 選んだスキルを本体の枠(body)で計算する。召喚獣のスキル(極・熊連・電撃攻撃など)を
+        // 選んでも、係数は Rust がスキル自身の攻撃者から引く(coefficients_for)ので
+        // 1 発の値は召喚獣のもの。召喚獣の鎖(summon)は見ない — 実測するのは
+        // 「選んだスキルの 1 発」だけ(ADR-016 突き合わせ)
         attack = damage?.body.trace.attack ?? preview.attack?.breakdown ?? null;
         stats = preview.stats;
         result = damage?.body ?? null;
@@ -269,7 +270,9 @@
             }
             options={skills.map((s) => ({
               value: s.id, name: s.name,
-              meta: s.attacker === "magic_doll" ? `熊 ・ ${skillMeta(s)}` : skillMeta(s),
+              meta: s.attacker === "magic_doll" ? `熊 ・ ${skillMeta(s)}`
+                : s.attacker === "destruction_spirit" ? `精霊 ・ ${skillMeta(s)}`
+                : skillMeta(s),
               iconId: s.id, iconKind: "skill" as const,
             }))}
           />

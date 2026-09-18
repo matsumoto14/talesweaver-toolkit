@@ -76,6 +76,25 @@ id が `relic_sanctuary_kisinik` だったために 10〜19段の系列に入ら
 を追加。既存キャラは未選択のまま読める。SQLite は `SCHEMA_VERSION` 15 → 16、
 IndexedDB(`browserStore.ts`)も 5 → 6 で既存行に `summon_skill_id: null` を埋める。
 
+### v17: 主軸に紛れた召喚スキルを召喚欄へ移す(2026-09-18)
+
+破壊精霊(`Attacker::DestructionSpirit`)を足す前は `validate_main_skill` が攻撃者を見ておらず、
+熊(魔法人形)・精霊が撃つスキルも本体の主軸(`main_skill_id`)に選べてしまっていた(docs/adr/016)。
+既存キャラの `main_skill_id` がそれを指していると、検証を攻撃者ごとに分けた変更後は
+`validate_main_skill` が弾いてキャラタブの自動保存がエラーで止まる。
+
+`migrate_summon_skill_out_of_main` が、`main_skill_id` が召喚スキル(本体以外の攻撃者)を指す行を
+見つけ、`summon_skill_id` が未選択ならそこへ移して `main_skill_id` を NULL に戻す。`summon_skill_id`
+が既に埋まっている行は上書きせず `main_skill_id` だけ NULL にする —
+**このとき主軸に入っていた召喚スキルは捨てる**。召喚枠は 1 つ(docs/adr/016 決定 12)なので 2 件は
+持てず、既に召喚欄で選んである側(意図がはっきりしている方)を残す。
+判定・移す先の決定は `gamedata::normalize_summon_skill_selection` の 1 関数に持たせ、SQLite の
+v17 移行・IndexedDB の v7 移行(`onupgradeneeded` ではなくストアを開いた直後の一回だけの正規化。
+版変更トランザクション中に WASM を呼べないため)・書き出し JSON の読み込み(`transfer.ts`)の
+3 か所が同じ関数を使う。SQLite は `SCHEMA_VERSION` 16 → 17、IndexedDB(`browserStore.ts`)も
+6 → 7。新しい列・ストアは無いので、書き出し JSON の `FORMAT_VERSION` は据え置き(ファイルの形は
+変わらず、値の意味だけ直る)。
+
 ### v1 → v8 の変遷
 
 1. **v1**: `characters` 1 テーブル(id, name, game_character_id, 7 ステ, awakening_stage, eta_level)。

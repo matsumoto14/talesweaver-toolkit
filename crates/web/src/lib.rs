@@ -80,6 +80,13 @@ struct RetainCharacterSkillsArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct NormalizeSummonSkillSelectionArgs {
+    main_skill_id: Option<String>,
+    summon_skill_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BuffsArgs {
     buffs: domain::BuffSelection,
 }
@@ -318,6 +325,15 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "retain_character_skills" => {
             let a: RetainCharacterSkillsArgs = args_of(command, args)?;
             ok(commands::retain_character_skills(a.skill_ids, a.game_character_id))
+        }
+        // 主軸に召喚スキルが紛れていたら召喚欄へ移す(書き出し JSON の読み込み・IndexedDB の
+        // 一回だけの正規化パスが呼ぶ。2026-09-18 追記)
+        "normalize_summon_skill_selection" => {
+            let a: NormalizeSummonSkillSelectionArgs = args_of(command, args)?;
+            ok(commands::normalize_summon_skill_selection(
+                a.main_skill_id,
+                a.summon_skill_id,
+            ))
         }
 
         // --- 引数を取る計算系 ---

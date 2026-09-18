@@ -380,29 +380,33 @@ const MAGIC_DOLL_EQUIPMENT_COEFFICIENTS: EquipmentCoefficients = EquipmentCoeffi
 
 /// 攻撃者ごとのステ由来攻撃力係数。`Player` は `attack_coefficients` に委譲、`MagicDoll` は
 /// `dependency` を無視して熊固定の係数を返す(出典は `MAGIC_DOLL_ATTACK_COEFFICIENTS`)。
+/// `DestructionSpirit`(破壊精霊)は wiki 計算式まとめの依存表に専用行が無い(あるのは
+/// `STAB(熊)` だけ)ため、`Player` と同じく `dependency` の行(INT)に委譲する
+/// (2026-09-18 確認)。
 pub fn attack_coefficients_for(attacker: Attacker, dependency: SkillDependency) -> AttackCoefficients {
     match attacker {
-        Attacker::Player => attack_coefficients(dependency),
+        Attacker::Player | Attacker::DestructionSpirit => attack_coefficients(dependency),
         Attacker::MagicDoll => MAGIC_DOLL_ATTACK_COEFFICIENTS,
     }
 }
 
-/// 攻撃者ごとの装備攻撃力係数。`Player` は `equipment_coefficients` に委譲。
+/// 攻撃者ごとの装備攻撃力係数。`Player` / `DestructionSpirit` は `equipment_coefficients` に委譲。
 pub fn equipment_coefficients_for(
     attacker: Attacker,
     dependency: SkillDependency,
 ) -> EquipmentCoefficients {
     match attacker {
-        Attacker::Player => equipment_coefficients(dependency),
+        Attacker::Player | Attacker::DestructionSpirit => equipment_coefficients(dependency),
         Attacker::MagicDoll => MAGIC_DOLL_EQUIPMENT_COEFFICIENTS,
     }
 }
 
-/// 攻撃者ごとの命中P補正。`Player` は `accuracy_correction` に委譲。熊は依存ボーナス
-/// INT×0.1・ペナルティ INT/100(既存 `accuracy_correction(Stab)` の STAB→INT 置き換え)。
+/// 攻撃者ごとの命中P補正。`Player` / `DestructionSpirit` は `accuracy_correction` に委譲。
+/// 熊は依存ボーナス INT×0.1・ペナルティ INT/100(既存 `accuracy_correction(Stab)` の
+/// STAB→INT 置き換え)。
 pub fn accuracy_correction_for(attacker: Attacker, dependency: SkillDependency) -> AccuracyCorrection {
     match attacker {
-        Attacker::Player => accuracy_correction(dependency),
+        Attacker::Player | Attacker::DestructionSpirit => accuracy_correction(dependency),
         Attacker::MagicDoll => AccuracyCorrection {
             bonus: Some((StatKind::Int, 0.1)),
             penalty_primary: StatKind::Int,
@@ -579,6 +583,25 @@ mod tests {
         );
         assert_eq!(
             accuracy_correction_for(Attacker::Player, dependency),
+            accuracy_correction(dependency)
+        );
+    }
+
+    /// 破壊精霊は wiki 計算式まとめに専用行が無いため、`Player` と同じ `dependency` の行
+    /// (INT)に委譲する(2026-09-18 確認)。
+    #[test]
+    fn 破壊精霊の係数は本体のINT行と一致する() {
+        let dependency = SkillDependency::Int;
+        assert_eq!(
+            attack_coefficients_for(Attacker::DestructionSpirit, dependency),
+            attack_coefficients(dependency)
+        );
+        assert_eq!(
+            equipment_coefficients_for(Attacker::DestructionSpirit, dependency),
+            equipment_coefficients(dependency)
+        );
+        assert_eq!(
+            accuracy_correction_for(Attacker::DestructionSpirit, dependency),
             accuracy_correction(dependency)
         );
     }

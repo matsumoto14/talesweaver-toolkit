@@ -45,7 +45,7 @@ pub use equipment_catalog::{
 pub use inkri::{find_inkri_target, inkri_targets, InkriTarget, INKRI_TARGET_SOURCE};
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};
-pub use skills::{attacker_of, find_skill, skills_for};
+pub use skills::{attacker_of, find_skill, normalize_summon_skill_selection, skills_for};
 pub use titles::{title_catalog, TITLE_SOURCE};
 
 /// データの出典。

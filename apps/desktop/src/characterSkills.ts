@@ -4,7 +4,7 @@
 // (crates/domain/src/character_skill.rs の effects() / actual_delay_contributions() /
 // damage_contributions() が唯一の正)。
 import type {
-  Attacker, CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect,
+  Attacker, CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect, SummonForm,
 } from "./api/types";
 import { fmtPct, fmtSigned } from "./format";
 import { ELEMENT_LABELS, STAT_LABELS } from "./labels";
@@ -65,19 +65,25 @@ export const MAIN_SKILL_PINNED = 3;
  * (§07「1 つ選ぶ」: ドメイン知識で固定、使用履歴で並べない)。
  * 空欄は候補の 1 行(value = "")で、文言は呼び出し側の文脈で変える。
  *
- * `attacker`(既定 `player`)で候補を絞る。本体の主軸は魔法人形(`magic_doll`)が撃つスキルを
- * 選べない(ADR-016)ので、召喚欄の Picker は `attacker: "magic_doll"` を渡して呼ぶ。
+ * `attacker`(既定 `player`)で候補を絞る。本体の主軸は召喚獣(熊・破壊精霊)が撃つスキルを
+ * 選べない(ADR-016)ので、召喚欄の Picker は `attacker: "summon"` を渡して呼ぶ
+ * (`!== "player"` = 熊と精霊をまとめて 1 つの召喚欄の候補にする。攻撃者を 2 系統に分けない)。
+ *
+ * `summonForm` を渡すと、召喚欄の候補をさらにその型(主軸が決めた「どの人形 / 精霊か」)だけに
+ * 絞る(2026-09-18 追記)。主軸が型を決めないとき(`summonForm` が `null` / 未指定)は絞らない。
  */
 export function mainSkillOptions(
   skills: Skill[],
   emptyLabel: string,
   emptyMeta: string,
-  attacker: Attacker = "player",
+  attacker: Attacker | "summon" = "player",
+  summonForm?: SummonForm | null,
 ): PickerOption[] {
   return [
     { value: "", name: emptyLabel, meta: emptyMeta, iconId: null },
     ...skills
-      .filter((s) => s.attacker === attacker)
+      .filter((s) => (attacker === "summon" ? s.attacker !== "player" : s.attacker === attacker))
+      .filter((s) => summonForm == null || s.summon_form === summonForm)
       .map((s, i) => ({
         value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const,
         pinned: i < MAIN_SKILL_PINNED,

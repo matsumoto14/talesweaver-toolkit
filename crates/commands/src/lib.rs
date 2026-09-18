@@ -689,9 +689,31 @@ pub fn list_titles() -> Vec<TitleView> {
         .collect()
 }
 
+/// `main_skill_id` / `summon_skill_id` の正規化結果(`gamedata::normalize_summon_skill_selection`
+/// のコマンド版)。SQLite の v17 移行は gamedata を直接呼べるのでこちらを経由しないが、
+/// IndexedDB の v7 移行・書き出し JSON の読み込み(`transfer.ts`)はここを呼ぶ(2026-09-18 追記)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NormalizedSkillSelection {
+    pub main_skill_id: Option<String>,
+    pub summon_skill_id: Option<String>,
+}
+
+/// 主軸に召喚スキルが紛れていたら召喚欄へ移す(`gamedata::normalize_summon_skill_selection` 参照)。
+pub fn normalize_summon_skill_selection(
+    main_skill_id: Option<String>,
+    summon_skill_id: Option<String>,
+) -> NormalizedSkillSelection {
+    let (main_skill_id, summon_skill_id) =
+        gamedata::normalize_summon_skill_selection(main_skill_id, summon_skill_id);
+    NormalizedSkillSelection {
+        main_skill_id,
+        summon_skill_id,
+    }
+}
+
 /// 主軸スキル(攻撃力の依存種別を決める)はそのキャラのスキル一覧に含まれている必要がある。
 /// キャラ種を変えたときに前キャラのスキルが残るのを防ぐ。未選択(`None`)は許す。
-/// 熊(魔法人形)が撃つスキルは本体の主軸にはできない(wiki 計算式まとめ `STAB(熊)` 行)。
+/// 召喚獣(熊・精霊)が撃つスキルは本体の主軸にはできない(wiki 計算式まとめ `STAB(熊)` 行)。
 pub fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
     let Some(skill_id) = &character.main_skill_id else {
         return Ok(());
@@ -707,14 +729,14 @@ pub fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
     }
     if gamedata::attacker_of(skill_id) != domain::Attacker::Player {
         return Err(CommandError::from(format!(
-            "熊が撃つスキル '{skill_id}' は主軸に選べません"
+            "召喚獣が撃つスキル '{skill_id}' は主軸に選べません"
         )));
     }
     Ok(())
 }
 
-/// 召喚スキル(アナイスの魔法人形に撃たせるスキル)はそのキャラのスキル一覧に含まれ、
-/// かつ熊(魔法人形)が撃つスキルである必要がある。未選択(`None`)は許す。
+/// 召喚スキル(アナイスの熊・破壊精霊に撃たせるスキル)はそのキャラのスキル一覧に含まれ、
+/// かつ本体以外(召喚獣)が撃つスキルである必要がある。未選択(`None`)は許す。
 pub fn validate_summon_skill(character: &NewCharacter) -> CommandResult<()> {
     let Some(skill_id) = &character.summon_skill_id else {
         return Ok(());
@@ -728,7 +750,7 @@ pub fn validate_summon_skill(character: &NewCharacter) -> CommandResult<()> {
             character.game_character_id
         )));
     }
-    if gamedata::attacker_of(skill_id) != domain::Attacker::MagicDoll {
+    if gamedata::attacker_of(skill_id) == domain::Attacker::Player {
         return Err(CommandError::from(format!(
             "本体が撃つスキル '{skill_id}' は召喚スキルに選べません"
         )));
@@ -1573,10 +1595,10 @@ fn damage_with_optional_combo(
     Ok(domain::calculate_damage_with_combo(material, target, &normal))
 }
 
-/// 熊(魔法人形)ぶんのダメージ計算結果。`skill` は召喚スキル、`result` は熊固定係数・
-/// コンボ無し(`combo_count = 0`)で計算した `DamageResult` だが、DPS 由来の値
+/// 召喚獣(熊・破壊精霊)ぶんのダメージ計算結果。`skill` は召喚スキル、`result` は召喚獣の
+/// 係数・コンボ無し(`combo_count = 0`)で計算した `DamageResult` だが、DPS 由来の値
 /// (`actual_delay.uses_per_minute` / `dps` / `expected_dps` / `defeat_seconds` / `reach`)は
-/// 熊の攻撃間隔式(`summon_uses_per_minute`。本体の実測回数表は使わない)で作り直したもの。
+/// 召喚獣の攻撃間隔式(`summon_uses_per_minute`。本体の実測回数表は使わない)で作り直したもの。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SummonDamage {
     pub skill_id: String,
@@ -1585,20 +1607,20 @@ pub struct SummonDamage {
     pub interval_seconds: Option<f64>,
 }
 
-/// 本体 + 熊の合計(合計 DPS = 本体 DPS + 熊 DPS の単純和。本体は召喚中も自由に撃てるため)。
-/// 熊を持たないキャラ・召喚スキル未選択なら本体単独の値と同じ。
+/// 本体 + 召喚獣の合計(合計 DPS = 本体 DPS + 召喚獣 DPS の単純和。本体は召喚中も自由に撃てるため)。
+/// 召喚獣を持たないキャラ・召喚スキル未選択なら本体単独の値と同じ。
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct CombinedDamage {
     pub expected_dps: Option<f64>,
     pub defeat_seconds: Option<f64>,
     /// 合計の討伐時間から決まる到達段(`domain::ReachTier`)。討伐時間が出せないなら `None`。
-    /// 熊がいるキャラの「行ける?」判定は本体単独の `body.reach` ではなくこちらを見る
+    /// 召喚獣がいるキャラの「行ける?」判定は本体単独の `body.reach` ではなくこちらを見る
     /// (メーター・討伐時間の文言・ホームのスポットライトが共有する。ADR-016 決定 9・10)
     pub reach: Option<domain::ReachTier>,
 }
 
 /// `damage_for_character` / `preview_damage` の戻り。既存の `DamageResult` 全フィールドは
-/// `body` にそのまま残し、熊ぶん(`summon`)と合計(`combined`)を足したもの。
+/// `body` にそのまま残し、召喚獣ぶん(`summon`)と合計(`combined`)を足したもの。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CharacterDamageResult {
     pub body: DamageResult,
@@ -1607,10 +1629,9 @@ pub struct CharacterDamageResult {
     pub combined: CombinedDamage,
 }
 
-/// 熊(魔法人形)のスキル 1 件ぶんを計算する。本体と同じ材料(能力値・装備・バフ)で
-/// `coefficients` だけ `coefficients_for(MagicDoll, ..)`・`combo_count = 0` になる
-/// (`build_damage_input` が `skill.attacker` を見て係数を分岐させるので、ここでは
-/// 熊のスキルを渡すだけでよい)。
+/// 召喚獣(熊・破壊精霊)のスキル 1 件ぶんを計算する。本体と同じ材料(能力値・装備・バフ)で
+/// `coefficients` だけ召喚獣の係数(`build_damage_input` が `skill.attacker` を見て分岐)・
+/// `combo_count = 0` になる(ここでは召喚獣のスキルを渡すだけでよい)。
 #[allow(clippy::too_many_arguments)]
 fn build_summon_damage(
     base_stats: &domain::BaseStats,
@@ -1644,7 +1665,7 @@ fn build_summon_damage(
         temporary_adjustments,
     )?;
     let mut result = domain::calculate_damage(&material, &target);
-    // 熊の攻撃間隔は本体の実測回数表を使わず式で出す(domain::apply_summon_interval。
+    // 召喚獣の攻撃間隔は本体の実測回数表を使わず式で出す(domain::apply_summon_interval。
     // 中ディレイ・回数・DPS・討伐時間をまとめて作り直し、本体式の値を残さない)
     let interval_seconds = domain::apply_summon_interval(&mut result, target.enemy.hp);
     Ok(SummonDamage {
@@ -1654,7 +1675,7 @@ fn build_summon_damage(
     })
 }
 
-/// 本体 DPS + 熊 DPS の単純和(本体は召喚中も自由に撃てるため)。熊が無ければ本体の値のまま。
+/// 本体 DPS + 召喚獣 DPS の単純和(本体は召喚中も自由に撃てるため)。召喚獣が無ければ本体の値のまま。
 fn combine_damage(body: &DamageResult, summon: Option<&SummonDamage>) -> CombinedDamage {
     let Some(summon) = summon else {
         return CombinedDamage {
@@ -1840,8 +1861,8 @@ pub fn evaluate_contents(
     };
     // スキルごとに変わるがコンテンツには依存しない値(依存種別の係数・カテゴリ寄与・
     // 属性値)は、コンテンツの数だけ繰り返さずキャラのスキル数ぶんだけ 1 回作る。
-    // 熊(魔法人形)が撃つスキルは本体の最良スキル判定には含めない(本体は熊のスキルを
-    // 自分で振れないため)。熊ぶんの期待 DPS は別に集計して後段で合算する
+    // 召喚獣(熊・破壊精霊)が撃つスキルは本体の最良スキル判定には含めない(本体は召喚獣の
+    // スキルを自分で振れないため)。召喚獣ぶんの期待 DPS は別に集計して後段で合算する
     let skill_inputs: Vec<SkillEvaluationInput> = skills
         .iter()
         .filter(|skill| skill.attacker == domain::Attacker::Player)
@@ -1862,7 +1883,7 @@ pub fn evaluate_contents(
             ),
         })
         .collect();
-    // 熊(魔法人形)ぶんの入力(召喚スキル未選択・魔法人形を持たないキャラは None)。
+    // 召喚獣(熊・破壊精霊)ぶんの入力(召喚スキル未選択・召喚獣を持たないキャラは None)。
     let summon_input = character
         .summon_skill_id
         .as_deref()
@@ -2021,14 +2042,14 @@ fn candidate_context(
         .into_iter()
         .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
         .collect();
-    // 熊(魔法人形)のスキルを直接プレビューしているときも、装備は本体のもの(熊は自分の
-    // 装備を持たない)なので、係数だけ攻撃者で分岐させる
+    // 召喚獣(熊・破壊精霊)のスキルを直接プレビューしているときも、装備は本体のもの
+    // (召喚獣は自分の装備を持たない)なので、係数だけ攻撃者で分岐させる
     let mut enchant_allowed_keys = domain::enchant_dependency_keys(
         &gamedata::equipment_coefficients_for(skill.attacker, skill.dependency),
     );
-    // キャラに熊(魔法人形)が撃つスキルがあれば、エンチャント案内は本体 ∪ 熊の和集合にする
-    // (ADR-016 決定 8)。本体は召喚中も自由に撃てるので、熊にしか効かない値種を除外すると
-    // 本体側の伸びしろを見逃す。逆に本体だけに効く値種を除外すると熊側を見逃す。
+    // キャラに召喚獣が撃つスキルがあれば、エンチャント案内は本体 ∪ 召喚獣の和集合にする
+    // (ADR-016 決定 8)。本体は召喚中も自由に撃てるので、召喚獣にしか効かない値種を除外すると
+    // 本体側の伸びしろを見逃す。逆に本体だけに効く値種を除外すると召喚獣側を見逃す。
     if let Some(summon_skill_id) = character.summon_skill_id.as_deref() {
         let summon_skill = find_skill(summon_skill_id)?;
         for key in domain::enchant_dependency_keys(&gamedata::equipment_coefficients_for(
@@ -2361,6 +2382,21 @@ mod tests {
         c.main_skill_id = Some("anais_angry_pixie".to_string());
         c.summon_skill_id = Some("anais_mica_even_bear".to_string());
         assert!(super::validate_main_skill(&c).is_ok());
+        assert!(super::validate_summon_skill(&c).is_ok());
+    }
+
+    #[test]
+    fn 精霊が撃つスキルを主軸に選ぶと拒否される() {
+        let mut c = anais();
+        c.main_skill_id = Some("anais_lightning_attack".to_string());
+        let error = super::validate_main_skill(&c).unwrap_err();
+        assert!(error.message.contains("主軸に選べません"));
+    }
+
+    #[test]
+    fn 精霊が撃つスキルは召喚スキルに選べる() {
+        let mut c = anais();
+        c.summon_skill_id = Some("anais_lightning_attack".to_string());
         assert!(super::validate_summon_skill(&c).is_ok());
     }
 

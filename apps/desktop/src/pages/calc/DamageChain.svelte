@@ -1,11 +1,11 @@
 <script lang="ts">
-  // 鎖(1 発 → 合計 → DPS[→ 討伐時間])1 本ぶん。攻撃者(本体 / 熊)ごとに CalcPage が
+  // 鎖(1 発 → 合計 → DPS[→ 討伐時間])1 本ぶん。攻撃者(本体 / 召喚獣)ごとに CalcPage が
   // この部品を 1 回ずつ描く(ADR-016)。中身の組み立ては calc/damageDetail.ts、
   // 内訳の面は calc/DetailRows.svelte(そのままここでも使う)。
   //
   // 討伐時間の節は showDefeat で切り替える: 召喚スキルが無いキャラは今までどおり鎖の内に
   // 討伐時間まで出す。召喚スキルがあるキャラは
-  // 本体・熊どちらの鎖にも討伐時間節を出さず、CalcPage 側の「合計」面(combined)にだけ出す
+  // 本体・召喚獣どちらの鎖にも討伐時間節を出さず、CalcPage 側の「合計」面(combined)にだけ出す
   // (同じ情報を 2 箇所に出さない。§00 ②)。
   import type { DamageResult, Skill } from "../../api/types";
   import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
@@ -23,10 +23,13 @@
     skill: Skill | null;
     /** この鎖の開閉・変わった行の控え。攻撃者ごとに 1 つ(CalcPage が本体用・熊用を分けて持つ) */
     store: DetailStore;
-    /** 誰の鎖か(「熊」/「本体」) */
+    /** 誰の鎖か(「熊」/「精霊」/「本体」) */
     attackerLabel: string;
+    /** この鎖が召喚獣(熊 or 精霊)のものか。バッジのスタイル分岐に使う(attackerLabel の
+     *  文字列一致ではなく props で受ける。2026-09-18) */
+    isSummon?: boolean;
     attackerSkillName: string;
-    /** バッジに置く撃つ人の絵(本体 = キャラ、熊 = 魔法人形)。source は登録キャラの任意画像 */
+    /** バッジに置く撃つ人の絵(本体 = キャラ、召喚獣 = 魔法人形 / 破壊精霊)。source は登録キャラの任意画像 */
     icon: { kind: IconKind; id: string | null; source?: string | null };
     /** 討伐時間の節を鎖の中に出すか(召喚スキルが無いキャラだけ true。上の説明参照) */
     showDefeat: boolean;
@@ -44,7 +47,7 @@
     flowChanged?: boolean;
   }
   let {
-    result, skill, store, attackerLabel, attackerSkillName, icon, showDefeat, heroNumber,
+    result, skill, store, attackerLabel, isSummon = false, attackerSkillName, icon, showDefeat, heroNumber,
     intervalNote = null, onView, onPerHitDeltaFollow, flowChanged = false,
   }: Props = $props();
 
@@ -234,7 +237,7 @@
 
 <div class="chain-block">
   <div class="chain">
-    <div class="chain-badge badge-in" class:bear={attackerLabel === "熊"}>
+    <div class="chain-badge badge-in" class:bear={isSummon}>
       <Icon kind={icon.kind} id={icon.id} source={icon.source ?? null} size={28} label={attackerLabel} />
       <span class="badge-text">
         <span class="badge-who">{attackerLabel}</span>

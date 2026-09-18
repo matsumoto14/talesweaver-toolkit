@@ -81,12 +81,21 @@ export interface Skill {
   /** 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。null = 基本中ディレイ未収録で比較不能 */
   power_per_second: number | null;
   /** このスキルを実際に撃つ主体。魔法人形(アナイスのミカベア / ルシベア)が自分で撃つ
-   * スキルだけ `magic_doll`。既定は `player` */
+   * スキルは `magic_doll`、破壊精霊(アンフェル / グレシス / イグニー)が自分で撃つ
+   * スキルは `destruction_spirit`。既定は `player` */
   attacker: Attacker;
+  /** 召喚獣の型(wiki「Skill/アナイス」の型分け)。主軸スキルのうち「どの人形 / 精霊で
+   * 戦うか」を決めるスキル(ベアステップ・陣)はその型、召喚スキル(attacker !== "player")は
+   * 自分が属する型を持つ。型を決めない主軸・他キャラのスキルは null。フロントはこの値だけを
+   * 見て召喚欄を絞る(対応表を TS に書き写さない) */
+  summon_form: SummonForm | null;
 }
 
 // crates/domain/src/skill.rs の Attacker(snake_case)。
-export type Attacker = "player" | "magic_doll";
+export type Attacker = "player" | "magic_doll" | "destruction_spirit";
+
+// crates/domain/src/skill.rs の SummonForm(snake_case)。
+export type SummonForm = "mica_bear" | "rucy_bear" | "anferu" | "gureshisu" | "igni";
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
 export type Element =
@@ -1279,6 +1288,13 @@ export interface RegisteredCharacter {
   default_buff_set_id: number | null;
   /** 最終保存日時(ISO8601 UTC)。この列より前に作られたキャラは null(表示しない) */
   updated_at: string | null;
+}
+
+/** `main_skill_id` / `summon_skill_id` の正規化結果(commands の `NormalizedSkillSelection`。
+ * 主軸に召喚スキルが紛れていたら召喚欄へ移す。2026-09-18 追記) */
+export interface NormalizedSkillSelection {
+  main_skill_id: string | null;
+  summon_skill_id: string | null;
 }
 
 /** 登録キャラごとの正規化済み表示画像。data URLは端末内だけで使う。 */

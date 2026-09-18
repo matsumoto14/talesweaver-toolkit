@@ -262,10 +262,10 @@ fn evaluate_one_content(
         }
     }
 
-    // 熊(魔法人形)ぶんの期待 DPS を本体の期待 DPS に足し、討伐時間を出し直す
+    // 召喚獣(熊・破壊精霊)ぶんの期待 DPS を本体の期待 DPS に足し、討伐時間を出し直す
     // (wiki 計算式まとめ `STAB(熊)` 行。本体は召喚中も自由に撃てるので単純和)。
-    // 熊にはコンボボーナスが乗らない(combo_count = 0)。実測回数表は本体プレイヤーの実測なので
-    // 熊には使わず、常に `summon_uses_per_minute` の式で 60 秒あたりの回数を出す。
+    // 召喚獣にはコンボボーナスが乗らない(combo_count = 0)。実測回数表は本体プレイヤーの実測
+    // なので召喚獣には使わず、常に `summon_uses_per_minute` の式で 60 秒あたりの回数を出す。
     if let (Some(summon_input), Some(b)) = (summon, best.as_mut()) {
         let summon_target = DamageTarget {
             skill: summon_input.skill.clone(),
@@ -367,6 +367,7 @@ mod tests {
             power: Skill::compute_power(0.99, 1),
             power_per_second: Skill::compute_power_per_second(Skill::compute_power(0.99, 1), Some(1.4)),
             attacker: crate::Attacker::Player,
+            summon_form: None,
         }
     }
 

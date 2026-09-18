@@ -62,13 +62,16 @@ impl SkillDependency {
 /// どちらの表から引くかを決める(wiki 計算式まとめ `STAB(熊)` 行、2026-09-18 取得)。
 ///
 /// アナイスの魔法人形(ミカベア / ルシベア)は自分でスキルを撃ち、本体とは別の係数で
-/// 攻撃力を持つ。破壊精霊は対象外(そのスキルは本体扱いのまま)。
+/// 攻撃力を持つ。破壊精霊(アンフェル / グレシス / イグニー)も本体とは別の攻撃主体として
+/// 召喚に入るが、wiki 計算式まとめの依存表に「精霊」行が無い(あるのは `STAB(熊)` だけ)
+/// ため、係数は本体と同じ `dependency` の行(INT)に委譲する(2026-09-18 確認)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Attacker {
     #[default]
     Player,
     MagicDoll,
+    DestructionSpirit,
 }
 
 /// 対象指定(wiki スキル性能一覧の「対象指定」列)。
@@ -179,6 +182,24 @@ pub struct Skill {
     /// gamedata の副表(`MAGIC_DOLL_SKILLS`)から `to_skill()` が付ける
     #[serde(default)]
     pub attacker: Attacker,
+    /// 召喚獣の型(wiki「Skill/アナイス」の型分け、2026-09-18 追記)。本体の主軸スキルの
+    /// うち「どの人形 / 精霊で戦うか」を決めるスキル(ベアステップ・陣)はその型を、召喚スキル
+    /// (`attacker != Player`)は自分が属する型を持つ。型を決めない主軸(共通スキル・守護精霊)や
+    /// 他キャラのスキルは `None`。主軸を選んだら召喚欄をこの型の候補だけに絞り、既存の召喚選択が
+    /// 型外なら型内の先頭(ダメージ最大)へ差し替える(フロントは対応表を持たず、この値だけ見る)
+    #[serde(default)]
+    pub summon_form: Option<SummonForm>,
+}
+
+/// `Skill::summon_form` が指す召喚獣の型。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SummonForm {
+    MicaBear,
+    RucyBear,
+    Anferu,
+    Gureshisu,
+    Igni,
 }
 
 impl Skill {
@@ -232,6 +253,7 @@ impl Skill {
             power: 1.0,
             power_per_second: None,
             attacker: Attacker::Player,
+            summon_form: None,
         }
     }
 
@@ -324,6 +346,7 @@ mod tests {
                 Some(1.4),
             ),
             attacker: Attacker::Player,
+            summon_form: None,
         }
     }
 

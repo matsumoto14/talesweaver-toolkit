@@ -1344,6 +1344,7 @@ mod tests {
                     Some(1.4),
                 ),
                 attacker: crate::Attacker::Player,
+                summon_form: None,
             },
             enemy: Enemy {
                 id: "e".into(),

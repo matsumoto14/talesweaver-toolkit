@@ -84,7 +84,10 @@ CREATE TABLE IF NOT EXISTS characters (
 /// に変わった(10〜19段と同じ系列に畳むため)。保存済みの「次の目標」を書き換える(2026-09-16)。
 /// v16 で `summon_skill_id`(アナイスの魔法人形に撃たせるスキル)が加わった。既存キャラは
 /// 未選択(NULL)で読める(2026-09-18)。
-const SCHEMA_VERSION: i64 = 16;
+/// v17 で、主軸に紛れ込んでいた召喚スキル(熊・破壊精霊が撃つスキル)を召喚欄へ移す
+/// (`migrate_summon_skill_out_of_main`)。破壊精霊を足す前は主軸に選べてしまっていた穴を
+/// 塞ぐ移行で、新しい列は無い(2026-09-18)。
+const SCHEMA_VERSION: i64 = 17;
 
 const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, default_buff_set_id, updated_at";
 
@@ -781,6 +784,38 @@ fn migrate_weapon_skills_to_common(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// v17: 主軸(`main_skill_id`)に召喚スキル(本体以外の攻撃者が撃つスキル)が紛れている行を
+/// 召喚欄(`summon_skill_id`)へ移す。破壊精霊を足す前は `validate_main_skill` が攻撃者を
+/// 見ておらず、召喚スキル(魔法人形の熊のスキルも同様)も本体の主軸に選べてしまっていた
+/// (2026-09-18 追記)。判定・移す先の決定は `gamedata::normalize_summon_skill_selection`
+/// (IndexedDB の v7 移行・書き出し JSON の読み込みと共通の 1 関数)に委ね、ここに if を
+/// 書き写さない。起動のたびに走っても、移行後は `main_skill_id` が召喚スキルを指す行が
+/// 無いので実質何もしない(冪等)。
+fn migrate_summon_skill_out_of_main(conn: &Connection) -> Result<()> {
+    let mut stmt =
+        conn.prepare("SELECT id, main_skill_id, summon_skill_id FROM characters WHERE main_skill_id IS NOT NULL")?;
+    let rows: Vec<(i64, String, Option<String>)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    let tx = conn.unchecked_transaction()?;
+    for (id, main_skill_id, summon_skill_id) in rows {
+        let (new_main, new_summon) = gamedata::normalize_summon_skill_selection(
+            Some(main_skill_id.clone()),
+            summon_skill_id.clone(),
+        );
+        if new_main == Some(main_skill_id) && new_summon == summon_skill_id {
+            continue;
+        }
+        tx.execute(
+            "UPDATE characters SET main_skill_id = ?1, summon_skill_id = ?2 WHERE id = ?3",
+            params![new_main, new_summon, id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 pub struct CharacterRepository {
     pub(crate) conn: Connection,
 }
@@ -856,6 +891,8 @@ impl CharacterRepository {
         migrate_damage_snapshots(&conn)?;
         crate::character_icon_repository::migrate_character_icons(&conn)?;
         migrate_owned_titles(&conn)?;
+        // v17: summon_skill_id 列を読める必要がある(上の ALTER TABLE の後ならどこでもよい)。
+        migrate_summon_skill_out_of_main(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -2103,7 +2140,7 @@ mod tests {
                 created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
             );
             INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id)
-            VALUES ('アナイス', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'anais_thrust');
+            VALUES ('アナイス', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'anais_angry_pixie');
             PRAGMA user_version = 15;
             ",
         )
@@ -2114,7 +2151,7 @@ mod tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "アナイス");
         // 既存の値は壊れない
-        assert_eq!(list[0].main_skill_id.as_deref(), Some("anais_thrust"));
+        assert_eq!(list[0].main_skill_id.as_deref(), Some("anais_angry_pixie"));
         // 召喚スキルは未選択のまま
         assert_eq!(list[0].summon_skill_id, None);
 
@@ -2128,6 +2165,127 @@ mod tests {
             updated.summon_skill_id.as_deref(),
             Some("anais_mica_even_bear")
         );
+    }
+
+    /// v16 の DB(`summon_skill_id` 列はあるが破壊精霊追加前)で、主軸に召喚スキル(熊・精霊)が
+    /// 紛れている行が召喚欄へ移り、主軸は未選択になる(2026-09-18 追記)。
+    #[test]
+    fn v16dbで主軸に紛れた召喚スキルは召喚欄へ移る() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                summon_skill_id     TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            -- 熊のスキルが主軸に入っていて、召喚欄は未選択(移す先が空)
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id)
+            VALUES ('熊主軸', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'anais_mica_even_bear', NULL);
+            -- 精霊のスキルが主軸に入っていて、召喚欄は既に別のスキルで埋まっている(上書きしない)
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id)
+            VALUES ('精霊主軸', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'anais_lightning_attack', 'anais_mica_even_bear');
+            -- 本体スキルが主軸に入っている行は触らない
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id)
+            VALUES ('本体主軸', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'anais_angry_pixie', NULL);
+            PRAGMA user_version = 16;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        assert_eq!(
+            repo.conn
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
+        let list = repo.list().unwrap();
+
+        let bear = list.iter().find(|c| c.name == "熊主軸").unwrap();
+        assert_eq!(bear.main_skill_id, None);
+        assert_eq!(bear.summon_skill_id.as_deref(), Some("anais_mica_even_bear"));
+
+        // 召喚欄が既に埋まっている行は上書きされない。主軸だけ未選択になる。
+        let spirit = list.iter().find(|c| c.name == "精霊主軸").unwrap();
+        assert_eq!(spirit.main_skill_id, None);
+        assert_eq!(spirit.summon_skill_id.as_deref(), Some("anais_mica_even_bear"));
+
+        let body = list.iter().find(|c| c.name == "本体主軸").unwrap();
+        assert_eq!(body.main_skill_id.as_deref(), Some("anais_angry_pixie"));
+        assert_eq!(body.summon_skill_id, None);
+    }
+
+    /// 上の移行は起動のたびに走っても、一度移した行を再び動かさない(冪等)。
+    #[test]
+    fn 主軸の召喚スキルを移す移行は2回開いても再移行しない() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                summon_skill_id     TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id)
+            VALUES ('熊主軸', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'anais_mica_even_bear', NULL);
+            PRAGMA user_version = 16;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let list = repo.list().unwrap();
+        assert_eq!(list[0].main_skill_id, None);
+        assert_eq!(list[0].summon_skill_id.as_deref(), Some("anais_mica_even_bear"));
+
+        // ユーザーが召喚欄を手で未選択に戻したあと、もう一度 from_connection を通しても
+        // (= 2 回目の起動)、主軸が空なので移す対象にならず、召喚欄は手で戻した値のまま残る。
+        let mut cleared = new_character("熊主軸");
+        cleared.game_character_id = "anais".to_string();
+        cleared.summon_skill_id = None;
+        repo.update(list[0].id, &cleared, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        let reopened = CharacterRepository::from_connection(repo.conn).unwrap();
+        let relisted = reopened.list().unwrap();
+        assert_eq!(relisted[0].main_skill_id, None);
+        assert_eq!(relisted[0].summon_skill_id, None);
     }
 
     /// v4 の DB(`main_skill_id` 列が無い)を開いても落ちず、既存キャラは主軸スキル未選択で読める。

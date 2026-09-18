@@ -140,3 +140,9 @@ wiki Skill/共通・Skill/ゲージスキル から取り込んだ(`tools/gameda
 2D 立ち絵が無いので、召喚スキル「ミカベア召喚」「ルシベア召喚」のスキルアイコン(テクスチャ 13322 の
 コマ 53 / 55)を使う。gamedata に召喚スキルは無い(攻撃スキルだけ)ので id は「あれば付くはずの id」。
 計算タブの熊の鎖のバッジが使う。取り込みは `tools/gamedata/import_manual_icons.py`(`FROM_SPRITE`)。
+
+同日、同じ理由でアナイスの破壊精霊の絵 3 枚(`skills/anais_anferu_summon.png` /
+`skills/anais_gureshisu_summon.png` / `skills/anais_igni_summon.png`)も同梱した。精霊も 3D モデルで
+2D 立ち絵が無いので、召喚スキル「アンフェル召喚」「グレシス召喚」「イグニー召喚」のスキルアイコン
+(テクスチャ 13322 のコマ 65 / 67 / 69。雷 = アンフェル・水 = グレシス・火 = イグニー)を使う。
+計算タブの精霊の鎖のバッジが、その召喚スキルの属性から絵を選ぶのに使う。

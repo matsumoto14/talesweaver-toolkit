@@ -9,7 +9,7 @@
  */
 import {
   createBuffSet, createCharacter, getDamageSnapshot, listBuffSets, listCharacterIcons,
-  listCharacters, setCharacterIcon, setDamageSnapshot, setDefaultBuffSet,
+  listCharacters, normalizeSummonSkillSelection, setCharacterIcon, setDamageSnapshot, setDefaultBuffSet,
 } from "./commands";
 import type {
   BuffSet, CharacterIcon, DamageSnapshot, NewCharacter, RegisteredCharacter,
@@ -92,6 +92,14 @@ export async function importAll(file: TransferFile): Promise<ImportResult> {
 
   const characterIds = new Map<number, number>();
   for (const character of file.characters) {
+    // 主軸に召喚スキルが紛れていたら召喚欄へ移す(破壊精霊を足す前は本体の主軸に選べて
+    // しまっていた穴。SQLite の v17 移行・IndexedDB の v7 移行と同じ正規化関数を通す。
+    // FORMAT_VERSION は上げない — ファイルの形は変わらず、値の意味だけ直す)
+    const normalized = await normalizeSummonSkillSelection(
+      character.main_skill_id,
+      // 旧い書き出し(欄が無い)は未選択として読む
+      character.summon_skill_id ?? null,
+    );
     // 登録に要るのは NewCharacter の分だけ。id と最終保存日時は保存先が新しく付ける
     const draft: NewCharacter = {
       name: character.name,
@@ -101,9 +109,8 @@ export async function importAll(file: TransferFile): Promise<ImportResult> {
       stat_sources: character.stat_sources,
       equipment: character.equipment,
       common_skills: character.common_skills,
-      main_skill_id: character.main_skill_id,
-      // 旧い書き出し(欄が無い)は未選択として読む
-      summon_skill_id: character.summon_skill_id ?? null,
+      main_skill_id: normalized.main_skill_id,
+      summon_skill_id: normalized.summon_skill_id,
       goal_content_id: character.goal_content_id,
       default_buff_set_id: null,
     };

@@ -28,8 +28,14 @@ const DB_NAME = "tw-context";
  * に変わった(SQLite 側の v15 と同じ移行)。保存済みの「次の目標」を書き換える。
  * v6 でキャラに `summon_skill_id`(魔法人形の召喚スキル)が加わった(SQLite 側の v16 と同じ移行。
  * 既存キャラは未選択のまま)。
+ * v7 で、主軸(`main_skill_id`)に召喚スキルが紛れている行を召喚欄(`summon_skill_id`)へ移す
+ * (SQLite 側の v17 と同じ移行。破壊精霊を足す前は本体の主軸に召喚スキルを選べてしまっていた穴)。
+ * 新しいストア・列は無いので `onupgradeneeded` には何もしない。判定・移す先の決定は Rust
+ * (WASM)の正規化関数を要るため `onupgradeneeded` の版変更トランザクション中には呼べず、
+ * `normalizeSummonSkillSelections`(ストアを開いた直後に呼ぶ通常のトランザクション)として
+ * 実装する(2026-09-18 追記。呼び出し側は invoke.wasm.ts)。
  */
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -243,6 +249,34 @@ export const deleteCharacter = (id: number) =>
     await wrap(store.delete(id));
     await wrap(tx.objectStore(ICONS).delete(id));
     await wrap(tx.objectStore(SNAPSHOTS).delete(id));
+  });
+
+/**
+ * v7: 主軸(`main_skill_id`)に召喚スキルが紛れている行を召喚欄(`summon_skill_id`)へ移す
+ * (2026-09-18 追記。SQLite 側の v17 移行 `migrate_summon_skill_out_of_main` と同じ意味)。
+ *
+ * どのスキルが召喚スキルかの判定・移す先の決定は `normalize`(呼び出し側 = invoke.wasm.ts が
+ * Rust の `normalize_summon_skill_selection` を渡す)に委ね、ここでは結果をそのまま書き込む
+ * だけ(スキル id の一覧を TS に書き写さない)。`onupgradeneeded` の版変更トランザクション中に
+ * WASM 呼び出しを挟むと安全に完了しないため、ストアを開いた直後の通常のトランザクションとして
+ * 実装する。起動のたびに呼んでも、移行後は対象行が無いので実質何もしない
+ * (SQLite 側の `migrate_*` と同じ冪等性)。
+ */
+export const normalizeSummonSkillSelections = (
+  normalize: (
+    mainSkillId: string | null,
+    summonSkillId: string | null,
+  ) => { main_skill_id: string | null; summon_skill_id: string | null },
+) =>
+  transact(CHARACTERS, "readwrite", async (tx) => {
+    const store = tx.objectStore(CHARACTERS);
+    const rows = await wrap(store.getAll() as IDBRequest<RegisteredCharacter[]>);
+    for (const row of rows) {
+      const result = normalize(row.main_skill_id, row.summon_skill_id ?? null);
+      if (result.main_skill_id !== row.main_skill_id || result.summon_skill_id !== (row.summon_skill_id ?? null)) {
+        await wrap(store.put({ ...row, main_skill_id: result.main_skill_id, summon_skill_id: result.summon_skill_id }));
+      }
+    }
   });
 
 // --- バフセット(buff_set_repository.rs) ---

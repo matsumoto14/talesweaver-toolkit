@@ -192,10 +192,10 @@
   });
   const skills = $derived(skillsByCharacter[draft.gameCharacterId] ?? []);
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
-  /** 熊(魔法人形)が撃つスキル。未選択・アナイス以外は null(欄自体が出ない) */
+  /** 召喚獣(熊・破壊精霊)が撃つスキル。未選択・アナイス以外は null(欄自体が出ない) */
   const summonSkill = $derived(skills.find((s) => s.id === draft.summonSkillId) ?? null);
 
-  /** 保存前のキャラデータをプレビュー入力の形に(deep copy)。主軸・熊どちらの攻撃力
+  /** 保存前のキャラデータをプレビュー入力の形に(deep copy)。主軸・召喚獣どちらの攻撃力
    *  プレビューも同じ材料(能力値・装備・バフ)を使うので、ここで 1 回に集約する。 */
   function previewMaterial() {
     return {
@@ -242,12 +242,13 @@
   });
 
   /**
-   * 「いまの実力」帯の 熊 / 本体 チップ(保存しない・ローカル state)。既定は**熊**固定。
-   * 本来は火力の大きいほうを既定にしたいが、この帯はダメージ計算(preview_damage)を呼ばず
-   * 攻撃力(A)だけをプレビューするので、どちらが大きいか比較できない。ADR-016 決定 10。
+   * 「いまの実力」帯の 召喚獣 / 本体 チップ(保存しない・ローカル state)。既定は**召喚獣**固定
+   * (値 "bear" のまま、表示ラベルだけ熊 / 精霊で切り替える)。本来は火力の大きいほうを既定に
+   * したいが、この帯はダメージ計算(preview_damage)を呼ばず攻撃力(A)だけをプレビューするので、
+   * どちらが大きいか比較できない。ADR-016 決定 10。
    */
   let summonView = $state<"bear" | "body">("bear");
-  /** 熊が撃つスキルの攻撃力(A)プレビュー。未選択なら呼ばない(計算タブと同じく 0 で埋めない) */
+  /** 召喚獣が撃つスキルの攻撃力(A)プレビュー。未選択なら呼ばない(計算タブと同じく 0 で埋めない) */
   let summonPreview = $state<StatPreview | null>(null);
   const summonPreviewLatest = latest({ debounce: 100 });
   $effect(() => {
@@ -450,8 +451,16 @@
   /** 強化能力値の合計。いまの実力バーの装備ブロックと共有(summaries.ts。計算は Rust 側 preview) */
   const eqEnhancedTotal = $derived(equipmentEnhancedTotal(preview));
   const equipmentAttackKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
-  /** 熊が選ばれているとき「いまの実力」帯が出す装備列(斬り・魔攻・魔防。熊は依存種別を持たない) */
-  const summonEquipmentAttackKinds = $derived(equipmentAttackKindsForMagicDoll());
+  /** 召喚獣が選ばれているとき「いまの実力」帯が出す装備列。熊(斬り・魔攻・魔防、依存種別を
+   *  持たない固定係数)は `tables.magic_doll_enchant_keys`、精霊(専用行が無く本体と同じ
+   *  INT 依存の行に委譲)はそのスキルの依存から出す(熊の固定表を使い回さない)。 */
+  const summonEquipmentAttackKinds = $derived(
+    summonSkill?.attacker === "magic_doll"
+      ? equipmentAttackKindsForMagicDoll()
+      : equipmentAttackKindsFor(summonSkill?.dependency ?? null),
+  );
+  /** 召喚欄チップの短いラベル(熊 / 精霊)。未選択時は使われない(showSummonView が false) */
+  const summonLabel = $derived(summonSkill?.attacker === "destruction_spirit" ? "精霊" : "熊");
   const showSummonView = $derived(draft.summonSkillId !== "" && summonView === "bear");
   /** 装備値の見せ方は「合計 (+エンチャント)」で全画面そろえる(equipment.ts の withEnchant) */
   const equipmentSummary = $derived(
@@ -917,10 +926,10 @@
   <div class="sheet">
     <span class="sheet-title">いまの実力</span>
     {#if draft.summonSkillId !== ""}
-      <!-- 熊(魔法人形)が撃つスキルがあるキャラだけ出る 2 択(§07 段階選択)。保存しない
+      <!-- 召喚獣(熊・破壊精霊)が撃つスキルがあるキャラだけ出る 2 択(§07 段階選択)。保存しない
            ローカル state — キャラタブでは「見る側」を切り替えるだけで、モデルは変えない -->
-      <div class="summon-toggle" role="group" aria-label="いまの実力を熊 / 本体のどちらで見るか">
-        <Chip class="quiet" name="summon-view" value="bear" on={summonView === "bear"} onToggle={() => (summonView = "bear")}>熊</Chip>
+      <div class="summon-toggle" role="group" aria-label="いまの実力を{summonLabel} / 本体のどちらで見るか">
+        <Chip class="quiet" name="summon-view" value="bear" on={summonView === "bear"} onToggle={() => (summonView = "bear")}>{summonLabel}</Chip>
         <Chip class="quiet" name="summon-view" value="body" on={summonView === "body"} onToggle={() => (summonView = "body")}>本体</Chip>
       </div>
     {/if}

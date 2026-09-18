@@ -12,7 +12,7 @@
 //!   docs/claude/decisions.md「2026-08-25 全キャラのスキル取込」
 
 use domain::{
-    Attacker, ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency, WeaponClass,
+    Attacker, ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency, SummonForm, WeaponClass,
 };
 
 use crate::skill_targets::SKILL_TARGETS;
@@ -831,7 +831,7 @@ const SKILLS: &[SkillRecord] = &[
 
 /// 魔法人形(アナイスのミカベア / ルシベア)が自分で撃つスキル(wiki 計算式まとめ
 /// `STAB(熊)` 行、2026-09-18 取得)。ベアステップ(`anais_mica_bear_step` /
-/// `anais_rucy_bear_step`)は本体が撃つので含めない。破壊精霊は対象外(本体扱いのまま)。
+/// `anais_rucy_bear_step`)は本体が撃つので含めない。
 const MAGIC_DOLL_SKILLS: &[&str] = &[
     "anais_thrust",
     "anais_mica_even_bear",
@@ -843,12 +843,93 @@ const MAGIC_DOLL_SKILLS: &[&str] = &[
     "anais_rucy_footstep",
 ];
 
-/// このスキルを実際に撃つ主体。`MAGIC_DOLL_SKILLS` に載っている 8 件だけ `MagicDoll`。
+/// 破壊精霊(アンフェル / グレシス / イグニー)が自分で撃つスキル(wiki「Skill/アナイス」
+/// 「計算式まとめ」2026-09-18 取得)。陣の 3 件(`anais_tesla_coil` / `anais_ice_age` /
+/// `anais_flare_field`)は wiki スキル性能一覧に「陣による攻撃はアナイス本体がダメージを
+/// 与えた扱いになる」と明記されているため本体扱いのまま含めない。守護精霊のスキルも同様。
+const DESTRUCTION_SPIRIT_SKILLS: &[&str] = &[
+    "anais_lightning_attack",
+    "anais_chain_lightning",
+    "anais_crystal_attack",
+    "anais_crystal_sprinter",
+    "anais_ring_of_ice",
+    "anais_flame_attack",
+    "anais_fire_blast",
+    "anais_detonate",
+];
+
+/// このスキルを実際に撃つ主体。`MAGIC_DOLL_SKILLS` / `DESTRUCTION_SPIRIT_SKILLS` に載って
+/// いるスキルだけそれぞれ `MagicDoll` / `DestructionSpirit`、他は本体 `Player`。
 pub fn attacker_of(skill_id: &str) -> Attacker {
     if MAGIC_DOLL_SKILLS.contains(&skill_id) {
         Attacker::MagicDoll
+    } else if DESTRUCTION_SPIRIT_SKILLS.contains(&skill_id) {
+        Attacker::DestructionSpirit
     } else {
         Attacker::Player
+    }
+}
+
+/// 主軸スキル → 召喚獣の型、召喚スキル → 自分が属する型(wiki「Skill/アナイス」の型分け、
+/// 2026-09-18 追記)。ベアステップ・陣(本体スキル)は型を「決める」側、召喚スキル 16 件は
+/// 型に「属する」側で、どちらもこの 1 つの表に載せる(フロントに対応表を書き写させない)。
+/// 型を決めない共通スキル(`anais_fairy_light` / `anais_angry_pixie`)と守護精霊
+/// (`anais_dissonance` / `anais_cacophony` 他)はここに載せない = `None`。
+const SUMMON_FORMS: &[(&str, SummonForm)] = &[
+    ("anais_mica_bear_step", SummonForm::MicaBear),
+    ("anais_thrust", SummonForm::MicaBear),
+    ("anais_mica_even_bear", SummonForm::MicaBear),
+    ("anais_mica_footstep", SummonForm::MicaBear),
+    ("anais_judgment_spin", SummonForm::MicaBear),
+    ("anais_rucy_bear_step", SummonForm::RucyBear),
+    ("anais_strike", SummonForm::RucyBear),
+    ("anais_rucy_even_bear", SummonForm::RucyBear),
+    ("anais_rucy_footstep", SummonForm::RucyBear),
+    ("anais_deathmoment", SummonForm::RucyBear),
+    ("anais_tesla_coil", SummonForm::Anferu),
+    ("anais_lightning_attack", SummonForm::Anferu),
+    ("anais_chain_lightning", SummonForm::Anferu),
+    ("anais_ice_age", SummonForm::Gureshisu),
+    ("anais_crystal_attack", SummonForm::Gureshisu),
+    ("anais_crystal_sprinter", SummonForm::Gureshisu),
+    ("anais_ring_of_ice", SummonForm::Gureshisu),
+    ("anais_flare_field", SummonForm::Igni),
+    ("anais_flame_attack", SummonForm::Igni),
+    ("anais_fire_blast", SummonForm::Igni),
+    ("anais_detonate", SummonForm::Igni),
+];
+
+/// `SUMMON_FORMS` を引く。載っていなければ `None`。
+pub fn summon_form_of(skill_id: &str) -> Option<SummonForm> {
+    SUMMON_FORMS
+        .iter()
+        .find(|(id, _)| *id == skill_id)
+        .map(|(_, form)| *form)
+}
+
+/// 主軸(`main_skill_id`)に召喚スキル(本体以外の攻撃者が撃つスキル)が紛れているときの正規化
+/// (2026-09-18 追記)。破壊精霊を足す前は `validate_main_skill` が攻撃者を見ておらず、召喚
+/// スキルも本体の主軸に選べてしまっていた。召喚欄(`summon_skill_id`)が空ならそこへ移し、
+/// 主軸は未選択(`None`)に戻す。召喚欄が既に埋まっているなら、ユーザーが選んだ値を捨てず
+/// 主軸だけ未選択にする(上書きしない)。SQLite の v17 移行(`storage::migrate_summon_skill_out_of_main`)
+/// ・IndexedDB の v7 移行・書き出し JSON の読み込み(`transfer.ts`)が同じこの関数を使う
+/// (3 か所に同じ if を書かない)。`main_skill_id` が未選択、または本体スキルならそのまま返す。
+pub fn normalize_summon_skill_selection(
+    main_skill_id: Option<String>,
+    summon_skill_id: Option<String>,
+) -> (Option<String>, Option<String>) {
+    let Some(main_id) = main_skill_id else {
+        return (None, summon_skill_id);
+    };
+    if attacker_of(&main_id) == Attacker::Player {
+        return (Some(main_id), summon_skill_id);
+    }
+    match summon_skill_id {
+        None => (None, Some(main_id)),
+        // 召喚欄が既に埋まっているなら、主軸に入っていた召喚スキルは**捨てる**。召喚枠は 1 つ
+        // (ADR-016 決定 12)なので 2 件は持てず、どちらかを諦めるしかない。既に召喚欄で選んで
+        // ある側(意図がはっきりしている方)を残す(レビュー指摘 2026-09-18)。
+        Some(existing) => (None, Some(existing)),
     }
 }
 
@@ -919,6 +1000,7 @@ impl SkillRecord {
             power,
             power_per_second: Skill::compute_power_per_second(power, base_actual_delay),
             attacker: attacker_of(&self.skill_id()),
+            summon_form: summon_form_of(&self.skill_id()),
         }
     }
 }
@@ -955,6 +1037,103 @@ mod tests {
         assert_eq!(attacker_of("anais_mica_bear_step"), Attacker::Player);
         assert_eq!(attacker_of("anais_rucy_bear_step"), Attacker::Player);
         assert_eq!(attacker_of("lucian_butt"), Attacker::Player);
+    }
+
+    /// 主軸スキル(ベアステップ・陣)が召喚獣の型を決める。型を決めない共通スキルは None
+    /// (2026-09-18 追記)。
+    #[test]
+    fn 主軸スキルは召喚獣の型を決める() {
+        assert_eq!(summon_form_of("anais_mica_bear_step"), Some(SummonForm::MicaBear));
+        assert_eq!(summon_form_of("anais_rucy_bear_step"), Some(SummonForm::RucyBear));
+        assert_eq!(summon_form_of("anais_tesla_coil"), Some(SummonForm::Anferu));
+        assert_eq!(summon_form_of("anais_ice_age"), Some(SummonForm::Gureshisu));
+        assert_eq!(summon_form_of("anais_flare_field"), Some(SummonForm::Igni));
+        assert_eq!(summon_form_of("anais_fairy_light"), None);
+        assert_eq!(summon_form_of("anais_angry_pixie"), None);
+        assert_eq!(summon_form_of("anais_dissonance"), None);
+        assert_eq!(summon_form_of("anais_cacophony"), None);
+    }
+
+    /// 召喚スキル(熊 4 件 × 2 体・精霊 8 件)は自分が属する型を持ち、型ごとの候補が
+    /// `MAGIC_DOLL_SKILLS` / `DESTRUCTION_SPIRIT_SKILLS` と過不足なく一致する(2026-09-18 追記)。
+    #[test]
+    fn 召喚スキルは自分の型を持つ() {
+        let mica = ["anais_thrust", "anais_mica_even_bear", "anais_mica_footstep", "anais_judgment_spin"];
+        let rucy = ["anais_strike", "anais_rucy_even_bear", "anais_rucy_footstep", "anais_deathmoment"];
+        let anferu = ["anais_lightning_attack", "anais_chain_lightning"];
+        let gureshisu = ["anais_crystal_attack", "anais_crystal_sprinter", "anais_ring_of_ice"];
+        let igni = ["anais_flame_attack", "anais_fire_blast", "anais_detonate"];
+        for id in mica {
+            assert_eq!(summon_form_of(id), Some(SummonForm::MicaBear), "{id}");
+        }
+        for id in rucy {
+            assert_eq!(summon_form_of(id), Some(SummonForm::RucyBear), "{id}");
+        }
+        for id in anferu {
+            assert_eq!(summon_form_of(id), Some(SummonForm::Anferu), "{id}");
+        }
+        for id in gureshisu {
+            assert_eq!(summon_form_of(id), Some(SummonForm::Gureshisu), "{id}");
+        }
+        for id in igni {
+            assert_eq!(summon_form_of(id), Some(SummonForm::Igni), "{id}");
+        }
+        // 型を持つ召喚スキルの総数は MAGIC_DOLL_SKILLS + DESTRUCTION_SPIRIT_SKILLS と一致する
+        let typed_summon_skills = MAGIC_DOLL_SKILLS
+            .iter()
+            .chain(DESTRUCTION_SPIRIT_SKILLS)
+            .filter(|id| summon_form_of(id).is_some())
+            .count();
+        assert_eq!(typed_summon_skills, MAGIC_DOLL_SKILLS.len() + DESTRUCTION_SPIRIT_SKILLS.len());
+    }
+
+    /// 主軸に召喚スキルが紛れていたら召喚欄へ移し、主軸は未選択に戻す(2026-09-18 追記)。
+    #[test]
+    fn 正規化は主軸の召喚スキルを召喚欄へ移す() {
+        let (main, summon) = normalize_summon_skill_selection(
+            Some("anais_mica_even_bear".to_string()),
+            None,
+        );
+        assert_eq!(main, None);
+        assert_eq!(summon, Some("anais_mica_even_bear".to_string()));
+    }
+
+    /// 召喚欄が既に埋まっているなら上書きしない。主軸だけ未選択にする(2026-09-18 追記)。
+    #[test]
+    fn 正規化は召喚欄が埋まっていれば上書きしない() {
+        let (main, summon) = normalize_summon_skill_selection(
+            Some("anais_lightning_attack".to_string()),
+            Some("anais_mica_even_bear".to_string()),
+        );
+        assert_eq!(main, None);
+        assert_eq!(summon, Some("anais_mica_even_bear".to_string()));
+    }
+
+    /// 本体スキル・未選択はそのまま返す(2026-09-18 追記)。
+    #[test]
+    fn 正規化は本体スキルと未選択をそのまま返す() {
+        assert_eq!(
+            normalize_summon_skill_selection(Some("anais_angry_pixie".to_string()), None),
+            (Some("anais_angry_pixie".to_string()), None)
+        );
+        assert_eq!(normalize_summon_skill_selection(None, None), (None, None));
+        assert_eq!(
+            normalize_summon_skill_selection(None, Some("anais_mica_even_bear".to_string())),
+            (None, Some("anais_mica_even_bear".to_string()))
+        );
+    }
+
+    /// 破壊精霊が撃つスキルは 8 件、陣 3 件は本体扱いのまま(2026-09-18 取得)。
+    #[test]
+    fn 破壊精霊が撃つスキルは8件で陣は本体扱い() {
+        assert_eq!(DESTRUCTION_SPIRIT_SKILLS.len(), 8);
+        for id in DESTRUCTION_SPIRIT_SKILLS {
+            assert_eq!(attacker_of(id), Attacker::DestructionSpirit, "{id}");
+            assert!(find_skill(id).is_some(), "{id} がカタログに無い");
+        }
+        for id in ["anais_tesla_coil", "anais_ice_age", "anais_flare_field"] {
+            assert_eq!(attacker_of(id), Attacker::Player, "{id}");
+        }
     }
 
     #[test]
