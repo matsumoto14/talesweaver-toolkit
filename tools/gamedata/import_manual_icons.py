@@ -49,6 +49,17 @@ FROM_ICON: dict[tuple[str, str], Path] = {
 }
 
 
+# アナイスの魔法人形(ミカベア / ルシベア)の絵。人形は 3D モデルで 2D 立ち絵が無いので、
+# 召喚スキル「ミカベア召喚」「ルシベア召喚」(クライアント DB 0006 の 3002602 / 3002603。アイコン指定
+# {"id":95596,"w":28|29} → アニメ 95596 の 28 / 29 番 → テクスチャ 13322 のコマ 53 / 55)を使う。
+# gamedata には召喚スキルが無い(攻撃スキルだけ)ので、id は「あれば付くはずの id」で置く。
+# 計算タブの熊の鎖のバッジが `skills/` から引く(docs/adr/016)
+FROM_SPRITE: dict[tuple[str, str], str] = {
+    ("skills", "anais_mica_bear_summon"): "0133__13322_f053",
+    ("skills", "anais_rucy_bear_summon"): "0133__13322_f055",
+}
+
+
 def default_assets_dir() -> Path:
     env = os.environ.get("TW_ASSETS")
     return Path(env) if env else Path(r"C:\github\private\tw_assets")
@@ -106,6 +117,16 @@ def main() -> None:
         monsters = {r["id"]: r for r in csv.DictReader(f) if r["kind"] == "monster"}
 
     written = 0
+    for (kind, icon_id), frame in FROM_SPRITE.items():
+        source = args.assets / "sprites" / f"{frame}.png"
+        if not source.exists():
+            sys.exit(f"{kind}/{icon_id}: {source.name} が sprites/ に無い")
+        dest = ICONS / kind / f"{icon_id}.png"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with Image.open(source) as img:
+            square(img).save(dest)
+        written += 1
+        print(f"{kind}/{icon_id} <- {source.name}")
     for (kind, icon_id), monster_id in FROM_MONSTER.items():
         row = monsters.get(monster_id)
         if row is None:

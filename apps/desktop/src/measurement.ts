@@ -78,8 +78,11 @@ export function measurementDraft(
 ): InquiryDraft {
   const label = targetLabel(conditions);
   const listed = conditions.content !== null;
+  const doll = conditions.skill.attacker === "magic_doll";
   const lines = [
-    `${label} を ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`,
+    doll
+      ? `${label} を熊(魔法人形)の ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`
+      : `${label} を ${conditions.skill.name} で殴った実測 ${samples.length} 点です。`,
     "",
     listed ? "| 武器 | 攻撃力 | 実測 | 計算 | 差 | 発数 |" : "| 武器 | 攻撃力 | 実測 | 発数 |",
     listed ? "|---|---:|---:|---:|---:|---:|" : "|---|---:|---:|---:|",
@@ -108,6 +111,13 @@ export function measurementDraft(
       ? "攻撃力の違う点が 2 つ以上あるので、防御力とカット率を分けて逆算できます。"
       : "攻撃力が同じ点だけなので、防御力とカット率は分けられません(装備を替えてもう 1 点あると分けられます)。",
   );
+  if (doll) {
+    lines.push(
+      "",
+      "熊の攻撃力は wiki 計算式まとめの STAB(熊) 行(2026/4/1 以前の情報)で計算しています。"
+      + "差が大きければ敵の値より先に係数の行を疑ってください。",
+    );
+  }
   const notes = samples.map((s) => s.note.trim()).filter(Boolean);
   if (notes.length > 0) lines.push("", `気づいたこと: ${notes.join(" / ")}`);
   lines.push("", "条件は下の「アプリが自動で付ける情報」に入っています(集計用の JSON)。");
@@ -124,7 +134,7 @@ export function measurementDraft(
 function measurementPayload(conditions: MeasurementConditions, samples: MeasurementSample[]) {
   return {
     kind: "measurement",
-    version: 3,
+    version: 4,
     character: {
       id: conditions.gameCharacterId,
       awakening: conditions.awakeningStage,
@@ -132,6 +142,8 @@ function measurementPayload(conditions: MeasurementConditions, samples: Measurem
     },
     skill: {
       id: conditions.skill.id,
+      /** 誰が撃ったか(player / magic_doll)。熊は係数行が別なので集計側で分ける(version 4 で追加) */
+      attacker: conditions.skill.attacker,
       combo_type: conditions.comboSkillType,
       dependency: conditions.skill.dependency,
       multiplier: conditions.skill.multiplier,

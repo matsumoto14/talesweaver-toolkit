@@ -5,8 +5,9 @@
    * 値はすべて Rust 由来(DamageTrace / DamageResult)。ここが作るのは並べ方だけで、
    * 段の組み立ては calc/damageDetail.ts、開いた面の状態は calc/detailStore が持つ。
    */
-  import type { DamageCategory, DamageResult, DefenseProfile } from "../../api/types";
+  import type { Attacker, DamageCategory, DamageResult, DefenseProfile } from "../../api/types";
   import { fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned } from "../../format";
+  import Chip from "../../ui/Chip.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Value from "../../ui/Value.svelte";
   import { changed } from "../../ui/motion.svelte";
@@ -25,8 +26,13 @@
     perHit: number | null;
     critMode: boolean;
     store: DetailStore;
+    /** 誰の数字を掘り下げているか。熊(magic_doll)のときは ① の掘り下げに「係数 STAB(熊)」の行が
+     *  1 行増える(ADR-016 突き合わせ)。面の形は変えない */
+    attacker: Attacker;
+    /** 熊がいるキャラだけ見出しに 本体 / 熊 の 2 択を置く(ユーザー要望 2026-09-18)。押すと親が attacker を替える */
+    onAttacker?: (attacker: Attacker) => void;
   }
-  let { result, defense, perHit, critMode, store }: Props = $props();
+  let { result, defense, perHit, critMode, store, attacker, onAttacker }: Props = $props();
 
   const steps = $derived(stepsOf(result, critMode));
   const atkRows = $derived(attackRows(result?.trace.attack ?? null));
@@ -103,11 +109,21 @@
 </script>
 
 <div class="panel">
-  <button type="button" class="panel-head blue" aria-expanded={store.flowOpen} onclick={() => (store.flowOpen = !store.flowOpen)}>
-    <span class="panel-title dark">なぜこの数字？</span>
-    <span class="panel-note dark">{store.flowOpen ? "閉じる" : "内訳をひらく"}</span>
-    <span class="caret" class:rot={store.flowOpen}>▼</span>
-  </button>
+  <!-- 見出しは全体が開閉のボタン。本体 / 熊 の 2 択(§07 段階選択)はボタンの中に入れられない
+       (button の入れ子は不正)ので、同じ帯の上に隣として重ねる。熊がいないキャラでは何も置かない -->
+  <div class="panel-head-wrap">
+    <button type="button" class="panel-head blue" aria-expanded={store.flowOpen} onclick={() => (store.flowOpen = !store.flowOpen)}>
+      <span class="panel-title dark">なぜこの数字？</span>
+      <span class="panel-note dark">{store.flowOpen ? "閉じる" : "内訳をひらく"}</span>
+      <span class="caret" class:rot={store.flowOpen}>▼</span>
+    </button>
+    {#if onAttacker}
+      <div class="who-switch" role="group" aria-label="なぜこの数字? を本体 / 熊のどちらで見るか">
+        <Chip class="quiet" name="why-attacker" value="player" on={attacker === "player"} onToggle={() => onAttacker?.("player")}>本体</Chip>
+        <Chip class="quiet" name="why-attacker" value="magic_doll" on={attacker === "magic_doll"} onToggle={() => onAttacker?.("magic_doll")}>熊</Chip>
+      </div>
+    {/if}
+  </div>
   <div class="panel-body">
     <div class="flow-line">
       <span class="dim">防御を抜けた攻撃力</span>
@@ -186,7 +202,7 @@
             <Value class="br-val" motion={() => Math.round(a.v)} value={fmtInt(Math.round(a.v))} delta={{}} />
             <Value class="br-share dim" motion={() => parseFloat(a.share)} value={a.share} />
             {/snippet}
-            <DetailRows boxed d={store.register(`atk:${a.k}`, atkDetail(result, steps, a))} {store} />
+            <DetailRows boxed d={store.register(`atk:${a.k}`, atkDetail(result, steps, a, attacker))} {store} />
           </Disclosure>
         {/each}
       </div>
@@ -327,6 +343,9 @@
   .panel-title.dark { color: var(--fg); }
   .panel-note { min-width: 0; flex: 1; text-align: right; font-size: 9px; color: #E4E3F4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .panel-note.dark { color: #40536F; }
+  .panel-head-wrap { position: relative; }
+  /* 見出し文字の右隣。見出しの文字幅は固定(7 文字)なので位置も固定。帯の高さは変えない */
+  .who-switch { position: absolute; left: 112px; top: 50%; transform: translateY(-50%); display: flex; gap: 4px; }
   .panel-body { padding: 11px 13px 12px; }
 
   .flow-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 9px; }

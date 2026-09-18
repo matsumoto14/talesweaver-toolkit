@@ -90,7 +90,7 @@
   const skill = $derived(
     skills.find((s) => s.id === pickedSkillId)
       ?? skills.find((s) => s.id === character?.main_skill_id)
-      ?? skills[0]
+      ?? skills.find((s) => s.attacker === "player")
       ?? null,
   );
 
@@ -127,7 +127,9 @@
         if (!isCurrent()) return;
         // 収録済みの敵では計算に使った攻撃力をそのまま採る(テシスコアは対象の地域で
         // 解決されるので、地域なしの preview_effective_stats とは値がずれる)。
-        // 実測は本体スキルの検証用なので body だけ見る(熊は別枠。ADR-016)
+        // 選んだスキルを本体の枠(body)で計算する。熊のスキル(極・熊連など)を選んでも、係数は
+        // Rust がスキル自身の攻撃者から引く(coefficients_for)ので 1 発の値は熊のもの。
+        // 熊の鎖(summon)は見ない — 実測するのは「選んだスキルの 1 発」だけ(ADR-016 突き合わせ)
         attack = damage?.body.trace.attack ?? preview.attack?.breakdown ?? null;
         stats = preview.stats;
         result = damage?.body ?? null;
@@ -265,9 +267,22 @@
               () => skill?.id ?? "",
               (v) => (pickedSkillId = v)
             }
-            options={skills.map((s) => ({ value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const }))}
+            options={skills.map((s) => ({
+              value: s.id, name: s.name,
+              meta: s.attacker === "magic_doll" ? `熊 ・ ${skillMeta(s)}` : skillMeta(s),
+              iconId: s.id, iconKind: "skill" as const,
+            }))}
           />
         </div>
+        {#if skill?.attacker === "magic_doll"}
+          <!-- 熊(魔法人形)の係数は wiki が「2026/4/1 以前の情報」と断っている行。合わないときに
+               敵側より先に疑う場所を、測る前に言っておく(ADR-016 突き合わせ) -->
+          <p class="note dim">
+            <b>熊(魔法人形)が撃つスキル</b>です。計算は wiki の <b>STAB(熊)</b> の係数行
+            (INT・HACK と装備の斬り・魔攻・魔防)から出しています。この行は 2026/4/1 以前の情報なので、
+            差が大きいときは敵の値より先に<b>係数の行のほう</b>を疑ってください。
+          </p>
+        {/if}
         {#if weapons.length > 0}
           <!-- 攻撃力を変える一番かんたんな手段。押した瞬間に攻撃力が変わる(保存はされない)。
                登録が 1 件でも「外す」で 2 点目を作れる -->

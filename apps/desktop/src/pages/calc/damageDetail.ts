@@ -2,7 +2,8 @@
 // **値はすべて Rust 由来**で、ここが作るのは並べ方と 2 値の差分だけ。式は持たない。
 // 画面(CalcPage の鎖 / WhyPanel の帯)はここが返した Detail / 行を描くだけにする。
 import type {
-  AttackPowerBreakdown, CategoryTrace, DamageCategory, DamageResult, DefenseProfile, FormulaStep, StatKind,
+  Attacker, AttackPowerBreakdown, CategoryTrace, DamageCategory, DamageResult, DefenseProfile, FormulaStep,
+  StatKind,
 } from "../../api/types";
 import { fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct, formatLayerValue } from "../../format";
 import { EQUIPMENT_STAT_LABELS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
@@ -246,10 +247,47 @@ export function statFactorMats(result: DamageResult | null, kind: StatKind): Mat
 
 const EQUIPMENT_ATTACK_LAYER_LABELS: Record<string, string> = { base: "基本", enhanced: "強化" };
 
+/**
+ * 熊(魔法人形)の係数行 — wiki 計算式まとめ `STAB(熊)` の 1 行を、トレースに載っている係数から
+ * そのまま並べ直す(値は Rust 由来。TS に係数を書き写さない)。wiki 自身が「2026/4/1 以前の情報」と
+ * 断っている行なので、実測と合わないときに真っ先に疑う場所として掘り下げの先頭に置く(ADR-016)。
+ * 本体(player)には無い行。
+ */
+const MAGIC_DOLL_SOURCE_NOTE =
+  "熊の係数は wiki 計算式まとめ STAB(熊) の行(2026/4/1 以前の情報)。実測と合わなければ、敵の値より先にこの行を疑う";
+/** 係数はラベル列(唯一の広い列)に載せる。数値列は 64px 固定で文字列が折り返す */
+function magicDollCoefficientMat(result: DamageResult | null, row: AtkRow["k"]): Mat | null {
+  if (row === "ステ攻撃力") {
+    const parts = result?.trace.stat_attack_parts ?? [];
+    if (parts.length === 0) return null;
+    return {
+      label: `係数 STAB(熊): ${parts.map((p) => `${STAT_LABELS[p.kind]} ×${fmtNum(p.coefficient)}`).join(" / ")}`,
+      value: "",
+    };
+  }
+  if (row === "装備攻撃力") {
+    const parts = result?.trace.equipment_attack_parts ?? [];
+    if (parts.length === 0) return null;
+    // 値種ごとに 基本/強化 の係数を並べる(係数 0 の層はトレースに行が無いので 0 と書く)
+    const kinds = [...new Set(parts.map((p) => p.value))];
+    const rate = (kind: (typeof kinds)[number], layer: "base" | "enhanced") =>
+      fmtNum(parts.find((p) => p.value === kind && p.layer === layer)?.coefficient ?? 0);
+    return {
+      label: `係数 STAB(熊)(基本/強化): ${kinds.map((k) => `${EQUIPMENT_STAT_LABELS[k]} ${rate(k, "base")}/${rate(k, "enhanced")}`).join("・")}`,
+      value: "",
+    };
+  }
+  return null;
+}
+
 /** 攻撃力の構成行の内訳。ステ攻撃力は「実際に使っている依存ステ」だけを並べ、押すと要因まで開く */
-export function atkDetail(result: DamageResult | null, steps: FormulaStep[], a: AtkRow): Detail {
+export function atkDetail(
+  result: DamageResult | null, steps: FormulaStep[], a: AtkRow, attacker: Attacker,
+): Detail {
   const atk = result?.trace.attack ?? null;
   const mats: Mat[] = [];
+  const doll = attacker === "magic_doll" ? magicDollCoefficientMat(result, a.k) : null;
+  if (doll) mats.push(doll);
   if (a.k === "ステ攻撃力") {
     for (const p of result?.trace.stat_attack_parts ?? []) {
       mats.push({
@@ -297,6 +335,7 @@ export function atkDetail(result: DamageResult | null, steps: FormulaStep[], a: 
     to: a.to,
     mats,
     idle: 0,
+    note: doll ? MAGIC_DOLL_SOURCE_NOTE : undefined,
     expr: a.k === "装備攻撃力" ? (stepOf(steps, "装備攻撃力")?.expression ?? null) : null,
   };
 }

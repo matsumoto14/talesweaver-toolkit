@@ -4,12 +4,13 @@
   // 内訳の面は calc/DetailRows.svelte(そのままここでも使う)。
   //
   // 討伐時間の節は showDefeat で切り替える: 召喚スキルが無いキャラは今までどおり鎖の内に
-  // 討伐時間まで出す(既存 19 キャラの見た目を変えない)。召喚スキルがあるキャラは
+  // 討伐時間まで出す。召喚スキルがあるキャラは
   // 本体・熊どちらの鎖にも討伐時間節を出さず、CalcPage 側の「合計」面(combined)にだけ出す
   // (同じ情報を 2 箇所に出さない。§00 ②)。
   import type { DamageResult, Skill } from "../../api/types";
   import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
   import { limits } from "../../limits.svelte";
+  import Icon, { type IconKind } from "../../ui/Icon.svelte";
   import Value from "../../ui/Value.svelte";
   import { critChanceStage } from "../../ui/critChance";
   import DetailRows from "./DetailRows.svelte";
@@ -20,31 +21,37 @@
     result: DamageResult;
     /** 内訳(「クリティカルなら」の倍率表示)に要る。未収録なら null */
     skill: Skill | null;
+    /** この鎖の開閉・変わった行の控え。攻撃者ごとに 1 つ(CalcPage が本体用・熊用を分けて持つ) */
     store: DetailStore;
-    /** 内訳の開閉キーの接頭辞。本体は ""、熊は "summon:"(1 つの DetailStore を共有するため) */
-    keyPrefix: string;
     /** 誰の鎖か(「熊」/「本体」) */
     attackerLabel: string;
     attackerSkillName: string;
+    /** バッジに置く撃つ人の絵(本体 = キャラ、熊 = 魔法人形)。source は登録キャラの任意画像 */
+    icon: { kind: IconKind; id: string | null; source?: string | null };
     /** 討伐時間の節を鎖の中に出すか(召喚スキルが無いキャラだけ true。上の説明参照) */
     showDefeat: boolean;
-    /** 44px の主役数字(.hero-num)を使うか。金の帯 = 答えは 1 つ(§02)なので、鎖が
-     *  2 本になる(召喚スキルあり)ときは本体の鎖だけ true にする。熊は 1 段小さい見出し数字 */
+    /** 44px の主役数字(.hero-num)を使うか。鎖が 2 本(召喚スキルあり)のときも両方 true —
+     *  本体と熊で寸法を変えない(ユーザー判断 2026-09-18) */
     heroNumber: boolean;
     /** 熊の DPS 節に出す間隔の注記(「{n}s 間隔(中ディレイ + 0.0705s)・コンボは乗りません」)。
      *  本体は null(通常の「◯回/分」表示のまま) */
     intervalNote?: string | null;
+    /** 節を押した(= この鎖を見ている)。「なぜこの数字?」がこの鎖に付いてくる合図 */
+    onView?: () => void;
     /** 「1 発」の差分を押すと「なぜこの数字?」へ辿る(本体だけが持つ機能。熊には無い) */
     onPerHitDeltaFollow?: () => void;
     /** 「なぜこの数字?」の中に変わった段があるか(本体の ↑ に下線を出す判定。熊は常に false) */
     flowChanged?: boolean;
   }
   let {
-    result, skill, store, keyPrefix, attackerLabel, attackerSkillName, showDefeat, heroNumber,
-    intervalNote = null, onPerHitDeltaFollow, flowChanged = false,
+    result, skill, store, attackerLabel, attackerSkillName, icon, showDefeat, heroNumber,
+    intervalNote = null, onView, onPerHitDeltaFollow, flowChanged = false,
   }: Props = $props();
 
-  const key = (k: string) => `${keyPrefix}${k}`;
+  const toggle = (k: string) => {
+    onView?.();
+    store.toggle(k);
+  };
 
   const critMode = $derived(result.critical_chance > 0);
   const perHit = $derived(result.per_hit_primary);
@@ -228,12 +235,15 @@
 <div class="chain-block">
   <div class="chain">
     <div class="chain-badge badge-in" class:bear={attackerLabel === "熊"}>
-      <span class="badge-who">{attackerLabel}</span>
-      <span class="badge-skill">{attackerSkillName}</span>
+      <Icon kind={icon.kind} id={icon.id} source={icon.source ?? null} size={28} label={attackerLabel} />
+      <span class="badge-text">
+        <span class="badge-who">{attackerLabel}</span>
+        <span class="badge-skill">{attackerSkillName}</span>
+      </span>
     </div>
     <button
       type="button" class="node gate"
-      aria-expanded={store.isOpen(key("perHit"))} onclick={() => store.toggle(key("perHit"))}
+      aria-expanded={store.isOpen("perHit")} onclick={() => toggle("perHit")}
     >
       <span class="nl">表記ダメージ(1 発)</span>
       <Value class={heroNumber ? "hero-num nv" : "nv"} motion={() => perHit} value={fmtInt(perHit)} />
@@ -249,7 +259,7 @@
     </button>
     <button
       type="button" class="node mid"
-      aria-expanded={store.isOpen(key("total"))} onclick={() => store.toggle(key("total"))}
+      aria-expanded={store.isOpen("total")} onclick={() => toggle("total")}
     >
       <span class="nl">合計ダメージ <span class="num">(×<Value motion={() => result.hit_count} value={String(result.hit_count)} /> 段)</span></span>
       <Value class="nv" motion={() => totalValue} value={fmtInt(totalValue)} />
@@ -271,7 +281,7 @@
     </button>
     <button
       type="button" class="node rate"
-      aria-expanded={store.isOpen(key("dps"))} onclick={() => store.toggle(key("dps"))}
+      aria-expanded={store.isOpen("dps")} onclick={() => toggle("dps")}
     >
       <span class="nl">DPS <span class="num">(÷ <Value motion={() => result.actual_delay?.value ?? null} value={result.actual_delay ? fmtNum(result.actual_delay.value, 2, "s") : "—"} />)</span></span>
       <Value class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"} />
@@ -312,9 +322,9 @@
       </div>
     {/if}
   </div>
-  {#if perHitDetail}<DetailRows boxed d={perHitDetail} {store} open={store.isOpen(key("perHit"))} />{/if}
-  {#if totalDetail}<DetailRows boxed d={totalDetail} {store} open={store.isOpen(key("total"))} />{/if}
-  {#if dpsDetail}<DetailRows boxed d={dpsDetail} {store} open={store.isOpen(key("dps"))} />{/if}
+  {#if perHitDetail}<DetailRows boxed d={perHitDetail} {store} open={store.isOpen("perHit")} />{/if}
+  {#if totalDetail}<DetailRows boxed d={totalDetail} {store} open={store.isOpen("total")} />{/if}
+  {#if dpsDetail}<DetailRows boxed d={dpsDetail} {store} open={store.isOpen("dps")} />{/if}
 </div>
 
 <style>
@@ -323,14 +333,17 @@
      (鎖の外・combined を使うため) */
   .chain { display: flex; align-items: stretch; gap: 4px; flex-wrap: wrap; margin: 0 -6px; }
   .chain-badge {
-    flex-shrink: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center;
-    gap: 1px; padding: 4px 9px; margin-right: 2px; border-radius: var(--r-inset);
-    background: var(--bg-field); border: 1px solid var(--border-soft); min-width: 64px;
+    flex-shrink: 0; align-self: stretch; display: flex; align-items: center;
+    gap: 7px; padding: 4px 9px 4px 6px; margin-right: 2px; border-radius: var(--r-inset);
+    background: var(--bg-field); border: 1px solid var(--border-soft);
+    /* 幅を固定して 2 本の鎖の列位置をそろえる(スキル名の長さで節がずれない。§09) */
+    width: 136px; box-sizing: border-box;
   }
+  .badge-text { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; }
   .chain-badge.bear { background: var(--state-temp-bg); border-color: var(--sim); }
   .badge-who { font-size: 10px; font-weight: 800; color: var(--fg-head); white-space: nowrap; }
   .chain-badge.bear .badge-who { color: var(--sim-fg); }
-  .badge-skill { font-size: 8.5px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 96px; }
+  .badge-skill { font-size: 8.5px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chain .node { display: flex; flex-direction: column; gap: 0; min-width: 0; padding: 4px 6px 5px; }
   .chain .nl {
     line-height: 14px; font-size: 10px; font-weight: 700; color: var(--fg-head); white-space: nowrap;
@@ -340,8 +353,6 @@
   .chain .nsub { margin-top: 4px; gap: 4px; }
   .chain :global(.nv) { font-weight: 700; color: var(--fg); white-space: nowrap; }
   .chain .node.gate :global(.nv) { min-width: 120px; }
-  /* 熊(hero-num を持たない鎖)は見出し数字止まり。本体だけが 44px の主役数字を持つ(§02) */
-  .chain .node.gate :global(.nv):not(.hero-num) { font-size: var(--t-heading); }
   .chain .node.mid :global(.nv) { font-size: 15px; min-width: 68px; }
   .chain .node.rate :global(.nv) { font-size: var(--t-heading); min-width: 68px; }
   .chain .node.gate { width: 260px; }

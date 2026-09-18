@@ -19,6 +19,7 @@
   import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Popover from "../../ui/Popover.svelte";
+  import ReadRow from "../../ui/ReadRow.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
   import SplitPage from "../../ui/SplitPage.svelte";
   import Value from "../../ui/Value.svelte";
@@ -223,6 +224,11 @@
   const combined = $derived(result?.combined ?? null);
   /** 熊が撃つスキルの表示名(結果 JSON は id しか持たないので skills 一覧から引く) */
   const summonSkillName = $derived(skills.find((s) => s.id === summon?.skill_id)?.name ?? "");
+  /** 熊の鎖のバッジに置く人形の絵。ルシベア専用スキル(anais_rucy_*)ならルシベア、他はミカベア
+   *  (突き・ジャッジメントスピン等は両方の人形が撃つので、どちらの人形かは保存していない) */
+  const summonIconId = $derived(
+    summon?.skill_id.startsWith("anais_rucy_") ? "anais_rucy_bear_summon" : "anais_mica_bear_summon",
+  );
   /** 熊の DPS 節に出す間隔の注記。中ディレイ未収録(interval_seconds が null)なら出さない */
   const summonIntervalNote = $derived(
     summon?.interval_seconds != null
@@ -356,12 +362,42 @@
   const flowRows = $derived(flowRowsOf(steps, pierced));
 
   // --- 数値を開いて詳細を確認する(§00 03: 開くのは押した行の下だけ) ----------
-  // 開いている面・変わった行の控えは鎖(本体・熊の両方)と「なぜこの数字?」(本体のみ)で
-  // 共有する(calc/detailStore)。値はすべて Rust 由来(DamageTrace / DamageResult)。
+  // 開いている面・変わった行の控えは鎖と「なぜこの数字?」で共有する(calc/detailStore)。
+  // 攻撃者ごとに 1 つずつ持つ(本体 = details / 熊 = summonDetails): 「変わった行」の控えは
+  // 前回値との比較なので、本体と熊を 1 つの控えに混ぜると、見る鎖を切り替えただけで全行が
+  // 「変わった」扱いになる。値はすべて Rust 由来(DamageTrace / DamageResult)。
   // UI で作るのは 2 値の差分だけ。
   const details = new DetailStore();
-  /** 鎖の ↑ に下線を出すか(その下に変わった段があるか)。判定は WhyPanel と同じ関数 */
+  const summonDetails = new DetailStore();
+  /** 鎖の ↑ に下線を出すか(その下に変わった段があるか)。判定は WhyPanel と同じ関数。熊も同じ */
   const flowChanged = $derived(changedFlowKeys(details, flowRows, body).length > 0);
+  const summonFlowChanged = $derived.by(() => {
+    const r = summon?.result ?? null;
+    if (!r) return false;
+    const steps = stepsOf(r, r.critical_chance > 0);
+    return changedFlowKeys(summonDetails, flowRowsOf(steps, stepValue(steps, "攻撃力−防御力")), r).length > 0;
+  });
+  /**
+   * 「なぜこの数字?」がどちらの鎖を掘り下げているか。最後に節を押した鎖に付いていく
+   * (熊の鎖を見ているときだけ熊の値・熊の係数行を出す)。熊が消えたら本体に戻る。
+   * 面の開閉(flowOpen)は切り替えても引き継ぐ — 押した瞬間に面が閉じては困る(§00 ③)
+   */
+  let whyView = $state<"body" | "summon">("body");
+  // 熊が消えたら(熊なしキャラへ切替・召喚スキル解除)本体に戻す。viewWhy を通さない —
+  // 別キャラの summonDetails.flowOpen を details に持ち込まない(レビュー指摘 2026-09-18)
+  $effect(() => {
+    if (summon === null) whyView = "body";
+  });
+  const whySummon = $derived(whyView === "summon" && summon !== null);
+  const whyStore = $derived(whySummon ? summonDetails : details);
+  const whyResult = $derived(whySummon ? (summon?.result ?? null) : body);
+  function viewWhy(view: "body" | "summon") {
+    if (view === whyView) return;
+    const from = view === "summon" ? details : summonDetails;
+    const to = view === "summon" ? summonDetails : details;
+    to.flowOpen = from.flowOpen;
+    whyView = view;
+  }
 
   // --- 攻撃 / 防御タブ(規格シート 5c) --------------------------------------
   let side = $state<"attack" | "defense">("attack");
@@ -617,45 +653,54 @@
                  ければレートに意味が無いので、軸を切り替えず因果の順に繋ぐ。
                  判定(バッジ)はゲートの位置だけに置き、レートには付けない — 「何秒までなら
                  合格」の基準がゲーム側に存在しないので、付けたら嘘になる。
-                 44px の主役数値は増やさない(金の帯 = 答えは 1 つ。§02)。鎖が右に伸びるだけ。
-                 熊(魔法人形)が撃つスキルがあるキャラは、本体の鎖の上に熊の鎖をもう 1 本
-                 足す(ADR-016)。討伐時間は combined(下の「合計」面)で 1 か所に決める
+                 熊(魔法人形)が撃つスキルがあるキャラは、本体の鎖の下に熊の鎖をもう 1 本
+                 足す(ADR-016)。2 本の鎖は同じ寸法・同じ列位置で描く(本体だけ大きくしない。
+                 ユーザー判断 2026-09-18 — 答えは下の合計面と「行ける?」帯が持つ)。討伐時間は combined(下の「合計」面)で 1 か所に決める
                  ので、熊がいるときはどちらの鎖にも討伐時間節を出さない(§00 ②)。 -->
             {#if body}
               <DamageChain
-                result={body} {skill} store={details} keyPrefix=""
+                result={body} {skill} store={details}
                 attackerLabel="本体" attackerSkillName={skill?.name ?? ""}
+                icon={{ kind: "character", id: character?.game_character_id ?? null, source: character ? (app.characterIcons[character.id] ?? null) : null }}
                 showDefeat={!summon} heroNumber={true}
-                onPerHitDeltaFollow={() => details.follow("perHit")}
+                onView={() => viewWhy("body")}
+                onPerHitDeltaFollow={() => { viewWhy("body"); details.follow("perHit"); }}
                 {flowChanged}
               />
             {/if}
             {#if summon}
               <DamageChain
-                result={summon.result} skill={null} store={details} keyPrefix="summon:"
+                result={summon.result} skill={null} store={summonDetails}
                 attackerLabel="熊" attackerSkillName={summonSkillName}
-                showDefeat={false} heroNumber={false}
+                icon={{ kind: "skill", id: summonIconId }}
+                showDefeat={false} heroNumber={true}
                 intervalNote={summonIntervalNote}
+                onView={() => viewWhy("summon")}
+                onPerHitDeltaFollow={() => { viewWhy("summon"); summonDetails.follow("perHit"); }}
+                flowChanged={summonFlowChanged}
               />
-              <!-- 合計(本体 + 熊)。討伐時間はここだけに出す(§00 ②。ADR-016 決定 5・10) -->
-              <div class="combined-face inset">
-                <span class="combined-label">合計(本体 + 熊)</span>
-                <span class="combined-item">
-                  <span class="ci-label">合計 DPS</span>
-                  <Value
-                    class="ci-value" motion={() => combined?.expected_dps ?? null}
-                    value={combined?.expected_dps != null ? fmtInt(Math.round(combined.expected_dps)) : "—"}
-                    delta={{}}
-                  />
-                </span>
-                <span class="combined-item">
-                  <span class="ci-label">討伐時間</span>
-                  <Value
-                    class="ci-value" motion={() => combined?.defeat_seconds ?? null}
-                    value={combined?.defeat_seconds != null ? fmtDuration(combined.defeat_seconds) : "—"}
-                    delta={{ unit: "秒", digits: 0 }} deltaClass="less-is-better"
-                  />
-                </span>
+              <!-- 合計(本体 + 熊)。討伐時間はここだけに出す(§00 ②。ADR-016 決定 5・10)。
+                   読み取り専用の値 2 つなので ReadRow の面(§08: インセット + ラベル + 右端固定幅の値)。
+                   主役の数字(44px の金の帯 = 答えは 1 つ)と競わせないため、本文の大きさに留める。
+                   討伐時間そのものの判定(バッジ・メーター・文)は下の「行ける?」帯が持つ -->
+              <div class="combined readrows inset">
+                <span class="combined-title">合計(本体 + 熊)</span>
+                <ReadRow
+                  label="合計 DPS"
+                  value={combined?.expected_dps != null ? fmtInt(Math.round(combined.expected_dps)) : "—"}
+                  motion={() => (combined?.expected_dps == null ? null : Math.round(combined.expected_dps))}
+                  delta={{}}
+                >
+                  {#snippet note()}本体 + 熊の期待値の単純和(本体は召喚中も手が止まらない){/snippet}
+                </ReadRow>
+                <ReadRow
+                  label="討伐時間"
+                  value={combined?.defeat_seconds != null ? fmtDuration(combined.defeat_seconds) : "—"}
+                  motion={() => (combined?.defeat_seconds == null ? null : Math.round(combined.defeat_seconds))}
+                  delta={{ unit: "秒", digits: 0 }} deltaClass="less-is-better"
+                >
+                  {#snippet note()}敵 HP ÷ 合計 DPS(ソロ){/snippet}
+                </ReadRow>
               </div>
             {/if}
             <!-- 討伐時間が出せない(敵 HP か中ディレイが未収録)ときはメーターも文言も出さない
@@ -780,8 +825,15 @@
           </div>
         </SheetCard>
 
-        <!-- なぜこの数字?(本体だけ。元デザインは変えない。熊の掘り下げは鎖の直下 = DamageChain 内) -->
-        <WhyPanel result={body} {defense} {perHit} {critMode} store={details} />
+        <!-- なぜこの数字?(元デザインは変えない)。見出しの 本体 / 熊 の 2 択、または最後に節を押した鎖に
+             付いて、その攻撃者の値を掘り下げる。熊のときは「係数 STAB(熊)」の行が ① の掘り下げに 1 行増える
+             だけ(ADR-016 突き合わせ) -->
+        <WhyPanel
+          result={whyResult} {defense} perHit={whyResult?.per_hit_primary ?? null}
+          critMode={(whyResult?.critical_chance ?? 0) > 0} store={whyStore}
+          attacker={whySummon ? "magic_doll" : "player"}
+          onAttacker={summon ? (a) => viewWhy(a === "magic_doll" ? "summon" : "body") : undefined}
+        />
         </div>
       {/if}
   {/snippet}
@@ -900,14 +952,10 @@
   :global(.hero .chain-block + .chain-block) {
     margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft);
   }
-  /* 合計(本体 + 熊)の面。読み取り専用なのでインセット(§design-system: 面はインセット+ハイライト) */
-  .combined-face {
-    margin-top: 6px; padding: 7px 11px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
-  }
-  .combined-label { flex-shrink: 0; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--fg-head); }
-  .combined-item { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-  .ci-label { font-size: 9.5px; color: var(--fg-dim); white-space: nowrap; }
-  .combined-face :global(.ci-value) { font-size: var(--t-heading); font-weight: 700; color: var(--fg); white-space: nowrap; }
+  /* 合計(本体 + 熊)の面。ReadRow の面(.readrows.inset)に見出し 1 行を足しただけ(ホームの
+     「いまの実力」パネルと同じ形)。上端のハイライト 1 本で「平たい箱」にしない(§08) */
+  .combined { margin-top: 8px; padding-top: 6px; padding-bottom: 6px; box-shadow: inset 0 1px 0 #fff; }
+  .combined-title { padding: 0 0 3px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
 

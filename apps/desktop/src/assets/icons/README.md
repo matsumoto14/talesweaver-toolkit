@@ -134,3 +134,9 @@ wiki Skill/共通・Skill/ゲージスキル から取り込んだ(`tools/gameda
   (+1〜+10 は全部同じ絵)、エンチャント = `sources/enchant`。
   `enchant` は SourceId に無い**固定名**(キャラタブでは装備の中の操作なので補正源のペインが無い)。
   絵はアイテム「エンチャント強化呪文書」で、`import_source_icons.py` が取り込む。
+
+2026-09-18にアナイスの魔法人形の絵 2 枚(`skills/anais_mica_bear_summon.png` /
+`skills/anais_rucy_bear_summon.png`)をクライアント展開データから同梱した。人形は 3D モデルで
+2D 立ち絵が無いので、召喚スキル「ミカベア召喚」「ルシベア召喚」のスキルアイコン(テクスチャ 13322 の
+コマ 53 / 55)を使う。gamedata に召喚スキルは無い(攻撃スキルだけ)ので id は「あれば付くはずの id」。
+計算タブの熊の鎖のバッジが使う。取り込みは `tools/gamedata/import_manual_icons.py`(`FROM_SPRITE`)。

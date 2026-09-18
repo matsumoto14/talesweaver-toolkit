@@ -15,6 +15,8 @@
     delta?: { unit?: string; digits?: number } | null;
     /** 値の色。up = 伸びた(緑) / down = 減った(赤) / sim = 試し変更(ラベンダー) */
     tone?: "up" | "down" | "sim" | null;
+    /** 差分枠に付ける見た目(討伐時間の「減ったら緑」= less-is-better など)。Value にそのまま渡す */
+    deltaClass?: string;
     /** 値の左に添える小さな補足(素 + 強化 など) */
     sub?: Snippet;
     /** 値の右に続く注記(式・出典)。行の残り幅を使う */
@@ -22,7 +24,7 @@
     /** 値の代わりに置く中身(Picker・行チップ)。value より優先 */
     children?: Snippet;
   }
-  let { label, value = null, motion, delta = null, tone = null, sub, note, children }: Props = $props();
+  let { label, value = null, motion, delta = null, tone = null, deltaClass = "", sub, note, children }: Props = $props();
 </script>
 
 <div class="readrow">
@@ -31,7 +33,7 @@
   {#if children}
     <span class="slot">{@render children()}</span>
   {:else}
-    <Value {value} {motion} {delta} {tone} class="v" />
+    <Value {value} {motion} {delta} {tone} {deltaClass} class="v" />
   {/if}
   {#if note}<span class="n dim">{@render note()}</span>{/if}
 </div>
