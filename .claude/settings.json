@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/storage-schema-check.sh\"",
+            "timeout": 15,
+            "statusMessage": "保存データの形を確認中"
+          }
+        ]
+      }
+    ]
+  }
+}
