@@ -25,8 +25,10 @@
 {#snippet backlogRow(label: string, title: string | undefined, text: string)}
   <div class="rn-row">
     <span class="tag meta-pill">{label}</span>
-    {#if title}<b class="rn-title">{title}</b>{/if}
-    <span class="rn-text">{text}</span>
+    <div class="rn-body">
+      {#if title}<b class="rn-title">{title}</b>{/if}
+      <span class="rn-text">{text}</span>
+    </div>
   </div>
 {/snippet}
 
@@ -156,8 +158,11 @@
     background: var(--bg-field); border: 1px solid var(--border-soft);
   }
   .rn-row .tag { margin-top: 1px; }
-  .rn-title { flex: none; font-size: 11px; font-weight: 700; color: var(--fg); line-height: 1.5; }
-  .rn-text { min-width: 0; flex: 1; font-size: 11px; color: var(--fg-sub); line-height: 1.5; }
+  /* 見出しと本文は縦に積む。横 1 行に並べていたときは、見出しの長さぶん本文の左端が
+     行ごとにずれて、読むたびに目が横に飛んでいた(§00 01 視線を動かさない) */
+  .rn-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+  .rn-title { font-size: 11px; font-weight: 700; color: var(--fg); line-height: 1.5; }
+  .rn-text { font-size: 10.5px; color: var(--fg-sub); line-height: 1.6; }
   .rn-version { padding: 1px 8px; font-size: 9px; }
   .rn-date { flex: none; font-size: 9.5px; color: var(--fg-dim); }
   .rn-headline { min-width: 0; font-size: 10px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

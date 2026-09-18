@@ -1619,7 +1619,7 @@
             <div class="rail-row">
               <span class="tag meta-pill">{CHANGE_LABELS[change.kind]}</span>
               <span class="rail-text" title={change.title ? `${change.title} — ${change.text}` : change.text}
-                >{change.title ? `${change.title} — ` : ""}{change.text}</span>
+                >{change.title ?? change.text}</span>
             </div>
           {/each}
         </div>
@@ -1674,10 +1674,11 @@
   .rail-list { display: flex; flex-direction: column; gap: 5px; }
   .rail-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .rail-row .tag { width: 34px; font-size: 9px; }
-  /* 短縮なので 2 行で切る。全文は「お知らせ」タブが持つ(title に全文を入れて hover で読める) */
+  /* 短縮なので見出しを 1 行だけ。何が変わったかが読めれば足りる(§00 02 要らないものを
+     見せない)。本文と全文は「お知らせ」タブが持つ(title に入れてあるので hover でも読める) */
   .rail-text {
     min-width: 0; font-size: 10px; color: var(--fg-sub); line-height: 1.5;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
   }
   .rail-more { font-size: 9.5px; }
   .rail-issue { display: flex; align-items: baseline; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--border-soft); }
