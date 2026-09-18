@@ -25,5 +25,12 @@ export default defineConfig({
   },
   // dev サーバーはリポジトリ外の pkg を読むので、配信を許す範囲をリポジトリルートまで広げる
   server: { fs: { allow: [resolve("../..")] } },
-  build: { outDir: "dist-web", emptyOutDir: true },
+  build: {
+    outDir: "dist-web",
+    emptyOutDir: true,
+    // アイコンを JS へ base64 で埋めない。既定(4KB 未満をインライン)だと 2,400 枚超が
+    // App.js に入って 3.8MB になり、iOS Safari が初回のパースとメモリで落ちる。
+    // 個別ファイルにすれば実際に画面へ出た絵だけが読まれる。
+    assetsInlineLimit: 0,
+  },
 });
