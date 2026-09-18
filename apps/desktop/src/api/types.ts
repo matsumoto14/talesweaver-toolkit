@@ -400,7 +400,7 @@ export interface Masteries {
 }
 
 // 誰に効くか。crates/domain/src/character_skill.rs の SkillAudience。
-export type SkillAudience = "self_only" | "ally";
+export type SkillAudience = "self_only" | "ally" | "enemy";
 
 // マスタリーによる効果の差し替え。crates/domain/src/character_skill.rs の MasteryOverride。
 export interface MasteryOverride {
@@ -419,6 +419,8 @@ export interface CharacterSkillDef {
   effects: SkillEffect[];
   /** マスタリーを取ると効果が差し替わる(上から順に最初に一致したもの) */
   mastery_overrides: MasteryOverride[];
+  /** 同時に ON にできない id(同じスキルの強さ違い)。ON にすると相手が OFF になる */
+  exclusive_with: string[];
   source_url: string;
   note: string;
 }
@@ -1337,6 +1339,8 @@ export interface CategoryTrace {
   value: number;
   factor: number;
   cap: CategoryCap | null;
+  /** 式で `(1−Σ)` として掛かるか。伸ばす方向が逆なので上限判定は cap.min 側を見る(敵デバフの S) */
+  subtractive: boolean;
 }
 
 // crates/domain/src/stat_sources.rs の BuffDamageEffect。バフ 1 件ぶんが、カテゴリ上限適用後の

@@ -2,7 +2,7 @@
   // 「skills」補正源のペイン。マスタリー(段ごとに 1 つ)と、自分・味方のスキル。
   import type { CharacterSkillEffectsView, MasteryDef } from "../../../api/types";
   import {
-    allySkills, effectLabel, ownSkills, resolvedEffectsOf, singleEffectLabel, toggleCharacterSkill,
+    allySkills, effectLabel, enemySkills, ownSkills, resolvedEffectsOf, singleEffectLabel, toggleCharacterSkill,
   } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import { app } from "../../../state.svelte";
@@ -20,12 +20,14 @@
   // 味方から受けるスキルは誰でも ON にできる。
   const ownCharacterSkills = $derived(ownSkills(app.characterSkills, draft.gameCharacterId));
   const allyCharacterSkills = $derived(allySkills(app.characterSkills));
+  const enemyCharacterSkills = $derived(enemySkills(app.characterSkills));
   const skillChecked = (id: string) => draft.statSources.character_skills.skill_ids.includes(id);
   function toggleCharSkill(id: string, on: boolean) {
     draft.statSources.character_skills.skill_ids = toggleCharacterSkill(
       draft.statSources.character_skills.skill_ids,
       id,
       on,
+      app.characterSkills,
     );
   }
 
@@ -126,6 +128,30 @@
       <p class="empty dim">味方から受けるスキルデータは未収録です。</p>
     {/if}
     {#each allyCharacterSkills as def (def.id)}
+      {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
+      {@const sourceCharacter = app.gameCharacters.find((c) => c.id === def.game_character_id)}
+      {@const checked = skillChecked(def.id)}
+      <ToggleRow
+        name={def.name}
+        cond={def.note || undefined}
+        value={label ?? "—"}
+        title={def.note || undefined}
+        on={checked}
+        onToggle={() => toggleCharSkill(def.id, !checked)}
+      >
+        {#snippet icon()}
+          <Icon kind="character" id={def.game_character_id} size={20} label={sourceCharacter?.name ?? def.game_character_id} />
+        {/snippet}
+      </ToggleRow>
+    {/each}
+  </div>
+  <div class="card-title space">敵にかけるデバフ</div>
+  <p class="hint dim">同行者が敵にかけている前提なので、誰でも ON にできます(敵の被ダメージが増える = 自分の火力が上がる)。</p>
+  <div class="toggle-list">
+    {#if enemyCharacterSkills.length === 0}
+      <p class="empty dim">敵にかけるデバフのデータは未収録です。</p>
+    {/if}
+    {#each enemyCharacterSkills as def (def.id)}
       {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       {@const sourceCharacter = app.gameCharacters.find((c) => c.id === def.game_character_id)}
       {@const checked = skillChecked(def.id)}

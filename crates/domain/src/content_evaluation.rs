@@ -340,6 +340,7 @@ mod tests {
             mastery_id: "test_m2_3",
             effects: ELITE_SWORDSMAN,
         }],
+        exclusive_with: &[],
         source_url: "",
         note: "",
     }];

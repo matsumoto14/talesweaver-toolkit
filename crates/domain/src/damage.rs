@@ -48,7 +48,7 @@ pub struct LeverCandidate {
     pub category: DamageCategory,
     /// +1% 足したときの最終ダメージの伸び(%)
     pub gain_percent: f64,
-    /// 上限まであと(Σ% の小数表現)。上限なしは None
+    /// 上限まであと(Σ% の小数表現。減算系は下限まであと)。上限なしは None
     pub headroom: Option<f64>,
 }
 
@@ -74,11 +74,19 @@ pub fn damage_levers(categories: &[CategoryTrace]) -> DamageLevers {
         .filter(|c| c.factor > 1.0)
         .max_by(|a, b| a.factor.total_cmp(&b.factor))
         .map(|c| c.category);
-    let at_cap = |c: &CategoryTrace| {
-        c.cap
-            .and_then(|cap| cap.max)
-            .is_some_and(|max| c.value >= max - 1e-9)
+    // 伸ばす方向はカテゴリで違う。減算系(S = 敵にかけるデバフ)は Σ を**負に振るほど**倍率が
+    // 上がるので、上限も伸びしろも `cap.min` 側で測る。max 側だけを見ると、下限に張り付いた
+    // デバフが「まだ 60% 伸ばせます」と嘘をつく
+    let headroom = |c: &CategoryTrace| {
+        c.cap.and_then(|cap| {
+            if c.subtractive {
+                cap.min.map(|min| c.value - min)
+            } else {
+                cap.max.map(|max| max - c.value)
+            }
+        })
     };
+    let at_cap = |c: &CategoryTrace| headroom(c).is_some_and(|room| room <= 1e-9);
     let mut candidates: Vec<LeverCandidate> = categories
         .iter()
         .filter(active)
@@ -86,7 +94,7 @@ pub fn damage_levers(categories: &[CategoryTrace]) -> DamageLevers {
         .map(|c| LeverCandidate {
             category: c.category,
             gain_percent: 1.0 / c.factor,
-            headroom: c.cap.and_then(|cap| cap.max).map(|max| max - c.value),
+            headroom: headroom(c),
         })
         .collect();
     candidates.sort_by(|a, b| b.gain_percent.total_cmp(&a.gain_percent));
@@ -1798,6 +1806,40 @@ mod tests {
         }
     }
 
+    /// 敵にかけるデバフ(S = TakenDamageReduction)は負値を積むと敵被ダメージが増える側に働く。
+    /// -10% → `get()` は `1 - (-0.10)` = 1.10 = 与ダメージ 1.10 倍
+    #[test]
+    fn 被ダメージ減少に負値を入れると敵被ダメージが増える() {
+        use DamageCategory::*;
+        let mut base = CategoryTotals::neutral();
+        base.add(AttackPower, 2000.0);
+        base.add(TargetDefense, 500.0);
+        base.add(SkillMultiplier, 1.5);
+        base.add(CriticalMultiplier, 2.0);
+        let (before, _) = evaluate(&base, false);
+
+        base.add(TakenDamageReduction, -0.10);
+        assert!((base.get(TakenDamageReduction) - 1.10).abs() < 1e-12);
+        let (after, _) = evaluate(&base, false);
+        assert_eq!(after, (before as f64 * 1.10) as i64);
+    }
+
+    #[test]
+    fn 被ダメージ減少のキャップは30パーセントで効く() {
+        use DamageCategory::*;
+        let mut t = CategoryTotals::neutral();
+        // -50% を積んでも下限 -30% で止まる → get() = 1 - (-0.30) = 1.30
+        t.add(TakenDamageReduction, -0.50);
+        assert!((t.value(TakenDamageReduction) - (-0.30)).abs() < 1e-12);
+        assert!((t.get(TakenDamageReduction) - 1.30).abs() < 1e-12);
+
+        let mut u = CategoryTotals::neutral();
+        // +50% を積んでも上限 +30% で止まる → get() = 1 - 0.30 = 0.70
+        u.add(TakenDamageReduction, 0.50);
+        assert!((u.value(TakenDamageReduction) - 0.30).abs() < 1e-12);
+        assert!((u.get(TakenDamageReduction) - 0.70).abs() < 1e-12);
+    }
+
     #[test]
     fn トレースに全カテゴリが出る() {
         let r = calculate_damage(&material(), &target());
@@ -2721,5 +2763,34 @@ mod tests {
         assert_eq!(defeat_seconds(None, Some(100.0)), None);
         assert_eq!(defeat_seconds(Some(1_000), None), None);
         assert_eq!(defeat_seconds(Some(1_000), Some(0.0)), None);
+    }
+
+    /// 減算系(S = 敵にかけるデバフ)は Σ を**負に振るほど**倍率が上がる。上限判定と伸びしろを
+    /// `cap.max` 側で測ると、下限に張り付いたデバフが「まだ 60% 伸ばせます」と嘘をつく。
+    #[test]
+    fn 減算系の伸びしろは下限側で測る() {
+        use crate::category::CategoryTotals;
+        let mut totals = CategoryTotals::neutral();
+        totals.add(DamageCategory::TakenDamageReduction, -0.30);
+        let trace = totals.trace();
+        let levers = damage_levers(&trace);
+        assert!(
+            !levers
+                .candidates
+                .iter()
+                .any(|c| c.category == DamageCategory::TakenDamageReduction),
+            "下限に達したデバフは「次に伸ばす」候補に出さない"
+        );
+
+        let mut half = CategoryTotals::neutral();
+        half.add(DamageCategory::TakenDamageReduction, -0.10);
+        let levers = damage_levers(&half.trace());
+        let s = levers
+            .candidates
+            .iter()
+            .find(|c| c.category == DamageCategory::TakenDamageReduction)
+            .expect("まだ下限に達していないので候補に出る");
+        // 残りは下限まで(-0.30 − (-0.10) = -0.20 の 0.20)。max 側で測ると 0.40 になってしまう
+        assert!((s.headroom.unwrap() - 0.20).abs() < 1e-9, "{:?}", s.headroom);
     }
 }

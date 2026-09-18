@@ -1239,13 +1239,15 @@ const MASTERIES: &[MasteryDef] = &[
         effect: SkillEffect::RecordOnly,
         note: "<毒舌>に最小命中率減少(-10%)を追加",
     },
+    // 効果は character_skills.rs の maximin_invective_abuse が持つ(二重計上防止)。
+    // wiki の「最終ダメージ-10%」は誤りで、公式お知らせ no=153335 §6 が正。
     MasteryDef {
         id: "maximin_m2_3",
         game_character_id: "maximin",
         tier: 2,
         name: "暴言",
         effect: SkillEffect::RecordOnly,
-        note: "<毒舌>に最終ダメージ-10%を追加",
+        note: "<毒舌>に敵被ダメージ増加(+10%)を追加",
     },
     MasteryDef {
         id: "maximin_m3_1",
@@ -1291,13 +1293,14 @@ const MASTERIES: &[MasteryDef] = &[
         effect: SkillEffect::RecordOnly,
         note: "攻撃時、一定確率で<スタン>付与",
     },
+    // wiki のスキル説明「防御力 -7% とみなす」は古い。公式お知らせ no=153335 §6 が正。
     MasteryDef {
         id: "maximin_m4_3",
         game_character_id: "maximin",
         tier: 4,
         name: "棒のように振るう剣",
         effect: SkillEffect::RecordOnly,
-        note: "攻撃スキルを使用する際、対象の物理防御力と魔法防御力が一定量低下(-7%)したものとみなしてダメージを与える",
+        note: "攻撃スキル使用時、確率(+15%)で対象の防御力を無視する",
     },
     // --- mira
     MasteryDef {
@@ -1683,13 +1686,16 @@ const MASTERIES: &[MasteryDef] = &[
         effect: SkillEffect::RecordOnly,
         note: "カース・ペンジュラム、ベノムノヴァの持続時間とクールタイムが半減する。",
     },
+    // 敵被ダメージ増加は character_skills.rs の
+    // roamini_curse_pendulum_symbol_of_spirit_debuff が持つ(二重計上防止)。
+    // wiki の「+5%」表記は誤りで、公式お知らせ no=153335 §6 が正。
     MasteryDef {
         id: "roamini_m1_3",
         game_character_id: "roamini",
         tier: 1,
         name: "シンボルオブスピリット",
         effect: SkillEffect::RecordOnly,
-        note: "カース・ペンジュラム、ベノムノヴァの効果を強化、クールタイムが1.5倍に増加する。 カース・ペンジュラム：被ダメージ増加(+5%)、敵の与ダメージ減少(-5%)、 全能力値減少(-5%)、チームメンバーの与ダメージ増加(+5%) ベノムノヴァ：ダメージ増加(約1.5倍)、中毒数増加(+4)",
+        note: "<カース・ペンジュラム>と<ベノムノヴァ>を強化し、CT が 1.5 倍になる。カース・ペンジュラム: 攻撃ダメージ / 敵攻撃ダメージ減少 / 敵被ダメージ増加がいずれも 20%。ベノムノヴァ: ダメージ約 1.5 倍、中毒数 +4",
     },
     MasteryDef {
         id: "roamini_m2_1",

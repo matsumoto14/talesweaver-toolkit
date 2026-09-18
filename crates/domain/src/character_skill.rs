@@ -86,6 +86,15 @@ pub enum SkillEffect {
     RecordOnly,
 }
 
+/// 画面に出す符号つきの数。減少は負値のまま持つので、`+` を決め打ちすると `+-10%` になる。
+fn signed(value: f64) -> String {
+    if value < 0.0 {
+        format!("−{}", -value)
+    } else {
+        format!("+{value}")
+    }
+}
+
 impl SkillEffect {
     /// 与ダメージ・能力値に入るか。`false` は記録するだけ。
     pub fn is_modeled(&self) -> bool {
@@ -97,14 +106,18 @@ impl SkillEffect {
         match self {
             SkillEffect::StatRate { stats, percent, .. } => {
                 let names: Vec<&str> = stats.iter().map(|k| k.label()).collect();
-                format!("{} +{percent}%", names.join(" / "))
+                format!("{} {}%", names.join(" / "), signed(*percent))
             }
             SkillEffect::ActualDelay { percent } => format!("中ディレイ −{percent}%"),
             SkillEffect::Damage { category, percent } => {
+                // 敵にかけるデバフは S(被ダメージ減少)に負値で積む。画面はプレイヤーの語彙で出す
+                if *category == DamageCategory::TakenDamageReduction && *percent < 0.0 {
+                    return format!("敵被ダメージ {}%", signed(-percent));
+                }
                 if category.is_percent_source() {
-                    format!("{} +{percent}%", category.label())
+                    format!("{} {}%", category.label(), signed(*percent))
                 } else {
-                    format!("{} +{percent}", category.label())
+                    format!("{} {}", category.label(), signed(*percent))
                 }
             }
             SkillEffect::AccuracyPoint { value, .. } => format!("命中P +{value}"),
@@ -125,6 +138,8 @@ pub enum SkillAudience {
     SelfOnly,
     /// 味方にも掛かる
     Ally,
+    /// 敵にかけるデバフ。同行者がかける前提なので誰でも ON にできる
+    Enemy,
 }
 
 /// マスタリーによる効果の差し替え(wiki のカテゴリ表の子行)。
@@ -151,6 +166,10 @@ pub struct CharacterSkillDef {
     pub effects: &'static [SkillEffect],
     /// マスタリーを取ると効果が差し替わる。上から順に見て最初に一致したものを使う
     pub mastery_overrides: &'static [MasteryOverride],
+    /// 同時に ON にできない `CharacterSkillDef::id`。同じスキルの強さ違いを別エントリで持つとき
+    /// (敵デバフはマスタリー差し替えが効かないので、カース・ペンジュラムの通常と
+    /// 【シンボルオブスピリット】が別エントリになる)に、両方 ON で二重計上するのを防ぐ
+    pub exclusive_with: &'static [&'static str],
     pub source_url: &'static str,
     pub note: &'static str,
 }
@@ -158,9 +177,9 @@ pub struct CharacterSkillDef {
 impl CharacterSkillDef {
     /// 選んでいるマスタリーを踏まえた実際の効果。
     ///
-    /// 味方スキルは**相手のマスタリーが分からない**ので差し替えを見ない(基本効果のまま)。
+    /// 味方スキル・敵デバフは**相手のマスタリーが分からない**ので差し替えを見ない(基本効果のまま)。
     pub fn effects(&self, masteries: &Masteries) -> &'static [SkillEffect] {
-        if self.audience == SkillAudience::Ally {
+        if self.audience == SkillAudience::Ally || self.audience == SkillAudience::Enemy {
             return self.effects;
         }
         self.mastery_overrides
@@ -175,9 +194,11 @@ impl CharacterSkillDef {
 pub type CharacterSkillCatalog = [CharacterSkillDef];
 
 impl CharacterSkillDef {
-    /// そのキャラが ON にできるスキルか(自分のスキル、または味方から受けるスキル)。
+    /// そのキャラが ON にできるスキルか(自分のスキル、味方から受けるスキル、敵にかけるデバフ)。
     pub fn applies_to(&self, game_character_id: &str) -> bool {
-        self.audience == SkillAudience::Ally || self.game_character_id == game_character_id
+        self.audience == SkillAudience::Ally
+            || self.audience == SkillAudience::Enemy
+            || self.game_character_id == game_character_id
     }
 }
 
@@ -318,6 +339,16 @@ impl CharacterSkills {
             if seen.contains(&def.id) {
                 return Err(CharacterSkillError::Duplicated { id: id.clone() });
             }
+            if let Some(other) = def
+                .exclusive_with
+                .iter()
+                .find(|other| self.skill_ids.iter().any(|s| s == *other))
+            {
+                return Err(CharacterSkillError::Exclusive {
+                    id: id.clone(),
+                    other: (*other).to_string(),
+                });
+            }
             seen.push(def.id);
         }
         Ok(())
@@ -358,6 +389,8 @@ pub enum CharacterSkillError {
     },
     #[error("キャラスキル '{id}' が重複して選択されています")]
     Duplicated { id: String },
+    #[error("キャラスキル '{id}' と '{other}' は同時に ON にできません(同じスキルの強さ違い)")]
+    Exclusive { id: String, other: String },
 }
 
 #[cfg(test)]
@@ -427,6 +460,7 @@ mod tests {
                 mastery_id: "mira_m4_2",
                 effects: SPURT_GOOD_FACE,
             }],
+            exclusive_with: &[],
             source_url: "",
             note: "",
         },
@@ -441,6 +475,7 @@ mod tests {
                 mastery_id: "maximin_m3_3",
                 effects: CURSED_EGO,
             }],
+            exclusive_with: &[],
             source_url: "",
             note: "",
         },
@@ -452,6 +487,7 @@ mod tests {
             max_level: 1,
             effects: AGI_UP,
             mastery_overrides: &[],
+            exclusive_with: &[],
             source_url: "",
             note: "",
         },
@@ -467,6 +503,7 @@ mod tests {
                 mastery_id: "joshua_m2_3",
                 effects: ELITE_SWORDSMAN,
             }],
+            exclusive_with: &[],
             source_url: "",
             note: "",
         },
@@ -576,5 +613,75 @@ mod tests {
         let rates = skills.stat_rates(CATALOG, &picked(&["mira_m4_2"]));
         assert_eq!(rates.len(), 1);
         assert_eq!(rates[0].0, StatKind::Agi);
+    }
+
+    #[test]
+    fn 敵デバフのラベルはプレイヤーの語彙で出る() {
+        // S に負値で積むが、画面は「敵被ダメージ +10%」と読ませる(`+-10%` にしない)
+        let debuff = SkillEffect::Damage {
+            category: DamageCategory::TakenDamageReduction,
+            percent: -10.0,
+        };
+        assert_eq!(debuff.label(), "敵被ダメージ +10%");
+    }
+
+    #[test]
+    fn 減少の効果は符号を潰さない() {
+        let buff = SkillEffect::Damage {
+            category: DamageCategory::AttackDamageSkill,
+            percent: 5.0,
+        };
+        assert_eq!(buff.label(), "攻撃ダメージ(スキル) +5%");
+        let down = SkillEffect::StatRate {
+            stats: &[StatKind::Agi],
+            percent: -10.0,
+            layer: StatLayer::MultiplierB,
+        };
+        assert_eq!(down.label(), "AGI −10%");
+    }
+
+    /// 同じスキルの強さ違いを別エントリで持つ(敵デバフはマスタリー差し替えが効かない)ので、
+    /// 両方 ON にすると二重計上になる。保存データの検証で弾く。
+    #[test]
+    fn 排他のスキルを同時にonにはできない() {
+        const CATALOG: &CharacterSkillCatalog = &[
+            CharacterSkillDef {
+                id: "a",
+                game_character_id: "roamini",
+                name: "強さ違い A",
+                audience: SkillAudience::Enemy,
+                max_level: 1,
+                effects: &[],
+                mastery_overrides: &[],
+                exclusive_with: &["b"],
+                source_url: "",
+                note: "",
+            },
+            CharacterSkillDef {
+                id: "b",
+                game_character_id: "roamini",
+                name: "強さ違い B",
+                audience: SkillAudience::Enemy,
+                max_level: 1,
+                effects: &[],
+                mastery_overrides: &[],
+                exclusive_with: &["a"],
+                source_url: "",
+                note: "",
+            },
+        ];
+        let both = CharacterSkills {
+            skill_ids: vec!["a".into(), "b".into()],
+            ..Default::default()
+        };
+        assert!(matches!(
+            both.validate(CATALOG, "roamini"),
+            Err(CharacterSkillError::Exclusive { .. })
+        ));
+        let one = CharacterSkills {
+            skill_ids: vec!["b".into()],
+            ..Default::default()
+        };
+        assert!(one.validate(CATALOG, "roamini").is_ok());
     }
 }

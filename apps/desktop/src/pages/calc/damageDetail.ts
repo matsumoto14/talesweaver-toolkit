@@ -112,9 +112,19 @@ export function flowRowsOf(steps: FormulaStep[], pierced: number | null): FlowRo
 export const activeCategoriesOf = (result: DamageResult | null): CategoryTrace[] =>
   (result?.trace.categories ?? []).filter((c) => c.kind !== "assigned" && c.value !== 0);
 
-export const catAtCap = (c: CategoryTrace) => !!c.cap && c.cap.max !== null && c.value >= c.cap.max - 1e-9;
-/** 上限で捨てられた分(生の合算値 − 上限適用後)。0 なら捨てていない */
-export const catLoss = (c: CategoryTrace) => c.raw - c.value;
+/** 上限(減算系は下限)まであと。伸ばす方向はカテゴリで違う。唯一の正は Rust の damage_levers */
+export const catHeadroom = (c: CategoryTrace): number | null => {
+  if (!c.cap) return null;
+  const bound = c.subtractive ? c.cap.min : c.cap.max;
+  if (bound === null || bound === undefined) return null;
+  return c.subtractive ? c.value - bound : bound - c.value;
+};
+export const catAtCap = (c: CategoryTrace) => {
+  const room = catHeadroom(c);
+  return room !== null && room <= 1e-9;
+};
+/** 上限(減算系は下限)で捨てられた分。0 なら捨てていない */
+export const catLoss = (c: CategoryTrace) => Math.abs(c.raw - c.value);
 export const fmtCatValue = (c: CategoryTrace) =>
   c.kind === "rate" ? fmtSignedPct(c.value, { max: 4 }) : fmtNum(c.value);
 export const fmtCatRaw = (c: CategoryTrace) =>

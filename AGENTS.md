@@ -30,7 +30,12 @@ docs/ 直下は人向け(利用者・貢献者が読む)。決定記録は docs/
 
 ## 情報ソース
 
+- **バフ・デバフの数値は公式お知らせが最上位**(docs/adr/017)。
+  [システム・キャラクターバランシング(2024-02-21)](https://talesweaver.nexon.co.jp/notice/notice.aspx?no=153335) §6 に
+  全キャラの変更後の値が 1 表にある。**wiki と食い違ったらお知らせが正**(wiki には実際に誤りがある)。
+  ただの HTML なので `curl` + タグ除去で取れる。
 - ゲーム仕様の一次ソースは [Tale Wiki](https://talewiki.com/)(EUC-JP の PukiWiki)。取得方法は docs/damage-formula.md 末尾。
+  どの層・どのカテゴリに載るかの**構造**は wiki を見る。
 - 旧リポ `C:\github\private\twtoolkit`(非公開)に Excel 計算器由来の静的データ(スキル・敵・バフ JSON)がある。数値は古い可能性があるため wiki を正とする。
 
 ## ビルド・テスト

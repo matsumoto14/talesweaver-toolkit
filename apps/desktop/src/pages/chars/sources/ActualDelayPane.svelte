@@ -31,6 +31,7 @@
       draft.statSources.character_skills.skill_ids,
       id,
       on,
+      app.characterSkills,
     );
   }
   /** 中ディレイ減少を持つキャラスキル */

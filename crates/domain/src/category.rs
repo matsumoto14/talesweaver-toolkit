@@ -220,8 +220,8 @@ impl DamageCategory {
     }
 
     /// プレイヤーが積み上げられるカテゴリか(「一番効いている / 次に伸ばす」の候補)。
-    /// 代入(A〜D / F)・敵側(C / M / V1 / Q / R / S / U / New2 / V2)・PVP(Y)・
-    /// 子を持つ親(X)・旧仕様(Old)は候補にしない。
+    /// 代入(A〜D / F)・敵側(C / M / V1 / Q / R / U / New2 / V2)・PVP(Y)・
+    /// 子を持つ親(X)・旧仕様(Old)は候補にしない。S だけはデバフでプレイヤーが動かせるので候補に入れる。
     /// 段(D / F)で比べるとスキル固有の値が常勝して努力の範疇外になり、足した実数で比べると
     /// 後段ほど大きな値に掛かって最後の段が構造的に常勝する(ユーザー指摘 2026-08-29)ので、
     /// 候補の中を倍率(`factor`)で比べる。
@@ -238,7 +238,6 @@ impl DamageCategory {
                 | CutRateA
                 | DamageAbsorb
                 | TakenDamageRate
-                | TakenDamageReduction
                 | DamageResistance
                 | DamageMitigation
                 | CutRateB
@@ -289,6 +288,8 @@ impl DamageCategory {
             // X5 は wiki が「上限:+??%」と書いていて値が分からない。決め打ちしない
             AttackDamageSpecial => None,
             AttackDamageJapan => Some(CategoryCap::max(0.30)),
+            // wiki [S4]被ダメージ減少(スキル)。敵デバフでは負値(敵被ダメージ増加)を積む
+            TakenDamageReduction => Some(CategoryCap::range(-0.30, 0.30)),
             _ => None,
         }
     }
@@ -399,6 +400,9 @@ pub struct CategoryTrace {
     /// 式で使われる値(キャップ適用後)。割合は 1+Σ%(減算系は 1−Σ%)、それ以外は value と同じ
     pub factor: f64,
     pub cap: Option<CategoryCap>,
+    /// 式で `(1−Σ)` として掛かるか。**伸ばす方向が逆**(Σ を負に振るほど倍率が上がる)なので、
+    /// 上限判定・伸びしろは `cap.min` 側を見る。敵にかけるデバフ(S)がこれ
+    pub subtractive: bool,
 }
 
 /// 全カテゴリの集計値(パイプライン②)。
@@ -484,6 +488,7 @@ impl CategoryTotals {
                 value: self.value(category),
                 factor: self.get(category),
                 cap: category.cap(),
+                subtractive: category.is_subtractive(),
             })
             .collect()
     }

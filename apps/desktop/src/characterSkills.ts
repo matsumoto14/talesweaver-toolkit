@@ -30,6 +30,11 @@ export function singleEffectLabel(e: SkillEffect): string | null {
   // Rust の SkillEffect::label と同じ文言
   if ("accuracy_rate" in e) return `命中P割合増加(SLv×${fmtPct(e.accuracy_rate.per_level, { max: 2 })})`;
   const { category, percent } = e.damage;
+  // 敵にかけるデバフは S(被ダメージ減少)に負値で積む。画面はプレイヤーの語彙で出す
+  // (「被ダメージ減少 −10%」は意味が逆に読める)。唯一の正は Rust の SkillEffect::label
+  if (category === "taken_damage_reduction" && percent < 0) {
+    return `敵被ダメージ ${fmtSigned(-percent, { max: 2 }, "%")}`;
+  }
   return `${damageCategoryLabel(category)} ${fmtSigned(percent, { max: 2 }, "%")}`;
 }
 
@@ -92,8 +97,14 @@ export function mainSkillOptions(
 }
 
 /** ON/OFF を反映した新しい id 配列を返す(元の配列は変更しない) */
-export function toggleCharacterSkill(skillIds: string[], id: string, on: boolean): string[] {
-  const rest = skillIds.filter((x) => x !== id);
+export function toggleCharacterSkill(
+  skillIds: string[], id: string, on: boolean, catalog: CharacterSkillDef[] = [],
+): string[] {
+  // 同じスキルの強さ違い(カース・ペンジュラムの通常と【シンボルオブスピリット】)は
+  // 両方 ON にすると二重計上になる。押した方を採って相手を落とす —
+  // 「押した瞬間に結果が動く」ので、警告を出して考えさせない
+  const exclusive = catalog.find((d) => d.id === id)?.exclusive_with ?? [];
+  const rest = skillIds.filter((x) => x !== id && !(on && exclusive.includes(x)));
   return on ? [...rest, id] : rest;
 }
 
@@ -102,4 +113,7 @@ export const ownSkills = (catalog: CharacterSkillDef[], gameCharacterId: string)
   catalog.filter((d) => d.audience === "self_only" && d.game_character_id === gameCharacterId);
 export const allySkills = (catalog: CharacterSkillDef[]) =>
   catalog.filter((d) => d.audience === "ally");
+/** 敵にかけるデバフ。同行者がかける前提なので誰でも ON にできる */
+export const enemySkills = (catalog: CharacterSkillDef[]) =>
+  catalog.filter((d) => d.audience === "enemy");
 

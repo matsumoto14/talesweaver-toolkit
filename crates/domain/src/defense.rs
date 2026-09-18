@@ -1549,6 +1549,7 @@ mod tests {
             shift: &HIT_SWORD_SHIFT,
         }],
         mastery_overrides: &[],
+        exclusive_with: &[],
         source_url: "",
         note: "",
     };
