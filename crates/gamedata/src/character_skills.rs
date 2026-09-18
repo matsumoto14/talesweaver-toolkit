@@ -1867,4 +1867,55 @@ mod tests {
                 < 1e-12
         );
     }
+
+    /// 敵にかけるデバフが与ダメージ式まで効いているか、実カタログから通しで確かめる。
+    /// カタログ → 寄与 → カテゴリ集計 → 式で使う倍率、の全段をつなぐ。
+    #[test]
+    fn 敵デバフはカタログからダメージ式の倍率まで届く() {
+        use domain::{CategoryTotals, DamageCategory};
+
+        let catalog = character_skill_catalog();
+        let totals_of = |ids: &[&str]| {
+            let mut t = CategoryTotals::neutral();
+            for c in on(ids).damage_contributions(catalog, &picked(&[])) {
+                t.add(c.category, c.value);
+            }
+            t
+        };
+
+        // 何も ON にしていなければ S は中立(×1.00)
+        assert_eq!(
+            totals_of(&[]).get(DamageCategory::TakenDamageReduction),
+            1.0
+        );
+
+        // 毒舌【暴言】= 敵被ダメージ増加 +10% → (1−S) が 1.10 倍
+        let one = totals_of(&["maximin_invective_abuse"]);
+        assert!(
+            (one.get(DamageCategory::TakenDamageReduction) - 1.10).abs() < 1e-12,
+            "{}",
+            one.get(DamageCategory::TakenDamageReduction)
+        );
+
+        // 積める。毒舌【暴言】+10% と弱化 +10% で 1.20 倍
+        let two = totals_of(&["maximin_invective_abuse", "joshua_weaken"]);
+        assert!(
+            (two.get(DamageCategory::TakenDamageReduction) - 1.20).abs() < 1e-12,
+            "{}",
+            two.get(DamageCategory::TakenDamageReduction)
+        );
+
+        // 下限 −30% で頭打ち。+10 +10 +15 +10 = +45% を積んでも 1.30 倍まで
+        let capped = totals_of(&[
+            "maximin_invective_abuse",
+            "joshua_weaken",
+            "roamini_curse_pendulum_debuff",
+            "yefnen_blend",
+        ]);
+        assert!(
+            (capped.get(DamageCategory::TakenDamageReduction) - 1.30).abs() < 1e-12,
+            "{}",
+            capped.get(DamageCategory::TakenDamageReduction)
+        );
+    }
 }
