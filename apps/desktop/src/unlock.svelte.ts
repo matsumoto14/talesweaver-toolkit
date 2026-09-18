@@ -1,4 +1,4 @@
-// 一部機能のロック(対人タブ・追加装備)。解除は情報パネルのバージョン表記を続けて押す
+// 一部機能のロック(対人タブ・インクリタブ・追加装備)。解除は情報パネルのバージョン表記を続けて押す
 // ジェスチャーで、合言葉や鍵は持たない(ユーザー決定 2026-09-03: 秘匿ではなく「見せない・使わせない」)。
 // 解除状態はこの PC の localStorage にだけ残す(キャラデータの書き出しには含めない)。
 //
@@ -56,8 +56,10 @@ export function isLockedEquipment(item: { id: string }): boolean {
 }
 
 /** ロック中は出さないタブ */
+const LOCKED_TABS = new Set(["versus", "inkri"]);
+
 export function isLockedTab(tab: string): boolean {
-  return !unlock.on && tab === "versus";
+  return !unlock.on && LOCKED_TABS.has(tab);
 }
 
 /** 配信元。CORS を要求しないよう Rust 側(plugin-http)から取る(news.ts と同じ理由) */
