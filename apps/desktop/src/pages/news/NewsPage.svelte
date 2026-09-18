@@ -140,7 +140,7 @@
 
 <style>
   .news { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--bg-mid); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 940px; }
+  .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 940px; }
 
   /* 見出し・帯ラベルはホームと同じ形(§00 01 視線を動かさない) */
   .section { display: flex; flex-direction: column; gap: 6px; }

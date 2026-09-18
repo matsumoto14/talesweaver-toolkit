@@ -10,6 +10,7 @@
   // 今日の期限・影響 + 今日の強化(5 項目タイル。押すとグリッド全体の下に展開)+ 到達一覧(畳み)のブリーフィング型 1 カラム(更新内容は「お知らせ」タブ)。
   // 判定はすべて Rust 側(evaluate_contents / preview_effective_stats / preview_defense / preview_damage)。
   // この画面は表示と選択のみ。
+  import { onMount } from "svelte";
   import {
     errorMessage, getDamageSnapshot, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
     previewEffectiveStats, relicState, relicStep, setDamageSnapshot,
@@ -31,7 +32,9 @@
   } from "../../equipment";
   import { fmtDuration, fmtInt, fmtMonthDay, fmtNum, fmtSigned } from "../../format";
   import {
-    EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT, SIENA_ALLOWED_SLOTS, STAT_KINDS, STAT_LABELS,
+    ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_LABELS, EQUIPMENT_STAT_SHORT,
+    OTHER_EQUIPMENT_STATS, PART_SLOTS, PART_SLOT_LABELS, PRIMARY_EQUIPMENT_STATS, SIENA_ALLOWED_SLOTS,
+    STAT_KINDS, STAT_LABELS,
   } from "../../labels";
   import type { EquipmentStatKind } from "../../labels";
   import { limits } from "../../limits.svelte";
@@ -40,7 +43,9 @@
     app, buffSelectionFor, enqueueCharacterSave, evaluationFor, flatContents, focusCharacterSource, gameCharacterName,
     payloadOf, refreshEvaluation, selectedCharacter, totalContents, upsertCharacter,
   } from "../../state.svelte";
+  import { BUNDLED_NEWS, CHANGE_LABELS, fetchNews, type News } from "../../news";
   import { reportError } from "../../toast.svelte";
+  import { installUpdate, restartApp, updater } from "../../update.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { latest } from "../../ui/latest.svelte";
@@ -50,6 +55,16 @@
   import Picker, { type PickerOption } from "../../ui/Picker.svelte";
   import { badgeStyle, REACH_BADGES, REACH_STATE, reachOk, STATE, triadStyle, type Badge } from "../../ui/states";
   import NumberField from "../../ui/NumberField.svelte";
+
+  // ===== 右枠のお知らせ(短縮) =============================================
+  // 正は配信元(R2)の news.json。取れなければ同梱ぶん。中身の作りは「お知らせ」タブと同じで、
+  // ここは**最新版の変更 3 件と、まだ版に入っていないものの件数**だけを出す。
+  let news = $state<News>(BUNDLED_NEWS);
+  onMount(() => void fetchNews().then((v) => (news = v)));
+  const latestRelease = $derived(news.releases[0] ?? null);
+  const NEWS_RAIL_CHANGES = 3;
+  const railChanges = $derived(latestRelease?.changes.slice(0, NEWS_RAIL_CHANGES) ?? []);
+  const railRestCount = $derived(Math.max(0, (latestRelease?.changes.length ?? 0) - NEWS_RAIL_CHANGES));
 
   const character = $derived(selectedCharacter());
   const totalCount = $derived(totalContents());
@@ -337,24 +352,6 @@
 
   // 装備値の内訳(基本能力値 + 強化能力値 = 合計)。どちらも preview(Rust 側の計算済み値)。
   const heroEnhanced = $derived(heroStats?.equipment_enhanced_total ?? null);
-  // 装備値の表示行はスポットライトのスキルの依存で切り替える(HI 依存に突きを見せない)。
-  // 依存種別 → 見るステ 2 本はドメイン(装備攻撃力係数)から起動時に引いた静的テーブルを使う
-  // (enchant.ts の enchantDepKeysFor。ルール表をフロントに持たない)。
-  const EQUIP_ROW_LABELS = { thrust: "突き", slash: "斬り", magic_attack: "魔攻", magic_defense: "魔防" } as const;
-  const heroEquipRows = $derived.by(() => {
-    const stats = heroStats;
-    const enhanced = heroEnhanced;
-    if (!stats || !enhanced) return [];
-    const skillId = heroSpot?.skillId ?? character?.main_skill_id ?? null;
-    const dep = (skillId ? skillDeps[skillId] : null) ?? "stab_hack";
-    return enchantDepKeysFor(dep).map((key) => ({
-      key,
-      label: EQUIP_ROW_LABELS[key],
-      base: stats.equipment_base_total[key],
-      enhanced: enhanced[key],
-      total: stats.equipment_base_total[key] + enhanced[key],
-    }));
-  });
 
   // 命中P(次の目標のスキルで判定。BestSkillDamage には無いので previewDamage を別途叩く)と、
   // おすすめ強化(list_upgrade_candidates。列挙・並び順は Rust 側。上位 3 件を表示)
@@ -722,7 +719,7 @@
   const cuffsRemaining = $derived(cuffsSummary ? cuffsSummary.max - cuffsSummary.value : null);
 
   // --- 3. エンチャント(各部位の part.enchant)。軸を主軸スキルの依存ステ(1〜2 本)に絞る
-  //    (heroEquipRows と同じ enchantDepKeysFor を使う)。行 = そのステのエンチャント枠を持つ
+  //    (enchant.ts の enchantDepKeysFor を使う)。行 = そのステのエンチャント枠を持つ
   //    装備済み部位だけ(枠 0 の部位・未装備・カタログ外の品は出さない)。
   //    ルール表・上限のフォールバックは enchant.ts(ドメイン経由の 1 本)に寄せている。 ---
   /** キャラタブと同じ 4 種 + MAX(ユーザー要望: 増分の種類を絞りすぎないでほしい)。 */
@@ -893,6 +890,46 @@
     if (stages.length === 0) return null;
     return { value: stages.reduce((s, v) => s + v, 0), max: stages.length * app.siena.stage_max };
   });
+
+  // ===== 装備の概要 = 補正値の合計 ==========================================
+  // 着けている物の一覧はキャラタブが持っている。ホームで知りたいのは
+  // 「装備ぜんぶで今いくつ乗っているか」— 基本能力値 + エンチャント = 合計の 9 補正。
+  // ヒーローの「装備・命中」は主軸スキルが見る 2 本だけなので、残りはここで読む。
+  const equipTotalRow = (k: EquipmentStatKind) => ({
+    key: k,
+    label: EQUIPMENT_STAT_LABELS[k],
+    base: heroStats?.equipment_base_total[k] ?? 0,
+    enchant: heroEnhanced?.[k] ?? 0,
+    total: (heroStats?.equipment_base_total[k] ?? 0) + (heroEnhanced?.[k] ?? 0),
+  });
+  /**
+   * 部位ごとの行。**どの数値が何か**は列見出しが持つので、行には素の数値だけを置く
+   * (部位行の右端に「突き 848 (+318)」と書き込むのをやめた — 小さすぎて読めず、
+   * 列がないので隣の部位と足し合わせられなかった。ユーザー 2026-09-18)。
+   */
+  const equipPartRows = $derived.by(() => {
+    if (!character) return [];
+    return PART_SLOTS.map((slot) => {
+      const part = partOf(slot);
+      const item = itemOf(part);
+      return {
+        slot,
+        label: PART_SLOT_LABELS[slot],
+        iconId: equipmentIconId(part?.item_id ?? null, app.equipmentCatalog),
+        name: item ? item.name : part?.custom_name ? `${part.custom_name} [仮]` : null,
+        enhance: ENHANCE_ALLOWED_SLOTS.includes(slot) ? (part?.enhance_level ?? 0) : null,
+        // 列 = 主要 4 補正。部位が持っていない補正は 0 ではなく空(§00 ②)
+        values: PRIMARY_EQUIPMENT_STATS.map((k) => {
+          const v = part ? part.base[k] + part.enchant[k] : 0;
+          return { key: k, value: v > 0 ? v : null };
+        }),
+      };
+    });
+  });
+  const equipPrimaryTotals = $derived(PRIMARY_EQUIPMENT_STATS.map(equipTotalRow));
+  const equipOtherTotals = $derived(OTHER_EQUIPMENT_STATS.map(equipTotalRow));
+  /** そのほか 5 補正を畳んだままでも「乗っているか」が分かるよう、合計だけ畳んだ行に出す */
+  const equipOtherSum = $derived(equipOtherTotals.reduce((n, r) => n + r.total, 0));
 </script>
 
 <div class="home">
@@ -901,6 +938,7 @@
     <span class="note">{todayLabel}{character ? ` ・ ${character.name} の現況` : ""}</span>
   </div>
   <div class="scroll">
+    <div class="main">
     {#if !character}
       <p class="empty dim">キャラを登録すると、ここに今日の状況が出ます。左のレールの「＋ キャラを登録」からどうぞ。</p>
     {:else}
@@ -922,18 +960,16 @@
                 <ReadRow label={STAT_LABELS[k]} value={heroStats ? fmtInt(heroStats.stats[k]) : "—"} motion={() => heroStats?.stats[k] ?? null} />
               {/each}
             </div>
-            <!-- 目標を選び直すとスポットライトのスキルが変わり、見る装備値の 2 本(突き/斬り/魔攻…)も
-                 入れ替わる。中身が入れ替わった面は短く動かす(§10 型 3b。数値の跳ねでは表せない) -->
-            <div class="hero-panel readrows inset swap-in" use:changed={() => heroEquipRows.map((r) => r.key).join(",")}>
+            <!-- 装備の合計はここが置き場。主軸スキルの依存で 2 本に絞る出し方はやめた —
+                 「装備でいくつ乗っているか」は目標を替えても知りたい値で、絞ると合計が読めない
+                 (ユーザー 2026-09-18)。部位ごとの内訳はヒーロー末尾の畳みが持つ -->
+            <div class="hero-panel readrows inset">
               <span class="hero-panel-title">装備・命中</span>
-              {#each heroEquipRows as row (row.key)}
+              {#each equipPrimaryTotals as row (row.key)}
                 <ReadRow label={row.label} value={fmtInt(row.total)} motion={() => row.total}>
-                  {#snippet sub()}{fmtInt(row.base)} {fmtSigned(row.enhanced)}{/snippet}
+                  {#snippet sub()}{fmtInt(row.base)} {fmtSigned(row.enchant)}{/snippet}
                 </ReadRow>
               {/each}
-              {#if heroEquipRows.length === 0}
-                <ReadRow label="装備" value="—" />
-              {/if}
               {#if heroAccuracy !== null}
                 <ReadRow label="命中P" value={fmtInt(heroAccuracy)} motion={() => heroAccuracy} />
               {:else}
@@ -1065,6 +1101,68 @@
             </div>
           </div>
         {/if}
+
+        <!-- 部位ごとの内訳。ホームに常設するには重い(毎日は変わらない)ので畳んでおく。
+             合計は上の「装備・命中」に常に出ているので、ここは「何を着けているか」を見る面 -->
+        <Disclosure class="fold equip-fold">
+          {#snippet summary()}
+            <span class="area-name">装備の内訳(部位ごと)</span>
+            <span class="fold-note dim">押すとキャラタブのその部位へ</span>
+          {/snippet}
+          {#snippet children(open)}
+          {#if open}
+            <!-- 列見出しが「どの数値が何か」を持つ。行の右端に「突き 848 (+318)」と
+                 書き込む出し方はやめた(小さすぎて読めず、列がないので足し合わせられない) -->
+            <div class="fold-body equip-table">
+              <div class="equip-head">
+                <span class="equip-col-slot">部位</span>
+                <span class="equip-col-name">装備</span>
+                {#each PRIMARY_EQUIPMENT_STATS as k (k)}
+                  <span class="equip-col-num">{EQUIPMENT_STAT_SHORT[k]}</span>
+                {/each}
+              </div>
+              {#each equipPartRows as row (row.slot)}
+                <button
+                  type="button" class="equip-row"
+                  onclick={() => focusCharacterSource("equipment", row.slot)}
+                  title="キャラタブへ移動して、この部位を開きます"
+                >
+                  <span class="equip-col-slot">
+                    {row.label}
+                    {#if row.enhance}<span class="equip-plus">+{row.enhance}</span>{/if}
+                  </span>
+                  <span class="equip-col-name" class:none={row.name === null}>
+                    <Icon kind="equipment" id={row.iconId} size={20} label={row.name ?? "未装備"} />
+                    <span class="equip-name-text">{row.name ?? "未装備"}</span>
+                  </span>
+                  {#each row.values as v (v.key)}
+                    <Value class="equip-col-num" motion={() => v.value} value={v.value === null ? "" : fmtInt(v.value)} />
+                  {/each}
+                </button>
+              {/each}
+              <!-- 合計は部位の足し算ではない(装備アビリティ・称号・ソウルリンクが乗る)。
+                   Rust の equipment_base_total + equipment_enhanced_total をそのまま出す -->
+              <div class="equip-sum">
+                <span class="equip-col-slot">合計</span>
+                <span class="equip-col-name dim">装備アビリティ・称号・ソウルリンク込み</span>
+                {#each equipPrimaryTotals as row (row.key)}
+                  <span class="equip-col-num equip-sum-cell">
+                    <Value class="equip-sum-value" motion={() => row.total} value={fmtInt(row.total)} />
+                    <span class="equip-sum-sub num dim">{fmtInt(row.base)} {fmtSigned(row.enchant)}</span>
+                  </span>
+                {/each}
+              </div>
+              <!-- 物防・命中・Cri・回避・敏捷は主役ではないので合計だけ 1 行に畳む(ユーザー 2026-09-15) -->
+              <div class="equip-others dim">
+                そのほかの補正
+                {#each equipOtherTotals as row (row.key)}
+                  <span class="equip-other">{EQUIPMENT_STAT_SHORT[row.key]} <Value value={fmtInt(row.total)} motion={() => row.total} /></span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+          {/snippet}
+        </Disclosure>
       </div>
 
       <!-- ===== 期限・影響(今日のカード)。0 件の日は列ごと出さない ===== -->
@@ -1256,7 +1354,7 @@
             {:else if openTile === "enchant"}
               <div class="expand-head">
                 <span class="expand-title">エンチャント</span>
-                <span class="dim expand-note">主軸: {enchantDepKeys.map((k) => EQUIP_ROW_LABELS[k]).join("・")}</span>
+                <span class="dim expand-note">主軸: {enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・")}</span>
                 <button type="button" class="cta expand-more" onclick={() => (app.tab = "chars")}>ほかのステはキャラタブへ ›</button>
               </div>
               {#if enchantRows.length === 0}
@@ -1359,6 +1457,7 @@
 
         <button type="button" class="cta tile-more" onclick={() => (app.tab = "chars")}>そのほかの設定(武器・鎧の強化・ペット・ルーン・バフ) ›</button>
       </div>
+
 
       <!-- ===== どこまでいける?: 畳み既定。エリア 4 行 → 押すと直下に一覧が展開(§09 規則 1) ===== -->
       <Disclosure class="fold reach-fold">
@@ -1479,12 +1578,110 @@
         敵の HP はユーザー提供の実測表が出典で、PT 時の HP 増加は入っていません。
       </p>
     {/if}
+    </div>
+
+    <!-- 右枠: お知らせの短縮。全文は「お知らせ」タブが持つので、ここは最新版の 3 件まで。
+         更新が来ているときだけ、いちばん上にその 1 行を出す(§00 02 要らないものを見せない) -->
+    <aside class="rail">
+      <div class="rail-head">
+        <span class="area-name">お知らせ</span>
+        <span class="area-rule"></span>
+      </div>
+      {#if updater.status === "available"}
+        <button type="button" class="rail-update" onclick={() => void installUpdate()}>
+          <span class="rn-flag update-flag">更新</span>
+          <span class="rail-update-text">新しい版 v{updater.version} があります</span>
+          <span class="chev dim">›</span>
+        </button>
+      {:else if updater.status === "ready"}
+        <button type="button" class="rail-update done" onclick={() => void restartApp()}>
+          <span class="rn-flag update-flag">更新</span>
+          <span class="rail-update-text">v{updater.version} を入れました — 再起動して使う</span>
+          <span class="chev dim">›</span>
+        </button>
+      {:else if updater.status === "downloading" || updater.status === "installing"}
+        <div class="rail-update">
+          <span class="rn-flag update-flag">更新</span>
+          <Value class="rail-update-text" motion={() => updater.percent}
+            value={`v${updater.version} を${updater.status === "installing" ? "入れています" : "落としています"} ${updater.percent >= 0 ? `${updater.percent}%` : "…"}`} />
+        </div>
+      {/if}
+      {#if latestRelease}
+        <div class="rail-release">
+          <span class="rn-version meta-pill">v{latestRelease.version}</span>
+          <span class="rail-date num dim">{fmtMonthDay(latestRelease.date)}</span>
+        </div>
+        {#if latestRelease.headline}
+          <p class="rail-headline">{latestRelease.headline}</p>
+        {/if}
+        <div class="rail-list">
+          {#each railChanges as change (change.text)}
+            <div class="rail-row">
+              <span class="tag meta-pill">{CHANGE_LABELS[change.kind]}</span>
+              <span class="rail-text" title={change.title ? `${change.title} — ${change.text}` : change.text}
+                >{change.title ? `${change.title} — ` : ""}{change.text}</span>
+            </div>
+          {/each}
+        </div>
+        {#if railRestCount > 0}
+          <span class="rail-more dim">この版の残り {fmtInt(railRestCount)} 件</span>
+        {/if}
+      {/if}
+      {#if news.knownIssues.length > 0}
+        <div class="rail-issue">
+          <span class="rn-flag issue">不具合</span>
+          <span class="rail-text">既知の不具合 <span class="num">{fmtInt(news.knownIssues.length)}</span> 件</span>
+        </div>
+      {/if}
+      <button type="button" class="cta rail-all" onclick={() => (app.tab = "news")}>お知らせをぜんぶ見る ›</button>
+    </aside>
   </div>
 </div>
 
 <style>
   .home { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--bg-mid); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 940px; }
+  /* 本体(940px)+ 右枠。右枠は本体の幅を食わないので、窓を広げた分だけがお知らせに回る。
+     窓が狭いときは下に回す(消さない) */
+  .scroll {
+    flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 16px 22px 22px;
+    display: grid; grid-template-columns: minmax(0, 940px) 268px; gap: 16px; align-items: start;
+    max-width: 1240px;
+  }
+  @media (max-width: 1180px) { .scroll { grid-template-columns: minmax(0, 940px); } }
+  .main { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ===== 右枠: お知らせ(短縮) ===== */
+  .rail {
+    position: sticky; top: 0; min-width: 0;
+    display: flex; flex-direction: column; gap: 7px;
+    padding: 10px 12px 12px;
+    background: var(--surface-inset); border: 1px solid var(--border-soft); border-radius: var(--r-inset);
+  }
+  .rail-head { display: flex; align-items: center; gap: 8px; }
+  .rail-update {
+    display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+    padding: 5px 8px; border-radius: var(--r-inset);
+    background: var(--state-goal-bg); border: 1px solid var(--state-goal-bd);
+  }
+  .rail-update.done { background: var(--state-met-bg); border-color: var(--state-met-bd); }
+  .rail-update-text { min-width: 0; flex: 1; font-size: 10px; font-weight: 700; color: var(--fg-head); }
+  .rn-flag { flex: none; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid; font-size: 9px; font-weight: 700; white-space: nowrap; }
+  .rn-flag.update-flag { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+  .rn-flag.issue { background: var(--state-short-bg); border-color: var(--state-short-bd); color: var(--state-short-fg); }
+  .rail-release { display: flex; align-items: baseline; gap: 7px; }
+  .rail-date { font-size: 9.5px; }
+  .rail-headline { margin: 0; font-size: 10.5px; font-weight: 700; color: var(--fg-head); line-height: 1.5; }
+  .rail-list { display: flex; flex-direction: column; gap: 5px; }
+  .rail-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .rail-row .tag { width: 34px; font-size: 9px; }
+  /* 短縮なので 2 行で切る。全文は「お知らせ」タブが持つ(title に全文を入れて hover で読める) */
+  .rail-text {
+    min-width: 0; font-size: 10px; color: var(--fg-sub); line-height: 1.5;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  }
+  .rail-more { font-size: 9.5px; }
+  .rail-issue { display: flex; align-items: baseline; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--border-soft); }
+  .rail-all { align-self: flex-start; margin-top: 2px; }
   .empty { font-size: 12px; }
 
   .retry-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 11px; }
@@ -1653,6 +1850,37 @@
 
   .tile-more { align-self: flex-start; margin-top: 2px; }
   .tile-more { align-self: flex-start; margin-top: 2px; }
+
+  /* ===== 装備の補正値(読み取り専用 = インセット)。列は固定幅で、
+         装備を替えて桁が増えても見出しと数値の位置が動かない(§00 03) ===== */
+  .equip-table { display: flex; flex-direction: column; gap: 1px; }
+  .equip-head, .equip-row, .equip-sum {
+    display: grid; grid-template-columns: 112px minmax(0, 1fr) repeat(4, 76px);
+    align-items: center; gap: 8px; width: 100%; text-align: left;
+  }
+  .equip-head { padding: 0 6px 4px; border-bottom: 1px solid var(--border-soft); }
+  .equip-head span { font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--fg-muted); }
+  .equip-head .equip-col-num { text-align: right; }
+  .equip-row { padding: 3px 6px; border: 1px solid transparent; border-radius: var(--r-inset); background: transparent; }
+  .equip-row:hover { border-color: var(--accent); background: var(--surface); }
+  .equip-col-slot { min-width: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10.5px; font-weight: 700; color: var(--fg-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .equip-plus { font-size: 9px; font-weight: 700; color: var(--mob); }
+  .equip-col-name { min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--fg); }
+  .equip-col-name.none { color: var(--fg-muted); }
+  .equip-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 数値列。tabular-nums と固定幅は <Value> が持つが、列としての幅はここで決める */
+  .equip-row :global(.equip-col-num) { text-align: right; font-size: 11px; font-weight: 700; }
+  .equip-sum {
+    margin-top: 3px; padding: 5px 6px 0; border-top: 1px solid var(--border);
+    align-items: end;
+  }
+  .equip-sum > .equip-col-slot { font-size: 11px; }
+  .equip-sum > .equip-col-name { font-size: 9px; }
+  .equip-sum-cell { display: flex; flex-direction: column; align-items: flex-end; }
+  .equip-sum-cell :global(.equip-sum-value) { font-size: var(--t-result-inline); font-weight: 800; }
+  .equip-sum-sub { font-size: 9px; }
+  .equip-others { margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border-soft); display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 9.5px; }
+  .equip-other { display: inline-flex; align-items: baseline; gap: 4px; }
 
   /* ===== どこまでいける?(details.fold は app.css 側の畳み見た目を継承) ===== */
   :global(details.reach-fold > summary) { gap: 9px; }

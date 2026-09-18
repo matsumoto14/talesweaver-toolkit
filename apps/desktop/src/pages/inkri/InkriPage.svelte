@@ -387,7 +387,7 @@
 </div>
 
 <style>
-  .inkri-page { flex: 1; min-width: 0; min-height: 0; display: flex; gap: 18px; overflow: auto; padding: 16px 22px 22px; background: var(--bg-mid); }
+  .inkri-page { flex: 1; min-width: 0; min-height: 0; display: flex; gap: 18px; overflow: auto; scrollbar-gutter: stable; padding: 16px 22px 22px; background: var(--bg-mid); }
   .game { flex: none; }
   .side { flex: 1; min-width: 240px; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
 

@@ -421,7 +421,7 @@
 
 <style>
   .measure-page { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--bg-mid); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
+  .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
   .empty { font-size: 12px; }
   .lead { margin: 0; font-size: 11px; line-height: 1.7; }
 

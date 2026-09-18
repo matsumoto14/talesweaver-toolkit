@@ -706,7 +706,7 @@
 
 <style>
   .versus-page { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--bg-mid); }
-  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 1160px; }
+  .scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 14px; max-width: 1160px; }
   .empty { font-size: 12px; }
 
   /* 方向ごとに 1 列。1280 幅のウィンドウで 2 列が横に並ぶ幅にする */
