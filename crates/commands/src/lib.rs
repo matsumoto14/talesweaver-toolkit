@@ -308,6 +308,23 @@ pub struct EquipmentAbilityCandidate {
     pub default_shown: bool,
 }
 
+/// この部位のアビリティ系統適合を解決する: `(この部位そのものの系統, 武器アビリティも合算する
+/// def-slot)`。武器はそのまま武器系統。双剣Subの盾は武器・盾アビリティを合算するので
+/// `also_from = Some(PartSlot::Weapon)`(系統適合は武器 def にだけ掛かる)。それ以外の部位は
+/// 系統適合を持たない(`None, None`)。
+fn ability_slot_fit(
+    part: &EquipmentPart,
+    slot: domain::PartSlot,
+) -> (Option<domain::WeaponSystem>, Option<domain::PartSlot>) {
+    let catalog = gamedata::equipment_catalog();
+    if slot == domain::PartSlot::Weapon {
+        (part.weapon_system(&catalog), None)
+    } else {
+        let dual_blade = part.dual_blade_weapon_ability_system(&catalog);
+        (dual_blade, dual_blade.map(|_| domain::PartSlot::Weapon))
+    }
+}
+
 /// この部位(武器はカテゴリー枠)に装着できるアビリティを、画面に出す順で返す。
 /// 並び・等級での畳み方・武器系統の適合はすべて domain(`ability_candidates`)が決める。
 pub fn list_equipment_ability_candidates(
@@ -315,12 +332,13 @@ pub fn list_equipment_ability_candidates(
     slot: domain::PartSlot,
     category: Option<u8>,
 ) -> Vec<EquipmentAbilityCandidate> {
-    let weapon_system = part.weapon_system(&gamedata::equipment_catalog());
+    let (weapon_system, also_from) = ability_slot_fit(&part, slot);
     domain::ability_candidates(
         &gamedata::equipment_abilities(),
         slot,
         category,
         weapon_system,
+        also_from,
         &part.abilities,
     )
     .into_iter()
@@ -348,14 +366,14 @@ pub fn set_enhance_level(part: EquipmentPart, level: u8) -> EquipmentPart {
     next
 }
 
-/// 武器の 1 カテゴリー枠のアビリティを入れ替えた部位を返す(`None` = 装着しない)。
+/// 武器(または双剣Subの盾)の 1 カテゴリー枠のアビリティを入れ替えた部位を返す(`None` = 装着しない)。
 pub fn set_ability_for_category(
     part: EquipmentPart,
     slot: domain::PartSlot,
     category: u8,
     ability_id: Option<String>,
 ) -> EquipmentPart {
-    let weapon_system = part.weapon_system(&gamedata::equipment_catalog());
+    let (weapon_system, also_from) = ability_slot_fit(&part, slot);
     let mut next = part;
     next.set_ability_for_category(
         &gamedata::equipment_abilities(),
@@ -363,6 +381,7 @@ pub fn set_ability_for_category(
         category,
         ability_id.as_deref(),
         weapon_system,
+        also_from,
     );
     next
 }

@@ -61,6 +61,13 @@
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
   const iconId = (itemId: string | null) => equipmentIconId(itemId, app.equipmentCatalog);
 
+  /** 双剣Sub(wrist_type)。この盾は武器アビリティも合算候補になる
+      (wiki: 装備システム/アビリティ #subarms。domain::WristType::weapon_ability_system と同じ対象)。 */
+  const DUAL_BLADE_WRIST_TYPES = new Set(["dual_blade_physical", "dual_blade_magic"]);
+  /** 武器と同じ「カテゴリー枠セレクタ」UI を使う部位か(武器そのもの、または双剣Subの盾)。 */
+  const usesWeaponAbilityUi = (slot: PartSlot): boolean =>
+    slot === "weapon" || DUAL_BLADE_WRIST_TYPES.has(equippedItem(slot)?.wrist_type ?? "");
+
   // --- 装備ドリルダウン(部位一覧 ⇄ 部位詳細) --------------------------------
   let openPart = $state<PartSlot | null>(null);
   let itemQuery = $state("");
@@ -376,6 +383,9 @@
     { category: 4, label: "新装着", note: "追加効果2枠" },
     { category: 3, label: "武器ディレイ", note: "任意・計算対象外" },
   ];
+  /** カテゴリー枠セレクタを使う部位の実際の枠(その部位の枠数ぶんだけ先頭から使う)。
+      武器は3枠で全部出る。双剣Subの盾は2枠なので、カテゴリー3(武器ディレイ・計算対象外)は出ない。 */
+  const abilityRowsFor = (slot: PartSlot) => WEAPON_ABILITY_ROWS.slice(0, currentAbilitySlotCount(slot));
   let abilityGroups = $state<Record<string, AbilityGroup>>({});
   const abilityCandidatesLatest = latest();
   $effect(() => {
@@ -393,8 +403,8 @@
       enhance_type: part.enhance_type,
       abilities: [...part.abilities],
     };
-    const keys: { key: string; category: number | null }[] = slot === "weapon"
-      ? WEAPON_ABILITY_ROWS.map((row) => ({ key: `weapon-${row.category}`, category: row.category }))
+    const keys: { key: string; category: number | null }[] = usesWeaponAbilityUi(slot)
+      ? abilityRowsFor(slot).map((row) => ({ key: `weapon-${row.category}`, category: row.category }))
       : [{ key: slot, category: null }];
     abilityCandidatesLatest.run(async (isCurrent) => {
       try {
@@ -532,10 +542,13 @@
     showAllEquipmentCandidates = false;
     if (!part) { openPart = slot; itemQuery = ""; itemPickerOpen = false; return; }
     const seen = new Set<string>();
+    // 双剣Subの盾は武器defも正当(usesWeaponAbilityUi)。それ以外はこの部位の def だけを残す。
+    const weaponUi = usesWeaponAbilityUi(slot);
     const normalized = part.abilities.filter((id) => {
-      if (abilityDef(id)?.slot !== slot) return false;
+      const defSlot = abilityDef(id)?.slot;
+      if (defSlot !== slot && !(weaponUi && defSlot === "weapon")) return false;
       const category = abilityDef(id)?.category;
-      if (category === undefined || (slot === "weapon" && seen.has(String(category)))) return false;
+      if (category === undefined || (weaponUi && seen.has(String(category)))) return false;
       seen.add(String(category));
       return true;
     }).slice(0, currentAbilitySlotCount(slot));
@@ -905,6 +918,10 @@
       <p class="hint dim">シエナのオーラとテシスコアは各専用欄から自動合流します。</p>
       {#snippet equationRow(k: EquipmentStatKind)}
           {@const cap = item ? item.enchant_caps[k] : (part.enchant_caps?.[k] ?? null)}
+          <!-- 上限 0 = この装備でそのステはエンチャントできない。「上限が未収録」の破線欄を出すと
+               入れられない値を入れる場所に見える(§00 ⑤ 考えさせない)。既に値が入っている行だけは
+               直せるように欄を残す -->
+          {@const noEnchant = cap !== null && cap <= 0 && part.enchant[k] === 0}
           {@const abilityValue = partAbilityValues(slot)[k]}
           {@const displayTotal = part.base[k] + partEnchantValues(slot)[k] + abilityValue}
           {@const completionPlan = enchantPlanFor(slot, k)}
@@ -925,13 +942,15 @@
                 <span class="ability-spacer" aria-hidden="true"></span>
               {/if}
               <div class="equation-enchant">
-                <NumberField
-                  label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント"
-                  max={cap ?? undefined}
-                  reason="上限が未収録"
-                  increments={[12, 14, 17, 20]}
-                  bind:value={part.enchant[k]}
-                />
+                {#if !noEnchant}
+                  <NumberField
+                    label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント"
+                    max={cap ?? undefined}
+                    reason="上限が未収録"
+                    increments={[12, 14, 17, 20]}
+                    bind:value={part.enchant[k]}
+                  />
+                {/if}
               </div>
               <div class="equation-base">
                 <NumberField
@@ -969,11 +988,15 @@
           <span>アビリティ</span><span class="badge">{part.abilities.length} / {currentAbilitySlotCount(slot)}</span>
           <strong class="ability-impact num"><Value value={abilityImpactSummary(slot)} /></strong>
         </div>
-        {#if slot === "weapon"}
-        <p class="hint dim">ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。</p>
+        {#if usesWeaponAbilityUi(slot)}
+        <p class="hint dim">
+          {slot === "weapon"
+            ? "ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。"
+            : "双剣Subは武器アビリティと盾アビリティを合わせて2枠まで装着できます。"}
+        </p>
 
         <div class="ability-fixed-list">
-          {#each WEAPON_ABILITY_ROWS as row (row.category)}
+          {#each abilityRowsFor(slot) as row (row.category)}
             {@const selectedAbilityId = abilityIdForCategory(slot, row.category)}
             {@const selectedAbility = abilityDef(selectedAbilityId)}
             {@const gradeKey = `weapon-${row.category}`}
@@ -1002,13 +1025,13 @@
               <div class="ability-additional-panel swap-in">
                 <div class="ability-additional-head">
                   <b>ランダム追加</b>
-                  <span class="badge">{additionsFor("weapon", selectedAbility.id).length} / 2</span>
+                  <span class="badge">{additionsFor(slot, selectedAbility.id).length} / 2</span>
                   <span class="dim">付いている種類を押して足し、実測値を合わせます</span>
                 </div>
-                {#if additionsFor("weapon", selectedAbility.id).length < 2}
+                {#if additionsFor(slot, selectedAbility.id).length < 2}
                   <div class="ro-add-row ability-additional-candidates">
-                    {#each addableAdditionalOptions("weapon", selectedAbility.id) as option (option.kind)}
-                      <Chip class="add" onclick={() => addAdditional("weapon", selectedAbility.id, option.kind)}>
+                    {#each addableAdditionalOptions(slot, selectedAbility.id) as option (option.kind)}
+                      <Chip class="add" onclick={() => addAdditional(slot, selectedAbility.id, option.kind)}>
                         ＋ {additionalKindLabel(option.kind)}
                         <span class="num dim">
                           {additionalRangeLabel(option)}
@@ -1017,7 +1040,7 @@
                     {/each}
                   </div>
                 {/if}
-                {#each additionsFor("weapon", selectedAbility.id) as additional, additionalIndex (`${additional.kind}-${additionalIndex}`)}
+                {#each additionsFor(slot, selectedAbility.id) as additional, additionalIndex (`${additional.kind}-${additionalIndex}`)}
                   {@const additionalDef = selectedAbility.additional_options.find((option) => option.kind === additional?.kind)}
                   {#if additionalDef}
                     <div class="siena-row swap-in">
@@ -1026,9 +1049,9 @@
                         label="{additionalKindLabel(additional.kind)}の値"
                         min={additionalDef.min}
                         max={additionalDef.max}
-                        bind:value={() => additional.value, (value) => setAdditionalValue("weapon", selectedAbility.id, additionalIndex, value)}
+                        bind:value={() => additional.value, (value) => setAdditionalValue(slot, selectedAbility.id, additionalIndex, value)}
                       />
-                      <button type="button" class="clear" onclick={() => removeAdditional("weapon", selectedAbility.id, additionalIndex)}>外す</button>
+                      <button type="button" class="clear" onclick={() => removeAdditional(slot, selectedAbility.id, additionalIndex)}>外す</button>
                     </div>
                   {/if}
                 {/each}

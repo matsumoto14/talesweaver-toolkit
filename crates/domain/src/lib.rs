@@ -117,7 +117,8 @@ pub use equipment::{
     EquipmentCoefficients, EquipmentEnhanceType, EquipmentError, EquipmentPart,
     EquipmentPartList, EquipmentParts, EquipmentRates, EquipmentValueKind, EquipmentValueSource,
     EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus, WristBonusRule,
-    ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX, WEAPON_ABILITY_SLOTS,
+    ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
+    DUAL_BLADE_SUB_ABILITY_SLOTS, WEAPON_ABILITY_SLOTS,
 };
 pub use game_tables::{game_tables, DamageCategoryLabel, EquipmentStatLabel, GameTables};
 pub use growth_apply::{apply_growth_action, GrowthApplyContext};

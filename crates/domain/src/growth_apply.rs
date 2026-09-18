@@ -109,6 +109,7 @@ pub fn apply_growth_action(
                     def.category,
                     Some(ability_id.as_str()),
                     ctx.weapon_system,
+                    None,
                 );
             } else {
                 part.abilities.push(ability_id.clone());

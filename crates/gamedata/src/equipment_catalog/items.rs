@@ -174,6 +174,9 @@ impl domain::EquipmentCatalogEntry for EquipmentItem {
     fn weapon_class(&self) -> Option<WeaponClass> {
         self.weapon_class
     }
+    fn wrist_type(&self) -> Option<WristType> {
+        self.wrist_type
+    }
     fn enhance_type(&self) -> Option<EquipmentEnhanceType> {
         self.resolved_enhance_type()
     }
@@ -1872,6 +1875,16 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             {
                 item.wrist_type = Some(wrist_type);
             }
+        }
+        // 双剣Subは武器・盾アビリティ合算2枠(wiki: Item/合成/装着アビリティシステム スロット表
+        // 「双剣(sub)|2|…|武器と盾アビリティを装着可能」)。wrist_type が page 文字列でなく
+        // client DB / R2 由来のときはここまで確定しないので、この後段でまとめて上書きする
+        // (wiki 抽出経路・client 経路の両方をここ 1 か所で揃える)。
+        if matches!(
+            item.wrist_type,
+            Some(WristType::DualBladePhysical | WristType::DualBladeMagic)
+        ) {
+            item.ability_slots = domain::DUAL_BLADE_SUB_ABILITY_SLOTS;
         }
     }
     assign_icon_ids(&mut items);

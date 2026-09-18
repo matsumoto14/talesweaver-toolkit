@@ -425,13 +425,16 @@
   .delete-registration.confirm { background: var(--state-short-bg); font-weight: 700; }
   .editing-registration { background: var(--state-temp-bg); border-color: var(--state-temp-bd); color: var(--state-temp-fg); }
   .values-paired { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; margin-top: 4px; }
-  .value-pair { width: min(100%, 520px); display: grid; grid-template-columns: 44px 464px; gap: 6px; align-items: center; }
-  .value-pair.plan-stat { width: min(100%, 800px); grid-template-columns: 44px 464px minmax(220px, 1fr); }
+  .value-pair { width: min(100%, 555px); display: grid; grid-template-columns: 44px 499px; gap: 6px; align-items: center; }
+  .value-pair.plan-stat { width: min(100%, 835px); grid-template-columns: 44px 499px minmax(220px, 1fr); }
   .value-pair.secondary-stat { opacity: .82; }
-  .value-equation { display: grid; grid-template-columns: 102px 52px 214px 62px; gap: 6px; align-items: center; }
+  /* エンチャント列の 249px は NumberField(形態 4 + 刻み 4 つ)の実寸そのもの —
+     − 16 + セル 74 + ＋ 16 + 刻み 23×4 + MAX 30 + 隙間 3×7 = 249。器を 214px にしていた間は
+     MAX が右の「装備本体補正」欄の下にはみ出し、押しても隣の欄に吸われていた(§09 規則 1) */
+  .value-equation { display: grid; grid-template-columns: 102px 52px 249px 62px; gap: 6px; align-items: center; }
   .equation-base { width: 62px; display: grid; align-items: center; }
   .equation-base :global(.stepper .cell.bare) { width: 62px; min-width: 62px; }
-  .equation-enchant { width: 214px; display: grid; align-items: center; }
+  .equation-enchant { width: 249px; display: grid; align-items: center; }
   .enchant-plan {
     min-width: 0; min-height: 30px; padding: 3px 7px; display: grid;
     grid-template-columns: 75px minmax(0, 1fr) 34px; align-items: center; gap: 7px;
@@ -442,7 +445,7 @@
   .plan-recipe { min-width: 0; color: var(--fg-sub); font-size: 9.5px; font-weight: 700; white-space: nowrap; }
   .enchant-plan > .badge { min-width: 34px; text-align: center; }
   .enchant-plan.complete .plan-remaining b, .enchant-plan.complete .plan-recipe { color: var(--state-edge-fg); }
-  .base-value-toolbar { width: min(100%, 520px); min-height: 29px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft); display: grid; grid-template-columns: 44px 102px 52px 214px 62px; column-gap: 6px; align-items: center; }
+  .base-value-toolbar { width: min(100%, 555px); min-height: 29px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--border-soft); display: grid; grid-template-columns: 44px 102px 52px 249px 62px; column-gap: 6px; align-items: center; }
   .base-value-copy { grid-column: 5; display: flex; align-items: baseline; justify-content: center; gap: 3px; white-space: nowrap; }
   .base-value-copy b { font-size: 9.5px; color: var(--fg-sub); }
   .base-value-copy small { color: var(--fg-muted); font-size: 9px; }
@@ -461,7 +464,7 @@
     display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 3px;
   }
   .enchant-more-toggle {
-    width: min(100%, 520px); grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
+    width: min(100%, 555px); grid-column: 1 / -1; min-height: 29px; margin-top: 3px; padding: 4px 7px;
     border: 0; border-top: 1px dashed var(--border-soft); background: none; color: var(--fg-sub);
     display: flex; align-items: center; justify-content: space-between; text-align: left;
   }
@@ -480,15 +483,15 @@
   .enchant-card .hint { margin: 4px 0 0; }
   .equipment-filter { white-space: nowrap; }
   @media (max-width: 850px) {
-    .values-paired, .base-value-toolbar { width: min(100%, 508px); }
-    .base-value-toolbar { grid-template-columns: 40px 94px 48px 214px 58px; }
-    .value-pair { grid-template-columns: 40px 462px; }
-    .value-pair.plan-stat { width: min(100%, 508px); grid-template-columns: 40px 462px; }
+    .values-paired, .base-value-toolbar { width: min(100%, 543px); }
+    .base-value-toolbar { grid-template-columns: 40px 94px 48px 249px 58px; }
+    .value-pair { grid-template-columns: 40px 497px; }
+    .value-pair.plan-stat { width: min(100%, 543px); grid-template-columns: 40px 497px; }
     .enchant-plan { grid-column: 2; margin-top: 2px; }
-    .value-equation { grid-template-columns: 94px 48px 214px 58px; }
+    .value-equation { grid-template-columns: 94px 48px 249px 58px; }
     .equation-base { width: 58px; }
     .equation-base :global(.stepper .cell.bare) { width: 58px; min-width: 58px; }
-    .equation-enchant { width: 214px; }
+    .equation-enchant { width: 249px; }
     .value-total { width: 94px; grid-template-columns: 36px 56px; }
     .total-main { width: 36px; }
     .enchant-part { width: 56px; }

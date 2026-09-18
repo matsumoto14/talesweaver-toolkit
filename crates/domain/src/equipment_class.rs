@@ -206,6 +206,18 @@ impl WristType {
         }
     }
 
+    /// 武器アビリティも装着できるサブアーム種のとき、その武器系統を返す(wiki:
+    /// `Item/合成/装着アビリティシステム` スロット表「双剣(sub)|2|…|武器と盾アビリティを
+    /// 装着可能」)。対象は双剣Subの2種だけで、系統は `WeaponClass::system()` と食い違わないよう
+    /// そこから引く。他のサブアーム(盾・スペルブック等)は `None`(従来どおり盾アビリティのみ)。
+    pub fn weapon_ability_system(self) -> Option<WeaponSystem> {
+        match self {
+            WristType::DualBladePhysical => Some(WeaponClass::DualBladePhysical.system()),
+            WristType::DualBladeMagic => Some(WeaponClass::DualBladeMagic.system()),
+            _ => None,
+        }
+    }
+
     /// 同じキャラで物理・魔法の専用サブアームが分かれる場合だけ、攻撃タイプで狭める。
     /// 片側しか持たないキャラ(盾のみ等)はそのまま返す。
     pub fn narrow_by_attack_type(types: &[WristType], attack_type: AttackType) -> Vec<WristType> {
@@ -489,6 +501,31 @@ mod tests {
         assert_eq!(
             WristType::narrow_by_attack_type(&shield_only, AttackType::Magic),
             vec![WristType::Shield]
+        );
+    }
+
+    #[test]
+    fn 双剣sub以外のサブアームは武器アビリティ系統を持たない() {
+        for wrist in [
+            WristType::Shield,
+            WristType::Spellbook,
+            WristType::Knuckle,
+            WristType::Band,
+            WristType::Bracelet,
+            WristType::Pendulum,
+            WristType::CrystalBall,
+            WristType::PhysicalMagazine,
+            WristType::MagicMagazine,
+        ] {
+            assert_eq!(wrist.weapon_ability_system(), None);
+        }
+        assert_eq!(
+            WristType::DualBladePhysical.weapon_ability_system(),
+            Some(WeaponClass::DualBladePhysical.system())
+        );
+        assert_eq!(
+            WristType::DualBladeMagic.weapon_ability_system(),
+            Some(WeaponClass::DualBladeMagic.system())
         );
     }
 

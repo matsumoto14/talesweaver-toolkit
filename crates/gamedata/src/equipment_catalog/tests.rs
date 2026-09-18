@@ -113,6 +113,58 @@ fn 腕種別はカタログのwiki区分から判定する() {
 }
 
 #[test]
+fn 双剣subのアビリティ枠は武器と盾の合算2枠() {
+    // wiki: Item/合成/装着アビリティシステム スロット表「双剣(sub)|2|…|武器と盾アビリティを装着可能」
+    let physical = find_equipment_item("wiki-02cb4a19ad02").unwrap();
+    assert_eq!(physical.wrist_type, Some(WristType::DualBladePhysical));
+    assert_eq!(physical.ability_slots, domain::DUAL_BLADE_SUB_ABILITY_SLOTS);
+    assert_eq!(physical.ability_slots, 2);
+
+    // 普通の盾は従来どおり1枠のまま
+    let shield = find_equipment_item("abyss-shield").unwrap();
+    assert_eq!(shield.wrist_type, Some(WristType::Shield));
+    assert_eq!(shield.ability_slots, 1);
+}
+
+#[test]
+fn 双剣subの盾は武器と盾のアビリティ候補を合算し普通の盾は武器defを出さない() {
+    // wiki: Item/合成/装着アビリティシステム スロット表「双剣(sub)|2|…|武器と盾アビリティを
+    // 装着可能」(ユーザー確認 2026-09-19)。物理双剣Subは Hack 系統、魔法双剣Subは Mr 系統。
+    let abilities = equipment_abilities();
+
+    let magic_item = find_equipment_item("wiki-066bb0e06f09").unwrap();
+    assert_eq!(magic_item.wrist_type, Some(WristType::DualBladeMagic));
+    let weapon_system = magic_item.wrist_type.and_then(WristType::weapon_ability_system);
+    assert_eq!(weapon_system, Some(WeaponSystem::Mr));
+    let candidates: HashSet<&str> = domain::ability_candidates(
+        &abilities,
+        PartSlot::Shield,
+        None,
+        weapon_system,
+        Some(PartSlot::Weapon),
+        &[],
+    )
+    .iter()
+    .map(|c| c.def.id)
+    .collect();
+    // 武器 def(Mr系統に合う耐魔力)も盾 def(盾研磨)もどちらも候補に出る
+    assert!(candidates.contains("night-star-magic-resistance"), "{candidates:?}");
+    assert!(candidates.contains("lower-grade-magic-defense"), "{candidates:?}");
+    assert!(candidates.contains("night-star-shield-polish"), "{candidates:?}");
+    // 系統違いの武器 def(斬り)は出ない
+    assert!(!candidates.contains("night-star-sharp-blade"), "{candidates:?}");
+
+    // 普通の盾(双剣Subでない)は武器 def を出さない
+    let normal_candidates: HashSet<&str> =
+        domain::ability_candidates(&abilities, PartSlot::Shield, None, None, None, &[])
+            .iter()
+            .map(|c| c.def.id)
+            .collect();
+    assert!(!normal_candidates.contains("night-star-magic-resistance"), "{normal_candidates:?}");
+    assert!(normal_candidates.contains("night-star-shield-polish"), "{normal_candidates:?}");
+}
+
+#[test]
 fn ボリスとマキシミンは腕の突き基本とエンチャントを魔攻基本へ変換する() {
     let mut equipment = wrist("abyss-shield", 100, 0, 30, 0);
     equipment

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::element::{Element, ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX};
-use crate::equipment_class::{WeaponClass, WeaponSystem};
+use crate::equipment_class::{WeaponClass, WeaponSystem, WristType};
 use crate::random_option::{
     RandomOptionDef, RandomOptionError, RandomOptionSlot, RandomOptionTotals,
     RANDOM_OPTION_VALUE_MAX,
@@ -119,6 +119,10 @@ pub const ENHANCE_LEVEL_MAX: u8 = 15;
 /// 武器に追加できる装着アビリティのスロット数。
 /// 出典: Item/合成/装着アビリティシステム「種別 / スロット数」(武器 = 3)。
 pub const WEAPON_ABILITY_SLOTS: usize = 3;
+/// 双剣Subに追加できる装着アビリティのスロット数(武器アビリティ・盾アビリティ合算)。
+/// 出典: `Item/合成/装着アビリティシステム` スロット表「双剣(sub) | 2 | 80,000 |
+/// 武器と盾アビリティを装着可能」(取得 2026-09-19。武器 3・盾 1 とは別枠数)。
+pub const DUAL_BLADE_SUB_ABILITY_SLOTS: usize = 2;
 /// +12 以上で追加固定ダメージがレンジ振り(MR)になる境界(wiki: +11 覚醒までは確定値)。
 pub const ENHANCE_LEVEL_RANDOM_RANGE_MIN: u8 = 12;
 /// 画面で選べる強化 Lv。0 = 強化なし。+10 未満は実用しないので出さず、+10〜+15 を並べる
@@ -574,6 +578,19 @@ impl EquipmentPart {
         self.enhance_type.and_then(WeaponSystem::from_enhance_type)
     }
 
+    /// 双剣Subの盾部位が武器アビリティも装着できる系統(wiki: 装備システム/アビリティ #subarms、
+    /// `WristType::weapon_ability_system` 参照)。双剣Sub以外は `None`。
+    pub fn dual_blade_weapon_ability_system<C: EquipmentCatalogEntry>(
+        &self,
+        catalog: &[C],
+    ) -> Option<WeaponSystem> {
+        let entry = self
+            .item_id
+            .as_ref()
+            .and_then(|id| catalog.iter().find(|i| i.id() == id.as_str()))?;
+        entry.wrist_type()?.weapon_ability_system()
+    }
+
     /// カタログ品をこの部位に当てる(基本能力値はレンジ上限、エンチャントは新しい枠まで、
     /// アビリティ・ランダムオプションは新しい枠数まで切り詰め)。カタログを選んだとき・
     /// レリックの段を動かしたとき・武器を上位品に置き換えたときで同じ規則を使う。
@@ -630,8 +647,13 @@ impl EquipmentPart {
         });
     }
 
-    /// 武器の 1 カテゴリー枠にアビリティを入れ替える(`None` = 装着しない)。
+    /// 武器(または双剣Subの盾)の 1 カテゴリー枠にアビリティを入れ替える(`None` = 装着しない)。
     /// 同じカテゴリーの前のアビリティは本体値・追加値ごと外す。
+    ///
+    /// `also_from` は `slot` に加えてこのカテゴリー枠に装着できる別の def-slot
+    /// (双剣Subの盾なら `Some(PartSlot::Weapon)`。武器アビリティも合算候補にするが、
+    /// 系統適合の絞り込みは武器 def にだけ掛ける)。通常はカタログ品の
+    /// `weapon_system` / `dual_blade_weapon_ability_system` を呼び出し側が解決して渡す。
     pub fn set_ability_for_category(
         &mut self,
         defs: &[EquipmentAbilityDef],
@@ -639,6 +661,7 @@ impl EquipmentPart {
         category: u8,
         ability_id: Option<&str>,
         weapon_system: Option<WeaponSystem>,
+        also_from: Option<PartSlot>,
     ) {
         let def_of = |id: &str| defs.iter().find(|d| d.id == id);
         let current: Option<String> = self
@@ -660,10 +683,10 @@ impl EquipmentPart {
         let Some(def) = ability_id.and_then(def_of) else {
             return;
         };
-        if def.slot != slot || def.category != category {
+        if (def.slot != slot && Some(def.slot) != also_from) || def.category != category {
             return;
         }
-        if slot == PartSlot::Weapon
+        if def.slot == PartSlot::Weapon
             && weapon_system.is_some_and(|system| !system.accepts_ability(def.family))
         {
             return;
@@ -811,10 +834,18 @@ impl EquipmentPart {
         if !self.abilities.is_empty() && !slot.allows_abilities() {
             return Err(EquipmentError::AbilitiesNotAllowed { slot });
         }
-        if self.abilities.len() > slot.ability_slots() {
+        // 盾は通常 1 枠だが、双剣Subは武器・盾アビリティ合算 2 枠を持つ(カタログ品限定)。
+        // ここでは緩い上限だけを見て弾かない。厳密な枠数はカタログを引ける
+        // `Equipment::validate_against_catalog` の `item.ability_slots()` が正で担保する。
+        let max_abilities = if slot == PartSlot::Shield {
+            DUAL_BLADE_SUB_ABILITY_SLOTS
+        } else {
+            slot.ability_slots()
+        };
+        if self.abilities.len() > max_abilities {
             return Err(EquipmentError::TooManyAbilities {
                 slot,
-                max: slot.ability_slots(),
+                max: max_abilities,
             });
         }
         self.validate_random_options(slot)?;
@@ -1265,6 +1296,8 @@ pub trait EquipmentCatalogEntry {
     fn enchant_caps(&self) -> EquipmentValues;
     /// 武器なら武器種。装着アビリティの系統適合を見るのに使う
     fn weapon_class(&self) -> Option<WeaponClass>;
+    /// 腕装備(サブアーム)なら区分。双剣Subが武器アビリティも装着できるかの判定に使う
+    fn wrist_type(&self) -> Option<WristType>;
     /// 装備強化の補正式。武器は `weapon_class` から決まるので、それ以外(鎧など)だけ
     fn enhance_type(&self) -> Option<EquipmentEnhanceType>;
     /// レリックなら種別と段。育成順序(段上げの可否)を見るのに使う
@@ -1410,9 +1443,15 @@ impl Equipment {
                 }
                 // アビリティはカテゴリーごとに1つまで。同じ攻撃系統でもカテゴリー1と4は併用できる。
                 // 武器は系統に合う効果系統しか装着できない(系統不明のカスタム武器は通す)。
-                let weapon_system = (slot == PartSlot::Weapon)
-                    .then(|| part.weapon_system(equipment_catalog))
-                    .flatten();
+                // 双剣Subの盾は武器アビリティも合算候補にするので、武器 def(`also_from`)も許す
+                // (wiki: 装備システム/アビリティ #subarms)。系統適合は武器 def にだけ掛ける。
+                let weapon_system = if slot == PartSlot::Weapon {
+                    part.weapon_system(equipment_catalog)
+                } else {
+                    part.dual_blade_weapon_ability_system(equipment_catalog)
+                };
+                let also_from = (slot != PartSlot::Weapon && weapon_system.is_some())
+                    .then_some(PartSlot::Weapon);
                 let mut groups = std::collections::HashSet::new();
                 for ability_id in &part.abilities {
                     let def = equipment_abilities
@@ -1424,21 +1463,23 @@ impl Equipment {
                                 at_ability(ability_id),
                             )
                         })?;
-                    if def.slot != slot {
+                    if def.slot != slot && Some(def.slot) != also_from {
                         return Err(ValidationError::at(
                             format!("装備アビリティ '{}' は {:?} 用です", def.name, def.slot),
                             at_ability(ability_id),
                         ));
                     }
-                    if let Some(system) = weapon_system {
-                        if !system.accepts_ability(def.family) {
-                            return Err(ValidationError::at(
-                                format!(
-                                    "装備アビリティ '{}' はこの武器の系統({:?})には装着できません",
-                                    def.name, system
-                                ),
-                                at_ability(ability_id),
-                            ));
+                    if def.slot == PartSlot::Weapon {
+                        if let Some(system) = weapon_system {
+                            if !system.accepts_ability(def.family) {
+                                return Err(ValidationError::at(
+                                    format!(
+                                        "装備アビリティ '{}' はこの武器の系統({:?})には装着できません",
+                                        def.name, system
+                                    ),
+                                    at_ability(ability_id),
+                                ));
+                            }
                         }
                     }
                     if !groups.insert(def.exclusive_group) {
@@ -1681,7 +1722,7 @@ impl Equipment {
             }
         }
         for (slot, part) in self.iter_selected() {
-            let values = part_ability_values(slot, part, abilities);
+            let values = part_ability_values(part, abilities);
             if values != EquipmentValues::default() {
                 sources.push(EquipmentValueSource {
                     source: format!("{} アビリティ", slot.label()),
@@ -1712,7 +1753,7 @@ impl Equipment {
         self.iter_selected()
             .map(|(slot, part)| PartEquipmentValues {
                 slot,
-                values: part_ability_values(slot, part, abilities),
+                values: part_ability_values(part, abilities),
             })
             .collect()
     }
@@ -1752,12 +1793,12 @@ impl Equipment {
         let effects: Vec<(String, &SkillEffect)> = self
             .iter_selected()
             .into_iter()
-            .flat_map(|(slot, part)| {
-                part.abilities.iter().filter_map(move |id| {
-                    abilities
-                        .iter()
-                        .find(|a| a.id == id.as_str() && a.slot == slot)
-                })
+            .flat_map(|(_, part)| {
+                // アビリティ id はカタログ全体で一意(双剣Subの盾は武器 def の id も持ちうる)ので
+                // id 一致だけで引く。部位の正当性は候補列挙・検証側が担保する。
+                part.abilities
+                    .iter()
+                    .filter_map(move |id| abilities.iter().find(|a| a.id == id.as_str()))
             })
             .flat_map(|def| {
                 def.damage_effects
@@ -1957,17 +1998,12 @@ pub struct PartStatTotal {
 
 /// 1 部位ぶんのアビリティ由来の装備補正(アビリティ定義値 + ロール値 + 追加効果)。
 /// part.base・称号は含まない(`base_totals` / `ability_values_by_part` が共有する)。
-fn part_ability_values(
-    slot: PartSlot,
-    part: &EquipmentPart,
-    abilities: &[EquipmentAbilityDef],
-) -> EquipmentValues {
+fn part_ability_values(part: &EquipmentPart, abilities: &[EquipmentAbilityDef]) -> EquipmentValues {
     let mut total = EquipmentValues::default();
     for ability_id in &part.abilities {
-        if let Some(def) = abilities
-            .iter()
-            .find(|a| a.id == *ability_id && a.slot == slot)
-        {
+        // アビリティ id はカタログ全体で一意(双剣Subの盾は武器 def の id も持ちうる)ので
+        // id 一致だけで引く。部位の正当性は候補列挙・検証側が担保する。
+        if let Some(def) = abilities.iter().find(|a| a.id == *ability_id) {
             total = total.add(def.values);
         }
     }
@@ -2516,10 +2552,12 @@ pub fn ability_value_rooms(
                 && (slot != PartSlot::Weapon
                     || weapon_system.is_none_or(|system| system.accepts_ability(def.family)))
         };
+        // アビリティ id はカタログ全体で一意(双剣Subの盾は武器 def の id も持ちうる)ので
+        // id 一致だけで引く。部位の正当性は候補列挙・検証側が担保する。
         let attached: Vec<&EquipmentAbilityDef> = part
             .abilities
             .iter()
-            .filter_map(|id| abilities.iter().find(|a| a.id == id.as_str() && a.slot == slot))
+            .filter_map(|id| abilities.iter().find(|a| a.id == id.as_str()))
             .collect();
 
         // 差し替え: 同じラダー(カテゴリー × 等級を外した種類名)の上位へ
@@ -2583,19 +2621,25 @@ pub fn ability_value_rooms(
 ///   枠は 喪失 / 夜星 だけ**、それ以外のラダーは上位 2 段だけを既定にする
 ///   (ユーザー決定 2026-09-01)。等級が付かない候補はラダーを成さないので常に見せる
 /// - 選んであるものは畳んだ側にあっても必ず見せる(隠れると値の理由が分からなくなる)
+///
+/// `also_from` は `slot` に加えて候補に混ぜる別の def-slot(双剣Subの盾なら
+/// `Some(PartSlot::Weapon)`。wiki: `Item/合成/装着アビリティシステム` スロット表「双剣(sub)|2|…|
+/// 武器と盾アビリティを装着可能」)。系統適合(`weapon_system`)は武器 def にだけ掛かり、
+/// 盾 def はそのまま候補に出る。
 pub fn ability_candidates(
     defs: &[EquipmentAbilityDef],
     slot: PartSlot,
     category: Option<u8>,
     weapon_system: Option<WeaponSystem>,
+    also_from: Option<PartSlot>,
     selected: &[String],
 ) -> Vec<AbilityCandidate> {
     let mut candidates: Vec<&EquipmentAbilityDef> = defs
         .iter()
-        .filter(|a| a.slot == slot)
+        .filter(|a| a.slot == slot || Some(a.slot) == also_from)
         .filter(|a| category.is_none_or(|c| a.category == c))
         .filter(|a| {
-            slot != PartSlot::Weapon
+            a.slot != PartSlot::Weapon
                 || weapon_system.is_none_or(|system| system.accepts_ability(a.family))
         })
         .collect();
@@ -3854,6 +3898,9 @@ mod tests {
         fn weapon_class(&self) -> Option<WeaponClass> {
             None
         }
+        fn wrist_type(&self) -> Option<WristType> {
+            None
+        }
         fn enhance_type(&self) -> Option<EquipmentEnhanceType> {
             None
         }
@@ -4013,11 +4060,11 @@ mod tests {
             ability("c4b", "夜星の尖った刃", PartSlot::Weapon, 4, "weapon-category-4"),
         ];
         let mut part = EquipmentPart::default();
-        part.set_ability_for_category(&defs, PartSlot::Weapon, 1, Some("c1"), None);
-        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, Some("c4a"), None);
-        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, Some("c4b"), None);
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 1, Some("c1"), None, None);
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, Some("c4a"), None, None);
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, Some("c4b"), None, None);
         assert_eq!(part.abilities, vec!["c1".to_string(), "c4b".to_string()]);
-        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, None, None);
+        part.set_ability_for_category(&defs, PartSlot::Weapon, 4, None, None, None);
         assert_eq!(part.abilities, vec!["c1".to_string()]);
     }
 
@@ -4038,7 +4085,7 @@ mod tests {
             def.ladder = "尖った刃".to_string();
             defs.push(def);
         }
-        let shown: Vec<&str> = ability_candidates(&defs, PartSlot::Weapon, Some(4), None, &[])
+        let shown: Vec<&str> = ability_candidates(&defs, PartSlot::Weapon, Some(4), None, None, &[])
             .iter()
             .filter(|c| c.default_shown)
             .map(|c| c.def.id)
@@ -4046,12 +4093,50 @@ mod tests {
         assert_eq!(shown, vec!["loss", "night"]);
         // 選んであるものは畳んだ側でも必ず見せる
         let selected = vec!["ancient".to_string()];
-        let shown: Vec<&str> = ability_candidates(&defs, PartSlot::Weapon, Some(4), None, &selected)
+        let shown: Vec<&str> =
+            ability_candidates(&defs, PartSlot::Weapon, Some(4), None, None, &selected)
             .iter()
             .filter(|c| c.default_shown)
             .map(|c| c.def.id)
             .collect();
         assert_eq!(shown, vec!["ancient", "loss", "night"]);
+    }
+
+    #[test]
+    fn 双剣subの盾は武器と盾のアビリティを合算して候補に出し系統は武器defにだけ掛かる() {
+        // wiki: Item/合成/装着アビリティシステム スロット表「双剣(sub)|2|…|武器と盾アビリティを
+        // 装着可能」。系統絞り(WeaponSystem::accepts_ability)は武器 def にだけ掛け、盾 def は
+        // そのまま候補に出る(ユーザー確認 2026-09-19)。
+        let mut mr_weapon = ability("mr-weapon", "夜星の耐魔力", PartSlot::Weapon, 4, "weapon-category-4");
+        mr_weapon.family = EquipmentAbilityFamily::MagicResistance;
+        let mut sharp_weapon = ability("sharp-weapon", "夜星の鋭い刃", PartSlot::Weapon, 4, "weapon-category-4");
+        sharp_weapon.family = EquipmentAbilityFamily::SharpBlade;
+        let shield_ability = ability("shield-polish", "夜星の盾研磨", PartSlot::Shield, 4, "shield-ability");
+        let defs = vec![mr_weapon, sharp_weapon, shield_ability];
+
+        // 魔法双剣(Mr系統): 系統に合う武器MR defと、系統を掛けない盾 defが両方出る。
+        // 系統違いの武器(斬り)defは出ない
+        let mut magic_dual_blade: Vec<&str> = ability_candidates(
+            &defs,
+            PartSlot::Shield,
+            Some(4),
+            Some(WeaponSystem::Mr),
+            Some(PartSlot::Weapon),
+            &[],
+        )
+        .iter()
+        .map(|c| c.def.id)
+        .collect();
+        magic_dual_blade.sort_unstable();
+        assert_eq!(magic_dual_blade, vec!["mr-weapon", "shield-polish"]);
+
+        // 普通の盾(also_from 無し)は武器 def を出さない
+        let normal_shield: Vec<&str> =
+            ability_candidates(&defs, PartSlot::Shield, Some(4), None, None, &[])
+                .iter()
+                .map(|c| c.def.id)
+                .collect();
+        assert_eq!(normal_shield, vec!["shield-polish"]);
     }
 
     #[test]
@@ -4122,6 +4207,9 @@ mod tests {
         fn weapon_class(&self) -> Option<WeaponClass> {
             None
         }
+        fn wrist_type(&self) -> Option<WristType> {
+            None
+        }
         fn enhance_type(&self) -> Option<EquipmentEnhanceType> {
             None
         }
@@ -4188,6 +4276,90 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(part.resolve_enchant_caps(&catalog), None);
+    }
+
+    struct MockDualBladeShield {
+        id: &'static str,
+        ability_slots: usize,
+        wrist_type: Option<WristType>,
+    }
+    impl EquipmentCatalogEntry for MockDualBladeShield {
+        fn id(&self) -> &str {
+            self.id
+        }
+        fn slot(&self) -> PartSlot {
+            PartSlot::Shield
+        }
+        fn ability_slots(&self) -> usize {
+            self.ability_slots
+        }
+        fn random_option_slots(&self) -> Option<usize> {
+            None
+        }
+        fn values_min(&self) -> EquipmentValues {
+            EquipmentValues::default()
+        }
+        fn values_max(&self) -> EquipmentValues {
+            EquipmentValues::default()
+        }
+        fn growth_caps(&self) -> Option<EquipmentValues> {
+            None
+        }
+        fn enchant_caps(&self) -> EquipmentValues {
+            EquipmentValues::default()
+        }
+        fn weapon_class(&self) -> Option<WeaponClass> {
+            None
+        }
+        fn wrist_type(&self) -> Option<WristType> {
+            self.wrist_type
+        }
+        fn enhance_type(&self) -> Option<EquipmentEnhanceType> {
+            None
+        }
+        fn relic(&self) -> Option<RelicInfo> {
+            None
+        }
+    }
+
+    #[test]
+    fn 双剣subの盾は武器と盾のアビリティを合算保存でき値も集計される() {
+        // wiki: Item/合成/装着アビリティシステム スロット表「双剣(sub)|2|…|
+        // 武器と盾アビリティを装着可能」(ユーザー確認 2026-09-19)。
+        let catalog = [MockDualBladeShield {
+            id: "dual-blade-sub",
+            ability_slots: DUAL_BLADE_SUB_ABILITY_SLOTS,
+            wrist_type: Some(WristType::DualBladeMagic),
+        }];
+        let mut mr_weapon =
+            ability("mr-weapon", "夜星の耐魔力", PartSlot::Weapon, 4, "weapon-category-4");
+        mr_weapon.family = EquipmentAbilityFamily::MagicResistance;
+        mr_weapon.values.magic_defense = 20;
+        let mut shield_polish =
+            ability("shield-polish", "夜星の盾研磨", PartSlot::Shield, 4, "shield-ability");
+        shield_polish.family = EquipmentAbilityFamily::ShieldPolish;
+        shield_polish.values.physical_defense = 30;
+        let abilities = vec![mr_weapon, shield_polish];
+
+        let mut equipment = Equipment::default();
+        equipment.parts.shield = EquipmentPartList::from(EquipmentPart {
+            item_id: Some("dual-blade-sub".to_string()),
+            abilities: vec!["mr-weapon".to_string(), "shield-polish".to_string()],
+            ..Default::default()
+        });
+
+        // 盾の一般 validate は緩い上限(DUAL_BLADE_SUB_ABILITY_SLOTS)を通る
+        assert!(equipment.validate().is_ok());
+        // カタログ検証(系統適合・枠数)も通る
+        assert!(equipment
+            .validate_against_catalog(&catalog, &abilities, &[])
+            .is_ok());
+
+        // 値は武器 def・盾 def どちらも id 一致で集計される
+        let part = equipment.parts.shield.selected().unwrap();
+        let values = part_ability_values(part, &abilities);
+        assert_eq!(values.magic_defense, 20);
+        assert_eq!(values.physical_defense, 30);
     }
 
     #[test]
