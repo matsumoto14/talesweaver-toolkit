@@ -302,6 +302,7 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "list_element_sources" => ok(commands::list_element_sources()),
         "list_contents" => ok(commands::list_contents()),
         "list_equipment_catalog" => ok(commands::list_equipment_catalog()),
+        "list_downloaded_equipment_ids" => ok(gamedata::list_downloaded_equipment_ids()),
         "list_inkri_targets" => ok(commands::list_inkri_targets()),
         "eta_scroll_price" => ok(commands::eta_scroll_price()),
         "list_equipment_abilities" => ok(commands::list_equipment_abilities()),

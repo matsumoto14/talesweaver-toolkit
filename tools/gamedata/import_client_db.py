@@ -1,11 +1,16 @@
 """クライアント展開データ(dm_NNNNN_NNNN.csv)から装備カタログを取り込み、
 `crates/gamedata/src/equipment_catalog/client.rs` を生成する。
 
-†テネブリス(2026-09-14 決定)は配布物・リポジトリから外す(docs/adr/009-public-release.md)。
-`client.rs` には書かず、代わりに `tools/gamedata/out/tenebris.json`(git 管理外。.gitignore 参照)
-へ書き出す。R2 へ上げるのは手元から(CI には乗せない。ENDPOINT の `<ACCOUNT_ID>` は実値に置換):
+追加装備(2026-09-14 決定)は配布物・リポジトリから外す(docs/adr/009-public-release.md)。
+`client.rs` には書かず、代わりに `tools/gamedata/out/extra-equipment.json`(git 管理外。
+.gitignore 参照)へ書き出す。どのアイテムを分けるかは名前の前置きで決めるが、その文字列も
+リポジトリに置かない。環境変数 `TW_EXTRA_EQUIPMENT_PREFIX` に入れて実行する:
 
-    aws s3 cp tools/gamedata/out/tenebris.json s3://tw-context/data/tenebris.json \\
+    TW_EXTRA_EQUIPMENT_PREFIX='<前置き>' python tools/gamedata/import_client_db.py
+
+R2 へ上げるのは手元から(CI には乗せない。ENDPOINT の `<ACCOUNT_ID>` は実値に置換):
+
+    aws s3 cp tools/gamedata/out/extra-equipment.json s3://tw-context/data/extra-equipment.json \\
         --endpoint-url https://<ACCOUNT_ID>.r2.cloudflarestorage.com \\
         --content-type "application/json; charset=utf-8" \\
         --only-show-errors
@@ -90,9 +95,12 @@ ROOT = Path(__file__).resolve().parents[2]
 CATALOG_DIR = ROOT / "crates/gamedata/src/equipment_catalog"
 OUT_PATH = CATALOG_DIR / "client.rs"
 # git 管理外(.gitignore の tools/gamedata/out/)。R2 へ上げる手元置き場。
-TENEBRIS_OUT_PATH = ROOT / "tools/gamedata/out/tenebris.json"
-TENEBRIS_RETRIEVED_ON = "2026-09-03"
-TENEBRIS_NAME_PREFIX = "†テネブリス"
+EXTRA_OUT_PATH = ROOT / "tools/gamedata/out/extra-equipment.json"
+EXTRA_RETRIEVED_ON = "2026-09-03"
+# 配布物・リポジトリから外す装備を選ぶ名前の前置き。値そのものもリポジトリに置かない
+# (docs/adr/009-public-release.md)。未設定なら分離せずに止める(黙って client.rs に
+# 書き込むと配布物に混ざるため)。
+EXTRA_NAME_PREFIX = os.environ.get("TW_EXTRA_EQUIPMENT_PREFIX", "")
 
 STAT_COLUMNS = [
     ("c42_Thrust", "thrust"),
@@ -205,7 +213,7 @@ def load_equip_type_names(assets: Path) -> dict[str, str]:
 
 def load_equipment_rows(assets: Path) -> list[Row]:
     rows: list[Row] = []
-    # 全 DB パッケージ(dm_00000 / dm_00001 …)を読む。セイクリッド・テネブリスは dm_00001 側にある
+    # 全 DB パッケージ(dm_00000 / dm_00001 …)を読む。セイクリッド・上位装備は dm_00001 側にある
     for path in sorted(glob.glob(str(assets / "db" / "dm_*_0*.csv"))):
         path = Path(path)
         header, data = load_csv(path)
@@ -435,14 +443,19 @@ def main() -> None:
             "reason": reasons[r.item_id],
         })
 
-    tenebris_entries = [e for e in entries if e["name"].startswith(TENEBRIS_NAME_PREFIX)]
-    other_entries = [e for e in entries if not e["name"].startswith(TENEBRIS_NAME_PREFIX)]
+    if not EXTRA_NAME_PREFIX:
+        sys.exit(
+            "TW_EXTRA_EQUIPMENT_PREFIX が未設定です。配布物から外す装備を選べないので中断します"
+            "(docs/adr/009-public-release.md)。"
+        )
+    extra_entries = [e for e in entries if e["name"].startswith(EXTRA_NAME_PREFIX)]
+    other_entries = [e for e in entries if not e["name"].startswith(EXTRA_NAME_PREFIX)]
 
     write_rust(other_entries)
-    write_tenebris_json(tenebris_entries)
+    write_extra_equipment_json(extra_entries)
 
     print(f"抽出行(対象部位・EquippableItemTemplate): {len(rows)} 件(uniq item_id 抽出は行っていない、部位フィルタ後 {len(candidates)} 件)", file=sys.stderr)
-    print(f"収録件数: {len(entries)} 件(うちテネブリス {len(tenebris_entries)} 件は client.rs に書かず tenebris.json へ)", file=sys.stderr)
+    print(f"収録件数: {len(entries)} 件(うち追加装備 {len(extra_entries)} 件は client.rs に書かず extra-equipment.json へ)", file=sys.stderr)
     print(f"既存カタログと同名で突き合わせ対象: {match_total} 件 / 完全一致: {match_exact} 件 / 不一致: {len(mismatches)} 件", file=sys.stderr)
     for m in mismatches[:10]:
         print(f"  不一致: {m}", file=sys.stderr)
@@ -523,8 +536,8 @@ def pascal_to_snake(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
-def write_tenebris_json(entries: list[dict]) -> None:
-    """†テネブリス(client.rs から除外ぶん)を、解除時に R2 から取得する形で書き出す。
+def write_extra_equipment_json(entries: list[dict]) -> None:
+    """追加装備(client.rs から除外ぶん)を、解除時に R2 から取得する形で書き出す。
     スキーマは `crates/gamedata/src/equipment_catalog/downloaded.rs` の DTO と対で決めている。
     """
     stat_keys = [key for _p, key in STAT_COLUMNS]
@@ -547,14 +560,14 @@ def write_tenebris_json(entries: list[dict]) -> None:
             "usable_by": e["usable_by"],
             "source": {
                 "page": f'client DB {e["source_file"]} ItemId {e["item_id"]}',
-                "retrieved_on": TENEBRIS_RETRIEVED_ON,
+                "retrieved_on": EXTRA_RETRIEVED_ON,
                 "note": f"収録理由: {'既存カタログと同名' if e['reason'] == 'name_match' else 'Lv280以上'}。EquipType {e['source_file']}",
             },
         })
 
-    TENEBRIS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"retrieved_on": TENEBRIS_RETRIEVED_ON, "items": items}
-    TENEBRIS_OUT_PATH.write_text(
+    EXTRA_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"retrieved_on": EXTRA_RETRIEVED_ON, "items": items}
+    EXTRA_OUT_PATH.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
 

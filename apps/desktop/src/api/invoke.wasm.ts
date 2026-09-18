@@ -15,15 +15,15 @@ import * as store from "./browserStore";
 import type { BuffSelection, NewCharacter } from "./types";
 
 /**
- * 「追加機能の解除」で取得したテネブリス装備(unlock.svelte.ts)。デスクトップ版は Rust 側が
- * app_data_dir/tenebris.json に保存して起動時に読み直すが、ブラウザ版は WASM が生きている間しか
+ * 「追加機能の解除」で取得した追加装備(unlock.svelte.ts)。デスクトップ版は Rust 側が
+ * app_data_dir のファイルに保存して起動時に読み直すが、ブラウザ版は WASM が生きている間しか
  * 持てないので、同じ役目をここで localStorage に持たせる(解除状態と同じくこのブラウザにだけ残る)。
- * 無いと、テネブリスを装備したキャラがリロード後に「未知の装備アイテム」で保存・計算できなくなる。
+ * 無いと、追加装備を着けたキャラがリロード後に「未知の装備アイテム」で保存・計算できなくなる。
  */
-const DOWNLOADED_EQUIPMENT_KEY = "tw-v4-tenebris";
+const DOWNLOADED_EQUIPMENT_KEY = "tw-v4-extra-equipment";
 
 // 初期化は 1 回だけ。最初に呼ばれた invoke がこれを待つ(呼び出し側に初期化を意識させない)。
-// 初期化の中で、前回取得したテネブリスをカタログへ戻す(壊れていれば捨てて未収録のまま進む)。
+// 初期化の中で、前回取得した追加装備をカタログへ戻す(壊れていれば捨てて未収録のまま進む)。
 const ready = init().then(async () => {
   let json: string | null = null;
   try {

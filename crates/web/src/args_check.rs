@@ -85,6 +85,7 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         | "list_element_sources"
         | "list_contents"
         | "list_equipment_catalog"
+        | "list_downloaded_equipment_ids"
         | "list_inkri_targets"
         | "eta_scroll_price"
         | "list_equipment_abilities"

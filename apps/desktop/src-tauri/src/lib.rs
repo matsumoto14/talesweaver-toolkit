@@ -26,9 +26,9 @@ pub struct AppInfo {
 
 /// 登録キャラの保存先ファイル名。情報パネルにも同じ値を出すので、ここだけに置く。
 pub const DATABASE_FILE_NAME: &str = "tw-context.sqlite";
-/// 「追加機能の解除」で R2 から取得した装備(テネブリスなど)のローカル保存先ファイル名。
+/// 「追加機能の解除」で R2 から取得した追加装備のローカル保存先ファイル名。
 /// 配布物には含めない(docs/adr/009-public-release.md)。
-pub const TENEBRIS_FILE_NAME: &str = "tenebris.json";
+pub const EXTRA_EQUIPMENT_FILE_NAME: &str = "extra-equipment.json";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -50,12 +50,12 @@ pub fn run() {
                 repo: Mutex::new(outcome.repo),
                 startup_notice: outcome.notice,
             });
-            // 前回「追加機能の解除」で取得したテネブリスがあれば、この起動でもカタログへ合流させる。
+            // 前回「追加機能の解除」で取得した追加装備があれば、この起動でもカタログへ合流させる。
             // 壊れたファイルで起動を止めない(フォールバック値は作らない。未収録のまま起動するだけ)。
-            let tenebris_path = data_dir.join(TENEBRIS_FILE_NAME);
-            if let Ok(json) = fs::read_to_string(&tenebris_path) {
+            let extra_path = data_dir.join(EXTRA_EQUIPMENT_FILE_NAME);
+            if let Ok(json) = fs::read_to_string(&extra_path) {
                 if let Err(e) = gamedata::install_downloaded_equipment(&json) {
-                    eprintln!("テネブリス装備の再インストールに失敗: {e}");
+                    eprintln!("追加装備の再インストールに失敗: {e}");
                 }
             }
             Ok(())
@@ -81,6 +81,7 @@ pub fn run() {
             commands::list_contents,
             commands::list_equipment_catalog,
             commands::install_downloaded_equipment,
+            commands::list_downloaded_equipment_ids,
             commands::list_inkri_targets,
             commands::run_inkri_attempts,
             commands::inkri_success_rate,

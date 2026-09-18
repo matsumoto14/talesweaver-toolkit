@@ -13,7 +13,7 @@ mod sacred_kr;
 #[path = "downloaded.rs"]
 mod downloaded;
 
-pub use downloaded::install_downloaded_equipment;
+pub use downloaded::{install_downloaded_equipment, list_downloaded_equipment_ids};
 
 /// 装備カタログの出典。
 pub const EQUIPMENT_CATALOG_SOURCE: Source = Source {
@@ -1822,7 +1822,7 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             catalog.push(*item);
         }
     }
-    // 「追加機能の解除」で R2 から取得しインストールした装備(テネブリスなど。配布物・git には
+    // 「追加機能の解除」で R2 から取得しインストールした追加装備(配布物・git には
     // 含めない。docs/adr/009-public-release.md)。9 値は取得元(client DB 相当)がすでに正しい値を
     // 持つので、client_items のような上書きループには参加させない。
     for entry in downloaded::downloaded_equipment_catalog() {

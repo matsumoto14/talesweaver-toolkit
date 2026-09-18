@@ -48,9 +48,9 @@
     // OFF → ON のときだけ取りに行く(ローカルに残っているぶんは消さない)
     try {
       const count = await fetchLockedEquipment();
-      reportNotice(`追加機能を有効にしました(テネブリス装備 ${count} 件を取得)`);
+      reportNotice(`追加機能を有効にしました(追加装備 ${count} 件を取得)`);
     } catch (error) {
-      reportError(`テネブリス装備を取得できませんでした: ${errorMessage(error)}`);
+      reportError(`追加装備を取得できませんでした: ${errorMessage(error)}`);
     }
   }
 

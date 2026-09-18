@@ -1,7 +1,7 @@
-//! 「追加機能の解除」(情報パネルのバージョン表記 7 連打)で Cloudflare R2 から取得した装備
-//! (†テネブリス 38 件)を、実行中のプロセスへ合流させる。配布物・git には含めない
+//! 「追加機能の解除」(情報パネルのバージョン表記 7 連打)で Cloudflare R2 から取得した追加装備
+//! 38 件を、実行中のプロセスへ合流させる。配布物・git には含めない
 //! (docs/adr/009-public-release.md)。生成元・スキーマは
-//! `tools/gamedata/import_client_db.py` の `write_tenebris_json` 参照。
+//! `tools/gamedata/import_client_db.py` の `write_extra_equipment_json` 参照。
 //!
 //! Tauri 側(`install_downloaded_equipment` 呼び出し元)がローカル保存とアプリ起動時の
 //! 再インストールを担い、ここは「妥当な JSON なら合流させる」だけを持つ。
@@ -53,6 +53,15 @@ pub(super) fn downloaded_equipment_catalog() -> Vec<DownloadedEquipment> {
         .read()
         .expect("DOWNLOADED ロックが失敗")
         .clone()
+}
+
+/// 取得由来の装備の id 一覧。どれが取得ぶんかを画面側が知るためだけに使う
+/// (gamedata はロックの概念を持たない。ADR-009)。
+pub fn list_downloaded_equipment_ids() -> Vec<String> {
+    downloaded_equipment_catalog()
+        .iter()
+        .map(|entry| entry.item.id.to_string())
+        .collect()
 }
 
 /// `client_wrist_type` と同じ役目(build 時に id で引く)。
