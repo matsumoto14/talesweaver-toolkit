@@ -115,7 +115,7 @@
         const parsed = JSON.parse(payloadJson);
         const preview = await previewEffectiveStats(
           parsed.base_stats, parsed.stat_sources, parsed.equipment, parsed.common_skills,
-          parsed.awakening, skillIdForCalc, JSON.parse(buffsJson),
+          parsed.awakening, parsed.game_character_id, skillIdForCalc, JSON.parse(buffsJson),
         );
         // 収録済みの敵のときだけ計算値を出す。未収録は「出せない」と正直に見せる
         const damage = contentIdForCalc

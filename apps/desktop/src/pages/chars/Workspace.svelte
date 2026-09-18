@@ -226,7 +226,7 @@
     const mainSkillId = draft.mainSkillId === "" ? null : draft.mainSkillId;
     previewLatest.run((isCurrent) =>
       previewEffectiveStats(
-        baseStats, statSources, equipment, commonSkills, awakening, mainSkillId, buffs,
+        baseStats, statSources, equipment, commonSkills, awakening, draft.gameCharacterId, mainSkillId, buffs,
       )
         .then((p) => {
           if (isCurrent()) {
@@ -261,7 +261,7 @@
     const { baseStats, statSources, equipment, commonSkills, awakening, buffs } = previewMaterial();
     summonPreviewLatest.run((isCurrent) =>
       previewEffectiveStats(
-        baseStats, statSources, equipment, commonSkills, awakening, summonSkillId, buffs,
+        baseStats, statSources, equipment, commonSkills, awakening, draft.gameCharacterId, summonSkillId, buffs,
       )
         .then((p) => {
           if (isCurrent()) summonPreview = p;

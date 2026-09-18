@@ -505,6 +505,7 @@ pub fn preview_effective_stats(
     equipment: domain::Equipment,
     common_skills: CommonSkills,
     awakening: domain::Awakening,
+    game_character_id: String,
     main_skill_id: Option<String>,
 ) -> CommandResult<commands::StatPreviewPayload> {
     commands::preview_effective_stats(
@@ -514,6 +515,7 @@ pub fn preview_effective_stats(
         equipment,
         common_skills,
         awakening,
+        game_character_id,
         main_skill_id,
     )
 }

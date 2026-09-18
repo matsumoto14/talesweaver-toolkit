@@ -277,7 +277,7 @@ pub struct EquipmentValueSource {
     pub values: EquipmentValues,
 }
 
-/// `EquipmentValueSource` の一覧を合算する(`base_totals`/`enhanced_totals` が使う。
+/// `EquipmentValueSource` の一覧を合算する(`EquipmentBaseContext::total`/`enhanced_totals` が使う。
 /// 合計と内訳を二重に計算しない)。
 pub fn sum_equipment_value_sources(sources: &[EquipmentValueSource]) -> EquipmentValues {
     sources
@@ -1108,7 +1108,7 @@ pub struct Equipment {
     pub owned_titles: Vec<String>,
 }
 
-/// 12 部位。named field で持つ(`parts.weapon` 等)。
+/// 13 部位。named field で持つ(`parts.weapon` 等)。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct EquipmentParts {
     #[serde(default)]
@@ -1282,7 +1282,7 @@ impl EquipmentParts {
 }
 
 /// カタログを引ける層(`gamedata` の `EquipmentItem` 相当)が渡す装備品 1 件のビュー。
-/// domain は gamedata に依存できないので、`base_totals` が `&[EquipmentAbilityDef]` を
+/// domain は gamedata に依存できないので、`EquipmentBaseContext` が `&[EquipmentAbilityDef]` を
 /// 受ける流儀と同じく、カタログの中身は呼び出し側(gamedata の `EquipmentItem`)がこのトレイトを
 /// 実装して渡す。
 pub trait EquipmentCatalogEntry {
@@ -1318,7 +1318,7 @@ impl Equipment {
 
     /// 装備のカタログ整合性を検証する(未知の item_id/ability id・部位不一致・成長値/エンチャント枠超過・
     /// アビリティのカテゴリー重複・ランダムオプションのカテゴリー重複)。呼び出し側(保存前の `storage`、
-    /// DB に書かないプレビュー系コマンド双方)がカタログを渡す(`base_totals` と同じ依存方向)。
+    /// DB に書かないプレビュー系コマンド双方)がカタログを渡す(`EquipmentBaseContext` と同じ依存方向)。
     ///
     /// `custom`(`item_id` が `None`)のエンチャントは `Equipment::validate` の値域チェック(0〜共通上限)
     /// で既に検証済み。ここではカタログ item のときはカタログ固有の `enchant_caps` を、
@@ -1677,25 +1677,15 @@ impl Equipment {
         Ok(())
     }
 
-    /// 基本能力値の合計(Σ part.base + Σ 装備アビリティの加算値 + 表示中の称号)。
-    ///
-    /// 称号は装備部位ではないが、効き先が基本能力値なのでここで合流させる
-    /// (wiki: 称号システム。ユーザー確定 2026-08-25)。
-    pub fn base_totals(
-        &self,
-        abilities: &[EquipmentAbilityDef],
-        titles: &[TitleDef],
-        polish_active: bool,
-    ) -> EquipmentValues {
-        sum_equipment_value_sources(&self.base_sources(abilities, titles, polish_active))
-    }
-
     /// 基本能力値の供給源内訳(部位の実測値 → 部位ごとの研磨 → 部位アビリティ → 称号の順)。
-    /// 全 0 の供給源は入れない。`base_totals` はこの Σ(計算を二重に書かない)。
+    /// 全 0 の供給源は入れない。
     ///
     /// `polish_active` はバフ「装備研磨」(`equipment_polish_active`)の ON/OFF。記録
     /// (`self.polish`)があっても OFF なら供給源に出さない(バフを切ったら効かない)。
-    pub fn base_sources(
+    ///
+    /// **これは crate 内部の部品**。装備だけでは解けない供給源(ソウルリンク・手首補正)が
+    /// 落ちるので、外から使う入口は `EquipmentBaseContext::sources` / `total` だけにする。
+    pub(crate) fn base_sources(
         &self,
         abilities: &[EquipmentAbilityDef],
         titles: &[TitleDef],
@@ -1745,7 +1735,7 @@ impl Equipment {
     }
 
     /// 部位別のアビリティ由来の装備補正(表示用の内訳。part.base・称号は含まない)。
-    /// `base_totals` の二項目(装備アビリティの合計)を部位ごとに割ったもの。
+    /// 基本能力値の二項目(装備アビリティの合計)を部位ごとに割ったもの。
     pub fn ability_values_by_part(
         &self,
         abilities: &[EquipmentAbilityDef],
@@ -1785,7 +1775,7 @@ impl Equipment {
     }
 
     /// アビリティの追加効果(wiki: アビリティ表の「追加効果」列)を
-    /// 与ダメージ式のカテゴリ寄与に変換する。装備攻撃力への加算は `base_totals` が別に見る。
+    /// 与ダメージ式のカテゴリ寄与に変換する。装備攻撃力への加算は `EquipmentBaseContext` が別に見る。
     pub fn ability_damage_contributions(
         &self,
         abilities: &[EquipmentAbilityDef],
@@ -1886,7 +1876,7 @@ impl Equipment {
     }
 
     /// 全部位のランダムオプションの集計。カタログは呼び出し側が渡す
-    /// (`base_totals` の武器アビリティと同じ依存方向。domain は gamedata に依存できない)。
+    /// (`EquipmentBaseContext` の武器アビリティと同じ依存方向。domain は gamedata に依存できない)。
     /// カタログに無い id の枠は無視する(保存前に `Equipment::validate_against_catalog` が弾いている)。
     pub fn random_option_totals(&self, defs: &[RandomOptionDef]) -> RandomOptionTotals {
         let mut totals = RandomOptionTotals::default();
@@ -1997,7 +1987,7 @@ pub struct PartStatTotal {
 }
 
 /// 1 部位ぶんのアビリティ由来の装備補正(アビリティ定義値 + ロール値 + 追加効果)。
-/// part.base・称号は含まない(`base_totals` / `ability_values_by_part` が共有する)。
+/// part.base・称号は含まない(`base_sources` / `ability_values_by_part` が共有する)。
 fn part_ability_values(part: &EquipmentPart, abilities: &[EquipmentAbilityDef]) -> EquipmentValues {
     let mut total = EquipmentValues::default();
     for ability_id in &part.abilities {
@@ -2064,7 +2054,7 @@ pub struct EquipmentCoefficients {
 }
 
 /// 装備攻撃力(wiki: カテゴリA の内訳)。`Σ(基本値 × 基本係数) + Σ(強化値 × 強化係数)`。
-/// `base`/`enhanced` は呼び出し側が `Equipment::base_totals`/`enhanced_totals` で集計して渡す。
+/// `base`/`enhanced` は呼び出し側が `EquipmentBaseContext::total`/`Equipment::enhanced_totals` で集計して渡す。
 pub fn equipment_attack_power(
     base: &EquipmentValues,
     enhanced: &EquipmentValues,
@@ -2290,11 +2280,14 @@ fn band_agility_bonus(agility: i64) -> i64 {
 /// 選択中の腕装備の基本+エンチャント合計、`siena_thrust` はシエナ盾のオーラの突き
 /// (`ThrustToMagicAttack` のみ使う)。元の腕装備の基本/エンチャント値そのものは
 /// 変更しない(このルールは派生先へ「足す」値だけを返す)。
+///
+/// `style_dependency` が `None`(主軸スキル未選択で、計算中のスキルも無い)のときは、
+/// 振り先が依存種別で変わるルール(ナヤトレイ・イサック)は何も変換しない。
 pub fn wrist_base_bonus(
     rule: Option<WristBonusRule>,
     is_band: bool,
     base_stats: &crate::stats::BaseStats,
-    style_dependency: crate::skill::SkillDependency,
+    style_dependency: Option<crate::skill::SkillDependency>,
     wrist_totals: EquipmentValues,
     siena_thrust: i64,
 ) -> EquipmentValues {
@@ -2316,8 +2309,8 @@ pub fn wrist_base_bonus(
     let mut values = EquipmentValues::default();
     match rule {
         WristBonusRule::BandAgilityByDependency => match style_dependency {
-            SkillDependency::Stab | SkillDependency::StabHack => values.thrust = bonus,
-            SkillDependency::Hack => values.slash = bonus,
+            Some(SkillDependency::Stab | SkillDependency::StabHack) => values.thrust = bonus,
+            Some(SkillDependency::Hack) => values.slash = bonus,
             _ => {}
         },
         WristBonusRule::BandAgilityToSlash => values.slash = bonus,
@@ -2332,6 +2325,101 @@ pub fn wrist_base_bonus(
         WristBonusRule::ThrustToMagicAttack => unreachable!("above早期returnで処理済み"),
     }
     values
+}
+
+/// 腕装備パッシブ(`WristBonusRule`)を適用するための材料。カタログ解決
+/// (`WristType` がバンドかどうか)は呼び出し側(gamedata)が行う。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WristBonusMaterial {
+    pub rule: Option<WristBonusRule>,
+    pub is_band: bool,
+    /// 選択中の腕装備の基本+エンチャント合計
+    pub wrist_totals: EquipmentValues,
+    /// シエナ盾のオーラの突き(`ThrustToMagicAttack` のみ使う)
+    pub siena_thrust: i64,
+}
+
+/// 装備の基本能力値を組み立てるのに要る、装備の外から来る材料一式。
+///
+/// **装備の基本能力値の供給源を組み立てる唯一の経路**(部位の実測値 → 研磨 → 部位アビリティ
+/// → 称号 → ソウルリンク → 手首補正)。キャラ画面・防御・対人・ダメージ計算・コンテンツ評価が
+/// 全部ここを通る。`Equipment::base_sources` は crate 内部の部品にしてあるので、呼び出し側が
+/// 「ソウルリンクと手首補正の継ぎ足しを忘れる」余地を構造的に無くす
+/// (2026-09-19。以前は経路ごとに継ぎ足していて、キャラ画面・防御・対人だけ手首補正が
+/// 落ちていた)。
+#[derive(Clone, Copy)]
+pub struct EquipmentBaseContext<'a> {
+    pub abilities: &'a [EquipmentAbilityDef],
+    pub titles: &'a [TitleDef],
+    /// バフ「装備研磨」が ON か(`stat_sources::equipment_polish_active`)
+    pub polish_active: bool,
+    pub soul_link: crate::soul_link::SoulLinkStatus,
+    /// 手首補正のバンド系ルールが参照する素ステ
+    pub base_stats: crate::stats::BaseStats,
+    /// 腕装備パッシブの材料を「その装備」から解く。カタログ引き(バンドかどうか)が要るので
+    /// gamedata を知る呼び出し側が閉包で渡す。`None` = 手首補正を持たない文脈
+    /// (カタログ検証・テスト)。**装備を差し替えて引き直す**(部位を外した試算)ときも
+    /// 同じ閉包を通すので、腕を外せば手首補正も一緒に消える。
+    pub wrist: Option<&'a dyn Fn(&Equipment) -> WristBonusMaterial>,
+    /// 手首補正の振り先を決める依存種別。主軸スキルがあればそれ、無ければ計算中のスキル。
+    pub style_dependency: Option<crate::skill::SkillDependency>,
+}
+
+impl<'a> EquipmentBaseContext<'a> {
+    /// 手首補正・ソウルリンクを持たない最小の文脈(カタログ検証・テスト用)。
+    pub fn catalog_only(abilities: &'a [EquipmentAbilityDef], titles: &'a [TitleDef]) -> Self {
+        Self {
+            abilities,
+            titles,
+            polish_active: false,
+            soul_link: crate::soul_link::SoulLinkStatus::default(),
+            base_stats: crate::stats::BaseStats::default(),
+            wrist: None,
+            style_dependency: None,
+        }
+    }
+
+    /// 手首補正の振り先だけを差し替えた複製(コンテンツ評価が依存種別ぶん引き直すのに使う)。
+    pub fn for_dependency(self, style_dependency: Option<crate::skill::SkillDependency>) -> Self {
+        Self {
+            style_dependency,
+            ..self
+        }
+    }
+
+    /// 装備の基本能力値の供給源。全 0 の供給源は入れない。
+    pub fn sources(&self, equipment: &Equipment) -> Vec<EquipmentValueSource> {
+        let mut sources = equipment.base_sources(self.abilities, self.titles, self.polish_active);
+        if let Some(source) = self.soul_link.equipment_source() {
+            sources.push(source);
+        }
+        if let Some(bonus) = self.wrist_bonus(equipment) {
+            sources.push(EquipmentValueSource {
+                source: "手首補正".to_string(),
+                values: bonus,
+            });
+        }
+        sources
+    }
+
+    /// 装備の基本能力値の合計。`sources` の Σ(計算を二重に書かない)。
+    pub fn total(&self, equipment: &Equipment) -> EquipmentValues {
+        sum_equipment_value_sources(&self.sources(equipment))
+    }
+
+    /// 手首補正(非 0 のときだけ `Some`)。
+    fn wrist_bonus(&self, equipment: &Equipment) -> Option<EquipmentValues> {
+        let material = (self.wrist?)(equipment);
+        let bonus = wrist_base_bonus(
+            material.rule,
+            material.is_band,
+            &self.base_stats,
+            self.style_dependency,
+            material.wrist_totals,
+            material.siena_thrust,
+        );
+        (bonus != EquipmentValues::default()).then_some(bonus)
+    }
 }
 
 /// レリックの系列(wiki: Item/アクセサリ/レリック)。神鳥とルナリアは別系列で、
@@ -2725,6 +2813,21 @@ pub fn ability_candidates(
 
 #[cfg(test)]
 mod tests {
+    /// テスト用の装備基本合計(ソウルリンク・手首補正を持たない文脈)。本番の入口は
+    /// `EquipmentBaseContext::total`。
+    fn base_totals(
+        equipment: &Equipment,
+        abilities: &[EquipmentAbilityDef],
+        titles: &[TitleDef],
+        polish_active: bool,
+    ) -> EquipmentValues {
+        EquipmentBaseContext {
+            polish_active,
+            ..EquipmentBaseContext::catalog_only(abilities, titles)
+        }
+        .total(equipment)
+    }
+
     use super::*;
     use crate::stats::StatKind;
     use crate::siena::{
@@ -2778,7 +2881,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let base = eq.base_totals(&[], &[], false);
+        let base = base_totals(&eq, &[], &[], false);
         let enhanced = eq.enhanced_totals(None);
         // 150*14.5*2 + 60*28.75*2 = 4350 + 3450 = 7800
         assert!((equipment_attack_power(&base, &enhanced, &coefficients()) - 7800.0).abs() < 1e-9);
@@ -2787,7 +2890,7 @@ mod tests {
     #[test]
     fn 装備なしなら装備攻撃力は0() {
         let eq = Equipment::default();
-        let base = eq.base_totals(&[], &[], false);
+        let base = base_totals(&eq, &[], &[], false);
         let enhanced = eq.enhanced_totals(None);
         assert_eq!(
             equipment_attack_power(&base, &enhanced, &coefficients()),
@@ -2837,7 +2940,7 @@ mod tests {
             },
             damage_effects: &[],
         }];
-        let base = eq.base_totals(&abilities, &[], false);
+        let base = base_totals(&eq, &abilities, &[], false);
         assert_eq!(
             base,
             EquipmentValues {
@@ -2876,12 +2979,12 @@ mod tests {
 
         let sources_off = eq.base_sources(&[], &[], false);
         assert!(!sources_off.iter().any(|s| s.source == "武器 研磨"));
-        assert_eq!(eq.base_totals(&[], &[], false).thrust, 100);
+        assert_eq!(base_totals(&eq, &[], &[], false).thrust, 100);
 
         let sources_on = eq.base_sources(&[], &[], true);
         assert!(sources_on.iter().any(|s| s.source == "武器 研磨"));
         // 100 の 5% = 5
-        assert_eq!(eq.base_totals(&[], &[], true).thrust, 105);
+        assert_eq!(base_totals(&eq, &[], &[], true).thrust, 105);
     }
 
     #[test]
@@ -2945,7 +3048,7 @@ mod tests {
             kind: EquipmentAbilityAdditionalKind::Slash,
             value: 13,
         }];
-        assert_eq!(eq.base_totals(&[], &[], false).slash, 13);
+        assert_eq!(base_totals(&eq, &[], &[], false).slash, 13);
     }
 
     #[test]
@@ -2964,7 +3067,7 @@ mod tests {
                 value: 16,
             },
         ];
-        let base = eq.base_totals(&[], &[], false);
+        let base = base_totals(&eq, &[], &[], false);
         assert_eq!(base.slash, 18);
         assert_eq!(base.accuracy, 16);
 
@@ -3330,7 +3433,7 @@ mod tests {
                 ..Default::default()
             }
         );
-        assert_eq!(eq.base_totals(&[], &[], false), EquipmentValues::default());
+        assert_eq!(base_totals(&eq, &[], &[], false), EquipmentValues::default());
         assert_eq!(
             eq.siena_stat_bonus(),
             SienaStatBonus {
@@ -3717,11 +3820,11 @@ mod tests {
             thrust: 100,
             ..Default::default()
         };
-        assert_eq!(eq.base_totals(&[], &title_defs(), false).thrust, 100);
+        assert_eq!(base_totals(&eq, &[], &title_defs(), false).thrust, 100);
 
         eq.title = Some("eclipse".to_string());
-        assert_eq!(eq.base_totals(&[], &title_defs(), false).thrust, 140);
-        assert_eq!(eq.base_totals(&[], &title_defs(), false).slash, 40);
+        assert_eq!(base_totals(&eq, &[], &title_defs(), false).thrust, 140);
+        assert_eq!(base_totals(&eq, &[], &title_defs(), false).slash, 40);
         // 強化能力値には入らない(称号にエンチャントは無い)
         assert_eq!(eq.enhanced_totals(None), EquipmentValues::default());
     }
@@ -3731,7 +3834,7 @@ mod tests {
         let mut eq = Equipment::default();
         eq.title = Some("nope".to_string());
         assert_eq!(
-            eq.base_totals(&[], &title_defs(), false),
+            base_totals(&eq, &[], &title_defs(), false),
             EquipmentValues::default()
         );
     }
@@ -3786,7 +3889,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            wrist_base_bonus(None, true, &stats, SkillDependency::Stab, totals, 0),
+            wrist_base_bonus(None, true, &stats, Some(SkillDependency::Stab), totals, 0),
             EquipmentValues::default()
         );
     }
@@ -3803,7 +3906,7 @@ mod tests {
             Some(WristBonusRule::ThrustToMagicAttack),
             false,
             &stats,
-            SkillDependency::HackInt,
+            Some(SkillDependency::HackInt),
             totals,
             35,
         );
@@ -3830,7 +3933,7 @@ mod tests {
             WristBonusRule::BandAgilityToMagicAttack,
         ] {
             assert_eq!(
-                wrist_base_bonus(Some(rule), false, &stats, SkillDependency::Hack, totals, 0),
+                wrist_base_bonus(Some(rule), false, &stats, Some(SkillDependency::Hack), totals, 0),
                 EquipmentValues::default(),
                 "{rule:?}"
             );
@@ -3854,7 +3957,7 @@ mod tests {
                 Some(WristBonusRule::BandAgilityByStatComparison),
                 true,
                 &stats,
-                SkillDependency::Hack,
+                Some(SkillDependency::Hack),
                 totals,
                 0
             ),

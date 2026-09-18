@@ -15,17 +15,16 @@ use crate::damage::{
 };
 use crate::enemy::Enemy;
 use crate::equipment::{
-    sum_equipment_value_sources, wrist_base_bonus, Equipment, EquipmentValueSource,
-    EquipmentValues, WristBonusRule,
+    sum_equipment_value_sources, Equipment, EquipmentBaseContext, EquipmentValueSource,
+    EquipmentValues,
 };
 use crate::skill::{Skill, SkillDependency};
-use crate::stats::BaseStats;
 use crate::thesis_core::CoreRegion;
 use crate::title::{title_added_damage_rate, title_attack_damage_rate, TitleDef};
 
 /// 「全コンテンツ×スキル」評価ループの中で、スキル固有だがコンテンツには依存しない
 /// 入力(依存種別の係数・カテゴリ寄与・属性値)。腕装備パッシブ込みの装備基本能力値は
-/// `WristBonusMaterial` から評価関数が依存種別ごとに導くのでここには含めない。
+/// `EquipmentBaseContext` から評価関数が依存種別ごとに導くのでここには含めない。
 /// 呼び出し側(commands.rs)が gamedata のカタログを解決して、キャラのスキル数ぶんだけ
 /// 1 回作る(コンテンツの数だけ繰り返し計算しない)。
 ///
@@ -37,51 +36,6 @@ pub struct SkillEvaluationInput {
     pub coefficients: DependencyCoefficients,
     pub damage_contributions: Vec<DamageContribution>,
     pub element_value: i64,
-}
-
-/// 腕装備パッシブ(`WristBonusRule`)を適用するための材料。カタログ解決
-/// (`WristType` がバンドかどうか)は呼び出し側(gamedata)が行う。
-#[derive(Debug, Clone, Copy, Default)]
-pub struct WristBonusMaterial {
-    pub rule: Option<WristBonusRule>,
-    pub is_band: bool,
-    pub wrist_totals: EquipmentValues,
-    pub siena_thrust: i64,
-    /// キャラの主軸スキル(`main_skill_id`)の依存種別。`Some` なら、振り先がスキル依存で
-    /// 変わるルール(ナヤトレイ・イサック)は評価中のスキルの依存種別によらず**常にこちら**を
-    /// 使う(装備条件の判定は「主軸で戦う前提」のため)。`None` なら評価中の依存種別を使う。
-    pub style_dependency_override: Option<SkillDependency>,
-}
-
-impl WristBonusMaterial {
-    /// 依存種別ごとの装備基本能力値の供給源(腕装備パッシブ込み)をあらかじめ全 6 種ぶん組み立てる。
-    /// 腕装備パッシブは非 0 のときだけ「手首補正」という 1 供給源として追加する
-    /// (「なぜこの数字?」パネルの装備攻撃力掘り下げに使う)。
-    fn base_sources_by_dependency(
-        &self,
-        base_stats: &BaseStats,
-        equipment_base_sources_raw: &[EquipmentValueSource],
-    ) -> [(SkillDependency, Vec<EquipmentValueSource>); 6] {
-        SkillDependency::ALL.map(|dependency| {
-            let style_dependency = self.style_dependency_override.unwrap_or(dependency);
-            let bonus = wrist_base_bonus(
-                self.rule,
-                self.is_band,
-                base_stats,
-                style_dependency,
-                self.wrist_totals,
-                self.siena_thrust,
-            );
-            let mut sources = equipment_base_sources_raw.to_vec();
-            if bonus != EquipmentValues::default() {
-                sources.push(EquipmentValueSource {
-                    source: "手首補正".to_string(),
-                    values: bonus,
-                });
-            }
-            (dependency, sources)
-        })
-    }
 }
 
 /// 全コンテンツ×スキルを評価し、コンテンツごとに最大火力スキルと判定結果を返す
@@ -106,14 +60,24 @@ pub fn evaluate_contents_for_character(
     // 熊(魔法人形)ぶんの入力。魔法人形を持たない・召喚スキル未選択のキャラは `None`
     // (本体だけで判定する、従来どおりの動き)
     summon: Option<&SkillEvaluationInput>,
-    equipment_base_sources_raw: Vec<EquipmentValueSource>,
-    wrist_bonus: WristBonusMaterial,
+    equipment_base: EquipmentBaseContext<'_>,
     titles: &[TitleDef],
     awakening: Awakening,
     fixed_dependency: Option<SkillDependency>,
 ) -> Vec<ContentEvaluation> {
-    let equipment_base_sources_by_dependency = wrist_bonus
-        .base_sources_by_dependency(&material.base_stats, &equipment_base_sources_raw);
+    // 依存種別ごとの供給源(手首補正の振り先が依存で変わるキャラがいる)を先に全 6 種ぶん
+    // 組み立てる。主軸スキルが決まっているキャラ(`style_dependency`)は、評価中のスキルに
+    // よらず常に主軸で振る(装備条件の判定は「主軸で戦う前提」のため)。
+    let equipment_base_sources_by_dependency: [(SkillDependency, Vec<EquipmentValueSource>); 6] =
+        SkillDependency::ALL.map(|dependency| {
+            let style = equipment_base.style_dependency.or(Some(dependency));
+            (
+                dependency,
+                equipment_base.for_dependency(style).sources(equipment),
+            )
+        });
+    // 依存種別が決まらない場面(敵データが無く、スキルも無いコンテンツ)のぶん
+    let equipment_base_sources_raw = equipment_base.sources(equipment);
     let equipment_base_sources_for = |dependency: SkillDependency| {
         equipment_base_sources_by_dependency
             .iter()
@@ -317,7 +281,7 @@ mod tests {
     use crate::random_option::RandomOptionTotals;
     use crate::skill::{SkillDependency, SkillTarget};
     use crate::stat_sources::{build_modifiers, StatSources};
-    use crate::stats::StatKind;
+    use crate::stats::{BaseStats, StatKind};
     use crate::thesis_core::CoreSetBonus;
 
     const STAB_DEF: &[StatKind] = &[StatKind::Stab, StatKind::Def];
@@ -491,8 +455,7 @@ mod tests {
             &[enemy()],
             &skills,
             None,
-            Vec::new(),
-            WristBonusMaterial::default(),
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             Awakening::default(),
             None,
@@ -551,8 +514,7 @@ mod tests {
                 &[enemy_with_hp.clone()],
                 &skills,
                 summon,
-                Vec::new(),
-                WristBonusMaterial::default(),
+                EquipmentBaseContext::catalog_only(&[], &[]),
                 &[],
                 Awakening::default(),
                 None,

@@ -535,7 +535,9 @@ mod tests {
             ..Default::default()
         };
         let correction = neutral_correction();
-        let equipment_accuracy = equipment.base_totals(&defs, &[], false).accuracy;
+        let equipment_accuracy = crate::equipment::EquipmentBaseContext::catalog_only(&defs, &[])
+            .total(&equipment)
+            .accuracy;
         let v = compute(VersusAttacker {
             learnable_accuracy_skill: None,
             stats: &stats,
@@ -572,7 +574,9 @@ mod tests {
         let mut tried_equipment = equipment.clone();
         apply_growth_action(&mut sources, &mut tried_equipment, &mut buffs, &room.action, &ctx);
 
-        let new_equipment_accuracy = tried_equipment.base_totals(&defs, &[], false).accuracy;
+        let new_equipment_accuracy = crate::equipment::EquipmentBaseContext::catalog_only(&defs, &[])
+            .total(&tried_equipment)
+            .accuracy;
         let before = accuracy_point(
             &stats,
             &correction,
@@ -612,7 +616,9 @@ mod tests {
             ..Default::default()
         };
         let correction = neutral_correction();
-        let equipment_accuracy = equipment.base_totals(&defs, &[], false).accuracy;
+        let equipment_accuracy = crate::equipment::EquipmentBaseContext::catalog_only(&defs, &[])
+            .total(&equipment)
+            .accuracy;
         let v = compute(VersusAttacker {
             learnable_accuracy_skill: None,
             stats: &stats,
@@ -649,7 +655,9 @@ mod tests {
         let mut tried_equipment = equipment.clone();
         apply_growth_action(&mut sources, &mut tried_equipment, &mut buffs, &room.action, &ctx);
 
-        let new_equipment_accuracy = tried_equipment.base_totals(&defs, &[], false).accuracy;
+        let new_equipment_accuracy = crate::equipment::EquipmentBaseContext::catalog_only(&defs, &[])
+            .total(&tried_equipment)
+            .accuracy;
         let before = accuracy_point(
             &stats,
             &correction,

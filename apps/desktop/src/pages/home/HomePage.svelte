@@ -335,7 +335,7 @@
       try {
         const [stats, defense] = await Promise.all([
           previewEffectiveStats(
-            p.base_stats, p.stat_sources, p.equipment, p.common_skills, p.awakening, p.main_skill_id, buffs,
+            p.base_stats, p.stat_sources, p.equipment, p.common_skills, p.awakening, p.game_character_id, p.main_skill_id, buffs,
           ),
           previewDefense(p, buffs),
         ]);

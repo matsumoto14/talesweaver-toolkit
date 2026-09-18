@@ -177,7 +177,7 @@ pub struct DamageTarget {
     pub combo_count: u32,
     /// スキル依存種別で決まる係数一式(攻撃力・装備攻撃力・命中P)
     pub coefficients: DependencyCoefficients,
-    /// 装備の基本能力値の供給源内訳(`Equipment::base_sources`。部位実測値・部位アビリティ・
+    /// 装備の基本能力値の供給源内訳(`EquipmentBaseContext::sources`。部位実測値・部位アビリティ・
     /// 称号・手首補正。呼び出し側が gamedata の武器アビリティカタログを使って集計して渡す。
     /// domain は gamedata に依存できないため)。合計は `equipment_base_totals()` を使う
     /// (合計と内訳の二重持ちはしない)

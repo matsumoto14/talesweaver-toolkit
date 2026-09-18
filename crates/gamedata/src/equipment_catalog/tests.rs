@@ -183,7 +183,7 @@ fn ボリスとマキシミンは腕の突き基本とエンチャントを魔�
             },
         });
     equipment.siena.shield.selected_id = Some(1);
-    let stats = BaseStats::default();
+    let stats = domain::BaseStats::default();
     let catalog = equipment_catalog();
     for character in ["boris", "maximin"] {
         let bonus = character_wrist_base_bonus(
@@ -195,7 +195,9 @@ fn ボリスとマキシミンは腕の突き基本とエンチャントを魔�
         );
         assert_eq!(bonus.magic_attack, 135, "{character}");
         assert_eq!(bonus.thrust, 0, "元の突き値を移動せず派生値だけ返す");
-        let base = equipment.base_totals(&[], &[], false).add(bonus);
+        let base = domain::EquipmentBaseContext::catalog_only(&[], &[])
+            .total(&equipment)
+            .add(bonus);
         let enhanced = equipment.enhanced_totals(None);
         assert_eq!(base.magic_attack, 135, "変換結果は基本能力値へ入る");
         assert_eq!(
@@ -210,12 +212,12 @@ fn バンド敏捷の七割をキャラと型に応じた基本補正へ変換�
     // (101 + 10) * 0.7 = 77.7 → 77
     let equipment = wrist("wiki-21ae0bc1de72", 0, 101, 0, 10);
     let catalog = equipment_catalog();
-    let normal = BaseStats {
+    let normal = domain::BaseStats {
         hack: 200,
         mr: 100,
         ..Default::default()
     };
-    let magic = BaseStats {
+    let magic = domain::BaseStats {
         hack: 100,
         mr: 200,
         ..Default::default()
@@ -299,7 +301,7 @@ fn バンド以外と対象外キャラとベンヤ同値は変換しない() {
     let shield = wrist("abyss-shield", 0, 100, 0, 0);
     let band = wrist("wiki-21ae0bc1de72", 0, 100, 0, 0);
     let catalog = equipment_catalog();
-    let equal = BaseStats {
+    let equal = domain::BaseStats {
         hack: 100,
         mr: 100,
         ..Default::default()
@@ -362,7 +364,7 @@ fn 韓国コミュニティ資料で照合したセイクリッドブレード�
 }
 
 /// 装着時効果は wiki ステータス のカテゴリ表どおりの効き先に入る。
-/// **装備補正値(基本能力値)ではない**ので `base_totals` には出ない。
+/// **装備補正値(基本能力値)ではない**ので装備の基本合計には出ない。
 #[test]
 fn 装着時効果は与ダメージ式のカテゴリに入る() {
     let expected = [

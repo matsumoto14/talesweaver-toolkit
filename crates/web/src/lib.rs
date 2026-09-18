@@ -128,6 +128,7 @@ struct PreviewEffectiveStatsArgs {
     equipment: domain::Equipment,
     common_skills: domain::CommonSkills,
     awakening: domain::Awakening,
+    game_character_id: String,
     main_skill_id: Option<String>,
 }
 
@@ -386,6 +387,7 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
                 a.equipment,
                 a.common_skills,
                 a.awakening,
+                a.game_character_id,
                 a.main_skill_id,
             ))
         }

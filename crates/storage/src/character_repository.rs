@@ -2618,7 +2618,12 @@ mod tests {
             .unwrap();
         let loaded = repo.get(created.id).unwrap();
         assert_eq!(loaded.equipment.title.as_deref(), Some("test-title"));
-        assert_eq!(loaded.equipment.base_totals(&[], &test_titles(), false).thrust, 40);
+        assert_eq!(
+            domain::EquipmentBaseContext::catalog_only(&[], &test_titles())
+                .total(&loaded.equipment)
+                .thrust,
+            40
+        );
     }
 
     #[test]

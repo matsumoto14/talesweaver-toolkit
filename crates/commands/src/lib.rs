@@ -844,6 +844,7 @@ fn attack_coefficients_of(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn preview_effective_stats(
     base_stats: domain::BaseStats,
     stat_sources: domain::StatSources,
@@ -851,11 +852,21 @@ pub fn preview_effective_stats(
     equipment: domain::Equipment,
     common_skills: CommonSkills,
     awakening: domain::Awakening,
+    game_character_id: String,
     main_skill_id: Option<String>,
 ) -> CommandResult<StatPreviewPayload> {
     let coefficients = attack_coefficients_of(main_skill_id.as_deref())?;
     let part_enhance = part_enhance_previews(&equipment, stat_sources.soul_link);
-    let base = stat_preview_of(&base_stats, &stat_sources, &buffs, &equipment, &common_skills, awakening, coefficients)?;
+    // 手首補正(腕装備パッシブ)の振り先は主軸スキルの依存種別で決まる。計算タブと同じ
+    // 文脈を通すので、キャラ画面の装備合計・装備攻撃力も計算タブと一致する
+    let inputs = EquipmentBaseInputs::new(&game_character_id);
+    let equipment_base = inputs.context(
+        &base_stats,
+        stat_sources.soul_link,
+        &buffs,
+        character_style_dependency(main_skill_id.as_deref())?,
+    );
+    let base = stat_preview_of(&base_stats, &stat_sources, &buffs, &equipment, &common_skills, awakening, equipment_base, coefficients)?;
     Ok(StatPreviewPayload {
         base,
         part_enhance,
@@ -1379,8 +1390,6 @@ fn combat_stats_of(
     character: &NewCharacter,
     buffs: &BuffSelection,
 ) -> CommandResult<(domain::EffectiveStats, domain::EquipmentValues)> {
-    let abilities = gamedata::equipment_abilities();
-    let titles = gamedata::title_catalog();
     let stats = domain::effective_stats_of(
         &character.base_stats,
         &character.stat_sources,
@@ -1391,18 +1400,76 @@ fn combat_stats_of(
         gamedata::awakening_caps(character.awakening).max_stat,
     )
     .map_err(|e| e.to_string())?;
-    let base_total = domain::equipment_base_total(
-        &character.equipment,
-        character.stat_sources.soul_link,
-        &abilities,
-        &titles,
-        domain::equipment_polish_active(buffs),
-    );
+    let inputs = EquipmentBaseInputs::new(&character.game_character_id);
+    let base_total = inputs
+        .context(
+            &character.base_stats,
+            character.stat_sources.soul_link,
+            buffs,
+            character_style_dependency(character.main_skill_id.as_deref())?,
+        )
+        .total(&character.equipment);
     Ok((stats, base_total))
+}
+
+/// 装備の基本能力値の文脈(`domain::EquipmentBaseContext`)を作るのに要る gamedata 側の材料。
+///
+/// 手首補正(腕装備パッシブ)は「その装備」から装備カタログを引いて解くので閉包で持つ。
+/// **装備の基本合計を使う経路(キャラ画面・防御・対人・ダメージ計算・コンテンツ評価)は
+/// すべてここから文脈を作る**。以前は経路ごとにソウルリンクと手首補正を継ぎ足していて、
+/// キャラ画面・防御・対人だけ手首補正が落ちていた(2026-09-19)。
+struct EquipmentBaseInputs {
+    abilities: Vec<EquipmentAbilityDef>,
+    titles: Vec<TitleDef>,
+    wrist: Box<dyn Fn(&domain::Equipment) -> WristBonusMaterial>,
+}
+
+impl EquipmentBaseInputs {
+    fn new(game_character_id: &str) -> Self {
+        let catalog = gamedata::equipment_catalog();
+        let id = game_character_id.to_string();
+        Self {
+            abilities: gamedata::equipment_abilities(),
+            titles: gamedata::title_catalog(),
+            wrist: Box::new(move |equipment| {
+                gamedata::character_wrist_bonus_material(&id, equipment, &catalog)
+            }),
+        }
+    }
+
+    /// `style_dependency` は手首補正の振り先を決める依存種別(主軸スキル、無ければ計算中のスキル)。
+    fn context<'a>(
+        &'a self,
+        base_stats: &domain::BaseStats,
+        soul_link: domain::SoulLinkStatus,
+        buffs: &BuffSelection,
+        style_dependency: Option<domain::SkillDependency>,
+    ) -> domain::EquipmentBaseContext<'a> {
+        domain::EquipmentBaseContext {
+            abilities: &self.abilities,
+            titles: &self.titles,
+            polish_active: domain::equipment_polish_active(buffs),
+            soul_link,
+            base_stats: *base_stats,
+            wrist: Some(&*self.wrist),
+            style_dependency,
+        }
+    }
+}
+
+/// キャラの主軸スキルの依存種別(未選択なら `None`)。手首補正の振り先に使う。
+fn character_style_dependency(
+    main_skill_id: Option<&str>,
+) -> CommandResult<Option<domain::SkillDependency>> {
+    main_skill_id
+        .map(find_skill)
+        .transpose()
+        .map(|skill| skill.map(|s| s.dependency))
 }
 
 /// 能力値プレビュー(`domain::preview_effective_stats`)をカタログ込みで呼ぶ。
 /// キャラ画面・防御・対人が同じ経路を通る
+#[allow(clippy::too_many_arguments)]
 fn stat_preview_of(
     base_stats: &domain::BaseStats,
     stat_sources: &domain::StatSources,
@@ -1410,6 +1477,7 @@ fn stat_preview_of(
     equipment: &domain::Equipment,
     common_skills: &CommonSkills,
     awakening: domain::Awakening,
+    equipment_base: domain::EquipmentBaseContext<'_>,
     coefficients: Option<AttackPowerCoefficients>,
 ) -> CommandResult<domain::StatPreview> {
     domain::preview_effective_stats(
@@ -1419,8 +1487,7 @@ fn stat_preview_of(
         equipment,
         common_skills,
         stat_catalogs(&gamedata::buff_catalog()),
-        &gamedata::equipment_abilities(),
-        &gamedata::title_catalog(),
+        equipment_base,
         &gamedata::random_option_catalog(),
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
@@ -1544,28 +1611,16 @@ fn build_damage_input(
         temporary_adjustments.as_ref(),
     )?;
     let skill = resolve_combo_skill_type(skill, &equipment, combo_skill_type)?;
-    let equipment_catalog = gamedata::equipment_catalog();
-    let mut equipment_base_sources = equipment.base_sources(
-        &gamedata::equipment_abilities(),
-        &gamedata::title_catalog(),
-        domain::equipment_polish_active(buffs),
-    );
-    if let Some(source) = stat_sources.soul_link.equipment_source() {
-        equipment_base_sources.push(source);
-    }
-    let wrist_bonus = gamedata::character_wrist_base_bonus(
-        game_character_id,
-        base_stats,
-        character_style_dependency.unwrap_or(skill.dependency),
-        &equipment,
-        &equipment_catalog,
-    );
-    if wrist_bonus != domain::EquipmentValues::default() {
-        equipment_base_sources.push(domain::EquipmentValueSource {
-            source: "手首補正".to_string(),
-            values: wrist_bonus,
-        });
-    }
+    // 装備の基本能力値(ソウルリンク・手首補正込み)はキャラ画面・防御・対人と同じ文脈から出す
+    let inputs = EquipmentBaseInputs::new(game_character_id);
+    let equipment_base_sources = inputs
+        .context(
+            base_stats,
+            stat_sources.soul_link,
+            buffs,
+            Some(character_style_dependency.unwrap_or(skill.dependency)),
+        )
+        .sources(&equipment);
     let equipment_enhanced_sources = equipment.enhanced_sources(content.core_region);
     let title_damage_rate =
         domain::title_attack_damage_rate(equipment.title.as_deref(), &gamedata::title_catalog());
@@ -1827,8 +1882,6 @@ pub fn evaluate_contents(
 ) -> CommandResult<Vec<ContentEvaluation>> {
     validate_character_draft(&character, &buffs)?;
     // 後段のループで繰り返し使う(下の「評価ループの不変値」コメント参照)。
-    let equipment_catalog = gamedata::equipment_catalog();
-    let equipment_abilities = gamedata::equipment_abilities();
     let titles = gamedata::title_catalog();
     let skills = gamedata::skills_for(&character.game_character_id);
     let enemies = gamedata::enemies();
@@ -1856,28 +1909,15 @@ pub fn evaluate_contents(
         character.awakening,
         None,
     )?;
-    let mut equipment_base_sources_raw = character.equipment.base_sources(
-        &equipment_abilities,
-        &titles,
-        domain::equipment_polish_active(&buffs),
+    // 装備の基本能力値は計算タブ・キャラ画面と同じ文脈から出す(手首補正の振り先は
+    // 主軸スキル。主軸が未選択なら評価中のスキルの依存種別を domain 側が使う)
+    let inputs = EquipmentBaseInputs::new(&character.game_character_id);
+    let equipment_base = inputs.context(
+        &character.base_stats,
+        character.stat_sources.soul_link,
+        &buffs,
+        character_style_dependency(character.main_skill_id.as_deref())?,
     );
-    if let Some(source) = character.stat_sources.soul_link.equipment_source() {
-        equipment_base_sources_raw.push(source);
-    }
-    let character_style_dependency = character
-        .main_skill_id
-        .as_deref()
-        .map(find_skill)
-        .transpose()?
-        .map(|skill| skill.dependency);
-    let wrist_bonus = WristBonusMaterial {
-        style_dependency_override: character_style_dependency,
-        ..gamedata::character_wrist_bonus_material(
-            &character.game_character_id,
-            &character.equipment,
-            &equipment_catalog,
-        )
-    };
     // スキルごとに変わるがコンテンツには依存しない値(依存種別の係数・カテゴリ寄与・
     // 属性値)は、コンテンツの数だけ繰り返さずキャラのスキル数ぶんだけ 1 回作る。
     // 召喚獣(熊・破壊精霊)が撃つスキルは本体の最良スキル判定には含めない(本体は召喚獣の
@@ -1936,8 +1976,7 @@ pub fn evaluate_contents(
         &enemies,
         &skill_inputs,
         summon_input.as_ref(),
-        equipment_base_sources_raw,
-        wrist_bonus,
+        equipment_base,
         &titles,
         character.awakening,
         fixed_dependency,
@@ -2308,8 +2347,8 @@ fn enchant_id_slot_key(
 #[cfg(test)]
 mod tests {
     use super::{
-        armor_added_hp, build_damage_input, preview_versus, resolve_accuracy_boost,
-        resolve_combo_skill_type, weapon_added_damage,
+        armor_added_hp, build_damage_input, preview_effective_stats, preview_versus,
+        resolve_accuracy_boost, resolve_combo_skill_type, weapon_added_damage,
     };
     use domain::{
         AccuracyBoost, AccuracyBoostSource, Awakening, BaseStats, BuffSelection, ComboSkillType,
@@ -2875,4 +2914,78 @@ mod tests {
         let ctx_without = super::candidate_context(&without_summon, &BuffSelection::default(), "anais_angry_pixie", "ringo").unwrap();
         assert!(!ctx_without.enchant_allowed_keys.contains(&domain::EquipmentStatKind::Slash));
     }
+
+    #[test]
+    fn 手首補正はキャラ画面と計算タブで同じ装備基本合計になる() {
+        // ボリスは腕(盾)の突き(基本+エンチャント)が魔攻の基本補正になる
+        // (`WristBonusRule::ThrustToMagicAttack`)。以前はこの変換を計算タブと
+        // コンテンツ評価だけが継ぎ足していて、キャラ画面・防御・対人は落としていた。
+        // 装備の基本合計は `EquipmentBaseContext` 1 本に集約したので両者は必ず一致する。
+        let base_stats = BaseStats {
+            stab: 100,
+            hack: 100,
+            int: 1,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
+        let mut equipment = Equipment::default();
+        equipment.parts.shield = EquipmentPart {
+            base: EquipmentValues {
+                thrust: 120,
+                ..Default::default()
+            },
+            enchant: EquipmentValues {
+                thrust: 15,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+        .into();
+        let content = gamedata::content_areas()
+            .into_iter()
+            .flat_map(|area| area.contents)
+            .find(|content| content.id == "ringo")
+            .unwrap();
+        let (_, target) = build_damage_input(
+            &base_stats,
+            "boris",
+            None,
+            &StatSources::default(),
+            &BuffSelection::default(),
+            equipment.clone(),
+            CommonSkills::default(),
+            Awakening::default(),
+            gamedata::find_skill("boris_horizontal_sword").unwrap(),
+            gamedata::find_enemy("ringo_boss").unwrap(),
+            &content,
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        let preview = preview_effective_stats(
+            base_stats,
+            StatSources::default(),
+            BuffSelection::default(),
+            equipment,
+            CommonSkills::default(),
+            Awakening::default(),
+            "boris".to_string(),
+            Some("boris_horizontal_sword".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            preview.base.equipment_base_total,
+            target.equipment_base_totals(),
+            "キャラ画面と計算タブの装備基本合計は一致する"
+        );
+        assert_eq!(
+            preview.base.equipment_base_total.magic_attack, 135,
+            "腕の突き(基本 120 + エンチャント 15)が魔攻へ乗る"
+        );
+    }
+
 }

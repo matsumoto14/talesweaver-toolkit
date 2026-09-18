@@ -127,7 +127,7 @@
         if (character) {
           const draft = payloadOf(character);
           const [buffPreview, baseDefense, buffDefense] = await Promise.all([
-            previewEffectiveStats(draft.base_stats, draft.stat_sources, draft.equipment, draft.common_skills, draft.awakening, draft.main_skill_id, choices),
+            previewEffectiveStats(draft.base_stats, draft.stat_sources, draft.equipment, draft.common_skills, draft.awakening, draft.game_character_id, draft.main_skill_id, choices),
             previewDefense(draft), previewDefense(draft, choices),
           ]);
           afterStats = buffPreview.stats;

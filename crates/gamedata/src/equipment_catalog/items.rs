@@ -145,7 +145,7 @@ impl EquipmentItem {
 
 /// `Equipment::validate_against_catalog`(domain)がカタログを検証できるようにする実装。
 /// domain は gamedata に依存できないので、domain 側にトレイトを置いてこちらで実装する
-/// (`base_totals` が `&[EquipmentAbilityDef]` を受ける依存方向と同じ)。
+/// (`domain::EquipmentBaseContext` が `&[EquipmentAbilityDef]` を受ける依存方向と同じ)。
 impl domain::EquipmentCatalogEntry for EquipmentItem {
     fn id(&self) -> &str {
         self.id
@@ -1973,10 +1973,10 @@ pub fn find_equipment_item(id: &str) -> Option<EquipmentItem> {
         .find(|item| item.id == id)
 }
 
-/// `character_wrist_base_bonus` の材料(キャラのルール・バンド判定・腕合計値)だけを解決する。
+/// 腕装備パッシブの材料(キャラのルール・バンド判定・腕合計値)を解決する。
 ///
-/// 依存種別ごとに何度も呼ばず 1 回だけ材料を作り、複数の依存種別ぶんの変換を domain 側で
-/// まとめて計算できるようにする(`evaluate_contents` のように依存種別が複数あるとき用)。
+/// 変換そのものは `domain::EquipmentBaseContext` が装備ごとに引き直す(依存種別が複数ある
+/// コンテンツ評価でも、材料はこの 1 回の解決を使い回す)。
 pub fn character_wrist_bonus_material(
     game_character_id: &str,
     equipment: &Equipment,
@@ -2002,20 +2002,18 @@ pub fn character_wrist_bonus_material(
         is_band,
         wrist_totals: wrist.base.add(wrist.enchant),
         siena_thrust,
-        // どの依存種別で振り先を選ぶかは呼び出し側(commands.rs)が決める(キャラの主軸
-        // スキルを使うかどうかは文脈依存のため、ここでは解決しない)。
-        style_dependency_override: None,
     }
 }
 
 /// キャラ固有パッシブにより、腕装備の補正から「基本能力値」へ派生する装備補正。
 ///
-/// どのキャラがどのルールか(`WristBonusRule`)は `characters::find_character` が持つデータ。
-/// ここでは腕装備の選択状態とカタログから `WristType`(バンドかどうか)を解決し、
-/// 実際の変換計算は `domain::wrist_base_bonus` に委ねる(元の `base` / `enchant` は変更しない)。
-pub fn character_wrist_base_bonus(
+/// **キャラごとのルール(`characters::find_character`)が正しく効くかを確かめるテスト用の入口**。
+/// 本番の経路は `character_wrist_bonus_material` を `domain::EquipmentBaseContext` に渡す形で、
+/// 装備の基本合計の中で一緒に解く。
+#[cfg(test)]
+pub(crate) fn character_wrist_base_bonus(
     game_character_id: &str,
-    base_stats: &BaseStats,
+    base_stats: &domain::BaseStats,
     style_dependency: SkillDependency,
     equipment: &Equipment,
     catalog: &[EquipmentItem],
@@ -2025,14 +2023,14 @@ pub fn character_wrist_base_bonus(
         material.rule,
         material.is_band,
         base_stats,
-        style_dependency,
+        Some(style_dependency),
         material.wrist_totals,
         material.siena_thrust,
     )
 }
 
 /// 装備しているアイテムそのものの装着時効果を、与ダメージ式のカテゴリ寄与に変換する。
-/// 装備補正値は `Equipment::base_totals` が別に見る。
+/// 装備補正値は `domain::EquipmentBaseContext` が別に見る。
 ///
 /// `Equipment::ability_damage_contributions` と同じ役割だが、`EquipmentItem` は
 /// `Source` / `WeaponClass` を持つので domain ではなくこちら側にある。

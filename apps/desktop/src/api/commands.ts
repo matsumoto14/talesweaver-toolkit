@@ -77,9 +77,10 @@ export const previewPotentialEffects = (statSources: StatSources, commonSkills: 
   invoke<PotentialEffects>("preview_potential_effects", { statSources, commonSkills });
 export const previewEffectiveStats = (
   baseStats: BaseStats, statSources: StatSources, equipment: Equipment, commonSkills: CommonSkills,
-  awakening: Awakening, mainSkillId: string | null, buffs: BuffSelection = { choices: [] },
+  awakening: Awakening, gameCharacterId: string, mainSkillId: string | null,
+  buffs: BuffSelection = { choices: [] },
 ) => invoke<StatPreview>("preview_effective_stats", {
-  baseStats, statSources, equipment, commonSkills, awakening, mainSkillId, buffs,
+  baseStats, statSources, equipment, commonSkills, awakening, gameCharacterId, mainSkillId, buffs,
 });
 export const calculateDamage = (
   characterId: number, skillId: string, contentId: string, comboCount: number, temporaryAdjustments: Adjustments,

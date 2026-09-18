@@ -26,12 +26,12 @@ export function equipmentAttackKindsForMagicDoll(): EquipmentStatKind[] {
   return tables.magic_doll_enchant_keys;
 }
 
-/** 基本能力値の合計(Σ part.base + 装備アビリティ + 称号 + ソウルリンク)。計算は Rust 側(preview) */
+/** 基本能力値の合計(Σ part.base + 研磨 + 装備アビリティ + 称号 + ソウルリンク + 手首補正)。計算は Rust 側(preview) */
 export function equipmentBaseTotal(preview: StatPreview | null): EquipmentValues {
   return preview?.equipment_base_total ?? zeroValues();
 }
 
-/** 強化能力値の合計(Σ part.enchant + シエナのオーラ武器/盾分)。計算は Rust 側(preview) */
+/** 強化能力値の合計(Σ part.enchant + シエナのオーラ + アバター強化)。計算は Rust 側(preview) */
 export function equipmentEnhancedTotal(preview: StatPreview | null): EquipmentValues {
   return preview?.equipment_enhanced_total ?? zeroValues();
 }

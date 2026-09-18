@@ -71,10 +71,7 @@ pub use content::{ReachTier,
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation, ContentRequirement,
     ContentSeries, GameRegion, RequirementCheck,
 };
-pub use content_evaluation::{
-    evaluate_contents_for_character, SkillEvaluationInput,
-    WristBonusMaterial,
-};
+pub use content_evaluation::{evaluate_contents_for_character, SkillEvaluationInput};
 pub use critical_rate::{
     critical_rate, CriticalRate, CriticalRateError, CriticalRateSourceId, CriticalRateSources,
     ARCHITECT_LAB_PER_STAGE, ARCHITECT_LAB_STAGE_MAX, CRITICAL_RATE_BONUS_MAX,
@@ -113,10 +110,12 @@ pub use equipment::{
     EnhanceGrade, RelicDirection, RelicInfo, RelicKind, RelicState, EquipmentStatKind,
     EnhanceRates, Equipment, EquipmentAbilityAdditional, EquipmentAbilityAdditionalDef,
     EquipmentAbilityAdditionalKind, EquipmentAbilityDef, EquipmentAbilityFamily,
-    EquipmentAttackLayer, EquipmentAttackPart, EquipmentAttackSource, EquipmentCatalogEntry,
+    EquipmentAttackLayer, EquipmentAttackPart, EquipmentAttackSource, EquipmentBaseContext,
+    EquipmentCatalogEntry,
     EquipmentCoefficients, EquipmentEnhanceType, EquipmentError, EquipmentPart,
     EquipmentPartList, EquipmentParts, EquipmentRates, EquipmentValueKind, EquipmentValueSource,
-    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus, WristBonusRule,
+    EquipmentValues, PartEquipmentValues, PartSlot, PartSlotRule, SienaStatBonus,
+    WristBonusMaterial, WristBonusRule,
     ENHANCE_LEVEL_MAX, ENHANCE_LEVEL_RANDOM_RANGE_MIN, EQUIPMENT_VALUE_MAX,
     DUAL_BLADE_SUB_ABILITY_SLOTS, WEAPON_ABILITY_SLOTS,
 };
@@ -153,7 +152,7 @@ pub use stat_sources::{
     apply_unleash, buff_target_stat_gains, build_modifiers, build_stat_modifiers,
     contribution_source_effects,
     group_source_effects,
-    effective_stats_of, equipment_base_total, equipment_polish_active, preview_effective_stats, stat_limits,
+    effective_stats_of, equipment_polish_active, preview_effective_stats, stat_limits,
     EQUIPMENT_POLISH_BUFF_ID,
     summarize_buff_selection, Adjustments, AttackPowerCoefficients, AttackPreview, BuffCatalog, BuffChoice,
     BuffDamageEffect, BuffDamageSummary, BuffDefinition, BuffOrigin, BuffPurpose, BuffSelection, BuffTarget,

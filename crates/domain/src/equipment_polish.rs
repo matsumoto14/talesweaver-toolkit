@@ -8,7 +8,7 @@
 //!
 //! 1 部位に同時 1 つ。レリック(段階成長の別モデル)は対象外。期限は持たない
 //! (このリポジトリに期限つき値の前例が無い。`avatar_enhance.rs` と同じ扱い)。
-//! 効き先は装備の**基本能力値**側(`Equipment::base_sources`)。
+//! 効き先は装備の**基本能力値**側(`EquipmentBaseContext::sources`)。
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

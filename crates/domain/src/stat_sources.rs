@@ -23,9 +23,9 @@ use crate::critical_rate::{CriticalRateSourceId, CriticalRateSources};
 use crate::damage::DamageContribution;
 use crate::element::ElementSources;
 use crate::equipment::{
-    equipment_values_attack, Equipment, EquipmentAbilityDef, EquipmentCoefficients, EquipmentError,
-    EquipmentValues, PartEquipmentValues, PartSlot, PartStatTotal, ENHANCE_LEVEL_MAX,
-    EQUIPMENT_VALUE_MAX,
+    equipment_values_attack, Equipment, EquipmentBaseContext, EquipmentCoefficients,
+    EquipmentError, EquipmentValues, PartEquipmentValues, PartSlot, PartStatTotal,
+    ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
 };
 use crate::mastery::{Masteries, MasteryCatalog};
 use crate::random_option::{RandomOptionDef, RandomOptionTotals};
@@ -43,7 +43,6 @@ use crate::thesis_core::{
     CoreRegion, CoreSetBonus, CoreSetGroup, CORE_ENHANCEMENT_MAX, CORE_EVOLUTION_MAX,
     CORE_SLOT_COUNT,
 };
-use crate::title::TitleDef;
 use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
 
 /// ペット S スキルの段階(wiki: PET)。上位段階ほど値が大きい。
@@ -1232,7 +1231,7 @@ pub struct StatPreview {
     /// ソウルリンク 1〜10 の Rust 計算済み派生値。
     pub soul_link: SoulLinkPreview,
     /// 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号 + ソウルリンク)。
-    /// 装備由来の正は `Equipment::base_totals`、ソウルリンク由来の正は `SoulLinkStatus::equipment_values`。
+    /// 装備由来の正は `EquipmentBaseContext::total`(ソウルリンク・手首補正込み)。
     pub equipment_base_total: EquipmentValues,
     /// 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳)。
     /// 正は `Equipment::ability_values_by_part`
@@ -1629,7 +1628,7 @@ fn effective_stats_with(
 pub const EQUIPMENT_POLISH_BUFF_ID: &str = "equipment_polish";
 
 /// バフ「装備研磨」が ON か。ON のときだけ `Equipment::polish` の記録を基本能力値に合流させる
-/// (`Equipment::base_sources` / `base_totals` の `polish_active` 引数に渡す)。
+/// (`EquipmentBaseContext::polish_active` に渡す)。
 pub fn equipment_polish_active(buffs: &BuffSelection) -> bool {
     buffs
         .choices
@@ -1644,19 +1643,14 @@ pub fn equipment_polish_active(buffs: &BuffSelection) -> bool {
 fn attack_power_of(
     stats: &EffectiveStats,
     equipment: &Equipment,
-    soul_link: SoulLinkStatus,
+    equipment_base: &EquipmentBaseContext<'_>,
     common: &CommonSkills,
-    abilities: &[EquipmentAbilityDef],
-    titles: &[TitleDef],
-    polish_active: bool,
     coefficients: &AttackPowerCoefficients,
 ) -> AttackPowerBreakdown {
     attack_power_breakdown(
         stat_attack_power(stats, &coefficients.stat),
         equipment_values_attack(
-            &equipment
-                .base_totals(abilities, titles, polish_active)
-                .add(soul_link.equipment_values()),
+            &equipment_base.total(equipment),
             &coefficients.equipment.base,
         ),
         equipment_values_attack(
@@ -1740,20 +1734,6 @@ pub fn buff_target_stat_gains(
     Ok(gains)
 }
 
-/// 装備の基本能力値の合計(部位 + アビリティ + 称号 + ソウルリンク)。ソウルリンクは
-/// エンチャントではなく基本能力値へ直接加算する。キャラ画面・防御・対人が同じ式を使う
-pub fn equipment_base_total(
-    equipment: &Equipment,
-    soul_link: SoulLinkStatus,
-    abilities: &[EquipmentAbilityDef],
-    titles: &[TitleDef],
-    polish_active: bool,
-) -> EquipmentValues {
-    equipment
-        .base_totals(abilities, titles, polish_active)
-        .add(soul_link.equipment_values())
-}
-
 /// 最終能力値だけを出す(部位ごとの寄与・補正源内訳を組み立てない軽い経路。防御・対人が使う)。
 pub fn effective_stats_of(
     base: &BaseStats,
@@ -1776,6 +1756,9 @@ pub fn effective_stats_of(
 ///
 /// `coefficients` はキャラの主軸スキルの依存種別から引いた係数。`None`(主軸スキル未選択)なら
 /// 攻撃力は出さない。
+///
+/// `equipment_base` は装備の基本能力値を組み立てる唯一の文脈(ソウルリンク・手首補正込み)。
+/// 研磨の ON/OFF もここが持つので、`buffs` から作った文脈をそのまま渡す。
 pub fn preview_effective_stats(
     base: &BaseStats,
     sources: &StatSources,
@@ -1783,8 +1766,7 @@ pub fn preview_effective_stats(
     equipment: &Equipment,
     common: &CommonSkills,
     catalogs: StatCatalogs<'_>,
-    abilities: &[EquipmentAbilityDef],
-    titles: &[TitleDef],
+    equipment_base: EquipmentBaseContext<'_>,
     random_options: &[RandomOptionDef],
     coefficients: Option<AttackPowerCoefficients>,
     stat_cap: i64,
@@ -1792,7 +1774,8 @@ pub fn preview_effective_stats(
     base.validate()?;
     sources.validate()?;
     equipment.validate()?;
-    let polish_active = equipment_polish_active(buffs);
+    let abilities = equipment_base.abilities;
+    let polish_active = equipment_base.polish_active;
     let (stats, traces, source_effects) = effective_stats_with(
         base,
         sources,
@@ -1806,16 +1789,7 @@ pub fn preview_effective_stats(
         None => None,
         Some(coefficients) => {
             let breakdown =
-                attack_power_of(
-                    &stats,
-                    equipment,
-                    sources.soul_link,
-                    common,
-                    abilities,
-                    titles,
-                    polish_active,
-                    &coefficients,
-                );
+                attack_power_of(&stats, equipment, &equipment_base, common, &coefficients);
             // 部位を外すとシエナのオーラのステ加算も消える = 最終能力値まで動く。
             // 差分は「その装備を外した状態を丸ごと計算し直した A」との差にする。
             let mut part_contributions = Vec::with_capacity(12);
@@ -1830,16 +1804,9 @@ pub fn preview_effective_stats(
                     catalogs,
                     stat_cap,
                 )?;
-                let a_without = attack_power_of(
-                    &stats_without,
-                    &without,
-                    sources.soul_link,
-                    common,
-                    abilities,
-                    titles,
-                    polish_active,
-                    &coefficients,
-                );
+                // 腕を外せば手首補正も消える(`EquipmentBaseContext` が装備から解き直す)
+                let a_without =
+                    attack_power_of(&stats_without, &without, &equipment_base, common, &coefficients);
                 part_contributions.push(PartAttackContribution {
                     slot,
                     value: breakdown.value - a_without.value,
@@ -1865,8 +1832,7 @@ pub fn preview_effective_stats(
         .iter()
         .map(|&k| sacred_relic_value(sources.sacred_relic.get(k)))
         .sum();
-    let equipment_base_total =
-        equipment_base_total(equipment, sources.soul_link, abilities, titles, polish_active);
+    let equipment_base_total = equipment_base.total(equipment);
     let part_ability_values = equipment.ability_values_by_part(abilities);
     let part_polish_values = equipment.polish_values_by_part(polish_active);
     let siena_part_values = equipment
@@ -2428,8 +2394,7 @@ mod tests {
                 masteries: MASTERY_CATALOG,
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             None,
             NO_CAP,
@@ -2449,8 +2414,7 @@ mod tests {
                 masteries: MASTERY_CATALOG,
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             None,
             NO_CAP,
@@ -2538,8 +2502,7 @@ mod tests {
                 masteries: MASTERY_CATALOG,
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             None,
             NO_CAP,
@@ -2556,8 +2519,7 @@ mod tests {
                 masteries: MASTERY_CATALOG,
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             None,
             NO_CAP,
@@ -2972,8 +2934,7 @@ mod tests {
                 masteries: &[],
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             None,
             NO_CAP,
@@ -3005,8 +2966,7 @@ mod tests {
                 masteries: &[],
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             Some(test_attack_coefficients()),
             NO_CAP,
@@ -3062,8 +3022,10 @@ mod tests {
                 masteries: &[],
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext {
+                soul_link: sources.soul_link,
+                ..EquipmentBaseContext::catalog_only(&[], &[])
+            },
             &[],
             Some(test_attack_coefficients()),
             NO_CAP,
@@ -3110,8 +3072,7 @@ mod tests {
                 masteries: &[],
                 character_skills: &[],
             },
-            &[],
-            &[],
+            EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
             Some(coefficients),
             NO_CAP,
@@ -3132,8 +3093,7 @@ mod tests {
                     masteries: &[],
                     character_skills: &[],
                 },
-                &[],
-                &[],
+                EquipmentBaseContext::catalog_only(&[], &[]),
                 &[],
                 Some(coefficients),
                 NO_CAP,

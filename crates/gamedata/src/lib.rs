@@ -35,7 +35,7 @@ pub use elements::{
 pub use enemies::{enemies, find_enemy};
 pub use equipment_catalog::{
     armor_class, armor_class_for_type, armor_enhance_multiplier, armor_enhance_rates,
-    character_wrist_base_bonus, character_wrist_bonus_material, enhance_grade_multiplier,
+    character_wrist_bonus_material, enhance_grade_multiplier,
     enhance_multiplier, enhance_multiplier_range, enhance_rates, enhance_rates_for_type,
     equipment_abilities, equipment_catalog, equipment_enhance_type, find_equipment_item,
     install_downloaded_equipment, item_damage_contributions, list_downloaded_equipment_ids,

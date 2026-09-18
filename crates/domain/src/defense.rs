@@ -439,7 +439,7 @@ pub fn hit_rate(accuracy_point: i64, evasion_point: i64, floors: HitRateFloors) 
 
 /// 防御側の戦闘能力値を出す。
 ///
-/// `equipment` は装備補正 9 値の合計(基本 + 強化)。呼び出し側が `Equipment::base_totals` /
+/// `equipment` は装備補正 9 値の合計(基本 + 強化)。呼び出し側が `EquipmentBaseContext::total` /
 /// `enhanced_totals` を足して渡す(domain は gamedata のアビリティカタログを持たないため)。
 /// `caps` は覚醒・エタの意志で開放される上限(表は gamedata)。防御力は上限に当たると
 /// そこで頭打ちになり、以降の軽減はカット率 J が担う(wiki §6)。
