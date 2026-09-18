@@ -11,7 +11,7 @@ import type {
   EquipmentAbilityView, EquipmentAbilityCandidate, EquipmentCandidates, EnchantPlanRow,
   EquipmentPart, PartSlot, RandomOptionCandidate,
   RelicDirection, RelicState, WeaponSystem,
-  InkriTarget, InkriAttemptRequest, InkriBatchResult,
+  InkriTarget, InkriAttemptRequest, InkriBatchResult, InkriKind, EtaScrollPrice,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -111,8 +111,13 @@ export const previewVersus = (
     attacker, attackerBuffs, skillId, defender, defenderBuffs, attackerTries, defenderTries,
   });
 export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipment_catalog");
-/** ビアヌのインクリ対象装備一覧(合成回数上限・ビアヌ費用込み) */
+/** ビアヌのインクリ対象装備一覧(部位・ビアヌ費用込み) */
 export const listInkriTargets = () => invoke<InkriTarget[]>("list_inkri_targets");
+/** エタインクリ呪文書 1 枚の値段(SEED / ELSO / TP) */
+export const etaScrollPrice = () => invoke<EtaScrollPrice>("eta_scroll_price");
+/** いまの成功率(10万分率)。表は domain が持つ */
+export const inkriSuccessRate = (kind: InkriKind, inkriCount: number) =>
+  invoke<number>("inkri_success_rate", { kind, inkriCount });
 /** インクリの試行をまとめて実行する(1 回 / N 回 / 成功するまで)。シードが同じなら結果も同じ */
 export const runInkriAttempts = (request: InkriAttemptRequest) =>
   invoke<InkriBatchResult>("run_inkri_attempts", { request });

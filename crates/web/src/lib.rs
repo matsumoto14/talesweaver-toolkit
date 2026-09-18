@@ -212,6 +212,13 @@ struct RunInkriAttemptsArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct InkriSuccessRateArgs {
+    kind: domain::InkriKind,
+    inkri_count: i64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RelicStepArgs {
     part: domain::EquipmentPart,
     direction: domain::RelicDirection,
@@ -289,6 +296,7 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "list_contents" => ok(commands::list_contents()),
         "list_equipment_catalog" => ok(commands::list_equipment_catalog()),
         "list_inkri_targets" => ok(commands::list_inkri_targets()),
+        "eta_scroll_price" => ok(commands::eta_scroll_price()),
         "list_equipment_abilities" => ok(commands::list_equipment_abilities()),
         "list_random_options" => ok(commands::list_random_options()),
         "list_masteries" => ok(commands::list_masteries()),
@@ -432,6 +440,10 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "run_inkri_attempts" => {
             let a: RunInkriAttemptsArgs = args_of(command, args)?;
             done(commands::run_inkri_attempts(a.request))
+        }
+        "inkri_success_rate" => {
+            let a: InkriSuccessRateArgs = args_of(command, args)?;
+            ok(commands::inkri_success_rate(a.kind, a.inkri_count))
         }
         "list_equipment_ability_candidates" => {
             let a: AbilityCandidatesArgs = args_of(command, args)?;

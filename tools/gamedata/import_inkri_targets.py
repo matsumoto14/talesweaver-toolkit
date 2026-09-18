@@ -4,13 +4,17 @@
 `apps/desktop/src/assets/inkri/items/<ItemId>.png` へ複製する。
 
 ## データソース
-- 装備の合成回数上限: クライアント展開データ `<tw_assets>/db/dm_*_0*.csv`
-  (`EquippableItemTemplate` 行の `c51_995dd080` 列。値は文字列 `"[min, max]"` で、
-  採用するのは max。9xxx 側(`dm_*_9*.csv`)は 0xxx の複製 = ItemId +90,000,000 なので読まない)。
+- 装備の一覧・部位: クライアント展開データ `<tw_assets>/db/dm_*_0*.csv`
+  (`EquippableItemTemplate` 行。合成回数を持つ `c51_995dd080` 列がある = インクリ対象になり得る
+  装備だけを拾う。9xxx 側(`dm_*_9*.csv`)は 0xxx の複製 = ItemId +90,000,000 なので読まない)。
+  合成回数の上限そのものは使わない — シミュレータはインクリ回数を積み上げる形式で、
+  合成回数は追わない(ユーザー判断 2026-09-18)。
 - 表示名・アイコン: `<tw_assets>/item_icons/items.csv`(クライアント DB の `Name` 列は
   一部が文字化けしているため使わない)。
 - ビアヌのインクリ費用(SEED): wiki「装備システム/インクリ」の表(2026-09-12 更新、
   ユーザー確認 2026-09-17)をそのまま転記。ロード/加護/祝福/王室の費用は資料が無く常に `None`。
+- エタインクリ費用(SEED、呪文書 1 枚は別): 同ページ「エタインクリ費用」節。エタレベルが装備条件の
+  セイクリッド / 改・セイクリッドだけにあり、他の系列は `None`(= エタインクリ不可)。
 
 ## 部位(PartSlot)の決め方
 `c35_EquipSlot` の値を `domain::PartSlot` に機械的に対応させる(既存
@@ -26,8 +30,8 @@ wiki のインクリ費用表は系列によって「武器/防具/AF/エフェ�
 - エクリプスは「武器・防具」と「AF」の 2 区分。ウィング(Body)は wiki 表に単独の行が無いため、
   AF と同額として扱う([仮]。区分自体が無い可能性がある)。
 - セイクリッド・改・セイクリッドは「武器・防具・AF」が同一価格 1 本(部位を問わず同額)。
-- デックストシューズ等 4 種・真ブリニクル武器・地神装備・ネニャフル学院の鎧は単一価格
-  (部位を問わず同額、あるいは対象が単一部位)。
+- モモンズ・グリーブ・地神装備・ネニャフル学院の鎧は単一価格(部位を問わず同額、あるいは対象が単一部位)。
+  デックストシューズ・アベルシューズ・サクヤの雪駄・真ブリニクル武器は収録しない(ユーザー判断 2026-09-18)。
 - Lv185AF・Lv250コラボ靴は実アイテム名が確認できず対象外(判定が曖昧な系列は入れない)。
 
 ## id の絞り込み
@@ -80,11 +84,10 @@ def default_assets_dir() -> Path:
 class DbItem:
     item_id: int
     equip_slot: str
-    synth_max: int
 
 
 def load_db_items(assets: Path) -> dict[int, DbItem]:
-    """EquippableItemTemplate かつ c51(合成回数)を持つ行だけを ItemId で引けるようにする。"""
+    """EquippableItemTemplate かつ c51(合成回数)が入っている行だけを ItemId で引けるようにする。"""
     items: dict[int, DbItem] = {}
     for path in sorted(glob.glob(str(assets / "db" / "dm_*_0*.csv"))):
         with open(path, encoding="utf-8-sig", newline="") as f:
@@ -102,10 +105,10 @@ def load_db_items(assets: Path) -> dict[int, DbItem]:
                     continue
                 try:
                     item_id = int(row[id_col])
-                    synth_max = int(row[synth_col].strip("[]").split(",")[-1])
+                    int(row[synth_col].strip("[]").split(",")[-1])
                 except (ValueError, IndexError):
                     continue
-                items[item_id] = DbItem(item_id, row[slot_col], synth_max)
+                items[item_id] = DbItem(item_id, row[slot_col])
     return items
 
 
@@ -168,16 +171,14 @@ def by_part(prices: dict[str, int], default: int | None = None):
     return lambda part: prices.get(part, default)
 
 
+# 系列ラベル → エタインクリ費用(SEED)。wiki「エタインクリ費用」節(2026-09-18 転記)
+ETA_SEED_COST: dict[str, int] = {
+    "セイクリッド": 296_680_000,
+    "改・セイクリッド": 313_680_000,
+}
+
 SERIES: list[Series] = [
-    ("デックストシューズ", exact("†デックストシューズ"), flat(3_000_000)),
-    ("アベルシューズ", exact("†アベルシューズ"), flat(3_000_000)),
     ("モモンズ・グリーブ", exact("†モモンズ・グリーブ"), flat(3_000_000)),
-    ("サクヤの雪駄", exact("†サクヤの雪駄"), flat(3_000_000)),
-    (
-        "真ブリニクル武器",
-        all_of(prefix("†真・ブリニクル"), part_is("Weapon")),
-        flat(6_915_000),
-    ),
     (
         "地神装備",
         prefix("†地神の", "†真・地神の"),
@@ -259,8 +260,8 @@ class Target:
     name: str
     series: str
     part: str
-    synth_max: int
     price: int | None
+    eta_price: int | None
     icon_file: str
 
 
@@ -300,8 +301,8 @@ def main() -> None:
                         name=name,
                         series=label,
                         part=part,
-                        synth_max=db_item.synth_max,
                         price=price_fn(part),
+                        eta_price=ETA_SEED_COST.get(label),
                         icon_file=icon_file,
                     )
                 )
@@ -341,8 +342,9 @@ def write_rust(targets: list[Target]) -> None:
         lines.append(f'        name: "{name_escaped}",')
         lines.append(f'        series: "{series_escaped}",')
         lines.append(f"        part: PartSlot::{t.part},")
-        lines.append(f"        synth_max: {t.synth_max},")
         lines.append(f"        bianu_seed_cost: {cost},")
+        eta = f"Some({t.eta_price})" if t.eta_price is not None else "None"
+        lines.append(f"        eta_seed_cost: {eta},")
         lines.append("    },")
     lines.append("];")
     lines.append("")
@@ -352,6 +354,8 @@ def write_rust(targets: list[Target]) -> None:
 
 def copy_icons(assets: Path, targets: list[Target]) -> None:
     icon_dir = assets / "item_icons"
+    # 収録から外れた装備のアイコンを残さないため、出力先を作り直す
+    shutil.rmtree(ICON_OUT_DIR, ignore_errors=True)
     ICON_OUT_DIR.mkdir(parents=True, exist_ok=True)
     copied = 0
     missing: list[int] = []

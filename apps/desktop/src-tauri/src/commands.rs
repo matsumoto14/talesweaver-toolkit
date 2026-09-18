@@ -151,6 +151,16 @@ pub fn list_inkri_targets() -> Vec<gamedata::InkriTarget> {
 }
 
 #[tauri::command]
+pub fn eta_scroll_price() -> domain::EtaScrollPrice {
+    commands::eta_scroll_price()
+}
+
+#[tauri::command]
+pub fn inkri_success_rate(kind: domain::InkriKind, inkri_count: i64) -> i64 {
+    commands::inkri_success_rate(kind, inkri_count)
+}
+
+#[tauri::command]
 pub fn run_inkri_attempts(
     request: commands::InkriAttemptRequest,
 ) -> CommandResult<domain::InkriBatchResult> {

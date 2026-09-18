@@ -212,13 +212,13 @@ pub fn list_equipment_catalog() -> Vec<EquipmentItem> {
     gamedata::equipment_catalog()
 }
 
-/// ビアヌのインクリ対象装備一覧(合成回数上限・ビアヌ費用は gamedata が持つ)。
+/// ビアヌのインクリ対象装備一覧(部位・ビアヌ費用は gamedata が持つ)。
 pub fn list_inkri_targets() -> Vec<InkriTarget> {
     gamedata::inkri_targets().to_vec()
 }
 
-/// インクリの試行をまとめて実行する。`request.kind` がビアヌのときだけ、対象装備の
-/// ビアヌ費用(SEED、未収録なら `None`)を消費 SEED の計算に使う(他 4 種は費用資料が無い)。
+/// インクリの試行をまとめて実行する。`request.kind` がビアヌ / エタインクリのときだけ、対象装備の
+/// その費用(SEED、未収録なら `None`)を消費 SEED の計算に使う(他 4 種は費用資料が無い)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InkriAttemptRequest {
     /// クライアント DB の ItemId(`InkriTarget::client_item_id`)
@@ -230,6 +230,16 @@ pub struct InkriAttemptRequest {
     pub seed: u64,
 }
 
+/// エタインクリ呪文書 1 枚の値段(SEED / ELSO / TP)。
+pub fn eta_scroll_price() -> domain::EtaScrollPrice {
+    domain::ETA_SCROLL_PRICE
+}
+
+/// いまの成功率(10万分率)。画面が「今の確率」を出すために引く(表は domain が唯一の正)。
+pub fn inkri_success_rate(kind: InkriKind, inkri_count: i64) -> i64 {
+    kind.success_rate(inkri_count)
+}
+
 pub fn run_inkri_attempts(request: InkriAttemptRequest) -> CommandResult<InkriBatchResult> {
     let target = gamedata::find_inkri_target(request.client_item_id).ok_or_else(|| {
         format!(
@@ -237,8 +247,12 @@ pub fn run_inkri_attempts(request: InkriAttemptRequest) -> CommandResult<InkriBa
             request.client_item_id
         )
     })?;
+    if request.kind == InkriKind::Eta && target.eta_seed_cost.is_none() {
+        return Err(format!("{} はエタインクリの対象ではありません", target.name).into());
+    }
     let seed_cost_per_attempt = match request.kind {
         InkriKind::Vianu => target.bianu_seed_cost,
+        InkriKind::Eta => target.eta_seed_cost,
         _ => None,
     };
     let mut rng = InkriRng::new(request.seed);

@@ -1,11 +1,12 @@
-//! ビアヌのインクリ対象装備カタログ(合成回数の上限・ビアヌ費用)。
+//! ビアヌのインクリ対象装備カタログ(部位・ビアヌ費用・エタインクリ費用)。
 //!
-//! 出典: クライアント DB `db/dm_*_0*.csv`(`EquippableItemTemplate` の `c51_995dd080` 列 =
-//! `[0, N]` の N が合成回数の初期上限)。表示名・アイコンは `tw_assets/item_icons/items.csv`
+//! 出典: クライアント DB `db/dm_*_0*.csv`(`EquippableItemTemplate` で合成回数列 `c51_995dd080` を
+//! 持つ装備)。表示名・アイコンは `tw_assets/item_icons/items.csv`
 //! (クライアント DB の `Name` 列は一部が文字化けしているため使わない)。
 //!
 //! ビアヌのインクリ費用(SEED)は wiki「装備システム/インクリ」の表(2026-09-12 更新、
-//! ユーザー確認 2026-09-17)をそのまま転記。系列ごとの収録判定・費用の割り当ては
+//! ユーザー確認 2026-09-17)をそのまま転記。エタインクリ費用(SEED、呪文書 1 枚は別)は同ページ
+//! 「エタインクリ費用」節(セイクリッド 296,680,000 / 改セイクリッド 313,680,000)。系列ごとの収録判定・費用の割り当ては
 //! `tools/gamedata/import_inkri_targets.py` 冒頭のコメント参照。ロード/加護/祝福/王室の
 //! 費用は資料が無いため常に `None`(画面は「?」を出す)。
 //!
@@ -31,10 +32,10 @@ pub struct InkriTarget {
     /// 表示グルーピング用の系列名(例: "アクィルス"、"地神")
     pub series: &'static str,
     pub part: PartSlot,
-    /// 合成回数の初期上限(クライアント DB `c51_995dd080` の `[0, N]` の N)
-    pub synth_max: i64,
     /// ビアヌのインクリ費用(SEED)。wiki に資料が無い装備は `None`。
     pub bianu_seed_cost: Option<i64>,
+    /// エタインクリ費用(SEED、呪文書 1 枚は別)。エタレベル装備(セイクリッド系)以外は `None` = 使えない。
+    pub eta_seed_cost: Option<i64>,
 }
 
 #[path = "generated.rs"]
@@ -71,11 +72,28 @@ mod tests {
     }
 
     #[test]
-    fn 合成回数上限は正の値() {
+    fn 収録しない系列が混ざっていない() {
+        // デックストシューズ・アベルシューズ・サクヤの雪駄・真ブリニクル武器は外す(ユーザー判断 2026-09-18)
         for target in inkri_targets() {
-            assert!(
-                target.synth_max > 0,
-                "{} (ItemId {}) の synth_max が 0 以下です",
+            for dropped in ["デックスト", "アベル", "サクヤ", "ブリニクル"] {
+                assert!(
+                    !target.series.contains(dropped) && !target.name.contains(dropped),
+                    "{} (ItemId {}) は収録対象外の系列です",
+                    target.name,
+                    target.client_item_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn エタインクリ費用はセイクリッド系にだけある() {
+        for target in inkri_targets() {
+            let eta = target.series == "セイクリッド" || target.series == "改・セイクリッド";
+            assert_eq!(
+                target.eta_seed_cost.is_some(),
+                eta,
+                "{} (ItemId {})",
                 target.name,
                 target.client_item_id
             );

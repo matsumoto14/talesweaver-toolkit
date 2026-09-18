@@ -1070,19 +1070,24 @@ export interface InkriTarget {
   /** 表示グルーピング用の系列名(例: "アクィルス"、"地神") */
   series: string;
   part: PartSlot;
-  /** 合成回数の初期上限 */
-  synth_max: number;
   /** ビアヌのインクリ費用(SEED)。資料が無い装備は null */
   bianu_seed_cost: number | null;
+  /** エタインクリ費用(SEED、呪文書 1 枚は別)。エタレベル装備以外は null = 使えない */
+  eta_seed_cost: number | null;
+}
+
+// crates/domain/src/inkri.rs の EtaScrollPrice。エタインクリ呪文書 1 枚の値段(商店ごとに通貨が違う)。
+export interface EtaScrollPrice {
+  seed: number;
+  elso: number;
+  tp: number;
 }
 
 // crates/domain/src/inkri.rs の InkriKind。
-export type InkriKind = "lord" | "grace" | "blessing" | "royal" | "vianu";
+export type InkriKind = "lord" | "grace" | "blessing" | "royal" | "vianu" | "eta";
 
 // crates/domain/src/inkri.rs の EquipmentInkriState。
 export interface EquipmentInkriState {
-  synth_current: number;
-  synth_max: number;
   inkri_count: number;
   destroyed: boolean;
 }
@@ -1095,6 +1100,15 @@ export type InkriBatchMode =
   | { fixed: { attempts: number } }
   | { until_success: { max_attempts: number } };
 
+// crates/domain/src/inkri.rs の InkriStep。積み上げの 1 段(ある回数から次の成功に向けた試行のかたまり)。
+export interface InkriStep {
+  from_count: number;
+  attempts: number;
+  succeeded: boolean;
+  /** この段で使った SEED(費用未収録なら null) */
+  seed: number | null;
+}
+
 // crates/domain/src/inkri.rs の InkriBatchResult。
 export interface InkriBatchResult {
   attempts_made: number;
@@ -1104,6 +1118,8 @@ export interface InkriBatchResult {
   last_outcome: InkriAttemptOutcome | null;
   /** 消費 SEED(費用が未収録なら null) */
   consumed_seed: number | null;
+  /** 今回の試行の段ごとの内訳(成功で段が閉じる。最後の段だけ開いたままのことがある) */
+  steps: InkriStep[];
 }
 
 // crates/commands/src/lib.rs の InkriAttemptRequest。

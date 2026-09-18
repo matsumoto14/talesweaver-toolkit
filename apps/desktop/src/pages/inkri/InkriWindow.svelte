@@ -5,11 +5,10 @@
   //
   // 見た目はアプリのデザインシステムではなくゲームに合わせる(ユーザー要件 2026-09-17「画面ほぼ一緒」)。
   // このファイルは表示だけを持ち、判定・乱数・費用はページ(Rust 側のコマンド)が持つ。
+  // 合成回数はゲームの画面にはあるがこのシミュレータは追わないので出さない(ユーザー判断 2026-09-18)
   export interface WindowItem {
     name: string;
     icon: string | null;
-    synthesis: number;
-    synthesisMax: number;
     inkriCount: number;
     destroyed: boolean;
   }
@@ -18,6 +17,8 @@
     label: string;
     rateLabel: string;
     destroysOnFailure: boolean;
+    /** 1 回ごとに呪文書も 1 枚使う(エタインクリ) */
+    consumesScroll?: boolean;
   }
 </script>
 
@@ -49,6 +50,8 @@
     kind: string;
     /** 書式済みの費用。null = 未収録 */
     cost: string | null;
+    /** いまの装備で選べない種類の id(エタレベル装備でないときのエタインクリ)。押せない見た目にする */
+    unavailable?: string[];
     /** 書式済みの所持 SEED 表示(シミュレータでは消費の累計) */
     seed: string;
     /** 下の一言を差し替える(「これ以上インクリを進行できません。」など)。null ならゲームの既定文 */
@@ -67,7 +70,7 @@
     held?: boolean;
   }
   let {
-    item, kinds, kind, cost, seed, notice, busy, held = false,
+    item, kinds, kind, cost, seed, notice, busy, held = false, unavailable = [],
     successPlay, failPlay, onkind, onrun, onfxend, onpickitem, onbutton,
   }: Props = $props();
 
@@ -98,11 +101,6 @@
     {#if shown}
       <div class="detail-body">
         <div>インクリ</div>
-        {#if shown.synthesis >= shown.synthesisMax}
-          <div class="ind red">合成回数MAX</div>
-        {:else}
-          <div class="ind blue">合成回数 {shown.synthesis}/{shown.synthesisMax}</div>
-        {/if}
         {#if shown.inkriCount > 0}<div class="ind blue">インクリ回数 {shown.inkriCount}</div>{/if}
       </div>
     {/if}
@@ -122,7 +120,6 @@
       </button>
       {#if shown}
         <div class="name">{shown.name}</div>
-        <div class="row r1"><span>合成 回数</span><b>{shown.synthesis}/{shown.synthesisMax}</b></div>
         <div class="row r2"><span>エンチャント回数</span><b>0回</b></div>
         <div class="row r3"><span>インクリ回数</span><b>{shown.inkriCount}回</b></div>
       {/if}
@@ -135,8 +132,9 @@
             aria-checked={k.id === kind}
             class="kind"
             class:on={k.id === kind}
+            class:off={unavailable.includes(k.id)}
             style:top="{43 + i * 25.5}px"
-            disabled={busy}
+            disabled={busy || unavailable.includes(k.id)}
             onclick={() => { onbutton(); onkind(k.id); }}
           >
             <img src={k.id === kind ? radioOn : radioOff} alt="" />{k.label}
@@ -148,11 +146,14 @@
     {#if selected && shown}
       <div class="desc">
         <p><b>{selected.rateLabel}</b> でインクリが成功します。</p>
-        <p>インクリ成功時 <b>合成回数が1減少</b> します。</p>
+        <p>インクリ成功時 <b>インクリ回数が1増加</b> します。</p>
         {#if selected.destroysOnFailure}
           <p>インクリ失敗時 <b>アイテムが破壊</b> されます。</p>
         {:else}
           <p>インクリが失敗しても <b>アイテムは破壊</b> されません。</p>
+        {/if}
+        {#if selected.consumesScroll}
+          <p>1回ごとに <b>エタインクリ呪文書</b> を1枚消費します。</p>
         {/if}
       </div>
     {/if}
@@ -232,7 +233,6 @@
   .info-min { position: absolute; right: 10px; top: 5px; width: 14px; height: 4px; background: #9fe7f5; border-radius: 1px; }
   .detail-body { padding: 8px 14px; line-height: 15px; }
   .ind { padding-left: 12px; }
-  .red { color: #d4141c; }
   .blue { color: #44509a; }
 
   .tabs { position: absolute; left: 258px; top: 26px; display: flex; gap: 1px; }
@@ -253,13 +253,14 @@
   .row { position: absolute; left: 0; width: 226px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
   .row span { text-align: right; }
   .row b { font-variant-numeric: tabular-nums; color: #2a2a2a; }
-  .r1 { top: 99px; } .r2 { top: 123px; } .r3 { top: 148px; }
+  .r2 { top: 123px; } .r3 { top: 148px; }
   .list-head { position: absolute; left: 228px; width: 228px; top: 16px; text-align: center; font-weight: bold; color: #2a2a2a; }
   .kind {
     position: absolute; left: 277px; height: 22px; padding: 0; display: flex; align-items: center; gap: 13px;
     background: none; border: 0; font: inherit; color: #3a3a3a; cursor: pointer;
   }
   .kind.on { color: #2f6fe0; }
+  .kind.off { color: #9a9a9a; cursor: default; }
   .kind img { display: block; }
 
   .desc { position: absolute; left: 0; right: 0; top: 229px; text-align: center; line-height: 21px; }

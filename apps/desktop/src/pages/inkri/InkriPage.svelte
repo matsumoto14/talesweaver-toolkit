@@ -2,17 +2,19 @@
   // インクリ: ゲームの装備システムウィンドウ(インクリタブ)をそのまま再現して試せる画面。
   //
   // 左がゲームの画面(InkriWindow、見た目はゲームに合わせる)、右がこのツールの面(装備を選ぶ・
-  // まとめて試す・集計)。判定と乱数と費用はすべて Rust 側(domain::inkri / gamedata::inkri)が持ち、
-  // ここは結果を演出と音に変えるだけ。仕様の出典は wiki「装備システム/インクリ」。
+  // まとめて試す・積み上げ)。判定と乱数と費用はすべて Rust 側(domain::inkri / gamedata::inkri)が持ち、
+  // ここは結果を演出と音に変え、「n 回目の成功までに何回・いくら」を段として積むだけ。
+  // 合成回数は追わない(ユーザー判断 2026-09-18)。仕様の出典は wiki「装備システム/インクリ」。
   import { onDestroy, onMount } from "svelte";
-  import { errorMessage, listInkriTargets, runInkriAttempts } from "../../api/commands";
+  import { errorMessage, etaScrollPrice, inkriSuccessRate, listInkriTargets, runInkriAttempts } from "../../api/commands";
   import type {
-    EquipmentInkriState, InkriAttemptOutcome, InkriBatchMode, InkriKind, InkriTarget,
+    EquipmentInkriState, EtaScrollPrice, InkriBatchMode, InkriKind, InkriStep, InkriTarget,
   } from "../../api/types";
   import { fmtInt } from "../../format";
   import { PART_SLOT_LABELS } from "../../labels";
   import { reportError } from "../../toast.svelte";
   import Choose from "../../ui/Choose.svelte";
+  import NumberField from "../../ui/NumberField.svelte";
   import Picker from "../../ui/Picker.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import ToggleRow from "../../ui/ToggleRow.svelte";
@@ -32,17 +34,35 @@
     { id: "blessing", label: "祝福のインクリ", rateLabel: "中確率", destroysOnFailure: true },
     { id: "royal", label: "王室のインクリ", rateLabel: "中確率", destroysOnFailure: true },
     { id: "vianu", label: "ビアヌのインクリ", rateLabel: "極めて低確率", destroysOnFailure: false },
+    { id: "eta", label: "エタインクリ", rateLabel: "低確率", destroysOnFailure: false, consumesScroll: true },
   ];
 
   let targets = $state<InkriTarget[]>([]);
-  const saved = persisted("tw-inkri", { itemId: 0, kind: "vianu" as InkriKind, sound: true });
+  /** エタインクリ呪文書 1 枚の値段(起動時に 1 回引く) */
+  let scrollPrice = $state<EtaScrollPrice | null>(null);
+  const saved = persisted("tw-inkri", { itemId: 0, kind: "vianu" as InkriKind, sound: true, startCount: 0 });
+  /** 「今のインクリ回数」の欄の上限。仕組み上の上限は無いので、入力欄の形を保つための値(ユーザー指定 1000、2026-09-18) */
+  const START_MAX = 1000;
 
   const seriesList = $derived([...new Set(targets.map((t) => t.series))]);
   let series = $state("");
   const target = $derived(targets.find((t) => t.client_item_id === saved.value.itemId) ?? null);
 
-  let itemState = $state<EquipmentInkriState | null>(null);
+  let itemState = $state<EquipmentInkriState>({ inkri_count: 0, destroyed: false });
   const totals = $state({ attempts: 0, successes: 0, seed: 0 as number | null });
+  /** 積み上げ。先頭が今取り組んでいる段(まだ成功していない)、以降は成功した段を新しい順に */
+  let steps = $state<InkriStep[]>([]);
+  /** いまの成功率(10万分率)。種類かインクリ回数が変わるたびに Rust に聞く。null = 取得前 */
+  let rate = $state<number | null>(null);
+  $effect(() => {
+    const kind = saved.value.kind;
+    const count = itemState.inkri_count;
+    inkriSuccessRate(kind, count).then((r) => {
+      if (kind === saved.value.kind && count === itemState.inkri_count) rate = r;
+    }).catch((e) => reportError(errorMessage(e)));
+  });
+  /** 10万分率 → 「0.07%」「21%」 */
+  const rateText = (r: number | null) => (r === null ? null : `${(r / 1000).toFixed(3).replace(/\.?0+$/, "")}%`);
 
   /** まとめて試している間。1 回ずつのインクリは止めない(ゲームは連打できる) */
   let busy = $state(false);
@@ -50,15 +70,13 @@
   let asking = false;
   /** ウィンドウ下の一言をゲームのメッセージで差し替える */
   let notice = $state<string | null>(null);
-  /** まとめて試した結果(ゲームの画面には無いので右の面に出す) */
-  let lastBatch = $state<string | null>(null);
   let successPlay = $state(0);
   let failPlay = $state(0);
   let noticeTimer = 0;
 
   onMount(async () => {
     try {
-      targets = await listInkriTargets();
+      [targets, scrollPrice] = await Promise.all([listInkriTargets(), etaScrollPrice()]);
       const first = targets.find((t) => t.client_item_id === saved.value.itemId) ?? targets.find((t) => t.series === "アクィルス") ?? targets[0];
       if (first) pickItem(first.client_item_id);
     } catch (e) {
@@ -66,28 +84,50 @@
     }
   });
 
-  function freshState(t: InkriTarget): EquipmentInkriState {
-    // 合成を上限までした装備から始める(インクリをする前提の状態)
-    return { synth_current: t.synth_max, synth_max: t.synth_max, inkri_count: 0, destroyed: false };
-  }
-
   function pickItem(id: number) {
     const t = targets.find((x) => x.client_item_id === id);
     if (!t) return;
-    saved.value = { ...saved.value, itemId: id };
+    // エタインクリはエタレベル装備だけ。対象外の装備に替えたらビアヌに戻す
+    const kind = saved.value.kind === "eta" && t.eta_seed_cost === null ? "vianu" : saved.value.kind;
+    saved.value = { ...saved.value, itemId: id, kind };
     series = t.series;
     reset();
   }
 
+  /** 今のインクリ回数を変える。積み上げはその回数から始め直す */
+  function setStartCount(n: number) {
+    saved.value = { ...saved.value, startCount: n };
+    reset();
+  }
+
   function reset() {
-    itemState = target ? freshState(target) : null;
+    itemState = { inkri_count: saved.value.startCount, destroyed: false };
     totals.attempts = 0;
     totals.successes = 0;
     totals.seed = 0;
+    steps = [];
     notice = null;
-    lastBatch = null;
     successPlay = 0;
     failPlay = 0;
+  }
+
+  /** 今回の内訳を積み上げに足す。先頭の開いた段は続きなので合算する */
+  function pushSteps(incoming: InkriStep[]) {
+    let next = [...steps];
+    for (const step of incoming) {
+      const head = next[0];
+      if (head && !head.succeeded && head.from_count === step.from_count) {
+        next[0] = {
+          ...head,
+          attempts: head.attempts + step.attempts,
+          succeeded: step.succeeded,
+          seed: head.seed === null || step.seed === null ? null : head.seed + step.seed,
+        };
+      } else {
+        next = [step, ...next];
+      }
+    }
+    steps = next;
   }
 
   function play(src: string) {
@@ -110,7 +150,7 @@
   }
 
   async function run(mode: InkriBatchMode) {
-    if (!target || !itemState || asking) return;
+    if (!target || asking) return;
     if (itemState.destroyed) {
       showNotice("インクリを進行する装備がありません。");
       return;
@@ -134,10 +174,7 @@
       totals.attempts += result.attempts_made;
       totals.successes += result.successes;
       totals.seed = totals.seed === null || result.consumed_seed === null ? null : totals.seed + result.consumed_seed;
-      if (batch) {
-        lastBatch = `${fmtInt(result.attempts_made)}回で成功 ${fmtInt(result.successes)}回`
-          + (result.destroyed ? "(装備が破壊されました)" : "");
-      }
+      pushSteps(result.steps);
       // 押した瞬間に結果が出る。連打すると演出は出だしからやり直す(録画 2026-09-17)
       if (result.last_outcome === "success") {
         failPlay = 0;
@@ -179,7 +216,7 @@
     held = true;
     pressOnce();
     repeatTimer = window.setInterval(() => {
-      if (busy || !itemState || itemState.destroyed) return stopHold();
+      if (busy || itemState.destroyed) return stopHold();
       pressOnce();
     }, REPEAT_MS);
   }
@@ -217,20 +254,25 @@
     return parts.join(" ");
   }
 
-  const cost = $derived(saved.value.kind === "vianu" ? (target?.bianu_seed_cost ?? null) : null);
+  const cost = $derived(
+    saved.value.kind === "vianu" ? (target?.bianu_seed_cost ?? null)
+    : saved.value.kind === "eta" ? (target?.eta_seed_cost ?? null)
+    : null,
+  );
+  /** いまの装備で選べない種類(エタレベル装備でなければエタインクリ) */
+  const unavailable = $derived(target && target.eta_seed_cost === null ? ["eta"] : []);
 
   const windowItem = $derived(
-    target && itemState
+    target
       ? {
           name: target.name,
           icon: iconOf(target.client_item_id),
-          synthesis: itemState.synth_current,
-          synthesisMax: itemState.synth_max,
           inkriCount: itemState.inkri_count,
           destroyed: itemState.destroyed,
         }
       : null,
   );
+
 
   const itemOptions = $derived(
     targets
@@ -238,7 +280,7 @@
       .map((t) => ({
         value: String(t.client_item_id),
         name: t.name,
-        meta: `${PART_SLOT_LABELS[t.part]} · 合成 ${t.synth_max} · ${t.bianu_seed_cost === null ? "費用 ?" : seedText(t.bianu_seed_cost)}`,
+        meta: `${PART_SLOT_LABELS[t.part]} · ${t.bianu_seed_cost === null ? "費用 ?" : seedText(t.bianu_seed_cost)}`,
       })),
   );
 
@@ -254,6 +296,7 @@
       kinds={KINDS}
       kind={saved.value.kind}
       cost={seedText(cost)}
+      {unavailable}
       seed={seedText(totals.seed) ?? "?"}
       {notice}
       {busy}
@@ -280,6 +323,10 @@
           options={target && target.series === series ? itemOptions : [{ value: "", name: "選んでください", meta: series }, ...itemOptions]}
         />
       </div>
+      <div class="field">
+        <span class="field-label">今のインクリ回数</span>
+        <NumberField label="今のインクリ回数" max={START_MAX} bind:value={() => saved.value.startCount, setStartCount} />
+      </div>
     </div>
 
     <div class="section">
@@ -288,31 +335,54 @@
         <button type="button" class="btn" disabled={busy} onclick={() => run({ fixed: { attempts: 10 } })}>10回</button>
         <button type="button" class="btn" disabled={busy} onclick={() => run({ fixed: { attempts: 100 } })}>100回</button>
         <button type="button" class="btn primary" disabled={busy} onclick={() => run({ until_success: { max_attempts: 1_000_000 } })}>
-          成功するまで
+          次の成功まで
         </button>
       </div>
       <p class="note dim">
         <kbd>←</kbd> キーを押している間、ゲームと同じようにインクリし続けます。
-        まとめて試すボタンは演出を省き、止まるのは成功したときか、合成回数が 1/4 に届いたときです。
+        まとめて試すボタンは演出を省きます。
       </p>
-      {#if lastBatch}<p class="last">{lastBatch}</p>{/if}
-    </div>
-
-    <div class="section">
-      <div class="area-head"><span class="area-name">これまで</span><span class="area-rule"></span></div>
-      <div class="rows">
-        <ReadRow label="試行" value="{fmtInt(totals.attempts)}回" motion={() => totals.attempts} />
-        <ReadRow label="成功" value="{fmtInt(totals.successes)}回" motion={() => totals.successes} />
-        <ReadRow label="消費 SEED" value={seedText(totals.seed)} motion={() => totals.seed} />
-      </div>
-      <div class="batch">
-        <button type="button" class="btn" disabled={busy} onclick={reset}>装備を元に戻す</button>
-      </div>
     </div>
 
     <div class="section">
       <ToggleRow name="音を出す" on={saved.value.sound} tone="saved" onToggle={() => (saved.value = { ...saved.value, sound: !saved.value.sound })} />
     </div>
+
+    <!-- 最後の面。一覧(.ladder)だけが残りの高さを使ってスクロールし、上の数字とボタンは動かない -->
+    <div class="section stack">
+      <div class="area-head">
+        <span class="area-name">積み上げ</span><span class="area-rule"></span>
+        <button type="button" class="btn" disabled={busy || totals.attempts === 0} onclick={reset}>最初から</button>
+      </div>
+      <div class="rows">
+        <ReadRow label="インクリ回数" value="{fmtInt(itemState.inkri_count)}回" motion={() => itemState.inkri_count} />
+        <ReadRow label="今の成功率" value={rateText(rate)} motion={() => rate}>
+          {#snippet note()}{#if rate !== null}平均 {fmtInt(Math.round(100_000 / rate))}回{/if}{/snippet}
+        </ReadRow>
+        <ReadRow label="試行" value="{fmtInt(totals.attempts)}回" motion={() => totals.attempts} />
+        <ReadRow label="消費 SEED" value={seedText(totals.seed)} motion={() => totals.seed} />
+        {#if saved.value.kind === "eta"}
+          <ReadRow label="呪文書" value="{fmtInt(totals.attempts)}枚" motion={() => totals.attempts} />
+          <!-- 呪文書代。フォレスト(SEED)を主にし、トードー(ELSO)・ルイノの袋(TP)を注記に -->
+          <ReadRow label="呪文書代" value={scrollPrice ? seedText(scrollPrice.seed * totals.attempts) : null} motion={() => totals.attempts}>
+            {#snippet note()}{#if scrollPrice}または {fmtInt(scrollPrice.elso * totals.attempts)} ELSO / {fmtInt(scrollPrice.tp * totals.attempts)} TP{/if}{/snippet}
+          </ReadRow>
+        {/if}
+      </div>
+      {#if steps.length > 0}
+        <!-- 新しい段ほど上。段が閉じる(成功する)と次の段がその上に積まれる -->
+        <div class="ladder readrows inset">
+          {#each steps as step (step.from_count)}
+            <div class="step swap-in" class:open={!step.succeeded}>
+              <ReadRow label="{fmtInt(step.from_count + 1)}回目" value="{fmtInt(step.attempts)}回" motion={() => step.attempts}>
+                {#snippet note()}{step.succeeded ? (seedText(step.seed) ?? "?") : "試行中"}{/snippet}
+              </ReadRow>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
   </div>
 </div>
 
@@ -330,5 +400,7 @@
   .batch { display: flex; gap: 8px; flex-wrap: wrap; }
   .note { margin: 0; font-size: 10px; line-height: 1.6; }
   kbd { padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg-field); font: inherit; }
-  .last { margin: 0; font-size: 11px; font-weight: 700; color: var(--fg-head); }
+  .stack { flex: 1; min-height: 0; }
+  .ladder { flex: 1; min-height: 0; overflow-y: auto; }
+  .step.open { font-weight: 700; }
 </style>

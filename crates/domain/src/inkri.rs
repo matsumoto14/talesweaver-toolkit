@@ -1,14 +1,16 @@
 //! ビアヌのインクリ(wiki: 装備システム/インクリ。クライアント DB
-//! `db/dm_00000_0419.csv`(EncryptDataTemplate、ItemId 5600000〜5600004)。ユーザー確認 2026-09-17)。
+//! `db/dm_00000_0419.csv`(EncryptDataTemplate、ItemId 5600000〜5600005)。ユーザー確認 2026-09-17)。
 //!
-//! 装備の「合成回数」を 1 減らし「インクリ回数」を 1 増やす消耗行為。5 種類あり、ロード / 加護 /
-//! 祝福 / 王室は失敗すると装備が破壊されるが、**ビアヌだけは失敗しても何も起きない**(合成回数も
-//! インクリ回数も変わらない)。成功率(10万分率)はロード 21000・加護 26000・祝福 31000・王室 36000
-//! の固定値で、ビアヌだけそれまでの成功回数 `inkri_count` に応じて `70 - 5 * inkri_count`
-//! (下限 10、= n≥12 で 0.010%)まで下がる。エタインクリ(ItemId 5600005)は対象外(作らない)。
+//! 装備の「インクリ回数」を 1 ずつ積み上げる消耗行為。6 種類あり、ロード / 加護 / 祝福 / 王室は
+//! 失敗すると装備が破壊されるが、**ビアヌとエタインクリは失敗しても何も起きない**。成功率(10万分率)は
+//! ロード 21000・加護 26000・祝福 31000・王室 36000・エタインクリ 1000 の固定値で、ビアヌだけ
+//! それまでの成功回数 `inkri_count` に応じて `70 - 5 * inkri_count`(下限 10、= n≥12 で 0.010%)まで下がる。
+//! エタインクリ(ItemId 5600005)はエタレベルが装備条件の装備(セイクリッド系)でだけ使え、
+//! SEED のほかに「エタインクリ呪文書」を 1 回 1 枚消費する(wiki「エタインクリ費用」節、2026-09-18 追加)。
 //!
-//! 「合成回数が1/4になるまでインクリできる」(wiki)の端数処理は wiki に明記が無いため、
-//! [仮] 切り上げと推定して `min_synth_threshold` に実装する。
+//! ゲームでは成功のたびに装備の合成回数も 1 減り、1/4 まで減ると止まるが、このシミュレータは
+//! 合成回数を追わない — 「n 回目の成功までに何回・いくらかかるか」を積み上げて見るための道具で、
+//! 装備側の残量は利用者が知っている(ユーザー判断 2026-09-18)。
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -27,15 +29,18 @@ pub enum InkriKind {
     Royal,
     /// ビアヌのインクリ(ItemId 5600004)。失敗しても装備は破壊されない。
     Vianu,
+    /// エタインクリ(ItemId 5600005)。失敗しても装備は破壊されない。エタレベル装備専用。
+    Eta,
 }
 
 impl InkriKind {
-    pub const ALL: [InkriKind; 5] = [
+    pub const ALL: [InkriKind; 6] = [
         InkriKind::Lord,
         InkriKind::Grace,
         InkriKind::Blessing,
         InkriKind::Royal,
         InkriKind::Vianu,
+        InkriKind::Eta,
     ];
 
     pub fn label(self) -> &'static str {
@@ -45,21 +50,27 @@ impl InkriKind {
             InkriKind::Blessing => "祝福のインクリ",
             InkriKind::Royal => "王室のインクリ",
             InkriKind::Vianu => "ビアヌのインクリ",
+            InkriKind::Eta => "エタインクリ",
         }
     }
 
     /// wiki の確率表記(低確率/中確率/極めて低確率)。実際の成功率は `success_rate` で持つ。
     pub fn probability_label(self) -> &'static str {
         match self {
-            InkriKind::Lord | InkriKind::Grace => "低確率",
+            InkriKind::Lord | InkriKind::Grace | InkriKind::Eta => "低確率",
             InkriKind::Blessing | InkriKind::Royal => "中確率",
             InkriKind::Vianu => "極めて低確率",
         }
     }
 
-    /// 失敗時に装備が破壊されるか(ビアヌだけ破壊されない)。
+    /// 失敗時に装備が破壊されるか(ビアヌとエタインクリは破壊されない)。
     pub fn destroys_on_failure(self) -> bool {
-        !matches!(self, InkriKind::Vianu)
+        !matches!(self, InkriKind::Vianu | InkriKind::Eta)
+    }
+
+    /// 1 回ごとに「エタインクリ呪文書」を消費するか(エタインクリだけ)。
+    pub fn consumes_scroll(self) -> bool {
+        matches!(self, InkriKind::Eta)
     }
 
     /// 成功率(10万分率。roll は `0..100_000` を渡す)。ビアヌはそれまでの成功回数
@@ -71,17 +82,32 @@ impl InkriKind {
             InkriKind::Blessing => 31_000,
             InkriKind::Royal => 36_000,
             InkriKind::Vianu => (70 - 5 * inkri_count.max(0)).max(10),
+            InkriKind::Eta => 1_000,
         }
     }
 }
 
+/// 「エタインクリ呪文書」1 枚の値段(wiki「装備システム/インクリ」エタインクリ費用節、2026-09-18)。
+/// 3 つの商店で通貨が違うので 3 つとも持つ。TP はルイノの「エタインクリ袋」(100 枚入り 46,800TP)の 1 枚あたり。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EtaScrollPrice {
+    /// ルーンの庭園「フォレスト」: 1 枚 2億 SEED
+    pub seed: i64,
+    /// ルーンの庭園「トードー」: 1 枚 3万 ELSO
+    pub elso: i64,
+    /// ナルビク / クラド フリーマーケット「ルイノ」: エタインクリ袋(100 枚)46,800TP → 1 枚 468TP
+    pub tp: i64,
+}
+
+pub const ETA_SCROLL_PRICE: EtaScrollPrice = EtaScrollPrice {
+    seed: 200_000_000,
+    elso: 30_000,
+    tp: 46_800 / 100,
+};
+
 /// 装備 1 個のインクリに関わる状態。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquipmentInkriState {
-    /// 現在の合成回数(減っていく)
-    pub synth_current: i64,
-    /// 合成回数の初期上限(装備固有。gamedata の `InkriTarget::synth_max`)
-    pub synth_max: i64,
     /// これまでの成功回数(ビアヌの成功率を下げる)
     pub inkri_count: i64,
     /// 破壊済みか
@@ -89,11 +115,9 @@ pub struct EquipmentInkriState {
 }
 
 impl EquipmentInkriState {
-    /// 未使用の初期状態(合成回数は上限のまま、インクリ回数 0、未破壊)。
-    pub fn fresh(synth_max: i64) -> Self {
+    /// 未使用の初期状態(インクリ回数 0、未破壊)。
+    pub fn fresh() -> Self {
         Self {
-            synth_current: synth_max,
-            synth_max,
             inkri_count: 0,
             destroyed: false,
         }
@@ -105,35 +129,12 @@ impl EquipmentInkriState {
 pub enum InkriBlockReason {
     #[error("この装備は破壊されています")]
     Destroyed,
-    #[error(
-        "合成回数が {current} 回(上限 {max} 回の1/4 = {threshold} 回)以下のため、\
-         これ以上インクリできません"
-    )]
-    SynthTooLow {
-        current: i64,
-        max: i64,
-        threshold: i64,
-    },
-}
-
-/// 合成回数の下限([仮] 端数は切り上げと推定。wiki は端数処理を明記していない)。
-/// この値**以下**になるとインクリできない(= 1/4 を割り込む一歩手前で止まる)。
-pub fn min_synth_threshold(synth_max: i64) -> i64 {
-    (synth_max + 3) / 4
 }
 
 /// この状態でインクリを実行できるか。
 pub fn check_can_attempt(state: EquipmentInkriState) -> Result<(), InkriBlockReason> {
     if state.destroyed {
         return Err(InkriBlockReason::Destroyed);
-    }
-    let threshold = min_synth_threshold(state.synth_max);
-    if state.synth_current <= threshold {
-        return Err(InkriBlockReason::SynthTooLow {
-            current: state.synth_current,
-            max: state.synth_max,
-            threshold,
-        });
     }
     Ok(())
 }
@@ -142,7 +143,7 @@ pub fn check_can_attempt(state: EquipmentInkriState) -> Result<(), InkriBlockRea
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InkriAttemptOutcome {
-    /// 成功(合成回数 -1、インクリ回数 +1)
+    /// 成功(インクリ回数 +1)
     Success,
     /// 失敗して装備が破壊された(ロード/加護/祝福/王室)
     FailureDestroyed,
@@ -160,7 +161,6 @@ pub fn attempt(
     let rate = kind.success_rate(state.inkri_count);
     if roll < rate {
         let next = EquipmentInkriState {
-            synth_current: state.synth_current - 1,
             inkri_count: state.inkri_count + 1,
             ..state
         };
@@ -206,14 +206,26 @@ impl InkriRng {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InkriBatchMode {
-    /// 実行できなくなるか destroyed になるまでの間、指定回数だけ試す
+    /// 破壊されるまでの間、指定回数だけ試す
     Fixed { attempts: i64 },
-    /// 成功する(または実行できなくなる/破壊される)まで、上限回数を超えない範囲で試す
+    /// 成功する(または破壊される)まで、上限回数を超えない範囲で試す
     UntilSuccess { max_attempts: i64 },
 }
 
-/// まとめ試行の結果。
+/// 積み上げの 1 段 = ある回数から次の成功に向けた試行のかたまり。
+/// `succeeded` が false の段はまだ成功していない(まとめ試行の末尾、または破壊で終わった)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InkriStep {
+    /// この段に入った時点のインクリ回数(0 なら 1 回目の成功を目指す段)
+    pub from_count: i64,
+    pub attempts: i64,
+    pub succeeded: bool,
+    /// この段で使った SEED(費用未収録なら `None`)。種類を途中で替えても段ごとの額が狂わないよう段が持つ
+    pub seed: Option<i64>,
+}
+
+/// まとめ試行の結果。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InkriBatchResult {
     pub attempts_made: i64,
     pub successes: i64,
@@ -222,10 +234,12 @@ pub struct InkriBatchResult {
     pub last_outcome: Option<InkriAttemptOutcome>,
     /// 消費 SEED(`seed_cost_per_attempt` が `None` = 費用未収録のときは `None`)
     pub consumed_seed: Option<i64>,
+    /// 今回の試行を段ごとに割った内訳(成功で段が閉じる。最後の段だけ開いたままのことがある)
+    pub steps: Vec<InkriStep>,
 }
 
-/// N 回、または成功するまで(上限回数つき)試す。実行できなくなった(1/4 到達)/ 破壊された
-/// 時点で打ち切る。`seed_cost_per_attempt` は gamedata 側のビアヌ費用(未収録装備は `None`)。
+/// N 回、または成功するまで(上限回数つき)試す。破壊された時点で打ち切る。
+/// `seed_cost_per_attempt` は gamedata 側のビアヌ費用(未収録装備は `None`)。
 pub fn run_batch(
     mut state: EquipmentInkriState,
     kind: InkriKind,
@@ -240,6 +254,7 @@ pub fn run_batch(
     let mut attempts_made = 0i64;
     let mut successes = 0i64;
     let mut last_outcome = None;
+    let mut steps: Vec<InkriStep> = Vec::new();
     for _ in 0..limit.max(0) {
         if check_can_attempt(state).is_err() {
             break;
@@ -247,9 +262,22 @@ pub fn run_batch(
         let roll = rng.next_roll();
         let (next_state, outcome) =
             attempt(state, kind, roll).expect("check_can_attempt を通したあとなので必ず Ok");
+        let success = matches!(outcome, InkriAttemptOutcome::Success);
+        match steps.last_mut() {
+            Some(step) if !step.succeeded => {
+                step.attempts += 1;
+                step.succeeded = success;
+                step.seed = seed_cost_per_attempt.map(|cost| cost * step.attempts);
+            }
+            _ => steps.push(InkriStep {
+                from_count: state.inkri_count,
+                attempts: 1,
+                succeeded: success,
+                seed: seed_cost_per_attempt,
+            }),
+        }
         state = next_state;
         attempts_made += 1;
-        let success = matches!(outcome, InkriAttemptOutcome::Success);
         if success {
             successes += 1;
         }
@@ -268,6 +296,7 @@ pub fn run_batch(
         final_state: state,
         last_outcome,
         consumed_seed: seed_cost_per_attempt.map(|cost| cost * attempts_made),
+        steps,
     }
 }
 
@@ -286,10 +315,20 @@ mod tests {
     }
 
     #[test]
+    fn エタインクリは1パーセント固定で破壊されない() {
+        assert_eq!(InkriKind::Eta.success_rate(0), 1_000);
+        assert_eq!(InkriKind::Eta.success_rate(20), 1_000);
+        assert!(!InkriKind::Eta.destroys_on_failure());
+        assert!(InkriKind::Eta.consumes_scroll());
+        let state = EquipmentInkriState::fresh();
+        let (next, outcome) = attempt(state, InkriKind::Eta, 99_999).unwrap();
+        assert_eq!(outcome, InkriAttemptOutcome::FailureNoChange);
+        assert_eq!(next, state);
+    }
+
+    #[test]
     fn ビアヌの成功率は13段で下限10に張り付く() {
-        let expected = [
-            70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10,
-        ];
+        let expected = [70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10];
         for (n, &rate) in expected.iter().enumerate() {
             assert_eq!(InkriKind::Vianu.success_rate(n as i64), rate, "n={n}");
         }
@@ -299,27 +338,26 @@ mod tests {
     }
 
     #[test]
-    fn 成功すると合成回数が減りインクリ回数が増える() {
-        let state = EquipmentInkriState::fresh(8);
+    fn 成功するとインクリ回数が増える() {
+        let state = EquipmentInkriState::fresh();
         let (next, outcome) = attempt(state, InkriKind::Lord, 0).unwrap();
         assert_eq!(outcome, InkriAttemptOutcome::Success);
-        assert_eq!(next.synth_current, 7);
         assert_eq!(next.inkri_count, 1);
         assert!(!next.destroyed);
     }
 
     #[test]
     fn 固定4種は失敗すると破壊される() {
-        let state = EquipmentInkriState::fresh(8);
+        let state = EquipmentInkriState::fresh();
         let (next, outcome) = attempt(state, InkriKind::Lord, 99_999).unwrap();
         assert_eq!(outcome, InkriAttemptOutcome::FailureDestroyed);
         assert!(next.destroyed);
-        assert_eq!(next.synth_current, 8, "破壊時は合成回数を変えない");
+        assert_eq!(next.inkri_count, 0, "破壊時はインクリ回数を変えない");
     }
 
     #[test]
     fn ビアヌは失敗しても何も変わらない() {
-        let state = EquipmentInkriState::fresh(8);
+        let state = EquipmentInkriState::fresh();
         let (next, outcome) = attempt(state, InkriKind::Vianu, 99_999).unwrap();
         assert_eq!(outcome, InkriAttemptOutcome::FailureNoChange);
         assert_eq!(next, state);
@@ -328,8 +366,6 @@ mod tests {
     #[test]
     fn 破壊済みは実行できない() {
         let state = EquipmentInkriState {
-            synth_current: 5,
-            synth_max: 8,
             inkri_count: 0,
             destroyed: true,
         };
@@ -341,57 +377,33 @@ mod tests {
     }
 
     #[test]
-    fn 合成回数が上限の4分の1以下だと実行できない() {
-        // max=8 → threshold=2。current<=2 で不可、current=3 なら可
-        assert_eq!(min_synth_threshold(8), 2);
-        let blocked = EquipmentInkriState {
-            synth_current: 2,
-            synth_max: 8,
-            inkri_count: 0,
-            destroyed: false,
-        };
-        assert!(matches!(
-            check_can_attempt(blocked),
-            Err(InkriBlockReason::SynthTooLow { .. })
-        ));
-        let allowed = EquipmentInkriState {
-            synth_current: 3,
-            ..blocked
-        };
-        assert!(check_can_attempt(allowed).is_ok());
-    }
-
-    #[test]
-    fn 端数切り上げの上限計算() {
-        // 7 の 1/4 = 1.75 → 切り上げ 2([仮]。テストで固定できるようにしておく)
-        assert_eq!(min_synth_threshold(7), 2);
-        assert_eq!(min_synth_threshold(6), 2);
-        assert_eq!(min_synth_threshold(5), 2);
-        assert_eq!(min_synth_threshold(4), 1);
-        assert_eq!(min_synth_threshold(3), 1);
-        assert_eq!(min_synth_threshold(1), 1);
-    }
-
-    #[test]
-    fn 上限到達で実行が止まる場合はそこで打ち切る() {
-        // max=4, threshold=1。current=2 から始めると 1 回で threshold に到達し、次は不可
-        let state = EquipmentInkriState::fresh(4);
+    fn 破壊された時点で打ち切る() {
+        // シード1の初手 roll=88969 は Royal(36000)に対して失敗 = 破壊
+        let state = EquipmentInkriState::fresh();
         let mut rng = InkriRng::new(1);
         let result = run_batch(
             state,
-            InkriKind::Lord,
+            InkriKind::Royal,
             InkriBatchMode::Fixed { attempts: 10 },
             &mut rng,
             None,
         );
-        // 上限4から threshold=1まで、成功が続く限り最大3回で打ち切られる(1/4以下で停止)
-        assert!(result.attempts_made <= 3);
-        assert!(result.final_state.synth_current > min_synth_threshold(4) || result.destroyed);
+        assert_eq!(result.attempts_made, 1);
+        assert!(result.destroyed);
+        assert_eq!(
+            result.steps,
+            vec![InkriStep {
+                from_count: 0,
+                attempts: 1,
+                succeeded: false,
+                seed: None,
+            }]
+        );
     }
 
     #[test]
     fn シード固定で結果が再現する() {
-        let state = EquipmentInkriState::fresh(100);
+        let state = EquipmentInkriState::fresh();
         let mode = InkriBatchMode::Fixed { attempts: 20 };
         let mut rng_a = InkriRng::new(42);
         let mut rng_b = InkriRng::new(42);
@@ -404,7 +416,7 @@ mod tests {
     fn シードが違えば結果も変わる() {
         // 事前に splitmix64 の初手を計算して確定させた組(シード1→roll 88969、シード4→roll 5741)。
         // Royal(36000)に対して 1 は失敗(破壊)、4 は成功になる。
-        let state = EquipmentInkriState::fresh(100);
+        let state = EquipmentInkriState::fresh();
         let mode = InkriBatchMode::Fixed { attempts: 1 };
         let mut rng_destroyed = InkriRng::new(1);
         let result_destroyed = run_batch(state, InkriKind::Royal, mode, &mut rng_destroyed, None);
@@ -419,7 +431,7 @@ mod tests {
 
     #[test]
     fn 消費seedは費用が未収録なら常にnone() {
-        let state = EquipmentInkriState::fresh(100);
+        let state = EquipmentInkriState::fresh();
         let mut rng = InkriRng::new(7);
         let result = run_batch(
             state,
@@ -434,7 +446,7 @@ mod tests {
     #[test]
     fn 成功するまでモードは成功した時点で打ち切る() {
         // シード4の初手 roll=5741 は Lord(21000)に対して成功する
-        let state = EquipmentInkriState::fresh(1000);
+        let state = EquipmentInkriState::fresh();
         let mut rng = InkriRng::new(4);
         let result = run_batch(
             state,
@@ -446,5 +458,55 @@ mod tests {
         assert_eq!(result.attempts_made, 1);
         assert_eq!(result.successes, 1);
         assert_eq!(result.last_outcome, Some(InkriAttemptOutcome::Success));
+        assert_eq!(
+            result.steps,
+            vec![InkriStep {
+                from_count: 0,
+                attempts: 1,
+                succeeded: true,
+                seed: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn 段の内訳は成功で閉じ末尾だけ開いたまま() {
+        // ビアヌを十分な回数回すと、段の合計 = 試行回数、閉じた段の数 = 成功回数、
+        // from_count は入った時点の回数から 1 ずつ増える
+        let state = EquipmentInkriState {
+            inkri_count: 3,
+            destroyed: false,
+        };
+        let mut rng = InkriRng::new(2026);
+        let result = run_batch(
+            state,
+            InkriKind::Vianu,
+            InkriBatchMode::Fixed { attempts: 20_000 },
+            &mut rng,
+            Some(1),
+        );
+        assert!(result.successes >= 2, "successes={}", result.successes);
+        let total: i64 = result.steps.iter().map(|s| s.attempts).sum();
+        assert_eq!(total, result.attempts_made);
+        let seed: i64 = result.steps.iter().map(|s| s.seed.unwrap()).sum();
+        assert_eq!(Some(seed), result.consumed_seed);
+        let closed = result.steps.iter().filter(|s| s.succeeded).count() as i64;
+        assert_eq!(closed, result.successes);
+        for (i, step) in result.steps.iter().enumerate() {
+            assert_eq!(step.from_count, 3 + i as i64);
+        }
+        // 開いた段があるなら最後の 1 つだけ
+        let open_positions: Vec<usize> = result
+            .steps
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| !s.succeeded)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(open_positions.len() <= 1);
+        if let Some(&pos) = open_positions.first() {
+            assert_eq!(pos, result.steps.len() - 1);
+        }
+        assert_eq!(result.final_state.inkri_count, 3 + result.successes);
     }
 }
