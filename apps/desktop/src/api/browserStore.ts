@@ -188,6 +188,24 @@ function open(): Promise<IDBDatabase> {
 }
 
 /**
+ * 保存先を丸ごと消す。開けなくなった保存データから復旧するための最後の手段で、
+ * **呼ぶ前に必ず人へ確認する**(消えたキャラは書き出し JSON からしか戻せない)。
+ * 他のタブが握っていて今すぐ消せない場合も、削除は予約されるので待たない。
+ */
+export async function deleteDatabase(): Promise<void> {
+  const opened = connection ? await connection.catch(() => null) : null;
+  opened?.close();
+  connection = null;
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onblocked = () => resolve();
+    request.onerror = () =>
+      reject(failure(`保存先(IndexedDB)を消せませんでした: ${request.error?.message ?? ""}`));
+  });
+}
+
+/**
  * 1 つの操作を 1 トランザクションで行う。`run` の中で待ってよいのは IndexedDB の要求だけ
  * (それ以外を待つとトランザクションが先に閉じる)。
  */

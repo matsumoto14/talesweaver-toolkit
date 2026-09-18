@@ -15,6 +15,8 @@ export default defineConfig({
       { find: "tw-web", replacement: resolve("../../crates/web/pkg/web.js") },
       // デスクトップ版だけの説明(自動バックアップ)を画面から外すための旗
       { find: "./platform", replacement: resolve("./src/web/platform.ts") },
+      // 保存先(IndexedDB)を消して開き直す復旧経路。デスクトップ版は SQLite なので実体を持たない
+      { find: "./recovery", replacement: resolve("./src/web/recovery.ts") },
       // Tauri プラグイン前提の口(外部リンク・お知らせの取得・自動更新)をブラウザ用に差し替える。
       // 画面側で「デスクトップかどうか」を分岐させないため、ここで実体だけを入れ替える。
       { find: "@tauri-apps/plugin-opener", replacement: resolve("./src/web/opener.ts") },
