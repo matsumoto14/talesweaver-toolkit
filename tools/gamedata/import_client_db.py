@@ -3,10 +3,7 @@
 
 追加装備(2026-09-14 決定)は配布物・リポジトリから外す(docs/adr/009-public-release.md)。
 `client.rs` には書かず、代わりに `tools/gamedata/out/extra-equipment.json`(git 管理外。
-.gitignore 参照)へ書き出す。どのアイテムを分けるかは名前の前置きで決めるが、その文字列も
-リポジトリに置かない。環境変数 `TW_EXTRA_EQUIPMENT_PREFIX` に入れて実行する:
-
-    TW_EXTRA_EQUIPMENT_PREFIX='<前置き>' python tools/gamedata/import_client_db.py
+.gitignore 参照)へ書き出す。どのアイテムを分けるかは ItemId(`EXTRA_ITEM_IDS`)で決める。
 
 R2 へ上げるのは手元から(CI には乗せない。ENDPOINT の `<ACCOUNT_ID>` は実値に置換):
 
@@ -97,10 +94,11 @@ OUT_PATH = CATALOG_DIR / "client.rs"
 # git 管理外(.gitignore の tools/gamedata/out/)。R2 へ上げる手元置き場。
 EXTRA_OUT_PATH = ROOT / "tools/gamedata/out/extra-equipment.json"
 EXTRA_RETRIEVED_ON = "2026-09-03"
-# 配布物・リポジトリから外す装備を選ぶ名前の前置き。値そのものもリポジトリに置かない
-# (docs/adr/009-public-release.md)。未設定なら分離せずに止める(黙って client.rs に
-# 書き込むと配布物に混ざるため)。
-EXTRA_NAME_PREFIX = os.environ.get("TW_EXTRA_EQUIPMENT_PREFIX", "")
+# 配布物・リポジトリから外す装備の ItemId(client DB の c2_ItemId)。2026-09-03 時点の最上位
+# 38 件で、欠番のない連番。アイテム名では選ばない(名前を置かずに済ませる。ADR-009)。
+# 同じ id のアイコンは同梱しているので(`assets/icons/equipment/client-10604xx.png`)、
+# ここに書いてもリポジトリの情報は増えない。新しい上位装備が来たら範囲を広げる。
+EXTRA_ITEM_IDS = range(1060422, 1060460)
 
 STAT_COLUMNS = [
     ("c42_Thrust", "thrust"),
@@ -443,13 +441,18 @@ def main() -> None:
             "reason": reasons[r.item_id],
         })
 
-    if not EXTRA_NAME_PREFIX:
+    def is_extra(entry: dict) -> bool:
+        return int(entry["item_id"]) in EXTRA_ITEM_IDS
+
+    extra_entries = [e for e in entries if is_extra(e)]
+    other_entries = [e for e in entries if not is_extra(e)]
+    # 収録基準に引っかからず 38 件に満たないまま client.rs を書くと、配布物に数値が混ざる。
+    if len(extra_entries) != len(EXTRA_ITEM_IDS):
         sys.exit(
-            "TW_EXTRA_EQUIPMENT_PREFIX が未設定です。配布物から外す装備を選べないので中断します"
+            f"配布物から外す装備が {len(extra_entries)} 件しか見つかりません"
+            f"(EXTRA_ITEM_IDS は {len(EXTRA_ITEM_IDS)} 件)。client.rs を書かずに中断します"
             "(docs/adr/009-public-release.md)。"
         )
-    extra_entries = [e for e in entries if e["name"].startswith(EXTRA_NAME_PREFIX)]
-    other_entries = [e for e in entries if not e["name"].startswith(EXTRA_NAME_PREFIX)]
 
     write_rust(other_entries)
     write_extra_equipment_json(extra_entries)
