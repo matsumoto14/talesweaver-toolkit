@@ -2458,7 +2458,7 @@ pub struct EquipmentBaseContext<'a> {
     pub soul_link: crate::soul_link::SoulLinkStatus,
     /// 手首補正のバンド系ルールが参照する素ステ
     pub base_stats: crate::stats::BaseStats,
-    /// 腕装備パッシブの材料を「その装備」から解く。カタログ引き(バンドかどうか)が要るので
+    /// 盾(腕装備)のパッシブの材料を「その装備」から解く。カタログ引き(バンドかどうか)が要るので
     /// gamedata を知る呼び出し側が閉包で渡す。`None` = 手首補正を持たない文脈
     /// (カタログ検証・テスト)。**装備を差し替えて引き直す**(部位を外した試算)ときも
     /// 同じ閉包を通すので、腕を外せば手首補正も一緒に消える。
@@ -2497,7 +2497,7 @@ impl<'a> EquipmentBaseContext<'a> {
         }
         if let Some(bonus) = self.wrist_bonus(equipment) {
             sources.push(EquipmentValueSource {
-                source: "手首補正".to_string(),
+                source: "盾のパッシブ".to_string(),
                 values: bonus,
             });
         }
