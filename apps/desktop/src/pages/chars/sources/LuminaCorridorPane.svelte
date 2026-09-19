@@ -76,8 +76,9 @@
 
 <div class="card">
   <div class="card-title">回廊効果</div>
-  {#each rows as row (row.key)}
-    <div class="corridor-row">
+  <!-- 名前の列を全行で同じ幅にして、Lv0 の位置(押し始め)を縦に揃える(§00 01 視線を動かさない) -->
+  <div class="corridor-rows">
+    {#each rows as row (row.key)}
       <span class="corridor-name">
         {row.name}
         {#if row.recordOnly}<span class="badge">記録のみ</span>{/if}
@@ -97,9 +98,9 @@
         motion={() => corridor[row.key]}
         value={corridor[row.key] === 0 ? "—" : row.effect(corridor[row.key])}
       />
-    </div>
-    <p class="hint dim">{row.note}</p>
-  {/each}
+      <p class="hint dim corridor-note">{row.note}</p>
+    {/each}
+  </div>
 </div>
 
 <p class="hint dim">
@@ -114,18 +115,24 @@
 
 <style>
   /* 共有の `.field`(ラベルを上に積むグリッド)とは別物なので名前を分ける。
-     行内に 名前 / 段階 / いまの効き を横並びにして、段が列で揃うようにする(§00 01) */
-  .corridor-row {
-    display: flex;
+     名前の列は `max-content` = 一番長い名前(記録のみバッジ込み)の幅で全行そろう。
+     min-width で近い幅に寄せるのではなく、列で決めるので Lv0 の位置がぴったり一致する */
+  .corridor-rows {
+    display: grid;
+    grid-template-columns: max-content max-content auto;
     align-items: center;
-    gap: 10px;
-    padding: 4px 0;
+    column-gap: 10px;
   }
   .corridor-name {
     display: flex;
     align-items: center;
     gap: 6px;
-    min-width: 9em;
+    padding: 4px 0;
     font-size: 12px;
+  }
+  /* 注記は 3 列ぶん使って次の行へ。段の列は名前と段階だけで決める */
+  .corridor-note {
+    grid-column: 1 / -1;
+    margin: 0 0 6px;
   }
 </style>
