@@ -92,12 +92,19 @@
         : (mainElement as Element),
   );
   /**
-   * 内訳を出す属性。**値が入っている属性は全部出す** — 一覧の行にも出ている値なので、
-   * ここで消すと「行にあるのに開くと無い」になる。効いている属性を先頭に置く
+   * 内訳を出す属性。効いている属性を先頭に、**その属性だけに入っているものがある属性**を続ける。
+   *
+   * 全属性に乗るもの(ルミナの回廊・全属性バフ)だけの属性は出さない — それを出すと 8 属性
+   * 全部が並んで、実際に積んである属性が埋もれる(§00 02 要らないものを見せない)。
    */
+  const ownTotal = (e: Element) =>
+    (elements?.base[e] ?? 0) +
+    (elements?.equipment[e] ?? 0) +
+    (elements?.ability[e] ?? 0) +
+    (elements?.sources[e] ?? 0);
   const shownElements = $derived<Element[]>([
     ...(activeElement !== null && (elements?.total[activeElement] ?? 0) > 0 ? [activeElement] : []),
-    ...ELEMENTS.filter((e) => e !== activeElement && (elements?.total[e] ?? 0) > 0),
+    ...ELEMENTS.filter((e) => e !== activeElement && ownTotal(e) > 0),
   ]);
   const activeTotal = $derived(activeElement === null ? 0 : elements?.total[activeElement] ?? 0);
   /** 敵の属性値との差 +1 ごとに増えるダメージ。上限に届いたかどうかも出す */
@@ -141,7 +148,11 @@
         ],
   );
 
-  /** 装備以外の補正源から入ってくる分(いまはルミナの回廊の全属性増加だけ) */
+  /**
+   * 装備以外から入ってくる分。**押しても移る先が無い行も出す**(`id` なし)— 主属性に紐づく
+   * ペット・カード・ルーンの属性値はこのペインでしか触らないし、バフはバフタブで選ぶ。
+   * 0 の行も残して「どこから来るか」の地図にする(`ExternalSourceList` の方針)
+   */
   const fromOthers = $derived<ExternalSource[]>(
     activeElement === null
       ? []
@@ -152,6 +163,19 @@
             value: elements?.corridor[activeElement] ?? 0,
             format: (v: number) => fmtSigned(v),
             note: "回廊効果「全属性増加」(Lv1 ごとに全属性 +1・最大 +10)",
+          },
+          ...elementSourceDefs.map((def) => ({
+            name: def.name,
+            value:
+              draft.statSources.elements[def.id] === activeElement ? def.value : 0,
+            format: (v: number) => fmtSigned(v),
+            note: "主属性に選んだ属性へ乗ります(上の「主属性」で切り替え)",
+          })),
+          {
+            name: "バフ(全属性 +15)",
+            value: elements?.buff[activeElement] ?? 0,
+            format: (v: number) => fmtSigned(v),
+            note: "イルミネーション祭りのドリンク・ユキダルマン族の特製ポーション・迅速の秘薬。バフタブで選びます",
           },
         ],
   );
@@ -218,14 +242,6 @@
         {/each}
       </div>
     {/if}
-    {#if activeElement !== null && elements.buff[activeElement] > 0}
-      <p class="hint dim">
-        いつものバフに「全属性 +15」を持つもの(イルミネーション祭りのドリンク・
-        ユキダルマン族の特製ポーション・迅速の秘薬)が入っています:
-        <b><Value motion={() => elements.buff[activeElement!]} value={fmtSigned(elements.buff[activeElement!])} /></b>。
-        バフの ON / OFF はバフタブで切り替えます。
-      </p>
-    {/if}
     <p class="hint dim">
       与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに
       {fmtSigned(limits.element_bonus_percent_per_point, { max: 2 }, "%")}、
@@ -237,7 +253,7 @@
 {/if}
 
 <ExternalSourceList rows={fromEquipment} title="装備から自動で入る分" {onOpenSource} />
-<ExternalSourceList rows={fromOthers} title="ほかの補正源から自動で入る分" {onOpenSource} />
+<ExternalSourceList rows={fromOthers} title="装備以外から入る分" {onOpenSource} />
 
 <style>
   .element-row {

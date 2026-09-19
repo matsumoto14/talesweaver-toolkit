@@ -554,11 +554,19 @@
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 
-  /** 属性の行サブタイトル。効いている属性と合計(合算・上限は Rust 側 preview.elements) */
+  /**
+   * 属性の行サブタイトル。合算・上限は Rust 側(preview.elements)。
+   * **その属性だけに積んであるもの**がある属性だけ出す — 全属性に乗るもの(ルミナの回廊・
+   * 全属性バフ)しか無い属性まで出すと 8 属性が並んで、実際に積んだ属性が埋もれる
+   * (属性ペインの内訳と同じ規則)。
+   */
   const elementSummary = $derived.by(() => {
     const elements = preview?.elements;
     if (!elements) return NEUTRAL;
-    const shown = ELEMENTS.filter((e) => elements.total[e] > 0);
+    const shown = ELEMENTS.filter(
+      (e) =>
+        elements.base[e] + elements.equipment[e] + elements.ability[e] + elements.sources[e] > 0,
+    );
     return shown.length === 0
       ? NEUTRAL
       : shown.map((e) => `${ELEMENT_LABELS[e]} ${fmtInt(elements.total[e])}`).join(" ・ ");
