@@ -337,6 +337,7 @@ mod tests {
                 value: 20,
                 exclusive_with: &[],
             }],
+            element_bonus: 0,
         }];
         let stats = EffectiveStats {
             dex: 100,
@@ -414,6 +415,7 @@ mod tests {
             note: "",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         }];
         let base = BaseStats {
             stab: 1,
@@ -1172,6 +1174,7 @@ mod tests {
                 value: 20,
                 exclusive_with: &[],
             }],
+            element_bonus: 0,
         };
         let buff_catalog = vec![mk("acc_a", "命中バフ A"), mk("acc_b", "命中バフ B")];
         let ctx = GrowthApplyContext {

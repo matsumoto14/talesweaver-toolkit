@@ -216,8 +216,22 @@ pub struct ElementPreview {
     pub sources: ElementValues,
     /// ルミナの回廊の「全属性増加」(8 属性それぞれに Lv ぶん)
     pub corridor: ElementValues,
+    /// バフの「全属性 +15」(イルミネーション祭りのドリンク・ユキダルマン族の特製ポーション・
+    /// 迅速の秘薬。選んでいるバフぶんの合計が 8 属性それぞれに乗る)
+    pub buff: ElementValues,
     /// すべてを足して上限 255 で頭打ちにした値
     pub total: ElementValues,
+}
+
+impl ElementValues {
+    /// 8 属性それぞれに同じ値を配る(「全属性 +N」の器)。
+    pub fn all(value: i64) -> Self {
+        let mut values = Self::default();
+        for element in Element::ALL {
+            *values.get_mut(element) = value;
+        }
+        values
+    }
 }
 
 impl ElementPreview {
@@ -227,6 +241,7 @@ impl ElementPreview {
         ability_by_part: Vec<PartElementValues>,
         sources: ElementValues,
         corridor: ElementValues,
+        buff: ElementValues,
     ) -> Self {
         let ability = ability_by_part
             .iter()
@@ -238,11 +253,13 @@ impl ElementPreview {
             ability_by_part,
             sources,
             corridor,
+            buff,
             total: base
                 .add(equipment)
                 .add(ability)
                 .add(sources)
                 .add(corridor)
+                .add(buff)
                 .clamp_to_max(),
         }
     }

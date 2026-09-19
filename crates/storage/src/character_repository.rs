@@ -1355,6 +1355,7 @@ mod tests {
                 note: "",
                 default_value: Some(33.0),
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "illumination_drink",
@@ -1369,6 +1370,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "charge_potion",
@@ -1383,6 +1385,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
         ]
     }

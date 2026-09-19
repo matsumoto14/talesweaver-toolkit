@@ -1497,7 +1497,7 @@ fn stat_preview_of(
         stat_catalogs(&gamedata::buff_catalog()),
         equipment_base,
         &gamedata::random_option_catalog(),
-        damage_inputs::element_preview(game_character_id, equipment, stat_sources),
+        damage_inputs::element_preview(game_character_id, equipment, stat_sources, buffs),
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
     )
@@ -1642,7 +1642,7 @@ fn build_damage_input(
     let damage_contributions =
         damage_inputs::damage_contributions_of(stat_sources, buffs, &equipment, skill.dependency);
     let element_value =
-        damage_inputs::element_value_for(game_character_id, &equipment, stat_sources, &skill);
+        damage_inputs::element_value_for(game_character_id, &equipment, stat_sources, buffs, &skill);
     let coefficients = coefficients_for(skill.attacker, skill.dependency);
     Ok((
         material,
@@ -1947,6 +1947,7 @@ pub fn evaluate_contents(
                 &character.game_character_id,
                 &character.equipment,
                 &character.stat_sources,
+                &buffs,
                 skill,
             ),
         })
@@ -1969,6 +1970,7 @@ pub fn evaluate_contents(
                 &character.game_character_id,
                 &character.equipment,
                 &character.stat_sources,
+                &buffs,
                 &skill,
             ),
             skill,
@@ -3040,6 +3042,43 @@ mod tests {
         let mut character = anais();
         character.main_skill_id = Some("no-such-skill".to_string());
         assert!(combat_stats_of(&character, &BuffSelection::default()).is_ok());
+    }
+
+
+    #[test]
+    fn 全属性バフと回廊は属性値の内訳に出る() {
+        // 迅速の秘薬(全属性 +15)を ON、回廊の全属性増加を Lv10(各属性 +10)にすると、
+        // キャラ画面の属性内訳にそれぞれ別の行として出て、合計にも乗る
+        let mut character = anais();
+        character.stat_sources.lumina_corridor = domain::LuminaCorridor {
+            all_element_level: 10,
+            ..Default::default()
+        };
+        let buffs = BuffSelection {
+            choices: vec![domain::BuffChoice {
+                buff_id: "swift_elixir".to_string(),
+                stat: None,
+                choice_index: None,
+                value: None,
+            }],
+        };
+        let preview = preview_effective_stats(
+            character.base_stats,
+            character.stat_sources.clone(),
+            buffs,
+            character.equipment.clone(),
+            character.common_skills,
+            character.awakening,
+            character.game_character_id.clone(),
+            None,
+        )
+        .unwrap();
+
+        let elements = preview.base.elements;
+        assert_eq!(elements.corridor.fire, 10, "回廊は 8 属性それぞれに +10");
+        assert_eq!(elements.buff.fire, 15, "全属性バフは 8 属性それぞれに +15");
+        // アナイスの基礎属性値(火 10)も足した合計
+        assert_eq!(elements.total.fire, elements.base.fire + 25);
     }
 
 }

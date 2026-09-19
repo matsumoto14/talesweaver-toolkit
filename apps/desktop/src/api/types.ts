@@ -517,6 +517,8 @@ export interface ElementPreview {
   sources: ElementValues;
   /** ルミナの回廊の「全属性増加」(8 属性それぞれに Lv ぶん) */
   corridor: ElementValues;
+  /** バフの「全属性 +15」(選んでいるバフぶんの合計。8 属性それぞれに乗る) */
+  buff: ElementValues;
   /** 4 つを足して上限 255 で頭打ちにした値 */
   total: ElementValues;
 }

@@ -201,7 +201,7 @@
         <span class="dim">
           キャラ {fmtInt(elements.base[e])} + 装備 {fmtInt(elements.equipment[e])}
           + 装備アビリティ {fmtInt(elements.ability[e])} + 主属性 {fmtInt(elements.sources[e])}
-          + 回廊 {fmtInt(elements.corridor[e])}
+          + 回廊 {fmtInt(elements.corridor[e])} + バフ {fmtInt(elements.buff[e])}
         </span>
       </div>
     {:else}
@@ -217,6 +217,14 @@
           </span>
         {/each}
       </div>
+    {/if}
+    {#if activeElement !== null && elements.buff[activeElement] > 0}
+      <p class="hint dim">
+        いつものバフに「全属性 +15」を持つもの(イルミネーション祭りのドリンク・
+        ユキダルマン族の特製ポーション・迅速の秘薬)が入っています:
+        <b><Value motion={() => elements.buff[activeElement!]} value={fmtSigned(elements.buff[activeElement!])} /></b>。
+        バフの ON / OFF はバフタブで切り替えます。
+      </p>
     {/if}
     <p class="hint dim">
       与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに

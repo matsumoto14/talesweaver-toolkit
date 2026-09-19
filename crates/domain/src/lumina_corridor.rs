@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use crate::category::DamageCategory;
 use crate::damage::DamageContribution;
-use crate::element::{Element, ElementValues};
+use crate::element::ElementValues;
 
 /// 最終ダメージ(カテゴリL)。1 レベルあたり +1%、最大 Lv5 = +5%
 pub const CORRIDOR_FINAL_DAMAGE_RATE_PER_LEVEL: f64 = 0.01;
@@ -92,12 +92,7 @@ impl LuminaCorridor {
 
     /// 全属性への加算。**8 属性それぞれ**にレベルぶん乗る
     pub fn element_values(self) -> ElementValues {
-        let bonus = i64::from(self.all_element_level) * CORRIDOR_ELEMENT_PER_LEVEL;
-        let mut values = ElementValues::default();
-        for element in Element::ALL {
-            *values.get_mut(element) = bonus;
-        }
-        values
+        ElementValues::all(i64::from(self.all_element_level) * CORRIDOR_ELEMENT_PER_LEVEL)
     }
 
     pub fn damage_contributions(self) -> Vec<DamageContribution> {
@@ -116,6 +111,7 @@ impl LuminaCorridor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::element::Element;
 
     #[test]
     fn 全属性増加は8属性それぞれに乗る() {

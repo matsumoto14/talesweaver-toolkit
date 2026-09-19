@@ -35,9 +35,10 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             value: BuffValue::Fixed(0.30),
             exclusive_slots: vec!["percent_slot_1", "percent_slot_2", "x1_group_a"],
             source_url: WIKI_URL,
-            note: "①+②",
+            note: "①+② / 全属性 +15",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+            element_bonus: 15,
         },
         BuffDefinition {
             id: "snowman_potion",
@@ -49,9 +50,29 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             value: BuffValue::Fixed(0.30),
             exclusive_slots: vec!["percent_slot_1", "percent_slot_2", "x1_group_a", "x1_group_b"],
             source_url: WIKI_URL,
-            note: "①+②",
+            note: "①+② / 全属性 +15",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
+            element_bonus: 15,
+        },
+        BuffDefinition {
+            id: "swift_elixir",
+            name: "迅速の秘薬",
+            // 全属性 +15 は属性差ボーナス(カテゴリI)経由で与ダメージに効くので Damage
+            purposes: &[BuffPurpose::Damage],
+            origin: BuffOrigin::Item,
+            // ステには効かない(全属性 +15 と移動速度 +15 だけ)。器の都合で対象・層は使わない
+            target: BuffTarget::AllStats,
+            layer: StatLayer::Fixed,
+            value: BuffValue::RecordOnly,
+            // 重複の可否がお知らせに書かれていない `[仮]`。排他枠を置くと選べない組み合わせを
+            // 勝手に作ってしまうので、分かるまでは独立扱いにする
+            exclusive_slots: vec![],
+            source_url: SWIFT_ELIXIR_NOTICE_URL,
+            note: "2 時間・全属性 +15(移動速度 +15 は未モデル)。wiki 未収録で公式お知らせが出典。                   重複の可否は未記載 `[仮]`",
+            default_value: None,
+            damage_effects: &[],
+            element_bonus: 15,
         },
         BuffDefinition {
             id: "charge_potion",
@@ -66,6 +87,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "①",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "buff_concentrate",
@@ -80,6 +102,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "②",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "guardian_potion",
@@ -94,6 +117,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "独立。「週五社のためのポーション」は本項の別名",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "isabelle_ratio",
@@ -108,6 +132,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "退魔師の恵み・祝福の聖水・河童神の涙と同枠(テイルズウィーバーのエネルギーとは別枠)",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         // 旧カタログでは isabelle_fixed の値を +100 としていたが、これは特選秘薬(固定)側の値の
         // 誤転記だった。wiki 通り秘法(固定)は +20、特選秘薬(固定)は +100 が正しい。
@@ -127,6 +152,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "祝福のポーション・カレーライスと同枠",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "isabelle_rare_percent",
@@ -141,6 +167,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "特別な時のみ",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "isabelle_rare_fixed",
@@ -157,6 +184,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "特別な時のみ",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "growth_support_potion",
@@ -179,6 +207,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "①+②。退魔師の恵み・祝福のポーション・バフスクロールと重複不可。[X1] +20% も持つ",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "blessing_potion",
@@ -193,6 +222,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "イザベルの秘法(固定)・特選秘薬(固定)の両方と同時使用不可",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "demon_slayer_blessing",
@@ -207,6 +237,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "イザベルの秘法(比率)と同枠",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "karill_buff_scroll",
@@ -221,6 +252,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "分類不明(割合)。バフスクロールと重複可能",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "event_buff",
@@ -235,6 +267,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "段階選択(+10%/+20%/+30%/+50%)",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "trust_potion",
@@ -250,6 +283,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "最大+34、人により異なる。信頼の薬と排他。無印の信頼の薬は最大+28",
             default_value: Some(34.0),
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "fixed_increase",
@@ -265,6 +299,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "手入力(1枠)。ウガンポの葉っぱ・トールのしっぽ焼き(+50)・四味仙霊芝草(+30)等も本項で表す",
             default_value: Some(50.0),
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "club_effect",
@@ -282,6 +317,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "ステごとに +1〜7。使える数はクラブレベル次第。+20 はクラブSエフェクト",
             default_value: Some(7.0),
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "club_s_effect",
@@ -300,6 +336,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "7日。課金箱。ステータス系のクラブSエフェクトと同時に使える",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 5.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "club_s_effect_single_stat",
@@ -320,6 +357,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "STAB/HACK/INT/DEF/MR/DEX/AGIから複数選択。ステごとに +20。7日。課金箱",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "club_s_effect_all_stats",
@@ -335,6 +373,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "ALL+5/+10/+15/+20。期間と入手方法は商品ごとに異なる",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "tales_weaver_energy",
@@ -357,6 +396,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
                 // (取得 2026-09-01)。的中剣との排他は wiki に記載が無いので付けない
                 SkillEffect::MinEvasionRate { value: 10 },
             ],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "archer_rune",
@@ -371,6 +411,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "最大レベル時 命中P+20",
             default_value: None,
             damage_effects: &[SkillEffect::AccuracyPoint { value: 20, exclusive_with: &[] }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "hard_weapon_earl",
@@ -386,6 +427,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
                    攻撃ダメージ +20%)とは同名の別スキル",
             default_value: None,
             damage_effects: &[SkillEffect::AccuracyPoint { value: 15, exclusive_with: &[] }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "play_tincture",
@@ -403,6 +445,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
                    味方バフとして誰でも選べるようここへ収録した([仮] 判断)",
             default_value: None,
             damage_effects: &[SkillEffect::AccuracyPoint { value: 20, exclusive_with: &[] }],
+            element_bonus: 0,
         },
         // --- ダメージにだけ効くバフ(ステは上げない。wiki ステータスの [X1]〜[X6] / [L])---
         BuffDefinition {
@@ -419,6 +462,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X1] 上限 +50%。クリティカル率 +5% は未収録",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "isabel_special_damage",
@@ -434,6 +478,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X1]。橙色の薬・16周年ピクニックのり巻きお弁当・ラッキービースト-I型 車掌タイプ・マルクスのクナイ・デスガイニーの葉・宝玉<赤眼の魔王>・朧塚商店街のクリームパン・<シルバーソード>のクリームシチュー等と同枠",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "moonlight_potion",
@@ -449,6 +494,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X1]。月光のポーションと怪力のポーションは同値同枠なのでまとめている",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "silver_sword_stew",
@@ -464,6 +510,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X1]。イザベルの特選秘薬(ダメージ)等と同枠(【D】)",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "festival_food",
@@ -479,6 +526,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X1]",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "sakuraeda_hitokata",
@@ -494,6 +542,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X1]。被ダメージ減少 [S1] +10% は未収録",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "oborozuka_cream_bread",
@@ -509,6 +558,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X1]。朧塚商店街のクリームパンとロデリック商会特製マヨネーズは同値同枠なのでまとめている",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "awakening_elixir",
@@ -524,6 +574,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] 上限 +30%。改・覚醒の秘薬とは重複不可",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "improved_awakening_elixir",
@@ -539,6 +590,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] 上限 +30%。覚醒の秘薬とは重複不可",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "strength_ham",
@@ -554,6 +606,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2]",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "club_shop_buff_type_p",
@@ -569,6 +622,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] クラブダンジョン掲示板",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "wednesday_attack_c_rank",
@@ -584,6 +638,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] 水曜日の異変(規則正しいゼリッピ)",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "twin_dango",
@@ -599,6 +654,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2]。被ダメージ減少 [S2] +10% は未収録",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "ancient_ganapoly_mana",
@@ -614,6 +670,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] wiki は +1〜15%。最大値で入れている",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 15.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "attendance_buff",
@@ -629,6 +686,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] 重複可能",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "daily_burning_buff",
@@ -644,6 +702,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2]",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "soul_link_explore",
@@ -659,6 +718,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] 重複不可",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 5.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "berserker_rune",
@@ -674,6 +734,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X2] Lv×0.25%、最大 +10%。最大値で入れている",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageGeneral, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "fever",
@@ -689,6 +750,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X3] 上限 +80%。全ステータス +30 は未収録",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageBasicTrigger, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "deep_rune_attack",
@@ -704,6 +766,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X3] +3 で +9%",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageBasicTrigger, percent: 9.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "plunder_bread",
@@ -719,6 +782,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X6] 上限 +30%",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageJapan, percent: 20.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "boiled_mimic",
@@ -734,6 +798,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[X6] 被ダメージ -30% は未収録",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageJapan, percent: 10.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "ancient_relic_minigame",
@@ -749,6 +814,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             note: "[L] 上限 +45%",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::FinalDamageRate, percent: 15.0 }],
+            element_bonus: 0,
         },
         BuffDefinition {
             id: "equipment_polish",
@@ -767,6 +833,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
                    聖なる +4(武器・鎧)/ +2(それ以外)。wiki の 7% / +10 は旧値なので使わない",
             default_value: None,
             damage_effects: &[],
+            element_bonus: 0,
         },
     ]
 }
@@ -779,6 +846,9 @@ const ITEM_BUFF_WIKI_URL: &str = "https://talewiki.com/?cmd=read&page=Item%2F%BE
 const CLUB_WIKI_URL: &str = "https://talewiki.com/?%A5%AF%A5%E9%A5%D6#club_S_effect";
 /// wiki ステータスページ「その他のバフ」節相当(値は旧く、正はクライアント DB)。
 const EQUIPMENT_POLISH_WIKI_URL: &str = "https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9#battle";
+/// 迅速の秘薬・イルミネーション祭りのドリンクの「全属性 +15」の出典(公式お知らせ 2021-07-28)。
+/// wiki は 3 件とも全属性の記載を落としているので、お知らせを正とする(docs/adr/017)
+const SWIFT_ELIXIR_NOTICE_URL: &str = "https://talesweaver.nexon.co.jp/notice/newest.aspx?no=151355";
 
 #[cfg(test)]
 mod tests {
@@ -790,9 +860,30 @@ mod tests {
         // ステータス#jc16a054 の 44 件 + 計算式まとめ#AccuracyPoint の命中P増加バフ 3 件
         // (archer_rune / hard_weapon_earl / play_tincture。tales_weaver_energy は既存の44件に含む)
         // + 装備研磨(equipment_polish、2026-09-15 追加)
-        assert_eq!(buff_catalog().len(), 48);
+        // + 迅速の秘薬(swift_elixir、全属性 +15。wiki 未収録で公式お知らせ由来。2026-09-19 追加)
+        assert_eq!(buff_catalog().len(), 49);
         assert!(!buff_catalog().iter().any(|d| d.id == "unleash"));
         assert!(!buff_catalog().iter().any(|d| d.id == "soul_link_status"));
+    }
+
+    /// 全属性 +15 の 3 件(公式お知らせ由来。talewiki は 3 件とも記載を落としている)。
+    /// 属性はステの器(`BuffTarget`)で表せないので `element_bonus` に持つ。
+    #[test]
+    fn 全属性バフは3件で15ずつ() {
+        let catalog = buff_catalog();
+        let with_element: Vec<(&str, i64)> = catalog
+            .iter()
+            .filter(|d| d.element_bonus != 0)
+            .map(|d| (d.id, d.element_bonus))
+            .collect();
+        assert_eq!(
+            with_element,
+            vec![
+                ("illumination_drink", 15),
+                ("snowman_potion", 15),
+                ("swift_elixir", 15),
+            ]
+        );
     }
 
     #[test]
@@ -811,10 +902,12 @@ mod tests {
     #[test]
     fn ダメージへの効き先を持つバフ() {
         let catalog = buff_catalog();
+        // 全属性 +15 は属性差ボーナス(カテゴリI)経由で与ダメージに効くので火力扱いにする
         let has_damage = |d: &BuffDefinition| {
             d.damage_effects
                 .iter()
                 .any(|e| matches!(e, SkillEffect::Damage { .. }))
+                || d.element_bonus > 0
         };
         for buff in &catalog {
             assert_eq!(
@@ -829,7 +922,8 @@ mod tests {
             .filter(|d| has_damage(d))
             .map(|d| d.id)
             .collect();
-        assert_eq!(with_damage.len(), 30);
+        // 30 件 + 迅速の秘薬(全属性 +15 で属性差ボーナス経由に効く。2026-09-19 追加)
+        assert_eq!(with_damage.len(), 31);
         // ステと与ダメージの両方に効くもの
         for id in [
             "guardian_potion",

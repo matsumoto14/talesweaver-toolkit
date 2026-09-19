@@ -54,11 +54,12 @@ pub fn actual_delay_contributions(
 
 /// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
 /// 装備アビリティ(月石・カフス・レリックの属性枠)+ 装備外の供給源(ペット /
-/// モンスターカード / ルーン)+ ルミナの回廊の全属性増加。合計は上限 255。
+/// モンスターカード / ルーン)+ ルミナの回廊の全属性増加 + バフの全属性 +15。合計は上限 255。
 pub fn element_preview(
     game_character_id: &str,
     equipment: &domain::Equipment,
     stat_sources: &domain::StatSources,
+    buffs: &domain::BuffSelection,
 ) -> domain::ElementPreview {
     let abilities = gamedata::equipment_abilities();
     domain::ElementPreview::new(
@@ -69,6 +70,10 @@ pub fn element_preview(
             .elements
             .values(gamedata::element_source_catalog()),
         stat_sources.lumina_corridor.element_values(),
+        domain::ElementValues::all(domain::stat_sources::buff_element_total(
+            buffs,
+            &gamedata::buff_catalog(),
+        )),
     )
 }
 
@@ -91,10 +96,11 @@ pub fn element_value_for(
     game_character_id: &str,
     equipment: &domain::Equipment,
     stat_sources: &domain::StatSources,
+    buffs: &domain::BuffSelection,
     skill: &domain::Skill,
 ) -> i64 {
     let enchanted = enchanted_element(equipment, stat_sources, &gamedata::equipment_abilities());
-    element_preview(game_character_id, equipment, stat_sources)
+    element_preview(game_character_id, equipment, stat_sources, buffs)
         .total
         .get(skill.element.effective_for_attack(enchanted))
 }

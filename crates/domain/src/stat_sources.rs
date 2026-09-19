@@ -302,6 +302,10 @@ pub struct BuffDefinition {
     /// (守護者のためのポーションは能力値の割合増加 +10% と最終ダメージ L +10% の両方)。
     /// ON/OFF だけで決まるので `BuffValue` の段階選択・手入力は掛からない
     pub damage_effects: &'static [SkillEffect],
+    /// **全属性への加算**(公式お知らせの「全属性 +15」)。`damage_effects` と同じく主効果とは
+    /// 別枠の副次効果で、8 属性それぞれに乗る。0 = 属性には効かない。
+    /// ステの器(`BuffTarget`)は属性を指せないのでここに持つ(2026-09-19)
+    pub element_bonus: i64,
 }
 
 /// バフカタログ。呼び出しは `&BuffCatalog` = `&[BuffDefinition]`。
@@ -685,6 +689,17 @@ pub fn buff_accuracy_point_total(
 }
 
 /// 選んでいるバフの、最小回避率補正の合計(wiki 計算式まとめ `#HitRateCap`:
+/// 選択中のバフの**全属性への加算**の合計(公式お知らせの「全属性 +15」)。
+/// 8 属性それぞれにこの値が乗る(`ElementPreview::buff`)。
+pub fn buff_element_total(buffs: &BuffSelection, catalog: &BuffCatalog) -> i64 {
+    buffs
+        .choices
+        .iter()
+        .filter_map(|choice| catalog.iter().find(|def| def.id == choice.buff_id))
+        .map(|def| def.element_bonus)
+        .sum()
+}
+
 /// テイルズウィーバーのエネルギー「最小回避率 +10%」)。
 pub fn buff_min_evasion_rate_total(buffs: &BuffSelection, catalog: &BuffCatalog) -> i64 {
     buffs
@@ -2610,6 +2625,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "charge_potion",
@@ -2624,6 +2640,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "event_buff",
@@ -2638,6 +2655,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "trust_potion",
@@ -2655,6 +2673,7 @@ mod tests {
                 note: "",
                 default_value: Some(33.0),
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "club_effect",
@@ -2669,6 +2688,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "tales_weaver_energy",
@@ -2683,6 +2703,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
             BuffDefinition {
                 id: "unleash",
@@ -2697,6 +2718,7 @@ mod tests {
                 note: "",
                 default_value: None,
                 damage_effects: &[],
+                element_bonus: 0,
             },
         ]
     }
@@ -3925,6 +3947,7 @@ mod tests {
                         &[]
                     },
                 }])),
+                element_bonus: 0,
             }
         }
         let catalog = vec![
@@ -4003,6 +4026,7 @@ mod tests {
                     value,
                     exclusive_with: &[],
                 }])),
+                element_bonus: 0,
             }
         }
         let catalog = vec![
