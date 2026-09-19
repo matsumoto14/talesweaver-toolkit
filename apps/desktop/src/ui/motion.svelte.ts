@@ -86,7 +86,9 @@ export function bump(node: HTMLElement, get: () => number | null) {
 /**
  * **いくつ変わったか**を出す差分枠(§10 型 1b)。跳ねと色は 0.3s で戻るので、同時に
  * 10 か所が動くと「動いた」は分かっても「いくつ」は読み切れない — 前回値との差を
- * 緑 ↑1,234 / 赤 ↓3.2% で出し、消さずにその数値が次に変わるまで残す(書き換えるだけ)。
+ * 緑 ↑1,234 / 赤 ↓3.2% で出す。**出るのは直近の再計算で動いた値だけ** — 動かなかった値の枠は
+ * その場で空に戻す(残すと、関係ない項目まで「今の変更で動いた」ように読める。
+ * ユーザー指摘 2026-09-20。2026-09-15 の「消さない」はこれで取り下げ)。
  *
  * 付ける先は数値そのものではなく**差分専用の空 span**。数値の中に差し込むと、出た瞬間・
  * 桁が変わった瞬間に隣を押してがたつく(実機 2026-09-15)。枠は最初から場所を取り、
@@ -95,6 +97,8 @@ export function bump(node: HTMLElement, get: () => number | null) {
  */
 export interface DeltaSpec {
   get: () => number | null;
+  /** どの計算の世代を見るか(`<Value>` が面の宣言から渡す)。省略なら攻撃 */
+  scope?: DeltaScope;
   /** 差分の後ろに付ける単位("%" / "s" など)。省略なら無し */
   unit?: string;
   /** 小数桁。省略なら前回値・今回値が両方整数のとき 0、それ以外 2(末尾の 0 は落とす) */
@@ -108,8 +112,33 @@ function formatDelta(prev: number, next: number, spec: DeltaSpec): string {
   return `${d > 0 ? "↑" : "↓"}${body}${spec.unit ?? ""}`;
 }
 
+/** 差分枠がどの計算を見ているか。攻撃(ダメージ)と防御は別々のコマンドで別々に着く。 */
+export type DeltaScope = "attack" | "defense";
+
+/** 面ごとの宣言(`setContext`)。宣言しなければ攻撃。防御の面だけが "defense" を置く。 */
+export const DELTA_SCOPE = Symbol("delta-scope");
+
+/**
+ * 「計算が走り直した」世代。差分枠は値が変わったときだけ動けばよさそうに見えるが、
+ * **値が変わらないと action の $effect は走らない**(Svelte は同じ値で止める)ので、
+ * それだけでは「今回は動かなかった」ことに気づけず前の ↑↓ が残る
+ * (シャープネスビジョンの Lv を変えても表記ダメージは動かない、など)。
+ * 計算結果が差し替わったら画面がこれを進め、差分枠はそれを依存に入れて毎回見直す。
+ *
+ * 攻撃と防御で別に持つ: 1 つにすると、後から着いたほうが、もう片方が出したばかりの
+ * 差分を「動かなかった」と見なして消す(防御は debounce 無し・攻撃は 120ms なので実際に起きる)。
+ */
+const recalcGenerations = $state<Record<DeltaScope, number>>({ attack: 0, defense: 0 });
+
+/** 計算結果が差し替わったことを差分枠に伝える(結果を受け取るたび 1 回)。 */
+export function markRecalculated(scope: DeltaScope = "attack") {
+  recalcGenerations[scope] += 1;
+}
+
 export function delta(node: HTMLElement, spec: DeltaSpec) {
-  node.classList.add("delta", "num");
+  // `delta` / `num` は呼ぶ側(`ui/Value.svelte`)が class に載せる。ここで classList に足すと、
+  // 呼ぶ側が同じ属性を持っているぶん、その値が変わったときに消える。ここが足すのは
+  // 増減のたびに付け替える `up` / `down` / `delta-in` だけ。
   node.setAttribute("aria-hidden", "true");
   let prev = spec.get();
   // CSS 側の min-width(列の幅)より広くなったときだけ inline で広げる。常に inline で上書きすると
@@ -117,8 +146,12 @@ export function delta(node: HTMLElement, spec: DeltaSpec) {
   const base = parseFloat(getComputedStyle(node).minWidth) || 0;
   let width = base;
   $effect(() => {
+    void recalcGenerations[spec.scope ?? "attack"]; // 値が動かなくても、計算が走り直したら見直す
     const next = spec.get();
     if (next === null || prev === null || next === prev) {
+      // 今回は動かなかった。前の変更で出した差分は消す(幅は残すので隣は動かない)
+      node.textContent = "";
+      node.classList.remove("delta-in", "up", "down");
       prev = next;
       return;
     }

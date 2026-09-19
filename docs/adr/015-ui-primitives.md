@@ -683,7 +683,23 @@ Svelte が microtask で button を描いてフォーカスを移すため、**�
   借りているつもりの空クラスだったので外した
 - `badgeStyle` の import が**分割前から未使用**だった
 
-#### 却下した選択肢
+##### 差分枠のクラスと世代は `<Value>` 側が持つ(2026-09-20)
+
+- **`use:delta` が `classList.add("delta", "num")` でクラスを足すのをやめ、`<Value>` の
+  `class="delta num {deltaClass}"` に載せた。** 同じ要素の `class` を Svelte(呼ぶ側の
+  `deltaClass`)と action の両方が触っていたので、`deltaClass` が変わった flush で属性ごと
+  置き換わり `delta` が消えていた。`.delta.follow`(緑を辿る点線)も `.delta.less-is-better`
+  (討伐時間の色)も、そのせいで一度も出ていなかった。**属性を 2 人で持たない**。
+  action が足すのは増減のたびに付け替える `up` / `down` / `delta-in` だけ。
+- **「今回は動かなかった」を知るために、計算の世代(`markRecalculated`)を差分枠の依存に入れる。**
+  値が変わらないと action の `$effect` は走らないので、値だけを見ていては動かなかったことに
+  気づけない。世代は**計算結果を代入するのと同じ場所**で進める — `$effect` から進めると、
+  枠側の effect のほうが先に走って、出た差分をその直後に消すことがある。
+- **世代は攻撃(ダメージ)と防御で別に持つ。** 別々のコマンドで別々に着くので、1 つにすると
+  後から着いたほうがもう片方の出したばかりの差分を消す。どちらを見るかは面が
+  `setContext(DELTA_SCOPE, ...)` で宣言する(既定は攻撃) — 呼ぶ側 12 箇所に props を配らずに済む。
+
+## 却下した選択肢
 
 - **「次の候補」の一覧のために `.dt-row` の段を `WhyPanel` にもう一度書く案** — 6 行の CSS で済むが、
   段階 1〜9 でやってきたことの逆。`DetailRows` に `head: false` / `Mat.prefix` / `Detail.note` を足して

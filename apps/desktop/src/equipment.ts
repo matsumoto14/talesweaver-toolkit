@@ -11,6 +11,7 @@ import {
   AVATAR_PARTS, CORE_REGIONS, CORE_SLOT_COUNT, ENHANCE_ALLOWED_SLOTS, EQUIPMENT_STAT_KINDS,
   EQUIPMENT_STAT_SHORT, PART_SLOTS, SIENA_ALLOWED_SLOTS, SKILL_DEPENDENCY_LABELS,
 } from "./labels";
+import type { EquipmentStatKind } from "./labels";
 import type { PartSlot, PolishKind } from "./api/types";
 import { fmtInt, fmtSigned } from "./format";
 import { tables } from "./tables.svelte";
@@ -42,17 +43,39 @@ export const sumValues = (v: EquipmentValues): number =>
  * 括弧はエンチャントが 0 でも出す — 幅が動かないし、盛れる余地が残っていることが分かる。
  */
 export const withEnchant = (base: number, enchant: number): string =>
-  `${fmtInt(base + enchant)} (${fmtSigned(enchant)})`;
+  totalWithEnchant(base + enchant, enchant);
 
-/** 値が大きい上位 2 種の要約(部位行の見出し用)。武器なら「突き 315 (+120) / 斬り 122 (+0)」。 */
-export const valuesSummary = (base: EquipmentValues, enchant: EquipmentValues): string => {
-  const total = (k: (typeof EQUIPMENT_VALUE_KEYS)[number]) => base[k] + enchant[k];
-  const top = EQUIPMENT_VALUE_KEYS.filter((k) => total(k) > 0)
-    .sort((a, b) => total(b) - total(a))
-    .slice(0, 2);
-  return top.length === 0
+/** 同じ見せ方で、合計を既に持っているとき用(部位の合計は Rust が出す)。 */
+export const totalWithEnchant = (total: number, enchant: number): string =>
+  `${fmtInt(total)} (${fmtSigned(enchant)})`;
+
+/**
+ * 部位行の見出しに出す要約。武器なら「突き 315 (+120) / 斬り 122 (+0)」。
+ * `total` は **その部位の補正値の合計**(装備本体 + エンチャント + 装備アビリティ)。
+ * 足すのは Rust(`Equipment::total_values_by_part` → `StatPreview.part_total_values`)で、
+ * ここは並べて書式を付けるだけ。
+ *
+ * `kinds` は主軸スキルが実際に使う補正。部位をまたいで同じ並びになるので縦に目が動かない。
+ * ただし**その部位がどれも持っていないときは、その部位の合計が大きい上位 2 種に落とす** —
+ * 物防・魔防しか持たない鎧や兜が「—」(= 未装備と同じ見た目)になると、値が入っているのに
+ * 空に見える(§00 ⑤ 考えさせない。ユーザー判断 2026-09-20)。
+ */
+export const valuesSummary = (
+  total: EquipmentValues,
+  enchant: EquipmentValues,
+  kinds?: readonly EquipmentStatKind[],
+): string => {
+  const held = (list: readonly EquipmentStatKind[]) => list.filter((k) => total[k] > 0);
+  const top = () =>
+    held(EQUIPMENT_VALUE_KEYS)
+      .sort((a, b) => total[b] - total[a])
+      .slice(0, 2);
+  const shown = kinds === undefined ? top() : (held(kinds).length > 0 ? held(kinds) : top());
+  return shown.length === 0
     ? "—"
-    : top.map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${withEnchant(base[k], enchant[k])}`).join(" / ");
+    : shown
+        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${totalWithEnchant(total[k], enchant[k])}`)
+        .join(" / ");
 };
 
 /** カタログ候補のレンジ要約。max が大きい上位 2 種を「物防260-280 / 魔防230-260」の形で出す。 */

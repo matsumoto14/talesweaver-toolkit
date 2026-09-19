@@ -28,7 +28,7 @@
   } from "../../enchant";
   import {
     equipmentIconId, sacredRelicStageFromValue, sacredRelicValue, selectedSienaAura, sienaStage,
-    valuesSummary,
+    valuesSummary, zeroValues,
   } from "../../equipment";
   import { fmtDuration, fmtInt, fmtMonthDay, fmtNum, fmtSigned } from "../../format";
   import {
@@ -539,6 +539,10 @@
     const list = character.equipment.parts[slot];
     return list.registered.find((p) => p.id === list.selected_id) ?? null;
   }
+  /** この部位の補正値の合計(装備本体 + エンチャント + 装備アビリティ)。計算は Rust 側(preview)。
+      画面側で足すとアビリティを落として装備タブと食い違う(2026-09-20 の修正)。 */
+  const partTotalValues = (slot: PartSlot) =>
+    heroStats?.part_total_values.find((p) => p.slot === slot)?.values ?? zeroValues();
   const isUnequipped = (part: EquipmentPart | null) =>
     !part || (part.item_id === null && part.custom_name === null);
   const itemOf = (part: EquipmentPart | null): EquipmentItem | null =>
@@ -1439,7 +1443,7 @@
                             <p class="relic-hint dim">補正値が上限まで届くと次の段へ進めます</p>
                           {/if}
                         {:else}
-                          <span class="expand-row-vals num dim">{valuesSummary(part!.base, part!.enchant)}</span>
+                          <span class="expand-row-vals num dim">{valuesSummary(partTotalValues(r.slot), part!.enchant)}</span>
                         {/if}
                       </div>
                     {:else}

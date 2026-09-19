@@ -908,6 +908,7 @@ impl CharacterRepository {
         titles: &[TitleDef],
         character_skills: &CharacterSkillCatalog,
     ) -> Result<RegisteredCharacter> {
+        let new = &pruned(new);
         validate(
             new,
             equipment_catalog,
@@ -959,6 +960,7 @@ impl CharacterRepository {
         titles: &[TitleDef],
         character_skills: &CharacterSkillCatalog,
     ) -> Result<RegisteredCharacter> {
+        let update = &pruned(update);
         validate(
             update,
             equipment_catalog,
@@ -1041,6 +1043,14 @@ impl CharacterRepository {
 }
 
 /// 登録リクエストの検証(値域・バフ整合性・装備カタログ整合性)。保存前プレビュー(preview_damage 等)からも使う。
+/// 保存するキャラ。親が選ばれていないアビリティ本体値・追加値(古いデータの残骸)を落としてから
+/// 検証・保存する。計算にも画面にも出ないものを、検証で止めたり持ち回ったりしない。
+fn pruned(new: &NewCharacter) -> NewCharacter {
+    let mut character = new.clone();
+    character.equipment.prune_ability_extras();
+    character
+}
+
 pub fn validate(
     new: &NewCharacter,
     equipment_catalog: &[EquipmentItem],
@@ -3032,9 +3042,10 @@ mod tests {
         ));
     }
 
-    /// エラー帯から該当部位へ飛べるように、装備の検証エラーは「どこの話か」を持つ。
+    /// 親が選ばれていない本体値(古いデータの残骸)は人に見せる話ではない。
+    /// 保存を止めず、黙って落とす(2026-09-20。それまでは検証エラーで拒否していた)。
     #[test]
-    fn 装備アビリティ本体値の孤児は部位とアビリティidを指す() {
+    fn 装備アビリティ本体値の孤児は拒否されず保存時に落ちる() {
         let repo = CharacterRepository::open_in_memory().unwrap();
         let mut c = new_character("x");
         c.equipment.parts.weapon.selected_or_register().item_id = Some("test-weapon".to_string());
@@ -3043,32 +3054,33 @@ mod tests {
             slash: 100,
             ..Default::default()
         };
-        // abilities には無いのに本体値だけ残っている(検証を足す前に保存された旧データ)。
+        // abilities には無いのに本体値だけ残っている(付け外しを掃除する前に保存された旧データ)。
         c.equipment.parts.weapon.selected_or_register().ability_values = vec![domain::EquipmentAbilityAdditional {
             ability_id: "test-ability".to_string(),
             kind: domain::EquipmentAbilityAdditionalKind::Thrust,
             value: 1,
         }];
-        let part_id = c.equipment.parts.weapon.registered[0].id;
-        let Err(StorageError::InvalidValue(error)) = repo.create(
-            &c,
-            &[],
-            &[test_equipment_item()],
-            &[test_equipment_ability()],
-            &[],
-            &[],
-            &[],
-        ) else {
-            panic!("孤児の本体値は拒否されるはず");
-        };
-        assert_eq!(
-            error.location,
-            Some(domain::ValidationLocation {
-                slot: domain::PartSlot::Weapon,
-                part_id,
-                ability_id: Some("test-ability".to_string()),
-                random_option_id: None,
-            })
+        let saved = repo
+            .create(
+                &c,
+                &[],
+                &[test_equipment_item()],
+                &[test_equipment_ability()],
+                &[],
+                &[],
+                &[],
+            )
+            .expect("孤児の本体値があっても保存できる");
+        assert!(
+            saved
+                .equipment
+                .parts
+                .weapon
+                .selected()
+                .expect("武器")
+                .ability_values
+                .is_empty(),
+            "残骸は保存時に落ちる"
         );
     }
 

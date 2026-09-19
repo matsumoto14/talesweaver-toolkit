@@ -24,7 +24,7 @@
   import SplitPage from "../../ui/SplitPage.svelte";
   import Value from "../../ui/Value.svelte";
   import { latest } from "../../ui/latest.svelte";
-  import { changed } from "../../ui/motion.svelte";
+  import { changed, markRecalculated } from "../../ui/motion.svelte";
   import { REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
   import DamageChain from "./DamageChain.svelte";
   import DefensePanel from "./DefensePanel.svelte";
@@ -282,6 +282,10 @@
         if (isCurrent()) {
           result = main;
           savedResult = saved;
+          // 差分枠(↑↓)は「今回の計算で動いた値」にだけ出す。動かなかった値では差分枠の
+          // effect が走らないので、結果を入れたこの場で世代を進めて全部の枠に見直させる。
+          // $effect からではなく代入と同じ場所で呼ぶ — 枠側の effect より先に確定させるため
+          markRecalculated();
         }
       } catch (e) {
         if (isCurrent()) {
@@ -416,6 +420,7 @@
   // --- 攻撃 / 防御タブ(規格シート 5c) --------------------------------------
   let side = $state<"attack" | "defense">("attack");
   let defense = $state<DefenseProfile | null>(null);
+
   let defenseError = $state<string | null>(null);
   const defenseLatest = latest();
   $effect(() => {
@@ -432,6 +437,7 @@
           if (isCurrent()) {
             defense = d;
             defenseError = null;
+            markRecalculated("defense");
           }
         })
         .catch((e) => {

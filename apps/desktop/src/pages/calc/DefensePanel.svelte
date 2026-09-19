@@ -6,6 +6,12 @@
   import { limits } from "../../limits.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
   import SheetCard from "../../ui/SheetCard.svelte";
+  import { setContext } from "svelte";
+  import { DELTA_SCOPE } from "../../ui/motion.svelte";
+
+  // この面の値は防御の計算(previewDefense)で来る。攻撃の計算が着いたときに
+  // 「動かなかった」と判定されて差分が消えないよう、見る世代を宣言する
+  setContext(DELTA_SCOPE, "defense");
 
   interface Props {
     profile: DefenseProfile | null;

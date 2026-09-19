@@ -1262,6 +1262,9 @@ pub struct StatPreview {
     /// 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳)。
     /// 正は `Equipment::ability_values_by_part`
     pub part_ability_values: Vec<PartEquipmentValues>,
+    /// 部位別の「この装備の補正値」(`part.base` + `part.enchant` + 部位アビリティ)。
+    /// 部位一覧・部位詳細が出す合計はこれが正。正は `Equipment::total_values_by_part`
+    pub part_total_values: Vec<PartEquipmentValues>,
     /// 基本能力値のうち装備研磨由来の分だけを部位別に割ったもの(表示用の内訳)。
     /// バフ「装備研磨」が OFF なら全部位 0。正は `Equipment::polish_values_by_part`
     pub part_polish_values: Vec<PartEquipmentValues>,
@@ -1861,6 +1864,7 @@ pub fn preview_effective_stats(
         .sum();
     let equipment_base_total = equipment_base.total(equipment);
     let part_ability_values = equipment.ability_values_by_part(abilities);
+    let part_total_values = equipment.total_values_by_part(abilities);
     let part_polish_values = equipment.polish_values_by_part(polish_active);
     let siena_part_values = equipment
         .siena
@@ -1935,6 +1939,7 @@ pub fn preview_effective_stats(
         elements,
         equipment_base_total,
         part_ability_values,
+        part_total_values,
         part_polish_values,
         equipment_polish_active: polish_active,
         siena_part_values,

@@ -631,6 +631,16 @@ impl EquipmentPart {
             .retain(|addition| !ability_ids.contains(&addition.ability_id));
     }
 
+    /// 選ばれていないアビリティに紐づく本体値・追加値を落とす。
+    /// 付け外しのたびに Rust 側が掃除しているので、これが仕事をするのは
+    /// 掃除する前のコードで保存された古いデータだけ(残骸は画面にも計算にも出さない)。
+    pub fn prune_ability_extras(&mut self) {
+        self.ability_values
+            .retain(|value| self.abilities.contains(&value.ability_id));
+        self.ability_additions
+            .retain(|addition| self.abilities.contains(&addition.ability_id));
+    }
+
     /// 本体に可変値があるアビリティの既定値(上端)を入れる。既にあれば作り直さない
     /// (作ると本体値が重複して保存できなくなる)。
     fn ensure_ability_value(&mut self, def: &EquipmentAbilityDef) {
@@ -1521,15 +1531,6 @@ impl Equipment {
                             at_ability(&value.ability_id),
                         ));
                     }
-                    if !part.abilities.iter().any(|id| id == &value.ability_id) {
-                        return Err(ValidationError::at(
-                            format!(
-                                "装備アビリティ本体値の親 '{}' が選択されていません",
-                                value.ability_id
-                            ),
-                            at_ability(&value.ability_id),
-                        ));
-                    }
                     let def = equipment_abilities
                         .iter()
                         .find(|a| a.id == value.ability_id)
@@ -1573,15 +1574,6 @@ impl Equipment {
                 let mut addition_counts: std::collections::HashMap<&str, usize> =
                     std::collections::HashMap::new();
                 for addition in &part.ability_additions {
-                    if !part.abilities.iter().any(|id| id == &addition.ability_id) {
-                        return Err(ValidationError::at(
-                            format!(
-                                "追加アビリティの親 '{}' が選択されていません",
-                                addition.ability_id
-                            ),
-                            at_ability(&addition.ability_id),
-                        ));
-                    }
                     let def = equipment_abilities
                         .iter()
                         .find(|a| a.id == addition.ability_id)
@@ -1773,6 +1765,34 @@ impl Equipment {
             .map(|(slot, part)| PartEquipmentValues {
                 slot,
                 values: part.enchant,
+            })
+            .collect()
+    }
+
+    /// 全部位・全登録の残骸(親が選ばれていない本体値・追加値)を落とす。保存の直前に通す。
+    pub fn prune_ability_extras(&mut self) {
+        for slot in PartSlot::ALL {
+            for part in &mut self.parts.get_mut(slot).registered {
+                part.prune_ability_extras();
+            }
+        }
+    }
+
+    /// 部位別の「この装備の補正値」(表示用の合計)。`part.base` + `part.enchant` + 部位アビリティ。
+    /// **部位一覧・部位詳細が出す数字はこれが正**(画面側で足し直さない)。
+    /// 研磨はバフ「装備研磨」の ON/OFF で出入りし、シエナのオーラは部位によって装備補正かステ加算かが
+    /// 変わるので、どちらもここには入れない(`polish_values_by_part` / `SienaAura::values` が別に持つ)。
+    pub fn total_values_by_part(
+        &self,
+        abilities: &[EquipmentAbilityDef],
+    ) -> Vec<PartEquipmentValues> {
+        self.iter_selected()
+            .map(|(slot, part)| PartEquipmentValues {
+                slot,
+                values: part
+                    .base
+                    .add(part.enchant)
+                    .add(part_ability_values(part, abilities)),
             })
             .collect()
     }
@@ -2099,11 +2119,16 @@ fn part_ability_values(part: &EquipmentPart, abilities: &[EquipmentAbilityDef]) 
             total = total.add(def.values);
         }
     }
+    // 親が選ばれていない値は残骸(古いデータ)。画面に出ないものを計算に混ぜない。
     for value in &part.ability_values {
-        add_ability_value(&mut total, value);
+        if part.abilities.contains(&value.ability_id) {
+            add_ability_value(&mut total, value);
+        }
     }
     for addition in &part.ability_additions {
-        add_ability_value(&mut total, addition);
+        if part.abilities.contains(&addition.ability_id) {
+            add_ability_value(&mut total, addition);
+        }
     }
     total
 }
@@ -3066,6 +3091,51 @@ mod tests {
     }
 
     #[test]
+    fn total_values_by_partは装備本体とエンチャントとアビリティを足す() {
+        let mut eq = equipment_with(
+            EquipmentValues {
+                slash: 840,
+                ..Default::default()
+            },
+            EquipmentValues {
+                slash: 20,
+                ..Default::default()
+            },
+        );
+        eq.parts.weapon.selected_or_register().abilities = vec!["sharp-blade-e".to_string()];
+        let abilities = vec![EquipmentAbilityDef {
+            id: "sharp-blade-e",
+            name: "E-鋭い刃",
+            family: EquipmentAbilityFamily::SharpBlade,
+            category: 4,
+            slot: PartSlot::Weapon,
+            value_option: None,
+            exclusive_group: "weapon-category-4",
+            additional_slots: 2,
+            additional_effects: "",
+            additional_options: vec![],
+            record_only: false,
+            element: None,
+            grade: None,
+            ladder: String::new(),
+            priority: 0,
+            effect_summary: "斬り +12",
+            values: EquipmentValues {
+                slash: 12,
+                ..Default::default()
+            },
+            damage_effects: &[],
+        }];
+
+        let weapon = eq
+            .total_values_by_part(&abilities)
+            .into_iter()
+            .find(|p| p.slot == PartSlot::Weapon)
+            .expect("武器の合計");
+        assert_eq!(weapon.values.slash, 840 + 20 + 12);
+    }
+
+    #[test]
     fn base_sourcesはpolish_activeがfalseなら研磨を出さない() {
         let mut eq = equipment_with(
             EquipmentValues {
@@ -3155,9 +3225,40 @@ mod tests {
     }
 
     #[test]
+    fn 親が選ばれていないアビリティ本体値は計算に入らず保存で落ちる() {
+        let mut eq = Equipment::default();
+        let part = eq.parts.shield_plus.selected_or_register();
+        // 「鋭い刃」を外して「命中」に付け替えた後の古いデータ(本体値だけ残っている)
+        part.abilities = vec!["mystic-mine-accuracy".into()];
+        part.ability_values = vec![
+            EquipmentAbilityAdditional {
+                ability_id: "mystic-mine-accuracy".into(),
+                kind: EquipmentAbilityAdditionalKind::Accuracy,
+                value: 15,
+            },
+            EquipmentAbilityAdditional {
+                ability_id: "mystic-mine-sharp-blade".into(),
+                kind: EquipmentAbilityAdditionalKind::Slash,
+                value: 13,
+            },
+        ];
+
+        let base = base_totals(&eq, &[], &[], false);
+        assert_eq!(base.accuracy, 15);
+        assert_eq!(base.slash, 0, "残骸は装備補正に足さない");
+
+        eq.prune_ability_extras();
+        let values = &eq.parts.shield_plus.selected().expect("盾+").ability_values;
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0].ability_id, "mystic-mine-accuracy");
+    }
+
+    #[test]
     fn 新装着アビリティのランダム追加は補正値_w_x3へ入る() {
         use EquipmentAbilityAdditionalKind::*;
         let mut eq = equipment_with(EquipmentValues::default(), EquipmentValues::default());
+        // 追加値は親のアビリティが選ばれているときだけ効く(残骸は足さない)
+        eq.parts.weapon.selected_or_register().abilities = vec!["night-star-sharp-blade".into()];
         eq.parts.weapon.selected_or_register().ability_additions = vec![
             EquipmentAbilityAdditional {
                 ability_id: "night-star-sharp-blade".into(),

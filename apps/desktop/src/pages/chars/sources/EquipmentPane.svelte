@@ -17,6 +17,7 @@
   import Disclosure from "../../../ui/Disclosure.svelte";
   import { latest } from "../../../ui/latest.svelte";
   import { damageCategoryLabel } from "../../../characterSkills";
+  import { equipmentAttackKindsFor } from "../summaries";
   import type { Draft } from "../../../draft";
   import {
     cloneEquipmentPart, equipmentIconId, neutralEquipmentPart, rangeSummary, valuesSummary, zeroValues,
@@ -59,6 +60,11 @@
   ]);
 
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
+  /** 部位一覧に出す補正。主軸スキルの依存能力から決まる(見出しの要約と同じ規則)。
+      主軸が無いときは undefined = 値が大きい上位 2 種に任せる。 */
+  const summaryKinds = $derived(
+    mainSkill === null ? undefined : equipmentAttackKindsFor(mainSkill.dependency),
+  );
   const iconId = (itemId: string | null) => equipmentIconId(itemId, app.equipmentCatalog);
 
   /** 双剣Sub(wrist_type)。この盾は武器アビリティも合算候補になる
@@ -342,8 +348,8 @@
   const abilityDef = (id: string) => app.equipmentAbilities.find((a) => a.id === id) ?? null;
   /**
    * 装着アビリティを差し替え、そこで外れたアビリティの本体値・追加値も一緒に落とす。
-   * 元から親のいない孤児(検証を足す前に保存された旧データ)は残す — 黙って捨てず、
-   * 部位詳細で「アビリティに戻す / 値を捨てる」を選ばせる。
+   * 親が選ばれていない値(古いデータの残骸)は Rust が保存時に落とすので、画面は気にしない
+   * (`Equipment::prune_ability_extras`。計算にも入らない)。
    */
   function replaceAbilities(part: EquipmentPart, next: string[]) {
     const removed = part.abilities.filter((id) => !next.includes(id));
@@ -351,26 +357,6 @@
     if (removed.length === 0) return;
     part.ability_values = (part.ability_values ?? []).filter((v) => !removed.includes(v.ability_id));
     part.ability_additions = (part.ability_additions ?? []).filter((a) => !removed.includes(a.ability_id));
-  }
-  /** 本体一覧(abilities)に無いのに値だけ残っている親 id。旧データでだけ出る。 */
-  const orphanAbilityIds = (slot: PartSlot): string[] => {
-    const part = selectedPartOrNull(slot);
-    if (!part) return [];
-    const ids = [
-      ...(part.ability_values ?? []).map((v) => v.ability_id),
-      ...(part.ability_additions ?? []).map((a) => a.ability_id),
-    ];
-    return [...new Set(ids)].filter((id) => !part.abilities.includes(id));
-  };
-  function restoreOrphanAbility(slot: PartSlot, abilityId: string) {
-    const part = selectedPart(slot);
-    if (part.abilities.includes(abilityId)) return;
-    part.abilities = [...part.abilities, abilityId];
-  }
-  function dropOrphanAbility(slot: PartSlot, abilityId: string) {
-    const part = selectedPart(slot);
-    part.ability_values = (part.ability_values ?? []).filter((v) => v.ability_id !== abilityId);
-    part.ability_additions = (part.ability_additions ?? []).filter((a) => a.ability_id !== abilityId);
   }
   // 武器の系統の解決・系統ごとの装着可否・候補の並び・等級での畳み方は、すべて Rust
   // (domain::ability_candidates)が持つ。ここは返ってきた順に並べ、`default_shown` で
@@ -530,6 +516,9 @@
   /** 基本能力値のうち、この部位の装備アビリティ由来の分(表示用の内訳)。計算は Rust 側(preview) */
   const partAbilityValues = (slot: PartSlot) =>
     preview?.part_ability_values.find((p) => p.slot === slot)?.values ?? zeroValues();
+  /** この部位の補正値の合計(装備本体 + エンチャント + 装備アビリティ)。計算は Rust 側(preview) */
+  const partTotalValues = (slot: PartSlot) =>
+    preview?.part_total_values.find((p) => p.slot === slot)?.values ?? zeroValues();
   /** 強化能力値のうち、この部位のエンチャント分(part.enchant そのもの)。計算は Rust 側(preview) */
   const partEnchantValues = (slot: PartSlot) =>
     preview?.part_enchant_values.find((p) => p.slot === slot)?.values ?? zeroValues();
@@ -707,7 +696,10 @@
         <span class="part-abi">OP {part!.random_options.length}</span>
       {/if}
     </span>
-    <span class="part-vals num dim">{part ? valuesSummary(part.base, part.enchant) : "—"}</span>
+    <!-- 主軸スキルが実際に使う補正だけを出す(部位をまたいで同じ並びなので縦に目が動かない。
+         §00 ①)。主軸未選択のときだけ「値が大きい上位 2 種」に落ちる -->
+    <span class="part-vals num dim"
+    >{part ? valuesSummary(partTotalValues(slot), partEnchantValues(slot), summaryKinds) : "—"}</span>
   {/snippet}
   </Drill>
   {#if list.registered.length > 1}
@@ -923,7 +915,8 @@
                直せるように欄を残す -->
           {@const noEnchant = cap !== null && cap <= 0 && part.enchant[k] === 0}
           {@const abilityValue = partAbilityValues(slot)[k]}
-          {@const displayTotal = part.base[k] + partEnchantValues(slot)[k] + abilityValue}
+          <!-- 合計は Rust が部位ごとに出したもの(`part_total_values`)。画面側で足し直さない -->
+          {@const displayTotal = partTotalValues(slot)[k]}
           {@const completionPlan = enchantPlanFor(slot, k)}
           <div
             class="value-pair"
@@ -1148,24 +1141,6 @@
           {/if}
         {/if}
 
-        <!-- 本体一覧に無いのに値だけ残っている旧データ。黙って捨てず、その場で 1 クリックで決めさせる -->
-        {#each orphanAbilityIds(slot) as orphanId (orphanId)}
-          {@const orphan = abilityDef(orphanId)}
-          <div
-            class="siena-row orphan-row swap-in"
-            data-ability-id={orphanId}
-            use:changed={() => focusToken(orphanId)}
-          >
-            <span class="ro-name">{orphan?.name ?? orphanId}</span>
-            <span class="orphan-note">本体一覧に無い値が残っています</span>
-            <Chip
-              class="add"
-              disabled={orphan === null || part.abilities.length >= currentAbilitySlotCount(slot)}
-              onclick={() => restoreOrphanAbility(slot, orphanId)}
-            >アビリティに戻す</Chip>
-            <button type="button" class="clear" onclick={() => dropOrphanAbility(slot, orphanId)}>値を捨てる</button>
-          </div>
-        {/each}
       </div>
     {/if}
 

@@ -1469,6 +1469,8 @@ export interface StatPreview {
   equipment_base_total: EquipmentValues;
   /** 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳) */
   part_ability_values: PartEquipmentValues[];
+  /** 部位別の「この装備の補正値」(装備本体 + エンチャント + 装備アビリティ)。部位一覧・部位詳細が出す合計 */
+  part_total_values: PartEquipmentValues[];
   /** 基本能力値のうち装備研磨由来の分だけを部位別に割ったもの(表示用の内訳)。バフ「装備研磨」が OFF なら全部位 0 */
   part_polish_values: PartEquipmentValues[];
   /** バフ「装備研磨」がこのプレビューのバフ選択(いつものバフ)で ON か */

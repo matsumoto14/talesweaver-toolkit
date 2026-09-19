@@ -272,14 +272,6 @@
     background: none; border: 1px solid var(--border-soft); border-radius: var(--r-pill);
   }
   .siena-row .clear:hover { background: var(--state-short-bg); color: var(--danger); }
-  /* 本体一覧に無い値が残っている行(旧データ)。捨てるか戻すかを決めてもらうまで残すので、
-     「届かない・危険」の状態色をそのまま使い、新しい色は足さない(§03) */
-  .orphan-row {
-    grid-template-columns: minmax(0, 132px) minmax(0, 1fr) auto auto;
-    margin: 4px 0; padding: 4px 6px; border-bottom: none; border-radius: var(--r-inset);
-    background: var(--state-short-bg); border: 1px solid var(--state-short-bd);
-  }
-  .orphan-note { font-size: 9px; color: var(--danger); }
   /* 効き先。名前の下に小さく置く(行は増やさない) */
   .siena-to {
     display: block; font-size: 8.5px; font-weight: 500; color: var(--fg-muted);
