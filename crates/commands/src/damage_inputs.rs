@@ -63,7 +63,7 @@ pub fn element_preview(
     domain::ElementPreview::new(
         gamedata::element_base(game_character_id),
         equipment.element_values(enchanted_element(equipment, stat_sources, &abilities)),
-        equipment.ability_element_values(&abilities),
+        equipment.ability_element_values_by_part(&abilities),
         stat_sources
             .elements
             .values(gamedata::element_source_catalog()),

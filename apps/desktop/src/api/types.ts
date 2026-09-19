@@ -497,6 +497,8 @@ export interface ElementPreview {
   equipment: ElementValues;
   /** 装備アビリティ由来(月石の本体値 + 追加枠の属性) */
   ability: ElementValues;
+  /** 装備アビリティ由来の部位別の内訳。属性を持ちうる部位は、登録が無くても 0 で入る */
+  ability_by_part: PartElementValues[];
   /** 装備の外の供給源(ペット / モンスターカード / ルーンスキル) */
   sources: ElementValues;
   /** 4 つを足して上限 255 で頭打ちにした値 */
@@ -1004,6 +1006,11 @@ export type ArmorClass = "light" | "heavy" | "magic" | "suit" | "robe";
 export interface PartEquipmentValues {
   slot: PartSlot;
   values: EquipmentValues;
+}
+// crates/domain/src/equipment.rs の PartElementValues。部位キー付きの属性値(表示用)。
+export interface PartElementValues {
+  slot: PartSlot;
+  values: ElementValues;
 }
 // crates/domain/src/equipment.rs の PartSlotRule。部位ごとの枠数・可否ルール(ドラフト非依存、
 // PartSlot の同名メソッドの写し)。唯一の正 — labels.ts の可否テーブルはここを参照する。

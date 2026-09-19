@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::equipment::PartElementValues;
+
 /// 属性 8 種(wiki 属性システム「火・水・風・地・雷・白・黒・無の8つ」)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -199,13 +201,17 @@ pub struct ElementBonus {
 
 /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備アビリティ / 装備外の供給源 / 合計)。
 /// 画面表示用。既定値(全 0)は「どの属性も乗っていない」。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ElementPreview {
     pub base: ElementValues,
     /// 部位ごとの属性強化(1 部位 1 属性・最大 9)
     pub equipment: ElementValues,
     /// 装備アビリティ由来(月石の本体値 + 追加枠の属性)
     pub ability: ElementValues,
+    /// 装備アビリティ由来の部位別の内訳。**属性を持ちうる部位は登録が無くても 0 で入る**
+    /// (「ここに登録すればまだ増える」を画面が言えるように)。正は
+    /// `Equipment::ability_element_values_by_part`
+    pub ability_by_part: Vec<PartElementValues>,
     /// 装備の外の供給源(ペット / モンスターカード / ルーンスキル)
     pub sources: ElementValues,
     /// 4 つを足して上限 255 で頭打ちにした値
@@ -216,13 +222,17 @@ impl ElementPreview {
     pub fn new(
         base: ElementValues,
         equipment: ElementValues,
-        ability: ElementValues,
+        ability_by_part: Vec<PartElementValues>,
         sources: ElementValues,
     ) -> Self {
+        let ability = ability_by_part
+            .iter()
+            .fold(ElementValues::default(), |acc, p| acc.add(p.values));
         Self {
             base,
             equipment,
             ability,
+            ability_by_part,
             sources,
             total: base.add(equipment).add(ability).add(sources).clamp_to_max(),
         }

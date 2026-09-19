@@ -6,10 +6,10 @@
   // 分からない。敵の閾値(120 / 125 が多い)に対してどれだけ超えているかまで出す。
   // 合算・上限 255 の頭打ちは Rust 側(preview.elements)。ここは表示に整えるだけ(ADR 001)。
   import { untrack } from "svelte";
-  import type { Element, Skill, StatPreview } from "../../../api/types";
+  import type { Element, PartSlot, Skill, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
   import { fmtInt, fmtSigned, fmtSignedPct } from "../../../format";
-  import { ELEMENT_LABELS, ELEMENTS } from "../../../labels";
+  import { ELEMENT_LABELS, ELEMENTS, PART_SLOT_LABELS } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
   import Chip from "../../../ui/Chip.svelte";
@@ -109,7 +109,17 @@
   /** 収録済みの敵に多い閾値。ここは「だいたいどのくらい効くか」の目安 */
   const ENEMY_THRESHOLDS = [120, 125];
 
-  /** 装備から自動で入る分(部位ごとの属性強化と、月石などのアビリティ) */
+  /**
+   * 装備アビリティで属性を持てる部位ごとの注記。**登録が無い部位も 0 の行で出す**ので、
+   * 「属性値が足りないのは登録の抜け」だと画面で分かる(Rust 側が 0 の行も返す)
+   */
+  const ABILITY_PART_NOTE: Partial<Record<PartSlot, string>> = {
+    helm: "月石の本体(N +5 / R +10 / L +15 / G +20)と、G- の別属性枠 +20",
+    shield_plus: "カフスのアビリティのランダム追加枠(属性 +10〜30)",
+    relic_pendant: "レリック(ペンダント)のランダム追加枠(属性 +20〜30)",
+  };
+
+  /** 装備から自動で入る分(部位ごとの属性強化と、部位ごとの装備アビリティ) */
   const fromEquipment = $derived<ExternalSource[]>(
     activeElement === null
       ? []
@@ -121,13 +131,13 @@
             format: (v: number) => fmtSigned(v),
             note: "1 部位 1 属性・最大 9(盾+・レリックは対象外)",
           },
-          {
+          ...(elements?.ability_by_part ?? []).map((part) => ({
             id: "equipment" as SourceId,
-            name: "装備アビリティ",
-            value: elements?.ability[activeElement] ?? 0,
+            name: `${PART_SLOT_LABELS[part.slot]}のアビリティ`,
+            value: part.values[activeElement],
             format: (v: number) => fmtSigned(v),
-            note: "月石(N +5 / R +10 / L +15 / G +20)・カフス・レリックの属性枠",
-          },
+            note: ABILITY_PART_NOTE[part.slot],
+          })),
         ],
   );
 </script>

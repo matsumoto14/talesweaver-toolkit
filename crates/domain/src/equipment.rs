@@ -1971,21 +1971,61 @@ impl Equipment {
     /// (G- 月石の別属性 +20 / カフス(盾+)+10〜30 / レリック(ペンダント)+20〜30)を足す。
     /// **装備の属性強化(`element_values`)とは別枠**で、どちらもキャラの属性値へ合流する。
     pub fn ability_element_values(&self, abilities: &[EquipmentAbilityDef]) -> ElementValues {
+        self.iter_selected()
+            .map(|(slot, _)| self.part_ability_element_values(slot, abilities))
+            .fold(ElementValues::default(), |acc, v| acc.add(v))
+    }
+
+    /// 装備アビリティ由来の属性値の**部位別の内訳**。
+    ///
+    /// カタログ上で属性を持ちうる部位(本体に属性値がある = 月石の頭、追加枠に属性がある =
+    /// 盾+ のカフス・レリックのペンダント)を、**登録が無くても 0 で返す**。画面が
+    /// 「ここに登録すればまだ増える」を言えるようにするため(属性値が足りない原因は
+    /// たいてい計算ではなく登録の抜け)。部位の並びは `PartSlot::ALL` の順。
+    pub fn ability_element_values_by_part(
+        &self,
+        abilities: &[EquipmentAbilityDef],
+    ) -> Vec<PartElementValues> {
+        PartSlot::ALL
+            .into_iter()
+            .filter(|slot| {
+                abilities.iter().any(|a| {
+                    a.slot == *slot
+                        && (a.element.is_some()
+                            || a.additional_options
+                                .iter()
+                                .any(|o| o.kind.element().is_some()))
+                })
+            })
+            .map(|slot| PartElementValues {
+                slot,
+                values: self.part_ability_element_values(slot, abilities),
+            })
+            .collect()
+    }
+
+    /// 部位 1 つぶんの装備アビリティ由来の属性値(本体 + 追加枠)。
+    fn part_ability_element_values(
+        &self,
+        slot: PartSlot,
+        abilities: &[EquipmentAbilityDef],
+    ) -> ElementValues {
         let mut total = ElementValues::default();
-        for (_, part) in self.iter_selected() {
-            for id in &part.abilities {
-                if let Some(bonus) = abilities
-                    .iter()
-                    .find(|a| a.id == id.as_str())
-                    .and_then(|a| a.element)
-                {
-                    *total.get_mut(bonus.element) += bonus.value;
-                }
+        let Some(part) = self.parts.get(slot).selected() else {
+            return total;
+        };
+        for id in &part.abilities {
+            if let Some(bonus) = abilities
+                .iter()
+                .find(|a| a.id == id.as_str())
+                .and_then(|a| a.element)
+            {
+                *total.get_mut(bonus.element) += bonus.value;
             }
-            for addition in &part.ability_additions {
-                if let Some(element) = addition.kind.element() {
-                    *total.get_mut(element) += i64::from(addition.value);
-                }
+        }
+        for addition in &part.ability_additions {
+            if let Some(element) = addition.kind.element() {
+                *total.get_mut(element) += i64::from(addition.value);
             }
         }
         total
@@ -2032,6 +2072,13 @@ impl Equipment {
 pub struct PartEquipmentValues {
     pub slot: PartSlot,
     pub values: EquipmentValues,
+}
+
+/// 部位 1 つぶんの属性値(表示用。装備アビリティ由来の内訳)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PartElementValues {
+    pub slot: PartSlot,
+    pub values: ElementValues,
 }
 
 /// 部位 1 つぶんの単純な合計値(表示用。シエナのオーラのステ加算合計など)。

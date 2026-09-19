@@ -1401,12 +1401,19 @@ fn combat_stats_of(
     )
     .map_err(|e| e.to_string())?;
     let inputs = EquipmentBaseInputs::new(&character.game_character_id);
+    // 主軸スキルは手首補正の振り先を決めるためだけに引く。カタログに無い id(スキルの改名を
+    // またいだ古いキャラ)でも防御・対人は出せるべきなので、ここでは解けなくても止めない
+    let style_dependency = character
+        .main_skill_id
+        .as_deref()
+        .and_then(gamedata::find_skill)
+        .map(|skill| skill.dependency);
     let base_total = inputs
         .context(
             &character.base_stats,
             character.stat_sources.soul_link,
             buffs,
-            character_style_dependency(character.main_skill_id.as_deref())?,
+            style_dependency,
         )
         .total(&character.equipment);
     Ok((stats, base_total))
@@ -2349,8 +2356,8 @@ fn enchant_id_slot_key(
 #[cfg(test)]
 mod tests {
     use super::{
-        armor_added_hp, build_damage_input, preview_effective_stats, preview_versus,
-        resolve_accuracy_boost, resolve_combo_skill_type, weapon_added_damage,
+        armor_added_hp, build_damage_input, combat_stats_of, preview_effective_stats,
+        preview_versus, resolve_accuracy_boost, resolve_combo_skill_type, weapon_added_damage,
     };
     use domain::{
         AccuracyBoost, AccuracyBoostSource, Awakening, BaseStats, BuffSelection, ComboSkillType,
@@ -2988,6 +2995,51 @@ mod tests {
             preview.base.equipment_base_total.magic_attack, 135,
             "腕の突き(基本 120 + エンチャント 15)が魔攻へ乗る"
         );
+    }
+
+
+    #[test]
+    fn 防御と対人が通る経路にも手首補正が入る() {
+        // ベンヤはバンドの敏捷 × 0.7 が HACK と MR の大小で 斬り / 魔防 へ行く
+        // (`WristBonusRule::BandAgilityByStatComparison`)。魔防は防御プロファイルの入力なので、
+        // 防御・対人が使う `combat_stats_of` の装備基本合計に入っていないと防御力が下振れする。
+        let catalog = gamedata::equipment_catalog();
+        let band = catalog
+            .iter()
+            .find(|item| item.wrist_type == Some(domain::WristType::Band))
+            .expect("バンドの腕装備がカタログにある");
+        let mut character = anais();
+        character.game_character_id = "benya".to_string();
+        // HACK < MR なので振り先は魔防
+        character.base_stats.hack = 1;
+        character.base_stats.mr = 100;
+        character.equipment.parts.shield = EquipmentPart {
+            item_id: Some(band.id.to_string()),
+            base: EquipmentValues {
+                agility: 100,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+        .into();
+
+        let (_, with_band) = combat_stats_of(&character, &BuffSelection::default()).unwrap();
+        // 100 × 0.7 = 70(小数点以下切り捨て)
+        assert_eq!(with_band.magic_defense, 70);
+
+        // 腕を外せば手首補正も消える
+        character.equipment.parts.shield.selected_id = None;
+        let (_, without_band) = combat_stats_of(&character, &BuffSelection::default()).unwrap();
+        assert_eq!(without_band.magic_defense, 0);
+    }
+
+    #[test]
+    fn 主軸スキルがカタログに無くても防御と対人は出せる() {
+        // スキルの改名をまたいだ古いキャラ。手首補正の振り先が決まらないだけで、
+        // 防御・対人まで開けなくなってはいけない
+        let mut character = anais();
+        character.main_skill_id = Some("no-such-skill".to_string());
+        assert!(combat_stats_of(&character, &BuffSelection::default()).is_ok());
     }
 
 }
