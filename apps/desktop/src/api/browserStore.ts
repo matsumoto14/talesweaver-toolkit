@@ -34,6 +34,9 @@ const DB_NAME = "tw-context";
  * (WASM)の正規化関数を要るため `onupgradeneeded` の版変更トランザクション中には呼べず、
  * `normalizeSummonSkillSelections`(ストアを開いた直後に呼ぶ通常のトランザクション)として
  * 実装する(2026-09-18 追記。呼び出し側は invoke.wasm.ts)。
+ * v8 で補正源に `lumina_corridor`(ルミナの回廊の回廊効果)が加わった。SQLite は JSON 列
+ * (`stat_sources`)なので列追加も migrate も要らないが、IndexedDB は v3 と同じ理由で既存行に
+ * 中立値(全 Lv0)を足す(2026-09-19)。
  */
 const SCHEMA_VERSION = 8;
 

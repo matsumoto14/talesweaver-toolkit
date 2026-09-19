@@ -1921,11 +1921,17 @@ pub fn evaluate_contents(
     // 装備の基本能力値は計算タブ・キャラ画面と同じ文脈から出す(手首補正の振り先は
     // 主軸スキル。主軸が未選択なら評価中のスキルの依存種別を domain 側が使う)
     let inputs = EquipmentBaseInputs::new(&character.game_character_id);
+    // 主軸スキルは手首補正の振り先にしか使わないので、カタログに無い id(スキルの改名を
+    // またいだ古いキャラ)でもホームの到達一覧は出す(防御・対人と同じ扱い)
     let equipment_base = inputs.context(
         &character.base_stats,
         character.stat_sources.soul_link,
         &buffs,
-        character_style_dependency(character.main_skill_id.as_deref())?,
+        character
+            .main_skill_id
+            .as_deref()
+            .and_then(gamedata::find_skill)
+            .map(|skill| skill.dependency),
     );
     // スキルごとに変わるがコンテンツには依存しない値(依存種別の係数・カテゴリ寄与・
     // 属性値)は、コンテンツの数だけ繰り返さずキャラのスキル数ぶんだけ 1 回作る。

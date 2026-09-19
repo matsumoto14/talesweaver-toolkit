@@ -3339,6 +3339,74 @@ mod tests {
     }
 
     #[test]
+    fn 部位別の属性値は未登録の部位も0で返し合計と一致する() {
+        // カタログ上で属性を持てる部位(ここでは頭と盾+)は、登録が無くても行が出る。
+        // 「属性値が足りないのは登録の抜け」だと画面で言えるようにするため。
+        let moonstone = EquipmentAbilityDef {
+            id: "g-fire-moonstone",
+            name: "G-火の月石",
+            family: EquipmentAbilityFamily::Element,
+            category: 4,
+            slot: PartSlot::Head,
+            value_option: None,
+            exclusive_group: "head-element",
+            additional_slots: 1,
+            additional_effects: "",
+            additional_options: vec![],
+            record_only: false,
+            effect_summary: "火属性 +20",
+            values: EquipmentValues::default(),
+            damage_effects: &[],
+            element: Some(ElementBonus {
+                element: Element::Fire,
+                value: 20,
+            }),
+            grade: None,
+            ladder: String::new(),
+            priority: 0,
+        };
+        let cuffs = EquipmentAbilityDef {
+            id: "mystic-mine-sharp-blade",
+            name: "神秘鉱の鋭い刃",
+            slot: PartSlot::ShieldPlus,
+            element: None,
+            additional_options: vec![EquipmentAbilityAdditionalDef {
+                kind: EquipmentAbilityAdditionalKind::WaterElement,
+                min: 10,
+                max: 30,
+            }],
+            ..moonstone.clone()
+        };
+        let abilities = [moonstone, cuffs];
+
+        // 頭にだけ月石を登録した状態(盾+ は未登録)
+        let mut eq = Equipment::default();
+        let head = eq.parts.head.selected_or_register();
+        head.abilities = vec!["g-fire-moonstone".into()];
+
+        let by_part = eq.ability_element_values_by_part(&abilities);
+        let slots: Vec<PartSlot> = by_part.iter().map(|p| p.slot).collect();
+        assert_eq!(
+            slots,
+            vec![PartSlot::ShieldPlus, PartSlot::Head],
+            "属性を持てる部位は登録が無くても出る(並びは PartSlot::ALL)"
+        );
+        let head_row = by_part.iter().find(|p| p.slot == PartSlot::Head).unwrap();
+        assert_eq!(head_row.values.get(Element::Fire), 20);
+        let cuffs_row = by_part
+            .iter()
+            .find(|p| p.slot == PartSlot::ShieldPlus)
+            .unwrap();
+        assert_eq!(cuffs_row.values, ElementValues::default(), "未登録は 0");
+
+        // 合計は部位別の Σ と一致する(計算を二重に書いていない)
+        let summed = by_part
+            .iter()
+            .fold(ElementValues::default(), |acc, p| acc.add(p.values));
+        assert_eq!(eq.ability_element_values(&abilities), summed);
+    }
+
+    #[test]
     fn 無属性と未装備には属性強化を反映しない() {
         let mut eq = Equipment::default();
         eq.parts.shield_plus.selected_or_register().item_id = Some("cuffs".into());
