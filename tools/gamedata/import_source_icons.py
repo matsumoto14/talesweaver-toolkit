@@ -6,6 +6,7 @@
 `kind="source"` + SourceId で機械的に解決するので、対応表はこのファイルだけが持つ。
 
 既に別系統で同梱済みの絵(研磨・称号・ソウルリンク)は `assets/icons/` 内から複製する。
+アイテムの絵が無い補正源(ルミナの回廊)は `<tw_assets>/sprites/` のスプライトから選ぶ。
 
 使い方:
     python tools/gamedata/import_source_icons.py [--assets PATH]
@@ -46,6 +47,12 @@ CLIENT_ITEMS: dict[str, tuple[int, str]] = {
     "enchant": (1033038, "エンチャント強化呪文書"),
 }
 
+# SourceId → <tw_assets>/sprites/<ファイル名>。対応するアイテムが無い補正源はスプライトから選ぶ
+# (ルミナの回廊は回廊ポイントに当たるアイテムアイコンが存在しない。ユーザー指定 2026-09-19)
+SPRITE_ICONS: dict[str, str] = {
+    "lumina": "0164__16471_f008.png",
+}
+
 # SourceId → assets/icons 内の既存画像(同じ物の絵を 2 出典にしない)
 LOCAL_ICONS: dict[str, str] = {
     "polish": "buffs/equipment_polish.png",
@@ -78,6 +85,14 @@ def main() -> None:
             continue
         shutil.copyfile(matches[0], OUTPUT_DIR / f"{source_id}.png")
         print(f"{source_id:13} <- {matches[0].name}")
+    sprite_dir: Path = args.assets / "sprites"
+    for source_id, name in SPRITE_ICONS.items():
+        src = sprite_dir / name
+        if not src.is_file():
+            missing.append(f"{source_id}: sprites/{name}")
+            continue
+        shutil.copyfile(src, OUTPUT_DIR / f"{source_id}.png")
+        print(f"{source_id:13} <- sprites/{name}")
     for source_id, rel in LOCAL_ICONS.items():
         src = ICONS_DIR / rel
         if not src.is_file():
