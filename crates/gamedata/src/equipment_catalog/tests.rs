@@ -8,7 +8,7 @@ use super::items::{
     SURVIVAL_MITIGATION_15, SURVIVAL_MITIGATION_40,
 };
 
-use domain::DamageCategory;
+use domain::{DamageCategory, Element, ElementBonus};
 
 /// テスト用: `DamageContribution` を (カテゴリ, 値) に落として比較しやすくする。
 fn pairs(contributions: &[domain::DamageContribution]) -> Vec<(DamageCategory, f64)> {
@@ -845,17 +845,56 @@ fn e_鎧研磨は物防30_r_尖った刃は突き7とx3の3パーセント() {
         }]
     );
 
-    // 最大HP・移動速度・属性は EquipmentValues に無いので記録のみ。
-    for id in [
-        "n-vitality-armor",
-        "n-mana-armor",
-        "r-agility-leg",
-        "n-fire-moonstone",
-    ] {
+    // 最大HP・移動速度は EquipmentValues に無いので記録のみ。
+    for id in ["n-vitality-armor", "n-mana-armor", "r-agility-leg"] {
         let def = abilities.iter().find(|a| a.id == id).unwrap();
         assert!(def.record_only, "{id}");
         assert_eq!(def.values, EquipmentValues::default(), "{id}");
     }
+
+    // 属性も EquipmentValues には無いが、`element` 欄で計算に入るので記録のみではない。
+    let moonstone = abilities.iter().find(|a| a.id == "n-fire-moonstone").unwrap();
+    assert!(!moonstone.record_only);
+    assert_eq!(moonstone.values, EquipmentValues::default());
+    assert_eq!(
+        moonstone.element,
+        Some(ElementBonus {
+            element: Element::Fire,
+            value: 5
+        })
+    );
+}
+
+/// 月石は 7 属性 × N/R/L/G の 28 件で、段ごとに本体の属性値が +5/+10/+15/+20。
+/// G- だけが別属性のランダム追加枠(+20)を持つ。
+#[test]
+fn 月石は28件で段ごとに属性値を持つ() {
+    let abilities = equipment_abilities();
+    let moonstones: Vec<_> = abilities
+        .iter()
+        .filter(|a| a.id.ends_with("-moonstone"))
+        .collect();
+    assert_eq!(moonstones.len(), 28);
+    for def in &moonstones {
+        let bonus = def.element.unwrap_or_else(|| panic!("{}", def.id));
+        let expected = match def.id.split('-').next().unwrap() {
+            "n" => 5,
+            "r" => 10,
+            "l" => 15,
+            _ => 20,
+        };
+        assert_eq!(bonus.value, expected, "{}", def.id);
+        // 要約と欄がずれていないか(値を 2 か所に書いているので機械で見る)
+        assert!(
+            def.effect_summary.ends_with(&format!("+{expected}")),
+            "{}: {}",
+            def.id,
+            def.effect_summary
+        );
+    }
+    let g = moonstones.iter().find(|a| a.id == "g-earth-moonstone").unwrap();
+    assert_eq!(g.additional_slots, 1);
+    assert_eq!(g.additional_options.len(), 3, "別属性の候補は石ごとに 3 種");
 }
 
 /// 新装着アビリティは 古代精霊 / 深淵 / 喪失 / 夜星 の4系列。どの系列も同じ

@@ -91,8 +91,8 @@ pub use defense::{
     HIT_RATE_PLAYER_SPAN, PVP_MIN_EVASION_CAP, SKILL_ACCURACY_OFFSET,
 };
 pub use element::{
-    Element, ElementPreview, ElementSourceDef, ElementSourceId, ElementSources, ElementValues,
-    EQUIPMENT_ELEMENT_VALUE_MAX,
+    Element, ElementBonus, ElementPreview, ElementSourceDef, ElementSourceId, ElementSources,
+    ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX,
 };
 pub use enchant::{enchant_plan, enchant_plan_stats, EnchantPlan, EnchantPlanItem, PRIMARY_ENCHANT_STATS};
 pub use enemy::Enemy;

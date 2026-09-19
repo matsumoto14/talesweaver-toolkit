@@ -312,6 +312,7 @@ mod tests {
                 ..Default::default()
             },
             damage_effects: &[],
+            element: None,
             grade: None,
             ladder: ladder.to_string(),
             priority: 0,

@@ -13,7 +13,7 @@ use crate::damage::DamageContribution;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::element::{Element, ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX};
+use crate::element::{Element, ElementBonus, ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX};
 use crate::equipment_class::{WeaponClass, WeaponSystem, WristType};
 use crate::random_option::{
     RandomOptionDef, RandomOptionError, RandomOptionSlot, RandomOptionTotals,
@@ -974,6 +974,21 @@ pub enum EquipmentAbilityAdditionalKind {
 }
 
 impl EquipmentAbilityAdditionalKind {
+    /// 属性値の追加効果なら、その属性。属性以外なら `None`
+    /// (月石の別属性枠・カフス・レリックの属性枠がこれ)。
+    pub fn element(self) -> Option<Element> {
+        match self {
+            EquipmentAbilityAdditionalKind::FireElement => Some(Element::Fire),
+            EquipmentAbilityAdditionalKind::WaterElement => Some(Element::Water),
+            EquipmentAbilityAdditionalKind::WindElement => Some(Element::Wind),
+            EquipmentAbilityAdditionalKind::EarthElement => Some(Element::Earth),
+            EquipmentAbilityAdditionalKind::LightningElement => Some(Element::Thunder),
+            EquipmentAbilityAdditionalKind::WhiteElement => Some(Element::White),
+            EquipmentAbilityAdditionalKind::DarkElement => Some(Element::Black),
+            _ => None,
+        }
+    }
+
     /// この追加候補をその部位で選べるか。HP / MP 自然回復力は武器には付かない
     /// (wiki: 装備システム/新装着アビリティ。武器の追加候補表に無い)。
     pub fn allowed_on(self, slot: PartSlot) -> bool {
@@ -1069,6 +1084,9 @@ pub struct EquipmentAbilityDef {
     /// **追加効果**(wiki: アビリティ表の「追加効果」列)。R- 以上の段に付く
     /// 「ダメージ増加 +n%」は装備攻撃力ではなく与ダメージ式のカテゴリX3 に入る
     pub damage_effects: &'static [SkillEffect],
+    /// アビリティ本体が持つ属性値(月石の「火属性 +20」など)。属性を持たない候補は `None`。
+    /// 属性値は装備補正 9 値に無いので `values` ではなくここに持つ
+    pub element: Option<ElementBonus>,
     /// 名前が表す等級(gamedata が名前から解決する)。等級を持たない候補は `None`
     pub grade: Option<AbilityGrade>,
     /// 等級を外した種類名(「鎧研磨」「火の月石」)。同じラダーかを見る鍵
@@ -1945,6 +1963,43 @@ impl Equipment {
             }
         }
         total
+    }
+
+    /// 装備アビリティ由来の属性値の合計(属性ごと)。
+    ///
+    /// 本体の属性値(月石の N/R/L/G = +5/+10/+15/+20)と、ランダム追加枠の属性
+    /// (G- 月石の別属性 +20 / カフス(盾+)+10〜30 / レリック(ペンダント)+20〜30)を足す。
+    /// **装備の属性強化(`element_values`)とは別枠**で、どちらもキャラの属性値へ合流する。
+    pub fn ability_element_values(&self, abilities: &[EquipmentAbilityDef]) -> ElementValues {
+        let mut total = ElementValues::default();
+        for (_, part) in self.iter_selected() {
+            for id in &part.abilities {
+                if let Some(bonus) = abilities
+                    .iter()
+                    .find(|a| a.id == id.as_str())
+                    .and_then(|a| a.element)
+                {
+                    *total.get_mut(bonus.element) += bonus.value;
+                }
+            }
+            for addition in &part.ability_additions {
+                if let Some(element) = addition.kind.element() {
+                    *total.get_mut(element) += i64::from(addition.value);
+                }
+            }
+        }
+        total
+    }
+
+    /// 装備アビリティ由来の属性値が一番大きい属性(装備に付与できるものだけ)。
+    /// 装備の属性強化をどの属性に乗せるかの最後の手がかりに使う
+    /// (`ElementSources::selected` が空 = ペット・カード・ルーンを未設定のとき)。
+    pub fn dominant_ability_element(&self, abilities: &[EquipmentAbilityDef]) -> Option<Element> {
+        let values = self.ability_element_values(abilities);
+        Element::ALL
+            .into_iter()
+            .filter(|e| e.can_enchant_equipment() && values.get(*e) > 0)
+            .max_by_key(|e| values.get(*e))
     }
 
     /// シエナのオーラによるステ加算の合計(能力値スロット + 全ステータス増加。最終固定値層に乗る)。
@@ -2930,6 +2985,7 @@ mod tests {
             additional_effects: "",
             additional_options: vec![],
             record_only: false,
+            element: None,
             grade: None,
             ladder: String::new(),
             priority: 0,
@@ -3181,6 +3237,58 @@ mod tests {
         assert_eq!(values.get(Element::Water), 18);
         assert_eq!(values.get(Element::Fire), 0);
         assert_eq!(values.get(Element::Neutral), 0);
+    }
+
+    #[test]
+    fn 装備アビリティの属性は本体値と追加枠を足して属性ごとに出る() {
+        // 頭に G-火の月石(本体 火 +20 / 別属性の追加枠で 土 +20)、
+        // 盾+ のカフスに 水 +30 を付けた状態。
+        let moonstone = EquipmentAbilityDef {
+            id: "g-fire-moonstone",
+            name: "G-火の月石",
+            family: EquipmentAbilityFamily::Element,
+            category: 4,
+            slot: PartSlot::Head,
+            value_option: None,
+            exclusive_group: "head-element",
+            additional_slots: 1,
+            additional_effects: "",
+            additional_options: vec![],
+            record_only: false,
+            effect_summary: "火属性 +20",
+            values: EquipmentValues::default(),
+            damage_effects: &[],
+            element: Some(ElementBonus {
+                element: Element::Fire,
+                value: 20,
+            }),
+            grade: None,
+            ladder: String::new(),
+            priority: 0,
+        };
+        let mut eq = Equipment::default();
+        let head = eq.parts.head.selected_or_register();
+        head.abilities = vec!["g-fire-moonstone".into()];
+        head.ability_additions = vec![EquipmentAbilityAdditional {
+            ability_id: "g-fire-moonstone".into(),
+            kind: EquipmentAbilityAdditionalKind::EarthElement,
+            value: 20,
+        }];
+        let cuffs = eq.parts.shield_plus.selected_or_register();
+        cuffs.ability_additions = vec![EquipmentAbilityAdditional {
+            ability_id: "mystic-mine-sharp-blade".into(),
+            kind: EquipmentAbilityAdditionalKind::WaterElement,
+            value: 30,
+        }];
+
+        let abilities = [moonstone];
+        let values = eq.ability_element_values(&abilities);
+        assert_eq!(values.get(Element::Fire), 20);
+        assert_eq!(values.get(Element::Earth), 20);
+        assert_eq!(values.get(Element::Water), 30);
+        assert_eq!(values.get(Element::Wind), 0);
+        // 装備の属性強化を乗せる先は、供給源が無ければ一番積んでいる属性
+        assert_eq!(eq.dominant_ability_element(&abilities), Some(Element::Water));
     }
 
     #[test]
@@ -4063,6 +4171,7 @@ mod tests {
             effect_summary: "",
             values: EquipmentValues::default(),
             damage_effects: &[],
+            element: None,
             grade: None,
             ladder: name.to_string(),
             priority: 0,

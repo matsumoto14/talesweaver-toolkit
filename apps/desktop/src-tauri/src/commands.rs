@@ -131,11 +131,6 @@ pub fn equipment_element_values(
 }
 
 #[tauri::command]
-pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
-    commands::preview_elements(character)
-}
-
-#[tauri::command]
 pub fn list_contents() -> Vec<ContentArea> {
     commands::list_contents()
 }

@@ -27,6 +27,7 @@ OUTPUT_DIR = ICONS_DIR / "sources"
 # SourceId → クライアントの ItemId(item_icons/<ItemId>_<名前>.png)。名前は照合用のメモ
 CLIENT_ITEMS: dict[str, tuple[int, str]] = {
     "status": (1016470, "ステータス再分配スクロール"),
+    "element": (1023320, "G-火の月石(Lv.200)"),
     "equipment": (1046188, "†パワーダンシングゼリッピ"),
     "pet": (1006173, "ペットＳスキルスクロール(応援)"),
     "rune": (1021058, "ルーンの種(Lv1)"),

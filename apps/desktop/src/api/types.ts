@@ -473,15 +473,14 @@ export interface ActualDelay {
 }
 
 // 属性値の供給源の種別。crates/domain/src/element.rs の ElementSourceId(snake_case)。
-export type ElementSourceId = "pet" | "monster_card" | "rune" | "helm_ability" | "cuffs_ability";
+export type ElementSourceId = "pet" | "monster_card" | "rune";
 
-// 供給源ごとに「どの属性に乗せているか」。null = 使っていない。
+// 装備の外の供給源が「どの属性に乗せているか」。null = 使っていない。
+// 頭アビリティ(月石)とカフスのアビリティは装備から読むのでここには無い。
 export interface ElementSources {
   pet: Element | null;
   monster_card: Element | null;
   rune: Element | null;
-  helm_ability: Element | null;
-  cuffs_ability: Element | null;
 }
 
 // 供給源 1 つ分の定義(表示名と加算値)。crates/domain/src/element.rs の ElementSourceDef。
@@ -494,9 +493,13 @@ export interface ElementSourceDef {
 // 属性値の内訳。crates/domain/src/element.rs の ElementPreview。
 export interface ElementPreview {
   base: ElementValues;
+  /** 部位ごとの属性強化(1 部位 1 属性・最大 9) */
   equipment: ElementValues;
+  /** 装備アビリティ由来(月石の本体値 + 追加枠の属性) */
+  ability: ElementValues;
+  /** 装備の外の供給源(ペット / モンスターカード / ルーンスキル) */
   sources: ElementValues;
-  /** 3 つを足して上限 255 で頭打ちにした値 */
+  /** 4 つを足して上限 255 で頭打ちにした値 */
   total: ElementValues;
 }
 
@@ -1435,6 +1438,8 @@ export interface StatPreview {
   sacred_relic_total: number;
   /** ソウルリンク 1〜10 の Rust 計算済み派生値 */
   soul_link: SoulLinkPreview;
+  /** 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備アビリティ / 装備外の供給源 / 合計) */
+  elements: ElementPreview;
   /** 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号 + ソウルリンク) */
   equipment_base_total: EquipmentValues;
   /** 基本能力値のうち装備アビリティ由来の分だけを部位別に割ったもの(表示用の内訳) */

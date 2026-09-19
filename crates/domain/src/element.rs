@@ -122,8 +122,12 @@ impl ElementValues {
     }
 }
 
-/// 装備の属性強化以外の属性値の供給源(ユーザー提供 2026-08-25)。
+/// 装備の外から来る属性値の供給源(ユーザー提供 2026-08-25)。
 /// 供給源ごとに「どの属性に乗せているか」だけを持ち、加算値は gamedata が持つ。
+///
+/// 頭アビリティ(月石)とカフス(盾+)のアビリティは 2026-09-19 にここから外した。
+/// 実物が装備に登録されていて段(N/R/L/G)や追加枠の実測値まで分かるので、固定値の
+/// トグルではなく装備から読む(`Equipment::ability_element_values`)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ElementSources {
     /// ペット
@@ -135,12 +139,6 @@ pub struct ElementSources {
     /// ルーンスキル
     #[serde(default)]
     pub rune: Option<Element>,
-    /// 頭アビリティ
-    #[serde(default)]
-    pub helm_ability: Option<Element>,
-    /// カフス(盾+)のアビリティ(神秘鉱の鋭い刃 等)
-    #[serde(default)]
-    pub cuffs_ability: Option<Element>,
 }
 
 /// 供給源 1 つ分の定義(表示名と加算値)。実データは gamedata。
@@ -158,8 +156,6 @@ pub enum ElementSourceId {
     Pet,
     MonsterCard,
     Rune,
-    HelmAbility,
-    CuffsAbility,
 }
 
 impl ElementSources {
@@ -168,8 +164,6 @@ impl ElementSources {
             ElementSourceId::Pet => self.pet,
             ElementSourceId::MonsterCard => self.monster_card,
             ElementSourceId::Rune => self.rune,
-            ElementSourceId::HelmAbility => self.helm_ability,
-            ElementSourceId::CuffsAbility => self.cuffs_ability,
         }
     }
 
@@ -184,40 +178,53 @@ impl ElementSources {
         total
     }
 
-    /// 装備に付与できる属性の優先順位で 1 つ選ぶ(ペット → モンスターカード → ルーン →
-    /// 頭アビ → カフスアビ。中立属性は装備付与できないので除外)。
-    /// 呼び出し側(コマンド層)で属性強化の対象属性を決めるのに使う。
+    /// 装備に付与できる属性の優先順位で 1 つ選ぶ(ペット → モンスターカード → ルーン。
+    /// 中立属性は装備付与できないので除外)。呼び出し側(コマンド層)で属性強化の対象属性を
+    /// 決めるのに使う。どれも未設定なら、装備アビリティ由来の属性
+    /// (`Equipment::dominant_ability_element`)へ落ちる。
     pub fn selected(&self) -> Option<Element> {
-        [
-            self.pet,
-            self.monster_card,
-            self.rune,
-            self.helm_ability,
-            self.cuffs_ability,
-        ]
-        .into_iter()
-        .flatten()
-        .find(|e| e.can_enchant_equipment())
+        [self.pet, self.monster_card, self.rune]
+            .into_iter()
+            .flatten()
+            .find(|e| e.can_enchant_equipment())
     }
 }
 
-/// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。画面表示用。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// 装備アビリティ 1 件が持つ属性値(月石の本体値など)。実データは gamedata。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ElementBonus {
+    pub element: Element,
+    pub value: i64,
+}
+
+/// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備アビリティ / 装備外の供給源 / 合計)。
+/// 画面表示用。既定値(全 0)は「どの属性も乗っていない」。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ElementPreview {
     pub base: ElementValues,
+    /// 部位ごとの属性強化(1 部位 1 属性・最大 9)
     pub equipment: ElementValues,
+    /// 装備アビリティ由来(月石の本体値 + 追加枠の属性)
+    pub ability: ElementValues,
+    /// 装備の外の供給源(ペット / モンスターカード / ルーンスキル)
     pub sources: ElementValues,
-    /// 3 つを足して上限 255 で頭打ちにした値
+    /// 4 つを足して上限 255 で頭打ちにした値
     pub total: ElementValues,
 }
 
 impl ElementPreview {
-    pub fn new(base: ElementValues, equipment: ElementValues, sources: ElementValues) -> Self {
+    pub fn new(
+        base: ElementValues,
+        equipment: ElementValues,
+        ability: ElementValues,
+        sources: ElementValues,
+    ) -> Self {
         Self {
             base,
             equipment,
+            ability,
             sources,
-            total: base.add(equipment).add(sources).clamp_to_max(),
+            total: base.add(equipment).add(ability).add(sources).clamp_to_max(),
         }
     }
 }
@@ -276,7 +283,6 @@ mod tests {
             pet: Some(Element::Water),
             monster_card: Some(Element::Water),
             rune: Some(Element::Fire),
-            ..Default::default()
         };
         let values = sources.values(&defs);
         assert_eq!(values.get(Element::Water), 40);

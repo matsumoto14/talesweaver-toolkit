@@ -45,11 +45,8 @@ export const buffTargetStatGains = (
   });
 export const setDefaultBuffSet = (characterId: number, buffSetId: number | null) =>
   invoke<RegisteredCharacter>("set_default_buff_set", { characterId, buffSetId });
-/** 属性値の供給源カタログ(装備の属性強化以外) */
+/** 属性値の供給源カタログ(装備の外から来るぶん) */
 export const listElementSources = () => invoke<ElementSourceDef[]>("list_element_sources");
-/** 属性値の内訳(キャラ基礎 / 装備 / 供給源 / 合計)。保存前のキャラデータで出す */
-export const previewElements = (character: NewCharacter) =>
-  invoke<ElementPreview>("preview_elements", { character });
 /** 装備の属性強化の合計(部位ごとに +9)。対象属性は呼び出し側が決める */
 export const equipmentElementValues = (equipment: Equipment, element: Element | null) =>
   invoke<ElementValues>("equipment_element_values", { equipment, element });

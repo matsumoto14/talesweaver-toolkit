@@ -351,10 +351,6 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
             let a: EquipmentElementValuesArgs = args_of(command, args)?;
             ok(commands::equipment_element_values(a.equipment, a.element))
         }
-        "preview_elements" => {
-            let a: CharacterArgs = args_of(command, args)?;
-            done(commands::preview_elements(a.character))
-        }
         // 保存の前チェック。保存自体は TS 側(IndexedDB)が行うが、検証は domain を持つこちらで見る
         "validate_character" => {
             let a: CharacterArgs = args_of(command, args)?;

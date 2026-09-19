@@ -38,7 +38,7 @@
   import { buffSetOptions } from "../../buffs";
   import { fmtInt, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
   import {
-    EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
+    ELEMENT_LABELS, ELEMENTS, EQUIPMENT_STAT_SHORT, PART_SLOTS, STAT_KINDS, ULTIMATE_SKILL_LABELS,
   } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { app, characterSourceFocus, enqueueCharacterSave, equipmentFocus, loadSkills, removeCharacter, skillsByCharacter, upsertCharacter } from "../../state.svelte";
@@ -554,6 +554,16 @@
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 
+  /** 属性の行サブタイトル。効いている属性と合計(合算・上限は Rust 側 preview.elements) */
+  const elementSummary = $derived.by(() => {
+    const elements = preview?.elements;
+    if (!elements) return NEUTRAL;
+    const shown = ELEMENTS.filter((e) => elements.total[e] > 0);
+    return shown.length === 0
+      ? NEUTRAL
+      : shown.map((e) => `${ELEMENT_LABELS[e]} ${fmtInt(elements.total[e])}`).join(" ・ ");
+  });
+
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
     {
       id: "status",
@@ -561,6 +571,11 @@
       // 一番効いている 2 項目(覚醒段階とエタの意志 Lv は能力値上限を決める)だけ。属性はここでは
       // 出さない(開いた先のペインに出る。全部詰めると必ず切れる)
       sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}`,
+    },
+    {
+      id: "element",
+      name: "属性",
+      sub: elementSummary,
     },
     {
       id: "commonSkill",
@@ -639,8 +654,8 @@
   //
   // ★ はホームタブのコンテンツと同じ操作なので、覚えることが増えない。
   const DEFAULT_ORDER: SourceId[] = [
-    "status", "skills", "equipment", "soulLink", "commonSkill", "thesis", "avatar", "polish", "siena", "relic",
-    "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
+    "status", "skills", "equipment", "soulLink", "commonSkill", "element", "thesis", "avatar", "polish",
+    "siena", "relic", "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
     "title", "randomOption",
   ];
   interface SourceLayout {

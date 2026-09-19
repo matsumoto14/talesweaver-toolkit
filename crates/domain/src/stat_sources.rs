@@ -21,7 +21,7 @@ use crate::character_skill::{
 use crate::common_skill::{CommonSkills, DefenseRates, STRONG_WEAPON_LEVEL_MAX};
 use crate::critical_rate::{CriticalRateSourceId, CriticalRateSources};
 use crate::damage::DamageContribution;
-use crate::element::ElementSources;
+use crate::element::{ElementPreview, ElementSources};
 use crate::equipment::{
     equipment_values_attack, Equipment, EquipmentBaseContext, EquipmentCoefficients,
     EquipmentError, EquipmentValues, PartEquipmentValues, PartSlot, PartStatTotal,
@@ -1230,6 +1230,9 @@ pub struct StatPreview {
     pub sacred_relic_total: i64,
     /// ソウルリンク 1〜10 の Rust 計算済み派生値。
     pub soul_link: SoulLinkPreview,
+    /// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備アビリティ / 装備外の供給源 / 合計)。
+    /// キャラ基礎属性値は gamedata にしか無いので、呼び出し側が組み立てて渡す
+    pub elements: ElementPreview,
     /// 基本能力値の合計(Σ part.base + 装備アビリティ + 表示中の称号 + ソウルリンク)。
     /// 装備由来の正は `EquipmentBaseContext::total`(ソウルリンク・手首補正込み)。
     pub equipment_base_total: EquipmentValues,
@@ -1768,6 +1771,7 @@ pub fn preview_effective_stats(
     catalogs: StatCatalogs<'_>,
     equipment_base: EquipmentBaseContext<'_>,
     random_options: &[RandomOptionDef],
+    elements: ElementPreview,
     coefficients: Option<AttackPowerCoefficients>,
     stat_cap: i64,
 ) -> Result<StatPreview, StatSourceError> {
@@ -1905,6 +1909,7 @@ pub fn preview_effective_stats(
         critical_rate_bonus,
         sacred_relic_total,
         soul_link: sources.soul_link.preview(),
+        elements,
         equipment_base_total,
         part_ability_values,
         part_polish_values,
@@ -2396,6 +2401,7 @@ mod tests {
             },
             EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
+            ElementPreview::default(),
             None,
             NO_CAP,
         )
@@ -2416,6 +2422,7 @@ mod tests {
             },
             EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
+            ElementPreview::default(),
             None,
             NO_CAP,
         )
@@ -2504,6 +2511,7 @@ mod tests {
             },
             EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
+            ElementPreview::default(),
             None,
             NO_CAP,
         )
@@ -2521,6 +2529,7 @@ mod tests {
             },
             EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
+            ElementPreview::default(),
             None,
             NO_CAP,
         )
@@ -2936,6 +2945,7 @@ mod tests {
             },
             EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
+            ElementPreview::default(),
             None,
             NO_CAP,
         )
@@ -2968,6 +2978,7 @@ mod tests {
             },
             EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
+            ElementPreview::default(),
             Some(test_attack_coefficients()),
             NO_CAP,
         )
@@ -3027,6 +3038,7 @@ mod tests {
                 ..EquipmentBaseContext::catalog_only(&[], &[])
             },
             &[],
+            ElementPreview::default(),
             Some(test_attack_coefficients()),
             NO_CAP,
         )
@@ -3074,6 +3086,7 @@ mod tests {
             },
             EquipmentBaseContext::catalog_only(&[], &[]),
             &[],
+            ElementPreview::default(),
             Some(coefficients),
             NO_CAP,
         )
@@ -3095,6 +3108,7 @@ mod tests {
                 },
                 EquipmentBaseContext::catalog_only(&[], &[]),
                 &[],
+                ElementPreview::default(),
                 Some(coefficients),
                 NO_CAP,
             )

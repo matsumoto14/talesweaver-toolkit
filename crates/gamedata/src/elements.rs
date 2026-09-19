@@ -18,15 +18,18 @@ pub const ELEMENT_BASE_SOURCE: Source = Source {
            ロアミニ/ノクターン/リーチェ/イェフネンは wiki に表が無く全属性 0 `[仮]`",
 };
 
-/// 装備の属性強化以外の属性値の供給源(ユーザー提供 2026-08-25)。
+/// 装備の外から来る属性値の供給源(ユーザー提供 2026-08-25)。
 ///
-/// wiki には一覧が無く、ユーザーが実プレイから提供した値。装備の属性強化(部位ごとに 0〜9、
-/// 盾+(カフス)とレリックは対象外 = 10 部位で最大 90)と合わせて 200 まで積め、
-/// 敵属性値 120〜125 に対して属性差 +80(カテゴリI の上限 +50%)に届く。
+/// wiki には一覧が無く、ユーザーが実プレイから提供した値。もとは 5 件 110 だったが、
+/// 頭アビリティ(月石)+20 とカフス(盾+)アビリティ+30 は**装備に登録した実物から読む**ように
+/// 変えた(2026-09-19。段が N/R/L/G で +5〜+20 と変わり、追加枠の属性値も実測に幅がある)。
+/// 残る 3 件 60 + 装備の属性強化(部位ごとに 0〜9、盾+(カフス)とレリックは対象外 = 10 部位で
+/// 最大 90)+ 装備アビリティ(月石 20 + 別属性枠 20 + カフス 30)で 200 に届き、敵属性値
+/// 120〜125 に対して属性差 +80(カテゴリI の上限 +50%)を満たす。
 pub const ELEMENT_SOURCE_CATALOG_SOURCE: Source = Source {
     page: "ユーザー提供(実プレイ)",
     retrieved_on: "2026-08-25",
-    note: "ペット+10 / モンスターカード+30 / ルーンスキル+20 / 頭アビリティ+20 /            カフス(盾+)アビリティ+30(神秘鉱の鋭い刃 等)。wiki 属性システムには供給源の一覧が無い",
+    note: "ペット+10 / モンスターカード+30 / ルーンスキル+20。頭アビリティ(月石)と           カフス(盾+)アビリティは装備アビリティから読む。wiki 属性システムには供給源の一覧が無い",
 };
 
 const ELEMENT_SOURCES: &[ElementSourceDef] = &[
@@ -45,19 +48,9 @@ const ELEMENT_SOURCES: &[ElementSourceDef] = &[
         name: "ルーンスキル",
         value: 20,
     },
-    ElementSourceDef {
-        id: ElementSourceId::HelmAbility,
-        name: "頭アビリティ",
-        value: 20,
-    },
-    ElementSourceDef {
-        id: ElementSourceId::CuffsAbility,
-        name: "カフスアビリティ",
-        value: 30,
-    },
 ];
 
-/// 属性値の供給源カタログ(装備の属性強化以外)。
+/// 属性値の供給源カタログ(装備の外から来るぶん)。
 pub fn element_source_catalog() -> &'static [ElementSourceDef] {
     ELEMENT_SOURCES
 }
@@ -124,13 +117,14 @@ mod tests {
     }
 
     #[test]
-    fn 供給源は5件で合計200まで積める() {
+    fn 装備外の供給源は3件で60() {
         let defs = element_source_catalog();
-        assert_eq!(defs.len(), 5);
-        // 供給源 110 + 装備 10 部位 × 9 = 90 → 200
+        assert_eq!(defs.len(), 3);
         let sources: i64 = defs.iter().map(|d| d.value).sum();
-        assert_eq!(sources, 110);
-        assert_eq!(sources + 10 * domain::EQUIPMENT_ELEMENT_VALUE_MAX, 200);
+        assert_eq!(sources, 60);
+        // 残りは装備から読む: 属性強化 10 部位 × 9 = 90、装備アビリティ(G-月石 20 +
+        // 別属性枠 20 + カフス 30)= 70。合わせて 220 で、実プレイの 200 を満たす
+        assert_eq!(sources + 10 * domain::EQUIPMENT_ELEMENT_VALUE_MAX + 70, 220);
     }
 
     #[test]

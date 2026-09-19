@@ -103,6 +103,7 @@ fn new_ability(
         effect_summary,
         values,
         damage_effects: &[],
+        element: None,
         grade: None,
         ladder: String::new(),
         priority: 0,
@@ -137,6 +138,7 @@ fn fixed_ability(
         effect_summary,
         values,
         damage_effects: &[],
+        element: None,
         grade: None,
         ladder: String::new(),
         priority: 0,
@@ -338,6 +340,7 @@ fn slot_ability(
         effect_summary,
         values,
         damage_effects,
+        element: None,
         grade: None,
         ladder: String::new(),
         priority: 0,
@@ -883,16 +886,20 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ));
     }
 
-    for (id, name, summary) in [
-        ("g-fire-moonstone", "G-火の月石", "火属性 +20"),
-        ("g-water-moonstone", "G-水の月石", "水属性 +20"),
-        ("g-wind-moonstone", "G-風の月石", "風属性 +20"),
-        ("g-earth-moonstone", "G-土の月石", "土属性 +20"),
-        ("g-lightning-moonstone", "G-雷の月石", "雷属性 +20"),
-        ("g-white-moonstone", "G-白の月石", "白属性 +20"),
-        ("g-dark-moonstone", "G-黒の月石", "黒属性 +20"),
+    // G- 月石。本体 +20 に加えて、別属性のランダム追加枠を 1 つ持つ(候補は石ごとに固定。
+    // `slot_ability` の `PartSlot::Head` の表)。属性値は装備補正 9 値に無いので
+    // `EquipmentAbilityDef::element` に持ち、キャラの属性値へ合流する
+    // (`Equipment::ability_element_values`)。
+    for (id, name, summary, element, value) in [
+        ("g-fire-moonstone", "G-火の月石", "火属性 +20", Element::Fire, 20),
+        ("g-water-moonstone", "G-水の月石", "水属性 +20", Element::Water, 20),
+        ("g-wind-moonstone", "G-風の月石", "風属性 +20", Element::Wind, 20),
+        ("g-earth-moonstone", "G-土の月石", "土属性 +20", Element::Earth, 20),
+        ("g-lightning-moonstone", "G-雷の月石", "雷属性 +20", Element::Thunder, 20),
+        ("g-white-moonstone", "G-白の月石", "白属性 +20", Element::White, 20),
+        ("g-dark-moonstone", "G-黒の月石", "黒属性 +20", Element::Black, 20),
     ] {
-        out.push(slot_ability(
+        let mut def = slot_ability(
             id,
             name,
             PartSlot::Head,
@@ -900,9 +907,11 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
             "head-element",
             EquipmentValues::default(),
             summary,
-            true,
+            false,
             &[],
-        ));
+        );
+        def.element = Some(ElementBonus { element, value });
+        out.push(def);
     }
 
     for (id, name, family, values, summary) in [
@@ -1502,31 +1511,31 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
         ));
     }
 
-    // 月石は最上位(G-)だけ既収録だった。属性値は装備補正 9 値に無いので record_only。
-    for (id, name, summary) in [
-        ("n-fire-moonstone", "N-火の月石", "火属性 +5"),
-        ("r-fire-moonstone", "R-火の月石", "火属性 +10"),
-        ("l-fire-moonstone", "L-火の月石", "火属性 +15"),
-        ("n-water-moonstone", "N-水の月石", "水属性 +5"),
-        ("r-water-moonstone", "R-水の月石", "水属性 +10"),
-        ("l-water-moonstone", "L-水の月石", "水属性 +15"),
-        ("n-wind-moonstone", "N-風の月石", "風属性 +5"),
-        ("r-wind-moonstone", "R-風の月石", "風属性 +10"),
-        ("l-wind-moonstone", "L-風の月石", "風属性 +15"),
-        ("n-earth-moonstone", "N-土の月石", "土属性 +5"),
-        ("r-earth-moonstone", "R-土の月石", "土属性 +10"),
-        ("l-earth-moonstone", "L-土の月石", "土属性 +15"),
-        ("n-lightning-moonstone", "N-雷の月石", "雷属性 +5"),
-        ("r-lightning-moonstone", "R-雷の月石", "雷属性 +10"),
-        ("l-lightning-moonstone", "L-雷の月石", "雷属性 +15"),
-        ("n-white-moonstone", "N-白の月石", "白属性 +5"),
-        ("r-white-moonstone", "R-白の月石", "白属性 +10"),
-        ("l-white-moonstone", "L-白の月石", "白属性 +15"),
-        ("n-dark-moonstone", "N-黒の月石", "黒属性 +5"),
-        ("r-dark-moonstone", "R-黒の月石", "黒属性 +10"),
-        ("l-dark-moonstone", "L-黒の月石", "黒属性 +15"),
+    // 月石の下位段(N/R/L)。段ごとに本体の属性値が変わる。G- と違いランダム追加枠は持たない。
+    for (id, name, summary, element, value) in [
+        ("n-fire-moonstone", "N-火の月石", "火属性 +5", Element::Fire, 5),
+        ("r-fire-moonstone", "R-火の月石", "火属性 +10", Element::Fire, 10),
+        ("l-fire-moonstone", "L-火の月石", "火属性 +15", Element::Fire, 15),
+        ("n-water-moonstone", "N-水の月石", "水属性 +5", Element::Water, 5),
+        ("r-water-moonstone", "R-水の月石", "水属性 +10", Element::Water, 10),
+        ("l-water-moonstone", "L-水の月石", "水属性 +15", Element::Water, 15),
+        ("n-wind-moonstone", "N-風の月石", "風属性 +5", Element::Wind, 5),
+        ("r-wind-moonstone", "R-風の月石", "風属性 +10", Element::Wind, 10),
+        ("l-wind-moonstone", "L-風の月石", "風属性 +15", Element::Wind, 15),
+        ("n-earth-moonstone", "N-土の月石", "土属性 +5", Element::Earth, 5),
+        ("r-earth-moonstone", "R-土の月石", "土属性 +10", Element::Earth, 10),
+        ("l-earth-moonstone", "L-土の月石", "土属性 +15", Element::Earth, 15),
+        ("n-lightning-moonstone", "N-雷の月石", "雷属性 +5", Element::Thunder, 5),
+        ("r-lightning-moonstone", "R-雷の月石", "雷属性 +10", Element::Thunder, 10),
+        ("l-lightning-moonstone", "L-雷の月石", "雷属性 +15", Element::Thunder, 15),
+        ("n-white-moonstone", "N-白の月石", "白属性 +5", Element::White, 5),
+        ("r-white-moonstone", "R-白の月石", "白属性 +10", Element::White, 10),
+        ("l-white-moonstone", "L-白の月石", "白属性 +15", Element::White, 15),
+        ("n-dark-moonstone", "N-黒の月石", "黒属性 +5", Element::Black, 5),
+        ("r-dark-moonstone", "R-黒の月石", "黒属性 +10", Element::Black, 10),
+        ("l-dark-moonstone", "L-黒の月石", "黒属性 +15", Element::Black, 15),
     ] {
-        out.push(ui_category4(
+        let mut def = ui_category4(
             id,
             name,
             PartSlot::Head,
@@ -1534,9 +1543,11 @@ pub fn equipment_abilities() -> Vec<EquipmentAbilityDef> {
             "head-element",
             EquipmentValues::default(),
             summary,
-            true,
+            false,
             &[],
-        ));
+        );
+        def.element = Some(ElementBonus { element, value });
+        out.push(def);
     }
 
     for (id, name, family, values, summary, effects) in [

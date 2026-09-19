@@ -1,16 +1,14 @@
 <script lang="ts">
-  // 「status」補正源のペイン。キャラ選択・覚醒・エタの意志・主軸スキル・主属性・能力値の一覧。
+  // 「status」補正源のペイン。キャラ選択・覚醒・エタの意志・主軸スキル・能力値の一覧。
+  // 属性は独立した補正源(`sources/ElementPane.svelte`)へ移した(2026-09-19)。
   import { untrack } from "svelte";
-  import type {
-    Element, ElementPreview, Skill, StatKind, StatPreview, StatSourceGroup,
-  } from "../../../api/types";
-  import { errorMessage, previewElements, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
+  import type { Skill, StatKind, StatPreview, StatSourceGroup } from "../../../api/types";
+  import { errorMessage, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
   import { mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
-  import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
+  import { ETERNAL_MILESTONES, type Draft } from "../../../draft";
   import { fmtInt, fmtSigned, fmtSignedPct, formatLayerValue } from "../../../format";
   import {
-    ELEMENT_LABELS, ELEMENTS, STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS,
-    STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
+    STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS, STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
   } from "../../../labels";
   import { limits } from "../../../limits.svelte";
   import { app } from "../../../state.svelte";
@@ -144,75 +142,6 @@
     draft.summonSkillId = best?.id ?? "";
   });
 
-  // 属性は主軸スキルで決まる。無属性のスキルのときだけ、乗せる属性を選ばせる
-  // (アンプルで属性を足す運用が多い)
-  const skillElement = $derived(mainSkill?.element ?? null);
-  const elementFromSkill = $derived(skillElement !== null && skillElement !== "neutral");
-  let elementPickOpen = $state(false);
-
-  // --- 主属性 -------------------------------------------------------------
-  // 供給源(ペット / モンスターカード / ルーンスキル / 頭・カフスのアビリティ)は、
-  // 実際には**全部同じ属性に振る**。だから供給源ごとに聞かず、主属性を 1 回選ばせて
-  // まとめて乗せる(§00「要らないものを見せない」)
-  const elementSourceDefs = $derived(app.elementSources);
-  const elementOptions = [
-    { value: "", label: "なし" },
-    ...ELEMENTS.map((e) => ({ value: e, label: ELEMENT_LABELS[e] })),
-  ];
-  /** 供給源が全部同じ属性ならそれが主属性。ばらけていたら "" を返す */
-  const mainElement = $derived.by(() => {
-    const picked = elementSourceDefs.map((def) => draft.statSources.elements[def.id] ?? null);
-    const first = picked[0] ?? null;
-    return first !== null && picked.every((e) => e === first) ? first : "";
-  });
-  function setMainElement(value: string) {
-    for (const def of elementSourceDefs) {
-      draft.statSources.elements[def.id] = value === "" ? null : (value as Element);
-    }
-  }
-  /** 属性を選んだら、属性ありスキルと同じ確定表示へ戻す。 */
-  function chooseMainElement(value: string) {
-    setMainElement(value);
-    elementOverrideForSkill = elementFromSkill && value !== skillElement ? draft.mainSkillId : null;
-    if (value !== "") elementPickOpen = false;
-  }
-  const elementSourceTotal = $derived(elementSourceDefs.reduce((n, def) => n + def.value, 0));
-  // 保存済みデータがスキル属性と違う場合は、利用者が選んだ上書きとして維持する。
-  let elementOverrideForSkill = $state(untrack(() =>
-    elementFromSkill && mainElement !== "" && mainElement !== skillElement ? draft.mainSkillId : null
-  ));
-  let lastElementSkillId = untrack(() => draft.mainSkillId);
-  /**
-   * 属性は主軸スキルで決まるので、スキルを選んだら供給源もその属性に合わせる(自動値)。
-   * 自分で「別の属性を乗せる」を開いたときは触らない — 例外操作を上書きしない
-   */
-  $effect(() => {
-    const currentSkillId = draft.mainSkillId;
-    if (currentSkillId !== lastElementSkillId) {
-      lastElementSkillId = currentSkillId;
-      elementOverrideForSkill = null;
-      elementPickOpen = false;
-    }
-    if (!elementFromSkill || elementOverrideForSkill === draft.mainSkillId) return;
-    if (mainElement === skillElement) return;
-    setMainElement(skillElement as string);
-  });
-  // 内訳は Rust 側で出す(キャラ基礎属性値は gamedata にしか無い)。開いている間だけ引く
-  let elementPreview = $state<ElementPreview | null>(null);
-  const elementLatest = latest();
-  $effect(() => {
-    const payload = draftToPayload(draft);
-    elementLatest.run((isCurrent) =>
-      previewElements(payload)
-        .then((p) => {
-          if (isCurrent()) elementPreview = p;
-        })
-        .catch(() => {
-          if (isCurrent()) elementPreview = null;
-        }),
-    );
-  });
-
   const traceFor = (k: StatKind) => preview?.traces.find((t) => t.kind === k) ?? null;
   const signed = (n: number) => fmtSigned(n, { max: 3 });
 
@@ -334,50 +263,7 @@
         />
       </div>
     {/if}
-    <!-- 属性はふつう主軸スキルで決まる。無属性のときだけ「何を乗せるか」を選ばせる -->
-    <div class="wide">
-      <span class="label">属性</span>
-      {#if (elementFromSkill || mainElement !== "") && !elementPickOpen}
-        {@const displayedElement = (elementFromSkill && elementOverrideForSkill !== draft.mainSkillId ? skillElement : mainElement) as Element}
-        <p class="element-auto">
-          <b class="element-picked elem-{displayedElement}"
-            ><Value value={displayedElement}>{#snippet children()}{ELEMENT_LABELS[displayedElement]}{/snippet}</Value></b
-          >
-          <span class="dim">
-            {elementFromSkill && elementOverrideForSkill !== draft.mainSkillId
-              ? `— 主軸スキル「${mainSkill?.name}」で決まります`
-              : "— アンプルなどで乗せる属性"}
-          </span>
-          <Chip class="quiet" onclick={() => (elementPickOpen = true)}>変更</Chip>
-        </p>
-      {:else}
-        {#if skillElement === "neutral"}
-          <p class="hint dim">主軸スキルが無属性なので、アンプルなどで乗せる属性を選びます。</p>
-        {/if}
-        <Choose
-          label="乗せる属性"
-          options={elementOptions}
-          cols={elementOptions.length}
-          tone={(v) => (v === "" ? undefined : `elem-${v}`)}
-          bind:value={() => mainElement, chooseMainElement}
-        />
-        <p class="hint dim">ペット・カード・ルーン・アビリティの {fmtSigned(elementSourceTotal)} をまとめて乗せます。</p>
-      {/if}
-    </div>
   </div>
-  {#if elementPreview}
-    <p class="hint dim">
-      属性値
-      {#each ELEMENTS.filter((e) => elementPreview!.total[e] > 0) as e (e)}
-        <b><Value motion={() => elementPreview?.total[e] ?? null} value={`${ELEMENT_LABELS[e]} ${fmtInt(elementPreview.total[e])}`} /></b>
-        <span class="dim">(キャラ {fmtInt(elementPreview.base[e])} + 装備 {fmtInt(elementPreview.equipment[e])} + 主属性 {fmtInt(elementPreview.sources[e])})</span>
-      {:else}
-        まだどの属性も乗っていません
-      {/each}
-      。与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに {fmtSigned(limits.element_bonus_percent_per_point, { max: 2 }, "%")}、
-      {fmtSigned(limits.element_bonus_max / (limits.element_bonus_percent_per_point / 100))} で上限 {fmtSignedPct(limits.element_bonus_max)}(敵は 120 / 125 が多い)。
-    </p>
-  {/if}
   <p class="hint dim">
     {#if skills.length === 0}
       このキャラのスキルはまだ未収録です。収録されるまで攻撃力は出せません。
@@ -396,7 +282,9 @@
      枠線で「変わった」を残す(色・弾みが両方消えると何も伝わらなくなる) */
   .current-icon { display: inline-flex; border-radius: var(--r-window); }
   @media (prefers-reduced-motion: reduce) {
-    .current-icon.badge-in { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* .badge-in は app.css の共通クラスを `use:changed` が実行時に付ける。
+       静的な markup に出てこないので :global で受ける */
+    .current-icon:global(.badge-in) { outline: 2px solid var(--accent); outline-offset: 2px; }
   }
 </style>
 <div class="card">

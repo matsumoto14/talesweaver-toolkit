@@ -6,7 +6,7 @@
 
 use domain::{
     AbilityGrade, AbilityGradeScheme,
-    DamageCategory, EnhanceGrade, EnhanceRates, Equipment,
+    DamageCategory, Element, ElementBonus, EnhanceGrade, EnhanceRates, Equipment,
     EquipmentAbilityAdditionalDef, EquipmentAbilityAdditionalKind, EquipmentAbilityDef,
     EquipmentAbilityFamily, EquipmentEnhanceType, EquipmentValues, PartSlot, SkillDependency,
     SkillEffect,

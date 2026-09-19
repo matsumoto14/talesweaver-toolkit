@@ -52,19 +52,36 @@ pub fn actual_delay_contributions(
 }
 
 /// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
-/// 装備以外の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)。合計は上限 255。
+/// 装備アビリティ(月石・カフス・レリックの属性枠)+ 装備外の供給源(ペット /
+/// モンスターカード / ルーン)。合計は上限 255。
 pub fn element_preview(
     game_character_id: &str,
     equipment: &domain::Equipment,
     stat_sources: &domain::StatSources,
 ) -> domain::ElementPreview {
+    let abilities = gamedata::equipment_abilities();
     domain::ElementPreview::new(
         gamedata::element_base(game_character_id),
-        equipment.element_values(stat_sources.elements.selected()),
+        equipment.element_values(enchanted_element(equipment, stat_sources, &abilities)),
+        equipment.ability_element_values(&abilities),
         stat_sources
             .elements
             .values(gamedata::element_source_catalog()),
     )
+}
+
+/// 装備の属性強化をどの属性に乗せているか。供給源(ペット / カード / ルーン)が先で、
+/// どれも未設定なら装備アビリティ(月石など)で一番積んでいる属性に落ちる。
+/// 無属性スキルに乗る属性もこれで決まる。
+fn enchanted_element(
+    equipment: &domain::Equipment,
+    stat_sources: &domain::StatSources,
+    abilities: &[domain::EquipmentAbilityDef],
+) -> Option<domain::Element> {
+    stat_sources
+        .elements
+        .selected()
+        .or_else(|| equipment.dominant_ability_element(abilities))
 }
 
 /// スキルの属性に対応するキャラの属性値(wiki: カテゴリI の起点)。
@@ -74,7 +91,8 @@ pub fn element_value_for(
     stat_sources: &domain::StatSources,
     skill: &domain::Skill,
 ) -> i64 {
+    let enchanted = enchanted_element(equipment, stat_sources, &gamedata::equipment_abilities());
     element_preview(game_character_id, equipment, stat_sources)
         .total
-        .get(skill.element.effective_for_attack(stat_sources.elements.selected()))
+        .get(skill.element.effective_for_attack(enchanted))
 }

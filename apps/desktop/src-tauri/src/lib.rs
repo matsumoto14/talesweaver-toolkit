@@ -77,7 +77,6 @@ pub fn run() {
             commands::set_default_buff_set,
             commands::list_element_sources,
             commands::equipment_element_values,
-            commands::preview_elements,
             commands::list_contents,
             commands::list_equipment_catalog,
             commands::install_downloaded_equipment,

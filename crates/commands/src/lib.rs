@@ -194,16 +194,6 @@ pub fn equipment_element_values(
     equipment.element_values(element)
 }
 
-/// 属性値の内訳(キャラ基礎 / 装備の属性強化 / 装備以外の供給源 / 合計)。保存前のキャラデータで出す。
-pub fn preview_elements(character: NewCharacter) -> CommandResult<domain::ElementPreview> {
-    validate_character_draft(&character, &BuffSelection::default())?;
-    Ok(damage_inputs::element_preview(
-        &character.game_character_id,
-        &character.equipment,
-        &character.stat_sources,
-    ))
-}
-
 pub fn list_contents() -> Vec<ContentArea> {
     gamedata::content_areas()
 }
@@ -866,7 +856,17 @@ pub fn preview_effective_stats(
         &buffs,
         character_style_dependency(main_skill_id.as_deref())?,
     );
-    let base = stat_preview_of(&base_stats, &stat_sources, &buffs, &equipment, &common_skills, awakening, equipment_base, coefficients)?;
+    let base = stat_preview_of(
+        &base_stats,
+        &stat_sources,
+        &buffs,
+        &equipment,
+        &common_skills,
+        awakening,
+        &game_character_id,
+        equipment_base,
+        coefficients,
+    )?;
     Ok(StatPreviewPayload {
         base,
         part_enhance,
@@ -1477,6 +1477,7 @@ fn stat_preview_of(
     equipment: &domain::Equipment,
     common_skills: &CommonSkills,
     awakening: domain::Awakening,
+    game_character_id: &str,
     equipment_base: domain::EquipmentBaseContext<'_>,
     coefficients: Option<AttackPowerCoefficients>,
 ) -> CommandResult<domain::StatPreview> {
@@ -1489,6 +1490,7 @@ fn stat_preview_of(
         stat_catalogs(&gamedata::buff_catalog()),
         equipment_base,
         &gamedata::random_option_catalog(),
+        damage_inputs::element_preview(game_character_id, equipment, stat_sources),
         coefficients,
         gamedata::awakening_caps(awakening).max_stat,
     )
