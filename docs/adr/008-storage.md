@@ -95,6 +95,17 @@ v17 移行・IndexedDB の v7 移行(`onupgradeneeded` ではなくストアを�
 6 → 7。新しい列・ストアは無いので、書き出し JSON の `FORMAT_VERSION` は据え置き(ファイルの形は
 変わらず、値の意味だけ直る)。
 
+### IndexedDB v8: ルミナの回廊の欄をブラウザ側で埋める(2026-09-19)
+
+`StatSources` に `lumina_corridor`(ルミナの回廊の回廊効果 Lv)を `#[serde(default)]` で足した。
+SQLite は JSON 列(`stat_sources`)なので Rust が読む時点で中立値が入る — 列は増えず
+`SCHEMA_VERSION` も `migrate_*` も要らない。一方 IndexedDB は素の JSON を返すので、既存キャラに
+欄が無いまま画面へ渡すと `undefined` を読んでキャラタブが開けなくなる(v3 と同じ失敗。
+docs/adr/008 の「IndexedDB v3」節)。`browserStore.ts` の `SCHEMA_VERSION` を 7 → 8 に上げ、
+`onupgradeneeded` で既存行に中立値(全 Lv0)を足し、`withEquipmentDefaults` にも同じ欄を足して
+create / update と旧い書き出し JSON の読み込みでも埋まるようにした。
+書き出し JSON の `FORMAT_VERSION` は据え置き(欄が増えるだけで、旧ファイルは中立値で読める)。
+
 ### v1 → v8 の変遷
 
 1. **v1**: `characters` 1 テーブル(id, name, game_character_id, 7 ステ, awakening_stage, eta_level)。

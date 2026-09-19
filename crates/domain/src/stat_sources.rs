@@ -27,6 +27,7 @@ use crate::equipment::{
     EquipmentError, EquipmentValues, PartEquipmentValues, PartSlot, PartStatTotal,
     ENHANCE_LEVEL_MAX, EQUIPMENT_VALUE_MAX,
 };
+use crate::lumina_corridor::{LuminaCorridor, LuminaCorridorError};
 use crate::mastery::{Masteries, MasteryCatalog};
 use crate::random_option::{RandomOptionDef, RandomOptionTotals};
 use crate::rounding::{floor_int, trunc_int};
@@ -481,7 +482,7 @@ pub struct StatSources {
     pub monster_cards: MonsterCards,
     #[serde(default)]
     pub sacred_relic: SacredRelic,
-    /// 装備の属性強化以外の属性値の供給源(ペット / モンスターカード / ルーン / 頭アビ / カフスアビ)
+    /// 装備の外から来る属性値の供給源(ペット / モンスターカード / ルーンスキル)
     #[serde(default)]
     pub elements: ElementSources,
     /// ON にしているキャラスキル(パッシブ・自己バフ・味方バフ。効果は `character_skill.rs`)
@@ -497,6 +498,10 @@ pub struct StatSources {
     /// 1〜4 は装備基本能力、5〜7 は戦闘計算、8〜10 は記録用。
     #[serde(default)]
     pub soul_link: SoulLinkStatus,
+    /// ルミナの回廊の回廊効果(wiki: ミニゲーム/ルミナの回廊)。アカウント単位の恒常バフで、
+    /// 最終ダメージと全属性増加が計算に効く
+    #[serde(default)]
+    pub lumina_corridor: LuminaCorridor,
 }
 
 impl StatSources {
@@ -557,6 +562,7 @@ impl StatSources {
         }
         self.critical_rate.validate()?;
         self.soul_link.validate()?;
+        self.lumina_corridor.validate()?;
         Ok(())
     }
 }
@@ -911,6 +917,8 @@ pub struct StatContribution {
 pub enum StatSourceError {
     #[error(transparent)]
     SoulLink(#[from] SoulLinkError),
+    #[error(transparent)]
+    LuminaCorridor(#[from] LuminaCorridorError),
     #[error(transparent)]
     CriticalRate(#[from] crate::critical_rate::CriticalRateError),
     #[error("排他枠 '{slot}' が重複しています")]
@@ -1971,6 +1979,14 @@ pub struct StatLimits {
     pub equipment_element_value_max: i64,
     /// キャラの属性値の上限(wiki: 属性システム)
     pub element_value_max: i64,
+    /// ルミナの回廊「最終ダメージ」の Lv 上限(wiki: ミニゲーム/ルミナの回廊)
+    pub corridor_final_damage_level_max: u8,
+    /// ルミナの回廊「全属性増加」の Lv 上限
+    pub corridor_element_level_max: u8,
+    /// ルミナの回廊「ダメージ減少」の Lv 上限(記録のみ)
+    pub corridor_damage_reduction_level_max: u8,
+    /// ルミナの回廊「HP MP SP 増加」の Lv 上限(記録のみ)
+    pub corridor_hp_mp_sp_level_max: u8,
     /// 覚醒段階の上限(wiki: Quest/覚醒クエスト)
     pub awakening_stage_max: u8,
     /// エタの意志 Lv の上限(wiki: エタの意志「エタの成長」)
@@ -2092,6 +2108,11 @@ pub fn stat_limits() -> StatLimits {
         avatar_enhance_max: crate::avatar_enhance::AVATAR_ENHANCE_MAX,
         equipment_element_value_max: crate::element::EQUIPMENT_ELEMENT_VALUE_MAX,
         element_value_max: crate::element::ELEMENT_VALUE_MAX,
+        corridor_final_damage_level_max: crate::lumina_corridor::CORRIDOR_FINAL_DAMAGE_LEVEL_MAX,
+        corridor_element_level_max: crate::lumina_corridor::CORRIDOR_ELEMENT_LEVEL_MAX,
+        corridor_damage_reduction_level_max:
+            crate::lumina_corridor::CORRIDOR_DAMAGE_REDUCTION_LEVEL_MAX,
+        corridor_hp_mp_sp_level_max: crate::lumina_corridor::CORRIDOR_HP_MP_SP_LEVEL_MAX,
         awakening_stage_max: crate::awakening::Awakening::MAX_STAGE,
         eternal_level_max: crate::awakening::Awakening::MAX_ETERNAL_LEVEL,
         eternal_awakening_stage: crate::awakening::Awakening::ETERNAL_STAGE,

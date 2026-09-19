@@ -26,6 +26,7 @@ pub mod equipment_polish;
 pub mod game_tables;
 pub mod growth_apply;
 pub mod inkri;
+pub mod lumina_corridor;
 pub mod mastery;
 pub mod measurement;
 pub mod random_option;
@@ -93,6 +94,11 @@ pub use defense::{
 pub use element::{
     Element, ElementBonus, ElementPreview, ElementSourceDef, ElementSourceId, ElementSources,
     ElementValues, EQUIPMENT_ELEMENT_VALUE_MAX,
+};
+pub use lumina_corridor::{
+    LuminaCorridor, LuminaCorridorError, CORRIDOR_DAMAGE_REDUCTION_LEVEL_MAX,
+    CORRIDOR_ELEMENT_LEVEL_MAX, CORRIDOR_ELEMENT_PER_LEVEL, CORRIDOR_FINAL_DAMAGE_LEVEL_MAX,
+    CORRIDOR_FINAL_DAMAGE_RATE_PER_LEVEL, CORRIDOR_HP_MP_SP_LEVEL_MAX,
 };
 pub use enchant::{enchant_plan, enchant_plan_stats, EnchantPlan, EnchantPlanItem, PRIMARY_ENCHANT_STATS};
 pub use enemy::Enemy;

@@ -27,6 +27,7 @@ pub fn damage_contributions_of(
         &gamedata::buff_catalog(),
     ));
     out.extend(sources.soul_link.damage_contributions());
+    out.extend(sources.lumina_corridor.damage_contributions());
     out
 }
 
@@ -53,7 +54,7 @@ pub fn actual_delay_contributions(
 
 /// 属性値の内訳。キャラの基礎属性値(gamedata)+ 装備の属性強化(部位ごとに 0〜9)+
 /// 装備アビリティ(月石・カフス・レリックの属性枠)+ 装備外の供給源(ペット /
-/// モンスターカード / ルーン)。合計は上限 255。
+/// モンスターカード / ルーン)+ ルミナの回廊の全属性増加。合計は上限 255。
 pub fn element_preview(
     game_character_id: &str,
     equipment: &domain::Equipment,
@@ -67,6 +68,7 @@ pub fn element_preview(
         stat_sources
             .elements
             .values(gamedata::element_source_catalog()),
+        stat_sources.lumina_corridor.element_values(),
     )
 }
 

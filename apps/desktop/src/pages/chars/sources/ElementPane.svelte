@@ -140,6 +140,21 @@
           })),
         ],
   );
+
+  /** 装備以外の補正源から入ってくる分(いまはルミナの回廊の全属性増加だけ) */
+  const fromOthers = $derived<ExternalSource[]>(
+    activeElement === null
+      ? []
+      : [
+          {
+            id: "lumina" as SourceId,
+            name: "ルミナの回廊",
+            value: elements?.corridor[activeElement] ?? 0,
+            format: (v: number) => fmtSigned(v),
+            note: "回廊効果「全属性増加」(Lv1 ごとに全属性 +1・最大 +10)",
+          },
+        ],
+  );
 </script>
 
 <div class="card">
@@ -186,6 +201,7 @@
         <span class="dim">
           キャラ {fmtInt(elements.base[e])} + 装備 {fmtInt(elements.equipment[e])}
           + 装備アビリティ {fmtInt(elements.ability[e])} + 主属性 {fmtInt(elements.sources[e])}
+          + 回廊 {fmtInt(elements.corridor[e])}
         </span>
       </div>
     {:else}
@@ -213,6 +229,7 @@
 {/if}
 
 <ExternalSourceList rows={fromEquipment} title="装備から自動で入る分" {onOpenSource} />
+<ExternalSourceList rows={fromOthers} title="ほかの補正源から自動で入る分" {onOpenSource} />
 
 <style>
   .element-row {

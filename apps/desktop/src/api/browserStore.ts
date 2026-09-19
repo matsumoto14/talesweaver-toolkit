@@ -35,7 +35,7 @@ const DB_NAME = "tw-context";
  * `normalizeSummonSkillSelections`(ストアを開いた直後に呼ぶ通常のトランザクション)として
  * 実装する(2026-09-18 追記。呼び出し側は invoke.wasm.ts)。
  */
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -47,6 +47,10 @@ const NEUTRAL_AVATAR = () => ({
   legs: { ...ZERO_EQUIPMENT_VALUES }, effect: { ...ZERO_EQUIPMENT_VALUES },
 });
 const NEUTRAL_POLISH = () => ({ entries: [] });
+/** v8 で足した補正源の中立値。形の正は crates/domain の `LuminaCorridor` */
+const NEUTRAL_LUMINA_CORRIDOR = () => ({
+  final_damage_level: 0, all_element_level: 0, damage_reduction_level: 0, hp_mp_sp_level: 0,
+});
 
 /**
  * 装備に v3/v4 の欄が無ければ中立値を足す。読み込み(transfer.ts)で旧い書き出しを受けたときも
@@ -55,11 +59,13 @@ const NEUTRAL_POLISH = () => ({ entries: [] });
 function withEquipmentDefaults(character: NewCharacter): NewCharacter {
   const equipment = character.equipment as Partial<NewCharacter["equipment"]>;
   const partial = character as Partial<NewCharacter>;
+  const statSources = character.stat_sources as Partial<NewCharacter["stat_sources"]>;
   if (
     equipment.avatar !== undefined &&
     equipment.polish !== undefined &&
     equipment.owned_titles !== undefined &&
-    partial.summon_skill_id !== undefined
+    partial.summon_skill_id !== undefined &&
+    statSources.lumina_corridor !== undefined
   ) {
     return character;
   }
@@ -72,6 +78,11 @@ function withEquipmentDefaults(character: NewCharacter): NewCharacter {
       avatar: equipment.avatar ?? NEUTRAL_AVATAR(),
       polish: equipment.polish ?? NEUTRAL_POLISH(),
       owned_titles: equipment.owned_titles ?? (equipment.title ? [equipment.title] : []),
+    },
+    // v8: ルミナの回廊(旧い行・旧い書き出し JSON には欄が無い)。未習得を中立値で足す
+    stat_sources: {
+      ...character.stat_sources,
+      lumina_corridor: statSources.lumina_corridor ?? NEUTRAL_LUMINA_CORRIDOR(),
     },
   };
 }
@@ -174,6 +185,20 @@ function open(): Promise<IDBDatabase> {
           const row = cursor.value as RegisteredCharacter;
           const filled = withEquipmentDefaults(row);
           if (filled !== row) cursor.update({ ...row, equipment: filled.equipment });
+          cursor.continue();
+        };
+      }
+      // v8: 既存キャラの補正源に lumina_corridor(ルミナの回廊)の中立値を足す
+      // (SQLite 側は JSON 列を Rust が serde default で読むのと同じ意味)。
+      if (event.oldVersion > 0 && event.oldVersion < 8) {
+        const characters = request.transaction!.objectStore(CHARACTERS);
+        const cursorRequest = characters.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const row = cursor.value as RegisteredCharacter;
+          const filled = withEquipmentDefaults(row);
+          if (filled !== row) cursor.update({ ...row, stat_sources: filled.stat_sources });
           cursor.continue();
         };
       }

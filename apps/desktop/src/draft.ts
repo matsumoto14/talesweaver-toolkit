@@ -96,7 +96,18 @@ export const cloneStatSources = (src: StatSources): StatSources => ({
   masteries: { picked: [...(src.masteries?.picked ?? [])] },
   critical_rate: { ...src.critical_rate },
   soul_link: { ...src.soul_link },
+  // 旧い保存データ(欄が無い)は中立値で埋める。IndexedDB は素の JSON を返すので
+  // `undefined` のまま画面へ渡すとキャラタブが開けなくなる(browserStore の v8 と同じ扱い)
+  lumina_corridor: { ...(src.lumina_corridor ?? NEUTRAL_LUMINA_CORRIDOR) },
 });
+
+/** ルミナの回廊の未習得状態。正は crates/domain/src/lumina_corridor.rs の `LuminaCorridor` */
+export const NEUTRAL_LUMINA_CORRIDOR = {
+  final_damage_level: 0,
+  all_element_level: 0,
+  damage_reduction_level: 0,
+  hp_mp_sp_level: 0,
+} as const;
 
 export const buildDraft = (c: RegisteredCharacter): Draft => ({
   name: c.name,

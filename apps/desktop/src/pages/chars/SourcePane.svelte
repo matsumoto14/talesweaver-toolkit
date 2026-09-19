@@ -26,6 +26,7 @@
   import CommonSkillPane from "./sources/CommonSkillPane.svelte";
   import CriticalRatePane from "./sources/CriticalRatePane.svelte";
   import ElementPane from "./sources/ElementPane.svelte";
+  import LuminaCorridorPane from "./sources/LuminaCorridorPane.svelte";
   import EquipmentPane from "./sources/EquipmentPane.svelte";
   import RandomOptionPane from "./sources/RandomOptionPane.svelte";
   import SienaPane from "./sources/SienaPane.svelte";
@@ -142,6 +143,7 @@
   const TITLES: Record<SourceId, { title: string; note: string }> = {
     status: { title: "キャラステータス", note: "素ステ・覚醒・主軸スキル" },
     element: { title: "属性", note: "主属性と、装備から自動で入る属性値" },
+    lumina: { title: "ルミナの回廊", note: "回廊効果(テイルズID 内の全キャラに効く恒常バフ)" },
     equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
     soulLink: { title: "ソウルリンク", note: "全項目を計算に反映" },
     pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
@@ -187,6 +189,8 @@
 
   {#if sourceId === "status"}
     <StatusPane {characterId} {draft} {preview} {skills} />
+  {:else if sourceId === "lumina"}
+    <LuminaCorridorPane {draft} {preview} />
   {:else if sourceId === "element"}
     <ElementPane {draft} {preview} {skills} {onOpenSource} />
   {:else if sourceId === "equipment"}

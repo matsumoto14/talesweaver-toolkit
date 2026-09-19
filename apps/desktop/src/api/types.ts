@@ -290,6 +290,20 @@ export interface StatSources {
   critical_rate: CriticalRateSources;
   /** ソウルリンク 1〜10。1〜4は装備基本能力、5〜7は戦闘計算、8〜10は記録用 */
   soul_link: SoulLinkStatus;
+  /** ルミナの回廊の回廊効果(アカウント単位の恒常バフ) */
+  lumina_corridor: LuminaCorridor;
+}
+
+// crates/domain/src/lumina_corridor.rs の LuminaCorridor。習得している回廊効果の Lv。
+export interface LuminaCorridor {
+  /** 最終ダメージ(カテゴリL)。Lv1 ごとに +1%、最大 Lv5 */
+  final_damage_level: number;
+  /** 全属性増加。Lv1 ごとに全属性 +1、最大 Lv10 */
+  all_element_level: number;
+  /** ダメージ減少(被ダメージ側)。記録のみ */
+  damage_reduction_level: number;
+  /** HP / MP / SP 増加。記録のみ */
+  hp_mp_sp_level: number;
 }
 
 // crates/domain/src/critical_rate.rs の CriticalRateSources。
@@ -501,6 +515,8 @@ export interface ElementPreview {
   ability_by_part: PartElementValues[];
   /** 装備の外の供給源(ペット / モンスターカード / ルーンスキル) */
   sources: ElementValues;
+  /** ルミナの回廊の「全属性増加」(8 属性それぞれに Lv ぶん) */
+  corridor: ElementValues;
   /** 4 つを足して上限 255 で頭打ちにした値 */
   total: ElementValues;
 }
@@ -2033,6 +2049,10 @@ export interface StatLimits {
   equipment_element_value_max: number;
   /** キャラの属性値の上限 */
   element_value_max: number;
+  corridor_final_damage_level_max: number;
+  corridor_element_level_max: number;
+  corridor_damage_reduction_level_max: number;
+  corridor_hp_mp_sp_level_max: number;
   /** 覚醒段階の上限 */
   awakening_stage_max: number;
   /** エタの意志 Lv の上限 */

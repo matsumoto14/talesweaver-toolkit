@@ -214,7 +214,9 @@ pub struct ElementPreview {
     pub ability_by_part: Vec<PartElementValues>,
     /// 装備の外の供給源(ペット / モンスターカード / ルーンスキル)
     pub sources: ElementValues,
-    /// 4 つを足して上限 255 で頭打ちにした値
+    /// ルミナの回廊の「全属性増加」(8 属性それぞれに Lv ぶん)
+    pub corridor: ElementValues,
+    /// すべてを足して上限 255 で頭打ちにした値
     pub total: ElementValues,
 }
 
@@ -224,6 +226,7 @@ impl ElementPreview {
         equipment: ElementValues,
         ability_by_part: Vec<PartElementValues>,
         sources: ElementValues,
+        corridor: ElementValues,
     ) -> Self {
         let ability = ability_by_part
             .iter()
@@ -234,7 +237,13 @@ impl ElementPreview {
             ability,
             ability_by_part,
             sources,
-            total: base.add(equipment).add(ability).add(sources).clamp_to_max(),
+            corridor,
+            total: base
+                .add(equipment)
+                .add(ability)
+                .add(sources)
+                .add(corridor)
+                .clamp_to_max(),
         }
     }
 }

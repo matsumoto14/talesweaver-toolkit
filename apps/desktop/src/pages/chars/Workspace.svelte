@@ -564,6 +564,17 @@
       : shown.map((e) => `${ELEMENT_LABELS[e]} ${fmtInt(elements.total[e])}`).join(" ・ ");
   });
 
+  /** ルミナの回廊の行サブタイトル。習得している回廊効果だけを出す */
+  const luminaSummary = $derived.by(() => {
+    const c = draft.statSources.lumina_corridor;
+    const parts: string[] = [];
+    if (c.final_damage_level > 0) parts.push(`最終ダメ ${fmtSignedPct(c.final_damage_level / 100)}`);
+    if (c.all_element_level > 0) parts.push(`全属性 ${fmtSigned(c.all_element_level)}`);
+    if (c.damage_reduction_level > 0) parts.push(`ダメ減少 ${fmtSignedPct(c.damage_reduction_level / 100)}`);
+    if (c.hp_mp_sp_level > 0) parts.push(`HP MP SP ${fmtSignedPct(c.hp_mp_sp_level * 0.005)}`);
+    return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
+  });
+
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
     {
       id: "status",
@@ -576,6 +587,11 @@
       id: "element",
       name: "属性",
       sub: elementSummary,
+    },
+    {
+      id: "lumina",
+      name: "ルミナの回廊",
+      sub: luminaSummary,
     },
     {
       id: "commonSkill",
@@ -655,7 +671,7 @@
   // ★ はホームタブのコンテンツと同じ操作なので、覚えることが増えない。
   const DEFAULT_ORDER: SourceId[] = [
     "status", "skills", "equipment", "soulLink", "commonSkill", "element", "thesis", "avatar", "polish",
-    "siena", "relic", "crown", "monsterCard", "pet", "rune", "actualDelay", "criticalRate",
+    "siena", "relic", "crown", "monsterCard", "pet", "rune", "lumina", "actualDelay", "criticalRate",
     "title", "randomOption",
   ];
   interface SourceLayout {

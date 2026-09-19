@@ -1492,6 +1492,41 @@ mod tests {
         assert_eq!(repo.list().unwrap().len(), 1);
     }
 
+    /// `lumina_corridor` の欄が無い旧 JSON(2026-09-19 より前の保存)も、中立値(全 Lv0)として
+    /// 読めること。JSON 列への欄追加は `ALTER TABLE` を伴わないので、serde の既定値が
+    /// そのまま保存データの移行になる(ブラウザ版は IndexedDB v8 が同じ埋め方をする)。
+    #[test]
+    fn 回廊効果の欄が無い旧statsourcesは中立値で読める() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let created = repo
+            .create(&new_character("旧データ"), &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        // いまの形から `lumina_corridor` の欄だけを落として、旧い保存データを作る
+        let mut sources = serde_json::to_value(StatSources {
+            soul_link: domain::SoulLinkStatus {
+                thrust_level: 2,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        sources.as_object_mut().unwrap().remove("lumina_corridor");
+        repo.conn
+            .execute(
+                "UPDATE characters SET stat_sources = ?1 WHERE id = ?2",
+                params![sources.to_string(), created.id],
+            )
+            .unwrap();
+
+        let loaded = repo.get(created.id).unwrap();
+        assert_eq!(loaded.stat_sources.soul_link.thrust_level, 2, "既存の値は残る");
+        assert_eq!(
+            loaded.stat_sources.lumina_corridor,
+            domain::LuminaCorridor::default(),
+            "欄が無い旧データは未習得(全 Lv0)"
+        );
+    }
+
     /// `stat_sources` 列の無い旧スキーマ(v1)から開いた場合、`from_connection` が
     /// 自動で `ALTER TABLE` して `stat_sources` を `StatSources::default()` として読めるようにする。
     #[test]
