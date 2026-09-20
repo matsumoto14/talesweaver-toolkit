@@ -162,7 +162,7 @@
     title: { title: "称号", note: "表示中の 1 件だけ有効" },
     commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
     thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
-    avatar: { title: "アバター強化", note: "兜・頭・体・脚・エフェクトの5部位に強化剤で付与" },
+    avatar: { title: "アバター", note: "兜・頭・体・脚・エフェクトの5部位。強化剤と補正付きアバター(末尾「Ａ」)" },
     polish: { title: "研磨", note: "部位ごとに能力値1つを研磨剤/ワックスで上げる" },
     skills: { title: "キャラスキル", note: "マスタリー(段ごとに 1 つ)と、自分・味方のスキル" },
     actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
@@ -307,7 +307,7 @@
   {:else if sourceId === "thesis"}
     <ThesisCorePane {draft} {preview} />
   {:else if sourceId === "avatar"}
-    <AvatarPane {draft} />
+    <AvatarPane {draft} dependency={equipmentMainSkill?.dependency ?? null} />
   {:else if sourceId === "polish"}
     <PolishPane {draft} {preview} dependency={equipmentMainSkill?.dependency ?? null} />
   {:else if sourceId === "actualDelay"}

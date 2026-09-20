@@ -6,7 +6,9 @@ import { EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, POLISH_KI
 import { tables } from "../../tables.svelte";
 import type { EquipmentValues, SkillDependency, StatPreview } from "../../api/types";
 import type { Draft } from "../../draft";
-import { avatarEnhanceTotals, zeroValues } from "../../equipment";
+import {
+  avatarCorrectionAmount, avatarCorrectionCount, avatarEnhanceTotals, zeroValues,
+} from "../../equipment";
 import { fmtSigned, fmtSignedPct } from "../../format";
 
 /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの依存種別から絞る。 */
@@ -93,14 +95,19 @@ export function polishSummary(draft: Draft): string {
 }
 
 /**
- * アバター強化の「効いている量」要約(能力値ごとの Σ、非 0 だけ)。例「突き +60 ・ 命中 +24」。
+ * アバターの「効いている量」要約。強化剤は能力値ごとの Σ(非 0 だけ)、補正付きアバターは
+ * 9 値すべてに同額なので点数と合計で 1 つにまとめる。例「補正付き5点 全9値 +15 ・ 突き +60」。
  * ペイン見出しと Workspace の行サブタイトルの両方がこの関数を呼ぶ(2 か所にロジックを置かない)。
  */
 export function avatarEnhanceSummary(draft: Draft): string {
   const totals = avatarEnhanceTotals(draft.equipment.avatar);
-  return (
-    EQUIPMENT_STAT_KINDS.filter((k) => totals[k] > 0)
-      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(totals[k])}`)
-      .join(" ・ ") || "未使用"
+  const parts = EQUIPMENT_STAT_KINDS.filter((k) => totals[k] > 0).map(
+    (k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(totals[k])}`,
   );
+  const count = avatarCorrectionCount(draft.equipment.avatar_corrections);
+  if (count > 0) {
+    const amount = avatarCorrectionAmount(draft.equipment.avatar_corrections);
+    parts.unshift(`補正付き${count}点 全9値 ${fmtSigned(amount)}`);
+  }
+  return parts.join(" ・ ") || "未使用";
 }

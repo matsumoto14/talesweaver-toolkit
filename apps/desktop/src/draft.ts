@@ -8,7 +8,7 @@ import type {
   RegisteredCharacter,
   StatSources,
 } from "./api/types";
-import { cloneAvatarEnhancements, cloneEquipmentPart, cloneEquipmentPolishes, cloneSienaAuras, cloneThesisCores, neutralAvatarEnhancements, neutralEquipmentPart, neutralEquipmentPolishes, neutralSienaAuras, neutralThesisCores } from "./equipment";
+import { cloneAvatarCorrections, cloneAvatarEnhancements, cloneEquipmentPart, cloneEquipmentPolishes, cloneSienaAuras, cloneThesisCores, neutralAvatarCorrections, neutralAvatarEnhancements, neutralEquipmentPart, neutralEquipmentPolishes, neutralSienaAuras, neutralThesisCores } from "./equipment";
 import { PART_SLOTS, STAT_KINDS } from "./labels";
 
 /**
@@ -55,6 +55,7 @@ export const cloneEquipment = (src: Equipment): Equipment => ({
   siena: cloneSienaAuras(src.siena),
   thesis_cores: cloneThesisCores(src.thesis_cores),
   avatar: cloneAvatarEnhancements(src.avatar),
+  avatar_corrections: cloneAvatarCorrections(src.avatar_corrections ?? neutralAvatarCorrections()),
   polish: cloneEquipmentPolishes(src.polish),
   title: src.title ?? null,
   owned_titles: [...src.owned_titles],
@@ -66,6 +67,7 @@ export const defaultEquipment = (): Equipment => ({
   siena: neutralSienaAuras(),
   thesis_cores: neutralThesisCores(),
   avatar: neutralAvatarEnhancements(),
+  avatar_corrections: neutralAvatarCorrections(),
   polish: neutralEquipmentPolishes(),
   title: null,
   owned_titles: [],

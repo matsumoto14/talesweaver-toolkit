@@ -8,6 +8,10 @@
 //! 出典: クライアント DB のアバター強化剤アイテム(dm_00000_0408/0425/0481)、
 //! ユーザー確認 2026-09-15。
 //!
+//! アバター本体(補正付きアバター = アイテム名末尾が「Ａ」)も装備補正 9 値を持ち、
+//! 5 部位すべてを揃えると 5 セット効果が乗る(`AvatarCorrections`)。強化剤とは別枠だが
+//! 合流先は同じ強化能力値。
+//!
 //! 期限(期間制)はモデルに持たない。このリポジトリに期限つき値の前例が無く、
 //! 値だけを保持する(docs/adr/005-siena-thesis-core.md 2026-09-15 追記)。
 
@@ -119,6 +123,88 @@ impl AvatarEnhancements {
     }
 }
 
+/// 補正付きアバター(アイテム名の末尾に「Ａ」が付く)1 点が装備補正 9 値すべてに足す値。
+/// 出典: ゲーム内アイテム説明「†スウィートスターの足あとＡ - 脚」(突き〜敏捷度がすべて 1)、
+/// ユーザー確認 2026-09-21。
+pub const AVATAR_CORRECTION_PER_PART: i64 = 1;
+
+/// 補正付きアバターを 5 部位すべて揃えたときのセット効果。装備補正 9 値すべてに足す。
+/// 出典: ゲーム内「5 セット効果」表示(9 値すべて +10、ほかに移動速度 +10)、
+/// wiki「移動速度」(アバター5点セット +10)。移動速度はこのツールでは扱わない。
+pub const AVATAR_SET_BONUS: i64 = 10;
+
+/// 補正付きアバターをどの部位に着けているか。値は部位によらず一定なので ON/OFF だけを持つ。
+/// 5 部位すべてが ON のときだけセット効果(`AVATAR_SET_BONUS`)が乗る。
+/// アバター強化剤(`AvatarEnhancements`)とは別物で、合流先は同じ強化能力値。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct AvatarCorrections {
+    #[serde(default)]
+    pub helm: bool,
+    #[serde(default)]
+    pub head: bool,
+    #[serde(default)]
+    pub body: bool,
+    #[serde(default)]
+    pub legs: bool,
+    #[serde(default)]
+    pub effect: bool,
+}
+
+impl AvatarCorrections {
+    pub fn get(&self, part: AvatarPart) -> bool {
+        match part {
+            AvatarPart::Helm => self.helm,
+            AvatarPart::Head => self.head,
+            AvatarPart::Body => self.body,
+            AvatarPart::Legs => self.legs,
+            AvatarPart::Effect => self.effect,
+        }
+    }
+
+    pub fn get_mut(&mut self, part: AvatarPart) -> &mut bool {
+        match part {
+            AvatarPart::Helm => &mut self.helm,
+            AvatarPart::Head => &mut self.head,
+            AvatarPart::Body => &mut self.body,
+            AvatarPart::Legs => &mut self.legs,
+            AvatarPart::Effect => &mut self.effect,
+        }
+    }
+
+    /// 補正付きアバターを着けている部位の数(0〜5)。
+    pub fn equipped_count(&self) -> usize {
+        AvatarPart::ALL.into_iter().filter(|p| self.get(*p)).count()
+    }
+
+    /// 5 部位すべてが補正付きか(セット効果が乗るか)。
+    pub fn is_set(&self) -> bool {
+        self.equipped_count() == AvatarPart::ALL.len()
+    }
+
+    /// アバター本体の補正(点数 × `AVATAR_CORRECTION_PER_PART`)。セット効果は含まない。
+    pub fn item_values(&self) -> EquipmentValues {
+        uniform(self.equipped_count() as i64 * AVATAR_CORRECTION_PER_PART)
+    }
+
+    /// 5 点セット効果。揃っていなければ中立値。
+    pub fn set_bonus_values(&self) -> EquipmentValues {
+        uniform(if self.is_set() { AVATAR_SET_BONUS } else { 0 })
+    }
+
+    pub fn is_neutral(&self) -> bool {
+        *self == AvatarCorrections::default()
+    }
+}
+
+/// 装備補正 9 値すべてに同じ値を入れた `EquipmentValues`。
+fn uniform(value: i64) -> EquipmentValues {
+    let mut values = EquipmentValues::default();
+    for kind in EquipmentStatKind::ALL {
+        *values.get_mut(kind) = value;
+    }
+    values
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize)]
 pub enum AvatarEnhanceError {
     #[error("アバター強化({part:?} の {kind:?})は 0〜{max} の範囲で指定してください(指定値 {value})")]
@@ -171,5 +257,30 @@ mod tests {
         ));
 
         assert!(AvatarEnhancements::default().validate().is_ok());
+    }
+
+    #[test]
+    fn 補正付きアバターは点数ぶんと5点セット効果を足す() {
+        let mut c = AvatarCorrections::default();
+        assert!(c.is_neutral());
+        assert_eq!(c.item_values(), EquipmentValues::default());
+        assert_eq!(c.set_bonus_values(), EquipmentValues::default());
+
+        *c.get_mut(AvatarPart::Helm) = true;
+        *c.get_mut(AvatarPart::Head) = true;
+        assert_eq!(c.equipped_count(), 2);
+        assert!(!c.is_set());
+        assert_eq!(c.item_values().thrust, 2);
+        assert_eq!(c.item_values().agility, 2);
+        assert_eq!(c.set_bonus_values(), EquipmentValues::default());
+
+        for part in AvatarPart::ALL {
+            *c.get_mut(part) = true;
+        }
+        assert!(c.is_set());
+        for kind in EquipmentStatKind::ALL {
+            assert_eq!(c.item_values().get(kind), 5);
+            assert_eq!(c.set_bonus_values().get(kind), 10);
+        }
     }
 }

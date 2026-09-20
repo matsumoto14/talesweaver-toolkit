@@ -1995,6 +1995,10 @@ pub struct StatLimits {
     pub core_enhancement_max: u8,
     /// アバター強化 1 個あたりの値の上限(wiki: 現行アバター強化剤は +10 / +12)
     pub avatar_enhance_max: i64,
+    /// 補正付きアバター 1 点が装備補正 9 値すべてに足す値
+    pub avatar_correction_per_part: i64,
+    /// 補正付きアバター 5 点セット効果が装備補正 9 値すべてに足す値
+    pub avatar_set_bonus: i64,
     /// 装備 1 部位に付与できる属性値の上限(wiki: 装備システム/属性強化)
     pub equipment_element_value_max: i64,
     /// キャラの属性値の上限(wiki: 属性システム)
@@ -2126,6 +2130,8 @@ pub fn stat_limits() -> StatLimits {
         core_evolution_max: CORE_EVOLUTION_MAX,
         core_enhancement_max: CORE_ENHANCEMENT_MAX,
         avatar_enhance_max: crate::avatar_enhance::AVATAR_ENHANCE_MAX,
+        avatar_correction_per_part: crate::avatar_enhance::AVATAR_CORRECTION_PER_PART,
+        avatar_set_bonus: crate::avatar_enhance::AVATAR_SET_BONUS,
         equipment_element_value_max: crate::element::EQUIPMENT_ELEMENT_VALUE_MAX,
         element_value_max: crate::element::ELEMENT_VALUE_MAX,
         corridor_final_damage_level_max: crate::lumina_corridor::CORRIDOR_FINAL_DAMAGE_LEVEL_MAX,

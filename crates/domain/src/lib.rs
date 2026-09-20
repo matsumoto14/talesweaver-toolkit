@@ -45,7 +45,10 @@ pub use actual_delay::{
     actual_delay, summon_uses_per_minute, ActualDelay, ActualDelayContribution, SkillUsesTable,
     ACTUAL_DELAY_MIN, ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
 };
-pub use avatar_enhance::{AvatarEnhanceError, AvatarEnhancements, AvatarPart, AVATAR_ENHANCE_MAX};
+pub use avatar_enhance::{
+    AvatarCorrections, AvatarEnhanceError, AvatarEnhancements, AvatarPart,
+    AVATAR_CORRECTION_PER_PART, AVATAR_ENHANCE_MAX, AVATAR_SET_BONUS,
+};
 pub use attack_power::{
     attack_power, attack_power_breakdown, random_part_max, stat_attack_power, AttackCoefficients,
     AttackPowerBreakdown,

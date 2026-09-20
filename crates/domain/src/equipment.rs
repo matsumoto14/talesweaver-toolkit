@@ -5,7 +5,7 @@
 //! 「強化能力値」= 部位ごとのエンチャント値 + シエナのオーラの能力値(武器/盾)+ テシスコア
 //! + アバター強化。
 
-use crate::avatar_enhance::{AvatarEnhanceError, AvatarEnhancements};
+use crate::avatar_enhance::{AvatarCorrections, AvatarEnhanceError, AvatarEnhancements};
 use crate::equipment_polish::{EquipmentPolishError, EquipmentPolishes};
 use crate::category::DamageCategory;
 use crate::character_skill::{damage_contributions, SkillEffect};
@@ -1123,6 +1123,10 @@ pub struct Equipment {
     /// (wiki: 計算式まとめ「強化能力値」。期限は持たない)
     #[serde(default)]
     pub avatar: AvatarEnhancements,
+    /// 補正付きアバター(アイテム名末尾が「Ａ」)をどの部位に着けているか。1 点あたり装備補正
+    /// 9 値すべてに +1、5 部位揃うと 5 セット効果で 9 値すべてにさらに +10。強化能力値へ合流する
+    #[serde(default)]
+    pub avatar_corrections: AvatarCorrections,
     /// 装備研磨(部位ごとに能力値 1 つを上げる消耗品)。基本能力値へ合流する
     /// (`docs/adr/005-siena-thesis-core.md` 2026-09-15 追記。期限は持たない)
     #[serde(default)]
@@ -1908,6 +1912,23 @@ impl Equipment {
             sources.push(EquipmentValueSource {
                 source: "アバター強化".to_string(),
                 values: avatar_values,
+            });
+        }
+        let correction_values = self.avatar_corrections.item_values();
+        if correction_values != EquipmentValues::default() {
+            sources.push(EquipmentValueSource {
+                source: format!(
+                    "補正付きアバター({}点)",
+                    self.avatar_corrections.equipped_count()
+                ),
+                values: correction_values,
+            });
+        }
+        let set_values = self.avatar_corrections.set_bonus_values();
+        if set_values != EquipmentValues::default() {
+            sources.push(EquipmentValueSource {
+                source: "アバター5セット効果".to_string(),
+                values: set_values,
             });
         }
         sources
@@ -4839,6 +4860,58 @@ mod tests {
         let totals = eq.enhanced_totals(None);
         assert_eq!(totals.thrust, 24);
         assert_eq!(totals.accuracy, 10);
+    }
+
+    #[test]
+    fn 補正付きアバターとセット効果が強化能力値の供給源に合流する() {
+        use crate::avatar_enhance::AvatarPart;
+
+        let mut eq = Equipment::default();
+        // 中立なら供給源に出ない
+        assert!(eq
+            .enhanced_sources(None)
+            .iter()
+            .all(|s| !s.source.starts_with("補正付きアバター") && s.source != "アバター5セット効果"));
+
+        // 2 点だけならセット効果は乗らない(9 値すべてに +2)
+        *eq.avatar_corrections.get_mut(AvatarPart::Helm) = true;
+        *eq.avatar_corrections.get_mut(AvatarPart::Head) = true;
+        let sources = eq.enhanced_sources(None);
+        let item = sources
+            .iter()
+            .find(|s| s.source == "補正付きアバター(2点)")
+            .expect("補正付きアバターの供給源が無い");
+        assert_eq!(item.values.thrust, 2);
+        assert!(sources.iter().all(|s| s.source != "アバター5セット効果"));
+
+        // 5 点揃えると本体 +5 とセット効果 +10 で 9 値すべてに +15
+        for part in AvatarPart::ALL {
+            *eq.avatar_corrections.get_mut(part) = true;
+        }
+        let sources = eq.enhanced_sources(None);
+        assert_eq!(
+            sources
+                .iter()
+                .find(|s| s.source == "補正付きアバター(5点)")
+                .expect("補正付きアバターの供給源が無い")
+                .values
+                .thrust,
+            5
+        );
+        assert_eq!(
+            sources
+                .iter()
+                .find(|s| s.source == "アバター5セット効果")
+                .expect("セット効果の供給源が無い")
+                .values
+                .thrust,
+            10
+        );
+
+        let totals = eq.enhanced_totals(None);
+        for kind in EquipmentStatKind::ALL {
+            assert_eq!(totals.get(kind), 15, "{kind:?} が +15 になっていない");
+        }
     }
 
     #[test]

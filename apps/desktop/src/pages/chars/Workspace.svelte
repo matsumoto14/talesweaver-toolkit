@@ -648,7 +648,7 @@
     },
     {
       id: "avatar",
-      name: "アバター強化",
+      name: "アバター",
       sub: avatarSummary === "未使用" ? NEUTRAL : avatarSummary,
     },
     {

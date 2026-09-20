@@ -106,6 +106,14 @@ docs/adr/008 の「IndexedDB v3」節)。`browserStore.ts` の `SCHEMA_VERSION` 
 create / update と旧い書き出し JSON の読み込みでも埋まるようにした。
 書き出し JSON の `FORMAT_VERSION` は据え置き(欄が増えるだけで、旧ファイルは中立値で読める)。
 
+### IndexedDB v9: 補正付きアバターの欄をブラウザ側で埋める(2026-09-21)
+
+`Equipment` に `avatar_corrections`(補正付きアバターをどの部位に着けているか)を
+`#[serde(default)]` で足した。SQLite は JSON 列(`equipment`)なので v8 と同じく列追加も
+`migrate_*` も要らない。IndexedDB は `SCHEMA_VERSION` を 8 → 9 に上げ、`onupgradeneeded` で
+既存行に中立値(全部位 `false` = 未装備)を足し、`withEquipmentDefaults` にも同じ欄を足した。
+書き出し JSON の `FORMAT_VERSION` は据え置き(欄が増えるだけで、旧ファイルは中立値で読める)。
+
 ### v1 → v8 の変遷
 
 1. **v1**: `characters` 1 テーブル(id, name, game_character_id, 7 ステ, awakening_stage, eta_level)。

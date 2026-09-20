@@ -2,7 +2,7 @@
 // 計算・判定ロジックは Rust 側(crates/domain/src/equipment.rs)にあり、ここは表示・編集用の
 // 単純な値組み立てのみ(CLAUDE.md「計算・判定は Rust 側」)。
 import type {
-  AvatarEnhancements, CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList,
+  AvatarCorrections, AvatarEnhancements, CoreSet, Equipment, EquipmentItem, EquipmentPart, EquipmentPartList,
   EquipmentPolishes, EquipmentValues,
   RandomOptionDef, RandomOptionEffect, RandomOptionSlot, RegisteredSienaAura,
   SienaAura, SienaAuraList, SienaAuras, SienaExtraKind, ThesisCores,
@@ -15,6 +15,7 @@ import type { EquipmentStatKind } from "./labels";
 import type { PartSlot, PolishKind } from "./api/types";
 import { fmtInt, fmtSigned } from "./format";
 import { tables } from "./tables.svelte";
+import { limits } from "./limits.svelte";
 
 const EQUIPMENT_VALUE_KEYS = EQUIPMENT_STAT_KINDS;
 
@@ -139,6 +140,28 @@ export const neutralAvatarEnhancements = (): AvatarEnhancements =>
 
 export const cloneAvatarEnhancements = (src: AvatarEnhancements): AvatarEnhancements =>
   Object.fromEntries(AVATAR_PARTS.map((p) => [p, { ...src[p] }])) as unknown as AvatarEnhancements;
+
+export const neutralAvatarCorrections = (): AvatarCorrections =>
+  Object.fromEntries(AVATAR_PARTS.map((p) => [p, false])) as AvatarCorrections;
+
+export const cloneAvatarCorrections = (src: AvatarCorrections): AvatarCorrections =>
+  Object.fromEntries(AVATAR_PARTS.map((p) => [p, src[p] === true])) as AvatarCorrections;
+
+/** 補正付きアバターの点数(0〜5)。5 点でセット効果が乗る。 */
+export const avatarCorrectionCount = (src: AvatarCorrections): number =>
+  AVATAR_PARTS.filter((p) => src[p]).length;
+
+/**
+ * 補正付きアバターが装備補正 9 値すべてに足す量(本体 点数×1 + 5 点セット効果 10)。
+ * 値は domain の `AVATAR_CORRECTION_PER_PART` / `AVATAR_SET_BONUS`(limits 経由)。
+ */
+export const avatarCorrectionAmount = (src: AvatarCorrections): number => {
+  const count = avatarCorrectionCount(src);
+  return (
+    count * limits.avatar_correction_per_part +
+    (count === AVATAR_PARTS.length ? limits.avatar_set_bonus : 0)
+  );
+};
 
 /** 部位ごとの合計(能力値ごとの Σ、非 0 だけ)。ペイン見出しと Workspace の行サブタイトルで共有する。 */
 export const avatarEnhanceTotals = (src: AvatarEnhancements): EquipmentValues =>

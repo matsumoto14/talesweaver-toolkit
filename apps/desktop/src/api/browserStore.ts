@@ -37,8 +37,11 @@ const DB_NAME = "tw-context";
  * v8 で補正源に `lumina_corridor`(ルミナの回廊の回廊効果)が加わった。SQLite は JSON 列
  * (`stat_sources`)なので列追加も migrate も要らないが、IndexedDB は v3 と同じ理由で既存行に
  * 中立値(全 Lv0)を足す(2026-09-19)。
+ * v9 で装備に `avatar_corrections`(補正付きアバターをどの部位に着けているか)が加わった。
+ * SQLite は JSON 列(`equipment`)なので列追加も migrate も要らないが、IndexedDB は v3 と同じ理由で
+ * 既存行に中立値(全部位 false)を足す(2026-09-21)。
  */
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -50,13 +53,17 @@ const NEUTRAL_AVATAR = () => ({
   legs: { ...ZERO_EQUIPMENT_VALUES }, effect: { ...ZERO_EQUIPMENT_VALUES },
 });
 const NEUTRAL_POLISH = () => ({ entries: [] });
+/** v9 で足した装備の欄の中立値。形の正は crates/domain の `AvatarCorrections` */
+const NEUTRAL_AVATAR_CORRECTIONS = () => ({
+  helm: false, head: false, body: false, legs: false, effect: false,
+});
 /** v8 で足した補正源の中立値。形の正は crates/domain の `LuminaCorridor` */
 const NEUTRAL_LUMINA_CORRIDOR = () => ({
   final_damage_level: 0, all_element_level: 0, damage_reduction_level: 0, hp_mp_sp_level: 0,
 });
 
 /**
- * 装備に v3/v4 の欄が無ければ中立値を足す。読み込み(transfer.ts)で旧い書き出しを受けたときも
+ * 装備に v3/v4/v9 の欄が無ければ中立値を足す。読み込み(transfer.ts)で旧い書き出しを受けたときも
  * ここを通るので、保存する行は常に今の形になる(SQLite 側は serde default が同じことをする)。
  */
 function withEquipmentDefaults(character: NewCharacter): NewCharacter {
@@ -65,6 +72,7 @@ function withEquipmentDefaults(character: NewCharacter): NewCharacter {
   const statSources = character.stat_sources as Partial<NewCharacter["stat_sources"]>;
   if (
     equipment.avatar !== undefined &&
+    equipment.avatar_corrections !== undefined &&
     equipment.polish !== undefined &&
     equipment.owned_titles !== undefined &&
     partial.summon_skill_id !== undefined &&
@@ -79,6 +87,8 @@ function withEquipmentDefaults(character: NewCharacter): NewCharacter {
     equipment: {
       ...character.equipment,
       avatar: equipment.avatar ?? NEUTRAL_AVATAR(),
+      // v9: 補正付きアバター(旧い行・旧い書き出し JSON には欄が無い)。未装備を中立値で足す
+      avatar_corrections: equipment.avatar_corrections ?? NEUTRAL_AVATAR_CORRECTIONS(),
       polish: equipment.polish ?? NEUTRAL_POLISH(),
       owned_titles: equipment.owned_titles ?? (equipment.title ? [equipment.title] : []),
     },
@@ -202,6 +212,20 @@ function open(): Promise<IDBDatabase> {
           const row = cursor.value as RegisteredCharacter;
           const filled = withEquipmentDefaults(row);
           if (filled !== row) cursor.update({ ...row, stat_sources: filled.stat_sources });
+          cursor.continue();
+        };
+      }
+      // v9: 既存キャラの装備に avatar_corrections(補正付きアバター)の中立値を足す
+      // (SQLite 側は JSON 列を Rust が serde default で読むのと同じ意味)。
+      if (event.oldVersion > 0 && event.oldVersion < 9) {
+        const characters = request.transaction!.objectStore(CHARACTERS);
+        const cursorRequest = characters.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const row = cursor.value as RegisteredCharacter;
+          const filled = withEquipmentDefaults(row);
+          if (filled !== row) cursor.update({ ...row, equipment: filled.equipment });
           cursor.continue();
         };
       }

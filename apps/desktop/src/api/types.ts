@@ -873,6 +873,11 @@ export interface AvatarEnhancements {
   effect: EquipmentValues;
 }
 
+// 補正付きアバター(アイテム名末尾が「Ａ」)をどの部位に着けているか。1 点あたり装備補正 9 値
+// すべてに +1、5 部位揃うとセット効果で 9 値すべてにさらに +10。
+// crates/domain/src/avatar_enhance.rs の AvatarCorrections。
+export type AvatarCorrections = Record<AvatarPart, boolean>;
+
 // 装備研磨の種類。crates/domain/src/equipment_polish.rs の PolishKind。
 export type PolishKind = "sparkle" | "artisan" | "holy";
 
@@ -995,6 +1000,8 @@ export interface Equipment {
   thesis_cores: ThesisCores;
   /** アバター強化(兜・頭・体・脚・エフェクトの5部位)。強化能力値へ合流 */
   avatar: AvatarEnhancements;
+  /** 補正付きアバター(末尾「Ａ」)を着けている部位。1点 +1・5点セット効果 +10。強化能力値へ合流 */
+  avatar_corrections: AvatarCorrections;
   /** 装備研磨(部位ごとに能力値1つを上げる消耗品)。基本能力値へ合流 */
   polish: EquipmentPolishes;
   /** 表示中の称号(TitleDef.id)。1 枠だけ・補正は基本能力値へ合流。null = 未装備 */
@@ -2049,6 +2056,8 @@ export interface StatLimits {
   core_enhancement_max: number;
   /** アバター強化 1 個あたりの値の上限(wiki: 現行アバター強化剤は +10 / +12) */
   avatar_enhance_max: number;
+  avatar_correction_per_part: number;
+  avatar_set_bonus: number;
   /** 装備 1 部位に付与できる属性値の上限 */
   equipment_element_value_max: number;
   /** キャラの属性値の上限 */
