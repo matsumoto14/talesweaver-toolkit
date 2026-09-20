@@ -1,11 +1,11 @@
-# Tale Wiki を全部取り込む(計画、2026-09-02)
+# Tale Wiki を全部取り込む(計画、2026-09-02。段階 0 前半の実装で 2026-09-20 に訂正)
 
 issue #14〜#18 の「知識」側を、wiki 丸ごとの取り込みとして具体化したもの。決まったら ADR に移す。
 完成像(4 画面のワイヤー、ユーザー承認 2026-09-02): https://claude.ai/code/artifact/a5939b49-15bb-4381-9406-95364b82243a
 
 ## ゴール(ユーザー決定 2026-09-02)
 
-wiki 3,443 ページを自前サーバー(#16 の app-api)に持ち、アプリから 4 つのことができるようにする。
+wiki 3,438 ページを自前サーバー(#16 の app-api)に持ち、アプリから 4 つのことができるようにする。
 
 1. **AI に聞ける**(#18): 「あのクエどう進める」に出典付きで答える。根拠は取り込んだ wiki だけ
 2. **登録で選べる物を増やす**: 装備・神鳥・クラウン・ペット・カード等をカタログ化して自由入力をなくす(ux-guidelines)
@@ -24,19 +24,19 @@ wiki 3,443 ページを自前サーバー(#16 の app-api)に持ち、アプリ�
 
 | 項目 | 値 |
 |---|---|
-| ページ数 | 3,443(`?cmd=list`) |
+| ページ数 | **3,438**(`?cmd=list` の body 内 href 3,443 − ナビ 4 − 重複 1。2026-09-20 訂正)。本文があるのは 3,439 で、`FrontPage` は一覧に載らず RecentChanges からしか分からない |
 | うちドメイン外(Quest / Event / NPC 好感度 / Chapter / Shop / コメント / MenuBar 等) | 約 1,500。ゴール 1・4 では対象、ゴール 2・3 では対象外 |
-| wiki ソース総量 | 約 34 MB(25 ページ抽出の平均 10 KB × 3,443) |
-| 取得速度 | 0.14 秒 / ページ。全件 8 分 |
-| 差分検出 | `?cmd=rss&ver=2.0` に更新日時。`?cmd=list` には無い。RSS + 週 1 の全件突き合わせ(改名・削除の検出) |
+| wiki ソース総量 | **約 15 MB**(2026-09-20 全件実測、平均 4.4 KB。以前の「34 MB」は 25 ページの平均 10 KB からの外挿) |
+| 取得速度 | 0.14 秒 / ページ。全件 9 分(2026-09-20 実測) |
+| 差分検出 | **`RecentChanges` のソース**(約 500 件・2024-01 まで)+ `--full` の `?cmd=list` 突き合わせ(改名・削除)。`?cmd=rss` は 15 件しか返さないので使わない(2026-09-20 訂正) |
 | 添付(画像) | `?cmd=filelist` は一覧を返さない。ページ内の `&ref()` から辿る |
 
-取得は既存の `.claude/skills/talewiki-fetch/scripts/fetch_page.py`(EUC-JP + NEC 拡張の復元)を土台にする。
+取得の実装は `tools/gamedata/wiki/talewiki.py` が正本(EUC-JP + NEC 拡張の復元)。`.claude/skills/talewiki-fetch/scripts/fetch_page.py` は 1 枚だけ見たいとき用にそれを呼ぶ薄い口。
 
 ## 層
 
 ```
-talewiki ──fetch──▶ [1] 取込キャッシュ(page, source, mtime, rev)
+talewiki ──fetch──▶ [1] 取込キャッシュ(page, source, mtime, status)
                           │
             ┌─────────────┼──────────────────┐
             ▼             ▼                  ▼
@@ -46,7 +46,7 @@ talewiki ──fetch──▶ [1] 取込キャッシュ(page, source, mtime, rev
    ゴール 2・3
 ```
 
-- [1] は派生データの正本。gamedata の数値は [2] が [1] から生成する(今の手作業スクリプトを置き換える)。domain の正本はこれまでどおり gamedata / SQLite で、索引に置き換えない(#17)
+- [1] は **実装済み**(`tools/gamedata/wiki/`、2026-09-20)。派生データの正本。gamedata の数値は [2] が [1] から生成する(今の手作業スクリプトを置き換える)。domain の正本はこれまでどおり gamedata / SQLite で、索引に置き換えない(#17)
 - [2] だけが今のリポの中で完結する。[3][4] はサーバー(#15 の境界、#16 の基盤)を要る。[1] はサーバーに置かず、取込側(開発機)に留める
 
 ## 段階
@@ -57,13 +57,13 @@ talewiki ──fetch──▶ [1] 取込キャッシュ(page, source, mtime, rev
 
 ### 段階 0: 取込パイプライン([1] + [2] の骨格)
 
-- `tools/gamedata/wiki/`: `fetch_all`(RSS 差分 + 全件)→ `store`(SQLite: page / source / mtime / fetched_at / status)→ `extract_*`(表 → JSON)→ `gen_rust`(`Source` + 取得日付きリテラル)→ `diff`(前回生成との差)
+- `tools/gamedata/wiki/`: `sync`(RecentChanges 差分 + 全件)→ `store`(SQLite: page / source / mtime / fetched_at / status)→ `extract_*`(表 → JSON)→ `gen_rust`(`Source` + 取得日付きリテラル)→ `diff`(前回生成との差)
 - 既存の `import_*.py` はこの上に載せ替える。使い捨てスクリプトを増やさない
-- 受け入れ条件:
-    - [ ] `python tools/gamedata/wiki/sync.py` 1 回で 3,443 ページを取り、リポ外(スクラッチまたは `%APPDATA%`)の SQLite に page / source / mtime / fetched_at / status を保存する
-    - [ ] 2 回目は RSS の更新分だけ取り直し、週 1 相当の `--full` で `?cmd=list` と突き合わせて改名・削除を検出する
-    - [ ] 取得失敗はページ単位で記録し、最後に成功した版を残す(全体を止めない)
-    - [ ] EUC-JP + NEC 拡張(丸数字)の復元が既存 `fetch_page.py` と同じ結果になるテスト
+- 受け入れ条件(前半 4 つは 2026-09-20 に完了):
+    - [x] `python tools/gamedata/wiki/sync.py --full` 1 回で 3,439 ページを取り(失敗 1 は wiki 側が壊れた名前で RecentChanges に記録している行)、リポ外(既定 `%LOCALAPPDATA%\tw-context-wiki\wiki.sqlite`)の SQLite に page / source / mtime / fetched_at / status を保存する
+    - [x] 2 回目は RecentChanges の更新分だけ取り直し(加えて未取得のページも埋める)、`--full` で `?cmd=list` と突き合わせて改名・削除を検出する
+    - [x] 取得失敗はページ単位で記録し、最後に成功した版を残す(全体を止めない)
+    - [x] EUC-JP + NEC 拡張(丸数字)の復元が既存 `fetch_page.py` と同じ結果になるテスト(`test_talewiki.py`。「ステータス」ページ 105,205 字が旧実装と完全一致することも実測で確認)
     - [ ] 既存の 1 本(`import_skill_icons.py` か装備カタログ生成)をこの経路に載せ替え、生成物が現状と一致する
     - [ ] 生成した Rust リテラルは `Source { page, retrieved_on }` を持ち、`diff` で前回との差だけが見える
 
