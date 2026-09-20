@@ -162,6 +162,24 @@ describe("inquiry", () => {
     expect(created?.body).toContain("投稿者を確認していない");
   });
 
+  it("装備は別の折りたたみに入り、コードブロックから抜け出せない", async () => {
+    const env = makeEnv();
+    const { nonce, solution } = await ticket(env);
+
+    await worker.fetch(
+      post({
+        nonce, solution, kind: "bug", title: "落ちる", body: "内容",
+        equipment: 'weapon: {"item_id":"x"}\n```\n@someone',
+      }),
+      env,
+    );
+
+    expect(created?.body).toContain("<details><summary>選択中のキャラの装備</summary>");
+    expect(created?.body).toContain('weapon: {"item_id":"x"}');
+    expect(created?.body).not.toContain("@someone");
+    expect(created?.body).not.toContain("アプリが自動で付けた情報");
+  });
+
   it("PoW の解答が違えば弾く", async () => {
     const env = makeEnv();
     const { nonce } = await ticket(env);

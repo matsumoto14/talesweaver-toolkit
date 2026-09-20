@@ -130,6 +130,7 @@ export function measurementDraft(
     title: `実測 ${label} / ${conditions.skill.name}(${samples.length} 点)`,
     body: lines.join("\n"),
     diagnostics: JSON.stringify(measurementPayload(conditions, samples)),
+    equipment: "",
   };
 }
 

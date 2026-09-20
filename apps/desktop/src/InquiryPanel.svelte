@@ -4,7 +4,7 @@
   import { errorMessage, getAppInfo } from "./api/commands";
   import type { AppInfo } from "./api/types";
   import {
-    INQUIRY_ENDPOINT, INQUIRY_KINDS, preview, send,
+    INQUIRY_ENDPOINT, INQUIRY_KINDS, equipmentAttachment, preview, send,
     type InquiryDraft, type InquiryKind, type SentInquiry,
   } from "./inquiry";
   import { app } from "./state.svelte";
@@ -25,6 +25,7 @@
   let title = $state(seed?.title ?? "");
   let body = $state(seed?.body ?? "");
   let includeDiagnostics = $state(true);
+  let includeEquipment = $state(false);
   let sending = $state(false);
   let progress = $state("");
   let sent = $state<SentInquiry | null>(null);
@@ -35,9 +36,11 @@
       .catch((error) => reportError(errorMessage(error)));
   });
 
+  const selected = $derived(app.characters.find((candidate) => candidate.id === app.selectedId));
+
   /** 調査に効くのに本人が書けない情報だけを集める。個人を特定するものは入れない。 */
   const diagnostics = $derived.by(() => {
-    const character = app.characters.find((candidate) => candidate.id === app.selectedId);
+    const character = selected;
     const lines = [
       `アプリ: ${info?.version ?? "?"}`,
       `環境: ${navigator.userAgent}`,
@@ -55,7 +58,10 @@
     return lines.join("\n");
   });
 
-  const draft = $derived<InquiryDraft>({ kind, title, body, diagnostics });
+  // 装備は量が多く公開のページに載るので、既定では付けない(押した人だけ)。
+  const equipment = $derived(includeEquipment && selected ? equipmentAttachment(selected) : "");
+
+  const draft = $derived<InquiryDraft>({ kind, title, body, diagnostics, equipment });
   const canSubmit = $derived(title.trim().length > 0 && body.trim().length > 0);
 
   async function submit() {
@@ -109,6 +115,14 @@
             on={includeDiagnostics}
             onToggle={() => (includeDiagnostics = !includeDiagnostics)}
           />
+          {#if selected}
+            <ToggleRow
+              name="選択中のキャラの装備を一緒に送る(キャラ名は含めません)"
+              tone="temp"
+              on={includeEquipment}
+              onToggle={() => (includeEquipment = !includeEquipment)}
+            />
+          {/if}
 
           <div class="preview-label">送られる内容</div>
           <div class="preview inset">{preview(draft, includeDiagnostics)}</div>

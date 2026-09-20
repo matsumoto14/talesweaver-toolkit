@@ -44,6 +44,8 @@ const LIMITS = {
   title: 120,
   body: 4000,
   diagnostics: 4000,
+  // 装備中の 13 部位 + オーラ + コア。ほかと足しても issue 本文の上限(65536)に収まる
+  equipment: 20000,
 } as const;
 
 const KINDS = ["bug", "data", "feature"] as const;
@@ -164,12 +166,13 @@ async function createInquiry(request: Request, env: Env): Promise<Response> {
   const title = clean(asString(payload.title), LIMITS.title);
   const body = clean(asString(payload.body), LIMITS.body);
   const diagnostics = clean(asString(payload.diagnostics), LIMITS.diagnostics);
+  const equipment = clean(asString(payload.equipment), LIMITS.equipment);
 
   if (!title || !body) return json({ error: "件名と内容を入力してください" }, 400);
 
   const issue = await createIssue(env, {
     title: `[${KIND_LABEL[kind]}] ${title}`,
-    body: renderIssueBody(body, diagnostics),
+    body: renderIssueBody(body, diagnostics, equipment),
     labels: env.ISSUE_LABELS.split(",").map((l) => l.trim()).filter(Boolean),
   });
 
@@ -211,20 +214,25 @@ function clean(value: string, limit: number): string {
     .slice(0, limit);
 }
 
-function renderIssueBody(body: string, diagnostics: string): string {
+function renderIssueBody(body: string, diagnostics: string, equipment: string): string {
   const parts = [
     "> アプリの問い合わせフォームから送られた、**投稿者を確認していない**内容です。",
     "",
     body,
   ];
 
-  if (diagnostics) {
+  const attachments = [
+    ["アプリが自動で付けた情報", diagnostics],
+    ["選択中のキャラの装備", equipment],
+  ];
+  for (const [summary, content] of attachments) {
+    if (!content) continue;
     parts.push(
       "",
-      "<details><summary>アプリが自動で付けた情報</summary>",
+      `<details><summary>${summary}</summary>`,
       "",
       "```",
-      diagnostics,
+      content,
       "```",
       "",
       "</details>",
