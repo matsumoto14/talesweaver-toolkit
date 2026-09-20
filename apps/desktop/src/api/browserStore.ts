@@ -40,6 +40,11 @@ const DB_NAME = "tw-context";
  * v9 で装備に `avatar_corrections`(補正付きアバターをどの部位に着けているか)が加わった。
  * SQLite は JSON 列(`equipment`)なので列追加も migrate も要らないが、IndexedDB は v3 と同じ理由で
  * 既存行に中立値(全部位 false)を足す(2026-09-21)。
+ *
+ * **埋め直しは 1 本のカーソルにまとめる**(2026-09-21)。版ごとに `openCursor()` を分けていたが、
+ * IndexedDB は要求を置かれた順に処理するので、同じストアに N 本開くと N 本とも「更新前の行」を
+ * 読んでから順に書き戻し、最後の 1 本以外の埋め直しが消えていた(v5 の DB を v9 で開くと
+ * summon_skill_id と lumina_corridor が落ちる)。版ごとの分岐も持たず、欠けている欄だけを埋める。
  */
 const SCHEMA_VERSION = 9;
 
@@ -146,86 +151,33 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(ICONS)) db.createObjectStore(ICONS, { keyPath: "characterId" });
       if (!db.objectStoreNames.contains(SNAPSHOTS)) db.createObjectStore(SNAPSHOTS, { keyPath: "character_id" });
       if (!db.objectStoreNames.contains(COUNTERS)) db.createObjectStore(COUNTERS, { keyPath: "name" });
-      // v2: 既存キャラに「次の目標」を未設定(null)として足す。列の無い行を残して
-      // undefined のまま読ませない(SQLite 側の ALTER TABLE と同じ扱いに揃える)。
-      if (event.oldVersion > 0 && event.oldVersion < 2) {
-        const characters = request.transaction!.objectStore(CHARACTERS);
-        const cursorRequest = characters.openCursor();
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (!cursor) return;
-          const row = cursor.value as Partial<RegisteredCharacter>;
-          if (row.goal_content_id === undefined) cursor.update({ ...row, goal_content_id: null });
-          cursor.continue();
-        };
-      }
-      // v5: レリックの聖域 20段の content id を直す。旧 id のままだと「次の目標」が解決できない
-      // (SQLite 側の migrate_goal_relic_20 と同じ扱いに揃える)。
-      if (event.oldVersion > 0 && event.oldVersion < 5) {
+      // --- 既存行の埋め直し ------------------------------------------------
+      // **1 本のカーソルにまとめる。**同じストアに複数のカーソルを開いてはいけない:
+      // IndexedDB は要求を置かれた順に処理するので、カーソルを N 本開くと N 本とも
+      // 「更新前の行」を読んでから順に書き戻し、最後の 1 本以外の埋め直しが消える。
+      // 実際、v5 の DB を v9 で開くと summon_skill_id(v6)と lumina_corridor(v8)が
+      // 落ちて、キャラタブが開けない行ができていた(2026-09-21 に発見・修正)。
+      //
+      // 版ごとの分岐も持たない(migrate_* と同じく、起動のたび全部走っても同じ結果になる形)。
+      // 欠けている欄だけが埋まり、既に今の形の行は書き戻さない。
+      if (event.oldVersion > 0 && event.oldVersion < SCHEMA_VERSION) {
         const characters = request.transaction!.objectStore(CHARACTERS);
         const cursorRequest = characters.openCursor();
         cursorRequest.onsuccess = () => {
           const cursor = cursorRequest.result;
           if (!cursor) return;
           const row = cursor.value as RegisteredCharacter;
-          if (row.goal_content_id === "relic_sanctuary_kisinik") {
-            cursor.update({ ...row, goal_content_id: "relic_sanctuary_20" });
+          // v3(avatar / polish)・v4(owned_titles)・v6(summon_skill_id)・
+          // v8(lumina_corridor)・v9(avatar_corrections)。欠けている欄に中立値を足す
+          // (SQLite 側で Rust が serde default / ALTER TABLE で埋めるのと同じ意味)
+          const filled = withEquipmentDefaults(row) as RegisteredCharacter;
+          // v2: 「次の目標」を未設定(null)として足す
+          const goal = filled.goal_content_id ?? null;
+          // v5: レリックの聖域 20段の content id を直す(旧 id のままだと目標が解決できない)
+          const goalFixed = goal === "relic_sanctuary_kisinik" ? "relic_sanctuary_20" : goal;
+          if (filled !== row || goalFixed !== row.goal_content_id) {
+            cursor.update({ ...filled, goal_content_id: goalFixed });
           }
-          cursor.continue();
-        };
-      }
-      // v6: 既存キャラに summon_skill_id(魔法人形の召喚スキル)を未選択(null)として足す。
-      if (event.oldVersion > 0 && event.oldVersion < 6) {
-        const characters = request.transaction!.objectStore(CHARACTERS);
-        const cursorRequest = characters.openCursor();
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (!cursor) return;
-          const row = cursor.value as Partial<RegisteredCharacter>;
-          if (row.summon_skill_id === undefined) cursor.update({ ...row, summon_skill_id: null });
-          cursor.continue();
-        };
-      }
-      // v3: 既存キャラの装備に avatar / polish の中立値を足す(SQLite の serde default と同じ意味)
-      // v4: 既存キャラの装備に owned_titles(所持称号一覧)を足す。まとめて 1 カーソルで処理する
-      // (withEquipmentDefaults が両方の欠落を見て埋めるので、v3 到達済みの行も v4 で再度通る)。
-      if (event.oldVersion > 0 && event.oldVersion < 4) {
-        const characters = request.transaction!.objectStore(CHARACTERS);
-        const cursorRequest = characters.openCursor();
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (!cursor) return;
-          const row = cursor.value as RegisteredCharacter;
-          const filled = withEquipmentDefaults(row);
-          if (filled !== row) cursor.update({ ...row, equipment: filled.equipment });
-          cursor.continue();
-        };
-      }
-      // v8: 既存キャラの補正源に lumina_corridor(ルミナの回廊)の中立値を足す
-      // (SQLite 側は JSON 列を Rust が serde default で読むのと同じ意味)。
-      if (event.oldVersion > 0 && event.oldVersion < 8) {
-        const characters = request.transaction!.objectStore(CHARACTERS);
-        const cursorRequest = characters.openCursor();
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (!cursor) return;
-          const row = cursor.value as RegisteredCharacter;
-          const filled = withEquipmentDefaults(row);
-          if (filled !== row) cursor.update({ ...row, stat_sources: filled.stat_sources });
-          cursor.continue();
-        };
-      }
-      // v9: 既存キャラの装備に avatar_corrections(補正付きアバター)の中立値を足す
-      // (SQLite 側は JSON 列を Rust が serde default で読むのと同じ意味)。
-      if (event.oldVersion > 0 && event.oldVersion < 9) {
-        const characters = request.transaction!.objectStore(CHARACTERS);
-        const cursorRequest = characters.openCursor();
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (!cursor) return;
-          const row = cursor.value as RegisteredCharacter;
-          const filled = withEquipmentDefaults(row);
-          if (filled !== row) cursor.update({ ...row, equipment: filled.equipment });
           cursor.continue();
         };
       }
