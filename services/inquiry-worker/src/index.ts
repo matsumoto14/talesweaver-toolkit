@@ -44,7 +44,10 @@ const LIMITS = {
   title: 120,
   body: 4000,
   diagnostics: 4000,
-  // 装備中の 13 部位 + オーラ + コア。ほかと足しても issue 本文の上限(65536)に収まる
+  // 計算を再現できるキャラ 1 体ぶん(素ステ・補正源・装備中の 13 部位・バフ・結果)。
+  // ほかと足しても issue 本文の上限(65536)に収まる
+  character: 40000,
+  // 0.5.1 以前の配布済みの版が送る、装備だけの添付
   equipment: 20000,
 } as const;
 
@@ -166,13 +169,14 @@ async function createInquiry(request: Request, env: Env): Promise<Response> {
   const title = clean(asString(payload.title), LIMITS.title);
   const body = clean(asString(payload.body), LIMITS.body);
   const diagnostics = clean(asString(payload.diagnostics), LIMITS.diagnostics);
+  const character = clean(asString(payload.character), LIMITS.character);
   const equipment = clean(asString(payload.equipment), LIMITS.equipment);
 
   if (!title || !body) return json({ error: "件名と内容を入力してください" }, 400);
 
   const issue = await createIssue(env, {
     title: `[${KIND_LABEL[kind]}] ${title}`,
-    body: renderIssueBody(body, diagnostics, equipment),
+    body: renderIssueBody(body, diagnostics, character, equipment),
     labels: env.ISSUE_LABELS.split(",").map((l) => l.trim()).filter(Boolean),
   });
 
@@ -214,7 +218,9 @@ function clean(value: string, limit: number): string {
     .slice(0, limit);
 }
 
-function renderIssueBody(body: string, diagnostics: string, equipment: string): string {
+function renderIssueBody(
+  body: string, diagnostics: string, character: string, equipment: string,
+): string {
   const parts = [
     "> アプリの問い合わせフォームから送られた、**投稿者を確認していない**内容です。",
     "",
@@ -223,6 +229,7 @@ function renderIssueBody(body: string, diagnostics: string, equipment: string): 
 
   const attachments = [
     ["アプリが自動で付けた情報", diagnostics],
+    ["選択中のキャラのデータ", character],
     ["選択中のキャラの装備", equipment],
   ];
   for (const [summary, content] of attachments) {

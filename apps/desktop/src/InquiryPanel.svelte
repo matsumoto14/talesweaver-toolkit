@@ -1,13 +1,13 @@
 <script lang="ts">
   // 問い合わせパネル。情報パネルとは分け、右上から直接開く。
   import { onMount, untrack } from "svelte";
-  import { errorMessage, getAppInfo } from "./api/commands";
+  import { errorMessage, getAppInfo, getDamageSnapshot, previewEffectiveStats } from "./api/commands";
   import type { AppInfo } from "./api/types";
   import {
-    INQUIRY_ENDPOINT, INQUIRY_KINDS, equipmentAttachment, preview, send,
-    type InquiryDraft, type InquiryKind, type SentInquiry,
+    INQUIRY_ENDPOINT, INQUIRY_KINDS, characterAttachment, preview, send,
+    type InquiryDraft, type InquiryKind, type InquiryResult, type SentInquiry,
   } from "./inquiry";
-  import { app } from "./state.svelte";
+  import { app, payloadOf, simIsDirty } from "./state.svelte";
   import { reportError } from "./toast.svelte";
   import Modal from "./ui/Modal.svelte";
   import Choose from "./ui/Choose.svelte";
@@ -25,7 +25,8 @@
   let title = $state(seed?.title ?? "");
   let body = $state(seed?.body ?? "");
   let includeDiagnostics = $state(true);
-  let includeEquipment = $state(false);
+  let includeCharacter = $state(false);
+  let result = $state<InquiryResult | null>(null);
   let sending = $state(false);
   let progress = $state("");
   let sent = $state<SentInquiry | null>(null);
@@ -50,6 +51,7 @@
       lines.push(`選択中のキャラ種: ${character.game_character_id}`);
       lines.push(`覚醒 ${character.awakening.stage} / エタ Lv${character.awakening.eternal_level}`);
       if (character.main_skill_id) lines.push(`主軸スキル: ${character.main_skill_id}`);
+      if (simIsDirty()) lines.push("試し変更中");
     }
     if (app.calcTargetId) lines.push(`計算中の対象: ${app.calcTargetId}`);
     // 実測の条件(集計用の JSON)。中継側は診断情報だけをコードブロックに入れるので、
@@ -58,10 +60,40 @@
     return lines.join("\n");
   });
 
-  // 装備は量が多く公開のページに載るので、既定では付けない(押した人だけ)。
-  const equipment = $derived(includeEquipment && selected ? equipmentAttachment(selected) : "");
+  // 計算タブで試し変更中なら、画面に出ている数字の元はそちら
+  const shared = $derived(selected ? (simIsDirty() && app.sim ? app.sim : payloadOf(selected)) : null);
 
-  const draft = $derived<InquiryDraft>({ kind, title, body, diagnostics, equipment });
+  // アプリが出していた数字も付ける(再現した値と突き合わせる基準)。取れなくても送信は止めない
+  $effect(() => {
+    const draftCharacter = shared;
+    const id = selected?.id;
+    result = null;
+    if (!includeCharacter || !draftCharacter || id === undefined) return;
+    Promise.all([
+      previewEffectiveStats(
+        draftCharacter.base_stats, draftCharacter.stat_sources, draftCharacter.equipment,
+        draftCharacter.common_skills, draftCharacter.awakening, draftCharacter.game_character_id,
+        draftCharacter.main_skill_id, app.calcBuffs,
+      ),
+      getDamageSnapshot(id),
+    ]).then(([stats, snapshot]) => {
+      if (shared !== draftCharacter) return;
+      result = {
+        stats: stats.stats,
+        attack: stats.attack?.breakdown ?? null,
+        last_damage: snapshot && {
+          skill_id: snapshot.skill_id, content_id: snapshot.content_id, per_hit: snapshot.per_hit,
+        },
+      };
+    }).catch(() => {});
+  });
+
+  // 量が多く公開のページに載るので、既定では付けない(押した人だけ)。
+  const character = $derived(
+    includeCharacter && shared ? characterAttachment(shared, app.calcBuffs, result) : "",
+  );
+
+  const draft = $derived<InquiryDraft>({ kind, title, body, diagnostics, character });
   const canSubmit = $derived(title.trim().length > 0 && body.trim().length > 0);
 
   async function submit() {
@@ -117,10 +149,10 @@
           />
           {#if selected}
             <ToggleRow
-              name="選択中のキャラの装備を一緒に送る(キャラ名は含めません)"
+              name="選択中のキャラのデータを一緒に送る(キャラ名は含めません)"
               tone="temp"
-              on={includeEquipment}
-              onToggle={() => (includeEquipment = !includeEquipment)}
+              on={includeCharacter}
+              onToggle={() => (includeCharacter = !includeCharacter)}
             />
           {/if}
 

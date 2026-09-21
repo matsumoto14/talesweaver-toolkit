@@ -180,6 +180,24 @@ describe("inquiry", () => {
     expect(created?.body).not.toContain("アプリが自動で付けた情報");
   });
 
+  it("キャラのデータは別の折りたたみに入る", async () => {
+    const env = makeEnv();
+    const { nonce, solution } = await ticket(env);
+
+    await worker.fetch(
+      post({
+        nonce, solution, kind: "bug", title: "落ちる", body: "内容",
+        character: '{"character":{"game_character_id":"x"}}\n```\n@someone',
+      }),
+      env,
+    );
+
+    expect(created?.body).toContain("<details><summary>選択中のキャラのデータ</summary>");
+    expect(created?.body).toContain('{"character":{"game_character_id":"x"}}');
+    expect(created?.body).not.toContain("@someone");
+    expect(created?.body).not.toContain("選択中のキャラの装備");
+  });
+
   it("PoW の解答が違えば弾く", async () => {
     const env = makeEnv();
     const { nonce } = await ticket(env);

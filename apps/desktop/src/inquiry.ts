@@ -4,7 +4,9 @@
 // レート制限で守っている。ここは「nonce をもらう → 解く → 送る」だけ。
 
 import type {
-  EquipmentPartList, EquipmentValues, PartSlot, RegisteredCharacter, SienaAuraList,
+  AttackPowerBreakdown, BuffSelection, DamageSnapshot, EffectiveStats, EquipmentPartList, EquipmentParts, NewCharacter,
+  SienaAuraList,
+  SienaAuras,
 } from "./api/types";
 
 /**
@@ -30,53 +32,72 @@ export interface InquiryDraft {
   body: string;
   /** 自動で付ける情報。送信前に全文を見せて、ユーザーが外せるようにする */
   diagnostics: string;
-  /** 選択中キャラの装備(`equipmentAttachment`)。付けないときは空 */
-  equipment: string;
+  /** 選択中キャラのデータ(`characterAttachment`)。付けないときは空 */
+  character: string;
+}
+
+/** アプリがその入力から出していた数字。再現した値と突き合わせる基準になる */
+export interface InquiryResult {
+  stats: EffectiveStats;
+  attack: AttackPowerBreakdown | null;
+  /** 直近のダメージ計算(保存済みのキャラだけ) */
+  last_damage: Pick<DamageSnapshot, "skill_id" | "content_id" | "per_hit"> | null;
 }
 
 /**
- * 問い合わせに付ける装備データ。**装備中のものだけ**を 1 部位 1 行で書く。
+ * 問い合わせに付けるキャラのデータ。**計算を再現できる入力一式**(素ステ・補正源・装備・
+ * 共通スキル・計算に使っているバフ)と、アプリが出していた結果。
  *
- * 公開のページに載るので、ユーザーが自由に書いた文字(キャラ名・部位やオーラのラベル)と
- * 端末内の id は入れない。0 の能力値は落とす(全文を送信前に見せるので、読める長さに保つ)。
- * カタログ外装備の `custom_name` はアイテム名なので残す(データの誤りの調査に要る)。
+ * `character` は保存形(`NewCharacter`)のままなので、テストの入力にそのまま使える。
+ * 公開のページに載るので、ユーザーが自由に書いた文字(キャラ名・部位やオーラのラベル・
+ * バフセット名)と端末内の id は入れない。装備は**装備中のものだけ**を残し、所持称号や
+ * 次の目標のような計算に効かない欄は空にする。カタログ外装備の `custom_name` は
+ * アイテム名なので残す(データの誤りの調査に要る)。
+ *
+ * 全文を送信前に見せるので、1 欄 1 行で書く(全体は 1 つの JSON として読める)。
  */
-export function equipmentAttachment(character: RegisteredCharacter): string {
-  const { parts, siena, thesis_cores, avatar, polish, title } = character.equipment;
-  const lines: string[] = [];
-
-  for (const [slot, list] of Object.entries(parts) as [PartSlot, EquipmentPartList][]) {
-    const part = list.registered.find((candidate) => candidate.id === list.selected_id);
-    if (!part) continue;
-    const { id: _id, label: _label, base, enchant, enchant_caps, ...rest } = part;
-    lines.push(`${slot}: ${JSON.stringify({
-      ...rest,
-      base: nonZero(base),
-      enchant: nonZero(enchant),
-      enchant_caps: enchant_caps && nonZero(enchant_caps),
-    })}`);
-  }
-  for (const [slot, list] of Object.entries(siena) as [string, SienaAuraList][]) {
-    const selected = list.registered.find((candidate) => candidate.id === list.selected_id);
-    if (selected) lines.push(`siena.${slot}: ${JSON.stringify(selected.aura)}`);
-  }
-  for (const [region, set] of Object.entries(thesis_cores)) {
-    if (set.slots.some((core) => core !== null)) {
-      lines.push(`thesis_cores.${region}: ${JSON.stringify(set.slots)}`);
-    }
-  }
-  for (const [slot, values] of Object.entries(avatar)) {
-    const kept = nonZero(values);
-    if (Object.keys(kept).length > 0) lines.push(`avatar.${slot}: ${JSON.stringify(kept)}`);
-  }
-  if (polish.entries.length > 0) lines.push(`polish: ${JSON.stringify(polish.entries)}`);
-  if (title) lines.push(`title: ${title}`);
-
-  return lines.join("\n");
+export function characterAttachment(
+  character: NewCharacter, buffs: BuffSelection, result: InquiryResult | null,
+): string {
+  const { equipment } = character;
+  const shared: NewCharacter = {
+    name: "",
+    game_character_id: character.game_character_id,
+    base_stats: character.base_stats,
+    awakening: character.awakening,
+    main_skill_id: character.main_skill_id,
+    summon_skill_id: character.summon_skill_id,
+    common_skills: character.common_skills,
+    stat_sources: character.stat_sources,
+    equipment: {
+      ...equipment,
+      parts: selectedOnly(equipment.parts),
+      siena: selectedOnly(equipment.siena),
+      owned_titles: equipment.title ? [equipment.title] : [],
+    },
+    goal_content_id: null,
+    rotation_skill_ids: character.rotation_skill_ids,
+    default_buff_set_id: null,
+  };
+  return `{"character":{\n${fields(shared)}\n},\n${fields({ buffs, result })}\n}`;
 }
 
-function nonZero(values: EquipmentValues): Partial<EquipmentValues> {
-  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== 0));
+/** 登録リストを「装備中の 1 件だけ」にする。id は振り直し、ラベルは空にする。 */
+function selectedOnly<T extends EquipmentParts | SienaAuras>(lists: T): T {
+  const entries = Object.entries(lists) as [string, EquipmentPartList | SienaAuraList][];
+  return Object.fromEntries(entries.map(([slot, list]) => {
+    const registered: { id: number }[] = list.registered;
+    const selected = registered.find((candidate) => candidate.id === list.selected_id);
+    return [slot, selected
+      ? { registered: [{ ...selected, id: 1, label: "" }], selected_id: 1 }
+      : { registered: [], selected_id: null }];
+  })) as unknown as T;
+}
+
+function fields(value: object): string {
+  return Object.entries(value)
+    .map(([key, field]) => `${JSON.stringify(key)}:${JSON.stringify(field)}`)
+    .join(",\n");
 }
 
 export interface SentInquiry {
@@ -96,7 +117,7 @@ export function preview(draft: InquiryDraft, includeDiagnostics: boolean): strin
   if (includeDiagnostics && draft.diagnostics) {
     parts.push("", "--- アプリが自動で付ける情報 ---", draft.diagnostics);
   }
-  if (draft.equipment) parts.push("", "--- 選択中のキャラの装備 ---", draft.equipment);
+  if (draft.character) parts.push("", "--- 選択中のキャラのデータ ---", draft.character);
   return parts.join("\n");
 }
 
@@ -119,7 +140,7 @@ export async function send(
     title: draft.title,
     body: draft.body,
     diagnostics: includeDiagnostics ? draft.diagnostics : "",
-    equipment: draft.equipment,
+    character: draft.character,
   });
 }
 
