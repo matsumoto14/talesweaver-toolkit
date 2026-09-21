@@ -165,14 +165,20 @@
   const manyLines = $derived(timelines.length > 1);
 
   const candidates = $derived(choices?.candidates ?? []);
+  // 候補が「差し込むと DPS が下がる技」だけなら段ごと出さない(§00 ②。選ぶ意味のある技が無い)。
+  // 下がる技を ON にしている(スキル回しがある)ときと、ここで試している最中は出したままにする —
+  // 押したチップが OFF にした瞬間に段ごと消えないように(§00 ③)
+  const visible = $derived(
+    parts.length > 0 || overridden || candidates.some((c) => c.effect !== "reduces"),
+  );
 </script>
 
-{#if candidates.length > 0 || parts.length > 0}
+{#if visible}
   <div class="rotation inset">
     <!-- 押した場所は動かない(§00 ③): チップ行は段のいちばん上。下の行数が変わっても動かない -->
     <div class="rot-pick">
       <span class="rot-title">
-        回し
+        スキル回し
         <!-- 上限は無いので「n / 候補数」を値の隣に常設する(§07)。候補が無い回しでは出さない -->
         {#if candidates.length > 0}
           <Value

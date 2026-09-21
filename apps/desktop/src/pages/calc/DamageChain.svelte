@@ -278,7 +278,7 @@
         // 回しの中では「差し込みは間隔ごとに 1 回」「連打は空いた時間ぶん」なので、
         // この回数は連打し続けたときの上限になる(実際の回数は下の段)
         sub: (intervalNote ?? (d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ"))
-          + (rotation ? " ・ 連打し続けたときの回数(実際は下の回しのとおり)" : ""),
+          + (rotation ? " ・ 連打し続けたときの回数(実際は下のスキル回しのとおり)" : ""),
       });
     }
     // チャネリング技(押している間、一定間隔で攻撃を繰り返す)。上の「合計ダメージ」は
@@ -346,7 +346,7 @@
       });
     }
     return {
-      mult: dpsDenominator !== null ? `÷ ${fmtNum(dpsDenominator, 2, "s")}` : "回し",
+      mult: dpsDenominator !== null ? `÷ ${fmtNum(dpsDenominator, 2, "s")}` : "スキル回し",
       delta: null,
       to: Math.round(dpsValue),
       mats,
@@ -413,7 +413,7 @@
       type="button" class="node rate"
       aria-expanded={store.isOpen("dps")} onclick={() => toggle("dps")}
     >
-      <span class="nl">DPS {#if dpsDenominator !== null}<span class="num">(÷ <Value motion={() => dpsDenominator} value={fmtNum(dpsDenominator, 2, "s")} />{mainInsert ? " ごとに 1 回" : ""})</span>{:else if rotation}<span class="num">(回し)</span>{/if}</span>
+      <span class="nl">DPS {#if dpsDenominator !== null}<span class="num">(÷ <Value motion={() => dpsDenominator} value={fmtNum(dpsDenominator, 2, "s")} />{mainInsert ? " ごとに 1 回" : ""})</span>{:else if rotation}<span class="num">(スキル回し)</span>{/if}</span>
       <Value class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : null} />
       <span class="nsub dim">
         <span class="nsub-line"><Value motion={() => (dpsValue === null ? null : Math.round(dpsValue))} delta={{}} /></span>
@@ -424,7 +424,7 @@
             {:else if usesPerMinute !== null}
               {attackerSkillName} {fmtNum(usesPerMinute, 1)} 回/分{rotation && filler && !filler.is_main ? ` ・ 合間に ${filler.skill_name}` : ""} ・{critMode ? "クリ確定" : "非クリ"}
             {:else if rotation}
-              連打と差し込みの回し ・{critMode ? "クリ確定" : "非クリ"}
+              連打と差し込みのスキル回し ・{critMode ? "クリ確定" : "非クリ"}
             {/if}
           </span>
         </span>

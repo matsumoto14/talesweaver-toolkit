@@ -913,7 +913,7 @@
                   ／ 1 秒あたり = (スキル + {c.normal_attack_name})の合計 ÷ 1 サイクル
                 {:else if rotation}
                   <!-- 回しがあるときの DPS は「この回数で連打」ではない。上の回しの段と食い違う式を出さない -->
-                  連打し続けた場合は {Math.round(d.uses_per_minute)} 回/分。DPS は上の「回し」(連打 + 差し込み)の配分で出しています
+                  連打し続けた場合は {Math.round(d.uses_per_minute)} 回/分。DPS は上の「スキル回し」(連打 + 差し込み)の配分で出しています
                 {:else}
                   1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
                   {#if d.uses_measured}
