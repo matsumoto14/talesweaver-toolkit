@@ -1864,8 +1864,10 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             item.usable_by = from_client.usable_by;
             // 装着時効果は client の説明文にも載っている。手書き・wiki 行が効果を持たないときだけ補う
             // (カテゴリを wiki で確かめて手で置いた行を、機械抽出で上書きしない)。
-            if item.damage_effects.is_empty() && item.survival_effects.is_empty() {
+            if item.damage_effects.is_empty() {
                 item.damage_effects = from_client.damage_effects;
+            }
+            if item.survival_effects.is_empty() {
                 item.survival_effects = from_client.survival_effects;
             }
         }

@@ -62,14 +62,14 @@ fn wrist(
 static CATALOG_COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
-fn 上位装備カタログは1300件_idは重複しない() {
+fn 上位装備カタログは1308件_idは重複しない() {
     let _guard = CATALOG_COUNT_LOCK.lock().unwrap();
     let catalog = equipment_catalog();
     // 既存の手検証済み行(装着時効果つき)を優先し、次に client DB(9値の生成元)、
     // 最後に client DB に同名が無い wiki 抽出/韓国コミュニティ資料ぶんを名前で重複排除して積む。
     // 追加装備 38 件は配布物・git に含めず、「追加機能の解除」時に R2 から取得するので
     // ここには入らない(`追加装備は既定で未収録_解除操作で合流する` 参照)。
-    assert_eq!(catalog.len(), 1300);
+    assert_eq!(catalog.len(), 1308);
     let ids: HashSet<&str> = catalog.iter().map(|i| i.id).collect();
     assert_eq!(ids.len(), catalog.len());
 }
@@ -427,7 +427,7 @@ fn 装着時効果は与ダメージ式のカテゴリに入る() {
         .iter()
         .filter(|i| !i.damage_effects.is_empty())
         .count();
-    assert_eq!(with_effects, 238);
+    assert_eq!(with_effects, 247);
 }
 
 /// 装備中のアイテムだけが寄与する。カテゴリ側の上限は `CategoryTotals` が掛けるので、
@@ -1197,6 +1197,11 @@ fn クライアントdb由来の行も装着時効果を持つ() {
     assert_eq!(chihiro.name, "†千尋の血晶武装");
     assert_eq!(chihiro.slot, PartSlot::Effect);
     assert_eq!(chihiro.damage_effects, japan_3);
+
+    // 同じ効果でも説明文の言い回しが違う行がある(「攻撃力が」/「攻撃ダメージが」)
+    let nightmare_flower = find_equipment_item("client-1040154").unwrap();
+    assert_eq!(nightmare_flower.name, "†悪夢の花");
+    assert_eq!(nightmare_flower.damage_effects, japan_3);
 
     // 同じ「攻撃力が3%」でも部位と発動条件でカテゴリが違う。文面だけで決めない:
     // エフェクトの「装着時」は X5、エフェクトの「スキル使用時、一定確率で」は X6、
