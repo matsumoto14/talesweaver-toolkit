@@ -1841,8 +1841,15 @@ pub struct RotationInsert {
     pub interval_seconds: f64,
     /// 1 回あたり挟む連打技の回数
     pub filler_uses: u32,
-    /// CT を満たすために連打の回数を増やしたか(<フラグ> の積み直しより多く挟んでいる)
-    pub cooldown_bound: bool,
+    /// 間隔のうち連打技が占める秒(= 連打 1 回 × `filler_uses`)。画面はこれを幅に換算する
+    pub filler_seconds: f64,
+    /// 間隔のうち何も入らない秒(CT 待ち・詰まって空いたぶん)。無ければ 0
+    pub idle_seconds: f64,
+    /// 何も入らない時間の正体(待ち / 他の差し込み)。`idle_seconds` が 0 なら `None`
+    pub idle: Option<domain::RotationIdle>,
+    /// この間隔を決めているもの(CT 律速 / 積み直し律速 / 詰まっている / 何もなし)。
+    /// **画面はこの分類に文言を当てるだけ**にする(回数や秒から推し量らない)
+    pub pace: domain::RotationPace,
     /// この技を差し込むことで増える期待 DPS(**負なら差し込むと下がる**)。
     /// 主軸自身は外す選択肢が無いので `None`
     pub expected_dps_gain: Option<f64>,
@@ -2178,6 +2185,15 @@ fn rotation_materials(
     })
 }
 
+/// 主軸を**連打**しながら <フラグ> を爆発させる回しは組めない —— 爆発は主軸 1 回につき
+/// 1 度だが、連打の回数は時間配分の結果として決まるので、どの間隔で入れるか決まらない。
+/// ADR-019 決定 8 と同じく、爆発を黙って落とした「確定値」を出さない。
+///
+/// 計算タブ(`build_rotation`)もキャラタブの候補(`list_rotation_choices`)もここを通る。
+fn flag_burst_blocks_rotation(has_burst: bool, roles: &domain::RotationRoles) -> bool {
+    has_burst && roles.filler == Some(domain::RotationRole::Main)
+}
+
 /// 回しを組む(`Rotation` 参照)。
 ///
 /// 役割(どれを連打し、どれを差し込むか)は `domain::choose_rotation` が決める —
@@ -2234,11 +2250,9 @@ fn build_rotation(
         temporary_adjustments,
     )?;
     let roles = &materials.roles;
-    // 主軸を**連打**しながら <フラグ> を爆発させる回しは、爆発をどの間隔で入れるか決まらない
-    // (爆発は主軸 1 回につき 1 度だが、連打の回数は時間配分の結果として決まる)。
-    // ADR-019 決定 8 と同じく、爆発を黙って落とした「確定値」を出さない —— 回しを組まずに
-    // 返すと `combine_damage` が DPS を不明にする(ホーム評価も同じ規則)
-    if flag_burst.is_some() && roles.filler == Some(domain::RotationRole::Main) {
+    // 回しを組めない組み合わせ(規則は 1 本。`flag_burst_blocks_rotation` 参照)。
+    // 回しを組まずに返すと `combine_damage` が DPS を不明にする(ホーム評価も同じ規則)
+    if flag_burst_blocks_rotation(flag_burst.is_some(), roles) {
         return Ok(None);
     }
     // 明示指定があれば既定の差し込みを置き換える(規則は domain。ホーム評価と同じ 1 本)。
@@ -2376,7 +2390,10 @@ fn build_rotation(
                 cooldown_seconds: insert.cooldown_seconds,
                 interval_seconds: slot.interval_seconds,
                 filler_uses: slot.filler_uses,
-                cooldown_bound: slot.cooldown_bound,
+                filler_seconds: slot.filler_seconds,
+                idle_seconds: slot.idle_seconds,
+                idle: slot.idle,
+                pace: slot.pace,
                 expected_dps: share.expected_dps,
                 dps_share: dps_share(share),
                 uses_per_minute: share.uses_per_second * 60.0,
@@ -2639,6 +2656,20 @@ pub fn preview_damage(
     )
 }
 
+/// 差し込んだときに DPS がどう動くか。**振り分けは Rust が決める** —— 画面が
+/// 「`gain >= 0` なら上がる」のような境界を持つと、既定 ON の判定(`gain > 0`)と
+/// 食い違う(gain がちょうど 0 の技が「上がる側」に並ぶのに既定 ON にならない)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RotationChoiceEffect {
+    /// 差し込むと上がる(既定 ON の対象になりうる)
+    Improves,
+    /// 差し込んでも増えない・下がる(畳んだ先に置く)
+    Reduces,
+    /// 損得を出せない(1 回の所要時間が未収録)
+    Unknown,
+}
+
 /// キャラタブの「差し込む CT 技」1 件ぶん。候補も既定 ON も損得も**回しの規則そのもの**
 /// (`damage_for_character` → `build_rotation`)から出すので、画面は CT 判定を持たない。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -2651,6 +2682,8 @@ pub struct RotationInsertChoice {
     /// いまの選択にこの技を足したときの期待 DPS の差(**負なら差し込むと下がる**)。
     /// 既に選んでいる技なら計算タブの内訳に出ている数と同じ。出せないなら `None`
     pub expected_dps_gain: Option<f64>,
+    /// 上がる / 下がる / 不明の振り分け。画面はこれで並べ先を決める
+    pub effect: RotationChoiceEffect,
 }
 
 /// 「差し込む CT 技」の候補一式(キャラタブ)。
@@ -2764,6 +2797,10 @@ pub fn list_rotation_choices(
         temporary_adjustments.as_ref(),
     )?;
     let roles = &materials.roles;
+    // 回しを組めない組み合わせでは候補も出さない(計算タブと同じ 1 本)
+    if flag_burst_blocks_rotation(main_burst.is_some(), roles) {
+        return Ok(RotationChoices::default());
+    }
     let candidate_ids = materials.candidate_ids();
     let filler_result = roles.filler.map(|role| materials.result_of(&body, role));
     let filler_seconds = filler_result.and_then(DamageResult::cycle_seconds);
@@ -2876,6 +2913,12 @@ pub fn list_rotation_choices(
             cooldown_seconds: candidate.cooldown_seconds.unwrap_or(0.0),
             skill_name: candidate.name.clone(),
             skill_id,
+            // 既定 ON の判定(`domain::choose_rotation` の `gain > 0.0`)と同じ境界で分ける
+            effect: match expected_dps_gain {
+                None => RotationChoiceEffect::Unknown,
+                Some(gain) if gain > 0.0 => RotationChoiceEffect::Improves,
+                Some(_) => RotationChoiceEffect::Reduces,
+            },
             expected_dps_gain,
         });
     }
@@ -4883,7 +4926,7 @@ mod tests {
                 "yefnen_continuous_urumi"
             );
             // 爆発しても半分(5)残るので積み直しは 1 回ぶんだが、CT 10 秒に届かず回数が増える
-            assert!(urumi_insert.cooldown_bound);
+            assert_eq!(urumi_insert.pace, domain::RotationPace::Cooldown);
             assert!(urumi_insert.filler_uses > 1);
             assert!(urumi_insert.interval_seconds >= 10.0 - 1e-9);
 
@@ -5031,6 +5074,63 @@ mod tests {
                 none_preview.combined.expected_dps.unwrap()
                     < default_preview.combined.expected_dps.unwrap()
             );
+        }
+
+        /// 「主軸を連打しながら <フラグ> を爆発させる回しは組まない」規則は 1 本で、
+        /// 計算タブ(`build_rotation`)もキャラタブの候補(`list_rotation_choices`)も通る。
+        #[test]
+        fn 回しを組めない組み合わせの規則は1本() {
+            use domain::{RotationRole, RotationRoles};
+
+            let filler_is_main = RotationRoles {
+                filler: Some(RotationRole::Main),
+                inserts: vec![RotationRole::Candidate(0)],
+            };
+            let main_is_insert = RotationRoles {
+                filler: Some(RotationRole::Candidate(0)),
+                inserts: vec![RotationRole::Main],
+            };
+            // 主軸を連打しながら爆発させる = 爆発をどの間隔で入れるか決まらない
+            assert!(super::super::flag_burst_blocks_rotation(true, &filler_is_main));
+            // 主軸が差し込み側なら爆発の間隔は決まる
+            assert!(!super::super::flag_burst_blocks_rotation(true, &main_is_insert));
+            // 爆発が無ければどちらでも組める
+            assert!(!super::super::flag_burst_blocks_rotation(false, &filler_is_main));
+            assert!(!super::super::flag_burst_blocks_rotation(false, &main_is_insert));
+        }
+
+        /// 候補の「上がる / 下がる / 不明」は Rust が振り分ける(画面が境界を持たない)。
+        /// 既定 ON(`gain > 0`)と同じ境界なので、既定 ON の技は必ず「上がる」側に入る。
+        #[test]
+        fn 候補の振り分けは既定onと同じ境界() {
+            use super::super::RotationChoiceEffect;
+
+            // 連(CT なし)を連打する形。候補に CT 技が並ぶ
+            let mut character = yefnen(Some(10));
+            character.main_skill_id = Some("yefnen_continuous".to_string());
+            let choices = super::super::list_rotation_choices(
+                character,
+                BuffSelection::default(),
+                "tutatur".to_string(),
+                None,
+                0,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            assert!(!choices.candidates.is_empty());
+            for c in &choices.candidates {
+                let expected = match c.expected_dps_gain {
+                    None => RotationChoiceEffect::Unknown,
+                    Some(gain) if gain > 0.0 => RotationChoiceEffect::Improves,
+                    Some(_) => RotationChoiceEffect::Reduces,
+                };
+                assert_eq!(c.effect, expected, "{}", c.skill_id);
+                if c.default_on {
+                    assert_eq!(c.effect, RotationChoiceEffect::Improves, "{}", c.skill_id);
+                }
+            }
         }
 
         /// 計算タブの「回し」の段は、キャラを保存せずに差し込みを試せる ——

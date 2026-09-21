@@ -878,6 +878,10 @@ fn migrate_removed_character_skills(conn: &Connection) -> Result<()> {
 /// (`migrate_removed_character_skills` と同じ扱い)。カタログから技が消える・改名されると
 /// 保存の検証で弾かれ、そのキャラの自動保存がまるごと止まる。
 /// 起動のたびに走っても、落とすものが無ければ何も書かない(冪等)。
+///
+/// 読めない JSON の行はここでは触らない(飛ばす)。読み出し側(`row_to_character`)が
+/// **未設定(`None`)として読む**ので、そのキャラは既定の差し込みで動き、次にそのキャラを
+/// 保存した時点で列が `NULL`(= 未設定)に上書きされる。壊れた値は残り続けない。
 fn migrate_removed_rotation_skills(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare(
         "SELECT id, game_character_id, rotation_skill_ids FROM characters WHERE rotation_skill_ids IS NOT NULL",

@@ -2,16 +2,17 @@
   // 回しの段(計算タブの主役カード「DPS(回し)」の下に常設)。
   //
   // 出すのは 3 つ: **その場で試す差し込みチップ**・**1 周のタイムライン**・**技ごとの寄与**。
-  // 数はすべて Rust(`domain::rotation_shares` → `commands::Rotation`)が技ごとに返したもので、
-  // ここでは足し算も割り算もしない(合計と内訳が食い違わないため)。区画の**幅は実際の秒数**で、
-  // 割合の帯ではない —— 割合の帯 2 本(時間 / DPS)は実機で見方が伝わらなかった(2026-09-21)。
+  // 秒・回数・寄与・分類はすべて Rust(`domain::plan_rotation` / `rotation_shares` →
+  // `commands::Rotation`)が返したものをそのまま出す。**ここでするのは「秒 ÷ 間隔」を
+  // 幅(%)に換算することだけ**で、時間の配分そのものを組み立て直さない。
+  // 区画の**幅は実際の秒数**で、割合の帯ではない —— 割合の帯 2 本(時間 / DPS)は
+  // 実機で見方が伝わらなかった(2026-09-21)。
   //
   // チップは**保存しない**(計算タブの原則)。ラベンダー = 保存されない(§03)。
   // チップ行は段のいちばん上に置く —— 押して下の行数が変わっても、押した場所は動かない(§00 ③)。
   import type { Rotation, RotationChoices, Skill } from "../../api/types";
-  import { fmtInt, fmtNum, fmtPct, fmtShareOf, fmtSigned } from "../../format";
-  import Choose from "../../ui/Choose.svelte";
-  import Disclosure from "../../ui/Disclosure.svelte";
+  import { fmtInt, fmtNum, fmtPct } from "../../format";
+  import RotationChips from "../../RotationChips.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Value from "../../ui/Value.svelte";
   import { changed } from "../../ui/motion.svelte";
@@ -58,7 +59,7 @@
     color: string;
     /** 回しの中での役(「連打」/「10.0s に 1 回」) */
     role: string;
-    /** 1 回の所要時間・合間の連打回数 */
+    /** 1 回の所要時間・チャネリングの tick */
     detail: string;
     expectedDps: number;
     dpsShare: number;
@@ -82,13 +83,14 @@
       });
     });
     if (filler) {
-      const uses = rotation.inserts.reduce((n, i) => n + i.filler_uses, 0);
+      // 「合間に × n 回」は差し込みが 1 つのときだけ言える(2 つ以上は周期ごとに違う)
+      const single = rotation.inserts.length === 1 ? rotation.inserts[0] : null;
       list.push({
         key: `filler:${filler.skill_id}`,
         skillId: filler.skill_id,
         name: filler.skill_name,
         color: FILLER_COLOR,
-        role: uses > 0 && rotation.inserts.length === 1 ? `合間に × ${fmtInt(uses)} 回` : "連打",
+        role: single && single.filler_uses > 0 ? `合間に × ${fmtInt(single.filler_uses)} 回` : "連打",
         detail: `${fmtNum(filler.uses_per_minute, 1)} 回/分 ・ 1 回 ${fmtNum(filler.seconds, 2, "s")}`
           + tickNote(filler.skill_id),
         expectedDps: filler.expected_dps,
@@ -102,14 +104,17 @@
 
   // --- 1 周のタイムライン ----------------------------------------------------
   // 差し込む技 1 つにつき 1 本。左端 0 秒 →[その技 c_i 秒][連打技 × k_i 回]→ 右端が
-  // その技を撃つ間隔 T_i(`interval_seconds`)。**幅は実際の秒数の比**なので、
-  // 「1 周のうちどこで何を撃っているか」がそのまま絵になる。
+  // その技を撃つ間隔 T_i(`interval_seconds`)。**秒はすべて Rust が返したもの**
+  // (`domain::plan_rotation` → `RotationInsert` の `seconds` / `filler_seconds` /
+  // `idle_seconds`)で、ここでするのは「秒 ÷ 間隔」を幅(%)に換算することだけ。
   // 差し込みが 2 つ以上あると周期が技ごとに違い、全体で 1 本の「1 周」は存在しないので、
   // 技ごとに 1 本ずつ並べて見出しにその技の名前を出す。
   /** 連打 1 回ぶんの刻みを描くかの下限(px)。これより細いと数えられないので出さない */
   const TICK_MIN_PX = 3;
   /** 帯の実幅(px)。刻みを出すかの判定に使う(全部の帯が同じ幅) */
   let trackWidth = $state(0);
+  /** 何も入らない時間の呼び名。分類は Rust(`idle`)が返す */
+  const IDLE_LABEL = { wait: "待ち", other_inserts: "他の差し込み" } as const;
 
   interface Timeline {
     key: string;
@@ -126,19 +131,17 @@
     fillerPct: number;
     /** 連打 1 回ごとの刻みを描くか */
     ticked: boolean;
-    /** 残り(連打も差し込みも入らない時間)の割合と、その呼び名 */
-    restPct: number;
-    restLabel: string;
+    /** 何も入らない時間(秒・割合)と、その呼び名 */
+    idlePct: number;
+    idleLabel: string | null;
   }
   const timelines = $derived.by<Timeline[]>(() => {
     if (!rotation) return [];
-    const filler = rotation.filler;
+    /** 秒を帯の幅(%)に換算する。割合そのものは Rust に無い「見せ方」なのでここで作る */
+    const pct = (seconds: number, total: number) => (total > 0 ? (seconds / total) * 100 : 0);
     return rotation.inserts.map((insert, index) => {
       const total = insert.interval_seconds;
-      const insertPct = total > 0 ? (insert.seconds / total) * 100 : 0;
-      const fillerSeconds = filler ? filler.seconds * insert.filler_uses : 0;
-      const fillerPct = total > 0 ? (fillerSeconds / total) * 100 : 0;
-      const restPct = Math.max(0, 100 - insertPct - fillerPct);
+      const fillerPct = pct(insert.filler_seconds, total);
       const perUsePx = insert.filler_uses > 0
         ? (trackWidth * fillerPct) / 100 / insert.filler_uses
         : 0;
@@ -148,15 +151,13 @@
         color: INSERT_COLORS[index % INSERT_COLORS.length],
         total,
         seconds: insert.seconds,
-        insertPct,
+        insertPct: pct(insert.seconds, total),
         fillerUses: insert.filler_uses,
-        fillerSeconds,
+        fillerSeconds: insert.filler_seconds,
         fillerPct,
         ticked: perUsePx >= TICK_MIN_PX,
-        restPct,
-        // 連打する技が無いときは CT が明くのを待つだけ。詰まっている(crowded)ときは
-        // 他の差し込みを撃っている時間
-        restLabel: rotation.crowded ? "他の差し込み" : "待ち",
+        idlePct: pct(insert.idle_seconds, total),
+        idleLabel: insert.idle === null ? null : IDLE_LABEL[insert.idle],
       };
     });
   });
@@ -164,35 +165,6 @@
   const manyLines = $derived(timelines.length > 1);
 
   const candidates = $derived(choices?.candidates ?? []);
-  /** 差し込むと DPS が上がる候補。下がるものは畳んだ先へ(キャラタブと同じ扱い。ADR-019) */
-  const ups = $derived(candidates.filter((c) => (c.expected_dps_gain ?? 0) >= 0));
-  /** 損得を出せない候補(1 回の所要時間が未収録)。上段には出すが割合の代わりに「?」。
-   *  既定 ON にはならない(判定は domain の `choose_rotation`。画面では決めない) */
-  const unknown = (id: string) =>
-    candidates.find((c) => c.skill_id === id)?.expected_dps_gain === null;
-  const drops = $derived(
-    candidates.filter((c) => c.expected_dps_gain !== null && c.expected_dps_gain < 0),
-  );
-  const dropsOn = $derived(drops.filter((c) => onIds.includes(c.skill_id)));
-  const optionsOf = (list: typeof candidates) =>
-    list.map((c) => ({ value: c.skill_id, label: c.skill_name }));
-  /** 回し全体に対する割合。絶対値だけだと桁が大きく、実際より深刻に見える(キャラタブと同じ) */
-  const gainShare = (gain: number) => fmtShareOf(gain, choices?.expected_dps ?? null);
-  const gainLabel = (id: string) => {
-    const gain = candidates.find((c) => c.skill_id === id)?.expected_dps_gain ?? null;
-    return gain === null ? null : gainShare(Math.round(gain));
-  };
-  const chipTitle = (id: string) => {
-    const c = candidates.find((x) => x.skill_id === id);
-    if (!c) return undefined;
-    const gain = c.expected_dps_gain;
-    if (gain === null) {
-      return `CT ${c.cooldown_seconds}s ・ 差し込んだときの損得は出せません(1 回の所要時間が未収録)`;
-    }
-    const share = gainShare(gain);
-    const amount = `${share === null ? "" : `${share}(`}${fmtSigned(Math.round(gain))}${share === null ? "" : ")"}`;
-    return `CT ${c.cooldown_seconds}s ・ ${gain < 0 ? "差し込むと DPS が下がる" : "差し込むと DPS が上がる"} ${amount}`;
-  };
 </script>
 
 {#if candidates.length > 0 || parts.length > 0}
@@ -210,53 +182,19 @@
           />
         {/if}
       </span>
-      {#if ups.length > 0}
-        <Choose
-          label="ここで試す差し込み CT 技"
-          class="chiprow"
-          options={optionsOf(ups)}
-          values={onIds}
-          {onToggle}
-          tone={() => "sim"}
-          titleFor={chipTitle}
-        >
-          {#snippet item(o)}
-            {@const cd = candidates.find((c) => c.skill_id === o.value)?.cooldown_seconds ?? 0}
-            {o.label} <Value class="chip-ct" value={`${cd}s`} />
-            <!-- 損得を出せない候補は割合の代わりに「?」(未収録は 0 や空白にしない。§08) -->
-            {#if unknown(o.value)}<Value class="chip-gain" value={null} />{/if}
-          {/snippet}
-        </Choose>
-      {/if}
-      {#if drops.length > 0}
-        <!-- 下がる技は畳んだ先(キャラタブと同じ。ON にしているものは summary で分かる) -->
-        <Disclosure class="rot-drops" summaryClass="chip quiet">
-          {#snippet summary()}
-            DPS が下がる技 <Value class="dim normal" motion={() => drops.length} value={`${drops.length} 件`} />
-            {#if dropsOn.length > 0}
-              <Value class="badge drop-badge" motion={() => dropsOn.length} value={`${dropsOn.length} 件 ON`} />
-            {/if}
-          {/snippet}
-          <Choose
-            label="DPS が下がる差し込み CT 技(ここで試す)"
-            class="chiprow"
-            options={optionsOf(drops)}
-            values={onIds}
-            {onToggle}
-            tone={() => "sim"}
-            titleFor={chipTitle}
-          >
-            {#snippet item(o)}
-              {@const cd = candidates.find((c) => c.skill_id === o.value)?.cooldown_seconds ?? 0}
-              {o.label}
-              <Value class="chip-ct" value={`${cd}s`} />
-              {#if gainLabel(o.value)}
-                <Value class="chip-gain" tone="down" value={gainLabel(o.value)} />
-              {/if}
-            {/snippet}
-          </Choose>
-        </Disclosure>
-      {/if}
+      <!-- チップ一式はキャラタブと同じ部品(振り分けは Rust の `effect`)。ここでの選択は
+           保存しないので `temporary`(ラベンダー = 保存されない。§03) -->
+      <RotationChips
+        {candidates}
+        {onIds}
+        {onToggle}
+        expectedDps={choices?.expected_dps ?? null}
+        temporary
+      >
+        {#snippet dropHint()}
+          <p class="rot-note dim">ここの技は、差し込むと連打していたぶんが減って DPS が下がります。</p>
+        {/snippet}
+      </RotationChips>
       {#if overridden}
         <button type="button" class="rot-reset badge-in" title="キャラに保存した組み合わせに戻す" onclick={onReset}>
           保存値に戻す
@@ -292,9 +230,10 @@
                     </span>
                   </span>
                 {/if}
-                {#if line.restPct > 0.5}
-                  <span class="zone rest" style="width: {line.restPct}%;">
-                    <span class="zone-text">{line.restLabel}</span>
+                {#if line.idleLabel !== null}
+                  <!-- 何も入らない時間。何なのか(待ち / 他の差し込み)は Rust が分類する -->
+                  <span class="zone rest" style="width: {line.idlePct}%;">
+                    <span class="zone-text">{line.idleLabel}</span>
                   </span>
                 {/if}
               </span>
@@ -361,9 +300,11 @@
   .rot-pick :global(.drop-badge) {
     background: var(--state-temp-bg); border: 1px solid var(--sim); color: var(--sim-fg);
   }
-  .rot-pick :global(details.rot-drops) { min-width: 0; }
-  .rot-pick :global(details.rot-drops > summary) { display: inline-flex; }
-  .rot-pick :global(details.rot-drops .chiprow) { margin-top: 5px; }
+  /* 畳んだ先(下がる技)は RotationChips が `drop-pick` で描く。行に溶かして、
+     開いたときだけチップが下に出るようにする */
+  .rot-pick :global(details.drop-pick) { min-width: 0; }
+  .rot-pick :global(details.drop-pick > summary) { display: inline-flex; }
+  .rot-pick :global(details.drop-pick .chiprow) { margin-top: 5px; }
 
   .rot-body { display: flex; flex-direction: column; gap: 7px; }
 

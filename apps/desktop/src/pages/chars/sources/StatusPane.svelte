@@ -14,13 +14,14 @@
     resolvedEffectsOf, skillBoundSkills, toggleCharacterSkill,
   } from "../../../characterSkills";
   import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
-  import { fmtInt, fmtShareOf, fmtSigned, fmtSignedPct, formatLayerValue } from "../../../format";
+  import { fmtInt, fmtSigned, fmtSignedPct, formatLayerValue } from "../../../format";
   import {
     SKILL_FORMS, SKILL_FORM_LABELS,
     STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS, STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
   } from "../../../labels";
   import { limits } from "../../../limits.svelte";
-  import { app } from "../../../state.svelte";
+  import RotationChips from "../../../RotationChips.svelte";
+  import { app, currentDamageTarget } from "../../../state.svelte";
   import { reportError } from "../../../toast.svelte";
   import Chip from "../../../ui/Chip.svelte";
   import Disclosure from "../../../ui/Disclosure.svelte";
@@ -176,11 +177,8 @@
   // 返す。CT の判定も既定の選び方もここには写さない(計算タブ・ホームと同じ 1 本を通す)。
   let rotation = $state<RotationChoices | null>(null);
   const rotationLatest = latest({ debounce: 200 });
-  /** 損得を出すのに敵が要る。計算タブでいま見ている対象(無ければ敵データのある先頭) */
-  const rotationTarget = $derived.by(() => {
-    const withEnemy = app.areas.flatMap((a) => a.contents).filter((c) => c.enemy_id !== null);
-    return withEnemy.find((c) => c.id === app.calcTargetId) ?? withEnemy[0] ?? null;
-  });
+  /** 損得を出すのに敵が要る。「いま見ている対象」の決め方は state に 1 本化してある */
+  const rotationTarget = $derived(currentDamageTarget());
   $effect(() => {
     const contentId = rotationTarget?.id ?? null;
     const payload = draftToPayload(draft);
@@ -213,9 +211,6 @@
       ?? rotationCandidates.filter((c) => c.default_on).map((c) => c.skill_id)
     ).filter((id) => rotationCandidates.some((c) => c.skill_id === id)),
   );
-  const rotationOptions = $derived(
-    rotationCandidates.map((c) => ({ value: c.skill_id, label: c.skill_name })),
-  );
   /** 押した瞬間に保存(自動保存)と再計算。並びは候補の並びのまま(押した順で入れ替えない) */
   function toggleRotationSkill(id: string, on: boolean) {
     const next = on
@@ -225,58 +220,9 @@
       .map((c) => c.skill_id)
       .filter((x) => next.includes(x));
   }
-  /**
-   * 差し込むと DPS が下がる技。**既定では見せない**(ユーザー決定 2026-09-21) — 既定で
-   * ON にならないものを並べると、押せる数が増えるだけで選ぶ手がかりにならない。
-   * 畳んだ先(`Disclosure`)に置き、見たい人だけが開いて手で ON にできる。
-   */
-  const rotationUps = $derived(
-    rotationCandidates.filter((c) => (c.expected_dps_gain ?? 0) >= 0),
-  );
-  /** 損得を出せない候補(中ディレイ未収録など)。上段には出すが、割合の代わりに「?」を出す。
-   *  既定 ON にもならない(判定は domain の `choose_rotation`。画面では決めない) */
-  const rotationUnknown = (id: string) =>
-    rotationCandidates.find((c) => c.skill_id === id)?.expected_dps_gain === null;
-  const rotationDrops = $derived(
-    rotationCandidates.filter((c) => c.expected_dps_gain !== null && c.expected_dps_gain < 0),
-  );
-  const rotationDropsOn = $derived(
-    rotationDrops.filter((c) => rotationOnIds.includes(c.skill_id)),
-  );
-  /** 回し全体に対する割合。絶対値だけだと桁が大きく、実際より深刻に見える(実機 2026-09-21) */
-  const rotationDropShare = (gain: number) => fmtShareOf(gain, rotation?.expected_dps ?? null);
-  /** 段に添える割合。上がる技も下がる技も同じ形で、チップの中に 1 つずつ置く */
-  const rotationGainLabel = (id: string) => {
-    const gain = rotationCandidates.find((c) => c.skill_id === id)?.expected_dps_gain ?? null;
-    if (gain === null) return null;
-    return rotationDropShare(Math.round(gain));
-  };
-  const optionsOf = (list: typeof rotationCandidates) =>
-    list.map((c) => ({ value: c.skill_id, label: c.skill_name }));
-  const rotationChipTitle = (id: string) => {
-    const c = rotationCandidates.find((x) => x.skill_id === id);
-    if (!c) return undefined;
-    const gain = c.expected_dps_gain;
-    if (gain === null) {
-      return `CT ${c.cooldown_seconds}s ・ 差し込んだときの損得は出せません(1 回の所要時間が未収録)`;
-    }
-    const share = rotationDropShare(gain);
-    const amount = `${share === null ? "" : `${share}(`}${fmtSigned(Math.round(gain))}${share === null ? "" : ")"}`;
-    return gain < 0
-      ? `CT ${c.cooldown_seconds}s ・ 差し込むと DPS が下がる ${amount}`
-      : `CT ${c.cooldown_seconds}s ・ 差し込むと DPS が ${amount}`;
-  };
-  /** 主軸の形態を変えたら、前の形態で選んだ差し込みは候補ごと入れ替わるので既定に戻す */
-  let lastForm = untrack(() => mainSkill?.form ?? null);
-  $effect(() => {
-    const form = mainSkill?.form ?? null;
-    if (form === lastForm) return;
-    const previous = lastForm;
-    lastForm = form;
-    // 技一覧を読み込む前(null → 形態)は「形態が変わった」ではない。保存値を消さない
-    if (previous === null || form === null) return;
-    draft.rotationSkillIds = null;
-  });
+  /** 差し込むと DPS が上がる技があるか(振り分けは Rust の `effect`)。
+   *  1 件も無ければチップの代わりに理由を出す */
+  const rotationHasUps = $derived(rotationCandidates.some((c) => c.effect !== "reduces"));
 
   // 召喚獣(熊・破壊精霊)が撃つスキル。アナイス以外はこのキャラのスキルに本体以外の
   // 攻撃者が 1 件も無いので欄自体を出さない(§00②「要らないものを見せない」。ADR-016)。
@@ -445,53 +391,19 @@
             value={`${rotationOnIds.length} / ${rotationCandidates.length}`}
           />
         </span>
-        {#if rotationUps.length > 0}
-          <Choose
-            label="差し込む CT 技"
-            class="chiprow"
-            options={optionsOf(rotationUps)}
-            values={rotationOnIds}
-            onToggle={toggleRotationSkill}
-            titleFor={rotationChipTitle}
-          >
-            {#snippet item(o)}
-              {@const cd = rotationCandidates.find((c) => c.skill_id === o.value)?.cooldown_seconds ?? 0}
-              {o.label} <Value class="chip-ct" value={`${cd}s`} />
-              <!-- 損得を出せない候補は割合の代わりに「?」(未収録は 0 や空白にしない。§08) -->
-              {#if rotationUnknown(o.value)}<Value class="chip-gain" value={null} />{/if}
-            {/snippet}
-          </Choose>
-        {:else}
-          <p class="hint dim">差し込むと DPS が上がる技はありません。</p>
-        {/if}
-        {#if rotationDrops.length > 0}
-          <!-- 下がる技は畳んだ先に置く。ON にしているものは summary で分かる(§00②④) -->
-          <Disclosure class="drop-pick" summaryClass="chip quiet">
-            {#snippet summary()}
-              DPS が下がる技 <Value class="dim normal" motion={() => rotationDrops.length} value={`${rotationDrops.length} 件`} />
-              {#if rotationDropsOn.length > 0}
-                <Value class="badge drop-badge" motion={() => rotationDropsOn.length} value={`${rotationDropsOn.length} 件 ON`} />
-              {/if}
-            {/snippet}
-            <Choose
-              label="DPS が下がる差し込み CT 技"
-              class="chiprow"
-              options={optionsOf(rotationDrops)}
-              values={rotationOnIds}
-              onToggle={toggleRotationSkill}
-              titleFor={rotationChipTitle}
-            >
-              {#snippet item(o)}
-                {@const cd = rotationCandidates.find((c) => c.skill_id === o.value)?.cooldown_seconds ?? 0}
-                {o.label}
-                <Value class="chip-ct" value={`${cd}s`} />
-                {#if rotationGainLabel(o.value)}
-                  <Value class="chip-gain" tone="down" value={rotationGainLabel(o.value)} />
-                {/if}
-              {/snippet}
-            </Choose>
+        <!-- チップ一式は計算タブの回しの段と同じ部品(振り分けは Rust の `effect`) -->
+        <RotationChips
+          candidates={rotationCandidates}
+          onIds={rotationOnIds}
+          onToggle={toggleRotationSkill}
+          expectedDps={rotation?.expected_dps ?? null}
+        >
+          {#snippet dropHint()}
             <p class="hint dim">ここの技は、差し込むと連打していたぶんが減って DPS が下がります。それでも撃ちたいときだけ ON にしてください。</p>
-          </Disclosure>
+          {/snippet}
+        </RotationChips>
+        {#if !rotationHasUps}
+          <p class="hint dim">差し込むと DPS が上がる技はありません。</p>
         {/if}
         <p class="hint dim">
           CT が明けるまでの間は連打技を撃ちます。{rotation?.filler_skill_name

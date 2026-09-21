@@ -59,6 +59,11 @@ export const fmtShareOf = (diff: number, total: number | null): string | null =>
 /** 倍率。「×1.42」 */
 export const fmtRate = (mult: number, digits: Digits = 2): string => `×${fmtNum(mult, digits)}`;
 
+/** クールタイム(秒)。「10s」「7.5s」—— **CT の見え方はここだけが決める**。
+ *  整数なら小数を出さず、小数の CT が来たら 1 桁だけ出す(画面ごとに丸め方を変えない) */
+export const fmtCooldown = (seconds: number): string =>
+  fmtNum(seconds, Number.isInteger(seconds) ? 0 : 1, "s");
+
 /** 長さ(秒)を人が読む単位で。上から 2 単位まで(3日 5時間 / 12分 30秒 / 8秒)。
  *  討伐時間は敵によって 8 秒から数日まで振れるので、単位を固定せず桁に合わせて選ぶ */
 export const fmtDuration = (seconds: number): string => {

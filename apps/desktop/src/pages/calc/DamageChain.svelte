@@ -8,7 +8,9 @@
   // 本体・召喚獣どちらの鎖にも討伐時間節を出さず、CalcPage 側の「合計」面(combined)にだけ出す
   // (同じ情報を 2 箇所に出さない。§00 ②)。
   import type { CombinedDamage, DamageResult, FlagDamage, Rotation, Skill } from "../../api/types";
-  import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
+  import {
+    fmtCooldown, fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct,
+  } from "../../format";
   import { limits } from "../../limits.svelte";
   import Icon, { type IconKind } from "../../ui/Icon.svelte";
   import Value from "../../ui/Value.svelte";
@@ -67,11 +69,14 @@
   const critMode = $derived(result.critical_chance > 0);
   const perHit = $derived(result.per_hit_primary);
   // 合計・DPS・討伐時間は「この鎖に合流する別枠込み」の値を出す。合流する別枠が無ければ
-  // combined は body と同じ値になる(Rust の combine_damage)ので、画面に分岐を持たせない
+  // combined は body と同じ値になる(Rust の combine_damage)ので、画面に分岐を持たせない。
+  // **`combined` を受け取っているなら、その中身が null でも技単独の値に戻さない** ——
+  // Rust が意図して「不明」にした DPS(回しを組めないのに <フラグ> の爆発がある等)を
+  // 数字として出してしまうため。null のときは未収録の「?」で出す(§08)
   const totalValue = $derived(combined?.total_primary ?? result.total_primary);
-  const dpsValue = $derived(pickSide(combined?.dps ?? result.dps, critMode));
-  const defeatSeconds = $derived(combined?.defeat_seconds ?? result.defeat_seconds);
-  const expectedDps = $derived(combined?.expected_dps ?? result.expected_dps);
+  const dpsValue = $derived(pickSide(combined ? combined.dps : result.dps, critMode));
+  const defeatSeconds = $derived(combined ? combined.defeat_seconds : result.defeat_seconds);
+  const expectedDps = $derived(combined ? combined.expected_dps : result.expected_dps);
   /** <フラグ> 爆発(主軸が スレイ / クラッシュ のときだけ)。合計に合流する */
   const burst = $derived(flag?.burst ?? null);
   /** 回しの中の主軸(CT 技として差し込んでいるとき)。DPS は回しで出している */
@@ -91,7 +96,8 @@
   /** 主軸を 1 分間に何回撃つか。回しの中では「差し込みは間隔ごとに 1 回」
    *  「連打は空いた時間ぶん」なので、そのまま回数に直す */
   const usesPerMinute = $derived.by<number | null>(() => {
-    if (mainInsert) return 60 / mainInsert.interval_seconds;
+    // 回しの中の回数は Rust が技ごとに返している(画面で割り出さない)
+    if (mainInsert) return mainInsert.uses_per_minute;
     if (rotation) {
       // 回しの中の回数は Rust が技ごとに返している(画面で割り戻さない)
       return filler && filler.is_main ? filler.uses_per_minute : null;
@@ -293,13 +299,14 @@
     // 差し込みだけで時間が埋まっていること
     if (rotation) {
       for (const insert of rotation.inserts) {
-        const reason = rotation.crowded
-          ? "差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)"
-          : insert.cooldown_bound
-            ? `CT ${fmtNum(insert.cooldown_seconds, 0, "s")} が明くまで連打技を挟むので、この間隔になります`
-            : insert.filler_uses > 0
-              ? `<フラグ> を積み直すのに連打技を ${insert.filler_uses} 回挟むので、CT より長くなります`
-              : `CT ${fmtNum(insert.cooldown_seconds, 0, "s")} が明けたらすぐ撃てます`;
+        // 何がこの間隔を決めているか(CT 律速 / 積み直し律速 / 詰まっている / なし)は
+        // Rust の分類(`pace`)。画面は文言を当てるだけで、回数や秒から推し量らない
+        const reason = {
+          crowded: "差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)",
+          cooldown: `CT ${fmtCooldown(insert.cooldown_seconds)} が明くまで連打技を挟むので、この間隔になります`,
+          reapply: `<フラグ> を積み直すのに連打技を ${insert.filler_uses} 回挟むので、CT より長くなります`,
+          free: `CT ${fmtCooldown(insert.cooldown_seconds)} が明けたらすぐ撃てます`,
+        }[insert.pace];
         mats.push({
           label: `↳ ${insert.skill_name} の間隔`,
           value: fmtNum(insert.interval_seconds, 2, "s"),
@@ -407,7 +414,7 @@
       aria-expanded={store.isOpen("dps")} onclick={() => toggle("dps")}
     >
       <span class="nl">DPS {#if dpsDenominator !== null}<span class="num">(÷ <Value motion={() => dpsDenominator} value={fmtNum(dpsDenominator, 2, "s")} />{mainInsert ? " ごとに 1 回" : ""})</span>{:else if rotation}<span class="num">(回し)</span>{/if}</span>
-      <Value class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"} />
+      <Value class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : null} />
       <span class="nsub dim">
         <span class="nsub-line"><Value motion={() => (dpsValue === null ? null : Math.round(dpsValue))} delta={{}} /></span>
         <span class="nsub-line">

@@ -198,7 +198,32 @@ pub struct RotationInsert {
     pub minimum_filler_uses: u32,
 }
 
-/// 差し込む技 1 つぶんの答え(`k_i` / `T_i`)。
+/// 差し込む技を撃つ間隔(`T_i`)を決めているもの。**画面はこの分類に文言を当てるだけ**で、
+/// 「CT 律速か積み直し律速か」を回数や秒から推し量らない。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RotationPace {
+    /// CT が明くのを待っている(`n_i` より多く連打を挟んでいる / 連打技が無くて待つ)
+    Cooldown,
+    /// <フラグ> の積み直しで決まっている(CT はもう明けている)
+    Reapply,
+    /// 差し込みだけで時間が埋まり、頻度を縮めた(`crowded`)
+    Crowded,
+    /// 何にも縛られていない(撃ち終わったらすぐ次が撃てる)
+    Free,
+}
+
+/// 差し込む技 1 回あたりの間隔に、何も入らない時間があるならその正体。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RotationIdle {
+    /// CT が明くのを待っている(連打する技が無い)
+    Wait,
+    /// 他の差し込みを撃っている(`crowded`)
+    OtherInserts,
+}
+
+/// 差し込む技 1 つぶんの答え(`k_i` / `T_i` と、その間隔の内訳)。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RotationSlot {
     /// `inserts` のどれの答えか
@@ -208,8 +233,14 @@ pub struct RotationSlot {
     pub filler_uses: u32,
     /// この技を撃つ間隔(秒)= `T_i`。CT より短くならない
     pub interval_seconds: f64,
-    /// CT を満たすために連打の回数を増やしたか(`n_i` より多く挟んでいる)
-    pub cooldown_bound: bool,
+    /// そのうち連打技が占める秒(= `k_i × c_f`)。連打が入らないなら 0
+    pub filler_seconds: f64,
+    /// そのうち何も入らない秒(CT 待ち・詰まって空いたぶん)。無ければ 0
+    pub idle_seconds: f64,
+    /// 何も入らない時間の正体。`idle_seconds` が 0 なら `None`
+    pub idle: Option<RotationIdle>,
+    /// 間隔を決めているもの(CT 律速 / 積み直し律速 / 詰まっている / 何もなし)
+    pub pace: RotationPace,
 }
 
 /// 回し 1 周ぶんの時間配分。
@@ -259,7 +290,16 @@ pub fn plan_rotation(
                     insert: index,
                     filler_uses,
                     interval_seconds: seconds + f64::from(filler_uses) * filler_seconds,
-                    cooldown_bound: for_cooldown > insert.minimum_filler_uses,
+                    filler_seconds: f64::from(filler_uses) * filler_seconds,
+                    idle_seconds: 0.0,
+                    idle: None,
+                    pace: if for_cooldown > insert.minimum_filler_uses {
+                        RotationPace::Cooldown
+                    } else if insert.minimum_filler_uses > 0 {
+                        RotationPace::Reapply
+                    } else {
+                        RotationPace::Free
+                    },
                 }
             }
             // 連打する技が無いときは CT が明けるのを待つだけ
@@ -267,7 +307,10 @@ pub fn plan_rotation(
                 insert: index,
                 filler_uses: 0,
                 interval_seconds: insert.cooldown_seconds,
-                cooldown_bound: true,
+                filler_seconds: 0.0,
+                idle_seconds: insert.cooldown_seconds - seconds,
+                idle: Some(RotationIdle::Wait),
+                pace: RotationPace::Cooldown,
             },
         };
         occupied += seconds / slot.interval_seconds;
@@ -285,6 +328,12 @@ pub fn plan_rotation(
             // 差し込みだけで時間が埋まっているので、合間に連打は入らない
             // (`filler_share` も 0)。「合間に k 回」と噛み合わない数を残さない
             slot.filler_uses = 0;
+            slot.filler_seconds = 0.0;
+            // 空いた時間は他の差し込みを撃っている(待っているのではない)
+            let seconds = inserts[slot.insert].seconds.unwrap_or(0.0);
+            slot.idle_seconds = (slot.interval_seconds - seconds).max(0.0);
+            slot.idle = Some(RotationIdle::OtherInserts);
+            slot.pace = RotationPace::Crowded;
         }
     }
     Some(RotationPlan {
@@ -484,7 +533,10 @@ mod tests {
         let plan = plan_rotation(Some(2.0), &[insert(1.4, 10.0, 5)]).unwrap();
         let slot = plan.slots[0];
         assert_eq!(slot.filler_uses, 5);
-        assert!(!slot.cooldown_bound);
+        // CT はもう明けているので、間隔を決めているのは積み直し
+        assert_eq!(slot.pace, RotationPace::Reapply);
+        assert_eq!(slot.idle, None);
+        assert!((slot.filler_seconds - 10.0).abs() < 1e-12);
         assert!((slot.interval_seconds - 11.4).abs() < 1e-12);
         // 連打技に回るのは 1 周のうち主軸の 1.4s を除いたぶん
         assert!((plan.filler_share - (1.0 - 1.4 / 11.4)).abs() < 1e-12);
@@ -495,8 +547,11 @@ mod tests {
     fn ctに満たないときは連打の回数で埋める() {
         let plan = plan_rotation(Some(1.0), &[insert(1.4, 10.0, 1)]).unwrap();
         let slot = plan.slots[0];
-        assert!(slot.cooldown_bound);
+        assert_eq!(slot.pace, RotationPace::Cooldown);
         assert_eq!(slot.filler_uses, 9); // (10 − 1.4) / 1.0 の切り上げ
+        // 1 周は「この技 + 連打ぶん」で埋まり、空き時間は無い
+        assert!((slot.filler_seconds - 9.0).abs() < 1e-12);
+        assert_eq!(slot.idle_seconds, 0.0);
         assert!(slot.interval_seconds >= 10.0);
         // 1 回減らすと CT 未満
         assert!((f64::from(slot.filler_uses - 1) + 1.4) < 10.0);
@@ -552,6 +607,12 @@ mod tests {
         assert_eq!(plan.filler_share, 0.0);
         // 連打に回る時間が無いので、合間に挟む回数も 0
         assert!(plan.slots.iter().all(|slot| slot.filler_uses == 0));
+        // 空いた時間は他の差し込みぶん(待っているのではない)
+        for slot in &plan.slots {
+            assert_eq!(slot.idle, Some(RotationIdle::OtherInserts));
+            assert_eq!(slot.pace, RotationPace::Crowded);
+            assert!((slot.idle_seconds - (slot.interval_seconds - 9.0)).abs() < 1e-12);
+        }
         // 素の間隔は 3 件とも 10s(占有 2.7)→ 27s に 1 回ずつで占有はちょうど 1
         let occupied: f64 = plan
             .slots
@@ -570,6 +631,10 @@ mod tests {
         assert_eq!(plan.slots[0].filler_uses, 0);
         assert!((plan.slots[0].interval_seconds - 10.0).abs() < 1e-12);
         assert_eq!(plan.filler_share, 0.0);
+        // 撃ったあとは CT が明くまで待つだけ(待ち = 10 − 1.4)
+        assert_eq!(plan.slots[0].idle, Some(RotationIdle::Wait));
+        assert!((plan.slots[0].idle_seconds - 8.6).abs() < 1e-12);
+        assert_eq!(plan.slots[0].pace, RotationPace::Cooldown);
         // 連打技が無いと <フラグ> を積み直せないので、その差し込みは撃てない
         assert_eq!(plan_rotation(None, &[insert(1.4, 10.0, 5)]), None);
     }

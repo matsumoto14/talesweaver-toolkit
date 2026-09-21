@@ -207,6 +207,23 @@ export function totalContents(): number {
   return app.areas.reduce((n, a) => n + a.contents.length, 0);
 }
 
+/**
+ * ダメージ計算の対象になれるコンテンツ(敵データを持つもの)。計算タブの一覧も、
+ * キャラタブが損得を出すときの対象もここから採る(絞り込みを 2 か所に書かない)。
+ */
+export function damageContents(): Content[] {
+  return app.areas.flatMap((a) => a.contents).filter((c) => c.enemy_id !== null);
+}
+
+/**
+ * 「いま見ている対象」。計算タブで選んでいるコンテンツ、無ければ敵データのある先頭。
+ * 計算タブとキャラタブが同じ 1 本で決める(片方だけ別の敵で判定しない)。
+ */
+export function currentDamageTarget(): Content | null {
+  const list = damageContents();
+  return list.find((c) => c.id === app.calcTargetId) ?? list[0] ?? null;
+}
+
 export function findContent(contentId: string): Content | null {
   for (const a of app.areas) {
     const c = a.contents.find((x) => x.id === contentId);

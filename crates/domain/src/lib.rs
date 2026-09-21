@@ -94,8 +94,9 @@ pub use damage::{
 pub use rotation::{
     apply_explicit_inserts, choose_rotation, effective_cooldown_seconds, insert_expected_dps_gain,
     plan_rotation,
-    rotation_dps, rotation_shares, RotationCandidate, RotationDamage, RotationInsert, RotationPlan,
-    RotationRole, RotationRoles, RotationShare, RotationShares, RotationSlot,
+    rotation_dps, rotation_shares, RotationCandidate, RotationDamage, RotationIdle, RotationInsert,
+    RotationPace, RotationPlan, RotationRole, RotationRoles, RotationShare, RotationShares,
+    RotationSlot,
 };
 pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,

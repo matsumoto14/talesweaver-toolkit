@@ -1406,6 +1406,9 @@ export interface Channeling {
   tick_seconds: number;
 }
 
+/** 差し込んだときに DPS がどう動くか(Rust `RotationChoiceEffect`)。 */
+export type RotationChoiceEffect = "improves" | "reduces" | "unknown";
+
 /** 「差し込む CT 技」の候補 1 件(commands の `RotationInsertChoice`)。 */
 export interface RotationInsertChoice {
   skill_id: string;
@@ -1416,6 +1419,8 @@ export interface RotationInsertChoice {
   default_on: boolean;
   /** いまの選択にこの技を足したときの期待 DPS の差(負なら差し込むと下がる) */
   expected_dps_gain: number | null;
+  /** 上がる / 下がる / 不明の振り分け(境界は Rust が決める。既定 ON と同じ規則) */
+  effect: RotationChoiceEffect;
 }
 
 /** 「差し込む CT 技」の候補一式(commands の `RotationChoices`)。 */
@@ -2107,6 +2112,12 @@ export interface RotationFiller {
   uses_per_minute: number;
 }
 
+/** 何も入らない時間の正体(Rust `RotationIdle`)。 */
+export type RotationIdle = "wait" | "other_inserts";
+
+/** 差し込む技を撃つ間隔を決めているもの(Rust `RotationPace`)。 */
+export type RotationPace = "cooldown" | "reapply" | "crowded" | "free";
+
 /** 回しに差し込む CT 技 1 つぶん(Rust `RotationInsert`)。 */
 export interface RotationInsert {
   skill_id: string;
@@ -2125,8 +2136,14 @@ export interface RotationInsert {
   interval_seconds: number;
   /** 1 回あたり挟む連打技の回数 */
   filler_uses: number;
-  /** CT を満たすために連打の回数を増やしたか */
-  cooldown_bound: boolean;
+  /** 間隔のうち連打技が占める秒(連打 1 回 × filler_uses) */
+  filler_seconds: number;
+  /** 間隔のうち何も入らない秒(CT 待ち・詰まって空いたぶん)。無ければ 0 */
+  idle_seconds: number;
+  /** 何も入らない時間の正体。idle_seconds が 0 なら null */
+  idle: RotationIdle | null;
+  /** この間隔を決めているもの(画面は文言を当てるだけ) */
+  pace: RotationPace;
   /** この技を差し込むことで増える期待 DPS(負なら差し込むと下がる)。主軸自身は null */
   expected_dps_gain: number | null;
   /** この技が出している期待 DPS(回しの中での取り分。<フラグ> 爆発ぶんを含む) */

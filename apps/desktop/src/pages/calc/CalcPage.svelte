@@ -14,7 +14,7 @@
   import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { tables } from "../../tables.svelte";
-  import { app, flatContents } from "../../state.svelte";
+  import { app, damageContents, flatContents } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
   import Choose from "../../ui/Choose.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
@@ -32,7 +32,7 @@
   import MaterialsPane from "./MaterialsPane.svelte";
   import RotationPane from "./RotationPane.svelte";
   import WhyPanel from "./WhyPanel.svelte";
-  import { changedFlowKeys, deltaText, flowRowsOf, pick as pickSide, stepValue, stepsOf } from "./damageDetail";
+  import { changedFlowKeys, deltaText, flowRowsOf, stepValue, stepsOf } from "./damageDetail";
   import { DetailStore } from "./detailStore.svelte";
   import { SimStore } from "./simStore.svelte";
 
@@ -53,9 +53,12 @@
   // --- 対象(コンテンツ) --------------------------------------------------
   // ダメージ計算には敵データが要るので、enemy_id を持つコンテンツだけを対象に出す
   // (敵未収録のコンテンツはホームで入場条件のみ判定する)。
+  // 絞り込み(敵データを持つか)は state の `damageContents` が持つ。キャラタブの
+  // 「いま見ている対象」も同じ 1 本(`currentDamageTarget`)から決まる
+  const damageIds = $derived(new Set(damageContents().map((c) => c.id)));
   const contents = $derived(
     flatContents().filter(
-      (x): x is typeof x & { content: { enemy_id: string } } => x.content.enemy_id !== null,
+      (x): x is typeof x & { content: { enemy_id: string } } => damageIds.has(x.content.id),
     ),
   );
   // 対象ピッカーも同じ絞り込みで描画する(選べない行を一覧に残さない)。
@@ -412,8 +415,6 @@
     t ? (critMode ? t.critical : t.max) : null;
   const perHit = $derived(body?.per_hit_primary ?? null);
   const savedPerHit = $derived(savedResult?.body.per_hit_primary ?? null);
-  const totalValue = $derived(body?.total_primary ?? null);
-  const dpsValue = $derived(pickSide(body?.dps, critMode));
   const deltaPct = $derived(
     perHit !== null && savedPerHit !== null && savedPerHit > 0
       ? Math.round((perHit / savedPerHit - 1) * 100)
