@@ -971,6 +971,15 @@ mod tests {
         assert_eq!(all.value, BuffValue::Choice(vec![5.0, 10.0, 15.0, 20.0]));
     }
 
+    /// 全属性しか持たないバフも火力グループに入る。入らないと画面のどのタブにも出ない
+    /// (迅速の秘薬が v0.4.0 で追加されたのに選べなかった)。
+    #[test]
+    fn 迅速の秘薬は火力グループのその他に出る() {
+        let catalog = buff_catalog();
+        let swift = catalog.iter().find(|d| d.id == "swift_elixir").unwrap();
+        assert_eq!(swift.damage_groups(), vec![domain::BuffDamageGroup::Other]);
+    }
+
     #[test]
     fn 覚醒の秘薬2種は別アイテムで同時使用できない() {
         let catalog = buff_catalog();

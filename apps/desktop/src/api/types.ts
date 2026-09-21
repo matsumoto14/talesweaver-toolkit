@@ -217,6 +217,8 @@ export interface BuffDefinition {
   default_value: number | null;
   /** ステ増加以外の効き先(与ダメージ式のカテゴリ)。同じバフが 2 か所に効くことがある */
   damage_effects: SkillEffect[];
+  /** 全属性への加算(8 属性それぞれに乗る)。0 = 属性には効かない */
+  element_bonus: number;
 }
 
 export interface BuffChoice {

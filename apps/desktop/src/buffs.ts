@@ -21,9 +21,19 @@ export const BUFF_PURPOSES: { id: BuffPurpose; label: string; description: strin
 ];
 
 /** 「火力」だけは purposes ではなく**攻撃ダメージ効果を持つか**で拾う(カタログの
- *  purposes は能力値side の分類なので、ダメージ系がそこに入っていない) */
+ *  purposes は能力値side の分類なので、ダメージ系がそこに入っていない)。
+ *  全属性への加算も属性差ボーナス経由で与ダメージに効くので火力に入れる */
 export const matchesPurpose = (def: BuffDefinition, purpose: BuffPurpose): boolean =>
-  purpose === "damage" ? def.damage_effects.length > 0 : def.purposes.includes(purpose);
+  purpose === "damage"
+    ? def.damage_effects.length > 0 || def.element_bonus > 0
+    : def.purposes.includes(purpose);
+
+/** キーワードでバフを探す。名前・補足(note)・種類のラベルのどれかに、空白区切りの語が
+ *  すべて含まれていれば当たり。空の検索語は全件に当たる */
+export function matchesBuffQuery(def: BuffDefinition, originLabel: string, query: string): boolean {
+  const haystack = `${def.name} ${def.note} ${originLabel}`.toLowerCase();
+  return query.toLowerCase().split(/\s+/).filter(Boolean).every((word) => haystack.includes(word));
+}
 
 export const isChoiceValue = (v: BuffValue): v is { choice: number[] } =>
   typeof v === "object" && v !== null && "choice" in v;

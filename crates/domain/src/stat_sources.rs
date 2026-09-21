@@ -362,6 +362,11 @@ impl BuffDefinition {
                 out.push(group);
             }
         }
+        // 全属性への加算は属性差ボーナス(カテゴリ I)経由で与ダメージに効く = 「その他」。
+        // これを数えないと、全属性しか持たないバフ(迅速の秘薬)がどのグループにも出ない
+        if self.element_bonus > 0 && !out.contains(&BuffDamageGroup::Other) {
+            out.push(BuffDamageGroup::Other);
+        }
         out
     }
 }

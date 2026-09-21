@@ -13,7 +13,7 @@
   } from "../../api/types";
   import {
     BUFF_PURPOSES, isChoiceValue, isFixedValue, isMultiTarget, isPercentLayer, isRecordOnly,
-    matchesPurpose,
+    matchesBuffQuery, matchesPurpose,
     isUserSelectedTarget, pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
   import { fmtInt, fmtPct, fmtSigned, fmtSignedPct, formatLayerValue, topRows, topRowsText, type TopRows } from "../../format";
@@ -91,8 +91,13 @@
   const activePurposeMeta = $derived(PURPOSES.find((purpose) => purpose.id === activePurpose) ?? PURPOSES[0]);
   /** グループ分けは Rust(`BuffDefinition::damage_groups`) */
   const matchesDamageGroup = (def: BuffDefinition, group: BuffDamageGroup) => def.damage_groups.includes(group);
-  const activeDefinitions = $derived(app.catalog.filter((def) =>
-    matchesPurpose(def, activePurpose) && (activePurpose !== "damage" || matchesDamageGroup(def, activeDamageGroup))
+  /** キーワード検索。入っているあいだは目的タブ・火力グループをまたいで全カタログから探す —
+   *  どのタブにあるかを知らなくても見つかるようにする(§00 05 考えさせない) */
+  let buffQuery = $state("");
+  const searching = $derived(buffQuery.trim() !== "");
+  const activeDefinitions = $derived(app.catalog.filter((def) => searching
+    ? matchesBuffQuery(def, ORIGIN_LABELS[def.origin], buffQuery)
+    : matchesPurpose(def, activePurpose) && (activePurpose !== "damage" || matchesDamageGroup(def, activeDamageGroup))
   ));
 
   $effect(() => {
@@ -396,12 +401,19 @@
     return target.stats.map((stat) => STAT_LABELS[stat]).join(" / ");
   }
 
+  /** 全属性への加算の表示(無ければ空)。ダメージ効果と同じ並びに足す */
+  const elementLabels = (def: BuffDefinition): string[] =>
+    def.element_bonus > 0 ? [`全属性 ${fmtSigned(def.element_bonus)}`] : [];
+
   function effectSummary(def: BuffDefinition): string {
     if (isFixedValue(def.value)) return `${STAT_LAYER_LABELS[def.layer]} ${formatLayerValue(def.layer, def.value.fixed)}`;
     if (isChoiceValue(def.value)) return def.value.choice.map((value) => formatLayerValue(def.layer, value)).join(" / ");
     const range = userInputRange(def.value);
     if (range) return `${STAT_LAYER_LABELS[def.layer]} ${formatLayerValue(def.layer, range.min)}〜${formatLayerValue(def.layer, range.max)}`;
-    const damage = def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null);
+    const damage = [
+      ...def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null),
+      ...elementLabels(def),
+    ];
     return damage.join(" ・ ") || "効果を記録";
   }
 
@@ -422,7 +434,10 @@
   function buffTooltip(def: BuffDefinition, blocked: boolean): string {
     const purposes = def.purposes.map((purpose) => PURPOSES.find((item) => item.id === purpose)?.label ?? purpose).join(" / ");
     const lines = [def.name, `目的: ${purposes}`, `種類: ${ORIGIN_LABELS[def.origin]}`, `主効果: ${effectSummary(def)}`, `対象: ${targetLabel(def.target)}`];
-    const damage = def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null);
+    const damage = [
+      ...def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null),
+      ...elementLabels(def),
+    ];
     if (damage.length > 0 && !isRecordOnly(def.value)) lines.push(`追加効果: ${damage.join(" ・ ")}`);
     lines.push(`重複: ${exclusive(def)}`);
     if (def.note) lines.push(`補足: ${def.note}`);
@@ -554,7 +569,8 @@
           ? fmtSigned(e.damage.percent, { max: 2 }, "%")
           : `${damageRowLabel(damageCategoryLabel(e.damage.category))} ${fmtSigned(e.damage.percent, { max: 2 }, "%")}`
         : singleEffectLabel(e))
-      .filter((label): label is string => label !== null);
+      .filter((label): label is string => label !== null)
+      .concat(elementLabels(def));
     if (activePurpose === "damage" && damage.length > 0) return damage.join(" ・ ");
     return effectSummary(def);
   }
@@ -606,6 +622,9 @@
         <button class="btn danger delete-set" disabled={saving} onclick={requestRemove}>削除</button>
       </div>
       <div class="groups">
+        <div class="search-row">
+          <TextField label="バフ名・効果のキーワードで探す" count={activeDefinitions.length} bind:value={buffQuery} />
+        </div>
         <Choose
           label="バフの目的"
           class="chiprow category-switch"
@@ -621,16 +640,20 @@
         </Choose>
         <!-- 入場クラス swap-in(型 3b = 上から短く入る)が動き方を決め、use:changed がそれを
              再生する。badge-in(型 5)にすると面ぜんたいが中心から膨らんで他タブと揃わない -->
-        <section class="buff-group inset swap-in" use:changed={() => `${activePurpose}:${activeDamageGroup}`}>
+        <section class="buff-group inset swap-in" use:changed={() => searching ? "search" : `${activePurpose}:${activeDamageGroup}`}>
           <div class="group-summary">
-            <span class="group-copy"><strong>{activePurposeMeta.label}</strong><small>{activePurposeMeta.description}</small></span>
-            {#if activePurpose === "stats"}
+            {#if searching}
+              <span class="group-copy"><strong>検索結果</strong><small>目的をまたいで全バフから探しています</small></span>
+            {:else}
+              <span class="group-copy"><strong>{activePurposeMeta.label}</strong><small>{activePurposeMeta.description}</small></span>
+            {/if}
+            {#if !searching && activePurpose === "stats"}
               <button class="guide-link" type="button" onclick={() => focusCharacterSource("commonSkill")}>
                 アンリーシュはキャラ設定 <span aria-hidden="true">›</span>
               </button>
             {/if}
           </div>
-          {#if activePurpose === "damage"}
+          {#if !searching && activePurpose === "damage"}
             <Choose
               label="ダメージバフの群"
               class="chiprow damage-switch"
@@ -775,6 +798,7 @@
                 {/snippet}
               </ToggleRow>
             {/each}
+            {#if activeDefinitions.length === 0}<p class="no-hit">「{buffQuery.trim()}」に当たるバフはありません。</p>{/if}
           </div>
         </section>
       </div>
@@ -886,6 +910,8 @@
   .set-list :global(.set-count) { margin-left: auto; min-width: 2ch; text-align: right; }
   .set-list p, .empty { margin: 12px; color: var(--fg-muted); font-size: 11px; }
   .groups { flex: 1; min-height: 0; padding: 8px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; }
+  .search-row { display: flex; }
+  .no-hit { margin: 6px; color: var(--fg-muted); font-size: 11px; }
   :global(.category-switch) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
   :global(.category-switch > .chip), :global(.damage-switch > .chip) {
     min-width: 0; width: 100%; justify-content: flex-start; border-radius: var(--r-inset);
