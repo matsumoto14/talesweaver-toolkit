@@ -169,8 +169,8 @@ async function createInquiry(request: Request, env: Env): Promise<Response> {
   const title = clean(asString(payload.title), LIMITS.title);
   const body = clean(asString(payload.body), LIMITS.body);
   const diagnostics = clean(asString(payload.diagnostics), LIMITS.diagnostics);
-  const character = clean(asString(payload.character), LIMITS.character);
-  const equipment = clean(asString(payload.equipment), LIMITS.equipment);
+  const character = attachment(asString(payload.character), LIMITS.character);
+  const equipment = attachment(asString(payload.equipment), LIMITS.equipment);
 
   if (!title || !body) return json({ error: "件名と内容を入力してください" }, 400);
 
@@ -206,20 +206,41 @@ async function consumeRateLimit(request: Request, env: Env): Promise<string | nu
  * - 制御文字を落とす(改行とタブは残す)
  * - `@名前` / `#123` はリンクさせない(通知の巻き込み・課題の相互リンクを防ぐ)
  * - ``` を潰す(こちらが用意したコードブロックから抜け出させない)
- * - 上限で切る
+ *
+ * 上限の扱いは 2 通り: 文章(件名・本文・自動で付ける情報)は `clean` で切り、
+ * JSON の添付は `attachment` で**切らずに落とす**(壊れた JSON を載せないため)。
  */
-function clean(value: string, limit: number): string {
+function sanitize(value: string): string {
   return value
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     .replace(/@(?=[\w-])/g, "@\u200B")
     .replace(/#(?=\d)/g, "#\u200B")
     .replace(/`{3,}/g, "'''")
-    .trim()
-    .slice(0, limit);
+    .trim();
+}
+
+function clean(value: string, limit: number): string {
+  return sanitize(value).slice(0, limit);
+}
+
+/** 添付(JSON)1 件ぶん。上限を超えたら `omitted`(本文にその旨を書く) */
+interface Attachment {
+  text: string;
+  omitted: boolean;
+}
+
+/**
+ * JSON の添付は**切らない**。途中で切れた JSON は貼り直しても計算を再現できないので、
+ * 上限を超えたら添付ごと落として「省略した」と本文に書く(黙って壊れた JSON を載せない)。
+ * アプリ側も同じ上限で送信前に止める(`apps/desktop/src/inquiry.ts`)。
+ */
+function attachment(value: string, limit: number): Attachment {
+  const text = sanitize(value);
+  return text.length > limit ? { text: "", omitted: true } : { text, omitted: false };
 }
 
 function renderIssueBody(
-  body: string, diagnostics: string, character: string, equipment: string,
+  body: string, diagnostics: string, character: Attachment, equipment: Attachment,
 ): string {
   const parts = [
     "> アプリの問い合わせフォームから送られた、**投稿者を確認していない**内容です。",
@@ -227,12 +248,17 @@ function renderIssueBody(
     body,
   ];
 
-  const attachments = [
-    ["アプリが自動で付けた情報", diagnostics],
-    ["選択中のキャラのデータ", character],
-    ["選択中のキャラの装備", equipment],
+  const attachments: [string, string, boolean][] = [
+    ["アプリが自動で付けた情報", diagnostics, false],
+    ["選択中のキャラのデータ", character.text, character.omitted],
+    ["選択中のキャラの装備", equipment.text, equipment.omitted],
   ];
-  for (const [summary, content] of attachments) {
+  for (const [summary, content, omitted] of attachments) {
+    if (omitted) {
+      // 切って載せると「再現できないデータ」が残るだけなので、載せなかったことを書く
+      parts.push("", `> ${summary}は上限を超えたため省略しました。`);
+      continue;
+    }
     if (!content) continue;
     parts.push(
       "",

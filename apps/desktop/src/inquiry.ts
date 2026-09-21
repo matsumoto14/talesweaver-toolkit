@@ -18,6 +18,17 @@ import type {
  */
 export const INQUIRY_ENDPOINT ="https://inquiry.tw-context.dev";
 
+/**
+ * 添付するキャラのデータの上限(文字)。中継サーバー(services/inquiry-worker の
+ * `LIMITS.character`)と同じ値にする。**超えたら切らずに付けない** —— 途中で切れた JSON は
+ * 貼り直しても再現に使えないので、「送ったのに再現できない」問い合わせになるだけ。
+ */
+export const CHARACTER_ATTACHMENT_MAX = 40000;
+
+/** 添付が上限を超えているか(送信前に警告して添付を止める) */
+export const characterAttachmentTooLong = (character: string): boolean =>
+  character.length > CHARACTER_ATTACHMENT_MAX;
+
 export type InquiryKind = "bug" | "data" | "feature";
 
 export const INQUIRY_KINDS: { value: InquiryKind; label: string }[] = [
@@ -82,7 +93,13 @@ export function characterAttachment(
   return `{"character":{\n${fields(shared)}\n},\n${fields({ buffs, result })}\n}`;
 }
 
-/** 登録リストを「装備中の 1 件だけ」にする。id は振り直し、ラベルは空にする。 */
+/**
+ * 登録リストを「装備中の 1 件だけ」にする。id は振り直し、ラベルは空にする。
+ *
+ * **`custom_name`(カタログ外装備の名前)は消さない** —— ユーザーが打った文字だが
+ * 個人を指す情報ではなくアイテム名で、「その装備の値が違う」という問い合わせの調査に要る
+ * (上の `characterAttachment` の但し書きどおり、ここが唯一の例外)。
+ */
 function selectedOnly<T extends EquipmentParts | SienaAuras>(lists: T): T {
   const entries = Object.entries(lists) as [string, EquipmentPartList | SienaAuraList][];
   return Object.fromEntries(entries.map(([slot, list]) => {
@@ -117,7 +134,11 @@ export function preview(draft: InquiryDraft, includeDiagnostics: boolean): strin
   if (includeDiagnostics && draft.diagnostics) {
     parts.push("", "--- アプリが自動で付ける情報 ---", draft.diagnostics);
   }
-  if (draft.character) parts.push("", "--- 選択中のキャラのデータ ---", draft.character);
+  if (characterAttachmentTooLong(draft.character)) {
+    parts.push("", "--- 選択中のキャラのデータ ---", "(上限を超えるため添付しません)");
+  } else if (draft.character) {
+    parts.push("", "--- 選択中のキャラのデータ ---", draft.character);
+  }
   return parts.join("\n");
 }
 
@@ -140,7 +161,8 @@ export async function send(
     title: draft.title,
     body: draft.body,
     diagnostics: includeDiagnostics ? draft.diagnostics : "",
-    character: draft.character,
+    // 上限を超える添付は送らない(中継側で切られると壊れた JSON が issue に載る)
+    character: characterAttachmentTooLong(draft.character) ? "" : draft.character,
   });
 }
 

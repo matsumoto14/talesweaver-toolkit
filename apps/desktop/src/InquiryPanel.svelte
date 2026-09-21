@@ -4,9 +4,11 @@
   import { errorMessage, getAppInfo, getDamageSnapshot, previewEffectiveStats } from "./api/commands";
   import type { AppInfo } from "./api/types";
   import {
-    INQUIRY_ENDPOINT, INQUIRY_KINDS, characterAttachment, preview, send,
+    CHARACTER_ATTACHMENT_MAX, INQUIRY_ENDPOINT, INQUIRY_KINDS, characterAttachment,
+    characterAttachmentTooLong, preview, send,
     type InquiryDraft, type InquiryKind, type InquiryResult, type SentInquiry,
   } from "./inquiry";
+  import { fmtInt } from "./format";
   import { app, payloadOf, simIsDirty } from "./state.svelte";
   import { reportError } from "./toast.svelte";
   import Modal from "./ui/Modal.svelte";
@@ -94,6 +96,8 @@
   );
 
   const draft = $derived<InquiryDraft>({ kind, title, body, diagnostics, character });
+  /** 添付が上限を超えているか。切って送ると再現できない JSON が載るので、付けずに知らせる */
+  const characterTooLong = $derived(characterAttachmentTooLong(character));
   const canSubmit = $derived(title.trim().length > 0 && body.trim().length > 0);
 
   async function submit() {
@@ -154,6 +158,12 @@
               on={includeCharacter}
               onToggle={() => (includeCharacter = !includeCharacter)}
             />
+            {#if characterTooLong}
+              <p class="muted warn-line">
+                このキャラのデータは上限({fmtInt(CHARACTER_ATTACHMENT_MAX)} 文字)を超えるため<b>添付しません</b>。
+                途中で切れたデータでは再現できないので、内容に「どの装備・どのスキルで」を書いてください。
+              </p>
+            {/if}
           {/if}
 
           <div class="preview-label">送られる内容</div>

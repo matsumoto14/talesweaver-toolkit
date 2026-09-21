@@ -198,6 +198,27 @@ describe("inquiry", () => {
     expect(created?.body).not.toContain("選択中のキャラの装備");
   });
 
+  // 途中で切れた JSON は貼り直しても再現に使えない。切らずに落として、そう書く
+  it("上限を超えたキャラのデータは切らずに省略して本文に書く", async () => {
+    const env = makeEnv();
+    const { nonce, solution } = await ticket(env);
+    const huge = `{"character":{"note":"${"あ".repeat(41000)}"}}`;
+
+    await worker.fetch(
+      post({
+        nonce, solution, kind: "bug", title: "落ちる", body: "内容",
+        character: huge,
+      }),
+      env,
+    );
+
+    expect(created?.body).toContain("選択中のキャラのデータは上限を超えたため省略しました。");
+    expect(created?.body).not.toContain("<details><summary>選択中のキャラのデータ</summary>");
+    expect(created?.body).not.toContain('{"character":{"note":"あ');
+    // 切られた断片が本文に残っていない
+    expect(created?.body?.includes("あああああああああ")).toBe(false);
+  });
+
   it("PoW の解答が違えば弾く", async () => {
     const env = makeEnv();
     const { nonce } = await ticket(env);
