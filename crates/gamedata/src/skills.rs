@@ -16,24 +16,11 @@ use domain::{
     Skill, SkillDependency, SkillForm, SummonForm, SwiftSword, WeaponClass,
 };
 
+use crate::skill_channeling::SKILL_CHANNELING;
+use crate::skill_cooldowns::SKILL_COOLDOWNS;
 use crate::skill_targets::SKILL_TARGETS;
 
 use crate::Source;
-
-/// 単体チャネリングスキル(wiki「Skill#f8e303fb」の区分の凡例: `続` = チャネリングスキル)。
-///
-/// **区分に `続` を含み、対象指定が `単体`** のものだけが該当する。19 キャラ 515 行を
-/// パースして 7 件(いずれも段数 10)。極限スキル「フルスロットル」の段数増加(最大 +3)は
-/// これにだけ乗る(wiki Skill/極限)。
-const SINGLE_TARGET_CHANNELING: [&str; 7] = [
-    "lucian_streak",              // 極・連撃
-    "lucian_warriors_dance",      // 極・無双乱舞
-    "lucian_whirlwind_sword",     // 極・旋風斬
-    "nayatorei_mausoleum",        // 極・狂猫
-    "siberin_twin_dragon_strike", // 極・双龍撃
-    "siberin_red_dragon_strike",  // 極・紅龍連撃
-    "isaac_demise_furious",       // 極・滅神乱舞
-];
 
 /// 依存能力だけでは実用武器を絞れないスキルの武器種。
 ///
@@ -48,8 +35,7 @@ const SKILL_WEAPON_CLASSES: &[(&str, &[WeaponClass])] = &[
 
 /// 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列(取得 2026-08-25)。
 ///
-/// `s(...)` の引数に足さず別表にしているのは `SINGLE_TARGET_CHANNELING` と同じ理由で、
-/// 303 行の主表は wiki の「攻撃力・Cri倍・命中・Cri値」の並びを保ちたいため。
+/// `s(...)` の引数に足さず別表にしているのは、303 行の主表は wiki の「攻撃力・Cri倍・命中・Cri値」の並びを保ちたいため。
 /// - `A/B` 表記(イェフネンのパイク系)は条件付き([加速])の値なので**基本値の A** を採る
 /// - `(固定)` 付き(ティチエル 極・ギガブレイズ / クロエ 極・メテオストライク)は
 ///   中ディレイ減少が効かない。`ACTUAL_DELAY_FIXED` で持つ
@@ -129,7 +115,10 @@ const ACTUAL_DELAYS: &[(&str, Option<f64>)] = &[
     ("tichiel_ice_missile", Some(1.0)),
     ("tichiel_lightning_rod", Some(0.8)),
     ("tichiel_calling_thunder", Some(0.8)),
-    ("tichiel_sparkling_kite", None), // 極・スパークリングカイト: wiki の「動作」が "0"
+    // 極・スパークリングカイト: 一覧の「動作」は "0" だが、詳細表(Skill/ティチエル#SparklingKite)は
+    // 中 =「ｹﾞｰｼﾞ(10s)」= 最大 10 秒のチャネリング(1 秒ごとに 492% × 10 段)。他のチャネリング技
+    // (lucian_streak = 10.0 等)と同じく撃ち切る時間を採る(2026-09-21)
+    ("tichiel_sparkling_kite", Some(10.0)),
     ("tichiel_lightning_bolt", Some(1.0)),
     ("tichiel_holy_bolt", Some(1.0)),
     ("tichiel_sunrise", Some(1.2)),
@@ -385,6 +374,14 @@ const ACTUAL_DELAY_FIXED: [&str; 2] = [
     "tichiel_giga_blaze",  // 極・ギガブレイズ
     "chloe_meteor_strike", // 極・メテオストライク
 ];
+
+/// チャネリング技の tick(`SKILL_CHANNELING`)。
+fn channeling_of(skill_id: &str) -> Option<domain::Channeling> {
+    SKILL_CHANNELING
+        .iter()
+        .find(|(id, _, _)| *id == skill_id)
+        .map(|&(_, ticks, tick_seconds)| domain::Channeling { ticks, tick_seconds })
+}
 
 pub const SKILLS_SOURCE: Source = Source {
     page: "Skill/<各キャラ名>「スキル性能一覧」",
@@ -950,21 +947,28 @@ const FLAG_DETONATORS: &[&str] = &[
     "yefnen_slay_chisel", "yefnen_crash_chisel",
 ];
 
-/// クールタイム(秒)。wiki スキル性能一覧の CT 列(2026-09-21 取得)。
-/// いまは <フラグ> を爆発させる スレイ / クラッシュ(全 5 形態、いずれも 10 秒)だけ。
-/// 連 / 爆 に CT は無い。載っていない技は `None` = CT なし。
-#[rustfmt::skip]
-const COOLDOWNS: &[(&str, f64)] = &[
-    ("yefnen_slay", 10.0), ("yefnen_crash", 10.0),
-    ("yefnen_slay_pike", 10.0), ("yefnen_crash_pike", 10.0),
-    ("yefnen_slay_axe", 10.0), ("yefnen_crash_axe", 10.0),
-    ("yefnen_slay_urumi", 10.0), ("yefnen_crash_urumi", 10.0),
-    ("yefnen_slay_chisel", 10.0), ("yefnen_crash_chisel", 10.0),
-];
+/// クールタイム(秒)のうち、生成表(`SKILL_COOLDOWNS`)から外した技。
+/// wiki の詳細表に値が 1 つに決まらない形で載っているので手で決める。
+/// ここに載っている技は生成表より優先し、`None` なら CT なしとして扱う。
+///
+/// - `mira_crimson_shooter`(極・紅い射手の砲撃): wiki `Skill/ミラ#CrimsonShooter` の
+///   CT 列は **Lv1 だけ 120s、Lv2 以降は 0**(Master = Lv11)。カタログが持つのは SLv11 の
+///   性能なので **CT なし**。120s は Lv1 の旧性能(350% x1)に付いた値で、
+///   Lv2 以降(760% x4)になると消える。
+/// - `roamini_mastary1_2`(極・ベノムノヴァ): wiki `Skill/ロアミニ#Mastary1_2` の CT 列が
+///   `30s&br;60s&br;90s`。マスタリー No.1 の選択(【シンボル・オブ・フラッシュ】30s /
+///   【〜ステディ】60s / 【〜スピリット】90s)で変わる。カタログはマスタリー選択を
+///   持たないので、半減も 1.5 倍も掛からない素の **60s** を既定として収録する
+///   (2026-09-21 ユーザー判断。クライアント DB も 60s)。
+const MANUAL_COOLDOWNS: &[(&str, Option<f64>)] =
+    &[("mira_crimson_shooter", None), ("roamini_mastary1_2", Some(60.0))];
 
-/// `COOLDOWNS` を引く。載っていなければ `None`(CT なし = 連打できる)。
+/// クールタイム(秒)を引く。載っていなければ `None`(CT なし = 連打できる)。
 pub fn cooldown_of(skill_id: &str) -> Option<f64> {
-    COOLDOWNS
+    if let Some((_, seconds)) = MANUAL_COOLDOWNS.iter().find(|(id, _)| *id == skill_id) {
+        return *seconds;
+    }
+    SKILL_COOLDOWNS
         .iter()
         .find(|(id, _)| *id == skill_id)
         .map(|(_, seconds)| *seconds)
@@ -1078,7 +1082,10 @@ impl SkillRecord {
             .iter()
             .find(|(id, _)| *id == self.skill_id().as_str())
             .and_then(|(_, delay)| *delay);
-        let power = Skill::compute_power(self.multiplier, self.hit_count);
+        let channeling = channeling_of(&self.skill_id());
+        // チャネリング技の 1 回は tick 数ぶん撃つ(wiki の段数は 1 tick ぶん)
+        let power = Skill::compute_power(self.multiplier, self.hit_count)
+            * f64::from(channeling.map_or(1, |c: domain::Channeling| c.ticks.max(1)));
         Skill {
             id: self.skill_id(),
             name: self.name.to_string(),
@@ -1099,8 +1106,10 @@ impl SkillRecord {
             accuracy: self.accuracy,
             critical_rate: self.critical_rate,
             level: self.level,
-            single_target_channeling: SINGLE_TARGET_CHANNELING.contains(&self.skill_id().as_str()),
+            channeling,
             base_actual_delay,
+            // チャネリング技にも中ディレイ減少が効く(公式 2025-10-29 no=154871 4-1:
+            // 反復周期 × (1 − 減少)。攻撃回数は変わらず、持続が同じ率で縮む)
             actual_delay_fixed: ACTUAL_DELAY_FIXED.contains(&self.skill_id().as_str()),
             // 通常攻撃は wiki スキル性能一覧の † (基本攻撃)。名前がそのまま印になっている
             normal_attack: self.name.starts_with('†'),
@@ -1133,7 +1142,11 @@ impl SkillRecord {
                 Vec::new()
             },
             power,
-            power_per_second: Skill::compute_power_per_second(power, base_actual_delay),
+            power_per_second: Skill::compute_power_per_second(
+                power,
+                base_actual_delay,
+                cooldown_of(&self.skill_id()),
+            ),
             attacker: attacker_of(&self.skill_id()),
             summon_form: summon_form_of(&self.skill_id()),
             form: form_of(&self.skill_id()),
@@ -1166,6 +1179,24 @@ pub fn skills_for(character_id: &str) -> Vec<Skill> {
 /// <フラグ> を積むか)から技を引きたいときに使う(`flag::flag_applier_for`)。
 pub fn all_skills() -> impl Iterator<Item = Skill> {
     SKILLS.iter().map(SkillRecord::to_skill)
+}
+
+/// 回しに差し込む CT 技(`NewCharacter::rotation_skill_ids`)から、**選べなくなった id** を
+/// 落とす。選べるのは「そのキャラが自分で撃つ攻撃技」かつ「クールタイムを持つ」技だけ
+/// (`commands::validate_rotation_skills` と同じ規則を 1 か所に持つ)。
+///
+/// カタログから技が消える・改名される・キャラ種を変えると保存済みの id が選べなくなり、
+/// そのままだと保存の検証で弾かれて自動保存が止まる。キャラスキルの
+/// `normalize_character_skill_selection` と同じ形で、落としたら `true` を返す。
+pub fn retain_rotation_skills(ids: &mut Vec<String>, character_id: &str) -> bool {
+    let before = ids.len();
+    let selectable: Vec<String> = skills_for(character_id)
+        .into_iter()
+        .filter(|s| s.attacker == Attacker::Player && s.cooldown_seconds.is_some())
+        .map(|s| s.id)
+        .collect();
+    ids.retain(|id| selectable.contains(id));
+    ids.len() != before
 }
 
 pub fn find_skill(id: &str) -> Option<Skill> {
@@ -1321,26 +1352,6 @@ mod tests {
         );
     }
 
-    /// wiki「Skill#f8e303fb」の区分 `続` + 対象指定 `単体` で抽出した 7 件。
-    /// これ以外に段数が増えるスキルがあると火力が過大になる。
-    #[test]
-    fn 単体チャネリングスキルは7件で全部カタログにある() {
-        assert_eq!(SINGLE_TARGET_CHANNELING.len(), 7);
-        for id in SINGLE_TARGET_CHANNELING {
-            let skill = find_skill(id).unwrap_or_else(|| panic!("{id} がカタログに無い"));
-            assert!(
-                skill.single_target_channeling,
-                "{id} にフラグが立っていない"
-            );
-        }
-        let flagged = crate::characters()
-            .into_iter()
-            .flat_map(|c| skills_for(c.id))
-            .filter(|s| s.single_target_channeling)
-            .count();
-        assert_eq!(flagged, 7);
-    }
-
     /// wiki スキル性能一覧の「動作」列。全 303 件ぶん引けて、秒が読めなかったのは
     /// ティチエル 極・スパークリングカイト(wiki 表記が `0`)の 1 件だけ。
     #[test]
@@ -1357,17 +1368,50 @@ mod tests {
                 "{id} の動作が無い"
             );
         }
+        // 「動作」が秒として読めない行はもう無い(スパークリングカイトは詳細表から採った)
         let missing: Vec<&str> = ACTUAL_DELAYS
             .iter()
             .filter(|(_, d)| d.is_none())
             .map(|(id, _)| *id)
             .collect();
-        assert_eq!(missing, ["tichiel_sparkling_kite"]);
+        assert!(missing.is_empty(), "{missing:?}");
         // 秒が読めた行はすべて正の値
         assert!(ACTUAL_DELAYS
             .iter()
             .filter_map(|(_, d)| *d)
             .all(|d| d > 0.0));
+    }
+
+    /// チャネリング技の表(生成物)。区分 `続` の 16 件で、単体チャネリング 7 件はその部分集合。
+    /// どれも 1 回の使用で 10 tick(持続 ÷ tick 間隔)。
+    #[test]
+    fn チャネリング技は16件で1回に10tick撃つ() {
+        assert_eq!(SKILL_CHANNELING.len(), 16);
+        for (id, ticks, tick_seconds) in SKILL_CHANNELING {
+            let skill = find_skill(id).unwrap_or_else(|| panic!("{id} がカタログに無い"));
+            let channeling = skill.channeling.unwrap_or_else(|| panic!("{id} に印が立っていない"));
+            assert_eq!(channeling.ticks, *ticks, "{id}");
+            assert_eq!(*ticks, 10, "{id}");
+            assert!(*tick_seconds > 0.0, "{id}");
+            // 持続(動作)= tick 間隔 × tick 数
+            let lasts = skill.base_actual_delay.unwrap_or_else(|| panic!("{id} の動作が無い"));
+            assert!(
+                (lasts - tick_seconds * f64::from(*ticks)).abs() < 1e-9,
+                "{id} 動作 {lasts} / {tick_seconds} × {ticks}"
+            );
+            // 中ディレイ減少が効く(公式 2025-10-29 no=154871 4-1)
+            assert!(!skill.actual_delay_fixed, "{id}");
+            // 火力の目安は tick 込み(段数は 1 tick ぶん)
+            assert!(
+                (skill.power - skill.multiplier * f64::from(skill.hit_count) * f64::from(*ticks))
+                    .abs()
+                    < 1e-9,
+                "{id}"
+            );
+        }
+        // 単体も範囲も入る
+        assert!(SKILL_CHANNELING.iter().any(|(k, _, _)| *k == "lucian_streak"));
+        assert!(SKILL_CHANNELING.iter().any(|(k, _, _)| *k == "tichiel_blizzard"));
     }
 
     #[test]
@@ -1459,6 +1503,101 @@ mod tests {
                 "{} が一覧に無い",
                 s.character_id
             );
+        }
+    }
+
+    // --- クールタイム ---
+
+    #[test]
+    fn ct表のidは実在して重複しない() {
+        let mut ids: Vec<&str> = SKILL_COOLDOWNS.iter().map(|(id, _)| *id).collect();
+        for id in &ids {
+            assert!(find_skill(id).is_some(), "{id} がカタログに無い");
+        }
+        ids.sort_unstable();
+        let total = ids.len();
+        ids.dedup();
+        assert_eq!(ids.len(), total, "CT 表に重複がある");
+        for (id, _) in MANUAL_COOLDOWNS {
+            assert!(find_skill(id).is_some(), "{id} がカタログに無い");
+            assert!(
+                !ids.contains(id),
+                "{id} は手書きの例外なので生成表に載ってはいけない"
+            );
+        }
+    }
+
+    /// wiki 各キャラ `Skill/<キャラ名>` のスキル詳細表 CT 列(ミラーの 2026-09-20 版)。
+    /// ボリス / イスピンは CT を持つスキルが 1 つも無い。
+    #[test]
+    fn ct表の件数はキャラ別に固定() {
+        let expected = [
+            ("anais", 9),
+            ("benya", 6),
+            ("chloe", 6),
+            ("isaac", 4),
+            ("isolet", 10),
+            ("joshua", 3),
+            ("leeche", 3),
+            ("lucian", 3),
+            ("maximin", 1),
+            ("mira", 1),
+            ("nayatorei", 4),
+            ("nocturne", 4),
+            ("ranjie", 1),
+            ("roamini", 5), // 生成表 4 + 例外表のベノムノヴァ(60s)
+            ("siberin", 3),
+            ("tichiel", 5),
+            ("yefnen", 10),
+        ];
+        assert_eq!(SKILL_COOLDOWNS.len(), 77);
+        // 生成表 77 件 + 例外表で CT を持つ 1 件
+        assert_eq!(expected.iter().map(|(_, n)| n).sum::<usize>(), 78);
+        for (character_id, count) in expected {
+            let found = SKILLS
+                .iter()
+                .filter(|s| s.character_id == character_id)
+                .filter(|s| cooldown_of(&s.skill_id()).is_some())
+                .count();
+            assert_eq!(found, count, "{character_id} の CT 持ち件数");
+        }
+        for character_id in ["boris", "ispin"] {
+            assert!(SKILLS
+                .iter()
+                .filter(|s| s.character_id == character_id)
+                .all(|s| cooldown_of(&s.skill_id()).is_none()));
+        }
+    }
+
+    #[test]
+    fn ctの代表値() {
+        for (id, seconds) in [
+            ("lucian_streak", Some(10.0)),
+            ("chloe_meteor_strike", Some(60.0)),
+            ("nayatorei_assault", Some(5.0)),
+            ("benya_hell_gate", Some(60.0)),
+            ("tichiel_fire_ball", None),
+            ("lucian_butt", None),
+            // 例外表(実用 SLv では CT なし / マスタリーで変わる値は素の 60s)
+            ("mira_crimson_shooter", None),
+            ("roamini_mastary1_2", Some(60.0)),
+        ] {
+            assert_eq!(find_skill(id).unwrap().cooldown_seconds, seconds, "{id}");
+        }
+        // イェフネンの スレイ / クラッシュ 10 件は全形態 10s(旧 COOLDOWNS と同じ)
+        for id in [
+            "yefnen_slay",
+            "yefnen_crash",
+            "yefnen_slay_pike",
+            "yefnen_crash_pike",
+            "yefnen_slay_axe",
+            "yefnen_crash_axe",
+            "yefnen_slay_urumi",
+            "yefnen_crash_urumi",
+            "yefnen_slay_chisel",
+            "yefnen_crash_chisel",
+        ] {
+            assert_eq!(cooldown_of(id), Some(10.0), "{id}");
         }
     }
 }

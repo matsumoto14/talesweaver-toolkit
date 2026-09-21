@@ -7,7 +7,7 @@
   // 討伐時間まで出す。召喚スキルがあるキャラは
   // 本体・召喚獣どちらの鎖にも討伐時間節を出さず、CalcPage 側の「合計」面(combined)にだけ出す
   // (同じ情報を 2 箇所に出さない。§00 ②)。
-  import type { CombinedDamage, DamageResult, FlagDamage, Skill } from "../../api/types";
+  import type { CombinedDamage, DamageResult, FlagDamage, Rotation, Skill } from "../../api/types";
   import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
   import { limits } from "../../limits.svelte";
   import Icon, { type IconKind } from "../../ui/Icon.svelte";
@@ -47,13 +47,16 @@
     flowChanged?: boolean;
     /** <フラグ>(技とは別枠のダメージ)。本体の鎖だけが受け取る。null = 積んでいない */
     flag?: FlagDamage | null;
+    /** 回し(連打する技 + 差し込む CT 技)。本体の鎖だけが受け取る。null = 回しを組まない */
+    rotation?: Rotation | null;
     /** この鎖に合流する別枠込みの合算(1 発の合計・DPS・討伐時間)。Rust が足した値で、
      *  画面は側を選ぶだけ。null = 合算を鎖に出さない(熊がいるときは CalcPage の「合計」面が持つ) */
     combined?: CombinedDamage | null;
   }
   let {
     result, skill, store, attackerLabel, isSummon = false, attackerSkillName, icon, showDefeat, heroNumber,
-    intervalNote = null, onView, onPerHitDeltaFollow, flowChanged = false, flag = null, combined = null,
+    intervalNote = null, onView, onPerHitDeltaFollow, flowChanged = false, flag = null, rotation = null,
+    combined = null,
   }: Props = $props();
 
   const toggle = (k: string) => {
@@ -71,8 +74,30 @@
   const expectedDps = $derived(combined?.expected_dps ?? result.expected_dps);
   /** <フラグ> 爆発(主軸が スレイ / クラッシュ のときだけ)。合計に合流する */
   const burst = $derived(flag?.burst ?? null);
-  /** 積み直しの 1 周(積む技 × n → 主軸 → 爆発)。DPS はこの 1 周で出している */
-  const reapply = $derived(flag?.cycle ?? null);
+  /** 回しの中の主軸(CT 技として差し込んでいるとき)。DPS は回しで出している */
+  const mainInsert = $derived(rotation?.inserts.find((i) => i.is_main) ?? null);
+  /** 連打している技(主軸そのものなら is_main)。null = 連打できる技が無い */
+  const filler = $derived(rotation?.filler ?? null);
+  /** DPS の分母。主軸を CT ごとに 1 回撃つならその間隔、回しを組んでいなければ中ディレイ
+   *  (コンボならサイクル)。**主軸を連打して別の技を差し込む形は 1 つの数で割っていない**ので
+   *  null(分母を出さない。§00 05) */
+  const dpsDenominator = $derived(
+    mainInsert
+      ? mainInsert.interval_seconds
+      : rotation
+        ? null
+        : (result.combo?.seconds ?? result.actual_delay?.value ?? null),
+  );
+  /** 主軸を 1 分間に何回撃つか。回しの中では「差し込みは間隔ごとに 1 回」
+   *  「連打は空いた時間ぶん」なので、そのまま回数に直す */
+  const usesPerMinute = $derived.by<number | null>(() => {
+    if (mainInsert) return 60 / mainInsert.interval_seconds;
+    if (rotation) {
+      // 回しの中の回数は Rust が技ごとに返している(画面で割り戻さない)
+      return filler && filler.is_main ? filler.uses_per_minute : null;
+    }
+    return result.combo?.uses_per_minute ?? result.actual_delay?.uses_per_minute ?? null;
+  });
 
   // 段の組み立ては calc/damageDetail.ts(CalcPage の「なぜこの数字?」と同じ関数)。
   // 熊には WhyPanel が無いが、材料(トレースの段)は本体と同じ形で Rust が返すので流用できる。
@@ -244,19 +269,44 @@
         label: "スキル回数",
         value: `${Math.round(d.uses_per_minute)} 回/分`,
         n: Math.round(d.uses_per_minute),
-        sub: intervalNote ?? (d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ"),
+        // 回しの中では「差し込みは間隔ごとに 1 回」「連打は空いた時間ぶん」なので、
+        // この回数は連打し続けたときの上限になる(実際の回数は下の段)
+        sub: (intervalNote ?? (d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ"))
+          + (rotation ? " ・ 連打し続けたときの回数(実際は下の回しのとおり)" : ""),
       });
     }
-    // <フラグ> を爆発させる技は「積み直しの 1 周」で DPS を出す(毎回そのスタック数が
-    // 乗る前提にしない)。回数も 1 周の時間も Rust が決めた値をそのまま出す
-    if (reapply) {
+    // チャネリング技(押している間、一定間隔で攻撃を繰り返す)。上の「合計ダメージ」は
+    // 1 tick ぶん(ゲーム内の表示と同じ)なので、1 回の使用で何回入るかをここで言う
+    if (skill?.channeling) {
+      const { ticks, tick_seconds } = skill.channeling;
       mats.push({
-        label: `積み直し ${reapply.applier_skill_name} × ${reapply.applier_uses} 回 → ${attackerSkillName}`,
-        value: fmtNum(reapply.seconds, 2, "s"),
-        n: reapply.seconds, unit: "s",
-        sub: `1 周で <フラグ> を ${reapply.stacks_to_apply} 積み直す(1 回 +${reapply.stacks_per_use})`
-          + (reapply.cooldown_bound ? ` ・ CT ${fmtNum(reapply.cooldown_seconds, 0, "s")} を待つぶん多く撃つ` : ""),
+        label: "チャネリング",
+        value: `${fmtInt(ticks)} 回`,
+        n: ticks,
+        sub: `合計ダメージ(${fmtInt(result.hit_count)} 段)を ${fmtNum(tick_seconds, 2, "s")} 毎に、`
+          + `最大 ${fmtNum(tick_seconds * ticks, 2, "s")} 撃ち続けます`,
       });
+    }
+    // 回し(連打する技 + 差し込む CT 技)。**技ごとの寄与・取り分・合間の回数は主役カードの
+    // 「回し」の段が常設で出している**ので、ここに同じ内訳を二重に持たない(§00 ②)。
+    // 残すのは段では言えない**理由** —— その間隔が何で決まっているか(CT 律速 / 積み直し律速)と、
+    // 差し込みだけで時間が埋まっていること
+    if (rotation) {
+      for (const insert of rotation.inserts) {
+        const reason = rotation.crowded
+          ? "差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)"
+          : insert.cooldown_bound
+            ? `CT ${fmtNum(insert.cooldown_seconds, 0, "s")} が明くまで連打技を挟むので、この間隔になります`
+            : insert.filler_uses > 0
+              ? `<フラグ> を積み直すのに連打技を ${insert.filler_uses} 回挟むので、CT より長くなります`
+              : `CT ${fmtNum(insert.cooldown_seconds, 0, "s")} が明けたらすぐ撃てます`;
+        mats.push({
+          label: `↳ ${insert.skill_name} の間隔`,
+          value: fmtNum(insert.interval_seconds, 2, "s"),
+          n: insert.interval_seconds, unit: "s",
+          sub: reason + (insert.burst ? " ・ <フラグ> 爆発つき" : ""),
+        });
+      }
     }
     // 技とは別枠のダメージ(<フラグ>)。Rust が「この秒数に 1 回」を当てた dps を持っている
     // ので、画面は側を選んで並べるだけ(合算は combined が持つ)
@@ -275,7 +325,9 @@
         label: "<フラグ> 爆発",
         value: burstDps !== null ? fmtInt(Math.round(burstDps)) : "—",
         n: burstDps === null ? undefined : Math.round(burstDps),
-        sub: reapply ? "1 周に 1 度" : "技 1 回につき 1 度",
+        sub: mainInsert
+          ? `${attackerSkillName} 1 回につき 1 度(${fmtNum(mainInsert.interval_seconds, 2, "s")} に 1 回)`
+          : "技 1 回につき 1 度",
       });
     }
     if (expectedDps !== null && result.critical_chance > 0 && result.critical_chance < 1) {
@@ -287,13 +339,14 @@
       });
     }
     return {
-      mult: `÷ ${fmtNum(reapply?.seconds ?? cycle?.seconds ?? d.value, 2, "s")}`,
+      mult: dpsDenominator !== null ? `÷ ${fmtNum(dpsDenominator, 2, "s")}` : "回し",
       delta: null,
       to: Math.round(dpsValue),
       mats,
       idle: 0,
-      expr: reapply
-        ? "1 秒あたり = (積み直し × 回数 + 主軸 + <フラグ> 爆発) ÷ 1 周の時間 ＋ <フラグ> 持続(1 秒ごと)"
+      expr: rotation
+        ? "1 秒あたり = 差し込む技(＋ <フラグ> 爆発) ÷ その間隔 ＋ 連打技 × 空いた時間"
+          + (flag ? " ＋ <フラグ> 持続(1 秒ごと)" : "")
         : (cycle
             ? "1 秒あたり = (スキルの合計 + 通常攻撃の合計) ÷ 1 サイクル"
             : "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60")
@@ -353,7 +406,7 @@
       type="button" class="node rate"
       aria-expanded={store.isOpen("dps")} onclick={() => toggle("dps")}
     >
-      <span class="nl">DPS <span class="num">(÷ <Value motion={() => result.actual_delay?.value ?? null} value={result.actual_delay ? fmtNum(result.actual_delay.value, 2, "s") : "—"} />)</span></span>
+      <span class="nl">DPS {#if dpsDenominator !== null}<span class="num">(÷ <Value motion={() => dpsDenominator} value={fmtNum(dpsDenominator, 2, "s")} />{mainInsert ? " ごとに 1 回" : ""})</span>{:else if rotation}<span class="num">(回し)</span>{/if}</span>
       <Value class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : "—"} />
       <span class="nsub dim">
         <span class="nsub-line"><Value motion={() => (dpsValue === null ? null : Math.round(dpsValue))} delta={{}} /></span>
@@ -361,10 +414,10 @@
           <span>
             {#if intervalNote}
               {intervalNote}
-            {:else if result.combo}
-              {Math.round(result.combo.uses_per_minute)} 回/分 ・{critMode ? "クリ確定" : "非クリ"}
-            {:else if result.actual_delay}
-              {Math.round(result.actual_delay.uses_per_minute)} 回/分 ・{critMode ? "クリ確定" : "非クリ"}
+            {:else if usesPerMinute !== null}
+              {attackerSkillName} {fmtNum(usesPerMinute, 1)} 回/分{rotation && filler && !filler.is_main ? ` ・ 合間に ${filler.skill_name}` : ""} ・{critMode ? "クリ確定" : "非クリ"}
+            {:else if rotation}
+              連打と差し込みの回し ・{critMode ? "クリ確定" : "非クリ"}
             {/if}
           </span>
         </span>

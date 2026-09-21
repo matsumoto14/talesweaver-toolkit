@@ -187,6 +187,33 @@ struct PreviewDamageArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RetainRotationSkillsArgs {
+    rotation_skill_ids: Option<Vec<String>>,
+    game_character_id: String,
+}
+
+/// キャラタブの「差し込む CT 技」の候補。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RotationChoicesArgs {
+    character: domain::NewCharacter,
+    buffs: domain::BuffSelection,
+    content_id: String,
+    /// 計算タブの材料(そこで選び直した技・コンボ・一時調整)。キャラタブは既定のまま
+    #[serde(default)]
+    skill_id: Option<String>,
+    #[serde(default)]
+    combo_count: u32,
+    #[serde(default)]
+    combo_skill_type: Option<domain::ComboSkillType>,
+    #[serde(default)]
+    normal_attack_id: Option<String>,
+    #[serde(default)]
+    temporary_adjustments: Option<domain::Adjustments>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct EvaluateContentsArgs {
     character: domain::NewCharacter,
     buffs: domain::BuffSelection,
@@ -514,6 +541,26 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "can_separate_measurement" => {
             let a: CanSeparateMeasurementArgs = args_of(command, args)?;
             ok(commands::can_separate_measurement(a.attacks))
+        }
+        "retain_rotation_skills" => {
+            let a: RetainRotationSkillsArgs = args_of(command, args)?;
+            ok(commands::retain_rotation_skills(
+                a.rotation_skill_ids,
+                a.game_character_id,
+            ))
+        }
+        "list_rotation_choices" => {
+            let a: RotationChoicesArgs = args_of(command, args)?;
+            done(commands::list_rotation_choices(
+                a.character,
+                a.buffs,
+                a.content_id,
+                a.skill_id,
+                a.combo_count,
+                a.combo_skill_type,
+                a.normal_attack_id,
+                a.temporary_adjustments,
+            ))
         }
         "evaluate_contents" => {
             let a: EvaluateContentsArgs = args_of(command, args)?;

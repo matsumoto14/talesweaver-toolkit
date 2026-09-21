@@ -23,7 +23,6 @@ pub mod enemy;
 pub mod equipment;
 pub mod equipment_class;
 pub mod equipment_polish;
-pub mod flag_cycle;
 pub mod game_tables;
 pub mod growth_apply;
 pub mod inkri;
@@ -31,6 +30,7 @@ pub mod lumina_corridor;
 pub mod mastery;
 pub mod measurement;
 pub mod random_option;
+pub mod rotation;
 pub mod rounding;
 pub mod siena;
 pub mod skill;
@@ -77,7 +77,8 @@ pub use content::{ReachTier,
     ContentSeries, GameRegion, RequirementCheck,
 };
 pub use content_evaluation::{
-    evaluate_contents_for_character, FlagBurstInput, FlagEvaluationInput, SkillEvaluationInput,
+    evaluate_contents_for_character, FlagEvaluationInput, RotationCandidateEvaluationInput,
+    RotationEvaluationInput, RotationInsertMaterial, SkillEvaluationInput,
 };
 pub use critical_rate::{
     critical_rate, CriticalRate, CriticalRateError, CriticalRateSourceId, CriticalRateSources,
@@ -85,12 +86,17 @@ pub use critical_rate::{
 };
 pub use damage::{
     apply_fixed_interval_dps, apply_summon_interval, calculate_damage, calculate_damage_with_combo,
-    combine_dps, combine_expected_dps, cycle_dps, defeat_seconds, evaluate, ComboCycle,
+    combine_dps, combine_expected_dps, defeat_seconds, evaluate, ComboCycle,
     DamageContribution, damage_levers, DamageLevers, DamageMaterial, DamageResult, DamageTarget,
     DamageTrace, DamageTriple, DependencyCoefficients, FormulaStepKind, LeverCandidate,
     DpsTriple, FormulaStep,
 };
-pub use flag_cycle::{plan_flag_cycle, FlagCyclePlan};
+pub use rotation::{
+    apply_explicit_inserts, choose_rotation, effective_cooldown_seconds, insert_expected_dps_gain,
+    plan_rotation,
+    rotation_dps, rotation_shares, RotationCandidate, RotationDamage, RotationInsert, RotationPlan,
+    RotationRole, RotationRoles, RotationShare, RotationShares, RotationSlot,
+};
 pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,
     AccuracyBoostSource,
@@ -158,7 +164,7 @@ pub use siena::{
     SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES, SIENA_STAGE_MAX,
 };
 pub use skill::{
-    Attacker, ComboSkillType, ComboSkillTypeError, ComboSkillVariant, FullCharge, Skill,
+    Attacker, Channeling, ComboSkillType, ComboSkillTypeError, ComboSkillVariant, FullCharge, Skill,
     SkillDependency, SkillForm, SkillTarget, SummonForm, SwiftSword,
 };
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};

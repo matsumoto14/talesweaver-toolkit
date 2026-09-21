@@ -72,6 +72,9 @@
           main_skill_id: mainSkillId === "" ? inheritedMainSkill : mainSkillId,
         };
         if (source.game_character_id !== gameCharacterId) {
+          // 差し込む CT 技はコピー元キャラのスキル id なので、別キャラへのコピーでは捨てる
+          // (残すと validate_rotation_skills に弾かれて登録できない)
+          payload.rotation_skill_ids = null;
           // キャラ種が違うコピーでは、旧キャラ専用のキャラスキルを落とす(幽霊スキル対策)
           payload.stat_sources.character_skills.skill_ids = await retainCharacterSkills(
             payload.stat_sources.character_skills.skill_ids,
@@ -94,6 +97,8 @@
           summon_skill_id: null,
           // 「次の目標」は登録時には決めない。ホームが自動で選び、要るときだけ上書きする
           goal_content_id: null,
+          // 差し込む CT 技も登録時には決めない(未設定 = 既定を自動で差し込む)
+          rotation_skill_ids: null,
         };
       }
       const saved = await createCharacter(payload);

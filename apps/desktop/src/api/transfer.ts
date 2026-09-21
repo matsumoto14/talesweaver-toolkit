@@ -9,7 +9,8 @@
  */
 import {
   createBuffSet, createCharacter, getDamageSnapshot, listBuffSets, listCharacterIcons,
-  listCharacters, normalizeCharacterSkills, normalizeSummonSkillSelection, setCharacterIcon,
+  listCharacters, normalizeCharacterSkills, normalizeSummonSkillSelection, retainRotationSkills,
+  setCharacterIcon,
   setDamageSnapshot, setDefaultBuffSet,
 } from "./commands";
 import type {
@@ -107,6 +108,10 @@ export async function importAll(file: TransferFile): Promise<ImportResult> {
     const characterSkills = await normalizeCharacterSkills(
       character.stat_sources.character_skills,
     );
+    const rotationSkillIds = await retainRotationSkills(
+      character.rotation_skill_ids ?? null,
+      character.game_character_id,
+    );
     // 登録に要るのは NewCharacter の分だけ。id と最終保存日時は保存先が新しく付ける
     const draft: NewCharacter = {
       name: character.name,
@@ -119,6 +124,9 @@ export async function importAll(file: TransferFile): Promise<ImportResult> {
       main_skill_id: normalized.main_skill_id,
       summon_skill_id: normalized.summon_skill_id,
       goal_content_id: character.goal_content_id,
+      // 欄の無い旧い書き出しは未設定(null)= 既定で読む(FORMAT_VERSION は上げない)。
+      // 選べなくなった id(消えた技・改名)は落とす — 残すと登録の検証で弾かれる
+      rotation_skill_ids: rotationSkillIds,
       default_buff_set_id: null,
     };
     const created = await createCharacter(draft);

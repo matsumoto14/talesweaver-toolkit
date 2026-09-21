@@ -15,6 +15,8 @@ pub mod flag;
 pub mod inkri;
 pub mod masteries;
 pub mod random_options;
+mod skill_channeling;
+mod skill_cooldowns;
 mod skill_targets;
 pub mod skills;
 pub mod titles;
@@ -55,6 +57,7 @@ pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};
 pub use skills::{
     all_skills, attacker_of, cooldown_of, find_skill, form_of, normalize_summon_skill_selection,
     resolve_skill_variants,
+    retain_rotation_skills,
     skills_for,
 };
 pub use titles::{title_catalog, TITLE_SOURCE};

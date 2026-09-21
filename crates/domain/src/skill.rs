@@ -175,6 +175,19 @@ pub struct FullCharge {
     pub seconds: f64,
 }
 
+/// チャネリング技の tick(wiki スキル性能一覧の攻撃力列 `(Ns毎)` と動作列の持続秒)。
+///
+/// `492%x10 (1s毎)` を 10 秒撃つ技なら「1 tick = 492% × 10 段」を 10 tick。
+/// **ゲーム内の表示と揃えるため、1 発の主役数字と合計ダメージは 1 tick ぶんのまま**で、
+/// DPS・討伐時間・回し(`DamageResult::cycle_total`)だけが tick 数を含む(ADR-019)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Channeling {
+    /// 1 回の使用で撃つ tick 数(持続秒 ÷ tick 間隔)
+    pub ticks: u32,
+    /// tick の間隔(秒)
+    pub tick_seconds: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -204,10 +217,11 @@ pub struct Skill {
     pub critical_rate: Option<i64>,
     /// スキル Lv(wiki スキル性能一覧の SLv。倍率は Lv 別未対応なのでこの Lv の値を持つ)
     pub level: u8,
-    /// 単体チャネリングスキルか(wiki スキル性能一覧の 区分に `続` を含み、対象指定が `単体`。
-    /// 凡例は wiki「Skill#f8e303fb」)。極限スキル「フルスロットル」の段数増加はこれにだけ乗る
+    /// チャネリング(押している間、一定間隔で攻撃を繰り返す)技の tick。
+    /// wiki スキル性能一覧の区分に `続` を含む技だけ `Some`。
+    /// **段数(`hit_count`)は 1 tick ぶん**で、1 回の使用ぶんは `段数 × ticks`
     #[serde(default)]
-    pub single_target_channeling: bool,
+    pub channeling: Option<Channeling>,
     /// 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列。
     /// 秒数として読めない行(表記が `0` 等)は `None` = 中ディレイ・DPS を出せない
     #[serde(default)]
@@ -283,10 +297,11 @@ pub enum SummonForm {
 
 impl Skill {
     /// 1 回ぶんの火力の目安(倍率 × 段数)。0 段のスキルは無いので段数は最低 1 扱い。
-    /// 主軸候補の順。対ボスで使う単体スキルを先にし、その中を中ディレイ込みの継続火力順
-    /// (`power_per_second`)にする。依存種別では絞らない(斬り・物理複合・魔剣など、
-    /// 別ビルドの入口を候補から消さないため)。中ディレイ不明のものは既知のものより後ろで、
-    /// 1 回ぶんの火力(`power`)順。
+    /// 主軸候補の順。対ボスで使う単体スキルを先にし、その中を**1 回あたりの間隔込みの**
+    /// 継続火力順(`power_per_second`。間隔は基本中ディレイ + チャージと CT の長いほう)に
+    /// する。依存種別では絞らない(斬り・物理複合・魔剣など、別ビルドの入口を候補から
+    /// 消さないため)。中ディレイ不明のものは既知のものより後ろで、1 回ぶんの火力
+    /// (`power`)順。回しの連打技を自動で選ぶときもこの並びを使う(`rotation`)。
     pub fn main_skill_order(a: &Skill, b: &Skill) -> std::cmp::Ordering {
         use std::cmp::Ordering;
         let single = |s: &Skill| s.target == Some(SkillTarget::Single);
@@ -303,17 +318,26 @@ impl Skill {
         }
     }
 
+    /// 1 tick(チャネリングでない技は 1 回)ぶんの火力の目安。
     pub fn compute_power(multiplier: f64, hit_count: u32) -> f64 {
         multiplier * f64::from(hit_count.max(1))
+    }
+
+    /// 1 回の使用で撃つ tick 数。チャネリングでない技は 1。
+    pub fn channeling_ticks(&self) -> u32 {
+        self.channeling.map_or(1, |c| c.ticks.max(1))
     }
 
     /// 倍率・段数・チャージ時間を変えたあとに火力の目安を付け直す。
     /// 継続火力は 1 回の所要時間(基本中ディレイ + チャージ時間)で割る。
     fn refresh_power(&mut self) {
-        self.power = Self::compute_power(self.multiplier, self.hit_count);
+        // チャネリング技の 1 回は tick 数ぶん撃つ(段数は 1 tick ぶん)
+        self.power =
+            Self::compute_power(self.multiplier, self.hit_count) * f64::from(self.channeling_ticks());
         self.power_per_second = Self::compute_power_per_second(
             self.power,
             self.base_actual_delay.map(|d| d + self.charge_seconds),
+            self.cooldown_seconds,
         );
     }
 
@@ -363,7 +387,7 @@ impl Skill {
             accuracy: None,
             critical_rate: None,
             level: 1,
-            single_target_channeling: false,
+            channeling: None,
             base_actual_delay: None,
             actual_delay_fixed: false,
             normal_attack: false,
@@ -383,11 +407,20 @@ impl Skill {
         }
     }
 
-    /// 継続火力の目安(倍率 × 段数 ÷ 基本中ディレイ)。基本中ディレイが未収録 / 0 以下なら比較不能
-    pub fn compute_power_per_second(power: f64, base_actual_delay: Option<f64>) -> Option<f64> {
-        base_actual_delay
-            .filter(|&delay| delay > 0.0)
-            .map(|delay| power / delay)
+    /// 継続火力の目安(倍率 × 段数 ÷ 1 回あたりの間隔)。
+    ///
+    /// 間隔は 1 回の所要時間(基本中ディレイ + チャージ)と CT の長いほう — CT のある技は
+    /// 明けるまで撃てないので、中ディレイだけで割ると連打できる技より前に出てしまう。
+    /// 所要時間が未収録 / 0 以下なら比較不能。**候補の並べ替え専用の目安**で、実際に
+    /// 何秒に 1 回撃てるかは回し(`rotation`)が実際の所要時間から出す。
+    pub fn compute_power_per_second(
+        power: f64,
+        seconds: Option<f64>,
+        cooldown_seconds: Option<f64>,
+    ) -> Option<f64> {
+        seconds
+            .filter(|&seconds| seconds > 0.0)
+            .map(|seconds| power / seconds.max(cooldown_seconds.unwrap_or(0.0)))
     }
 
     /// 選択したコンボスキルタイプとシエナのオーラから、今回の計算に使う性能を解決する。
@@ -439,7 +472,7 @@ mod tests {
             accuracy: Some(100),
             critical_rate: Some(5),
             level: 10,
-            single_target_channeling: false,
+            channeling: None,
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
             normal_attack: false,
@@ -468,6 +501,7 @@ mod tests {
             power_per_second: Skill::compute_power_per_second(
                 Skill::compute_power(5.55, 11),
                 Some(1.4),
+                None,
             ),
             attacker: Attacker::Player,
             summon_form: None,

@@ -3,15 +3,18 @@
   // 属性は独立した補正源(`sources/ElementPane.svelte`)へ移した(2026-09-19)。
   import { untrack } from "svelte";
   import type {
-    CharacterSkillDef, CharacterSkillEffectsView, Skill, StatKind, StatPreview, StatSourceGroup,
+    BuffSelection, CharacterSkillDef, CharacterSkillEffectsView, RotationChoices, Skill, StatKind,
+    StatPreview, StatSourceGroup,
   } from "../../../api/types";
-  import { errorMessage, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
+  import {
+    errorMessage, listRotationChoices, resetCharacterIcon, setCharacterIcon,
+  } from "../../../api/commands";
   import {
     effectLabel, isRecordOnly, mainSkillOptions as buildMainSkillOptions, RECORD_ONLY_LABEL,
     resolvedEffectsOf, skillBoundSkills, toggleCharacterSkill,
   } from "../../../characterSkills";
-  import { ETERNAL_MILESTONES, type Draft } from "../../../draft";
-  import { fmtInt, fmtSigned, fmtSignedPct, formatLayerValue } from "../../../format";
+  import { draftToPayload, ETERNAL_MILESTONES, type Draft } from "../../../draft";
+  import { fmtInt, fmtShareOf, fmtSigned, fmtSignedPct, formatLayerValue } from "../../../format";
   import {
     SKILL_FORMS, SKILL_FORM_LABELS,
     STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS, STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
@@ -89,6 +92,8 @@
     // 召喚スキルも捨てる。前キャラのスキル id が残ると validate_summon_skill が
     // 「そのキャラのスキルではありません」で弾き、自動保存が止まる(レビュー指摘 2026-09-18)
     draft.summonSkillId = "";
+    // 差し込む CT 技も同じ(validate_rotation_skills が弾いて自動保存が止まる)
+    draft.rotationSkillIds = null;
   }
 
   // エタの意志 Lv は 0〜100 の**数値**。101 個を並べても段階にならないので、
@@ -165,6 +170,113 @@
     if (isRecordOnly(effects)) return RECORD_ONLY_LABEL;
     return "マスタリー未取得";
   }
+
+  // --- 差し込む CT 技(回し) ------------------------------------------------
+  // 候補・既定 ON・差し込んだときの損得は **Rust の回しそのもの**(list_rotation_choices)が
+  // 返す。CT の判定も既定の選び方もここには写さない(計算タブ・ホームと同じ 1 本を通す)。
+  let rotation = $state<RotationChoices | null>(null);
+  const rotationLatest = latest({ debounce: 200 });
+  /** 損得を出すのに敵が要る。計算タブでいま見ている対象(無ければ敵データのある先頭) */
+  const rotationTarget = $derived.by(() => {
+    const withEnemy = app.areas.flatMap((a) => a.contents).filter((c) => c.enemy_id !== null);
+    return withEnemy.find((c) => c.id === app.calcTargetId) ?? withEnemy[0] ?? null;
+  });
+  $effect(() => {
+    const contentId = rotationTarget?.id ?? null;
+    const payload = draftToPayload(draft);
+    const buffs = JSON.parse(JSON.stringify(
+      app.buffSets.find((set) => set.id === draft.defaultBuffSetId)?.choices ?? { choices: [] },
+    )) as BuffSelection;
+    if (contentId === null || payload.main_skill_id === null) {
+      rotationLatest.cancel();
+      rotation = null;
+      return;
+    }
+    rotationLatest.run((isCurrent) =>
+      listRotationChoices(payload, contentId, buffs)
+        .then((r) => {
+          if (isCurrent()) rotation = r;
+        })
+        .catch(() => {
+          // 取得に失敗した・編集途中で検証が通らないだけ。**直前の候補をそのまま残す** —
+          // 行ごと消すと、名前を消した一瞬などで押そうとしたチップが消える(§00③)
+        }),
+    );
+    return () => rotationLatest.cancel();
+  });
+  const rotationCandidates = $derived(rotation?.candidates ?? []);
+  /** いま ON の技。未設定(null)なら既定 ON がそのまま点いて見える(初期値は常に埋まっている)。
+   *  保存済みの id のうち候補に無いもの(主軸自身・形態が変わって外れた技)は数えない —
+   *  チップに出ないものを「n / 候補数」に数えると、点いている数と合わなくなる */
+  const rotationOnIds = $derived(
+    (draft.rotationSkillIds
+      ?? rotationCandidates.filter((c) => c.default_on).map((c) => c.skill_id)
+    ).filter((id) => rotationCandidates.some((c) => c.skill_id === id)),
+  );
+  const rotationOptions = $derived(
+    rotationCandidates.map((c) => ({ value: c.skill_id, label: c.skill_name })),
+  );
+  /** 押した瞬間に保存(自動保存)と再計算。並びは候補の並びのまま(押した順で入れ替えない) */
+  function toggleRotationSkill(id: string, on: boolean) {
+    const next = on
+      ? [...rotationOnIds, id]
+      : rotationOnIds.filter((x) => x !== id);
+    draft.rotationSkillIds = rotationCandidates
+      .map((c) => c.skill_id)
+      .filter((x) => next.includes(x));
+  }
+  /**
+   * 差し込むと DPS が下がる技。**既定では見せない**(ユーザー決定 2026-09-21) — 既定で
+   * ON にならないものを並べると、押せる数が増えるだけで選ぶ手がかりにならない。
+   * 畳んだ先(`Disclosure`)に置き、見たい人だけが開いて手で ON にできる。
+   */
+  const rotationUps = $derived(
+    rotationCandidates.filter((c) => (c.expected_dps_gain ?? 0) >= 0),
+  );
+  /** 損得を出せない候補(中ディレイ未収録など)。上段には出すが、割合の代わりに「?」を出す。
+   *  既定 ON にもならない(判定は domain の `choose_rotation`。画面では決めない) */
+  const rotationUnknown = (id: string) =>
+    rotationCandidates.find((c) => c.skill_id === id)?.expected_dps_gain === null;
+  const rotationDrops = $derived(
+    rotationCandidates.filter((c) => c.expected_dps_gain !== null && c.expected_dps_gain < 0),
+  );
+  const rotationDropsOn = $derived(
+    rotationDrops.filter((c) => rotationOnIds.includes(c.skill_id)),
+  );
+  /** 回し全体に対する割合。絶対値だけだと桁が大きく、実際より深刻に見える(実機 2026-09-21) */
+  const rotationDropShare = (gain: number) => fmtShareOf(gain, rotation?.expected_dps ?? null);
+  /** 段に添える割合。上がる技も下がる技も同じ形で、チップの中に 1 つずつ置く */
+  const rotationGainLabel = (id: string) => {
+    const gain = rotationCandidates.find((c) => c.skill_id === id)?.expected_dps_gain ?? null;
+    if (gain === null) return null;
+    return rotationDropShare(Math.round(gain));
+  };
+  const optionsOf = (list: typeof rotationCandidates) =>
+    list.map((c) => ({ value: c.skill_id, label: c.skill_name }));
+  const rotationChipTitle = (id: string) => {
+    const c = rotationCandidates.find((x) => x.skill_id === id);
+    if (!c) return undefined;
+    const gain = c.expected_dps_gain;
+    if (gain === null) {
+      return `CT ${c.cooldown_seconds}s ・ 差し込んだときの損得は出せません(1 回の所要時間が未収録)`;
+    }
+    const share = rotationDropShare(gain);
+    const amount = `${share === null ? "" : `${share}(`}${fmtSigned(Math.round(gain))}${share === null ? "" : ")"}`;
+    return gain < 0
+      ? `CT ${c.cooldown_seconds}s ・ 差し込むと DPS が下がる ${amount}`
+      : `CT ${c.cooldown_seconds}s ・ 差し込むと DPS が ${amount}`;
+  };
+  /** 主軸の形態を変えたら、前の形態で選んだ差し込みは候補ごと入れ替わるので既定に戻す */
+  let lastForm = untrack(() => mainSkill?.form ?? null);
+  $effect(() => {
+    const form = mainSkill?.form ?? null;
+    if (form === lastForm) return;
+    const previous = lastForm;
+    lastForm = form;
+    // 技一覧を読み込む前(null → 形態)は「形態が変わった」ではない。保存値を消さない
+    if (previous === null || form === null) return;
+    draft.rotationSkillIds = null;
+  });
 
   // 召喚獣(熊・破壊精霊)が撃つスキル。アナイス以外はこのキャラのスキルに本体以外の
   // 攻撃者が 1 件も無いので欄自体を出さない(§00②「要らないものを見せない」。ADR-016)。
@@ -320,6 +432,78 @@
         bind:value={draft.mainSkillId}
       />
     </div>
+    {#if rotationCandidates.length > 0}
+      <!-- 主軸のすぐ下。CT のある技は「連打の合間に差し込む」ので、主軸を決めた次に決める
+           (§00①「決める順に並べる」)。候補・既定 ON・損得はすべて Rust の回しが返す -->
+      <div class="wide">
+        <span class="label">
+          差し込む CT 技
+          <!-- 上限は無いので「n / 候補数」を値の隣に常設する(§07) -->
+          <Value
+            class="dim normal"
+            motion={() => rotationOnIds.length}
+            value={`${rotationOnIds.length} / ${rotationCandidates.length}`}
+          />
+        </span>
+        {#if rotationUps.length > 0}
+          <Choose
+            label="差し込む CT 技"
+            class="chiprow"
+            options={optionsOf(rotationUps)}
+            values={rotationOnIds}
+            onToggle={toggleRotationSkill}
+            titleFor={rotationChipTitle}
+          >
+            {#snippet item(o)}
+              {@const cd = rotationCandidates.find((c) => c.skill_id === o.value)?.cooldown_seconds ?? 0}
+              {o.label} <Value class="chip-ct" value={`${cd}s`} />
+              <!-- 損得を出せない候補は割合の代わりに「?」(未収録は 0 や空白にしない。§08) -->
+              {#if rotationUnknown(o.value)}<Value class="chip-gain" value={null} />{/if}
+            {/snippet}
+          </Choose>
+        {:else}
+          <p class="hint dim">差し込むと DPS が上がる技はありません。</p>
+        {/if}
+        {#if rotationDrops.length > 0}
+          <!-- 下がる技は畳んだ先に置く。ON にしているものは summary で分かる(§00②④) -->
+          <Disclosure class="drop-pick" summaryClass="chip quiet">
+            {#snippet summary()}
+              DPS が下がる技 <Value class="dim normal" motion={() => rotationDrops.length} value={`${rotationDrops.length} 件`} />
+              {#if rotationDropsOn.length > 0}
+                <Value class="badge drop-badge" motion={() => rotationDropsOn.length} value={`${rotationDropsOn.length} 件 ON`} />
+              {/if}
+            {/snippet}
+            <Choose
+              label="DPS が下がる差し込み CT 技"
+              class="chiprow"
+              options={optionsOf(rotationDrops)}
+              values={rotationOnIds}
+              onToggle={toggleRotationSkill}
+              titleFor={rotationChipTitle}
+            >
+              {#snippet item(o)}
+                {@const cd = rotationCandidates.find((c) => c.skill_id === o.value)?.cooldown_seconds ?? 0}
+                {o.label}
+                <Value class="chip-ct" value={`${cd}s`} />
+                {#if rotationGainLabel(o.value)}
+                  <Value class="chip-gain" tone="down" value={rotationGainLabel(o.value)} />
+                {/if}
+              {/snippet}
+            </Choose>
+            <p class="hint dim">ここの技は、差し込むと連打していたぶんが減って DPS が下がります。それでも撃ちたいときだけ ON にしてください。</p>
+          </Disclosure>
+        {/if}
+        <p class="hint dim">
+          CT が明けるまでの間は連打技を撃ちます。{rotation?.filler_skill_name
+            ? `主軸に CT があるので、合間に ${rotation.filler_skill_name} を連打します。`
+            : "主軸を連打して、選んだ技を差し込みます。"}
+          選んだ内容は計算タブ・ホームの判定にもそのまま効きます。
+          <!-- 損得は敵ごとに変わる(既定 ON も対象で決まる)ので、どの対象で見ているかを言う。
+               計算タブで別の対象を見ていると、あちらの既定 ON と違って見えることがある -->
+          {#if rotationTarget}損得は<b>{rotationTarget.name}</b>での判定です(対象を変えると変わります)。{/if}
+        </p>
+      </div>
+    {/if}
     {#if boundSkills.length > 0}
       <!-- いまの技でだけ意味がある入力。形態や技を変えると中身が入れ替わる
            (§00②。出す / 出さないの判定は `requires` の印) -->
@@ -373,6 +557,16 @@
      app.css 共通の .badge-in(弾む)に乗る。動きを消す設定のときだけ、弾みの代わりに
      枠線で「変わった」を残す(色・弾みが両方消えると何も伝わらなくなる) */
   .current-icon { display: inline-flex; border-radius: var(--r-window); }
+
+  /* 差し込むと DPS が下がる技。状態色は §02 の「届かない」の段に収める(独自色を足さない) */
+  /* Disclosure の summary の中に出るので :global で受ける */
+  .wide :global(.drop-badge) {
+    background: var(--state-short-bg); border-color: var(--state-short-bd); color: var(--state-short-fg);
+  }
+  /* チップに添える CT 秒と損得。数値書体は Value が持つので、ここは間合いと幅だけ。
+     桁が増えてもチップの幅が動かないようにする(§00③) */
+  .wide :global(.chip-ct) { margin-left: 4px; opacity: 0.75; }
+  .wide :global(.chip-gain) { margin-left: 5px; min-width: 5.5em; text-align: right; }
   @media (prefers-reduced-motion: reduce) {
     /* .badge-in は app.css の共通クラスを `use:changed` が実行時に付ける。
        静的な markup に出てこないので :global で受ける */

@@ -41,6 +41,21 @@ export const fmtSigned = (n: number, digits: Digits = 0, unit = ""): string => {
 /** 符号つきの割合(0–1)。「+12%」「-3.5%」 */
 export const fmtSignedPct = (rate: number, digits: Digits = 0): string => fmtSigned(rate * 100, digits, "%");
 
+/**
+ * 「全体のどれくらいか」を符号つきの % で(差 ÷ 全体)。DPS の増減のように、
+ * **絶対値だけでは大きさが分からない**数に添える。小数 1 桁で、丸めて 0.0% になるものは
+ * 「−0.1% 未満」と言う(0.0% と出すと「変わらない」に読める)。
+ * 全体が出せない / 0 のときは null(その場合は割合を出さない)。
+ */
+export const fmtShareOf = (diff: number, total: number | null): string | null => {
+  if (total === null || total <= 0) return null;
+  const rate = diff / total;
+  if (Math.abs(rate) * 100 < 0.05) {
+    return `${diff < 0 ? "−" : "+"}0.1% 未満`;
+  }
+  return fmtSignedPct(rate, 1);
+};
+
 /** 倍率。「×1.42」 */
 export const fmtRate = (mult: number, digits: Digits = 2): string => `×${fmtNum(mult, digits)}`;
 

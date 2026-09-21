@@ -42,6 +42,8 @@ const DB_NAME = "tw-context";
  * どの id が消えたかの判定は Rust(WASM)のカタログを引く正規化関数しか持っていないので、
  * `onupgradeneeded` ではなく `normalizeStoredSkillSelections`(ストアを開いた直後の通常の
  * トランザクション)で行う(2026-09-21)。
+ * v11 でキャラに `rotation_skill_ids`(回しに差し込む CT 技)が加わった(SQLite 側の v19 と
+ * 同じ移行)。既存行は未設定(null)= 既定の 1 つを自動で差し込むまま。
  * v9 で装備に `avatar_corrections`(補正付きアバターをどの部位に着けているか)が加わった。
  * SQLite は JSON 列(`equipment`)なので列追加も migrate も要らないが、IndexedDB は v3 と同じ理由で
  * 既存行に中立値(全部位 false)を足す(2026-09-21)。
@@ -51,7 +53,7 @@ const DB_NAME = "tw-context";
  * 読んでから順に書き戻し、最後の 1 本以外の埋め直しが消えていた(v5 の DB を v9 で開くと
  * summon_skill_id と lumina_corridor が落ちる)。版ごとの分岐も持たず、欠けている欄だけを埋める。
  */
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -86,6 +88,7 @@ function withEquipmentDefaults(character: NewCharacter): NewCharacter {
     equipment.polish !== undefined &&
     equipment.owned_titles !== undefined &&
     partial.summon_skill_id !== undefined &&
+    partial.rotation_skill_ids !== undefined &&
     statSources.lumina_corridor !== undefined
   ) {
     return character;
@@ -94,6 +97,8 @@ function withEquipmentDefaults(character: NewCharacter): NewCharacter {
     ...character,
     // v6: 召喚スキル(旧い書き出し JSON には欄が無い)。未収録は未選択(null)扱い
     summon_skill_id: partial.summon_skill_id ?? null,
+    // v11: 差し込む CT 技(旧い行・旧い書き出し JSON には欄が無い)。未設定(null)= 既定
+    rotation_skill_ids: partial.rotation_skill_ids ?? null,
     equipment: {
       ...character.equipment,
       avatar: equipment.avatar ?? NEUTRAL_AVATAR(),
@@ -173,7 +178,8 @@ function open(): Promise<IDBDatabase> {
           if (!cursor) return;
           const row = cursor.value as RegisteredCharacter;
           // v3(avatar / polish)・v4(owned_titles)・v6(summon_skill_id)・
-          // v8(lumina_corridor)・v9(avatar_corrections)。欠けている欄に中立値を足す
+          // v8(lumina_corridor)・v9(avatar_corrections)・v11(rotation_skill_ids)。
+          // 欠けている欄に中立値を足す
           // (SQLite 側で Rust が serde default / ALTER TABLE で埋めるのと同じ意味)
           const filled = withEquipmentDefaults(row) as RegisteredCharacter;
           // v2: 「次の目標」を未設定(null)として足す
@@ -285,6 +291,8 @@ export const deleteCharacter = (id: number) =>
  *   (SQLite 側の v17 移行 `migrate_summon_skill_out_of_main` と同じ意味)
  * - v10: カタログから消えたキャラスキルの id を落とす(SQLite 側の v18 移行
  *   `migrate_removed_character_skills` と同じ意味)。残っていると計算がまるごと止まる
+ * - v11: 選べなくなった「差し込む CT 技」の id を落とす(SQLite 側の v19 移行
+ *   `migrate_removed_rotation_skills` と同じ意味)。残っていると保存の検証で弾かれる
  *
  * **判定はすべて `normalize`(呼び出し側 = invoke.wasm.ts が Rust の正規化関数を渡す)に委ね、
  * ここは結果を書き込むだけ**(スキル id の一覧を TS に書き写さない)。`onupgradeneeded` の
@@ -298,6 +306,10 @@ export const normalizeStoredSkillSelections = (normalize: {
     summonSkillId: string | null,
   ) => { main_skill_id: string | null; summon_skill_id: string | null };
   characterSkills: (characterSkills: CharacterSkills) => CharacterSkills;
+  rotationSkills: (
+    rotationSkillIds: string[] | null,
+    gameCharacterId: string,
+  ) => string[] | null;
 }) =>
   transact(CHARACTERS, "readwrite", async (tx) => {
     const store = tx.objectStore(CHARACTERS);
@@ -312,6 +324,13 @@ export const normalizeStoredSkillSelections = (normalize: {
         skill_levels: stored?.skill_levels ?? {},
       };
       const skills = normalize.characterSkills(before);
+      // v11: 選べなくなった差し込む CT 技を落とす(欄の無い古い行は未設定のまま)
+      const rotation = normalize.rotationSkills(
+        row.rotation_skill_ids ?? null,
+        row.game_character_id,
+      );
+      const rotationChanged =
+        JSON.stringify(rotation ?? null) !== JSON.stringify(row.rotation_skill_ids ?? null);
       const skillsChanged =
         skills.skill_ids.length !== before.skill_ids.length
         || Object.keys(skills.skill_levels).length !== Object.keys(before.skill_levels).length
@@ -321,11 +340,13 @@ export const normalizeStoredSkillSelections = (normalize: {
         summon.main_skill_id === row.main_skill_id
         && summon.summon_skill_id === (row.summon_skill_id ?? null)
         && !skillsChanged
+        && !rotationChanged
       ) continue;
       await wrap(store.put({
         ...row,
         main_skill_id: summon.main_skill_id,
         summon_skill_id: summon.summon_skill_id,
+        rotation_skill_ids: rotation ?? null,
         stat_sources: { ...row.stat_sources, character_skills: skills },
       }));
     }

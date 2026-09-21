@@ -27,10 +27,6 @@ const FULL_THROTTLE_DELAY_BASE: f64 = 25.0;
 const FULL_THROTTLE_DELAY_SUPER: f64 = 3.0;
 const FULL_THROTTLE_DELAY_HYPER: [f64; 6] = [7.0, 9.0, 11.0, 13.0, 15.0, 17.0];
 
-/// フルスロットルの単体チャネリングスキル段数(ハイパーリミット Lv1〜6)。
-/// 基本もスーパーリミットも +0 なので、ハイパーリミットの表だけ持つ。
-const FULL_THROTTLE_HITS_HYPER: [u32; 6] = [0, 0, 0, 1, 2, 3];
-
 /// ワイドフォーカスのスキル範囲(基本 / スーパーリミット / ハイパーリミット Lv1〜6)。
 /// 火力には効かないので記録のみ。
 const WIDE_FOCUS_BASE: f64 = 4.0;
@@ -43,7 +39,7 @@ const WIDE_FOCUS_HYPER: [f64; 6] = [4.0, 6.0, 8.0, 10.0, 12.0, 14.0];
 pub enum UltimateSkill {
     /// スコープアイ: クリティカルダメージ増加(カテゴリG)
     ScopeEye,
-    /// フルスロットル: 中ディレイ減少 + 単体チャネリングスキルの段数
+    /// フルスロットル: 中ディレイ減少
     FullThrottle,
     /// ワイドフォーカス: スキル範囲。火力には効かない
     WideFocus,
@@ -118,15 +114,6 @@ impl UltimateSkills {
             0.0
         };
         (FULL_THROTTLE_DELAY_BASE + super_limit + self.hyper(&FULL_THROTTLE_DELAY_HYPER)) / 100.0
-    }
-
-    /// フルスロットルの段数増加。**単体チャネリングスキルにだけ**乗る
-    /// (対象スキルかどうかの判定は `Skill::single_target_channeling`)。
-    pub fn added_hit_count(&self) -> u32 {
-        if !self.has(UltimateSkill::FullThrottle) {
-            return 0;
-        }
-        self.hyper(&FULL_THROTTLE_HITS_HYPER)
     }
 
     /// ワイドフォーカスのスキル範囲増加。火力には効かないので表示専用。
@@ -204,7 +191,6 @@ mod tests {
     fn 選んでいない極限スキルの効果は0() {
         let s = with(UltimateSkill::WideFocus, true, 6);
         assert_eq!(s.critical_damage_rate(), 0.0);
-        assert_eq!(s.added_hit_count(), 0);
         assert_eq!(s.actual_delay_reduction(), 0.0);
     }
 
@@ -213,15 +199,6 @@ mod tests {
     fn フルスロットルの中ディレイ減少は最大45パーセント() {
         let s = with(UltimateSkill::FullThrottle, true, 6);
         assert!((s.actual_delay_reduction() - 0.45).abs() < 1e-12);
-    }
-
-    // wiki Skill/極限: 段数はハイパーリミット Lv4 から +1/+2/+3
-    #[test]
-    fn フルスロットルの段数はハイパーリミットlv4から増える() {
-        for (lv, expected) in [(0, 0), (3, 0), (4, 1), (5, 2), (6, 3)] {
-            let s = with(UltimateSkill::FullThrottle, true, lv);
-            assert_eq!(s.added_hit_count(), expected, "Lv{lv}");
-        }
     }
 
     // wiki Skill/極限: +4 +2 +14 = +20

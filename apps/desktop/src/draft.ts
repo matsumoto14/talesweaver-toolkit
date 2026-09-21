@@ -45,6 +45,12 @@ export interface Draft {
    * ここから落とすとキャラタブを保存した瞬間にホームで選んだ目標が消える。
    */
   goalContentId: string;
+  /**
+   * 回しに差し込む CT 技。null = 未設定(既定を自動で差し込む)、[] = 差し込まない。
+   * **自動値は入れない** — ユーザーが触ったときだけ配列になる(ux-guidelines の
+   * 「入力欄は自動値を上書きする例外操作」)。
+   */
+  rotationSkillIds: string[] | null;
   defaultBuffSetId: number | null;
 }
 
@@ -123,6 +129,7 @@ export const buildDraft = (c: RegisteredCharacter): Draft => ({
   mainSkillId: c.main_skill_id ?? "",
   summonSkillId: c.summon_skill_id ?? "",
   goalContentId: c.goal_content_id ?? "",
+  rotationSkillIds: c.rotation_skill_ids ? [...c.rotation_skill_ids] : null,
   defaultBuffSetId: c.default_buff_set_id,
 });
 
@@ -138,5 +145,6 @@ export const draftToPayload = (draft: Draft): NewCharacter => ({
   main_skill_id: draft.mainSkillId === "" ? null : draft.mainSkillId,
   summon_skill_id: draft.summonSkillId === "" ? null : draft.summonSkillId,
   goal_content_id: draft.goalContentId === "" ? null : draft.goalContentId,
+  rotation_skill_ids: draft.rotationSkillIds ? [...draft.rotationSkillIds] : null,
   default_buff_set_id: draft.defaultBuffSetId,
 });

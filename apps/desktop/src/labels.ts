@@ -153,7 +153,7 @@ export const ULTIMATE_SKILL_LABELS: Record<UltimateSkill, string> = {
 /** 何に効くか(火力に効かないものはそう分かる文言にする)。 */
 export const ULTIMATE_SKILL_EFFECTS: Record<UltimateSkill, string> = {
   scope_eye: "クリティカルダメージ増加(非クリには乗りません)",
-  full_throttle: "中ディレイ減少 + 単体チャネリングスキルの段数",
+  full_throttle: "中ディレイ減少",
   wide_focus: "スキル範囲(火力には効きません)",
 };
 

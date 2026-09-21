@@ -383,6 +383,7 @@ pub fn create_character(
     }
     commands::validate_main_skill(&character)?;
     commands::validate_summon_skill(&character)?;
+    commands::validate_rotation_skills(&character)?;
     with_repo(&state, |repo| {
         repo.create(
             &character,
@@ -410,6 +411,7 @@ pub fn update_character(
     }
     commands::validate_main_skill(&character)?;
     commands::validate_summon_skill(&character)?;
+    commands::validate_rotation_skills(&character)?;
     with_repo(&state, |repo| {
         repo.update(
             id,
@@ -595,6 +597,15 @@ pub fn normalize_character_skills(
     commands::normalize_character_skills(character_skills.unwrap_or_default())
 }
 
+/// 選べなくなった「差し込む CT 技」を落とす(書き出し JSON の読み込みが呼ぶ。2026-09-21 追記)。
+#[tauri::command]
+pub fn retain_rotation_skills(
+    rotation_skill_ids: Option<Vec<String>>,
+    game_character_id: String,
+) -> Option<Vec<String>> {
+    commands::retain_rotation_skills(rotation_skill_ids, game_character_id)
+}
+
 /// 主軸に召喚スキルが紛れていたら召喚欄へ移す(書き出し JSON の読み込みが呼ぶ。2026-09-18 追記)。
 #[tauri::command]
 pub fn normalize_summon_skill_selection(
@@ -635,6 +646,34 @@ pub fn calculate_damage(
         combo_count,
         combo_skill_type,
         normal_attack_id.as_deref(),
+        // 回しに差し込む CT 技はキャラに保存した選択(未設定なら既定)
+        temporary_adjustments,
+        character.rotation_skill_ids.as_deref(),
+    )
+}
+
+/// キャラタブ・計算タブの「差し込む CT 技」の候補・既定 ON・損得。
+/// `skill_id` 以降は計算タブの材料(選び直した技・コンボ・一時調整)。キャラタブは既定。
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn list_rotation_choices(
+    character: NewCharacter,
+    buffs: BuffSelection,
+    content_id: String,
+    skill_id: Option<String>,
+    combo_count: u32,
+    combo_skill_type: Option<domain::ComboSkillType>,
+    normal_attack_id: Option<String>,
+    temporary_adjustments: Option<domain::Adjustments>,
+) -> CommandResult<commands::RotationChoices> {
+    commands::list_rotation_choices(
+        character,
+        buffs,
+        content_id,
+        skill_id,
+        combo_count,
+        combo_skill_type,
+        normal_attack_id,
         temporary_adjustments,
     )
 }

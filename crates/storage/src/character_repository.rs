@@ -42,6 +42,10 @@ pub struct RegisteredCharacter {
     /// ホームの「次の目標」に据えるコンテンツ(gamedata の `Content::id`)。
     /// 未設定(`None`)なら画面が自動で選ぶ。
     pub goal_content_id: Option<String>,
+    /// 回しに差し込む CT 技(gamedata の `Skill::id` の配列)。`None` = 未設定で既定を自動で
+    /// 差し込む、`Some([])` = 差し込まない、`Some([id, …])` = 明示指定。自動値は保存しない
+    #[serde(default)]
+    pub rotation_skill_ids: Option<Vec<String>>,
     /// このキャラで計算時に最初に選ぶバフセット。
     pub default_buff_set_id: Option<i64>,
     /// 最終保存日時(ISO8601 UTC)。v11 未満で作られた既存行は NULL(表示しない)。
@@ -91,9 +95,11 @@ CREATE TABLE IF NOT EXISTS characters (
 /// どちらも <フラグ> にしか効かない誤収録)を保存済みの選択から落とす
 /// (`migrate_removed_character_skills`)。残っていると `CharacterSkills::validate` が
 /// `Unknown` を返し、そのキャラの計算・プレビューがまるごと止まる。新しい列は無い(2026-09-21)。
-const SCHEMA_VERSION: i64 = 18;
+/// v19 で `rotation_skill_ids`(回しに差し込む CT 技。JSON 配列)が加わった。既存キャラは
+/// 未設定(NULL)= 既定の 1 つを自動で差し込むまま読める(2026-09-21)。
+const SCHEMA_VERSION: i64 = 19;
 
-const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, default_buff_set_id, updated_at";
+const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, rotation_skill_ids, default_buff_set_id, updated_at";
 
 /// v9: キャラ JSON に埋め込まれていた常用バフを独立したセットへ移す。
 /// 1キャラずつ作り、同じ内容でも統合しない。全処理を単一 transaction にする。
@@ -868,6 +874,36 @@ fn migrate_removed_character_skills(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// v19: 保存済みの「差し込む CT 技」から、選べなくなった id を落とす
+/// (`migrate_removed_character_skills` と同じ扱い)。カタログから技が消える・改名されると
+/// 保存の検証で弾かれ、そのキャラの自動保存がまるごと止まる。
+/// 起動のたびに走っても、落とすものが無ければ何も書かない(冪等)。
+fn migrate_removed_rotation_skills(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT id, game_character_id, rotation_skill_ids FROM characters WHERE rotation_skill_ids IS NOT NULL",
+    )?;
+    let rows: Vec<(i64, String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    let tx = conn.unchecked_transaction()?;
+    for (id, character_id, json) in rows {
+        // 読めない行は飛ばす(1 行の壊れだけで DB が開けなくならないように)
+        let Ok(mut ids) = serde_json::from_str::<Vec<String>>(&json) else {
+            continue;
+        };
+        if !gamedata::retain_rotation_skills(&mut ids, &character_id) {
+            continue;
+        }
+        tx.execute(
+            "UPDATE characters SET rotation_skill_ids = ?1 WHERE id = ?2",
+            params![serde_json::to_string(&ids)?, id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 pub struct CharacterRepository {
     pub(crate) conn: Connection,
 }
@@ -923,6 +959,10 @@ impl CharacterRepository {
         if !existing_columns.contains("summon_skill_id") {
             conn.execute_batch("ALTER TABLE characters ADD COLUMN summon_skill_id TEXT;")?;
         }
+        // v19: 回しに差し込む CT 技(JSON 配列)。既存キャラは未設定(NULL)= 既定のままで読める。
+        if !existing_columns.contains("rotation_skill_ids") {
+            conn.execute_batch("ALTER TABLE characters ADD COLUMN rotation_skill_ids TEXT;")?;
+        }
         // v6: 共通スキル。既存キャラは `{}`(全部未習得)で読める。
         if !existing_columns.contains("common_skills") {
             conn.execute_batch(
@@ -947,6 +987,8 @@ impl CharacterRepository {
         migrate_owned_titles(&conn)?;
         // v17: summon_skill_id 列を読める必要がある(上の ALTER TABLE の後ならどこでもよい)。
         migrate_summon_skill_out_of_main(&conn)?;
+        // v19: rotation_skill_ids 列を読める必要がある(上の ALTER TABLE の後)。
+        migrate_removed_rotation_skills(&conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
         Ok(Self { conn })
@@ -975,9 +1017,10 @@ impl CharacterRepository {
         let stat_sources_json = serde_json::to_string(&new.stat_sources)?;
         let equipment_json = serde_json::to_string(&new.equipment)?;
         let common_skills_json = serde_json::to_string(&new.common_skills)?;
+        let rotation_skill_ids_json = rotation_skill_ids_column(&new.rotation_skill_ids)?;
         self.conn.execute(
-            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, default_buff_set_id, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            "INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, rotation_skill_ids, default_buff_set_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
             params![
                 new.name,
                 new.game_character_id,
@@ -996,6 +1039,7 @@ impl CharacterRepository {
                 new.main_skill_id,
                 new.summon_skill_id,
                 new.goal_content_id,
+                rotation_skill_ids_json,
                 new.default_buff_set_id,
             ],
         )?;
@@ -1027,15 +1071,16 @@ impl CharacterRepository {
         let stat_sources_json = serde_json::to_string(&update.stat_sources)?;
         let equipment_json = serde_json::to_string(&update.equipment)?;
         let common_skills_json = serde_json::to_string(&update.common_skills)?;
+        let rotation_skill_ids_json = rotation_skill_ids_column(&update.rotation_skill_ids)?;
         let affected = self.conn.execute(
             "UPDATE characters SET
                 name = ?1, game_character_id = ?2,
                 stab = ?3, hack = ?4, int = ?5, def = ?6, mr = ?7, dex = ?8, agi = ?9,
                 awakening_stage = ?10, eternal_level = ?11, stat_sources = ?12, equipment = ?13,
                 common_skills = ?14, main_skill_id = ?15, summon_skill_id = ?16, goal_content_id = ?17,
-                default_buff_set_id = ?18,
+                rotation_skill_ids = ?18, default_buff_set_id = ?19,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-             WHERE id = ?19",
+             WHERE id = ?20",
             params![
                 update.name,
                 update.game_character_id,
@@ -1054,6 +1099,7 @@ impl CharacterRepository {
                 update.main_skill_id,
                 update.summon_skill_id,
                 update.goal_content_id,
+                rotation_skill_ids_json,
                 update.default_buff_set_id,
                 id,
             ],
@@ -1123,6 +1169,15 @@ pub fn validate(
     .map_err(StorageError::InvalidValue)
 }
 
+/// 回しに差し込む CT 技の列(JSON 配列 / NULL)。未設定は NULL で保存する
+/// (`[]` =「差し込まない」と区別する)。
+fn rotation_skill_ids_column(ids: &Option<Vec<String>>) -> Result<Option<String>> {
+    Ok(match ids {
+        Some(ids) => Some(serde_json::to_string(ids)?),
+        None => None,
+    })
+}
+
 fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
     Ok(RegisteredCharacter {
         id: row.get("id")?,
@@ -1147,6 +1202,12 @@ fn row_to_character(row: &Row<'_>) -> rusqlite::Result<RegisteredCharacter> {
         main_skill_id: row.get("main_skill_id")?,
         summon_skill_id: row.get("summon_skill_id")?,
         goal_content_id: row.get("goal_content_id")?,
+        // 壊れた JSON は**未設定**(= 既定で選ぶ)に倒す。1 列の壊れでキャラが丸ごと
+        // 読めなくならないようにする(移行側 `migrate_removed_rotation_skills` が
+        // 読めない行を飛ばして残すのと揃える)
+        rotation_skill_ids: row
+            .get::<_, Option<String>>("rotation_skill_ids")?
+            .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok()),
         default_buff_set_id: row.get("default_buff_set_id")?,
         updated_at: row.get("updated_at")?,
     })
@@ -1393,6 +1454,7 @@ mod tests {
             common_skills: CommonSkills::default(),
             main_skill_id: None,
             summon_skill_id: None,
+            rotation_skill_ids: None,
             goal_content_id: None,
             default_buff_set_id: None,
         }
@@ -2213,6 +2275,141 @@ mod tests {
             .update(created.id, &cleared, &[], &[], &[], &[], &[], &[])
             .unwrap();
         assert_eq!(updated.summon_skill_id, None);
+    }
+
+    /// v19: 回しに差し込む CT 技は NULL(未設定 = 既定)/ `[]`(差し込まない)/ 明示指定の
+    /// 3 つを区別して往復する。
+    #[test]
+    fn rotation_skill_idsは未設定と空配列と指定を区別して往復する() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let mut c = new_character("回し");
+        // 未設定(既定を自動で差し込む)
+        let created = repo.create(&c, &[], &[], &[], &[], &[], &[]).unwrap();
+        assert_eq!(created.rotation_skill_ids, None);
+        assert_eq!(repo.get(created.id).unwrap().rotation_skill_ids, None);
+
+        // 明示的に差し込まない
+        c.rotation_skill_ids = Some(Vec::new());
+        let updated = repo
+            .update(created.id, &c, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(updated.rotation_skill_ids, Some(Vec::new()));
+        assert_eq!(
+            repo.get(created.id).unwrap().rotation_skill_ids,
+            Some(Vec::new())
+        );
+
+        // 明示指定(並びも保つ)
+        c.rotation_skill_ids = Some(vec!["skill_a".to_string(), "skill_b".to_string()]);
+        let updated = repo
+            .update(created.id, &c, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(
+            updated.rotation_skill_ids.as_deref(),
+            Some(["skill_a".to_string(), "skill_b".to_string()].as_slice())
+        );
+
+        // 未設定に戻せる
+        c.rotation_skill_ids = None;
+        let updated = repo
+            .update(created.id, &c, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        assert_eq!(updated.rotation_skill_ids, None);
+    }
+
+    /// 壊れた JSON が入っていても、キャラは読める(差し込みは未設定 = 既定に倒す)。
+    /// 移行(`migrate_removed_rotation_skills`)が読めない行を飛ばすのと揃える。
+    #[test]
+    fn 壊れたrotation_skill_idsは未設定として読む() {
+        let repo = CharacterRepository::open_in_memory().unwrap();
+        let c = new_character("壊れた回し");
+        let created = repo.create(&c, &[], &[], &[], &[], &[], &[]).unwrap();
+        repo.conn
+            .execute(
+                "UPDATE characters SET rotation_skill_ids = ?1 WHERE id = ?2",
+                params!["{壊れた", created.id],
+            )
+            .unwrap();
+        assert_eq!(repo.get(created.id).unwrap().rotation_skill_ids, None);
+        assert_eq!(repo.list().unwrap()[0].rotation_skill_ids, None);
+        // 開き直し(移行が走る)でも壊れない
+        let reopened = CharacterRepository::from_connection(repo.conn).unwrap();
+        assert_eq!(reopened.get(created.id).unwrap().rotation_skill_ids, None);
+    }
+
+    /// v18 の DB(`rotation_skill_ids` 列が無い)を開いても既存キャラは壊れず、
+    /// 差し込む CT 技は未設定(= 既定)で読める。2 回開いても再移行しない。
+    #[test]
+    fn rotation_skill_ids列の無いv18dbを開くと既存キャラは未設定で読める() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                summon_skill_id     TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id)
+            VALUES ('v18データ', 'yefnen', 300, 250, 10, 200, 150, 280, 250, 5, 40, '{}', '{\"parts\":{}}', '{}', 'yefnen_slay');
+            PRAGMA user_version = 18;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        assert_eq!(
+            repo.conn
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
+        let list = repo.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "v18データ");
+        assert_eq!(list[0].main_skill_id.as_deref(), Some("yefnen_slay"));
+        // 新しい列は未設定 = 既定の 1 つを自動で差し込むまま
+        assert_eq!(list[0].rotation_skill_ids, None);
+
+        // 明示指定を保存してから、もう一度開いても再移行しない(選べる id は消えない)。
+        // 選べなくなった id(消えた技)だけが落ちる(`migrate_removed_rotation_skills`)
+        let mut c = new_character("v18データ");
+        c.game_character_id = "yefnen".to_string();
+        c.main_skill_id = Some("yefnen_slay".to_string());
+        c.rotation_skill_ids = Some(vec![
+            "yefnen_crash".to_string(),
+            "no_such_skill".to_string(),
+        ]);
+        repo.update(list[0].id, &c, &[], &[], &[], &[], &[], &[])
+            .unwrap();
+        let reopened = CharacterRepository::from_connection(repo.conn).unwrap();
+        assert_eq!(
+            reopened.list().unwrap()[0].rotation_skill_ids.as_deref(),
+            Some(["yefnen_crash".to_string()].as_slice())
+        );
+        // 2 回目に開いても、残った id はそのまま
+        let again = CharacterRepository::from_connection(reopened.conn).unwrap();
+        assert_eq!(
+            again.list().unwrap()[0].rotation_skill_ids.as_deref(),
+            Some(["yefnen_crash".to_string()].as_slice())
+        );
     }
 
     /// v15 の DB(`summon_skill_id` 列が無い)を開いても既存キャラは壊れず、召喚スキルは

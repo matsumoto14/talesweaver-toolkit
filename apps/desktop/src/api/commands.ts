@@ -12,7 +12,7 @@ import type {
   EquipmentPart, PartSlot, RandomOptionCandidate,
   RelicDirection, RelicState, WeaponSystem,
   InkriTarget, InkriAttemptRequest, InkriBatchResult, InkriKind, EtaScrollPrice,
-  NormalizedSkillSelection, CharacterSkills,
+  NormalizedSkillSelection, CharacterSkills, RotationChoices,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -105,6 +105,12 @@ export const normalizeSummonSkillSelection = (mainSkillId: string | null, summon
  * カタログを引いて決める唯一の正で、id の一覧を TS に書き写さない) */
 export const normalizeCharacterSkills = (characterSkills: CharacterSkills | undefined) =>
   invoke<CharacterSkills>("normalize_character_skills", { characterSkills });
+/** 保存済みの「差し込む CT 技」から、選べなくなった id を落とす(書き出し JSON の読み込み・
+ * ブラウザ版の起動時正規化が呼ぶ。2026-09-21 追記。判定は Rust 側の 1 か所
+ * gamedata::retain_rotation_skills) */
+export const retainRotationSkills = (
+  rotationSkillIds: string[] | null, gameCharacterId: string,
+) => invoke<string[] | null>("retain_rotation_skills", { rotationSkillIds, gameCharacterId });
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
   invoke<DefenseProfile>("preview_defense", { character, buffs });
@@ -227,6 +233,25 @@ export const previewDamage = (
   buffs: BuffSelection = { choices: [] },
   normalAttackId: string | null = null,
 ) => invoke<CharacterDamageResult>("preview_damage", { character, skillId, contentId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments, buffs });
+/**
+ * キャラタブの「差し込む CT 技」の候補・既定 ON・差し込んだときの損得。
+ * 候補も損得も回しの規則そのもの(Rust)から出す(CT 判定を画面に写さない)。
+ */
+/**
+ * `skillId` 以降は計算タブの材料(そこで選び直した技・コンボ・一時調整)。同じ材料で
+ * 候補と損得を出すので、チップの損得と実際の DPS の動きが食い違わない。
+ * キャラタブは既定(主軸・コンボなし・調整なし)のまま呼ぶ。
+ */
+export const listRotationChoices = (
+  character: NewCharacter, contentId: string, buffs: BuffSelection = { choices: [] },
+  skillId: string | null = null,
+  comboCount = 0,
+  comboSkillType: ComboSkillType | null = null,
+  normalAttackId: string | null = null,
+  temporaryAdjustments: Adjustments | null = null,
+) => invoke<RotationChoices>("list_rotation_choices", {
+  character, buffs, contentId, skillId, comboCount, comboSkillType, normalAttackId, temporaryAdjustments,
+});
 /**
  * 全コンテンツの到達判定(火力は最大ダメージのスキル・コンボなしで評価)。
  * `dependencySkillId` を渡すと、装備条件(スキル依存で比較先が変わる)をそのスキルで判定する。

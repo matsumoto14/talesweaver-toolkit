@@ -11,10 +11,13 @@ use crate::awakening::Awakening;
 use crate::content::{evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation};
 use crate::damage::{
     apply_fixed_interval_dps, apply_summon_interval, calculate_damage, combine_expected_dps,
-    cycle_dps, defeat_seconds, DamageContribution, DamageMaterial, DamageResult, DamageTarget,
+    defeat_seconds, DamageContribution, DamageMaterial, DamageResult, DamageTarget,
     DependencyCoefficients,
 };
-use crate::flag_cycle::plan_flag_cycle;
+use crate::rotation::{
+    choose_rotation, plan_rotation, rotation_dps, RotationCandidate, RotationDamage,
+    RotationInsert, RotationRole,
+};
 use crate::enemy::Enemy;
 use crate::equipment::{
     sum_equipment_value_sources, Equipment, EquipmentBaseContext, EquipmentValueSource,
@@ -41,38 +44,58 @@ pub struct SkillEvaluationInput {
     /// 解決済み(`CharacterSkills::added_damage_rate`)
     pub skill_added_damage_rate: f64,
     pub element_value: i64,
-    /// <フラグ>(イェフネンの、技とは別枠のダメージ)ぶんの入力。
-    /// **技ごとに付く** — 爆発するのは スレイ / クラッシュ だけで、<フラグ> の技データは
-    /// 積んだ技から命中・Cri値を引き継ぐため。積んでいないキャラ・スタック 0 は `None`
+    /// <フラグ>(イェフネンの、技とは別枠のダメージ)の持続ぶんの入力。
+    /// **技ごとに付く** — <フラグ> の技データは積んだ技から命中・Cri値を引き継ぐため。
+    /// 積んでいないキャラ・スタック 0 は `None`
     pub flag: Option<FlagEvaluationInput>,
+    /// この技を主軸にしたときの回し(連打する技 + 差し込む CT 技)。
+    /// 差し込む技が無い(CT 技を持たないキャラ)なら `None` で、DPS は技そのものの値
+    pub rotation: Option<RotationEvaluationInput>,
 }
 
-/// <フラグ> ぶんの入力(`SkillEvaluationInput` にぶら下がる)。
-/// 持続は周期ごと、爆発は技 1 回につき 1 度入るので、DPS の割り方だけが違う。
+/// <フラグ> の持続ぶんの入力(`SkillEvaluationInput` にぶら下がる)。
+/// 1 秒ごとに入るので、回しとは無関係に周期で割った DPS を足す。
 #[derive(Debug, Clone)]
 pub struct FlagEvaluationInput {
-    /// 持続 1 回ぶん(`flag` は常に `None`。入れ子にしない)
+    /// 持続 1 回ぶん(`flag` / `rotation` は常に `None`。入れ子にしない)
     pub duration: Box<SkillEvaluationInput>,
-    /// 爆発と積み直しの 1 周。<フラグ> を爆発させる技のときだけ `Some`
-    pub burst: Option<FlagBurstInput>,
     /// 持続ダメージの周期(秒)
     pub tick_seconds: f64,
 }
 
-/// <フラグ> を爆発させる技ぶんの入力。計算タブと同じ「積み直しの 1 周」
-/// (積む技 × n → 主軸 → 爆発)で DPS を出すのに要るものだけを持つ。
+/// 回しぶんの入力。計算タブ(`commands::build_rotation`)と同じ材料を、カタログ解決済みで
+/// 受け取る。どれを連打してどれを差し込むかは `rotation::choose_rotation` が決めるので、
+/// ここでは**候補を並べるだけ**(役割を呼び出し側で決めない)。
 #[derive(Debug, Clone)]
-pub struct FlagBurstInput {
-    /// 爆発 1 回ぶん
-    pub burst: Box<SkillEvaluationInput>,
-    /// 積み直しに使う技(同じ形態の 連 / 爆)
-    pub applier: Box<SkillEvaluationInput>,
-    /// 1 周で積み直す量(ウルミは爆発しても半分残るので少ない)
-    pub stacks_to_apply: u8,
-    /// 積む技 1 回で積む数
-    pub stacks_per_use: u8,
-    /// 主軸の CT(秒)。1 周はこれより短くならない
-    pub cooldown_seconds: f64,
+pub struct RotationEvaluationInput {
+    /// 同じキャラ・同じ形態のプレイヤー攻撃技(主軸は含めない)
+    pub candidates: Vec<RotationCandidateEvaluationInput>,
+    /// <フラグ> の積み直しで連打技が決まっているならその技の id(同形態の 連 / 爆)
+    pub pinned_filler_id: Option<String>,
+    /// 主軸自身を差し込むときに付いてくるもの
+    pub main: RotationInsertMaterial,
+    /// キャラに保存された「差し込む CT 技」(`NewCharacter::rotation_skill_ids`)。
+    /// `None` = 既定、`Some([])` = 差し込まない、`Some([id, …])` = 明示指定
+    pub insert_skill_ids: Option<Vec<String>>,
+}
+
+/// 回しの候補 1 件。
+#[derive(Debug, Clone)]
+pub struct RotationCandidateEvaluationInput {
+    pub skill: Box<SkillEvaluationInput>,
+    /// 主軸を連打するときに差し込んでよいか(<フラグ> を爆発させる技は、主軸で積んだ
+    /// ぶんを使う技だけ `true`)
+    pub insertable: bool,
+    pub material: RotationInsertMaterial,
+}
+
+/// 差し込んだときに付いてくるもの(<フラグ> の爆発と積み直しの回数)。
+#[derive(Debug, Clone, Default)]
+pub struct RotationInsertMaterial {
+    /// この技が起こす <フラグ> の爆発 1 回ぶん
+    pub burst: Option<Box<SkillEvaluationInput>>,
+    /// 撃つ前に連打技を最低何回挟むか(<フラグ> の積み直し)
+    pub minimum_filler_uses: u32,
 }
 
 /// 全コンテンツ×スキルを評価し、コンテンツごとに最大火力スキルと判定結果を返す
@@ -275,34 +298,23 @@ fn evaluate_one_content(
     if let Some(b) = best.as_mut() {
         let mut combined = b.expected_dps;
 
-        // <フラグ>(技とは別枠のダメージ)。計算タブ(`commands::combine_damage`)と同じ規則:
-        // 爆発させる技は「積み直しの 1 周」(積む技 × n → 主軸 → 爆発)で技の期待 DPS を
-        // **置き換え**、持続はそれに足す。技の DPS が出せないときは何も足さない
+        // 回し(連打する技 + 差し込む CT 技)。計算タブ(`commands::combine_damage`)と
+        // 同じ規則で技の期待 DPS を**置き換え**、<フラグ> の持続はそれに足す。
+        // 技の DPS が出せないときは何も足さない
         if let Some((entry, main_result)) = best_entry.as_ref() {
-            if let (Some(flag), true) = (entry.flag.as_ref(), combined.is_some()) {
-                if let Some(burst_input) = flag.burst.as_ref() {
-                    let applier = calculate_damage(material, &to_target(&burst_input.applier));
-                    let burst = calculate_damage(material, &to_target(&burst_input.burst));
-                    combined = match (applier.cycle_seconds(), main_result.cycle_seconds()) {
-                        (Some(applier_seconds), Some(main_seconds)) => plan_flag_cycle(
-                            burst_input.stacks_to_apply,
-                            burst_input.stacks_per_use,
-                            applier_seconds,
-                            main_seconds,
-                            burst_input.cooldown_seconds,
-                        )
-                        .and_then(|plan| {
-                            cycle_dps(
-                                &[(&applier, plan.uses), (main_result, 1), (&burst, 1)],
-                                plan.seconds,
-                            )
-                            .map(|(_, expected)| expected)
-                        }),
-                        // 積む技か主軸の所要時間が不明なら合算 DPS も不明
-                        _ => None,
-                    };
+            if combined.is_some() {
+                if let Some(rotation) = entry.rotation.as_ref() {
+                    match rotation_expected_dps(material, &to_target, rotation, entry, main_result)
+                    {
+                        Some(expected) => combined = Some(expected),
+                        // 回しを組めないのに <フラグ> の爆発がある技は、爆発をどの間隔で
+                        // 入れるか決まらない。爆発を無視した確定値を出さない
+                        // (計算タブの `commands::combine_damage` と同じ規則)
+                        None if rotation.main.burst.is_some() => combined = None,
+                        None => {}
+                    }
                 }
-                if combined.is_some() {
+                if let Some(flag) = entry.flag.as_ref() {
                     let mut duration = calculate_damage(material, &to_target(&flag.duration));
                     apply_fixed_interval_dps(&mut duration, flag.tick_seconds);
                     combined = combine_expected_dps(combined, duration.expected_dps);
@@ -339,6 +351,119 @@ fn evaluate_one_content(
         requirement_dependency,
         thesis_core_total,
     )
+}
+
+/// 回しの期待 DPS(計算タブの `commands::build_rotation` + `combine_damage` と同じ規則)。
+/// 候補も連打技も差し込む技も、主軸とまったく同じ的(`to_target`)で 1 回ぶんを計算し、
+/// 役割は `rotation::choose_rotation`(実際の 1 回の所要時間が基準)で決める。
+/// 回しを組めないなら `None`(呼び出し側は技そのものの DPS のまま)。
+fn rotation_expected_dps(
+    material: &DamageMaterial,
+    to_target: &impl Fn(&SkillEvaluationInput) -> DamageTarget,
+    rotation: &RotationEvaluationInput,
+    main: &SkillEvaluationInput,
+    main_result: &DamageResult,
+) -> Option<f64> {
+    // 役割の判定は実際の所要時間が基準なので、候補も 1 回ぶんを計算する
+    let results: Vec<DamageResult> = rotation
+        .candidates
+        .iter()
+        .map(|candidate| calculate_damage(material, &to_target(&candidate.skill)))
+        .collect();
+    // 1 回で同時に入るダメージ(技本体 + それが起こす <フラグ> の爆発)。
+    // 差し込むと上がるかを `choose_rotation` がその場で確かめるので、候補ぶんも先に作る
+    let candidate_damages: Vec<Vec<RotationDamage>> = rotation
+        .candidates
+        .iter()
+        .zip(&results)
+        .map(|(candidate, result)| {
+            let mut part = vec![RotationDamage::of(result)];
+            if let Some(burst) = candidate.material.burst.as_ref() {
+                part.push(RotationDamage::of(&calculate_damage(material, &to_target(burst))));
+            }
+            part
+        })
+        .collect();
+    let candidates: Vec<RotationCandidate<'_>> = rotation
+        .candidates
+        .iter()
+        .zip(&results)
+        .zip(&candidate_damages)
+        .map(|((candidate, result), damage)| RotationCandidate {
+            skill: &candidate.skill.skill,
+            seconds: result.cycle_seconds(),
+            insertable: candidate.insertable,
+            damage,
+            minimum_filler_uses: candidate.material.minimum_filler_uses,
+        })
+        .collect();
+    let roles = choose_rotation(
+        &main.skill,
+        main_result.cycle_seconds(),
+        Some(RotationDamage::of(main_result)),
+        &candidates,
+        rotation.pinned_filler_id.as_deref(),
+    );
+    // 主軸を**連打**しながら <フラグ> を爆発させる回しは、爆発をどの間隔で入れるか決まらない
+    // (爆発は主軸 1 回につき 1 度だが、連打の回数は時間配分の結果として決まる)。
+    // ADR-019 決定 8 と同じく、爆発を黙って落とした「確定値」を出さず DPS を不明にする
+    // (計算タブの `commands::build_rotation` と同じ規則)
+    if rotation.main.burst.is_some() && roles.filler == Some(RotationRole::Main) {
+        return None;
+    }
+    // 画面から明示された差し込み(キャラに保存した「差し込む CT 技」)は計算タブと同じ 1 本で当てる
+    let candidate_ids: Vec<&str> = rotation
+        .candidates
+        .iter()
+        .map(|candidate| candidate.skill.skill.id.as_str())
+        .collect();
+    let insert_roles = crate::rotation::apply_explicit_inserts(
+        &roles,
+        rotation.insert_skill_ids.as_deref(),
+        &main.skill.id,
+        &candidate_ids,
+    );
+    let result_of = |role: RotationRole| match role {
+        RotationRole::Main => main_result,
+        RotationRole::Candidate(index) => &results[index],
+    };
+    let skill_of = |role: RotationRole| match role {
+        RotationRole::Main => &main.skill,
+        RotationRole::Candidate(index) => &rotation.candidates[index].skill.skill,
+    };
+    let material_of = |role: RotationRole| match role {
+        RotationRole::Main => &rotation.main,
+        RotationRole::Candidate(index) => &rotation.candidates[index].material,
+    };
+    let filler = roles
+        .filler
+        .map(result_of)
+        .and_then(|result| Some((RotationDamage::of(result), result.cycle_seconds()?)));
+    let inserts: Vec<RotationInsert> = insert_roles
+        .iter()
+        .map(|&role| RotationInsert {
+            seconds: result_of(role).cycle_seconds(),
+            cooldown_seconds: skill_of(role).cooldown_seconds.unwrap_or(0.0),
+            minimum_filler_uses: material_of(role).minimum_filler_uses,
+        })
+        .collect();
+    // 差し込むぶんの 1 回のダメージ。候補ぶんは上で作ってあるので作り直さない
+    let parts: Vec<Vec<RotationDamage>> = insert_roles
+        .iter()
+        .map(|&role| match role {
+            RotationRole::Candidate(index) => candidate_damages[index].clone(),
+            RotationRole::Main => {
+                let mut part = vec![RotationDamage::of(main_result)];
+                if let Some(burst) = rotation.main.burst.as_ref() {
+                    part.push(RotationDamage::of(&calculate_damage(material, &to_target(burst))));
+                }
+                part
+            }
+        })
+        .collect();
+    let parts: Vec<&[RotationDamage]> = parts.iter().map(Vec::as_slice).collect();
+    let plan = plan_rotation(filler.map(|(_, seconds)| seconds), &inserts)?;
+    rotation_dps(&plan, &parts, filler).map(|(_, expected)| expected)
 }
 
 #[cfg(test)]
@@ -399,14 +524,18 @@ mod tests {
             accuracy: Some(92),
             critical_rate: Some(7),
             level: 1,
-            single_target_channeling: false,
+            channeling: None,
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
             normal_attack: false,
             combo_interval: None,
             combo_variants: Vec::new(),
             power: Skill::compute_power(0.99, 1),
-            power_per_second: Skill::compute_power_per_second(Skill::compute_power(0.99, 1), Some(1.4)),
+            power_per_second: Skill::compute_power_per_second(
+                Skill::compute_power(0.99, 1),
+                Some(1.4),
+                None,
+            ),
             attacker: crate::Attacker::Player,
             summon_form: None,
             form: None,
@@ -532,6 +661,7 @@ mod tests {
             skill_added_damage_rate: 0.0,
             element_value: 0,
             flag: None,
+            rotation: None,
         }];
         evaluate_contents_for_character(
             &material,
@@ -563,11 +693,10 @@ mod tests {
         );
     }
 
-    /// <フラグ> を爆発させる技を選んだコンテンツでは、討伐時間が「積み直しの 1 周」
-    /// (積む技 × n → 主軸 → 爆発)+ 持続 で出る。計算タブ(`commands::combine_damage`)と
-    /// 同じ式なので、ここでは式そのものを手計算と突き合わせる。
+    /// ホームの討伐時間も回し(連打する技 × n → 差し込む CT 技 → <フラグ> の爆発)で出る。
+    /// 計算タブ(`commands::combine_damage`)と同じ式なので、式そのものを手計算と突き合わせる。
     #[test]
-    fn フラグを爆発させる技は積み直しの1周で討伐時間を出す() {
+    fn 回しで討伐時間を出す() {
         let material = material(false);
         let input = |s: Skill| SkillEvaluationInput {
             skill: s,
@@ -576,26 +705,34 @@ mod tests {
             skill_added_damage_rate: 0.0,
             element_value: 0,
             flag: None,
+            rotation: None,
         };
-        // 主軸(爆発させる技)。積む技より 1 発が大きいので最良スキルに選ばれる
+        // 主軸(CT のある、<フラグ> を爆発させる技)。連打技より 1 発が大きいので最良に選ばれる
         let main_skill = Skill { id: "main".into(), multiplier: 3.0, detonates_flag: true, cooldown_seconds: Some(10.0), ..skill() };
-        let applier_skill = Skill { id: "applier".into(), multiplier: 1.0, applies_flag: true, base_actual_delay: Some(1.0), ..skill() };
+        let filler_skill = Skill { id: "filler".into(), multiplier: 1.0, applies_flag: true, base_actual_delay: Some(1.0), ..skill() };
         let burst_skill = Skill { id: "burst".into(), multiplier: 2.0, base_actual_delay: None, ..skill() };
         let duration_skill = Skill { id: "duration".into(), multiplier: 0.5, base_actual_delay: None, ..skill() };
         let mut main = input(main_skill);
         main.flag = Some(FlagEvaluationInput {
-            duration: Box::new(input(duration_skill)),
-            burst: Some(FlagBurstInput {
-                burst: Box::new(input(burst_skill)),
-                applier: Box::new(input(applier_skill)),
-                stacks_to_apply: 10,
-                stacks_per_use: 2,
-                cooldown_seconds: 10.0,
-            }),
+            duration: Box::new(input(duration_skill.clone())),
             tick_seconds: 1.0,
         });
+        main.rotation = Some(RotationEvaluationInput {
+            insert_skill_ids: None,
+            // 候補は連打技 1 つだけ。主軸に CT があるので連打技として選ばれる
+            candidates: vec![RotationCandidateEvaluationInput {
+                skill: Box::new(input(filler_skill.clone())),
+                insertable: false,
+                material: RotationInsertMaterial::default(),
+            }],
+            pinned_filler_id: None,
+            main: RotationInsertMaterial {
+                burst: Some(Box::new(input(burst_skill.clone()))),
+                // 積み直し 10 ÷ 2 = 5 回
+                minimum_filler_uses: 5,
+            },
+        });
         let enemy_with_hp = Enemy { hp: Some(100_000), ..enemy() };
-        let skills = vec![main.clone()];
         let run = |skills: &[SkillEvaluationInput]| {
             evaluate_contents_for_character(
                 &material,
@@ -613,11 +750,10 @@ mod tests {
                 .clone()
                 .unwrap()
         };
-        let with_flag = run(&skills);
+        let with_flag = run(&[main.clone()]);
 
-        // 手計算: 積み直し 10 ÷ 2 = 5 回。1 周 5 × 1.0 + 1.4 = 6.4s は CT 10s に足りないので
-        // ⌈(10 − 1.4) / 1.0⌉ = 9 回に増え、1 周は 10.4s
-        let burst_input = main.flag.as_ref().unwrap().burst.as_ref().unwrap();
+        // 手計算: 5 回では 5 × 1.0 + 1.4 = 6.4s で CT 10s に足りないので
+        // ⌈(10 − 1.4) / 1.0⌉ = 9 回に増え、主軸の間隔は 10.4s
         let to_target_for = |i: &SkillEvaluationInput| DamageTarget {
             skill: i.skill.clone(),
             enemy: enemy_with_hp.clone(),
@@ -631,17 +767,26 @@ mod tests {
             skill_added_damage_rate: 0.0,
             element_value: 0,
         };
-        let applier = calculate_damage(&material, &to_target_for(&burst_input.applier));
-        let burst = calculate_damage(&material, &to_target_for(&burst_input.burst));
+        let filler = calculate_damage(&material, &to_target_for(&input(filler_skill)));
+        let burst = calculate_damage(&material, &to_target_for(&input(burst_skill)));
         let main_result = calculate_damage(&material, &to_target_for(&main));
-        let mut duration = calculate_damage(&material, &to_target_for(&main.flag.as_ref().unwrap().duration));
+        let mut duration = calculate_damage(&material, &to_target_for(&input(duration_skill)));
         apply_fixed_interval_dps(&mut duration, 1.0);
-        let plan = plan_flag_cycle(10, 2, applier.cycle_seconds().unwrap(), main_result.cycle_seconds().unwrap(), 10.0).unwrap();
-        assert_eq!(plan.uses, 9);
-        assert!((plan.seconds - 10.4).abs() < 1e-9);
-        let (_, expected) = cycle_dps(
-            &[(&applier, plan.uses), (&main_result, 1), (&burst, 1)],
-            plan.seconds,
+        let plan = plan_rotation(
+            filler.cycle_seconds(),
+            &[RotationInsert {
+                seconds: main_result.cycle_seconds(),
+                cooldown_seconds: 10.0,
+                minimum_filler_uses: 5,
+            }],
+        )
+        .unwrap();
+        assert_eq!(plan.slots[0].filler_uses, 9);
+        assert!((plan.slots[0].interval_seconds - 10.4).abs() < 1e-9);
+        let (_, expected) = rotation_dps(
+            &plan,
+            &[&[RotationDamage::of(&main_result), RotationDamage::of(&burst)][..]],
+            Some((RotationDamage::of(&filler), filler.cycle_seconds().unwrap())),
         )
         .unwrap();
         let combined = expected + duration.expected_dps.unwrap();
@@ -651,13 +796,67 @@ mod tests {
             with_flag.defeat_seconds
         );
 
-        // <フラグ> が無ければ技単独のまま(回帰)。CT を見ない「技を連打する」前提なので、
-        // 1 周基準(CT 10 秒を守る)より速く出る — 比べる対象ではないので値だけ確認する
+        // 回しが無ければ技単独のまま(回帰)。CT を見ない「技を連打する」前提なので、
+        // 回し(CT 10 秒を守る)より速く出る — 比べる対象ではないので値だけ確認する
         let without = run(&[input(Skill { id: "main".into(), multiplier: 3.0, ..skill() })]);
         assert!(
             (without.defeat_seconds.unwrap() - 100_000.0 / main_result.expected_dps.unwrap()).abs()
                 < 1e-6
         );
+    }
+
+    /// 主軸が連打技(CT なし)のときは、差し込む CT 技のぶんだけ期待 DPS が上がる。
+    /// 差し込む技は CT ごとに 1 回しか撃てないので、その技を連打した DPS にはならない。
+    #[test]
+    fn 連打技に差し込むと期待dpsが上がる() {
+        let material = material(false);
+        let input = |s: Skill| SkillEvaluationInput {
+            skill: s,
+            coefficients: coefficients(),
+            damage_contributions: Vec::new(),
+            skill_added_damage_rate: 0.0,
+            element_value: 0,
+            flag: None,
+            rotation: None,
+        };
+        let main_skill = Skill { id: "main".into(), multiplier: 1.0, base_actual_delay: Some(1.0), ..skill() };
+        let insert_skill = Skill { id: "insert".into(), multiplier: 3.0, base_actual_delay: Some(1.0), cooldown_seconds: Some(10.0), ..skill() };
+        let enemy_with_hp = Enemy { hp: Some(100_000), ..enemy() };
+        let run = |skills: &[SkillEvaluationInput]| {
+            evaluate_contents_for_character(
+                &material,
+                &Equipment::default(),
+                &content_area(),
+                &[enemy_with_hp.clone()],
+                skills,
+                None,
+                EquipmentBaseContext::catalog_only(&[], &[]),
+                &[],
+                Awakening::default(),
+                None,
+            )[0]
+                .damage
+                .clone()
+                .unwrap()
+        };
+        let alone = run(&[input(main_skill.clone())]);
+        let mut with_insert = input(main_skill.clone());
+        with_insert.rotation = Some(RotationEvaluationInput {
+            insert_skill_ids: None,
+            candidates: vec![RotationCandidateEvaluationInput {
+                skill: Box::new(input(insert_skill.clone())),
+                insertable: true,
+                material: RotationInsertMaterial::default(),
+            }],
+            pinned_filler_id: None,
+            main: RotationInsertMaterial::default(),
+        });
+        let with_insert = run(&[with_insert]);
+        // 差し込むほうが速い(同じ時間に強い技が混ざる)
+        assert!(with_insert.defeat_seconds.unwrap() < alone.defeat_seconds.unwrap());
+        // ただし差し込む技を連打できるわけではない(CT 10 秒ぶんの間隔がある)
+        let spam = run(&[input(Skill { cooldown_seconds: None, ..insert_skill })]);
+        assert!(with_insert.defeat_seconds.unwrap() > spam.defeat_seconds.unwrap());
     }
 
     /// 熊(魔法人形)の入力を足すと期待 DPS が本体+熊になり、討伐時間が短くなる
@@ -672,6 +871,7 @@ mod tests {
             skill_added_damage_rate: 0.0,
             element_value: 0,
             flag: None,
+            rotation: None,
         }];
         let summon_skill = Skill {
             id: "bear".into(),
@@ -686,6 +886,7 @@ mod tests {
             skill_added_damage_rate: 0.0,
             element_value: 0,
             flag: None,
+            rotation: None,
         };
         let enemy_with_hp = Enemy {
             hp: Some(100_000),

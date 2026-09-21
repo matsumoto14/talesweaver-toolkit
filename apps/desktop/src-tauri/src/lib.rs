@@ -127,6 +127,8 @@ pub fn run() {
             commands::set_damage_snapshot,
             commands::calculate_damage,
             commands::preview_damage,
+            commands::list_rotation_choices,
+            commands::retain_rotation_skills,
             commands::evaluate_contents,
             commands::list_upgrade_candidates,
             commands::list_enchant_gains,

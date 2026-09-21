@@ -88,6 +88,7 @@ mod tests {
             common_skills: domain::CommonSkills::default(),
             main_skill_id: None,
             summon_skill_id: None,
+            rotation_skill_ids: None,
             goal_content_id: None,
             default_buff_set_id: None,
         }

@@ -343,8 +343,14 @@ pub struct DamageResult {
     /// 中ディレイ(wiki: 計算式まとめ `#ActualDelay`)。スキルの「動作」列が秒で取れない
     /// (`Skill::base_actual_delay` が `None`)なら出せないので `None`
     pub actual_delay: Option<ActualDelay>,
-    /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。中ディレイが出せないなら `None`
+    /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。中ディレイが出せないなら `None`。
+    /// チャネリング技は 1 回の使用で `channeling_ticks` 回ぶん入るのでその倍率込み
     pub dps: Option<DpsTriple>,
+    /// チャネリング技が 1 回の使用で撃つ tick 数(`Skill::channeling`)。他の技は `None`。
+    /// `total` は 1 tick ぶんのまま(ゲーム内の表示と揃える)で、`cycle_total` と `dps` が
+    /// この回数を掛ける
+    #[serde(default)]
+    pub channeling_ticks: Option<u32>,
     /// クリティカル率(0..1)。`critical_rate` が `Some` ならその値を 0..1 にクランプしたもの。
     /// wiki 未記載で `critical_rate` が `None` のときは **1.0(クリティカル確定扱い)**
     /// (未記載は確定扱い(ユーザー判断 2026-08-29))。
@@ -402,13 +408,20 @@ impl DamageResult {
     /// `cycle_total() ÷ cycle_seconds() = dps` がコンボの有無によらず成り立つので、
     /// 複数の技を並べた 1 周(<フラグ> の積み直し)の火力はこの 2 つだけで出せる。
     pub fn cycle_total(&self) -> DamageTriple {
+        // チャネリング技は押している間 tick 数ぶん撃つ(`total` は 1 tick ぶん)
+        let ticks = i64::from(self.channeling_ticks.unwrap_or(1).max(1));
+        let skill = DamageTriple {
+            min: self.total.min * ticks,
+            max: self.total.max * ticks,
+            critical: self.total.critical * ticks,
+        };
         let Some(combo) = &self.combo else {
-            return self.total;
+            return skill;
         };
         DamageTriple {
-            min: self.total.min + combo.normal_attack_total.min,
-            max: self.total.max + combo.normal_attack_total.max,
-            critical: self.total.critical + combo.normal_attack_total.critical,
+            min: skill.min + combo.normal_attack_total.min,
+            max: skill.max + combo.normal_attack_total.max,
+            critical: skill.critical + combo.normal_attack_total.critical,
         }
     }
 
@@ -691,10 +704,13 @@ pub fn apply_summon_interval(result: &mut DamageResult, enemy_hp: Option<i64>) -
     delay.uses_per_minute = uses_per_minute;
     delay.uses_measured = false;
     let factor = uses_per_minute / crate::actual_delay::SECONDS_PER_MINUTE;
+    // 1 回の使用ぶん(`cycle_total`)× 回数。熊はコンボもチャネリングも無いので `total` と
+    // 同じ値になるが、「1 回ぶんは何か」を 1 か所(`cycle_total`)にまとめておく
+    let one = result.cycle_total();
     let dps = DpsTriple {
-        min: result.total.min as f64 * factor,
-        max: result.total.max as f64 * factor,
-        critical: result.total.critical as f64 * factor,
+        min: one.min as f64 * factor,
+        max: one.max as f64 * factor,
+        critical: one.critical as f64 * factor,
     };
     let p = result.critical_chance;
     let expected_dps = dps.max * (1.0 - p) + dps.critical * p;
@@ -715,43 +731,17 @@ pub fn apply_fixed_interval_dps(result: &mut DamageResult, seconds: f64) {
     if seconds <= 0.0 {
         return;
     }
+    // 1 回ぶんの決め方は `cycle_total` に 1 本化する(<フラグ> はコンボもチャネリングも
+    // 持たないので `total` と同じ値になる)
+    let one = result.cycle_total();
     let dps = DpsTriple {
-        min: result.total.min as f64 / seconds,
-        max: result.total.max as f64 / seconds,
-        critical: result.total.critical as f64 / seconds,
+        min: one.min as f64 / seconds,
+        max: one.max as f64 / seconds,
+        critical: one.critical as f64 / seconds,
     };
     let p = result.critical_chance;
     result.expected_dps = Some(dps.max * (1.0 - p) + dps.critical * p);
     result.dps = Some(dps);
-}
-
-/// いくつかの技を並べた「1 周」の火力。`parts` は (1 回ぶんの結果, 1 周で撃つ回数)。
-///
-/// <フラグ> を爆発させるときの 1 周(積む技 × n → 主軸 → 爆発)がこれ。側(最小 / 最大 /
-/// クリ)ごとに足してから 1 周の時間で割る。期待値は**技ごとのクリ率で按分してから**足す
-/// (同じ 1 周でも技によってクリ率が違う)。時間が 0 以下なら `None`。
-pub fn cycle_dps(parts: &[(&DamageResult, u32)], seconds: f64) -> Option<(DpsTriple, f64)> {
-    if seconds <= 0.0 {
-        return None;
-    }
-    let mut total = DamageTriple { min: 0, max: 0, critical: 0 };
-    let mut expected = 0.0;
-    for (result, times) in parts {
-        let times = i64::from(*times);
-        let one = result.cycle_total();
-        total.min += one.min * times;
-        total.max += one.max * times;
-        total.critical += one.critical * times;
-        expected += one.expected(result.critical_chance) * times as f64;
-    }
-    Some((
-        DpsTriple {
-            min: total.min as f64 / seconds,
-            max: total.max as f64 / seconds,
-            critical: total.critical as f64 / seconds,
-        },
-        expected / seconds,
-    ))
 }
 
 /// 攻撃者 / 別枠ごとの DPS を側(最小 / 最大 / クリ)ごとに足す。片方が無ければもう片方。
@@ -814,7 +804,9 @@ pub fn calculate_damage_with_combo(
         return result;
     }
 
-    let per_second = |skill: i64, normal: i64| (skill + normal) as f64 / seconds;
+    // チャネリング技はスキル側が tick 数ぶん入る(`total` は 1 tick ぶん)
+    let ticks = i64::from(result.channeling_ticks.unwrap_or(1).max(1));
+    let per_second = |skill: i64, normal: i64| (skill * ticks + normal) as f64 / seconds;
     result.dps = Some(DpsTriple {
         min: per_second(result.total.min, normal.total.min),
         max: per_second(result.total.max, normal.total.max),
@@ -1032,14 +1024,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         attack_breakdown.into_iter().chain(steps_critical).collect();
 
     // ④ 段数
-    // 極限スキル「フルスロットル」(wiki: Skill/極限)。ハイパーリミット Lv4 以降で
-    // **単体チャネリングスキル**の段数が +1〜+3 される。他のスキルには乗らない
-    let added_hits = if target.skill.single_target_channeling {
-        material.common_skills.ultimate.added_hit_count()
-    } else {
-        0
-    };
-    let hit_count = target.skill.hit_count + added_hits;
+    let hit_count = target.skill.hit_count;
     let hits = i64::from(hit_count);
 
     // ダメージ上限(wiki: Quest/覚醒クエスト。多段スキルでも 1 段ごとに適用)。
@@ -1213,6 +1198,9 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
             target.combo_count,
             &material.skill_uses,
             target.skill.charge_seconds,
+            // チャネリング技はコンボの倍率A を掛けない(持続だけ半分になって攻撃回数が
+            // 据え置きだと DPS がほぼ 2 倍になる。根拠が無いので掛けない。ADR-019)
+            target.skill.channeling.is_some(),
         )
     });
     let total = DamageTriple {
@@ -1221,8 +1209,12 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         critical: sum.critical + weapon_added_total + added.critical,
     };
     // DPS は「合計ダメージ × 60 秒あたりのスキル回数 / 60」。回数は実測表(格子の外だけ式)。
+    // チャネリング技は 1 回の使用で tick 数ぶん入る(`total` は 1 tick ぶん)
+    let channeling_ticks = target.skill.channeling.map(|c| c.ticks.max(1));
+    let ticks = f64::from(channeling_ticks.unwrap_or(1));
     let dps = delay.as_ref().map(|d| {
-        let per_second = |total: i64| total as f64 * d.uses_per_minute / SECONDS_PER_MINUTE;
+        let per_second =
+            |total: i64| total as f64 * ticks * d.uses_per_minute / SECONDS_PER_MINUTE;
         DpsTriple {
             min: per_second(total.min),
             max: per_second(total.max),
@@ -1262,6 +1254,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         critical_rate: critical_chance,
         actual_delay: delay,
         dps,
+        channeling_ticks,
         critical_chance: critical_chance_ratio,
         expected_dps,
         enemy_hp: target.enemy.hp,
@@ -1447,7 +1440,7 @@ mod tests {
                 accuracy: Some(92),
                 critical_rate: Some(7),
                 level: 1,
-                single_target_channeling: false,
+                channeling: None,
                 base_actual_delay: Some(1.4),
                 actual_delay_fixed: false,
                 normal_attack: false,
@@ -1457,6 +1450,7 @@ mod tests {
                 power_per_second: Skill::compute_power_per_second(
                     Skill::compute_power(0.99, 1),
                     Some(1.4),
+                    None,
                 ),
                 attacker: crate::Attacker::Player,
                 summon_form: None,
@@ -2670,6 +2664,31 @@ mod tests {
         assert_eq!(charged.cycle_seconds(), Some(charged_combo.seconds));
     }
 
+    /// チャネリング技をコンボに挟んでも、持続(中ディレイ)は半分にならない —— 攻撃回数は
+    /// tick 10 のままなので、半分にすると DPS がほぼ 2 倍になる(ADR-019)。
+    /// `cycle_total ÷ cycle_seconds = dps` はコンボでもチャネリングでも成り立つ。
+    #[test]
+    fn コンボのチャネリング技は持続が半分にならない() {
+        let m = material();
+        let normal = normal_attack(Some(0.32));
+        let mut channeling = target();
+        channeling.skill.base_actual_delay = Some(10.0);
+        channeling.skill.actual_delay_fixed = false;
+        channeling.skill.channeling = Some(crate::skill::Channeling { ticks: 10, tick_seconds: 1.0 });
+        let combo = calculate_damage_with_combo(&m, &channeling, &normal);
+        let cycle = combo.combo.clone().unwrap();
+        // 持続 10s がそのまま 1 サイクルの中に入る(×0.5 が掛からない)
+        assert_eq!(combo.actual_delay.as_ref().unwrap().combo_rate, 1.0);
+        assert!((cycle.skill_delay - 10.0).abs() < 1e-12);
+        // 1 サイクルぶんの合計 ÷ 1 サイクルの秒数 = DPS
+        assert_eq!(combo.cycle_seconds(), Some(cycle.seconds));
+        let hand = combo.cycle_total().max as f64 / cycle.seconds;
+        assert!((combo.dps.unwrap().max - hand).abs() < 1e-6, "{hand}");
+        // コンボなしと比べて DPS が倍になっていない(通常攻撃ぶんしか増えない)
+        let plain = calculate_damage(&m, &channeling);
+        assert!(combo.dps.unwrap().max < plain.dps.unwrap().max * 1.5);
+    }
+
     #[test]
     fn 動作が取れない通常攻撃ではコンボのサイクルを作らない() {
         let m = material();
@@ -2720,33 +2739,48 @@ mod tests {
         assert!((g.value - 0.40).abs() < 1e-12);
     }
 
+    // 公式 2025-10-29(no=154871 4-1): チャネリング技は中ディレイ減少を受ける方式になり、
+    // フルスロットルの攻撃回数増加は適用されなくなった
     #[test]
-    fn フルスロットルの段数は単体チャネリングスキルにだけ乗る() {
+    fn フルスロットルは段数を変えない() {
         use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
 
-        let ultimate = UltimateSkills {
+        let mut with_ultimate = material();
+        with_ultimate.common_skills.ultimate = UltimateSkills {
             slots: [Some(UltimateSkill::FullThrottle), None],
             super_limit: true,
             hyper_limit_level: 6,
         };
-
-        // 単体チャネリングではないスキル(テスト既定)は段数が変わらない
-        let mut with_ultimate = material();
-        with_ultimate.common_skills.ultimate = ultimate;
-        assert_eq!(
-            calculate_damage(&with_ultimate, &target()).hit_count,
-            target().skill.hit_count
-        );
-
-        // 単体チャネリングなら +3
         let mut channeling = target();
         channeling.skill.hit_count = 10;
-        channeling.skill.single_target_channeling = true;
-        let without = calculate_damage(&material(), &channeling);
-        let with_throttle = calculate_damage(&with_ultimate, &channeling);
-        assert_eq!(without.hit_count, 10);
-        assert_eq!(with_throttle.hit_count, 13);
-        assert_eq!(with_throttle.total.max, with_throttle.per_hit.max * 13);
+        channeling.skill.channeling = Some(crate::skill::Channeling { ticks: 10, tick_seconds: 1.0 });
+        assert_eq!(calculate_damage(&with_ultimate, &channeling).hit_count, 10);
+    }
+
+    // 公式の例(no=154871 4-1): 極・連撃は中ディレイ −45% で 反復周期 0.55 秒・持続 5.5 秒。
+    // 攻撃回数は変わらないので、1 回の使用が短くなったぶん DPS が上がる
+    #[test]
+    fn チャネリング技の持続は中ディレイ減少で縮む() {
+        use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
+
+        let mut with_ultimate = material();
+        with_ultimate.common_skills.ultimate = UltimateSkills {
+            slots: [Some(UltimateSkill::FullThrottle), None],
+            super_limit: true,
+            hyper_limit_level: 6,
+        };
+        let mut channeling = target();
+        channeling.skill.base_actual_delay = Some(10.0);
+        channeling.skill.actual_delay_fixed = false;
+        channeling.skill.channeling = Some(crate::skill::Channeling { ticks: 10, tick_seconds: 1.0 });
+
+        let base = calculate_damage(&material(), &channeling);
+        let reduced = calculate_damage(&with_ultimate, &channeling);
+        let base_seconds = base.cycle_seconds().unwrap();
+        let seconds = reduced.cycle_seconds().unwrap();
+        assert!((seconds / base_seconds - 0.55).abs() < 1e-9, "{seconds} / {base_seconds}");
+        let ratio = reduced.dps.unwrap().max / base.dps.unwrap().max;
+        assert!((ratio - 1.0 / 0.55).abs() < 1e-9, "{ratio}");
     }
 
     #[test]
@@ -2754,8 +2788,7 @@ mod tests {
         use crate::ultimate_skill::{UltimateSkill, UltimateSkills};
 
         let mut m = material();
-        let mut tg = target();
-        tg.skill.single_target_channeling = true;
+        let tg = target();
         m.common_skills.ultimate = UltimateSkills {
             slots: [Some(UltimateSkill::WideFocus), None],
             super_limit: true,

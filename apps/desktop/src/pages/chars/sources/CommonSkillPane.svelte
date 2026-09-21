@@ -175,7 +175,6 @@
     }
     if (u.slots.includes("full_throttle")) {
       out.push(`中ディレイ ${fmtSigned(-fullThrottlePercent, { max: 2 }, "%")}`);
-      out.push(`単体チャネリング段数 ${fmtSigned(effects?.added_hit_count ?? 0)}`);
     }
     if (u.slots.includes("wide_focus")) {
       out.push(`スキル範囲 ${fmtSigned(effects?.skill_range_bonus ?? 0)}`);

@@ -31,6 +31,12 @@ pub struct NewCharacter {
     /// 2026-09-18 取得)。魔法人形を持たないキャラ・未選択は `None`
     #[serde(default)]
     pub summon_skill_id: Option<String>,
+    /// 回しに差し込む CT 技(gamedata の `Skill::id`)。
+    /// `None` = 未設定で、既定(`rotation::choose_rotation` が選ぶ 1 つ)を自動で差し込む。
+    /// `Some([])` = 明示的に差し込まない。`Some([id, …])` = 明示指定。
+    /// **自動値は保存しない**(ユーザーが触ったときだけ値が入る)
+    #[serde(default)]
+    pub rotation_skill_ids: Option<Vec<String>>,
     /// ホームの「次の目標」に据えるコンテンツ(gamedata の `Content::id`)。
     /// `None` はユーザーが決めていない状態で、そのときは画面が自動で選ぶ。
     /// 「クリアできる」と「周回したい」は別なので、自動判定を置き換える例外操作として持つ。

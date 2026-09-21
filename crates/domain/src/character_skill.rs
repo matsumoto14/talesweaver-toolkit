@@ -180,7 +180,7 @@ pub struct MasteryOverride {
 /// このキャラスキルが意味を持つ主軸スキルの条件(イェフネンの形態ごとのパッシブ)。
 ///
 /// 効果側に条件を持たせるのではなく、**スキルに印を立てて計算側が見る**
-/// (`Skill::single_target_channeling` / `Skill::summon_form` と同じ作法)。
+/// (`Skill::summon_form` と同じ作法)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SkillRequirement {

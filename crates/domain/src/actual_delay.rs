@@ -8,7 +8,9 @@
 //! - **基本中ディレイ**は wiki スキル性能一覧の「動作」列(`Skill::base_actual_delay`)
 //! - **中ディレイ減少値**(= 倍率B の減少分)は上限 70%。供給源は極限スキル「フルスロットル」/
 //!   カフス(盾+)のランダムオプション / シエナのオーラの追加オプション / キャラのパッシブ・マスタリー
-//! - **コンボボーナス**(2 コンボ以上で ×0.5)は倍率A で、減少値の上限 70% の**対象外**
+//! - **コンボボーナス**(2 コンボ以上で ×0.5)は倍率A で、減少値の上限 70% の**対象外**。
+//!   ただし**チャネリング技(区分 `続`)には掛けない**(ADR-019。持続だけ半分になって
+//!   攻撃回数が据え置きだと DPS がほぼ 2 倍になるが、効くという根拠が無い)
 //! - wiki が「(固定)」と書いている中ディレイ(極・ギガブレイズ 等)は減少が効かない
 
 use serde::{Deserialize, Serialize};
@@ -72,6 +74,10 @@ pub struct ActualDelay {
 /// `charge_seconds` はチャージで段数を伸ばす技(`Skill::full_charge`)がチャージに費やす時間。
 /// 中ディレイ減少も下限も効かず 1 回の所要時間に丸ごと乗るので、下限を取ったあとに足す。
 /// 実測のスキル回数表はチャージ無しの計測なので、チャージしているときは式で出す。
+///
+/// `channeling` はチャネリング技(区分 `続`。中ディレイ = 撃ち続ける持続時間)か。
+/// **コンボボーナス(倍率A ×0.5)は掛けない** —— 持続を半分にすると攻撃回数(tick 10)は
+/// そのままで DPS がほぼ 2 倍になるが、コンボが反復周期に効くという根拠が無い(ADR-019)。
 pub fn actual_delay(
     base: f64,
     fixed: bool,
@@ -79,6 +85,7 @@ pub fn actual_delay(
     combo_count: u32,
     uses: &SkillUsesTable,
     charge_seconds: f64,
+    channeling: bool,
 ) -> ActualDelay {
     let reduction_raw: f64 = contributions.iter().map(|c| c.rate).sum();
     // 「(固定)」の中ディレイには減少が乗らない(コンボボーナスは倍率A なので別枠)
@@ -87,7 +94,7 @@ pub fn actual_delay(
     } else {
         reduction_raw.min(ACTUAL_DELAY_REDUCTION_MAX)
     };
-    let combo_rate = if combo_count >= COMBO_DELAY_THRESHOLD {
+    let combo_rate = if combo_count >= COMBO_DELAY_THRESHOLD && !channeling {
         COMBO_DELAY_RATE
     } else {
         1.0
@@ -221,13 +228,25 @@ mod tests {
     // wiki `#ActualDelay`: 中ディレイ = 基本 × (1 − 減少値) × (2 コンボ以上なら 0.5)
     #[test]
     fn 減少値とコンボボーナスが掛かる() {
-        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 0, &no_table(), 0.0);
+        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 0, &no_table(), 0.0, false);
         assert!((d.value - 1.4 * 0.55).abs() < 1e-12);
         assert_eq!(d.combo_rate, 1.0);
 
         // 2 コンボ以上でさらに半分
-        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 2, &no_table(), 0.0);
+        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 2, &no_table(), 0.0, false);
         assert!((d.value - 1.4 * 0.55 * 0.5).abs() < 1e-12);
+    }
+
+    /// チャネリング技(区分 `続`)の中ディレイは「撃ち続ける持続時間」なので、コンボの
+    /// 倍率A を掛けない(持続だけ半分になって攻撃回数は tick 10 のまま = DPS 2 倍を防ぐ)。
+    #[test]
+    fn チャネリング技にはコンボボーナスを掛けない() {
+        let d = actual_delay(10.0, false, Vec::new(), 2, &no_table(), 0.0, true);
+        assert_eq!(d.combo_rate, 1.0);
+        assert!((d.value - 10.0).abs() < 1e-12);
+        // 中ディレイ減少は効く(公式 2025-10-29 の追加案内)
+        let reduced = actual_delay(10.0, false, vec![c("フルスロットル", 0.45)], 2, &no_table(), 0.0, true);
+        assert!((reduced.value - 5.5).abs() < 1e-12);
     }
 
     // wiki `#ActualDelay`: 減少値の上限 70%。コンボボーナスは対象外
@@ -240,6 +259,7 @@ mod tests {
             0,
             &no_table(),
             0.0,
+            false,
         );
         assert!((d.reduction_raw - 0.80).abs() < 1e-12);
         assert_eq!(d.reduction, 0.70);
@@ -249,23 +269,23 @@ mod tests {
     // wiki `#ActualDelay`: 中ディレイの下限は 0.3s
     #[test]
     fn 下限は0_3秒() {
-        let d = actual_delay(0.8, false, vec![c("A", 0.70)], 2, &no_table(), 0.0);
+        let d = actual_delay(0.8, false, vec![c("A", 0.70)], 2, &no_table(), 0.0, false);
         // 0.8 × 0.30 × 0.5 = 0.12 → 下限 0.3
         assert_eq!(d.value, ACTUAL_DELAY_MIN);
         assert!(d.floored);
 
-        let d = actual_delay(1.4, false, Vec::new(), 0, &no_table(), 0.0);
+        let d = actual_delay(1.4, false, Vec::new(), 0, &no_table(), 0.0, false);
         assert!(!d.floored);
     }
 
     // wiki スキル性能一覧の「(固定)」は減少が効かない(極・ギガブレイズ 等)
     #[test]
     fn 固定の中ディレイには減少が乗らない() {
-        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 0, &no_table(), 0.0);
+        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 0, &no_table(), 0.0, false);
         assert_eq!(d.reduction, 0.0);
         assert!((d.value - 0.8).abs() < 1e-12);
         // コンボボーナス(倍率A)は固定でも掛かる
-        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 3, &no_table(), 0.0);
+        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 3, &no_table(), 0.0, false);
         assert!((d.value - 0.4).abs() < 1e-12);
     }
 
@@ -273,15 +293,15 @@ mod tests {
     // 1 回の所要時間に丸ごと乗る。実測表はチャージ無しの計測なので式で出す。
     #[test]
     fn チャージ時間は減少も下限も受けずに足される() {
-        let d = actual_delay(1.8, false, vec![c("A", 0.50)], 0, &no_table(), 1.0);
+        let d = actual_delay(1.8, false, vec![c("A", 0.50)], 0, &no_table(), 1.0, false);
         assert_eq!(d.charge, 1.0);
         assert!((d.value - (1.8 * 0.50 + 1.0)).abs() < 1e-12);
         // 下限 0.3s はチャージを足す前に取る(チャージぶんが目減りしない)
-        let floored = actual_delay(0.8, false, vec![c("A", 0.70)], 2, &no_table(), 0.5);
+        let floored = actual_delay(0.8, false, vec![c("A", 0.70)], 2, &no_table(), 0.5, false);
         assert!(floored.floored);
         assert!((floored.value - (ACTUAL_DELAY_MIN + 0.5)).abs() < 1e-12);
         // 実測表の格子に収まっていてもチャージ中は式(表はチャージ無しの計測)
-        let charged = actual_delay(0.8, false, vec![c("A", 0.48)], 0, &table(), 1.0);
+        let charged = actual_delay(0.8, false, vec![c("A", 0.48)], 0, &table(), 1.0, false);
         assert!(!charged.uses_measured);
         assert!((charged.uses_per_minute - 60.0 / charged.value).abs() < 1e-9);
     }
@@ -290,14 +310,14 @@ mod tests {
     #[test]
     fn 実測表の格子の中は実測回数で外は式にフォールバックする() {
         // 総減少 48%(フルスロットル 45% + カフス RO 3%)・基本 0.8s → 実測 135 回/分
-        let d = actual_delay(0.8, false, vec![c("A", 0.48)], 0, &table(), 0.0);
+        let d = actual_delay(0.8, false, vec![c("A", 0.48)], 0, &table(), 0.0, false);
         assert!(d.uses_measured);
         assert!((d.uses_per_minute - 135.0).abs() < 1e-9);
         // 式なら 60 / (0.8 × 0.52) = 144.2 回/分。実測のほうが少ない(詠唱・入力の overhead)
         assert!(d.uses_per_minute < 60.0 / d.value);
 
         // 格子の外(総減少 20%)は式で出す
-        let d = actual_delay(0.8, false, vec![c("A", 0.20)], 0, &table(), 0.0);
+        let d = actual_delay(0.8, false, vec![c("A", 0.20)], 0, &table(), 0.0, false);
         assert!(!d.uses_measured);
         assert!((d.uses_per_minute - 60.0 / d.value).abs() < 1e-9);
     }
@@ -305,19 +325,19 @@ mod tests {
     #[test]
     fn 実測表は縦横とも線形補間する() {
         // 基本 1.2s は 0.8s(135)と 1.6s(69)の中点 → 102
-        let d = actual_delay(1.2, false, vec![c("A", 0.48)], 0, &table(), 0.0);
+        let d = actual_delay(1.2, false, vec![c("A", 0.48)], 0, &table(), 0.0, false);
         assert!((d.uses_per_minute - 102.0).abs() < 1e-9);
         // 総減少 56% は 48%(135)と 64%(176)の中点 → 155.5
-        let d = actual_delay(0.8, false, vec![c("A", 0.56)], 0, &table(), 0.0);
+        let d = actual_delay(0.8, false, vec![c("A", 0.56)], 0, &table(), 0.0, false);
         assert!((d.uses_per_minute - 155.5).abs() < 1e-9);
     }
 
     // 実測表はコンボボーナス無し・減少が効くスキルの計測なので、その条件を外れたら式で出す
     #[test]
     fn コンボボーナスと固定中ディレイでは実測表を使わない() {
-        let combo = actual_delay(0.8, false, vec![c("A", 0.48)], 2, &table(), 0.0);
+        let combo = actual_delay(0.8, false, vec![c("A", 0.48)], 2, &table(), 0.0, false);
         assert!(!combo.uses_measured);
-        let fixed = actual_delay(0.8, true, vec![c("A", 0.48)], 0, &table(), 0.0);
+        let fixed = actual_delay(0.8, true, vec![c("A", 0.48)], 0, &table(), 0.0, false);
         assert!(!fixed.uses_measured);
     }
 }

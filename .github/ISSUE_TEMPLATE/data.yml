@@ -22,7 +22,7 @@ body:
       label: いまの値と、正しい値
       placeholder: |
         いま: 段数 10
-        正しい: 段数 13(フルスロットル時)
+        正しい: 段数 12
     validations:
       required: true
 

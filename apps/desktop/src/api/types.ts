@@ -64,8 +64,9 @@ export interface Skill {
   critical_rate: number | null;
   /** スキル Lv(wiki スキル性能一覧の SLv) */
   level: number;
-  /** 単体チャネリングスキルか。極限スキル「フルスロットル」の段数増加はこれにだけ乗る */
-  single_target_channeling: boolean;
+  /** チャネリング(押している間、一定間隔で攻撃を繰り返す)技の tick。null = 該当しない。
+   *  段数(hit_count)は 1 tick ぶんで、1 回の使用ぶんは 段数 × ticks */
+  channeling: Channeling | null;
   /** 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列。null = 秒として読めない */
   base_actual_delay: number | null;
   /** 中ディレイが固定で減少が効かない(wiki の「(固定)」表記) */
@@ -1356,6 +1357,8 @@ export interface RegisteredCharacter {
   summon_skill_id: string | null;
   /** ホームの「次の目標」に据えるコンテンツ。未設定(null)なら自動で選ぶ */
   goal_content_id: string | null;
+  /** 回しに差し込む CT 技。null = 未設定(既定を自動で差し込む)、[] = 差し込まない */
+  rotation_skill_ids: string[] | null;
   /** 共通スキル(wiki: Skill/共通) */
   common_skills: CommonSkills;
   default_buff_set_id: number | null;
@@ -1390,7 +1393,39 @@ export interface NewCharacter {
   summon_skill_id: string | null;
   /** ホームの「次の目標」に据えるコンテンツ。未設定(null)なら自動で選ぶ */
   goal_content_id: string | null;
+  /** 回しに差し込む CT 技。null = 未設定(既定を自動で差し込む)、[] = 差し込まない */
+  rotation_skill_ids: string[] | null;
   default_buff_set_id: number | null;
+}
+
+/** チャネリング技の tick(Rust `Channeling`)。 */
+export interface Channeling {
+  /** 1 回の使用で撃つ tick 数 */
+  ticks: number;
+  /** tick の間隔(秒) */
+  tick_seconds: number;
+}
+
+/** 「差し込む CT 技」の候補 1 件(commands の `RotationInsertChoice`)。 */
+export interface RotationInsertChoice {
+  skill_id: string;
+  skill_name: string;
+  /** クールタイム(秒) */
+  cooldown_seconds: number;
+  /** 未設定(rotation_skill_ids が null)のとき既定で差し込まれる技か */
+  default_on: boolean;
+  /** いまの選択にこの技を足したときの期待 DPS の差(負なら差し込むと下がる) */
+  expected_dps_gain: number | null;
+}
+
+/** 「差し込む CT 技」の候補一式(commands の `RotationChoices`)。 */
+export interface RotationChoices {
+  candidates: RotationInsertChoice[];
+  /** 合間に連打する技の名前(主軸が CT 技のときは自動で決まる)。主軸を連打するなら null */
+  filler_skill_name: string | null;
+  /** いまの選択どおりに組んだ回しの期待 DPS(計算タブの Rotation.expected_dps と同じ値)。
+   *  expected_dps_gain を割合で見せるための分母。組めないなら null */
+  expected_dps: number | null;
 }
 
 export type CategoryKind = "assigned" | "fixed" | "rate";
@@ -1604,8 +1639,6 @@ export interface UltimateSkillPreview {
   critical_damage_rate: number;
   /** フルスロットルの中ディレイ減少。Σ% の小数表現 */
   actual_delay_reduction: number;
-  /** フルスロットルの単体チャネリングスキル段数増加 */
-  added_hit_count: number;
   /** ワイドフォーカスのスキル範囲増加(火力には効かない) */
   skill_range_bonus: number;
 }
@@ -2029,11 +2062,8 @@ export interface FlagDamage {
   /** 持続ダメージ 1 回ぶん(倍率 × 1 段、Cri倍率 2.0) */
   duration: DamageResult;
   /** 爆発 1 回ぶん(倍率 × 5 段、Cri倍率 2.5)。主軸が爆発させる技のときだけ非 null。
-   * dps は 1 周の時間で割った値(1 周に 1 度入る) */
+   * dps は主軸を撃つ間隔で割った値(1 回につき 1 度入る) */
   burst: DamageResult | null;
-  /** 積み直しの 1 周(積む技 × n → 主軸 → 爆発)。爆発させる技で、積む技と主軸の
-   * 所要時間が両方出せるときだけ非 null。null なら合算 DPS も出さない */
-  cycle: FlagCycle | null;
   /** 持続ダメージの周期(秒) */
   tick_seconds: number;
   /** <フラグ> の持続時間(秒) */
@@ -2041,29 +2071,70 @@ export interface FlagDamage {
 }
 
 /**
- * <フラグ> を爆発させるときの「積み直しの 1 周」(Rust `FlagCycle`)。
- * スレイ / クラッシュ は撃つたびに <フラグ> を消費するので、DPS は
- * `積む技(連 / 爆)× n → 主軸 1 回 → 爆発` の 1 周で出す。CT に満たない時間は
- * 積む技を撃って埋める。回数・時間・足し算はすべて Rust 側。
+ * 回し(連打する技 1 つ + 差し込む CT 技 0〜数個。Rust `Rotation`)。
+ * CT のある技は明けるまで撃てないので、その間は連打技を撃っている。
+ * 回数・間隔・足し算はすべて Rust 側(`domain::plan_rotation` / `rotation_dps`)。
  */
-export interface FlagCycle {
-  /** 積み直しに使う技(同じ形態の 連 / 爆) */
-  applier_skill_id: string;
-  applier_skill_name: string;
-  /** 積む技 1 回ぶんの結果 */
-  applier: DamageResult;
-  /** 1 周で積む技を撃つ回数 */
-  applier_uses: number;
-  /** 1 周の時間(秒) */
+export interface Rotation {
+  /** 連打する技。null = 連打できる技が無い(CT が明くのを待つだけ) */
+  filler: RotationFiller | null;
+  /** 差し込む CT 技(主軸が CT 技ならその 1 つ目) */
+  inserts: RotationInsert[];
+  /** 連打技に回る時間の割合(0〜1) */
+  filler_share: number;
+  /** 差し込む技だけで時間が埋まり、間隔を伸ばして詰めたか(全部は CT どおりに撃てない) */
+  crowded: boolean;
+  /** 回し全体の DPS(側ごと)と期待値 */
+  dps: DpsTriple;
+  expected_dps: number;
+}
+
+/** 回しの連打技(Rust `RotationFiller`)。 */
+export interface RotationFiller {
+  skill_id: string;
+  skill_name: string;
+  /** 連打しているのが主軸そのものか(画面は鎖に出ている結果をそのまま使う) */
+  is_main: boolean;
+  /** 1 回ぶんの結果。主軸そのものなら null */
+  result: DamageResult | null;
+  /** 1 回撃つのにかかる時間(秒) */
   seconds: number;
-  /** 1 回で積む <フラグ> の数 */
-  stacks_per_use: number;
-  /** 1 周で積み直す量(ウルミは爆発しても半分残るので少ない) */
-  stacks_to_apply: number;
-  /** 主軸の CT(秒)。1 周はこれより短くならない */
+  /** この技が出している期待 DPS(回しの中での取り分) */
+  expected_dps: number;
+  /** 回しの期待 DPS に占める割合(0〜1) */
+  dps_share: number;
+  /** 1 分あたりに撃つ回数 */
+  uses_per_minute: number;
+}
+
+/** 回しに差し込む CT 技 1 つぶん(Rust `RotationInsert`)。 */
+export interface RotationInsert {
+  skill_id: string;
+  skill_name: string;
+  /** 差し込む技が主軸そのものか */
+  is_main: boolean;
+  /** 1 回ぶんの結果。主軸そのものなら null(鎖の結果と同じ) */
+  result: DamageResult | null;
+  /** この技が起こす <フラグ> の爆発 1 回ぶん。主軸そのものなら null(FlagDamage.burst にある) */
+  burst: DamageResult | null;
+  /** 1 回撃つのにかかる時間(秒) */
+  seconds: number;
+  /** クールタイム(秒) */
   cooldown_seconds: number;
-  /** CT を満たすために積む技の回数を増やしたか */
+  /** この技を撃つ間隔(秒)。CT より短くならない */
+  interval_seconds: number;
+  /** 1 回あたり挟む連打技の回数 */
+  filler_uses: number;
+  /** CT を満たすために連打の回数を増やしたか */
   cooldown_bound: boolean;
+  /** この技を差し込むことで増える期待 DPS(負なら差し込むと下がる)。主軸自身は null */
+  expected_dps_gain: number | null;
+  /** この技が出している期待 DPS(回しの中での取り分。<フラグ> 爆発ぶんを含む) */
+  expected_dps: number;
+  /** 回しの期待 DPS に占める割合(0〜1) */
+  dps_share: number;
+  /** 1 分あたりに撃つ回数 */
+  uses_per_minute: number;
 }
 
 /**
@@ -2091,6 +2162,8 @@ export interface CharacterDamageResult {
   summon: SummonDamage | null;
   /** <フラグ> を 1 スタック以上積んでいるときだけ非 null(イェフネン) */
   flag: FlagDamage | null;
+  /** 回し(連打する技 + 差し込む CT 技)。差し込む CT 技が無いなら null で、DPS は技そのものの値 */
+  rotation: Rotation | null;
   combined: CombinedDamage;
 }
 

@@ -167,7 +167,7 @@
   /** チップに併記する効果値。写経しない — Rust 側 preview_potential_effects(3 種すべてを
    *  付けたとしたときの効果)から引く。 */
   let ultimateEffects = $state<{
-    critical_damage_rate: number; actual_delay_reduction: number; added_hit_count: number; skill_range_bonus: number;
+    critical_damage_rate: number; actual_delay_reduction: number; skill_range_bonus: number;
   } | null>(null);
   /** ソウルリンクの効いている量(preview_effective_stats の soul_link)。同じ応答から取る */
   let soulLinkPreview = $state<SoulLinkPreview | null>(null);
@@ -200,9 +200,7 @@
     const e = ultimateEffects;
     if (!e) return "";
     if (skillId === "scope_eye") return `クリダメ ${fmtSignedPct(e.critical_damage_rate)}`;
-    if (skillId === "full_throttle") {
-      return `中ディレイ ${fmtSignedPct(-e.actual_delay_reduction)} ・段数 ${fmtSigned(e.added_hit_count)}`;
-    }
+    if (skillId === "full_throttle") return `中ディレイ ${fmtSignedPct(-e.actual_delay_reduction)}`;
     return `範囲 ${fmtSigned(e.skill_range_bonus)}(火力には効きません)`;
   }
 

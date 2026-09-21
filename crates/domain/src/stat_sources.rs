@@ -1364,8 +1364,6 @@ pub struct UltimateSkillPreview {
     pub critical_damage_rate: f64,
     /// フルスロットルの中ディレイ減少。Σ% の小数表現
     pub actual_delay_reduction: f64,
-    /// フルスロットルの単体チャネリングスキル段数増加
-    pub added_hit_count: u32,
     /// ワイドフォーカスのスキル範囲増加(火力には効かない)
     pub skill_range_bonus: f64,
 }
@@ -1376,7 +1374,6 @@ impl UltimateSkillPreview {
         UltimateSkillPreview {
             critical_damage_rate: ultimate.critical_damage_rate(),
             actual_delay_reduction: ultimate.actual_delay_reduction(),
-            added_hit_count: ultimate.added_hit_count(),
             skill_range_bonus: ultimate.skill_range_bonus(),
         }
     }
@@ -1395,7 +1392,6 @@ impl UltimateSkillPreview {
         UltimateSkillPreview {
             critical_damage_rate: combat.critical_damage_rate(),
             actual_delay_reduction: combat.actual_delay_reduction(),
-            added_hit_count: combat.added_hit_count(),
             skill_range_bonus: range.skill_range_bonus(),
         }
     }

@@ -49,6 +49,8 @@ const ready = init().then(async () => {
       },
     characterSkills: (characterSkills) =>
       callWasm("normalize_character_skills", { characterSkills }) as CharacterSkills,
+    rotationSkills: (rotationSkillIds, gameCharacterId) =>
+      callWasm("retain_rotation_skills", { rotationSkillIds, gameCharacterId }) as string[] | null,
   });
 });
 

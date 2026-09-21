@@ -3,11 +3,12 @@
   // 右カラムは「計算の材料」(試し変更・バフ・入場条件)。計算はすべて Rust 側(preview_damage)。
   import { untrack } from "svelte";
   import {
-    errorMessage, evaluateContents, listSkills, listUpgradeCandidates, previewDamage, previewDefense,
+    errorMessage, evaluateContents, listRotationChoices, listSkills, listUpgradeCandidates,
+    previewDamage, previewDefense,
   } from "../../api/commands";
   import type {
-    Adjustments, CharacterDamageResult, ComboSkillType, ContentEvaluation, DefenseProfile, NewCharacter, Skill,
-    UpgradeCandidate,
+    Adjustments, CharacterDamageResult, ComboSkillType, ContentEvaluation, DefenseProfile, NewCharacter,
+    RotationChoices, Skill, UpgradeCandidate,
   } from "../../api/types";
   import { fmtDuration, fmtInt, fmtNum, fmtPct } from "../../format";
   import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
@@ -29,6 +30,7 @@
   import DamageChain from "./DamageChain.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import MaterialsPane from "./MaterialsPane.svelte";
+  import RotationPane from "./RotationPane.svelte";
   import WhyPanel from "./WhyPanel.svelte";
   import { changedFlowKeys, deltaText, flowRowsOf, pick as pickSide, stepValue, stepsOf } from "./damageDetail";
   import { DetailStore } from "./detailStore.svelte";
@@ -208,6 +210,68 @@
   );
   const comboNormalAttackId = $derived(combo ? normalAttackId : null);
 
+  // --- 回し(差し込む CT 技。この計算だけの選択で保存しない) -----------------
+  // 候補・既定 ON・損得は Rust の回しそのもの(list_rotation_choices)が返す。キャラタブと
+  // 同じ 1 本で、CT 判定も既定の選び方もここには写さない。
+  // null = キャラの保存値(未設定なら既定)どおり。キャラ・主軸・対象を変えたら null に戻す。
+  let rotationOverride = $state<string[] | null>(null);
+  /** 一時の差し込みを当てた payload。保存はしない(計算タブの試し変更と同じ流儀) */
+  const withRotation = (p: NewCharacter): NewCharacter =>
+    rotationOverride === null ? p : { ...p, rotation_skill_ids: rotationOverride };
+  let rotationChoices = $state<RotationChoices | null>(null);
+  const rotationLatest = latest({ debounce: 200 });
+  $effect(() => {
+    // 候補も損得も**この画面の材料**(選び直した技・コンボ・一時調整)で出す。
+    // 依存種別はキャラの主軸から決まる(preview_damage と同じ。Rust 側が持つ規則)
+    const pJson = payload ? JSON.stringify(withRotation(payload)) : null;
+    const sid = skillId;
+    const t = target;
+    const comboType = selectedComboSkillType;
+    const normalId = comboNormalAttackId;
+    const count = comboCount;
+    const tempJson = JSON.stringify(NEUTRAL_ADJUSTMENTS);
+    const buffsJson = JSON.stringify(app.calcBuffs);
+    if (!pJson || !sid || !t) {
+      rotationLatest.cancel();
+      rotationChoices = null;
+      return;
+    }
+    rotationLatest.run((isCurrent) =>
+      listRotationChoices(
+        JSON.parse(pJson), t.content.id, JSON.parse(buffsJson),
+        sid, count, comboType, normalId, JSON.parse(tempJson),
+      )
+        .then((r) => {
+          if (isCurrent()) rotationChoices = r;
+        })
+        .catch(() => {
+          // 編集途中で検証が通らないだけ。直前の候補をそのまま残す(押そうとしたチップを消さない)
+        }),
+    );
+    return () => rotationLatest.cancel();
+  });
+  const rotationCandidates = $derived(rotationChoices?.candidates ?? []);
+  /** いま ON の技。未設定なら既定 ON がそのまま点いて見える(初期値は常に埋まっている) */
+  const rotationOnIds = $derived(
+    (rotationOverride
+      ?? character?.rotation_skill_ids
+      ?? rotationCandidates.filter((c) => c.default_on).map((c) => c.skill_id)
+    ).filter((id) => rotationCandidates.some((c) => c.skill_id === id)),
+  );
+  /** 押した瞬間に計算し直す(「適用」を挟まない)。並びは候補の並びのまま */
+  function toggleRotationSkill(id: string, on: boolean) {
+    const next = on ? [...rotationOnIds, id] : rotationOnIds.filter((x) => x !== id);
+    rotationOverride = rotationCandidates.map((c) => c.skill_id).filter((x) => next.includes(x));
+  }
+  // キャラ・主軸(計算する技)・対象が変われば、一時の選択は保存値に戻す
+  let lastRotationKey = untrack(() => `${character?.id}|${skillId}|${target?.content.id}`);
+  $effect(() => {
+    const key = `${character?.id}|${skillId}|${target?.content.id}`;
+    if (key === lastRotationKey) return;
+    lastRotationKey = key;
+    rotationOverride = null;
+  });
+
   // --- 一時調整 -------------------------------------------------------------
   // この画面に編集 UI は無い(「調整(一時)」カードは削除済み)。previewDamage 系コマンドは
   // Adjustments を必須パラメータとして取るため、中立値を渡す。
@@ -233,6 +297,8 @@
   /** <フラグ>(技とは別枠のダメージ。イェフネン)。積んでいなければ null。
    *  合算(1 発の合計・DPS・討伐時間)は combined が持つので、画面は足し算をしない */
   const flag = $derived(result?.flag ?? null);
+  /** 回し(連打する技 + 差し込む CT 技)。本体の鎖の DPS はこの回しで出している */
+  const rotation = $derived(result?.rotation ?? null);
   const combined = $derived(result?.combined ?? null);
   /** 召喚獣(熊・精霊)が撃つスキル本体(結果 JSON は id しか持たないので skills 一覧から引く) */
   const summonSkillFull = $derived(skills.find((s) => s.id === summon?.skill_id) ?? null);
@@ -263,8 +329,9 @@
   );
   const requestLatest = latest({ debounce: 120 });
   $effect(() => {
-    const pJson = payload ? JSON.stringify(payload) : null; // sim のネスト変更も拾う
-    const sp = savedPayload;
+    // sim のネスト変更も拾う。回しの一時選択(保存しない)もここで payload に載せる
+    const pJson = payload ? JSON.stringify(withRotation(payload)) : null;
+    const sp = savedPayload ? withRotation(savedPayload) : null;
     const t = target;
     const sid = skillId;
     const comboType = selectedComboSkillType;
@@ -700,7 +767,16 @@
                 onPerHitDeltaFollow={() => { viewWhy("body"); details.follow("perHit"); }}
                 {flowChanged}
                 {flag}
+                {rotation}
                 combined={summon ? null : combined}
+              />
+              <!-- 回しの段(「DPS(回し)」の下に常設)。差し込みをその場で試せて、時間と DPS の
+                   取り分が技ごとに読める。数は Rust の回しが技ごとに返したものをそのまま出す -->
+              <RotationPane
+                {rotation} choices={rotationChoices} onIds={rotationOnIds} skills={bodySkills}
+                onToggle={toggleRotationSkill}
+                overridden={rotationOverride !== null}
+                onReset={() => (rotationOverride = null)}
               />
             {/if}
             {#if summon}
@@ -834,6 +910,9 @@
                   1 サイクル = 通常攻撃 {fmtNum(c.normal_delay, 2, "s")} + max(スキル {fmtNum(c.skill_delay, 2, "s")},
                   CI {c.interval !== null ? fmtNum(c.interval, 2, "s") : "?"}) = {fmtNum(c.seconds, 2, "s")}
                   ／ 1 秒あたり = (スキル + {c.normal_attack_name})の合計 ÷ 1 サイクル
+                {:else if rotation}
+                  <!-- 回しがあるときの DPS は「この回数で連打」ではない。上の回しの段と食い違う式を出さない -->
+                  連打し続けた場合は {Math.round(d.uses_per_minute)} 回/分。DPS は上の「回し」(連打 + 差し込み)の配分で出しています
                 {:else}
                   1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
                   {#if d.uses_measured}
