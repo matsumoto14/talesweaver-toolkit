@@ -1,12 +1,14 @@
 <script lang="ts">
   // 「skills」補正源のペイン。マスタリー(段ごとに 1 つ)と、自分・味方のスキル。
-  import type { CharacterSkillEffectsView, MasteryDef } from "../../../api/types";
+  import type { CharacterSkillDef, CharacterSkillEffectsView, MasteryDef } from "../../../api/types";
   import {
-    allySkills, effectLabel, enemySkills, ownSkills, resolvedEffectsOf, singleEffectLabel, toggleCharacterSkill,
+    allySkills, effectLabel, enemySkills, isRecordOnly, ownSkills, RECORD_ONLY_LABEL, resolvedEffectsOf,
+    singleEffectLabel, hasStacks, toggleCharacterSkill,
   } from "../../../characterSkills";
   import type { Draft } from "../../../draft";
   import { app } from "../../../state.svelte";
   import Icon from "../../../ui/Icon.svelte";
+  import NumberField from "../../../ui/NumberField.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
 
   interface Props {
@@ -29,6 +31,25 @@
       on,
       app.characterSkills,
     );
+    // OFF にしたら段の控えも捨てる。段 0(= OFF)は `skill_ids` に入れないことで表すので、
+    // 行を押した経路と段を 0 にした経路で残るものを変えない(`CharacterSkills::level_of`)
+    if (!on) delete draft.statSources.character_skills.skill_levels[id];
+  }
+
+  // 重ねがけできるスキル(ブレンド・<フラグ> のスタック)は行の中で数を決める。
+  // **0 = OFF**。ON/OFF と段数を 2 か所で操作させない(押した瞬間に結果が動く)。
+  // 行の高さは変えない(§00③)ので、欄は押せる面の外(extra)に置く。
+  const stackOf = (def: CharacterSkillDef) =>
+    skillChecked(def.id) ? (draft.statSources.character_skills.skill_levels[def.id] ?? def.max_level) : 0;
+  function setStack(def: CharacterSkillDef, value: number) {
+    const levels = draft.statSources.character_skills.skill_levels;
+    if (value <= 0) {
+      // 控えを捨てるのは toggleCharSkill(OFF)が受け持つ(2 か所で消さない)
+      toggleCharSkill(def.id, false);
+      return;
+    }
+    levels[def.id] = value;
+    if (!skillChecked(def.id)) toggleCharSkill(def.id, true);
   }
 
   // --- マスタリー(wiki: 各キャラの Skill ページ。段ごとに 1 つ)-----------
@@ -108,7 +129,9 @@
       <p class="empty dim">このキャラのスキルデータは未収録です。</p>
     {/if}
     {#each ownCharacterSkills as def (def.id)}
-      {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
+      {@const effects = resolvedEffectsOf(def.id, resolvedSkillEffects)}
+      <!-- 記録のみ(wiki に値はあるが計算に入れていない)と「マスタリー未取得」(効果が空)は別物 -->
+      {@const label = effectLabel(effects) ?? (isRecordOnly(effects) ? RECORD_ONLY_LABEL : null)}
       {@const checked = skillChecked(def.id)}
       <ToggleRow
         name={def.name}
@@ -119,6 +142,21 @@
         onToggle={() => toggleCharSkill(def.id, !checked)}
       >
         {#snippet icon()}<Icon kind="skill" id={def.id} size={20} label={def.name} />{/snippet}
+        <!-- 重ねがけの数を持つ自分のスキル(<フラグ> のスタック)。0 = OFF。
+             判定は効果の種類(`hasStacks`)で、どの id が持つかの表は画面に持たない。
+             SLv(極・的中剣)はここでは入力させない(ユーザー判断 2026-09-21) -->
+        {#snippet extra()}
+          {#if hasStacks(def)}
+            <span class="stack">
+              <NumberField
+                label="{def.name}のスタック"
+                min={0}
+                max={def.max_level}
+                bind:value={() => stackOf(def), (v) => setStack(def, v)}
+              />
+            </span>
+          {/if}
+        {/snippet}
       </ToggleRow>
     {/each}
   </div>
@@ -166,7 +204,27 @@
         {#snippet icon()}
           <Icon kind="character" id={def.game_character_id} size={20} label={sourceCharacter?.name ?? def.game_character_id} />
         {/snippet}
+        {#snippet extra()}
+          {#if hasStacks(def)}
+            <span class="stack">
+              <NumberField
+                label="{def.name}のスタック数"
+                min={0}
+                max={def.max_level}
+                bind:value={() => stackOf(def), (v) => setStack(def, v)}
+              />
+            </span>
+          {/if}
+        {/snippet}
       </ToggleRow>
     {/each}
   </div>
 </div>
+
+<style>
+  /* 重ねがけの数(ブレンド・<フラグ> のスタック)。**行の高さを変えない**(§00③)ので、
+     押せる面(.face)の外に置いて高さを行の最小(28px)に収める。
+     セルは 0 でも 10 でも同じ幅(tabular-nums + min-width)なので、桁が増えても動かない */
+  .stack { flex: none; display: inline-flex; align-items: center; height: 26px; }
+  .stack :global(.numfield .cell) { padding-top: 2px; padding-bottom: 3px; min-width: 56px; }
+</style>

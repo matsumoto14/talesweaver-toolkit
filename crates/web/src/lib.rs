@@ -87,6 +87,15 @@ struct NormalizeSummonSkillSelectionArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct NormalizeCharacterSkillsArgs {
+    /// 欄が無い古い書き出し JSON(キャラスキルを保存する前の版)は**未選択**として読む。
+    /// ここを必須にすると、1 件でも古い行があるファイルの取り込みがまるごと止まる
+    #[serde(default)]
+    character_skills: domain::CharacterSkills,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BuffsArgs {
     buffs: domain::BuffSelection,
 }
@@ -336,6 +345,13 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
                 a.main_skill_id,
                 a.summon_skill_id,
             ))
+        }
+
+        // カタログから消えたキャラスキルを落とす(書き出し JSON の読み込み・IndexedDB の
+        // 一回だけの正規化パスが呼ぶ。2026-09-21 追記)
+        "normalize_character_skills" => {
+            let a: NormalizeCharacterSkillsArgs = args_of(command, args)?;
+            ok(commands::normalize_character_skills(a.character_skills))
         }
 
         // --- 引数を取る計算系 ---

@@ -67,6 +67,8 @@
 - 出典は Tale Wiki(スキル・敵・バフ・コンテンツ等)と、装備・称号の 9 値およびアイコンはゲームクライアントの展開データ(docs/adr/004-equipment-model.md)。各データに出典(ページ・取得日)を持たせる
 - wiki に無く実測に頼る値は `[仮]` を付ける(docs/adr/002-damage-formula-sources.md)
 - `inkri`: ビアヌのインクリ対象装備カタログ(部位はクライアント DB、ビアヌ費用・エタインクリ費用は wiki の表)。生成は `tools/gamedata/import_inkri_targets.py`
+- `skills::form_of`(副表 `SKILL_FORMS`)はイェフネンの武器形態を `Skill::form` に付け、`skills::resolve_skill_variants` は習得しているキャラスキル(速剣 / 最大までチャージ)とマスタリーで変わる技の性能(倍率・段数・チャージ時間)を 1 か所で解決する。計算タブ・プレビュー・ホーム評価はすべてこの 1 関数を通る(形態の分岐を各所に書かない)
+- `flag`: イェフネンの <フラグ>(技とは別枠のダメージ)。スタック数 → 倍率の表、持続 / 爆発の技データ(`flag_skill`)、マスタリー3(欠片)の E1 寄与(`flag_damage_contributions`)を持つ。与ダメージ式には合流せず、commands が同じ材料で 2 本目のダメージとして計算する(docs/damage-formula.md §12「<フラグ>」)
 - `skills::attacker_of` は魔法人形(副表 `MAGIC_DOLL_SKILLS`)・破壊精霊(副表 `DESTRUCTION_SPIRIT_SKILLS`)が撃つスキルを判定し、`Skill::attacker` に付ける。`skills::summon_form_of`(副表 `SUMMON_FORMS`)は主軸スキル・召喚スキルが属する召喚獣の型(ミカベア/ルシベア/アンフェル/グレシス/イグニー)を `Skill::summon_form` に付ける。`characters::attack_coefficients_for` 等は攻撃者ごとの係数を返す唯一の口(`Player` と `DestructionSpirit` は既存の依存種別別関数に委譲)
 
 ### crates/storage — ユーザーデータ(SQLite)

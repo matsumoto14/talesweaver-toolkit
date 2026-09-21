@@ -12,7 +12,7 @@ import type {
   EquipmentPart, PartSlot, RandomOptionCandidate,
   RelicDirection, RelicState, WeaponSystem,
   InkriTarget, InkriAttemptRequest, InkriBatchResult, InkriKind, EtaScrollPrice,
-  NormalizedSkillSelection,
+  NormalizedSkillSelection, CharacterSkills,
 } from "./types";
 
 export const listGameCharacters = () => invoke<GameCharacter[]>("list_game_characters");
@@ -100,6 +100,11 @@ export const retainCharacterSkills = (skillIds: string[], gameCharacterId: strin
  * スキル id の一覧を TS に書き写さない) */
 export const normalizeSummonSkillSelection = (mainSkillId: string | null, summonSkillId: string | null) =>
   invoke<NormalizedSkillSelection>("normalize_summon_skill_selection", { mainSkillId, summonSkillId });
+/** カタログから消えたキャラスキルを保存済みの選択から落とす(書き出し JSON の読み込みが呼ぶ。
+ * 2026-09-21 追記。どの id が消えたかは Rust 側(gamedata::normalize_character_skill_selection)が
+ * カタログを引いて決める唯一の正で、id の一覧を TS に書き写さない) */
+export const normalizeCharacterSkills = (characterSkills: CharacterSkills | undefined) =>
+  invoke<CharacterSkills>("normalize_character_skills", { characterSkills });
 /** 防御側の戦闘能力値(docs/damage-formula.md §6〜7)。対象コンテンツに依らない */
 export const previewDefense = (character: NewCharacter, buffs: BuffSelection = { choices: [] }) =>
   invoke<DefenseProfile>("preview_defense", { character, buffs });

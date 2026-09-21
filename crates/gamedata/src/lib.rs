@@ -11,6 +11,7 @@ pub mod contents;
 pub mod elements;
 pub mod enemies;
 pub mod equipment_catalog;
+pub mod flag;
 pub mod inkri;
 pub mod masteries;
 pub mod random_options;
@@ -23,7 +24,7 @@ use serde::Serialize;
 pub use actual_delay::{skill_uses_table, SKILL_USES_SOURCE};
 pub use awakening::{awakening_caps, awakening_rate, AWAKENING_SOURCE};
 pub use buffs::{buff_catalog, BUFF_CATALOG_SOURCE};
-pub use character_skills::{character_skill_catalog, CHARACTER_SKILL_SOURCE};
+pub use character_skills::{character_skill_catalog, CHARACTER_SKILL_SOURCE, normalize_character_skill_selection};
 pub use characters::{
     accuracy_correction, accuracy_correction_for, attack_coefficients, attack_coefficients_for,
     characters, equipment_coefficients, equipment_coefficients_for, find_character, GameCharacter,
@@ -43,10 +44,19 @@ pub use equipment_catalog::{
     EquipmentItem, WeaponClass, WeaponSystem, WristType, ENHANCE_SOURCE,
     EQUIPMENT_ABILITY_SOURCE, EQUIPMENT_CATALOG_SOURCE,
 };
+pub use flag::{
+    flag_applier_for, flag_damage_contributions, flag_multiplier, flag_skill, flag_stacks,
+    flag_stacks_left_after_burst, flag_stacks_per_use, flag_stacks_to_apply, FlagPart,
+    FLAG_DURATION_SECONDS, FLAG_MULTIPLIERS, FLAG_SKILL_ID, FLAG_TICK_SECONDS,
+};
 pub use inkri::{find_inkri_target, inkri_targets, InkriTarget, INKRI_TARGET_SOURCE};
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};
-pub use skills::{attacker_of, find_skill, normalize_summon_skill_selection, skills_for};
+pub use skills::{
+    all_skills, attacker_of, cooldown_of, find_skill, form_of, normalize_summon_skill_selection,
+    resolve_skill_variants,
+    skills_for,
+};
 pub use titles::{title_catalog, TITLE_SOURCE};
 
 /// データの出典。

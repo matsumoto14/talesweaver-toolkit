@@ -191,6 +191,9 @@ pub struct DamageTarget {
     pub title_attack_damage_rate: f64,
     /// 対象地域・敵に一致した称号の割合追加ダメージ(§5 新-割合)。
     pub title_added_damage_rate: f64,
+    /// キャラスキルの割合追加ダメージ(§5 新-割合)。形態で絞るスキルの解決は呼び出し側
+    /// (`CharacterSkills::added_damage_rate`)
+    pub skill_added_damage_rate: f64,
     /// キャラスキル・マスタリー・バフの、与ダメージ式のカテゴリへの寄与(カタログの解決は
     /// 呼び出し側)。効き先はカテゴリごとに違う(X4 攻撃ダメージ(スキル)、L 最終ダメージ、
     /// E1/E2 スキル倍率増加 …)ので、値だけでなく**どのカテゴリか**を持つ。`source` は
@@ -259,6 +262,13 @@ impl DamageTriple {
     pub fn primary(&self, critical_chance: f64) -> i64 {
         if critical_chance > 0.0 { self.critical } else { self.max }
     }
+
+    /// クリ率(0..1)で按分した期待値。DPS の期待値(`dps.max × (1−p) + dps.critical × p`)と
+    /// 同じ按分を 1 発ぶんの数に当てたもの。<フラグ>(技とは別枠のダメージ)を DPS に
+    /// 乗せるときに使う
+    pub fn expected(&self, critical_chance: f64) -> f64 {
+        self.max as f64 * (1.0 - critical_chance) + self.critical as f64 * critical_chance
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -317,7 +327,8 @@ pub struct DamageResult {
     pub damage_cap: i64,
     /// 上限で捨てられた分(1 段あたり)。すべて 0 なら上限に当たっていない
     pub capped_loss: DamageTriple,
-    /// 割合追加ダメージ(§5「新-割合」)の Σ%。いまの供給源はシャープネスビジョンのみ
+    /// 割合追加ダメージ(§5「新-割合」)の Σ%。供給源はシャープネスビジョン・武器の
+    /// ランダムOP・称号・キャラスキル
     pub added_damage_rate: f64,
     /// 割合追加ダメージの実額。**合計ダメージ**に乗る(1 段ごとではない)ので
     /// `total` にだけ含まれる
@@ -382,6 +393,36 @@ pub struct ComboCycle {
     pub seconds: f64,
     /// スキルを撃てる回数(回/分)= 60 ÷ サイクル。実測表はコンボなしの計測なので使わない
     pub uses_per_minute: f64,
+}
+
+impl DamageResult {
+    /// この技を 1 回撃つぶんのダメージ。コンボ中は**間に挟む通常攻撃ぶんを含む**
+    /// (1 サイクル = 通常攻撃 → スキル で 1 回と数えるため)。
+    ///
+    /// `cycle_total() ÷ cycle_seconds() = dps` がコンボの有無によらず成り立つので、
+    /// 複数の技を並べた 1 周(<フラグ> の積み直し)の火力はこの 2 つだけで出せる。
+    pub fn cycle_total(&self) -> DamageTriple {
+        let Some(combo) = &self.combo else {
+            return self.total;
+        };
+        DamageTriple {
+            min: self.total.min + combo.normal_attack_total.min,
+            max: self.total.max + combo.normal_attack_total.max,
+            critical: self.total.critical + combo.normal_attack_total.critical,
+        }
+    }
+
+    /// この技を 1 回撃つのにかかる時間(秒)。コンボ中は 1 サイクル、通常は
+    /// `60 ÷ スキル回数`(実測表由来なら overhead 込み)。中ディレイ未収録なら `None`。
+    ///
+    /// <フラグ>の爆発は技 1 回につき 1 度起きるので、その DPS をこの秒数で出す。
+    pub fn cycle_seconds(&self) -> Option<f64> {
+        if let Some(cycle) = &self.combo {
+            return Some(cycle.seconds);
+        }
+        let uses = self.actual_delay.as_ref()?.uses_per_minute;
+        (uses > 0.0).then(|| crate::actual_delay::SECONDS_PER_MINUTE / uses)
+    }
 }
 
 /// 1 秒あたりの与ダメージ(合計ダメージ / 中ディレイ)。
@@ -663,6 +704,68 @@ pub fn apply_summon_interval(result: &mut DamageResult, enemy_hp: Option<i64>) -
     result.defeat_seconds = seconds;
     result.reach = ReachTier::of_defeat_seconds(seconds);
     Some(interval)
+}
+
+/// 中ディレイを持たない別枠のダメージ(<フラグ>の持続 / 爆発)に、「この秒数に 1 回入る」
+/// 前提で DPS を入れる。持続は周期(1 秒)、爆発は技 1 回の所要時間(`cycle_seconds`)。
+///
+/// 中ディレイの内訳は存在しない(技の中ディレイの話ではない)ので `actual_delay` は
+/// `None` のままにする。討伐時間もここでは出さない(合算側 = commands が 1 か所で出す)。
+pub fn apply_fixed_interval_dps(result: &mut DamageResult, seconds: f64) {
+    if seconds <= 0.0 {
+        return;
+    }
+    let dps = DpsTriple {
+        min: result.total.min as f64 / seconds,
+        max: result.total.max as f64 / seconds,
+        critical: result.total.critical as f64 / seconds,
+    };
+    let p = result.critical_chance;
+    result.expected_dps = Some(dps.max * (1.0 - p) + dps.critical * p);
+    result.dps = Some(dps);
+}
+
+/// いくつかの技を並べた「1 周」の火力。`parts` は (1 回ぶんの結果, 1 周で撃つ回数)。
+///
+/// <フラグ> を爆発させるときの 1 周(積む技 × n → 主軸 → 爆発)がこれ。側(最小 / 最大 /
+/// クリ)ごとに足してから 1 周の時間で割る。期待値は**技ごとのクリ率で按分してから**足す
+/// (同じ 1 周でも技によってクリ率が違う)。時間が 0 以下なら `None`。
+pub fn cycle_dps(parts: &[(&DamageResult, u32)], seconds: f64) -> Option<(DpsTriple, f64)> {
+    if seconds <= 0.0 {
+        return None;
+    }
+    let mut total = DamageTriple { min: 0, max: 0, critical: 0 };
+    let mut expected = 0.0;
+    for (result, times) in parts {
+        let times = i64::from(*times);
+        let one = result.cycle_total();
+        total.min += one.min * times;
+        total.max += one.max * times;
+        total.critical += one.critical * times;
+        expected += one.expected(result.critical_chance) * times as f64;
+    }
+    Some((
+        DpsTriple {
+            min: total.min as f64 / seconds,
+            max: total.max as f64 / seconds,
+            critical: total.critical as f64 / seconds,
+        },
+        expected / seconds,
+    ))
+}
+
+/// 攻撃者 / 別枠ごとの DPS を側(最小 / 最大 / クリ)ごとに足す。片方が無ければもう片方。
+/// 画面は合算した側を選ぶだけで済む(足し算を画面に持たせない)。
+pub fn combine_dps(a: Option<DpsTriple>, b: Option<DpsTriple>) -> Option<DpsTriple> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(DpsTriple {
+            min: a.min + b.min,
+            max: a.max + b.max,
+            critical: a.critical + b.critical,
+        }),
+        (a, None) => a,
+        (None, b) => b,
+    }
 }
 
 /// 本体 + 熊の期待 DPS(単純和。本体は召喚中も自由に撃てる)。片方が無ければもう片方の値。
@@ -1016,7 +1119,8 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         .added_damage_rate_for(target.skill.dependency);
     let added_rate = material.common_skills.sharpness_vision_rate()
         + random_option_added_rate
-        + target.title_added_damage_rate;
+        + target.title_added_damage_rate
+        + target.skill_added_damage_rate;
     let sum = DamageTriple {
         min: min * hits,
         max: max * hits,
@@ -1038,11 +1142,12 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
             name: "割合追加ダメージ(合計に乗る)".to_string(),
             kind: FormulaStepKind::Outside,
             expression: format!(
-                "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}% + 称号 {:.0}%",
+                "合計 × {:.0}% ※シャープネスビジョン {:.0}% + ランダムOP {:.0}% + 称号 {:.0}% + キャラスキル {:.0}%",
                 added_rate * 100.0,
                 material.common_skills.sharpness_vision_rate() * 100.0,
                 random_option_added_rate * 100.0,
-                target.title_added_damage_rate * 100.0
+                target.title_added_damage_rate * 100.0,
+                target.skill_added_damage_rate * 100.0
             ),
             value: added_rate,
             reached: added_rate,
@@ -1107,6 +1212,7 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
             contributions,
             target.combo_count,
             &material.skill_uses,
+            target.skill.charge_seconds,
         )
     });
     let total = DamageTriple {
@@ -1326,6 +1432,7 @@ mod tests {
             equipment_enhanced_sources: Vec::new(),
             title_attack_damage_rate: 0.0,
             title_added_damage_rate: 0.0,
+            skill_added_damage_rate: 0.0,
             damage_contributions: Vec::new(),
             skill: Skill {
                 id: "s".into(),
@@ -1353,6 +1460,13 @@ mod tests {
                 ),
                 attacker: crate::Attacker::Player,
                 summon_form: None,
+                form: None,
+                swift_sword: None,
+                full_charge: None,
+                charge_seconds: 0.0,
+                applies_flag: false,
+                detonates_flag: false,
+                cooldown_seconds: None,
             },
             enemy: Enemy {
                 id: "e".into(),
@@ -2530,6 +2644,30 @@ mod tests {
         assert_eq!(combo.interval, None);
         assert!(!combo.interval_binding);
         assert!((combo.seconds - (combo.normal_delay + combo.skill_delay)).abs() < 1e-12);
+    }
+
+    /// チャージ時間はコンボの 1 サイクルにも乗る。中ディレイ減少も倍率A も下限も受けず、
+    /// 下限を取ったあとに足す値なので、サイクル = 通常攻撃 + max(スキル中ディレイ + チャージ, CI)。
+    #[test]
+    fn チャージ時間はコンボの1サイクルにも乗る() {
+        let m = material();
+        let normal = normal_attack(Some(0.32));
+        let plain = calculate_damage_with_combo(&m, &target(), &normal);
+        let mut charged_target = target();
+        charged_target.skill.charge_seconds = 1.0;
+        let charged = calculate_damage_with_combo(&m, &charged_target, &normal);
+
+        let plain_combo = plain.combo.clone().unwrap();
+        let charged_combo = charged.combo.clone().unwrap();
+        // 中ディレイ自体がチャージぶん伸び、サイクルもそのぶん伸びる
+        assert!((charged_combo.skill_delay - (plain_combo.skill_delay + 1.0)).abs() < 1e-12);
+        assert!((charged_combo.seconds - (plain_combo.seconds + 1.0)).abs() < 1e-12);
+        assert_eq!(charged.actual_delay.as_ref().unwrap().charge, 1.0);
+        // 1 発ぶんのダメージは変わらず、DPS だけ落ちる
+        assert_eq!(charged.total, plain.total);
+        assert!(charged.dps.unwrap().max < plain.dps.unwrap().max);
+        // 「技 1 回の所要時間」もサイクルを指す(<フラグ> 爆発の DPS はこれで割る)
+        assert_eq!(charged.cycle_seconds(), Some(charged_combo.seconds));
     }
 
     #[test]

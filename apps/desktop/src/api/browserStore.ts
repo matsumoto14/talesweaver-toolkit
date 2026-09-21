@@ -10,8 +10,8 @@
  * (同じ検証を TS に写すと必ずずれるため。保存前に問うのは呼び出し側 = invoke.wasm.ts)。
  */
 import type {
-  BuffSelection, BuffSet, CharacterIcon, DamageSnapshot, NewCharacter, RegisteredCharacter,
-  ValidationLocation,
+  BuffSelection, BuffSet, CharacterIcon, CharacterSkills, DamageSnapshot, NewCharacter,
+  RegisteredCharacter, ValidationLocation,
 } from "./types";
 
 const DB_NAME = "tw-context";
@@ -37,6 +37,11 @@ const DB_NAME = "tw-context";
  * v8 で補正源に `lumina_corridor`(ルミナの回廊の回廊効果)が加わった。SQLite は JSON 列
  * (`stat_sources`)なので列追加も migrate も要らないが、IndexedDB は v3 と同じ理由で既存行に
  * 中立値(全 Lv0)を足す(2026-09-19)。
+ * v10 で、カタログから消えたキャラスキル(イェフネンの 鋭い欠片<フラグ> / べたつく欠片<フラグ>)を
+ * 保存済みの選択から落とす(SQLite 側の v18 と同じ移行)。v7 と同じく新しいストア・列は無く、
+ * どの id が消えたかの判定は Rust(WASM)のカタログを引く正規化関数しか持っていないので、
+ * `onupgradeneeded` ではなく `normalizeStoredSkillSelections`(ストアを開いた直後の通常の
+ * トランザクション)で行う(2026-09-21)。
  * v9 で装備に `avatar_corrections`(補正付きアバターをどの部位に着けているか)が加わった。
  * SQLite は JSON 列(`equipment`)なので列追加も migrate も要らないが、IndexedDB は v3 と同じ理由で
  * 既存行に中立値(全部位 false)を足す(2026-09-21)。
@@ -46,7 +51,7 @@ const DB_NAME = "tw-context";
  * 読んでから順に書き戻し、最後の 1 本以外の埋め直しが消えていた(v5 の DB を v9 で開くと
  * summon_skill_id と lumina_corridor が落ちる)。版ごとの分岐も持たず、欠けている欄だけを埋める。
  */
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 /** v3 で足した装備の欄の中立値。形の正は crates/domain の `AvatarEnhancements` / `EquipmentPolishes` */
 const ZERO_EQUIPMENT_VALUES = {
@@ -274,30 +279,55 @@ export const deleteCharacter = (id: number) =>
   });
 
 /**
- * v7: 主軸(`main_skill_id`)に召喚スキルが紛れている行を召喚欄(`summon_skill_id`)へ移す
- * (2026-09-18 追記。SQLite 側の v17 移行 `migrate_summon_skill_out_of_main` と同じ意味)。
+ * ストアを開いた直後に 1 回だけ走る、保存済みの選択の作り直し。
  *
- * どのスキルが召喚スキルかの判定・移す先の決定は `normalize`(呼び出し側 = invoke.wasm.ts が
- * Rust の `normalize_summon_skill_selection` を渡す)に委ね、ここでは結果をそのまま書き込む
- * だけ(スキル id の一覧を TS に書き写さない)。`onupgradeneeded` の版変更トランザクション中に
- * WASM 呼び出しを挟むと安全に完了しないため、ストアを開いた直後の通常のトランザクションとして
- * 実装する。起動のたびに呼んでも、移行後は対象行が無いので実質何もしない
- * (SQLite 側の `migrate_*` と同じ冪等性)。
+ * - v7: 主軸(`main_skill_id`)に召喚スキルが紛れている行を召喚欄(`summon_skill_id`)へ移す
+ *   (SQLite 側の v17 移行 `migrate_summon_skill_out_of_main` と同じ意味)
+ * - v10: カタログから消えたキャラスキルの id を落とす(SQLite 側の v18 移行
+ *   `migrate_removed_character_skills` と同じ意味)。残っていると計算がまるごと止まる
+ *
+ * **判定はすべて `normalize`(呼び出し側 = invoke.wasm.ts が Rust の正規化関数を渡す)に委ね、
+ * ここは結果を書き込むだけ**(スキル id の一覧を TS に書き写さない)。`onupgradeneeded` の
+ * 版変更トランザクション中に WASM 呼び出しを挟むと安全に完了しないため、通常の
+ * トランザクションとして実装する。起動のたびに呼んでも、2 回目以降は対象行が無いので
+ * 実質何もしない(SQLite 側の `migrate_*` と同じ冪等性)。
  */
-export const normalizeSummonSkillSelections = (
-  normalize: (
+export const normalizeStoredSkillSelections = (normalize: {
+  summon: (
     mainSkillId: string | null,
     summonSkillId: string | null,
-  ) => { main_skill_id: string | null; summon_skill_id: string | null },
-) =>
+  ) => { main_skill_id: string | null; summon_skill_id: string | null };
+  characterSkills: (characterSkills: CharacterSkills) => CharacterSkills;
+}) =>
   transact(CHARACTERS, "readwrite", async (tx) => {
     const store = tx.objectStore(CHARACTERS);
     const rows = await wrap(store.getAll() as IDBRequest<RegisteredCharacter[]>);
     for (const row of rows) {
-      const result = normalize(row.main_skill_id, row.summon_skill_id ?? null);
-      if (result.main_skill_id !== row.main_skill_id || result.summon_skill_id !== (row.summon_skill_id ?? null)) {
-        await wrap(store.put({ ...row, main_skill_id: result.main_skill_id, summon_skill_id: result.summon_skill_id }));
-      }
+      const summon = normalize.summon(row.main_skill_id, row.summon_skill_id ?? null);
+      // 欄が無い / 欠けた古い行(キャラスキルを保存する前の版)は中立値で読む。
+      // ここで例外を投げると移行がまるごと止まり、ready が reject してブラウザ版が全滅する
+      const stored = row.stat_sources?.character_skills;
+      const before: CharacterSkills = {
+        skill_ids: stored?.skill_ids ?? [],
+        skill_levels: stored?.skill_levels ?? {},
+      };
+      const skills = normalize.characterSkills(before);
+      const skillsChanged =
+        skills.skill_ids.length !== before.skill_ids.length
+        || Object.keys(skills.skill_levels).length !== Object.keys(before.skill_levels).length
+        || stored?.skill_ids === undefined
+        || stored?.skill_levels === undefined;
+      if (
+        summon.main_skill_id === row.main_skill_id
+        && summon.summon_skill_id === (row.summon_skill_id ?? null)
+        && !skillsChanged
+      ) continue;
+      await wrap(store.put({
+        ...row,
+        main_skill_id: summon.main_skill_id,
+        summon_skill_id: summon.summon_skill_id,
+        stat_sources: { ...row.stat_sources, character_skills: skills },
+      }));
     }
   });
 

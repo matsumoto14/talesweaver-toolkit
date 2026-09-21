@@ -4,7 +4,8 @@
 // (crates/domain/src/character_skill.rs の effects() / actual_delay_contributions() /
 // damage_contributions() が唯一の正)。
 import type {
-  Attacker, CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect, SummonForm,
+  Attacker, CharacterSkillDef, CharacterSkillEffectsView, DamageCategory, Skill, SkillEffect,
+  SkillForm, SummonForm,
 } from "./api/types";
 import { fmtPct, fmtSigned } from "./format";
 import { ELEMENT_LABELS, STAT_LABELS } from "./labels";
@@ -20,6 +21,8 @@ export const damageCategoryLabel = (c: DamageCategory): string =>
  * キャラスキル(複数効果を並べる effectLabel)とマスタリー(1 択なのでこれをそのまま使う)で共通 */
 export function singleEffectLabel(e: SkillEffect): string | null {
   if (e === "record_only") return null;
+  // Rust の SkillEffect::label と同じ文言。計算はしているが与ダメージ式には入らない
+  if (e === "separate_damage") return "技とは別枠のダメージ";
   if ("stat_rate" in e) {
     const stats = e.stat_rate.stats.map((k) => STAT_LABELS[k]).join(" / ");
     return `${stats} ${fmtSigned(e.stat_rate.percent, { max: 2 }, "%")}`;
@@ -29,6 +32,16 @@ export function singleEffectLabel(e: SkillEffect): string | null {
   if ("min_evasion_rate" in e) return `最小回避率補正 ${fmtSigned(e.min_evasion_rate.value, { max: 2 }, "%")}`;
   // Rust の SkillEffect::label と同じ文言
   if ("accuracy_rate" in e) return `命中P割合増加(SLv×${fmtPct(e.accuracy_rate.per_level, { max: 2 })})`;
+  if ("added_damage_rate" in e) {
+    return `追加ダメージ(割合) ${fmtSigned(e.added_damage_rate.percent, { max: 2 }, "%")}`;
+  }
+  if ("damage_per_level" in e) {
+    const { category, percent } = e.damage_per_level;
+    if (category === "taken_damage_reduction" && percent < 0) {
+      return `敵被ダメージ ${fmtSigned(-percent, { max: 2 }, "%")} × スタック`;
+    }
+    return `${damageCategoryLabel(category)} ${fmtSigned(percent, { max: 2 }, "%")} × SLv`;
+  }
   const { category, percent } = e.damage;
   // 敵にかけるデバフは S(被ダメージ減少)に負値で積む。画面はプレイヤーの語彙で出す
   // (「被ダメージ減少 −10%」は意味が逆に読める)。唯一の正は Rust の SkillEffect::label
@@ -49,6 +62,13 @@ export function effectLabel(effects: SkillEffect[]): string | null {
  * まだ取得できていなければ空配列(record_only 扱いと同じ表示になる) */
 export const resolvedEffectsOf = (id: string, resolved: CharacterSkillEffectsView[]): SkillEffect[] =>
   resolved.find((e) => e.id === id)?.effects ?? [];
+
+/** 効果はあるが**計算に入れていない**(wiki に値はあるが確率発動・防御側などで未配線)。
+ * 「マスタリー未取得」(= 効果が空)とは別物なので、行の右端の文言を分ける */
+export const isRecordOnly = (effects: SkillEffect[]): boolean =>
+  effects.length > 0 && effects.every((e) => e === "record_only");
+/** 記録のみの行に出す文言。マスタリーの record-only 表現と合わせる */
+export const RECORD_ONLY_LABEL = "記録のみ(計算に入りません)";
 
 // --- 主軸スキル(攻撃力の依存種別を決める、Skill 由来)------------------------
 // キャラ登録(RegisterPane)とキャラワークスペース(StatusPane)で同じ選び方をする。
@@ -83,12 +103,14 @@ export function mainSkillOptions(
   emptyMeta: string,
   attacker: Attacker | "summon" = "player",
   summonForm?: SummonForm | null,
+  form?: SkillForm | null,
 ): PickerOption[] {
   return [
     { value: "", name: emptyLabel, meta: emptyMeta, iconId: null },
     ...skills
       .filter((s) => (attacker === "summon" ? s.attacker !== "player" : s.attacker === attacker))
       .filter((s) => summonForm == null || s.summon_form === summonForm)
+      .filter((s) => form == null || s.form === form)
       .map((s, i) => ({
         value: s.id, name: s.name, meta: skillMeta(s), iconId: s.id, iconKind: "skill" as const,
         pinned: i < MAIN_SKILL_PINNED,
@@ -108,12 +130,38 @@ export function toggleCharacterSkill(
   return on ? [...rest, id] : rest;
 }
 
-/** このキャラが ON にできるスキル(自分のスキル / 味方から受けるスキル) */
+/** いま撃つ技がこのスキルの条件(形態・チャージ)を満たすか。判定は `requires` の印だけを見る
+ * (どの id がどの形態かの対応表は TS に持たない)。正は Rust の SkillRequirement::matches */
+export function skillRequirementMet(def: CharacterSkillDef, skill: Skill | null): boolean {
+  if (def.requires === null) return true;
+  if (skill === null) return false;
+  return def.requires === "full_charge"
+    ? skill.full_charge !== null
+    : skill.form === def.requires.form;
+}
+
+/** このキャラが ON にできるスキル(自分のスキル / 味方から受けるスキル)。
+ * 形態で絞るスキル(`requires`)はキャラタブの一覧からは外し、主軸スキルの隣に出す */
 export const ownSkills = (catalog: CharacterSkillDef[], gameCharacterId: string) =>
-  catalog.filter((d) => d.audience === "self_only" && d.game_character_id === gameCharacterId);
+  catalog.filter((d) =>
+    d.audience === "self_only" && d.game_character_id === gameCharacterId && d.requires === null);
+
+/** いまの技でだけ意味がある自分のスキル(速剣・最大までチャージ・後方から攻撃)。
+ * 主軸スキルの隣に出す(§00②「要らないものを見せない」) */
+export const skillBoundSkills = (
+  catalog: CharacterSkillDef[], gameCharacterId: string, skill: Skill | null,
+) =>
+  catalog.filter((d) =>
+    d.audience === "self_only" && d.game_character_id === gameCharacterId
+    && d.requires !== null && skillRequirementMet(d, skill));
 export const allySkills = (catalog: CharacterSkillDef[]) =>
   catalog.filter((d) => d.audience === "ally");
 /** 敵にかけるデバフ。同行者がかける前提なので誰でも ON にできる */
 export const enemySkills = (catalog: CharacterSkillDef[]) =>
   catalog.filter((d) => d.audience === "enemy");
 
+/** 重ねがけの数(スタック)を入力させるスキルか。効果の種類で決める — スタックに比例する効果か、
+    技とは別枠のダメージを持つもの。SLv を持つだけのスキル(極・的中剣)は含めない */
+export function hasStacks(def: CharacterSkillDef): boolean {
+  return def.effects.some((e) => e === "separate_damage" || (typeof e === "object" && "damage_per_level" in e));
+}

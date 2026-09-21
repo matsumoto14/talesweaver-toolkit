@@ -10,9 +10,11 @@
 use crate::awakening::Awakening;
 use crate::content::{evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation};
 use crate::damage::{
-    apply_summon_interval, calculate_damage, combine_expected_dps, defeat_seconds, DamageContribution, DamageMaterial, DamageTarget,
+    apply_fixed_interval_dps, apply_summon_interval, calculate_damage, combine_expected_dps,
+    cycle_dps, defeat_seconds, DamageContribution, DamageMaterial, DamageResult, DamageTarget,
     DependencyCoefficients,
 };
+use crate::flag_cycle::plan_flag_cycle;
 use crate::enemy::Enemy;
 use crate::equipment::{
     sum_equipment_value_sources, Equipment, EquipmentBaseContext, EquipmentValueSource,
@@ -35,7 +37,42 @@ pub struct SkillEvaluationInput {
     pub skill: Skill,
     pub coefficients: DependencyCoefficients,
     pub damage_contributions: Vec<DamageContribution>,
+    /// キャラスキルの割合追加ダメージ(§5 新-割合)。形態で絞るスキルはこのスキルで
+    /// 解決済み(`CharacterSkills::added_damage_rate`)
+    pub skill_added_damage_rate: f64,
     pub element_value: i64,
+    /// <フラグ>(イェフネンの、技とは別枠のダメージ)ぶんの入力。
+    /// **技ごとに付く** — 爆発するのは スレイ / クラッシュ だけで、<フラグ> の技データは
+    /// 積んだ技から命中・Cri値を引き継ぐため。積んでいないキャラ・スタック 0 は `None`
+    pub flag: Option<FlagEvaluationInput>,
+}
+
+/// <フラグ> ぶんの入力(`SkillEvaluationInput` にぶら下がる)。
+/// 持続は周期ごと、爆発は技 1 回につき 1 度入るので、DPS の割り方だけが違う。
+#[derive(Debug, Clone)]
+pub struct FlagEvaluationInput {
+    /// 持続 1 回ぶん(`flag` は常に `None`。入れ子にしない)
+    pub duration: Box<SkillEvaluationInput>,
+    /// 爆発と積み直しの 1 周。<フラグ> を爆発させる技のときだけ `Some`
+    pub burst: Option<FlagBurstInput>,
+    /// 持続ダメージの周期(秒)
+    pub tick_seconds: f64,
+}
+
+/// <フラグ> を爆発させる技ぶんの入力。計算タブと同じ「積み直しの 1 周」
+/// (積む技 × n → 主軸 → 爆発)で DPS を出すのに要るものだけを持つ。
+#[derive(Debug, Clone)]
+pub struct FlagBurstInput {
+    /// 爆発 1 回ぶん
+    pub burst: Box<SkillEvaluationInput>,
+    /// 積み直しに使う技(同じ形態の 連 / 爆)
+    pub applier: Box<SkillEvaluationInput>,
+    /// 1 周で積み直す量(ウルミは爆発しても半分残るので少ない)
+    pub stacks_to_apply: u8,
+    /// 積む技 1 回で積む数
+    pub stacks_per_use: u8,
+    /// 主軸の CT(秒)。1 周はこれより短くならない
+    pub cooldown_seconds: f64,
 }
 
 /// 全コンテンツ×スキルを評価し、コンテンツごとに最大火力スキルと判定結果を返す
@@ -194,22 +231,28 @@ fn evaluate_one_content(
         content.enemy_id.as_deref(),
     );
 
+    // 1 件ぶんの計算対象。攻撃者(本体 / 召喚獣 / <フラグ>)で変わるのは入力だけなので、
+    // 的(敵・称号・装備)の組み立てはここ 1 か所にまとめる
+    let to_target = |entry: &SkillEvaluationInput| DamageTarget {
+        skill: entry.skill.clone(),
+        enemy: enemy.clone(),
+        combo_count: 0,
+        coefficients: entry.coefficients,
+        equipment_base_sources: equipment_base_sources_for(entry.skill.dependency),
+        equipment_enhanced_sources: equipment_enhanced_sources.clone(),
+        title_attack_damage_rate: title_damage_rate,
+        title_added_damage_rate,
+        damage_contributions: entry.damage_contributions.clone(),
+        skill_added_damage_rate: entry.skill_added_damage_rate,
+        element_value: entry.element_value,
+    };
+
     let mut best: Option<BestSkillDamage> = None;
     let mut best_dependency: Option<SkillDependency> = None;
+    // 最良スキルの入力と結果(<フラグ> の 1 周を組むのに、主軸 1 回ぶんの火力と時間が要る)
+    let mut best_entry: Option<(&SkillEvaluationInput, DamageResult)> = None;
     for entry in skills {
-        let target = DamageTarget {
-            skill: entry.skill.clone(),
-            enemy: enemy.clone(),
-            combo_count: 0,
-            coefficients: entry.coefficients,
-            equipment_base_sources: equipment_base_sources_for(entry.skill.dependency),
-            equipment_enhanced_sources: equipment_enhanced_sources.clone(),
-            title_attack_damage_rate: title_damage_rate,
-            title_added_damage_rate,
-            damage_contributions: entry.damage_contributions.clone(),
-            element_value: entry.element_value,
-        };
-        let result = calculate_damage(material, &target);
+        let result = calculate_damage(material, &to_target(entry));
         if best
             .as_ref()
             .is_none_or(|b| result.per_hit_primary > b.per_hit_primary)
@@ -223,30 +266,62 @@ fn evaluate_one_content(
             });
             // 装備条件の比較先は「判定に使ったスキル」の依存種別で決める
             best_dependency = Some(entry.skill.dependency);
+            best_entry = Some((entry, result));
         }
     }
 
-    // 召喚獣(熊・破壊精霊)ぶんの期待 DPS を本体の期待 DPS に足し、討伐時間を出し直す
-    // (wiki 計算式まとめ `STAB(熊)` 行。本体は召喚中も自由に撃てるので単純和)。
-    // 召喚獣にはコンボボーナスが乗らない(combo_count = 0)。実測回数表は本体プレイヤーの実測
-    // なので召喚獣には使わず、常に `summon_uses_per_minute` の式で 60 秒あたりの回数を出す。
-    if let (Some(summon_input), Some(b)) = (summon, best.as_mut()) {
-        let summon_target = DamageTarget {
-            skill: summon_input.skill.clone(),
-            enemy: enemy.clone(),
-            combo_count: 0,
-            coefficients: summon_input.coefficients,
-            equipment_base_sources: equipment_base_sources_for(summon_input.skill.dependency),
-            equipment_enhanced_sources: equipment_enhanced_sources.clone(),
-            title_attack_damage_rate: title_damage_rate,
-            title_added_damage_rate,
-            damage_contributions: summon_input.damage_contributions.clone(),
-            element_value: summon_input.element_value,
-        };
-        let mut summon_result = calculate_damage(material, &summon_target);
-        apply_summon_interval(&mut summon_result, enemy.hp);
-        let combined = combine_expected_dps(b.expected_dps, summon_result.expected_dps);
-        b.defeat_seconds = defeat_seconds(enemy.hp, combined);
+    // 本体以外(召喚獣・<フラグ>)の期待 DPS を足し、討伐時間を出し直す。
+    // 足す先は 1 か所にまとめる(2 つが同時に成立しても片方の合算が捨てられない)。
+    if let Some(b) = best.as_mut() {
+        let mut combined = b.expected_dps;
+
+        // <フラグ>(技とは別枠のダメージ)。計算タブ(`commands::combine_damage`)と同じ規則:
+        // 爆発させる技は「積み直しの 1 周」(積む技 × n → 主軸 → 爆発)で技の期待 DPS を
+        // **置き換え**、持続はそれに足す。技の DPS が出せないときは何も足さない
+        if let Some((entry, main_result)) = best_entry.as_ref() {
+            if let (Some(flag), true) = (entry.flag.as_ref(), combined.is_some()) {
+                if let Some(burst_input) = flag.burst.as_ref() {
+                    let applier = calculate_damage(material, &to_target(&burst_input.applier));
+                    let burst = calculate_damage(material, &to_target(&burst_input.burst));
+                    combined = match (applier.cycle_seconds(), main_result.cycle_seconds()) {
+                        (Some(applier_seconds), Some(main_seconds)) => plan_flag_cycle(
+                            burst_input.stacks_to_apply,
+                            burst_input.stacks_per_use,
+                            applier_seconds,
+                            main_seconds,
+                            burst_input.cooldown_seconds,
+                        )
+                        .and_then(|plan| {
+                            cycle_dps(
+                                &[(&applier, plan.uses), (main_result, 1), (&burst, 1)],
+                                plan.seconds,
+                            )
+                            .map(|(_, expected)| expected)
+                        }),
+                        // 積む技か主軸の所要時間が不明なら合算 DPS も不明
+                        _ => None,
+                    };
+                }
+                if combined.is_some() {
+                    let mut duration = calculate_damage(material, &to_target(&flag.duration));
+                    apply_fixed_interval_dps(&mut duration, flag.tick_seconds);
+                    combined = combine_expected_dps(combined, duration.expected_dps);
+                }
+            }
+        }
+
+        // 召喚獣(熊・破壊精霊)。wiki 計算式まとめ `STAB(熊)` 行。本体は召喚中も自由に
+        // 撃てるので単純和。コンボボーナスは乗らず(combo_count = 0)、実測回数表は本体
+        // プレイヤーの実測なので使わず `summon_uses_per_minute` の式で回数を出す
+        if let Some(summon_input) = summon {
+            let mut summon_result = calculate_damage(material, &to_target(summon_input));
+            apply_summon_interval(&mut summon_result, enemy.hp);
+            combined = combine_expected_dps(combined, summon_result.expected_dps);
+        }
+
+        if combined != b.expected_dps {
+            b.defeat_seconds = defeat_seconds(enemy.hp, combined);
+        }
     }
 
     let requirement_dependency = fixed_dependency.or(best_dependency);
@@ -305,6 +380,7 @@ mod tests {
             effects: ELITE_SWORDSMAN,
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: "",
         note: "",
     }];
@@ -333,6 +409,13 @@ mod tests {
             power_per_second: Skill::compute_power_per_second(Skill::compute_power(0.99, 1), Some(1.4)),
             attacker: crate::Attacker::Player,
             summon_form: None,
+            form: None,
+            swift_sword: None,
+            full_charge: None,
+            charge_seconds: 0.0,
+            applies_flag: false,
+            detonates_flag: false,
+            cooldown_seconds: None,
         }
     }
 
@@ -446,7 +529,9 @@ mod tests {
             skill: skill(),
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
+            skill_added_damage_rate: 0.0,
             element_value: 0,
+            flag: None,
         }];
         evaluate_contents_for_character(
             &material,
@@ -478,6 +563,103 @@ mod tests {
         );
     }
 
+    /// <フラグ> を爆発させる技を選んだコンテンツでは、討伐時間が「積み直しの 1 周」
+    /// (積む技 × n → 主軸 → 爆発)+ 持続 で出る。計算タブ(`commands::combine_damage`)と
+    /// 同じ式なので、ここでは式そのものを手計算と突き合わせる。
+    #[test]
+    fn フラグを爆発させる技は積み直しの1周で討伐時間を出す() {
+        let material = material(false);
+        let input = |s: Skill| SkillEvaluationInput {
+            skill: s,
+            coefficients: coefficients(),
+            damage_contributions: Vec::new(),
+            skill_added_damage_rate: 0.0,
+            element_value: 0,
+            flag: None,
+        };
+        // 主軸(爆発させる技)。積む技より 1 発が大きいので最良スキルに選ばれる
+        let main_skill = Skill { id: "main".into(), multiplier: 3.0, detonates_flag: true, cooldown_seconds: Some(10.0), ..skill() };
+        let applier_skill = Skill { id: "applier".into(), multiplier: 1.0, applies_flag: true, base_actual_delay: Some(1.0), ..skill() };
+        let burst_skill = Skill { id: "burst".into(), multiplier: 2.0, base_actual_delay: None, ..skill() };
+        let duration_skill = Skill { id: "duration".into(), multiplier: 0.5, base_actual_delay: None, ..skill() };
+        let mut main = input(main_skill);
+        main.flag = Some(FlagEvaluationInput {
+            duration: Box::new(input(duration_skill)),
+            burst: Some(FlagBurstInput {
+                burst: Box::new(input(burst_skill)),
+                applier: Box::new(input(applier_skill)),
+                stacks_to_apply: 10,
+                stacks_per_use: 2,
+                cooldown_seconds: 10.0,
+            }),
+            tick_seconds: 1.0,
+        });
+        let enemy_with_hp = Enemy { hp: Some(100_000), ..enemy() };
+        let skills = vec![main.clone()];
+        let run = |skills: &[SkillEvaluationInput]| {
+            evaluate_contents_for_character(
+                &material,
+                &Equipment::default(),
+                &content_area(),
+                &[enemy_with_hp.clone()],
+                skills,
+                None,
+                EquipmentBaseContext::catalog_only(&[], &[]),
+                &[],
+                Awakening::default(),
+                None,
+            )[0]
+                .damage
+                .clone()
+                .unwrap()
+        };
+        let with_flag = run(&skills);
+
+        // 手計算: 積み直し 10 ÷ 2 = 5 回。1 周 5 × 1.0 + 1.4 = 6.4s は CT 10s に足りないので
+        // ⌈(10 − 1.4) / 1.0⌉ = 9 回に増え、1 周は 10.4s
+        let burst_input = main.flag.as_ref().unwrap().burst.as_ref().unwrap();
+        let to_target_for = |i: &SkillEvaluationInput| DamageTarget {
+            skill: i.skill.clone(),
+            enemy: enemy_with_hp.clone(),
+            combo_count: 0,
+            coefficients: i.coefficients,
+            equipment_base_sources: Vec::new(),
+            equipment_enhanced_sources: Vec::new(),
+            title_attack_damage_rate: 0.0,
+            title_added_damage_rate: 0.0,
+            damage_contributions: Vec::new(),
+            skill_added_damage_rate: 0.0,
+            element_value: 0,
+        };
+        let applier = calculate_damage(&material, &to_target_for(&burst_input.applier));
+        let burst = calculate_damage(&material, &to_target_for(&burst_input.burst));
+        let main_result = calculate_damage(&material, &to_target_for(&main));
+        let mut duration = calculate_damage(&material, &to_target_for(&main.flag.as_ref().unwrap().duration));
+        apply_fixed_interval_dps(&mut duration, 1.0);
+        let plan = plan_flag_cycle(10, 2, applier.cycle_seconds().unwrap(), main_result.cycle_seconds().unwrap(), 10.0).unwrap();
+        assert_eq!(plan.uses, 9);
+        assert!((plan.seconds - 10.4).abs() < 1e-9);
+        let (_, expected) = cycle_dps(
+            &[(&applier, plan.uses), (&main_result, 1), (&burst, 1)],
+            plan.seconds,
+        )
+        .unwrap();
+        let combined = expected + duration.expected_dps.unwrap();
+        assert!(
+            (with_flag.defeat_seconds.unwrap() - 100_000.0 / combined).abs() < 1e-6,
+            "{:?}",
+            with_flag.defeat_seconds
+        );
+
+        // <フラグ> が無ければ技単独のまま(回帰)。CT を見ない「技を連打する」前提なので、
+        // 1 周基準(CT 10 秒を守る)より速く出る — 比べる対象ではないので値だけ確認する
+        let without = run(&[input(Skill { id: "main".into(), multiplier: 3.0, ..skill() })]);
+        assert!(
+            (without.defeat_seconds.unwrap() - 100_000.0 / main_result.expected_dps.unwrap()).abs()
+                < 1e-6
+        );
+    }
+
     /// 熊(魔法人形)の入力を足すと期待 DPS が本体+熊になり、討伐時間が短くなる
     /// (wiki 計算式まとめ `STAB(熊)` 行)。入力なしなら既存テストのまま変わらない(回帰)。
     #[test]
@@ -487,7 +669,9 @@ mod tests {
             skill: skill(),
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
+            skill_added_damage_rate: 0.0,
             element_value: 0,
+            flag: None,
         }];
         let summon_skill = Skill {
             id: "bear".into(),
@@ -499,7 +683,9 @@ mod tests {
             skill: summon_skill,
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
+            skill_added_damage_rate: 0.0,
             element_value: 0,
+            flag: None,
         };
         let enemy_with_hp = Enemy {
             hp: Some(100_000),

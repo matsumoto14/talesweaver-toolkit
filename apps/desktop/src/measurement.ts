@@ -25,6 +25,9 @@ export interface MeasurementConditions {
   eternalLevel: number;
   skill: Skill;
   comboSkillType: string | null;
+  /** 解決後(コンボタイプ・速剣・最大チャージを当てたあと)の倍率と段数。Rust の計算結果から
+   * そのまま取る。計算値が出せないとき(未収録の敵など)は null で、素の値を書き出す */
+  resolved: { multiplier: number; hit_count: number } | null;
   /** 収録済みの対象。「一覧に無い敵」のときは null */
   content: { id: string; name: string; enemyId: string } | null;
   /** 一覧に無い敵。収録済みのときは null */
@@ -152,8 +155,10 @@ function measurementPayload(conditions: MeasurementConditions, samples: Measurem
       attacker: conditions.skill.attacker,
       combo_type: conditions.comboSkillType,
       dependency: conditions.skill.dependency,
-      multiplier: conditions.skill.multiplier,
-      hits: conditions.skill.hit_count,
+      // **解決後の値**を書き出す。素の倍率・段数を送ると、速剣・最大チャージ・コンボタイプを
+      // 当てた分だけ集計側で合わなくなる(2026-09-21)
+      multiplier: conditions.resolved?.multiplier ?? conditions.skill.multiplier,
+      hits: conditions.resolved?.hit_count ?? conditions.skill.hit_count,
       element: conditions.skill.element,
     },
     target: conditions.content

@@ -23,6 +23,7 @@ pub mod enemy;
 pub mod equipment;
 pub mod equipment_class;
 pub mod equipment_polish;
+pub mod flag_cycle;
 pub mod game_tables;
 pub mod growth_apply;
 pub mod inkri;
@@ -64,7 +65,7 @@ pub use category::{CategoryCap, CategoryKind, CategoryTotals, CategoryTrace, Dam
 pub use character::{CharacterCatalogs, NewCharacter};
 pub use character_skill::{
     damage_contributions, CharacterSkillCatalog, CharacterSkillDef, CharacterSkillError,
-    CharacterSkills, MasteryOverride, SkillAudience, SkillEffect,
+    CharacterSkills, MasteryOverride, SkillAudience, SkillEffect, SkillRequirement,
 };
 pub use common_skill::{
     CommonSkillError, CommonSkills, DefenseRates, RateContribution, UnleashSlot,
@@ -75,17 +76,21 @@ pub use content::{ReachTier,
     evaluate_content, BestSkillDamage, Content, ContentArea, ContentEvaluation, ContentRequirement,
     ContentSeries, GameRegion, RequirementCheck,
 };
-pub use content_evaluation::{evaluate_contents_for_character, SkillEvaluationInput};
+pub use content_evaluation::{
+    evaluate_contents_for_character, FlagBurstInput, FlagEvaluationInput, SkillEvaluationInput,
+};
 pub use critical_rate::{
     critical_rate, CriticalRate, CriticalRateError, CriticalRateSourceId, CriticalRateSources,
     ARCHITECT_LAB_PER_STAGE, ARCHITECT_LAB_STAGE_MAX, CRITICAL_RATE_BONUS_MAX,
 };
 pub use damage::{
-    apply_summon_interval, calculate_damage, calculate_damage_with_combo, combine_expected_dps, defeat_seconds, evaluate, ComboCycle,
+    apply_fixed_interval_dps, apply_summon_interval, calculate_damage, calculate_damage_with_combo,
+    combine_dps, combine_expected_dps, cycle_dps, defeat_seconds, evaluate, ComboCycle,
     DamageContribution, damage_levers, DamageLevers, DamageMaterial, DamageResult, DamageTarget,
     DamageTrace, DamageTriple, DependencyCoefficients, FormulaStepKind, LeverCandidate,
     DpsTriple, FormulaStep,
 };
+pub use flag_cycle::{plan_flag_cycle, FlagCyclePlan};
 pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,
     AccuracyBoostSource,
@@ -153,8 +158,8 @@ pub use siena::{
     SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES, SIENA_STAGE_MAX,
 };
 pub use skill::{
-    Attacker, ComboSkillType, ComboSkillTypeError, ComboSkillVariant, Skill, SkillDependency,
-    SkillTarget, SummonForm,
+    Attacker, ComboSkillType, ComboSkillTypeError, ComboSkillVariant, FullCharge, Skill,
+    SkillDependency, SkillForm, SkillTarget, SummonForm, SwiftSword,
 };
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{

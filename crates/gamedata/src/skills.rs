@@ -12,7 +12,8 @@
 //!   docs/claude/decisions.md「2026-08-25 全キャラのスキル取込」
 
 use domain::{
-    Attacker, ComboSkillType, ComboSkillVariant, Element, Skill, SkillDependency, SummonForm, WeaponClass,
+    Attacker, CharacterSkills, ComboSkillType, ComboSkillVariant, Element, FullCharge, Masteries,
+    Skill, SkillDependency, SkillForm, SummonForm, SwiftSword, WeaponClass,
 };
 
 use crate::skill_targets::SKILL_TARGETS;
@@ -899,6 +900,140 @@ const SUMMON_FORMS: &[(&str, SummonForm)] = &[
     ("anais_detonate", SummonForm::Igni),
 ];
 
+/// 武器形態(wiki「Skill/イェフネン」スキル性能一覧、2026-09-21 取得)。
+/// イェフネンは同じ 4 技(連 / 爆 / スレイ / クラッシュ)を 5 形態で撃ち分ける。
+/// 形態はスキル id の接尾で決まるが、**接尾の綴りをフロントに解釈させない**ため副表で持つ
+/// (`SUMMON_FORMS` と同じ作法)。
+#[rustfmt::skip]
+const SKILL_FORMS: &[(&str, SkillForm)] = &[
+    ("yefnen_continuous", SkillForm::Sword),
+    ("yefnen_explosion", SkillForm::Sword),
+    ("yefnen_slay", SkillForm::Sword),
+    ("yefnen_crash", SkillForm::Sword),
+    ("yefnen_continuous_pike", SkillForm::Pike),
+    ("yefnen_explosion_pike", SkillForm::Pike),
+    ("yefnen_slay_pike", SkillForm::Pike),
+    ("yefnen_crash_pike", SkillForm::Pike),
+    ("yefnen_continuous_axe", SkillForm::Axe),
+    ("yefnen_explosion_axe", SkillForm::Axe),
+    ("yefnen_slay_axe", SkillForm::Axe),
+    ("yefnen_crash_axe", SkillForm::Axe),
+    ("yefnen_continuous_urumi", SkillForm::Urumi),
+    ("yefnen_explosion_urumi", SkillForm::Urumi),
+    ("yefnen_slay_urumi", SkillForm::Urumi),
+    ("yefnen_crash_urumi", SkillForm::Urumi),
+    ("yefnen_continuous_chisel", SkillForm::Chisel),
+    ("yefnen_explosion_chisel", SkillForm::Chisel),
+    ("yefnen_slay_chisel", SkillForm::Chisel),
+    ("yefnen_crash_chisel", SkillForm::Chisel),
+];
+
+/// <フラグ>(イェフネンの、技とは別枠のダメージ)を積む技。
+/// 韓国公式「귀환」+ wiki「Skill/イェフネン」#Flag(2026-09-21 取得): 連 / 爆 が全形態で積む。
+/// 値と計算は `crate::flag`。ここは**技に印を立てる**だけ(`Skill::summon_form` と同じ作法)。
+#[rustfmt::skip]
+const FLAG_APPLIERS: &[&str] = &[
+    "yefnen_continuous", "yefnen_explosion",
+    "yefnen_continuous_pike", "yefnen_explosion_pike",
+    "yefnen_continuous_axe", "yefnen_explosion_axe",
+    "yefnen_continuous_urumi", "yefnen_explosion_urumi",
+    "yefnen_continuous_chisel", "yefnen_explosion_chisel",
+];
+
+/// 積まれた <フラグ> を爆発させる技(スレイ / クラッシュ。全形態)。出典は `FLAG_APPLIERS` と同じ。
+#[rustfmt::skip]
+const FLAG_DETONATORS: &[&str] = &[
+    "yefnen_slay", "yefnen_crash",
+    "yefnen_slay_pike", "yefnen_crash_pike",
+    "yefnen_slay_axe", "yefnen_crash_axe",
+    "yefnen_slay_urumi", "yefnen_crash_urumi",
+    "yefnen_slay_chisel", "yefnen_crash_chisel",
+];
+
+/// クールタイム(秒)。wiki スキル性能一覧の CT 列(2026-09-21 取得)。
+/// いまは <フラグ> を爆発させる スレイ / クラッシュ(全 5 形態、いずれも 10 秒)だけ。
+/// 連 / 爆 に CT は無い。載っていない技は `None` = CT なし。
+#[rustfmt::skip]
+const COOLDOWNS: &[(&str, f64)] = &[
+    ("yefnen_slay", 10.0), ("yefnen_crash", 10.0),
+    ("yefnen_slay_pike", 10.0), ("yefnen_crash_pike", 10.0),
+    ("yefnen_slay_axe", 10.0), ("yefnen_crash_axe", 10.0),
+    ("yefnen_slay_urumi", 10.0), ("yefnen_crash_urumi", 10.0),
+    ("yefnen_slay_chisel", 10.0), ("yefnen_crash_chisel", 10.0),
+];
+
+/// `COOLDOWNS` を引く。載っていなければ `None`(CT なし = 連打できる)。
+pub fn cooldown_of(skill_id: &str) -> Option<f64> {
+    COOLDOWNS
+        .iter()
+        .find(|(id, _)| *id == skill_id)
+        .map(|(_, seconds)| *seconds)
+}
+
+/// `SKILL_FORMS` を引く。載っていなければ `None`(形態を持たないキャラのスキル)。
+pub fn form_of(skill_id: &str) -> Option<SkillForm> {
+    SKILL_FORMS
+        .iter()
+        .find(|(id, _)| *id == skill_id)
+        .map(|(_, form)| *form)
+}
+
+/// 速剣(パッシブ)を習得しているときの性能(wiki スキル性能一覧の「(速剣適用時)」行、
+/// 2026-09-21 取得)。**ソードシェイプ系 4 技だけ**に載っている。
+///
+/// wiki ステータスのカテゴリ表は「スキル倍率増加(割合)−10% / スキル段数 +10%」の 2 行だが、
+/// 段数の実値は一覧側の行(11→12 / 5→6 / 12→13 / 6→7)を採る。倍率は素の ×0.9
+/// (381 → 342.9% 等)。
+#[rustfmt::skip]
+const SWIFT_SWORDS: &[(&str, SwiftSword)] = &[
+    ("yefnen_continuous", SwiftSword { multiplier: 3.429, hit_count: 12 }),
+    ("yefnen_explosion", SwiftSword { multiplier: 4.086, hit_count: 6 }),
+    ("yefnen_slay", SwiftSword { multiplier: 6.3, hit_count: 13 }),
+    ("yefnen_crash", SwiftSword { multiplier: 6.075, hit_count: 7 }),
+];
+
+/// チャージで段数が増える技(wiki スキル性能一覧の段数が `8〜17` のように幅で書かれている行、
+/// 2026-09-21 取得)。アックスシェイプの スレイ / クラッシュ だけ。チャージタイムは 1 秒で、
+/// マスタリー【アックス特化】(`yefnen_m1_2`)を取ると半減する。
+#[rustfmt::skip]
+const FULL_CHARGES: &[(&str, FullCharge)] = &[
+    ("yefnen_slay_axe", FullCharge { hit_count: 17, seconds: 1.0 }),
+    ("yefnen_crash_axe", FullCharge { hit_count: 10, seconds: 1.0 }),
+];
+
+/// 速剣(パッシブ)の `CharacterSkillDef::id`。習得していると(= `skill_ids` にあると)
+/// ソードシェイプ系 4 技の性能が `Skill::swift_sword` に差し替わる。
+pub const SWIFT_SWORD_SKILL_ID: &str = "yefnen_swift_sword";
+/// 「最大までチャージ」の `CharacterSkillDef::id`。ON のときチャージ技が最大段数になる。
+pub const FULL_CHARGE_SKILL_ID: &str = "yefnen_full_charge";
+/// マスタリー【アックス特化】の `MasteryDef::id`。チャージタイムが半減する。
+pub const AXE_SPECIALIZATION_MASTERY_ID: &str = "yefnen_m1_2";
+
+/// キャラスキル(習得の印)で変わる技の性能を解決する。
+///
+/// 速剣はソードシェイプ系以外には一切効かず、チャージはチャージ技以外には効かない
+/// (どちらも判定は `Skill` 側の印 = `swift_sword` / `full_charge` の有無)。
+/// 計算・プレビュー・実測がすべてこの 1 関数を通るので、形態の if を各所に書かない。
+pub fn resolve_skill_variants(
+    skill: Skill,
+    character_skills: &CharacterSkills,
+    masteries: &Masteries,
+) -> Skill {
+    let has = |id: &str| character_skills.skill_ids.iter().any(|s| s == id);
+    let mut resolved = skill;
+    if has(SWIFT_SWORD_SKILL_ID) {
+        resolved = resolved.resolve_swift_sword();
+    }
+    if has(FULL_CHARGE_SKILL_ID) {
+        let halved = masteries
+            .picked
+            .iter()
+            .any(|id| id == AXE_SPECIALIZATION_MASTERY_ID);
+        resolved = resolved.resolve_full_charge(halved);
+    }
+    resolved
+}
+
 /// `SUMMON_FORMS` を引く。載っていなければ `None`。
 pub fn summon_form_of(skill_id: &str) -> Option<SummonForm> {
     SUMMON_FORMS
@@ -1001,6 +1136,19 @@ impl SkillRecord {
             power_per_second: Skill::compute_power_per_second(power, base_actual_delay),
             attacker: attacker_of(&self.skill_id()),
             summon_form: summon_form_of(&self.skill_id()),
+            form: form_of(&self.skill_id()),
+            swift_sword: SWIFT_SWORDS
+                .iter()
+                .find(|(id, _)| *id == self.skill_id().as_str())
+                .map(|(_, variant)| *variant),
+            full_charge: FULL_CHARGES
+                .iter()
+                .find(|(id, _)| *id == self.skill_id().as_str())
+                .map(|(_, charge)| *charge),
+            charge_seconds: 0.0,
+            applies_flag: FLAG_APPLIERS.contains(&self.skill_id().as_str()),
+            detonates_flag: FLAG_DETONATORS.contains(&self.skill_id().as_str()),
+            cooldown_seconds: cooldown_of(&self.skill_id()),
         }
     }
 }
@@ -1012,6 +1160,12 @@ pub fn skills_for(character_id: &str) -> Vec<Skill> {
         .filter(|s| s.character_id == character_id)
         .map(SkillRecord::to_skill)
         .collect()
+}
+
+/// 全キャラのスキルを 1 件ずつ。id ではなく**技に立っている印**(形態・対象指定・
+/// <フラグ> を積むか)から技を引きたいときに使う(`flag::flag_applier_for`)。
+pub fn all_skills() -> impl Iterator<Item = Skill> {
+    SKILLS.iter().map(SkillRecord::to_skill)
 }
 
 pub fn find_skill(id: &str) -> Option<Skill> {

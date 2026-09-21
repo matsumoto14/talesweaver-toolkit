@@ -89,7 +89,25 @@ export interface Skill {
    * 自分が属する型を持つ。型を決めない主軸・他キャラのスキルは null。フロントはこの値だけを
    * 見て召喚欄を絞る(対応表を TS に書き写さない) */
   summon_form: SummonForm | null;
+  /** 武器形態(wiki「Skill/イェフネン」)。同じ 4 技を形態ごとに別性能で撃つ。
+   * 形態を持たないキャラのスキルは null。フロントはこの値だけを見て形態を逆引きする */
+  form: SkillForm | null;
+  /** 速剣(パッシブ)を習得しているときの性能。ソードシェイプ系 4 技だけが持つ */
+  swift_sword: { multiplier: number; hit_count: number } | null;
+  /** 最大までチャージしたときの性能。チャージできない技は null */
+  full_charge: { hit_count: number; seconds: number } | null;
+  /** この計算でチャージに費やす時間(秒)。解決後にだけ入る(チャージしていなければ 0) */
+  charge_seconds: number;
+  /** この技が敵に <フラグ> を積むか(イェフネンの 連 / 爆。全形態) */
+  applies_flag: boolean;
+  /** この技が積まれた <フラグ> を爆発させるか(イェフネンの スレイ / クラッシュ。全形態) */
+  detonates_flag: boolean;
+  /** クールタイム(秒)。wiki スキル性能一覧の CT 列。null = CT なし(連打できる) */
+  cooldown_seconds: number | null;
 }
+
+// crates/domain/src/skill.rs の SkillForm(snake_case)。
+export type SkillForm = "sword" | "pike" | "axe" | "urumi" | "chisel";
 
 // crates/domain/src/skill.rs の Attacker(snake_case)。
 export type Attacker = "player" | "magic_doll" | "destruction_spirit";
@@ -395,6 +413,12 @@ export type SkillEffect =
   /** 命中P割合増加(的中剣系)。倍率は `1 + per_level × SLv`、SLv ごとの固定変動が shift[SLv-1]。
    * SLv は CharacterSkills.skill_levels から引く */
   | { accuracy_rate: { per_level: number; shift: number[] } }
+  /** 割合追加ダメージ(§5 新-割合)。与ダメージ式の外で、合計ダメージに乗る */
+  | { added_damage_rate: { percent: number } }
+  /** SLv(= スタック数)に比例する与ダメージカテゴリへの加算(`percent × SLv`) */
+  | { damage_per_level: { category: DamageCategory; percent: number } }
+  /** 技とは別枠のダメージ(<フラグ>)。与ダメージ式のカテゴリには何も足さない */
+  | "separate_damage"
   /** 記録するだけ(防御側・確率発動・条件付きで未配線) */
   | "record_only";
 
@@ -431,15 +455,23 @@ export interface CharacterSkillDef {
   game_character_id: string;
   name: string;
   audience: SkillAudience;
+  /** SLv(スタック数)の上限。ON/OFF だけのスキルは 1 */
+  max_level: number;
   /** マスタリー未取得のときの効果。空 = マスタリーを取ってはじめて効果が出る */
   effects: SkillEffect[];
   /** マスタリーを取ると効果が差し替わる(上から順に最初に一致したもの) */
   mastery_overrides: MasteryOverride[];
   /** 同時に ON にできない id(同じスキルの強さ違い)。ON にすると相手が OFF になる */
   exclusive_with: string[];
+  /** いま撃つ技の条件(イェフネンの形態ごとのパッシブ)。null = どの技でも効く。
+   * 画面はこの印だけを見て「いまの形態で意味のある入力」を出す(id の対応表を持たない) */
+  requires: SkillRequirement | null;
   source_url: string;
   note: string;
 }
+
+// crates/domain/src/character_skill.rs の SkillRequirement。
+export type SkillRequirement = { form: SkillForm } | "full_charge";
 
 export interface CharacterSkills {
   /** ON にしている CharacterSkillDef の id */
@@ -475,7 +507,9 @@ export interface ActualDelay {
   combo_rate: number;
   /** 下限 0.3s を掛ける前の中ディレイ(秒) */
   raw: number;
-  /** 中ディレイ(秒)。下限 0.3s 適用後 */
+  /** チャージ時間(秒)。中ディレイ減少も倍率A も効かないので下限のあとに足す。0 = チャージ無し */
+  charge: number;
+  /** 中ディレイ(秒)。下限 0.3s 適用後 + チャージ時間 */
   value: number;
   /** 下限 0.3s で頭打ちになったか */
   floored: boolean;
@@ -1494,6 +1528,8 @@ export interface StatPreview {
   equipment_enhanced_total: EquipmentValues;
   /** 強化能力値のうち part.enchant だけを部位別に割ったもの(表示用の内訳) */
   part_enchant_values: PartEquipmentValues[];
+  /** ゲーム内の装備欄に出る合計(基本 + 強化からソウルリンクだけを除いたもの)。装備ペインの見出しが出す数 */
+  equipment_ingame_total: EquipmentValues;
   /** 全部位のランダムオプションの効き先別集計 */
   random_option_totals: RandomOptionTotals;
   /** シエナのオーラのステ加算(能力値スロット + 全ステータス増加)の 7 ステ合計 */
@@ -1528,8 +1564,6 @@ export interface PartEnhancePreview {
   added: number;
   /** ソウルリンク7(武器)/ 8(鎧)の倍率。Lv0 なら 1.0 */
   soul_link_multiplier: number;
-  /** ゲーム内の装備欄に出る合計(基本 + 強化からソウルリンクだけを除いたもの)。装備ペインの見出しが出す数 */
-  equipment_ingame_total: EquipmentValues;
   /** ソウルリンクまで掛けた最終値 */
   total: number;
 }
@@ -1981,8 +2015,66 @@ export interface SummonDamage {
   interval_seconds: number | null;
 }
 
-/** 本体 + 熊の合計(Rust `CombinedDamage`)。熊を持たない・召喚スキル未選択なら本体単独と同じ */
+/**
+ * <フラグ>(イェフネンの、技とは別枠のダメージ。Rust `FlagDamage`)。
+ * 技とまったく同じ材料で計算した 2 本目のダメージで、形態限定の効果(速剣・後方攻撃・
+ * 最大チャージ)とコンボボーナスは乗らない。持続 / 爆発の `dps` は「この秒数に 1 回」
+ * (持続 = 周期、爆発 = 技 1 回の所要時間)を当てた値で、`actual_delay` は持たない。
+ */
+export interface FlagDamage {
+  /** いま敵に付いているスタック数(1〜10) */
+  stacks: number;
+  /** スタック数から引いた倍率(10 なら 4.00 = 400%) */
+  multiplier: number;
+  /** 持続ダメージ 1 回ぶん(倍率 × 1 段、Cri倍率 2.0) */
+  duration: DamageResult;
+  /** 爆発 1 回ぶん(倍率 × 5 段、Cri倍率 2.5)。主軸が爆発させる技のときだけ非 null。
+   * dps は 1 周の時間で割った値(1 周に 1 度入る) */
+  burst: DamageResult | null;
+  /** 積み直しの 1 周(積む技 × n → 主軸 → 爆発)。爆発させる技で、積む技と主軸の
+   * 所要時間が両方出せるときだけ非 null。null なら合算 DPS も出さない */
+  cycle: FlagCycle | null;
+  /** 持続ダメージの周期(秒) */
+  tick_seconds: number;
+  /** <フラグ> の持続時間(秒) */
+  lasts_seconds: number;
+}
+
+/**
+ * <フラグ> を爆発させるときの「積み直しの 1 周」(Rust `FlagCycle`)。
+ * スレイ / クラッシュ は撃つたびに <フラグ> を消費するので、DPS は
+ * `積む技(連 / 爆)× n → 主軸 1 回 → 爆発` の 1 周で出す。CT に満たない時間は
+ * 積む技を撃って埋める。回数・時間・足し算はすべて Rust 側。
+ */
+export interface FlagCycle {
+  /** 積み直しに使う技(同じ形態の 連 / 爆) */
+  applier_skill_id: string;
+  applier_skill_name: string;
+  /** 積む技 1 回ぶんの結果 */
+  applier: DamageResult;
+  /** 1 周で積む技を撃つ回数 */
+  applier_uses: number;
+  /** 1 周の時間(秒) */
+  seconds: number;
+  /** 1 回で積む <フラグ> の数 */
+  stacks_per_use: number;
+  /** 1 周で積み直す量(ウルミは爆発しても半分残るので少ない) */
+  stacks_to_apply: number;
+  /** 主軸の CT(秒)。1 周はこれより短くならない */
+  cooldown_seconds: number;
+  /** CT を満たすために積む技の回数を増やしたか */
+  cooldown_bound: boolean;
+}
+
+/**
+ * 本体 + 熊 + <フラグ> の合計(Rust `CombinedDamage`)。
+ * 熊も <フラグ> も無ければ本体単独と同じ値になる(画面に分岐を持たせない)。
+ */
 export interface CombinedDamage {
+  /** 1 発の主役数字 = 技の合計ダメージ + <フラグ> 爆発。熊はここには足さない */
+  total_primary: number;
+  /** 側(最小 / 最大 / クリ)ごとに足した 1 秒あたり。画面は側を選ぶだけ */
+  dps: DpsTriple | null;
   expected_dps: number | null;
   defeat_seconds: number | null;
   /** 合計の討伐時間から決まる到達段。討伐時間が出せないなら null */
@@ -1997,6 +2089,8 @@ export interface CharacterDamageResult {
   body: DamageResult;
   /** キャラに summon_skill_id があるときだけ非 null */
   summon: SummonDamage | null;
+  /** <フラグ> を 1 スタック以上積んでいるときだけ非 null(イェフネン) */
+  flag: FlagDamage | null;
   combined: CombinedDamage;
 }
 
@@ -2180,6 +2274,8 @@ export interface GameTables {
   random_option_ranks: RandomOptionRank[];
   /** スキル依存種別の並び */
   skill_dependencies: SkillDependency[];
+  /** 武器形態の並びと表示名(crates/domain/src/skill.rs の SkillForm::ALL / label) */
+  skill_form_labels: { form: SkillForm; label: string }[];
   /** 極限スキルの並び */
   ultimate_skills: UltimateSkill[];
   /** テシスコアの地域の並び */

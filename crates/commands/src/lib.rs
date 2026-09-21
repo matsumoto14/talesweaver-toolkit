@@ -720,6 +720,16 @@ pub fn normalize_summon_skill_selection(
     }
 }
 
+/// 保存済みのキャラスキル選択から、カタログから消えた id を落とす
+/// (`gamedata::normalize_character_skill_selection` 参照)。SQLite の v18 移行は gamedata を
+/// 直接呼ぶのでここを経由しないが、IndexedDB の v10 移行・書き出し JSON の読み込みは
+/// このコマンドを呼ぶ(TS に消えた id の一覧を書き写さないため)。
+pub fn normalize_character_skills(character_skills: domain::CharacterSkills) -> domain::CharacterSkills {
+    let mut skills = character_skills;
+    gamedata::normalize_character_skill_selection(&mut skills);
+    skills
+}
+
 /// 主軸スキル(攻撃力の依存種別を決める)はそのキャラのスキル一覧に含まれている必要がある。
 /// キャラ種を変えたときに前キャラのスキルが残るのを防ぐ。未選択(`None`)は許す。
 /// 召喚獣(熊・精霊)が撃つスキルは本体の主軸にはできない(wiki 計算式まとめ `STAB(熊)` 行)。
@@ -1526,6 +1536,17 @@ fn resolve_combo_skill_type(
     }
 }
 
+/// キャラスキルの習得(速剣・最大までチャージ)で変わる技の性能を解決する。
+/// 判定は `Skill` 側の印(`swift_sword` / `full_charge`)だけを見るので、形態の if は
+/// ここにも呼び出し側にも無い(実体は `gamedata::resolve_skill_variants`)。
+fn resolve_skill_variants(skill: Skill, stat_sources: &domain::StatSources) -> Skill {
+    gamedata::resolve_skill_variants(
+        skill,
+        &stat_sources.character_skills,
+        &stat_sources.masteries,
+    )
+}
+
 /// 与ダメージ計算のうち、スキル・敵・コンテンツによらない共通材料を組み立てる
 /// (calculate_damage / preview_damage / evaluate_contents 共通。`domain::DamageMaterial` 参照)。
 fn build_damage_material(
@@ -1619,7 +1640,10 @@ fn build_damage_input(
         awakening,
         temporary_adjustments.as_ref(),
     )?;
-    let skill = resolve_combo_skill_type(skill, &equipment, combo_skill_type)?;
+    let skill = resolve_skill_variants(
+        resolve_combo_skill_type(skill, &equipment, combo_skill_type)?,
+        stat_sources,
+    );
     // 装備の基本能力値(ソウルリンク・手首補正込み)はキャラ画面・防御・対人と同じ文脈から出す
     let inputs = EquipmentBaseInputs::new(game_character_id);
     let equipment_base_sources = inputs
@@ -1640,7 +1664,8 @@ fn build_damage_input(
         content.enemy_id.as_deref(),
     );
     let damage_contributions =
-        damage_inputs::damage_contributions_of(stat_sources, buffs, &equipment, skill.dependency);
+        damage_inputs::damage_contributions_of(stat_sources, buffs, &equipment, &skill);
+    let skill_added_damage_rate = damage_inputs::added_damage_rate_of(stat_sources, &skill);
     let element_value =
         damage_inputs::element_value_for(game_character_id, &equipment, stat_sources, buffs, &skill);
     let coefficients = coefficients_for(skill.attacker, skill.dependency);
@@ -1655,6 +1680,7 @@ fn build_damage_input(
             equipment_enhanced_sources,
             title_attack_damage_rate: title_damage_rate,
             title_added_damage_rate,
+            skill_added_damage_rate,
             damage_contributions,
             element_value,
         },
@@ -1690,10 +1716,67 @@ pub struct SummonDamage {
     pub interval_seconds: Option<f64>,
 }
 
-/// 本体 + 召喚獣の合計(合計 DPS = 本体 DPS + 召喚獣 DPS の単純和。本体は召喚中も自由に撃てるため)。
-/// 召喚獣を持たないキャラ・召喚スキル未選択なら本体単独の値と同じ。
+/// <フラグ>(イェフネンの、技とは別枠のダメージ)ぶんの計算結果。
+///
+/// 持続(1 秒ごと)と爆発(スレイ / クラッシュのときだけ)を、技とまったく同じ材料
+/// (能力値・装備・バフ・敵デバフ・割合追加ダメージ)で計算したもの。形態限定の効果
+/// (速剣・後方攻撃・最大チャージ)とコンボボーナスは乗らない(`gamedata::flag_skill` /
+/// `build_flag_damage` 参照)。DPS 由来の値は技データ側に中ディレイが無いので `None` のまま —
+/// 合算は `combine_damage` が周期と技 1 回の所要時間で出す。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FlagDamage {
+    /// いま敵に付いているスタック数(1〜10)
+    pub stacks: u8,
+    /// 倍率(スタック数から引いた値。画面の説明用)
+    pub multiplier: f64,
+    /// 持続ダメージ 1 回ぶん(倍率 × 1 段、Cri倍率 2.0)
+    pub duration: DamageResult,
+    /// 爆発 1 回ぶん(倍率 × 5 段、Cri倍率 2.5)。主軸が爆発させる技のときだけ `Some`
+    pub burst: Option<DamageResult>,
+    /// 積み直しの 1 周(積む技 × n → 主軸 → 爆発)。主軸が爆発させる技で、積む技と主軸の
+    /// 所要時間が両方出せるときだけ `Some`。`None` なら合算 DPS を出さない
+    pub cycle: Option<FlagCycle>,
+    /// 持続ダメージの周期(秒)
+    pub tick_seconds: f64,
+    /// <フラグ> の持続時間(秒)
+    pub lasts_seconds: f64,
+}
+
+/// <フラグ> を爆発させるときの「積み直しの 1 周」。
+///
+/// スレイ / クラッシュ は撃つたびに <フラグ> を消費するので、DPS は
+/// `積む技(連 / 爆)× n → 主軸 1 回 → 爆発` の 1 周で出す。CT(10 秒)に満たない時間は
+/// 積む技を撃って埋める。回数と時間の規則は `domain::plan_flag_cycle`。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FlagCycle {
+    /// 積み直しに使う技(同じ形態の 連 / 爆)。速剣などの解決済み
+    pub applier_skill_id: String,
+    pub applier_skill_name: String,
+    /// 積む技 1 回ぶんの結果(内訳に出す)
+    pub applier: DamageResult,
+    /// 1 周で積む技を撃つ回数
+    pub applier_uses: u32,
+    /// 1 周の時間(秒)
+    pub seconds: f64,
+    /// 1 回で積む <フラグ> の数
+    pub stacks_per_use: u8,
+    /// 1 周で積み直す量(ウルミは爆発しても半分残るので少ない)
+    pub stacks_to_apply: u8,
+    /// 主軸の CT(秒)。1 周はこれより短くならない
+    pub cooldown_seconds: f64,
+    /// CT を満たすために積む技の回数を増やしたか
+    pub cooldown_bound: bool,
+}
+
+/// 本体 + 召喚獣 + <フラグ> の合計(合計 DPS は単純和。本体は召喚中も自由に撃てるため)。
+/// 召喚獣を持たないキャラ・召喚スキル未選択・<フラグ> 無しなら本体単独の値と同じ。
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct CombinedDamage {
+    /// 1 発の主役数字 = 技の合計ダメージ + <フラグ> 爆発の合計ダメージ。
+    /// 召喚獣は別の攻撃者なのでここには足さない(DPS だけで合流する)
+    pub total_primary: i64,
+    /// 側(最小 / 最大 / クリ)ごとに足した 1 秒あたり。画面は側を選ぶだけでよい
+    pub dps: Option<domain::DpsTriple>,
     pub expected_dps: Option<f64>,
     pub defeat_seconds: Option<f64>,
     /// 合計の討伐時間から決まる到達段(`domain::ReachTier`)。討伐時間が出せないなら `None`。
@@ -1709,6 +1792,8 @@ pub struct CharacterDamageResult {
     pub body: DamageResult,
     /// キャラに `summon_skill_id` があるときだけ `Some`
     pub summon: Option<SummonDamage>,
+    /// <フラグ> を 1 スタック以上積んでいるときだけ `Some`(イェフネン)
+    pub flag: Option<FlagDamage>,
     pub combined: CombinedDamage,
 }
 
@@ -1758,18 +1843,184 @@ fn build_summon_damage(
     })
 }
 
-/// 本体 DPS + 召喚獣 DPS の単純和(本体は召喚中も自由に撃てるため)。召喚獣が無ければ本体の値のまま。
-fn combine_damage(body: &DamageResult, summon: Option<&SummonDamage>) -> CombinedDamage {
-    let Some(summon) = summon else {
-        return CombinedDamage {
-            expected_dps: body.expected_dps,
-            defeat_seconds: body.defeat_seconds,
-            reach: body.reach,
-        };
+/// <フラグ>(技とは別枠のダメージ)1 件ぶんを計算する。技とまったく同じ材料を通すので、
+/// 自己バフ・敵デバフ(ブレンド)・割合追加ダメージは技と同じように効く。違うのは 3 つだけ:
+///
+/// - 技データは `gamedata::flag_skill`(HACK 依存・物理・無属性・<フラグ> の倍率 / 段数 / Cri倍率)
+/// - マスタリー3(欠片)の ±% を E1 として**ここにだけ**足す(技には効かない)
+/// - コンボボーナス(倍率A)は乗せない(技の一撃ではないため `combo_count = 0`)
+///
+/// スタック 0 なら `None`。
+#[allow(clippy::too_many_arguments)]
+fn build_flag_damage(
+    base_stats: &domain::BaseStats,
+    game_character_id: &str,
+    style_dependency: Option<domain::SkillDependency>,
+    stat_sources: &domain::StatSources,
+    buffs: &BuffSelection,
+    equipment: &domain::Equipment,
+    common_skills: CommonSkills,
+    awakening: domain::Awakening,
+    skill: &Skill,
+    stacks: u8,
+    part: gamedata::FlagPart,
+    enemy: &Enemy,
+    content: &domain::Content,
+    temporary_adjustments: Option<&domain::Adjustments>,
+) -> CommandResult<Option<DamageResult>> {
+    let Some(flag_skill) = gamedata::flag_skill(skill, stacks, part) else {
+        return Ok(None);
     };
-    let expected_dps = domain::combine_expected_dps(body.expected_dps, summon.result.expected_dps);
+    let (material, mut target) = build_damage_input(
+        base_stats,
+        game_character_id,
+        style_dependency,
+        stat_sources,
+        buffs,
+        equipment.clone(),
+        common_skills,
+        awakening,
+        flag_skill,
+        enemy.clone(),
+        content,
+        0,
+        None,
+        temporary_adjustments.cloned(),
+    )?;
+    target
+        .damage_contributions
+        .extend(gamedata::flag_damage_contributions(
+            &stat_sources.masteries,
+            part,
+        ));
+    Ok(Some(domain::calculate_damage(&material, &target)))
+}
+
+/// 積み直しの 1 周を組む(`FlagCycle` 参照)。
+///
+/// 積む技は「同じ形態の 連 / 爆」(`gamedata::flag_applier_for`)で、主軸とまったく同じ経路
+/// (`build_damage_input` → コンボ)を通すので、速剣などの形態限定の効果も同じように効く。
+/// コンボ ON のときは、積む技にも同じ通常攻撃を挟んだ 1 サイクルで数える
+/// (`DamageResult::cycle_total` / `cycle_seconds` がその 1 回ぶんを返す)。
+///
+/// 積む技が引けない・どちらかの所要時間が出せないなら `None`(合算 DPS を出さない)。
+#[allow(clippy::too_many_arguments)]
+fn build_flag_cycle(
+    base_stats: &domain::BaseStats,
+    game_character_id: &str,
+    style_dependency: Option<domain::SkillDependency>,
+    stat_sources: &domain::StatSources,
+    buffs: &BuffSelection,
+    equipment: &domain::Equipment,
+    common_skills: CommonSkills,
+    awakening: domain::Awakening,
+    skill: &Skill,
+    body: &DamageResult,
+    stacks: u8,
+    enemy: &Enemy,
+    content: &domain::Content,
+    combo_count: u32,
+    normal_attack_id: Option<&str>,
+    temporary_adjustments: Option<&domain::Adjustments>,
+) -> CommandResult<Option<FlagCycle>> {
+    let (Some(form), Some(applier)) = (skill.form, gamedata::flag_applier_for(skill)) else {
+        return Ok(None);
+    };
+    let (material, target) = build_damage_input(
+        base_stats,
+        game_character_id,
+        style_dependency,
+        stat_sources,
+        buffs,
+        equipment.clone(),
+        common_skills,
+        awakening,
+        applier,
+        enemy.clone(),
+        content,
+        combo_count,
+        None,
+        temporary_adjustments.cloned(),
+    )?;
+    let applier = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
+    let stacks_per_use = gamedata::flag_stacks_per_use(form);
+    let stacks_to_apply = gamedata::flag_stacks_to_apply(form, stacks);
+    let cooldown_seconds = skill.cooldown_seconds.unwrap_or(0.0);
+    let (Some(applier_seconds), Some(main_seconds)) = (applier.cycle_seconds(), body.cycle_seconds())
+    else {
+        return Ok(None);
+    };
+    let Some(plan) = domain::plan_flag_cycle(
+        stacks_to_apply,
+        stacks_per_use,
+        applier_seconds,
+        main_seconds,
+        cooldown_seconds,
+    ) else {
+        return Ok(None);
+    };
+    Ok(Some(FlagCycle {
+        applier_skill_id: target.skill.id.clone(),
+        applier_skill_name: target.skill.name.clone(),
+        applier,
+        applier_uses: plan.uses,
+        seconds: plan.seconds,
+        stacks_per_use,
+        stacks_to_apply,
+        cooldown_seconds,
+        cooldown_bound: plan.cooldown_bound,
+    }))
+}
+
+/// 本体 DPS + 召喚獣 DPS + <フラグ> の単純和(本体は召喚中も自由に撃てるため)。
+/// 召喚獣も <フラグ> も無ければ本体の値のまま。
+///
+/// <フラグ> の乗せ方(ユーザー決定 2026-09-21):
+/// - 1 発の主役数字 = 技の合計 + 爆発の合計(爆発は主軸が スレイ / クラッシュ のときだけ)
+/// - 持続は主役数字に入れず、`期待値 ÷ 周期(1 秒)` を DPS に足す
+/// - 爆発は技 1 回につき 1 度なので、`期待値 ÷ 技 1 回の所要時間` を DPS に足す
+fn combine_damage(
+    body: &DamageResult,
+    summon: Option<&SummonDamage>,
+    flag: Option<&FlagDamage>,
+) -> CombinedDamage {
+    let burst = flag.and_then(|f| f.burst.as_ref());
+    // 技の火力の基準。<フラグ> を爆発させる技は「積み直しの 1 周」で出す
+    // (毎回そのスタック数が乗る前提にしない)。1 周には主軸も爆発も入っているので、
+    // それぞれの DPS を別に足さない
+    let (mut dps, mut expected_dps) = match flag.and_then(|f| f.cycle.as_ref()) {
+        Some(cycle) => {
+            let mut parts: Vec<(&DamageResult, u32)> =
+                vec![(&cycle.applier, cycle.applier_uses), (body, 1)];
+            if let Some(burst) = burst {
+                parts.push((burst, 1));
+            }
+            match domain::cycle_dps(&parts, cycle.seconds) {
+                Some((dps, expected)) => (Some(dps), Some(expected)),
+                None => (None, None),
+            }
+        }
+        // 爆発させる技なのに 1 周を組めなかった(積む技か主軸の所要時間が不明)なら
+        // 合算 DPS は出さない。積む技(連 / 爆)・<フラグ> OFF は従来どおり技の DPS
+        None if burst.is_some() => (None, None),
+        None => (body.dps, body.expected_dps),
+    };
+    // 持続は 1 周とは無関係に 1 秒ごと入る。技の DPS が出せないときは足さない
+    // (「技の火力は不明なのに討伐時間が出ている」画面にしない)
+    if dps.is_some() {
+        if let Some(duration) = flag.map(|f| &f.duration) {
+            dps = domain::combine_dps(dps, duration.dps);
+            expected_dps = domain::combine_expected_dps(expected_dps, duration.expected_dps);
+        }
+    }
+    if let Some(summon) = summon {
+        dps = domain::combine_dps(dps, summon.result.dps);
+        expected_dps = domain::combine_expected_dps(expected_dps, summon.result.expected_dps);
+    }
     let defeat_seconds = domain::defeat_seconds(body.enemy_hp, expected_dps);
     CombinedDamage {
+        total_primary: body.total_primary + burst.map_or(0, |b| b.total_primary),
+        dps,
         expected_dps,
         defeat_seconds,
         reach: domain::ReachTier::of_defeat_seconds(defeat_seconds),
@@ -1820,6 +2071,78 @@ pub fn damage_for_character(
         temporary_adjustments.clone(),
     )?;
     let body = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
+    // <フラグ>(技とは別枠のダメージ)。積んでいなければ None。爆発は主軸が
+    // スレイ / クラッシュ(`Skill::detonates_flag`)のときだけ出す
+    let stacks = gamedata::flag_stacks(&stat_sources.character_skills);
+    let flag = match gamedata::flag_multiplier(stacks) {
+        Some(multiplier) => {
+            let flag_for = |part| {
+                build_flag_damage(
+                    base_stats,
+                    game_character_id,
+                    style_dependency,
+                    stat_sources,
+                    buffs,
+                    &equipment,
+                    common_skills,
+                    awakening,
+                    &target.skill,
+                    stacks,
+                    part,
+                    &enemy,
+                    &content,
+                    temporary_adjustments.as_ref(),
+                )
+            };
+            let mut duration = flag_for(gamedata::FlagPart::Duration)?;
+            let mut burst = if target.skill.detonates_flag {
+                flag_for(gamedata::FlagPart::Burst)?
+            } else {
+                None
+            };
+            // 持続は周期(1 秒)ごと。中ディレイを持たない別枠なので「この秒数に 1 回」を当てる
+            if let Some(duration) = duration.as_mut() {
+                domain::apply_fixed_interval_dps(duration, gamedata::FLAG_TICK_SECONDS);
+            }
+            // 積み直しの 1 周(積む技 × n → 主軸 → 爆発)。爆発させる技のときだけ組む
+            let cycle = if burst.is_some() {
+                build_flag_cycle(
+                    base_stats,
+                    game_character_id,
+                    style_dependency,
+                    stat_sources,
+                    buffs,
+                    &equipment,
+                    common_skills,
+                    awakening,
+                    &target.skill,
+                    &body,
+                    stacks,
+                    &enemy,
+                    &content,
+                    combo_count,
+                    normal_attack_id,
+                    temporary_adjustments.as_ref(),
+                )?
+            } else {
+                None
+            };
+            // 爆発は 1 周につき 1 度なので、1 周の時間で割った DPS を持たせる(内訳の 1 行ぶん)
+            if let (Some(burst), Some(cycle)) = (burst.as_mut(), cycle.as_ref()) {
+                domain::apply_fixed_interval_dps(burst, cycle.seconds);
+            }
+            duration.map(|duration| FlagDamage {
+                stacks,
+                multiplier,
+                duration,
+                burst,
+                cycle,
+                tick_seconds: gamedata::FLAG_TICK_SECONDS,
+                lasts_seconds: gamedata::FLAG_DURATION_SECONDS,
+            })
+        }
+        None => None,
+    };
     let summon = summon_skill_id
         .map(|id| {
             build_summon_damage(
@@ -1838,10 +2161,11 @@ pub fn damage_for_character(
             )
         })
         .transpose()?;
-    let combined = combine_damage(&body, summon.as_ref());
+    let combined = combine_damage(&body, summon.as_ref(), flag.as_ref());
     Ok(CharacterDamageResult {
         body,
         summon,
+        flag,
         combined,
     })
 }
@@ -1937,25 +2261,79 @@ pub fn evaluate_contents(
     // 属性値)は、コンテンツの数だけ繰り返さずキャラのスキル数ぶんだけ 1 回作る。
     // 召喚獣(熊・破壊精霊)が撃つスキルは本体の最良スキル判定には含めない(本体は召喚獣の
     // スキルを自分で振れないため)。召喚獣ぶんの期待 DPS は別に集計して後段で合算する
+    // 1 スキルぶんの入力。<フラグ> の 2 本(持続 / 爆発)も同じ形で作る(二重実装しない)
+    let input_of = |skill: Skill| SkillEvaluationInput {
+        coefficients: coefficients_for(skill.attacker, skill.dependency),
+        damage_contributions: damage_inputs::damage_contributions_of(
+            &character.stat_sources,
+            &buffs,
+            &character.equipment,
+            &skill,
+        ),
+        skill_added_damage_rate: damage_inputs::added_damage_rate_of(
+            &character.stat_sources,
+            &skill,
+        ),
+        element_value: damage_inputs::element_value_for(
+            &character.game_character_id,
+            &character.equipment,
+            &character.stat_sources,
+            &buffs,
+            &skill,
+        ),
+        skill,
+        flag: None,
+    };
+    // <フラグ>(技とは別枠のダメージ)。積んでいなければ 0 で、他キャラでは必ず 0
+    let flag_stacks = gamedata::flag_stacks(&character.stat_sources.character_skills);
+    // <フラグ> 1 本ぶんの入力。マスタリー3(欠片)の ±% は E1 として**ここにだけ**足す
+    let flag_input_of = |base: &Skill, part| {
+        gamedata::flag_skill(base, flag_stacks, part).map(|flag_skill| {
+            let mut input = input_of(flag_skill);
+            input.damage_contributions.extend(
+                gamedata::flag_damage_contributions(&character.stat_sources.masteries, part),
+            );
+            Box::new(input)
+        })
+    };
     let skill_inputs: Vec<SkillEvaluationInput> = skills
         .iter()
         .filter(|skill| skill.attacker == domain::Attacker::Player)
-        .map(|skill| SkillEvaluationInput {
-            skill: skill.clone(),
-            coefficients: coefficients_for(skill.attacker, skill.dependency),
-            damage_contributions: damage_inputs::damage_contributions_of(
-                &character.stat_sources,
-                &buffs,
-                &character.equipment,
-                skill.dependency,
-            ),
-            element_value: damage_inputs::element_value_for(
-                &character.game_character_id,
-                &character.equipment,
-                &character.stat_sources,
-                &buffs,
-                skill,
-            ),
+        // 速剣・最大チャージは技データ側の差し替えなので、評価に使う技も解決してから入れる
+        .map(|skill| resolve_skill_variants(skill.clone(), &character.stat_sources))
+        .map(|skill| {
+            // 計算タブ(damage_for_character)と同じ組み立て: 持続は常に、爆発は
+            // <フラグ> を爆発させる技(スレイ / クラッシュ)のときだけ
+            let flag = flag_input_of(&skill, gamedata::FlagPart::Duration).map(|duration| {
+                domain::FlagEvaluationInput {
+                    duration,
+                    // 爆発させる技は「積み直しの 1 周」で出す(計算タブと同じ)。積む技は
+                    // 同じ形態の 連 / 爆 で、主軸と同じ解決経路(速剣など)を通す
+                    burst: skill
+                        .detonates_flag
+                        .then(|| {
+                            let burst = flag_input_of(&skill, gamedata::FlagPart::Burst)?;
+                            let form = skill.form?;
+                            let applier = resolve_skill_variants(
+                                gamedata::flag_applier_for(&skill)?,
+                                &character.stat_sources,
+                            );
+                            Some(domain::FlagBurstInput {
+                                burst,
+                                applier: Box::new(input_of(applier)),
+                                stacks_to_apply: gamedata::flag_stacks_to_apply(form, flag_stacks),
+                                stacks_per_use: gamedata::flag_stacks_per_use(form),
+                                cooldown_seconds: skill.cooldown_seconds.unwrap_or(0.0),
+                            })
+                        })
+                        .flatten(),
+                    tick_seconds: gamedata::FLAG_TICK_SECONDS,
+                }
+            });
+            SkillEvaluationInput {
+                flag,
+                ..input_of(skill)
+            }
         })
         .collect();
     // 召喚獣(熊・破壊精霊)ぶんの入力(召喚スキル未選択・召喚獣を持たないキャラは None)。
@@ -1964,23 +2342,7 @@ pub fn evaluate_contents(
         .as_deref()
         .map(find_skill)
         .transpose()?
-        .map(|skill| SkillEvaluationInput {
-            coefficients: coefficients_for(skill.attacker, skill.dependency),
-            damage_contributions: damage_inputs::damage_contributions_of(
-                &character.stat_sources,
-                &buffs,
-                &character.equipment,
-                skill.dependency,
-            ),
-            element_value: damage_inputs::element_value_for(
-                &character.game_character_id,
-                &character.equipment,
-                &character.stat_sources,
-                &buffs,
-                &skill,
-            ),
-            skill,
-        });
+        .map(&input_of);
     // 呼び出し側がスキルを指定したら、装備条件の比較先はそのスキルの依存で固定する。
     let fixed_dependency = match dependency_skill_id {
         None => None,
@@ -2910,6 +3272,458 @@ mod tests {
         assert!(without_summon.summon.is_none());
         assert_eq!(without_summon.combined.expected_dps, without_summon.body.expected_dps);
         assert_eq!(without_summon.combined.defeat_seconds, without_summon.body.defeat_seconds);
+    }
+
+    /// 技の性能を解決する順は **コンボスキルタイプ → 速剣 / 最大までチャージ** で固定する。
+    /// 逆にすると、コンボタイプの表が速剣の倍率・段数を上書きしてしまう(いまは両方を持つ技が
+    /// 無いので実害は出ないが、足したときに静かに壊れる)。この順で計算タブ・プレビュー・
+    /// ホーム評価がすべて `build_damage_input` を通る。
+    #[test]
+    fn 技の性能はコンボタイプのあとに速剣とチャージで解決する() {
+        let content = gamedata::content_areas()
+            .into_iter()
+            .flat_map(|area| area.contents)
+            .find(|content| content.id == "ringo")
+            .unwrap();
+        let base_stats = BaseStats { stab: 100, hack: 100, int: 100, def: 1, mr: 1, dex: 1, agi: 1 };
+        let build = |skill_id: &str, character: &str, skills: &[&str], masteries: &[&str], combo_type| {
+            let mut stat_sources = StatSources::default();
+            stat_sources.character_skills.skill_ids = skills.iter().map(|s| (*s).to_string()).collect();
+            stat_sources.masteries.picked = masteries.iter().map(|s| (*s).to_string()).collect();
+            let (_, target) = build_damage_input(
+                &base_stats,
+                character,
+                None,
+                &stat_sources,
+                &BuffSelection::default(),
+                Equipment::default(),
+                CommonSkills::default(),
+                domain::Awakening::default(),
+                gamedata::find_skill(skill_id).unwrap(),
+                gamedata::find_enemy("ringo_boss").unwrap(),
+                &content,
+                0,
+                combo_type,
+                None,
+            )
+            .unwrap();
+            target.skill
+        };
+
+        // 速剣: ソードシェイプ系の倍率 ×0.9・段数 +1(wiki スキル性能一覧の「(速剣適用時)」行)
+        let plain = build("yefnen_slay", "yefnen", &[], &[], None);
+        assert!((plain.multiplier - 7.0).abs() < 1e-9);
+        assert_eq!(plain.hit_count, 12);
+        let swift = build("yefnen_slay", "yefnen", &["yefnen_swift_sword"], &[], None);
+        assert!((swift.multiplier - 6.3).abs() < 1e-9);
+        assert_eq!(swift.hit_count, 13);
+        // チャージ: 段数が伸び、チャージ時間が中ディレイの外に乗る(【アックス特化】で半減)
+        let charged = build("yefnen_slay_axe", "yefnen", &["yefnen_full_charge"], &[], None);
+        assert_eq!(charged.hit_count, 17);
+        assert!((charged.charge_seconds - 1.0).abs() < 1e-9);
+        let halved = build(
+            "yefnen_slay_axe",
+            "yefnen",
+            &["yefnen_full_charge"],
+            &["yefnen_m1_2"],
+            None,
+        );
+        assert!((halved.charge_seconds - 0.5).abs() < 1e-9);
+        // コンボスキルタイプ(速剣・チャージを持たない技)は従来どおり解決される
+        let swift_type = build(
+            "maximin_continuous",
+            "maximin",
+            &[],
+            &[],
+            Some(domain::ComboSkillType::Instant),
+        );
+        assert!((swift_type.multiplier - 5.20).abs() < 1e-9);
+        assert_eq!(swift_type.hit_count, 10);
+    }
+
+    /// <フラグ>(技とは別枠のダメージ)。スタック・爆発する技・マスタリー3 の効き方と、
+    /// **技そのものの結果が一切変わらないこと**をまとめて確かめる。
+    mod フラグ {
+        use super::*;
+
+        fn yefnen_stats() -> BaseStats {
+            BaseStats {
+                stab: 1,
+                hack: 300,
+                int: 1,
+                def: 1,
+                mr: 1,
+                dex: 1,
+                agi: 1,
+            }
+        }
+
+        fn calc(
+            skill_id: &str,
+            stacks: Option<u8>,
+            masteries: &[&str],
+        ) -> super::super::CharacterDamageResult {
+            let mut stat_sources = StatSources::default();
+            if let Some(stacks) = stacks {
+                stat_sources
+                    .character_skills
+                    .skill_ids
+                    .push("yefnen_flag".to_string());
+                stat_sources
+                    .character_skills
+                    .skill_levels
+                    .insert("yefnen_flag".to_string(), stacks);
+            }
+            stat_sources.masteries.picked = masteries.iter().map(|s| (*s).to_string()).collect();
+            super::super::damage_for_character(
+                &yefnen_stats(),
+                "yefnen",
+                Some(skill_id),
+                None,
+                &stat_sources,
+                &BuffSelection::default(),
+                Equipment::default(),
+                CommonSkills::default(),
+                domain::Awakening::default(),
+                skill_id,
+                "tutatur",
+                0,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+        }
+
+        /// スタック 0(= 画面で OFF。`skill_ids` に入っていない)なら <フラグ> は無く、
+        /// 結果は従来どおり body と同じ。
+        #[test]
+        fn スタック0なら従来どおりの結果になる() {
+            let off = calc("yefnen_slay", None, &[]);
+            assert!(off.flag.is_none());
+            assert_eq!(off.combined.total_primary, off.body.total_primary);
+            assert_eq!(off.combined.dps, off.body.dps);
+            assert_eq!(off.combined.expected_dps, off.body.expected_dps);
+            assert_eq!(off.combined.defeat_seconds, off.body.defeat_seconds);
+        }
+
+        #[test]
+        fn 爆発は主役数字に入り持続はdpsにだけ乗る() {
+            let off = calc("yefnen_slay", None, &[]);
+            let on = calc("yefnen_slay", Some(10), &[]);
+            let flag = on.flag.as_ref().unwrap();
+            let burst = flag.burst.as_ref().unwrap();
+            // 技そのものは 1 ミリも変わらない
+            assert_eq!(on.body.total_primary, off.body.total_primary);
+            assert_eq!(on.body.expected_dps, off.body.expected_dps);
+            // 1 発の主役数字 = 技 + 爆発
+            assert_eq!(
+                on.combined.total_primary,
+                on.body.total_primary + burst.total_primary
+            );
+            // 持続は主役数字に入らない(DPS にだけ乗る)
+            assert_eq!(
+                on.combined.total_primary - on.body.total_primary,
+                burst.total_primary
+            );
+
+            // 合算 DPS = 1 周のダメージ ÷ 1 周の時間 + 持続 ÷ 周期(1 秒)
+            let cycle = flag.cycle.as_ref().unwrap();
+            let cycle_damage = cycle.applier.total.expected(cycle.applier.critical_chance)
+                * f64::from(cycle.applier_uses)
+                + on.body.total.expected(on.body.critical_chance)
+                + burst.total.expected(burst.critical_chance);
+            let duration_dps =
+                flag.duration.total.expected(flag.duration.critical_chance) / flag.tick_seconds;
+            assert!((flag.duration.expected_dps.unwrap() - duration_dps).abs() < 1e-9);
+            assert!(
+                (on.combined.expected_dps.unwrap()
+                    - (cycle_damage / cycle.seconds + duration_dps))
+                    .abs()
+                    < 1e-6
+            );
+        }
+
+        /// 1 周基準にしたぶん、爆発の DPS は旧式(爆発 ÷ 主軸 1 回)より小さくなる。
+        /// 1 周には積み直しの時間が入っているので当然だが、「過大だった」ことの回帰ガード。
+        #[test]
+        fn 一周のdpsは旧式より小さい() {
+            let on = calc("yefnen_slay", Some(10), &[]);
+            let flag = on.flag.as_ref().unwrap();
+            let cycle = flag.cycle.as_ref().unwrap();
+            let burst = flag.burst.as_ref().unwrap();
+            let duration_dps = flag.duration.expected_dps.unwrap();
+            // 旧式: 技の DPS + 爆発 ÷ 主軸 1 回の所要時間 + 持続
+            let old = on.body.expected_dps.unwrap()
+                + burst.total.expected(burst.critical_chance) / on.body.cycle_seconds().unwrap()
+                + duration_dps;
+            assert!(on.combined.expected_dps.unwrap() < old);
+            // 1 周は CT より短くならない
+            assert!(cycle.seconds >= cycle.cooldown_seconds - 1e-9);
+        }
+
+        /// 積み直しの 1 周: 通常形態は 1 回 +2 なので S=10 で 5 回。
+        /// ウルミは 1 回 +5 で爆発しても半分残るため積み直しは 5 → 1 回で足りるが、
+        /// CT 10 秒を満たすまで回数が増える。
+        #[test]
+        fn 積み直しの回数はスタックとctで決まる() {
+            let sword = calc("yefnen_slay", Some(10), &[]);
+            let cycle = sword.flag.as_ref().unwrap().cycle.as_ref().unwrap();
+            assert_eq!(cycle.applier_skill_id, "yefnen_continuous");
+            assert_eq!(cycle.stacks_per_use, 2);
+            assert_eq!(cycle.stacks_to_apply, 10);
+            assert!(cycle.applier_uses >= 5);
+            assert!(cycle.seconds >= 10.0 - 1e-9);
+
+            let urumi = calc("yefnen_slay_urumi", Some(10), &[]);
+            let urumi_cycle = urumi.flag.as_ref().unwrap().cycle.as_ref().unwrap();
+            assert_eq!(urumi_cycle.applier_skill_id, "yefnen_continuous_urumi");
+            assert_eq!(urumi_cycle.stacks_per_use, 5);
+            // 爆発しても半分(5)残るので、積み直すのは 5 = 1 回ぶん
+            assert_eq!(urumi_cycle.stacks_to_apply, 5);
+            // でも CT 10 秒に届かないので回数が増える
+            assert!(urumi_cycle.cooldown_bound);
+            assert!(urumi_cycle.applier_uses > 1);
+            assert!(urumi_cycle.seconds >= 10.0 - 1e-9);
+
+            // 範囲技(クラッシュ)は同じ形態の 爆 で積み直す
+            let crash = calc("yefnen_crash_axe", Some(10), &[]);
+            let crash_cycle = crash.flag.as_ref().unwrap().cycle.as_ref().unwrap();
+            assert_eq!(crash_cycle.applier_skill_id, "yefnen_explosion_axe");
+
+            // スタックを下げると積み直しの回数は増えない(CT 由来の下限は残る)
+            let few = calc("yefnen_slay", Some(2), &[]);
+            let few_cycle = few.flag.as_ref().unwrap().cycle.as_ref().unwrap();
+            assert_eq!(few_cycle.stacks_to_apply, 2);
+            assert!(few_cycle.applier_uses <= cycle.applier_uses);
+        }
+
+        /// 主軸が積む技(連 / 爆)なら 1 周を組まない(従来どおり技の DPS + 持続)。
+        #[test]
+        fn 主軸が連なら一周を組まない() {
+            let on = calc("yefnen_continuous", Some(10), &[]);
+            let flag = on.flag.as_ref().unwrap();
+            assert!(flag.cycle.is_none());
+            assert!(flag.burst.is_none());
+            assert_eq!(on.combined.total_primary, on.body.total_primary);
+            let duration_dps = flag.duration.expected_dps.unwrap();
+            assert!(
+                (on.combined.expected_dps.unwrap()
+                    - (on.body.expected_dps.unwrap() + duration_dps))
+                    .abs()
+                    < 1e-9
+            );
+        }
+
+        #[test]
+        fn スタック10の倍率と段数とcri倍率が出典どおり() {
+            let on = calc("yefnen_slay", Some(10), &[]);
+            let flag = on.flag.as_ref().unwrap();
+            let burst = flag.burst.as_ref().unwrap();
+            assert_eq!(flag.stacks, 10);
+            assert!((flag.multiplier - 4.00).abs() < 1e-9);
+            // 400% × 5 段 / Cri倍率 2.5(爆発)、400% × 1 段 / Cri倍率 2.0(持続)
+            assert_eq!(burst.hit_count, 5);
+            assert!((burst.effective_skill_multiplier - 4.00).abs() < 1e-9);
+            assert_eq!(flag.duration.hit_count, 1);
+            assert!((flag.duration.effective_skill_multiplier - 4.00).abs() < 1e-9);
+            assert!((flag.tick_seconds - 1.0).abs() < 1e-9);
+            assert!((flag.lasts_seconds - 120.0).abs() < 1e-9);
+        }
+
+        #[test]
+        fn 連と爆では爆発せずスレイとクラッシュでは全形態で爆発する() {
+            for id in ["yefnen_continuous", "yefnen_explosion_axe"] {
+                let r = calc(id, Some(10), &[]);
+                assert!(r.flag.as_ref().unwrap().burst.is_none(), "{id}");
+                // 持続は積む技でも乗る
+                assert!(r.flag.as_ref().unwrap().duration.expected_dps.is_some(), "{id}");
+                assert_eq!(r.combined.total_primary, r.body.total_primary, "{id}");
+            }
+            for id in [
+                "yefnen_slay",
+                "yefnen_slay_pike",
+                "yefnen_crash_axe",
+                "yefnen_crash_urumi",
+                "yefnen_slay_chisel",
+            ] {
+                let r = calc(id, Some(10), &[]);
+                assert!(r.flag.as_ref().unwrap().burst.is_some(), "{id}");
+                assert!(r.combined.total_primary > r.body.total_primary, "{id}");
+            }
+        }
+
+        /// 欠片(マスタリー3)の ±% は <フラグ> の E1 にだけ入り、技には一切入らない。
+        /// 値は「どの供給源がどのカテゴリにいくら積んだか」(トレース)で見る —
+        /// 最終ダメージは敵の防御で下限に張り付くので比較に使えない。
+        #[test]
+        fn 欠片のマスタリーはフラグのe1にだけ入る() {
+            let e1 = |result: &super::super::DamageResult, source: &str| -> Option<f64> {
+                result
+                    .trace
+                    .category_contributions
+                    .iter()
+                    .find(|c| {
+                        c.source == source && c.category == DamageCategory::SkillMultiplierRate
+                    })
+                    .map(|c| c.value)
+            };
+            let sharp = calc("yefnen_slay", Some(10), &["yefnen_m3_2"]);
+            let flag = sharp.flag.as_ref().unwrap();
+            assert_eq!(e1(&flag.duration, "鋭い欠片"), Some(0.20));
+            assert_eq!(e1(flag.burst.as_ref().unwrap(), "鋭い欠片"), Some(-0.20));
+            // 技には入らない
+            assert_eq!(e1(&sharp.body, "鋭い欠片"), None);
+
+            let sticky = calc("yefnen_slay", Some(10), &["yefnen_m3_3"]);
+            let flag = sticky.flag.as_ref().unwrap();
+            assert_eq!(e1(&flag.duration, "べたつく欠片"), Some(-0.10));
+            assert_eq!(e1(flag.burst.as_ref().unwrap(), "べたつく欠片"), None);
+            assert_eq!(e1(&sticky.body, "べたつく欠片"), None);
+
+            // 技の結果はどの欠片でも不変(安定した欠片 = 素の <フラグ> と同じ)
+            let plain = calc("yefnen_slay", Some(10), &["yefnen_m3_1"]);
+            assert_eq!(sharp.body.total_primary, plain.body.total_primary);
+            assert_eq!(sticky.body.total_primary, plain.body.total_primary);
+            assert_eq!(sharp.body.expected_dps, plain.body.expected_dps);
+        }
+
+        /// 技の DPS が出せない(中ディレイ未収録)なら、<フラグ> の持続だけで
+        /// 合算 DPS・討伐時間を立てない。「技の火力は不明なのに討伐時間が出ている」にしない。
+        #[test]
+        fn 技のdpsが不明なら合算dpsも不明() {
+            let on = calc("yefnen_slay", Some(10), &[]);
+            // 積む技か主軸の中ディレイが未収録で 1 周を組めなかった状況を作る
+            // (gamedata の全技には中ディレイがあるので、手で外す)
+            let mut flag = on.flag.clone().unwrap();
+            flag.cycle = None;
+            let mut body = on.body.clone();
+            body.dps = None;
+            body.expected_dps = None;
+            body.defeat_seconds = None;
+            let combined = super::super::combine_damage(&body, None, Some(&flag));
+            assert_eq!(combined.dps, None);
+            assert_eq!(combined.expected_dps, None);
+            assert_eq!(combined.defeat_seconds, None);
+            // 1 発の主役数字(爆発ぶん)は DPS とは無関係に出る
+            assert!(combined.total_primary > body.total_primary);
+        }
+
+        /// ホーム(全コンテンツ評価)の討伐時間は、計算タブの合算(`combined`)と同じ値に
+        /// なる。2 つの経路で別の数字が出ると「ホームでは行けるのに計算タブでは届かない」
+        /// が起きるので、同じスキル・同じコンテンツで突き合わせる。
+        fn yefnen(stacks: Option<u8>) -> NewCharacter {
+            let mut stat_sources = StatSources::default();
+            if let Some(stacks) = stacks {
+                stat_sources.character_skills.skill_ids.push("yefnen_flag".to_string());
+                stat_sources.character_skills.skill_levels.insert("yefnen_flag".to_string(), stacks);
+            }
+            NewCharacter {
+                name: "イェフネン".to_string(),
+                game_character_id: "yefnen".to_string(),
+                base_stats: yefnen_stats(),
+                awakening: domain::Awakening::default(),
+                stat_sources,
+                equipment: Equipment::default(),
+                common_skills: CommonSkills::default(),
+                main_skill_id: Some("yefnen_slay".to_string()),
+                summon_skill_id: None,
+                goal_content_id: None,
+                default_buff_set_id: None,
+            }
+        }
+
+        /// ホームの評価と計算タブを同じコンテンツ・同じスキルで突き合わせる。
+        fn home_and_calc(stacks: Option<u8>) -> (Option<f64>, Option<f64>) {
+            let character = yefnen(stacks);
+            let evals =
+                super::super::evaluate_contents(character.clone(), BuffSelection::default(), None)
+                    .unwrap();
+            let eval = evals.iter().find(|e| e.content_id == "tutatur").unwrap();
+            let best = eval.damage.as_ref().unwrap();
+            let calc = super::super::damage_for_character(
+                &character.base_stats,
+                &character.game_character_id,
+                character.main_skill_id.as_deref(),
+                None,
+                &character.stat_sources,
+                &BuffSelection::default(),
+                character.equipment.clone(),
+                character.common_skills,
+                character.awakening,
+                &best.skill_id,
+                "tutatur",
+                0,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            (best.defeat_seconds, calc.combined.defeat_seconds)
+        }
+
+        #[test]
+        fn ホームの討伐時間は計算タブの合算と一致する() {
+            let (home, calc) = home_and_calc(Some(10));
+            assert!(home.is_some() && calc.is_some());
+            assert!((home.unwrap() - calc.unwrap()).abs() < 1e-6, "home={home:?} calc={calc:?}");
+        }
+
+        #[test]
+        fn スタック0ならホームの討伐時間は従来どおり() {
+            let (home, calc) = home_and_calc(None);
+            assert!((home.unwrap() - calc.unwrap()).abs() < 1e-6);
+            // <フラグ> を積むと討伐が速くなる(積まないときと同じ値にならない)
+            let (with_flag, _) = home_and_calc(Some(10));
+            assert!(with_flag.unwrap() < home.unwrap());
+        }
+
+        #[test]
+        fn 他キャラのホーム評価は変わらない() {
+            let mut boris = anais();
+            boris.name = "ボリス".to_string();
+            boris.game_character_id = "boris".to_string();
+            boris.base_stats = BaseStats { stab: 300, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+            let evals =
+                super::super::evaluate_contents(boris.clone(), BuffSelection::default(), None)
+                    .unwrap();
+            let eval = evals.iter().find(|e| e.content_id == "tutatur").unwrap();
+            let best = eval.damage.as_ref().unwrap();
+            // <フラグ> が無いキャラは本体単独の討伐時間のまま
+            assert_eq!(
+                best.defeat_seconds,
+                domain::defeat_seconds(
+                    gamedata::find_enemy("tutatur").unwrap().hp,
+                    best.expected_dps
+                )
+            );
+        }
+
+        #[test]
+        fn 他キャラの結果は変わらない() {
+            let before = super::super::damage_for_character(
+                &BaseStats { stab: 300, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 },
+                "boris",
+                None,
+                None,
+                &StatSources::default(),
+                &BuffSelection::default(),
+                Equipment::default(),
+                CommonSkills::default(),
+                domain::Awakening::default(),
+                "boris_horizontal_sword",
+                "ringo",
+                0,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            assert!(before.flag.is_none());
+            assert_eq!(before.combined.total_primary, before.body.total_primary);
+            assert_eq!(before.combined.dps, before.body.dps);
+            assert_eq!(before.combined.expected_dps, before.body.expected_dps);
+        }
     }
 
     /// 召喚スキルがあるキャラのエンチャント案内は、本体(anais_angry_pixie。Int 依存 →

@@ -12,7 +12,7 @@ import init, { invoke as callWasm } from "tw-web";
 
 import { version as appVersion } from "../../package.json";
 import * as store from "./browserStore";
-import type { BuffSelection, NewCharacter } from "./types";
+import type { BuffSelection, CharacterSkills, NewCharacter } from "./types";
 
 /**
  * 「追加機能の解除」で取得した追加装備(unlock.svelte.ts)。デスクトップ版は Rust 側が
@@ -38,14 +38,18 @@ const ready = init().then(async () => {
       localStorage.removeItem(DOWNLOADED_EQUIPMENT_KEY);
     }
   }
-  // v7: 主軸に召喚スキルが紛れている行を召喚欄へ移す(browserStore.ts の
-  // normalizeSummonSkillSelections 参照)。判定・移す先の決定は Rust(WASM)側の
-  // normalize_summon_skill_selection に委ね、ここは呼ぶだけ(2026-09-18 追記)。
-  await store.normalizeSummonSkillSelections((mainSkillId, summonSkillId) =>
-    callWasm("normalize_summon_skill_selection", { mainSkillId, summonSkillId }) as {
-      main_skill_id: string | null;
-      summon_skill_id: string | null;
-    });
+  // v7: 主軸に召喚スキルが紛れている行を召喚欄へ移す / v10: カタログから消えたキャラスキルを
+  // 落とす(browserStore.ts の normalizeStoredSkillSelections 参照)。判定はどちらも
+  // Rust(WASM)側の正規化関数に委ね、ここは呼ぶだけ(2026-09-21 追記)。
+  await store.normalizeStoredSkillSelections({
+    summon: (mainSkillId, summonSkillId) =>
+      callWasm("normalize_summon_skill_selection", { mainSkillId, summonSkillId }) as {
+        main_skill_id: string | null;
+        summon_skill_id: string | null;
+      },
+    characterSkills: (characterSkills) =>
+      callWasm("normalize_character_skills", { characterSkills }) as CharacterSkills,
+  });
 });
 
 type Args = Record<string, unknown>;

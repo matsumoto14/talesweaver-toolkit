@@ -9,7 +9,8 @@
  */
 import {
   createBuffSet, createCharacter, getDamageSnapshot, listBuffSets, listCharacterIcons,
-  listCharacters, normalizeSummonSkillSelection, setCharacterIcon, setDamageSnapshot, setDefaultBuffSet,
+  listCharacters, normalizeCharacterSkills, normalizeSummonSkillSelection, setCharacterIcon,
+  setDamageSnapshot, setDefaultBuffSet,
 } from "./commands";
 import type {
   BuffSet, CharacterIcon, DamageSnapshot, NewCharacter, RegisteredCharacter,
@@ -100,13 +101,19 @@ export async function importAll(file: TransferFile): Promise<ImportResult> {
       // 旧い書き出し(欄が無い)は未選択として読む
       character.summon_skill_id ?? null,
     );
+    // カタログから消えたキャラスキル(イェフネンの欠片系)を落とす。残っていると保存の
+    // 検証が「未知のキャラスキルです」で落ちる(SQLite の v18 移行・IndexedDB の v10 移行と
+    // 同じ正規化関数を通す。FORMAT_VERSION は上げない — ファイルの形は変わらない)
+    const characterSkills = await normalizeCharacterSkills(
+      character.stat_sources.character_skills,
+    );
     // 登録に要るのは NewCharacter の分だけ。id と最終保存日時は保存先が新しく付ける
     const draft: NewCharacter = {
       name: character.name,
       game_character_id: character.game_character_id,
       base_stats: character.base_stats,
       awakening: character.awakening,
-      stat_sources: character.stat_sources,
+      stat_sources: { ...character.stat_sources, character_skills: characterSkills },
       equipment: character.equipment,
       common_skills: character.common_skills,
       main_skill_id: normalized.main_skill_id,

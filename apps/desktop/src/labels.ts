@@ -1,7 +1,7 @@
 // ステータスの表示名と並び順。順序は Rust の StatKind::ALL に合わせる。
 import type {
   AvatarPart, CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentStatKind, PartSlot, PetSkillTier,
-  PolishKind, SienaAuras, RandomOptionRank, SkillDependency, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
+  PolishKind, SienaAuras, RandomOptionRank, SkillDependency, SkillForm, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
 } from "./api/types";
 import { limits } from "./limits.svelte";
 import { tables } from "./tables.svelte";
@@ -67,6 +67,12 @@ export const ELEMENT_LABELS: Record<Element, string> = {
   fire: "火", water: "水", wind: "風", earth: "土", thunder: "雷",
   white: "白", black: "黒", neutral: "無",
 };
+// 武器形態(crates/domain/src/skill.rs の SkillForm)。並びも表示名も Rust が配る。
+export const SKILL_FORMS: SkillForm[] = tables.skill_form_labels.map((f) => f.form);
+export const SKILL_FORM_LABELS: Record<SkillForm, string> = Object.fromEntries(
+  tables.skill_form_labels.map((f) => [f.form, f.label]),
+) as Record<SkillForm, string>;
+
 // 装備に付与できるのは無属性以外(wiki: 装備システム/属性強化。判定は Element::can_enchant_equipment)。
 export const EQUIPMENT_ELEMENTS: Element[] = [...tables.equipment_elements];
 // 装備部位ごとの枠数・可否ルールと部位の並び順(crates/domain/src/equipment.rs の PartSlot の鏡像)。

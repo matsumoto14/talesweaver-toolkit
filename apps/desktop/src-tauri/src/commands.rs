@@ -585,6 +585,16 @@ pub fn retain_character_skills(skill_ids: Vec<String>, game_character_id: String
     commands::retain_character_skills(skill_ids, game_character_id)
 }
 
+/// カタログから消えたキャラスキルを保存済みの選択から落とす(書き出し JSON の読み込みが
+/// 呼ぶ。2026-09-21 追記)。
+#[tauri::command]
+pub fn normalize_character_skills(
+    // 欄が無い古い書き出し JSON は**未選択**として読む(必須にすると取り込みが丸ごと止まる)
+    character_skills: Option<domain::CharacterSkills>,
+) -> domain::CharacterSkills {
+    commands::normalize_character_skills(character_skills.unwrap_or_default())
+}
+
 /// 主軸に召喚スキルが紛れていたら召喚欄へ移す(書き出し JSON の読み込みが呼ぶ。2026-09-18 追記)。
 #[tauri::command]
 pub fn normalize_summon_skill_selection(

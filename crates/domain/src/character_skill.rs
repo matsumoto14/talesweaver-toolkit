@@ -37,6 +37,7 @@ use crate::actual_delay::ActualDelayContribution;
 use crate::category::DamageCategory;
 use crate::damage::DamageContribution;
 use crate::mastery::Masteries;
+use crate::skill::{Skill, SkillForm};
 use crate::stat_sources::StatLayer;
 use crate::stats::StatKind;
 
@@ -81,6 +82,21 @@ pub enum SkillEffect {
         per_level: f64,
         shift: &'static [i64],
     },
+    /// 割合追加ダメージ(docs/damage-formula.md §5「新-割合」)。与ダメージ式の外にあり、
+    /// **合計ダメージ**(与ダメージ合計 + 武器強化追加合計)に乗る。シャープネスビジョン・
+    /// 武器のランダムOP・称号と同じ枠に合流する
+    AddedDamageRate { percent: f64 },
+    /// SLv(= スタック数)に比例する与ダメージカテゴリへの加算。`percent × SLv`。
+    /// SLv は `CharacterSkills::skill_levels` から引き、上限は `CharacterSkillDef::max_level`
+    /// (ブレンドの「敵の被ダメージ +1% × スタック(最大 10)」)
+    DamagePerLevel {
+        category: DamageCategory,
+        percent: f64,
+    },
+    /// **技とは別枠のダメージ**(イェフネンの <フラグ>)。与ダメージ式のカテゴリには
+    /// 何も足さない — 同じ材料でもう 1 本ダメージを計算する側(commands の `FlagDamage`)が
+    /// 効果の本体で、ここは「このスキルは別枠のダメージを持つ」という宣言だけ
+    SeparateDamage,
     /// **記録するだけ**。wiki に効果はあるが、まだ配線していない
     /// (被ダメージ・移動速度・確率発動・条件付き・減衰する値)
     RecordOnly,
@@ -125,6 +141,16 @@ impl SkillEffect {
             SkillEffect::AccuracyRate { per_level, .. } => {
                 format!("命中P割合増加(SLv×{}%)", per_level * 100.0)
             }
+            SkillEffect::AddedDamageRate { percent } => {
+                format!("追加ダメージ(割合) {}%", signed(*percent))
+            }
+            SkillEffect::DamagePerLevel { category, percent } => {
+                if *category == DamageCategory::TakenDamageReduction && *percent < 0.0 {
+                    return format!("敵被ダメージ {}% × スタック", signed(-percent));
+                }
+                format!("{} {}% × SLv", category.label(), signed(*percent))
+            }
+            SkillEffect::SeparateDamage => "技とは別枠のダメージ".to_string(),
             SkillEffect::RecordOnly => "記録のみ".to_string(),
         }
     }
@@ -151,6 +177,32 @@ pub struct MasteryOverride {
     pub effects: &'static [SkillEffect],
 }
 
+/// このキャラスキルが意味を持つ主軸スキルの条件(イェフネンの形態ごとのパッシブ)。
+///
+/// 効果側に条件を持たせるのではなく、**スキルに印を立てて計算側が見る**
+/// (`Skill::single_target_channeling` / `Skill::summon_form` と同じ作法)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillRequirement {
+    /// この武器形態(`Skill::form`)の技を主軸にしているときだけ効く
+    Form(SkillForm),
+    /// チャージで段数が増える技(`Skill::full_charge`)を主軸にしているときだけ効く
+    FullCharge,
+}
+
+impl SkillRequirement {
+    /// いま撃つ技がこの条件を満たすか。技が決まっていない(`None`)なら満たさない。
+    pub fn matches(self, skill: Option<&Skill>) -> bool {
+        let Some(skill) = skill else {
+            return false;
+        };
+        match self {
+            SkillRequirement::Form(form) => skill.form == Some(form),
+            SkillRequirement::FullCharge => skill.full_charge.is_some(),
+        }
+    }
+}
+
 /// キャラスキル 1 つ。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CharacterSkillDef {
@@ -170,11 +222,19 @@ pub struct CharacterSkillDef {
     /// (敵デバフはマスタリー差し替えが効かないので、カース・ペンジュラムの通常と
     /// 【シンボルオブスピリット】が別エントリになる)に、両方 ON で二重計上するのを防ぐ
     pub exclusive_with: &'static [&'static str],
+    /// 主軸スキルの条件(イェフネンの形態ごとのパッシブ)。`None` = どの技でも効く。
+    /// 画面もこの印だけを見て「いまの形態で意味のある入力」を出す(id の対応表を持たない)
+    pub requires: Option<SkillRequirement>,
     pub source_url: &'static str,
     pub note: &'static str,
 }
 
 impl CharacterSkillDef {
+    /// いま撃つ技でこのスキルが効くか(形態で絞るスキルだけが `false` になりうる)。
+    pub fn effective_for(&self, skill: Option<&Skill>) -> bool {
+        self.requires.is_none_or(|r| r.matches(skill))
+    }
+
     /// 選んでいるマスタリーを踏まえた実際の効果。
     ///
     /// 味方スキル・敵デバフは**相手のマスタリーが分からない**ので差し替えを見ない(基本効果のまま)。
@@ -230,6 +290,9 @@ impl CharacterSkills {
     }
 
     /// スキルの SLv。明示が無ければ上限(「ON = 満額の効果」。他のキャラスキルと同じ)。
+    ///
+    /// **段 0(= OFF)は `skill_ids` に入れないことで表す**。`skill_levels` に 0 は書かない
+    /// (書いても 1 にクランプされる)。画面の段入力も 0 にすると id ごと落とす
     pub fn level_of(&self, def: &CharacterSkillDef) -> u8 {
         self.skill_levels
             .get(def.id)
@@ -272,17 +335,61 @@ impl CharacterSkills {
     }
 
     /// 与ダメージ式のカテゴリへの寄与。割合は Σ% の小数表現、固定値はそのまま。
-    /// `source` はこのスキル名(マスタリーで差し替わっていても表示はスキル名のまま)
+    /// `source` はこのスキル名(マスタリーで差し替わっていても表示はスキル名のまま)。
+    ///
+    /// `skill` はいま撃つ技。形態で絞るスキル(`CharacterSkillDef::requires`)は、
+    /// 条件に合う技のときだけ寄与に入る。
     pub fn damage_contributions(
         &self,
         catalog: &CharacterSkillCatalog,
         masteries: &Masteries,
+        skill: Option<&Skill>,
     ) -> Vec<DamageContribution> {
-        damage_contributions(
-            self.resolved(catalog, masteries)
-                .into_iter()
-                .flat_map(|(def, effects)| effects.iter().map(move |e| (def.name.to_string(), e))),
-        )
+        let mut out = Vec::new();
+        for (def, effects) in self.resolved(catalog, masteries) {
+            if !def.effective_for(skill) {
+                continue;
+            }
+            let level = f64::from(self.level_of(def));
+            for effect in effects {
+                // SLv 比例は「その SLv での効果」に畳んでから、通常の効果と同じ道を通す
+                // (割合 / 固定値の直し方を 2 か所に書かない)
+                let scaled;
+                let effect = match effect {
+                    SkillEffect::DamagePerLevel { category, percent } => {
+                        scaled = SkillEffect::Damage {
+                            category: *category,
+                            percent: percent * level,
+                        };
+                        &scaled
+                    }
+                    other => other,
+                };
+                out.extend(damage_contributions(std::iter::once((
+                    def.name.to_string(),
+                    effect,
+                ))));
+            }
+        }
+        out
+    }
+
+    /// 割合追加ダメージ(§5「新-割合」)の Σ(小数表現)。形態で絞るスキルは条件に合う技のときだけ。
+    pub fn added_damage_rate(
+        &self,
+        catalog: &CharacterSkillCatalog,
+        masteries: &Masteries,
+        skill: Option<&Skill>,
+    ) -> f64 {
+        self.resolved(catalog, masteries)
+            .into_iter()
+            .filter(|(def, _)| def.effective_for(skill))
+            .flat_map(|(_, effects)| effects.iter())
+            .filter_map(|e| match e {
+                SkillEffect::AddedDamageRate { percent } => Some(percent / 100.0),
+                _ => None,
+            })
+            .sum()
     }
 
     /// ステ増加への寄与(ステ, Σ% の小数表現, 層, スキル名)。
@@ -461,6 +568,7 @@ mod tests {
                 effects: SPURT_GOOD_FACE,
             }],
             exclusive_with: &[],
+            requires: None,
             source_url: "",
             note: "",
         },
@@ -476,6 +584,7 @@ mod tests {
                 effects: CURSED_EGO,
             }],
             exclusive_with: &[],
+            requires: None,
             source_url: "",
             note: "",
         },
@@ -488,6 +597,7 @@ mod tests {
             effects: AGI_UP,
             mastery_overrides: &[],
             exclusive_with: &[],
+            requires: None,
             source_url: "",
             note: "",
         },
@@ -504,6 +614,7 @@ mod tests {
                 effects: ELITE_SWORDSMAN,
             }],
             exclusive_with: &[],
+            requires: None,
             source_url: "",
             note: "",
         },
@@ -552,14 +663,14 @@ mod tests {
     #[test]
     fn 呪われた魔剣はm3の三択で値が変わる() {
         let skills = on(&["maximin_cursed_sword"]);
-        assert!((x4(&skills.damage_contributions(CATALOG, &picked(&[]))) - 0.05).abs() < 1e-12);
+        assert!((x4(&skills.damage_contributions(CATALOG, &picked(&[]), None)) - 0.05).abs() < 1e-12);
         assert!(
-            (x4(&skills.damage_contributions(CATALOG, &picked(&["maximin_m3_3"]))) - 0.07).abs()
+            (x4(&skills.damage_contributions(CATALOG, &picked(&["maximin_m3_3"]), None)) - 0.07).abs()
                 < 1e-12
         );
         // スキルを ON にしていなければ、マスタリーを取っていても入らない
         assert_eq!(
-            x4(&on(&[]).damage_contributions(CATALOG, &picked(&["maximin_m3_3"]))),
+            x4(&on(&[]).damage_contributions(CATALOG, &picked(&["maximin_m3_3"]), None)),
             0.0
         );
     }
@@ -654,6 +765,7 @@ mod tests {
                 effects: &[],
                 mastery_overrides: &[],
                 exclusive_with: &["b"],
+                requires: None,
                 source_url: "",
                 note: "",
             },
@@ -666,6 +778,7 @@ mod tests {
                 effects: &[],
                 mastery_overrides: &[],
                 exclusive_with: &["a"],
+                requires: None,
                 source_url: "",
                 note: "",
             },

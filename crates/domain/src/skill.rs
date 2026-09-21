@@ -122,6 +122,59 @@ impl std::fmt::Display for ComboSkillTypeError {
 
 impl std::error::Error for ComboSkillTypeError {}
 
+/// 武器形態(wiki「Skill/イェフネン」スキル性能一覧、2026-09-21 取得)。
+///
+/// イェフネンは同じ 4 技(連 / 爆 / スレイ / クラッシュ)を形態ごとに別の性能で撃つ。
+/// 形態はキャラの状態ではなく**技そのものの属性**なので、保存せず主軸スキルから逆引きする。
+/// 形態を持たないキャラのスキルは `None`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillForm {
+    Sword,
+    Pike,
+    Axe,
+    Urumi,
+    Chisel,
+}
+
+impl SkillForm {
+    /// wiki スキル性能一覧に出てくる順。
+    pub const ALL: [SkillForm; 5] = [
+        SkillForm::Sword,
+        SkillForm::Pike,
+        SkillForm::Axe,
+        SkillForm::Urumi,
+        SkillForm::Chisel,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            SkillForm::Sword => "ソード",
+            SkillForm::Pike => "パイク",
+            SkillForm::Axe => "アックス",
+            SkillForm::Urumi => "ウルミ",
+            SkillForm::Chisel => "チゼル",
+        }
+    }
+}
+
+/// 速剣(パッシブ)を習得しているときの性能(wiki スキル性能一覧の「(速剣適用時)」行)。
+/// ソードシェイプ系 4 技だけが持つ。倍率は素の ×0.9、段数は表の実値。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SwiftSword {
+    pub multiplier: f64,
+    pub hit_count: u32,
+}
+
+/// 最大までチャージしたときの性能(wiki スキル性能一覧の段数幅 `8〜17` の上側)。
+/// チャージ時間は中ディレイ減少が効かず、1 回の所要時間に丸ごと乗る。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FullCharge {
+    pub hit_count: u32,
+    /// チャージ時間(秒)。マスタリー【アックス特化】で半減する
+    pub seconds: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -189,6 +242,32 @@ pub struct Skill {
     /// 型外なら型内の先頭(ダメージ最大)へ差し替える(フロントは対応表を持たず、この値だけ見る)
     #[serde(default)]
     pub summon_form: Option<SummonForm>,
+    /// 武器形態(wiki「Skill/イェフネン」)。gamedata の副表(`SKILL_FORMS`)が付ける。
+    /// 形態を持たないキャラのスキルは `None`
+    #[serde(default)]
+    pub form: Option<SkillForm>,
+    /// 速剣(パッシブ)を習得しているときの性能。ソードシェイプ系 4 技だけが持つ
+    #[serde(default)]
+    pub swift_sword: Option<SwiftSword>,
+    /// チャージで段数が増える技の、最大までチャージしたときの性能
+    #[serde(default)]
+    pub full_charge: Option<FullCharge>,
+    /// 今回の計算でチャージに費やす時間(秒)。**解決後にだけ入る**値で、チャージしていない
+    /// ときは 0。中ディレイ減少が効かないので、中ディレイの外で 1 回の所要時間に足す
+    #[serde(default)]
+    pub charge_seconds: f64,
+    /// この技が敵に <フラグ> を積むか(イェフネンの 連 / 爆。全形態)。
+    /// 積まれた <フラグ> は 1 秒ごとに持続ダメージを出す — 技とは**別枠**のダメージ
+    #[serde(default)]
+    pub applies_flag: bool,
+    /// この技が積まれた <フラグ> を爆発させるか(イェフネンの スレイ / クラッシュ。全形態)。
+    /// 爆発は技 1 回につき 1 度で、1 発の主役数字は技 + 爆発の合計になる
+    #[serde(default)]
+    pub detonates_flag: bool,
+    /// クールタイム(秒)。wiki スキル性能一覧の CT 列。`None` = CT なし(連打できる)。
+    /// 連続して撃てない技は、この秒数を 1 周の下限として DPS に効く
+    #[serde(default)]
+    pub cooldown_seconds: Option<f64>,
 }
 
 /// `Skill::summon_form` が指す召喚獣の型。
@@ -228,6 +307,46 @@ impl Skill {
         multiplier * f64::from(hit_count.max(1))
     }
 
+    /// 倍率・段数・チャージ時間を変えたあとに火力の目安を付け直す。
+    /// 継続火力は 1 回の所要時間(基本中ディレイ + チャージ時間)で割る。
+    fn refresh_power(&mut self) {
+        self.power = Self::compute_power(self.multiplier, self.hit_count);
+        self.power_per_second = Self::compute_power_per_second(
+            self.power,
+            self.base_actual_delay.map(|d| d + self.charge_seconds),
+        );
+    }
+
+    /// 速剣(パッシブ)を習得しているときの性能に差し替える。速剣の行を持たない技
+    /// (ソードシェイプ系以外)はそのまま返すので、形態で分岐する if を呼び出し側に書かない。
+    pub fn resolve_swift_sword(&self) -> Skill {
+        let mut resolved = self.clone();
+        let Some(variant) = self.swift_sword else {
+            return resolved;
+        };
+        resolved.multiplier = variant.multiplier;
+        resolved.hit_count = variant.hit_count;
+        resolved.refresh_power();
+        resolved
+    }
+
+    /// 最大までチャージしたときの性能に差し替える。`halved` はマスタリー【アックス特化】
+    /// (チャージタイム半減)を取っているか。チャージできない技はそのまま返す。
+    pub fn resolve_full_charge(&self, halved: bool) -> Skill {
+        let mut resolved = self.clone();
+        let Some(charge) = self.full_charge else {
+            return resolved;
+        };
+        resolved.hit_count = charge.hit_count;
+        resolved.charge_seconds = if halved {
+            charge.seconds / 2.0
+        } else {
+            charge.seconds
+        };
+        resolved.refresh_power();
+        resolved
+    }
+
     /// テスト用の最小スキル(倍率・段数などは判定に関係しない既定値)。
     #[cfg(test)]
     pub(crate) fn for_test(id: &str, dependency: SkillDependency) -> Skill {
@@ -254,6 +373,13 @@ impl Skill {
             power_per_second: None,
             attacker: Attacker::Player,
             summon_form: None,
+            form: None,
+            swift_sword: None,
+            full_charge: None,
+            charge_seconds: 0.0,
+            applies_flag: false,
+            detonates_flag: false,
+            cooldown_seconds: None,
         }
     }
 
@@ -290,9 +416,7 @@ impl Skill {
             resolved.hit_count += step / 3;
             resolved.multiplier += f64::from(step % 3) * 0.10;
         }
-        resolved.power = Self::compute_power(resolved.multiplier, resolved.hit_count);
-        resolved.power_per_second =
-            Self::compute_power_per_second(resolved.power, resolved.base_actual_delay);
+        resolved.refresh_power();
         Ok(resolved)
     }
 }
@@ -347,6 +471,13 @@ mod tests {
             ),
             attacker: Attacker::Player,
             summon_form: None,
+            form: None,
+            swift_sword: None,
+            full_charge: None,
+            charge_seconds: 0.0,
+            applies_flag: false,
+            detonates_flag: false,
+            cooldown_seconds: None,
         }
     }
 

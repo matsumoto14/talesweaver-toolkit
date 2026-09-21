@@ -1550,6 +1550,7 @@ mod tests {
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: "",
         note: "",
     };

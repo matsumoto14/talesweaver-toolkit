@@ -6,17 +6,25 @@
 /// 与ダメージ式のカテゴリへの寄与
 /// (キャラスキル + マスタリー + バフ + 装備アビリティ + 装備アイテムの装着時効果)。
 /// カタログが分かれているのでここでまとめる。
+///
+/// `skill` は**いま撃つ技(解決済み)**。形態で絞るキャラスキル
+/// (`CharacterSkillDef::requires`)は条件に合う技のときだけ寄与に入る。
 pub fn damage_contributions_of(
     sources: &domain::StatSources,
     buffs: &domain::BuffSelection,
     equipment: &domain::Equipment,
-    dependency: domain::SkillDependency,
+    skill: &domain::Skill,
 ) -> Vec<domain::DamageContribution> {
-    let mut out = sources
-        .character_skills
-        .damage_contributions(gamedata::character_skill_catalog(), &sources.masteries);
+    let mut out = sources.character_skills.damage_contributions(
+        gamedata::character_skill_catalog(),
+        &sources.masteries,
+        Some(skill),
+    );
     out.extend(equipment.ability_damage_contributions(&gamedata::equipment_abilities()));
-    out.extend(gamedata::item_damage_contributions(equipment, dependency));
+    out.extend(gamedata::item_damage_contributions(
+        equipment,
+        skill.dependency,
+    ));
     out.extend(
         sources
             .masteries
@@ -29,6 +37,15 @@ pub fn damage_contributions_of(
     out.extend(sources.soul_link.damage_contributions());
     out.extend(sources.lumina_corridor.damage_contributions());
     out
+}
+
+/// キャラスキルの割合追加ダメージ(§5「新-割合」)。形態で絞るスキルは `skill` で解決する。
+pub fn added_damage_rate_of(sources: &domain::StatSources, skill: &domain::Skill) -> f64 {
+    sources.character_skills.added_damage_rate(
+        gamedata::character_skill_catalog(),
+        &sources.masteries,
+        Some(skill),
+    )
 }
 
 /// 中ディレイ減少の寄与(キャラスキル + マスタリー)。

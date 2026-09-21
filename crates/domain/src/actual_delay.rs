@@ -45,7 +45,10 @@ pub struct ActualDelay {
     pub combo_rate: f64,
     /// 下限 0.3s を掛ける前の中ディレイ(秒)。`基本 × (1 − 減少) × 倍率A`
     pub raw: f64,
-    /// 中ディレイ(秒)。下限 0.3s 適用後
+    /// チャージ時間(秒)。中ディレイ減少も倍率A も効かないので、下限を取ったあとに足す。
+    /// チャージしない技は 0
+    pub charge: f64,
+    /// 中ディレイ(秒)。下限 0.3s 適用後 + チャージ時間
     pub value: f64,
     /// 下限 0.3s で頭打ちになったか
     pub floored: bool,
@@ -65,12 +68,17 @@ pub struct ActualDelay {
 /// `uses` は実測のスキル回数表。格子に収まるときは 60 秒あたりの回数をそこから引く
 /// (式の `60 / 中ディレイ` は overhead を含まないので実測より 3〜14% 多く出る)。
 /// コンボボーナス(2 コンボ以上で ×0.5)は実測表に無いので、その場合は式で出す。
+///
+/// `charge_seconds` はチャージで段数を伸ばす技(`Skill::full_charge`)がチャージに費やす時間。
+/// 中ディレイ減少も下限も効かず 1 回の所要時間に丸ごと乗るので、下限を取ったあとに足す。
+/// 実測のスキル回数表はチャージ無しの計測なので、チャージしているときは式で出す。
 pub fn actual_delay(
     base: f64,
     fixed: bool,
     contributions: Vec<ActualDelayContribution>,
     combo_count: u32,
     uses: &SkillUsesTable,
+    charge_seconds: f64,
 ) -> ActualDelay {
     let reduction_raw: f64 = contributions.iter().map(|c| c.rate).sum();
     // 「(固定)」の中ディレイには減少が乗らない(コンボボーナスは倍率A なので別枠)
@@ -85,9 +93,11 @@ pub fn actual_delay(
         1.0
     };
     let raw = base * (1.0 - reduction) * combo_rate;
-    let value = raw.max(ACTUAL_DELAY_MIN);
-    // 実測表はコンボボーナス無し・減少が効くスキルの計測なので、その条件のときだけ使う
-    let measured = (!fixed && combo_rate == 1.0)
+    let floored = raw.max(ACTUAL_DELAY_MIN);
+    let charge = charge_seconds.max(0.0);
+    let value = floored + charge;
+    // 実測表はコンボボーナス無し・チャージ無し・減少が効くスキルの計測なので、その条件のときだけ使う
+    let measured = (!fixed && combo_rate == 1.0 && charge == 0.0)
         .then(|| uses.uses_per_minute(base, reduction))
         .flatten();
     ActualDelay {
@@ -96,8 +106,9 @@ pub fn actual_delay(
         reduction,
         combo_rate,
         raw,
+        charge,
         value,
-        floored: value > raw,
+        floored: floored > raw,
         fixed,
         contributions,
         uses_per_minute: measured.unwrap_or(SECONDS_PER_MINUTE / value),
@@ -210,12 +221,12 @@ mod tests {
     // wiki `#ActualDelay`: 中ディレイ = 基本 × (1 − 減少値) × (2 コンボ以上なら 0.5)
     #[test]
     fn 減少値とコンボボーナスが掛かる() {
-        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 0, &no_table());
+        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 0, &no_table(), 0.0);
         assert!((d.value - 1.4 * 0.55).abs() < 1e-12);
         assert_eq!(d.combo_rate, 1.0);
 
         // 2 コンボ以上でさらに半分
-        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 2, &no_table());
+        let d = actual_delay(1.4, false, vec![c("フルスロットル", 0.45)], 2, &no_table(), 0.0);
         assert!((d.value - 1.4 * 0.55 * 0.5).abs() < 1e-12);
     }
 
@@ -228,6 +239,7 @@ mod tests {
             vec![c("A", 0.45), c("B", 0.30), c("C", 0.05)],
             0,
             &no_table(),
+            0.0,
         );
         assert!((d.reduction_raw - 0.80).abs() < 1e-12);
         assert_eq!(d.reduction, 0.70);
@@ -237,38 +249,55 @@ mod tests {
     // wiki `#ActualDelay`: 中ディレイの下限は 0.3s
     #[test]
     fn 下限は0_3秒() {
-        let d = actual_delay(0.8, false, vec![c("A", 0.70)], 2, &no_table());
+        let d = actual_delay(0.8, false, vec![c("A", 0.70)], 2, &no_table(), 0.0);
         // 0.8 × 0.30 × 0.5 = 0.12 → 下限 0.3
         assert_eq!(d.value, ACTUAL_DELAY_MIN);
         assert!(d.floored);
 
-        let d = actual_delay(1.4, false, Vec::new(), 0, &no_table());
+        let d = actual_delay(1.4, false, Vec::new(), 0, &no_table(), 0.0);
         assert!(!d.floored);
     }
 
     // wiki スキル性能一覧の「(固定)」は減少が効かない(極・ギガブレイズ 等)
     #[test]
     fn 固定の中ディレイには減少が乗らない() {
-        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 0, &no_table());
+        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 0, &no_table(), 0.0);
         assert_eq!(d.reduction, 0.0);
         assert!((d.value - 0.8).abs() < 1e-12);
         // コンボボーナス(倍率A)は固定でも掛かる
-        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 3, &no_table());
+        let d = actual_delay(0.8, true, vec![c("フルスロットル", 0.45)], 3, &no_table(), 0.0);
         assert!((d.value - 0.4).abs() < 1e-12);
+    }
+
+    // チャージ(スレイ・アックス / クラッシュ・アックス)は中ディレイ減少も下限も効かず、
+    // 1 回の所要時間に丸ごと乗る。実測表はチャージ無しの計測なので式で出す。
+    #[test]
+    fn チャージ時間は減少も下限も受けずに足される() {
+        let d = actual_delay(1.8, false, vec![c("A", 0.50)], 0, &no_table(), 1.0);
+        assert_eq!(d.charge, 1.0);
+        assert!((d.value - (1.8 * 0.50 + 1.0)).abs() < 1e-12);
+        // 下限 0.3s はチャージを足す前に取る(チャージぶんが目減りしない)
+        let floored = actual_delay(0.8, false, vec![c("A", 0.70)], 2, &no_table(), 0.5);
+        assert!(floored.floored);
+        assert!((floored.value - (ACTUAL_DELAY_MIN + 0.5)).abs() < 1e-12);
+        // 実測表の格子に収まっていてもチャージ中は式(表はチャージ無しの計測)
+        let charged = actual_delay(0.8, false, vec![c("A", 0.48)], 0, &table(), 1.0);
+        assert!(!charged.uses_measured);
+        assert!((charged.uses_per_minute - 60.0 / charged.value).abs() < 1e-9);
     }
 
     // ユーザー提供の計測表(60 秒あたりのスキル回数)。格子の中は実測、外は式。
     #[test]
     fn 実測表の格子の中は実測回数で外は式にフォールバックする() {
         // 総減少 48%(フルスロットル 45% + カフス RO 3%)・基本 0.8s → 実測 135 回/分
-        let d = actual_delay(0.8, false, vec![c("A", 0.48)], 0, &table());
+        let d = actual_delay(0.8, false, vec![c("A", 0.48)], 0, &table(), 0.0);
         assert!(d.uses_measured);
         assert!((d.uses_per_minute - 135.0).abs() < 1e-9);
         // 式なら 60 / (0.8 × 0.52) = 144.2 回/分。実測のほうが少ない(詠唱・入力の overhead)
         assert!(d.uses_per_minute < 60.0 / d.value);
 
         // 格子の外(総減少 20%)は式で出す
-        let d = actual_delay(0.8, false, vec![c("A", 0.20)], 0, &table());
+        let d = actual_delay(0.8, false, vec![c("A", 0.20)], 0, &table(), 0.0);
         assert!(!d.uses_measured);
         assert!((d.uses_per_minute - 60.0 / d.value).abs() < 1e-9);
     }
@@ -276,19 +305,19 @@ mod tests {
     #[test]
     fn 実測表は縦横とも線形補間する() {
         // 基本 1.2s は 0.8s(135)と 1.6s(69)の中点 → 102
-        let d = actual_delay(1.2, false, vec![c("A", 0.48)], 0, &table());
+        let d = actual_delay(1.2, false, vec![c("A", 0.48)], 0, &table(), 0.0);
         assert!((d.uses_per_minute - 102.0).abs() < 1e-9);
         // 総減少 56% は 48%(135)と 64%(176)の中点 → 155.5
-        let d = actual_delay(0.8, false, vec![c("A", 0.56)], 0, &table());
+        let d = actual_delay(0.8, false, vec![c("A", 0.56)], 0, &table(), 0.0);
         assert!((d.uses_per_minute - 155.5).abs() < 1e-9);
     }
 
     // 実測表はコンボボーナス無し・減少が効くスキルの計測なので、その条件を外れたら式で出す
     #[test]
     fn コンボボーナスと固定中ディレイでは実測表を使わない() {
-        let combo = actual_delay(0.8, false, vec![c("A", 0.48)], 2, &table());
+        let combo = actual_delay(0.8, false, vec![c("A", 0.48)], 2, &table(), 0.0);
         assert!(!combo.uses_measured);
-        let fixed = actual_delay(0.8, true, vec![c("A", 0.48)], 0, &table());
+        let fixed = actual_delay(0.8, true, vec![c("A", 0.48)], 0, &table(), 0.0);
         assert!(!fixed.uses_measured);
     }
 }

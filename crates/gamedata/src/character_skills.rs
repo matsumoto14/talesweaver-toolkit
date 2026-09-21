@@ -18,8 +18,8 @@
 //! 一次ソースで、スキルページの説明文しか無いもの(層が分からないもの)は `RecordOnly`。
 
 use domain::{
-    CharacterSkillDef, DamageCategory, MasteryOverride, SkillAudience, SkillEffect, StatKind,
-    StatLayer,
+    CharacterSkillDef, CharacterSkills, DamageCategory, MasteryOverride, SkillAudience, SkillEffect,
+    SkillForm, SkillRequirement, StatKind, StatLayer,
 };
 
 use crate::Source;
@@ -85,6 +85,10 @@ const WIKI: &str = "https://talewiki.com/?%A5%B9%A5%C6%A1%BC%A5%BF%A5%B9";
 /// (ユーザー決定)。
 const NOTICE_153335: &str = "https://talesweaver.nexon.co.jp/notice/notice.aspx?no=153335";
 
+/// 韓国公式スキル情報「귀환(帰還)」= イェフネンの極限スキル(2026-09-21 取得)。
+/// <フラグ> のスタックごとの倍率・段数・Cri倍率・周期の出典(wiki と食い違ったらこちらが正)。
+const KR_YEVGNEN_RETURN: &str = "https://tw.dn.nexoncdn.co.kr/ActionInfo/18_Yevgnen/3008482.htm";
+
 const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
     // --- 中ディレイ減少のパッシブ(wiki ステータス「中ディレイ倍率B」。全件 −5%)---
     CharacterSkillDef {
@@ -96,6 +100,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: DELAY_5,
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "パッシブ",
     },
@@ -108,6 +113,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: DELAY_5,
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "パッシブ",
     },
@@ -127,6 +133,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         ],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "パッシブ",
     },
@@ -139,6 +146,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: DELAY_5,
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "パッシブ",
     },
@@ -151,6 +159,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: DELAY_5,
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "パッシブ",
     },
@@ -163,6 +172,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: DELAY_5,
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "パッシブ",
     },
@@ -183,6 +193,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             effects: SPURT_GOOD_FACE,
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "中ディレイ減少は素だと 25% → 0% に減衰。移動速度 +10 は未配線",
     },
@@ -211,6 +222,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             },
         ],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "持続2分・CT10分。M3 の三択で値が変わる。被ダメージ +5% は未配線",
     },
@@ -233,6 +245,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "命中Pにかかる倍率が SLv×5%増加(Master=Lv7で+35%)。ペット集中(Lv1相当)が優先",
     },
@@ -260,6 +273,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             ],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "射程 +4 は未配線",
     },
@@ -279,6 +293,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "被ダメージ −10% と最大HP増加は未配線",
     },
@@ -300,6 +315,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "[仮] 憑依モード時のボーナス",
     },
@@ -319,6 +335,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "[仮] 憑依モード時のボーナス",
     },
@@ -344,6 +361,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【強剣】。前後ディレイも増える",
     },
@@ -362,6 +380,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【力を込めた連撃】。この 3 スキルを主軸にするときだけ ON にする",
     },
@@ -377,6 +396,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "味方にも",
     },
@@ -392,6 +412,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -410,6 +431,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【必滅者】",
     },
@@ -428,6 +450,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【騎士道】。<騎士道>が 30 スタック時の値(持続30s)",
     },
@@ -443,6 +466,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -458,6 +482,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -476,6 +501,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【ヴァイパーズアイ】(持続 5 分)",
     },
@@ -491,6 +517,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -509,6 +536,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【ハードトレーニング】で<鍛造>バフに攻撃ダメージが付く(持続 2 分)",
     },
@@ -524,6 +552,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -539,6 +568,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "パッシブ",
     },
@@ -554,6 +584,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -569,6 +600,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -584,6 +616,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "名薬の反動。攻撃ダメージが下がる",
     },
@@ -599,6 +632,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -630,6 +664,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             },
         ],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "M5 の型で変わる。防御型は攻撃ダメージが上がらない",
     },
@@ -648,6 +683,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【アノーイングネイバー】",
     },
@@ -663,6 +699,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -681,6 +718,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【エクソダス】",
     },
@@ -708,6 +746,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             },
         ],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "M5 の型で変わる。防御型は攻撃ダメージが上がらない",
     },
@@ -723,6 +762,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -738,6 +778,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "敵味方に効果有",
     },
@@ -753,6 +794,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -768,6 +810,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -783,6 +826,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -798,6 +842,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -810,6 +855,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         effects: &[],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "wiki:「効果なし(2024/2/21〜)」",
     },
@@ -825,6 +871,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "wiki は +1〜3%。最大値で入れている",
     },
@@ -840,6 +887,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -855,6 +903,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "wiki は +5,13〜20%。最大値で入れている",
     },
@@ -870,6 +919,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -891,6 +941,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【光の歌（攻撃）】で +10% になる",
     },
@@ -906,6 +957,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -921,6 +973,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -939,6 +992,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【トランススピリット】で選択",
     },
@@ -957,6 +1011,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【アルトリスティックスピリット】で選択。自身のぶん",
     },
@@ -972,6 +1027,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "使い手のマスタリー【アルトリスティックスピリット】が前提",
     },
@@ -990,6 +1046,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【ハーモニックスピリット】で選択",
     },
@@ -1005,6 +1062,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -1026,6 +1084,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【シンボルオブスピリット】で +20%(CT 1.5 倍)",
     },
@@ -1041,6 +1100,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -1056,6 +1116,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -1071,6 +1132,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -1086,6 +1148,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -1101,6 +1164,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "",
     },
@@ -1119,6 +1183,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【極・攻撃の熱気】で選択",
     },
@@ -1134,6 +1199,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "使い手のマスタリー【極・攻撃の熱気】が前提",
     },
@@ -1153,6 +1219,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【プリチャージ】",
     },
@@ -1171,59 +1238,160 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "マスタリー【良心】",
     },
-    CharacterSkillDef {
-        id: "yefnen_sharp_shard",
-        game_character_id: "yefnen",
-        name: "鋭い欠片<フラグ>",
-        audience: SkillAudience::SelfOnly,
-        max_level: 1,
-        effects: &[],
-        mastery_overrides: &[MasteryOverride {
-            mastery_id: "yefnen_m3_2",
-            effects: &[SkillEffect::Damage {
-                category: DamageCategory::SkillMultiplierRate,
-                percent: 20.0,
-            }],
-        }],
-        exclusive_with: &[],
-        source_url: WIKI,
-        note: "マスタリー【鋭い欠片】のフラグ。爆発の −20% は未収録",
-    },
-    CharacterSkillDef {
-        id: "yefnen_sticky_shard",
-        game_character_id: "yefnen",
-        name: "べたつく欠片<フラグ>",
-        audience: SkillAudience::SelfOnly,
-        max_level: 1,
-        effects: &[],
-        mastery_overrides: &[MasteryOverride {
-            mastery_id: "yefnen_m3_3",
-            effects: &[SkillEffect::Damage {
-                category: DamageCategory::SkillMultiplierRate,
-                percent: -10.0,
-            }],
-        }],
-        exclusive_with: &[],
-        source_url: WIKI,
-        note: "マスタリー【べたつく欠片】。持続ダメージが減る代わりに攻撃ダメージ減少を与える",
-    },
+    // --- イェフネンの形態ごとのパッシブ(wiki「Skill/イェフネン」スキル性能一覧 /
+    // ステータス各カテゴリ表、2026-09-21 取得)。**効果を技データ側に持つもの**は
+    // ここでは効果を持たず、「習得している印」として `requires` で形態だけを宣言する。
+    // 値は `Skill::swift_sword` / `Skill::full_charge`(gamedata/skills.rs)が持つ。
+    //
+    // 鋭い欠片 / べたつく欠片(マスタリー M3)は**<フラグ>にしか効かない** E1 で、技そのものには
+    // 効かない。以前はキャラスキルとして収録していたが誤りなので削除した(2026-09-21。
+    // 保存済みの id は storage の v18 移行と IndexedDB の v10 移行が落とす)。
     CharacterSkillDef {
         id: "yefnen_swift_sword",
         game_character_id: "yefnen",
         name: "速剣",
         audience: SkillAudience::SelfOnly,
         max_level: 1,
-        effects: &[SkillEffect::Damage {
-            category: DamageCategory::SkillMultiplierRate,
-            percent: -10.0,
-        }],
+        // 倍率 ×0.9・段数 +1 は wiki スキル性能一覧の「(速剣適用時)」行そのものなので、
+        // 技データ(`Skill::swift_sword`)が持つ。ここに E1 −10% を書くと二重に効く
+        effects: &[],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: Some(SkillRequirement::Form(SkillForm::Sword)),
         source_url: WIKI,
-        note: "ソードシェイプ系スキルのスキル倍率が下がる",
+        note: "ソードシェイプ系 4 技の倍率 ×0.9・段数 +1(習得していると常に適用)",
+    },
+    CharacterSkillDef {
+        id: "yefnen_full_charge",
+        game_character_id: "yefnen",
+        name: "最大までチャージ",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        // 段数とチャージ時間は技データ(`Skill::full_charge`)が持つ
+        effects: &[],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: Some(SkillRequirement::FullCharge),
+        source_url: WIKI,
+        note: "スレイ・アックス 8→17 段 / クラッシュ・アックス 6→10 段。チャージ 1 秒(マスタリー【アックス特化】で 0.5 秒)が 1 回の所要時間に乗る",
+    },
+    CharacterSkillDef {
+        id: "yefnen_back_attack",
+        game_character_id: "yefnen",
+        name: "後方から攻撃",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        // マスタリー【パイク特化】を取ってはじめて効果が出る。マスタリー側は `RecordOnly`
+        // のままにする(両方に効果を持たせると二重に数える)
+        effects: &[],
+        mastery_overrides: &[MasteryOverride {
+            mastery_id: "yefnen_m1_1",
+            effects: &[SkillEffect::AddedDamageRate { percent: 10.0 }],
+        }],
+        exclusive_with: &[],
+        requires: Some(SkillRequirement::Form(SkillForm::Pike)),
+        source_url: WIKI,
+        note: "マスタリー【パイク特化】: パイクシェイプ系で後方攻撃時 追加ダメージ +10%",
+    },
+    CharacterSkillDef {
+        id: "yefnen_boris_mark",
+        game_character_id: "yefnen",
+        name: "なんともいえない切なさ",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        effects: &[SkillEffect::AddedDamageRate { percent: 10.0 }],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: None,
+        source_url: WIKI,
+        note: "<ボリス!> が付いた敵への攻撃に追加ダメージ +10%(形態を問わない)",
+    },
+    // --- 値・層が確かめられていないので記録だけ(確率発動は docs/adr/005 で収録見送り)---
+    CharacterSkillDef {
+        id: "yefnen_boris_company",
+        game_character_id: "yefnen",
+        name: "ボリス同行",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        effects: &[SkillEffect::RecordOnly],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: None,
+        source_url: WIKI,
+        note: "攻撃ダメージ +3%。wiki のカテゴリ表に無く、X のどの副カテゴリか未確認",
+    },
+    CharacterSkillDef {
+        id: "yefnen_revenge",
+        game_character_id: "yefnen",
+        name: "<復讐>",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        effects: &[SkillEffect::RecordOnly],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: None,
+        source_url: WIKI,
+        note: "攻撃ダメージ +30%。wiki のカテゴリ表に無く、X のどの副カテゴリか未確認",
+    },
+    CharacterSkillDef {
+        id: "yefnen_reinforce",
+        game_character_id: "yefnen",
+        name: "<強化>",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        effects: &[SkillEffect::RecordOnly],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: None,
+        source_url: WIKI,
+        note: "攻撃ダメージ +30%。wiki のカテゴリ表に無く、X のどの副カテゴリか未確認",
+    },
+    CharacterSkillDef {
+        id: "yefnen_chisel_smash",
+        game_character_id: "yefnen",
+        name: "チゼルの防御貫通",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        effects: &[SkillEffect::RecordOnly],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: Some(SkillRequirement::Form(SkillForm::Chisel)),
+        source_url: WIKI,
+        note: "スレイ・チゼル / クラッシュ・チゼルの強打系: 確率 15% で防御 −15%。確率発動は収録しない方針(docs/adr/005)なので計算には入れない",
+    },
+    // <フラグ> は技とは別枠のダメージ(持続 1 秒ごと + スレイ / クラッシュで爆発)。
+    // ON = 敵に <フラグ> が付いている、SLv = スタック数(最大 10)。
+    // 倍率表・持続 / 爆発の作り方・マスタリー3 の ±% は gamedata/flag.rs が持つ
+    // (ここに効果を書くと技の与ダメージ式に合流してしまう)。
+    CharacterSkillDef {
+        id: "yefnen_flag",
+        game_character_id: "yefnen",
+        name: "<フラグ>",
+        audience: SkillAudience::SelfOnly,
+        max_level: 10,
+        effects: &[SkillEffect::SeparateDamage],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: None,
+        source_url: KR_YEVGNEN_RETURN,
+        note: "連 / 爆 が積み、スレイ / クラッシュ が爆発させる。スタック数ぶん倍率が上がる(1:320% → 10:400%)",
+    },
+    CharacterSkillDef {
+        id: "yefnen_shard_wire",
+        game_character_id: "yefnen",
+        name: "シャードワイヤー",
+        audience: SkillAudience::SelfOnly,
+        max_level: 1,
+        effects: &[SkillEffect::RecordOnly],
+        mastery_overrides: &[],
+        exclusive_with: &[],
+        requires: None,
+        source_url: WIKI,
+        note: "効果の層・値が wiki のカテゴリ表で確認できていないため記録のみ",
     },
     // --- 最終ダメージ(wiki ステータス [L]最終ダメージ。上限 +45%)---
     CharacterSkillDef {
@@ -1238,6 +1406,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "極・ミラクルスピリットの追加効果。上限 +45% で頭打ちになる",
     },
@@ -1255,6 +1424,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "自身のみ",
     },
@@ -1271,6 +1441,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "味方にも(30分)",
     },
@@ -1287,6 +1458,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "[仮] 女性キャラ同行時、味方にも",
     },
@@ -1303,6 +1475,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: WIKI,
         note: "[仮] マキシミン/クロエ同行時、味方にも",
     },
@@ -1320,6 +1493,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1335,6 +1509,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1350,6 +1525,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "<毒舌>にマスタリー【暴言】を乗せた形。敵被ダメージ増加(+10%)",
     },
@@ -1365,6 +1541,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+10%)",
     },
@@ -1380,6 +1557,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+10%)。ボリス同行時の追加 +3% は条件付きなので含めない",
     },
@@ -1395,6 +1573,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1410,6 +1589,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1425,6 +1605,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+10%)",
     },
@@ -1440,6 +1621,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)。自分の被ダメージ減少(-2%)は含めない",
     },
@@ -1455,6 +1637,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1470,6 +1653,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1485,6 +1669,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1500,6 +1685,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1515,6 +1701,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+3%)",
     },
@@ -1530,6 +1717,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+10%)。敵攻撃ダメージ減少(-10%)は含めない",
     },
@@ -1545,6 +1733,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+10%)",
     },
@@ -1560,6 +1749,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &["roamini_curse_pendulum_symbol_of_spirit_debuff"],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+15%)。マスタリー【シンボルオブスピリット】なら +20%(別行)",
     },
@@ -1575,6 +1765,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &["roamini_curse_pendulum_debuff"],
+        requires: None,
         source_url: NOTICE_153335,
         note: "マスタリー【シンボルオブスピリット】を取っているときの敵被ダメージ増加(+20%)。\
                roamini_curse_pendulum_debuff(基本 +15%)と排他 — 両方 ON にすると二重計上になる",
@@ -1591,6 +1782,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1606,6 +1798,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1621,6 +1814,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+5%)",
     },
@@ -1636,23 +1830,27 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
+        requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+10%)",
     },
+    // ブレンドはスタックする(最大 10)。スタック 1 つにつき敵の被ダメージ +1%。
+    // 公式お知らせ(153335)はイェフネン実装前の表なので、ここだけは wiki が正。
     CharacterSkillDef {
         id: "yefnen_blend",
         game_character_id: "yefnen",
         name: "ブレンド",
         audience: SkillAudience::Enemy,
-        max_level: 1,
-        effects: &[SkillEffect::Damage {
+        max_level: 10,
+        effects: &[SkillEffect::DamagePerLevel {
             category: DamageCategory::TakenDamageReduction,
-            percent: -10.0,
+            percent: -1.0,
         }],
         mastery_overrides: &[],
         exclusive_with: &[],
-        source_url: NOTICE_153335,
-        note: "敵被ダメージ増加(+10%)",
+        requires: None,
+        source_url: WIKI,
+        note: "敵被ダメージ増加 +1% × スタック(最大 10)",
     },
 ];
 
@@ -1661,10 +1859,32 @@ pub fn character_skill_catalog() -> &'static [CharacterSkillDef] {
     CHARACTER_SKILLS
 }
 
+/// 保存済みのキャラスキル選択から、**カタログに無くなった id** を落とす。
+///
+/// 残っていると `CharacterSkills::validate` が `Unknown` を返し、そのキャラの計算・
+/// プレビューがまるごと止まる(実機で「未知のキャラスキルです」)。id の一覧は持たず
+/// カタログそのものを引くので、カタログから消すたびにここへ 1 行足す必要がない。
+///
+/// SQLite の v18 移行(`storage::migrate_removed_character_skills`)・IndexedDB の v10 移行・
+/// 書き出し JSON の読み込み(`transfer.ts`)がこの 1 関数を通る。冪等
+/// (カタログにある id しか残らないので、2 回通しても結果は同じ)。
+/// 戻り値は落としたものがあったか。
+pub fn normalize_character_skill_selection(skills: &mut CharacterSkills) -> bool {
+    let known = |id: &str| CHARACTER_SKILLS.iter().any(|d| d.id == id);
+    let before = (skills.skill_ids.len(), skills.skill_levels.len());
+    skills.skill_ids.retain(|id| known(id));
+    skills.skill_levels.retain(|id, _| known(id));
+    (skills.skill_ids.len(), skills.skill_levels.len()) != before
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{CharacterSkills, Masteries};
+    use crate::skills::{
+        find_skill, resolve_skill_variants, skills_for, AXE_SPECIALIZATION_MASTERY_ID,
+        FULL_CHARGE_SKILL_ID, SWIFT_SWORD_SKILL_ID,
+    };
+    use domain::Masteries;
 
     /// テスト用: カテゴリX4(攻撃ダメージ(スキル))の合計。
     fn x4(contributions: &[domain::DamageContribution]) -> f64 {
@@ -1689,8 +1909,8 @@ mod tests {
 
     /// 収録件数。カタログを入れ替えたら数を更新する(黙って増減させない)。
     #[test]
-    fn 収録は95件() {
-        assert_eq!(CHARACTER_SKILLS.len(), 95);
+    fn 収録は102件() {
+        assert_eq!(CHARACTER_SKILLS.len(), 102);
     }
 
     /// 上限はカテゴリ側(`DamageCategory::cap`)が見るので、ここでは
@@ -1857,15 +2077,226 @@ mod tests {
     fn 呪われた魔剣はm3の三択で5と7に分かれる() {
         let catalog = character_skill_catalog();
         let sword = on(&["maximin_cursed_sword"]);
-        assert!((x4(&sword.damage_contributions(catalog, &picked(&[]))) - 0.05).abs() < 1e-12);
+        assert!((x4(&sword.damage_contributions(catalog, &picked(&[]), None)) - 0.05).abs() < 1e-12);
         assert!(
-            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_2"]))) - 0.05).abs()
+            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_2"]), None)) - 0.05).abs()
                 < 1e-12
         );
         assert!(
-            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_3"]))) - 0.07).abs()
+            (x4(&sword.damage_contributions(catalog, &picked(&["maximin_m3_3"]), None)) - 0.07).abs()
                 < 1e-12
         );
+    }
+
+
+    // --- イェフネンの形態(wiki「Skill/イェフネン」スキル性能一覧、2026-09-21 取得)---
+
+    /// 形態は 5 つ × 4 技 = 20 件。イェフネン以外の技は形態を持たない。
+    #[test]
+    fn イェフネンの20技に形態が付く() {
+        use domain::SkillForm::*;
+        let expected: &[(&str, domain::SkillForm)] = &[
+            ("yefnen_continuous", Sword),
+            ("yefnen_explosion", Sword),
+            ("yefnen_slay", Sword),
+            ("yefnen_crash", Sword),
+            ("yefnen_continuous_pike", Pike),
+            ("yefnen_explosion_pike", Pike),
+            ("yefnen_slay_pike", Pike),
+            ("yefnen_crash_pike", Pike),
+            ("yefnen_continuous_axe", Axe),
+            ("yefnen_explosion_axe", Axe),
+            ("yefnen_slay_axe", Axe),
+            ("yefnen_crash_axe", Axe),
+            ("yefnen_continuous_urumi", Urumi),
+            ("yefnen_explosion_urumi", Urumi),
+            ("yefnen_slay_urumi", Urumi),
+            ("yefnen_crash_urumi", Urumi),
+            ("yefnen_continuous_chisel", Chisel),
+            ("yefnen_explosion_chisel", Chisel),
+            ("yefnen_slay_chisel", Chisel),
+            ("yefnen_crash_chisel", Chisel),
+        ];
+        for (id, form) in expected {
+            assert_eq!(find_skill(id).unwrap().form, Some(*form), "{id}");
+        }
+        // 形態を持つのはこの 20 件だけ(他キャラの技に紛れ込んでいない)
+        let with_form = skills_for("yefnen")
+            .iter()
+            .filter(|s| s.form.is_some())
+            .count();
+        assert_eq!(with_form, expected.len());
+        assert_eq!(find_skill("lucian_continuous").unwrap().form, None);
+    }
+
+    /// 速剣(wiki 一覧の「(速剣適用時)」行)。倍率は素の ×0.9、段数は表の実値。
+    /// ソードシェイプ系 4 技**だけ**に載り、他の形態には一切効かない。
+    #[test]
+    fn 速剣はソード系4技だけの倍率と段数に差し替わる() {
+        let cases: &[(&str, f64, u32)] = &[
+            ("yefnen_continuous", 3.429, 12),
+            ("yefnen_explosion", 4.086, 6),
+            ("yefnen_slay", 6.3, 13),
+            ("yefnen_crash", 6.075, 7),
+        ];
+        let learned = CharacterSkills {
+            skill_ids: vec![SWIFT_SWORD_SKILL_ID.to_string()],
+            ..Default::default()
+        };
+        let none = Masteries::default();
+        for (id, multiplier, hit_count) in cases {
+            let base = find_skill(id).unwrap();
+            // 素の倍率の 0.9 倍であること(wiki のカテゴリ表「スキル倍率増加(割合)−10%」)
+            assert!((base.multiplier * 0.9 - multiplier).abs() < 1e-9, "{id}");
+            let resolved = resolve_skill_variants(base.clone(), &learned, &none);
+            assert!((resolved.multiplier - multiplier).abs() < 1e-12, "{id}");
+            assert_eq!(resolved.hit_count, *hit_count, "{id}");
+            assert!((resolved.power - multiplier * f64::from(*hit_count)).abs() < 1e-9, "{id}");
+            // 習得していなければ素のまま
+            let plain = resolve_skill_variants(base.clone(), &CharacterSkills::default(), &none);
+            assert_eq!(plain.multiplier, base.multiplier, "{id}");
+            assert_eq!(plain.hit_count, base.hit_count, "{id}");
+        }
+        // ソード以外(パイク・アックス・ウルミ・チゼル)には効かない
+        for id in [
+            "yefnen_continuous_pike",
+            "yefnen_slay_axe",
+            "yefnen_crash_urumi",
+            "yefnen_explosion_chisel",
+        ] {
+            let base = find_skill(id).unwrap();
+            let resolved = resolve_skill_variants(base.clone(), &learned, &none);
+            assert_eq!(resolved.multiplier, base.multiplier, "{id}");
+            assert_eq!(resolved.hit_count, base.hit_count, "{id}");
+            assert_eq!(resolved.charge_seconds, 0.0, "{id}");
+        }
+    }
+
+    /// チャージ(wiki 一覧の段数幅)。アックスの スレイ 8〜17 / クラッシュ 6〜10 だけ。
+    /// マスタリー【アックス特化】でチャージタイムが半減する。
+    #[test]
+    fn 最大チャージはアックスのスレイとクラッシュの段数を上げる() {
+        let charging = CharacterSkills {
+            skill_ids: vec![FULL_CHARGE_SKILL_ID.to_string()],
+            ..Default::default()
+        };
+        let none = Masteries::default();
+        let axe_spec = Masteries {
+            picked: vec![AXE_SPECIALIZATION_MASTERY_ID.to_string()],
+        };
+        for (id, base_hits, max_hits) in [("yefnen_slay_axe", 8, 17), ("yefnen_crash_axe", 6, 10)] {
+            let base = find_skill(id).unwrap();
+            assert_eq!(base.hit_count, base_hits, "{id}");
+            let full = resolve_skill_variants(base.clone(), &charging, &none);
+            assert_eq!(full.hit_count, max_hits, "{id}");
+            assert_eq!(full.charge_seconds, 1.0, "{id}");
+            // 【アックス特化】でチャージタイム半減
+            let fast = resolve_skill_variants(base.clone(), &charging, &axe_spec);
+            assert_eq!(fast.charge_seconds, 0.5, "{id}");
+            assert_eq!(fast.hit_count, max_hits, "{id}");
+        }
+        // チャージできない技には効かない(アックスの 連・爆 も含む)
+        for id in ["yefnen_continuous_axe", "yefnen_slay", "yefnen_slay_pike"] {
+            let base = find_skill(id).unwrap();
+            let resolved = resolve_skill_variants(base.clone(), &charging, &axe_spec);
+            assert_eq!(resolved.hit_count, base.hit_count, "{id}");
+            assert_eq!(resolved.charge_seconds, 0.0, "{id}");
+        }
+    }
+
+    /// 後方攻撃の追加ダメージ +10% は**パイクの技 + マスタリー【パイク特化】**のときだけ。
+    #[test]
+    fn 後方攻撃の追加ダメージはパイクとm1_1がそろったときだけ入る() {
+        let catalog = character_skill_catalog();
+        let on_back = on(&["yefnen_back_attack"]);
+        let pike = find_skill("yefnen_slay_pike").unwrap();
+        let sword = find_skill("yefnen_slay").unwrap();
+        let pike_spec = picked(&["yefnen_m1_1"]);
+
+        let rate = |skills: &CharacterSkills, m: &Masteries, s: &domain::Skill| {
+            skills.added_damage_rate(catalog, m, Some(s))
+        };
+        assert!((rate(&on_back, &pike_spec, &pike) - 0.10).abs() < 1e-12);
+        // マスタリー未取得は 0(スキルを ON にしただけでは効かない)
+        assert_eq!(rate(&on_back, &picked(&[]), &pike), 0.0);
+        // 形態が違えば 0(ソードシェイプには効かない)
+        assert_eq!(rate(&on_back, &pike_spec, &sword), 0.0);
+        // スキルを ON にしていなければ 0
+        assert_eq!(rate(&on(&[]), &pike_spec, &pike), 0.0);
+    }
+
+    /// <ボリス!> は形態を問わず追加ダメージ +10%。後方攻撃と重なれば足し合わさる。
+    #[test]
+    fn ボリスの追加ダメージは形態を問わない() {
+        let catalog = character_skill_catalog();
+        let chisel = find_skill("yefnen_slay_chisel").unwrap();
+        let pike = find_skill("yefnen_slay_pike").unwrap();
+        assert!(
+            (on(&["yefnen_boris_mark"]).added_damage_rate(catalog, &picked(&[]), Some(&chisel))
+                - 0.10)
+                .abs()
+                < 1e-12
+        );
+        let both = on(&["yefnen_boris_mark", "yefnen_back_attack"]);
+        assert!(
+            (both.added_damage_rate(catalog, &picked(&["yefnen_m1_1"]), Some(&pike)) - 0.20).abs()
+                < 1e-12
+        );
+    }
+
+    /// ブレンドはスタック 1 つにつき敵の被ダメージ +1%(最大 10)。
+    #[test]
+    fn ブレンドはスタック数に比例する() {
+        let catalog = character_skill_catalog();
+        let def = catalog.iter().find(|d| d.id == "yefnen_blend").unwrap();
+        assert_eq!(def.max_level, 10);
+        let stacked = |n: u8| {
+            let mut skills = on(&["yefnen_blend"]);
+            skills.skill_levels.insert("yefnen_blend".to_string(), n);
+            skills
+                .damage_contributions(catalog, &picked(&[]), None)
+                .iter()
+                .filter(|c| c.category == DamageCategory::TakenDamageReduction)
+                .map(|c| c.value)
+                .sum::<f64>()
+        };
+        assert!((stacked(5) - -0.05).abs() < 1e-12);
+        assert!((stacked(1) - -0.01).abs() < 1e-12);
+        assert!((stacked(10) - -0.10).abs() < 1e-12);
+        // SLv 未指定は上限(10 スタック)= 以前の固定 −10% と同値
+        let sum: f64 = on(&["yefnen_blend"])
+            .damage_contributions(catalog, &picked(&[]), None)
+            .iter()
+            .filter(|c| c.category == DamageCategory::TakenDamageReduction)
+            .map(|c| c.value)
+            .sum();
+        assert!((sum - -0.10).abs() < 1e-12);
+    }
+
+    /// 誤って収録していた <フラグ> 専用のマスタリー効果は消えている(2026-09-21)。
+    /// 保存済みの id はカタログを引く正規化で落ちる。
+    #[test]
+    fn 欠片系は収録から消えて保存済みの選択からも落ちる() {
+        let catalog = character_skill_catalog();
+        for id in ["yefnen_sharp_shard", "yefnen_sticky_shard"] {
+            assert!(catalog.iter().all(|d| d.id != id), "{id}");
+        }
+        let mut saved = CharacterSkills {
+            skill_ids: vec![
+                "yefnen_sharp_shard".into(),
+                "yefnen_swift_sword".into(),
+                "yefnen_sticky_shard".into(),
+            ],
+            skill_levels: [("yefnen_sticky_shard".to_string(), 1u8), ("yefnen_blend".to_string(), 3)]
+                .into_iter()
+                .collect(),
+        };
+        assert!(normalize_character_skill_selection(&mut saved));
+        assert_eq!(saved.skill_ids, vec!["yefnen_swift_sword".to_string()]);
+        assert_eq!(saved.skill_levels.get("yefnen_blend"), Some(&3));
+        assert!(saved.validate(catalog, "yefnen").is_ok());
+        // 2 回目は何も落ちない(冪等)
+        assert!(!normalize_character_skill_selection(&mut saved));
     }
 
     /// 敵にかけるデバフが与ダメージ式まで効いているか、実カタログから通しで確かめる。
@@ -1877,7 +2308,7 @@ mod tests {
         let catalog = character_skill_catalog();
         let totals_of = |ids: &[&str]| {
             let mut t = CategoryTotals::neutral();
-            for c in on(ids).damage_contributions(catalog, &picked(&[])) {
+            for c in on(ids).damage_contributions(catalog, &picked(&[]), None) {
                 t.add(c.category, c.value);
             }
             t

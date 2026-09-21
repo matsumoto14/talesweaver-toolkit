@@ -92,9 +92,17 @@
       })
       .catch((e) => reportError(errorMessage(e)));
   });
+  /** キャラタブで選んだ主軸の武器形態(イェフネン)。形態を持たないキャラは null。
+   *  形態は技の属性なので `Skill::form` から逆引きする(対応表は TS に持たない) */
+  const mainForm = $derived(
+    skills.find((s) => s.id === character?.main_skill_id)?.form ?? null,
+  );
   /** 本体が撃てるスキルだけ(熊 = 魔法人形が撃つスキルは主軸に選べない。ADR-016)。
+   *  形態を持つキャラは**いまの形態の技だけ**にする(形態を跨ぐ選び直しはキャラタブで行う)。
    *  このタブの主軸ピッカー・一覧計算はここから絞る */
-  const bodySkills = $derived(skills.filter((s) => s.attacker === "player"));
+  const bodySkills = $derived(
+    skills.filter((s) => s.attacker === "player" && (mainForm === null || s.form === mainForm)),
+  );
   /** キャラタブで選んだ主軸スキル。この画面のスキルはこれが正 */
   const mainSkill = $derived(bodySkills.find((s) => s.id === character?.main_skill_id) ?? null);
   /**
@@ -164,7 +172,8 @@
         .then((rs) => {
           if (!isCurrent()) return;
           skillTotals = Object.fromEntries(
-            rs.map(([id, r]) => [id, { perHit: r.body.per_hit_primary, total: r.body.total_primary }]),
+            // 合計は <フラグ> 爆発まで込みの合算(combined)。並び順もこの値で決まる
+            rs.map(([id, r]) => [id, { perHit: r.body.per_hit_primary, total: r.combined.total_primary }]),
           );
         })
         .catch((e) => reportError(errorMessage(e))),
@@ -221,6 +230,9 @@
   let calculating = $state(false);
   const body = $derived(result?.body ?? null);
   const summon = $derived(result?.summon ?? null);
+  /** <フラグ>(技とは別枠のダメージ。イェフネン)。積んでいなければ null。
+   *  合算(1 発の合計・DPS・討伐時間)は combined が持つので、画面は足し算をしない */
+  const flag = $derived(result?.flag ?? null);
   const combined = $derived(result?.combined ?? null);
   /** 召喚獣(熊・精霊)が撃つスキル本体(結果 JSON は id しか持たないので skills 一覧から引く) */
   const summonSkillFull = $derived(skills.find((s) => s.id === summon?.skill_id) ?? null);
@@ -687,6 +699,8 @@
                 onView={() => viewWhy("body")}
                 onPerHitDeltaFollow={() => { viewWhy("body"); details.follow("perHit"); }}
                 {flowChanged}
+                {flag}
+                combined={summon ? null : combined}
               />
             {/if}
             {#if summon}
@@ -805,7 +819,12 @@
                   × (1 − {fmtPct(d.reduction)}){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 {fmtPct(limits.actual_delay_reduction_max)}({fmtPct(d.reduction_raw)} ぶん選択中)</span>{/if}
                 {/if}
                 {#if d.combo_rate < 1}× {fmtNum(d.combo_rate)}(コンボ){/if}
-                = {fmtNum(d.value, 2, "s")}{#if d.floored}<span class="warn"> ※下限 {fmtNum(limits.actual_delay_min, 1, "s")}</span>{/if}
+                <!-- チャージは中ディレイ減少も倍率A も下限も受けず、下限を取ったあとに足す。
+                     式が表示中の値に到達するように、足している間は段を出す -->
+                {#if d.charge > 0}
+                  ＋ チャージ <Value motion={() => d.charge} value={fmtNum(d.charge, 2, "s")} />
+                {/if}
+                = <Value motion={() => d.value} value={fmtNum(d.value, 2, "s")} />{#if d.floored}<span class="warn"> ※下限 {fmtNum(limits.actual_delay_min, 1, "s")}</span>{/if}
                 {#if d.contributions.length > 0}
                   ／ 減少源: {d.contributions.map((c) => `${c.source} ${fmtPct(c.rate)}`).join(" ・ ")}
                 {/if}

@@ -201,6 +201,9 @@
         eternalLevel: character.awakening.eternal_level,
         skill,
         comboSkillType: null,
+        resolved: result
+          ? { multiplier: result.effective_skill_multiplier, hit_count: result.hit_count }
+          : null,
         content: targetKind === "listed" && content
           ? { id: content.content.id, name: content.content.name, enemyId: content.content.enemy_id }
           : null,

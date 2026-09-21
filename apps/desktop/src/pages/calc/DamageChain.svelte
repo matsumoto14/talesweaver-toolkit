@@ -7,7 +7,7 @@
   // 討伐時間まで出す。召喚スキルがあるキャラは
   // 本体・召喚獣どちらの鎖にも討伐時間節を出さず、CalcPage 側の「合計」面(combined)にだけ出す
   // (同じ情報を 2 箇所に出さない。§00 ②)。
-  import type { DamageResult, Skill } from "../../api/types";
+  import type { CombinedDamage, DamageResult, FlagDamage, Skill } from "../../api/types";
   import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
   import { limits } from "../../limits.svelte";
   import Icon, { type IconKind } from "../../ui/Icon.svelte";
@@ -45,10 +45,15 @@
     onPerHitDeltaFollow?: () => void;
     /** 「なぜこの数字?」の中に変わった段があるか(本体の ↑ に下線を出す判定。熊は常に false) */
     flowChanged?: boolean;
+    /** <フラグ>(技とは別枠のダメージ)。本体の鎖だけが受け取る。null = 積んでいない */
+    flag?: FlagDamage | null;
+    /** この鎖に合流する別枠込みの合算(1 発の合計・DPS・討伐時間)。Rust が足した値で、
+     *  画面は側を選ぶだけ。null = 合算を鎖に出さない(熊がいるときは CalcPage の「合計」面が持つ) */
+    combined?: CombinedDamage | null;
   }
   let {
     result, skill, store, attackerLabel, isSummon = false, attackerSkillName, icon, showDefeat, heroNumber,
-    intervalNote = null, onView, onPerHitDeltaFollow, flowChanged = false,
+    intervalNote = null, onView, onPerHitDeltaFollow, flowChanged = false, flag = null, combined = null,
   }: Props = $props();
 
   const toggle = (k: string) => {
@@ -58,8 +63,16 @@
 
   const critMode = $derived(result.critical_chance > 0);
   const perHit = $derived(result.per_hit_primary);
-  const totalValue = $derived(result.total_primary);
-  const dpsValue = $derived(pickSide(result.dps, critMode));
+  // 合計・DPS・討伐時間は「この鎖に合流する別枠込み」の値を出す。合流する別枠が無ければ
+  // combined は body と同じ値になる(Rust の combine_damage)ので、画面に分岐を持たせない
+  const totalValue = $derived(combined?.total_primary ?? result.total_primary);
+  const dpsValue = $derived(pickSide(combined?.dps ?? result.dps, critMode));
+  const defeatSeconds = $derived(combined?.defeat_seconds ?? result.defeat_seconds);
+  const expectedDps = $derived(combined?.expected_dps ?? result.expected_dps);
+  /** <フラグ> 爆発(主軸が スレイ / クラッシュ のときだけ)。合計に合流する */
+  const burst = $derived(flag?.burst ?? null);
+  /** 積み直しの 1 周(積む技 × n → 主軸 → 爆発)。DPS はこの 1 周で出している */
+  const reapply = $derived(flag?.cycle ?? null);
 
   // 段の組み立ては calc/damageDetail.ts(CalcPage の「なぜこの数字?」と同じ関数)。
   // 熊には WhyPanel が無いが、材料(トレースの段)は本体と同じ形で Rust が返すので流用できる。
@@ -125,7 +138,17 @@
         mult: fmtSignedPct(result.added_damage_rate, { max: 4 }),
         value: fmtInt(added),
         n: added,
-        sub: "シャープネスビジョン・ランダムOP・称号",
+        sub: "シャープネスビジョン・ランダムOP・称号・キャラスキル",
+      });
+    }
+    if (burst) {
+      // 技とは別枠のダメージ。技 1 回につき 1 度なので、1 発の合計にそのまま合流する
+      mats.push({
+        label: `<フラグ> 爆発(スタック ${flag?.stacks ?? 0})`,
+        mult: `×${burst.hit_count} 段`,
+        value: fmtInt(burst.total_primary),
+        n: burst.total_primary,
+        sub: `技とは別枠・倍率 ${fmtPct(flag?.multiplier ?? 0)}・Cri倍率 ×2.5`,
       });
     }
     if (!critMode) {
@@ -172,6 +195,16 @@
     if (d.combo_rate < 1) {
       mats.push({ label: "コンボ(倍率A。間に通常攻撃を挟む)", mult: `×${fmtNum(d.combo_rate)}`, value: "" });
     }
+    if (d.charge > 0) {
+      // チャージは中ディレイ減少も倍率A も下限 0.3s も受けず、下限を取ったあとに足す
+      mats.push({
+        label: "チャージ(最大までためる)",
+        mult: "+",
+        value: fmtNum(d.charge, 2, "s"),
+        n: d.charge, unit: "s",
+        sub: "減少も下限も効かない(そのまま足す)",
+      });
+    }
     mats.push({
       label: intervalNote ? "攻撃間隔" : "中ディレイ",
       value: fmtNum(d.value, 2, "s"),
@@ -214,23 +247,57 @@
         sub: intervalNote ?? (d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ"),
       });
     }
-    if (result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1) {
+    // <フラグ> を爆発させる技は「積み直しの 1 周」で DPS を出す(毎回そのスタック数が
+    // 乗る前提にしない)。回数も 1 周の時間も Rust が決めた値をそのまま出す
+    if (reapply) {
+      mats.push({
+        label: `積み直し ${reapply.applier_skill_name} × ${reapply.applier_uses} 回 → ${attackerSkillName}`,
+        value: fmtNum(reapply.seconds, 2, "s"),
+        n: reapply.seconds, unit: "s",
+        sub: `1 周で <フラグ> を ${reapply.stacks_to_apply} 積み直す(1 回 +${reapply.stacks_per_use})`
+          + (reapply.cooldown_bound ? ` ・ CT ${fmtNum(reapply.cooldown_seconds, 0, "s")} を待つぶん多く撃つ` : ""),
+      });
+    }
+    // 技とは別枠のダメージ(<フラグ>)。Rust が「この秒数に 1 回」を当てた dps を持っている
+    // ので、画面は側を選んで並べるだけ(合算は combined が持つ)
+    if (flag) {
+      const durationDps = pickSide(flag.duration.dps, critMode);
+      mats.push({
+        label: `<フラグ> 持続(${fmtNum(flag.tick_seconds, 1, "s")}ごと)`,
+        value: durationDps !== null ? fmtInt(Math.round(durationDps)) : "—",
+        n: durationDps === null ? undefined : Math.round(durationDps),
+        sub: `1 回 ${fmtInt(pickSide(flag.duration.total, critMode) ?? 0)}・持続 ${fmtNum(flag.lasts_seconds, 0, "s")}`,
+      });
+    }
+    if (burst) {
+      const burstDps = pickSide(burst.dps, critMode);
+      mats.push({
+        label: "<フラグ> 爆発",
+        value: burstDps !== null ? fmtInt(Math.round(burstDps)) : "—",
+        n: burstDps === null ? undefined : Math.round(burstDps),
+        sub: reapply ? "1 周に 1 度" : "技 1 回につき 1 度",
+      });
+    }
+    if (expectedDps !== null && result.critical_chance > 0 && result.critical_chance < 1) {
       mats.push({
         label: "期待値(クリ率で按分)",
-        value: fmtInt(Math.round(result.expected_dps)),
-        n: Math.round(result.expected_dps),
-        sub: `合計(非クリ) × ${fmtPct(1 - result.critical_chance, 1)} + 合計(クリ) × ${fmtPct(result.critical_chance, 1)}`,
+        value: fmtInt(Math.round(expectedDps)),
+        n: Math.round(expectedDps),
+        sub: `${flag ? "<フラグ> 込みの" : ""}合計(非クリ) × ${fmtPct(1 - result.critical_chance, 1)} + 合計(クリ) × ${fmtPct(result.critical_chance, 1)}`,
       });
     }
     return {
-      mult: `÷ ${fmtNum(cycle?.seconds ?? d.value, 2, "s")}`,
+      mult: `÷ ${fmtNum(reapply?.seconds ?? cycle?.seconds ?? d.value, 2, "s")}`,
       delta: null,
       to: Math.round(dpsValue),
       mats,
       idle: 0,
-      expr: cycle
-        ? "1 秒あたり = (スキルの合計 + 通常攻撃の合計) ÷ 1 サイクル"
-        : "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60",
+      expr: reapply
+        ? "1 秒あたり = (積み直し × 回数 + 主軸 + <フラグ> 爆発) ÷ 1 周の時間 ＋ <フラグ> 持続(1 秒ごと)"
+        : (cycle
+            ? "1 秒あたり = (スキルの合計 + 通常攻撃の合計) ÷ 1 サイクル"
+            : "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60")
+          + (flag ? " ＋ <フラグ> 持続(1 秒ごと)" : ""),
     };
   });
 </script>
@@ -301,21 +368,21 @@
             {/if}
           </span>
         </span>
-        {#if result.expected_dps !== null && result.critical_chance > 0 && result.critical_chance < 1}
+        {#if expectedDps !== null && result.critical_chance > 0 && result.critical_chance < 1}
           <span class="nsub-line">
-            期待値 <Value motion={() => result.expected_dps} value={fmtInt(Math.round(result.expected_dps ?? 0))} />(クリ率 {fmtPct(result.critical_chance, 1)})
+            期待値 <Value motion={() => expectedDps} value={fmtInt(Math.round(expectedDps ?? 0))} />(クリ率 {fmtPct(result.critical_chance, 1)})
           </span>
         {/if}
       </span>
     </button>
-    {#if showDefeat && result.defeat_seconds !== null && result.enemy_hp !== null}
+    {#if showDefeat && defeatSeconds !== null && result.enemy_hp !== null}
       <div class="node rate">
         <span class="nl">討伐時間 <Value motion={() => result.enemy_hp} value={`(HP ${fmtInt(result.enemy_hp ?? 0)})`} /></span>
-        <Value class="nv" motion={() => result.defeat_seconds} value={fmtDuration(result.defeat_seconds ?? 0)} />
+        <Value class="nv" motion={() => defeatSeconds} value={fmtDuration(defeatSeconds ?? 0)} />
         <span class="nsub dim">
           <span class="nsub-line">
             <Value
-              motion={() => (result.defeat_seconds == null ? null : Math.round(result.defeat_seconds))}
+              motion={() => (defeatSeconds == null ? null : Math.round(defeatSeconds))}
               delta={{ unit: "秒", digits: 0 }}
               deltaClass="less-is-better"
             />

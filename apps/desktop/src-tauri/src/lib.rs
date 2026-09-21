@@ -114,6 +114,7 @@ pub fn run() {
             commands::get_new_character_common_skills,
             commands::retain_character_skills,
             commands::normalize_summon_skill_selection,
+            commands::normalize_character_skills,
             commands::preview_potential_effects,
             commands::list_characters,
             commands::create_character,

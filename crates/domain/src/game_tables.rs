@@ -22,6 +22,13 @@ pub struct DamageCategoryLabel {
     pub label: String,
 }
 
+/// 武器形態(`SkillForm`)の表示名。並びは `SkillForm::ALL`。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SkillFormLabel {
+    pub form: crate::skill::SkillForm,
+    pub label: String,
+}
+
 /// 装備補正 1 値の表示名。`kind` は serde のフィールド名(`EquipmentStatKind::key`)と一致する。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EquipmentStatLabel {
@@ -81,6 +88,8 @@ pub struct GameTables {
     // --- 表示名 ---
     /// 与ダメージ式カテゴリ(`DamageCategory`)の日本語名。`DamageCategory::ALL` の順
     pub damage_category_labels: Vec<DamageCategoryLabel>,
+    /// 武器形態(`SkillForm`)の並びと表示名。画面はこれを読んで形態の段を描く
+    pub skill_form_labels: Vec<SkillFormLabel>,
     /// 装備補正 9 値(`EquipmentValues`)の表示名。`EquipmentStatKind::ALL` の順。
     /// `CoreType`(テシスコア)の表示名もここと同じ(8 種が重なる。critical は含まない)
     pub equipment_stat_labels: Vec<EquipmentStatLabel>,
@@ -161,6 +170,13 @@ pub fn game_tables() -> GameTables {
             .map(|category| DamageCategoryLabel {
                 category,
                 label: category.label().to_string(),
+            })
+            .collect(),
+        skill_form_labels: crate::skill::SkillForm::ALL
+            .into_iter()
+            .map(|form| SkillFormLabel {
+                form,
+                label: form.label().to_string(),
             })
             .collect(),
         equipment_stat_labels: EquipmentStatKind::ALL

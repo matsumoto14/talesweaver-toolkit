@@ -95,6 +95,27 @@ v17 移行・IndexedDB の v7 移行(`onupgradeneeded` ではなくストアを�
 6 → 7。新しい列・ストアは無いので、書き出し JSON の `FORMAT_VERSION` は据え置き(ファイルの形は
 変わらず、値の意味だけ直る)。
 
+### v18: カタログから消えたキャラスキルを保存済みの選択から落とす(2026-09-21)
+
+イェフネンの「鋭い欠片<フラグ>」「べたつく欠片<フラグ>」は、マスタリー【鋭い欠片】/【べたつく欠片】が
+**<フラグ>(設置した破片)にしか効かない** E1 なのに、技そのものに効くキャラスキルとして収録していた
+(誤り)。カタログから削除するが、保存済みの `stat_sources.character_skills.skill_ids` に id が残ると
+`CharacterSkills::validate` が `Unknown` を返し、**そのキャラの計算・プレビューがまるごと止まる**
+(実機で「未知のキャラスキルです」)。
+
+`migrate_removed_character_skills` が `skill_ids` と `skill_levels` から**カタログに無い id** を落とす。
+消えた id の一覧は持たず、判定は `gamedata::normalize_character_skill_selection`
+(カタログそのものを引く 1 関数)に委ねる — カタログから何かを消すたびに移行へ 1 行足す必要がない。
+SQLite の v18 移行・IndexedDB の v10 移行(v7 と同じく `onupgradeneeded` ではなくストアを開いた
+直後の一回だけの正規化。版変更トランザクション中に WASM を呼べないため)・書き出し JSON の
+読み込み(`transfer.ts`)の 3 か所が同じ関数を使う。SQLite は `SCHEMA_VERSION` 17 → 18、
+IndexedDB(`browserStore.ts`)は 9 → 10。新しい列・ストアは無いので `FORMAT_VERSION` は据え置き。
+
+あわせて `migrate_character_skills`(v9 相当)の取りこぼしを直した。`character_skills` が既にある
+行でも毎回 `{ skill_ids }` で作り直していたため、**起動のたびに `skill_levels`(極・的中剣の SLv・
+ブレンドのスタック)が消えて**いた。動かすものが無い行は書き戻さず、書き戻すときも
+`skill_ids` だけを差し替える。
+
 ### IndexedDB v8: ルミナの回廊の欄をブラウザ側で埋める(2026-09-19)
 
 `StatSources` に `lumina_corridor`(ルミナの回廊の回廊効果 Lv)を `#[serde(default)]` で足した。

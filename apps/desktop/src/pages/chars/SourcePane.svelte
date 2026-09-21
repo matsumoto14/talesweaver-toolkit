@@ -201,7 +201,7 @@
   {#if previewError}<p class="preview-error">{previewError}</p>{/if}
 
   {#if sourceId === "status"}
-    <StatusPane {characterId} {draft} {preview} {skills} />
+    <StatusPane {characterId} {draft} {preview} {skills} {resolvedSkillEffects} />
   {:else if sourceId === "lumina"}
     <LuminaCorridorPane {draft} {preview} />
   {:else if sourceId === "element"}

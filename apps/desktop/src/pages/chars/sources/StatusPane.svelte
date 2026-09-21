@@ -2,12 +2,18 @@
   // 「status」補正源のペイン。キャラ選択・覚醒・エタの意志・主軸スキル・能力値の一覧。
   // 属性は独立した補正源(`sources/ElementPane.svelte`)へ移した(2026-09-19)。
   import { untrack } from "svelte";
-  import type { Skill, StatKind, StatPreview, StatSourceGroup } from "../../../api/types";
+  import type {
+    CharacterSkillDef, CharacterSkillEffectsView, Skill, StatKind, StatPreview, StatSourceGroup,
+  } from "../../../api/types";
   import { errorMessage, resetCharacterIcon, setCharacterIcon } from "../../../api/commands";
-  import { mainSkillOptions as buildMainSkillOptions } from "../../../characterSkills";
+  import {
+    effectLabel, isRecordOnly, mainSkillOptions as buildMainSkillOptions, RECORD_ONLY_LABEL,
+    resolvedEffectsOf, skillBoundSkills, toggleCharacterSkill,
+  } from "../../../characterSkills";
   import { ETERNAL_MILESTONES, type Draft } from "../../../draft";
   import { fmtInt, fmtSigned, fmtSignedPct, formatLayerValue } from "../../../format";
   import {
+    SKILL_FORMS, SKILL_FORM_LABELS,
     STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS, STAT_SOURCE_GROUPS, STAT_SOURCE_GROUP_LABELS,
   } from "../../../labels";
   import { limits } from "../../../limits.svelte";
@@ -23,6 +29,7 @@
   import Picker from "../../../ui/Picker.svelte";
   import NumberField from "../../../ui/NumberField.svelte";
   import Choose from "../../../ui/Choose.svelte";
+  import ToggleRow from "../../../ui/ToggleRow.svelte";
   import TextField from "../../../ui/TextField.svelte";
 
   interface Props {
@@ -30,8 +37,9 @@
     draft: Draft;
     preview: StatPreview | null;
     skills: Skill[];
+    resolvedSkillEffects: CharacterSkillEffectsView[];
   }
-  let { characterId, draft, preview, skills }: Props = $props();
+  let { characterId, draft, preview, skills, resolvedSkillEffects }: Props = $props();
 
   const STAT_MIN = 1;
 
@@ -106,8 +114,57 @@
   // 主軸スキル。未収録のキャラがあるので未選択("")を許す。
   /** 中ディレイ込みの継続火力順。主軸に選ばれるのはほぼこの上位なので、候補として先に出す。 */
   const mainSkill = $derived(skills.find((s) => s.id === draft.mainSkillId) ?? null);
-  // 並びは list_skills(Rust)が主軸候補順で返し、先頭 3 件がチップに固定される
-  const mainSkillOptions = $derived(buildMainSkillOptions(skills, "未選択", "攻撃力を出さない"));
+
+  // --- 武器形態(イェフネン)。形態 → 技 の順に選ぶ ------------------------------
+  // 形態を持つ技が 1 件も無いキャラでは欄自体を出さない(§00②「要らないものを見せない」)。
+  // 形態は保存しない。`Skill::form` から逆引きするだけ(召喚獣の型と同じ形)。
+  const characterForms = $derived(SKILL_FORMS.filter((f) => skills.some((s) => s.form === f)));
+  const currentForm = $derived(mainSkill?.form ?? null);
+  const formOptions = $derived(
+    characterForms.map((f) => ({ value: f, label: SKILL_FORM_LABELS[f] })),
+  );
+  /** 形態を押したら、その形態で一番火力の出る技へ即差し替える(押した瞬間に結果が動く)。
+   *  「一番」は継続火力(power_per_second)。未収録なら 1 回ぶんの火力で比べる
+   *  (召喚欄の自動差し替えと同じ規則) */
+  function setForm(form: string) {
+    const rate = (s: Skill) => s.power_per_second ?? s.power;
+    const best = skills
+      .filter((s) => s.form === form && s.attacker === "player")
+      .reduce<Skill | null>((top, s) => (top === null || rate(s) > rate(top) ? s : top), null);
+    if (best) draft.mainSkillId = best.id;
+  }
+
+  // 並びは list_skills(Rust)が主軸候補順で返し、先頭 3 件がチップに固定される。
+  // 形態を持つキャラは、いま選んでいる形態の技だけを候補にする
+  const mainSkillOptions = $derived(
+    buildMainSkillOptions(skills, "未選択", "攻撃力を出さない", "player", null, currentForm),
+  );
+
+  // いまの技でだけ意味があるキャラスキル(速剣 / 最大までチャージ / 後方から攻撃)。
+  // どれを出すかは `CharacterSkillDef::requires` の印だけで決まる(id の対応表は持たない)
+  const boundSkills = $derived(skillBoundSkills(app.characterSkills, draft.gameCharacterId, mainSkill));
+  const skillChecked = (id: string) => draft.statSources.character_skills.skill_ids.includes(id);
+  function toggleBound(id: string, on: boolean) {
+    draft.statSources.character_skills.skill_ids = toggleCharacterSkill(
+      draft.statSources.character_skills.skill_ids, id, on, app.characterSkills,
+    );
+  }
+  /** 右端の値。効果を技データ側に持つもの(速剣・最大までチャージ)は、その技での実値を出す */
+  function boundValue(def: CharacterSkillDef, skill: Skill | null): string {
+    const effects = resolvedEffectsOf(def.id, resolvedSkillEffects);
+    const label = effectLabel(effects);
+    if (label !== null) return label;
+    if (def.requires === "full_charge" && skill?.full_charge) {
+      return `${skill.full_charge.hit_count} 段 ・ チャージ ${skill.full_charge.seconds}s`;
+    }
+    if (skill?.swift_sword) {
+      return `×${skill.swift_sword.multiplier} ・ ${skill.swift_sword.hit_count} 段`;
+    }
+    // 記録するだけのスキル(チゼルの防御貫通など)は「マスタリー未取得」ではない。
+    // 効果は wiki にあるが計算に入れていない、と言う(マスタリーの record-only と同じ扱い)
+    if (isRecordOnly(effects)) return RECORD_ONLY_LABEL;
+    return "マスタリー未取得";
+  }
 
   // 召喚獣(熊・破壊精霊)が撃つスキル。アナイス以外はこのキャラのスキルに本体以外の
   // 攻撃者が 1 件も無いので欄自体を出さない(§00②「要らないものを見せない」。ADR-016)。
@@ -238,6 +295,20 @@
         {/if}
       </div>
     </div>
+    {#if characterForms.length > 0}
+      <!-- 形態 → 技 の順に決める(§00①「決める順に並べる」)。形態はキャラの状態ではなく
+           技の属性なので保存せず、主軸スキルから逆引きする -->
+      <div class="wide">
+        <span class="label">武器形態</span>
+        <Choose
+          label="武器形態"
+          options={formOptions}
+          cols={formOptions.length}
+          bind:value={() => currentForm ?? "", setForm}
+        />
+        <p class="hint dim">形態を選ぶと、その形態で一番火力の出る技に切り替わります。下の主軸スキルはその形態の技だけになります。</p>
+      </div>
+    {/if}
     <!-- 主軸に選ばれるのはほぼ火力上位。上位 3 つをチップで手前に固定し、残りは候補面
          (§07「1 つ選ぶ」)。スキルは名前だけでは選べないので 単 / 範・段数・属性・中ディレイを併記 -->
     <div class="wide">
@@ -249,6 +320,27 @@
         bind:value={draft.mainSkillId}
       />
     </div>
+    {#if boundSkills.length > 0}
+      <!-- いまの技でだけ意味がある入力。形態や技を変えると中身が入れ替わる
+           (§00②。出す / 出さないの判定は `requires` の印) -->
+      <div class="wide">
+        <span class="label">この技での習得・撃ち方</span>
+        <div class="toggle-list">
+          {#each boundSkills as def (def.id)}
+            {@const checked = skillChecked(def.id)}
+            <ToggleRow
+              name={def.name}
+              value={boundValue(def, mainSkill)}
+              title={def.note}
+              on={checked}
+              onToggle={() => toggleBound(def.id, !checked)}
+            >
+              {#snippet icon()}<Icon kind="skill" id={def.id} size={20} label={def.name} />{/snippet}
+            </ToggleRow>
+          {/each}
+        </div>
+      </div>
+    {/if}
     {#if hasSummon}
       <!-- アナイス専用: 魔法人形(ミカベア/ルシベア)または破壊精霊(アンフェル/グレシス/
            イグニー)に自動で撃たせるスキル(ADR-016)。主軸と同じ Picker 形。

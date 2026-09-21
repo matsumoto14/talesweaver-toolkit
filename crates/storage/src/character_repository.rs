@@ -87,7 +87,11 @@ CREATE TABLE IF NOT EXISTS characters (
 /// v17 で、主軸に紛れ込んでいた召喚スキル(熊・破壊精霊が撃つスキル)を召喚欄へ移す
 /// (`migrate_summon_skill_out_of_main`)。破壊精霊を足す前は主軸に選べてしまっていた穴を
 /// 塞ぐ移行で、新しい列は無い(2026-09-18)。
-const SCHEMA_VERSION: i64 = 17;
+/// v18 で、カタログから消えたキャラスキル(イェフネンの 鋭い欠片<フラグ> / べたつく欠片<フラグ>。
+/// どちらも <フラグ> にしか効かない誤収録)を保存済みの選択から落とす
+/// (`migrate_removed_character_skills`)。残っていると `CharacterSkills::validate` が
+/// `Unknown` を返し、そのキャラの計算・プレビューがまるごと止まる。新しい列は無い(2026-09-21)。
+const SCHEMA_VERSION: i64 = 18;
 
 const SELECT_COLUMNS: &str = "id, name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id, goal_content_id, default_buff_set_id, updated_at";
 
@@ -710,7 +714,10 @@ fn migrate_character_skills(conn: &Connection) -> Result<()> {
             });
         }
 
-        if moved.is_empty() && !object.contains_key("character_skills") {
+        // 動かすものが無い行は書き戻さない。以前は `character_skills` があるだけで
+        // `{ skill_ids }` に作り直していたため、起動のたびに `skill_levels`
+        // (的中剣の SLv・ブレンドのスタック)が消えていた(2026-09-21 修正)
+        if moved.is_empty() {
             continue;
         }
         let existing = object
@@ -730,10 +737,13 @@ fn migrate_character_skills(conn: &Connection) -> Result<()> {
                 skill_ids.push(id);
             }
         }
-        object.insert(
-            "character_skills".to_string(),
-            serde_json::json!({ "skill_ids": skill_ids }),
-        );
+        // 既にある `character_skills` に **skill_ids だけ**を書き戻す(`skill_levels` を消さない)
+        let entry = object
+            .entry("character_skills")
+            .or_insert_with(|| serde_json::json!({}));
+        if let Some(map) = entry.as_object_mut() {
+            map.insert("skill_ids".to_string(), serde_json::json!(skill_ids));
+        }
         let migrated = serde_json::to_string(&value)?;
         conn.execute(
             "UPDATE characters SET stat_sources = ?1 WHERE id = ?2",
@@ -816,6 +826,48 @@ fn migrate_summon_skill_out_of_main(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// v18: カタログから消えたキャラスキルの id を `stat_sources.character_skills` から落とす
+/// (2026-09-21)。どの id が消えたかは持たず、判定は `gamedata::normalize_character_skill_selection`
+/// (IndexedDB の v10 移行・書き出し JSON の読み込みと共通の 1 関数)に委ねる。
+/// 起動のたびに走っても、カタログにある id しか残らないので 2 回目以降は何もしない(冪等)。
+fn migrate_removed_character_skills(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT id, stat_sources FROM characters")?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    let tx = conn.unchecked_transaction()?;
+    // 読めない行(壊れた JSON・形が違うキャラスキル)は**飛ばす**。ここで `?` を返すと
+    // 1 行の壊れだけで DB がまるごと開けなくなる(移行はキャラ一覧の表示より前に走る)
+    for (id, json) in rows {
+        let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&json) else {
+            continue;
+        };
+        let Some(map) = value.as_object_mut() else {
+            continue;
+        };
+        let Some(raw) = map.get("character_skills") else {
+            continue;
+        };
+        let Ok(mut skills) = serde_json::from_value::<domain::CharacterSkills>(raw.clone()) else {
+            continue;
+        };
+        if !gamedata::normalize_character_skill_selection(&mut skills) {
+            continue;
+        }
+        map.insert(
+            "character_skills".to_string(),
+            serde_json::to_value(&skills)?,
+        );
+        tx.execute(
+            "UPDATE characters SET stat_sources = ?1 WHERE id = ?2",
+            params![serde_json::to_string(&value)?, id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 pub struct CharacterRepository {
     pub(crate) conn: Connection,
 }
@@ -884,6 +936,8 @@ impl CharacterRepository {
         migrate_weapon_skills_to_common(&conn)?;
         migrate_removed_buffs(&conn)?;
         migrate_character_skills(&conn)?;
+        // v18: `character_skills` を作った後でないと落とす対象が現れない
+        migrate_removed_character_skills(&conn)?;
         migrate_goal_relic_20(&conn)?;
         // v9 は旧バフに混在していたキャラスキルを分離した後の choices を抽出する。
         migrate_buff_sets(&conn)?;
@@ -2339,6 +2393,192 @@ mod tests {
         assert_eq!(relisted[0].summon_skill_id, None);
     }
 
+
+    /// v18: カタログから消えたキャラスキル(イェフネンの 鋭い欠片<フラグ> /
+    /// べたつく欠片<フラグ>)が保存済みの選択から落ち、残りはそのまま読める(2026-09-21)。
+    /// 落とさないと `CharacterSkills::validate` が `Unknown` を返して計算が全部止まる。
+    #[test]
+    fn v17dbでカタログから消えたキャラスキルは落ちる() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                summon_skill_id     TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills)
+            VALUES ('欠片持ち', 'yefnen', 300, 250, 10, 200, 150, 280, 250, 5, 40,
+                '{\"character_skills\":{\"skill_ids\":[\"yefnen_sharp_shard\",\"yefnen_swift_sword\",\"yefnen_sticky_shard\"],\"skill_levels\":{\"yefnen_sticky_shard\":1,\"yefnen_blend\":5}}}',
+                '{\"parts\":{}}', '{}');
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills)
+            VALUES ('バフ移し', 'yefnen', 300, 250, 10, 200, 150, 280, 250, 5, 40,
+                '{\"buffs\":{\"choices\":[{\"buff_id\":\"siberin_charm\"}]},\"character_skills\":{\"skill_ids\":[\"yefnen_blend\"],\"skill_levels\":{\"yefnen_blend\":5}}}',
+                '{\"parts\":{}}', '{}');
+            PRAGMA user_version = 17;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        assert_eq!(
+            repo.conn
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
+        let list = repo.list().unwrap();
+        // バフから移す id がある行(`migrate_character_skills` が書き戻す経路)でも SLv は残る
+        let moved = list.iter().find(|c| c.name == "バフ移し").unwrap();
+        let moved_skills = &moved.stat_sources.character_skills;
+        assert!(moved_skills.skill_ids.contains(&"siberin_charm".to_string()));
+        assert_eq!(moved_skills.skill_levels.get("yefnen_blend"), Some(&5));
+
+        let skills = &list.iter().find(|c| c.name == "欠片持ち").unwrap().stat_sources.character_skills;
+        assert_eq!(skills.skill_ids, vec!["yefnen_swift_sword".to_string()]);
+        // SLv も同じ規則で落ちる。残った id(ブレンドのスタック)はそのまま
+        assert_eq!(skills.skill_levels.get("yefnen_sticky_shard"), None);
+        assert_eq!(skills.skill_levels.get("yefnen_blend"), Some(&5));
+        // 落としたあとはカタログ整合が取れているので検証が通る(計算が止まらない)
+        assert!(skills.validate(gamedata::character_skill_catalog(), "yefnen").is_ok());
+    }
+
+    /// 壊れた行が 1 件あっても DB は開ける。移行はキャラ一覧より前に走るので、ここで
+    /// エラーを返すと壊れた 1 行のせいでアプリが起動しなくなる(読めない行は飛ばす)。
+    #[test]
+    fn 壊れたキャラスキルの行があってもdbは開ける() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                summon_skill_id     TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            -- 1 件目: character_skills が JSON として読めない形(配列)
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills)
+            VALUES ('壊れ', 'yefnen', 300, 250, 10, 200, 150, 280, 250, 5, 40,
+                '{\"character_skills\":[\"こわれている\"]}', '{\"parts\":{}}', '{}');
+            -- 2 件目: 正常。消えた id が落ちて読める
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills)
+            VALUES ('正常', 'yefnen', 300, 250, 10, 200, 150, 280, 250, 5, 40,
+                '{\"character_skills\":{\"skill_ids\":[\"yefnen_sharp_shard\",\"yefnen_swift_sword\"],\"skill_levels\":{}}}',
+                '{\"parts\":{}}', '{}');
+            PRAGMA user_version = 17;
+            ",
+        )
+        .unwrap();
+
+        // 開ける(移行がエラーを返さない)
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        assert_eq!(
+            repo.conn
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
+        // 壊れた行はそのまま(移行が触らない)、正常な行は移行済み
+        let raw: String = repo
+            .conn
+            .query_row("SELECT stat_sources FROM characters WHERE name = '壊れ'", [], |row| row.get(0))
+            .unwrap();
+        assert!(raw.contains("こわれている"));
+        let fixed: String = repo
+            .conn
+            .query_row("SELECT stat_sources FROM characters WHERE name = '正常'", [], |row| row.get(0))
+            .unwrap();
+        assert!(!fixed.contains("yefnen_sharp_shard"));
+        assert!(fixed.contains("yefnen_swift_sword"));
+    }
+
+    /// 上の移行は起動のたびに走っても、2 回目以降は何も動かさない(冪等)。
+    #[test]
+    fn 消えたキャラスキルを落とす移行は2回開いても再移行しない() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                summon_skill_id     TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills)
+            VALUES ('欠片持ち', 'yefnen', 300, 250, 10, 200, 150, 280, 250, 5, 40,
+                '{\"character_skills\":{\"skill_ids\":[\"yefnen_sharp_shard\",\"yefnen_swift_sword\"],\"skill_levels\":{}}}',
+                '{\"parts\":{}}', '{}');
+            PRAGMA user_version = 17;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let before = repo.list().unwrap();
+        let reopened = CharacterRepository::from_connection(repo.conn).unwrap();
+        let after = reopened.list().unwrap();
+        assert_eq!(
+            after[0].stat_sources.character_skills,
+            before[0].stat_sources.character_skills
+        );
+        assert_eq!(
+            after[0].stat_sources.character_skills.skill_ids,
+            vec!["yefnen_swift_sword".to_string()]
+        );
+    }
+
     /// v4 の DB(`main_skill_id` 列が無い)を開いても落ちず、既存キャラは主軸スキル未選択で読める。
     #[test]
     fn main_skill_id列の無いdbを開くと既存キャラは未選択で読める() {
@@ -2605,6 +2845,7 @@ mod tests {
                 effects: &[domain::SkillEffect::ActualDelay { percent: 5.0 }],
                 mastery_overrides: &[],
                 exclusive_with: &[],
+                requires: None,
                 source_url: "",
                 note: "",
             },
@@ -2617,6 +2858,7 @@ mod tests {
                 effects: &[domain::SkillEffect::RecordOnly],
                 mastery_overrides: &[],
                 exclusive_with: &[],
+                requires: None,
                 source_url: "",
                 note: "",
             },
