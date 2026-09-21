@@ -51,7 +51,7 @@ pub enum ContentRequirement {
         composite: i64,
     },
     /// テシスコアの火力補正合計がこの値以上(swiki の「コア N」)。
-    /// 判定対象は `Content::core_region` の地域のコアセット(地域不明なら全地域の最大値)。
+    /// 判定対象は `Content::core_region` の地域のコアセット(地域不明なら 0)。
     ThesisCoreTotal(i64),
 }
 

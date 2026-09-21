@@ -37,8 +37,8 @@ R2 は AWS CLI v2 の既定チェックサムに対応しないので、上げ�
   `relic_item` ハードコードをそのまま使う)。
 - `c39_SetId_*`              : セット ID(今回未使用。セット効果は次段)
 - `c42_Thrust_* .. c50_Agility_*` : 突/斬/物防/魔攻/魔防/命中/Cri/回避/敏捷の 9 値。各列は
-  文字列 `"[min, max, cap]"`(JSON 配列)。**cap==255 または cap==1000 は番兵**で、
-  「エンチャント総上限の追加情報なし」を表す(下記 SENTINEL 節)。
+  文字列 `"[min, max, cap]"`(JSON 配列)。`cap` は総上限の実値だが、**基礎値を持たない枠
+  (max==0)はエンチャント不可**、**cap==1000 は番兵**(下記 SENTINEL 節)。
 - `c53_Req1Type_* .. c60_Req4Val_*` : 装備条件 4 組。Type==1 が Lv 条件で Val がそのレベル。Lv 条件は
   どの組にも入りうる(セイクリッド以降は Req1 が Type 10(エタの意志 Lv 21 / 30)で Lv 310 は Req2)。
 - `c11_CharMask_*`      : 装備可能キャラのビット列。**bit 0 = 全キャラ装備可**。**bit k(k>=1)
@@ -53,10 +53,25 @@ cap が 255 か 1000 になっている行がある。†アクィルスウィ�
 wiki カタログ(values_min/max/enchant_total_caps = 76/86/116)と全 9 値が完全一致したのに対し、
 †デモニックウィング(ItemId 1039368、wiki: `wiki-9bf855a9cd26`)は命中/Cri/回避/敏捷が
 `[1,65,1000]` 等でありながら、既存 wiki 行の enchant_total_caps はその 4 値とも 0
-(= 総上限 == values_max、エンチャント枠なし)だった。ここから **cap が 255 or 1000 のときは
-「total_cap 情報なし」を意味し、`total_cap = values_max`(エンチャント枠 0 相当)として扱う**
-と確定した(`load_equip_table` の `resolve_triple` 参照)。cap がそれ以外の実数値のときは
-そのまま「エンチャント込みの総上限」として使う(アクィルスウィングで確認済み)。
+(= 総上限 == values_max、エンチャント枠なし)だった。
+
+**255 は番兵ではなく実値**(2026-09-21 訂正、Issue #30)。†カスミの着物(ItemId 1042922)の
+突き/斬りは `[4,6,255]` で、ゲーム内では 255 までエンチャントできるのに、255 を番兵として
+潰していたためアプリ側でエンチャント欄が出せなかった、という利用者報告で判明した。
+**9 値はクライアントを全面的に正とする**(ADR-004 の方針どおり。wiki には列の取り違え・
+古い値が実在する)。
+
+`cap` を実値として使うと、`[0,0,255]` の枠(基礎値を持たないのに共通上限 255 が入っている)
+にもエンチャント枠が開いてしまうが、**基礎値が無い補正はそもそもエンチャントできない**
+(ユーザー確認 2026-09-21)。そこで `resolve_triple` は `max == 0` の枠を一律 枠なしにする。
+これは wiki カタログとも整合する(wiki も `[0,0,255]` の 227 枠を枠なしと書いている)。
+逆に基礎値のある枠で 255 を実値にすると、wiki と食い違っていた 41 枠が client 側で一致する。
+
+cap==1000 は番兵のままにする `[仮]`。†デモニックウィング(ItemId 1039368、wiki:
+`wiki-9bf855a9cd26`)の命中/Cri/回避/敏捷が `[1,65,1000]` でありながら wiki は 4 値とも
+枠なしだった、という照合以外に裏が取れていないため(ユーザー判断 2026-09-21)。
+cap がそれ以外の実数値のときはそのまま「エンチャント込みの総上限」として使う
+(†アクィルスウィングで確認済み)。
 
 ## 収録の絞り込み
 (a) 既存カタログ(手書き `items.rs` / `generated.rs` / `sacred_kr.rs`)に同名の行がある、または
@@ -111,7 +126,7 @@ STAT_COLUMNS = [
     ("c49_Evade", "evasion"),
     ("c50_Agility", "agility"),
 ]
-SENTINEL_CAPS = {255, 1000}
+SENTINEL_CAPS = {1000}
 
 # 表 0309 `c3_Name` → 武器種(`domain::WeaponClass` のバリアント名)。
 EQUIP_TYPE_TO_WEAPON_CLASS = {
@@ -323,10 +338,15 @@ def load_existing_catalog() -> tuple[dict[str, str], dict[str, tuple]]:
 
 
 def resolve_triple(triple: tuple[int, int, int]) -> tuple[int, int, int]:
-    """[min, max, cap] → (min, max, total_cap)。cap が番兵(255/1000)なら
-    total_cap = max(エンチャント枠 0 相当)にする。"""
+    """[min, max, cap] → (min, max, total_cap)。
+
+    `cap` はクライアントの実値をそのまま総上限に使う。ただし
+    - **基礎値を持たない枠(max == 0)はエンチャント不可**(ゲームの仕様。ユーザー確認 2026-09-21)
+    - `cap` が番兵(1000)の枠は「総上限の情報なし」
+    のどちらかなら `total_cap = max`(エンチャント枠 0 相当)にする。
+    """
     lo, hi, cap = triple
-    if cap in SENTINEL_CAPS:
+    if hi == 0 or cap in SENTINEL_CAPS:
         cap = hi
     return lo, hi, cap
 

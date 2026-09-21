@@ -75,19 +75,46 @@ fn 上位装備カタログは1259件_idは重複しない() {
 }
 
 #[test]
-fn スタリオンサインは主能力700_その他255との差分をエンチャント枠にする() {
+fn スタリオンサインは主能力700_対の能力500_その他255との差分をエンチャント枠にする() {
     let blue = find_equipment_item("stallion-sign-blue").unwrap();
     assert_eq!(blue.values_max, v(30, 5, 5, 5, 5, 35, 35, 35, 35));
     assert_eq!(
         blue.enchant_caps,
-        v(670, 250, 250, 250, 250, 220, 220, 220, 220)
+        v(670, 495, 250, 250, 250, 220, 220, 220, 220)
     );
 
     let yellow = find_equipment_item("stallion-sign-yellow").unwrap();
     assert_eq!(
         yellow.enchant_caps,
-        v(250, 250, 250, 250, 670, 220, 220, 220, 220)
+        v(250, 250, 250, 495, 670, 220, 220, 220, 220)
     );
+}
+
+/// クライアント DB の総上限 255 は実値。以前は番兵(=情報なし)として潰していたため、
+/// †カスミの着物のような軽鎧の突き・斬りにエンチャント枠が出せなかった(利用者報告 2026-09-20)。
+/// ただし**基礎値を持たない補正はエンチャントできない**ので、そこは枠 0 のまま
+/// (`[0,0,255]` の枠。ユーザー確認 2026-09-21)。
+#[test]
+fn 総上限255は実値だが基礎値のない補正は枠を開けない() {
+    let kasumi = find_equipment_item("client-1042922").unwrap();
+    assert_eq!(kasumi.name, "†カスミの着物");
+    assert_eq!(kasumi.values_max, v(6, 6, 179, 0, 163, 0, 0, 106, 0));
+    // 突き・斬りは 255 - 6 = 249 の枠が開く。補正を持たない魔攻・命中・Cri・敏捷は 0 のまま
+    assert_eq!(kasumi.enchant_caps, v(249, 249, 24, 0, 24, 0, 0, 30, 0));
+
+    let shingetsu = find_equipment_item("wiki-d12d6f2dbc98").unwrap();
+    assert_eq!(shingetsu.name, "†新月");
+    // Cri だけ総上限 33(実値)で、命中・回避・敏捷は 255
+    assert_eq!(
+        shingetsu.enchant_caps,
+        v(134, 137, 235, 236, 236, 221, 7, 226, 226)
+    );
+
+    // 基礎値が 0 の枠は、クライアントが共通上限 255 を持っていても枠を開けない
+    let magazine = find_equipment_item("client-1029222").unwrap();
+    assert_eq!(magazine.name, "†ヘリア・ブラッドマガジン");
+    assert_eq!(magazine.values_max, v(63, 0, 44, 0, 0, 0, 22, 0, 0));
+    assert_eq!(magazine.enchant_caps, v(18, 0, 6, 0, 0, 0, 4, 0, 0));
 }
 
 #[test]

@@ -120,8 +120,9 @@ fn series_of(id: &str) -> Option<ContentSeries> {
 ///
 /// wiki の表に名前が無いがユーザー確認済み(2026-08-24): リンゴ = マーキュリアル、
 /// 月の女王の軍の訓練所・最後の決戦(1/2 含む)・異界の峡谷 兵士 = エクリプス、
-/// 混乱した大地・異界の峡谷防衛戦・喜びの残像 = ルビコナ。
-/// 「異界の峡谷」は防衛戦がルビコナ、通常の峡谷(兵士)がエクリプスで分かれる(同確認)。
+/// 混乱した大地・喜びの残像 = ルビコナ。
+/// **異界の峡谷は防衛戦・兵士ともエクリプス**(2026-09-21 訂正。防衛戦をルビコナと
+/// していたため、入場条件「コア 300」をルビコナコアで数えて未達にしていた)。
 ///
 /// **ここに無いコンテンツはコア効果が無い**(ユーザー確認 2026-08-24。コアの効かない
 /// コンテンツが実在する)。セット効果だけは全地域で発動するので別枠で常に乗る。
@@ -136,7 +137,7 @@ const CORE_REGIONS: &[(&str, CoreRegion)] = &[
     ("abyss_hell", CoreRegion::Abyss),
     ("abyss_ex", CoreRegion::Abyss),
     ("arklon_underground", CoreRegion::Abyss),
-    // エクリプス / アフェティリア(月の女王の軍の訓練所・最後の決戦・異界の峡谷 兵士はユーザー確認)
+    // エクリプス / アフェティリア(月の女王の軍の訓練所・最後の決戦・異界の峡谷はユーザー確認)
     ("moon_queen_training", CoreRegion::Eclipse),
     ("last_battle", CoreRegion::Eclipse),
     ("last_battle_1", CoreRegion::Eclipse),
@@ -152,9 +153,9 @@ const CORE_REGIONS: &[(&str, CoreRegion)] = &[
     ("selinacos_ex", CoreRegion::Eclipse),
     ("goitia_h", CoreRegion::Eclipse),
     ("goitia_ex", CoreRegion::Eclipse),
-    // ルビコナ(ゆがんだ村。混乱した大地・異界の峡谷・喜びの残像はユーザー確認)
+    ("valley_defense", CoreRegion::Eclipse),
+    // ルビコナ(ゆがんだ村。混乱した大地・喜びの残像はユーザー確認)
     ("chaotic_land", CoreRegion::Rubicona),
-    ("valley_defense", CoreRegion::Rubicona),
     ("pleasure_afterimage", CoreRegion::Rubicona),
     ("void_domain", CoreRegion::Rubicona),
     ("leitia_n", CoreRegion::Rubicona),
@@ -615,6 +616,8 @@ mod tests {
     // 「コア N」はそのコンテンツの地域のコアだけで判定する(ユーザー確認 2026-08-24)ため、
     // 地域が無いまま要求だけあると「常に未達」の嘘になる。
     #[test]
+    /// 地域が無いとコア合計が常に 0 になり、条件を満たしていても未達と出る
+    /// (異界の峡谷防衛戦をルビコナに置いていたときに起きた。2026-09-21 訂正)。
     fn コア要求のあるコンテンツは必ず地域を持つ() {
         for area in content_areas() {
             for content in area.contents {
@@ -655,8 +658,8 @@ mod tests {
         assert_eq!(region("chaotic_land"), Some(CoreRegion::Rubicona));
         assert_eq!(region("moon_queen_training"), Some(CoreRegion::Eclipse));
         assert_eq!(region("last_battle"), Some(CoreRegion::Eclipse));
-        // 異界の峡谷は防衛戦(ルビコナ)と通常の峡谷(エクリプス)で分かれる
-        assert_eq!(region("valley_defense"), Some(CoreRegion::Rubicona));
+        // 異界の峡谷は防衛戦・兵士ともエクリプス(2026-09-21 訂正)
+        assert_eq!(region("valley_defense"), Some(CoreRegion::Eclipse));
         assert_eq!(region("valley_soldier"), Some(CoreRegion::Eclipse));
         assert_eq!(region("last_battle_1"), Some(CoreRegion::Eclipse));
         assert_eq!(region("last_battle_2"), Some(CoreRegion::Eclipse));
@@ -673,6 +676,7 @@ mod tests {
             );
         }
     }
+
     #[test]
     fn ゲーム内地域は称号の対象だけに限定する() {
         assert_eq!(game_region_of("eclipse_boss"), Some(GameRegion::LostIsland));
