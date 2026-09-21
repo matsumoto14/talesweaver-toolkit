@@ -1286,52 +1286,52 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
         // カテゴリX5 攻撃ダメージ(特殊): エフェクト(装着時攻撃力 +3%)
         effect_attack_3(
             "beast-cerberus",
-            "【年占】†幻獣(ケルベロス)",
+            "【年占】†幻獣（ケルベロス）",
             v(20, 5, 5, 5, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "beast-phoenix",
-            "【年占】†幻獣(フェニックス)",
+            "【年占】†幻獣（フェニックス）",
             v(5, 20, 5, 5, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "beast-griffon",
-            "【年占】†幻獣(グリフォン)",
+            "【年占】†幻獣（グリフォン）",
             v(5, 5, 20, 5, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "beast-leviathan",
-            "【年占】†幻獣(リヴァイアサン)",
+            "【年占】†幻獣（リヴァイアサン）",
             v(5, 5, 5, 20, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "beast-unicorn",
-            "【年占】†幻獣(ユニコーン)",
+            "【年占】†幻獣（ユニコーン）",
             v(5, 5, 5, 5, 20, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "memorial-crest-dark",
-            "【18th】†記念の祝福紋様 − 闇",
+            "【18th】†記念の祝福紋様 － 闇",
             v(20, 5, 5, 5, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "memorial-crest-water",
-            "【18th】†記念の祝福紋様 − 水",
+            "【18th】†記念の祝福紋様 － 水",
             v(5, 20, 5, 5, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "memorial-crest-fire",
-            "【18th】†記念の祝福紋様 − 炎",
+            "【18th】†記念の祝福紋様 － 炎",
             v(5, 5, 20, 5, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "memorial-crest-light",
-            "【18th】†記念の祝福紋様 − 光",
+            "【18th】†記念の祝福紋様 － 光",
             v(5, 5, 5, 20, 5, 18, 18, 18, 18),
         ),
         effect_attack_3(
             "memorial-crest-wind",
-            "【18th】†記念の祝福紋様 − 風",
+            "【18th】†記念の祝福紋様 － 風",
             v(5, 5, 5, 5, 20, 18, 18, 18, 18),
         ),
         // カテゴリX6: エフェクトの「スキル使用時、一定確率で 3% 上昇」。**発動前提で入れる**
@@ -1422,16 +1422,16 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
         // ── 効果: 22nd メモリアル。9 値の総上限はクライアント DB が実値を持つ ──
         // 主能力 700(公式お知らせと一致)+ 対になる能力 500 + 残り 255。
         // パープルだけ斬りにも 500 が入っている(ゲーム側のデータがそうなっている)。
-        stallion_effect("stallion-sign-blue", "†スタリオンサイン-ブルー",
+        stallion_effect("stallion-sign-blue", "†スタリオンサイン - ブルー",
             v(30, 5, 5, 5, 5, 35, 35, 35, 35),
             v(700, 500, 255, 255, 255, 255, 255, 255, 255)),
-        stallion_effect("stallion-sign-green", "†スタリオンサイン-グリーン",
+        stallion_effect("stallion-sign-green", "†スタリオンサイン - グリーン",
             v(5, 30, 5, 5, 5, 35, 35, 35, 35),
             v(500, 700, 255, 255, 255, 255, 255, 255, 255)),
-        stallion_effect("stallion-sign-purple", "†スタリオンサイン-パープル",
+        stallion_effect("stallion-sign-purple", "†スタリオンサイン - パープル",
             v(5, 5, 5, 30, 5, 35, 35, 35, 35),
             v(255, 500, 255, 700, 500, 255, 255, 255, 255)),
-        stallion_effect("stallion-sign-yellow", "†スタリオンサイン-イエロー",
+        stallion_effect("stallion-sign-yellow", "†スタリオンサイン - イエロー",
             v(5, 5, 5, 5, 30, 35, 35, 35, 35),
             v(255, 255, 255, 500, 700, 255, 255, 255, 255)),
 
@@ -1673,34 +1673,34 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
 
         artifact_item("ethereal-stab", "†エーテリアルチューブ(突力)",
             v(210, 0, 30, 0, 30, 30, 30, 30, 30), v(230, 0, 40, 0, 40, 40, 40, 40, 40),
-            v(260, 0, 60, 0, 60, 60, 60, 60, 60), &[],
-            SURVIVAL_MITIGATION_15, Some(SkillDependency::Stab), None,
-            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+            v(260, 0, 60, 0, 60, 60, 60, 60, 60), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Stab), Some(SkillDependency::Stab),
+            "ゆがんだ村。上限は同系列規則。依存ダメージ+35%は wiki が ?? のため同系列の物理力(wiki で 35%)に合わせた [仮]"),
         artifact_item("ethereal-hack", "†エーテリアルチューブ(斬力)",
             v(0, 210, 30, 0, 30, 30, 30, 30, 30), v(0, 230, 40, 0, 40, 40, 40, 40, 40),
-            v(0, 260, 60, 0, 60, 60, 60, 60, 60), &[],
-            SURVIVAL_MITIGATION_15, Some(SkillDependency::Hack), None,
-            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+            v(0, 260, 60, 0, 60, 60, 60, 60, 60), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Hack), Some(SkillDependency::Hack),
+            "ゆがんだ村。上限は同系列規則。依存ダメージ+35%は wiki が ?? のため同系列の物理力(wiki で 35%)に合わせた [仮]"),
         artifact_item("ethereal-physical", "†エーテリアルチューブ(物理力)",
             v(190, 190, 30, 0, 30, 30, 30, 30, 30), v(210, 210, 40, 0, 40, 40, 40, 40, 40),
-            v(240, 240, 60, 0, 60, 60, 60, 60, 60), &[],
-            SURVIVAL_MITIGATION_15, Some(SkillDependency::StabHack), None,
-            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+            v(240, 240, 60, 0, 60, 60, 60, 60, 60), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::StabHack), Some(SkillDependency::StabHack),
+            "ゆがんだ村。上限は同系列規則。依存ダメージ+35%は wiki(2026-09-20)で確認"),
         artifact_item("ethereal-int", "†エーテリアルチューブ(魔力)",
             v(0, 0, 30, 210, 30, 30, 30, 30, 30), v(0, 0, 40, 230, 40, 40, 40, 40, 40),
-            v(0, 0, 60, 260, 60, 60, 60, 60, 60), &[],
-            SURVIVAL_MITIGATION_15, Some(SkillDependency::Int), None,
-            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+            v(0, 0, 60, 260, 60, 60, 60, 60, 60), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Int), Some(SkillDependency::Int),
+            "ゆがんだ村。上限は同系列規則。依存ダメージ+35%は wiki が ?? のため同系列の物理力(wiki で 35%)に合わせた [仮]"),
         artifact_item("ethereal-mr", "†エーテリアルチューブ(魔防力)",
             v(0, 0, 30, 30, 210, 30, 30, 30, 30), v(0, 0, 40, 40, 230, 40, 40, 40, 40),
-            v(0, 0, 60, 60, 260, 60, 60, 60, 60), &[],
-            SURVIVAL_MITIGATION_15, Some(SkillDependency::Mr), None,
-            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+            v(0, 0, 60, 60, 260, 60, 60, 60, 60), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::Mr), Some(SkillDependency::Mr),
+            "ゆがんだ村。上限は同系列規則。依存ダメージ+35%は wiki が ?? のため同系列の物理力(wiki で 35%)に合わせた [仮]"),
         artifact_item("ethereal-hack-int", "†エーテリアルチューブ(魔斬力)",
             v(0, 190, 30, 190, 30, 30, 30, 30, 30), v(0, 210, 40, 210, 40, 40, 40, 40, 40),
-            v(0, 240, 60, 240, 60, 60, 60, 60, 60), &[],
-            SURVIVAL_MITIGATION_15, Some(SkillDependency::HackInt), None,
-            "ゆがんだ村。上限は同系列規則。通常版の依存倍率はWikiが??のため未計算"),
+            v(0, 240, 60, 240, 60, 60, 60, 60, 60), ITEM_DAMAGE_DEPENDENCY_35,
+            SURVIVAL_MITIGATION_15, Some(SkillDependency::HackInt), Some(SkillDependency::HackInt),
+            "ゆがんだ村。上限は同系列規則。依存ダメージ+35%は wiki が ?? のため同系列の物理力(wiki で 35%)に合わせた [仮]"),
 
         defensio_artifact("psyche-stab-def", "†プシーキーの突力 - ディフェンシオ",
             v(69, 0, 20, 0, 20, 16, 16, 26, 16), v(72, 0, 23, 0, 23, 17, 18, 28, 17),
@@ -1862,6 +1862,12 @@ fn build_equipment_catalog() -> Vec<EquipmentItem> {
             item.values_max = from_client.values_max;
             item.enchant_total_caps = from_client.enchant_total_caps;
             item.usable_by = from_client.usable_by;
+            // 装着時効果は client の説明文にも載っている。手書き・wiki 行が効果を持たないときだけ補う
+            // (カテゴリを wiki で確かめて手で置いた行を、機械抽出で上書きしない)。
+            if item.damage_effects.is_empty() && item.survival_effects.is_empty() {
+                item.damage_effects = from_client.damage_effects;
+                item.survival_effects = from_client.survival_effects;
+            }
         }
     }
     let mut items: Vec<EquipmentItem> = catalog

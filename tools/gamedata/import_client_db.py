@@ -75,8 +75,19 @@ cap がそれ以外の実数値のときはそのまま「エンチャント込�
 
 ## 収録の絞り込み
 (a) 既存カタログ(手書き `items.rs` / `generated.rs` / `sacred_kr.rs`)に同名の行がある、または
-(b) Lv 条件(Req1〜4 のいずれかが Type 1)が 280 以上で、EquipSlot が上記の対象部位に対応する。
+(b) Lv 条件(Req1〜4 のいずれかが Type 1)が 280 以上で、EquipSlot が上記の対象部位に対応する、または
+(c) 説明文(`c4_Desc`)に与ダメージの効果がある(下の「装着時効果」。Lv は問わない。Lv15 帯の
+    旧コラボエフェクトがここで入る)。
 のいずれかを満たす行だけを client.rs に書き出す。
+
+## 装着時効果(`c4_Desc`)
+説明文の末尾に効果文が入っている(例: `<c5>装着時与ダメージ+3%</c5>`)。与ダメージ側だけを
+`damage_effects` / `survival_effects` に起こす。どの文がどのカテゴリに入るかは wiki「ステータス」
+`#z4747f51` のカテゴリ表が正で、対応は `DESC_EFFECT_RULES` に置く(Issue #34 で、client 由来の行が
+効果を持たず †フレンの籠手 の +3% が計算に入らない、と報告されて足した)。
+**wiki が「分類不明」としている文は起こさない**(式のどこに入るか決められない):
+「攻撃時一定確率で攻撃力がN%増加」(†ドゥクスのアームカバー・†千尋の腕時計)、兜・体・手の「装着時攻撃力N%上昇」と、
+「被ダメージ-N%」の鎧・盾・手。拾えなかった効果文は実行時に stderr へ一覧する。
 
 同名で複数行あるもの(例: †デモニックウィング はステごとに 5 行、命中/Cri/回避/敏捷/物防各1個の
 特化違い)は、既存カタログに同名行があればその values_min/max と完全一致する行を採用し、
@@ -127,6 +138,7 @@ STAT_COLUMNS = [
     ("c50_Agility", "agility"),
 ]
 SENTINEL_CAPS = {1000}
+REASON_LABELS = {"name_match": "既存カタログと同名", "level": "Lv280以上", "effect": "装着時効果つき"}
 
 # 表 0309 `c3_Name` → 武器種(`domain::WeaponClass` のバリアント名)。
 EQUIP_TYPE_TO_WEAPON_CLASS = {
@@ -152,11 +164,61 @@ EQUIP_TYPE_TO_ARMOR_ENHANCE = {
     "ライトアーマー": "ArmorLight", "メイル": "ArmorHeavy", "マジックアーマー": "ArmorMagic",
     "スーツ": "ArmorSuit", "ローブ": "ArmorRobe",
 }
-# EquipSlot → PartSlot バリアント名。20/21(レリック)・13(その他、実データ0件)・15(乗り物)は対象外。
+# EquipSlot → PartSlot バリアント名。20/21(レリック)・15(乗り物)は対象外。13 はエフェクト。
 EQUIP_SLOT_TO_PART_SLOT = {
     "1": "Helm", "2": "Weapon", "3": "Armor", "4": "Shield",
-    "5": "Head", "6": "Hand", "7": "Body", "8": "Leg", "18": "Artifact",
+    "5": "Head", "6": "Hand", "7": "Body", "8": "Leg", "13": "Effect", "18": "Artifact",
 }
+# 説明文の効果文 → 効果。**同じ文面でも部位でカテゴリが違う**ので、規則は (文の形, 部位, 効果) で持つ
+# (例: 「装着時攻撃力が3%増加」はエフェクトなら X5、LoV タイアップ武器は X6、兜・体・手は wiki でも
+# 分類不明。ユーザー指摘 2026-09-21)。部位は wiki「ステータス」`#z4747f51` の表に行がある部位だけを書き、
+# 表に無い部位は起こさず「未対応」に出す。効果は ("damage", DamageCategory のバリアント名) か
+# ("survival", EquipmentSurvivalEffect のバリアント名, フィールド名)。正規表現のグループが数値で、
+# 効果の並びとグループの並びを揃える。「一定確率で」は発動前提で入れる
+# (items.rs `ITEM_SOURCE_DAMAGE_EFFECT`、ユーザー確定 2026-08-27)。
+DESC_EFFECT_RULES = [
+    # X6 攻撃ダメージ(日本独自): 「武器(装着時与ダメージ+3%)」「ダンジョン飯コラボ手袋」「エフェクト 装着時攻撃力x%増加 コラボ」
+    (re.compile(r"装着時[、 ]?与?ダメージ\+(\d+)%"), {"Weapon", "Shield", "Hand", "Effect"},
+     [("damage", "AttackDamageJapan")]),
+    # X6: 「†ゴリラのあーむかばー 装着時物理攻撃力+x% ※物理・魔法に関係なく上昇する」
+    (re.compile(r"装着時(?:物理|魔法)攻撃力\+(\d+)%"), {"Hand"}, [("damage", "AttackDamageJapan")]),
+    # O 物理/魔法ダメージ増加: 「装備(鎧) リナの服 魔法与ダメージ+3%」
+    (re.compile(r"魔法での与ダメージ\+(\d+)%"), {"Armor"}, [("damage", "PhysicalMagicDamageRate")]),
+    # X6: 「エフェクト スキル使用時、一定確率で攻撃ダメージが3%上昇」
+    (re.compile(r"スキル使用時、?一定確率で攻撃力が(\d+)%(?:上昇|増加)"), {"Effect"},
+     [("damage", "AttackDamageJapan")]),
+    # X5 攻撃ダメージ(特殊): 「エフェクト 装着時攻撃力3%増加 祝福の記念紋様、幻獣」
+    (re.compile(r"装着時、?攻撃力が?(\d+)%(?:増加|上昇)"), {"Effect"}, [("damage", "AttackDamageSpecial")]),
+    # X6: 「武器(装着時与ダメージ+3%) LoV タイアップ等」。†血晶武装の武器は文面が「攻撃力が3%増加」でも
+    # wiki はこの行に置いている(エフェクトの X5 と同じ文面だがカテゴリが違う)
+    (re.compile(r"装着時、?攻撃力が?(\d+)%(?:増加|上昇)"), {"Weapon"}, [("damage", "AttackDamageJapan")]),
+    # コラボ AF。与ダメージは X5、防御力は盾研磨と同じ割合(items.rs の †ピッキングツール と同じ扱い)
+    (re.compile(r"一定確率で与ダメージ\+(\d+)%、防御力\+(\d+)%"), {"Artifact"},
+     [("damage", "AttackDamageSpecial"), ("survival", "DefenseRate", "percent")]),
+]
+# 効果文らしいのに規則に掛からなかったものを拾う目印(見落としを stderr に出すためだけに使う)。
+DESC_EFFECT_HINT_RE = re.compile(r"(?:与ダメージ|攻撃力)[^。\n]*?\d+%|\d+%[^。\n]*?(?:与ダメージ|攻撃力)")
+
+
+def parse_desc_effects(desc: str, part_slot: str | None) -> tuple[list[str], list[str], list[str]]:
+    """説明文と部位 → (damage_effects の Rust 式, survival_effects の Rust 式, 拾えなかった効果文)。"""
+    text = re.sub(r"<[^>]+>", "\n", desc).replace("\uff05", "%").replace("\uff0b", "+")
+    for pattern, slots, outputs in DESC_EFFECT_RULES:
+        m = pattern.search(text) if part_slot in slots else None
+        if not m:
+            continue
+        damage: list[str] = []
+        survival: list[str] = []
+        for out, number in zip(outputs, m.groups()):
+            if out[0] == "damage":
+                damage.append(
+                    f"SkillEffect::Damage {{ category: DamageCategory::{out[1]}, percent: {number}.0 }}"
+                )
+            else:
+                survival.append(f"EquipmentSurvivalEffect::{out[1]} {{ {out[2]}: {number}.0 }}")
+        return damage, survival, []
+    missed = [line.strip() for line in text.split("\n") if DESC_EFFECT_HINT_RE.search(line)]
+    return [], [], missed
 # `dm_00000_0298.csv` の行順(= `c11_CharMask` の bit k-1)→ `GameCharacter::id`(crates/gamedata/
 # src/characters.rs)。19 番目以降(「追加05〜」)は未実装キャラなので対応を持たない。
 CHAR_IDS_BY_ROW = [
@@ -198,6 +260,9 @@ class Row:
     req1_val: str
     usable_by: tuple[str, ...] | None
     source_file: str
+    damage_effects: list[str]
+    survival_effects: list[str]
+    missed_effects: list[str]
 
 
 def load_csv(path: Path) -> tuple[list[str], list[list[str]]]:
@@ -233,6 +298,7 @@ def load_equipment_rows(assets: Path) -> list[Row]:
         template_col = col_index(header, "c1_Template")
         item_id_col = col_index(header, "c2_ItemId")
         name_col = col_index(header, "c3_Name")
+        desc_col = col_index(header, "c4_Desc")
         equip_type_col = col_index(header, "c7_EquipType")
         equip_slot_col = col_index(header, "c35_EquipSlot")
         # Lv 条件は Req1〜Req4 のどこにでも入る(セイクリッド以降は Req1 がエタ条件(Type 10)で Lv は Req2)
@@ -271,6 +337,10 @@ def load_equipment_rows(assets: Path) -> list[Row]:
                     usable_by = usable_by_from_mask(int(row[char_mask_col]))
                 except (ValueError, IndexError):
                     usable_by = None
+            damage_effects, survival_effects, missed_effects = parse_desc_effects(
+                row[desc_col] if desc_col is not None else "",
+                EQUIP_SLOT_TO_PART_SLOT.get(row[equip_slot_col]),
+            )
             rows.append(Row(
                 item_id=row[item_id_col],
                 name=row[name_col],
@@ -281,6 +351,9 @@ def load_equipment_rows(assets: Path) -> list[Row]:
                 req1_val=level,
                 usable_by=usable_by,
                 source_file=path.name,
+                damage_effects=damage_effects,
+                survival_effects=survival_effects,
+                missed_effects=missed_effects,
             ))
     return rows
 
@@ -379,10 +452,11 @@ def main() -> None:
         is_high_level = (
             r.req1_type == "1" and r.req1_val.isdigit() and int(r.req1_val) >= 280 and not all_zero
         )
-        if not (is_name_match or is_high_level):
+        has_effect = bool(r.damage_effects) and not all_zero
+        if not (is_name_match or is_high_level or has_effect):
             continue
         by_name.setdefault(r.name, []).append(r)
-        reasons[r.item_id] = "name_match" if is_name_match else "level"
+        reasons[r.item_id] = "name_match" if is_name_match else "level" if is_high_level else "effect"
 
     duplicate_report: list[str] = []
     for name, group in by_name.items():
@@ -456,6 +530,9 @@ def main() -> None:
             "wrist_type": wrist_type,
             "enhance_type": enhance_type,
             "usable_by": r.usable_by,
+            "damage_effects": r.damage_effects,
+            "survival_effects": r.survival_effects,
+            "missed_effects": r.missed_effects,
             "source_file": r.source_file,
             "item_id": r.item_id,
             "reason": reasons[r.item_id],
@@ -474,6 +551,10 @@ def main() -> None:
             "(docs/adr/009-public-release.md)。"
         )
 
+    # 追加装備の JSON(downloaded.rs の DTO)は効果の欄を持たない。効果つきが混ざったら形を足す合図。
+    if any(e["damage_effects"] or e["survival_effects"] for e in extra_entries):
+        sys.exit("追加装備に装着時効果つきの行があります。extra-equipment.json の形に効果を足してください。")
+
     write_rust(other_entries)
     write_extra_equipment_json(extra_entries)
 
@@ -486,6 +567,13 @@ def main() -> None:
         print(f"同名重複({len(duplicate_report)} 組):", file=sys.stderr)
         for d in duplicate_report:
             print(f"  {d}", file=sys.stderr)
+
+    with_effects = [e for e in entries if e["damage_effects"] or e["survival_effects"]]
+    print(f"装着時効果つき: {len(with_effects)} 件", file=sys.stderr)
+    missed = [(e["name"], text) for e in entries for text in e["missed_effects"]]
+    print(f"効果文らしいが規則に掛からなかったもの: {len(missed)} 件", file=sys.stderr)
+    for name, text in missed:
+        print(f"  未対応: {name}: {text}", file=sys.stderr)
 
     new_names = {e["name"] for e in entries}
     uncovered_generated = [n for n in re.findall(r'name: "([^"]+)"', (CATALOG_DIR / "generated.rs").read_text(encoding="utf-8")) if n not in new_names]
@@ -512,7 +600,9 @@ def write_rust(entries: list[dict]) -> None:
         else:
             ids = ", ".join(f'"{cid}"' for cid in e["usable_by"])
             usable_by = f"Some(&[{ids}])"
-        note = f"収録理由: {'既存カタログと同名' if e['reason'] == 'name_match' else 'Lv280以上'}。EquipType {e['source_file']}"
+        note = f"収録理由: {REASON_LABELS[e['reason']]}。EquipType {e['source_file']}"
+        damage_effects = "&[" + ", ".join(e["damage_effects"]) + "]"
+        survival_effects = "&[" + ", ".join(e["survival_effects"]) + "]"
         name_escaped = e["name"].replace("\\", "\\\\").replace('"', '\\"')
         lines.append("        WikiEquipmentItem {")
         lines.append(f'            id: "{e["id"]}",')
@@ -525,9 +615,9 @@ def write_rust(entries: list[dict]) -> None:
         lines.append(f"            weapon_class: {weapon_class},")
         lines.append(f"            enhance_type: {enhance_type},")
         lines.append(f"            usable_by: {usable_by},")
-        lines.append("            damage_effects: &[],")
+        lines.append(f"            damage_effects: {damage_effects},")
         lines.append("            no_ability_or_random_option_slots: false,")
-        lines.append("            survival_effects: &[],")
+        lines.append(f"            survival_effects: {survival_effects},")
         lines.append("            recommended_dependency: None,")
         lines.append("            damage_dependency: None,")
         lines.append("            source: Source {")
@@ -584,7 +674,7 @@ def write_extra_equipment_json(entries: list[dict]) -> None:
             "source": {
                 "page": f'client DB {e["source_file"]} ItemId {e["item_id"]}',
                 "retrieved_on": EXTRA_RETRIEVED_ON,
-                "note": f"収録理由: {'既存カタログと同名' if e['reason'] == 'name_match' else 'Lv280以上'}。EquipType {e['source_file']}",
+                "note": f"収録理由: {REASON_LABELS[e['reason']]}。EquipType {e['source_file']}",
             },
         })
 

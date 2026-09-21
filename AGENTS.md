@@ -83,7 +83,7 @@ Agent 定義は `~/.claude/agents/`(ユーザー単位)。すべて `disallowedT
 | reviewer | Sonnet / high | Complex 変更の独立レビュー。ファイル変更不可 |
 | Explore(組み込み) | — | ファイル探索・シンボル検索 |
 
-Skills は `.claude/skills/`(talewiki-fetch / gui-smoke / finish-goal / design-review / release / db-migration)。各 SKILL.md の description が使いどころ。
+Skills は `.claude/skills/`(talewiki-fetch / gui-smoke / finish-goal / design-review / release / db-migration / issue-triage)。各 SKILL.md の description が使いどころ。
 
 依頼の作法:
 

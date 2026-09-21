@@ -62,14 +62,14 @@ fn wrist(
 static CATALOG_COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
-fn 上位装備カタログは1259件_idは重複しない() {
+fn 上位装備カタログは1300件_idは重複しない() {
     let _guard = CATALOG_COUNT_LOCK.lock().unwrap();
     let catalog = equipment_catalog();
     // 既存の手検証済み行(装着時効果つき)を優先し、次に client DB(9値の生成元)、
     // 最後に client DB に同名が無い wiki 抽出/韓国コミュニティ資料ぶんを名前で重複排除して積む。
     // 追加装備 38 件は配布物・git に含めず、「追加機能の解除」時に R2 から取得するので
     // ここには入らない(`追加装備は既定で未収録_解除操作で合流する` 参照)。
-    assert_eq!(catalog.len(), 1259);
+    assert_eq!(catalog.len(), 1300);
     let ids: HashSet<&str> = catalog.iter().map(|i| i.id).collect();
     assert_eq!(ids.len(), catalog.len());
 }
@@ -427,7 +427,7 @@ fn 装着時効果は与ダメージ式のカテゴリに入る() {
         .iter()
         .filter(|i| !i.damage_effects.is_empty())
         .count();
-    assert_eq!(with_effects, 221);
+    assert_eq!(with_effects, 238);
 }
 
 /// 装備中のアイテムだけが寄与する。カテゴリ側の上限は `CategoryTotals` が掛けるので、
@@ -1178,4 +1178,73 @@ fn 装備可能キャラのビットは表の行に対応する() {
         .find(|item| item.name == "†アノマラド共和国のアーマー")
         .unwrap();
     assert_eq!(wiki_only.usable_by, None);
+}
+
+/// クライアント DB 由来の行は装着時効果を持たず、†フレンの籠手の与ダメージ +3% が計算に
+/// 入っていなかった(利用者報告 Issue #34)。効果は client の説明文から起こす。
+#[test]
+fn クライアントdb由来の行も装着時効果を持つ() {
+    let japan_3 = [SkillEffect::Damage {
+        category: DamageCategory::AttackDamageJapan,
+        percent: 3.0,
+    }];
+    let flynn = find_equipment_item("client-1047860").unwrap();
+    assert_eq!(flynn.name, "†フレンの籠手");
+    assert_eq!(flynn.damage_effects, japan_3);
+
+    // Lv15 帯の旧コラボエフェクトは Lv 条件では入らない。効果つきなので収録する
+    let chihiro = find_equipment_item("client-1035908").unwrap();
+    assert_eq!(chihiro.name, "†千尋の血晶武装");
+    assert_eq!(chihiro.slot, PartSlot::Effect);
+    assert_eq!(chihiro.damage_effects, japan_3);
+
+    // 同じ「攻撃力が3%」でも部位と発動条件でカテゴリが違う。文面だけで決めない:
+    // エフェクトの「装着時」は X5、エフェクトの「スキル使用時、一定確率で」は X6、
+    // LoV タイアップ武器の「装着時」は wiki が X6 の行に置いている
+    let special_3 = [SkillEffect::Damage {
+        category: DamageCategory::AttackDamageSpecial,
+        percent: 3.0,
+    }];
+    let phoenix = find_equipment_item("beast-phoenix").unwrap();
+    assert_eq!(phoenix.damage_effects, special_3);
+    let full_control = find_equipment_item("logh-full-control-battle").unwrap();
+    assert_eq!(full_control.damage_effects, japan_3);
+    let blood_sword = find_equipment_item("client-1035886").unwrap();
+    assert_eq!(blood_sword.name, "†血晶武装の剣");
+    assert_eq!(blood_sword.damage_effects, japan_3);
+
+    // wiki が「分類不明」とする文(兜・体・手の「装着時攻撃力1%上昇」など)は起こさない
+    let catalog = equipment_catalog();
+    for name in ["†デミアンの眼帯", "†オルカのマント", "†ドゥクスのアームカバー"] {
+        if let Some(item) = catalog.iter().find(|item| item.name == name) {
+            assert!(item.damage_effects.is_empty(), "{name}");
+        }
+    }
+
+    // 手で置いた効果(wiki でカテゴリを確かめた行)は機械抽出で変わらない
+    let gorilla = find_equipment_item("gorilla-armcover").unwrap();
+    assert_eq!(gorilla.damage_effects.len(), 1);
+}
+
+#[test]
+fn エーテリアルチューブ通常版は依存ダメージ35() {
+    for (id, dependency) in [
+        ("ethereal-stab", SkillDependency::Stab),
+        ("ethereal-hack", SkillDependency::Hack),
+        ("ethereal-physical", SkillDependency::StabHack),
+        ("ethereal-int", SkillDependency::Int),
+        ("ethereal-mr", SkillDependency::Mr),
+        ("ethereal-hack-int", SkillDependency::HackInt),
+    ] {
+        let item = find_equipment_item(id).unwrap();
+        assert_eq!(item.damage_dependency, Some(dependency), "{id}");
+        assert_eq!(
+            item.damage_effects,
+            [SkillEffect::Damage {
+                category: DamageCategory::DependencyDamageRate,
+                percent: 35.0,
+            }],
+            "{id}"
+        );
+    }
 }
