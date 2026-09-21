@@ -1528,6 +1528,8 @@ export interface PartEnhancePreview {
   added: number;
   /** ソウルリンク7(武器)/ 8(鎧)の倍率。Lv0 なら 1.0 */
   soul_link_multiplier: number;
+  /** ゲーム内の装備欄に出る合計(基本 + 強化からソウルリンクだけを除いたもの)。装備ペインの見出しが出す数 */
+  equipment_ingame_total: EquipmentValues;
   /** ソウルリンクまで掛けた最終値 */
   total: number;
 }

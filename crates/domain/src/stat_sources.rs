@@ -1288,6 +1288,11 @@ pub struct StatPreview {
     /// 強化能力値のうち `part.enchant` だけを部位別に割ったもの(表示用の内訳)。
     /// 正は `Equipment::enchant_values_by_part`
     pub part_enchant_values: Vec<PartEquipmentValues>,
+    /// **ゲーム内の装備欄に出る合計**(基本 + 強化。装備ペインの見出しはこれが正)。
+    /// `equipment_base_total` + `equipment_enhanced_total` から**ソウルリンクだけ**を除いたもの。
+    /// ソウルリンク 1〜4 はダメージには効くがゲーム内の装備欄には表示されない
+    /// (2026-09-21 実機照合: 斬り Lv11 = +22 ぶんだけゲーム内表示が少ない。docs/adr/011)
+    pub equipment_ingame_total: EquipmentValues,
     /// 全部位のランダムオプションの効き先別集計。正は `Equipment::random_option_totals`
     pub random_option_totals: RandomOptionTotals,
     /// シエナのオーラのステ加算(能力値スロット + 全ステータス増加)の 7 ステ合計。
@@ -1871,6 +1876,14 @@ pub fn preview_effective_stats(
     let part_ability_values = equipment.ability_values_by_part(abilities);
     let part_total_values = equipment.total_values_by_part(abilities);
     let part_polish_values = equipment.polish_values_by_part(polish_active);
+    let part_enchant_values = equipment.enchant_values_by_part();
+    let equipment_enhanced_total = equipment.enhanced_totals(None);
+    let equipment_ingame_total = EquipmentBaseContext {
+        soul_link: crate::soul_link::SoulLinkStatus::default(),
+        ..equipment_base
+    }
+    .total(equipment)
+    .add(equipment_enhanced_total);
     let siena_part_values = equipment
         .siena
         .iter_selected()
@@ -1949,8 +1962,9 @@ pub fn preview_effective_stats(
         equipment_polish_active: polish_active,
         siena_part_values,
         thesis_cores,
-        equipment_enhanced_total: equipment.enhanced_totals(None),
-        part_enchant_values: equipment.enchant_values_by_part(),
+        equipment_enhanced_total,
+        part_enchant_values,
+        equipment_ingame_total,
         random_option_totals: equipment.random_option_totals(random_options),
         siena_stat_total,
         siena_attack_rate: equipment.siena_attack_rate(),
@@ -3113,6 +3127,8 @@ mod tests {
                 ..Default::default()
             }
         );
+        // ゲーム内の装備欄にソウルリンクは出ない(2026-09-21 実機照合: 斬り Lv11 = 22 の差)
+        assert_eq!(preview.equipment_ingame_total, EquipmentValues::default());
         let attack = preview.attack.unwrap().breakdown;
         assert!((attack.equipment_base_attack - (2.0 * 14.5 + 4.0 * 14.5)).abs() < 1e-9);
         assert_eq!(attack.equipment_enhanced_attack, 0.0);

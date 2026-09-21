@@ -12,7 +12,7 @@
   // sources/pane-shared.css にまとめてグローバル読み込みしている(理由はそのファイル冒頭を参照)。
   import type { CharacterSkillEffectsView, PetSkillTier, Skill, StatKind, StatPreview } from "../../api/types";
   import type { Draft } from "../../draft";
-  import { sacredRelicStageFromValue, sacredRelicValue, withEnchant } from "../../equipment";
+  import { sacredRelicStageFromValue, sacredRelicValue, totalWithEnchant } from "../../equipment";
   import { limits } from "../../limits.svelte";
   import { tables } from "../../tables.svelte";
   import Chip from "../../ui/Chip.svelte";
@@ -40,7 +40,7 @@
   import { fmtSigned } from "../../format";
   import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import Value from "../../ui/Value.svelte";
-  import { equipmentAttackKindsFor, equipmentBaseTotal, equipmentEnhancedTotal } from "./summaries";
+  import { equipmentAttackKindsFor } from "./summaries";
 
   /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
   const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
@@ -131,16 +131,28 @@
   const equipmentHeadNote = $derived.by(() => {
     // 計算前は 0 が並ぶだけなので、値が来るまでは元の説明文を出す(§00「0 で埋めない」)
     if (!preview) return TITLES.equipment.note;
-    const base = equipmentBaseTotal(preview);
-    const enchant = equipmentEnhancedTotal(preview);
+    // ゲーム内の装備欄と見比べる数なので、ゲーム内に出ないソウルリンクだけを除いた合計を出す
+    // (シエナのオーラ・アバター強化・称号はゲーム内でも乗る)。除いた分は横の注記が言う
+    const total = preview.equipment_ingame_total;
+    const enchant = preview.equipment_enhanced_total;
     return (
       equipmentAttackKindsFor(equipmentMainSkill?.dependency ?? null)
-        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${withEnchant(base[k], enchant[k])}`)
+        .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${totalWithEnchant(total[k], enchant[k])}`)
         .join(" ・ ") || TITLES.equipment.note
     );
   });
 
-  const TITLES: Record<SourceId, { title: string; note: string }> = {
+  /** 見出しの合計から除いたソウルリンク分。0 なら除いたものが無いので注記ごと出さない */
+  const equipmentSoulLinkNote = $derived.by(() => {
+    if (!preview) return "";
+    const excluded = equipmentAttackKindsFor(equipmentMainSkill?.dependency ?? null)
+      .filter((k) => preview.soul_link.equipment_values[k] !== 0)
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(preview.soul_link.equipment_values[k])}`)
+      .join(" ・ ");
+    return excluded ? `ゲーム内の表示と同じ ・ ソウルリンク(${excluded})は含まない` : "";
+  });
+
+  const TITLES: Record<SourceId,{ title: string; note: string }> = {
     status: { title: "キャラステータス", note: "素ステ・覚醒・主軸スキル" },
     element: { title: "属性", note: "主属性と、装備から自動で入る属性値" },
     lumina: { title: "ルミナの回廊", note: "回廊効果(テイルズID 内の全キャラに効く恒常バフ)" },
@@ -179,6 +191,7 @@
          概ね認知できる(ユーザー判断 2026-09-01)ので、主軸スキルが使う補正だけを見出しに置き、
          ペインの中には表を持たない(縦を使わない) -->
     {#if sourceId === "equipment"}
+      {#if equipmentSoulLinkNote}<span class="dim">{equipmentSoulLinkNote}</span>{/if}
       <Value class="head-value" value={equipmentHeadNote} />
     {:else}
       <span class="dim">{TITLES[sourceId].note}</span>

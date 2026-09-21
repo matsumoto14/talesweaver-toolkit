@@ -34,7 +34,7 @@
   } from "../../api/types";
   import { deleteCharacter } from "../../api/commands";
   import { buildDraft, draftToPayload } from "../../draft";
-  import { cloneEquipmentPart, randomOptionCount, sienaPartCount, withEnchant } from "../../equipment";
+  import { cloneEquipmentPart, randomOptionCount, sienaPartCount, totalWithEnchant } from "../../equipment";
   import { buffSetOptions } from "../../buffs";
   import { fmtInt, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
   import {
@@ -462,10 +462,11 @@
   /** 召喚欄チップの短いラベル(熊 / 精霊)。未選択時は使われない(showSummonView が false) */
   const summonLabel = $derived(summonSkill?.attacker === "destruction_spirit" ? "精霊" : "熊");
   const showSummonView = $derived(draft.summonSkillId !== "" && summonView === "bear");
-  /** 装備値の見せ方は「合計 (+エンチャント)」で全画面そろえる(equipment.ts の withEnchant) */
+  /** 装備値の見せ方は「合計 (+エンチャント)」で全画面そろえる(equipment.ts の totalWithEnchant)。
+   *  「装備」の行は装備ペインの見出しと同じ数(ゲーム内の装備欄の合計 = ソウルリンクを除く)を言う */
   const equipmentSummary = $derived(
     equipmentAttackKinds
-      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${withEnchant(eqBaseTotal[k], eqEnhancedTotal[k])}`)
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${totalWithEnchant(preview?.equipment_ingame_total[k] ?? 0, eqEnhancedTotal[k])}`)
       .join(" / "),
   );
   const sienaParts = $derived(sienaPartCount(draft.equipment));
