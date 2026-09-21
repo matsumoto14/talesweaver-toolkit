@@ -295,7 +295,6 @@
     font-size: var(--t-label); font-weight: 700; white-space: nowrap;
   }
   .rot-reset:hover { background: var(--state-temp-bg); }
-  .rot-pick :global(.chip-ct) { color: var(--fg-sub); font-size: var(--t-label); }
   .rot-pick :global(.chip-gain) { margin-left: 5px; min-width: 5.5em; text-align: right; }
   .rot-pick :global(.drop-badge) {
     background: var(--state-temp-bg); border: 1px solid var(--sim); color: var(--sim-fg);

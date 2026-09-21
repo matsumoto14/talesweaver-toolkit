@@ -13,6 +13,7 @@
   import { fmtCooldown, fmtShareOf, fmtSigned } from "./format";
   import Choose from "./ui/Choose.svelte";
   import Disclosure from "./ui/Disclosure.svelte";
+  import Icon from "./ui/Icon.svelte";
   import Value from "./ui/Value.svelte";
 
   interface Props {
@@ -56,13 +57,15 @@
     const effect = c.effect === "improves" ? "差し込むと DPS が上がる" : "差し込むと DPS が下がる";
     return `${cd} ・ ${effect} ${amount}`;
   };
-  const tone = $derived(temporary ? () => "sim" : undefined);
+  // 見た目は主軸スキルのチップ(`ui/Picker.svelte`)と同じ段: アイコン + 技名 + 補足のピル。
+  // すぐ上の主軸と同じ作法で並ぶので、別物に見えない(§00 ⑤)
+  const tone = $derived(() => `picker-chip with-icon${temporary ? " sim" : ""}`);
 </script>
 
 {#if ups.length > 0}
   <Choose
     label={temporary ? "ここで試す差し込み CT 技" : "差し込む CT 技"}
-    class="chiprow"
+    class="chiprow picker-chips"
     options={optionsOf(ups)}
     values={onIds}
     {onToggle}
@@ -70,7 +73,9 @@
     titleFor={chipTitle}
   >
     {#snippet item(o)}
-      {o.label} <Value class="chip-ct" value={fmtCooldown(find(o.value)?.cooldown_seconds ?? 0)} />
+      <Icon kind="skill" id={o.value} size={20} label={o.label} />
+      <span class="picker-chip-name">{o.label}</span>
+      <span class="picker-chip-meta num">CT {fmtCooldown(find(o.value)?.cooldown_seconds ?? 0)}</span>
       <!-- 損得を出せない候補は割合の代わりに「?」(未収録は 0 や空白にしない。§08) -->
       {#if find(o.value)?.effect === "unknown"}<Value class="chip-gain" value={null} />{/if}
     {/snippet}
@@ -87,7 +92,7 @@
     {/snippet}
     <Choose
       label="DPS が下がる差し込み CT 技"
-      class="chiprow"
+      class="chiprow picker-chips"
       options={optionsOf(drops)}
       values={onIds}
       {onToggle}
@@ -95,8 +100,9 @@
       titleFor={chipTitle}
     >
       {#snippet item(o)}
-        {o.label}
-        <Value class="chip-ct" value={fmtCooldown(find(o.value)?.cooldown_seconds ?? 0)} />
+        <Icon kind="skill" id={o.value} size={20} label={o.label} />
+        <span class="picker-chip-name">{o.label}</span>
+        <span class="picker-chip-meta num">CT {fmtCooldown(find(o.value)?.cooldown_seconds ?? 0)}</span>
         {#if gainLabel(o.value)}
           <Value class="chip-gain" tone="down" value={gainLabel(o.value)} />
         {/if}

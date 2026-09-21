@@ -477,8 +477,11 @@
   }
   /* チップに添える CT 秒と損得。数値書体は Value が持つので、ここは間合いと幅だけ。
      桁が増えてもチップの幅が動かないようにする(§00③) */
-  .wide :global(.chip-ct) { margin-left: 4px; opacity: 0.75; }
   .wide :global(.chip-gain) { margin-left: 5px; min-width: 5.5em; text-align: right; }
+  /* チップ行と畳み(下がる技)は縦に並ぶ。チップどうしの間合い(.picker-chips の 5px)と同じ段で離す */
+  .wide :global(details.drop-pick) { margin-top: 6px; }
+  .wide :global(details.drop-pick > summary) { display: inline-flex; }
+  .wide :global(details.drop-pick .chiprow) { margin-top: 6px; }
   @media (prefers-reduced-motion: reduce) {
     /* .badge-in は app.css の共通クラスを `use:changed` が実行時に付ける。
        静的な markup に出てこないので :global で受ける */
