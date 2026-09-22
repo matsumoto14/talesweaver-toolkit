@@ -3,20 +3,26 @@
 // 語尾は「ッピ」だけを借り、正直さ(候補に無いことは言わない)をそのまま文にする。一人称は使わない。
 //
 // 同じ状態に複数の定型文を持てる形にしてある(質問文のハッシュで選ぶ = 同じ質問には同じ文が返る)。
-import zerippiF008 from "../../assets/ask/zerippi_f008.png";
-import zerippiF020 from "../../assets/ask/zerippi_f020.png";
-import zerippiF025 from "../../assets/ask/zerippi_f025.png";
-import zerippiF033 from "../../assets/ask/zerippi_f033.png";
+import sheetBlink from "../../assets/ask/motion/blink.png";
+import sheetIdle from "../../assets/ask/motion/idle.png";
+import sheetJoy from "../../assets/ask/motion/joy.png";
+import sheetNotify from "../../assets/ask/motion/notify.png";
+import sheetThink from "../../assets/ask/motion/think.png";
 import { AskHttpError, type Aspect, type AskNoneReason, type ProgressStep, type WrongReason } from "../../ask";
 
 /** ゼリッピの表情。応答の kind とエラーの種類から決める(s6.txt「ゼリッピの役」) */
 export type Expression = "answered" | "thinking" | "notfound" | "offline";
 
-export const EXPRESSION_SPRITE: Record<Expression, string> = {
-  answered: zerippiF008, // 目を開けた正面
-  thinking: zerippiF020, // 体を傾けたコマ
-  notfound: zerippiF025, // 涙のコマ
-  offline: zerippiF033, // 背を向けて拗ねる
+/** 立ち絵の型。応答の表情に、会話がまだ 1 つも無いときの待機を足したもの */
+export type Pose = Expression | "idle";
+
+/** 型ごとの 8 コマのシート(48×64 の横並び)。回すのは Zerippi.svelte */
+export const POSE_SHEET: Record<Pose, string> = {
+  idle: sheetIdle, // 何も起きていない
+  answered: sheetJoy, // 目を細めて笑う
+  thinking: sheetThink, // 羽を口元に当てて考える
+  notfound: sheetNotify, // 口を開けて困る
+  offline: sheetBlink, // 目を閉じて動かない
 };
 
 const THINKING: readonly string[] = ["wiki をめくってるッピ……"];

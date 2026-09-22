@@ -10,9 +10,9 @@
   import { changed, reveal } from "../../ui/motion.svelte";
   import TextField from "../../ui/TextField.svelte";
   import AnswerBubble from "./AnswerBubble.svelte";
-  import { askErrorLine, emptyLine, EXPRESSION_SPRITE, noneLine, offlineLine, progressLine, thinkingLine, type Expression } from "./lines";
+  import { askErrorLine, emptyLine, noneLine, offlineLine, progressLine, thinkingLine, type Expression } from "./lines";
+  import Zerippi from "./Zerippi.svelte";
 
-  const SEND_HOST = new URL("https://api.tw-context.dev").host;
 
   interface Turn {
     id: number;
@@ -127,7 +127,7 @@
       {#if healthState === "checking"}
         <p class="dim">つないでいます…</p>
       {:else}
-        <img class="face swap-in" src={EXPRESSION_SPRITE.offline} alt="ゼリッピ" />
+        <Zerippi pose="offline" center />
         <p class="line pop-in">{offlineLine("")}</p>
       {/if}
     </div>
@@ -139,7 +139,7 @@
 
       {#if turns.length === 0}
         <div class="intro">
-          <img class="face" src={EXPRESSION_SPRITE.answered} alt="ゼリッピ" />
+          <Zerippi pose="idle" center />
         </div>
       {/if}
 
@@ -147,9 +147,7 @@
         <div class="turn">
           <div class="bubble user pop-in">{turn.question}</div>
           <div class="reply">
-            {#key turn.expression}
-              <img class="face swap-in" src={EXPRESSION_SPRITE[turn.expression]} alt="ゼリッピ" />
-            {/key}
+            <Zerippi pose={turn.expression} />
             <div class="bubble zerippi pop-in">
               {#if turn.status !== "done" || turn.response?.kind !== "answer"}
                 <p class="line" use:changed={() => turn.message}>{turn.message}</p>
@@ -175,8 +173,7 @@
       <button type="button" class="btn primary" onclick={submit} disabled={!question.trim()}>聞く</button>
     </div>
     <p class="notice dim">
-      質問は回答サーバー({SEND_HOST})を通して外部の AI サービスに送ります。質問と答えは改善のために記録します(キャラや装備の中身は送りません)。
-      値を押すと「この値は違う」を送れます
+      質問は外部の AI サービスに送ります(キャラや装備の中身は送りません)。値を押すと「この値は違う」を送れます
     </p>
   {/if}
 </div>
@@ -220,12 +217,6 @@
   }
   .bubble.zerippi .line { margin: 0; color: var(--sim-fg); font-weight: 700; }
 
-  /* 36×54 の枠に底辺揃え・2 倍・ドットのまま(design案 s6.txt) */
-  .face {
-    flex: none; width: 72px; height: 108px; object-fit: contain; object-position: bottom center;
-    image-rendering: pixelated; align-self: flex-end;
-  }
-  .intro .face { align-self: center; }
 
   .composer {
     flex: none; display: flex; gap: 8px; align-items: center; padding: 10px 22px 4px;
