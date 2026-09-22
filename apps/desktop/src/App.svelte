@@ -14,7 +14,7 @@
   import MeasurePage from "./pages/measure/MeasurePage.svelte";
   import InkriPage from "./pages/inkri/InkriPage.svelte";
   import inkriTabIcon from "./assets/inkri/ui/app_tab.png";
-  import askTabIcon from "./assets/ask/zerippi_tab.png";
+  import askTabIcon from "./assets/ask/zerippi_tab.webp";
   import AskPage from "./pages/ask/AskPage.svelte";
   import NewsPage from "./pages/news/NewsPage.svelte";
   import VersusPage from "./pages/versus/VersusPage.svelte";

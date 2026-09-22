@@ -3,11 +3,16 @@
 // 語尾は「ッピ」だけを借り、正直さ(候補に無いことは言わない)をそのまま文にする。一人称は使わない。
 //
 // 同じ状態に複数の定型文を持てる形にしてある(質問文のハッシュで選ぶ = 同じ質問には同じ文が返る)。
-import sheetBlink from "../../assets/ask/motion/blink.png";
-import sheetIdle from "../../assets/ask/motion/idle.png";
-import sheetJoy from "../../assets/ask/motion/joy.png";
-import sheetNotify from "../../assets/ask/motion/notify.png";
-import sheetThink from "../../assets/ask/motion/think.png";
+import blinkStill from "../../assets/ask/motion/blink-still.webp";
+import blinkGif from "../../assets/ask/motion/blink.gif";
+import idleStill from "../../assets/ask/motion/idle-still.webp";
+import idleGif from "../../assets/ask/motion/idle.gif";
+import joyStill from "../../assets/ask/motion/joy-still.webp";
+import joyGif from "../../assets/ask/motion/joy.gif";
+import notifyStill from "../../assets/ask/motion/notify-still.webp";
+import notifyGif from "../../assets/ask/motion/notify.gif";
+import thinkStill from "../../assets/ask/motion/think-still.webp";
+import thinkGif from "../../assets/ask/motion/think.gif";
 import { AskHttpError, type Aspect, type AskNoneReason, type ProgressStep, type WrongReason } from "../../ask";
 
 /** ゼリッピの表情。応答の kind とエラーの種類から決める(s6.txt「ゼリッピの役」) */
@@ -16,13 +21,23 @@ export type Expression = "answered" | "thinking" | "notfound" | "offline";
 /** 立ち絵の型。応答の表情に、会話がまだ 1 つも無いときの待機を足したもの */
 export type Pose = Expression | "idle";
 
-/** 型ごとの 8 コマのシート(48×64 の横並び)。回すのは Zerippi.svelte */
-export const POSE_SHEET: Record<Pose, string> = {
-  idle: sheetIdle, // 何も起きていない
-  answered: sheetJoy, // 目を細めて笑う
-  thinking: sheetThink, // 羽を口元に当てて考える
-  notfound: sheetNotify, // 口を開けて困る
-  offline: sheetBlink, // 目を閉じて動かない
+/** 型ごとの 8 コマのアニメ GIF。色は原画のまま・地(--bg-mid)に焼いてある
+ *  (GIF の透過は 1bit しかなく、透過のままだとふちがギザギザになるため) */
+export const POSE_GIF: Record<Pose, string> = {
+  idle: idleGif, // 何も起きていない
+  answered: joyGif, // 目を細めて笑う
+  thinking: thinkGif, // 羽を口元に当てて考える
+  notfound: notifyGif, // 口を開けて困る
+  offline: blinkGif, // 目を閉じて動かない
+};
+
+/** 動きを消す設定のときに出す 1 コマ目。GIF は再生を止められないので絵ごと差し替える */
+export const POSE_STILL: Record<Pose, string> = {
+  idle: idleStill,
+  answered: joyStill,
+  thinking: thinkStill,
+  notfound: notifyStill,
+  offline: blinkStill,
 };
 
 const THINKING: readonly string[] = ["wiki をめくってるッピ……"];
