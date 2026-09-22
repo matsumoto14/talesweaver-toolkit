@@ -17,5 +17,11 @@ tmp/
 # 追加装備の数値(配布物・git から外し、解除時に R2 から取得する。tools/gamedata/import_client_db.py)
 tools/gamedata/out/
 
+# wiki 取込の生成物(units.py の出力。tools/gamedata/out/ とは別物)
+tools/gamedata/wiki/out/
+
 # 利用者数の目安を出す手元スクリプト(Cloudflare のアカウント ID を持つので公開しない)
 tools/release/usage.py
+
+# Worker のローカル秘密(wrangler)
+.dev.vars

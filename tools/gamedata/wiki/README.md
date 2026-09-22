@@ -66,3 +66,35 @@ Cloudflare D1 にそのまま載る。
 
 `gone` から一覧に戻ったページは古い `source` を持ったまま `new` になるので、
 mtime が取れなくても必ず取り直す。
+
+## unit / correction の書き出し(units.py)
+
+```
+python tools/gamedata/wiki/units.py [--pages 名前,名前,...] [--limit N]
+```
+
+`wiki.sqlite` の `page` を段落・表の行・訂正のユニットに切り、`out/units.sql` を書き出す
+(D1 への流し込みは `wrangler d1 execute` に渡す)。`--pages` は開発用に対象ページを先頭に寄せる
+だけで、`--limit` を付けないと全ページ(約 3,400)を処理する。
+
+**訂正(`correction`)**は `corrections.json`(git 管理、生成物)から読む。値は
+`crates/gamedata` が持つ `CharacterSkillDef` / `BuffDefinition` の効果値から機械で作るので、
+gamedata を直した後は必ず作り直す:
+
+```
+cargo run -p gamedata --bin export_corrections > tools/gamedata/wiki/corrections.json
+```
+
+`units.py` は各訂正について `page` のユニットのうち `text` に `match` を含む**最初の row**を
+`unit_id` にする(無ければ NULL のまま、訂正は対象ユニットを持たず単独で候補になる)。
+
+**静的データだけの項目(`app_data.json`、生成物)**は称号・装備カタログのうち wiki に無い・
+wiki より新しい値(9 値・上限)を持つ。gamedata を直した後は必ず作り直す(ADR-021):
+
+```
+cargo run -p gamedata --bin export_app_data > tools/gamedata/wiki/app_data.json
+```
+
+`units.py` はセル 1 つにつき `correction` 行を 1 本作る(`unit_id` は常に NULL。wiki の行とは
+結び付けない)。Worker は質問の語が `subject` に完全一致したときだけ、これを 1 件の疑似候補として
+候補に足す(段階 3 spec B)。

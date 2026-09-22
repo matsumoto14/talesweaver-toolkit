@@ -34,7 +34,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.30),
             exclusive_slots: vec!["percent_slot_1", "percent_slot_2", "x1_group_a"],
-            source_url: WIKI_URL,
+            source_url: SWIFT_ELIXIR_NOTICE_URL,
             note: "①+② / 全属性 +15(wiki 未収録。公式お知らせ no=151355 が出典)",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 10.0 }],
@@ -49,7 +49,7 @@ pub fn buff_catalog() -> Vec<BuffDefinition> {
             layer: StatLayer::PercentOfBase,
             value: BuffValue::Fixed(0.30),
             exclusive_slots: vec!["percent_slot_1", "percent_slot_2", "x1_group_a", "x1_group_b"],
-            source_url: WIKI_URL,
+            source_url: SNOWMAN_POTION_NOTICE_URL,
             note: "①+② / 全属性 +15(wiki 未収録。公式お知らせ no=151524 が出典)",
             default_value: None,
             damage_effects: &[SkillEffect::Damage { category: DamageCategory::AttackDamageIsabel, percent: 20.0 }],
@@ -849,6 +849,8 @@ const EQUIPMENT_POLISH_WIKI_URL: &str = "https://talewiki.com/?%A5%B9%A5%C6%A1%B
 /// 迅速の秘薬・イルミネーション祭りのドリンクの「全属性 +15」の出典(公式お知らせ 2021-07-28)。
 /// wiki は 3 件とも全属性の記載を落としているので、お知らせを正とする(docs/adr/017)
 const SWIFT_ELIXIR_NOTICE_URL: &str = "https://talesweaver.nexon.co.jp/notice/newest.aspx?no=151355";
+/// ユキダルマン族の特製ポーションの「全属性 +15」の出典(公式お知らせ。docs/adr/017)
+const SNOWMAN_POTION_NOTICE_URL: &str = "https://talesweaver.nexon.co.jp/notice/newest.aspx?no=151524";
 
 #[cfg(test)]
 mod tests {

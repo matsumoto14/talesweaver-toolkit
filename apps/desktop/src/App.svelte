@@ -14,6 +14,7 @@
   import MeasurePage from "./pages/measure/MeasurePage.svelte";
   import InkriPage from "./pages/inkri/InkriPage.svelte";
   import inkriTabIcon from "./assets/inkri/ui/app_tab.png";
+  import AskPage from "./pages/ask/AskPage.svelte";
   import NewsPage from "./pages/news/NewsPage.svelte";
   import VersusPage from "./pages/versus/VersusPage.svelte";
   import {
@@ -34,6 +35,7 @@
     { id: "versus", label: "対人" },
     { id: "measure", label: "実測" },
     { id: "inkri", label: "インクリ" },
+    { id: "ask", label: "wiki に聞く" },
     { id: "news", label: "お知らせ" },
   ];
 
@@ -187,6 +189,8 @@
             <MeasurePage />
           {:else if app.tab === "inkri"}
             <InkriPage />
+          {:else if app.tab === "ask"}
+            <AskPage />
           {:else if app.tab === "news"}
             <NewsPage />
           {:else}

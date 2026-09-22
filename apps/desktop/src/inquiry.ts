@@ -8,6 +8,7 @@ import type {
   SienaAuraList,
   SienaAuras,
 } from "./api/types";
+import { solveChallenge } from "./pow";
 
 /**
  * 中継サーバー(services/inquiry-worker)。
@@ -151,7 +152,7 @@ export async function send(
   const challenge = await request<Challenge>("/challenge");
 
   onProgress?.("送信の検証中です…");
-  const solution = await solve(challenge.nonce, challenge.difficultyBits);
+  const solution = await solveChallenge(challenge.nonce, challenge.difficultyBits);
 
   onProgress?.("送信しています…");
   return request<SentInquiry>("/inquiry", {
@@ -183,32 +184,4 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
     throw new Error(payload?.error ?? `送信に失敗しました(${response.status})`);
   }
   return payload as T;
-}
-
-/**
- * sha256(nonce + ":" + counter) の先頭が規定ビット数だけ 0 になる counter を探す。
- * 20 ビットでおよそ 100 万回。UI を固めないよう、区切りごとに制御を返す。
- */
-async function solve(nonce: string, difficultyBits: number): Promise<string> {
-  const encoder = new TextEncoder();
-  for (let counter = 0; ; counter += 1) {
-    const digest = new Uint8Array(
-      await crypto.subtle.digest("SHA-256", encoder.encode(`${nonce}:${counter}`)),
-    );
-    if (hasLeadingZeroBits(digest, difficultyBits)) return String(counter);
-    if (counter % 2000 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
-
-function hasLeadingZeroBits(digest: Uint8Array, bits: number): boolean {
-  let remaining = bits;
-  for (const byte of digest) {
-    if (remaining >= 8) {
-      if (byte !== 0) return false;
-      remaining -= 8;
-      continue;
-    }
-    return byte >>> (8 - remaining) === 0;
-  }
-  return true;
 }

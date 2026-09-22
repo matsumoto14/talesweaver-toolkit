@@ -124,6 +124,7 @@ api/browserStore.ts    ブラウザ版の保存(IndexedDB)/ api/transfer.ts デ�
 web/                   ブラウザ版での Tauri プラグイン相当(外部リンク・HTTP・更新・プロセス)
 ui/                    画面によらない汎用部品(Num, ReadRow, Modal, Popover, Disclosure, Drill, Choose, Chip, Picker, StatInput, ToggleRow, Splitter, persistedState)
 pages/<機能>/          機能ごとの画面と、その画面専用の部品
+ask.ts                 「wiki に聞く」(回答サーバー services/api-worker への問い合わせ)
 buffs.ts               バフ選択の共通ロジック(純関数)
 candidates.ts          強化候補の列挙(効果の計算は Rust 側 preview_damage)
 draft.ts               キャラ編集ドラフトの型と組み立て
@@ -146,6 +147,7 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 - **`pages/buffs/`**: セット一覧 → 静的カタログからの選択 → 効果・排他枠要約。独自バフ定義は作らない
 - **`pages/chars/`**: `CharsPage.svelte`(外枠)/ `RegisterPane.svelte`(名前 + 19 職アイコンのみの最小登録・コピー登録)/ `Workspace.svelte`(draft 管理・`preview_effective_stats` の即時プレビュー・保存・いまの実力シート)/ `SourcePane.svelte`(補正源ドリルダウンの編集ペイン)。登録後のStatusPaneだけで任意画像を選び、レール・ホーム・現在キャラへ共通反映する
 - **`pages/versus/`**: `VersusPage.svelte` — **方向ごとに 1 列**(A が B に当てる / B が A に当てる)。頭の「[A] が [B] に当てる」がキャラの Picker、率 → 式 → 命中P ブロック(内訳・使用スキルの Picker・的中剣チップ・「全部やると」・4 区分の手のチップ)→ 回避P ブロック。ブロックは開閉(2 列で共有)。手のチップを押すと payload に当てて `preview_versus` を叩き直す(対人タブ内の状態、保存しない)
+- **`pages/ask/`**: `AskPage.svelte` — 案内役ゼリッピと対話する形で wiki を検索する(`ask.ts` が回答サーバー services/api-worker を呼ぶ)。段階 1 で LLM の結論文(`AnswerBubble.svelte` / `LeadLine.svelte`)・手順(`StepBlock.svelte`)・訂正・リアクション(`Reaction.svelte`)が加わる。応答はまだ素の JSON(SSE は段階 2)。段階 3 で困りごとの型「勝てない」の打ち手(`Playbook.svelte`)が加わる — サーバーは `playbook:"cant_win"` の印だけを返し、装備の中身を送らずに端末のローカル計算(登録キャラの `stat_sources.critical_rate` / `preview_defense`)で打ち手を描く。定型文は `pages/ask/lines.ts`。会話は保存しない
 
 ### tools/gamedata — 静的データの取り込み(Python)
 
@@ -158,8 +160,17 @@ SvelteKit は使っていないため `src/lib/` は置かない(`$lib` エイ�
 - **アプリ本体からは独立している**。ここが落ちても計算・保存は動く(問い合わせが送れないだけ)
 - アプリに秘密を持たせないための中継。GitHub App の秘密鍵は Worker のシークレットにあり、
   アプリ側は認証を持たない。代わりに proof-of-work + IP ハッシュのレート制限で匿名投稿を守る
-- ユーザーの操作で送信する唯一の外部通信先(ほかは `dl.tw-context.dev` からの更新確認・お知らせの読み取りだけ)。
-  エンドポイントは `apps/desktop/src/inquiry.ts` と `tauri.conf.json` の `connect-src` の **2 か所**に書くので、変えるときは両方直す
+- ユーザーの操作で送信する外部通信先は**問い合わせと wiki に聞くの 2 つ**(ほかは `dl.tw-context.dev` からの更新確認・お知らせの読み取りだけ)。
+  問い合わせのエンドポイントは `apps/desktop/src/inquiry.ts` と `tauri.conf.json` の `connect-src` の **2 か所**に書くので、変えるときは両方直す(wiki に聞くは `apps/desktop/src/ask.ts` と同じく `connect-src` の 2 か所)
+
+### services/api-worker — wiki に聞く(アプリ外)
+
+- 「wiki に聞く」タブの回答サーバー(Cloudflare Workers + D1)。ホストは `api.tw-context.dev`。inquiry とは別 Worker・別 D1
+- 段階 0(docs/adr/020)は LLM なし: `GET /health`(取込日時・ユニット数)と `GET /search`(質問文を分かち書きして FTS5 に投げる)
+- D1 に載るのは wiki の**断片・表の行・見出し**だけで本文は持たない(ADR-013)。`unit_fts` は contentless で、語の集合しか入らない
+- 取込は `tools/gamedata/wiki/units.py`(wiki.sqlite → `out/units.sql`)。分かち書きだけは Worker の `src/segment.ts` を Node CLI(`tools/segment-cli.ts`)で共有し、索引と質問の切れ目を揃える
+- 内部関数(`src/tools.ts`: find_pages / search_units / get_outline / get_rows / get_app_data)は最初から読み取り専用のツールの形。段階 1 で LLM に渡す
+- 評価セットは `services/api-worker/eval/`(`run.ts` が起動中の Worker を叩いて再現率を出す)
 
 ### site/ — 紹介ページ(アプリ外)
 
@@ -178,7 +189,7 @@ storage                 → domain(型のため)
 gamedata                → domain(型のため)
 domain                  → (何にも依存しない)
 tools/gamedata          → (Python。生成物を gamedata と assets に書くだけ)
-services/               → (どのクレートにも依存しない。HTTP でだけ繋がる)
+services/               → (どのクレートにも依存しない。HTTP でだけ繋がる。api-worker の索引は tools/gamedata/wiki が作る)
 ```
 
 domain が最内層。逆流(domain → storage 等)は禁止。

@@ -1,0 +1,5 @@
+{
+  "進化": { "note": "進化段階", "state_key": "evolution" },
+  "Lv": { "note": "レベル", "state_key": "level" },
+  "レベル": { "note": "レベル", "state_key": "level" }
+}

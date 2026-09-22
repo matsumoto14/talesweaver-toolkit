@@ -1,0 +1,43 @@
+# wiki に聞く(段階 1)の Worker。inquiry-worker とは別ホスト・別 Worker(ADR-013 段階 3)。
+name = "tw-context-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+routes = [{ pattern = "api.tw-context.dev", custom_domain = true }]
+
+[observability]
+enabled = true
+
+# 作成: wrangler d1 create tw-wiki
+# database_id は司令塔が作成後に書き換える。ローカル実行(wrangler dev / d1 execute --local)は
+# プレースホルダのままでも動く。
+[[d1_databases]]
+binding = "WIKI"
+database_name = "tw-wiki"
+database_id = "a5a9cc21-e02c-439e-89e6-a1bb29d436f7"
+
+# nonce の使用済み記録と 1 日のレート制限カウンタ。inquiry-worker の KV とは別(秘密もレート制限の
+# 単位も違い、片方の障害をもう片方に持ち込まない)。作成: wrangler kv namespace create API
+[[kv_namespaces]]
+binding = "API"
+id = "59ea45e9651d4baa84bb02fabcf2d62a"
+
+# 連打止め(1 分 10 問)。期間は Rate Limiting バインディングの制約で 10 か 60 秒しか選べないので、
+# 1 日の上限は KV カウンタ(consumeRateLimit)で別に数える。キーは KV と同じ「IP のハッシュ」。
+[[ratelimits]]
+name = "ASK_BURST"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[vars]
+# 空文字なら SDK 既定(直接 Anthropic API)。値があれば Anthropic クライアントの baseURL に渡す。
+AI_GATEWAY_URL = ""
+SELECT_MODEL = "claude-haiku-4-5"
+UNDERSTAND_MODEL = "claude-haiku-4-5"
+RATE_LIMIT_PER_DAY = "100"
+
+# シークレット(wrangler secret put。ここには書かない):
+#   ANTHROPIC_API_KEY   Claude API の鍵。Console でこの Worker 専用に発行し、月額上限を付ける
+#   NONCE_SECRET        PoW の nonce とセッショントークンの署名鍵。inquiry-worker の値とは別にする
