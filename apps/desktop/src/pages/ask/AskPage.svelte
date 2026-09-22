@@ -175,7 +175,7 @@
       <button type="button" class="btn primary" onclick={submit} disabled={!question.trim()}>聞く</button>
     </div>
     <p class="notice dim">
-      質問と、選択中キャラの Lv を回答サーバー({SEND_HOST})と Anthropic に送ります。質問文は保存しません(「違った」で同意したときだけ)。
+      質問を回答サーバー({SEND_HOST})と Anthropic に送ります。質問文は保存しません(「違った」で同意したときだけ)。
       値を押すと「この値は違う」を送れます
     </p>
   {/if}

@@ -272,7 +272,7 @@ export function selectCharacter(id: number | null): void {
  * 覚えるのは「どこを見ていたか」だけで、キャラの中身は保存層が持つ。
  */
 const SESSION_KEY = "tw-session";
-const TABS: Tab[] = ["home", "calc", "buffs", "chars", "versus", "measure", "inkri", "news"];
+const TABS: Tab[] = ["home", "calc", "buffs", "chars", "versus", "measure", "inkri", "ask", "news"];
 
 /** 起動時に 1 回。存在しないキャラ・コンテンツを指していないかは `loadAll` が直す */
 export function restoreSession(): void {
