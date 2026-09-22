@@ -44,10 +44,13 @@
     const gain = find(id)?.expected_dps_gain ?? null;
     return gain === null ? null : share(Math.round(gain));
   };
+  /** 陣は CT ではなく持続(切れたら置き直す)。数字の意味が違うので言い方を変える */
+  const cdLabel = (c: { cooldown_seconds: number; is_field: boolean }) =>
+    `${c.is_field ? "持続" : "CT"} ${fmtCooldown(c.cooldown_seconds)}`;
   const chipTitle = (id: string) => {
     const c = find(id);
     if (!c) return undefined;
-    const cd = `CT ${fmtCooldown(c.cooldown_seconds)}`;
+    const cd = cdLabel(c);
     if (c.expected_dps_gain === null) {
       return `${cd} ・ 差し込んだときの損得は出せません(1 回の所要時間が未収録)`;
     }
@@ -75,7 +78,7 @@
     {#snippet item(o)}
       <Icon kind="skill" id={o.value} size={20} label={o.label} />
       <span class="picker-chip-name">{o.label}</span>
-      <span class="picker-chip-meta num">CT {fmtCooldown(find(o.value)?.cooldown_seconds ?? 0)}</span>
+      <span class="picker-chip-meta num">{find(o.value) ? cdLabel(find(o.value)!) : ""}</span>
       <!-- 損得を出せない候補は割合の代わりに「?」(未収録は 0 や空白にしない。§08) -->
       {#if find(o.value)?.effect === "unknown"}<Value class="chip-gain" value={null} />{/if}
     {/snippet}
@@ -102,7 +105,7 @@
       {#snippet item(o)}
         <Icon kind="skill" id={o.value} size={20} label={o.label} />
         <span class="picker-chip-name">{o.label}</span>
-        <span class="picker-chip-meta num">CT {fmtCooldown(find(o.value)?.cooldown_seconds ?? 0)}</span>
+        <span class="picker-chip-meta num">{find(o.value) ? cdLabel(find(o.value)!) : ""}</span>
         {#if gainLabel(o.value)}
           <Value class="chip-gain" tone="down" value={gainLabel(o.value)} />
         {/if}

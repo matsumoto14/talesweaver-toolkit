@@ -525,6 +525,7 @@ mod tests {
             critical_rate: Some(7),
             level: 1,
             channeling: None,
+            field: None,
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
             normal_attack: false,

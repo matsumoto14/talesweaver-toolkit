@@ -165,7 +165,7 @@ pub use siena::{
     SienaValueKindDef, SIENA_EXTRA_UNLOCK_STAGES, SIENA_STAGE_MAX,
 };
 pub use skill::{
-    Attacker, Channeling, ComboSkillType, ComboSkillTypeError, ComboSkillVariant, FullCharge, Skill,
+    Attacker, Channeling, ComboSkillType, Field, ComboSkillTypeError, ComboSkillVariant, FullCharge, Skill,
     SkillDependency, SkillForm, SkillTarget, SummonForm, SwiftSword,
 };
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};

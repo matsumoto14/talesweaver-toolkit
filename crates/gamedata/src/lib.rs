@@ -16,6 +16,7 @@ pub mod inkri;
 pub mod masteries;
 pub mod random_options;
 mod skill_channeling;
+mod skill_fields;
 mod skill_cooldowns;
 mod skill_targets;
 pub mod skills;

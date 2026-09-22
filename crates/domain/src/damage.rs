@@ -783,6 +783,11 @@ pub fn calculate_damage_with_combo(
     normal_attack: &Skill,
 ) -> DamageResult {
     let mut result = calculate_damage(material, target);
+    // 陣は置いたら手が空くので、通常攻撃を挟む「コンボ」の 1 サイクルにならない(置く動作の
+    // DPS を通常攻撃込みで出しても意味が無い)。置く技としての DPS(持続で割った値)のまま返す
+    if target.skill.field.is_some() {
+        return result;
+    }
     let mut normal_target = target.clone();
     normal_target.skill = normal_attack.clone();
     let normal = calculate_damage(material, &normal_target);
@@ -1209,12 +1214,18 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         critical: sum.critical + weapon_added_total + added.critical,
     };
     // DPS は「合計ダメージ × 60 秒あたりのスキル回数 / 60」。回数は実測表(格子の外だけ式)。
-    // チャネリング技は 1 回の使用で tick 数ぶん入る(`total` は 1 tick ぶん)
-    let channeling_ticks = target.skill.channeling.map(|c| c.ticks.max(1));
+    // チャネリング技・陣は 1 回の使用で tick 数ぶん入る(`total` は 1 tick ぶん)
+    let channeling_ticks = (target.skill.channeling.is_some() || target.skill.field.is_some())
+        .then(|| target.skill.channeling_ticks());
     let ticks = f64::from(channeling_ticks.unwrap_or(1));
+    // 陣は置き直せるのが持続が切れてからなので、1 回ぶんは持続で割る(置く動作の秒数では割らない)
+    let uses_per_minute_of = |d: &ActualDelay| match target.skill.field {
+        Some(field) if field.duration_seconds > 0.0 => SECONDS_PER_MINUTE / field.duration_seconds,
+        _ => d.uses_per_minute,
+    };
     let dps = delay.as_ref().map(|d| {
         let per_second =
-            |total: i64| total as f64 * ticks * d.uses_per_minute / SECONDS_PER_MINUTE;
+            |total: i64| total as f64 * ticks * uses_per_minute_of(d) / SECONDS_PER_MINUTE;
         DpsTriple {
             min: per_second(total.min),
             max: per_second(total.max),
@@ -1441,6 +1452,7 @@ mod tests {
                 critical_rate: Some(7),
                 level: 1,
                 channeling: None,
+                field: None,
                 base_actual_delay: Some(1.4),
                 actual_delay_fixed: false,
                 normal_attack: false,

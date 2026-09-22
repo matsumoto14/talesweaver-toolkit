@@ -67,6 +67,9 @@ export interface Skill {
   /** チャネリング(押している間、一定間隔で攻撃を繰り返す)技の tick。null = 該当しない。
    *  段数(hit_count)は 1 tick ぶんで、1 回の使用ぶんは 段数 × ticks */
   channeling: Channeling | null;
+  /** 陣(設置技)。置いてから duration_seconds の間、tick_seconds ごとに攻撃が入る。置いた本人は自由。
+   *  段数は 1 tick ぶんで、1 回置いたぶんは 段数 × ticks。cooldown_seconds には持続(置き直す間隔)が入る */
+  field: SkillField | null;
   /** 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列。null = 秒として読めない */
   base_actual_delay: number | null;
   /** 中ディレイが固定で減少が効かない(wiki の「(固定)」表記) */
@@ -1399,6 +1402,12 @@ export interface NewCharacter {
 }
 
 /** チャネリング技の tick(Rust `Channeling`)。 */
+export interface SkillField {
+  ticks: number;
+  tick_seconds: number;
+  duration_seconds: number;
+}
+
 export interface Channeling {
   /** 1 回の使用で撃つ tick 数 */
   ticks: number;
@@ -1415,6 +1424,8 @@ export interface RotationInsertChoice {
   skill_name: string;
   /** クールタイム(秒) */
   cooldown_seconds: number;
+  /** 陣(設置技)。cooldown_seconds は CT ではなく持続(置き直す間隔)なので、画面は「持続」と言う */
+  is_field: boolean;
   /** 未設定(rotation_skill_ids が null)のとき既定で差し込まれる技か */
   default_on: boolean;
   /** いまの選択にこの技を足したときの期待 DPS の差(負なら差し込むと下がる) */
@@ -2132,6 +2143,8 @@ export interface RotationInsert {
   seconds: number;
   /** クールタイム(秒) */
   cooldown_seconds: number;
+  /** 陣(設置技)。cooldown_seconds は CT ではなく持続(置き直す間隔)なので、画面は「持続」と言う */
+  is_field: boolean;
   /** この技を撃つ間隔(秒)。CT より短くならない */
   interval_seconds: number;
   /** 1 回あたり挟む連打技の回数 */

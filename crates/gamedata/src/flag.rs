@@ -158,6 +158,7 @@ pub fn flag_skill(base: &Skill, stacks: u8, part: FlagPart) -> Option<Skill> {
         level: base.level,
         // <フラグ> は技とは別枠の単発ダメージ(チャネリングではない)
         channeling: None,
+        field: None,
         // 別枠のダメージなので中ディレイを持たない。DPS は commands が
         // 周期(持続)/ 技 1 回の所要時間(爆発)で出す
         base_actual_delay: None,

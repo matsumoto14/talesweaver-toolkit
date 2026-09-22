@@ -1835,8 +1835,10 @@ pub struct RotationInsert {
     pub burst: Option<DamageResult>,
     /// 1 回撃つのにかかる時間(秒)
     pub seconds: f64,
-    /// クールタイム(秒)
+    /// クールタイム(秒)。陣(`is_field`)は持続 = 置き直す間隔
     pub cooldown_seconds: f64,
+    /// 陣(設置技)。`cooldown_seconds` は CT ではなく持続で、画面は「持続」と言う
+    pub is_field: bool,
     /// この技を撃つ間隔(秒)= 1 回ぶん + 挟む連打技。CT より短くならない
     pub interval_seconds: f64,
     /// 1 回あたり挟む連打技の回数
@@ -2269,6 +2271,7 @@ fn build_rotation(
         burst: Option<DamageResult>,
         seconds: Option<f64>,
         cooldown_seconds: f64,
+        is_field: bool,
         minimum_filler_uses: u32,
     }
     let skill_of = |role: domain::RotationRole| -> &Skill { materials.skill_of(skill, role) };
@@ -2292,6 +2295,7 @@ fn build_rotation(
             burst,
             seconds: result_of(role).cycle_seconds(),
             cooldown_seconds: insert_skill.cooldown_seconds.unwrap_or(0.0),
+            is_field: insert_skill.field.is_some(),
             minimum_filler_uses,
         });
     }
@@ -2388,6 +2392,7 @@ fn build_rotation(
                 burst,
                 seconds: insert.seconds.unwrap_or(0.0),
                 cooldown_seconds: insert.cooldown_seconds,
+                is_field: insert.is_field,
                 interval_seconds: slot.interval_seconds,
                 filler_uses: slot.filler_uses,
                 filler_seconds: slot.filler_seconds,
@@ -2676,7 +2681,10 @@ pub enum RotationChoiceEffect {
 pub struct RotationInsertChoice {
     pub skill_id: String,
     pub skill_name: String,
+    /// クールタイム(秒)。陣(`is_field`)は持続 = 置き直す間隔
     pub cooldown_seconds: f64,
+    /// 陣(設置技)。画面は CT ではなく「持続」と言う
+    pub is_field: bool,
     /// 未設定(`rotation_skill_ids` が `None`)のとき既定で差し込まれる技か
     pub default_on: bool,
     /// いまの選択にこの技を足したときの期待 DPS の差(**負なら差し込むと下がる**)。
@@ -2911,6 +2919,7 @@ pub fn list_rotation_choices(
         candidates.push(RotationInsertChoice {
             default_on: default_ids.contains(&skill_id),
             cooldown_seconds: candidate.cooldown_seconds.unwrap_or(0.0),
+            is_field: candidate.field.is_some(),
             skill_name: candidate.name.clone(),
             skill_id,
             // 既定 ON の判定(`domain::choose_rotation` の `gain > 0.0`)と同じ境界で分ける
@@ -4018,7 +4027,11 @@ mod tests {
         .unwrap();
         assert!(with_summon.summon.is_some());
         let summon_dps = with_summon.summon.as_ref().unwrap().result.expected_dps.unwrap();
-        let body_dps = with_summon.body.expected_dps.unwrap();
+        // 本体ぶんは回し(ピクシー連打にテスラコイルを差し込む)があればその DPS、無ければ主軸単独
+        let body_dps = with_summon
+            .rotation
+            .as_ref()
+            .map_or(with_summon.body.expected_dps.unwrap(), |r| r.expected_dps);
         assert!((with_summon.combined.expected_dps.unwrap() - (body_dps + summon_dps)).abs() < 1e-6);
         assert!(with_summon.combined.defeat_seconds.unwrap() < with_summon.body.defeat_seconds.unwrap());
 
@@ -4053,6 +4066,52 @@ mod tests {
         assert!(without_summon.summon.is_none());
         assert_eq!(without_summon.combined.expected_dps, without_summon.body.expected_dps);
         assert_eq!(without_summon.combined.defeat_seconds, without_summon.body.defeat_seconds);
+    }
+
+    /// 陣(テスラコイル)は「置く 1.1s → 27s 持続 → 置き直す」の差し込む技として回しに入る
+    /// (wiki Skill/アナイス: 609%x3 (1.8s毎)、持続 27s。ADR-019 追記 2026-09-23)。
+    /// 主軸がピクシー連打のとき既定で差し込まれ、間隔は持続の 27s、1 回ぶんの与ダメは 15 tick。
+    #[test]
+    fn テスラコイルは持続を間隔にした差し込む技として回しに入る() {
+        let base_stats = BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 };
+        let calc = super::damage_for_character(
+            &base_stats,
+            "anais",
+            Some("anais_angry_pixie"),
+            None,
+            &StatSources::default(),
+            &BuffSelection::default(),
+            Equipment::default(),
+            CommonSkills::default(),
+            domain::Awakening::default(),
+            "anais_angry_pixie",
+            "ringo",
+            0,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let rotation = calc.rotation.as_ref().expect("回しがある");
+        let tesla = rotation
+            .inserts
+            .iter()
+            .find(|i| i.skill_id == "anais_tesla_coil")
+            .expect("テスラコイルが既定で差し込まれる");
+        assert!((tesla.cooldown_seconds - 27.0).abs() < 1e-9);
+        // 置き直しは持続 27s が切れてから。連打技の切れ目で置くので 27s 以上・27s + 連打 1 回未満
+        let filler_seconds = rotation.filler.as_ref().unwrap().seconds;
+        assert!(tesla.interval_seconds >= 27.0 && tesla.interval_seconds < 27.0 + filler_seconds, "{}", tesla.interval_seconds);
+        // 置く動作は 1.1s(中ディレイ)で、27s のうち残りはピクシー連打に回る
+        assert!(tesla.seconds < 2.0, "{}", tesla.seconds);
+        let result = tesla.result.as_ref().unwrap();
+        assert_eq!(result.channeling_ticks, Some(15));
+        assert_eq!(result.cycle_total().max, result.total.max * 15);
+        // 陣単独の DPS は 15 tick ぶんを持続 27s で割った値(置く動作の 1.1s で割らない)
+        let alone = result.dps.as_ref().unwrap().max;
+        assert!((alone - result.total.max as f64 * 15.0 / 27.0).abs() < 1e-6, "{alone}");
+        assert!(tesla.expected_dps_gain.unwrap() > 0.0);
     }
 
     /// 技の性能を解決する順は **コンボスキルタイプ → 速剣 / 最大までチャージ** で固定する。

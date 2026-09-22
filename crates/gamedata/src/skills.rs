@@ -18,6 +18,7 @@ use domain::{
 
 use crate::skill_channeling::SKILL_CHANNELING;
 use crate::skill_cooldowns::SKILL_COOLDOWNS;
+use crate::skill_fields::SKILL_FIELDS;
 use crate::skill_targets::SKILL_TARGETS;
 
 use crate::Source;
@@ -963,8 +964,20 @@ const FLAG_DETONATORS: &[&str] = &[
 const MANUAL_COOLDOWNS: &[(&str, Option<f64>)] =
     &[("mira_crimson_shooter", None), ("roamini_mastary1_2", Some(60.0))];
 
+/// 陣(設置技)の持続と判定間隔(`SKILL_FIELDS`)。
+fn field_of(skill_id: &str) -> Option<domain::Field> {
+    SKILL_FIELDS
+        .iter()
+        .find(|(id, _, _, _)| *id == skill_id)
+        .map(|&(_, ticks, tick_seconds, duration_seconds)| domain::Field { ticks, tick_seconds, duration_seconds })
+}
+
 /// クールタイム(秒)を引く。載っていなければ `None`(CT なし = 連打できる)。
+/// 陣は CT の代わりに持続(置き直す間隔)。
 pub fn cooldown_of(skill_id: &str) -> Option<f64> {
+    if let Some(field) = field_of(skill_id) {
+        return Some(field.duration_seconds);
+    }
     if let Some((_, seconds)) = MANUAL_COOLDOWNS.iter().find(|(id, _)| *id == skill_id) {
         return *seconds;
     }
@@ -1083,9 +1096,10 @@ impl SkillRecord {
             .find(|(id, _)| *id == self.skill_id().as_str())
             .and_then(|(_, delay)| *delay);
         let channeling = channeling_of(&self.skill_id());
-        // チャネリング技の 1 回は tick 数ぶん撃つ(wiki の段数は 1 tick ぶん)
-        let power = Skill::compute_power(self.multiplier, self.hit_count)
-            * f64::from(channeling.map_or(1, |c: domain::Channeling| c.ticks.max(1)));
+        let field = field_of(&self.skill_id());
+        // チャネリング技・陣の 1 回は tick 数ぶん撃つ(wiki の段数は 1 tick ぶん)
+        let ticks = channeling.map(|c| c.ticks).or(field.map(|f| f.ticks)).map_or(1, |t| t.max(1));
+        let power = Skill::compute_power(self.multiplier, self.hit_count) * f64::from(ticks);
         Skill {
             id: self.skill_id(),
             name: self.name.to_string(),
@@ -1107,6 +1121,7 @@ impl SkillRecord {
             critical_rate: self.critical_rate,
             level: self.level,
             channeling,
+            field,
             base_actual_delay,
             // チャネリング技にも中ディレイ減少が効く(公式 2025-10-29 no=154871 4-1:
             // 反復周期 × (1 − 減少)。攻撃回数は変わらず、持続が同じ率で縮む)
@@ -1532,7 +1547,7 @@ mod tests {
     #[test]
     fn ct表の件数はキャラ別に固定() {
         let expected = [
-            ("anais", 9),
+            ("anais", 12), // 生成表 9 + 陣 3 件(持続を置き直す間隔として CT に持つ。SKILL_FIELDS)
             ("benya", 6),
             ("chloe", 6),
             ("isaac", 4),
@@ -1551,8 +1566,8 @@ mod tests {
             ("yefnen", 10),
         ];
         assert_eq!(SKILL_COOLDOWNS.len(), 77);
-        // 生成表 77 件 + 例外表で CT を持つ 1 件
-        assert_eq!(expected.iter().map(|(_, n)| n).sum::<usize>(), 78);
+        // 生成表 77 件 + 例外表で CT を持つ 1 件 + 陣 3 件
+        assert_eq!(expected.iter().map(|(_, n)| n).sum::<usize>(), 81);
         for (character_id, count) in expected {
             let found = SKILLS
                 .iter()

@@ -188,6 +188,20 @@ pub struct Channeling {
     pub tick_seconds: f64,
 }
 
+/// 陣(設置技)。置いてから `duration_seconds` の間、`tick_seconds` ごとに攻撃が入る。
+/// チャネリングと違い**置いた本人は置いた直後から自由**(中ディレイは置く動作の秒数のまま)で、
+/// 持続が切れたら置き直す運用(重ね置きに意味は無い。ユーザー判断 2026-09-23)。
+/// wiki「Skill/アナイス」の 対象指定 `陣/位置指定 持続 27s`、攻撃力 `609%x3 (1.8s毎)`。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Field {
+    /// 1 回置いたぶんで入る攻撃の回数(持続秒 ÷ 判定間隔、切り捨て)
+    pub ticks: u32,
+    /// 判定の間隔(秒)
+    pub tick_seconds: f64,
+    /// 持続(秒)。置き直す間隔 = `Skill::cooldown_seconds` にもこの値を入れる
+    pub duration_seconds: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -222,6 +236,10 @@ pub struct Skill {
     /// **段数(`hit_count`)は 1 tick ぶん**で、1 回の使用ぶんは `段数 × ticks`
     #[serde(default)]
     pub channeling: Option<Channeling>,
+    /// 陣(設置技)。**段数(`hit_count`)は 1 tick ぶん**で、1 回置いたぶんは `段数 × ticks`。
+    /// 回し(`rotation`)では「所要 = 置く動作、間隔 = 持続」の差し込む技になる
+    #[serde(default)]
+    pub field: Option<Field>,
     /// 基本中ディレイ(秒)。wiki スキル性能一覧の「動作」列。
     /// 秒数として読めない行(表記が `0` 等)は `None` = 中ディレイ・DPS を出せない
     #[serde(default)]
@@ -279,7 +297,8 @@ pub struct Skill {
     #[serde(default)]
     pub detonates_flag: bool,
     /// クールタイム(秒)。wiki スキル性能一覧の CT 列。`None` = CT なし(連打できる)。
-    /// 連続して撃てない技は、この秒数を 1 周の下限として DPS に効く
+    /// 連続して撃てない技は、この秒数を 1 周の下限として DPS に効く。
+    /// 陣(`field`)は CT ではなく**持続**(置き直す間隔)をここに持つ
     #[serde(default)]
     pub cooldown_seconds: Option<f64>,
 }
@@ -325,7 +344,10 @@ impl Skill {
 
     /// 1 回の使用で撃つ tick 数。チャネリングでない技は 1。
     pub fn channeling_ticks(&self) -> u32 {
-        self.channeling.map_or(1, |c| c.ticks.max(1))
+        self.channeling
+            .map(|c| c.ticks)
+            .or(self.field.map(|f| f.ticks))
+            .map_or(1, |t| t.max(1))
     }
 
     /// 倍率・段数・チャージ時間を変えたあとに火力の目安を付け直す。
@@ -388,6 +410,7 @@ impl Skill {
             critical_rate: None,
             level: 1,
             channeling: None,
+            field: None,
             base_actual_delay: None,
             actual_delay_fixed: false,
             normal_attack: false,
@@ -473,6 +496,7 @@ mod tests {
             critical_rate: Some(5),
             level: 10,
             channeling: None,
+            field: None,
             base_actual_delay: Some(1.4),
             actual_delay_fixed: false,
             normal_attack: false,

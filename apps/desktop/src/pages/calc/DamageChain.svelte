@@ -303,9 +303,13 @@
         // Rust の分類(`pace`)。画面は文言を当てるだけで、回数や秒から推し量らない
         const reason = {
           crowded: "差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)",
-          cooldown: `CT ${fmtCooldown(insert.cooldown_seconds)} が明くまで連打技を挟むので、この間隔になります`,
+          cooldown: insert.is_field
+            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れるまで連打技を挟み、切れたら置き直すので、この間隔になります`
+            : `CT ${fmtCooldown(insert.cooldown_seconds)} が明くまで連打技を挟むので、この間隔になります`,
           reapply: `<フラグ> を積み直すのに連打技を ${insert.filler_uses} 回挟むので、CT より長くなります`,
-          free: `CT ${fmtCooldown(insert.cooldown_seconds)} が明けたらすぐ撃てます`,
+          free: insert.is_field
+            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れたらすぐ置き直せます`
+            : `CT ${fmtCooldown(insert.cooldown_seconds)} が明けたらすぐ撃てます`,
         }[insert.pace];
         mats.push({
           label: `↳ ${insert.skill_name} の間隔`,
