@@ -16,7 +16,7 @@ use crate::damage::{
 };
 use crate::rotation::{
     choose_rotation, plan_rotation, rotation_dps, RotationCandidate, RotationDamage,
-    RotationInsert, RotationRole,
+    RotationInsert, RotationRole, summon_absent_share,
 };
 use crate::enemy::Enemy;
 use crate::equipment::{
@@ -301,12 +301,16 @@ fn evaluate_one_content(
         // 回し(連打する技 + 差し込む CT 技)。計算タブ(`commands::combine_damage`)と
         // 同じ規則で技の期待 DPS を**置き換え**、<フラグ> の持続はそれに足す。
         // 技の DPS が出せないときは何も足さない
+        let mut summon_present = 1.0;
         if let Some((entry, main_result)) = best_entry.as_ref() {
             if combined.is_some() {
                 if let Some(rotation) = entry.rotation.as_ref() {
                     match rotation_expected_dps(material, &to_target, rotation, entry, main_result)
                     {
-                        Some(expected) => combined = Some(expected),
+                        Some((expected, summon_absent)) => {
+                            combined = Some(expected);
+                            summon_present = 1.0 - summon_absent;
+                        }
                         // 回しを組めないのに <フラグ> の爆発がある技は、爆発をどの間隔で
                         // 入れるか決まらない。爆発を無視した確定値を出さない
                         // (計算タブの `commands::combine_damage` と同じ規則)
@@ -328,7 +332,10 @@ fn evaluate_one_content(
         if let Some(summon_input) = summon {
             let mut summon_result = calculate_damage(material, &to_target(summon_input));
             apply_summon_interval(&mut summon_result, enemy.hp);
-            combined = combine_expected_dps(combined, summon_result.expected_dps);
+            combined = combine_expected_dps(
+                combined,
+                summon_result.expected_dps.map(|e| e * summon_present),
+            );
         }
 
         if combined != b.expected_dps {
@@ -363,7 +370,7 @@ fn rotation_expected_dps(
     rotation: &RotationEvaluationInput,
     main: &SkillEvaluationInput,
     main_result: &DamageResult,
-) -> Option<f64> {
+) -> Option<(f64, f64)> {
     // 役割の判定は実際の所要時間が基準なので、候補も 1 回ぶんを計算する
     let results: Vec<DamageResult> = rotation
         .candidates
@@ -391,7 +398,7 @@ fn rotation_expected_dps(
         .zip(&candidate_damages)
         .map(|((candidate, result), damage)| RotationCandidate {
             skill: &candidate.skill.skill,
-            seconds: result.cycle_seconds(),
+            seconds: candidate.skill.skill.insert_seconds(result.cycle_seconds()),
             insertable: candidate.insertable,
             damage,
             minimum_filler_uses: candidate.material.minimum_filler_uses,
@@ -442,7 +449,7 @@ fn rotation_expected_dps(
     let inserts: Vec<RotationInsert> = insert_roles
         .iter()
         .map(|&role| RotationInsert {
-            seconds: result_of(role).cycle_seconds(),
+            seconds: skill_of(role).insert_seconds(result_of(role).cycle_seconds()),
             cooldown_seconds: skill_of(role).cooldown_seconds.unwrap_or(0.0),
             minimum_filler_uses: material_of(role).minimum_filler_uses,
         })
@@ -463,7 +470,13 @@ fn rotation_expected_dps(
         .collect();
     let parts: Vec<&[RotationDamage]> = parts.iter().map(Vec::as_slice).collect();
     let plan = plan_rotation(filler.map(|(_, seconds)| seconds), &inserts)?;
-    rotation_dps(&plan, &parts, filler).map(|(_, expected)| expected)
+    // 陣を置くと精霊が消えるぶん(召喚獣の DPS に 1 − 割合 を掛ける)
+    let absent: Vec<f64> = insert_roles
+        .iter()
+        .map(|&role| skill_of(role).summon_absent_seconds(result_of(role).cycle_seconds()))
+        .collect();
+    let summon_absent = summon_absent_share(&plan, &absent);
+    rotation_dps(&plan, &parts, filler).map(|(_, expected)| (expected, summon_absent))
 }
 
 #[cfg(test)]

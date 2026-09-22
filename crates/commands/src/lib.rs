@@ -1800,6 +1800,9 @@ pub struct Rotation {
     /// 回し全体の DPS(側ごと)と期待値
     pub dps: domain::DpsTriple,
     pub expected_dps: f64,
+    /// 差し込む陣が召喚獣を消すぶん、召喚獣が居ない時間の割合(0〜1)。
+    /// 召喚獣の DPS には `1 − この値` を掛ける(`combine_damage`)。陣が無ければ 0
+    pub summon_absent_share: f64,
 }
 
 /// 回しの連打技(差し込みの合間に撃つ技)。
@@ -2169,7 +2172,7 @@ fn rotation_materials(
             .zip(&damages)
             .map(|(candidate, damage)| domain::RotationCandidate {
                 skill: &candidate.skill,
-                seconds: candidate.result.cycle_seconds(),
+                seconds: candidate.skill.insert_seconds(candidate.result.cycle_seconds()),
                 // 爆発させる技は、連打している主軸で積んだ <フラグ> を使う技だけ差し込める
                 insertable: !(candidate.skill.detonates_flag && flag_stacks > 0)
                     || gamedata::flag_applier_for(&candidate.skill)
@@ -2272,6 +2275,7 @@ fn build_rotation(
         seconds: Option<f64>,
         cooldown_seconds: f64,
         is_field: bool,
+        summon_absent_seconds: f64,
         minimum_filler_uses: u32,
     }
     let skill_of = |role: domain::RotationRole| -> &Skill { materials.skill_of(skill, role) };
@@ -2293,9 +2297,10 @@ fn build_rotation(
             is_main,
             result: (!is_main).then(|| result_of(role).clone()),
             burst,
-            seconds: result_of(role).cycle_seconds(),
+            seconds: insert_skill.insert_seconds(result_of(role).cycle_seconds()),
             cooldown_seconds: insert_skill.cooldown_seconds.unwrap_or(0.0),
             is_field: insert_skill.field.is_some(),
+            summon_absent_seconds: insert_skill.summon_absent_seconds(result_of(role).cycle_seconds()),
             minimum_filler_uses,
         });
     }
@@ -2370,6 +2375,14 @@ fn build_rotation(
     };
     // 画面に出すのは実際に撃つ技だけ(撃てない差し込みは plan が落としている)
     let mut inserts: Vec<Option<Insert>> = inserts.into_iter().map(Some).collect();
+    // 陣が精霊を消すぶん(召喚獣が居ない時間の割合)。内部の一覧を畳む前に出しておく
+    let summon_absent_share = domain::summon_absent_share(
+        &plan,
+        &inserts
+            .iter()
+            .map(|i| i.as_ref().map_or(0.0, |i| i.summon_absent_seconds))
+            .collect::<Vec<_>>(),
+    );
     let inserts: Vec<RotationInsert> = plan
         .slots
         .iter()
@@ -2426,6 +2439,7 @@ fn build_rotation(
         inserts,
         filler_share: plan.filler_share,
         crowded: plan.crowded,
+        summon_absent_share,
         dps,
         expected_dps,
     }))
@@ -2464,8 +2478,16 @@ fn combine_damage(
         }
     }
     if let Some(summon) = summon {
-        dps = domain::combine_dps(dps, summon.result.dps);
-        expected_dps = domain::combine_expected_dps(expected_dps, summon.result.expected_dps);
+        // 陣を置くと精霊が消えて呼び直すまで居ないので、そのぶん召喚獣の DPS を削る
+        let present = 1.0 - rotation.map_or(0.0, |r| r.summon_absent_share);
+        let scale = |d: domain::DpsTriple| domain::DpsTriple {
+            min: d.min * present,
+            max: d.max * present,
+            critical: d.critical * present,
+        };
+        dps = domain::combine_dps(dps, summon.result.dps.map(scale));
+        expected_dps =
+            domain::combine_expected_dps(expected_dps, summon.result.expected_dps.map(|e| e * present));
     }
     let defeat_seconds = domain::defeat_seconds(body.enemy_hp, expected_dps);
     CombinedDamage {
@@ -2821,7 +2843,9 @@ pub fn list_rotation_choices(
         .map(|role| materials.skill_of(main, role).name.clone());
 
     let insert_of = |role: domain::RotationRole| domain::RotationInsert {
-        seconds: materials.result_of(&body, role).cycle_seconds(),
+        seconds: materials
+            .skill_of(main, role)
+            .insert_seconds(materials.result_of(&body, role).cycle_seconds()),
         cooldown_seconds: materials
             .skill_of(main, role)
             .cooldown_seconds
@@ -4027,12 +4051,16 @@ mod tests {
         .unwrap();
         assert!(with_summon.summon.is_some());
         let summon_dps = with_summon.summon.as_ref().unwrap().result.expected_dps.unwrap();
-        // 本体ぶんは回し(ピクシー連打にテスラコイルを差し込む)があればその DPS、無ければ主軸単独
-        let body_dps = with_summon
-            .rotation
-            .as_ref()
-            .map_or(with_summon.body.expected_dps.unwrap(), |r| r.expected_dps);
-        assert!((with_summon.combined.expected_dps.unwrap() - (body_dps + summon_dps)).abs() < 1e-6);
+        // 本体ぶんは回し(ピクシー連打にテスラコイルを差し込む)があればその DPS、無ければ主軸単独。
+        // 陣を置くと精霊が消えるぶん、召喚獣の DPS は居る割合を掛けたものになる
+        let (body_dps, summon_present) = with_summon.rotation.as_ref().map_or(
+            (with_summon.body.expected_dps.unwrap(), 1.0),
+            |r| (r.expected_dps, 1.0 - r.summon_absent_share),
+        );
+        assert!(summon_present < 1.0 && summon_present > 0.9, "{summon_present}");
+        assert!(
+            (with_summon.combined.expected_dps.unwrap() - (body_dps + summon_dps * summon_present)).abs() < 1e-6
+        );
         assert!(with_summon.combined.defeat_seconds.unwrap() < with_summon.body.defeat_seconds.unwrap());
 
         // summon_skill_id が無いキャラ(他キャラ)は summon が None で combined = 本体(回帰)。
@@ -4103,8 +4131,13 @@ mod tests {
         // 置き直しは持続 27s が切れてから。連打技の切れ目で置くので 27s 以上・27s + 連打 1 回未満
         let filler_seconds = rotation.filler.as_ref().unwrap().seconds;
         assert!(tesla.interval_seconds >= 27.0 && tesla.interval_seconds < 27.0 + filler_seconds, "{}", tesla.interval_seconds);
-        // 置く動作は 1.1s(中ディレイ)で、27s のうち残りはピクシー連打に回る
+        // 置く動作(中ディレイ 1.1s)+ アンフェルの呼び直し 0.3s。27s のうち残りはピクシー連打に回る
         assert!(tesla.seconds < 2.0, "{}", tesla.seconds);
+        let place = tesla.result.as_ref().unwrap().cycle_seconds().unwrap();
+        assert!((tesla.seconds - (place + 0.3)).abs() < 1e-9, "{} vs {place}", tesla.seconds);
+        // 精霊が居ない割合 = (置く + 呼び直し) / 間隔
+        let absent = (place + 0.3) / tesla.interval_seconds;
+        assert!((rotation.summon_absent_share - absent).abs() < 1e-9, "{}", rotation.summon_absent_share);
         let result = tesla.result.as_ref().unwrap();
         assert_eq!(result.channeling_ticks, Some(15));
         assert_eq!(result.cycle_total().max, result.total.max * 15);

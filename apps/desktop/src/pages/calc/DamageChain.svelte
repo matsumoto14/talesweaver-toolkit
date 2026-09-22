@@ -300,15 +300,20 @@
     if (rotation) {
       for (const insert of rotation.inserts) {
         // 何がこの間隔を決めているか(CT 律速 / 積み直し律速 / 詰まっている / なし)は
-        // Rust の分類(`pace`)。画面は文言を当てるだけで、回数や秒から推し量らない
+        // Rust の分類(`pace`)。画面は文言を当てるだけで、回数や秒から推し量らない。
+        // 陣は置くと精霊が消えるので、呼び直しの時間と、居ないぶん召喚獣の DPS を削っていることも言う
+        const absentNote =
+          insert.is_field && rotation.summon_absent_share > 0
+            ? `。置くと精霊が消えるので呼び直しを所要に足し、居ない ${(rotation.summon_absent_share * 100).toFixed(1)}% ぶん召喚獣の DPS を削っています`
+            : "";
         const reason = {
           crowded: "差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)",
           cooldown: insert.is_field
-            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れるまで連打技を挟み、切れたら置き直すので、この間隔になります`
+            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れるまで連打技を挟み、切れたら置き直すので、この間隔になります${absentNote}`
             : `CT ${fmtCooldown(insert.cooldown_seconds)} が明くまで連打技を挟むので、この間隔になります`,
           reapply: `<フラグ> を積み直すのに連打技を ${insert.filler_uses} 回挟むので、CT より長くなります`,
           free: insert.is_field
-            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れたらすぐ置き直せます`
+            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れたらすぐ置き直せます${absentNote}`
             : `CT ${fmtCooldown(insert.cooldown_seconds)} が明けたらすぐ撃てます`,
         }[insert.pace];
         mats.push({

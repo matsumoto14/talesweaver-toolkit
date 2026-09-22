@@ -198,6 +198,18 @@ pub struct RotationInsert {
     pub minimum_filler_uses: u32,
 }
 
+/// 差し込む技のうち召喚獣を消すもの(陣。`Skill::summon_absent_seconds`)で、召喚獣が
+/// 居ない時間の割合(0〜1)。`absent_seconds[i]` は差し込み i の 1 回につき居なくなる秒数
+/// (消さない技は 0)。召喚獣の DPS にはこの残り(1 − 割合)を掛ける。
+pub fn summon_absent_share(plan: &RotationPlan, absent_seconds: &[f64]) -> f64 {
+    plan.slots
+        .iter()
+        .filter(|slot| slot.interval_seconds > 0.0)
+        .map(|slot| absent_seconds.get(slot.insert).copied().unwrap_or(0.0) / slot.interval_seconds)
+        .sum::<f64>()
+        .clamp(0.0, 1.0)
+}
+
 /// 差し込む技を撃つ間隔(`T_i`)を決めているもの。**画面はこの分類に文言を当てるだけ**で、
 /// 「CT 律速か積み直し律速か」を回数や秒から推し量らない。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -493,6 +505,18 @@ pub fn insert_expected_dps_gain(
 mod tests {
     use super::*;
     use crate::skill::{SkillDependency, SkillTarget};
+
+    #[test]
+    fn 陣が精霊を消す割合は差し込みごとの居ない秒数を間隔で割った和() {
+        // 差し込み 0: 1.4s ごとに 27s 間隔(陣、居ない 1.4s)、差し込み 1: 通常の CT 技(居ない 0)
+        let plan = plan_rotation(Some(1.0), &[insert(1.4, 27.0, 0), insert(1.0, 10.0, 0)]).unwrap();
+        let share = summon_absent_share(&plan, &[1.4, 0.0]);
+        let slot0 = plan.slots.iter().find(|s| s.insert == 0).unwrap();
+        assert!((share - 1.4 / slot0.interval_seconds).abs() < 1e-12, "{share}");
+        assert!((summon_absent_share(&plan, &[0.0, 0.0])).abs() < 1e-12);
+        // 1 を超えない
+        assert!((summon_absent_share(&plan, &[100.0, 100.0]) - 1.0).abs() < 1e-12);
+    }
 
     fn insert(seconds: f64, cooldown_seconds: f64, minimum_filler_uses: u32) -> RotationInsert {
         RotationInsert {

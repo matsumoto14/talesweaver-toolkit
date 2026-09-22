@@ -200,6 +200,10 @@ pub struct Field {
     pub tick_seconds: f64,
     /// 持続(秒)。置き直す間隔 = `Skill::cooldown_seconds` にもこの値を入れる
     pub duration_seconds: f64,
+    /// 置くと召喚獣が消える(wiki「使用時にアンフェル消滅」)ときの、呼び直しにかかる秒数
+    /// (召喚スキルの動作。極・アンフェル召喚 0.3s)。消えないなら 0。
+    /// 置く動作と合わせて本体の手が止まり、その間は召喚獣の攻撃も止まる
+    pub resummon_seconds: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -343,6 +347,20 @@ impl Skill {
     }
 
     /// 1 回の使用で撃つ tick 数。チャネリングでない技は 1。
+    /// 回しで差し込むときの 1 回の所要時間。陣は置く動作に召喚獣の呼び直しを足す
+    /// (`Field::resummon_seconds`)。`cycle` は `DamageResult::cycle_seconds`
+    pub fn insert_seconds(&self, cycle: Option<f64>) -> Option<f64> {
+        cycle.map(|c| c + self.field.map_or(0.0, |f| f.resummon_seconds))
+    }
+
+    /// 差し込む 1 回につき召喚獣が居なくなる秒数(置く動作 + 呼び直し)。消えない技は 0
+    pub fn summon_absent_seconds(&self, cycle: Option<f64>) -> f64 {
+        match self.field {
+            Some(f) if f.resummon_seconds > 0.0 => cycle.unwrap_or(0.0) + f.resummon_seconds,
+            _ => 0.0,
+        }
+    }
+
     pub fn channeling_ticks(&self) -> u32 {
         self.channeling
             .map(|c| c.ticks)

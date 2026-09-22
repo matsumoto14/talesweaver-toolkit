@@ -968,8 +968,10 @@ const MANUAL_COOLDOWNS: &[(&str, Option<f64>)] =
 fn field_of(skill_id: &str) -> Option<domain::Field> {
     SKILL_FIELDS
         .iter()
-        .find(|(id, _, _, _)| *id == skill_id)
-        .map(|&(_, ticks, tick_seconds, duration_seconds)| domain::Field { ticks, tick_seconds, duration_seconds })
+        .find(|(id, ..)| *id == skill_id)
+        .map(|&(_, ticks, tick_seconds, duration_seconds, resummon_seconds)| domain::Field {
+            ticks, tick_seconds, duration_seconds, resummon_seconds,
+        })
 }
 
 /// クールタイム(秒)を引く。載っていなければ `None`(CT なし = 連打できる)。

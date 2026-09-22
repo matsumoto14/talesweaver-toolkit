@@ -1406,6 +1406,8 @@ export interface SkillField {
   ticks: number;
   tick_seconds: number;
   duration_seconds: number;
+  /** 置くと召喚獣が消えるときの呼び直し(秒)。消えないなら 0 */
+  resummon_seconds: number;
 }
 
 export interface Channeling {
@@ -2100,6 +2102,8 @@ export interface Rotation {
   filler_share: number;
   /** 差し込む技だけで時間が埋まり、間隔を伸ばして詰めたか(全部は CT どおりに撃てない) */
   crowded: boolean;
+  /** 差し込む陣が召喚獣を消すぶん、召喚獣が居ない時間の割合(0〜1)。合計 DPS の召喚獣ぶんに 1 − これが掛かる */
+  summon_absent_share: number;
   /** 回し全体の DPS(側ごと)と期待値 */
   dps: DpsTriple;
   expected_dps: number;

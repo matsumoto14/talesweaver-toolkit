@@ -92,7 +92,7 @@ pub use damage::{
     DpsTriple, FormulaStep,
 };
 pub use rotation::{
-    apply_explicit_inserts, choose_rotation, effective_cooldown_seconds, insert_expected_dps_gain,
+    apply_explicit_inserts, choose_rotation, effective_cooldown_seconds, insert_expected_dps_gain, summon_absent_share,
     plan_rotation,
     rotation_dps, rotation_shares, RotationCandidate, RotationDamage, RotationIdle, RotationInsert,
     RotationPace, RotationPlan, RotationRole, RotationRoles, RotationShare, RotationShares,
