@@ -129,7 +129,10 @@ function renderLead(raw: Selection, selected: Set<string>, ctx: Ctx, dropped: Dr
 
   if (raw.verdict !== "none") {
     if (raw.basis.length === 0) return fail("basis_empty");
-    for (const id of raw.basis) if (!selected.has(id)) return fail(`basis_not_selected:${id}`);
+    // 選択集合の外の basis は捨てる(その札が上限や重複で落ちた場合が多い)。根拠が 1 つも残らないときだけ結論文を捨てる
+    const kept = raw.basis.filter((id) => selected.has(id));
+    for (const id of raw.basis) if (!selected.has(id)) dropped.push({ what: "lead", why: `basis_not_selected:${id}` });
+    if (kept.length === 0) return fail("basis_empty");
   }
 
   const text = raw.lead;

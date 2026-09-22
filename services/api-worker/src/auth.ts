@@ -13,6 +13,8 @@ export interface AuthEnv {
   /** 難易度の上書き(テスト用)。未設定なら POW_DIFFICULTY_BITS。 */
   POW_DIFFICULTY_BITS?: string;
   RATE_LIMIT_PER_DAY?: string;
+  /** 評価スクリプト用(ローカルの .dev.vars にだけ置く)。本番の vars には無い */
+  RATE_LIMIT_DISABLED?: string;
   /** 連打止め(Workers Rate Limiting バインディング)。ローカル/テストでは無くてもよい。 */
   ASK_BURST?: { limit: (opts: { key: string }) => Promise<{ success: boolean }> };
 }
@@ -124,6 +126,7 @@ export async function ipHash(request: Request, env: AuthEnv): Promise<string> {
 
 /** 連打(1 分 10 問、Rate Limiting バインディング)+ 1 日の上限(KV カウンタ)。 */
 export async function consumeRateLimit(request: Request, env: AuthEnv): Promise<string | null> {
+  if (env.RATE_LIMIT_DISABLED === "1") return null; // 評価(eval/run.ts)が 90 問を続けて投げるため。ローカル専用
   const hash = await ipHash(request, env);
 
   if (env.ASK_BURST) {

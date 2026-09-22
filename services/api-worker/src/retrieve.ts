@@ -231,7 +231,8 @@ export function correctedValue(c: Candidate, col: string): string | undefined {
   return hit ? hit.value : c.cells?.[col];
 }
 
-function toCandidate(u: UnitRow): Candidate {
+/** UnitRow → Candidate(cells/nums の JSON を復元)。回す道(agent.ts)の get_rows もこれを使う。 */
+export function toCandidate(u: UnitRow): Candidate {
   return {
     id: u.id,
     kind: u.kind === "row" ? "row" : "paragraph",
@@ -258,7 +259,7 @@ function groupKeyOf(c: Candidate): string {
  * 行の列にキャラ状態と同じ意味の列があり、数値化できて、値が範囲外ならその列名を返す。
  * 数値化できない列(nums に無い)は矛盾と見なさない。
  */
-function conflictingColumn(
+export function conflictingColumn(
   c: Candidate,
   state: Record<string, number>,
   columnNotes: Record<string, ColumnNote>,
@@ -273,6 +274,16 @@ function conflictingColumn(
     if (want < lo || want > hi) return col;
   }
   return null;
+}
+
+/** 表の行を状態で絞る。絞った結果が 0 行なら絞らない(条件が合わない表を消さない)。安い道と回す道で共用。 */
+export function filterRowsByState<T extends Candidate>(
+  rows: T[],
+  state: Record<string, number>,
+  columnNotes: Record<string, ColumnNote>,
+): T[] {
+  const filtered = rows.filter((c) => !conflictingColumn(c, state, columnNotes));
+  return filtered.length > 0 ? filtered : rows;
 }
 
 export interface CollectCandidatesInput {
@@ -391,6 +402,29 @@ const MAX_CANDIDATES_CAP = 20;
 /** app_data 由来の疑似候補の上限(段階 3 spec B 7)。 */
 const MAX_APP_DATA_CANDIDATES = 3;
 
+/** subject 1 件ぶんの correction 行(unit_id が NULL)を、1 つの疑似候補(row)にまとめる。
+ * 回す道(agent.ts)の get_app_data も同じ形を使う(段階 3 spec B 7)。 */
+export function toAppDataCandidate(subject: string, rows: CorrectionRow[]): Candidate {
+  const cells: Record<string, string> = { 名前: subject };
+  for (const r of rows) cells[r.col] = r.value;
+  const section = rows[0]?.section ?? "";
+  return {
+    id: `c:app/${subject}`,
+    kind: "row",
+    page: "アプリのデータ",
+    section,
+    anchor: "app",
+    ord: 0,
+    table_idx: null,
+    group_key: null,
+    row_key: subject,
+    text: "",
+    truncated: false,
+    cells,
+    nums: null,
+  };
+}
+
 /**
  * 質問の分かち書きの語 + 理解の terms が `correction.subject`(`unit_id` が NULL、= wiki の行と
  * 結び付かない静的データ)に**完全一致**したときだけ、その subject の全セルを 1 つの疑似候補に
@@ -421,24 +455,7 @@ export async function getAppDataCandidates(db: D1Database, subjects: string[]): 
     if (out.length >= MAX_APP_DATA_CANDIDATES) break;
     const subjectRows = bySubject.get(word);
     if (!subjectRows || subjectRows.length === 0) continue;
-    const head = subjectRows[0]!;
-    const cells: Record<string, string> = { 名前: head.subject };
-    for (const r of subjectRows) cells[r.col] = r.value;
-    out.push({
-      id: `c:app/${head.subject}`,
-      kind: "row",
-      page: "アプリのデータ",
-      section: head.section ?? "",
-      anchor: "app",
-      ord: 0,
-      table_idx: null,
-      group_key: null,
-      row_key: head.subject,
-      text: "",
-      truncated: false,
-      cells,
-      nums: null,
-    });
+    out.push(toAppDataCandidate(subjectRows[0]!.subject, subjectRows));
   }
   return out;
 }

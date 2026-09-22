@@ -8,9 +8,11 @@
 // lead の生存率と口調・verdict の分布・安い道で解けなかった率を出す(ANTHROPIC_API_KEY が
 // 要る。`.dev.vars` に鍵を入れてから `npm run dev` すること)。--no-understand は /ask の
 // 要求 JSON に `debug: { understand: false }` を足し、理解あり/なしの再現率を比べる。
+// --no-loop は `debug: { loop: false }` を足し、回す道(段階 2、agent.ts)を無効化して
+// 安い道だけの数字を測る(段階 1 の数字と比べるため)。既定(--no-loop 無し)は回す道あり。
 //
 // 実行: node --experimental-strip-types eval/run.ts [--base http://127.0.0.1:8787] [--limit 20]
-//       [--ask] [--no-understand] [--verbose]
+//       [--ask] [--no-understand] [--no-loop] [--verbose]
 import { readFileSync } from "node:fs";
 
 interface Expect { page: string; text_contains?: string }
@@ -36,6 +38,7 @@ const limit = Number(arg("--limit", "20"));
 const verbose = process.argv.includes("--verbose");
 const askMode = process.argv.includes("--ask");
 const noUnderstand = process.argv.includes("--no-understand");
+const noLoop = process.argv.includes("--no-loop");
 
 const file = new URL("./questions.json", import.meta.url);
 const questions = (JSON.parse(readFileSync(file, "utf8")) as { questions: Question[] }).questions;
@@ -54,7 +57,7 @@ if (askMode) {
 interface AskUnit { id: string; kind: string; text?: string; cells?: Record<string, string> }
 interface AskStep { units: AskUnit[] }
 interface AskResponse {
-  kind: "answer" | "none";
+  kind: "answer" | "none" | "error";
   reason?: string;
   verdict?: string;
   lead?: unknown[] | null;
@@ -109,10 +112,15 @@ async function ask(token: string, q: Question): Promise<AskResponse> {
       question: q.question,
       state: q.state ?? {},
       prev: q.prev ?? null,
-      ...(noUnderstand ? { debug: { understand: false } } : {}),
+      ...((noUnderstand || noLoop) ? { debug: { understand: !noUnderstand, loop: !noLoop } } : {}),
     }),
   });
-  return (await res.json()) as AskResponse;
+  const body = (await res.json()) as AskResponse & { error?: string };
+  if (!res.ok) {
+    // HTTP エラー(429/502/503)は答えではない。集計に混ぜず、経路の故障として数える
+    return { kind: "error", reason: `http_${res.status}`, error: body.error } as unknown as AskResponse;
+  }
+  return body;
 }
 
 function unitMatches(u: AskUnit, e: Expect): boolean {
@@ -151,6 +159,12 @@ async function runAsk(): Promise<void> {
   console.log(`  期待ありの none 率: ${noneRateOf(withExpect)}`);
   console.log(`  期待なし(absent)の none 率: ${noneRateOf(withoutExpect)}`);
 
+  const errored = results.filter((r) => r.res.kind === "error");
+  if (errored.length > 0) {
+    const byReason = new Map<string, number>();
+    for (const r of errored) byReason.set(r.res.reason ?? "?", (byReason.get(r.res.reason ?? "?") ?? 0) + 1);
+    console.log(`  HTTP エラー(答えではない): ${errored.length}/${results.length} ${[...byReason].map(([k, v]) => `${k}=${v}`).join(" ")}`);
+  }
   const answered = results.filter((r) => r.res.kind === "answer");
   const leadAlive = answered.filter((r) => Array.isArray(r.res.lead) && r.res.lead.length > 0);
   const leadText = (r: (typeof results)[number]): string =>
@@ -170,6 +184,32 @@ async function runAsk(): Promise<void> {
   const smalltalkOther = results.filter((r) => r.q.kind === "smalltalk" || r.q.kind === "other");
   const kindOk = smalltalkOther.filter((r) => r.res.kind === "none" && r.res.reason === r.q.kind);
   console.log(`  雑談/範囲外の kind 正誤: ${kindOk.length}/${smalltalkOther.length}`);
+
+  // route ごとの件数・行一致・none 率・ツール回数と所要時間の平均(dropped の "route" 行から拾う。段階 2)。
+  const routeOf = (r: AskResponse): string => r.route ?? (r.kind === "error" ? "error" : "(none)");
+  const loopStatsOf = (r: AskResponse): { toolCalls: number; ms: number } | null => {
+    const entry = r.dropped?.find((d) => d.what === "route" && d.why.startsWith("loop:"));
+    const m = entry?.why.match(/^loop:(\d+)回\/(\d+)ms$/);
+    return m ? { toolCalls: Number(m[1]), ms: Number(m[2]) } : null;
+  };
+  const routes = new Map<string, typeof results>();
+  for (const r of results) {
+    const key = routeOf(r.res);
+    routes.set(key, [...(routes.get(key) ?? []), r]);
+  }
+  console.log(`  route ごとの件数: ${[...routes.entries()].map(([k, v]) => `${k}=${v.length}`).join(" ")}`);
+  for (const [key, rows] of routes) {
+    if (key === "cheap" || key === "error" || key === "(none)") continue;
+    const stats = rows.map((r) => loopStatsOf(r.res)).filter((s): s is { toolCalls: number; ms: number } => s !== null);
+    const withExpectRows = rows.filter((r) => r.q.expect.length > 0);
+    const unitHit = withExpectRows.filter((r) => r.unitHit).length;
+    const noneCount = rows.filter((r) => r.res.kind === "none").length;
+    const avg = (nums: number[]): string => (nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1) : "-");
+    console.log(
+      `    ${key}: 行一致 ${unitHit}/${withExpectRows.length}  none率 ${noneCount}/${rows.length}` +
+        `  平均ツール回数 ${avg(stats.map((s) => s.toolCalls))}  平均秒 ${avg(stats.map((s) => s.ms / 1000))}`,
+    );
+  }
 
   if (verbose) {
     for (const r of results) {

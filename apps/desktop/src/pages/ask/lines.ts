@@ -28,6 +28,8 @@ const PROGRESS_LINE: Record<ProgressStep, string> = {
   search: "wiki をめくってるッピ……",
   select: "どれを見せるか選んでるッピ……",
   app_data: "アプリのデータも見るッピ……",
+  outline: "目次を見てるッピ……",
+  rows: "表を見てるッピ……",
 };
 
 export const progressLine = (step: ProgressStep): string => PROGRESS_LINE[step];

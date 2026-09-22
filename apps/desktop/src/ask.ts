@@ -230,8 +230,9 @@ export interface ValueWrongPayload {
   question?: string;
 }
 
-/** SSE の `progress` イベントの `step`(stage2-spec.md desktop 8・9) */
-export type ProgressStep = "understand" | "search" | "select" | "app_data";
+/** SSE の `progress` イベントの `step`(stage2-spec.md desktop 8・9)。"outline"・"rows" は
+ * 段階 2(回す道、agent.ts)の get_outline・get_rows ツール呼び出し中に流れる。 */
+export type ProgressStep = "understand" | "search" | "select" | "app_data" | "outline" | "rows";
 
 /** HTTP エラー(401 以外)。画面が状態(429 の上限・502/503 のつながらない)で表情を選べるよう status を持つ */
 export class AskHttpError extends Error {

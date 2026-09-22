@@ -62,8 +62,9 @@ curl https://api.tw-context.dev/health
 ```
 npm run dev                                          # ローカル D1 に全件入れてから
 node --experimental-strip-types eval/run.ts          # 段階 0: /search の再現率(LLM 不要)
-node --experimental-strip-types eval/run.ts --ask               # 段階 1: /ask を叩く(ANTHROPIC_API_KEY が要る)
+node --experimental-strip-types eval/run.ts --ask               # /ask を叩く(ANTHROPIC_API_KEY が要る)。回す道あり
 node --experimental-strip-types eval/run.ts --ask --no-understand  # 理解を飛ばして再現率を比べる
+node --experimental-strip-types eval/run.ts --ask --no-loop        # 回す道を無効化(安い道だけの数字)
 ```
 
 段階 0(2026-09-22)の実測: ページ名あり 88%(ページ単位 96%)、言い換え 47%、続きの質問 20%。
@@ -125,7 +126,59 @@ data: { ...今までの応答 JSON 全体... }
 | `src/react.ts` | `POST /react` の受け付け(重複防止・サニタイズ)。`helpful`/`wrong` は answer_id 単位、`value_wrong` は列単位で重複を防ぐ |
 | `src/segment.ts` | 分かち書き。取込(`tools/segment-cli.ts` 経由)と検索クエリで同じ切れ目を使う |
 | `src/retrieve.ts` | D1 の読み取り(alias 検索、FTS 検索、候補収集 `collectCandidates`、訂正、列辞書、outline、行、meta) |
-| `src/tools.ts` | `src/retrieve.ts` のラップ + 候補への札の採番(`assignSlots`)。回す道(段階 2)のツール呼び出しの下地 |
+| `src/tools.ts` | `src/retrieve.ts` のラップ + 候補への札の採番(`assignSlots`)。安い道(選択 1 回)の下地 |
+| `src/agent.ts` | 回す道(段階 2)。手動のツールループ(`runAgentLoop`)。ツールは `src/retrieve.ts` を直接呼ぶ |
 | `src/wiki-url.ts` | `page.url`(EUC-JP percent-encoding 済み。units.py が作る)+ アンカーの連結 |
 | `tools/segment-cli.ts` | `src/segment.ts` を読み込む CLI。units.py が子プロセスとして呼ぶ |
-| `eval/run.ts` | 評価セットの実行(`--ask` / `--no-understand`) |
+| `eval/run.ts` | 評価セットの実行(`--ask` / `--no-understand` / `--no-loop`) |
+
+## 回す道(段階 2、`src/agent.ts`)
+
+安い道(理解 1 回 + 選択 1 回)で解けなかった質問だけ、ツールを渡した手動のループ(`client.messages.create`
+の `stop_reason: "tool_use"` の間ツールを実行して返す形。claude-api skill の Manual Agentic Loop)に
+1 回だけ回す。振り分けは `runAsk`(`src/index.ts`):
+
+1. 理解の `hops: "multi"` → 最初から回す道(`route: "loop"`)。安い道の検索・選択は呼ばない
+2. 安い道の結果が `none`(`llm_none` / `verification_failed`)、または答えの `missing` が空でなければ、
+   **1 回だけ**回す道でやり直す(`route: "cheap_then_loop"`)。回す道でも駄目なら安い道の結果をそのまま返す
+   (「駄目」= ツール呼び出し無しで終わった・`answer` の JSON が壊れている・API エラー・`max_tokens` が
+   2 回続いた。`agent.runAgentLoop` が `null` を返す)
+3. 1 問につき回す道は 1 回まで(1 で試したら 2 では試さない)
+
+上限はツール呼び出し 5 回・全体 12 秒(理解と安い道の時間を除く)・札 40・入力トークン概算 40,000。
+上限に達したら次の 1 往復だけ `tool_choice: {type:"tool", name:"answer"}` で `answer` を強制する。
+
+**リクエストごとのタイムアウトは 20 秒(全体予算の 12 秒より緩い)。** 最初の実装は「残り予算(12 秒 −
+経過時間)」をそのままリクエストの `timeout` に渡していたが、実測で Haiku 4.5 の 1 往復が 12 秒を
+超えることがあり、1 回目のリクエストからタイムアウトで打ち切ってしまっていた(`Error: Request timed
+out.`)。全体 12 秒の歯止めは「次の往復から `answer` を強制する」ソフトな予算として持ち、リクエスト
+自体は落とさないようにした。
+
+### 実測(2026-09-22、ローカル D1 全件、Haiku 4.5、`RATE_LIMIT_DISABLED=1`)
+
+`エタ解放までのクエストの流れわかる?`(hops: multi、`route: "loop"`)と
+`喪失の島の侵入モブが強すぎる`(`route: "loop"`、`trouble: cant_win`)を数回ずつ実 API で通した:
+
+- 所要時間はループだけで 8.5〜12.3 秒(ツール呼び出し 5 回で `answer` を強制した回が大半)。
+  リクエスト全体(理解 + ループ)は 10〜16 秒
+- 5 回のツール呼び出しでは、多段(ページをまたぐ)質問を最後まで辿りきれず `none` で終わることが
+  あった(`find_pages` → `search_units` → `get_outline` → `get_rows` → `search_units` で 5 回使い切り、
+  2 ページ目以降に届く前に強制 `answer`)
+- **12 秒は妥当(そのままにする)。** ソフトな予算に変えたことで、超えても answer を強制するだけで
+  失敗にはならない。ツール呼び出し 5 回のほうが先に効くことが多いので、辿りきれない質問が残るなら
+  次に見るのは回数の上限(5)を上げるか、1 回の `search_units` の返す情報量を増やすこと
+
+評価セット(`eval/run.ts --ask`、85 問、行一致・none 率は「期待あり」70 問)の比較(同日、1 回ずつ):
+
+| | 安い道で解けなかった率(none または missing あり) | 期待ありの行一致 | route ごとの件数 |
+|---|---|---|---|
+| 安い道のみ(`--no-loop`) | 35/70(50%) | 58/70 | cheap=65 / (none)=20 |
+| 回す道あり(既定) | 20/70(29%) | 48/70 | cheap=34 / cheap_then_loop=15 / loop=3 / (none)=33 |
+| 段階 1 の実測(参考、当時 70 問) | 31/70(44%) | — | — |
+
+回す道を足したことで「安い道で解けなかった率」は 50%→29%(同日の対照)に下がり、目安の 2 割には
+まだ届かないが段階 1 からは大きく改善した。`cheap_then_loop` に回った 15 問は行一致 12/14・none 率
+0/15 で、安い道が `none` や `missing` ありだった質問の大半を回す道が拾えている。一方で全体の行一致が
+58→48 に下がって見えるのは、`missing` が非空なら（安い道の答えが部分的に合っていても）回す道の答えで
+**まるごと置き換える**契約(§振り分け 2)の効果と、1 回ずつしか測っていない LLM の揺れの両方が乗っている
+可能性があり、揺れを切り分けるには複数回の対照実験が要る(残作業)。

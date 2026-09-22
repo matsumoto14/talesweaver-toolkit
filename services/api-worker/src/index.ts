@@ -1,5 +1,6 @@
 // 「wiki に聞く」の索引・検索・理解・選択 API(段階 1)。inquiry-worker とは別 Worker・
 // 別ホスト(api.tw-context.dev)。LLM を呼ぶのは understand() / select()(src/claude.ts)だけ。
+import * as agent from "./agent";
 import * as claude from "./claude";
 import {
   attachCorrections,
@@ -14,7 +15,7 @@ import {
   searchUnits,
   collectCandidates,
 } from "./retrieve";
-import type { Candidate } from "./retrieve";
+import type { Candidate, ColumnNote } from "./retrieve";
 import { buildDict, fold, normalize, segment, toQuery } from "./segment";
 import { ASPECT_VOCAB } from "./prompt";
 import type { PrevTurn } from "./prompt";
@@ -265,7 +266,8 @@ interface AskPayload {
   question?: string;
   state?: AskState;
   prev?: { question: string; page: string } | null;
-  debug?: { understand?: boolean };
+  /** `loop: false` で回す道を無効化(eval/run.ts --no-loop、安い道だけの数字を測る用)。 */
+  debug?: { understand?: boolean; loop?: boolean };
 }
 
 function normalizeState(state: AskState | undefined): Record<string, number> {
@@ -326,7 +328,7 @@ async function aliasExactMatch(db: D1Database, question: string): Promise<boolea
   return row !== null;
 }
 
-type ProgressStep = "understand" | "search" | "select" | "app_data";
+type ProgressStep = "understand" | "search" | "select" | "app_data" | "outline" | "rows";
 type ProgressFn = (step: ProgressStep) => void;
 const noopProgress: ProgressFn = () => {};
 
@@ -348,13 +350,14 @@ async function ask(request: Request, env: AskEnv): Promise<Response> {
   const state = normalizeState(payload?.state);
   const prev = normalizePrev(payload?.prev ?? null);
   const callUnderstand = payload?.debug?.understand !== false;
+  const loopEnabled = payload?.debug?.loop !== false;
 
   const wantsSse = (request.headers.get("accept") ?? "").includes("text/event-stream");
   if (!wantsSse) {
-    const result = await runAsk(env, question, state, prev, callUnderstand, noopProgress);
+    const result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, noopProgress);
     return json(result.body, result.status);
   }
-  return askSse(env, question, state, prev, callUnderstand);
+  return askSse(env, question, state, prev, callUnderstand, loopEnabled);
 }
 
 /** `Accept: text/event-stream` のときだけ通る道。理解より前のエラー(401/429/503)は呼び元(ask/fetch)が
@@ -365,6 +368,7 @@ function askSse(
   state: Record<string, number>,
   prev: PrevTurn | null,
   callUnderstand: boolean,
+  loopEnabled: boolean,
 ): Response {
   const encoder = new TextEncoder();
   // クライアントが切断したら cancel() が呼ばれる。以後の enqueue は捨てる(Claude の呼び出しは
@@ -378,7 +382,7 @@ function askSse(
       };
       try {
         const progress: ProgressFn = (step) => send("progress", { step });
-        const result = await runAsk(env, question, state, prev, callUnderstand, progress);
+        const result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, progress);
         if (result.status === 502) send("error", { status: result.status, error: result.body.error });
         else send("result", result.body);
       } catch (error) {
@@ -398,6 +402,98 @@ function askSse(
   });
 }
 
+
+/** 質問の語から「ページ名の候補」を最大 10 件。完全一致した別名のページ → 語を含む別名のページ(語ごとに LIKE)。 */
+async function findPagesByTokens(
+  db: D1Database,
+  tokens: string[],
+  byName: Map<string, string[]>,
+): Promise<{ name: string; page: string }[]> {
+  const out: { name: string; page: string }[] = [];
+  const seen = new Set<string>();
+  const push = (name: string, page: string): void => {
+    if (seen.has(page)) return;
+    seen.add(page);
+    out.push({ name, page });
+  };
+  for (const t of tokens) for (const page of byName.get(t) ?? []) push(t, page);
+  // 語ごとの LIKE は D1 のフルスキャンなので、走査する語は先頭 8 語まで
+  for (const t of tokens.slice(0, 8)) {
+    if (out.length >= PAGE_SLOTS.length) break;
+    if (t.length < 2) continue;
+    for (const hit of await findPages(db, t)) push(hit.name, hit.page);
+  }
+  return out.slice(0, PAGE_SLOTS.length);
+}
+
+/**
+ * 回す道(段階 2、agent.ts)を 1 回試す。`null` は経路の故障・不使用(呼び元が安い道の結果へ)。
+ * `route` は応答に載る値("loop" = hops:multi で最初から、"cheap_then_loop" = 安い道が駄目だったやり直し)。
+ */
+async function tryLoop(
+  env: AskEnv,
+  question: string,
+  state: Record<string, number>,
+  prev: PrevTurn | null,
+  columnNotes: Record<string, ColumnNote>,
+  dict: readonly string[],
+  syncedAt: string | null,
+  playbook: "cant_win" | null,
+  pageNames: string[],
+  columnDict: Record<string, string>,
+  route: "loop" | "cheap_then_loop",
+  hopsDropped: Dropped[],
+  followupPage: string | null,
+  progress: ProgressFn,
+): Promise<RunAskResult | null> {
+  const result = await agent.runAgentLoop(
+    { db: env.WIKI, env, question, state, columnNotes, dict, prev },
+    (step) => progress(step),
+  );
+  if (!result) return null;
+
+  const routeDropped: Dropped = { what: "route", why: `loop:${result.toolCalls}回/${result.ms}ms` };
+  const dropped = [...hopsDropped, routeDropped];
+
+  if (result.selection.none) {
+    return { status: 200, body: await noneAnswer(env, "llm_none", null, syncedAt, dropped, playbook) };
+  }
+
+  const ctx: Ctx = {
+    candidates: result.candidates,
+    state,
+    columnDict,
+    pageNames,
+    candidateText: candidateTextOf([...result.candidates.values()]),
+  };
+  const verified = verify(result.selection, ctx);
+  if (verified.steps.length === 0) {
+    return {
+      status: 200,
+      body: await noneAnswer(env, "verification_failed", null, syncedAt, [...verified.dropped, ...dropped], playbook),
+    };
+  }
+
+  const answer = await buildAnswer(env.WIKI, {
+    steps: verified.steps,
+    lead: verified.lead,
+    dropped: [...verified.dropped, ...dropped],
+    columnDict,
+    state,
+    syncedAt,
+    model: env.SELECT_MODEL,
+    route,
+    playbook,
+    missing: verified.missing,
+    verdict: result.selection.verdict,
+    basis: verified.lead
+      ? result.selection.basis.filter((id) => verified.steps.some((st) => st.units.some((u) => u.id === id)))
+      : [],
+    followup: followupPage ? { page: followupPage } : null,
+  });
+  return { status: 200, body: answer };
+}
+
 /** `/ask` の中身(理解 → 候補収集 → 選択 → 検証 → 回答)。JSON 経路・SSE 経路の両方から呼ばれる。 */
 async function runAsk(
   env: AskEnv,
@@ -405,13 +501,17 @@ async function runAsk(
   state: Record<string, number>,
   prev: PrevTurn | null,
   callUnderstand: boolean,
+  loopEnabled: boolean,
   progress: ProgressFn,
 ): Promise<RunAskResult> {
   const meta = await getMeta(env.WIKI);
   const syncedAt = meta.synced_at ?? null;
 
-  const { words: dict, subjectByToken } = await loadAliasIndex(env.WIKI);
-  const pageHits = await findPages(env.WIKI, question);
+  const { words: dict, byName, subjectByToken } = await loadAliasIndex(env.WIKI);
+  // ページ名の候補: 質問の分かち書きの語が別名に完全一致したページを先に、次に語を含む別名のページ。
+  // 質問文全体を LIKE に投げない(当たらないうえ、長い文は D1 が「pattern too complex」で拒む)
+  const questionTokens = segment(question, dict);
+  const pageHits = await findPagesByTokens(env.WIKI, questionTokens, byName);
   const pageSlots = pageHits.slice(0, PAGE_SLOTS.length).map((h, i) => ({ slot: PAGE_SLOTS[i]!, page: h.page }));
 
   progress("understand");
@@ -428,8 +528,11 @@ async function runAsk(
     return { status: 200, body: await noneAnswer(env, kind, null, syncedAt, [], playbook) };
   }
 
-  // hops は記録だけ(回す道は段階 2 では作らない)。評価が「回す道なら解けたかもしれない率」を数える材料。
+  // hops は記録だけ残す(評価が「回す道なら解けたかもしれない率」を数える材料)。hops:multi は下で
+  // 最初から回す道を試す(§振り分け 1)。
   const hopsDropped: Dropped[] = understanding.hops === "multi" ? [{ what: "route", why: "hops:multi" }] : [];
+  // 1 問につき回す道は 1 回だけ(hops:multi で先に試したら、安い道が駄目でも二度目は試さない)。
+  let loopTried = false;
 
   const pageNames = await loadPageNames(env.WIKI);
   const slotToPage = new Map(pageSlots.map((p) => [p.slot, p.page]));
@@ -443,12 +546,6 @@ async function runAsk(
     if (!boostPages.includes(prev.page)) boostPages.push(prev.page);
   }
 
-  const questionTokens = segment(question, dict);
-  const termTokens = understanding.terms.slice(0, 6).flatMap((t) => segment(t.slice(0, 20), dict));
-  const aspectTokens: string[] = []; // 観点(aspects)は段階 3 で理解の欄に戻す。それまで語彙の加点は無し
-  const query = toQuery([...questionTokens, ...termTokens, ...aspectTokens]);
-  if (!query) return { status: 200, body: await noneAnswer(env, "no_terms", null, syncedAt, hopsDropped, playbook) };
-
   const columnNoteRows = await getColumnNotes(env.WIKI);
   const columnDict: Record<string, string> = {};
   const columnNoteTexts: Record<string, string> = {};
@@ -457,8 +554,26 @@ async function runAsk(
     if (note.state_key) columnDict[name] = note.state_key;
   }
 
+  // hops:multi は最初から回す道(§振り分け 1)。安い道の search/select は呼ばない。
+  // 回す道が駄目だった(null)ときだけ、下の安い道に進む。
+  if (understanding.hops === "multi" && loopEnabled) {
+    loopTried = true;
+    const loopResult = await tryLoop(
+      env, question, state, prev, columnNoteRows, dict, syncedAt, playbook,
+      pageNames, columnDict, "loop", hopsDropped, followupPage, progress,
+    );
+    if (loopResult) return loopResult;
+  }
+
+  const termTokens = understanding.terms.slice(0, 6).flatMap((t) => segment(t.slice(0, 20), dict));
+  const aspectTokens: string[] = []; // 観点(aspects)は段階 3 で理解の欄に戻す。それまで語彙の加点は無し
+  const query = toQuery([...questionTokens, ...termTokens, ...aspectTokens]);
+  if (!query) return { status: 200, body: await noneAnswer(env, "no_terms", null, syncedAt, hopsDropped, playbook) };
+
   progress("search");
-  const candidates = await collectCandidates(env.WIKI, { query, boostPages, state, columnNotes: columnNoteRows });
+  let candidates = await collectCandidates(env.WIKI, { query, boostPages, state, columnNotes: columnNoteRows });
+  // 順序頑健性の測定用(ローカルの .dev.vars にだけ置く)。候補の並びを逆にして同じ評価を回し、選択の揺れを見る
+  if ((env as { EVAL_REVERSE_CANDIDATES?: string }).EVAL_REVERSE_CANDIDATES === "1") candidates = [...candidates].reverse();
   // 静的データだけの項目(段階 3 spec B 7): 質問の語 + 理解の terms が完全一致した subject だけ足す
   // 静的データは語が名前に完全一致したときだけ。語 → 原文の名前に戻し、D1 の bind 上限(100)より手前で切る
   const subjects = [...new Set([...questionTokens, ...termTokens].map((t) => subjectByToken.get(t)).filter((v): v is string => !!v))].slice(0, 50);
@@ -472,7 +587,22 @@ async function runAsk(
   if (!result) return { status: 502, body: { error: "回答サーバーが応答しません。時間をおいて試してください" } };
 
   const { selection } = result;
-  if (selection.none) return { status: 200, body: await noneAnswer(env, "llm_none", query, syncedAt, hopsDropped, playbook) };
+
+  /** 安い道が駄目だった(none / 検証で全滅)ときの、1 回だけの回す道リトライ。 */
+  const retryWithLoop = async (): Promise<RunAskResult | null> => {
+    if (loopTried || !loopEnabled) return null;
+    loopTried = true;
+    return tryLoop(
+      env, question, state, prev, columnNoteRows, dict, syncedAt, playbook,
+      pageNames, columnDict, "cheap_then_loop", hopsDropped, followupPage, progress,
+    );
+  };
+
+  if (selection.none) {
+    const loopResult = await retryWithLoop();
+    if (loopResult) return loopResult;
+    return { status: 200, body: await noneAnswer(env, "llm_none", query, syncedAt, hopsDropped, playbook) };
+  }
 
   const ctx: Ctx = {
     candidates: new Map(candidates.map((c) => [c.id, c] as [string, Candidate])),
@@ -483,6 +613,8 @@ async function runAsk(
   };
   const verified = verify(selection, ctx);
   if (verified.steps.length === 0) {
+    const loopResult = await retryWithLoop();
+    if (loopResult) return loopResult;
     return {
       status: 200,
       body: await noneAnswer(env, "verification_failed", query, syncedAt, [...verified.dropped, ...hopsDropped], playbook),
@@ -501,9 +633,16 @@ async function runAsk(
     playbook,
     missing: verified.missing,
     verdict: selection.verdict,
-    basis: verified.lead ? selection.basis : [],
+    basis: verified.lead ? selection.basis.filter((id) => verified.steps.some((st) => st.units.some((u) => u.id === id))) : [],
     followup: followupPage ? { page: followupPage } : null,
   });
+
+  // missing(候補に答えが無かった観点)が空でなければ、1 回だけ回す道でやり直す(§振り分け 2)。
+  if (answer.missing.length > 0) {
+    const loopResult = await retryWithLoop();
+    // 回す道が本物の答えを出したときだけ差し替える。none で戻ったら安い道の部分的な答えを残す(仕様: 回す道でも駄目なら安い道の結果)
+    if (loopResult && "kind" in loopResult.body && loopResult.body.kind === "answer") return loopResult;
+  }
   return { status: 200, body: answer };
 }
 
