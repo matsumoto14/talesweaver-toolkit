@@ -48,9 +48,35 @@ npx wrangler d1 execute tw-wiki --local  --file schema.sql -y     # 初回だけ
 npx wrangler d1 execute tw-wiki --local  --file ../../tools/gamedata/wiki/out/units.sql -y
 npx wrangler d1 execute tw-wiki --remote --file schema.sql -y     # 初回だけ
 npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/units.sql -y
-npx wrangler deploy                  # 独自ドメイン api.tw-context.dev は wrangler.toml の routes で付く
+npx wrangler d1 execute tw-wiki --remote --file migrations/001-ask-log.sql -y   # schema.sql 投入後に足した表(1 回だけ)
+npx wrangler d1 execute tw-wiki --remote --file migrations/002-ask-log-qkey.sql -y  # 001 の後に 1 回だけ(--file が認証エラーなら中の 1 文を --command で)
 curl https://api.tw-context.dev/health
 ```
+
+deploy は main への push で `.github/workflows/workers.yml` が行う(型検査 → テスト → `wrangler deploy`)。
+手で出すなら `npx wrangler deploy`。`units.sql` を再投入する前後で deploy し直す必要はない(表の中身だけ変わる)。
+
+## 1 日の上限と記録
+
+- **連打止め**: 1 分 10 問(IP のハッシュ、Rate Limiting バインディング `ASK_BURST`)
+- **1 日の上限**: `RATE_LIMIT_PER_DAY`(既定 20 問、wrangler.toml の vars)。単位は**端末**(`x-client-id`、
+  端末が localStorage に持つ UUID)のハッシュ。ヘッダが無ければ IP のハッシュ。費用の歯止めは正直な
+  利用者向けで、ID を消せば別の端末として数え直される(PoW を解き直す手間だけ)。突破する人への
+  歯止めは連打止めと Anthropic Console の月額上限
+- **答えのキャッシュ**(`src/cache.ts`、KV `answer:<qkey のハッシュ>`): 「役に立った」が付いた答えを、同じ意味の質問
+  (分かち書きした語の集合が同じ。語順・助詞・空白は無視)に LLM を呼ばず返す(`route: "cached"`)。キャラ状態は
+  キーに入れず、答えが状態で行を絞っていた(steps の `filtered_by`)ときだけ同じ状態の人に限って返す。
+  wiki の版(meta の synced_at / imported_at)が変わったら捨てる。続きの質問(prev あり)は貯めない・引かない。
+  TTL 30 日。評価で外したいときは要求の `debug: { cache: false }`
+- **プロンプトキャッシュ**(回す道だけ): 往復ごとに最後のメッセージへ `cache_control` を 1 つ付け、履歴を
+  キャッシュから読ませる。Haiku 4.5 は前方の合計が 4096 トークン未満だと効かないので、1〜2 往復目は普通に課金。
+  効き具合は `dropped` の `route: loop:<回>/<ms>/in<入力>+cached<キャッシュ読み>/out<出力>` と ask_log の body で見る
+- **記録**(`ask_log`): 質問・キャラ状態(level / evolution だけ)・答えの JSON 全文・経路・所要時間・端末のハッシュ。
+  IP と装備の中身は入らない。端末側の注記にも「質問と答えは記録する」と書いてある。見るときは
+  ```
+  npx wrangler d1 execute tw-wiki --remote --command "SELECT at, substr(user,1,8) AS who, kind, route, ms, question, lead FROM ask_log ORDER BY id DESC LIMIT 50"
+  npx wrangler d1 execute tw-wiki --remote --command "SELECT substr(user,1,8) AS who, count(*) AS n FROM ask_log WHERE at >= date('now') GROUP BY user ORDER BY n DESC"
+  ```
 
 `units.sql` は先頭で全表を `DELETE` してから入れ直すので、wiki を再同期(`sync.py`)したら
 `units.py` → `--remote` の 2 手で更新できる。`unit_fts` も毎回作り直す。

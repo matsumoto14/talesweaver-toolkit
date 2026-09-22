@@ -30,10 +30,13 @@ import {
   issueChallenge,
   issueSessionToken,
   requireSession,
+  userHash,
   verifyNonce,
   verifyProofOfWork,
   difficultyOf,
 } from "./auth";
+import { logAsk } from "./log";
+import { getCachedAnswer, putCachedAnswer, questionKey, wikiVersion } from "./cache";
 import { handleReact } from "./react";
 
 export interface Env {
@@ -140,7 +143,7 @@ function capPerPage<T extends { page: string }>(hits: T[]): T[] {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
@@ -165,7 +168,7 @@ export default {
       if (url.pathname === "/ask" && request.method === "POST") {
         const missing = missingSecrets(env, ["ANTHROPIC_API_KEY", "NONCE_SECRET"]);
         if (missing.length > 0) return cors(json({ error: `中継サーバーが未設定です: ${missing.join(", ")}` }, 503));
-        return cors(await ask(request, env as AskEnv));
+        return cors(await ask(request, env as AskEnv, ctx));
       }
       if (url.pathname === "/react" && request.method === "POST") {
         const missing = missingSecrets(env, ["NONCE_SECRET"]);
@@ -175,7 +178,7 @@ export default {
         if (authError) return cors(json({ error: authError }, 401));
         const rateError = await consumeRateLimit(request, envWithApi);
         if (rateError) return cors(json({ error: rateError }, 429));
-        return cors(await handleReact(request, envWithApi));
+        return cors(await handleReact(request, envWithApi, (answerId) => ctx.waitUntil(rememberHelpfulAnswer(envWithApi, answerId))));
       }
     } catch (error) {
       console.error(error);
@@ -267,7 +270,7 @@ interface AskPayload {
   state?: AskState;
   prev?: { question: string; page: string } | null;
   /** `loop: false` で回す道を無効化(eval/run.ts --no-loop、安い道だけの数字を測る用)。 */
-  debug?: { understand?: boolean; loop?: boolean };
+  debug?: { understand?: boolean; loop?: boolean; cache?: boolean };
 }
 
 function normalizeState(state: AskState | undefined): Record<string, number> {
@@ -288,7 +291,7 @@ function normalizePrev(prev: AskPayload["prev"]): PrevTurn | null {
   };
 }
 
-interface NoneAnswer {
+export interface NoneAnswer {
   kind: "none";
   reason: "llm_none" | "verification_failed" | "smalltalk" | "other" | "no_terms";
   search: { id: string; page: string; section: string; snippet: string; url: string }[];
@@ -332,32 +335,81 @@ type ProgressStep = "understand" | "search" | "select" | "app_data" | "outline" 
 type ProgressFn = (step: ProgressStep) => void;
 const noopProgress: ProgressFn = () => {};
 
-type RunAskResult =
+export type RunAskResult =
   | { status: 200; body: NoneAnswer | AnswerResponse }
   | { status: 502; body: { error: string } };
 
-async function ask(request: Request, env: AskEnv): Promise<Response> {
+async function ask(request: Request, env: AskEnv, ctx: ExecutionContext): Promise<Response> {
   const authError = await requireSession(request, env);
   if (authError) return json({ error: authError }, 401);
-  const rateError = await consumeRateLimit(request, env);
-  if (rateError) return json({ error: rateError }, 429);
 
+  // 本文の検査を上限の消費より先に(空の質問で 1 問ぶん減らさない)
   const payload = (await request.json().catch(() => null)) as AskPayload | null;
   const rawQuestion = typeof payload?.question === "string" ? payload.question : "";
   const question = rawQuestion.trim().slice(0, QUESTION_LIMIT);
   if (!question) return json({ error: "質問を入力してください" }, 400);
+
+  const rateError = await consumeRateLimit(request, env);
+  if (rateError) return json({ error: rateError }, 429);
 
   const state = normalizeState(payload?.state);
   const prev = normalizePrev(payload?.prev ?? null);
   const callUnderstand = payload?.debug?.understand !== false;
   const loopEnabled = payload?.debug?.loop !== false;
 
-  const wantsSse = (request.headers.get("accept") ?? "").includes("text/event-stream");
-  if (!wantsSse) {
+  // 質問と答えの記録(ask_log)。応答を待たせないよう waitUntil で。失敗しても答えは返す
+  const startedAt = Date.now();
+  const user = await userHash(request, env);
+  // 答えのキャッシュのキー(cache.ts)。続きの質問は文脈依存なので作らない
+  const qkey = prev ? null : questionKey(question, (await loadAliasIndex(env.WIKI)).words);
+  const record = (result: RunAskResult | { status: 500; body: { error: string } }): void => {
+    ctx.waitUntil(logAsk(env.WIKI, { user, question, qkey, prev, state, result, ms: Date.now() - startedAt }));
+  };
+
+  // 「役に立った」が付いた同じ意味の質問なら LLM を呼ばずに返す(wiki の版が同じときだけ)
+  if (qkey && payload?.debug?.cache !== false) {
+    const cached = await getCachedAnswer(env.API, qkey, wikiVersion(await getMeta(env.WIKI)), state);
+    if (cached) {
+      const result: RunAskResult = { status: 200, body: cached };
+      record(result);
+      return wantsSse(request) ? sseOnce("result", cached) : json(cached);
+    }
+  }
+
+  if (!wantsSse(request)) {
     const result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, noopProgress);
+    record(result);
     return json(result.body, result.status);
   }
-  return askSse(env, question, state, prev, callUnderstand, loopEnabled);
+  return askSse(env, question, state, prev, callUnderstand, loopEnabled, record);
+}
+
+function wantsSse(request: Request): boolean {
+  return (request.headers.get("accept") ?? "").includes("text/event-stream");
+}
+
+/** SSE でイベントを 1 つ流して閉じる(キャッシュから即答するとき)。 */
+function sseOnce(event: string, data: unknown): Response {
+  return new Response(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`, {
+    status: 200,
+    headers: { "content-type": "text/event-stream", "cache-control": "no-store" },
+  });
+}
+
+/** /react の helpful(1 回目)で、その答えを ask_log から引いてキャッシュに入れる。 */
+async function rememberHelpfulAnswer(env: EnvWithApi, answerId: string): Promise<void> {
+  try {
+    const row = await env.WIKI
+      .prepare("SELECT qkey, body, state FROM ask_log WHERE answer_id = ?1 AND kind = 'answer' AND qkey IS NOT NULL LIMIT 1")
+      .bind(answerId)
+      .first<{ qkey: string; body: string; state: string }>();
+    if (!row) return;
+    const body = JSON.parse(row.body) as AnswerResponse;
+    const state = JSON.parse(row.state) as Record<string, number>;
+    await putCachedAnswer(env.API, row.qkey, wikiVersion(await getMeta(env.WIKI)), body, state);
+  } catch (error) {
+    console.error("答えのキャッシュへの書き込みに失敗", error);
+  }
 }
 
 /** `Accept: text/event-stream` のときだけ通る道。理解より前のエラー(401/429/503)は呼び元(ask/fetch)が
@@ -369,6 +421,7 @@ function askSse(
   prev: PrevTurn | null,
   callUnderstand: boolean,
   loopEnabled: boolean,
+  record: (result: RunAskResult | { status: 500; body: { error: string } }) => void,
 ): Response {
   const encoder = new TextEncoder();
   // クライアントが切断したら cancel() が呼ばれる。以後の enqueue は捨てる(Claude の呼び出しは
@@ -383,11 +436,14 @@ function askSse(
       try {
         const progress: ProgressFn = (step) => send("progress", { step });
         const result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, progress);
+        record(result);
         if (result.status === 502) send("error", { status: result.status, error: result.body.error });
         else send("result", result.body);
       } catch (error) {
         console.error(error);
-        send("error", { status: 500, error: "サーバー側で問題が起きました。時間をおいて試してください。" });
+        const message = "サーバー側で問題が起きました。時間をおいて試してください。";
+        record({ status: 500, body: { error: message } });
+        send("error", { status: 500, error: message });
       } finally {
         if (!closed) { closed = true; controller.close(); }
       }
@@ -452,7 +508,10 @@ async function tryLoop(
   );
   if (!result) return null;
 
-  const routeDropped: Dropped = { what: "route", why: `loop:${result.toolCalls}回/${result.ms}ms` };
+  const routeDropped: Dropped = {
+    what: "route",
+    why: `loop:${result.toolCalls}回/${result.ms}ms/in${result.tokens.input}+cached${result.tokens.cached}/out${result.tokens.output}`,
+  };
   const dropped = [...hopsDropped, routeDropped];
 
   if (result.selection.none) {
@@ -678,7 +737,7 @@ function cors(response: Response): Response {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", "*");
   headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
-  headers.set("access-control-allow-headers", "content-type, authorization");
+  headers.set("access-control-allow-headers", "content-type, authorization, x-client-id");
   headers.set("access-control-max-age", "86400");
   return new Response(response.body, { status: response.status, headers });
 }

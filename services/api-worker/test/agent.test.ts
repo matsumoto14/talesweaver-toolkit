@@ -189,6 +189,32 @@ describe("runAgentLoop", () => {
     expect(result!.candidates.has("p:テシスコア/top/1")).toBe(true);
   });
 
+  it("毎回、最後のメッセージの最後のブロックにだけ cache_control を付ける", async () => {
+    const messagesMock = fakeClient([
+      toolUseResponse("find_pages", { name: "A" }),
+      toolUseResponse("find_pages", { name: "B" }),
+      toolUseResponse("answer", EMPTY_ANSWER),
+    ]);
+    vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);
+
+    await runAgentLoop({ db: fakeDb(), env: {} as never, ...BASE_INPUT });
+
+    type Block = { type: string; cache_control?: { type: string } };
+    for (const call of messagesMock.calls) {
+      const marked: string[] = [];
+      call.messages.forEach((m, i) => {
+        const blocks = Array.isArray(m.content) ? (m.content as Block[]) : [];
+        blocks.forEach((b, j) => { if (b.cache_control) marked.push(`${i}:${j}`); });
+      });
+      const last = call.messages.at(-1)!;
+      const lastBlocks = last.content as Block[];
+      expect(marked).toEqual([`${call.messages.length - 1}:${lastBlocks.length - 1}`]);
+      expect(lastBlocks.at(-1)!.cache_control).toEqual({ type: "ephemeral" });
+    }
+    // 1 回目は文字列だった user メッセージが text ブロックに変わっている
+    expect((messagesMock.calls[0]!.messages[0]!.content as Block[])[0]!.type).toBe("text");
+  });
+
   it("stop_reason: refusal は none(NONE_SELECTION)を返す", async () => {
     const messagesMock = fakeClient([refusalResponse()]);
     vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);

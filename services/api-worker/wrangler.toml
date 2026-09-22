@@ -22,8 +22,8 @@ database_id = "a5a9cc21-e02c-439e-89e6-a1bb29d436f7"
 binding = "API"
 id = "59ea45e9651d4baa84bb02fabcf2d62a"
 
-# 連打止め(1 分 10 問)。期間は Rate Limiting バインディングの制約で 10 か 60 秒しか選べないので、
-# 1 日の上限は KV カウンタ(consumeRateLimit)で別に数える。キーは KV と同じ「IP のハッシュ」。
+# 連打止め(1 分 10 問、IP のハッシュ)。期間は Rate Limiting バインディングの制約で 10 か 60 秒しか選べないので、
+# 1 日の上限(RATE_LIMIT_PER_DAY、端末 ID のハッシュ = ユーザーあたり)は KV カウンタ(consumeRateLimit)で別に数える。
 [[ratelimits]]
 name = "ASK_BURST"
 namespace_id = "1001"
@@ -36,7 +36,7 @@ namespace_id = "1001"
 AI_GATEWAY_URL = ""
 SELECT_MODEL = "claude-haiku-4-5"
 UNDERSTAND_MODEL = "claude-haiku-4-5"
-RATE_LIMIT_PER_DAY = "100"
+RATE_LIMIT_PER_DAY = "20"
 
 # シークレット(wrangler secret put。ここには書かない):
 #   ANTHROPIC_API_KEY   Claude API の鍵。Console でこの Worker 専用に発行し、月額上限を付ける

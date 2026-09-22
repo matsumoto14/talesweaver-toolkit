@@ -14,6 +14,7 @@
   import MeasurePage from "./pages/measure/MeasurePage.svelte";
   import InkriPage from "./pages/inkri/InkriPage.svelte";
   import inkriTabIcon from "./assets/inkri/ui/app_tab.png";
+  import askTabIcon from "./assets/ask/zerippi_f008.png";
   import AskPage from "./pages/ask/AskPage.svelte";
   import NewsPage from "./pages/news/NewsPage.svelte";
   import VersusPage from "./pages/versus/VersusPage.svelte";
@@ -35,7 +36,7 @@
     { id: "versus", label: "対人" },
     { id: "measure", label: "実測" },
     { id: "inkri", label: "インクリ" },
-    { id: "ask", label: "wiki に聞く" },
+    { id: "ask", label: "調べる" },
     { id: "news", label: "お知らせ" },
   ];
 
@@ -97,6 +98,9 @@
         {#if o.value === "inkri"}
           <!-- インクリは文字ではなくインクリスクロールの絵(ユーザー指定 2026-09-17)。名前は title と読み上げで持つ -->
           <img class="tab-icon" src={inkriTabIcon} alt={o.label} title={o.label} />
+        {:else if o.value === "ask"}
+          <!-- 「調べる」はゼリッピの顔(ユーザー指定 2026-09-23)。名前は title と読み上げで持つ -->
+          <img class="tab-icon ask" src={askTabIcon} alt={o.label} title={o.label} />
         {:else}
           {o.label}
         {/if}
@@ -213,6 +217,8 @@
   }
   .brand { display: flex; align-items: center; flex-shrink: 0; }
   .tab-icon { display: block; width: 23px; height: 24px; margin: -4px 0; image-rendering: pixelated; }
+  /* ゼリッピの顔は 36×43 を縮めるので、整数倍でない縮小をピクセル補間で汚さない */
+  .tab-icon.ask { width: 20px; height: 24px; object-fit: contain; image-rendering: auto; }
   .brand img { width: auto; height: 48px; display: block; object-fit: contain; }
 
   /* 見た目は app.css の `.tabs`(§08)。中身は ui/Choose.svelte なので、ここには置き場所だけ */

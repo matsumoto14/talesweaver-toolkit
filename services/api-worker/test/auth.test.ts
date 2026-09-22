@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  issueChallenge, issueSessionToken, verifyNonce, verifyProofOfWork, verifySessionToken,
+  consumeRateLimit, issueChallenge, issueSessionToken, userHash, verifyNonce, verifyProofOfWork, verifySessionToken,
 } from "../src/auth";
 import type { AuthEnv } from "../src/auth";
 
@@ -103,5 +103,40 @@ describe("セッショントークン", () => {
     const env = makeEnv();
     expect(await verifySessionToken(env, null)).toBe(false);
     expect(await verifySessionToken(env, "not-a-token")).toBe(false);
+  });
+});
+
+describe("1 日の上限(ユーザーあたり)", () => {
+  const CLIENT_A = "11111111-2222-4333-8444-555555555555";
+  const CLIENT_B = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  function req(clientId: string | null, ip = "203.0.113.1"): Request {
+    const headers: Record<string, string> = { "cf-connecting-ip": ip };
+    if (clientId) headers["x-client-id"] = clientId;
+    return new Request("https://x/ask", { method: "POST", headers });
+  }
+
+  it("端末 ID ごとに数え、上限を超えると回数入りの文で断る", async () => {
+    const env = makeEnv({ RATE_LIMIT_PER_DAY: "2" });
+    expect(await consumeRateLimit(req(CLIENT_A), env)).toBeNull();
+    expect(await consumeRateLimit(req(CLIENT_A), env)).toBeNull();
+    expect(await consumeRateLimit(req(CLIENT_A), env)).toBe("1 日に聞けるのは 2 問までです。また明日どうぞ");
+    // 同じ IP でも別の端末 ID なら別枠
+    expect(await consumeRateLimit(req(CLIENT_B), env)).toBeNull();
+  });
+
+  it("端末 ID が無い・形式違反なら IP で数える", async () => {
+    const env = makeEnv({ RATE_LIMIT_PER_DAY: "1" });
+    expect(await consumeRateLimit(req(null), env)).toBeNull();
+    expect(await consumeRateLimit(req("not-a-uuid"), env)).not.toBeNull();
+    expect(await consumeRateLimit(req(null, "198.51.100.9"), env)).toBeNull();
+  });
+
+  it("userHash は端末 ID の生の値を含まず、同じ ID なら同じ値", async () => {
+    const env = makeEnv();
+    const a1 = await userHash(req(CLIENT_A), env);
+    const a2 = await userHash(req(CLIENT_A, "198.51.100.9"), env);
+    expect(a1).toBe(a2);
+    expect(a1).not.toContain(CLIENT_A);
+    expect(await userHash(req(CLIENT_B), env)).not.toBe(a1);
   });
 });

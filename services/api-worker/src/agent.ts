@@ -56,6 +56,8 @@ export interface AgentResult {
   candidates: Map<string, Candidate>;
   toolCalls: number;
   ms: number;
+  /** 往復ごとの usage の合計(費用の把握用)。cached はキャッシュから読めた入力トークン */
+  tokens: { input: number; cached: number; output: number };
 }
 
 // --- ツール定義 ---------------------------------------------------------------
@@ -333,6 +335,30 @@ async function executeTool(ctx: LoopCtx, name: string, input: Record<string, unk
   }
 }
 
+/**
+ * プロンプトキャッシュ(段階 2 の費用対策、2026-09-23)。回す道は往復ごとに履歴を全部送り直すので、
+ * 直前までの履歴をキャッシュから読ませる。breakpoint は「最後のメッセージの最後のブロック」1 つだけ
+ * (1 リクエスト 4 つまでの制限に触れないよう、毎回作り直す。前の往復で付けた breakpoint は
+ * 自動の前方一致で見つかる)。system と tools は breakpoint より前なので一緒にキャッシュされる。
+ * Haiku 4.5 は前方の合計が 4096 トークン未満だとキャッシュされない(その往復は普通に課金)。
+ */
+function withCacheBreakpoint(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const last = messages[messages.length - 1];
+  if (!last) return messages;
+  const cacheControl = { type: "ephemeral" } as const;
+  let content: Anthropic.MessageParam["content"];
+  if (typeof last.content === "string") {
+    content = [{ type: "text", text: last.content, cache_control: cacheControl }];
+  } else {
+    const blocks = [...last.content];
+    const tail = blocks[blocks.length - 1];
+    if (!tail) return messages;
+    blocks[blocks.length - 1] = { ...tail, cache_control: cacheControl } as typeof tail;
+    content = blocks;
+  }
+  return [...messages.slice(0, -1), { role: last.role, content }];
+}
+
 // --- ループ本体 -----------------------------------------------------------------
 
 /**
@@ -363,6 +389,7 @@ export async function runAgentLoop(
   const calledArgs = new Map<string, Set<string>>();
   let toolCalls = 0;
   let inputTokens = 0;
+  const tokens = { input: 0, cached: 0, output: 0 };
   let forcedAnswer = false;
   let maxTokensRetried = false;
 
@@ -382,7 +409,7 @@ export async function runAgentLoop(
           system: AGENT_SYSTEM,
           tools: TOOLS,
           ...(mustForce ? { tool_choice: { type: "tool", name: "answer" } as const } : {}),
-          messages,
+          messages: withCacheBreakpoint(messages),
         },
         // リクエスト自体のタイムアウトは緩め(実測: Haiku 4.5 の 1 往復が 12 秒を超えることがあり、
         // 全体予算と同じ値で切ると 1 回目からリクエストごと打ち切ってしまう)。全体 12 秒の歯止めは
@@ -394,10 +421,16 @@ export async function runAgentLoop(
       return null;
     }
 
-    inputTokens += response.usage?.input_tokens ?? 0;
+    // 予算はキャッシュ込みの文脈の大きさで数える(input_tokens はキャッシュから読んだ分を含まない)
+    const usage = response.usage;
+    const cached = (usage?.cache_read_input_tokens ?? 0) + (usage?.cache_creation_input_tokens ?? 0);
+    inputTokens += (usage?.input_tokens ?? 0) + cached;
+    tokens.input += usage?.input_tokens ?? 0;
+    tokens.cached += usage?.cache_read_input_tokens ?? 0;
+    tokens.output += usage?.output_tokens ?? 0;
 
     if (response.stop_reason === "refusal") {
-      return { selection: NONE_SELECTION, candidates: ctx.candidatesById, toolCalls, ms: elapsed() };
+      return { selection: NONE_SELECTION, candidates: ctx.candidatesById, toolCalls, ms: elapsed(), tokens };
     }
     if (response.stop_reason === "max_tokens") {
       if (maxTokensRetried) return null;
@@ -424,7 +457,7 @@ export async function runAgentLoop(
         return null;
       }
       const resolved = resolveSlots(parsed.data, ctx.slotToId);
-      return { selection: resolved, candidates: ctx.candidatesById, toolCalls, ms: elapsed() };
+      return { selection: resolved, candidates: ctx.candidatesById, toolCalls, ms: elapsed(), tokens };
     }
 
     const results: Anthropic.ToolResultBlockParam[] = [];

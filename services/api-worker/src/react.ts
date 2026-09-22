@@ -71,7 +71,12 @@ function parsePayload(raw: unknown): ReactPayload | null {
   };
 }
 
-export async function handleReact(request: Request, env: ReactEnv): Promise<Response> {
+export async function handleReact(
+  request: Request,
+  env: ReactEnv,
+  /** helpful の 1 回目に呼ぶ(答えのキャッシュへ入れる。index.ts が渡す) */
+  onHelpful: (answerId: string) => void = () => {},
+): Promise<Response> {
   const raw = await request.json().catch(() => null);
   const payload = parsePayload(raw);
   if (!payload) return new Response(JSON.stringify({ error: "本文を読み取れません" }), {
@@ -80,7 +85,7 @@ export async function handleReact(request: Request, env: ReactEnv): Promise<Resp
   });
 
   if (payload.kind === "value_wrong") await handleValueWrong(env, payload);
-  else await handleHelpfulOrWrong(env, payload);
+  else if (await handleHelpfulOrWrong(env, payload) && payload.kind === "helpful") onHelpful(payload.answer_id);
 
   // どちらも 200。
   return new Response(JSON.stringify({ ok: true }), {
@@ -89,7 +94,8 @@ export async function handleReact(request: Request, env: ReactEnv): Promise<Resp
   });
 }
 
-async function handleHelpfulOrWrong(env: ReactEnv, payload: ReactPayload): Promise<void> {
+/** 戻り値は「この answer_id への 1 回目の反応だったか」。 */
+async function handleHelpfulOrWrong(env: ReactEnv, payload: ReactPayload): Promise<boolean> {
   const dedupeKey = `react:${payload.answer_id}`;
   const already = await env.API.get(dedupeKey);
   if (!already) {
@@ -101,6 +107,7 @@ async function handleHelpfulOrWrong(env: ReactEnv, payload: ReactPayload): Promi
     )
       .bind(day, payload.answer_id, payload.kind, payload.reason, JSON.stringify(payload.unit_ids), payload.question)
       .run();
+    return true;
   } else if (already === payload.kind && (payload.reason || payload.question)) {
     // 同じ答え・同じ種類の 2 回目は「理由のチップ」「同意した質問文」の追記(端末は押した瞬間に 1 回目を
     // 送り、理由と同意はあとから同じ場所で選ぶ)。種類の違う 2 回目は無視する
@@ -111,6 +118,7 @@ async function handleHelpfulOrWrong(env: ReactEnv, payload: ReactPayload): Promi
       .bind(payload.answer_id, payload.reason, payload.question, payload.kind)
       .run();
   }
+  return false;
 }
 
 /** value_wrong は列ごとに 1 回。1 回目は行を作るだけ、2 回目(claim/note/question 付き)は同じ行に追記する。 */

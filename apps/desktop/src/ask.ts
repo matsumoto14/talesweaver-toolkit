@@ -284,6 +284,26 @@ async function withSession<T>(call: (token: string) => Promise<T>): Promise<T> {
   }
 }
 
+// ---- 端末 ID(1 日の上限の単位) ----
+
+const CLIENT_KEY = "ask.client";
+
+/**
+ * 端末ごとの UUID。回答サーバーは「ユーザーあたり 1 日 N 問」をこのハッシュで数え、質問の記録にも同じハッシュを付ける。
+ * 名前・メール・IP とは結び付かない。消せば新しい端末として数え直される(保存できない環境では毎回変わる)
+ */
+function clientId(): string {
+  try {
+    const stored = localStorage.getItem(CLIENT_KEY);
+    if (stored) return stored;
+    const fresh = crypto.randomUUID();
+    localStorage.setItem(CLIENT_KEY, fresh);
+    return fresh;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
 // ---- セッショントークン(PoW → 1 時間有効) ----
 
 const SESSION_KEY = "ask.session";
@@ -387,6 +407,7 @@ async function requestAskStream(
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
         accept: "text/event-stream",
+        "x-client-id": clientId(),
       },
       body: JSON.stringify({ question, state, prev }),
     });
@@ -471,7 +492,7 @@ async function requestAuthed<T>(path: string, body: unknown, token: string): Pro
   try {
     response = await fetch(`${API_ENDPOINT}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-client-id": clientId() },
       body: JSON.stringify(body),
     });
   } catch {

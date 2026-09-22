@@ -80,6 +80,24 @@ CREATE TABLE reaction (                   -- ユーザーのリアクション�
   status     TEXT NOT NULL DEFAULT 'new'  -- new | confirmed | rejected(メンテナが付ける)
 );
 
+CREATE TABLE ask_log (                    -- /ask の記録(質問と答え。運営が改善と費用の把握に使う)
+  id         INTEGER PRIMARY KEY,
+  at         TEXT NOT NULL,               -- ISO 時刻(UTC)
+  user       TEXT NOT NULL,               -- 端末 ID のハッシュ(auth.ts userHash)。端末を跨いで同じ人かは分からない
+  question   TEXT NOT NULL,
+  qkey       TEXT,                        -- 答えのキャッシュのキー(cache.ts questionKey、語の集合)。続きの質問は NULL
+  prev_page  TEXT,                        -- 続きの質問なら直前のページ
+  state      TEXT NOT NULL,               -- JSON(level / evolution。装備の中身は来ない)
+  kind       TEXT NOT NULL,               -- answer | none | error
+  reason     TEXT,                        -- none の理由 / error の文
+  route      TEXT,                        -- cheap | loop | cheap_then_loop
+  answer_id  TEXT,                        -- reaction.answer_id と突き合わせる
+  lead       TEXT,                        -- 結論文(LLM が書いた 1 文)
+  body       TEXT NOT NULL,               -- 応答 JSON の全文
+  ms         INTEGER NOT NULL             -- 所要時間
+);
+CREATE INDEX ask_log_user ON ask_log(user, at);
+
 -- 検索用の索引。contentless(本文を保持しない。ADR-013)、detail='full'。terms は取込時に重複を落としてソートした語の集合なので、位置情報があっても本文(語順)は復元できない。detail='none' / 'column' では bm25 が常に 0 で順位が付かない(実測 2026-09-22)。
 -- terms は「ページ名 › 節名」+ 本文を正規化・分かち書きした語を、重複を落として空白区切りにしたもの。
 CREATE VIRTUAL TABLE unit_fts USING fts5(

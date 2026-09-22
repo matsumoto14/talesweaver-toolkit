@@ -22,7 +22,6 @@ export interface AuthEnv {
 const POW_DIFFICULTY_BITS = 20;
 const NONCE_TTL_SECONDS = 600;
 const SESSION_TTL_SECONDS = 60 * 60; // 1 時間
-const DEFAULT_RATE_LIMIT_PER_DAY = 100;
 
 function difficultyOf(env: AuthEnv): number {
   const override = Number(env.POW_DIFFICULTY_BITS);
@@ -118,27 +117,41 @@ export async function requireSession(request: Request, env: AuthEnv): Promise<st
 
 // --- レート制限 ----------------------------------------------------------------
 
-/** IP は保存せず、ハッシュだけをキーにする。/ask と /react が共有する。 */
+const CLIENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const DEFAULT_RATE_LIMIT_PER_DAY = 20;
+
+/** IP は保存せず、ハッシュだけをキーにする。連打止め(ASK_BURST)のキー。 */
 export async function ipHash(request: Request, env: AuthEnv): Promise<string> {
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   return sha256Hex(`${env.NONCE_SECRET}:${ip}`);
 }
 
-/** 連打(1 分 10 問、Rate Limiting バインディング)+ 1 日の上限(KV カウンタ)。 */
+/**
+ * 「ユーザーあたり」の単位。端末が localStorage に持つ UUID(`x-client-id`)のハッシュ。
+ * 端末を跨いで同じ人かは分からないし、消せば新しい人になる(PoW を解き直す手間だけ)。
+ * 費用の上限は正直な利用者向けで、突破する人の歯止めは IP の連打止めと Anthropic 側の月額上限。
+ * ヘッダが無い(古い端末)なら IP のハッシュで代用する。1 日の上限と ask_log の両方がこれを使う。
+ */
+export async function userHash(request: Request, env: AuthEnv): Promise<string> {
+  const clientId = request.headers.get("x-client-id") ?? "";
+  if (CLIENT_ID_PATTERN.test(clientId)) return sha256Hex(`${env.NONCE_SECRET}:client:${clientId}`);
+  return ipHash(request, env);
+}
+
+/** 連打(1 分 10 問、IP、Rate Limiting バインディング)+ 1 日の上限(ユーザー、KV カウンタ)。 */
 export async function consumeRateLimit(request: Request, env: AuthEnv): Promise<string | null> {
   if (env.RATE_LIMIT_DISABLED === "1") return null; // 評価(eval/run.ts)が 90 問を続けて投げるため。ローカル専用
-  const hash = await ipHash(request, env);
 
   if (env.ASK_BURST) {
-    const burst = await env.ASK_BURST.limit({ key: hash });
+    const burst = await env.ASK_BURST.limit({ key: await ipHash(request, env) });
     if (!burst.success) return "続けて聞きすぎです。少し待ってからもう一度どうぞ";
   }
 
   const perDay = Number(env.RATE_LIMIT_PER_DAY) || DEFAULT_RATE_LIMIT_PER_DAY;
   const day = new Date().toISOString().slice(0, 10);
-  const key = `rate:${hash}:${day}`;
+  const key = `rate:${await userHash(request, env)}:${day}`;
   const used = Number((await env.API.get(key)) ?? "0");
-  if (used >= perDay) return "1 日に聞けるのは 100 問までです";
+  if (used >= perDay) return `1 日に聞けるのは ${perDay} 問までです。また明日どうぞ`;
   await env.API.put(key, String(used + 1), { expirationTtl: 60 * 60 * 48 });
   return null;
 }

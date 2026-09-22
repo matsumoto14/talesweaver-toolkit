@@ -50,7 +50,7 @@ export interface AnswerResponse {
   next: NextItem[];
   synced_at: string | null;
   model: string;
-  route: "cheap" | "loop" | "cheap_then_loop";
+  route: "cheap" | "loop" | "cheap_then_loop" | "cached";
   playbook: "cant_win" | null;
   answer_id: string;
   corrections: AnswerCorrection[];

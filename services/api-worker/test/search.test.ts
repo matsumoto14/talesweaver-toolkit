@@ -3,6 +3,9 @@
 import { describe, expect, it } from "vitest";
 
 import worker, { type Env } from "../src/index";
+import { fakeCtx } from "./ctx";
+
+const ctx = fakeCtx();
 
 interface FakeRow {
   [key: string]: unknown;
@@ -49,7 +52,7 @@ describe("GET /health", () => {
         ],
       }),
     };
-    const res = await worker.fetch(new Request("https://x/health"), env);
+    const res = await worker.fetch(new Request("https://x/health"), env, ctx);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toMatchObject({ ok: true, unit_count: 186000, schema_version: "1" });
@@ -57,7 +60,7 @@ describe("GET /health", () => {
 
   it("meta が無ければ 503", async () => {
     const env: Env = { WIKI: fakeDb({}) };
-    const res = await worker.fetch(new Request("https://x/health"), env);
+    const res = await worker.fetch(new Request("https://x/health"), env, ctx);
     expect(res.status).toBe(503);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.ok).toBe(false);
@@ -87,7 +90,7 @@ describe("GET /search", () => {
   });
 
   it("q が空なら no_terms", async () => {
-    const res = await worker.fetch(new Request("https://x/search?q="), baseEnv());
+    const res = await worker.fetch(new Request("https://x/search?q="), baseEnv(), ctx);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toMatchObject({ kind: "none", reason: "no_terms", query: null, search: [] });
@@ -96,7 +99,7 @@ describe("GET /search", () => {
   it("q が語を持てば no_llm で検索結果を返す(anchor top は url にアンカーを付けない)", async () => {
     const res = await worker.fetch(
       new Request(`https://x/search?${new URLSearchParams({ q: "エタ解放" })}`),
-      baseEnv(),
+      baseEnv(), ctx,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { kind: string; reason: string; search: { url: string }[] };
@@ -110,7 +113,7 @@ describe("GET /search", () => {
     const long = "あ".repeat(300);
     const res = await worker.fetch(
       new Request(`https://x/search?${new URLSearchParams({ q: long })}`),
-      baseEnv(),
+      baseEnv(), ctx,
     );
     expect(res.status).toBe(200);
   });
@@ -129,7 +132,7 @@ describe("GET /search", () => {
       }),
     };
     for (const qs of ["q=エタ", "q=エタ&limit="]) {
-      const res = await worker.fetch(new Request(`https://x/search?${qs}`), env);
+      const res = await worker.fetch(new Request(`https://x/search?${qs}`), env, ctx);
       const body = (await res.json()) as { search: unknown[] };
       expect(body.search).toHaveLength(10);
     }
@@ -138,7 +141,7 @@ describe("GET /search", () => {
   it("limit は 1..20 に丸める", async () => {
     const res = await worker.fetch(
       new Request(`https://x/search?${new URLSearchParams({ q: "エタ", limit: "999" })}`),
-      baseEnv(),
+      baseEnv(), ctx,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { search: unknown[] };

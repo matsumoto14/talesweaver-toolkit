@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 import { issueSessionToken } from "../src/auth";
 import type { AuthEnv } from "../src/auth";
 import worker, { type Env } from "../src/index";
+import { handleReact } from "../src/react";
+import { fakeCtx } from "./ctx";
+
+const ctx = fakeCtx();
 
 function memoryKv(): KVNamespace {
   const store = new Map<string, string>();
@@ -60,7 +64,7 @@ describe("POST /react", () => {
 
     const res = await worker.fetch(
       reactRequest({ answer_id: "a_1", kind: "helpful", unit_ids: ["r:x/1"] }, token),
-      env,
+      env, ctx,
     );
 
     expect(res.status).toBe(200);
@@ -81,10 +85,10 @@ describe("POST /react", () => {
     const env = makeEnv((v) => inserts.push(v), (v) => updates.push(v));
     const token = await bearerFor(env);
 
-    await worker.fetch(reactRequest({ answer_id: "a_3", kind: "wrong", unit_ids: [] }, token), env);
+    await worker.fetch(reactRequest({ answer_id: "a_3", kind: "wrong", unit_ids: [] }, token), env, ctx);
     const second = await worker.fetch(
       reactRequest({ answer_id: "a_3", kind: "wrong", reason: "outdated", unit_ids: [], question: "エタ解放は?" }, token),
-      env,
+      env, ctx,
     );
 
     expect(second.status).toBe(200);
@@ -98,8 +102,8 @@ describe("POST /react", () => {
     const env = makeEnv((v) => inserts.push(v));
     const token = await bearerFor(env);
 
-    await worker.fetch(reactRequest({ answer_id: "a_2", kind: "helpful", unit_ids: [] }, token), env);
-    const second = await worker.fetch(reactRequest({ answer_id: "a_2", kind: "wrong", unit_ids: [] }, token), env);
+    await worker.fetch(reactRequest({ answer_id: "a_2", kind: "helpful", unit_ids: [] }, token), env, ctx);
+    const second = await worker.fetch(reactRequest({ answer_id: "a_2", kind: "wrong", unit_ids: [] }, token), env, ctx);
 
     expect(second.status).toBe(200);
     expect(inserts).toHaveLength(1);
@@ -112,7 +116,7 @@ describe("POST /react", () => {
 
     await worker.fetch(
       reactRequest({ answer_id: "a_3", kind: "wrong", reason: "outdated", unit_ids: [], question: "この値は違うのでは" }, token),
-      env,
+      env, ctx,
     );
 
     const questionArg = inserts[0]?.[5];
@@ -124,7 +128,7 @@ describe("POST /react", () => {
     const env = makeEnv((v) => inserts.push(v));
     const token = await bearerFor(env);
 
-    await worker.fetch(reactRequest({ answer_id: "a_4", kind: "wrong", unit_ids: [] }, token), env);
+    await worker.fetch(reactRequest({ answer_id: "a_4", kind: "wrong", unit_ids: [] }, token), env, ctx);
 
     expect(inserts[0]?.[5]).toBeNull();
   });
@@ -133,7 +137,7 @@ describe("POST /react", () => {
     const env = makeEnv(() => {});
     const token = await bearerFor(env);
 
-    const res = await worker.fetch(reactRequest({ kind: "helpful" }, token), env);
+    const res = await worker.fetch(reactRequest({ kind: "helpful" }, token), env, ctx);
     expect(res.status).toBe(400);
   });
 
@@ -141,7 +145,7 @@ describe("POST /react", () => {
     const env = makeEnv(() => {});
     const res = await worker.fetch(
       new Request("https://worker.test/react", { method: "POST", body: JSON.stringify({ answer_id: "a", kind: "helpful", unit_ids: [] }) }),
-      env,
+      env, ctx,
     );
     expect(res.status).toBe(401);
   });
@@ -155,7 +159,7 @@ describe("POST /react value_wrong(段階 2)", () => {
 
     const res = await worker.fetch(
       reactRequest({ answer_id: "a_5", kind: "value_wrong", unit_id: "r:x/1", col: "成功率", unit_ids: ["r:x/1"] }, token),
-      env,
+      env, ctx,
     );
 
     expect(res.status).toBe(200);
@@ -179,14 +183,14 @@ describe("POST /react value_wrong(段階 2)", () => {
 
     await worker.fetch(
       reactRequest({ answer_id: "a_6", kind: "value_wrong", unit_id: "r:x/1", col: "成功率", unit_ids: [] }, token),
-      env,
+      env, ctx,
     );
     const second = await worker.fetch(
       reactRequest(
         { answer_id: "a_6", kind: "value_wrong", unit_id: "r:x/1", col: "成功率", unit_ids: [], claim: "50%", note: "公式お知らせ" },
         token,
       ),
-      env,
+      env, ctx,
     );
 
     expect(second.status).toBe(200);
@@ -203,11 +207,11 @@ describe("POST /react value_wrong(段階 2)", () => {
 
     await worker.fetch(
       reactRequest({ answer_id: "a_7", kind: "value_wrong", unit_id: "r:x/1", col: "成功率", unit_ids: [] }, token),
-      env,
+      env, ctx,
     );
     await worker.fetch(
       reactRequest({ answer_id: "a_7", kind: "value_wrong", unit_id: "r:x/1", col: "進化", unit_ids: [] }, token),
-      env,
+      env, ctx,
     );
 
     expect(inserts).toHaveLength(2);
@@ -220,9 +224,9 @@ describe("POST /react value_wrong(段階 2)", () => {
 
     await worker.fetch(
       reactRequest({ answer_id: "a_8", kind: "value_wrong", unit_id: "r:x/1", col: "成功率", unit_ids: [] }, token),
-      env,
+      env, ctx,
     );
-    await worker.fetch(reactRequest({ answer_id: "a_8", kind: "helpful", unit_ids: [] }, token), env);
+    await worker.fetch(reactRequest({ answer_id: "a_8", kind: "helpful", unit_ids: [] }, token), env, ctx);
 
     expect(inserts).toHaveLength(2);
   });
@@ -233,7 +237,7 @@ describe("POST /react value_wrong(段階 2)", () => {
 
     const res = await worker.fetch(
       reactRequest({ answer_id: "a_9", kind: "value_wrong", unit_ids: [] }, token),
-      env,
+      env, ctx,
     );
     expect(res.status).toBe(400);
   });
@@ -251,7 +255,7 @@ describe("POST /react value_wrong(段階 2)", () => {
         },
         token,
       ),
-      env,
+      env, ctx,
     );
 
     const [, , , , , claim, note] = inserts[0]!;
@@ -264,8 +268,8 @@ describe("POST /react value_wrong(段階 2)", () => {
     const env = makeEnv((v) => inserts.push(v));
     const token = await bearerFor(env);
     const base = { answer_id: "a_9", kind: "value_wrong", unit_ids: [] };
-    await worker.fetch(reactRequest({ ...base, unit_id: "p:X", col: "Y:Z" }, token), env);
-    await worker.fetch(reactRequest({ ...base, unit_id: "p:X:Y", col: "Z" }, token), env);
+    await worker.fetch(reactRequest({ ...base, unit_id: "p:X", col: "Y:Z" }, token), env, ctx);
+    await worker.fetch(reactRequest({ ...base, unit_id: "p:X:Y", col: "Z" }, token), env, ctx);
     expect(inserts).toHaveLength(2);
   });
 
@@ -273,10 +277,23 @@ describe("POST /react value_wrong(段階 2)", () => {
     const inserts: unknown[][] = [];
     const env = makeEnv((v) => inserts.push(v));
     const token = await bearerFor(env);
-    const bad1 = await worker.fetch(reactRequest({ answer_id: "a_10", kind: "value_wrong", unit_ids: [], unit_id: "x:1", col: "a" }, token), env);
-    const bad2 = await worker.fetch(reactRequest({ answer_id: "a_10", kind: "value_wrong", unit_ids: [], unit_id: "p:1", col: "a".repeat(81) }, token), env);
+    const bad1 = await worker.fetch(reactRequest({ answer_id: "a_10", kind: "value_wrong", unit_ids: [], unit_id: "x:1", col: "a" }, token), env, ctx);
+    const bad2 = await worker.fetch(reactRequest({ answer_id: "a_10", kind: "value_wrong", unit_ids: [], unit_id: "p:1", col: "a".repeat(81) }, token), env, ctx);
     expect(bad1.status).toBe(400);
     expect(bad2.status).toBe(400);
     expect(inserts).toHaveLength(0);
+  });
+});
+
+describe("helpful → 答えのキャッシュ", () => {
+  it("1 回目の helpful だけ onHelpful を呼ぶ(wrong や 2 回目は呼ばない)", async () => {
+    const env = makeEnv(() => {});
+    const called: string[] = [];
+    const call = (body: unknown): Promise<Response> =>
+      handleReact(new Request("https://x/react", { method: "POST", body: JSON.stringify(body) }), env as never, (id) => called.push(id));
+    await call({ answer_id: "a_9", kind: "helpful", unit_ids: [] });
+    await call({ answer_id: "a_9", kind: "helpful", unit_ids: [], question: "q" });
+    await call({ answer_id: "a_8", kind: "wrong", unit_ids: [] });
+    expect(called).toEqual(["a_9"]);
   });
 });
