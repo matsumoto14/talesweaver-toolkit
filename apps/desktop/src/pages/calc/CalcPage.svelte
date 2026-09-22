@@ -1070,8 +1070,11 @@
   .hero-sentence .num { flex-shrink: 0; font-size: 9.5px; }
   /* 鎖(.chain 一式)は calc/DamageChain.svelte が持つ(攻撃者ごとに 2 回描くため子コンポーネント化。ADR-016)。
      2 本目(熊)が続くときの区切りだけはここで足す — DamageChain 単体では
-     「自分の隣に自分と同じ要素があるか」を知らない(:global は実 DOM の隣接関係を見る) */
-  :global(.hero .chain-block + .chain-block) {
+     「自分の隣に自分と同じ要素があるか」を知らない(:global は実 DOM の隣接関係を見る)。
+     本体の鎖の下には回しの段(.rotation)が挟まるので、その次に来る鎖にも同じ区切りを付ける
+     (無いと 本体→回し は 8px、回し→精霊 は 4px で詰まって見えた。実機 2026-09-23) */
+  :global(.hero .chain-block + .chain-block),
+  :global(.hero .rotation + .chain-block) {
     margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-soft);
   }
   /* 合計(本体 + 熊)の面。ReadRow の面(.readrows.inset)に見出し 1 行を足しただけ(ホームの
