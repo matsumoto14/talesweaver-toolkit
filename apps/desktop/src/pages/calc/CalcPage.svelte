@@ -1119,8 +1119,14 @@
   }
   /* 合計(本体 + 熊)の面。ReadRow の面(.readrows.inset)に見出し 1 行を足しただけ(ホームの
      「いまの実力」パネルと同じ形)。上端のハイライト 1 本で「平たい箱」にしない(§08) */
-  .combined { margin-top: 8px; padding-top: 6px; padding-bottom: 6px; box-shadow: inset 0 1px 0 #fff; }
-  .combined-title { padding: 0 0 3px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-muted); }
+  /* 合計は 2 本目の鎖(召喚獣)の真下に来るので、そのままだと召喚獣の続きに見える(実機 2026-09-23)。
+     鎖どうしと同じ破線の区切りを上に置き、見出しを鎖のラベルと同じ濃さにして「両方を束ねる面」にする */
+  .combined { position: relative; margin-top: 18px; padding-top: 6px; padding-bottom: 6px; box-shadow: inset 0 1px 0 #fff; }
+  .combined::before {
+    content: ""; position: absolute; left: 0; right: 0; top: -10px;
+    border-top: 1px dashed var(--border-soft);
+  }
+  .combined-title { padding: 0 0 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--fg); }
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
 
