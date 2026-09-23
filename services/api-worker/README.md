@@ -81,7 +81,7 @@ deploy は main への push で `.github/workflows/workers.yml` が行う(型検
   npx wrangler d1 execute tw-wiki --remote --command "SELECT substr(user,1,8) AS who, count(*) AS n FROM ask_log WHERE at >= date('now') GROUP BY user ORDER BY n DESC"
   ```
 
-`units.sql` は先頭で全表を `DELETE` してから入れ直すので、wiki を再同期(`sync.py`)したら
+`units.sql` は先頭で wiki 由来の表を `DELETE` してから入れ直す(利用者から届く `reaction`・`ask_log`・`ask_call` には触らない)ので、wiki を再同期(`sync.py`)したら
 `units.py` → `--remote` の 2 手で更新できる。`unit_fts` も毎回作り直す。
 生きている Worker インスタンスは別名の辞書をキャッシュしているので、投入直後は古い辞書で
 動くことがある(次の deploy か isolate の入れ替わりで揃う)。

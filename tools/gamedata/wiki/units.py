@@ -1057,6 +1057,11 @@ def unit_search_text(unit: Unit, page_aliases: dict[str, list[str]]) -> str:
     return f"{prefix} {unit.text}"
 
 
+# units.sql が先頭で空にして入れ直す表(wiki と同梱データから作るもの)。利用者から届いたもの
+# (reaction・ask_log・ask_call)は入れない — 再投入のたびに消えてしまう。
+REBUILT_TABLES = ("correction", "unit_link", "alias", "column_note", "wiki_table", "unit", "page", "meta")
+
+
 def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dict[str, str],
             column_notes: dict[str, dict], limit: int | None, only_pages: list[str] | None,
             corrections: list[dict] | None = None, app_data: list[dict] | None = None,
@@ -1105,12 +1110,7 @@ def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dic
     texts = [unit_search_text(u, page_aliases) for u in all_units]
     terms_per_unit = run_segment_cli(segment_cli, dict_path, texts)
 
-    lines: list[str] = [
-        "DELETE FROM correction;", "DELETE FROM reaction;", "DELETE FROM unit_link;",
-        "DELETE FROM alias;", "DELETE FROM column_note;", "DELETE FROM wiki_table;",
-        "DELETE FROM unit;", "DELETE FROM page;", "DELETE FROM meta;",
-        "DROP TABLE IF EXISTS unit_fts;",
-    ]
+    lines: list[str] = [*(f"DELETE FROM {t};" for t in REBUILT_TABLES), "DROP TABLE IF EXISTS unit_fts;"]
 
     page_rows = [
         [

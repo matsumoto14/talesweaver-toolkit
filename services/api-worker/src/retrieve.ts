@@ -321,7 +321,7 @@ export async function collectCandidates(
   for (const hit of ordered) {
     if (byId.has(hit.id)) continue;
     if (hit.kind === "row" && hit.table_idx !== null) {
-      const tableKey = `${hit.page} ${hit.anchor} ${hit.table_idx}`;
+      const tableKey = `${hit.page}\u0000${hit.anchor}\u0000${hit.table_idx}`;
       if (!tablesSeen.has(tableKey)) {
         tablesSeen.add(tableKey);
         const rows = await getRows(db, hit.page, hit.anchor, hit.table_idx);

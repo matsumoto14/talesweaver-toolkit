@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from units import (  # noqa: E402
-    Heading, ListItem, Paragraph, Table, Unit, apparent_equipment_corrections,
+    REBUILT_TABLES, Heading, ListItem, Paragraph, Table, Unit, apparent_equipment_corrections,
     app_data_correction_rows, build_aliases, build_units, choose_key_columns, correction_rows,
     detect_repeat_group, fragment, is_excluded_page, is_item_catalog_page, make_row_key, numify,
     parse_blocks, promote_decorated_header, propagate_name_rows, resolve_correction_unit,
@@ -525,6 +525,19 @@ class ApparentEquipmentCorrections(unittest.TestCase):
         }]
         units = [_catalog_row("r:1", "†テスト剣", {"突き": "95"})]
         self.assertEqual(apparent_equipment_corrections(app_data, units), [])
+
+
+class RebuiltTables(unittest.TestCase):
+    """units.sql が空にする表は、schema.sql のうち利用者から届くもの以外すべて。"""
+
+    USER_TABLES = {"reaction", "ask_log", "ask_call"}
+
+    def test_rebuilds_every_wiki_table_and_never_user_data(self) -> None:
+        import re
+        schema = (Path(__file__).resolve().parents[3] / "services/api-worker/schema.sql").read_text(encoding="utf-8")
+        tables = set(re.findall(r"^CREATE TABLE (\w+)", schema, re.MULTILINE))
+        self.assertTrue(self.USER_TABLES <= tables)
+        self.assertEqual(set(REBUILT_TABLES), tables - self.USER_TABLES)
 
 
 if __name__ == "__main__":
