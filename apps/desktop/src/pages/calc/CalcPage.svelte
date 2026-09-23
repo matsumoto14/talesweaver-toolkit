@@ -26,7 +26,7 @@
   import Value from "../../ui/Value.svelte";
   import { latest } from "../../ui/latest.svelte";
   import { changed, markRecalculated } from "../../ui/motion.svelte";
-  import { reachOk, STATE } from "../../ui/states";
+  import { REACH_BADGES, REACH_STATE, reachOk, STATE, type Badge } from "../../ui/states";
   import DamageChain from "./DamageChain.svelte";
   import DefensePanel from "./DefensePanel.svelte";
   import MaterialsPane from "./MaterialsPane.svelte";
@@ -443,6 +443,8 @@
   // combined が body と同じ値になる(Rust combine_damage のフォールバック)ので、
   // 分岐を画面側に持たない(ADR-016 決定 9・10)
   const defeatSeconds = $derived(combined?.defeat_seconds ?? null);
+  /** メーター比。討伐時間が長いほど伸びる(0 = 一瞬、100% = 目安ぴったり) */
+  const meterRatio = $derived(defeatSeconds !== null ? Math.min(1, defeatSeconds / closeSeconds) : 0);
   const hasReqs = $derived((target?.content.requirements.length ?? 0) > 0);
   // 評価が未取得の間は入場条件を「不明」として扱い、未達コンテンツに「通る/余裕」を
   // 出さない(ダメージ 120ms・評価 200ms のデバウンス差で毎回この窓が開く。PR レビュー指摘)
@@ -451,6 +453,13 @@
   /** 目安に対する到達段(Rust 側の判定。目安なしは null) */
   const reach = $derived(combined?.reach ?? null);
   const reached = $derived(reachOk(reach));
+  const badgeState = $derived.by(() => {
+    if (perHit === null || !entryKnown || reach === null) return 6;
+    if (hasReqs && !entryOk) return reached ? 5 : 4;
+    return REACH_STATE[reach];
+  });
+  // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)。先頭 6 件は共通(ui/states.ts)
+  const BADGE: Badge[] = [...REACH_BADGES, { label: "判定中", state: "unknown" }];
 
   // --- なぜこの数字?(トレースの式から組み立て) ---------------------------
   // 段の組み立ては calc/damageDetail.ts、面そのものは calc/WhyPanel.svelte(本体だけ。
@@ -846,7 +855,9 @@
                 </ReadRow>
               </div>
             {/if}
-            <!-- 計算中・防御力を抜けていない は討伐時間の有無に関わらず伝えるべき事実なので、この 2 つだけ別枠で出す -->
+            <!-- 討伐時間が出せない(敵 HP か中ディレイが未収録)ときはメーターも文言も出さない
+                 (§00 02。0 や「届かない」で埋めると嘘になる)。計算中・防御力を抜けていない
+                 は討伐時間の有無に関わらず伝えるべき事実なので、その 2 つだけは別枠で出す -->
             {#if perHit === null}
               <div class="meter big"><div class="fill" style="width: 0%; background: {STATE.unknown.bar};"></div></div>
               <div class="hero-sentence"><span class="sentence">計算中…</span></div>
@@ -855,10 +866,23 @@
               <div class="hero-sentence">
                 <span class="sentence ng">防御力を抜けていません(攻撃力 {atkA !== null ? fmtInt(atkA) : "—"} ≤ 防御力 {defenseValue !== null ? fmtInt(defenseValue) : "—"})</span>
               </div>
+            {:else if defeatSeconds !== null && reach !== null}
+              <div class="meter big"><div class="fill" style="width: {meterRatio * 100}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
+              <div class="hero-sentence">
+                <span class="sentence" class:ok={reached} class:ng={!reached}>
+                  {#if reach === "comfortable"}
+                    {fmtDuration(tables.reach_seconds.comfortable)}かからずに倒せます。
+                  {:else if reach === "reached"}
+                    {fmtDuration(defeatSeconds)} で倒せます。
+                  {:else if reach === "close"}
+                    {fmtDuration(defeatSeconds)}。{fmtDuration(closeSeconds)}の目安ぎりぎりです。
+                  {:else}
+                    {fmtDuration(defeatSeconds)}。{fmtDuration(closeSeconds)}を超えるので厳しいです。
+                  {/if}
+                </span>
+                <span class="num dim">目安 {fmtDuration(closeSeconds)}以内</span>
+              </div>
             {/if}
-            <!-- 「n 秒で倒せます」の 1 文とメーターは 2026-09-23 に外した。討伐時間は鎖の節(召喚獣なし)か
-                 合計の面(召喚獣あり)に出ていて、目安は見出しの「目安 n 分以内」にあるので、同じことを
-                 3 度言っていた(§00 ②)。届かないときの打ち手は下の「一番効くのは」の行が持つ -->
             <!-- 足りない分をどう埋める? を 1 行に(旧: 紫のパネル)。候補が無い・すでに目安に
                  届いているときは行ごと消す(§00 02) -->
             {#if perHit !== null && !reached && whatIf.length > 0}
@@ -1081,7 +1105,9 @@
   .meter.big { margin-top: 10px; height: 12px; border-radius: var(--r-inset); }
   .hero-sentence { margin-top: 7px; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .sentence { min-width: 0; flex: 1; font-size: 11px; font-weight: 700; text-wrap: pretty; }
+  .sentence.ok { color: var(--good); }
   .sentence.ng { color: var(--danger); }
+  .hero-sentence .num { flex-shrink: 0; font-size: 9.5px; }
   /* 鎖(.chain 一式)は calc/DamageChain.svelte が持つ(攻撃者ごとに 2 回描くため子コンポーネント化。ADR-016)。
      2 本目(熊)が続くときの区切りだけはここで足す — DamageChain 単体では
      「自分の隣に自分と同じ要素があるか」を知らない(:global は実 DOM の隣接関係を見る)。
