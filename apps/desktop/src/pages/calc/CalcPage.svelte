@@ -10,7 +10,7 @@
     Adjustments, CharacterDamageResult, ComboSkillType, ContentEvaluation, DefenseProfile, NewCharacter,
     RotationChoices, Skill, UpgradeCandidate,
   } from "../../api/types";
-  import { fmtDuration, fmtInt, fmtNum, fmtPct } from "../../format";
+  import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtSigned, fmtSignedPct } from "../../format";
   import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { tables } from "../../tables.svelte";
@@ -308,19 +308,23 @@
   /** 召喚獣が撃つスキルの表示名 */
   const summonSkillName = $derived(summonSkillFull?.name ?? "");
   /** 召喚獣の鎖のラベル(熊 / 精霊) */
-  // 合計(本体 + 召喚獣)の内訳。本体は回しがあれば回しの DPS、召喚獣は陣で居ないぶんを引いた値
-  // (Rust の combine_damage と同じ足し算。ここで計算し直さず、材料をそのまま見せる)
-  const bodyShareDps = $derived(rotation?.expected_dps ?? body?.expected_dps ?? null);
-  const summonAbsentShare = $derived(rotation?.summon_absent_share ?? 0);
-  const summonShareDps = $derived(
-    summon?.result.expected_dps == null ? null : summon.result.expected_dps * (1 - summonAbsentShare),
-  );
-  /** 回しの顔ぶれ(連打技 + 差し込む技)。合計の内訳の注記用 */
-  const rotationSummary = $derived(
-    rotation
-      ? [rotation.filler?.skill_name, ...rotation.inserts.map((i) => i.skill_name)].filter(Boolean).join(" + ")
-      : "",
-  );
+  // 合計(本体 + 召喚獣)の内訳は**増減**で言う(数字の足し算ではなく「回しでこれだけ増え、陣で
+  // これだけ減った」。ユーザー判断 2026-09-23)。本体 = 主軸を撃ち続けた値 → 回しの値の差、
+  // 召喚獣 = 陣で居ないぶんの減り(Rust の combine_damage と同じ材料。ここで計算し直さない)
+  const bodyGain = $derived.by(() => {
+    const base = body?.expected_dps;
+    if (!rotation || base == null || base <= 0 || rotation.inserts.length === 0) return null;
+    const withRotation = rotation.expected_dps;
+    return { amount: withRotation - base, rate: (withRotation - base) / base };
+  });
+  const summonLoss = $derived.by(() => {
+    const share = rotation?.summon_absent_share ?? 0;
+    const full = summon?.result.expected_dps;
+    if (full == null || share <= 0) return null;
+    return { amount: full * share, rate: share };
+  });
+  /** 差し込んでいる技の名前(合計の内訳の注記用) */
+  const rotationInsertNames = $derived(rotation ? rotation.inserts.map((i) => i.skill_name).join("・") : "");
   const summonLabel = $derived(summonSkillFull?.attacker === "destruction_spirit" ? "精霊" : "熊");
   /** 召喚獣の鎖のバッジに置く絵。熊はルシベア専用スキル(anais_rucy_*)ならルシベア、他はミカベア
    *  (突き・ジャッジメントスピン等は両方の人形が撃つので、どちらの人形かは保存していない)。
@@ -813,22 +817,26 @@
                 <!-- 合計の内訳。本体は回しがあればその DPS(主軸単独ではない)、召喚獣は陣で消えている
                      ぶんを引いた値。合計だけ出すと「本体の鎖の数字 + 召喚獣の鎖の数字」に見えて
                      合わないので(実機 2026-09-23)、足し算の 2 項をそのまま行にする -->
-                <ReadRow
-                  label="本体"
-                  value={bodyShareDps != null ? fmtInt(Math.round(bodyShareDps)) : "—"}
-                  motion={() => (bodyShareDps == null ? null : Math.round(bodyShareDps))}
-                  delta={{}}
-                >
-                  {#snippet note()}{rotation ? `スキル回し(${rotationSummary})` : `${skill?.name ?? "主軸"}を撃ち続けた値`}{/snippet}
-                </ReadRow>
-                <ReadRow
-                  label={summonLabel}
-                  value={summonShareDps != null ? fmtInt(Math.round(summonShareDps)) : "—"}
-                  motion={() => (summonShareDps == null ? null : Math.round(summonShareDps))}
-                  delta={{}}
-                >
-                  {#snippet note()}{#if summonAbsentShare > 0 && summon?.result.expected_dps != null}{fmtInt(Math.round(summon.result.expected_dps))} × (1 − {fmtPct(summonAbsentShare, 1)})。陣を置くと消え、呼び直すまで居ない{:else}召喚中も本体の手は止まらないので、そのまま足す{/if}{/snippet}
-                </ReadRow>
+                {#if bodyGain !== null}
+                  <ReadRow
+                    label="本体"
+                    value={fmtSignedPct(bodyGain.rate, 0)}
+                    motion={() => Math.round(bodyGain?.amount ?? 0)}
+                    tone={bodyGain.amount >= 0 ? "up" : "down"}
+                  >
+                    {#snippet note()}回しで {bodyGain.amount >= 0 ? "上がる" : "下がる"}ぶん({fmtSigned(Math.round(bodyGain.amount))})。{skill?.name ?? "主軸"}だけを撃ち続けるより、{rotationInsertNames} を差し込んだ値{/snippet}
+                  </ReadRow>
+                {/if}
+                {#if summonLoss !== null}
+                  <ReadRow
+                    label={summonLabel}
+                    value={fmtSignedPct(-summonLoss.rate, 1)}
+                    motion={() => Math.round(summonLoss?.amount ?? 0)}
+                    tone="down"
+                  >
+                    {#snippet note()}陣で居ないぶん({fmtSigned(-Math.round(summonLoss.amount))})。置くと消え、呼び直すまで攻撃が止まる{/snippet}
+                  </ReadRow>
+                {/if}
                 <ReadRow
                   label="合計 DPS"
                   value={combined?.expected_dps != null ? fmtInt(Math.round(combined.expected_dps)) : "—"}
