@@ -56,7 +56,7 @@ export function isLockedEquipment(item: { id: string }): boolean {
 }
 
 /** ロック中は出さないタブ */
-const LOCKED_TABS = new Set(["versus", "inkri", "ask"]);
+const LOCKED_TABS = new Set(["versus", "inkri"]);
 
 export function isLockedTab(tab: string): boolean {
   return !unlock.on && LOCKED_TABS.has(tab);
