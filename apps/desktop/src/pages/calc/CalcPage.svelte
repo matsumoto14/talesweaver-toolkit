@@ -818,24 +818,23 @@
                 <!-- 合計の内訳。本体は回しがあればその DPS(主軸単独ではない)、召喚獣は陣で消えている
                      ぶんを引いた値。合計だけ出すと「本体の鎖の数字 + 召喚獣の鎖の数字」に見えて
                      合わないので(実機 2026-09-23)、足し算の 2 項をそのまま行にする -->
-                {#if bodyGain !== null}
+                {#if bodyGain !== null && rotation}
+                  <!-- 値は実際の DPS(合計の足し算の項)。増減は隣に符号つきで(割合だけだと取り分に見える。実機 2026-09-23) -->
                   <ReadRow
                     label="本体"
-                    value={fmtSignedPct(bodyGain.rate, 0)}
-                    motion={() => Math.round(bodyGain?.amount ?? 0)}
-                    tone={bodyGain.amount >= 0 ? "up" : "down"}
+                    value={fmtInt(Math.round(rotation.expected_dps))}
+                    motion={() => Math.round(rotation?.expected_dps ?? 0)}
                   >
-                    {#snippet note()}回しで {bodyGain.amount >= 0 ? "上がる" : "下がる"}ぶん({fmtSigned(Math.round(bodyGain.amount))})。{skill?.name ?? "主軸"}だけを撃ち続けるより、{rotationInsertNames} を差し込んだ値{/snippet}
+                    {#snippet note()}<Value class="gain" tone={bodyGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(bodyGain.amount))}(${fmtSignedPct(bodyGain.rate, 0)})`} /> {skill?.name ?? "主軸"}だけを撃ち続けるより、{rotationInsertNames} を差し込んだぶん{/snippet}
                   </ReadRow>
                 {/if}
-                {#if summonLoss !== null}
+                {#if summonLoss !== null && summon?.result.expected_dps != null}
                   <ReadRow
                     label={summonLabel}
-                    value={fmtSignedPct(-summonLoss.rate, 1)}
-                    motion={() => Math.round(summonLoss?.amount ?? 0)}
-                    tone="down"
+                    value={fmtInt(Math.round(summon.result.expected_dps - summonLoss.amount))}
+                    motion={() => Math.round((summon?.result.expected_dps ?? 0) - (summonLoss?.amount ?? 0))}
                   >
-                    {#snippet note()}陣で不在のぶん({fmtSigned(-Math.round(summonLoss.amount))})。置くと消え、呼び直すまで攻撃が止まる{/snippet}
+                    {#snippet note()}<Value class="gain" tone="down" value={`${fmtSigned(-Math.round(summonLoss.amount))}(${fmtSignedPct(-summonLoss.rate, 1)})`} /> 陣を置くと消え、呼び直すまで攻撃が止まるぶん{/snippet}
                   </ReadRow>
                 {/if}
                 <ReadRow
@@ -1128,6 +1127,8 @@
     border-top: 1px dashed var(--border-soft);
   }
   .combined-title { padding: 0 0 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--fg); }
+  /* 内訳の増減は注記の先頭に符号つきの数値(色は Value の tone)。注記の薄さに負けないよう太く */
+  .combined :global(.gain) { font-weight: 700; margin-right: 4px; }
   .delay-note { margin-top: 6px; font-size: 9px; line-height: 1.5; }
   .delay-note .warn { color: var(--danger, #B5443A); }
 
