@@ -1941,6 +1941,7 @@ fn build_summon_damage(
     temporary_adjustments: Option<domain::Adjustments>,
 ) -> CommandResult<SummonDamage> {
     let skill = find_skill(summon_skill_id)?;
+    let cooldown_seconds = skill.cooldown_seconds;
     let (material, target) = build_damage_input(
         base_stats,
         game_character_id,
@@ -1960,7 +1961,7 @@ fn build_summon_damage(
     let mut result = domain::calculate_damage(&material, &target);
     // 召喚獣の攻撃間隔は本体の実測回数表を使わず式で出す(domain::apply_summon_interval。
     // 中ディレイ・回数・DPS・討伐時間をまとめて作り直し、本体式の値を残さない)
-    let interval_seconds = domain::apply_summon_interval(&mut result, target.enemy.hp);
+    let interval_seconds = domain::apply_summon_interval(&mut result, cooldown_seconds, target.enemy.hp);
     Ok(SummonDamage {
         skill_id: summon_skill_id.to_string(),
         result,

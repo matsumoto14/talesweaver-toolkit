@@ -129,10 +129,16 @@ pub fn actual_delay(
 /// 熊には使わない(常に式で出す)。
 const SUMMON_DELAY_OVERHEAD: f64 = 0.0705;
 
-/// 熊(魔法人形)の 60 秒あたりのスキル回数。コンボボーナスは乗らない(熊はコンボしない)ので
+/// 召喚獣(熊・破壊精霊)の 60 秒あたりのスキル回数。コンボボーナスは乗らない(召喚獣はコンボしない)ので
 /// `combo_rate` は考慮しない。`delay_reduction` は上限 70% 適用後の値を渡す。
-pub fn summon_uses_per_minute(base_delay_seconds: f64, delay_reduction: f64) -> f64 {
-    SECONDS_PER_MINUTE / (base_delay_seconds * (1.0 - delay_reduction) + SUMMON_DELAY_OVERHEAD)
+/// 間隔は CT を下回らない(CT の明ける前には撃てない)。
+pub fn summon_uses_per_minute(
+    base_delay_seconds: f64,
+    delay_reduction: f64,
+    cooldown_seconds: Option<f64>,
+) -> f64 {
+    let interval = base_delay_seconds * (1.0 - delay_reduction) + SUMMON_DELAY_OVERHEAD;
+    SECONDS_PER_MINUTE / interval.max(cooldown_seconds.unwrap_or(0.0))
 }
 
 /// 実測のスキル回数表(**60 秒あたり**)。行 = 総中ディレイ減少 %、列 = 基本中ディレイ(秒)。
@@ -220,9 +226,17 @@ mod tests {
     #[test]
     fn 熊の攻撃間隔は基本中ディレイに0_0705秒を足した式で出す() {
         // 減少 0、基本 1s → 60 / 1.0705
-        assert!((summon_uses_per_minute(1.0, 0.0) - 60.0 / 1.0705).abs() < 1e-9);
+        assert!((summon_uses_per_minute(1.0, 0.0, None) - 60.0 / 1.0705).abs() < 1e-9);
         // 減少 0.35、基本 0.8s → 60 / (0.8×0.65 + 0.0705)
-        assert!((summon_uses_per_minute(0.8, 0.35) - 60.0 / (0.8 * 0.65 + 0.0705)).abs() < 1e-9);
+        assert!((summon_uses_per_minute(0.8, 0.35, None) - 60.0 / (0.8 * 0.65 + 0.0705)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn 召喚獣の攻撃間隔はctを下回らない() {
+        // 基本 1.0s・減少 0.35 → 式は 0.7205s だが CT 1s が明けるまで撃てない
+        assert!((summon_uses_per_minute(1.0, 0.35, Some(1.0)) - 60.0).abs() < 1e-9);
+        // 式のほうが長ければ CT は効かない
+        assert!((summon_uses_per_minute(1.0, 0.0, Some(1.0)) - 60.0 / 1.0705).abs() < 1e-9);
     }
 
     // wiki `#ActualDelay`: 中ディレイ = 基本 × (1 − 減少値) × (2 コンボ以上なら 0.5)

@@ -693,9 +693,17 @@ pub fn defeat_seconds(hp: Option<i64>, expected_dps: Option<f64>) -> Option<f64>
 /// `reach`)を作り直す。`calculate_damage` が出した本体式の値(実測回数表・下限 0.3s・コンボ倍率)は
 /// 熊には当てはまらないので残さない。戻りは攻撃間隔(秒)。中ディレイ未収録なら何もせず `None`。
 /// 計算タブ(commands)とホーム評価(content_evaluation)の両方がここを通る(二重実装しない)。
-pub fn apply_summon_interval(result: &mut DamageResult, enemy_hp: Option<i64>) -> Option<f64> {
+///
+/// 間隔は技の CT(`cooldown_seconds`)を下回らない。式だけだと中ディレイ 1.0s・CT 1s の技が
+/// 減少 35% で 0.72s に 1 回撃つ計算になり、CT の明ける前に撃っていた(ユーザー判断 2026-09-23)。
+pub fn apply_summon_interval(
+    result: &mut DamageResult,
+    cooldown_seconds: Option<f64>,
+    enemy_hp: Option<i64>,
+) -> Option<f64> {
     let delay = result.actual_delay.as_mut()?;
-    let uses_per_minute = crate::actual_delay::summon_uses_per_minute(delay.base, delay.reduction);
+    let uses_per_minute =
+        crate::actual_delay::summon_uses_per_minute(delay.base, delay.reduction, cooldown_seconds);
     let interval = crate::actual_delay::SECONDS_PER_MINUTE / uses_per_minute;
     delay.combo_rate = 1.0;
     delay.raw = interval;

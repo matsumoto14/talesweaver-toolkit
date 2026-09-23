@@ -341,10 +341,16 @@
         ? "anais_rucy_bear_summon"
         : "anais_mica_bear_summon",
   );
+  /** 召喚獣の攻撃間隔が CT で頭打ちか(domain::apply_summon_interval は式と CT の長いほうを採る) */
+  const summonIntervalCapped = $derived(
+    summon?.interval_seconds != null && summon.interval_seconds === summonSkillFull?.cooldown_seconds,
+  );
   /** 召喚獣の DPS 節に出す間隔の注記。中ディレイ未収録(interval_seconds が null)なら出さない */
   const summonIntervalNote = $derived(
     summon?.interval_seconds != null
-      ? `${fmtNum(summon.interval_seconds, 2)}s 間隔(中ディレイ + 0.0705s)・コンボは乗りません`
+      ? `${fmtNum(summon.interval_seconds, 2)}s 間隔(${
+          summonIntervalCapped ? "CT で頭打ち" : "中ディレイ + 0.0705s"
+        })・コンボは乗りません`
       : null,
   );
   const requestLatest = latest({ debounce: 120 });
@@ -805,6 +811,7 @@
                 icon={{ kind: "skill", id: summonIconId }}
                 showDefeat={false} heroNumber={true}
                 intervalNote={summonIntervalNote}
+                intervalCapped={summonIntervalCapped}
                 onView={() => viewWhy("summon")}
                 onPerHitDeltaFollow={() => { viewWhy("summon"); summonDetails.follow("perHit"); }}
                 flowChanged={summonFlowChanged}

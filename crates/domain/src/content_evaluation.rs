@@ -334,7 +334,11 @@ fn evaluate_one_content(
         // プレイヤーの実測なので使わず `summon_uses_per_minute` の式で回数を出す
         if let Some(summon_input) = summon {
             let mut summon_result = calculate_damage(material, &to_target(summon_input));
-            apply_summon_interval(&mut summon_result, enemy.hp);
+            apply_summon_interval(
+                &mut summon_result,
+                summon_input.skill.cooldown_seconds,
+                enemy.hp,
+            );
             combined = combine_expected_dps(
                 combined,
                 summon_result.expected_dps.map(|e| e * summon_present),

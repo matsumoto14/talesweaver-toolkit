@@ -41,6 +41,8 @@
     /** 熊の DPS 節に出す間隔の注記(「{n}s 間隔(中ディレイ + 0.0705s)・コンボは乗りません」)。
      *  本体は null(通常の「◯回/分」表示のまま) */
     intervalNote?: string | null;
+    /** 召喚獣の攻撃間隔が CT で頭打ちか(式より CT が長い)。本体は false */
+    intervalCapped?: boolean;
     /** 節を押した(= この鎖を見ている)。「なぜこの数字?」がこの鎖に付いてくる合図 */
     onView?: () => void;
     /** 「1 発」の差分を押すと「なぜこの数字?」へ辿る(本体だけが持つ機能。熊には無い) */
@@ -57,7 +59,7 @@
   }
   let {
     result, skill, store, attackerLabel, isSummon = false, attackerSkillName, icon, showDefeat, heroNumber,
-    intervalNote = null, onView, onPerHitDeltaFollow, flowChanged = false, flag = null, rotation = null,
+    intervalNote = null, intervalCapped = false, onView, onPerHitDeltaFollow, flowChanged = false, flag = null, rotation = null,
     combined = null,
   }: Props = $props();
 
@@ -240,9 +242,12 @@
       label: intervalNote ? "攻撃間隔" : "中ディレイ",
       value: fmtNum(d.value, 2, "s"),
       n: d.value, unit: "s",
-      // 熊は 基本 × (1 − 減少) + 0.0705s(発動遅延)。下限 0.3s もコンボ倍率も無い(domain::apply_summon_interval)
+      // 召喚獣は 基本 × (1 − 減少) + 0.0705s(発動遅延)と CT の長いほう。下限 0.3s もコンボ倍率も無い
+      // (domain::apply_summon_interval)
       sub: intervalNote
-        ? "基本 × (1 − 減少) + 0.0705s(発動遅延)"
+        ? intervalCapped
+          ? `CT ${fmtNum(d.value, 1, "s")} で頭打ち`
+          : "基本 × (1 − 減少) + 0.0705s(発動遅延)"
         : d.floored ? `下限 ${fmtNum(limits.actual_delay_min, 1, "s")} で頭打ち` : undefined,
     });
     const cycle = result.combo;
