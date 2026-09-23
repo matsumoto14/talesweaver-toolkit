@@ -310,7 +310,7 @@
   /** 召喚獣の鎖のラベル(熊 / 精霊) */
   // 合計(本体 + 召喚獣)の内訳は**増減**で言う(数字の足し算ではなく「回しでこれだけ増え、陣で
   // これだけ減った」。ユーザー判断 2026-09-23)。本体 = 主軸を撃ち続けた値 → 回しの値の差、
-  // 召喚獣 = 陣で居ないぶんの減り(Rust の combine_damage と同じ材料。ここで計算し直さない)
+  // 召喚獣 = 陣で不在のぶんの減り(Rust の combine_damage と同じ材料。ここで計算し直さない)
   const bodyGain = $derived.by(() => {
     const base = body?.expected_dps;
     if (!rotation || base == null || base <= 0 || rotation.inserts.length === 0) return null;
@@ -792,6 +792,7 @@
                    取り分が技ごとに読める。数は Rust の回しが技ごとに返したものをそのまま出す -->
               <RotationPane
                 {rotation} choices={rotationChoices} onIds={rotationOnIds} skills={bodySkills}
+                hasSummon={summon !== null}
                 onToggle={toggleRotationSkill}
                 overridden={rotationOverride !== null}
                 onReset={() => (rotationOverride = null)}
@@ -834,7 +835,7 @@
                     motion={() => Math.round(summonLoss?.amount ?? 0)}
                     tone="down"
                   >
-                    {#snippet note()}陣で居ないぶん({fmtSigned(-Math.round(summonLoss.amount))})。置くと消え、呼び直すまで攻撃が止まる{/snippet}
+                    {#snippet note()}陣で不在のぶん({fmtSigned(-Math.round(summonLoss.amount))})。置くと消え、呼び直すまで攻撃が止まる{/snippet}
                   </ReadRow>
                 {/if}
                 <ReadRow

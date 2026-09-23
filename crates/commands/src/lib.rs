@@ -1842,6 +1842,9 @@ pub struct RotationInsert {
     pub cooldown_seconds: f64,
     /// 陣(設置技)。`cooldown_seconds` は CT ではなく持続で、画面は「持続」と言う
     pub is_field: bool,
+    /// `seconds` のうち、置いたあと精霊を呼び直す召喚スキルの動作(秒)。消えない技は 0。
+    /// 画面はタイムラインでこの区画を技と分けて描く(本体の手順 = 置く → 呼ぶ → 連打)
+    pub resummon_seconds: f64,
     /// この技を撃つ間隔(秒)= 1 回ぶん + 挟む連打技。CT より短くならない
     pub interval_seconds: f64,
     /// 1 回あたり挟む連打技の回数
@@ -2275,6 +2278,7 @@ fn build_rotation(
         seconds: Option<f64>,
         cooldown_seconds: f64,
         is_field: bool,
+        resummon_seconds: f64,
         summon_absent_seconds: f64,
         minimum_filler_uses: u32,
     }
@@ -2300,6 +2304,7 @@ fn build_rotation(
             seconds: insert_skill.insert_seconds(result_of(role).cycle_seconds()),
             cooldown_seconds: insert_skill.cooldown_seconds.unwrap_or(0.0),
             is_field: insert_skill.field.is_some(),
+            resummon_seconds: insert_skill.field.map_or(0.0, |f| f.resummon_seconds),
             summon_absent_seconds: insert_skill.summon_absent_seconds(result_of(role).cycle_seconds()),
             minimum_filler_uses,
         });
@@ -2406,6 +2411,7 @@ fn build_rotation(
                 seconds: insert.seconds.unwrap_or(0.0),
                 cooldown_seconds: insert.cooldown_seconds,
                 is_field: insert.is_field,
+                resummon_seconds: insert.resummon_seconds,
                 interval_seconds: slot.interval_seconds,
                 filler_uses: slot.filler_uses,
                 filler_seconds: slot.filler_seconds,

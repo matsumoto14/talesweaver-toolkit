@@ -2149,6 +2149,8 @@ export interface RotationInsert {
   cooldown_seconds: number;
   /** 陣(設置技)。cooldown_seconds は CT ではなく持続(置き直す間隔)なので、画面は「持続」と言う */
   is_field: boolean;
+  /** seconds のうち、置いたあと精霊を呼び直す召喚スキルの動作(秒)。消えない技は 0 */
+  resummon_seconds: number;
   /** この技を撃つ間隔(秒)。CT より短くならない */
   interval_seconds: number;
   /** 1 回あたり挟む連打技の回数 */

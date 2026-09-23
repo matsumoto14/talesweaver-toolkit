@@ -33,8 +33,17 @@
     /** このキャラのスキル一覧。回しに入る技がチャネリングかを引くのに使う(鎖の内訳は
      *  主軸しか見ないので、連打技・差し込みの tick はここで言う) */
     skills: Skill[];
+    /** 召喚獣(精霊)を出しているか。陣で消える精霊の「不在 / 攻撃中」の帯はこのときだけ描く */
+    hasSummon?: boolean;
   }
-  let { rotation, choices, onIds, onToggle, overridden, onReset, skills }: Props = $props();
+  let { rotation, choices, onIds, onToggle, overridden, onReset, skills, hasSummon = false }: Props = $props();
+
+  /** 陣の型(アンフェル / グレシス / イグニー)から、置いたあと呼び直す召喚スキルの名前 */
+  const SUMMON_NAMES: Record<string, string> = { anferu: "アンフェル召喚", gureshisu: "グレシス召喚", igni: "イグニー召喚" };
+  const resummonNameOf = (id: string) => {
+    const form = skills.find((s) => s.id === id)?.summon_form ?? null;
+    return form !== null && form in SUMMON_NAMES ? SUMMON_NAMES[form] : "召喚";
+  };
 
   /** 1 回の使用で何 tick 入るか(チャネリング技だけ)。他の技は null */
   const channelingOf = (id: string) => skills.find((s) => s.id === id)?.channeling ?? null;
@@ -77,7 +86,10 @@
         name: insert.skill_name,
         color: INSERT_COLORS[index % INSERT_COLORS.length],
         role: `${fmtNum(insert.interval_seconds, 1, "s")} に 1 回`,
-        detail: `1 回 ${fmtNum(insert.seconds, 2, "s")}` + tickNote(insert.skill_id),
+        // 陣は「置く + 精霊の呼び直し」で 1 回(呼び直しの秒は Rust が返す)
+        detail: insert.resummon_seconds > 0
+          ? `1 回 ${fmtNum(insert.seconds, 2, "s")}(置く ${fmtNum(insert.seconds - insert.resummon_seconds, 2, "s")} + ${resummonNameOf(insert.skill_id)} ${fmtNum(insert.resummon_seconds, 2, "s")})`
+          : `1 回 ${fmtNum(insert.seconds, 2, "s")}` + tickNote(insert.skill_id),
         expectedDps: insert.expected_dps,
         dpsShare: insert.dps_share,
       });
@@ -122,9 +134,16 @@
     color: string;
     /** その技を撃つ間隔(秒)= 帯の全幅 */
     total: number;
-    /** 差し込む技 1 回(秒)とその割合(%) */
+    /** 差し込む技 1 回(秒)とその割合(%)。陣は「置く」だけの幅で、呼び直しは別の区画 */
     seconds: number;
     insertPct: number;
+    /** 置いたあと精霊を呼び直す区画(秒・割合・召喚スキル名)。無ければ 0 */
+    resummonSeconds: number;
+    resummonPct: number;
+    resummonName: string;
+    /** 精霊が不在の時間(秒・割合)= 置く + 呼び直し。陣でなければ 0 */
+    absentSeconds: number;
+    absentPct: number;
     /** 合間の連打(回数・合計秒・割合) */
     fillerUses: number;
     fillerSeconds: number;
@@ -145,13 +164,19 @@
       const perUsePx = insert.filler_uses > 0
         ? (trackWidth * fillerPct) / 100 / insert.filler_uses
         : 0;
+      const castSeconds = insert.seconds - insert.resummon_seconds;
       return {
         key: `line:${insert.skill_id}`,
         name: insert.skill_name,
         color: INSERT_COLORS[index % INSERT_COLORS.length],
         total,
-        seconds: insert.seconds,
-        insertPct: pct(insert.seconds, total),
+        seconds: castSeconds,
+        insertPct: pct(castSeconds, total),
+        resummonSeconds: insert.resummon_seconds,
+        resummonPct: pct(insert.resummon_seconds, total),
+        resummonName: resummonNameOf(insert.skill_id),
+        absentSeconds: insert.resummon_seconds > 0 ? insert.seconds : 0,
+        absentPct: insert.resummon_seconds > 0 ? pct(insert.seconds, total) : 0,
         fillerUses: insert.filler_uses,
         fillerSeconds: insert.filler_seconds,
         fillerPct,
@@ -224,6 +249,12 @@
                 <span class="zone" style="width: {line.insertPct}%; background: {line.color};">
                   <span class="zone-text">{line.name} {fmtNum(line.seconds, 1, "s")}</span>
                 </span>
+                {#if line.resummonPct > 0}
+                  <!-- 陣を置くと精霊が消えるので、その場で呼び直す(本体の手順の一部) -->
+                  <span class="zone resummon" style="width: {line.resummonPct}%;">
+                    <span class="zone-text">{line.resummonName} {fmtNum(line.resummonSeconds, 1, "s")}</span>
+                  </span>
+                {/if}
                 {#if line.fillerPct > 0 && rotation?.filler}
                   <!-- 連打の区画は 1 回ごとに刻む(細くて数えられないときは刻まず回数だけ) -->
                   <span
@@ -243,12 +274,26 @@
                   </span>
                 {/if}
               </span>
-              <!-- 秒の目盛り: 0s / 差し込みが終わる秒 / 1 周の秒 -->
+              {#if hasSummon && line.absentPct > 0}
+                <!-- 精霊の帯: 置いてから呼び直すまで不在、あとは攻撃中。合計の「−x%」の出どころ -->
+                <!-- 上の帯と同じ幅・同じ目盛りに揃える(文字は下の目盛り行の中央に) -->
+                <span class="track inset spirit" title="精霊は陣を置くと消え、呼び直すまで不在">
+                  <span class="zone absent" style="width: {line.absentPct}%;"></span>
+                  <span class="zone present" style="width: {100 - line.absentPct}%;"></span>
+                </span>
+              {/if}
+              <!-- 秒の目盛り: 0s / 差し込みが終わる秒(呼び直し込み)/ 1 周の秒 -->
               <span class="scale">
                 <span class="mark start"><Value value="0s" /></span>
-                {#if line.insertPct > 6 && line.insertPct < 94}
-                  <span class="mark mid" style="left: {line.insertPct}%;">
-                    <Value motion={() => line.seconds} value={fmtNum(line.seconds, 1, "s")} />
+                {#if line.insertPct + line.resummonPct > 6 && line.insertPct + line.resummonPct < 94}
+                  <span class="mark mid" style="left: {line.insertPct + line.resummonPct}%;">
+                    <Value motion={() => line.seconds + line.resummonSeconds} value={fmtNum(line.seconds + line.resummonSeconds, 1, "s")} />
+                  </span>
+                {/if}
+                {#if hasSummon && line.absentPct > 0}
+                  <span class="mark center spirit-note num">
+                    精霊 <span class="sw absent"></span>不在 {fmtNum(line.absentSeconds, 1, "s")}
+                    <span class="sw present"></span>攻撃中 {fmtNum(line.total - line.absentSeconds, 1, "s")}
                   </span>
                 {/if}
                 <span class="mark end">
@@ -339,6 +384,18 @@
   }
   /* 連打も差し込みも入らない時間(CT 待ち・詰まっているぶん)。塗らずに溝のまま見せる */
   .rest { background: repeating-linear-gradient(135deg, #DCE5F1 0 5px, #CFDAEA 5px 10px); }
+  /* 精霊の呼び直し(本体の手順)。差し込みの色の薄い版で「同じ 1 回の続き」に見せる */
+  .resummon { background: var(--state-temp-bd); }
+  /* 陣・呼び直しは 27 秒のうち 1 秒未満で、比のままだと 1〜2px に消える。色の塊として残るよう下限を置く
+     (文字は帯に入れず、右の凡例と下の行が言う) */
+  .zone { min-width: 6px; }
+  /* 精霊の帯。細く、不在 = 届かない色、攻撃中 = 足りている色(状態色 §03)。文字は帯の外の凡例に */
+  .track.spirit { height: 7px; margin-top: 2px; }
+  .absent { background: var(--state-short-bd); }
+  .present { background: var(--state-met-bd); }
+  .mark.center { left: 50%; transform: translateX(-50%); }
+  .spirit-note { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-muted); }
+  .sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-left: 4px; }
   .zone-text {
     padding: 0 5px; min-width: 0;
     font-size: var(--t-label); font-weight: 700; color: #fff; white-space: nowrap;

@@ -301,10 +301,10 @@
       for (const insert of rotation.inserts) {
         // 何がこの間隔を決めているか(CT 律速 / 積み直し律速 / 詰まっている / なし)は
         // Rust の分類(`pace`)。画面は文言を当てるだけで、回数や秒から推し量らない。
-        // 陣は置くと精霊が消えるので、呼び直しの時間と、居ないぶん召喚獣の DPS を削っていることも言う
+        // 陣は置くと精霊が消えるので、呼び直しの時間と、不在のぶん召喚獣の DPS を削っていることも言う
         const absentNote =
           insert.is_field && rotation.summon_absent_share > 0
-            ? `。置くと精霊が消えるので呼び直しを所要に足し、居ない ${(rotation.summon_absent_share * 100).toFixed(1)}% ぶん召喚獣の DPS を削っています`
+            ? `。置くと精霊が消えるので呼び直しを所要に足し、不在の ${(rotation.summon_absent_share * 100).toFixed(1)}% ぶん召喚獣の DPS を削っています`
             : "";
         const reason = {
           crowded: "差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)",
