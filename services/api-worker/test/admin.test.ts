@@ -61,6 +61,8 @@ function fakeAdminDb(data: {
   neighborsBefore?: FakeRow[];
   neighborsAfter?: FakeRow[];
   costRows?: FakeRow[];
+  /** bind された値を SQL ごとに見たいテスト用 */
+  onBind?: (sql: string, args: unknown[]) => void;
 }): D1Database {
   const logs = data.logs ?? [];
   const calls = data.calls ?? [];
@@ -75,7 +77,10 @@ function fakeAdminDb(data: {
   return {
     prepare(sql: string) {
       const statement = {
-        bind: (..._args: unknown[]) => statement,
+        bind: (...args: unknown[]) => {
+          data.onBind?.(sql, args);
+          return statement;
+        },
         all: async <T = FakeRow>() => {
           let results: FakeRow[] = [];
           if (sql.includes("FROM ask_call ac JOIN ask_log al")) results = costRows;
@@ -118,6 +123,13 @@ describe("GET /api/logs", () => {
     expect(body.logs[0]!.calls).toBe(1);
     expect(body.logs[0]!.cost_usd).toBeCloseTo(1.0, 6); // 100 万 input トークン = $1
     expect(body.logs[0]!.reactions).toEqual({ helpful: 2 });
+  });
+
+  it("limit を付けなければ 50 件ずつ読む(指定なしを 0 → 1 件と読まない)", async () => {
+    const binds: unknown[][] = [];
+    const db = fakeAdminDb({ onBind: (sql, args) => { if (sql.includes("FROM ask_log al")) binds.push(args); } });
+    await handleAdmin(new Request("https://admin.tw-context.dev/api/logs"), adminEnv(db), new URL("https://admin.tw-context.dev/api/logs"));
+    expect(binds[0]!.at(-1)).toBe(50);
   });
 
   it("Access 検証に失敗したら 403", async () => {

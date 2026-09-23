@@ -45,6 +45,8 @@ function placeholders(n: number): string {
 }
 
 function clampInt(raw: string | null, fallback: number, min: number, max: number): number {
+  // Number(null) と Number("") は 0 になるので、指定なしは先に既定値へ
+  if (raw === null || raw.trim() === "") return fallback;
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, Math.trunc(n)));
