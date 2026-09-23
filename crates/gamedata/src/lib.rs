@@ -56,6 +56,7 @@ pub use inkri::{find_inkri_target, inkri_targets, InkriTarget, INKRI_TARGET_SOUR
 pub use masteries::{mastery_catalog, MASTERY_SOURCE};
 pub use random_options::{random_option_catalog, RANDOM_OPTION_SOURCE};
 pub use skills::{
+    resummon_skill_name,
     all_skills, attacker_of, cooldown_of, find_skill, form_of, normalize_summon_skill_selection,
     resolve_skill_variants,
     retain_rotation_skills,

@@ -2151,6 +2151,12 @@ export interface RotationInsert {
   is_field: boolean;
   /** seconds のうち、置いたあと精霊を呼び直す召喚スキルの動作(秒)。消えない技は 0 */
   resummon_seconds: number;
+  /** 呼び直す召喚スキルの名前(陣だけ)。帯の区画名 */
+  resummon_skill_name: string | null;
+  /** seconds のうち技そのもの(陣なら置く動作)の秒数 */
+  cast_seconds: number;
+  /** この差し込み 1 回につき召喚獣が不在になる秒数。消えない技は 0 */
+  summon_absent_seconds: number;
   /** この技を撃つ間隔(秒)。CT より短くならない */
   interval_seconds: number;
   /** 1 回あたり挟む連打技の回数 */
@@ -2186,6 +2192,20 @@ export interface CombinedDamage {
   defeat_seconds: number | null;
   /** 合計の討伐時間から決まる到達段。討伐時間が出せないなら null */
   reach: ReachTier | null;
+  /** 合計の内訳(Rust が足し引きした値。画面は出すだけ) */
+  parts: CombinedParts;
+}
+
+/** expected_dps = body_expected_dps + summon_expected_dps */
+export interface CombinedParts {
+  /** 本体ぶん(回しがあれば回し全体、無ければ主軸単独。<フラグ> の持続込み) */
+  body_expected_dps: number | null;
+  /** 回しで差し込んだことによる増減(回し − 主軸を撃ち続けた値)。差し込みが無ければ null */
+  rotation_gain: number | null;
+  /** 召喚獣ぶん(陣で不在のぶんを引いたあと)。召喚獣がいなければ null */
+  summon_expected_dps: number | null;
+  /** 陣で不在のぶん減った召喚獣の DPS(正の値)。陣が無ければ null */
+  summon_absent_loss: number | null;
 }
 
 /**

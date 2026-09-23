@@ -964,6 +964,17 @@ const FLAG_DETONATORS: &[&str] = &[
 const MANUAL_COOLDOWNS: &[(&str, Option<f64>)] =
     &[("mira_crimson_shooter", None), ("roamini_mastary1_2", Some(60.0))];
 
+/// 陣を置いたあと精霊を呼び直す召喚スキルの名前(wiki「Skill/アナイス」`#AnferuSummons` の 3 行)。
+/// 熊の型・型なしは `None`(陣は精霊の型にしか無い)。画面の帯の区画名に使う。
+pub fn resummon_skill_name(form: SummonForm) -> Option<&'static str> {
+    match form {
+        SummonForm::Anferu => Some("極・アンフェル召喚"),
+        SummonForm::Gureshisu => Some("極・グレシス召喚"),
+        SummonForm::Igni => Some("極・イグニー召喚"),
+        SummonForm::MicaBear | SummonForm::RucyBear => None,
+    }
+}
+
 /// 陣(設置技)の持続と判定間隔(`SKILL_FIELDS`)。
 fn field_of(skill_id: &str) -> Option<domain::Field> {
     SKILL_FIELDS

@@ -308,20 +308,20 @@
   /** 召喚獣が撃つスキルの表示名 */
   const summonSkillName = $derived(summonSkillFull?.name ?? "");
   /** 召喚獣の鎖のラベル(熊 / 精霊) */
-  // 合計(本体 + 召喚獣)の内訳は**増減**で言う(数字の足し算ではなく「回しでこれだけ増え、陣で
-  // これだけ減った」。ユーザー判断 2026-09-23)。本体 = 主軸を撃ち続けた値 → 回しの値の差、
-  // 召喚獣 = 陣で不在のぶんの減り(Rust の combine_damage と同じ材料。ここで計算し直さない)
+  // 合計(本体 + 召喚獣)の内訳。値も増減も Rust(combine_damage の `parts`)が出したものを
+  // そのまま並べる(画面で足し引きしない)。割合は「基準に対する増減」の見せ方なのでここで割る
+  const parts = $derived(combined?.parts ?? null);
   const bodyGain = $derived.by(() => {
+    const gain = parts?.rotation_gain;
     const base = body?.expected_dps;
-    if (!rotation || base == null || base <= 0 || rotation.inserts.length === 0) return null;
-    const withRotation = rotation.expected_dps;
-    return { amount: withRotation - base, rate: (withRotation - base) / base };
+    if (gain == null || base == null || base <= 0) return null;
+    return { amount: gain, rate: gain / base };
   });
   const summonLoss = $derived.by(() => {
-    const share = rotation?.summon_absent_share ?? 0;
+    const loss = parts?.summon_absent_loss;
     const full = summon?.result.expected_dps;
-    if (full == null || share <= 0) return null;
-    return { amount: full * share, rate: share };
+    if (loss == null || full == null || full <= 0) return null;
+    return { amount: loss, rate: loss / full };
   });
   /** 差し込んでいる技の名前(合計の内訳の注記用) */
   const rotationInsertNames = $derived(rotation ? rotation.inserts.map((i) => i.skill_name).join("・") : "");
@@ -818,21 +818,21 @@
                 <!-- 合計の内訳。本体は回しがあればその DPS(主軸単独ではない)、召喚獣は陣で消えている
                      ぶんを引いた値。合計だけ出すと「本体の鎖の数字 + 召喚獣の鎖の数字」に見えて
                      合わないので(実機 2026-09-23)、足し算の 2 項をそのまま行にする -->
-                {#if bodyGain !== null && rotation}
+                {#if bodyGain !== null && parts?.body_expected_dps != null}
                   <!-- 値は実際の DPS(合計の足し算の項)。増減は隣に符号つきで(割合だけだと取り分に見える。実機 2026-09-23) -->
                   <ReadRow
                     label="本体"
-                    value={fmtInt(Math.round(rotation.expected_dps))}
-                    motion={() => Math.round(rotation?.expected_dps ?? 0)}
+                    value={fmtInt(Math.round(parts.body_expected_dps))}
+                    motion={() => Math.round(parts?.body_expected_dps ?? 0)}
                   >
                     {#snippet note()}<Value class="gain" tone={bodyGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(bodyGain.amount))}(${fmtSignedPct(bodyGain.rate, 0)})`} /> {skill?.name ?? "主軸"}だけを撃ち続けるより、{rotationInsertNames} を差し込んだぶん{/snippet}
                   </ReadRow>
                 {/if}
-                {#if summonLoss !== null && summon?.result.expected_dps != null}
+                {#if summonLoss !== null && parts?.summon_expected_dps != null}
                   <ReadRow
                     label={summonLabel}
-                    value={fmtInt(Math.round(summon.result.expected_dps - summonLoss.amount))}
-                    motion={() => Math.round((summon?.result.expected_dps ?? 0) - (summonLoss?.amount ?? 0))}
+                    value={fmtInt(Math.round(parts.summon_expected_dps))}
+                    motion={() => Math.round(parts?.summon_expected_dps ?? 0)}
                   >
                     {#snippet note()}<Value class="gain" tone="down" value={`${fmtSigned(-Math.round(summonLoss.amount))}(${fmtSignedPct(-summonLoss.rate, 1)})`} /> 陣を置くと消え、呼び直すまで攻撃が止まるぶん{/snippet}
                   </ReadRow>

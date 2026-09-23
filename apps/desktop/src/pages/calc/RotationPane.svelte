@@ -38,13 +38,6 @@
   }
   let { rotation, choices, onIds, onToggle, overridden, onReset, skills, hasSummon = false }: Props = $props();
 
-  /** 陣の型(アンフェル / グレシス / イグニー)から、置いたあと呼び直す召喚スキルの名前 */
-  const SUMMON_NAMES: Record<string, string> = { anferu: "アンフェル召喚", gureshisu: "グレシス召喚", igni: "イグニー召喚" };
-  const resummonNameOf = (id: string) => {
-    const form = skills.find((s) => s.id === id)?.summon_form ?? null;
-    return form !== null && form in SUMMON_NAMES ? SUMMON_NAMES[form] : "召喚";
-  };
-
   /** 1 回の使用で何 tick 入るか(チャネリング技だけ)。他の技は null */
   const channelingOf = (id: string) => skills.find((s) => s.id === id)?.channeling ?? null;
   const tickNote = (id: string) => {
@@ -86,9 +79,9 @@
         name: insert.skill_name,
         color: INSERT_COLORS[index % INSERT_COLORS.length],
         role: `${fmtNum(insert.interval_seconds, 1, "s")} に 1 回`,
-        // 陣は「置く + 精霊の呼び直し」で 1 回(呼び直しの秒は Rust が返す)
+        // 陣は「置く + 精霊の呼び直し」で 1 回(どちらの秒も Rust が返す)
         detail: insert.resummon_seconds > 0
-          ? `1 回 ${fmtNum(insert.seconds, 2, "s")}(置く ${fmtNum(insert.seconds - insert.resummon_seconds, 2, "s")} + ${resummonNameOf(insert.skill_id)} ${fmtNum(insert.resummon_seconds, 2, "s")})`
+          ? `1 回 ${fmtNum(insert.seconds, 2, "s")}(置く ${fmtNum(insert.cast_seconds, 2, "s")} + ${insert.resummon_skill_name ?? "召喚"} ${fmtNum(insert.resummon_seconds, 2, "s")})`
           : `1 回 ${fmtNum(insert.seconds, 2, "s")}` + tickNote(insert.skill_id),
         expectedDps: insert.expected_dps,
         dpsShare: insert.dps_share,
@@ -164,19 +157,19 @@
       const perUsePx = insert.filler_uses > 0
         ? (trackWidth * fillerPct) / 100 / insert.filler_uses
         : 0;
-      const castSeconds = insert.seconds - insert.resummon_seconds;
       return {
         key: `line:${insert.skill_id}`,
         name: insert.skill_name,
         color: INSERT_COLORS[index % INSERT_COLORS.length],
         total,
-        seconds: castSeconds,
-        insertPct: pct(castSeconds, total),
+        seconds: insert.cast_seconds,
+        insertPct: pct(insert.cast_seconds, total),
         resummonSeconds: insert.resummon_seconds,
         resummonPct: pct(insert.resummon_seconds, total),
-        resummonName: resummonNameOf(insert.skill_id),
-        absentSeconds: insert.resummon_seconds > 0 ? insert.seconds : 0,
-        absentPct: insert.resummon_seconds > 0 ? pct(insert.seconds, total) : 0,
+        resummonName: insert.resummon_skill_name ?? "召喚",
+        // 不在の秒数は Rust(`Skill::summon_absent_seconds`)。ここは幅(%)に直すだけ
+        absentSeconds: insert.summon_absent_seconds,
+        absentPct: pct(insert.summon_absent_seconds, total),
         fillerUses: insert.filler_uses,
         fillerSeconds: insert.filler_seconds,
         fillerPct,

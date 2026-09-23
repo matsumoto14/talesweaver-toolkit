@@ -1845,6 +1845,12 @@ pub struct RotationInsert {
     /// `seconds` のうち、置いたあと精霊を呼び直す召喚スキルの動作(秒)。消えない技は 0。
     /// 画面はタイムラインでこの区画を技と分けて描く(本体の手順 = 置く → 呼ぶ → 連打)
     pub resummon_seconds: f64,
+    /// 呼び直す召喚スキルの名前(陣だけ `Some`。gamedata::resummon_skill_name)
+    pub resummon_skill_name: Option<String>,
+    /// `seconds` のうち技そのもの(陣なら置く動作)の秒数 = `seconds − resummon_seconds`
+    pub cast_seconds: f64,
+    /// この差し込み 1 回につき召喚獣が不在になる秒数(`Skill::summon_absent_seconds`)。消えない技は 0
+    pub summon_absent_seconds: f64,
     /// この技を撃つ間隔(秒)= 1 回ぶん + 挟む連打技。CT より短くならない
     pub interval_seconds: f64,
     /// 1 回あたり挟む連打技の回数
@@ -1884,6 +1890,21 @@ pub struct CombinedDamage {
     /// 召喚獣がいるキャラの「行ける?」判定は本体単独の `body.reach` ではなくこちらを見る
     /// (メーター・討伐時間の文言・ホームのスポットライトが共有する。ADR-016 決定 9・10)
     pub reach: Option<domain::ReachTier>,
+    /// 合計の内訳(召喚獣がいるキャラの合計の面が出す)。画面は値を出すだけで足し引きしない
+    pub parts: CombinedParts,
+}
+
+/// `expected_dps` = `body_expected_dps` + `summon_expected_dps`(どちらも `None` なら足さない)。
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub struct CombinedParts {
+    /// 本体ぶんの期待 DPS(回しがあれば回し全体、無ければ主軸単独。<フラグ> の持続込み)
+    pub body_expected_dps: Option<f64>,
+    /// 回しで差し込んだことによる増減(回しの DPS − 主軸を撃ち続けた DPS)。差し込みが無ければ `None`
+    pub rotation_gain: Option<f64>,
+    /// 召喚獣ぶんの期待 DPS(陣で不在のぶんを引いたあと)。召喚獣がいなければ `None`
+    pub summon_expected_dps: Option<f64>,
+    /// 陣で不在のぶん減った召喚獣の DPS(正の値)。陣が無ければ `None`
+    pub summon_absent_loss: Option<f64>,
 }
 
 /// `damage_for_character` / `preview_damage` の戻り。既存の `DamageResult` 全フィールドは
@@ -2284,6 +2305,7 @@ fn build_rotation(
         cooldown_seconds: f64,
         is_field: bool,
         resummon_seconds: f64,
+        resummon_skill_name: Option<String>,
         summon_absent_seconds: f64,
         minimum_filler_uses: u32,
     }
@@ -2310,6 +2332,12 @@ fn build_rotation(
             cooldown_seconds: insert_skill.cooldown_seconds.unwrap_or(0.0),
             is_field: insert_skill.field.is_some(),
             resummon_seconds: insert_skill.field.map_or(0.0, |f| f.resummon_seconds),
+            resummon_skill_name: insert_skill
+                .field
+                .filter(|f| f.resummon_seconds > 0.0)
+                .and_then(|_| insert_skill.summon_form)
+                .and_then(gamedata::resummon_skill_name)
+                .map(str::to_string),
             summon_absent_seconds: insert_skill.summon_absent_seconds(result_of(role).cycle_seconds()),
             minimum_filler_uses,
         });
@@ -2417,6 +2445,9 @@ fn build_rotation(
                 cooldown_seconds: insert.cooldown_seconds,
                 is_field: insert.is_field,
                 resummon_seconds: insert.resummon_seconds,
+                resummon_skill_name: insert.resummon_skill_name,
+                cast_seconds: insert.seconds.unwrap_or(0.0) - insert.resummon_seconds,
+                summon_absent_seconds: insert.summon_absent_seconds,
                 interval_seconds: slot.interval_seconds,
                 filler_uses: slot.filler_uses,
                 filler_seconds: slot.filler_seconds,
@@ -2488,17 +2519,26 @@ fn combine_damage(
             expected_dps = domain::combine_expected_dps(expected_dps, duration.expected_dps);
         }
     }
+    let body_expected_dps = expected_dps;
+    // 回しで差し込んだことによる増減(差し込みがあるときだけ言える)
+    let rotation_gain = rotation
+        .filter(|r| !r.inserts.is_empty())
+        .and_then(|r| body.expected_dps.map(|base| r.expected_dps - base));
+    let mut summon_expected_dps = None;
+    let mut summon_absent_loss = None;
     if let Some(summon) = summon {
         // 陣を置くと精霊が消えて呼び直すまで居ないので、そのぶん召喚獣の DPS を削る
-        let present = 1.0 - rotation.map_or(0.0, |r| r.summon_absent_share);
+        let absent = rotation.map_or(0.0, |r| r.summon_absent_share);
+        let present = 1.0 - absent;
         let scale = |d: domain::DpsTriple| domain::DpsTriple {
             min: d.min * present,
             max: d.max * present,
             critical: d.critical * present,
         };
+        summon_expected_dps = summon.result.expected_dps.map(|e| e * present);
+        summon_absent_loss = (absent > 0.0).then(|| summon.result.expected_dps.map(|e| e * absent)).flatten();
         dps = domain::combine_dps(dps, summon.result.dps.map(scale));
-        expected_dps =
-            domain::combine_expected_dps(expected_dps, summon.result.expected_dps.map(|e| e * present));
+        expected_dps = domain::combine_expected_dps(expected_dps, summon_expected_dps);
     }
     let defeat_seconds = domain::defeat_seconds(body.enemy_hp, expected_dps);
     CombinedDamage {
@@ -2507,6 +2547,7 @@ fn combine_damage(
         expected_dps,
         defeat_seconds,
         reach: domain::ReachTier::of_defeat_seconds(defeat_seconds),
+        parts: CombinedParts { body_expected_dps, rotation_gain, summon_expected_dps, summon_absent_loss },
     }
 }
 
