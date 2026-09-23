@@ -854,6 +854,76 @@ mod tests {
         assert!((line.summon[1].seconds - 5.0).abs() < 1e-9);
     }
 
+    fn timeline_insert(cast_seconds: f64) -> TimelineInsert {
+        TimelineInsert {
+            cast_seconds,
+            resummon_seconds: 0.0,
+            summon_absent_seconds: 0.0,
+            summon_bonus_seconds: 0.0,
+        }
+    }
+
+    /// 区画が隙間なく・重ならず軸を埋めているか
+    fn assert_fills_axis(line: &RotationTimeline) {
+        let mut cursor = 0.0;
+        for seg in &line.segments {
+            assert!((seg.start_seconds - cursor).abs() < 1e-9, "{:?}", line.segments);
+            assert!(seg.seconds > 0.0 && seg.seconds.is_finite());
+            cursor += seg.seconds;
+        }
+        assert!((cursor - line.total_seconds).abs() < 1e-9);
+    }
+
+    #[test]
+    fn タイムラインは連打技が無ければ待ちで埋める() {
+        let plan = plan_rotation(None, &[insert(1.0, 10.0, 0)]).unwrap();
+        let line = rotation_timeline(&plan, None, &[timeline_insert(1.0)]);
+        assert_fills_axis(&line);
+        assert_eq!(line.segments[1].kind, TimelineSegmentKind::Idle);
+        assert!(line.summon.is_empty());
+    }
+
+    #[test]
+    fn タイムラインは差し込みだけで埋まっても軸を埋める() {
+        // 連打技なしで 1s・CT 1.5s を 2 つ = 占有 1/1.5 × 2 > 1(crowded)
+        let plan = plan_rotation(None, &[insert(1.0, 1.5, 0), insert(1.0, 1.5, 0)]).unwrap();
+        assert!(plan.crowded);
+        let line = rotation_timeline(&plan, None, &[timeline_insert(1.0), timeline_insert(1.0)]);
+        assert_fills_axis(&line);
+    }
+
+    #[test]
+    fn タイムラインは陣とダメージプラスを同じ軸に並べる() {
+        // 差し込み 0: 陣(置く 1s + 呼び直し 0.3s、不在 1.3s)、差し込み 1: 追加ダメージ 10s
+        let plan = plan_rotation(Some(0.5), &[insert(1.3, 27.0, 0), insert(0.8, 30.0, 0)]).unwrap();
+        let field = TimelineInsert {
+            cast_seconds: 1.0,
+            resummon_seconds: 0.3,
+            summon_absent_seconds: 1.3,
+            summon_bonus_seconds: 0.0,
+        };
+        let bonus = TimelineInsert { summon_bonus_seconds: 10.0, ..timeline_insert(0.8) };
+        let line = rotation_timeline(&plan, Some(0.5), &[field, bonus]);
+        assert_fills_axis(&line);
+        let kinds: Vec<_> = line.segments.iter().take(3).map(|s| s.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                TimelineSegmentKind::Insert { slot: 0 },
+                TimelineSegmentKind::Resummon { slot: 0 },
+                TimelineSegmentKind::Insert { slot: 1 },
+            ]
+        );
+        // 精霊: 不在 1.3s → 追加ダメージ(ダメージプラスを撃ち終えた 2.1s から 10s)
+        assert_eq!(line.summon[0].state, SummonState::Absent);
+        assert!((line.summon[0].seconds - 1.3).abs() < 1e-9);
+        let bonus_seg = line.summon.iter().find(|s| s.state == SummonState::Bonus).unwrap();
+        assert!((bonus_seg.start_seconds - 2.1).abs() < 1e-9);
+        assert!((bonus_seg.seconds - 10.0).abs() < 1e-9);
+        let sum: f64 = line.summon.iter().map(|s| s.seconds).sum();
+        assert!((sum - line.total_seconds).abs() < 1e-9);
+    }
+
     #[test]
     fn 陣の不在は追加ダメージより優先する() {
         let segments = summon_segments(10.0, &[(0.0, 2.0)], &[(1.0, 4.0)]);
