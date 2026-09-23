@@ -34,7 +34,7 @@ export async function handleAdmin(request: Request, env: AdminEnv, url: URL): Pr
     if (!detail) return json({ error: "not found" }, 404);
     return json(detail);
   }
-  if (url.pathname === "/api/costs" && request.method === "GET") return json(await getCosts(env.WIKI, url.searchParams));
+  if (url.pathname === "/api/summary" && request.method === "GET") return json(await getSummary(env.WIKI, url.searchParams));
   return json({ error: "not found" }, 404);
 }
 
@@ -92,7 +92,17 @@ interface LogRow {
   route: string | null;
   ms: number;
   answer_id: string | null;
+  missing_n: number | null;
 }
+
+/**
+ * 直すべきもの = エラー / 見つからない(雑談・範囲外は除く)/ 一部だけ(missing あり)/ 👎・値の誤り。
+ * 雑談・範囲外の誤分類は機械では決められないので、ここには入れず一覧の分類で見せる。
+ */
+const PROBLEM_SQL = `(al.kind = 'error'
+  OR (al.kind = 'none' AND al.reason IN ('llm_none', 'verification_failed', 'no_terms'))
+  OR (al.kind = 'answer' AND json_array_length(json_extract(al.body, '$.missing')) > 0)
+  OR EXISTS (SELECT 1 FROM reaction r WHERE r.answer_id = al.answer_id AND r.kind IN ('wrong', 'value_wrong')))`;
 
 async function listLogs(db: D1Database, params: URLSearchParams): Promise<unknown> {
   const from = params.get("from");
@@ -100,6 +110,7 @@ async function listLogs(db: D1Database, params: URLSearchParams): Promise<unknow
   const kind = params.get("kind");
   const route = params.get("route");
   const reaction = params.get("reaction");
+  const problem = params.get("problem") === "1";
   const before = params.get("before");
   const limit = clampInt(params.get("limit"), 50, 1, 200);
 
@@ -110,6 +121,7 @@ async function listLogs(db: D1Database, params: URLSearchParams): Promise<unknow
   if (kind) { conditions.push("al.kind = ?"); args.push(kind); }
   if (route) { conditions.push("al.route = ?"); args.push(route); }
   if (before) { conditions.push("al.id < ?"); args.push(clampInt(before, Number.MAX_SAFE_INTEGER, 1, Number.MAX_SAFE_INTEGER)); }
+  if (problem) conditions.push(PROBLEM_SQL);
   if (reaction) {
     conditions.push("EXISTS (SELECT 1 FROM reaction r WHERE r.answer_id = al.answer_id AND r.kind = ?)");
     args.push(reaction);
@@ -118,7 +130,8 @@ async function listLogs(db: D1Database, params: URLSearchParams): Promise<unknow
 
   const rows = await db
     .prepare(
-      `SELECT al.id, al.at, al.question, al.kind, al.reason, al.route, al.ms, al.answer_id
+      `SELECT al.id, al.at, al.question, al.kind, al.reason, al.route, al.ms, al.answer_id,
+              json_array_length(json_extract(al.body, '$.missing')) AS missing_n
        FROM ask_log al ${where} ORDER BY al.id DESC LIMIT ${placeholders(1)}`,
     )
     .bind(...args, limit)
@@ -210,6 +223,8 @@ interface NeighborRow {
   at: string;
   question: string;
   kind: string;
+  reason: string | null;
+  missing_n: number | null;
 }
 
 async function getLogDetail(db: D1Database, id: number): Promise<unknown | null> {
@@ -232,13 +247,13 @@ async function getLogDetail(db: D1Database, id: number): Promise<unknown | null>
 
   const before = (
     await db
-      .prepare("SELECT id, at, question, kind FROM ask_log WHERE user = ? AND id < ? ORDER BY id DESC LIMIT 5")
+      .prepare("SELECT id, at, question, kind, reason, json_array_length(json_extract(body, '$.missing')) AS missing_n FROM ask_log WHERE user = ? AND id < ? ORDER BY id DESC LIMIT 5")
       .bind(log.user, id)
       .all<NeighborRow>()
   ).results ?? [];
   const after = (
     await db
-      .prepare("SELECT id, at, question, kind FROM ask_log WHERE user = ? AND id > ? ORDER BY id ASC LIMIT 5")
+      .prepare("SELECT id, at, question, kind, reason, json_array_length(json_extract(body, '$.missing')) AS missing_n FROM ask_log WHERE user = ? AND id > ? ORDER BY id ASC LIMIT 5")
       .bind(log.user, id)
       .all<NeighborRow>()
   ).results ?? [];
@@ -300,7 +315,17 @@ interface CostRow {
   output_tokens: number;
 }
 
-async function getCosts(db: D1Database, params: URLSearchParams): Promise<unknown> {
+/** 1 問の結果の分類。画面の積み上げ棒と指標はこの 5 つで数える。 */
+export type Outcome = "answered" | "partial" | "not_found" | "off" | "error";
+
+export function outcomeOf(kind: string, reason: string | null, missingN: number | null): Outcome {
+  if (kind === "error") return "error";
+  if (kind === "answer") return (missingN ?? 0) > 0 ? "partial" : "answered";
+  if (reason === "smalltalk" || reason === "other") return "off";
+  return "not_found";
+}
+
+async function getSummary(db: D1Database, params: URLSearchParams): Promise<unknown> {
   const days = clampInt(params.get("days"), 30, 1, 365);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
@@ -327,6 +352,41 @@ async function getCosts(db: D1Database, params: URLSearchParams): Promise<unknow
     costs: (number | null)[];
   }
   const byDay = new Map<string, DayAgg>();
+
+  // 結果の分類と反応(費用とは別に、呼び出しの無い質問 = 雑談・エラーも数える)
+  const logRows = (
+    await db
+      .prepare(
+        `SELECT id, at, kind, reason, ms, json_array_length(json_extract(body, '$.missing')) AS missing_n
+         FROM ask_log WHERE at >= ?`,
+      )
+      .bind(since)
+      .all<{ id: number; at: string; kind: string; reason: string | null; ms: number; missing_n: number | null }>()
+  ).results ?? [];
+  const reactionRows = (
+    await db
+      .prepare(
+        `SELECT al.at, r.kind FROM reaction r JOIN ask_log al ON al.answer_id = r.answer_id
+         WHERE al.at >= ? AND al.kind = 'answer'`,
+      )
+      .bind(since)
+      .all<{ at: string; kind: string }>()
+  ).results ?? [];
+  type OutcomeAgg = Record<Outcome, number> & { ms: number; helpful: number; wrong: number; value_wrong: number };
+  const emptyOutcome = (): OutcomeAgg =>
+    ({ answered: 0, partial: 0, not_found: 0, off: 0, error: 0, ms: 0, helpful: 0, wrong: 0, value_wrong: 0 });
+  const outcomeByDay = new Map<string, OutcomeAgg>();
+  for (const r of logRows) {
+    const o = outcomeByDay.get(r.at.slice(0, 10)) ?? emptyOutcome();
+    o[outcomeOf(r.kind, r.reason, r.missing_n)] += 1;
+    o.ms += r.ms;
+    outcomeByDay.set(r.at.slice(0, 10), o);
+  }
+  for (const r of reactionRows) {
+    const o = outcomeByDay.get(r.at.slice(0, 10)) ?? emptyOutcome();
+    if (r.kind === "helpful" || r.kind === "wrong" || r.kind === "value_wrong") o[r.kind] += 1;
+    outcomeByDay.set(r.at.slice(0, 10), o);
+  }
   const byUser = new Map<string, { questionIds: Set<number>; costs: (number | null)[] }>();
 
   for (const r of rows) {
@@ -353,20 +413,28 @@ async function getCosts(db: D1Database, params: URLSearchParams): Promise<unknow
     byUser.set(r.user, user);
   }
 
-  const daysOut = [...byDay.values()]
-    .sort((a, b) => (a.date < b.date ? 1 : -1))
-    .map((d) => {
+  const dates = [...new Set([...byDay.keys(), ...outcomeByDay.keys()])].sort().reverse();
+  const daysOut = dates
+    .map((date) => {
+      const d = byDay.get(date) ?? {
+        date, questionIds: new Set<number>(), calls: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0, costs: [],
+      };
+      const o = outcomeByDay.get(date) ?? emptyOutcome();
       const cost = sumCost(d.costs);
-      const questions = d.questionIds.size;
+      const questions = o.answered + o.partial + o.not_found + o.off + o.error;
       return {
-        date: d.date,
+        date,
         questions,
+        outcomes: { answered: o.answered, partial: o.partial, not_found: o.not_found, off: o.off, error: o.error },
+        reactions: { helpful: o.helpful, wrong: o.wrong, value_wrong: o.value_wrong },
+        avg_ms: questions > 0 ? Math.round(o.ms / questions) : null,
         calls: d.calls,
         input_tokens: d.inputTokens,
         cache_read_tokens: d.cacheReadTokens,
         cache_creation_tokens: d.cacheCreationTokens,
         output_tokens: d.outputTokens,
         cost_usd: cost,
+        // 雑談・エラーなど呼び出しの無い質問も分母に入れる(1 問の実費)
         avg_cost_usd: cost !== null && questions > 0 ? cost / questions : null,
       };
     });

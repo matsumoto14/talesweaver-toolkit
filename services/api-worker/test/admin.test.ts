@@ -6,7 +6,7 @@ vi.mock("../src/access", () => ({ verifyAccess: vi.fn() }));
 
 import * as access from "../src/access";
 import worker, { type Env } from "../src/index";
-import { handleAdmin } from "../src/admin";
+import { handleAdmin, outcomeOf } from "../src/admin";
 import type { AdminEnv } from "../src/admin";
 import { fakeCtx } from "./ctx";
 
@@ -61,6 +61,8 @@ function fakeAdminDb(data: {
   neighborsBefore?: FakeRow[];
   neighborsAfter?: FakeRow[];
   costRows?: FakeRow[];
+  summaryLogs?: FakeRow[];
+  summaryReactions?: FakeRow[];
   /** bind された値を SQL ごとに見たいテスト用 */
   onBind?: (sql: string, args: unknown[]) => void;
 }): D1Database {
@@ -84,6 +86,8 @@ function fakeAdminDb(data: {
         all: async <T = FakeRow>() => {
           let results: FakeRow[] = [];
           if (sql.includes("FROM ask_call ac JOIN ask_log al")) results = costRows;
+          else if (sql.includes("FROM ask_log WHERE at >= ?")) results = data.summaryLogs ?? [];
+          else if (sql.includes("FROM reaction r JOIN ask_log al")) results = data.summaryReactions ?? [];
           else if (sql.includes("FROM ask_call WHERE ask_log_id IN")) results = calls;
           else if (sql.includes("FROM ask_call WHERE ask_log_id = ?")) results = detailCalls;
           else if (sql.includes("FROM reaction") && sql.includes("GROUP BY")) results = reactionCounts;
@@ -182,20 +186,45 @@ describe("GET /api/logs/:id", () => {
   });
 });
 
-describe("GET /api/costs", () => {
+describe("outcomeOf", () => {
+  it("答え・一部だけ・見つからない・雑談/範囲外・エラーに分ける", () => {
+    expect(outcomeOf("answer", null, 0)).toBe("answered");
+    expect(outcomeOf("answer", null, 2)).toBe("partial");
+    expect(outcomeOf("none", "llm_none", null)).toBe("not_found");
+    expect(outcomeOf("none", "verification_failed", null)).toBe("not_found");
+    expect(outcomeOf("none", "smalltalk", null)).toBe("off");
+    expect(outcomeOf("none", "other", null)).toBe("off");
+    expect(outcomeOf("error", "x", null)).toBe("error");
+  });
+});
+
+describe("GET /api/summary", () => {
   it("日別に質問数・呼び出し・トークン・費用を集計する(単価不明モデルは null)", async () => {
     const db = fakeAdminDb({
       costRows: [
         { ask_log_id: 1, at: "2026-09-23T00:00:00Z", user: "u1", model: "claude-haiku-4-5", input_tokens: 1_000_000, cache_read_tokens: 0, cache_creation_tokens: 0, output_tokens: 0 },
         { ask_log_id: 2, at: "2026-09-23T05:00:00Z", user: "u2", model: "claude-haiku-4-5", input_tokens: 500_000, cache_read_tokens: 0, cache_creation_tokens: 0, output_tokens: 0 },
       ],
+      summaryLogs: [
+        { id: 1, at: "2026-09-23T00:00:00Z", kind: "answer", reason: null, ms: 1000, missing_n: 0 },
+        { id: 2, at: "2026-09-23T05:00:00Z", kind: "none", reason: "llm_none", ms: 3000, missing_n: null },
+        { id: 3, at: "2026-09-23T06:00:00Z", kind: "none", reason: "smalltalk", ms: 200, missing_n: null },
+      ],
+      summaryReactions: [{ at: "2026-09-23T00:00:00Z", kind: "wrong" }],
     });
-    const res = await handleAdmin(new Request("https://admin.tw-context.dev/api/costs?days=7"), adminEnv(db), new URL("https://admin.tw-context.dev/api/costs?days=7"));
+    const res = await handleAdmin(new Request("https://admin.tw-context.dev/api/summary?days=7"), adminEnv(db), new URL("https://admin.tw-context.dev/api/summary?days=7"));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { days: { date: string; questions: number; cost_usd: number }[]; top_users: { user: string }[] };
+    const body = (await res.json()) as {
+      days: { date: string; questions: number; cost_usd: number; avg_cost_usd: number; outcomes: Record<string, number>; reactions: Record<string, number> }[];
+      top_users: { user: string }[];
+    };
     expect(body.days).toHaveLength(1);
-    expect(body.days[0]!.questions).toBe(2);
+    // 呼び出しの無い雑談も質問に数え、1 問あたりの分母に入れる
+    expect(body.days[0]!.questions).toBe(3);
     expect(body.days[0]!.cost_usd).toBeCloseTo(1.5, 6);
+    expect(body.days[0]!.avg_cost_usd).toBeCloseTo(0.5, 6);
+    expect(body.days[0]!.outcomes).toEqual({ answered: 1, partial: 0, not_found: 1, off: 1, error: 0 });
+    expect(body.days[0]!.reactions).toEqual({ helpful: 0, wrong: 1, value_wrong: 0 });
     expect(body.top_users.map((u) => u.user).sort()).toEqual(["u1", "u2"]);
   });
 
@@ -205,7 +234,7 @@ describe("GET /api/costs", () => {
         { ask_log_id: 1, at: "2026-09-23T00:00:00Z", user: "u1", model: "unknown-model", input_tokens: 100, cache_read_tokens: 0, cache_creation_tokens: 0, output_tokens: 0 },
       ],
     });
-    const res = await handleAdmin(new Request("https://admin.tw-context.dev/api/costs"), adminEnv(db), new URL("https://admin.tw-context.dev/api/costs"));
+    const res = await handleAdmin(new Request("https://admin.tw-context.dev/api/summary"), adminEnv(db), new URL("https://admin.tw-context.dev/api/summary"));
     const body = (await res.json()) as { days: { cost_usd: number | null }[] };
     expect(body.days[0]!.cost_usd).toBeNull();
   });

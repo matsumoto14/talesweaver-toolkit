@@ -639,7 +639,9 @@ async function runAsk(
   } else {
     understanding = codeFallbackUnderstand();
   }
-  trace.understanding = understanding;
+  // 記録は枠(p01…)ではなくページ名で持つ(管理画面で読めるように)
+  const slotPage = new Map(pageSlots.map((p) => [p.slot, p.page]));
+  trace.understanding = { ...understanding, pages: understanding.pages.map((p) => slotPage.get(p) ?? p) };
 
   // 誤分類の歯止め 2 つ: 質問の全文が別名に一致する / 質問の語で索引に当たりがある(「聖水はどうやって稼ぐ?」を
   // 雑談と判定した実例 2026-09-23)。どちらかなら wiki として進める(挨拶は語が索引に無いので変わらない)
