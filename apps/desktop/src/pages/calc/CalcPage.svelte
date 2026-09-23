@@ -308,6 +308,19 @@
   /** 召喚獣が撃つスキルの表示名 */
   const summonSkillName = $derived(summonSkillFull?.name ?? "");
   /** 召喚獣の鎖のラベル(熊 / 精霊) */
+  // 合計(本体 + 召喚獣)の内訳。本体は回しがあれば回しの DPS、召喚獣は陣で居ないぶんを引いた値
+  // (Rust の combine_damage と同じ足し算。ここで計算し直さず、材料をそのまま見せる)
+  const bodyShareDps = $derived(rotation?.expected_dps ?? body?.expected_dps ?? null);
+  const summonAbsentShare = $derived(rotation?.summon_absent_share ?? 0);
+  const summonShareDps = $derived(
+    summon?.result.expected_dps == null ? null : summon.result.expected_dps * (1 - summonAbsentShare),
+  );
+  /** 回しの顔ぶれ(連打技 + 差し込む技)。合計の内訳の注記用 */
+  const rotationSummary = $derived(
+    rotation
+      ? [rotation.filler?.skill_name, ...rotation.inserts.map((i) => i.skill_name)].filter(Boolean).join(" + ")
+      : "",
+  );
   const summonLabel = $derived(summonSkillFull?.attacker === "destruction_spirit" ? "精霊" : "熊");
   /** 召喚獣の鎖のバッジに置く絵。熊はルシベア専用スキル(anais_rucy_*)ならルシベア、他はミカベア
    *  (突き・ジャッジメントスピン等は両方の人形が撃つので、どちらの人形かは保存していない)。
@@ -797,13 +810,32 @@
                    討伐時間そのものの判定(バッジ・メーター・文)は下の「行ける?」帯が持つ -->
               <div class="combined readrows inset">
                 <span class="combined-title">合計(本体 + {summonLabel})</span>
+                <!-- 合計の内訳。本体は回しがあればその DPS(主軸単独ではない)、召喚獣は陣で消えている
+                     ぶんを引いた値。合計だけ出すと「本体の鎖の数字 + 召喚獣の鎖の数字」に見えて
+                     合わないので(実機 2026-09-23)、足し算の 2 項をそのまま行にする -->
+                <ReadRow
+                  label="本体"
+                  value={bodyShareDps != null ? fmtInt(Math.round(bodyShareDps)) : "—"}
+                  motion={() => (bodyShareDps == null ? null : Math.round(bodyShareDps))}
+                  delta={{}}
+                >
+                  {#snippet note()}{rotation ? `スキル回し(${rotationSummary})` : `${skill?.name ?? "主軸"}を撃ち続けた値`}{/snippet}
+                </ReadRow>
+                <ReadRow
+                  label={summonLabel}
+                  value={summonShareDps != null ? fmtInt(Math.round(summonShareDps)) : "—"}
+                  motion={() => (summonShareDps == null ? null : Math.round(summonShareDps))}
+                  delta={{}}
+                >
+                  {#snippet note()}{#if summonAbsentShare > 0 && summon?.result.expected_dps != null}{fmtInt(Math.round(summon.result.expected_dps))} × (1 − {fmtPct(summonAbsentShare, 1)})。陣を置くと消え、呼び直すまで居ない{:else}召喚中も本体の手は止まらないので、そのまま足す{/if}{/snippet}
+                </ReadRow>
                 <ReadRow
                   label="合計 DPS"
                   value={combined?.expected_dps != null ? fmtInt(Math.round(combined.expected_dps)) : "—"}
                   motion={() => (combined?.expected_dps == null ? null : Math.round(combined.expected_dps))}
                   delta={{}}
                 >
-                  {#snippet note()}本体 + {summonLabel}の期待値の単純和(本体は召喚中も手が止まらない){/snippet}
+                  {#snippet note()}本体 + {summonLabel}{/snippet}
                 </ReadRow>
                 <ReadRow
                   label="討伐時間"
