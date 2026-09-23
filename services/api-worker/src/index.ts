@@ -377,7 +377,14 @@ async function ask(request: Request, env: AskEnv, ctx: ExecutionContext): Promis
   }
 
   if (!wantsSse(request)) {
-    const result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, noopProgress);
+    // 失敗も記録に残す(SSE 経路と同じ)。例外は 500 として記録してから投げ直す(呼び元が 500 を返す)
+    let result: RunAskResult;
+    try {
+      result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, noopProgress);
+    } catch (error) {
+      record({ status: 500, body: { error: "サーバー側で問題が起きました。時間をおいて試してください。" } });
+      throw error;
+    }
     record(result);
     return json(result.body, result.status);
   }
@@ -510,7 +517,7 @@ async function tryLoop(
 
   const routeDropped: Dropped = {
     what: "route",
-    why: `loop:${result.toolCalls}回/${result.ms}ms/in${result.tokens.input}+cached${result.tokens.cached}/out${result.tokens.output}`,
+    why: `loop:${result.toolCalls}回/${result.ms}ms/in${result.tokens.input}+cached${result.tokens.cached}+written${result.tokens.cacheWritten}/out${result.tokens.output}`,
   };
   const dropped = [...hopsDropped, routeDropped];
 

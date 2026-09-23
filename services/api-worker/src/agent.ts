@@ -56,8 +56,8 @@ export interface AgentResult {
   candidates: Map<string, Candidate>;
   toolCalls: number;
   ms: number;
-  /** 往復ごとの usage の合計(費用の把握用)。cached はキャッシュから読めた入力トークン */
-  tokens: { input: number; cached: number; output: number };
+  /** 往復ごとの usage の合計(費用の把握用)。cached = キャッシュから読めた入力、cacheWritten = キャッシュに書いた入力(割高) */
+  tokens: { input: number; cached: number; cacheWritten: number; output: number };
 }
 
 // --- ツール定義 ---------------------------------------------------------------
@@ -389,7 +389,7 @@ export async function runAgentLoop(
   const calledArgs = new Map<string, Set<string>>();
   let toolCalls = 0;
   let inputTokens = 0;
-  const tokens = { input: 0, cached: 0, output: 0 };
+  const tokens = { input: 0, cached: 0, cacheWritten: 0, output: 0 };
   let forcedAnswer = false;
   let maxTokensRetried = false;
 
@@ -427,6 +427,7 @@ export async function runAgentLoop(
     inputTokens += (usage?.input_tokens ?? 0) + cached;
     tokens.input += usage?.input_tokens ?? 0;
     tokens.cached += usage?.cache_read_input_tokens ?? 0;
+    tokens.cacheWritten += usage?.cache_creation_input_tokens ?? 0;
     tokens.output += usage?.output_tokens ?? 0;
 
     if (response.stop_reason === "refusal") {

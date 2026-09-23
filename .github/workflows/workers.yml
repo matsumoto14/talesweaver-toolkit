@@ -16,8 +16,9 @@ on:
       - ".github/workflows/workers.yml"
   workflow_dispatch:
 
+# 同じ Worker の deploy が重ならないようにする(2 つの Worker は独立なので並行でよい)
 concurrency:
-  group: workers
+  group: workers-${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:

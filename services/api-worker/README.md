@@ -70,9 +70,10 @@ deploy は main への push で `.github/workflows/workers.yml` が行う(型検
   TTL 30 日。評価で外したいときは要求の `debug: { cache: false }`
 - **プロンプトキャッシュ**(回す道だけ): 往復ごとに最後のメッセージへ `cache_control` を 1 つ付け、履歴を
   キャッシュから読ませる。Haiku 4.5 は前方の合計が 4096 トークン未満だと効かないので、1〜2 往復目は普通に課金。
-  効き具合は `dropped` の `route: loop:<回>/<ms>/in<入力>+cached<キャッシュ読み>/out<出力>` と ask_log の body で見る
+  効き具合は `dropped` の `route: loop:<回>/<ms>/in<入力>+cached<キャッシュ読み>+written<キャッシュ書き>/out<出力>` と ask_log の body で見る
 - **記録**(`ask_log`): 質問・キャラ状態(level / evolution だけ)・答えの JSON 全文・経路・所要時間・端末のハッシュ。
-  IP と装備の中身は入らない。端末側の注記にも「質問と答えは記録する」と書いてある。見るときは
+  IP と装備の中身は入らない。端末側の注記は「質問は外部の AI サービスに送ります(キャラや装備の中身は送りません)」だけで、
+  記録することは書いていない(2026-09-23 ユーザー判断。戻すなら AskPage.svelte の注記に 1 文足す)。保持期間・削除の手段は未定。見るときは
   ```
   npx wrangler d1 execute tw-wiki --remote --command "SELECT at, substr(user,1,8) AS who, kind, route, ms, question, lead FROM ask_log ORDER BY id DESC LIMIT 50"
   npx wrangler d1 execute tw-wiki --remote --command "SELECT substr(user,1,8) AS who, count(*) AS n FROM ask_log WHERE at >= date('now') GROUP BY user ORDER BY n DESC"
