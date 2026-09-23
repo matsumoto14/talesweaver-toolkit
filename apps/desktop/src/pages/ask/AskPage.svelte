@@ -137,7 +137,7 @@
         <span class="synced">wiki は {fmtMonthDay(syncedAt)} 時点</span>
         <!-- 試験公開の断り(2026-09-23 ユーザー決定)。費用しだいで閉じる前提 -->
         <p class="trial">
-          試験公開中です。質問 1 つごとに AI の利用料が管理人の財布に直撃しているので、費用がかさむようなら閉じるかもしれません。安く運用できそうなら続けます。
+          試験公開中です。質問 1 つごとに AI の利用料が管理人の財布に直撃しているので、費用がかさむようなら閉じるかもしれません。<br />安く運用できそうなら続けます。
         </p>
       </div>
 
@@ -197,7 +197,7 @@
   }
 
   .meta { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .trial { margin: 0; max-width: 520px; font-size: var(--t-label); line-height: 1.5; color: var(--fg-muted); text-align: center; }
+  .trial { margin: 0; max-width: 100%; word-break: keep-all; overflow-wrap: anywhere; font-size: var(--t-label); line-height: 1.5; color: var(--fg-muted); text-align: center; }
   .synced { font-size: 9.5px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 
   .intro { display: flex; justify-content: center; padding: 18px 0; }
