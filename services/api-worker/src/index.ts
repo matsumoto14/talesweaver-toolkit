@@ -325,6 +325,13 @@ async function noneAnswer(
   };
 }
 
+/** 質問の語(2 文字以上)で索引に当たりがあるか(誤分類の歯止め)。挨拶は語が無いので false。 */
+async function questionHitsIndex(db: D1Database, tokens: string[]): Promise<boolean> {
+  const query = toQuery(tokens.filter((t) => t.length >= 2));
+  if (!query) return false;
+  return (await searchUnits(db, query)).length > 0;
+}
+
 /** 質問の全文が別名に完全一致するか(誤分類の歯止め)。 */
 async function aliasExactMatch(db: D1Database, question: string): Promise<boolean> {
   const row = await db.prepare("SELECT 1 FROM alias WHERE name = ?1 LIMIT 1").bind(question.trim()).first();
@@ -585,8 +592,19 @@ async function runAsk(
     ? (await claude.understand(env, question, prev, pageSlots)) ?? codeFallbackUnderstand()
     : codeFallbackUnderstand();
 
-  const exactAlias = await aliasExactMatch(env.WIKI, question);
-  const kind = understanding.kind !== "wiki" && exactAlias ? "wiki" : understanding.kind;
+  // 誤分類の歯止め 2 つ: 質問の全文が別名に一致する / 質問の語で索引に当たりがある(「聖水はどうやって稼ぐ?」を
+  // 雑談と判定した実例 2026-09-23)。どちらかなら wiki として進める(挨拶は語が索引に無いので変わらない)
+  let kind = understanding.kind;
+  const kindDropped: Dropped[] = [];
+  if (kind !== "wiki") {
+    const rescued =
+      (await aliasExactMatch(env.WIKI, question)) ||
+      (await questionHitsIndex(env.WIKI, questionTokens));
+    if (rescued) {
+      kindDropped.push({ what: "kind", why: `${kind}→wiki(索引に当たりあり)` });
+      kind = "wiki";
+    }
+  }
   // 困りごとの型「勝てない」。wiki の答えの有無に関わらず載せる(端末が打ち手をローカルで描く)。
   const playbook: "cant_win" | null = understanding.trouble === "cant_win" ? "cant_win" : null;
 
@@ -596,7 +614,10 @@ async function runAsk(
 
   // hops は記録だけ残す(評価が「回す道なら解けたかもしれない率」を数える材料)。hops:multi は下で
   // 最初から回す道を試す(§振り分け 1)。
-  const hopsDropped: Dropped[] = understanding.hops === "multi" ? [{ what: "route", why: "hops:multi" }] : [];
+  const hopsDropped: Dropped[] = [
+    ...kindDropped,
+    ...(understanding.hops === "multi" ? [{ what: "route", why: "hops:multi" } as Dropped] : []),
+  ];
   // 1 問につき回す道は 1 回だけ(hops:multi で先に試したら、安い道が駄目でも二度目は試さない)。
   let loopTried = false;
 

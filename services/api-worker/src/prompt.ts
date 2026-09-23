@@ -104,7 +104,9 @@ export function renderUnderstandPrompt(
   lines.push("【ページの候補】");
   for (const p of pageCandidates) lines.push(`- ${p.slot}: ${p.page}`);
   lines.push(
-    "【規則】ページは候補からだけ選ぶ。分からなければ空で返す。wiki に聞く質問でなければ kind を変える。" +
+    "【規則】ページは候補からだけ選ぶ。分からなければ空で返す。" +
+      "kind: TalesWeaver のゲーム内容(アイテム・お金や素材の稼ぎ方・クエスト・敵・スキル・装備・システム・用語の意味)を聞く文は、言葉が分からなくても全部 wiki。" +
+      "挨拶や雑談(ゲームと関係ない話しかけ)だけ smalltalk。ゲームと無関係の調べもの(天気・計算・他のゲーム)だけ other。迷ったら wiki。" +
       "【直前】があり、今回の質問がその続き(同じ話題を指す代名詞・省略・前のページへの言及)なら followup を true にする。関係が無ければ false。" +
       "「強すぎる」「勝てない」「倒せない」「死ぬ」のような文は mood を trouble にする。それ以外は ask。" +
       "「勝てない」「強すぎる」「倒せない」のように、原因が敵の強さそのものへの困りごとなら trouble を cant_win にする。それ以外は none。",

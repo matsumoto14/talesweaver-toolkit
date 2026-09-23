@@ -7,7 +7,7 @@ import type { Aspect } from "./schema";
 import type { Selection } from "./schema";
 import type { Candidate } from "./retrieve";
 
-export type Dropped = { what: "unit" | "step" | "lead" | "all" | "route"; id?: string; why: string };
+export type Dropped = { what: "unit" | "step" | "lead" | "all" | "route" | "kind"; id?: string; why: string };
 export type LeadSeg = { t: string } | { ref: string; col: string };
 
 export interface Step {
