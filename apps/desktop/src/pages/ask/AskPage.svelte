@@ -10,7 +10,7 @@
   import { changed, reveal } from "../../ui/motion.svelte";
   import TextField from "../../ui/TextField.svelte";
   import AnswerBubble from "./AnswerBubble.svelte";
-  import { askErrorLine, emptyLine, noneLine, offlineLine, progressLine, thinkingLine, type Expression } from "./lines";
+  import { askErrorLine, noneLine, offlineLine, progressLine, thinkingLine, type Expression } from "./lines";
   import Zerippi from "./Zerippi.svelte";
 
 
@@ -107,9 +107,9 @@
         turn.message = "";
         turn.page = res.steps[0]?.source.page ?? null;
       } else {
-        const line = noneLine(res.reason, q);
+        const line = noneLine(res.reason, q, res.search.length > 0);
         turn.expression = line.expression;
-        turn.message = res.search.length > 0 ? line.message : emptyLine(q);
+        turn.message = line.message;
       }
     } catch (e) {
       const line = askErrorLine(e, q);

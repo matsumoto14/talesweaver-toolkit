@@ -9,8 +9,8 @@ import idleStill from "../../assets/ask/motion/idle-still.webp";
 import idleGif from "../../assets/ask/motion/idle.gif";
 import joyStill from "../../assets/ask/motion/joy-still.webp";
 import joyGif from "../../assets/ask/motion/joy.gif";
-import notifyStill from "../../assets/ask/motion/notify-still.webp";
-import notifyGif from "../../assets/ask/motion/notify.gif";
+import sadStill from "../../assets/ask/motion/sad-still.webp";
+import sadGif from "../../assets/ask/motion/sad.gif";
 import thinkStill from "../../assets/ask/motion/think-still.webp";
 import thinkGif from "../../assets/ask/motion/think.gif";
 import { AskHttpError, type Aspect, type AskNoneReason, type ProgressStep, type WrongReason } from "../../ask";
@@ -27,7 +27,7 @@ export const POSE_GIF: Record<Pose, string> = {
   idle: idleGif, // 何も起きていない
   answered: joyGif, // 目を細めて笑う
   thinking: thinkGif, // 羽を口元に当てて考える
-  notfound: notifyGif, // 口を開けて困る
+  notfound: sadGif, // 困る → 汗 → 泣く → しょんぼり
   offline: blinkGif, // 目を閉じて動かない
 };
 
@@ -36,7 +36,7 @@ export const POSE_STILL: Record<Pose, string> = {
   idle: idleStill,
   answered: joyStill,
   thinking: thinkStill,
-  notfound: notifyStill,
+  notfound: sadStill, // 3 コマ目(困り眉で口を閉じた顔)
   offline: blinkStill,
 };
 
@@ -86,7 +86,11 @@ export const otherLine = (question: string): string => pick(OTHER, question);
 export const rateLimitLine = (question: string): string => pick(RATE_LIMIT, question);
 
 /** `kind:"none"` の reason ごとの文と表情(s6.txt / stage1-spec.md 16) */
-export function noneLine(reason: AskNoneReason, question: string): { message: string; expression: Expression } {
+export function noneLine(
+  reason: AskNoneReason,
+  question: string,
+  hasSearch: boolean,
+): { message: string; expression: Expression } {
   switch (reason) {
     case "smalltalk":
       return { message: smalltalkLine(question), expression: "answered" };
@@ -94,7 +98,7 @@ export function noneLine(reason: AskNoneReason, question: string): { message: st
       return { message: otherLine(question), expression: "answered" };
     default:
       // llm_none / verification_failed / no_terms は段階 0 の「見つからない」+ 検索結果
-      return { message: emptyLine(question), expression: "notfound" };
+      return { message: hasSearch ? notFoundLine(question) : emptyLine(question), expression: "notfound" };
   }
 }
 
