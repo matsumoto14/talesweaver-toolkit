@@ -94,9 +94,25 @@ CREATE TABLE ask_log (                    -- /ask の記録(質問と答え。�
   answer_id  TEXT,                        -- reaction.answer_id と突き合わせる
   lead       TEXT,                        -- 結論文(LLM が書いた 1 文)
   body       TEXT NOT NULL,               -- 応答 JSON の全文
-  ms         INTEGER NOT NULL             -- 所要時間
+  ms         INTEGER NOT NULL,            -- 所要時間
+  understanding TEXT,                     -- 理解(1 回目)の出力 JSON(管理画面専用。migrations/003)
+  candidates TEXT                         -- LLM に見せた候補 [{id,page,section}](管理画面専用。migrations/003)
 );
 CREATE INDEX ask_log_user ON ask_log(user, at);
+
+CREATE TABLE ask_call (                   -- /ask 1 回につき、LLM への往復ごとに 1 行(管理画面専用。migrations/003)
+  id                    INTEGER PRIMARY KEY,
+  ask_log_id            INTEGER NOT NULL,
+  seq                   INTEGER NOT NULL,
+  kind                  TEXT NOT NULL,     -- understand | select | loop
+  model                 TEXT NOT NULL,
+  input_tokens          INTEGER NOT NULL,
+  cache_read_tokens     INTEGER NOT NULL,
+  cache_creation_tokens INTEGER NOT NULL,
+  output_tokens         INTEGER NOT NULL,
+  ms                    INTEGER NOT NULL
+);
+CREATE INDEX ask_call_ask_log_id ON ask_call(ask_log_id);
 
 -- 検索用の索引。contentless(本文を保持しない。ADR-013)、detail='full'。terms は取込時に重複を落としてソートした語の集合なので、位置情報があっても本文(語順)は復元できない。detail='none' / 'column' では bm25 が常に 0 で順位が付かない(実測 2026-09-22)。
 -- terms は「ページ名 › 節名」+ 本文を正規化・分かち書きした語を、重複を落として空白区切りにしたもの。

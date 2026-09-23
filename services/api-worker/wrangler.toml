@@ -3,7 +3,11 @@ name = "tw-context-api"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
-routes = [{ pattern = "api.tw-context.dev", custom_domain = true }]
+routes = [
+  { pattern = "api.tw-context.dev", custom_domain = true },
+  # 運営者の監視画面(admin.ts)。fetch() 冒頭で hostname により振り分ける(公開ホストからは 404)。
+  { pattern = "admin.tw-context.dev", custom_domain = true },
+]
 
 [observability]
 enabled = true
@@ -37,6 +41,11 @@ AI_GATEWAY_URL = ""
 SELECT_MODEL = "claude-haiku-4-5"
 UNDERSTAND_MODEL = "claude-haiku-4-5"
 RATE_LIMIT_PER_DAY = "20"
+
+# 管理画面(admin.tw-context.dev)の Cloudflare Access。Zero Trust でアプリを作ったあとに書く。
+# 空文字のままなら管理ホストは常に 403(閉じる側に倒す。README「管理画面」参照)。
+ACCESS_TEAM_DOMAIN = "purple-base-2f41.cloudflareaccess.com"
+ACCESS_AUD = "38cf96d648525b27697f14631cd96a25e6bc48f8184508c4e2c976ba02472cd7"
 
 # シークレット(wrangler secret put。ここには書かない):
 #   ANTHROPIC_API_KEY   Claude API の鍵。Console でこの Worker 専用に発行し、月額上限を付ける

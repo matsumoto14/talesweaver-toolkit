@@ -20,6 +20,7 @@ import { buildDict, fold, normalize, segment, toQuery } from "./segment";
 import { ASPECT_VOCAB } from "./prompt";
 import type { PrevTurn } from "./prompt";
 import { PAGE_SLOTS } from "./schema";
+import type { Understand } from "./schema";
 import { wikiUrl } from "./wiki-url";
 import { verify } from "./verify";
 import type { Ctx, Dropped } from "./verify";
@@ -36,8 +37,10 @@ import {
   difficultyOf,
 } from "./auth";
 import { logAsk } from "./log";
+import type { AskTrace } from "./log";
 import { getCachedAnswer, putCachedAnswer, questionKey, wikiVersion } from "./cache";
 import { handleReact } from "./react";
+import { handleAdmin } from "./admin";
 
 export interface Env {
   WIKI: D1Database;
@@ -51,7 +54,13 @@ export interface Env {
   UNDERSTAND_MODEL?: string;
   RATE_LIMIT_PER_DAY?: string;
   ASK_BURST?: { limit: (opts: { key: string }) => Promise<{ success: boolean }> };
+  /** 管理ホスト(admin.tw-context.dev)の Cloudflare Access。空なら管理ホストは常に 403。 */
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
 }
+
+/** 運営者の監視画面。公開ホストとは別ホストで、hostname だけで振り分ける(§決定済み)。 */
+const ADMIN_HOSTNAME = "admin.tw-context.dev";
 
 /** /challenge /session /ask /react が実際に必要とする形(KV は wrangler.toml のバインディングで常に付く)。 */
 type EnvWithApi = Env & { API: KVNamespace };
@@ -145,6 +154,17 @@ function capPerPage<T extends { page: string }>(hits: T[]): T[] {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // 管理ホストは公開ルートを一切持たない(逆も同様)。hostname 冒頭で分ける。
+    // 管理画面は同じオリジンから読むだけなので CORS を付けない(公開 API の `*` を持ち込まない)
+    if (url.hostname === ADMIN_HOSTNAME) {
+      try {
+        return await handleAdmin(request, env, url);
+      } catch (error) {
+        console.error(error);
+        return json({ error: "サーバー側で問題が起きました。時間をおいて試してください。" }, 500);
+      }
+    }
 
     if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
 
@@ -346,6 +366,16 @@ export type RunAskResult =
   | { status: 200; body: NoneAnswer | AnswerResponse }
   | { status: 502; body: { error: string } };
 
+/** runAsk() の戻り値。trace は管理画面専用(logAsk にだけ渡す。応答 body には混ぜない)。 */
+interface RunAskOutcome {
+  result: RunAskResult;
+  trace: AskTrace;
+}
+
+function newTrace(): AskTrace {
+  return { understanding: null, candidates: [], calls: [] };
+}
+
 async function ask(request: Request, env: AskEnv, ctx: ExecutionContext): Promise<Response> {
   const authError = await requireSession(request, env);
   if (authError) return json({ error: authError }, 401);
@@ -369,8 +399,11 @@ async function ask(request: Request, env: AskEnv, ctx: ExecutionContext): Promis
   const user = await userHash(request, env);
   // 答えのキャッシュのキー(cache.ts)。続きの質問は文脈依存なので作らない
   const qkey = prev ? null : questionKey(question, (await loadAliasIndex(env.WIKI)).words);
-  const record = (result: RunAskResult | { status: 500; body: { error: string } }): void => {
-    ctx.waitUntil(logAsk(env.WIKI, { user, question, qkey, prev, state, result, ms: Date.now() - startedAt }));
+  const record = (
+    result: RunAskResult | { status: 500; body: { error: string } },
+    trace?: AskTrace,
+  ): void => {
+    ctx.waitUntil(logAsk(env.WIKI, { user, question, qkey, prev, state, result, ms: Date.now() - startedAt, trace }));
   };
 
   // 「役に立った」が付いた同じ意味の質問なら LLM を呼ばずに返す(wiki の版が同じときだけ)
@@ -385,15 +418,15 @@ async function ask(request: Request, env: AskEnv, ctx: ExecutionContext): Promis
 
   if (!wantsSse(request)) {
     // 失敗も記録に残す(SSE 経路と同じ)。例外は 500 として記録してから投げ直す(呼び元が 500 を返す)
-    let result: RunAskResult;
+    let outcome: RunAskOutcome;
     try {
-      result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, noopProgress);
+      outcome = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, noopProgress);
     } catch (error) {
       record({ status: 500, body: { error: "サーバー側で問題が起きました。時間をおいて試してください。" } });
       throw error;
     }
-    record(result);
-    return json(result.body, result.status);
+    record(outcome.result, outcome.trace);
+    return json(outcome.result.body, outcome.result.status);
   }
   return askSse(env, question, state, prev, callUnderstand, loopEnabled, record);
 }
@@ -435,7 +468,7 @@ function askSse(
   prev: PrevTurn | null,
   callUnderstand: boolean,
   loopEnabled: boolean,
-  record: (result: RunAskResult | { status: 500; body: { error: string } }) => void,
+  record: (result: RunAskResult | { status: 500; body: { error: string } }, trace?: AskTrace) => void,
 ): Response {
   const encoder = new TextEncoder();
   // クライアントが切断したら cancel() が呼ばれる。以後の enqueue は捨てる(Claude の呼び出しは
@@ -449,8 +482,9 @@ function askSse(
       };
       try {
         const progress: ProgressFn = (step) => send("progress", { step });
-        const result = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, progress);
-        record(result);
+        const outcome = await runAsk(env, question, state, prev, callUnderstand, loopEnabled, progress);
+        const { result } = outcome;
+        record(result, outcome.trace);
         if (result.status === 502) send("error", { status: result.status, error: result.body.error });
         else send("result", result.body);
       } catch (error) {
@@ -515,6 +549,7 @@ async function tryLoop(
   hopsDropped: Dropped[],
   followupPage: string | null,
   progress: ProgressFn,
+  trace: AskTrace,
 ): Promise<RunAskResult | null> {
   const result = await agent.runAgentLoop(
     { db: env.WIKI, env, question, state, columnNotes, dict, prev },
@@ -522,10 +557,11 @@ async function tryLoop(
   );
   if (!result) return null;
 
-  const routeDropped: Dropped = {
-    what: "route",
-    why: `loop:${result.toolCalls}回/${result.ms}ms/in${result.tokens.input}+cached${result.tokens.cached}+written${result.tokens.cacheWritten}/out${result.tokens.output}`,
-  };
+  // 呼び出しごとの詳細(トークン・時間)は管理画面の ask_call が持つ。dropped には手掛かりだけ短く残す
+  for (const call of result.calls) trace.calls.push({ ...call, kind: "loop" });
+  trace.candidates = [...result.candidates.values()].map((c) => ({ id: c.id, page: c.page, section: c.section }));
+
+  const routeDropped: Dropped = { what: "route", why: `loop:${result.toolCalls}回/${result.ms}ms` };
   const dropped = [...hopsDropped, routeDropped];
 
   if (result.selection.none) {
@@ -576,7 +612,10 @@ async function runAsk(
   callUnderstand: boolean,
   loopEnabled: boolean,
   progress: ProgressFn,
-): Promise<RunAskResult> {
+): Promise<RunAskOutcome> {
+  const trace = newTrace();
+  const outcome = (result: RunAskResult): RunAskOutcome => ({ result, trace });
+
   const meta = await getMeta(env.WIKI);
   const syncedAt = meta.synced_at ?? null;
 
@@ -588,9 +627,19 @@ async function runAsk(
   const pageSlots = pageHits.slice(0, PAGE_SLOTS.length).map((h, i) => ({ slot: PAGE_SLOTS[i]!, page: h.page }));
 
   progress("understand");
-  const understanding = callUnderstand
-    ? (await claude.understand(env, question, prev, pageSlots)) ?? codeFallbackUnderstand()
-    : codeFallbackUnderstand();
+  let understanding: Understand;
+  if (callUnderstand) {
+    const understood = await claude.understand(env, question, prev, pageSlots);
+    if (understood) {
+      understanding = understood.understanding;
+      trace.calls.push({ ...understood.call, kind: "understand" });
+    } else {
+      understanding = codeFallbackUnderstand();
+    }
+  } else {
+    understanding = codeFallbackUnderstand();
+  }
+  trace.understanding = understanding;
 
   // 誤分類の歯止め 2 つ: 質問の全文が別名に一致する / 質問の語で索引に当たりがある(「聖水はどうやって稼ぐ?」を
   // 雑談と判定した実例 2026-09-23)。どちらかなら wiki として進める(挨拶は語が索引に無いので変わらない)
@@ -609,7 +658,7 @@ async function runAsk(
   const playbook: "cant_win" | null = understanding.trouble === "cant_win" ? "cant_win" : null;
 
   if (kind === "smalltalk" || kind === "other") {
-    return { status: 200, body: await noneAnswer(env, kind, null, syncedAt, [], playbook) };
+    return outcome({ status: 200, body: await noneAnswer(env, kind, null, syncedAt, [], playbook) });
   }
 
   // hops は記録だけ残す(評価が「回す道なら解けたかもしれない率」を数える材料)。hops:multi は下で
@@ -647,15 +696,15 @@ async function runAsk(
     loopTried = true;
     const loopResult = await tryLoop(
       env, question, state, prev, columnNoteRows, dict, syncedAt, playbook,
-      pageNames, columnDict, "loop", hopsDropped, followupPage, progress,
+      pageNames, columnDict, "loop", hopsDropped, followupPage, progress, trace,
     );
-    if (loopResult) return loopResult;
+    if (loopResult) return outcome(loopResult);
   }
 
   const termTokens = understanding.terms.slice(0, 6).flatMap((t) => segment(t.slice(0, 20), dict));
   const aspectTokens: string[] = []; // 観点(aspects)は段階 3 で理解の欄に戻す。それまで語彙の加点は無し
   const query = toQuery([...questionTokens, ...termTokens, ...aspectTokens]);
-  if (!query) return { status: 200, body: await noneAnswer(env, "no_terms", null, syncedAt, hopsDropped, playbook) };
+  if (!query) return outcome({ status: 200, body: await noneAnswer(env, "no_terms", null, syncedAt, hopsDropped, playbook) });
 
   progress("search");
   let candidates = await collectCandidates(env.WIKI, { query, boostPages, state, columnNotes: columnNoteRows });
@@ -671,7 +720,9 @@ async function runAsk(
   progress("select");
   let result = await claude.select(env, question, state, candidates, columnNoteTexts);
   if (!result) result = await claude.select(env, question, state, candidates, columnNoteTexts);
-  if (!result) return { status: 502, body: { error: "回答サーバーが応答しません。時間をおいて試してください" } };
+  if (!result) return outcome({ status: 502, body: { error: "回答サーバーが応答しません。時間をおいて試してください" } });
+  trace.calls.push({ ...result.call, kind: "select" });
+  trace.candidates = candidates.map((c) => ({ id: c.id, page: c.page, section: c.section }));
 
   const { selection } = result;
 
@@ -681,14 +732,14 @@ async function runAsk(
     loopTried = true;
     return tryLoop(
       env, question, state, prev, columnNoteRows, dict, syncedAt, playbook,
-      pageNames, columnDict, "cheap_then_loop", hopsDropped, followupPage, progress,
+      pageNames, columnDict, "cheap_then_loop", hopsDropped, followupPage, progress, trace,
     );
   };
 
   if (selection.none) {
     const loopResult = await retryWithLoop();
-    if (loopResult) return loopResult;
-    return { status: 200, body: await noneAnswer(env, "llm_none", query, syncedAt, hopsDropped, playbook) };
+    if (loopResult) return outcome(loopResult);
+    return outcome({ status: 200, body: await noneAnswer(env, "llm_none", query, syncedAt, hopsDropped, playbook) });
   }
 
   const ctx: Ctx = {
@@ -701,11 +752,11 @@ async function runAsk(
   const verified = verify(selection, ctx);
   if (verified.steps.length === 0) {
     const loopResult = await retryWithLoop();
-    if (loopResult) return loopResult;
-    return {
+    if (loopResult) return outcome(loopResult);
+    return outcome({
       status: 200,
       body: await noneAnswer(env, "verification_failed", query, syncedAt, [...verified.dropped, ...hopsDropped], playbook),
-    };
+    });
   }
 
   const answer = await buildAnswer(env.WIKI, {
@@ -726,18 +777,18 @@ async function runAsk(
 
   // missing(候補に答えが無かった観点)が空でなければ、1 回だけ回す道でやり直す(§振り分け 2)。
   if (answer.missing.length > 0) {
+    const cheapCandidates = trace.candidates;
     const loopResult = await retryWithLoop();
     // 回す道が本物の答えを出したときだけ差し替える。none で戻ったら安い道の部分的な答えを残す(仕様: 回す道でも駄目なら安い道の結果)
-    if (loopResult && "kind" in loopResult.body && loopResult.body.kind === "answer") return loopResult;
+    if (loopResult && "kind" in loopResult.body && loopResult.body.kind === "answer") return outcome(loopResult);
+    // 回す道の候補は採らなかったので、記録の候補は返す答えの根拠(安い道)に戻す。呼び出し(費用)は残す
+    trace.candidates = cheapCandidates;
   }
-  return { status: 200, body: answer };
+  return outcome({ status: 200, body: answer });
 }
 
 /** LLM(理解)が落ちたときのコード経路: 何も選ばず wiki として進めるだけ(別名一致は呼び元が別途見る)。 */
-function codeFallbackUnderstand(): {
-  kind: "wiki"; pages: never[]; terms: never[]; hops: "single"; followup: false;
-  mood: "ask"; trouble: "none";
-} {
+function codeFallbackUnderstand(): Understand {
   return { kind: "wiki", pages: [], terms: [], hops: "single", followup: false, mood: "ask", trouble: "none" };
 }
 

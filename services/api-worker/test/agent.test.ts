@@ -215,6 +215,24 @@ describe("runAgentLoop", () => {
     expect((messagesMock.calls[0]!.messages[0]!.content as Block[])[0]!.type).toBe("text");
   });
 
+  it("往復ごとに calls を積む(kind は agent 側で loop に統一される。model と usage を持つ)", async () => {
+    const messagesMock = fakeClient([
+      toolUseResponse("find_pages", { name: "A" }, 111),
+      toolUseResponse("answer", EMPTY_ANSWER, 222),
+    ]);
+    vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);
+
+    const result = await runAgentLoop({ db: fakeDb(), env: { SELECT_MODEL: "claude-haiku-4-5" } as never, ...BASE_INPUT });
+
+    expect(result).not.toBeNull();
+    expect(result!.calls).toHaveLength(2);
+    expect(result!.calls[0]).toEqual({
+      model: "claude-haiku-4-5", ms: expect.any(Number),
+      inputTokens: 111, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0,
+    });
+    expect(result!.calls[1]!.inputTokens).toBe(222);
+  });
+
   it("stop_reason: refusal は none(NONE_SELECTION)を返す", async () => {
     const messagesMock = fakeClient([refusalResponse()]);
     vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);

@@ -34,6 +34,32 @@ export function createClient(env: ClaudeEnv): Anthropic {
   return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, baseURL: env.AI_GATEWAY_URL || undefined });
 }
 
+/** 1 回の呼び出しの記録(管理画面の費用・時間表示用)。応答が来た(refusal も含む)ときだけ作る。 */
+export interface CallInfo {
+  model: string;
+  ms: number;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  outputTokens: number;
+}
+
+function callInfoOf(model: string, usage: Anthropic.Usage | undefined, startedAt: number): CallInfo {
+  return {
+    model,
+    ms: Date.now() - startedAt,
+    inputTokens: usage?.input_tokens ?? 0,
+    cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
+    cacheCreationTokens: usage?.cache_creation_input_tokens ?? 0,
+    outputTokens: usage?.output_tokens ?? 0,
+  };
+}
+
+export interface UnderstandResult {
+  understanding: Understand;
+  call: CallInfo;
+}
+
 /**
  * 理解(1 回目)。落ちても止まらない: エラー・時間切れ・`max_tokens` 切れは `null`(呼び元はコード
  * 経路で進む。1 回だけの呼び出しで、再試行はしない)。拒否(`refusal`)は経路の故障ではないので、
@@ -44,8 +70,9 @@ export async function understand(
   question: string,
   prev: PrevTurn | null,
   pageCandidates: { slot: string; page: string }[],
-): Promise<Understand | null> {
+): Promise<UnderstandResult | null> {
   const client = createClient(env);
+  const startedAt = Date.now();
   try {
     const response = await client.messages.parse(
       {
@@ -57,8 +84,10 @@ export async function understand(
       },
       { headers: AI_GATEWAY_HEADERS, timeout: UNDERSTAND_TIMEOUT_MS },
     );
-    if (response.stop_reason === "refusal") return NONE_UNDERSTAND;
-    return response.parsed_output ?? null;
+    const call = callInfoOf(env.UNDERSTAND_MODEL, response.usage, startedAt);
+    if (response.stop_reason === "refusal") return { understanding: NONE_UNDERSTAND, call };
+    if (!response.parsed_output) return null;
+    return { understanding: response.parsed_output, call };
   } catch {
     return null;
   }
@@ -67,6 +96,7 @@ export async function understand(
 export interface SelectResult {
   selection: Selection;
   slotToId: Map<string, string>;
+  call: CallInfo;
 }
 
 /**
@@ -85,6 +115,7 @@ export async function select(
   const slotOf = (id: string): string => idToSlot.get(id) ?? id;
 
   const client = createClient(env);
+  const startedAt = Date.now();
   try {
     const response = await client.messages.parse(
       {
@@ -98,9 +129,10 @@ export async function select(
       },
       { headers: AI_GATEWAY_HEADERS, timeout: SELECT_TIMEOUT_MS },
     );
-    if (response.stop_reason === "refusal") return { selection: NONE_SELECTION, slotToId };
+    const call = callInfoOf(env.SELECT_MODEL, response.usage, startedAt);
+    if (response.stop_reason === "refusal") return { selection: NONE_SELECTION, slotToId, call };
     if (!response.parsed_output) return null;
-    return { selection: resolveSlots(response.parsed_output, slotToId), slotToId };
+    return { selection: resolveSlots(response.parsed_output, slotToId), slotToId, call };
   } catch {
     return null;
   }

@@ -70,9 +70,11 @@ deploy は main への push で `.github/workflows/workers.yml` が行う(型検
   TTL 30 日。評価で外したいときは要求の `debug: { cache: false }`
 - **プロンプトキャッシュ**(回す道だけ): 往復ごとに最後のメッセージへ `cache_control` を 1 つ付け、履歴を
   キャッシュから読ませる。Haiku 4.5 は前方の合計が 4096 トークン未満だと効かないので、1〜2 往復目は普通に課金。
-  効き具合は `dropped` の `route: loop:<回>/<ms>/in<入力>+cached<キャッシュ読み>+written<キャッシュ書き>/out<出力>` と ask_log の body で見る
-- **記録**(`ask_log`): 質問・キャラ状態(level / evolution だけ)・答えの JSON 全文・経路・所要時間・端末のハッシュ。
-  IP と装備の中身は入らない。端末側の注記は「質問は外部の AI サービスに送ります(キャラや装備の中身は送りません)」だけで、
+  往復ごとのトークン・時間は `ask_call`(管理画面「費用」参照)に残る。`dropped` には
+  `route: loop:<回>/<ms>` の短い手掛かりだけを残す(2026-09-23、トークン内訳は管理画面に移した)
+- **記録**(`ask_log` + `ask_call`): 質問・キャラ状態(level / evolution だけ)・答えの JSON 全文・経路・
+  所要時間・端末のハッシュに加え、理解の出力・LLM に見せた候補・呼び出しごとの usage(`ask_call`、
+  管理画面専用)。IP と装備の中身は入らない。端末側の注記は「質問は外部の AI サービスに送ります(キャラや装備の中身は送りません)」だけで、
   記録することは書いていない(2026-09-23 ユーザー判断。戻すなら AskPage.svelte の注記に 1 文足す)。保持期間・削除の手段は未定。見るときは
   ```
   npx wrangler d1 execute tw-wiki --remote --command "SELECT at, substr(user,1,8) AS who, kind, route, ms, question, lead FROM ask_log ORDER BY id DESC LIMIT 50"
@@ -83,6 +85,43 @@ deploy は main への push で `.github/workflows/workers.yml` が行う(型検
 `units.py` → `--remote` の 2 手で更新できる。`unit_fts` も毎回作り直す。
 生きている Worker インスタンスは別名の辞書をキャッシュしているので、投入直後は古い辞書で
 動くことがある(次の deploy か isolate の入れ替わりで揃う)。
+
+## 管理画面(admin.tw-context.dev)
+
+運営者が `/ask` の質問・LLM の理解と候補・呼び出しごとのトークンと費用・反応(`helpful`/`wrong`/
+`value_wrong`)を見返すための画面。同じ Worker に別ホストとして同居する(`src/admin.ts` + 静的
+HTML `src/admin-html.ts`)。`fetch()` の冒頭で `hostname` により振り分け、公開ホストは管理ルートを
+持たず、管理ホストも `/ask` などの公開ルートを持たない。
+
+**Cloudflare Access の設定(ダッシュボードでの作業。1 回だけ)**
+
+1. Zero Trust → Access → Applications → Add an application(Self-hosted)で
+   `admin.tw-context.dev` を保護対象にする
+2. ポリシーは運営者本人のメールアドレスだけを許可(Allow)
+3. 作成後、アプリの Overview に出る **AUD タグ** と、チームのドメイン(`<team>.cloudflareaccess.com`)
+   を控える
+4. `wrangler.toml` の `[vars]` に書く
+   ```
+   ACCESS_TEAM_DOMAIN = "<team>.cloudflareaccess.com"
+   ACCESS_AUD = "<AUD タグ>"
+   ```
+   空文字のままだと管理ホストは常に 403(閉じる側に倒す。秘密ではないので vars でよい)
+
+認証は Cloudflare Access が付ける `Cf-Access-Jwt-Assertion` を `src/access.ts` が `jose` で検証する
+だけ(Worker 側はログイン画面もセッションも持たない。Access 自体が持つ)。
+
+**migration 003 の投入(schema.sql に無い版へ更新するとき)**
+
+```
+npx wrangler d1 execute tw-wiki --remote --file migrations/003-ask-trace.sql -y
+```
+
+**画面**: `https://admin.tw-context.dev/` を開くと、上に直近 30 日の日別費用の表、下にフィルタ
+(期間・kind・route・reaction)付きのログ一覧。行を押すと右(狭い幅では下)に詳細(質問 → 理解 →
+候補 → 呼び出しごとのトークン・費用・ms → 答え body → dropped → 反応 → 同じ人の前後のやりとり)。
+`GET /api/logs` `GET /api/logs/:id` `GET /api/costs` が JSON を返す(いずれも Access 必須)。
+単価は `src/pricing.ts`(Anthropic 公式、百万トークンあたり USD)。未知のモデルは費用を `null` で
+返す(0 円に化かさない)。
 
 ## 評価
 
@@ -156,6 +195,10 @@ data: { ...今までの応答 JSON 全体... }
 | `src/tools.ts` | `src/retrieve.ts` のラップ + 候補への札の採番(`assignSlots`)。安い道(選択 1 回)の下地 |
 | `src/agent.ts` | 回す道(段階 2)。手動のツールループ(`runAgentLoop`)。ツールは `src/retrieve.ts` を直接呼ぶ |
 | `src/wiki-url.ts` | `page.url`(EUC-JP percent-encoding 済み。units.py が作る)+ アンカーの連結 |
+| `src/log.ts` | `/ask` の記録(`ask_log` + `ask_call`)。トレース(理解・候補・呼び出し usage)は管理画面専用 |
+| `src/pricing.ts` | Claude API の単価と `costUsd()`。未知モデルは `null`(0 円に化かさない) |
+| `src/access.ts` | 管理ホストの認証(Cloudflare Access の JWT を `jose` で検証) |
+| `src/admin.ts` / `src/admin-html.ts` | 管理画面(`admin.tw-context.dev`)。API(`/api/logs` `/api/logs/:id` `/api/costs`)と静的 HTML |
 | `tools/segment-cli.ts` | `src/segment.ts` を読み込む CLI。units.py が子プロセスとして呼ぶ |
 | `eval/run.ts` | 評価セットの実行(`--ask` / `--no-understand` / `--no-loop`) |
 

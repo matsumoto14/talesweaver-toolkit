@@ -12,7 +12,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
 import { createClient, resolveSlots } from "./claude";
-import type { ClaudeEnv } from "./claude";
+import type { CallInfo, ClaudeEnv } from "./claude";
 import { renderState, SYSTEM_RULES } from "./prompt";
 import type { PrevTurn } from "./prompt";
 import * as retrieve from "./retrieve";
@@ -56,8 +56,8 @@ export interface AgentResult {
   candidates: Map<string, Candidate>;
   toolCalls: number;
   ms: number;
-  /** 往復ごとの usage の合計(費用の把握用)。cached = キャッシュから読めた入力、cacheWritten = キャッシュに書いた入力(割高) */
-  tokens: { input: number; cached: number; cacheWritten: number; output: number };
+  /** 往復ごとの呼び出し記録(費用の把握用。管理画面が ask_call として積む)。 */
+  calls: CallInfo[];
 }
 
 // --- ツール定義 ---------------------------------------------------------------
@@ -389,7 +389,7 @@ export async function runAgentLoop(
   const calledArgs = new Map<string, Set<string>>();
   let toolCalls = 0;
   let inputTokens = 0;
-  const tokens = { input: 0, cached: 0, cacheWritten: 0, output: 0 };
+  const calls: CallInfo[] = [];
   let forcedAnswer = false;
   let maxTokensRetried = false;
 
@@ -399,6 +399,7 @@ export async function runAgentLoop(
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const mustForce = forcedAnswer || overBudget();
+    const roundStart = Date.now();
 
     let response: Anthropic.Message;
     try {
@@ -425,13 +426,17 @@ export async function runAgentLoop(
     const usage = response.usage;
     const cached = (usage?.cache_read_input_tokens ?? 0) + (usage?.cache_creation_input_tokens ?? 0);
     inputTokens += (usage?.input_tokens ?? 0) + cached;
-    tokens.input += usage?.input_tokens ?? 0;
-    tokens.cached += usage?.cache_read_input_tokens ?? 0;
-    tokens.cacheWritten += usage?.cache_creation_input_tokens ?? 0;
-    tokens.output += usage?.output_tokens ?? 0;
+    calls.push({
+      model: input.env.SELECT_MODEL,
+      ms: Date.now() - roundStart,
+      inputTokens: usage?.input_tokens ?? 0,
+      cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
+      cacheCreationTokens: usage?.cache_creation_input_tokens ?? 0,
+      outputTokens: usage?.output_tokens ?? 0,
+    });
 
     if (response.stop_reason === "refusal") {
-      return { selection: NONE_SELECTION, candidates: ctx.candidatesById, toolCalls, ms: elapsed(), tokens };
+      return { selection: NONE_SELECTION, candidates: ctx.candidatesById, toolCalls, ms: elapsed(), calls };
     }
     if (response.stop_reason === "max_tokens") {
       if (maxTokensRetried) return null;
@@ -458,7 +463,7 @@ export async function runAgentLoop(
         return null;
       }
       const resolved = resolveSlots(parsed.data, ctx.slotToId);
-      return { selection: resolved, candidates: ctx.candidatesById, toolCalls, ms: elapsed(), tokens };
+      return { selection: resolved, candidates: ctx.candidatesById, toolCalls, ms: elapsed(), calls };
     }
 
     const results: Anthropic.ToolResultBlockParam[] = [];
