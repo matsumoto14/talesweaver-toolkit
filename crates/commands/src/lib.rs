@@ -2089,6 +2089,8 @@ fn rotation_materials(
     combo_count: u32,
     normal_attack_id: Option<&str>,
     temporary_adjustments: Option<&domain::Adjustments>,
+    // 出している召喚獣のスキル(陣はその型の精霊が居るときだけ候補にする)
+    summon_skill: Option<&Skill>,
 ) -> CommandResult<RotationMaterials> {
     // 1 回ぶんを主軸と同じ経路で計算する(解決済みの技と結果を返す)
     let calculate = |skill: Skill| -> CommandResult<(Skill, DamageResult)> {
@@ -2111,12 +2113,13 @@ fn rotation_materials(
         let result = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
         Ok((target.skill, result))
     };
-    // 候補: 同じキャラ・同じ形態(形態を持つキャラ)のプレイヤー攻撃技。主軸は含めない
+    // 候補: 同じキャラ・同じ形態(形態を持つキャラ)のプレイヤー攻撃技。主軸は含めない。
+    // 陣はその型の精霊を出しているときだけ(`Skill::usable_with_summon`)
     let candidate_skills: Vec<Skill> = gamedata::skills_for(game_character_id)
         .into_iter()
         .filter(|s| s.attacker == domain::Attacker::Player)
         .map(|s| resolve_skill_variants(s, stat_sources))
-        .filter(|s| s.form == skill.form && s.id != skill.id)
+        .filter(|s| s.form == skill.form && s.id != skill.id && s.usable_with_summon(summon_skill))
         .collect();
     // <フラグ> を爆発させる技は、爆発ぶんのダメージと積み直しの回数が付く
     let reapply_uses = |candidate: &Skill| match candidate.form {
@@ -2238,6 +2241,7 @@ fn build_rotation(
     normal_attack_id: Option<&str>,
     temporary_adjustments: Option<&domain::Adjustments>,
     insert_skill_ids: Option<&[String]>,
+    summon_skill: Option<&Skill>,
 ) -> CommandResult<Option<Rotation>> {
     let materials = rotation_materials(
         base_stats,
@@ -2256,6 +2260,7 @@ fn build_rotation(
         combo_count,
         normal_attack_id,
         temporary_adjustments,
+        summon_skill,
     )?;
     let roles = &materials.roles;
     // 回しを組めない組み合わせ(規則は 1 本。`flag_burst_blocks_rotation` 参照)。
@@ -2582,6 +2587,8 @@ pub fn damage_for_character(
     if let Some(duration) = duration.as_mut() {
         domain::apply_fixed_interval_dps(duration, gamedata::FLAG_TICK_SECONDS);
     }
+    // 出している召喚獣のスキル(陣の候補の絞り込みに使う)
+    let summon_skill = summon_skill_id.map(find_skill).transpose()?;
     // 回し(連打する技 + 差し込む CT 技)。差し込む CT 技が無いキャラは None
     let rotation = build_rotation(
         base_stats,
@@ -2602,6 +2609,7 @@ pub fn damage_for_character(
         normal_attack_id,
         temporary_adjustments.as_ref(),
         rotation_skill_ids,
+        summon_skill.as_ref(),
     )?;
     // 爆発は主軸 1 回につき 1 度なので、主軸を撃つ間隔で割った DPS を持たせる(内訳の 1 行ぶん)
     if let Some(burst) = burst.as_mut() {
@@ -2831,6 +2839,7 @@ pub fn list_rotation_choices(
         combo_count,
         normal_attack_id,
         temporary_adjustments.as_ref(),
+        character.summon_skill_id.as_deref().map(find_skill).transpose()?.as_ref(),
     )?;
     let roles = &materials.roles;
     // 回しを組めない組み合わせでは候補も出さない(計算タブと同じ 1 本)
@@ -3065,10 +3074,13 @@ pub fn evaluate_contents(
     };
     // 速剣・最大チャージは技データ側の差し替えなので、評価に使う技も解決してから入れる。
     // 召喚獣(熊・破壊精霊)が撃つスキルは本体が自分で振れないので入れない
+    let summon_skill = character.summon_skill_id.as_deref().map(find_skill).transpose()?;
     let player_skills: Vec<Skill> = skills
         .iter()
         .filter(|skill| skill.attacker == domain::Attacker::Player)
         .map(|skill| resolve_skill_variants(skill.clone(), &character.stat_sources))
+        // 陣はその型の精霊を出しているときだけ回しの候補になる(計算タブと同じ規則)
+        .filter(|skill| skill.usable_with_summon(summon_skill.as_ref()))
         .collect();
     // 差し込んだときに付いてくるもの(<フラグ> の爆発と積み直しの回数)。
     // 計算タブ(`build_rotation`)と同じ組み立て
@@ -4057,13 +4069,13 @@ mod tests {
         .unwrap();
         assert!(with_summon.summon.is_some());
         let summon_dps = with_summon.summon.as_ref().unwrap().result.expected_dps.unwrap();
-        // 本体ぶんは回し(ピクシー連打にテスラコイルを差し込む)があればその DPS、無ければ主軸単独。
-        // 陣を置くと精霊が消えるぶん、召喚獣の DPS は居る割合を掛けたものになる
+        // 本体ぶんは回しがあればその DPS、無ければ主軸単独。熊(ミカベア)を出しているときは陣を
+        // 置けない(陣は精霊の型に合うときだけ候補)ので、召喚獣の不在は無く present = 1
         let (body_dps, summon_present) = with_summon.rotation.as_ref().map_or(
             (with_summon.body.expected_dps.unwrap(), 1.0),
             |r| (r.expected_dps, 1.0 - r.summon_absent_share),
         );
-        assert!(summon_present < 1.0 && summon_present > 0.9, "{summon_present}");
+        assert!((summon_present - 1.0).abs() < 1e-12, "{summon_present}");
         assert!(
             (with_summon.combined.expected_dps.unwrap() - (body_dps + summon_dps * summon_present)).abs() < 1e-6
         );
@@ -4104,7 +4116,8 @@ mod tests {
 
     /// 陣(テスラコイル)は「置く 1.1s → 27s 持続 → 置き直す」の差し込む技として回しに入る
     /// (wiki Skill/アナイス: 609%x3 (1.8s毎)、持続 27s。ADR-019 追記 2026-09-23)。
-    /// 主軸がピクシー連打のとき既定で差し込まれ、間隔は持続の 27s、1 回ぶんの与ダメは 15 tick。
+    /// 主軸がピクシー連打・アンフェル(チェーンライトニング)を出しているとき既定で差し込まれ、
+    /// 間隔は持続の 27s、1 回ぶんの与ダメは 15 tick。
     #[test]
     fn テスラコイルは持続を間隔にした差し込む技として回しに入る() {
         let base_stats = BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 };
@@ -4112,7 +4125,7 @@ mod tests {
             &base_stats,
             "anais",
             Some("anais_angry_pixie"),
-            None,
+            Some("anais_chain_lightning"),
             &StatSources::default(),
             &BuffSelection::default(),
             Equipment::default(),
@@ -4151,6 +4164,51 @@ mod tests {
         let alone = result.dps.as_ref().unwrap().max;
         assert!((alone - result.total.max as f64 * 15.0 / 27.0).abs() < 1e-6, "{alone}");
         assert!(tesla.expected_dps_gain.unwrap() > 0.0);
+    }
+
+    /// 陣はその型の精霊を出しているときだけ候補になる(テスラコイルは「アンフェルスキル」)。
+    /// グレシス(クリスタルスプリンター)ならアイスエイジだけ、召喚なしなら陣は 1 つも出ない。
+    /// ホームの到達評価も同じ規則で、合計 DPS(討伐時間)が計算タブと一致する。
+    #[test]
+    fn 陣は出している精霊の型に合うものだけ差し込める() {
+        let base_stats = BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 };
+        let character = |summon: Option<&str>| NewCharacter {
+            name: "a".into(), game_character_id: "anais".into(), base_stats: base_stats.clone(),
+            awakening: domain::Awakening::default(), stat_sources: StatSources::default(),
+            equipment: Equipment::default(), common_skills: CommonSkills::default(),
+            main_skill_id: Some("anais_angry_pixie".into()), summon_skill_id: summon.map(String::from),
+            rotation_skill_ids: None, goal_content_id: None, default_buff_set_id: None,
+        };
+        let ids = |summon: Option<&str>| -> Vec<String> {
+            super::list_rotation_choices(
+                character(summon), BuffSelection::default(), "ringo".into(),
+                Some("anais_angry_pixie".into()), 0, None, None, None,
+            )
+            .unwrap()
+            .candidates
+            .into_iter()
+            .map(|c| c.skill_id)
+            .collect()
+        };
+        assert_eq!(ids(Some("anais_chain_lightning")), vec!["anais_tesla_coil"]);
+        assert_eq!(ids(Some("anais_crystal_sprinter")), vec!["anais_ice_age"]);
+        assert!(ids(None).is_empty(), "{:?}", ids(None));
+
+        // ホーム(evaluate_contents)と計算タブで討伐時間が一致する(精霊が不在のぶんも同じ足し算)
+        let c = character(Some("anais_crystal_sprinter"));
+        let evals = super::evaluate_contents(c.clone(), BuffSelection::default(), None).unwrap();
+        let eval = evals.iter().find(|e| e.content_id == "ringo").unwrap();
+        let best = eval.damage.as_ref().unwrap();
+        let calc = super::damage_for_character(
+            &c.base_stats, &c.game_character_id, c.main_skill_id.as_deref(), c.summon_skill_id.as_deref(),
+            &c.stat_sources, &BuffSelection::default(), c.equipment.clone(), c.common_skills, c.awakening,
+            &best.skill_id, "ringo", 0, None, None, None, None,
+        )
+        .unwrap();
+        let rotation = calc.rotation.as_ref().unwrap();
+        assert!(rotation.inserts.iter().any(|i| i.skill_id == "anais_ice_age"));
+        assert!(rotation.summon_absent_share > 0.0);
+        assert!((best.defeat_seconds.unwrap() - calc.combined.defeat_seconds.unwrap()).abs() < 1e-6);
     }
 
     /// 技の性能を解決する順は **コンボスキルタイプ → 速剣 / 最大までチャージ** で固定する。

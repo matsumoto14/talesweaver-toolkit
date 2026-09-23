@@ -353,6 +353,16 @@ impl Skill {
         cycle.map(|c| c + self.field.map_or(0.0, |f| f.resummon_seconds))
     }
 
+    /// この技を回しに差し込めるか(召喚獣との整合)。陣はその型の精霊(`summon_form` が同じ召喚スキル)を
+    /// 出しているときだけ置ける(wiki: テスラコイルは「アンフェルスキル」で、使用時にアンフェル消滅)。
+    /// 召喚獣を出していない・型が違う(グレシスを出していてテスラコイル)なら候補にしない。陣以外は常に可
+    pub fn usable_with_summon(&self, summon: Option<&Skill>) -> bool {
+        match self.field {
+            None => true,
+            Some(_) => summon.is_some_and(|s| s.summon_form.is_some() && s.summon_form == self.summon_form),
+        }
+    }
+
     /// 差し込む 1 回につき召喚獣が居なくなる秒数(置く動作 + 呼び直し)。消えない技は 0
     pub fn summon_absent_seconds(&self, cycle: Option<f64>) -> f64 {
         match self.field {

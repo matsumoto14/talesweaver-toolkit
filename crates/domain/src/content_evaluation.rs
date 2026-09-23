@@ -318,7 +318,10 @@ fn evaluate_one_content(
                         None => {}
                     }
                 }
-                if let Some(flag) = entry.flag.as_ref() {
+                // 技の DPS が不明になった(上の None)あとに持続だけを足すと、持続だけの「確定値」が
+                // 生まれてしまう(combine_expected_dps は片方が None なら残りを返す)。計算タブの
+                // combine_damage と同じく、技の DPS があるときだけ足す(レビュー指摘 2026-09-23)
+                if let (Some(flag), true) = (entry.flag.as_ref(), combined.is_some()) {
                     let mut duration = calculate_damage(material, &to_target(&flag.duration));
                     apply_fixed_interval_dps(&mut duration, flag.tick_seconds);
                     combined = combine_expected_dps(combined, duration.expected_dps);
