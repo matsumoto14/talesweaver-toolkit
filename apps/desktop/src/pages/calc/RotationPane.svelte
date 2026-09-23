@@ -1,7 +1,7 @@
 <script lang="ts">
   // 回しの段(計算タブの主役カード「DPS(回し)」の下に常設)。
   //
-  // 出すのは 3 つ: **その場で試す差し込みチップ**・**1 周のタイムライン**・**技ごとの寄与**。
+  // 出すのは 3 つ: **その場で試す差し込みチップ**・**本体のスキル回し(1 本のタイムライン)**・**技ごとの寄与**。
   // 秒・回数・寄与・分類はすべて Rust(`domain::plan_rotation` / `rotation_shares` →
   // `commands::Rotation`)が返したものをそのまま出す。**ここでするのは「秒 ÷ 間隔」を
   // 幅(%)に換算することだけ**で、時間の配分そのものを組み立て直さない。
@@ -82,7 +82,11 @@
         // 陣は「置く + 精霊の呼び直し」で 1 回(どちらの秒も Rust が返す)
         detail: insert.resummon_seconds > 0
           ? `1 回 ${fmtNum(insert.seconds, 2, "s")}(置く ${fmtNum(insert.cast_seconds, 2, "s")} + ${insert.resummon_skill_name ?? "召喚"} ${fmtNum(insert.resummon_seconds, 2, "s")})`
-          : `1 回 ${fmtNum(insert.seconds, 2, "s")}` + tickNote(insert.skill_id),
+          : `1 回 ${fmtNum(insert.seconds, 2, "s")}` + tickNote(insert.skill_id)
+            // 自分のダメージは 0。得は精霊の側に入る(額は精霊の鎖と合計の精霊の行)
+            + (insert.summon_hit_bonus_seconds > 0
+              ? ` ・ 精霊に ${fmtNum(insert.summon_hit_bonus_seconds, 0, "s")} 追加ダメージ`
+              : ""),
         expectedDps: insert.expected_dps,
         dpsShare: insert.dps_share,
       });
@@ -107,80 +111,68 @@
   /** 並びが変わったら段を動かす(§00 ④)。技の顔ぶれが変わったときだけ */
   const partsKey = $derived(parts.map((p) => p.key).join("|"));
 
-  // --- 1 周のタイムライン ----------------------------------------------------
-  // 差し込む技 1 つにつき 1 本。左端 0 秒 →[その技 c_i 秒][連打技 × k_i 回]→ 右端が
-  // その技を撃つ間隔 T_i(`interval_seconds`)。**秒はすべて Rust が返したもの**
-  // (`domain::plan_rotation` → `RotationInsert` の `seconds` / `filler_seconds` /
-  // `idle_seconds`)で、ここでするのは「秒 ÷ 間隔」を幅(%)に換算することだけ。
-  // 差し込みが 2 つ以上あると周期が技ごとに違い、全体で 1 本の「1 周」は存在しないので、
-  // 技ごとに 1 本ずつ並べて見出しにその技の名前を出す。
+  // --- 本体のスキル回し(1 本のタイムライン) ---------------------------------
+  // 本体が実際に撃つ順を 1 本の時間軸に並べる。区画の時刻・秒・回数と召喚獣の状態は
+  // すべて Rust(`domain::rotation_timeline` → `Rotation.timeline`)が返したもので、
+  // ここでするのは「秒 ÷ 軸の長さ」を幅(%)に換算することと、区画に色と名前を当てることだけ。
   /** 連打 1 回ぶんの刻みを描くかの下限(px)。これより細いと数えられないので出さない */
   const TICK_MIN_PX = 3;
-  /** 帯の実幅(px)。刻みを出すかの判定に使う(全部の帯が同じ幅) */
+  /** 帯の実幅(px)。刻みを出すかの判定に使う */
   let trackWidth = $state(0);
-  /** 何も入らない時間の呼び名。分類は Rust(`idle`)が返す */
-  const IDLE_LABEL = { wait: "待ち", other_inserts: "他の差し込み" } as const;
 
-  interface Timeline {
+  interface Zone {
     key: string;
-    name: string;
+    /** 区画の種類(描き分け用) */
+    kind: "insert" | "resummon" | "filler" | "idle";
+    pct: number;
     color: string;
-    /** その技を撃つ間隔(秒)= 帯の全幅 */
-    total: number;
-    /** 差し込む技 1 回(秒)とその割合(%)。陣は「置く」だけの幅で、呼び直しは別の区画 */
-    seconds: number;
-    insertPct: number;
-    /** 置いたあと精霊を呼び直す区画(秒・割合・召喚スキル名)。無ければ 0 */
-    resummonSeconds: number;
-    resummonPct: number;
-    resummonName: string;
-    /** 精霊が不在の時間(秒・割合)= 置く + 呼び直し。陣でなければ 0 */
-    absentSeconds: number;
-    absentPct: number;
-    /** 合間の連打(回数・合計秒・割合) */
-    fillerUses: number;
-    fillerSeconds: number;
-    fillerPct: number;
-    /** 連打 1 回ごとの刻みを描くか */
+    /** 帯の中に書く文字(細くて入らなければ省略される) */
+    text: string;
+    /** カーソルを合わせると出る名前と秒 */
+    title: string;
+    uses: number;
     ticked: boolean;
-    /** 何も入らない時間(秒・割合)と、その呼び名 */
-    idlePct: number;
-    idleLabel: string | null;
   }
-  const timelines = $derived.by<Timeline[]>(() => {
+  /** 秒を帯の幅(%)に換算する。割合そのものは Rust に無い「見せ方」なのでここで作る */
+  const pctOf = (seconds: number, total: number) => (total > 0 ? (seconds / total) * 100 : 0);
+  const zones = $derived.by<Zone[]>(() => {
     if (!rotation) return [];
-    /** 秒を帯の幅(%)に換算する。割合そのものは Rust に無い「見せ方」なのでここで作る */
-    const pct = (seconds: number, total: number) => (total > 0 ? (seconds / total) * 100 : 0);
-    return rotation.inserts.map((insert, index) => {
-      const total = insert.interval_seconds;
-      const fillerPct = pct(insert.filler_seconds, total);
-      const perUsePx = insert.filler_uses > 0
-        ? (trackWidth * fillerPct) / 100 / insert.filler_uses
-        : 0;
-      return {
-        key: `line:${insert.skill_id}`,
-        name: insert.skill_name,
-        color: INSERT_COLORS[index % INSERT_COLORS.length],
-        total,
-        seconds: insert.cast_seconds,
-        insertPct: pct(insert.cast_seconds, total),
-        resummonSeconds: insert.resummon_seconds,
-        resummonPct: pct(insert.resummon_seconds, total),
-        resummonName: insert.resummon_skill_name ?? "召喚",
-        // 不在の秒数は Rust(`Skill::summon_absent_seconds`)。ここは幅(%)に直すだけ
-        absentSeconds: insert.summon_absent_seconds,
-        absentPct: pct(insert.summon_absent_seconds, total),
-        fillerUses: insert.filler_uses,
-        fillerSeconds: insert.filler_seconds,
-        fillerPct,
-        ticked: perUsePx >= TICK_MIN_PX,
-        idlePct: pct(insert.idle_seconds, total),
-        idleLabel: insert.idle === null ? null : IDLE_LABEL[insert.idle],
-      };
+    const { total_seconds: total, segments } = rotation.timeline;
+    return segments.map((seg, i) => {
+      const pct = pctOf(seg.seconds, total);
+      const sec = fmtNum(seg.seconds, 1, "s");
+      const key = `z:${i}`;
+      if (seg.kind === "insert" || seg.kind === "resummon") {
+        const insert = rotation.inserts[seg.slot];
+        if (seg.kind === "resummon") {
+          const name = insert?.resummon_skill_name ?? "召喚";
+          return { key, kind: "resummon", pct, color: "", text: `${name} ${sec}`, title: `${name} ${sec}(精霊の呼び直し)`, uses: 0, ticked: false };
+        }
+        const name = insert?.skill_name ?? "";
+        return {
+          key, kind: "insert", pct, color: INSERT_COLORS[seg.slot % INSERT_COLORS.length],
+          text: `${name} ${sec}`, title: `${name} ${sec}`, uses: 0, ticked: false,
+        };
+      }
+      if (seg.kind === "filler") {
+        const name = rotation.filler?.skill_name ?? "";
+        const perUsePx = seg.uses > 0 ? (trackWidth * pct) / 100 / seg.uses : 0;
+        const text = `${name} × ${fmtInt(seg.uses)}(${sec})`;
+        return { key, kind: "filler", pct, color: FILLER_COLOR, text, title: text, uses: seg.uses, ticked: perUsePx >= TICK_MIN_PX };
+      }
+      return { key, kind: "idle", pct, color: "", text: "待ち", title: `待ち ${sec}(CT が明くのを待つ)`, uses: 0, ticked: false };
     });
   });
-  /** 差し込みが 2 つ以上あるか(見出しに技の名前を出すか) */
-  const manyLines = $derived(timelines.length > 1);
+  /** 同じ軸での召喚獣の状態(陣で不在 / 追加ダメージ中 / 攻撃中)と、状態ごとの合計秒 */
+  const summonZones = $derived(
+    rotation ? rotation.timeline.summon.map((s) => ({ ...s, pct: pctOf(s.seconds, rotation!.timeline.total_seconds) })) : [],
+  );
+  const summonTotals = $derived.by(() => {
+    const t = { present: 0, absent: 0, bonus: 0 };
+    for (const s of summonZones) t[s.state] += s.seconds;
+    return t;
+  });
+  const SUMMON_LABEL = { present: "攻撃中", absent: "不在", bonus: "追加ダメージ" } as const;
 
   const candidates = $derived(choices?.candidates ?? []);
   // 候補が「差し込むと DPS が下がる技」だけなら段ごと出さない(§00 ②。選ぶ意味のある技が無い)。
@@ -230,71 +222,53 @@
       <!-- タイムラインと行。技の顔ぶれが変われば丸ごと入れ直すので、入場クラスを 1 つ載せて
            `use:changed` で再生する(§10「動きの部品」) -->
       <div class="rot-body pane-in" use:changed={() => partsKey}>
-        <!-- 1 周のタイムライン(差し込む技ごとに 1 本)。幅は実際の秒数の比 -->
+        <!-- 本体のスキル回し(1 本)。幅は実際の秒数の比。細い区画はカーソルを合わせると名前と秒が出る -->
         <div class="rot-lines" bind:clientWidth={trackWidth}>
-          {#each timelines as line (line.key)}
+          {#if rotation}
             <div class="rot-line">
               <span class="line-head">
-                {manyLines ? `${line.name} の 1 周` : "1 周"}
-                <Value class="line-total" motion={() => line.total} value={fmtNum(line.total, 1, "s")} />
+                本体のスキル回し
+                <Value class="line-total" motion={() => rotation?.timeline.total_seconds ?? 0} value={fmtNum(rotation.timeline.total_seconds, 1, "s")} />
               </span>
               <span class="track inset">
-                <span class="zone" style="width: {line.insertPct}%; background: {line.color};">
-                  <span class="zone-text">{line.name} {fmtNum(line.seconds, 1, "s")}</span>
-                </span>
-                {#if line.resummonPct > 0}
-                  <!-- 陣を置くと精霊が消えるので、その場で呼び直す(本体の手順の一部) -->
-                  <span class="zone resummon" style="width: {line.resummonPct}%;">
-                    <span class="zone-text">{line.resummonName} {fmtNum(line.resummonSeconds, 1, "s")}</span>
-                  </span>
-                {/if}
-                {#if line.fillerPct > 0 && rotation?.filler}
-                  <!-- 連打の区画は 1 回ごとに刻む(細くて数えられないときは刻まず回数だけ) -->
+                {#each zones as z (z.key)}
                   <span
-                    class="zone filler"
-                    class:ticked={line.ticked}
-                    style="width: {line.fillerPct}%; background: {FILLER_COLOR}; --uses: {line.fillerUses};"
+                    class="zone {z.kind}"
+                    class:ticked={z.ticked}
+                    style="width: {z.pct}%;{z.color ? ` background: ${z.color};` : ''}{z.uses > 0 ? ` --uses: ${z.uses};` : ''}"
+                    title={z.title}
                   >
-                    <span class="zone-text">
-                      {rotation.filler.skill_name} × {fmtInt(line.fillerUses)}({fmtNum(line.fillerSeconds, 1, "s")})
-                    </span>
+                    <span class="zone-text">{z.text}</span>
                   </span>
-                {/if}
-                {#if line.idleLabel !== null}
-                  <!-- 何も入らない時間。何なのか(待ち / 他の差し込み)は Rust が分類する -->
-                  <span class="zone rest" style="width: {line.idlePct}%;">
-                    <span class="zone-text">{line.idleLabel}</span>
-                  </span>
-                {/if}
+                {/each}
               </span>
-              {#if hasSummon && line.absentPct > 0}
-                <!-- 精霊の帯: 置いてから呼び直すまで不在、あとは攻撃中。合計の「−x%」の出どころ -->
-                <!-- 上の帯と同じ幅・同じ目盛りに揃える(文字は下の目盛り行の中央に) -->
-                <span class="track inset spirit" title="精霊は陣を置くと消え、呼び直すまで不在">
-                  <span class="zone absent" style="width: {line.absentPct}%;"></span>
-                  <span class="zone present" style="width: {100 - line.absentPct}%;"></span>
+              {#if hasSummon && summonZones.length > 0}
+                <!-- 精霊の帯: 同じ時間軸で、陣で不在 / 追加ダメージ中 / 攻撃中。合計の増減の出どころ -->
+                <span class="track inset spirit">
+                  {#each summonZones as s (s.start_seconds)}
+                    <span class="zone {s.state}" style="width: {s.pct}%;" title="精霊 {SUMMON_LABEL[s.state]} {fmtNum(s.seconds, 1, 's')}"></span>
+                  {/each}
                 </span>
               {/if}
-              <!-- 秒の目盛り: 0s / 差し込みが終わる秒(呼び直し込み)/ 1 周の秒 -->
+              <!-- 秒の目盛り: 0s / 1 周の秒。精霊の凡例は中央に -->
               <span class="scale">
                 <span class="mark start"><Value value="0s" /></span>
-                {#if line.insertPct + line.resummonPct > 6 && line.insertPct + line.resummonPct < 94}
-                  <span class="mark mid" style="left: {line.insertPct + line.resummonPct}%;">
-                    <Value motion={() => line.seconds + line.resummonSeconds} value={fmtNum(line.seconds + line.resummonSeconds, 1, "s")} />
-                  </span>
-                {/if}
-                {#if hasSummon && line.absentPct > 0}
+                {#if hasSummon && summonZones.length > 0}
                   <span class="mark center spirit-note num">
-                    精霊 <span class="sw absent"></span>不在 {fmtNum(line.absentSeconds, 1, "s")}
-                    <span class="sw present"></span>攻撃中 {fmtNum(line.total - line.absentSeconds, 1, "s")}
+                    精霊
+                    {#each ["absent", "bonus", "present"] as const as state (state)}
+                      {#if summonTotals[state] > 0}
+                        <span class="sw {state}"></span>{SUMMON_LABEL[state]} {fmtNum(summonTotals[state], 1, "s")}
+                      {/if}
+                    {/each}
                   </span>
                 {/if}
                 <span class="mark end">
-                  <Value motion={() => line.total} value={fmtNum(line.total, 1, "s")} />
+                  <Value motion={() => rotation?.timeline.total_seconds ?? 0} value={fmtNum(rotation.timeline.total_seconds, 1, "s")} />
                 </span>
               </span>
             </div>
-          {/each}
+          {/if}
         </div>
         <div class="rot-rows">
           {#each parts as p (p.key)}
@@ -371,12 +345,12 @@
   .zone + .zone { box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.85); }
   /* 連打の区画は 1 回ごとに細い刻み(`--uses` 等分)。刻みが 3px 未満になるときは
      `ticked` を外して回数の文字だけにする(数えられない線は置かない) */
-  .filler.ticked {
+  .zone.filler.ticked {
     background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.75) 0 1px, transparent 1px 100%);
     background-size: calc(100% / var(--uses)) 100%;
   }
   /* 連打も差し込みも入らない時間(CT 待ち・詰まっているぶん)。塗らずに溝のまま見せる */
-  .rest { background: repeating-linear-gradient(135deg, #DCE5F1 0 5px, #CFDAEA 5px 10px); }
+  .idle { background: repeating-linear-gradient(135deg, #DCE5F1 0 5px, #CFDAEA 5px 10px); }
   /* 精霊の呼び直し(本体の手順)。差し込みの色の薄い版で「同じ 1 回の続き」に見せる */
   .resummon { background: var(--state-temp-bd); }
   /* 陣・呼び直しは 27 秒のうち 1 秒未満で、比のままだと 1〜2px に消える。色の塊として残るよう下限を置く
@@ -386,6 +360,8 @@
   .track.spirit { height: 7px; margin-top: 2px; }
   .absent { background: var(--state-short-bd); }
   .present { background: var(--state-met-bd); }
+  /* 追加ダメージが乗っている時間。攻撃中より濃い緑で「上乗せ中」を分ける */
+  .bonus { background: var(--state-met-fg); }
   .mark.center { left: 50%; transform: translateX(-50%); }
   .spirit-note { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-muted); }
   .sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-left: 4px; }
@@ -394,7 +370,7 @@
     font-size: var(--t-label); font-weight: 700; color: #fff; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
   }
-  .rest .zone-text { color: var(--fg-muted); }
+  .idle .zone-text { color: var(--fg-muted); }
   /* 目盛り。数値は tabular-nums(Value が .num を載せる)。区切りの位置に中央で置く */
   .scale { position: relative; height: 13px; font-size: var(--t-label); color: var(--fg-muted); }
   .mark { position: absolute; top: 0; white-space: nowrap; }

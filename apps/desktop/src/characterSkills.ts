@@ -109,6 +109,8 @@ export function mainSkillOptions(
     { value: "", name: emptyLabel, meta: emptyMeta, iconId: null },
     ...skills
       .filter((s) => (attacker === "summon" ? s.attacker !== "player" : s.attacker === attacker))
+      // 自分ではダメージを与えない技(極・ダメージプラス)は主軸にも召喚欄にもならない
+      .filter((s) => s.multiplier > 0)
       .filter((s) => summonForm == null || s.summon_form === summonForm)
       .filter((s) => form == null || s.form === form)
       .map((s, i) => ({

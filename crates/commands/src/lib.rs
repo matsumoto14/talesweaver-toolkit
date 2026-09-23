@@ -763,6 +763,12 @@ pub fn validate_main_skill(character: &NewCharacter) -> CommandResult<()> {
             "召喚獣が撃つスキル '{skill_id}' は主軸に選べません"
         )));
     }
+    // 自分ではダメージを与えない技(極・ダメージプラス)を主軸にすると本体の火力が 0 になる
+    if gamedata::find_skill(skill_id).is_some_and(|s| s.multiplier <= 0.0) {
+        return Err(CommandError::from(format!(
+            "ダメージを与えないスキル '{skill_id}' は主軸に選べません"
+        )));
+    }
     Ok(())
 }
 
@@ -1749,13 +1755,15 @@ fn damage_with_optional_combo(
 /// 召喚獣(熊・破壊精霊)ぶんのダメージ計算結果。`skill` は召喚スキル、`result` は召喚獣の
 /// 係数・コンボ無し(`combo_count = 0`)で計算した `DamageResult` だが、DPS 由来の値
 /// (`actual_delay.uses_per_minute` / `dps` / `expected_dps` / `defeat_seconds` / `reach`)は
-/// 召喚獣の攻撃間隔式(`summon_uses_per_minute`。本体の実測回数表は使わない)で作り直したもの。
+/// 召喚獣の攻撃間隔式(`domain::summon_interval`。本体の実測回数表は使わない)で作り直したもの。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SummonDamage {
     pub skill_id: String,
     pub result: DamageResult,
     /// 攻撃間隔(秒)。中ディレイ未収録なら `None`(0 で埋めない)
     pub interval_seconds: Option<f64>,
+    /// 攻撃間隔が CT で頭打ちか(式の間隔より CT が長い)。間隔が出せないなら `false`
+    pub interval_cooldown_bound: bool,
 }
 
 /// <フラグ>(イェフネンの、技とは別枠のダメージ)ぶんの計算結果。
@@ -1803,6 +1811,12 @@ pub struct Rotation {
     /// 差し込む陣が召喚獣を消すぶん、召喚獣が居ない時間の割合(0〜1)。
     /// 召喚獣の DPS には `1 − この値` を掛ける(`combine_damage`)。陣が無ければ 0
     pub summon_absent_share: f64,
+    /// 極・ダメージプラスが召喚獣(破壊精霊)に足す DPS。差し込んでいなければ 0
+    /// (`combine_damage` が召喚獣ぶんの期待 DPS にこれを足す)
+    pub summon_hit_bonus_dps: f64,
+    /// 本体のスキル回しを 1 本の時間軸に並べた図(`domain::rotation_timeline`)。
+    /// 区画の `slot` は `inserts` の位置
+    pub timeline: domain::RotationTimeline,
 }
 
 /// 回しの連打技(差し込みの合間に撃つ技)。
@@ -1842,6 +1856,9 @@ pub struct RotationInsert {
     pub cooldown_seconds: f64,
     /// 陣(設置技)。`cooldown_seconds` は CT ではなく持続で、画面は「持続」と言う
     pub is_field: bool,
+    /// 召喚獣の命中ごとに追加ダメージを入れる技(`Skill::summon_hit_bonus`)の効果の持続(秒)。
+    /// 持たない技は 0。上乗せぶんは `Rotation::summon_hit_bonus_dps`
+    pub summon_hit_bonus_seconds: f64,
     /// `seconds` のうち、置いたあと精霊を呼び直す召喚スキルの動作(秒)。消えない技は 0。
     /// 画面はタイムラインでこの区画を技と分けて描く(本体の手順 = 置く → 呼ぶ → 連打)
     pub resummon_seconds: f64,
@@ -1905,6 +1922,12 @@ pub struct CombinedParts {
     pub summon_expected_dps: Option<f64>,
     /// 陣で不在のぶん減った召喚獣の DPS(正の値)。陣が無ければ `None`
     pub summon_absent_loss: Option<f64>,
+    /// 本体の回しが召喚獣に及ぼした増減(陣の不在 − と極・ダメージプラスの上乗せ + の差し引き。
+    /// `summon_expected_dps` − 召喚獣単独の期待 DPS)。どちらも無ければ `None`
+    pub summon_rotation_gain: Option<f64>,
+    /// 召喚獣ぶんの DPS(最小 / 最大 / クリ)。陣の不在と極・ダメージプラスの上乗せを込めた、
+    /// 回しの中で実際に入る値(`summon_expected_dps` の側ごとの版)。召喚獣がいなければ `None`
+    pub summon_dps: Option<domain::DpsTriple>,
 }
 
 /// `damage_for_character` / `preview_damage` の戻り。既存の `DamageResult` 全フィールドは
@@ -1961,11 +1984,12 @@ fn build_summon_damage(
     let mut result = domain::calculate_damage(&material, &target);
     // 召喚獣の攻撃間隔は本体の実測回数表を使わず式で出す(domain::apply_summon_interval。
     // 中ディレイ・回数・DPS・討伐時間をまとめて作り直し、本体式の値を残さない)
-    let interval_seconds = domain::apply_summon_interval(&mut result, cooldown_seconds, target.enemy.hp);
+    let interval = domain::apply_summon_interval(&mut result, cooldown_seconds, target.enemy.hp);
     Ok(SummonDamage {
         skill_id: summon_skill_id.to_string(),
         result,
-        interval_seconds,
+        interval_seconds: interval.map(|i| i.seconds),
+        interval_cooldown_bound: interval.is_some_and(|i| i.cooldown_bound),
     })
 }
 
@@ -2040,6 +2064,10 @@ struct RotationCandidateMaterial {
     burst: Option<DamageResult>,
     /// 撃つ前に連打技を最低何回挟むか(<フラグ> の積み直し)
     minimum_filler_uses: u32,
+    /// 極・ダメージプラスの割合(`Skill::summon_hit_bonus` を持つ技だけ `Some`。
+    /// 素INT + 装備魔攻(この技自身の的で解決した `equipment_base_totals` /
+    /// `equipment_enhanced_totals`)から `domain::summon_hit_bonus_ratio` で出す)
+    summon_hit_bonus_ratio: Option<f64>,
 }
 
 impl RotationCandidateMaterial {
@@ -2058,7 +2086,9 @@ impl RotationCandidateMaterial {
 /// ここから先(どれを差し込むと何 DPS か)は domain の純関数だけで回せる。
 struct RotationMaterials {
     candidates: Vec<RotationCandidateMaterial>,
-    /// 既定の役割(`domain::choose_rotation`)
+    /// 既定の役割(`domain::choose_rotation`)。極・ダメージプラスは合計(本体の損 + 精霊の得)が
+    /// 上がるときだけ、通常の差し込みとは**別枠**でここに追加してある
+    /// (`domain::resolve_summon_hit_bonus`)
     roles: domain::RotationRoles,
     /// 主軸自身を差し込むときの積み直しの回数
     main_minimum_filler_uses: u32,
@@ -2113,9 +2143,13 @@ fn rotation_materials(
     temporary_adjustments: Option<&domain::Adjustments>,
     // 出している召喚獣のスキル(陣はその型の精霊が居るときだけ候補にする)
     summon_skill: Option<&Skill>,
+    // 出している召喚獣(破壊精霊)の計算結果。極・ダメージプラスの上乗せの判定に使う
+    summon: Option<&SummonDamage>,
 ) -> CommandResult<RotationMaterials> {
-    // 1 回ぶんを主軸と同じ経路で計算する(解決済みの技と結果を返す)
-    let calculate = |skill: Skill| -> CommandResult<(Skill, DamageResult)> {
+    // 1 回ぶんを主軸と同じ経路で計算する(解決済みの技・結果・装備魔攻の合計を返す)。
+    // 装備魔攻は極・ダメージプラスの割合(素INT + 装備魔攻)にしか使わないが、
+    // その技もここを通るので付いでに返す
+    let calculate = |skill: Skill| -> CommandResult<(Skill, DamageResult, i64)> {
         let (material, target) = build_damage_input(
             base_stats,
             game_character_id,
@@ -2133,7 +2167,9 @@ fn rotation_materials(
             temporary_adjustments.cloned(),
         )?;
         let result = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
-        Ok((target.skill, result))
+        let equipment_magic_attack =
+            target.equipment_base_totals().magic_attack + target.equipment_enhanced_totals().magic_attack;
+        Ok((target.skill, result, equipment_magic_attack))
     };
     // 候補: 同じキャラ・同じ形態(形態を持つキャラ)のプレイヤー攻撃技。主軸は含めない。
     // 陣はその型の精霊を出しているときだけ(`Skill::usable_with_summon`)
@@ -2152,7 +2188,7 @@ fn rotation_materials(
     };
     let mut candidates: Vec<RotationCandidateMaterial> = Vec::with_capacity(candidate_skills.len());
     for candidate in candidate_skills {
-        let (candidate, result) = calculate(candidate)?;
+        let (candidate, result, equipment_magic_attack) = calculate(candidate)?;
         let burst = if candidate.detonates_flag && flag_stacks > 0 {
             build_flag_damage(
                 base_stats,
@@ -2173,11 +2209,16 @@ fn rotation_materials(
         } else {
             None
         };
+        let summon_hit_bonus_ratio = candidate
+            .summon_hit_bonus
+            .as_ref()
+            .map(|bonus| domain::summon_hit_bonus_ratio(bonus, i64::from(base_stats.int), equipment_magic_attack));
         candidates.push(RotationCandidateMaterial {
             minimum_filler_uses: reapply_uses(&candidate),
             skill: candidate,
             result,
             burst,
+            summon_hit_bonus_ratio,
         });
     }
     // 爆発させる技を撃つなら、その <フラグ> を積む技(同形態の 連 / 爆)を連打する
@@ -2211,6 +2252,91 @@ fn rotation_materials(
             .collect::<Vec<_>>(),
         pinned_filler_id.as_deref(),
     );
+    // 極・ダメージプラスは、既存の差し込み(既定 `roles.inserts`)に**加えて**、合計
+    // (本体の損 + 精霊の得)が上がるときだけ足す(通常の差し込み選びには混ぜない。ADR-019)。
+    // 明示指定があるとき(`insert_skill_ids: Some(_)`)は `apply_explicit_inserts` が
+    // `roles.inserts` の候補ぶんを丸ごと差し替えるので、ここで足しても足さなくても関わらない
+    let mut roles = roles;
+    if let (Some(summon), Some(interval)) = (summon, summon.and_then(|s| s.interval_seconds)) {
+        if let Some((extra_index, extra_candidate)) = candidates
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.skill.summon_hit_bonus.is_some())
+        {
+            if let (Some(bonus), Some(ratio)) =
+                (extra_candidate.skill.summon_hit_bonus, extra_candidate.summon_hit_bonus_ratio)
+            {
+                let insert_of = |role: domain::RotationRole| -> domain::RotationInsert {
+                    let (s, seconds, minimum_filler_uses) = match role {
+                        domain::RotationRole::Main => (skill, body.cycle_seconds(), reapply_uses(skill)),
+                        domain::RotationRole::Candidate(index) => (
+                            &candidates[index].skill,
+                            candidates[index].result.cycle_seconds(),
+                            candidates[index].minimum_filler_uses,
+                        ),
+                    };
+                    domain::RotationInsert {
+                        seconds: s.insert_seconds(seconds),
+                        cooldown_seconds: s.cooldown_seconds.unwrap_or(0.0),
+                        minimum_filler_uses,
+                    }
+                };
+                let absent_of = |role: domain::RotationRole| -> f64 {
+                    let (s, seconds) = match role {
+                        domain::RotationRole::Main => (skill, body.cycle_seconds()),
+                        domain::RotationRole::Candidate(index) => {
+                            (&candidates[index].skill, candidates[index].result.cycle_seconds())
+                        }
+                    };
+                    s.summon_absent_seconds(seconds)
+                };
+                let main_damage = domain::RotationDamage::of(body);
+                let damage_of = |role: domain::RotationRole| -> &[domain::RotationDamage] {
+                    match role {
+                        domain::RotationRole::Main => std::slice::from_ref(&main_damage),
+                        domain::RotationRole::Candidate(index) => &damages[index],
+                    }
+                };
+                let filler_seconds = roles.filler.and_then(|role| insert_of(role).seconds);
+                let filler = match (roles.filler, filler_seconds) {
+                    (Some(role), Some(seconds)) => Some((damage_of(role)[0], seconds)),
+                    _ => None,
+                };
+                let base_inserts: Vec<domain::RotationInsert> =
+                    roles.inserts.iter().map(|&role| insert_of(role)).collect();
+                let base_absent_seconds: Vec<f64> = roles.inserts.iter().map(|&role| absent_of(role)).collect();
+                let base_damages: Vec<&[domain::RotationDamage]> =
+                    roles.inserts.iter().map(|&role| damage_of(role)).collect();
+                let base_body_expected_dps = match domain::plan_rotation(filler_seconds, &base_inserts) {
+                    Some(plan) => domain::rotation_dps(&plan, &base_damages, filler)
+                        .map(|(_, expected)| expected)
+                        .unwrap_or(0.0),
+                    None => filler
+                        .filter(|(_, seconds)| *seconds > 0.0)
+                        .map(|(damage, seconds)| damage.total.expected(damage.critical_chance) / seconds)
+                        .unwrap_or(0.0),
+                };
+                let extra_insert = insert_of(domain::RotationRole::Candidate(extra_index));
+                if domain::resolve_summon_hit_bonus(
+                    filler_seconds,
+                    &base_inserts,
+                    &base_absent_seconds,
+                    &base_damages,
+                    filler,
+                    base_body_expected_dps,
+                    extra_insert,
+                    &bonus,
+                    summon.result.per_hit.expected(summon.result.critical_chance),
+                    interval,
+                    ratio,
+                )
+                .is_some()
+                {
+                    roles.inserts.push(domain::RotationRole::Candidate(extra_index));
+                }
+            }
+        }
+    }
     Ok(RotationMaterials {
         main_minimum_filler_uses: reapply_uses(skill),
         candidates,
@@ -2264,6 +2390,7 @@ fn build_rotation(
     temporary_adjustments: Option<&domain::Adjustments>,
     insert_skill_ids: Option<&[String]>,
     summon_skill: Option<&Skill>,
+    summon: Option<&SummonDamage>,
 ) -> CommandResult<Option<Rotation>> {
     let materials = rotation_materials(
         base_stats,
@@ -2283,6 +2410,7 @@ fn build_rotation(
         normal_attack_id,
         temporary_adjustments,
         summon_skill,
+        summon,
     )?;
     let roles = &materials.roles;
     // 回しを組めない組み合わせ(規則は 1 本。`flag_burst_blocks_rotation` 参照)。
@@ -2305,6 +2433,7 @@ fn build_rotation(
         seconds: Option<f64>,
         cooldown_seconds: f64,
         is_field: bool,
+        summon_hit_bonus_seconds: f64,
         resummon_seconds: f64,
         resummon_skill_name: Option<String>,
         summon_absent_seconds: f64,
@@ -2332,6 +2461,7 @@ fn build_rotation(
             seconds: insert_skill.insert_seconds(result_of(role).cycle_seconds()),
             cooldown_seconds: insert_skill.cooldown_seconds.unwrap_or(0.0),
             is_field: insert_skill.field.is_some(),
+            summon_hit_bonus_seconds: insert_skill.summon_hit_bonus.map_or(0.0, |b| b.duration_seconds),
             resummon_seconds: insert_skill.field.map_or(0.0, |f| f.resummon_seconds),
             resummon_skill_name: insert_skill
                 .field
@@ -2422,6 +2552,58 @@ fn build_rotation(
             .map(|i| i.as_ref().map_or(0.0, |i| i.summon_absent_seconds))
             .collect::<Vec<_>>(),
     );
+    // 極・ダメージプラスが差し込まれていれば、その間隔と精霊が居る割合(陣込みの
+    // `summon_absent_share`)から実際の上乗せ DPS を出す(`domain::summon_hit_bonus_dps`)。
+    // 判定(足すかどうか)は `rotation_materials` 側でもう済んでいるので、ここは
+    // 最終的に決まった間隔で数値を出すだけ
+    let summon_hit_bonus_dps = summon
+        .and_then(|summon| summon.interval_seconds.map(|interval| (summon, interval)))
+        .and_then(|(summon, interval)| {
+            inserts.iter().enumerate().find_map(|(index, insert)| {
+                let insert = insert.as_ref()?;
+                let bonus_skill = materials
+                    .candidates
+                    .iter()
+                    .find(|c| c.skill.id == insert.skill_id)?;
+                let bonus = bonus_skill.skill.summon_hit_bonus?;
+                let ratio = bonus_skill.summon_hit_bonus_ratio?;
+                let slot = plan.slots.iter().find(|s| s.insert == index)?;
+                domain::summon_hit_bonus_dps(
+                    &bonus,
+                    summon.result.per_hit.expected(summon.result.critical_chance),
+                    interval,
+                    ratio,
+                    slot.interval_seconds,
+                    1.0 - summon_absent_share,
+                )
+            })
+        })
+        .unwrap_or(0.0);
+    // 本体のスキル回しを 1 本の時間軸に並べる(`plan.slots` と同じ並び = 下の `inserts` の並び)
+    let timeline = domain::rotation_timeline(
+        &plan,
+        filler_seconds,
+        &plan
+            .slots
+            .iter()
+            .map(|slot| {
+                inserts.get(slot.insert).and_then(Option::as_ref).map_or(
+                    domain::TimelineInsert {
+                        cast_seconds: 0.0,
+                        resummon_seconds: 0.0,
+                        summon_absent_seconds: 0.0,
+                        summon_bonus_seconds: 0.0,
+                    },
+                    |insert| domain::TimelineInsert {
+                        cast_seconds: insert.seconds.unwrap_or(0.0) - insert.resummon_seconds,
+                        resummon_seconds: insert.resummon_seconds,
+                        summon_absent_seconds: insert.summon_absent_seconds,
+                        summon_bonus_seconds: insert.summon_hit_bonus_seconds,
+                    },
+                )
+            })
+            .collect::<Vec<_>>(),
+    );
     let inserts: Vec<RotationInsert> = plan
         .slots
         .iter()
@@ -2436,7 +2618,11 @@ fn build_rotation(
             });
             Some(RotationInsert {
                 // 主軸は「差し込まない」選択肢が無いので損得を出さない
-                expected_dps_gain: (!insert.is_main).then(|| gain_of(slot.insert)).flatten(),
+                // 極・ダメージプラスの得は精霊の側に入る(本体の損 + 精霊の得。既定 ON の判定と同じ)
+                expected_dps_gain: (!insert.is_main)
+                    .then(|| gain_of(slot.insert))
+                    .flatten()
+                    .map(|gain| if insert.summon_hit_bonus_seconds > 0.0 { gain + summon_hit_bonus_dps } else { gain }),
                 skill_id: insert.skill_id,
                 skill_name: insert.skill_name,
                 is_main: insert.is_main,
@@ -2445,6 +2631,7 @@ fn build_rotation(
                 seconds: insert.seconds.unwrap_or(0.0),
                 cooldown_seconds: insert.cooldown_seconds,
                 is_field: insert.is_field,
+                summon_hit_bonus_seconds: insert.summon_hit_bonus_seconds,
                 resummon_seconds: insert.resummon_seconds,
                 resummon_skill_name: insert.resummon_skill_name,
                 cast_seconds: insert.seconds.unwrap_or(0.0) - insert.resummon_seconds,
@@ -2483,6 +2670,8 @@ fn build_rotation(
         filler_share: plan.filler_share,
         crowded: plan.crowded,
         summon_absent_share,
+        summon_hit_bonus_dps,
+        timeline,
         dps,
         expected_dps,
     }))
@@ -2527,18 +2716,37 @@ fn combine_damage(
         .and_then(|r| body.expected_dps.map(|base| r.expected_dps - base));
     let mut summon_expected_dps = None;
     let mut summon_absent_loss = None;
+    let mut summon_dps = None;
+    let mut summon_rotation_gain = None;
     if let Some(summon) = summon {
         // 陣を置くと精霊が消えて呼び直すまで居ないので、そのぶん召喚獣の DPS を削る
         let absent = rotation.map_or(0.0, |r| r.summon_absent_share);
         let present = 1.0 - absent;
+        // 極・ダメージプラスの上乗せ(既定で差し込んだときだけ非 0。`rotation_materials`)
+        let summon_hit_bonus_dps = rotation.map_or(0.0, |r| r.summon_hit_bonus_dps);
+        // 上乗せは精霊の 1 段に比例するので、最小 / 最大 / クリの各側にも期待 DPS と同じ比で乗せる
+        // (期待 DPS にだけ足すと、側を選ぶ DPS 表示と合計・討伐時間が食い違う)
+        let bonus_share = summon
+            .result
+            .expected_dps
+            .filter(|&e| e > 0.0)
+            .map_or(0.0, |e| summon_hit_bonus_dps / e);
+        let factor = present + bonus_share;
         let scale = |d: domain::DpsTriple| domain::DpsTriple {
-            min: d.min * present,
-            max: d.max * present,
-            critical: d.critical * present,
+            min: d.min * factor,
+            max: d.max * factor,
+            critical: d.critical * factor,
         };
-        summon_expected_dps = summon.result.expected_dps.map(|e| e * present);
+        summon_expected_dps = domain::combine_expected_dps(
+            summon.result.expected_dps.map(|e| e * present),
+            (summon_hit_bonus_dps != 0.0).then_some(summon_hit_bonus_dps),
+        );
         summon_absent_loss = (absent > 0.0).then(|| summon.result.expected_dps.map(|e| e * absent)).flatten();
-        dps = domain::combine_dps(dps, summon.result.dps.map(scale));
+        summon_rotation_gain = (absent > 0.0 || summon_hit_bonus_dps > 0.0)
+            .then(|| summon_expected_dps.zip(summon.result.expected_dps).map(|(with, alone)| with - alone))
+            .flatten();
+        summon_dps = summon.result.dps.map(scale);
+        dps = domain::combine_dps(dps, summon_dps);
         expected_dps = domain::combine_expected_dps(expected_dps, summon_expected_dps);
     }
     let defeat_seconds = domain::defeat_seconds(body.enemy_hp, expected_dps);
@@ -2548,7 +2756,7 @@ fn combine_damage(
         expected_dps,
         defeat_seconds,
         reach: domain::ReachTier::of_defeat_seconds(defeat_seconds),
-        parts: CombinedParts { body_expected_dps, rotation_gain, summon_expected_dps, summon_absent_loss },
+        parts: CombinedParts { body_expected_dps, rotation_gain, summon_expected_dps, summon_absent_loss, summon_rotation_gain, summon_dps },
     }
 }
 
@@ -2631,6 +2839,27 @@ pub fn damage_for_character(
     }
     // 出している召喚獣のスキル(陣の候補の絞り込みに使う)
     let summon_skill = summon_skill_id.map(find_skill).transpose()?;
+    // 召喚獣(熊・破壊精霊)の計算結果。極・ダメージプラスの上乗せ判定(回しより先に要る)にも
+    // 使うので、回しより前に計算する(`equipment` / `enemy` / `temporary_adjustments` は
+    // 回しでも使うのでここでは複製を渡す)
+    let summon = summon_skill_id
+        .map(|id| {
+            build_summon_damage(
+                base_stats,
+                game_character_id,
+                style_dependency,
+                stat_sources,
+                buffs,
+                equipment.clone(),
+                common_skills,
+                awakening,
+                id,
+                enemy.clone(),
+                &content,
+                temporary_adjustments.clone(),
+            )
+        })
+        .transpose()?;
     // 回し(連打する技 + 差し込む CT 技)。差し込む CT 技が無いキャラは None
     let rotation = build_rotation(
         base_stats,
@@ -2652,6 +2881,7 @@ pub fn damage_for_character(
         temporary_adjustments.as_ref(),
         rotation_skill_ids,
         summon_skill.as_ref(),
+        summon.as_ref(),
     )?;
     // 爆発は主軸 1 回につき 1 度なので、主軸を撃つ間隔で割った DPS を持たせる(内訳の 1 行ぶん)
     if let Some(burst) = burst.as_mut() {
@@ -2677,24 +2907,6 @@ pub fn damage_for_character(
         }
         None => None,
     };
-    let summon = summon_skill_id
-        .map(|id| {
-            build_summon_damage(
-                base_stats,
-                game_character_id,
-                style_dependency,
-                stat_sources,
-                buffs,
-                equipment,
-                common_skills,
-                awakening,
-                id,
-                enemy,
-                &content,
-                temporary_adjustments,
-            )
-        })
-        .transpose()?;
     let combined = combine_damage(&body, summon.as_ref(), flag.as_ref(), rotation.as_ref());
     Ok(CharacterDamageResult {
         body,
@@ -2863,6 +3075,27 @@ pub fn list_rotation_choices(
     } else {
         None
     };
+    // 召喚獣(破壊精霊)の計算結果。極・ダメージプラスの既定 ON 判定に使う
+    let summon = character
+        .summon_skill_id
+        .as_deref()
+        .map(|id| {
+            build_summon_damage(
+                &character.base_stats,
+                &character.game_character_id,
+                style_dependency,
+                &character.stat_sources,
+                &buffs,
+                character.equipment.clone(),
+                character.common_skills,
+                character.awakening,
+                id,
+                enemy.clone(),
+                &content,
+                temporary_adjustments.clone(),
+            )
+        })
+        .transpose()?;
     // 同形態の技の 1 回ぶんは**ここで 1 度だけ**計算する。以降は domain の純関数だけを回す
     let materials = rotation_materials(
         &character.base_stats,
@@ -2882,6 +3115,7 @@ pub fn list_rotation_choices(
         normal_attack_id,
         temporary_adjustments.as_ref(),
         character.summon_skill_id.as_deref().map(find_skill).transpose()?.as_ref(),
+        summon.as_ref(),
     )?;
     let roles = &materials.roles;
     // 回しを組めない組み合わせでは候補も出さない(計算タブと同じ 1 本)
@@ -2953,6 +3187,38 @@ pub fn list_rotation_choices(
             .map(|(damage, seconds)| damage.total.expected(damage.critical_chance) / seconds)
     });
 
+    // 回し `plan` の差し込み `at` が極・ダメージプラスなら、その間隔での精霊への上乗せ DPS。
+    // 精霊の居る割合は陣込み(計算タブ `build_rotation` と同じ材料)。他の技・精霊なしは 0
+    let summon_hit_bonus_dps_of =
+        |plan: &domain::RotationPlan, insert_roles: &[domain::RotationRole], at: usize| -> f64 {
+            (|| {
+                let domain::RotationRole::Candidate(index) = insert_roles[at] else {
+                    return None;
+                };
+                let candidate = &materials.candidates[index];
+                let bonus = candidate.skill.summon_hit_bonus?;
+                let ratio = candidate.summon_hit_bonus_ratio?;
+                let summon = summon.as_ref()?;
+                let slot = plan.slots.iter().find(|s| s.insert == at)?;
+                let absent_seconds: Vec<f64> = insert_roles
+                    .iter()
+                    .map(|&r| {
+                        materials
+                            .skill_of(main, r)
+                            .summon_absent_seconds(materials.result_of(&body, r).cycle_seconds())
+                    })
+                    .collect();
+                domain::summon_hit_bonus_dps(
+                    &bonus,
+                    summon.result.per_hit.expected(summon.result.critical_chance),
+                    summon.interval_seconds?,
+                    ratio,
+                    slot.interval_seconds,
+                    1.0 - domain::summon_absent_share(plan, &absent_seconds),
+                )
+            })()
+            .unwrap_or(0.0)
+        };
     let mut candidates = Vec::new();
     for index in 0..materials.candidates.len() {
         let role = domain::RotationRole::Candidate(index);
@@ -2988,14 +3254,17 @@ pub fn list_rotation_choices(
             let plan = domain::plan_rotation(filler_seconds, &inserts)?;
             let (_, expected) = domain::rotation_dps(&plan, &parts, filler_damage)?;
             let at = insert_roles.iter().position(|r| *r == role)?;
-            domain::insert_expected_dps_gain(
+            let body_gain = domain::insert_expected_dps_gain(
                 expected,
                 filler_seconds,
                 &inserts,
                 &parts,
                 filler_damage,
                 at,
-            )
+            )?;
+            // 極・ダメージプラスは本体の手を使うだけで自分のダメージは 0。得は精霊の側に入るので
+            // 既定 ON の判定(`domain::resolve_summon_hit_bonus`: 本体の損 + 精霊の得)と同じく足す
+            Some(body_gain + summon_hit_bonus_dps_of(&plan, &insert_roles, at))
         })();
         candidates.push(RotationInsertChoice {
             default_on: default_ids.contains(&skill_id),
@@ -3702,6 +3971,14 @@ mod tests {
     }
 
     #[test]
+    fn ダメージを与えないスキルを主軸に選ぶと拒否される() {
+        let mut c = anais();
+        c.main_skill_id = Some("anais_damage_plus".to_string());
+        let error = super::validate_main_skill(&c).unwrap_err();
+        assert!(error.message.contains("主軸に選べません"));
+    }
+
+    #[test]
     fn 精霊が撃つスキルは召喚スキルに選べる() {
         let mut c = anais();
         c.summon_skill_id = Some("anais_lightning_attack".to_string());
@@ -4232,8 +4509,9 @@ mod tests {
             .map(|c| c.skill_id)
             .collect()
         };
-        assert_eq!(ids(Some("anais_chain_lightning")), vec!["anais_tesla_coil"]);
-        assert_eq!(ids(Some("anais_crystal_sprinter")), vec!["anais_ice_age"]);
+        // 極・ダメージプラスも破壊精霊がいれば常に候補になる(3 種どれでもよい)
+        assert_eq!(ids(Some("anais_chain_lightning")), vec!["anais_tesla_coil", "anais_damage_plus"]);
+        assert_eq!(ids(Some("anais_crystal_sprinter")), vec!["anais_ice_age", "anais_damage_plus"]);
         assert!(ids(None).is_empty(), "{:?}", ids(None));
 
         // ホーム(evaluate_contents)と計算タブで討伐時間が一致する(精霊が不在のぶんも同じ足し算)
@@ -4251,6 +4529,82 @@ mod tests {
         assert!(rotation.inserts.iter().any(|i| i.skill_id == "anais_ice_age"));
         assert!(rotation.summon_absent_share > 0.0);
         assert!((best.defeat_seconds.unwrap() - calc.combined.defeat_seconds.unwrap()).abs() < 1e-6);
+    }
+
+    /// 極・ダメージプラスは、合計(本体の損 + 精霊の得)が上がるときだけ既定で差し込まれる
+    /// (ADR-019)。ホーム(evaluate_contents)と計算タブは同じ 1 本(`domain::resolve_summon_hit_bonus`)
+    /// を通るので、討伐時間が一致する。
+    #[test]
+    fn 極ダメージプラスは合計が上がるときだけ既定で差し込まれる() {
+        let character = |int: u32| NewCharacter {
+            name: "a".into(), game_character_id: "anais".into(),
+            base_stats: BaseStats { stab: 1, hack: 1, int, def: 1, mr: 1, dex: 1, agi: 1 },
+            awakening: domain::Awakening::default(), stat_sources: StatSources::default(),
+            equipment: Equipment::default(), common_skills: CommonSkills::default(),
+            main_skill_id: Some("anais_angry_pixie".into()),
+            summon_skill_id: Some("anais_chain_lightning".into()),
+            rotation_skill_ids: None, goal_content_id: None, default_buff_set_id: None,
+        };
+        let run = |int: u32| {
+            let c = character(int);
+            let evals = super::evaluate_contents(c.clone(), BuffSelection::default(), None).unwrap();
+            let eval = evals.iter().find(|e| e.content_id == "ringo").unwrap();
+            let best = eval.damage.as_ref().unwrap();
+            let calc = super::damage_for_character(
+                &c.base_stats, &c.game_character_id, c.main_skill_id.as_deref(), c.summon_skill_id.as_deref(),
+                &c.stat_sources, &BuffSelection::default(), c.equipment.clone(), c.common_skills, c.awakening,
+                &best.skill_id, "ringo", 0, None, None, None, None,
+            )
+            .unwrap();
+            (best.defeat_seconds, calc)
+        };
+        // 素INT 300: 精霊の 1 発が大きく、既定で差し込まれる
+        let (home_defeat, calc) = run(300);
+        let rotation = calc.rotation.as_ref().unwrap();
+        assert!(
+            rotation.inserts.iter().any(|i| i.skill_id == "anais_damage_plus"),
+            "{:?}", rotation.inserts.iter().map(|i| &i.skill_id).collect::<Vec<_>>()
+        );
+        assert!(rotation.summon_hit_bonus_dps > 0.0);
+        // 損得の表示も精霊の得込み(本体だけだと必ず「下がる」に見えて、既定 ON と食い違う)
+        let insert = rotation.inserts.iter().find(|i| i.summon_hit_bonus_seconds > 0.0).unwrap();
+        assert!(insert.expected_dps_gain.unwrap() > 0.0);
+        let choices = super::list_rotation_choices(
+            character(300), BuffSelection::default(), "ringo".into(), Some("anais_angry_pixie".into()), 0, None, None, None,
+        )
+        .unwrap();
+        let choice = choices.candidates.iter().find(|c| c.skill_id == "anais_damage_plus").unwrap();
+        assert!(choice.default_on);
+        assert!(choice.expected_dps_gain.unwrap() > 0.0);
+        assert!(calc.combined.parts.summon_expected_dps.is_some());
+        assert!((home_defeat.unwrap() - calc.combined.defeat_seconds.unwrap()).abs() < 1e-6);
+        // 側を選ぶ DPS(最小 / 最大 / クリ)にも上乗せが乗る(期待 DPS にだけ足すと表示と合計が食い違う)
+        let summon_dps = calc.summon.as_ref().unwrap().result.dps.unwrap();
+        assert!(calc.combined.dps.unwrap().max > rotation.dps.max + summon_dps.max);
+
+        // 差し込まないと明示すれば合計は下がる(既定 ON が上乗せしている証拠)。
+        // `calc` と同じ技(`best.skill_id`)で比べる
+        let c = character(300);
+        let evals = super::evaluate_contents(c.clone(), BuffSelection::default(), None).unwrap();
+        let eval = evals.iter().find(|e| e.content_id == "ringo").unwrap();
+        let best = eval.damage.as_ref().unwrap();
+        let off = super::damage_for_character(
+            &c.base_stats, &c.game_character_id, c.main_skill_id.as_deref(), c.summon_skill_id.as_deref(),
+            &c.stat_sources, &BuffSelection::default(), c.equipment.clone(), c.common_skills, c.awakening,
+            &best.skill_id, "ringo", 0, None, None, None, Some(&[]),
+        )
+        .unwrap();
+        assert!(off.combined.expected_dps.unwrap() < calc.combined.expected_dps.unwrap());
+
+        // 素INT 1 でもホームと計算タブは一致する(既定 ON / OFF どちらでも同じ 1 本を通る)。
+        // 既定 OFF になる境界(合計が下がるとき見送る)は domain::rotation の
+        // `極ダメージプラスは合計が上がるときだけ既定on` で確認済み
+        let (home_defeat_low, calc_low) = run(1);
+        match (home_defeat_low, calc_low.combined.defeat_seconds) {
+            (Some(a), Some(b)) => assert!((a - b).abs() < 1e-6),
+            (None, None) => {}
+            other => panic!("home と計算タブの討伐時間が食い違う: {other:?}"),
+        }
     }
 
     /// 技の性能を解決する順は **コンボスキルタイプ → 速剣 / 最大までチャージ** で固定する。

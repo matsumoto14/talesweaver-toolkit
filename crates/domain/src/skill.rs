@@ -206,6 +206,27 @@ pub struct Field {
     pub resummon_seconds: f64,
 }
 
+/// 召喚獣命中時の追加ダメージ(アナイス 極・ダメージプラス、wiki「Skill/アナイス」
+/// `#DamagePlus`、2026-09-23 取得)。この技自体は本体に与ダメージを持たない
+/// (`Skill::multiplier` 0)。撃つと `duration_seconds` の間、対象が破壊精霊の
+/// スキル攻撃を受けるたびに、その 1 発の与ダメージ × 割合の追加ダメージが対象に
+/// `hits_per_activation` 回入る。割合は `100 + floor((素INT + 装備魔攻) / 10)`%
+/// (`max_ratio_percent` が上限)。`reactivation_min_seconds` 未満の間隔では
+/// 再発動しない(domain::rotation::summon_hit_bonus_reactivation_seconds)。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SummonHitBonus {
+    /// 効果の持続(秒)
+    pub duration_seconds: f64,
+    /// 割合の基準値(%)。素INT + 装備魔攻が 0 のときの割合
+    pub base_ratio_percent: i64,
+    /// 割合の上限(%)
+    pub max_ratio_percent: i64,
+    /// 再発動までの最短間隔(秒)。精霊の攻撃間隔がこれ未満なら、この間隔に切り上げる
+    pub reactivation_min_seconds: f64,
+    /// 1 回の発動で対象に入る回数
+    pub hits_per_activation: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -305,6 +326,9 @@ pub struct Skill {
     /// 陣(`field`)は CT ではなく**持続**(置き直す間隔)をここに持つ
     #[serde(default)]
     pub cooldown_seconds: Option<f64>,
+    /// 召喚獣命中時の追加ダメージ(アナイス 極・ダメージプラス)。持たない技は `None`
+    #[serde(default)]
+    pub summon_hit_bonus: Option<SummonHitBonus>,
 }
 
 /// `Skill::summon_form` が指す召喚獣の型。
@@ -355,8 +379,18 @@ impl Skill {
 
     /// この技を回しに差し込めるか(召喚獣との整合)。陣はその型の精霊(`summon_form` が同じ召喚スキル)を
     /// 出しているときだけ置ける(wiki: テスラコイルは「アンフェルスキル」で、使用時にアンフェル消滅)。
-    /// 召喚獣を出していない・型が違う(グレシスを出していてテスラコイル)なら候補にしない。陣以外は常に可
+    /// 召喚獣を出していない・型が違う(グレシスを出していてテスラコイル)なら候補にしない。
+    /// 召喚獣命中時の追加ダメージ(`summon_hit_bonus`)は破壊精霊(3 種どれでも)を
+    /// 出しているときだけ候補にする(熊・召喚なしでは出さない)。それ以外は常に可
     pub fn usable_with_summon(&self, summon: Option<&Skill>) -> bool {
+        if self.summon_hit_bonus.is_some() {
+            return summon.is_some_and(|s| {
+                matches!(
+                    s.summon_form,
+                    Some(SummonForm::Anferu | SummonForm::Gureshisu | SummonForm::Igni)
+                )
+            });
+        }
         match self.field {
             None => true,
             Some(_) => summon.is_some_and(|s| s.summon_form.is_some() && s.summon_form == self.summon_form),
@@ -455,6 +489,7 @@ impl Skill {
             applies_flag: false,
             detonates_flag: false,
             cooldown_seconds: None,
+            summon_hit_bonus: None,
         }
     }
 
@@ -564,6 +599,7 @@ mod tests {
             applies_flag: false,
             detonates_flag: false,
             cooldown_seconds: None,
+            summon_hit_bonus: None,
         }
     }
 

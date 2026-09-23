@@ -178,6 +178,7 @@ pub fn flag_skill(base: &Skill, stacks: u8, part: FlagPart) -> Option<Skill> {
         applies_flag: false,
         detonates_flag: false,
         cooldown_seconds: None,
+        summon_hit_bonus: None,
     })
 }
 

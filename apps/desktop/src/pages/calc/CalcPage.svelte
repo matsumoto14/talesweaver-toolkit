@@ -323,6 +323,30 @@
     if (loss == null || full == null || full <= 0) return null;
     return { amount: loss, rate: loss / full };
   });
+  /** 極・ダメージプラスが召喚獣に足しているぶん(既に summon_expected_dps に含まれる。
+   *  差し込んでいなければ 0 = 出さない) */
+  const summonBonus = $derived.by(() => {
+    const bonus = rotation?.summon_hit_bonus_dps;
+    return bonus != null && bonus > 0 ? bonus : null;
+  });
+  /** 合計の精霊の行に出す増減(陣の不在と極・ダメージプラスの差し引き。値は Rust)。
+   *  内訳は精霊の鎖の「1 秒あたり」が持つので、ここは 1 つの ± と、何によるかの名前だけ */
+  const summonGain = $derived.by(() => {
+    const gain = parts?.summon_rotation_gain;
+    const full = summon?.result.expected_dps;
+    if (gain == null || full == null || full <= 0) return null;
+    const causes = [summonLoss !== null ? "陣" : null, summonBonus !== null ? "極・ダメージプラス" : null]
+      .filter((c) => c !== null)
+      .join("と");
+    return { amount: gain, rate: gain / full, causes };
+  });
+  /** 精霊の鎖に出す「回しの中で実際に入る DPS」。陣の不在・極・ダメージプラスが無ければ
+   *  技単独の値のままなので null */
+  const summonInRotation = $derived.by(() => {
+    const dps = parts?.summon_dps;
+    if (dps == null || (summonLoss === null && summonBonus === null)) return null;
+    return { dps, absentLoss: summonLoss?.amount ?? null, hitBonus: summonBonus };
+  });
   /** 差し込んでいる技の名前(合計の内訳の注記用) */
   const rotationInsertNames = $derived(rotation ? rotation.inserts.map((i) => i.skill_name).join("・") : "");
   const summonLabel = $derived(summonSkillFull?.attacker === "destruction_spirit" ? "精霊" : "熊");
@@ -341,10 +365,8 @@
         ? "anais_rucy_bear_summon"
         : "anais_mica_bear_summon",
   );
-  /** 召喚獣の攻撃間隔が CT で頭打ちか(domain::apply_summon_interval は式と CT の長いほうを採る) */
-  const summonIntervalCapped = $derived(
-    summon?.interval_seconds != null && summon.interval_seconds === summonSkillFull?.cooldown_seconds,
-  );
+  /** 召喚獣の攻撃間隔が CT で頭打ちか(判定は Rust の domain::summon_interval) */
+  const summonIntervalCapped = $derived(summon?.interval_cooldown_bound ?? false);
   /** 召喚獣の DPS 節に出す間隔の注記。中ディレイ未収録(interval_seconds が null)なら出さない */
   const summonIntervalNote = $derived(
     summon?.interval_seconds != null
@@ -812,6 +834,7 @@
                 showDefeat={false} heroNumber={true}
                 intervalNote={summonIntervalNote}
                 intervalCapped={summonIntervalCapped}
+                {summonInRotation}
                 onView={() => viewWhy("summon")}
                 onPerHitDeltaFollow={() => { viewWhy("summon"); summonDetails.follow("perHit"); }}
                 flowChanged={summonFlowChanged}
@@ -831,17 +854,21 @@
                     label="本体"
                     value={fmtInt(Math.round(parts.body_expected_dps))}
                     motion={() => Math.round(parts?.body_expected_dps ?? 0)}
+                    delta={{}}
                   >
-                    {#snippet note()}<Value class="gain" tone={bodyGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(bodyGain.amount))}(${fmtSignedPct(bodyGain.rate, 0)})`} /> {skill?.name ?? "主軸"}だけを撃ち続けるより、{rotationInsertNames} を差し込んだぶん{/snippet}
+                    {#snippet note()}<Value class="gain" tone={bodyGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(bodyGain.amount))}(${fmtSignedPct(bodyGain.rate, 1)})`} /> {skill?.name ?? "主軸"}だけを撃ち続けるより、{rotationInsertNames} を差し込んだぶん{/snippet}
                   </ReadRow>
                 {/if}
-                {#if summonLoss !== null && parts?.summon_expected_dps != null}
+                {#if summonGain !== null && parts?.summon_expected_dps != null}
                   <ReadRow
                     label={summonLabel}
                     value={fmtInt(Math.round(parts.summon_expected_dps))}
                     motion={() => Math.round(parts?.summon_expected_dps ?? 0)}
+                    delta={{}}
                   >
-                    {#snippet note()}<Value class="gain" tone="down" value={`${fmtSigned(-Math.round(summonLoss.amount))}(${fmtSignedPct(-summonLoss.rate, 1)})`} /> 陣を置くと消え、呼び直すまで攻撃が止まるぶん{/snippet}
+                    <!-- 本体の行と同じく差し引きの ± を 1 つ(2 つ並べると 1 行に収まらず後ろが切れた。実機 2026-09-23)。
+                         内訳(陣 − / ダメージプラス +)は精霊の鎖の「1 秒あたり」 -->
+                    {#snippet note()}<Value class="gain" tone={summonGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(summonGain.amount))}(${fmtSignedPct(summonGain.rate, 1)})`} /> {summonGain.causes}のぶん(内訳は{summonLabel}の 1 秒あたり){/snippet}
                   </ReadRow>
                 {/if}
                 <ReadRow

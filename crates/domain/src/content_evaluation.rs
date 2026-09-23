@@ -298,18 +298,42 @@ fn evaluate_one_content(
     if let Some(b) = best.as_mut() {
         let mut combined = b.expected_dps;
 
+        // 召喚獣(熊・破壊精霊)。wiki 計算式まとめ `STAB(熊)` 行。本体は召喚中も自由に
+        // 撃てるので単純和。コンボボーナスは乗らず(combo_count = 0)、実測回数表は本体
+        // プレイヤーの実測なので使わず `summon_interval` の式で間隔を出す。
+        // 極・ダメージプラスの上乗せ判定(回しより先)にも使うので、回しより前に出しておく
+        let mut summon_interval = None;
+        let summon_result = summon.map(|summon_input| {
+            let mut summon_result = calculate_damage(material, &to_target(summon_input));
+            summon_interval = apply_summon_interval(
+                &mut summon_result,
+                summon_input.skill.cooldown_seconds,
+                enemy.hp,
+            )
+            .map(|interval| interval.seconds);
+            summon_result
+        });
+
         // 回し(連打する技 + 差し込む CT 技)。計算タブ(`commands::combine_damage`)と
         // 同じ規則で技の期待 DPS を**置き換え**、<フラグ> の持続はそれに足す。
         // 技の DPS が出せないときは何も足さない
         let mut summon_present = 1.0;
+        let mut summon_hit_bonus_dps = 0.0;
         if let Some((entry, main_result)) = best_entry.as_ref() {
             if combined.is_some() {
                 if let Some(rotation) = entry.rotation.as_ref() {
-                    match rotation_expected_dps(material, &to_target, rotation, entry, main_result)
-                    {
-                        Some((expected, summon_absent)) => {
+                    match rotation_expected_dps(
+                        material,
+                        &to_target,
+                        rotation,
+                        entry,
+                        main_result,
+                        summon_result.as_ref().zip(summon_interval),
+                    ) {
+                        Some((expected, summon_absent, bonus)) => {
                             combined = Some(expected);
                             summon_present = 1.0 - summon_absent;
+                            summon_hit_bonus_dps = bonus;
                         }
                         // 回しを組めないのに <フラグ> の爆発がある技は、爆発をどの間隔で
                         // 入れるか決まらない。爆発を無視した確定値を出さない
@@ -329,20 +353,13 @@ fn evaluate_one_content(
             }
         }
 
-        // 召喚獣(熊・破壊精霊)。wiki 計算式まとめ `STAB(熊)` 行。本体は召喚中も自由に
-        // 撃てるので単純和。コンボボーナスは乗らず(combo_count = 0)、実測回数表は本体
-        // プレイヤーの実測なので使わず `summon_uses_per_minute` の式で回数を出す
-        if let Some(summon_input) = summon {
-            let mut summon_result = calculate_damage(material, &to_target(summon_input));
-            apply_summon_interval(
-                &mut summon_result,
-                summon_input.skill.cooldown_seconds,
-                enemy.hp,
-            );
-            combined = combine_expected_dps(
-                combined,
+        if let Some(summon_result) = summon_result.as_ref() {
+            let bonus = (summon_hit_bonus_dps != 0.0).then_some(summon_hit_bonus_dps);
+            let summon_expected_dps = combine_expected_dps(
                 summon_result.expected_dps.map(|e| e * summon_present),
+                bonus,
             );
+            combined = combine_expected_dps(combined, summon_expected_dps);
         }
 
         if combined != b.expected_dps {
@@ -377,7 +394,10 @@ fn rotation_expected_dps(
     rotation: &RotationEvaluationInput,
     main: &SkillEvaluationInput,
     main_result: &DamageResult,
-) -> Option<(f64, f64)> {
+    // 出している召喚獣(破壊精霊)の 1 発の結果と攻撃間隔。極・ダメージプラスの
+    // 上乗せ判定に使う。召喚獣がいない・間隔が出せないなら `None`
+    summon: Option<(&DamageResult, f64)>,
+) -> Option<(f64, f64, f64)> {
     // 役割の判定は実際の所要時間が基準なので、候補も 1 回ぶんを計算する
     let results: Vec<DamageResult> = rotation
         .candidates
@@ -411,13 +431,102 @@ fn rotation_expected_dps(
             minimum_filler_uses: candidate.material.minimum_filler_uses,
         })
         .collect();
-    let roles = choose_rotation(
+    let result_of = |role: RotationRole| match role {
+        RotationRole::Main => main_result,
+        RotationRole::Candidate(index) => &results[index],
+    };
+    let skill_of = |role: RotationRole| match role {
+        RotationRole::Main => &main.skill,
+        RotationRole::Candidate(index) => &rotation.candidates[index].skill.skill,
+    };
+    let material_of = |role: RotationRole| match role {
+        RotationRole::Main => &rotation.main,
+        RotationRole::Candidate(index) => &rotation.candidates[index].material,
+    };
+    let mut roles = choose_rotation(
         &main.skill,
         main_result.cycle_seconds(),
         Some(RotationDamage::of(main_result)),
         &candidates,
         rotation.pinned_filler_id.as_deref(),
     );
+    // 極・ダメージプラスは、既存の差し込み(既定 `roles.inserts`)に**加えて**、合計
+    // (本体の損 + 精霊の得)が上がるときだけ足す(通常の差し込み選びには混ぜない。ADR-019)。
+    // 明示指定(`insert_skill_ids: Some(_)`)があるときは、`apply_explicit_inserts` が
+    // `roles.inserts` の候補ぶんを丸ごと差し替えるので、ここで足しても関わらない
+    if let Some((spirit_result, spirit_interval)) = summon {
+        if let Some((extra_index, extra_candidate)) = rotation
+            .candidates
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.skill.skill.summon_hit_bonus.is_some())
+        {
+            if let Some(bonus) = extra_candidate.skill.skill.summon_hit_bonus {
+                let equipment_magic_attack = {
+                    let target = to_target(&extra_candidate.skill);
+                    target.equipment_base_totals().magic_attack
+                        + target.equipment_enhanced_totals().magic_attack
+                };
+                let ratio = crate::rotation::summon_hit_bonus_ratio(
+                    &bonus,
+                    i64::from(material.base_stats.int),
+                    equipment_magic_attack,
+                );
+                let main_damage = RotationDamage::of(main_result);
+                let insert_of = |role: RotationRole| RotationInsert {
+                    seconds: skill_of(role).insert_seconds(result_of(role).cycle_seconds()),
+                    cooldown_seconds: skill_of(role).cooldown_seconds.unwrap_or(0.0),
+                    minimum_filler_uses: material_of(role).minimum_filler_uses,
+                };
+                let damage_of = |role: RotationRole| -> &[RotationDamage] {
+                    match role {
+                        RotationRole::Main => std::slice::from_ref(&main_damage),
+                        RotationRole::Candidate(index) => &candidate_damages[index],
+                    }
+                };
+                let filler_seconds = roles.filler.map(insert_of).and_then(|i| i.seconds);
+                let filler = match (roles.filler, filler_seconds) {
+                    (Some(role), Some(seconds)) => Some((damage_of(role)[0], seconds)),
+                    _ => None,
+                };
+                let base_inserts: Vec<RotationInsert> = roles.inserts.iter().map(|&r| insert_of(r)).collect();
+                let base_absent_seconds: Vec<f64> = roles
+                    .inserts
+                    .iter()
+                    .map(|&r| skill_of(r).summon_absent_seconds(result_of(r).cycle_seconds()))
+                    .collect();
+                let base_damages: Vec<&[RotationDamage]> =
+                    roles.inserts.iter().map(|&r| damage_of(r)).collect();
+                let base_body_expected_dps = match plan_rotation(filler_seconds, &base_inserts) {
+                    Some(plan) => rotation_dps(&plan, &base_damages, filler)
+                        .map(|(_, expected)| expected)
+                        .unwrap_or(0.0),
+                    None => filler
+                        .filter(|(_, seconds)| *seconds > 0.0)
+                        .map(|(damage, seconds)| damage.total.expected(damage.critical_chance) / seconds)
+                        .unwrap_or(0.0),
+                };
+                let extra_insert = insert_of(RotationRole::Candidate(extra_index));
+                if crate::rotation::resolve_summon_hit_bonus(
+                    filler_seconds,
+                    &base_inserts,
+                    &base_absent_seconds,
+                    &base_damages,
+                    filler,
+                    base_body_expected_dps,
+                    extra_insert,
+                    &bonus,
+                    spirit_result.per_hit.expected(spirit_result.critical_chance),
+                    spirit_interval,
+                    ratio,
+                )
+                .is_some()
+                {
+                    roles.inserts.push(RotationRole::Candidate(extra_index));
+                }
+            }
+        }
+    }
     // 主軸を**連打**しながら <フラグ> を爆発させる回しは、爆発をどの間隔で入れるか決まらない
     // (爆発は主軸 1 回につき 1 度だが、連打の回数は時間配分の結果として決まる)。
     // ADR-019 決定 8 と同じく、爆発を黙って落とした「確定値」を出さず DPS を不明にする
@@ -437,18 +546,6 @@ fn rotation_expected_dps(
         &main.skill.id,
         &candidate_ids,
     );
-    let result_of = |role: RotationRole| match role {
-        RotationRole::Main => main_result,
-        RotationRole::Candidate(index) => &results[index],
-    };
-    let skill_of = |role: RotationRole| match role {
-        RotationRole::Main => &main.skill,
-        RotationRole::Candidate(index) => &rotation.candidates[index].skill.skill,
-    };
-    let material_of = |role: RotationRole| match role {
-        RotationRole::Main => &rotation.main,
-        RotationRole::Candidate(index) => &rotation.candidates[index].material,
-    };
     let filler = roles
         .filler
         .map(result_of)
@@ -483,7 +580,42 @@ fn rotation_expected_dps(
         .map(|&role| skill_of(role).summon_absent_seconds(result_of(role).cycle_seconds()))
         .collect();
     let summon_absent = summon_absent_share(&plan, &absent);
-    rotation_dps(&plan, &parts, filler).map(|(_, expected)| (expected, summon_absent))
+    // 極・ダメージプラスが差し込まれていれば、最終的に決まった間隔と精霊が居る割合
+    // (陣込みの `summon_absent`)から実際の上乗せ DPS を出す。足すかどうかの判定は上で
+    // 済んでいるので、ここは決まった間隔で数値を出すだけ
+    let input_of = |role: RotationRole| -> &SkillEvaluationInput {
+        match role {
+            RotationRole::Main => main,
+            RotationRole::Candidate(index) => &rotation.candidates[index].skill,
+        }
+    };
+    let summon_hit_bonus_dps = summon
+        .and_then(|(spirit_result, spirit_interval)| {
+            insert_roles.iter().enumerate().find_map(|(index, &role)| {
+                let bonus = skill_of(role).summon_hit_bonus?;
+                let equipment_magic_attack = {
+                    let target = to_target(input_of(role));
+                    target.equipment_base_totals().magic_attack + target.equipment_enhanced_totals().magic_attack
+                };
+                let ratio = crate::rotation::summon_hit_bonus_ratio(
+                    &bonus,
+                    i64::from(material.base_stats.int),
+                    equipment_magic_attack,
+                );
+                let slot = plan.slots.iter().find(|s| s.insert == index)?;
+                crate::rotation::summon_hit_bonus_dps(
+                    &bonus,
+                    spirit_result.per_hit.expected(spirit_result.critical_chance),
+                    spirit_interval,
+                    ratio,
+                    slot.interval_seconds,
+                    1.0 - summon_absent,
+                )
+            })
+        })
+        .unwrap_or(0.0);
+    rotation_dps(&plan, &parts, filler)
+        .map(|(_, expected)| (expected, summon_absent, summon_hit_bonus_dps))
 }
 
 #[cfg(test)]
@@ -566,6 +698,7 @@ mod tests {
             applies_flag: false,
             detonates_flag: false,
             cooldown_seconds: None,
+            summon_hit_bonus: None,
         }
     }
 

@@ -16,7 +16,7 @@
 //! 絞り込みと、1 回の所要時間・ダメージの計算は呼び出し側(commands)がする。
 
 use crate::damage::{DamageResult, DamageTriple, DpsTriple};
-use crate::skill::Skill;
+use crate::skill::{Skill, SummonHitBonus};
 
 /// 実効クールタイム。**1 回の所要時間以下の CT は連打を妨げない**ので「CT なし」として扱う
 /// (中ディレイのほうが長い技 — 撃ち切るのに CT より時間がかかるチャネリング技や、
@@ -208,6 +208,190 @@ pub fn summon_absent_share(plan: &RotationPlan, absent_seconds: &[f64]) -> f64 {
         .map(|slot| absent_seconds.get(slot.insert).copied().unwrap_or(0.0) / slot.interval_seconds)
         .sum::<f64>()
         .clamp(0.0, 1.0)
+}
+
+/// タイムラインに並べる差し込み 1 つぶんの秒(`RotationPlan::slots` と同じ並び)。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineInsert {
+    /// 技そのものを撃つ秒(陣は置く動作だけ)
+    pub cast_seconds: f64,
+    /// 撃ったあと召喚獣を呼び直す秒(陣だけ。他は 0)
+    pub resummon_seconds: f64,
+    /// 撃った瞬間から召喚獣が居ない秒(陣だけ。他は 0)
+    pub summon_absent_seconds: f64,
+    /// 撃ち終えてから召喚獣の命中に追加ダメージが乗る秒(極・ダメージプラスだけ。他は 0)
+    pub summon_bonus_seconds: f64,
+}
+
+/// 本体のタイムラインの 1 区画が何か。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TimelineSegmentKind {
+    /// 差し込む技(`slot` = `RotationPlan::slots` の位置)
+    Insert { slot: usize },
+    /// 陣を置いたあとの召喚獣の呼び直し
+    Resummon { slot: usize },
+    /// 連打技を `uses` 回
+    Filler { uses: u32 },
+    /// 何も撃てない(連打する技が無く CT を待っている)
+    Idle,
+}
+
+/// 本体のタイムラインの 1 区画。
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+pub struct TimelineSegment {
+    #[serde(flatten)]
+    pub kind: TimelineSegmentKind,
+    pub start_seconds: f64,
+    pub seconds: f64,
+}
+
+/// タイムライン上の召喚獣の状態。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SummonState {
+    /// 攻撃している
+    Present,
+    /// 陣で消えている(呼び直すまで)
+    Absent,
+    /// 攻撃に追加ダメージが乗っている(極・ダメージプラス)
+    Bonus,
+}
+
+/// 召喚獣の状態の 1 区間。
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+pub struct SummonSegment {
+    pub state: SummonState,
+    pub start_seconds: f64,
+    pub seconds: f64,
+}
+
+/// 本体のスキル回しを 1 本の時間軸に並べたもの(画面のタイムライン)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct RotationTimeline {
+    /// 軸の長さ(秒)= いちばん長い差し込み間隔
+    pub total_seconds: f64,
+    pub segments: Vec<TimelineSegment>,
+    /// 同じ軸での召喚獣の状態。陣もダメージプラスも無ければ空
+    pub summon: Vec<SummonSegment>,
+}
+
+/// 回しを 1 本の時間軸に並べる。軸はいちばん長い差し込み間隔 1 周ぶん。
+///
+/// 各差し込みは `plan` の間隔(`interval_seconds`)ごとの時刻に置き、先に置いた技と重なれば
+/// 後ろへずらす。空いた時間は連打技で埋める(連打する技が無ければ待ち)。**様子を見せる図**で、
+/// DPS は今までどおり `plan` の間隔から出す(重なりをずらしたぶん図と数字はわずかにずれうる。
+/// ユーザー判断 2026-09-23)。`inserts` は `plan.slots` と同じ並び。
+pub fn rotation_timeline(
+    plan: &RotationPlan,
+    filler_seconds: Option<f64>,
+    inserts: &[TimelineInsert],
+) -> RotationTimeline {
+    let total = plan.slots.iter().map(|s| s.interval_seconds).fold(0.0, f64::max);
+    // (時刻, 差し込みの位置)。同じ時刻なら plan の並び順
+    let mut events: Vec<(f64, usize)> = Vec::new();
+    for (at, slot) in plan.slots.iter().enumerate() {
+        if slot.interval_seconds <= 0.0 {
+            continue;
+        }
+        let mut t = 0.0;
+        while t < total - 1e-9 {
+            events.push((t, at));
+            t += slot.interval_seconds;
+        }
+    }
+    events.sort_by(|a, b| {
+        a.0.partial_cmp(&b.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.1.cmp(&b.1))
+    });
+
+    let filler_seconds = filler_seconds.filter(|&f| f > 0.0);
+    let fill = |segments: &mut Vec<TimelineSegment>, from: f64, to: f64| {
+        let gap = to - from;
+        if gap <= 1e-9 {
+            return;
+        }
+        let kind = match filler_seconds {
+            // 端数は回数を丸めて幅は隙間いっぱいにする(図なので)
+            Some(f) => TimelineSegmentKind::Filler { uses: (gap / f).round().max(1.0) as u32 },
+            None => TimelineSegmentKind::Idle,
+        };
+        segments.push(TimelineSegment { kind, start_seconds: from, seconds: gap });
+    };
+    let mut segments = Vec::new();
+    let mut absent: Vec<(f64, f64)> = Vec::new();
+    let mut bonus: Vec<(f64, f64)> = Vec::new();
+    let mut cursor = 0.0;
+    for (t, at) in events {
+        let start = f64::max(t, cursor);
+        if start >= total - 1e-9 {
+            continue;
+        }
+        let Some(insert) = inserts.get(at) else { continue };
+        fill(&mut segments, cursor, start);
+        let cast = insert.cast_seconds.min(total - start);
+        segments.push(TimelineSegment {
+            kind: TimelineSegmentKind::Insert { slot: at },
+            start_seconds: start,
+            seconds: cast,
+        });
+        let mut end = start + cast;
+        if insert.resummon_seconds > 0.0 && end < total {
+            let resummon = insert.resummon_seconds.min(total - end);
+            segments.push(TimelineSegment {
+                kind: TimelineSegmentKind::Resummon { slot: at },
+                start_seconds: end,
+                seconds: resummon,
+            });
+            end += resummon;
+        }
+        if insert.summon_absent_seconds > 0.0 {
+            absent.push((start, (start + insert.summon_absent_seconds).min(total)));
+        }
+        if insert.summon_bonus_seconds > 0.0 {
+            bonus.push((end, (end + insert.summon_bonus_seconds).min(total)));
+        }
+        cursor = end;
+    }
+    fill(&mut segments, cursor, total);
+
+    RotationTimeline { total_seconds: total, segments, summon: summon_segments(total, &absent, &bonus) }
+}
+
+/// 召喚獣の状態を区間の並びにする。不在が最優先(居なければ追加ダメージも乗らない)。
+fn summon_segments(total: f64, absent: &[(f64, f64)], bonus: &[(f64, f64)]) -> Vec<SummonSegment> {
+    if absent.is_empty() && bonus.is_empty() {
+        return Vec::new();
+    }
+    let mut cuts: Vec<f64> = vec![0.0, total];
+    for &(a, b) in absent.iter().chain(bonus) {
+        cuts.push(a);
+        cuts.push(b);
+    }
+    cuts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    let within = |ranges: &[(f64, f64)], t: f64| ranges.iter().any(|&(a, b)| a <= t && t < b);
+    let mut out: Vec<SummonSegment> = Vec::new();
+    for w in cuts.windows(2) {
+        let (from, to) = (w[0], w[1]);
+        if to - from <= 1e-9 {
+            continue;
+        }
+        let mid = (from + to) / 2.0;
+        let state = if within(absent, mid) {
+            SummonState::Absent
+        } else if within(bonus, mid) {
+            SummonState::Bonus
+        } else {
+            SummonState::Present
+        };
+        match out.last_mut() {
+            Some(last) if last.state == state => last.seconds += to - from,
+            _ => out.push(SummonSegment { state, start_seconds: from, seconds: to - from }),
+        }
+    }
+    out
 }
 
 /// 差し込む技を撃つ間隔(`T_i`)を決めているもの。**画面はこの分類に文言を当てるだけ**で、
@@ -501,6 +685,123 @@ pub fn insert_expected_dps_gain(
     Some(expected_dps - without)
 }
 
+/// 極・ダメージプラスの割合(%)。素INT + 装備魔攻から、上限つきで出す
+/// (wiki「Skill/アナイス」`#DamagePlus`: `追加ダメージ[%]＝100+(素INT＋魔法攻撃力)/10`、
+/// `ダメージ上限175%`)。1.0 = 等倍(100%)。
+pub fn summon_hit_bonus_ratio(bonus: &SummonHitBonus, base_int: i64, equipment_magic_attack: i64) -> f64 {
+    let percent = (bonus.base_ratio_percent + (base_int + equipment_magic_attack) / 10)
+        .clamp(bonus.base_ratio_percent, bonus.max_ratio_percent);
+    percent as f64 / 100.0
+}
+
+/// 発動間隔(秒)。精霊の攻撃間隔 `t` から、`reactivation_min_seconds` 未満の間隔では
+/// 再発動しないぶんを踏まえた実際の間隔を出す(`t ≥ 最短` なら `t`、`t <` 最短なら
+/// `最短を満たす最初の t の倍数`)。`t` が出せない・0 以下なら `None`
+pub fn summon_hit_bonus_reactivation_seconds(bonus: &SummonHitBonus, spirit_interval_seconds: f64) -> Option<f64> {
+    if spirit_interval_seconds <= 0.0 {
+        return None;
+    }
+    Some(if spirit_interval_seconds >= bonus.reactivation_min_seconds {
+        spirit_interval_seconds
+    } else {
+        // 割り切れるはずの商が浮動小数の誤差でわずかに超えて 1 つ余計に繰り上がらないよう、
+        // 誤差ぶんを引いてから切り上げる
+        ((bonus.reactivation_min_seconds / spirit_interval_seconds) - 1e-9).ceil() * spirit_interval_seconds
+    })
+}
+
+/// 持続(`duration_seconds`)のうち、この技を撃つ間隔(`insert_interval_seconds`)に
+/// 占める割合(1 を超えない)。`summon_absent_share` と同型
+pub fn summon_hit_bonus_share(bonus: &SummonHitBonus, insert_interval_seconds: f64) -> f64 {
+    if insert_interval_seconds <= 0.0 {
+        return 0.0;
+    }
+    (bonus.duration_seconds / insert_interval_seconds).clamp(0.0, 1.0)
+}
+
+/// 極・ダメージプラスが召喚獣(破壊精霊)に足す DPS。発動間隔(再発動 1s)・割合・
+/// 対象への回数(2 回)をまとめて 1 本で出す。`spirit_hit_expected` は精霊の 1 発の
+/// 期待ダメージ(`DamageResult::per_hit.expected(critical_chance)`)、`present_share` は
+/// 精霊が居る割合(陣で不在なら 1 未満。`summon_absent_share`)。発動間隔が出せないなら `None`
+#[allow(clippy::too_many_arguments)]
+pub fn summon_hit_bonus_dps(
+    bonus: &SummonHitBonus,
+    spirit_hit_expected: f64,
+    spirit_interval_seconds: f64,
+    ratio: f64,
+    insert_interval_seconds: f64,
+    present_share: f64,
+) -> Option<f64> {
+    let reactivation = summon_hit_bonus_reactivation_seconds(bonus, spirit_interval_seconds)?;
+    let share = summon_hit_bonus_share(bonus, insert_interval_seconds);
+    Some(
+        spirit_hit_expected * ratio * f64::from(bonus.hits_per_activation) / reactivation * share
+            * present_share,
+    )
+}
+
+/// 極・ダメージプラスを差し込んだ結果(足すと判定したときだけ返る)。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SummonHitBonusPlan {
+    /// この技を足したあとの本体の回し全体の期待 DPS(自分の与ダメージは 0 なので、
+    /// 連打が削れたぶんだけ元より下がるか同じ)
+    pub body_expected_dps: f64,
+    /// この技が足す、精霊への上乗せ DPS
+    pub summon_bonus_dps: f64,
+    /// この技を撃つ間隔(秒)
+    pub interval_seconds: f64,
+}
+
+/// 極・ダメージプラスを、既存の差し込み(`base_inserts`)に**加えて**既定で足すか判定する。
+/// 単体では必ず本体 DPS を下げる(自分の与ダメージが 0)ので、通常の候補選び
+/// (`choose_rotation`)には混ぜない —— 本体の損(差し込むぶん連打が削れる)と精霊の得
+/// (`summon_hit_bonus_dps`)を合わせた合計が上がるときだけ足す。
+///
+/// 陣と同時に差し込むときは、`base_absent_seconds`(`base_inserts` と同じ並び。
+/// `Skill::summon_absent_seconds`)から出る「精霊が居る割合」も上乗せぶんに掛ける。
+/// 既存の差し込みは変えない。計算タブ(`commands`)もホーム評価
+/// (`content_evaluation`)もこの 1 本を通る。
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_summon_hit_bonus(
+    filler_seconds: Option<f64>,
+    base_inserts: &[RotationInsert],
+    base_absent_seconds: &[f64],
+    base_damages: &[&[RotationDamage]],
+    filler: Option<(RotationDamage, f64)>,
+    base_body_expected_dps: f64,
+    extra_insert: RotationInsert,
+    bonus: &SummonHitBonus,
+    spirit_hit_expected: f64,
+    spirit_interval_seconds: f64,
+    ratio: f64,
+) -> Option<SummonHitBonusPlan> {
+    let mut inserts = base_inserts.to_vec();
+    inserts.push(extra_insert);
+    let empty: &[RotationDamage] = &[];
+    let mut damages: Vec<&[RotationDamage]> = base_damages.to_vec();
+    damages.push(empty);
+    let plan = plan_rotation(filler_seconds, &inserts)?;
+    let (_, body_expected_dps) = rotation_dps(&plan, &damages, filler)?;
+    let slot = plan.slots.iter().find(|s| s.insert == inserts.len() - 1)?;
+    let mut absent_seconds = base_absent_seconds.to_vec();
+    absent_seconds.push(0.0);
+    let present_share = 1.0 - summon_absent_share(&plan, &absent_seconds);
+    let summon_bonus_dps = summon_hit_bonus_dps(
+        bonus,
+        spirit_hit_expected,
+        spirit_interval_seconds,
+        ratio,
+        slot.interval_seconds,
+        present_share,
+    )?;
+    let gain = (body_expected_dps - base_body_expected_dps) + summon_bonus_dps;
+    (gain > 0.0).then_some(SummonHitBonusPlan {
+        body_expected_dps,
+        summon_bonus_dps,
+        interval_seconds: slot.interval_seconds,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,6 +817,51 @@ mod tests {
         assert!((summon_absent_share(&plan, &[0.0, 0.0])).abs() < 1e-12);
         // 1 を超えない
         assert!((summon_absent_share(&plan, &[100.0, 100.0]) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn タイムラインは差し込みを間隔ごとに置き隙間を連打で埋める() {
+        // 差し込み 0: 1s・CT 10s、差し込み 1: 1s・CT 20s、連打 1s
+        let plan = plan_rotation(Some(1.0), &[insert(1.0, 10.0, 0), insert(1.0, 20.0, 0)]).unwrap();
+        let t0 = TimelineInsert {
+            cast_seconds: 1.0,
+            resummon_seconds: 0.0,
+            summon_absent_seconds: 0.0,
+            summon_bonus_seconds: 0.0,
+        };
+        let t1 = TimelineInsert { summon_bonus_seconds: 5.0, ..t0 };
+        let line = rotation_timeline(&plan, Some(1.0), &[t0, t1]);
+        let longest = plan.slots.iter().map(|s| s.interval_seconds).fold(0.0, f64::max);
+        assert!((line.total_seconds - longest).abs() < 1e-9);
+        // 区画は隙間なく軸を埋める
+        let sum: f64 = line.segments.iter().map(|s| s.seconds).sum();
+        assert!((sum - line.total_seconds).abs() < 1e-9, "{sum}");
+        // 先頭は差し込み 0、同じ時刻の差し込み 1 はその直後にずれる
+        assert_eq!(line.segments[0].kind, TimelineSegmentKind::Insert { slot: 0 });
+        assert_eq!(line.segments[1].kind, TimelineSegmentKind::Insert { slot: 1 });
+        assert!((line.segments[1].start_seconds - 1.0).abs() < 1e-9);
+        // 間隔の短い差し込み 0 は 1 周の中に 2 回出る
+        let count = line
+            .segments
+            .iter()
+            .filter(|s| s.kind == TimelineSegmentKind::Insert { slot: 0 })
+            .count();
+        assert_eq!(count, 2);
+        // 追加ダメージは撃ち終えた 2s から 5s 間
+        assert_eq!(line.summon[0].state, SummonState::Present);
+        assert_eq!(line.summon[1].state, SummonState::Bonus);
+        assert!((line.summon[1].start_seconds - 2.0).abs() < 1e-9);
+        assert!((line.summon[1].seconds - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn 陣の不在は追加ダメージより優先する() {
+        let segments = summon_segments(10.0, &[(0.0, 2.0)], &[(1.0, 4.0)]);
+        let states: Vec<_> = segments.iter().map(|s| (s.state, s.seconds)).collect();
+        assert_eq!(
+            states,
+            vec![(SummonState::Absent, 2.0), (SummonState::Bonus, 2.0), (SummonState::Present, 6.0)]
+        );
     }
 
     fn insert(seconds: f64, cooldown_seconds: f64, minimum_filler_uses: u32) -> RotationInsert {
@@ -918,5 +1264,83 @@ mod tests {
         assert_eq!(effective_cooldown_seconds(&ct, None), Some(10.0));
         let plain = skill("plain", 10.0, 1.0, None);
         assert_eq!(effective_cooldown_seconds(&plain, Some(1.0)), None);
+    }
+
+    fn damage_plus_bonus() -> SummonHitBonus {
+        SummonHitBonus {
+            duration_seconds: 10.0,
+            base_ratio_percent: 100,
+            max_ratio_percent: 175,
+            reactivation_min_seconds: 1.0,
+            hits_per_activation: 2,
+        }
+    }
+
+    /// 発動間隔: t ≥ 1 ならそのまま、t < 1 なら 1s を満たす最初の t の倍数。
+    #[test]
+    fn 極ダメージプラスの発動間隔() {
+        let bonus = damage_plus_bonus();
+        assert!(
+            (summon_hit_bonus_reactivation_seconds(&bonus, 0.265).unwrap() - 1.06).abs() < 1e-9
+        );
+        assert!((summon_hit_bonus_reactivation_seconds(&bonus, 0.72).unwrap() - 1.44).abs() < 1e-9);
+        assert!((summon_hit_bonus_reactivation_seconds(&bonus, 1.0).unwrap() - 1.0).abs() < 1e-9);
+        assert_eq!(summon_hit_bonus_reactivation_seconds(&bonus, 0.0), None);
+    }
+
+    /// 割合は 100 + floor((素INT + 装備魔攻) / 10)、上限 175%。
+    #[test]
+    fn 極ダメージプラスの割合は上限175パーセント() {
+        let bonus = damage_plus_bonus();
+        assert!((summon_hit_bonus_ratio(&bonus, 0, 0) - 1.00).abs() < 1e-12);
+        assert!((summon_hit_bonus_ratio(&bonus, 100, 200) - 1.30).abs() < 1e-12); // 100+(300/10)=130
+        // 上限を超える組み合わせは 175% に丸める
+        assert!((summon_hit_bonus_ratio(&bonus, 2000, 2000) - 1.75).abs() < 1e-12);
+    }
+
+    /// 本体の損 + 精霊の得の合計が上がるときだけ既定で足す。
+    #[test]
+    fn 極ダメージプラスは合計が上がるときだけ既定on() {
+        let bonus = damage_plus_bonus();
+        let filler_seconds = Some(1.0);
+        let filler = Some((damage(100), 1.0));
+        // 既存の差し込みは無し(連打だけ) — base の期待 DPS は連打そのまま
+        let base_body_expected_dps = 100.0;
+        let extra_insert = insert(0.8, 30.0, 0);
+        // 精霊の 1 発が大きければ、連打がわずかに削れても合計は上がる
+        let big = resolve_summon_hit_bonus(
+            filler_seconds,
+            &[],
+            &[],
+            &[],
+            filler,
+            base_body_expected_dps,
+            extra_insert,
+            &bonus,
+            100_000.0,
+            0.265,
+            1.0,
+        );
+        assert!(big.is_some());
+        let plan = big.unwrap();
+        assert!(plan.summon_bonus_dps > 0.0);
+        // 本体は自分の与ダメージが 0 なので、足すと連打が削れて下がるか同じ
+        assert!(plan.body_expected_dps <= base_body_expected_dps + 1e-9);
+
+        // 精霊の 1 発が小さければ、連打が削れたぶんを取り返せず既定 OFF
+        let small = resolve_summon_hit_bonus(
+            filler_seconds,
+            &[],
+            &[],
+            &[],
+            filler,
+            base_body_expected_dps,
+            extra_insert,
+            &bonus,
+            0.01,
+            0.265,
+            1.0,
+        );
+        assert!(small.is_none());
     }
 }

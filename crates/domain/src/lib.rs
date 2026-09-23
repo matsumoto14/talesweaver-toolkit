@@ -43,7 +43,7 @@ pub mod ultimate_skill;
 pub mod validation;
 
 pub use actual_delay::{
-    actual_delay, summon_uses_per_minute, ActualDelay, ActualDelayContribution, SkillUsesTable,
+    actual_delay, summon_interval, ActualDelay, ActualDelayContribution, SkillUsesTable,
     ACTUAL_DELAY_MIN, ACTUAL_DELAY_REDUCTION_MAX, SECONDS_PER_MINUTE,
 };
 pub use avatar_enhance::{
@@ -93,10 +93,13 @@ pub use damage::{
 };
 pub use rotation::{
     apply_explicit_inserts, choose_rotation, effective_cooldown_seconds, insert_expected_dps_gain, summon_absent_share,
-    plan_rotation,
-    rotation_dps, rotation_shares, RotationCandidate, RotationDamage, RotationIdle, RotationInsert,
+    plan_rotation, resolve_summon_hit_bonus,
+    rotation_dps, rotation_shares, rotation_timeline, summon_hit_bonus_dps, summon_hit_bonus_ratio,
+    summon_hit_bonus_reactivation_seconds, summon_hit_bonus_share,
+    RotationCandidate, RotationDamage, RotationIdle, RotationInsert, RotationTimeline, SummonSegment,
+    SummonState, TimelineInsert, TimelineSegment, TimelineSegmentKind,
     RotationPace, RotationPlan, RotationRole, RotationRoles, RotationShare, RotationShares,
-    RotationSlot,
+    RotationSlot, SummonHitBonusPlan,
 };
 pub use defense::{
     accuracy_point, attack_type_bonus, defense_profile, hit_rate, versus_accuracy, AccuracyBoost,
@@ -166,7 +169,7 @@ pub use siena::{
 };
 pub use skill::{
     Attacker, Channeling, ComboSkillType, Field, ComboSkillTypeError, ComboSkillVariant, FullCharge, Skill,
-    SkillDependency, SkillForm, SkillTarget, SummonForm, SwiftSword,
+    SkillDependency, SkillForm, SkillTarget, SummonForm, SummonHitBonus, SwiftSword,
 };
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{

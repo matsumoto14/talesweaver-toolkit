@@ -12,6 +12,7 @@ pub(crate) const SKILL_TARGETS: &[(&str, SkillTarget)] = &[
     ("anais_chain_lightning", SkillTarget::Single),  // アナイス 極・チェーンライトニング
     ("anais_crystal_attack", SkillTarget::Single),  // アナイス †極・結晶攻撃
     ("anais_crystal_sprinter", SkillTarget::Single),  // アナイス 極・クリスタルスプリンター
+    ("anais_damage_plus", SkillTarget::Single),  // アナイス 極・ダメージプラス
     ("anais_deathmoment", SkillTarget::Single),  // アナイス 極・デスモーメント
     ("anais_detonate", SkillTarget::Single),  // アナイス 極・ディトネート
     ("anais_dissonance", SkillTarget::Single),  // アナイス 極・ディソナンス

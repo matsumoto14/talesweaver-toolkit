@@ -260,6 +260,10 @@ const ACTUAL_DELAYS: &[(&str, Option<f64>)] = &[
     ("anais_fire_blast", Some(0.8)),
     ("anais_detonate", Some(0.8)),
     ("anais_flare_field", Some(1.1)),
+    // 極・ダメージプラス: 「召喚関連スキル」の別表(依存/属性/命中/Cri値を持たない形式)にある。
+    // 動作列は wiki 表記 0.9s だが、韓国公式 ActionInfo/11_Anais/3002610.htm で照合した
+    // 確認値 0.8s を採る(jp-official-notice-typos。docs/adr/019-rotation-dps.md 追記 2026-09-23)
+    ("anais_damage_plus", Some(0.8)),
     ("anais_dissonance", Some(1.4)),
     ("anais_cacophony", Some(1.2)),
     // ---- isolet ----
@@ -718,6 +722,9 @@ const SKILLS: &[SkillRecord] = &[
     s("anais", "fire_blast", "極・ファイアブラスト", SkillDependency::Int, 3.5, 4, 4.0, Element::Fire, Some(110), Some(10), 10),
     s("anais", "detonate", "極・ディトネート", SkillDependency::Int, 4.07, 4, 3.3, Element::Fire, Some(110), Some(6), 10),
     s("anais", "flare_field", "極・フレアフィールド", SkillDependency::Int, 2.23, 2, 2.0, Element::Fire, Some(110), Some(5), 10),
+    // 極・ダメージプラス: 「召喚関連スキル」の別表にあり、依存/属性/命中/Cri値を持たない
+    // (本体は与ダメージ 0。破壊精霊命中時の追加ダメージは `SKILL_SUMMON_HIT_BONUS`)
+    s("anais", "damage_plus", "極・ダメージプラス", SkillDependency::Int, 0.0, 1, 1.0, Element::Neutral, None, None, 5),
     s("anais", "dissonance", "極・ディソナンス", SkillDependency::Mr, 4.6, 11, 2.5, Element::Neutral, Some(110), Some(10), 10),
     s("anais", "cacophony", "極・カコフォニー", SkillDependency::Mr, 4.46, 5, 2.78, Element::Neutral, Some(100), Some(7), 10),
     // ---- イソレット (21 件) ----
@@ -961,8 +968,14 @@ const FLAG_DETONATORS: &[&str] = &[
 ///   【〜ステディ】60s / 【〜スピリット】90s)で変わる。カタログはマスタリー選択を
 ///   持たないので、半減も 1.5 倍も掛からない素の **60s** を既定として収録する
 ///   (2026-09-21 ユーザー判断。クライアント DB も 60s)。
-const MANUAL_COOLDOWNS: &[(&str, Option<f64>)] =
-    &[("mira_crimson_shooter", None), ("roamini_mastary1_2", Some(60.0))];
+const MANUAL_COOLDOWNS: &[(&str, Option<f64>)] = &[
+    ("mira_crimson_shooter", None),
+    ("roamini_mastary1_2", Some(60.0)),
+    // 極・ダメージプラス: 「召喚関連スキル」の別表(ヘッダ `|スキル|区分|解説|…`)にあり、
+    // `skill_cooldowns.py` の `list_table` は `|スキル|区分|依存|` で始まる表しか見ないため
+    // 拾えない(生成の再実行では入らない)。CT/消費 列の `CT30s` を手で採る
+    ("anais_damage_plus", Some(30.0)),
+];
 
 /// 陣を置いたあと精霊を呼び直す召喚スキルの名前(wiki「Skill/アナイス」`#AnferuSummons` の 3 行)。
 /// 熊の型・型なしは `None`(陣は精霊の型にしか無い)。画面の帯の区画名に使う。
@@ -1190,8 +1203,17 @@ impl SkillRecord {
             applies_flag: FLAG_APPLIERS.contains(&self.skill_id().as_str()),
             detonates_flag: FLAG_DETONATORS.contains(&self.skill_id().as_str()),
             cooldown_seconds: cooldown_of(&self.skill_id()),
+            summon_hit_bonus: summon_hit_bonus_of(&self.skill_id()),
         }
     }
+}
+
+/// 召喚獣命中時の追加ダメージ(`SKILL_SUMMON_HIT_BONUS`)。持たない技は `None`。
+fn summon_hit_bonus_of(skill_id: &str) -> Option<domain::SummonHitBonus> {
+    crate::skill_summon_hit_bonus::SKILL_SUMMON_HIT_BONUS
+        .iter()
+        .find(|(id, _)| *id == skill_id)
+        .map(|(_, bonus)| *bonus)
 }
 
 /// キャラクターのスキル一覧。
@@ -1560,7 +1582,7 @@ mod tests {
     #[test]
     fn ct表の件数はキャラ別に固定() {
         let expected = [
-            ("anais", 12), // 生成表 9 + 陣 3 件(持続を置き直す間隔として CT に持つ。SKILL_FIELDS)
+            ("anais", 13), // 生成表 9 + 陣 3 件(SKILL_FIELDS) + 極・ダメージプラス(MANUAL_COOLDOWNS)
             ("benya", 6),
             ("chloe", 6),
             ("isaac", 4),
@@ -1579,8 +1601,8 @@ mod tests {
             ("yefnen", 10),
         ];
         assert_eq!(SKILL_COOLDOWNS.len(), 77);
-        // 生成表 77 件 + 例外表で CT を持つ 1 件 + 陣 3 件
-        assert_eq!(expected.iter().map(|(_, n)| n).sum::<usize>(), 81);
+        // 生成表 77 件 + 例外表で CT を持つ 2 件(ベノムノヴァ・極・ダメージプラス) + 陣 3 件
+        assert_eq!(expected.iter().map(|(_, n)| n).sum::<usize>(), 82);
         for (character_id, count) in expected {
             let found = SKILLS
                 .iter()

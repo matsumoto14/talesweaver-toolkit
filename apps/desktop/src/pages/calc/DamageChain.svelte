@@ -7,7 +7,7 @@
   // 討伐時間まで出す。召喚スキルがあるキャラは
   // 本体・召喚獣どちらの鎖にも討伐時間節を出さず、CalcPage 側の「合計」面(combined)にだけ出す
   // (同じ情報を 2 箇所に出さない。§00 ②)。
-  import type { CombinedDamage, DamageResult, FlagDamage, Rotation, Skill } from "../../api/types";
+  import type { CombinedDamage, DamageResult, DpsTriple, FlagDamage, Rotation, Skill } from "../../api/types";
   import {
     fmtCooldown, fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct,
   } from "../../format";
@@ -43,6 +43,10 @@
     intervalNote?: string | null;
     /** 召喚獣の攻撃間隔が CT で頭打ちか(式より CT が長い)。本体は false */
     intervalCapped?: boolean;
+    /** 召喚獣の鎖だけが受け取る、回しの中で実際に入る DPS と、その内訳の増減(期待値)。
+     *  `dps` は陣の不在・極・ダメージプラスの上乗せ込み(Rust `CombinedParts.summon_dps`)。
+     *  回しの影響が無ければ null(技単独の値のまま) */
+    summonInRotation?: { dps: DpsTriple; absentLoss: number | null; hitBonus: number | null } | null;
     /** 節を押した(= この鎖を見ている)。「なぜこの数字?」がこの鎖に付いてくる合図 */
     onView?: () => void;
     /** 「1 発」の差分を押すと「なぜこの数字?」へ辿る(本体だけが持つ機能。熊には無い) */
@@ -59,7 +63,7 @@
   }
   let {
     result, skill, store, attackerLabel, isSummon = false, attackerSkillName, icon, showDefeat, heroNumber,
-    intervalNote = null, intervalCapped = false, onView, onPerHitDeltaFollow, flowChanged = false, flag = null, rotation = null,
+    intervalNote = null, intervalCapped = false, summonInRotation = null, onView, onPerHitDeltaFollow, flowChanged = false, flag = null, rotation = null,
     combined = null,
   }: Props = $props();
 
@@ -76,7 +80,9 @@
   // Rust が意図して「不明」にした DPS(回しを組めないのに <フラグ> の爆発がある等)を
   // 数字として出してしまうため。null のときは未収録の「?」で出す(§08)
   const totalValue = $derived(combined?.total_primary ?? result.total_primary);
-  const dpsValue = $derived(pickSide(combined ? combined.dps : result.dps, critMode));
+  const dpsValue = $derived(
+    pickSide(combined ? combined.dps : summonInRotation ? summonInRotation.dps : result.dps, critMode),
+  );
   const defeatSeconds = $derived(combined ? combined.defeat_seconds : result.defeat_seconds);
   const expectedDps = $derived(combined ? combined.expected_dps : result.expected_dps);
   /** <フラグ> 爆発(主軸が スレイ / クラッシュ のときだけ)。合計に合流する */
@@ -286,6 +292,25 @@
           + (rotation ? " ・ 連打し続けたときの回数(実際は下のスキル回しのとおり)" : ""),
       });
     }
+    // 本体の回しが精霊に及ぼすぶん(値は Rust の combine_damage。この節の値に含めている)
+    const absentLoss = summonInRotation?.absentLoss ?? null;
+    if (absentLoss !== null && absentLoss > 0) {
+      mats.push({
+        label: "陣で精霊が消えるぶん",
+        value: `−${fmtInt(Math.round(absentLoss))}`,
+        n: -Math.round(absentLoss),
+        sub: "陣を置くと精霊が消え、呼び直すまで攻撃が止まる",
+      });
+    }
+    const hitBonus = summonInRotation?.hitBonus ?? null;
+    if (hitBonus !== null && hitBonus > 0) {
+      mats.push({
+        label: "極・ダメージプラス",
+        value: `+${fmtInt(Math.round(hitBonus))}`,
+        n: Math.round(hitBonus),
+        sub: "10 秒間、命中ごとに 1 段 × 割合 × 2 回(1 秒に 1 回まで)。本体が撃ち、精霊の攻撃にだけ効く",
+      });
+    }
     // チャネリング技(押している間、一定間隔で攻撃を繰り返す)。上の「合計ダメージ」は
     // 1 tick ぶん(ゲーム内の表示と同じ)なので、1 回の使用で何回入るかをここで言う
     if (skill?.channeling) {
@@ -321,11 +346,16 @@
             ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れたらすぐ置き直せます${absentNote}`
             : `CT ${fmtCooldown(insert.cooldown_seconds)} が明けたらすぐ撃てます`,
         }[insert.pace];
+        // 極・ダメージプラス: 撃つのは本体だが効くのは精霊。上乗せ額は精霊の鎖(1 秒あたり)に出す
+        const bonusNote =
+          insert.summon_hit_bonus_seconds > 0 && rotation.summon_hit_bonus_dps > 0
+            ? "。効くのは精霊の攻撃だけで、上乗せは精霊の鎖に出しています"
+            : "";
         mats.push({
           label: `↳ ${insert.skill_name} の間隔`,
           value: fmtNum(insert.interval_seconds, 2, "s"),
           n: insert.interval_seconds, unit: "s",
-          sub: reason + (insert.burst ? " ・ <フラグ> 爆発つき" : ""),
+          sub: reason + bonusNote + (insert.burst ? " ・ <フラグ> 爆発つき" : ""),
         });
       }
     }

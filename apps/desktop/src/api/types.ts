@@ -93,6 +93,8 @@ export interface Skill {
    * 自分が属する型を持つ。型を決めない主軸・他キャラのスキルは null。フロントはこの値だけを
    * 見て召喚欄を絞る(対応表を TS に書き写さない) */
   summon_form: SummonForm | null;
+  /** 召喚獣命中時の追加ダメージ(極・ダメージプラス)。持たない技は null */
+  summon_hit_bonus: SummonHitBonus | null;
   /** 武器形態(wiki「Skill/イェフネン」)。同じ 4 技を形態ごとに別性能で撃つ。
    * 形態を持たないキャラのスキルは null。フロントはこの値だけを見て形態を逆引きする */
   form: SkillForm | null;
@@ -1421,6 +1423,39 @@ export interface Channeling {
 export type RotationChoiceEffect = "improves" | "reduces" | "unknown";
 
 /** 「差し込む CT 技」の候補 1 件(commands の `RotationInsertChoice`)。 */
+/** 召喚獣命中時の追加ダメージ(domain `SummonHitBonus`)。割合 = min(基準 + ⌊(素INT + 装備魔攻) / 10⌋, 上限)% */
+export interface SummonHitBonus {
+  duration_seconds: number;
+  base_ratio_percent: number;
+  max_ratio_percent: number;
+  reactivation_min_seconds: number;
+  hits_per_activation: number;
+}
+
+/** 本体のタイムラインの 1 区画(Rust `domain::TimelineSegment`)。slot は Rotation.inserts の位置 */
+export type TimelineSegment = { start_seconds: number; seconds: number } & (
+  | { kind: "insert"; slot: number }
+  | { kind: "resummon"; slot: number }
+  | { kind: "filler"; uses: number }
+  | { kind: "idle" }
+);
+
+/** タイムライン上の召喚獣の状態(Rust `domain::SummonSegment`) */
+export interface SummonSegment {
+  state: "present" | "absent" | "bonus";
+  start_seconds: number;
+  seconds: number;
+}
+
+/** 本体のスキル回しを 1 本の時間軸に並べた図(Rust `domain::RotationTimeline`) */
+export interface RotationTimeline {
+  /** 軸の長さ(秒)= いちばん長い差し込み間隔 */
+  total_seconds: number;
+  segments: TimelineSegment[];
+  /** 同じ軸での召喚獣の状態。陣もダメージプラスも無ければ空 */
+  summon: SummonSegment[];
+}
+
 export interface RotationInsertChoice {
   skill_id: string;
   skill_name: string;
@@ -2064,6 +2099,8 @@ export interface SummonDamage {
   result: DamageResult;
   /** 攻撃間隔(秒)。中ディレイ未収録なら null(0 で埋めない) */
   interval_seconds: number | null;
+  /** 攻撃間隔が CT で頭打ちか(式の間隔より CT が長い) */
+  interval_cooldown_bound: boolean;
 }
 
 /**
@@ -2104,6 +2141,10 @@ export interface Rotation {
   crowded: boolean;
   /** 差し込む陣が召喚獣を消すぶん、召喚獣が居ない時間の割合(0〜1)。合計 DPS の召喚獣ぶんに 1 − これが掛かる */
   summon_absent_share: number;
+  /** 極・ダメージプラスが召喚獣に足す DPS。差し込んでいなければ 0 */
+  summon_hit_bonus_dps: number;
+  /** 本体のスキル回しを 1 本の時間軸に並べた図。区画の slot は inserts の位置 */
+  timeline: RotationTimeline;
   /** 回し全体の DPS(側ごと)と期待値 */
   dps: DpsTriple;
   expected_dps: number;
@@ -2149,6 +2190,9 @@ export interface RotationInsert {
   cooldown_seconds: number;
   /** 陣(設置技)。cooldown_seconds は CT ではなく持続(置き直す間隔)なので、画面は「持続」と言う */
   is_field: boolean;
+  /** 召喚獣の命中ごとに追加ダメージを入れる技(極・ダメージプラス)の効果の持続(秒)。持たない技は 0。
+   *  上乗せぶんは Rotation.summon_hit_bonus_dps */
+  summon_hit_bonus_seconds: number;
   /** seconds のうち、置いたあと精霊を呼び直す召喚スキルの動作(秒)。消えない技は 0 */
   resummon_seconds: number;
   /** 呼び直す召喚スキルの名前(陣だけ)。帯の区画名 */
@@ -2206,6 +2250,10 @@ export interface CombinedParts {
   summon_expected_dps: number | null;
   /** 陣で不在のぶん減った召喚獣の DPS(正の値)。陣が無ければ null */
   summon_absent_loss: number | null;
+  /** 本体の回しが召喚獣に及ぼした増減(陣の不在と極・ダメージプラスの差し引き)。どちらも無ければ null */
+  summon_rotation_gain: number | null;
+  /** 召喚獣ぶんの DPS(最小 / 最大 / クリ)。陣の不在と極・ダメージプラスの上乗せ込み。召喚獣がいなければ null */
+  summon_dps: DpsTriple | null;
 }
 
 /**

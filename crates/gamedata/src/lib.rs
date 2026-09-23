@@ -18,6 +18,7 @@ pub mod random_options;
 mod skill_channeling;
 mod skill_fields;
 mod skill_cooldowns;
+mod skill_summon_hit_bonus;
 mod skill_targets;
 pub mod skills;
 pub mod titles;

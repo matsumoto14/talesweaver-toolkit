@@ -688,7 +688,7 @@ pub fn defeat_seconds(hp: Option<i64>, expected_dps: Option<f64>) -> Option<f64>
     Some(hp as f64 / dps)
 }
 
-/// 熊(魔法人形)の結果に攻撃間隔の式(`summon_uses_per_minute`: 基本中ディレイ × (1 − 減少) + 0.0705s)
+/// 熊(魔法人形)の結果に攻撃間隔の式(`summon_interval`: 基本中ディレイ × (1 − 減少) + 0.0705s と CT の長いほう)
 /// を当て、DPS 由来の値(`actual_delay` の中ディレイ・回数 / `dps` / `expected_dps` / `defeat_seconds` /
 /// `reach`)を作り直す。`calculate_damage` が出した本体式の値(実測回数表・下限 0.3s・コンボ倍率)は
 /// 熊には当てはまらないので残さない。戻りは攻撃間隔(秒)。中ディレイ未収録なら何もせず `None`。
@@ -700,11 +700,11 @@ pub fn apply_summon_interval(
     result: &mut DamageResult,
     cooldown_seconds: Option<f64>,
     enemy_hp: Option<i64>,
-) -> Option<f64> {
+) -> Option<crate::actual_delay::SummonInterval> {
     let delay = result.actual_delay.as_mut()?;
-    let uses_per_minute =
-        crate::actual_delay::summon_uses_per_minute(delay.base, delay.reduction, cooldown_seconds);
-    let interval = crate::actual_delay::SECONDS_PER_MINUTE / uses_per_minute;
+    let summon_interval = crate::actual_delay::summon_interval(delay.base, delay.reduction, cooldown_seconds);
+    let interval = summon_interval.seconds;
+    let uses_per_minute = crate::actual_delay::SECONDS_PER_MINUTE / interval;
     delay.combo_rate = 1.0;
     delay.raw = interval;
     delay.value = interval;
@@ -727,7 +727,7 @@ pub fn apply_summon_interval(
     result.expected_dps = Some(expected_dps);
     result.defeat_seconds = seconds;
     result.reach = ReachTier::of_defeat_seconds(seconds);
-    Some(interval)
+    Some(summon_interval)
 }
 
 /// 中ディレイを持たない別枠のダメージ(<フラグ>の持続 / 爆発)に、「この秒数に 1 回入る」
@@ -1481,6 +1481,7 @@ mod tests {
                 applies_flag: false,
                 detonates_flag: false,
                 cooldown_seconds: None,
+                summon_hit_bonus: None,
             },
             enemy: Enemy {
                 id: "e".into(),
