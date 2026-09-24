@@ -9,7 +9,7 @@ use domain::{
     evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
     CommonSkills, Content, ContentArea, ContentEvaluation, DamageMaterial, DamageTarget,
     DamageResult, DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef,
-    EquipmentInkriState, EquipmentPart, InkriBatchMode, InkriBatchResult, InkriKind, InkriRng,
+    EquipmentInkriState, EquipmentPart, InkriBatchResult, InkriKind, InkriRng, InkriRunLimit,
     NewCharacter, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
 use gamedata::{EquipmentItem, GameCharacter, InkriTarget};
@@ -215,7 +215,10 @@ pub struct InkriAttemptRequest {
     pub client_item_id: u32,
     pub state: EquipmentInkriState,
     pub kind: InkriKind,
-    pub mode: InkriBatchMode,
+    /// 止め方(成功するまで上限回数つき / 予算まで)
+    pub limit: InkriRunLimit,
+    /// 強化ハッピーアワー中(インクリ費用 2 割引)
+    pub happy_hour: bool,
     /// 決定的 PRNG のシード(同じ値なら同じ結果になる)
     pub seed: u64,
 }
@@ -230,26 +233,34 @@ pub fn inkri_success_rate(kind: InkriKind, inkri_count: i64) -> i64 {
     kind.success_rate(inkri_count)
 }
 
-pub fn run_inkri_attempts(request: InkriAttemptRequest) -> CommandResult<InkriBatchResult> {
-    let target = gamedata::find_inkri_target(request.client_item_id).ok_or_else(|| {
-        format!(
-            "インクリ対象 '{}' が見つかりません",
-            request.client_item_id
-        )
-    })?;
-    if request.kind == InkriKind::Eta && target.eta_seed_cost.is_none() {
+/// 1 回あたりの SEED(ハッピーアワーなら割引込み)。ビアヌ / エタインクリだけが費用を持ち、
+/// 他 4 種と未収録装備は `None`。
+pub fn inkri_seed_cost(
+    client_item_id: u32,
+    kind: InkriKind,
+    happy_hour: bool,
+) -> CommandResult<Option<i64>> {
+    let target = gamedata::find_inkri_target(client_item_id)
+        .ok_or_else(|| format!("インクリ対象 '{client_item_id}' が見つかりません"))?;
+    if kind == InkriKind::Eta && target.eta_seed_cost.is_none() {
         return Err(format!("{} はエタインクリの対象ではありません", target.name).into());
     }
-    let seed_cost_per_attempt = match request.kind {
+    let cost = match kind {
         InkriKind::Vianu => target.bianu_seed_cost,
         InkriKind::Eta => target.eta_seed_cost,
         _ => None,
     };
+    Ok(cost.map(|c| if happy_hour { domain::happy_hour_seed_cost(c) } else { c }))
+}
+
+pub fn run_inkri_attempts(request: InkriAttemptRequest) -> CommandResult<InkriBatchResult> {
+    let seed_cost_per_attempt =
+        inkri_seed_cost(request.client_item_id, request.kind, request.happy_hour)?;
     let mut rng = InkriRng::new(request.seed);
     Ok(domain::run_batch(
         request.state,
         request.kind,
-        request.mode,
+        request.limit,
         &mut rng,
         seed_cost_per_attempt,
     ))

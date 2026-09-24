@@ -202,14 +202,13 @@ impl InkriRng {
     }
 }
 
-/// まとめて試す回数の指定。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InkriBatchMode {
-    /// 破壊されるまでの間、指定回数だけ試す
-    Fixed { attempts: i64 },
-    /// 成功する(または破壊される)まで、上限回数を超えない範囲で試す
-    UntilSuccess { max_attempts: i64 },
+/// 強化ハッピーアワー中のインクリ費用(SEED)の割合(%)。公式イベント告知の「インクリ費用20%割引」
+/// (no=154609・154982、2026-09-24 確認)。成功率は変わらない。呪文書は費用ではなく消費アイテムなので対象外。
+pub const HAPPY_HOUR_SEED_PERCENT: i64 = 80;
+
+/// 1 回あたりの SEED をハッピーアワーの割引込みにする(収録済みの費用はすべて 5 の倍数なので端数は出ない)。
+pub fn happy_hour_seed_cost(cost: i64) -> i64 {
+    cost * HAPPY_HOUR_SEED_PERCENT / 100
 }
 
 /// 積み上げの 1 段 = ある回数から次の成功に向けた試行のかたまり。
@@ -238,24 +237,37 @@ pub struct InkriBatchResult {
     pub steps: Vec<InkriStep>,
 }
 
-/// N 回、または成功するまで(上限回数つき)試す。破壊された時点で打ち切る。
+/// まとめて試すときの止め方。どちらも破壊された時点で打ち切る。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InkriRunLimit {
+    /// 成功するまで、上限回数を超えない範囲で試す。「1回」「10回」「100回」「次の成功まで」は上限が違うだけで、
+    /// 成功を通り越して回し続けることはない
+    UntilSuccess { max_attempts: i64 },
+    /// 消費 SEED が予算を超えない範囲で、成功しても続けて試す(「この予算でどこまで上がるか」)。
+    /// 費用が未収録(`seed_cost_per_attempt` が `None`)なら 1 回も試さない
+    Budget { seed: i64 },
+}
+
+/// `limit` に従ってまとめて試す。
 /// `seed_cost_per_attempt` は gamedata 側のビアヌ費用(未収録装備は `None`)。
 pub fn run_batch(
     mut state: EquipmentInkriState,
     kind: InkriKind,
-    mode: InkriBatchMode,
+    limit: InkriRunLimit,
     rng: &mut InkriRng,
     seed_cost_per_attempt: Option<i64>,
 ) -> InkriBatchResult {
-    let limit = match mode {
-        InkriBatchMode::Fixed { attempts } => attempts,
-        InkriBatchMode::UntilSuccess { max_attempts } => max_attempts,
+    let max_attempts = match (limit, seed_cost_per_attempt) {
+        (InkriRunLimit::UntilSuccess { max_attempts }, _) => max_attempts,
+        (InkriRunLimit::Budget { seed }, Some(cost)) if cost > 0 => seed / cost,
+        (InkriRunLimit::Budget { .. }, _) => 0,
     };
     let mut attempts_made = 0i64;
     let mut successes = 0i64;
     let mut last_outcome = None;
     let mut steps: Vec<InkriStep> = Vec::new();
-    for _ in 0..limit.max(0) {
+    for _ in 0..max_attempts.max(0) {
         if check_can_attempt(state).is_err() {
             break;
         }
@@ -282,10 +294,8 @@ pub fn run_batch(
             successes += 1;
         }
         last_outcome = Some(outcome);
-        if state.destroyed {
-            break;
-        }
-        if success && matches!(mode, InkriBatchMode::UntilSuccess { .. }) {
+        let stop_on_success = matches!(limit, InkriRunLimit::UntilSuccess { .. });
+        if state.destroyed || (success && stop_on_success) {
             break;
         }
     }
@@ -369,10 +379,7 @@ mod tests {
             inkri_count: 0,
             destroyed: true,
         };
-        assert_eq!(
-            check_can_attempt(state),
-            Err(InkriBlockReason::Destroyed)
-        );
+        assert_eq!(check_can_attempt(state), Err(InkriBlockReason::Destroyed));
         assert!(attempt(state, InkriKind::Lord, 0).is_err());
     }
 
@@ -384,7 +391,7 @@ mod tests {
         let result = run_batch(
             state,
             InkriKind::Royal,
-            InkriBatchMode::Fixed { attempts: 10 },
+            InkriRunLimit::UntilSuccess { max_attempts: 10 },
             &mut rng,
             None,
         );
@@ -404,11 +411,11 @@ mod tests {
     #[test]
     fn シード固定で結果が再現する() {
         let state = EquipmentInkriState::fresh();
-        let mode = InkriBatchMode::Fixed { attempts: 20 };
+        let limit = InkriRunLimit::UntilSuccess { max_attempts: 20 };
         let mut rng_a = InkriRng::new(42);
         let mut rng_b = InkriRng::new(42);
-        let result_a = run_batch(state, InkriKind::Vianu, mode, &mut rng_a, Some(3_000_000));
-        let result_b = run_batch(state, InkriKind::Vianu, mode, &mut rng_b, Some(3_000_000));
+        let result_a = run_batch(state, InkriKind::Vianu, limit, &mut rng_a, Some(3_000_000));
+        let result_b = run_batch(state, InkriKind::Vianu, limit, &mut rng_b, Some(3_000_000));
         assert_eq!(result_a, result_b);
     }
 
@@ -417,13 +424,13 @@ mod tests {
         // 事前に splitmix64 の初手を計算して確定させた組(シード1→roll 88969、シード4→roll 5741)。
         // Royal(36000)に対して 1 は失敗(破壊)、4 は成功になる。
         let state = EquipmentInkriState::fresh();
-        let mode = InkriBatchMode::Fixed { attempts: 1 };
+        let limit = InkriRunLimit::UntilSuccess { max_attempts: 1 };
         let mut rng_destroyed = InkriRng::new(1);
-        let result_destroyed = run_batch(state, InkriKind::Royal, mode, &mut rng_destroyed, None);
+        let result_destroyed = run_batch(state, InkriKind::Royal, limit, &mut rng_destroyed, None);
         assert!(result_destroyed.destroyed);
 
         let mut rng_success = InkriRng::new(4);
-        let result_success = run_batch(state, InkriKind::Royal, mode, &mut rng_success, None);
+        let result_success = run_batch(state, InkriKind::Royal, limit, &mut rng_success, None);
         assert!(!result_success.destroyed);
         assert_eq!(result_success.successes, 1);
         assert_ne!(result_destroyed, result_success);
@@ -436,7 +443,7 @@ mod tests {
         let result = run_batch(
             state,
             InkriKind::Lord,
-            InkriBatchMode::Fixed { attempts: 3 },
+            InkriRunLimit::UntilSuccess { max_attempts: 3 },
             &mut rng,
             None,
         );
@@ -444,14 +451,19 @@ mod tests {
     }
 
     #[test]
-    fn 成功するまでモードは成功した時点で打ち切る() {
+    fn ハッピーアワーはインクリ費用を2割引く() {
+        assert_eq!(happy_hour_seed_cost(15_787_500), 12_630_000);
+    }
+
+    #[test]
+    fn 成功した時点で打ち切る() {
         // シード4の初手 roll=5741 は Lord(21000)に対して成功する
         let state = EquipmentInkriState::fresh();
         let mut rng = InkriRng::new(4);
         let result = run_batch(
             state,
             InkriKind::Lord,
-            InkriBatchMode::UntilSuccess { max_attempts: 1000 },
+            InkriRunLimit::UntilSuccess { max_attempts: 1000 },
             &mut rng,
             None,
         );
@@ -470,9 +482,9 @@ mod tests {
     }
 
     #[test]
-    fn 段の内訳は成功で閉じ末尾だけ開いたまま() {
-        // ビアヌを十分な回数回すと、段の合計 = 試行回数、閉じた段の数 = 成功回数、
-        // from_count は入った時点の回数から 1 ずつ増える
+    fn 上限回数を残していても成功したら止まる() {
+        // ビアヌは成功率が低いので、失敗を重ねてから 1 回成功して止まる。
+        // 内訳は 1 段だけ(成功で閉じる)で、段の回数・SEED = 今回の合計
         let state = EquipmentInkriState {
             inkri_count: 3,
             destroyed: false,
@@ -481,32 +493,97 @@ mod tests {
         let result = run_batch(
             state,
             InkriKind::Vianu,
-            InkriBatchMode::Fixed { attempts: 20_000 },
+            InkriRunLimit::UntilSuccess {
+                max_attempts: 20_000,
+            },
             &mut rng,
             Some(1),
         );
+        assert_eq!(result.successes, 1);
+        assert!(result.attempts_made < 20_000);
+        assert_eq!(result.last_outcome, Some(InkriAttemptOutcome::Success));
+        assert_eq!(
+            result.steps,
+            vec![InkriStep {
+                from_count: 3,
+                attempts: result.attempts_made,
+                succeeded: true,
+                seed: Some(result.attempts_made),
+            }]
+        );
+        assert_eq!(result.consumed_seed, Some(result.attempts_made));
+        assert_eq!(result.final_state.inkri_count, 4);
+    }
+
+    #[test]
+    fn 予算は成功しても続け超える手前で止まる() {
+        // 1 回 1 SEED のビアヌを予算 20000 で。成功を通り越して続き、ちょうど予算分だけ試す。
+        // 段は成功ごとに閉じ、閉じた段の数 = 成功回数、開いた段があるなら末尾だけ
+        let state = EquipmentInkriState {
+            inkri_count: 3,
+            destroyed: false,
+        };
+        let mut rng = InkriRng::new(2026);
+        let limit = InkriRunLimit::Budget { seed: 20_000 };
+        let result = run_batch(state, InkriKind::Vianu, limit, &mut rng, Some(1));
+        assert_eq!(result.attempts_made, 20_000);
+        assert_eq!(result.consumed_seed, Some(20_000));
         assert!(result.successes >= 2, "successes={}", result.successes);
-        let total: i64 = result.steps.iter().map(|s| s.attempts).sum();
-        assert_eq!(total, result.attempts_made);
-        let seed: i64 = result.steps.iter().map(|s| s.seed.unwrap()).sum();
-        assert_eq!(Some(seed), result.consumed_seed);
         let closed = result.steps.iter().filter(|s| s.succeeded).count() as i64;
         assert_eq!(closed, result.successes);
         for (i, step) in result.steps.iter().enumerate() {
             assert_eq!(step.from_count, 3 + i as i64);
-        }
-        // 開いた段があるなら最後の 1 つだけ
-        let open_positions: Vec<usize> = result
-            .steps
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| !s.succeeded)
-            .map(|(i, _)| i)
-            .collect();
-        assert!(open_positions.len() <= 1);
-        if let Some(&pos) = open_positions.first() {
-            assert_eq!(pos, result.steps.len() - 1);
+            if !step.succeeded {
+                assert_eq!(i, result.steps.len() - 1);
+            }
         }
         assert_eq!(result.final_state.inkri_count, 3 + result.successes);
+    }
+
+    #[test]
+    fn 予算は1回分に満たなければ試さない() {
+        let state = EquipmentInkriState::fresh();
+        let mut rng = InkriRng::new(1);
+        let under = run_batch(
+            state,
+            InkriKind::Vianu,
+            InkriRunLimit::Budget { seed: 2_999_999 },
+            &mut rng,
+            Some(3_000_000),
+        );
+        assert_eq!(under.attempts_made, 0);
+        let unknown = run_batch(
+            state,
+            InkriKind::Lord,
+            InkriRunLimit::Budget { seed: 1_000_000 },
+            &mut rng,
+            None,
+        );
+        assert_eq!(unknown.attempts_made, 0);
+    }
+
+    #[test]
+    fn 上限回数まで成功しなければ段は開いたまま() {
+        // エタインクリ(1%・破壊なし)を 10 回。シード 2026 の初手 10 回はすべて失敗する組
+        let state = EquipmentInkriState::fresh();
+        let mut rng = InkriRng::new(2026);
+        let result = run_batch(
+            state,
+            InkriKind::Eta,
+            InkriRunLimit::UntilSuccess { max_attempts: 10 },
+            &mut rng,
+            None,
+        );
+        assert_eq!(result.attempts_made, 10);
+        assert_eq!(result.successes, 0);
+        assert_eq!(
+            result.steps,
+            vec![InkriStep {
+                from_count: 0,
+                attempts: 10,
+                succeeded: false,
+                seed: None,
+            }]
+        );
     }
 }

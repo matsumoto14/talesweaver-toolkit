@@ -147,9 +147,9 @@ pub use equipment::{
 pub use game_tables::{game_tables, DamageCategoryLabel, EquipmentStatLabel, GameTables};
 pub use growth_apply::{apply_growth_action, GrowthApplyContext};
 pub use inkri::{
-    attempt, check_can_attempt, run_batch, EquipmentInkriState, InkriAttemptOutcome,
-    EtaScrollPrice, InkriBatchMode, InkriBatchResult, InkriBlockReason, InkriKind, InkriRng,
-    InkriStep, ETA_SCROLL_PRICE,
+    attempt, check_can_attempt, happy_hour_seed_cost, run_batch, EquipmentInkriState,
+    InkriAttemptOutcome, EtaScrollPrice, InkriBatchResult, InkriBlockReason, InkriKind, InkriRng,
+    InkriRunLimit, InkriStep, ETA_SCROLL_PRICE,
 };
 pub use mastery::{Masteries, MasteryCatalog, MasteryDef, MasteryError};
 pub use measurement::{

@@ -6,14 +6,13 @@
   // ここは結果を演出と音に変え、「n 回目の成功までに何回・いくら」を段として積むだけ。
   // 合成回数は追わない(ユーザー判断 2026-09-18)。仕様の出典は wiki「装備システム/インクリ」。
   import { onDestroy, onMount } from "svelte";
-  import { errorMessage, etaScrollPrice, inkriSuccessRate, listInkriTargets, runInkriAttempts } from "../../api/commands";
+  import { errorMessage, etaScrollPrice, inkriSeedCost, inkriSuccessRate, listInkriTargets, runInkriAttempts } from "../../api/commands";
   import type {
-    EquipmentInkriState, EtaScrollPrice, InkriBatchMode, InkriKind, InkriStep, InkriTarget,
+    EquipmentInkriState, EtaScrollPrice, InkriKind, InkriRunLimit, InkriStep, InkriTarget,
   } from "../../api/types";
   import { fmtInt } from "../../format";
   import { PART_SLOT_LABELS } from "../../labels";
   import { reportError } from "../../toast.svelte";
-  import Choose from "../../ui/Choose.svelte";
   import NumberField from "../../ui/NumberField.svelte";
   import Picker from "../../ui/Picker.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
@@ -40,7 +39,7 @@
   let targets = $state<InkriTarget[]>([]);
   /** エタインクリ呪文書 1 枚の値段(起動時に 1 回引く) */
   let scrollPrice = $state<EtaScrollPrice | null>(null);
-  const saved = persisted("tw-inkri", { itemId: 0, kind: "vianu" as InkriKind, sound: true, startCount: 0 });
+  const saved = persisted("tw-inkri", { itemId: 0, kind: "vianu" as InkriKind, sound: true, startCount: 0, happyHour: false, budgetOku: 100 });
   /** 「今のインクリ回数」の欄の上限。仕組み上の上限は無いので、入力欄の形を保つための値(ユーザー指定 1000、2026-09-18) */
   const START_MAX = 1000;
 
@@ -149,13 +148,15 @@
     return a[0] * 0x200000 + (a[1] & 0x1fffff); // 53bit に収める
   }
 
-  async function run(mode: InkriBatchMode) {
+  const untilSuccess = (max_attempts: number): InkriRunLimit => ({ until_success: { max_attempts } });
+
+  async function run(limit: InkriRunLimit) {
     if (!target || asking) return;
     if (itemState.destroyed) {
       showNotice("インクリを進行する装備がありません。");
       return;
     }
-    const batch = !("fixed" in mode && mode.fixed.attempts === 1);
+    const batch = !("until_success" in limit && limit.until_success.max_attempts === 1);
     asking = true;
     if (batch) busy = true;
     try {
@@ -163,7 +164,8 @@
         client_item_id: target.client_item_id,
         state: itemState,
         kind: saved.value.kind,
-        mode,
+        limit,
+        happy_hour: saved.value.happyHour,
         seed: randomSeed(),
       });
       if (result.attempts_made === 0) {
@@ -175,8 +177,9 @@
       totals.successes += result.successes;
       totals.seed = totals.seed === null || result.consumed_seed === null ? null : totals.seed + result.consumed_seed;
       pushSteps(result.steps);
-      // 押した瞬間に結果が出る。連打すると演出は出だしからやり直す(録画 2026-09-17)
-      if (result.last_outcome === "success") {
+      // 押した瞬間に結果が出る。連打すると演出は出だしからやり直す(録画 2026-09-17)。
+      // 予算まで回すと最後の 1 回はたいてい失敗なので、途中で 1 回でも成功していれば成功の演出にする
+      if (result.successes > 0) {
         failPlay = 0;
         successPlay++;
         play(seSuccess);
@@ -204,7 +207,7 @@
 
   // ←キーはボタンを押していないので、ボタンのクリック音は鳴らさない(ユーザー指定 2026-09-17)
   function pressOnce() {
-    void run({ fixed: { attempts: 1 } });
+    void run(untilSuccess(1));
   }
 
   function onKeyDown(e: KeyboardEvent) {
@@ -254,11 +257,22 @@
     return parts.join(" ");
   }
 
-  const cost = $derived(
-    saved.value.kind === "vianu" ? (target?.bianu_seed_cost ?? null)
-    : saved.value.kind === "eta" ? (target?.eta_seed_cost ?? null)
-    : null,
-  );
+  /** 1 回あたりの SEED(ハッピーアワーの割引込み)。割引の正は domain::inkri なので Rust に聞く */
+  let cost = $state<number | null>(null);
+  $effect(() => {
+    const id = target?.client_item_id;
+    const { kind, happyHour } = saved.value;
+    if (id === undefined) return;
+    inkriSeedCost(id, kind, happyHour).then((c) => {
+      if (id === target?.client_item_id && kind === saved.value.kind && happyHour === saved.value.happyHour) cost = c;
+    }).catch((e) => reportError(errorMessage(e)));
+  });
+  /** 予算は億 SEED で入れる(手持ちの一部だけ回す、のように額は人それぞれ) */
+  const OKU = 100_000_000;
+  const budgetSeed = $derived(saved.value.budgetOku * OKU);
+  /** その予算で回せる回数。費用のない種類・未収録は null */
+  const budgetAttempts = $derived(cost === null || cost === 0 ? null : Math.floor(budgetSeed / cost));
+
   /** いまの装備で選べない種類(エタレベル装備でなければエタインクリ) */
   const unavailable = $derived(target && target.eta_seed_cost === null ? ["eta"] : []);
 
@@ -274,12 +288,19 @@
   );
 
 
+  const seriesOptions = $derived(
+    seriesList.map((s) => ({ value: s, name: s, meta: `${targets.filter((t) => t.series === s).length}件` })),
+  );
+
   const itemOptions = $derived(
     targets
       .filter((t) => t.series === series)
       .map((t) => ({
         value: String(t.client_item_id),
         name: t.name,
+        iconId: String(t.client_item_id),
+        iconKind: "equipment" as const,
+        iconSource: iconOf(t.client_item_id),
         meta: `${PART_SLOT_LABELS[t.part]} · ${t.bianu_seed_cost === null ? "費用 ?" : seedText(t.bianu_seed_cost)}`,
       })),
   );
@@ -303,7 +324,7 @@
       {successPlay}
       {failPlay}
       onkind={(k) => (saved.value = { ...saved.value, kind: k as InkriKind })}
-      onrun={() => run({ fixed: { attempts: 1 } })}
+      onrun={() => run(untilSuccess(1))}
       onfxend={fxEnd}
       onpickitem={() => picker?.scrollIntoView({ block: "nearest" })}
       onbutton={() => play(seButton)}
@@ -314,7 +335,17 @@
   <div class="side" bind:this={picker}>
     <div class="section">
       <div class="area-head"><span class="area-name">装備</span><span class="area-rule"></span></div>
-      <Choose label="系列" class="chiprow" options={seriesList.map((s) => ({ value: s, label: s }))} bind:value={series} />
+      <!-- 系列と今の回数は短いので横に並べ、装備は名前が長いので 1 行を使う -->
+      <div class="equip-head">
+        <div class="field">
+          <span class="field-label">系列</span>
+          <Picker label="系列" options={seriesOptions} bind:value={series} />
+        </div>
+        <div class="field">
+          <span class="field-label">今のインクリ回数</span>
+          <NumberField label="今のインクリ回数" max={START_MAX} bind:value={() => saved.value.startCount, setStartCount} />
+        </div>
+      </div>
       <div class="field">
         <span class="field-label">装備</span>
         <Picker
@@ -323,28 +354,40 @@
           options={target && target.series === series ? itemOptions : [{ value: "", name: "選んでください", meta: series }, ...itemOptions]}
         />
       </div>
-      <div class="field">
-        <span class="field-label">今のインクリ回数</span>
-        <NumberField label="今のインクリ回数" max={START_MAX} bind:value={() => saved.value.startCount, setStartCount} />
-      </div>
     </div>
 
     <div class="section">
       <div class="area-head"><span class="area-name">まとめて試す</span><span class="area-rule"></span></div>
+      <!-- 上の 3 つは成功したら止まる。予算は成功しても続けて、予算を使い切る手前まで回す -->
       <div class="batch">
-        <button type="button" class="btn" disabled={busy} onclick={() => run({ fixed: { attempts: 10 } })}>10回</button>
-        <button type="button" class="btn" disabled={busy} onclick={() => run({ fixed: { attempts: 100 } })}>100回</button>
-        <button type="button" class="btn primary" disabled={busy} onclick={() => run({ until_success: { max_attempts: 1_000_000 } })}>
+        <button type="button" class="btn" disabled={busy} onclick={() => run(untilSuccess(10))}>10回</button>
+        <button type="button" class="btn" disabled={busy} onclick={() => run(untilSuccess(100))}>100回</button>
+        <button type="button" class="btn primary" disabled={busy} onclick={() => run(untilSuccess(1_000_000))}>
           次の成功まで
         </button>
       </div>
+      <div class="field">
+        <span class="field-label">予算(億 SEED)</span>
+        <div class="budget">
+          <NumberField
+            label="予算(億 SEED)"
+            min={1}
+            digits={5}
+            bind:value={() => saved.value.budgetOku, (v) => (saved.value = { ...saved.value, budgetOku: v })}
+            format={() => (budgetAttempts === null ? "費用なし" : `${fmtInt(budgetAttempts)}回分`)}
+            reason="手持ちに合わせて"
+          />
+          <button type="button" class="btn" disabled={busy || !budgetAttempts} onclick={() => run({ budget: { seed: budgetSeed } })}>予算まで回す</button>
+        </div>
+      </div>
       <p class="note dim">
-        <kbd>←</kbd> キーを押している間、ゲームと同じようにインクリし続けます。
-        まとめて試すボタンは演出を省きます。
+        10回・100回は成功した時点で止まり、予算は成功しても使い切るまで回します(演出は省略)。
+        <kbd>←</kbd> 長押しでゲームと同じように連続インクリ。
       </p>
     </div>
 
-    <div class="section">
+    <div class="toggles">
+      <ToggleRow name="ハッピーアワー" cond="インクリ費用" value="-20%" on={saved.value.happyHour} tone="saved" onToggle={() => (saved.value = { ...saved.value, happyHour: !saved.value.happyHour })} />
       <ToggleRow name="音を出す" on={saved.value.sound} tone="saved" onToggle={() => (saved.value = { ...saved.value, sound: !saved.value.sound })} />
     </div>
 
@@ -395,12 +438,18 @@
   .area-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .area-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg-head); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); white-space: nowrap; }
   .area-rule { flex: 1; height: 2px; border-radius: var(--r-inset); background: linear-gradient(90deg, #B9CCE2, rgba(185, 204, 226, 0)); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
-  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .equip-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
   .rows { display: flex; flex-direction: column; gap: 4px; }
   .batch { display: flex; gap: 8px; flex-wrap: wrap; }
+  .budget { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .budget .btn { flex: none; white-space: nowrap; }
+  /* オン / オフ 2 つは横に並べて 1 段に収め、残りの高さを積み上げの一覧に回す */
+  .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
   .note { margin: 0; font-size: 10px; line-height: 1.6; }
   kbd { padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg-field); font: inherit; }
-  .stack { flex: 1; min-height: 0; }
+  /* 一覧は残りの高さを使うが、窓の下端には付けない(最後の行が縁に貼り付いて見えないように) */
+  .stack { flex: 1; min-height: 0; margin-bottom: 16px; }
   .ladder { flex: 1; min-height: 0; overflow-y: auto; }
   .step.open { font-weight: 700; }
 </style>

@@ -1183,10 +1183,10 @@ export interface EquipmentInkriState {
 // crates/domain/src/inkri.rs の InkriAttemptOutcome。
 export type InkriAttemptOutcome = "success" | "failure_destroyed" | "failure_no_change";
 
-// crates/domain/src/inkri.rs の InkriBatchMode。
-export type InkriBatchMode =
-  | { fixed: { attempts: number } }
-  | { until_success: { max_attempts: number } };
+// crates/domain/src/inkri.rs の InkriRunLimit。まとめて試すときの止め方。
+export type InkriRunLimit =
+  | { until_success: { max_attempts: number } }
+  | { budget: { seed: number } };
 
 // crates/domain/src/inkri.rs の InkriStep。積み上げの 1 段(ある回数から次の成功に向けた試行のかたまり)。
 export interface InkriStep {
@@ -1215,7 +1215,10 @@ export interface InkriAttemptRequest {
   client_item_id: number;
   state: EquipmentInkriState;
   kind: InkriKind;
-  mode: InkriBatchMode;
+  /** 止め方(成功するまで上限回数つき / 予算まで) */
+  limit: InkriRunLimit;
+  /** 強化ハッピーアワー中(インクリ費用 2 割引) */
+  happy_hour: boolean;
   /** 決定的 PRNG のシード(同じ値なら同じ結果になる) */
   seed: number;
 }

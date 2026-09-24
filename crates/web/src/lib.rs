@@ -256,6 +256,14 @@ struct RunInkriAttemptsArgs {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct InkriSeedCostArgs {
+    client_item_id: u32,
+    kind: domain::InkriKind,
+    happy_hour: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct InkriSuccessRateArgs {
     kind: domain::InkriKind,
     inkri_count: i64,
@@ -498,6 +506,10 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "run_inkri_attempts" => {
             let a: RunInkriAttemptsArgs = args_of(command, args)?;
             done(commands::run_inkri_attempts(a.request))
+        }
+        "inkri_seed_cost" => {
+            let a: InkriSeedCostArgs = args_of(command, args)?;
+            done(commands::inkri_seed_cost(a.client_item_id, a.kind, a.happy_hour))
         }
         "inkri_success_rate" => {
             let a: InkriSuccessRateArgs = args_of(command, args)?;

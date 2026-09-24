@@ -111,6 +111,7 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         "part_weapon_system" | "relic_state" => arg_fields::<PartArgs>(),
         "relic_step" => arg_fields::<RelicStepArgs>(),
         "run_inkri_attempts" => arg_fields::<RunInkriAttemptsArgs>(),
+        "inkri_seed_cost" => arg_fields::<InkriSeedCostArgs>(),
         "inkri_success_rate" => arg_fields::<InkriSuccessRateArgs>(),
         "list_equipment_ability_candidates" => arg_fields::<AbilityCandidatesArgs>(),
         "apply_catalog_item" => arg_fields::<ApplyCatalogItemArgs>(),

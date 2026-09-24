@@ -130,10 +130,13 @@ export const listEquipmentCatalog = () => invoke<EquipmentItem[]>("list_equipmen
 export const listInkriTargets = () => invoke<InkriTarget[]>("list_inkri_targets");
 /** エタインクリ呪文書 1 枚の値段(SEED / ELSO / TP) */
 export const etaScrollPrice = () => invoke<EtaScrollPrice>("eta_scroll_price");
+/** 1 回あたりの SEED(ハッピーアワーなら割引込み)。ビアヌ / エタインクリ以外と未収録は null */
+export const inkriSeedCost = (clientItemId: number, kind: InkriKind, happyHour: boolean) =>
+  invoke<number | null>("inkri_seed_cost", { clientItemId, kind, happyHour });
 /** いまの成功率(10万分率)。表は domain が持つ */
 export const inkriSuccessRate = (kind: InkriKind, inkriCount: number) =>
   invoke<number>("inkri_success_rate", { kind, inkriCount });
-/** インクリの試行をまとめて実行する(1 回 / N 回 / 成功するまで)。シードが同じなら結果も同じ */
+/** インクリの試行をまとめて実行する(成功するか上限回数に届くまで)。シードが同じなら結果も同じ */
 export const runInkriAttempts = (request: InkriAttemptRequest) =>
   invoke<InkriBatchResult>("run_inkri_attempts", { request });
 /** 「追加機能の解除」で R2 から取得した追加装備を合流させる。呼び出しは unlock.svelte.ts */

@@ -151,6 +151,15 @@ pub fn eta_scroll_price() -> domain::EtaScrollPrice {
 }
 
 #[tauri::command]
+pub fn inkri_seed_cost(
+    client_item_id: u32,
+    kind: domain::InkriKind,
+    happy_hour: bool,
+) -> CommandResult<Option<i64>> {
+    commands::inkri_seed_cost(client_item_id, kind, happy_hour)
+}
+
+#[tauri::command]
 pub fn inkri_success_rate(kind: domain::InkriKind, inkri_count: i64) -> i64 {
     commands::inkri_success_rate(kind, inkri_count)
 }

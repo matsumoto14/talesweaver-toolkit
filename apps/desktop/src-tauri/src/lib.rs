@@ -83,6 +83,7 @@ pub fn run() {
             commands::list_downloaded_equipment_ids,
             commands::list_inkri_targets,
             commands::run_inkri_attempts,
+            commands::inkri_seed_cost,
             commands::inkri_success_rate,
             commands::eta_scroll_price,
             commands::list_equipment_abilities,
