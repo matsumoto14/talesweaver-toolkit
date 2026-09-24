@@ -89,6 +89,8 @@ TW_ASSETS_DB_DIR = TW_ASSETS_DIR / "db"
 # 敵名の出典。ライセンス表記が無いサイトなので原本はキャッシュにだけ置く(gitignore)。
 TALESDB_MONSTERS_URL = "https://talesdb.xyz/assets/monsters.json"
 TALESDB_MONSTERS_CACHE = CACHE_DIR / "talesdb_monsters.json"
+TALESDB_BUFFS_URL = "https://talesdb.xyz/assets/buffs.json"
+TALESDB_BUFFS_CACHE = CACHE_DIR / "talesdb_buffs.json"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -161,6 +163,11 @@ def ensure_cache() -> None:
         req = urllib.request.Request(TALESDB_MONSTERS_URL, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=20) as resp:
             TALESDB_MONSTERS_CACHE.write_bytes(resp.read())
+    if not TALESDB_BUFFS_CACHE.exists():
+        print(f"キャラバフ名を取得: {TALESDB_BUFFS_URL}")
+        req = urllib.request.Request(TALESDB_BUFFS_URL, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            TALESDB_BUFFS_CACHE.write_bytes(resp.read())
 
 
 def ensure_dump() -> None:
@@ -519,6 +526,50 @@ def import_enemies(jp_enemies: list[dict]) -> dict[str, str]:
     return result
 
 
+BUFF_PAIRS_JSON = ROOT / "tools" / "i18n" / "buff_pairs.json"
+
+
+def import_character_buffs(
+    jp_character_skills: list[dict], char_names: dict[str, str], taken: dict[str, str]
+) -> dict[str, str]:
+    """キャラスキル(バフ・デバフ)の名前を talesdb.xyz の buffs.json(キャラ別のバフ名)で訳す。
+
+    効果の値は日韓で違うことが多く(敵の被ダメ増加 10 と日本の 5 など)値では照合できないので、
+    スキルと同じく対応だけを buff_pairs.json(キャラスキル id -> talesdb のバフ名)に持つ。
+    表の名前がそのキャラの buffs.json に無ければ止める。公式のスキル記事で訳が付いた名前
+    (taken)は公式を優先し、ここでは上書きしない。
+    """
+    kr_buffs = json.loads(TALESDB_BUFFS_CACHE.read_text(encoding="utf-8"))
+    pairs: dict[str, str] = json.loads(BUFF_PAIRS_JSON.read_text(encoding="utf-8"))
+    by_id = {s["id"]: s for s in jp_character_skills}
+    errors: list[str] = []
+    result: dict[str, str] = {}
+    for skill_id, kr_core in pairs.items():
+        skill = by_id.get(skill_id)
+        if skill is None:
+            errors.append(f"{skill_id}: gamedata に無い id")
+            continue
+        kr_char = char_names.get(skill["game_character_id"])
+        # talesdb はリーチェを「리체」と書く(公式は 클라리체)
+        buffs = kr_buffs.get(kr_char) or kr_buffs.get("리체" if skill["game_character_id"] == "leeche" else "", {})
+        if kr_core not in buffs.get("버프", {}):
+            errors.append(f"{skill_id}: {kr_core!r} が talesdb の {kr_char} のバフに無い")
+            continue
+        m = SKILL_NAME_RE.match(skill["name"])
+        assert m is not None
+        star, kyoku, _core, suffix = m.groups()
+        value = star + ("극·" if kyoku else "") + kr_core + (SKILL_SUFFIX_KO[suffix] if suffix else "")
+        if skill["name"] in taken or skill["name"] in result:
+            continue
+        result[skill["name"]] = value
+    if errors:
+        for e in errors:
+            print(f"  ✗ {e}")
+        raise SystemExit("buff_pairs.json に問題がある")
+    print(f"キャラバフ名(talesdb): {len(result)} / 対応表 {len(pairs)}")
+    return result
+
+
 # ---- キャラ名 ----
 
 # crates/gamedata/src/characters.rs の id → tales.nexon.com の URL スラッグ(2026-09-24 実データで確認)
@@ -826,6 +877,8 @@ def main() -> int:
     kr_by_char = load_kr_skill_blocks()
     skill_names = import_skills(jp_skills, jp_character_skills, kr_by_char)
     names.update(skill_names)
+    char_names = {c["id"]: names[c["name"]] for c in jp_characters if c["name"] in names}
+    names.update(import_character_buffs(jp_character_skills, char_names, names))
     print(f"マスタリー名: 公式記事に載っていないため見送り(全 {len(jp_masteries)})")
 
     sorted_names = {k: names[k] for k in sorted(names)}
