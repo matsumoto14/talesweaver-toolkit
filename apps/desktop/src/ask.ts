@@ -150,8 +150,8 @@ export type Aspect = "what" | "how" | "materials" | "where" | "condition" | "num
 
 export interface AskAnswer {
   kind: "answer";
-  /** 結論文セグメント。検証で落ちていれば空配列(手順だけを出す) */
-  lead: LeadSeg[];
+  /** 結論文セグメント。検証で落ちていれば null(手順だけを出す。services/api-worker/src/verify.ts) */
+  lead: LeadSeg[] | null;
   steps: Step[];
   /** 次の一手(段階 3 まで常に空) */
   next: NextQuestion[];

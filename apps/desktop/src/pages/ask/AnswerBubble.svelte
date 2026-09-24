@@ -54,7 +54,7 @@
       </div>
     {/if}
 
-    {#if response.lead.length > 0}
+    {#if response.lead && response.lead.length > 0}
       <p class="lead pop-in">
         <LeadLine segments={response.lead} {unitsById} corrections={response.corrections} />
         <span class="tag llm">LLM · 検証済</span>
