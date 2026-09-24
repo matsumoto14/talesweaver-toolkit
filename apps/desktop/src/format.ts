@@ -1,7 +1,8 @@
 import type { StatLayer } from "./api/types";
+import { LOCALE_TAG, t } from "./i18n";
 
 // 数値書式はここだけが決める(design-system §08「数値の 3 段」)。画面側で toLocaleString / toFixed を
-// 呼ばない(tools/design-audit/run.py R11 が見張る)。桁区切りは ja-JP、小数桁は呼び手が役割で指定する。
+// 呼ばない(tools/design-audit/run.py R11 が見張る)。桁区切りは表示言語(i18n.ts)に従い、小数桁は呼び手が役割で指定する。
 
 /** 小数桁。数値なら固定桁(1.50)、`{ max }` なら上限までで末尾の 0 を落とす(1.5 / 2) */
 export type Digits = number | { max: number };
@@ -12,7 +13,7 @@ const formatter = (digits: Digits): Intl.NumberFormat => {
   const key = `${min}/${max}`;
   let f = formatters.get(key);
   if (!f) {
-    f = new Intl.NumberFormat("ja-JP", { minimumFractionDigits: min, maximumFractionDigits: max });
+    f = new Intl.NumberFormat(LOCALE_TAG, { minimumFractionDigits: min, maximumFractionDigits: max });
     formatters.set(key, f);
   }
   return f;
@@ -51,7 +52,7 @@ export const fmtShareOf = (diff: number, total: number | null): string | null =>
   if (total === null || total <= 0) return null;
   const rate = diff / total;
   if (Math.abs(rate) * 100 < 0.05) {
-    return `${diff < 0 ? "−" : "+"}0.1% 未満`;
+    return t("{sign}0.1% 未満", { sign: diff < 0 ? "−" : "+" });
   }
   return fmtSignedPct(rate, 1);
 };
@@ -68,16 +69,16 @@ export const fmtCooldown = (seconds: number): string =>
  *  討伐時間は敵によって 8 秒から数日まで振れるので、単位を固定せず桁に合わせて選ぶ */
 export const fmtDuration = (seconds: number): string => {
   // 1 秒未満を「0秒」と出すと「時間がかからない」ではなく「測れていない」に読める(§00 05)
-  if (seconds < 1) return "1秒未満";
+  if (seconds < 1) return t("1秒未満");
   const total = Math.max(0, Math.round(seconds));
   const d = Math.floor(total / 86400);
   const h = Math.floor((total % 86400) / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  if (d > 0) return h > 0 ? `${fmtInt(d)}日 ${h}時間` : `${fmtInt(d)}日`;
-  if (h > 0) return m > 0 ? `${h}時間 ${m}分` : `${h}時間`;
-  if (m > 0) return s > 0 ? `${m}分 ${s}秒` : `${m}分`;
-  return `${s}秒`;
+  if (d > 0) return h > 0 ? t("{d}日 {h}時間", { d: fmtInt(d), h }) : t("{d}日", { d: fmtInt(d) });
+  if (h > 0) return m > 0 ? t("{h}時間 {m}分", { h, m }) : t("{h}時間", { h });
+  if (m > 0) return s > 0 ? t("{m}分 {s}秒", { m, s }) : t("{m}分", { m });
+  return t("{s}秒", { s });
 };
 
 /** ISO8601(YYYY-MM-DD)を MM-DD に。ホームの「最後の強化」とお知らせの公開日で使う */
@@ -130,6 +131,6 @@ export function topRowsText(rows: { label: string; value: number }[], max = 2): 
   if (rows.length === 0) return "";
   const { shown, restCount } = topRows(rows, max);
   const parts = [...shown];
-  if (restCount > 0) parts.push(`ほか ${restCount}`);
+  if (restCount > 0) parts.push(t("ほか {n}", { n: restCount }));
   return parts.join(" / ");
 }

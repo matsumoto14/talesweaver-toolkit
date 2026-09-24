@@ -7,7 +7,9 @@
   import { errorMessage, getAppInfo } from "./api/commands";
   import { exportAll, importAll, parseTransferFile, suggestedFileName } from "./api/transfer";
   import type { AppInfo } from "./api/types";
+  import { LOCALE_OPTIONS, locale, setLocale, t, type Locale } from "./i18n";
   import { IS_DESKTOP } from "./platform";
+  import Choose from "./ui/Choose.svelte";
   import FilePick from "./ui/FilePick.svelte";
   import Modal from "./ui/Modal.svelte";
   import { reportError, reportNotice } from "./toast.svelte";
@@ -18,6 +20,9 @@
   let { onClose }: { onClose: () => void } = $props();
 
   let info = $state<AppInfo | null>(null);
+  /** 表示言語。押した瞬間に読み込み直す(i18n.ts) */
+  let language = $state<Locale>(locale);
+  $effect(() => setLocale(language));
   /** 書き出し / 読み込みの途中。押した瞬間から結果が出るまで、押した場所に出す */
   let transfer = $state<{ busy: boolean; message: string; imported: boolean }>({
     busy: false, message: "", imported: false,
@@ -41,21 +46,21 @@
     const turningOn = !unlock.on;
     setUnlocked(turningOn);
     if (!turningOn) {
-      reportNotice("追加機能を無効にしました");
+      reportNotice(t("追加機能を無効にしました"));
       return;
     }
     // OFF → ON のときだけ取りに行く(ローカルに残っているぶんは消さない)
     try {
       const count = await fetchLockedEquipment();
-      reportNotice(`追加機能を有効にしました(追加装備 ${count} 件を取得)`);
+      reportNotice(t("追加機能を有効にしました(追加装備 {count} 件を取得)", { count }));
     } catch (error) {
-      reportError(`追加装備を取得できませんでした: ${errorMessage(error)}`);
+      reportError(t("追加装備を取得できませんでした: {error}", { error: errorMessage(error) }));
     }
   }
 
   /** 全部を JSON 1 ファイルにして保存する。預け先はユーザーが選ぶ(保存先を勝手に決めない) */
   async function exportData() {
-    transfer = { busy: true, message: "書き出しています…", imported: false };
+    transfer = { busy: true, message: t("書き出しています…"), imported: false };
     try {
       const json = JSON.stringify(await exportAll(), null, 2);
       const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
@@ -64,7 +69,7 @@
       link.download = suggestedFileName();
       link.click();
       URL.revokeObjectURL(url);
-      transfer = { busy: false, message: `${suggestedFileName()} を書き出しました`, imported: false };
+      transfer = { busy: false, message: t("{file} を書き出しました", { file: suggestedFileName() }), imported: false };
     } catch (error) {
       transfer = { busy: false, message: "", imported: false };
       reportError(errorMessage(error));
@@ -73,12 +78,12 @@
 
   /** 読み込みは「足す」。いま入っているものは消さない(消す判断をこちらでしない) */
   async function importData(file: File) {
-    transfer = { busy: true, message: "読み込んでいます…", imported: false };
+    transfer = { busy: true, message: t("読み込んでいます…"), imported: false };
     try {
       const result = await importAll(parseTransferFile(JSON.parse(await file.text())));
       transfer = {
         busy: false,
-        message: `キャラ ${result.characters} 件・バフセット ${result.buffSets} 件を読み込みました`,
+        message: t("キャラ {characters} 件・バフセット {buffSets} 件を読み込みました", { characters: result.characters, buffSets: result.buffSets }),
         imported: true,
       };
     } catch (error) {
@@ -97,26 +102,30 @@
   }
 </script>
 
-<Modal label="このアプリについて" class="modal-narrow" {onClose}>
+<Modal label={t("このアプリについて")} class="modal-narrow" {onClose}>
     <div class="panel-body">
       <div class="card">
-        <div class="card-title">バージョン</div>
+        <div class="card-title">{t("バージョン")}</div>
         <!-- 続けて押すとロックを切り替える。入口は見せない(見た目・キーボード操作は元のまま) -->
         <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
         <div class="version num" onclick={tapVersion}>{info?.version ?? "—"}</div>
       </div>
 
+      <div class="card">
+        <div class="card-title">言語 · 언어</div>
+        <Choose label="言語 · 언어" bind:value={language} options={LOCALE_OPTIONS} full />
+      </div>
+
       <div class="card warn">
-        <div class="card-title">非公式ツールです</div>
+        <div class="card-title">{t("非公式ツールです")}</div>
         <p>
-          TalesWeaver の開発元・運営元とは一切関係がなく、公認・提携・後援を受けていません。
-          ゲームクライアントには接続せず、ゲームのファイルも読み書きしません。
+          {t("TalesWeaver の開発元・運営元とは一切関係がなく、公認・提携・後援を受けていません。ゲームクライアントには接続せず、ゲームのファイルも読み書きしません。")}
         </p>
         <p>
-          ゲーム内の名称・用語、および同梱しているアイコン画像の権利は、それぞれの権利者に帰属します。
+          {t("ゲーム内の名称・用語、および同梱しているアイコン画像の権利は、それぞれの権利者に帰属します。")}
         </p>
         <!-- ネクソンの FAQ「ファンサイトで公式サイトの画像などを使用できますか?」が、
-             ゲームに関連するコンテンツを含むページにこの表記を求めている。文言は変えない -->
+             ゲームに関連するコンテンツを含むページにこの表記を求めている。文言は変えない(訳さない) -->
         <p class="copyright">Copyrights (C) NEXON Corporation and NEXON Co., Ltd. All Rights Reserved.</p>
         <p class="muted">
           <a
@@ -125,90 +134,87 @@
             target="_blank"
             rel="noreferrer"
             onclick={(event) => openExternal(event, "https://talesweaver.nexon.co.jp/")}
-          >テイルズウィーバー公式サイト</a>
+          >{t("テイルズウィーバー公式サイト")}</a>
         </p>
       </div>
 
       <div class="card">
-        <div class="card-title">データの扱い</div>
+        <div class="card-title">{t("データの扱い")}</div>
         <p>
-          登録したキャラクター情報は、<b>この PC の中だけ</b>に保存されます。
-          自動的に外部へ送られることはありません。
+          {t("登録したキャラクター情報は、")}<b>{t("この PC の中だけ")}</b>{t("に保存されます。自動的に外部へ送られることはありません。")}
         </p>
         <div class="path inset">{info?.databasePath ?? "—"}</div>
         <p class="muted">
-          問い合わせを送る場合も、送信内容は別画面で事前に全文表示されます。
+          {t("問い合わせを送る場合も、送信内容は別画面で事前に全文表示されます。")}
           <!-- 自動バックアップはデスクトップ版だけの話。ブラウザ版で言うと嘘になる -->
           {#if IS_DESKTOP}
-            アップデートのたびに、このファイルのバックアップを直近 3 世代まで自動で保存します。
+            {t("アップデートのたびに、このファイルのバックアップを直近 3 世代まで自動で保存します。")}
           {:else}
-            ブラウザのサイトデータを消すと一緒に消えるので、大事なものは「データの持ち出し」で書き出しておいてください。
+            {t("ブラウザのサイトデータを消すと一緒に消えるので、大事なものは「データの持ち出し」で書き出しておいてください。")}
           {/if}
         </p>
       </div>
 
       <div class="card">
-        <div class="card-title">データの持ち出し</div>
+        <div class="card-title">{t("データの持ち出し")}</div>
         <p>
-          登録キャラ・バフセット・画像・計算の記録を、JSON 1 ファイルにまとめて書き出せます。
-          読み込むと、いま入っているものを消さずに足します。
+          {t("登録キャラ・バフセット・画像・計算の記録を、JSON 1 ファイルにまとめて書き出せます。読み込むと、いま入っているものを消さずに足します。")}
         </p>
         <div class="transfer">
-          <button type="button" class="btn" onclick={exportData} disabled={transfer.busy}>書き出す</button>
-          <FilePick class="btn" accept="application/json,.json" disabled={transfer.busy} onPick={importData}>読み込む</FilePick>
+          <button type="button" class="btn" onclick={exportData} disabled={transfer.busy}>{t("書き出す")}</button>
+          <FilePick class="btn" accept="application/json,.json" disabled={transfer.busy} onPick={importData}>{t("読み込む")}</FilePick>
         </div>
         {#if transfer.message}
           <p class="muted transfer-message">
             {transfer.message}
             {#if transfer.imported}
-              <button type="button" class="btn" onclick={() => window.location.reload()}>画面に出す</button>
+              <button type="button" class="btn" onclick={() => window.location.reload()}>{t("画面に出す")}</button>
             {/if}
           </p>
         {/if}
       </div>
 
       <div class="card">
-        <div class="card-title">数値・計算仕様の参考資料</div>
+        <div class="card-title">{t("数値・計算仕様の参考資料")}</div>
         <p>
-          スキル倍率・敵ステータス・装備補正などは、コミュニティ運営の
-          <b>Tale Wiki</b>(talewiki.com)を一次ソースとして取り込んでいます。
+          {t("スキル倍率・敵ステータス・装備補正などは、コミュニティ運営の")}
+          <b>Tale Wiki</b>{t("(talewiki.com)を一次ソースとして取り込んでいます。")}
         </p>
         <p>
-          一部のステータスや計算式などは、せせなぎさんが公開している実測・検証情報や
-          ダメージ計算ツールを参考に収録・整理しています。
+          {t("一部のステータスや計算式などは、せせなぎさんが公開している実測・検証情報やダメージ計算ツールを参考に収録・整理しています。")}
         </p>
         <p class="muted">
-          参考にした公開情報・ツール:
+          {t("参考にした公開情報・ツール:")}
           <a
             class="source-link"
             href="https://x.com/sese_nagi1125?s=11"
             target="_blank"
             rel="noreferrer"
             onclick={(event) => openExternal(event, "https://x.com/sese_nagi1125?s=11")}
-          >せせなぎさん（@sese_nagi1125）</a>
+          >{t("せせなぎさん（@sese_nagi1125）")}</a>
         </p>
         <p class="muted">
-          この記載は公開情報へのクレジットであり、本ツールの公認・監修・共同開発を示すものではありません。
+          {t("この記載は公開情報へのクレジットであり、本ツールの公認・監修・共同開発を示すものではありません。")}
         </p>
       </div>
 
       <div class="card">
-        <div class="card-title">作者</div>
+        <div class="card-title">{t("作者")}</div>
         <p class="muted">
-          xかんば（エルフィンタサーバー）・
+          {t("xかんば（エルフィンタサーバー）・")}
           <a
             class="source-link"
             href="https://x.com/tw_xkanba?s=11"
             target="_blank"
             rel="noreferrer"
             onclick={(event) => openExternal(event, "https://x.com/tw_xkanba?s=11")}
-          >@tw_xkanba（X）</a>
+          >{t("@tw_xkanba（X）")}</a>
         </p>
       </div>
 
       <div class="card">
-        <div class="card-title">ライセンス</div>
-        <p>ソースコードと文書は MIT License。同梱しているゲーム由来の画像・数値データは対象外です。</p>
+        <div class="card-title">{t("ライセンス")}</div>
+        <p>{t("ソースコードと文書は MIT License。同梱しているゲーム由来の画像・数値データは対象外です。")}</p>
       </div>
     </div>
 </Modal>

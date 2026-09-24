@@ -3,10 +3,12 @@ import type {
   AvatarPart, CoreRegion, CoreType, Element, EquipmentAbilityFamily, EquipmentStatKind, PartSlot, PetSkillTier,
   PolishKind, SienaAuras, RandomOptionRank, SkillDependency, SkillForm, StatKind, StatLayer, StatSourceGroup, UltimateSkill,
 } from "./api/types";
+import { t, tc } from "./i18n";
 import { limits } from "./limits.svelte";
 import { tables } from "./tables.svelte";
 
 // 並びの唯一の正は Rust の enum(`StatLimits` 経由)。ここはラベルだけを持つ。
+// ラベルは読み込み時に表示言語で 1 回だけ作る(言語の切り替えは読み込み直し。i18n.ts)。
 export const STAT_KINDS: StatKind[] = [...tables.stat_kinds];
 export const STAT_LABELS: Record<StatKind, string> = {
   stab: "STAB", hack: "HACK", int: "INT", def: "DEF", mr: "MR", dex: "DEX", agi: "AGI",
@@ -15,28 +17,28 @@ export const STAT_LABELS: Record<StatKind, string> = {
 /** 補正の出どころの区分。ゲーム内の能力値と突き合わせるときに、外せば消える分(バフ)・
  *  装備を替えると動く分・ふだん動かない分に分けて読むためのラベル */
 export const STAT_SOURCE_GROUP_LABELS: Record<StatSourceGroup, string> = {
-  buff: "バフ",
-  equipment: "装備",
-  other: "そのほか",
+  buff: t("バフ"),
+  equipment: t("装備"),
+  other: t("そのほか"),
 };
 
 /** 表示順(Rust の StatSourceGroup::ALL) */
 export const STAT_SOURCE_GROUPS: StatSourceGroup[] = [...tables.stat_source_groups];
 
 export const STAT_LAYER_LABELS: Record<StatLayer, string> = {
-  percent_of_base: "割合増加",
-  fixed: "固定値",
-  multiplier_a: "倍率A",
-  multiplier_b: "倍率B",
-  final_fixed: "最終固定値",
+  percent_of_base: t("割合増加"),
+  fixed: t("固定値"),
+  multiplier_a: t("倍率A"),
+  multiplier_b: t("倍率B"),
+  final_fixed: t("最終固定値"),
 };
 
 export const PET_SKILL_TIER_LABELS: Record<PetSkillTier, string> = {
-  basic: "強化",
-  true_lv1: "真Lv1",
-  true_lv2: "真Lv2",
-  true_lv3: "真Lv3",
-  true_lv4: "真Lv4",
+  basic: t("強化"),
+  true_lv1: t("真Lv1"),
+  true_lv2: t("真Lv2"),
+  true_lv3: t("真Lv3"),
+  true_lv4: t("真Lv4"),
 };
 
 // 装備補正 9 種(crates/domain/src/equipment.rs の EquipmentValues)の並び順。
@@ -47,7 +49,7 @@ export type { EquipmentStatKind };
 // 唯一の正は Rust の EquipmentValues::fields()(StatLimits.equipment_stat_labels 経由)。
 // CoreType(テシスコア)の表示名も同じテーブルを引く(装備補正とテシスコアで敏捷度補正の表記が食い違っていた事故の再発防止)。
 export const EQUIPMENT_STAT_LABELS: Record<EquipmentStatKind, string> = Object.fromEntries(
-  tables.equipment_stat_labels.map((e) => [e.kind, e.label]),
+  tables.equipment_stat_labels.map((e) => [e.kind, t(e.label)]),
 ) as Record<EquipmentStatKind, string>;
 /** 装備で日常的にエンチャントする 4 補正。ゲーム内の呼び方どおり S/H/I/M を先に並べる。
  * 残り 5 補正(物防 / 命中 / Cri / 回避 / 敏捷)は既定で畳み、必要なときだけ開く(装備・アバター強化で共通)。 */
@@ -57,20 +59,20 @@ export const OTHER_EQUIPMENT_STATS: EquipmentStatKind[] = EQUIPMENT_STAT_KINDS.f
 );
 // 表・部位行など幅の狭いところ用の短縮名。
 export const EQUIPMENT_STAT_SHORT: Record<EquipmentStatKind, string> = {
-  thrust: "突き", slash: "斬り", physical_defense: "物防", magic_attack: "魔攻", magic_defense: "魔防",
-  accuracy: "命中", critical: "Cri", evasion: "回避", agility: "敏捷",
+  thrust: t("突き"), slash: t("斬り"), physical_defense: t("物防"), magic_attack: t("魔攻"), magic_defense: t("魔防"),
+  accuracy: t("命中"), critical: "Cri", evasion: t("回避"), agility: t("敏捷"),
 };
 
 // 属性 8 種(crates/domain/src/element.rs の Element)。wiki 属性システムの並び。
 export const ELEMENTS: Element[] = [...tables.elements];
 export const ELEMENT_LABELS: Record<Element, string> = {
-  fire: "火", water: "水", wind: "風", earth: "土", thunder: "雷",
-  white: "白", black: "黒", neutral: "無",
+  fire: t("火"), water: t("水"), wind: t("風"), earth: t("土"), thunder: t("雷"),
+  white: t("白"), black: t("黒"), neutral: t("無"),
 };
 // 武器形態(crates/domain/src/skill.rs の SkillForm)。並びも表示名も Rust が配る。
 export const SKILL_FORMS: SkillForm[] = tables.skill_form_labels.map((f) => f.form);
 export const SKILL_FORM_LABELS: Record<SkillForm, string> = Object.fromEntries(
-  tables.skill_form_labels.map((f) => [f.form, f.label]),
+  tables.skill_form_labels.map((f) => [f.form, t(f.label)]),
 ) as Record<SkillForm, string>;
 
 // 装備に付与できるのは無属性以外(wiki: 装備システム/属性強化。判定は Element::can_enchant_equipment)。
@@ -79,7 +81,7 @@ export const EQUIPMENT_ELEMENTS: Element[] = [...tables.equipment_elements];
 // 唯一の正は Rust(StatLimits.part_slot_rules)。以下は全てそこからの導出 — ここに新しい判定を足さない。
 export const PART_SLOTS: PartSlot[] = tables.part_slot_rules.map((r) => r.slot);
 export const PART_SLOT_LABELS: Record<PartSlot, string> = Object.fromEntries(
-  tables.part_slot_rules.map((r) => [r.slot, r.label]),
+  tables.part_slot_rules.map((r) => [r.slot, t(r.label)]),
 ) as Record<PartSlot, string>;
 // 装備強化(+1〜+15)を持てる部位(wiki: 装備システム/装備強化。武器・鎧のみ)。
 export const ENHANCE_ALLOWED_SLOTS: PartSlot[] =
@@ -97,21 +99,21 @@ export const RANDOM_OPTION_ALLOWED_SLOTS: PartSlot[] =
 // 表示順は加算先(突き / 斬り / 魔攻 / 魔防)の並び = Rust の EquipmentAbilityFamily::ALL。
 export const ABILITY_FAMILIES: EquipmentAbilityFamily[] = [...tables.ability_families];
 export const ABILITY_FAMILY_LABELS: Record<EquipmentAbilityFamily, string> = {
-  pointed_blade: "尖った刃(突き)",
-  sharp_blade: "鋭い刃(斬り)",
-  intelligence: "知力(魔攻)",
-  magic_resistance: "耐魔力(魔防)",
-  weapon_delay: "武器ディレイ",
-  armor_polish: "鎧研磨",
-  vitality: "生命力",
-  mana: "マナ",
-  evasion: "機敏(回避)",
-  shield_polish: "盾研磨",
-  critical: "致命打",
-  accuracy: "的中剣",
-  element: "属性",
-  agility: "敏捷",
-  skill_attack: "スキル攻撃力",
+  pointed_blade: t("尖った刃(突き)"),
+  sharp_blade: t("鋭い刃(斬り)"),
+  intelligence: t("知力(魔攻)"),
+  magic_resistance: t("耐魔力(魔防)"),
+  weapon_delay: t("武器ディレイ"),
+  armor_polish: t("鎧研磨"),
+  vitality: t("生命力"),
+  mana: t("マナ"),
+  evasion: t("機敏(回避)"),
+  shield_polish: t("盾研磨"),
+  critical: t("致命打"),
+  accuracy: t("的中剣"),
+  element: t("属性"),
+  agility: tc("アビリティ", "敏捷"),
+  skill_attack: t("スキル攻撃力"),
 };
 // シエナのオーラを発現できる部位(wiki: 装備システム冒頭の表「オーラ」行。8 部位)。
 export type SienaPartSlot = keyof SienaAuras;
@@ -130,44 +132,44 @@ export const RANDOM_OPTION_RANK_LABELS: Record<RandomOptionRank, string> = {
   valuable: "Valuable",
   rare: "Rare",
   special: "Special",
-  s_true: "S・真",
+  s_true: t("S・真"),
 };
 // スキル依存種別(crates/domain/src/skill.rs の SkillDependency)。ランダムOP の効き先表示に使う。
 export const SKILL_DEPENDENCIES: SkillDependency[] = [...tables.skill_dependencies];
 export const SKILL_DEPENDENCY_LABELS: Record<SkillDependency, string> = {
-  stab: "突き(STAB依存)",
-  hack: "斬り(HACK依存)",
-  int: "魔法(INT依存)",
-  mr: "神聖(MR依存)",
-  stab_hack: "物理複合(STAB+HACK依存)",
-  hack_int: "魔法斬り(HACK+INT依存)",
+  stab: t("突き(STAB依存)"),
+  hack: t("斬り(HACK依存)"),
+  int: t("魔法(INT依存)"),
+  mr: t("神聖(MR依存)"),
+  stab_hack: t("物理複合(STAB+HACK依存)"),
+  hack_int: t("魔法斬り(HACK+INT依存)"),
 };
 
 // 極限スキル(crates/domain/src/ultimate_skill.rs の UltimateSkill)。wiki Skill/極限 の表順。
 export const ULTIMATE_SKILLS: UltimateSkill[] = [...tables.ultimate_skills];
 export const ULTIMATE_SKILL_LABELS: Record<UltimateSkill, string> = {
-  scope_eye: "スコープアイ",
-  full_throttle: "フルスロットル",
-  wide_focus: "ワイドフォーカス",
+  scope_eye: t("スコープアイ"),
+  full_throttle: t("フルスロットル"),
+  wide_focus: t("ワイドフォーカス"),
 };
 /** 何に効くか(火力に効かないものはそう分かる文言にする)。 */
 export const ULTIMATE_SKILL_EFFECTS: Record<UltimateSkill, string> = {
-  scope_eye: "クリティカルダメージ増加(非クリには乗りません)",
-  full_throttle: "中ディレイ減少",
-  wide_focus: "スキル範囲(火力には効きません)",
+  scope_eye: t("クリティカルダメージ増加(非クリには乗りません)"),
+  full_throttle: t("中ディレイ減少"),
+  wide_focus: t("スキル範囲(火力には効きません)"),
 };
 
 // アバターの部位(crates/domain/src/avatar_enhance.rs の AvatarPart)。順序は Rust の AvatarPart::ALL。
 export const AVATAR_PARTS: AvatarPart[] = ["helm", "head", "body", "legs", "effect"];
 export const AVATAR_PART_LABELS: Record<AvatarPart, string> = {
-  helm: "兜", head: "頭", body: "体", legs: "脚", effect: "エフェクト",
+  helm: t("兜"), head: t("頭"), body: t("体"), legs: t("脚"), effect: t("エフェクト"),
 };
 
 // 装備研磨(crates/domain/src/equipment_polish.rs の PolishKind)。研磨対象の部位はレリック
 // (段階成長の別モデル)を除いた PART_SLOTS。「研磨剤」/「ワックス」の呼び分け(equipment.ts の
 // polishProductLabel)は部位から決まる(武器・鎧 = 研磨剤、それ以外 = ワックス)。
 export const POLISH_KIND_LABELS: Record<PolishKind, string> = {
-  sparkle: "ピカピカ", artisan: "職人", holy: "聖なる",
+  sparkle: t("ピカピカ"), artisan: t("職人"), holy: t("聖なる"),
 };
 export const POLISH_ALLOWED_SLOTS: PartSlot[] = PART_SLOTS.filter(
   (slot) => slot !== "relic_pendant" && slot !== "relic_bracelet",
@@ -176,10 +178,10 @@ export const POLISH_ALLOWED_SLOTS: PartSlot[] = PART_SLOTS.filter(
 // テシスコアの地域(crates/domain/src/thesis_core.rs の CoreRegion)。順序は Rust の CoreRegion::ALL。
 export const CORE_REGIONS: CoreRegion[] = [...tables.core_regions];
 export const CORE_REGION_LABELS: Record<CoreRegion, string> = {
-  mercurial: "マーキュリアル洞窟",
-  abyss: "アビス",
-  eclipse: "エクリプス",
-  rubicona: "ルビコナ",
+  mercurial: t("マーキュリアル洞窟"),
+  abyss: t("アビス"),
+  eclipse: t("エクリプス"),
+  rubicona: t("ルビコナ"),
 };
 // テシスコアのタイプ。火力 4 種は強化能力値に入り、補助 4 種は記録と入場条件の合計にのみ効く
 // (分類の正は Rust の CoreType::is_power。経験値タイプはシオカンヘイム専用なので持たない)。

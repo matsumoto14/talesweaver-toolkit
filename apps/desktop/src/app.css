@@ -126,8 +126,8 @@
      余った横は空けたままにする(埋めるために要らないものを出さない = §00 02) */
   --w-face: 980px;
 
-  --font: "M PLUS Rounded 1c", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
-  --font-num: "M PLUS 1 Code", ui-monospace, SFMono-Regular, monospace;
+  --font: "M PLUS Rounded 1c", "Noto Sans KR", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+  --font-num: "M PLUS 1 Code", "Noto Sans KR", ui-monospace, SFMono-Regular, monospace;
 
   /* 動きの時間は役割で 8 段(§10)。数字を画面ごとに決めない — 同じ意味の動きが
      画面によって 0.15s だったり 0.18s だったりすると、速さそのものが意味を持たなくなる。
