@@ -463,31 +463,59 @@ def import_equipment_official(jp_catalog: list[dict]) -> tuple[dict[str, str], d
 
 # ---- 敵名 ----
 
+def _enemy_stats_kr(m: dict) -> tuple:
+    # talesdb の列 → gamedata の Enemy: defense = 스탯방어 + 고정방어、damage_reduction = -고정피감、
+    # cut_rate_a = 1 - 피감률/100、element_threshold = 속성값
+    return (m["스탯방어"] + m["고정방어"], -m["고정피감"], round(1 - m["피감률"] / 100, 4), m["속성값"])
+
+
+def _enemy_stats_jp(e: dict) -> tuple:
+    return (e["defense"], e["damage_reduction"], round(e["cut_rate_a"], 4), e["element_threshold"])
+
+
 def import_enemies(jp_enemies: list[dict]) -> dict[str, str]:
-    """talesdb.xyz の敵データを HP の完全一致で照合する(一意に決まるものだけ)。"""
+    """talesdb.xyz の敵データと照合する。同じ一式(42 件)で並び順だけ違う。
+
+    防御・固定ダメ減・カット率・属性値・HP の全項目の一致を優先し、無ければ「HP 以外の全項目」
+    「HP だけ」の順に、一意に決まるものを採る。全項目が一致しなかった組は数値の食い違いとして出す
+    (どちらかの誤り。gamedata 側の値を一次ソースで確かめる材料)。
+    """
     kr_monsters = json.loads(TALESDB_MONSTERS_CACHE.read_text(encoding="utf-8"))["몬스터"]
-    hp_to_names: dict[int, list[str]] = {}
-    for m in kr_monsters:
-        hp_to_names.setdefault(m["HP"], []).append(m["이름"])
+
+    def unique(pred) -> dict | None:
+        found = [m for m in kr_monsters if pred(m)]
+        return found[0] if len(found) == 1 else None
 
     result: dict[str, str] = {}
-    counts = {"採用": 0, "候補なし": 0, "候補複数": 0, "HPなし": 0}
+    mismatches: list[str] = []
+    missing: list[str] = []
     for enemy in jp_enemies:
-        hp = enemy.get("hp")
-        if hp is None:
-            counts["HPなし"] += 1
+        stats = _enemy_stats_jp(enemy)
+        m = (
+            unique(lambda k: _enemy_stats_kr(k) == stats and k["HP"] == enemy.get("hp"))
+            or unique(lambda k: _enemy_stats_kr(k) == stats)
+            or unique(lambda k: k["HP"] == enemy.get("hp"))
+        )
+        if m is None:
+            # 全項目が同じ敵が複数ある(レイティア N/H・設計者 N/H)。同じ一式なので、同じ値を持つ組の
+            # 中での並び順で対応させる
+            same_jp = [e for e in jp_enemies if _enemy_stats_jp(e) == stats and e.get("hp") == enemy.get("hp")]
+            same_kr = [k for k in kr_monsters if _enemy_stats_kr(k) == stats and k["HP"] == enemy.get("hp")]
+            if len(same_jp) == len(same_kr) > 1:
+                m = same_kr[same_jp.index(enemy)]
+        if m is None:
+            missing.append(enemy["name"])
             continue
-        candidates = hp_to_names.get(hp, [])
-        if len(candidates) == 0:
-            counts["候補なし"] += 1
-            continue
-        if len(candidates) > 1:
-            counts["候補複数"] += 1
-            continue
-        result[enemy["name"]] = candidates[0]
-        counts["採用"] += 1
+        result[enemy["name"]] = m["이름"]
+        if _enemy_stats_kr(m) != stats or m["HP"] != enemy.get("hp"):
+            mismatches.append(
+                f"{enemy['name']} / {m['이름']}: gamedata {stats} HP {enemy.get('hp')}"
+                f" ≠ talesdb {_enemy_stats_kr(m)} HP {m['HP']}"
+            )
 
-    print(f"敵名: {counts} / 全 {len(jp_enemies)}")
+    print(f"敵名: 採用 {len(result)} / 全 {len(jp_enemies)}(候補なし {missing})")
+    for line in mismatches:
+        print(f"  数値の食い違い: {line}")
     return result
 
 
