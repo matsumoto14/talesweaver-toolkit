@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "apps" / "desktop" / "src"
 KO = SRC / "i18n" / "ko"
 # 画面からは見えない鍵(t(変数) で引く)を持つ辞書
-DYNAMIC_FILES = {"names.json"}
+DYNAMIC_FILES = {"names.json", "notes.json"}
 # 画面へ文字列を返す Rust(ゲームデータ名の crates/gamedata は names.json 側)
 RUST_DIRS = [
     ROOT / "crates" / "domain" / "src",

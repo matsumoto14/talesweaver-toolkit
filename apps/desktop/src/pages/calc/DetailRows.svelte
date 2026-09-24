@@ -55,7 +55,7 @@
           bind:open={() => store.isOpen(key), (v) => store.setOpen(key, v)}
         >
           {#snippet summary()}
-          <span class="dt-label">{#if m.prefix}<span class="dim">{m.prefix}</span> {/if}{m.label}{#if m.note}<span class="dt-swap dim" use:changed={() => m.note ?? ""}>{m.note}</span>{/if}</span>
+          <span class="dt-label">{#if m.prefix}<span class="dim">{m.prefix}</span> {/if}{m.label}{#if m.note}<span class="dt-swap dim" use:changed={() => m.note ?? ""}>{t(m.note)}</span>{/if}</span>
           <Value class="dt-mult dim" value={m.mult ?? ""} />
           <Value
             class="dt-val"

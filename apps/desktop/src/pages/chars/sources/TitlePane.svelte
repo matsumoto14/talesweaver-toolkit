@@ -48,7 +48,11 @@
   const queriedOtherTitles = $derived.by(() => {
     const q = titleQuery.trim();
     if (q === "") return otherTitles;
-    return otherTitles.filter((title) => title.name.includes(q) || title.group.includes(q));
+    return otherTitles.filter(
+      (title) =>
+        title.name.includes(q) || t(title.name).includes(q) ||
+        title.group.includes(q) || t(title.group).includes(q),
+    );
   });
 
   // --- 主軸スキルの依存種別で絞り込む ---------------------------------------
@@ -122,7 +126,7 @@
         class:on={draft.equipment.title === title.id}
         onclick={() => addOwnedAndSelect(title.id)}
       >
-        <span class="item-name">{title.name}</span>
+        <span class="item-name">{t(title.name)}</span>
         <span class="item-vals num dim">{t("合計")} {signed(title.equipment_value_total)}</span>
         {@render dmgBadge(title, impliedDmg)}
         {@render ownedBadge(ownedIds.has(title.id))}
@@ -148,7 +152,7 @@
           openGroup = openGroup === g.base ? null : g.base;
         }}
       >
-        <span class="item-name">{g.base}</span>
+        <span class="item-name">{t(g.base)}</span>
         {@render ownedBadge(g.items.some((title) => ownedIds.has(title.id)))}
         {#if !expanded}
           <span class="item-vals num dim">{t("合計")} {signed(g.items[0].equipment_value_total)}</span>
@@ -158,9 +162,9 @@
             {#each g.items as title (title.id)}
               <Chip
                 on={draft.equipment.title === title.id}
-                title="{title.name} — {titleSummary(title)}"
+                title="{t(title.name)} — {titleSummary(title)}"
                 onToggle={() => addOwnedAndSelect(title.id)}
-              >{title.name.slice(g.base.length + 3)} <span class="title-variant-val num">{signed(title.equipment_value_total)}</span></Chip>
+              >{t(title.name.slice(g.base.length + 3))} <span class="title-variant-val num">{signed(title.equipment_value_total)}</span></Chip>
             {/each}
           </span>
         {/if}
@@ -201,7 +205,7 @@
       {#each ownedTitles as title (title.id)}
         <div class="item-row badge-in" class:on={draft.equipment.title === title.id}>
           <button type="button" class="item-row-main" onclick={() => (draft.equipment.title = title.id)}>
-            <span class="item-name">{title.name}</span>
+            <span class="item-name">{t(title.name)}</span>
             {#if titleSummary(title) !== ""}
               <span class="item-vals num dim">{titleSummary(title)}</span>
             {/if}
@@ -261,7 +265,7 @@
   {@const filled = EQUIPMENT_STAT_KINDS.filter((k) => selectedTitle.values[k] !== 0)}
   <div class="card">
     <div class="card-title inline">
-      {t("選択中の補正")} <span class="normal dim">{selectedTitle.name}</span>
+      {t("選択中の補正")} <span class="normal dim">{t(selectedTitle.name)}</span>
     </div>
     {#if selectedTitle.attack_damage_percent > 0}
       <p class="hint dim">
@@ -286,8 +290,8 @@
       <p class="hint dim">{t("補正値はありません(ダメージ増加だけの称号)。")}</p>
     {/if}
     <p class="hint dim">
-      {selectedTitle.group}{selectedTitle.level !== null ? ` ・ ${t("習得 Lv{lv}", { lv: selectedTitle.level })}` : ""}
-      {#if selectedTitle.note}<br />{selectedTitle.note}{/if}
+      {t(selectedTitle.group)}{selectedTitle.level !== null ? ` ・ ${t("習得 Lv{lv}", { lv: selectedTitle.level })}` : ""}
+      {#if selectedTitle.note}<br />{t(selectedTitle.note)}{/if}
     </p>
   </div>
 {/if}

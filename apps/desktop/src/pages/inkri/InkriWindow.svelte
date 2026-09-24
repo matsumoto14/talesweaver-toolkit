@@ -120,7 +120,7 @@
         {#if shown?.icon}<img src={shown.icon} alt="" />{/if}
       </button>
       {#if shown}
-        <div class="name">{shown.name}</div>
+        <div class="name">{t(shown.name)}</div>
         <div class="row r2"><span>{t("エンチャント回数")}</span><b>{t("{n}回", { n: 0 })}</b></div>
         <div class="row r3"><span>{t("インクリ回数")}</span><b>{t("{n}回", { n: shown.inkriCount })}</b></div>
       {/if}

@@ -25,3 +25,8 @@ tools/release/usage.py
 
 # Worker のローカル秘密(wrangler)
 .dev.vars
+
+# 韓国語のゲームデータ名取込(tools/i18n/import_names.py)の材料・出力。材料は容量が大きく
+# (装備整理シート 約34MB)、出力は再生成できるので追わない
+tools/i18n/cache/
+tools/i18n/out/

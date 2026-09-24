@@ -213,7 +213,7 @@
     const unlocked = equipmentCandidates.items.filter((i) => !isLockedEquipment(i));
     const candidates = query === ""
       ? unlocked
-      : unlocked.filter((i) => i.name.includes(query));
+      : unlocked.filter((i) => i.name.includes(query) || t(i.name).includes(query));
     const matched = candidates.filter((i) => i.fit === "recommended");
     if (matched.length === 0) return candidates;
     return showAllEquipmentCandidates
@@ -414,7 +414,7 @@
   const weaponAbilityOptions = (grades: AbilityGroup): PickerOption[] => [
     { value: "", name: t("装着しない"), meta: t("空き枠"), pinned: true },
     ...[...grades.shown, ...grades.folded].map((ability, i) => ({
-      value: ability.id, name: ability.name, meta: ability.effect_summary,
+      value: ability.id, name: t(ability.name), meta: t(ability.effect_summary),
       iconId: ability.id, iconKind: "equipment" as const,
       pinned: i < grades.shown.length,
       tone: ability.record_only ? "record-only" : undefined,
@@ -630,15 +630,15 @@
   <!-- 複数選択の防具アビリティは行チップ(§07)。キャラに保存されるので tone="saved" -->
   <div class:swap-in={fresh}>
     <ToggleRow
-      name={ability.name}
-      value={ability.effect_summary}
+      name={t(ability.name)}
+      value={t(ability.effect_summary)}
       cond={ability.record_only ? t("記録のみ") : undefined}
       on={selected}
       tone="saved"
       disabled={!selected && full}
       onToggle={() => toggleNonWeaponAbility(slot, ability)}
     >
-      {#snippet icon()}<Icon kind="equipment" id={ability.id} size={20} label={ability.name} />{/snippet}
+      {#snippet icon()}<Icon kind="equipment" id={ability.id} size={20} label={t(ability.name)} />{/snippet}
     </ToggleRow>
   </div>
 {/snippet}
@@ -660,7 +660,7 @@
     >
       <span class="registration-grip" aria-hidden="true">⠿</span>
       <Icon kind="equipment" id={iconId(registered.item_id)} size={20} label={registered.label || t("装備 {n}", { n: registered.id })} />
-      {registered.label || app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name || t("装備 {n}", { n: registered.id })}
+      {registered.label || t(app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name ?? "") || t("装備 {n}", { n: registered.id })}
     </button>
   {/each}
 {/snippet}
@@ -804,9 +804,9 @@
               <!-- 候補カードは名前の識別が主目的。カテゴリ名は詳細へ譲り、短い効果量だけを置く -->
               {@const candidateDamage = itemDamageLabel(candidate, true)}
               <button type="button" class="item-row" class:on={part.item_id === candidate.id} onclick={() => pickCatalogItem(slot, candidate)}>
-                <Icon kind="equipment" id={iconId(candidate.id)} size={28} label={candidate.name} />
+                <Icon kind="equipment" id={iconId(candidate.id)} size={28} label={t(candidate.name)} />
                 <span class="item-copy">
-                  <span class="item-name">{candidate.name}</span>
+                  <span class="item-name">{t(candidate.name)}</span>
                   <span class="item-vals num dim">{rangeSummary(candidate.values_min, candidate.values_max)}</span>
                 </span>
                 {#if candidateDamage !== null}<span class="part-dmg">{candidateDamage}</span>{/if}
@@ -1087,9 +1087,9 @@
                 data-ability-id={ability.id}
                 use:changed={() => focusToken(ability.id)}
               >
-                <span class="ro-name">{ability.name}</span>
+                <span class="ro-name">{t(ability.name)}</span>
                 <NumberField
-                  label={t("{name}の実測値", { name: ability.name })}
+                  label={t("{name}の実測値", { name: t(ability.name) })}
                   min={ability.value_option.min}
                   max={ability.value_option.max}
                   bind:value={() => abilityRecordedValue(slot, ability.id), (value) => setAbilityRecordedValue(slot, ability.id, value)}

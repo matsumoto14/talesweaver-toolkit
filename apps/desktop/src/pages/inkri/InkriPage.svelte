@@ -280,7 +280,7 @@
   const windowItem = $derived(
     target
       ? {
-          name: target.name,
+          name: t(target.name),
           icon: iconOf(target.client_item_id),
           inkriCount: itemState.inkri_count,
           destroyed: itemState.destroyed,
@@ -290,7 +290,7 @@
 
 
   const seriesOptions = $derived(
-    seriesList.map((s) => ({ value: s, name: s, meta: t("{n}件", { n: targets.filter((t) => t.series === s).length }) })),
+    seriesList.map((s) => ({ value: s, name: t(s), meta: t("{n}件", { n: targets.filter((t) => t.series === s).length }) })),
   );
 
   const itemOptions = $derived(
@@ -298,7 +298,7 @@
       .filter((it) => it.series === series)
       .map((it) => ({
         value: String(it.client_item_id),
-        name: it.name,
+        name: t(it.name),
         iconId: String(it.client_item_id),
         iconKind: "equipment" as const,
         iconSource: iconOf(it.client_item_id),

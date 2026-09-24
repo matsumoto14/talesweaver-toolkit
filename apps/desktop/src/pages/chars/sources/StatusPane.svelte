@@ -307,8 +307,8 @@
                 class:on={c.id === draft.gameCharacterId}
                 onclick={() => { setGameCharacterId(c.id); charPickOpen = false; }}
               >
-                <Icon kind="character" id={c.id} size={40} label={c.name} />
-                <span class="pick-name">{c.name}</span>
+                <Icon kind="character" id={c.id} size={40} label={t(c.name)} />
+                <span class="pick-name">{t(c.name)}</span>
               </button>
             {/each}
           </div>
@@ -408,12 +408,12 @@
         {/if}
         <p class="hint dim">
           {t("CT が明けるまでの間は連打技を撃ちます。")}{rotation?.filler_skill_name
-            ? t("主軸に CT があるので、合間に {skill} を連打します。", { skill: rotation.filler_skill_name })
+            ? t("主軸に CT があるので、合間に {skill} を連打します。", { skill: t(rotation.filler_skill_name) })
             : t("主軸を連打して、選んだ技を差し込みます。")}
           {t("選んだ内容は計算タブ・ホームの判定にもそのまま効きます。")}
           <!-- 損得は敵ごとに変わる(既定 ON も対象で決まる)ので、どの対象で見ているかを言う。
                計算タブで別の対象を見ていると、あちらの既定 ON と違って見えることがある -->
-          {#if rotationTarget}{t("損得は")}<b>{rotationTarget.name}</b>{t("での判定です(対象を変えると変わります)。")}{/if}
+          {#if rotationTarget}{t("損得は")}<b>{t(rotationTarget.name)}</b>{t("での判定です(対象を変えると変わります)。")}{/if}
         </p>
       </div>
     {/if}
@@ -426,13 +426,13 @@
           {#each boundSkills as def (def.id)}
             {@const checked = skillChecked(def.id)}
             <ToggleRow
-              name={def.name}
+              name={t(def.name)}
               value={boundValue(def, mainSkill)}
-              title={def.note}
+              title={t(def.note)}
               on={checked}
               onToggle={() => toggleBound(def.id, !checked)}
             >
-              {#snippet icon()}<Icon kind="skill" id={def.id} size={20} label={def.name} />{/snippet}
+              {#snippet icon()}<Icon kind="skill" id={def.id} size={20} label={t(def.name)} />{/snippet}
             </ToggleRow>
           {/each}
         </div>

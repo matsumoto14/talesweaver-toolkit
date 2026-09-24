@@ -310,7 +310,7 @@
                   class="ro-badge"
                   class:record-only={!randomOptionIsApplied(def.effect)}
                   title={t("{name}({effect} {value})", { name: t(def.name), effect: t(randomOptionEffectLabel(def.effect)), value: randomOptionValueLabel(o, def) })}
-                >{def.short}</span>
+                >{t(def.short)}</span>
               {/if}
             {/each}
             {#if count === 0}<span class="dim">{t("なし")}</span>{/if}

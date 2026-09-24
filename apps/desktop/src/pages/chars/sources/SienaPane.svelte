@@ -126,15 +126,15 @@
     siena.slots.forEach((s, i) => {
       const def = sienaValueDef(s.kind);
       if (def) rows.push({
-        key: `v${i}`, text: `${def.short}${fmtNum(s.value, { max: 2 }, def.unit)}`,
-        title: `${def.label} ${fmtSigned(s.value, { max: 2 }, def.unit)}`, modeled: def.is_modeled,
+        key: `v${i}`, text: `${t(def.short)}${fmtNum(s.value, { max: 2 }, def.unit)}`,
+        title: `${t(def.label)} ${fmtSigned(s.value, { max: 2 }, def.unit)}`, modeled: def.is_modeled,
       });
     });
     siena.extras.forEach((e, i) => {
       const def = sienaExtraDef(e.kind);
       if (def) rows.push({
-        key: `e${i}`, text: `${def.short}${fmtNum(e.value, { max: 2 }, def.unit)}`,
-        title: `${def.label} ${fmtSigned(e.value, { max: 2 }, def.unit)}`, modeled: def.is_modeled,
+        key: `e${i}`, text: `${t(def.short)}${fmtNum(e.value, { max: 2 }, def.unit)}`,
+        title: `${t(def.label)} ${fmtSigned(e.value, { max: 2 }, def.unit)}`, modeled: def.is_modeled,
       });
     });
     return rows;
@@ -233,9 +233,9 @@
             {#each sienaValueDefs(slot) as def (def.kind)}
               <Chip
                 class="add {def.is_modeled ? '' : 'record-only'}"
-                title={def.note}
+                title={t(def.note)}
                 onclick={() => addSienaSlot(slot, def.kind)}
-              >＋ {def.label}</Chip>
+              >＋ {t(def.label)}</Chip>
             {/each}
           </div>
         {:else}
@@ -247,9 +247,9 @@
             <!-- 1 スロット 1 行。種類 / 値 / 外す を列でそろえる(§00 01)。
                  効き先の但し書きは title に入れ、行は増やさない -->
             <div class="siena-row swap-in" class:record-only={!def.is_modeled}>
-              <span class="ro-name" title="{def.label}{def.note ? ` — ${def.note}` : ''}">{def.label}</span>
+              <span class="ro-name" title="{t(def.label)}{t(def.note) ? ` — ${t(def.note)}` : ''}">{t(def.label)}</span>
               <NumberField
-                label={t("{name}の値", { name: def.label })}
+                label={t("{name}の値", { name: t(def.label) })}
                 min={def.min}
                 max={def.max}
                 format={def.min > 1 ? () => `wiki ${def.min}–${def.max}${def.unit}` : undefined}
@@ -275,9 +275,9 @@
               {#each sienaAddableExtras(slot) as def (def.kind)}
                 <Chip
                   class="add {def.is_modeled ? '' : 'record-only'}"
-                  title={def.note}
+                  title={t(def.note)}
                   onclick={() => addSienaExtra(slot, def.kind)}
-                >＋ {def.label}</Chip>
+                >＋ {t(def.label)}</Chip>
               {/each}
             </div>
           {:else}
@@ -289,13 +289,13 @@
             {@const def = sienaExtraDef(e.kind)}
             {#if def}
               <div class="siena-row swap-in" class:record-only={!def.is_modeled}>
-                <span class="ro-name" title="{def.label} — {def.note}">
-                  {def.label}
-                  <span class="siena-to">{def.note}</span>
+                <span class="ro-name" title="{t(def.label)} — {t(def.note)}">
+                  {t(def.label)}
+                  <span class="siena-to">{t(def.note)}</span>
                 </span>
                 {#if sienaChoicesAreRun(def.choices)}
                   <NumberField
-                    label={t("{name}の値", { name: def.label })}
+                    label={t("{name}の値", { name: t(def.label) })}
                     min={def.choices[0]}
                     max={def.choices[def.choices.length - 1]}
                     format={def.choices[0] > 1
@@ -306,7 +306,7 @@
                 {:else}
                   <!-- 飛び飛びの値(中ディレイ 0.5 / 1 / 2%)はステッパーだと無い値を作れてしまう -->
                   <Choose
-                    label={t("{name}の値", { name: def.label })}
+                    label={t("{name}の値", { name: t(def.label) })}
                     options={def.choices.map((c) => ({ value: String(c), label: `${c}${def.unit}` }))}
                     bind:value={() => String(e.value), (v) => (e.value = Number(v))}
                   />
